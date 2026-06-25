@@ -135,12 +135,32 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
       },
     ],
   };
+  const mockConsentItems = (accepted: boolean) => [
+    {
+      policy_slug: 'terms_of_service',
+      policy_version: 1,
+      title: 'Terms of Service',
+      body: 'You must follow the community node terms of service.',
+      required: true,
+      accepted_at: accepted ? Math.floor(Date.now() / 1000) : null,
+      previously_accepted_version: accepted ? 1 : null,
+    },
+    {
+      policy_slug: 'privacy_policy',
+      policy_version: 1,
+      title: 'Privacy Policy',
+      body: 'You must acknowledge the community node privacy policy.',
+      required: true,
+      accepted_at: accepted ? Math.floor(Date.now() / 1000) : null,
+      previously_accepted_version: accepted ? 1 : null,
+    },
+  ];
   let communityNodeStatuses: CommunityNodeNodeStatus[] = [
     {
       base_url: 'https://api.kukuri.app',
       auto_approve: true,
       auth_state: { authenticated: true, expires_at: Date.now() + 60_000 },
-      consent_state: { all_required_accepted: true, items: [] },
+      consent_state: { all_required_accepted: true, items: mockConsentItems(true) },
       resolved_urls: {
         public_base_url: 'https://api.kukuri.app',
         connectivity_urls: ['https://api.kukuri.app'],
@@ -1365,7 +1385,7 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
           ? {
               ...status,
               auth_state: { authenticated: true, expires_at: Date.now() },
-              consent_state: { all_required_accepted: false, items: [] },
+              consent_state: { all_required_accepted: false, items: mockConsentItems(false) },
               session_phase: status.auto_approve ? 'accepting' : 'authenticating',
             }
           : status
@@ -1395,7 +1415,7 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
         status.base_url === baseUrl
           ? {
               ...status,
-              consent_state: { all_required_accepted: true, items: [] },
+              consent_state: { all_required_accepted: true, items: mockConsentItems(true) },
               resolved_urls: resolvedUrls,
               session_phase: 'ready',
               retry_after: null,

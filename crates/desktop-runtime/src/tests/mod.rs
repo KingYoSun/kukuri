@@ -1780,17 +1780,36 @@ struct MockManagedCommunityNodeState {
     consent_accept_hits: Arc<AtomicUsize>,
     heartbeat_hits: Arc<AtomicUsize>,
     bootstrap_hits: Arc<AtomicUsize>,
+    // true の場合、未同意状態を「版が上がった更新（旧版は同意済み）」として返す。
+    // auto_approve でも黙って再受諾せずユーザーへ提示する挙動の検証に使う（#384）。
+    simulate_pending_update: Arc<AtomicBool>,
 }
 
 fn managed_community_node_consent_status(accepted: bool) -> CommunityNodeConsentStatus {
+    managed_community_node_consent_status_with_update(accepted, false)
+}
+
+fn managed_community_node_consent_status_with_update(
+    accepted: bool,
+    pending_update: bool,
+) -> CommunityNodeConsentStatus {
+    // 未同意でも「更新（pending_update=true）」のときは過去版の同意を示す previously_accepted_version
+    // を返し、初回未同意（previously_accepted_version=None）と区別できるようにする。
+    let previously_accepted_version = if accepted || pending_update {
+        Some(1)
+    } else {
+        None
+    };
     CommunityNodeConsentStatus {
         all_required_accepted: accepted,
         items: vec![kukuri_cn_core::CommunityNodeConsentItem {
             policy_slug: "builder-preview".into(),
-            policy_version: 1,
+            policy_version: if pending_update { 2 } else { 1 },
             title: "Builder Preview".into(),
+            body: "Builder preview policy body.".into(),
             required: true,
             accepted_at: accepted.then(|| Utc::now().timestamp()),
+            previously_accepted_version,
         }],
     }
 }
@@ -1848,8 +1867,10 @@ async fn mock_managed_consent_status(
 ) -> std::result::Result<Json<CommunityNodeConsentStatus>, StatusCode> {
     authorize_managed_community_node_request(&headers, state.as_ref()).await?;
     state.consent_status_hits.fetch_add(1, Ordering::SeqCst);
-    Ok(Json(managed_community_node_consent_status(
-        state.consent_accepted.load(Ordering::SeqCst),
+    let accepted = state.consent_accepted.load(Ordering::SeqCst);
+    Ok(Json(managed_community_node_consent_status_with_update(
+        accepted,
+        !accepted && state.simulate_pending_update.load(Ordering::SeqCst),
     )))
 }
 

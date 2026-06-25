@@ -101,8 +101,14 @@ pub struct CommunityNodeConsentItem {
     pub policy_slug: String,
     pub policy_version: i32,
     pub title: String,
+    #[serde(default)]
+    pub body: String,
     pub required: bool,
     pub accepted_at: Option<i64>,
+    /// その policy_slug で過去に同意した最大 version（version 不問）。
+    /// `accepted_at` が None でこれが Some なら、版が上がって再同意が必要な「更新」を意味する。
+    #[serde(default)]
+    pub previously_accepted_version: Option<i32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

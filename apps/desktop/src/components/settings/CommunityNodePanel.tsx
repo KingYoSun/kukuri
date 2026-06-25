@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
@@ -5,6 +6,7 @@ import { Card, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
 
+import { CommunityNodeConsentDialog } from './CommunityNodeConsentDialog';
 import { SettingsActionRow } from './SettingsActionRow';
 import { SettingsDiagnosticList } from './SettingsDiagnosticList';
 import { SettingsEditorField } from './SettingsEditorField';
@@ -24,8 +26,8 @@ type CommunityNodePanelProps = {
   onReset: () => void;
   onClearNodes: () => void;
   onAuthenticate: (baseUrl: string) => void;
-  onFetchConsents: (baseUrl: string) => void;
-  onAcceptConsents: (baseUrl: string) => void;
+  onFetchConsents: (baseUrl: string) => void | Promise<void>;
+  onAcceptConsents: (baseUrl: string) => void | Promise<void>;
   onRefresh: (baseUrl: string) => void;
   onClearToken: (baseUrl: string) => void;
 };
@@ -50,6 +52,47 @@ export function CommunityNodePanel({
   onClearToken,
 }: CommunityNodePanelProps) {
   const { t } = useTranslation(['common', 'settings']);
+  const [consentDialogNodeBaseUrl, setConsentDialogNodeBaseUrl] = useState<string | null>(null);
+  const [consentDialogLoadedBaseUrl, setConsentDialogLoadedBaseUrl] = useState<string | null>(null);
+  const [consentBusy, setConsentBusy] = useState(false);
+
+  const consentDialogNode =
+    consentDialogNodeBaseUrl != null
+      ? view.nodes.find((node) => node.baseUrl === consentDialogNodeBaseUrl)
+      : undefined;
+  const consentDialogView = consentDialogNode
+    ? {
+        ...consentDialogNode.consent,
+        loaded:
+          consentDialogNode.consent.loaded &&
+          consentDialogLoadedBaseUrl === consentDialogNode.baseUrl,
+      }
+    : null;
+
+  async function openConsentDialog(baseUrl: string) {
+    setConsentDialogNodeBaseUrl(baseUrl);
+    setConsentDialogLoadedBaseUrl(null);
+    setConsentBusy(true);
+    try {
+      await onFetchConsents(baseUrl);
+      setConsentDialogLoadedBaseUrl(baseUrl);
+    } catch {
+      setConsentDialogLoadedBaseUrl(null);
+    } finally {
+      setConsentBusy(false);
+    }
+  }
+
+  async function acceptConsentFromDialog(baseUrl: string) {
+    setConsentBusy(true);
+    try {
+      await onAcceptConsents(baseUrl);
+    } catch {
+      return;
+    } finally {
+      setConsentBusy(false);
+    }
+  }
 
   return (
     <Card className='min-w-0 space-y-4'>
@@ -163,16 +206,9 @@ export function CommunityNodePanel({
                 <Button
                   variant='secondary'
                   disabled={nodeActionsDisabled || !node.saved || !node.baseUrl.trim()}
-                  onClick={() => onFetchConsents(node.baseUrl)}
+                  onClick={() => void openConsentDialog(node.baseUrl)}
                 >
                   {t('common:actions.consents')}
-                </Button>
-                <Button
-                  variant='secondary'
-                  disabled={nodeActionsDisabled || !node.saved || !node.baseUrl.trim()}
-                  onClick={() => onAcceptConsents(node.baseUrl)}
-                >
-                  {t('common:actions.accept')}
                 </Button>
                 <Button
                   variant='secondary'
@@ -193,6 +229,22 @@ export function CommunityNodePanel({
           </section>
         ))}
       </div>
+
+      {consentDialogNode && consentDialogView ? (
+        <CommunityNodeConsentDialog
+          open={consentDialogNodeBaseUrl != null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setConsentDialogNodeBaseUrl(null);
+              setConsentDialogLoadedBaseUrl(null);
+            }
+          }}
+          baseUrl={consentDialogNode.baseUrl}
+          consent={consentDialogView}
+          busy={consentBusy}
+          onAccept={() => void acceptConsentFromDialog(consentDialogNode.baseUrl)}
+        />
+      ) : null}
     </Card>
   );
 }

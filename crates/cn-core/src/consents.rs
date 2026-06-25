@@ -15,13 +15,22 @@ pub async fn get_consent_status(pool: &PgPool, pubkey: &str) -> Result<Community
             p.policy_slug,
             p.policy_version,
             p.title,
+            p.body_markdown,
             p.required,
-            c.accepted_at
+            c.accepted_at,
+            prev.previously_accepted_version
          FROM cn_admin.policies p
          LEFT JOIN cn_user.policy_consents c
            ON c.policy_slug = p.policy_slug
           AND c.policy_version = p.policy_version
           AND c.subscriber_pubkey = $1
+         LEFT JOIN (
+            SELECT policy_slug, MAX(policy_version) AS previously_accepted_version
+            FROM cn_user.policy_consents
+            WHERE subscriber_pubkey = $1
+            GROUP BY policy_slug
+         ) prev
+           ON prev.policy_slug = p.policy_slug
          ORDER BY p.policy_slug ASC",
     )
     .bind(&pubkey)
@@ -37,8 +46,10 @@ pub async fn get_consent_status(pool: &PgPool, pubkey: &str) -> Result<Community
                 policy_slug: row.try_get("policy_slug")?,
                 policy_version: row.try_get("policy_version")?,
                 title: row.try_get("title")?,
+                body: row.try_get("body_markdown")?,
                 required: row.try_get("required")?,
                 accepted_at,
+                previously_accepted_version: row.try_get("previously_accepted_version")?,
             })
         })
         .collect::<Result<Vec<_>>>()?;

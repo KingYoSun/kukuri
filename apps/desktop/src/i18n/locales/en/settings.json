@@ -58,6 +58,21 @@
       }
     },
     "autoApproveLabel": "Auto-approve consent for this node",
+    "consent": {
+      "title": "Community node policies",
+      "authRequired": "Authenticate with this node before reviewing or accepting its policies.",
+      "notLoaded": "Open this dialog to load the latest policies from the node.",
+      "updatedNotice": "This node updated its policies. Review the changes and accept again to keep connecting.",
+      "noPolicies": "This node does not require any policy consent.",
+      "noBody": "This policy does not provide a body text.",
+      "required": "Required",
+      "optional": "Optional",
+      "updatedBadge": "Updated",
+      "updatedDetail": "Updated from v{{previous}} to v{{current}}.",
+      "acceptedAt": "Accepted at {{timestamp}}",
+      "notAccepted": "Not accepted yet",
+      "allAccepted": "All accepted"
+    },
     "baseUrlLabel": "Base URL",
     "baseUrlsHint": "One HTTPS base URL per line.",
     "baseUrlsLabel": "Base URLs",

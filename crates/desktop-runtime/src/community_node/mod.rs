@@ -41,6 +41,19 @@ pub use report_routing_support::{
 };
 pub(crate) use token_storage_support::*;
 
+/// 「版が上がって再同意が必要（更新）」な required ポリシーが存在するか。
+///
+/// `accepted_at` が None（現行版を未同意）かつ `previously_accepted_version` が Some
+/// （過去に別版を同意済み）の required ポリシーがあれば true。auto_approve の node でも、
+/// 更新時は黙って再受諾せずユーザーへ本文を再提示するための判定。
+pub(crate) fn community_node_consent_has_pending_update(
+    status: &CommunityNodeConsentStatus,
+) -> bool {
+    status.items.iter().any(|item| {
+        item.required && item.accepted_at.is_none() && item.previously_accepted_version.is_some()
+    })
+}
+
 pub(crate) const COMMUNITY_NODE_TOKEN_PURPOSE: &str = "community-node-token";
 pub(crate) const COMMUNITY_NODE_PREVIEW_BASE_URL: &str = "https://api.kukuri.app";
 pub(crate) const COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_INTERVAL_SECONDS: i64 = 30;
@@ -178,4 +191,65 @@ pub struct CommunityNodeNodeStatus {
 pub(crate) struct StoredCommunityNodeToken {
     pub(crate) access_token: String,
     pub(crate) expires_at: i64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kukuri_cn_core::CommunityNodeConsentItem;
+
+    fn consent_item(
+        accepted: bool,
+        previously_accepted_version: Option<i32>,
+        required: bool,
+    ) -> CommunityNodeConsentItem {
+        CommunityNodeConsentItem {
+            policy_slug: "terms_of_service".to_string(),
+            policy_version: 2,
+            title: "Terms of Service".to_string(),
+            body: "body".to_string(),
+            required,
+            accepted_at: accepted.then_some(1_700_000_000),
+            previously_accepted_version,
+        }
+    }
+
+    #[test]
+    fn pending_update_false_when_first_time_not_accepted() {
+        // 初回未同意（過去版の同意なし）は「更新」ではない。auto_approve の auto 受諾を許す。
+        let status = CommunityNodeConsentStatus {
+            all_required_accepted: false,
+            items: vec![consent_item(false, None, true)],
+        };
+        assert!(!community_node_consent_has_pending_update(&status));
+    }
+
+    #[test]
+    fn pending_update_true_when_previous_version_accepted_but_current_not() {
+        // 旧版を同意済みだが現行版を未同意 = 版が上がった「更新」。auto_approve でも再提示。
+        let status = CommunityNodeConsentStatus {
+            all_required_accepted: false,
+            items: vec![consent_item(false, Some(1), true)],
+        };
+        assert!(community_node_consent_has_pending_update(&status));
+    }
+
+    #[test]
+    fn pending_update_false_when_current_version_accepted() {
+        let status = CommunityNodeConsentStatus {
+            all_required_accepted: true,
+            items: vec![consent_item(true, Some(2), true)],
+        };
+        assert!(!community_node_consent_has_pending_update(&status));
+    }
+
+    #[test]
+    fn pending_update_ignores_optional_policies() {
+        // optional ポリシーの更新は接続 gate に影響しないため pending update としない。
+        let status = CommunityNodeConsentStatus {
+            all_required_accepted: true,
+            items: vec![consent_item(false, Some(1), false)],
+        };
+        assert!(!community_node_consent_has_pending_update(&status));
+    }
 }

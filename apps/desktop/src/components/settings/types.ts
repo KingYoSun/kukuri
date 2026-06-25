@@ -64,6 +64,31 @@ export type CommunityNodeDependencyView = {
   manifestError?: string | null;
 };
 
+// per-node consent ダイアログ（#384）で表示する 1 ポリシー分の行。
+export type CommunityNodeConsentPolicyView = {
+  policySlug: string;
+  title: string;
+  body: string;
+  policyVersion: number;
+  required: boolean;
+  acceptedAtLabel: string | null;
+  // 版が上がって再同意が必要な「更新」状態か。
+  updated: boolean;
+  previouslyAcceptedVersion: number | null;
+};
+
+// per-node consent ダイアログ全体の表示状態。
+export type CommunityNodeConsentView = {
+  // 認証済みでないと consent を取得・受諾できない。
+  authenticated: boolean;
+  // consent_state を一度でも取得できているか（未取得なら本文表示前に取得を促す）。
+  loaded: boolean;
+  allRequiredAccepted: boolean;
+  // 更新による未同意（再同意要求）が 1 つでもあるか。
+  hasPendingUpdate: boolean;
+  policies: CommunityNodeConsentPolicyView[];
+};
+
 export type CommunityNodeEntryView = {
   id: string;
   baseUrl: string;
@@ -71,6 +96,7 @@ export type CommunityNodeEntryView = {
   saved: boolean;
   diagnostics: SettingsDiagnosticItemView[];
   dependency: CommunityNodeDependencyView;
+  consent: CommunityNodeConsentView;
   lastError?: string | null;
 };
 

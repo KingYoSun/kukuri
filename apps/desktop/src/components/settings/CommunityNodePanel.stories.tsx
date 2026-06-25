@@ -33,6 +33,13 @@ function CommunityNodePanelStory({
                 saved: false,
                 diagnostics: [],
                 dependency: { diagnostics: [], boundaryNotes: [] },
+                consent: {
+                  authenticated: false,
+                  loaded: false,
+                  allRequiredAccepted: false,
+                  hasPendingUpdate: false,
+                  policies: [],
+                },
                 lastError: null,
               },
             ])

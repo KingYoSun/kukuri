@@ -20,6 +20,17 @@ export function formatLocalizedTime(
   }).format(date);
 }
 
+export function formatLocalizedDateTime(
+  value: Date | number | string,
+  locale?: string | null
+): string {
+  const date = value instanceof Date ? value : new Date(value);
+  return new Intl.DateTimeFormat(getResolvedLocale(locale), {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
+}
+
 export function formatLocalizedBytes(value: number, locale?: string | null): string {
   const resolvedLocale = getResolvedLocale(locale);
   if (value >= 1024 * 1024) {

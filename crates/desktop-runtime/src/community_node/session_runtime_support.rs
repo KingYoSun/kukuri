@@ -83,7 +83,7 @@ impl DesktopRuntime {
         self.set_community_node_cached_consent(base_url.as_str(), Some(consent_status.clone()))
             .await;
         if !consent_status.all_required_accepted {
-            if !auto_approve {
+            if !auto_approve || community_node_consent_has_pending_update(&consent_status) {
                 self.clear_community_node_retry_state(base_url.as_str())
                     .await;
                 self.set_community_node_session_phase(

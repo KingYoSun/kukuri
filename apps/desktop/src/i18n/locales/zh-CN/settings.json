@@ -56,6 +56,21 @@
         "defaultNotAuthority": "即使是默认节点，也不是整个网络的运营者或权限方。"
       }
     },
+    "consent": {
+      "title": "社区节点政策",
+      "authRequired": "在查看或接受其政策前，请先与该节点完成认证。",
+      "notLoaded": "打开此对话框以从节点加载最新政策。",
+      "updatedNotice": "该节点更新了政策。请查看变更并再次接受以继续连接。",
+      "noPolicies": "该节点不需要任何政策同意。",
+      "noBody": "该政策未提供正文。",
+      "required": "必需",
+      "optional": "可选",
+      "updatedBadge": "已更新",
+      "updatedDetail": "已从 v{{previous}} 更新至 v{{current}}。",
+      "acceptedAt": "已于 {{timestamp}} 接受",
+      "notAccepted": "尚未接受",
+      "allAccepted": "已全部接受"
+    },
     "baseUrlsHint": "每行一个 HTTPS 基础 URL。",
     "baseUrlsLabel": "基础 URL",
     "baseUrlsPlaceholder": "https://community.example.com",

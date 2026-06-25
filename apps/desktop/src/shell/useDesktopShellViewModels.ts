@@ -66,6 +66,7 @@ import {
   communityNodeAuthLabel,
   communityNodeConnectivityUrlsLabel,
   communityNodeConsentLabel,
+  communityNodeConsentView,
   communityNodeNextStepLabel,
   communityNodeRetryAfterLabel,
   communityNodeSessionPhaseLabel,
@@ -1021,6 +1022,7 @@ export function useDesktopShellViewModels({
             communityNodeManifests[node.base_url],
             t
           ),
+          consent: communityNodeConsentView(status),
           lastError: status?.last_error ?? null,
         };
       }),

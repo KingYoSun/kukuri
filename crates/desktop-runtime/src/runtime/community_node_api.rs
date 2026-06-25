@@ -125,7 +125,10 @@ impl DesktopRuntime {
             .await?;
         self.set_community_node_cached_consent(base_url.as_str(), Some(consent_state.clone()))
             .await;
-        if !consent_state.all_required_accepted && node.auto_approve {
+        if !consent_state.all_required_accepted
+            && node.auto_approve
+            && !community_node_consent_has_pending_update(&consent_state)
+        {
             self.set_community_node_session_phase(
                 base_url.as_str(),
                 CommunityNodeSessionPhase::Accepting,

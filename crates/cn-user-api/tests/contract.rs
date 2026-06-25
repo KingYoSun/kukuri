@@ -211,6 +211,20 @@ async fn bootstrap_requires_bearer_then_consents() -> Result<()> {
             .iter()
             .all(|item| item.accepted_at.is_none())
     );
+    // #384: client が規約本文を表示できるよう body が返ること。
+    assert!(
+        consent_status
+            .items
+            .iter()
+            .all(|item| !item.body.trim().is_empty())
+    );
+    // 初回（過去同意なし）は previously_accepted_version が None であること。
+    assert!(
+        consent_status
+            .items
+            .iter()
+            .all(|item| item.previously_accepted_version.is_none())
+    );
 
     let accepted = client
         .post(format!("{}/v1/consents", server.base_url))
@@ -222,6 +236,13 @@ async fn bootstrap_requires_bearer_then_consents() -> Result<()> {
         .json::<kukuri_cn_core::CommunityNodeConsentStatus>()
         .await?;
     assert!(accepted.all_required_accepted);
+    // 受諾後は accepted_at と previously_accepted_version が設定されること。
+    assert!(
+        accepted
+            .items
+            .iter()
+            .all(|item| item.accepted_at.is_some() && item.previously_accepted_version.is_some())
+    );
 
     let bootstrap = client
         .get(format!("{}/v1/bootstrap/nodes", server.base_url))
