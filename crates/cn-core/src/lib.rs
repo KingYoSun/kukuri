@@ -1,3 +1,4 @@
+mod admission;
 mod auth;
 mod bootstrap;
 mod config;
@@ -12,6 +13,12 @@ mod rollout;
 #[cfg(test)]
 mod tests;
 
+pub use admission::{
+    AdmissionConfig, AdmissionMode, AdmissionRejection, AllowlistEntry, BannedEntry,
+    InviteCodeSummary, add_allowlist, ban_subscriber, invite_code_hash, issue_invite_code,
+    list_allowlist, list_banned, list_invite_codes, load_admission_config, remove_allowlist,
+    revoke_invite_code, set_admission_mode, unban_subscriber,
+};
 pub use auth::{
     build_auth_envelope_json, create_auth_challenge, require_bearer_identity,
     require_bearer_pubkey, verify_auth_envelope_and_issue_token,
@@ -22,7 +29,8 @@ pub use bootstrap::{
 };
 pub use config::{
     AUTH_CHALLENGE_TTL_SECONDS, AUTH_ENVELOPE_KIND, AUTH_EVENT_MAX_SKEW_SECONDS, AuthMode,
-    AuthRolloutConfig, BOOTSTRAP_PEER_REGISTRATION_TTL_SECONDS, COMMUNITY_NODE_AUTH_SERVICE_NAME,
+    AuthRolloutConfig, BOOTSTRAP_PEER_REGISTRATION_TTL_SECONDS,
+    COMMUNITY_NODE_ADMISSION_SERVICE_NAME, COMMUNITY_NODE_AUTH_SERVICE_NAME,
     COMMUNITY_NODE_DATABASE_INIT_MODE_ENV, COMMUNITY_NODE_RENDEZVOUS_KEY_PREFIX_ENV,
     COMMUNITY_NODE_RENDEZVOUS_REDIS_URL_ENV, DEFAULT_TOKEN_TTL_SECONDS, DatabaseInitMode,
     JwtConfig, TOPIC_RENDEZVOUS_TTL_SECONDS, USER_API_BEARER_CHALLENGE,

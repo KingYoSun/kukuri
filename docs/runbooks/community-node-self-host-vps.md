@@ -158,6 +158,56 @@ docker compose --env-file .env.community-node -f docker-compose.community-node.y
 docker compose --env-file .env.community-node -f docker-compose.community-node.yml up -d --build cn-user-api cn-iroh-relay
 ```
 
+## 入会制御（招待 / whitelist / ban） — #383
+
+public node の利用者を限定する場合、`cn-cli admission` で運用する。mode は DB（`cn_admin.service_configs`）に保存され runtime 可変なので、`.env.community-node` の変更や再起動は不要。
+
+mode の意味:
+
+- `open`（既定）: 署名できる誰でも参加できる。既存挙動と同じ。
+- `invite`: 未登録の参加者は有効な招待コードが必要。allowlist 済みの pubkey はコード不要で参加できる。
+- `whitelist`: allowlist 済みの pubkey のみ参加できる。
+
+いずれの mode でも、既に参加済み（active）の利用者は mode 変更後も再認証を通る。ban された pubkey は mode に関わらず参加できず、既存トークンも即時失効する。
+
+> 注意: ここでの ban は kukuri network 全体からのアカウント凍結ではなく、この node が提供する接続補助・auth/consent をこの pubkey へ提供しないという node-local な制限である（`docs/architecture/p2p-first-community-node-responsibility-boundary.md`）。
+
+`cn-cli` は `COMMUNITY_NODE_DATABASE_URL` を参照する。docker compose 環境では `cn-user-api` と同じ DB を指す。
+
+```bash
+# 現在の mode を確認
+docker compose --env-file .env.community-node -f docker-compose.community-node.yml run --rm \
+  cn-cli admission show
+
+# 招待制に切り替える
+docker compose --env-file .env.community-node -f docker-compose.community-node.yml run --rm \
+  cn-cli admission set-mode --mode invite
+
+# 招待コードを発行する（平文はこのとき一度だけ表示される。max-uses / expires-at は任意）
+docker compose --env-file .env.community-node -f docker-compose.community-node.yml run --rm \
+  cn-cli admission invite issue --label friends --max-uses 5 --expires-at 2026-12-31T00:00:00Z
+
+# 招待コードの一覧（hash のみ）と取り消し
+docker compose --env-file .env.community-node -f docker-compose.community-node.yml run --rm \
+  cn-cli admission invite list
+docker compose --env-file .env.community-node -f docker-compose.community-node.yml run --rm \
+  cn-cli admission invite revoke --code <plaintext-code>
+
+# 手動許可（whitelist）
+docker compose --env-file .env.community-node -f docker-compose.community-node.yml run --rm \
+  cn-cli admission allow add --pubkey <hex-pubkey> --label trusted
+docker compose --env-file .env.community-node -f docker-compose.community-node.yml run --rm \
+  cn-cli admission allow list
+
+# ブラックリスト（ban）
+docker compose --env-file .env.community-node -f docker-compose.community-node.yml run --rm \
+  cn-cli admission ban add --pubkey <hex-pubkey>
+docker compose --env-file .env.community-node -f docker-compose.community-node.yml run --rm \
+  cn-cli admission ban remove --pubkey <hex-pubkey>
+```
+
+client 側では、招待が必要な node に未登録の pubkey で接続すると `POST /v1/auth/verify` が HTTP 403（`INVITE_REQUIRED` / `INVITE_INVALID` / `INVITE_EXPIRED` / `INVITE_EXHAUSTED` / `INVITE_REVOKED` / `NOT_ALLOWLISTED` / `BANNED`）を返す。現行 client はこれを接続エラーとして表示する（招待コード入力 UI は後続）。
+
 ## 確認
 
 VPS:

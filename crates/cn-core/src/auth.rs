@@ -9,6 +9,7 @@ use sqlx::postgres::PgPool;
 
 use kukuri_core::{KukuriAuthEnvelopeContentV1, KukuriKeys, sign_envelope_json};
 
+use crate::admission::{AdmissionMode, evaluate_admission};
 use crate::bootstrap::{
     prune_expired_bootstrap_peer_registrations, upsert_bootstrap_peer_registration,
 };
@@ -72,6 +73,7 @@ where
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn verify_auth_envelope_and_issue_token(
     pool: &PgPool,
     jwt_config: &JwtConfig,
@@ -79,6 +81,8 @@ pub async fn verify_auth_envelope_and_issue_token(
     auth_envelope_json: &Value,
     endpoint_id: Option<&str>,
     addr_hint: Option<&str>,
+    admission_mode: AdmissionMode,
+    invite_code: Option<&str>,
 ) -> Result<AuthVerifyResponse> {
     let public_base_url = normalize_http_url(public_base_url)?;
     let envelope = parse_auth_envelope(auth_envelope_json)?;
@@ -124,6 +128,16 @@ pub async fn verify_auth_envelope_and_issue_token(
 
     let mut tx = pool.begin().await?;
     prune_expired_bootstrap_peer_registrations(&mut *tx).await?;
+    // admission を challenge / invite 消費の前に評価する。拒否時は tx を rollback し、
+    // challenge も invite も消費しない（無効な試行で消費させない）。invite redeem が成功した
+    // 場合は subscriber 作成・challenge 消費と同一 tx でコミットされ原子性を保つ。
+    evaluate_admission(
+        &mut tx,
+        normalized_pubkey.as_str(),
+        admission_mode,
+        invite_code,
+    )
+    .await?;
     sqlx::query(
         "UPDATE cn_auth.auth_challenges
          SET used_at = NOW()
@@ -195,6 +209,8 @@ pub async fn require_bearer_identity(
             pubkey,
             endpoint_id,
         }),
+        // banned subscriber は既存トークンでも即時失効する（#383）。
+        Some("banned") => Err(auth_required_error("subscriber is banned")),
         Some(_) => Err(auth_required_error("subscriber is not active")),
         None => Err(auth_required_error("subscriber is not registered")),
     }
