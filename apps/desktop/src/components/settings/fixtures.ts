@@ -6,7 +6,7 @@ import type {
 } from './types';
 import { buildCommunityNodeDependencyView } from './communityNodeDependency';
 import i18n from '@/i18n';
-import { formatLocalizedTime, getResolvedLocale } from '@/i18n/format';
+import { formatLocalizedDateTime, formatLocalizedTime, getResolvedLocale } from '@/i18n/format';
 
 const fixtureTranslate = (key: string, options?: Record<string, unknown>): string =>
   i18n.t(key, options);
@@ -215,6 +215,24 @@ export function createCommunityNodePanelFixture(): CommunityNodePanelView {
           },
           fixtureTranslate
         ),
+        consent: {
+          authenticated: true,
+          loaded: true,
+          allRequiredAccepted: true,
+          hasPendingUpdate: false,
+          policies: [
+            {
+              policySlug: 'terms_of_service',
+              title: 'Terms of Service',
+              body: 'You must follow the community node terms of service.',
+              policyVersion: 1,
+              required: true,
+              acceptedAtLabel: formatLocalizedDateTime('2026-03-28T13:00:00Z'),
+              updated: false,
+              previouslyAcceptedVersion: 1,
+            },
+          ],
+        },
         lastError: null,
       },
       {
@@ -254,6 +272,13 @@ export function createCommunityNodePanelFixture(): CommunityNodePanelView {
           },
         ],
         dependency: buildCommunityNodeDependencyView({ status: 'absent' }, fixtureTranslate),
+        consent: {
+          authenticated: false,
+          loaded: false,
+          allRequiredAccepted: false,
+          hasPendingUpdate: false,
+          policies: [],
+        },
         lastError: i18n.t('common:errors.failedToRefreshCommunityNode'),
       },
     ],

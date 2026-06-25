@@ -415,8 +415,10 @@ export type CommunityNodeConsentItem = {
   policy_slug: string;
   policy_version: number;
   title: string;
+  body?: string;
   required: boolean;
   accepted_at?: number | null;
+  previously_accepted_version?: number | null;
 };
 
 export type CommunityNodeConsentStatus = {

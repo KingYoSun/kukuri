@@ -187,8 +187,8 @@ export function DesktopShellSettingsDrawer({
           }}
           onClearNodes={() => void handleClearCommunityNodes()}
           onAuthenticate={(baseUrl) => void handleAuthenticateCommunityNode(baseUrl)}
-          onFetchConsents={(baseUrl) => void handleFetchCommunityNodeConsents(baseUrl)}
-          onAcceptConsents={(baseUrl) => void handleAcceptCommunityNodeConsents(baseUrl)}
+          onFetchConsents={(baseUrl) => handleFetchCommunityNodeConsents(baseUrl)}
+          onAcceptConsents={(baseUrl) => handleAcceptCommunityNodeConsents(baseUrl)}
           onRefresh={(baseUrl) => void handleRefreshCommunityNode(baseUrl)}
           onClearToken={(baseUrl) => void handleClearCommunityNodeToken(baseUrl)}
         />

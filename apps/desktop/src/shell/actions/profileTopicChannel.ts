@@ -764,6 +764,7 @@ export function createProfileTopicChannelActions({
           ? consentError.message
           : translate('common:errors.failedToFetchConsentStatus')
       );
+      throw consentError;
     }
   }
 
@@ -780,6 +781,7 @@ export function createProfileTopicChannelActions({
           ? consentError.message
           : translate('common:errors.failedToAcceptConsents')
       );
+      throw consentError;
     }
   }
 

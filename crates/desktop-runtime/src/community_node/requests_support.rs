@@ -681,7 +681,7 @@ impl DesktopRuntime {
                 self.set_community_node_cached_consent(base_url, Some(consent_status.clone()))
                     .await;
                 if !consent_status.all_required_accepted {
-                    if !auto_approve {
+                    if !auto_approve || community_node_consent_has_pending_update(&consent_status) {
                         self.set_community_node_session_phase(
                             base_url,
                             CommunityNodeSessionPhase::Idle,
@@ -709,6 +709,21 @@ impl DesktopRuntime {
                 .map_err(CommunityNodeRequestError::into_anyhow)
             }
             Err(CommunityNodeRequestError::ConsentRequired) if auto_approve => {
+                // 版が上がっての再同意（更新）かどうかを判定するため、現在の consent 状態を取得する。
+                // 更新が含まれる場合は auto_approve でも黙って再受諾せず、ユーザーへ本文を再提示する。
+                let consent_status = self
+                    .fetch_community_node_consent_status_with_retry(base_url, token, false)
+                    .await?;
+                self.set_community_node_cached_consent(base_url, Some(consent_status.clone()))
+                    .await;
+                if community_node_consent_has_pending_update(&consent_status) {
+                    self.set_community_node_session_phase(
+                        base_url,
+                        CommunityNodeSessionPhase::Idle,
+                    )
+                    .await;
+                    return Ok(());
+                }
                 self.set_community_node_session_phase(
                     base_url,
                     CommunityNodeSessionPhase::Accepting,

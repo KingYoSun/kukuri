@@ -20,9 +20,14 @@ import {
   type TimelineScope,
   type TopicSyncStatus,
 } from '@/lib/api';
+import type {
+  CommunityNodeConsentPolicyView,
+  CommunityNodeConsentView,
+} from '@/components/settings/types';
 import i18n from '@/i18n';
 import {
   formatLocalizedBytes,
+  formatLocalizedDateTime,
   formatLocalizedNumber,
   formatLocalizedTime,
 } from '@/i18n/format';
@@ -419,6 +424,43 @@ export function communityNodeConsentLabel(status?: CommunityNodeNodeStatus): str
   return status.consent_state.all_required_accepted
     ? translate('common:states.accepted')
     : translate('common:states.required');
+}
+
+function formatConsentAcceptedAt(value: number | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+  return formatLocalizedDateTime(value * 1000);
+}
+
+// per-node consent ダイアログ（#384）用の view を組み立てる。
+// 認証状態・取得有無・各ポリシー（本文/版/必須/受諾日時/更新フラグ）をまとめる。
+export function communityNodeConsentView(
+  status?: CommunityNodeNodeStatus
+): CommunityNodeConsentView {
+  const authenticated = status?.auth_state.authenticated ?? false;
+  const consentState = status?.consent_state ?? null;
+  const policies: CommunityNodeConsentPolicyView[] = (consentState?.items ?? []).map((item) => {
+    const previouslyAcceptedVersion = item.previously_accepted_version ?? null;
+    const updated = item.accepted_at == null && previouslyAcceptedVersion != null;
+    return {
+      policySlug: item.policy_slug,
+      title: item.title,
+      body: item.body ?? '',
+      policyVersion: item.policy_version,
+      required: item.required,
+      acceptedAtLabel: formatConsentAcceptedAt(item.accepted_at),
+      updated,
+      previouslyAcceptedVersion,
+    };
+  });
+  return {
+    authenticated,
+    loaded: consentState != null,
+    allRequiredAccepted: consentState?.all_required_accepted ?? false,
+    hasPendingUpdate: policies.some((policy) => policy.required && policy.updated),
+    policies,
+  };
 }
 
 export function translateTopicConnectionText(label: string): string {

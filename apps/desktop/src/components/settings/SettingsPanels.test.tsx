@@ -147,6 +147,7 @@ test('discovery panel keeps env-locked seed editor read-only', () => {
 
 test('community node panel renders ready and error states', async () => {
   const user = userEvent.setup();
+  const onFetchConsents = vi.fn();
   const onAcceptConsents = vi.fn();
   const communityNodePanelFixture = createCommunityNodePanelFixture();
 
@@ -167,7 +168,7 @@ test('community node panel renders ready and error states', async () => {
       onReset={() => {}}
       onClearNodes={() => {}}
       onAuthenticate={() => {}}
-      onFetchConsents={() => {}}
+      onFetchConsents={onFetchConsents}
       onAcceptConsents={onAcceptConsents}
       onRefresh={() => {}}
       onClearToken={() => {}}
@@ -177,8 +178,135 @@ test('community node panel renders ready and error states', async () => {
   expect(screen.getByText('failed to update community nodes')).toBeInTheDocument();
   expect(screen.getByDisplayValue('https://api.kukuri.app')).toBeInTheDocument();
 
-  await user.click(screen.getAllByRole('button', { name: 'Accept' })[0]);
+  await user.click(screen.getAllByRole('button', { name: 'Consents' })[0]);
+  expect(onFetchConsents).toHaveBeenCalledWith('https://api.kukuri.app');
+
+  // 既に全て同意済みのノードでは Accept が無効化され、誤受諾を防ぐ。
+  const consentDialog = await screen.findByRole('dialog');
+  expect(within(consentDialog).getByRole('button', { name: 'All accepted' })).toBeDisabled();
+  expect(onAcceptConsents).not.toHaveBeenCalled();
+});
+
+test('community node consent dialog shows policy body, version, and update notice', async () => {
+  const user = userEvent.setup();
+  const onFetchConsents = vi.fn();
+  const onAcceptConsents = vi.fn();
+  const communityNodePanelFixture = createCommunityNodePanelFixture();
+  const fixtureWithUpdate = {
+    ...communityNodePanelFixture,
+    nodes: communityNodePanelFixture.nodes.map((node, index) =>
+      index === 0
+        ? {
+            ...node,
+            consent: {
+              authenticated: true,
+              loaded: true,
+              allRequiredAccepted: false,
+              hasPendingUpdate: true,
+              policies: [
+                {
+                  policySlug: 'terms_of_service',
+                  title: 'Terms of Service',
+                  body: 'You must follow the community node terms of service.',
+                  policyVersion: 2,
+                  required: true,
+                  acceptedAtLabel: null,
+                  updated: true,
+                  previouslyAcceptedVersion: 1,
+                },
+              ],
+            },
+          }
+        : node
+    ),
+  };
+
+  render(
+    <CommunityNodePanel
+      view={fixtureWithUpdate}
+      saveDisabled={false}
+      resetDisabled={false}
+      clearDisabled={false}
+      onAddNode={() => {}}
+      onNodeBaseUrlChange={() => {}}
+      onNodeAutoApproveChange={() => {}}
+      onRemoveNode={() => {}}
+      onSaveNodes={() => {}}
+      onReset={() => {}}
+      onClearNodes={() => {}}
+      onAuthenticate={() => {}}
+      onFetchConsents={onFetchConsents}
+      onAcceptConsents={onAcceptConsents}
+      onRefresh={() => {}}
+      onClearToken={() => {}}
+    />
+  );
+
+  await user.click(screen.getAllByRole('button', { name: 'Consents' })[0]);
+
+  const consentDialog = await screen.findByRole('dialog');
+  expect(
+    within(consentDialog).getByText('You must follow the community node terms of service.')
+  ).toBeInTheDocument();
+  expect(within(consentDialog).getByText('v2')).toBeInTheDocument();
+  expect(
+    within(consentDialog).getByText('This node updated its policies. Review the changes and accept again to keep connecting.')
+  ).toBeInTheDocument();
+  expect(within(consentDialog).getByText('Updated from v1 to v2.')).toBeInTheDocument();
+
+  await user.click(within(consentDialog).getByRole('button', { name: 'Accept' }));
   expect(onAcceptConsents).toHaveBeenCalledWith('https://api.kukuri.app');
+});
+
+test('community node consent dialog disables accept when latest policy fetch fails', async () => {
+  const user = userEvent.setup();
+  const onFetchConsents = vi.fn().mockRejectedValue(new Error('offline'));
+  const onAcceptConsents = vi.fn();
+  const communityNodePanelFixture = createCommunityNodePanelFixture();
+  const fixtureWithPendingConsent = {
+    ...communityNodePanelFixture,
+    nodes: communityNodePanelFixture.nodes.map((node, index) =>
+      index === 0
+        ? {
+            ...node,
+            consent: {
+              ...node.consent,
+              allRequiredAccepted: false,
+            },
+          }
+        : node
+    ),
+  };
+
+  render(
+    <CommunityNodePanel
+      view={fixtureWithPendingConsent}
+      saveDisabled={false}
+      resetDisabled={false}
+      clearDisabled={false}
+      onAddNode={() => {}}
+      onNodeBaseUrlChange={() => {}}
+      onNodeAutoApproveChange={() => {}}
+      onRemoveNode={() => {}}
+      onSaveNodes={() => {}}
+      onReset={() => {}}
+      onClearNodes={() => {}}
+      onAuthenticate={() => {}}
+      onFetchConsents={onFetchConsents}
+      onAcceptConsents={onAcceptConsents}
+      onRefresh={() => {}}
+      onClearToken={() => {}}
+    />
+  );
+
+  await user.click(screen.getAllByRole('button', { name: 'Consents' })[0]);
+
+  const consentDialog = await screen.findByRole('dialog');
+  expect(within(consentDialog).getByText('Open this dialog to load the latest policies from the node.')).toBeInTheDocument();
+  expect(
+    within(consentDialog).queryByText('You must follow the community node terms of service.')
+  ).not.toBeInTheDocument();
+  expect(within(consentDialog).getByRole('button', { name: 'Accept' })).toBeDisabled();
 });
 
 test('settings panels avoid the legacy grid classname collision', () => {
