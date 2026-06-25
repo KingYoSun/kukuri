@@ -31,6 +31,7 @@
 - UI/UX フロー・ガードレール: `docs/adr/0014-uiux-dev-flow.md`
 - UI review record: `docs/ui-reviews/`
 - 振る舞い: `crates/*` のテストと `harness/scenarios/`
+- GitHub Issue / PR / 現在のセッション内容は SSoT として扱わない。根拠にするのは本リポジトリの実装・docs・tests・scenarios のみ。
 
 ## ガードレール
 - 既存コードの丸ごとコピーは禁止。contract または scenario を先に置いてから必要最小限だけ移植する。
