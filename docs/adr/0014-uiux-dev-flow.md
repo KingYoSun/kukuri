@@ -3,7 +3,7 @@
 ## Status
 Accepted
 
-**2026-06-13 改訂（#308）**: Figma を一次レビュー面とする HTML capture フローを廃止した。旧 `docs/DESIGN.md` の design-system ルール / review チェックリスト / 例外ポリシーを本 ADR に統合し、色・タイポ・余白・コンポーネント等の**具体的なビジュアル仕様は root [`DESIGN.md`](../../DESIGN.md) へ分離**した。
+**2026-06-13 改訂**: Figma を一次レビュー面とする HTML capture フローを廃止した。旧 `docs/DESIGN.md` の design-system ルール / review チェックリスト / 例外ポリシーを本 ADR に統合し、色・タイポ・余白・コンポーネント等の**具体的なビジュアル仕様は root [`DESIGN.md`](../../DESIGN.md) へ分離**した。
 
 ## Context
 - 現行 desktop frontend は Tailwind + shadcn/ui + Storybook へ寄せつつ移行中で、未着手の既存 UI も残る。

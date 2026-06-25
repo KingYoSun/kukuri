@@ -8,9 +8,9 @@
 
 community node operator の法務・運用・safety・通報に関わる設計（operator docs / safety architecture / report routing / default node policy など）は、すべてこの責任境界を共通前提とする。
 
-ここで境界を固定しないと、これらの設計が暗黙のうちに「kukuri network 全体の運営者」を仮定してしまう。kukuri はそのような中央運営者を持たない。
+ここで境界を固定しないと、これらの設計が暗黙のうちに「kukuri network 全体の運営者」を仮定してしまう。kukuri はそのような中央運営者を **持たない** のではなく、P2P を基盤としているために **構造的に持ち得ない**。network 全体を所有する中央のチョークポイントが存在しないため、誰かを network 全体の運営者・統治者として据えることはそもそも不可能である。
 
-このページは法的助言ではなく、central governance model / network-wide moderation policy を導入するものでもない。あくまで実装・文書・UX が共有すべき責任境界の定義である。
+このページは法的助言ではなく、central governance model / network-wide moderation policy を導入するものでもない（そもそも P2P 基盤上で導入し得ない）。あくまで実装・文書・UX が共有すべき責任境界の定義である。
 
 ## 1. kukuri は Mastodon clone ではない
 
@@ -66,20 +66,20 @@ community node は、少なくとも以下を**負わない**。これらは ope
 kukuri は onboarding を成立させるために default community node を用意し得るが、その位置づけは限定的である。
 
 - default community node は **onboarding compromise / onboarding infrastructure** である。新規 user が最初の接続・bootstrap・初期体験を得るための補助に過ぎない。
-- default node は **network-wide authority ではない**。「default である」ことは「kukuri network 全体の運営者・通報先・moderation 権者である」ことを意味しない。
+- default node は **network-wide authority ではない**。「default である」ことは「kukuri network 全体の運営者・通報先・moderation 権者である」ことを意味しない。そもそも P2P 基盤上には network 全体の authority という座が存在しないため、default node であってもその役割を担うことは構造的に不可能である。
 - default node policy は、**default node が提供する capability にのみ**適用される。
 - default node は、third-party node の content / index / moderation / cache / trust signal に対して責任を持たない。
 - 通報先は「default node があるから default に集約する」のではなく、対象を実際に表示・索引・moderation・cache・recommend した node の authority scope に基づいて決まる。provenance 不明時に default node / kukuri project へ fallback してはならない。
 
 ## 5. Operator safety work の位置づけ
 
-operator docs / safety / report flow の整備は、community node を中央 SNS 運営者にするためのものではない。
+operator docs / safety / report flow の整備は、community node を中央 SNS 運営者にするためのものではない。P2P 基盤上には network 全体を統治する中央運営者が構造的に存在し得ないため、これらは node-local な補助層の説明責任を扱う。
 
 これらの目的は、**P2P network の補助層を、個人・小規模グループでも現実的かつ説明可能に運用できるようにする**ことである。
 
-- operator docs: operator が有効化した capability に対応した説明責任（terms / privacy / 外部送信表示 / 届出補助など）を決定論的に生成し、分散運用の説明責任負荷を下げる。これは node を network 全体の運営者にするものではない。
-- safety moderation: operator が自分の index / discovery / recommendation / relation から critical safety risk を排除できるようにする。verdict / moderation event / risk signal は node の authority scope 内で機能し、global moderation authority を作らない。
-- 分散通報ルーティング: 通報を中央集約せず、対象に実際に関与した責任ある node へ route する。default node や kukuri project を network-wide の中央通報窓口にしない。
+- operator docs: operator が有効化した capability に対応した説明責任（terms / privacy / 外部送信表示 / 届出補助など）を決定論的に生成し、分散運用の説明責任負荷を下げる。これは node を network 全体の運営者にするものではない。P2P 基盤上ではその役割自体が成立し得ない。
+- safety moderation: operator が自分の index / discovery / recommendation / relation から critical safety risk を排除できるようにする。verdict / moderation event / risk signal は node の authority scope 内で機能する。global moderation authority は「作らない」のではなく、P2P 基盤上では成立し得ないため、そもそも存在しない。
+- 分散通報ルーティング: 通報を中央集約せず、対象に実際に関与した責任ある node へ route する。network-wide の中央通報窓口は構造的に存在しないため、default node や kukuri project をその窓口として据えることはできない。
 
 ## このマニフェストが満たすべきこと
 
@@ -87,7 +87,7 @@ operator docs / safety / report flow の整備は、community node を中央 SNS
 - community node が home server ではないことを明記している。
 - user identity / profile / social graph が node-independent であることを明記している。
 - community node の責務と非責務を分離している。
-- default community node が onboarding infrastructure であり network-wide authority ではないことを明記している。
+- default community node が onboarding infrastructure であり、network-wide authority は P2P 基盤上で成立し得ないことを明記している。
 - operator docs / safety / report flow が、P2P 補助層を分散運用可能にするためのものであることを明記している。
 
 ## 関連文書
