@@ -65,6 +65,39 @@ test('settings drawer can open the release section', async () => {
   expect(screen.getByRole('heading', { name: 'Release' })).toBeInTheDocument();
 });
 
+test('desktop app blocks startup until app-level legal consent is accepted', async () => {
+  const user = userEvent.setup();
+  invokeMock.mockResolvedValueOnce({
+    status: 'consent_required',
+    current_bundle_version: 1,
+    accepted_bundle_version: null,
+  });
+  invokeMock.mockResolvedValueOnce({
+    status: 'failed',
+    error: {
+      kind: 'unknown',
+      message: 'kukuri could not open the local app database.',
+      detail: 'runtime starts after consent',
+      db_path: null,
+    },
+  });
+
+  render(<App />);
+
+  expect(await screen.findByRole('heading', { name: 'Before you continue' })).toBeInTheDocument();
+  expect(screen.getByText('Terms of Service')).toBeInTheDocument();
+  expect(screen.getByText('Privacy Policy')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Publish' })).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'Accept and continue' }));
+
+  await waitFor(() => {
+    expect(invokeMock).toHaveBeenCalledWith('accept_app_consents', { bundleVersion: 1 });
+  });
+  expect(await screen.findByText('kukuri could not open the local database.')).toBeInTheDocument();
+  expect(screen.getByDisplayValue(/runtime starts after consent/)).toBeInTheDocument();
+});
+
 test('desktop app renders a startup error when the local database cannot be opened', async () => {
   invokeMock.mockResolvedValueOnce({
     status: 'failed',

@@ -23,7 +23,19 @@ export type DesktopStartupErrorView = {
 
 export type DesktopStartupStatus =
   | { status: 'ready' }
+  | {
+      status: 'consent_required';
+      current_bundle_version: number;
+      accepted_bundle_version: number | null;
+    }
   | { status: 'failed'; error: DesktopStartupErrorView };
+
+export type AppConsentStatus = {
+  currentBundleVersion: number;
+  acceptedBundleVersion: number | null;
+  acceptedAt: number | null;
+  satisfied: boolean;
+};
 
 export type ChannelAudienceKind = 'invite_only' | 'friend_only' | 'friend_plus';
 export type ChannelSharingState = 'open' | 'frozen';

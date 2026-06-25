@@ -60,6 +60,11 @@ export const SETTINGS_SECTION_COPY: Array<{
   description: string;
 }> = [
   {
+    id: 'about',
+    label: 'About / Legal',
+    description: 'Terms, privacy, app version, and consent status.',
+  },
+  {
     id: 'appearance',
     label: 'Appearance',
     description: 'Local light and dark theme selection.',
@@ -102,6 +107,7 @@ export const PRIMARY_SECTION_PATHS: Record<PrimarySection, string> = {
 
 export function isSettingsSection(value: string | null): value is SettingsSection {
   return (
+    value === 'about' ||
     value === 'appearance' ||
     value === 'connectivity' ||
     value === 'discovery' ||

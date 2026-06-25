@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { HashRouter } from 'react-router-dom';
 
+import { LegalDocumentView } from '@/components/LegalDocumentView';
 import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
 import { DesktopShellPage } from '@/shell/DesktopShellPage';
@@ -13,6 +14,7 @@ import {
 import {
   type DesktopStartupErrorView,
   type DesktopStartupStatus,
+  acceptAppConsents,
   getDesktopStartupStatus,
 } from '@/lib/api';
 import { BACKEND_UNAVAILABLE_MESSAGE } from '@/lib/api/invoke/error';
@@ -23,10 +25,7 @@ import {
 } from '@/lib/theme';
 import { copyTextToClipboard } from '@/lib/utils';
 
-type StartupGateState =
-  | { status: 'checking' }
-  | { status: 'ready' }
-  | { status: 'failed'; error: DesktopStartupErrorView };
+type StartupGateState = { status: 'checking' } | DesktopStartupStatus;
 
 export function App(props: AppProps) {
   const [store] = useState(() => createDesktopShellStore());
@@ -55,7 +54,7 @@ export function App(props: AppProps) {
         if (!active) {
           return;
         }
-        setStartupGate(status.status === 'failed' ? status : { status: 'ready' });
+        setStartupGate(status);
       })
       .catch((error: unknown) => {
         if (!active) {
@@ -85,6 +84,16 @@ export function App(props: AppProps) {
     return <StartupStatusScreen status='checking' />;
   }
 
+  if (startupGate.status === 'consent_required') {
+    return (
+      <ConsentGate
+        currentBundleVersion={startupGate.current_bundle_version}
+        acceptedBundleVersion={startupGate.accepted_bundle_version}
+        onAccepted={setStartupGate}
+      />
+    );
+  }
+
   if (startupGate.status === 'failed') {
     return <StartupStatusScreen status='failed' error={startupGate.error} />;
   }
@@ -95,6 +104,76 @@ export function App(props: AppProps) {
         <DesktopShellPage {...props} theme={theme} onThemeChange={setTheme} />
       </HashRouter>
     </DesktopShellStoreContext.Provider>
+  );
+}
+
+function ConsentGate({
+  currentBundleVersion,
+  acceptedBundleVersion,
+  onAccepted,
+}: {
+  currentBundleVersion: number;
+  acceptedBundleVersion: number | null;
+  onAccepted: (status: DesktopStartupStatus) => void;
+}) {
+  const { t } = useTranslation(['common', 'legal']);
+  const [accepting, setAccepting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [declined, setDeclined] = useState(false);
+  const updated = acceptedBundleVersion !== null && acceptedBundleVersion < currentBundleVersion;
+
+  async function handleAccept() {
+    setAccepting(true);
+    setError(null);
+    try {
+      const nextStatus = await acceptAppConsents(currentBundleVersion);
+      onAccepted(nextStatus);
+    } catch (acceptError) {
+      setError(acceptError instanceof Error ? acceptError.message : String(acceptError));
+    } finally {
+      setAccepting(false);
+    }
+  }
+
+  return (
+    <main className='startup-error-screen'>
+      <section className='startup-error-panel max-h-[90vh] overflow-y-auto' aria-live='polite'>
+        <div className='space-y-4'>
+          <div className='space-y-2'>
+            <h1 className='text-xl font-semibold text-foreground'>{t('legal:gate.title')}</h1>
+            <p className='text-sm leading-6 text-[var(--muted-foreground)]'>
+              {t('legal:gate.intro')}
+            </p>
+          </div>
+          <Notice tone='warning'>
+            {updated ? t('legal:gate.updatedNotice') : t('legal:gate.draftNotice')}
+          </Notice>
+          <LegalDocumentView bundleVersion={currentBundleVersion} compact />
+          {error ? (
+            <Notice tone='destructive'>
+              <div className='space-y-1'>
+                <p>{t('legal:gate.acceptError')}</p>
+                <small className='font-mono'>{error}</small>
+              </div>
+            </Notice>
+          ) : null}
+          {declined ? <Notice tone='destructive'>{t('legal:gate.declineNotice')}</Notice> : null}
+          <div className='startup-error-actions'>
+            <Button type='button' disabled={accepting} onClick={() => void handleAccept()}>
+              {accepting ? t('legal:gate.accepting') : t('legal:gate.accept')}
+            </Button>
+            <Button
+              type='button'
+              variant='secondary'
+              disabled={accepting}
+              onClick={() => setDeclined(true)}
+            >
+              {t('legal:gate.decline')}
+            </Button>
+          </div>
+        </div>
+      </section>
+    </main>
   );
 }
 

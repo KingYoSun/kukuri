@@ -1,0 +1,97 @@
+{
+  "gate": {
+    "title": "继续之前",
+    "intro": "在使用 kukuri 之前，请阅读服务条款与隐私政策。在您同意之前，kukuri 不会开始任何网络连接（不会暴露您的 IP 地址）。",
+    "draftNotice": "本文档为草案，不构成法律意见。",
+    "updatedNotice": "服务条款或隐私政策已更新。请重新阅读并同意以继续。",
+    "accept": "同意并继续",
+    "decline": "不同意",
+    "declineNotice": "如果您不同意，则无法使用 kukuri。请关闭应用。",
+    "accepting": "正在应用…",
+    "acceptError": "保存同意失败，请重试。"
+  },
+  "about": {
+    "title": "关于 / 法律信息",
+    "summary": "服务条款、隐私政策，以及应用与同意状态。",
+    "appVersionLabel": "应用版本",
+    "bundleVersionLabel": "条款版本",
+    "acceptedVersionLabel": "已同意版本",
+    "acceptedAtLabel": "同意时间",
+    "notAccepted": "尚未同意",
+    "documentsHeading": "文档"
+  },
+  "documents": {
+    "draftNotice": "这是草案，不构成法律意见。最终决定应咨询适当的专家或监管机构。",
+    "terms": {
+      "title": "服务条款",
+      "sections": [
+        {
+          "heading": "kukuri 的定位",
+          "paragraphs": [
+            "kukuri 是构建在 P2P 基础之上的去中心化应用。不存在统治整个网络的中央权限；这在结构上是不可能的。",
+            "用户的 identity / profile / social graph 不归属于任何特定 community node，也不会因某个节点停止或变更而丢失。"
+          ]
+        },
+        {
+          "heading": "禁止行为",
+          "paragraphs": [
+            "禁止将 kukuri 用于违法目的，或创建、共享、传播儿童性剥削（CSAM / CSE）等严重侵权内容。",
+            "禁止侵犯他人权利（知识产权、隐私、名誉等）、妨碍网络 / community node / relay，以及用于恶意软件、钓鱼等不正当或有害目的。"
+          ]
+        },
+        {
+          "heading": "开发者与节点运营者的免责",
+          "paragraphs": [
+            "kukuri 开发者提供运行于 P2P 基础之上的软件，不对整个网络、其他用户或各 community node 的活动负责。",
+            "community node 运营者仅在其实际参与的辅助功能范围内承担责任，不对整个 kukuri network 或其他节点负责。",
+            "kukuri 按现状（as-is）提供；在适用法律允许的最大范围内，对因使用或无法使用而产生的损害不承担责任。"
+          ]
+        },
+        {
+          "heading": "条款的变更",
+          "paragraphs": [
+            "本条款可能更新。出现重要更新时，应用会重新显示更新后的条款并要求再次同意。"
+          ]
+        }
+      ]
+    },
+    "privacy": {
+      "title": "隐私政策",
+      "sections": [
+        {
+          "heading": "本地保存的信息",
+          "paragraphs": [
+            "您的 identity（密钥）、profile、social graph 以及投稿等本地 projection，连同应用设置（主题、语言、discovery 设置、community node 设置以及对本政策的同意状态），仅保存在您设备的本地。"
+          ]
+        },
+        {
+          "heading": "在信令与连接时处理的信息",
+          "paragraphs": [
+            "在建立 P2P 连接（信令）或通过 relay 通信的过程中，您的来源 IP 地址可能对连接对端以及 community node / relay 可见。这是在 P2P 网络上建立连接所必需的技术性结果。",
+            "连接目标、连接时间、endpoint 标识符等连接元数据（连接日志）可能由路径上的 community node / relay 临时处理。kukuri client 本身不会集中收集或保存这些信息。"
+          ]
+        },
+        {
+          "heading": "保存期限",
+          "paragraphs": [
+            "本地保存的信息会保留在您的设备上，直到您删除应用数据。",
+            "community node / relay 处理的连接日志的保存期限遵循各运营者的隐私政策。kukuri client 不对此进行控制。"
+          ]
+        },
+        {
+          "heading": "向第三方提供",
+          "paragraphs": [
+            "kukuri client 不会集中汇总您的个人信息并提供给第三方。",
+            "由于 P2P 的特性，您共享的内容和连接信息可能在技术上对连接对端、community node 和 relay 可见。这并非“向第三方提供”，而是 P2P 通信固有的技术特性。"
+          ]
+        },
+        {
+          "heading": "同意",
+          "paragraphs": [
+            "首次启动时，在开始任何网络连接之前，应用会请求您同意本政策。在您同意之前，kukuri 不会开始网络连接。出现重要更新时会要求您重新阅读并同意。"
+          ]
+        }
+      ]
+    }
+  }
+}
