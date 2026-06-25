@@ -5,6 +5,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::DatabaseInitMode;
+use crate::admission::{AdmissionRejection, ensure_default_admission};
 use crate::config::{COMMUNITY_NODE_AUTH_SERVICE_NAME, DATABASE_PREPARE_HINT};
 use crate::rollout::ensure_default_auth_rollout;
 
@@ -25,6 +26,7 @@ pub async fn initialize_database(pool: &PgPool) -> Result<()> {
     migrate_postgres(pool).await?;
     seed_default_policies(pool).await?;
     ensure_default_auth_rollout(pool).await?;
+    ensure_default_admission(pool).await?;
     Ok(())
 }
 
@@ -45,6 +47,8 @@ pub async fn ensure_database_ready(pool: &PgPool) -> Result<()> {
         ("cn_user", "policy_consents"),
         ("cn_admin", "policies"),
         ("cn_admin", "service_configs"),
+        ("cn_admin", "invite_codes"),
+        ("cn_admin", "admission_allowlist"),
         ("cn_bootstrap", "bootstrap_nodes"),
         ("cn_bootstrap", "peer_registrations"),
     ] {
@@ -130,18 +134,34 @@ pub(crate) async fn ensure_active_subscriber<'e, E>(executor: E, pubkey: &str) -
 where
     E: Executor<'e, Database = sqlx::Postgres>,
 {
-    sqlx::query(
+    // admission を通過して token 発行に至った subscriber は member として記録する（#383）。
+    // `admitted = TRUE` により、後の mode 変更後も再認証を bypass できる現メンバーと、
+    // 未参加のまま ban/unban されただけの pubkey を区別する。
+    //
+    // banned 行は active に戻さない。auth/verify と ban_subscriber が競合し admission チェック後に
+    // ban が割り込んでも、WHERE 条件で banned 行を除外して ban を権威的に維持する（既存トークンも
+    // require_bearer_identity で失効）。
+    let status = sqlx::query_scalar::<_, String>(
         "INSERT INTO cn_user.subscriber_accounts
-            (subscriber_pubkey, status, last_authenticated_at)
-         VALUES ($1, 'active', NOW())
+            (subscriber_pubkey, status, admitted, last_authenticated_at)
+         VALUES ($1, 'active', TRUE, NOW())
          ON CONFLICT (subscriber_pubkey) DO UPDATE
          SET status = 'active',
-             last_authenticated_at = NOW()",
+             admitted = TRUE,
+             last_authenticated_at = NOW()
+         WHERE cn_user.subscriber_accounts.status <> 'banned'
+         RETURNING status",
     )
     .bind(pubkey)
-    .execute(executor)
+    .fetch_optional(executor)
     .await?;
-    Ok(())
+    match status.as_deref() {
+        Some("active") => Ok(()),
+        // ON CONFLICT の WHERE が banned 行を除外した場合は RETURNING が空になる。
+        // この場合も token を返さず、auth/verify の admission 拒否として扱う。
+        None | Some("banned") => Err(AdmissionRejection::Banned.into()),
+        Some(_) => Ok(()),
+    }
 }
 
 #[derive(Clone, Debug)]

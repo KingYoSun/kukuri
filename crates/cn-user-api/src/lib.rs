@@ -9,14 +9,15 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use kukuri_cn_core::{
-    ApiError, ApiResult, AuthChallengeResponse, AuthVerifyResponse, BootstrapHeartbeatResponse,
-    COMMUNITY_NODE_RENDEZVOUS_KEY_PREFIX_ENV, COMMUNITY_NODE_RENDEZVOUS_REDIS_URL_ENV,
-    CommunityNodeBootstrapNode, CommunityNodeConsentStatus, CommunityNodeResolvedUrls,
-    DatabaseInitMode, JwtConfig, NewCommunityNodeReport, TopicRendezvousHeartbeat,
-    TopicRendezvousHeartbeatResponse, TopicRendezvousStore, accept_consents, auth_required_error,
-    connect_postgres, create_auth_challenge, get_consent_status, initialize_database,
-    initialize_database_for_runtime, insert_community_node_report, load_bootstrap_nodes,
-    load_bootstrap_seed_peers, normalize_http_url, normalize_http_url_list,
+    AdmissionRejection, ApiError, ApiResult, AuthChallengeResponse, AuthVerifyResponse,
+    BootstrapHeartbeatResponse, COMMUNITY_NODE_RENDEZVOUS_KEY_PREFIX_ENV,
+    COMMUNITY_NODE_RENDEZVOUS_REDIS_URL_ENV, CommunityNodeBootstrapNode,
+    CommunityNodeConsentStatus, CommunityNodeResolvedUrls, DatabaseInitMode, JwtConfig,
+    NewCommunityNodeReport, TopicRendezvousHeartbeat, TopicRendezvousHeartbeatResponse,
+    TopicRendezvousStore, accept_consents, auth_required_error, connect_postgres,
+    create_auth_challenge, get_consent_status, initialize_database,
+    initialize_database_for_runtime, insert_community_node_report, load_admission_config,
+    load_bootstrap_nodes, load_bootstrap_seed_peers, normalize_http_url, normalize_http_url_list,
     refresh_bootstrap_peer_registration, require_bearer_identity, require_bearer_pubkey,
     require_consents, verify_auth_envelope_and_issue_token,
 };
@@ -74,6 +75,10 @@ struct AuthVerifyRequest {
     endpoint_id: Option<String>,
     #[serde(default)]
     addr_hint: Option<String>,
+    /// invite mode の community node に参加するための招待コード（#383）。
+    /// open / whitelist mode や既存 subscriber では不要。
+    #[serde(default)]
+    invite_code: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -414,6 +419,9 @@ async fn auth_verify(
     State(state): State<UserApiState>,
     Json(request): Json<AuthVerifyRequest>,
 ) -> ApiResult<Json<AuthVerifyResponse>> {
+    let admission_config = load_admission_config(&state.pool)
+        .await
+        .map_err(internal_error)?;
     let response = verify_auth_envelope_and_issue_token(
         &state.pool,
         &state.jwt_config,
@@ -421,16 +429,29 @@ async fn auth_verify(
         &request.auth_envelope_json,
         request.endpoint_id.as_deref(),
         request.addr_hint.as_deref(),
+        admission_config.mode,
+        request.invite_code.as_deref(),
     )
     .await
-    .map_err(|error| {
-        ApiError::new(
-            axum::http::StatusCode::UNAUTHORIZED,
-            "AUTH_FAILED",
-            error.to_string(),
-        )
-    })?;
+    .map_err(map_auth_verify_error)?;
     Ok(Json(response))
+}
+
+/// auth/verify の失敗を HTTP 応答へマップする。admission 拒否（#383）は 403 + 専用コードで
+/// 区別し、それ以外の署名・challenge 検証失敗は従来通り 401 AUTH_FAILED にする。
+fn map_auth_verify_error(error: anyhow::Error) -> ApiError {
+    if let Some(rejection) = error.downcast_ref::<AdmissionRejection>() {
+        return ApiError::new(
+            axum::http::StatusCode::FORBIDDEN,
+            rejection.code(),
+            rejection.message(),
+        );
+    }
+    ApiError::new(
+        axum::http::StatusCode::UNAUTHORIZED,
+        "AUTH_FAILED",
+        error.to_string(),
+    )
 }
 
 async fn consent_status(
