@@ -174,30 +174,6 @@ The current repository state does not yet provide public indexing, moderation, o
 
 Production provider application and production integration should happen after the repository can validate the provider abstraction and readiness checks without relying on production credentials.
 
-## 13. Provider outreach summary
-
-The following short summary is intended for outreach to safety providers such as Project Arachnid Shield, Microsoft PhotoDNA, Thorn Safer, and Hive. It intentionally describes intended architecture and current early-stage implementation status, not an approved production integration.
-
-> **kukuri — community node critical safety, provider outreach summary**
->
-> kukuri is a P2P-first social application. Community nodes are auxiliary service providers for the P2P network; they are **not** home servers, and user identity, profile, and social graph are node-independent. A network-wide moderation authority is not merely absent by policy — it is structurally impossible on a P2P foundation, because there is no central chokepoint that could govern the whole network. A node's safety decisions therefore apply only within that node's own authority scope.
->
-> kukuri is currently in an early implementation phase. Community nodes today focus on auth/consent, bootstrap assist, topic rendezvous, iroh relay, and a report endpoint. Community indexing, moderation, and trust signals are **planned, not yet shipped**.
->
-> Before enabling any public indexing, we intend to build CSAM / critical safety as an **architecture constraint, not a later add-on**:
->
-> - Media and external blob references are scanned by a moderation server **before** indexing.
-> - Indexing is **fail-closed**: unscanned media, scan failures, and provider-unavailable states are never indexed or surfaced.
-> - Known CSAM, suspected unknown CSAM/CSE, and general moderation are architecturally separated.
-> - Matched or suspected critical content is excluded from index, discovery, and recommendation.
-> - Community nodes do **not** permanently store blob bodies.
-> - Exclusion decisions are recorded as signed, auditable moderation events so operators can demonstrate active exclusion.
-> - We do not ask operators to manually review CSAM/CSE material, and we do not host or train our own CSAM detection database/model.
->
-> We would like to confirm: (1) whether individual or small third-party community node operators can obtain access to your services, and (2) whether the kukuri project could serve as an integration coordinator / centrally approved integration provider on their behalf.
->
-> Formal application and production integration would follow our mock-provider and readiness-check implementation; this outreach is to confirm eligibility and the right integration model first.
-
 ## Related references
 
 - Japanese translation: `docs/safety/community-node-critical-safety_ja.md`
