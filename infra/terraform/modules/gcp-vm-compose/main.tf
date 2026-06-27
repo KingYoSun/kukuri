@@ -7,9 +7,9 @@ terraform {
 }
 
 locals {
-  install_dir = "/opt/kukuri/community-node"
-  certs_dir   = "/opt/kukuri/certs" # host path（certbot が書き込む）
-  certs_mount = "/certs"            # container 内のマウント先
+  install_dir = "/var/lib/kukuri/community-node"
+  certs_dir   = "/var/lib/kukuri/certs" # host path（certbot が書き込む）
+  certs_mount = "/certs"                # container 内のマウント先
   # api/relay を 1 つの SAN 証明書 lineage にまとめる。初回発行と更新で同じ lineage を
   # 使うことで、relay 用 PEM が更新されず期限切れになる事故を防ぐ。
   cert_name = var.api_domain
@@ -27,7 +27,7 @@ locals {
   use_blob_cache_disk = var.blob_cache_enabled && var.blob_cache_size_gb > 0
 
   # 各テンプレートを base64 で metadata に渡し、startup script が展開する。
-  compose_b64 = base64encode(templatefile("${path.module}/templates/docker-compose.yml.tftpl", {
+  compose_b64 = base64encode(replace(templatefile("${path.module}/templates/docker-compose.yml.tftpl", {
     deploy_local_postgres    = var.deploy_local_postgres
     deploy_local_valkey      = var.deploy_local_valkey
     postgres_image           = var.postgres_image
@@ -48,18 +48,18 @@ locals {
     postgres_data_path       = local.postgres_data_path
     blob_cache_enabled       = var.blob_cache_enabled
     blob_cache_path          = var.blob_cache_path
-  }))
+  }), "\r\n", "\n"))
 
-  caddyfile_b64 = base64encode(templatefile("${path.module}/templates/Caddyfile.tftpl", {
+  caddyfile_b64 = base64encode(replace(templatefile("${path.module}/templates/Caddyfile.tftpl", {
     api_domain      = var.api_domain
     relay_domain    = var.relay_domain
     certs_mount     = local.certs_mount
     cert_name       = local.cert_name
     api_port        = local.api_port
     relay_http_port = local.relay_http_port
-  }))
+  }), "\r\n", "\n"))
 
-  env_runtime_b64 = base64encode(templatefile("${path.module}/templates/community-node.env.tftpl", {
+  env_runtime_b64 = base64encode(replace(templatefile("${path.module}/templates/community-node.env.tftpl", {
     rendezvous_key_prefix                 = var.rendezvous_key_prefix
     api_domain                            = var.api_domain
     relay_domain                          = var.relay_domain
@@ -78,16 +78,16 @@ locals {
     blob_cache_path                       = var.blob_cache_path
     certs_mount                           = local.certs_mount
     cert_name                             = local.cert_name
-  }))
+  }), "\r\n", "\n"))
 
-  backup_script_b64 = base64encode(templatefile("${path.module}/templates/backup.sh.tftpl", {
+  backup_script_b64 = base64encode(replace(templatefile("${path.module}/templates/backup.sh.tftpl", {
     install_dir   = local.install_dir
     backup_bucket = var.backup_bucket
     postgres_user = var.postgres_user
     postgres_db   = var.postgres_db
-  }))
+  }), "\r\n", "\n"))
 
-  renew_script_b64 = base64encode(templatefile("${path.module}/templates/renew-certs.sh.tftpl", {
+  renew_script_b64 = base64encode(replace(templatefile("${path.module}/templates/renew-certs.sh.tftpl", {
     install_dir  = local.install_dir
     certs_dir    = local.certs_dir
     acme_image   = var.acme_image
@@ -95,9 +95,9 @@ locals {
     relay_domain = var.relay_domain
     acme_email   = var.acme_email
     cert_name    = local.cert_name
-  }))
+  }), "\r\n", "\n"))
 
-  startup_script = templatefile("${path.module}/templates/startup.sh.tftpl", {
+  startup_script = replace(templatefile("${path.module}/templates/startup.sh.tftpl", {
     install_dir           = local.install_dir
     certs_dir             = local.certs_dir
     acme_image            = var.acme_image
@@ -133,7 +133,7 @@ locals {
     env_runtime_b64                     = local.env_runtime_b64
     backup_script_b64                   = local.backup_script_b64
     renew_script_b64                    = local.renew_script_b64
-  })
+  }), "\r\n", "\n")
 }
 
 resource "google_service_account" "vm" {

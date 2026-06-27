@@ -66,26 +66,24 @@ format_and_mount "blob-cache" "${blob_cache_path}"
 mkdir -p "${blob_cache_path}"
 %{ endif ~}
 
-# --- docker compose plugin ---
-# Container-Optimized OS ではミルストーンによって `docker compose` v2 plugin が無い場合がある。
-# その場合に備えて plugin を導入するが、COS の root FS は read-only なので /root ではなく
-# /var 配下（書き込み可・再起動後も残る stateful partition）へ置き、DOCKER_CONFIG で discovery させる。
-# systemd 経由の renew/backup でも同じ plugin を使えるよう DOCKER_CONFIG を全体で export する。
-export DOCKER_CONFIG="/var/lib/kukuri/docker"
+# --- docker compose binary ---
+# COS の Docker CLI は環境により v2 plugin discovery が効かないため、standalone binary を
+# stateful partition に配置して明示的に呼ぶ。
+COMPOSE_BIN="/var/lib/toolbox/kukuri/bin/docker-compose"
 ensure_compose() {
-  if docker compose version >/dev/null 2>&1; then
+  if [ -x "$COMPOSE_BIN" ]; then
     return 0
   fi
-  log "installing docker compose plugin"
-  local plugin_dir="$DOCKER_CONFIG/cli-plugins"
-  mkdir -p "$plugin_dir"
+  log "installing docker compose standalone binary"
+  mkdir -p "$(dirname "$COMPOSE_BIN")"
   local arch
   arch="$(uname -m)"
   local url="https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$${arch}"
-  curl -fsSL "$url" -o "$plugin_dir/docker-compose"
-  chmod +x "$plugin_dir/docker-compose"
+  curl -fsSL "$url" -o "$COMPOSE_BIN"
+  chmod +x "$COMPOSE_BIN"
 }
 ensure_compose
+"$COMPOSE_BIN" version
 
 # --- Secret Manager helpers (no gcloud needed) ---
 metadata_token() {
@@ -163,9 +161,9 @@ fi
 
 # --- start the stack ---
 cd "$INSTALL_DIR"
-docker compose pull
-docker compose run --rm cn-migrate
-docker compose up -d
+"$COMPOSE_BIN" pull
+"$COMPOSE_BIN" run --rm cn-migrate
+"$COMPOSE_BIN" up -d
 
 # --- systemd timer: certificate renewal ---
 cat > /etc/systemd/system/kukuri-cert-renew.service <<UNIT
@@ -173,7 +171,7 @@ cat > /etc/systemd/system/kukuri-cert-renew.service <<UNIT
 Description=kukuri community node certificate renewal
 [Service]
 Type=oneshot
-Environment=DOCKER_CONFIG=$DOCKER_CONFIG
+Environment=COMPOSE_BIN=$COMPOSE_BIN
 ExecStart=$INSTALL_DIR/renew-certs.sh
 UNIT
 cat > /etc/systemd/system/kukuri-cert-renew.timer <<UNIT
@@ -194,7 +192,7 @@ cat > /etc/systemd/system/kukuri-backup.service <<UNIT
 Description=kukuri community node postgres backup
 [Service]
 Type=oneshot
-Environment=DOCKER_CONFIG=$DOCKER_CONFIG
+Environment=COMPOSE_BIN=$COMPOSE_BIN
 ExecStart=$INSTALL_DIR/backup.sh
 UNIT
 cat > /etc/systemd/system/kukuri-backup.timer <<UNIT
