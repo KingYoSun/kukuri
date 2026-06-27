@@ -7,6 +7,7 @@ set -euo pipefail
 INSTALL_DIR="${install_dir}"
 CERTS_DIR="${certs_dir}"
 WEBROOT="$INSTALL_DIR/acme-webroot"
+COMPOSE_BIN="$${COMPOSE_BIN:-/var/lib/toolbox/kukuri/bin/docker-compose}"
 
 mkdir -p "$WEBROOT"
 
@@ -26,8 +27,8 @@ docker run --rm \
 cd "$INSTALL_DIR"
 if [ -f "$CERTS_DIR/.renewed" ]; then
   echo "[kukuri-renew] certificates renewed; reloading caddy and restarting relay"
-  docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile || docker compose restart caddy
-  docker compose restart cn-iroh-relay
+  "$COMPOSE_BIN" exec -T caddy caddy reload --config /etc/caddy/Caddyfile || "$COMPOSE_BIN" restart caddy
+  "$COMPOSE_BIN" restart cn-iroh-relay
   rm -f "$CERTS_DIR/.renewed"
 else
   echo "[kukuri-renew] no renewal needed"

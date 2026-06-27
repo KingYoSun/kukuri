@@ -8,6 +8,7 @@ INSTALL_DIR="${install_dir}"
 BACKUP_BUCKET="${backup_bucket}"
 PGUSER="${postgres_user}"
 PGDB="${postgres_db}"
+COMPOSE_BIN="$${COMPOSE_BIN:-/var/lib/toolbox/kukuri/bin/docker-compose}"
 
 if [ -z "$BACKUP_BUCKET" ]; then
   echo "[kukuri-backup] backup bucket not configured; skipping"
@@ -21,7 +22,7 @@ TMP_FILE="$(mktemp /tmp/cn-postgres.XXXXXX.dump)"
 trap 'rm -f "$TMP_FILE"' EXIT
 
 # pg_dump をコンテナ内で実行し、custom format dump を取得する。
-docker compose exec -T cn-postgres \
+"$COMPOSE_BIN" exec -T cn-postgres \
   sh -lc 'pg_dump -U "'"$PGUSER"'" -d "'"$PGDB"'" -Fc' > "$TMP_FILE"
 
 # GCS へアップロード（COS の gcloud/gsutil コンテナを使い、host token を渡す）。
