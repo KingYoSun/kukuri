@@ -1,0 +1,32 @@
+# Copy to terraform.tfvars and fill in. Never put secret VALUES here; only
+# Secret Manager secret IDs. terraform.tfvars is gitignored.
+
+project_id = "your-gcp-project"
+region     = "asia-northeast1"
+zone       = "asia-northeast1-a"
+
+api_domain   = "api.example.com"
+relay_domain = "iroh-relay.example.com"
+acme_email   = "ops@example.com"
+
+# Cloud DNS で A レコードを自動作成する場合は true + zone 名。
+# false の場合は terraform output static_ip を手動 DNS に設定する。
+manage_cloud_dns = false
+dns_zone_name    = ""
+
+# public GHCR images（tag または digest 込み）
+cn_user_api_image   = "ghcr.io/kingyosun/kukuri-cn-user-api:latest"
+cn_iroh_relay_image = "ghcr.io/kingyosun/kukuri-cn-iroh-relay:latest"
+cn_cli_image        = "ghcr.io/kingyosun/kukuri-cn-cli:latest"
+
+# Secret Manager secret IDs（payload は事前に gcloud で作成しておく）
+jwt_secret_id               = "kukuri-cn-jwt-secret"
+postgres_password_secret_id = "kukuri-cn-postgres-password"
+
+# sizing（任意。既定は e2-small / 30GB）
+machine_type = "e2-small"
+disk_size_gb = 30
+
+# backup（任意）
+backup_enabled        = true
+backup_retention_days = 30

@@ -1,0 +1,96 @@
+name: Kukuri Terraform
+
+on:
+  pull_request:
+    paths:
+      - 'infra/terraform/**'
+      - '.github/workflows/kukuri-terraform.yml'
+  push:
+    branches: [main, develop]
+    paths:
+      - 'infra/terraform/**'
+      - '.github/workflows/kukuri-terraform.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  TF_IN_AUTOMATION: 'true'
+  TERRAFORM_VERSION: 1.9.8
+
+jobs:
+  fmt-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform fmt check
+        run: terraform fmt -check -recursive infra/terraform
+
+      - name: Validate all env roots
+        run: |
+          set -euo pipefail
+          for root in infra/terraform/envs/*/; do
+            echo "::group::validate $root"
+            terraform -chdir="$root" init -backend=false -input=false
+            terraform -chdir="$root" validate
+            echo "::endgroup::"
+          done
+
+  low-cost-plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: fmt-validate
+    # WIF / GCP の設定が無い環境、または fork PR では plan をスキップする。
+    # pull_request では PR 側の Terraform/workflow が実行されるため、fork に GCP OIDC を渡さない。
+    if: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Authenticate to GCP (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Terraform init (low-cost, GCS backend)
+        working-directory: infra/terraform/envs/low-cost
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.TF_BACKEND_BUCKET }}" \
+            -backend-config="prefix=${{ vars.TF_BACKEND_PREFIX }}"
+
+      - name: Terraform plan (low-cost)
+        working-directory: infra/terraform/envs/low-cost
+        env:
+          TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+          TF_VAR_region: ${{ vars.GCP_REGION != '' && vars.GCP_REGION || 'asia-northeast1' }}
+          TF_VAR_zone: ${{ vars.GCP_ZONE != '' && vars.GCP_ZONE || 'asia-northeast1-a' }}
+          TF_VAR_api_domain: ${{ vars.CN_API_DOMAIN }}
+          TF_VAR_relay_domain: ${{ vars.CN_RELAY_DOMAIN }}
+          TF_VAR_acme_email: ${{ vars.CN_ACME_EMAIL }}
+          TF_VAR_cn_user_api_image: ${{ vars.CN_USER_API_IMAGE }}
+          TF_VAR_cn_iroh_relay_image: ${{ vars.CN_IROH_RELAY_IMAGE }}
+          TF_VAR_cn_cli_image: ${{ vars.CN_CLI_IMAGE }}
+          TF_VAR_jwt_secret_id: ${{ vars.CN_JWT_SECRET_ID }}
+          TF_VAR_postgres_password_secret_id: ${{ vars.CN_POSTGRES_PASSWORD_SECRET_ID }}
+          TF_VAR_manage_cloud_dns: ${{ vars.CN_MANAGE_CLOUD_DNS != '' && vars.CN_MANAGE_CLOUD_DNS || 'false' }}
+          TF_VAR_dns_zone_name: ${{ vars.CN_DNS_ZONE_NAME }}
+        run: terraform plan -input=false -lock-timeout=5m -no-color

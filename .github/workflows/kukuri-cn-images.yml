@@ -1,0 +1,146 @@
+name: Kukuri Community Node Images
+
+on:
+  pull_request:
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'docker/cn/Dockerfile'
+      - 'crates/cn-*/**'
+      - '.github/workflows/kukuri-cn-images.yml'
+  push:
+    branches: [main, develop]
+    tags:
+      - 'v*'
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'docker/cn/Dockerfile'
+      - 'crates/cn-*/**'
+      - '.github/workflows/kukuri-cn-images.yml'
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Tag to publish to GHCR (example: latest, v0.1.2-cn.1, 2026-06-28)'
+        required: false
+        default: 'latest'
+        type: string
+      push:
+        description: 'Push images to GHCR'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    name: Build ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: kukuri-cn-user-api
+            bin: cn-user-api
+            image: kukuri-cn-user-api
+          - package: kukuri-cn-iroh-relay
+            bin: cn-iroh-relay
+            image: kukuri-cn-iroh-relay
+          - package: kukuri-cn-cli
+            bin: cn-cli
+            image: kukuri-cn-cli
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Prepare image metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          image="${REGISTRY}/${owner}/${{ matrix.image }}"
+          short_sha="${GITHUB_SHA::12}"
+          push="false"
+          tags=("${image}:sha-${short_sha}")
+
+          case "${GITHUB_EVENT_NAME}" in
+            pull_request)
+              tags=("${image}:pr-${{ github.event.pull_request.number }}-${short_sha}")
+              ;;
+            workflow_dispatch)
+              if [[ "${{ github.event.inputs.push }}" == "true" ]]; then
+                push="true"
+              fi
+              tag="${{ github.event.inputs.image_tag }}"
+              if [[ -n "$tag" ]]; then
+                tags+=("${image}:${tag}")
+              fi
+              ;;
+            push)
+              push="true"
+              if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+                tags+=("${image}:${GITHUB_REF_NAME}")
+              elif [[ "${GITHUB_REF_NAME}" == "main" ]]; then
+                tags+=("${image}:latest")
+              else
+                safe_ref="${GITHUB_REF_NAME//\//-}"
+                tags+=("${image}:${safe_ref}")
+              fi
+              ;;
+          esac
+
+          {
+            echo "image=${image}"
+            echo "push=${push}"
+            echo "tags<<EOF"
+            printf '%s\n' "${tags[@]}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Login to GHCR
+        if: ${{ steps.meta.outputs.push == 'true' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and optionally push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/cn/Dockerfile
+          push: ${{ steps.meta.outputs.push == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.title=${{ matrix.image }}
+          build-args: |
+            TARGET_PACKAGE=${{ matrix.package }}
+            TARGET_BIN=${{ matrix.bin }}
+          cache-from: type=gha,scope=cn-${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=cn-${{ matrix.image }}
+
+      - name: Image summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Image: ${{ steps.meta.outputs.image }}"
+          echo "Push: ${{ steps.meta.outputs.push }}"
+          echo 'Tags:'
+          printf '%s\n' '${{ steps.meta.outputs.tags }}'

@@ -1,0 +1,26 @@
+# Copy to terraform.tfvars and fill in. Never put secret VALUES in version control.
+project_id = "your-gcp-project"
+region     = "asia-northeast1"
+zone       = "asia-northeast1-a"
+
+api_domain   = "api.example.com"
+relay_domain = "iroh-relay.example.com"
+acme_email   = "ops@example.com"
+
+cn_user_api_image   = "ghcr.io/kingyosun/kukuri-cn-user-api:latest"
+cn_iroh_relay_image = "ghcr.io/kingyosun/kukuri-cn-iroh-relay:latest"
+cn_cli_image        = "ghcr.io/kingyosun/kukuri-cn-cli:latest"
+
+jwt_secret_id = "kukuri-cn-jwt-secret"
+
+# database_password は TF_VAR_database_password 環境変数で渡すこと（tfvars に書かない）。
+# 同じ値を Secret Manager にも登録し、その secret ID を database_password_secret_id に指定する
+# （VM は boot 時にこの secret から password を取得する）。
+database_name               = "cn"
+database_user               = "cn"
+database_password_secret_id = "kukuri-cn-db-password"
+
+cloudsql_tier              = "db-custom-1-3840"
+cloudsql_availability_type = "ZONAL"
+memorystore_tier           = "BASIC"
+memorystore_memory_size_gb = 1
