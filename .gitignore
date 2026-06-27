@@ -136,5 +136,21 @@ kukuri-tauri/src-tauri/bootstrap_nodes.json
 
 target/
 
+# Terraform (infra/terraform)
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+!*.tfvars.example
+backend.hcl
+!backend.hcl.example
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
 # 各エンジニアのローカル AI エージェント設定（雛形 *.example は commit する）
 AGENTS.local.md

@@ -33,6 +33,9 @@
 - targeted rerun は `cargo xtask rust-check|rust-test|tauri-check|desktop-lint|desktop-test|desktop-storybook|desktop-browser-test`
 - 新 feature 着手前に `docs/adr/0002-feature-data-classification-template.md` を埋める。
 
+## Ops
+- community node GCP Terraform デプロイ（deployment profile: low-cost / managed-db / ha）: `docs/runbooks/community-node-gcp-terraform.md`（実装は `infra/terraform/`）
+
 ## Architecture
 - P2P-first community node の責任境界: `docs/architecture/p2p-first-community-node-responsibility-boundary.md`（operator docs / safety / report routing の共通前提）
 - moderation event / safety advisory の trust semantics: `docs/architecture/moderation-event-trust-semantics.md`（optional trust input であり network-wide command ではないことを固定）

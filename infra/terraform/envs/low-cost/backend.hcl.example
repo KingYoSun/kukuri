@@ -1,0 +1,4 @@
+# Copy to backend.hcl and fill in your Terraform state bucket/prefix, then:
+#   terraform init -backend-config=backend.hcl
+bucket = "your-tf-state-bucket"
+prefix = "kukuri/community-node/low-cost"
