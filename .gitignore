@@ -154,3 +154,5 @@ override.tf.json
 
 # 各エンジニアのローカル AI エージェント設定（雛形 *.example は commit する）
 AGENTS.local.md
+
+operator-config.yaml
