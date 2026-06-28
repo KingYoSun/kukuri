@@ -257,8 +257,42 @@ GitHub repository variables（Settings → Secrets and variables → Actions →
 - `low-cost` / `managed-db` / `ha` は **インフラ**のコスト/データ階層の軸（この Terraform）。
 - `minimal` / `relay-enabled` / `full-service` は **cn-operator** の開示・manifest 用 capability の軸
   （`docs/runbooks/community-node-operator-docs.md`）。
-- 両者は独立。operator docs / manifest 生成は `cn-operator init` で別途行い、この Terraform は
-  その前提を壊さない。
+- 両者は独立した軸だが、`operator-config.yaml` を単一の入力元にして両方を生成できる（#380）。
+  operator-config の `deploy:` セクションがコスト軸、`profile` / `features` が capability 軸。
+
+## operator-config から一気通貫でセットアップ（#380）
+
+`cn-operator` を起点に docs / manifest と terraform env 設定の両方を生成し、デプロイ時に
+operator-config.yaml を VM へ配置して public manifest endpoint を有効化できる。
+
+```bash
+cd infra/terraform/envs/low-cost
+
+# operator-config.yaml を用意（deploy: セクションを含める）
+cn-operator init --out operator-config.yaml
+# operator-config.yaml を編集（server / features / deploy を埋める）
+cn-operator validate-config --config operator-config.yaml
+
+# 同じ config から terraform.tfvars を生成
+cn-operator generate-tfvars --config operator-config.yaml --out terraform.tfvars
+
+cp backend.hcl.example backend.hcl   # state bucket/prefix を埋める
+terraform init -backend-config=backend.hcl
+terraform plan
+terraform apply
+```
+
+- `terraform.tfvars` の末尾コメントに従い `operator_config_path = "operator-config.yaml"`
+  を有効化すると、Terraform が env dir からの相対 path を読み込み、起動時に
+  operator-config.yaml が VM の `/etc/kukuri/operator-config.yaml` へ配置され、
+  `cn-user-api` が `COMMUNITY_NODE_OPERATOR_CONFIG` で読み込む。
+- これにより `GET /.well-known/kukuri/community-node.json` / `GET /v1/node/manifest` が応答し、
+  `report_endpoint` capability を有効化した node では `POST /v1/report` が受理される。
+- `operator_config_path` が空（既定）なら manifest endpoint は `404` のまま（従来挙動）。
+- blob cache の on/off は operator-config の `features.blob_cache` が真実源で、tfvars の
+  `blob_cache_enabled` はそこから導出される。`features.blob_cache: false` なのに
+  `deploy.blob_cache_size_gb > 0` を指定すると `validate-config` / `generate-tfvars` が失敗する。
+- tfvars 生成は `low-cost` のみ対応。`managed-db` / `ha` は拡張点。
 
 ## 関連
 

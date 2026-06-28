@@ -225,3 +225,10 @@ variable "extra_ingress_source_ranges" {
   type        = list(string)
   default     = ["0.0.0.0/0"]
 }
+
+# --- operator manifest (#380) ---
+variable "operator_config_path" {
+  description = "operator-config.yaml のパス（この env ディレクトリからの相対パス、例: operator-config.yaml）。空でなければ main.tf が file() で読み込み、VM に配置して cn-user-api の COMMUNITY_NODE_OPERATOR_CONFIG に設定し public manifest endpoint / report_endpoint gating を有効化する。空なら manifest endpoint は 404 のまま。"
+  type        = string
+  default     = ""
+}

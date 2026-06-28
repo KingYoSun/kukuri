@@ -30,3 +30,9 @@ disk_size_gb = 30
 # backup（任意）
 backup_enabled        = true
 backup_retention_days = 30
+
+# operator-config.yaml を VM へ配置して public manifest endpoint /
+# report_endpoint gating を有効化する（#380, 任意）。
+# この env ディレクトリに operator-config.yaml を置き、相対パスを指定する。
+# main.tf が file() で読み込んで VM に配置する。空（既定）なら manifest endpoint は 404 のまま。
+# operator_config_path = "operator-config.yaml"

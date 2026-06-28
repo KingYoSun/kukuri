@@ -14,6 +14,10 @@ locals {
       name = "${var.relay_domain}."
     }
   }
+
+  # operator-config.yaml を VM 配置して public manifest endpoint を有効化する（#380）。
+  # .tfvars では file()/path.module を使えないため、パスをここ（.tf）で解決して中身を module へ渡す。
+  operator_config_file = trimspace(var.operator_config_path) != "" ? file("${path.module}/${var.operator_config_path}") : ""
 }
 
 module "network" {
@@ -71,6 +75,9 @@ module "vm" {
 
   backup_enabled = var.backup_enabled
   backup_bucket  = var.backup_enabled ? module.backup[0].bucket_name : ""
+
+  # operator-config.yaml を VM 配置して public manifest endpoint を有効化する（#380）。
+  operator_config_file = local.operator_config_file
 }
 
 module "backup" {
