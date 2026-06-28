@@ -42,6 +42,9 @@ cn-operator validate-config --config operator-config.yaml
 # 文書群を生成
 cn-operator generate-docs --config operator-config.yaml --out-dir dist/operator-docs
 
+# terraform.tfvars を生成（deploy セクションが必要・#380）
+cn-operator generate-tfvars --config operator-config.yaml --out infra/terraform/envs/low-cost/terraform.tfvars
+
 # 生成済み文書と config の drift を検出（差分があれば non-zero exit）
 cn-operator check-disclosures --config operator-config.yaml --out-dir dist/operator-docs
 ```
@@ -62,6 +65,45 @@ cargo run -p kukuri-cn-operator --bin cn-operator -- generate-docs \
 - `relay-enabled`: minimal + 専用 iroh relay + 暗号化済み traffic fallback 開示。
 - `full-service`: relay-enabled + blob cache + push 通知 + report endpoint。analytics /
   crash report は任意（既定無効）。
+
+## deploy セクション（terraform env 生成・#380）
+
+operator-config.yaml に任意の `deploy:` セクションを追加すると、同じ config を単一の入力元として
+`cn-operator generate-tfvars` が `infra/terraform/envs/low-cost` 用の `terraform.tfvars` を生成できる。
+未指定なら従来通り docs / manifest のみを生成する（後方互換）。
+
+```yaml
+deploy:
+  profile: low-cost        # コスト/データ階層の軸（capability 軸の profile とは別物）
+  project_id: your-gcp-project
+  region: asia-northeast1
+  zone: asia-northeast1-a
+  relay_domain: iroh-relay.example-kukuri.net   # low-cost では必須
+  acme_email: ops@example-kukuri.net
+  jwt_secret_id: kukuri-cn-jwt-secret           # secret の値ではなく Secret Manager の ID
+  postgres_password_secret_id: kukuri-cn-postgres-password
+  machine_type: e2-small
+  disk_size_gb: 30
+  postgres_data_disk_gb: 0
+  blob_cache_size_gb: 0    # blob cache の on/off は features.blob_cache が真実源
+  backup_enabled: true
+```
+
+注意点:
+
+- `deploy.profile` は `low-cost` / `managed-db` / `ha` の **コスト/データ階層の軸**で、上の
+  capability 軸 profile（`minimal` / `relay-enabled` / `full-service`）とは独立。
+- secret は **値ではなく Secret Manager の secret ID** のみを書く。tfvars にも値は出力されない。
+- blob cache の on/off は `features.blob_cache` を真実源にする。`features.blob_cache: false` なのに
+  `deploy.blob_cache_size_gb > 0` を指定すると `validate-config` で失敗する。
+- api hostname は `server.domain` から導出する。`low-cost` は relay container を常に配置するため
+  `deploy.relay_domain` が必須。その他 profile でも `iroh_relay` capability が有効なら必須。
+- tfvars 生成は現状 `low-cost` のみ対応。`managed-db` / `ha` は拡張点で、指定すると
+  `generate-tfvars` が error にする（docs / manifest 生成自体は可能）。
+
+生成した `terraform.tfvars` は `operator_config_path = "operator-config.yaml"` を併用することで、
+operator-config.yaml を VM へ配置し public manifest endpoint / report_endpoint gating を有効化できる
+（`docs/runbooks/community-node-gcp-terraform.md` 参照）。
 
 ## 生成される文書
 

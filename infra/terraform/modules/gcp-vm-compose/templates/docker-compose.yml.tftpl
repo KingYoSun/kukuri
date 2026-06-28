@@ -61,6 +61,14 @@ services:
       COMMUNITY_NODE_DATABASE_URL: $${COMMUNITY_NODE_DATABASE_URL:?set COMMUNITY_NODE_DATABASE_URL}
       COMMUNITY_NODE_RENDEZVOUS_REDIS_URL: $${COMMUNITY_NODE_RENDEZVOUS_REDIS_URL:?set COMMUNITY_NODE_RENDEZVOUS_REDIS_URL}
       COMMUNITY_NODE_JWT_SECRET: $${COMMUNITY_NODE_JWT_SECRET:?set COMMUNITY_NODE_JWT_SECRET}
+%{ if operator_config_enabled ~}
+      # operator-config.yaml を読み込み public manifest endpoint / report_endpoint gating を有効化する。
+      COMMUNITY_NODE_OPERATOR_CONFIG: ${operator_config_path}
+%{ endif ~}
+%{ if operator_config_enabled ~}
+    volumes:
+      - ./operator-config.yaml:${operator_config_path}:ro
+%{ endif ~}
     depends_on:
       cn-migrate:
         condition: service_completed_successfully

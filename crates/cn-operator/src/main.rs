@@ -4,6 +4,7 @@
 //! - `init`            : サンプル operator-config.yaml を出力する
 //! - `validate-config` : config を検証する（Phase B 承認ガードを含む）
 //! - `generate-docs`   : 文書群を出力ディレクトリへ生成する
+//! - `generate-tfvars` : deploy セクションから terraform.tfvars を生成する（#380）
 //! - `check-disclosures`: config から再生成した結果と既存生成物の drift を検出する
 
 use std::fs;
@@ -14,7 +15,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
 use kukuri_cn_operator::{
-    Availability, SAMPLE_CONFIG, check_drift, generate_all, load_and_validate,
+    Availability, SAMPLE_CONFIG, check_drift, generate_all, generate_tfvars, load_and_validate,
 };
 
 #[derive(Debug, Parser)]
@@ -46,6 +47,14 @@ enum Command {
         config: PathBuf,
         #[arg(long, default_value = "dist/operator-docs")]
         out_dir: PathBuf,
+    },
+    /// deploy セクションから terraform.tfvars を生成する（#380）。
+    GenerateTfvars {
+        #[arg(long, default_value = "operator-config.yaml")]
+        config: PathBuf,
+        /// 出力先（既定: 標準出力）。
+        #[arg(long)]
+        out: Option<PathBuf>,
     },
     /// config から再生成した結果と既存生成物の drift を検出する。
     CheckDisclosures {
@@ -103,6 +112,20 @@ fn run() -> Result<ExitCode> {
                 out_dir.display()
             );
             print_planned_warning(&resolved);
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::GenerateTfvars { config, out } => {
+            let resolved = load_config(&config)?;
+            let tfvars = generate_tfvars(&resolved)?;
+            match out {
+                Some(path) => {
+                    fs::write(&path, &tfvars).with_context(|| {
+                        format!("{} への書き込みに失敗しました", path.display())
+                    })?;
+                    println!("terraform.tfvars を {} に出力しました", path.display());
+                }
+                None => print!("{tfvars}"),
+            }
             Ok(ExitCode::SUCCESS)
         }
         Command::CheckDisclosures { config, out_dir } => {

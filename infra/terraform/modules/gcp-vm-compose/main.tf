@@ -26,6 +26,11 @@ locals {
   use_postgres_disk   = var.deploy_local_postgres && var.postgres_data_disk_gb > 0
   use_blob_cache_disk = var.blob_cache_enabled && var.blob_cache_size_gb > 0
 
+  # operator-config.yaml を VM に配置するか（#380）。空文字なら配置せず manifest endpoint は 404。
+  operator_config_enabled = trimspace(var.operator_config_file) != ""
+  operator_config_path    = "/etc/kukuri/operator-config.yaml"
+  operator_config_b64     = local.operator_config_enabled ? base64encode(var.operator_config_file) : ""
+
   # 各テンプレートを base64 で metadata に渡し、startup script が展開する。
   compose_b64 = base64encode(replace(templatefile("${path.module}/templates/docker-compose.yml.tftpl", {
     deploy_local_postgres    = var.deploy_local_postgres
@@ -48,6 +53,8 @@ locals {
     postgres_data_path       = local.postgres_data_path
     blob_cache_enabled       = var.blob_cache_enabled
     blob_cache_path          = var.blob_cache_path
+    operator_config_enabled  = local.operator_config_enabled
+    operator_config_path     = local.operator_config_path
   }), "\r\n", "\n"))
 
   caddyfile_b64 = base64encode(replace(templatefile("${path.module}/templates/Caddyfile.tftpl", {
@@ -128,6 +135,9 @@ locals {
     blob_cache_path                     = var.blob_cache_path
     backup_enabled                      = var.backup_enabled
     backup_schedule_oncalendar          = var.backup_schedule_oncalendar
+    operator_config_enabled             = local.operator_config_enabled
+    operator_config_path                = local.operator_config_path
+    operator_config_b64                 = local.operator_config_b64
     compose_b64                         = local.compose_b64
     caddyfile_b64                       = local.caddyfile_b64
     env_runtime_b64                     = local.env_runtime_b64

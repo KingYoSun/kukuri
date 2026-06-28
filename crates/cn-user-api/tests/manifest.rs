@@ -91,6 +91,53 @@ async fn manifest_endpoint_serves_unauthenticated_json() -> Result<()> {
     Ok(())
 }
 
+/// deploy セクション付き operator-config（#380）。manifest endpoint には deploy 情報を露出しない。
+const DEPLOY_YAML: &str = r#"server:
+  domain: example-kukuri.net
+  operator_name: Example Operator
+  country: JP
+profile: relay-enabled
+deploy:
+  profile: low-cost
+  project_id: secret-project-id
+  relay_domain: iroh-relay.example-kukuri.net
+  acme_email: ops@example-kukuri.net
+  jwt_secret_id: kukuri-cn-jwt-secret
+  postgres_password_secret_id: kukuri-cn-postgres-password
+acknowledge_planned_capabilities: true
+"#;
+
+#[tokio::test]
+async fn manifest_endpoint_does_not_expose_deploy_section() -> Result<()> {
+    // deploy セクション付き config でも manifest は構築でき、deploy 情報（secret ID / project_id）は
+    // manifest JSON に露出しない（CommunityNodeManifest 型に含まれないため）。
+    let (base_url, task) = spawn_manifest_server(Some(DEPLOY_YAML)).await?;
+    let client = Client::new();
+    let resp = client
+        .get(format!("{base_url}/v1/node/manifest"))
+        .send()
+        .await?;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let raw = resp.text().await?;
+    assert!(
+        !raw.contains("secret-project-id"),
+        "manifest must not expose deploy.project_id"
+    );
+    assert!(
+        !raw.contains("kukuri-cn-jwt-secret"),
+        "manifest must not expose deploy secret IDs"
+    );
+    assert!(
+        !raw.contains("postgres_password_secret_id"),
+        "manifest must not expose deploy fields"
+    );
+    // capability 由来の情報は通常通り含まれる。
+    let body: serde_json::Value = serde_json::from_str(&raw)?;
+    assert_eq!(body["server_name"], "example-kukuri.net");
+    task.abort();
+    Ok(())
+}
+
 #[tokio::test]
 async fn manifest_endpoint_returns_404_when_not_configured() -> Result<()> {
     let (base_url, task) = spawn_manifest_server(None).await?;

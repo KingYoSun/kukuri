@@ -318,3 +318,10 @@ variable "deployment_profile" {
   type        = string
   default     = "low-cost"
 }
+
+# --- operator manifest (#380) ---
+variable "operator_config_file" {
+  description = "operator-config.yaml の中身（YAML 文字列）。空でなければ VM に配置し、cn-user-api の COMMUNITY_NODE_OPERATOR_CONFIG に設定して public manifest endpoint / report_endpoint gating を有効化する。空なら manifest endpoint は 404 のまま。"
+  type        = string
+  default     = ""
+}
