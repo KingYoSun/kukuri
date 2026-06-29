@@ -263,3 +263,69 @@ runtime / provider 接続後に残る `Unknown`:
 - `safety_readiness.rs` の `impl From<SafetyErrorAction> for kukuri_cn_safety::SafetyAction` を削除した。
   消費箇所が無く（`on_scan_error` → `SafetyAction` の写像は後続の runtime scan adapter で使う想定だが、本 PR スコープ外）、
   `pub` trait impl は `dead_code` lint の対象外のため検出されず残っていた。dead code を残さない方針に従い除去した。
+
+## 段階3b: safety runtime adapter / scan orchestration
+
+indexing 本体に入る前の DB 非依存作業として、`cn-safety` の pure domain（`SafetyProvider` /
+`SafetyPolicy` / `route()`）を実際に駆動する境界を新規 crate `crates/cn-safety-runtime`
+（`kukuri-cn-safety-runtime`）として追加した。
+
+### 実装範囲
+
+- 新規 crate `crates/cn-safety-runtime`（`cn-safety` にのみ依存。DB / network / production
+  credentials なし）。
+  - workspace members と `xtask` `CN_PACKAGES` に追加（`cargo xtask cn-check` / `cn-test` 対象）。
+- 抽象注入:
+  - `ScanClock { fn now_rfc3339(&self) -> String }` … scan 時刻供給。crate 自体は時計非依存。
+  - `EventIdGenerator { fn next_id(&self) -> String }` … moderation event id 供給。
+  - 本番実装（system clock / UUID・ULID）は本 crate のスコープ外（別 Issue 起票）。テストは
+    integration test 内の固定 clock / 連番 id で決定論的に検証。
+- `SafetyOrchestrator`（builder で provider を登録順に保持）:
+  - `scan_subject(&ProviderScanRequest) -> SafetyScanReport`。
+  - provider を**登録順に逐次実行**し、各 `ProviderScanResult` を集約して 1 回 `route()` に渡す。
+  - provider が `Err` を返した場合、`map_scan_error` で `ScanOutcome` に写像し、provider 名 /
+    capability を保持した `ProviderScanResult` を**合成**する（結果集合から除外しない）。
+    一部成功 + 一部失敗の取りこぼしを防ぐ fail-closed の要。
+  - build 時に issuer node id 空 / provider 不在 / capability 無し provider / 空 provider 名を
+    `SafetyRuntimeError` で拒否。
+- `ScanError → ScanOutcome` 写像:
+  - `Unavailable` → `Unavailable`、`Timeout` / `Protocol` → `Failed`。route() の既存 fail-closed
+    分岐（Unavailable→ProviderUnavailable, Failed→ScanFailed）と整合。
+- verdict からの**未署名** moderation artifact 生成（`SafetyScanReport.moderation_event` /
+  `risk_signal`）:
+  - indexable（`allow`）verdict では artifact を生成しない。
+  - target（subject_kind / subject_id）が欠けている場合や `subject_id` が空/空白の場合は artifact を生成しない（空 target_id の
+    moderation event を作らない）。
+  - operational fail-closed（scan_failed / provider_unavailable / unscanned）は content の safety
+    category を示さないため **risk signal を作らない**（虚偽の risk label を作らない）。moderation
+    event は target が揃えば生成（visibility=local）。
+  - visibility は `SafetyRiskSignal::default_visibility_for(category, basis)` に従い、suspected
+    unknown CSAM / CSE は `Local` 既定、confirmed のみ `SubscribedNodes` 以上。
+  - critical reason（`csam_confirmed` / `csam_suspected` / `cse_suspected`）は reason_code を優先して category を導出し、provider が先頭に一般 label を返しても critical category を取り違えない。
+  - 署名はしない（`SignedModerationEvent` は作らない。body のみ）。
+
+### 維持した境界
+
+- 本番 provider 接続（#391）、実鍵署名（secp256k1）、event / signal の永続化は未実装。
+- fail-closed indexing 本体（DB 制約）、moderation server の HTTP / blob 一時 fetch は未実装。
+- `cn-operator` / `cn-core` からの本 crate 利用結線（runtime 組み込み）は後続。
+- `Moderation` / `CommunityIndex` / `CommunityLocalTrust` は引き続き `Availability::Planned`。
+- mock（provider / clock / id）は production の既定 API に出さない（cn-safety の mock は
+  dev-dependency の `features = ["mock"]` 経由、runtime の clock / id mock は integration test 内
+  local 定義）。
+
+### 後続への申し送り（別 Issue）
+
+- 本番 `ScanClock`（system clock, RFC3339）実装 … Issue #398。
+- 本番 `EventIdGenerator`（UUID / ULID）実装 … Issue #399。
+- いずれも cn-safety-runtime を runtime に組み込む段階で必要。
+
+### 検証
+
+- `cargo test -p kukuri-cn-safety-runtime`（mock provider / 固定 clock / 連番 id、DB 不要）: 17 tests pass。
+- `cargo check -p kukuri-cn-safety-runtime --no-default-features`（production ビルド = mock 無し）: pass。
+- `cargo clippy -p kukuri-cn-safety-runtime --all-targets --all-features -- -D warnings`: clean。
+- `cargo fmt -p kukuri-cn-safety-runtime --check`: clean。
+- `cargo xtask cn-check`（CN slice。新 crate を含む）。
+- `cargo xtask cn-test`（CN slice の test。Postgres/Valkey harness 起動を含む）。
+- `cargo test -p xtask`（`CN_PACKAGES` 長変更の回帰確認）。
