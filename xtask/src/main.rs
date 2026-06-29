@@ -6,13 +6,14 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
-const CN_PACKAGES: [&str; 6] = [
+const CN_PACKAGES: [&str; 7] = [
     "kukuri-cn-core",
     "kukuri-cn-user-api",
     "kukuri-cn-iroh-relay",
     "kukuri-cn-cli",
     "kukuri-cn-operator",
     "kukuri-cn-safety",
+    "kukuri-cn-safety-runtime",
 ];
 const SERIAL_RUST_PACKAGE: &str = "kukuri-harness";
 const TAURI_CHECK_TARGET_DIR: &str = "target/desktop-tauri-check";

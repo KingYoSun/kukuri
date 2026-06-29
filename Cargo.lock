@@ -2986,6 +2986,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "kukuri-cn-safety-runtime"
+version = "0.1.2"
+dependencies = [
+ "async-trait",
+ "kukuri-cn-safety",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "kukuri-cn-user-api"
 version = "0.1.2"
 dependencies = [
