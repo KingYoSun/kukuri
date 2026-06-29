@@ -2990,6 +2990,7 @@ name = "kukuri-cn-safety-runtime"
 version = "0.1.2"
 dependencies = [
  "async-trait",
+ "chrono",
  "kukuri-cn-safety",
  "serde",
  "serde_json",

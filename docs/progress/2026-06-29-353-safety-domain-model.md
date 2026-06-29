@@ -276,10 +276,12 @@ indexing 本体に入る前の DB 非依存作業として、`cn-safety` の pur
   credentials なし）。
   - workspace members と `xtask` `CN_PACKAGES` に追加（`cargo xtask cn-check` / `cn-test` 対象）。
 - 抽象注入:
-  - `ScanClock { fn now_rfc3339(&self) -> String }` … scan 時刻供給。crate 自体は時計非依存。
-  - `EventIdGenerator { fn next_id(&self) -> String }` … moderation event id 供給。
-  - 本番実装（system clock / UUID・ULID）は本 crate のスコープ外（別 Issue 起票）。テストは
-    integration test 内の固定 clock / 連番 id で決定論的に検証。
+  - `ScanClock { fn now_rfc3339(&self) -> String }` … scan 時刻供給。orchestrator は clock 注入のまま維持。
+    本番実装 `SystemScanClock`（system clock, UTC RFC3339）を追加済み（#398）。
+  - `EventIdGenerator { fn next_id(&self) -> String }` … moderation event id 供給。本番実装
+    （UUID / ULID）は本 crate のスコープ外（#399）。
+  - テストは orchestrator 経路を固定 clock / 連番 id で決定論的に検証し、`SystemScanClock` は
+    RFC3339 / UTC / 秒精度の契約を別 contract test で検証。
 - `SafetyOrchestrator`（builder で provider を登録順に保持）:
   - `scan_subject(&ProviderScanRequest) -> SafetyScanReport`。
   - provider を**登録順に逐次実行**し、各 `ProviderScanResult` を集約して 1 回 `route()` に渡す。
@@ -316,16 +318,36 @@ indexing 本体に入る前の DB 非依存作業として、`cn-safety` の pur
 
 ### 後続への申し送り（別 Issue）
 
-- 本番 `ScanClock`（system clock, RFC3339）実装 … Issue #398。
-- 本番 `EventIdGenerator`（UUID / ULID）実装 … Issue #399。
-- いずれも cn-safety-runtime を runtime に組み込む段階で必要。
+- 本番 `ScanClock`（system clock, RFC3339）実装 … Issue #398（`SystemScanClock` として実装済み）。
+- 本番 `EventIdGenerator`（UUID / ULID）実装 … Issue #399（未実装）。
+- runtime 組み込み時は `SystemScanClock` を注入し、event id には #399 の本番実装を追加して使う。
 
 ### 検証
 
-- `cargo test -p kukuri-cn-safety-runtime`（mock provider / 固定 clock / 連番 id、DB 不要）: 17 tests pass。
+- `cargo test -p kukuri-cn-safety-runtime`（mock provider / 固定 clock / 連番 id、DB 不要 + SystemScanClock contract）: 20 tests pass。
 - `cargo check -p kukuri-cn-safety-runtime --no-default-features`（production ビルド = mock 無し）: pass。
 - `cargo clippy -p kukuri-cn-safety-runtime --all-targets --all-features -- -D warnings`: clean。
 - `cargo fmt -p kukuri-cn-safety-runtime --check`: clean。
 - `cargo xtask cn-check`（CN slice。新 crate を含む）。
 - `cargo xtask cn-test`（CN slice の test。Postgres/Valkey harness 起動を含む）。
 - `cargo test -p xtask`（`CN_PACKAGES` 長変更の回帰確認）。
+
+## #398: 本番 ScanClock（SystemScanClock）
+
+cn-safety-runtime に system clock ベースの本番 `ScanClock` 実装 `SystemScanClock` を追加した。
+
+### 実装範囲
+
+- `crates/cn-safety-runtime/src/clock.rs` に `SystemScanClock` を追加。
+  - `now_rfc3339()` は `chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)` を返す。
+  - UTC・秒精度・`Z` suffix に正規化（例: `2026-06-29T09:00:00Z`）。監査時刻として秒未満は不要。
+- crate root から `SystemScanClock` を re-export。`Arc<dyn ScanClock>` として
+  `SafetyOrchestrator::builder` に渡せる。
+- `chrono` を `cn-safety-runtime` の通常依存に追加（workspace dependency。新規外部 dependency は増やさない）。
+- `ScanClock` trait と orchestrator のシグネチャは変更しない。テストの固定 clock も従来どおり。
+
+### 検証
+
+- `cargo test -p kukuri-cn-safety-runtime --test clock`: 3 tests pass（RFC3339 / UTC / 秒精度 / orchestrator 注入）。
+- `cargo check -p kukuri-cn-safety-runtime --no-default-features`: pass。
+- 残課題: 本番 `EventIdGenerator`（#399）。
