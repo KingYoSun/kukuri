@@ -14,6 +14,7 @@ members = [
     "crates/cn-iroh-relay",
     "crates/cn-cli",
     "crates/cn-operator",
+    "crates/cn-safety",
 ]
 exclude = [
     "apps/desktop/src-tauri",
