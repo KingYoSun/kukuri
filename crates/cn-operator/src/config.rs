@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::capability::{Availability, Capability};
 use crate::manifest::{AuthorityScopeOverride, NodeRole};
 use crate::profile::Profile;
+use crate::safety_config::{SafetyConfig, validate_safety_config};
 
 /// `operator-config.yaml` の生表現。
 ///
@@ -24,6 +25,8 @@ pub struct OperatorConfig {
     pub features: BTreeMap<String, bool>,
     #[serde(default)]
     pub retention: RetentionConfig,
+    #[serde(default)]
+    pub safety: Option<SafetyConfig>,
     #[serde(default)]
     pub manifest: ManifestConfig,
     /// terraform デプロイ用の env 設定（#380）。
@@ -414,6 +417,10 @@ pub fn resolve_and_validate(config: OperatorConfig) -> Result<ResolvedConfig> {
              承認した場合でも、生成文書ではこれらは「{}」として扱われます。",
             Availability::Planned.label_ja()
         );
+    }
+
+    if let Some(safety) = resolved.raw.safety.as_ref() {
+        validate_safety_config(safety)?;
     }
 
     // deploy セクションの検証（指定されている場合のみ。未指定は従来通り通す）。

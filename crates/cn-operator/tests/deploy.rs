@@ -182,7 +182,7 @@ fn low_cost_rejects_invalid_deploy_format() {
                 \x20 relay_domain: relay.example-kukuri.net\n  acme_email: ops@example-kukuri.net\n\
                 \x20 jwt_secret_id: kukuri-cn-jwt-secret\n\
                 \x20 postgres_password_secret_id: kukuri-cn-postgres-password\n";
-    let err = load_and_validate(&yaml).unwrap_err();
+    let err = load_and_validate(yaml).unwrap_err();
     assert!(err.to_string().contains("project_id"), "got: {err}");
 
     let yaml = "server:\n  domain: example-kukuri.net\n  operator_name: Op\n  country: JP\n\
@@ -190,7 +190,7 @@ fn low_cost_rejects_invalid_deploy_format() {
                 \x20 relay_domain: relay.example-kukuri.net\n  acme_email: ops@example-kukuri.net\n\
                 \x20 jwt_secret_id: \"bad secret\"\n\
                 \x20 postgres_password_secret_id: kukuri-cn-postgres-password\n";
-    let err = load_and_validate(&yaml).unwrap_err();
+    let err = load_and_validate(yaml).unwrap_err();
     assert!(err.to_string().contains("jwt_secret_id"), "got: {err}");
 }
 

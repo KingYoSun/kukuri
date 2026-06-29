@@ -20,6 +20,8 @@ pub mod docs;
 pub mod drift;
 pub mod manifest;
 pub mod profile;
+pub mod safety_config;
+pub mod safety_readiness;
 
 pub use capability::{Availability, Capability, CapabilityMeta, ExternalDestination};
 pub use capability_risk::CapabilityRiskPractices;
@@ -36,6 +38,14 @@ pub use manifest::{
     render_manifest,
 };
 pub use profile::Profile;
+pub use safety_config::{
+    SafetyConfig, SafetyErrorAction, SafetyEventsConfig, SafetyIndexingConfig, SafetyProviderEntry,
+    SafetyProvidersConfig, SafetyStorageConfig,
+};
+pub use safety_readiness::{
+    PUBLIC_NODE_PROFILE, READINESS_CHECK_IDS, ReadinessCheck, ReadinessReport, ReadinessStatus,
+    evaluate_public_node_readiness,
+};
 
 /// `operator init` が出力するサンプル config。
 pub const SAMPLE_CONFIG: &str = r#"server:
@@ -64,6 +74,34 @@ features:
 retention:
   connection_logs_days: 30
   moderation_logs_days: 180
+
+safety:
+  profile: public-node
+  policy_version: 2026-06-public-node-v1
+  indexing:
+    index_before_scan: false
+    on_scan_error: hold
+  storage:
+    permanent_blob_storage: false
+  events:
+    emit_signed_moderation_events: true
+  providers:
+    # known_csam は public-node readiness の必須 provider。本番では実際の
+    # known-CSAM provider 名（例: project_arachnid_shield）と secret ID を設定する。
+    known_csam:
+      provider: project_arachnid_shield
+      required: true
+      credential_secret_id: kukuri-cn-safety-known-csam
+    # general / unknown_csam は任意。下記は本番値ではない placeholder。
+    # 実運用では実際の provider 名に置き換える。
+    general:
+      provider: placeholder-general-moderation
+      required: false
+    unknown_csam:
+      provider: placeholder-unknown-csam
+      required: false
+      # on_high_confidence は将来の runtime scan で使う宣言。現時点の readiness 判定では未使用。
+      on_high_confidence: quarantine
 
 manifest:
   manifest_version: v1

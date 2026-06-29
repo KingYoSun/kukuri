@@ -2965,10 +2965,12 @@ version = "0.1.2"
 dependencies = [
  "anyhow",
  "clap",
+ "kukuri-cn-safety",
  "serde",
  "serde_json",
  "serde_yaml",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]
