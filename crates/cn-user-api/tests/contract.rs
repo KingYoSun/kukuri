@@ -15,8 +15,8 @@ use redis::AsyncCommands;
 use reqwest::{Client, StatusCode};
 use sqlx::postgres::PgPool;
 
-const DEFAULT_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:55432/cn";
-const DEFAULT_RENDEZVOUS_REDIS_URL: &str = "redis://127.0.0.1:56379/";
+const DEFAULT_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:15432/cn";
+const DEFAULT_RENDEZVOUS_REDIS_URL: &str = "redis://127.0.0.1:16379/";
 
 struct TestServer {
     task: tokio::task::JoinHandle<()>,

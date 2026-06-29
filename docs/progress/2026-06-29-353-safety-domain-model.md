@@ -278,8 +278,8 @@ indexing 本体に入る前の DB 非依存作業として、`cn-safety` の pur
 - 抽象注入:
   - `ScanClock { fn now_rfc3339(&self) -> String }` … scan 時刻供給。orchestrator は clock 注入のまま維持。
     本番実装 `SystemScanClock`（system clock, UTC RFC3339）を追加済み（#398）。
-  - `EventIdGenerator { fn next_id(&self) -> String }` … moderation event id 供給。本番実装
-    （UUID / ULID）は本 crate のスコープ外（#399）。
+  - `EventIdGenerator { fn next_id(&self) -> String }` … moderation event id 供給。
+    本番実装 `UuidEventIdGenerator`（UUID v4）を追加済み（#399）。
   - テストは orchestrator 経路を固定 clock / 連番 id で決定論的に検証し、`SystemScanClock` は
     RFC3339 / UTC / 秒精度の契約を別 contract test で検証。
 - `SafetyOrchestrator`（builder で provider を登録順に保持）:
@@ -319,12 +319,12 @@ indexing 本体に入る前の DB 非依存作業として、`cn-safety` の pur
 ### 後続への申し送り（別 Issue）
 
 - 本番 `ScanClock`（system clock, RFC3339）実装 … Issue #398（`SystemScanClock` として実装済み）。
-- 本番 `EventIdGenerator`（UUID / ULID）実装 … Issue #399（未実装）。
-- runtime 組み込み時は `SystemScanClock` を注入し、event id には #399 の本番実装を追加して使う。
+- 本番 `EventIdGenerator`（UUID / ULID）実装 … Issue #399（`UuidEventIdGenerator` として実装済み）。
+- runtime 組み込み時は `SystemScanClock` と `UuidEventIdGenerator` を注入する。
 
 ### 検証
 
-- `cargo test -p kukuri-cn-safety-runtime`（mock provider / 固定 clock / 連番 id、DB 不要 + SystemScanClock contract）: 20 tests pass。
+- `cargo test -p kukuri-cn-safety-runtime`（mock provider / 固定 clock / 連番 id、DB 不要 + SystemScanClock / UuidEventIdGenerator contract）: 23 tests pass。
 - `cargo check -p kukuri-cn-safety-runtime --no-default-features`（production ビルド = mock 無し）: pass。
 - `cargo clippy -p kukuri-cn-safety-runtime --all-targets --all-features -- -D warnings`: clean。
 - `cargo fmt -p kukuri-cn-safety-runtime --check`: clean。
@@ -350,4 +350,25 @@ cn-safety-runtime に system clock ベースの本番 `ScanClock` 実装 `System
 
 - `cargo test -p kukuri-cn-safety-runtime --test clock`: 3 tests pass（RFC3339 / UTC / 秒精度 / orchestrator 注入）。
 - `cargo check -p kukuri-cn-safety-runtime --no-default-features`: pass。
-- 残課題: 本番 `EventIdGenerator`（#399）。
+- #399（本番 `EventIdGenerator`）も対応済み。下記 #399 節を参照。
+
+## #399: 本番 EventIdGenerator（UuidEventIdGenerator）
+
+cn-safety-runtime に UUID v4 ベースの本番 `EventIdGenerator` 実装 `UuidEventIdGenerator` を追加した。
+
+### 実装範囲
+
+- `crates/cn-safety-runtime/src/id.rs` に `UuidEventIdGenerator` を追加。
+  - `next_id()` は `uuid::Uuid::new_v4().to_string()`（ハイフン付き小文字 UUID v4）を返す。
+- crate root から `UuidEventIdGenerator` を re-export。`Arc<dyn EventIdGenerator>` として
+  `SafetyOrchestrator::builder` に渡せる。
+- `uuid` を `cn-safety-runtime` の通常依存に追加（workspace dependency。lockfile 解決済みで
+  新規外部 dependency は増やさない）。
+- ULID ではなく UUID を採用。`uuid` が `features=["serde","v4"]` 付きで既存 workspace dep のため、
+  追加コストなく v4 を利用できる（`ulid` は未導入で「新規外部 dependency を増やさない」方針に反する）。
+- `EventIdGenerator` trait と orchestrator のシグネチャは変更しない。テストの連番 id 生成器も従来どおり。
+
+### 検証
+
+- `cargo test -p kukuri-cn-safety-runtime --test id`: 3 tests pass（UUID v4 parse / 一意性 / orchestrator 注入）。
+- `cargo check -p kukuri-cn-safety-runtime --no-default-features`: pass。

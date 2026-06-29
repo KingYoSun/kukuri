@@ -6,16 +6,15 @@
 //! `SafetyRiskSignal`）を生成する。
 //!
 //! この crate は DB / network / production credentials に依存しない。時刻と event id は
-//! [`ScanClock`] / [`EventIdGenerator`] として注入される。時刻の本番実装は
-//! [`SystemScanClock`]（system clock, UTC RFC3339）として提供する。event id の本番実装は
-//! runtime 組み込み段階で追加する（#399）。
+//! [`ScanClock`] / [`EventIdGenerator`] として注入される。本番実装として時刻は
+//! [`SystemScanClock`]（system clock, UTC RFC3339）、event id は
+//! [`UuidEventIdGenerator`]（UUID v4）を提供する。
 //!
 //! スコープ境界（本 crate に含まないもの）:
 //! - 本番 provider 接続（#391 Project Arachnid Shield 等）
 //! - moderation event の実鍵署名（secp256k1）と永続化、risk signal の永続化
 //! - fail-closed indexing 本体（search / discovery / recommendation 除外の DB 制約）
 //! - blob の一時 fetch / moderation server 本体（HTTP）
-//! - 本番 [`EventIdGenerator`] 実装（#399）
 //!
 //! 設計の真実源:
 //! - `docs/safety/community-node-critical-safety.md`（§5 component boundary, §6 data flow,
@@ -30,7 +29,7 @@ pub mod orchestrator;
 
 pub use clock::{ScanClock, SystemScanClock};
 pub use error::SafetyRuntimeError;
-pub use id::EventIdGenerator;
+pub use id::{EventIdGenerator, UuidEventIdGenerator};
 pub use orchestrator::{
     SafetyOrchestrator, SafetyOrchestratorBuilder, SafetyScanReport, map_scan_error,
 };

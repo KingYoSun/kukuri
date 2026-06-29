@@ -739,7 +739,7 @@ fn cn_test_database_url() -> String {
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "55432".to_string());
+        .unwrap_or_else(|| "15432".to_string());
     format!("postgres://cn:cn_password@127.0.0.1:{port}/cn")
 }
 
@@ -748,12 +748,32 @@ fn cn_test_rendezvous_redis_url() -> String {
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "56379".to_string());
+        .unwrap_or_else(|| "16379".to_string());
     format!("redis://127.0.0.1:{port}/")
 }
 
 fn with_cn_postgres<T>(operation: impl FnOnce() -> Result<T>) -> Result<T> {
     let root = root_dir();
+    // 15432 / 16379 は Linux の一般的な ephemeral port range (32768-60999) 外に置き、
+    // outgoing connection の一時ポートとの衝突を避ける。
+    // さらに起動前に残骸スタックを掃除しておく。前回の cn-test が異常終了して compose スタックが
+    // 残っていると固定ホストポートが専有されたままになり、`up` が "address already in use" で
+    // 失敗する。pre-up の down は冪等で、残骸が無ければ no-op。
+    // docker 未起動などの環境異常では失敗し得るが、その場合は後続の `up` が本来のエラーを
+    // 返すため、ここでは best-effort（結果を無視）にする。
+    let _ = run_with_env(
+        "docker",
+        [
+            "compose",
+            "-f",
+            "docker-compose.community-node.yml",
+            "down",
+            "-v",
+            "--remove-orphans",
+        ],
+        &root,
+        &cn_compose_envs(),
+    );
     run_with_env(
         "docker",
         [

@@ -54,7 +54,7 @@ docker compose --env-file .env.community-node -f docker-compose.community-node.y
 docker compose --env-file .env.community-node -f docker-compose.community-node.yml up --build cn-user-api cn-iroh-relay
 ```
 
-- host port の既定値は `18080` (`cn-user-api`), `13340` (`cn-iroh-relay`), `55432` (`cn-postgres`)
+- host port の既定値は `18080` (`cn-user-api`), `13340` (`cn-iroh-relay`), `15432` (`cn-postgres`), `16379` (`cn-valkey`)
 - host 側 bind の既定値は loopback (`127.0.0.1`) なので、LAN/WireGuard 越しに公開する場合は `CN_*_HOST_BIND_IP` を上書きする
 - compose 内の service 名は `cn-postgres`, `cn-migrate`, `cn-user-api`, `cn-iroh-relay`
 - public URL を変える場合は `CN_BASE_URL`, `CN_PUBLIC_BASE_URL`, `COMMUNITY_NODE_CONNECTIVITY_URLS` を上書きする
