@@ -12,12 +12,17 @@ path = "src/lib.rs"
 name = "cn-operator"
 path = "src/main.rs"
 
+[features]
+safety-mock = ["kukuri-cn-safety/mock", "dep:tokio"]
+
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
+kukuri-cn-safety = { path = "../cn-safety" }
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
+tokio = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile.workspace = true

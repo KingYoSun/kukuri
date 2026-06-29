@@ -12,10 +12,11 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 use kukuri_cn_operator::{
-    Availability, SAMPLE_CONFIG, check_drift, generate_all, generate_tfvars, load_and_validate,
+    Availability, SAMPLE_CONFIG, check_drift, evaluate_public_node_readiness, generate_all,
+    generate_tfvars, load_and_validate,
 };
 
 #[derive(Debug, Parser)]
@@ -63,6 +64,37 @@ enum Command {
         #[arg(long, default_value = "dist/operator-docs")]
         out_dir: PathBuf,
     },
+    /// safety readiness / provider 経路を検査する。
+    Safety {
+        #[command(subcommand)]
+        action: SafetyCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum SafetyCommand {
+    /// public-node safety readiness を operator-config から静的検査する。
+    Readiness {
+        #[arg(long, default_value = "operator-config.yaml")]
+        config: PathBuf,
+        #[arg(long, default_value = "public-node")]
+        profile: String,
+    },
+    /// mock provider で scan -> route -> verdict 経路を検査する。
+    TestProvider {
+        #[arg(long, default_value = "blob-test")]
+        subject_id: String,
+        #[arg(long, value_enum, default_value_t = TestProviderScenario::KnownMatch)]
+        scenario: TestProviderScenario,
+    },
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum TestProviderScenario {
+    KnownMatch,
+    NoKnownMatch,
+    Unavailable,
+    SuspectedCsam,
 }
 
 fn main() -> ExitCode {
@@ -138,7 +170,113 @@ fn run() -> Result<ExitCode> {
                 Ok(ExitCode::FAILURE)
             }
         }
+        Command::Safety { action } => run_safety(action),
     }
+}
+
+fn run_safety(action: SafetyCommand) -> Result<ExitCode> {
+    match action {
+        SafetyCommand::Readiness { config, profile } => {
+            let resolved = load_config(&config)?;
+            let report = evaluate_public_node_readiness(&resolved, profile.as_str());
+            println!(
+                "safety readiness profile={} ready={} static_ok={} fail={} unknown={}",
+                report.profile,
+                report.is_ready(),
+                report.static_checks_pass(),
+                report.fail_count(),
+                report.unknown_count()
+            );
+            for check in &report.checks {
+                println!("{}  {}  {}", check.status.key(), check.id, check.detail);
+            }
+            if report.has_blocking_failures() {
+                // static config に不備（fail）がある。設定で解消すべき。
+                Ok(ExitCode::FAILURE)
+            } else if report.is_ready() {
+                println!("OK: すべての readiness check を満たしています。");
+                Ok(ExitCode::SUCCESS)
+            } else {
+                // fail は無いが unknown が残る。runtime / provider 接続後に確定する項目。
+                println!(
+                    "NOTE: static config の check は満たしています。unknown の {} 項目は provider / runtime 接続後に確定します（public indexing 解禁前に再検査が必要）。",
+                    report.unknown_count()
+                );
+                Ok(ExitCode::SUCCESS)
+            }
+        }
+        SafetyCommand::TestProvider {
+            subject_id,
+            scenario,
+        } => run_safety_test_provider(subject_id, scenario),
+    }
+}
+
+#[cfg(feature = "safety-mock")]
+fn run_safety_test_provider(
+    subject_id: String,
+    scenario: TestProviderScenario,
+) -> Result<ExitCode> {
+    use kukuri_cn_safety::{
+        MockSafetyProvider, ProviderScanRequest, SafetyCategory, SafetyPolicy, SafetyProvider,
+        SafetyProviderCapability, SubjectKind, route,
+    };
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("tokio runtime の作成に失敗しました")?;
+    let (provider, request) = match scenario {
+        TestProviderScenario::KnownMatch => (
+            MockSafetyProvider::known_csam("mock-known-csam")
+                .with_known_hash_match(subject_id.as_str()),
+            ProviderScanRequest::for_subject(SubjectKind::Blob, subject_id.as_str()),
+        ),
+        TestProviderScenario::NoKnownMatch => (
+            MockSafetyProvider::known_csam("mock-known-csam")
+                .with_no_known_match(subject_id.as_str()),
+            ProviderScanRequest::for_subject(SubjectKind::Blob, subject_id.as_str()),
+        ),
+        TestProviderScenario::Unavailable => (
+            MockSafetyProvider::known_csam("mock-known-csam").default_unavailable(),
+            ProviderScanRequest::for_subject(SubjectKind::Blob, subject_id.as_str()),
+        ),
+        TestProviderScenario::SuspectedCsam => (
+            MockSafetyProvider::with_capabilities(
+                "mock-unknown-csam",
+                vec![SafetyProviderCapability::NovelCsamImageClassifier],
+            )
+            .with_score(
+                subject_id.as_str(),
+                SafetyProviderCapability::NovelCsamImageClassifier,
+                SafetyCategory::Csam,
+                90,
+            ),
+            ProviderScanRequest::for_subject(SubjectKind::Blob, subject_id.as_str()),
+        ),
+    };
+    let scan = runtime.block_on(async { provider.scan(&request).await })?;
+    let policy = SafetyPolicy::public_node_default();
+    let verdict = route(std::slice::from_ref(&scan), &policy, "mock-scanned-at");
+    println!("provider: {}", scan.provider);
+    println!("capability: {:?}", scan.capability);
+    println!("outcome: {:?}", scan.outcome);
+    println!("verdict_action: {:?}", verdict.action);
+    println!("reason_code: {:?}", verdict.reason_code);
+    println!("critical: {}", verdict.critical);
+    println!("indexable: {}", verdict.is_indexable());
+    Ok(ExitCode::SUCCESS)
+}
+
+#[cfg(not(feature = "safety-mock"))]
+fn run_safety_test_provider(
+    _subject_id: String,
+    _scenario: TestProviderScenario,
+) -> Result<ExitCode> {
+    eprintln!(
+        "safety test-provider は `cargo run -p kukuri-cn-operator --features safety-mock -- safety test-provider` で実行してください"
+    );
+    Ok(ExitCode::FAILURE)
 }
 
 fn load_config(path: &PathBuf) -> Result<kukuri_cn_operator::ResolvedConfig> {
