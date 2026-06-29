@@ -6,6 +6,7 @@
 - `AGENTS.local.md`
 - `docs/README.md`
 - `docs/runbooks/dev.md`
+- `PLANS.md` (プランモード・プラン作成時)
 - `DESIGN.md`（UI/UX 作業時のビジュアル仕様。フロー/ガードレールは `docs/adr/0014-uiux-dev-flow.md`）
 - `REFACTORING.md`（リファクタリング・構造整理・大きめの移動/抽出を行う場合）
 
