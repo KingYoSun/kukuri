@@ -9,6 +9,7 @@ name = "kukuri_cn_safety_runtime"
 path = "src/lib.rs"
 
 [dependencies]
+chrono.workspace = true
 kukuri-cn-safety = { path = "../cn-safety" }
 serde.workspace = true
 thiserror.workspace = true
