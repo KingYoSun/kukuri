@@ -1,7 +1,7 @@
 use crate::*;
 
-const DEFAULT_CN_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:55432/cn";
-const DEFAULT_CN_RENDEZVOUS_REDIS_URL: &str = "redis://127.0.0.1:56379/";
+const DEFAULT_CN_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:15432/cn";
+const DEFAULT_CN_RENDEZVOUS_REDIS_URL: &str = "redis://127.0.0.1:16379/";
 const EXTERNAL_CN_BASE_URL_ENV: &str = "KUKURI_HARNESS_COMMUNITY_NODE_BASE_URL";
 const EXTERNAL_CN_CONNECTIVITY_URLS_ENV: &str = "KUKURI_HARNESS_COMMUNITY_NODE_CONNECTIVITY_URLS";
 

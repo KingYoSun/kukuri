@@ -4,7 +4,7 @@ use kukuri_cn_core::{
     initialize_database_for_runtime,
 };
 
-const DEFAULT_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:55432/cn";
+const DEFAULT_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:15432/cn";
 
 fn integration_test_admin_database_url() -> Option<String> {
     let enabled = std::env::var("KUKURI_CN_RUN_INTEGRATION_TESTS")

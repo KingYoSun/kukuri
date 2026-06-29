@@ -11,8 +11,8 @@ use kukuri_cn_core::{JwtConfig, TestDatabase};
 use kukuri_cn_user_api::{UserApiConfig, app_router, build_state};
 use reqwest::{Client, StatusCode};
 
-const DEFAULT_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:55432/cn";
-const DEFAULT_RENDEZVOUS_REDIS_URL: &str = "redis://127.0.0.1:56379/";
+const DEFAULT_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:15432/cn";
+const DEFAULT_RENDEZVOUS_REDIS_URL: &str = "redis://127.0.0.1:16379/";
 
 /// report_endpoint capability を有効化した operator config。
 const REPORT_ENABLED_YAML: &str = r#"server:
