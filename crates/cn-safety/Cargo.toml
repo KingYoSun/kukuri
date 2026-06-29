@@ -1,0 +1,27 @@
+[package]
+name = "kukuri-cn-safety"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "kukuri_cn_safety"
+path = "src/lib.rs"
+
+[features]
+# deterministic な mock provider / signer。production の既定 API には含めない
+# （非暗号の MockSigner を本番経路で誤用させないため）。テストでは下の self
+# dev-dependency が有効化する。
+mock = []
+
+[dependencies]
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+# 自分自身を mock feature 付きで dev-dependency にすることで、tests/ から mock を使える
+# （feature unification によりテストビルド時のみ mock が有効になる）。
+kukuri-cn-safety = { path = ".", features = ["mock"] }
+tokio.workspace = true
