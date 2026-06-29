@@ -195,6 +195,23 @@ fn low_cost_rejects_invalid_deploy_format() {
 }
 
 #[test]
+fn tfvars_emits_safety_signing_key_secret_id_when_present() {
+    // safety.events.signing_key_secret_id があれば tfvars に secret ID として出力される。
+    let yaml = "server:\n  domain: example-kukuri.net\n  operator_name: Op\n  country: JP\n\
+                safety:\n  events:\n    signing_key_secret_id: kukuri-cn-safety-signing-key\n\
+                deploy:\n  profile: low-cost\n  project_id: my-project\n\
+                \x20 relay_domain: relay.example-kukuri.net\n  acme_email: ops@example-kukuri.net\n\
+                \x20 jwt_secret_id: kukuri-cn-jwt-secret\n\
+                \x20 postgres_password_secret_id: kukuri-cn-postgres-password\n";
+    let resolved = load_and_validate(yaml).unwrap();
+    let tfvars = generate_tfvars(&resolved).unwrap();
+    assert!(
+        tfvars.contains("safety_signing_key_secret_id = \"kukuri-cn-safety-signing-key\""),
+        "tfvars:\n{tfvars}"
+    );
+}
+
+#[test]
 fn generated_tfvars_guides_operator_config_path() {
     let yaml = config_with_deploy("  relay_domain: relay.example-kukuri.net\n", "", false);
     let resolved = load_and_validate(&yaml).unwrap();

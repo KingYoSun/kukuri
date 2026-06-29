@@ -94,6 +94,19 @@ pub fn generate_keys() -> KukuriKeys {
     KukuriKeys::generate()
 }
 
+/// secret 文字列が既知の placeholder（サンプル値）を含むかを返す（大文字小文字を無視）。
+///
+/// community node の secret 検証（JWT secret / moderation event signing key 等）で、
+/// `change-me` のようなサンプル値のまま本番起動するのを防ぐ。複数の検証経路が同じ判定を
+/// 共有して drift しないよう、ここを単一の真実源にする。
+pub fn is_placeholder_secret(secret: &str) -> bool {
+    const PLACEHOLDER_MARKERS: [&str; 2] = ["change-me", "change_me"];
+    let lowered = secret.to_ascii_lowercase();
+    PLACEHOLDER_MARKERS
+        .iter()
+        .any(|marker| lowered.contains(marker))
+}
+
 pub(crate) fn sha256_digest(bytes: &[u8]) -> [u8; 32] {
     Sha256::digest(bytes).into()
 }

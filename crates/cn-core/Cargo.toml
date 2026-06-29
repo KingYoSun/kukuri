@@ -20,6 +20,10 @@ tracing.workspace = true
 url.workspace = true
 uuid.workspace = true
 kukuri-core = { path = "../core" }
+kukuri-cn-safety = { path = "../cn-safety" }
+kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }
 
 [dev-dependencies]
 tempfile.workspace = true
+kukuri-cn-safety = { path = "../cn-safety" }
+kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }

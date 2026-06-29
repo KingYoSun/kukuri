@@ -10,7 +10,7 @@ pub const PUBLIC_NODE_PROFILE: &str = "public-node";
 /// 通常経路（`evaluate_public_node_readiness`）と safety セクション欠落経路
 /// （`missing_safety_report`）の双方が、必ずこの集合を同じ順序で網羅する。ID で機械処理する
 /// 消費側が経路ごとの差異に依存しないことを保証する（テストで固定）。
-pub const READINESS_CHECK_IDS: [&str; 11] = [
+pub const READINESS_CHECK_IDS: [&str; 12] = [
     "safety_config_present",
     "safety_profile_public_node",
     "known_csam_provider_configured",
@@ -18,6 +18,7 @@ pub const READINESS_CHECK_IDS: [&str; 11] = [
     "index_before_scan_disabled",
     "scan_error_fail_closed",
     "signed_moderation_events_enabled",
+    "signing_key_secret_configured",
     "permanent_blob_storage_disabled",
     "known_csam_credential_secret_configured",
     "provider_credential_valid",
@@ -124,6 +125,7 @@ pub fn evaluate_public_node_readiness(
             check_index_before_scan(safety),
             check_on_scan_error(safety),
             check_signed_events(safety),
+            check_signing_key_secret(safety),
             check_no_permanent_blob_storage(safety),
             check_known_provider_secret(safety),
             ReadinessCheck {
@@ -255,6 +257,20 @@ fn check_signed_events(safety: &SafetyConfig) -> ReadinessCheck {
             "signed_moderation_events_enabled",
             "signed moderation events must be enabled".to_string(),
         )
+    }
+}
+
+fn check_signing_key_secret(safety: &SafetyConfig) -> ReadinessCheck {
+    match safety.events.signing_key_secret_id.as_deref() {
+        Some(secret_id) if !secret_id.trim().is_empty() => pass(
+            "signing_key_secret_configured",
+            format!("signing_key_secret_id={secret_id}"),
+        ),
+        Some(_) | None => fail(
+            "signing_key_secret_configured",
+            "safety.events.signing_key_secret_id is required for real-key moderation event signing"
+                .to_string(),
+        ),
     }
 }
 

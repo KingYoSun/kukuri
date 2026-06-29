@@ -44,20 +44,46 @@ pub struct ModerationEventBody {
 impl ModerationEventBody {
     /// 署名対象の決定論的バイト列を返す。
     ///
-    /// 同一の論理内容に対して常に同じバイト列を返す。フィールド順序が固定された struct を
-    /// `serde_json` で文字列化する（`serde_json` は struct を宣言順でシリアライズし、map を
-    /// 使わないため出力は決定論的）。crate 内テストで安定性を固定する。
-    ///
-    /// 注意: 本実装は同一バージョンでの決定性を担保する。クロス実装で厳密に一致させる
-    /// canonical 形式（フィールドのソート / 正規化）が必要になった段階で、実鍵署名導入
-    /// （後続）と合わせて強化する。
+    /// 同一の論理内容に対して常に同じバイト列を返す。[`canonical_json`](Self::canonical_json) の
+    /// UTF-8 バイト列であり、object のキーを再帰的に辞書順ソートしてからシリアライズするため、
+    /// struct のフィールド宣言順や `serde_json` の map 表現（`preserve_order` feature の有無）に
+    /// 依存しない。実鍵署名（secp256k1）の署名対象として、クロス実装・クロスバージョンで安定する。
     pub fn canonical_bytes(&self) -> Vec<u8> {
         self.canonical_json().into_bytes()
     }
 
     /// 署名対象の決定論的 JSON 文字列。
+    ///
+    /// object のキーを再帰的に辞書順へ正規化する。`skip_serializing_if` で省略される
+    /// `Option::None`（`confidence` 等）は canonical 表現にも現れない。
     pub fn canonical_json(&self) -> String {
-        serde_json::to_string(self).expect("moderation event body serializes to JSON")
+        let value = serde_json::to_value(self).expect("moderation event body serializes to JSON");
+        let canonical = canonicalize_json_value(value);
+        serde_json::to_string(&canonical)
+            .expect("canonical moderation event body serializes to JSON")
+    }
+}
+
+/// JSON object のキーを再帰的に辞書順へ正規化する。
+///
+/// `serde_json::Map` の既定（`preserve_order` 無効時は BTreeMap）はキーをソートするが、
+/// feature unification で `preserve_order` が有効化されても安定するよう、明示的にソート順で
+/// 再構築する。array の要素順は意味を持つため保持する。
+fn canonicalize_json_value(value: serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(map) => {
+            let mut entries: Vec<(String, serde_json::Value)> = map.into_iter().collect();
+            entries.sort_by(|a, b| a.0.cmp(&b.0));
+            let mut sorted = serde_json::Map::new();
+            for (key, child) in entries {
+                sorted.insert(key, canonicalize_json_value(child));
+            }
+            serde_json::Value::Object(sorted)
+        }
+        serde_json::Value::Array(items) => {
+            serde_json::Value::Array(items.into_iter().map(canonicalize_json_value).collect())
+        }
+        other => other,
     }
 }
 
