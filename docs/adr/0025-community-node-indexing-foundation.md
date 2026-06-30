@@ -30,11 +30,11 @@ community node の主要未検討機能のひとつ「indexing（index / search 
 ## Feature Data Classification
 - Feature 名: community node content index（topic-scoped post 本文テキスト + media 派生タグ + room メタデータ）
 - Durable / Transient: Durable な node-local server index state（再構築可能な derived projection）
-- Canonical Source: index は canonical ではない。canonical source は author-owned のまま（post 本文は topic replica、room は `live/<id>/state` / `game/<id>/state` の docs pointer + manifest blob）。index は派生した検索用テキスト + media 派生タグ + メタデータ + safety verdict state のみを持つ
-- Replicated?: No（index は node-local。client へ canonical として replicate しない。検索/発見結果は node の authority scope 内で API として提供する）
-- Rebuildable From: topic replica の post 本文 + room state pointer + safety scan（VLM タグ含む）の verdict。再 ingest + 再 scan で再構築できる
+- Canonical Source: index は canonical ではない。canonical source は author-owned のまま（post 本文は topic replica、room は `live/<id>/state` / `game/<id>/state` の docs pointer + manifest blob）。CN は ingestion = Model C（§6）で sync 元の topic / channel docs replica（public は導出 namespace、private は登録 capability）から取り込む。index は派生した検索用テキスト + media 派生タグ + メタデータ + safety verdict state のみを持つ
+- Replicated?: No（index 自体は node-local。client へ canonical として replicate しない）。CN は supported topic / 許可 channel の **docs sync peer として参加**する（§6 Model C）。検索/発見結果は node の authority scope 内で API として提供する
+- Rebuildable From: sync した topic / channel replica の post 本文・room state pointer + safety scan（VLM タグ含む）の verdict。再 ingest + 再 scan で再構築でき、docs+blob で backfill / restart 復元する
 - Public Replica / Private Replica / Local Only: node-local な private server state（`cn-core` / Postgres）。public manifest には capability の有無のみを載せ、index 中身は載せない
-- Gossip Hint 必要有無: ingestion path（§6, 未決）に依存。Model B/C を採る場合は supported topic の gossip hint / docs replica を ingest 入力として使う
+- Gossip Hint 必要有無: peer discovery 補助として使用（Model C, §6）。基本データ経路は docs replica sync
 - Blob 必要有無: No（**no permanent blob storage** を維持。raw media blob は index しない。index は VLM 由来の派生タグのみ。moderation server の一時 fetch のみ）
 - SQLite projection 必要有無: No（server は SQLite を使わず Postgres projection）
 - 必須 contract:
@@ -49,7 +49,11 @@ community node の主要未検討機能のひとつ「indexing（index / search 
   - `index_only_allow_verdict_content`
   - `index_excludes_unscanned_and_scan_failed`
   - `search_discovery_recommendation_excludes_non_allow`
-  - （ingestion path 確定後に追加: 受信経路ごとの consent / scope 境界 contract）
+  - `index_only_indexes_shared_replica_entries`
+  - `index_private_channel_requires_submitted_channel_secret`
+  - `index_private_channel_request_authz_reuses_channel_permission`
+  - `indexing_startup_requires_validated_relay`
+  - `indexing_startup_fails_without_own_or_external_relay`
 - 必須 scenario:
   - operator が topic を supported set に追加 → その topic の post 本文が検索に出る / supported 外 topic の post は検索に出ない
   - 画像のみの投稿は、本文が無くても VLM 派生タグで検索でき、raw blob 自体は index されない
@@ -57,6 +61,9 @@ community node の主要未検討機能のひとつ「indexing（index / search 
   - streaming / metaverse room は title / description / タグで検索/発見に出るが、その room 内のコメント・action は出ない
   - トピック毎の検索窓で topic 内検索ができ、CN 横断検索は別画面で supported topic 全体を横断する
   - unscanned / scan_failed / `allow` 以外の verdict の content は search / discovery / recommendation に出ない
+  - private channel の secret を提示した indexing リクエストで `channel::` replica が sync され検索に出る / secret 無しでは index されない
+  - 自前 relay も外部 relay も未設定の CN は indexing 起動に失敗する（fail-closed）
+  - 共有 replica に実在しない content（CN へ直接渡されただけ）は index されない
 
 ## 1. 背景
 
@@ -81,7 +88,7 @@ community node の主要未検討機能のひとつ「indexing（index / search 
   - supported になっても、個々の content は §2.5 の安全ゲートを通過した `allow` のみが index される。
   - つまり `request → operator 承認（supported 化）→ 安全 verdict 通過 → index` の多段ゲートとする（`index_admits_approved_user_indexing_request`）。
 - この設計により、index の authority scope は「operator が明示的に引き受けた topic」に常に限定され、無制限に膨張しない。
-- **index 対象は public topic に限らない。** 招待制（身内向け）CN（ADR 0024 admission）では **private channel に対する indexing request も想定**する。private channel の index は §6 考慮 1 の条件（channel capability の正当な保持 / scope を channel メンバー + その CN の authority に閉じる / visibility は `local` 寄り）を満たすことを必須とする。public topic（namespace 秘密が導出可能）と private channel（`channel::`、capability 必要）は取得経路が異なる（§6）。
+- **index 対象は public topic に限らない。** 招待制（身内向け）CN（ADR 0024 admission）では **private channel に対する indexing request も想定**する。private channel の index は §6.3 の条件（indexing リクエスト＝secret 送信 / リクエスト権限は channel 権限モデルの応用 / scope を channel メンバー + その CN の authority に閉じる / visibility は `local` 寄り）を満たすことを必須とする。public topic（namespace 秘密が導出可能）と private channel（`channel::`、capability 必要）は取得経路が異なる（§6）。
 
 ### 2.3 index 対象の content kind — テキスト本文 + media の派生メタデータ（タグ）。raw blob は index しない
 
@@ -132,6 +139,8 @@ content が index に入る条件は次の AND とする:
 - index は「拾えるものを全部拾う」のではなく、operator が引き受けた supported topic × index 可能な content kind × `allow` verdict の交差に限定される。authority scope が常に説明可能になる。
 - media 検索は VLM 由来の派生タグ経由で提供する（raw blob の内容検索・画像類似検索は提供しない）。media タグ生成は非決定論的 moderation（#411）に依存する。
 - streaming / metaverse の検索体験は「room を見つける」までで（title / description / タグ）、room 内発言の全文検索は提供しない。
+- ingestion = Model C を基本とするため、CN は supported topic / 許可 channel の **docs sync participant node を新たに常駐**させる（純 relay + KV rendezvous の現行構成を一段拡張）。indexing 起動時に **relay validation** を gate として通し、自前 relay が無ければ外部 relay 設定を必須化する。Model B / A は Appendix（optional）。
+- private channel の indexing は「indexing リクエスト＝secret 送信」で C に capability を注入して解決し、別 ingestion 経路を新設しない。リクエスト権限は channel の権限モデルを応用する。
 - index 本体（schema / storage / query boundary）と fail-closed 制約の実装は #404 が担う。本 ADR は #404 が満たすべき contract / scenario の必要集合を先に固定する。
 - `CommunityIndex` capability の `Availability::Planned` → 昇格は、§2 の scope/content/safety ゲートと critical-safety.md §11 readiness（known-CSAM provider 設定・signed event 有効・blob 恒久保存無効 等）が実装・テストで満たされた段階で別途判断する（本 ADR では昇格しない）。
 
@@ -151,52 +160,56 @@ content が index に入る条件は次の AND とする:
 - **no permanent blob storage** を維持する（raw media blob を index に取り込まない。index するのは VLM 由来の派生タグのみ）。
 - `allow` 以外、unscanned、scan_failed、provider_unavailable を surfacing 経路に出さない（fail-closed）。
 
-## 6. 未決事項: 投稿・room 情報の取得経路（ingestion path）— 要決定
+## 6. 投稿・room 情報の取得経路（ingestion path）= Model C を基本とする（Decision）
 
-index する content（post 本文・media タグ・room メタデータ）を、**community node がどこから / 誰から / どの経路で受け取るか**を本 ADR で確定する必要がある。これは authority scope・consent・P2P-first 境界・no permanent blob storage に直結する設計情報であり、未確定のままでは #404 の実装境界（schema / ingest / scan 順序）が定まらない。
+index する content（post 本文・media タグ・room メタデータ）を community node がどこから / 誰から / どの経路で受け取るかを、**Model C（topic / channel の docs replica を sync する canonical pull）を基本（required）**として確定する。Model B / Model A は **Appendix A（実装してもよいが必須ではない optional）**とする。
 
-前提（AGENTS.md 通信経路）: 基本優先度は `Direct P2P -> Relay Supported P2P -> Relay Fallback`。`cn-user-api` が topic rendezvous state の owner、`cn-iroh-relay` は純 iroh relay。community node は P2P network の **service provider** であって home server ではない。
+前提（AGENTS.md 通信経路）: 基本優先度は `Direct P2P -> Relay Supported P2P -> Relay Fallback`。`cn-user-api` が topic rendezvous state の owner。community node は P2P network の **service provider** であって home server ではない。
 
-候補モデル:
+### 6.1 なぜ C を基本にするか（cost / attack surface）
 
-### Model A: client が cn-user-api へ明示 submit（dual-publish）
+- **コスト**: 総コストは safety scan（特に media VLM）が支配し、これは ingestion 経路に依らず共通。ingestion の差は相対的に小さい。replica sync は iroh-docs の **delta 同期（range 突合）**で per-post を償却し、late-join backfill / restart 復元が docs+blob だけで成立する（ADR 0005/0006）。「常駐プロセスが無い」ことを A の優位とみなすのは誤り（`cn-user-api` は既に常駐し、A は backfill 不能）。
+- **attack surface（ghost 注入）**: post envelope の署名検証は self-contained（`KukuriEnvelope::verify`、pubkey 埋め込み schnorr）。しかし有効署名は「実際に共有 replica / gossip に存在した投稿」であることを証明しない。Model A は **CN に直接 POST された、ネットワークに流れていないゴースト投稿**を index し得る（CN 限定の私的注入面を新設し、index がネットワーク実体から乖離する）。Model C は **全参加者と同じ共有 replica の entry のみ**を index するため、この私的注入面を作らない。
+- 結論: C は index を共有実体に一致させ、A 固有の注入面を持たず、per-post コストも償却できる。
 
-- client が gossip publish と並行して、index 許可付きで post を CN の API に submit する。
-- 長所: opt-in / 明示 consent が明確。CN は送られたものだけを index。supported 外 topic への要求も submit ベースで扱える。
-- 短所: publish 経路が二重化。opt-in した client の投稿しか集まらず「topic を広く index する」用途には届かない。CN が特別な publish 先になり P2P-first から外れ気味。
+### 6.2 Model C の決定内容
 
-### Model B: CN が gossip 参加者として受信（good-citizen relay）
+- **public topic**: `topic_replica_id(topic)`（= `topic::<topic_id>`）から namespace を導出し、`public_replica_secret` で replica を open、peer を discovery して iroh-docs sync する（`crates/docs-sync/src/{access,iroh_sync}.rs`）。
+- **ghost 注入を作らない**: index 対象は **sync された共有 replica に実在する entry のみ**。CN に直接渡されただけで replica に存在しない content は index しない（`index_only_indexes_shared_replica_entries`）。
+- **blob**: scan のための一時 fetch のみ。恒久保存しない（no permanent blob storage）。
 
-- CN が supported topic の gossip を subscribe し、通常の P2P 経路で post を受信。受信した post は次の peer へ forward する（sink ではなく Relay Supported P2P の良き参加者）。
-- 長所: 既存 P2P 経路に乗る。supported topic の public 投稿を広く拾える。「P2P network の service provider」という位置づけと整合。
-- 短所: CN は subscribe した topic の public gossip を広く見る（scope / privacy 配慮が要る。supported topic に限定して境界化する）。
+### 6.3 課題 1 の解決: private channel indexing = secret 送信
 
-### Model C: CN が topic の public docs replica を複製（canonical pull）
+- 招待制（身内向け）CN（ADR 0024 admission）では private channel への indexing request も想定する。private channel replica（`channel::`）は namespace 秘密が導出できず capability（登録済み secret）が必要（`access.rs`）。
+- **解決**: **indexing リクエスト＝secret 送信**とする。リクエスト時に channel secret（capability）を CN に渡し、CN はそれを登録して **Model C と同じ仕組みで `channel::` replica を sync** する。private channel 専用の別 ingestion 経路は新設せず、C に capability を注入するだけで解決する。
+- **リクエスト権限**: indexing をリクエストできる権限は **channel の既存権限モデルをそのまま応用**する（channel の secret にアクセスできる権限者が、その secret を提示して indexing をリクエストできる）。CN は新しい権限体系を作らない。
+- scope / consent: private channel index は channel メンバー + その CN の authority に閉じ、risk signal / visibility は `local` 寄り（trust-semantics）。
+- contract: `index_private_channel_requires_submitted_channel_secret` / `index_private_channel_request_authz_reuses_channel_permission`。
 
-- CN が supported topic の author / topic docs replica（iroh-docs）を canonical として sync し、gossip は hint としてのみ使う（ADR 0005/0006 の `docs state + manifest blob` モデルと整合）。
-- 長所: canonical な post 本文・room manifest を確実に取得。late-join backfill / restart 復元が docs だけで成立。
-- 短所: docs 複製の対象範囲（どの author / topic replica を引くか）の管理が要る。
+### 6.4 課題 2 の解決: relay validation（relay 抜き CN）
 
-### 組み合わせと決定の反映
+- CN は relay 抜き構成を許容するため、Model C の peer discovery を CN-local relay 前提にできない。
+- **解決**: **indexing 起動時に relay を validate する**。自前 relay（`cn-iroh-relay`）が無い構成では、**外部 relay の設定を必須化**する。relay（自前 or 外部）が未設定なら indexing を起動しない（fail-closed の起動 gate）。
+- これにより relay 有無に依らず C の discovery（seed peer / imported ticket / 外部 relay / DHT。`iroh_sync.rs` の `seed_peers` / `learned_peers` / `imported_peers`）が成立する。
+- contract: `indexing_startup_requires_validated_relay` / `indexing_startup_fails_without_own_or_external_relay`。
 
-組み合わせ（例: supported topic は Model C で canonical 取得 + Model B で liveness、opt-in / 例外は Model A）も選択肢。どのモデル（または組み合わせ）を既定とするかは設計判断であり、**決定後に本 ADR の §2 Decision と Feature Data Classification（Canonical Source / Replicated / Rebuildable From / Gossip Hint）へ反映し、ingestion ごとの consent / scope 境界 contract を追加する**。
+### 6.5 Feature Data Classification への反映（C 確定）
 
-### 取得経路の追加考慮事項（決定前に織り込む）
+- Canonical Source: index は派生。canonical は sync 元の topic / channel docs replica（public は導出 namespace、private は登録 capability）。
+- Replicated?: index 自体は node-local。CN は supported topic / 許可 channel の **docs sync peer として参加**する。
+- Rebuildable From: sync した replica（topic / channel）+ safety scan。docs+blob で backfill / restart 復元。
+- Gossip Hint: peer discovery 補助として使用。基本データ経路は docs replica sync。
 
-#### 考慮 1: 招待制（身内向け）CN と private channel indexing
+## Appendix A: 代替・補助 ingestion モデル（B / A, optional）
 
-- 現状 CN は admission（`open` / `invite` / `whitelist`、ADR 0024）を実装済みで、**「招待したユーザーのみ許可」**する運用を認めている。これは public CN を立てることの**法的ハードルの高さ**を踏まえ、よりハードルの低い**身内向け CN** を想定したため。
-- したがって index は public topic だけでなく、**private channel に対する indexing request も当然想定する必要がある**。「supported topic に限定」という §2.2 の scope 前提を、private channel index 対象を含む形に拡張する。
-- 技術的含意（`crates/docs-sync/src/access.rs`）: private channel replica（`channel::`）は namespace 秘密が topic id から**導出できず**、capability（登録済み secret）が必要。public topic replica（導出可能）とは取得経路が根本的に異なる。
-  - したがって private channel の index は (a) その channel の capability を CN が正当に保持していること、(b) scope / consent が **channel メンバー + その CN の authority** に閉じること、(c) risk signal / 露出 visibility が `local` 寄りであること、を満たす必要がある。
-  - Model 適合: capability を伴う Model A（メンバーが capability 付きで submit / CN に capability 登録）と相性が良い。Model B/C で private channel を扱う場合も、public derive では取得できないため capability 注入が前提になる。
-- 身内向け CN の index は「その CN の admission を通ったメンバー向けの node-local 検索」であり、network-wide 公開ではない。p2p-first responsibility boundary / trust-semantics と整合させる。
+以下は Model C を補完する optional モデル。**実装してもよいが必須ではない。** 採用する場合も §6.1–§6.4 の不変条件（ghost 注入を作らない / relay validation / private は capability）を満たすこと。
 
-#### 考慮 2: relay 抜き CN を許容する
+### Model B: CN が gossip 参加者として受信（liveness 補助, optional）
 
-- 現状の CN 要件は **relay 抜き CN**（`cn-iroh-relay` を持たない構成）を許容している。よって ingestion 設計を「CN 自身が relay を持つこと」に依存させてはならない。
-- 技術的含意: Model B/C の peer discovery を CN-local relay 前提にできない。relay 無し CN では、docs/gossip 参加ノードの peer discovery を別経路で成立させる必要がある（imported ticket / seed peer / 外部 relay / DHT discovery 等。`iroh_sync.rs` の `seed_peers` / `learned_peers` / `imported_peers` と整合）。
-- つまり「CN を docs 参加ノードにする（Model B/C）」コストには、**relay 有無による discovery 経路差**が加わる。relay 無し構成でも canonical sync が成立する discovery を設計に含めること。
-- Model A（client が cn-user-api へ submit）は HTTP 面のみで relay/参加ノードに依存しないため、relay 抜き CN との相性は最も良い。
+- CN が supported topic の gossip を subscribe し、新着の liveness hint を得て次 peer へ forward する（sink ではなく Relay Supported P2P の良き参加者）。C の canonical sync を低遅延化する補助。
+- index は依然 §6.2 の「共有 replica の entry のみ」に従う（gossip だけで来た未 replica content を直接 index しない）。
 
-これら 2 点は、§2.2 の scope（public topic 限定 → private channel を含む）と、Model 選択（参加ノード化のコスト / relay 依存の排除）に直接効く。決定時に上記を満たすことを必須とする。
+### Model A: client が cn-user-api へ明示 submit（opt-in 例外, optional）
+
+- client が index 許可付きで post を CN の API に submit する opt-in 経路。
+- 必須ではない。採用する場合、ghost 注入を防ぐため **submit された content も共有 replica 上の実在を確認してから index する**（単独 POST だけで index しない）。確認できないなら index しない。
