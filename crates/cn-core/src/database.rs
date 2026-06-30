@@ -51,6 +51,8 @@ pub async fn ensure_database_ready(pool: &PgPool) -> Result<()> {
         ("cn_admin", "admission_allowlist"),
         ("cn_bootstrap", "bootstrap_nodes"),
         ("cn_bootstrap", "peer_registrations"),
+        ("cn_safety", "signed_moderation_events"),
+        ("cn_safety", "risk_signals"),
     ] {
         let exists = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS (

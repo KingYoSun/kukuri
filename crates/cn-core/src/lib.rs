@@ -10,6 +10,7 @@ mod normalize;
 mod rendezvous;
 mod reports;
 mod rollout;
+mod safety_events;
 #[cfg(test)]
 mod tests;
 
@@ -59,3 +60,9 @@ pub use reports::{
     get_community_node_report, insert_community_node_report, list_community_node_reports,
 };
 pub use rollout::{ensure_default_auth_rollout, load_auth_rollout, store_auth_rollout};
+pub use safety_events::{
+    DistributionAudience, StoredModerationEvent, StoredRiskSignal, get_risk_signal,
+    get_signed_moderation_event, list_distributable_moderation_events,
+    list_distributable_risk_signals, list_risk_signals_for_target, list_signed_moderation_events,
+    persist_risk_signal, persist_signed_moderation_event,
+};

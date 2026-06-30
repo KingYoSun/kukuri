@@ -61,12 +61,18 @@ pub struct SafetyStorageConfig {
 pub struct SafetyEventsConfig {
     #[serde(default = "default_emit_signed_moderation_events")]
     pub emit_signed_moderation_events: bool,
+    /// moderation event の実鍵署名（secp256k1）に使う signing key を保持する
+    /// Secret Manager secret ID（値ではない）。runtime はこの secret を
+    /// `COMMUNITY_NODE_SAFETY_SIGNING_KEY` env として注入され、署名鍵を読み込む。
+    #[serde(default)]
+    pub signing_key_secret_id: Option<String>,
 }
 
 impl Default for SafetyEventsConfig {
     fn default() -> Self {
         Self {
             emit_signed_moderation_events: default_emit_signed_moderation_events(),
+            signing_key_secret_id: None,
         }
     }
 }
@@ -140,6 +146,9 @@ pub fn validate_safety_config(config: &SafetyConfig) -> Result<()> {
         "safety.providers.unknown_csam",
         config.providers.unknown_csam.as_ref(),
     )?;
+    if let Some(secret_id) = config.events.signing_key_secret_id.as_deref() {
+        validate_secret_id("safety.events.signing_key_secret_id", secret_id)?;
+    }
     Ok(())
 }
 

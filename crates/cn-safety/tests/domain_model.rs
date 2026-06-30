@@ -205,6 +205,47 @@ fn moderation_event_body_canonical_is_deterministic() {
 }
 
 #[test]
+fn moderation_event_body_canonical_matches_golden_vector() {
+    // canonical form をクロス実装・クロスバージョンで固定する golden vector。
+    // object キーは辞書順、`confidence`（None）は省略される。
+    let expected = "{\
+\"action\":\"exclude\",\
+\"basis\":\"known_hash_match\",\
+\"created_at\":\"2026-06-29T00:00:00Z\",\
+\"id\":\"evt-1\",\
+\"issuer_node_id\":\"node-1\",\
+\"labels\":[{\"category\":\"csam\"}],\
+\"policy_version\":\"2026-06-public-node-v1\",\
+\"reason_code\":\"csam_confirmed\",\
+\"severity\":\"critical\",\
+\"target_id\":\"bafy-target\",\
+\"target_type\":\"blob\",\
+\"visibility\":\"subscribed_nodes\"\
+}";
+    assert_eq!(sample_body().canonical_json(), expected);
+}
+
+#[test]
+fn moderation_event_body_canonical_is_field_order_independent() {
+    // 論理的に同じ body は、デシリアライズ元の JSON のキー順序に依存せず同一 canonical を生む。
+    let ordered = r#"{
+        "id":"evt-1","issuer_node_id":"node-1","target_type":"blob","target_id":"bafy-target",
+        "action":"exclude","labels":[{"category":"csam"}],"reason_code":"csam_confirmed",
+        "severity":"critical","basis":"known_hash_match","visibility":"subscribed_nodes",
+        "policy_version":"2026-06-public-node-v1","created_at":"2026-06-29T00:00:00Z"
+    }"#;
+    let shuffled = r#"{
+        "created_at":"2026-06-29T00:00:00Z","visibility":"subscribed_nodes","severity":"critical",
+        "policy_version":"2026-06-public-node-v1","basis":"known_hash_match","reason_code":"csam_confirmed",
+        "labels":[{"category":"csam"}],"action":"exclude","target_id":"bafy-target",
+        "target_type":"blob","issuer_node_id":"node-1","id":"evt-1"
+    }"#;
+    let a: ModerationEventBody = serde_json::from_str(ordered).unwrap();
+    let b: ModerationEventBody = serde_json::from_str(shuffled).unwrap();
+    assert_eq!(a.canonical_bytes(), b.canonical_bytes());
+}
+
+#[test]
 fn moderation_event_body_round_trips_snake_case() {
     let body = sample_body();
     let value = serde_json::to_value(&body).unwrap();

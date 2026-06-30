@@ -81,12 +81,7 @@ pub(crate) fn validate_jwt_secret(secret: &str) -> Result<()> {
             secret.len()
         );
     }
-    const PLACEHOLDER_MARKERS: [&str; 2] = ["change-me", "change_me"];
-    let lowered = secret.to_ascii_lowercase();
-    if PLACEHOLDER_MARKERS
-        .iter()
-        .any(|marker| lowered.contains(marker))
-    {
+    if kukuri_core::is_placeholder_secret(secret) {
         bail!(
             "COMMUNITY_NODE_JWT_SECRET still contains a placeholder value; set a strong unique secret"
         );

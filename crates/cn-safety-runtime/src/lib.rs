@@ -5,14 +5,19 @@
 //! `route()` で `SafetyVerdict` を得て、未署名 moderation artifact（`ModerationEventBody` /
 //! `SafetyRiskSignal`）を生成する。
 //!
-//! この crate は DB / network / production credentials に依存しない。時刻と event id は
+//! この crate は DB / network に依存しない。時刻と event id は
 //! [`ScanClock`] / [`EventIdGenerator`] として注入される。本番実装として時刻は
 //! [`SystemScanClock`]（system clock, UTC RFC3339）、event id は
 //! [`UuidEventIdGenerator`]（UUID v4）を提供する。
 //!
+//! moderation event の実鍵署名は [`Secp256k1ModerationEventSigner`]（secp256k1 schnorr）として
+//! 提供し、`cn-safety` の mock signer を置き換える。署名対象は `sha256(canonical_bytes)`、
+//! issuer_node_id は署名鍵の x-only 公開鍵 hex。[`verify_signed_event`] で検証する。署名鍵の
+//! 値は呼び出し側（runtime / Secret Manager 注入 env）が供給し、本 crate は鍵 store を持たない。
+//!
 //! スコープ境界（本 crate に含まないもの）:
 //! - 本番 provider 接続（#391 Project Arachnid Shield 等）
-//! - moderation event の実鍵署名（secp256k1）と永続化、risk signal の永続化
+//! - signed moderation event / risk signal の永続化（`cn-core` が所有）
 //! - fail-closed indexing 本体（search / discovery / recommendation 除外の DB 制約）
 //! - blob の一時 fetch / moderation server 本体（HTTP）
 //!
@@ -26,10 +31,15 @@ pub mod clock;
 pub mod error;
 pub mod id;
 pub mod orchestrator;
+pub mod signer;
 
 pub use clock::{ScanClock, SystemScanClock};
 pub use error::SafetyRuntimeError;
 pub use id::{EventIdGenerator, UuidEventIdGenerator};
 pub use orchestrator::{
     SafetyOrchestrator, SafetyOrchestratorBuilder, SafetyScanReport, map_scan_error,
+};
+pub use signer::{
+    SAFETY_SIGNING_KEY_ENV, Secp256k1ModerationEventSigner, SignatureError, SignerKeyError,
+    verify_signed_event,
 };

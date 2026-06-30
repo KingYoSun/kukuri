@@ -13,7 +13,7 @@ fn config_with_safety(safety: &str) -> String {
 }
 
 fn complete_safety() -> &'static str {
-    "safety:\n  profile: public-node\n  policy_version: 2026-06-public-node-v1\n  indexing:\n    index_before_scan: false\n    on_scan_error: hold\n  storage:\n    permanent_blob_storage: false\n  events:\n    emit_signed_moderation_events: true\n  providers:\n    known_csam:\n      provider: project_arachnid_shield\n      required: true\n      credential_secret_id: kukuri-cn-safety-known-csam\n"
+    "safety:\n  profile: public-node\n  policy_version: 2026-06-public-node-v1\n  indexing:\n    index_before_scan: false\n    on_scan_error: hold\n  storage:\n    permanent_blob_storage: false\n  events:\n    emit_signed_moderation_events: true\n    signing_key_secret_id: kukuri-cn-safety-signing-key\n  providers:\n    known_csam:\n      provider: project_arachnid_shield\n      required: true\n      credential_secret_id: kukuri-cn-safety-known-csam\n"
 }
 
 #[test]
@@ -88,6 +88,11 @@ fn readiness_complete_static_config_has_unknown_runtime_checks() {
     assert_check(
         &report,
         "signed_moderation_events_enabled",
+        ReadinessStatus::Pass,
+    );
+    assert_check(
+        &report,
+        "signing_key_secret_configured",
         ReadinessStatus::Pass,
     );
     assert_check(
@@ -189,7 +194,7 @@ fn safety_readiness_cli_fails_on_static_failure() {
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(!output.status.success(), "stdout:\n{stdout}");
     assert!(stdout.contains("static_ok=false"), "stdout:\n{stdout}");
-    assert!(stdout.contains("fail=11"), "stdout:\n{stdout}");
+    assert!(stdout.contains("fail=12"), "stdout:\n{stdout}");
 }
 
 #[test]
@@ -270,6 +275,33 @@ fn readiness_fails_when_signed_events_are_disabled() {
         &report,
         "signed_moderation_events_enabled",
         ReadinessStatus::Fail,
+    );
+}
+
+#[test]
+fn readiness_fails_without_signing_key_secret() {
+    // signing_key_secret_id 行を取り除くと signing key check が fail する。
+    let yaml = config_with_safety(&complete_safety().replace(
+        "    signing_key_secret_id: kukuri-cn-safety-signing-key\n",
+        "",
+    ));
+    let resolved = load_and_validate(&yaml).unwrap();
+    let report = evaluate_public_node_readiness(&resolved, "public-node");
+    assert_check(
+        &report,
+        "signing_key_secret_configured",
+        ReadinessStatus::Fail,
+    );
+}
+
+#[test]
+fn safety_invalid_signing_key_secret_id_is_rejected() {
+    let yaml =
+        config_with_safety("safety:\n  events:\n    signing_key_secret_id: \"bad secret\"\n");
+    let err = load_and_validate(&yaml).unwrap_err();
+    assert!(
+        err.to_string().contains("signing_key_secret_id"),
+        "unexpected error: {err}"
     );
 }
 

@@ -58,6 +58,13 @@ fn render_low_cost_tfvars(config: &ResolvedConfig, deploy: &DeployConfig) -> Str
     let cn_cli_image = deploy.cn_cli_image.trim();
     let jwt_secret_id = deploy.jwt_secret_id.trim();
     let postgres_password_secret_id = deploy.postgres_password_secret_id.trim();
+    let safety_signing_key_secret_id = config
+        .raw
+        .safety
+        .as_ref()
+        .and_then(|safety| safety.events.signing_key_secret_id.as_deref())
+        .map(str::trim)
+        .unwrap_or("");
     let machine_type = deploy.machine_type.trim();
     let blob_cache_path = deploy.blob_cache_path.trim();
 
@@ -112,6 +119,11 @@ fn render_low_cost_tfvars(config: &ResolvedConfig, deploy: &DeployConfig) -> Str
         out,
         "postgres_password_secret_id = {}",
         hcl_string(postgres_password_secret_id)
+    );
+    let _ = writeln!(
+        out,
+        "safety_signing_key_secret_id = {}",
+        hcl_string(safety_signing_key_secret_id)
     );
     let _ = writeln!(out);
 

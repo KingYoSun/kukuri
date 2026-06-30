@@ -85,6 +85,9 @@ safety:
     permanent_blob_storage: false
   events:
     emit_signed_moderation_events: true
+    # moderation event の実鍵署名（secp256k1）に使う signing key の Secret Manager secret ID。
+    # 値ではなく ID のみ。runtime は COMMUNITY_NODE_SAFETY_SIGNING_KEY として注入される。
+    signing_key_secret_id: kukuri-cn-safety-signing-key
   providers:
     # known_csam は public-node readiness の必須 provider。本番では実際の
     # known-CSAM provider 名（例: project_arachnid_shield）と secret ID を設定する。
