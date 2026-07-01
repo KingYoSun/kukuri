@@ -2929,6 +2929,7 @@ version = "0.1.2"
 dependencies = [
  "anyhow",
  "axum",
+ "chacha20poly1305",
  "chrono",
  "hex",
  "jsonwebtoken",
@@ -2936,6 +2937,7 @@ dependencies = [
  "kukuri-cn-safety-runtime",
  "kukuri-core",
  "redis",
+ "secp256k1",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -2945,6 +2947,31 @@ dependencies = [
  "tracing",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "kukuri-cn-indexer"
+version = "0.1.2"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "futures-util",
+ "hex",
+ "kukuri-cn-core",
+ "kukuri-cn-safety",
+ "kukuri-cn-safety-runtime",
+ "kukuri-core",
+ "kukuri-docs-sync",
+ "kukuri-transport",
+ "reqwest 0.13.4",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -3012,6 +3039,7 @@ dependencies = [
  "anyhow",
  "axum",
  "chrono",
+ "hex",
  "kukuri-cn-core",
  "kukuri-cn-operator",
  "kukuri-core",

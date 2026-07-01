@@ -11,15 +11,16 @@ use axum::{Json, Router};
 use kukuri_cn_core::{
     AdmissionRejection, ApiError, ApiResult, AuthChallengeResponse, AuthVerifyResponse,
     BootstrapHeartbeatResponse, COMMUNITY_NODE_RENDEZVOUS_KEY_PREFIX_ENV,
-    COMMUNITY_NODE_RENDEZVOUS_REDIS_URL_ENV, CommunityNodeBootstrapNode,
-    CommunityNodeConsentStatus, CommunityNodeResolvedUrls, DatabaseInitMode, JwtConfig,
-    NewCommunityNodeReport, TopicRendezvousHeartbeat, TopicRendezvousHeartbeatResponse,
-    TopicRendezvousStore, accept_consents, auth_required_error, connect_postgres,
-    create_auth_challenge, get_consent_status, initialize_database,
-    initialize_database_for_runtime, insert_community_node_report, load_admission_config,
-    load_bootstrap_nodes, load_bootstrap_seed_peers, normalize_http_url, normalize_http_url_list,
-    refresh_bootstrap_peer_registration, require_bearer_identity, require_bearer_pubkey,
-    require_consents, verify_auth_envelope_and_issue_token,
+    COMMUNITY_NODE_RENDEZVOUS_REDIS_URL_ENV, ChannelSecretCipher, ChannelSecretConflict,
+    CommunityNodeBootstrapNode, CommunityNodeConsentStatus, CommunityNodeResolvedUrls,
+    DatabaseInitMode, IndexScopeKind, JwtConfig, NewCommunityNodeReport, TopicRendezvousHeartbeat,
+    TopicRendezvousHeartbeatResponse, TopicRendezvousStore, accept_consents, auth_required_error,
+    connect_postgres, create_auth_challenge, get_consent_status, initialize_database,
+    initialize_database_for_runtime, insert_community_node_report, insert_indexing_request,
+    load_admission_config, load_bootstrap_nodes, load_bootstrap_seed_peers, normalize_http_url,
+    normalize_http_url_list, parse_bool_env, parse_csv_env, refresh_bootstrap_peer_registration,
+    register_channel_secret, require_bearer_identity, require_bearer_pubkey, require_consents,
+    verify_auth_envelope_and_issue_token,
 };
 use kukuri_cn_operator::{CommunityNodeManifest, build_manifest, load_and_validate};
 use serde::{Deserialize, Serialize};
@@ -39,6 +40,10 @@ pub struct UserApiState {
     self_node: CommunityNodeBootstrapNode,
     /// 公開する manifest（operator config が設定されている場合のみ）。
     manifest: Option<Arc<CommunityNodeManifest>>,
+    /// private channel の indexing request で受け取る channel secret を at-rest 暗号化する cipher。
+    /// 鍵 material（`COMMUNITY_NODE_CHANNEL_SECRET_KEY`）が未設定なら None で、private channel の
+    /// indexing request は受け付けない（secret を平文保存しないため）。
+    channel_secret_cipher: Option<Arc<ChannelSecretCipher>>,
 }
 
 /// public manifest endpoint 用の最小 state。DB を必要としないため、
@@ -48,7 +53,7 @@ struct ManifestState {
     manifest: Option<Arc<CommunityNodeManifest>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct UserApiConfig {
     pub bind_addr: SocketAddr,
     pub database_url: String,
@@ -61,6 +66,30 @@ pub struct UserApiConfig {
     /// 公開 manifest を生成する operator-config.yaml のパス。
     /// 未設定なら manifest endpoint は 404 を返す（client は別 node / 直接 P2P へ fallback）。
     pub operator_config_path: Option<PathBuf>,
+    /// private channel の indexing request で渡される channel secret を at-rest 暗号化する鍵 material。
+    /// 未設定なら private channel の indexing request は受け付けない（#413 / ADR 0025 §6.3）。
+    pub channel_secret_key: Option<String>,
+}
+
+impl std::fmt::Debug for UserApiConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // channel_secret_key（at-rest 暗号鍵）を Debug 出力に含めない。
+        f.debug_struct("UserApiConfig")
+            .field("bind_addr", &self.bind_addr)
+            .field("database_url", &self.database_url)
+            .field("rendezvous_redis_url", &self.rendezvous_redis_url)
+            .field("rendezvous_key_prefix", &self.rendezvous_key_prefix)
+            .field("base_url", &self.base_url)
+            .field("public_base_url", &self.public_base_url)
+            .field("connectivity_urls", &self.connectivity_urls)
+            .field("jwt_config", &self.jwt_config)
+            .field("operator_config_path", &self.operator_config_path)
+            .field(
+                "channel_secret_key",
+                &self.channel_secret_key.as_ref().map(|_| "<redacted>"),
+            )
+            .finish()
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -117,6 +146,43 @@ struct SubmitReportResponse {
     reference_id: String,
 }
 
+/// indexing request（#413 / ADR 0025 §2.2 / §6.3）。認証済み user が「この topic / channel を
+/// index してほしい」と要求する。request は index を保証しない（operator 承認 + safety verdict の
+/// 多段ゲート）。private channel は channel secret（capability）の提示が必須で、それ自体が権限の証明。
+///
+/// `Debug` は手動実装で `channel_secret_hex` の中身を秘匿する（誤ってログへ平文 secret を出さない）。
+#[derive(Deserialize)]
+struct SubmitIndexingRequestRequest {
+    /// scope の種別（`public_topic` / `private_channel`）。
+    #[serde(default)]
+    kind: String,
+    /// 対象識別子（topic_id / channel_id）。
+    #[serde(default)]
+    target_id: String,
+    /// private channel の namespace secret hex（capability）。private_channel のときのみ必須。
+    #[serde(default)]
+    channel_secret_hex: Option<String>,
+}
+
+impl std::fmt::Debug for SubmitIndexingRequestRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SubmitIndexingRequestRequest")
+            .field("kind", &self.kind)
+            .field("target_id", &self.target_id)
+            .field(
+                "channel_secret_hex",
+                &self.channel_secret_hex.as_ref().map(|_| "<redacted>"),
+            )
+            .finish()
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct SubmitIndexingRequestResponse {
+    request_id: String,
+    status: String,
+}
+
 #[derive(Debug, Serialize)]
 struct BootstrapNodesResponse {
     nodes: Vec<CommunityNodeBootstrapNode>,
@@ -153,6 +219,9 @@ impl UserApiConfig {
             .ok()
             .filter(|value| !value.trim().is_empty())
             .map(PathBuf::from);
+        let channel_secret_key = std::env::var("COMMUNITY_NODE_CHANNEL_SECRET_KEY")
+            .ok()
+            .filter(|value| !value.trim().is_empty());
         Ok(Self {
             bind_addr,
             database_url,
@@ -163,6 +232,7 @@ impl UserApiConfig {
             connectivity_urls,
             jwt_config: JwtConfig::from_env()?,
             operator_config_path,
+            channel_secret_key,
         })
     }
 }
@@ -276,6 +346,13 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
         config.rendezvous_key_prefix.as_str(),
     )?;
     let manifest = load_manifest(config.operator_config_path.as_deref())?;
+    let channel_secret_cipher = config
+        .channel_secret_key
+        .as_deref()
+        .map(ChannelSecretCipher::from_key_material)
+        .transpose()
+        .context("invalid COMMUNITY_NODE_CHANNEL_SECRET_KEY")?
+        .map(Arc::new);
     Ok(UserApiState {
         pool,
         rendezvous_store,
@@ -289,6 +366,7 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
             )?,
         },
         manifest,
+        channel_secret_cipher,
     })
 }
 
@@ -322,6 +400,7 @@ pub fn app_router(state: UserApiState) -> Router {
             post(topic_rendezvous_heartbeat),
         )
         .route("/v1/report", post(submit_report))
+        .route("/v1/indexing/requests", post(submit_indexing_request))
         .with_state(state);
     api.merge(manifest).layer(TraceLayer::new_for_http())
 }
@@ -540,6 +619,101 @@ fn normalize_optional(value: Option<String>) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
+/// user からの indexing request を受け付けて保存する（#413 / ADR 0025 §2.2 / §6.3）。
+///
+/// 認証済み（bearer）+ consent 済み user のみ要求できる。request は index を保証しない: operator が
+/// supported set に入れ、さらに safety verdict が `allow` の content だけが index される多段ゲートの
+/// 入口である。
+///
+/// - public topic: target_id（topic_id）を pending request として保存する。
+/// - private channel: channel secret（capability）の提示が必須。secret を提示できること自体を channel
+///   権限の証明とみなす（ADR 0025 §6.3。CN は新権限体系を作らない）。secret は at-rest 暗号化して保存し、
+///   cn-indexer が Model C と同じ機構で `channel::` replica を sync する。channel secret 暗号鍵が未設定の
+///   node は private channel request を受け付けない（平文保存しないため）。
+async fn submit_indexing_request(
+    State(state): State<UserApiState>,
+    headers: HeaderMap,
+    Json(request): Json<SubmitIndexingRequestRequest>,
+) -> ApiResult<Json<SubmitIndexingRequestResponse>> {
+    let identity = require_bearer_identity(&state.pool, &state.jwt_config, &headers).await?;
+    let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
+
+    let kind = match request.kind.trim() {
+        "public_topic" => IndexScopeKind::PublicTopic,
+        "private_channel" => IndexScopeKind::PrivateChannel,
+        _ => {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "INVALID_INDEXING_REQUEST",
+                "kind must be `public_topic` or `private_channel`",
+            ));
+        }
+    };
+    let target_id = request.target_id.trim();
+    if target_id.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "INVALID_INDEXING_REQUEST",
+            "target_id is required",
+        ));
+    }
+
+    // private channel は capability（secret）の提示が必須。これが権限の証明を兼ねる。
+    if kind == IndexScopeKind::PrivateChannel {
+        let secret_hex = request
+            .channel_secret_hex
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let Some(secret_hex) = secret_hex else {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "CHANNEL_SECRET_REQUIRED",
+                "private channel indexing requires the channel secret",
+            ));
+        };
+        // channel secret を平文保存しないため、暗号鍵未設定の node は受け付けない。
+        let Some(cipher) = state.channel_secret_cipher.as_ref() else {
+            return Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "CHANNEL_INDEXING_NOT_CONFIGURED",
+                "this community node does not accept private channel indexing requests",
+            ));
+        };
+        // first-writer-wins: 別 requester が別 secret で既存 capability を上書きできないようにする。
+        // 同一 secret の再提示は冪等。別 secret による乗っ取りは 409 で拒否する。
+        register_channel_secret(&state.pool, cipher, target_id, secret_hex)
+            .await
+            .map_err(map_channel_secret_error)?;
+    }
+
+    let stored = insert_indexing_request(&state.pool, identity.pubkey.as_str(), kind, target_id)
+        .await
+        .map_err(internal_error)?;
+    Ok(Json(SubmitIndexingRequestResponse {
+        request_id: stored.id,
+        status: stored.status.as_str().to_string(),
+    }))
+}
+
+/// channel secret 登録失敗を HTTP 応答へマップする。
+///
+/// 既存 capability と異なる secret での上書き（乗っ取り試行）は 409、hex 形式不正等は 400。
+fn map_channel_secret_error(error: anyhow::Error) -> ApiError {
+    if error.downcast_ref::<ChannelSecretConflict>().is_some() {
+        return ApiError::new(
+            StatusCode::CONFLICT,
+            "CHANNEL_SECRET_CONFLICT",
+            error.to_string(),
+        );
+    }
+    ApiError::new(
+        StatusCode::BAD_REQUEST,
+        "INVALID_CHANNEL_SECRET",
+        error.to_string(),
+    )
+}
+
 async fn bootstrap_nodes(
     State(state): State<UserApiState>,
     headers: HeaderMap,
@@ -617,19 +791,6 @@ fn internal_error(error: impl std::fmt::Display) -> ApiError {
     )
 }
 
-fn parse_bool_env(var_name: &str, default: bool) -> Result<bool> {
-    match std::env::var(var_name) {
-        Ok(value) => match value.trim().to_ascii_lowercase().as_str() {
-            "" => Ok(default),
-            "1" | "true" | "yes" | "on" => Ok(true),
-            "0" | "false" | "no" | "off" => Ok(false),
-            other => Err(anyhow::anyhow!("failed to parse {var_name}: `{other}`")),
-        },
-        Err(std::env::VarError::NotPresent) => Ok(default),
-        Err(error) => Err(anyhow::anyhow!("{var_name}: {error}")),
-    }
-}
-
 fn parse_u64_env(var_name: &str, default: u64) -> Result<u64> {
     match std::env::var(var_name) {
         Ok(value) if !value.trim().is_empty() => value
@@ -648,23 +809,4 @@ fn parse_u32_env(var_name: &str, default: u32) -> Result<u32> {
             .with_context(|| format!("failed to parse {var_name}")),
         _ => Ok(default),
     }
-}
-
-fn parse_csv_env(var_name: &str) -> Vec<String> {
-    std::env::var(var_name)
-        .ok()
-        .map(|value| {
-            value
-                .split(',')
-                .filter_map(|item| {
-                    let trimmed = item.trim();
-                    if trimmed.is_empty() {
-                        None
-                    } else {
-                        Some(trimmed.to_string())
-                    }
-                })
-                .collect()
-        })
-        .unwrap_or_default()
 }

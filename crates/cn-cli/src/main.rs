@@ -2,11 +2,14 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand, ValueEnum};
 use kukuri_cn_core::{
-    AdmissionMode, AuthMode, AuthRolloutConfig, COMMUNITY_NODE_AUTH_SERVICE_NAME, add_allowlist,
+    AdmissionMode, AuthMode, AuthRolloutConfig, COMMUNITY_NODE_AUTH_SERVICE_NAME, IndexScopeKind,
+    IndexingRequestStatus, add_allowlist, add_supported_topic, approve_indexing_request,
     ban_subscriber, connect_postgres, get_community_node_report, initialize_database,
-    issue_invite_code, list_allowlist, list_banned, list_community_node_reports, list_invite_codes,
-    load_admission_config, migrate_postgres, remove_allowlist, revoke_invite_code,
-    seed_default_policies, set_admission_mode, store_auth_rollout, unban_subscriber,
+    issue_invite_code, list_allowlist, list_banned, list_community_node_reports,
+    list_indexing_requests, list_invite_codes, list_supported_topics, load_admission_config,
+    migrate_postgres, reject_indexing_request, remove_allowlist, remove_supported_topic,
+    revoke_invite_code, seed_default_policies, set_admission_mode, store_auth_rollout,
+    unban_subscriber,
 };
 
 #[derive(Debug, Parser)]
@@ -44,6 +47,91 @@ enum Command {
         #[command(subcommand)]
         action: AdmissionAction,
     },
+    /// index が引き受ける supported topic / 許可 channel を運用する（#413）。
+    SupportedTopic {
+        #[command(subcommand)]
+        action: SupportedTopicAction,
+    },
+    /// user からの indexing request を確認・承認する（#413）。
+    IndexingRequest {
+        #[command(subcommand)]
+        action: IndexingRequestAction,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum SupportedTopicAction {
+    /// supported set に scope を追加する。
+    Add {
+        #[arg(long)]
+        kind: IndexScopeKindArg,
+        #[arg(long)]
+        id: String,
+    },
+    /// supported set から scope を除去する。
+    Remove {
+        #[arg(long)]
+        kind: IndexScopeKindArg,
+        #[arg(long)]
+        id: String,
+    },
+    /// supported set を新着順で一覧する。
+    List,
+}
+
+#[derive(Debug, Subcommand)]
+enum IndexingRequestAction {
+    /// indexing request を一覧する（status で絞り込み可能）。
+    List {
+        #[arg(long)]
+        status: Option<IndexingRequestStatusArg>,
+        #[arg(long, default_value_t = 50)]
+        limit: i64,
+        #[arg(long, default_value_t = 0)]
+        offset: i64,
+    },
+    /// request を承認し、対象 scope を supported set に入れる。
+    Approve {
+        #[arg(long)]
+        id: String,
+    },
+    /// request を却下する（supported set は変更しない）。
+    Reject {
+        #[arg(long)]
+        id: String,
+    },
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum IndexScopeKindArg {
+    PublicTopic,
+    PrivateChannel,
+}
+
+impl From<IndexScopeKindArg> for IndexScopeKind {
+    fn from(value: IndexScopeKindArg) -> Self {
+        match value {
+            IndexScopeKindArg::PublicTopic => IndexScopeKind::PublicTopic,
+            IndexScopeKindArg::PrivateChannel => IndexScopeKind::PrivateChannel,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum IndexingRequestStatusArg {
+    Pending,
+    Approved,
+    Rejected,
+}
+
+impl From<IndexingRequestStatusArg> for IndexingRequestStatus {
+    fn from(value: IndexingRequestStatusArg) -> Self {
+        match value {
+            IndexingRequestStatusArg::Pending => IndexingRequestStatus::Pending,
+            IndexingRequestStatusArg::Approved => IndexingRequestStatus::Approved,
+            IndexingRequestStatusArg::Rejected => IndexingRequestStatus::Rejected,
+        }
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -269,8 +357,103 @@ async fn main() -> Result<()> {
         Command::Admission { action } => {
             run_admission(&pool, action).await?;
         }
+        Command::SupportedTopic { action } => {
+            run_supported_topic(&pool, action).await?;
+        }
+        Command::IndexingRequest { action } => {
+            run_indexing_request(&pool, action).await?;
+        }
     }
 
+    Ok(())
+}
+
+async fn run_supported_topic(pool: &sqlx::PgPool, action: SupportedTopicAction) -> Result<()> {
+    // supported set の state を持つテーブルが揃っていることを保証する。
+    initialize_database(pool).await?;
+    match action {
+        SupportedTopicAction::Add { kind, id } => {
+            let kind = IndexScopeKind::from(kind);
+            let entry = add_supported_topic(pool, kind, id.as_str()).await?;
+            println!(
+                "supported topic added: {} {}",
+                entry.kind.as_str(),
+                entry.id
+            );
+        }
+        SupportedTopicAction::Remove { kind, id } => {
+            let kind = IndexScopeKind::from(kind);
+            if remove_supported_topic(pool, kind, id.as_str()).await? {
+                println!("supported topic removed: {} {}", kind.as_str(), id);
+            } else {
+                println!("supported topic not found: {} {}", kind.as_str(), id);
+            }
+        }
+        SupportedTopicAction::List => {
+            let entries = list_supported_topics(pool).await?;
+            if entries.is_empty() {
+                println!("no supported topics");
+            } else {
+                println!("{} supported topic(s):", entries.len());
+                for entry in entries {
+                    println!(
+                        "{}  {}  {}",
+                        entry.created_at.to_rfc3339(),
+                        entry.kind.as_str(),
+                        entry.id,
+                    );
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn run_indexing_request(pool: &sqlx::PgPool, action: IndexingRequestAction) -> Result<()> {
+    initialize_database(pool).await?;
+    match action {
+        IndexingRequestAction::List {
+            status,
+            limit,
+            offset,
+        } => {
+            let status = status.map(IndexingRequestStatus::from);
+            let requests = list_indexing_requests(pool, status, limit, offset).await?;
+            if requests.is_empty() {
+                println!("no indexing requests");
+            } else {
+                println!("{} indexing request(s):", requests.len());
+                for request in requests {
+                    println!(
+                        "{}  {}  {}/{}  requester={}  status={}",
+                        request.created_at.to_rfc3339(),
+                        request.id,
+                        request.kind.as_str(),
+                        request.target_id,
+                        request.requester_pubkey,
+                        request.status.as_str(),
+                    );
+                }
+            }
+        }
+        IndexingRequestAction::Approve { id } => {
+            match approve_indexing_request(pool, id.as_str()).await? {
+                Some(request) => println!(
+                    "indexing request approved: {} ({} {} now supported)",
+                    request.id,
+                    request.kind.as_str(),
+                    request.target_id,
+                ),
+                None => println!("indexing request not found: {id}"),
+            }
+        }
+        IndexingRequestAction::Reject { id } => {
+            match reject_indexing_request(pool, id.as_str()).await? {
+                Some(request) => println!("indexing request rejected: {}", request.id),
+                None => println!("indexing request not found: {id}"),
+            }
+        }
+    }
     Ok(())
 }
 

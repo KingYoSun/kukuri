@@ -3718,11 +3718,15 @@ version = "0.1.2"
 dependencies = [
  "anyhow",
  "axum",
+ "chacha20poly1305",
  "chrono",
  "hex",
  "jsonwebtoken",
+ "kukuri-cn-safety",
+ "kukuri-cn-safety-runtime",
  "kukuri-core",
  "redis",
+ "secp256k1",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -3730,6 +3734,31 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
+ "uuid",
+]
+
+[[package]]
+name = "kukuri-cn-safety"
+version = "0.1.2"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "kukuri-cn-safety-runtime"
+version = "0.1.2"
+dependencies = [
+ "chrono",
+ "hex",
+ "kukuri-cn-safety",
+ "kukuri-core",
+ "secp256k1",
+ "serde",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
  "uuid",
 ]
 
