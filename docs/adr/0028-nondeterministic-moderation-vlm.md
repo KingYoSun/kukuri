@@ -27,7 +27,7 @@ community node の moderation のうち **非決定論的 moderation（VLM / cla
 - Feature 名: non-deterministic (VLM) moderation classification + 派生 media タグ
 - Durable / Transient: verdict / classification は transient。生成される signed moderation event / risk signal / 派生タグは durable（event/signal は #405、タグは index = ADR 0025）
 - Canonical Source: derived。VLM provider（OpenAI-compatible API）の scan 結果を policy router に通した派生。canonical な「真の分類」は存在しない（確率的・node-local）
-- Replicated?: No（node-local）。critical suspected は配布しない（§2.4）。general は risk signal として visibility 規則に従う
+- Replicated?: index / classification は node-local。**advisory（signed moderation event / risk signal）は visibility 規則（local / subscribed_nodes / public）に従って network 配布可**。受け手は opt-in trust input として採用（trust-semantics）
 - Rebuildable From: VLM provider の再 scan + `route()`。閾値・policy は operator 設定
 - Public Replica / Private Replica / Local Only: node-local server（`cn-core` / Postgres）。派生タグは index（node-local）
 - Gossip Hint 必要有無: No
@@ -37,15 +37,18 @@ community node の moderation のうち **非決定論的 moderation（VLM / cla
   - `vlm_provider_is_openai_compatible_and_operator_owned`
   - `vlm_basis_is_classifier_score_never_confirmed`
   - `suspected_threshold_default_0_7_operator_tunable`
-  - `high_confidence_critical_is_fail_closed_and_local`
-  - `nondeterministic_critical_not_distributed_to_network`
+  - `high_confidence_critical_is_fail_closed_indexing`
+  - `advisory_is_network_distributable_per_visibility`
+  - `false_positive_appeal_path_exists`
+  - `appeal_cleared_propagates_and_reverts_trust_contribution`
   - `general_moderation_feeds_trust_relative_component`
   - `critical_suspected_feeds_trust_absolute_component`
   - `derived_tags_only_for_allow_media`
   - `derived_tags_exclude_critical_and_match_data`
   - `operator_review_can_edit_detection_metadata`
 - 必須 scenario:
-  - critical risk タグが閾値超の高 confidence → fail-closed（index されない）かつ visibility `Local`（network 配布しない）
+  - critical risk タグが閾値超の高 confidence → fail-closed（自 node の index / discovery / recommendation に出ない）。advisory は visibility 規則に従い network 配布可
+  - 誤検知は issuer node への異議申し立て → operator が `Cleared` → 配布済み advisory に伝播し trust 寄与が戻る
   - general（nsfw / 暴力 / hate）suspected は relation 重み付けで trust 相対成分に入る
   - `allow` media は VLM 派生タグで検索でき、exclude / critical media はタグ化・index されない
   - operator が閾値を 0.7 から変更でき、検知結果メタデータを直接編集（appeal / 誤検知修正）できる
@@ -53,7 +56,7 @@ community node の moderation のうち **非決定論的 moderation（VLM / cla
 ## 1. 背景と意図
 
 - 決定論的 moderation（ADR 0027）は known-hash / provider-verdict による confirmed（絶対・evidence ベース）。一方、未知 CSAM / CSE の suspected や、nsfw / 暴力 / hate 等の general moderation は **確率的分類（VLM / classifier）**でしか判定できない。
-- 確率的判定は誤検知を伴うため、決定論的 confirmed と同じ強さで network に拡散させてはならない（visibility は `Local` 寄り）。
+- 確率的判定は誤検知を伴うが、対策は **配布制限ではなく異議申し立て（appeal）経路の整備**とする（§2.8）。advisory（signed moderation event / risk signal）自体は network 配布可であり、決定論 confirmed とは扱いを変えない（ただし confirmed には昇格させず suspected どまり）。
 - VLM は moderation verdict と **descriptive な検索タグ**の両方を同一 pipeline で生成できる（ADR 0025 §2.3 の media タグ）。一体設計で二重スキャンを避ける。
 
 ## 2. Decision
@@ -73,13 +76,14 @@ community node の moderation のうち **非決定論的 moderation（VLM / cla
 - **optional**: operator レビューを有効化できる。operator は **検知結果（= メタデータ）を直接編集**できる（誤検知の是正 / 分類の修正）。これは `AppealStatus`（None / Disputed / Cleared）と operator audit に接続する。
 - operator 編集は node-local な advisory の是正であり、user の canonical state を変更しない。
 
-### 2.4 critical risk 高 confidence → fail-closed かつ Local（network 拡散しない）
-- **VLM が critical risk タグ（CSAM / CSE / grooming）を高 confidence（閾値以上）で付けた場合、fail-closed として扱う**: `allow` にしない（index / discovery / recommendation に出さない）。
-- かつ **visibility は `Local`**。確率的 critical 検知は誤検知の可能性があるため、confirmed（決定論）と違い **network に配布しない**（`SubscribedNodes` / `Public` にしない）。これが「high-confidence critical を failed として fail-closed・非拡散にする」意図。
-- **非対称の要点**: 決定論的 confirmed（ADR 0027, known-hash）は exclude + `SubscribedNodes` 配布し得るが、**非決定論的 critical は高 confidence でも Local 止まり**。誤検知を public advisory として拡散しない安全側の既定。
+### 2.4 critical risk 高 confidence → fail-closed（自 node の index / surface のみ制御）
+- **VLM が critical risk タグ（CSAM / CSE / grooming）を高 confidence（閾値以上）で付けた場合、fail-closed として扱う**: `allow` にしない（自 node の index / discovery / recommendation に出さない）。
+- ここで制御するのは **その node 自身の surfacing 出力だけ**である。コンテンツ（gossip hint / docs / blob）の P2P 流通を止めるものではない（node の authority scope 外。P2P 上に中央権者はいない）。
+- **advisory（signed moderation event / risk signal）は network 配布可**。visibility 規則（`local` / `subscribed_nodes` / `public`）に従って配布でき、受け手は opt-in の trust input として採用する（trust-semantics, ADR 0027 §2.1）。**非決定論だからといって Local に固定しない**。
+- 確率的判定の誤検知は **配布制限ではなく異議申し立て（appeal）経路で是正する**（§2.8）。
 
 ### 2.5 trust への振り分け（ADR 0026 の絶対 / 相対）
-- **critical（CSAM / CSE / grooming）suspected = 厳格非決定論** → ADR 0026 の trust **絶対成分**の入力（relation 非依存、report-bomb 不動）。§2.4 の fail-closed・Local 扱いと整合。
+- **critical（CSAM / CSE / grooming）suspected = 厳格非決定論** → ADR 0026 の trust **絶対成分**の入力（relation 非依存、report-bomb 不動）。§2.4 の fail-closed 扱いと整合。
 - **general（nsfw / 暴力 / hate / spam 等）= 文化依存** → ADR 0026 の trust **相対成分**の入力（relation で重み付け、viewer / cluster 相対）。
 - いずれも断定ラベルではなく根拠つき risk signal（basis = classifier_score, confidence 付き）。
 
@@ -89,10 +93,19 @@ community node の moderation のうち **非決定論的 moderation（VLM / cla
 - critical 検知結果・Match Data（#391）・生スコアの機微をタグや index に流さない（descriptive tag は一般的記述に限定）。
 - タグはサムネイル代替表示（読み込み中 / アダルト・暴力的コンテンツの安全用代替、ADR 0025 §2.3）にも使える。
 
-### 2.7 fail 挙動と非対称（まとめ）
+### 2.7 fail 挙動（まとめ）
 - scan failure / provider unavailable / unscanned は ADR 0027 §2.4 どおり fail-closed（`allow` にしない）。
-- 高 confidence critical suspected も fail-closed かつ Local（§2.4）。
-- general suspected は hold / quarantine（自動、operator レビュー可）で index させない。visibility は `Local` 既定。
+- 高 confidence critical suspected も fail-closed（`allow` にしない、§2.4）。
+- general suspected は hold / quarantine（自動、operator レビュー可）で index させない。
+- fail-closed は **自 node の surfacing 制御**であり、advisory の配布可否とは独立（advisory は §2.4 のとおり network 配布可）。visibility の既定は安全側だが hard cap ではなく policy / operator で調整でき、誤検知は §2.8 の appeal で是正する。
+
+### 2.8 誤検知への異議申し立て（appeal）経路
+確率的判定は誤検知を伴うため、**配布を制限するのではなく、誤検知を是正できる異議申し立て経路を整備する**ことを安全策の中心に置く。
+- **状態**: `AppealStatus`（`None` / `Disputed` / `Cleared`）で risk signal / moderation event の異議状態を管理する。
+- **申し立て導線**: user / client は、その advisory を発行した **issuer node**（責任 node）へ異議を申し立てられる。分散通報ルーティングが issuer node の abuse / appeal endpoint を候補化する（ADR 0027 §2.8, report routing）。
+- **operator レビュー**: operator は検知メタデータを直接編集して `Disputed` → `Cleared` にできる（§2.3）。
+- **是正の伝播**: 既に配布した advisory は、`Cleared` 反映 / `expires_at` 失効 / 訂正 signal の再発行で受け手に伝える。受け手は opt-in trust input として最新状態を反映する。
+- **trust への反映戻し**: `Cleared` になった誤検知は、ADR 0026 の trust 絶対 / 相対成分への負の寄与を取り消す。
 
 ## 3. Consequences
 - 非決定論 moderation の decision record が確定し、ADR 0027（決定論）と対で moderation 設計が揃う。
@@ -108,7 +121,7 @@ community node の moderation のうち **非決定論的 moderation（VLM / cla
 
 ## 5. 維持する境界
 - 非決定論 = 常に `Basis::ClassifierScore` = suspected。confirmed に昇格させない。
-- 高 confidence critical でも network に配布しない（Local 止まり、誤検知非拡散）。決定論 confirmed とは非対称。
+- fail-closed は自 node の surfacing 制御であり、advisory の network 配布可否とは独立。非決定論だからといって advisory を Local に固定しない。誤検知は appeal 経路で是正する（§2.8）。
 - `allow` 以外は surfacing に出さない（fail-closed、ADR 0027 §2.4 の単一判定点 `is_indexable()`）。
 - 派生タグは `allow` media のみ。critical / Match Data をタグ・index に流さない。
 - no permanent blob storage。VLM 入力は一時 fetch / 参照 hint。
@@ -118,5 +131,5 @@ community node の moderation のうち **非決定論的 moderation（VLM / cla
 - critical fail-closed 用の「高 confidence」閾値を suspected 閾値（0.7）と共通にするか、別のより厳格な値を operator が設定できるようにするか。
 - VLM の image / video / text 別 capability 粒度と、OpenAI-compatible API での vision 入力（media_hint = URL / blob 参照）の受け渡し方式。
 - タグ語彙（tag vocabulary）の標準化とサムネイル代替表示の client 挙動（ADR 0025 と共同）。
-- operator レビューの監査ログ・appeal（`AppealStatus`）反映と、誤検知修正の risk signal への波及。
+- appeal 経路の詳細（申し立て API / issuer の appeal endpoint / 配布済み advisory への `Cleared` 伝播・失効の具体・監査ログ）。
 - general moderation の細分類（nsfw / 暴力 / hate / spam）と relation 相対化の対応（ADR 0026 §6 と共同）。
