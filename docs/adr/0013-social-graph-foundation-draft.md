@@ -28,7 +28,9 @@ Accepted
   - `author_relationship_projection_rebuild_roundtrip`
   - `social_graph_derives_friend_of_friend_and_clears_after_unfollow`
   - `friend_only_channel_restore_keeps_archived_epoch_history`
+  - `post card shows friend of friend badge and author name fallback`
   - `author detail shows via authors and follow action updates relationship`
+  - `local profile editor saves profile draft`
 - 必須 scenario:
   - Linux 実機 2-3 台で `nickname/profile 表示 -> follow -> mutual -> unfollow -> friend of friend -> restart 後復元` を確認する
 
@@ -213,17 +215,7 @@ social-graph v1 は current `main` に次の UX として入っている。
 
 ## 7. Validation
 
-social graph v1 の current baseline は少なくとも次で固定されている。
-
-- `store_profile_upsert_latest_wins`
-- `author_relationship_projection_rebuild_roundtrip`
-- `social_graph_derives_friend_of_friend_and_clears_after_unfollow`
-- `friend_only_channel_restore_keeps_archived_epoch_history`
-- `post card shows friend of friend badge and author name fallback`
-- `author detail shows via authors and follow action updates relationship`
-- `local profile editor saves profile draft`
-
-manual verification としては、Linux 実機 2-3 台で `nickname/profile 表示`, `follow`, `mutual`, `unfollow`, `friend of friend`, restart 後復元まで確認済みである。
+social graph v1 の current baseline を固定する 必須 contract / manual scenario は上記「Feature Data Classification」を単一の正とし、ここでは再掲しない。current baseline ではこれらを満たしており、Linux 実機 2-3 台での manual verification も確認済みである。
 
 ## 8. Follow-up Boundary
 
