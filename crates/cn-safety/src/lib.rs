@@ -5,14 +5,13 @@
 //! deterministic な単体テストで verdict 分岐と fail-closed 挙動を固定する。
 //!
 //! 設計の真実源:
-//! - `docs/safety/community-node-critical-safety.md`
-//!   - §7 verdict model and routing（action と label の分離、`csam_confirmed` と `csam_suspected` の区別）
-//!   - §8 fail-closed invariants（unscanned / scan failure / provider unavailable を allow にしない）
-//!   - §12 implementation prerequisites（provider abstraction / mock provider / policy routing）
-//! - `docs/architecture/moderation-event-trust-semantics.md`
-//!   - moderation event / risk signal は issuer node の authority scope 内の advisory であり
-//!     network-wide command ではない。visibility は local / subscribed_nodes / public の3段階で、
-//!     suspected unknown CSAM / CSE は既定 `local`。
+//! - `docs/adr/0027-deterministic-moderation-critical-safety.md`
+//!   - §2.2 verdict model（action と label の分離、`csam_confirmed` と `csam_suspected` の区別）
+//!   - §2.4 fail-closed invariants（unscanned / scan failure / provider unavailable を allow にしない）
+//!   - §2.7 provider abstraction / §2.3 policy routing
+//!   - §2.1 advisory ≠ command（moderation event / risk signal は issuer node の authority scope 内の
+//!     advisory であり network-wide command ではない）
+//!   - §2.6 visibility（local / subscribed_nodes / public の3段階、suspected unknown CSAM / CSE は既定 `local`）
 //!
 //! スコープ境界（本 crate に含まないもの）:
 //! - public-node readiness check / `safety` CLI（段階3）

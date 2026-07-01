@@ -1,6 +1,6 @@
 //! policy router（#353）。provider の scan 結果群から最終 verdict を決める純関数。
 //!
-//! `docs/safety/community-node-critical-safety.md` §7 / §8 に従い:
+//! ADR 0027 `docs/adr/0027-deterministic-moderation-critical-safety.md` §2.2 / §2.3 / §2.4 に従い:
 //! - 既知 CSAM hash match → `exclude`（critical / confirmed）
 //! - 未知 CSAM / CSE 疑い（classifier score >= threshold）→ `hold` / `quarantine`（critical / suspected）
 //! - 一般 moderation（nsfw / spam / malware / phishing）→ critical とは別 route

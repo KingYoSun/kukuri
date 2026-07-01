@@ -2,7 +2,7 @@
 //!
 //! community node は自分の authority scope 内の判断を signed moderation event として保存・配布でき、
 //! risk signal を trustness / relation 反映のために保存する。いずれも issuer node の advisory であり
-//! network-wide command ではない（`docs/architecture/moderation-event-trust-semantics.md`）。
+//! network-wide command ではない（`docs/adr/0027-deterministic-moderation-critical-safety.md` §2.1）。
 //!
 //! 配布境界は visibility（`local` / `subscribed_nodes` / `public`）で決まる。
 //! - `local` は issuer node の外へ出さない（配布クエリは返さない）。

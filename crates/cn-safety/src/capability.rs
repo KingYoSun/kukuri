@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 /// safety / moderation provider が提供し得る capability。
 ///
-/// `docs/safety/community-node-critical-safety.md` の provider capability 例と、
+/// ADR 0027 `docs/adr/0027-deterministic-moderation-critical-safety.md` §2.7 の provider capability と、
 /// Issue #353 の `SafetyProviderCapability` に対応する。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

@@ -14,16 +14,16 @@ Draft
 - `docs/adr/0013-social-graph-foundation-draft.md`（author-owned canonical source）
 - `docs/adr/0005-live-session-data-classification.md`（live session = streaming room）
 - `docs/adr/0006-game-room-data-classification.md`（game / metaverse room）
-- `docs/safety/community-node-critical-safety.md`（§5 component boundary, §6 data flow, §8 fail-closed invariants, §11 readiness）
+- `docs/adr/0027-deterministic-moderation-critical-safety.md`（§2 component boundary / data flow / fail-closed invariants / §2.9 readiness。旧 `community-node-critical-safety.md` を集約）
 - `docs/architecture/p2p-first-community-node-responsibility-boundary.md`（authority scope）
-- `docs/architecture/moderation-event-trust-semantics.md`（advisory ≠ command）
+- `docs/adr/0027-deterministic-moderation-critical-safety.md`（§2.1 advisory ≠ command。旧 `moderation-event-trust-semantics.md` を集約）
 - `crates/cn-operator/src/capability.rs`（`CommunityIndex` = `Availability::Planned`）
 - 実装側 Issue: #404（fail-closed community indexing 本体）
 - 後続 ADR: trust / relation foundation（#409）, 決定論的 moderation（#410）, 非決定論的 moderation（#411）
 
 ## 位置づけ
 
-community node の主要未検討機能のひとつ「indexing（index / search / discovery / recommendation）」の責務境界を固定する foundation ADR である。`cn-core` に index の実体はまだ無く（実装は #404）、現状 fail-closed 不変条件は `docs/safety/community-node-critical-safety.md` に moderation 視点で散在しているだけだった。本 ADR は、その土台として **何を index し、何を index しないか**を先に確定し、その上に trust/relation（#409）・moderation（#410/#411）を載せられるようにする。
+community node の主要未検討機能のひとつ「indexing（index / search / discovery / recommendation）」の責務境界を固定する foundation ADR である。`cn-core` に index の実体はまだ無く（実装は #404）、現状 fail-closed 不変条件は決定論 moderation ADR（`docs/adr/0027-deterministic-moderation-critical-safety.md` §2.4）に集約されている。本 ADR は、その土台として **何を index し、何を index しないか**を先に確定し、その上に trust/relation（#409）・moderation（#410/#411）を載せられるようにする。
 
 本 ADR は indexing の **scope（範囲）と content kind（対象種別）と fail-closed（安全）** の境界を定義する。trust / relation への risk signal 反映、provider 接続、ranking/recommendation アルゴリズムの詳細は本 ADR のスコープ外（後続 ADR / Issue）。
 

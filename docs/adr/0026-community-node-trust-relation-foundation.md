@@ -10,11 +10,11 @@ Draft
 `main`
 
 ## Related
-- `docs/architecture/moderation-event-trust-semantics.md`（advisory ≠ command / authority scope / visibility）
+- `docs/adr/0027-deterministic-moderation-critical-safety.md`（advisory ≠ command / authority scope / visibility, §2.1 / §2.6。旧 `moderation-event-trust-semantics.md` を集約）
 - `docs/adr/0013-social-graph-foundation-draft.md`（author-owned follow graph。canonical, node-independent）
 - `docs/adr/0025-community-node-indexing-foundation.md`（index = co-participation の観測元 / recommendation 境界）
 - `docs/adr/0024-community-node-admission-data-classification.md`（admission。node-local な補助提供可否）
-- `docs/safety/community-node-critical-safety.md`（§5 risk signal を trust/relation に反映 / §9 risk signal model）
+- `docs/adr/0027-deterministic-moderation-critical-safety.md`（§2.5 / §2.6 signed event / risk signal model）
 - `crates/cn-safety/src/signal.rs`（`SafetyRiskSignal` / `RiskSignalTarget`）
 - `crates/cn-operator/src/capability.rs`（`CommunityLocalTrust` = `Availability::Planned`）
 - Issue: #406（runtime 結線で risk signal を trust/relation reads に反映）, #409（本 ADR）
@@ -23,7 +23,7 @@ Draft
 
 community node の主要未検討機能 **trust / relation** の **意図・境界・read 契約**を固定する foundation ADR。`CommunityLocalTrust` capability（`Availability::Planned`）の中身を定義し、#406 の「risk signal を trust/relation reads に反映する」反映先 read 契約を確定する。
 
-trust と relation は **node-local かつ advisory** な derived signal であり、`docs/architecture/moderation-event-trust-semantics.md` の不変条件（network-wide command ではない / issuer node の authority scope に閉じる / user identity・profile・social graph の canonical を所有・改変しない）に従う。
+trust と relation は **node-local かつ advisory** な derived signal であり、`docs/adr/0027-deterministic-moderation-critical-safety.md` §2.1 の不変条件（network-wide command ではない / issuer node の authority scope に閉じる / user identity・profile・social graph の canonical を所有・改変しない）に従う。
 
 本 ADR は **意図・境界・read 契約**を定義する。具体的な clustering / scoring アルゴリズムの詳細は §6（未決）と後続 Issue に委ねる。
 

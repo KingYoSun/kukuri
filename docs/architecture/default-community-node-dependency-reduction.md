@@ -28,7 +28,7 @@ kukuri には onboarding のための **default community node** が存在する
 | relay assist（NAT 越え） | 中（直接 P2P 不可時に default relay へ） | 補助。直接 P2P / 別 relay で代替可能。 |
 | topic rendezvous（topic peer 合流） | 中 | 補助。別 rendezvous / 既存 peer で代替可能。 |
 | consent / auth | 中（補助機能利用時） | 補助。利用する capability にのみ必要。 |
-| future index / moderation / trust signal | 低（未実装 / 計画中, Phase B） | 補助かつ optional trust input（`docs/architecture/moderation-event-trust-semantics.md`）。 |
+| future index / moderation / trust signal | 低（未実装 / 計画中, Phase B） | 補助かつ optional trust input（`docs/adr/0027-deterministic-moderation-critical-safety.md` §2.1）。 |
 | generated policy / manifest display | 低（表示のみ） | 補助。manifest 取得失敗時は fallback 表示（client settings の node 依存度表示）。 |
 
 重要: いずれも **補助 capability** であり、user identity / profile / social graph という canonical state は default node に依存しない。依存低減とは「補助経路を default node 以外でも自然に賄えるようにする」ことであり、「user の存在を default node から切り離す」ことではない（それは既に切り離されている）。
@@ -102,4 +102,4 @@ Phase 4: default node なしでも継続利用できることを検証する
 - client settings の node 依存度表示（Phase 1 実装）
 - content provenance / responsible capability metadata
 - `docs/runbooks/community-node-shutdown-and-user-continuity.md`（community node shutdown と user continuity）
-- `docs/architecture/moderation-event-trust-semantics.md`（moderation event の trust semantics）
+- `docs/adr/0027-deterministic-moderation-critical-safety.md`（moderation event の trust semantics / advisory ≠ command）

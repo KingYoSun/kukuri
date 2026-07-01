@@ -1,6 +1,6 @@
 //! verdict model（#353）。検知ラベルと最終 action を分離する。
 //!
-//! `docs/safety/community-node-critical-safety.md` §7 に従い:
+//! ADR 0027 `docs/adr/0027-deterministic-moderation-critical-safety.md` §2.2 に従い:
 //! - action（`allow` / `hold` / `quarantine` / `exclude`）と label を分ける。
 //! - `csam_confirmed`（known hash match / provider confirmed）と
 //!   `csam_suspected`（classifier high score / CSE 疑い）を区別する。

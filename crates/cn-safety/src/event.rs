@@ -1,8 +1,8 @@
-//! signed moderation event（#353 / moderation-event-trust-semantics）。
+//! signed moderation event（#353 / ADR 0027 deterministic moderation）。
 //!
 //! 危険判定・index 除外・quarantine は signed moderation event として記録する。
 //! event は issuer node によって署名され、その効果は issuer node の authority scope に限定される。
-//! network-wide command ではない（`docs/architecture/moderation-event-trust-semantics.md`）。
+//! network-wide command ではない（`docs/adr/0027-deterministic-moderation-critical-safety.md` §2.1）。
 //!
 //! 署名対象（canonical body）と署名を分離する。
 //! - [`ModerationEventBody`] — 未署名の canonical 本体。`canonical_bytes()` で決定論的な
