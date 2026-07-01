@@ -6,8 +6,7 @@
 //! は作らない。
 //!
 //! 設計の真実源:
-//! - `docs/safety/community-node-critical-safety.md` §9（advisory / visibility 規則）
-//! - `docs/architecture/moderation-event-trust-semantics.md`
+//! - `docs/adr/0027-deterministic-moderation-critical-safety.md` §2.5 / §2.6（signed events / advisory / visibility 規則）
 //!
 //! 生成ガードレール:
 //! - indexable（`allow`）な verdict では artifact を生成しない。

@@ -22,9 +22,8 @@
 //! - blob の一時 fetch / moderation server 本体（HTTP）
 //!
 //! 設計の真実源:
-//! - `docs/safety/community-node-critical-safety.md`（§5 component boundary, §6 data flow,
-//!   §8 fail-closed invariants, §9 signed events / risk signals）
-//! - `docs/architecture/moderation-event-trust-semantics.md`
+//! - `docs/adr/0027-deterministic-moderation-critical-safety.md`（§2 component boundary / data flow /
+//!   fail-closed invariants / signed events / risk signals、§2.1 advisory ≠ command）
 
 mod artifacts;
 pub mod clock;

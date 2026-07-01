@@ -108,7 +108,7 @@ preview 更新では identity、local DB、Iroh data、Community Node 設定、p
   - [docs/adr/0023-local-notification-inbox-v1.md](./docs/adr/0023-local-notification-inbox-v1.md)
 - community-node の責任境界 / trust 境界は次です。
   - [docs/architecture/p2p-first-community-node-responsibility-boundary.md](./docs/architecture/p2p-first-community-node-responsibility-boundary.md)
-  - [docs/architecture/moderation-event-trust-semantics.md](./docs/architecture/moderation-event-trust-semantics.md)
+  - [docs/adr/0027-deterministic-moderation-critical-safety.md](./docs/adr/0027-deterministic-moderation-critical-safety.md)
   - [docs/architecture/default-community-node-dependency-reduction.md](./docs/architecture/default-community-node-dependency-reduction.md)
 
 ### 作業入口

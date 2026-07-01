@@ -1,4 +1,4 @@
-//! trustness / relation risk signal（#353 / moderation-event-trust-semantics）。
+//! trustness / relation risk signal（#353 / ADR 0026 trust-relation, ADR 0027 §2.6 visibility）。
 //!
 //! trustness / relation には断定ラベルではなく、根拠つき risk signal として反映する。
 //! 受け手はこれを使って重み付けを決める（advisory であり command ではない）。

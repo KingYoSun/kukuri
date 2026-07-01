@@ -108,7 +108,7 @@ Current scope is defined by [foundation progress](./docs/progress/2026-03-10-fou
   - [docs/adr/0023-local-notification-inbox-v1.md](./docs/adr/0023-local-notification-inbox-v1.md)
 - Community-node responsibility and trust boundaries:
   - [docs/architecture/p2p-first-community-node-responsibility-boundary.md](./docs/architecture/p2p-first-community-node-responsibility-boundary.md)
-  - [docs/architecture/moderation-event-trust-semantics.md](./docs/architecture/moderation-event-trust-semantics.md)
+  - [docs/adr/0027-deterministic-moderation-critical-safety.md](./docs/adr/0027-deterministic-moderation-critical-safety.md)
   - [docs/architecture/default-community-node-dependency-reduction.md](./docs/architecture/default-community-node-dependency-reduction.md)
 
 ### Entry Points

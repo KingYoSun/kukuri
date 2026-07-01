@@ -38,8 +38,8 @@
 
 ## Architecture
 - P2P-first community node の責任境界: `docs/architecture/p2p-first-community-node-responsibility-boundary.md`（operator docs / safety / report routing の共通前提）
-- moderation event / safety advisory の trust semantics: `docs/architecture/moderation-event-trust-semantics.md`（optional trust input であり network-wide command ではないことを固定）
-- public community node critical safety architecture: `docs/safety/community-node-critical-safety.md`（canonical English。日本語版: `docs/safety/community-node-critical-safety_ja.md`）
+- moderation event / safety advisory の trust semantics + deterministic (CSAM / known-hash) critical safety: `docs/adr/0027-deterministic-moderation-critical-safety.md`（optional trust input であり network-wide command ではないことを固定。旧 `community-node-critical-safety.md` / `moderation-event-trust-semantics.md` を集約）
+- community node trust / relation foundation: `docs/adr/0026-community-node-trust-relation-foundation.md`
 - default community node 依存低減ロードマップ: `docs/architecture/default-community-node-dependency-reduction.md`（default node は onboarding infrastructure であり network-wide authority ではない）
 
 ## Legal
