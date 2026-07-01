@@ -46,6 +46,7 @@ impl TestServer {
             connectivity_urls: vec!["http://127.0.0.1:13340".to_string()],
             jwt_config: JwtConfig::new("kukuri-cn-tests", "test-secret", 3600),
             operator_config_path: None,
+            channel_secret_key: None,
         })
         .await?;
         let app = app_router(state);

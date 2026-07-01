@@ -18,7 +18,9 @@ Draft
 - `docs/architecture/p2p-first-community-node-responsibility-boundary.md`（authority scope）
 - `docs/adr/0027-deterministic-moderation-critical-safety.md`（§2.1 advisory ≠ command。旧 `moderation-event-trust-semantics.md` を集約）
 - `crates/cn-operator/src/capability.rs`（`CommunityIndex` = `Availability::Planned`）
-- 実装側 Issue: #404（fail-closed community indexing 本体）
+- `crates/cn-indexer/`（#413 Model C ingestion participant + relay validation gate + ArcadeDB 投影）
+- `crates/cn-core/src/index_scope.rs` + `crates/cn-core/migrations/202607010001_index_scope.sql`（#413 scope 管理 state）
+- 実装側 Issue: #404（fail-closed community indexing 本体）, #413（Model C ingestion / supported-topic scope / indexing request）
 - 後続 ADR: trust / relation foundation（#409）, 決定論的 moderation（#410）, 非決定論的 moderation（#411）
 
 ## 位置づけ
@@ -36,7 +38,8 @@ community node の主要未検討機能のひとつ「indexing（index / search 
 - Public Replica / Private Replica / Local Only: node-local な private server state（`cn-core` / Postgres）。public manifest には capability の有無のみを載せ、index 中身は載せない
 - Gossip Hint 必要有無: peer discovery 補助として使用（Model C, §6）。基本データ経路は docs replica sync
 - Blob 必要有無: No（**no permanent blob storage** を維持。raw media blob は index しない。index は VLM 由来の派生タグのみ。moderation server の一時 fetch のみ）
-- SQLite projection 必要有無: No（server は SQLite を使わず Postgres projection）
+- SQLite projection 必要有無: No（server は SQLite を使わない）
+- index 投影ストア: **ArcadeDB**（Lucene 全文検索付き multi-model DB。canonical ではない derived な写像）。#413 で決定・改訂（当初は「Postgres projection」としていたが、ADR 0026 §6.1 で relation graph 用に採用する ArcadeDB に index 投影も相乗りさせ、全文検索 + co-participation graph を単一エンジンに統合する）。**全文検索のみ**を今回のスコープとし、ベクトル検索は延期する（§4 の画像類似検索除外と整合）。scope 管理 state（supported set / user request / private channel capability）は node-local な制御情報として **Postgres（`cn_index` schema）** に置く（index 投影本体とは別）
 - 必須 contract:
   - `index_scope_limited_to_operator_supported_topics`
   - `index_rejects_topic_outside_supported_set`
@@ -199,6 +202,18 @@ index する content（post 本文・media タグ・room メタデータ）を c
 - Replicated?: index 自体は node-local。CN は supported topic / 許可 channel の **docs sync peer として参加**する。
 - Rebuildable From: sync した replica（topic / channel）+ safety scan。docs+blob で backfill / restart 復元。
 - Gossip Hint: peer discovery 補助として使用。基本データ経路は docs replica sync。
+- index 投影ストア: ArcadeDB（全文のみ、ベクトル延期）。scope 管理 state は Postgres（`cn_index`）。
+
+### 6.6 実装（#413）
+
+Model C ingestion と scope / request / relay validation は #413 で実装した。
+
+- **crate 構成**: docs replica sync participant を新 crate/binary `cn-indexer` に分離する（`cn-user-api` = HTTP/DB/rendezvous、`cn-iroh-relay` = 純 relay の責務を汚さない）。
+- **scope 管理 state**: `cn-core` の `cn_index` schema（`supported_topics` / `indexing_requests` / `channel_secrets`）。channel secret（capability）は **at-rest 暗号化（XChaCha20Poly1305）**して保存し、平文は列に残さない。復号鍵は runtime（Secret Manager / env 注入 `COMMUNITY_NODE_CHANNEL_SECRET_KEY`）が供給する。
+- **運用面**: operator は `cn-cli`（`supported-topic` / `indexing-request` サブコマンド）で supported set と request 承認を運用する。user の indexing request は `cn-user-api` の `POST /v1/indexing/requests`（認証 + consent）で受ける。承認は operator が CLI で行い、auto-approve は作らない。#382 admin UI は別 Issue。
+- **relay validation 起動 gate**: `cn-indexer` は起動時に config 検査で relay を validate する（自前 relay = operator の `iroh_relay` capability、または外部 relay URL のどちらか。両方未設定なら indexing を起動しない）。到達性 probe はしない。
+- **ingest → 投影**: 共有 replica の実在 post entry のみを `cn-safety-runtime` の orchestrator で scan し、`allow` verdict のみ ArcadeDB 投影へ書く（unscanned / scan_failed / 非 allow は投影しない fail-closed）。supported 除外 / channel secret 失効時は sync 停止 + de-index する。media は scan/tag pipeline へ渡す接続点まで（VLM 本体は #411）。
+- **seam（#404 との境界）**: #413 は ingest → 投影 + 投影レベル read（`allow` entry の存在確認）まで。ユーザー向け search / discovery / recommendation 本体と fail-closed query gate は #404。
 
 ## Appendix A: 代替・補助 ingestion モデル（B / A, optional）
 

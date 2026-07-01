@@ -4,7 +4,9 @@ mod bootstrap;
 mod config;
 mod consents;
 mod database;
+mod env;
 mod errors;
+mod index_scope;
 mod models;
 mod normalize;
 mod rendezvous;
@@ -41,7 +43,15 @@ pub use database::{
     TestDatabase, connect_postgres, ensure_database_ready, initialize_database,
     initialize_database_for_runtime, migrate_postgres, seed_default_policies,
 };
+pub use env::{parse_bool_env, parse_csv_env};
 pub use errors::{ApiError, ApiResult, auth_required_error, consent_required_error};
+pub use index_scope::{
+    ChannelSecret, ChannelSecretCipher, ChannelSecretConflict, IndexScopeKind, IndexingRequest,
+    IndexingRequestStatus, SupportedTopic, add_supported_topic, approve_indexing_request,
+    get_channel_secret, insert_indexing_request, is_topic_supported, list_channel_secrets,
+    list_indexing_requests, list_supported_topics, register_channel_secret,
+    reject_indexing_request, remove_channel_secret, remove_supported_topic, upsert_channel_secret,
+};
 pub use models::{
     AuthChallengeResponse, AuthVerifyResponse, BearerIdentity, BootstrapHeartbeatResponse,
     CommunityNodeBootstrapNode, CommunityNodeConsentItem, CommunityNodeConsentStatus,

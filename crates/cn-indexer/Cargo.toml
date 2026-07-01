@@ -1,0 +1,37 @@
+[package]
+name = "kukuri-cn-indexer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "cn-indexer"
+path = "src/main.rs"
+
+[lib]
+name = "kukuri_cn_indexer"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+futures-util.workspace = true
+hex.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+kukuri-core = { path = "../core" }
+kukuri-docs-sync = { path = "../docs-sync" }
+kukuri-transport = { path = "../transport" }
+kukuri-cn-core = { path = "../cn-core" }
+kukuri-cn-safety = { path = "../cn-safety" }
+kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }
+
+[dev-dependencies]
+kukuri-cn-safety = { path = "../cn-safety", features = ["mock"] }
+tempfile.workspace = true

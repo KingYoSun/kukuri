@@ -16,6 +16,7 @@ members = [
     "crates/cn-operator",
     "crates/cn-safety",
     "crates/cn-safety-runtime",
+    "crates/cn-indexer",
 ]
 exclude = [
     "apps/desktop/src-tauri",
