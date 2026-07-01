@@ -177,16 +177,7 @@ private channel repost は later scope に送る。
 
 ## 7. Validation
 
-v1 は少なくとも次で固定する。
-
-- `create_same_topic_repost_persists_repost_object_and_profile_repost_doc`
-- `create_cross_topic_repost_renders_from_target_topic_without_tracking_source_topic`
-- `simple_repost_is_unique_per_author_target_and_original`
-- `quote_repost_allows_multiple_distinct_quotes_for_same_original`
-- `quote_repost_opens_own_thread_and_simple_repost_cannot_be_reply_parent`
-- `profile_timeline_merges_profile_posts_and_profile_reposts`
-- `public_comment_can_be_reposted_with_source_context_snapshot`
-- `private_channel_post_cannot_be_reposted_publicly`
+必須 contract は上記「Feature Data Classification」を単一の正とし、ここでは再掲しない。
 
 required scenario は次である。
 

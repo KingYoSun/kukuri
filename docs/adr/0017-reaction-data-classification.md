@@ -361,17 +361,7 @@ v1 では次を扱わない。
 
 ## 7. Validation
 
-v1 の required contract は少なくとも次で固定する。
-
-- `public_post_reaction_persists_and_aggregates_emoji_and_custom_keys`
-- `same_author_same_reaction_key_toggles_off`
-- `different_reaction_keys_can_coexist_on_same_target`
-- `private_channel_reaction_stays_epoch_scoped_after_rotate`
-- `custom_reaction_asset_is_author_owned_public_blob_backed_object`
-- `animated_gif_custom_reaction_preserves_gif_mime_after_normalization`
-- `custom_reaction_snapshot_renders_without_author_asset_hydration`
-- `local_bookmarks_restore_saved_custom_reactions_after_restart`
-- `profile_feed_does_not_offer_direct_reaction_affordance`
+v1 の required contract は上記各「Feature Data Classification」block（投稿 Reaction / カスタムリアクション asset / ブックマーク済みカスタムリアクション library）の 必須 contract を単一の正とし、ここでは再掲しない。
 
 required scenario は少なくとも次である。
 
