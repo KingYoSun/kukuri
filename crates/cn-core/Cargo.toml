@@ -34,6 +34,7 @@ kukuri-core = { path = "../core" }
 kukuri-cn-safety = { path = "../cn-safety" }
 kukuri-cn-safety-arachnid = { path = "../cn-safety-arachnid", optional = true }
 kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }
+kukuri-cn-trust = { path = "../cn-trust" }
 
 [dev-dependencies]
 tempfile.workspace = true

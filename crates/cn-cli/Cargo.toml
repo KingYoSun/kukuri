@@ -16,3 +16,4 @@ serde_json.workspace = true
 sqlx.workspace = true
 tokio.workspace = true
 kukuri-cn-core = { path = "../cn-core" }
+kukuri-cn-indexer = { path = "../cn-indexer" }

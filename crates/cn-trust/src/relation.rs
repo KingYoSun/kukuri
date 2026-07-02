@@ -1,0 +1,145 @@
+//! relation（pairwise cluster proximity）のドメイン型と graph-store 抽象境界（ADR 0026 §6.1）。
+//!
+//! relation は CN が観測から導く node-local な derived overlay であり、social graph の
+//! canonical を所有・改変しない（§2.2）。出力は cluster proximity（A から見た B の近さ）で
+//! あって follow 関係でも risk ラベルでもない。
+//!
+//! graph-store 抽象境界（§6.1 Decision）: backend（最小 = ArcadeDB / scale = neo4j）を
+//! 差し替え可能にする trait を置く。クエリは **Cypher 互換**表現に落とせることを前提とし、
+//! proximity の合成（feature → score）は backend 非依存の純関数 [`proximity_from_features`]
+//! に置いて、ArcadeDB / neo4j / in-memory が同一の score を返すようにする（backend は
+//! edge property の格納と取り出しだけを担う）。
+
+use std::collections::BTreeMap;
+
+use anyhow::Result;
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
+
+/// 共有 supported topic 数の feature key。
+pub const FEATURE_SHARED_TOPICS: &str = "shared_topics";
+/// co-participation イベント数（同一 scope での共起 entry 数）の feature key。
+pub const FEATURE_CO_PARTICIPATION_EVENTS: &str = "co_participation_events";
+/// follow projection（ADR 0013）由来 feature の key。
+///
+/// **seam**: CN 側に follow projection の観測実装が無いため、producer は後続
+/// （プラン Assumption 4）。key だけ固定し、値が入り次第 proximity に自然合流する。
+pub const FEATURE_FOLLOW_PROJECTION: &str = "follow_projection";
+
+/// pairwise edge に格納する feature 値（解析 worker が点数化して upsert する）。
+///
+/// key は `FEATURE_*` 定数。BTreeMap で決定論的な順序を保つ（説明・テストの安定性）。
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct EdgeFeatures(pub BTreeMap<String, f64>);
+
+impl EdgeFeatures {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with(mut self, key: &str, value: f64) -> Self {
+        self.0.insert(key.to_string(), value);
+        self
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+/// proximity の根拠 1 件（feature ごとの内訳）。
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProximityBasisEntry {
+    pub feature: String,
+    /// 格納されていた feature 値。
+    pub value: f64,
+    /// この feature の重み。
+    pub weight: f64,
+    /// score への寄与（正規化後）。
+    pub contribution: f64,
+}
+
+/// pairwise cluster proximity（根拠つき, ADR 0026 §6.1）。
+///
+/// `score ∈ [0, 1]`。断定ラベルではなく、feature 内訳（basis）を必ず同伴する
+/// （`relation_read_is_explainable`）。
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Proximity {
+    pub score: f64,
+    pub basis: Vec<ProximityBasisEntry>,
+}
+
+/// cluster 帰属（相対成分の重み付け入力, §6.1）。
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClusterRef(pub String);
+
+/// feature の重み（初期決め打ち。チューニングは ADR 0026 §4 で後続 Issue）。
+fn feature_weight(feature: &str) -> f64 {
+    match feature {
+        FEATURE_SHARED_TOPICS => 1.0,
+        FEATURE_CO_PARTICIPATION_EVENTS => 1.0,
+        FEATURE_FOLLOW_PROJECTION => 1.0,
+        _ => 0.5,
+    }
+}
+
+/// feature 値 → proximity score の backend 非依存合成。
+///
+/// 各 feature を飽和変換 `value / (value + 1)`（逓減。回数が増えるほど寄与が鈍る）で
+/// `[0, 1)` に正規化し、重み付き平均を score とする。すべての backend（in-memory /
+/// ArcadeDB / neo4j）はこの関数で score を合成し、同一 feature には同一 score を返す。
+pub fn proximity_from_features(features: &EdgeFeatures) -> Proximity {
+    let mut basis = Vec::new();
+    let mut weighted_sum = 0.0;
+    let mut total_weight = 0.0;
+    for (feature, value) in &features.0 {
+        let weight = feature_weight(feature);
+        let normalized = if *value > 0.0 {
+            value / (value + 1.0)
+        } else {
+            0.0
+        };
+        let contribution = weight * normalized;
+        weighted_sum += contribution;
+        total_weight += weight;
+        basis.push(ProximityBasisEntry {
+            feature: feature.clone(),
+            value: *value,
+            weight,
+            contribution,
+        });
+    }
+    let score = if total_weight > 0.0 {
+        (weighted_sum / total_weight).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    Proximity { score, basis }
+}
+
+/// graph-store 抽象境界（ADR 0026 §6.1 の最小 API + cluster 書き込み）。
+///
+/// いずれも viewer / target は pubkey。クエリは Cypher 互換表現に落とせることを前提とし、
+/// ArcadeDB / neo4j 双方で同一 API を満たす。relation graph は social graph canonical とは
+/// 別物の node-local overlay であり、この trait に canonical への書き込み口は存在しない
+/// （`relation_does_not_mutate_social_graph_canonical` の構造的保証）。
+#[async_trait]
+pub trait RelationStore: Send + Sync {
+    /// co-participation / follow projection 等の feature を pairwise edge に格納する。
+    ///
+    /// foundation の feature（co-participation 系）は対称なので、実装は (from, to) と
+    /// (to, from) のどちらで読んでも同じ feature が見えることを保証する。
+    async fn upsert_edge(&self, from: &str, to: &str, features: &EdgeFeatures) -> Result<()>;
+
+    /// viewer 視点の target への近接度（根拠つき）。edge が無ければ None。
+    async fn pairwise_proximity(&self, viewer: &str, target: &str) -> Result<Option<Proximity>>;
+
+    /// discovery / surfacing 用の近接近傍（proximity 降順で最大 k 件）。
+    async fn neighbors(&self, viewer: &str, k: usize) -> Result<Vec<String>>;
+
+    /// cluster 帰属（相対成分の重み付け入力）。未割り当てなら None。
+    async fn cluster_of(&self, pubkey: &str) -> Result<Option<ClusterRef>>;
+
+    /// 解析 worker が算出した cluster 帰属を格納する（§6.1 の最小 API に加える書き込み口）。
+    async fn set_cluster(&self, pubkey: &str, cluster: &ClusterRef) -> Result<()>;
+}

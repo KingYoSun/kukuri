@@ -58,6 +58,7 @@ pub async fn ensure_database_ready(pool: &PgPool) -> Result<()> {
         ("cn_index", "indexing_requests"),
         ("cn_index", "channel_secrets"),
         ("cn_index", "index_entries"),
+        ("cn_trust", "relation_optouts"),
     ] {
         let exists = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS (

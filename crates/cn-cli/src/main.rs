@@ -3,14 +3,15 @@ use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand, ValueEnum};
 use kukuri_cn_core::{
     AdmissionMode, AuthMode, AuthRolloutConfig, COMMUNITY_NODE_AUTH_SERVICE_NAME, IndexScopeKind,
-    IndexingRequestStatus, add_allowlist, add_supported_topic, approve_indexing_request,
-    ban_subscriber, connect_postgres, get_community_node_report, initialize_database,
-    issue_invite_code, list_allowlist, list_banned, list_community_node_reports,
-    list_indexing_requests, list_invite_codes, list_supported_topics, load_admission_config,
-    migrate_postgres, reject_indexing_request, remove_allowlist, remove_supported_topic,
-    revoke_invite_code, seed_default_policies, set_admission_mode, store_auth_rollout,
-    unban_subscriber,
+    IndexingRequestStatus, PgCoParticipationSource, add_allowlist, add_supported_topic,
+    approve_indexing_request, ban_subscriber, connect_postgres, get_community_node_report,
+    initialize_database, issue_invite_code, list_allowlist, list_banned,
+    list_community_node_reports, list_indexing_requests, list_invite_codes, list_supported_topics,
+    load_admission_config, migrate_postgres, reject_indexing_request, remove_allowlist,
+    remove_supported_topic, revoke_invite_code, seed_default_policies, set_admission_mode,
+    store_auth_rollout, unban_subscriber,
 };
+use kukuri_cn_indexer::{ArcadeDbConfig, ArcadeDbRelationGraph, analyze_relations};
 
 #[derive(Debug, Parser)]
 struct Cli {
@@ -56,6 +57,24 @@ enum Command {
     IndexingRequest {
         #[command(subcommand)]
         action: IndexingRequestAction,
+    },
+    /// relation graph（trust / relation foundation, #415）を運用する。
+    Relation {
+        #[command(subcommand)]
+        action: RelationAction,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum RelationAction {
+    /// index 真実源の co-participation 集計から relation graph を batch 解析する（非常駐、冪等）。
+    ///
+    /// 書き込み先は ArcadeDB の relation graph（`COMMUNITY_NODE_ARCADEDB_*` env）のみ。
+    /// social graph canonical / index 真実源は改変しない（ADR 0026 §2.2）。
+    Analyze {
+        /// 読み込む集計行の上限（有界化）。
+        #[arg(long, default_value_t = kukuri_cn_indexer::DEFAULT_ANALYSIS_LIMIT)]
+        limit: usize,
     },
 }
 
@@ -363,8 +382,31 @@ async fn main() -> Result<()> {
         Command::IndexingRequest { action } => {
             run_indexing_request(&pool, action).await?;
         }
+        Command::Relation { action } => {
+            run_relation(&pool, action).await?;
+        }
     }
 
+    Ok(())
+}
+
+async fn run_relation(pool: &sqlx::PgPool, action: RelationAction) -> Result<()> {
+    match action {
+        RelationAction::Analyze { limit } => {
+            let source = PgCoParticipationSource::new(pool.clone());
+            let graph = ArcadeDbRelationGraph::new(ArcadeDbConfig::from_env())
+                .context("failed to build ArcadeDB relation graph client")?;
+            graph
+                .ensure_schema()
+                .await
+                .context("failed to ensure relation graph schema")?;
+            let report = analyze_relations(&source, &graph, limit).await?;
+            println!(
+                "relation analysis done: {} edge(s) upserted, {} cluster(s) assigned",
+                report.edges_upserted, report.clusters_assigned
+            );
+        }
+    }
     Ok(())
 }
 

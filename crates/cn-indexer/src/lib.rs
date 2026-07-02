@@ -23,6 +23,8 @@ pub mod ingest;
 pub mod participant;
 pub mod projection;
 pub mod query;
+pub mod relation_graph;
+pub mod relation_worker;
 pub mod runtime;
 
 pub use arcadedb::ArcadeDbProjection;
@@ -31,4 +33,8 @@ pub use ingest::{IngestPipeline, IngestSummary};
 pub use participant::{IndexerParticipant, ScopeReplica};
 pub use projection::{IndexProjection, IndexedEntry, MemoryIndexProjection};
 pub use query::{FailClosedIndexQuery, IndexQuery, MAX_QUERY_LIMIT, clamp_query_limit};
+pub use relation_graph::ArcadeDbRelationGraph;
+pub use relation_worker::{
+    DEFAULT_ANALYSIS_LIMIT, RelationAnalysisReport, analyze_relations, topic_cluster,
+};
 pub use runtime::run_from_env;
