@@ -13,8 +13,10 @@ mod rendezvous;
 mod reports;
 mod rollout;
 mod safety_events;
+mod safety_runtime;
 #[cfg(test)]
 mod tests;
+mod trust_inputs;
 
 pub use admission::{
     AdmissionConfig, AdmissionMode, AdmissionRejection, AllowlistEntry, BannedEntry,
@@ -75,4 +77,13 @@ pub use safety_events::{
     get_signed_moderation_event, list_distributable_moderation_events,
     list_distributable_risk_signals, list_risk_signals_for_target, list_signed_moderation_events,
     persist_risk_signal, persist_signed_moderation_event,
+};
+pub use safety_runtime::{
+    MemorySafetyArtifactStore, PgSafetyArtifactStore, SafetyArtifactStore, SafetyRuntimeConfig,
+    SafetyRuntimeProviderEntry, SafetyRuntimeProvidersConfig, SafetyScanOutcome, SafetyScanService,
+    SafetyScanServiceBuilder, build_safety_orchestrator, build_safety_scan_service,
+};
+pub use trust_inputs::{
+    TrustComponentKind, TrustRiskInput, TrustRiskInputs, list_trust_risk_inputs,
+    trust_component_for, trust_risk_inputs_from,
 };

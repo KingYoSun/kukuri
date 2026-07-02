@@ -8,65 +8,65 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use kukuri_cn_core::IndexScopeKind;
+use kukuri_cn_core::{IndexScopeKind, MemorySafetyArtifactStore, SafetyScanService};
 use kukuri_cn_indexer::config::RelayConfig;
 use kukuri_cn_indexer::ingest::IngestPipeline;
 use kukuri_cn_indexer::participant::ScopeReplica;
 use kukuri_cn_indexer::projection::{IndexProjection, MemoryIndexProjection};
-use kukuri_cn_safety::MockSafetyProvider;
-use kukuri_cn_safety_runtime::SafetyOrchestrator;
+use kukuri_cn_safety::{
+    MockSafetyProvider, ModerationEventSigner, RiskSignalTarget, SafetyCategory,
+};
 use kukuri_cn_safety_runtime::clock::SystemScanClock;
 use kukuri_cn_safety_runtime::id::UuidEventIdGenerator;
+use kukuri_cn_safety_runtime::{
+    SafetyOrchestrator, Secp256k1ModerationEventSigner, verify_signed_event,
+};
 use kukuri_core::{KukuriKeys, ReplicaId, TopicId, build_post_envelope};
 use kukuri_docs_sync::{DocOp, DocQuery, DocsSync, MemoryDocsSync, stable_key, topic_replica_id};
 
-/// mock provider で allow を返す orchestrator（known CSAM = NoKnownMatch、脅威スコア無し）。
+const TEST_SECRET: &str = "0000000000000000000000000000000000000000000000000000000000000001";
+
+/// mock provider から scan service（#406）を組む。本番構成と同型（実鍵 signer +
+/// SystemScanClock + UuidEventIdGenerator）で、store のみ in-memory。
+///
+/// 返り値の store から、pipeline 経由で永続化された moderation artifact を検証できる。
+fn service_with(
+    provider: MockSafetyProvider,
+) -> (Arc<SafetyScanService>, Arc<MemorySafetyArtifactStore>) {
+    let signer = Secp256k1ModerationEventSigner::from_secret(TEST_SECRET).expect("signer");
+    let issuer = signer.issuer_node_id().to_string();
+    let store = Arc::new(MemorySafetyArtifactStore::new());
+    let orchestrator = SafetyOrchestrator::builder(
+        &issuer,
+        Arc::new(SystemScanClock),
+        Arc::new(UuidEventIdGenerator),
+    )
+    .provider(Arc::new(provider))
+    .build()
+    .expect("orchestrator");
+    let service = SafetyScanService::builder(Arc::new(orchestrator), store.clone())
+        .signer(Arc::new(signer))
+        .build()
+        .expect("service");
+    (Arc::new(service), store)
+}
+
+/// mock provider で allow を返す service（known CSAM = NoKnownMatch、脅威スコア無し）。
 ///
 /// `public_node_default` policy は known CSAM provider を必須とするため、allow を得るには
 /// `KnownCsamHashMatch` provider が `NoKnownMatch` を返す必要がある。
-fn allow_orchestrator() -> Arc<SafetyOrchestrator> {
-    let provider = Arc::new(MockSafetyProvider::known_csam("mock-known-csam"));
-    Arc::new(
-        SafetyOrchestrator::builder(
-            "node-issuer",
-            Arc::new(SystemScanClock),
-            Arc::new(UuidEventIdGenerator),
-        )
-        .provider(provider)
-        .build()
-        .expect("orchestrator"),
-    )
+fn allow_service() -> (Arc<SafetyScanService>, Arc<MemorySafetyArtifactStore>) {
+    service_with(MockSafetyProvider::known_csam("mock-known-csam"))
 }
 
-/// mock provider が scan 失敗を返す orchestrator（fail-closed のテスト用）。
-fn scan_failed_orchestrator() -> Arc<SafetyOrchestrator> {
-    let provider = Arc::new(MockSafetyProvider::known_csam("mock-known-csam").default_failed());
-    Arc::new(
-        SafetyOrchestrator::builder(
-            "node-issuer",
-            Arc::new(SystemScanClock),
-            Arc::new(UuidEventIdGenerator),
-        )
-        .provider(provider)
-        .build()
-        .expect("orchestrator"),
-    )
+/// mock provider が scan 失敗を返す service（fail-closed のテスト用）。
+fn scan_failed_service() -> (Arc<SafetyScanService>, Arc<MemorySafetyArtifactStore>) {
+    service_with(MockSafetyProvider::known_csam("mock-known-csam").default_failed())
 }
 
-/// known CSAM hash match を返す orchestrator（exclude のテスト用）。
-fn known_csam_orchestrator(post_id: &str) -> Arc<SafetyOrchestrator> {
-    let provider =
-        Arc::new(MockSafetyProvider::known_csam("mock-known-csam").with_known_hash_match(post_id));
-    Arc::new(
-        SafetyOrchestrator::builder(
-            "node-issuer",
-            Arc::new(SystemScanClock),
-            Arc::new(UuidEventIdGenerator),
-        )
-        .provider(provider)
-        .build()
-        .expect("orchestrator"),
-    )
+/// known CSAM hash match を返す service（exclude のテスト用）。
+fn known_csam_service(post_id: &str) -> (Arc<SafetyScanService>, Arc<MemorySafetyArtifactStore>) {
+    service_with(MockSafetyProvider::known_csam("mock-known-csam").with_known_hash_match(post_id))
 }
 
 /// 本文 text の post envelope を共有 replica に実在させる（app-api の persist と同じ key 形状）。
@@ -116,7 +116,7 @@ async fn index_only_indexes_shared_replica_entries() -> Result<()> {
     let replica = topic_replica_id("rust");
     let object_id = persist_post(&docs, &replica, &topic, "hello shared replica").await;
 
-    let pipeline = IngestPipeline::new(docs.clone(), allow_orchestrator(), projection.clone());
+    let pipeline = IngestPipeline::new(docs.clone(), allow_service().0, projection.clone());
     let scope = ScopeReplica::from_scope(IndexScopeKind::PublicTopic, "rust");
     let summary = pipeline
         .ingest_scope(scope.kind, &scope.id, &scope.replica_id)
@@ -141,7 +141,7 @@ async fn content_not_in_shared_replica_is_not_indexed() -> Result<()> {
     let replica = topic_replica_id("empty");
     docs.open_replica(&replica).await?;
 
-    let pipeline = IngestPipeline::new(docs.clone(), allow_orchestrator(), projection.clone());
+    let pipeline = IngestPipeline::new(docs.clone(), allow_service().0, projection.clone());
     let summary = pipeline
         .ingest_scope(IndexScopeKind::PublicTopic, "empty", &replica)
         .await?;
@@ -166,8 +166,7 @@ async fn index_excludes_unscanned_and_scan_failed() -> Result<()> {
     let replica = topic_replica_id("rust");
     let object_id = persist_post(&docs, &replica, &topic, "scan will fail").await;
 
-    let pipeline =
-        IngestPipeline::new(docs.clone(), scan_failed_orchestrator(), projection.clone());
+    let pipeline = IngestPipeline::new(docs.clone(), scan_failed_service().0, projection.clone());
     let summary = pipeline
         .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
         .await?;
@@ -194,7 +193,7 @@ async fn index_excludes_non_allow_verdict_content() -> Result<()> {
 
     let pipeline = IngestPipeline::new(
         docs.clone(),
-        known_csam_orchestrator(&object_id),
+        known_csam_service(&object_id).0,
         projection.clone(),
     );
     let summary = pipeline
@@ -220,7 +219,7 @@ async fn reingest_deindexes_when_verdict_flips_to_non_allow() -> Result<()> {
     let replica = topic_replica_id("rust");
     let object_id = persist_post(&docs, &replica, &topic, "flips later").await;
 
-    IngestPipeline::new(docs.clone(), allow_orchestrator(), projection.clone())
+    IngestPipeline::new(docs.clone(), allow_service().0, projection.clone())
         .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
         .await?;
     assert!(
@@ -231,7 +230,7 @@ async fn reingest_deindexes_when_verdict_flips_to_non_allow() -> Result<()> {
 
     IngestPipeline::new(
         docs.clone(),
-        known_csam_orchestrator(&object_id),
+        known_csam_service(&object_id).0,
         projection.clone(),
     )
     .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
@@ -275,7 +274,7 @@ async fn deleted_objects_are_deindexed() -> Result<()> {
     let replica = topic_replica_id("rust");
     let object_id = persist_post(&docs, &replica, &topic, "to be deleted").await;
 
-    IngestPipeline::new(docs.clone(), allow_orchestrator(), projection.clone())
+    IngestPipeline::new(docs.clone(), allow_service().0, projection.clone())
         .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
         .await?;
     assert!(
@@ -304,7 +303,7 @@ async fn deleted_objects_are_deindexed() -> Result<()> {
     )
     .await?;
 
-    let summary = IngestPipeline::new(docs.clone(), allow_orchestrator(), projection.clone())
+    let summary = IngestPipeline::new(docs.clone(), allow_service().0, projection.clone())
         .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
         .await?;
     assert_eq!(summary.deindexed, 1);
@@ -313,5 +312,96 @@ async fn deleted_objects_are_deindexed() -> Result<()> {
             .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
             .await?
     );
+    Ok(())
+}
+
+// --- runtime（pipeline）経由の moderation artifact 記録（#406） ---
+
+#[tokio::test]
+async fn ingest_known_csam_records_risk_signal_and_does_not_index() -> Result<()> {
+    // known CSAM hash match の post は投影に入らず、risk signal + 署名 event が store に入る。
+    let docs = Arc::new(MemoryDocsSync::default());
+    let projection = Arc::new(MemoryIndexProjection::new());
+    let topic = TopicId::new("rust");
+    let replica = topic_replica_id("rust");
+    let object_id = persist_post(&docs, &replica, &topic, "bad content").await;
+
+    let (service, store) = known_csam_service(&object_id);
+    let summary = IngestPipeline::new(docs.clone(), service, projection.clone())
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+
+    assert_eq!(summary.indexed, 0);
+    assert_eq!(summary.skipped_non_allow, 1);
+    assert!(
+        !projection
+            .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
+            .await?
+    );
+
+    // risk signal が trust/relation reads の入力として永続化される（根拠つき、断定ラベルなし）。
+    let signals = store.signals();
+    assert_eq!(signals.len(), 1);
+    let (_, signal) = &signals[0];
+    assert_eq!(signal.target, RiskSignalTarget::PostId);
+    assert_eq!(signal.target_id, object_id);
+    assert_eq!(signal.category, SafetyCategory::Csam);
+
+    // moderation event は実鍵署名済みで検証に通る。
+    let events = store.events();
+    assert_eq!(events.len(), 1);
+    verify_signed_event(&events[0]).expect("event verifies");
+    assert_eq!(events[0].body.target_id, object_id);
+    Ok(())
+}
+
+#[tokio::test]
+async fn ingest_scan_failure_is_fail_closed_and_records_no_risk_signal() -> Result<()> {
+    // provider failure は runtime（pipeline）経由でも fail-closed: 投影されず、
+    // content の safety category を示さないため risk signal も生成されない。
+    let docs = Arc::new(MemoryDocsSync::default());
+    let projection = Arc::new(MemoryIndexProjection::new());
+    let topic = TopicId::new("rust");
+    let replica = topic_replica_id("rust");
+    let object_id = persist_post(&docs, &replica, &topic, "scan will fail").await;
+
+    let (service, store) = scan_failed_service();
+    let summary = IngestPipeline::new(docs.clone(), service, projection.clone())
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+
+    assert_eq!(summary.indexed, 0);
+    assert_eq!(summary.skipped_non_allow, 1);
+    assert!(
+        !projection
+            .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
+            .await?
+    );
+    assert!(store.signals().is_empty(), "no false risk labels");
+    Ok(())
+}
+
+#[tokio::test]
+async fn ingest_allow_records_no_artifacts() -> Result<()> {
+    // allow verdict は投影のみで moderation artifact を作らない。
+    let docs = Arc::new(MemoryDocsSync::default());
+    let projection = Arc::new(MemoryIndexProjection::new());
+    let topic = TopicId::new("rust");
+    let replica = topic_replica_id("rust");
+    let object_id = persist_post(&docs, &replica, &topic, "clean content").await;
+
+    let (service, store) = allow_service();
+    let summary = IngestPipeline::new(docs.clone(), service, projection.clone())
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+
+    assert_eq!(summary.indexed, 1);
+    assert!(
+        projection
+            .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
+            .await?
+    );
+    assert!(store.events().is_empty());
+    assert!(store.signals().is_empty());
     Ok(())
 }
