@@ -30,23 +30,25 @@
 //! - `docs/adr/0027-deterministic-moderation-critical-safety.md` §2.5 / §2.6（signed event / risk
 //!   signal / visibility）
 
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use sqlx::PgPool;
 
-use kukuri_cn_safety::provider::ProviderScanRequest;
+use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
 use kukuri_cn_safety::{
-    ModerationEventSigner, SafetyPolicy, SafetyProvider, SafetyRiskSignal, SignedModerationEvent,
-    issue_signed_event,
+    ModerationEventSigner, SafetyPolicy, SafetyProvider, SafetyRiskSignal, SafetyVerdict,
+    SignedModerationEvent, issue_signed_event,
 };
 use kukuri_cn_safety_runtime::{
     SAFETY_SIGNING_KEY_ENV, SafetyOrchestrator, SafetyScanReport, Secp256k1ModerationEventSigner,
     SystemScanClock, UuidEventIdGenerator,
 };
 
-use crate::safety_events::{persist_risk_signal, persist_signed_moderation_event};
+use crate::safety_events::{persist_risk_signal, persist_signed_moderation_event, to_db_enum};
+use crate::scan_verdicts::upsert_scan_verdict;
 
 /// runtime 側の safety provider slot 設定。
 ///
@@ -137,6 +139,17 @@ pub trait SafetyArtifactStore: Send + Sync {
         issuer_node_id: &str,
         signal: &SafetyRiskSignal,
     ) -> Result<String>;
+
+    /// scan 対象の最新 verdict state を upsert し、verdict record id を返す（#404）。
+    ///
+    /// `allow` を含む全 verdict を対象ごとに 1 行で保持する。id は初回採番のまま据え置かれ、
+    /// index 真実源（`cn_index.index_entries`）の FK 参照先になる。
+    async fn persist_verdict(
+        &self,
+        subject_kind: SubjectKind,
+        subject_id: &str,
+        verdict: &SafetyVerdict,
+    ) -> Result<String>;
 }
 
 /// Postgres 実装。`safety_events`（#405）の persist API に委譲する。
@@ -168,6 +181,17 @@ impl SafetyArtifactStore for PgSafetyArtifactStore {
             .await
             .map(|stored| stored.id)
     }
+
+    async fn persist_verdict(
+        &self,
+        subject_kind: SubjectKind,
+        subject_id: &str,
+        verdict: &SafetyVerdict,
+    ) -> Result<String> {
+        upsert_scan_verdict(&self.pool, subject_kind, subject_id, verdict)
+            .await
+            .map(|stored| stored.id)
+    }
 }
 
 /// contract test 用の in-memory 実装（`MemoryDocsSync` / `MemoryIndexProjection` と同じ流儀）。
@@ -178,6 +202,9 @@ impl SafetyArtifactStore for PgSafetyArtifactStore {
 pub struct MemorySafetyArtifactStore {
     events: Mutex<Vec<SignedModerationEvent>>,
     signals: Mutex<Vec<(String, SafetyRiskSignal)>>,
+    /// (subject_kind の snake_case, subject_id) → (verdict record id, 最新 verdict)。
+    /// Postgres 実装と同じく id は初回採番のまま据え置く。
+    verdicts: Mutex<HashMap<(String, String), (String, SafetyVerdict)>>,
 }
 
 impl MemorySafetyArtifactStore {
@@ -194,6 +221,38 @@ impl MemorySafetyArtifactStore {
     pub fn signals(&self) -> Vec<(String, SafetyRiskSignal)> {
         self.signals.lock().expect("signals mutex poisoned").clone()
     }
+
+    /// 保存済みの対象別最新 verdict（verdict record id, verdict）のスナップショット。
+    pub fn verdict_for(
+        &self,
+        subject_kind: SubjectKind,
+        subject_id: &str,
+    ) -> Option<(String, SafetyVerdict)> {
+        let key = (
+            memory_subject_kind_key(subject_kind),
+            subject_id.to_string(),
+        );
+        self.verdicts
+            .lock()
+            .expect("verdicts mutex poisoned")
+            .get(&key)
+            .cloned()
+    }
+
+    /// verdict record id から最新 verdict を引く（Postgres 実装の verdict_id join に対応）。
+    pub fn verdict_by_id(&self, verdict_id: &str) -> Option<SafetyVerdict> {
+        self.verdicts
+            .lock()
+            .expect("verdicts mutex poisoned")
+            .values()
+            .find(|(id, _)| id == verdict_id)
+            .map(|(_, verdict)| verdict.clone())
+    }
+}
+
+/// `SubjectKind` を in-memory map の鍵（snake_case 文字列）に写す。
+fn memory_subject_kind_key(subject_kind: SubjectKind) -> String {
+    to_db_enum(&subject_kind).expect("SubjectKind serializes to a snake_case string")
 }
 
 #[async_trait]
@@ -216,6 +275,27 @@ impl SafetyArtifactStore for MemorySafetyArtifactStore {
         signals.push((issuer_node_id.to_string(), signal.clone()));
         Ok(id)
     }
+
+    async fn persist_verdict(
+        &self,
+        subject_kind: SubjectKind,
+        subject_id: &str,
+        verdict: &SafetyVerdict,
+    ) -> Result<String> {
+        if subject_id.trim().is_empty() {
+            bail!("scan verdict subject_id must not be empty");
+        }
+        let mut verdicts = self.verdicts.lock().expect("verdicts mutex poisoned");
+        let key = (
+            memory_subject_kind_key(subject_kind),
+            subject_id.to_string(),
+        );
+        let next_id = format!("memory-verdict-{}", verdicts.len() + 1);
+        let entry = verdicts.entry(key);
+        let (id, stored) = entry.or_insert_with(|| (next_id, verdict.clone()));
+        *stored = verdict.clone();
+        Ok(id.clone())
+    }
 }
 
 /// [`SafetyScanService::scan_and_record`] の結果。
@@ -229,6 +309,11 @@ pub struct SafetyScanOutcome {
     pub signed_event: Option<SignedModerationEvent>,
     /// store が採番した risk signal id（signal が生成されなかった場合は None）。
     pub persisted_signal_id: Option<String>,
+    /// store が upsert した対象別最新 verdict の record id（#404）。
+    ///
+    /// request に subject_kind / subject_id が無い場合は None。index 真実源
+    /// （`cn_index.index_entries`）はこの id を FK で参照する。
+    pub verdict_id: Option<String>,
 }
 
 /// scan → verdict → artifact 署名 / 永続化を合成する runtime 境界（#406）。
@@ -270,8 +355,10 @@ impl SafetyScanService {
     /// scan して、生成された artifact を署名・永続化する。
     ///
     /// 1. `SafetyOrchestrator::scan_subject`（provider 失敗は fail-closed に写像済み）。
-    /// 2. risk signal があれば store へ保存する（署名対象ではないため signer の有無に依らない）。
-    /// 3. moderation event body があり signer が構成されていれば、署名して store へ保存する。
+    /// 2. request に subject があれば、対象別の最新 verdict state を store へ upsert する（#404。
+    ///    `allow` を含む。index 真実源の FK 参照先になる）。
+    /// 3. risk signal があれば store へ保存する（署名対象ではないため signer の有無に依らない）。
+    /// 4. moderation event body があり signer が構成されていれば、署名して store へ保存する。
     ///
     /// allow verdict / target 欠落 / operational fail-closed（scan_failed 等）で artifact を
     /// 作らない判断は `cn-safety-runtime` の artifacts ガードレールに委ねる（ここで再判断しない）。
@@ -281,6 +368,16 @@ impl SafetyScanService {
         request: &ProviderScanRequest,
     ) -> Result<SafetyScanOutcome> {
         let report = self.orchestrator.scan_subject(request).await;
+
+        let verdict_id = match (request.subject_kind, request.subject_id.as_deref()) {
+            (Some(kind), Some(subject_id)) if !subject_id.trim().is_empty() => Some(
+                self.store
+                    .persist_verdict(kind, subject_id, &report.verdict)
+                    .await
+                    .context("failed to persist scan verdict state")?,
+            ),
+            _ => None,
+        };
 
         let persisted_signal_id = match report.risk_signal.as_ref() {
             Some(signal) => Some(
@@ -308,6 +405,7 @@ impl SafetyScanService {
             report,
             signed_event,
             persisted_signal_id,
+            verdict_id,
         })
     }
 }

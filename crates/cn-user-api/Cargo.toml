@@ -22,10 +22,12 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 url.workspace = true
 kukuri-cn-core = { path = "../cn-core" }
+kukuri-cn-indexer = { path = "../cn-indexer" }
 kukuri-cn-operator = { path = "../cn-operator" }
 
 [dev-dependencies]
 kukuri-core = { path = "../core" }
+kukuri-cn-safety = { path = "../cn-safety" }
 hex.workspace = true
 reqwest.workspace = true
 redis.workspace = true

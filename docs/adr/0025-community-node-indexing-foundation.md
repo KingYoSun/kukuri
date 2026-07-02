@@ -215,6 +215,25 @@ Model C ingestion と scope / request / relay validation は #413 で実装し�
 - **ingest → 投影**: 共有 replica の実在 post entry のみを `cn-safety-runtime` の orchestrator で scan し、`allow` verdict のみ ArcadeDB 投影へ書く（unscanned / scan_failed / 非 allow は投影しない fail-closed）。supported 除外 / channel secret 失効時は sync 停止 + de-index する。media は scan/tag pipeline へ渡す接続点まで（VLM 本体は #411）。
 - **seam（#404 との境界）**: #413 は ingest → 投影 + 投影レベル read（`allow` entry の存在確認）まで。ユーザー向け search / discovery / recommendation 本体と fail-closed query gate は #404。
 
+### 6.7 実装（#404）
+
+fail-closed indexing 本体（DB 制約 + query 境界）は #404 で実装した（詳細は
+`docs/progress/2026-07-02-404-fail-closed-community-indexing.md`）。
+
+- **verdict state / index 真実源**: `cn_safety.scan_verdicts`（対象ごとの最新 verdict。`allow` 含む）と
+  `cn_index.index_entries`（index の真実源）。§2.5 の「index entry は対応する safety verdict state を
+  必ず伴う」を NOT NULL FK で、「`allow` verdict の content のみ」を `CHECK (verdict_action = 'allow')`
+  と `CHECK (NOT critical)` で **DB 制約として**固定した。ArcadeDB 投影は真実源の derived な写像。
+- **query 境界**: `cn-indexer` の `IndexQuery`（topic 内検索 / 横断検索 / 新着列挙）+
+  `FailClosedIndexQuery`（唯一のユーザー向け読み口。投影 hit を真実源 + 最新 verdict と突合して
+  非 allow / critical / 残留 hit を落とす）。`cn-user-api` の `GET /v1/index/{search,discovery,recommendations}`
+  （認証 + consent + rate limit）が公開面。
+- **既定無効**: `COMMUNITY_NODE_INDEX_QUERY_ENABLED`（既定 false → 404）。`CommunityIndex` の
+  `Availability::Planned` → 昇格（および ingest loop 常駐化・エンドポイント既定有効化）は
+  readiness（ADR 0027 §2.9）が揃った段階で別途判断する。
+- **スコープ外のまま**: ranking / 関連度スコアリングの具体（§4）。discovery / recommendation は
+  created_at 降順の新着列挙を最小 surface とする。
+
 ## Appendix A: 代替・補助 ingestion モデル（B / A, optional）
 
 以下は Model C を補完する optional モデル。**実装してもよいが必須ではない。** 採用する場合も §6.1–§6.4 の不変条件（ghost 注入を作らない / relay validation / private は capability）を満たすこと。

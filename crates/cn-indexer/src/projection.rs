@@ -13,6 +13,8 @@ use serde::{Deserialize, Serialize};
 
 use kukuri_cn_core::IndexScopeKind;
 
+use crate::query::IndexQuery;
+
 /// 投影 1 件（検索対象エントリ）。
 ///
 /// canonical ではない derived な写像。text は post 本文（media は将来 VLM 派生タグ）で、raw blob は
@@ -166,6 +168,77 @@ impl IndexProjection for MemoryIndexProjection {
             .await
             .retain(|entry| !same_object(entry, scope_kind, scope_id, object_id));
         Ok(())
+    }
+}
+
+/// in-memory の全文検索近似: query を空白区切りの term に分け、いずれかの term を含む text に
+/// hit する（Lucene の既定 OR 演算に対応する最小近似。contract テスト用）。
+fn memory_text_matches(text: &str, query: &str) -> bool {
+    let text = text.to_lowercase();
+    query
+        .split_whitespace()
+        .any(|term| !term.is_empty() && text.contains(&term.to_lowercase()))
+}
+
+#[async_trait]
+impl IndexQuery for MemoryIndexProjection {
+    async fn search_scope(
+        &self,
+        scope_kind: IndexScopeKind,
+        scope_id: &str,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<IndexedEntry>> {
+        let mut hits: Vec<IndexedEntry> = self
+            .entries
+            .lock()
+            .await
+            .iter()
+            .filter(|entry| {
+                entry.scope_kind == scope_kind
+                    && entry.scope_id == scope_id
+                    && memory_text_matches(&entry.text, query)
+            })
+            .cloned()
+            .collect();
+        hits.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        hits.truncate(limit);
+        Ok(hits)
+    }
+
+    async fn search_all(&self, query: &str, limit: usize) -> Result<Vec<IndexedEntry>> {
+        let mut hits: Vec<IndexedEntry> = self
+            .entries
+            .lock()
+            .await
+            .iter()
+            .filter(|entry| memory_text_matches(&entry.text, query))
+            .cloned()
+            .collect();
+        hits.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        hits.truncate(limit);
+        Ok(hits)
+    }
+
+    async fn list_recent(
+        &self,
+        scope: Option<(IndexScopeKind, &str)>,
+        limit: usize,
+    ) -> Result<Vec<IndexedEntry>> {
+        let mut hits: Vec<IndexedEntry> = self
+            .entries
+            .lock()
+            .await
+            .iter()
+            .filter(|entry| match scope {
+                Some((kind, id)) => entry.scope_kind == kind && entry.scope_id == id,
+                None => true,
+            })
+            .cloned()
+            .collect();
+        hits.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        hits.truncate(limit);
+        Ok(hits)
     }
 }
 

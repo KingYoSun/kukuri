@@ -3,11 +3,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use kukuri_cn_core::PgIndexEntryStore;
 use kukuri_cn_core::{
     AdmissionRejection, ApiError, ApiResult, AuthChallengeResponse, AuthVerifyResponse,
     BootstrapHeartbeatResponse, COMMUNITY_NODE_RENDEZVOUS_KEY_PREFIX_ENV,
@@ -22,6 +23,7 @@ use kukuri_cn_core::{
     register_channel_secret, require_bearer_identity, require_bearer_pubkey, require_consents,
     verify_auth_envelope_and_issue_token,
 };
+use kukuri_cn_indexer::{ArcadeDbConfig, ArcadeDbProjection, FailClosedIndexQuery, IndexQuery};
 use kukuri_cn_operator::{CommunityNodeManifest, build_manifest, load_and_validate};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -44,6 +46,21 @@ pub struct UserApiState {
     /// 鍵 material（`COMMUNITY_NODE_CHANNEL_SECRET_KEY`）が未設定なら None で、private channel の
     /// indexing request は受け付けない（secret を平文保存しないため）。
     channel_secret_cipher: Option<Arc<ChannelSecretCipher>>,
+    /// ユーザー向け search / discovery / recommendation の query 境界（#404）。
+    /// fail-closed query gate（`FailClosedIndexQuery`）を通した読み口のみを持つ。
+    /// None = 機能無効（`CommunityIndex` が `Availability::Planned` の既定状態）で、
+    /// `/v1/index/*` は 404 を返す。
+    index_query: Option<Arc<dyn IndexQuery>>,
+}
+
+impl UserApiState {
+    /// query 境界を差し替える（テスト用の in-memory 実装注入、または明示的な有効化）。
+    ///
+    /// 注入する実装は必ず fail-closed gate（`FailClosedIndexQuery`）を通したものにすること。
+    pub fn with_index_query(mut self, index_query: Arc<dyn IndexQuery>) -> Self {
+        self.index_query = Some(index_query);
+        self
+    }
 }
 
 /// public manifest endpoint 用の最小 state。DB を必要としないため、
@@ -69,6 +86,10 @@ pub struct UserApiConfig {
     /// private channel の indexing request で渡される channel secret を at-rest 暗号化する鍵 material。
     /// 未設定なら private channel の indexing request は受け付けない（#413 / ADR 0025 §6.3）。
     pub channel_secret_key: Option<String>,
+    /// ユーザー向け index query（search / discovery / recommendation）を公開するか（#404）。
+    /// 既定 false（`CommunityIndex` が `Availability::Planned` の現状と整合。`/v1/index/*` は 404）。
+    /// 有効化すると ArcadeDB（`COMMUNITY_NODE_ARCADEDB_*`）へ接続する。
+    pub index_query_enabled: bool,
 }
 
 impl std::fmt::Debug for UserApiConfig {
@@ -88,6 +109,7 @@ impl std::fmt::Debug for UserApiConfig {
                 "channel_secret_key",
                 &self.channel_secret_key.as_ref().map(|_| "<redacted>"),
             )
+            .field("index_query_enabled", &self.index_query_enabled)
             .finish()
     }
 }
@@ -222,6 +244,7 @@ impl UserApiConfig {
         let channel_secret_key = std::env::var("COMMUNITY_NODE_CHANNEL_SECRET_KEY")
             .ok()
             .filter(|value| !value.trim().is_empty());
+        let index_query_enabled = parse_bool_env("COMMUNITY_NODE_INDEX_QUERY_ENABLED", false)?;
         Ok(Self {
             bind_addr,
             database_url,
@@ -233,6 +256,7 @@ impl UserApiConfig {
             jwt_config: JwtConfig::from_env()?,
             operator_config_path,
             channel_secret_key,
+            index_query_enabled,
         })
     }
 }
@@ -353,6 +377,19 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
         .transpose()
         .context("invalid COMMUNITY_NODE_CHANNEL_SECRET_KEY")?
         .map(Arc::new);
+    // ユーザー向け index query（#404）。有効時のみ ArcadeDB（投影）+ Postgres（真実源）を
+    // fail-closed gate（`FailClosedIndexQuery`）で束ねる。読み口はこの gate 以外に作らない。
+    let index_query: Option<Arc<dyn IndexQuery>> = if config.index_query_enabled {
+        let projection = ArcadeDbProjection::new(ArcadeDbConfig::from_env())
+            .context("failed to build ArcadeDB client for index query")?;
+        let entries = PgIndexEntryStore::new(pool.clone());
+        Some(Arc::new(FailClosedIndexQuery::new(
+            Arc::new(projection),
+            Arc::new(entries),
+        )))
+    } else {
+        None
+    };
     Ok(UserApiState {
         pool,
         rendezvous_store,
@@ -367,6 +404,7 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
         },
         manifest,
         channel_secret_cipher,
+        index_query,
     })
 }
 
@@ -401,6 +439,9 @@ pub fn app_router(state: UserApiState) -> Router {
         )
         .route("/v1/report", post(submit_report))
         .route("/v1/indexing/requests", post(submit_indexing_request))
+        .route("/v1/index/search", get(index_search))
+        .route("/v1/index/discovery", get(index_discovery))
+        .route("/v1/index/recommendations", get(index_recommendations))
         .with_state(state);
     api.merge(manifest).layer(TraceLayer::new_for_http())
 }
@@ -694,6 +735,195 @@ async fn submit_indexing_request(
         request_id: stored.id,
         status: stored.status.as_str().to_string(),
     }))
+}
+
+/// index query の共通クエリパラメータ（#404）。
+///
+/// `scope_kind` + `scope_id` の組で topic 内（scope 内）読み、両方無指定で supported set 横断。
+#[derive(Debug, Default, Deserialize)]
+struct IndexQueryParams {
+    /// 検索文字列（`/v1/index/search` のみ必須）。
+    #[serde(default)]
+    q: Option<String>,
+    /// scope 種別（`public_topic` / `private_channel`）。
+    #[serde(default)]
+    scope_kind: Option<String>,
+    /// scope 識別子（topic_id / channel_id）。
+    #[serde(default)]
+    scope_id: Option<String>,
+    /// 返す entry 数の上限（`MAX_QUERY_LIMIT` に丸められる）。
+    #[serde(default)]
+    limit: Option<usize>,
+}
+
+/// index query の応答 entry。投影 entry のうちユーザー向けに公開するフィールドのみ
+/// （`source_replica_id` は監査用の内部情報のため出さない）。
+#[derive(Debug, Serialize)]
+struct IndexEntryView {
+    scope_kind: String,
+    scope_id: String,
+    object_id: String,
+    author_pubkey: String,
+    text: String,
+    created_at: i64,
+}
+
+#[derive(Debug, Serialize)]
+struct IndexQueryResponse {
+    entries: Vec<IndexEntryView>,
+}
+
+impl From<Vec<kukuri_cn_indexer::IndexedEntry>> for IndexQueryResponse {
+    fn from(entries: Vec<kukuri_cn_indexer::IndexedEntry>) -> Self {
+        Self {
+            entries: entries
+                .into_iter()
+                .map(|entry| IndexEntryView {
+                    scope_kind: entry.scope_kind.as_str().to_string(),
+                    scope_id: entry.scope_id,
+                    object_id: entry.object_id,
+                    author_pubkey: entry.author_pubkey,
+                    text: entry.text,
+                    created_at: entry.created_at,
+                })
+                .collect(),
+        }
+    }
+}
+
+/// index query 共通の前処理: 機能ゲート（未構成なら 404）+ 認証 + consent。
+///
+/// query 境界（`FailClosedIndexQuery`）を返す。`CommunityIndex` capability が
+/// `Availability::Planned` の既定状態では index query は構成されず、この node は
+/// search / discovery / recommendation を提供しない。
+async fn require_index_query(
+    state: &UserApiState,
+    headers: &HeaderMap,
+) -> ApiResult<Arc<dyn IndexQuery>> {
+    let Some(index_query) = state.index_query.clone() else {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "INDEX_QUERY_NOT_CONFIGURED",
+            "this community node does not provide index queries",
+        ));
+    };
+    let identity = require_bearer_identity(&state.pool, &state.jwt_config, headers).await?;
+    let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
+    Ok(index_query)
+}
+
+/// `scope_kind` / `scope_id` パラメータの組を解釈する。
+///
+/// 両方指定 = scope 内読み、両方無指定 = 横断。片方のみは 400。
+fn parse_index_scope_params(
+    params: &IndexQueryParams,
+) -> Result<Option<(IndexScopeKind, String)>, ApiError> {
+    let scope_kind = params
+        .scope_kind
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty());
+    let scope_id = params
+        .scope_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty());
+    match (scope_kind, scope_id) {
+        (None, None) => Ok(None),
+        (Some(kind), Some(id)) => {
+            let kind = IndexScopeKind::parse(kind).map_err(|error| {
+                ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "INVALID_INDEX_QUERY",
+                    error.to_string(),
+                )
+            })?;
+            Ok(Some((kind, id.to_string())))
+        }
+        _ => Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "INVALID_INDEX_QUERY",
+            "scope_kind and scope_id must be provided together",
+        )),
+    }
+}
+
+/// limit パラメータ（未指定は既定 20。gate 側で `MAX_QUERY_LIMIT` に丸められる）。
+fn index_query_limit(params: &IndexQueryParams) -> usize {
+    params.limit.unwrap_or(20)
+}
+
+/// ユーザー向け検索（#404 / ADR 0025 §2.7）。
+///
+/// `scope_kind` + `scope_id` 指定で topic 内検索（基本 UX）、無指定で supported set 横断検索
+/// （別画面）。結果は fail-closed query gate を通った `allow` verdict の entry のみ。
+async fn index_search(
+    State(state): State<UserApiState>,
+    headers: HeaderMap,
+    Query(params): Query<IndexQueryParams>,
+) -> ApiResult<Json<IndexQueryResponse>> {
+    let index_query = require_index_query(&state, &headers).await?;
+    let query = params
+        .q
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "INVALID_INDEX_QUERY",
+                "q is required",
+            )
+        })?;
+    let limit = index_query_limit(&params);
+    let entries = match parse_index_scope_params(&params)? {
+        Some((scope_kind, scope_id)) => index_query
+            .search_scope(scope_kind, scope_id.as_str(), query, limit)
+            .await
+            .map_err(internal_error)?,
+        None => index_query
+            .search_all(query, limit)
+            .await
+            .map_err(internal_error)?,
+    };
+    Ok(Json(entries.into()))
+}
+
+/// discovery（新着列挙。#404）。scope 指定で topic 内、無指定で supported set 横断。
+///
+/// ranking / 関連度スコアリングの具体は ADR 0025 §4 でスコープ外のため、最小 surface として
+/// created_at 降順の新着を返す。critical / 非 allow verdict は fail-closed gate で入らない。
+async fn index_discovery(
+    State(state): State<UserApiState>,
+    headers: HeaderMap,
+    Query(params): Query<IndexQueryParams>,
+) -> ApiResult<Json<IndexQueryResponse>> {
+    let index_query = require_index_query(&state, &headers).await?;
+    let limit = index_query_limit(&params);
+    let scope = parse_index_scope_params(&params)?;
+    let entries = index_query
+        .list_recent(scope.as_ref().map(|(kind, id)| (*kind, id.as_str())), limit)
+        .await
+        .map_err(internal_error)?;
+    Ok(Json(entries.into()))
+}
+
+/// recommendation（#404）。supported set 横断の新着列挙を最小 surface として返す。
+///
+/// ranking アルゴリズムの具体は ADR 0025 §4 でスコープ外。critical verdict が recommendation に
+/// 入らないことは fail-closed gate（真実源 + 最新 verdict 突合）が保証する。
+async fn index_recommendations(
+    State(state): State<UserApiState>,
+    headers: HeaderMap,
+    Query(params): Query<IndexQueryParams>,
+) -> ApiResult<Json<IndexQueryResponse>> {
+    let index_query = require_index_query(&state, &headers).await?;
+    let limit = index_query_limit(&params);
+    let entries = index_query
+        .list_recent(None, limit)
+        .await
+        .map_err(internal_error)?;
+    Ok(Json(entries.into()))
 }
 
 /// channel secret 登録失敗を HTTP 応答へマップする。

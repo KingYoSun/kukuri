@@ -345,7 +345,7 @@ fn risk_signal_from_row(row: &PgRow) -> Result<StoredRiskSignal> {
 }
 
 /// `cn-safety` の snake_case enum を DB 列文字列へ写す。
-fn to_db_enum<T: Serialize>(value: &T) -> Result<String> {
+pub(crate) fn to_db_enum<T: Serialize>(value: &T) -> Result<String> {
     match serde_json::to_value(value).context("failed to encode enum value")? {
         Value::String(s) => Ok(s),
         other => bail!("expected snake_case string enum, got {other}"),
@@ -353,7 +353,7 @@ fn to_db_enum<T: Serialize>(value: &T) -> Result<String> {
 }
 
 /// DB 列文字列を `cn-safety` の snake_case enum へ戻す。
-fn from_db_enum<T: DeserializeOwned>(field: &str, value: &str) -> Result<T> {
+pub(crate) fn from_db_enum<T: DeserializeOwned>(field: &str, value: &str) -> Result<T> {
     serde_json::from_value(Value::String(value.to_string()))
         .with_context(|| format!("invalid stored `{field}` value `{value}`"))
 }

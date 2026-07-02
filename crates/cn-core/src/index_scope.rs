@@ -39,7 +39,7 @@ fn channel_secret_aad(channel_id: &str) -> Vec<u8> {
 
 /// indexing scope の種別。public topic は導出 namespace で open でき、private channel は
 /// 登録 capability（secret）が必要（ADR 0025 §6.2 / §6.3）。
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IndexScopeKind {
     PublicTopic,

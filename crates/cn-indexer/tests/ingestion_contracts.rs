@@ -8,11 +8,14 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use kukuri_cn_core::{IndexScopeKind, MemorySafetyArtifactStore, SafetyScanService};
+use kukuri_cn_core::{
+    IndexScopeKind, MemoryIndexEntryStore, MemorySafetyArtifactStore, SafetyScanService,
+};
 use kukuri_cn_indexer::config::RelayConfig;
 use kukuri_cn_indexer::ingest::IngestPipeline;
 use kukuri_cn_indexer::participant::ScopeReplica;
 use kukuri_cn_indexer::projection::{IndexProjection, MemoryIndexProjection};
+use kukuri_cn_safety::provider::{ScanError, SubjectKind};
 use kukuri_cn_safety::{
     MockSafetyProvider, ModerationEventSigner, RiskSignalTarget, SafetyCategory,
 };
@@ -21,7 +24,10 @@ use kukuri_cn_safety_runtime::id::UuidEventIdGenerator;
 use kukuri_cn_safety_runtime::{
     SafetyOrchestrator, Secp256k1ModerationEventSigner, verify_signed_event,
 };
-use kukuri_core::{KukuriKeys, ReplicaId, TopicId, build_post_envelope};
+use kukuri_core::{
+    KukuriKeys, ObjectVisibility, PayloadRef, ReplicaId, TopicId, build_post_envelope,
+    build_post_envelope_with_payload,
+};
 use kukuri_docs_sync::{DocOp, DocQuery, DocsSync, MemoryDocsSync, stable_key, topic_replica_id};
 
 const TEST_SECRET: &str = "0000000000000000000000000000000000000000000000000000000000000001";
@@ -64,9 +70,35 @@ fn scan_failed_service() -> (Arc<SafetyScanService>, Arc<MemorySafetyArtifactSto
     service_with(MockSafetyProvider::known_csam("mock-known-csam").default_failed())
 }
 
+/// mock provider が unavailable を返す service（provider unavailable の fail-closed テスト用）。
+fn provider_unavailable_service() -> (Arc<SafetyScanService>, Arc<MemorySafetyArtifactStore>) {
+    service_with(
+        MockSafetyProvider::known_csam("mock-known-csam")
+            .default_error(ScanError::Unavailable("mock provider down".to_string())),
+    )
+}
+
 /// known CSAM hash match を返す service（exclude のテスト用）。
 fn known_csam_service(post_id: &str) -> (Arc<SafetyScanService>, Arc<MemorySafetyArtifactStore>) {
     service_with(MockSafetyProvider::known_csam("mock-known-csam").with_known_hash_match(post_id))
+}
+
+/// service + 真実源（`MemoryIndexEntryStore`）+ 投影から二段書き込みの pipeline を組む（#404）。
+///
+/// 真実源は artifact store の verdict record を参照するため、service と同じ store を渡す。
+/// 返り値の store から moderation artifact を、entries から真実源の entry を検証できる。
+fn pipeline_with(
+    docs: &Arc<MemoryDocsSync>,
+    projection: &Arc<MemoryIndexProjection>,
+    (service, store): (Arc<SafetyScanService>, Arc<MemorySafetyArtifactStore>),
+) -> (
+    IngestPipeline,
+    Arc<MemoryIndexEntryStore>,
+    Arc<MemorySafetyArtifactStore>,
+) {
+    let entries = Arc::new(MemoryIndexEntryStore::new(store.clone()));
+    let pipeline = IngestPipeline::new(docs.clone(), service, entries.clone(), projection.clone());
+    (pipeline, entries, store)
 }
 
 /// 本文 text の post envelope を共有 replica に実在させる（app-api の persist と同じ key 形状）。
@@ -107,6 +139,52 @@ async fn persist_post(
     object_id
 }
 
+async fn persist_media_post(
+    docs: &MemoryDocsSync,
+    replica: &ReplicaId,
+    topic: &TopicId,
+    body: &str,
+) -> String {
+    let keys = KukuriKeys::generate();
+    let envelope = build_post_envelope_with_payload(
+        &keys,
+        topic,
+        PayloadRef::InlineText {
+            text: body.to_string(),
+        },
+        Vec::new(),
+        vec!["media-manifest-test".to_string()],
+        None,
+        ObjectVisibility::Public,
+    )
+    .expect("envelope");
+    let object = envelope
+        .to_post_object()
+        .expect("post object")
+        .expect("post object present");
+    let object_id = object.object_id.as_str().to_string();
+    docs.open_replica(replica).await.expect("open");
+    docs.apply_doc_op(
+        replica,
+        DocOp::SetJson {
+            key: stable_key("objects", &format!("{object_id}/state")),
+            value: serde_json::to_value(&object).expect("state json"),
+        },
+    )
+    .await
+    .expect("state op");
+    docs.apply_doc_op(
+        replica,
+        DocOp::SetJson {
+            key: stable_key("objects", &format!("{object_id}/envelope")),
+            value: serde_json::to_value(&envelope).expect("envelope json"),
+        },
+    )
+    .await
+    .expect("envelope op");
+    object_id
+}
+
 #[tokio::test]
 async fn index_only_indexes_shared_replica_entries() -> Result<()> {
     // 共有 replica に実在する entry のみ index する（ghost 注入を作らない）。
@@ -116,7 +194,7 @@ async fn index_only_indexes_shared_replica_entries() -> Result<()> {
     let replica = topic_replica_id("rust");
     let object_id = persist_post(&docs, &replica, &topic, "hello shared replica").await;
 
-    let pipeline = IngestPipeline::new(docs.clone(), allow_service().0, projection.clone());
+    let (pipeline, entries, _) = pipeline_with(&docs, &projection, allow_service());
     let scope = ScopeReplica::from_scope(IndexScopeKind::PublicTopic, "rust");
     let summary = pipeline
         .ingest_scope(scope.kind, &scope.id, &scope.replica_id)
@@ -129,6 +207,8 @@ async fn index_only_indexes_shared_replica_entries() -> Result<()> {
             .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
             .await?
     );
+    // 真実源（index_entries）にも記録される（投影とペア。#404）。
+    assert!(entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
     Ok(())
 }
 
@@ -141,7 +221,7 @@ async fn content_not_in_shared_replica_is_not_indexed() -> Result<()> {
     let replica = topic_replica_id("empty");
     docs.open_replica(&replica).await?;
 
-    let pipeline = IngestPipeline::new(docs.clone(), allow_service().0, projection.clone());
+    let (pipeline, _, _) = pipeline_with(&docs, &projection, allow_service());
     let summary = pipeline
         .ingest_scope(IndexScopeKind::PublicTopic, "empty", &replica)
         .await?;
@@ -158,6 +238,31 @@ async fn content_not_in_shared_replica_is_not_indexed() -> Result<()> {
 }
 
 #[tokio::test]
+async fn scan_before_media_is_not_indexed() -> Result<()> {
+    let docs = Arc::new(MemoryDocsSync::default());
+    let projection = Arc::new(MemoryIndexProjection::new());
+    let topic = TopicId::new("rust");
+    let replica = topic_replica_id("rust");
+    let object_id = persist_media_post(&docs, &replica, &topic, "media caption").await;
+
+    let (pipeline, entries, store) = pipeline_with(&docs, &projection, allow_service());
+    let summary = pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+
+    assert_eq!(summary.indexed, 0);
+    assert_eq!(summary.skipped_non_allow, 1);
+    assert!(
+        !projection
+            .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
+            .await?
+    );
+    assert!(!entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
+    assert!(store.verdict_for(SubjectKind::Post, &object_id).is_none());
+    Ok(())
+}
+
+#[tokio::test]
 async fn index_excludes_unscanned_and_scan_failed() -> Result<()> {
     // scan 失敗（fail-closed）の content は投影に入らない。
     let docs = Arc::new(MemoryDocsSync::default());
@@ -166,7 +271,7 @@ async fn index_excludes_unscanned_and_scan_failed() -> Result<()> {
     let replica = topic_replica_id("rust");
     let object_id = persist_post(&docs, &replica, &topic, "scan will fail").await;
 
-    let pipeline = IngestPipeline::new(docs.clone(), scan_failed_service().0, projection.clone());
+    let (pipeline, entries, _) = pipeline_with(&docs, &projection, scan_failed_service());
     let summary = pipeline
         .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
         .await?;
@@ -179,6 +284,32 @@ async fn index_excludes_unscanned_and_scan_failed() -> Result<()> {
             .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
             .await?
     );
+    assert!(!entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
+    Ok(())
+}
+
+#[tokio::test]
+async fn provider_unavailable_is_never_allowed_and_not_indexed() -> Result<()> {
+    // provider unavailable は allow に倒れず、真実源にも投影にも入らない（issue #404 受け入れ条件）。
+    let docs = Arc::new(MemoryDocsSync::default());
+    let projection = Arc::new(MemoryIndexProjection::new());
+    let topic = TopicId::new("rust");
+    let replica = topic_replica_id("rust");
+    let object_id = persist_post(&docs, &replica, &topic, "provider is down").await;
+
+    let (pipeline, entries, _) = pipeline_with(&docs, &projection, provider_unavailable_service());
+    let summary = pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+
+    assert_eq!(summary.indexed, 0);
+    assert_eq!(summary.skipped_non_allow, 1);
+    assert!(
+        !projection
+            .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
+            .await?
+    );
+    assert!(!entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
     Ok(())
 }
 
@@ -191,11 +322,7 @@ async fn index_excludes_non_allow_verdict_content() -> Result<()> {
     let replica = topic_replica_id("rust");
     let object_id = persist_post(&docs, &replica, &topic, "bad content").await;
 
-    let pipeline = IngestPipeline::new(
-        docs.clone(),
-        known_csam_service(&object_id).0,
-        projection.clone(),
-    );
+    let (pipeline, entries, _) = pipeline_with(&docs, &projection, known_csam_service(&object_id));
     let summary = pipeline
         .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
         .await?;
@@ -207,6 +334,7 @@ async fn index_excludes_non_allow_verdict_content() -> Result<()> {
             .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
             .await?
     );
+    assert!(!entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
     Ok(())
 }
 
@@ -219,7 +347,8 @@ async fn reingest_deindexes_when_verdict_flips_to_non_allow() -> Result<()> {
     let replica = topic_replica_id("rust");
     let object_id = persist_post(&docs, &replica, &topic, "flips later").await;
 
-    IngestPipeline::new(docs.clone(), allow_service().0, projection.clone())
+    let (allow_pipeline, entries, _) = pipeline_with(&docs, &projection, allow_service());
+    allow_pipeline
         .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
         .await?;
     assert!(
@@ -227,10 +356,15 @@ async fn reingest_deindexes_when_verdict_flips_to_non_allow() -> Result<()> {
             .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
             .await?
     );
+    assert!(entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
 
+    // 後続 scan（別 service）で非 allow に変わる。真実源 store は共有し、de-index が両方へ届くこと
+    // を確認する。
+    let (flip_service, _flip_store) = known_csam_service(&object_id);
     IngestPipeline::new(
         docs.clone(),
-        known_csam_service(&object_id).0,
+        flip_service,
+        entries.clone(),
         projection.clone(),
     )
     .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
@@ -240,6 +374,7 @@ async fn reingest_deindexes_when_verdict_flips_to_non_allow() -> Result<()> {
             .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
             .await?
     );
+    assert!(!entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
     Ok(())
 }
 
@@ -274,7 +409,8 @@ async fn deleted_objects_are_deindexed() -> Result<()> {
     let replica = topic_replica_id("rust");
     let object_id = persist_post(&docs, &replica, &topic, "to be deleted").await;
 
-    IngestPipeline::new(docs.clone(), allow_service().0, projection.clone())
+    let (pipeline, entries, _) = pipeline_with(&docs, &projection, allow_service());
+    pipeline
         .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
         .await?;
     assert!(
@@ -303,15 +439,22 @@ async fn deleted_objects_are_deindexed() -> Result<()> {
     )
     .await?;
 
-    let summary = IngestPipeline::new(docs.clone(), allow_service().0, projection.clone())
-        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
-        .await?;
+    // 真実源 store を共有した再 ingest で de-index が両方へ届く。
+    let summary = IngestPipeline::new(
+        docs.clone(),
+        allow_service().0,
+        entries.clone(),
+        projection.clone(),
+    )
+    .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+    .await?;
     assert_eq!(summary.deindexed, 1);
     assert!(
         !projection
             .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
             .await?
     );
+    assert!(!entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
     Ok(())
 }
 
@@ -326,8 +469,9 @@ async fn ingest_known_csam_records_risk_signal_and_does_not_index() -> Result<()
     let replica = topic_replica_id("rust");
     let object_id = persist_post(&docs, &replica, &topic, "bad content").await;
 
-    let (service, store) = known_csam_service(&object_id);
-    let summary = IngestPipeline::new(docs.clone(), service, projection.clone())
+    let (pipeline, entries, store) =
+        pipeline_with(&docs, &projection, known_csam_service(&object_id));
+    let summary = pipeline
         .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
         .await?;
 
@@ -338,6 +482,7 @@ async fn ingest_known_csam_records_risk_signal_and_does_not_index() -> Result<()
             .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
             .await?
     );
+    assert!(!entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
 
     // risk signal が trust/relation reads の入力として永続化される（根拠つき、断定ラベルなし）。
     let signals = store.signals();
@@ -365,8 +510,8 @@ async fn ingest_scan_failure_is_fail_closed_and_records_no_risk_signal() -> Resu
     let replica = topic_replica_id("rust");
     let object_id = persist_post(&docs, &replica, &topic, "scan will fail").await;
 
-    let (service, store) = scan_failed_service();
-    let summary = IngestPipeline::new(docs.clone(), service, projection.clone())
+    let (pipeline, _, store) = pipeline_with(&docs, &projection, scan_failed_service());
+    let summary = pipeline
         .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
         .await?;
 
@@ -390,8 +535,8 @@ async fn ingest_allow_records_no_artifacts() -> Result<()> {
     let replica = topic_replica_id("rust");
     let object_id = persist_post(&docs, &replica, &topic, "clean content").await;
 
-    let (service, store) = allow_service();
-    let summary = IngestPipeline::new(docs.clone(), service, projection.clone())
+    let (pipeline, entries, store) = pipeline_with(&docs, &projection, allow_service());
+    let summary = pipeline
         .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
         .await?;
 
@@ -401,6 +546,8 @@ async fn ingest_allow_records_no_artifacts() -> Result<()> {
             .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
             .await?
     );
+    // allow の verdict state は記録される（artifact とは別。index entry の FK 参照先）。
+    assert!(entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
     assert!(store.events().is_empty());
     assert!(store.signals().is_empty());
     Ok(())

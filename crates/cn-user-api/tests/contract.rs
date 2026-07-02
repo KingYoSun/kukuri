@@ -47,6 +47,7 @@ impl TestServer {
             jwt_config: JwtConfig::new("kukuri-cn-tests", "test-secret", 3600),
             operator_config_path: None,
             channel_secret_key: None,
+            index_query_enabled: false,
         })
         .await?;
         let app = app_router(state);
