@@ -86,6 +86,9 @@ fn primary_category(verdict: &SafetyVerdict) -> Option<SafetyCategory> {
             .iter()
             .map(|label| label.category)
             .find(|category| !category.is_critical_safety()),
+        // provider self-test 一致（#391）。非 critical だが exclude されるため、event / signal の
+        // category は専用の ProviderTest を使う（csam と混同させない）。
+        ReasonCode::ProviderTestMatch => Some(SafetyCategory::ProviderTest),
         ReasonCode::ScanFailed
         | ReasonCode::ProviderUnavailable
         | ReasonCode::Unscanned

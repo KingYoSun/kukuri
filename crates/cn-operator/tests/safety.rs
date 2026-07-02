@@ -80,6 +80,11 @@ fn readiness_complete_static_config_has_unknown_runtime_checks() {
     );
     assert_check(
         &report,
+        "known_csam_provider_resolvable",
+        ReadinessStatus::Pass,
+    );
+    assert_check(
+        &report,
         "known_csam_provider_required",
         ReadinessStatus::Pass,
     );
@@ -194,7 +199,7 @@ fn safety_readiness_cli_fails_on_static_failure() {
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(!output.status.success(), "stdout:\n{stdout}");
     assert!(stdout.contains("static_ok=false"), "stdout:\n{stdout}");
-    assert!(stdout.contains("fail=12"), "stdout:\n{stdout}");
+    assert!(stdout.contains("fail=13"), "stdout:\n{stdout}");
 }
 
 #[test]
@@ -233,6 +238,38 @@ fn readiness_fails_without_known_csam_provider() {
         &report,
         "known_csam_credential_secret_configured",
         ReadinessStatus::Fail,
+    );
+}
+
+#[test]
+fn readiness_fails_for_unresolvable_provider_name() {
+    // runtime が解決できない実装名は readiness の段階で fail（起動時ではなく設定時に検出）。
+    let yaml = config_with_safety(&complete_safety().replace(
+        "provider: project_arachnid_shield",
+        "provider: some-future-provider",
+    ));
+    let resolved = load_and_validate(&yaml).unwrap();
+    let report = evaluate_public_node_readiness(&resolved, "public-node");
+    assert_check(
+        &report,
+        "known_csam_provider_resolvable",
+        ReadinessStatus::Fail,
+    );
+}
+
+#[test]
+fn readiness_accepts_canonical_hyphenated_provider_name() {
+    // 正規名（hyphen 表記）も underscore 表記と同様に解決可能と判定する。
+    let yaml = config_with_safety(&complete_safety().replace(
+        "provider: project_arachnid_shield",
+        "provider: project-arachnid-shield",
+    ));
+    let resolved = load_and_validate(&yaml).unwrap();
+    let report = evaluate_public_node_readiness(&resolved, "public-node");
+    assert_check(
+        &report,
+        "known_csam_provider_resolvable",
+        ReadinessStatus::Pass,
     );
 }
 

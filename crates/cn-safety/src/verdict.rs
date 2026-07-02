@@ -55,6 +55,10 @@ pub enum SafetyCategory {
     Spam,
     Malware,
     Phishing,
+    /// provider の self-test データへの一致（例: Project Arachnid Shield の `test`
+    /// classification。#391）。実 CSAM ではないため critical ではないが、既知リスト一致で
+    /// あることに変わりはなく index には決して入れない（router が常に `Exclude` に写像する）。
+    ProviderTest,
 }
 
 impl SafetyCategory {
@@ -128,6 +132,10 @@ pub enum ReasonCode {
     ProviderUnavailable,
     /// scan 要求がそもそも無い（unscanned。fail-closed の根拠）。
     Unscanned,
+    /// provider の self-test データに一致した（例: Project Arachnid Shield の `test`
+    /// classification。#391）。`csam_confirmed` と明確に区別するための専用 reason。
+    /// 実 CSAM の confirmed ではないが index には入れない（action は `Exclude`）。
+    ProviderTestMatch,
     /// 既知 hash には一致しなかった（**safe の証明ではない**）。
     NoKnownMatch,
     /// 明示的に clean と判定できた（全 capability で問題なし）。

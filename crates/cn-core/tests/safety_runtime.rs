@@ -243,6 +243,64 @@ fn build_orchestrator_rejects_unknown_provider_name() {
 }
 
 #[test]
+fn build_orchestrator_resolves_arachnid_shield_only_with_credentials() {
+    // env は process-global なため、この 1 テスト内で「欠落 → Err」と「設定 → Ok」を順に
+    // 検証する（他テストはこの env を読まない）。
+    let providers = SafetyRuntimeProvidersConfig {
+        known_csam: Some(SafetyRuntimeProviderEntry {
+            provider: "project-arachnid-shield".to_string(),
+            required: true,
+        }),
+        ..Default::default()
+    };
+
+    // credentials 欠落 → Err（起動 fail-closed）。エラーは env 名のみで値を含まない。
+    unsafe {
+        std::env::remove_var("PROJECT_ARACHNID_API_USERNAME");
+        std::env::remove_var("PROJECT_ARACHNID_API_PASSWORD");
+    }
+    let error = build_safety_orchestrator("issuer-node", &providers, None).unwrap_err();
+    let message = format!("{error:#}");
+    assert!(message.contains("project-arachnid-shield"), "{message}");
+    assert!(
+        message.contains("PROJECT_ARACHNID_API_USERNAME"),
+        "{message}"
+    );
+
+    // credentials があれば構築できる。
+    unsafe {
+        std::env::set_var("PROJECT_ARACHNID_API_USERNAME", "operator-user");
+        std::env::set_var("PROJECT_ARACHNID_API_PASSWORD", "operator-pass");
+    }
+    let result = build_safety_orchestrator("issuer-node", &providers, None);
+    unsafe {
+        std::env::remove_var("PROJECT_ARACHNID_API_USERNAME");
+        std::env::remove_var("PROJECT_ARACHNID_API_PASSWORD");
+    }
+    result.expect("orchestrator should build once credentials are configured");
+}
+
+#[test]
+fn build_orchestrator_rejects_arachnid_shield_outside_known_csam_slot() {
+    // Shield は known-match provider。general / unknown_csam slot への指定は fail-closed。
+    let providers = SafetyRuntimeProvidersConfig {
+        known_csam: mock_slot(),
+        general: Some(SafetyRuntimeProviderEntry {
+            provider: "project-arachnid-shield".to_string(),
+            required: false,
+        }),
+        ..Default::default()
+    };
+    let error = build_safety_orchestrator("issuer-node", &providers, None).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("only supports the `known_csam` slot"),
+        "{error}"
+    );
+}
+
+#[test]
 fn build_orchestrator_rejects_empty_provider_set() {
     let providers = SafetyRuntimeProvidersConfig::default();
     let error = build_safety_orchestrator("issuer-node", &providers, None).unwrap_err();
