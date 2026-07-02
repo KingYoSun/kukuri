@@ -5,19 +5,26 @@
 //! - risk signal の保存・取得・対象別一覧。
 //! - visibility 配布境界（local 除外 / subscribed_nodes / public）と expires_at 失効。
 
+use std::sync::Arc;
+
 use anyhow::Result;
 use kukuri_cn_core::{
-    DistributionAudience, TestDatabase, connect_postgres, get_signed_moderation_event,
-    initialize_database, list_distributable_moderation_events, list_distributable_risk_signals,
-    list_risk_signals_for_target, persist_risk_signal, persist_signed_moderation_event,
+    DistributionAudience, PgSafetyArtifactStore, SafetyScanService, TestDatabase, connect_postgres,
+    get_risk_signal, get_signed_moderation_event, initialize_database,
+    list_distributable_moderation_events, list_distributable_risk_signals,
+    list_risk_signals_for_target, list_trust_risk_inputs, persist_risk_signal,
+    persist_signed_moderation_event,
 };
 use kukuri_cn_safety::event::{ModerationEventBody, SignedModerationEvent, issue_signed_event};
-use kukuri_cn_safety::provider::SubjectKind;
+use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
 use kukuri_cn_safety::{
-    AppealStatus, Basis, ModerationAction, ModerationEventSigner, ReasonCode, RiskSignalTarget,
-    SafetyCategory, SafetyLabel, SafetyRiskSignal, Severity, Visibility,
+    AppealStatus, Basis, MockSafetyProvider, ModerationAction, ModerationEventSigner, ReasonCode,
+    RiskSignalTarget, SafetyCategory, SafetyLabel, SafetyRiskSignal, Severity, Visibility,
 };
-use kukuri_cn_safety_runtime::{Secp256k1ModerationEventSigner, verify_signed_event};
+use kukuri_cn_safety_runtime::{
+    SafetyOrchestrator, Secp256k1ModerationEventSigner, SystemScanClock, UuidEventIdGenerator,
+    verify_signed_event,
+};
 
 const DEFAULT_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:15432/cn";
 const TEST_SECRET: &str = "0000000000000000000000000000000000000000000000000000000000000001";
@@ -329,6 +336,121 @@ async fn empty_target_id_is_rejected() -> Result<()> {
                 .await
                 .is_err()
         );
+
+        Ok::<(), anyhow::Error>(())
+    }
+    .await;
+    database.cleanup().await?;
+    result
+}
+
+// --- runtime 結線（#406）: SafetyScanService + Postgres store の integration ---
+
+#[tokio::test]
+async fn scan_and_record_persists_artifacts_via_postgres_store() -> Result<()> {
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!(
+            "skipping cn-core safety integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1"
+        );
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_core_safety_runtime").await?;
+    let pool = connect_postgres(database.database_url.as_str()).await?;
+    let result = async {
+        initialize_database(&pool).await?;
+        let signer = signer();
+        let issuer = signer.issuer_node_id().to_string();
+
+        // 本番構成と同型: SystemScanClock + UuidEventIdGenerator + Postgres store。
+        // provider のみ mock（known hash match を決定論的に発火させる）。
+        let provider =
+            MockSafetyProvider::known_csam("mock-known-csam").with_known_hash_match("post-406");
+        let orchestrator = SafetyOrchestrator::builder(
+            &issuer,
+            Arc::new(SystemScanClock::new()),
+            Arc::new(UuidEventIdGenerator::new()),
+        )
+        .provider(Arc::new(provider))
+        .build()?;
+        let service = SafetyScanService::builder(
+            Arc::new(orchestrator),
+            Arc::new(PgSafetyArtifactStore::new(pool.clone())),
+        )
+        .signer(Arc::new(signer))
+        .build()?;
+
+        let outcome = service
+            .scan_and_record(&ProviderScanRequest::for_subject(
+                SubjectKind::Post,
+                "post-406",
+            ))
+            .await?;
+        assert!(!outcome.report.verdict.is_indexable());
+
+        // signed moderation event が cn_safety schema に入り、ロード後も署名検証が通る。
+        let event = outcome.signed_event.expect("signed moderation event");
+        let stored_event = get_signed_moderation_event(&pool, &event.body.id)
+            .await?
+            .expect("event persisted");
+        assert_eq!(stored_event.event, event);
+        verify_signed_event(&stored_event.event).expect("loaded event verifies");
+
+        // risk signal も採番 id で入り、対象別一覧から読み戻せる。
+        let signal_id = outcome.persisted_signal_id.expect("risk signal id");
+        let stored_signal = get_risk_signal(&pool, &signal_id)
+            .await?
+            .expect("risk signal persisted");
+        assert_eq!(stored_signal.issuer_node_id, issuer);
+        assert_eq!(stored_signal.signal.category, SafetyCategory::Csam);
+        let listed =
+            list_risk_signals_for_target(&pool, RiskSignalTarget::PostId, "post-406").await?;
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].id, signal_id);
+
+        Ok::<(), anyhow::Error>(())
+    }
+    .await;
+    database.cleanup().await?;
+    result
+}
+
+#[tokio::test]
+async fn list_trust_risk_inputs_partitions_absolute_and_relative_from_postgres() -> Result<()> {
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!(
+            "skipping cn-core safety integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1"
+        );
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_core_trust_inputs").await?;
+    let pool = connect_postgres(database.database_url.as_str()).await?;
+    let result = async {
+        initialize_database(&pool).await?;
+        let issuer = signer().issuer_node_id().to_string();
+
+        // 同一 user pubkey に critical（csam）と一般（nsfw）の signal を保存する。
+        let mut csam = risk_signal("pubkey-406", Visibility::Local, None);
+        csam.target = RiskSignalTarget::UserPubkey;
+        let mut nsfw = risk_signal("pubkey-406", Visibility::Local, None);
+        nsfw.target = RiskSignalTarget::UserPubkey;
+        nsfw.category = SafetyCategory::Nsfw;
+        nsfw.severity = Severity::Medium;
+        persist_risk_signal(&pool, &issuer, &csam).await?;
+        persist_risk_signal(&pool, &issuer, &nsfw).await?;
+
+        // trust 入力 read は category で絶対 / 相対成分へ振り分けて返す（ADR 0026 §2.7）。
+        let inputs = list_trust_risk_inputs(
+            &pool,
+            RiskSignalTarget::UserPubkey,
+            "pubkey-406",
+            "2026-07-02T09:00:00Z",
+        )
+        .await?;
+        assert_eq!(inputs.absolute.len(), 1);
+        assert_eq!(inputs.absolute[0].category, SafetyCategory::Csam);
+        assert_eq!(inputs.relative.len(), 1);
+        assert_eq!(inputs.relative[0].category, SafetyCategory::Nsfw);
+        assert_eq!(inputs.absolute[0].issuer_node_id, issuer);
 
         Ok::<(), anyhow::Error>(())
     }

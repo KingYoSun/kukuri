@@ -11,6 +11,23 @@
 
 use anyhow::{Context, Result, bail};
 
+use kukuri_cn_core::{
+    SafetyRuntimeConfig, SafetyRuntimeProviderEntry, SafetyRuntimeProvidersConfig,
+};
+use kukuri_cn_safety_runtime::SAFETY_SIGNING_KEY_ENV;
+
+/// safety provider slot（#406。operator config の `safety.providers.*` と 1:1）の env 名。
+/// 値は provider 実装名（現状 `mock` のみ。#391 / #411 で本番実装名を追加）。
+/// `<SLOT>_REQUIRED`（bool）で required 宣言を併記できる。
+pub const SAFETY_PROVIDER_KNOWN_CSAM_ENV: &str = "COMMUNITY_NODE_SAFETY_PROVIDER_KNOWN_CSAM";
+pub const SAFETY_PROVIDER_GENERAL_ENV: &str = "COMMUNITY_NODE_SAFETY_PROVIDER_GENERAL";
+pub const SAFETY_PROVIDER_UNKNOWN_CSAM_ENV: &str = "COMMUNITY_NODE_SAFETY_PROVIDER_UNKNOWN_CSAM";
+/// signed moderation event を発行するか（operator config の
+/// `safety.events.emit_signed_moderation_events` に対応。既定 true）。
+pub const SAFETY_EMIT_SIGNED_EVENTS_ENV: &str = "COMMUNITY_NODE_SAFETY_EMIT_SIGNED_EVENTS";
+/// signed event 無効時に risk signal issuer として使う node id。
+pub const SAFETY_ISSUER_NODE_ID_ENV: &str = "COMMUNITY_NODE_SAFETY_ISSUER_NODE_ID";
+
 /// relay validation の結果。fail-closed gate の単一判定点。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RelayValidation {
@@ -83,6 +100,8 @@ pub struct IndexerConfig {
     pub channel_secret_key: String,
     /// ArcadeDB index 投影の接続設定。
     pub arcadedb: ArcadeDbConfig,
+    /// safety scan runtime（#406）の構成。provider 未構成なら scan service は構築されない。
+    pub safety: SafetyRuntimeConfig,
 }
 
 impl std::fmt::Debug for IndexerConfig {
@@ -93,6 +112,8 @@ impl std::fmt::Debug for IndexerConfig {
             .field("relay", &self.relay)
             .field("channel_secret_key", &"<redacted>")
             .field("arcadedb", &self.arcadedb)
+            // SafetyRuntimeConfig の Debug は signing_key を秘匿する。
+            .field("safety", &self.safety)
             .finish()
     }
 }
@@ -153,19 +174,134 @@ impl IndexerConfig {
                 .unwrap_or_else(|| "root".to_string()),
             password: std::env::var("COMMUNITY_NODE_ARCADEDB_PASSWORD").unwrap_or_default(),
         };
+        let safety = SafetyRuntimeConfig {
+            providers: SafetyRuntimeProvidersConfig {
+                known_csam: safety_provider_entry(
+                    non_empty_env(SAFETY_PROVIDER_KNOWN_CSAM_ENV),
+                    kukuri_cn_core::parse_bool_env(
+                        &format!("{SAFETY_PROVIDER_KNOWN_CSAM_ENV}_REQUIRED"),
+                        false,
+                    )?,
+                ),
+                general: safety_provider_entry(
+                    non_empty_env(SAFETY_PROVIDER_GENERAL_ENV),
+                    kukuri_cn_core::parse_bool_env(
+                        &format!("{SAFETY_PROVIDER_GENERAL_ENV}_REQUIRED"),
+                        false,
+                    )?,
+                ),
+                unknown_csam: safety_provider_entry(
+                    non_empty_env(SAFETY_PROVIDER_UNKNOWN_CSAM_ENV),
+                    kukuri_cn_core::parse_bool_env(
+                        &format!("{SAFETY_PROVIDER_UNKNOWN_CSAM_ENV}_REQUIRED"),
+                        false,
+                    )?,
+                ),
+            },
+            signing_key: non_empty_env(SAFETY_SIGNING_KEY_ENV),
+            emit_signed_events: kukuri_cn_core::parse_bool_env(
+                SAFETY_EMIT_SIGNED_EVENTS_ENV,
+                true,
+            )?,
+            issuer_node_id: non_empty_env(SAFETY_ISSUER_NODE_ID_ENV),
+        };
         Ok(Self {
             database_url,
             data_dir,
             relay: RelayConfig::new(has_own_relay, external_relay_urls),
             channel_secret_key,
             arcadedb,
+            safety,
         })
     }
+}
+
+/// 空 / 空白のみの env は未設定として扱う。
+fn non_empty_env(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+/// provider slot env の値から entry を組む。空 / 空白は「slot 未構成」。
+fn safety_provider_entry(
+    provider: Option<String>,
+    required: bool,
+) -> Option<SafetyRuntimeProviderEntry> {
+    provider.map(|provider| SafetyRuntimeProviderEntry { provider, required })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Mutex, OnceLock};
+
+    const TEST_SECRET: &str = "0000000000000000000000000000000000000000000000000000000000000001";
+    const SAFETY_PROVIDER_KNOWN_CSAM_REQUIRED_ENV: &str =
+        "COMMUNITY_NODE_SAFETY_PROVIDER_KNOWN_CSAM_REQUIRED";
+    const SAFETY_PROVIDER_GENERAL_REQUIRED_ENV: &str =
+        "COMMUNITY_NODE_SAFETY_PROVIDER_GENERAL_REQUIRED";
+    const SAFETY_PROVIDER_UNKNOWN_CSAM_REQUIRED_ENV: &str =
+        "COMMUNITY_NODE_SAFETY_PROVIDER_UNKNOWN_CSAM_REQUIRED";
+    const INDEXER_ENV_KEYS: &[&str] = &[
+        "COMMUNITY_NODE_DATABASE_URL",
+        "COMMUNITY_NODE_INDEXER_DATA_DIR",
+        "COMMUNITY_NODE_INDEXER_OWN_RELAY",
+        "COMMUNITY_NODE_INDEXER_EXTERNAL_RELAY_URLS",
+        "COMMUNITY_NODE_CHANNEL_SECRET_KEY",
+        "COMMUNITY_NODE_ARCADEDB_URL",
+        "COMMUNITY_NODE_ARCADEDB_DATABASE",
+        "COMMUNITY_NODE_ARCADEDB_USER",
+        "COMMUNITY_NODE_ARCADEDB_PASSWORD",
+        SAFETY_PROVIDER_KNOWN_CSAM_ENV,
+        SAFETY_PROVIDER_KNOWN_CSAM_REQUIRED_ENV,
+        SAFETY_PROVIDER_GENERAL_ENV,
+        SAFETY_PROVIDER_GENERAL_REQUIRED_ENV,
+        SAFETY_PROVIDER_UNKNOWN_CSAM_ENV,
+        SAFETY_PROVIDER_UNKNOWN_CSAM_REQUIRED_ENV,
+        SAFETY_SIGNING_KEY_ENV,
+        SAFETY_EMIT_SIGNED_EVENTS_ENV,
+        SAFETY_ISSUER_NODE_ID_ENV,
+    ];
+
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("env lock")
+    }
+
+    fn with_clean_indexer_env<T>(f: impl FnOnce() -> T) -> T {
+        let _guard = env_lock();
+        let snapshot: Vec<(&'static str, Option<String>)> = INDEXER_ENV_KEYS
+            .iter()
+            .map(|key| (*key, std::env::var(key).ok()))
+            .collect();
+        for key in INDEXER_ENV_KEYS {
+            unsafe { std::env::remove_var(key) };
+        }
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
+
+        for (key, value) in snapshot {
+            match value {
+                Some(value) => unsafe { std::env::set_var(key, value) },
+                None => unsafe { std::env::remove_var(key) },
+            }
+        }
+        match result {
+            Ok(value) => value,
+            Err(panic) => std::panic::resume_unwind(panic),
+        }
+    }
+
+    fn set_minimal_indexer_env() {
+        unsafe {
+            std::env::set_var("COMMUNITY_NODE_DATABASE_URL", "postgres://example");
+            std::env::set_var("COMMUNITY_NODE_CHANNEL_SECRET_KEY", "test-channel-secret");
+        }
+    }
 
     #[test]
     fn startup_fails_without_own_or_external_relay() {
@@ -218,5 +354,71 @@ mod tests {
             ],
         );
         assert_eq!(config.external_relay_urls.len(), 1);
+    }
+
+    #[test]
+    fn unset_safety_provider_env_yields_no_entry() {
+        // slot 未構成（env 未設定）は entry を作らない → provider 全 slot 未構成なら
+        // scan service は構築されない（fail-closed。cn-core 側 contract test で固定）。
+        assert!(safety_provider_entry(None, true).is_none());
+    }
+
+    #[test]
+    fn safety_provider_entry_keeps_name_and_required_flag() {
+        let entry = safety_provider_entry(Some("mock".to_string()), true).unwrap();
+        assert_eq!(entry.provider, "mock");
+        assert!(entry.required);
+    }
+
+    #[test]
+    fn safety_emit_signed_events_defaults_to_true() {
+        // operator config の default（emit_signed_moderation_events = true）と一致する。
+        assert!(SafetyRuntimeConfig::default().emit_signed_events);
+    }
+
+    #[test]
+    fn safety_service_is_absent_without_provider_config() {
+        with_clean_indexer_env(|| {
+            set_minimal_indexer_env();
+
+            let config = IndexerConfig::from_env().unwrap();
+            assert!(config.safety.providers.is_empty());
+
+            let store = Arc::new(kukuri_cn_core::MemorySafetyArtifactStore::new());
+            let service = kukuri_cn_core::build_safety_scan_service(&config.safety, store).unwrap();
+            assert!(service.is_none());
+        });
+    }
+
+    #[test]
+    fn safety_env_parses_provider_slots() {
+        with_clean_indexer_env(|| {
+            set_minimal_indexer_env();
+            unsafe {
+                std::env::set_var(SAFETY_PROVIDER_KNOWN_CSAM_ENV, " mock ");
+                std::env::set_var(SAFETY_PROVIDER_KNOWN_CSAM_REQUIRED_ENV, "true");
+                std::env::set_var(SAFETY_PROVIDER_GENERAL_ENV, "mock");
+                std::env::set_var(SAFETY_PROVIDER_GENERAL_REQUIRED_ENV, "false");
+                std::env::set_var(SAFETY_PROVIDER_UNKNOWN_CSAM_ENV, "mock");
+                std::env::set_var(SAFETY_PROVIDER_UNKNOWN_CSAM_REQUIRED_ENV, "1");
+                std::env::set_var(SAFETY_SIGNING_KEY_ENV, TEST_SECRET);
+                std::env::set_var(SAFETY_EMIT_SIGNED_EVENTS_ENV, "off");
+                std::env::set_var(SAFETY_ISSUER_NODE_ID_ENV, " issuer-node ");
+            }
+
+            let config = IndexerConfig::from_env().unwrap();
+            let known = config.safety.providers.known_csam.as_ref().unwrap();
+            assert_eq!(known.provider, "mock");
+            assert!(known.required);
+            let general = config.safety.providers.general.as_ref().unwrap();
+            assert_eq!(general.provider, "mock");
+            assert!(!general.required);
+            let unknown = config.safety.providers.unknown_csam.as_ref().unwrap();
+            assert_eq!(unknown.provider, "mock");
+            assert!(unknown.required);
+            assert_eq!(config.safety.signing_key.as_deref(), Some(TEST_SECRET));
+            assert!(!config.safety.emit_signed_events);
+            assert_eq!(config.safety.issuer_node_id.as_deref(), Some("issuer-node"));
+        });
     }
 }

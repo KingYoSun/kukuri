@@ -4,8 +4,14 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+# provider 実装名 `mock` を runtime 構築（build_safety_orchestrator）で解決できるようにする。
+# 本番 provider（#391 / #411）実装まで、contract test / 明示 opt-in 構成でのみ使う。
+safety-mock-provider = ["kukuri-cn-safety/mock"]
+
 [dependencies]
 anyhow.workspace = true
+async-trait.workspace = true
 axum.workspace = true
 chacha20poly1305.workspace = true
 chrono.workspace = true
@@ -27,5 +33,8 @@ kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }
 
 [dev-dependencies]
 tempfile.workspace = true
-kukuri-cn-safety = { path = "../cn-safety" }
+kukuri-cn-safety = { path = "../cn-safety", features = ["mock"] }
 kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }
+# 自分自身を feature 付き dev-dependency にすることで、tests/ から mock provider 解決を使える
+# （feature unification によりテストビルド時のみ有効になる。cn-safety と同じ流儀）。
+kukuri-cn-core = { path = ".", features = ["safety-mock-provider"] }

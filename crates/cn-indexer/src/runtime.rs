@@ -1,16 +1,22 @@
-//! cn-indexer 常駐 runtime（#413 / T4）。
+//! cn-indexer 常駐 runtime（#413 / T4、safety runtime 結線 #406）。
 //!
 //! 起動フローの要は **relay validation の起動 gate**（ADR 0025 §6.4）: 自前 relay も外部 relay も
 //! 設定されていなければ indexing を起動しない（fail-closed）。gate を通ったら Postgres の scope
 //! 管理 state を真実源に docs replica sync participant を立ち上げる。
 //!
-//! safety provider（#391 / #411）はまだ実装が無いため、scan orchestrator を構成できない構成では
-//! ingest を起動しない（unscanned を index しない fail-closed と整合。`CommunityIndex` capability が
-//! `Availability::Planned` である現状と一致する）。relay gate 自体はそれとは独立に起動時へ適用する。
+//! safety scan の構築境界は #406 で結線済み: provider が構成されていれば
+//! `SafetyScanService`（scan → risk signal / signed event 永続化）を構築・検証する。
+//! provider 未構成なら scan service を構成せず ingest を起動しない（unscanned を index しない
+//! fail-closed と整合。`CommunityIndex` capability が `Availability::Planned` である現状と一致する）。
+//! relay gate 自体はそれとは独立に起動時へ適用する。
+
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use tracing::info;
 use tracing_subscriber::EnvFilter;
+
+use kukuri_cn_core::PgSafetyArtifactStore;
 
 use crate::config::IndexerConfig;
 
@@ -49,9 +55,25 @@ async fn run(config: IndexerConfig) -> Result<()> {
         "cn-indexer configuration validated"
     );
 
-    // NOTE: safety provider（#391 / #411）が実装され `CommunityIndex` が昇格するまで、実 ingest loop は
-    // 起動しない。ここまでで relay 起動 gate と scope state の準備確認は完了しており、participant /
-    // ingest pipeline（`crate::participant` / `crate::ingest`）は provider 実装後に本 runtime へ結線する。
+    // safety scan runtime の構築境界（#406）。provider が構成されていれば service を構築・検証する
+    // （構成不正 = 未知 provider 名 / emit 有効なのに署名鍵なし、は起動失敗）。未構成なら scan
+    // service を構成せず、ingest は起動されない（fail-closed）。
+    let safety = kukuri_cn_core::build_safety_scan_service(
+        &config.safety,
+        Arc::new(PgSafetyArtifactStore::new(pool.clone())),
+    )?;
+    match safety.as_ref() {
+        Some(service) => info!(
+            issuer_node_id = %service.issuer_node_id(),
+            "safety scan service constructed; ingest loop remains gated on #391 / #404"
+        ),
+        None => info!("safety providers not configured; ingest stays disabled (fail-closed)"),
+    }
+
+    // NOTE: 構築境界（orchestrator / scan service）は #406 で結線済み。実 ingest loop の起動は
+    // 本番 provider（#391 / #411）と fail-closed indexing 本体（#404）が揃い `CommunityIndex` が
+    // 昇格した段階で行う。participant / ingest pipeline（`crate::participant` / `crate::ingest`）は
+    // 上記 `safety` service を注入して起動する。
     Ok(())
 }
 

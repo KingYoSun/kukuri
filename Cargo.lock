@@ -2928,11 +2928,13 @@ name = "kukuri-cn-core"
 version = "0.1.2"
 dependencies = [
  "anyhow",
+ "async-trait",
  "axum",
  "chacha20poly1305",
  "chrono",
  "hex",
  "jsonwebtoken",
+ "kukuri-cn-core",
  "kukuri-cn-safety",
  "kukuri-cn-safety-runtime",
  "kukuri-core",

@@ -1,8 +1,9 @@
 //! ingest pipeline（#413 / T5 / ADR 0025 §2.5 / §6.2）。
 //!
-//! 共有 replica に **実在する** post entry のみを対象に、post 本文 text を `cn-safety-runtime` の
-//! `SafetyOrchestrator` で scan し、verdict が `allow`（`SafetyVerdict::is_indexable()`）の entry のみを
-//! index 投影へ書く。以下を不変条件として守る:
+//! 共有 replica に **実在する** post entry のみを対象に、post 本文 text を `cn-core` の
+//! `SafetyScanService`（#406。内部で `cn-safety-runtime` の `SafetyOrchestrator` を駆動し、
+//! moderation artifact を署名・永続化する）で scan し、verdict が `allow`
+//! （`SafetyVerdict::is_indexable()`）の entry のみを index 投影へ書く。以下を不変条件として守る:
 //!   - ghost 注入を作らない: 対象は共有 replica の entry のみ（CN 直渡しは経路が無い。§6.2）。
 //!   - fail-closed: unscanned / scan_failed / provider_unavailable / 非 allow は投影しない（§2.5）。
 //!   - no permanent blob storage: blob は scan 用の一時 fetch のみで、投影に raw blob を入れない（§2.3）。
@@ -17,9 +18,8 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use tracing::{debug, warn};
 
-use kukuri_cn_core::IndexScopeKind;
+use kukuri_cn_core::{IndexScopeKind, SafetyScanService};
 use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
-use kukuri_cn_safety_runtime::SafetyOrchestrator;
 use kukuri_core::{KukuriEnvelope, ObjectStatus, PayloadRef, ReplicaId};
 use kukuri_docs_sync::{DocFetchPolicy, DocQuery, DocRecord, DocsSync, stable_key};
 
@@ -38,22 +38,26 @@ pub struct IngestSummary {
     pub deindexed: usize,
 }
 
-/// ingest pipeline。docs replica + safety orchestrator + index 投影を束ねる。
+/// ingest pipeline。docs replica + safety scan service + index 投影を束ねる。
+///
+/// safety scan は `SafetyScanService`（#406）経由で行い、scan と同時に moderation artifact
+/// （signed moderation event / risk signal）が署名・永続化される。verdict gate（allow のみ投影）
+/// は従来どおり本 pipeline が担う。
 pub struct IngestPipeline {
     docs_sync: Arc<dyn DocsSync>,
-    orchestrator: Arc<SafetyOrchestrator>,
+    safety: Arc<SafetyScanService>,
     projection: Arc<dyn IndexProjection>,
 }
 
 impl IngestPipeline {
     pub fn new(
         docs_sync: Arc<dyn DocsSync>,
-        orchestrator: Arc<SafetyOrchestrator>,
+        safety: Arc<SafetyScanService>,
         projection: Arc<dyn IndexProjection>,
     ) -> Self {
         Self {
             docs_sync,
-            orchestrator,
+            safety,
             projection,
         }
     }
@@ -155,10 +159,12 @@ impl IngestPipeline {
             .resolve_body_text(replica_id, &object, envelopes)
             .await?;
 
-        // safety scan（fail-closed）。post 本文 text を orchestrator に渡す。
+        // safety scan（fail-closed）。post 本文 text を scan service に渡す。生成された
+        // moderation artifact（risk signal / signed event）は service が署名・永続化する（#406）。
+        // 永続化失敗は `?` で呼び出し側の per-entry fail-closed（投影しない）に乗る。
         let request = ProviderScanRequest::for_subject(SubjectKind::Post, object.object_id.clone())
             .with_text(text.clone());
-        let report = self.orchestrator.scan_subject(&request).await;
+        let report = self.safety.scan_and_record(&request).await?.report;
 
         if !report.verdict.is_indexable() {
             // unscanned / scan_failed / provider_unavailable / 非 allow は投影しない。

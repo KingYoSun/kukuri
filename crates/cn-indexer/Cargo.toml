@@ -28,7 +28,10 @@ tracing-subscriber.workspace = true
 kukuri-core = { path = "../core" }
 kukuri-docs-sync = { path = "../docs-sync" }
 kukuri-transport = { path = "../transport" }
-kukuri-cn-core = { path = "../cn-core" }
+# safety-mock-provider: 本番 provider（#391 / #411）実装まで、runtime 構築（provider 実装名
+# `mock`）と contract test を成立させるため有効化する。mock provider は operator が env で
+# 明示指定しない限り構成されず、未知の provider 名は fail-closed で Err になる。
+kukuri-cn-core = { path = "../cn-core", features = ["safety-mock-provider"] }
 kukuri-cn-safety = { path = "../cn-safety" }
 kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }
 
