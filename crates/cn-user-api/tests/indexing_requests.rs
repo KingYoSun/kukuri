@@ -49,6 +49,7 @@ impl TestServer {
             operator_config_path: None,
             channel_secret_key,
             index_query_enabled: false,
+            trust_read_enabled: false,
         })
         .await?;
         let app = app_router(state);

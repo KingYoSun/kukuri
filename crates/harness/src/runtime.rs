@@ -103,6 +103,7 @@ impl CommunityNodeStack {
             operator_config_path: None,
             channel_secret_key: None,
             index_query_enabled: false,
+            trust_read_enabled: false,
         })
         .await
         .context("failed to build community-node user-api state")?;

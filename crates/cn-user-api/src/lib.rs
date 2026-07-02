@@ -3,10 +3,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use axum::extract::{Query, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use kukuri_cn_core::PgIndexEntryStore;
 use kukuri_cn_core::{
@@ -16,15 +16,24 @@ use kukuri_cn_core::{
     CommunityNodeBootstrapNode, CommunityNodeConsentStatus, CommunityNodeResolvedUrls,
     DatabaseInitMode, IndexScopeKind, JwtConfig, NewCommunityNodeReport, TopicRendezvousHeartbeat,
     TopicRendezvousHeartbeatResponse, TopicRendezvousStore, accept_consents, auth_required_error,
-    connect_postgres, create_auth_challenge, get_consent_status, initialize_database,
-    initialize_database_for_runtime, insert_community_node_report, insert_indexing_request,
-    load_admission_config, load_bootstrap_nodes, load_bootstrap_seed_peers, normalize_http_url,
-    normalize_http_url_list, parse_bool_env, parse_csv_env, refresh_bootstrap_peer_registration,
-    register_channel_secret, require_bearer_identity, require_bearer_pubkey, require_consents,
+    clear_relation_optout, connect_postgres, create_auth_challenge, filter_relation_visible,
+    get_consent_status, get_relation_optout, initialize_database, initialize_database_for_runtime,
+    insert_community_node_report, insert_indexing_request, is_relation_opted_out,
+    list_trust_risk_inputs, load_admission_config, load_bootstrap_nodes, load_bootstrap_seed_peers,
+    normalize_http_url, normalize_http_url_list, normalize_pubkey, parse_bool_env, parse_csv_env,
+    refresh_bootstrap_peer_registration, register_channel_secret, require_bearer_identity,
+    require_bearer_pubkey, require_consents, set_relation_optout,
     verify_auth_envelope_and_issue_token,
 };
-use kukuri_cn_indexer::{ArcadeDbConfig, ArcadeDbProjection, FailClosedIndexQuery, IndexQuery};
+use kukuri_cn_indexer::{
+    ArcadeDbConfig, ArcadeDbProjection, ArcadeDbRelationGraph, FailClosedIndexQuery, IndexQuery,
+};
 use kukuri_cn_operator::{CommunityNodeManifest, build_manifest, load_and_validate};
+use kukuri_cn_safety::RiskSignalTarget;
+use kukuri_cn_trust::{
+    PullAudience, RelationStore, TrustParams, TrustReadView, UniformRelationWeight,
+    build_trust_read, cross_node_trust_disclosure,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
@@ -51,6 +60,21 @@ pub struct UserApiState {
     /// None = 機能無効（`CommunityIndex` が `Availability::Planned` の既定状態）で、
     /// `/v1/index/*` は 404 を返す。
     index_query: Option<Arc<dyn IndexQuery>>,
+    /// trust / relation read surface（#415 / ADR 0026）。
+    /// None = 機能無効（`CommunityLocalTrust` が `Availability::Planned` の既定状態）で、
+    /// `/v1/trust/*` / `/v1/relation/*` は 404 を返す。
+    trust_read: Option<Arc<TrustReadState>>,
+}
+
+/// trust / relation read surface の依存一式（#415）。
+///
+/// trust の入力（risk signal）は Postgres（`UserApiState::pool`）から読み、relation は
+/// graph backend（本番 = ArcadeDB、テスト = in-memory）から読む。
+pub struct TrustReadState {
+    /// trust 合成のパラメータ（operator 可変, ADR 0026 §6.2）。
+    pub params: TrustParams,
+    /// relation graph の読み口（graph-store 抽象境界, §6.1）。
+    pub relation: Arc<dyn RelationStore>,
 }
 
 impl UserApiState {
@@ -59,6 +83,13 @@ impl UserApiState {
     /// 注入する実装は必ず fail-closed gate（`FailClosedIndexQuery`）を通したものにすること。
     pub fn with_index_query(mut self, index_query: Arc<dyn IndexQuery>) -> Self {
         self.index_query = Some(index_query);
+        self
+    }
+
+    /// trust / relation read surface を差し替える（テスト用の in-memory relation 注入、
+    /// または明示的な有効化）。
+    pub fn with_trust_read(mut self, trust_read: Arc<TrustReadState>) -> Self {
+        self.trust_read = Some(trust_read);
         self
     }
 }
@@ -90,6 +121,12 @@ pub struct UserApiConfig {
     /// 既定 false（`CommunityIndex` が `Availability::Planned` の現状と整合。`/v1/index/*` は 404）。
     /// 有効化すると ArcadeDB（`COMMUNITY_NODE_ARCADEDB_*`）へ接続する。
     pub index_query_enabled: bool,
+    /// trust / relation read surface を公開するか（#415）。
+    /// 既定 false（`CommunityLocalTrust` が `Availability::Planned` の現状と整合。
+    /// `/v1/trust/*` / `/v1/relation/*` は 404）。有効化すると relation graph の
+    /// ArcadeDB（`COMMUNITY_NODE_ARCADEDB_*`）へ接続し、trust パラメータを
+    /// `COMMUNITY_NODE_TRUST_*` env から読む。
+    pub trust_read_enabled: bool,
 }
 
 impl std::fmt::Debug for UserApiConfig {
@@ -110,6 +147,7 @@ impl std::fmt::Debug for UserApiConfig {
                 &self.channel_secret_key.as_ref().map(|_| "<redacted>"),
             )
             .field("index_query_enabled", &self.index_query_enabled)
+            .field("trust_read_enabled", &self.trust_read_enabled)
             .finish()
     }
 }
@@ -245,6 +283,7 @@ impl UserApiConfig {
             .ok()
             .filter(|value| !value.trim().is_empty());
         let index_query_enabled = parse_bool_env("COMMUNITY_NODE_INDEX_QUERY_ENABLED", false)?;
+        let trust_read_enabled = parse_bool_env("COMMUNITY_NODE_TRUST_READ_ENABLED", false)?;
         Ok(Self {
             bind_addr,
             database_url,
@@ -257,6 +296,7 @@ impl UserApiConfig {
             operator_config_path,
             channel_secret_key,
             index_query_enabled,
+            trust_read_enabled,
         })
     }
 }
@@ -390,6 +430,19 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
     } else {
         None
     };
+    // trust / relation read surface（#415）。有効時のみ trust パラメータ（operator 可変）を
+    // 検証つきで読み、relation graph（ArcadeDB。`cn-cli relation analyze` が構築する）へ接続する。
+    let trust_read: Option<Arc<TrustReadState>> = if config.trust_read_enabled {
+        let params = TrustParams::from_env().context("invalid COMMUNITY_NODE_TRUST_* params")?;
+        let relation = ArcadeDbRelationGraph::new(ArcadeDbConfig::from_env())
+            .context("failed to build ArcadeDB client for relation graph")?;
+        Some(Arc::new(TrustReadState {
+            params,
+            relation: Arc::new(relation),
+        }))
+    } else {
+        None
+    };
     Ok(UserApiState {
         pool,
         rendezvous_store,
@@ -405,6 +458,7 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
         manifest,
         channel_secret_cipher,
         index_query,
+        trust_read,
     })
 }
 
@@ -442,6 +496,14 @@ pub fn app_router(state: UserApiState) -> Router {
         .route("/v1/index/search", get(index_search))
         .route("/v1/index/discovery", get(index_discovery))
         .route("/v1/index/recommendations", get(index_recommendations))
+        .route("/v1/trust/users/{pubkey}", get(trust_user_read))
+        .route("/v1/trust/pull/{pubkey}", get(trust_pull))
+        .route("/v1/relation/users/{target}", get(relation_user_read))
+        .route("/v1/relation/neighbors", get(relation_neighbors))
+        .route(
+            "/v1/relation/optout",
+            put(relation_optout_set).delete(relation_optout_clear),
+        )
         .with_state(state);
     api.merge(manifest).layer(TraceLayer::new_for_http())
 }
@@ -924,6 +986,257 @@ async fn index_recommendations(
         .await
         .map_err(internal_error)?;
     Ok(Json(entries.into()))
+}
+
+// --- trust / relation read surface（#415 / ADR 0026） ---
+
+/// trust / relation read 共通の前処理: 機能ゲート（未構成なら 404）+ 認証 + consent。
+///
+/// `CommunityLocalTrust` capability が `Availability::Planned` の既定状態では構成されず、
+/// この node は trust / relation read を提供しない。認証は challenge への鍵署名を検証して
+/// 発行された bearer（`BearerIdentity`）であり、**viewer = bearer の pubkey に固定**される
+/// （`viewer_relative_read_requires_authenticated_viewer` / `relation_read_requires_authenticated_viewer`。
+/// 他人を viewer に指定する手段を持たない = なりすまし防止）。
+async fn require_trust_read(
+    state: &UserApiState,
+    headers: &HeaderMap,
+) -> ApiResult<(Arc<TrustReadState>, String)> {
+    let Some(trust_read) = state.trust_read.clone() else {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "TRUST_READ_NOT_CONFIGURED",
+            "this community node does not provide trust / relation reads",
+        ));
+    };
+    let identity = require_bearer_identity(&state.pool, &state.jwt_config, headers).await?;
+    let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
+    Ok((trust_read, identity.pubkey))
+}
+
+fn parse_target_pubkey(raw: &str) -> Result<String, ApiError> {
+    normalize_pubkey(raw).map_err(|error| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "INVALID_TRUST_QUERY",
+            error.to_string(),
+        )
+    })
+}
+
+/// trust read の応答（node-local advisory。断定ラベルなし・根拠つき）。
+#[derive(Debug, Serialize)]
+struct TrustUserReadResponse {
+    /// この read の viewer（bearer identity の pubkey。相対成分の視点）。
+    viewer_pubkey: String,
+    #[serde(flatten)]
+    view: TrustReadView,
+}
+
+/// per-user trust read（ADR 0026 §2.3 / §6.2）。
+///
+/// 絶対成分（viewer 非依存・relation 非依存・減衰なし）+ 相対成分（viewer / cluster 相対・
+/// relation 重み付け・半減期減衰）+ 合成 trust を、寄与 signal の根拠つきで返す。
+/// 相対成分の relation 重みは observer-attributed 観測の producer（非決定論的 moderation,
+/// ADR 0028 系）実装まで一様 1.0（重み付けの seam は scoring 層で固定済み）。
+async fn trust_user_read(
+    State(state): State<UserApiState>,
+    headers: HeaderMap,
+    Path(pubkey): Path<String>,
+) -> ApiResult<Json<TrustUserReadResponse>> {
+    let (trust_read, viewer_pubkey) = require_trust_read(&state, &headers).await?;
+    let target = parse_target_pubkey(pubkey.as_str())?;
+    let now = chrono::Utc::now();
+    let inputs = list_trust_risk_inputs(
+        &state.pool,
+        RiskSignalTarget::UserPubkey,
+        target.as_str(),
+        now.to_rfc3339().as_str(),
+    )
+    .await
+    .map_err(internal_error)?;
+    let view = build_trust_read(
+        target.as_str(),
+        &inputs,
+        now,
+        &trust_read.params,
+        &UniformRelationWeight::default(),
+    );
+    Ok(Json(TrustUserReadResponse {
+        viewer_pubkey,
+        view,
+    }))
+}
+
+/// cross-node pull（ADR 0026 §6.3）。
+///
+/// **confirmed（known-hash / provider-verdict）な絶対成分のみ**を根拠つきで返す。
+/// 相対成分・relation・suspected は visibility に依らず返さない。`visibility` は
+/// アクセス範囲: `Local` は返さず（既定）、`SubscribedNodes` は bearer で subscriber と
+/// 認証できた要求者のみ、`Public` は匿名でも返す。絶対成分は viewer 非依存のため
+/// viewer 証明は要さない（bearer は audience 判定のみに使う）。
+async fn trust_pull(
+    State(state): State<UserApiState>,
+    headers: HeaderMap,
+    Path(pubkey): Path<String>,
+) -> ApiResult<Json<kukuri_cn_trust::CrossNodeTrustDisclosure>> {
+    let Some(_) = state.trust_read.clone() else {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "TRUST_READ_NOT_CONFIGURED",
+            "this community node does not provide trust / relation reads",
+        ));
+    };
+    // bearer が有効な subscriber なら SubscribedNodes、無ければ匿名（Public visibility のみ）。
+    let audience = match require_bearer_identity(&state.pool, &state.jwt_config, &headers).await {
+        Ok(_) => PullAudience::SubscribedNodes,
+        Err(_) => PullAudience::Public,
+    };
+    let target = parse_target_pubkey(pubkey.as_str())?;
+    let now = chrono::Utc::now();
+    let inputs = list_trust_risk_inputs(
+        &state.pool,
+        RiskSignalTarget::UserPubkey,
+        target.as_str(),
+        now.to_rfc3339().as_str(),
+    )
+    .await
+    .map_err(internal_error)?;
+    Ok(Json(cross_node_trust_disclosure(
+        target.as_str(),
+        &inputs,
+        audience,
+        now,
+    )))
+}
+
+/// relation read の応答（pairwise cluster proximity。根拠つき）。
+#[derive(Debug, Serialize)]
+struct RelationReadResponse {
+    viewer_pubkey: String,
+    target_pubkey: String,
+    #[serde(flatten)]
+    proximity: kukuri_cn_trust::Proximity,
+}
+
+/// pairwise relation read（ADR 0026 §2.4）。viewer = bearer identity。
+///
+/// target が opt-out（「見えない」）している場合は edge が無い場合と同じ 404 を返し、
+/// opt-out 状態そのものを漏らさない。relation は情報として返すのみで、index / search /
+/// discovery の結果集合をこの値で削らない（`relation_does_not_auto_suppress_cross_cluster_content`）。
+async fn relation_user_read(
+    State(state): State<UserApiState>,
+    headers: HeaderMap,
+    Path(target): Path<String>,
+) -> ApiResult<Json<RelationReadResponse>> {
+    let (trust_read, viewer_pubkey) = require_trust_read(&state, &headers).await?;
+    let target = parse_target_pubkey(target.as_str())?;
+    let not_found = || {
+        ApiError::new(
+            StatusCode::NOT_FOUND,
+            "RELATION_NOT_FOUND",
+            "no relation observed for this pair",
+        )
+    };
+    // 「見えない」opt-out: 他者から見た relation read に出さない（§6.3。可逆・trust 非影響）。
+    if is_relation_opted_out(&state.pool, target.as_str())
+        .await
+        .map_err(internal_error)?
+    {
+        return Err(not_found());
+    }
+    let proximity = trust_read
+        .relation
+        .pairwise_proximity(viewer_pubkey.as_str(), target.as_str())
+        .await
+        .map_err(internal_error)?
+        .ok_or_else(not_found)?;
+    Ok(Json(RelationReadResponse {
+        viewer_pubkey,
+        target_pubkey: target,
+        proximity,
+    }))
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct RelationNeighborsParams {
+    #[serde(default)]
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Serialize)]
+struct RelationNeighborsResponse {
+    viewer_pubkey: String,
+    neighbors: Vec<String>,
+}
+
+/// discovery / surfacing 用の近接近傍（ADR 0026 §6.1 `neighbors`）。viewer = bearer identity。
+///
+/// opt-out 済み user は結果から除外する（「見えない」= discovery に出ない, §6.3）。
+async fn relation_neighbors(
+    State(state): State<UserApiState>,
+    headers: HeaderMap,
+    Query(params): Query<RelationNeighborsParams>,
+) -> ApiResult<Json<RelationNeighborsResponse>> {
+    let (trust_read, viewer_pubkey) = require_trust_read(&state, &headers).await?;
+    let limit = params.limit.unwrap_or(20).clamp(1, 100);
+    let neighbors = trust_read
+        .relation
+        .neighbors(viewer_pubkey.as_str(), limit)
+        .await
+        .map_err(internal_error)?;
+    let neighbors = filter_relation_visible(&state.pool, neighbors.as_slice())
+        .await
+        .map_err(internal_error)?;
+    Ok(Json(RelationNeighborsResponse {
+        viewer_pubkey,
+        neighbors,
+    }))
+}
+
+#[derive(Debug, Serialize)]
+struct RelationOptoutResponse {
+    pubkey: String,
+    opted_out: bool,
+    /// opt-out した時刻（説明可能性。解除済みなら null）。
+    opted_out_at: Option<String>,
+}
+
+/// 「見えない」opt-out の設定（ADR 0026 §2.6 / §6.3）。
+///
+/// **自分自身のみ**設定できる（bearer identity に固定）。可逆（DELETE で解除）で、
+/// trust には影響しない（troll 判定回避の手段にしない）。social graph canonical の削除でもない。
+async fn relation_optout_set(
+    State(state): State<UserApiState>,
+    headers: HeaderMap,
+) -> ApiResult<Json<RelationOptoutResponse>> {
+    let (_, pubkey) = require_trust_read(&state, &headers).await?;
+    set_relation_optout(&state.pool, pubkey.as_str())
+        .await
+        .map_err(internal_error)?;
+    let opted_out_at = get_relation_optout(&state.pool, pubkey.as_str())
+        .await
+        .map_err(internal_error)?;
+    Ok(Json(RelationOptoutResponse {
+        pubkey,
+        opted_out: true,
+        opted_out_at: opted_out_at.map(|at| at.to_rfc3339()),
+    }))
+}
+
+/// 「見えない」opt-out の解除（可逆性の実装）。
+async fn relation_optout_clear(
+    State(state): State<UserApiState>,
+    headers: HeaderMap,
+) -> ApiResult<Json<RelationOptoutResponse>> {
+    let (_, pubkey) = require_trust_read(&state, &headers).await?;
+    clear_relation_optout(&state.pool, pubkey.as_str())
+        .await
+        .map_err(internal_error)?;
+    Ok(Json(RelationOptoutResponse {
+        pubkey,
+        opted_out: false,
+        opted_out_at: None,
+    }))
 }
 
 /// channel secret 登録失敗を HTTP 応答へマップする。

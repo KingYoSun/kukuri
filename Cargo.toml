@@ -17,6 +17,7 @@ members = [
     "crates/cn-safety",
     "crates/cn-safety-arachnid",
     "crates/cn-safety-runtime",
+    "crates/cn-trust",
     "crates/cn-indexer",
 ]
 exclude = [

@@ -21,79 +21,18 @@
 //! - `None`: 確定寄与（ADR の `rejected` 相当を含む、異議が立っていない状態）。
 
 use anyhow::{Context, Result};
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use chrono::DateTime;
 use sqlx::PgPool;
 
-use kukuri_cn_safety::{
-    AppealStatus, Basis, RiskSignalTarget, SafetyCategory, Severity, Visibility,
+use kukuri_cn_safety::{AppealStatus, RiskSignalTarget};
+// 型（TrustComponentKind / TrustRiskInput / TrustRiskInputs / trust_component_for）は
+// pure domain の cn-trust（#415）へ移した。本 module は永続化 risk signal からの組み立て
+// （供給契約）のみを担い、既存利用箇所のため型を再エクスポートする。
+pub use kukuri_cn_trust::{
+    TrustComponentKind, TrustRiskInput, TrustRiskInputs, trust_component_for,
 };
 
 use crate::safety_events::{StoredRiskSignal, list_risk_signals_for_target};
-
-/// risk signal category の trust 成分振り分け先（ADR 0026 §2.7）。
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TrustComponentKind {
-    /// 絶対成分: critical safety（CSAM / CSE / grooming）。relation で重み付けせず、
-    /// 通報数で動かない（report-bomb 不動）。時間減衰もしない（§6.2、scoring は #415）。
-    Absolute,
-    /// 相対成分: nsfw / spam 等の community / 文化圏依存の指標。relation で重み付けし、
-    /// viewer / cluster 相対で扱う。半減期減衰する（§6.2、scoring は #415）。
-    Relative,
-}
-
-/// category → trust 成分の振り分け（初期規則。operator 可変化は #415）。
-///
-/// critical safety（`SafetyCategory::is_critical_safety()` = Csam / Cse / Grooming）は絶対成分、
-/// それ以外（nsfw / spam / malware / phishing 等）は相対成分（ADR 0026 §2.7）。
-pub fn trust_component_for(category: SafetyCategory) -> TrustComponentKind {
-    if category.is_critical_safety() {
-        TrustComponentKind::Absolute
-    } else {
-        TrustComponentKind::Relative
-    }
-}
-
-/// trust / relation read への入力 1 件（根拠つき advisory）。
-///
-/// 断定ラベルではない。basis / confidence / visibility / expiry / appeal を必ず同伴し、
-/// 消費側（#415）が issuer / 根拠 / 有効期限を説明できる状態を保つ。
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TrustRiskInput {
-    /// 永続化側が採番した risk signal id。
-    pub signal_id: String,
-    /// この signal を発行した issuer node。
-    pub issuer_node_id: String,
-    /// 振り分け先の trust 成分。
-    pub component: TrustComponentKind,
-    pub category: SafetyCategory,
-    pub severity: Severity,
-    pub basis: Basis,
-    pub confidence: Option<u8>,
-    /// cross-node 開示の判定材料（§6.3。開示判定は消費側の責務）。
-    pub visibility: Visibility,
-    /// `Disputed`（= pending）は寄与据え置きのまま含まれる。消費側が状態を説明できるよう同伴する。
-    pub appeal_status: AppealStatus,
-    pub expires_at: Option<String>,
-    pub persisted_at: DateTime<Utc>,
-}
-
-/// 対象 1 つ分の trust 入力（絶対 / 相対に振り分け済み）。
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct TrustRiskInputs {
-    /// 絶対成分への入力（critical safety）。
-    pub absolute: Vec<TrustRiskInput>,
-    /// 相対成分への入力（relation 重み付けの対象）。
-    pub relative: Vec<TrustRiskInput>,
-}
-
-impl TrustRiskInputs {
-    /// 入力が 1 件も無いか。
-    pub fn is_empty(&self) -> bool {
-        self.absolute.is_empty() && self.relative.is_empty()
-    }
-}
 
 /// 永続化済み risk signal 列から trust 入力を組み立てる純関数。
 ///

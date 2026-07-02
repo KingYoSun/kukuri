@@ -2952,6 +2952,7 @@ dependencies = [
  "chrono",
  "clap",
  "kukuri-cn-core",
+ "kukuri-cn-indexer",
  "serde_json",
  "sqlx",
  "tokio",
@@ -2972,6 +2973,7 @@ dependencies = [
  "kukuri-cn-safety",
  "kukuri-cn-safety-arachnid",
  "kukuri-cn-safety-runtime",
+ "kukuri-cn-trust",
  "kukuri-core",
  "redis",
  "secp256k1",
@@ -2998,6 +3000,7 @@ dependencies = [
  "kukuri-cn-core",
  "kukuri-cn-safety",
  "kukuri-cn-safety-runtime",
+ "kukuri-cn-trust",
  "kukuri-core",
  "kukuri-docs-sync",
  "kukuri-transport",
@@ -3086,6 +3089,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "kukuri-cn-trust"
+version = "0.1.2"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "kukuri-cn-safety",
+ "kukuri-cn-trust",
+ "serde",
+ "tokio",
+]
+
+[[package]]
 name = "kukuri-cn-user-api"
 version = "0.1.2"
 dependencies = [
@@ -3097,6 +3113,7 @@ dependencies = [
  "kukuri-cn-indexer",
  "kukuri-cn-operator",
  "kukuri-cn-safety",
+ "kukuri-cn-trust",
  "kukuri-core",
  "redis",
  "reqwest 0.13.4",

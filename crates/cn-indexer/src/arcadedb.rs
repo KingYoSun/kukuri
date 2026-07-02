@@ -26,18 +26,74 @@ const ENTRY_TYPE: &str = "IndexedEntry";
 const ENTRY_COLUMNS: &str = "scope_kind, scope_id, object_id, author_pubkey, text, created_at, \
      source_replica_id";
 
-/// ArcadeDB HTTP client 越しの index 投影。
-pub struct ArcadeDbProjection {
+/// ArcadeDB HTTP command client（`/api/v1/command/<database>`）。
+///
+/// index 投影（本 module）と relation graph（`relation_graph`、ADR 0026 §6.1）が同じ
+/// ArcadeDB インスタンスに相乗りするため、接続と command 発行をここで共有する。
+#[derive(Clone)]
+pub struct ArcadeDbClient {
     client: Client,
     config: ArcadeDbConfig,
 }
 
-impl ArcadeDbProjection {
+impl ArcadeDbClient {
     pub fn new(config: ArcadeDbConfig) -> Result<Self> {
         let client = Client::builder()
             .build()
             .context("failed to build ArcadeDB HTTP client")?;
         Ok(Self { client, config })
+    }
+
+    /// ArcadeDB `/api/v1/command/<database>` を叩く。
+    pub(crate) async fn command(&self, language: &str, command: &str) -> Result<Value> {
+        self.command_with_params(language, command, json!({})).await
+    }
+
+    pub(crate) async fn command_with_params(
+        &self,
+        language: &str,
+        command: &str,
+        params: Value,
+    ) -> Result<Value> {
+        let url = format!(
+            "{}/api/v1/command/{}",
+            self.config.base_url.trim_end_matches('/'),
+            self.config.database
+        );
+        let response = self
+            .client
+            .post(&url)
+            .basic_auth(&self.config.username, Some(&self.config.password))
+            .json(&json!({
+                "language": language,
+                "command": command,
+                "params": params,
+            }))
+            .send()
+            .await
+            .context("failed to send ArcadeDB command")?;
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            bail!("ArcadeDB command failed ({status}): {body}");
+        }
+        response
+            .json::<Value>()
+            .await
+            .context("failed to decode ArcadeDB response")
+    }
+}
+
+/// ArcadeDB HTTP client 越しの index 投影。
+pub struct ArcadeDbProjection {
+    client: ArcadeDbClient,
+}
+
+impl ArcadeDbProjection {
+    pub fn new(config: ArcadeDbConfig) -> Result<Self> {
+        Ok(Self {
+            client: ArcadeDbClient::new(config)?,
+        })
     }
 
     /// index 投影 schema（document type + unique index）を用意する。
@@ -82,9 +138,9 @@ impl ArcadeDbProjection {
         Ok(())
     }
 
-    /// ArcadeDB `/api/v1/command/<database>` を叩く。
+    /// ArcadeDB `/api/v1/command/<database>` を叩く（共有 client へ委譲）。
     async fn command(&self, language: &str, command: &str) -> Result<Value> {
-        self.command_with_params(language, command, json!({})).await
+        self.client.command(language, command).await
     }
 
     async fn command_with_params(
@@ -93,32 +149,9 @@ impl ArcadeDbProjection {
         command: &str,
         params: Value,
     ) -> Result<Value> {
-        let url = format!(
-            "{}/api/v1/command/{}",
-            self.config.base_url.trim_end_matches('/'),
-            self.config.database
-        );
-        let response = self
-            .client
-            .post(&url)
-            .basic_auth(&self.config.username, Some(&self.config.password))
-            .json(&json!({
-                "language": language,
-                "command": command,
-                "params": params,
-            }))
-            .send()
+        self.client
+            .command_with_params(language, command, params)
             .await
-            .context("failed to send ArcadeDB command")?;
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            bail!("ArcadeDB command failed ({status}): {body}");
-        }
-        response
-            .json::<Value>()
-            .await
-            .context("failed to decode ArcadeDB response")
     }
 
     fn scope_kind_str(scope_kind: IndexScopeKind) -> &'static str {

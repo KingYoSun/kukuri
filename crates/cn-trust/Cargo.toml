@@ -1,0 +1,27 @@
+[package]
+name = "kukuri-cn-trust"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "kukuri_cn_trust"
+path = "src/lib.rs"
+
+[features]
+# RelationStore 実装（in-memory / ArcadeDB / 将来の neo4j）へ同一 contract を課す共有テスト
+# スイート。production の既定 API には含めない。
+testing = []
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+serde.workspace = true
+kukuri-cn-safety = { path = "../cn-safety" }
+
+[dev-dependencies]
+# 自分自身を testing feature 付き dev-dependency にすることで、tests/ から共有スイートを使える
+# （feature unification によりテストビルド時のみ有効になる。cn-safety の mock と同じ流儀）。
+kukuri-cn-trust = { path = ".", features = ["testing"] }
+tokio.workspace = true

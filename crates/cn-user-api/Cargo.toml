@@ -24,10 +24,11 @@ url.workspace = true
 kukuri-cn-core = { path = "../cn-core" }
 kukuri-cn-indexer = { path = "../cn-indexer" }
 kukuri-cn-operator = { path = "../cn-operator" }
+kukuri-cn-safety = { path = "../cn-safety" }
+kukuri-cn-trust = { path = "../cn-trust" }
 
 [dev-dependencies]
 kukuri-core = { path = "../core" }
-kukuri-cn-safety = { path = "../cn-safety" }
 hex.workspace = true
 reqwest.workspace = true
 redis.workspace = true

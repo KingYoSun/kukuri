@@ -1,6 +1,7 @@
 mod admission;
 mod auth;
 mod bootstrap;
+mod co_participation;
 mod config;
 mod consents;
 mod database;
@@ -10,6 +11,7 @@ mod index_entries;
 mod index_scope;
 mod models;
 mod normalize;
+mod relation_optouts;
 mod rendezvous;
 mod reports;
 mod rollout;
@@ -33,6 +35,9 @@ pub use auth::{
 pub use bootstrap::{
     load_bootstrap_nodes, load_bootstrap_seed_peers, refresh_bootstrap_peer_registration,
     upsert_bootstrap_node,
+};
+pub use co_participation::{
+    AuthorDominantTopic, CoParticipationPair, CoParticipationSource, PgCoParticipationSource,
 };
 pub use config::{
     AUTH_CHALLENGE_TTL_SECONDS, AUTH_ENVELOPE_KIND, AUTH_EVENT_MAX_SKEW_SECONDS, AuthMode,
@@ -69,6 +74,10 @@ pub use models::{
 pub use normalize::{
     first_tag_value, normalize_http_url, normalize_http_url_list, normalize_pubkey,
     normalize_ws_url, parse_auth_envelope, parse_socket_addr_env, verify_auth_envelope,
+};
+pub use relation_optouts::{
+    clear_relation_optout, filter_relation_visible, get_relation_optout, is_relation_opted_out,
+    set_relation_optout,
 };
 pub use rendezvous::{
     TopicRendezvousCandidate, TopicRendezvousHeartbeat, TopicRendezvousHeartbeatResponse,

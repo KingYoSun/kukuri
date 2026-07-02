@@ -296,6 +296,16 @@ impl MemoryIndexEntryStore {
         }
     }
 
+    /// 現在の entry 一覧のスナップショット（co-participation 集計の in-memory 実装が使う）。
+    pub fn entries_snapshot(&self) -> Vec<NewIndexEntry> {
+        self.entries
+            .lock()
+            .expect("entries mutex poisoned")
+            .values()
+            .cloned()
+            .collect()
+    }
+
     /// entry が真実源に存在するか（テスト用の read ヘルパ）。
     pub fn contains(&self, scope_kind: IndexScopeKind, scope_id: &str, object_id: &str) -> bool {
         self.entries
