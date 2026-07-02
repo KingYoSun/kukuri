@@ -25,7 +25,8 @@ ADR 0027 §7（追補: 写像表・非保持保証・operator-owned credentials�
   no-known-match の写像、401/5xx/timeout/未知 classification の fail-closed、credentials・
   Match Data の非露出、orchestrator 経由の moderation event 非汚染）。
 - **docs**: runbook（operator の credentials / Submitted Data / No Known Match semantics /
-  法的義務 disclaimer / 漏洩時手順 / Authorized Domains）、ADR 0027 §7 追補、`.env.example`。
+  法的義務 disclaimer / 漏洩時手順 / Authorized Domains）、ADR 0027 §7 追補、
+  `.env.community-node.example`。
 
 ## 実 API での確認（2026-07-02）
 
