@@ -1,0 +1,278 @@
+use super::super::*;
+
+pub(crate) async fn apply_relay_backed_community_node_seed_peers(
+    runtime: &DesktopRuntime,
+    base_url: &str,
+    relay_url: &str,
+    seed_peers: Vec<CommunityNodeSeedPeer>,
+) {
+    *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        nodes: vec![CommunityNodeNodeConfig {
+            base_url: base_url.to_string(),
+            auto_approve: false,
+            resolved_urls: Some(
+                CommunityNodeResolvedUrls::new(base_url, vec![relay_url.to_string()], seed_peers)
+                    .expect("resolved urls"),
+            ),
+        }],
+    };
+    timeout(
+        Duration::from_secs(30),
+        runtime.apply_runtime_connectivity_assist(),
+    )
+    .await
+    .expect("apply assist timeout")
+    .expect("apply assist");
+    timeout(
+        Duration::from_secs(15),
+        runtime.apply_effective_seed_peers(),
+    )
+    .await
+    .expect("apply seed peers timeout")
+    .expect("apply seed peers");
+}
+#[derive(Clone)]
+pub(crate) struct MockCommunityNodeState {
+    pub(crate) base_url: String,
+    pub(crate) seed_peers: Arc<Mutex<Vec<CommunityNodeSeedPeer>>>,
+    pub(crate) heartbeat_seed_peers: Arc<Mutex<Option<Vec<CommunityNodeSeedPeer>>>>,
+    pub(crate) heartbeat_hits: Arc<AtomicUsize>,
+    pub(crate) bootstrap_hits: Arc<AtomicUsize>,
+}
+
+#[derive(Clone)]
+pub(crate) struct MockHeartbeatEchoCommunityNodeState {
+    pub(crate) base_url: String,
+    pub(crate) connectivity_urls: Vec<String>,
+    pub(crate) seed_peers: Arc<Mutex<Vec<CommunityNodeSeedPeer>>>,
+    pub(crate) heartbeat_hits: Arc<AtomicUsize>,
+    pub(crate) bootstrap_hits: Arc<AtomicUsize>,
+}
+
+pub(crate) async fn mock_bootstrap_heartbeat(
+    State(state): State<Arc<MockCommunityNodeState>>,
+    Json(_request): Json<serde_json::Value>,
+) -> Json<BootstrapHeartbeatResponse> {
+    state.heartbeat_hits.fetch_add(1, Ordering::SeqCst);
+    if let Some(seed_peers) = state.heartbeat_seed_peers.lock().await.take() {
+        *state.seed_peers.lock().await = seed_peers;
+    }
+    Json(BootstrapHeartbeatResponse {
+        expires_at: Utc::now().timestamp() + 300,
+    })
+}
+
+pub(crate) async fn mock_bootstrap_nodes(
+    State(state): State<Arc<MockCommunityNodeState>>,
+) -> Json<BootstrapNodesResponse> {
+    state.bootstrap_hits.fetch_add(1, Ordering::SeqCst);
+    let seed_peers = state.seed_peers.lock().await.clone();
+    Json(BootstrapNodesResponse {
+        nodes: vec![kukuri_cn_core::CommunityNodeBootstrapNode {
+            base_url: state.base_url.clone(),
+            resolved_urls: CommunityNodeResolvedUrls::new(
+                state.base_url.clone(),
+                Vec::new(),
+                seed_peers,
+            )
+            .expect("resolved urls"),
+        }],
+    })
+}
+
+pub(crate) async fn mock_bootstrap_consent_status() -> Json<CommunityNodeConsentStatus> {
+    Json(managed_community_node_consent_status(true))
+}
+
+pub(crate) async fn mock_heartbeat_echo_bootstrap_heartbeat(
+    State(state): State<Arc<MockHeartbeatEchoCommunityNodeState>>,
+    Json(request): Json<serde_json::Value>,
+) -> Json<BootstrapHeartbeatResponse> {
+    state.heartbeat_hits.fetch_add(1, Ordering::SeqCst);
+    let endpoint_id = request
+        .get("endpoint_id")
+        .and_then(serde_json::Value::as_str)
+        .expect("heartbeat endpoint id")
+        .to_string();
+    let addr_hint = request
+        .get("addr_hint")
+        .and_then(serde_json::Value::as_str)
+        .map(ToOwned::to_owned);
+    *state.seed_peers.lock().await =
+        vec![CommunityNodeSeedPeer::new(endpoint_id, addr_hint).expect("heartbeat seed peer")];
+    Json(BootstrapHeartbeatResponse {
+        expires_at: Utc::now().timestamp() + 300,
+    })
+}
+
+pub(crate) async fn mock_heartbeat_echo_bootstrap_nodes(
+    State(state): State<Arc<MockHeartbeatEchoCommunityNodeState>>,
+) -> Json<BootstrapNodesResponse> {
+    state.bootstrap_hits.fetch_add(1, Ordering::SeqCst);
+    let seed_peers = state.seed_peers.lock().await.clone();
+    Json(BootstrapNodesResponse {
+        nodes: vec![kukuri_cn_core::CommunityNodeBootstrapNode {
+            base_url: state.base_url.clone(),
+            resolved_urls: CommunityNodeResolvedUrls::new(
+                state.base_url.clone(),
+                state.connectivity_urls.clone(),
+                seed_peers,
+            )
+            .expect("resolved urls"),
+        }],
+    })
+}
+
+#[derive(Clone)]
+pub(crate) struct MockManagedCommunityNodeState {
+    pub(crate) base_url: String,
+    pub(crate) seed_peers: Vec<CommunityNodeSeedPeer>,
+    pub(crate) consent_accepted: Arc<AtomicBool>,
+    pub(crate) current_token: Arc<Mutex<String>>,
+    pub(crate) challenge_hits: Arc<AtomicUsize>,
+    pub(crate) verify_hits: Arc<AtomicUsize>,
+    pub(crate) consent_status_hits: Arc<AtomicUsize>,
+    pub(crate) consent_accept_hits: Arc<AtomicUsize>,
+    pub(crate) heartbeat_hits: Arc<AtomicUsize>,
+    pub(crate) bootstrap_hits: Arc<AtomicUsize>,
+    // true の場合、未同意状態を「版が上がった更新（旧版は同意済み）」として返す。
+    // auto_approve でも黙って再受諾せずユーザーへ提示する挙動の検証に使う（#384）。
+    pub(crate) simulate_pending_update: Arc<AtomicBool>,
+}
+
+pub(crate) fn managed_community_node_consent_status(accepted: bool) -> CommunityNodeConsentStatus {
+    managed_community_node_consent_status_with_update(accepted, false)
+}
+
+pub(crate) fn managed_community_node_consent_status_with_update(
+    accepted: bool,
+    pending_update: bool,
+) -> CommunityNodeConsentStatus {
+    // 未同意でも「更新（pending_update=true）」のときは過去版の同意を示す previously_accepted_version
+    // を返し、初回未同意（previously_accepted_version=None）と区別できるようにする。
+    let previously_accepted_version = if accepted || pending_update {
+        Some(1)
+    } else {
+        None
+    };
+    CommunityNodeConsentStatus {
+        all_required_accepted: accepted,
+        items: vec![kukuri_cn_core::CommunityNodeConsentItem {
+            policy_slug: "builder-preview".into(),
+            policy_version: if pending_update { 2 } else { 1 },
+            title: "Builder Preview".into(),
+            body: "Builder preview policy body.".into(),
+            required: true,
+            accepted_at: accepted.then(|| Utc::now().timestamp()),
+            previously_accepted_version,
+        }],
+    }
+}
+
+pub(crate) async fn authorize_managed_community_node_request(
+    headers: &HeaderMap,
+    state: &MockManagedCommunityNodeState,
+) -> std::result::Result<(), StatusCode> {
+    let Some(value) = headers.get(AUTHORIZATION) else {
+        return Err(StatusCode::UNAUTHORIZED);
+    };
+    let Ok(value) = value.to_str() else {
+        return Err(StatusCode::UNAUTHORIZED);
+    };
+    let Some(token) = value.strip_prefix("Bearer ") else {
+        return Err(StatusCode::UNAUTHORIZED);
+    };
+    let current_token = state.current_token.lock().await.clone();
+    if token == current_token {
+        Ok(())
+    } else {
+        Err(StatusCode::UNAUTHORIZED)
+    }
+}
+
+pub(crate) async fn mock_managed_auth_challenge(
+    State(state): State<Arc<MockManagedCommunityNodeState>>,
+    Json(_request): Json<serde_json::Value>,
+) -> Json<kukuri_cn_core::AuthChallengeResponse> {
+    state.challenge_hits.fetch_add(1, Ordering::SeqCst);
+    Json(kukuri_cn_core::AuthChallengeResponse {
+        challenge: format!("challenge-{}", state.challenge_hits.load(Ordering::SeqCst)),
+        expires_at: Utc::now().timestamp() + 300,
+    })
+}
+
+pub(crate) async fn mock_managed_auth_verify(
+    State(state): State<Arc<MockManagedCommunityNodeState>>,
+    Json(_request): Json<serde_json::Value>,
+) -> Json<kukuri_cn_core::AuthVerifyResponse> {
+    let next = state.verify_hits.fetch_add(1, Ordering::SeqCst) + 1;
+    let token = format!("managed-token-{next}");
+    *state.current_token.lock().await = token.clone();
+    Json(kukuri_cn_core::AuthVerifyResponse {
+        access_token: token,
+        token_type: "Bearer".into(),
+        expires_at: Utc::now().timestamp() + 3600,
+        pubkey: "f".repeat(64),
+    })
+}
+
+pub(crate) async fn mock_managed_consent_status(
+    State(state): State<Arc<MockManagedCommunityNodeState>>,
+    headers: HeaderMap,
+) -> std::result::Result<Json<CommunityNodeConsentStatus>, StatusCode> {
+    authorize_managed_community_node_request(&headers, state.as_ref()).await?;
+    state.consent_status_hits.fetch_add(1, Ordering::SeqCst);
+    let accepted = state.consent_accepted.load(Ordering::SeqCst);
+    Ok(Json(managed_community_node_consent_status_with_update(
+        accepted,
+        !accepted && state.simulate_pending_update.load(Ordering::SeqCst),
+    )))
+}
+
+pub(crate) async fn mock_managed_accept_consents(
+    State(state): State<Arc<MockManagedCommunityNodeState>>,
+    headers: HeaderMap,
+    Json(_request): Json<serde_json::Value>,
+) -> std::result::Result<Json<CommunityNodeConsentStatus>, StatusCode> {
+    authorize_managed_community_node_request(&headers, state.as_ref()).await?;
+    state.consent_accept_hits.fetch_add(1, Ordering::SeqCst);
+    state.consent_accepted.store(true, Ordering::SeqCst);
+    Ok(Json(managed_community_node_consent_status(true)))
+}
+
+pub(crate) async fn mock_managed_bootstrap_heartbeat(
+    State(state): State<Arc<MockManagedCommunityNodeState>>,
+    headers: HeaderMap,
+    Json(_request): Json<serde_json::Value>,
+) -> std::result::Result<Json<BootstrapHeartbeatResponse>, StatusCode> {
+    authorize_managed_community_node_request(&headers, state.as_ref()).await?;
+    if !state.consent_accepted.load(Ordering::SeqCst) {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    state.heartbeat_hits.fetch_add(1, Ordering::SeqCst);
+    Ok(Json(BootstrapHeartbeatResponse {
+        expires_at: Utc::now().timestamp() + 300,
+    }))
+}
+
+pub(crate) async fn mock_managed_bootstrap_nodes(
+    State(state): State<Arc<MockManagedCommunityNodeState>>,
+    headers: HeaderMap,
+) -> std::result::Result<Json<BootstrapNodesResponse>, StatusCode> {
+    authorize_managed_community_node_request(&headers, state.as_ref()).await?;
+    if !state.consent_accepted.load(Ordering::SeqCst) {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    state.bootstrap_hits.fetch_add(1, Ordering::SeqCst);
+    Ok(Json(BootstrapNodesResponse {
+        nodes: vec![kukuri_cn_core::CommunityNodeBootstrapNode {
+            base_url: state.base_url.clone(),
+            resolved_urls: CommunityNodeResolvedUrls::new(
+                state.base_url.clone(),
+                Vec::new(),
+                state.seed_peers.clone(),
+            )
+            .expect("resolved urls"),
+        }],
+    }))
+}
