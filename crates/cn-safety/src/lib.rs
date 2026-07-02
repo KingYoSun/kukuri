@@ -44,7 +44,8 @@ pub use event::{
 pub use mock::{MockSafetyProvider, MockSigner};
 pub use policy::{SafetyPolicy, route};
 pub use provider::{
-    ProviderScanRequest, ProviderScanResult, SafetyProvider, ScanError, ScanOutcome, SubjectKind,
+    FetchedMedia, MediaFetcher, ProviderScanRequest, ProviderScanResult, SafetyProvider, ScanError,
+    ScanOutcome, SubjectKind,
 };
 pub use signal::{AppealStatus, RiskSignalTarget, SafetyRiskSignal};
 pub use verdict::{

@@ -150,7 +150,7 @@ public-node profile が public indexing を有効化する前に満たすべき�
 
 ## 4. Out of scope（後続 / 別 ADR・Issue）
 - classifier ベース非決定論的検知の詳細（#411）。
-- 本番 provider 統合の実装詳細（#391）。
+- 本番 provider 統合の実装詳細（#391。→ §7 追補で確定）。
 - fail-closed indexing 本体の DB 実装（#404）。
 - runtime 結線・trust/relation 反映（#406）。
 
@@ -166,3 +166,44 @@ public-node profile が public indexing を有効化する前に満たすべき�
 - 本 ADR を決定論 moderation の **decision record（authoritative）** とする。
 - 旧 `docs/safety/community-node-critical-safety.md`（+ `_ja`）と `docs/architecture/moderation-event-trust-semantics.md` は、normative な内容を本 ADR（trust/relation reflection は ADR 0026）へ集約し、「設計ドキュメントを ADR と誤認する」混乱を避けるため **本 PR で削除**した。
 - 旧ドキュメントを参照していた code doc-comment / README / runbook / 他 ADR は本 ADR（trust/relation は ADR 0026）へ張り替えた。progress 記録・migration など過去時点の記録は歴史的記録として据え置き（デッドリンクは許容）。
+
+## 7. 追補: Project Arachnid Shield provider（#391、2026-07-02）
+
+本節は #391 の実装（`crates/cn-safety-arachnid`）で確定した decision を記録する。
+
+### 7.1 classification → domain の写像
+
+| Shield classification | match_type | ProviderScanResult | router 出力 |
+|---|---|---|---|
+| `csam` | `exact` / 欠落 | `known_hash_match=true`、capability `KnownCsamHashMatch`、label `csam` | `exclude` / `csam_confirmed` / critical |
+| `csam` | `near` | 同上（capability `PerceptualHashMatch`）| 同上 |
+| `harmful-abusive-material` | 任意 | `csam` と同じ（下記 7.2） | 同上 |
+| `test` | 任意 | `known_hash_match=false`、label `provider_test`（非 critical） | `exclude` / `provider_test_match` / 非 critical |
+| `no-known-match` | - | `ScanOutcome::NoKnownMatch` | `allow` / `no_known_match`（safe の証明ではない） |
+| 未知の値（将来拡張） | - | deserialize 失敗 → `ScanError::Protocol` | fail-closed（`hold` / `scan_failed`） |
+
+### 7.2 保守的写像（over-exclusion 側に倒す）
+
+- `harmful-abusive-material` は CSAM の法的定義に該当しない有害・虐待的既知コンテンツだが、
+  Shield 既知リストへの一致であることに変わりはないため、known match（category `csam`）として
+  除外する。専用 category の細分化が必要になったら本 ADR を改訂する。
+- `test`（C3P のテストデータ一致）は index には決して入れないが、実運用の `csam_confirmed`
+  event と混ざらないよう専用 reason（`ReasonCode::ProviderTestMatch`、`SafetyCategory::ProviderTest`、
+  非 critical）で記録する。router 規則3（`cn-safety/src/policy.rs`）で policy 非依存に `exclude`。
+
+### 7.3 Match Data 非保持の構造的保証
+
+- Shield 応答から deserialize するのは `classification` / `match_type` のみ。`near_match_details`・
+  一致先 sha1/sha256・timestamp は応答型に**存在しない**ため、`ProviderScanResult` →
+  verdict → signed moderation event / risk signal / `cn_safety` 永続化のどこにも載り得ない
+  （contract テストで serialize 結果に Match Data が現れないことを固定）。
+- HTTP エラーは status のみでエラー化し、応答 body・credential 値をエラー文字列・log に含めない。
+
+### 7.4 operator-owned credentials
+
+- credentials は env（既定: `PROJECT_ARACHNID_API_USERNAME` / `PROJECT_ARACHNID_API_PASSWORD`。
+  Project Arachnid 管理ページの表記に合わせた命名）から読む。欠落時は runtime 構築が Err になり
+  ingest は起動しない（fail-closed）。
+- provider 実装名は `project-arachnid-shield`（operator-config の underscore 表記は正規化して受理）。
+  known_csam slot 専用で、他 slot への指定は Err。
+- 運用手順は `docs/runbooks/project-arachnid-shield.md`。

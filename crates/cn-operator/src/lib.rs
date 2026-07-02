@@ -90,9 +90,10 @@ safety:
     signing_key_secret_id: kukuri-cn-safety-signing-key
   providers:
     # known_csam は public-node readiness の必須 provider。本番では実際の
-    # known-CSAM provider 名（例: project_arachnid_shield）と secret ID を設定する。
+    # known-CSAM provider 名と secret ID を設定する。`project-arachnid-shield`（#391）は
+    # operator 自身の Project Arachnid Shield credentials を env で与える。
     known_csam:
-      provider: project_arachnid_shield
+      provider: project-arachnid-shield
       required: true
       credential_secret_id: kukuri-cn-safety-known-csam
     # general / unknown_csam は任意。下記は本番値ではない placeholder。

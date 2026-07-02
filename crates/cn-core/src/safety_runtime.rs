@@ -521,21 +521,51 @@ pub fn build_safety_orchestrator(
 
 /// provider 実装名を実装に解決する。
 ///
-/// 現状解決できるのは `mock`（`safety-mock-provider` feature 有効時）のみ。本番 provider
-/// 実装名（#391 Project Arachnid Shield 等）はここに match arm を追加する。未知の名前は
-/// `required` に依らず Err（fail-closed）。
+/// 解決できるのは `mock`（`safety-mock-provider` feature）と `project-arachnid-shield`
+/// （`safety-arachnid-provider` feature、#391）。未知の名前は `required` に依らず Err
+/// （fail-closed）。
 fn resolve_provider(
     slot: &'static str,
     entry: &SafetyRuntimeProviderEntry,
 ) -> Result<Arc<dyn SafetyProvider>> {
-    match entry.provider.trim() {
+    // operator-config の underscore 表記（`project_arachnid_shield`）も受理するため、
+    // hyphen へ正規化してから解決する（cn-operator readiness と同じ規則）。
+    let normalized = entry.provider.trim().replace('_', "-");
+    match normalized.as_str() {
         #[cfg(feature = "safety-mock-provider")]
         "mock" => Ok(mock_provider_for_slot(slot)),
+        #[cfg(feature = "safety-arachnid-provider")]
+        kukuri_cn_safety_arachnid::PROVIDER_NAME => arachnid_shield_provider(slot),
         other => bail!(
             "unknown safety provider `{other}` for slot `{slot}` \
-             (fail-closed; production providers are added in #391 / #411)"
+             (fail-closed; unknown-CSAM classifier providers are added in #411)"
         ),
     }
+}
+
+/// Project Arachnid Shield provider（#391）を組み立てる。
+///
+/// - known_csam slot 専用（Shield は known-match provider であり、general / unknown_csam の
+///   役割は果たさない）。他 slot に指定されたら Err（fail-closed）。
+/// - operator-owned credentials は env（既定: `PROJECT_ARACHNID_API_USERNAME` /
+///   `PROJECT_ARACHNID_API_PASSWORD`）から読む。欠落は Err = 起動失敗（fail-closed）。
+///   エラーには env の名前のみ含まれ、値は含まれない。
+/// - media fetcher は未接続（media scan pipeline 側の issue で注入する）。それまで
+///   media_hint 付き scan は provider が `Unavailable` を返し fail-closed に倒れる。
+#[cfg(feature = "safety-arachnid-provider")]
+fn arachnid_shield_provider(slot: &'static str) -> Result<Arc<dyn SafetyProvider>> {
+    use anyhow::Context;
+
+    if slot != "known_csam" {
+        bail!(
+            "safety provider `{}` only supports the `known_csam` slot (got `{slot}`); \
+             it is a known-match provider and must not be used for general / unknown-CSAM slots",
+            kukuri_cn_safety_arachnid::PROVIDER_NAME
+        );
+    }
+    let provider = kukuri_cn_safety_arachnid::ProjectArachnidShieldProvider::from_env()
+        .context("failed to configure the project-arachnid-shield safety provider")?;
+    Ok(Arc::new(provider))
 }
 
 /// slot に対応する capability を持つ mock provider を作る（test / 構成検証用）。

@@ -10,10 +10,11 @@ pub const PUBLIC_NODE_PROFILE: &str = "public-node";
 /// 通常経路（`evaluate_public_node_readiness`）と safety セクション欠落経路
 /// （`missing_safety_report`）の双方が、必ずこの集合を同じ順序で網羅する。ID で機械処理する
 /// 消費側が経路ごとの差異に依存しないことを保証する（テストで固定）。
-pub const READINESS_CHECK_IDS: [&str; 12] = [
+pub const READINESS_CHECK_IDS: [&str; 13] = [
     "safety_config_present",
     "safety_profile_public_node",
     "known_csam_provider_configured",
+    "known_csam_provider_resolvable",
     "known_csam_provider_required",
     "index_before_scan_disabled",
     "scan_error_fail_closed",
@@ -121,6 +122,7 @@ pub fn evaluate_public_node_readiness(
             ),
             check_profile(safety, profile),
             check_known_provider_configured(safety),
+            check_known_provider_resolvable(safety),
             check_known_provider_required(safety),
             check_index_before_scan(safety),
             check_on_scan_error(safety),
@@ -196,6 +198,38 @@ fn check_known_provider_configured(safety: &SafetyConfig) -> ReadinessCheck {
             provider.provider
         ),
     )
+}
+
+/// runtime（`resolve_provider`、cn-core）が解決できる known_csam provider 実装名。
+///
+/// underscore 表記（`project_arachnid_shield`）は runtime と同様に hyphen へ正規化して
+/// 受理する。ここに無い実装名は runtime 構築が fail-closed で失敗するため、readiness の
+/// 段階で fail にして設定ミスを早期に検出する。
+const RESOLVABLE_KNOWN_CSAM_PROVIDERS: [&str; 2] = ["mock", "project-arachnid-shield"];
+
+fn check_known_provider_resolvable(safety: &SafetyConfig) -> ReadinessCheck {
+    let Some(provider) = known_csam_provider(safety) else {
+        return fail(
+            "known_csam_provider_resolvable",
+            "known CSAM provider is missing".to_string(),
+        );
+    };
+    let normalized = provider.provider.trim().replace('_', "-");
+    if RESOLVABLE_KNOWN_CSAM_PROVIDERS.contains(&normalized.as_str()) {
+        pass(
+            "known_csam_provider_resolvable",
+            format!("provider={normalized} is resolvable by the runtime"),
+        )
+    } else {
+        fail(
+            "known_csam_provider_resolvable",
+            format!(
+                "provider `{}` is not a known implementation (supported: {})",
+                provider.provider,
+                RESOLVABLE_KNOWN_CSAM_PROVIDERS.join(" / ")
+            ),
+        )
+    }
 }
 
 fn check_known_provider_required(safety: &SafetyConfig) -> ReadinessCheck {

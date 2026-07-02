@@ -80,8 +80,12 @@ enum SafetyCommand {
         #[arg(long, default_value = "public-node")]
         profile: String,
     },
-    /// mock provider で scan -> route -> verdict 経路を検査する。
+    /// provider 経路を検査する。provider 名を指定すると実 API への connectivity check、
+    /// 省略すると mock provider で scan -> route -> verdict 経路を検査する。
     TestProvider {
+        /// 実 provider の connectivity check（対応: `project-arachnid-shield`）。
+        /// credentials は env から読み、値は表示しない。
+        provider: Option<String>,
         #[arg(long, default_value = "blob-test")]
         subject_id: String,
         #[arg(long, value_enum, default_value_t = TestProviderScenario::KnownMatch)]
@@ -206,10 +210,100 @@ fn run_safety(action: SafetyCommand) -> Result<ExitCode> {
             }
         }
         SafetyCommand::TestProvider {
+            provider,
             subject_id,
             scenario,
-        } => run_safety_test_provider(subject_id, scenario),
+        } => match provider
+            .as_deref()
+            .map(|name| name.trim().replace('_', "-"))
+        {
+            Some(name) if name == "project-arachnid-shield" => run_safety_test_arachnid_shield(),
+            Some(other) => {
+                eprintln!(
+                    "未対応の provider です: {other}（対応: project-arachnid-shield。\
+                     省略時は mock 経路を検査します）"
+                );
+                Ok(ExitCode::FAILURE)
+            }
+            None => run_safety_test_provider(subject_id, scenario),
+        },
     }
+}
+
+/// Project Arachnid Shield への connectivity check（#391）。
+///
+/// env（既定: `PROJECT_ARACHNID_API_USERNAME` / `PROJECT_ARACHNID_API_PASSWORD`）から
+/// operator-owned credentials を読み、合成 PDQ hash（実画像由来ではない固定値）を
+/// `POST /v1/pdq` に送って認証・接続・応答写像を確認する。credentials の値・Match Data は
+/// 表示しない。
+#[cfg(feature = "safety-arachnid")]
+fn run_safety_test_arachnid_shield() -> Result<ExitCode> {
+    use kukuri_cn_safety_arachnid::{ShieldClient, ShieldError, ShieldProviderConfig};
+
+    // 合成 PDQ hash（Shield API の期待形式 = 32 bytes の base64。実画像から計算したものではない。
+    // 2026-07-02 に実 API で形式を確認済み）。
+    const PROBE_PDQ_HASH: &str = "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=";
+
+    let config = ShieldProviderConfig::from_env()?;
+    println!("provider: project-arachnid-shield");
+    println!("api_base_url: {}", config.api_base_url);
+    println!(
+        "credentials: env {} / {}（値は表示しません）",
+        config.api_username_env, config.api_password_env
+    );
+
+    let client = match ShieldClient::from_config(&config) {
+        Ok(client) => client,
+        Err(error) => {
+            eprintln!("NG: {error}");
+            eprintln!(
+                "credentials が未設定です。operator 自身の Project Arachnid Shield account の credentials を env に設定してください。"
+            );
+            return Ok(ExitCode::FAILURE);
+        }
+    };
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("tokio runtime の作成に失敗しました")?;
+    let result = runtime.block_on(client.scan_pdq(&[PROBE_PDQ_HASH.to_string()]));
+    match result {
+        Ok(scanned) => {
+            println!("connectivity: OK（認証成功・応答を受信）");
+            match scanned.get(PROBE_PDQ_HASH) {
+                Some(scan) => println!("probe_classification: {:?}", scan.classification),
+                None => println!("probe_classification: (応答に probe hash のエントリなし)"),
+            }
+            println!(
+                "注意: `no-known-match` は安全の証明ではありません（scan 時点で既知データに一致しなかったことのみを意味します）。"
+            );
+            Ok(ExitCode::SUCCESS)
+        }
+        Err(error @ ShieldError::Unauthorized { .. }) => {
+            eprintln!("NG: {error}");
+            eprintln!(
+                "credentials が拒否されました。env {} / {} の値（表示しません）を確認してください。",
+                config.api_username_env, config.api_password_env
+            );
+            Ok(ExitCode::FAILURE)
+        }
+        Err(error) => {
+            eprintln!("NG: {error}");
+            eprintln!(
+                "fail-closed: この状態では known-CSAM scan が実行できないため、public indexing は有効化できません。"
+            );
+            Ok(ExitCode::FAILURE)
+        }
+    }
+}
+
+#[cfg(not(feature = "safety-arachnid"))]
+fn run_safety_test_arachnid_shield() -> Result<ExitCode> {
+    eprintln!(
+        "safety test-provider project-arachnid-shield は `cargo run -p kukuri-cn-operator --features safety-arachnid -- safety test-provider project-arachnid-shield` で実行してください"
+    );
+    Ok(ExitCode::FAILURE)
 }
 
 #[cfg(feature = "safety-mock")]

@@ -113,7 +113,24 @@ pub fn route(
         return verdict;
     }
 
-    // 3. 未知 CSAM / CSE 疑い（critical な検知 かつ effective score >= threshold）。
+    // 3. provider self-test データ一致（Project Arachnid Shield の `test` classification 等、
+    //    #391）。実 CSAM の confirmed（規則2）とは専用 reason で区別しつつ、既知リスト一致で
+    //    あるため policy に依らず index には決して入れない（Exclude / critical=false）。
+    if let Some(result) = scan_outcomes.iter().find(|r| {
+        r.outcome == ScanOutcome::Completed
+            && r.labels
+                .iter()
+                .any(|l| l.category == SafetyCategory::ProviderTest)
+    }) {
+        let mut verdict = base(SafetyAction::Exclude, ReasonCode::ProviderTestMatch, false);
+        verdict.provider = Some(result.provider.clone());
+        verdict.provider_capability = Some(result.capability);
+        verdict.confidence = result.score;
+        verdict.labels = non_empty_labels(result, SafetyCategory::ProviderTest);
+        return verdict;
+    }
+
+    // 4. 未知 CSAM / CSE 疑い（critical な検知 かつ effective score >= threshold）。
     if let Some(result) = scan_outcomes
         .iter()
         .filter(|r| r.outcome == ScanOutcome::Completed && is_critical_detection(r))
@@ -135,7 +152,7 @@ pub fn route(
         return verdict;
     }
 
-    // 4. scan failure / provider unavailable → fail-closed（allow にしない）。
+    // 5. scan failure / provider unavailable → fail-closed（allow にしない）。
     if let Some(result) = scan_outcomes.iter().find(|r| r.outcome.is_fail_closed()) {
         let reason = match result.outcome {
             ScanOutcome::Unavailable => ReasonCode::ProviderUnavailable,
@@ -147,7 +164,7 @@ pub fn route(
         return verdict;
     }
 
-    // 5. critical な検知があるが suspected 閾値に達しなかった / score が無いものを
+    // 6. critical な検知があるが suspected 閾値に達しなかった / score が無いものを
     //    Allow に取りこぼさない（fail-closed）。critical safety を safe と断定しない。
     if let Some(result) = scan_outcomes
         .iter()
@@ -168,7 +185,7 @@ pub fn route(
         return verdict;
     }
 
-    // 6. public-node で必須の known CSAM provider 結果が無いなら fail-closed。
+    // 7. public-node で必須の known CSAM provider 結果が無いなら fail-closed。
     //    general moderation が clean / allow を返せても、known CSAM scan 欠落時は index しない。
     if policy.require_known_csam && !has_known_csam_scan_result(scan_outcomes) {
         return base(
@@ -178,7 +195,7 @@ pub fn route(
         );
     }
 
-    // 7. 一般 moderation（critical 以外のラベル）→ critical とは別 route（critical=false）。
+    // 8. 一般 moderation（critical 以外のラベル）→ critical とは別 route（critical=false）。
     if let Some((result, category)) = scan_outcomes
         .iter()
         .find_map(|r| general_category(r).map(|category| (r, category)))
@@ -192,7 +209,7 @@ pub fn route(
         return verdict;
     }
 
-    // 8. 検知なし。既知一致なし（NoKnownMatch）は safe と断定しない。
+    // 9. 検知なし。既知一致なし（NoKnownMatch）は safe と断定しない。
     //    すべて Completed かつラベル無しのときのみ Clean とする。
     let has_no_known_match = scan_outcomes
         .iter()
@@ -289,6 +306,9 @@ fn general_action(policy: &SafetyPolicy, category: SafetyCategory) -> SafetyActi
     match category {
         SafetyCategory::Spam => policy.on_spam,
         SafetyCategory::Malware | SafetyCategory::Phishing => policy.on_malware_phishing,
+        // provider self-test 一致は route() 規則3で先に処理されるが、万一ここへ落ちても
+        // policy に依らず exclude（index に入れない）に倒す（防御の重ね）。
+        SafetyCategory::ProviderTest => SafetyAction::Exclude,
         // nsfw / その他一般。
         _ => policy.on_high_confidence_nsfw,
     }

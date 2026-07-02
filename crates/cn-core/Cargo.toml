@@ -8,6 +8,9 @@ license.workspace = true
 # provider 実装名 `mock` を runtime 構築（build_safety_orchestrator）で解決できるようにする。
 # 本番 provider（#391 / #411）実装まで、contract test / 明示 opt-in 構成でのみ使う。
 safety-mock-provider = ["kukuri-cn-safety/mock"]
+# provider 実装名 `project-arachnid-shield`（#391）を known_csam slot で解決できるようにする。
+# reqwest 依存を持ち込むため optional にし、runtime を持つ crate（cn-indexer 等）が有効化する。
+safety-arachnid-provider = ["dep:kukuri-cn-safety-arachnid"]
 
 [dependencies]
 anyhow.workspace = true
@@ -29,6 +32,7 @@ url.workspace = true
 uuid.workspace = true
 kukuri-core = { path = "../core" }
 kukuri-cn-safety = { path = "../cn-safety" }
+kukuri-cn-safety-arachnid = { path = "../cn-safety-arachnid", optional = true }
 kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }
 
 [dev-dependencies]
@@ -37,4 +41,4 @@ kukuri-cn-safety = { path = "../cn-safety", features = ["mock"] }
 kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }
 # 自分自身を feature 付き dev-dependency にすることで、tests/ から mock provider 解決を使える
 # （feature unification によりテストビルド時のみ有効になる。cn-safety と同じ流儀）。
-kukuri-cn-core = { path = ".", features = ["safety-mock-provider"] }
+kukuri-cn-core = { path = ".", features = ["safety-mock-provider", "safety-arachnid-provider"] }

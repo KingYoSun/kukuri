@@ -14,11 +14,14 @@ path = "src/main.rs"
 
 [features]
 safety-mock = ["kukuri-cn-safety/mock", "dep:tokio"]
+# `safety test-provider project-arachnid-shield`（実 API への connectivity check、#391）。
+safety-arachnid = ["dep:kukuri-cn-safety-arachnid", "dep:tokio"]
 
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
 kukuri-cn-safety = { path = "../cn-safety" }
+kukuri-cn-safety-arachnid = { path = "../cn-safety-arachnid", optional = true }
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true

@@ -140,6 +140,36 @@ pub enum ScanError {
     Protocol(String),
 }
 
+/// scan 用に一時取得した media 本体。
+///
+/// community node は blob 本体を恒久保存しない前提のため、scan のための一時 fetch に限定して
+/// 使い、scan 後は破棄する。`Debug` は bytes を出力しない（media 本体を log に出さない）。
+#[derive(Clone, PartialEq, Eq)]
+pub struct FetchedMedia {
+    pub bytes: Vec<u8>,
+    /// provider へ渡す MIME type（例: `image/jpeg` / `video/mp4`）。
+    pub content_type: String,
+}
+
+impl std::fmt::Debug for FetchedMedia {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FetchedMedia")
+            .field("bytes_len", &self.bytes.len())
+            .field("content_type", &self.content_type)
+            .finish()
+    }
+}
+
+/// `media_hint`（hash / CID 等）から scan 用に media 本体を一時取得する抽象。
+///
+/// 本番実装は blob store / iroh-blobs からの一時 fetch（恒久保存しない）。fetch 失敗は
+/// `ScanError` で返し、呼び出し側が fail-closed に写像する。fetcher が未構成の場合、media を
+/// 要する provider は `ScanError::Unavailable` を返して fail-closed に倒す（#391）。
+#[async_trait]
+pub trait MediaFetcher: Send + Sync {
+    async fn fetch(&self, media_hint: &str) -> Result<FetchedMedia, ScanError>;
+}
+
 /// safety / moderation provider の抽象。
 ///
 /// 実装例: mock provider（本 crate）、#391 Project Arachnid Shield、一般 moderation provider。
