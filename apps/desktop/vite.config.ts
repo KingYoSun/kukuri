@@ -34,7 +34,33 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
-    include: ['src/**/*.{test,spec}.{ts,tsx}', 'scripts/**/*.{test,spec}.mjs'],
-    exclude: ['tests/playwright/**'],
+    // NOTE: include/exclude live on the projects below — `extends: true`
+    // concatenates (not replaces) inherited arrays, so root-level patterns
+    // would leak into every project.
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'unit',
+          include: ['src/**/*.{test,spec}.{ts,tsx}', 'scripts/**/*.{test,spec}.mjs'],
+          exclude: ['tests/playwright/**', 'src/shell/DesktopShellPage.*.test.tsx'],
+          sequence: { groupOrder: 0 },
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'shell-integration',
+          include: ['src/shell/DesktopShellPage.*.test.tsx'],
+          // These suites mount the full App in jsdom and are timing-sensitive.
+          // Before the WP-S1 split they all lived in one file, so they (a) ran
+          // serially and (b) mostly ran after the parallel unit suites had
+          // finished, i.e. on an otherwise idle CPU. Keep both properties:
+          // one file at a time, scheduled after the unit project completes.
+          maxWorkers: 1,
+          sequence: { groupOrder: 1 },
+        },
+      },
+    ],
   },
 });
