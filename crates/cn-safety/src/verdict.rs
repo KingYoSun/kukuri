@@ -32,6 +32,16 @@ impl SafetyAction {
     pub fn allows_indexing(self) -> bool {
         matches!(self, SafetyAction::Allow)
     }
+
+    /// serde（snake_case）と同一の文字列表現。DB 列などの文字列境界に写すときに使う。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SafetyAction::Allow => "allow",
+            SafetyAction::Hold => "hold",
+            SafetyAction::Quarantine => "quarantine",
+            SafetyAction::Exclude => "exclude",
+        }
+    }
 }
 
 /// risk signal / moderation のカテゴリ。

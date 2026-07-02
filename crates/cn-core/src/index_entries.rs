@@ -1,0 +1,399 @@
+//! index された entry の真実源（fail-closed indexing の権威レコード。#404）。
+//!
+//! `cn_index.index_entries` は「この node が index に入れた content」の真実源であり、ArcadeDB の
+//! 全文検索投影はこの集合の derived な写像である。fail-closed 不変条件は DB 制約で保証する:
+//!
+//! - `verdict_id` NOT NULL + FK（`cn_safety.scan_verdicts`）: verdict 無しの index entry を
+//!   作らない。unscanned の content は verdict 行が無いため構造的に index できない。
+//! - `CHECK (verdict_action = 'allow')`: 非 allow（hold / quarantine / exclude）と fail-closed
+//!   経路（scan_failed / provider_unavailable）の entry は書き込めない。
+//! - `CHECK (NOT critical)`: critical verdict は search / discovery / recommendation に入らない。
+//!
+//! query 境界（search / discovery / recommendation）は投影の hit を本テーブル + 最新 verdict
+//! （`verdict_id` join。verdict 行は対象ごとに upsert されるため常に最新値）と突合し、真実源に
+//! 無い / 現在の verdict が非 allow / critical の hit を落とす（fail-closed query gate）。
+
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
+use anyhow::{Result, bail};
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+use sqlx::Row;
+use sqlx::postgres::{PgPool, PgRow};
+
+use crate::index_scope::IndexScopeKind;
+use crate::safety_runtime::MemorySafetyArtifactStore;
+
+/// 真実源に upsert する index entry（`cn-indexer` の投影 entry と同じ内容 + verdict 参照）。
+///
+/// 検索対象 text は持たない（text は ArcadeDB 投影のみに置き、replica の再 ingest + 再 scan で
+/// 再構築する。ADR 0025 §2.1）。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NewIndexEntry {
+    pub scope_kind: IndexScopeKind,
+    pub scope_id: String,
+    pub object_id: String,
+    pub author_pubkey: String,
+    /// content の作成時刻（unix 秒）。
+    pub created_at: i64,
+    pub source_replica_id: String,
+    /// 対応する verdict record id（`cn_safety.scan_verdicts`）。
+    pub verdict_id: String,
+    /// index 時点の verdict action（DB CHECK により `allow` のみ通る）。
+    pub verdict_action: String,
+    /// index 時点の critical フラグ（DB CHECK により false のみ通る）。
+    pub critical: bool,
+}
+
+/// 永続化された index entry。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StoredIndexEntry {
+    pub scope_kind: IndexScopeKind,
+    pub scope_id: String,
+    pub object_id: String,
+    pub author_pubkey: String,
+    pub created_at: i64,
+    pub source_replica_id: String,
+    pub verdict_id: String,
+    pub verdict_action: String,
+    pub critical: bool,
+    pub indexed_at: DateTime<Utc>,
+}
+
+/// index entry を真実源へ upsert する（(scope_kind, scope_id, object_id) で冪等）。
+///
+/// 非 allow / critical / 存在しない verdict_id は DB 制約（CHECK / FK）が拒否する。呼び出し側の
+/// verdict gate（`SafetyVerdict::is_indexable()`）をすり抜けた書き込みもここで止まる（防御の重ね）。
+pub async fn upsert_index_entry(pool: &PgPool, entry: &NewIndexEntry) -> Result<StoredIndexEntry> {
+    if entry.object_id.trim().is_empty() {
+        bail!("index entry object_id must not be empty");
+    }
+    if entry.scope_id.trim().is_empty() {
+        bail!("index entry scope_id must not be empty");
+    }
+    let row = sqlx::query(
+        "INSERT INTO cn_index.index_entries
+            (scope_kind, scope_id, object_id, author_pubkey, created_at, source_replica_id,
+             verdict_id, verdict_action, critical)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT (scope_kind, scope_id, object_id) DO UPDATE
+         SET author_pubkey = EXCLUDED.author_pubkey,
+             created_at = EXCLUDED.created_at,
+             source_replica_id = EXCLUDED.source_replica_id,
+             verdict_id = EXCLUDED.verdict_id,
+             verdict_action = EXCLUDED.verdict_action,
+             critical = EXCLUDED.critical,
+             indexed_at = NOW()
+         RETURNING scope_kind, scope_id, object_id, author_pubkey, created_at, source_replica_id,
+                   verdict_id, verdict_action, critical, indexed_at",
+    )
+    .bind(entry.scope_kind.as_str())
+    .bind(&entry.scope_id)
+    .bind(&entry.object_id)
+    .bind(&entry.author_pubkey)
+    .bind(entry.created_at)
+    .bind(&entry.source_replica_id)
+    .bind(&entry.verdict_id)
+    .bind(&entry.verdict_action)
+    .bind(entry.critical)
+    .fetch_one(pool)
+    .await?;
+    index_entry_from_row(&row)
+}
+
+/// 単一 object を真実源から削除する（tombstone / 非 allow への verdict 変化時の de-index）。
+pub async fn remove_index_entry(
+    pool: &PgPool,
+    scope_kind: IndexScopeKind,
+    scope_id: &str,
+    object_id: &str,
+) -> Result<()> {
+    sqlx::query(
+        "DELETE FROM cn_index.index_entries
+         WHERE scope_kind = $1 AND scope_id = $2 AND object_id = $3",
+    )
+    .bind(scope_kind.as_str())
+    .bind(scope_id)
+    .bind(object_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// scope 全体を真実源から削除する（supported topic 除去 / channel secret 失効時の de-index）。
+pub async fn remove_index_scope(
+    pool: &PgPool,
+    scope_kind: IndexScopeKind,
+    scope_id: &str,
+) -> Result<()> {
+    sqlx::query("DELETE FROM cn_index.index_entries WHERE scope_kind = $1 AND scope_id = $2")
+        .bind(scope_kind.as_str())
+        .bind(scope_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// 単一 object の真実源 entry を取得する。
+pub async fn get_index_entry(
+    pool: &PgPool,
+    scope_kind: IndexScopeKind,
+    scope_id: &str,
+    object_id: &str,
+) -> Result<Option<StoredIndexEntry>> {
+    let row = sqlx::query(
+        "SELECT scope_kind, scope_id, object_id, author_pubkey, created_at, source_replica_id,
+                verdict_id, verdict_action, critical, indexed_at
+         FROM cn_index.index_entries
+         WHERE scope_kind = $1 AND scope_id = $2 AND object_id = $3",
+    )
+    .bind(scope_kind.as_str())
+    .bind(scope_id)
+    .bind(object_id)
+    .fetch_optional(pool)
+    .await?;
+    row.as_ref().map(index_entry_from_row).transpose()
+}
+
+/// fail-closed query gate の突合（#404）。
+///
+/// query 境界が投影（ArcadeDB）から得た hit 候補 `(scope_id, object_id)` のうち、いま surfacing
+/// してよいものだけを返す。条件は AND:
+/// - 真実源 `index_entries` に entry が存在する（投影残留 / ghost を落とす）
+/// - `verdict_id` が指す**最新** verdict（対象ごとに upsert される行）が `allow` かつ非 critical
+///   （scan し直しで verdict が変わり、de-index がまだ追いついていない場合もここで落ちる）
+///
+/// 候補は limit で有界（検索 1 回分）である前提。返り値は入力と同じ `(scope_id, object_id)` の組。
+pub async fn filter_surfaceable_objects(
+    pool: &PgPool,
+    scope_kind: IndexScopeKind,
+    candidates: &[(String, String)],
+) -> Result<Vec<(String, String)>> {
+    if candidates.is_empty() {
+        return Ok(Vec::new());
+    }
+    let scope_ids: Vec<&str> = candidates.iter().map(|(s, _)| s.as_str()).collect();
+    let object_ids: Vec<&str> = candidates.iter().map(|(_, o)| o.as_str()).collect();
+    let rows = sqlx::query(
+        "SELECT e.scope_id, e.object_id
+         FROM UNNEST($2::text[], $3::text[]) AS candidate (scope_id, object_id)
+         JOIN cn_index.index_entries e
+           ON e.scope_kind = $1
+          AND e.scope_id = candidate.scope_id
+          AND e.object_id = candidate.object_id
+         JOIN cn_safety.scan_verdicts v
+           ON v.id = e.verdict_id
+         WHERE v.action = 'allow'
+           AND NOT v.critical",
+    )
+    .bind(scope_kind.as_str())
+    .bind(&scope_ids)
+    .bind(&object_ids)
+    .fetch_all(pool)
+    .await?;
+    rows.iter()
+        .map(|row| {
+            Ok((
+                row.try_get::<String, _>("scope_id")?,
+                row.try_get::<String, _>("object_id")?,
+            ))
+        })
+        .collect()
+}
+
+/// index 真実源への書き込み / 突合の抽象（#404）。
+///
+/// 本番は Postgres（[`PgIndexEntryStore`]、`cn_index.index_entries` の DB 制約が fail-closed を
+/// 保証する）、contract test は in-memory（[`MemoryIndexEntryStore`]、同じ不変条件をコードで模す）。
+/// ingest pipeline は「① 真実源 upsert → ② 投影 upsert」の順で書き、query 境界は投影 hit を
+/// `filter_surfaceable` で突合してから返す。
+#[async_trait]
+pub trait IndexEntryStore: Send + Sync {
+    /// allow entry を真実源へ upsert する（非 allow / critical / verdict 無しは Err）。
+    async fn upsert_entry(&self, entry: &NewIndexEntry) -> Result<()>;
+
+    /// 単一 object を真実源から削除する。
+    async fn remove_entry(
+        &self,
+        scope_kind: IndexScopeKind,
+        scope_id: &str,
+        object_id: &str,
+    ) -> Result<()>;
+
+    /// scope 全体を真実源から削除する。
+    async fn remove_scope(&self, scope_kind: IndexScopeKind, scope_id: &str) -> Result<()>;
+
+    /// 投影 hit 候補 `(scope_id, object_id)` のうち、いま surfacing してよいものだけを返す
+    /// （真実源に存在し、最新 verdict が `allow` かつ非 critical）。
+    async fn filter_surfaceable(
+        &self,
+        scope_kind: IndexScopeKind,
+        candidates: &[(String, String)],
+    ) -> Result<Vec<(String, String)>>;
+}
+
+/// Postgres 実装。`cn_index.index_entries` の persist API に委譲する。
+#[derive(Clone, Debug)]
+pub struct PgIndexEntryStore {
+    pool: PgPool,
+}
+
+impl PgIndexEntryStore {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl IndexEntryStore for PgIndexEntryStore {
+    async fn upsert_entry(&self, entry: &NewIndexEntry) -> Result<()> {
+        upsert_index_entry(&self.pool, entry).await.map(|_| ())
+    }
+
+    async fn remove_entry(
+        &self,
+        scope_kind: IndexScopeKind,
+        scope_id: &str,
+        object_id: &str,
+    ) -> Result<()> {
+        remove_index_entry(&self.pool, scope_kind, scope_id, object_id).await
+    }
+
+    async fn remove_scope(&self, scope_kind: IndexScopeKind, scope_id: &str) -> Result<()> {
+        remove_index_scope(&self.pool, scope_kind, scope_id).await
+    }
+
+    async fn filter_surfaceable(
+        &self,
+        scope_kind: IndexScopeKind,
+        candidates: &[(String, String)],
+    ) -> Result<Vec<(String, String)>> {
+        filter_surfaceable_objects(&self.pool, scope_kind, candidates).await
+    }
+}
+
+/// contract test 用の in-memory 実装。
+///
+/// Postgres の DB 制約（CHECK / FK）と同じ不変条件をコードで模し、verdict の現在値は
+/// [`MemorySafetyArtifactStore`] の verdict record（`verdict_by_id`）を参照する。これにより
+/// 「index 後に verdict が非 allow / critical へ変わった entry は surfacing されない」という
+/// join セマンティクスが in-memory でも成立する。
+/// (scope_kind, scope_id, object_id) → entry の in-memory map。
+type MemoryEntryMap = HashMap<(IndexScopeKind, String, String), NewIndexEntry>;
+
+#[derive(Clone)]
+pub struct MemoryIndexEntryStore {
+    verdicts: Arc<MemorySafetyArtifactStore>,
+    entries: Arc<Mutex<MemoryEntryMap>>,
+}
+
+impl MemoryIndexEntryStore {
+    pub fn new(verdicts: Arc<MemorySafetyArtifactStore>) -> Self {
+        Self {
+            verdicts,
+            entries: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    /// entry が真実源に存在するか（テスト用の read ヘルパ）。
+    pub fn contains(&self, scope_kind: IndexScopeKind, scope_id: &str, object_id: &str) -> bool {
+        self.entries
+            .lock()
+            .expect("entries mutex poisoned")
+            .contains_key(&(scope_kind, scope_id.to_string(), object_id.to_string()))
+    }
+}
+
+#[async_trait]
+impl IndexEntryStore for MemoryIndexEntryStore {
+    async fn upsert_entry(&self, entry: &NewIndexEntry) -> Result<()> {
+        // Postgres の CHECK / FK 制約と同じ不変条件を模す（fail-closed contract の等価性）。
+        if entry.verdict_action != "allow" {
+            bail!(
+                "index entry violates check constraint: verdict_action `{}` is not `allow`",
+                entry.verdict_action
+            );
+        }
+        if entry.critical {
+            bail!("index entry violates check constraint: critical entry is not indexable");
+        }
+        if self
+            .verdicts
+            .verdict_by_id(entry.verdict_id.as_str())
+            .is_none()
+        {
+            bail!(
+                "index entry violates foreign key constraint: verdict `{}` does not exist",
+                entry.verdict_id
+            );
+        }
+        self.entries.lock().expect("entries mutex poisoned").insert(
+            (
+                entry.scope_kind,
+                entry.scope_id.clone(),
+                entry.object_id.clone(),
+            ),
+            entry.clone(),
+        );
+        Ok(())
+    }
+
+    async fn remove_entry(
+        &self,
+        scope_kind: IndexScopeKind,
+        scope_id: &str,
+        object_id: &str,
+    ) -> Result<()> {
+        self.entries
+            .lock()
+            .expect("entries mutex poisoned")
+            .remove(&(scope_kind, scope_id.to_string(), object_id.to_string()));
+        Ok(())
+    }
+
+    async fn remove_scope(&self, scope_kind: IndexScopeKind, scope_id: &str) -> Result<()> {
+        self.entries
+            .lock()
+            .expect("entries mutex poisoned")
+            .retain(|(kind, id, _), _| !(*kind == scope_kind && id == scope_id));
+        Ok(())
+    }
+
+    async fn filter_surfaceable(
+        &self,
+        scope_kind: IndexScopeKind,
+        candidates: &[(String, String)],
+    ) -> Result<Vec<(String, String)>> {
+        let entries = self.entries.lock().expect("entries mutex poisoned");
+        Ok(candidates
+            .iter()
+            .filter(|(scope_id, object_id)| {
+                let Some(entry) = entries.get(&(scope_kind, scope_id.clone(), object_id.clone()))
+                else {
+                    return false;
+                };
+                // Postgres 実装の join（verdict_id → 最新 verdict）と同じセマンティクス。
+                self.verdicts
+                    .verdict_by_id(entry.verdict_id.as_str())
+                    .is_some_and(|verdict| verdict.is_indexable() && !verdict.critical)
+            })
+            .cloned()
+            .collect())
+    }
+}
+
+fn index_entry_from_row(row: &PgRow) -> Result<StoredIndexEntry> {
+    Ok(StoredIndexEntry {
+        scope_kind: IndexScopeKind::parse(&row.try_get::<String, _>("scope_kind")?)?,
+        scope_id: row.try_get("scope_id")?,
+        object_id: row.try_get("object_id")?,
+        author_pubkey: row.try_get("author_pubkey")?,
+        created_at: row.try_get("created_at")?,
+        source_replica_id: row.try_get("source_replica_id")?,
+        verdict_id: row.try_get("verdict_id")?,
+        verdict_action: row.try_get("verdict_action")?,
+        critical: row.try_get("critical")?,
+        indexed_at: row.try_get("indexed_at")?,
+    })
+}

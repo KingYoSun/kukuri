@@ -17,9 +17,14 @@ use kukuri_cn_core::IndexScopeKind;
 
 use crate::config::ArcadeDbConfig;
 use crate::projection::{IndexProjection, IndexedEntry};
+use crate::query::IndexQuery;
 
 /// index 投影 document の ArcadeDB type 名。
 const ENTRY_TYPE: &str = "IndexedEntry";
+
+/// `SELECT` で取り出す投影 entry の列（`IndexedEntry` の serde フィールドと一致させる）。
+const ENTRY_COLUMNS: &str = "scope_kind, scope_id, object_id, author_pubkey, text, created_at, \
+     source_replica_id";
 
 /// ArcadeDB HTTP client 越しの index 投影。
 pub struct ArcadeDbProjection {
@@ -229,6 +234,95 @@ impl IndexProjection for ArcadeDbProjection {
         .await?;
         Ok(())
     }
+}
+
+#[async_trait]
+impl IndexQuery for ArcadeDbProjection {
+    async fn search_scope(
+        &self,
+        scope_kind: IndexScopeKind,
+        scope_id: &str,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<IndexedEntry>> {
+        // Lucene 全文 index（`SEARCH_INDEX`）+ scope 絞り込み。query は Lucene クエリ構文。
+        let command = format!(
+            "SELECT {ENTRY_COLUMNS} FROM {ENTRY_TYPE} \
+             WHERE SEARCH_INDEX('{ENTRY_TYPE}[text]', :query) \
+             AND scope_kind = :scope_kind AND scope_id = :scope_id \
+             ORDER BY created_at DESC LIMIT {limit}"
+        );
+        let value = self
+            .command_with_params(
+                "sql",
+                &command,
+                json!({
+                    "query": query,
+                    "scope_kind": Self::scope_kind_str(scope_kind),
+                    "scope_id": scope_id,
+                }),
+            )
+            .await?;
+        entries_from_result(&value)
+    }
+
+    async fn search_all(&self, query: &str, limit: usize) -> Result<Vec<IndexedEntry>> {
+        let command = format!(
+            "SELECT {ENTRY_COLUMNS} FROM {ENTRY_TYPE} \
+             WHERE SEARCH_INDEX('{ENTRY_TYPE}[text]', :query) \
+             ORDER BY created_at DESC LIMIT {limit}"
+        );
+        let value = self
+            .command_with_params("sql", &command, json!({ "query": query }))
+            .await?;
+        entries_from_result(&value)
+    }
+
+    async fn list_recent(
+        &self,
+        scope: Option<(IndexScopeKind, &str)>,
+        limit: usize,
+    ) -> Result<Vec<IndexedEntry>> {
+        let value = match scope {
+            Some((scope_kind, scope_id)) => {
+                let command = format!(
+                    "SELECT {ENTRY_COLUMNS} FROM {ENTRY_TYPE} \
+                     WHERE scope_kind = :scope_kind AND scope_id = :scope_id \
+                     ORDER BY created_at DESC LIMIT {limit}"
+                );
+                self.command_with_params(
+                    "sql",
+                    &command,
+                    json!({
+                        "scope_kind": Self::scope_kind_str(scope_kind),
+                        "scope_id": scope_id,
+                    }),
+                )
+                .await?
+            }
+            None => {
+                let command = format!(
+                    "SELECT {ENTRY_COLUMNS} FROM {ENTRY_TYPE} \
+                     ORDER BY created_at DESC LIMIT {limit}"
+                );
+                self.command("sql", &command).await?
+            }
+        };
+        entries_from_result(&value)
+    }
+}
+
+/// ArcadeDB の SELECT 応答（`{ "result": [{...}, ...] }`）から投影 entry 群を読む。
+fn entries_from_result(value: &Value) -> Result<Vec<IndexedEntry>> {
+    let Some(rows) = value.get("result").and_then(|result| result.as_array()) else {
+        return Ok(Vec::new());
+    };
+    rows.iter()
+        .map(|row| {
+            serde_json::from_value(row.clone())
+                .context("failed to decode ArcadeDB indexed entry row")
+        })
+        .collect()
 }
 
 /// ArcadeDB の `SELECT count(*) AS total` 応答（`{ "result": [{ "total": N }] }`）から件数を読む。

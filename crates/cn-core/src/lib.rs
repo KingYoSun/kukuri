@@ -6,6 +6,7 @@ mod consents;
 mod database;
 mod env;
 mod errors;
+mod index_entries;
 mod index_scope;
 mod models;
 mod normalize;
@@ -14,6 +15,7 @@ mod reports;
 mod rollout;
 mod safety_events;
 mod safety_runtime;
+mod scan_verdicts;
 #[cfg(test)]
 mod tests;
 mod trust_inputs;
@@ -47,6 +49,11 @@ pub use database::{
 };
 pub use env::{parse_bool_env, parse_csv_env};
 pub use errors::{ApiError, ApiResult, auth_required_error, consent_required_error};
+pub use index_entries::{
+    IndexEntryStore, MemoryIndexEntryStore, NewIndexEntry, PgIndexEntryStore, StoredIndexEntry,
+    filter_surfaceable_objects, get_index_entry, remove_index_entry, remove_index_scope,
+    upsert_index_entry,
+};
 pub use index_scope::{
     ChannelSecret, ChannelSecretCipher, ChannelSecretConflict, IndexScopeKind, IndexingRequest,
     IndexingRequestStatus, SupportedTopic, add_supported_topic, approve_indexing_request,
@@ -83,6 +90,7 @@ pub use safety_runtime::{
     SafetyRuntimeProviderEntry, SafetyRuntimeProvidersConfig, SafetyScanOutcome, SafetyScanService,
     SafetyScanServiceBuilder, build_safety_orchestrator, build_safety_scan_service,
 };
+pub use scan_verdicts::{StoredScanVerdict, get_scan_verdict, upsert_scan_verdict};
 pub use trust_inputs::{
     TrustComponentKind, TrustRiskInput, TrustRiskInputs, list_trust_risk_inputs,
     trust_component_for, trust_risk_inputs_from,

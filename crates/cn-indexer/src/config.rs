@@ -140,6 +140,30 @@ impl std::fmt::Debug for ArcadeDbConfig {
     }
 }
 
+impl ArcadeDbConfig {
+    /// 環境変数（`COMMUNITY_NODE_ARCADEDB_*`）から接続設定を読む。
+    ///
+    /// cn-indexer（投影の書き込み）と cn-user-api（query 境界の読み出し、#404）が同じ env を
+    /// 共有する。
+    pub fn from_env() -> Self {
+        Self {
+            base_url: std::env::var("COMMUNITY_NODE_ARCADEDB_URL")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| "http://127.0.0.1:2480".to_string()),
+            database: std::env::var("COMMUNITY_NODE_ARCADEDB_DATABASE")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| "kukuri_index".to_string()),
+            username: std::env::var("COMMUNITY_NODE_ARCADEDB_USER")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| "root".to_string()),
+            password: std::env::var("COMMUNITY_NODE_ARCADEDB_PASSWORD").unwrap_or_default(),
+        }
+    }
+}
+
 impl IndexerConfig {
     /// 環境変数から設定を読む。
     ///
@@ -159,21 +183,7 @@ impl IndexerConfig {
             kukuri_cn_core::parse_csv_env("COMMUNITY_NODE_INDEXER_EXTERNAL_RELAY_URLS");
         let channel_secret_key = std::env::var("COMMUNITY_NODE_CHANNEL_SECRET_KEY")
             .context("COMMUNITY_NODE_CHANNEL_SECRET_KEY is required")?;
-        let arcadedb = ArcadeDbConfig {
-            base_url: std::env::var("COMMUNITY_NODE_ARCADEDB_URL")
-                .ok()
-                .filter(|value| !value.trim().is_empty())
-                .unwrap_or_else(|| "http://127.0.0.1:2480".to_string()),
-            database: std::env::var("COMMUNITY_NODE_ARCADEDB_DATABASE")
-                .ok()
-                .filter(|value| !value.trim().is_empty())
-                .unwrap_or_else(|| "kukuri_index".to_string()),
-            username: std::env::var("COMMUNITY_NODE_ARCADEDB_USER")
-                .ok()
-                .filter(|value| !value.trim().is_empty())
-                .unwrap_or_else(|| "root".to_string()),
-            password: std::env::var("COMMUNITY_NODE_ARCADEDB_PASSWORD").unwrap_or_default(),
-        };
+        let arcadedb = ArcadeDbConfig::from_env();
         let safety = SafetyRuntimeConfig {
             providers: SafetyRuntimeProvidersConfig {
                 known_csam: safety_provider_entry(

@@ -16,7 +16,8 @@ use sqlx::postgres::PgPool;
 use tracing::{info, warn};
 
 use kukuri_cn_core::{
-    ChannelSecretCipher, IndexScopeKind, list_channel_secrets, list_supported_topics,
+    ChannelSecretCipher, IndexEntryStore, IndexScopeKind, list_channel_secrets,
+    list_supported_topics,
 };
 use kukuri_core::ReplicaId;
 use kukuri_docs_sync::{DocsSync, private_channel_replica_id, topic_replica_id};
@@ -54,6 +55,7 @@ impl ScopeReplica {
 pub struct IndexerParticipant {
     pool: PgPool,
     docs_sync: Arc<dyn DocsSync>,
+    entries: Arc<dyn IndexEntryStore>,
     projection: Arc<dyn IndexProjection>,
     pipeline: IngestPipeline,
     channel_secret_cipher: ChannelSecretCipher,
@@ -63,6 +65,7 @@ impl IndexerParticipant {
     pub fn new(
         pool: PgPool,
         docs_sync: Arc<dyn DocsSync>,
+        entries: Arc<dyn IndexEntryStore>,
         projection: Arc<dyn IndexProjection>,
         pipeline: IngestPipeline,
         channel_secret_cipher: ChannelSecretCipher,
@@ -70,6 +73,7 @@ impl IndexerParticipant {
         Self {
             pool,
             docs_sync,
+            entries,
             projection,
             pipeline,
             channel_secret_cipher,
@@ -160,7 +164,7 @@ impl IndexerParticipant {
     /// supported topic 除外時の sync 停止 + de-index（E2 / E5）。
     ///
     /// public topic の replica はここでは docs から secret を外せない（導出 secret のため）が、
-    /// 投影を de-index することで検索面から消える。private channel は capability も外す。
+    /// 真実源と投影を de-index することで検索面から消える。private channel は capability も外す。
     pub async fn stop_and_deindex_scope(&self, kind: IndexScopeKind, id: &str) -> Result<()> {
         let scope = ScopeReplica::from_scope(kind, id);
         if kind == IndexScopeKind::PrivateChannel {
@@ -169,6 +173,8 @@ impl IndexerParticipant {
                 .remove_private_replica_secret(&scope.replica_id)
                 .await?;
         }
+        // 真実源 → 投影の順で消す（投影削除が失敗しても query 境界の突合が即座に効く）。
+        self.entries.remove_scope(kind, id).await?;
         self.projection.remove_scope(kind, id).await?;
         info!(
             kind = kind.as_str(),
