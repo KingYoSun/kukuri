@@ -36,5 +36,11 @@ export default defineConfig({
     setupFiles: './src/test/setup.ts',
     include: ['src/**/*.{test,spec}.{ts,tsx}', 'scripts/**/*.{test,spec}.mjs'],
     exclude: ['tests/playwright/**'],
+    // Many suites mount the full App in jsdom. Splitting DesktopShellPage into
+    // per-theme files multiplied the worker count; on high-core machines the
+    // default (one worker per core) oversubscribes CPU and starves these
+    // render-heavy suites into scheduling-timing flakes. Cap concurrency so the
+    // execution model stays close to the pre-split single-file behavior.
+    maxWorkers: 6,
   },
 });
