@@ -7,6 +7,7 @@ use kukuri_cn_trust::{
     PullAudience, TrustComponentKind, TrustRiskInput, TrustRiskInputs, cross_node_trust_disclosure,
 };
 
+#[allow(clippy::unwrap_used)] // test fixture helper
 fn now() -> DateTime<Utc> {
     DateTime::parse_from_rfc3339("2026-07-02T09:00:00Z")
         .unwrap()

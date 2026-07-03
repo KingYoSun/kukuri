@@ -19,3 +19,7 @@ kukuri-transport = { path = "../transport" }
 
 [dev-dependencies]
 tempfile.workspace = true
+
+
+[lints]
+workspace = true

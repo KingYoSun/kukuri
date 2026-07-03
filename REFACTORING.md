@@ -120,12 +120,22 @@ PR 作成前または `main` merge 前は、可能なら `cargo xtask check` + `
 
 ## 大型ファイルポリシー
 
-`cargo xtask oversized-files` は大型の手書きファイルを報告する。
+`cargo xtask oversized-files` は大型(1000行以上)の手書きファイルを報告し、
+`xtask/oversized-baseline.json` との比較で **ratchet 方式の CI ゲート**として動作する。
+
+ゲートの判定:
+
+- baseline に無い 1000 行以上の新規ファイル → **fail**。
+- baseline 記載ファイルが記録行数を超えて成長 → **fail**。
+- 行数不変・減少 → pass(減少時は baseline 更新推奨の note を表示)。
+- baseline の更新は `cargo xtask oversized-files --update-baseline` で再生成し、
+  正当化を PR 本文に書いた上でコミットする(レビューを通すことが ratchet の意図)。
+- ファイルを分割して 1000 行未満にした場合も `--update-baseline` で baseline から除去する。
 
 ルール:
 
-- 明示的な正当化なしに、1000行を超える新規手書きファイルを追加しない。
-- 既存の大型ファイルを編集する場合は、差分を最小に保つ。
+- 明示的な正当化(= baseline 更新コミット)なしに、1000行以上の新規手書きファイルを追加しない。
+- 既存の大型ファイルを編集する場合は、差分を最小に保つ(行数を増やす変更は baseline 更新が必要になる)。
 - 大型ファイルの中で大きなロジック変更を行う場合は、先に分割計画を提案する。
 - 1500行を超えるファイルで、かつ複数責務に触る場合は、後続の分割計画を作成する。
 - formatting-only change と semantic change を混ぜない。
