@@ -3165,6 +3165,7 @@ dependencies = [
  "kukuri-blob-service",
  "kukuri-cn-core",
  "kukuri-cn-iroh-relay",
+ "kukuri-cn-operator",
  "kukuri-core",
  "kukuri-docs-sync",
  "kukuri-store",
