@@ -1,0 +1,21 @@
+{
+  "room_id": "room-1",
+  "host_pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+  "title": "score battle",
+  "description": "first to 10",
+  "status": "Running",
+  "phase_label": "round 2",
+  "scores": [
+    {
+      "participant_id": "participant-1",
+      "label": "alice",
+      "score": 7
+    }
+  ],
+  "room_kind": "score_game",
+  "metaverse": null,
+  "manifest_blob_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "updated_at": 1700000400,
+  "channel_id": null,
+  "audience_label": "Public"
+}

@@ -23,6 +23,7 @@ function node(
       mutual: false,
       friend_of_friend: false,
       object_kind: 'post',
+      is_threadable: true,
       content: objectId,
       content_status: 'Available',
       attachments: [],

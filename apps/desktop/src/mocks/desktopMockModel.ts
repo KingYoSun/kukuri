@@ -14,17 +14,24 @@ import {
   type RecentReactionView,
   type SyncStatus,
   type TimelineScope,
-  type TimelineView,
 } from '@/lib/api';
+
+// seed 入力は wire 契約(PostView / GameRoomView)より緩い専用型で受け、
+// 既定値は with*Defaults がバックエンドのルールをミラーして補完する。
+export type SeedPostInput = Omit<PostView, 'is_threadable'> & { is_threadable?: boolean };
+export type SeedGameRoomInput = Omit<GameRoomView, 'room_kind' | 'manifest_blob_hash'> & {
+  room_kind?: GameRoomView['room_kind'];
+  manifest_blob_hash?: string;
+};
 
 export type DesktopMockApiOptions = {
   globalLastError?: string | null;
   topicLastError?: string | null;
   assistPeerIds?: string[];
-  seedPosts?: Record<string, TimelineView['items']>;
-  authorProfileTimelines?: Record<string, TimelineView['items']>;
+  seedPosts?: Record<string, SeedPostInput[]>;
+  authorProfileTimelines?: Record<string, SeedPostInput[]>;
   seedLiveSessions?: Record<string, LiveSessionView[]>;
-  seedGameRooms?: Record<string, GameRoomView[]>;
+  seedGameRooms?: Record<string, SeedGameRoomInput[]>;
   notifications?: NotificationView[];
   myProfile?: Partial<Profile>;
   authorSocialViews?: Record<string, Partial<AuthorSocialView>>;
@@ -139,7 +146,7 @@ export function parseMockChannelAccessTokenPreview(
   };
 }
 
-export function withSocialPostDefaults(post: PostView): PostView {
+export function withSocialPostDefaults(post: SeedPostInput): PostView {
   return {
     ...post,
     author_name: post.author_name ?? null,
@@ -166,6 +173,8 @@ export function withSocialPostDefaults(post: PostView): PostView {
       : null,
     repost_of: post.repost_of ?? null,
     repost_commentary: post.repost_commentary ?? null,
+    // Rust 側のルール(timeline_runtime_support.rs)をミラー:
+    // repost かつ commentary 無しのときだけ thread を開けない。
     is_threadable:
       post.is_threadable ?? (post.object_kind !== 'repost' || Boolean(post.repost_commentary)),
     channel_id: post.channel_id ?? null,
@@ -201,7 +210,7 @@ export function withLiveSessionDefaults(session: LiveSessionView): LiveSessionVi
   };
 }
 
-export function withGameRoomDefaults(room: GameRoomView): GameRoomView {
+export function withGameRoomDefaults(room: SeedGameRoomInput): GameRoomView {
   return {
     ...room,
     channel_id: room.channel_id ?? null,

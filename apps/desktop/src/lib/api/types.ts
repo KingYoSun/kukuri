@@ -82,7 +82,7 @@ export type PostView = {
   origin_topic_id?: string | null;
   repost_of?: RepostSourceView | null;
   repost_commentary?: string | null;
-  is_threadable?: boolean;
+  is_threadable: boolean;
   channel_id?: string | null;
   audience_label: string;
   reaction_summary?: ReactionSummaryView[];
@@ -660,9 +660,9 @@ export type GameRoomView = {
   status: GameRoomStatus;
   phase_label?: string | null;
   scores: GameScoreView[];
-  room_kind?: GameRoomKind;
+  room_kind: GameRoomKind;
   metaverse?: MetaverseRoomStateV1 | null;
-  manifest_blob_hash?: string | null;
+  manifest_blob_hash: string;
   updated_at: number;
   channel_id?: string | null;
   audience_label: string;

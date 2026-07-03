@@ -1,0 +1,33 @@
+{
+  "bookmarked_at": 1700000050,
+  "post": {
+    "object_id": "post-2",
+    "envelope_id": "envelope-post-2",
+    "author_pubkey": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
+    "author_name": null,
+    "author_display_name": null,
+    "author_picture": null,
+    "author_picture_asset": null,
+    "following": false,
+    "followed_by": false,
+    "mutual": false,
+    "friend_of_friend": false,
+    "content": "minimal",
+    "content_status": "Missing",
+    "attachments": [],
+    "created_at": 1700000001,
+    "reply_to": null,
+    "reply_preview": null,
+    "root_id": null,
+    "object_kind": "post",
+    "published_topic_id": null,
+    "origin_topic_id": null,
+    "repost_of": null,
+    "repost_commentary": null,
+    "is_threadable": true,
+    "channel_id": null,
+    "audience_label": "Public",
+    "reaction_summary": [],
+    "my_reactions": []
+  }
+}

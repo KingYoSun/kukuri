@@ -1,0 +1,28 @@
+{
+  "items": [
+    {
+      "dm_id": "dm-1",
+      "message_id": "msg-1",
+      "sender_pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+      "recipient_pubkey": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
+      "created_at": 1700000300,
+      "text": "hello dm",
+      "reply_to_message_id": "msg-0",
+      "attachments": [
+        {
+          "hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "mime": "image/png",
+          "bytes": 4096,
+          "role": "image_original",
+          "status": "Available"
+        }
+      ],
+      "outgoing": true,
+      "delivered": false
+    }
+  ],
+  "next_cursor": {
+    "created_at": 1700000300,
+    "object_id": "msg-1"
+  }
+}

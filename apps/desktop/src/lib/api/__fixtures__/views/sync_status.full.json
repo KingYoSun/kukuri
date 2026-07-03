@@ -1,0 +1,77 @@
+{
+  "connected": true,
+  "delivery_state": "DurableRecovering",
+  "last_sync_ts": 1700000100,
+  "peer_count": 2,
+  "pending_events": 0,
+  "status_detail": "durable recovering",
+  "last_error": "previous error",
+  "configured_peers": [
+    "peer-a"
+  ],
+  "subscribed_topics": [
+    "kukuri:topic:demo"
+  ],
+  "active_path": "relay_supported_p2p",
+  "fallback_peer_ids": [],
+  "topic_diagnostics": [
+    {
+      "topic": "kukuri:topic:demo",
+      "joined": true,
+      "delivery_state": "Live",
+      "peer_count": 2,
+      "connected_peers": [
+        "peer-a",
+        "peer-b"
+      ],
+      "docs_assist_peer_ids": [
+        "peer-b"
+      ],
+      "configured_peer_ids": [
+        "peer-a"
+      ],
+      "missing_peer_ids": [],
+      "active_path": "direct_p2p",
+      "rendezvous_peer_ids": [
+        "peer-b"
+      ],
+      "fallback_peer_ids": [],
+      "last_received_at": 1700000090,
+      "last_docs_activity_at": 1700000095,
+      "status_detail": "live",
+      "last_error": null
+    }
+  ],
+  "local_author_pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+  "discovery": {
+    "mode": "seeded_dht",
+    "connect_mode": "direct_or_relay",
+    "active_path": "relay_supported_p2p",
+    "fallback_peer_ids": [],
+    "env_locked": false,
+    "configured_seed_peer_ids": [
+      "seed-1"
+    ],
+    "bootstrap_seed_peer_ids": [
+      "seed-2"
+    ],
+    "manual_ticket_peer_ids": [
+      "manual-1"
+    ],
+    "connected_peer_ids": [
+      "peer-a"
+    ],
+    "docs_assist_peer_ids": [
+      "peer-b"
+    ],
+    "blob_assist_peer_ids": [],
+    "local_endpoint_id": "endpoint-1",
+    "last_discovery_error": "dht timeout"
+  },
+  "gossip_disabled_topics": [
+    "kukuri:topic:quiet"
+  ],
+  "gossip_disabled_channels": [
+    "chan-quiet"
+  ]
+}
