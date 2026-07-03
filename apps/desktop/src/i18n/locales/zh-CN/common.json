@@ -3,6 +3,8 @@
     "accept": "接受",
     "add": "添加",
     "authenticate": "认证",
+    "bookmark": "收藏",
+    "cancel": "取消",
     "clear": "清除",
     "copyLink": "复制链接",
     "copyHash": "复制哈希值",
@@ -20,6 +22,8 @@
     "react": "回应",
     "refresh": "刷新",
     "manageReactions": "管理回应",
+    "remove": "移除",
+    "removeBookmark": "取消收藏",
     "restoreDraft": "恢复草稿",
     "repost": "转发",
     "reply": "回复",
@@ -29,6 +33,7 @@
     "save": "保存",
     "unmute": "取消静音",
     "unfollow": "取消关注",
+    "zoom": "缩放",
     "close": "关闭",
     "report": "举报"
   },
@@ -70,6 +75,7 @@
     "failedToPublish": "发布失败",
     "failedToRefreshCommunityNode": "刷新社区节点失败",
     "failedToSaveProfile": "保存资料失败",
+    "failedToUpdateBookmark": "更新收藏失败",
     "failedToUpdateCommunityNodes": "更新社区节点失败",
     "failedToUpdateDiscoverySeeds": "更新发现种子失败",
     "failedToUpdateFollowState": "更新关注状态失败",
@@ -81,8 +87,11 @@
     "localFailed": "发布失败",
     "localPosting": "发布中…",
     "localSyncing": "同步中…",
+    "pendingPosts": "显示 {{count}} 条新帖子",
     "quoteRepost": "引用转发",
-    "reposted": "已转发"
+    "replyingTo": "回复 {{author}}",
+    "reposted": "已转发",
+    "repostedBy": "{{author}} 已转发"
   },
   "feedback": {
     "copiedToClipboard": "已复制到剪贴板。"
@@ -142,7 +151,9 @@
     "videoPosterAlt": "视频海报"
   },
   "reactions": {
+    "custom": "自定义",
     "recent": "最近使用",
+    "emoji": "表情符号",
     "customResults": "搜索结果",
     "searchPlaceholder": "搜索回应",
     "searchHint": "按表情或自定义 key 搜索。",
