@@ -22,7 +22,7 @@
 
 - 1 PR = 1意図。
 - rename / move / extraction / behavior change を同じ PR に混ぜない。
-- 明示指示なしに public API、protocol object、storage schema、docs/blobs canonical source、community-node endpoint contract を変更しない。
+- 明示指示なしに public API、protocol object、storage schema、docs/blobs canonical source、community-node endpoint contract を変更しない(具体的な対象は「凍結境界」の章)。
 - 既存テストを削除しない。削除が必要な場合は、削除理由と代替カバレッジを示す。
 - 振る舞いが変わる可能性がある場合は、先に characterization test / contract / scenario を追加する。
 - 大きな抽象化を導入する前に、現在の責務境界と呼び出し方向を調査する。
@@ -86,6 +86,46 @@ PR を作成または説明するときは、タスク種別を明確にする�
 - protocol shape change + internal cleanup
 - test deletion + implementation change without replacement
 - formatting-only change + semantic change
+
+## 凍結境界(変更 = 挙動破壊)
+
+以下は「1 バイトの変更で既存データ・既存署名・ネットワーク互換・契約が壊れる」凍結対象である。
+明示的なタスク(migration 計画込み)なしに変更しない。多くは contract テストが検出装置として
+固定している(fail した場合、テストではなく変更側の互換影響を評価する)。
+詳細な調査記録は `.claude/plans/2026-07-02-refactoring_master_plan.md` §3.1。
+
+1. **署名 canonical 3 系統**: envelope の 6 要素配列(`crates/core/src/envelope.rs` の
+   `canonical_envelope_payload`)、DM frame/ack の canonical 配列(`crates/core/src/direct_messages.rs`)、
+   moderation event のキー辞書順 canonical(`crates/cn-safety/src/event.rs`)。
+   固定: `crates/core/src/tests/signing_canonical.rs` / `crates/cn-safety/tests/domain_model.rs` /
+   `crates/cn-safety-runtime/tests/signer.rs`。
+2. **rendezvous / 派生文字列**: replica 命名と `kukuri-docs:` 派生(`crates/docs-sync/src/replicas.rs`)、
+   gossip topic id(`crates/transport/src/iroh/topics.rs` の `topic_to_gossip_id`)、
+   rendezvous ドメイン(`crates/core/src/rendezvous.rs`)、DM の HKDF/AAD ドメイン群、
+   wire prefix 定数(`crates/core/src/wire.rs`)。
+   固定: `crates/core/src/tests/derivation_golden.rs` / `wire_constants.rs`、
+   `crates/docs-sync/src/tests/replicas.rs`、transport の `topic_to_gossip_id_matches_golden`。
+3. **serde フィールド名・variant 名 = wire 形式**: `GossipHint`(externally-tagged、受信側は
+   デコード失敗を黙殺)、docs エントリ値の `KukuriEnvelope` / `*DocV1` 群、envelope kind/tag 文字列。
+   固定: `crates/core/src/tests/wire_snapshot.rs`。
+4. **`PayloadRef` の PascalCase タグ**: 周囲の snake_case と不整合だが署名済み content と
+   SQLite に永続済み。「統一リファクタ」は全既存データの破壊。固定: 同上 wire_snapshot.rs。
+5. **docs エントリ key スキーム**(`objects/{id}/state` 等): app-api の `stable_key` 生成と
+   cn-indexer の prefix 走査の暗黙契約。固定: cn-indexer の ingestion_contracts(常時実行)。
+6. **永続スキーマと identity**: SQLite / Postgres の migration 済みスキーマ、identity ファイル群
+   (keyring account は db パス依存 — パス変更 = 鍵ロスト)、endpoint secret(iroh::SecretKey の
+   serde 表現に直結)。固定: migration テスト(拡充は後続 WP)。
+7. **community-node HTTP 契約と manifest**: cn-user-api の endpoint 群と `CommunityNodeManifest`
+   (server 完全版 ⇔ client slim 版)。変更は後方互換な optional フィールド追加のみ可。
+   固定: `crates/cn-user-api/tests/`、round-trip は
+   `crates/desktop-runtime/src/community_node/manifest_support.rs` +
+   `crates/cn-operator/tests/manifest_golden.rs`(**この 2 ファイルを触る PR は
+   `cargo xtask rust-test` の round-trip テストと `cn-test` の golden の両方を実行する**)。
+8. **cn-operator の `Availability::Planned` 3 capability**: 昇格は ADR 0027 §2.9 の条件付き
+   decision であり、リファクタで表明を変えない。
+9. **Tauri IPC 契約**(`crates/app-api/src/views.rs` ⇔ `apps/desktop/src/lib/api/types.ts`):
+   同一バイナリ内契約のため両側同時変更なら改名可能だが、片側変更は silent break。
+   固定: 未(WP-S4 で contract テスト / codegen を導入予定)。
 
 ## 真実の置き場所ルール
 
@@ -167,6 +207,7 @@ PR 作成前または `main` merge 前は、可能なら `cargo xtask check` + `
 - 触った振る舞いに対して tests / contracts / scenarios は十分か。
 - 必須validationは実行され、報告されているか。
 - 大型ファイルを慎重に扱っているか。
+- diff 内の `#[serde` 属性・wire 文字列リテラル・canonical 実装の変更を目視したか(凍結境界の章を参照)。
 
 ## 完了報告形式
 
