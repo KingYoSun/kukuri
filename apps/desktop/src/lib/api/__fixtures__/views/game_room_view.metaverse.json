@@ -1,0 +1,72 @@
+{
+  "room_id": "room-2",
+  "host_pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+  "title": "metaverse room",
+  "description": "hangout",
+  "status": "Waiting",
+  "phase_label": null,
+  "scores": [],
+  "room_kind": "metaverse_room",
+  "metaverse": {
+    "world_version": 3,
+    "max_peers": 8,
+    "scene": {
+      "ground": "grid",
+      "shared_object": {
+        "object_id": "shared-1",
+        "asset_ref": {
+          "kind": "glb",
+          "blob_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "mime_type": "model/gltf-binary",
+          "size_bytes": 65536,
+          "name": "statue"
+        },
+        "primitive_fallback": "cube",
+        "position": [
+          1,
+          2,
+          3
+        ],
+        "rotation": [
+          0,
+          90,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ],
+        "updated_by": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+        "updated_at": 1700000410
+      }
+    },
+    "default_spawn": {
+      "position": [
+        0,
+        0,
+        5
+      ],
+      "rotation": [
+        0,
+        180,
+        0
+      ]
+    },
+    "asset_refs": [],
+    "chat_history": [
+      {
+        "room_id": "room-2",
+        "message_id": "chat-1",
+        "author_peer_id": "peer-a",
+        "display_name": "Alice",
+        "body": "welcome",
+        "created_at": 1700000420
+      }
+    ]
+  },
+  "manifest_blob_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "updated_at": 1700000430,
+  "channel_id": "chan-1",
+  "audience_label": "Private channel"
+}

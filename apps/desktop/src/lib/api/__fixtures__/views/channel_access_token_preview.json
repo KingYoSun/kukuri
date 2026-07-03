@@ -1,0 +1,10 @@
+{
+  "kind": "grant",
+  "topic_id": "kukuri:topic:demo",
+  "channel_id": "chan-1",
+  "channel_label": "secret room",
+  "owner_pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+  "inviter_pubkey": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
+  "sponsor_pubkey": null,
+  "epoch_id": "epoch-2"
+}
