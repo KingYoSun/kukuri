@@ -6,3 +6,4 @@ mod private_channels;
 mod profile;
 mod reactions;
 mod wire_snapshot;
+mod signing_canonical;

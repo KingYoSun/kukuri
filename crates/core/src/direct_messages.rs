@@ -426,7 +426,9 @@ fn derive_direct_message_attachment_key(
     )
 }
 
-fn canonical_direct_message_frame_payload(frame: &DirectMessageFrameV1) -> Result<String> {
+pub(crate) fn canonical_direct_message_frame_payload(
+    frame: &DirectMessageFrameV1,
+) -> Result<String> {
     serde_json::to_string(&serde_json::json!([
         0,
         frame.dm_id,
@@ -440,7 +442,7 @@ fn canonical_direct_message_frame_payload(frame: &DirectMessageFrameV1) -> Resul
     .context("failed to encode canonical direct message frame payload")
 }
 
-fn canonical_direct_message_ack_payload(ack: &DirectMessageAckV1) -> Result<String> {
+pub(crate) fn canonical_direct_message_ack_payload(ack: &DirectMessageAckV1) -> Result<String> {
     serde_json::to_string(&serde_json::json!([
         0,
         ack.dm_id,
