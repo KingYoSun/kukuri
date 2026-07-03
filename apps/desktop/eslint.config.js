@@ -35,6 +35,9 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       'react-hooks/set-state-in-effect': 'off',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+      // AGENTS.md: console.error は使わない。log/debug も禁止し、
+      // 意図的なログは warn / info のみ許可する。
+      'no-console': ['error', { allow: ['warn', 'info'] }],
     },
   },
   {
