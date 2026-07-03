@@ -187,6 +187,179 @@ async fn connect_file_migrates_pre_metaverse_game_room_fixture() {
     assert!(latest_migration);
 }
 
+// ---------------------------------------------------------------------------
+// WP-S6 T1: migration down の可逆性を固定する characterization テスト。
+// 後続 WP-H1(ProjectionStore 分割)の安全網として、
+// (1) 全世代に up/down が embed で揃うこと、
+// (2) 全適用 → undo(0) → 再適用でスキーマと migration 記録が完全復元されること
+// を固定する。期待値は観測した現挙動の生リテラル(世代数 16 など)。
+// ---------------------------------------------------------------------------
+
+/// 全 16 世代に ReversibleUp / ReversibleDown が揃っていることを固定する(DB 不要)。
+/// down が embed されていない世代は `Migrator::undo` に黙ってスキップされ、
+/// round-trip を静かに破壊するため、ここで欠落を即検出する。
+#[tokio::test]
+async fn all_generations_have_paired_down() {
+    use sqlx::migrate::MigrationType;
+    use std::collections::BTreeMap;
+
+    // version ごとに (up あり, down あり) を集計する。
+    let mut generations: BTreeMap<i64, (bool, bool)> = BTreeMap::new();
+    for migration in STORE_MIGRATOR.iter() {
+        let entry = generations
+            .entry(migration.version)
+            .or_insert((false, false));
+        match migration.migration_type {
+            MigrationType::ReversibleUp => entry.0 = true,
+            MigrationType::ReversibleDown => entry.1 = true,
+            MigrationType::Simple => panic!(
+                "store migration {} must be a reversible up/down pair, found a simple migration",
+                migration.version
+            ),
+        }
+    }
+
+    assert_eq!(
+        generations.len(),
+        16,
+        "store migrations must cover exactly 16 generations, found versions: {:?}",
+        generations.keys().collect::<Vec<_>>()
+    );
+
+    let missing_up: Vec<i64> = generations
+        .iter()
+        .filter(|(_, (has_up, _))| !has_up)
+        .map(|(version, _)| *version)
+        .collect();
+    assert!(
+        missing_up.is_empty(),
+        "store migration generations missing an up migration: {missing_up:?}"
+    );
+
+    let missing_down: Vec<i64> = generations
+        .iter()
+        .filter(|(_, (_, has_down))| !has_down)
+        .map(|(version, _)| *version)
+        .collect();
+    assert!(
+        missing_down.is_empty(),
+        "store migration generations missing a paired down migration: {missing_down:?}"
+    );
+}
+
+/// 全適用 → undo(0) → run() の full round-trip でスキーマ(全テーブルの
+/// pragma_table_info 正規化文字列)と _sqlx_migrations の version 集合が
+/// 全適用時と一致することを固定する。down の残置列・欠落 down による
+/// up スキップをまとめて検出する。
+#[tokio::test]
+async fn full_migration_round_trip() {
+    let tempdir = tempdir().expect("tempdir");
+    let db_path = tempdir.path().join("round-trip.db");
+    let store = SqliteStore::connect_file(&db_path)
+        .await
+        .expect("initialize sqlite store");
+
+    let fully_migrated_snapshot = schema_table_snapshot(store.pool())
+        .await
+        .expect("snapshot fully migrated schema");
+
+    STORE_MIGRATOR
+        .undo(store.pool(), 0)
+        .await
+        .expect("undo all store migrations");
+
+    let remaining_tables = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT name
+        FROM sqlite_master
+        WHERE type = 'table'
+          AND name NOT LIKE 'sqlite_%'
+          AND name != '_sqlx_migrations'
+        ORDER BY name
+        "#,
+    )
+    .fetch_all(store.pool())
+    .await
+    .expect("list tables after undo(0)");
+    assert_eq!(
+        remaining_tables,
+        Vec::<String>::new(),
+        "undo(0) must drop every store table"
+    );
+
+    STORE_MIGRATOR
+        .run(store.pool())
+        .await
+        .expect("re-run all store migrations after undo(0)");
+
+    let replayed_snapshot = schema_table_snapshot(store.pool())
+        .await
+        .expect("snapshot schema after round trip");
+    assert_eq!(
+        replayed_snapshot, fully_migrated_snapshot,
+        "schema after undo(0) + run() must match the fully migrated schema"
+    );
+
+    let applied_versions =
+        sqlx::query_scalar::<_, i64>("SELECT version FROM _sqlx_migrations ORDER BY version")
+            .fetch_all(store.pool())
+            .await
+            .expect("list applied migration versions");
+    let mut expected_versions: Vec<i64> = STORE_MIGRATOR
+        .iter()
+        .filter(|migration| !migration.migration_type.is_down_migration())
+        .map(|migration| migration.version)
+        .collect();
+    expected_versions.sort_unstable();
+    expected_versions.dedup();
+    assert_eq!(
+        applied_versions.len(),
+        16,
+        "round trip must restore all 16 migration generations"
+    );
+    assert_eq!(applied_versions, expected_versions);
+}
+
+/// 全テーブル(_sqlx_migrations / sqlite 内部テーブル除外)の pragma_table_info を
+/// 正規化した文字列 snapshot にする。index は T2(migrations_roundtrip)の範囲。
+async fn schema_table_snapshot(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<String> {
+    let table_names = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT name
+        FROM sqlite_master
+        WHERE type = 'table'
+          AND name NOT LIKE 'sqlite_%'
+          AND name != '_sqlx_migrations'
+        ORDER BY name
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut snapshot = String::new();
+    for table_name in &table_names {
+        snapshot.push_str("table ");
+        snapshot.push_str(table_name);
+        snapshot.push('\n');
+        let columns = sqlx::query("SELECT * FROM pragma_table_info(?1) ORDER BY cid")
+            .bind(table_name)
+            .fetch_all(pool)
+            .await?;
+        for column in &columns {
+            let cid: i64 = column.get("cid");
+            let name: String = column.get("name");
+            let column_type: String = column.get("type");
+            let notnull: i64 = column.get("notnull");
+            let default_value: Option<String> = column.get("dflt_value");
+            let pk: i64 = column.get("pk");
+            snapshot.push_str(&format!(
+                "  column cid={cid} name={name} type={column_type} notnull={notnull} default={default_value:?} pk={pk}\n"
+            ));
+        }
+    }
+    Ok(snapshot)
+}
+
 fn fixture_applied_through(fixture: &str) -> i64 {
     fixture
         .lines()
