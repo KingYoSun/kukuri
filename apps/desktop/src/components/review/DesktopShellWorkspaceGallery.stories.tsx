@@ -88,6 +88,7 @@ const PROFILE_TIMELINE_POSTS: PostCardView[] = [
       mutual: false,
       friend_of_friend: false,
       object_kind: 'post',
+      is_threadable: true,
       content: 'Profile overview stays topic-first and only shows my public posts in the active topic.',
       content_status: 'Available',
       attachments: [],

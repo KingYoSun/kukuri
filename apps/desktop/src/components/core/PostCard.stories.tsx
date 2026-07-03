@@ -6,6 +6,7 @@ import { type PostCardView } from './types';
 const basePost = {
   object_id: 'post-1',
   envelope_id: 'envelope-post-1',
+  is_threadable: true,
   author_pubkey: 'a'.repeat(64),
   author_name: 'alice',
   author_display_name: 'Alice',
@@ -206,6 +207,7 @@ export const ChannelAccessToken: Story = {
         ...basePost,
         object_id: 'token-post',
         envelope_id: 'envelope-token-post',
+        is_threadable: true,
         content: inviteTokenPostContent,
       },
       threadTargetId: 'token-post',
@@ -223,6 +225,7 @@ export const PureRepost: Story = {
       post: {
         ...basePost,
         object_kind: 'repost',
+        is_threadable: false,
         content: '',
         repost_commentary: null,
         repost_of: {
@@ -249,6 +252,7 @@ export const QuoteRepost: Story = {
       post: {
         ...basePost,
         object_kind: 'repost',
+        is_threadable: true,
         content: 'Adding my own take on top of the original.',
         repost_commentary: 'Adding my own take on top of the original.',
         repost_of: {

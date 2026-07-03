@@ -41,6 +41,7 @@ function buildImagePost(overrides?: Partial<PostView>): PostView {
     mutual: false,
     friend_of_friend: false,
     object_kind: 'post',
+    is_threadable: true,
     content: '[blob pending]',
     content_status: 'Missing',
     attachments: [attachment],
@@ -65,6 +66,7 @@ function buildVideoPost(overrides?: Partial<PostView>): PostView {
     mutual: false,
     friend_of_friend: false,
     object_kind: 'post',
+    is_threadable: true,
     content: 'video caption',
     content_status: 'Available',
     attachments: [

@@ -125,6 +125,8 @@ function ExtendedProductFlowStory({ width }: { width: number }) {
           rooms={[
             {
               room_id: 'game-1',
+              room_kind: 'score_game',
+              manifest_blob_hash: 'mock-manifest',
               host_pubkey: 'f'.repeat(64),
               title: 'Grand Finals',
               description: 'set one',
