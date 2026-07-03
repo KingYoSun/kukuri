@@ -4,11 +4,12 @@ use anyhow::Result;
 use crate::*;
 
 pub(crate) fn cn_check() -> Result<()> {
-    run(
-        "cargo",
-        cargo_package_args("check", &CN_PACKAGES),
-        &root_dir(),
-    )
+    let mut clippy_args = cargo_package_args("clippy", &CN_PACKAGES);
+    clippy_args.push("--all-targets".to_string());
+    clippy_args.push("--".to_string());
+    clippy_args.push("-D".to_string());
+    clippy_args.push("warnings".to_string());
+    run("cargo", clippy_args, &root_dir())
 }
 
 pub(crate) fn cn_test() -> Result<()> {

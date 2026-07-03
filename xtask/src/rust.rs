@@ -3,6 +3,9 @@ use anyhow::{Result, bail};
 #[allow(unused_imports)]
 use crate::*;
 
+// community-node 系のうち cn-check / cn-test の lane で検証する package 群。
+// kukuri-cn-safety-arachnid は意図的に含めない: Postgres/Valkey を要さないため
+// rust-check の clippy --workspace と rust-test 側の lane でゲートされている。
 pub(crate) const CN_PACKAGES: [&str; 9] = [
     "kukuri-cn-core",
     "kukuri-cn-user-api",
