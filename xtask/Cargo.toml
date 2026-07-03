@@ -9,3 +9,6 @@ anyhow.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 kukuri-harness = { path = "../crates/harness" }
+
+[lints]
+workspace = true

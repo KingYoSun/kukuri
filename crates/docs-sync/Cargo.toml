@@ -25,3 +25,6 @@ kukuri-transport = { path = "../transport" }
 [dev-dependencies]
 iroh = { workspace = true, features = ["test-utils"] }
 tempfile.workspace = true
+
+[lints]
+workspace = true

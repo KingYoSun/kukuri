@@ -24,3 +24,6 @@ kukuri-core = { path = "../core" }
 
 [dev-dependencies]
 iroh = { workspace = true, features = ["test-utils"] }
+
+[lints]
+workspace = true

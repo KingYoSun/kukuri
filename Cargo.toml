@@ -80,3 +80,6 @@ wiremock = "0.6"
 
 [patch.crates-io]
 netwatch = { git = "https://github.com/n0-computer/net-tools", rev = "8b2d36b9be2b44281fdbf58121a9ab6a739919bc" }
+
+[workspace.lints.clippy]
+unwrap_used = "warn"

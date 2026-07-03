@@ -43,3 +43,6 @@ kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }
 # 自分自身を feature 付き dev-dependency にすることで、tests/ から mock provider 解決を使える
 # （feature unification によりテストビルド時のみ有効になる。cn-safety と同じ流儀）。
 kukuri-cn-core = { path = ".", features = ["safety-mock-provider", "safety-arachnid-provider"] }
+
+[lints]
+workspace = true
