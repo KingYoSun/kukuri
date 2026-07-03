@@ -31,6 +31,7 @@ mod reactions;
 mod social;
 mod sync;
 mod timeline;
+mod topic_normalization;
 mod views_wire_snapshot;
 
 mod support;

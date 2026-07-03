@@ -22,7 +22,10 @@ pub fn private_channel_epoch_replica_id(channel_id: &str, epoch_id: &str) -> Rep
 }
 
 pub fn private_channel_hint_topic(channel_id: &str) -> TopicId {
-    TopicId::new(format!("private/{channel_id}"))
+    TopicId::new(format!(
+        "{}{channel_id}",
+        kukuri_core::wire::PRIVATE_CHANNEL_TOPIC_PREFIX
+    ))
 }
 
 pub fn author_replica_id(author_pubkey: &str) -> ReplicaId {

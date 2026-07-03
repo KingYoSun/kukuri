@@ -442,13 +442,13 @@ impl IrohGossipTransport {
     }
 
     pub(crate) async fn hint_subscribe_hints_impl(&self, topic: &TopicId) -> Result<HintStream> {
-        let hint_topic = TopicId::new(format!("hint/{}", topic.as_str()));
+        let hint_topic = kukuri_core::wire::hint_topic_id(topic);
         let sender = self.ensure_hint_topic(&hint_topic).await?;
         Ok(Self::stream_from_sender(&sender))
     }
 
     pub(crate) async fn hint_unsubscribe_hints_impl(&self, topic: &TopicId) -> Result<()> {
-        let hint_topic = TopicId::new(format!("hint/{}", topic.as_str()));
+        let hint_topic = kukuri_core::wire::hint_topic_id(topic);
         self.remove_topic_state(hint_topic.as_str()).await;
         Ok(())
     }
@@ -458,7 +458,7 @@ impl IrohGossipTransport {
         topic: &TopicId,
         hint: GossipHint,
     ) -> Result<()> {
-        let hint_topic = TopicId::new(format!("hint/{}", topic.as_str()));
+        let hint_topic = kukuri_core::wire::hint_topic_id(topic);
         let _ = self.ensure_hint_topic(&hint_topic).await?;
         let states = self.topic_states.lock().await;
         let state = states
