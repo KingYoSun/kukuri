@@ -125,7 +125,9 @@ PR を作成または説明するときは、タスク種別を明確にする�
    decision であり、リファクタで表明を変えない。
 9. **Tauri IPC 契約**(`crates/app-api/src/views.rs` ⇔ `apps/desktop/src/lib/api/types.ts`):
    同一バイナリ内契約のため両側同時変更なら改名可能だが、片側変更は silent break。
-   固定: 未(WP-S4 で contract テスト / codegen を導入予定)。
+   固定: 高頻度 8 型グループは共有 fixture(apps/desktop/src/lib/api/__fixtures__/views/)を
+   Rust 側 crates/app-api/src/tests/views_wire_snapshot.rs と TS 側 viewsContract.ts(+ .test.ts)が
+   両側から検証する(再生成手順は各ファイル冒頭)。CommunityNode 系・requests.rs 入力方向は未。
 
 ## 真実の置き場所ルール
 

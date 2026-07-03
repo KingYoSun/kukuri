@@ -1,0 +1,26 @@
+{
+  "notification_id": "notification-1",
+  "kind": "quote_repost",
+  "actor_pubkey": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
+  "actor_name": "bob",
+  "actor_display_name": "Bob",
+  "actor_picture": null,
+  "actor_picture_asset": {
+    "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "mime": "image/png",
+    "bytes": 2048,
+    "role": "profile_avatar"
+  },
+  "source_envelope_id": "envelope-1",
+  "source_replica_id": "topic::demo",
+  "topic_id": "kukuri:topic:demo",
+  "channel_id": "chan-1",
+  "object_id": "post-1",
+  "thread_root_object_id": "root-1",
+  "dm_id": null,
+  "message_id": null,
+  "preview_text": "quoted you",
+  "created_at": 1700000200,
+  "received_at": 1700000201,
+  "read_at": 1700000210
+}

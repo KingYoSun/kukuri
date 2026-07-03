@@ -1,0 +1,107 @@
+{
+  "object_id": "post-1",
+  "envelope_id": "envelope-post-1",
+  "author_pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+  "author_name": "alice",
+  "author_display_name": "Alice",
+  "author_picture": "https://example.com/alice.png",
+  "author_picture_asset": {
+    "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "mime": "image/png",
+    "bytes": 2048,
+    "role": "profile_avatar"
+  },
+  "following": true,
+  "followed_by": true,
+  "mutual": true,
+  "friend_of_friend": false,
+  "content": "hello ipc contract",
+  "content_status": "Available",
+  "attachments": [
+    {
+      "hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "mime": "image/png",
+      "bytes": 4096,
+      "role": "image_original",
+      "status": "Available"
+    }
+  ],
+  "created_at": 1700000000,
+  "reply_to": "parent-1",
+  "reply_preview": {
+    "object_id": "parent-1",
+    "topic": "kukuri:topic:demo",
+    "author": {
+      "pubkey": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
+      "name": "bob",
+      "display_name": "Bob",
+      "picture": null,
+      "picture_asset": {
+        "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "mime": "image/png",
+        "bytes": 2048,
+        "role": "profile_avatar"
+      }
+    },
+    "content": "parent content",
+    "attachments": [
+      {
+        "hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "mime": "image/png",
+        "bytes": 4096,
+        "role": "image_original",
+        "status": "Available"
+      }
+    ],
+    "root_id": "root-1",
+    "reply_to": null
+  },
+  "root_id": "root-1",
+  "object_kind": "comment",
+  "published_topic_id": "kukuri:topic:demo",
+  "origin_topic_id": "kukuri:topic:demo",
+  "repost_of": {
+    "source_object_id": "source-1",
+    "source_topic_id": "kukuri:topic:source",
+    "source_author_pubkey": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
+    "source_author_name": "bob",
+    "source_author_display_name": null,
+    "source_author_picture": null,
+    "source_author_picture_asset": null,
+    "source_object_kind": "post",
+    "content": "original",
+    "attachments": [],
+    "reply_to": null,
+    "root_id": null
+  },
+  "repost_commentary": "great post",
+  "is_threadable": true,
+  "channel_id": "chan-1",
+  "audience_label": "Private channel",
+  "reaction_summary": [
+    {
+      "reaction_key_kind": "emoji",
+      "normalized_reaction_key": "emoji:👍",
+      "emoji": "👍",
+      "custom_asset": null,
+      "count": 3
+    }
+  ],
+  "my_reactions": [
+    {
+      "reaction_key_kind": "custom",
+      "normalized_reaction_key": "custom:reaction-asset-1",
+      "emoji": null,
+      "custom_asset": {
+        "asset_id": "reaction-asset-1",
+        "owner_pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+        "blob_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "search_key": "party-parrot",
+        "mime": "image/gif",
+        "bytes": 12345,
+        "width": 64,
+        "height": 64
+      }
+    }
+  ]
+}
