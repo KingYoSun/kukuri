@@ -19,3 +19,20 @@ CREATE INDEX IF NOT EXISTS idx_object_thread_cache_topic_root_created
 DROP INDEX IF EXISTS idx_object_index_cache_topic_created;
 CREATE INDEX IF NOT EXISTS idx_object_index_cache_topic_created
     ON object_index_cache(topic_id, created_at DESC, object_id DESC);
+
+-- channel 系 index を channel_id 非参照へ戻した後に、up で追加した channel_id 列を
+-- up の逆順で DROP する(WP-S6 T1: down を真の逆操作にする)。
+ALTER TABLE live_presence_cache
+    DROP COLUMN channel_id;
+
+ALTER TABLE game_room_cache
+    DROP COLUMN channel_id;
+
+ALTER TABLE live_session_cache
+    DROP COLUMN channel_id;
+
+ALTER TABLE object_thread_cache
+    DROP COLUMN channel_id;
+
+ALTER TABLE object_index_cache
+    DROP COLUMN channel_id;
