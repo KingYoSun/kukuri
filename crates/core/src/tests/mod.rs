@@ -1,3 +1,4 @@
+mod derivation_golden;
 mod direct_messages;
 mod envelope;
 mod media_live_game;

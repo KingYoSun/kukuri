@@ -482,6 +482,18 @@ impl IrohGossipTransport {
 mod tests {
     use super::*;
 
+    // gossip topic id 派生の golden(WP-S3 T4)。blake3(topic 文字列)が
+    // on-wire の gossip 識別子そのもの。変更はネットワーク分断になる。
+    #[test]
+    fn topic_to_gossip_id_matches_golden() {
+        let id = topic_to_gossip_id(&kukuri_core::TopicId::new("kukuri:topic:golden"));
+        let expected = blake3::Hash::from_hex(
+            "65994b46e778ead0264f20707efc571bfc4bdf510f97add9ebd81c8ad507dc80",
+        )
+        .expect("expected hex parses");
+        assert_eq!(id.as_bytes(), expected.as_bytes());
+    }
+
     #[test]
     fn topic_warmup_retry_delay_backs_off_and_caps() {
         assert_eq!(
