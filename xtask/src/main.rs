@@ -34,6 +34,7 @@ fn main() -> Result<()> {
         "desktop-test" => desktop_test(),
         "desktop-storybook" => desktop_storybook(),
         "desktop-browser-test" => desktop_browser_test(),
+        "desktop-visual-test" => desktop_visual_test(),
         "desktop-ui-check" => desktop_ui_check(),
         "cn-check" => cn_check(),
         "cn-test" => cn_test(),
@@ -90,6 +91,6 @@ fn doctor() -> Result<()> {
 
 fn print_usage() {
     eprintln!(
-        "usage: cargo xtask <doctor|check|test|rust-check|rust-test|tauri-check|desktop-lint|desktop-test|desktop-storybook|desktop-browser-test|desktop-ui-check|cn-check|cn-test|desktop-package|release-check [tag]|oversized-files [--update-baseline]|e2e-smoke|scenario <name>>"
+        "usage: cargo xtask <doctor|check|test|rust-check|rust-test|tauri-check|desktop-lint|desktop-test|desktop-storybook|desktop-browser-test|desktop-visual-test|desktop-ui-check|cn-check|cn-test|desktop-package|release-check [tag]|oversized-files [--update-baseline]|e2e-smoke|scenario <name>>"
     );
 }
