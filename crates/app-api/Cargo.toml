@@ -26,3 +26,6 @@ tempfile.workspace = true
 iroh-mainline-address-lookup.workspace = true
 n0-mainline.workspace = true
 iroh = { workspace = true, features = ["test-utils"] }
+
+[lints]
+workspace = true

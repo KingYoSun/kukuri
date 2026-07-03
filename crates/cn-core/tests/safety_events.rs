@@ -45,6 +45,7 @@ fn integration_test_admin_database_url() -> Option<String> {
     )
 }
 
+#[allow(clippy::unwrap_used)] // test fixture helper
 fn signer() -> Secp256k1ModerationEventSigner {
     Secp256k1ModerationEventSigner::from_secret(TEST_SECRET).unwrap()
 }

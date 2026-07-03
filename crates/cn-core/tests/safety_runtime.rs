@@ -43,10 +43,12 @@ impl EventIdGenerator for SequentialIdGenerator {
     }
 }
 
+#[allow(clippy::unwrap_used)] // test fixture helper
 fn signer() -> Secp256k1ModerationEventSigner {
     Secp256k1ModerationEventSigner::from_secret(TEST_SECRET).unwrap()
 }
 
+#[allow(clippy::unwrap_used)] // test fixture helper
 fn orchestrator(issuer: &str, provider: MockSafetyProvider) -> Arc<SafetyOrchestrator> {
     Arc::new(
         SafetyOrchestrator::builder(
@@ -61,6 +63,7 @@ fn orchestrator(issuer: &str, provider: MockSafetyProvider) -> Arc<SafetyOrchest
 }
 
 /// signer + memory store で組んだ service（本番構成と同型、DB のみ in-memory）。
+#[allow(clippy::unwrap_used)] // test fixture helper
 fn signed_service(
     provider: MockSafetyProvider,
 ) -> (SafetyScanService, Arc<MemorySafetyArtifactStore>, String) {

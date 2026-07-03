@@ -39,3 +39,6 @@ iroh-mainline-address-lookup.workspace = true
 n0-mainline.workspace = true
 iroh = { workspace = true, features = ["test-utils"] }
 kukuri-cn-iroh-relay = { path = "../cn-iroh-relay" }
+
+[lints]
+workspace = true
