@@ -181,4 +181,18 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn cargo_package_args_prefixes_command_and_expands_packages() {
+        assert_eq!(
+            cargo_package_args("clippy", &CN_PACKAGES[..2]),
+            vec![
+                "clippy".to_string(),
+                "-p".to_string(),
+                CN_PACKAGES[0].to_string(),
+                "-p".to_string(),
+                CN_PACKAGES[1].to_string(),
+            ]
+        );
+    }
 }
