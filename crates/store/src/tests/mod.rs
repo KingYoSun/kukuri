@@ -16,6 +16,7 @@ use tempfile::tempdir;
 mod direct_messages;
 mod migrations;
 mod migrations_roundtrip;
+mod row_mapping_edge;
 mod row_mapping_enums;
 mod row_mapping_roundtrip;
 mod row_mapping_roundtrip_dm;
