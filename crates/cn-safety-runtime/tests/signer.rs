@@ -161,3 +161,43 @@ fn from_env_reads_injected_key() {
         std::env::remove_var(SAFETY_SIGNING_KEY_ENV);
     }
 }
+
+// ---- WP-S3 T3: 凍結 golden ----
+// 以下の golden が fail した場合、テストではなく変更(コード・依存更新)の
+// 互換影響を評価すること。署名対象 digest と検証互換は cn_safety.safety_events
+// に永続済みの署名の有効性と直結する。
+
+/// 署名対象 digest = sha256(canonical_bytes) の凍結。
+/// canonical golden(cn-safety/tests/domain_model.rs)と対になる。
+#[test]
+fn canonical_digest_matches_golden() {
+    use sha2::{Digest, Sha256};
+    let body = sample_body("node-1");
+    let digest = Sha256::digest(body.canonical_bytes());
+    assert_eq!(
+        hex::encode(digest),
+        "3c32dc1941d40130bb5c2fc1e052d4e57c9ebcacbc90cd3851d10715a3fe5758"
+    );
+}
+
+/// issuer_node_id = 署名鍵の x-only 公開鍵 hex の値レベル凍結。
+#[test]
+fn issuer_node_id_matches_golden_for_fixed_secret() {
+    let signer = Secp256k1ModerationEventSigner::from_secret(TEST_SECRET_A).unwrap();
+    assert_eq!(
+        signer.issuer_node_id(),
+        "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+    );
+}
+
+/// 過去に生成・署名された SignedModerationEvent(2026-07-03 生成、
+/// TEST_SECRET_A で署名)が verify を通り続け、serde 表現も不変であることの凍結。
+/// 署名バイト自体は非決定的なため pin せず、fixture の検証互換のみを固定する。
+#[test]
+fn signed_event_fixture_still_verifies_and_reserializes_identically() {
+    const FIXTURE: &str = r#"{"body":{"id":"evt-1","issuer_node_id":"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798","target_type":"blob","target_id":"bafy-target","action":"exclude","labels":[{"category":"csam"}],"reason_code":"csam_confirmed","severity":"critical","basis":"known_hash_match","visibility":"subscribed_nodes","policy_version":"2026-06-public-node-v1","created_at":"2026-06-29T00:00:00Z"},"signature":"a7a5450205fe794a3f9f01a829fe1bb6bfafd55016ac76defc86bfeaf3d5635eab45362d204b7688e5fc68524ebe9a09c0943ce6b502aa6660ea6fab83be929f"}"#;
+    let signed: kukuri_cn_safety::SignedModerationEvent =
+        serde_json::from_str(FIXTURE).expect("fixture parses");
+    verify_signed_event(&signed).expect("historically signed event must keep verifying");
+    assert_eq!(serde_json::to_string(&signed).expect("serialize"), FIXTURE);
+}
