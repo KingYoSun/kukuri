@@ -42,7 +42,17 @@ fn main() -> Result<()> {
             let tag = args.next();
             release_check(tag.as_deref())
         }
-        "oversized-files" => oversized_files(),
+        "oversized-files" => {
+            let update_baseline = match args.next().as_deref() {
+                None => false,
+                Some("--update-baseline") => true,
+                Some(flag) => {
+                    print_usage();
+                    bail!("unsupported oversized-files flag: {flag}");
+                }
+            };
+            oversized_files(update_baseline)
+        }
         "e2e-smoke" => e2e_smoke("desktop_smoke_post_persist"),
         "scenario" => {
             let name = args.next().context("scenario name is required")?;
@@ -80,6 +90,6 @@ fn doctor() -> Result<()> {
 
 fn print_usage() {
     eprintln!(
-        "usage: cargo xtask <doctor|check|test|rust-check|rust-test|tauri-check|desktop-lint|desktop-test|desktop-storybook|desktop-browser-test|desktop-ui-check|cn-check|cn-test|desktop-package|release-check [tag]|oversized-files|e2e-smoke|scenario <name>>"
+        "usage: cargo xtask <doctor|check|test|rust-check|rust-test|tauri-check|desktop-lint|desktop-test|desktop-storybook|desktop-browser-test|desktop-ui-check|cn-check|cn-test|desktop-package|release-check [tag]|oversized-files [--update-baseline]|e2e-smoke|scenario <name>>"
     );
 }
