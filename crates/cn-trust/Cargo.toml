@@ -25,3 +25,6 @@ kukuri-cn-safety = { path = "../cn-safety" }
 # （feature unification によりテストビルド時のみ有効になる。cn-safety の mock と同じ流儀）。
 kukuri-cn-trust = { path = ".", features = ["testing"] }
 tokio.workspace = true
+
+[lints]
+workspace = true

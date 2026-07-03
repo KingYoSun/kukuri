@@ -20,3 +20,6 @@ thiserror.workspace = true
 kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }
 tokio.workspace = true
 wiremock.workspace = true
+
+[lints]
+workspace = true

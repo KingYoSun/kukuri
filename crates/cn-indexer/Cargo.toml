@@ -43,3 +43,6 @@ kukuri-cn-safety = { path = "../cn-safety", features = ["mock"] }
 # relation graph（ArcadeDB / in-memory）へ同一 contract を課す共有スイート。
 kukuri-cn-trust = { path = "../cn-trust", features = ["testing"] }
 tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -25,3 +25,6 @@ thiserror.workspace = true
 # （feature unification によりテストビルド時のみ mock が有効になる）。
 kukuri-cn-safety = { path = ".", features = ["mock"] }
 tokio.workspace = true
+
+[lints]
+workspace = true
