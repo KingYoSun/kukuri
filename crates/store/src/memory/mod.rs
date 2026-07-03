@@ -22,8 +22,11 @@ use crate::pagination::{
 };
 use crate::traits::{ProjectionStore, Store};
 
-type LivePresenceKey = (String, String, String);
-type LivePresenceValue = (String, String, i64, i64);
+/// sqlite の live_presence_cache 主キー ON CONFLICT(topic_id, channel_id, session_id,
+/// author_pubkey) と同義のキー(WP-S6 T7 で topic_id 欠落による上書き divergence を修正)。
+type LivePresenceKey = (String, String, String, String);
+/// (expires_at, updated_at)
+type LivePresenceValue = (i64, i64);
 type MemoryReactionProjectionRows = HashMap<(String, String, String), ReactionProjectionRow>;
 type MemoryDirectMessageRows = HashMap<(String, String), DirectMessageMessageRow>;
 type MemoryDirectMessageOutboxRows = HashMap<(String, String), DirectMessageOutboxRow>;

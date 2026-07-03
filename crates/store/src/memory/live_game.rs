@@ -29,13 +29,15 @@ impl MemoryStore {
             row.viewer_count = if row.status == LiveSessionStatus::Ended {
                 0
             } else {
+                // sqlite の viewer_count 相関サブクエリ(topic_id, channel_id, session_id
+                // が行と一致する live_presence_cache の COUNT)と同義
                 presence
                     .iter()
                     .filter(
-                        |((presence_channel, session_id, _), (presence_topic, _, _, _))| {
-                            presence_channel == &row.channel_id
-                                && session_id == &row.session_id
-                                && presence_topic == topic_id
+                        |((presence_topic, presence_channel, presence_session, _), _)| {
+                            presence_topic == &row.topic_id
+                                && presence_channel == &row.channel_id
+                                && presence_session == &row.session_id
                         },
                     )
                     .count()
@@ -91,18 +93,16 @@ impl MemoryStore {
         expires_at: i64,
         updated_at: i64,
     ) -> Result<()> {
+        // キーは sqlite の ON CONFLICT(topic_id, channel_id, session_id, author_pubkey)
+        // と同義(topic_id を含めないと別 topic の presence を上書きしてしまう)
         self.live_presence.write().await.insert(
             (
+                topic_id.to_string(),
                 channel_id.to_string(),
                 session_id.to_string(),
                 author_pubkey.to_string(),
             ),
-            (
-                topic_id.to_string(),
-                channel_id.to_string(),
-                expires_at,
-                updated_at,
-            ),
+            (expires_at, updated_at),
         );
         Ok(())
     }
@@ -114,7 +114,7 @@ impl MemoryStore {
         self.live_presence
             .write()
             .await
-            .retain(|_, (_, _, expires_at, _)| *expires_at > now_ms);
+            .retain(|_, (expires_at, _)| *expires_at > now_ms);
         Ok(())
     }
 
@@ -125,7 +125,7 @@ impl MemoryStore {
         self.live_presence
             .write()
             .await
-            .retain(|_, (presence_topic, _, _, _)| presence_topic != topic_id);
+            .retain(|(presence_topic, _, _, _), _| presence_topic != topic_id);
         Ok(())
     }
 }
