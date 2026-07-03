@@ -121,11 +121,16 @@
     "activeTopicBar": "当前主题栏"
   },
   "workspace": {
+    "bookmarks": "收藏",
     "composeTarget": "发布目标",
+    "feed": "动态",
+    "noBookmarks": "还没有收藏的帖子。",
     "noPosts": "该主题下还没有帖子。",
     "noPublicPosts": "你在该主题下还没有公开帖子。",
     "refresh": "刷新",
+    "savedCount": "已保存 {{count}} 条",
     "tabs": "工作区",
+    "timelineViews": "时间线视图",
     "communityNodeUnavailableAction": "打开 Community Node 设置",
     "communityNodeUnavailableBody": "已配置的 community node 当前不可用。客户端会继续启动，direct P2P 连接仍然可用。",
     "communityNodeUnavailableTitle": "Community node unavailable",
