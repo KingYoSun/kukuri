@@ -16,5 +16,6 @@ use tempfile::tempdir;
 mod direct_messages;
 mod migrations;
 mod migrations_roundtrip;
+mod row_mapping_enums;
 mod sqlite_projection;
 mod sqlite_store;
