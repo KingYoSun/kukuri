@@ -13,6 +13,7 @@ use kukuri_core::{
 };
 use tempfile::tempdir;
 
+mod backend_parity;
 mod direct_messages;
 mod migrations;
 mod migrations_roundtrip;
