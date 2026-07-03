@@ -50,21 +50,28 @@ pub(crate) fn cn_test_envs() -> Vec<(String, String)> {
 }
 
 pub(crate) fn cn_test_database_url() -> String {
-    let port = std::env::var("CN_POSTGRES_PORT")
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "15432".to_string());
+    cn_test_database_url_for(std::env::var("CN_POSTGRES_PORT").ok())
+}
+
+pub(crate) fn cn_test_database_url_for(port_env: Option<String>) -> String {
+    let port = resolve_port(port_env, "15432");
     format!("postgres://cn:cn_password@127.0.0.1:{port}/cn")
 }
 
 pub(crate) fn cn_test_rendezvous_redis_url() -> String {
-    let port = std::env::var("CN_VALKEY_PORT")
-        .ok()
+    cn_test_rendezvous_redis_url_for(std::env::var("CN_VALKEY_PORT").ok())
+}
+
+pub(crate) fn cn_test_rendezvous_redis_url_for(port_env: Option<String>) -> String {
+    let port = resolve_port(port_env, "16379");
+    format!("redis://127.0.0.1:{port}/")
+}
+
+fn resolve_port(port_env: Option<String>, default: &str) -> String {
+    port_env
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "16379".to_string());
-    format!("redis://127.0.0.1:{port}/")
+        .unwrap_or_else(|| default.to_string())
 }
 
 pub(crate) fn with_cn_postgres<T>(operation: impl FnOnce() -> Result<T>) -> Result<T> {
@@ -125,5 +132,34 @@ pub(crate) fn with_cn_postgres<T>(operation: impl FnOnce() -> Result<T>) -> Resu
         (Err(operation_error), Err(shutdown_error)) => Err(operation_error.context(format!(
             "failed to tear down cn-postgres after error: {shutdown_error:#}"
         ))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cn_test_urls_use_documented_default_ports() {
+        assert_eq!(
+            cn_test_database_url_for(None),
+            "postgres://cn:cn_password@127.0.0.1:15432/cn"
+        );
+        assert_eq!(
+            cn_test_rendezvous_redis_url_for(None),
+            "redis://127.0.0.1:16379/"
+        );
+    }
+
+    #[test]
+    fn cn_test_urls_respect_port_overrides_and_ignore_blank_values() {
+        assert_eq!(
+            cn_test_database_url_for(Some(" 25432 ".to_string())),
+            "postgres://cn:cn_password@127.0.0.1:25432/cn"
+        );
+        assert_eq!(
+            cn_test_rendezvous_redis_url_for(Some(String::new())),
+            "redis://127.0.0.1:16379/"
+        );
     }
 }

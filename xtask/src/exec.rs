@@ -290,4 +290,13 @@ mod tests {
             }
         );
     }
+
+    #[test]
+    fn format_duration_covers_ms_seconds_and_minutes() {
+        assert_eq!(format_duration(Duration::from_millis(999)), "999ms");
+        assert_eq!(format_duration(Duration::from_millis(1000)), "1.0s");
+        assert_eq!(format_duration(Duration::from_secs(59)), "59.0s");
+        assert_eq!(format_duration(Duration::from_secs(60)), "1m00s");
+        assert_eq!(format_duration(Duration::from_secs(605)), "10m05s");
+    }
 }

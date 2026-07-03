@@ -35,20 +35,25 @@ pub(crate) fn release_check(tag: Option<&str>) -> Result<()> {
     }
 
     if let Some(tag) = tag {
-        let expected = format!("v{workspace_version}-preview.");
-        if !tag.starts_with(&expected) {
-            bail!("release tag must start with {expected} and include a preview number, got {tag}");
-        }
-        let suffix = &tag[expected.len()..];
-        if suffix.is_empty() || !suffix.chars().all(|value| value.is_ascii_digit()) {
-            bail!("release tag preview suffix must be numeric, got {tag}");
-        }
+        validate_release_tag(&workspace_version, tag)?;
     }
 
     println!(
         "[xtask] release version ok: workspace={workspace_version} channel=preview tag={}",
         tag.unwrap_or("<not checked>")
     );
+    Ok(())
+}
+
+pub(crate) fn validate_release_tag(workspace_version: &str, tag: &str) -> Result<()> {
+    let expected = format!("v{workspace_version}-preview.");
+    if !tag.starts_with(&expected) {
+        bail!("release tag must start with {expected} and include a preview number, got {tag}");
+    }
+    let suffix = &tag[expected.len()..];
+    if suffix.is_empty() || !suffix.chars().all(|value| value.is_ascii_digit()) {
+        bail!("release tag preview suffix must be numeric, got {tag}");
+    }
     Ok(())
 }
 
@@ -95,4 +100,33 @@ pub(crate) fn read_json_version(path: &Path) -> Result<String> {
         .and_then(Value::as_str)
         .map(str::to_string)
         .with_context(|| format!("version was not found in {}", path.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn release_tag_accepts_preview_tag_matching_workspace_version() {
+        assert!(validate_release_tag("0.1.2", "v0.1.2-preview.1").is_ok());
+        assert!(validate_release_tag("0.1.2", "v0.1.2-preview.12").is_ok());
+    }
+
+    #[test]
+    fn release_tag_rejects_version_mismatch_and_bad_suffixes() {
+        assert!(validate_release_tag("0.1.2", "v0.1.3-preview.1").is_err());
+        assert!(validate_release_tag("0.1.2", "v0.1.2-preview.").is_err());
+        assert!(validate_release_tag("0.1.2", "v0.1.2-preview.1a").is_err());
+        assert!(validate_release_tag("0.1.2", "v0.1.2").is_err());
+    }
+
+    #[test]
+    fn parse_toml_string_value_extracts_quoted_values_only() {
+        assert_eq!(
+            parse_toml_string_value("version = \"0.1.2\"").unwrap(),
+            "0.1.2"
+        );
+        assert!(parse_toml_string_value("version = 3").is_err());
+        assert!(parse_toml_string_value("no equals sign").is_err());
+    }
 }
