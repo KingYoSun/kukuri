@@ -181,7 +181,8 @@ pub fn derive_direct_message_topic(
     hkdf.expand(b"kukuri:direct-message:pairwise-topic", &mut topic_key)
         .map_err(|_| anyhow!("failed to derive direct message topic"))?;
     Ok(TopicId::new(format!(
-        "kukuri:dm:{}",
+        "{}{}",
+        crate::wire::DM_TOPIC_PREFIX,
         hex::encode(topic_key)
     )))
 }

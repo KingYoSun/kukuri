@@ -312,7 +312,7 @@ impl AppService {
         let peer_pubkey = normalize_author_pubkey(peer_pubkey)?;
         let topic =
             derive_direct_message_topic(self.keys.as_ref(), &Pubkey::from(peer_pubkey.as_str()))?;
-        let hint_topic = format!("hint/{}", topic.as_str());
+        let hint_topic = kukuri_core::wire::hint_topic_id(&topic).0;
         Ok(self
             .transport
             .peers()

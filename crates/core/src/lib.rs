@@ -10,6 +10,7 @@ mod private_channels;
 mod profile;
 mod reactions;
 mod rendezvous;
+pub mod wire;
 
 #[cfg(test)]
 mod tests;

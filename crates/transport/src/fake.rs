@@ -244,7 +244,7 @@ impl Transport for FakeTransport {
 #[async_trait]
 impl HintTransport for FakeTransport {
     async fn subscribe_hints(&self, topic: &TopicId) -> Result<HintStream> {
-        let hint_topic = TopicId::new(format!("hint/{}", topic.as_str()));
+        let hint_topic = kukuri_core::wire::hint_topic_id(topic);
         self.subscribed_topics
             .lock()
             .await
@@ -263,7 +263,7 @@ impl HintTransport for FakeTransport {
     }
 
     async fn unsubscribe_hints(&self, topic: &TopicId) -> Result<()> {
-        let hint_topic = TopicId::new(format!("hint/{}", topic.as_str()));
+        let hint_topic = kukuri_core::wire::hint_topic_id(topic);
         self.subscribed_topics
             .lock()
             .await
