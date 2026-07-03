@@ -369,7 +369,13 @@ fn fixture_applied_through(fixture: &str) -> i64 {
         .expect("fixture applied_through version")
 }
 
-async fn materialize_sqlite_fixture(db_path: &std::path::Path, applied_through: i64) -> Result<()> {
+/// `applied_through` 世代までの up migration だけを適用した DB ファイルを合成する
+/// 共通ヘルパ(WP-S6 T2 の stepwise round-trip でも中間世代 DB の合成に使う)。
+/// `applied_through = 0` は「migration 未適用(_sqlx_migrations のみ)」を意味する。
+pub(crate) async fn materialize_sqlite_fixture(
+    db_path: &std::path::Path,
+    applied_through: i64,
+) -> Result<()> {
     let options = SqliteConnectOptions::from_str(&format!("sqlite://{}", db_path.display()))?
         .create_if_missing(true);
     let pool = SqlitePoolOptions::new()

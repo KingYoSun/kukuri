@@ -1,0 +1,458 @@
+table author_relationship_cache
+  column cid=0 name=local_author_pubkey type=TEXT notnull=1 default=None pk=1
+  column cid=1 name=author_pubkey type=TEXT notnull=1 default=None pk=2
+  column cid=2 name=following type=INTEGER notnull=1 default=None pk=0
+  column cid=3 name=followed_by type=INTEGER notnull=1 default=None pk=0
+  column cid=4 name=mutual type=INTEGER notnull=1 default=None pk=0
+  column cid=5 name=friend_of_friend type=INTEGER notnull=1 default=None pk=0
+  column cid=6 name=friend_of_friend_via_pubkeys_json type=TEXT notnull=1 default=None pk=0
+  column cid=7 name=derived_at type=INTEGER notnull=1 default=None pk=0
+table blob_objects
+  column cid=0 name=blob_hash type=TEXT notnull=0 default=None pk=1
+  column cid=1 name=status type=TEXT notnull=1 default=None pk=0
+table bookmarked_custom_reactions
+  column cid=0 name=asset_id type=TEXT notnull=0 default=None pk=1
+  column cid=1 name=owner_pubkey type=TEXT notnull=1 default=None pk=0
+  column cid=2 name=blob_hash type=TEXT notnull=1 default=None pk=0
+  column cid=3 name=mime type=TEXT notnull=1 default=None pk=0
+  column cid=4 name=bytes type=INTEGER notnull=1 default=None pk=0
+  column cid=5 name=width type=INTEGER notnull=1 default=None pk=0
+  column cid=6 name=height type=INTEGER notnull=1 default=None pk=0
+  column cid=7 name=bookmarked_at type=INTEGER notnull=1 default=None pk=0
+  column cid=8 name=search_key type=TEXT notnull=1 default=Some("''") pk=0
+table bookmarked_posts
+  column cid=0 name=source_object_id type=TEXT notnull=0 default=None pk=1
+  column cid=1 name=source_envelope_id type=TEXT notnull=1 default=None pk=0
+  column cid=2 name=source_replica_id type=TEXT notnull=1 default=None pk=0
+  column cid=3 name=topic_id type=TEXT notnull=1 default=None pk=0
+  column cid=4 name=channel_id type=TEXT notnull=1 default=None pk=0
+  column cid=5 name=author_pubkey type=TEXT notnull=1 default=None pk=0
+  column cid=6 name=created_at type=INTEGER notnull=1 default=None pk=0
+  column cid=7 name=object_kind type=TEXT notnull=1 default=None pk=0
+  column cid=8 name=payload_ref_json type=TEXT notnull=1 default=None pk=0
+  column cid=9 name=content type=TEXT notnull=0 default=None pk=0
+  column cid=10 name=attachments_json type=TEXT notnull=1 default=None pk=0
+  column cid=11 name=reply_to_object_id type=TEXT notnull=0 default=None pk=0
+  column cid=12 name=root_object_id type=TEXT notnull=0 default=None pk=0
+  column cid=13 name=repost_of_json type=TEXT notnull=0 default=None pk=0
+  column cid=14 name=bookmarked_at type=INTEGER notnull=1 default=None pk=0
+table dm_conversations
+  column cid=0 name=dm_id type=TEXT notnull=0 default=None pk=1
+  column cid=1 name=peer_pubkey type=TEXT notnull=1 default=None pk=0
+  column cid=2 name=updated_at type=INTEGER notnull=1 default=None pk=0
+  column cid=3 name=last_message_at type=INTEGER notnull=0 default=None pk=0
+  column cid=4 name=last_message_id type=TEXT notnull=0 default=None pk=0
+  column cid=5 name=last_message_preview type=TEXT notnull=0 default=None pk=0
+table dm_message_tombstones
+  column cid=0 name=dm_id type=TEXT notnull=1 default=None pk=1
+  column cid=1 name=message_id type=TEXT notnull=1 default=None pk=2
+  column cid=2 name=deleted_at type=INTEGER notnull=1 default=None pk=0
+table dm_messages
+  column cid=0 name=dm_id type=TEXT notnull=1 default=None pk=1
+  column cid=1 name=message_id type=TEXT notnull=1 default=None pk=2
+  column cid=2 name=sender_pubkey type=TEXT notnull=1 default=None pk=0
+  column cid=3 name=recipient_pubkey type=TEXT notnull=1 default=None pk=0
+  column cid=4 name=created_at type=INTEGER notnull=1 default=None pk=0
+  column cid=5 name=text type=TEXT notnull=0 default=None pk=0
+  column cid=6 name=reply_to_message_id type=TEXT notnull=0 default=None pk=0
+  column cid=7 name=attachment_manifest_json type=TEXT notnull=0 default=None pk=0
+  column cid=8 name=outgoing type=INTEGER notnull=1 default=Some("0") pk=0
+  column cid=9 name=acked_at type=INTEGER notnull=0 default=None pk=0
+table dm_outbox
+  column cid=0 name=dm_id type=TEXT notnull=1 default=None pk=1
+  column cid=1 name=message_id type=TEXT notnull=1 default=None pk=2
+  column cid=2 name=peer_pubkey type=TEXT notnull=1 default=None pk=0
+  column cid=3 name=frame_blob_hash type=TEXT notnull=1 default=None pk=0
+  column cid=4 name=created_at type=INTEGER notnull=1 default=None pk=0
+  column cid=5 name=last_attempt_at type=INTEGER notnull=0 default=None pk=0
+table download_jobs
+  column cid=0 name=blob_hash type=TEXT notnull=0 default=None pk=1
+  column cid=1 name=status type=TEXT notnull=1 default=None pk=0
+table envelopes
+  column cid=0 name=envelope_id type=TEXT notnull=0 default=None pk=1
+  column cid=1 name=pubkey type=TEXT notnull=1 default=None pk=0
+  column cid=2 name=created_at type=INTEGER notnull=1 default=None pk=0
+  column cid=3 name=kind type=TEXT notnull=1 default=None pk=0
+  column cid=4 name=content type=TEXT notnull=1 default=None pk=0
+  column cid=5 name=tags_json type=TEXT notnull=1 default=None pk=0
+  column cid=6 name=sig type=TEXT notnull=1 default=None pk=0
+table follow_edges
+  column cid=0 name=subject_pubkey type=TEXT notnull=1 default=None pk=1
+  column cid=1 name=target_pubkey type=TEXT notnull=1 default=None pk=2
+  column cid=2 name=status type=TEXT notnull=1 default=None pk=0
+  column cid=3 name=updated_at type=INTEGER notnull=1 default=None pk=0
+  column cid=4 name=source_envelope_id type=TEXT notnull=1 default=None pk=0
+table game_room_cache
+  column cid=0 name=room_id type=TEXT notnull=0 default=None pk=1
+  column cid=1 name=topic_id type=TEXT notnull=1 default=None pk=0
+  column cid=2 name=host_pubkey type=TEXT notnull=1 default=None pk=0
+  column cid=3 name=title type=TEXT notnull=1 default=None pk=0
+  column cid=4 name=description type=TEXT notnull=1 default=None pk=0
+  column cid=5 name=status type=TEXT notnull=1 default=None pk=0
+  column cid=6 name=phase_label type=TEXT notnull=0 default=None pk=0
+  column cid=7 name=scores_json type=TEXT notnull=1 default=None pk=0
+  column cid=8 name=updated_at type=INTEGER notnull=1 default=None pk=0
+  column cid=9 name=source_replica_id type=TEXT notnull=1 default=None pk=0
+  column cid=10 name=source_key type=TEXT notnull=1 default=None pk=0
+  column cid=11 name=manifest_blob_hash type=TEXT notnull=1 default=None pk=0
+  column cid=12 name=derived_at type=INTEGER notnull=1 default=None pk=0
+  column cid=13 name=projection_version type=INTEGER notnull=1 default=None pk=0
+  column cid=14 name=channel_id type=TEXT notnull=1 default=Some("'public'") pk=0
+  column cid=15 name=room_kind type=TEXT notnull=1 default=Some("'score_game'") pk=0
+  column cid=16 name=metaverse_json type=TEXT notnull=0 default=None pk=0
+table live_presence_cache
+  column cid=0 name=topic_id type=TEXT notnull=1 default=None pk=1
+  column cid=1 name=session_id type=TEXT notnull=1 default=None pk=2
+  column cid=2 name=author_pubkey type=TEXT notnull=1 default=None pk=3
+  column cid=3 name=expires_at type=INTEGER notnull=1 default=None pk=0
+  column cid=4 name=updated_at type=INTEGER notnull=1 default=None pk=0
+  column cid=5 name=channel_id type=TEXT notnull=1 default=Some("'public'") pk=0
+table live_session_cache
+  column cid=0 name=session_id type=TEXT notnull=0 default=None pk=1
+  column cid=1 name=topic_id type=TEXT notnull=1 default=None pk=0
+  column cid=2 name=host_pubkey type=TEXT notnull=1 default=None pk=0
+  column cid=3 name=title type=TEXT notnull=1 default=None pk=0
+  column cid=4 name=description type=TEXT notnull=1 default=None pk=0
+  column cid=5 name=status type=TEXT notnull=1 default=None pk=0
+  column cid=6 name=started_at type=INTEGER notnull=1 default=None pk=0
+  column cid=7 name=ended_at type=INTEGER notnull=0 default=None pk=0
+  column cid=8 name=updated_at type=INTEGER notnull=1 default=None pk=0
+  column cid=9 name=source_replica_id type=TEXT notnull=1 default=None pk=0
+  column cid=10 name=source_key type=TEXT notnull=1 default=None pk=0
+  column cid=11 name=manifest_blob_hash type=TEXT notnull=1 default=None pk=0
+  column cid=12 name=derived_at type=INTEGER notnull=1 default=None pk=0
+  column cid=13 name=projection_version type=INTEGER notnull=1 default=None pk=0
+  column cid=14 name=channel_id type=TEXT notnull=1 default=Some("'public'") pk=0
+table muted_authors
+  column cid=0 name=author_pubkey type=TEXT notnull=0 default=None pk=1
+  column cid=1 name=muted_at type=INTEGER notnull=1 default=None pk=0
+table notifications
+  column cid=0 name=notification_id type=TEXT notnull=0 default=None pk=1
+  column cid=1 name=recipient_pubkey type=TEXT notnull=1 default=None pk=0
+  column cid=2 name=kind type=TEXT notnull=1 default=None pk=0
+  column cid=3 name=actor_pubkey type=TEXT notnull=1 default=None pk=0
+  column cid=4 name=source_envelope_id type=TEXT notnull=0 default=None pk=0
+  column cid=5 name=source_replica_id type=TEXT notnull=0 default=None pk=0
+  column cid=6 name=topic_id type=TEXT notnull=0 default=None pk=0
+  column cid=7 name=channel_id type=TEXT notnull=0 default=None pk=0
+  column cid=8 name=object_id type=TEXT notnull=0 default=None pk=0
+  column cid=9 name=dm_id type=TEXT notnull=0 default=None pk=0
+  column cid=10 name=message_id type=TEXT notnull=0 default=None pk=0
+  column cid=11 name=preview_text type=TEXT notnull=0 default=None pk=0
+  column cid=12 name=created_at type=INTEGER notnull=1 default=None pk=0
+  column cid=13 name=received_at type=INTEGER notnull=1 default=None pk=0
+  column cid=14 name=read_at type=INTEGER notnull=0 default=None pk=0
+table object_index_cache
+  column cid=0 name=object_id type=TEXT notnull=0 default=None pk=1
+  column cid=1 name=topic_id type=TEXT notnull=1 default=None pk=0
+  column cid=2 name=author_pubkey type=TEXT notnull=1 default=None pk=0
+  column cid=3 name=created_at type=INTEGER notnull=1 default=None pk=0
+  column cid=4 name=root_object_id type=TEXT notnull=0 default=None pk=0
+  column cid=5 name=reply_to_object_id type=TEXT notnull=0 default=None pk=0
+  column cid=6 name=payload_ref_json type=TEXT notnull=1 default=None pk=0
+  column cid=7 name=content type=TEXT notnull=0 default=None pk=0
+  column cid=8 name=source_replica_id type=TEXT notnull=1 default=None pk=0
+  column cid=9 name=source_key type=TEXT notnull=1 default=None pk=0
+  column cid=10 name=source_envelope_id type=TEXT notnull=1 default=None pk=0
+  column cid=11 name=source_blob_hash type=TEXT notnull=0 default=None pk=0
+  column cid=12 name=derived_at type=INTEGER notnull=1 default=None pk=0
+  column cid=13 name=projection_version type=INTEGER notnull=1 default=None pk=0
+  column cid=14 name=channel_id type=TEXT notnull=1 default=Some("'public'") pk=0
+  column cid=15 name=object_kind type=TEXT notnull=1 default=Some("'post'") pk=0
+  column cid=16 name=repost_of_json type=TEXT notnull=0 default=None pk=0
+  column cid=17 name=attachments_json type=TEXT notnull=1 default=Some("'[]'") pk=0
+table object_thread_cache
+  column cid=0 name=object_id type=TEXT notnull=0 default=None pk=1
+  column cid=1 name=topic_id type=TEXT notnull=1 default=None pk=0
+  column cid=2 name=root_object_id type=TEXT notnull=1 default=None pk=0
+  column cid=3 name=created_at type=INTEGER notnull=1 default=None pk=0
+  column cid=4 name=channel_id type=TEXT notnull=1 default=Some("'public'") pk=0
+table object_threads
+  column cid=0 name=topic_id type=TEXT notnull=1 default=None pk=0
+  column cid=1 name=object_id type=TEXT notnull=0 default=None pk=1
+  column cid=2 name=root_object_id type=TEXT notnull=1 default=None pk=0
+  column cid=3 name=reply_to_object_id type=TEXT notnull=0 default=None pk=0
+  column cid=4 name=created_at type=INTEGER notnull=1 default=None pk=0
+  fk id=0 seq=0 table=envelopes from=object_id to=Some("envelope_id") on_update=NO ACTION on_delete=NO ACTION match=NONE
+table profile_cache
+  column cid=0 name=pubkey type=TEXT notnull=0 default=None pk=1
+  column cid=1 name=name type=TEXT notnull=0 default=None pk=0
+  column cid=2 name=display_name type=TEXT notnull=0 default=None pk=0
+  column cid=3 name=about type=TEXT notnull=0 default=None pk=0
+  column cid=4 name=picture type=TEXT notnull=0 default=None pk=0
+  column cid=5 name=updated_at type=INTEGER notnull=1 default=None pk=0
+  column cid=6 name=picture_blob_hash type=TEXT notnull=0 default=None pk=0
+  column cid=7 name=picture_mime type=TEXT notnull=0 default=None pk=0
+  column cid=8 name=picture_bytes type=INTEGER notnull=0 default=None pk=0
+table profiles
+  column cid=0 name=pubkey type=TEXT notnull=0 default=None pk=1
+  column cid=1 name=name type=TEXT notnull=0 default=None pk=0
+  column cid=2 name=display_name type=TEXT notnull=0 default=None pk=0
+  column cid=3 name=about type=TEXT notnull=0 default=None pk=0
+  column cid=4 name=picture type=TEXT notnull=0 default=None pk=0
+  column cid=5 name=updated_at type=INTEGER notnull=1 default=None pk=0
+  column cid=6 name=picture_blob_hash type=TEXT notnull=0 default=None pk=0
+  column cid=7 name=picture_mime type=TEXT notnull=0 default=None pk=0
+  column cid=8 name=picture_bytes type=INTEGER notnull=0 default=None pk=0
+table reaction_cache
+  column cid=0 name=source_replica_id type=TEXT notnull=1 default=None pk=1
+  column cid=1 name=target_object_id type=TEXT notnull=1 default=None pk=2
+  column cid=2 name=reaction_id type=TEXT notnull=1 default=None pk=3
+  column cid=3 name=author_pubkey type=TEXT notnull=1 default=None pk=0
+  column cid=4 name=created_at type=INTEGER notnull=1 default=None pk=0
+  column cid=5 name=updated_at type=INTEGER notnull=1 default=None pk=0
+  column cid=6 name=reaction_key_kind type=TEXT notnull=1 default=None pk=0
+  column cid=7 name=normalized_reaction_key type=TEXT notnull=1 default=None pk=0
+  column cid=8 name=emoji type=TEXT notnull=0 default=None pk=0
+  column cid=9 name=custom_asset_id type=TEXT notnull=0 default=None pk=0
+  column cid=10 name=custom_asset_snapshot_json type=TEXT notnull=0 default=None pk=0
+  column cid=11 name=status type=TEXT notnull=1 default=None pk=0
+  column cid=12 name=source_key type=TEXT notnull=1 default=None pk=0
+  column cid=13 name=source_envelope_id type=TEXT notnull=1 default=None pk=0
+  column cid=14 name=derived_at type=INTEGER notnull=1 default=None pk=0
+  column cid=15 name=projection_version type=INTEGER notnull=1 default=None pk=0
+table replica_cursors
+  column cid=0 name=replica_id type=TEXT notnull=0 default=None pk=1
+  column cid=1 name=cursor type=TEXT notnull=0 default=None pk=0
+table topic_objects
+  column cid=0 name=topic_id type=TEXT notnull=1 default=None pk=1
+  column cid=1 name=object_id type=TEXT notnull=1 default=None pk=2
+  column cid=2 name=created_at type=INTEGER notnull=1 default=None pk=0
+  fk id=0 seq=0 table=envelopes from=object_id to=Some("envelope_id") on_update=NO ACTION on_delete=NO ACTION match=NONE
+table ui_state
+  column cid=0 name=state_key type=TEXT notnull=0 default=None pk=1
+  column cid=1 name=value_json type=TEXT notnull=1 default=None pk=0
+index idx_author_relationship_cache_local_author table=author_relationship_cache unique=0 origin=c partial=0
+  key seqno=0 cid=0 name=Some("local_author_pubkey")
+  key seqno=1 cid=1 name=Some("author_pubkey")
+  sql=Some("CREATE INDEX idx_author_relationship_cache_local_author ON author_relationship_cache(local_author_pubkey, author_pubkey)")
+index idx_bookmarked_custom_reactions_bookmarked_at table=bookmarked_custom_reactions unique=0 origin=c partial=0
+  key seqno=0 cid=7 name=Some("bookmarked_at")
+  key seqno=1 cid=0 name=Some("asset_id")
+  sql=Some("CREATE INDEX idx_bookmarked_custom_reactions_bookmarked_at ON bookmarked_custom_reactions(bookmarked_at DESC, asset_id DESC)")
+index idx_bookmarked_posts_bookmarked_at table=bookmarked_posts unique=0 origin=c partial=0
+  key seqno=0 cid=14 name=Some("bookmarked_at")
+  key seqno=1 cid=0 name=Some("source_object_id")
+  sql=Some("CREATE INDEX idx_bookmarked_posts_bookmarked_at ON bookmarked_posts(bookmarked_at DESC, source_object_id DESC)")
+index idx_dm_conversations_updated_at table=dm_conversations unique=0 origin=c partial=0
+  key seqno=0 cid=2 name=Some("updated_at")
+  key seqno=1 cid=0 name=Some("dm_id")
+  sql=Some("CREATE INDEX idx_dm_conversations_updated_at ON dm_conversations(updated_at DESC, dm_id DESC)")
+index idx_dm_messages_timeline table=dm_messages unique=0 origin=c partial=0
+  key seqno=0 cid=0 name=Some("dm_id")
+  key seqno=1 cid=4 name=Some("created_at")
+  key seqno=2 cid=1 name=Some("message_id")
+  sql=Some("CREATE INDEX idx_dm_messages_timeline ON dm_messages(dm_id, created_at DESC, message_id DESC)")
+index idx_dm_outbox_created_at table=dm_outbox unique=0 origin=c partial=0
+  key seqno=0 cid=4 name=Some("created_at")
+  key seqno=1 cid=1 name=Some("message_id")
+  sql=Some("CREATE INDEX idx_dm_outbox_created_at ON dm_outbox(created_at ASC, message_id ASC)")
+index idx_dm_tombstones_dm_id table=dm_message_tombstones unique=0 origin=c partial=0
+  key seqno=0 cid=0 name=Some("dm_id")
+  key seqno=1 cid=2 name=Some("deleted_at")
+  key seqno=2 cid=1 name=Some("message_id")
+  sql=Some("CREATE INDEX idx_dm_tombstones_dm_id ON dm_message_tombstones(dm_id, deleted_at DESC, message_id DESC)")
+index idx_follow_edges_subject table=follow_edges unique=0 origin=c partial=0
+  key seqno=0 cid=0 name=Some("subject_pubkey")
+  key seqno=1 cid=3 name=Some("updated_at")
+  key seqno=2 cid=1 name=Some("target_pubkey")
+  sql=Some("CREATE INDEX idx_follow_edges_subject ON follow_edges(subject_pubkey, updated_at DESC, target_pubkey ASC)")
+index idx_follow_edges_target table=follow_edges unique=0 origin=c partial=0
+  key seqno=0 cid=1 name=Some("target_pubkey")
+  key seqno=1 cid=3 name=Some("updated_at")
+  key seqno=2 cid=0 name=Some("subject_pubkey")
+  sql=Some("CREATE INDEX idx_follow_edges_target ON follow_edges(target_pubkey, updated_at DESC, subject_pubkey ASC)")
+index idx_game_room_cache_topic_kind_updated table=game_room_cache unique=0 origin=c partial=0
+  key seqno=0 cid=1 name=Some("topic_id")
+  key seqno=1 cid=15 name=Some("room_kind")
+  key seqno=2 cid=8 name=Some("updated_at")
+  key seqno=3 cid=0 name=Some("room_id")
+  sql=Some("CREATE INDEX idx_game_room_cache_topic_kind_updated ON game_room_cache(topic_id, room_kind, updated_at DESC, room_id DESC)")
+index idx_game_room_cache_topic_updated table=game_room_cache unique=0 origin=c partial=0
+  key seqno=0 cid=1 name=Some("topic_id")
+  key seqno=1 cid=14 name=Some("channel_id")
+  key seqno=2 cid=8 name=Some("updated_at")
+  key seqno=3 cid=0 name=Some("room_id")
+  sql=Some("CREATE INDEX idx_game_room_cache_topic_updated ON game_room_cache(topic_id, channel_id, updated_at DESC, room_id DESC)")
+index idx_game_room_cache_topic_updated_all table=game_room_cache unique=0 origin=c partial=0
+  key seqno=0 cid=1 name=Some("topic_id")
+  key seqno=1 cid=8 name=Some("updated_at")
+  key seqno=2 cid=0 name=Some("room_id")
+  sql=Some("CREATE INDEX idx_game_room_cache_topic_updated_all ON game_room_cache(topic_id, updated_at DESC, room_id DESC)")
+index idx_live_presence_cache_expiry table=live_presence_cache unique=0 origin=c partial=0
+  key seqno=0 cid=3 name=Some("expires_at")
+  sql=Some("CREATE INDEX idx_live_presence_cache_expiry ON live_presence_cache(expires_at ASC)")
+index idx_live_presence_cache_identity table=live_presence_cache unique=1 origin=c partial=0
+  key seqno=0 cid=0 name=Some("topic_id")
+  key seqno=1 cid=5 name=Some("channel_id")
+  key seqno=2 cid=1 name=Some("session_id")
+  key seqno=3 cid=2 name=Some("author_pubkey")
+  sql=Some("CREATE UNIQUE INDEX idx_live_presence_cache_identity ON live_presence_cache(topic_id, channel_id, session_id, author_pubkey)")
+index idx_live_session_cache_topic_started table=live_session_cache unique=0 origin=c partial=0
+  key seqno=0 cid=1 name=Some("topic_id")
+  key seqno=1 cid=14 name=Some("channel_id")
+  key seqno=2 cid=6 name=Some("started_at")
+  key seqno=3 cid=0 name=Some("session_id")
+  sql=Some("CREATE INDEX idx_live_session_cache_topic_started ON live_session_cache(topic_id, channel_id, started_at DESC, session_id DESC)")
+index idx_live_session_cache_topic_started_all table=live_session_cache unique=0 origin=c partial=0
+  key seqno=0 cid=1 name=Some("topic_id")
+  key seqno=1 cid=6 name=Some("started_at")
+  key seqno=2 cid=0 name=Some("session_id")
+  sql=Some("CREATE INDEX idx_live_session_cache_topic_started_all ON live_session_cache(topic_id, started_at DESC, session_id DESC)")
+index idx_muted_authors_muted_at table=muted_authors unique=0 origin=c partial=0
+  key seqno=0 cid=1 name=Some("muted_at")
+  key seqno=1 cid=0 name=Some("author_pubkey")
+  sql=Some("CREATE INDEX idx_muted_authors_muted_at ON muted_authors(muted_at DESC, author_pubkey ASC)")
+index idx_notifications_dm_dedupe table=notifications unique=1 origin=c partial=1
+  key seqno=0 cid=1 name=Some("recipient_pubkey")
+  key seqno=1 cid=2 name=Some("kind")
+  key seqno=2 cid=9 name=Some("dm_id")
+  key seqno=3 cid=10 name=Some("message_id")
+  sql=Some("CREATE UNIQUE INDEX idx_notifications_dm_dedupe ON notifications(recipient_pubkey, kind, dm_id, message_id) WHERE dm_id IS NOT NULL AND message_id IS NOT NULL")
+index idx_notifications_docs_dedupe table=notifications unique=1 origin=c partial=1
+  key seqno=0 cid=1 name=Some("recipient_pubkey")
+  key seqno=1 cid=2 name=Some("kind")
+  key seqno=2 cid=4 name=Some("source_envelope_id")
+  sql=Some("CREATE UNIQUE INDEX idx_notifications_docs_dedupe ON notifications(recipient_pubkey, kind, source_envelope_id) WHERE source_envelope_id IS NOT NULL")
+index idx_notifications_inbox table=notifications unique=0 origin=c partial=0
+  key seqno=0 cid=13 name=Some("received_at")
+  key seqno=1 cid=0 name=Some("notification_id")
+  sql=Some("CREATE INDEX idx_notifications_inbox ON notifications(received_at DESC, notification_id DESC)")
+index idx_notifications_unread table=notifications unique=0 origin=c partial=1
+  key seqno=0 cid=13 name=Some("received_at")
+  key seqno=1 cid=0 name=Some("notification_id")
+  sql=Some("CREATE INDEX idx_notifications_unread ON notifications(received_at DESC, notification_id DESC) WHERE read_at IS NULL")
+index idx_object_index_cache_topic_created table=object_index_cache unique=0 origin=c partial=0
+  key seqno=0 cid=1 name=Some("topic_id")
+  key seqno=1 cid=14 name=Some("channel_id")
+  key seqno=2 cid=3 name=Some("created_at")
+  key seqno=3 cid=0 name=Some("object_id")
+  sql=Some("CREATE INDEX idx_object_index_cache_topic_created ON object_index_cache(topic_id, channel_id, created_at DESC, object_id DESC)")
+index idx_object_index_cache_topic_created_all table=object_index_cache unique=0 origin=c partial=0
+  key seqno=0 cid=1 name=Some("topic_id")
+  key seqno=1 cid=3 name=Some("created_at")
+  key seqno=2 cid=0 name=Some("object_id")
+  sql=Some("CREATE INDEX idx_object_index_cache_topic_created_all ON object_index_cache(topic_id, created_at DESC, object_id DESC)")
+index idx_object_thread_cache_topic_root_created table=object_thread_cache unique=0 origin=c partial=0
+  key seqno=0 cid=1 name=Some("topic_id")
+  key seqno=1 cid=4 name=Some("channel_id")
+  key seqno=2 cid=2 name=Some("root_object_id")
+  key seqno=3 cid=3 name=Some("created_at")
+  key seqno=4 cid=0 name=Some("object_id")
+  sql=Some("CREATE INDEX idx_object_thread_cache_topic_root_created ON object_thread_cache(topic_id, channel_id, root_object_id, created_at ASC, object_id ASC)")
+index idx_object_thread_cache_topic_root_created_all table=object_thread_cache unique=0 origin=c partial=0
+  key seqno=0 cid=1 name=Some("topic_id")
+  key seqno=1 cid=2 name=Some("root_object_id")
+  key seqno=2 cid=3 name=Some("created_at")
+  key seqno=3 cid=0 name=Some("object_id")
+  sql=Some("CREATE INDEX idx_object_thread_cache_topic_root_created_all ON object_thread_cache(topic_id, root_object_id, created_at ASC, object_id ASC)")
+index idx_object_threads_root table=object_threads unique=0 origin=c partial=0
+  key seqno=0 cid=0 name=Some("topic_id")
+  key seqno=1 cid=2 name=Some("root_object_id")
+  key seqno=2 cid=4 name=Some("created_at")
+  key seqno=3 cid=1 name=Some("object_id")
+  sql=Some("CREATE INDEX idx_object_threads_root ON object_threads (topic_id, root_object_id, created_at ASC, object_id ASC)")
+index idx_reaction_cache_author_updated_at table=reaction_cache unique=0 origin=c partial=0
+  key seqno=0 cid=3 name=Some("author_pubkey")
+  key seqno=1 cid=5 name=Some("updated_at")
+  key seqno=2 cid=2 name=Some("reaction_id")
+  sql=Some("CREATE INDEX idx_reaction_cache_author_updated_at ON reaction_cache(author_pubkey, updated_at DESC, reaction_id DESC)")
+index idx_reaction_cache_target table=reaction_cache unique=0 origin=c partial=0
+  key seqno=0 cid=0 name=Some("source_replica_id")
+  key seqno=1 cid=1 name=Some("target_object_id")
+  key seqno=2 cid=7 name=Some("normalized_reaction_key")
+  key seqno=3 cid=2 name=Some("reaction_id")
+  sql=Some("CREATE INDEX idx_reaction_cache_target ON reaction_cache(source_replica_id, target_object_id, normalized_reaction_key, reaction_id)")
+index idx_topic_objects_timeline table=topic_objects unique=0 origin=c partial=0
+  key seqno=0 cid=0 name=Some("topic_id")
+  key seqno=1 cid=2 name=Some("created_at")
+  key seqno=2 cid=1 name=Some("object_id")
+  sql=Some("CREATE INDEX idx_topic_objects_timeline ON topic_objects (topic_id, created_at DESC, object_id DESC)")
+index sqlite_autoindex_author_relationship_cache_1 table=author_relationship_cache unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("local_author_pubkey")
+  key seqno=1 cid=1 name=Some("author_pubkey")
+  sql=None
+index sqlite_autoindex_blob_objects_1 table=blob_objects unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("blob_hash")
+  sql=None
+index sqlite_autoindex_bookmarked_custom_reactions_1 table=bookmarked_custom_reactions unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("asset_id")
+  sql=None
+index sqlite_autoindex_bookmarked_posts_1 table=bookmarked_posts unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("source_object_id")
+  sql=None
+index sqlite_autoindex_dm_conversations_1 table=dm_conversations unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("dm_id")
+  sql=None
+index sqlite_autoindex_dm_conversations_2 table=dm_conversations unique=1 origin=u partial=0
+  key seqno=0 cid=1 name=Some("peer_pubkey")
+  sql=None
+index sqlite_autoindex_dm_message_tombstones_1 table=dm_message_tombstones unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("dm_id")
+  key seqno=1 cid=1 name=Some("message_id")
+  sql=None
+index sqlite_autoindex_dm_messages_1 table=dm_messages unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("dm_id")
+  key seqno=1 cid=1 name=Some("message_id")
+  sql=None
+index sqlite_autoindex_dm_outbox_1 table=dm_outbox unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("dm_id")
+  key seqno=1 cid=1 name=Some("message_id")
+  sql=None
+index sqlite_autoindex_download_jobs_1 table=download_jobs unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("blob_hash")
+  sql=None
+index sqlite_autoindex_envelopes_1 table=envelopes unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("envelope_id")
+  sql=None
+index sqlite_autoindex_follow_edges_1 table=follow_edges unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("subject_pubkey")
+  key seqno=1 cid=1 name=Some("target_pubkey")
+  sql=None
+index sqlite_autoindex_game_room_cache_1 table=game_room_cache unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("room_id")
+  sql=None
+index sqlite_autoindex_live_presence_cache_1 table=live_presence_cache unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("topic_id")
+  key seqno=1 cid=1 name=Some("session_id")
+  key seqno=2 cid=2 name=Some("author_pubkey")
+  sql=None
+index sqlite_autoindex_live_session_cache_1 table=live_session_cache unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("session_id")
+  sql=None
+index sqlite_autoindex_muted_authors_1 table=muted_authors unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("author_pubkey")
+  sql=None
+index sqlite_autoindex_notifications_1 table=notifications unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("notification_id")
+  sql=None
+index sqlite_autoindex_object_index_cache_1 table=object_index_cache unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("object_id")
+  sql=None
+index sqlite_autoindex_object_thread_cache_1 table=object_thread_cache unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("object_id")
+  sql=None
+index sqlite_autoindex_object_threads_1 table=object_threads unique=1 origin=pk partial=0
+  key seqno=0 cid=1 name=Some("object_id")
+  sql=None
+index sqlite_autoindex_profile_cache_1 table=profile_cache unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("pubkey")
+  sql=None
+index sqlite_autoindex_profiles_1 table=profiles unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("pubkey")
+  sql=None
+index sqlite_autoindex_reaction_cache_1 table=reaction_cache unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("source_replica_id")
+  key seqno=1 cid=1 name=Some("target_object_id")
+  key seqno=2 cid=2 name=Some("reaction_id")
+  sql=None
+index sqlite_autoindex_replica_cursors_1 table=replica_cursors unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("replica_id")
+  sql=None
+index sqlite_autoindex_topic_objects_1 table=topic_objects unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("topic_id")
+  key seqno=1 cid=1 name=Some("object_id")
+  sql=None
+index sqlite_autoindex_ui_state_1 table=ui_state unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("state_key")
+  sql=None
