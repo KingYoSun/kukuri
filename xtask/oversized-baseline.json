@@ -1,0 +1,52 @@
+{
+  "files": [
+    {
+      "lines": 3085,
+      "path": "apps/desktop/src/styles/shell-phase1.css"
+    },
+    {
+      "lines": 1559,
+      "path": "apps/desktop/src/mocks/desktopApiMock.ts"
+    },
+    {
+      "lines": 1355,
+      "path": "crates/cn-user-api/src/lib.rs"
+    },
+    {
+      "lines": 1207,
+      "path": "crates/cn-user-api/tests/contract.rs"
+    },
+    {
+      "lines": 1159,
+      "path": "apps/desktop/src/shell/DesktopShellPage.tsx"
+    },
+    {
+      "lines": 1155,
+      "path": "apps/desktop/src/components/extended/MetaverseRoomPanel.tsx"
+    },
+    {
+      "lines": 1141,
+      "path": "apps/desktop/src/styles/shell-phase1-legacy.css"
+    },
+    {
+      "lines": 1138,
+      "path": "apps/desktop/src/shell/useDesktopShellViewModels.ts"
+    },
+    {
+      "lines": 1133,
+      "path": "apps/desktop/src/shell/useDesktopShellData.ts"
+    },
+    {
+      "lines": 1087,
+      "path": "crates/harness/src/scenarios/community_node.rs"
+    },
+    {
+      "lines": 1028,
+      "path": "crates/app-api/src/service/private_channels_support.rs"
+    },
+    {
+      "lines": 1020,
+      "path": "crates/app-api/src/private_channels.rs"
+    }
+  ]
+}
