@@ -28,14 +28,14 @@
 
 :root,
 :root[data-theme='dark'] {
-  --background: #3a1030;
-  --shell-background: #3a1030;
+  --background: #101923;
+  --shell-background: #101923;
   --foreground: #f6f1e8;
   --foreground-strong: #fff7ef;
   --muted-foreground: #cbbdae;
   --muted-foreground-soft: #a89b8f;
-  --surface-panel: #0c1721;
-  --surface-panel-solid: #0c1721;
+  --surface-panel: #d81b8c;
+  --surface-panel-solid: #d81b8c;
   --surface-panel-accent: #162231;
   --surface-panel-muted: #13202c;
   --surface-panel-soft: #182632;
