@@ -3,6 +3,7 @@
 ## 目的
 - 現行 kukuri 実装に必要な情報だけを置く。
 - 仕様は ADR、実行手順は runbook、状態は progress に分ける。
+- `docs/progress/` は 2 種を置く: (a) named な current-state / 計画文書（最新のマイルストーン状態・ロードマップ）と (b) `YYYY-MM-DD-<issue#>-<slug>.md` の per-issue 作業報告（個別 issue の実装ログ）。current-state は「今どうなっているか」、per-issue は「その issue で何をしたか」を書き分ける。
 
 ## 優先参照順
 1. `docs/progress/2026-04-16-mvp-builder-preview-plan.md`

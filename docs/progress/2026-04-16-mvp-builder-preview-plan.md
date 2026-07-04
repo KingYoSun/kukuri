@@ -50,9 +50,9 @@
 
 ## Launch Checklist
 
-- [ ] GitHub Release で Windows installer を公開
-- [ ] README 冒頭を builder preview 導線へ更新
-- [ ] `mvp-user-quickstart` と `mvp-troubleshooting` を公開
+- [x] GitHub Release で Windows installer を公開（`v0.1.x-preview.*` を GitHub Releases に公開済み）
+- [x] README 冒頭を builder preview 導線へ更新（root `README.md` に「Builder Preview」節あり）
+- [x] `mvp-user-quickstart` と `mvp-troubleshooting` を公開（`docs/runbooks/` に存在）
 - [ ] hosted preview node 上で starter topic seed content を確認
 - [ ] GitHub feedback surface を preview copy から辿れるようにする
 - [ ] packaged Windows app で `launch -> ready -> post -> reply -> private channel` を手動確認
