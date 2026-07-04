@@ -45,7 +45,8 @@ pub(crate) fn desktop_ui_check() -> Result<()> {
     desktop_lint()?;
     desktop_test()?;
     desktop_storybook()?;
-    desktop_browser_test()
+    desktop_browser_test()?;
+    desktop_visual_test()
 }
 
 pub(crate) fn desktop_package() -> Result<()> {
