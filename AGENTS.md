@@ -12,9 +12,9 @@
 
 ## 作業対象
 - 新規実装・修正は原則 root workspace の現行実装のみ。
-- 現行スコープの参照優先順位は `docs/README.md` に従う。
-- foundation baseline は `docs/progress/2026-03-10-foundation.md`。
+- 現行スコープの参照優先順位は `docs/README.md` に従う（現行アクティブマイルストーンは builder preview）。
 - builder preview / 配布 / 初回体験は `docs/progress/2026-04-16-mvp-builder-preview-plan.md`。
+- その capability baseline は `docs/progress/2026-03-10-foundation.md`。
 - Windows desktop support、seeded DHT discovery、community-node connectivity/auth、social graph v1、private channel audience v1 は current scope に含まれる。
 
 ## 実行入口
