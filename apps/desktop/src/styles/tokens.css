@@ -28,8 +28,8 @@
 
 :root,
 :root[data-theme='dark'] {
-  --background: #101923;
-  --shell-background: #101923;
+  --background: #3a1030;
+  --shell-background: #3a1030;
   --foreground: #f6f1e8;
   --foreground-strong: #fff7ef;
   --muted-foreground: #cbbdae;
