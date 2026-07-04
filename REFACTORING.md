@@ -145,16 +145,18 @@ PR を作成または説明するときは、タスク種別を明確にする�
 | `crates/core/**` | `cargo xtask rust-test` |
 | `crates/store/**` | `cargo xtask rust-test` + 永続化の振る舞いが変わる場合は関連 scenario |
 | `crates/transport/**` | `cargo xtask rust-test` + peer の振る舞いが変わる場合は関連 connectivity scenario |
-| `crates/docs-sync/**` | `cargo xtask rust-test` + `cargo xtask e2e-smoke` |
+| `crates/docs-sync/**` | `cargo xtask rust-test`（実 relay replication テスト `src/tests/relay.rs` を含む）+ replication / relay 経路の振る舞いが変わる場合は `cargo xtask scenario community_node_public_connectivity` |
 | `crates/blob-service/**` | `cargo xtask rust-test` + media/blob に影響する場合は関連 scenario |
 | `crates/app-api/**` | `cargo xtask rust-test` + payload 形状が変わる場合は frontend test |
-| `crates/desktop-runtime/**` | `cargo xtask rust-test` + `cargo xtask e2e-smoke` |
+| `crates/desktop-runtime/**` | `cargo xtask rust-test`（community_node / identity_restart / seeded_dht / media_blob_restore 等の実挙動テストを含む）+ 起動 / 永続往復が変わる場合は `cargo xtask e2e-smoke`、peer 間 connectivity・CN セッションが変わる場合は `cargo xtask scenario community_node_public_connectivity` |
 | `crates/cn-*` | `cargo xtask cn-check` + `cargo xtask cn-test` |
 | `harness/scenarios/**` | `cargo xtask scenario <changed-scenario>` |
 | `apps/desktop/**` | `cargo xtask desktop-ui-check`（視覚回帰 `test:e2e:visual` を含む。CSS/スタイル変更で見た目が変わると CI の視覚 step が赤くなる。意図的な変更時は baseline を再生成する — 手順は `docs/runbooks/dev.md` の「視覚回帰」を参照） |
 | `apps/desktop/src-tauri/**` | `cargo xtask tauri-check` + `cargo xtask e2e-smoke` |
 | `docs/adr/**` | 対応する tests / contracts / scenarios を確認または更新する |
 | `docs/runbooks/**` | runbook 内の command と path を確認する |
+
+`cargo xtask e2e-smoke` は `desktop_smoke_post_persist`（`FakeNetwork`・in-process 単一 runtime）1 本を回す desktop 永続 smoke であり、post 作成 → timeline → restart → 再表示の永続往復のみを検証する。実 transport / docs-sync の peer 間経路・relay replication は通らない。peer / replication / CN 接続の検証は該当 crate の `cargo xtask rust-test`（実 iroh テストを含む）と `cargo xtask scenario <connectivity scenario>` が担う。CI 実配線の connectivity scenario は `community_node_public_connectivity`（fast / release）、加えて `community_node_multi_device_connectivity`（nightly）。connectivity scenario は cn-postgres 起動 + 実 iroh peer 複数で重いため、マトリクスでは「振る舞いが変わる場合」の条件付き要求とする。
 
 必須validationの全実行がローカルで重すぎる場合は、最も狭い関連 command を実行し、実行しなかった内容と理由を明確に報告する。実行していない validation を passed と報告しない。
 
