@@ -129,6 +129,41 @@ PR を作成または説明するときは、タスク種別を明確にする�
    Rust 側 crates/app-api/src/tests/views_wire_snapshot.rs と TS 側 viewsContract.ts(+ .test.ts)が
    両側から検証する(再生成手順は各ファイル冒頭)。CommunityNode 系・requests.rs 入力方向は未。
 
+## 地雷リスト(直したくなるが、してはいけない)
+
+凍結境界とは別に、「一見 dead code / 不整合 / 冗長に見えるが、消す・揃える・golden 化すると
+壊れる」ものを挙げる。詳細な調査記録は `.claude/plans/2026-07-02-refactoring_master_plan.md` §3.2。
+
+1. **`ConnectionPath::RelayFallback` は削除禁止の第3経路**: `AGENTS.md`「通信経路」節が規定する
+   `Direct P2P -> Relay Supported P2P -> Relay Fallback` の 3 番目。variant は
+   `crates/transport/src/config.rs` に定義され、TS 側表示分岐(`apps/desktop/src/lib/api/types.ts` /
+   `apps/desktop/src/shell/selectors.ts` の `relay_fallback`)も実在する。**実行時に値として構築される
+   箇所が現状ゼロ**(ライブ代入は DirectP2p / RelaySupportedP2p のみ)なので「未使用だから削除」に
+   見えるが、これは削除対象ではなく診断の実装ギャップである。**variant は削除しない。診断は現状
+   RelayFallback を報告しない**(判定実装は別 issue。本リファクタでは事実固定に留める)。
+2. **`apps/desktop/src/styles/shell-phase1-legacy.css` は名前に反して現役の本番 CSS**: 大半の
+   クラスが現在も使われ、Radix Portal 経由の dialog / popover では `.shell-phase1` の外に描画される
+   ため unscoped な phase1 側だけが効く。「legacy だから削除」は禁止。安全なのは改名のみ(H8)。
+   統合は宣言単位・コンテキスト別の実効値判定 + 視覚回帰ネット(検証マトリクスの
+   `apps/desktop/**` = `test:e2e:visual`)を前提にする。
+3. **署名バイトは非決定的なので golden 化しない**: `KukuriKeys::sign_schnorr`
+   (`crates/core/src/crypto.rs`)は毎回 aux_rand を生成するため署名バイトは実行毎に変わる。凍結対象は
+   canonical バイト列と「過去 fixture の verify 継続」であり、署名バイトを snapshot golden にすると
+   毎回 fail する(理由は `crates/core/src/tests/signing_canonical.rs` の doc）。
+
+## 互換パスと sunset 条件
+
+以下は後方互換のために残している経路で、「いつ削除してよいか」を明文化せずに消すと既存データ・
+既存ユーザーが壊れる。現状は削除せず、撤去は Phase 2(master plan C6 / C8)で条件を確定してから行う。
+撤去条件が決まるまでは削除しない(このリストが「消してよいか」の判断入口)。
+
+| 互換パス | 所在 | 誤削除の影響 | sunset 条件 |
+|---|---|---|---|
+| epoch `"legacy"` 互換 | `crates/app-api/src/service/projection_support.rs` | legacy epoch の projection が読めなくなる | 未決定(全既存 projection の再構築完了が前提) |
+| 旧 `.nsec` 鍵ファイル読込 | `crates/desktop-runtime/src/identity.rs`(`db_path.with_extension("nsec")`。テスト `legacy_nsec_file_still_loads` が固定) | 旧形式で鍵を持つユーザーの identity ロスト | 未決定(全ユーザーの新形式移行が前提) |
+| `resolved_urls` fallback(seed_peers 空 / None 時) | `crates/desktop-runtime/src/community_node/requests_support.rs` | 旧 community-node 設定の URL が壊れる | 未決定 |
+| CRLF checksum 自己修復 | `crates/store/src/sqlite/connection.rs`(`repair_line_ending_only_migration_checksums`。**store 初期化=pool 作成時に1回**実行) | CRLF 時代に migration checksum がずれた DB が起動不能になる | 未決定(master plan C6 = バージョン条件付き撤去 or 一度きりメンテ処理へ隔離) |
+
 ## 真実の置き場所ルール
 
 - 現行ドキュメントの優先順位は `docs/README.md` に従う。
