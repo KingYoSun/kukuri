@@ -26,17 +26,18 @@ cargo xtask desktop-lint
 cargo xtask desktop-test
 cargo xtask desktop-storybook
 cargo xtask desktop-browser-test
+cargo xtask desktop-visual-test
 ```
 
 `cargo xtask check` は non-CN Rust check、`apps/desktop/src-tauri` の Tauri backend compile、frontend lint/typecheck をまとめた日常 fast path。
 
 `cargo xtask test` は non-CN Rust test と `apps/desktop` の Vitest をまとめた日常 regression path。
 
-`cargo xtask desktop-ui-check` は `apps/desktop` の `lint`, `typecheck`, `test`, `storybook:build`, `test:e2e:browser` をまとめて流す browser-aware frontend gate。
+`cargo xtask desktop-ui-check` は `apps/desktop` の `lint`, `typecheck`, `test`, `storybook:build`, `test:e2e:browser`, `test:e2e:visual` をまとめて流す browser-aware frontend gate。`test:e2e:visual`(視覚回帰)は Windows などの非 CI 環境では `ignoreSnapshots` により比較が skip され、到達操作の smoke としてのみ流れる（下記「視覚回帰」を参照）。
 
 - `cargo xtask rust-test` は `cargo-nextest` を優先して non-CN package を流し、`kukuri-harness` は serial 実行、doctest は `cargo test --doc` で補完する。local で `cargo-nextest` が無い場合だけ `cargo test` に fallback する。
 - `cargo xtask tauri-check` は `CARGO_TARGET_DIR=target/desktop-tauri-check` を使って `apps/desktop/src-tauri` を warm cache 向けに compile する。
-- `cargo xtask desktop-lint` / `desktop-test` / `desktop-storybook` / `desktop-browser-test` は targeted rerun 用。workflow とローカル rerun のどちらでも同じ entrypoint を使う。
+- `cargo xtask desktop-lint` / `desktop-test` / `desktop-storybook` / `desktop-browser-test` / `desktop-visual-test` は targeted rerun 用。workflow とローカル rerun のどちらでも同じ entrypoint を使う。
 - `cargo xtask cn-check` / `cargo xtask cn-test` は `cn-*` server slice の compile/test 用。
 - `cargo xtask cn-test` は `docker-compose.community-node.yml` の `cn-postgres` を自動起動し、`KUKURI_CN_RUN_INTEGRATION_TESTS=1` を付けて contract/integration test を流す。
 - `cargo xtask scenario community_node_public_connectivity` も `cn-postgres` を自動起動し、in-process の `cn-user-api` / `cn-iroh-relay` を立てて 2 desktop scenario を流す。
@@ -47,6 +48,29 @@ cargo xtask desktop-browser-test
 - browser-level UI change: 追加で `cargo xtask desktop-ui-check`
 - community-node / Postgres 変更: 追加で `cargo xtask cn-check` + `cargo xtask cn-test`
 - runtime / end-to-end 変更: 追加で `cargo xtask e2e-smoke` または対象 `cargo xtask scenario ...`
+- CSS / スタイル変更: `cargo xtask desktop-ui-check`（視覚回帰を含む）。見た目が意図的に変わる場合は下記手順で baseline を更新する
+
+## 視覚回帰 (visual regression)
+
+WP-H8（CSS 改名・整理）の安全網として、主要 14 サーフェスを Playwright `toHaveScreenshot` で撮って baseline と比較する（`apps/desktop/tests/playwright/visual.spec.ts`）。
+
+- **baseline は Linux / Chromium 固定**。`apps/desktop/tests/playwright/__screenshots__/visual.spec.ts/*.png` に commit されている。フォントは非同梱（システムフォント依存）のため Windows 開発機と CI の pixel 一致は構造的に不可能。
+- **ローカル（非 CI）は比較 skip**。`playwright.config.ts` の `ignoreSnapshots: !process.env.CI` により、Windows 等では `cargo xtask desktop-visual-test` / `desktop-ui-check` は到達操作の smoke としてのみ流れ、比較は行わない（従来どおり green）。
+- **CI（`linux-desktop-browser`）が比較を強制**。CSS 変更で見た目が変わると視覚 step が赤くなる。
+- 決定性のための固定: `timezoneId: 'UTC'`（絶対時刻表示が TZ 依存）、`animations: 'disabled'`、`maxDiffPixelRatio: 0.01`（AA 微差を吸収）。
+
+### 視覚 step が赤くなったら
+1. Actions の失敗ジョブから artifact `kukuri-desktop-visual-diff` をダウンロードし、`*-actual.png` / `*-diff.png` を baseline と目視比較する。
+2. **意図しない差分（退行）** → CSS を修正して push。
+3. **意図した差分** → baseline を更新（下記）。CSS 変更 PR に baseline 更新を同梱し、diff 画像を PR 本文に貼る。
+
+### baseline の再生成（意図的な見た目変更・deps 更新時）
+- **必ず Linux/Chromium で生成する。Windows ローカルでの `--update-snapshots` は禁止**（フォント差で CI と不一致になり、生成した baseline が即割れる）。
+- 手順: GitHub Actions の **「Kukuri Visual Baseline」ワークフロー（`workflow_dispatch`）** を対象ブランチで実行 → 生成された artifact `kukuri-desktop-visual-baseline` をダウンロード → `apps/desktop/tests/playwright/__screenshots__/visual.spec.ts/` に上書き展開して commit。
+  - CLI 例: `gh workflow run kukuri-visual-baseline.yml --ref <branch>` → 完了後 `gh run download <run-id> -n kukuri-desktop-visual-baseline -D <tmp>`。
+- optional（ローカルで Linux baseline を再生成したい場合）: Playwright 公式 Docker イメージ `mcr.microsoft.com/playwright:v1.59.1-jammy`（`pnpm-lock.yaml` の `@playwright/test` バージョンと一致させる）内で `pnpm test:e2e:visual --update-snapshots` を実行する。
+- `@playwright/test`（同梱 Chromium）更新や ubuntu-latest ランナーイメージ更新でフォント/AA が変わると baseline が一斉に割れることがある。その場合は deps 更新 PR に baseline 再生成を同梱する。
+- baseline の置き場は `apps/desktop/tests/playwright/__screenshots__/`（`.gitignore` 済みの `test-results/` とは別。混同しない）。
 
 ## community-node compose
 ```bash
