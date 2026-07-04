@@ -11,7 +11,8 @@
     "test": "vitest run",
     "storybook": "storybook dev -p 6006",
     "storybook:build": "storybook build",
-    "test:e2e:browser": "playwright test",
+    "test:e2e:browser": "playwright test --project=chromium",
+    "test:e2e:visual": "playwright test --project=visual",
     "tauri": "node ./scripts/tauri-cli.mjs",
     "tauri:dev": "node ./scripts/tauri-cli.mjs dev",
     "tauri:build": "node ./scripts/tauri-cli.mjs build"

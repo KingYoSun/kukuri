@@ -37,6 +37,10 @@ pub(crate) fn desktop_browser_test() -> Result<()> {
     run_pnpm(["test:e2e:browser"], &desktop_dir())
 }
 
+pub(crate) fn desktop_visual_test() -> Result<()> {
+    run_pnpm(["test:e2e:visual"], &desktop_dir())
+}
+
 pub(crate) fn desktop_ui_check() -> Result<()> {
     desktop_lint()?;
     desktop_test()?;
