@@ -151,7 +151,7 @@ PR を作成または説明するときは、タスク種別を明確にする�
 | `crates/desktop-runtime/**` | `cargo xtask rust-test` + `cargo xtask e2e-smoke` |
 | `crates/cn-*` | `cargo xtask cn-check` + `cargo xtask cn-test` |
 | `harness/scenarios/**` | `cargo xtask scenario <changed-scenario>` |
-| `apps/desktop/**` | `cargo xtask desktop-ui-check` |
+| `apps/desktop/**` | `cargo xtask desktop-ui-check`（視覚回帰 `test:e2e:visual` を含む。CSS/スタイル変更で見た目が変わると CI の視覚 step が赤くなる。意図的な変更時は baseline を再生成する — 手順は `docs/runbooks/dev.md` の「視覚回帰」を参照） |
 | `apps/desktop/src-tauri/**` | `cargo xtask tauri-check` + `cargo xtask e2e-smoke` |
 | `docs/adr/**` | 対応する tests / contracts / scenarios を確認または更新する |
 | `docs/runbooks/**` | runbook 内の command と path を確認する |
