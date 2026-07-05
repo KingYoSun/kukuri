@@ -122,10 +122,12 @@ pub(crate) fn build_desktop_state(app_handle: &tauri::AppHandle) -> Result<Deskt
     let db_path = resolve_db_path(app_handle)?;
     let runtime = tauri::async_runtime::block_on(DesktopRuntime::from_env(db_path))
         .map_err(map_error)?;
+    let runtime = Arc::new(runtime);
+    // トレイ常駐中はフロントのポーリング(hidden で停止)が CN セッションを維持できないため、
+    // runtime 常駐のセッション維持スケジューラをここで起動する(停止は shutdown / プロセス終了)。
+    tauri::async_runtime::block_on(runtime.start_community_node_session_scheduler());
 
-    Ok(DesktopState {
-        runtime: Arc::new(runtime),
-    })
+    Ok(DesktopState { runtime })
 }
 
 fn app_consent_path(db_path: &Path) -> PathBuf {

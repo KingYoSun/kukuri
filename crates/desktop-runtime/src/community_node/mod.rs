@@ -25,6 +25,7 @@ mod manifest_support;
 mod reconnect_support;
 mod report_routing_support;
 mod requests_support;
+mod scheduler_support;
 mod session_runtime_support;
 mod session_state_support;
 mod token_storage_support;
@@ -63,6 +64,10 @@ pub(crate) const COMMUNITY_NODE_SESSION_RETRY_SECONDS: i64 = 30;
 pub(crate) const COMMUNITY_NODE_AUTH_REFRESH_SKEW_SECONDS: i64 = 300;
 pub(crate) const COMMUNITY_NODE_RECONNECT_UNHEALTHY_SECONDS: i64 = 30;
 pub(crate) const COMMUNITY_NODE_RECONNECT_BACKOFF_SECONDS: [i64; 3] = [30, 60, 120];
+// heartbeat の次回期限は「サーバ TTL(90 秒)− 30 秒」で管理されるため、tick は 30 秒未満が必須。
+// 15 秒は失効防止を満たしつつ、tick 毎の consent GET を可視時の現行ポーリング(3 秒 ×2 getter)
+// より低頻度に抑える値(WP-C1 プランの決定事項 1)。
+pub(crate) const COMMUNITY_NODE_SESSION_SCHEDULER_TICK_SECONDS: u64 = 15;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CommunityNodeNodeConfig {
