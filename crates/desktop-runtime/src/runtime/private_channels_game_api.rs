@@ -21,13 +21,17 @@ impl DesktopRuntime {
         &self,
         request: ExportPrivateChannelInviteRequest,
     ) -> Result<String> {
-        self.app_service
+        // owner の Share export は auto-rotate で capability を変異させる(WP-C2 E-2)
+        let token = self
+            .app_service
             .export_private_channel_invite(
                 request.topic.as_str(),
                 request.channel_id.as_str(),
                 request.expires_at,
             )
-            .await
+            .await?;
+        self.persist_private_channel_capabilities_from_app().await?;
+        Ok(token)
     }
 
     pub async fn import_private_channel_invite(
@@ -46,13 +50,17 @@ impl DesktopRuntime {
         &self,
         request: ExportChannelAccessTokenRequest,
     ) -> Result<ChannelAccessTokenExport> {
-        self.app_service
+        // app-api 内部で export 3 経路へ委譲されるため、このラッパー自身の persist が必要
+        let export = self
+            .app_service
             .export_channel_access_token(
                 request.topic.as_str(),
                 request.channel_id.as_str(),
                 request.expires_at,
             )
-            .await
+            .await?;
+        self.persist_private_channel_capabilities_from_app().await?;
+        Ok(export)
     }
 
     pub async fn import_channel_access_token(
@@ -80,13 +88,16 @@ impl DesktopRuntime {
         &self,
         request: ExportFriendOnlyGrantRequest,
     ) -> Result<String> {
-        self.app_service
+        let token = self
+            .app_service
             .export_friend_only_grant(
                 request.topic.as_str(),
                 request.channel_id.as_str(),
                 request.expires_at,
             )
-            .await
+            .await?;
+        self.persist_private_channel_capabilities_from_app().await?;
+        Ok(token)
     }
 
     pub async fn import_friend_only_grant(
@@ -105,13 +116,16 @@ impl DesktopRuntime {
         &self,
         request: ExportFriendPlusShareRequest,
     ) -> Result<String> {
-        self.app_service
+        let token = self
+            .app_service
             .export_friend_plus_share(
                 request.topic.as_str(),
                 request.channel_id.as_str(),
                 request.expires_at,
             )
-            .await
+            .await?;
+        self.persist_private_channel_capabilities_from_app().await?;
+        Ok(token)
     }
 
     pub async fn import_friend_plus_share(
