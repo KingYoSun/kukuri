@@ -3725,6 +3725,7 @@ dependencies = [
  "jsonwebtoken",
  "kukuri-cn-safety",
  "kukuri-cn-safety-runtime",
+ "kukuri-cn-trust",
  "kukuri-core",
  "redis",
  "secp256k1",
@@ -3761,6 +3762,17 @@ dependencies = [
  "sha2 0.10.9",
  "thiserror 2.0.18",
  "uuid",
+]
+
+[[package]]
+name = "kukuri-cn-trust"
+version = "0.1.2"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "kukuri-cn-safety",
+ "serde",
 ]
 
 [[package]]

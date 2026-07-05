@@ -346,6 +346,10 @@ impl DesktopRuntime {
     }
 
     pub async fn shutdown(&self) {
+        if let Some(handle) = self.community_node_scheduler_task.lock().await.take() {
+            handle.abort();
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
+        }
         self.app_service.shutdown().await;
         let _ = tokio::time::timeout(
             std::time::Duration::from_secs(15),

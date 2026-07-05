@@ -86,6 +86,7 @@ pub struct DesktopRuntime {
     pub(crate) community_node_session_guard: Arc<Mutex<()>>,
     pub(crate) community_node_reconnect_state: Arc<Mutex<CommunityNodeReconnectState>>,
     pub(crate) community_node_reconnect_guard: Arc<Mutex<()>>,
+    pub(crate) community_node_scheduler_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
     pub(crate) active_connectivity_urls: Arc<Mutex<Vec<String>>>,
     pub(crate) last_runtime_connectivity_assist_state:
         Arc<Mutex<Option<crate::community_node::RuntimeConnectivityAssistState>>>,
@@ -296,6 +297,7 @@ impl DesktopRuntime {
                 CommunityNodeReconnectState::default(),
             )),
             community_node_reconnect_guard: Arc::new(Mutex::new(())),
+            community_node_scheduler_task: Mutex::new(None),
             active_connectivity_urls: Arc::new(Mutex::new(relay_config.iroh_relay_urls.clone())),
             last_runtime_connectivity_assist_state: Arc::new(Mutex::new(Some(
                 initial_runtime_connectivity_state,
