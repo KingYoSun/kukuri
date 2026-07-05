@@ -265,6 +265,16 @@ impl DesktopRuntime {
                 .restore_private_channel_capability(capability)
                 .await?;
         }
+        // 復元完了後に write-through 永続化を接続する(復元前に接続すると復元途中の
+        // 部分リストが persist され、途中クラッシュでディスク上の registry が縮む)。
+        // 以後、capability registry の変異(register/remove 経由の全経路)は AppService
+        // 層でそのまま identity storage へ永続化され、ラッパー側の手動 persist 規約は不要。
+        {
+            let persist_db_path = db_path.clone();
+            app_service.set_private_channel_capability_persist(Arc::new(move |capabilities| {
+                persist_private_channel_capabilities(&persist_db_path, identity_mode, capabilities)
+            }));
+        }
         let gossip_subscription_state = load_gossip_subscription_state(&db_path, identity_mode)?;
         app_service
             .restore_gossip_disabled_state(
@@ -330,14 +340,6 @@ impl DesktopRuntime {
 
     pub fn db_path(&self) -> &Path {
         &self.db_path
-    }
-
-    async fn persist_private_channel_capabilities_from_app(&self) -> Result<()> {
-        persist_private_channel_capabilities(
-            &self.db_path,
-            self.identity_mode,
-            &self.app_service.list_private_channel_capabilities().await?,
-        )
     }
 
     pub(crate) async fn persist_gossip_subscription_state_from_app(&self) -> Result<()> {
