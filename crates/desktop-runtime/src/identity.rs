@@ -163,13 +163,19 @@ fn persist_optional_secret_with_keyring(
     keyring: &dyn KeyringStore,
 ) -> Result<()> {
     let account = optional_secret_account(db_path, purpose, key);
-    if mode == IdentityStorageMode::Auto
-        && keyring
+    if mode == IdentityStorageMode::Auto {
+        if keyring
             .set_password(KEYRING_SERVICE, account.as_str(), secret)
             .is_ok()
-    {
-        let _ = delete_file_if_exists(optional_secret_file_path(db_path, purpose, key).as_path());
-        return Ok(());
+        {
+            let _ =
+                delete_file_if_exists(optional_secret_file_path(db_path, purpose, key).as_path());
+            return Ok(());
+        }
+        // set 失敗時に旧 entry を残すと、load が keyring を優先するため file へ書いた
+        // 新しい値が恒久的にシャドウされる(例: Windows Credential Manager の blob 上限
+        // 超過で set が失敗し始めるケース)。best effort で削除してから file へ倒す。
+        let _ = keyring.delete_password(KEYRING_SERVICE, account.as_str());
     }
 
     persist_secret_to_file_path(
@@ -390,6 +396,7 @@ mod tests {
         entries: Arc<Mutex<HashMap<(String, String), String>>>,
         fail_get: Arc<Mutex<bool>>,
         fail_set: Arc<Mutex<bool>>,
+        fail_delete: Arc<Mutex<bool>>,
     }
 
     impl KeyringStore for FakeKeyringStore {
@@ -417,6 +424,9 @@ mod tests {
         }
 
         fn delete_password(&self, service: &str, account: &str) -> Result<()> {
+            if *self.fail_delete.lock().expect("keyring lock") {
+                anyhow::bail!("fake keyring delete failure");
+            }
             self.entries
                 .lock()
                 .expect("keyring lock")
@@ -529,6 +539,90 @@ mod tests {
                 .to_string()
                 .contains("persisted identity is stored in keyring"),
             "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn optional_secret_keyring_set_failure_does_not_shadow_file_fallback() {
+        clear_identity_env();
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("kukuri.db");
+        let keyring = FakeKeyringStore::default();
+
+        persist_optional_secret_with_keyring(
+            &db_path,
+            IdentityStorageMode::Auto,
+            "test-purpose",
+            "registry",
+            "old-value",
+            &keyring,
+        )
+        .expect("persist to keyring");
+        assert_eq!(
+            load_optional_secret_with_keyring(
+                &db_path,
+                IdentityStorageMode::Auto,
+                "test-purpose",
+                "registry",
+                &keyring,
+            )
+            .expect("load from keyring"),
+            Some("old-value".to_string())
+        );
+
+        // keyring 書き込みが失敗し始めた後の更新(例: registry JSON が blob 上限を超過)。
+        // 旧 entry が残ると load(keyring 優先)が file の新しい値を恒久的にシャドウする。
+        *keyring.fail_set.lock().expect("keyring lock") = true;
+        persist_optional_secret_with_keyring(
+            &db_path,
+            IdentityStorageMode::Auto,
+            "test-purpose",
+            "registry",
+            "new-value",
+            &keyring,
+        )
+        .expect("persist with keyring set failure");
+
+        let loaded = load_optional_secret_with_keyring(
+            &db_path,
+            IdentityStorageMode::Auto,
+            "test-purpose",
+            "registry",
+            &keyring,
+        )
+        .expect("load after fallback");
+        assert_eq!(
+            loaded,
+            Some("new-value".to_string()),
+            "stale keyring entry must not shadow the file fallback"
+        );
+    }
+
+    #[test]
+    fn optional_secret_persists_to_file_even_when_keyring_delete_fails() {
+        clear_identity_env();
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("kukuri.db");
+        let keyring = FakeKeyringStore::default();
+
+        *keyring.fail_set.lock().expect("keyring lock") = true;
+        *keyring.fail_delete.lock().expect("keyring lock") = true;
+        persist_optional_secret_with_keyring(
+            &db_path,
+            IdentityStorageMode::Auto,
+            "test-purpose",
+            "registry",
+            "value",
+            &keyring,
+        )
+        .expect("persist must fall back to file even when delete fails");
+
+        assert_eq!(
+            load_secret_from_file_path(
+                optional_secret_file_path(&db_path, "test-purpose", "registry").as_path()
+            )
+            .expect("read fallback file"),
+            Some("value".to_string())
         );
     }
 
