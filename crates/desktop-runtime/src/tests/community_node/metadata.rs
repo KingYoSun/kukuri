@@ -89,7 +89,7 @@ async fn community_node_status_refresh_updates_bootstrap_seed_peers() {
 }
 
 #[tokio::test]
-async fn community_node_sync_status_refresh_updates_bootstrap_seed_peers() {
+async fn community_node_session_maintenance_updates_bootstrap_seed_peers() {
     let _serial = acquire_async_test_lock().await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-sync-status-refresh.db");
@@ -148,7 +148,7 @@ async fn community_node_sync_status_refresh_updates_bootstrap_seed_peers() {
         }],
     };
 
-    let _status = runtime.get_sync_status().await.expect("sync status");
+    runtime.run_community_node_session_maintenance_once().await;
 
     assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
     assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 1);
@@ -233,10 +233,7 @@ async fn community_node_metadata_refresh_heartbeats_before_bootstrap_sync_even_w
         }],
     };
 
-    let _status = runtime
-        .get_sync_status()
-        .await
-        .expect("initial sync status");
+    runtime.run_community_node_session_maintenance_once().await;
     assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
     assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 1);
     let runtime_connectivity_apply_version = runtime
@@ -364,10 +361,7 @@ async fn community_node_ready_transition_refreshes_bootstrap_metadata_before_nex
         }],
     };
 
-    let _status = runtime
-        .get_sync_status()
-        .await
-        .expect("initial sync status");
+    runtime.run_community_node_session_maintenance_once().await;
     assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
     assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 1);
     assert!(
@@ -391,10 +385,7 @@ async fn community_node_ready_transition_refreshes_bootstrap_metadata_before_nex
 
     *state.seed_peers.lock().await = vec![refreshed_seed_peer.clone()];
 
-    let _status = runtime
-        .get_sync_status()
-        .await
-        .expect("refreshed sync status");
+    runtime.run_community_node_session_maintenance_once().await;
 
     assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
     assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 2);
@@ -478,24 +469,15 @@ async fn community_node_ready_transition_refreshes_bootstrap_metadata_only_once_
         }],
     };
 
-    let _status = runtime
-        .get_sync_status()
-        .await
-        .expect("initial sync status");
+    runtime.run_community_node_session_maintenance_once().await;
     assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
     assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 1);
 
-    let _status = runtime
-        .get_sync_status()
-        .await
-        .expect("ready refresh sync status");
+    runtime.run_community_node_session_maintenance_once().await;
     assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
     assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 2);
 
-    let _status = runtime
-        .get_sync_status()
-        .await
-        .expect("steady-state sync status");
+    runtime.run_community_node_session_maintenance_once().await;
     assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
     assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 2);
 
@@ -793,10 +775,7 @@ async fn refresh_community_node_metadata_requeues_heartbeat_when_runtime_connect
         return;
     }
 
-    let _status = runtime
-        .get_sync_status()
-        .await
-        .expect("sync status after refresh");
+    runtime.run_community_node_session_maintenance_once().await;
 
     assert_eq!(
         state.heartbeat_hits.load(Ordering::SeqCst),
