@@ -144,6 +144,86 @@ async fn session_scheduler_keeps_bootstrap_registration_alive_without_getter_pol
     server.abort();
 }
 
+/// get_sync_status が CN セッションの establish/refresh を一切行わない(読み取り専用)ことを
+/// 固定する contract。駆動はスケジューラ(session maintenance tick)のみが担う(WP-C1 T4)。
+#[tokio::test]
+async fn get_sync_status_is_read_only_for_community_node_session() {
+    let _serial = acquire_async_test_lock().await;
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("community-sync-status-read-only.db");
+    let runtime = DesktopRuntime::new_with_config_and_identity(
+        &db_path,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("runtime");
+
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind listener");
+    let base_url = format!("http://{}", listener.local_addr().expect("local addr"));
+    let state = Arc::new(MockCommunityNodeState {
+        base_url: base_url.clone(),
+        seed_peers: Arc::new(Mutex::new(Vec::new())),
+        heartbeat_seed_peers: Arc::new(Mutex::new(None)),
+        heartbeat_hits: Arc::new(AtomicUsize::new(0)),
+        bootstrap_hits: Arc::new(AtomicUsize::new(0)),
+    });
+    let app = Router::new()
+        .route("/v1/consents/status", get(mock_bootstrap_consent_status))
+        .route("/v1/bootstrap/heartbeat", post(mock_bootstrap_heartbeat))
+        .route("/v1/bootstrap/nodes", get(mock_bootstrap_nodes))
+        .with_state(state.clone());
+    let server = tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+
+    persist_community_node_token(
+        &db_path,
+        IdentityStorageMode::FileOnly,
+        base_url.as_str(),
+        &StoredCommunityNodeToken {
+            access_token: "fake-token".to_string(),
+            expires_at: Utc::now().timestamp() + 3600,
+        },
+    )
+    .expect("persist community-node token");
+    *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        nodes: vec![CommunityNodeNodeConfig {
+            base_url: base_url.clone(),
+            auto_approve: false,
+            resolved_urls: Some(
+                CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
+                    .expect("resolved urls"),
+            ),
+        }],
+    };
+
+    // heartbeat deadline 未設定(= 常に due)の状態でも、getter は refresh を駆動しない。
+    let _status = runtime.get_sync_status().await.expect("sync status");
+
+    assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 0);
+    assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 0);
+    assert!(
+        runtime
+            .community_node_session_phases
+            .lock()
+            .await
+            .is_empty()
+    );
+    assert!(
+        runtime
+            .community_node_heartbeat_deadlines
+            .lock()
+            .await
+            .is_empty()
+    );
+
+    runtime.shutdown().await;
+    server.abort();
+}
+
 /// トレイ常駐相当(getter を一切呼ばない)でも失効間近トークンの事前再認証が走ることを固定する。
 /// WP-C1 の failing test: スケジューラ導入前は verify_hits が 0 のまま timeout で赤になる。
 #[tokio::test]

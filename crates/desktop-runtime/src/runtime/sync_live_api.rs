@@ -1,28 +1,10 @@
 use super::*;
 
 impl DesktopRuntime {
+    /// 読み取り専用。CN セッションの establish/refresh・self-heal はスケジューラ
+    /// (`run_community_node_session_maintenance_once`)が担い、getter は副作用を持たない。
     pub async fn get_sync_status(&self) -> Result<SyncStatus> {
-        let community_node_config = self.community_node_config.lock().await.clone();
-        for node in community_node_config.nodes {
-            if let Err(error) = self
-                .refresh_community_node_registration_if_due(node.base_url.as_str())
-                .await
-            {
-                tracing::warn!(
-                    base_url = %node.base_url,
-                    error = %error,
-                    "failed to refresh community-node registration while loading sync status"
-                );
-            }
-        }
-        let status = self.app_service.get_sync_status().await?;
-        if self
-            .maybe_self_heal_community_node_connectivity(&status)
-            .await
-        {
-            return self.app_service.get_sync_status().await;
-        }
-        Ok(status)
+        self.app_service.get_sync_status().await
     }
 
     pub async fn has_topic_timeline_doc_index_entry(
