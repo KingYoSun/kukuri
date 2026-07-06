@@ -28,7 +28,7 @@ pub(crate) async fn persist_test_post(
         .await
         .expect("persist post object");
     if let Some(projection_store) = projection_store {
-        ProjectionStore::put_object_projection(
+        ObjectProjectionStore::put_object_projection(
             projection_store,
             projection_row_from_header(&object, None, &replica),
         )

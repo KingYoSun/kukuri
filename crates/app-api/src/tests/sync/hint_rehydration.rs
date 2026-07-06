@@ -83,7 +83,7 @@ async fn topic_doc_events_do_not_rehydrate_whole_replica() {
 
     timeout(Duration::from_secs(5), async {
         loop {
-            if ProjectionStore::get_object_projection(store.as_ref(), &envelope.id)
+            if ObjectProjectionStore::get_object_projection(store.as_ref(), &envelope.id)
                 .await
                 .expect("get projection")
                 .is_some()
@@ -481,7 +481,7 @@ async fn topic_session_hints_retry_until_manifest_blob_is_available() {
 
     assert_eq!(hydrated, 1);
     assert!(
-        ProjectionStore::list_topic_live_sessions(remote_store.as_ref(), topic.as_str())
+        LiveGameProjectionStore::list_topic_live_sessions(remote_store.as_ref(), topic.as_str())
             .await
             .expect("list remote live sessions")
             .iter()

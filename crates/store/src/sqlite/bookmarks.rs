@@ -1,11 +1,8 @@
 use super::*;
 
-impl SqliteStore {
-    pub(super) async fn projection_mark_blob_status_impl(
-        &self,
-        hash: &BlobHash,
-        status: BlobCacheStatus,
-    ) -> Result<()> {
+#[async_trait]
+impl BlobCacheStore for SqliteStore {
+    async fn mark_blob_status(&self, hash: &BlobHash, status: BlobCacheStatus) -> Result<()> {
         sqlx::query(
             r#"
             INSERT INTO blob_objects (blob_hash, status)
@@ -24,10 +21,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub(super) async fn projection_mark_blob_statuses_impl(
-        &self,
-        rows: Vec<(BlobHash, BlobCacheStatus)>,
-    ) -> Result<()> {
+    async fn mark_blob_statuses(&self, rows: Vec<(BlobHash, BlobCacheStatus)>) -> Result<()> {
         if rows.is_empty() {
             return Ok(());
         }
@@ -53,11 +47,11 @@ impl SqliteStore {
         tx.commit().await?;
         Ok(())
     }
+}
 
-    pub(super) async fn projection_upsert_reaction_cache_impl(
-        &self,
-        row: ReactionProjectionRow,
-    ) -> Result<()> {
+#[async_trait]
+impl ReactionBookmarkStore for SqliteStore {
+    async fn upsert_reaction_cache(&self, row: ReactionProjectionRow) -> Result<()> {
         let snapshot_json = row
             .custom_asset_snapshot
             .as_ref()
@@ -109,7 +103,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub(super) async fn projection_get_reaction_cache_impl(
+    async fn get_reaction_cache(
         &self,
         source_replica_id: &ReplicaId,
         target_object_id: &EnvelopeId,
@@ -133,7 +127,7 @@ impl SqliteStore {
         row.map(row_to_reaction_projection).transpose()
     }
 
-    pub(super) async fn projection_list_reaction_cache_for_target_impl(
+    async fn list_reaction_cache_for_target(
         &self,
         source_replica_id: &ReplicaId,
         target_object_id: &EnvelopeId,
@@ -156,7 +150,7 @@ impl SqliteStore {
         rows.into_iter().map(row_to_reaction_projection).collect()
     }
 
-    pub(super) async fn projection_list_reaction_cache_for_targets_impl(
+    async fn list_reaction_cache_for_targets(
         &self,
         source_replica_id: &ReplicaId,
         target_object_ids: &[EnvelopeId],
@@ -196,7 +190,7 @@ impl SqliteStore {
         Ok(reactions)
     }
 
-    pub(super) async fn projection_list_recent_reaction_cache_by_author_impl(
+    async fn list_recent_reaction_cache_by_author(
         &self,
         author_pubkey: &str,
     ) -> Result<Vec<ReactionProjectionRow>> {
@@ -217,10 +211,7 @@ impl SqliteStore {
         rows.into_iter().map(row_to_reaction_projection).collect()
     }
 
-    pub(super) async fn projection_put_bookmarked_custom_reaction_impl(
-        &self,
-        row: BookmarkedCustomReactionRow,
-    ) -> Result<()> {
+    async fn put_bookmarked_custom_reaction(&self, row: BookmarkedCustomReactionRow) -> Result<()> {
         sqlx::query(
             r#"
             INSERT INTO bookmarked_custom_reactions (
@@ -252,9 +243,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub(super) async fn projection_list_bookmarked_custom_reactions_impl(
-        &self,
-    ) -> Result<Vec<BookmarkedCustomReactionRow>> {
+    async fn list_bookmarked_custom_reactions(&self) -> Result<Vec<BookmarkedCustomReactionRow>> {
         let rows = sqlx::query(
             r#"
             SELECT asset_id, owner_pubkey, blob_hash, search_key, mime, bytes, width, height, bookmarked_at
@@ -269,10 +258,7 @@ impl SqliteStore {
             .collect()
     }
 
-    pub(super) async fn projection_remove_bookmarked_custom_reaction_impl(
-        &self,
-        asset_id: &str,
-    ) -> Result<()> {
+    async fn remove_bookmarked_custom_reaction(&self, asset_id: &str) -> Result<()> {
         sqlx::query(
             r#"
             DELETE FROM bookmarked_custom_reactions
@@ -285,10 +271,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub(super) async fn projection_put_bookmarked_post_impl(
-        &self,
-        row: BookmarkedPostRow,
-    ) -> Result<()> {
+    async fn put_bookmarked_post(&self, row: BookmarkedPostRow) -> Result<()> {
         sqlx::query(
             r#"
             INSERT INTO bookmarked_posts (
@@ -351,9 +334,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub(super) async fn projection_list_bookmarked_posts_impl(
-        &self,
-    ) -> Result<Vec<BookmarkedPostRow>> {
+    async fn list_bookmarked_posts(&self) -> Result<Vec<BookmarkedPostRow>> {
         let rows = sqlx::query(
             r#"
             SELECT
@@ -381,10 +362,7 @@ impl SqliteStore {
         rows.into_iter().map(row_to_bookmarked_post).collect()
     }
 
-    pub(super) async fn projection_remove_bookmarked_post_impl(
-        &self,
-        source_object_id: &EnvelopeId,
-    ) -> Result<()> {
+    async fn remove_bookmarked_post(&self, source_object_id: &EnvelopeId) -> Result<()> {
         sqlx::query(
             r#"
             DELETE FROM bookmarked_posts

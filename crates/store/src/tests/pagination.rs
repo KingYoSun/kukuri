@@ -5,7 +5,7 @@
 //!     apply_asc_projection_cursor / apply_desc_direct_message_cursor)の keyset 比較・
 //!     tie-break・next_cursor 生成規則を表テストで、
 //! (2) SQL 側 keyset(Store::list_topic_timeline / Store::list_thread /
-//!     ProjectionStore::list_direct_message_messages)を複数ページ走査で、
+//!     DirectMessageStore::list_direct_message_messages)を複数ページ走査で、
 //! それぞれ観測した現挙動の生リテラルで固定する。
 //!
 //! 固定している契約(観測した現挙動):
@@ -616,7 +616,7 @@ async fn sqlite_thread_pins_root_first_and_root_absent_after_cursor() {
 async fn sqlite_direct_message_messages_multi_page_scan_fixes_message_id_tie_break() {
     let store = SqliteStore::connect_memory().await.expect("sqlite store");
     let dm_id = "dm-pagination";
-    ProjectionStore::upsert_direct_message_conversation(
+    DirectMessageStore::upsert_direct_message_conversation(
         &store,
         DirectMessageConversationRow {
             dm_id: dm_id.into(),
@@ -638,7 +638,7 @@ async fn sqlite_direct_message_messages_multi_page_scan_fixes_message_id_tie_bre
         ("msg-a", 300),
         ("msg-e", 100),
     ] {
-        ProjectionStore::put_direct_message_message(
+        DirectMessageStore::put_direct_message_message(
             &store,
             dm_message_row(dm_id, message_id, created_at),
         )
@@ -646,11 +646,14 @@ async fn sqlite_direct_message_messages_multi_page_scan_fixes_message_id_tie_bre
         .expect("put message");
     }
     // 別 dm_id の行は走査に現れない
-    ProjectionStore::put_direct_message_message(&store, dm_message_row("dm-other", "msg-x", 250))
-        .await
-        .expect("put other dm message");
+    DirectMessageStore::put_direct_message_message(
+        &store,
+        dm_message_row("dm-other", "msg-x", 250),
+    )
+    .await
+    .expect("put other dm message");
 
-    let page1 = ProjectionStore::list_direct_message_messages(&store, dm_id, None, 2)
+    let page1 = DirectMessageStore::list_direct_message_messages(&store, dm_id, None, 2)
         .await
         .expect("page1");
     assert_eq!(message_ids(&page1), ["msg-b", "msg-a"]);
@@ -664,18 +667,26 @@ async fn sqlite_direct_message_messages_multi_page_scan_fixes_message_id_tie_bre
     );
 
     // 2 ページ目先頭の具体値は "msg-c"。境界が同時刻 100 の途中に落ちる
-    let page2 =
-        ProjectionStore::list_direct_message_messages(&store, dm_id, page1.next_cursor.clone(), 2)
-            .await
-            .expect("page2");
+    let page2 = DirectMessageStore::list_direct_message_messages(
+        &store,
+        dm_id,
+        page1.next_cursor.clone(),
+        2,
+    )
+    .await
+    .expect("page2");
     assert_eq!(message_ids(&page2), ["msg-c", "msg-e"]);
     assert_eq!(page2.next_cursor, Some(cursor_at(100, "msg-e")));
 
     // 3 ページ目は SQL 側 tie-break 分岐 created_at = ?2 AND message_id < ?3 を通る
-    let page3 =
-        ProjectionStore::list_direct_message_messages(&store, dm_id, page2.next_cursor.clone(), 2)
-            .await
-            .expect("page3");
+    let page3 = DirectMessageStore::list_direct_message_messages(
+        &store,
+        dm_id,
+        page2.next_cursor.clone(),
+        2,
+    )
+    .await
+    .expect("page3");
     assert_eq!(message_ids(&page3), ["msg-d"]);
     assert_eq!(page3.next_cursor, None);
 

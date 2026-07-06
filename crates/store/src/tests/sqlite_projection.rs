@@ -96,13 +96,13 @@ async fn recent_reaction_cache_query_returns_latest_rows_for_author() {
             projection_version: 1,
         },
     ] {
-        ProjectionStore::upsert_reaction_cache(&store, row)
+        ReactionBookmarkStore::upsert_reaction_cache(&store, row)
             .await
             .expect("upsert reaction cache");
     }
 
     let recent =
-        ProjectionStore::list_recent_reaction_cache_by_author(&store, author_pubkey.as_str())
+        ReactionBookmarkStore::list_recent_reaction_cache_by_author(&store, author_pubkey.as_str())
             .await
             .expect("list recent reaction cache");
 
@@ -116,7 +116,7 @@ async fn author_relationship_projection_rebuild_roundtrip() {
     let local_author = "a".repeat(64);
     let target_author = "b".repeat(64);
 
-    ProjectionStore::rebuild_author_relationships(
+    SocialProjectionStore::rebuild_author_relationships(
         &store,
         local_author.as_str(),
         vec![AuthorRelationshipProjectionRow {
@@ -133,7 +133,7 @@ async fn author_relationship_projection_rebuild_roundtrip() {
     .await
     .expect("rebuild relationships");
 
-    let relationship = ProjectionStore::get_author_relationship(
+    let relationship = SocialProjectionStore::get_author_relationship(
         &store,
         local_author.as_str(),
         target_author.as_str(),
@@ -158,7 +158,7 @@ async fn muted_authors_restore_after_restart() {
         let store = SqliteStore::connect_file(&db_path)
             .await
             .expect("open sqlite store");
-        ProjectionStore::put_muted_author(
+        SocialProjectionStore::put_muted_author(
             &store,
             MutedAuthorRow {
                 author_pubkey: author_pubkey.clone(),
@@ -173,24 +173,24 @@ async fn muted_authors_restore_after_restart() {
     let reopened = SqliteStore::connect_file(&db_path)
         .await
         .expect("reopen sqlite store");
-    let muted = ProjectionStore::get_muted_author(&reopened, author_pubkey.as_str())
+    let muted = SocialProjectionStore::get_muted_author(&reopened, author_pubkey.as_str())
         .await
         .expect("get muted author")
         .expect("muted author exists");
     assert_eq!(muted.author_pubkey, author_pubkey);
     assert_eq!(muted.muted_at, 42);
     assert_eq!(
-        ProjectionStore::list_muted_authors(&reopened)
+        SocialProjectionStore::list_muted_authors(&reopened)
             .await
             .expect("list muted authors"),
         vec![muted.clone()]
     );
 
-    ProjectionStore::remove_muted_author(&reopened, author_pubkey.as_str())
+    SocialProjectionStore::remove_muted_author(&reopened, author_pubkey.as_str())
         .await
         .expect("remove muted author");
     assert!(
-        ProjectionStore::get_muted_author(&reopened, author_pubkey.as_str())
+        SocialProjectionStore::get_muted_author(&reopened, author_pubkey.as_str())
             .await
             .expect("get muted author after delete")
             .is_none()
@@ -232,9 +232,13 @@ async fn author_relationship_rebuild_stays_visible_to_concurrent_readers() {
         derived_at: 999,
     });
 
-    ProjectionStore::rebuild_author_relationships(&writer, local_author.as_str(), rows.clone())
-        .await
-        .expect("seed relationships");
+    SocialProjectionStore::rebuild_author_relationships(
+        &writer,
+        local_author.as_str(),
+        rows.clone(),
+    )
+    .await
+    .expect("seed relationships");
 
     let keep_running = Arc::new(AtomicBool::new(true));
     let saw_gap = Arc::new(AtomicBool::new(false));
@@ -245,7 +249,7 @@ async fn author_relationship_rebuild_stays_visible_to_concurrent_readers() {
 
     let reader_task = tokio::spawn(async move {
         while keep_running_for_task.load(Ordering::SeqCst) {
-            let relationship = ProjectionStore::get_author_relationship(
+            let relationship = SocialProjectionStore::get_author_relationship(
                 &reader,
                 local_author_for_task.as_str(),
                 target_author_for_task.as_str(),
@@ -261,9 +265,13 @@ async fn author_relationship_rebuild_stays_visible_to_concurrent_readers() {
     });
 
     for _ in 0..32 {
-        ProjectionStore::rebuild_author_relationships(&writer, local_author.as_str(), rows.clone())
-            .await
-            .expect("rebuild relationships");
+        SocialProjectionStore::rebuild_author_relationships(
+            &writer,
+            local_author.as_str(),
+            rows.clone(),
+        )
+        .await
+        .expect("rebuild relationships");
         if saw_gap.load(Ordering::SeqCst) {
             break;
         }
@@ -333,14 +341,14 @@ async fn projection_rebuild_from_docs_blobs_only() {
         },
     ];
 
-    ProjectionStore::rebuild_object_projections(&store, rows)
+    ObjectProjectionStore::rebuild_object_projections(&store, rows)
         .await
         .expect("rebuild projection");
 
-    let timeline = ProjectionStore::list_topic_timeline(&store, topic, None, 10)
+    let timeline = ObjectProjectionStore::list_topic_timeline(&store, topic, None, 10)
         .await
         .expect("timeline");
-    let thread = ProjectionStore::list_thread(&store, topic, &root_id, None, 10)
+    let thread = ObjectProjectionStore::list_thread(&store, topic, &root_id, None, 10)
         .await
         .expect("thread");
 
@@ -360,15 +368,20 @@ async fn filtered_timeline_query_preserves_cursor_across_channel_pages() {
         projection_row(topic, "private:friends", "post-2", 20),
         projection_row(topic, "private:friends", "post-1", 10),
     ];
-    ProjectionStore::put_object_projections(&store, rows)
+    ObjectProjectionStore::put_object_projections(&store, rows)
         .await
         .expect("put projections");
 
     let allowed_channels = BTreeSet::from(["private:friends".to_string()]);
-    let first_page =
-        ProjectionStore::list_topic_timeline_filtered(&store, topic, &allowed_channels, None, 2)
-            .await
-            .expect("first filtered timeline page");
+    let first_page = ObjectProjectionStore::list_topic_timeline_filtered(
+        &store,
+        topic,
+        &allowed_channels,
+        None,
+        2,
+    )
+    .await
+    .expect("first filtered timeline page");
     assert_eq!(
         first_page
             .items
@@ -379,7 +392,7 @@ async fn filtered_timeline_query_preserves_cursor_across_channel_pages() {
     );
     assert!(first_page.next_cursor.is_some());
 
-    let second_page = ProjectionStore::list_topic_timeline_filtered(
+    let second_page = ObjectProjectionStore::list_topic_timeline_filtered(
         &store,
         topic,
         &allowed_channels,
@@ -423,14 +436,14 @@ async fn filtered_thread_query_preserves_cursor_across_channel_pages() {
     private_reply_b.reply_to_object_id = Some(root_id.clone());
     private_reply_b.object_kind = "comment".into();
 
-    ProjectionStore::put_object_projections(
+    ObjectProjectionStore::put_object_projections(
         &store,
         vec![root, public_reply, private_reply_a, private_reply_b],
     )
     .await
     .expect("put projections");
 
-    let first_page = ProjectionStore::list_thread_filtered(
+    let first_page = ObjectProjectionStore::list_thread_filtered(
         &store,
         topic,
         &root_id,
@@ -450,7 +463,7 @@ async fn filtered_thread_query_preserves_cursor_across_channel_pages() {
     );
     assert!(first_page.next_cursor.is_some());
 
-    let second_page = ProjectionStore::list_thread_filtered(
+    let second_page = ObjectProjectionStore::list_thread_filtered(
         &store,
         topic,
         &root_id,
@@ -489,22 +502,23 @@ async fn batch_projection_insert_matches_single_insert_and_preserves_attachments
     reply.root_object_id = Some(root.object_id.clone());
     reply.reply_to_object_id = Some(root.object_id.clone());
 
-    ProjectionStore::put_object_projections(&batch_store, vec![root.clone(), reply.clone()])
+    ObjectProjectionStore::put_object_projections(&batch_store, vec![root.clone(), reply.clone()])
         .await
         .expect("batch insert");
-    ProjectionStore::put_object_projection(&single_store, root.clone())
+    ObjectProjectionStore::put_object_projection(&single_store, root.clone())
         .await
         .expect("single insert root");
-    ProjectionStore::put_object_projection(&single_store, reply.clone())
+    ObjectProjectionStore::put_object_projection(&single_store, reply.clone())
         .await
         .expect("single insert reply");
 
-    let batch_timeline = ProjectionStore::list_topic_timeline(&batch_store, topic, None, 10)
+    let batch_timeline = ObjectProjectionStore::list_topic_timeline(&batch_store, topic, None, 10)
         .await
         .expect("batch timeline");
-    let single_timeline = ProjectionStore::list_topic_timeline(&single_store, topic, None, 10)
-        .await
-        .expect("single timeline");
+    let single_timeline =
+        ObjectProjectionStore::list_topic_timeline(&single_store, topic, None, 10)
+            .await
+            .expect("single timeline");
     assert_eq!(
         batch_timeline
             .items
@@ -518,11 +532,12 @@ async fn batch_projection_insert_matches_single_insert_and_preserves_attachments
             .collect::<Vec<_>>()
     );
 
-    let batch_thread = ProjectionStore::list_thread(&batch_store, topic, &root.object_id, None, 10)
-        .await
-        .expect("batch thread");
+    let batch_thread =
+        ObjectProjectionStore::list_thread(&batch_store, topic, &root.object_id, None, 10)
+            .await
+            .expect("batch thread");
     let single_thread =
-        ProjectionStore::list_thread(&single_store, topic, &root.object_id, None, 10)
+        ObjectProjectionStore::list_thread(&single_store, topic, &root.object_id, None, 10)
             .await
             .expect("single thread");
     assert_eq!(
@@ -538,7 +553,7 @@ async fn batch_projection_insert_matches_single_insert_and_preserves_attachments
             .collect::<Vec<_>>()
     );
 
-    let stored = ProjectionStore::get_object_projection(&batch_store, &root.object_id)
+    let stored = ObjectProjectionStore::get_object_projection(&batch_store, &root.object_id)
         .await
         .expect("get stored projection")
         .expect("stored projection");

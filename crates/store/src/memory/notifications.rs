@@ -1,10 +1,8 @@
 use super::*;
 
-impl MemoryStore {
-    pub(super) async fn projection_put_notification_if_absent_impl(
-        &self,
-        row: NotificationRow,
-    ) -> Result<bool> {
+#[async_trait]
+impl NotificationStore for MemoryStore {
+    async fn put_notification_if_absent(&self, row: NotificationRow) -> Result<bool> {
         let mut notifications = self.notification_rows.write().await;
         if notifications.contains_key(row.notification_id.as_str()) {
             return Ok(false);
@@ -13,7 +11,7 @@ impl MemoryStore {
         Ok(true)
     }
 
-    pub(super) async fn projection_list_notifications_impl(&self) -> Result<Vec<NotificationRow>> {
+    async fn list_notifications(&self) -> Result<Vec<NotificationRow>> {
         let mut items = self
             .notification_rows
             .read()
@@ -30,11 +28,7 @@ impl MemoryStore {
         Ok(items)
     }
 
-    pub(super) async fn projection_mark_notification_read_impl(
-        &self,
-        notification_id: &str,
-        read_at: i64,
-    ) -> Result<()> {
+    async fn mark_notification_read(&self, notification_id: &str, read_at: i64) -> Result<()> {
         if let Some(row) = self
             .notification_rows
             .write()
@@ -46,17 +40,14 @@ impl MemoryStore {
         Ok(())
     }
 
-    pub(super) async fn projection_mark_all_notifications_read_impl(
-        &self,
-        read_at: i64,
-    ) -> Result<()> {
+    async fn mark_all_notifications_read(&self, read_at: i64) -> Result<()> {
         for row in self.notification_rows.write().await.values_mut() {
             row.read_at.get_or_insert(read_at);
         }
         Ok(())
     }
 
-    pub(super) async fn projection_count_unread_notifications_impl(&self) -> Result<usize> {
+    async fn count_unread_notifications(&self) -> Result<usize> {
         Ok(self
             .notification_rows
             .read()

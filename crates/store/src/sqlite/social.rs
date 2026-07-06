@@ -229,11 +229,11 @@ impl SqliteStore {
 
         rows.into_iter().map(row_to_follow_edge).collect()
     }
+}
 
-    pub(super) async fn projection_upsert_profile_cache_impl(
-        &self,
-        profile: Profile,
-    ) -> Result<()> {
+#[async_trait]
+impl SocialProjectionStore for SqliteStore {
+    async fn upsert_profile_cache(&self, profile: Profile) -> Result<()> {
         sqlx::query(
             r#"
             INSERT INTO profile_cache (
@@ -281,7 +281,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub(super) async fn projection_get_author_relationship_impl(
+    async fn get_author_relationship(
         &self,
         local_author_pubkey: &str,
         author_pubkey: &str,
@@ -302,7 +302,7 @@ impl SqliteStore {
         row.map(row_to_author_relationship_projection).transpose()
     }
 
-    pub(super) async fn projection_list_author_relationships_impl(
+    async fn list_author_relationships(
         &self,
         local_author_pubkey: &str,
         author_pubkeys: &[String],
@@ -335,7 +335,7 @@ impl SqliteStore {
         Ok(relationships)
     }
 
-    pub(super) async fn projection_rebuild_author_relationships_impl(
+    async fn rebuild_author_relationships(
         &self,
         local_author_pubkey: &str,
         rows: Vec<AuthorRelationshipProjectionRow>,
@@ -379,7 +379,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub(super) async fn projection_put_muted_author_impl(&self, row: MutedAuthorRow) -> Result<()> {
+    async fn put_muted_author(&self, row: MutedAuthorRow) -> Result<()> {
         sqlx::query(
             r#"
             INSERT INTO muted_authors (author_pubkey, muted_at)
@@ -395,10 +395,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub(super) async fn projection_get_muted_author_impl(
-        &self,
-        author_pubkey: &str,
-    ) -> Result<Option<MutedAuthorRow>> {
+    async fn get_muted_author(&self, author_pubkey: &str) -> Result<Option<MutedAuthorRow>> {
         let row = sqlx::query(
             r#"
             SELECT author_pubkey, muted_at
@@ -412,7 +409,7 @@ impl SqliteStore {
         row.map(row_to_muted_author).transpose()
     }
 
-    pub(super) async fn projection_list_muted_authors_impl(&self) -> Result<Vec<MutedAuthorRow>> {
+    async fn list_muted_authors(&self) -> Result<Vec<MutedAuthorRow>> {
         let rows = sqlx::query(
             r#"
             SELECT author_pubkey, muted_at
@@ -425,10 +422,7 @@ impl SqliteStore {
         rows.into_iter().map(row_to_muted_author).collect()
     }
 
-    pub(super) async fn projection_remove_muted_author_impl(
-        &self,
-        author_pubkey: &str,
-    ) -> Result<()> {
+    async fn remove_muted_author(&self, author_pubkey: &str) -> Result<()> {
         sqlx::query(
             r#"
             DELETE FROM muted_authors

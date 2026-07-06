@@ -1,7 +1,8 @@
 use super::*;
 
-impl SqliteStore {
-    pub(super) async fn projection_upsert_direct_message_conversation_impl(
+#[async_trait]
+impl DirectMessageStore for SqliteStore {
+    async fn upsert_direct_message_conversation(
         &self,
         row: DirectMessageConversationRow,
     ) -> Result<()> {
@@ -30,7 +31,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub(super) async fn projection_get_direct_message_conversation_by_peer_impl(
+    async fn get_direct_message_conversation_by_peer(
         &self,
         peer_pubkey: &str,
     ) -> Result<Option<DirectMessageConversationRow>> {
@@ -47,7 +48,7 @@ impl SqliteStore {
         row.map(row_to_direct_message_conversation).transpose()
     }
 
-    pub(super) async fn projection_get_direct_message_conversation_by_dm_id_impl(
+    async fn get_direct_message_conversation_by_dm_id(
         &self,
         dm_id: &str,
     ) -> Result<Option<DirectMessageConversationRow>> {
@@ -64,9 +65,7 @@ impl SqliteStore {
         row.map(row_to_direct_message_conversation).transpose()
     }
 
-    pub(super) async fn projection_list_direct_message_conversations_impl(
-        &self,
-    ) -> Result<Vec<DirectMessageConversationRow>> {
+    async fn list_direct_message_conversations(&self) -> Result<Vec<DirectMessageConversationRow>> {
         let rows = sqlx::query(
             r#"
             SELECT dm_id, peer_pubkey, updated_at, last_message_at, last_message_id, last_message_preview
@@ -81,10 +80,7 @@ impl SqliteStore {
             .collect()
     }
 
-    pub(super) async fn projection_put_direct_message_message_impl(
-        &self,
-        row: DirectMessageMessageRow,
-    ) -> Result<()> {
+    async fn put_direct_message_message(&self, row: DirectMessageMessageRow) -> Result<()> {
         let tombstoned = sqlx::query_scalar::<_, i64>(
             r#"
             SELECT 1
@@ -139,7 +135,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub(super) async fn projection_get_direct_message_message_impl(
+    async fn get_direct_message_message(
         &self,
         dm_id: &str,
         message_id: &str,
@@ -159,7 +155,7 @@ impl SqliteStore {
         row.map(row_to_direct_message_message).transpose()
     }
 
-    pub(super) async fn projection_list_direct_message_messages_impl(
+    async fn list_direct_message_messages(
         &self,
         dm_id: &str,
         cursor: Option<TimelineCursor>,
@@ -189,7 +185,7 @@ impl SqliteStore {
         direct_message_page_from_rows(rows, limit)
     }
 
-    pub(super) async fn projection_set_direct_message_acked_at_impl(
+    async fn set_direct_message_acked_at(
         &self,
         dm_id: &str,
         message_id: &str,
@@ -210,10 +206,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub(super) async fn projection_put_direct_message_outbox_impl(
-        &self,
-        row: DirectMessageOutboxRow,
-    ) -> Result<()> {
+    async fn put_direct_message_outbox(&self, row: DirectMessageOutboxRow) -> Result<()> {
         sqlx::query(
             r#"
             INSERT INTO dm_outbox (
@@ -238,7 +231,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub(super) async fn projection_get_direct_message_outbox_impl(
+    async fn get_direct_message_outbox(
         &self,
         dm_id: &str,
         message_id: &str,
@@ -257,9 +250,7 @@ impl SqliteStore {
         row.map(row_to_direct_message_outbox).transpose()
     }
 
-    pub(super) async fn projection_list_direct_message_outbox_impl(
-        &self,
-    ) -> Result<Vec<DirectMessageOutboxRow>> {
+    async fn list_direct_message_outbox(&self) -> Result<Vec<DirectMessageOutboxRow>> {
         let rows = sqlx::query(
             r#"
             SELECT dm_id, message_id, peer_pubkey, frame_blob_hash, created_at, last_attempt_at
@@ -272,7 +263,7 @@ impl SqliteStore {
         rows.into_iter().map(row_to_direct_message_outbox).collect()
     }
 
-    pub(super) async fn projection_touch_direct_message_outbox_attempt_impl(
+    async fn touch_direct_message_outbox_attempt(
         &self,
         dm_id: &str,
         message_id: &str,
@@ -293,11 +284,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub(super) async fn projection_remove_direct_message_outbox_impl(
-        &self,
-        dm_id: &str,
-        message_id: &str,
-    ) -> Result<()> {
+    async fn remove_direct_message_outbox(&self, dm_id: &str, message_id: &str) -> Result<()> {
         sqlx::query(
             r#"
             DELETE FROM dm_outbox
@@ -311,10 +298,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub(super) async fn projection_put_direct_message_tombstone_impl(
-        &self,
-        row: DirectMessageTombstoneRow,
-    ) -> Result<()> {
+    async fn put_direct_message_tombstone(&self, row: DirectMessageTombstoneRow) -> Result<()> {
         sqlx::query(
             r#"
             INSERT INTO dm_message_tombstones (dm_id, message_id, deleted_at)
@@ -331,7 +315,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub(super) async fn projection_list_direct_message_tombstones_impl(
+    async fn list_direct_message_tombstones(
         &self,
         dm_id: &str,
     ) -> Result<Vec<DirectMessageTombstoneRow>> {
@@ -351,11 +335,7 @@ impl SqliteStore {
             .collect()
     }
 
-    pub(super) async fn projection_has_direct_message_tombstone_impl(
-        &self,
-        dm_id: &str,
-        message_id: &str,
-    ) -> Result<bool> {
+    async fn has_direct_message_tombstone(&self, dm_id: &str, message_id: &str) -> Result<bool> {
         let exists = sqlx::query_scalar::<_, i64>(
             r#"
             SELECT 1
@@ -372,7 +352,7 @@ impl SqliteStore {
         Ok(exists)
     }
 
-    pub(super) async fn projection_delete_direct_message_message_local_impl(
+    async fn delete_direct_message_message_local(
         &self,
         dm_id: &str,
         message_id: &str,
@@ -400,10 +380,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub(super) async fn projection_clear_direct_message_local_impl(
-        &self,
-        dm_id: &str,
-    ) -> Result<()> {
+    async fn clear_direct_message_local(&self, dm_id: &str) -> Result<()> {
         sqlx::query(
             r#"
             DELETE FROM dm_messages

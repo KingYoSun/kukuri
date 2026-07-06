@@ -1,10 +1,8 @@
 use super::*;
 
-impl SqliteStore {
-    pub(super) async fn projection_put_notification_if_absent_impl(
-        &self,
-        row: NotificationRow,
-    ) -> Result<bool> {
+#[async_trait]
+impl NotificationStore for SqliteStore {
+    async fn put_notification_if_absent(&self, row: NotificationRow) -> Result<bool> {
         let result = sqlx::query(
             r#"
             INSERT OR IGNORE INTO notifications (
@@ -47,7 +45,7 @@ impl SqliteStore {
         Ok(result.rows_affected() > 0)
     }
 
-    pub(super) async fn projection_list_notifications_impl(&self) -> Result<Vec<NotificationRow>> {
+    async fn list_notifications(&self) -> Result<Vec<NotificationRow>> {
         let rows = sqlx::query(
             r#"
             SELECT
@@ -75,11 +73,7 @@ impl SqliteStore {
         rows.into_iter().map(row_to_notification).collect()
     }
 
-    pub(super) async fn projection_mark_notification_read_impl(
-        &self,
-        notification_id: &str,
-        read_at: i64,
-    ) -> Result<()> {
+    async fn mark_notification_read(&self, notification_id: &str, read_at: i64) -> Result<()> {
         sqlx::query(
             r#"
             UPDATE notifications
@@ -94,10 +88,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub(super) async fn projection_mark_all_notifications_read_impl(
-        &self,
-        read_at: i64,
-    ) -> Result<()> {
+    async fn mark_all_notifications_read(&self, read_at: i64) -> Result<()> {
         sqlx::query(
             r#"
             UPDATE notifications
@@ -111,7 +102,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub(super) async fn projection_count_unread_notifications_impl(&self) -> Result<usize> {
+    async fn count_unread_notifications(&self) -> Result<usize> {
         let count = sqlx::query_scalar::<_, i64>(
             r#"
             SELECT COUNT(*)

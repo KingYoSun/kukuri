@@ -44,12 +44,14 @@ async fn reply_preview_is_restored_from_docs_when_parent_projection_is_unavailab
         .await
         .expect("reply post");
 
-    let reply_projection =
-        ProjectionStore::get_object_projection(store.as_ref(), &EnvelopeId::from(reply_id.clone()))
-            .await
-            .expect("reply projection lookup")
-            .expect("reply projection");
-    ProjectionStore::rebuild_object_projections(store.as_ref(), vec![reply_projection])
+    let reply_projection = ObjectProjectionStore::get_object_projection(
+        store.as_ref(),
+        &EnvelopeId::from(reply_id.clone()),
+    )
+    .await
+    .expect("reply projection lookup")
+    .expect("reply projection");
+    ObjectProjectionStore::rebuild_object_projections(store.as_ref(), vec![reply_projection])
         .await
         .expect("rebuild reply-only projections");
 

@@ -1,10 +1,8 @@
 use super::*;
 
-impl MemoryStore {
-    pub(super) async fn projection_upsert_live_session_cache_impl(
-        &self,
-        row: LiveSessionProjectionRow,
-    ) -> Result<()> {
+#[async_trait]
+impl LiveGameProjectionStore for MemoryStore {
+    async fn upsert_live_session_cache(&self, row: LiveSessionProjectionRow) -> Result<()> {
         self.live_session_rows
             .write()
             .await
@@ -12,7 +10,7 @@ impl MemoryStore {
         Ok(())
     }
 
-    pub(super) async fn projection_list_topic_live_sessions_impl(
+    async fn list_topic_live_sessions(
         &self,
         topic_id: &str,
     ) -> Result<Vec<LiveSessionProjectionRow>> {
@@ -52,10 +50,7 @@ impl MemoryStore {
         Ok(items)
     }
 
-    pub(super) async fn projection_upsert_game_room_cache_impl(
-        &self,
-        row: GameRoomProjectionRow,
-    ) -> Result<()> {
+    async fn upsert_game_room_cache(&self, row: GameRoomProjectionRow) -> Result<()> {
         self.game_room_rows
             .write()
             .await
@@ -63,10 +58,7 @@ impl MemoryStore {
         Ok(())
     }
 
-    pub(super) async fn projection_list_topic_game_rooms_impl(
-        &self,
-        topic_id: &str,
-    ) -> Result<Vec<GameRoomProjectionRow>> {
+    async fn list_topic_game_rooms(&self, topic_id: &str) -> Result<Vec<GameRoomProjectionRow>> {
         let mut items = self
             .game_room_rows
             .read()
@@ -84,7 +76,7 @@ impl MemoryStore {
         Ok(items)
     }
 
-    pub(super) async fn projection_upsert_live_presence_impl(
+    async fn upsert_live_presence(
         &self,
         topic_id: &str,
         channel_id: &str,
@@ -107,10 +99,7 @@ impl MemoryStore {
         Ok(())
     }
 
-    pub(super) async fn projection_clear_expired_live_presence_impl(
-        &self,
-        now_ms: i64,
-    ) -> Result<()> {
+    async fn clear_expired_live_presence(&self, now_ms: i64) -> Result<()> {
         self.live_presence
             .write()
             .await
@@ -118,10 +107,7 @@ impl MemoryStore {
         Ok(())
     }
 
-    pub(super) async fn projection_clear_topic_live_presence_impl(
-        &self,
-        topic_id: &str,
-    ) -> Result<()> {
+    async fn clear_topic_live_presence(&self, topic_id: &str) -> Result<()> {
         self.live_presence
             .write()
             .await

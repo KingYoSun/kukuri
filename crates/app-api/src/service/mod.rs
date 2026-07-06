@@ -51,11 +51,12 @@ pub(crate) use kukuri_docs_sync::{
     private_channel_replica_id, stable_key, topic_replica_id,
 };
 pub(crate) use kukuri_store::{
-    AuthorRelationshipProjectionRow, BlobCacheStatus, BookmarkedCustomReactionRow,
+    AuthorRelationshipProjectionRow, BlobCacheStatus, BlobCacheStore, BookmarkedCustomReactionRow,
     BookmarkedPostRow, DirectMessageConversationRow, DirectMessageMessageRow,
     DirectMessageOutboxRow, DirectMessageTombstoneRow, GameRoomProjectionRow,
     LiveSessionProjectionRow, MutedAuthorRow, NotificationKind, NotificationRow,
-    ObjectProjectionRow, Page, ProjectionStore, ReactionProjectionRow, Store, TimelineCursor,
+    ObjectProjectionRow, ObjectProjectionStore, Page, ProjectionStore, ReactionProjectionRow,
+    Store, TimelineCursor,
 };
 pub(crate) use kukuri_transport::{
     ConnectionPath, DiscoveryMode, DiscoverySnapshot, HintTransport, PeerSnapshot, SeedPeer,
@@ -418,9 +419,12 @@ impl AppService {
         source_object_id: &str,
     ) -> Result<ResolvedRepostSource> {
         let source_object_id = EnvelopeId::from(source_object_id);
-        if ProjectionStore::get_object_projection(self.projection_store.as_ref(), &source_object_id)
-            .await?
-            .is_none()
+        if ObjectProjectionStore::get_object_projection(
+            self.projection_store.as_ref(),
+            &source_object_id,
+        )
+        .await?
+        .is_none()
         {
             let _ = hydrate_topic_state_with_services(
                 self.docs_sync.as_ref(),
@@ -430,7 +434,7 @@ impl AppService {
             )
             .await?;
         }
-        let projection = ProjectionStore::get_object_projection(
+        let projection = ObjectProjectionStore::get_object_projection(
             self.projection_store.as_ref(),
             &source_object_id,
         )

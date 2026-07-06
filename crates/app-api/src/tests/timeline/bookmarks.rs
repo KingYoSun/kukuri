@@ -85,7 +85,7 @@ async fn bookmark_private_post_remains_local_only_and_readable_after_access_loss
         .await
         .expect("bookmark private post");
     app.joined_private_channels.lock().await.clear();
-    ProjectionStore::rebuild_object_projections(store.as_ref(), Vec::new())
+    ObjectProjectionStore::rebuild_object_projections(store.as_ref(), Vec::new())
         .await
         .expect("clear object projections");
 
@@ -125,7 +125,7 @@ async fn unbookmark_removes_only_local_bookmark_record() {
         .list_timeline(topic, None, 20)
         .await
         .expect("list timeline");
-    let projection = ProjectionStore::get_object_projection(
+    let projection = ObjectProjectionStore::get_object_projection(
         store.as_ref(),
         &EnvelopeId::from(object_id.clone()),
     )
@@ -192,7 +192,7 @@ async fn bookmarked_repost_renders_from_saved_snapshot_without_source_timeline_h
     app.bookmark_post(target_topic, repost_id.as_str())
         .await
         .expect("bookmark repost");
-    ProjectionStore::rebuild_object_projections(store.as_ref(), Vec::new())
+    ObjectProjectionStore::rebuild_object_projections(store.as_ref(), Vec::new())
         .await
         .expect("clear projections");
 

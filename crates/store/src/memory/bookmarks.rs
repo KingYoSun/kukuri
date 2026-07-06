@@ -1,11 +1,8 @@
 use super::*;
 
-impl MemoryStore {
-    pub(super) async fn projection_mark_blob_status_impl(
-        &self,
-        hash: &BlobHash,
-        status: BlobCacheStatus,
-    ) -> Result<()> {
+#[async_trait]
+impl BlobCacheStore for MemoryStore {
+    async fn mark_blob_status(&self, hash: &BlobHash, status: BlobCacheStatus) -> Result<()> {
         self.blob_statuses
             .write()
             .await
@@ -13,21 +10,18 @@ impl MemoryStore {
         Ok(())
     }
 
-    pub(super) async fn projection_mark_blob_statuses_impl(
-        &self,
-        rows: Vec<(BlobHash, BlobCacheStatus)>,
-    ) -> Result<()> {
+    async fn mark_blob_statuses(&self, rows: Vec<(BlobHash, BlobCacheStatus)>) -> Result<()> {
         let mut statuses = self.blob_statuses.write().await;
         for (hash, status) in rows {
             statuses.insert(hash.as_str().to_string(), status);
         }
         Ok(())
     }
+}
 
-    pub(super) async fn projection_upsert_reaction_cache_impl(
-        &self,
-        row: ReactionProjectionRow,
-    ) -> Result<()> {
+#[async_trait]
+impl ReactionBookmarkStore for MemoryStore {
+    async fn upsert_reaction_cache(&self, row: ReactionProjectionRow) -> Result<()> {
         self.reaction_projection_rows.write().await.insert(
             (
                 row.source_replica_id.as_str().to_string(),
@@ -39,7 +33,7 @@ impl MemoryStore {
         Ok(())
     }
 
-    pub(super) async fn projection_get_reaction_cache_impl(
+    async fn get_reaction_cache(
         &self,
         source_replica_id: &ReplicaId,
         target_object_id: &EnvelopeId,
@@ -57,7 +51,7 @@ impl MemoryStore {
             .cloned())
     }
 
-    pub(super) async fn projection_list_reaction_cache_for_target_impl(
+    async fn list_reaction_cache_for_target(
         &self,
         source_replica_id: &ReplicaId,
         target_object_id: &EnvelopeId,
@@ -81,7 +75,7 @@ impl MemoryStore {
         Ok(items)
     }
 
-    pub(super) async fn projection_list_reaction_cache_for_targets_impl(
+    async fn list_reaction_cache_for_targets(
         &self,
         source_replica_id: &ReplicaId,
         target_object_ids: &[EnvelopeId],
@@ -111,7 +105,7 @@ impl MemoryStore {
         Ok(grouped)
     }
 
-    pub(super) async fn projection_list_recent_reaction_cache_by_author_impl(
+    async fn list_recent_reaction_cache_by_author(
         &self,
         author_pubkey: &str,
     ) -> Result<Vec<ReactionProjectionRow>> {
@@ -132,10 +126,7 @@ impl MemoryStore {
         Ok(items)
     }
 
-    pub(super) async fn projection_put_bookmarked_custom_reaction_impl(
-        &self,
-        row: BookmarkedCustomReactionRow,
-    ) -> Result<()> {
+    async fn put_bookmarked_custom_reaction(&self, row: BookmarkedCustomReactionRow) -> Result<()> {
         self.bookmarked_custom_reactions
             .write()
             .await
@@ -143,9 +134,7 @@ impl MemoryStore {
         Ok(())
     }
 
-    pub(super) async fn projection_list_bookmarked_custom_reactions_impl(
-        &self,
-    ) -> Result<Vec<BookmarkedCustomReactionRow>> {
+    async fn list_bookmarked_custom_reactions(&self) -> Result<Vec<BookmarkedCustomReactionRow>> {
         let mut items = self
             .bookmarked_custom_reactions
             .read()
@@ -170,10 +159,7 @@ impl MemoryStore {
         Ok(items)
     }
 
-    pub(super) async fn projection_remove_bookmarked_custom_reaction_impl(
-        &self,
-        asset_id: &str,
-    ) -> Result<()> {
+    async fn remove_bookmarked_custom_reaction(&self, asset_id: &str) -> Result<()> {
         self.bookmarked_custom_reactions
             .write()
             .await
@@ -181,10 +167,7 @@ impl MemoryStore {
         Ok(())
     }
 
-    pub(super) async fn projection_put_bookmarked_post_impl(
-        &self,
-        row: BookmarkedPostRow,
-    ) -> Result<()> {
+    async fn put_bookmarked_post(&self, row: BookmarkedPostRow) -> Result<()> {
         self.bookmarked_posts
             .write()
             .await
@@ -192,9 +175,7 @@ impl MemoryStore {
         Ok(())
     }
 
-    pub(super) async fn projection_list_bookmarked_posts_impl(
-        &self,
-    ) -> Result<Vec<BookmarkedPostRow>> {
+    async fn list_bookmarked_posts(&self) -> Result<Vec<BookmarkedPostRow>> {
         let mut items = self
             .bookmarked_posts
             .read()
@@ -211,10 +192,7 @@ impl MemoryStore {
         Ok(items)
     }
 
-    pub(super) async fn projection_remove_bookmarked_post_impl(
-        &self,
-        source_object_id: &EnvelopeId,
-    ) -> Result<()> {
+    async fn remove_bookmarked_post(&self, source_object_id: &EnvelopeId) -> Result<()> {
         self.bookmarked_posts
             .write()
             .await

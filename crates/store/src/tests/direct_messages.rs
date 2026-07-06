@@ -4,7 +4,7 @@ use super::*;
 async fn direct_message_delete_clears_outbox_but_keeps_tombstone() {
     let store = SqliteStore::connect_memory().await.expect("sqlite store");
     let dm_id = "dm-test";
-    ProjectionStore::upsert_direct_message_conversation(
+    DirectMessageStore::upsert_direct_message_conversation(
         &store,
         DirectMessageConversationRow {
             dm_id: dm_id.into(),
@@ -17,7 +17,7 @@ async fn direct_message_delete_clears_outbox_but_keeps_tombstone() {
     )
     .await
     .expect("upsert conversation");
-    ProjectionStore::put_direct_message_message(
+    DirectMessageStore::put_direct_message_message(
         &store,
         DirectMessageMessageRow {
             dm_id: dm_id.into(),
@@ -34,7 +34,7 @@ async fn direct_message_delete_clears_outbox_but_keeps_tombstone() {
     )
     .await
     .expect("put message");
-    ProjectionStore::put_direct_message_outbox(
+    DirectMessageStore::put_direct_message_outbox(
         &store,
         DirectMessageOutboxRow {
             dm_id: dm_id.into(),
@@ -47,7 +47,7 @@ async fn direct_message_delete_clears_outbox_but_keeps_tombstone() {
     )
     .await
     .expect("put outbox");
-    ProjectionStore::put_direct_message_tombstone(
+    DirectMessageStore::put_direct_message_tombstone(
         &store,
         DirectMessageTombstoneRow {
             dm_id: dm_id.into(),
@@ -57,27 +57,27 @@ async fn direct_message_delete_clears_outbox_but_keeps_tombstone() {
     )
     .await
     .expect("put tombstone");
-    ProjectionStore::delete_direct_message_message_local(&store, dm_id, "message-1")
+    DirectMessageStore::delete_direct_message_message_local(&store, dm_id, "message-1")
         .await
         .expect("delete message");
-    ProjectionStore::clear_direct_message_local(&store, dm_id)
+    DirectMessageStore::clear_direct_message_local(&store, dm_id)
         .await
         .expect("clear conversation");
 
     assert!(
-        ProjectionStore::get_direct_message_outbox(&store, dm_id, "message-1")
+        DirectMessageStore::get_direct_message_outbox(&store, dm_id, "message-1")
             .await
             .expect("get outbox")
             .is_none()
     );
     assert!(
-        ProjectionStore::get_direct_message_conversation_by_dm_id(&store, dm_id)
+        DirectMessageStore::get_direct_message_conversation_by_dm_id(&store, dm_id)
             .await
             .expect("get conversation")
             .is_none()
     );
     assert!(
-        ProjectionStore::has_direct_message_tombstone(&store, dm_id, "message-1")
+        DirectMessageStore::has_direct_message_tombstone(&store, dm_id, "message-1")
             .await
             .expect("has tombstone")
     );
@@ -99,10 +99,10 @@ async fn direct_message_local_delete_prevents_duplicate_reinsert() {
         acked_at: None,
     };
 
-    ProjectionStore::put_direct_message_message(&store, message.clone())
+    DirectMessageStore::put_direct_message_message(&store, message.clone())
         .await
         .expect("insert message");
-    ProjectionStore::put_direct_message_tombstone(
+    DirectMessageStore::put_direct_message_tombstone(
         &store,
         DirectMessageTombstoneRow {
             dm_id: dm_id.into(),
@@ -112,19 +112,19 @@ async fn direct_message_local_delete_prevents_duplicate_reinsert() {
     )
     .await
     .expect("insert tombstone");
-    ProjectionStore::delete_direct_message_message_local(&store, dm_id, "message-1")
+    DirectMessageStore::delete_direct_message_message_local(&store, dm_id, "message-1")
         .await
         .expect("delete local message");
-    ProjectionStore::put_direct_message_message(&store, message)
+    DirectMessageStore::put_direct_message_message(&store, message)
         .await
         .expect("reinsert ignored");
 
-    let page = ProjectionStore::list_direct_message_messages(&store, dm_id, None, 20)
+    let page = DirectMessageStore::list_direct_message_messages(&store, dm_id, None, 20)
         .await
         .expect("list messages");
     assert!(page.items.is_empty());
     assert!(
-        ProjectionStore::has_direct_message_tombstone(&store, dm_id, "message-1")
+        DirectMessageStore::has_direct_message_tombstone(&store, dm_id, "message-1")
             .await
             .expect("has tombstone")
     );

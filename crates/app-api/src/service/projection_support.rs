@@ -18,7 +18,7 @@ pub(crate) async fn filtered_timeline_page(
     let mut items = Vec::new();
     let page_size = limit.max(20);
     loop {
-        let page = ProjectionStore::list_topic_timeline_filtered(
+        let page = ObjectProjectionStore::list_topic_timeline_filtered(
             projection_store,
             topic_id,
             allowed_channels,
@@ -61,7 +61,7 @@ pub(crate) async fn filtered_thread_page(
     let mut items = Vec::new();
     let page_size = limit.max(20);
     loop {
-        let page = ProjectionStore::list_thread_filtered(
+        let page = ObjectProjectionStore::list_thread_filtered(
             projection_store,
             topic_id,
             thread_root_object_id,

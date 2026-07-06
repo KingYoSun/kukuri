@@ -54,9 +54,9 @@ async fn live_session_scenario<S: Store + ProjectionStore>(store: &S) -> LiveSes
             50,
         ),
     ] {
-        ProjectionStore::upsert_live_session_cache(store, row)
+        LiveGameProjectionStore::upsert_live_session_cache(store, row)
             .await
-            .expect("ProjectionStore::upsert_live_session_cache");
+            .expect("LiveGameProjectionStore::upsert_live_session_cache");
     }
 
     // presence の投入順が重要: alice の同一キー更新(2 回目)の後で、
@@ -80,30 +80,30 @@ async fn live_session_scenario<S: Store + ProjectionStore>(store: &S) -> LiveSes
         (TOPIC_A, "ch-alt", "sess-ended", alice.as_str(), 1_000, 25),
     ];
     for (topic_id, channel_id, session_id, author, expires_at, updated_at) in presence {
-        ProjectionStore::upsert_live_presence(
+        LiveGameProjectionStore::upsert_live_presence(
             store, topic_id, channel_id, session_id, author, expires_at, updated_at,
         )
         .await
-        .expect("ProjectionStore::upsert_live_presence");
+        .expect("LiveGameProjectionStore::upsert_live_presence");
     }
 
-    let topic_a_initial = ProjectionStore::list_topic_live_sessions(store, TOPIC_A)
+    let topic_a_initial = LiveGameProjectionStore::list_topic_live_sessions(store, TOPIC_A)
         .await
         .expect("list topic-a sessions initial");
-    let topic_b_initial = ProjectionStore::list_topic_live_sessions(store, TOPIC_B)
+    let topic_b_initial = LiveGameProjectionStore::list_topic_live_sessions(store, TOPIC_B)
         .await
         .expect("list topic-b sessions initial");
 
     // expires_at <= 500 を掃除(境界値 500 ちょうどの carol が消える)
-    ProjectionStore::clear_expired_live_presence(store, 500)
+    LiveGameProjectionStore::clear_expired_live_presence(store, 500)
         .await
         .expect("clear expired presence");
-    let topic_a_after_expire = ProjectionStore::list_topic_live_sessions(store, TOPIC_A)
+    let topic_a_after_expire = LiveGameProjectionStore::list_topic_live_sessions(store, TOPIC_A)
         .await
         .expect("list topic-a sessions after expire");
 
     // topic-b の presence だけ消える(topic-a の viewer_count は不変)
-    ProjectionStore::clear_topic_live_presence(store, TOPIC_B)
+    LiveGameProjectionStore::clear_topic_live_presence(store, TOPIC_B)
         .await
         .expect("clear topic-b presence");
 
@@ -111,12 +111,16 @@ async fn live_session_scenario<S: Store + ProjectionStore>(store: &S) -> LiveSes
         topic_a_initial,
         topic_b_initial,
         topic_a_after_expire,
-        topic_a_after_clear_topic_b: ProjectionStore::list_topic_live_sessions(store, TOPIC_A)
-            .await
-            .expect("list topic-a sessions after clear"),
-        topic_b_after_clear_topic_b: ProjectionStore::list_topic_live_sessions(store, TOPIC_B)
-            .await
-            .expect("list topic-b sessions after clear"),
+        topic_a_after_clear_topic_b: LiveGameProjectionStore::list_topic_live_sessions(
+            store, TOPIC_A,
+        )
+        .await
+        .expect("list topic-a sessions after clear"),
+        topic_b_after_clear_topic_b: LiveGameProjectionStore::list_topic_live_sessions(
+            store, TOPIC_B,
+        )
+        .await
+        .expect("list topic-b sessions after clear"),
     }
 }
 
@@ -194,12 +198,12 @@ async fn game_room_scenario<S: Store + ProjectionStore>(store: &S) -> GameRoomSc
         meta,
         parity_game_room("room-other", other_topic, GameRoomStatus::Waiting, 80),
     ] {
-        ProjectionStore::upsert_game_room_cache(store, row)
+        LiveGameProjectionStore::upsert_game_room_cache(store, row)
             .await
-            .expect("ProjectionStore::upsert_game_room_cache");
+            .expect("LiveGameProjectionStore::upsert_game_room_cache");
     }
     // 同一 room_id の再 upsert(status 更新経路)
-    ProjectionStore::upsert_game_room_cache(
+    LiveGameProjectionStore::upsert_game_room_cache(
         store,
         parity_game_room("room-alpha", topic, GameRoomStatus::Paused, 100),
     )
@@ -207,10 +211,10 @@ async fn game_room_scenario<S: Store + ProjectionStore>(store: &S) -> GameRoomSc
     .expect("upsert game room update");
 
     GameRoomScenarioResult {
-        topic_rooms: ProjectionStore::list_topic_game_rooms(store, topic)
+        topic_rooms: LiveGameProjectionStore::list_topic_game_rooms(store, topic)
             .await
             .expect("list topic game rooms"),
-        other_topic_rooms: ProjectionStore::list_topic_game_rooms(store, other_topic)
+        other_topic_rooms: LiveGameProjectionStore::list_topic_game_rooms(store, other_topic)
             .await
             .expect("list other topic game rooms"),
     }

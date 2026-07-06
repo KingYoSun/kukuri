@@ -45,8 +45,14 @@ pub trait Store: Send + Sync {
     async fn list_follow_edges_by_target(&self, target_pubkey: &str) -> Result<Vec<FollowEdge>>;
 }
 
+// ProjectionStore はドメイン別 sub-trait の supertrait 合成(WP-H1)。
+// 実装側(sqlite / memory)はサブモジュール毎に対応する sub-trait を直接 impl し、
+// blanket impl により全 sub-trait を実装する型が自動的に ProjectionStore になる。
+// 注入点(`dyn ProjectionStore`)は従来どおり全ドメインを提供する。
+
+/// object projection とタイムライン / スレッド読み出し(実装: sqlite/projections.rs)。
 #[async_trait]
-pub trait ProjectionStore: Send + Sync {
+pub trait ObjectProjectionStore: Send + Sync {
     async fn put_object_projection(&self, row: ObjectProjectionRow) -> Result<()>;
     async fn put_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()> {
         for row in rows {
@@ -149,7 +155,12 @@ pub trait ProjectionStore: Send + Sync {
             current_cursor = next_cursor;
         }
     }
-    async fn upsert_profile_cache(&self, profile: Profile) -> Result<()>;
+    async fn rebuild_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()>;
+}
+
+/// ライブセッション / ゲームルーム / live presence(実装: sqlite/live_game.rs)。
+#[async_trait]
+pub trait LiveGameProjectionStore: Send + Sync {
     async fn upsert_live_session_cache(&self, row: LiveSessionProjectionRow) -> Result<()>;
     async fn list_topic_live_sessions(
         &self,
@@ -157,6 +168,23 @@ pub trait ProjectionStore: Send + Sync {
     ) -> Result<Vec<LiveSessionProjectionRow>>;
     async fn upsert_game_room_cache(&self, row: GameRoomProjectionRow) -> Result<()>;
     async fn list_topic_game_rooms(&self, topic_id: &str) -> Result<Vec<GameRoomProjectionRow>>;
+    async fn upsert_live_presence(
+        &self,
+        topic_id: &str,
+        channel_id: &str,
+        session_id: &str,
+        author_pubkey: &str,
+        expires_at: i64,
+        updated_at: i64,
+    ) -> Result<()>;
+    async fn clear_topic_live_presence(&self, topic_id: &str) -> Result<()>;
+    async fn clear_expired_live_presence(&self, now_ms: i64) -> Result<()>;
+}
+
+/// profile cache / 作者関係 / ミュート(実装: sqlite/social.rs)。
+#[async_trait]
+pub trait SocialProjectionStore: Send + Sync {
+    async fn upsert_profile_cache(&self, profile: Profile) -> Result<()>;
     async fn get_author_relationship(
         &self,
         local_author_pubkey: &str,
@@ -187,17 +215,11 @@ pub trait ProjectionStore: Send + Sync {
     async fn get_muted_author(&self, author_pubkey: &str) -> Result<Option<MutedAuthorRow>>;
     async fn list_muted_authors(&self) -> Result<Vec<MutedAuthorRow>>;
     async fn remove_muted_author(&self, author_pubkey: &str) -> Result<()>;
-    async fn upsert_live_presence(
-        &self,
-        topic_id: &str,
-        channel_id: &str,
-        session_id: &str,
-        author_pubkey: &str,
-        expires_at: i64,
-        updated_at: i64,
-    ) -> Result<()>;
-    async fn clear_topic_live_presence(&self, topic_id: &str) -> Result<()>;
-    async fn clear_expired_live_presence(&self, now_ms: i64) -> Result<()>;
+}
+
+/// blob の取得状態(実装: sqlite/bookmarks.rs。意味的に独立させた最小 trait)。
+#[async_trait]
+pub trait BlobCacheStore: Send + Sync {
     async fn mark_blob_status(&self, hash: &BlobHash, status: BlobCacheStatus) -> Result<()>;
     async fn mark_blob_statuses(&self, rows: Vec<(BlobHash, BlobCacheStatus)>) -> Result<()> {
         for (hash, status) in rows {
@@ -205,6 +227,11 @@ pub trait ProjectionStore: Send + Sync {
         }
         Ok(())
     }
+}
+
+/// リアクション cache / カスタムリアクション / ブックマーク(実装: sqlite/bookmarks.rs)。
+#[async_trait]
+pub trait ReactionBookmarkStore: Send + Sync {
     async fn upsert_reaction_cache(&self, row: ReactionProjectionRow) -> Result<()>;
     async fn get_reaction_cache(
         &self,
@@ -242,6 +269,11 @@ pub trait ProjectionStore: Send + Sync {
     async fn put_bookmarked_post(&self, row: BookmarkedPostRow) -> Result<()>;
     async fn list_bookmarked_posts(&self) -> Result<Vec<BookmarkedPostRow>>;
     async fn remove_bookmarked_post(&self, source_object_id: &EnvelopeId) -> Result<()>;
+}
+
+/// ダイレクトメッセージの会話 / メッセージ / outbox / tombstone(実装: sqlite/direct_messages.rs)。
+#[async_trait]
+pub trait DirectMessageStore: Send + Sync {
     async fn upsert_direct_message_conversation(
         &self,
         row: DirectMessageConversationRow,
@@ -299,10 +331,40 @@ pub trait ProjectionStore: Send + Sync {
         message_id: &str,
     ) -> Result<()>;
     async fn clear_direct_message_local(&self, dm_id: &str) -> Result<()>;
+}
+
+/// 通知(実装: sqlite/notifications.rs)。
+#[async_trait]
+pub trait NotificationStore: Send + Sync {
     async fn put_notification_if_absent(&self, row: NotificationRow) -> Result<bool>;
     async fn list_notifications(&self) -> Result<Vec<NotificationRow>>;
     async fn mark_notification_read(&self, notification_id: &str, read_at: i64) -> Result<()>;
     async fn mark_all_notifications_read(&self, read_at: i64) -> Result<()>;
     async fn count_unread_notifications(&self) -> Result<usize>;
-    async fn rebuild_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()>;
+}
+
+/// 全ドメインを提供する projection store(sub-trait の supertrait 合成)。
+///
+/// 注入点はこれまでどおり `dyn ProjectionStore` を使える。個別ドメインだけが必要な
+/// 場面では対応する sub-trait を直接使う。
+pub trait ProjectionStore:
+    ObjectProjectionStore
+    + LiveGameProjectionStore
+    + SocialProjectionStore
+    + BlobCacheStore
+    + ReactionBookmarkStore
+    + DirectMessageStore
+    + NotificationStore
+{
+}
+
+impl<T> ProjectionStore for T where
+    T: ObjectProjectionStore
+        + LiveGameProjectionStore
+        + SocialProjectionStore
+        + BlobCacheStore
+        + ReactionBookmarkStore
+        + DirectMessageStore
+        + NotificationStore
+{
 }
