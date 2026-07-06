@@ -1,5 +1,3 @@
-use super::*;
-
 use crate::service::projection_support::joined_private_channel_state_from_capability;
 use crate::{PrivateChannelCapability, PrivateChannelEpochCapability};
 use kukuri_core::ChannelAudienceKind;
