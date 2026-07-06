@@ -316,6 +316,12 @@ fn key_file_path(db_path: &Path) -> PathBuf {
     db_path.with_extension("identity-key")
 }
 
+// 互換パス(REFACTORING.md「互換パスと sunset 条件」参照)。
+// 旧 `.nsec`(bech32 表記)は読み込んでも新形式 `.identity-key` へ再保存されず残り続ける。
+// 鍵が見つからない場合 `load_or_create_keys` は黙って新しい鍵を生成するため、この読込パス
+// だけを消すと旧ファイルの利用者が気づかないまま別人の鍵になる。
+// 撤去条件(WP-C8 で確定): `.nsec` を検知したら起動を止めて案内を出す処理(fail-loud)と
+// セットで撤去すること。単独では削除しない。
 fn legacy_key_file_path(db_path: &Path) -> PathBuf {
     db_path.with_extension("nsec")
 }

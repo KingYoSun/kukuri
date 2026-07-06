@@ -152,6 +152,13 @@ pub(crate) async fn fetch_post_object_for_projection(
     Ok(Some(header))
 }
 
+// 互換パス(REFACTORING.md「互換パスと sunset 条件」参照)。
+// epoch 導入前に保存されたプライベートチャンネル capability(epoch_id が空)を "legacy"
+// epoch として扱い、epoch なし時代のレプリカ ID で読む(private_channel_replica_for_epoch /
+// joined_private_channel_state_from_capability)。現行ビルドが空の epoch_id を新規に書くことはない。
+// 撤去条件(WP-C8 で確定): 正式リリースの節目で削除可(preview データの保全は保証しない
+// 方針)。削除時は空の epoch_id を持つ capability をエラーで拒否すること(黙って読めなく
+// ならないようにする)。
 pub(crate) fn legacy_epoch_id() -> &'static str {
     "legacy"
 }
