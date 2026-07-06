@@ -114,9 +114,7 @@ async fn persist_failure_propagates_from_mutation() {
     let store = Arc::new(MemoryStore::default());
     let transport = Arc::new(FakeTransport::new("self", FakeNetwork::default()));
     let app = AppService::new(store, transport);
-    app.set_private_channel_capability_persist(Arc::new(|_| {
-        anyhow::bail!("fake persist failure")
-    }));
+    app.set_private_channel_capability_persist(Arc::new(|_| anyhow::bail!("fake persist failure")));
 
     let topic = "kukuri:topic:persist-callback-fail";
     let _ = app.list_timeline(topic, None, 20).await;
