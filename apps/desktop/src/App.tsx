@@ -17,7 +17,7 @@ import {
   acceptAppConsents,
   getDesktopStartupStatus,
 } from '@/lib/api';
-import { BACKEND_UNAVAILABLE_MESSAGE } from '@/lib/api/invoke/error';
+import { isBridgeUnavailableError } from '@/lib/api/invoke/error';
 import {
   type DesktopTheme,
   readDesktopTheme,
@@ -60,7 +60,8 @@ export function App(props: AppProps) {
         if (!active) {
           return;
         }
-        if (error instanceof Error && error.message === BACKEND_UNAVAILABLE_MESSAGE) {
+        if (isBridgeUnavailableError(error)) {
+          // Tauri ブリッジ不在(ブラウザ/mock モード)— 文言非依存の code 判定(WP-C3)。
           setStartupGate({ status: 'ready' });
           return;
         }

@@ -2,9 +2,9 @@ use serde::Serialize;
 use tauri::Manager;
 
 use crate::state::{
-    AppConsentRecord, DesktopStartupState, DesktopStartupStatus, DesktopState, LEGAL_BUNDLE_VERSION,
-    build_desktop_state, consent_satisfied, current_unix_seconds, failed_status, load_app_consent,
-    resolve_db_path, save_app_consent,
+    AppConsentRecord, CommandError, DesktopStartupState, DesktopStartupStatus, DesktopState,
+    LEGAL_BUNDLE_VERSION, build_desktop_state, consent_satisfied, current_unix_seconds,
+    failed_status, load_app_consent, resolve_db_path, save_app_consent,
 };
 
 #[derive(Clone, Debug, Serialize)]
@@ -17,12 +17,12 @@ pub struct AppConsentStatus {
 }
 
 #[tauri::command]
-pub fn get_app_consent_status(app_handle: tauri::AppHandle) -> Result<AppConsentStatus, String> {
+pub fn get_app_consent_status(
+    app_handle: tauri::AppHandle,
+) -> Result<AppConsentStatus, CommandError> {
     let db_path = resolve_db_path(&app_handle)?;
     let record = load_app_consent(&db_path);
-    let accepted_bundle_version = record
-        .as_ref()
-        .map(|record| record.accepted_bundle_version);
+    let accepted_bundle_version = record.as_ref().map(|record| record.accepted_bundle_version);
     Ok(AppConsentStatus {
         current_bundle_version: LEGAL_BUNDLE_VERSION,
         accepted_bundle_version,
@@ -35,11 +35,12 @@ pub fn get_app_consent_status(app_handle: tauri::AppHandle) -> Result<AppConsent
 pub fn accept_app_consents(
     app_handle: tauri::AppHandle,
     bundle_version: i32,
-) -> Result<DesktopStartupStatus, String> {
+) -> Result<DesktopStartupStatus, CommandError> {
     if bundle_version < LEGAL_BUNDLE_VERSION {
         return Err(format!(
             "consent bundle version {bundle_version} is older than the current version {LEGAL_BUNDLE_VERSION}"
-        ));
+        )
+        .into());
     }
 
     let db_path = resolve_db_path(&app_handle)?;

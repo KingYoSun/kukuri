@@ -98,7 +98,10 @@ impl OsNotificationBackground {
     }
 
     fn settings_snapshot(&self) -> OsNotificationSettings {
-        self.settings.lock().expect("settings lock poisoned").clone()
+        self.settings
+            .lock()
+            .expect("settings lock poisoned")
+            .clone()
     }
 
     fn replace_settings(&self, next: OsNotificationSettings) {
@@ -148,14 +151,21 @@ async fn poll_once(app: &AppHandle) -> anyhow::Result<()> {
     // First successful poll only records a baseline so the existing backlog does
     // not surface as a burst of toasts.
     if std::mem::replace(
-        &mut *background.baseline_pending.lock().expect("baseline lock poisoned"),
+        &mut *background
+            .baseline_pending
+            .lock()
+            .expect("baseline lock poisoned"),
         false,
     ) {
         store_cursor(&background, next_cursor);
         return Ok(());
     }
 
-    let previous = background.cursor.lock().expect("cursor lock poisoned").clone();
+    let previous = background
+        .cursor
+        .lock()
+        .expect("cursor lock poisoned")
+        .clone();
     let to_dispatch: Vec<&NotificationView> = notifications
         .iter()
         .filter(|notification| is_new(notification, &previous))
@@ -189,7 +199,10 @@ async fn resolve_local_pubkey(
     background: &OsNotificationBackground,
 ) -> String {
     {
-        let cached = background.local_pubkey.lock().expect("pubkey lock poisoned");
+        let cached = background
+            .local_pubkey
+            .lock()
+            .expect("pubkey lock poisoned");
         if !cached.is_empty() {
             return cached.clone();
         }
@@ -201,7 +214,10 @@ async fn resolve_local_pubkey(
         .map(|status| status.local_author_pubkey)
         .unwrap_or_default();
     if !resolved.is_empty() {
-        *background.local_pubkey.lock().expect("pubkey lock poisoned") = resolved.clone();
+        *background
+            .local_pubkey
+            .lock()
+            .expect("pubkey lock poisoned") = resolved.clone();
     }
     resolved
 }
@@ -363,7 +379,14 @@ mod tests {
 
     #[test]
     fn should_send_respects_enabled_and_quiet_and_read() {
-        let dm = notification("a", NotificationKind::DirectMessage, 10, None, "actor", None);
+        let dm = notification(
+            "a",
+            NotificationKind::DirectMessage,
+            10,
+            None,
+            "actor",
+            None,
+        );
         assert!(should_send(&dm, &enabled_settings(), "me"));
 
         let mut disabled = enabled_settings();
@@ -374,7 +397,14 @@ mod tests {
         quiet.quiet_mode = true;
         assert!(!should_send(&dm, &quiet, "me"));
 
-        let read = notification("a", NotificationKind::DirectMessage, 10, Some(11), "actor", None);
+        let read = notification(
+            "a",
+            NotificationKind::DirectMessage,
+            10,
+            Some(11),
+            "actor",
+            None,
+        );
         assert!(!should_send(&read, &enabled_settings(), "me"));
     }
 
@@ -416,7 +446,10 @@ mod tests {
             notification_body(&NotificationKind::Mention, Some("hi"), true).as_deref(),
             Some("hi")
         );
-        assert_eq!(notification_body(&NotificationKind::Mention, None, true), None);
+        assert_eq!(
+            notification_body(&NotificationKind::Mention, None, true),
+            None
+        );
     }
 
     #[test]

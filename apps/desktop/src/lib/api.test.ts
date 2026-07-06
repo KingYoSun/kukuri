@@ -29,4 +29,31 @@ describe('runtimeApi invoke errors', () => {
 
     await expect(runtimeApi.getSyncStatus()).rejects.toThrow('Desktop backend is not attached.');
   });
+
+  // WP-C3: バックエンドは { code, message } の構造化封筒で reject する。
+  // message は従来の平文文言と同一に保たれ、code が機械判定用に付く。
+  it('exposes a machine-readable code on structured backend errors', async () => {
+    invokeMock.mockRejectedValueOnce({ code: 'command_failed', message: 'reply target missing' });
+
+    const error = await runtimeApi.getSyncStatus().catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe('reply target missing');
+    expect((error as Error & { code?: string }).code).toBe('command_failed');
+  });
+
+  it('exposes bridge_unavailable code on tauri bridge failures', async () => {
+    invokeMock.mockRejectedValueOnce(new Error('__TAURI_INTERNALS__ was not found'));
+
+    const error = await runtimeApi.getSyncStatus().catch((caught: unknown) => caught);
+    expect((error as Error).message).toBe('Desktop backend is not attached.');
+    expect((error as Error & { code?: string }).code).toBe('bridge_unavailable');
+  });
+
+  it('marks plain string rejections as command failures with the message preserved', async () => {
+    invokeMock.mockRejectedValueOnce('reply target missing');
+
+    const error = await runtimeApi.getSyncStatus().catch((caught: unknown) => caught);
+    expect((error as Error).message).toBe('reply target missing');
+    expect((error as Error & { code?: string }).code).toBe('command_failed');
+  });
 });

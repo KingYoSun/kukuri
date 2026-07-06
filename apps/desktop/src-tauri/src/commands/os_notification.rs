@@ -1,5 +1,7 @@
 use tauri::{AppHandle, Emitter, Manager};
 
+use crate::state::CommandError;
+
 /// Event payload emitted to the frontend when an OS toast is clicked.
 #[derive(Clone, serde::Serialize)]
 struct ActivationPayload {
@@ -35,8 +37,9 @@ pub fn show_os_notification(
     title: String,
     body: Option<String>,
     silent: bool,
-) -> Result<(), String> {
-    show_platform_notification(app, id, title, body, silent)
+) -> Result<(), CommandError> {
+    // cfg 付きのプラットフォーム別ヘルパは String のまま(From<String> で封筒化)。
+    Ok(show_platform_notification(app, id, title, body, silent)?)
 }
 
 #[cfg(windows)]
