@@ -21,6 +21,7 @@ use tokio::sync::{Mutex as TokioMutex, broadcast};
 use tokio::time::{Duration, sleep, timeout};
 use tokio_stream::wrappers::BroadcastStream;
 
+mod capability_registry_snapshot;
 mod direct_messages;
 mod game;
 mod live;
