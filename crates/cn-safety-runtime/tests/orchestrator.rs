@@ -12,8 +12,8 @@ use kukuri_cn_safety::provider::{
 };
 use kukuri_cn_safety::verdict::{ReasonCode, SafetyAction, SafetyLabel};
 use kukuri_cn_safety::{
-    MockSafetyProvider, RiskSignalTarget, SafetyCategory, SafetyPolicy, SafetyProviderCapability,
-    Visibility,
+    Basis, MockSafetyProvider, RiskSignalTarget, SafetyCategory, SafetyPolicy,
+    SafetyProviderCapability, Visibility,
 };
 use kukuri_cn_safety_runtime::{
     EventIdGenerator, SafetyOrchestrator, SafetyRuntimeError, ScanClock, map_scan_error,
@@ -150,11 +150,91 @@ async fn known_hash_match_is_excluded_and_emits_event_and_signal() {
     assert_eq!(event.created_at, SCANNED_AT);
     // confirmed は subscribed_nodes 以上が許される。
     assert_eq!(event.visibility, Visibility::SubscribedNodes);
+    // 完全一致の根拠は KnownHashMatch(WP-C7 以後も不変であることを固定)。
+    assert_eq!(event.basis, Basis::KnownHashMatch);
 
     let signal = report.risk_signal.expect("signal for excluded content");
     assert_eq!(signal.target, RiskSignalTarget::BlobCid);
     assert_eq!(signal.category, SafetyCategory::Csam);
     assert_eq!(signal.visibility, Visibility::SubscribedNodes);
+    assert_eq!(signal.basis, Basis::KnownHashMatch);
+}
+
+#[tokio::test]
+async fn perceptual_match_confirmed_uses_provider_verdict_basis() {
+    // 近似(perceptual)一致による confirmed(ADR 0027 §7.1 の near match)。
+    // 排除・critical・subscribed_nodes 配布は完全一致と同じだが、根拠ラベルは
+    // 「完全一致」ではなく「provider による断定」(ProviderVerdict)になる(§2.2 / §2.7)。
+    let result = ProviderScanResult {
+        provider: "known".to_string(),
+        capability: SafetyProviderCapability::PerceptualHashMatch,
+        outcome: ScanOutcome::Completed,
+        known_hash_match: true,
+        score: None,
+        labels: vec![SafetyLabel::new(SafetyCategory::Csam)],
+    };
+    let provider = Arc::new(StaticProvider {
+        name: "known",
+        capabilities: vec![SafetyProviderCapability::PerceptualHashMatch],
+        result,
+    });
+    let orchestrator = SafetyOrchestrator::builder("node-1", clock(), ids())
+        .provider(provider)
+        .build()
+        .unwrap();
+    let report = orchestrator.scan_subject(&blob_request()).await;
+
+    assert_eq!(report.verdict.reason_code, ReasonCode::CsamConfirmed);
+    assert_eq!(report.verdict.action, SafetyAction::Exclude);
+    assert!(report.verdict.critical);
+
+    let event = report.moderation_event.expect("event for excluded content");
+    assert_eq!(event.basis, Basis::ProviderVerdict);
+    assert_eq!(event.visibility, Visibility::SubscribedNodes);
+
+    let signal = report.risk_signal.expect("signal for excluded content");
+    assert_eq!(signal.basis, Basis::ProviderVerdict);
+    assert_eq!(signal.visibility, Visibility::SubscribedNodes);
+}
+
+#[tokio::test]
+async fn general_moderation_uses_classifier_basis_and_local_visibility() {
+    // 一般判定(nsfw / spam 等)は分類器の推定であり「provider による断定」ではない。
+    // 根拠ラベルは ClassifierScore、既定の配布範囲は Local(自ノード内のみ)になる
+    // (§2.2 / §2.6。confirmed 相当の根拠 + subscribed_nodes 配布にしない)。
+    let result = ProviderScanResult {
+        provider: "general".to_string(),
+        capability: SafetyProviderCapability::GeneralMediaModeration,
+        outcome: ScanOutcome::Completed,
+        known_hash_match: false,
+        score: Some(95),
+        labels: vec![SafetyLabel::new(SafetyCategory::Nsfw).with_confidence(95)],
+    };
+    let provider = Arc::new(StaticProvider {
+        name: "general",
+        capabilities: vec![SafetyProviderCapability::GeneralMediaModeration],
+        result,
+    });
+    let mut policy = SafetyPolicy::public_node_default();
+    policy.require_known_csam = false;
+    let orchestrator = SafetyOrchestrator::builder("node-1", clock(), ids())
+        .policy(policy)
+        .provider(provider)
+        .build()
+        .unwrap();
+    let report = orchestrator.scan_subject(&blob_request()).await;
+
+    assert_eq!(report.verdict.reason_code, ReasonCode::GeneralModeration);
+    assert!(!report.verdict.critical);
+    assert!(!report.verdict.is_indexable());
+
+    let event = report.moderation_event.expect("event for excluded content");
+    assert_eq!(event.basis, Basis::ClassifierScore);
+    assert_eq!(event.visibility, Visibility::Local);
+
+    let signal = report.risk_signal.expect("signal for excluded content");
+    assert_eq!(signal.basis, Basis::ClassifierScore);
+    assert_eq!(signal.visibility, Visibility::Local);
 }
 
 #[tokio::test]

@@ -328,14 +328,27 @@ fn non_empty_labels(result: &ProviderScanResult, category: SafetyCategory) -> Ve
 }
 
 // Basis を verdict に直接は載せていない（verdict は reason_code を持つ）。Basis は
-// moderation event / risk signal 側で使う。ここでは router が決めた reason_code から
+// moderation event / risk signal 側で使う。ここでは router が決めた verdict から
 // 後段が basis を導出できるよう、対応関係を関数で提供する。
-/// reason_code から対応する基準（basis）を導く補助。
-pub fn basis_for_reason(reason: ReasonCode) -> Basis {
-    match reason {
-        ReasonCode::CsamConfirmed => Basis::KnownHashMatch,
-        ReasonCode::CsamSuspected | ReasonCode::CseSuspected => Basis::ClassifierScore,
-        ReasonCode::GeneralModeration => Basis::ProviderVerdict,
+/// verdict から対応する判定根拠（basis）を導く補助（ADR 0027 §2.2）。
+///
+/// - confirmed（`CsamConfirmed`）は capability で分ける: 完全一致
+///   （`KnownCsamHashMatch`）は `KnownHashMatch`、それ以外（perceptual near match 等の
+///   provider 断定）は `ProviderVerdict`（§2.7「near match は exact ではない」との整合）。
+/// - 一般判定（`GeneralModeration`）は provider の分類器由来なので `ClassifierScore`
+///   （`ProviderVerdict` にしない — confirmed 相当の根拠を分類結果に付けない）。
+pub fn basis_for_verdict(verdict: &SafetyVerdict) -> Basis {
+    match verdict.reason_code {
+        ReasonCode::CsamConfirmed => {
+            if verdict.provider_capability == Some(SafetyProviderCapability::KnownCsamHashMatch) {
+                Basis::KnownHashMatch
+            } else {
+                Basis::ProviderVerdict
+            }
+        }
+        ReasonCode::CsamSuspected | ReasonCode::CseSuspected | ReasonCode::GeneralModeration => {
+            Basis::ClassifierScore
+        }
         _ => Basis::LocalPolicy,
     }
 }
