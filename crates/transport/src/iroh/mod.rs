@@ -5,7 +5,7 @@ use std::net::SocketAddr;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 #[cfg(test)]
 use std::str::FromStr;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, RwLock as StdRwLock};
 use std::time::Duration;
 
@@ -35,7 +35,7 @@ use tokio::sync::{Mutex, Notify, RwLock, Semaphore, broadcast};
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, timeout};
 use tokio_stream::wrappers::BroadcastStream;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::config::{
     ConnectMode, ConnectionPath, DhtDiscoveryOptions, DiscoveryMode, DiscoverySnapshot, SeedPeer,
@@ -57,6 +57,10 @@ struct HintTopicState {
     neighbors: Arc<RwLock<BTreeSet<String>>>,
     last_received_at: Arc<Mutex<Option<i64>>>,
     last_error: Arc<Mutex<Option<String>>>,
+    // parse 失敗した受信 hint の累計(wire 非互換の観測用。WP-C4)。プロセス生存中は単調増加。
+    // 現状の読み手は cfg(test) のアクセサのみ(診断 UI への露出は契約変更のため別 WP)。
+    #[cfg_attr(not(test), allow(dead_code))]
+    invalid_hint_count: Arc<AtomicU64>,
     _receiver_task: JoinHandle<()>,
 }
 
