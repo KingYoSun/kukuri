@@ -1,7 +1,7 @@
 use super::*;
 use sqlx::sqlite::SqlitePoolOptions;
 
-use crate::sqlite::{STORE_MIGRATOR, alternate_line_ending_checksum};
+use crate::sqlite::STORE_MIGRATOR;
 use kukuri_core::{EnvelopeId, ObjectStatus, Profile, ReactionKeyKind};
 
 use std::sync::Arc;

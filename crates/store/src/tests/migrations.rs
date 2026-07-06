@@ -1,5 +1,6 @@
 use super::*;
 use anyhow::Result;
+use sha2::{Digest, Sha384};
 use sqlx::Row;
 use sqlx::sqlite::SqliteConnectOptions;
 use std::str::FromStr;
@@ -7,8 +8,17 @@ use std::str::FromStr;
 const PRE_METAVERSE_FIXTURE: &str =
     include_str!("../../fixtures/sqlite/pre-metaverse-game-room-columns.fixture");
 
+// 埋め込み migration(LF)を CRLF に変えた場合の checksum。
+// かつて存在した CRLF 自己修復(#211、WP-C6 で撤去)が対象にしていた形の
+// 不一致で、これを接続時にサイレント修復しないことを固定する。
+fn crlf_variant_checksum(sql: &str) -> Vec<u8> {
+    let lf_sql = sql.replace("\r\n", "\n").replace('\r', "\n");
+    let crlf_sql = lf_sql.replace('\n', "\r\n");
+    Vec::from(Sha384::digest(crlf_sql.as_bytes()).as_slice())
+}
+
 #[tokio::test]
-async fn connect_file_repairs_line_ending_only_migration_checksum_mismatches() {
+async fn connect_file_fails_loudly_on_line_ending_variant_migration_checksums() {
     let tempdir = tempdir().expect("tempdir");
     let db_path = tempdir.path().join("store.db");
     let store = SqliteStore::connect_file(&db_path)
@@ -29,40 +39,29 @@ async fn connect_file_repairs_line_ending_only_migration_checksum_mismatches() {
                 migration.version == version && !migration.migration_type.is_down_migration()
             })
             .expect("embedded store migration");
-        let alternate_checksum =
-            alternate_line_ending_checksum(migration.sql.as_ref(), migration.checksum.as_ref())
-                .expect("alternate line-ending checksum");
+        let variant_checksum = crlf_variant_checksum(migration.sql.as_ref());
+        assert_ne!(
+            variant_checksum.as_slice(),
+            migration.checksum.as_ref(),
+            "CRLF variant checksum must differ from the embedded checksum"
+        );
         sqlx::query("UPDATE _sqlx_migrations SET checksum = ?1 WHERE version = ?2")
-            .bind(alternate_checksum)
+            .bind(variant_checksum)
             .bind(version)
             .execute(&pool)
             .await
-            .expect("rewrite migration checksum to alternate line ending");
+            .expect("rewrite migration checksum to CRLF variant");
     }
     pool.close().await;
 
-    let reopened = SqliteStore::connect_file(&db_path)
-        .await
-        .expect("reopen store after repairing line-ending-only migration checksum mismatch");
-    for version in [20260319000000_i64, 20260319010000_i64] {
-        let stored_checksum = sqlx::query_scalar::<_, Vec<u8>>(
-            "SELECT checksum FROM _sqlx_migrations WHERE version = ?1",
-        )
-        .bind(version)
-        .fetch_one(reopened.pool())
-        .await
-        .expect("load repaired checksum");
-        let expected_checksum = STORE_MIGRATOR
-            .iter()
-            .find(|migration| {
-                migration.version == version && !migration.migration_type.is_down_migration()
-            })
-            .expect("embedded store migration")
-            .checksum
-            .to_vec();
-
-        assert_eq!(stored_checksum, expected_checksum);
-    }
+    let error = match SqliteStore::connect_file(&db_path).await {
+        Ok(_) => panic!("checksum mismatch must fail loudly (no silent repair)"),
+        Err(error) => error,
+    };
+    assert!(
+        format!("{error:#}").contains("was previously applied but has been modified"),
+        "unexpected error: {error:#}"
+    );
 }
 
 #[tokio::test]
