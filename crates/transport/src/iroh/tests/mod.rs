@@ -595,4 +595,141 @@ async fn transport_custom_relay_static_peer_seed_peers_connect_without_ticket_im
     drop(connection);
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn invalid_hint_payload_increments_counter_and_keeps_stream_healthy() {
+    let transport_a = IrohGossipTransport::bind_local()
+        .await
+        .expect("transport a");
+    let transport_b = IrohGossipTransport::bind_local()
+        .await
+        .expect("transport b");
+    let ticket_a = transport_a
+        .export_ticket()
+        .await
+        .expect("ticket a")
+        .expect("ticket a value");
+    let ticket_b = transport_b
+        .export_ticket()
+        .await
+        .expect("ticket b")
+        .expect("ticket b value");
+    transport_a
+        .import_ticket(&ticket_b)
+        .await
+        .expect("import b");
+    transport_b
+        .import_ticket(&ticket_a)
+        .await
+        .expect("import a");
+    let topic = TopicId::new("kukuri:topic:invalid-hint");
+    let join_timeout = initial_topic_join_timeout();
+    let (mut stream_a, mut stream_b) = tokio::try_join!(
+        transport_a.subscribe_hints(&topic),
+        transport_b.subscribe_hints(&topic)
+    )
+    .expect("subscribe both");
+    // gossip メッシュ確立と正常経路の成立を先に確認する。
+    wait_for_hint_roundtrip(
+        HintRoundtripParticipant {
+            transport: &transport_a,
+            stream: &mut stream_a,
+            expected_source_peer: None,
+        },
+        HintRoundtripParticipant {
+            transport: &transport_b,
+            stream: &mut stream_b,
+            expected_source_peer: None,
+        },
+        &topic,
+        join_timeout,
+        "invalid-hint-setup",
+    )
+    .await;
+
+    // B の gossip sender から wire に生の不正 bytes を注入する
+    // (hint_publish_hint_impl と同一経路。GossipHint の serde には触れない)。
+    let hint_topic = kukuri_core::wire::hint_topic_id(&topic);
+    {
+        let states = transport_b.topic_states.lock().await;
+        let state = states
+            .get(hint_topic.as_str())
+            .expect("hint topic state on b");
+        let sender = state.sender.lock().await;
+        sender
+            .broadcast(b"not-a-gossip-hint".to_vec().into())
+            .await
+            .expect("broadcast invalid payload");
+    }
+
+    // A 側: 不正 hint がカウンタと last_error で観測できる(WP-C4)。
+    timeout(join_timeout, async {
+        loop {
+            if transport_a.invalid_hint_count(&topic).await >= 1 {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("invalid hint counter timeout");
+    timeout(join_timeout, async {
+        loop {
+            let peers = transport_a.peers().await.expect("peers a");
+            let diag = peers
+                .topic_diagnostics
+                .iter()
+                .find(|diag| diag.topic == hint_topic.as_str());
+            if diag.is_some_and(|diag| {
+                diag.last_error.as_deref() == Some("failed to decode hint payload")
+            }) {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("invalid hint last_error timeout");
+
+    // 正常経路は不変: 不正 hint の後も正常 hint が配送され、last_error が消える。
+    let recovery_hint = GossipHint::TopicObjectsChanged {
+        topic_id: topic.clone(),
+        objects: vec![HintObjectRef {
+            object_id: "invalid-hint-recovery".into(),
+            object_kind: "post".into(),
+        }],
+    };
+    timeout(join_timeout, async {
+        loop {
+            transport_b
+                .publish_hint(&topic, recovery_hint.clone())
+                .await
+                .expect("publish recovery hint");
+            if let Ok(Some(envelope)) = timeout(Duration::from_millis(500), stream_a.next()).await
+                && envelope.hint == recovery_hint
+            {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .expect("recovery hint delivery timeout");
+    timeout(join_timeout, async {
+        loop {
+            let peers = transport_a.peers().await.expect("peers a");
+            let diag = peers
+                .topic_diagnostics
+                .iter()
+                .find(|diag| diag.topic == hint_topic.as_str());
+            if diag.is_some_and(|diag| diag.last_error.is_none()) {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("last_error clear timeout");
+    assert!(transport_a.invalid_hint_count(&topic).await >= 1);
+}
+
 mod relay_connectivity;

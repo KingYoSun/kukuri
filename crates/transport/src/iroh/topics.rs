@@ -303,6 +303,8 @@ impl IrohGossipTransport {
         let last_received_at_task = Arc::clone(&last_received_at);
         let last_error = Arc::new(Mutex::new(None));
         let last_error_task = Arc::clone(&last_error);
+        let invalid_hint_count = Arc::new(AtomicU64::new(0));
+        let invalid_hint_count_task = Arc::clone(&invalid_hint_count);
         let transport_last_error = Arc::clone(&self.last_error);
         let imported_count = bootstrap_peers.len();
         let warm_endpoint = self.endpoint.clone();
@@ -361,17 +363,44 @@ impl IrohGossipTransport {
                             .collect::<BTreeSet<_>>();
                         *neighbors_task.write().await = current_neighbors;
                         *last_received_at_task.lock().await = Some(Utc::now().timestamp_millis());
-                        if let Ok(parsed) = serde_json::from_slice::<GossipHint>(&message.content) {
-                            *last_error_task.lock().await = None;
-                            *transport_last_error.lock().await = None;
-                            let _ = outbound.send(HintEnvelope {
-                                hint: parsed,
-                                received_at: Utc::now().timestamp_millis(),
-                                source_peer: message.delivered_from.to_string(),
-                            });
-                        } else {
-                            *last_error_task.lock().await =
-                                Some("failed to decode hint payload".to_string());
+                        match serde_json::from_slice::<GossipHint>(&message.content) {
+                            Ok(parsed) => {
+                                *last_error_task.lock().await = None;
+                                *transport_last_error.lock().await = None;
+                                let _ = outbound.send(HintEnvelope {
+                                    hint: parsed,
+                                    received_at: Utc::now().timestamp_millis(),
+                                    source_peer: message.delivered_from.to_string(),
+                                });
+                            }
+                            Err(error) => {
+                                // wire 非互換・不正 payload の観測点(WP-C4)。payload 本体は
+                                // ログに出さない。悪性 peer によるログ洪水を避けるため warn は
+                                // 初回と 100 回毎に絞り、それ以外は debug に落とす。
+                                let count =
+                                    invalid_hint_count_task.fetch_add(1, Ordering::SeqCst) + 1;
+                                if count == 1 || count.is_multiple_of(100) {
+                                    warn!(
+                                        topic = %topic_name,
+                                        source_peer = %message.delivered_from,
+                                        payload_len = message.content.len(),
+                                        invalid_hint_count = count,
+                                        error = %error,
+                                        "failed to decode gossip hint payload"
+                                    );
+                                } else {
+                                    debug!(
+                                        topic = %topic_name,
+                                        source_peer = %message.delivered_from,
+                                        payload_len = message.content.len(),
+                                        invalid_hint_count = count,
+                                        error = %error,
+                                        "failed to decode gossip hint payload"
+                                    );
+                                }
+                                *last_error_task.lock().await =
+                                    Some("failed to decode hint payload".to_string());
+                            }
                         }
                     }
                     Ok(GossipEvent::NeighborUp(peer_id)) => {
@@ -415,6 +444,7 @@ impl IrohGossipTransport {
                 neighbors,
                 last_received_at,
                 last_error,
+                invalid_hint_count,
                 _receiver_task: task,
             },
         );
@@ -445,6 +475,18 @@ impl IrohGossipTransport {
         let hint_topic = kukuri_core::wire::hint_topic_id(topic);
         let sender = self.ensure_hint_topic(&hint_topic).await?;
         Ok(Self::stream_from_sender(&sender))
+    }
+
+    /// 対象 topic の hint parse 失敗の累計(WP-C4 の観測用)。未購読なら 0。
+    #[cfg(test)]
+    pub(crate) async fn invalid_hint_count(&self, topic: &TopicId) -> u64 {
+        let hint_topic = kukuri_core::wire::hint_topic_id(topic);
+        self.topic_states
+            .lock()
+            .await
+            .get(hint_topic.as_str())
+            .map(|state| state.invalid_hint_count.load(Ordering::SeqCst))
+            .unwrap_or(0)
     }
 
     pub(crate) async fn hint_unsubscribe_hints_impl(&self, topic: &TopicId) -> Result<()> {
