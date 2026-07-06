@@ -84,9 +84,7 @@ async fn owner_invite_export_auto_rotate_survives_restart() {
         "rotated epoch must survive owner restart"
     );
     assert!(
-        joined[0]
-            .archived_epoch_ids
-            .contains(&created_epoch),
+        joined[0].archived_epoch_ids.contains(&created_epoch),
         "pre-rotate epoch must be archived after restart (archived: {:?})",
         joined[0].archived_epoch_ids
     );
@@ -177,9 +175,7 @@ async fn owner_access_token_export_auto_rotate_survives_restart() {
         "rotated epoch must survive owner restart"
     );
     assert!(
-        joined[0]
-            .archived_epoch_ids
-            .contains(&created_epoch),
+        joined[0].archived_epoch_ids.contains(&created_epoch),
         "pre-rotate epoch must be archived after restart (archived: {:?})",
         joined[0].archived_epoch_ids
     );
