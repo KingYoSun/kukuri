@@ -7,7 +7,6 @@ use kukuri_core::{
     BlobHash, EnvelopeId, FollowEdge, KukuriEnvelope, Profile, ReplicaId, ThreadRef,
     parse_follow_edge, parse_profile,
 };
-use sha2::{Digest, Sha384};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Pool, QueryBuilder, Row, Sqlite};
 
@@ -48,8 +47,6 @@ pub struct SqliteStore {
 
 #[cfg(test)]
 pub(crate) use connection::STORE_MIGRATOR;
-#[cfg(test)]
-pub(crate) use connection::alternate_line_ending_checksum;
 
 #[async_trait]
 impl Store for SqliteStore {
