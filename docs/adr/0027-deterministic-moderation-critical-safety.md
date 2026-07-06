@@ -84,7 +84,10 @@ community node の moderation のうち **決定論的 moderation（既知 hash 
 - action は `SafetyAction`（`allow` / `hold` / `quarantine` / `exclude`）。**`allow` のみが index / discovery / recommendation へ surfacing を許す**（`SafetyAction::allows_indexing` / `SafetyVerdict::is_indexable`）。
 - 検知ラベル `SafetyLabel`（category / confidence / provider_capability）は action と独立。
 - `ReasonCode` で `CsamConfirmed`（**決定論的**: known hash match / provider confirmed）と `CsamSuspected` / `CseSuspected`（classifier = 非決定論、#411）を型で分離する。
-- **router が confirmed CSAM に付ける basis は `Basis::KnownHashMatch`**（`basis_for_reason(CsamConfirmed) → KnownHashMatch`）。`Basis::ProviderVerdict` は「provider が confirmed と返した」意味の basis だが、現状の `route()` は `ProviderVerdict` を `GeneralModeration` に割り当てており、provider-confirmed CSAM を confirmed basis として emit する経路は未整備（既知ギャップ。#391 provider 統合時に `basis_for_reason` と `default_visibility_for` の整合を取る）。`Basis::ClassifierScore` は suspected どまり（confirmed に昇格させない、#411）。
+- **basis の導出は `basis_for_verdict`**（`cn-safety/src/policy.rs`。2026-07-07 WP-C7 で `basis_for_reason` から置換し、本節の既知ギャップを解消）:
+  - confirmed CSAM（`CsamConfirmed`）は capability で分ける。完全一致（`KnownCsamHashMatch`）→ `Basis::KnownHashMatch`、それ以外（`PerceptualHashMatch` の near match 等、provider が confirmed と返したもの）→ `Basis::ProviderVerdict`。いずれも confirmed として扱われ、既定 visibility は `SubscribedNodes`（§2.6 の `default_visibility_for`）。
+  - suspected（`CsamSuspected` / `CseSuspected`）と一般判定（`GeneralModeration`）→ `Basis::ClassifierScore`。分類器の推定に confirmed 相当の根拠を付けない。これにより一般判定の既定 visibility は `Local`（かつては `GeneralModeration` に `ProviderVerdict` が付き既定で `SubscribedNodes` に配布されていたが、根拠の誤ラベルとして WP-C7 で修正）。
+  - `Basis::ClassifierScore` は suspected どまり（confirmed に昇格させない、#411）。
 
 ### 2.3 policy routing（critical と general の分離、純関数）
 - `route(&[ProviderScanResult], &SafetyPolicy, scanned_at) -> SafetyVerdict` は純関数。`SafetyPolicy::public_node_default()` を public-node 既定とする。
@@ -173,14 +176,14 @@ public-node profile が public indexing を有効化する前に満たすべき�
 
 ### 7.1 classification → domain の写像
 
-| Shield classification | match_type | ProviderScanResult | router 出力 |
-|---|---|---|---|
-| `csam` | `exact` / 欠落 | `known_hash_match=true`、capability `KnownCsamHashMatch`、label `csam` | `exclude` / `csam_confirmed` / critical |
-| `csam` | `near` | 同上（capability `PerceptualHashMatch`）| 同上 |
-| `harmful-abusive-material` | 任意 | `csam` と同じ（下記 7.2） | 同上 |
-| `test` | 任意 | `known_hash_match=false`、label `provider_test`（非 critical） | `exclude` / `provider_test_match` / 非 critical |
-| `no-known-match` | - | `ScanOutcome::NoKnownMatch` | `allow` / `no_known_match`（safe の証明ではない） |
-| 未知の値（将来拡張） | - | deserialize 失敗 → `ScanError::Protocol` | fail-closed（`hold` / `scan_failed`） |
+| Shield classification | match_type | ProviderScanResult | router 出力 | basis（moderation event / risk signal） |
+|---|---|---|---|---|
+| `csam` | `exact` / 欠落 | `known_hash_match=true`、capability `KnownCsamHashMatch`、label `csam` | `exclude` / `csam_confirmed` / critical | `known_hash_match` |
+| `csam` | `near` | 同上（capability `PerceptualHashMatch`）| 同上 | `provider_verdict`（完全一致ではないため。§2.2、WP-C7） |
+| `harmful-abusive-material` | 任意 | `csam` と同じ（下記 7.2） | 同上 | match_type に従う（上 2 行と同じ） |
+| `test` | 任意 | `known_hash_match=false`、label `provider_test`（非 critical） | `exclude` / `provider_test_match` / 非 critical | `local_policy` |
+| `no-known-match` | - | `ScanOutcome::NoKnownMatch` | `allow` / `no_known_match`（safe の証明ではない） | -（allow は artifact を作らない） |
+| 未知の値（将来拡張） | - | deserialize 失敗 → `ScanError::Protocol` | fail-closed（`hold` / `scan_failed`） | `local_policy` |
 
 ### 7.2 保守的写像（over-exclusion 側に倒す）
 

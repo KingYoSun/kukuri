@@ -16,7 +16,7 @@
 //!   safety category を示さないため、risk signal を生成しない（虚偽の risk label を作らない）。
 //! - suspected unknown CSAM / CSE の visibility は既定 `Local`（誤検知を public に拡散しない）。
 
-use kukuri_cn_safety::policy::basis_for_reason;
+use kukuri_cn_safety::policy::basis_for_verdict;
 use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
 use kukuri_cn_safety::{
     AppealStatus, Basis, ModerationAction, ModerationEventBody, ReasonCode, RiskSignalTarget,
@@ -50,7 +50,7 @@ pub(crate) fn build_artifacts(
         return (None, None);
     }
 
-    let basis = basis_for_reason(verdict.reason_code);
+    let basis = basis_for_verdict(verdict);
     let category = primary_category(verdict);
     let severity = severity_for(verdict);
 
