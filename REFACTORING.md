@@ -154,15 +154,21 @@ PR を作成または説明するときは、タスク種別を明確にする�
 ## 互換パスと sunset 条件
 
 以下は後方互換のために残している経路で、「いつ削除してよいか」を明文化せずに消すと既存データ・
-既存ユーザーが壊れる。現状は削除せず、撤去は Phase 2(master plan C6 / C8)で条件を確定してから行う。
-撤去条件が決まるまでは削除しない(このリストが「消してよいか」の判断入口)。
+既存ユーザーが壊れる。撤去条件は WP-C8(2026-07-07)で確定した。条件を満たすまで削除しない
+(このリストが「消してよいか」の判断入口。コード側の該当箇所にも同じ条件をコメントで明記している)。
 
-| 互換パス | 所在 | 誤削除の影響 | sunset 条件 |
+| 互換パス | 所在 | 誤削除の影響 | sunset 条件(WP-C8 で確定) |
 |---|---|---|---|
-| epoch `"legacy"` 互換 | `crates/app-api/src/service/projection_support.rs` | legacy epoch の projection が読めなくなる | 未決定(全既存 projection の再構築完了が前提) |
-| 旧 `.nsec` 鍵ファイル読込 | `crates/desktop-runtime/src/identity.rs`(`db_path.with_extension("nsec")`。テスト `legacy_nsec_file_still_loads` が固定) | 旧形式で鍵を持つユーザーの identity ロスト | 未決定(全ユーザーの新形式移行が前提) |
-| `resolved_urls` fallback(seed_peers 空 / None 時) | `crates/desktop-runtime/src/community_node/requests_support.rs` | 旧 community-node 設定の URL が壊れる | 未決定 |
-| CRLF checksum 自己修復 | `crates/store/src/sqlite/connection.rs`(`repair_line_ending_only_migration_checksums`。**store 初期化=pool 作成時に1回**実行) | CRLF 時代に migration checksum がずれた DB が起動不能になる | 未決定(master plan C6 = バージョン条件付き撤去 or 一度きりメンテ処理へ隔離) |
+| 旧 `.nsec` 鍵ファイル読込 | `crates/desktop-runtime/src/identity.rs`(`legacy_key_file_path`。テスト `legacy_nsec_file_still_loads` が固定) | **利用者が気づかないまま別人の鍵になる**: 旧ファイルは読み込んでも新形式へ再保存されず残り続け、鍵が見つからないと `load_or_create_keys` が黙って新しい鍵を生成するため | **撤去する際は、`.nsec` ファイルを検知したら起動を止めて案内を出す処理(fail-loud)とセットで行うこと**。黙って新しい鍵を生成する現状のまま読込パスだけを消してはならない。鍵は preview 段階でも黙って失ってよいものではない |
+| epoch `"legacy"` 互換 | `crates/app-api/src/service/projection_support.rs`(`legacy_epoch_id` / `private_channel_replica_for_epoch` / `joined_private_channel_state_from_capability`) | epoch 導入前に保存されたプライベートチャンネル capability(epoch_id が空)のチャンネル履歴が読めなくなる。現行ビルドが空の epoch_id を新規に書くことはない | **正式リリースの節目で削除可**(preview データの保全は保証しない方針)。削除時は空の epoch_id を持つ capability をエラーで拒否すること(黙って読めなくならないようにする) |
+| ~~CRLF checksum 自己修復~~ | ~~`crates/store/src/sqlite/connection.rs`~~ | - | **撤去済み**(2026-07-06、WP-C6 / PR #485)。checksum 不一致は fail-loud で起動失敗し、回帰テストで固定済み |
+
+**互換パスではないと再分類したもの(WP-C8):**
+
+- `resolved_urls` の未解決時の扱い(`crates/desktop-runtime/src/community_node/requests_support.rs`。
+  認証時に base_url で代用する fallback と、解決されるまで再取得を繰り返す判定)は、旧設定の互換では
+  なく**恒常経路**。コミュニティノードを新規追加した直後は必ず未解決(None)であり、この経路が初回接続
+  そのものを支えている。削除対象ではないため sunset 条件は持たない。
 
 ## 真実の置き場所ルール
 

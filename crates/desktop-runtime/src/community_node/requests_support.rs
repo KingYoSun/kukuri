@@ -22,6 +22,9 @@ impl DesktopRuntime {
             .await
             .context("failed to decode auth challenge response")?;
 
+        // resolved_urls 未解決時に base_url で代用するのは互換パスではなく恒常経路
+        // (REFACTORING.md「互換パスと sunset 条件」の再分類参照)。ノードを新規追加した
+        // 直後は必ず未解決(None)であり、この代用が初回の認証を支えている。削除対象ではない。
         let public_base_url = self
             .community_node_config
             .lock()
