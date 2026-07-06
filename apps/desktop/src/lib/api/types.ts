@@ -12,6 +12,15 @@ export type TimelineScope =
   | { kind: 'all_joined' }
   | { kind: 'channel'; channel_id: string };
 
+// Tauri コマンドの構造化エラー封筒(src-tauri の CommandError と対、WP-C3)。
+// invoke reject の payload 形状であり views fixture(S4 codegen)の対象外。
+// message は従来の平文エラー文言と同一、code は機械判定用(既知値:
+// 'command_failed'。'bridge_unavailable' は TS 側合成 — invoke/error.ts 参照)。
+export type CommandError = {
+  code: string;
+  message: string;
+};
+
 export type DesktopStartupErrorKind = 'database_open' | 'database_migration' | 'unknown';
 
 export type DesktopStartupErrorView = {

@@ -88,10 +88,7 @@ impl DesktopStartupState {
     }
 
     pub(crate) fn set_status(&self, next: DesktopStartupStatus) {
-        *self
-            .status
-            .lock()
-            .expect("startup status lock poisoned") = next;
+        *self.status.lock().expect("startup status lock poisoned") = next;
     }
 }
 
@@ -106,7 +103,40 @@ pub(crate) fn failed_status(error: String, db_path: Option<PathBuf>) -> DesktopS
     }
 }
 
-pub(crate) fn map_error(error: anyhow::Error) -> String {
+/// Tauri コマンドの構造化エラー封筒(WP-C3)。invoke 側には
+/// `{"code":"...","message":"..."}` の JSON で届く。message は従来の平文エラーと
+/// 同一で、code は機械判定用(ドメイン別 code の拡充は Q6 の領分)。
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct CommandError {
+    pub(crate) code: String,
+    pub(crate) message: String,
+}
+
+pub(crate) const COMMAND_FAILED_CODE: &str = "command_failed";
+
+impl From<anyhow::Error> for CommandError {
+    fn from(error: anyhow::Error) -> Self {
+        Self {
+            code: COMMAND_FAILED_CODE.to_string(),
+            message: error_message(error),
+        }
+    }
+}
+
+impl From<String> for CommandError {
+    fn from(message: String) -> Self {
+        Self {
+            code: COMMAND_FAILED_CODE.to_string(),
+            message,
+        }
+    }
+}
+
+pub(crate) fn map_error(error: anyhow::Error) -> CommandError {
+    CommandError::from(error)
+}
+
+fn error_message(error: anyhow::Error) -> String {
     format!("{error:#}")
 }
 
@@ -115,13 +145,13 @@ pub(crate) fn resolve_db_path(app_handle: &tauri::AppHandle) -> Result<PathBuf, 
         .path()
         .app_data_dir()
         .map_err(|error| format!("failed to resolve app data dir: {error}"))?;
-    resolve_db_path_from_env(&app_data_dir).map_err(map_error)
+    resolve_db_path_from_env(&app_data_dir).map_err(error_message)
 }
 
 pub(crate) fn build_desktop_state(app_handle: &tauri::AppHandle) -> Result<DesktopState, String> {
     let db_path = resolve_db_path(app_handle)?;
-    let runtime = tauri::async_runtime::block_on(DesktopRuntime::from_env(db_path))
-        .map_err(map_error)?;
+    let runtime =
+        tauri::async_runtime::block_on(DesktopRuntime::from_env(db_path)).map_err(error_message)?;
     let runtime = Arc::new(runtime);
     // トレイ常駐中はフロントのポーリング(hidden で停止)が CN セッションを維持できないため、
     // runtime 常駐のセッション維持スケジューラをここで起動する(停止は shutdown / プロセス終了)。
@@ -139,10 +169,7 @@ pub(crate) fn load_app_consent(db_path: &Path) -> Option<AppConsentRecord> {
     serde_json::from_slice(&bytes).ok()
 }
 
-pub(crate) fn save_app_consent(
-    db_path: &Path,
-    record: &AppConsentRecord,
-) -> Result<(), String> {
+pub(crate) fn save_app_consent(db_path: &Path, record: &AppConsentRecord) -> Result<(), String> {
     let path = app_consent_path(db_path);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
@@ -150,8 +177,12 @@ pub(crate) fn save_app_consent(
     }
     let bytes = serde_json::to_vec_pretty(record)
         .map_err(|error| format!("failed to encode consent record: {error}"))?;
-    std::fs::write(&path, bytes)
-        .map_err(|error| format!("failed to write consent record `{}`: {error}", path.display()))
+    std::fs::write(&path, bytes).map_err(|error| {
+        format!(
+            "failed to write consent record `{}`: {error}",
+            path.display()
+        )
+    })
 }
 
 pub(crate) fn consent_satisfied(accepted_bundle_version: Option<i32>) -> bool {
@@ -185,6 +216,25 @@ fn classify_startup_error(error: &str) -> DesktopStartupErrorKind {
 mod tests {
     use super::*;
 
+    // IPC エラー封筒の wire 形状(WP-C3)。TS 側 normalizeInvokeError と対になる
+    // 同一バイナリ内契約 — 形状を変える場合は両側同時に変更する。
+    #[test]
+    fn command_error_serializes_to_code_message_envelope() {
+        let error = map_error(anyhow::anyhow!("outer").context("inner"));
+        let json = serde_json::to_string(&error).expect("serialize command error");
+        assert_eq!(
+            json,
+            r#"{"code":"command_failed","message":"inner: outer"}"#
+        );
+    }
+
+    #[test]
+    fn command_error_from_string_preserves_message() {
+        let error = CommandError::from("failed to resolve app data dir: boom".to_string());
+        assert_eq!(error.code, COMMAND_FAILED_CODE);
+        assert_eq!(error.message, "failed to resolve app data dir: boom");
+    }
+
     #[test]
     fn consent_satisfied_requires_current_or_newer_version() {
         assert!(!consent_satisfied(None));
@@ -195,7 +245,8 @@ mod tests {
 
     #[test]
     fn app_consent_round_trips_through_disk() {
-        let dir = std::env::temp_dir().join(format!("kukuri-consent-test-{}", current_unix_seconds()));
+        let dir =
+            std::env::temp_dir().join(format!("kukuri-consent-test-{}", current_unix_seconds()));
         std::fs::create_dir_all(&dir).expect("create temp dir");
         let db_path = dir.join("kukuri.db");
 

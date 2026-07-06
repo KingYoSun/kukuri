@@ -116,3 +116,16 @@ test('desktop app renders a startup error when the local database cannot be open
   expect(screen.getByDisplayValue(/migration checksum mismatch/)).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Publish' })).not.toBeInTheDocument();
 });
+
+test('desktop app treats a tauri bridge failure as ready via error code (WP-C3)', async () => {
+  // props.api を渡さない = ブラウザ/mock モード。invoke がブリッジ不在エラーを reject し、
+  // normalizeInvokeError が code='bridge_unavailable' に正規化 → App は文言非依存で ready にする。
+  invokeMock.mockRejectedValueOnce(new Error('window.__TAURI_INTERNALS__ is undefined'));
+
+  render(<App />);
+
+  await waitFor(() => {
+    expect(screen.getByRole('tablist', { name: 'Workspaces' })).toBeInTheDocument();
+  });
+  expect(screen.queryByText('Migration failure')).not.toBeInTheDocument();
+});

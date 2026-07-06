@@ -1,25 +1,68 @@
 export const BACKEND_UNAVAILABLE_MESSAGE = 'Desktop backend is not attached.';
 
-export function normalizeInvokeError(error: unknown): Error {
-  const normalized =
+// バックエンド(src-tauri)の CommandError { code, message } と対になる同一バイナリ内契約。
+// code はドメイン別に拡充される可能性があるため string で保持する(既知値は下記 2 つ)。
+export type InvokeErrorCode = 'command_failed' | 'bridge_unavailable';
+
+export class InvokeError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = 'InvokeError';
+    this.code = code;
+  }
+}
+
+export function isBridgeUnavailableError(error: unknown): boolean {
+  return error instanceof InvokeError && error.code === 'bridge_unavailable';
+}
+
+function isCommandErrorPayload(error: unknown): error is { code: string; message: string } {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof error.code === 'string' &&
+    'message' in error &&
+    typeof error.message === 'string'
+  );
+}
+
+export function normalizeInvokeError(error: unknown): InvokeError {
+  if (error instanceof InvokeError) {
+    return error;
+  }
+  // バックエンドの構造化封筒はそのまま code を引き継ぐ(message は平文文言のまま)。
+  if (isCommandErrorPayload(error)) {
+    return new InvokeError(error.code, error.message);
+  }
+  const message =
     error instanceof Error
-      ? error
+      ? error.message
       : typeof error === 'string'
-        ? new Error(error)
+        ? error
         : typeof error === 'object' &&
             error !== null &&
             'message' in error &&
             typeof error.message === 'string'
-          ? new Error(error.message)
-          : new Error(BACKEND_UNAVAILABLE_MESSAGE);
-  const message = normalized.message.toLowerCase();
-  if (
-    message.includes('__tauri') ||
-    message.includes('__tauri_ipc__') ||
-    (message.includes('ipc') && message.includes('not available')) ||
-    (message.includes('invoke') && message.includes('undefined'))
-  ) {
-    return new Error(BACKEND_UNAVAILABLE_MESSAGE);
+          ? error.message
+          : null;
+  if (message === null) {
+    // 解読不能な reject は従来どおり「ブリッジ不在」として扱う(旧実装は sentinel
+    // message を合成しており、App 側はそれを未接続として解釈していた)。
+    return new InvokeError('bridge_unavailable', BACKEND_UNAVAILABLE_MESSAGE);
   }
-  return normalized;
+  const lowered = message.toLowerCase();
+  if (
+    lowered.includes('__tauri') ||
+    lowered.includes('__tauri_ipc__') ||
+    (lowered.includes('ipc') && lowered.includes('not available')) ||
+    (lowered.includes('invoke') && lowered.includes('undefined'))
+  ) {
+    // Tauri ブリッジ不在(ブラウザ/mock なし実行)の JS ランタイムエラー。
+    // 表示文言は互換のため従来の sentinel を維持し、判定は code で行う。
+    return new InvokeError('bridge_unavailable', BACKEND_UNAVAILABLE_MESSAGE);
+  }
+  return new InvokeError('command_failed', message);
 }
