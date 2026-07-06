@@ -150,9 +150,18 @@ pub struct IrohDocsNode {
     shutdown_started: AtomicBool,
 }
 
+const ENDPOINT_SECRET_FORMAT_VERSION: u32 = 1;
+
+/// endpoint secret の自前永続形式(WP-C5)。iroh::SecretKey の serde 表現
+/// (ed25519_dalek へ素通しのバイト配列)に依存すると iroh 更新がディスク互換を
+/// 壊しうるため、version + hex 32 bytes の自前スキーマで保存する。
+/// 旧形式(`{"secret_key":[..]}`)の読み込み fallback は置かない — 本リリース前の
+/// 破壊的変更。旧ファイルは parse 失敗で起動エラーになり、ファイルを削除すれば
+/// 新しい endpoint ID で再生成される。
 #[derive(Serialize, Deserialize)]
 struct StoredEndpointSecret {
-    secret_key: iroh::SecretKey,
+    version: u32,
+    secret_key_hex: String,
 }
 
 impl IrohDocsNode {
@@ -459,13 +468,29 @@ fn load_endpoint_secret(root: &Path) -> Result<Option<iroh::SecretKey>> {
         .with_context(|| format!("failed to read endpoint secret at {}", path.display()))?;
     let stored: StoredEndpointSecret = serde_json::from_slice(&bytes)
         .with_context(|| format!("failed to parse endpoint secret at {}", path.display()))?;
-    Ok(Some(stored.secret_key))
+    if stored.version != ENDPOINT_SECRET_FORMAT_VERSION {
+        bail!(
+            "failed to parse endpoint secret at {}: unsupported version {}",
+            path.display(),
+            stored.version
+        );
+    }
+    let decoded = hex::decode(stored.secret_key_hex.as_str())
+        .with_context(|| format!("failed to parse endpoint secret at {}", path.display()))?;
+    let secret_bytes: [u8; 32] = decoded.as_slice().try_into().map_err(|_| {
+        anyhow!(
+            "failed to parse endpoint secret at {}: secret must be 32 bytes",
+            path.display()
+        )
+    })?;
+    Ok(Some(iroh::SecretKey::from_bytes(&secret_bytes)))
 }
 
 fn save_endpoint_secret(root: &Path, secret_key: &iroh::SecretKey) -> Result<()> {
     let path = endpoint_secret_path(root);
     let bytes = serde_json::to_vec(&StoredEndpointSecret {
-        secret_key: secret_key.clone(),
+        version: ENDPOINT_SECRET_FORMAT_VERSION,
+        secret_key_hex: hex::encode(secret_key.to_bytes()),
     })
     .with_context(|| format!("failed to serialize endpoint secret at {}", path.display()))?;
     std::fs::write(&path, bytes)

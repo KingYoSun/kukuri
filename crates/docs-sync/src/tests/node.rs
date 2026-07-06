@@ -35,7 +35,7 @@ async fn persistent_node_recovers_corrupt_docs_store() {
     .expect("write stale author");
     fs::write(
         root.join("endpoint-secret.json"),
-        "{\"secret_key\":[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]}",
+        "{\"version\":1,\"secret_key_hex\":\"0101010101010101010101010101010101010101010101010101010101010101\"}",
     )
     .expect("write endpoint secret");
 
@@ -93,4 +93,107 @@ async fn persistent_node_does_not_recover_healthy_store() {
     assert!(recovery_dirs(root).is_empty());
     assert!(root.join("docs.redb").exists());
     assert!(root.join("default-author").exists());
+}
+
+// ---- endpoint secret の自前形式(WP-C5) ----
+// 固定 secret bytes 1..=32 に対する値。ENDPOINT_ID は SecretKey::from_bytes(...).public() の実出力。
+const ENDPOINT_SECRET_HEX: &str =
+    "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
+const ENDPOINT_SECRET_ENDPOINT_ID: &str =
+    "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664";
+// 旧形式 = iroh::SecretKey の serde 素通し表現(ed25519_dalek 由来のバイト配列)。
+// iroh 1.0 の実出力から生成したリテラル。V1 導入により「読めない」ことを固定する
+// (本リリース前の破壊的変更として fallback は置かない — プラン Decision 2)。
+const LEGACY_ENDPOINT_SECRET_JSON: &str = "{\"secret_key\":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32]}";
+
+fn read_endpoint_secret_json(root: &Path) -> serde_json::Value {
+    let bytes = fs::read(root.join("endpoint-secret.json")).expect("read endpoint secret file");
+    serde_json::from_slice(&bytes).expect("endpoint secret file must be JSON")
+}
+
+#[tokio::test]
+async fn persistent_node_reads_v1_endpoint_secret_and_keeps_endpoint_id() {
+    let dir = tempdir().expect("tempdir");
+    let root = dir.path();
+    fs::write(
+        root.join("endpoint-secret.json"),
+        format!("{{\"version\":1,\"secret_key_hex\":\"{ENDPOINT_SECRET_HEX}\"}}"),
+    )
+    .expect("write v1 endpoint secret");
+
+    let node = IrohDocsNode::persistent(root)
+        .await
+        .expect("node should read the v1 endpoint secret");
+    assert_eq!(
+        node.endpoint().id().to_string(),
+        ENDPOINT_SECRET_ENDPOINT_ID,
+        "endpoint id must be derived from the stored secret"
+    );
+    node.shutdown().await.expect("shutdown");
+}
+
+#[tokio::test]
+async fn persistent_node_endpoint_id_survives_restart_and_saves_v1() {
+    let dir = tempdir().expect("tempdir");
+    let root = dir.path();
+
+    let node = IrohDocsNode::persistent(root).await.expect("initial node");
+    let endpoint_id = node.endpoint().id().to_string();
+    node.shutdown().await.expect("initial shutdown");
+
+    let stored = read_endpoint_secret_json(root);
+    assert_eq!(
+        stored.get("version").and_then(serde_json::Value::as_u64),
+        Some(1),
+        "endpoint secret must be persisted in the v1 schema (got: {stored})"
+    );
+    let secret_hex = stored
+        .get("secret_key_hex")
+        .and_then(serde_json::Value::as_str)
+        .expect("secret_key_hex field");
+    assert_eq!(secret_hex.len(), 64, "secret must be 32 bytes hex");
+
+    let restarted = IrohDocsNode::persistent(root).await.expect("restart node");
+    assert_eq!(
+        restarted.endpoint().id().to_string(),
+        endpoint_id,
+        "endpoint id must survive a restart"
+    );
+    restarted.shutdown().await.expect("restart shutdown");
+}
+
+#[tokio::test]
+async fn persistent_node_rejects_legacy_endpoint_secret() {
+    let dir = tempdir().expect("tempdir");
+    let root = dir.path();
+    fs::write(
+        root.join("endpoint-secret.json"),
+        LEGACY_ENDPOINT_SECRET_JSON,
+    )
+    .expect("write legacy endpoint secret");
+
+    let error = match IrohDocsNode::persistent(root).await {
+        Ok(_) => panic!("legacy endpoint secret must fail loudly (no silent key regeneration)"),
+        Err(error) => error,
+    };
+    assert!(
+        format!("{error:#}").contains("failed to parse endpoint secret"),
+        "unexpected error: {error:#}"
+    );
+}
+
+#[tokio::test]
+async fn persistent_node_rejects_corrupted_endpoint_secret() {
+    let dir = tempdir().expect("tempdir");
+    let root = dir.path();
+    fs::write(root.join("endpoint-secret.json"), b"not-json").expect("write corrupted secret");
+
+    let error = match IrohDocsNode::persistent(root).await {
+        Ok(_) => panic!("corrupted endpoint secret must fail loudly"),
+        Err(error) => error,
+    };
+    assert!(
+        format!("{error:#}").contains("failed to parse endpoint secret"),
+        "unexpected error: {error:#}"
+    );
 }
