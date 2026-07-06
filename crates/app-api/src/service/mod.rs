@@ -214,6 +214,11 @@ pub(crate) struct ResolvedRepostSource {
     pub(crate) repost_of: RepostSourceSnapshotV1,
 }
 
+/// private channel capability registry の write-through 永続化 callback。
+/// 実体(identity storage への保存)は desktop-runtime が注入する。未接続なら no-op。
+pub type PrivateChannelCapabilityPersist =
+    Arc<dyn Fn(&[crate::PrivateChannelCapability]) -> Result<()> + Send + Sync>;
+
 pub struct AppService {
     pub(crate) store: Arc<dyn Store>,
     pub(crate) projection_store: Arc<dyn ProjectionStore>,
@@ -237,6 +242,9 @@ pub struct AppService {
     pub(crate) empty_recovery_candidates: Arc<Mutex<HashSet<String>>>,
     pub(crate) gossip_disabled_topics: Arc<Mutex<HashSet<String>>>,
     pub(crate) gossip_disabled_channels: Arc<Mutex<HashSet<String>>>,
+    pub(crate) private_channel_capability_persist:
+        std::sync::OnceLock<PrivateChannelCapabilityPersist>,
+    pub(crate) private_channel_capability_persist_guard: Arc<Mutex<()>>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -390,7 +398,18 @@ impl AppService {
             empty_recovery_candidates: Arc::new(Mutex::new(HashSet::new())),
             gossip_disabled_topics: Arc::new(Mutex::new(HashSet::new())),
             gossip_disabled_channels: Arc::new(Mutex::new(HashSet::new())),
+            private_channel_capability_persist: std::sync::OnceLock::new(),
+            private_channel_capability_persist_guard: Arc::new(Mutex::new(())),
         }
+    }
+
+    /// capability registry の write-through 永続化 callback を接続する。
+    /// registry を変異させるメソッド(register/remove 経由の全経路)は、以後
+    /// persist 試行が完了するまで return しない。復元
+    /// (`restore_private_channel_capability`)完了後に 1 回だけ呼ぶこと —
+    /// 復元前に接続すると復元途中の部分リストが永続化される。
+    pub fn set_private_channel_capability_persist(&self, persist: PrivateChannelCapabilityPersist) {
+        let _ = self.private_channel_capability_persist.set(persist);
     }
 
     pub(crate) async fn resolve_repost_source(

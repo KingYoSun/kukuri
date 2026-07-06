@@ -406,6 +406,24 @@ impl AppService {
         .await
     }
 
+    /// registry 変異時の write-through 永続化。callback 未接続(テスト・harness・復元前)
+    /// なら no-op。persist 同士を専用 guard で直列化し、スナップショットを guard 内で
+    /// 取ることで「古いスナップショットが新しい書き込みを上書きする」lost-update を防ぐ
+    /// (全量スナップショットのため、最後に走った persist が必ず最新の registry を反映する)。
+    pub(crate) async fn persist_private_channel_capabilities_if_configured(&self) -> Result<()> {
+        let Some(persist) = self.private_channel_capability_persist.get() else {
+            return Ok(());
+        };
+        let _guard = self.private_channel_capability_persist_guard.lock().await;
+        let snapshot = {
+            let map = self.joined_private_channels.lock().await;
+            map.values()
+                .map(private_channel_capability_snapshot)
+                .collect::<Vec<_>>()
+        };
+        persist(&snapshot)
+    }
+
     pub(crate) async fn register_joined_private_channel(
         &self,
         state: JoinedPrivateChannelState,
@@ -415,6 +433,8 @@ impl AppService {
             joined_private_channel_key(state.topic_id.as_str(), state.channel_id.as_str()),
             state.clone(),
         );
+        self.persist_private_channel_capabilities_if_configured()
+            .await?;
         self.ensure_private_channel_subscription(
             state.topic_id.as_str(),
             state.channel_id.as_str(),
@@ -433,6 +453,10 @@ impl AppService {
             .lock()
             .await
             .remove(joined_private_channel_key(topic_id, channel_id).as_str());
+        if removed.is_some() {
+            self.persist_private_channel_capabilities_if_configured()
+                .await?;
+        }
         let prefix = joined_private_channel_subscription_prefix(topic_id, channel_id);
         let keys = self
             .private_channel_subscriptions
@@ -1024,5 +1048,31 @@ impl AppService {
                 .insert(topic_id.to_string(), handle);
         }
         Ok(())
+    }
+}
+
+/// write-through 永続化用の state-only スナップショット。
+/// `private_channel_capability_from_state` と異なり diagnostics(docs 読みを伴う
+/// async/fallible 処理)に依存しない純関数。diagnostics 派生 3 フィールドは復元時に
+/// 一切読まれない(capability_registry_snapshot テストで固定)ため既定値で永続化する。
+/// JSON のフィールド名・形状(凍結境界)は不変。
+pub(crate) fn private_channel_capability_snapshot(
+    state: &JoinedPrivateChannelState,
+) -> PrivateChannelCapability {
+    PrivateChannelCapability {
+        topic_id: state.topic_id.clone(),
+        channel_id: state.channel_id.as_str().to_string(),
+        label: state.label.clone(),
+        creator_pubkey: state.creator_pubkey.clone(),
+        owner_pubkey: state.owner_pubkey.clone(),
+        joined_via_pubkey: state.joined_via_pubkey.clone(),
+        audience_kind: state.audience_kind.clone(),
+        current_epoch_id: state.current_epoch_id.clone(),
+        current_epoch_secret_hex: state.current_epoch_secret_hex.clone(),
+        archived_epochs: state.archived_epochs.clone(),
+        rotation_required: false,
+        participant_count: 0,
+        stale_participant_count: 0,
+        namespace_secret_hex: state.current_epoch_secret_hex.clone(),
     }
 }

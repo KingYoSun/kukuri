@@ -1,20 +1,19 @@
 use super::*;
 
+// capability registry の永続化はラッパー側の手動 persist ではなく、AppService へ注入した
+// write-through callback(registry 変異時に発火)が担う(WP-C2 boundary)。
 impl DesktopRuntime {
     pub async fn create_private_channel(
         &self,
         request: CreatePrivateChannelRequest,
     ) -> Result<JoinedPrivateChannelView> {
-        let channel = self
-            .app_service
+        self.app_service
             .create_private_channel(CreatePrivateChannelInput {
                 topic_id: TopicId::new(request.topic),
                 label: request.label,
                 audience_kind: request.audience_kind,
             })
-            .await?;
-        self.persist_private_channel_capabilities_from_app().await?;
-        Ok(channel)
+            .await
     }
 
     pub async fn export_private_channel_invite(
@@ -38,12 +37,9 @@ impl DesktopRuntime {
         &self,
         request: ImportPrivateChannelInviteRequest,
     ) -> Result<PrivateChannelInvitePreview> {
-        let preview = self
-            .app_service
+        self.app_service
             .import_private_channel_invite(request.token.as_str())
-            .await?;
-        self.persist_private_channel_capabilities_from_app().await?;
-        Ok(preview)
+            .await
     }
 
     pub async fn export_channel_access_token(
@@ -67,12 +63,9 @@ impl DesktopRuntime {
         &self,
         request: ImportChannelAccessTokenRequest,
     ) -> Result<ChannelAccessTokenPreview> {
-        let preview = self
-            .app_service
+        self.app_service
             .import_channel_access_token(request.token.as_str())
-            .await?;
-        self.persist_private_channel_capabilities_from_app().await?;
-        Ok(preview)
+            .await
     }
 
     pub async fn preview_channel_access_token(
@@ -104,12 +97,9 @@ impl DesktopRuntime {
         &self,
         request: ImportFriendOnlyGrantRequest,
     ) -> Result<FriendOnlyGrantPreview> {
-        let preview = self
-            .app_service
+        self.app_service
             .import_friend_only_grant(request.token.as_str())
-            .await?;
-        self.persist_private_channel_capabilities_from_app().await?;
-        Ok(preview)
+            .await
     }
 
     pub async fn export_friend_plus_share(
@@ -132,55 +122,42 @@ impl DesktopRuntime {
         &self,
         request: ImportFriendPlusShareRequest,
     ) -> Result<FriendPlusSharePreview> {
-        let preview = self
-            .app_service
+        self.app_service
             .import_friend_plus_share(request.token.as_str())
-            .await?;
-        self.persist_private_channel_capabilities_from_app().await?;
-        Ok(preview)
+            .await
     }
 
     pub async fn freeze_private_channel(
         &self,
         request: FreezePrivateChannelRequest,
     ) -> Result<JoinedPrivateChannelView> {
-        let view = self
-            .app_service
+        self.app_service
             .freeze_private_channel(request.topic.as_str(), request.channel_id.as_str())
-            .await?;
-        self.persist_private_channel_capabilities_from_app().await?;
-        Ok(view)
+            .await
     }
 
     pub async fn rotate_private_channel(
         &self,
         request: RotatePrivateChannelRequest,
     ) -> Result<JoinedPrivateChannelView> {
-        let view = self
-            .app_service
+        self.app_service
             .rotate_private_channel(request.topic.as_str(), request.channel_id.as_str())
-            .await?;
-        self.persist_private_channel_capabilities_from_app().await?;
-        Ok(view)
+            .await
     }
 
     pub async fn leave_private_channel(&self, request: LeavePrivateChannelRequest) -> Result<()> {
         self.app_service
             .leave_private_channel(request.topic.as_str(), request.channel_id.as_str())
-            .await?;
-        self.persist_private_channel_capabilities_from_app().await
+            .await
     }
 
     pub async fn list_joined_private_channels(
         &self,
         request: ListJoinedPrivateChannelsRequest,
     ) -> Result<Vec<JoinedPrivateChannelView>> {
-        let items = self
-            .app_service
+        self.app_service
             .list_joined_private_channels(request.topic.as_str())
-            .await?;
-        self.persist_private_channel_capabilities_from_app().await?;
-        Ok(items)
+            .await
     }
 
     pub async fn update_game_room(&self, request: UpdateGameRoomRequest) -> Result<()> {
