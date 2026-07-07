@@ -594,12 +594,39 @@ impl AppService {
         self.joined_private_channel_view_for_state(&state).await
     }
 
+    /// private channel の epoch rotate(所有者のみ)。
+    ///
+    /// フェーズ分割(WP-H5 PR4)。順序と失敗時挙動は分割前と同一:
+    /// 準備・受信者収集 → 旧 epoch 凍結 → 新 epoch 作成 → handoff grant 配布 →
+    /// 状態更新・通知。途中で失敗した場合の巻き戻しは行わない(分割前と同じ。
+    /// 受信側は maybe_redeem_rotation_grants_for_channel で追いつく)。
     pub async fn rotate_private_channel(
         &self,
         topic_id: &str,
         channel_id: &str,
     ) -> Result<JoinedPrivateChannelView> {
-        let Some(mut state) = self
+        let prep = self
+            .prepare_private_channel_rotation(topic_id, channel_id)
+            .await?;
+        self.freeze_rotated_epoch_policy(&prep).await?;
+        let next = self
+            .seed_next_private_channel_epoch(topic_id, &prep.state)
+            .await?;
+        self.distribute_rotation_grants(topic_id, &prep, &next)
+            .await?;
+        self.finalize_rotated_channel_state(topic_id, prep.state, next)
+            .await
+    }
+
+    /// フェーズ 1: 前提検証(参加中・epoch 対応・所有者)と、現行 replica の
+    /// policy 取得、handoff grant の受信者収集(現 epoch + 過去 epoch の active
+    /// 参加者。owner 除外・pubkey で重複排除)。
+    async fn prepare_private_channel_rotation(
+        &self,
+        topic_id: &str,
+        channel_id: &str,
+    ) -> Result<PrivateChannelRotationPrep> {
+        let Some(state) = self
             .joined_private_channel_state(topic_id, channel_id)
             .await
         else {
@@ -661,23 +688,43 @@ impl AppService {
                     .or_insert(participant);
             }
         }
+        Ok(PrivateChannelRotationPrep {
+            state,
+            current_replica,
+            current_policy,
+            rotation_recipients,
+        })
+    }
+
+    /// フェーズ 2: 旧 epoch の policy を Frozen + rotated_at で書き込み、
+    /// 以後の import(sharing_state Open 前提)を止める。
+    async fn freeze_rotated_epoch_policy(&self, prep: &PrivateChannelRotationPrep) -> Result<()> {
         persist_private_channel_policy(
             self.docs_sync.as_ref(),
             self.keys.as_ref(),
             &PrivateChannelPolicyDocV1 {
                 sharing_state: ChannelSharingState::Frozen,
                 rotated_at: Some(Utc::now().timestamp_millis()),
-                ..current_policy
+                ..prep.current_policy.clone()
             },
-            &current_replica,
+            &prep.current_replica,
         )
-        .await?;
+        .await
+    }
 
-        let next_epoch_id = next_private_channel_epoch_id(self.current_author_pubkey().as_str());
-        let next_secret = generate_keys().export_secret_hex();
-        let next_replica = private_channel_epoch_replica_id(channel_id, next_epoch_id.as_str());
+    /// フェーズ 3: 新 epoch(id / secret / replica)を作成し、metadata・
+    /// Open policy・owner 参加ドキュメントを書き込む。
+    async fn seed_next_private_channel_epoch(
+        &self,
+        topic_id: &str,
+        state: &JoinedPrivateChannelState,
+    ) -> Result<PrivateChannelNextEpoch> {
+        let epoch_id = next_private_channel_epoch_id(self.current_author_pubkey().as_str());
+        let secret_hex = generate_keys().export_secret_hex();
+        let replica =
+            private_channel_epoch_replica_id(state.channel_id.as_str(), epoch_id.as_str());
         self.docs_sync
-            .register_private_replica_secret(&next_replica, next_secret.as_str())
+            .register_private_replica_secret(&replica, secret_hex.as_str())
             .await?;
         let metadata = PrivateChannelMetadataDocV1 {
             channel_id: state.channel_id.clone(),
@@ -688,7 +735,7 @@ impl AppService {
             audience_kind: state.audience_kind.clone(),
             owner_pubkey: Pubkey::from(state.owner_pubkey.clone()),
         };
-        persist_private_channel_metadata(self.docs_sync.as_ref(), &next_replica, &metadata).await?;
+        persist_private_channel_metadata(self.docs_sync.as_ref(), &replica, &metadata).await?;
         persist_private_channel_policy(
             self.docs_sync.as_ref(),
             self.keys.as_ref(),
@@ -697,12 +744,12 @@ impl AppService {
                 topic_id: TopicId::new(topic_id),
                 audience_kind: state.audience_kind.clone(),
                 owner_pubkey: Pubkey::from(state.owner_pubkey.clone()),
-                epoch_id: next_epoch_id.clone(),
+                epoch_id: epoch_id.clone(),
                 sharing_state: ChannelSharingState::Open,
                 rotated_at: None,
                 previous_epoch_id: Some(state.current_epoch_id.clone()),
             },
-            &next_replica,
+            &replica,
         )
         .await?;
         persist_private_channel_participant(
@@ -711,7 +758,7 @@ impl AppService {
             &PrivateChannelParticipantDocV1 {
                 channel_id: state.channel_id.clone(),
                 topic_id: TopicId::new(topic_id),
-                epoch_id: next_epoch_id.clone(),
+                epoch_id: epoch_id.clone(),
                 participant_pubkey: Pubkey::from(state.owner_pubkey.clone()),
                 joined_at: Utc::now().timestamp_millis(),
                 is_owner: true,
@@ -720,10 +767,26 @@ impl AppService {
                 share_token_id: None,
                 left_at: None,
             },
-            &next_replica,
+            &replica,
         )
         .await?;
-        for participant in rotation_recipients.into_values() {
+        Ok(PrivateChannelNextEpoch {
+            epoch_id,
+            secret_hex,
+        })
+    }
+
+    /// フェーズ 4: 受信者へ handoff grant を暗号化して旧 replica に書く。
+    /// friend-only は配布時点でも mutual を再確認し、外れていれば黙って配らない
+    /// (分割前と同じ。受け取れなかった参加者は新 epoch に入れない)。
+    async fn distribute_rotation_grants(
+        &self,
+        topic_id: &str,
+        prep: &PrivateChannelRotationPrep,
+        next: &PrivateChannelNextEpoch,
+    ) -> Result<()> {
+        let state = &prep.state;
+        for participant in prep.rotation_recipients.values() {
             if state.audience_kind == ChannelAudienceKind::FriendOnly {
                 self.ensure_author_subscription(participant.participant_pubkey.as_str())
                     .await?;
@@ -746,19 +809,29 @@ impl AppService {
                     owner_pubkey: Pubkey::from(state.owner_pubkey.clone()),
                     recipient_pubkey: participant.participant_pubkey.clone(),
                     old_epoch_id: state.current_epoch_id.clone(),
-                    new_epoch_id: next_epoch_id.clone(),
-                    new_namespace_secret_hex: next_secret.clone(),
+                    new_epoch_id: next.epoch_id.clone(),
+                    new_namespace_secret_hex: next.secret_hex.clone(),
                 },
             )?;
             persist_private_channel_rotation_grant(
                 self.docs_sync.as_ref(),
                 self.keys.as_ref(),
                 &grant_doc,
-                &current_replica,
+                &prep.current_replica,
             )
             .await?;
         }
+        Ok(())
+    }
 
+    /// フェーズ 5: 旧 epoch を archive して現 epoch を差し替え、registry へ登録、
+    /// rotation hint を publish(失敗は warn のみ)して view を返す。
+    async fn finalize_rotated_channel_state(
+        &self,
+        topic_id: &str,
+        mut state: JoinedPrivateChannelState,
+        next: PrivateChannelNextEpoch,
+    ) -> Result<JoinedPrivateChannelView> {
         let archived_epoch_id = state.current_epoch_id.clone();
         let archived_secret = state.current_epoch_secret_hex.clone();
         archive_private_channel_epoch(
@@ -766,8 +839,8 @@ impl AppService {
             archived_epoch_id.as_str(),
             archived_secret.as_str(),
         );
-        state.current_epoch_id = next_epoch_id;
-        state.current_epoch_secret_hex = next_secret;
+        state.current_epoch_id = next.epoch_id;
+        state.current_epoch_secret_hex = next.secret_hex;
         self.register_joined_private_channel(state.clone()).await?;
         if let Err(error) = self
             .hint_transport
@@ -988,4 +1061,19 @@ enum ImportSponsor {
     Pubkey(Pubkey),
     /// snapshot 取得後の policy.owner_pubkey(friend-only)。
     PolicyOwner,
+}
+
+/// rotate フェーズ 1(準備)の成果物。
+struct PrivateChannelRotationPrep {
+    state: JoinedPrivateChannelState,
+    current_replica: ReplicaId,
+    current_policy: PrivateChannelPolicyDocV1,
+    /// handoff grant の受信者(pubkey で重複排除済み。owner は含まない)。
+    rotation_recipients: BTreeMap<String, PrivateChannelParticipantDocV1>,
+}
+
+/// rotate フェーズ 3(新 epoch 作成)の成果物。
+struct PrivateChannelNextEpoch {
+    epoch_id: String,
+    secret_hex: String,
 }
