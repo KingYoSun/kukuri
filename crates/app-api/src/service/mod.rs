@@ -79,7 +79,22 @@ pub(crate) const DIRECT_MESSAGE_ATTACHMENT_MIME: &str =
 pub(crate) const DIRECT_MESSAGE_RETRY_INTERVAL_MS: u64 = 2_000;
 pub(crate) const NOTIFICATION_PREVIEW_LIMIT: usize = 80;
 
-pub(crate) use crate::views::*;
+pub(crate) use crate::views::{
+    AttachmentView, AuthorSocialView, BlobMediaPayload, BlobViewStatus,
+    BookmarkedCustomReactionView, BookmarkedPostView, ChannelAccessTokenExport,
+    ChannelAccessTokenKind, ChannelAccessTokenPreview, CreateCustomReactionAssetInput,
+    CreateGameRoomInput, CreateLiveSessionInput, CreateMetaverseRoomInput, CustomReactionAssetView,
+    DeliveryState, DirectMessageConversationView, DirectMessageMessageView,
+    DirectMessageStatusView, DirectMessageTimelineView, DirectMessageTopicStatusView,
+    DiscoveryStatus, GameRoomView, GameScoreView, ImportMetaverseRoomAssetInput,
+    JoinedPrivateChannelView, LiveSessionView, MetaverseAssetRefView, MetaverseRoomEventView,
+    NotificationStatusView, NotificationView, PendingAttachment, PostView,
+    PrivateChannelCapability, PrivateChannelEpochCapability, ProfileAssetView, ProfileInput,
+    PublishMetaverseRoomEventInput, ReactionKeyView, ReactionStateView, ReactionSummaryView,
+    RecentReactionView, ReplyPreviewAuthorView, ReplyPreviewView, RepostSourceView,
+    SocialConnectionKind, SyncStatus, TimelineView, TopicSyncStatus, UpdateGameRoomInput,
+    UpdateMetaverseRoomInput,
+};
 
 mod attachment_support;
 mod direct_messages_delivery_support;
@@ -97,16 +112,97 @@ mod social_helpers;
 mod social_runtime_support;
 mod timeline_runtime_support;
 
-pub(crate) use attachment_support::*;
-pub(crate) use gossip_subscription_support::*;
-pub(crate) use hydration_support::*;
-pub(crate) use metaverse_room_event_support::*;
-pub(crate) use notifications_support::*;
-pub(crate) use object_persistence_support::*;
-pub(crate) use profile_docs_support::*;
-pub(crate) use projection_support::*;
-pub(crate) use social_helpers::*;
-pub(crate) use timeline_runtime_support::*;
+pub(crate) use attachment_support::{
+    attachment_views, attachment_views_from_refs, blob_status, blob_view_status,
+    blob_view_status_for_payload, channel_hint_topic_for, channel_id_for_view,
+    channel_id_from_storage, channel_storage_id, combine_delivery_states, delivery_state_for_topic,
+    direct_message_attachment_views, direct_message_preview, direct_message_topic_peer_count,
+    effective_sync_status_detail, effective_topic_status_detail, joined_private_channel_key,
+    joined_private_channel_subscription_key, joined_private_channel_subscription_prefix,
+    live_presence_task_key, materialize_direct_message_manifest, merge_optional_timestamp,
+    normalize_topic_diagnostics, normalize_topic_name, normalize_topics,
+    register_private_channel_replica_secrets, sanitize_game_participants, short_id_suffix,
+    subscription_replicas_for_topic, validate_game_room_scores, validate_game_room_transition,
+};
+pub(crate) use gossip_subscription_support::gossip_disabled_channel_key;
+pub(crate) use hydration_support::{
+    hint_targets_topic, hydrate_subscription_event_with_services,
+    hydrate_subscription_hint_with_services, hydrate_subscription_state_with_services,
+    hydrate_subscription_state_with_services_with_policy, hydrate_topic_state_with_services,
+    hydrate_topic_state_with_services_with_policy, profile_timeline_page,
+    projection_page_needs_hydration,
+};
+pub(crate) use metaverse_room_event_support::{
+    metaverse_room_event_buffer_key, parse_metaverse_room_event_envelope,
+    push_metaverse_room_event_buffer,
+};
+pub(crate) use notifications_support::{
+    author_social_view_from_parts, author_social_view_sort_key, direct_message_notification_id,
+    document_notification_id, normalize_author_pubkey, notification_candidate_from_follow_event,
+    notification_candidate_from_object_event, notification_doc_event_fingerprint,
+    notification_doc_event_fingerprint_parts, notification_preview_text,
+};
+pub(crate) use object_persistence_support::{
+    best_effort_blob_cache_status, best_effort_blob_view_status,
+    bookmarked_custom_reaction_view_from_row, custom_reaction_asset_view_from_doc,
+    fetch_game_room_state_from_replica, fetch_live_session_state_from_replica, fetch_manifest_blob,
+    fetch_private_channel_participants_from_replica,
+    fetch_private_channel_participants_from_replica_with_policy,
+    fetch_private_channel_policy_from_replica,
+    fetch_private_channel_policy_from_replica_with_policy,
+    fetch_private_channel_rotation_grant_from_replica,
+    fetch_private_channel_rotation_grant_from_replica_with_policy, fetch_projection_blob_text,
+    game_projection_row_from_state, live_projection_row_from_state, persist_game_room_state,
+    persist_live_session_state, persist_media_manifest, persist_post_object,
+    persist_private_channel_metadata, persist_private_channel_participant,
+    persist_private_channel_policy, persist_private_channel_rotation_grant,
+    private_channel_rotation_is_pending, projection_row_from_header, reaction_cache_key,
+    reaction_projection_row_from_doc, reaction_state_view_from_rows,
+    recent_reaction_view_from_projection, search_key_or_asset_id,
+    session_projection_retry_attempts, session_projection_retry_delay, store_manifest_blob,
+    wait_for_private_channel_epoch_snapshot,
+};
+pub(crate) use profile_docs_support::{
+    fetch_author_envelope_by_id, hydrate_author_state_with_services,
+    hydrate_author_state_with_services_with_policy,
+    load_custom_reaction_assets_from_author_replica,
+    load_profile_posts_from_author_replica_with_policy,
+    load_profile_reposts_from_author_replica_with_policy, merge_seed_peers,
+    persist_custom_reaction_asset_doc, persist_follow_edge_doc, persist_profile_doc,
+    persist_profile_post_doc, persist_profile_repost_doc, persist_reaction_doc,
+    snapshot_follow_notification_baseline_with_policy,
+    snapshot_object_notification_baseline_with_policy,
+};
+pub(crate) use projection_support::{
+    active_private_channel_participants, archive_private_channel_epoch,
+    bookmarked_post_row_is_muted, current_private_channel_replica_id,
+    fetch_post_object_for_projection, filter_channel_rows, filtered_thread_page,
+    filtered_timeline_page, initial_private_channel_epoch_id,
+    joined_private_channel_state_from_capability, merged_private_channel_state_from_epoch_join,
+    next_private_channel_epoch_id, private_channel_epoch_capabilities,
+    private_channel_is_epoch_aware, private_channel_replica_for_epoch,
+    profile_timeline_item_is_muted,
+};
+pub(crate) use social_helpers::{
+    current_mutual_direct_message_peers_with_services, rebuild_author_relationships_with_services,
+    reconcile_direct_message_subscriptions_with_services,
+    schedule_direct_message_reconcile_with_services,
+    stop_direct_message_subscription_with_services,
+};
+pub(crate) use timeline_runtime_support::{
+    MAX_POST_CONTENT_CHARS, MAX_PROFILE_ABOUT_CHARS, MAX_PROFILE_DISPLAY_NAME_CHARS,
+    MAX_PROFILE_NAME_CHARS, MAX_REPOST_COMMENTARY_CHARS, content_from_payload_ref,
+    ensure_optional_text_within_limit, ensure_text_within_limit, normalize_optional_text,
+    normalize_repost_commentary, profile_asset_view_from_ref,
+};
+
+// テストからのみ参照される再輸出(依存の可視化。WP-H5 PR1)。
+#[cfg(test)]
+pub(crate) use object_persistence_support::custom_reaction_asset_view_from_snapshot;
+#[cfg(test)]
+pub(crate) use profile_docs_support::{
+    snapshot_follow_notification_baseline, snapshot_object_notification_baseline,
+};
 
 pub(crate) async fn maybe_restart_replica_sync_with_cooldown(
     docs_sync: &dyn DocsSync,
