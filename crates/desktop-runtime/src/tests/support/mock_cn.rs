@@ -68,7 +68,7 @@ pub(crate) async fn mock_bootstrap_nodes(
     state.bootstrap_hits.fetch_add(1, Ordering::SeqCst);
     let seed_peers = state.seed_peers.lock().await.clone();
     Json(BootstrapNodesResponse {
-        nodes: vec![kukuri_cn_core::CommunityNodeBootstrapNode {
+        nodes: vec![kukuri_cn_protocol::CommunityNodeBootstrapNode {
             base_url: state.base_url.clone(),
             resolved_urls: CommunityNodeResolvedUrls::new(
                 state.base_url.clone(),
@@ -111,7 +111,7 @@ pub(crate) async fn mock_heartbeat_echo_bootstrap_nodes(
     state.bootstrap_hits.fetch_add(1, Ordering::SeqCst);
     let seed_peers = state.seed_peers.lock().await.clone();
     Json(BootstrapNodesResponse {
-        nodes: vec![kukuri_cn_core::CommunityNodeBootstrapNode {
+        nodes: vec![kukuri_cn_protocol::CommunityNodeBootstrapNode {
             base_url: state.base_url.clone(),
             resolved_urls: CommunityNodeResolvedUrls::new(
                 state.base_url.clone(),
@@ -157,7 +157,7 @@ pub(crate) fn managed_community_node_consent_status_with_update(
     };
     CommunityNodeConsentStatus {
         all_required_accepted: accepted,
-        items: vec![kukuri_cn_core::CommunityNodeConsentItem {
+        items: vec![kukuri_cn_protocol::CommunityNodeConsentItem {
             policy_slug: "builder-preview".into(),
             policy_version: if pending_update { 2 } else { 1 },
             title: "Builder Preview".into(),
@@ -193,9 +193,9 @@ pub(crate) async fn authorize_managed_community_node_request(
 pub(crate) async fn mock_managed_auth_challenge(
     State(state): State<Arc<MockManagedCommunityNodeState>>,
     Json(_request): Json<serde_json::Value>,
-) -> Json<kukuri_cn_core::AuthChallengeResponse> {
+) -> Json<kukuri_cn_protocol::AuthChallengeResponse> {
     state.challenge_hits.fetch_add(1, Ordering::SeqCst);
-    Json(kukuri_cn_core::AuthChallengeResponse {
+    Json(kukuri_cn_protocol::AuthChallengeResponse {
         challenge: format!("challenge-{}", state.challenge_hits.load(Ordering::SeqCst)),
         expires_at: Utc::now().timestamp() + 300,
     })
@@ -204,11 +204,11 @@ pub(crate) async fn mock_managed_auth_challenge(
 pub(crate) async fn mock_managed_auth_verify(
     State(state): State<Arc<MockManagedCommunityNodeState>>,
     Json(_request): Json<serde_json::Value>,
-) -> Json<kukuri_cn_core::AuthVerifyResponse> {
+) -> Json<kukuri_cn_protocol::AuthVerifyResponse> {
     let next = state.verify_hits.fetch_add(1, Ordering::SeqCst) + 1;
     let token = format!("managed-token-{next}");
     *state.current_token.lock().await = token.clone();
-    Json(kukuri_cn_core::AuthVerifyResponse {
+    Json(kukuri_cn_protocol::AuthVerifyResponse {
         access_token: token,
         token_type: "Bearer".into(),
         expires_at: Utc::now().timestamp() + 3600,
@@ -265,7 +265,7 @@ pub(crate) async fn mock_managed_bootstrap_nodes(
     }
     state.bootstrap_hits.fetch_add(1, Ordering::SeqCst);
     Ok(Json(BootstrapNodesResponse {
-        nodes: vec![kukuri_cn_core::CommunityNodeBootstrapNode {
+        nodes: vec![kukuri_cn_protocol::CommunityNodeBootstrapNode {
             base_url: state.base_url.clone(),
             resolved_urls: CommunityNodeResolvedUrls::new(
                 state.base_url.clone(),

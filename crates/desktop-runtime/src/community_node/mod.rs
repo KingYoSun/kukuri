@@ -3,7 +3,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result, anyhow};
 use chrono::Utc;
-use kukuri_cn_core::{
+use kukuri_cn_protocol::{
     AuthChallengeResponse, AuthVerifyResponse, BootstrapHeartbeatResponse,
     CommunityNodeConsentStatus, CommunityNodeResolvedUrls, CommunityNodeSeedPeer,
     build_auth_envelope_json, normalize_http_url,
@@ -86,7 +86,7 @@ pub struct CommunityNodeConfig {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct BootstrapNodesResponse {
-    pub(crate) nodes: Vec<kukuri_cn_core::CommunityNodeBootstrapNode>,
+    pub(crate) nodes: Vec<kukuri_cn_protocol::CommunityNodeBootstrapNode>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -201,7 +201,7 @@ pub(crate) struct StoredCommunityNodeToken {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kukuri_cn_core::CommunityNodeConsentItem;
+    use kukuri_cn_protocol::CommunityNodeConsentItem;
 
     fn consent_item(
         accepted: bool,

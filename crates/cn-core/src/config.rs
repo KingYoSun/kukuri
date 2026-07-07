@@ -4,7 +4,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use jsonwebtoken::{DecodingKey, EncodingKey};
 use serde::{Deserialize, Serialize};
 
-pub const AUTH_ENVELOPE_KIND: &str = "auth";
+pub use kukuri_cn_protocol::AUTH_ENVELOPE_KIND;
 pub const AUTH_CHALLENGE_TTL_SECONDS: i64 = 300;
 pub const AUTH_EVENT_MAX_SKEW_SECONDS: i64 = 600;
 pub const DEFAULT_TOKEN_TTL_SECONDS: i64 = 86_400;

@@ -19,7 +19,7 @@ tracing.workspace = true
 url.workspace = true
 kukuri-app-api = { path = "../app-api" }
 kukuri-blob-service = { path = "../blob-service" }
-kukuri-cn-core = { path = "../cn-core" }
+kukuri-cn-protocol = { path = "../cn-protocol" }
 kukuri-core = { path = "../core" }
 kukuri-docs-sync = { path = "../docs-sync" }
 kukuri-iroh-node = { path = "../iroh-node" }
