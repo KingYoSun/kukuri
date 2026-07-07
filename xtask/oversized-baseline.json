@@ -33,12 +33,12 @@
       "path": "crates/harness/src/scenarios/community_node.rs"
     },
     {
-      "lines": 1078,
-      "path": "crates/app-api/src/service/private_channels_support.rs"
+      "lines": 1079,
+      "path": "crates/app-api/src/private_channels.rs"
     },
     {
-      "lines": 1020,
-      "path": "crates/app-api/src/private_channels.rs"
+      "lines": 1078,
+      "path": "crates/app-api/src/service/private_channels_support.rs"
     }
   ]
 }
