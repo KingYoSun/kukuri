@@ -55,10 +55,7 @@ pub trait Store: Send + Sync {
 pub trait ObjectProjectionStore: Send + Sync {
     async fn put_object_projection(&self, row: ObjectProjectionRow) -> Result<()>;
     async fn put_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()> {
-        for row in rows {
-            self.put_object_projection(row).await?;
-        }
-        Ok(())
+        put_object_projections_one_by_one(self, rows).await
     }
     async fn get_object_projection(
         &self,
@@ -77,34 +74,13 @@ pub trait ObjectProjectionStore: Send + Sync {
         cursor: Option<TimelineCursor>,
         limit: usize,
     ) -> Result<Page<ObjectProjectionRow>> {
-        if limit == 0 {
-            return Ok(Page {
-                items: Vec::new(),
-                next_cursor: cursor,
-            });
-        }
-
-        let mut current_cursor = cursor;
-        let mut items = Vec::new();
-        let page_size = limit.max(20);
-        loop {
-            let page = self
-                .list_topic_timeline(topic_id, current_cursor.clone(), page_size)
-                .await?;
-            let next_cursor = page.next_cursor.clone();
-            for row in page.items {
-                if allowed_channels.contains(row.channel_id.as_str()) {
-                    items.push(row);
-                    if items.len() >= limit {
-                        return Ok(Page { items, next_cursor });
-                    }
-                }
-            }
-            if next_cursor.is_none() {
-                return Ok(Page { items, next_cursor });
-            }
-            current_cursor = next_cursor;
-        }
+        scan_projection_pages_filtered(
+            cursor,
+            limit,
+            |cursor, page_size| self.list_topic_timeline(topic_id, cursor, page_size),
+            |row| allowed_channels.contains(row.channel_id.as_str()),
+        )
+        .await
     }
     async fn list_thread(
         &self,
@@ -121,41 +97,71 @@ pub trait ObjectProjectionStore: Send + Sync {
         cursor: Option<TimelineCursor>,
         limit: usize,
     ) -> Result<Page<ObjectProjectionRow>> {
-        if limit == 0 {
-            return Ok(Page {
-                items: Vec::new(),
-                next_cursor: cursor,
-            });
-        }
-
-        let mut current_cursor = cursor;
-        let mut items = Vec::new();
-        let page_size = limit.max(20);
-        loop {
-            let page = self
-                .list_thread(
-                    topic_id,
-                    thread_root_object_id,
-                    current_cursor.clone(),
-                    page_size,
-                )
-                .await?;
-            let next_cursor = page.next_cursor.clone();
-            for row in page.items {
-                if allowed_channel.is_none_or(|channel_id| row.channel_id == channel_id) {
-                    items.push(row);
-                    if items.len() >= limit {
-                        return Ok(Page { items, next_cursor });
-                    }
-                }
-            }
-            if next_cursor.is_none() {
-                return Ok(Page { items, next_cursor });
-            }
-            current_cursor = next_cursor;
-        }
+        scan_projection_pages_filtered(
+            cursor,
+            limit,
+            |cursor, page_size| {
+                self.list_thread(topic_id, thread_root_object_id, cursor, page_size)
+            },
+            |row| allowed_channel.is_none_or(|channel_id| row.channel_id == channel_id),
+        )
+        .await
     }
     async fn rebuild_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()>;
+}
+
+/// `put_object_projections` の既定動作: 1 件ずつ `put_object_projection` を呼ぶ。
+pub(crate) async fn put_object_projections_one_by_one<S>(
+    store: &S,
+    rows: Vec<ObjectProjectionRow>,
+) -> Result<()>
+where
+    S: ObjectProjectionStore + ?Sized,
+{
+    for row in rows {
+        store.put_object_projection(row).await?;
+    }
+    Ok(())
+}
+
+/// filtered 系デフォルト実装の共通ループ: ページを順に読みながら述語に合う行を
+/// limit 件まで集める(バックエンド側で絞り込めない場合のフォールバック動作)。
+pub(crate) async fn scan_projection_pages_filtered<F, Fut>(
+    cursor: Option<TimelineCursor>,
+    limit: usize,
+    mut fetch_page: F,
+    keep: impl Fn(&ObjectProjectionRow) -> bool,
+) -> Result<Page<ObjectProjectionRow>>
+where
+    F: FnMut(Option<TimelineCursor>, usize) -> Fut,
+    Fut: std::future::Future<Output = Result<Page<ObjectProjectionRow>>>,
+{
+    if limit == 0 {
+        return Ok(Page {
+            items: Vec::new(),
+            next_cursor: cursor,
+        });
+    }
+
+    let mut current_cursor = cursor;
+    let mut items = Vec::new();
+    let page_size = limit.max(20);
+    loop {
+        let page = fetch_page(current_cursor.clone(), page_size).await?;
+        let next_cursor = page.next_cursor.clone();
+        for row in page.items {
+            if keep(&row) {
+                items.push(row);
+                if items.len() >= limit {
+                    return Ok(Page { items, next_cursor });
+                }
+            }
+        }
+        if next_cursor.is_none() {
+            return Ok(Page { items, next_cursor });
+        }
+        current_cursor = next_cursor;
+    }
 }
 
 /// ライブセッション / ゲームルーム / live presence(実装: sqlite/live_game.rs)。
@@ -195,16 +201,7 @@ pub trait SocialProjectionStore: Send + Sync {
         local_author_pubkey: &str,
         author_pubkeys: &[String],
     ) -> Result<HashMap<String, AuthorRelationshipProjectionRow>> {
-        let mut relationships = HashMap::new();
-        for author_pubkey in author_pubkeys {
-            if let Some(relationship) = self
-                .get_author_relationship(local_author_pubkey, author_pubkey.as_str())
-                .await?
-            {
-                relationships.insert(author_pubkey.clone(), relationship);
-            }
-        }
-        Ok(relationships)
+        list_author_relationships_one_by_one(self, local_author_pubkey, author_pubkeys).await
     }
     async fn rebuild_author_relationships(
         &self,
@@ -217,16 +214,48 @@ pub trait SocialProjectionStore: Send + Sync {
     async fn remove_muted_author(&self, author_pubkey: &str) -> Result<()>;
 }
 
+/// `list_author_relationships` の既定動作: 1 件ずつ `get_author_relationship` を呼ぶ。
+pub(crate) async fn list_author_relationships_one_by_one<S>(
+    store: &S,
+    local_author_pubkey: &str,
+    author_pubkeys: &[String],
+) -> Result<HashMap<String, AuthorRelationshipProjectionRow>>
+where
+    S: SocialProjectionStore + ?Sized,
+{
+    let mut relationships = HashMap::new();
+    for author_pubkey in author_pubkeys {
+        if let Some(relationship) = store
+            .get_author_relationship(local_author_pubkey, author_pubkey.as_str())
+            .await?
+        {
+            relationships.insert(author_pubkey.clone(), relationship);
+        }
+    }
+    Ok(relationships)
+}
+
 /// blob の取得状態(実装: sqlite/bookmarks.rs。意味的に独立させた最小 trait)。
 #[async_trait]
 pub trait BlobCacheStore: Send + Sync {
     async fn mark_blob_status(&self, hash: &BlobHash, status: BlobCacheStatus) -> Result<()>;
     async fn mark_blob_statuses(&self, rows: Vec<(BlobHash, BlobCacheStatus)>) -> Result<()> {
-        for (hash, status) in rows {
-            self.mark_blob_status(&hash, status).await?;
-        }
-        Ok(())
+        mark_blob_statuses_one_by_one(self, rows).await
     }
+}
+
+/// `mark_blob_statuses` の既定動作: 1 件ずつ `mark_blob_status` を呼ぶ。
+pub(crate) async fn mark_blob_statuses_one_by_one<S>(
+    store: &S,
+    rows: Vec<(BlobHash, BlobCacheStatus)>,
+) -> Result<()>
+where
+    S: BlobCacheStore + ?Sized,
+{
+    for (hash, status) in rows {
+        store.mark_blob_status(&hash, status).await?;
+    }
+    Ok(())
 }
 
 /// リアクション cache / カスタムリアクション / ブックマーク(実装: sqlite/bookmarks.rs)。
@@ -249,15 +278,7 @@ pub trait ReactionBookmarkStore: Send + Sync {
         source_replica_id: &ReplicaId,
         target_object_ids: &[EnvelopeId],
     ) -> Result<HashMap<String, Vec<ReactionProjectionRow>>> {
-        let mut reactions = HashMap::new();
-        for target_object_id in target_object_ids {
-            reactions.insert(
-                target_object_id.as_str().to_string(),
-                self.list_reaction_cache_for_target(source_replica_id, target_object_id)
-                    .await?,
-            );
-        }
-        Ok(reactions)
+        list_reaction_cache_for_targets_one_by_one(self, source_replica_id, target_object_ids).await
     }
     async fn list_recent_reaction_cache_by_author(
         &self,
@@ -269,6 +290,27 @@ pub trait ReactionBookmarkStore: Send + Sync {
     async fn put_bookmarked_post(&self, row: BookmarkedPostRow) -> Result<()>;
     async fn list_bookmarked_posts(&self) -> Result<Vec<BookmarkedPostRow>>;
     async fn remove_bookmarked_post(&self, source_object_id: &EnvelopeId) -> Result<()>;
+}
+
+/// `list_reaction_cache_for_targets` の既定動作: 対象毎に `list_reaction_cache_for_target` を呼ぶ。
+pub(crate) async fn list_reaction_cache_for_targets_one_by_one<S>(
+    store: &S,
+    source_replica_id: &ReplicaId,
+    target_object_ids: &[EnvelopeId],
+) -> Result<HashMap<String, Vec<ReactionProjectionRow>>>
+where
+    S: ReactionBookmarkStore + ?Sized,
+{
+    let mut reactions = HashMap::new();
+    for target_object_id in target_object_ids {
+        reactions.insert(
+            target_object_id.as_str().to_string(),
+            store
+                .list_reaction_cache_for_target(source_replica_id, target_object_id)
+                .await?,
+        );
+    }
+    Ok(reactions)
 }
 
 /// ダイレクトメッセージの会話 / メッセージ / outbox / tombstone(実装: sqlite/direct_messages.rs)。
