@@ -1,0 +1,90 @@
+//! bootstrap(nodes / heartbeat)と topic rendezvous heartbeat。
+
+use axum::Json;
+use axum::extract::State;
+use axum::http::HeaderMap;
+use kukuri_cn_core::{
+    ApiResult, BootstrapHeartbeatResponse, CommunityNodeBootstrapNode, TopicRendezvousHeartbeat,
+    TopicRendezvousHeartbeatResponse, auth_required_error, load_bootstrap_nodes,
+    load_bootstrap_seed_peers, refresh_bootstrap_peer_registration, require_bearer_identity,
+    require_consents,
+};
+use kukuri_cn_protocol::BootstrapHeartbeatRequest;
+use serde::Serialize;
+
+use crate::errors::internal_error;
+use crate::state::UserApiState;
+
+#[derive(Debug, Serialize)]
+pub(crate) struct BootstrapNodesResponse {
+    nodes: Vec<CommunityNodeBootstrapNode>,
+}
+
+pub(crate) async fn bootstrap_nodes(
+    State(state): State<UserApiState>,
+    headers: HeaderMap,
+) -> ApiResult<Json<BootstrapNodesResponse>> {
+    let identity = require_bearer_identity(&state.pool, &state.jwt_config, &headers).await?;
+    let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
+    let mut nodes = load_bootstrap_nodes(&state.pool, Some(state.self_node.clone()))
+        .await
+        .map_err(internal_error)?;
+    let seed_peers = load_bootstrap_seed_peers(
+        &state.pool,
+        Some(identity.pubkey.as_str()),
+        identity.endpoint_id.as_deref(),
+    )
+    .await
+    .map_err(internal_error)?;
+    for node in &mut nodes {
+        if node.base_url == state.self_node.base_url {
+            node.resolved_urls.seed_peers = seed_peers.clone();
+        }
+    }
+    Ok(Json(BootstrapNodesResponse { nodes }))
+}
+
+pub(crate) async fn bootstrap_heartbeat(
+    State(state): State<UserApiState>,
+    headers: HeaderMap,
+    Json(request): Json<BootstrapHeartbeatRequest>,
+) -> ApiResult<Json<BootstrapHeartbeatResponse>> {
+    let identity = require_bearer_identity(&state.pool, &state.jwt_config, &headers).await?;
+    if let Some(bound_endpoint_id) = identity.endpoint_id.as_deref()
+        && bound_endpoint_id != request.endpoint_id
+    {
+        return Err(auth_required_error("bearer token endpoint mismatch"));
+    }
+    let response = refresh_bootstrap_peer_registration(
+        &state.pool,
+        identity.pubkey.as_str(),
+        request.endpoint_id.as_str(),
+        request.addr_hint.as_deref(),
+    )
+    .await
+    .map_err(internal_error)?;
+    Ok(Json(response))
+}
+
+pub(crate) async fn topic_rendezvous_heartbeat(
+    State(state): State<UserApiState>,
+    headers: HeaderMap,
+    Json(request): Json<TopicRendezvousHeartbeat>,
+) -> ApiResult<Json<TopicRendezvousHeartbeatResponse>> {
+    let identity = require_bearer_identity(&state.pool, &state.jwt_config, &headers).await?;
+    let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
+    if let Some(bound_endpoint_id) = identity.endpoint_id.as_deref()
+        && bound_endpoint_id != request.endpoint_id
+    {
+        return Err(auth_required_error("bearer token endpoint mismatch"));
+    }
+    let response = state
+        .rendezvous_store
+        .heartbeat(
+            request,
+            state.self_node.resolved_urls.connectivity_urls.as_slice(),
+        )
+        .await
+        .map_err(internal_error)?;
+    Ok(Json(response))
+}

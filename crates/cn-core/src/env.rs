@@ -43,6 +43,28 @@ pub fn parse_csv_env(var_name: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// u64 環境変数をパースする。未設定 / 空文字は `default`(WP-H4 で cn-user-api から昇格)。
+pub fn parse_u64_env(var_name: &str, default: u64) -> Result<u64> {
+    match std::env::var(var_name) {
+        Ok(value) if !value.trim().is_empty() => value
+            .trim()
+            .parse::<u64>()
+            .map_err(|error| anyhow!("failed to parse {var_name}: {error}")),
+        _ => Ok(default),
+    }
+}
+
+/// u32 環境変数をパースする。未設定 / 空文字は `default`(WP-H4 で cn-user-api から昇格)。
+pub fn parse_u32_env(var_name: &str, default: u32) -> Result<u32> {
+    match std::env::var(var_name) {
+        Ok(value) if !value.trim().is_empty() => value
+            .trim()
+            .parse::<u32>()
+            .map_err(|error| anyhow!("failed to parse {var_name}: {error}")),
+        _ => Ok(default),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

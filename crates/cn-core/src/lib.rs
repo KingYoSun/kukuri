@@ -52,7 +52,7 @@ pub use database::{
     TestDatabase, connect_postgres, ensure_database_ready, initialize_database,
     initialize_database_for_runtime, migrate_postgres, seed_default_policies,
 };
-pub use env::{parse_bool_env, parse_csv_env};
+pub use env::{parse_bool_env, parse_csv_env, parse_u32_env, parse_u64_env};
 pub use errors::{ApiError, ApiResult, auth_required_error, consent_required_error};
 pub use index_entries::{
     IndexEntryStore, MemoryIndexEntryStore, NewIndexEntry, PgIndexEntryStore, StoredIndexEntry,
