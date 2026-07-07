@@ -3,6 +3,7 @@ mod diagnostics;
 mod discovery;
 mod fake;
 mod iroh;
+mod peers;
 mod tickets;
 mod traits;
 
@@ -10,5 +11,6 @@ pub use config::*;
 pub use discovery::*;
 pub use fake::*;
 pub use iroh::*;
+pub use peers::*;
 pub use tickets::*;
 pub use traits::*;
