@@ -118,55 +118,85 @@ impl AppService {
         )
     }
 
-    pub async fn import_private_channel_invite(
-        &self,
-        token: &str,
-    ) -> Result<PrivateChannelInvitePreview> {
-        let preview = parse_private_channel_invite_token(token)?;
-        if let Some(expires_at) = preview.expires_at
+    /// private channel import 3 系統(招待 / friend-only 許可 / friend-plus 共有)の共通仕様。
+    ///
+    /// フローは同型(トークン検証 → 前提確認 → replica 秘密登録 → snapshot 検証 →
+    /// 参加登録 → 状態併合。失敗時は秘密を掃除)で、差分だけをこの仕様に載せる(WP-H5 PR3)。
+    /// **エラー文言は統合前と 1 字も変えないこと**(テストと利用者向け表示が固定している)。
+    async fn import_private_channel_by_spec(&self, spec: PrivateChannelImportSpec) -> Result<()> {
+        if let Some(expires_at) = spec.expires_at
             && expires_at < Utc::now().timestamp_millis()
         {
-            anyhow::bail!("private channel invite is expired");
+            anyhow::bail!("{}", spec.expired_message);
         }
-        self.ensure_topic_subscription(preview.topic_id.as_str())
+        self.ensure_topic_subscription(spec.topic_id.as_str())
             .await?;
-        let replica = private_channel_replica_for_epoch(
-            preview.channel_id.as_str(),
-            preview.epoch_id.as_str(),
-        );
+        if let Some((peer_pubkey, message)) = spec.mutual_with.as_ref() {
+            self.ensure_author_subscription(peer_pubkey.as_str())
+                .await?;
+            self.rebuild_author_relationships().await?;
+            let relationship = self
+                .projection_store
+                .get_author_relationship(
+                    self.current_author_pubkey().as_str(),
+                    peer_pubkey.as_str(),
+                )
+                .await?;
+            if !relationship.as_ref().is_some_and(|value| value.mutual) {
+                anyhow::bail!("{}", message);
+            }
+        }
+        let replica = if spec.use_legacy_aware_replica {
+            private_channel_replica_for_epoch(spec.channel_id.as_str(), spec.epoch_id.as_str())
+        } else {
+            private_channel_epoch_replica_id(spec.channel_id.as_str(), spec.epoch_id.as_str())
+        };
         self.docs_sync
-            .register_private_replica_secret(&replica, preview.namespace_secret_hex.as_str())
+            .register_private_replica_secret(&replica, spec.namespace_secret_hex.as_str())
             .await?;
         let import_result = async {
             let (metadata, policy, participants) = wait_for_private_channel_epoch_snapshot(
                 self.docs_sync.as_ref(),
                 &replica,
-                "invite-only channel replica sync",
+                spec.sync_context,
             )
             .await?;
-            if policy.audience_kind != ChannelAudienceKind::InviteOnly {
-                anyhow::bail!("invite-only replica audience must be invite_only");
+            let participants = if spec.refetch_participants {
+                fetch_private_channel_participants_from_replica(self.docs_sync.as_ref(), &replica)
+                    .await?
+            } else {
+                participants
+            };
+            if policy.audience_kind != spec.audience {
+                anyhow::bail!("{}", spec.audience_message);
             }
             if policy.sharing_state != ChannelSharingState::Open {
-                anyhow::bail!("invite-only access token is no longer open for import");
+                anyhow::bail!("{}", spec.not_open_message);
             }
-            if policy.epoch_id != preview.epoch_id {
-                anyhow::bail!("invite-only access token epoch does not match the current policy");
+            if policy.epoch_id != spec.epoch_id {
+                anyhow::bail!("{}", spec.epoch_mismatch_message);
             }
-            if !participants.iter().any(|participant| {
-                participant.participant_pubkey == policy.owner_pubkey
-                    && participant.epoch_id == policy.epoch_id
-                    && participant.is_owner
-                    && participant.left_at.is_none()
-            }) {
-                anyhow::bail!("invite-only channel owner is not an active participant");
+            if let Some(owner_message) = spec.owner_check_message
+                && !participants.iter().any(|participant| {
+                    participant.participant_pubkey == policy.owner_pubkey
+                        && participant.epoch_id == policy.epoch_id
+                        && participant.is_owner
+                        && participant.left_at.is_none()
+                })
+            {
+                anyhow::bail!("{}", owner_message);
             }
             let local_pubkey = Pubkey::from(self.current_author_pubkey());
-            if !participants.iter().any(|participant| {
+            let already_participant = participants.iter().any(|participant| {
                 participant.participant_pubkey == local_pubkey
                     && participant.epoch_id == policy.epoch_id
                     && participant.left_at.is_none()
-            }) {
+            });
+            if !(spec.skip_persist_if_participant && already_participant) {
+                let sponsor_pubkey = match &spec.sponsor {
+                    ImportSponsor::Pubkey(value) => value.clone(),
+                    ImportSponsor::PolicyOwner => policy.owner_pubkey.clone(),
+                };
                 persist_private_channel_participant(
                     self.docs_sync.as_ref(),
                     self.keys.as_ref(),
@@ -177,9 +207,9 @@ impl AppService {
                         participant_pubkey: local_pubkey,
                         joined_at: Utc::now().timestamp_millis(),
                         is_owner: false,
-                        join_mode: Some(PrivateChannelJoinMode::InviteToken),
-                        sponsor_pubkey: Some(preview.inviter_pubkey.clone()),
-                        share_token_id: None,
+                        join_mode: Some(spec.join_mode),
+                        sponsor_pubkey: Some(sponsor_pubkey),
+                        share_token_id: spec.share_token_id.clone(),
                         left_at: None,
                     },
                     &replica,
@@ -187,20 +217,17 @@ impl AppService {
                 .await?;
             }
             let next_state = merged_private_channel_state_from_epoch_join(
-                self.joined_private_channel_state(
-                    preview.topic_id.as_str(),
-                    preview.channel_id.as_str(),
-                )
-                .await,
-                preview.topic_id.as_str(),
-                preview.channel_id.clone(),
-                preview.channel_label.as_str(),
+                self.joined_private_channel_state(spec.topic_id.as_str(), spec.channel_id.as_str())
+                    .await,
+                spec.topic_id.as_str(),
+                spec.channel_id.clone(),
+                spec.channel_label.as_str(),
                 metadata.creator_pubkey.as_str(),
-                preview.owner_pubkey.as_str(),
-                Some(preview.inviter_pubkey.as_str()),
-                ChannelAudienceKind::InviteOnly,
-                preview.epoch_id.as_str(),
-                preview.namespace_secret_hex.as_str(),
+                spec.owner_pubkey.as_str(),
+                Some(spec.joined_via_pubkey.as_str()),
+                spec.audience,
+                spec.epoch_id.as_str(),
+                spec.namespace_secret_hex.as_str(),
             );
             self.register_joined_private_channel(next_state).await?;
             Ok::<(), anyhow::Error>(())
@@ -209,7 +236,40 @@ impl AppService {
         if import_result.is_err() {
             let _ = self.docs_sync.remove_private_replica_secret(&replica).await;
         }
-        import_result?;
+        import_result
+    }
+
+    pub async fn import_private_channel_invite(
+        &self,
+        token: &str,
+    ) -> Result<PrivateChannelInvitePreview> {
+        let preview = parse_private_channel_invite_token(token)?;
+        self.import_private_channel_by_spec(PrivateChannelImportSpec {
+            topic_id: preview.topic_id.as_str().to_string(),
+            channel_id: preview.channel_id.clone(),
+            channel_label: preview.channel_label.clone(),
+            owner_pubkey: preview.owner_pubkey.as_str().to_string(),
+            epoch_id: preview.epoch_id.clone(),
+            namespace_secret_hex: preview.namespace_secret_hex.clone(),
+            expires_at: preview.expires_at,
+            expired_message: "private channel invite is expired",
+            mutual_with: None,
+            // 招待だけは epoch なし時代の channel を legacy replica で読む(互換パス)。
+            use_legacy_aware_replica: true,
+            sync_context: "invite-only channel replica sync",
+            refetch_participants: false,
+            audience: ChannelAudienceKind::InviteOnly,
+            audience_message: "invite-only replica audience must be invite_only",
+            not_open_message: "invite-only access token is no longer open for import",
+            epoch_mismatch_message: "invite-only access token epoch does not match the current policy",
+            owner_check_message: Some("invite-only channel owner is not an active participant"),
+            join_mode: PrivateChannelJoinMode::InviteToken,
+            sponsor: ImportSponsor::Pubkey(preview.inviter_pubkey.clone()),
+            share_token_id: None,
+            skip_persist_if_participant: true,
+            joined_via_pubkey: preview.inviter_pubkey.as_str().to_string(),
+        })
+        .await?;
         Ok(preview)
     }
 
@@ -377,103 +437,36 @@ impl AppService {
 
     pub async fn import_friend_only_grant(&self, token: &str) -> Result<FriendOnlyGrantPreview> {
         let preview = parse_friend_only_grant_token(token)?;
-        if let Some(expires_at) = preview.expires_at
-            && expires_at < Utc::now().timestamp_millis()
-        {
-            anyhow::bail!("friend-only grant is expired");
-        }
-        self.ensure_topic_subscription(preview.topic_id.as_str())
-            .await?;
-        self.ensure_author_subscription(preview.owner_pubkey.as_str())
-            .await?;
-        self.rebuild_author_relationships().await?;
-        let relationship = self
-            .projection_store
-            .get_author_relationship(
-                self.current_author_pubkey().as_str(),
-                preview.owner_pubkey.as_str(),
-            )
-            .await?;
-        if !relationship.as_ref().is_some_and(|value| value.mutual) {
-            anyhow::bail!(
-                "friend-only grant import requires a mutual relationship with the channel owner"
-            );
-        }
-
-        let replica = private_channel_epoch_replica_id(
-            preview.channel_id.as_str(),
-            preview.epoch_id.as_str(),
-        );
-        self.docs_sync
-            .register_private_replica_secret(&replica, preview.namespace_secret_hex.as_str())
-            .await?;
-        let import_result = async {
-            let (metadata, policy, participants) = wait_for_private_channel_epoch_snapshot(
-                self.docs_sync.as_ref(),
-                &replica,
-                "friend-only channel replica sync",
-            )
-            .await?;
-            if policy.audience_kind != ChannelAudienceKind::FriendOnly {
-                anyhow::bail!("friend-only grant replica audience must be friend_only");
-            }
-            if policy.sharing_state != ChannelSharingState::Open {
-                anyhow::bail!("friend-only grant is no longer open for import");
-            }
-            if policy.epoch_id != preview.epoch_id {
-                anyhow::bail!("friend-only grant epoch does not match the current policy");
-            }
-            if !participants.iter().any(|participant| {
-                participant.participant_pubkey == policy.owner_pubkey
-                    && participant.epoch_id == policy.epoch_id
-                    && participant.is_owner
-                    && participant.left_at.is_none()
-            }) {
-                anyhow::bail!("friend-only grant owner is not an active participant");
-            }
-            let joined_at = Utc::now().timestamp_millis();
-            persist_private_channel_participant(
-                self.docs_sync.as_ref(),
-                self.keys.as_ref(),
-                &PrivateChannelParticipantDocV1 {
-                    channel_id: metadata.channel_id.clone(),
-                    topic_id: metadata.topic_id.clone(),
-                    epoch_id: policy.epoch_id.clone(),
-                    participant_pubkey: Pubkey::from(self.current_author_pubkey()),
-                    joined_at,
-                    is_owner: false,
-                    join_mode: Some(PrivateChannelJoinMode::FriendOnlyGrant),
-                    sponsor_pubkey: Some(policy.owner_pubkey.clone()),
-                    share_token_id: None,
-                    left_at: None,
-                },
-                &replica,
-            )
-            .await?;
-            let next_state = merged_private_channel_state_from_epoch_join(
-                self.joined_private_channel_state(
-                    preview.topic_id.as_str(),
-                    preview.channel_id.as_str(),
-                )
-                .await,
-                preview.topic_id.as_str(),
-                preview.channel_id.clone(),
-                preview.channel_label.as_str(),
-                metadata.creator_pubkey.as_str(),
-                preview.owner_pubkey.as_str(),
-                Some(preview.owner_pubkey.as_str()),
-                ChannelAudienceKind::FriendOnly,
-                preview.epoch_id.as_str(),
-                preview.namespace_secret_hex.as_str(),
-            );
-            self.register_joined_private_channel(next_state).await?;
-            Ok::<(), anyhow::Error>(())
-        }
-        .await;
-        if import_result.is_err() {
-            let _ = self.docs_sync.remove_private_replica_secret(&replica).await;
-        }
-        import_result?;
+        self.import_private_channel_by_spec(PrivateChannelImportSpec {
+            topic_id: preview.topic_id.as_str().to_string(),
+            channel_id: preview.channel_id.clone(),
+            channel_label: preview.channel_label.clone(),
+            owner_pubkey: preview.owner_pubkey.as_str().to_string(),
+            epoch_id: preview.epoch_id.clone(),
+            namespace_secret_hex: preview.namespace_secret_hex.clone(),
+            expires_at: preview.expires_at,
+            expired_message: "friend-only grant is expired",
+            mutual_with: Some((
+                preview.owner_pubkey.as_str().to_string(),
+                "friend-only grant import requires a mutual relationship with the channel owner",
+            )),
+            use_legacy_aware_replica: false,
+            sync_context: "friend-only channel replica sync",
+            refetch_participants: false,
+            audience: ChannelAudienceKind::FriendOnly,
+            audience_message: "friend-only grant replica audience must be friend_only",
+            not_open_message: "friend-only grant is no longer open for import",
+            epoch_mismatch_message: "friend-only grant epoch does not match the current policy",
+            owner_check_message: Some("friend-only grant owner is not an active participant"),
+            join_mode: PrivateChannelJoinMode::FriendOnlyGrant,
+            // 参加ドキュメントの sponsor は snapshot 取得後の policy.owner_pubkey(統合前と同じ)。
+            sponsor: ImportSponsor::PolicyOwner,
+            share_token_id: None,
+            // friend-only は既参加でも参加ドキュメントを再発行する(統合前と同じ)。
+            skip_persist_if_participant: false,
+            joined_via_pubkey: preview.owner_pubkey.as_str().to_string(),
+        })
+        .await?;
         Ok(preview)
     }
 
@@ -529,99 +522,37 @@ impl AppService {
 
     pub async fn import_friend_plus_share(&self, token: &str) -> Result<FriendPlusSharePreview> {
         let preview = parse_friend_plus_share_token(token)?;
-        self.ensure_topic_subscription(preview.topic_id.as_str())
-            .await?;
-        self.ensure_author_subscription(preview.sponsor_pubkey.as_str())
-            .await?;
-        self.rebuild_author_relationships().await?;
-        let relationship = self
-            .projection_store
-            .get_author_relationship(
-                self.current_author_pubkey().as_str(),
-                preview.sponsor_pubkey.as_str(),
-            )
-            .await?;
-        if !relationship.as_ref().is_some_and(|value| value.mutual) {
-            anyhow::bail!(
-                "friend-plus share import requires a mutual relationship with the sponsor"
-            );
-        }
-
-        let replica = private_channel_epoch_replica_id(
-            preview.channel_id.as_str(),
-            preview.epoch_id.as_str(),
-        );
-        self.docs_sync
-            .register_private_replica_secret(&replica, preview.namespace_secret_hex.as_str())
-            .await?;
-        let import_result = async {
-            let (metadata, policy, _participants) = wait_for_private_channel_epoch_snapshot(
-                self.docs_sync.as_ref(),
-                &replica,
-                "friend-plus channel replica sync",
-            )
-            .await?;
-            let participants =
-                fetch_private_channel_participants_from_replica(self.docs_sync.as_ref(), &replica)
-                    .await?;
-            if policy.audience_kind != ChannelAudienceKind::FriendPlus {
-                anyhow::bail!("friend-plus share replica audience must be friend_plus");
-            }
-            if policy.sharing_state != ChannelSharingState::Open {
-                anyhow::bail!("friend-plus share is no longer open for import");
-            }
-            if policy.epoch_id != preview.epoch_id {
-                anyhow::bail!("friend-plus share epoch does not match the current policy");
-            }
-            let local_author = self.current_author_pubkey();
-            if !participants.iter().any(|participant| {
-                participant.participant_pubkey.as_str() == local_author
-                    && participant.epoch_id == policy.epoch_id
-                    && participant.left_at.is_none()
-            }) {
-                persist_private_channel_participant(
-                    self.docs_sync.as_ref(),
-                    self.keys.as_ref(),
-                    &PrivateChannelParticipantDocV1 {
-                        channel_id: metadata.channel_id.clone(),
-                        topic_id: metadata.topic_id.clone(),
-                        epoch_id: policy.epoch_id.clone(),
-                        participant_pubkey: Pubkey::from(local_author),
-                        joined_at: Utc::now().timestamp_millis(),
-                        is_owner: false,
-                        join_mode: Some(PrivateChannelJoinMode::FriendPlusShare),
-                        sponsor_pubkey: Some(preview.sponsor_pubkey.clone()),
-                        share_token_id: Some(preview.share_token_id.clone()),
-                        left_at: None,
-                    },
-                    &replica,
-                )
-                .await?;
-            }
-            let next_state = merged_private_channel_state_from_epoch_join(
-                self.joined_private_channel_state(
-                    preview.topic_id.as_str(),
-                    preview.channel_id.as_str(),
-                )
-                .await,
-                preview.topic_id.as_str(),
-                preview.channel_id.clone(),
-                preview.channel_label.as_str(),
-                metadata.creator_pubkey.as_str(),
-                preview.owner_pubkey.as_str(),
-                Some(preview.sponsor_pubkey.as_str()),
-                ChannelAudienceKind::FriendPlus,
-                preview.epoch_id.as_str(),
-                preview.namespace_secret_hex.as_str(),
-            );
-            self.register_joined_private_channel(next_state).await?;
-            Ok::<(), anyhow::Error>(())
-        }
-        .await;
-        if import_result.is_err() {
-            let _ = self.docs_sync.remove_private_replica_secret(&replica).await;
-        }
-        import_result?;
+        self.import_private_channel_by_spec(PrivateChannelImportSpec {
+            topic_id: preview.topic_id.as_str().to_string(),
+            channel_id: preview.channel_id.clone(),
+            channel_label: preview.channel_label.clone(),
+            owner_pubkey: preview.owner_pubkey.as_str().to_string(),
+            epoch_id: preview.epoch_id.clone(),
+            namespace_secret_hex: preview.namespace_secret_hex.clone(),
+            // friend-plus 共有トークンは期限チェックを行わない(統合前と同じ)。
+            expires_at: None,
+            expired_message: "friend-plus share is expired",
+            mutual_with: Some((
+                preview.sponsor_pubkey.as_str().to_string(),
+                "friend-plus share import requires a mutual relationship with the sponsor",
+            )),
+            use_legacy_aware_replica: false,
+            sync_context: "friend-plus channel replica sync",
+            // friend-plus のみ snapshot 後に participants を取り直す(統合前と同じ)。
+            refetch_participants: true,
+            audience: ChannelAudienceKind::FriendPlus,
+            audience_message: "friend-plus share replica audience must be friend_plus",
+            not_open_message: "friend-plus share is no longer open for import",
+            epoch_mismatch_message: "friend-plus share epoch does not match the current policy",
+            // friend-plus は owner の active 参加検査を行わない(統合前と同じ)。
+            owner_check_message: None,
+            join_mode: PrivateChannelJoinMode::FriendPlusShare,
+            sponsor: ImportSponsor::Pubkey(preview.sponsor_pubkey.clone()),
+            share_token_id: Some(preview.share_token_id.clone()),
+            skip_persist_if_participant: true,
+            joined_via_pubkey: preview.sponsor_pubkey.as_str().to_string(),
+        })
+        .await?;
         Ok(preview)
     }
 
@@ -1017,4 +948,44 @@ impl AppService {
         }
         Ok(items)
     }
+}
+
+/// import 3 系統の差分(注入点)。詳細は import_private_channel_by_spec を参照。
+struct PrivateChannelImportSpec {
+    topic_id: String,
+    channel_id: ChannelId,
+    channel_label: String,
+    owner_pubkey: String,
+    epoch_id: String,
+    namespace_secret_hex: String,
+    /// トークン期限(None = 期限チェックなし)。
+    expires_at: Option<i64>,
+    expired_message: &'static str,
+    /// mutual 関係の前提(相手 pubkey とエラー文言。None = チェックなし)。
+    mutual_with: Option<(String, &'static str)>,
+    /// epoch なし時代の channel を legacy replica で読むか(招待のみ true。互換パス)。
+    use_legacy_aware_replica: bool,
+    sync_context: &'static str,
+    /// snapshot 後に participants を取り直すか(friend-plus のみ true)。
+    refetch_participants: bool,
+    audience: ChannelAudienceKind,
+    audience_message: &'static str,
+    not_open_message: &'static str,
+    epoch_mismatch_message: &'static str,
+    /// owner が active 参加者であることの検査文言(None = 検査なし)。
+    owner_check_message: Option<&'static str>,
+    join_mode: PrivateChannelJoinMode,
+    sponsor: ImportSponsor,
+    share_token_id: Option<String>,
+    /// 既に参加者なら参加ドキュメントの発行をスキップするか(friend-only のみ false)。
+    skip_persist_if_participant: bool,
+    joined_via_pubkey: String,
+}
+
+/// 参加ドキュメントに載せる sponsor の出どころ。
+enum ImportSponsor {
+    /// トークン preview から(招待 = inviter、friend-plus = sponsor)。
+    Pubkey(Pubkey),
+    /// snapshot 取得後の policy.owner_pubkey(friend-only)。
+    PolicyOwner,
 }
