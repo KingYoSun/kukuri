@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -6,12 +6,13 @@ use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use iroh::EndpointAddr;
-use iroh::EndpointId;
 use iroh_docs::api::Doc;
 use iroh_docs::store::Query;
 use iroh_docs::{Capability, DocTicket, NamespaceSecret};
 use kukuri_core::ReplicaId;
-use kukuri_transport::{SeedPeer, parse_endpoint_ticket, relay_assisted_endpoint_addr};
+use kukuri_transport::{
+    PeerAddrBook, RemoteFetchRetryState, RemoteFetchStart, SeedPeer, parse_endpoint_ticket,
+};
 use tokio::sync::{Mutex, broadcast};
 use tokio::task::JoinHandle;
 use tokio::time::{Duration, Instant, timeout};
@@ -34,41 +35,6 @@ struct ReplicaHandle {
 
 const REMOTE_FETCH_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const REMOTE_FETCH_TRANSFER_TIMEOUT: Duration = Duration::from_secs(15);
-const REMOTE_FETCH_RETRY_COOLDOWN: Duration = Duration::from_secs(3);
-
-#[derive(Debug, PartialEq, Eq)]
-enum RemoteFetchStart {
-    Ready,
-    CoolingDown,
-}
-
-#[derive(Debug, Default)]
-struct RemoteFetchRetryState {
-    retry_after: BTreeMap<String, Instant>,
-}
-
-impl RemoteFetchRetryState {
-    fn try_begin(&mut self, key: &str, now: Instant) -> RemoteFetchStart {
-        if self
-            .retry_after
-            .get(key)
-            .is_some_and(|retry_after| *retry_after > now)
-        {
-            return RemoteFetchStart::CoolingDown;
-        }
-        self.retry_after.remove(key);
-        RemoteFetchStart::Ready
-    }
-
-    fn finish(&mut self, key: &str, success: bool, now: Instant) {
-        if success {
-            self.retry_after.remove(key);
-        } else {
-            self.retry_after
-                .insert(key.to_string(), now + REMOTE_FETCH_RETRY_COOLDOWN);
-        }
-    }
-}
 
 #[derive(Clone, Debug, Default)]
 pub struct DocsPeerState {
@@ -80,21 +46,20 @@ pub struct DocsPeerState {
 pub struct IrohDocsSync {
     node: Arc<IrohDocsNode>,
     replicas: Arc<Mutex<HashMap<String, ReplicaHandle>>>,
-    learned_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
-    seed_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
-    imported_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
+    // ピア台帳・接続候補・リトライ状態は kukuri-transport の共通実装(WP-H2)。
+    // 台帳変化(bool)を見て reapply_sync_peers を呼ぶのはこちら側の責務。
+    peers: Arc<PeerAddrBook>,
     private_replica_secrets: Arc<Mutex<HashMap<String, NamespaceSecret>>>,
     remote_fetch_retries: Arc<Mutex<RemoteFetchRetryState>>,
 }
 
 impl IrohDocsSync {
     pub fn new(node: Arc<IrohDocsNode>) -> Self {
+        let peers = Arc::new(PeerAddrBook::new(node.endpoint().clone(), node.discovery()));
         Self {
             node,
             replicas: Arc::new(Mutex::new(HashMap::new())),
-            learned_peers: Arc::new(Mutex::new(BTreeMap::new())),
-            seed_peers: Arc::new(Mutex::new(BTreeMap::new())),
-            imported_peers: Arc::new(Mutex::new(BTreeMap::new())),
+            peers,
             private_replica_secrets: Arc::new(Mutex::new(HashMap::new())),
             remote_fetch_retries: Arc::new(Mutex::new(RemoteFetchRetryState::default())),
         }
@@ -114,140 +79,33 @@ impl IrohDocsSync {
     }
 
     async fn sync_peers(&self) -> Vec<EndpointAddr> {
-        let mut peers = self
-            .learned_peers
-            .lock()
-            .await
-            .values()
-            .cloned()
-            .collect::<Vec<_>>();
-        for peer in self.seed_peers.lock().await.values() {
-            if !peers.iter().any(|existing| existing.id == peer.id) {
-                peers.push(peer.clone());
-            }
-        }
-        for peer in self.imported_peers.lock().await.values() {
-            if !peers.iter().any(|existing| existing.id == peer.id) {
-                peers.push(peer.clone());
-            }
-        }
-        peers
-    }
-
-    async fn insert_learned_peer_addr(&self, endpoint_addr: EndpointAddr) -> bool {
-        if !endpoint_addr.is_empty() {
-            self.node
-                .discovery()
-                .add_endpoint_info(endpoint_addr.clone());
-        }
-        let key = endpoint_addr.id.to_string();
-        let mut learned_peers = self.learned_peers.lock().await;
-        if learned_peers.get(key.as_str()) == Some(&endpoint_addr) {
-            return false;
-        }
-        learned_peers.insert(key, endpoint_addr);
-        true
-    }
-
-    async fn insert_imported_peer_addr(&self, endpoint_addr: EndpointAddr) {
-        self.node
-            .discovery()
-            .add_endpoint_info(endpoint_addr.clone());
-        self.imported_peers
-            .lock()
-            .await
-            .insert(endpoint_addr.id.to_string(), endpoint_addr);
+        self.peers.merged_peers().await
     }
 
     pub async fn peer_state(&self) -> DocsPeerState {
         DocsPeerState {
-            learned_peers: self.learned_peers.lock().await.values().cloned().collect(),
-            imported_peers: self.imported_peers.lock().await.values().cloned().collect(),
+            learned_peers: self.peers.learned_peers_snapshot().await,
+            imported_peers: self.peers.imported_peers_snapshot().await,
         }
     }
 
     pub async fn restore_peer_state(&self, state: DocsPeerState) -> Result<()> {
         for endpoint_addr in state.learned_peers {
-            let _ = self.insert_learned_peer_addr(endpoint_addr).await;
+            let _ = self.peers.insert_learned_peer_addr(endpoint_addr).await;
         }
         for endpoint_addr in state.imported_peers {
-            self.insert_imported_peer_addr(endpoint_addr).await;
+            self.peers.insert_imported_peer_addr(endpoint_addr).await;
         }
+        // 復元後の reapply は docs-sync 側の責務(共通台帳は行わない)。
         self.reapply_sync_peers().await
     }
 
-    async fn record_learned_peer(&self, endpoint_id: &str) -> Result<bool> {
-        let endpoint_id = EndpointId::from_str(endpoint_id.trim())?;
-        let relay_urls = self.node.relay_urls().await;
-        let mut endpoint_addr = self
-            .node
-            .endpoint()
-            .remote_info(endpoint_id)
-            .await
-            .map(|remote_info| {
-                EndpointAddr::from_parts(
-                    remote_info.id(),
-                    remote_info.into_addrs().map(|addr| addr.into_addr()),
-                )
-            })
-            .unwrap_or_else(|| EndpointAddr::new(endpoint_id));
-        for relay_url in relay_urls {
-            endpoint_addr = endpoint_addr.with_relay_url(relay_url);
-        }
-        Ok(self.insert_learned_peer_addr(endpoint_addr).await)
-    }
-
     async fn connect_candidates(&self, imported_peer: &EndpointAddr) -> Vec<EndpointAddr> {
-        let mut candidates = Vec::new();
-        if let Some(candidate) = direct_endpoint_addr(imported_peer) {
-            candidates.push(candidate);
-        }
-        if let Some(remote_info) = self.node.endpoint().remote_info(imported_peer.id).await {
-            let learned_peer = EndpointAddr::from_parts(
-                remote_info.id(),
-                remote_info.into_addrs().map(|addr| addr.into_addr()),
-            );
-            if !learned_peer.is_empty() {
-                candidates.push(learned_peer);
-            }
-        }
-        let relay_supported = relay_assisted_endpoint_addr(imported_peer);
-        if relay_supported.relay_urls().next().is_some()
-            && !candidates
-                .iter()
-                .any(|candidate| candidate == &relay_supported)
-        {
-            candidates.push(relay_supported);
-        }
-        if candidates.is_empty()
-            || !candidates
-                .iter()
-                .any(|candidate| candidate == imported_peer)
-        {
-            candidates.push(imported_peer.clone());
-        }
-        candidates
+        self.peers.connect_candidates(imported_peer).await
     }
 
     pub(crate) async fn available_sync_peer_ids(&self) -> Vec<String> {
-        let peers = self.sync_peers().await;
-        let mut available = BTreeSet::new();
-        for peer in peers {
-            if self
-                .node
-                .endpoint()
-                .remote_info(peer.id)
-                .await
-                .is_some_and(|info| {
-                    info.addrs().any(|addr| {
-                        matches!(addr.usage(), iroh::endpoint::TransportAddrUsage::Active)
-                    })
-                })
-            {
-                available.insert(peer.id.to_string());
-            }
-        }
-        available.into_iter().collect()
+        self.peers.available_peer_ids().await
     }
 
     async fn reapply_sync_peers(&self) -> Result<()> {
@@ -495,14 +353,6 @@ impl IrohDocsSync {
     }
 }
 
-fn direct_endpoint_addr(endpoint_addr: &EndpointAddr) -> Option<EndpointAddr> {
-    let mut direct = EndpointAddr::new(endpoint_addr.id);
-    for addr in endpoint_addr.ip_addrs() {
-        direct = direct.with_ip_addr(*addr);
-    }
-    (!direct.is_empty()).then_some(direct)
-}
-
 #[async_trait]
 impl DocsSync for IrohDocsSync {
     async fn open_replica(&self, replica_id: &ReplicaId) -> Result<()> {
@@ -616,13 +466,19 @@ impl DocsSync for IrohDocsSync {
 
     async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
         let endpoint_addr = parse_endpoint_ticket(ticket)?;
-        self.insert_imported_peer_addr(endpoint_addr).await;
+        self.peers.insert_imported_peer_addr(endpoint_addr).await;
         self.reapply_sync_peers().await?;
         Ok(())
     }
 
     async fn learn_peer(&self, endpoint_id: &str) -> Result<()> {
-        if self.record_learned_peer(endpoint_id).await? {
+        let relay_urls = self.node.relay_urls().await;
+        // 台帳に変化があったときだけ全レプリカへ同期先を配り直す(bool は docs-sync 固有の挙動)。
+        if self
+            .peers
+            .record_learned_peer(endpoint_id, &relay_urls)
+            .await?
+        {
             self.reapply_sync_peers().await?;
         }
         Ok(())
@@ -657,15 +513,8 @@ impl DocsSync for IrohDocsSync {
 
     async fn set_seed_peers(&self, peers: Vec<SeedPeer>) -> Result<()> {
         let relay_urls = self.node.relay_urls().await;
-        let mut parsed = BTreeMap::new();
-        for peer in peers {
-            let endpoint_addr = peer.to_endpoint_addr_with_relays(&relay_urls)?;
-            self.node
-                .discovery()
-                .add_endpoint_info(endpoint_addr.clone());
-            parsed.insert(endpoint_addr.id.to_string(), endpoint_addr);
-        }
-        *self.seed_peers.lock().await = parsed;
+        self.peers.set_seed_peers(peers, &relay_urls).await?;
+        // seed 差し替え後の reapply は docs-sync 固有の挙動(共通台帳は行わない)。
         self.reapply_sync_peers().await
     }
 
@@ -681,29 +530,63 @@ async fn doc_start_sync(doc: &Doc, peers: Vec<EndpointAddr>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kukuri_transport::TransportNetworkConfig;
+    use tempfile::tempdir;
+    use tokio::time::sleep;
 
-    #[test]
-    fn remote_fetch_retry_state_cools_down_failures_without_blocking_active_fetches() {
-        let now = Instant::now();
-        let mut state = RemoteFetchRetryState::default();
+    // 接続候補の順序は外部挙動(characterization、WP-H2)。
+    // direct(remote_info 由来)→ relay 付き → 元の値、の優先順位を固定する。
+    // blob-service 側の同名観点テストと対になる。
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn connect_candidates_prefers_direct_remote_info_before_relay_hint() {
+        let sender_dir = tempdir().expect("sender tempdir");
+        let receiver_dir = tempdir().expect("receiver tempdir");
+        let config = TransportNetworkConfig::loopback();
 
-        assert_eq!(state.try_begin("hash-a", now), RemoteFetchStart::Ready);
-        assert_eq!(state.try_begin("hash-a", now), RemoteFetchStart::Ready);
+        let sender_node = IrohDocsNode::persistent_with_config(sender_dir.path(), config.clone())
+            .await
+            .expect("sender node");
+        let receiver_node = IrohDocsNode::persistent_with_config(receiver_dir.path(), config)
+            .await
+            .expect("receiver node");
 
-        state.finish("hash-a", false, now);
-        assert_eq!(
-            state.try_begin("hash-a", now + Duration::from_secs(1)),
-            RemoteFetchStart::CoolingDown
-        );
-        assert_eq!(
-            state.try_begin("hash-a", now + REMOTE_FETCH_RETRY_COOLDOWN),
-            RemoteFetchStart::Ready
-        );
+        let receiver = IrohDocsSync::new(receiver_node.clone());
+        let relay_url = "https://relay.example.invalid/".parse().expect("relay url");
+        let sender_addr = EndpointAddr::new(sender_node.endpoint().id()).with_relay_url(relay_url);
 
-        state.finish("hash-a", true, now + REMOTE_FETCH_RETRY_COOLDOWN);
-        assert_eq!(
-            state.try_begin("hash-a", now + REMOTE_FETCH_RETRY_COOLDOWN),
-            RemoteFetchStart::Ready
-        );
+        let seeded = sender_node
+            .endpoint()
+            .connect(receiver_node.endpoint().addr(), iroh_gossip::ALPN)
+            .await
+            .expect("seed connection");
+        drop(seeded);
+
+        timeout(Duration::from_secs(5), async {
+            loop {
+                if receiver_node
+                    .endpoint()
+                    .remote_info(sender_node.endpoint().id())
+                    .await
+                    .is_some()
+                {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("receiver should learn sender remote info");
+
+        let candidates = receiver.connect_candidates(&sender_addr).await;
+        assert!(!candidates.is_empty());
+        assert_ne!(candidates[0], sender_addr);
+        assert!(candidates[0].relay_urls().next().is_none());
+        assert_eq!(candidates.last(), Some(&sender_addr));
+
+        receiver.shutdown().await;
+        let _ = sender_node.shutdown().await;
+        let _ = receiver_node.shutdown().await;
     }
+
+    // リトライ状態のテストは共通実装側(kukuri-transport::peers)へ移動した(WP-H2)。
 }
