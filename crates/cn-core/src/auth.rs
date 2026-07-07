@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Result, anyhow, bail};
 use axum::http::{HeaderMap, StatusCode, header::AUTHORIZATION};
 use chrono::{DateTime, Duration, Utc};
 use jsonwebtoken::{Algorithm, Header, Validation, decode, encode};
@@ -6,8 +6,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::Row;
 use sqlx::postgres::PgPool;
-
-use kukuri_core::{KukuriAuthEnvelopeContentV1, KukuriKeys, sign_envelope_json};
 
 use crate::admission::{AdmissionMode, evaluate_admission};
 use crate::bootstrap::{
@@ -226,27 +224,8 @@ pub async fn require_bearer_pubkey(
         .pubkey)
 }
 
-pub fn build_auth_envelope_json(
-    keys: &KukuriKeys,
-    challenge: &str,
-    public_base_url: &str,
-) -> Result<Value> {
-    let signed = sign_envelope_json(
-        keys,
-        AUTH_ENVELOPE_KIND,
-        vec![
-            vec!["challenge".into(), challenge.to_string()],
-            vec![
-                "capability_url".into(),
-                normalize_http_url(public_base_url)?,
-            ],
-        ],
-        &KukuriAuthEnvelopeContentV1 {
-            scope: "community-node-auth".into(),
-        },
-    )?;
-    serde_json::to_value(signed).context("failed to encode auth envelope json")
-}
+// 認証封筒の構築(client 側)は kukuri-cn-protocol へ移動した(WP-H3)。
+pub use kukuri_cn_protocol::build_auth_envelope_json;
 
 fn ensure_jwt_crypto_provider() {
     JWT_CRYPTO_PROVIDER_INIT.call_once(|| {

@@ -339,7 +339,7 @@ async fn community_node_status_does_not_require_restart_when_connectivity_is_act
             node,
             Some(CommunityNodeConsentStatus {
                 all_required_accepted: true,
-                items: vec![kukuri_cn_core::CommunityNodeConsentItem {
+                items: vec![kukuri_cn_protocol::CommunityNodeConsentItem {
                     policy_slug: "community-basic".to_string(),
                     policy_version: 1,
                     title: "Community Basic".to_string(),

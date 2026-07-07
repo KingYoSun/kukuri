@@ -17,7 +17,7 @@ use image::{
 use iroh::address_lookup::{AddrFilter, AddressLookup};
 use iroh_mainline_address_lookup::DhtAddressLookup;
 use kukuri_app_api::{GameScoreView, JoinedPrivateChannelView, SyncStatus, TimelineView};
-use kukuri_cn_core::{
+use kukuri_cn_protocol::{
     BootstrapHeartbeatResponse, CommunityNodeConsentStatus, CommunityNodeResolvedUrls,
     CommunityNodeSeedPeer,
 };

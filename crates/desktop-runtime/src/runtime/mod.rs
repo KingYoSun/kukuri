@@ -17,7 +17,7 @@ use kukuri_app_api::{
     PrivateChannelCapability, ProfileInput, PublishMetaverseRoomEventInput, ReactionStateView,
     RecentReactionView, SyncStatus, TimelineView, UpdateGameRoomInput, UpdateMetaverseRoomInput,
 };
-use kukuri_cn_core::{CommunityNodeConsentStatus, normalize_http_url};
+use kukuri_cn_protocol::{CommunityNodeConsentStatus, normalize_http_url};
 use kukuri_core::{
     BlobHash, CreatePrivateChannelInput, CustomReactionAssetSnapshotV1, FriendOnlyGrantPreview,
     FriendPlusSharePreview, KukuriKeys, PrivateChannelInvitePreview, Profile, TopicId,
