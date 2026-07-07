@@ -9,6 +9,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use kukuri_cn_core::PgIndexEntryStore;
+// request body / HTTP パスは kukuri-cn-protocol の共有定義(WP-H3 PR2)。
 use kukuri_cn_core::{
     AdmissionRejection, ApiError, ApiResult, AuthChallengeResponse, AuthVerifyResponse,
     BootstrapHeartbeatResponse, COMMUNITY_NODE_RENDEZVOUS_KEY_PREFIX_ENV,
@@ -29,6 +30,12 @@ use kukuri_cn_indexer::{
     ArcadeDbConfig, ArcadeDbProjection, ArcadeDbRelationGraph, FailClosedIndexQuery, IndexQuery,
 };
 use kukuri_cn_operator::{CommunityNodeManifest, build_manifest, load_and_validate};
+use kukuri_cn_protocol::{
+    AUTH_CHALLENGE_PATH, AUTH_VERIFY_PATH, AcceptConsentsRequest, AuthChallengeRequest,
+    AuthVerifyRequest, BOOTSTRAP_HEARTBEAT_PATH, BOOTSTRAP_NODES_PATH, BootstrapHeartbeatRequest,
+    CONSENTS_PATH, CONSENTS_STATUS_PATH, NODE_MANIFEST_PATH, REPORT_PATH,
+    TOPIC_RENDEZVOUS_HEARTBEAT_PATH,
+};
 use kukuri_cn_safety::RiskSignalTarget;
 use kukuri_cn_trust::{
     PullAudience, RelationStore, TrustParams, TrustReadView, UniformRelationWeight,
@@ -150,37 +157,6 @@ impl std::fmt::Debug for UserApiConfig {
             .field("trust_read_enabled", &self.trust_read_enabled)
             .finish()
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct AuthChallengeRequest {
-    pubkey: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct AuthVerifyRequest {
-    auth_envelope_json: Value,
-    #[serde(default)]
-    endpoint_id: Option<String>,
-    #[serde(default)]
-    addr_hint: Option<String>,
-    /// invite mode の community node に参加するための招待コード（#383）。
-    /// open / whitelist mode や既存 subscriber では不要。
-    #[serde(default)]
-    invite_code: Option<String>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct AcceptConsentsRequest {
-    #[serde(default)]
-    policy_slugs: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct BootstrapHeartbeatRequest {
-    endpoint_id: String,
-    #[serde(default)]
-    addr_hint: Option<String>,
 }
 
 /// 通報受信リクエスト（#370）。client（#310）が provenance + manifest authority scope で
@@ -481,17 +457,17 @@ pub fn app_router(state: UserApiState) -> Router {
     let manifest = manifest_routes(state.manifest.clone());
     let api = Router::new()
         .route("/healthz", get(healthz))
-        .route("/v1/auth/challenge", post(auth_challenge))
-        .route("/v1/auth/verify", post(auth_verify))
-        .route("/v1/consents/status", get(consent_status))
-        .route("/v1/consents", post(accept_consents_handler))
-        .route("/v1/bootstrap/nodes", get(bootstrap_nodes))
-        .route("/v1/bootstrap/heartbeat", post(bootstrap_heartbeat))
+        .route(AUTH_CHALLENGE_PATH, post(auth_challenge))
+        .route(AUTH_VERIFY_PATH, post(auth_verify))
+        .route(CONSENTS_STATUS_PATH, get(consent_status))
+        .route(CONSENTS_PATH, post(accept_consents_handler))
+        .route(BOOTSTRAP_NODES_PATH, get(bootstrap_nodes))
+        .route(BOOTSTRAP_HEARTBEAT_PATH, post(bootstrap_heartbeat))
         .route(
-            "/v1/rendezvous/topics/heartbeat",
+            TOPIC_RENDEZVOUS_HEARTBEAT_PATH,
             post(topic_rendezvous_heartbeat),
         )
-        .route("/v1/report", post(submit_report))
+        .route(REPORT_PATH, post(submit_report))
         .route("/v1/indexing/requests", post(submit_indexing_request))
         .route("/v1/index/search", get(index_search))
         .route("/v1/index/discovery", get(index_discovery))
@@ -519,7 +495,7 @@ pub fn manifest_routes(manifest: Option<Arc<CommunityNodeManifest>>) -> Router {
             "/.well-known/kukuri/community-node.json",
             get(node_manifest),
         )
-        .route("/v1/node/manifest", get(node_manifest))
+        .route(NODE_MANIFEST_PATH, get(node_manifest))
         .with_state(ManifestState { manifest })
 }
 

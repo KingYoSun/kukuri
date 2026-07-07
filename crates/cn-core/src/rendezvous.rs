@@ -14,35 +14,11 @@ pub struct TopicRendezvousStore {
     ttl_seconds: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TopicRendezvousHeartbeat {
-    pub endpoint_id: String,
-    pub addr_hint: Option<String>,
-    pub joins: Vec<String>,
-    pub refreshes: Vec<String>,
-    pub leaves: Vec<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TopicRendezvousCandidate {
-    pub endpoint_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub addr_hint: Option<String>,
-    #[serde(default)]
-    pub relay_urls: Vec<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TopicRendezvousTopicResponse {
-    pub topic_key: String,
-    pub peers: Vec<TopicRendezvousCandidate>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TopicRendezvousHeartbeatResponse {
-    pub expires_in_seconds: u64,
-    pub topics: Vec<TopicRendezvousTopicResponse>,
-}
+// rendezvous の wire 型は kukuri-cn-protocol へ移動した(WP-H3 PR2)。
+pub use kukuri_cn_protocol::{
+    TopicRendezvousCandidate, TopicRendezvousHeartbeat, TopicRendezvousHeartbeatResponse,
+    TopicRendezvousTopicResponse,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct StoredRendezvousPeer {

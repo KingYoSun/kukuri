@@ -4,9 +4,12 @@ use std::path::Path;
 use anyhow::{Context, Result, anyhow};
 use chrono::Utc;
 use kukuri_cn_protocol::{
-    AuthChallengeResponse, AuthVerifyResponse, BootstrapHeartbeatResponse,
-    CommunityNodeConsentStatus, CommunityNodeResolvedUrls, CommunityNodeSeedPeer,
-    build_auth_envelope_json, normalize_http_url,
+    AUTH_CHALLENGE_PATH, AUTH_VERIFY_PATH, AcceptConsentsRequest, AuthChallengeRequest,
+    AuthChallengeResponse, AuthVerifyRequest, AuthVerifyResponse, BOOTSTRAP_HEARTBEAT_PATH,
+    BOOTSTRAP_NODES_PATH, BootstrapHeartbeatRequest, BootstrapHeartbeatResponse, CONSENTS_PATH,
+    CONSENTS_STATUS_PATH, CommunityNodeConsentStatus, CommunityNodeResolvedUrls,
+    CommunityNodeSeedPeer, NODE_MANIFEST_PATH, TOPIC_RENDEZVOUS_HEARTBEAT_PATH,
+    TopicRendezvousHeartbeat, build_auth_envelope_json, normalize_http_url,
 };
 use kukuri_core::{TopicId, public_topic_rendezvous_key};
 use kukuri_transport::{SeedPeer, Transport, TransportRelayConfig, parse_seed_peer};
