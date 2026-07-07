@@ -4,6 +4,7 @@ members = [
     "crates/core",
     "crates/store",
     "crates/transport",
+    "crates/iroh-node",
     "crates/docs-sync",
     "crates/blob-service",
     "crates/harness",

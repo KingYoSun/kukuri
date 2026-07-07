@@ -6,9 +6,9 @@ use async_trait::async_trait;
 use kukuri_blob_service::{BlobService, BlobStatus, IrohBlobService, StoredBlob};
 use kukuri_core::{BlobHash, GossipHint, ReplicaId, TopicId};
 use kukuri_docs_sync::{
-    DocEventStream, DocFetchPolicy, DocOp, DocQuery, DocRecord, DocsSync, IrohDocsNode,
-    IrohDocsSync,
+    DocEventStream, DocFetchPolicy, DocOp, DocQuery, DocRecord, DocsSync, IrohDocsSync,
 };
+use kukuri_iroh_node::IrohDocsNode;
 use kukuri_transport::{
     ConnectMode, DhtDiscoveryOptions, DiscoveryMode, DiscoverySnapshot, HintStream, HintTransport,
     IrohGossipTransport, PeerSnapshot, SeedPeer, Transport, TransportNetworkConfig,

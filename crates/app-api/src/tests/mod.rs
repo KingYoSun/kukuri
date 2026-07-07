@@ -7,8 +7,8 @@ use iroh::address_lookup::{AddrFilter, AddressLookup};
 use iroh_mainline_address_lookup::DhtAddressLookup;
 use kukuri_blob_service::IrohBlobService;
 use kukuri_core::build_post_envelope_with_payload;
-use kukuri_docs_sync::IrohDocsNode;
 use kukuri_docs_sync::IrohDocsSync;
+use kukuri_iroh_node::IrohDocsNode;
 use kukuri_store::{
     BookmarkedCustomReactionRow, DirectMessageStore, LiveGameProjectionStore, MemoryStore,
     ReactionBookmarkStore, SocialProjectionStore, SqliteStore,

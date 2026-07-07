@@ -5,7 +5,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use async_trait::async_trait;
 use kukuri_core::BlobHash;
-use kukuri_docs_sync::IrohDocsNode;
+use kukuri_iroh_node::IrohDocsNode;
 use kukuri_transport::{
     PeerAddrBook, RemoteFetchRetryState, RemoteFetchStart, SeedPeer, parse_endpoint_ticket,
 };

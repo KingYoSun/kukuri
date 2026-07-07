@@ -1,8 +1,8 @@
 use anyhow::Result;
+use kukuri_iroh_node::IrohDocsNode;
 
 use crate::{
-    DocOp, DocQuery, DocsSync, IrohDocsNode, IrohDocsSync, author_replica_id, device_replica_id,
-    topic_replica_id,
+    DocOp, DocQuery, DocsSync, IrohDocsSync, author_replica_id, device_replica_id, topic_replica_id,
 };
 
 #[tokio::test]

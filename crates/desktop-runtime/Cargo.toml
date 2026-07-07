@@ -22,6 +22,7 @@ kukuri-blob-service = { path = "../blob-service" }
 kukuri-cn-core = { path = "../cn-core" }
 kukuri-core = { path = "../core" }
 kukuri-docs-sync = { path = "../docs-sync" }
+kukuri-iroh-node = { path = "../iroh-node" }
 kukuri-store = { path = "../store" }
 kukuri-transport = { path = "../transport" }
 
