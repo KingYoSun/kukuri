@@ -105,13 +105,13 @@ impl AppService {
                 "failed to restart replica sync after local timeline write"
             );
         }
-        ProjectionStore::put_object_projection(
+        ObjectProjectionStore::put_object_projection(
             self.projection_store.as_ref(),
             projection_row_from_header(&object, content, replica),
         )
         .await?;
         if let PayloadRef::BlobText { hash, .. } = &object.payload_ref {
-            ProjectionStore::mark_blob_status(
+            BlobCacheStore::mark_blob_status(
                 self.projection_store.as_ref(),
                 hash,
                 BlobCacheStatus::Available,
@@ -119,7 +119,7 @@ impl AppService {
             .await?;
         }
         for (_, attachment) in attachments {
-            ProjectionStore::mark_blob_status(
+            BlobCacheStore::mark_blob_status(
                 self.projection_store.as_ref(),
                 &attachment.hash,
                 BlobCacheStatus::Available,
@@ -139,7 +139,7 @@ impl AppService {
         }
 
         let Some(projection) =
-            ProjectionStore::get_object_projection(self.projection_store.as_ref(), object_id)
+            ObjectProjectionStore::get_object_projection(self.projection_store.as_ref(), object_id)
                 .await?
         else {
             return Ok(None);

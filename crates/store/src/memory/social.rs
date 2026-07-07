@@ -88,15 +88,15 @@ impl MemoryStore {
         });
         Ok(items)
     }
+}
 
-    pub(super) async fn projection_upsert_profile_cache_impl(
-        &self,
-        profile: Profile,
-    ) -> Result<()> {
+#[async_trait]
+impl SocialProjectionStore for MemoryStore {
+    async fn upsert_profile_cache(&self, profile: Profile) -> Result<()> {
         self.upsert_profile(profile).await
     }
 
-    pub(super) async fn projection_get_author_relationship_impl(
+    async fn get_author_relationship(
         &self,
         local_author_pubkey: &str,
         author_pubkey: &str,
@@ -109,7 +109,7 @@ impl MemoryStore {
             .cloned())
     }
 
-    pub(super) async fn projection_list_author_relationships_impl(
+    async fn list_author_relationships(
         &self,
         local_author_pubkey: &str,
         author_pubkeys: &[String],
@@ -126,7 +126,7 @@ impl MemoryStore {
             .collect())
     }
 
-    pub(super) async fn projection_rebuild_author_relationships_impl(
+    async fn rebuild_author_relationships(
         &self,
         local_author_pubkey: &str,
         rows: Vec<AuthorRelationshipProjectionRow>,
@@ -142,7 +142,7 @@ impl MemoryStore {
         Ok(())
     }
 
-    pub(super) async fn projection_put_muted_author_impl(&self, row: MutedAuthorRow) -> Result<()> {
+    async fn put_muted_author(&self, row: MutedAuthorRow) -> Result<()> {
         self.muted_authors
             .write()
             .await
@@ -150,14 +150,11 @@ impl MemoryStore {
         Ok(())
     }
 
-    pub(super) async fn projection_get_muted_author_impl(
-        &self,
-        author_pubkey: &str,
-    ) -> Result<Option<MutedAuthorRow>> {
+    async fn get_muted_author(&self, author_pubkey: &str) -> Result<Option<MutedAuthorRow>> {
         Ok(self.muted_authors.read().await.get(author_pubkey).cloned())
     }
 
-    pub(super) async fn projection_list_muted_authors_impl(&self) -> Result<Vec<MutedAuthorRow>> {
+    async fn list_muted_authors(&self) -> Result<Vec<MutedAuthorRow>> {
         let mut items = self
             .muted_authors
             .read()
@@ -174,10 +171,7 @@ impl MemoryStore {
         Ok(items)
     }
 
-    pub(super) async fn projection_remove_muted_author_impl(
-        &self,
-        author_pubkey: &str,
-    ) -> Result<()> {
+    async fn remove_muted_author(&self, author_pubkey: &str) -> Result<()> {
         self.muted_authors.write().await.remove(author_pubkey);
         Ok(())
     }

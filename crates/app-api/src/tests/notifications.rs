@@ -48,7 +48,7 @@ async fn remote_reply_to_local_post_creates_single_unread_reply_notification() {
     .await;
 
     assert!(created);
-    ProjectionStore::put_object_projection(
+    ObjectProjectionStore::put_object_projection(
         store.as_ref(),
         projection_row_from_header(&remote_object, None, &topic_replica_id(topic.as_str())),
     )
@@ -123,7 +123,7 @@ async fn object_notification_view_exposes_thread_root_object_id_for_click_throug
         )
         .await
     );
-    ProjectionStore::put_object_projection(
+    ObjectProjectionStore::put_object_projection(
         store.as_ref(),
         projection_row_from_header(&remote_object, None, &topic_replica_id(topic.as_str())),
     )

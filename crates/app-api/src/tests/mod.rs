@@ -9,7 +9,10 @@ use kukuri_blob_service::IrohBlobService;
 use kukuri_core::build_post_envelope_with_payload;
 use kukuri_docs_sync::IrohDocsNode;
 use kukuri_docs_sync::IrohDocsSync;
-use kukuri_store::{BookmarkedCustomReactionRow, MemoryStore, SqliteStore};
+use kukuri_store::{
+    BookmarkedCustomReactionRow, DirectMessageStore, LiveGameProjectionStore, MemoryStore,
+    ReactionBookmarkStore, SocialProjectionStore, SqliteStore,
+};
 use kukuri_transport::{
     DhtDiscoveryOptions, DiscoveryMode, FakeNetwork, FakeTransport, HintEnvelope, HintStream,
     IrohGossipTransport, SeedPeer, TransportRelayConfig,

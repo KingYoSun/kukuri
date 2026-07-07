@@ -92,9 +92,10 @@ async fn walk_projection_timeline<S: Store + ProjectionStore>(
     let mut pages = Vec::new();
     let mut cursor: Option<TimelineCursor> = None;
     loop {
-        let page = ProjectionStore::list_topic_timeline(store, topic_id, cursor.clone(), limit)
-            .await
-            .expect("ProjectionStore::list_topic_timeline");
+        let page =
+            ObjectProjectionStore::list_topic_timeline(store, topic_id, cursor.clone(), limit)
+                .await
+                .expect("ObjectProjectionStore::list_topic_timeline");
         cursor = page.next_cursor.clone();
         pages.push(page);
         if cursor.is_none() {
@@ -116,7 +117,7 @@ async fn walk_projection_timeline_filtered<S: Store + ProjectionStore>(
     let mut pages = Vec::new();
     let mut cursor: Option<TimelineCursor> = None;
     loop {
-        let page = ProjectionStore::list_topic_timeline_filtered(
+        let page = ObjectProjectionStore::list_topic_timeline_filtered(
             store,
             topic_id,
             allowed_channels,
@@ -124,7 +125,7 @@ async fn walk_projection_timeline_filtered<S: Store + ProjectionStore>(
             limit,
         )
         .await
-        .expect("ProjectionStore::list_topic_timeline_filtered");
+        .expect("ObjectProjectionStore::list_topic_timeline_filtered");
         cursor = page.next_cursor.clone();
         pages.push(page);
         if cursor.is_none() {
@@ -146,9 +147,9 @@ async fn walk_projection_thread<S: Store + ProjectionStore>(
     let mut pages = Vec::new();
     let mut cursor: Option<TimelineCursor> = None;
     loop {
-        let page = ProjectionStore::list_thread(store, topic_id, root, cursor.clone(), limit)
+        let page = ObjectProjectionStore::list_thread(store, topic_id, root, cursor.clone(), limit)
             .await
-            .expect("ProjectionStore::list_thread");
+            .expect("ObjectProjectionStore::list_thread");
         cursor = page.next_cursor.clone();
         pages.push(page);
         if cursor.is_none() {
@@ -171,7 +172,7 @@ async fn walk_projection_thread_filtered<S: Store + ProjectionStore>(
     let mut pages = Vec::new();
     let mut cursor: Option<TimelineCursor> = None;
     loop {
-        let page = ProjectionStore::list_thread_filtered(
+        let page = ObjectProjectionStore::list_thread_filtered(
             store,
             topic_id,
             root,
@@ -180,7 +181,7 @@ async fn walk_projection_thread_filtered<S: Store + ProjectionStore>(
             limit,
         )
         .await
-        .expect("ProjectionStore::list_thread_filtered");
+        .expect("ObjectProjectionStore::list_thread_filtered");
         cursor = page.next_cursor.clone();
         pages.push(page);
         if cursor.is_none() {
@@ -199,9 +200,9 @@ async fn walk_dm_messages<S: Store + ProjectionStore>(
     let mut cursor: Option<TimelineCursor> = None;
     loop {
         let page =
-            ProjectionStore::list_direct_message_messages(store, dm_id, cursor.clone(), limit)
+            DirectMessageStore::list_direct_message_messages(store, dm_id, cursor.clone(), limit)
                 .await
-                .expect("ProjectionStore::list_direct_message_messages");
+                .expect("DirectMessageStore::list_direct_message_messages");
         cursor = page.next_cursor.clone();
         pages.push(page);
         if cursor.is_none() {
@@ -306,7 +307,7 @@ async fn projection_timeline_scenario<S: Store + ProjectionStore>(
     store: &S,
 ) -> ProjectionTimelineScenarioResult {
     let topic = "kukuri:topic:parity-proj";
-    ProjectionStore::put_object_projections(
+    ObjectProjectionStore::put_object_projections(
         store,
         vec![
             parity_projection_row(topic, "public", "proj-a", 100),
@@ -318,21 +319,21 @@ async fn projection_timeline_scenario<S: Store + ProjectionStore>(
         ],
     )
     .await
-    .expect("ProjectionStore::put_object_projections");
+    .expect("ObjectProjectionStore::put_object_projections");
 
     // 同一 object_id の再 put(upsert 更新経路)
     let mut updated = parity_projection_row(topic, "public", "proj-a", 100);
     updated.content = Some("content:proj-a:updated".into());
-    ProjectionStore::put_object_projection(store, updated)
+    ObjectProjectionStore::put_object_projection(store, updated)
         .await
-        .expect("ProjectionStore::put_object_projection update");
+        .expect("ObjectProjectionStore::put_object_projection update");
 
     let private_only = BTreeSet::from(["private:friends".to_string()]);
     let both_channels = BTreeSet::from(["public".to_string(), "private:friends".to_string()]);
     ProjectionTimelineScenarioResult {
         timeline_pages: walk_projection_timeline(store, topic, 2).await,
         filtered_pages: walk_projection_timeline_filtered(store, topic, &private_only, 2).await,
-        filtered_all_channels: ProjectionStore::list_topic_timeline_filtered(
+        filtered_all_channels: ObjectProjectionStore::list_topic_timeline_filtered(
             store,
             topic,
             &both_channels,
@@ -340,16 +341,19 @@ async fn projection_timeline_scenario<S: Store + ProjectionStore>(
             10,
         )
         .await
-        .expect("ProjectionStore::list_topic_timeline_filtered all"),
-        projection_hit: ProjectionStore::get_object_projection(store, &EnvelopeId::from("proj-a"))
-            .await
-            .expect("ProjectionStore::get_object_projection hit"),
-        projection_miss: ProjectionStore::get_object_projection(
+        .expect("ObjectProjectionStore::list_topic_timeline_filtered all"),
+        projection_hit: ObjectProjectionStore::get_object_projection(
+            store,
+            &EnvelopeId::from("proj-a"),
+        )
+        .await
+        .expect("ObjectProjectionStore::get_object_projection hit"),
+        projection_miss: ObjectProjectionStore::get_object_projection(
             store,
             &EnvelopeId::from("proj-missing"),
         )
         .await
-        .expect("ProjectionStore::get_object_projection miss"),
+        .expect("ObjectProjectionStore::get_object_projection miss"),
     }
 }
 
@@ -415,7 +419,7 @@ async fn projection_thread_scenario<S: Store + ProjectionStore>(
         reply.object_kind = "comment".into();
     }
     let unrelated = parity_projection_row(topic, "private:friends", "th-x", 25);
-    ProjectionStore::put_object_projections(
+    ObjectProjectionStore::put_object_projections(
         store,
         vec![
             root,
@@ -426,7 +430,7 @@ async fn projection_thread_scenario<S: Store + ProjectionStore>(
         ],
     )
     .await
-    .expect("ProjectionStore::put_object_projections");
+    .expect("ObjectProjectionStore::put_object_projections");
 
     ProjectionThreadScenarioResult {
         thread_pages: walk_projection_thread(store, topic, &root_id, 2).await,
@@ -438,11 +442,11 @@ async fn projection_thread_scenario<S: Store + ProjectionStore>(
             2,
         )
         .await,
-        filtered_none_channel: ProjectionStore::list_thread_filtered(
+        filtered_none_channel: ObjectProjectionStore::list_thread_filtered(
             store, topic, &root_id, None, None, 10,
         )
         .await
-        .expect("ProjectionStore::list_thread_filtered none"),
+        .expect("ObjectProjectionStore::list_thread_filtered none"),
     }
 }
 
@@ -510,21 +514,21 @@ async fn direct_message_scenario<S: Store + ProjectionStore>(
         ("msg-5", 40),
         ("msg-6", 40),
     ] {
-        ProjectionStore::put_direct_message_message(
+        DirectMessageStore::put_direct_message_message(
             store,
             parity_dm_message(dm_id, message_id, created_at),
         )
         .await
-        .expect("ProjectionStore::put_direct_message_message");
+        .expect("DirectMessageStore::put_direct_message_message");
     }
-    ProjectionStore::set_direct_message_acked_at(store, dm_id, "msg-2", 99)
+    DirectMessageStore::set_direct_message_acked_at(store, dm_id, "msg-2", 99)
         .await
-        .expect("ProjectionStore::set_direct_message_acked_at");
+        .expect("DirectMessageStore::set_direct_message_acked_at");
 
     let first_walk = walk_dm_messages(store, dm_id, 2).await;
 
     // tombstone 中の put は無視される(bool 系 + 読み出しで固定)
-    ProjectionStore::put_direct_message_tombstone(
+    DirectMessageStore::put_direct_message_tombstone(
         store,
         DirectMessageTombstoneRow {
             dm_id: dm_id.into(),
@@ -534,12 +538,12 @@ async fn direct_message_scenario<S: Store + ProjectionStore>(
     )
     .await
     .expect("put tombstone blocked");
-    ProjectionStore::put_direct_message_message(store, parity_dm_message(dm_id, "blocked", 25))
+    DirectMessageStore::put_direct_message_message(store, parity_dm_message(dm_id, "blocked", 25))
         .await
         .expect("put blocked message");
 
     // 既存メッセージの tombstone → ローカル削除 → 再 put も無視される
-    ProjectionStore::put_direct_message_tombstone(
+    DirectMessageStore::put_direct_message_tombstone(
         store,
         DirectMessageTombstoneRow {
             dm_id: dm_id.into(),
@@ -549,13 +553,13 @@ async fn direct_message_scenario<S: Store + ProjectionStore>(
     )
     .await
     .expect("put tombstone msg-4");
-    ProjectionStore::delete_direct_message_message_local(store, dm_id, "msg-4")
+    DirectMessageStore::delete_direct_message_message_local(store, dm_id, "msg-4")
         .await
         .expect("delete msg-4");
-    ProjectionStore::put_direct_message_message(store, parity_dm_message(dm_id, "msg-4", 30))
+    DirectMessageStore::put_direct_message_message(store, parity_dm_message(dm_id, "msg-4", 30))
         .await
         .expect("re-put msg-4 (ignored)");
-    ProjectionStore::put_direct_message_tombstone(
+    DirectMessageStore::put_direct_message_tombstone(
         store,
         DirectMessageTombstoneRow {
             dm_id: dm_id.into(),
@@ -568,19 +572,21 @@ async fn direct_message_scenario<S: Store + ProjectionStore>(
 
     DirectMessageScenarioResult {
         first_walk,
-        acked_message: ProjectionStore::get_direct_message_message(store, dm_id, "msg-2")
+        acked_message: DirectMessageStore::get_direct_message_message(store, dm_id, "msg-2")
             .await
             .expect("get msg-2"),
-        blocked_message: ProjectionStore::get_direct_message_message(store, dm_id, "blocked")
+        blocked_message: DirectMessageStore::get_direct_message_message(store, dm_id, "blocked")
             .await
             .expect("get blocked"),
-        has_tombstone_hit: ProjectionStore::has_direct_message_tombstone(store, dm_id, "blocked")
-            .await
-            .expect("has tombstone blocked"),
-        has_tombstone_miss: ProjectionStore::has_direct_message_tombstone(store, dm_id, "msg-1")
+        has_tombstone_hit: DirectMessageStore::has_direct_message_tombstone(
+            store, dm_id, "blocked",
+        )
+        .await
+        .expect("has tombstone blocked"),
+        has_tombstone_miss: DirectMessageStore::has_direct_message_tombstone(store, dm_id, "msg-1")
             .await
             .expect("has tombstone msg-1"),
-        tombstones: ProjectionStore::list_direct_message_tombstones(store, dm_id)
+        tombstones: DirectMessageStore::list_direct_message_tombstones(store, dm_id)
             .await
             .expect("list tombstones"),
         second_walk: walk_dm_messages(store, dm_id, 2).await,

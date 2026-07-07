@@ -1,17 +1,12 @@
 use super::*;
 
-impl MemoryStore {
-    pub(super) async fn projection_put_object_projection_impl(
-        &self,
-        row: ObjectProjectionRow,
-    ) -> Result<()> {
+#[async_trait]
+impl ObjectProjectionStore for MemoryStore {
+    async fn put_object_projection(&self, row: ObjectProjectionRow) -> Result<()> {
         self.put_object_projections(vec![row]).await
     }
 
-    pub(super) async fn projection_put_object_projections_impl(
-        &self,
-        rows: Vec<ObjectProjectionRow>,
-    ) -> Result<()> {
+    async fn put_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()> {
         let mut projections = self.object_projection_rows.write().await;
         for row in rows {
             projections.insert(row.object_id.clone(), row);
@@ -19,7 +14,7 @@ impl MemoryStore {
         Ok(())
     }
 
-    pub(super) async fn projection_get_object_projection_impl(
+    async fn get_object_projection(
         &self,
         object_id: &EnvelopeId,
     ) -> Result<Option<ObjectProjectionRow>> {
@@ -31,7 +26,7 @@ impl MemoryStore {
             .cloned())
     }
 
-    pub(super) async fn projection_list_topic_timeline_impl(
+    async fn list_topic_timeline(
         &self,
         topic_id: &str,
         cursor: Option<TimelineCursor>,
@@ -54,7 +49,7 @@ impl MemoryStore {
         Ok(apply_desc_projection_cursor(items, cursor, limit))
     }
 
-    pub(super) async fn projection_list_topic_timeline_filtered_impl(
+    async fn list_topic_timeline_filtered(
         &self,
         topic_id: &str,
         allowed_channels: &BTreeSet<String>,
@@ -80,7 +75,7 @@ impl MemoryStore {
         Ok(apply_desc_projection_cursor(items, cursor, limit))
     }
 
-    pub(super) async fn projection_list_thread_impl(
+    async fn list_thread(
         &self,
         topic_id: &str,
         thread_root_object_id: &EnvelopeId,
@@ -114,7 +109,7 @@ impl MemoryStore {
         Ok(apply_asc_projection_cursor(items, cursor, limit))
     }
 
-    pub(super) async fn projection_list_thread_filtered_impl(
+    async fn list_thread_filtered(
         &self,
         topic_id: &str,
         thread_root_object_id: &EnvelopeId,
@@ -150,10 +145,7 @@ impl MemoryStore {
         Ok(apply_asc_projection_cursor(items, cursor, limit))
     }
 
-    pub(super) async fn projection_rebuild_object_projections_impl(
-        &self,
-        rows: Vec<ObjectProjectionRow>,
-    ) -> Result<()> {
+    async fn rebuild_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()> {
         let mut guard = self.object_projection_rows.write().await;
         guard.clear();
         for row in rows {

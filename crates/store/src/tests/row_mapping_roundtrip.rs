@@ -189,15 +189,15 @@ async fn object_projection_roundtrip_preserves_all_18_columns() {
     let store = SqliteStore::connect_memory().await.expect("sqlite store");
     let max = object_projection_max();
     let min = object_projection_min();
-    ProjectionStore::put_object_projection(&store, max.clone())
+    ObjectProjectionStore::put_object_projection(&store, max.clone())
         .await
         .expect("put max projection");
-    ProjectionStore::put_object_projection(&store, min.clone())
+    ObjectProjectionStore::put_object_projection(&store, min.clone())
         .await
         .expect("put min projection");
 
     assert_eq!(
-        ProjectionStore::get_object_projection(&store, &max.object_id)
+        ObjectProjectionStore::get_object_projection(&store, &max.object_id)
             .await
             .expect("get max projection"),
         Some(max)
@@ -210,7 +210,7 @@ async fn object_projection_roundtrip_preserves_all_18_columns() {
     expected_min.content = Some(String::new());
     expected_min.source_blob_hash = Some(BlobHash::new(""));
     assert_eq!(
-        ProjectionStore::get_object_projection(&store, &min.object_id)
+        ObjectProjectionStore::get_object_projection(&store, &min.object_id)
             .await
             .expect("get min projection"),
         Some(expected_min)
@@ -279,15 +279,15 @@ async fn reaction_projection_roundtrip_preserves_all_16_columns() {
     let store = SqliteStore::connect_memory().await.expect("sqlite store");
     let max = reaction_max();
     let min = reaction_min();
-    ProjectionStore::upsert_reaction_cache(&store, max.clone())
+    ReactionBookmarkStore::upsert_reaction_cache(&store, max.clone())
         .await
         .expect("upsert max reaction");
-    ProjectionStore::upsert_reaction_cache(&store, min.clone())
+    ReactionBookmarkStore::upsert_reaction_cache(&store, min.clone())
         .await
         .expect("upsert min reaction");
 
     assert_eq!(
-        ProjectionStore::get_reaction_cache(
+        ReactionBookmarkStore::get_reaction_cache(
             &store,
             &max.source_replica_id,
             &max.target_object_id,
@@ -303,7 +303,7 @@ async fn reaction_projection_roundtrip_preserves_all_16_columns() {
     expected_min.emoji = Some(String::new());
     expected_min.custom_asset_id = Some(String::new());
     assert_eq!(
-        ProjectionStore::get_reaction_cache(
+        ReactionBookmarkStore::get_reaction_cache(
             &store,
             &min.source_replica_id,
             &min.target_object_id,
@@ -372,20 +372,20 @@ async fn bookmarked_custom_reaction_roundtrip_preserves_all_columns() {
     let max = bookmarked_custom_reaction_max();
     let tie = bookmarked_custom_reaction_tie();
     let min = bookmarked_custom_reaction_min();
-    ProjectionStore::put_bookmarked_custom_reaction(&store, min.clone())
+    ReactionBookmarkStore::put_bookmarked_custom_reaction(&store, min.clone())
         .await
         .expect("put min bookmark");
-    ProjectionStore::put_bookmarked_custom_reaction(&store, tie.clone())
+    ReactionBookmarkStore::put_bookmarked_custom_reaction(&store, tie.clone())
         .await
         .expect("put tie bookmark");
-    ProjectionStore::put_bookmarked_custom_reaction(&store, max.clone())
+    ReactionBookmarkStore::put_bookmarked_custom_reaction(&store, max.clone())
         .await
         .expect("put max bookmark");
 
     // 読み出しは list のみ。主キー bookmarked_at DESC に加え、max と tie が
     // bookmarked_at 同値のため副キー asset_id DESC(tie-break)もここで行使して固定。
     assert_eq!(
-        ProjectionStore::list_bookmarked_custom_reactions(&store)
+        ReactionBookmarkStore::list_bookmarked_custom_reactions(&store)
             .await
             .expect("list bookmarks"),
         vec![max, tie, min]
@@ -463,10 +463,10 @@ async fn bookmarked_post_roundtrip_preserves_all_15_columns() {
     let store = SqliteStore::connect_memory().await.expect("sqlite store");
     let max = bookmarked_post_max();
     let min = bookmarked_post_min();
-    ProjectionStore::put_bookmarked_post(&store, min.clone())
+    ReactionBookmarkStore::put_bookmarked_post(&store, min.clone())
         .await
         .expect("put min bookmarked post");
-    ProjectionStore::put_bookmarked_post(&store, max.clone())
+    ReactionBookmarkStore::put_bookmarked_post(&store, max.clone())
         .await
         .expect("put max bookmarked post");
 
@@ -483,7 +483,7 @@ async fn bookmarked_post_roundtrip_preserves_all_15_columns() {
     // (副キー source_object_id DESC の tie-break はここでは未行使 —
     // T6 の pagination テストと T8 の backend_parity が担保)。
     assert_eq!(
-        ProjectionStore::list_bookmarked_posts(&store)
+        ReactionBookmarkStore::list_bookmarked_posts(&store)
             .await
             .expect("list bookmarked posts"),
         vec![max, expected_min]

@@ -1,7 +1,8 @@
 use super::*;
 
-impl MemoryStore {
-    pub(super) async fn projection_upsert_direct_message_conversation_impl(
+#[async_trait]
+impl DirectMessageStore for MemoryStore {
+    async fn upsert_direct_message_conversation(
         &self,
         row: DirectMessageConversationRow,
     ) -> Result<()> {
@@ -12,7 +13,7 @@ impl MemoryStore {
         Ok(())
     }
 
-    pub(super) async fn projection_get_direct_message_conversation_by_peer_impl(
+    async fn get_direct_message_conversation_by_peer(
         &self,
         peer_pubkey: &str,
     ) -> Result<Option<DirectMessageConversationRow>> {
@@ -25,7 +26,7 @@ impl MemoryStore {
             .cloned())
     }
 
-    pub(super) async fn projection_get_direct_message_conversation_by_dm_id_impl(
+    async fn get_direct_message_conversation_by_dm_id(
         &self,
         dm_id: &str,
     ) -> Result<Option<DirectMessageConversationRow>> {
@@ -37,9 +38,7 @@ impl MemoryStore {
             .cloned())
     }
 
-    pub(super) async fn projection_list_direct_message_conversations_impl(
-        &self,
-    ) -> Result<Vec<DirectMessageConversationRow>> {
+    async fn list_direct_message_conversations(&self) -> Result<Vec<DirectMessageConversationRow>> {
         let mut items = self
             .direct_message_conversations
             .read()
@@ -56,10 +55,7 @@ impl MemoryStore {
         Ok(items)
     }
 
-    pub(super) async fn projection_put_direct_message_message_impl(
-        &self,
-        row: DirectMessageMessageRow,
-    ) -> Result<()> {
+    async fn put_direct_message_message(&self, row: DirectMessageMessageRow) -> Result<()> {
         if self
             .direct_message_tombstones
             .read()
@@ -75,7 +71,7 @@ impl MemoryStore {
         Ok(())
     }
 
-    pub(super) async fn projection_get_direct_message_message_impl(
+    async fn get_direct_message_message(
         &self,
         dm_id: &str,
         message_id: &str,
@@ -88,7 +84,7 @@ impl MemoryStore {
             .cloned())
     }
 
-    pub(super) async fn projection_list_direct_message_messages_impl(
+    async fn list_direct_message_messages(
         &self,
         dm_id: &str,
         cursor: Option<TimelineCursor>,
@@ -111,7 +107,7 @@ impl MemoryStore {
         Ok(apply_desc_direct_message_cursor(items, cursor, limit))
     }
 
-    pub(super) async fn projection_set_direct_message_acked_at_impl(
+    async fn set_direct_message_acked_at(
         &self,
         dm_id: &str,
         message_id: &str,
@@ -128,10 +124,7 @@ impl MemoryStore {
         Ok(())
     }
 
-    pub(super) async fn projection_put_direct_message_outbox_impl(
-        &self,
-        row: DirectMessageOutboxRow,
-    ) -> Result<()> {
+    async fn put_direct_message_outbox(&self, row: DirectMessageOutboxRow) -> Result<()> {
         self.direct_message_outbox_rows
             .write()
             .await
@@ -139,7 +132,7 @@ impl MemoryStore {
         Ok(())
     }
 
-    pub(super) async fn projection_get_direct_message_outbox_impl(
+    async fn get_direct_message_outbox(
         &self,
         dm_id: &str,
         message_id: &str,
@@ -152,9 +145,7 @@ impl MemoryStore {
             .cloned())
     }
 
-    pub(super) async fn projection_list_direct_message_outbox_impl(
-        &self,
-    ) -> Result<Vec<DirectMessageOutboxRow>> {
+    async fn list_direct_message_outbox(&self) -> Result<Vec<DirectMessageOutboxRow>> {
         let mut items = self
             .direct_message_outbox_rows
             .read()
@@ -170,7 +161,7 @@ impl MemoryStore {
         Ok(items)
     }
 
-    pub(super) async fn projection_touch_direct_message_outbox_attempt_impl(
+    async fn touch_direct_message_outbox_attempt(
         &self,
         dm_id: &str,
         message_id: &str,
@@ -187,11 +178,7 @@ impl MemoryStore {
         Ok(())
     }
 
-    pub(super) async fn projection_remove_direct_message_outbox_impl(
-        &self,
-        dm_id: &str,
-        message_id: &str,
-    ) -> Result<()> {
+    async fn remove_direct_message_outbox(&self, dm_id: &str, message_id: &str) -> Result<()> {
         self.direct_message_outbox_rows
             .write()
             .await
@@ -199,10 +186,7 @@ impl MemoryStore {
         Ok(())
     }
 
-    pub(super) async fn projection_put_direct_message_tombstone_impl(
-        &self,
-        row: DirectMessageTombstoneRow,
-    ) -> Result<()> {
+    async fn put_direct_message_tombstone(&self, row: DirectMessageTombstoneRow) -> Result<()> {
         self.direct_message_tombstones
             .write()
             .await
@@ -210,7 +194,7 @@ impl MemoryStore {
         Ok(())
     }
 
-    pub(super) async fn projection_list_direct_message_tombstones_impl(
+    async fn list_direct_message_tombstones(
         &self,
         dm_id: &str,
     ) -> Result<Vec<DirectMessageTombstoneRow>> {
@@ -231,11 +215,7 @@ impl MemoryStore {
         Ok(items)
     }
 
-    pub(super) async fn projection_has_direct_message_tombstone_impl(
-        &self,
-        dm_id: &str,
-        message_id: &str,
-    ) -> Result<bool> {
+    async fn has_direct_message_tombstone(&self, dm_id: &str, message_id: &str) -> Result<bool> {
         Ok(self
             .direct_message_tombstones
             .read()
@@ -243,7 +223,7 @@ impl MemoryStore {
             .contains_key(&(dm_id.to_string(), message_id.to_string())))
     }
 
-    pub(super) async fn projection_delete_direct_message_message_local_impl(
+    async fn delete_direct_message_message_local(
         &self,
         dm_id: &str,
         message_id: &str,
@@ -259,10 +239,7 @@ impl MemoryStore {
         Ok(())
     }
 
-    pub(super) async fn projection_clear_direct_message_local_impl(
-        &self,
-        dm_id: &str,
-    ) -> Result<()> {
+    async fn clear_direct_message_local(&self, dm_id: &str) -> Result<()> {
         self.direct_message_rows
             .write()
             .await

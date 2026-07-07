@@ -311,15 +311,15 @@ async fn muted_author_roundtrip_preserves_all_columns_and_ordering() {
         author_pubkey: "b".repeat(64),
         muted_at: 100,
     };
-    ProjectionStore::put_muted_author(&store, older.clone())
+    SocialProjectionStore::put_muted_author(&store, older.clone())
         .await
         .expect("put older muted");
-    ProjectionStore::put_muted_author(&store, newer.clone())
+    SocialProjectionStore::put_muted_author(&store, newer.clone())
         .await
         .expect("put newer muted");
 
     assert_eq!(
-        ProjectionStore::get_muted_author(&store, newer.author_pubkey.as_str())
+        SocialProjectionStore::get_muted_author(&store, newer.author_pubkey.as_str())
             .await
             .expect("get muted"),
         Some(newer.clone())
@@ -327,7 +327,7 @@ async fn muted_author_roundtrip_preserves_all_columns_and_ordering() {
     // 主キー muted_at DESC の順序ごと固定(副キー author_pubkey ASC の
     // tie-break はここでは未行使 — T6 の pagination テストと T8 の backend_parity が担保)。
     assert_eq!(
-        ProjectionStore::list_muted_authors(&store)
+        SocialProjectionStore::list_muted_authors(&store)
             .await
             .expect("list muted"),
         vec![newer, older]
@@ -373,7 +373,7 @@ async fn author_relationship_roundtrip_preserves_all_columns() {
     let local = "a".repeat(64);
     let max = relationship_max(&local);
     let min = relationship_min(&local);
-    ProjectionStore::rebuild_author_relationships(
+    SocialProjectionStore::rebuild_author_relationships(
         &store,
         local.as_str(),
         vec![max.clone(), min.clone()],
@@ -382,7 +382,7 @@ async fn author_relationship_roundtrip_preserves_all_columns() {
     .expect("rebuild relationships");
 
     assert_eq!(
-        ProjectionStore::get_author_relationship(
+        SocialProjectionStore::get_author_relationship(
             &store,
             local.as_str(),
             max.author_pubkey.as_str()
@@ -392,7 +392,7 @@ async fn author_relationship_roundtrip_preserves_all_columns() {
         Some(max.clone())
     );
     assert_eq!(
-        ProjectionStore::get_author_relationship(
+        SocialProjectionStore::get_author_relationship(
             &store,
             local.as_str(),
             min.author_pubkey.as_str()
@@ -402,7 +402,7 @@ async fn author_relationship_roundtrip_preserves_all_columns() {
         Some(min.clone())
     );
 
-    let listed = ProjectionStore::list_author_relationships(
+    let listed = SocialProjectionStore::list_author_relationships(
         &store,
         local.as_str(),
         &[
@@ -425,22 +425,34 @@ async fn author_relationship_rebuild_replaces_only_given_local_author() {
     let local_b = "b".repeat(64);
     let a_before = relationship_max(&local_a);
     let b_row = relationship_max(&local_b);
-    ProjectionStore::rebuild_author_relationships(&store, local_a.as_str(), vec![a_before.clone()])
-        .await
-        .expect("seed local_a");
-    ProjectionStore::rebuild_author_relationships(&store, local_b.as_str(), vec![b_row.clone()])
-        .await
-        .expect("seed local_b");
+    SocialProjectionStore::rebuild_author_relationships(
+        &store,
+        local_a.as_str(),
+        vec![a_before.clone()],
+    )
+    .await
+    .expect("seed local_a");
+    SocialProjectionStore::rebuild_author_relationships(
+        &store,
+        local_b.as_str(),
+        vec![b_row.clone()],
+    )
+    .await
+    .expect("seed local_b");
 
     let mut a_after = relationship_min(&local_a);
     a_after.author_pubkey = "5".repeat(64);
-    ProjectionStore::rebuild_author_relationships(&store, local_a.as_str(), vec![a_after.clone()])
-        .await
-        .expect("rebuild local_a");
+    SocialProjectionStore::rebuild_author_relationships(
+        &store,
+        local_a.as_str(),
+        vec![a_after.clone()],
+    )
+    .await
+    .expect("rebuild local_a");
 
     // local_a は丸ごと差し替え(旧行は消える)、local_b の行は無傷。
     assert_eq!(
-        ProjectionStore::get_author_relationship(
+        SocialProjectionStore::get_author_relationship(
             &store,
             local_a.as_str(),
             a_before.author_pubkey.as_str(),
@@ -450,7 +462,7 @@ async fn author_relationship_rebuild_replaces_only_given_local_author() {
         None
     );
     assert_eq!(
-        ProjectionStore::get_author_relationship(
+        SocialProjectionStore::get_author_relationship(
             &store,
             local_a.as_str(),
             a_after.author_pubkey.as_str(),
@@ -460,7 +472,7 @@ async fn author_relationship_rebuild_replaces_only_given_local_author() {
         Some(a_after)
     );
     assert_eq!(
-        ProjectionStore::get_author_relationship(
+        SocialProjectionStore::get_author_relationship(
             &store,
             local_b.as_str(),
             b_row.author_pubkey.as_str(),

@@ -1,10 +1,8 @@
 use super::*;
 
-impl SqliteStore {
-    pub(super) async fn projection_upsert_live_session_cache_impl(
-        &self,
-        row: LiveSessionProjectionRow,
-    ) -> Result<()> {
+#[async_trait]
+impl LiveGameProjectionStore for SqliteStore {
+    async fn upsert_live_session_cache(&self, row: LiveSessionProjectionRow) -> Result<()> {
         sqlx::query(
             r#"
             INSERT INTO live_session_cache (
@@ -50,7 +48,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub(super) async fn projection_list_topic_live_sessions_impl(
+    async fn list_topic_live_sessions(
         &self,
         topic_id: &str,
     ) -> Result<Vec<LiveSessionProjectionRow>> {
@@ -84,10 +82,7 @@ impl SqliteStore {
             .collect()
     }
 
-    pub(super) async fn projection_upsert_game_room_cache_impl(
-        &self,
-        row: GameRoomProjectionRow,
-    ) -> Result<()> {
+    async fn upsert_game_room_cache(&self, row: GameRoomProjectionRow) -> Result<()> {
         let scores_json = serde_json::to_string(&row.scores)?;
         let metaverse_json = row
             .metaverse
@@ -143,10 +138,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub(super) async fn projection_list_topic_game_rooms_impl(
-        &self,
-        topic_id: &str,
-    ) -> Result<Vec<GameRoomProjectionRow>> {
+    async fn list_topic_game_rooms(&self, topic_id: &str) -> Result<Vec<GameRoomProjectionRow>> {
         let rows = sqlx::query(
             r#"
             SELECT room_id, topic_id, host_pubkey, title, description, status, phase_label,
@@ -164,7 +156,7 @@ impl SqliteStore {
         rows.into_iter().map(row_to_game_room_projection).collect()
     }
 
-    pub(super) async fn projection_upsert_live_presence_impl(
+    async fn upsert_live_presence(
         &self,
         topic_id: &str,
         channel_id: &str,
@@ -195,10 +187,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub(super) async fn projection_clear_expired_live_presence_impl(
-        &self,
-        now_ms: i64,
-    ) -> Result<()> {
+    async fn clear_expired_live_presence(&self, now_ms: i64) -> Result<()> {
         sqlx::query(
             r#"
             DELETE FROM live_presence_cache
@@ -211,10 +200,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub(super) async fn projection_clear_topic_live_presence_impl(
-        &self,
-        topic_id: &str,
-    ) -> Result<()> {
+    async fn clear_topic_live_presence(&self, topic_id: &str) -> Result<()> {
         sqlx::query(
             r#"
             DELETE FROM live_presence_cache

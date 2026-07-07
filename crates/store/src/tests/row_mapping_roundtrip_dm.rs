@@ -44,10 +44,10 @@ async fn direct_message_conversation_roundtrip_preserves_all_columns() {
     let store = SqliteStore::connect_memory().await.expect("sqlite store");
     let max = conversation_max();
     let min = conversation_min();
-    ProjectionStore::upsert_direct_message_conversation(&store, max.clone())
+    DirectMessageStore::upsert_direct_message_conversation(&store, max.clone())
         .await
         .expect("upsert max conversation");
-    ProjectionStore::upsert_direct_message_conversation(&store, min.clone())
+    DirectMessageStore::upsert_direct_message_conversation(&store, min.clone())
         .await
         .expect("upsert min conversation");
 
@@ -59,21 +59,24 @@ async fn direct_message_conversation_roundtrip_preserves_all_columns() {
     expected_min.last_message_preview = Some(String::new());
 
     assert_eq!(
-        ProjectionStore::get_direct_message_conversation_by_dm_id(&store, "dm-max")
+        DirectMessageStore::get_direct_message_conversation_by_dm_id(&store, "dm-max")
             .await
             .expect("get by dm_id"),
         Some(max.clone())
     );
     assert_eq!(
-        ProjectionStore::get_direct_message_conversation_by_peer(&store, min.peer_pubkey.as_str())
-            .await
-            .expect("get by peer"),
+        DirectMessageStore::get_direct_message_conversation_by_peer(
+            &store,
+            min.peer_pubkey.as_str()
+        )
+        .await
+        .expect("get by peer"),
         Some(expected_min.clone())
     );
     // 主キー updated_at DESC の順序ごと固定(副キー dm_id DESC の
     // tie-break はここでは未行使 — T6 の pagination テストと T8 の backend_parity が担保)。
     assert_eq!(
-        ProjectionStore::list_direct_message_conversations(&store)
+        DirectMessageStore::list_direct_message_conversations(&store)
             .await
             .expect("list conversations"),
         vec![max, expected_min]
@@ -139,15 +142,15 @@ async fn direct_message_message_roundtrip_preserves_all_columns() {
     let store = SqliteStore::connect_memory().await.expect("sqlite store");
     let max = message_max();
     let min = message_min();
-    ProjectionStore::put_direct_message_message(&store, max.clone())
+    DirectMessageStore::put_direct_message_message(&store, max.clone())
         .await
         .expect("put max message");
-    ProjectionStore::put_direct_message_message(&store, min.clone())
+    DirectMessageStore::put_direct_message_message(&store, min.clone())
         .await
         .expect("put min message");
 
     assert_eq!(
-        ProjectionStore::get_direct_message_message(&store, "dm-max", "msg-max")
+        DirectMessageStore::get_direct_message_message(&store, "dm-max", "msg-max")
             .await
             .expect("get max message"),
         Some(max)
@@ -161,7 +164,7 @@ async fn direct_message_message_roundtrip_preserves_all_columns() {
     expected_min.reply_to_message_id = Some(String::new());
     expected_min.acked_at = Some(0);
     assert_eq!(
-        ProjectionStore::get_direct_message_message(&store, "dm-min", "msg-min")
+        DirectMessageStore::get_direct_message_message(&store, "dm-min", "msg-min")
             .await
             .expect("get min message"),
         Some(expected_min)
@@ -189,22 +192,22 @@ async fn direct_message_acked_at_set_overwrites_unconditionally() {
     // set_direct_message_acked_at は COALESCE ではなく無条件 UPDATE
     // (notifications の read_at と対照的)。Some の上書きと None→Some を固定。
     let store = SqliteStore::connect_memory().await.expect("sqlite store");
-    ProjectionStore::put_direct_message_message(&store, message_max())
+    DirectMessageStore::put_direct_message_message(&store, message_max())
         .await
         .expect("put max message");
-    ProjectionStore::put_direct_message_message(&store, message_min())
+    DirectMessageStore::put_direct_message_message(&store, message_min())
         .await
         .expect("put min message");
 
-    ProjectionStore::set_direct_message_acked_at(&store, "dm-max", "msg-max", 1_700_000_000_099)
+    DirectMessageStore::set_direct_message_acked_at(&store, "dm-max", "msg-max", 1_700_000_000_099)
         .await
         .expect("ack max");
-    ProjectionStore::set_direct_message_acked_at(&store, "dm-min", "msg-min", 42)
+    DirectMessageStore::set_direct_message_acked_at(&store, "dm-min", "msg-min", 42)
         .await
         .expect("ack min");
 
     assert_eq!(
-        ProjectionStore::get_direct_message_message(&store, "dm-max", "msg-max")
+        DirectMessageStore::get_direct_message_message(&store, "dm-max", "msg-max")
             .await
             .expect("get max message")
             .expect("max message exists")
@@ -212,7 +215,7 @@ async fn direct_message_acked_at_set_overwrites_unconditionally() {
         Some(1_700_000_000_099)
     );
     assert_eq!(
-        ProjectionStore::get_direct_message_message(&store, "dm-min", "msg-min")
+        DirectMessageStore::get_direct_message_message(&store, "dm-min", "msg-min")
             .await
             .expect("get min message")
             .expect("min message exists")
@@ -254,10 +257,10 @@ async fn direct_message_outbox_roundtrip_preserves_all_columns() {
     let store = SqliteStore::connect_memory().await.expect("sqlite store");
     let max = outbox_max();
     let min = outbox_min();
-    ProjectionStore::put_direct_message_outbox(&store, max.clone())
+    DirectMessageStore::put_direct_message_outbox(&store, max.clone())
         .await
         .expect("put max outbox");
-    ProjectionStore::put_direct_message_outbox(&store, min.clone())
+    DirectMessageStore::put_direct_message_outbox(&store, min.clone())
         .await
         .expect("put min outbox");
 
@@ -267,7 +270,7 @@ async fn direct_message_outbox_roundtrip_preserves_all_columns() {
     expected_min.last_attempt_at = Some(0);
 
     assert_eq!(
-        ProjectionStore::get_direct_message_outbox(&store, "dm-max", "msg-out-max")
+        DirectMessageStore::get_direct_message_outbox(&store, "dm-max", "msg-out-max")
             .await
             .expect("get max outbox"),
         Some(max.clone())
@@ -275,7 +278,7 @@ async fn direct_message_outbox_roundtrip_preserves_all_columns() {
     // 主キー created_at ASC(送信キューは古い順)の順序ごと固定(副キー message_id ASC の
     // tie-break はここでは未行使 — T6 の pagination テストと T8 の backend_parity が担保)。
     assert_eq!(
-        ProjectionStore::list_direct_message_outbox(&store)
+        DirectMessageStore::list_direct_message_outbox(&store)
             .await
             .expect("list outbox"),
         vec![expected_min, max]
@@ -295,23 +298,23 @@ async fn direct_message_tombstone_roundtrip_preserves_all_columns() {
         message_id: "msg-del".into(),
         deleted_at: 555,
     };
-    ProjectionStore::put_direct_message_tombstone(&store, tombstone.clone())
+    DirectMessageStore::put_direct_message_tombstone(&store, tombstone.clone())
         .await
         .expect("put tombstone");
 
     assert_eq!(
-        ProjectionStore::list_direct_message_tombstones(&store, "dm-max")
+        DirectMessageStore::list_direct_message_tombstones(&store, "dm-max")
             .await
             .expect("list tombstones"),
         vec![tombstone]
     );
     assert!(
-        ProjectionStore::has_direct_message_tombstone(&store, "dm-max", "msg-del")
+        DirectMessageStore::has_direct_message_tombstone(&store, "dm-max", "msg-del")
             .await
             .expect("has tombstone")
     );
     assert!(
-        !ProjectionStore::has_direct_message_tombstone(&store, "dm-max", "msg-other")
+        !DirectMessageStore::has_direct_message_tombstone(&store, "dm-max", "msg-other")
             .await
             .expect("has other tombstone")
     );
@@ -370,12 +373,12 @@ async fn notification_roundtrip_preserves_all_15_columns() {
     let max = notification_max();
     let min = notification_min();
     assert!(
-        ProjectionStore::put_notification_if_absent(&store, max.clone())
+        NotificationStore::put_notification_if_absent(&store, max.clone())
             .await
             .expect("put max notification")
     );
     assert!(
-        ProjectionStore::put_notification_if_absent(&store, min.clone())
+        NotificationStore::put_notification_if_absent(&store, min.clone())
             .await
             .expect("put min notification")
     );
@@ -384,7 +387,7 @@ async fn notification_roundtrip_preserves_all_15_columns() {
     let mut duplicate = max.clone();
     duplicate.preview_text = Some("上書きされないはず".into());
     assert!(
-        !ProjectionStore::put_notification_if_absent(&store, duplicate)
+        !NotificationStore::put_notification_if_absent(&store, duplicate)
             .await
             .expect("put duplicate notification")
     );
@@ -398,7 +401,7 @@ async fn notification_roundtrip_preserves_all_15_columns() {
 
     // received_at DESC, notification_id DESC の順序ごと全列固定。
     assert_eq!(
-        ProjectionStore::list_notifications(&store)
+        NotificationStore::list_notifications(&store)
             .await
             .expect("list notifications"),
         vec![max, expected_min]
@@ -423,7 +426,7 @@ async fn notification_kind_roundtrip_covers_all_six_kinds() {
         row.received_at = 100 + index as i64;
         row.kind = kind.clone();
         assert!(
-            ProjectionStore::put_notification_if_absent(&store, row)
+            NotificationStore::put_notification_if_absent(&store, row)
                 .await
                 .expect("put kind notification")
         );
@@ -441,7 +444,7 @@ async fn notification_kind_roundtrip_covers_all_six_kinds() {
     }
 
     // 読み出しで enum に戻る(received_at DESC → 挿入の逆順)。
-    let listed = ProjectionStore::list_notifications(&store)
+    let listed = NotificationStore::list_notifications(&store)
         .await
         .expect("list notifications");
     let kinds_by_id = listed
@@ -472,32 +475,32 @@ async fn notification_read_at_coalesce_does_not_overwrite() {
     let mut second = notification_min();
     second.notification_id = "notif-b".into();
     second.received_at = 200;
-    ProjectionStore::put_notification_if_absent(&store, first)
+    NotificationStore::put_notification_if_absent(&store, first)
         .await
         .expect("put notif-a");
-    ProjectionStore::put_notification_if_absent(&store, second)
+    NotificationStore::put_notification_if_absent(&store, second)
         .await
         .expect("put notif-b");
     assert_eq!(
-        ProjectionStore::count_unread_notifications(&store)
+        NotificationStore::count_unread_notifications(&store)
             .await
             .expect("count unread"),
         2
     );
 
-    ProjectionStore::mark_notification_read(&store, "notif-a", 1_000)
+    NotificationStore::mark_notification_read(&store, "notif-a", 1_000)
         .await
         .expect("mark notif-a");
     // 2 回目の mark は無視される(既読を上書きしない)。
-    ProjectionStore::mark_notification_read(&store, "notif-a", 9_999)
+    NotificationStore::mark_notification_read(&store, "notif-a", 9_999)
         .await
         .expect("re-mark notif-a");
     // mark_all は read_at IS NULL の行(notif-b)だけを埋める。
-    ProjectionStore::mark_all_notifications_read(&store, 2_000)
+    NotificationStore::mark_all_notifications_read(&store, 2_000)
         .await
         .expect("mark all");
 
-    let listed = ProjectionStore::list_notifications(&store)
+    let listed = NotificationStore::list_notifications(&store)
         .await
         .expect("list notifications");
     assert_eq!(
@@ -508,7 +511,7 @@ async fn notification_read_at_coalesce_does_not_overwrite() {
         vec![("notif-b", Some(2_000)), ("notif-a", Some(1_000))]
     );
     assert_eq!(
-        ProjectionStore::count_unread_notifications(&store)
+        NotificationStore::count_unread_notifications(&store)
             .await
             .expect("count unread after"),
         0

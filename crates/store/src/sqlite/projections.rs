@@ -1,17 +1,12 @@
 use super::*;
 
-impl SqliteStore {
-    pub(super) async fn projection_put_object_projection_impl(
-        &self,
-        row: ObjectProjectionRow,
-    ) -> Result<()> {
+#[async_trait]
+impl ObjectProjectionStore for SqliteStore {
+    async fn put_object_projection(&self, row: ObjectProjectionRow) -> Result<()> {
         self.put_object_projections(vec![row]).await
     }
 
-    pub(super) async fn projection_put_object_projections_impl(
-        &self,
-        rows: Vec<ObjectProjectionRow>,
-    ) -> Result<()> {
+    async fn put_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()> {
         if rows.is_empty() {
             return Ok(());
         }
@@ -105,7 +100,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub(super) async fn projection_get_object_projection_impl(
+    async fn get_object_projection(
         &self,
         object_id: &EnvelopeId,
     ) -> Result<Option<ObjectProjectionRow>> {
@@ -126,7 +121,7 @@ impl SqliteStore {
         row.map(row_to_object_projection).transpose()
     }
 
-    pub(super) async fn projection_list_topic_timeline_impl(
+    async fn list_topic_timeline(
         &self,
         topic_id: &str,
         cursor: Option<TimelineCursor>,
@@ -159,7 +154,7 @@ impl SqliteStore {
         object_projection_page_from_rows(rows, limit)
     }
 
-    pub(super) async fn projection_list_topic_timeline_filtered_impl(
+    async fn list_topic_timeline_filtered(
         &self,
         topic_id: &str,
         allowed_channels: &std::collections::BTreeSet<String>,
@@ -219,7 +214,7 @@ impl SqliteStore {
         object_projection_page_from_rows(rows, limit)
     }
 
-    pub(super) async fn projection_list_thread_impl(
+    async fn list_thread(
         &self,
         topic_id: &str,
         thread_root_object_id: &EnvelopeId,
@@ -260,7 +255,7 @@ impl SqliteStore {
         object_projection_page_from_rows(rows, limit)
     }
 
-    pub(super) async fn projection_list_thread_filtered_impl(
+    async fn list_thread_filtered(
         &self,
         topic_id: &str,
         thread_root_object_id: &EnvelopeId,
@@ -269,7 +264,7 @@ impl SqliteStore {
         limit: usize,
     ) -> Result<Page<ObjectProjectionRow>> {
         let Some(channel_id) = allowed_channel else {
-            return ProjectionStore::list_thread(
+            return ObjectProjectionStore::list_thread(
                 self,
                 topic_id,
                 thread_root_object_id,
@@ -315,10 +310,7 @@ impl SqliteStore {
         object_projection_page_from_rows(rows, limit)
     }
 
-    pub(super) async fn projection_rebuild_object_projections_impl(
-        &self,
-        rows: Vec<ObjectProjectionRow>,
-    ) -> Result<()> {
+    async fn rebuild_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()> {
         let mut tx = self.pool.begin().await?;
         sqlx::query("DELETE FROM object_thread_cache")
             .execute(&mut *tx)

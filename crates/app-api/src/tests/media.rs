@@ -482,7 +482,7 @@ async fn new_writes_use_blob_text_payload_refs() {
         .await
         .expect("create post");
     let projection =
-        ProjectionStore::get_object_projection(store.as_ref(), &EnvelopeId::from(object_id))
+        ObjectProjectionStore::get_object_projection(store.as_ref(), &EnvelopeId::from(object_id))
             .await
             .expect("projection")
             .expect("projection row");

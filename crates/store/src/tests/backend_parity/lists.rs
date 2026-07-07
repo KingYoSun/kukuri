@@ -40,12 +40,12 @@ async fn notification_scenario<S: Store + ProjectionStore>(
     let mut inserted = Vec::new();
     for row in [n1, n2, n3, duplicate] {
         inserted.push(
-            ProjectionStore::put_notification_if_absent(store, row)
+            NotificationStore::put_notification_if_absent(store, row)
                 .await
-                .expect("ProjectionStore::put_notification_if_absent"),
+                .expect("NotificationStore::put_notification_if_absent"),
         );
     }
-    let unread_initial = ProjectionStore::count_unread_notifications(store)
+    let unread_initial = NotificationStore::count_unread_notifications(store)
         .await
         .expect("count unread initial");
     // NOTE: read_at が NULL のままの行を含む list はここでは比較しない。
@@ -53,25 +53,25 @@ async fn notification_scenario<S: Store + ProjectionStore>(
     // memory(None)と一致しないため(mod.rs ヘッダ参照)、
     // list の比較は全件 read 済みになった最後に行う。
 
-    ProjectionStore::mark_notification_read(store, "notif-1", 110)
+    NotificationStore::mark_notification_read(store, "notif-1", 110)
         .await
         .expect("mark notif-1 read");
-    ProjectionStore::mark_notification_read(store, "notif-1", 120)
+    NotificationStore::mark_notification_read(store, "notif-1", 120)
         .await
         .expect("mark notif-1 read again (kept)");
-    ProjectionStore::mark_notification_read(store, "notif-missing", 130)
+    NotificationStore::mark_notification_read(store, "notif-missing", 130)
         .await
         .expect("mark missing notification");
-    let unread_after_single = ProjectionStore::count_unread_notifications(store)
+    let unread_after_single = NotificationStore::count_unread_notifications(store)
         .await
         .expect("count unread after single");
-    ProjectionStore::mark_all_notifications_read(store, 140)
+    NotificationStore::mark_all_notifications_read(store, 140)
         .await
         .expect("mark all read");
-    let unread_after_all = ProjectionStore::count_unread_notifications(store)
+    let unread_after_all = NotificationStore::count_unread_notifications(store)
         .await
         .expect("count unread after all");
-    let list_final = ProjectionStore::list_notifications(store)
+    let list_final = NotificationStore::list_notifications(store)
         .await
         .expect("list notifications final");
 
@@ -135,14 +135,14 @@ async fn bookmark_scenario<S: Store + ProjectionStore>(store: &S) -> BookmarkSce
         parity_bookmarked_post("bp-min", 100),
         parity_bookmarked_post("bp-old", 90),
     ] {
-        ProjectionStore::put_bookmarked_post(store, row)
+        ReactionBookmarkStore::put_bookmarked_post(store, row)
             .await
-            .expect("ProjectionStore::put_bookmarked_post");
+            .expect("ReactionBookmarkStore::put_bookmarked_post");
     }
     // 同一 source_object_id の再 put(upsert 更新経路)
     let mut updated = parity_bookmarked_post_max("bp-max", 100);
     updated.content = Some("content:bp-max:updated".into());
-    ProjectionStore::put_bookmarked_post(store, updated)
+    ReactionBookmarkStore::put_bookmarked_post(store, updated)
         .await
         .expect("put bookmarked post update");
 
@@ -151,42 +151,42 @@ async fn bookmark_scenario<S: Store + ProjectionStore>(store: &S) -> BookmarkSce
         parity_custom_reaction("asset-empty", "", 100),
         parity_custom_reaction("asset-blank", "   ", 90),
     ] {
-        ProjectionStore::put_bookmarked_custom_reaction(store, row)
+        ReactionBookmarkStore::put_bookmarked_custom_reaction(store, row)
             .await
-            .expect("ProjectionStore::put_bookmarked_custom_reaction");
+            .expect("ReactionBookmarkStore::put_bookmarked_custom_reaction");
     }
     // 同一 asset_id の再 put(upsert 更新経路)
-    ProjectionStore::put_bookmarked_custom_reaction(
+    ReactionBookmarkStore::put_bookmarked_custom_reaction(
         store,
         parity_custom_reaction("asset-normal", "grin", 100),
     )
     .await
     .expect("put custom reaction update");
 
-    let posts_initial = ProjectionStore::list_bookmarked_posts(store)
+    let posts_initial = ReactionBookmarkStore::list_bookmarked_posts(store)
         .await
         .expect("list bookmarked posts initial");
-    let reactions_initial = ProjectionStore::list_bookmarked_custom_reactions(store)
+    let reactions_initial = ReactionBookmarkStore::list_bookmarked_custom_reactions(store)
         .await
         .expect("list custom reactions initial");
 
-    ProjectionStore::remove_bookmarked_post(store, &EnvelopeId::from("bp-old"))
+    ReactionBookmarkStore::remove_bookmarked_post(store, &EnvelopeId::from("bp-old"))
         .await
         .expect("remove bp-old");
-    ProjectionStore::remove_bookmarked_post(store, &EnvelopeId::from("bp-missing"))
+    ReactionBookmarkStore::remove_bookmarked_post(store, &EnvelopeId::from("bp-missing"))
         .await
         .expect("remove missing bookmarked post");
-    ProjectionStore::remove_bookmarked_custom_reaction(store, "asset-empty")
+    ReactionBookmarkStore::remove_bookmarked_custom_reaction(store, "asset-empty")
         .await
         .expect("remove asset-empty");
 
     BookmarkScenarioResult {
         posts_initial,
-        posts_after_remove: ProjectionStore::list_bookmarked_posts(store)
+        posts_after_remove: ReactionBookmarkStore::list_bookmarked_posts(store)
             .await
             .expect("list bookmarked posts after remove"),
         reactions_initial,
-        reactions_after_remove: ProjectionStore::list_bookmarked_custom_reactions(store)
+        reactions_after_remove: ReactionBookmarkStore::list_bookmarked_custom_reactions(store)
             .await
             .expect("list custom reactions after remove"),
     }
@@ -251,7 +251,7 @@ struct MutedScenarioResult {
 
 async fn muted_scenario<S: Store + ProjectionStore>(store: &S) -> MutedScenarioResult {
     for (author, muted_at) in [("m-a", 100), ("m-b", 100), ("m-c", 90)] {
-        ProjectionStore::put_muted_author(
+        SocialProjectionStore::put_muted_author(
             store,
             MutedAuthorRow {
                 author_pubkey: author.into(),
@@ -259,10 +259,10 @@ async fn muted_scenario<S: Store + ProjectionStore>(store: &S) -> MutedScenarioR
             },
         )
         .await
-        .expect("ProjectionStore::put_muted_author");
+        .expect("SocialProjectionStore::put_muted_author");
     }
     // 再 put で muted_at 更新(upsert 更新経路)
-    ProjectionStore::put_muted_author(
+    SocialProjectionStore::put_muted_author(
         store,
         MutedAuthorRow {
             author_pubkey: "m-c".into(),
@@ -272,16 +272,16 @@ async fn muted_scenario<S: Store + ProjectionStore>(store: &S) -> MutedScenarioR
     .await
     .expect("put muted author update");
 
-    let list_initial = ProjectionStore::list_muted_authors(store)
+    let list_initial = SocialProjectionStore::list_muted_authors(store)
         .await
         .expect("list muted authors initial");
-    let muted_hit = ProjectionStore::get_muted_author(store, "m-a")
+    let muted_hit = SocialProjectionStore::get_muted_author(store, "m-a")
         .await
         .expect("get muted author hit");
-    let muted_miss = ProjectionStore::get_muted_author(store, "m-missing")
+    let muted_miss = SocialProjectionStore::get_muted_author(store, "m-missing")
         .await
         .expect("get muted author miss");
-    ProjectionStore::remove_muted_author(store, "m-b")
+    SocialProjectionStore::remove_muted_author(store, "m-b")
         .await
         .expect("remove muted author");
 
@@ -289,7 +289,7 @@ async fn muted_scenario<S: Store + ProjectionStore>(store: &S) -> MutedScenarioR
         list_initial,
         muted_hit,
         muted_miss,
-        list_after_remove: ProjectionStore::list_muted_authors(store)
+        list_after_remove: SocialProjectionStore::list_muted_authors(store)
             .await
             .expect("list muted authors after remove"),
     }
@@ -502,20 +502,20 @@ async fn reaction_scenario<S: Store + ProjectionStore>(store: &S) -> ReactionSce
             50,
         ),
     ] {
-        ProjectionStore::upsert_reaction_cache(store, row)
+        ReactionBookmarkStore::upsert_reaction_cache(store, row)
             .await
-            .expect("ProjectionStore::upsert_reaction_cache");
+            .expect("ReactionBookmarkStore::upsert_reaction_cache");
     }
     // 同一キーの再 upsert(status / updated_at 更新経路)
     let mut updated = parity_reaction(replica, "obj-1", "react-1", &alice, "emoji:🔥", "🔥", 11);
     updated.status = ObjectStatus::Deleted;
-    ProjectionStore::upsert_reaction_cache(store, updated)
+    ReactionBookmarkStore::upsert_reaction_cache(store, updated)
         .await
         .expect("upsert reaction update");
 
     let replica_id = ReplicaId::new(replica);
     ReactionScenarioResult {
-        reaction_hit: ProjectionStore::get_reaction_cache(
+        reaction_hit: ReactionBookmarkStore::get_reaction_cache(
             store,
             &replica_id,
             &EnvelopeId::from("obj-1"),
@@ -523,7 +523,7 @@ async fn reaction_scenario<S: Store + ProjectionStore>(store: &S) -> ReactionSce
         )
         .await
         .expect("get reaction hit"),
-        reaction_miss: ProjectionStore::get_reaction_cache(
+        reaction_miss: ReactionBookmarkStore::get_reaction_cache(
             store,
             &replica_id,
             &EnvelopeId::from("obj-1"),
@@ -531,14 +531,14 @@ async fn reaction_scenario<S: Store + ProjectionStore>(store: &S) -> ReactionSce
         )
         .await
         .expect("get reaction miss"),
-        for_target: ProjectionStore::list_reaction_cache_for_target(
+        for_target: ReactionBookmarkStore::list_reaction_cache_for_target(
             store,
             &replica_id,
             &EnvelopeId::from("obj-1"),
         )
         .await
         .expect("list reactions for target"),
-        for_targets: ProjectionStore::list_reaction_cache_for_targets(
+        for_targets: ReactionBookmarkStore::list_reaction_cache_for_targets(
             store,
             &replica_id,
             &[
@@ -549,14 +549,14 @@ async fn reaction_scenario<S: Store + ProjectionStore>(store: &S) -> ReactionSce
         )
         .await
         .expect("list reactions for targets"),
-        for_targets_empty: ProjectionStore::list_reaction_cache_for_targets(
+        for_targets_empty: ReactionBookmarkStore::list_reaction_cache_for_targets(
             store,
             &replica_id,
             &[],
         )
         .await
         .expect("list reactions for empty targets"),
-        recent_by_author: ProjectionStore::list_recent_reaction_cache_by_author(
+        recent_by_author: ReactionBookmarkStore::list_recent_reaction_cache_by_author(
             store,
             alice.as_str(),
         )
@@ -633,35 +633,35 @@ async fn outbox_scenario<S: Store + ProjectionStore>(store: &S) -> OutboxScenari
         parity_outbox("dm-out", "om-2", 10),
         parity_outbox("dm-out2", "om-0", 5),
     ] {
-        ProjectionStore::put_direct_message_outbox(store, row)
+        DirectMessageStore::put_direct_message_outbox(store, row)
             .await
-            .expect("ProjectionStore::put_direct_message_outbox");
+            .expect("DirectMessageStore::put_direct_message_outbox");
     }
-    let list_initial = ProjectionStore::list_direct_message_outbox(store)
+    let list_initial = DirectMessageStore::list_direct_message_outbox(store)
         .await
         .expect("list outbox initial");
 
-    ProjectionStore::touch_direct_message_outbox_attempt(store, "dm-out", "om-2", 99)
+    DirectMessageStore::touch_direct_message_outbox_attempt(store, "dm-out", "om-2", 99)
         .await
         .expect("touch outbox attempt");
-    ProjectionStore::touch_direct_message_outbox_attempt(store, "dm-out", "om-missing", 99)
+    DirectMessageStore::touch_direct_message_outbox_attempt(store, "dm-out", "om-missing", 99)
         .await
         .expect("touch missing outbox attempt");
     // 再 put で created_at 更新(upsert 更新経路。順序も変わる)
-    ProjectionStore::put_direct_message_outbox(store, parity_outbox("dm-out", "om-1", 8))
+    DirectMessageStore::put_direct_message_outbox(store, parity_outbox("dm-out", "om-1", 8))
         .await
         .expect("put outbox update");
-    let list_after_update = ProjectionStore::list_direct_message_outbox(store)
+    let list_after_update = DirectMessageStore::list_direct_message_outbox(store)
         .await
         .expect("list outbox after update");
 
-    let outbox_hit = ProjectionStore::get_direct_message_outbox(store, "dm-out", "om-2")
+    let outbox_hit = DirectMessageStore::get_direct_message_outbox(store, "dm-out", "om-2")
         .await
         .expect("get outbox hit");
-    let outbox_miss = ProjectionStore::get_direct_message_outbox(store, "dm-out", "om-missing")
+    let outbox_miss = DirectMessageStore::get_direct_message_outbox(store, "dm-out", "om-missing")
         .await
         .expect("get outbox miss");
-    ProjectionStore::remove_direct_message_outbox(store, "dm-out2", "om-0")
+    DirectMessageStore::remove_direct_message_outbox(store, "dm-out2", "om-0")
         .await
         .expect("remove outbox");
 
@@ -670,7 +670,7 @@ async fn outbox_scenario<S: Store + ProjectionStore>(store: &S) -> OutboxScenari
         list_after_update,
         outbox_hit,
         outbox_miss,
-        list_after_remove: ProjectionStore::list_direct_message_outbox(store)
+        list_after_remove: DirectMessageStore::list_direct_message_outbox(store)
             .await
             .expect("list outbox after remove"),
     }
@@ -738,39 +738,41 @@ async fn conversation_scenario<S: Store + ProjectionStore>(
         parity_conversation("dm-b", &peer_2, 100),
         parity_conversation("dm-c", &peer_3, 90),
     ] {
-        ProjectionStore::upsert_direct_message_conversation(store, row)
+        DirectMessageStore::upsert_direct_message_conversation(store, row)
             .await
-            .expect("ProjectionStore::upsert_direct_message_conversation");
+            .expect("DirectMessageStore::upsert_direct_message_conversation");
     }
-    let list_initial = ProjectionStore::list_direct_message_conversations(store)
+    let list_initial = DirectMessageStore::list_direct_message_conversations(store)
         .await
         .expect("list conversations initial");
-    let peer_hit = ProjectionStore::get_direct_message_conversation_by_peer(store, peer_2.as_str())
-        .await
-        .expect("get conversation by peer hit");
+    let peer_hit =
+        DirectMessageStore::get_direct_message_conversation_by_peer(store, peer_2.as_str())
+            .await
+            .expect("get conversation by peer hit");
     let peer_miss =
-        ProjectionStore::get_direct_message_conversation_by_peer(store, &"9".repeat(64))
+        DirectMessageStore::get_direct_message_conversation_by_peer(store, &"9".repeat(64))
             .await
             .expect("get conversation by peer miss");
-    let dm_id_hit = ProjectionStore::get_direct_message_conversation_by_dm_id(store, "dm-a")
+    let dm_id_hit = DirectMessageStore::get_direct_message_conversation_by_dm_id(store, "dm-a")
         .await
         .expect("get conversation by dm_id hit");
-    let dm_id_miss = ProjectionStore::get_direct_message_conversation_by_dm_id(store, "dm-missing")
-        .await
-        .expect("get conversation by dm_id miss");
+    let dm_id_miss =
+        DirectMessageStore::get_direct_message_conversation_by_dm_id(store, "dm-missing")
+            .await
+            .expect("get conversation by dm_id miss");
 
     // 再 upsert で updated_at 更新 → 順序が変わる
-    ProjectionStore::upsert_direct_message_conversation(
+    DirectMessageStore::upsert_direct_message_conversation(
         store,
         parity_conversation("dm-c", &peer_3, 120),
     )
     .await
     .expect("upsert conversation update");
-    let list_after_update = ProjectionStore::list_direct_message_conversations(store)
+    let list_after_update = DirectMessageStore::list_direct_message_conversations(store)
         .await
         .expect("list conversations after update");
 
-    ProjectionStore::clear_direct_message_local(store, "dm-a")
+    DirectMessageStore::clear_direct_message_local(store, "dm-a")
         .await
         .expect("clear dm-a");
 
@@ -781,7 +783,7 @@ async fn conversation_scenario<S: Store + ProjectionStore>(
         dm_id_hit,
         dm_id_miss,
         list_after_update,
-        list_after_clear: ProjectionStore::list_direct_message_conversations(store)
+        list_after_clear: DirectMessageStore::list_direct_message_conversations(store)
             .await
             .expect("list conversations after clear"),
     }

@@ -113,7 +113,7 @@ async fn dm_status_stays_enabled_during_concurrent_relationship_rebuilds() {
     let local_pubkey_for_task = local_pubkey.clone();
     let writer_task = tokio::spawn(async move {
         while keep_running_for_task.load(Ordering::SeqCst) {
-            ProjectionStore::rebuild_author_relationships(
+            SocialProjectionStore::rebuild_author_relationships(
                 writer_store.as_ref(),
                 local_pubkey_for_task.as_str(),
                 writer_rows.clone(),

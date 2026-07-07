@@ -92,19 +92,19 @@ fn live_session_ended() -> LiveSessionProjectionRow {
 #[tokio::test]
 async fn live_session_roundtrip_preserves_all_columns_and_computes_viewer_count() {
     let store = SqliteStore::connect_memory().await.expect("sqlite store");
-    ProjectionStore::upsert_live_session_cache(&store, live_session_max())
+    LiveGameProjectionStore::upsert_live_session_cache(&store, live_session_max())
         .await
         .expect("upsert max session");
-    ProjectionStore::upsert_live_session_cache(&store, live_session_min())
+    LiveGameProjectionStore::upsert_live_session_cache(&store, live_session_min())
         .await
         .expect("upsert min session");
-    ProjectionStore::upsert_live_session_cache(&store, live_session_ended())
+    LiveGameProjectionStore::upsert_live_session_cache(&store, live_session_ended())
         .await
         .expect("upsert ended session");
 
     // viewer_count の分子は (topic_id, channel_id, session_id) 完全一致の
     // presence のみ。channel / topic 違いは数えない。
-    ProjectionStore::upsert_live_presence(
+    LiveGameProjectionStore::upsert_live_presence(
         &store,
         LIVE_TOPIC,
         "ch:live",
@@ -115,7 +115,7 @@ async fn live_session_roundtrip_preserves_all_columns_and_computes_viewer_count(
     )
     .await
     .expect("presence viewer-1");
-    ProjectionStore::upsert_live_presence(
+    LiveGameProjectionStore::upsert_live_presence(
         &store,
         LIVE_TOPIC,
         "ch:live",
@@ -127,7 +127,7 @@ async fn live_session_roundtrip_preserves_all_columns_and_computes_viewer_count(
     .await
     .expect("presence viewer-2");
     // channel 不一致 → 数えない。
-    ProjectionStore::upsert_live_presence(
+    LiveGameProjectionStore::upsert_live_presence(
         &store,
         LIVE_TOPIC,
         "ch:other",
@@ -139,7 +139,7 @@ async fn live_session_roundtrip_preserves_all_columns_and_computes_viewer_count(
     .await
     .expect("presence viewer-3");
     // topic 不一致 → 数えない。
-    ProjectionStore::upsert_live_presence(
+    LiveGameProjectionStore::upsert_live_presence(
         &store,
         "kukuri:topic:live-other",
         "ch:live",
@@ -151,7 +151,7 @@ async fn live_session_roundtrip_preserves_all_columns_and_computes_viewer_count(
     .await
     .expect("presence viewer-4");
     // ended セッションは presence が居ても 0。
-    ProjectionStore::upsert_live_presence(
+    LiveGameProjectionStore::upsert_live_presence(
         &store,
         LIVE_TOPIC,
         "ch:live",
@@ -163,7 +163,7 @@ async fn live_session_roundtrip_preserves_all_columns_and_computes_viewer_count(
     .await
     .expect("presence viewer-5");
 
-    let listed = ProjectionStore::list_topic_live_sessions(&store, LIVE_TOPIC)
+    let listed = LiveGameProjectionStore::list_topic_live_sessions(&store, LIVE_TOPIC)
         .await
         .expect("list live sessions");
 
@@ -297,10 +297,10 @@ async fn game_room_roundtrip_preserves_all_columns() {
     let store = SqliteStore::connect_memory().await.expect("sqlite store");
     let max = game_room_max();
     let min = game_room_min();
-    ProjectionStore::upsert_game_room_cache(&store, min.clone())
+    LiveGameProjectionStore::upsert_game_room_cache(&store, min.clone())
         .await
         .expect("upsert min room");
-    ProjectionStore::upsert_game_room_cache(&store, max.clone())
+    LiveGameProjectionStore::upsert_game_room_cache(&store, max.clone())
         .await
         .expect("upsert max room");
 
@@ -313,7 +313,7 @@ async fn game_room_roundtrip_preserves_all_columns() {
     // (副キー room_id DESC の tie-break はここでは未行使 —
     // T6 の pagination テストと T8 の backend_parity が担保)。
     assert_eq!(
-        ProjectionStore::list_topic_game_rooms(&store, GAME_TOPIC)
+        LiveGameProjectionStore::list_topic_game_rooms(&store, GAME_TOPIC)
             .await
             .expect("list game rooms"),
         vec![max, expected_min]

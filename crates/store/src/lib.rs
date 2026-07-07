@@ -17,4 +17,7 @@ pub use models::{
     ObjectProjectionRow, Page, ReactionProjectionRow, TimelineCursor,
 };
 pub use sqlite::SqliteStore;
-pub use traits::{ProjectionStore, Store};
+pub use traits::{
+    BlobCacheStore, DirectMessageStore, LiveGameProjectionStore, NotificationStore,
+    ObjectProjectionStore, ProjectionStore, ReactionBookmarkStore, SocialProjectionStore, Store,
+};

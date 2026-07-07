@@ -204,7 +204,7 @@ async fn game_room_status_legacy_aliases_map_to_current_variants() {
     .await
     .expect("insert legacy finished");
 
-    let rooms = ProjectionStore::list_topic_game_rooms(&store, topic_id)
+    let rooms = LiveGameProjectionStore::list_topic_game_rooms(&store, topic_id)
         .await
         .expect("list game rooms");
 
@@ -260,7 +260,7 @@ async fn game_room_kind_empty_string_maps_to_score_game() {
         .await
         .expect("insert empty room_kind");
 
-    let rooms = ProjectionStore::list_topic_game_rooms(&store, topic_id)
+    let rooms = LiveGameProjectionStore::list_topic_game_rooms(&store, topic_id)
         .await
         .expect("list game rooms");
 
@@ -283,7 +283,7 @@ async fn bookmarked_custom_reaction_blank_search_key_falls_back_to_asset_id() {
         .await
         .expect("insert whitespace search_key");
 
-    let rows = ProjectionStore::list_bookmarked_custom_reactions(&store)
+    let rows = ReactionBookmarkStore::list_bookmarked_custom_reactions(&store)
         .await
         .expect("list bookmarked custom reactions");
 
@@ -331,10 +331,11 @@ async fn object_projection_blank_root_and_reply_map_to_none() {
         .await
         .expect("insert whitespace root/reply");
 
-    let blank = ProjectionStore::get_object_projection(&store, &EnvelopeId::from("obj-blank-refs"))
-        .await
-        .expect("get blank refs")
-        .expect("row exists");
+    let blank =
+        ObjectProjectionStore::get_object_projection(&store, &EnvelopeId::from("obj-blank-refs"))
+            .await
+            .expect("get blank refs")
+            .expect("row exists");
     assert_eq!(
         blank,
         ObjectProjectionRow {
@@ -364,11 +365,13 @@ async fn object_projection_blank_root_and_reply_map_to_none() {
         }
     );
 
-    let whitespace =
-        ProjectionStore::get_object_projection(&store, &EnvelopeId::from("obj-whitespace-refs"))
-            .await
-            .expect("get whitespace refs")
-            .expect("row exists");
+    let whitespace = ObjectProjectionStore::get_object_projection(
+        &store,
+        &EnvelopeId::from("obj-whitespace-refs"),
+    )
+    .await
+    .expect("get whitespace refs")
+    .expect("row exists");
     assert_eq!(whitespace.root_object_id, None);
     assert_eq!(whitespace.reply_to_object_id, None);
 }
@@ -391,7 +394,7 @@ async fn bookmarked_post_empty_root_and_reply_map_to_some_empty_string() {
         .await
         .expect("insert null root/reply");
 
-    let rows = ProjectionStore::list_bookmarked_posts(&store)
+    let rows = ReactionBookmarkStore::list_bookmarked_posts(&store)
         .await
         .expect("list bookmarked posts");
     assert_eq!(rows.len(), 2);
@@ -445,7 +448,7 @@ async fn game_room_unknown_status_fails_listing() {
     .await
     .expect("insert unknown status");
 
-    let err = ProjectionStore::list_topic_game_rooms(&store, topic_id)
+    let err = LiveGameProjectionStore::list_topic_game_rooms(&store, topic_id)
         .await
         .expect_err("unknown status must fail");
     assert_eq!(err.to_string(), "unknown game room status: nonsense");
@@ -461,7 +464,7 @@ async fn game_room_unknown_room_kind_fails_listing() {
         .await
         .expect("insert unknown room_kind");
 
-    let err = ProjectionStore::list_topic_game_rooms(&store, topic_id)
+    let err = LiveGameProjectionStore::list_topic_game_rooms(&store, topic_id)
         .await
         .expect_err("unknown room_kind must fail");
     assert_eq!(err.to_string(), "unknown game room kind: vr_world");
