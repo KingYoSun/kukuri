@@ -9,14 +9,6 @@
       "path": "apps/desktop/src/mocks/desktopApiMock.ts"
     },
     {
-      "lines": 1355,
-      "path": "crates/cn-user-api/src/lib.rs"
-    },
-    {
-      "lines": 1207,
-      "path": "crates/cn-user-api/tests/contract.rs"
-    },
-    {
       "lines": 1159,
       "path": "apps/desktop/src/shell/DesktopShellPage.tsx"
     },

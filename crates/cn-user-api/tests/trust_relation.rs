@@ -28,31 +28,8 @@ use kukuri_cn_user_api::{TrustReadState, UserApiConfig, app_router, build_state}
 use kukuri_core::{KukuriKeys, generate_keys};
 use reqwest::{Client, StatusCode};
 
-const DEFAULT_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:15432/cn";
-const DEFAULT_RENDEZVOUS_REDIS_URL: &str = "redis://127.0.0.1:16379/";
-
-fn integration_test_admin_database_url() -> Option<String> {
-    let enabled = std::env::var("KUKURI_CN_RUN_INTEGRATION_TESTS")
-        .ok()
-        .map(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "yes" | "YES"))
-        .unwrap_or(false);
-    if !enabled {
-        return None;
-    }
-    Some(
-        std::env::var("COMMUNITY_NODE_DATABASE_URL")
-            .ok()
-            .filter(|value| !value.trim().is_empty())
-            .unwrap_or_else(|| DEFAULT_ADMIN_DATABASE_URL.to_string()),
-    )
-}
-
-fn integration_test_rendezvous_redis_url() -> String {
-    std::env::var("COMMUNITY_NODE_RENDEZVOUS_REDIS_URL")
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| DEFAULT_RENDEZVOUS_REDIS_URL.to_string())
-}
+mod support;
+use support::{integration_test_admin_database_url, integration_test_rendezvous_redis_url};
 
 struct TestServer {
     task: tokio::task::JoinHandle<()>,
