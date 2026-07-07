@@ -7,12 +7,12 @@ impl DesktopRuntime {
     ) -> Result<StoredCommunityNodeToken> {
         let base_url = normalize_http_url(base_url)?;
         let client = community_node_http_client()?;
-        let challenge_url = format!("{}/v1/auth/challenge", base_url);
+        let challenge_url = format!("{base_url}{AUTH_CHALLENGE_PATH}");
         let pubkey = self.author_keys.public_key_hex();
         let seed_peer = self.local_community_node_seed_peer("auth").await?;
         let challenge = client
             .post(challenge_url)
-            .json(&serde_json::json!({ "pubkey": pubkey }))
+            .json(&AuthChallengeRequest { pubkey })
             .send()
             .await
             .context("failed to request auth challenge")?
@@ -43,14 +43,15 @@ impl DesktopRuntime {
             challenge.challenge.as_str(),
             public_base_url.as_str(),
         )?;
-        let verify_url = format!("{}/v1/auth/verify", base_url);
+        let verify_url = format!("{base_url}{AUTH_VERIFY_PATH}");
         let verify = client
             .post(verify_url)
-            .json(&serde_json::json!({
-                "auth_envelope_json": auth_envelope_json,
-                "endpoint_id": seed_peer.endpoint_id,
-                "addr_hint": seed_peer.addr_hint,
-            }))
+            .json(&AuthVerifyRequest {
+                auth_envelope_json,
+                endpoint_id: Some(seed_peer.endpoint_id),
+                addr_hint: seed_peer.addr_hint,
+                invite_code: None,
+            })
             .send()
             .await
             .context("failed to verify auth envelope")?
@@ -74,7 +75,7 @@ impl DesktopRuntime {
     ) -> std::result::Result<CommunityNodeConsentStatus, CommunityNodeRequestError> {
         let client = community_node_http_client().map_err(CommunityNodeRequestError::Other)?;
         let response = client
-            .get(format!("{}/v1/consents/status", base_url))
+            .get(format!("{base_url}{CONSENTS_STATUS_PATH}"))
             .bearer_auth(access_token)
             .send()
             .await
@@ -109,9 +110,11 @@ impl DesktopRuntime {
     ) -> std::result::Result<CommunityNodeConsentStatus, CommunityNodeRequestError> {
         let client = community_node_http_client().map_err(CommunityNodeRequestError::Other)?;
         let response = client
-            .post(format!("{}/v1/consents", base_url))
+            .post(format!("{base_url}{CONSENTS_PATH}"))
             .bearer_auth(access_token)
-            .json(&serde_json::json!({ "policy_slugs": policy_slugs }))
+            .json(&AcceptConsentsRequest {
+                policy_slugs: policy_slugs.to_vec(),
+            })
             .send()
             .await
             .map_err(|error| {
@@ -159,7 +162,7 @@ impl DesktopRuntime {
         };
         let client = community_node_http_client().map_err(CommunityNodeRequestError::Other)?;
         let response = client
-            .get(format!("{}/v1/bootstrap/nodes", base_url))
+            .get(format!("{base_url}{BOOTSTRAP_NODES_PATH}"))
             .bearer_auth(access_token)
             .send()
             .await
@@ -366,15 +369,15 @@ impl DesktopRuntime {
             .map_err(CommunityNodeRequestError::Other)?;
         let client = community_node_http_client().map_err(CommunityNodeRequestError::Other)?;
         let response = client
-            .post(format!("{}/v1/rendezvous/topics/heartbeat", base_url))
+            .post(format!("{base_url}{TOPIC_RENDEZVOUS_HEARTBEAT_PATH}"))
             .bearer_auth(access_token)
-            .json(&serde_json::json!({
-                "endpoint_id": seed_peer.endpoint_id,
-                "addr_hint": seed_peer.addr_hint,
-                "joins": [],
-                "refreshes": topic_keys,
-                "leaves": []
-            }))
+            .json(&TopicRendezvousHeartbeat {
+                endpoint_id: seed_peer.endpoint_id,
+                addr_hint: seed_peer.addr_hint,
+                joins: Vec::new(),
+                refreshes: topic_keys,
+                leaves: Vec::new(),
+            })
             .send()
             .await
             .map_err(|error| {
@@ -575,12 +578,12 @@ impl DesktopRuntime {
         );
         let client = community_node_http_client().map_err(CommunityNodeRequestError::Other)?;
         let response = client
-            .post(format!("{}/v1/bootstrap/heartbeat", base_url))
+            .post(format!("{base_url}{BOOTSTRAP_HEARTBEAT_PATH}"))
             .bearer_auth(access_token)
-            .json(&serde_json::json!({
-                "endpoint_id": seed_peer.endpoint_id,
-                "addr_hint": seed_peer.addr_hint,
-            }))
+            .json(&BootstrapHeartbeatRequest {
+                endpoint_id: seed_peer.endpoint_id,
+                addr_hint: seed_peer.addr_hint,
+            })
             .send()
             .await;
         match response {

@@ -21,6 +21,7 @@ tower_governor.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 url.workspace = true
+kukuri-cn-protocol = { path = "../cn-protocol" }
 kukuri-cn-core = { path = "../cn-core" }
 kukuri-cn-indexer = { path = "../cn-indexer" }
 kukuri-cn-operator = { path = "../cn-operator" }

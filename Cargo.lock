@@ -3125,6 +3125,7 @@ dependencies = [
  "kukuri-cn-core",
  "kukuri-cn-indexer",
  "kukuri-cn-operator",
+ "kukuri-cn-protocol",
  "kukuri-cn-safety",
  "kukuri-cn-trust",
  "kukuri-core",

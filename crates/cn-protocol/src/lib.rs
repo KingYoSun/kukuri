@@ -12,8 +12,14 @@ pub mod auth;
 pub mod manifest;
 pub mod models;
 pub mod normalize;
+pub mod paths;
+pub mod rendezvous;
+pub mod requests;
 
 pub use auth::*;
 pub use manifest::*;
 pub use models::*;
 pub use normalize::*;
+pub use paths::*;
+pub use rendezvous::*;
+pub use requests::*;

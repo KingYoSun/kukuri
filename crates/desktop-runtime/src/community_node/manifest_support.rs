@@ -37,7 +37,7 @@ impl DesktopRuntime {
     ) -> Result<CommunityNodeManifestFetch> {
         let base_url = normalize_http_url(base_url)?;
         let client = community_node_http_client()?;
-        let url = format!("{}/v1/node/manifest", base_url);
+        let url = format!("{base_url}{NODE_MANIFEST_PATH}");
         let response = client
             .get(url)
             .send()
