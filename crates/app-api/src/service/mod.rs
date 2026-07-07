@@ -110,7 +110,8 @@ mod profile_docs_support;
 mod projection_support;
 mod social_helpers;
 mod social_runtime_support;
-mod timeline_runtime_support;
+mod timeline_subscription_support;
+mod timeline_view_support;
 
 pub(crate) use attachment_support::{
     attachment_views, attachment_views_from_refs, blob_status, blob_view_status,
@@ -189,7 +190,7 @@ pub(crate) use social_helpers::{
     schedule_direct_message_reconcile_with_services,
     stop_direct_message_subscription_with_services,
 };
-pub(crate) use timeline_runtime_support::{
+pub(crate) use timeline_view_support::{
     MAX_POST_CONTENT_CHARS, MAX_PROFILE_ABOUT_CHARS, MAX_PROFILE_DISPLAY_NAME_CHARS,
     MAX_PROFILE_NAME_CHARS, MAX_REPOST_COMMENTARY_CHARS, content_from_payload_ref,
     ensure_optional_text_within_limit, ensure_text_within_limit, normalize_optional_text,
