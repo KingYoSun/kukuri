@@ -51,7 +51,7 @@ impl AppService {
             .collect();
         }
         self.cleanup_ended_live_presence_tasks(&rows).await;
-        let joined_sessions = self.live_presence_tasks.lock().await;
+        let joined_sessions = self.subscription_registry.live_presence_tasks.lock().await;
         let mut items = Vec::with_capacity(rows.len());
         for row in rows {
             items.push(LiveSessionView {
@@ -252,6 +252,7 @@ impl AppService {
         let channel_key = channel_storage_id(state.channel_id.as_ref());
         let task_key = live_presence_task_key(topic_id, channel_key.as_str(), session_id);
         if self
+            .subscription_registry
             .live_presence_tasks
             .lock()
             .await
@@ -296,7 +297,8 @@ impl AppService {
                     .await;
             }
         });
-        self.live_presence_tasks
+        self.subscription_registry
+            .live_presence_tasks
             .lock()
             .await
             .insert(task_key, handle);

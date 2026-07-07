@@ -35,6 +35,7 @@ impl AppService {
 
     pub(crate) async fn restart_direct_message_subscriptions(&self) -> Result<()> {
         let existing_peers = self
+            .subscription_registry
             .direct_message_subscriptions
             .lock()
             .await
@@ -43,7 +44,9 @@ impl AppService {
             .collect::<Vec<_>>();
         for peer_pubkey in existing_peers {
             stop_direct_message_subscription_with_services(
-                self.direct_message_subscriptions.as_ref(),
+                self.subscription_registry
+                    .direct_message_subscriptions
+                    .as_ref(),
                 self.hint_transport.as_ref(),
                 self.keys.as_ref(),
                 peer_pubkey.as_str(),
@@ -84,7 +87,7 @@ impl AppService {
     pub(crate) async fn ensure_author_subscription(&self, author_pubkey: &str) -> Result<()> {
         let author_pubkey = normalize_author_pubkey(author_pubkey)?;
         let stale_key = {
-            let subscriptions = self.author_subscriptions.lock().await;
+            let subscriptions = self.subscription_registry.author_subscriptions.lock().await;
             match subscriptions.get(author_pubkey.as_str()) {
                 Some(handle) if !handle.is_finished() => return Ok(()),
                 Some(_) => Some(author_pubkey.to_string()),
@@ -92,7 +95,8 @@ impl AppService {
             }
         };
         if let Some(stale_key) = stale_key {
-            self.author_subscriptions
+            self.subscription_registry
+                .author_subscriptions
                 .lock()
                 .await
                 .remove(stale_key.as_str());
@@ -104,6 +108,7 @@ impl AppService {
     pub(crate) async fn restart_author_subscription(&self, author_pubkey: &str) -> Result<()> {
         let author_pubkey = normalize_author_pubkey(author_pubkey)?;
         if let Some(handle) = self
+            .subscription_registry
             .author_subscriptions
             .lock()
             .await
@@ -121,7 +126,11 @@ impl AppService {
         let key = format!("author-subscription:{author_pubkey}");
         let now = Utc::now().timestamp();
         {
-            let mut deadlines = self.replica_sync_restart_deadlines.lock().await;
+            let mut deadlines = self
+                .subscription_registry
+                .replica_sync_restart_deadlines
+                .lock()
+                .await;
             let next_due_at = deadlines.get(key.as_str()).copied().unwrap_or_default();
             if next_due_at > now {
                 return;
@@ -149,7 +158,8 @@ impl AppService {
         let transport = Arc::clone(&self.transport);
         let keys = Arc::clone(&self.keys);
         let last_sync = Arc::clone(&self.last_sync_ts);
-        let direct_message_subscriptions = Arc::clone(&self.direct_message_subscriptions);
+        let direct_message_subscriptions =
+            Arc::clone(&self.subscription_registry.direct_message_subscriptions);
         let author_key = normalize_author_pubkey(author_pubkey)?;
         let local_author_pubkey = self.current_author_pubkey();
         let replica = author_replica_id(author_key.as_str());
@@ -339,7 +349,8 @@ impl AppService {
                 }
             }
         });
-        self.author_subscriptions
+        self.subscription_registry
+            .author_subscriptions
             .lock()
             .await
             .insert(author_key, handle);

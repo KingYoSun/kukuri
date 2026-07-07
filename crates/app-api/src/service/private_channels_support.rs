@@ -459,6 +459,7 @@ impl AppService {
         }
         let prefix = joined_private_channel_subscription_prefix(topic_id, channel_id);
         let keys = self
+            .subscription_registry
             .private_channel_subscriptions
             .lock()
             .await
@@ -468,6 +469,7 @@ impl AppService {
             .collect::<Vec<_>>();
         for key in keys {
             if let Some(handle) = self
+                .subscription_registry
                 .private_channel_subscriptions
                 .lock()
                 .await
@@ -545,6 +547,7 @@ impl AppService {
     ) -> Result<()> {
         let prefix = joined_private_channel_subscription_prefix(topic_id, channel_id);
         let keys = self
+            .subscription_registry
             .private_channel_subscriptions
             .lock()
             .await
@@ -554,6 +557,7 @@ impl AppService {
             .collect::<Vec<_>>();
         for key in keys {
             if let Some(handle) = self
+                .subscription_registry
                 .private_channel_subscriptions
                 .lock()
                 .await
@@ -590,6 +594,7 @@ impl AppService {
                 &replica,
             );
             if self
+                .subscription_registry
                 .private_channel_subscriptions
                 .lock()
                 .await
@@ -1037,12 +1042,14 @@ impl AppService {
         });
 
         if let Some(private_key) = private_key {
-            self.private_channel_subscriptions
+            self.subscription_registry
+                .private_channel_subscriptions
                 .lock()
                 .await
                 .insert(private_key, handle);
         } else {
-            self.subscriptions
+            self.subscription_registry
+                .subscriptions
                 .lock()
                 .await
                 .insert(topic_id.to_string(), handle);

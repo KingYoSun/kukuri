@@ -169,11 +169,18 @@ impl AppService {
     }
 
     pub async fn unsubscribe_topic(&self, topic_id: &str) -> Result<()> {
-        if let Some(handle) = self.subscriptions.lock().await.remove(topic_id) {
+        if let Some(handle) = self
+            .subscription_registry
+            .subscriptions
+            .lock()
+            .await
+            .remove(topic_id)
+        {
             handle.abort();
         }
         self.clear_public_topic_delivery(topic_id).await;
         let private_keys = self
+            .subscription_registry
             .private_channel_subscriptions
             .lock()
             .await
@@ -183,6 +190,7 @@ impl AppService {
             .collect::<Vec<_>>();
         for key in private_keys {
             if let Some(handle) = self
+                .subscription_registry
                 .private_channel_subscriptions
                 .lock()
                 .await
@@ -199,6 +207,7 @@ impl AppService {
             }
         }
         let keys_to_remove = self
+            .subscription_registry
             .live_presence_tasks
             .lock()
             .await

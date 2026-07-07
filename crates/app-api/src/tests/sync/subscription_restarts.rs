@@ -102,7 +102,7 @@ async fn ensure_topic_subscription_recreates_finished_handle() {
     assert_eq!(*hint_transport.subscribe_count.lock().await, 1);
 
     {
-        let subscriptions = app.subscriptions.lock().await;
+        let subscriptions = app.subscription_registry.subscriptions.lock().await;
         subscriptions
             .get(topic)
             .expect("topic subscription handle")

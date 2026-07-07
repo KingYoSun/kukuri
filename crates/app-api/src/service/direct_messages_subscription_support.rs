@@ -20,7 +20,7 @@ impl AppService {
             Arc::clone(&self.transport),
             Arc::clone(&self.keys),
             Arc::clone(&self.last_sync_ts),
-            Arc::clone(&self.direct_message_subscriptions),
+            Arc::clone(&self.subscription_registry.direct_message_subscriptions),
             self.current_author_pubkey().as_str(),
         )
         .await
@@ -250,6 +250,7 @@ impl AppService {
             return Ok(());
         }
         let has_active_handle = self
+            .subscription_registry
             .direct_message_subscriptions
             .lock()
             .await
@@ -266,7 +267,7 @@ impl AppService {
             return Ok(());
         }
         Self::spawn_direct_message_subscription_with_services(
-            Arc::clone(&self.direct_message_subscriptions),
+            Arc::clone(&self.subscription_registry.direct_message_subscriptions),
             Arc::clone(&self.projection_store),
             Arc::clone(&self.blob_service),
             Arc::clone(&self.hint_transport),
@@ -285,14 +286,16 @@ impl AppService {
     ) -> Result<()> {
         let peer_pubkey = normalize_author_pubkey(peer_pubkey)?;
         stop_direct_message_subscription_with_services(
-            self.direct_message_subscriptions.as_ref(),
+            self.subscription_registry
+                .direct_message_subscriptions
+                .as_ref(),
             self.hint_transport.as_ref(),
             self.keys.as_ref(),
             peer_pubkey.as_str(),
         )
         .await?;
         Self::spawn_direct_message_subscription_with_services(
-            Arc::clone(&self.direct_message_subscriptions),
+            Arc::clone(&self.subscription_registry.direct_message_subscriptions),
             Arc::clone(&self.projection_store),
             Arc::clone(&self.blob_service),
             Arc::clone(&self.hint_transport),
@@ -336,7 +339,8 @@ impl AppService {
             return Ok(false);
         };
         if snapshot.joined || snapshot.peer_count > 0 || snapshot.configured_peer_ids.is_empty() {
-            self.direct_message_subscription_restart_deadlines
+            self.subscription_registry
+                .direct_message_subscription_restart_deadlines
                 .lock()
                 .await
                 .remove(peer_pubkey.as_str());
@@ -344,6 +348,7 @@ impl AppService {
         }
         let now = Utc::now().timestamp();
         let mut deadlines = self
+            .subscription_registry
             .direct_message_subscription_restart_deadlines
             .lock()
             .await;

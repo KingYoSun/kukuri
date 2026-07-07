@@ -546,22 +546,26 @@ pub(crate) fn effective_topic_status_detail(
 
 impl Drop for AppService {
     fn drop(&mut self) {
-        if let Ok(mut subscriptions) = self.subscriptions.try_lock() {
+        if let Ok(mut subscriptions) = self.subscription_registry.subscriptions.try_lock() {
             for (_, handle) in subscriptions.drain() {
                 handle.abort();
             }
         }
-        if let Ok(mut subscriptions) = self.private_channel_subscriptions.try_lock() {
+        if let Ok(mut subscriptions) = self
+            .subscription_registry
+            .private_channel_subscriptions
+            .try_lock()
+        {
             for (_, handle) in subscriptions.drain() {
                 handle.abort();
             }
         }
-        if let Ok(mut subscriptions) = self.author_subscriptions.try_lock() {
+        if let Ok(mut subscriptions) = self.subscription_registry.author_subscriptions.try_lock() {
             for (_, handle) in subscriptions.drain() {
                 handle.abort();
             }
         }
-        if let Ok(mut tasks) = self.live_presence_tasks.try_lock() {
+        if let Ok(mut tasks) = self.subscription_registry.live_presence_tasks.try_lock() {
             for (_, handle) in tasks.drain() {
                 handle.abort();
             }

@@ -208,7 +208,8 @@ async fn dm_import_peer_ticket_restarts_active_mutual_subscription() {
     let topic = derive_direct_message_topic(app.keys.as_ref(), &Pubkey::from(peer_pubkey.as_str()))
         .expect("derive dm topic");
     assert!(
-        app.direct_message_subscriptions
+        app.subscription_registry
+            .direct_message_subscriptions
             .lock()
             .await
             .contains_key(peer_pubkey.as_str()),
@@ -284,6 +285,7 @@ async fn dm_status_restarts_mutual_subscription_when_handle_is_missing() {
     assert_eq!(*hint_transport.subscribe_count.lock().await, 1);
 
     if let Some(handle) = app
+        .subscription_registry
         .direct_message_subscriptions
         .lock()
         .await
@@ -300,7 +302,8 @@ async fn dm_status_restarts_mutual_subscription_when_handle_is_missing() {
     assert!(status.mutual);
     assert_eq!(*hint_transport.subscribe_count.lock().await, 2);
     assert!(
-        app.direct_message_subscriptions
+        app.subscription_registry
+            .direct_message_subscriptions
             .lock()
             .await
             .contains_key(peer_pubkey.as_str()),

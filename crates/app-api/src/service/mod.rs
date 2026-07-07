@@ -110,6 +110,7 @@ mod profile_docs_support;
 mod projection_support;
 mod social_helpers;
 mod social_runtime_support;
+mod subscription_registry;
 mod timeline_subscription_support;
 mod timeline_view_support;
 
@@ -190,6 +191,7 @@ pub(crate) use social_helpers::{
     schedule_direct_message_reconcile_with_services,
     stop_direct_message_subscription_with_services,
 };
+pub(crate) use subscription_registry::SubscriptionRegistry;
 pub(crate) use timeline_view_support::{
     MAX_POST_CONTENT_CHARS, MAX_PROFILE_ABOUT_CHARS, MAX_PROFILE_DISPLAY_NAME_CHARS,
     MAX_PROFILE_NAME_CHARS, MAX_REPOST_COMMENTARY_CHARS, content_from_payload_ref,
@@ -325,18 +327,12 @@ pub struct AppService {
     pub(crate) docs_sync: Arc<dyn DocsSync>,
     pub(crate) blob_service: Arc<dyn BlobService>,
     pub(crate) keys: Arc<KukuriKeys>,
-    pub(crate) subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
-    pub(crate) direct_message_subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
-    pub(crate) private_channel_subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
-    pub(crate) author_subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
+    /// 購読タスクの台帳(task ×5 / 世代 / 復旧 deadline。WP-H5 PR5)。
+    pub(crate) subscription_registry: SubscriptionRegistry,
     pub(crate) joined_private_channels: Arc<Mutex<HashMap<String, JoinedPrivateChannelState>>>,
-    pub(crate) live_presence_tasks: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
     pub(crate) metaverse_room_events: Arc<Mutex<HashMap<String, VecDeque<MetaverseRoomEventView>>>>,
     pub(crate) last_sync_ts: Arc<Mutex<Option<i64>>>,
-    pub(crate) subscription_generations: Arc<Mutex<HashMap<String, u64>>>,
     pub(crate) public_topic_delivery: Arc<Mutex<HashMap<String, PublicTopicDeliveryStatus>>>,
-    pub(crate) direct_message_subscription_restart_deadlines: Arc<Mutex<HashMap<String, i64>>>,
-    pub(crate) replica_sync_restart_deadlines: Arc<Mutex<HashMap<String, i64>>>,
     pub(crate) empty_recovery_candidates: Arc<Mutex<HashSet<String>>>,
     pub(crate) gossip_disabled_topics: Arc<Mutex<HashSet<String>>>,
     pub(crate) gossip_disabled_channels: Arc<Mutex<HashSet<String>>>,
@@ -481,18 +477,11 @@ impl AppService {
             docs_sync,
             blob_service,
             keys: Arc::new(keys),
-            subscriptions: Arc::new(Mutex::new(HashMap::new())),
-            direct_message_subscriptions: Arc::new(Mutex::new(HashMap::new())),
-            private_channel_subscriptions: Arc::new(Mutex::new(HashMap::new())),
-            author_subscriptions: Arc::new(Mutex::new(HashMap::new())),
+            subscription_registry: SubscriptionRegistry::default(),
             joined_private_channels: Arc::new(Mutex::new(HashMap::new())),
-            live_presence_tasks: Arc::new(Mutex::new(HashMap::new())),
             metaverse_room_events: Arc::new(Mutex::new(HashMap::new())),
             last_sync_ts: Arc::new(Mutex::new(None)),
-            subscription_generations: Arc::new(Mutex::new(HashMap::new())),
             public_topic_delivery: Arc::new(Mutex::new(HashMap::new())),
-            direct_message_subscription_restart_deadlines: Arc::new(Mutex::new(HashMap::new())),
-            replica_sync_restart_deadlines: Arc::new(Mutex::new(HashMap::new())),
             empty_recovery_candidates: Arc::new(Mutex::new(HashSet::new())),
             gossip_disabled_topics: Arc::new(Mutex::new(HashSet::new())),
             gossip_disabled_channels: Arc::new(Mutex::new(HashSet::new())),
@@ -628,7 +617,11 @@ impl AppService {
     }
 
     pub(crate) async fn next_subscription_generation(&self, key: &str) -> u64 {
-        let mut generations = self.subscription_generations.lock().await;
+        let mut generations = self
+            .subscription_registry
+            .subscription_generations
+            .lock()
+            .await;
         let generation = generations
             .get(key)
             .copied()
@@ -669,6 +662,7 @@ impl AppService {
 
     pub(crate) async fn restart_active_subscriptions(&self) -> Result<()> {
         let topics = self
+            .subscription_registry
             .subscriptions
             .lock()
             .await
@@ -697,6 +691,7 @@ impl AppService {
         }
 
         let authors = self
+            .subscription_registry
             .author_subscriptions
             .lock()
             .await
@@ -712,6 +707,7 @@ impl AppService {
 
     pub async fn shutdown(&self) {
         let topics_to_unsubscribe = self
+            .subscription_registry
             .subscriptions
             .lock()
             .await
@@ -719,6 +715,7 @@ impl AppService {
             .cloned()
             .collect::<BTreeSet<_>>();
         let private_channels_to_unsubscribe = self
+            .subscription_registry
             .private_channel_subscriptions
             .lock()
             .await
@@ -726,7 +723,7 @@ impl AppService {
             .filter_map(|key| key.split("::").nth(1).map(str::to_owned))
             .collect::<BTreeSet<_>>();
         let handles = {
-            let mut subscriptions = self.subscriptions.lock().await;
+            let mut subscriptions = self.subscription_registry.subscriptions.lock().await;
             subscriptions
                 .drain()
                 .map(|(_, handle)| handle)
@@ -737,7 +734,11 @@ impl AppService {
             let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
         }
         let private_handles = {
-            let mut subscriptions = self.private_channel_subscriptions.lock().await;
+            let mut subscriptions = self
+                .subscription_registry
+                .private_channel_subscriptions
+                .lock()
+                .await;
             subscriptions
                 .drain()
                 .map(|(_, handle)| handle)
@@ -760,6 +761,7 @@ impl AppService {
                 .await;
         }
         let dm_peers_to_unsubscribe = self
+            .subscription_registry
             .direct_message_subscriptions
             .lock()
             .await
@@ -767,7 +769,11 @@ impl AppService {
             .cloned()
             .collect::<Vec<_>>();
         let dm_handles = {
-            let mut subscriptions = self.direct_message_subscriptions.lock().await;
+            let mut subscriptions = self
+                .subscription_registry
+                .direct_message_subscriptions
+                .lock()
+                .await;
             subscriptions
                 .drain()
                 .map(|(_, handle)| handle)
@@ -785,7 +791,7 @@ impl AppService {
             }
         }
         let author_handles = {
-            let mut subscriptions = self.author_subscriptions.lock().await;
+            let mut subscriptions = self.subscription_registry.author_subscriptions.lock().await;
             subscriptions
                 .drain()
                 .map(|(_, handle)| handle)
@@ -796,7 +802,7 @@ impl AppService {
             let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
         }
         let presence_handles = {
-            let mut tasks = self.live_presence_tasks.lock().await;
+            let mut tasks = self.subscription_registry.live_presence_tasks.lock().await;
             tasks.drain().map(|(_, handle)| handle).collect::<Vec<_>>()
         };
         for handle in presence_handles {
