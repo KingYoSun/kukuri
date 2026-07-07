@@ -2915,6 +2915,7 @@ dependencies = [
  "kukuri-blob-service",
  "kukuri-core",
  "kukuri-docs-sync",
+ "kukuri-iroh-node",
  "kukuri-store",
  "kukuri-transport",
  "n0-mainline",
@@ -2936,7 +2937,7 @@ dependencies = [
  "iroh",
  "iroh-blobs",
  "kukuri-core",
- "kukuri-docs-sync",
+ "kukuri-iroh-node",
  "kukuri-transport",
  "serde",
  "tempfile",
@@ -3168,6 +3169,7 @@ dependencies = [
  "kukuri-cn-operator",
  "kukuri-core",
  "kukuri-docs-sync",
+ "kukuri-iroh-node",
  "kukuri-store",
  "kukuri-transport",
  "n0-mainline",
@@ -3194,6 +3196,7 @@ dependencies = [
  "iroh-docs",
  "iroh-gossip",
  "kukuri-core",
+ "kukuri-iroh-node",
  "kukuri-transport",
  "serde",
  "serde_json",
@@ -3223,6 +3226,25 @@ dependencies = [
  "serde_yaml",
  "tempfile",
  "tokio",
+]
+
+[[package]]
+name = "kukuri-iroh-node"
+version = "0.1.2"
+dependencies = [
+ "anyhow",
+ "futures-util",
+ "hex",
+ "iroh",
+ "iroh-blobs",
+ "iroh-docs",
+ "iroh-gossip",
+ "kukuri-transport",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

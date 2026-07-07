@@ -6,7 +6,9 @@ use iroh::RelayUrl;
 use tempfile::tempdir;
 use tokio::time::{sleep, timeout};
 
-use crate::{DocOp, DocQuery, DocsSync, IrohDocsNode, IrohDocsSync, stable_key, topic_replica_id};
+use kukuri_iroh_node::IrohDocsNode;
+
+use crate::{DocOp, DocQuery, DocsSync, IrohDocsSync, stable_key, topic_replica_id};
 use kukuri_transport::{
     DhtDiscoveryOptions, SeedPeer, TransportNetworkConfig, TransportRelayConfig,
 };

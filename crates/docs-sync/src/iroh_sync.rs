@@ -20,11 +20,11 @@ use tokio_stream::wrappers::BroadcastStream;
 use tracing::{info, warn};
 
 use crate::access::parse_namespace_secret_hex;
-use crate::node::IrohDocsNode;
 use crate::replicas::public_replica_secret;
 use crate::types::{
     DocEvent, DocEventStream, DocFetchPolicy, DocOp, DocQuery, DocRecord, DocsSync,
 };
+use kukuri_iroh_node::IrohDocsNode;
 
 struct ReplicaHandle {
     doc: Doc,
