@@ -121,6 +121,7 @@ async fn dm_restart_resumes_pending_outbox_and_local_delete_prevents_duplicate_r
         .expect("resume direct message state");
     assert!(
         reopened_app_a
+            .subscription_registry
             .direct_message_subscriptions
             .lock()
             .await

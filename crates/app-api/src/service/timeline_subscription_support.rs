@@ -9,7 +9,7 @@ impl AppService {
             return Ok(());
         }
         let stale_key = {
-            let subscriptions = self.subscriptions.lock().await;
+            let subscriptions = self.subscription_registry.subscriptions.lock().await;
             match subscriptions.get(topic_id) {
                 Some(handle) if !handle.is_finished() => return Ok(()),
                 Some(_) => Some(topic_id.to_string()),
@@ -17,14 +17,19 @@ impl AppService {
             }
         };
         if let Some(stale_key) = stale_key {
-            self.subscriptions.lock().await.remove(stale_key.as_str());
+            self.subscription_registry
+                .subscriptions
+                .lock()
+                .await
+                .remove(stale_key.as_str());
         }
 
         self.spawn_topic_subscription(topic_id).await
     }
 
     pub(crate) async fn has_topic_subscription(&self, topic_id: &str) -> bool {
-        self.subscriptions
+        self.subscription_registry
+            .subscriptions
             .lock()
             .await
             .get(topic_id)
@@ -44,7 +49,13 @@ impl AppService {
     }
 
     pub(crate) async fn restart_topic_subscription(&self, topic_id: &str) -> Result<()> {
-        if let Some(handle) = self.subscriptions.lock().await.remove(topic_id) {
+        if let Some(handle) = self
+            .subscription_registry
+            .subscriptions
+            .lock()
+            .await
+            .remove(topic_id)
+        {
             handle.abort();
         }
         self.hint_transport
@@ -383,7 +394,7 @@ impl AppService {
     pub(crate) async fn maybe_restart_replica_sync(&self, topic_id: &str, replica: &ReplicaId) {
         maybe_restart_replica_sync_with_cooldown(
             self.docs_sync.as_ref(),
-            &self.replica_sync_restart_deadlines,
+            &self.subscription_registry.replica_sync_restart_deadlines,
             topic_id,
             replica,
         )
@@ -398,7 +409,11 @@ impl AppService {
         let key = format!("private-channel:{topic_id}:{channel_id}");
         let now = Utc::now().timestamp();
         {
-            let mut deadlines = self.replica_sync_restart_deadlines.lock().await;
+            let mut deadlines = self
+                .subscription_registry
+                .replica_sync_restart_deadlines
+                .lock()
+                .await;
             let next_due_at = deadlines.get(key.as_str()).copied().unwrap_or_default();
             if next_due_at > now {
                 return;
@@ -422,7 +437,11 @@ impl AppService {
         let key = format!("topic-subscription:{topic_id}");
         let now = Utc::now().timestamp();
         {
-            let mut deadlines = self.replica_sync_restart_deadlines.lock().await;
+            let mut deadlines = self
+                .subscription_registry
+                .replica_sync_restart_deadlines
+                .lock()
+                .await;
             let next_due_at = deadlines.get(key.as_str()).copied().unwrap_or_default();
             if next_due_at > now {
                 return;

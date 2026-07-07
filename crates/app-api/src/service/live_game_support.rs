@@ -8,7 +8,12 @@ impl AppService {
         session_id: &str,
     ) {
         let key = live_presence_task_key(topic_id, channel_id, session_id);
-        let handle = self.live_presence_tasks.lock().await.remove(key.as_str());
+        let handle = self
+            .subscription_registry
+            .live_presence_tasks
+            .lock()
+            .await
+            .remove(key.as_str());
         if let Some(handle) = handle {
             handle.abort();
             let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;

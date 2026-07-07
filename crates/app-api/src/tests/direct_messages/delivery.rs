@@ -79,6 +79,7 @@ async fn dm_first_message_appears_in_recipient_conversation_list_without_opening
         .expect("rebuild relationships for app b");
     assert!(
         app_b
+            .subscription_registry
             .direct_message_subscriptions
             .lock()
             .await
@@ -191,7 +192,8 @@ async fn dm_outbox_retry_stops_when_mutual_is_lost_and_resumes_when_it_returns()
         .await
         .expect("seed relationship projection");
     assert!(
-        app.direct_message_subscriptions
+        app.subscription_registry
+            .direct_message_subscriptions
             .lock()
             .await
             .contains_key(peer_pubkey.as_str()),
@@ -225,7 +227,8 @@ async fn dm_outbox_retry_stops_when_mutual_is_lost_and_resumes_when_it_returns()
         .await
         .expect("rebuild relationships after mutual loss");
     assert!(
-        !app.direct_message_subscriptions
+        !app.subscription_registry
+            .direct_message_subscriptions
             .lock()
             .await
             .contains_key(peer_pubkey.as_str()),
@@ -286,7 +289,8 @@ async fn dm_outbox_retry_stops_when_mutual_is_lost_and_resumes_when_it_returns()
         .await
         .expect("rebuild relationships after mutual restore");
     assert!(
-        app.direct_message_subscriptions
+        app.subscription_registry
+            .direct_message_subscriptions
             .lock()
             .await
             .contains_key(peer_pubkey.as_str()),
