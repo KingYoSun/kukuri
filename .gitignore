@@ -1,10 +1,5 @@
 # Tauri
-kukuri-tauri/src-tauri/target/
-kukuri-tauri/src-tauri/WixTools/
-kukuri-tauri/src-tauri/gen/
 apps/desktop/src-tauri/gen/
-
-kukuri-cli/target/
 
 # Node
 node_modules/
@@ -58,16 +53,12 @@ apps/desktop/storybook-static/
 **/*.rs.bk
 Cargo.lock
 !Cargo.lock
-!kukuri-tauri/src-tauri/Cargo.lock
-!kukuri-cli/Cargo.lock
-!kukuri-community-node/Cargo.lock
 
 # SQLite
 *.db
 *.db-journal
 *.db-wal
 *.db-shm
-!kukuri-tauri/testdata/e2e_seed.db
 
 # Test coverage
 coverage/
@@ -77,8 +68,6 @@ coverage/
 
 # Test results
 test-results/
-kukuri-tauri/tests/e2e/output/
-!kukuri-tauri/tests/e2e/output/.gitkeep
 
 # Temporary files
 *.tmp
@@ -123,7 +112,6 @@ docs/apis/
 build.err
 
 # Optional local bootstrap config (override via UI)
-kukuri-tauri/src-tauri/bootstrap_nodes.json
 
 # kamui
 .kamui/
