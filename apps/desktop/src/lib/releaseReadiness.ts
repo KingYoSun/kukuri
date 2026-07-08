@@ -1,13 +1,9 @@
-import type { NotificationView } from '@/lib/api';
-
 export const RELEASE_CHANNEL = 'preview';
 export const RELEASE_MANIFEST_NAME = 'latest-preview.json';
 export const RELEASE_FEEDBACK_URL =
   'https://github.com/KingYoSun/kukuri/issues/new?template=preview-feedback.md';
 
 export const OS_NOTIFICATION_SETTINGS_STORAGE_KEY = 'kukuri:os-notification-settings:v1';
-const OS_NOTIFICATION_SEEN_STORAGE_KEY = 'kukuri:os-notification-seen:v1';
-const MAX_SEEN_NOTIFICATION_IDS = 128;
 
 export type UpdateStatus =
   | 'idle'
@@ -72,84 +68,6 @@ export function saveOsNotificationSettings(settings: OsNotificationSettings): vo
   }
   window.localStorage.setItem(OS_NOTIFICATION_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
   window.dispatchEvent(new Event(OS_NOTIFICATION_SETTINGS_STORAGE_KEY));
-}
-
-export function shouldSendOsNotification(
-  notification: NotificationView,
-  settings: OsNotificationSettings,
-  localAuthorPubkey: string
-): boolean {
-  if (!settings.enabled || settings.quietMode || notification.read_at) {
-    return false;
-  }
-  if (notification.actor_pubkey === localAuthorPubkey) {
-    return false;
-  }
-  if (notification.kind === 'direct_message') {
-    return settings.directMessages;
-  }
-  if (notification.kind === 'mention' || notification.kind === 'reply') {
-    return settings.mentionsAndReplies;
-  }
-  if (
-    notification.kind === 'followed' ||
-    notification.kind === 'repost' ||
-    notification.kind === 'quote_repost'
-  ) {
-    return settings.followsAndReposts;
-  }
-  return false;
-}
-
-export function notificationTitle(notification: NotificationView): string {
-  switch (notification.kind) {
-    case 'direct_message':
-      return 'Direct message';
-    case 'mention':
-      return 'Mention';
-    case 'reply':
-      return 'Reply';
-    case 'followed':
-      return 'New follower';
-    case 'quote_repost':
-      return 'Quote repost';
-    case 'repost':
-      return 'Repost';
-  }
-}
-
-export function notificationBody(
-  notification: NotificationView,
-  settings: OsNotificationSettings
-): string | undefined {
-  if (!settings.previewBody) {
-    return notification.kind === 'direct_message'
-      ? 'Open kukuri to read this message.'
-      : 'Open kukuri to view this activity.';
-  }
-  return notification.preview_text ?? undefined;
-}
-
-export function readSeenOsNotificationIds(): Set<string> {
-  if (typeof window === 'undefined') {
-    return new Set();
-  }
-  try {
-    const parsed = JSON.parse(
-      window.localStorage.getItem(OS_NOTIFICATION_SEEN_STORAGE_KEY) ?? '[]'
-    ) as string[];
-    return new Set(parsed.filter((value) => typeof value === 'string'));
-  } catch {
-    return new Set();
-  }
-}
-
-export function writeSeenOsNotificationIds(values: Set<string>): void {
-  if (typeof window === 'undefined') {
-    return;
-  }
-  const nextValues = Array.from(values).slice(-MAX_SEEN_NOTIFICATION_IDS);
-  window.localStorage.setItem(OS_NOTIFICATION_SEEN_STORAGE_KEY, JSON.stringify(nextValues));
 }
 
 export function isTauriRuntime(): boolean {

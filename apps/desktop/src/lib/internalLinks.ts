@@ -139,20 +139,6 @@ export function buildLiveLink(
   return buildRoute('/live', params);
 }
 
-export function buildGameLink(
-  topic: string,
-  roomId: string,
-  channelId: string | null = null
-): string {
-  const params = new URLSearchParams();
-  params.set('topic', topic);
-  if (channelId) {
-    params.set('channel', channelId);
-  }
-  params.set('roomId', roomId);
-  return buildRoute('/game', params);
-}
-
 export function buildChannelAccessPreviewDeepLink(token: string): string {
   const params = new URLSearchParams();
   params.set('token', token);
