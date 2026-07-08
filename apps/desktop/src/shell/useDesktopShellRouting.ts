@@ -26,10 +26,12 @@ import { setRecordEntry } from '@/shell/stateUpdates';
 import { THREAD_TIMELINE_LIMIT } from '@/shell/pagination';
 import { useRouteSynchronization } from '@/shell/routing/useRouteSynchronization';
 import { useSyncRoute } from '@/shell/routing/useSyncRoute';
+import { useShallow } from 'zustand/react/shallow';
 import {
   authorViewFromDirectMessageConversation,
   mergeKnownAuthors,
   messageFromError,
+  selectShellRoutingSlice,
 } from '@/shell/selectors';
 import {
   useDesktopShellFieldSetter,
@@ -61,7 +63,7 @@ export function useDesktopShellRouting({
   const location = useLocation();
   const navigate = useNavigate();
   const storeApi = useDesktopShellStoreApi();
-  const state = useDesktopShellStore();
+  const state = useDesktopShellStore(useShallow(selectShellRoutingSlice));
   const {
     activeTopic,
     selectedThread,

@@ -33,6 +33,7 @@ import { authorDisplayLabel } from '@/shell/selectors';
 import { useDesktopShellFieldSetter, useDesktopShellStore } from '@/shell/store';
 import type { Translate } from '@/shell/actions/shared';
 import { useDesktopShellViewModels } from '@/shell/useDesktopShellViewModels';
+import { useShallow } from 'zustand/react/shallow';
 
 type ViewModels = ReturnType<typeof useDesktopShellViewModels>;
 
@@ -202,7 +203,34 @@ export function DesktopShellOverlays({
     replyTarget,
     repostTarget,
     syncStatus,
-  } = useDesktopShellStore();
+  } = useDesktopShellStore(
+    useShallow((s) => ({
+      attachmentInputKey: s.attachmentInputKey,
+      channelActionPending: s.channelActionPending,
+      channelAudienceInput: s.channelAudienceInput,
+      channelError: s.channelError,
+      channelLabelInput: s.channelLabelInput,
+      composer: s.composer,
+      composerError: s.composerError,
+      gameCreatePending: s.gameCreatePending,
+      gameDescription: s.gameDescription,
+      gameError: s.gameError,
+      gameParticipantsInput: s.gameParticipantsInput,
+      gameTitle: s.gameTitle,
+      inviteOutput: s.inviteOutput,
+      inviteOutputLabel: s.inviteOutputLabel,
+      inviteTokenInput: s.inviteTokenInput,
+      knownAuthorsByPubkey: s.knownAuthorsByPubkey,
+      localProfile: s.localProfile,
+      liveCreatePending: s.liveCreatePending,
+      liveDescription: s.liveDescription,
+      liveError: s.liveError,
+      liveTitle: s.liveTitle,
+      replyTarget: s.replyTarget,
+      repostTarget: s.repostTarget,
+      syncStatus: s.syncStatus,
+    }))
+  );
   const setChannelLabelInput = useDesktopShellFieldSetter('channelLabelInput');
   const setChannelAudienceInput = useDesktopShellFieldSetter('channelAudienceInput');
   const setInviteTokenInput = useDesktopShellFieldSetter('inviteTokenInput');

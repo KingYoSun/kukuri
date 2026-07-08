@@ -18,12 +18,13 @@ import {
   useDesktopShellStoreApi,
 } from '@/shell/store';
 import { setRecordEntry, updateRecordEntry } from '@/shell/stateUpdates';
-import { publishedTopicIdForPost } from '@/shell/selectors';
+import { publishedTopicIdForPost, selectShellActionsSlice } from '@/shell/selectors';
 import { createComposeInteractionsActions } from './actions/composeInteractions';
 import { createDirectMessageActions } from './actions/directMessages';
 import { createLiveGameActions } from './actions/liveGame';
 import { createMessageReactionSocialActions } from './actions/messageReactionSocial';
 import { createProfileTopicChannelActions } from './actions/profileTopicChannel';
+import { useShallow } from 'zustand/react/shallow';
 import type {
   OpenAuthorDetail,
   OpenDirectMessagePane,
@@ -80,7 +81,7 @@ export function useDesktopShellActions({
   buildVideoDraftItem,
 }: UseDesktopShellActionsArgs) {
   const storeApi = useDesktopShellStoreApi();
-  const state = useDesktopShellStore();
+  const state = useDesktopShellStore(useShallow(selectShellActionsSlice));
   const nextActiveTopic = state.activeTopic;
   const nextSelectedChannelId = state.selectedChannelIdByTopic[nextActiveTopic] ?? null;
   const nextJoinedChannels = state.joinedChannelsByTopic[nextActiveTopic] ?? [];

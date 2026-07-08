@@ -16,9 +16,7 @@ import {
 } from '@/shell/routes';
 import type {
   DesktopShellState,
-  DesktopShellStateValue,
-  DesktopShellStore,
-  DesktopShellStoreApi,
+  DesktopShellStateValue,  DesktopShellStoreApi,
 } from '@/shell/store';
 import {
   isHex64,
@@ -47,7 +45,8 @@ type UseRouteSynchronizationArgs = {
   resolvedRouteLocation: HashRouteLocation;
   routeSection: PrimarySection;
   scheduleAnimationFrame: (callback: () => void) => void;
-  state: DesktopShellStore;
+  // 読むフィールドだけを要求する(全ストア購読を強制しない。WP-H6 PR2)。
+  state: Pick<DesktopShellState, 'activeTopic' | 'directMessagePaneOpen' | 'focusedObjectId' | 'gamePanelStateByTopic' | 'gameRoomsByTopic' | 'joinedChannelsByTopic' | 'channelPanelStateByTopic' | 'livePanelStateByTopic' | 'liveSessionsByTopic' | 'selectedAuthor' | 'selectedAuthorPubkey' | 'selectedChannelIdByTopic' | 'selectedDirectMessagePeerPubkey' | 'selectedGameRoomId' | 'selectedLiveSessionId' | 'selectedThread' | 'shellChromeState' | 'thread' | 'trackedTopics'>;
   syncRoute: (mode?: 'push' | 'replace', overrides?: DesktopShellRouteOverrides) => void;
   storeApi: DesktopShellStoreApi;
 };

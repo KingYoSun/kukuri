@@ -39,6 +39,7 @@ import type {
 import type { DesktopTheme } from '@/lib/theme';
 
 import { extractMentions } from '@/lib/internalLinks';
+import { useShallow } from 'zustand/react/shallow';
 import {
   PRIMARY_SECTION_ITEMS,
   SETTINGS_SECTION_COPY,
@@ -85,6 +86,7 @@ import {
   syncStatusBadgeLabel,
   topicConnectionLabel,
   translateTopicConnectionText,
+  selectShellViewModelsSlice,
 } from '@/shell/selectors';
 
 type UseDesktopShellViewModelsArgs = {
@@ -107,7 +109,7 @@ export function useDesktopShellViewModels({
   theme,
   profileAvatarPreviewUrl,
 }: UseDesktopShellViewModelsArgs) {
-  const state = useDesktopShellStore();
+  const state = useDesktopShellStore(useShallow(selectShellViewModelsSlice));
   const activeTopic = state.activeTopic;
   const selectedPrivateChannelId = state.selectedChannelIdByTopic[activeTopic] ?? null;
   const activeJoinedChannels = state.joinedChannelsByTopic[activeTopic] ?? EMPTY_JOINED_CHANNELS;

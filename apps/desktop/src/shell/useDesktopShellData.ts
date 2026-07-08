@@ -36,6 +36,7 @@ import {
   useDesktopShellStoreApi,
 } from '@/shell/store';
 import { THREAD_TIMELINE_LIMIT, VISIBLE_TIMELINE_LIMIT } from '@/shell/pagination';
+import { useShallow } from 'zustand/react/shallow';
 import {
   authorViewFromDirectMessageConversation,
   communityNodesToDraftNodes,
@@ -45,6 +46,7 @@ import {
   privateTimelineScope,
   profileInputFromProfile,
   seedPeersToEditorValue,
+  selectShellDataSlice,
 } from '@/shell/selectors';
 
 type UseDesktopShellDataArgs = {
@@ -74,7 +76,7 @@ export function useDesktopShellData({
   draftSequenceRef,
 }: UseDesktopShellDataArgs) {
   const storeApi = useDesktopShellStoreApi();
-  const state = useDesktopShellStore();
+  const state = useDesktopShellStore(useShallow(selectShellDataSlice));
   const {
     trackedTopics,
     activeTopic,

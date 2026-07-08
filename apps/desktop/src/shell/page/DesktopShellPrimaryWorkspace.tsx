@@ -40,6 +40,7 @@ import {
 } from '@/shell/selectors';
 import { useDesktopShellViewModels } from '@/shell/useDesktopShellViewModels';
 import type { OpenAuthorDetail, OpenThread, Translate } from '@/shell/actions/shared';
+import { useShallow } from 'zustand/react/shallow';
 
 type ViewModels = ReturnType<typeof useDesktopShellViewModels>;
 
@@ -185,7 +186,35 @@ export function DesktopShellPrimaryWorkspace({
     syncStatus,
     timelineLoadingMoreByKey,
     timelineNextCursorByKey,
-  } = useDesktopShellStore();
+  } = useDesktopShellStore(
+    useShallow((s) => ({
+      activeTopic: s.activeTopic,
+      bookmarkedPosts: s.bookmarkedPosts,
+      bookmarkedReactionAssets: s.bookmarkedReactionAssets,
+      composerError: s.composerError,
+      knownAuthorsByPubkey: s.knownAuthorsByPubkey,
+      liveError: s.liveError,
+      localProfile: s.localProfile,
+      mediaObjectUrls: s.mediaObjectUrls,
+      communityNodeManifests: s.communityNodeManifests,
+      communityNodeStatuses: s.communityNodeStatuses,
+      ownedReactionAssets: s.ownedReactionAssets,
+      pendingTimelineCountsByKey: s.pendingTimelineCountsByKey,
+      profileDirty: s.profileDirty,
+      profileError: s.profileError,
+      profilePanelState: s.profilePanelState,
+      profileSaving: s.profileSaving,
+      recentReactions: s.recentReactions,
+      selectedLiveSessionId: s.selectedLiveSessionId,
+      selectedThread: s.selectedThread,
+      shellChromeState: s.shellChromeState,
+      socialConnections: s.socialConnections,
+      socialConnectionsPanelState: s.socialConnectionsPanelState,
+      syncStatus: s.syncStatus,
+      timelineLoadingMoreByKey: s.timelineLoadingMoreByKey,
+      timelineNextCursorByKey: s.timelineNextCursorByKey,
+    }))
+  );
   const setShellChromeState = useDesktopShellFieldSetter('shellChromeState');
   const bookmarkedPostIds = useMemo(
     () => new Set(bookmarkedPosts.map((item) => item.post.object_id)),

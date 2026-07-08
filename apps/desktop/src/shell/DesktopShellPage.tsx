@@ -48,6 +48,7 @@ import {
   resolveProfilePictureSrc,
   syncStatusBadgeLabel,
   syncStatusBadgeTone,
+  selectShellPageSlice,
 } from '@/shell/selectors';
 import { setRecordEntry } from '@/shell/stateUpdates';
 import { useDesktopShellData } from '@/shell/useDesktopShellData';
@@ -65,6 +66,7 @@ import {
 import { DesktopShellOverlays } from '@/shell/page/DesktopShellOverlays';
 import { DesktopShellPrimaryWorkspace } from '@/shell/page/DesktopShellPrimaryWorkspace';
 import { DesktopShellSettingsDrawer } from '@/shell/page/DesktopShellSettingsDrawer';
+import { useShallow } from 'zustand/react/shallow';
 
 const CLIPBOARD_TOAST_TIMEOUT_MS = 2200;
 const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
@@ -103,7 +105,7 @@ export function DesktopShellPage({
     selectedLiveSessionId,
     selectedGameRoomId,
     shellChromeState,
-  } = useDesktopShellStore();
+  } = useDesktopShellStore(useShallow(selectShellPageSlice));
   const [composeDialogOpen, setComposeDialogOpen] = useState(false);
   const [channelDialogOpen, setChannelDialogOpen] = useState(false);
   const [channelSettingsDialogOpen, setChannelSettingsDialogOpen] = useState(false);

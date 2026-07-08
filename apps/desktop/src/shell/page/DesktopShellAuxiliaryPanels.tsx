@@ -36,6 +36,7 @@ import {
   selectVideoPosterAttachment,
 } from '@/shell/media';
 import { useDesktopShellViewModels } from '@/shell/useDesktopShellViewModels';
+import { useShallow } from 'zustand/react/shallow';
 import type {
   OpenAuthorDetail,
   OpenDirectMessagePane,
@@ -102,7 +103,21 @@ export function DesktopShellMessagesWorkspace({
     selectedDirectMessagePeerPubkey,
     syncStatus,
     unsupportedVideoManifests,
-  } = useDesktopShellStore();
+  } = useDesktopShellStore(
+    useShallow((s) => ({
+      directMessageAttachmentInputKey: s.directMessageAttachmentInputKey,
+      directMessageComposer: s.directMessageComposer,
+      directMessageError: s.directMessageError,
+      directMessageSending: s.directMessageSending,
+      directMessages: s.directMessages,
+      knownAuthorsByPubkey: s.knownAuthorsByPubkey,
+      localProfile: s.localProfile,
+      mediaObjectUrls: s.mediaObjectUrls,
+      selectedDirectMessagePeerPubkey: s.selectedDirectMessagePeerPubkey,
+      syncStatus: s.syncStatus,
+      unsupportedVideoManifests: s.unsupportedVideoManifests,
+    }))
+  );
   const setDirectMessageComposer = useDesktopShellFieldSetter('directMessageComposer');
   const profileAuthorLabel = authorDisplayLabel(
     syncStatus.local_author_pubkey,
@@ -415,7 +430,14 @@ export function DesktopShellNotificationsWorkspace({
     notificationAutoReadError,
     notificationPanelState,
     notificationStatus,
-  } = useDesktopShellStore();
+  } = useDesktopShellStore(
+    useShallow((s) => ({
+      notifications: s.notifications,
+      notificationAutoReadError: s.notificationAutoReadError,
+      notificationPanelState: s.notificationPanelState,
+      notificationStatus: s.notificationStatus,
+    }))
+  );
 
   return (
     <>
@@ -563,7 +585,21 @@ export function DesktopShellDetailPaneStack({
     syncStatus,
     threadLoadingMoreById,
     threadNextCursorById,
-  } = useDesktopShellStore();
+  } = useDesktopShellStore(
+    useShallow((s) => ({
+      bookmarkedReactionAssets: s.bookmarkedReactionAssets,
+      focusedObjectId: s.focusedObjectId,
+      mediaObjectUrls: s.mediaObjectUrls,
+      ownedReactionAssets: s.ownedReactionAssets,
+      recentReactions: s.recentReactions,
+      selectedAuthor: s.selectedAuthor,
+      selectedAuthorPubkey: s.selectedAuthorPubkey,
+      selectedThread: s.selectedThread,
+      syncStatus: s.syncStatus,
+      threadLoadingMoreById: s.threadLoadingMoreById,
+      threadNextCursorById: s.threadNextCursorById,
+    }))
+  );
   const selectedThreadHasMore = selectedThread ? Boolean(threadNextCursorById[selectedThread]) : false;
   const selectedThreadLoadingMore = selectedThread
     ? (threadLoadingMoreById[selectedThread] ?? false)
