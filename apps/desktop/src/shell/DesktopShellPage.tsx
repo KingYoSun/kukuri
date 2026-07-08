@@ -2,7 +2,6 @@ import {
   startTransition,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -21,7 +20,7 @@ import { Label } from '@/components/ui/label';
 
 import { type ChannelAccessTokenPreview, runtimeApi } from '@/lib/api';
 import i18n from '@/i18n';
-import { formatLocalizedTime, getResolvedLocale } from '@/i18n/format';
+import { getResolvedLocale } from '@/i18n/format';
 import {
   buildTopicLink,
   parseChannelAccessPreviewDeepLink,
@@ -39,13 +38,11 @@ import {
   useDesktopShellStore,
 } from '@/shell/store';
 import {
-  authorDisplayLabel,
   formatCount,
   mergeKnownAuthors,
   messageFromError,
   privateComposeTarget,
   privateTimelineScope,
-  resolveProfilePictureSrc,
   syncStatusBadgeLabel,
   syncStatusBadgeTone,
   selectShellPageSlice,
@@ -95,10 +92,7 @@ export function DesktopShellPage({
     topicInput,
     selectedThread,
     focusedObjectId,
-    mediaObjectUrls,
     syncStatus,
-    localProfile,
-    knownAuthorsByPubkey,
     selectedAuthorPubkey,
     notifications,
     notificationStatus,
@@ -425,54 +419,6 @@ export function DesktopShellPage({
     notificationStatus.unread_count > 99 ? '99+' : formatCount(notificationStatus.unread_count);
   useOsNotificationBridge();
   useOsNotificationActivation(notifications, handleOpenNotification);
-  const notificationItems = useMemo(
-    () =>
-      notifications.map((notification) => {
-        const knownAuthor = knownAuthorsByPubkey[notification.actor_pubkey] ?? null;
-        const actorLabel = authorDisplayLabel(
-          notification.actor_pubkey,
-          notification.actor_display_name,
-          notification.actor_name
-        );
-        const actorPicture = knownAuthor
-          ? resolveProfilePictureSrc(knownAuthor, mediaObjectUrls)
-          : notification.actor_picture_asset
-            ? mediaObjectUrls[notification.actor_picture_asset.hash] ?? notification.actor_picture ?? null
-            : notification.actor_picture ?? null;
-        const contextLabel =
-          notification.kind === 'direct_message'
-            ? t('shell:notifications.context.directMessage')
-            : notification.topic_id && notification.channel_id
-              ? t('shell:notifications.context.topicChannel', {
-                  channel: notification.channel_id,
-                  topic: notification.topic_id,
-                })
-              : notification.topic_id
-                ? t('shell:notifications.context.topic', {
-                    topic: notification.topic_id,
-                  })
-                : t('shell:notifications.context.authorActivity');
-        const previewText =
-          notification.preview_text ??
-          (notification.kind === 'followed'
-            ? t('shell:notifications.preview.followed')
-            : notification.kind === 'direct_message'
-              ? t('shell:notifications.preview.noMessage')
-              : t('shell:notifications.preview.noContent'));
-
-        return {
-          ...notification,
-          actorLabel,
-          actorPicture,
-          contextLabel,
-          kindLabel: t(`shell:notifications.kinds.${notification.kind}`),
-          previewText,
-          receivedLabel: formatLocalizedTime(notification.received_at, locale),
-          unread: !notification.read_at,
-        };
-      }),
-    [knownAuthorsByPubkey, locale, mediaObjectUrls, notifications, t]
-  );
   const syncTopicContext = useCallback(
     async (topic: string, channelId: string | null) => {
       const nextTopics = trackedTopics.includes(topic) ? trackedTopics : [...trackedTopics, topic];
@@ -880,11 +826,6 @@ export function DesktopShellPage({
     </div>
   );
 
-  const profileAuthorLabel = authorDisplayLabel(
-    syncStatus.local_author_pubkey,
-    localProfile?.display_name,
-    localProfile?.name
-  );
   const messagesWorkspace = (
     <DesktopShellMessagesWorkspace
       t={t}
@@ -903,7 +844,7 @@ export function DesktopShellPage({
   const notificationsWorkspace = (
     <DesktopShellNotificationsWorkspace
       t={t}
-      notificationItems={notificationItems}
+      locale={locale}
       onRefresh={() => {
         setNotificationAutoReadError(null);
         setNotificationPanelState({
@@ -918,7 +859,6 @@ export function DesktopShellPage({
   const detailPaneStack = (
     <DesktopShellDetailPaneStack
       t={t}
-      activeTopic={activeTopic}
       viewModels={viewModels}
       closeAuthorPane={closeAuthorPane}
       closeThreadPane={closeThreadPane}
@@ -985,7 +925,6 @@ export function DesktopShellPage({
             api={api}
             locale={locale}
             routeSection={routeSection}
-            profileAuthorLabel={profileAuthorLabel}
             profileAvatarInputKey={profileAvatarInputKey}
             messagesWorkspace={messagesWorkspace}
             notificationsWorkspace={notificationsWorkspace}
@@ -1066,7 +1005,6 @@ export function DesktopShellPage({
 
       <DesktopShellOverlays
         t={t}
-        activeTopic={activeTopic}
         viewModels={viewModels}
         profileAvatarCropOpen={profileAvatarCropOpen}
         profileAvatarCropFile={profileAvatarCropFile}
@@ -1128,7 +1066,6 @@ export function DesktopShellPage({
       />
 
       <DesktopShellSettingsDrawer
-        drawerId={SHELL_SETTINGS_ID}
         onThemeChange={onThemeChange}
         onLocaleChange={(nextLocale) => {
           void i18nInstance.changeLanguage(nextLocale);

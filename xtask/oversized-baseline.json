@@ -13,16 +13,16 @@
       "path": "apps/desktop/src/components/extended/MetaverseRoomPanel.tsx"
     },
     {
-      "lines": 1153,
-      "path": "apps/desktop/src/shell/DesktopShellPage.tsx"
-    },
-    {
       "lines": 1141,
       "path": "apps/desktop/src/styles/shell-phase1-legacy.css"
     },
     {
       "lines": 1140,
       "path": "apps/desktop/src/shell/useDesktopShellViewModels.ts"
+    },
+    {
+      "lines": 1090,
+      "path": "apps/desktop/src/shell/DesktopShellPage.tsx"
     },
     {
       "lines": 1087,

@@ -796,15 +796,11 @@ export const selectShellPageSlice = (s: DesktopShellStore) => ({
   topicInput: s.topicInput,
   selectedThread: s.selectedThread,
   focusedObjectId: s.focusedObjectId,
-  mediaObjectUrls: s.mediaObjectUrls,
   syncStatus: s.syncStatus,
-  localProfile: s.localProfile,
-  knownAuthorsByPubkey: s.knownAuthorsByPubkey,
   selectedAuthorPubkey: s.selectedAuthorPubkey,
   notifications: s.notifications,
   notificationStatus: s.notificationStatus,
   selectedLiveSessionId: s.selectedLiveSessionId,
   selectedGameRoomId: s.selectedGameRoomId,
   shellChromeState: s.shellChromeState,
-    
 });

@@ -1,4 +1,4 @@
-import type { ChangeEvent, FormEvent } from 'react';
+import { useMemo, type ChangeEvent, type FormEvent } from 'react';
 
 import { AuthorAvatar } from '@/components/core/AuthorAvatar';
 import { AuthorDetailCard } from '@/components/core/AuthorDetailCard';
@@ -414,29 +414,81 @@ export function DesktopShellMessagesWorkspace({
 
 type NotificationsWorkspaceProps = {
   t: Translate;
-  notificationItems: NotificationItemView[];
+  locale: SupportedLocale;
   onRefresh: () => void;
   handleOpenNotification: (notification: NotificationView) => Promise<void>;
 };
 
 export function DesktopShellNotificationsWorkspace({
   t,
-  notificationItems,
+  locale,
   onRefresh,
   handleOpenNotification,
 }: NotificationsWorkspaceProps) {
   const {
+    knownAuthorsByPubkey,
+    mediaObjectUrls,
     notifications,
     notificationAutoReadError,
     notificationPanelState,
     notificationStatus,
   } = useDesktopShellStore(
     useShallow((s) => ({
+      knownAuthorsByPubkey: s.knownAuthorsByPubkey,
+      mediaObjectUrls: s.mediaObjectUrls,
       notifications: s.notifications,
       notificationAutoReadError: s.notificationAutoReadError,
       notificationPanelState: s.notificationPanelState,
       notificationStatus: s.notificationStatus,
     }))
+  );
+  const notificationItems = useMemo<NotificationItemView[]>(
+    () =>
+      notifications.map((notification) => {
+        const knownAuthor = knownAuthorsByPubkey[notification.actor_pubkey] ?? null;
+        const actorLabel = authorDisplayLabel(
+          notification.actor_pubkey,
+          notification.actor_display_name,
+          notification.actor_name
+        );
+        const actorPicture = knownAuthor
+          ? resolveProfilePictureSrc(knownAuthor, mediaObjectUrls)
+          : notification.actor_picture_asset
+            ? mediaObjectUrls[notification.actor_picture_asset.hash] ?? notification.actor_picture ?? null
+            : notification.actor_picture ?? null;
+        const contextLabel =
+          notification.kind === 'direct_message'
+            ? t('shell:notifications.context.directMessage')
+            : notification.topic_id && notification.channel_id
+              ? t('shell:notifications.context.topicChannel', {
+                  channel: notification.channel_id,
+                  topic: notification.topic_id,
+                })
+              : notification.topic_id
+                ? t('shell:notifications.context.topic', {
+                    topic: notification.topic_id,
+                  })
+                : t('shell:notifications.context.authorActivity');
+        const previewText =
+          notification.preview_text ??
+          (notification.kind === 'followed'
+            ? t('shell:notifications.preview.followed')
+            : notification.kind === 'direct_message'
+              ? t('shell:notifications.preview.noMessage')
+              : t('shell:notifications.preview.noContent'));
+
+        return {
+          ...notification,
+          actorLabel,
+          actorPicture,
+          contextLabel,
+          kindLabel: t(`shell:notifications.kinds.${notification.kind}`),
+          previewText,
+          receivedLabel: formatLocalizedTime(notification.received_at, locale),
+          unread: !notification.read_at,
+        };
+      }),
+    [knownAuthorsByPubkey, locale, mediaObjectUrls, notifications, t]
   );
 
   return (
@@ -518,7 +570,6 @@ export function DesktopShellNotificationsWorkspace({
 
 type DetailPaneStackProps = {
   t: Translate;
-  activeTopic: string;
   viewModels: Pick<
     ViewModels,
     | 'authorDetailView'
@@ -551,7 +602,6 @@ type DetailPaneStackProps = {
 
 export function DesktopShellDetailPaneStack({
   t,
-  activeTopic,
   viewModels,
   closeAuthorPane,
   closeThreadPane,
@@ -574,6 +624,7 @@ export function DesktopShellDetailPaneStack({
   handleOpenOriginalTopic,
 }: DetailPaneStackProps) {
   const {
+    activeTopic,
     bookmarkedReactionAssets,
     focusedObjectId,
     mediaObjectUrls,
@@ -587,6 +638,7 @@ export function DesktopShellDetailPaneStack({
     threadNextCursorById,
   } = useDesktopShellStore(
     useShallow((s) => ({
+      activeTopic: s.activeTopic,
       bookmarkedReactionAssets: s.bookmarkedReactionAssets,
       focusedObjectId: s.focusedObjectId,
       mediaObjectUrls: s.mediaObjectUrls,

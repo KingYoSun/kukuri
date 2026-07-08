@@ -39,7 +39,6 @@ type ViewModels = ReturnType<typeof useDesktopShellViewModels>;
 
 type DesktopShellOverlaysProps = {
   t: Translate;
-  activeTopic: string;
   viewModels: Pick<
     ViewModels,
     | 'activeComposeAudienceLabel'
@@ -122,7 +121,6 @@ function AccessPreviewItem({
 
 export function DesktopShellOverlays({
   t,
-  activeTopic,
   viewModels,
   profileAvatarCropOpen,
   profileAvatarCropFile,
@@ -179,6 +177,7 @@ export function DesktopShellOverlays({
     mentionCandidates,
   } = viewModels;
   const {
+    activeTopic,
     attachmentInputKey,
     channelActionPending,
     channelAudienceInput,
@@ -205,6 +204,7 @@ export function DesktopShellOverlays({
     syncStatus,
   } = useDesktopShellStore(
     useShallow((s) => ({
+      activeTopic: s.activeTopic,
       attachmentInputKey: s.attachmentInputKey,
       channelActionPending: s.channelActionPending,
       channelAudienceInput: s.channelAudienceInput,

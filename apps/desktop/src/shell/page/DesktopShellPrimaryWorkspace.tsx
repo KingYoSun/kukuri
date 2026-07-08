@@ -33,6 +33,7 @@ import {
   useDesktopShellStore,
 } from '@/shell/store';
 import {
+  authorDisplayLabel,
   formatCount,
   localizeAudienceLabel,
   resolveProfilePictureSrc,
@@ -49,7 +50,6 @@ type DesktopShellPrimaryWorkspaceProps = {
   api: DesktopApi;
   locale: SupportedLocale;
   routeSection: PrimarySection;
-  profileAuthorLabel: string;
   profileAvatarInputKey: number;
   messagesWorkspace: ReactNode;
   notificationsWorkspace: ReactNode;
@@ -120,7 +120,6 @@ export function DesktopShellPrimaryWorkspace({
   api,
   locale,
   routeSection,
-  profileAuthorLabel,
   profileAvatarInputKey,
   messagesWorkspace,
   notificationsWorkspace,
@@ -216,6 +215,11 @@ export function DesktopShellPrimaryWorkspace({
     }))
   );
   const setShellChromeState = useDesktopShellFieldSetter('shellChromeState');
+  const profileAuthorLabel = authorDisplayLabel(
+    syncStatus.local_author_pubkey,
+    localProfile?.display_name,
+    localProfile?.name
+  );
   const bookmarkedPostIds = useMemo(
     () => new Set(bookmarkedPosts.map((item) => item.post.object_id)),
     [bookmarkedPosts]
