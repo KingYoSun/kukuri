@@ -1,10 +1,6 @@
 {
   "files": [
     {
-      "lines": 2964,
-      "path": "apps/desktop/src/styles/shell-phase1.css"
-    },
-    {
       "lines": 1155,
       "path": "apps/desktop/src/components/extended/MetaverseRoomPanel.tsx"
     },
