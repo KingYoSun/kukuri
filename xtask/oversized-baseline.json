@@ -29,10 +29,6 @@
       "path": "crates/app-api/src/private_channels.rs"
     },
     {
-      "lines": 1044,
-      "path": "apps/desktop/src/styles/shell-scoped-overrides.css"
-    },
-    {
       "lines": 1035,
       "path": "apps/desktop/src/shell/useDesktopShellData.ts"
     }
