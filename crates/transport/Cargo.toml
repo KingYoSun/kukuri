@@ -21,6 +21,11 @@ tokio.workspace = true
 tokio-stream.workspace = true
 tracing.workspace = true
 kukuri-core = { path = "../core" }
+ts-rs = { workspace = true, optional = true }
+
+[features]
+# IPC 型の TypeScript 生成専用(codegen 時のみ有効)。
+ts = ["dep:ts-rs", "kukuri-core/ts"]
 
 [dev-dependencies]
 iroh = { workspace = true, features = ["test-utils"] }

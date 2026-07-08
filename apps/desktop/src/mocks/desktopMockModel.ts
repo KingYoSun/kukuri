@@ -18,7 +18,16 @@ import {
 
 // seed 入力は wire 契約(PostView / GameRoomView)より緩い専用型で受け、
 // 既定値は with*Defaults がバックエンドのルールをミラーして補完する。
-export type SeedPostInput = Omit<PostView, 'is_threadable'> & { is_threadable?: boolean };
+// 生成型 PostView は reaction 系を必須(wire 常在)にするが、seed 入力では
+// 省略でき withSocialPostDefaults が [] を補う。is_threadable も同様に任意。
+export type SeedPostInput = Omit<
+  PostView,
+  'is_threadable' | 'reaction_summary' | 'my_reactions'
+> & {
+  is_threadable?: boolean;
+  reaction_summary?: PostView['reaction_summary'];
+  my_reactions?: PostView['my_reactions'];
+};
 export type SeedGameRoomInput = Omit<GameRoomView, 'room_kind' | 'manifest_blob_hash'> & {
   room_kind?: GameRoomView['room_kind'];
   manifest_blob_hash?: string;

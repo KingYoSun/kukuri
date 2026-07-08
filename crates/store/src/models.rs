@@ -7,8 +7,11 @@ use kukuri_core::{
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct TimelineCursor {
     pub created_at: i64,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub object_id: EnvelopeId,
 }
 
@@ -200,6 +203,7 @@ pub struct DirectMessageTombstoneRow {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum NotificationKind {
     Mention,

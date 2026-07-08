@@ -20,6 +20,11 @@ kukuri-blob-service = { path = "../blob-service" }
 kukuri-docs-sync = { path = "../docs-sync" }
 kukuri-store = { path = "../store" }
 kukuri-transport = { path = "../transport" }
+ts-rs = { workspace = true, optional = true }
+
+[features]
+# IPC 型の TypeScript 生成専用(codegen 時のみ有効。production ビルドは無影響)。
+ts = ["dep:ts-rs", "kukuri-core/ts", "kukuri-store/ts", "kukuri-transport/ts"]
 
 [dev-dependencies]
 kukuri-iroh-node = { path = "../iroh-node" }
