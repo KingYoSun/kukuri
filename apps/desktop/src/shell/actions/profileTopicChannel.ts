@@ -1,3 +1,4 @@
+import { setRecordEntry, updateRecordEntry } from '@/shell/stateUpdates';
 import type { FormEvent } from 'react';
 
 import type {
@@ -145,10 +146,7 @@ export function createProfileTopicChannelActions({
 }: ProfileTopicChannelParams) {
   function handleProfileFieldChange(field: 'displayName' | 'name' | 'about', value: string) {
     const nextField: keyof ProfileInput = field === 'displayName' ? 'display_name' : field;
-    setProfileDraft((current) => ({
-      ...current,
-      [nextField]: value,
-    }));
+    setProfileDraft(setRecordEntry(nextField, value));
     setProfileDirty(true);
   }
 
@@ -211,24 +209,15 @@ export function createProfileTopicChannelActions({
   }
 
   function handleSelectPrivateChannel(topicId: string, channelId: string) {
-    setSelectedChannelIdByTopic((current) => ({
-      ...current,
-      [topicId]: channelId,
-    }));
-    setTimelineScopeByTopic((current) => ({
-      ...current,
-      [topicId]: {
+    setSelectedChannelIdByTopic(setRecordEntry(topicId, channelId));
+    setTimelineScopeByTopic(setRecordEntry(topicId, {
         kind: 'channel',
         channel_id: channelId,
-      },
-    }));
-    setComposeChannelByTopic((current) => ({
-      ...current,
-      [topicId]: {
+      }));
+    setComposeChannelByTopic(setRecordEntry(topicId, {
         kind: 'private_channel',
         channel_id: channelId,
-      },
-    }));
+      }));
     setActiveTopic(topicId);
     setShellChromeState((current) => ({
       ...current,
@@ -319,18 +308,9 @@ export function createProfileTopicChannelActions({
 
   async function handleSelectTopic(topic: string) {
     setActiveTopic(topic);
-    setSelectedChannelIdByTopic((current) => ({
-      ...current,
-      [topic]: null,
-    }));
-    setTimelineScopeByTopic((current) => ({
-      ...current,
-      [topic]: PUBLIC_TIMELINE_SCOPE,
-    }));
-    setComposeChannelByTopic((current) => ({
-      ...current,
-      [topic]: PUBLIC_CHANNEL_REF,
-    }));
+    setSelectedChannelIdByTopic(setRecordEntry(topic, null));
+    setTimelineScopeByTopic(setRecordEntry(topic, PUBLIC_TIMELINE_SCOPE));
+    setComposeChannelByTopic(setRecordEntry(topic, PUBLIC_CHANNEL_REF));
     setShellChromeState((current) => ({
       ...current,
       activePrimarySection: 'timeline',
@@ -426,38 +406,23 @@ export function createProfileTopicChannelActions({
           translate('channels:errors.failedShareChannel')
         );
       }
-      setJoinedChannelsByTopic((current) => ({
-        ...current,
-        [activeTopic]: upsertJoinedChannel(current[activeTopic] ?? [], channel),
-      }));
-      setChannelPanelStateByTopic((current) => ({
-        ...current,
-        [activeTopic]: {
+      setJoinedChannelsByTopic(updateRecordEntry(activeTopic, (prev) => upsertJoinedChannel(prev ?? [], channel)));
+      setChannelPanelStateByTopic(setRecordEntry(activeTopic, {
           status: 'ready',
           error: null,
-        },
-      }));
+        }));
       setChannelLabelInput('');
       setChannelAudienceInput('invite_only');
       setChannelError(nextChannelError);
-      setTimelineScopeByTopic((current) => ({
-        ...current,
-        [activeTopic]: {
+      setTimelineScopeByTopic(setRecordEntry(activeTopic, {
           kind: 'channel',
           channel_id: channel.channel_id,
-        },
-      }));
-      setSelectedChannelIdByTopic((current) => ({
-        ...current,
-        [activeTopic]: channel.channel_id,
-      }));
-      setComposeChannelByTopic((current) => ({
-        ...current,
-        [activeTopic]: {
+        }));
+      setSelectedChannelIdByTopic(setRecordEntry(activeTopic, channel.channel_id));
+      setComposeChannelByTopic(setRecordEntry(activeTopic, {
           kind: 'private_channel',
           channel_id: channel.channel_id,
-        },
-      }));
+        }));
       setShellChromeState((current) => ({
         ...current,
         activePrimarySection: 'timeline',
@@ -489,35 +454,20 @@ export function createProfileTopicChannelActions({
     setChannelActionPending('leave');
     try {
       await api.leavePrivateChannel(topicId, channelId);
-      setJoinedChannelsByTopic((current) => ({
-        ...current,
-        [topicId]: (current[topicId] ?? []).filter(
+      setJoinedChannelsByTopic(updateRecordEntry(topicId, (prev) => (prev ?? []).filter(
           (channel) => channel.channel_id !== channelId
-        ),
-      }));
-      setChannelPanelStateByTopic((current) => ({
-        ...current,
-        [topicId]: {
+        )));
+      setChannelPanelStateByTopic(setRecordEntry(topicId, {
           status: 'ready',
           error: null,
-        },
-      }));
+        }));
       setInviteOutput(null);
       setChannelError(null);
       const leavingSelectedChannel = selectedChannelIdByTopic[topicId] === channelId;
       if (leavingSelectedChannel) {
-        setSelectedChannelIdByTopic((current) => ({
-          ...current,
-          [topicId]: null,
-        }));
-        setTimelineScopeByTopic((current) => ({
-          ...current,
-          [topicId]: PUBLIC_TIMELINE_SCOPE,
-        }));
-        setComposeChannelByTopic((current) => ({
-          ...current,
-          [topicId]: PUBLIC_CHANNEL_REF,
-        }));
+        setSelectedChannelIdByTopic(setRecordEntry(topicId, null));
+        setTimelineScopeByTopic(setRecordEntry(topicId, PUBLIC_TIMELINE_SCOPE));
+        setComposeChannelByTopic(setRecordEntry(topicId, PUBLIC_CHANNEL_REF));
         if (topicId === activeTopic) {
           syncRoute('replace', {
             activeTopic: topicId,
@@ -563,36 +513,21 @@ export function createProfileTopicChannelActions({
     setTrackedTopics(nextTopics);
     setActiveTopic(topicId);
     if (placeholderChannel) {
-      setJoinedChannelsByTopic((current) => ({
-        ...current,
-        [topicId]: upsertJoinedChannel(current[topicId] ?? [], placeholderChannel),
-      }));
-      setChannelPanelStateByTopic((current) => ({
-        ...current,
-        [topicId]: {
+      setJoinedChannelsByTopic(updateRecordEntry(topicId, (prev) => upsertJoinedChannel(prev ?? [], placeholderChannel)));
+      setChannelPanelStateByTopic(setRecordEntry(topicId, {
           status: 'ready',
           error: null,
-        },
-      }));
+        }));
     }
-    setSelectedChannelIdByTopic((current) => ({
-      ...current,
-      [topicId]: channelId,
-    }));
-    setTimelineScopeByTopic((current) => ({
-      ...current,
-      [topicId]: {
+    setSelectedChannelIdByTopic(setRecordEntry(topicId, channelId));
+    setTimelineScopeByTopic(setRecordEntry(topicId, {
         kind: 'channel',
         channel_id: channelId,
-      },
-    }));
-    setComposeChannelByTopic((current) => ({
-      ...current,
-      [topicId]: {
+      }));
+    setComposeChannelByTopic(setRecordEntry(topicId, {
         kind: 'private_channel',
         channel_id: channelId,
-      },
-    }));
+      }));
     setInviteTokenInput('');
     setInviteOutput(null);
     setChannelError(null);

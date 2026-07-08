@@ -22,6 +22,7 @@ import {
   parsePrimarySectionPath,
   resolveHashBackedRouteLocation,
 } from '@/shell/routes';
+import { setRecordEntry } from '@/shell/stateUpdates';
 import { THREAD_TIMELINE_LIMIT } from '@/shell/pagination';
 import { useRouteSynchronization } from '@/shell/routing/useRouteSynchronization';
 import { useSyncRoute } from '@/shell/routing/useSyncRoute';
@@ -216,14 +217,8 @@ export function useDesktopShellRouting({
           const remaining = current.filter((entry) => entry.peer_pubkey !== conversation.peer_pubkey);
           return [conversation, ...remaining];
         });
-        setDirectMessageTimelineByPeer((current) => ({
-          ...current,
-          [peerPubkey]: timeline.items,
-        }));
-        setDirectMessageStatusByPeer((current) => ({
-          ...current,
-          [peerPubkey]: status,
-        }));
+        setDirectMessageTimelineByPeer(setRecordEntry(peerPubkey, timeline.items));
+        setDirectMessageStatusByPeer(setRecordEntry(peerPubkey, status));
         setKnownAuthorsByPubkey((current) =>
           mergeKnownAuthors(current, [authorViewFromDirectMessageConversation(conversation)])
         );
@@ -334,10 +329,7 @@ export function useDesktopShellRouting({
           setSelectedThread(threadId);
           setFocusedObjectId(nextFocusedObjectId);
           setThread(threadView.items);
-          setThreadNextCursorById((current) => ({
-            ...current,
-            [threadId]: threadView.next_cursor ?? null,
-          }));
+          setThreadNextCursorById(setRecordEntry(threadId, threadView.next_cursor ?? null));
           setSelectedAuthorPubkey(null);
           setSelectedAuthor(null);
           setAuthorError(null);

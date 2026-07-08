@@ -6,6 +6,7 @@ import type {
   DirectMessageMessageView,
 } from '@/lib/api';
 
+import { updateRecordEntry } from '@/shell/stateUpdates';
 import type { DesktopShellState } from '@/shell/store';
 import { messageFromError } from '@/shell/selectors';
 
@@ -125,13 +126,10 @@ export function createDirectMessageActions({
             pending_outbox_count: 0,
           },
       } satisfies DirectMessageConversationView;
-      setDirectMessageTimelineByPeer((current) => ({
-        ...current,
-        [peerPubkey]: [
+      setDirectMessageTimelineByPeer(updateRecordEntry(peerPubkey, (prev) => [
           optimisticMessage,
-          ...(current[peerPubkey] ?? []).filter((message) => message.message_id !== messageId),
-        ],
-      }));
+          ...(prev ?? []).filter((message) => message.message_id !== messageId),
+        ]));
       setDirectMessages((current) => {
         const remaining = current.filter((conversation) => conversation.peer_pubkey !== peerPubkey);
         return [optimisticConversation, ...remaining];
