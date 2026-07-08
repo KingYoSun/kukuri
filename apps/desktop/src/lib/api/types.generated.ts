@@ -121,3 +121,23 @@ export type GameRoomView = { room_id: string, host_pubkey: string, title: string
 
 export type MetaverseRoomEventView = { envelope_id: string, content: MetaverseRoomEventEnvelopeContentV1, envelope: Record<string, unknown>, received_at: number, source_peer: string, };
 
+export type Pubkey = string;
+
+export type TopicId = string;
+
+export type ChannelId = string;
+
+export type ChannelRef = { "kind": "public" } | { "kind": "private_channel", channel_id: ChannelId, };
+
+export type TimelineScope = { "kind": "public" } | { "kind": "all_joined" } | { "kind": "channel", channel_id: ChannelId, };
+
+export type SeedPeer = { endpoint_id: string, addr_hint?: string | null, };
+
+export type Profile = { pubkey: Pubkey, name?: string | null, display_name?: string | null, about?: string | null, picture?: string | null, picture_asset?: ProfileAssetView | null, updated_at: number, };
+
+export type PrivateChannelInvitePreview = { channel_id: ChannelId, topic_id: TopicId, channel_label: string, inviter_pubkey: Pubkey, owner_pubkey: Pubkey, epoch_id: string, expires_at?: number | null, namespace_secret_hex: string, };
+
+export type FriendOnlyGrantPreview = { channel_id: ChannelId, topic_id: TopicId, channel_label: string, owner_pubkey: Pubkey, epoch_id: string, expires_at?: number | null, namespace_secret_hex: string, };
+
+export type FriendPlusSharePreview = { channel_id: ChannelId, topic_id: TopicId, channel_label: string, owner_pubkey: Pubkey, sponsor_pubkey: Pubkey, epoch_id: string, expires_at?: number | null, namespace_secret_hex: string, share_token_id: string, };
+

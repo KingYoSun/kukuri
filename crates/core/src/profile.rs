@@ -8,17 +8,22 @@ use crate::{
 };
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct Profile {
     pub pubkey: Pubkey,
     pub name: Option<String>,
     pub display_name: Option<String>,
     pub about: Option<String>,
     pub picture: Option<String>,
+    // serialize_with で wire は ProfileAssetView 形状(views.rs で生成済み)。
+    // AssetRef を直接生成せず、現行 types.ts と同じ `?: ProfileAssetView | null` にする。
     #[serde(
         default,
         serialize_with = "serialize_profile_asset_ref",
         deserialize_with = "deserialize_profile_asset_ref"
     )]
+    #[cfg_attr(feature = "ts", ts(optional, type = "ProfileAssetView | null"))]
     pub picture_asset: Option<AssetRef>,
     pub updated_at: i64,
 }

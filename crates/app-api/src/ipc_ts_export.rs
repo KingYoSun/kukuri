@@ -26,14 +26,15 @@ fn emit<T: TS>(cfg: &ts_rs::Config, out: &mut String) {
 fn export_ipc_types() {
     use crate::views::*;
     use kukuri_core::{
-        ChannelAudienceKind, ChannelSharingState, GameRoomKind, GameRoomStatus, LiveSessionStatus,
+        ChannelAudienceKind, ChannelId, ChannelRef, ChannelSharingState, FriendOnlyGrantPreview,
+        FriendPlusSharePreview, GameRoomKind, GameRoomStatus, LiveSessionStatus,
         MetaverseAssetKind, MetaverseAssetRef, MetaverseAvatarTransformV1, MetaversePrimitive,
         MetaverseRoomChatMessageV1, MetaverseRoomEventEnvelopeContentV1, MetaverseRoomEventV1,
         MetaverseRoomPresenceV1, MetaverseRoomSceneV1, MetaverseRoomSpawnV1, MetaverseRoomStateV1,
-        SharedRoomObjectV1,
+        PrivateChannelInvitePreview, Profile, Pubkey, SharedRoomObjectV1, TimelineScope, TopicId,
     };
     use kukuri_store::{NotificationKind, TimelineCursor};
-    use kukuri_transport::{ConnectMode, ConnectionPath, DiscoveryMode};
+    use kukuri_transport::{ConnectMode, ConnectionPath, DiscoveryMode, SeedPeer};
 
     let cfg = ts_rs::Config::from_env();
     let mut out = String::from(HEADER);
@@ -104,6 +105,17 @@ fn export_ipc_types() {
         MetaverseRoomStateV1,
         GameRoomView,
         MetaverseRoomEventView,
+        // Stage 3a: core / transport の残り型 + newtype(string)
+        Pubkey,
+        TopicId,
+        ChannelId,
+        ChannelRef,
+        TimelineScope,
+        SeedPeer,
+        Profile,
+        PrivateChannelInvitePreview,
+        FriendOnlyGrantPreview,
+        FriendPlusSharePreview,
     );
 
     let path = concat!(
