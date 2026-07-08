@@ -740,39 +740,10 @@
   transform: translateY(0);
 }
 
-.shell-topbar {
-  position: sticky;
-  top: 1rem;
-  z-index: 20;
-  min-width: 0;
-  padding-block: var(--space-md);
-}
-
-.shell-topbar-grid > .shell-topbar {
-  grid-column: 2 / 3;
-}
-
-.shell-topbar-spacer {
-  min-width: 0;
-}
-
 .shell-main,
 .shell-pane-heading,
-.shell-pane-copy,
-.shell-topbar-topic {
+.shell-pane-copy {
   min-width: 0;
-}
-
-.shell-topbar-topic {
-  margin: 0;
-  overflow: hidden;
-  font-size: var(--text-body-reading);
-  font-weight: 700;
-  line-height: 1.25;
-  letter-spacing: 0.01em;
-  color: var(--foreground-strong);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .shell-status-badges {

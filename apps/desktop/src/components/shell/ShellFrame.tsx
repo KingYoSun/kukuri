@@ -4,7 +4,6 @@ import { cn } from '@/lib/utils';
 
 type ShellFrameProps = {
   skipTargetId: string;
-  topBar?: React.ReactNode;
   navRail: React.ReactNode;
   workspace: React.ReactNode;
   detailPaneStack?: React.ReactNode;
@@ -21,7 +20,6 @@ function isMobileViewport() {
 
 export function ShellFrame({
   skipTargetId,
-  topBar,
   navRail,
   workspace,
   detailPaneStack,
@@ -48,15 +46,6 @@ export function ShellFrame({
       <a className='shell-skip-link' href={`#${skipTargetId}`}>
         Skip to workspace
       </a>
-      {topBar ? (
-        <div
-          className='shell-layout shell-topbar-grid'
-          data-detail-pane-count={layoutDetailPaneCount}
-        >
-          <div className='shell-topbar-spacer' aria-hidden='true' />
-          {topBar}
-        </div>
-      ) : null}
       <div className='shell-layout' data-detail-pane-count={layoutDetailPaneCount}>
         {navRail}
         <main

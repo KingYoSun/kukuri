@@ -242,7 +242,7 @@ kukuri にはマーケティング的な First View / ブランドロックア�
 
 - **3 カラム CSS Grid**: 左 nav rail（`ShellNavRail`）＋ メインワークスペース ＋ 右 detail pane stack（thread → author、最大 2）。
 - `.shell-layout` は `data-detail-pane-count='0|1|2'` で detail pane 幅を切替える。
-- 任意の top bar（`ShellTopBar`: リリースバナー）。viewport `≤759px` で mobile footer（`isMobileViewport()`）。
+- viewport `≤759px` で mobile footer を表示（`isMobileViewport()`）。
 - **ルーティング**: hash routing（React Router v7）。`#/timeline` / `#/channels` / `#/live` / `#/game` / `#/profile`。search params: `topic` / `timelineScope` / `composeTarget` / `context` / `threadId` / `authorPubkey` / `profileMode` / `settings`。
 
 ### 5.2 推奨コンテンツ幅（将来定義）

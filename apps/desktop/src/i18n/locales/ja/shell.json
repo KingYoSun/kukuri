@@ -117,9 +117,6 @@
       "label": "リリース"
     }
   },
-  "topBar": {
-    "activeTopicBar": "アクティブトピックバー"
-  },
   "workspace": {
     "bookmarks": "ブックマーク",
     "composeTarget": "投稿先",
