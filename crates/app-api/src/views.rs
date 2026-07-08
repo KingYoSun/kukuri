@@ -8,6 +8,8 @@ use kukuri_transport::{ConnectMode, ConnectionPath, DiscoveryMode};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct PostView {
     pub object_id: String,
     pub envelope_id: String,
@@ -35,13 +37,20 @@ pub struct PostView {
     pub is_threadable: bool,
     pub channel_id: Option<String>,
     pub audience_label: String,
+    // 旧 types.ts と同じく front では任意(#[serde(default)] で復元も許容)。
+    // Vec には ts(optional) を付けられないため as で Option 扱いにして
+    // optional_fields = nullable と組み合わせ `?: T[] | null` を生成する。
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<Vec<ReactionSummaryView>>"))]
     pub reaction_summary: Vec<ReactionSummaryView>,
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<Vec<ReactionKeyView>>"))]
     pub my_reactions: Vec<ReactionKeyView>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ReplyPreviewAuthorView {
     pub pubkey: String,
     pub name: Option<String>,
@@ -51,6 +60,8 @@ pub struct ReplyPreviewAuthorView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ReplyPreviewView {
     pub object_id: String,
     pub topic: String,
@@ -62,6 +73,8 @@ pub struct ReplyPreviewView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ReactionKeyView {
     pub reaction_key_kind: String,
     pub normalized_reaction_key: String,
@@ -70,6 +83,8 @@ pub struct ReactionKeyView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ReactionSummaryView {
     pub reaction_key_kind: String,
     pub normalized_reaction_key: String,
@@ -79,6 +94,8 @@ pub struct ReactionSummaryView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ReactionStateView {
     pub target_object_id: String,
     pub source_replica_id: String,
@@ -87,6 +104,8 @@ pub struct ReactionStateView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct RecentReactionView {
     pub reaction_key_kind: String,
     pub normalized_reaction_key: String,
@@ -96,6 +115,8 @@ pub struct RecentReactionView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CustomReactionAssetView {
     pub asset_id: String,
     pub owner_pubkey: String,
@@ -110,6 +131,8 @@ pub struct CustomReactionAssetView {
 pub type BookmarkedCustomReactionView = CustomReactionAssetView;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct BookmarkedPostView {
     pub bookmarked_at: i64,
     pub post: PostView,
@@ -125,6 +148,8 @@ pub struct CreateCustomReactionAssetInput {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct RepostSourceView {
     pub source_object_id: String,
     pub source_topic_id: String,
@@ -141,6 +166,7 @@ pub struct RepostSourceView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub enum BlobViewStatus {
     Missing,
     Available,
@@ -148,6 +174,7 @@ pub enum BlobViewStatus {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct AttachmentView {
     pub hash: String,
     pub mime: String,
@@ -157,6 +184,8 @@ pub struct AttachmentView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct BlobMediaPayload {
     pub bytes_base64: String,
     pub mime: String,
@@ -174,14 +203,20 @@ pub struct ProfileInput {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ProfileAssetView {
     pub hash: String,
     pub mime: String,
     pub bytes: u64,
+    // 現行 types.ts と同じく値は常に 'profile_avatar'(literal)。
+    #[cfg_attr(feature = "ts", ts(type = "'profile_avatar'"))]
     pub role: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct AuthorSocialView {
     pub author_pubkey: String,
     pub name: Option<String>,
@@ -200,6 +235,7 @@ pub struct AuthorSocialView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum SocialConnectionKind {
     Following,
@@ -215,6 +251,8 @@ pub struct PendingAttachment {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct DirectMessageStatusView {
     pub peer_pubkey: String,
     pub dm_id: String,
@@ -225,6 +263,8 @@ pub struct DirectMessageStatusView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct DirectMessageTopicStatusView {
     pub topic: String,
     pub joined: bool,
@@ -235,6 +275,8 @@ pub struct DirectMessageTopicStatusView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct DirectMessageMessageView {
     pub dm_id: String,
     pub message_id: String,
@@ -249,6 +291,8 @@ pub struct DirectMessageMessageView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct DirectMessageConversationView {
     pub dm_id: String,
     pub peer_pubkey: String,
@@ -264,6 +308,8 @@ pub struct DirectMessageConversationView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct NotificationView {
     pub notification_id: String,
     pub kind: NotificationKind,
@@ -287,6 +333,8 @@ pub struct NotificationView {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct NotificationStatusView {
     pub unread_count: usize,
 }
@@ -394,18 +442,24 @@ pub struct ImportMetaverseRoomAssetInput {
 pub type MetaverseAssetRefView = MetaverseAssetRef;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct TimelineView {
     pub items: Vec<PostView>,
     pub next_cursor: Option<TimelineCursor>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct DirectMessageTimelineView {
     pub items: Vec<DirectMessageMessageView>,
     pub next_cursor: Option<TimelineCursor>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct JoinedPrivateChannelView {
     pub topic_id: String,
     pub channel_id: String,
@@ -424,12 +478,16 @@ pub struct JoinedPrivateChannelView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct PrivateChannelEpochCapability {
     pub epoch_id: String,
     pub namespace_secret_hex: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct PrivateChannelCapability {
     pub topic_id: String,
     pub channel_id: String,
@@ -458,6 +516,7 @@ pub struct PrivateChannelCapability {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum ChannelAccessTokenKind {
     Invite,
@@ -466,12 +525,16 @@ pub enum ChannelAccessTokenKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ChannelAccessTokenExport {
     pub kind: ChannelAccessTokenKind,
     pub token: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ChannelAccessTokenPreview {
     pub kind: ChannelAccessTokenKind,
     pub topic_id: String,
@@ -484,6 +547,8 @@ pub struct ChannelAccessTokenPreview {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct SyncStatus {
     pub connected: bool,
     pub delivery_state: DeliveryState,
@@ -504,6 +569,7 @@ pub struct SyncStatus {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub enum DeliveryState {
     Live,
     DurableRecovering,
@@ -513,6 +579,8 @@ pub enum DeliveryState {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct DiscoveryStatus {
     pub mode: DiscoveryMode,
     pub connect_mode: ConnectMode,
@@ -530,6 +598,8 @@ pub struct DiscoveryStatus {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct TopicSyncStatus {
     pub topic: String,
     pub joined: bool,

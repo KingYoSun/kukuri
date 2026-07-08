@@ -1,6 +1,41 @@
-export type TimelineCursor = {
-  created_at: number;
-  object_id: string;
+// IPC の view / DTO 型は Rust(crates/app-api/src/views.rs ほか)から生成する
+// (WP-H7 PR3)。定義元は types.generated.ts。ここでは front 専用型・入力型・
+// DesktopApi interface と、生成型に front 専用フィールドを交差させる PostView を扱う。
+export * from './types.generated';
+import type {
+  AuthorSocialView,
+  BlobMediaPayload,
+  BookmarkedPostView,
+  ChannelAccessTokenExport,
+  ChannelAccessTokenPreview,
+  ChannelAudienceKind,
+  ConnectMode,
+  CustomReactionAssetView,
+  DirectMessageConversationView,
+  DirectMessageStatusView,
+  DirectMessageTimelineView,
+  DiscoveryMode,
+  JoinedPrivateChannelView,
+  NotificationStatusView,
+  NotificationView,
+  PostView as WirePostView,
+  ProfileAssetView,
+  ReactionStateView,
+  RecentReactionView,
+  SocialConnectionKind,
+  SyncStatus,
+  TimelineCursor,
+  TimelineView,
+} from './types.generated';
+
+// PostView は wire 型に front 専用のローカル下書き状態を交差させる。
+export type PostView = WirePostView & {
+  local_id?: string | null;
+  local_state?: 'pending' | 'syncing' | 'failed' | null;
+  local_error?: string | null;
+  server_object_id?: string | null;
+  local_draft?: LocalPostDraft | null;
+  local_draft_media_items?: LocalDraftMediaItem[] | null;
 };
 
 export type ChannelRef =
@@ -46,9 +81,6 @@ export type AppConsentStatus = {
   satisfied: boolean;
 };
 
-export type ChannelAudienceKind = 'invite_only' | 'friend_only' | 'friend_plus';
-export type ChannelSharingState = 'open' | 'frozen';
-
 export type LocalPostDraft = {
   kind: 'post' | 'repost';
   topic: string;
@@ -67,100 +99,7 @@ export type LocalDraftMediaItem = {
   attachments: CreateAttachmentInput[];
 };
 
-export type PostView = {
-  object_id: string;
-  envelope_id: string;
-  author_pubkey: string;
-  author_name?: string | null;
-  author_display_name?: string | null;
-  author_picture?: string | null;
-  author_picture_asset?: ProfileAssetView | null;
-  following: boolean;
-  followed_by: boolean;
-  mutual: boolean;
-  friend_of_friend: boolean;
-  object_kind: string;
-  content: string;
-  content_status: BlobViewStatus;
-  attachments: AttachmentView[];
-  created_at: number;
-  reply_to?: string | null;
-  reply_preview?: ReplyPreviewView | null;
-  root_id?: string | null;
-  published_topic_id?: string | null;
-  origin_topic_id?: string | null;
-  repost_of?: RepostSourceView | null;
-  repost_commentary?: string | null;
-  is_threadable: boolean;
-  channel_id?: string | null;
-  audience_label: string;
-  reaction_summary?: ReactionSummaryView[];
-  my_reactions?: ReactionKeyView[];
-  local_id?: string | null;
-  local_state?: 'pending' | 'syncing' | 'failed' | null;
-  local_error?: string | null;
-  server_object_id?: string | null;
-  local_draft?: LocalPostDraft | null;
-  local_draft_media_items?: LocalDraftMediaItem[] | null;
-};
-
-export type ReplyPreviewAuthorView = {
-  pubkey: string;
-  name?: string | null;
-  display_name?: string | null;
-  picture?: string | null;
-  picture_asset?: ProfileAssetView | null;
-};
-
-export type ReplyPreviewView = {
-  object_id: string;
-  topic: string;
-  author: ReplyPreviewAuthorView;
-  content: string;
-  attachments: AttachmentView[];
-  root_id?: string | null;
-  reply_to?: string | null;
-};
-
-export type CustomReactionAssetView = {
-  asset_id: string;
-  owner_pubkey: string;
-  blob_hash: string;
-  search_key: string;
-  mime: string;
-  bytes: number;
-  width: number;
-  height: number;
-};
-
 export type BookmarkedCustomReactionView = CustomReactionAssetView;
-
-export type BookmarkedPostView = {
-  bookmarked_at: number;
-  post: PostView;
-};
-
-export type ReactionKeyView = {
-  reaction_key_kind: 'emoji' | 'custom_asset' | string;
-  normalized_reaction_key: string;
-  emoji?: string | null;
-  custom_asset?: CustomReactionAssetView | null;
-};
-
-export type ReactionSummaryView = ReactionKeyView & {
-  count: number;
-};
-
-export type ReactionStateView = {
-  target_object_id: string;
-  source_replica_id: string;
-  reaction_summary: ReactionSummaryView[];
-  my_reactions: ReactionKeyView[];
-};
-
-export type RecentReactionView = ReactionKeyView & {
-  updated_at: number;
-};
 
 export type ReactionKeyInput =
   | { kind: 'emoji'; emoji: string }
@@ -170,21 +109,6 @@ export type CustomReactionCropRect = {
   x: number;
   y: number;
   size: number;
-};
-
-export type RepostSourceView = {
-  source_object_id: string;
-  source_topic_id: string;
-  source_author_pubkey: string;
-  source_author_name?: string | null;
-  source_author_display_name?: string | null;
-  source_author_picture?: string | null;
-  source_author_picture_asset?: ProfileAssetView | null;
-  source_object_kind: string;
-  content: string;
-  attachments: AttachmentView[];
-  reply_to?: string | null;
-  root_id?: string | null;
 };
 
 export type Profile = {
@@ -206,116 +130,6 @@ export type ProfileInput = {
   clear_picture?: boolean;
 };
 
-export type ProfileAssetView = {
-  hash: string;
-  mime: string;
-  bytes: number;
-  role: 'profile_avatar';
-};
-
-export type AuthorSocialView = {
-  author_pubkey: string;
-  name?: string | null;
-  display_name?: string | null;
-  about?: string | null;
-  picture?: string | null;
-  picture_asset?: ProfileAssetView | null;
-  updated_at?: number | null;
-  following: boolean;
-  followed_by: boolean;
-  mutual: boolean;
-  friend_of_friend: boolean;
-  friend_of_friend_via_pubkeys: string[];
-  muted: boolean;
-};
-
-export type SocialConnectionKind = 'following' | 'followed' | 'muted';
-
-export type DirectMessageStatusView = {
-  peer_pubkey: string;
-  dm_id: string;
-  mutual: boolean;
-  send_enabled: boolean;
-  peer_count: number;
-  pending_outbox_count: number;
-};
-
-export type DirectMessageMessageView = {
-  dm_id: string;
-  message_id: string;
-  sender_pubkey: string;
-  recipient_pubkey: string;
-  created_at: number;
-  text: string;
-  reply_to_message_id?: string | null;
-  attachments: AttachmentView[];
-  outgoing: boolean;
-  delivered: boolean;
-};
-
-export type DirectMessageConversationView = {
-  dm_id: string;
-  peer_pubkey: string;
-  peer_name?: string | null;
-  peer_display_name?: string | null;
-  peer_picture?: string | null;
-  peer_picture_asset?: ProfileAssetView | null;
-  updated_at: number;
-  last_message_at?: number | null;
-  last_message_id?: string | null;
-  last_message_preview?: string | null;
-  status: DirectMessageStatusView;
-};
-
-export type NotificationKind =
-  | 'mention'
-  | 'reply'
-  | 'repost'
-  | 'quote_repost'
-  | 'direct_message'
-  | 'followed';
-
-export type NotificationView = {
-  notification_id: string;
-  kind: NotificationKind;
-  actor_pubkey: string;
-  actor_name?: string | null;
-  actor_display_name?: string | null;
-  actor_picture?: string | null;
-  actor_picture_asset?: ProfileAssetView | null;
-  source_envelope_id?: string | null;
-  source_replica_id?: string | null;
-  topic_id?: string | null;
-  channel_id?: string | null;
-  object_id?: string | null;
-  thread_root_object_id?: string | null;
-  dm_id?: string | null;
-  message_id?: string | null;
-  preview_text?: string | null;
-  created_at: number;
-  received_at: number;
-  read_at?: number | null;
-};
-
-export type NotificationStatusView = {
-  unread_count: number;
-};
-
-export type DirectMessageTimelineView = {
-  items: DirectMessageMessageView[];
-  next_cursor?: TimelineCursor | null;
-};
-
-export type BlobViewStatus = 'Missing' | 'Available' | 'Pinned';
-
-export type AttachmentView = {
-  hash: string;
-  mime: string;
-  bytes: number;
-  role: string;
-  status: BlobViewStatus;
-};
-
 export type CreateAttachmentInput = {
   file_name?: string | null;
   mime: string;
@@ -331,25 +145,6 @@ export type CreateRepostInput = {
   commentary?: string | null;
 };
 
-export type BlobMediaPayload = {
-  bytes_base64: string;
-  mime: string;
-};
-
-export type TimelineView = {
-  items: PostView[];
-  next_cursor?: TimelineCursor | null;
-};
-
-export type DiscoveryMode = 'static_peer' | 'seeded_dht';
-
-export type ConnectMode = 'direct_only' | 'direct_or_relay';
-
-export type ConnectionPath =
-  | 'direct_p2p'
-  | 'relay_supported_p2p'
-  | 'relay_fallback';
-
 export type SeedPeer = {
   endpoint_id: string;
   addr_hint?: string | null;
@@ -360,43 +155,6 @@ export type DiscoveryConfig = {
   connect_mode: ConnectMode;
   env_locked: boolean;
   seed_peers: SeedPeer[];
-};
-
-export type DiscoveryStatus = {
-  mode: DiscoveryMode;
-  connect_mode: ConnectMode;
-  active_path: ConnectionPath;
-  fallback_peer_ids: string[];
-  env_locked: boolean;
-  configured_seed_peer_ids: string[];
-  bootstrap_seed_peer_ids: string[];
-  manual_ticket_peer_ids: string[];
-  connected_peer_ids: string[];
-  docs_assist_peer_ids: string[];
-  blob_assist_peer_ids: string[];
-  local_endpoint_id: string;
-  last_discovery_error?: string | null;
-};
-
-export type DeliveryState = 'Live' | 'DurableRecovering' | 'DurableReady' | 'Offline';
-
-export type SyncStatus = {
-  connected: boolean;
-  delivery_state: DeliveryState;
-  last_sync_ts?: number | null;
-  peer_count: number;
-  pending_events: number;
-  status_detail: string;
-  last_error?: string | null;
-  configured_peers: string[];
-  subscribed_topics: string[];
-  active_path: ConnectionPath;
-  fallback_peer_ids: string[];
-  topic_diagnostics: TopicSyncStatus[];
-  local_author_pubkey: string;
-  discovery: DiscoveryStatus;
-  gossip_disabled_topics: string[];
-  gossip_disabled_channels: string[];
 };
 
 export type CommunityNodeResolvedUrls = {
@@ -528,24 +286,6 @@ export type SubmitCommunityNodeReportResult = {
   reference_id?: string | null;
 };
 
-export type TopicSyncStatus = {
-  topic: string;
-  joined: boolean;
-  delivery_state: DeliveryState;
-  peer_count: number;
-  connected_peers: string[];
-  docs_assist_peer_ids: string[];
-  configured_peer_ids: string[];
-  missing_peer_ids: string[];
-  active_path: ConnectionPath;
-  rendezvous_peer_ids: string[];
-  fallback_peer_ids: string[];
-  last_received_at?: number | null;
-  last_docs_activity_at?: number | null;
-  status_detail: string;
-  last_error?: string | null;
-};
-
 export type LiveSessionStatus = 'Scheduled' | 'Live' | 'Paused' | 'Ended';
 
 export type LiveSessionView = {
@@ -675,41 +415,6 @@ export type GameRoomView = {
   updated_at: number;
   channel_id?: string | null;
   audience_label: string;
-};
-
-export type JoinedPrivateChannelView = {
-  topic_id: string;
-  channel_id: string;
-  label: string;
-  creator_pubkey: string;
-  owner_pubkey: string;
-  joined_via_pubkey?: string | null;
-  audience_kind: ChannelAudienceKind;
-  is_owner: boolean;
-  current_epoch_id: string;
-  archived_epoch_ids: string[];
-  sharing_state: ChannelSharingState;
-  rotation_required: boolean;
-  participant_count: number;
-  stale_participant_count: number;
-};
-
-export type ChannelAccessTokenKind = 'invite' | 'grant' | 'share';
-
-export type ChannelAccessTokenExport = {
-  kind: ChannelAccessTokenKind;
-  token: string;
-};
-
-export type ChannelAccessTokenPreview = {
-  kind: ChannelAccessTokenKind;
-  topic_id: string;
-  channel_id: string;
-  channel_label: string;
-  owner_pubkey: string;
-  inviter_pubkey?: string | null;
-  sponsor_pubkey?: string | null;
-  epoch_id: string;
 };
 
 export type PrivateChannelInvitePreview = {

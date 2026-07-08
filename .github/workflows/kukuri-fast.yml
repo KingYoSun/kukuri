@@ -89,6 +89,9 @@ jobs:
       - name: Rust checks
         run: cargo xtask rust-check
 
+      - name: IPC types are in sync (Rust -> types.generated.ts)
+        run: cargo xtask ipc-types --check
+
       - name: Tauri compile check
         run: cargo xtask tauri-check
 

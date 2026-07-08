@@ -16,6 +16,11 @@ secp256k1.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+ts-rs = { workspace = true, optional = true }
+
+[features]
+# IPC 型の TypeScript 生成専用(codegen 時のみ有効)。
+ts = ["dep:ts-rs"]
 
 [lints]
 workspace = true
