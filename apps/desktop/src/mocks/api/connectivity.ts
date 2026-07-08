@@ -1,0 +1,255 @@
+import { type BlobMediaPayload, type DesktopApi } from '@/lib/api';
+
+import { cloneSyncStatus } from '../desktopMockModel';
+import { type MockRuntime } from '../mockRuntime';
+
+type ConnectivityMock = Pick<
+  DesktopApi,
+  | 'getSyncStatus'
+  | 'getDiscoveryConfig'
+  | 'getCommunityNodeConfig'
+  | 'getCommunityNodeStatuses'
+  | 'setCommunityNodeConfig'
+  | 'clearCommunityNodeConfig'
+  | 'authenticateCommunityNode'
+  | 'clearCommunityNodeToken'
+  | 'getCommunityNodeConsentStatus'
+  | 'acceptCommunityNodeConsents'
+  | 'refreshCommunityNodeMetadata'
+  | 'fetchCommunityNodeManifest'
+  | 'submitCommunityNodeReport'
+  | 'importPeerTicket'
+  | 'setDiscoverySeeds'
+  | 'unsubscribeTopic'
+  | 'setTopicGossipEnabled'
+  | 'setChannelGossipEnabled'
+  | 'getLocalPeerTicket'
+  | 'getBlobMediaPayload'
+  | 'getBlobPreviewUrl'
+>;
+
+export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
+  const {
+    syncStatus,
+    postsByTopic,
+    liveSessionsByTopic,
+    gameRoomsByTopic,
+    joinedChannelsByTopic,
+    metaverseAssetPayloads,
+    mockConsentItems,
+  } = runtime;
+
+  return {
+    async getSyncStatus() {
+      return cloneSyncStatus(syncStatus);
+    },
+    async getDiscoveryConfig() {
+      return runtime.discoveryConfig;
+    },
+    async getCommunityNodeConfig() {
+      return runtime.communityNodeConfig;
+    },
+    async getCommunityNodeStatuses() {
+      return runtime.communityNodeStatuses;
+    },
+    async setCommunityNodeConfig(nodes) {
+      runtime.communityNodeConfig = {
+        nodes: nodes.map((node) => ({
+          base_url: node.base_url,
+          auto_approve: node.auto_approve,
+          resolved_urls: null,
+        })),
+      };
+      runtime.communityNodeStatuses = nodes.map((node) => ({
+        base_url: node.base_url,
+        auto_approve: node.auto_approve,
+        auth_state: { authenticated: false, expires_at: null },
+        consent_state: null,
+        resolved_urls: null,
+        last_error: null,
+        session_phase: node.auto_approve ? 'connecting' : 'idle',
+        retry_after: null,
+        restart_required: false,
+      }));
+      return runtime.communityNodeConfig;
+    },
+    async clearCommunityNodeConfig() {
+      runtime.communityNodeConfig = { nodes: [] };
+      runtime.communityNodeStatuses = [];
+    },
+    async authenticateCommunityNode(baseUrl) {
+      runtime.communityNodeStatuses = runtime.communityNodeStatuses.map((status) =>
+        status.base_url === baseUrl
+          ? {
+              ...status,
+              auth_state: { authenticated: true, expires_at: Date.now() },
+              consent_state: { all_required_accepted: false, items: mockConsentItems(false) },
+              session_phase: status.auto_approve ? 'accepting' : 'authenticating',
+            }
+          : status
+      );
+      return runtime.communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
+    },
+    async clearCommunityNodeToken(baseUrl) {
+      runtime.communityNodeStatuses = runtime.communityNodeStatuses.map((status) =>
+        status.base_url === baseUrl
+          ? {
+              ...status,
+              auth_state: { authenticated: false, expires_at: null },
+              consent_state: null,
+              session_phase: 'idle',
+            }
+          : status
+      );
+      return runtime.communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
+    },
+    async getCommunityNodeConsentStatus(baseUrl) {
+      return runtime.communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
+    },
+    async acceptCommunityNodeConsents(baseUrl) {
+      const resolvedUrls = { public_base_url: baseUrl, connectivity_urls: [baseUrl] };
+      syncStatus.discovery.connect_mode = 'direct_or_relay';
+      runtime.communityNodeStatuses = runtime.communityNodeStatuses.map((status) =>
+        status.base_url === baseUrl
+          ? {
+              ...status,
+              consent_state: { all_required_accepted: true, items: mockConsentItems(true) },
+              resolved_urls: resolvedUrls,
+              session_phase: 'ready',
+              retry_after: null,
+              restart_required: false,
+            }
+          : status
+      );
+      runtime.communityNodeConfig = {
+        nodes: runtime.communityNodeConfig.nodes.map((node) =>
+          node.base_url === baseUrl ? { ...node, resolved_urls: resolvedUrls } : node
+        ),
+      };
+      return runtime.communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
+    },
+    async refreshCommunityNodeMetadata(baseUrl) {
+      syncStatus.discovery.connect_mode = 'direct_or_relay';
+      const resolvedUrls = { public_base_url: baseUrl, connectivity_urls: [baseUrl] };
+      runtime.communityNodeStatuses = runtime.communityNodeStatuses.map((status) =>
+        status.base_url === baseUrl
+          ? {
+              ...status,
+              resolved_urls: resolvedUrls,
+              session_phase: 'ready',
+              retry_after: null,
+              restart_required: false,
+            }
+          : status
+      );
+      runtime.communityNodeConfig = {
+        nodes: runtime.communityNodeConfig.nodes.map((node) =>
+          node.base_url === baseUrl ? { ...node, resolved_urls: resolvedUrls } : node
+        ),
+      };
+      return runtime.communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
+    },
+    async fetchCommunityNodeManifest(baseUrl) {
+      return {
+        status: 'ok',
+        manifest: {
+          node_id: '',
+          node_name: baseUrl,
+          node_role: 'community-node',
+          server_name: baseUrl,
+          manifest_version: 'v1',
+          capability_scope: {
+            available_enabled: ['auth_consent', 'bootstrap_assist', 'iroh_relay'],
+            planned_enabled: ['community_index', 'moderation'],
+          },
+          authority_scope: {
+            applies_to: ['this_node'],
+            does_not_apply_to: [
+              'kukuri_network_as_a_whole',
+              'user_identity',
+              'user_profile_canonical_source',
+              'user_social_graph_canonical_source',
+            ],
+          },
+          p2p_boundary: {
+            identity_authority: false,
+            profile_canonical_store: false,
+            social_graph_canonical_store: false,
+            content_truth_source: false,
+            network_wide_authority: false,
+          },
+          abuse_contact: `abuse@${baseUrl.replace(/^https?:\/\//, '')}`,
+          report_endpoint: `${baseUrl}/v1/report`,
+          terms_url: `${baseUrl}/terms`,
+          privacy_url: `${baseUrl}/privacy`,
+          moderation_policy_url: `${baseUrl}/moderation-policy`,
+        },
+      };
+    },
+    async submitCommunityNodeReport(request) {
+      return {
+        status: 'submitted',
+        reference_id: `mock-${request.subject_kind}-${request.subject_id}`,
+      };
+    },
+    async importPeerTicket() {},
+    async setDiscoverySeeds(seedEntries) {
+      runtime.discoveryConfig = {
+        ...runtime.discoveryConfig,
+        seed_peers: seedEntries.map((entry) => {
+          const [endpointId, addrHint] = entry.split('@', 2);
+          return {
+            endpoint_id: endpointId,
+            addr_hint: addrHint ?? null,
+          };
+        }),
+      };
+      syncStatus.discovery.configured_seed_peer_ids = runtime.discoveryConfig.seed_peers.map(
+        (peer) => peer.endpoint_id
+      );
+      return runtime.discoveryConfig;
+    },
+    async unsubscribeTopic(topic) {
+      delete postsByTopic[topic];
+      delete liveSessionsByTopic[topic];
+      delete gameRoomsByTopic[topic];
+      delete joinedChannelsByTopic[topic];
+      syncStatus.subscribed_topics = syncStatus.subscribed_topics.filter((value) => value !== topic);
+      syncStatus.topic_diagnostics = syncStatus.topic_diagnostics.filter(
+        (value) => value.topic !== topic
+      );
+    },
+    async setTopicGossipEnabled(topic, enabled) {
+      syncStatus.gossip_disabled_topics = syncStatus.gossip_disabled_topics.filter(
+        (value) => value !== topic
+      );
+      if (!enabled) {
+        syncStatus.gossip_disabled_topics.push(topic);
+      }
+    },
+    async setChannelGossipEnabled(topic, channelId, enabled) {
+      const key = `${topic}::${channelId}`;
+      syncStatus.gossip_disabled_channels = syncStatus.gossip_disabled_channels.filter(
+        (value) => value !== key
+      );
+      if (!enabled) {
+        syncStatus.gossip_disabled_channels.push(key);
+      }
+    },
+    async getLocalPeerTicket() {
+      return 'peer1@127.0.0.1:7777';
+    },
+    async getBlobMediaPayload(hash, mime): Promise<BlobMediaPayload | null> {
+      if (metaverseAssetPayloads[hash]) {
+        return metaverseAssetPayloads[hash];
+      }
+      return {
+        bytes_base64: mime.startsWith('video/') ? 'ZmFrZS12aWRlbw==' : 'ZmFrZS1pbWFnZQ==',
+        mime,
+      };
+    },
+    async getBlobPreviewUrl() {
+      return null;
+    },
+  };
+}

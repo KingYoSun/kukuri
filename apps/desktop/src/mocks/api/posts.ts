@@ -1,0 +1,282 @@
+import {
+  type AttachmentView,
+  type BookmarkedPostView,
+  type DesktopApi,
+  type TimelineScope,
+} from '@/lib/api';
+
+import {
+  cloneBookmarkedPost,
+  filterChannelScopedItems,
+  withSocialPostDefaults,
+} from '../desktopMockModel';
+import { type MockRuntime } from '../mockRuntime';
+
+type PostsMock = Pick<
+  DesktopApi,
+  | 'createPost'
+  | 'createRepost'
+  | 'listTimeline'
+  | 'listThread'
+  | 'listProfileTimeline'
+  | 'listBookmarkedPosts'
+  | 'bookmarkPost'
+  | 'removeBookmarkedPost'
+>;
+
+export function createPostsMock(runtime: MockRuntime): PostsMock {
+  const {
+    assistPeerIds,
+    postsByTopic,
+    authorProfileTimelines,
+    syncStatus,
+    joinedChannelsByTopic,
+    bookmarkedPosts,
+    visibleTimelineItems,
+    isVisiblePost,
+    withCurrentRelationship,
+  } = runtime;
+
+  return {
+    async createPost(topic, content, replyTo, attachments, channelRef = { kind: 'public' }) {
+      runtime.sequence += 1;
+      const objectId = `${topic}-${runtime.sequence}`;
+      const posts = postsByTopic[topic] ?? [];
+      const channelId = channelRef.kind === 'private_channel' ? channelRef.channel_id : null;
+      const rootId = replyTo
+        ? posts.find((post) => post.object_id === replyTo)?.root_id ?? replyTo
+        : objectId;
+      const postAttachments: AttachmentView[] = (attachments ?? []).map((attachment, index) => ({
+        hash: `${objectId}-attachment-${index}`,
+        mime: attachment.mime,
+        bytes: attachment.byte_size,
+        role: attachment.role ?? 'image_original',
+        status: 'Available',
+      }));
+      postsByTopic[topic] = [
+        withSocialPostDefaults({
+          object_id: objectId,
+          envelope_id: `envelope-${runtime.sequence}`,
+          author_pubkey: syncStatus.local_author_pubkey,
+          following: false,
+          followed_by: false,
+          mutual: false,
+          friend_of_friend: false,
+          object_kind: replyTo ? 'comment' : 'post',
+          content,
+          content_status: 'Available',
+          attachments: postAttachments,
+          created_at: runtime.sequence,
+          reply_to: replyTo ?? null,
+          root_id: rootId,
+          origin_topic_id: topic,
+          channel_id: channelId,
+          audience_label: channelId ? 'Private channel' : 'Public',
+        }),
+        ...posts,
+      ];
+      if (!channelId) {
+        authorProfileTimelines[syncStatus.local_author_pubkey] = [
+          withSocialPostDefaults({
+            object_id: objectId,
+            envelope_id: objectId,
+            author_pubkey: syncStatus.local_author_pubkey,
+            following: false,
+            followed_by: false,
+            mutual: false,
+            friend_of_friend: false,
+            object_kind: replyTo ? 'comment' : 'post',
+            content,
+            content_status: 'Available',
+            attachments: postAttachments,
+            created_at: runtime.sequence,
+            reply_to: replyTo ?? null,
+            root_id: rootId,
+            origin_topic_id: topic,
+            channel_id: null,
+            audience_label: 'Public',
+          }),
+          ...(authorProfileTimelines[syncStatus.local_author_pubkey] ?? []).filter(
+            (post) => post.object_id !== objectId
+          ),
+        ];
+      }
+      syncStatus.subscribed_topics = Array.from(new Set([...syncStatus.subscribed_topics, topic]));
+      if (!syncStatus.topic_diagnostics.some((entry) => entry.topic === topic)) {
+        syncStatus.topic_diagnostics.push({
+          topic,
+          joined: true,
+          delivery_state: 'Live',
+          peer_count: 1,
+          connected_peers: ['peer-a'],
+          docs_assist_peer_ids: assistPeerIds,
+          configured_peer_ids: ['peer-a'],
+          missing_peer_ids: [],
+          active_path: 'direct_p2p',
+          rendezvous_peer_ids: [],
+          fallback_peer_ids: [],
+          last_received_at: runtime.sequence,
+          last_docs_activity_at: runtime.sequence,
+          status_detail: 'Connected to all configured peers for this topic',
+          last_error: null,
+        });
+      }
+      return objectId;
+    },
+    async createRepost(topic, sourceTopic, sourceObjectId, commentary) {
+      runtime.sequence += 1;
+      const objectId = `${topic}-repost-${runtime.sequence}`;
+      const sourcePost = (postsByTopic[sourceTopic] ?? []).find((post) => post.object_id === sourceObjectId);
+      if (!sourcePost || sourcePost.channel_id) {
+        throw new Error('only public posts and comments can be reposted');
+      }
+      const normalizedCommentary = commentary?.trim() ? commentary.trim() : null;
+      if (!normalizedCommentary) {
+        const existing = (postsByTopic[topic] ?? []).find(
+          (post) =>
+            post.object_kind === 'repost' &&
+            post.author_pubkey === syncStatus.local_author_pubkey &&
+            post.repost_of?.source_object_id === sourceObjectId &&
+            !post.repost_commentary
+        );
+        if (existing) {
+          return existing.object_id;
+        }
+      }
+      const repost = withSocialPostDefaults({
+        object_id: objectId,
+        envelope_id: `envelope-${runtime.sequence}`,
+        author_pubkey: syncStatus.local_author_pubkey,
+        following: false,
+        followed_by: false,
+        mutual: false,
+        friend_of_friend: false,
+        object_kind: 'repost',
+        content: normalizedCommentary ?? '',
+        content_status: 'Available',
+        attachments: [],
+        created_at: runtime.sequence,
+        reply_to: null,
+        root_id: null,
+        published_topic_id: topic,
+        origin_topic_id: topic,
+        repost_of: {
+          source_object_id: sourceObjectId,
+          source_topic_id: sourceTopic,
+          source_author_pubkey: sourcePost.author_pubkey,
+          source_author_name: sourcePost.author_name ?? null,
+          source_author_display_name: sourcePost.author_display_name ?? null,
+          source_object_kind: sourcePost.object_kind,
+          content: sourcePost.content,
+          attachments: sourcePost.attachments.map((attachment) => ({ ...attachment })),
+          reply_to: sourcePost.reply_to ?? null,
+          root_id: sourcePost.root_id ?? null,
+        },
+        repost_commentary: normalizedCommentary,
+        is_threadable: Boolean(normalizedCommentary),
+        channel_id: null,
+        audience_label: 'Public',
+      });
+      postsByTopic[topic] = [repost, ...(postsByTopic[topic] ?? [])];
+      authorProfileTimelines[syncStatus.local_author_pubkey] = [
+        repost,
+        ...(authorProfileTimelines[syncStatus.local_author_pubkey] ?? []).filter(
+          (post) => post.object_id !== objectId
+        ),
+      ];
+      return objectId;
+    },
+    async listTimeline(topic, _cursor, _limit, scope: TimelineScope = { kind: 'public' }) {
+      syncStatus.subscribed_topics = Array.from(new Set([...syncStatus.subscribed_topics, topic]));
+      if (!syncStatus.topic_diagnostics.some((entry) => entry.topic === topic)) {
+        syncStatus.topic_diagnostics.push({
+          topic,
+          joined: false,
+          delivery_state: assistPeerIds.length > 0 ? 'DurableRecovering' : 'Offline',
+          peer_count: 0,
+          connected_peers: [],
+          docs_assist_peer_ids: assistPeerIds,
+          configured_peer_ids: [],
+          missing_peer_ids: [],
+          active_path: 'direct_p2p',
+          rendezvous_peer_ids: [],
+          fallback_peer_ids: [],
+          last_received_at: null,
+          last_docs_activity_at: null,
+          status_detail:
+            assistPeerIds.length > 0
+              ? `docs-assisted recovery is in progress via ${assistPeerIds.length} peer(s); live topic delivery is unavailable`
+              : 'No peers configured for this topic',
+          last_error: null,
+        });
+      }
+      return {
+        items: visibleTimelineItems(
+          filterChannelScopedItems(postsByTopic[topic] ?? [], scope, joinedChannelsByTopic[topic] ?? [])
+        ),
+        next_cursor: null,
+      };
+    },
+    async listThread(topic, threadId) {
+      const posts = postsByTopic[topic] ?? [];
+      return {
+        items: visibleTimelineItems(
+          posts.filter((post) => post.root_id === threadId || post.object_id === threadId)
+        ),
+        next_cursor: null,
+      };
+    },
+    async listProfileTimeline(pubkey) {
+      return {
+        items: visibleTimelineItems([...(authorProfileTimelines[pubkey] ?? [])]),
+        next_cursor: null,
+      };
+    },
+    async listBookmarkedPosts() {
+      return bookmarkedPosts
+        .filter((item) => isVisiblePost(item.post))
+        .map((item) =>
+          cloneBookmarkedPost({
+            ...item,
+            post: withCurrentRelationship(item.post),
+          })
+        );
+    },
+    async bookmarkPost(topic, objectId) {
+      const existing = bookmarkedPosts.find((item) => item.post.object_id === objectId);
+      if (existing) {
+        return cloneBookmarkedPost(existing);
+      }
+      const post = (postsByTopic[topic] ?? []).find((candidate) => candidate.object_id === objectId);
+      if (!post) {
+        throw new Error('bookmark target was not found');
+      }
+      const bookmarked: BookmarkedPostView = {
+        bookmarked_at: Date.now(),
+        post: withSocialPostDefaults({
+          ...post,
+          attachments: post.attachments.map((attachment) => ({ ...attachment })),
+          repost_of: post.repost_of
+            ? {
+                ...post.repost_of,
+                attachments: post.repost_of.attachments.map((attachment) => ({ ...attachment })),
+              }
+            : null,
+        }),
+      };
+      bookmarkedPosts.unshift(bookmarked);
+      bookmarkedPosts.sort(
+        (left, right) =>
+          right.bookmarked_at - left.bookmarked_at ||
+          right.post.object_id.localeCompare(left.post.object_id)
+      );
+      return cloneBookmarkedPost(bookmarked);
+    },
+    async removeBookmarkedPost(objectId) {
+      const index = bookmarkedPosts.findIndex((item) => item.post.object_id === objectId);
+      if (index >= 0) {
+        bookmarkedPosts.splice(index, 1);
+      }
+    },
+  };
+}
