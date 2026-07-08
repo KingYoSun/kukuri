@@ -8,6 +8,8 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CommunityNodeManifest {
     #[serde(default)]
     pub node_id: String,
@@ -40,6 +42,8 @@ pub struct CommunityNodeManifest {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CommunityNodeCapabilityScope {
     #[serde(default)]
     pub available_enabled: Vec<String>,
@@ -48,6 +52,8 @@ pub struct CommunityNodeCapabilityScope {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CommunityNodeAuthorityScope {
     #[serde(default)]
     pub applies_to: Vec<String>,
@@ -56,6 +62,8 @@ pub struct CommunityNodeAuthorityScope {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CommunityNodeP2pBoundary {
     #[serde(default)]
     pub identity_authority: bool,

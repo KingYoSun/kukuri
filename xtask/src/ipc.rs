@@ -19,7 +19,7 @@ pub(crate) fn ipc_types(check: bool) -> Result<()> {
         [
             "test",
             "-p",
-            "kukuri-app-api",
+            "kukuri-desktop-runtime",
             "--features",
             "ts",
             "export_ipc_types",

@@ -141,3 +141,87 @@ export type FriendOnlyGrantPreview = { channel_id: ChannelId, topic_id: TopicId,
 
 export type FriendPlusSharePreview = { channel_id: ChannelId, topic_id: TopicId, channel_label: string, owner_pubkey: Pubkey, sponsor_pubkey: Pubkey, epoch_id: string, expires_at?: number | null, namespace_secret_hex: string, share_token_id: string, };
 
+export type DiscoveryConfig = { mode: DiscoveryMode, connect_mode: ConnectMode, env_locked: boolean, seed_peers: Array<SeedPeer>, };
+
+export type CommunityNodeSeedPeer = { endpoint_id: string, addr_hint?: string | null, };
+
+export type CommunityNodeResolvedUrls = { public_base_url: string, connectivity_urls: Array<string>, seed_peers?: Array<CommunityNodeSeedPeer> | null, };
+
+export type CommunityNodeNodeConfig = { base_url: string, auto_approve?: boolean | null, resolved_urls?: CommunityNodeResolvedUrls | null, };
+
+export type CommunityNodeConfig = { nodes: Array<CommunityNodeNodeConfig>, };
+
+export type CommunityNodeAuthState = { authenticated: boolean, expires_at?: number | null, };
+
+export type CommunityNodeConsentItem = { policy_slug: string, policy_version: number, title: string, body?: string | null, required: boolean, accepted_at?: number | null, 
+/**
+ * その policy_slug で過去に同意した最大 version（version 不問）。
+ * `accepted_at` が None でこれが Some なら、版が上がって再同意が必要な「更新」を意味する。
+ */
+previously_accepted_version?: number | null, };
+
+export type CommunityNodeConsentStatus = { all_required_accepted: boolean, items: Array<CommunityNodeConsentItem>, };
+
+export type CommunityNodeSessionPhase = "idle" | "connecting" | "authenticating" | "accepting" | "refreshing" | "ready" | "retrying";
+
+export type CommunityNodeNodeStatus = { base_url: string, auto_approve?: boolean | null, auth_state: CommunityNodeAuthState, consent_state?: CommunityNodeConsentStatus | null, resolved_urls?: CommunityNodeResolvedUrls | null, last_error?: string | null, session_phase?: CommunityNodeSessionPhase | null, retry_after?: number | null, restart_required: boolean, };
+
+export type CommunityNodeCapabilityScope = { available_enabled: Array<string>, planned_enabled: Array<string>, };
+
+export type CommunityNodeAuthorityScope = { applies_to: Array<string>, does_not_apply_to: Array<string>, };
+
+export type CommunityNodeP2pBoundary = { identity_authority: boolean, profile_canonical_store: boolean, social_graph_canonical_store: boolean, content_truth_source: boolean, network_wide_authority: boolean, };
+
+export type CommunityNodeManifest = { node_id: string, node_name: string, node_role: string, server_name: string, manifest_version: string, capability_scope: CommunityNodeCapabilityScope, authority_scope: CommunityNodeAuthorityScope, p2p_boundary: CommunityNodeP2pBoundary, abuse_contact: string, 
+/**
+ * node が公開する通報受付 endpoint(#310)。未公開の場合は空文字。
+ * client は空なら `abuse_contact` を mailto / copyable contact として案内する。
+ */
+report_endpoint: string, terms_url: string, privacy_url: string, moderation_policy_url: string, };
+
+export type CommunityNodeManifestFetchStatus = "ok" | "absent";
+
+export type CommunityNodeManifestFetch = { status: CommunityNodeManifestFetchStatus, manifest?: CommunityNodeManifest | null, };
+
+export type SubmitCommunityNodeReportRequest = { 
+/**
+ * 通報先 node の base url（記録・表示用）。
+ */
+node_base_url: string, 
+/**
+ * node manifest が公開する通報受付 endpoint（絶対 http(s) URL）。
+ */
+report_endpoint: string, 
+/**
+ * 通報対象の種別（post / profile / media / search_result / recommendation 等）。
+ */
+subject_kind: string, 
+/**
+ * 通報対象の識別子（post id / pubkey / object id 等）。
+ */
+subject_id: string, 
+/**
+ * 通報先となった node capability（community_index / moderation / media_cache 等）。
+ */
+capability: string, 
+/**
+ * 通報理由カテゴリ。
+ */
+reason: string, 
+/**
+ * 任意の補足説明。
+ */
+details?: string | null, 
+/**
+ * 任意の通報者連絡先（node が follow-up に使える）。
+ */
+reporter_contact?: string | null, };
+
+export type SubmitCommunityNodeReportStatus = "submitted";
+
+export type SubmitCommunityNodeReportResult = { status: SubmitCommunityNodeReportStatus, 
+/**
+ * node が返した受付参照 ID（任意）。
+ */
+reference_id?: string | null, };
+

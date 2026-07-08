@@ -3054,6 +3054,7 @@ dependencies = [
  "kukuri-core",
  "serde",
  "serde_json",
+ "ts-rs",
  "url",
 ]
 
@@ -3194,6 +3195,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+ "ts-rs",
  "url",
 ]
 

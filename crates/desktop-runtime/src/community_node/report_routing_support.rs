@@ -8,6 +8,8 @@ use super::*;
 /// この request に載せて渡す。endpoint が無い node は client 側で `abuse_contact`
 /// 案内に切り替えるため、この command には到達しない。
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 #[serde(rename_all = "snake_case")]
 pub struct SubmitCommunityNodeReportRequest {
     /// 通報先 node の base url（記録・表示用）。
@@ -32,6 +34,7 @@ pub struct SubmitCommunityNodeReportRequest {
 
 /// 通報送信結果の状態。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum SubmitCommunityNodeReportStatus {
     /// node が通報を受理した（2xx）。
@@ -40,6 +43,8 @@ pub enum SubmitCommunityNodeReportStatus {
 
 /// 通報送信結果。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct SubmitCommunityNodeReportResult {
     pub status: SubmitCommunityNodeReportStatus,
     /// node が返した受付参照 ID（任意）。

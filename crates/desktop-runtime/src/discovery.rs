@@ -11,6 +11,8 @@ pub(crate) const DISCOVERY_MODE_ENV: &str = "KUKURI_DISCOVERY_MODE";
 pub(crate) const DISCOVERY_SEEDS_ENV: &str = "KUKURI_DISCOVERY_SEEDS";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct DiscoveryConfig {
     pub mode: DiscoveryMode,
     pub connect_mode: ConnectMode,

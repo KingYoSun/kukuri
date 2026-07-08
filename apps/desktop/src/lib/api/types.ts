@@ -10,12 +10,14 @@ import type {
   ChannelAccessTokenPreview,
   ChannelAudienceKind,
   ChannelRef,
-  ConnectMode,
+  CommunityNodeConfig,
+  CommunityNodeManifestFetch,
+  CommunityNodeNodeStatus,
   CustomReactionAssetView,
   DirectMessageConversationView,
   DirectMessageStatusView,
   DirectMessageTimelineView,
-  DiscoveryMode,
+  DiscoveryConfig,
   FriendOnlyGrantPreview,
   FriendPlusSharePreview,
   GameRoomStatus,
@@ -34,8 +36,9 @@ import type {
   Profile,
   ReactionStateView,
   RecentReactionView,
-  SeedPeer,
   SocialConnectionKind,
+  SubmitCommunityNodeReportRequest,
+  SubmitCommunityNodeReportResult,
   SyncStatus,
   TimelineCursor,
   TimelineScope,
@@ -140,70 +143,6 @@ export type CreateRepostInput = {
   commentary?: string | null;
 };
 
-export type DiscoveryConfig = {
-  mode: DiscoveryMode;
-  connect_mode: ConnectMode;
-  env_locked: boolean;
-  seed_peers: SeedPeer[];
-};
-
-export type CommunityNodeResolvedUrls = {
-  public_base_url: string;
-  connectivity_urls: string[];
-  seed_peers?: SeedPeer[];
-};
-
-export type CommunityNodeNodeConfig = {
-  base_url: string;
-  auto_approve?: boolean;
-  resolved_urls?: CommunityNodeResolvedUrls | null;
-};
-
-export type CommunityNodeConfig = {
-  nodes: CommunityNodeNodeConfig[];
-};
-
-export type CommunityNodeAuthState = {
-  authenticated: boolean;
-  expires_at?: number | null;
-};
-
-export type CommunityNodeConsentItem = {
-  policy_slug: string;
-  policy_version: number;
-  title: string;
-  body?: string;
-  required: boolean;
-  accepted_at?: number | null;
-  previously_accepted_version?: number | null;
-};
-
-export type CommunityNodeConsentStatus = {
-  all_required_accepted: boolean;
-  items: CommunityNodeConsentItem[];
-};
-
-export type CommunityNodeSessionPhase =
-  | 'idle'
-  | 'connecting'
-  | 'authenticating'
-  | 'accepting'
-  | 'refreshing'
-  | 'ready'
-  | 'retrying';
-
-export type CommunityNodeNodeStatus = {
-  base_url: string;
-  auto_approve?: boolean;
-  auth_state: CommunityNodeAuthState;
-  consent_state?: CommunityNodeConsentStatus | null;
-  resolved_urls?: CommunityNodeResolvedUrls | null;
-  last_error?: string | null;
-  session_phase?: CommunityNodeSessionPhase;
-  retry_after?: number | null;
-  restart_required: boolean;
-};
-
 export type CommunityNodeConfigInput = {
   base_url: string;
   auto_approve: boolean;
@@ -211,71 +150,10 @@ export type CommunityNodeConfigInput = {
 
 // community node manifest (#355/#356) の client 側表現。public manifest endpoint から取得し、
 // dependency 表示 (#357) に使う。snake_case は Rust 由来の JSON 形状に合わせる。
-export type CommunityNodeCapabilityScope = {
-  available_enabled: string[];
-  planned_enabled: string[];
-};
-
-export type CommunityNodeAuthorityScope = {
-  applies_to: string[];
-  does_not_apply_to: string[];
-};
-
-export type CommunityNodeP2pBoundary = {
-  identity_authority: boolean;
-  profile_canonical_store: boolean;
-  social_graph_canonical_store: boolean;
-  content_truth_source: boolean;
-  network_wide_authority: boolean;
-};
-
-export type CommunityNodeManifest = {
-  node_id: string;
-  node_name: string;
-  node_role: string;
-  server_name: string;
-  manifest_version: string;
-  capability_scope: CommunityNodeCapabilityScope;
-  authority_scope: CommunityNodeAuthorityScope;
-  p2p_boundary: CommunityNodeP2pBoundary;
-  abuse_contact: string;
-  // node が公開する通報受付 endpoint (#310)。未公開なら空文字。
-  // client は空なら abuse_contact を mailto / copyable contact として案内する。
-  report_endpoint: string;
-  terms_url: string;
-  privacy_url: string;
-  moderation_policy_url: string;
-};
-
 // manifest fetch 状態。'ok' は取得成功、'absent' は node が未公開 (404)。
 // 'error' は fetch 失敗、'loading' は取得中（client 側で付与）。
-export type CommunityNodeManifestFetchStatus = 'ok' | 'absent';
-
-export type CommunityNodeManifestFetch = {
-  status: CommunityNodeManifestFetchStatus;
-  manifest?: CommunityNodeManifest | null;
-};
-
 // 分散通報ルーティング (#310) の送信リクエスト。通報先は client が provenance + manifest
 // から解決し、その report_endpoint を載せて渡す。snake_case は Rust 由来の JSON 形状。
-export type SubmitCommunityNodeReportRequest = {
-  node_base_url: string;
-  report_endpoint: string;
-  subject_kind: string;
-  subject_id: string;
-  capability: string;
-  reason: string;
-  details?: string | null;
-  reporter_contact?: string | null;
-};
-
-export type SubmitCommunityNodeReportStatus = 'submitted';
-
-export type SubmitCommunityNodeReportResult = {
-  status: SubmitCommunityNodeReportStatus;
-  reference_id?: string | null;
-};
-
 export interface DesktopApi {
   createPost(
     topic: string,
