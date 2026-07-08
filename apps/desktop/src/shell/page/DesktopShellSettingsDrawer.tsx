@@ -11,7 +11,11 @@ import type { SupportedLocale } from '@/i18n';
 import type { CustomReactionCropRect } from '@/lib/api';
 import type { DesktopTheme } from '@/lib/theme';
 import { communityNodesToDraftNodes, seedPeersToEditorValue } from '@/shell/selectors';
-import { useDesktopShellFieldSetter, useDesktopShellStore } from '@/shell/store';
+import {
+  SHELL_SETTINGS_ID,
+  useDesktopShellFieldSetter,
+  useDesktopShellStore,
+} from '@/shell/store';
 import type { SyncRoute } from '@/shell/actions/shared';
 import { useDesktopShellViewModels } from '@/shell/useDesktopShellViewModels';
 import { useShallow } from 'zustand/react/shallow';
@@ -19,7 +23,6 @@ import { useShallow } from 'zustand/react/shallow';
 type ViewModels = ReturnType<typeof useDesktopShellViewModels>;
 
 type DesktopShellSettingsDrawerProps = {
-  drawerId: string;
   onThemeChange: (theme: DesktopTheme) => void;
   onLocaleChange: (locale: SupportedLocale) => void;
   syncRoute: SyncRoute;
@@ -55,7 +58,6 @@ function createCommunityNodeDraftId(): string {
 }
 
 export function DesktopShellSettingsDrawer({
-  drawerId,
   onThemeChange,
   onLocaleChange,
   syncRoute,
@@ -227,7 +229,7 @@ export function DesktopShellSettingsDrawer({
 
   return (
     <SettingsDrawer
-      drawerId={drawerId}
+      drawerId={SHELL_SETTINGS_ID}
       open={shellChromeState.settingsOpen}
       onOpenChange={(open) => setSettingsOpen(open, !open)}
       activeSection={shellChromeState.activeSettingsSection}
