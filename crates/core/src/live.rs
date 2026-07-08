@@ -11,6 +11,7 @@ pub enum LiveSignalKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub enum LiveSessionStatus {
     Scheduled,
     Live,

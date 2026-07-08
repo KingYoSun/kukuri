@@ -15,7 +15,15 @@ import type {
   DirectMessageStatusView,
   DirectMessageTimelineView,
   DiscoveryMode,
+  GameRoomStatus,
+  GameRoomView,
+  GameScoreView,
   JoinedPrivateChannelView,
+  LiveSessionView,
+  MetaverseAssetKind,
+  MetaverseAssetRef,
+  MetaverseRoomEventV1,
+  MetaverseRoomEventView,
   NotificationStatusView,
   NotificationView,
   PostView as WirePostView,
@@ -284,137 +292,6 @@ export type SubmitCommunityNodeReportStatus = 'submitted';
 export type SubmitCommunityNodeReportResult = {
   status: SubmitCommunityNodeReportStatus;
   reference_id?: string | null;
-};
-
-export type LiveSessionStatus = 'Scheduled' | 'Live' | 'Paused' | 'Ended';
-
-export type LiveSessionView = {
-  session_id: string;
-  host_pubkey: string;
-  title: string;
-  description: string;
-  status: LiveSessionStatus;
-  started_at: number;
-  ended_at?: number | null;
-  viewer_count: number;
-  joined_by_me: boolean;
-  channel_id?: string | null;
-  audience_label: string;
-};
-
-export type GameRoomStatus = 'Waiting' | 'Running' | 'Paused' | 'Ended';
-export type GameRoomKind = 'score_game' | 'metaverse_room';
-
-export type MetaverseAssetKind = 'vrm' | 'glb' | 'texture' | 'other';
-
-export type MetaverseAssetRef = {
-  kind: MetaverseAssetKind;
-  blob_hash: string;
-  mime_type?: string | null;
-  size_bytes?: number | null;
-  name?: string | null;
-};
-
-export type MetaversePrimitive = 'cube' | 'sphere';
-
-export type SharedRoomObjectV1 = {
-  object_id: string;
-  asset_ref?: MetaverseAssetRef | null;
-  primitive_fallback: MetaversePrimitive;
-  position: [number, number, number];
-  rotation: [number, number, number];
-  scale: [number, number, number];
-  updated_by: string;
-  updated_at: number;
-};
-
-export type MetaverseRoomStateV1 = {
-  world_version: number;
-  max_peers?: number | null;
-  scene: {
-    ground: string;
-    shared_object: SharedRoomObjectV1;
-  };
-  default_spawn: {
-    position: [number, number, number];
-    rotation: [number, number, number];
-  };
-  asset_refs: MetaverseAssetRef[];
-  chat_history?: MetaverseRoomChatMessageV1[];
-};
-
-export type MetaverseRoomPresenceV1 = {
-  room_id: string;
-  peer_id: string;
-  display_name?: string | null;
-  avatar_asset_ref?: MetaverseAssetRef | null;
-  joined_at: number;
-  last_seen_at: number;
-};
-
-export type MetaverseAvatarTransformV1 = {
-  room_id: string;
-  peer_id: string;
-  seq: number;
-  position: [number, number, number];
-  rotation: [number, number, number];
-  animation?: string | null;
-  sent_at: number;
-};
-
-export type MetaverseRoomChatMessageV1 = {
-  room_id: string;
-  message_id: string;
-  author_peer_id: string;
-  display_name?: string | null;
-  body: string;
-  created_at: number;
-};
-
-export type MetaverseRoomEventV1 =
-  | { type: 'presence_join'; presence: MetaverseRoomPresenceV1 }
-  | { type: 'presence_leave'; room_id: string; peer_id: string; left_at: number }
-  | { type: 'avatar_transform'; transform: MetaverseAvatarTransformV1 }
-  | { type: 'chat_message'; message: MetaverseRoomChatMessageV1 }
-  | { type: 'object_update'; object: SharedRoomObjectV1 };
-
-export type MetaverseRoomEventView = {
-  envelope_id: string;
-  content: {
-    event_id: string;
-    topic_id: string;
-    channel_id?: string | null;
-    room_id: string;
-    peer_id: string;
-    seq: number;
-    sent_at: number;
-    event: MetaverseRoomEventV1;
-  };
-  envelope: Record<string, unknown>;
-  received_at: number;
-  source_peer: string;
-};
-
-export type GameScoreView = {
-  participant_id: string;
-  label: string;
-  score: number;
-};
-
-export type GameRoomView = {
-  room_id: string;
-  host_pubkey: string;
-  title: string;
-  description: string;
-  status: GameRoomStatus;
-  phase_label?: string | null;
-  scores: GameScoreView[];
-  room_kind: GameRoomKind;
-  metaverse?: MetaverseRoomStateV1 | null;
-  manifest_blob_hash: string;
-  updated_at: number;
-  channel_id?: string | null;
-  audience_label: string;
 };
 
 export type PrivateChannelInvitePreview = {

@@ -83,3 +83,41 @@ export type DiscoveryStatus = { mode: DiscoveryMode, connect_mode: ConnectMode, 
 
 export type SyncStatus = { connected: boolean, delivery_state: DeliveryState, last_sync_ts?: number | null, peer_count: number, pending_events: number, status_detail: string, last_error?: string | null, configured_peers: Array<string>, subscribed_topics: Array<string>, active_path: ConnectionPath, fallback_peer_ids: Array<string>, topic_diagnostics: Array<TopicSyncStatus>, local_author_pubkey: string, discovery: DiscoveryStatus, gossip_disabled_topics: Array<string>, gossip_disabled_channels: Array<string>, };
 
+export type LiveSessionStatus = "Scheduled" | "Live" | "Paused" | "Ended";
+
+export type LiveSessionView = { session_id: string, host_pubkey: string, title: string, description: string, status: LiveSessionStatus, started_at: number, ended_at?: number | null, viewer_count: number, joined_by_me: boolean, channel_id?: string | null, audience_label: string, };
+
+export type GameRoomStatus = "Waiting" | "Running" | "Paused" | "Ended";
+
+export type GameRoomKind = "score_game" | "metaverse_room";
+
+export type GameScoreView = { participant_id: string, label: string, score: number, };
+
+export type MetaverseAssetKind = "vrm" | "glb" | "texture" | "other";
+
+export type MetaverseAssetRef = { kind: MetaverseAssetKind, blob_hash: string, mime_type?: string | null, size_bytes?: number | null, name?: string | null, };
+
+export type MetaversePrimitive = "cube" | "sphere";
+
+export type MetaverseRoomPresenceV1 = { room_id: string, peer_id: string, display_name?: string | null, avatar_asset_ref?: MetaverseAssetRef | null, joined_at: number, last_seen_at: number, };
+
+export type MetaverseAvatarTransformV1 = { room_id: string, peer_id: string, seq: number, position: [number, number, number], rotation: [number, number, number], animation?: string | null, sent_at: number, };
+
+export type MetaverseRoomChatMessageV1 = { room_id: string, message_id: string, author_peer_id: string, display_name?: string | null, body: string, created_at: number, };
+
+export type SharedRoomObjectV1 = { object_id: string, asset_ref?: MetaverseAssetRef | null, primitive_fallback: MetaversePrimitive, position: [number, number, number], rotation: [number, number, number], scale: [number, number, number], updated_by: string, updated_at: number, };
+
+export type MetaverseRoomEventV1 = { "type": "presence_join", presence: MetaverseRoomPresenceV1, } | { "type": "presence_leave", room_id: string, peer_id: string, left_at: number, } | { "type": "avatar_transform", transform: MetaverseAvatarTransformV1, } | { "type": "chat_message", message: MetaverseRoomChatMessageV1, } | { "type": "object_update", object: SharedRoomObjectV1, };
+
+export type MetaverseRoomEventEnvelopeContentV1 = { event_id: string, topic_id: string, channel_id?: string | null, room_id: string, peer_id: string, seq: number, sent_at: number, event: MetaverseRoomEventV1, };
+
+export type MetaverseRoomSceneV1 = { ground: string, shared_object: SharedRoomObjectV1, };
+
+export type MetaverseRoomSpawnV1 = { position: [number, number, number], rotation: [number, number, number], };
+
+export type MetaverseRoomStateV1 = { world_version: number, max_peers?: number | null, scene: MetaverseRoomSceneV1, default_spawn: MetaverseRoomSpawnV1, asset_refs: Array<MetaverseAssetRef>, chat_history?: Array<MetaverseRoomChatMessageV1> | null, };
+
+export type GameRoomView = { room_id: string, host_pubkey: string, title: string, description: string, status: GameRoomStatus, phase_label?: string | null, scores: Array<GameScoreView>, room_kind: GameRoomKind, metaverse?: MetaverseRoomStateV1 | null, manifest_blob_hash: string, updated_at: number, channel_id?: string | null, audience_label: string, };
+
+export type MetaverseRoomEventView = { envelope_id: string, content: MetaverseRoomEventEnvelopeContentV1, envelope: Record<string, unknown>, received_at: number, source_peer: string, };
+

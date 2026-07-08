@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::{ChannelId, EnvelopeId, ManifestBlobRef, Pubkey, TopicId};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum GameRoomKind {
     #[default]
@@ -12,6 +13,7 @@ pub enum GameRoomKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub enum GameRoomStatus {
     Waiting,
     Running,
@@ -33,6 +35,7 @@ pub struct GameScoreEntry {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum MetaverseAssetKind {
     Vrm,
@@ -42,6 +45,8 @@ pub enum MetaverseAssetKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct MetaverseAssetRef {
     pub kind: MetaverseAssetKind,
     pub blob_hash: String,
@@ -51,6 +56,8 @@ pub struct MetaverseAssetRef {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct MetaverseRoomPresenceV1 {
     pub room_id: String,
     pub peer_id: String,
@@ -61,6 +68,8 @@ pub struct MetaverseRoomPresenceV1 {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct MetaverseAvatarTransformV1 {
     pub room_id: String,
     pub peer_id: String,
@@ -72,6 +81,8 @@ pub struct MetaverseAvatarTransformV1 {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct MetaverseRoomChatMessageV1 {
     pub room_id: String,
     pub message_id: String,
@@ -82,6 +93,7 @@ pub struct MetaverseRoomChatMessageV1 {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum MetaversePrimitive {
     Cube,
@@ -89,6 +101,8 @@ pub enum MetaversePrimitive {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct SharedRoomObjectV1 {
     pub object_id: String,
     pub asset_ref: Option<MetaverseAssetRef>,
@@ -96,11 +110,13 @@ pub struct SharedRoomObjectV1 {
     pub position: [i64; 3],
     pub rotation: [i64; 3],
     pub scale: [i64; 3],
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub updated_by: Pubkey,
     pub updated_at: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum MetaverseRoomEventV1 {
     PresenceJoin {
@@ -123,9 +139,13 @@ pub enum MetaverseRoomEventV1 {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct MetaverseRoomEventEnvelopeContentV1 {
     pub event_id: String,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub topic_id: TopicId,
+    #[cfg_attr(feature = "ts", ts(as = "Option<String>"))]
     pub channel_id: Option<ChannelId>,
     pub room_id: String,
     pub peer_id: String,
@@ -135,18 +155,24 @@ pub struct MetaverseRoomEventEnvelopeContentV1 {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct MetaverseRoomSceneV1 {
     pub ground: String,
     pub shared_object: SharedRoomObjectV1,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct MetaverseRoomSpawnV1 {
     pub position: [i64; 3],
     pub rotation: [i64; 3],
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct MetaverseRoomStateV1 {
     pub world_version: u64,
     pub max_peers: Option<u32>,
@@ -154,6 +180,7 @@ pub struct MetaverseRoomStateV1 {
     pub default_spawn: MetaverseRoomSpawnV1,
     pub asset_refs: Vec<MetaverseAssetRef>,
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<Vec<MetaverseRoomChatMessageV1>>"))]
     pub chat_history: Vec<MetaverseRoomChatMessageV1>,
 }
 
