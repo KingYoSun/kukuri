@@ -9,6 +9,7 @@ pub use kukuri_cn_protocol::{
 
 /// manifest fetch の結果状態。error は command の Err として返すため含めない。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum CommunityNodeManifestFetchStatus {
     /// manifest を取得・解析できた。
@@ -19,6 +20,8 @@ pub enum CommunityNodeManifestFetchStatus {
 
 /// manifest fetch の結果。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CommunityNodeManifestFetch {
     pub status: CommunityNodeManifestFetchStatus,
     #[serde(default)]

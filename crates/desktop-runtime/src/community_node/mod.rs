@@ -73,15 +73,20 @@ pub(crate) const COMMUNITY_NODE_RECONNECT_BACKOFF_SECONDS: [i64; 3] = [30, 60, 1
 pub(crate) const COMMUNITY_NODE_SESSION_SCHEDULER_TICK_SECONDS: u64 = 15;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CommunityNodeNodeConfig {
     pub base_url: String,
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>"))]
     pub auto_approve: bool,
     #[serde(default)]
     pub resolved_urls: Option<CommunityNodeResolvedUrls>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CommunityNodeConfig {
     #[serde(default)]
     pub nodes: Vec<CommunityNodeNodeConfig>,
@@ -138,6 +143,8 @@ pub struct AcceptCommunityNodeConsentsRequest {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CommunityNodeAuthState {
     pub authenticated: bool,
     pub expires_at: Option<i64>,
@@ -168,6 +175,7 @@ pub(crate) struct CommunityNodeReconnectState {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum CommunityNodeSessionPhase {
     #[default]
@@ -181,15 +189,20 @@ pub enum CommunityNodeSessionPhase {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CommunityNodeNodeStatus {
     pub base_url: String,
+    // 現行 types.ts と同じく任意(#[serde(default)])。
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>"))]
     pub auto_approve: bool,
     pub auth_state: CommunityNodeAuthState,
     pub consent_state: Option<CommunityNodeConsentStatus>,
     pub resolved_urls: Option<CommunityNodeResolvedUrls>,
     pub last_error: Option<String>,
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<CommunityNodeSessionPhase>"))]
     pub session_phase: CommunityNodeSessionPhase,
     pub retry_after: Option<i64>,
     pub restart_required: bool,

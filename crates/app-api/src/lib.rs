@@ -1,7 +1,5 @@
 mod direct_messages;
 mod game;
-#[cfg(feature = "ts")]
-mod ipc_ts_export;
 mod live;
 mod media;
 mod notifications;

@@ -1,14 +1,16 @@
 //! IPC 型の TypeScript 生成(WP-H7 PR3。`ts` feature 時のみ)。
 //!
-//! `cargo test -p kukuri-app-api --features ts export_ipc_types` で
-//! `apps/desktop/src/lib/api/types.generated.ts` を再生成する。
-//! xtask `ipc-types` が `TS_RS_LARGE_INT=number` を設定してこれを実行し、
-//! 続けて prettier を掛ける。CI は再生成後に `git diff --exit-code` で
-//! Rust と TS の乖離(手動同期漏れ)を検出する。
+//! 生成器は client 依存グラフの頂点である desktop-runtime に置く。ここからは
+//! app-api(views)/ core / store / transport / cn-protocol / 自 crate の
+//! community-node 型まで全 IPC 型に到達できる。
 //!
-//! Stage 1 の生成対象は app-api の view サブグラフ(metaverse/game/live は
-//! 後続ステージ)。front 専用型・入力型・DesktopApi interface は
-//! 手書きの types.ts 側に残す。
+//! `cargo test -p kukuri-desktop-runtime --features ts export_ipc_types` で
+//! `apps/desktop/src/lib/api/types.generated.ts` を再生成する。xtask `ipc-types`
+//! が `TS_RS_LARGE_INT=number` を設定して実行し、CI は再生成後の
+//! `git diff --exit-code` で Rust と TS の乖離を検出する。
+//!
+//! front 専用型(入力 DTO / エラー型 / DesktopApi interface)は手書きの
+//! types.ts 側に残す。
 #![cfg(feature = "ts")]
 
 use ts_rs::TS;
@@ -24,7 +26,19 @@ fn emit<T: TS>(cfg: &ts_rs::Config, out: &mut String) {
 
 #[test]
 fn export_ipc_types() {
-    use crate::views::*;
+    use crate::{
+        CommunityNodeAuthState, CommunityNodeAuthorityScope, CommunityNodeCapabilityScope,
+        CommunityNodeConfig, CommunityNodeManifest, CommunityNodeManifestFetch,
+        CommunityNodeManifestFetchStatus, CommunityNodeNodeConfig, CommunityNodeNodeStatus,
+        CommunityNodeP2pBoundary, CommunityNodeSessionPhase, DiscoveryConfig,
+        SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
+        SubmitCommunityNodeReportStatus,
+    };
+    use kukuri_app_api::*;
+    use kukuri_cn_protocol::{
+        CommunityNodeConsentItem, CommunityNodeConsentStatus, CommunityNodeResolvedUrls,
+        CommunityNodeSeedPeer,
+    };
     use kukuri_core::{
         ChannelAudienceKind, ChannelId, ChannelRef, ChannelSharingState, FriendOnlyGrantPreview,
         FriendPlusSharePreview, GameRoomKind, GameRoomStatus, LiveSessionStatus,
@@ -33,7 +47,7 @@ fn export_ipc_types() {
         MetaverseRoomPresenceV1, MetaverseRoomSceneV1, MetaverseRoomSpawnV1, MetaverseRoomStateV1,
         PrivateChannelInvitePreview, Profile, Pubkey, SharedRoomObjectV1, TimelineScope, TopicId,
     };
-    use kukuri_store::{NotificationKind, TimelineCursor};
+    use kukuri_store::TimelineCursor;
     use kukuri_transport::{ConnectMode, ConnectionPath, DiscoveryMode, SeedPeer};
 
     let cfg = ts_rs::Config::from_env();
@@ -85,7 +99,7 @@ fn export_ipc_types() {
         TopicSyncStatus,
         DiscoveryStatus,
         SyncStatus,
-        // Stage 2: metaverse / game / live
+        // metaverse / game / live
         LiveSessionStatus,
         LiveSessionView,
         GameRoomStatus,
@@ -105,7 +119,7 @@ fn export_ipc_types() {
         MetaverseRoomStateV1,
         GameRoomView,
         MetaverseRoomEventView,
-        // Stage 3a: core / transport の残り型 + newtype(string)
+        // core / transport の残り + newtype(string)
         Pubkey,
         TopicId,
         ChannelId,
@@ -116,6 +130,26 @@ fn export_ipc_types() {
         PrivateChannelInvitePreview,
         FriendOnlyGrantPreview,
         FriendPlusSharePreview,
+        // community-node(desktop-runtime / cn-protocol)
+        DiscoveryConfig,
+        CommunityNodeSeedPeer,
+        CommunityNodeResolvedUrls,
+        CommunityNodeNodeConfig,
+        CommunityNodeConfig,
+        CommunityNodeAuthState,
+        CommunityNodeConsentItem,
+        CommunityNodeConsentStatus,
+        CommunityNodeSessionPhase,
+        CommunityNodeNodeStatus,
+        CommunityNodeCapabilityScope,
+        CommunityNodeAuthorityScope,
+        CommunityNodeP2pBoundary,
+        CommunityNodeManifest,
+        CommunityNodeManifestFetchStatus,
+        CommunityNodeManifestFetch,
+        SubmitCommunityNodeReportRequest,
+        SubmitCommunityNodeReportStatus,
+        SubmitCommunityNodeReportResult,
     );
 
     let path = concat!(

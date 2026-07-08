@@ -6,14 +6,20 @@ use serde::{Deserialize, Serialize};
 use crate::normalize::{normalize_http_url, normalize_http_url_list};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CommunityNodeResolvedUrls {
     pub public_base_url: String,
     pub connectivity_urls: Vec<String>,
+    // 現行 types.ts と同じく任意(#[serde(default)])。
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<Vec<CommunityNodeSeedPeer>>"))]
     pub seed_peers: Vec<CommunityNodeSeedPeer>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CommunityNodeSeedPeer {
     pub endpoint_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -97,11 +103,14 @@ pub struct BootstrapHeartbeatResponse {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CommunityNodeConsentItem {
     pub policy_slug: String,
     pub policy_version: i32,
     pub title: String,
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<String>"))]
     pub body: String,
     pub required: bool,
     pub accepted_at: Option<i64>,
@@ -112,6 +121,8 @@ pub struct CommunityNodeConsentItem {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CommunityNodeConsentStatus {
     pub all_required_accepted: bool,
     pub items: Vec<CommunityNodeConsentItem>,

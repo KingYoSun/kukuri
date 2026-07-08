@@ -10,6 +10,11 @@ serde.workspace = true
 serde_json.workspace = true
 url.workspace = true
 kukuri-core = { path = "../core" }
+ts-rs = { workspace = true, optional = true }
+
+[features]
+# IPC 型の TypeScript 生成専用(codegen 時のみ有効)。
+ts = ["dep:ts-rs", "kukuri-core/ts"]
 
 [lints]
 workspace = true

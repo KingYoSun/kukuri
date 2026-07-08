@@ -2,6 +2,8 @@ mod attachments;
 mod community_node;
 mod discovery;
 mod identity;
+#[cfg(feature = "ts")]
+mod ipc_ts_export;
 mod paths;
 mod requests;
 mod runtime;
