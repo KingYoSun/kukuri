@@ -1,16 +1,12 @@
 {
   "files": [
     {
-      "lines": 3085,
+      "lines": 2964,
       "path": "apps/desktop/src/styles/shell-phase1.css"
     },
     {
       "lines": 1155,
       "path": "apps/desktop/src/components/extended/MetaverseRoomPanel.tsx"
-    },
-    {
-      "lines": 1141,
-      "path": "apps/desktop/src/styles/shell-phase1-legacy.css"
     },
     {
       "lines": 1140,
@@ -35,6 +31,10 @@
     {
       "lines": 1035,
       "path": "apps/desktop/src/shell/useDesktopShellData.ts"
+    },
+    {
+      "lines": 1035,
+      "path": "apps/desktop/src/styles/shell-phase1-legacy.css"
     }
   ]
 }
