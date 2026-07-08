@@ -14,6 +14,7 @@ import { communityNodesToDraftNodes, seedPeersToEditorValue } from '@/shell/sele
 import { useDesktopShellFieldSetter, useDesktopShellStore } from '@/shell/store';
 import type { SyncRoute } from '@/shell/actions/shared';
 import { useDesktopShellViewModels } from '@/shell/useDesktopShellViewModels';
+import { useShallow } from 'zustand/react/shallow';
 
 type ViewModels = ReturnType<typeof useDesktopShellViewModels>;
 
@@ -88,7 +89,17 @@ export function DesktopShellSettingsDrawer({
     mediaObjectUrls,
     reactionCreatePending,
     shellChromeState,
-  } = useDesktopShellStore();
+  } = useDesktopShellStore(
+    useShallow((s) => ({
+      communityNodeConfig: s.communityNodeConfig,
+      communityNodeEditorDirty: s.communityNodeEditorDirty,
+      discoveryConfig: s.discoveryConfig,
+      discoveryEditorDirty: s.discoveryEditorDirty,
+      mediaObjectUrls: s.mediaObjectUrls,
+      reactionCreatePending: s.reactionCreatePending,
+      shellChromeState: s.shellChromeState,
+    }))
+  );
   const setPeerTicket = useDesktopShellFieldSetter('peerTicket');
   const setDiscoverySeedInput = useDesktopShellFieldSetter('discoverySeedInput');
   const setDiscoveryEditorDirty = useDesktopShellFieldSetter('discoveryEditorDirty');

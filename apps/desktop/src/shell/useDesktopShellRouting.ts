@@ -26,6 +26,7 @@ import { setRecordEntry } from '@/shell/stateUpdates';
 import { THREAD_TIMELINE_LIMIT } from '@/shell/pagination';
 import { useRouteSynchronization } from '@/shell/routing/useRouteSynchronization';
 import { useSyncRoute } from '@/shell/routing/useSyncRoute';
+import { useShallow } from 'zustand/react/shallow';
 import {
   authorViewFromDirectMessageConversation,
   mergeKnownAuthors,
@@ -61,7 +62,30 @@ export function useDesktopShellRouting({
   const location = useLocation();
   const navigate = useNavigate();
   const storeApi = useDesktopShellStoreApi();
-  const state = useDesktopShellStore();
+  const state = useDesktopShellStore(
+    useShallow((s) => ({
+      activeTopic: s.activeTopic,
+      channelPanelStateByTopic: s.channelPanelStateByTopic,
+      directMessagePaneOpen: s.directMessagePaneOpen,
+      focusedObjectId: s.focusedObjectId,
+      gamePanelStateByTopic: s.gamePanelStateByTopic,
+      gameRoomsByTopic: s.gameRoomsByTopic,
+      joinedChannelsByTopic: s.joinedChannelsByTopic,
+      lastNonNotificationsRoute: s.lastNonNotificationsRoute,
+      livePanelStateByTopic: s.livePanelStateByTopic,
+      liveSessionsByTopic: s.liveSessionsByTopic,
+      selectedAuthor: s.selectedAuthor,
+      selectedAuthorPubkey: s.selectedAuthorPubkey,
+      selectedChannelIdByTopic: s.selectedChannelIdByTopic,
+      selectedDirectMessagePeerPubkey: s.selectedDirectMessagePeerPubkey,
+      selectedGameRoomId: s.selectedGameRoomId,
+      selectedLiveSessionId: s.selectedLiveSessionId,
+      selectedThread: s.selectedThread,
+      shellChromeState: s.shellChromeState,
+      thread: s.thread,
+      trackedTopics: s.trackedTopics,
+    }))
+  );
   const {
     activeTopic,
     selectedThread,

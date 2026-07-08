@@ -36,6 +36,7 @@ import {
   useDesktopShellStoreApi,
 } from '@/shell/store';
 import { THREAD_TIMELINE_LIMIT, VISIBLE_TIMELINE_LIMIT } from '@/shell/pagination';
+import { useShallow } from 'zustand/react/shallow';
 import {
   authorViewFromDirectMessageConversation,
   communityNodesToDraftNodes,
@@ -74,7 +75,34 @@ export function useDesktopShellData({
   draftSequenceRef,
 }: UseDesktopShellDataArgs) {
   const storeApi = useDesktopShellStoreApi();
-  const state = useDesktopShellStore();
+  const state = useDesktopShellStore(
+    useShallow((s) => ({
+      activeTopic: s.activeTopic,
+      bookmarkedReactionAssets: s.bookmarkedReactionAssets,
+      directMessageTimelineByPeer: s.directMessageTimelineByPeer,
+      gameRoomsByTopic: s.gameRoomsByTopic,
+      joinedChannelsByTopic: s.joinedChannelsByTopic,
+      knownAuthorsByPubkey: s.knownAuthorsByPubkey,
+      localProfile: s.localProfile,
+      mediaObjectUrls: s.mediaObjectUrls,
+      notifications: s.notifications,
+      ownedReactionAssets: s.ownedReactionAssets,
+      profileTimeline: s.profileTimeline,
+      publicTimelinesByTopic: s.publicTimelinesByTopic,
+      recentReactions: s.recentReactions,
+      selectedAuthorPubkey: s.selectedAuthorPubkey,
+      selectedAuthorTimeline: s.selectedAuthorTimeline,
+      selectedChannelIdByTopic: s.selectedChannelIdByTopic,
+      selectedDirectMessagePeerPubkey: s.selectedDirectMessagePeerPubkey,
+      selectedThread: s.selectedThread,
+      shellChromeState: s.shellChromeState,
+      syncStatus: s.syncStatus,
+      thread: s.thread,
+      timelineScopeByTopic: s.timelineScopeByTopic,
+      timelinesByKey: s.timelinesByKey,
+      trackedTopics: s.trackedTopics,
+    }))
+  );
   const {
     trackedTopics,
     activeTopic,

@@ -24,6 +24,7 @@ import { createDirectMessageActions } from './actions/directMessages';
 import { createLiveGameActions } from './actions/liveGame';
 import { createMessageReactionSocialActions } from './actions/messageReactionSocial';
 import { createProfileTopicChannelActions } from './actions/profileTopicChannel';
+import { useShallow } from 'zustand/react/shallow';
 import type {
   OpenAuthorDetail,
   OpenDirectMessagePane,
@@ -80,7 +81,40 @@ export function useDesktopShellActions({
   buildVideoDraftItem,
 }: UseDesktopShellActionsArgs) {
   const storeApi = useDesktopShellStoreApi();
-  const state = useDesktopShellStore();
+  const state = useDesktopShellStore(
+    useShallow((s) => ({
+      activeTopic: s.activeTopic,
+      bookmarkedPosts: s.bookmarkedPosts,
+      channelAudienceInput: s.channelAudienceInput,
+      channelLabelInput: s.channelLabelInput,
+      communityNodeInput: s.communityNodeInput,
+      composeChannelByTopic: s.composeChannelByTopic,
+      composer: s.composer,
+      discoverySeedInput: s.discoverySeedInput,
+      draftMediaItems: s.draftMediaItems,
+      gameDescription: s.gameDescription,
+      gameDrafts: s.gameDrafts,
+      gameParticipantsInput: s.gameParticipantsInput,
+      gameRoomsByTopic: s.gameRoomsByTopic,
+      gameTitle: s.gameTitle,
+      inviteTokenInput: s.inviteTokenInput,
+      joinedChannelsByTopic: s.joinedChannelsByTopic,
+      liveDescription: s.liveDescription,
+      liveTitle: s.liveTitle,
+      localProfile: s.localProfile,
+      peerTicket: s.peerTicket,
+      profileDraft: s.profileDraft,
+      replyTarget: s.replyTarget,
+      repostTarget: s.repostTarget,
+      selectedAuthorPubkey: s.selectedAuthorPubkey,
+      selectedChannelIdByTopic: s.selectedChannelIdByTopic,
+      selectedThread: s.selectedThread,
+      shellChromeState: s.shellChromeState,
+      syncStatus: s.syncStatus,
+      topicInput: s.topicInput,
+      trackedTopics: s.trackedTopics,
+    }))
+  );
   const nextActiveTopic = state.activeTopic;
   const nextSelectedChannelId = state.selectedChannelIdByTopic[nextActiveTopic] ?? null;
   const nextJoinedChannels = state.joinedChannelsByTopic[nextActiveTopic] ?? [];
