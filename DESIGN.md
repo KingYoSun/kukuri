@@ -215,6 +215,25 @@ kukuri にはマーケティング的な First View / ブランドロックア�
 - オンボーディングは starter topics（`kukuri:topic:demo` 他）を提示する初回体験を前提にする。
 - 意味のある面には loading / empty / error / success 状態を必ず定義する（ガードレールは [ADR 0014](docs/adr/0014-uiux-dev-flow.md)）。
 
+### 4.7 スタイリング層とファイル構成（WP-H8）
+
+スタイルは 2 層に分ける。**新規スタイルはこのルールに従って置き場を選ぶ。**
+
+- **プリミティブ層 = `ui/` コンポーネント**（[`ui/button.tsx`](apps/desktop/src/components/ui/button.tsx) 等）: Tailwind ユーティリティ + CVA（`buttonVariants` 等）+ `tokens.css` の CSS 変数で完結させる。**semantic クラス（`.post-card` 等）を持たせない**。variant は CVA に足す。
+- **セマンティック層 = `styles/` の shell スタイルシート**: `.post-card` / `.composer` / `.shell-*` などアプリ固有のクラス。core / extended / shell の各コンポーネントが `className` で参照する。**新規の semantic クラスはこの層にのみ足す**（コンポーネント内にインラインの巨大 style を書かない）。
+
+`styles/` の構成（`index.css` がこの順で `@import`。cascade はこの順序が正）:
+
+| ファイル | 役割 |
+|---|---|
+| `tokens.css` | CSS 変数（色 / spacing / 型 / 角丸）。全層の基盤 |
+| `base.css` | リセット + 全体既定 + `.startup-error-screen` 等の非 shell 面 |
+| `shell-phase1-part1〜4.css` | shell の semantic クラス本体。WP-H8 PR4 で 1 ファイルを **cascade 順を保つ連続セグメント**に 4 分割した（ドメイン純粋ではない。番号順に `@import` して元の 1 ファイルと同一 cascade を再現する。1 ファイル 1,000 行未満に収める churn 対策） |
+| `shell-scoped-overrides.css` | `.shell-phase1` スコープ付き上書き層。shell 配下では `shell-phase1-part*` を specificity で上書きし、body 直下の Radix portal（dialog / tooltip / dropdown）には効かない。**portal と shell で意図的に値が異なるクラスの shell 側の値**をここに置く |
+
+- portal（Radix の Dialog / Tooltip / DropdownMenu / Popover）は `body` 直下に描画され `.shell-phase1` スコープの外にある。同じ semantic クラスを portal と shell で別値にしたい場合のみ、base 値を `shell-phase1-part*` に、shell 上書き値を `shell-scoped-overrides.css` に置く二層構造にする。
+- `var(--token)` は同梱スタイルシート内で定義済みのものだけ参照する（`css-vars.test.ts` が未定義参照を検出する）。
+
 ---
 
 ## 5. レイアウト原則
