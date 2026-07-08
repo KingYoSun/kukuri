@@ -1,3 +1,4 @@
+import { setRecordEntry } from '@/shell/stateUpdates';
 import { useEffect, type MutableRefObject } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 
@@ -250,18 +251,9 @@ export function useRouteSynchronization({
       currentSelectedChannelIdForTopic !== nextSelectedChannelId &&
       !channelRoutePendingValidation
     ) {
-      setSelectedChannelIdByTopic((current) => ({
-        ...current,
-        [nextTopic]: nextSelectedChannelId,
-      }));
-      setTimelineScopeByTopic((current) => ({
-        ...current,
-        [nextTopic]: privateTimelineScope(nextSelectedChannelId),
-      }));
-      setComposeChannelByTopic((current) => ({
-        ...current,
-        [nextTopic]: privateComposeTarget(nextSelectedChannelId),
-      }));
+      setSelectedChannelIdByTopic(setRecordEntry(nextTopic, nextSelectedChannelId));
+      setTimelineScopeByTopic(setRecordEntry(nextTopic, privateTimelineScope(nextSelectedChannelId)));
+      setComposeChannelByTopic(setRecordEntry(nextTopic, privateComposeTarget(nextSelectedChannelId)));
       shouldReload = true;
     }
 

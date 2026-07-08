@@ -1,3 +1,4 @@
+import { setRecordEntry } from '@/shell/stateUpdates';
 import type {
   CustomReactionCropRect,
   DesktopApi,
@@ -147,18 +148,9 @@ export function createMessageReactionSocialActions({
 
     setTrackedTopics(nextTopics);
     setActiveTopic(targetTopic);
-    setSelectedChannelIdByTopic((current) => ({
-      ...current,
-      [targetTopic]: nextChannelId,
-    }));
-    setTimelineScopeByTopic((current) => ({
-      ...current,
-      [targetTopic]: privateTimelineScope(nextChannelId),
-    }));
-    setComposeChannelByTopic((current) => ({
-      ...current,
-      [targetTopic]: privateComposeTarget(nextChannelId),
-    }));
+    setSelectedChannelIdByTopic(setRecordEntry(targetTopic, nextChannelId));
+    setTimelineScopeByTopic(setRecordEntry(targetTopic, privateTimelineScope(nextChannelId)));
+    setComposeChannelByTopic(setRecordEntry(targetTopic, privateComposeTarget(nextChannelId)));
     clearAuxiliaryPanels();
     setShellChromeState((current) => ({
       ...current,

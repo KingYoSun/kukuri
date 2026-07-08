@@ -22,6 +22,7 @@ import {
   type DesktopShellStateValue,
   type DesktopShellStoreApi,
 } from '@/shell/store';
+import { setRecordEntry } from '@/shell/stateUpdates';
 import { VISIBLE_TIMELINE_LIMIT } from '@/shell/pagination';
 import {
   authorViewFromDirectMessageConversation,
@@ -440,20 +441,11 @@ export function useDesktopShellDataEffects({
         }
         startTransition(() => {
           if (timelineResult.status === 'fulfilled') {
-            setDirectMessageTimelineByPeer((current) => ({
-              ...current,
-              [selectedPeerPubkey]: timelineResult.value.items,
-            }));
-            setDirectMessageTimelineNextCursorByPeer((current) => ({
-              ...current,
-              [selectedPeerPubkey]: timelineResult.value.next_cursor ?? null,
-            }));
+            setDirectMessageTimelineByPeer(setRecordEntry(selectedPeerPubkey, timelineResult.value.items));
+            setDirectMessageTimelineNextCursorByPeer(setRecordEntry(selectedPeerPubkey, timelineResult.value.next_cursor ?? null));
           }
           if (statusResult.status === 'fulfilled') {
-            setDirectMessageStatusByPeer((current) => ({
-              ...current,
-              [selectedPeerPubkey]: statusResult.value,
-            }));
+            setDirectMessageStatusByPeer(setRecordEntry(selectedPeerPubkey, statusResult.value));
           }
           setDirectMessageError(
             timelineResult.status === 'fulfilled' && statusResult.status === 'fulfilled'
@@ -619,10 +611,7 @@ export function useDesktopShellDataEffects({
     if (selectedStillJoined) {
       return;
     }
-    setSelectedChannelIdByTopic((current) => ({
-      ...current,
-      [activeTopic]: null,
-    }));
+    setSelectedChannelIdByTopic(setRecordEntry(activeTopic, null));
     setComposeChannelByTopic((current) =>
       current[activeTopic]?.kind === 'private_channel' &&
       current[activeTopic].channel_id === selectedPrivateChannelId

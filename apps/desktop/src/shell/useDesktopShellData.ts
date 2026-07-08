@@ -15,6 +15,7 @@ import type {
   PostView,
 } from '@/lib/api';
 
+import { removeRecordEntry, setRecordEntry, updateRecordEntry } from '@/shell/stateUpdates';
 import { useDesktopShellDataEffects } from '@/shell/data/useDesktopShellDataEffects';
 import { useDraftMediaHelpers } from '@/shell/data/useDraftMediaHelpers';
 import { useQueuedLoadTopics } from '@/shell/data/useQueuedLoadTopics';
@@ -254,14 +255,7 @@ export function useDesktopShellData({
         delete next[key];
         return next;
       });
-      setPendingTimelineNextCursorByKey((current) => {
-        if (!(key in current)) {
-          return current;
-        }
-        const next = { ...current };
-        delete next[key];
-        return next;
-      });
+      setPendingTimelineNextCursorByKey(removeRecordEntry(key));
     },
     [
       setPendingTimelineCountsByKey,
@@ -285,18 +279,12 @@ export function useDesktopShellData({
       const currentTimelinePosts = currentState.timelinesByKey[key] ?? EMPTY_POSTS;
       const preserveOlderPages = hasLoadedOlderAuthoritativePosts(currentTimelinePosts, pendingItems);
       startTransition(() => {
-        setTimelinesByKey((current) => ({
-          ...current,
-          [key]: mergeRefreshedVisiblePosts(
-            current[key] ?? EMPTY_POSTS,
+        setTimelinesByKey(updateRecordEntry(key, (prev) => mergeRefreshedVisiblePosts(
+            prev ?? EMPTY_POSTS,
             pendingItems,
             preserveOlderPages
-          ),
-        }));
-        setTimelineNextCursorByKey((current) => ({
-          ...current,
-          [key]: currentState.pendingTimelineNextCursorByKey[key] ?? null,
-        }));
+          )));
+        setTimelineNextCursorByKey(setRecordEntry(key, currentState.pendingTimelineNextCursorByKey[key] ?? null));
       });
       clearPendingTimeline(key);
       return true;
@@ -379,31 +367,16 @@ export function useDesktopShellData({
           const shouldBuffer = mode === 'buffer' && hasAuthoritativeBaseline && pendingCount > 0;
 
           if (shouldBuffer) {
-            setPendingTimelineSnapshotsByKey((current) => ({
-              ...current,
-              [timelineKey]: normalizedTimelineItems,
-            }));
-            setPendingTimelineCountsByKey((current) => ({
-              ...current,
-              [timelineKey]: pendingCount,
-            }));
-            setPendingTimelineNextCursorByKey((current) => ({
-              ...current,
-              [timelineKey]: resolvedTimelineCursor,
-            }));
+            setPendingTimelineSnapshotsByKey(setRecordEntry(timelineKey, normalizedTimelineItems));
+            setPendingTimelineCountsByKey(setRecordEntry(timelineKey, pendingCount));
+            setPendingTimelineNextCursorByKey(setRecordEntry(timelineKey, resolvedTimelineCursor));
           } else {
-            setTimelinesByKey((current) => ({
-              ...current,
-              [timelineKey]: mergeRefreshedVisiblePosts(
-                current[timelineKey] ?? EMPTY_POSTS,
+            setTimelinesByKey(updateRecordEntry(timelineKey, (prev) => mergeRefreshedVisiblePosts(
+                prev ?? EMPTY_POSTS,
                 normalizedTimelineItems,
                 preserveTimelinePages
-              ),
-            }));
-            setTimelineNextCursorByKey((current) => ({
-              ...current,
-              [timelineKey]: resolvedTimelineCursor,
-            }));
+              )));
+            setTimelineNextCursorByKey(setRecordEntry(timelineKey, resolvedTimelineCursor));
             clearPendingTimeline(timelineKey);
           }
         }
@@ -417,43 +390,28 @@ export function useDesktopShellData({
           const resolvedPublicTimelineCursor = preservePublicTimelinePages
             ? (currentState.publicTimelineNextCursorByTopic[topic] ?? null)
             : (publicTimeline.next_cursor ?? null);
-          setPublicTimelinesByTopic((current) => ({
-            ...current,
-            [topic]: mergeRefreshedVisiblePosts(
-              current[topic] ?? EMPTY_POSTS,
+          setPublicTimelinesByTopic(updateRecordEntry(topic, (prev) => mergeRefreshedVisiblePosts(
+              prev ?? EMPTY_POSTS,
               publicTimeline.items,
               preservePublicTimelinePages
-            ),
-          }));
-          setPublicTimelineNextCursorByTopic((current) => ({
-            ...current,
-            [topic]: resolvedPublicTimelineCursor,
-          }));
+            )));
+          setPublicTimelineNextCursorByTopic(setRecordEntry(topic, resolvedPublicTimelineCursor));
         }
 
         if (joinedChannelsResult.status === 'fulfilled') {
-          setJoinedChannelsByTopic((current) => ({
-            ...current,
-            [topic]: joinedChannelsResult.value,
-          }));
-          setChannelPanelStateByTopic((current) => ({
-            ...current,
-            [topic]: {
+          setJoinedChannelsByTopic(setRecordEntry(topic, joinedChannelsResult.value));
+          setChannelPanelStateByTopic(setRecordEntry(topic, {
               status: 'ready',
               error: null,
-            },
-          }));
+            }));
         } else {
-          setChannelPanelStateByTopic((current) => ({
-            ...current,
-            [topic]: {
+          setChannelPanelStateByTopic(setRecordEntry(topic, {
               status: 'error',
               error: messageFromError(
                 joinedChannelsResult.reason,
                 translate('common:errors.failedToLoadPrivateChannels')
               ),
-            },
-          }));
+            }));
         }
 
         if (currentThread) {
@@ -470,10 +428,7 @@ export function useDesktopShellData({
             setThread((current) =>
               mergeRefreshedVisiblePosts(current, incomingThreadItems, preserveThreadPages)
             );
-            setThreadNextCursorById((current) => ({
-              ...current,
-              [currentThread]: resolvedThreadCursor,
-            }));
+            setThreadNextCursorById(setRecordEntry(currentThread, resolvedThreadCursor));
           }
         } else {
           setThread([]);
@@ -528,10 +483,7 @@ export function useDesktopShellData({
         return;
       }
       const selectedChannelId = currentState.selectedChannelIdByTopic[topic] ?? null;
-      setTimelineLoadingMoreByKey((current) => ({
-        ...current,
-        [timelineKey]: true,
-      }));
+      setTimelineLoadingMoreByKey(setRecordEntry(timelineKey, true));
       try {
         const timeline = await api.listTimeline(
           topic,
@@ -540,20 +492,11 @@ export function useDesktopShellData({
           privateTimelineScope(selectedChannelId)
         );
         startTransition(() => {
-          setTimelinesByKey((current) => ({
-            ...current,
-            [timelineKey]: mergeUniquePosts(current[timelineKey] ?? EMPTY_POSTS, timeline.items),
-          }));
-          setTimelineNextCursorByKey((current) => ({
-            ...current,
-            [timelineKey]: timeline.next_cursor ?? null,
-          }));
+          setTimelinesByKey(updateRecordEntry(timelineKey, (prev) => mergeUniquePosts(prev ?? EMPTY_POSTS, timeline.items)));
+          setTimelineNextCursorByKey(setRecordEntry(timelineKey, timeline.next_cursor ?? null));
         });
       } finally {
-        setTimelineLoadingMoreByKey((current) => ({
-          ...current,
-          [timelineKey]: false,
-        }));
+        setTimelineLoadingMoreByKey(setRecordEntry(timelineKey, false));
       }
     },
     [
@@ -572,24 +515,15 @@ export function useDesktopShellData({
       if (!cursor || currentState.threadLoadingMoreById[threadId]) {
         return;
       }
-      setThreadLoadingMoreById((current) => ({
-        ...current,
-        [threadId]: true,
-      }));
+      setThreadLoadingMoreById(setRecordEntry(threadId, true));
       try {
         const threadView = await api.listThread(topic, threadId, cursor, THREAD_TIMELINE_LIMIT);
         startTransition(() => {
           setThread((current) => mergeUniquePosts(current, threadView.items));
-          setThreadNextCursorById((current) => ({
-            ...current,
-            [threadId]: threadView.next_cursor ?? null,
-          }));
+          setThreadNextCursorById(setRecordEntry(threadId, threadView.next_cursor ?? null));
         });
       } finally {
-        setThreadLoadingMoreById((current) => ({
-          ...current,
-          [threadId]: false,
-        }));
+        setThreadLoadingMoreById(setRecordEntry(threadId, false));
       }
     },
     [
@@ -651,27 +585,18 @@ export function useDesktopShellData({
             .listLiveSessions(currentActiveTopic, privateTimelineScope(selectedChannelId))
             .then((sessions) => {
               startTransition(() => {
-                setLiveSessionsByTopic((current) => ({
-                  ...current,
-                  [currentActiveTopic]: sessions,
-                }));
-                setLivePanelStateByTopic((current) => ({
-                  ...current,
-                  [currentActiveTopic]: { status: 'ready', error: null },
-                }));
+                setLiveSessionsByTopic(setRecordEntry(currentActiveTopic, sessions));
+                setLivePanelStateByTopic(setRecordEntry(currentActiveTopic, { status: 'ready', error: null }));
               });
             })
             .catch((error) => {
-              setLivePanelStateByTopic((current) => ({
-                ...current,
-                [currentActiveTopic]: {
+              setLivePanelStateByTopic(setRecordEntry(currentActiveTopic, {
                   status: 'error',
                   error: messageFromError(
                     error,
                     translate('common:errors.failedToLoadLiveSessions')
                   ),
-                },
-              }));
+                }));
             })
         );
       }
@@ -682,24 +607,15 @@ export function useDesktopShellData({
             .listGameRooms(currentActiveTopic, privateTimelineScope(selectedChannelId))
             .then((rooms) => {
               startTransition(() => {
-                setGameRoomsByTopic((current) => ({
-                  ...current,
-                  [currentActiveTopic]: rooms,
-                }));
-                setGamePanelStateByTopic((current) => ({
-                  ...current,
-                  [currentActiveTopic]: { status: 'ready', error: null },
-                }));
+                setGameRoomsByTopic(setRecordEntry(currentActiveTopic, rooms));
+                setGamePanelStateByTopic(setRecordEntry(currentActiveTopic, { status: 'ready', error: null }));
               });
             })
             .catch((error) => {
-              setGamePanelStateByTopic((current) => ({
-                ...current,
-                [currentActiveTopic]: {
+              setGamePanelStateByTopic(setRecordEntry(currentActiveTopic, {
                   status: 'error',
                   error: messageFromError(error, translate('common:errors.failedToLoadGameRooms')),
-                },
-              }));
+                }));
             })
         );
       }
@@ -786,20 +702,11 @@ export function useDesktopShellData({
               ]);
               startTransition(() => {
                 if (timelineResult.status === 'fulfilled') {
-                  setDirectMessageTimelineByPeer((current) => ({
-                    ...current,
-                    [selectedPeerPubkey]: timelineResult.value.items,
-                  }));
-                  setDirectMessageTimelineNextCursorByPeer((current) => ({
-                    ...current,
-                    [selectedPeerPubkey]: timelineResult.value.next_cursor ?? null,
-                  }));
+                  setDirectMessageTimelineByPeer(setRecordEntry(selectedPeerPubkey, timelineResult.value.items));
+                  setDirectMessageTimelineNextCursorByPeer(setRecordEntry(selectedPeerPubkey, timelineResult.value.next_cursor ?? null));
                 }
                 if (statusResult.status === 'fulfilled') {
-                  setDirectMessageStatusByPeer((current) => ({
-                    ...current,
-                    [selectedPeerPubkey]: statusResult.value,
-                  }));
+                  setDirectMessageStatusByPeer(setRecordEntry(selectedPeerPubkey, statusResult.value));
                 }
                 setDirectMessageError(
                   timelineResult.status === 'fulfilled' && statusResult.status === 'fulfilled'
@@ -931,25 +838,18 @@ export function useDesktopShellData({
                     void api
                       .fetchCommunityNodeManifest(baseUrl)
                       .then((result) => {
-                        setCommunityNodeManifests((current) => ({
-                          ...current,
-                          [baseUrl]:
-                            result.status === 'ok' && result.manifest
+                        setCommunityNodeManifests(setRecordEntry(baseUrl, result.status === 'ok' && result.manifest
                               ? { status: 'ok', manifest: result.manifest }
-                              : { status: 'absent' },
-                        }));
+                              : { status: 'absent' }));
                       })
                       .catch((error) => {
-                        setCommunityNodeManifests((current) => ({
-                          ...current,
-                          [baseUrl]: {
+                        setCommunityNodeManifests(setRecordEntry(baseUrl, {
                             status: 'error',
                             error: messageFromError(
                               error,
                               translate('common:errors.failedToLoadSettings')
                             ),
-                          },
-                        }));
+                          }));
                       });
                   }
                 }

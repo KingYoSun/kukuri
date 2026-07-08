@@ -49,6 +49,7 @@ import {
   syncStatusBadgeLabel,
   syncStatusBadgeTone,
 } from '@/shell/selectors';
+import { setRecordEntry } from '@/shell/stateUpdates';
 import { useDesktopShellData } from '@/shell/useDesktopShellData';
 import { useDesktopShellRouting } from '@/shell/useDesktopShellRouting';
 import { useDesktopShellActions } from '@/shell/useDesktopShellActions';
@@ -477,18 +478,9 @@ export function DesktopShellPage({
         setTrackedTopics(nextTopics);
       }
       setActiveTopic(topic);
-      setSelectedChannelIdByTopic((current) => ({
-        ...current,
-        [topic]: channelId,
-      }));
-      setTimelineScopeByTopic((current) => ({
-        ...current,
-        [topic]: privateTimelineScope(channelId),
-      }));
-      setComposeChannelByTopic((current) => ({
-        ...current,
-        [topic]: privateComposeTarget(channelId),
-      }));
+      setSelectedChannelIdByTopic(setRecordEntry(topic, channelId));
+      setTimelineScopeByTopic(setRecordEntry(topic, privateTimelineScope(channelId)));
+      setComposeChannelByTopic(setRecordEntry(topic, privateComposeTarget(channelId)));
       await loadTopics(nextTopics, topic, null);
     },
     [

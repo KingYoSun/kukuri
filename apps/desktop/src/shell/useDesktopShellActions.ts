@@ -17,6 +17,7 @@ import {
   useDesktopShellStore,
   useDesktopShellStoreApi,
 } from '@/shell/store';
+import { setRecordEntry, updateRecordEntry } from '@/shell/stateUpdates';
 import { publishedTopicIdForPost } from '@/shell/selectors';
 import { createComposeInteractionsActions } from './actions/composeInteractions';
 import { createDirectMessageActions } from './actions/directMessages';
@@ -254,10 +255,7 @@ export function useDesktopShellActions({
       }
       return changed ? next : current;
     });
-    setPublicTimelinesByTopic((current) => ({
-      ...current,
-      [topicId]: patch(current[topicId] ?? []),
-    }));
+    setPublicTimelinesByTopic(updateRecordEntry(topicId, (prev) => patch(prev ?? [])));
     setThread((current) => patch(current));
     setProfileTimeline((current) => patch(current));
     setSelectedAuthorTimeline((current) => patch(current));
@@ -296,11 +294,7 @@ export function useDesktopShellActions({
     setComposer(draft.content);
     setDraftMediaItems(draftMedia as DraftMediaItem[]);
     setAttachmentInputKey((value) => value + 1);
-    setComposeChannelByTopic((current) => ({
-      ...current,
-      [draft.topic]:
-        draft.kind === 'repost' ? PUBLIC_CHANNEL_REF : (draft.channel_ref ?? PUBLIC_CHANNEL_REF),
-    }));
+    setComposeChannelByTopic(setRecordEntry(draft.topic, draft.kind === 'repost' ? PUBLIC_CHANNEL_REF : (draft.channel_ref ?? PUBLIC_CHANNEL_REF)));
     if (draft.kind === 'repost' && draft.source_object_id) {
       setRepostTarget(findKnownPost(draft.source_object_id));
       setReplyTarget(null);
@@ -313,10 +307,7 @@ export function useDesktopShellActions({
       setRepostTarget(null);
       const channelRef = draft.channel_ref;
       if (channelRef && channelRef.kind === 'private_channel') {
-        setSelectedChannelIdByTopic((current) => ({
-          ...current,
-          [draft.topic]: channelRef.channel_id,
-        }));
+        setSelectedChannelIdByTopic(setRecordEntry(draft.topic, channelRef.channel_id));
       }
     }
     setComposerError(post.local_error ?? null);
@@ -427,16 +418,10 @@ export function useDesktopShellActions({
       : selectedChannelId === null;
 
     if (belongsToActiveTimeline) {
-      setTimelinesByKey((current) => ({
-        ...current,
-        [timelineKey]: prependPost(current[timelineKey] ?? [], post),
-      }));
+      setTimelinesByKey(updateRecordEntry(timelineKey, (prev) => prependPost(prev ?? [], post)));
     }
     if (!post.channel_id) {
-      setPublicTimelinesByTopic((current) => ({
-        ...current,
-        [topicId]: prependPost(current[topicId] ?? [], post),
-      }));
+      setPublicTimelinesByTopic(updateRecordEntry(topicId, (prev) => prependPost(prev ?? [], post)));
     }
     if (post.root_id && currentState.selectedThread === post.root_id) {
       setThread((current) => prependPost(current, post));

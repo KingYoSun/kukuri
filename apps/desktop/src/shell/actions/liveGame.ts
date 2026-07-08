@@ -2,6 +2,7 @@ import type { FormEvent } from 'react';
 
 import type { ChannelRef, GameRoomView, GameScoreView } from '@/lib/api';
 
+import { removeRecordEntry, setRecordEntry } from '@/shell/stateUpdates';
 import { createGameEditorDraft, messageFromError } from '@/shell/selectors';
 import type { GameEditorDraft } from '@/shell/store';
 
@@ -129,10 +130,7 @@ export function createLiveGameActions({
   }
 
   async function handleJoinLiveSession(sessionId: string) {
-    setLivePendingBySessionId((current) => ({
-      ...current,
-      [sessionId]: true,
-    }));
+    setLivePendingBySessionId(setRecordEntry(sessionId, true));
     try {
       await api.joinLiveSession(activeTopic, sessionId);
       setLiveError(null);
@@ -140,19 +138,12 @@ export function createLiveGameActions({
     } catch (joinError) {
       setLiveError(messageFromError(joinError, translate('live:errors.failedJoin')));
     } finally {
-      setLivePendingBySessionId((current) => {
-        const next = { ...current };
-        delete next[sessionId];
-        return next;
-      });
+      setLivePendingBySessionId(removeRecordEntry(sessionId));
     }
   }
 
   async function handleLeaveLiveSession(sessionId: string) {
-    setLivePendingBySessionId((current) => ({
-      ...current,
-      [sessionId]: true,
-    }));
+    setLivePendingBySessionId(setRecordEntry(sessionId, true));
     try {
       await api.leaveLiveSession(activeTopic, sessionId);
       setLiveError(null);
@@ -160,19 +151,12 @@ export function createLiveGameActions({
     } catch (leaveError) {
       setLiveError(messageFromError(leaveError, translate('live:errors.failedLeave')));
     } finally {
-      setLivePendingBySessionId((current) => {
-        const next = { ...current };
-        delete next[sessionId];
-        return next;
-      });
+      setLivePendingBySessionId(removeRecordEntry(sessionId));
     }
   }
 
   async function handleEndLiveSession(sessionId: string) {
-    setLivePendingBySessionId((current) => ({
-      ...current,
-      [sessionId]: true,
-    }));
+    setLivePendingBySessionId(setRecordEntry(sessionId, true));
     try {
       await api.endLiveSession(activeTopic, sessionId);
       setLiveError(null);
@@ -180,11 +164,7 @@ export function createLiveGameActions({
     } catch (endError) {
       setLiveError(messageFromError(endError, translate('live:errors.failedEnd')));
     } finally {
-      setLivePendingBySessionId((current) => {
-        const next = { ...current };
-        delete next[sessionId];
-        return next;
-      });
+      setLivePendingBySessionId(removeRecordEntry(sessionId));
     }
   }
 
@@ -269,10 +249,7 @@ export function createLiveGameActions({
         score: parsed,
       });
     }
-    setGameSavingByRoomId((current) => ({
-      ...current,
-      [room.room_id]: true,
-    }));
+    setGameSavingByRoomId(setRecordEntry(room.room_id, true));
     try {
       await api.updateGameRoom(
         activeTopic,
@@ -282,20 +259,12 @@ export function createLiveGameActions({
         scores
       );
       setGameError(null);
-      setGameDrafts((current) => {
-        const next = { ...current };
-        delete next[room.room_id];
-        return next;
-      });
+      setGameDrafts(removeRecordEntry(room.room_id));
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (updateError) {
       setGameError(messageFromError(updateError, translate('game:errors.failedUpdate')));
     } finally {
-      setGameSavingByRoomId((current) => {
-        const next = { ...current };
-        delete next[room.room_id];
-        return next;
-      });
+      setGameSavingByRoomId(removeRecordEntry(room.room_id));
     }
   }
 
