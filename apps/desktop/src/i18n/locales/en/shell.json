@@ -117,9 +117,6 @@
       "label": "Release"
     }
   },
-  "topBar": {
-    "activeTopicBar": "Active topic bar"
-  },
   "workspace": {
     "bookmarks": "Bookmarks",
     "composeTarget": "Compose Target",

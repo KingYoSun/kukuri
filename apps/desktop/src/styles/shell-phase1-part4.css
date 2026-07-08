@@ -281,14 +281,6 @@
     padding-inline: var(--space-sm);
   }
 
-  .shell-topbar-grid > .shell-topbar {
-    grid-column: 1 / -1;
-  }
-
-  .shell-topbar-spacer {
-    display: none;
-  }
-
   .shell-layout {
     grid-template-columns: 1fr;
   }

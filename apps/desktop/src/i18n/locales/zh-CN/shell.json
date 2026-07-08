@@ -117,9 +117,6 @@
       "label": "Release"
     }
   },
-  "topBar": {
-    "activeTopicBar": "当前主题栏"
-  },
   "workspace": {
     "bookmarks": "收藏",
     "composeTarget": "发布目标",
