@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 // Shell stylesheets that ship together (see index.css). Any `var(--token)` they
 // reference must resolve to a custom property defined in the same bundle,
 // otherwise the value silently falls back to nothing at runtime.
-const CSS_FILES = ['tokens.css', 'base.css', 'shell-phase1.css', 'shell-phase1-legacy.css'] as const;
+const CSS_FILES = ['tokens.css', 'base.css', 'shell-phase1.css', 'shell-scoped-overrides.css'] as const;
 
 // Custom properties intentionally injected at runtime (inline style / JS) rather
 // than declared in the static stylesheets. Tailwind owns the `--tw-*` space.

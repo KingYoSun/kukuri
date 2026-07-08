@@ -1,3 +1,12 @@
+/*
+ * shell-scoped-overrides.css
+ *
+ * 全規則が `.shell-phase1` スコープ付き(ShellFrame のルート div に付与)。
+ * アプリ shell 配下では shell-phase1.css の同名セレクタを specificity で上書きし、
+ * body 直下の Radix portal(dialog / tooltip / dropdown 等)には効かない層。
+ * shell 固有スタイルもここに置く。index.css で shell-phase1.css の後に @import する。
+ * (旧名 shell-phase1-legacy.css。WP-H8 PR2 で実態に合わせて改名)
+ */
 .shell-phase1 .shell {
   max-width: 1200px;
   margin: 0 auto;
