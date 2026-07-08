@@ -31,6 +31,7 @@ import {
   authorViewFromDirectMessageConversation,
   mergeKnownAuthors,
   messageFromError,
+  selectShellRoutingSlice,
 } from '@/shell/selectors';
 import {
   useDesktopShellFieldSetter,
@@ -62,30 +63,7 @@ export function useDesktopShellRouting({
   const location = useLocation();
   const navigate = useNavigate();
   const storeApi = useDesktopShellStoreApi();
-  const state = useDesktopShellStore(
-    useShallow((s) => ({
-      activeTopic: s.activeTopic,
-      channelPanelStateByTopic: s.channelPanelStateByTopic,
-      directMessagePaneOpen: s.directMessagePaneOpen,
-      focusedObjectId: s.focusedObjectId,
-      gamePanelStateByTopic: s.gamePanelStateByTopic,
-      gameRoomsByTopic: s.gameRoomsByTopic,
-      joinedChannelsByTopic: s.joinedChannelsByTopic,
-      lastNonNotificationsRoute: s.lastNonNotificationsRoute,
-      livePanelStateByTopic: s.livePanelStateByTopic,
-      liveSessionsByTopic: s.liveSessionsByTopic,
-      selectedAuthor: s.selectedAuthor,
-      selectedAuthorPubkey: s.selectedAuthorPubkey,
-      selectedChannelIdByTopic: s.selectedChannelIdByTopic,
-      selectedDirectMessagePeerPubkey: s.selectedDirectMessagePeerPubkey,
-      selectedGameRoomId: s.selectedGameRoomId,
-      selectedLiveSessionId: s.selectedLiveSessionId,
-      selectedThread: s.selectedThread,
-      shellChromeState: s.shellChromeState,
-      thread: s.thread,
-      trackedTopics: s.trackedTopics,
-    }))
-  );
+  const state = useDesktopShellStore(useShallow(selectShellRoutingSlice));
   const {
     activeTopic,
     selectedThread,

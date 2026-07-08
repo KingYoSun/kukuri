@@ -48,6 +48,7 @@ import {
   resolveProfilePictureSrc,
   syncStatusBadgeLabel,
   syncStatusBadgeTone,
+  selectShellPageSlice,
 } from '@/shell/selectors';
 import { setRecordEntry } from '@/shell/stateUpdates';
 import { useDesktopShellData } from '@/shell/useDesktopShellData';
@@ -104,25 +105,7 @@ export function DesktopShellPage({
     selectedLiveSessionId,
     selectedGameRoomId,
     shellChromeState,
-  } = useDesktopShellStore(
-    useShallow((s) => ({
-      trackedTopics: s.trackedTopics,
-      activeTopic: s.activeTopic,
-      topicInput: s.topicInput,
-      selectedThread: s.selectedThread,
-      focusedObjectId: s.focusedObjectId,
-      mediaObjectUrls: s.mediaObjectUrls,
-      syncStatus: s.syncStatus,
-      localProfile: s.localProfile,
-      knownAuthorsByPubkey: s.knownAuthorsByPubkey,
-      selectedAuthorPubkey: s.selectedAuthorPubkey,
-      notifications: s.notifications,
-      notificationStatus: s.notificationStatus,
-      selectedLiveSessionId: s.selectedLiveSessionId,
-      selectedGameRoomId: s.selectedGameRoomId,
-      shellChromeState: s.shellChromeState,
-    }))
-  );
+  } = useDesktopShellStore(useShallow(selectShellPageSlice));
   const [composeDialogOpen, setComposeDialogOpen] = useState(false);
   const [channelDialogOpen, setChannelDialogOpen] = useState(false);
   const [channelSettingsDialogOpen, setChannelSettingsDialogOpen] = useState(false);

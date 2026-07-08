@@ -16,9 +16,7 @@ import {
 } from '@/shell/routes';
 import type {
   DesktopShellState,
-  DesktopShellStateValue,
-  DesktopShellStore,
-  DesktopShellStoreApi,
+  DesktopShellStateValue,  DesktopShellStoreApi,
 } from '@/shell/store';
 import {
   isHex64,

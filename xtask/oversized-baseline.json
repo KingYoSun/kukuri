@@ -9,24 +9,20 @@
       "path": "apps/desktop/src/mocks/desktopApiMock.ts"
     },
     {
-      "lines": 1159,
-      "path": "apps/desktop/src/shell/DesktopShellPage.tsx"
-    },
-    {
       "lines": 1155,
       "path": "apps/desktop/src/components/extended/MetaverseRoomPanel.tsx"
+    },
+    {
+      "lines": 1153,
+      "path": "apps/desktop/src/shell/DesktopShellPage.tsx"
     },
     {
       "lines": 1141,
       "path": "apps/desktop/src/styles/shell-phase1-legacy.css"
     },
     {
-      "lines": 1138,
+      "lines": 1140,
       "path": "apps/desktop/src/shell/useDesktopShellViewModels.ts"
-    },
-    {
-      "lines": 1133,
-      "path": "apps/desktop/src/shell/useDesktopShellData.ts"
     },
     {
       "lines": 1087,
@@ -39,6 +35,10 @@
     {
       "lines": 1079,
       "path": "crates/app-api/src/private_channels.rs"
+    },
+    {
+      "lines": 1035,
+      "path": "apps/desktop/src/shell/useDesktopShellData.ts"
     }
   ]
 }

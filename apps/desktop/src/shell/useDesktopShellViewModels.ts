@@ -86,6 +86,7 @@ import {
   syncStatusBadgeLabel,
   topicConnectionLabel,
   translateTopicConnectionText,
+  selectShellViewModelsSlice,
 } from '@/shell/selectors';
 
 type UseDesktopShellViewModelsArgs = {
@@ -108,63 +109,7 @@ export function useDesktopShellViewModels({
   theme,
   profileAvatarPreviewUrl,
 }: UseDesktopShellViewModelsArgs) {
-  const state = useDesktopShellStore(
-    useShallow((s) => ({
-      activeTopic: s.activeTopic,
-      authorError: s.authorError,
-      bookmarkedPosts: s.bookmarkedPosts,
-      bookmarkedReactionAssets: s.bookmarkedReactionAssets,
-      channelPanelStateByTopic: s.channelPanelStateByTopic,
-      communityNodeConfig: s.communityNodeConfig,
-      communityNodeEditorDirty: s.communityNodeEditorDirty,
-      communityNodeError: s.communityNodeError,
-      communityNodeInput: s.communityNodeInput,
-      communityNodeManifests: s.communityNodeManifests,
-      communityNodeStatuses: s.communityNodeStatuses,
-      composeChannelByTopic: s.composeChannelByTopic,
-      directMessageDraftMediaItems: s.directMessageDraftMediaItems,
-      directMessageStatusByPeer: s.directMessageStatusByPeer,
-      directMessageTimelineByPeer: s.directMessageTimelineByPeer,
-      directMessages: s.directMessages,
-      discoveryConfig: s.discoveryConfig,
-      discoveryEditorDirty: s.discoveryEditorDirty,
-      discoveryError: s.discoveryError,
-      discoverySeedInput: s.discoverySeedInput,
-      draftMediaItems: s.draftMediaItems,
-      error: s.error,
-      gameDrafts: s.gameDrafts,
-      gamePanelStateByTopic: s.gamePanelStateByTopic,
-      gameRoomsByTopic: s.gameRoomsByTopic,
-      joinedChannelsByTopic: s.joinedChannelsByTopic,
-      knownAuthorsByPubkey: s.knownAuthorsByPubkey,
-      livePanelStateByTopic: s.livePanelStateByTopic,
-      livePendingBySessionId: s.livePendingBySessionId,
-      liveSessionsByTopic: s.liveSessionsByTopic,
-      localPeerTicket: s.localPeerTicket,
-      localProfile: s.localProfile,
-      mediaObjectUrls: s.mediaObjectUrls,
-      ownedReactionAssets: s.ownedReactionAssets,
-      peerTicket: s.peerTicket,
-      profileDraft: s.profileDraft,
-      profileTimeline: s.profileTimeline,
-      reactionPanelState: s.reactionPanelState,
-      replyTarget: s.replyTarget,
-      repostTarget: s.repostTarget,
-      selectedAuthor: s.selectedAuthor,
-      selectedAuthorTimeline: s.selectedAuthorTimeline,
-      selectedChannelIdByTopic: s.selectedChannelIdByTopic,
-      selectedDirectMessagePeerPubkey: s.selectedDirectMessagePeerPubkey,
-      selectedThread: s.selectedThread,
-      shellChromeState: s.shellChromeState,
-      socialConnections: s.socialConnections,
-      syncStatus: s.syncStatus,
-      thread: s.thread,
-      timelineScopeByTopic: s.timelineScopeByTopic,
-      timelinesByKey: s.timelinesByKey,
-      trackedTopics: s.trackedTopics,
-      unsupportedVideoManifests: s.unsupportedVideoManifests,
-    }))
-  );
+  const state = useDesktopShellStore(useShallow(selectShellViewModelsSlice));
   const activeTopic = state.activeTopic;
   const selectedPrivateChannelId = state.selectedChannelIdByTopic[activeTopic] ?? null;
   const activeJoinedChannels = state.joinedChannelsByTopic[activeTopic] ?? EMPTY_JOINED_CHANNELS;
