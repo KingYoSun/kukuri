@@ -340,6 +340,8 @@ pub struct NotificationStatusView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct LiveSessionView {
     pub session_id: String,
     pub host_pubkey: String,
@@ -355,6 +357,8 @@ pub struct LiveSessionView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct GameRoomView {
     pub room_id: String,
     pub host_pubkey: String,
@@ -372,6 +376,8 @@ pub struct GameRoomView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct GameScoreView {
     pub participant_id: String,
     pub label: String,
@@ -422,9 +428,12 @@ pub struct PublishMetaverseRoomEventInput {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct MetaverseRoomEventView {
     pub envelope_id: String,
     pub content: MetaverseRoomEventEnvelopeContentV1,
+    #[cfg_attr(feature = "ts", ts(type = "Record<string, unknown>"))]
     pub envelope: KukuriEnvelope,
     pub received_at: i64,
     pub source_peer: String,

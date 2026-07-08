@@ -25,7 +25,13 @@ fn emit<T: TS>(cfg: &ts_rs::Config, out: &mut String) {
 #[test]
 fn export_ipc_types() {
     use crate::views::*;
-    use kukuri_core::{ChannelAudienceKind, ChannelSharingState};
+    use kukuri_core::{
+        ChannelAudienceKind, ChannelSharingState, GameRoomKind, GameRoomStatus, LiveSessionStatus,
+        MetaverseAssetKind, MetaverseAssetRef, MetaverseAvatarTransformV1, MetaversePrimitive,
+        MetaverseRoomChatMessageV1, MetaverseRoomEventEnvelopeContentV1, MetaverseRoomEventV1,
+        MetaverseRoomPresenceV1, MetaverseRoomSceneV1, MetaverseRoomSpawnV1, MetaverseRoomStateV1,
+        SharedRoomObjectV1,
+    };
     use kukuri_store::{NotificationKind, TimelineCursor};
     use kukuri_transport::{ConnectMode, ConnectionPath, DiscoveryMode};
 
@@ -78,6 +84,26 @@ fn export_ipc_types() {
         TopicSyncStatus,
         DiscoveryStatus,
         SyncStatus,
+        // Stage 2: metaverse / game / live
+        LiveSessionStatus,
+        LiveSessionView,
+        GameRoomStatus,
+        GameRoomKind,
+        GameScoreView,
+        MetaverseAssetKind,
+        MetaverseAssetRef,
+        MetaversePrimitive,
+        MetaverseRoomPresenceV1,
+        MetaverseAvatarTransformV1,
+        MetaverseRoomChatMessageV1,
+        SharedRoomObjectV1,
+        MetaverseRoomEventV1,
+        MetaverseRoomEventEnvelopeContentV1,
+        MetaverseRoomSceneV1,
+        MetaverseRoomSpawnV1,
+        MetaverseRoomStateV1,
+        GameRoomView,
+        MetaverseRoomEventView,
     );
 
     let path = concat!(
