@@ -33,12 +33,10 @@ import type {
 } from '../types';
 
 import { invokeDesktop } from '../invoke/desktop';
+import { command } from '../invoke/dispatch';
 
 export const runtimeApi: DesktopApi = {
-  createPost: async (topic, content, replyTo, attachments = [], channelRef = { kind: 'public' }) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.createPost(topic, content, replyTo, attachments, channelRef);
-    }
+  createPost: command('createPost', async (topic, content, replyTo, attachments = [], channelRef = { kind: 'public' }) => {
     return invokeDesktop<string>('create_post', {
       request: {
         topic,
@@ -48,16 +46,8 @@ export const runtimeApi: DesktopApi = {
         attachments,
       },
     });
-  },
-  createRepost: async (topic, sourceTopic, sourceObjectId, commentary) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.createRepost(
-        topic,
-        sourceTopic,
-        sourceObjectId,
-        commentary
-      );
-    }
+  }),
+  createRepost: command('createRepost', async (topic, sourceTopic, sourceObjectId, commentary) => {
     return invokeDesktop<string>('create_repost', {
       request: {
         topic,
@@ -66,16 +56,8 @@ export const runtimeApi: DesktopApi = {
         commentary,
       },
     });
-  },
-  toggleReaction: async (targetTopicId, targetObjectId, reactionKey, channelRef = null) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.toggleReaction(
-        targetTopicId,
-        targetObjectId,
-        reactionKey,
-        channelRef
-      );
-    }
+  }),
+  toggleReaction: command('toggleReaction', async (targetTopicId, targetObjectId, reactionKey, channelRef = null) => {
     return invokeDesktop<ReactionStateView>('toggle_reaction', {
       request: {
         target_topic_id: targetTopicId,
@@ -97,27 +79,18 @@ export const runtimeApi: DesktopApi = {
         channel_ref: channelRef,
       },
     });
-  },
-  listMyCustomReactionAssets: async () => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.listMyCustomReactionAssets();
-    }
+  }),
+  listMyCustomReactionAssets: command('listMyCustomReactionAssets', async () => {
     return invokeDesktop<CustomReactionAssetView[]>('list_my_custom_reaction_assets');
-  },
-  listRecentReactions: async (limit = 8) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.listRecentReactions(limit);
-    }
+  }),
+  listRecentReactions: command('listRecentReactions', async (limit = 8) => {
     return invokeDesktop<RecentReactionView[]>('list_recent_reactions', {
       request: {
         limit,
       },
     });
-  },
-  createCustomReactionAsset: async (upload, cropRect, searchKey) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.createCustomReactionAsset(upload, cropRect, searchKey);
-    }
+  }),
+  createCustomReactionAsset: command('createCustomReactionAsset', async (upload, cropRect, searchKey) => {
     return invokeDesktop<CustomReactionAssetView>('create_custom_reaction_asset', {
       request: {
         upload,
@@ -125,17 +98,11 @@ export const runtimeApi: DesktopApi = {
         search_key: searchKey,
       },
     });
-  },
-  listBookmarkedCustomReactions: async () => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.listBookmarkedCustomReactions();
-    }
+  }),
+  listBookmarkedCustomReactions: command('listBookmarkedCustomReactions', async () => {
     return invokeDesktop<BookmarkedCustomReactionView[]>('list_bookmarked_custom_reactions');
-  },
-  bookmarkCustomReaction: async (asset) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.bookmarkCustomReaction(asset);
-    }
+  }),
+  bookmarkCustomReaction: command('bookmarkCustomReaction', async (asset) => {
     return invokeDesktop<BookmarkedCustomReactionView>('bookmark_custom_reaction', {
       request: {
         asset_id: asset.asset_id,
@@ -148,48 +115,33 @@ export const runtimeApi: DesktopApi = {
         height: asset.height,
       },
     });
-  },
-  removeBookmarkedCustomReaction: async (assetId) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.removeBookmarkedCustomReaction(assetId);
-    }
+  }),
+  removeBookmarkedCustomReaction: command('removeBookmarkedCustomReaction', async (assetId) => {
     return invokeDesktop<void>('remove_bookmarked_custom_reaction', {
       request: {
         asset_id: assetId,
       },
     });
-  },
-  listBookmarkedPosts: async () => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.listBookmarkedPosts();
-    }
+  }),
+  listBookmarkedPosts: command('listBookmarkedPosts', async () => {
     return invokeDesktop<BookmarkedPostView[]>('list_bookmarked_posts');
-  },
-  bookmarkPost: async (topic, objectId) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.bookmarkPost(topic, objectId);
-    }
+  }),
+  bookmarkPost: command('bookmarkPost', async (topic, objectId) => {
     return invokeDesktop<BookmarkedPostView>('bookmark_post', {
       request: {
         topic,
         object_id: objectId,
       },
     });
-  },
-  removeBookmarkedPost: async (objectId) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.removeBookmarkedPost(objectId);
-    }
+  }),
+  removeBookmarkedPost: command('removeBookmarkedPost', async (objectId) => {
     return invokeDesktop<void>('remove_bookmarked_post', {
       request: {
         object_id: objectId,
       },
     });
-  },
-  listTimeline: async (topic, cursor, limit, scope = { kind: 'public' }) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.listTimeline(topic, cursor, limit, scope);
-    }
+  }),
+  listTimeline: command('listTimeline', async (topic, cursor, limit, scope = { kind: 'public' }) => {
     return invokeDesktop<TimelineView>('list_timeline', {
       request: {
         topic,
@@ -198,11 +150,8 @@ export const runtimeApi: DesktopApi = {
         limit,
       },
     });
-  },
-  listThread: async (topic, threadId, cursor, limit) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.listThread(topic, threadId, cursor, limit);
-    }
+  }),
+  listThread: command('listThread', async (topic, threadId, cursor, limit) => {
     return invokeDesktop<TimelineView>('list_thread', {
       request: {
         topic,
@@ -211,11 +160,8 @@ export const runtimeApi: DesktopApi = {
         limit,
       },
     });
-  },
-  listProfileTimeline: async (pubkey, cursor, limit) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.listProfileTimeline(pubkey, cursor, limit);
-    }
+  }),
+  listProfileTimeline: command('listProfileTimeline', async (pubkey, cursor, limit) => {
     return invokeDesktop<TimelineView>('list_profile_timeline', {
       request: {
         pubkey,
@@ -223,113 +169,68 @@ export const runtimeApi: DesktopApi = {
         limit,
       },
     });
-  },
-  getMyProfile: async () => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.getMyProfile();
-    }
+  }),
+  getMyProfile: command('getMyProfile', async () => {
     return invokeDesktop<Profile>('get_my_profile');
-  },
-  setMyProfile: async (input) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.setMyProfile(input);
-    }
+  }),
+  setMyProfile: command('setMyProfile', async (input) => {
     return invokeDesktop<Profile>('set_my_profile', {
       request: input,
     });
-  },
-  followAuthor: async (pubkey) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.followAuthor(pubkey);
-    }
+  }),
+  followAuthor: command('followAuthor', async (pubkey) => {
     return invokeDesktop<AuthorSocialView>('follow_author', {
       request: { pubkey },
     });
-  },
-  unfollowAuthor: async (pubkey) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.unfollowAuthor(pubkey);
-    }
+  }),
+  unfollowAuthor: command('unfollowAuthor', async (pubkey) => {
     return invokeDesktop<AuthorSocialView>('unfollow_author', {
       request: { pubkey },
     });
-  },
-  getAuthorSocialView: async (pubkey) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.getAuthorSocialView(pubkey);
-    }
+  }),
+  getAuthorSocialView: command('getAuthorSocialView', async (pubkey) => {
     return invokeDesktop<AuthorSocialView>('get_author_social_view', {
       request: { pubkey },
     });
-  },
-  muteAuthor: async (pubkey) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.muteAuthor(pubkey);
-    }
+  }),
+  muteAuthor: command('muteAuthor', async (pubkey) => {
     return invokeDesktop<AuthorSocialView>('mute_author', {
       request: { pubkey },
     });
-  },
-  unmuteAuthor: async (pubkey) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.unmuteAuthor(pubkey);
-    }
+  }),
+  unmuteAuthor: command('unmuteAuthor', async (pubkey) => {
     return invokeDesktop<AuthorSocialView>('unmute_author', {
       request: { pubkey },
     });
-  },
-  listSocialConnections: async (kind) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.listSocialConnections(kind);
-    }
+  }),
+  listSocialConnections: command('listSocialConnections', async (kind) => {
     return invokeDesktop<AuthorSocialView[]>('list_social_connections', {
       request: { kind },
     });
-  },
-  listNotifications: async () => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.listNotifications();
-    }
+  }),
+  listNotifications: command('listNotifications', async () => {
     return invokeDesktop<NotificationView[]>('list_notifications');
-  },
-  markNotificationRead: async (notificationId) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.markNotificationRead(notificationId);
-    }
+  }),
+  markNotificationRead: command('markNotificationRead', async (notificationId) => {
     return invokeDesktop<NotificationStatusView>('mark_notification_read', {
       request: { notification_id: notificationId },
     });
-  },
-  markAllNotificationsRead: async () => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.markAllNotificationsRead();
-    }
+  }),
+  markAllNotificationsRead: command('markAllNotificationsRead', async () => {
     return invokeDesktop<NotificationStatusView>('mark_all_notifications_read');
-  },
-  getNotificationStatus: async () => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.getNotificationStatus();
-    }
+  }),
+  getNotificationStatus: command('getNotificationStatus', async () => {
     return invokeDesktop<NotificationStatusView>('get_notification_status');
-  },
-  openDirectMessage: async (pubkey) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.openDirectMessage(pubkey);
-    }
+  }),
+  openDirectMessage: command('openDirectMessage', async (pubkey) => {
     return invokeDesktop<DirectMessageConversationView>('open_direct_message', {
       request: { pubkey },
     });
-  },
-  listDirectMessages: async () => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.listDirectMessages();
-    }
+  }),
+  listDirectMessages: command('listDirectMessages', async () => {
     return invokeDesktop<DirectMessageConversationView[]>('list_direct_messages');
-  },
-  listDirectMessageMessages: async (pubkey, cursor, limit) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.listDirectMessageMessages(pubkey, cursor, limit);
-    }
+  }),
+  listDirectMessageMessages: command('listDirectMessageMessages', async (pubkey, cursor, limit) => {
     return invokeDesktop<DirectMessageTimelineView>('list_direct_message_messages', {
       request: {
         pubkey,
@@ -337,16 +238,8 @@ export const runtimeApi: DesktopApi = {
         limit,
       },
     });
-  },
-  sendDirectMessage: async (pubkey, text, attachments = [], replyToMessageId) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.sendDirectMessage(
-        pubkey,
-        text,
-        attachments,
-        replyToMessageId
-      );
-    }
+  }),
+  sendDirectMessage: command('sendDirectMessage', async (pubkey, text, attachments = [], replyToMessageId) => {
     return invokeDesktop<string>('send_direct_message', {
       request: {
         pubkey,
@@ -355,49 +248,34 @@ export const runtimeApi: DesktopApi = {
         attachments,
       },
     });
-  },
-  deleteDirectMessageMessage: async (pubkey, messageId) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.deleteDirectMessageMessage(pubkey, messageId);
-    }
+  }),
+  deleteDirectMessageMessage: command('deleteDirectMessageMessage', async (pubkey, messageId) => {
     return invokeDesktop<void>('delete_direct_message_message', {
       request: {
         pubkey,
         message_id: messageId,
       },
     });
-  },
-  clearDirectMessage: async (pubkey) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.clearDirectMessage(pubkey);
-    }
+  }),
+  clearDirectMessage: command('clearDirectMessage', async (pubkey) => {
     return invokeDesktop<void>('clear_direct_message', {
       request: { pubkey },
     });
-  },
-  getDirectMessageStatus: async (pubkey) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.getDirectMessageStatus(pubkey);
-    }
+  }),
+  getDirectMessageStatus: command('getDirectMessageStatus', async (pubkey) => {
     return invokeDesktop<DirectMessageStatusView>('get_direct_message_status', {
       request: { pubkey },
     });
-  },
-  listLiveSessions: async (topic, scope = { kind: 'public' }) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.listLiveSessions(topic, scope);
-    }
+  }),
+  listLiveSessions: command('listLiveSessions', async (topic, scope = { kind: 'public' }) => {
     return invokeDesktop<LiveSessionView[]>('list_live_sessions', {
       request: {
         topic,
         scope,
       },
     });
-  },
-  createLiveSession: async (topic, title, description, channelRef = { kind: 'public' }) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.createLiveSession(topic, title, description, channelRef);
-    }
+  }),
+  createLiveSession: command('createLiveSession', async (topic, title, description, channelRef = { kind: 'public' }) => {
     return invokeDesktop<string>('create_live_session', {
       request: {
         topic,
@@ -406,67 +284,46 @@ export const runtimeApi: DesktopApi = {
         description,
       },
     });
-  },
-  endLiveSession: async (topic, sessionId) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.endLiveSession(topic, sessionId);
-    }
+  }),
+  endLiveSession: command('endLiveSession', async (topic, sessionId) => {
     return invokeDesktop<void>('end_live_session', {
       request: {
         topic,
         session_id: sessionId,
       },
     });
-  },
-  joinLiveSession: async (topic, sessionId) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.joinLiveSession(topic, sessionId);
-    }
+  }),
+  joinLiveSession: command('joinLiveSession', async (topic, sessionId) => {
     return invokeDesktop<void>('join_live_session', {
       request: {
         topic,
         session_id: sessionId,
       },
     });
-  },
-  leaveLiveSession: async (topic, sessionId) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.leaveLiveSession(topic, sessionId);
-    }
+  }),
+  leaveLiveSession: command('leaveLiveSession', async (topic, sessionId) => {
     return invokeDesktop<void>('leave_live_session', {
       request: {
         topic,
         session_id: sessionId,
       },
     });
-  },
-  listGameRooms: async (topic, scope = { kind: 'public' }) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.listGameRooms(topic, scope);
-    }
+  }),
+  listGameRooms: command('listGameRooms', async (topic, scope = { kind: 'public' }) => {
     return invokeDesktop<GameRoomView[]>('list_game_rooms', {
       request: {
         topic,
         scope,
       },
     });
-  },
-  createGameRoom: async (
+  }),
+  createGameRoom: command('createGameRoom', async (
     topic,
     title,
     description,
     participants,
     channelRef = { kind: 'public' }
   ) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.createGameRoom(
-        topic,
-        title,
-        description,
-        participants,
-        channelRef
-      );
-    }
     return invokeDesktop<string>('create_game_room', {
       request: {
         topic,
@@ -476,23 +333,14 @@ export const runtimeApi: DesktopApi = {
         participants,
       },
     });
-  },
-  createMetaverseRoom: async (
+  }),
+  createMetaverseRoom: command('createMetaverseRoom', async (
     topic,
     title,
     description,
     maxPeers = null,
     channelRef = { kind: 'public' }
   ) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.createMetaverseRoom(
-        topic,
-        title,
-        description,
-        maxPeers,
-        channelRef
-      );
-    }
     return invokeDesktop<string>('create_metaverse_room', {
       request: {
         topic,
@@ -502,19 +350,13 @@ export const runtimeApi: DesktopApi = {
         max_peers: maxPeers,
       },
     });
-  },
-  createPrivateChannel: async (topic, label, audienceKind = 'invite_only') => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.createPrivateChannel(topic, label, audienceKind);
-    }
+  }),
+  createPrivateChannel: command('createPrivateChannel', async (topic, label, audienceKind = 'invite_only') => {
     return invokeDesktop<JoinedPrivateChannelView>('create_private_channel', {
       request: { topic, label, audience_kind: audienceKind },
     });
-  },
-  exportPrivateChannelInvite: async (topic, channelId, expiresAt = null) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.exportPrivateChannelInvite(topic, channelId, expiresAt);
-    }
+  }),
+  exportPrivateChannelInvite: command('exportPrivateChannelInvite', async (topic, channelId, expiresAt = null) => {
     return invokeDesktop<string>('export_private_channel_invite', {
       request: {
         topic,
@@ -522,19 +364,13 @@ export const runtimeApi: DesktopApi = {
         expires_at: expiresAt,
       },
     });
-  },
-  importPrivateChannelInvite: async (token) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.importPrivateChannelInvite(token);
-    }
+  }),
+  importPrivateChannelInvite: command('importPrivateChannelInvite', async (token) => {
     return invokeDesktop<PrivateChannelInvitePreview>('import_private_channel_invite', {
       request: { token },
     });
-  },
-  exportChannelAccessToken: async (topic, channelId, expiresAt = null) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.exportChannelAccessToken(topic, channelId, expiresAt);
-    }
+  }),
+  exportChannelAccessToken: command('exportChannelAccessToken', async (topic, channelId, expiresAt = null) => {
     return invokeDesktop<ChannelAccessTokenExport>('export_channel_access_token', {
       request: {
         topic,
@@ -542,29 +378,20 @@ export const runtimeApi: DesktopApi = {
         expires_at: expiresAt,
       },
     });
-  },
-  previewChannelAccessToken: async (token) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.previewChannelAccessToken(token);
-    }
+  }),
+  previewChannelAccessToken: command('previewChannelAccessToken', async (token) => {
     return invokeDesktop<ChannelAccessTokenPreview>('preview_channel_access_token', {
       request: {
         token,
       },
     });
-  },
-  importChannelAccessToken: async (token) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.importChannelAccessToken(token);
-    }
+  }),
+  importChannelAccessToken: command('importChannelAccessToken', async (token) => {
     return invokeDesktop<ChannelAccessTokenPreview>('import_channel_access_token', {
       request: { token },
     });
-  },
-  exportFriendOnlyGrant: async (topic, channelId, expiresAt = null) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.exportFriendOnlyGrant(topic, channelId, expiresAt);
-    }
+  }),
+  exportFriendOnlyGrant: command('exportFriendOnlyGrant', async (topic, channelId, expiresAt = null) => {
     return invokeDesktop<string>('export_friend_only_grant', {
       request: {
         topic,
@@ -572,19 +399,13 @@ export const runtimeApi: DesktopApi = {
         expires_at: expiresAt,
       },
     });
-  },
-  importFriendOnlyGrant: async (token) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.importFriendOnlyGrant(token);
-    }
+  }),
+  importFriendOnlyGrant: command('importFriendOnlyGrant', async (token) => {
     return invokeDesktop<FriendOnlyGrantPreview>('import_friend_only_grant', {
       request: { token },
     });
-  },
-  exportFriendPlusShare: async (topic, channelId, expiresAt = null) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.exportFriendPlusShare(topic, channelId, expiresAt);
-    }
+  }),
+  exportFriendPlusShare: command('exportFriendPlusShare', async (topic, channelId, expiresAt = null) => {
     return invokeDesktop<string>('export_friend_plus_share', {
       request: {
         topic,
@@ -592,60 +413,42 @@ export const runtimeApi: DesktopApi = {
         expires_at: expiresAt,
       },
     });
-  },
-  importFriendPlusShare: async (token) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.importFriendPlusShare(token);
-    }
+  }),
+  importFriendPlusShare: command('importFriendPlusShare', async (token) => {
     return invokeDesktop<FriendPlusSharePreview>('import_friend_plus_share', {
       request: { token },
     });
-  },
-  freezePrivateChannel: async (topic, channelId) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.freezePrivateChannel(topic, channelId);
-    }
+  }),
+  freezePrivateChannel: command('freezePrivateChannel', async (topic, channelId) => {
     return invokeDesktop<JoinedPrivateChannelView>('freeze_private_channel', {
       request: {
         topic,
         channel_id: channelId,
       },
     });
-  },
-  rotatePrivateChannel: async (topic, channelId) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.rotatePrivateChannel(topic, channelId);
-    }
+  }),
+  rotatePrivateChannel: command('rotatePrivateChannel', async (topic, channelId) => {
     return invokeDesktop<JoinedPrivateChannelView>('rotate_private_channel', {
       request: {
         topic,
         channel_id: channelId,
       },
     });
-  },
-  leavePrivateChannel: async (topic, channelId) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.leavePrivateChannel(topic, channelId);
-    }
+  }),
+  leavePrivateChannel: command('leavePrivateChannel', async (topic, channelId) => {
     return invokeDesktop<void>('leave_private_channel', {
       request: {
         topic,
         channel_id: channelId,
       },
     });
-  },
-  listJoinedPrivateChannels: async (topic) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.listJoinedPrivateChannels(topic);
-    }
+  }),
+  listJoinedPrivateChannels: command('listJoinedPrivateChannels', async (topic) => {
     return invokeDesktop<JoinedPrivateChannelView[]>('list_joined_private_channels', {
       request: { topic },
     });
-  },
-  updateGameRoom: async (topic, roomId, status, phaseLabel, scores) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.updateGameRoom(topic, roomId, status, phaseLabel, scores);
-    }
+  }),
+  updateGameRoom: command('updateGameRoom', async (topic, roomId, status, phaseLabel, scores) => {
     return invokeDesktop<void>('update_game_room', {
       request: {
         topic,
@@ -655,8 +458,8 @@ export const runtimeApi: DesktopApi = {
         scores,
       },
     });
-  },
-  updateMetaverseRoom: async (
+  }),
+  updateMetaverseRoom: command('updateMetaverseRoom', async (
     topic,
     roomId,
     status,
@@ -664,16 +467,6 @@ export const runtimeApi: DesktopApi = {
     sharedObjectRotation,
     sharedObjectScale
   ) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.updateMetaverseRoom(
-        topic,
-        roomId,
-        status,
-        sharedObjectPosition,
-        sharedObjectRotation,
-        sharedObjectScale
-      );
-    }
     return invokeDesktop<void>('update_metaverse_room', {
       request: {
         topic,
@@ -684,11 +477,8 @@ export const runtimeApi: DesktopApi = {
         shared_object_scale: sharedObjectScale,
       },
     });
-  },
-  publishMetaverseRoomEvent: async (topic, roomId, peerId, seq, event) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.publishMetaverseRoomEvent(topic, roomId, peerId, seq, event);
-    }
+  }),
+  publishMetaverseRoomEvent: command('publishMetaverseRoomEvent', async (topic, roomId, peerId, seq, event) => {
     return invokeDesktop<MetaverseRoomEventView>('publish_metaverse_room_event', {
       request: {
         topic,
@@ -698,11 +488,8 @@ export const runtimeApi: DesktopApi = {
         event,
       },
     });
-  },
-  listMetaverseRoomEvents: async (topic, roomId, afterEnvelopeId = null, limit = null) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.listMetaverseRoomEvents(topic, roomId, afterEnvelopeId, limit);
-    }
+  }),
+  listMetaverseRoomEvents: command('listMetaverseRoomEvents', async (topic, roomId, afterEnvelopeId = null, limit = null) => {
     return invokeDesktop<MetaverseRoomEventView[]>('list_metaverse_room_events', {
       request: {
         topic,
@@ -711,18 +498,8 @@ export const runtimeApi: DesktopApi = {
         limit,
       },
     });
-  },
-  importMetaverseRoomAsset: async (topic, roomId, kind, mimeType, name, dataBase64) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.importMetaverseRoomAsset(
-        topic,
-        roomId,
-        kind,
-        mimeType,
-        name,
-        dataBase64
-      );
-    }
+  }),
+  importMetaverseRoomAsset: command('importMetaverseRoomAsset', async (topic, roomId, kind, mimeType, name, dataBase64) => {
     return invokeDesktop<MetaverseAssetRef>('import_metaverse_room_asset', {
       request: {
         topic,
@@ -733,161 +510,107 @@ export const runtimeApi: DesktopApi = {
         data_base64: dataBase64,
       },
     });
-  },
-  getSyncStatus: async () => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.getSyncStatus();
-    }
+  }),
+  getSyncStatus: command('getSyncStatus', async () => {
     return invokeDesktop<SyncStatus>('get_sync_status');
-  },
-  getDiscoveryConfig: async () => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.getDiscoveryConfig();
-    }
+  }),
+  getDiscoveryConfig: command('getDiscoveryConfig', async () => {
     return invokeDesktop<DiscoveryConfig>('get_discovery_config');
-  },
-  getCommunityNodeConfig: async () => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.getCommunityNodeConfig();
-    }
+  }),
+  getCommunityNodeConfig: command('getCommunityNodeConfig', async () => {
     return invokeDesktop<CommunityNodeConfig>('get_community_node_config');
-  },
-  getCommunityNodeStatuses: async () => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.getCommunityNodeStatuses();
-    }
+  }),
+  getCommunityNodeStatuses: command('getCommunityNodeStatuses', async () => {
     return invokeDesktop<CommunityNodeNodeStatus[]>('get_community_node_statuses');
-  },
-  setCommunityNodeConfig: async (nodes) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.setCommunityNodeConfig(nodes);
-    }
+  }),
+  setCommunityNodeConfig: command('setCommunityNodeConfig', async (nodes) => {
     return invokeDesktop<CommunityNodeConfig>('set_community_node_config', {
       request: {
         nodes,
       },
     });
-  },
-  clearCommunityNodeConfig: async () => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.clearCommunityNodeConfig();
-    }
+  }),
+  clearCommunityNodeConfig: command('clearCommunityNodeConfig', async () => {
     return invokeDesktop<void>('clear_community_node_config');
-  },
-  authenticateCommunityNode: async (baseUrl) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.authenticateCommunityNode(baseUrl);
-    }
+  }),
+  authenticateCommunityNode: command('authenticateCommunityNode', async (baseUrl) => {
     return invokeDesktop<CommunityNodeNodeStatus>('authenticate_community_node', {
       request: {
         base_url: baseUrl,
       },
     });
-  },
-  clearCommunityNodeToken: async (baseUrl) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.clearCommunityNodeToken(baseUrl);
-    }
+  }),
+  clearCommunityNodeToken: command('clearCommunityNodeToken', async (baseUrl) => {
     return invokeDesktop<CommunityNodeNodeStatus>('clear_community_node_token', {
       request: {
         base_url: baseUrl,
       },
     });
-  },
-  getCommunityNodeConsentStatus: async (baseUrl) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.getCommunityNodeConsentStatus(baseUrl);
-    }
+  }),
+  getCommunityNodeConsentStatus: command('getCommunityNodeConsentStatus', async (baseUrl) => {
     return invokeDesktop<CommunityNodeNodeStatus>('get_community_node_consent_status', {
       request: {
         base_url: baseUrl,
       },
     });
-  },
-  acceptCommunityNodeConsents: async (baseUrl, policySlugs) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.acceptCommunityNodeConsents(baseUrl, policySlugs);
-    }
+  }),
+  acceptCommunityNodeConsents: command('acceptCommunityNodeConsents', async (baseUrl, policySlugs) => {
     return invokeDesktop<CommunityNodeNodeStatus>('accept_community_node_consents', {
       request: {
         base_url: baseUrl,
         policy_slugs: policySlugs,
       },
     });
-  },
-  refreshCommunityNodeMetadata: async (baseUrl) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.refreshCommunityNodeMetadata(baseUrl);
-    }
+  }),
+  refreshCommunityNodeMetadata: command('refreshCommunityNodeMetadata', async (baseUrl) => {
     return invokeDesktop<CommunityNodeNodeStatus>('refresh_community_node_metadata', {
       request: {
         base_url: baseUrl,
       },
     });
-  },
-  fetchCommunityNodeManifest: async (baseUrl) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.fetchCommunityNodeManifest(baseUrl);
-    }
+  }),
+  fetchCommunityNodeManifest: command('fetchCommunityNodeManifest', async (baseUrl) => {
     return invokeDesktop<CommunityNodeManifestFetch>('fetch_community_node_manifest', {
       request: {
         base_url: baseUrl,
       },
     });
-  },
-  submitCommunityNodeReport: async (request) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.submitCommunityNodeReport(request);
-    }
+  }),
+  submitCommunityNodeReport: command('submitCommunityNodeReport', async (request) => {
     return invokeDesktop<SubmitCommunityNodeReportResult>('submit_community_node_report', {
       request,
     });
-  },
-  importPeerTicket: async (ticket) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.importPeerTicket(ticket);
-    }
+  }),
+  importPeerTicket: command('importPeerTicket', async (ticket) => {
     return invokeDesktop<void>('import_peer_ticket', {
       request: {
         ticket,
       },
     });
-  },
-  setDiscoverySeeds: async (seedEntries) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.setDiscoverySeeds(seedEntries);
-    }
+  }),
+  setDiscoverySeeds: command('setDiscoverySeeds', async (seedEntries) => {
     return invokeDesktop<DiscoveryConfig>('set_discovery_seeds', {
       request: {
         seed_entries: seedEntries,
       },
     });
-  },
-  unsubscribeTopic: async (topic) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.unsubscribeTopic(topic);
-    }
+  }),
+  unsubscribeTopic: command('unsubscribeTopic', async (topic) => {
     return invokeDesktop<void>('unsubscribe_topic', {
       request: {
         topic,
       },
     });
-  },
-  setTopicGossipEnabled: async (topic, enabled) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.setTopicGossipEnabled(topic, enabled);
-    }
+  }),
+  setTopicGossipEnabled: command('setTopicGossipEnabled', async (topic, enabled) => {
     return invokeDesktop<void>('set_topic_gossip_enabled', {
       request: {
         topic,
         enabled,
       },
     });
-  },
-  setChannelGossipEnabled: async (topic, channelId, enabled) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.setChannelGossipEnabled(topic, channelId, enabled);
-    }
+  }),
+  setChannelGossipEnabled: command('setChannelGossipEnabled', async (topic, channelId, enabled) => {
     return invokeDesktop<void>('set_channel_gossip_enabled', {
       request: {
         topic,
@@ -895,33 +618,24 @@ export const runtimeApi: DesktopApi = {
         enabled,
       },
     });
-  },
-  getLocalPeerTicket: async () => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.getLocalPeerTicket();
-    }
+  }),
+  getLocalPeerTicket: command('getLocalPeerTicket', async () => {
     return invokeDesktop<string | null>('get_local_peer_ticket');
-  },
-  getBlobMediaPayload: async (hash, mime) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.getBlobMediaPayload(hash, mime);
-    }
+  }),
+  getBlobMediaPayload: command('getBlobMediaPayload', async (hash, mime) => {
     return invokeDesktop<BlobMediaPayload | null>('get_blob_media_payload', {
       request: {
         hash,
         mime,
       },
     });
-  },
-  getBlobPreviewUrl: async (hash, mime) => {
-    if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.getBlobPreviewUrl(hash, mime);
-    }
+  }),
+  getBlobPreviewUrl: command('getBlobPreviewUrl', async (hash, mime) => {
     return invokeDesktop<string | null>('get_blob_preview_url', {
       request: {
         hash,
         mime,
       },
     });
-  },
+  }),
 };
