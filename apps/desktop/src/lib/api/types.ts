@@ -9,12 +9,15 @@ import type {
   ChannelAccessTokenExport,
   ChannelAccessTokenPreview,
   ChannelAudienceKind,
+  ChannelRef,
   ConnectMode,
   CustomReactionAssetView,
   DirectMessageConversationView,
   DirectMessageStatusView,
   DirectMessageTimelineView,
   DiscoveryMode,
+  FriendOnlyGrantPreview,
+  FriendPlusSharePreview,
   GameRoomStatus,
   GameRoomView,
   GameScoreView,
@@ -27,12 +30,15 @@ import type {
   NotificationStatusView,
   NotificationView,
   PostView as WirePostView,
-  ProfileAssetView,
+  PrivateChannelInvitePreview,
+  Profile,
   ReactionStateView,
   RecentReactionView,
+  SeedPeer,
   SocialConnectionKind,
   SyncStatus,
   TimelineCursor,
+  TimelineScope,
   TimelineView,
 } from './types.generated';
 
@@ -45,15 +51,6 @@ export type PostView = WirePostView & {
   local_draft?: LocalPostDraft | null;
   local_draft_media_items?: LocalDraftMediaItem[] | null;
 };
-
-export type ChannelRef =
-  | { kind: 'public' }
-  | { kind: 'private_channel'; channel_id: string };
-
-export type TimelineScope =
-  | { kind: 'public' }
-  | { kind: 'all_joined' }
-  | { kind: 'channel'; channel_id: string };
 
 // Tauri コマンドの構造化エラー封筒(src-tauri の CommandError と対、WP-C3)。
 // invoke reject の payload 形状であり views fixture(S4 codegen)の対象外。
@@ -119,16 +116,6 @@ export type CustomReactionCropRect = {
   size: number;
 };
 
-export type Profile = {
-  pubkey: string;
-  name?: string | null;
-  display_name?: string | null;
-  about?: string | null;
-  picture?: string | null;
-  picture_asset?: ProfileAssetView | null;
-  updated_at: number;
-};
-
 export type ProfileInput = {
   name?: string | null;
   display_name?: string | null;
@@ -151,11 +138,6 @@ export type CreateRepostInput = {
   source_topic: string;
   source_object_id: string;
   commentary?: string | null;
-};
-
-export type SeedPeer = {
-  endpoint_id: string;
-  addr_hint?: string | null;
 };
 
 export type DiscoveryConfig = {
@@ -292,39 +274,6 @@ export type SubmitCommunityNodeReportStatus = 'submitted';
 export type SubmitCommunityNodeReportResult = {
   status: SubmitCommunityNodeReportStatus;
   reference_id?: string | null;
-};
-
-export type PrivateChannelInvitePreview = {
-  channel_id: string;
-  topic_id: string;
-  channel_label: string;
-  inviter_pubkey: string;
-  owner_pubkey: string;
-  epoch_id: string;
-  expires_at?: number | null;
-  namespace_secret_hex: string;
-};
-
-export type FriendOnlyGrantPreview = {
-  channel_id: string;
-  topic_id: string;
-  channel_label: string;
-  owner_pubkey: string;
-  epoch_id: string;
-  expires_at?: number | null;
-  namespace_secret_hex: string;
-};
-
-export type FriendPlusSharePreview = {
-  channel_id: string;
-  topic_id: string;
-  channel_label: string;
-  owner_pubkey: string;
-  sponsor_pubkey: string;
-  epoch_id: string;
-  expires_at?: number | null;
-  namespace_secret_hex: string;
-  share_token_id: string;
 };
 
 export interface DesktopApi {

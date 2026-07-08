@@ -90,6 +90,8 @@ impl TransportRelayConfig {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct SeedPeer {
     pub endpoint_id: String,
     pub addr_hint: Option<String>,

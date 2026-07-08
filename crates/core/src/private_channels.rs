@@ -107,6 +107,8 @@ pub struct PrivateChannelInviteTokenV1 {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct PrivateChannelInvitePreview {
     pub channel_id: ChannelId,
     pub topic_id: TopicId,
@@ -135,6 +137,8 @@ pub struct FriendOnlyGrantTokenV1 {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct FriendOnlyGrantPreview {
     pub channel_id: ChannelId,
     pub topic_id: TopicId,
@@ -163,6 +167,8 @@ pub struct FriendPlusShareTokenV1 {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct FriendPlusSharePreview {
     pub channel_id: ChannelId,
     pub topic_id: TopicId,

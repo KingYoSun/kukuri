@@ -23,6 +23,7 @@ impl From<&str> for EnvelopeId {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(transparent)]
 pub struct Pubkey(pub String);
 
@@ -45,6 +46,7 @@ impl From<&str> for Pubkey {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(transparent)]
 pub struct TopicId(pub String);
 
@@ -63,6 +65,7 @@ pub fn author_profile_topic_id(author_pubkey: &str) -> TopicId {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(transparent)]
 pub struct ChannelId(pub String);
 
