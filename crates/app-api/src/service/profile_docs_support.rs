@@ -574,19 +574,6 @@ pub(crate) async fn load_profile_reposts_from_author_replica_with_policy(
     Ok(items)
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
-pub(crate) async fn snapshot_object_notification_baseline(
-    docs_sync: &dyn DocsSync,
-    replica: &ReplicaId,
-) -> Result<NotificationDocEventBaseline> {
-    snapshot_object_notification_baseline_with_policy(
-        docs_sync,
-        replica,
-        DocFetchPolicy::LocalThenRemote,
-    )
-    .await
-}
-
 pub(crate) async fn snapshot_object_notification_baseline_with_policy(
     docs_sync: &dyn DocsSync,
     replica: &ReplicaId,
@@ -605,19 +592,6 @@ pub(crate) async fn snapshot_object_notification_baseline_with_policy(
             .filter(|record| record.key.ends_with("/state"))
             .collect::<Vec<_>>(),
     ))
-}
-
-#[cfg_attr(not(test), allow(dead_code))]
-pub(crate) async fn snapshot_follow_notification_baseline(
-    docs_sync: &dyn DocsSync,
-    replica: &ReplicaId,
-) -> Result<NotificationDocEventBaseline> {
-    snapshot_follow_notification_baseline_with_policy(
-        docs_sync,
-        replica,
-        DocFetchPolicy::LocalThenRemote,
-    )
-    .await
 }
 
 pub(crate) async fn snapshot_follow_notification_baseline_with_policy(
