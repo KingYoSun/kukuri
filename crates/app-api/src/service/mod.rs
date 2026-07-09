@@ -335,6 +335,7 @@ pub struct AppService {
     pub(crate) private_channel_capability_persist:
         std::sync::OnceLock<PrivateChannelCapabilityPersist>,
     pub(crate) private_channel_capability_persist_guard: Arc<Mutex<()>>,
+    pub(crate) notification_inserted_notify: Arc<tokio::sync::Notify>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -483,6 +484,7 @@ impl AppService {
             gossip_disabled_channels: Arc::new(Mutex::new(HashSet::new())),
             private_channel_capability_persist: std::sync::OnceLock::new(),
             private_channel_capability_persist_guard: Arc::new(Mutex::new(())),
+            notification_inserted_notify: Arc::new(tokio::sync::Notify::new()),
         }
     }
 
@@ -493,6 +495,10 @@ impl AppService {
     /// 復元前に接続すると復元途中の部分リストが永続化される。
     pub fn set_private_channel_capability_persist(&self, persist: PrivateChannelCapabilityPersist) {
         let _ = self.private_channel_capability_persist.set(persist);
+    }
+
+    pub fn notification_inserted_notify(&self) -> Arc<tokio::sync::Notify> {
+        Arc::clone(&self.notification_inserted_notify)
     }
 
     pub(crate) async fn resolve_repost_source(

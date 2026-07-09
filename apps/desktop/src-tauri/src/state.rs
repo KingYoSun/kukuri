@@ -6,7 +6,7 @@ use std::{
 
 use kukuri_desktop_runtime::{DesktopRuntime, StoreStartupError, resolve_db_path_from_env};
 use serde::{Deserialize, Serialize};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 pub(crate) struct DesktopState {
     pub(crate) runtime: Arc<DesktopRuntime>,
@@ -192,7 +192,19 @@ pub(crate) fn build_desktop_state(
     // runtime 常駐のセッション維持スケジューラをここで起動する(停止は shutdown / プロセス終了)。
     tauri::async_runtime::block_on(runtime.start_community_node_session_scheduler());
 
+    spawn_runtime_event_bridge(app_handle, &runtime);
+
     Ok(DesktopState { runtime })
+}
+
+fn spawn_runtime_event_bridge(app_handle: &tauri::AppHandle, runtime: &Arc<DesktopRuntime>) {
+    let mut rx = runtime.subscribe_events();
+    let app = app_handle.clone();
+    tauri::async_runtime::spawn(async move {
+        while let Ok(event) = rx.recv().await {
+            let _ = app.emit("kukuri://runtime-event", &event);
+        }
+    });
 }
 
 fn app_consent_path(db_path: &Path) -> PathBuf {

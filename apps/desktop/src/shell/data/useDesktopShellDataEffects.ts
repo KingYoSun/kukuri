@@ -1,5 +1,6 @@
 import {
   startTransition,
+  useCallback,
   useEffect,
   type MutableRefObject,
 } from 'react';
@@ -31,6 +32,7 @@ import {
   messageFromError,
   profileInputFromProfile,
 } from '@/shell/selectors';
+import { useRuntimeEventBridge } from '@/shell/data/useRuntimeEventBridge';
 
 type Setter<K extends keyof DesktopShellState> = (
   value: DesktopShellStateValue<K>
@@ -182,46 +184,38 @@ export function useDesktopShellDataEffects({
     };
   }, [activeTopic, refreshVisibleShellData, selectedThread, visibleRefreshInFlightRef]);
 
-  useEffect(() => {
-    let disposed = false;
-
-    const refreshStatus = async () => {
+  const refreshNotificationStatus = useCallback(async () => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      return;
+    }
+    try {
+      const status = await api.getNotificationStatus();
+      setNotificationStatus(status);
       if (
-        disposed ||
-        (typeof document !== 'undefined' && document.visibilityState === 'hidden')
+        status.unread_count > 0 &&
+        shellChromeState.activePrimarySection !== 'notifications'
       ) {
-        return;
+        const notificationItems = await api.listNotifications();
+        startTransition(() => {
+          setNotifications(notificationItems);
+        });
       }
-      try {
-        const status = await api.getNotificationStatus();
-        if (!disposed) {
-          setNotificationStatus(status);
-        }
-        if (
-          status.unread_count > 0 &&
-          shellChromeState.activePrimarySection !== 'notifications'
-        ) {
-          const notificationItems = await api.listNotifications();
-          if (!disposed) {
-            startTransition(() => {
-              setNotifications(notificationItems);
-            });
-          }
-        }
-      } catch {
-        // best effort badge refresh
-      }
-    };
+    } catch {
+      // best effort badge refresh
+    }
+  }, [api, setNotificationStatus, setNotifications, shellChromeState.activePrimarySection]);
 
-    void refreshStatus();
+  useRuntimeEventBridge(refreshNotificationStatus);
+
+  useEffect(() => {
+    void refreshNotificationStatus();
     const intervalId = window.setInterval(() => {
-      void refreshStatus();
+      void refreshNotificationStatus();
     }, STATUS_REFRESH_INTERVAL_MS);
     return () => {
-      disposed = true;
       window.clearInterval(intervalId);
     };
-  }, [api, setNotificationStatus, setNotifications, shellChromeState.activePrimarySection]);
+  }, [refreshNotificationStatus]);
 
   useEffect(() => {
     let disposed = false;
