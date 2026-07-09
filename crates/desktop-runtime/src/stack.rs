@@ -26,19 +26,129 @@ pub(crate) struct BoundIrohStack {
     pub(crate) blob_service: Arc<IrohBlobService>,
 }
 
-#[derive(Clone)]
-pub(crate) struct ReloadableTransport {
-    inner: Arc<RwLock<Arc<IrohGossipTransport>>>,
+/// ホットスワップ可能なサービスラッパーを 1 つ生成する。
+///
+/// `SharedIrohStack::rebuild` は iroh ノードを作り直すたびに transport / docs-sync /
+/// blob-service の実体を差し替える。各ラッパーは `Arc<RwLock<Arc<T>>>` を保持し、
+/// trait メソッドはすべて「その時点の実体を `current()` で取り出して素通し」する純転送で、
+/// 3 種で構造もメソッド転送も同型だったため declarative macro で 1 箇所に集約する。
+///
+/// 文法: `struct <Name> wrapping <Inner>;` に続けて、実装する trait ごとに
+/// `#[async_trait] impl <Trait> { async fn <m>(<args>) -> <ret>; ... }` を並べる
+/// (メソッドは `&self` を暗黙に取り、`self.current().await.<m>(args).await` へ転送される)。
+macro_rules! reloadable_service {
+    (
+        $(#[$struct_meta:meta])*
+        $vis:vis struct $name:ident wrapping $inner:ty;
+        $(
+            $(#[$impl_meta:meta])*
+            impl $trait:path {
+                $(
+                    async fn $method:ident ( $( $arg:ident : $arg_ty:ty ),* $(,)? ) -> $ret:ty;
+                )*
+            }
+        )*
+    ) => {
+        #[derive(Clone)]
+        $(#[$struct_meta])*
+        $vis struct $name {
+            inner: Arc<RwLock<Arc<$inner>>>,
+        }
+
+        impl $name {
+            pub(crate) fn new(inner: Arc<$inner>) -> Self {
+                Self {
+                    inner: Arc::new(RwLock::new(inner)),
+                }
+            }
+
+            pub(crate) async fn current(&self) -> Arc<$inner> {
+                self.inner.read().await.clone()
+            }
+
+            pub(crate) async fn replace(&self, inner: Arc<$inner>) {
+                *self.inner.write().await = inner;
+            }
+        }
+
+        $(
+            $(#[$impl_meta])*
+            impl $trait for $name {
+                $(
+                    async fn $method(&self, $( $arg : $arg_ty ),* ) -> $ret {
+                        self.current().await.$method($( $arg ),*).await
+                    }
+                )*
+            }
+        )*
+    };
 }
 
-#[derive(Clone)]
-pub(crate) struct ReloadableDocsSync {
-    inner: Arc<RwLock<Arc<IrohDocsSync>>>,
+reloadable_service! {
+    pub(crate) struct ReloadableTransport wrapping IrohGossipTransport;
+
+    #[async_trait]
+    impl Transport {
+        async fn peers() -> Result<PeerSnapshot>;
+        async fn export_ticket() -> Result<Option<String>>;
+        async fn import_ticket(ticket: &str) -> Result<()>;
+        async fn configure_discovery(
+            mode: DiscoveryMode,
+            env_locked: bool,
+            configured_seed_peers: Vec<SeedPeer>,
+            bootstrap_seed_peers: Vec<SeedPeer>,
+        ) -> Result<()>;
+        async fn discovery() -> Result<DiscoverySnapshot>;
+    }
+
+    #[async_trait]
+    impl HintTransport {
+        async fn subscribe_hints(topic: &TopicId) -> Result<HintStream>;
+        async fn unsubscribe_hints(topic: &TopicId) -> Result<()>;
+        async fn publish_hint(topic: &TopicId, hint: GossipHint) -> Result<()>;
+    }
 }
 
-#[derive(Clone)]
-pub(crate) struct ReloadableBlobService {
-    inner: Arc<RwLock<Arc<IrohBlobService>>>,
+reloadable_service! {
+    pub(crate) struct ReloadableDocsSync wrapping IrohDocsSync;
+
+    #[async_trait]
+    impl DocsSync {
+        async fn open_replica(replica_id: &ReplicaId) -> Result<()>;
+        async fn register_private_replica_secret(
+            replica_id: &ReplicaId,
+            namespace_secret_hex: &str,
+        ) -> Result<()>;
+        async fn remove_private_replica_secret(replica_id: &ReplicaId) -> Result<()>;
+        async fn apply_doc_op(replica_id: &ReplicaId, op: DocOp) -> Result<()>;
+        async fn query_replica_with_policy(
+            replica_id: &ReplicaId,
+            query: DocQuery,
+            policy: DocFetchPolicy,
+        ) -> Result<Vec<DocRecord>>;
+        async fn subscribe_replica(replica_id: &ReplicaId) -> Result<DocEventStream>;
+        async fn import_peer_ticket(ticket: &str) -> Result<()>;
+        async fn learn_peer(endpoint_id: &str) -> Result<()>;
+        async fn restart_replica_sync(replica_id: &ReplicaId) -> Result<()>;
+        async fn set_seed_peers(peers: Vec<SeedPeer>) -> Result<()>;
+        async fn assist_peer_ids() -> Result<Vec<String>>;
+    }
+}
+
+reloadable_service! {
+    pub(crate) struct ReloadableBlobService wrapping IrohBlobService;
+
+    #[async_trait]
+    impl BlobService {
+        async fn put_blob(data: Vec<u8>, mime: &str) -> Result<StoredBlob>;
+        async fn fetch_blob(hash: &BlobHash) -> Result<Option<Vec<u8>>>;
+        async fn pin_blob(hash: &BlobHash) -> Result<()>;
+        async fn blob_status(hash: &BlobHash) -> Result<BlobStatus>;
+        async fn import_peer_ticket(ticket: &str) -> Result<()>;
+        async fn learn_peer(endpoint_id: &str) -> Result<()>;
+        async fn set_seed_peers(peers: Vec<SeedPeer>) -> Result<()>;
+        async fn assist_peer_ids() -> Result<Vec<String>>;
+    }
 }
 
 pub(crate) struct SharedIrohStack {
@@ -56,206 +166,6 @@ fn should_rebuild_runtime_connectivity(
     next_relay_urls: &[String],
 ) -> bool {
     current_relay_urls != next_relay_urls
-}
-
-impl ReloadableTransport {
-    pub(crate) fn new(inner: Arc<IrohGossipTransport>) -> Self {
-        Self {
-            inner: Arc::new(RwLock::new(inner)),
-        }
-    }
-
-    pub(crate) async fn current(&self) -> Arc<IrohGossipTransport> {
-        self.inner.read().await.clone()
-    }
-
-    pub(crate) async fn replace(&self, inner: Arc<IrohGossipTransport>) {
-        *self.inner.write().await = inner;
-    }
-}
-
-#[async_trait]
-impl Transport for ReloadableTransport {
-    async fn peers(&self) -> Result<PeerSnapshot> {
-        self.current().await.peers().await
-    }
-
-    async fn export_ticket(&self) -> Result<Option<String>> {
-        self.current().await.export_ticket().await
-    }
-
-    async fn import_ticket(&self, ticket: &str) -> Result<()> {
-        self.current().await.import_ticket(ticket).await
-    }
-
-    async fn configure_discovery(
-        &self,
-        mode: DiscoveryMode,
-        env_locked: bool,
-        configured_seed_peers: Vec<SeedPeer>,
-        bootstrap_seed_peers: Vec<SeedPeer>,
-    ) -> Result<()> {
-        self.current()
-            .await
-            .configure_discovery(
-                mode,
-                env_locked,
-                configured_seed_peers,
-                bootstrap_seed_peers,
-            )
-            .await
-    }
-
-    async fn discovery(&self) -> Result<DiscoverySnapshot> {
-        self.current().await.discovery().await
-    }
-}
-
-#[async_trait]
-impl HintTransport for ReloadableTransport {
-    async fn subscribe_hints(&self, topic: &TopicId) -> Result<HintStream> {
-        self.current().await.subscribe_hints(topic).await
-    }
-
-    async fn unsubscribe_hints(&self, topic: &TopicId) -> Result<()> {
-        self.current().await.unsubscribe_hints(topic).await
-    }
-
-    async fn publish_hint(&self, topic: &TopicId, hint: GossipHint) -> Result<()> {
-        self.current().await.publish_hint(topic, hint).await
-    }
-}
-
-impl ReloadableDocsSync {
-    pub(crate) fn new(inner: Arc<IrohDocsSync>) -> Self {
-        Self {
-            inner: Arc::new(RwLock::new(inner)),
-        }
-    }
-
-    pub(crate) async fn current(&self) -> Arc<IrohDocsSync> {
-        self.inner.read().await.clone()
-    }
-
-    pub(crate) async fn replace(&self, inner: Arc<IrohDocsSync>) {
-        *self.inner.write().await = inner;
-    }
-}
-
-#[async_trait]
-impl DocsSync for ReloadableDocsSync {
-    async fn open_replica(&self, replica_id: &ReplicaId) -> Result<()> {
-        self.current().await.open_replica(replica_id).await
-    }
-
-    async fn register_private_replica_secret(
-        &self,
-        replica_id: &ReplicaId,
-        namespace_secret_hex: &str,
-    ) -> Result<()> {
-        self.current()
-            .await
-            .register_private_replica_secret(replica_id, namespace_secret_hex)
-            .await
-    }
-
-    async fn remove_private_replica_secret(&self, replica_id: &ReplicaId) -> Result<()> {
-        self.current()
-            .await
-            .remove_private_replica_secret(replica_id)
-            .await
-    }
-
-    async fn apply_doc_op(&self, replica_id: &ReplicaId, op: DocOp) -> Result<()> {
-        self.current().await.apply_doc_op(replica_id, op).await
-    }
-
-    async fn query_replica_with_policy(
-        &self,
-        replica_id: &ReplicaId,
-        query: DocQuery,
-        policy: DocFetchPolicy,
-    ) -> Result<Vec<DocRecord>> {
-        self.current()
-            .await
-            .query_replica_with_policy(replica_id, query, policy)
-            .await
-    }
-
-    async fn subscribe_replica(&self, replica_id: &ReplicaId) -> Result<DocEventStream> {
-        self.current().await.subscribe_replica(replica_id).await
-    }
-
-    async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
-        self.current().await.import_peer_ticket(ticket).await
-    }
-
-    async fn learn_peer(&self, endpoint_id: &str) -> Result<()> {
-        self.current().await.learn_peer(endpoint_id).await
-    }
-
-    async fn restart_replica_sync(&self, replica_id: &ReplicaId) -> Result<()> {
-        self.current().await.restart_replica_sync(replica_id).await
-    }
-
-    async fn set_seed_peers(&self, peers: Vec<SeedPeer>) -> Result<()> {
-        self.current().await.set_seed_peers(peers).await
-    }
-
-    async fn assist_peer_ids(&self) -> Result<Vec<String>> {
-        self.current().await.assist_peer_ids().await
-    }
-}
-
-impl ReloadableBlobService {
-    pub(crate) fn new(inner: Arc<IrohBlobService>) -> Self {
-        Self {
-            inner: Arc::new(RwLock::new(inner)),
-        }
-    }
-
-    pub(crate) async fn current(&self) -> Arc<IrohBlobService> {
-        self.inner.read().await.clone()
-    }
-
-    pub(crate) async fn replace(&self, inner: Arc<IrohBlobService>) {
-        *self.inner.write().await = inner;
-    }
-}
-
-#[async_trait]
-impl BlobService for ReloadableBlobService {
-    async fn put_blob(&self, data: Vec<u8>, mime: &str) -> Result<StoredBlob> {
-        self.current().await.put_blob(data, mime).await
-    }
-
-    async fn fetch_blob(&self, hash: &BlobHash) -> Result<Option<Vec<u8>>> {
-        self.current().await.fetch_blob(hash).await
-    }
-
-    async fn pin_blob(&self, hash: &BlobHash) -> Result<()> {
-        self.current().await.pin_blob(hash).await
-    }
-
-    async fn blob_status(&self, hash: &BlobHash) -> Result<BlobStatus> {
-        self.current().await.blob_status(hash).await
-    }
-
-    async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
-        self.current().await.import_peer_ticket(ticket).await
-    }
-
-    async fn learn_peer(&self, endpoint_id: &str) -> Result<()> {
-        self.current().await.learn_peer(endpoint_id).await
-    }
-
-    async fn set_seed_peers(&self, peers: Vec<SeedPeer>) -> Result<()> {
-        self.current().await.set_seed_peers(peers).await
-    }
-
-    async fn assist_peer_ids(&self) -> Result<Vec<String>> {
-        self.current().await.assist_peer_ids().await
-    }
 }
 
 pub(crate) fn effective_seed_peers(
