@@ -90,8 +90,7 @@ impl DesktopRuntime {
                 .entry(base_url.to_string())
                 .or_insert_with(CommunityNodeSessionState::default);
             entry.last_error = Some(error.to_string());
-            entry.session_retry_deadline =
-                now.saturating_add(COMMUNITY_NODE_SESSION_RETRY_SECONDS);
+            entry.session_retry_deadline = now.saturating_add(COMMUNITY_NODE_SESSION_RETRY_SECONDS);
         }
         self.set_community_node_session_phase(base_url, CommunityNodeSessionPhase::Retrying)
             .await;

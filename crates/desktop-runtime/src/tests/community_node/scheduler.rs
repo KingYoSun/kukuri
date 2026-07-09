@@ -96,7 +96,12 @@ async fn session_scheduler_keeps_bootstrap_registration_alive_without_getter_pol
     // 単発注入では初回 tick の書き込みに上書きされうる。観測できるまで注入を繰り返す。
     if timeout(Duration::from_secs(30), async {
         loop {
-            if let Some(entry) = runtime.community_node_sessions.lock().await.get_mut(base_url.as_str()) {
+            if let Some(entry) = runtime
+                .community_node_sessions
+                .lock()
+                .await
+                .get_mut(base_url.as_str())
+            {
                 entry.heartbeat_deadline = Utc::now().timestamp() - 1;
             }
             if state.heartbeat_hits.load(Ordering::SeqCst) >= 2 {
@@ -127,7 +132,12 @@ async fn session_scheduler_keeps_bootstrap_registration_alive_without_getter_pol
     // shutdown でスケジューラ task が停止し、以後 heartbeat が打たれないこと。
     runtime.shutdown().await;
     let hits_after_shutdown = state.heartbeat_hits.load(Ordering::SeqCst);
-    if let Some(entry) = runtime.community_node_sessions.lock().await.get_mut(base_url.as_str()) {
+    if let Some(entry) = runtime
+        .community_node_sessions
+        .lock()
+        .await
+        .get_mut(base_url.as_str())
+    {
         entry.heartbeat_deadline = Utc::now().timestamp() - 1;
     }
     sleep(Duration::from_millis(600)).await;
@@ -200,13 +210,7 @@ async fn get_sync_status_is_read_only_for_community_node_session() {
 
     assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 0);
     assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 0);
-    assert!(
-        runtime
-            .community_node_sessions
-            .lock()
-            .await
-            .is_empty()
-    );
+    assert!(runtime.community_node_sessions.lock().await.is_empty());
 
     runtime.shutdown().await;
     server.abort();

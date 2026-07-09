@@ -245,7 +245,12 @@ async fn community_node_metadata_refresh_heartbeats_before_bootstrap_sync_even_w
         .effective_seed_peer_apply_version
         .load(Ordering::SeqCst);
 
-    if let Some(entry) = runtime.community_node_sessions.lock().await.get_mut(base_url.as_str()) {
+    if let Some(entry) = runtime
+        .community_node_sessions
+        .lock()
+        .await
+        .get_mut(base_url.as_str())
+    {
         entry.ready_refresh_pending = false;
     }
 
@@ -572,7 +577,12 @@ async fn community_node_status_retries_bootstrap_metadata_when_seed_peers_are_em
     );
 
     *state.seed_peers.lock().await = vec![seed_peer.clone()];
-    if let Some(entry) = runtime.community_node_sessions.lock().await.get_mut(base_url.as_str()) {
+    if let Some(entry) = runtime
+        .community_node_sessions
+        .lock()
+        .await
+        .get_mut(base_url.as_str())
+    {
         entry.metadata_refresh_deadline = Utc::now().timestamp() - 1;
     }
 

@@ -228,7 +228,12 @@ impl DesktopRuntime {
             .await
             .ok();
         if local_seed_peer_before != local_seed_peer_after {
-            if let Some(entry) = self.community_node_sessions.lock().await.get_mut(base_url.as_str()) {
+            if let Some(entry) = self
+                .community_node_sessions
+                .lock()
+                .await
+                .get_mut(base_url.as_str())
+            {
                 entry.heartbeat_deadline = 0;
             }
             debug!(
@@ -597,12 +602,14 @@ impl DesktopRuntime {
                             error,
                         )
                     })?;
-                self.community_node_sessions.lock().await
+                self.community_node_sessions
+                    .lock()
+                    .await
                     .entry(base_url.clone())
                     .or_insert_with(CommunityNodeSessionState::default)
                     .heartbeat_deadline = heartbeat
-                        .expires_at
-                        .saturating_sub(COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_INTERVAL_SECONDS);
+                    .expires_at
+                    .saturating_sub(COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_INTERVAL_SECONDS);
                 debug!(
                     %base_url,
                     expires_at = heartbeat.expires_at,
@@ -637,11 +644,13 @@ impl DesktopRuntime {
                 }
             }
             Err(error) => {
-                self.community_node_sessions.lock().await
+                self.community_node_sessions
+                    .lock()
+                    .await
                     .entry(base_url)
                     .or_insert_with(CommunityNodeSessionState::default)
                     .heartbeat_deadline =
-                        now.saturating_add(COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_RETRY_SECONDS);
+                    now.saturating_add(COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_RETRY_SECONDS);
                 Err(Self::map_community_node_send_error(
                     "failed to refresh community node bootstrap registration",
                     error,
