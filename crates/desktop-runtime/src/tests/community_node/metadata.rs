@@ -245,11 +245,9 @@ async fn community_node_metadata_refresh_heartbeats_before_bootstrap_sync_even_w
         .effective_seed_peer_apply_version
         .load(Ordering::SeqCst);
 
-    runtime
-        .community_node_ready_refresh_pending
-        .lock()
-        .await
-        .remove(base_url.as_str());
+    if let Some(entry) = runtime.community_node_sessions.lock().await.get_mut(base_url.as_str()) {
+        entry.ready_refresh_pending = false;
+    }
 
     let refreshed = runtime
         .refresh_community_node_metadata(CommunityNodeTargetRequest {
@@ -368,11 +366,11 @@ async fn community_node_ready_transition_refreshes_bootstrap_metadata_before_nex
     assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 1);
     assert!(
         runtime
-            .community_node_heartbeat_deadlines
+            .community_node_sessions
             .lock()
             .await
             .get(base_url.as_str())
-            .copied()
+            .map(|s| s.heartbeat_deadline)
             .expect("heartbeat deadline")
             > Utc::now().timestamp()
     );
@@ -564,19 +562,19 @@ async fn community_node_status_retries_bootstrap_metadata_when_seed_peers_are_em
     );
     assert!(
         runtime
-            .community_node_metadata_refresh_deadlines
+            .community_node_sessions
             .lock()
             .await
-            .contains_key(base_url.as_str()),
+            .get(base_url.as_str())
+            .map(|s| s.metadata_refresh_deadline > 0)
+            .unwrap_or(false),
         "empty bootstrap metadata should schedule a retry"
     );
 
     *state.seed_peers.lock().await = vec![seed_peer.clone()];
-    runtime
-        .community_node_metadata_refresh_deadlines
-        .lock()
-        .await
-        .insert(base_url.clone(), Utc::now().timestamp() - 1);
+    if let Some(entry) = runtime.community_node_sessions.lock().await.get_mut(base_url.as_str()) {
+        entry.metadata_refresh_deadline = Utc::now().timestamp() - 1;
+    }
 
     runtime.run_community_node_session_maintenance_once().await;
     let refreshed_statuses = runtime

@@ -43,22 +43,7 @@ impl DesktopRuntime {
         let next_config = normalize_community_node_config(CommunityNodeConfig { nodes })?;
         save_community_node_config(&self.db_path, &next_config)?;
         *self.community_node_config.lock().await = next_config.clone();
-        self.community_node_heartbeat_deadlines.lock().await.clear();
-        self.community_node_metadata_refresh_deadlines
-            .lock()
-            .await
-            .clear();
-        self.community_node_session_retry_deadlines
-            .lock()
-            .await
-            .clear();
-        self.community_node_session_phases.lock().await.clear();
-        self.community_node_ready_refresh_pending
-            .lock()
-            .await
-            .clear();
-        self.community_node_last_errors.lock().await.clear();
-        self.community_node_cached_consents.lock().await.clear();
+        self.community_node_sessions.lock().await.clear();
         *self.community_node_reconnect_state.lock().await = Default::default();
         self.apply_runtime_connectivity_assist().await?;
         self.apply_effective_seed_peers().await?;
@@ -79,22 +64,7 @@ impl DesktopRuntime {
         }
         save_community_node_config(&self.db_path, &CommunityNodeConfig::default())?;
         *self.community_node_config.lock().await = CommunityNodeConfig::default();
-        self.community_node_heartbeat_deadlines.lock().await.clear();
-        self.community_node_metadata_refresh_deadlines
-            .lock()
-            .await
-            .clear();
-        self.community_node_session_retry_deadlines
-            .lock()
-            .await
-            .clear();
-        self.community_node_session_phases.lock().await.clear();
-        self.community_node_ready_refresh_pending
-            .lock()
-            .await
-            .clear();
-        self.community_node_last_errors.lock().await.clear();
-        self.community_node_cached_consents.lock().await.clear();
+        self.community_node_sessions.lock().await.clear();
         *self.community_node_reconnect_state.lock().await = Default::default();
         self.apply_runtime_connectivity_assist().await?;
         self.apply_effective_seed_peers().await?;
@@ -176,34 +146,13 @@ impl DesktopRuntime {
             COMMUNITY_NODE_TOKEN_PURPOSE,
             base_url.as_str(),
         )?;
-        self.community_node_heartbeat_deadlines
-            .lock()
-            .await
-            .remove(base_url.as_str());
-        self.community_node_metadata_refresh_deadlines
-            .lock()
-            .await
-            .remove(base_url.as_str());
-        self.community_node_session_retry_deadlines
-            .lock()
-            .await
-            .remove(base_url.as_str());
-        self.community_node_last_errors
-            .lock()
-            .await
-            .remove(base_url.as_str());
-        self.community_node_cached_consents
-            .lock()
-            .await
-            .remove(base_url.as_str());
-        self.community_node_session_phases
-            .lock()
-            .await
-            .insert(base_url.clone(), CommunityNodeSessionPhase::Idle);
-        self.community_node_ready_refresh_pending
-            .lock()
-            .await
-            .remove(base_url.as_str());
+        self.community_node_sessions.lock().await.insert(
+            base_url.clone(),
+            CommunityNodeSessionState {
+                session_phase: CommunityNodeSessionPhase::Idle,
+                ..Default::default()
+            },
+        );
         *self.community_node_reconnect_state.lock().await = Default::default();
         let node = self
             .community_node_config

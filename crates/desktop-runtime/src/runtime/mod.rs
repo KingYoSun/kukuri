@@ -17,7 +17,7 @@ use kukuri_app_api::{
     PrivateChannelCapability, ProfileInput, PublishMetaverseRoomEventInput, ReactionStateView,
     RecentReactionView, SyncStatus, TimelineView, UpdateGameRoomInput, UpdateMetaverseRoomInput,
 };
-use kukuri_cn_protocol::{CommunityNodeConsentStatus, normalize_http_url};
+use kukuri_cn_protocol::normalize_http_url;
 use kukuri_core::{
     BlobHash, CreatePrivateChannelInput, CustomReactionAssetSnapshotV1, FriendOnlyGrantPreview,
     FriendPlusSharePreview, KukuriKeys, PrivateChannelInvitePreview, Profile, TopicId,
@@ -33,14 +33,14 @@ use crate::attachments::{
 use crate::community_node::{
     AcceptCommunityNodeConsentsRequest, COMMUNITY_NODE_TOKEN_PURPOSE, CommunityNodeConfig,
     CommunityNodeManifestFetch, CommunityNodeNodeConfig, CommunityNodeNodeStatus,
-    CommunityNodeReconnectState, CommunityNodeSessionPhase, CommunityNodeTargetRequest,
-    SetCommunityNodeConfigRequest, SubmitCommunityNodeReportRequest,
-    SubmitCommunityNodeReportResult, community_node_consent_has_pending_update,
-    community_node_seed_peers, default_preview_community_node_config,
-    effective_seed_peer_apply_state, load_community_node_config_from_file,
-    load_community_node_token, normalize_community_node_config,
-    relay_config_from_community_node_config, runtime_connectivity_assist_state,
-    save_community_node_config,
+    CommunityNodeReconnectState, CommunityNodeSessionPhase, CommunityNodeSessionState,
+    CommunityNodeTargetRequest, SetCommunityNodeConfigRequest,
+    SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
+    community_node_consent_has_pending_update, community_node_seed_peers,
+    default_preview_community_node_config, effective_seed_peer_apply_state,
+    load_community_node_config_from_file, load_community_node_token,
+    normalize_community_node_config, relay_config_from_community_node_config,
+    runtime_connectivity_assist_state, save_community_node_config,
 };
 use crate::discovery::{
     DiscoveryConfig, SetDiscoverySeedsRequest, parse_seed_entries,
@@ -73,15 +73,8 @@ pub struct DesktopRuntime {
     pub(crate) iroh_stack: SharedIrohStack,
     pub(crate) discovery_config: Arc<Mutex<DiscoveryConfig>>,
     pub(crate) community_node_config: Arc<Mutex<CommunityNodeConfig>>,
-    pub(crate) community_node_heartbeat_deadlines: Arc<Mutex<HashMap<String, i64>>>,
-    pub(crate) community_node_metadata_refresh_deadlines: Arc<Mutex<HashMap<String, i64>>>,
-    pub(crate) community_node_session_retry_deadlines: Arc<Mutex<HashMap<String, i64>>>,
-    pub(crate) community_node_session_phases:
-        Arc<Mutex<HashMap<String, CommunityNodeSessionPhase>>>,
-    pub(crate) community_node_ready_refresh_pending: Arc<Mutex<HashMap<String, bool>>>,
-    pub(crate) community_node_last_errors: Arc<Mutex<HashMap<String, String>>>,
-    pub(crate) community_node_cached_consents:
-        Arc<Mutex<HashMap<String, CommunityNodeConsentStatus>>>,
+    pub(crate) community_node_sessions:
+        Arc<Mutex<HashMap<String, CommunityNodeSessionState>>>,
     pub(crate) community_node_rendezvous_seed_peers: Arc<Mutex<Vec<kukuri_transport::SeedPeer>>>,
     pub(crate) community_node_session_guard: Arc<Mutex<()>>,
     pub(crate) community_node_reconnect_state: Arc<Mutex<CommunityNodeReconnectState>>,
@@ -294,13 +287,7 @@ impl DesktopRuntime {
             iroh_stack,
             discovery_config: Arc::new(Mutex::new(discovery_config)),
             community_node_config: Arc::new(Mutex::new(community_node_config)),
-            community_node_heartbeat_deadlines: Arc::new(Mutex::new(HashMap::new())),
-            community_node_metadata_refresh_deadlines: Arc::new(Mutex::new(HashMap::new())),
-            community_node_session_retry_deadlines: Arc::new(Mutex::new(HashMap::new())),
-            community_node_session_phases: Arc::new(Mutex::new(HashMap::new())),
-            community_node_ready_refresh_pending: Arc::new(Mutex::new(HashMap::new())),
-            community_node_last_errors: Arc::new(Mutex::new(HashMap::new())),
-            community_node_cached_consents: Arc::new(Mutex::new(HashMap::new())),
+            community_node_sessions: Arc::new(Mutex::new(HashMap::new())),
             community_node_rendezvous_seed_peers: Arc::new(Mutex::new(Vec::new())),
             community_node_session_guard: Arc::new(Mutex::new(())),
             community_node_reconnect_state: Arc::new(Mutex::new(
