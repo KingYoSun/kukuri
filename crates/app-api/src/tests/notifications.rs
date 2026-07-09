@@ -313,9 +313,13 @@ async fn repost_notification_survives_hydration_before_live_doc_event() {
         .create_post(topic.as_str(), "source post", None)
         .await
         .expect("create source post");
-    let baseline = snapshot_object_notification_baseline(docs_sync.as_ref(), &replica)
-        .await
-        .expect("snapshot object baseline");
+    let baseline = snapshot_object_notification_baseline_with_policy(
+        docs_sync.as_ref(),
+        &replica,
+        DocFetchPolicy::LocalThenRemote,
+    )
+    .await
+    .expect("snapshot object baseline");
     let remote_keys = generate_keys();
     let repost_source = app
         .resolve_repost_source(topic.as_str(), source_object_id.as_str())
@@ -390,9 +394,13 @@ async fn quote_repost_notification_survives_hydration_before_live_doc_event() {
         .create_post(topic.as_str(), "quoted source", None)
         .await
         .expect("create source post");
-    let baseline = snapshot_object_notification_baseline(docs_sync.as_ref(), &replica)
-        .await
-        .expect("snapshot object baseline");
+    let baseline = snapshot_object_notification_baseline_with_policy(
+        docs_sync.as_ref(),
+        &replica,
+        DocFetchPolicy::LocalThenRemote,
+    )
+    .await
+    .expect("snapshot object baseline");
     let remote_keys = generate_keys();
     let repost_source = app
         .resolve_repost_source(topic.as_str(), source_object_id.as_str())
@@ -573,9 +581,13 @@ async fn follow_notification_survives_hydration_before_live_doc_event() {
     let remote_keys = generate_keys();
     let remote_pubkey = remote_keys.public_key_hex();
     let replica = author_replica_id(remote_pubkey.as_str());
-    let baseline = snapshot_follow_notification_baseline(docs_sync.as_ref(), &replica)
-        .await
-        .expect("snapshot follow baseline");
+    let baseline = snapshot_follow_notification_baseline_with_policy(
+        docs_sync.as_ref(),
+        &replica,
+        DocFetchPolicy::LocalThenRemote,
+    )
+    .await
+    .expect("snapshot follow baseline");
     let envelope = build_follow_edge_envelope(
         &remote_keys,
         &Pubkey::from(local_author_pubkey.as_str()),
@@ -647,9 +659,13 @@ async fn initial_follow_baseline_prevents_backfill_notification() {
     persist_follow_edge_doc(docs_sync.as_ref(), &edge, &envelope)
         .await
         .expect("persist follow edge doc");
-    let baseline = snapshot_follow_notification_baseline(docs_sync.as_ref(), &replica)
-        .await
-        .expect("snapshot follow baseline");
+    let baseline = snapshot_follow_notification_baseline_with_policy(
+        docs_sync.as_ref(),
+        &replica,
+        DocFetchPolicy::LocalThenRemote,
+    )
+    .await
+    .expect("snapshot follow baseline");
 
     hydrate_author_state_with_services(
         docs_sync.as_ref(),
@@ -790,9 +806,13 @@ async fn restart_or_manual_hydration_does_not_backfill_or_duplicate_notification
         .to_post_object()
         .expect("parse existing reply")
         .expect("existing reply object");
-    let baseline = snapshot_object_notification_baseline(docs_sync.as_ref(), &replica)
-        .await
-        .expect("snapshot object baseline");
+    let baseline = snapshot_object_notification_baseline_with_policy(
+        docs_sync.as_ref(),
+        &replica,
+        DocFetchPolicy::LocalThenRemote,
+    )
+    .await
+    .expect("snapshot object baseline");
     hydrate_subscription_state_with_services(
         docs_sync.as_ref(),
         blob_service.as_ref(),

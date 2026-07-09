@@ -59,13 +59,6 @@ impl ReactionKeyV1 {
             }
         }
     }
-
-    pub fn key_kind(&self) -> ReactionKeyKind {
-        match self {
-            Self::Emoji { .. } => ReactionKeyKind::Emoji,
-            Self::CustomAsset { .. } => ReactionKeyKind::CustomAsset,
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

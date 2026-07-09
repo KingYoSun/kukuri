@@ -202,10 +202,6 @@ pub(crate) use timeline_view_support::{
 // テストからのみ参照される再輸出(依存の可視化。WP-H5 PR1)。
 #[cfg(test)]
 pub(crate) use object_persistence_support::custom_reaction_asset_view_from_snapshot;
-#[cfg(test)]
-pub(crate) use profile_docs_support::{
-    snapshot_follow_notification_baseline, snapshot_object_notification_baseline,
-};
 
 pub(crate) async fn maybe_restart_replica_sync_with_cooldown(
     docs_sync: &dyn DocsSync,
