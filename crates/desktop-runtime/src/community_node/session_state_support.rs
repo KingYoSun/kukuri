@@ -6,20 +6,18 @@ impl DesktopRuntime {
         base_url: &str,
         phase: CommunityNodeSessionPhase,
     ) {
-        self.community_node_session_phases
-            .lock()
-            .await
-            .insert(base_url.to_string(), phase);
+        let mut sessions = self.community_node_sessions.lock().await;
+        let entry = sessions
+            .entry(base_url.to_string())
+            .or_insert_with(CommunityNodeSessionState::default);
+        entry.session_phase = phase;
         if phase != CommunityNodeSessionPhase::Ready
             && matches!(
                 phase,
                 CommunityNodeSessionPhase::Idle | CommunityNodeSessionPhase::Retrying
             )
         {
-            self.community_node_ready_refresh_pending
-                .lock()
-                .await
-                .remove(base_url);
+            entry.ready_refresh_pending = false;
         }
     }
 
@@ -28,26 +26,21 @@ impl DesktopRuntime {
         base_url: &str,
         schedule_immediate_refresh: bool,
     ) {
-        let previous = self
-            .community_node_session_phases
-            .lock()
-            .await
-            .insert(base_url.to_string(), CommunityNodeSessionPhase::Ready);
+        let mut sessions = self.community_node_sessions.lock().await;
+        let entry = sessions
+            .entry(base_url.to_string())
+            .or_insert_with(CommunityNodeSessionState::default);
+        let previous = Some(entry.session_phase);
+        entry.session_phase = CommunityNodeSessionPhase::Ready;
         if schedule_immediate_refresh {
-            self.community_node_ready_refresh_pending
-                .lock()
-                .await
-                .insert(base_url.to_string(), true);
+            entry.ready_refresh_pending = true;
             debug!(
                 %base_url,
                 previous_phase = ?previous,
                 "scheduled immediate community-node metadata refresh after ready transition"
             );
         } else {
-            self.community_node_ready_refresh_pending
-                .lock()
-                .await
-                .remove(base_url);
+            entry.ready_refresh_pending = false;
             debug!(
                 %base_url,
                 previous_phase = ?previous,
@@ -57,11 +50,11 @@ impl DesktopRuntime {
     }
 
     pub(crate) async fn community_node_session_was_ready(&self, base_url: &str) -> bool {
-        self.community_node_session_phases
+        self.community_node_sessions
             .lock()
             .await
             .get(base_url)
-            .copied()
+            .map(|s| s.session_phase)
             == Some(CommunityNodeSessionPhase::Ready)
     }
 
@@ -70,23 +63,19 @@ impl DesktopRuntime {
         base_url: &str,
         consent_state: Option<CommunityNodeConsentStatus>,
     ) {
-        let mut cached = self.community_node_cached_consents.lock().await;
-        if let Some(consent_state) = consent_state {
-            cached.insert(base_url.to_string(), consent_state);
-        } else {
-            cached.remove(base_url);
-        }
+        let mut sessions = self.community_node_sessions.lock().await;
+        let entry = sessions
+            .entry(base_url.to_string())
+            .or_insert_with(CommunityNodeSessionState::default);
+        entry.cached_consent = consent_state;
     }
 
     pub(crate) async fn clear_community_node_retry_state(&self, base_url: &str) {
-        self.community_node_session_retry_deadlines
-            .lock()
-            .await
-            .remove(base_url);
-        self.community_node_last_errors
-            .lock()
-            .await
-            .remove(base_url);
+        let mut sessions = self.community_node_sessions.lock().await;
+        if let Some(entry) = sessions.get_mut(base_url) {
+            entry.session_retry_deadline = 0;
+            entry.last_error = None;
+        }
     }
 
     pub(crate) async fn set_community_node_retry_state(
@@ -95,17 +84,14 @@ impl DesktopRuntime {
         error: anyhow::Error,
     ) {
         let now = Utc::now().timestamp();
-        self.community_node_last_errors
-            .lock()
-            .await
-            .insert(base_url.to_string(), error.to_string());
-        self.community_node_session_retry_deadlines
-            .lock()
-            .await
-            .insert(
-                base_url.to_string(),
-                now.saturating_add(COMMUNITY_NODE_SESSION_RETRY_SECONDS),
-            );
+        {
+            let mut sessions = self.community_node_sessions.lock().await;
+            let entry = sessions
+                .entry(base_url.to_string())
+                .or_insert_with(CommunityNodeSessionState::default);
+            entry.last_error = Some(error.to_string());
+            entry.session_retry_deadline = now.saturating_add(COMMUNITY_NODE_SESSION_RETRY_SECONDS);
+        }
         self.set_community_node_session_phase(base_url, CommunityNodeSessionPhase::Retrying)
             .await;
     }

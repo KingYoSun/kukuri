@@ -188,6 +188,17 @@ pub enum CommunityNodeSessionPhase {
     Retrying,
 }
 
+#[derive(Clone, Debug, Default)]
+pub(crate) struct CommunityNodeSessionState {
+    pub(crate) heartbeat_deadline: i64,
+    pub(crate) metadata_refresh_deadline: i64,
+    pub(crate) session_retry_deadline: i64,
+    pub(crate) session_phase: CommunityNodeSessionPhase,
+    pub(crate) ready_refresh_pending: bool,
+    pub(crate) last_error: Option<String>,
+    pub(crate) cached_consent: Option<CommunityNodeConsentStatus>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(optional_fields = nullable))]

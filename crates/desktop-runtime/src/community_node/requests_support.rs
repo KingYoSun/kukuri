@@ -228,10 +228,14 @@ impl DesktopRuntime {
             .await
             .ok();
         if local_seed_peer_before != local_seed_peer_after {
-            self.community_node_heartbeat_deadlines
+            if let Some(entry) = self
+                .community_node_sessions
                 .lock()
                 .await
-                .remove(base_url.as_str());
+                .get_mut(base_url.as_str())
+            {
+                entry.heartbeat_deadline = 0;
+            }
             debug!(
                 %base_url,
                 before = ?local_seed_peer_before,
@@ -265,19 +269,16 @@ impl DesktopRuntime {
             .find(|node| node.base_url == base_url)
             .and_then(|node| node.resolved_urls.as_ref())
             .is_none_or(|resolved_urls| resolved_urls.seed_peers.is_empty());
+        let mut sessions = self.community_node_sessions.lock().await;
         if !seed_peers_empty {
-            self.community_node_metadata_refresh_deadlines
-                .lock()
-                .await
-                .remove(base_url);
+            if let Some(entry) = sessions.get_mut(base_url) {
+                entry.metadata_refresh_deadline = 0;
+            }
             return false;
         }
-        let next_due_at = self
-            .community_node_metadata_refresh_deadlines
-            .lock()
-            .await
+        let next_due_at = sessions
             .get(base_url)
-            .copied()
+            .map(|s| s.metadata_refresh_deadline)
             .unwrap_or_default();
         next_due_at <= now
     }
@@ -288,14 +289,15 @@ impl DesktopRuntime {
         seed_peers_empty: bool,
         now: i64,
     ) {
-        let mut deadlines = self.community_node_metadata_refresh_deadlines.lock().await;
+        let mut sessions = self.community_node_sessions.lock().await;
+        let entry = sessions
+            .entry(base_url.to_string())
+            .or_insert_with(CommunityNodeSessionState::default);
         if seed_peers_empty {
-            deadlines.insert(
-                base_url.to_string(),
-                now.saturating_add(COMMUNITY_NODE_BOOTSTRAP_METADATA_RETRY_SECONDS),
-            );
+            entry.metadata_refresh_deadline =
+                now.saturating_add(COMMUNITY_NODE_BOOTSTRAP_METADATA_RETRY_SECONDS);
         } else {
-            deadlines.remove(base_url);
+            entry.metadata_refresh_deadline = 0;
         }
     }
 
@@ -496,20 +498,16 @@ impl DesktopRuntime {
     ) -> std::result::Result<(), CommunityNodeRequestError> {
         let base_url = normalize_http_url(base_url).map_err(CommunityNodeRequestError::Other)?;
         let now = Utc::now().timestamp();
-        let next_due_at = self
-            .community_node_heartbeat_deadlines
-            .lock()
-            .await
-            .get(base_url.as_str())
-            .copied()
-            .unwrap_or_default();
+        let (next_due_at, ready_refresh_pending) = {
+            let mut sessions = self.community_node_sessions.lock().await;
+            let entry = sessions
+                .entry(base_url.to_string())
+                .or_insert_with(CommunityNodeSessionState::default);
+            let due = entry.heartbeat_deadline;
+            let pending = std::mem::replace(&mut entry.ready_refresh_pending, false);
+            (due, pending)
+        };
         if !force_heartbeat && next_due_at > now {
-            let ready_refresh_pending = self
-                .community_node_ready_refresh_pending
-                .lock()
-                .await
-                .remove(base_url.as_str())
-                .unwrap_or(false);
             if !self
                 .community_node_bootstrap_metadata_retry_due(base_url.as_str(), now)
                 .await
@@ -604,12 +602,14 @@ impl DesktopRuntime {
                             error,
                         )
                     })?;
-                self.community_node_heartbeat_deadlines.lock().await.insert(
-                    base_url.clone(),
-                    heartbeat
-                        .expires_at
-                        .saturating_sub(COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_INTERVAL_SECONDS),
-                );
+                self.community_node_sessions
+                    .lock()
+                    .await
+                    .entry(base_url.clone())
+                    .or_insert_with(CommunityNodeSessionState::default)
+                    .heartbeat_deadline = heartbeat
+                    .expires_at
+                    .saturating_sub(COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_INTERVAL_SECONDS);
                 debug!(
                     %base_url,
                     expires_at = heartbeat.expires_at,
@@ -644,10 +644,13 @@ impl DesktopRuntime {
                 }
             }
             Err(error) => {
-                self.community_node_heartbeat_deadlines.lock().await.insert(
-                    base_url,
-                    now.saturating_add(COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_RETRY_SECONDS),
-                );
+                self.community_node_sessions
+                    .lock()
+                    .await
+                    .entry(base_url)
+                    .or_insert_with(CommunityNodeSessionState::default)
+                    .heartbeat_deadline =
+                    now.saturating_add(COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_RETRY_SECONDS);
                 Err(Self::map_community_node_send_error(
                     "failed to refresh community node bootstrap registration",
                     error,

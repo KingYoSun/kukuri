@@ -5,11 +5,11 @@ impl DesktopRuntime {
         let base_url = normalize_http_url(base_url)?;
         let now = Utc::now().timestamp();
         let retry_after = self
-            .community_node_session_retry_deadlines
+            .community_node_sessions
             .lock()
             .await
             .get(base_url.as_str())
-            .copied();
+            .map(|s| s.session_retry_deadline);
         if retry_after.is_some_and(|retry_after| retry_after > now) {
             self.set_community_node_session_phase(
                 base_url.as_str(),
@@ -22,11 +22,11 @@ impl DesktopRuntime {
         let _guard = self.community_node_session_guard.lock().await;
         let now = Utc::now().timestamp();
         let retry_after = self
-            .community_node_session_retry_deadlines
+            .community_node_sessions
             .lock()
             .await
             .get(base_url.as_str())
-            .copied();
+            .map(|s| s.session_retry_deadline);
         if retry_after.is_some_and(|retry_after| retry_after > now) {
             self.set_community_node_session_phase(
                 base_url.as_str(),
@@ -173,49 +173,27 @@ impl DesktopRuntime {
             },
             None => CommunityNodeAuthState::default(),
         };
-        let consent_state = if let Some(consent_state) = consent_state {
-            Some(consent_state)
-        } else {
-            self.community_node_cached_consents
-                .lock()
-                .await
-                .get(node.base_url.as_str())
-                .cloned()
-        };
-        let last_error = if let Some(last_error) = last_error {
-            Some(last_error)
-        } else {
-            self.community_node_last_errors
-                .lock()
-                .await
-                .get(node.base_url.as_str())
-                .cloned()
-        };
-        let retry_after = self
-            .community_node_session_retry_deadlines
-            .lock()
-            .await
-            .get(node.base_url.as_str())
-            .copied()
+        let sessions = self.community_node_sessions.lock().await;
+        let session = sessions.get(node.base_url.as_str());
+        let consent_state =
+            consent_state.or_else(|| session.and_then(|s| s.cached_consent.clone()));
+        let last_error = last_error.or_else(|| session.and_then(|s| s.last_error.clone()));
+        let retry_after = session
+            .map(|s| s.session_retry_deadline)
             .filter(|deadline| *deadline > now);
-        let session_phase = self
-            .community_node_session_phases
-            .lock()
-            .await
-            .get(node.base_url.as_str())
-            .copied()
-            .unwrap_or_else(|| {
-                if auth_state.authenticated
-                    && consent_state
-                        .as_ref()
-                        .is_none_or(|consent| consent.all_required_accepted)
-                    && node.resolved_urls.is_some()
-                {
-                    CommunityNodeSessionPhase::Ready
-                } else {
-                    CommunityNodeSessionPhase::Idle
-                }
-            });
+        let session_phase = session.map(|s| s.session_phase).unwrap_or_else(|| {
+            if auth_state.authenticated
+                && consent_state
+                    .as_ref()
+                    .is_none_or(|consent| consent.all_required_accepted)
+                && node.resolved_urls.is_some()
+            {
+                CommunityNodeSessionPhase::Ready
+            } else {
+                CommunityNodeSessionPhase::Idle
+            }
+        });
+        drop(sessions);
         let current_connectivity_urls = relay_config_from_community_node_config(
             &self.community_node_config.lock().await.clone(),
         )
