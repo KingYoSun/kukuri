@@ -88,7 +88,6 @@ pub struct IrohGossipTransport {
     endpoint: Endpoint,
     gossip: Gossip,
     _router: Option<Router>,
-    _endpoint_publish_task: Option<JoinHandle<()>>,
     discovery: Arc<MemoryLookup>,
     network_config: TransportNetworkConfig,
     configured_seed_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
@@ -120,9 +119,6 @@ pub(crate) use topics::{initial_topic_join_timeout, topic_to_gossip_id};
 
 impl Drop for IrohGossipTransport {
     fn drop(&mut self) {
-        if let Some(task) = self._endpoint_publish_task.take() {
-            task.abort();
-        }
         if let Ok(mut topics) = self.topic_states.try_lock() {
             for (_, state) in topics.drain() {
                 state._receiver_task.abort();

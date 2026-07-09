@@ -6,20 +6,18 @@ use std::time::Duration;
 use anyhow::Result;
 use iroh::Endpoint;
 use iroh::address_lookup::MemoryLookup;
-use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tracing::debug;
 
-use crate::config::{ConnectMode, DhtDiscoveryOptions, TransportRelayConfig};
+use crate::config::{ConnectMode, TransportRelayConfig};
 
 const RELAY_ONLINE_STARTUP_TIMEOUT: Duration = Duration::from_secs(15);
 
 pub async fn prepare_endpoint_for_discovery(
     endpoint: &Endpoint,
     discovery: &Arc<MemoryLookup>,
-    dht_options: &DhtDiscoveryOptions,
     relay_config: &TransportRelayConfig,
-) -> Result<Option<JoinHandle<()>>> {
+) -> Result<()> {
     let relay_backed = relay_config.connect_mode() == ConnectMode::DirectOrRelay;
     if relay_backed {
         let endpoint = endpoint.clone();
@@ -44,8 +42,7 @@ pub async fn prepare_endpoint_for_discovery(
     }
     discovery.add_endpoint_info(endpoint.addr());
 
-    let _ = dht_options;
-    Ok(None)
+    Ok(())
 }
 
 #[cfg(test)]
@@ -58,6 +55,7 @@ mod tests {
     use iroh_mainline_address_lookup::DhtAddressLookup;
     use n0_mainline::{DhtBuilder, Testnet};
 
+    use crate::config::DhtDiscoveryOptions;
     use crate::iroh::bind_endpoint_with_options;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -74,7 +72,7 @@ mod tests {
         let relay_urls = Arc::new(StdRwLock::new(
             relay_config.parsed_relay_urls().expect("relay urls"),
         ));
-        let (endpoint, _discovery, _publish_task) = bind_endpoint_with_options(
+        let (endpoint, _discovery) = bind_endpoint_with_options(
             std::net::SocketAddr::V4(std::net::SocketAddrV4::new(
                 std::net::Ipv4Addr::LOCALHOST,
                 0,

@@ -19,7 +19,6 @@ use kukuri_transport::{
     build_endpoint_builder, prepare_endpoint_for_discovery, sync_endpoint_relay_config,
 };
 use serde::{Deserialize, Serialize};
-use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tracing::warn;
 
@@ -146,7 +145,6 @@ pub struct IrohDocsNode {
     router: Arc<Router>,
     docs: DocsApi,
     blobs: BlobStore,
-    endpoint_publish_task: Option<JoinHandle<()>>,
     shutdown_started: AtomicBool,
 }
 
@@ -257,9 +255,7 @@ impl IrohDocsNode {
         if let Some(root) = root.as_deref() {
             save_endpoint_secret(root, endpoint.secret_key())?;
         }
-        let endpoint_publish_task =
-            prepare_endpoint_for_discovery(&endpoint, &discovery, &dht_options, &relay_config)
-                .await?;
+        prepare_endpoint_for_discovery(&endpoint, &discovery, &relay_config).await?;
         let gossip = Gossip::builder().spawn(endpoint.clone());
         let docs = match spawn_docs(
             root.as_deref(),
@@ -286,9 +282,6 @@ impl IrohDocsNode {
                 match error {
                     Ok(docs) => docs,
                     Err(error) => {
-                        if let Some(task) = &endpoint_publish_task {
-                            task.abort();
-                        }
                         endpoint.close().await;
                         let _ = blobs.shutdown().await;
                         return Err(error);
@@ -313,7 +306,6 @@ impl IrohDocsNode {
             router: Arc::new(router),
             docs: docs.api().clone(),
             blobs,
-            endpoint_publish_task,
             shutdown_started: AtomicBool::new(false),
         });
         if relay_config.connect_mode() == ConnectMode::DirectOrRelay {
@@ -413,9 +405,6 @@ impl IrohDocsNode {
         if self.shutdown_started.swap(true, Ordering::AcqRel) {
             return Ok(());
         }
-        if let Some(task) = &self.endpoint_publish_task {
-            task.abort();
-        }
         match timeout(router_shutdown_timeout(), self.router.shutdown()).await {
             Ok(Ok(())) => {}
             Ok(Err(error)) => {
@@ -436,9 +425,6 @@ impl IrohDocsNode {
 
 impl Drop for IrohDocsNode {
     fn drop(&mut self) {
-        if let Some(task) = self.endpoint_publish_task.take() {
-            task.abort();
-        }
         if self.shutdown_started.swap(true, Ordering::AcqRel) {
             return;
         }
