@@ -732,6 +732,11 @@ async fn runtime_starts_with_unreachable_community_node_and_recovers_via_manual_
         kukuri_app_api::DeliveryState::Offline | kukuri_app_api::DeliveryState::DurableRecovering
     ));
 
+    // WP-Q2: 到達不能ノードへの registration refresh 試行(→ last_error 記録)は
+    // スケジューラ tick が駆動し、getter は読み取り専用。
+    runtime_a
+        .run_community_node_session_maintenance_once()
+        .await;
     let community_statuses = runtime_a
         .get_community_node_statuses()
         .await

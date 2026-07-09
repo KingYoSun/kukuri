@@ -5,24 +5,15 @@ impl DesktopRuntime {
         Ok(self.community_node_config.lock().await.clone())
     }
 
+    /// 読み取り専用。CN セッションの establish/refresh・self-heal は
+    /// セッション維持スケジューラ(`run_community_node_session_maintenance_once`)が
+    /// 担い、getter は副作用(registration refresh のネットワーク I/O)を持たない(WP-Q2)。
+    /// config は tick 側が resolved_urls を書き戻すため、ここで読んだ node が最新。
     pub async fn get_community_node_statuses(&self) -> Result<Vec<CommunityNodeNodeStatus>> {
         let config = self.community_node_config.lock().await.clone();
         let mut statuses = Vec::with_capacity(config.nodes.len());
         for node in config.nodes {
-            let base_url = node.base_url.clone();
-            let _ = self
-                .refresh_community_node_registration_if_due(base_url.as_str())
-                .await;
-            let current_node = self
-                .community_node_config
-                .lock()
-                .await
-                .nodes
-                .iter()
-                .find(|candidate| candidate.base_url == base_url)
-                .cloned()
-                .unwrap_or(node);
-            statuses.push(self.community_node_status(current_node, None, None).await?);
+            statuses.push(self.community_node_status(node, None, None).await?);
         }
         Ok(statuses)
     }
@@ -71,6 +62,10 @@ impl DesktopRuntime {
         *self.community_node_reconnect_state.lock().await = Default::default();
         self.apply_runtime_connectivity_assist().await?;
         self.apply_effective_seed_peers().await?;
+        // getter を読取専用化した(WP-Q2)ため、config 変更直後の登録はここで 1 tick 即時実行する。
+        // これが無いと新規 auto_approve ノードの bootstrap がスケジューラ次 tick(最大 15 秒)まで
+        // 遅延する。tick は deadline ゲート済みの冪等設計で、直後の scheduler tick と二重でも安全。
+        self.run_community_node_session_maintenance_once().await;
         Ok(next_config)
     }
 

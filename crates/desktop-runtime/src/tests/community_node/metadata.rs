@@ -60,6 +60,8 @@ async fn community_node_status_refresh_updates_bootstrap_seed_peers() {
         }],
     };
 
+    // WP-Q2: registration refresh はスケジューラ tick が駆動し、getter は読み取り専用。
+    runtime.run_community_node_session_maintenance_once().await;
     let statuses = runtime
         .get_community_node_statuses()
         .await
@@ -544,6 +546,8 @@ async fn community_node_status_retries_bootstrap_metadata_when_seed_peers_are_em
         }],
     };
 
+    // WP-Q2: metadata refresh はスケジューラ tick が駆動し、getter は読み取り専用。
+    runtime.run_community_node_session_maintenance_once().await;
     let initial_statuses = runtime
         .get_community_node_statuses()
         .await
@@ -574,6 +578,7 @@ async fn community_node_status_retries_bootstrap_metadata_when_seed_peers_are_em
         .await
         .insert(base_url.clone(), Utc::now().timestamp() - 1);
 
+    runtime.run_community_node_session_maintenance_once().await;
     let refreshed_statuses = runtime
         .get_community_node_statuses()
         .await

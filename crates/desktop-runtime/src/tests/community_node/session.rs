@@ -1,7 +1,7 @@
 use super::super::*;
 
 #[tokio::test]
-async fn auto_approve_node_bootstraps_session_on_status_refresh() {
+async fn auto_approve_node_bootstraps_session_on_maintenance_tick() {
     let _serial = acquire_async_test_lock().await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-auto-approve-session.db");
@@ -61,6 +61,8 @@ async fn auto_approve_node_bootstraps_session_on_status_refresh() {
         }],
     };
 
+    // WP-Q2: セッション確立はスケジューラ tick が駆動し、getter は読み取り専用。
+    runtime.run_community_node_session_maintenance_once().await;
     let statuses = runtime
         .get_community_node_statuses()
         .await
@@ -93,6 +95,99 @@ async fn auto_approve_node_bootstraps_session_on_status_refresh() {
             .expect("resolved urls")
             .seed_peers,
         vec![seed_peer]
+    );
+
+    runtime.shutdown().await;
+    server.abort();
+}
+
+#[tokio::test]
+async fn status_getter_is_read_only_and_does_not_bootstrap_session() {
+    // WP-Q2: get_community_node_statuses は読み取り専用。セッションの establish/refresh は
+    // セッション維持スケジューラ(run_community_node_session_maintenance_once)が担い、
+    // getter 単独では refresh 副作用(challenge/verify/heartbeat/bootstrap)を持たない。
+    let _serial = acquire_async_test_lock().await;
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("community-getter-read-only.db");
+    let runtime = DesktopRuntime::new_with_config_and_identity(
+        &db_path,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("runtime");
+
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind listener");
+    let base_url = format!("http://{}", listener.local_addr().expect("local addr"));
+    let state = Arc::new(MockManagedCommunityNodeState {
+        base_url: base_url.clone(),
+        seed_peers: vec![],
+        consent_accepted: Arc::new(AtomicBool::new(false)),
+        current_token: Arc::new(Mutex::new(String::new())),
+        challenge_hits: Arc::new(AtomicUsize::new(0)),
+        verify_hits: Arc::new(AtomicUsize::new(0)),
+        consent_status_hits: Arc::new(AtomicUsize::new(0)),
+        consent_accept_hits: Arc::new(AtomicUsize::new(0)),
+        heartbeat_hits: Arc::new(AtomicUsize::new(0)),
+        bootstrap_hits: Arc::new(AtomicUsize::new(0)),
+        simulate_pending_update: Arc::new(AtomicBool::new(false)),
+    });
+    let app = Router::new()
+        .route("/v1/auth/challenge", post(mock_managed_auth_challenge))
+        .route("/v1/auth/verify", post(mock_managed_auth_verify))
+        .route("/v1/consents/status", get(mock_managed_consent_status))
+        .route("/v1/consents", post(mock_managed_accept_consents))
+        .route(
+            "/v1/bootstrap/heartbeat",
+            post(mock_managed_bootstrap_heartbeat),
+        )
+        .route("/v1/bootstrap/nodes", get(mock_managed_bootstrap_nodes))
+        .with_state(state.clone());
+    let server = tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+
+    *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        nodes: vec![CommunityNodeNodeConfig {
+            base_url: base_url.clone(),
+            auto_approve: true,
+            resolved_urls: Some(
+                CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
+                    .expect("resolved urls"),
+            ),
+        }],
+    };
+
+    // getter 単独では auto_approve でもセッションを bootstrap しない。
+    let statuses = runtime
+        .get_community_node_statuses()
+        .await
+        .expect("community node statuses");
+    assert_eq!(state.challenge_hits.load(Ordering::SeqCst), 0);
+    assert_eq!(state.verify_hits.load(Ordering::SeqCst), 0);
+    assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 0);
+    assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 0);
+    assert_eq!(statuses.len(), 1);
+    assert_eq!(
+        statuses[0].session_phase,
+        crate::CommunityNodeSessionPhase::Idle
+    );
+
+    // スケジューラ tick を回すとセッションが確立する。
+    runtime.run_community_node_session_maintenance_once().await;
+    let statuses = runtime
+        .get_community_node_statuses()
+        .await
+        .expect("community node statuses after maintenance tick");
+    assert_eq!(state.challenge_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(state.verify_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        statuses[0].session_phase,
+        crate::CommunityNodeSessionPhase::Ready
     );
 
     runtime.shutdown().await;
@@ -170,6 +265,8 @@ async fn near_expiry_token_triggers_proactive_community_node_reauthentication() 
         }],
     };
 
+    // WP-Q2: 近接失効トークンの proactive 再認証はスケジューラ tick が駆動する。
+    runtime.run_community_node_session_maintenance_once().await;
     let statuses = runtime
         .get_community_node_statuses()
         .await
@@ -265,6 +362,8 @@ async fn consent_required_node_without_auto_approve_stays_pending() {
         }],
     };
 
+    // WP-Q2: consent 確認を伴う registration refresh もスケジューラ tick が駆動する。
+    runtime.run_community_node_session_maintenance_once().await;
     let statuses = runtime
         .get_community_node_statuses()
         .await
@@ -445,6 +544,8 @@ async fn auto_approve_node_does_not_silently_reaccept_policy_update() {
         }],
     };
 
+    // WP-Q2: auto_approve の consent 判定もスケジューラ tick が駆動する。
+    runtime.run_community_node_session_maintenance_once().await;
     let statuses = runtime
         .get_community_node_statuses()
         .await
