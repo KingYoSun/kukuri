@@ -9,13 +9,18 @@ impl DesktopRuntime {
         &self,
         request: NotificationIdRequest,
     ) -> Result<NotificationStatusView> {
-        self.app_service
+        let status = self
+            .app_service
             .mark_notification_read(request.notification_id.as_str())
-            .await
+            .await?;
+        self.emit_event(RuntimeEvent::NotificationStatusChanged);
+        Ok(status)
     }
 
     pub async fn mark_all_notifications_read(&self) -> Result<NotificationStatusView> {
-        self.app_service.mark_all_notifications_read().await
+        let status = self.app_service.mark_all_notifications_read().await?;
+        self.emit_event(RuntimeEvent::NotificationStatusChanged);
+        Ok(status)
     }
 
     pub async fn get_notification_status(&self) -> Result<NotificationStatusView> {

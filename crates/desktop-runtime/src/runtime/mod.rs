@@ -64,6 +64,12 @@ pub(crate) const PRIVATE_CHANNEL_CAPABILITIES_KEY: &str = "registry";
 pub(crate) const GOSSIP_SUBSCRIPTION_STATE_PURPOSE: &str = "gossip-subscription-state";
 pub(crate) const GOSSIP_SUBSCRIPTION_STATE_KEY: &str = "registry";
 
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum RuntimeEvent {
+    NotificationStatusChanged,
+}
+
 pub struct DesktopRuntime {
     pub(crate) app_service: AppService,
     pub(crate) author_keys: Arc<KukuriKeys>,
@@ -86,6 +92,7 @@ pub struct DesktopRuntime {
         Arc<Mutex<Option<crate::community_node::EffectiveSeedPeerApplyState>>>,
     pub(crate) runtime_connectivity_apply_version: Arc<AtomicU64>,
     pub(crate) effective_seed_peer_apply_version: Arc<AtomicU64>,
+    event_sender: tokio::sync::broadcast::Sender<RuntimeEvent>,
 }
 
 fn load_private_channel_capabilities(
@@ -277,6 +284,18 @@ impl DesktopRuntime {
         app_service.warm_social_graph().await?;
         app_service.resume_direct_message_state().await?;
 
+        let (event_sender, _) = tokio::sync::broadcast::channel(64);
+        {
+            let notify = app_service.notification_inserted_notify();
+            let sender = event_sender.clone();
+            tokio::spawn(async move {
+                loop {
+                    notify.notified().await;
+                    let _ = sender.send(RuntimeEvent::NotificationStatusChanged);
+                }
+            });
+        }
+
         Ok(Self {
             app_service,
             author_keys,
@@ -303,6 +322,7 @@ impl DesktopRuntime {
             ))),
             runtime_connectivity_apply_version: Arc::new(AtomicU64::new(0)),
             effective_seed_peer_apply_version: Arc::new(AtomicU64::new(0)),
+            event_sender,
         })
     }
 
@@ -326,6 +346,14 @@ impl DesktopRuntime {
 
     pub fn db_path(&self) -> &Path {
         &self.db_path
+    }
+
+    pub fn subscribe_events(&self) -> tokio::sync::broadcast::Receiver<RuntimeEvent> {
+        self.event_sender.subscribe()
+    }
+
+    pub(crate) fn emit_event(&self, event: RuntimeEvent) {
+        let _ = self.event_sender.send(event);
     }
 
     pub(crate) async fn persist_gossip_subscription_state_from_app(&self) -> Result<()> {

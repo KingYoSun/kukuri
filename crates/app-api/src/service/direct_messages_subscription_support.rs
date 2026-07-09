@@ -21,6 +21,7 @@ impl AppService {
             Arc::clone(&self.keys),
             Arc::clone(&self.last_sync_ts),
             Arc::clone(&self.subscription_registry.direct_message_subscriptions),
+            Arc::clone(&self.notification_inserted_notify),
             self.current_author_pubkey().as_str(),
         )
         .await
@@ -274,6 +275,7 @@ impl AppService {
             Arc::clone(&self.transport),
             Arc::clone(&self.keys),
             Arc::clone(&self.last_sync_ts),
+            Arc::clone(&self.notification_inserted_notify),
             self.current_author_pubkey().as_str(),
             peer_pubkey.as_str(),
         )
@@ -302,6 +304,7 @@ impl AppService {
             Arc::clone(&self.transport),
             Arc::clone(&self.keys),
             Arc::clone(&self.last_sync_ts),
+            Arc::clone(&self.notification_inserted_notify),
             self.current_author_pubkey().as_str(),
             peer_pubkey.as_str(),
         )
@@ -375,6 +378,7 @@ impl AppService {
         transport: Arc<dyn Transport>,
         keys: Arc<KukuriKeys>,
         last_sync: Arc<Mutex<Option<i64>>>,
+        notification_inserted: Arc<tokio::sync::Notify>,
         local_author_pubkey: &str,
         peer_pubkey: &str,
     ) -> Result<()> {
@@ -451,6 +455,7 @@ impl AppService {
                         ).await {
                             Ok(true) => {
                                 *last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                                notification_inserted.notify_waiters();
                             }
                             Ok(false) => {}
                             Err(error) => {

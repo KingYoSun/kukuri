@@ -45,4 +45,4 @@ pub use requests::{
     SetMyProfileRequest, SetTopicGossipEnabledRequest, ToggleReactionRequest,
     UnsubscribeTopicRequest, UpdateGameRoomRequest, UpdateMetaverseRoomRequest,
 };
-pub use runtime::DesktopRuntime;
+pub use runtime::{DesktopRuntime, RuntimeEvent};

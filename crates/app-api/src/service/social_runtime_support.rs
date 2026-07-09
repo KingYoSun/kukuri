@@ -158,6 +158,7 @@ impl AppService {
         let transport = Arc::clone(&self.transport);
         let keys = Arc::clone(&self.keys);
         let last_sync = Arc::clone(&self.last_sync_ts);
+        let notification_inserted = Arc::clone(&self.notification_inserted_notify);
         let direct_message_subscriptions =
             Arc::clone(&self.subscription_registry.direct_message_subscriptions);
         let author_key = normalize_author_pubkey(author_pubkey)?;
@@ -205,6 +206,7 @@ impl AppService {
                         Arc::clone(&keys),
                         Arc::clone(&last_sync),
                         Arc::clone(&direct_message_subscriptions),
+                        Arc::clone(&notification_inserted),
                         local_author_pubkey.clone(),
                         author_key_for_task.clone(),
                     );
@@ -226,6 +228,7 @@ impl AppService {
             let recovery_transport = Arc::clone(&transport);
             let recovery_keys = Arc::clone(&keys);
             let recovery_last_sync = Arc::clone(&last_sync);
+            let recovery_notification_inserted = Arc::clone(&notification_inserted);
             let recovery_direct_message_subscriptions = Arc::clone(&direct_message_subscriptions);
             let recovery_local_author_pubkey = local_author_pubkey.clone();
             let recovery_author_pubkey = author_key_for_task.clone();
@@ -253,6 +256,7 @@ impl AppService {
                             Arc::clone(&recovery_keys),
                             Arc::clone(&recovery_last_sync),
                             Arc::clone(&recovery_direct_message_subscriptions),
+                            Arc::clone(&recovery_notification_inserted),
                             recovery_local_author_pubkey,
                             recovery_author_pubkey,
                         );
@@ -309,6 +313,7 @@ impl AppService {
                             ).await {
                                 Ok(true) => {
                                     *last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                                    notification_inserted.notify_waiters();
                                 }
                                 Ok(false) => {}
                                 Err(error) => {
@@ -340,6 +345,7 @@ impl AppService {
                                 Arc::clone(&keys),
                                 Arc::clone(&last_sync),
                                 Arc::clone(&direct_message_subscriptions),
+                                Arc::clone(&notification_inserted),
                                 local_author_pubkey.clone(),
                                 author_key_for_task.clone(),
                             );

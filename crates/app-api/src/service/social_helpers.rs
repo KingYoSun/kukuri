@@ -50,6 +50,7 @@ pub(crate) fn schedule_direct_message_reconcile_with_services(
     keys: Arc<KukuriKeys>,
     last_sync: Arc<Mutex<Option<i64>>>,
     direct_message_subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
+    notification_inserted: Arc<tokio::sync::Notify>,
     local_author_pubkey: String,
     author_pubkey: String,
 ) {
@@ -63,6 +64,7 @@ pub(crate) fn schedule_direct_message_reconcile_with_services(
             keys,
             last_sync,
             direct_message_subscriptions,
+            notification_inserted,
             local_author_pubkey.as_str(),
         )
         .await
@@ -86,6 +88,7 @@ pub(crate) async fn reconcile_direct_message_subscriptions_with_services(
     keys: Arc<KukuriKeys>,
     last_sync: Arc<Mutex<Option<i64>>>,
     direct_message_subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
+    notification_inserted: Arc<tokio::sync::Notify>,
     local_author_pubkey: &str,
 ) -> Result<()> {
     let desired_peers =
@@ -119,6 +122,7 @@ pub(crate) async fn reconcile_direct_message_subscriptions_with_services(
             Arc::clone(&transport),
             Arc::clone(&keys),
             Arc::clone(&last_sync),
+            Arc::clone(&notification_inserted),
             local_author_pubkey,
             peer_pubkey.as_str(),
         )

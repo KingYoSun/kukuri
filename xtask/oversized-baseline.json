@@ -14,11 +14,11 @@
     },
     {
       "lines": 1087,
-      "path": "crates/harness/src/scenarios/community_node.rs"
+      "path": "crates/app-api/src/service/private_channels_support.rs"
     },
     {
-      "lines": 1085,
-      "path": "crates/app-api/src/service/private_channels_support.rs"
+      "lines": 1087,
+      "path": "crates/harness/src/scenarios/community_node.rs"
     },
     {
       "lines": 1079,

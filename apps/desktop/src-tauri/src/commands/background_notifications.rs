@@ -20,7 +20,7 @@ use tracing::{debug, warn};
 
 use crate::{commands::os_notification::show_platform_notification, state::DesktopState};
 
-const POLL_INTERVAL: Duration = Duration::from_secs(15);
+const FALLBACK_POLL_INTERVAL: Duration = Duration::from_secs(60);
 
 /// User-facing OS notification preferences. Mirrors the `OsNotificationSettings`
 /// type the frontend persists in `localStorage` (camelCase keys on the wire).
@@ -123,11 +123,26 @@ pub fn set_os_notification_settings(
     state.replace_settings(settings);
 }
 
-/// Start the background poll loop. Call once after the runtime is ready.
+/// Start the background notification dispatcher. Subscribes to runtime events
+/// for instant dispatch and falls back to a 60-second poll for resilience.
 pub fn spawn(app: AppHandle) {
+    if let Some(state) = app.try_state::<DesktopState>() {
+        let mut rx = state.runtime.subscribe_events();
+        let event_app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            while let Ok(event) = rx.recv().await {
+                if matches!(event, kukuri_desktop_runtime::RuntimeEvent::NotificationStatusChanged) {
+                    if let Err(error) = poll_once(&event_app).await {
+                        debug!(%error, "event-driven notification poll skipped");
+                    }
+                }
+            }
+        });
+    }
+
     tauri::async_runtime::spawn(async move {
         loop {
-            tokio::time::sleep(POLL_INTERVAL).await;
+            tokio::time::sleep(FALLBACK_POLL_INTERVAL).await;
             if let Err(error) = poll_once(&app).await {
                 debug!(%error, "background notification poll skipped");
             }

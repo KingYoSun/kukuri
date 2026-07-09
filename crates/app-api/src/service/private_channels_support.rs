@@ -632,6 +632,7 @@ impl AppService {
         let transport = Arc::clone(&self.transport);
         let metaverse_room_events = Arc::clone(&self.metaverse_room_events);
         let last_sync = Arc::clone(&self.last_sync_ts);
+        let notification_inserted = Arc::clone(&self.notification_inserted_notify);
         let public_topic_delivery = Arc::clone(&self.public_topic_delivery);
         let topic = topic_id.to_string();
         let storage_channel_id = channel_storage_id(channel_id.as_ref());
@@ -727,6 +728,7 @@ impl AppService {
                             ).await {
                                 Ok(true) => {
                                     *last_sync.lock().await = Some(now);
+                                    notification_inserted.notify_waiters();
                                 }
                                 Ok(false) => {}
                                 Err(error) => {
