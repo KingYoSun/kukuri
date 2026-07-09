@@ -2,6 +2,26 @@ use super::*;
 
 pub(crate) static STORE_MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
+/// 起動時(SQLite 接続 / migration 適用)の失敗を型で区別するエラー。
+///
+/// desktop の起動 Failed 画面は、この variant を downcast して DatabaseOpen /
+/// DatabaseMigration に分類する(WP-Q2、従来のエラー文字列 contains 判定を置換)。
+/// `Display`(および anyhow の `{:#}`)は従来と同じ message + source を出すため、
+/// 表示・ログ・文字列アサーションは不変。
+#[derive(Debug, thiserror::Error)]
+pub enum StoreStartupError {
+    /// SQLite データベースへの接続 / オープン失敗。
+    #[error("failed to connect sqlite database: {path}")]
+    Open {
+        path: String,
+        #[source]
+        source: sqlx::Error,
+    },
+    /// embedded migration の適用失敗(checksum 不一致・未知世代など)。
+    #[error("failed to run sqlite migrations")]
+    Migration(#[source] sqlx::migrate::MigrateError),
+}
+
 impl SqliteStore {
     pub async fn connect(database_url: &str) -> Result<Self> {
         let pool = sqlite_pool_options(
@@ -14,7 +34,10 @@ impl SqliteStore {
         )
         .connect(database_url)
         .await
-        .with_context(|| format!("failed to connect sqlite database: {database_url}"))?;
+        .map_err(|source| StoreStartupError::Open {
+            path: database_url.to_string(),
+            source,
+        })?;
 
         run_store_migrations(&pool).await?;
 
@@ -28,7 +51,10 @@ impl SqliteStore {
         let pool = sqlite_pool_options(4, true)
             .connect_with(options)
             .await
-            .with_context(|| format!("failed to connect sqlite database: {}", path.display()))?;
+            .map_err(|source| StoreStartupError::Open {
+                path: path.display().to_string(),
+                source,
+            })?;
 
         run_store_migrations(&pool).await?;
 
@@ -74,6 +100,9 @@ fn sqlite_pool_options(max_connections: u32, enable_wal: bool) -> SqlitePoolOpti
 // DatabaseMigration として通知される。かつての接続毎 CRLF 自己修復(#211)は
 // WP-C6 で撤去済み — 根本原因は .gitattributes (*.sql text eol=lf、#211 同梱)で解消済み。
 async fn run_store_migrations(pool: &Pool<Sqlite>) -> Result<()> {
-    STORE_MIGRATOR.run(pool).await?;
+    STORE_MIGRATOR
+        .run(pool)
+        .await
+        .map_err(StoreStartupError::Migration)?;
     Ok(())
 }

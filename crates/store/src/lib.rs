@@ -16,7 +16,7 @@ pub use models::{
     LiveSessionProjectionRow, MutedAuthorRow, NotificationKind, NotificationRow,
     ObjectProjectionRow, Page, ReactionProjectionRow, TimelineCursor,
 };
-pub use sqlite::SqliteStore;
+pub use sqlite::{SqliteStore, StoreStartupError};
 pub use traits::{
     BlobCacheStore, DirectMessageStore, LiveGameProjectionStore, NotificationStore,
     ObjectProjectionStore, ProjectionStore, ReactionBookmarkStore, SocialProjectionStore, Store,
