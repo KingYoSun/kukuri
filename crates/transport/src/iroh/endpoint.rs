@@ -17,7 +17,7 @@ impl IrohGossipTransport {
     ) -> Result<Self> {
         let relay_config = relay_config.normalized();
         let relay_urls = Arc::new(StdRwLock::new(relay_config.parsed_relay_urls()?));
-        let (endpoint, discovery, publish_task) = bind_endpoint_with_options(
+        let (endpoint, discovery) = bind_endpoint_with_options(
             network_config.bind_addr,
             &dht_options,
             &relay_config,
@@ -35,7 +35,6 @@ impl IrohGossipTransport {
             endpoint,
             gossip,
             _router: Some(router),
-            _endpoint_publish_task: publish_task,
             discovery,
             network_config,
             configured_seed_peers: Arc::new(Mutex::new(BTreeMap::new())),
@@ -73,7 +72,6 @@ impl IrohGossipTransport {
             endpoint,
             gossip,
             _router: None,
-            _endpoint_publish_task: None,
             discovery,
             network_config,
             configured_seed_peers: Arc::new(Mutex::new(BTreeMap::new())),
@@ -105,7 +103,7 @@ pub(crate) async fn bind_endpoint_with_options(
     relay_config: &TransportRelayConfig,
     relay_urls: Arc<StdRwLock<Vec<RelayUrl>>>,
     secret_key: Option<SecretKey>,
-) -> Result<(Endpoint, Arc<MemoryLookup>, Option<JoinHandle<()>>)> {
+) -> Result<(Endpoint, Arc<MemoryLookup>)> {
     let discovery = Arc::new(MemoryLookup::new());
     let mut builder = build_endpoint_builder(
         EndpointBuilder::new(presets::Minimal).relay_mode(relay_config.relay_mode()?),
@@ -125,9 +123,8 @@ pub(crate) async fn bind_endpoint_with_options(
         .bind()
         .await
         .context("failed to bind iroh endpoint")?;
-    let publish_task =
-        prepare_endpoint_for_discovery(&endpoint, &discovery, dht_options, relay_config).await?;
-    Ok((endpoint, discovery, publish_task))
+    prepare_endpoint_for_discovery(&endpoint, &discovery, relay_config).await?;
+    Ok((endpoint, discovery))
 }
 fn apply_bind(builder: EndpointBuilder, bind_addr: SocketAddr) -> Result<EndpointBuilder> {
     match bind_addr {
