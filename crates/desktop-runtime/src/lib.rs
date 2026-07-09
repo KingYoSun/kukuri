@@ -22,6 +22,8 @@ pub use community_node::{
     SubmitCommunityNodeReportStatus,
 };
 pub use discovery::{DiscoveryConfig, SetDiscoverySeedsRequest};
+// 起動エラーの typed 分類(WP-Q2)。src-tauri は downcast で DatabaseOpen/Migration を判定する。
+pub use kukuri_store::StoreStartupError;
 pub use paths::resolve_db_path_from_env;
 pub use requests::{
     AuthorRequest, BookmarkCustomReactionRequest, BookmarkPostRequest, CreateAttachmentRequest,

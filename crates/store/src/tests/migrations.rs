@@ -65,6 +65,83 @@ async fn connect_file_fails_loudly_on_line_ending_variant_migration_checksums() 
 }
 
 #[tokio::test]
+async fn connect_file_migration_failure_is_typed_as_migration_error() {
+    // WP-Q2: 起動 Failed 画面のエラー分類を文字列 contains から typed downcast に
+    // 移すため、migration 失敗が StoreStartupError::Migration として downcast できることを固定する。
+    use crate::StoreStartupError;
+
+    let tempdir = tempdir().expect("tempdir");
+    let db_path = tempdir.path().join("store.db");
+    let store = SqliteStore::connect_file(&db_path)
+        .await
+        .expect("initialize sqlite store");
+    store.close().await;
+
+    // 適用済み migration の checksum を書き換えて version mismatch を誘発する。
+    let database_url = format!("sqlite://{}", db_path.display());
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect(&database_url)
+        .await
+        .expect("reopen sqlite db");
+    let version = 20260319000000_i64;
+    let migration = STORE_MIGRATOR
+        .iter()
+        .find(|migration| {
+            migration.version == version && !migration.migration_type.is_down_migration()
+        })
+        .expect("embedded store migration");
+    sqlx::query("UPDATE _sqlx_migrations SET checksum = ?1 WHERE version = ?2")
+        .bind(crlf_variant_checksum(migration.sql.as_ref()))
+        .bind(version)
+        .execute(&pool)
+        .await
+        .expect("rewrite migration checksum");
+    pool.close().await;
+
+    let error = match SqliteStore::connect_file(&db_path).await {
+        Ok(_) => panic!("checksum mismatch must fail"),
+        Err(error) => error,
+    };
+    let typed = error
+        .downcast_ref::<StoreStartupError>()
+        .expect("startup error must be typed as StoreStartupError");
+    assert!(
+        matches!(typed, StoreStartupError::Migration(_)),
+        "expected Migration variant, got {typed:?}"
+    );
+    // message は従来と同一(表示・ログ・既存文字列アサーションは不変)。
+    assert!(
+        format!("{error:#}").contains("was previously applied but has been modified"),
+        "migration source message must survive typing: {error:#}"
+    );
+}
+
+#[tokio::test]
+async fn connect_file_open_failure_is_typed_as_open_error() {
+    // 存在しない親ディレクトリ配下のパスは create_if_missing でも作成できず接続失敗する。
+    use crate::StoreStartupError;
+
+    let tempdir = tempdir().expect("tempdir");
+    let db_path = tempdir.path().join("missing-parent").join("store.db");
+    let error = match SqliteStore::connect_file(&db_path).await {
+        Ok(_) => panic!("connecting under a missing parent dir must fail"),
+        Err(error) => error,
+    };
+    let typed = error
+        .downcast_ref::<StoreStartupError>()
+        .expect("startup error must be typed as StoreStartupError");
+    assert!(
+        matches!(typed, StoreStartupError::Open { .. }),
+        "expected Open variant, got {typed:?}"
+    );
+    assert!(
+        format!("{error:#}").contains("failed to connect sqlite database"),
+        "open error message must survive typing: {error:#}"
+    );
+}
+
+#[tokio::test]
 async fn connect_file_applies_unfiltered_projection_indexes() {
     let tempdir = tempdir().expect("tempdir");
     let db_path = tempdir.path().join("store.db");

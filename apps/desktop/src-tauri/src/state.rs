@@ -4,7 +4,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use kukuri_desktop_runtime::{DesktopRuntime, resolve_db_path_from_env};
+use kukuri_desktop_runtime::{DesktopRuntime, StoreStartupError, resolve_db_path_from_env};
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
@@ -51,6 +51,39 @@ pub(crate) enum DesktopStartupErrorKind {
     Unknown,
 }
 
+/// 起動失敗の内部表現。分類済みの `kind` と表示用 `message` を持ち、`build_desktop_state`
+/// の Err として src-tauri 内を流れる。`kind` は anyhow エラーの typed downcast で
+/// 決まる(WP-Q2、従来の文字列 contains 判定を置換)。
+#[derive(Debug)]
+pub(crate) struct StartupError {
+    pub(crate) kind: DesktopStartupErrorKind,
+    pub(crate) message: String,
+}
+
+impl StartupError {
+    /// 分類できない起動失敗(db パス解決失敗など)。
+    fn unknown(message: String) -> Self {
+        Self {
+            kind: DesktopStartupErrorKind::Unknown,
+            message,
+        }
+    }
+
+    /// runtime 構築時の anyhow エラーを typed 分類して包む。
+    fn from_runtime_error(error: anyhow::Error) -> Self {
+        Self {
+            kind: classify_startup_error(&error),
+            message: error_message(error),
+        }
+    }
+}
+
+impl std::fmt::Display for StartupError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
 pub(crate) struct DesktopStartupState {
     status: Mutex<DesktopStartupStatus>,
 }
@@ -74,7 +107,7 @@ impl DesktopStartupState {
         }
     }
 
-    pub(crate) fn failed(error: String, db_path: Option<PathBuf>) -> Self {
+    pub(crate) fn failed(error: StartupError, db_path: Option<PathBuf>) -> Self {
         Self {
             status: Mutex::new(failed_status(error, db_path)),
         }
@@ -92,12 +125,12 @@ impl DesktopStartupState {
     }
 }
 
-pub(crate) fn failed_status(error: String, db_path: Option<PathBuf>) -> DesktopStartupStatus {
+pub(crate) fn failed_status(error: StartupError, db_path: Option<PathBuf>) -> DesktopStartupStatus {
     DesktopStartupStatus::Failed {
         error: DesktopStartupErrorView {
-            kind: classify_startup_error(&error),
+            kind: error.kind,
             message: "kukuri could not open the local app database.".to_string(),
-            detail: error,
+            detail: error.message,
             db_path: db_path.map(|path| path.display().to_string()),
         },
     }
@@ -148,10 +181,12 @@ pub(crate) fn resolve_db_path(app_handle: &tauri::AppHandle) -> Result<PathBuf, 
     resolve_db_path_from_env(&app_data_dir).map_err(error_message)
 }
 
-pub(crate) fn build_desktop_state(app_handle: &tauri::AppHandle) -> Result<DesktopState, String> {
-    let db_path = resolve_db_path(app_handle)?;
-    let runtime =
-        tauri::async_runtime::block_on(DesktopRuntime::from_env(db_path)).map_err(error_message)?;
+pub(crate) fn build_desktop_state(
+    app_handle: &tauri::AppHandle,
+) -> Result<DesktopState, StartupError> {
+    let db_path = resolve_db_path(app_handle).map_err(StartupError::unknown)?;
+    let runtime = tauri::async_runtime::block_on(DesktopRuntime::from_env(db_path))
+        .map_err(StartupError::from_runtime_error)?;
     let runtime = Arc::new(runtime);
     // トレイ常駐中はフロントのポーリング(hidden で停止)が CN セッションを維持できないため、
     // runtime 常駐のセッション維持スケジューラをここで起動する(停止は shutdown / プロセス終了)。
@@ -198,18 +233,16 @@ pub(crate) fn current_unix_seconds() -> i64 {
         .unwrap_or(0)
 }
 
-fn classify_startup_error(error: &str) -> DesktopStartupErrorKind {
-    let normalized = error.to_lowercase();
-    if normalized.contains("migration") || normalized.contains("_sqlx_migrations") {
-        return DesktopStartupErrorKind::DatabaseMigration;
+/// 起動時の anyhow エラーを typed に分類する(WP-Q2)。store が返す
+/// `StoreStartupError`(接続 / migration を区別)を downcast で判定する。
+/// anyhow の downcast は `.context()` を跨いでチェーンを辿るため、途中で文脈が
+/// 付与されても root の typed variant に到達する。store 由来でないエラーは Unknown。
+fn classify_startup_error(error: &anyhow::Error) -> DesktopStartupErrorKind {
+    match error.downcast_ref::<StoreStartupError>() {
+        Some(StoreStartupError::Migration(_)) => DesktopStartupErrorKind::DatabaseMigration,
+        Some(StoreStartupError::Open { .. }) => DesktopStartupErrorKind::DatabaseOpen,
+        None => DesktopStartupErrorKind::Unknown,
     }
-    if normalized.contains("failed to connect sqlite database")
-        || normalized.contains("sqlite")
-        || normalized.contains("database")
-    {
-        return DesktopStartupErrorKind::DatabaseOpen;
-    }
-    DesktopStartupErrorKind::Unknown
 }
 
 #[cfg(test)]
@@ -275,5 +308,26 @@ mod tests {
         ));
         state.set_status(DesktopStartupStatus::Ready);
         assert!(matches!(state.status(), DesktopStartupStatus::Ready));
+    }
+
+    // WP-Q2: store 由来でないエラーは、message に "migration"/"sqlite"/"database" を
+    // 含んでいても Unknown に分類される(= 旧実装の文字列判定による誤分類が起きない)。
+    // Open/Migration の typed 分類は store 側の connect_file_*_is_typed_as_* テストが担保。
+    #[test]
+    fn classify_startup_error_ignores_message_strings_for_non_store_errors() {
+        for message in [
+            "some unrelated database noise",
+            "migration-like wording in an unrelated failure",
+            "failed to connect sqlite database (but not a StoreStartupError)",
+        ] {
+            let error = anyhow::anyhow!(message);
+            assert!(
+                matches!(
+                    classify_startup_error(&error),
+                    DesktopStartupErrorKind::Unknown
+                ),
+                "non-store error must classify as Unknown regardless of message: {message}"
+            );
+        }
     }
 }

@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::str::FromStr;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use async_trait::async_trait;
 use kukuri_core::{
     BlobHash, EnvelopeId, FollowEdge, KukuriEnvelope, Profile, ReplicaId, ThreadRef,
@@ -42,6 +42,8 @@ mod live_game;
 mod notifications;
 mod projections;
 mod social;
+
+pub use connection::StoreStartupError;
 
 #[derive(Clone)]
 pub struct SqliteStore {
