@@ -230,14 +230,15 @@ pub(crate) async fn persist_reaction_doc(
         .await
 }
 
-pub(crate) async fn hydrate_author_state_with_services(
-    docs_sync: &dyn DocsSync,
-    store: &dyn Store,
-    projection_store: &dyn ProjectionStore,
+pub(crate) async fn hydrate_author_state(
+    services: &ServiceHandles,
     local_author_pubkey: &str,
     author_pubkey: &str,
     policy: DocFetchPolicy,
 ) -> Result<usize> {
+    let docs_sync = services.docs_sync.as_ref();
+    let store = services.store.as_ref();
+    let projection_store = services.projection_store.as_ref();
     let replica = author_replica_id(author_pubkey);
     let mut count = 0usize;
     if let Some(record) = query_replica_with_fetch_policy(
@@ -320,8 +321,7 @@ pub(crate) async fn hydrate_author_state_with_services(
         }
     }
 
-    rebuild_author_relationships_with_services(store, projection_store, local_author_pubkey)
-        .await?;
+    rebuild_author_relationships(store, projection_store, local_author_pubkey).await?;
     Ok(count)
 }
 

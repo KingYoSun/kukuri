@@ -128,9 +128,9 @@ pub(crate) use attachment_support::{
 };
 pub(crate) use gossip_subscription_support::gossip_disabled_channel_key;
 pub(crate) use hydration_support::{
-    hint_targets_topic, hydrate_subscription_event_with_services,
-    hydrate_subscription_hint_with_services, hydrate_subscription_state_with_services,
-    hydrate_topic_state_with_services, profile_timeline_page, projection_page_needs_hydration,
+    hint_targets_topic, hydrate_subscription_event, hydrate_subscription_hint,
+    hydrate_subscription_state, hydrate_topic_state, profile_timeline_page,
+    projection_page_needs_hydration,
 };
 pub(crate) use metaverse_room_event_support::{
     metaverse_room_event_buffer_key, parse_metaverse_room_event_envelope,
@@ -159,7 +159,7 @@ pub(crate) use object_persistence_support::{
     wait_for_private_channel_epoch_snapshot,
 };
 pub(crate) use profile_docs_support::{
-    fetch_author_envelope_by_id, hydrate_author_state_with_services,
+    fetch_author_envelope_by_id, hydrate_author_state,
     load_custom_reaction_assets_from_author_replica, load_profile_posts_from_author_replica,
     load_profile_reposts_from_author_replica, merge_seed_peers, persist_custom_reaction_asset_doc,
     persist_follow_edge_doc, persist_profile_doc, persist_profile_post_doc,
@@ -177,10 +177,9 @@ pub(crate) use projection_support::{
     profile_timeline_item_is_muted,
 };
 pub(crate) use social_helpers::{
-    current_mutual_direct_message_peers_with_services, rebuild_author_relationships_with_services,
-    reconcile_direct_message_subscriptions_with_services,
-    schedule_direct_message_reconcile_with_services,
-    stop_direct_message_subscription_with_services,
+    current_mutual_direct_message_peers, rebuild_author_relationships,
+    reconcile_direct_message_subscriptions, schedule_direct_message_reconcile,
+    stop_direct_message_subscription,
 };
 pub(crate) use subscription_registry::SubscriptionRegistry;
 pub(crate) use timeline_view_support::{
@@ -530,10 +529,8 @@ impl AppService {
         .await?
         .is_none()
         {
-            let _ = hydrate_topic_state_with_services(
-                self.services.docs_sync.as_ref(),
-                self.services.blob_service.as_ref(),
-                self.services.projection_store.as_ref(),
+            let _ = hydrate_topic_state(
+                &self.services,
                 source_topic_id,
                 DocFetchPolicy::LocalThenRemote,
             )

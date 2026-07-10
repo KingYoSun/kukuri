@@ -1,6 +1,6 @@
 use super::*;
 
-pub(crate) async fn current_mutual_direct_message_peers_with_services(
+pub(crate) async fn current_mutual_direct_message_peers(
     store: &dyn Store,
     local_author_pubkey: &str,
 ) -> Result<BTreeSet<String>> {
@@ -21,10 +21,9 @@ pub(crate) async fn current_mutual_direct_message_peers_with_services(
     Ok(following.intersection(&followed_by).cloned().collect())
 }
 
-pub(crate) async fn stop_direct_message_subscription_with_services(
+pub(crate) async fn stop_direct_message_subscription(
     direct_message_subscriptions: &Mutex<HashMap<String, JoinHandle<()>>>,
-    hint_transport: &dyn HintTransport,
-    keys: &KukuriKeys,
+    services: &ServiceHandles,
     peer_pubkey: &str,
 ) -> Result<()> {
     let peer_pubkey = normalize_author_pubkey(peer_pubkey)?;
@@ -35,19 +34,15 @@ pub(crate) async fn stop_direct_message_subscription_with_services(
     {
         handle.abort();
     }
-    let topic = derive_direct_message_topic(keys, &Pubkey::from(peer_pubkey.as_str()))?;
-    hint_transport.unsubscribe_hints(&topic).await?;
+    let topic =
+        derive_direct_message_topic(services.keys.as_ref(), &Pubkey::from(peer_pubkey.as_str()))?;
+    services.hint_transport.unsubscribe_hints(&topic).await?;
     Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn schedule_direct_message_reconcile_with_services(
-    store: Arc<dyn Store>,
-    projection_store: Arc<dyn ProjectionStore>,
-    blob_service: Arc<dyn BlobService>,
-    hint_transport: Arc<dyn HintTransport>,
-    transport: Arc<dyn Transport>,
-    keys: Arc<KukuriKeys>,
+pub(crate) fn schedule_direct_message_reconcile(
+    services: ServiceHandles,
     last_sync: Arc<Mutex<Option<i64>>>,
     direct_message_subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
     notification_inserted: Arc<tokio::sync::Notify>,
@@ -55,13 +50,8 @@ pub(crate) fn schedule_direct_message_reconcile_with_services(
     author_pubkey: String,
 ) {
     tokio::spawn(async move {
-        if let Err(error) = reconcile_direct_message_subscriptions_with_services(
-            store.as_ref(),
-            projection_store,
-            blob_service,
-            hint_transport,
-            transport,
-            keys,
+        if let Err(error) = reconcile_direct_message_subscriptions(
+            services,
             last_sync,
             direct_message_subscriptions,
             notification_inserted,
@@ -79,20 +69,15 @@ pub(crate) fn schedule_direct_message_reconcile_with_services(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn reconcile_direct_message_subscriptions_with_services(
-    store: &dyn Store,
-    projection_store: Arc<dyn ProjectionStore>,
-    blob_service: Arc<dyn BlobService>,
-    hint_transport: Arc<dyn HintTransport>,
-    transport: Arc<dyn Transport>,
-    keys: Arc<KukuriKeys>,
+pub(crate) async fn reconcile_direct_message_subscriptions(
+    services: ServiceHandles,
     last_sync: Arc<Mutex<Option<i64>>>,
     direct_message_subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
     notification_inserted: Arc<tokio::sync::Notify>,
     local_author_pubkey: &str,
 ) -> Result<()> {
     let desired_peers =
-        current_mutual_direct_message_peers_with_services(store, local_author_pubkey).await?;
+        current_mutual_direct_message_peers(services.store.as_ref(), local_author_pubkey).await?;
     let current_entries = {
         let subscriptions = direct_message_subscriptions.lock().await;
         subscriptions
@@ -103,10 +88,9 @@ pub(crate) async fn reconcile_direct_message_subscriptions_with_services(
 
     for (peer_pubkey, finished) in &current_entries {
         if *finished || !desired_peers.contains(peer_pubkey) {
-            stop_direct_message_subscription_with_services(
+            stop_direct_message_subscription(
                 direct_message_subscriptions.as_ref(),
-                hint_transport.as_ref(),
-                keys.as_ref(),
+                &services,
                 peer_pubkey.as_str(),
             )
             .await?;
@@ -114,13 +98,9 @@ pub(crate) async fn reconcile_direct_message_subscriptions_with_services(
     }
 
     for peer_pubkey in desired_peers {
-        AppService::spawn_direct_message_subscription_with_services(
+        AppService::spawn_direct_message_subscription(
             Arc::clone(&direct_message_subscriptions),
-            Arc::clone(&projection_store),
-            Arc::clone(&blob_service),
-            Arc::clone(&hint_transport),
-            Arc::clone(&transport),
-            Arc::clone(&keys),
+            services.clone(),
             Arc::clone(&last_sync),
             Arc::clone(&notification_inserted),
             local_author_pubkey,
@@ -131,7 +111,7 @@ pub(crate) async fn reconcile_direct_message_subscriptions_with_services(
     Ok(())
 }
 
-pub(crate) async fn rebuild_author_relationships_with_services(
+pub(crate) async fn rebuild_author_relationships(
     store: &dyn Store,
     projection_store: &dyn ProjectionStore,
     local_author_pubkey: &str,

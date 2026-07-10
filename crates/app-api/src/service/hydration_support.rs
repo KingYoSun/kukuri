@@ -180,32 +180,23 @@ pub(crate) async fn hydrate_reaction_cache_for_target(
     Ok(hydrated)
 }
 
-pub(crate) async fn hydrate_topic_state_with_services(
-    docs_sync: &dyn DocsSync,
-    blob_service: &dyn BlobService,
-    projection_store: &dyn ProjectionStore,
+pub(crate) async fn hydrate_topic_state(
+    services: &ServiceHandles,
     topic_id: &str,
     policy: DocFetchPolicy,
 ) -> Result<usize> {
-    hydrate_subscription_state_with_services(
-        docs_sync,
-        blob_service,
-        projection_store,
-        topic_id,
-        &topic_replica_id(topic_id),
-        policy,
-    )
-    .await
+    hydrate_subscription_state(services, topic_id, &topic_replica_id(topic_id), policy).await
 }
 
-pub(crate) async fn hydrate_subscription_state_with_services(
-    docs_sync: &dyn DocsSync,
-    blob_service: &dyn BlobService,
-    projection_store: &dyn ProjectionStore,
+pub(crate) async fn hydrate_subscription_state(
+    services: &ServiceHandles,
     topic_id: &str,
     replica: &ReplicaId,
     policy: DocFetchPolicy,
 ) -> Result<usize> {
+    let docs_sync = services.docs_sync.as_ref();
+    let blob_service = services.blob_service.as_ref();
+    let projection_store = services.projection_store.as_ref();
     let post_count = hydrate_object_projection_from_replica(
         docs_sync,
         blob_service,
@@ -484,14 +475,15 @@ pub(crate) async fn hydrate_game_room_from_key_with_retry(
     Ok(0)
 }
 
-pub(crate) async fn hydrate_subscription_event_with_services(
-    docs_sync: &dyn DocsSync,
-    blob_service: &dyn BlobService,
-    projection_store: &dyn ProjectionStore,
+pub(crate) async fn hydrate_subscription_event(
+    services: &ServiceHandles,
     topic_id: &str,
     replica: &ReplicaId,
     key: &str,
 ) -> Result<usize> {
+    let docs_sync = services.docs_sync.as_ref();
+    let blob_service = services.blob_service.as_ref();
+    let projection_store = services.projection_store.as_ref();
     if key.starts_with("objects/") && key.ends_with("/state") {
         return Ok(hydrate_object_projection_from_key(
             docs_sync,
@@ -533,14 +525,15 @@ pub(crate) async fn hydrate_subscription_event_with_services(
     Ok(0)
 }
 
-pub(crate) async fn hydrate_subscription_hint_with_services(
-    docs_sync: &dyn DocsSync,
-    blob_service: &dyn BlobService,
-    projection_store: &dyn ProjectionStore,
+pub(crate) async fn hydrate_subscription_hint(
+    services: &ServiceHandles,
     topic_id: &str,
     replica: &ReplicaId,
     hint: &GossipHint,
 ) -> Result<usize> {
+    let docs_sync = services.docs_sync.as_ref();
+    let blob_service = services.blob_service.as_ref();
+    let projection_store = services.projection_store.as_ref();
     match hint {
         GossipHint::TopicObjectsChanged { objects, .. } => {
             let mut hydrated = 0usize;

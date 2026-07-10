@@ -622,11 +622,7 @@ impl AppService {
         hint_topic: TopicId,
         private_key: Option<String>,
     ) -> Result<()> {
-        let projection_store = Arc::clone(&self.services.projection_store);
-        let docs_sync = Arc::clone(&self.services.docs_sync);
-        let blob_service = Arc::clone(&self.services.blob_service);
-        let hint_transport = Arc::clone(&self.services.hint_transport);
-        let transport = Arc::clone(&self.services.transport);
+        let services = self.services.clone();
         let metaverse_room_events = Arc::clone(&self.metaverse_room_events);
         let last_sync = Arc::clone(&self.last_sync_ts);
         let notification_inserted = Arc::clone(&self.notification_inserted_notify);
@@ -643,12 +639,17 @@ impl AppService {
             self.reset_public_topic_delivery_generation(topic_id, generation)
                 .await;
         }
-        docs_sync.open_replica(&replica).await?;
-        let mut doc_stream = docs_sync.subscribe_replica(&replica).await?;
-        let mut hint_stream = hint_transport.subscribe_hints(&hint_topic).await?;
+        services.docs_sync.open_replica(&replica).await?;
+        let mut doc_stream = services.docs_sync.subscribe_replica(&replica).await?;
+        let mut hint_stream = services.hint_transport.subscribe_hints(&hint_topic).await?;
         let replica_for_task = replica.clone();
         let hint_topic_for_task = hint_topic.clone();
         let handle = tokio::spawn(async move {
+            let projection_store = &services.projection_store;
+            let docs_sync = &services.docs_sync;
+            let blob_service = &services.blob_service;
+            let hint_transport = &services.hint_transport;
+            let transport = &services.transport;
             let notification_baseline = match snapshot_object_notification_baseline(
                 docs_sync.as_ref(),
                 &replica_for_task,
@@ -669,10 +670,8 @@ impl AppService {
             };
             let mut recovery_tick = tokio::time::interval(std::time::Duration::from_secs(1));
             recovery_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-            if let Err(error) = hydrate_subscription_state_with_services(
-                docs_sync.as_ref(),
-                blob_service.as_ref(),
-                projection_store.as_ref(),
+            if let Err(error) = hydrate_subscription_state(
+                &services,
                 topic.as_str(),
                 &replica_for_task,
                 DocFetchPolicy::LocalOnly,
@@ -737,10 +736,8 @@ impl AppService {
                                     );
                                 }
                             }
-                            let mut hydrated = match hydrate_subscription_event_with_services(
-                                docs_sync.as_ref(),
-                                blob_service.as_ref(),
-                                projection_store.as_ref(),
+                            let mut hydrated = match hydrate_subscription_event(
+                                &services,
                                 topic.as_str(),
                                 &replica_for_task,
                                 event.key.as_str(),
@@ -757,10 +754,8 @@ impl AppService {
                                 }
                             };
                             if hydrated == 0 && !is_public_topic {
-                                hydrated = match hydrate_subscription_state_with_services(
-                                    docs_sync.as_ref(),
-                                    blob_service.as_ref(),
-                                    projection_store.as_ref(),
+                                hydrated = match hydrate_subscription_state(
+                                    &services,
                                     topic.as_str(),
                                     &replica_for_task,
                                     DocFetchPolicy::LocalThenRemote,
@@ -871,10 +866,8 @@ impl AppService {
                                     *last_sync.lock().await = Some(now);
                                 }
                                 _ => {
-                                    let mut hydrated = match hydrate_subscription_hint_with_services(
-                                        docs_sync.as_ref(),
-                                        blob_service.as_ref(),
-                                        projection_store.as_ref(),
+                                    let mut hydrated = match hydrate_subscription_hint(
+                                        &services,
                                         topic.as_str(),
                                         &replica_for_task,
                                         &event.hint,
@@ -892,10 +885,8 @@ impl AppService {
                                     };
                                     let now = Utc::now().timestamp_millis();
                                     if hydrated == 0 {
-                                        hydrated = match hydrate_subscription_state_with_services(
-                                            docs_sync.as_ref(),
-                                            blob_service.as_ref(),
-                                            projection_store.as_ref(),
+                                        hydrated = match hydrate_subscription_state(
+                                            &services,
                                             topic.as_str(),
                                             &replica_for_task,
                                             DocFetchPolicy::LocalThenRemote,
@@ -990,10 +981,8 @@ impl AppService {
                         if docs_assist_peer_count == 0 && !has_configured_topic_peer {
                             continue;
                         }
-                        let hydrated = match hydrate_subscription_state_with_services(
-                            docs_sync.as_ref(),
-                            blob_service.as_ref(),
-                            projection_store.as_ref(),
+                        let hydrated = match hydrate_subscription_state(
+                            &services,
                             topic.as_str(),
                             &replica_for_task,
                             DocFetchPolicy::LocalThenRemote,

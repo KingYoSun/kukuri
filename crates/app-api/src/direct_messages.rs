@@ -19,7 +19,7 @@ impl AppService {
             peers.insert(row.peer_pubkey);
         }
         peers.extend(
-            current_mutual_direct_message_peers_with_services(
+            current_mutual_direct_message_peers(
                 self.services.store.as_ref(),
                 self.current_author_pubkey().as_str(),
             )
