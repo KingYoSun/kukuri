@@ -199,3 +199,116 @@ fn channel_rotation_grant_encrypt_decrypt_roundtrip_and_wrong_recipient_fails() 
         .expect_err("wrong recipient must fail");
     assert!(error.to_string().contains("recipient pubkey"));
 }
+
+#[test]
+fn epoch_handoff_grant_reads_legacy_rotation_grant_fixture_and_preserves_wire_shape() {
+    let owner =
+        KukuriKeys::parse("0000000000000000000000000000000000000000000000000000000000000001")
+            .expect("owner key");
+    let recipient =
+        KukuriKeys::parse("0000000000000000000000000000000000000000000000000000000000000002")
+            .expect("recipient key");
+    let expected_payload = PrivateChannelEpochHandoffGrantPayloadV1 {
+        channel_id: ChannelId::new("channel-fixture"),
+        topic_id: TopicId::new("kukuri:topic:fixture"),
+        owner_pubkey: owner.public_key(),
+        recipient_pubkey: recipient.public_key(),
+        old_epoch_id: "epoch-7".into(),
+        new_epoch_id: "epoch-8".into(),
+        new_namespace_secret_hex:
+            "0000000000000000000000000000000000000000000000000000000000000003".into(),
+    };
+    let legacy_doc = PrivateChannelEpochHandoffGrantDocV1 {
+        channel_id: expected_payload.channel_id.clone(),
+        topic_id: expected_payload.topic_id.clone(),
+        owner_pubkey: expected_payload.owner_pubkey.clone(),
+        recipient_pubkey: expected_payload.recipient_pubkey.clone(),
+        old_epoch_id: expected_payload.old_epoch_id.clone(),
+        new_epoch_id: expected_payload.new_epoch_id.clone(),
+        nonce_hex: "030106977157b65e271235713e1c2557e15b37fa50368f70".into(),
+        ciphertext_hex: concat!(
+            "3c868683bf8283ec5050cb619321f6327ec2c2171e66fb705c649b014debdc7b",
+            "a95d249f29ac6649c42229f6aaf42ac417152de3f9b5988670d34859100ea2c60",
+            "36cbbeeb6508f22f574c625954150888ba0388ab7324d743db21efe12616cf71a1",
+            "287d91e08c8adf4cae64ff9539a94dc1c6d3b976f7c7218dbded6bd1359d5910",
+            "63b585665acfa027ca789b0eedf1dbeff4756211269e3ff943c3ce047a876dd57",
+            "ff9abb4251cf84db0bf632fd2ae138ac18e202f4857b492af5c6accfd7b013cbc",
+            "1331bbf28fc79ae3b7c191d7a0c44d5f15bfd9c8def83778426427e25d08e85d",
+            "8431707db9c4189e98a7a281ecfa8ea4d29718e149ce72cead7263f7412a77ae1",
+            "683b6e75c9d6d8b0504b0b0340209b80c65eaf7062f4b06b76e741f6e86db27",
+            "ba5aa277bbf8778c624206c31eb471be084a0655adadda2214bdca72ca47e9021",
+            "eeac0e239476c344cc9920c6fbe91f7eb834061ebe83c7338e595844e1b339a0",
+            "b7a875d7ce92c1116d66a67421f06b48ca8e8ccceff4cac00008d2a1e23adbd",
+            "d01687de8f49e56"
+        )
+        .into(),
+    };
+
+    let decrypted =
+        decrypt_private_channel_epoch_handoff_grant(&recipient, &legacy_doc).expect("legacy grant");
+    assert_eq!(decrypted, expected_payload);
+
+    let doc_json = serde_json::to_value(&legacy_doc).expect("doc json");
+    let doc_fields = doc_json
+        .as_object()
+        .expect("doc object")
+        .keys()
+        .map(String::as_str)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        doc_fields,
+        [
+            "channel_id",
+            "ciphertext_hex",
+            "new_epoch_id",
+            "nonce_hex",
+            "old_epoch_id",
+            "owner_pubkey",
+            "recipient_pubkey",
+            "topic_id",
+        ]
+        .into_iter()
+        .collect()
+    );
+
+    let payload_json = serde_json::to_value(&decrypted).expect("payload json");
+    let payload_fields = payload_json
+        .as_object()
+        .expect("payload object")
+        .keys()
+        .map(String::as_str)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        payload_fields,
+        [
+            "channel_id",
+            "new_epoch_id",
+            "new_namespace_secret_hex",
+            "old_epoch_id",
+            "owner_pubkey",
+            "recipient_pubkey",
+            "topic_id",
+        ]
+        .into_iter()
+        .collect()
+    );
+
+    let envelope = build_private_channel_epoch_handoff_grant_envelope(&owner, &legacy_doc)
+        .expect("legacy envelope");
+    assert_eq!(envelope.kind, "channel-rotation-grant");
+    let expected_tags: Vec<Vec<String>> = vec![
+        vec!["topic".into(), "kukuri:topic:fixture".into()],
+        vec!["channel".into(), "channel-fixture".into()],
+        vec!["epoch".into(), "epoch-7".into()],
+        vec![
+            "recipient".into(),
+            "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5".into(),
+        ],
+        vec!["object".into(), "channel-rotation-grant".into()],
+    ];
+    assert_eq!(envelope.tags, expected_tags);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&envelope.content).expect("content json"),
+        doc_json
+    );
+}
