@@ -99,7 +99,12 @@ export function useDesktopShellRouting({
   const setLastNonNotificationsRoute = useDesktopShellFieldSetter('lastNonNotificationsRoute');
   const setShellChromeState = useDesktopShellFieldSetter('shellChromeState');
   const resolvedRouteLocation = useMemo(
-    () => resolveHashBackedRouteLocation(location.pathname, location.search),
+    () =>
+      resolveHashBackedRouteLocation(
+        location.pathname,
+        location.search,
+        typeof window === 'undefined' ? '' : window.location.hash
+      ),
     [location.pathname, location.search]
   );
 

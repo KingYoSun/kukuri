@@ -139,6 +139,25 @@ export type HashRouteLocation = {
   search: string;
 };
 
+export type ParsedRouteState = {
+  primarySection: PrimarySection | null;
+  requestedTopic: string | null;
+  requestedChannel: string | null;
+  requestedTimelineView: string | null;
+  requestedTimelineScope: string | null;
+  requestedComposeTarget: string | null;
+  requestedSettingsSection: string | null;
+  requestedContext: string | null;
+  requestedProfileMode: string | null;
+  requestedConnectionsView: string | null;
+  requestedThreadId: string | null;
+  requestedFocusObjectId: string | null;
+  requestedAuthorPubkey: string | null;
+  requestedPeerPubkey: string | null;
+  requestedSessionId: string | null;
+  requestedRoomId: string | null;
+};
+
 export function parseHashRouteLocation(hash: string): HashRouteLocation {
   const normalizedHash = hash.startsWith('#') ? hash.slice(1) : hash;
   if (!normalizedHash) {
@@ -162,18 +181,34 @@ export function parseHashRouteLocation(hash: string): HashRouteLocation {
   };
 }
 
+export function parseShellRouteState(location: HashRouteLocation): ParsedRouteState {
+  const params = new URLSearchParams(location.search);
+  return {
+    primarySection: parsePrimarySectionPath(location.pathname),
+    requestedTopic: params.get('topic')?.trim() || null,
+    requestedChannel: params.get('channel')?.trim() || null,
+    requestedTimelineView: params.get('timelineView'),
+    requestedTimelineScope: params.get('timelineScope'),
+    requestedComposeTarget: params.get('composeTarget'),
+    requestedSettingsSection: params.get('settings'),
+    requestedContext: params.get('context'),
+    requestedProfileMode: params.get('profileMode'),
+    requestedConnectionsView: params.get('connectionsView'),
+    requestedThreadId: params.get('threadId'),
+    requestedFocusObjectId: params.get('focusObjectId')?.trim() || null,
+    requestedAuthorPubkey: params.get('authorPubkey'),
+    requestedPeerPubkey: params.get('peerPubkey'),
+    requestedSessionId: params.get('sessionId')?.trim() || null,
+    requestedRoomId: params.get('roomId')?.trim() || null,
+  };
+}
+
 export function resolveHashBackedRouteLocation(
   pathname: string,
-  search: string
+  search: string,
+  hash: string
 ): HashRouteLocation {
-  if (typeof window === 'undefined') {
-    return {
-      pathname,
-      search,
-    };
-  }
-
-  const hashRouteLocation = parseHashRouteLocation(window.location.hash);
+  const hashRouteLocation = parseHashRouteLocation(hash);
   const shouldUseHashPathname =
     parsePrimarySectionPath(pathname) === null ||
     (pathname === '/' && hashRouteLocation.pathname !== '/');
@@ -199,7 +234,7 @@ export function parseLegacyRequestedChannel(
     .find((value): value is string => value !== null) ?? null;
 }
 
-export type BuildShellUrlOptions = {
+export type RouteState = {
   activeTopic: string;
   primarySection: PrimarySection;
   timelineView: TimelineWorkspaceView;
@@ -216,7 +251,7 @@ export type BuildShellUrlOptions = {
   selectedGameRoomId: string | null;
 };
 
-export function buildShellUrl(options: BuildShellUrlOptions): string {
+export function buildShellUrl(options: RouteState): string {
   const search = new URLSearchParams();
   search.set('topic', options.activeTopic);
 

@@ -62,7 +62,7 @@ test('hash-backed route resolution preserves hash query during router hydration 
     '/#/timeline?topic=kukuri%3Atopic%3Ademo&settings=appearance'
   );
 
-  expect(resolveHashBackedRouteLocation('/', '')).toEqual({
+  expect(resolveHashBackedRouteLocation('/', '', window.location.hash)).toEqual({
     pathname: '/timeline',
     search: '?topic=kukuri%3Atopic%3Ademo&settings=appearance',
   });
