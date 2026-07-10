@@ -1,0 +1,100 @@
+{
+  "title": "メタバースルーム",
+  "rooms": {
+    "summary_one": "このトピックに{{count}}件のルーム",
+    "summary_other": "このトピックに{{count}}件のルーム",
+    "empty": "このトピックにメタバースルームはありません。",
+    "noDescription": "説明なし"
+  },
+  "create": {
+    "action": "メタバースルームを作成",
+    "titleLabel": "ルーム名",
+    "titlePlaceholder": "アトリウム",
+    "maxPeersLabel": "最大参加者数",
+    "descriptionLabel": "説明",
+    "descriptionPlaceholder": "小さな交流スペース",
+    "titleRequired": "ルーム名は必須です"
+  },
+  "room": {
+    "host": "ホスト: {{host}}",
+    "updated": "更新: {{time}}",
+    "joined": "参加済み",
+    "notJoined": "未参加",
+    "manifest": "マニフェスト: {{value}}",
+    "world": "ワールド: {{version}}",
+    "join": "ルームに参加",
+    "pending": "処理中"
+  },
+  "connection": {
+    "states": {
+      "live": "接続中",
+      "recovering": "復旧中",
+      "stale": "停滞",
+      "offline": "オフライン"
+    },
+    "details": {
+      "live": "ルームイベントを受信しています",
+      "recovering": "ルーム接続を更新しています",
+      "stale": "最近のルーム活動がありません",
+      "offline": "ピア接続を利用できません"
+    }
+  },
+  "hud": {
+    "leave": "ルームから退出",
+    "hide": "ルームHUDを閉じる",
+    "open": "ルームHUDを開く",
+    "debug": "デバッグ詳細",
+    "topic": "トピック: {{topic}}",
+    "localPeer": "ローカルピア: {{peer}}",
+    "knownPeers": "既知のピア: {{count}}",
+    "lastSentSeq": "最終送信シーケンス: {{seq}}",
+    "lastReceived": "最終受信: {{time}}",
+    "remoteAnimation": "リモートアニメーション: {{value}}",
+    "avatarAsset": "アバターアセット: {{status}}",
+    "blobResolve": "Blobアセット解決: {{value}}",
+    "persistence": "永続化: マニフェストBlob {{value}}",
+    "communityAssist": "コミュニティ支援: {{value}}",
+    "none": "なし",
+    "publicFallback": "公開サンプル / フォールバック準備済み",
+    "assistAvailable": "利用可能",
+    "assistOptional": "任意",
+    "avatarStatuses": {
+      "loading": "読み込み中",
+      "sample-vrm": "サンプルVRM読込済み",
+      "blob-vrm": "Blob VRM読込済み",
+      "fallback-primitive": "代替プリミティブ"
+    }
+  },
+  "avatar": {
+    "title": "アバターアセット",
+    "fileLabel": "VRMファイル",
+    "default": "既定",
+    "remoteStale": "リモートアバターが停滞しています"
+  },
+  "object": {
+    "title": "共有オブジェクト",
+    "forward": "前へ",
+    "left": "左へ",
+    "right": "右へ",
+    "back": "後ろへ"
+  },
+  "chat": {
+    "title": "ルームチャット",
+    "hide": "ルームチャットを閉じる",
+    "open": "ルームチャットを開く",
+    "you": "自分",
+    "messageLabel": "ルームチャットのメッセージ",
+    "placeholder": "ルームでメッセージを送信",
+    "send": "送信"
+  },
+  "viewport": {
+    "ariaLabel": "メタバースルーム表示"
+  },
+  "errors": {
+    "createFailed": "メタバースルームを作成できませんでした",
+    "importAvatarFailed": "VRMアバターを読み込めませんでした",
+    "sampleFetchFailed": "サンプルVRMの取得に失敗しました: {{status}}",
+    "publishLeaveFailed": "ルーム退出を配信できませんでした",
+    "persistObjectFailed": "共有オブジェクトを保存できませんでした"
+  }
+}

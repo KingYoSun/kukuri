@@ -96,6 +96,7 @@ test('i18n init namespaces match the bundled resources', () => {
     'live',
     'game',
     'legal',
+    'metaverse',
   ]
     .slice()
     .sort();

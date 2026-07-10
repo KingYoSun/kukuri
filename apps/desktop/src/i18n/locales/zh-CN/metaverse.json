@@ -1,0 +1,100 @@
+{
+  "title": "元宇宙房间",
+  "rooms": {
+    "summary_one": "此话题中有 {{count}} 个房间",
+    "summary_other": "此话题中有 {{count}} 个房间",
+    "empty": "此话题中没有元宇宙房间。",
+    "noDescription": "无描述"
+  },
+  "create": {
+    "action": "创建元宇宙房间",
+    "titleLabel": "房间标题",
+    "titlePlaceholder": "中庭",
+    "maxPeersLabel": "最大人数",
+    "descriptionLabel": "描述",
+    "descriptionPlaceholder": "小型社交空间",
+    "titleRequired": "房间标题为必填项"
+  },
+  "room": {
+    "host": "主持人：{{host}}",
+    "updated": "更新时间：{{time}}",
+    "joined": "已加入",
+    "notJoined": "未加入",
+    "manifest": "清单：{{value}}",
+    "world": "世界：{{version}}",
+    "join": "加入房间",
+    "pending": "处理中"
+  },
+  "connection": {
+    "states": {
+      "live": "在线",
+      "recovering": "恢复中",
+      "stale": "停滞",
+      "offline": "离线"
+    },
+    "details": {
+      "live": "正在接收房间事件",
+      "recovering": "正在刷新房间连接",
+      "stale": "最近没有房间活动",
+      "offline": "对等连接不可用"
+    }
+  },
+  "hud": {
+    "leave": "离开房间",
+    "hide": "隐藏房间 HUD",
+    "open": "打开房间 HUD",
+    "debug": "调试详情",
+    "topic": "话题：{{topic}}",
+    "localPeer": "本地节点：{{peer}}",
+    "knownPeers": "已知节点：{{count}}",
+    "lastSentSeq": "最后发送序号：{{seq}}",
+    "lastReceived": "最后接收：{{time}}",
+    "remoteAnimation": "远程动画：{{value}}",
+    "avatarAsset": "头像资源：{{status}}",
+    "blobResolve": "Blob 资源解析：{{value}}",
+    "persistence": "持久化：清单 Blob {{value}}",
+    "communityAssist": "社区辅助：{{value}}",
+    "none": "无",
+    "publicFallback": "公共示例 / 已准备回退",
+    "assistAvailable": "可用",
+    "assistOptional": "可选",
+    "avatarStatuses": {
+      "loading": "加载中",
+      "sample-vrm": "示例 VRM 已加载",
+      "blob-vrm": "Blob VRM 已加载",
+      "fallback-primitive": "回退基础模型"
+    }
+  },
+  "avatar": {
+    "title": "头像资源",
+    "fileLabel": "VRM 文件",
+    "default": "默认",
+    "remoteStale": "远程头像已停滞"
+  },
+  "object": {
+    "title": "共享对象",
+    "forward": "向前",
+    "left": "向左",
+    "right": "向右",
+    "back": "向后"
+  },
+  "chat": {
+    "title": "房间聊天",
+    "hide": "隐藏房间聊天",
+    "open": "打开房间聊天",
+    "you": "你",
+    "messageLabel": "房间聊天消息",
+    "placeholder": "在房间里说点什么",
+    "send": "发送"
+  },
+  "viewport": {
+    "ariaLabel": "元宇宙房间视图"
+  },
+  "errors": {
+    "createFailed": "无法创建元宇宙房间",
+    "importAvatarFailed": "无法导入 VRM 头像",
+    "sampleFetchFailed": "获取示例 VRM 失败：{{status}}",
+    "publishLeaveFailed": "无法发布离开房间事件",
+    "persistObjectFailed": "无法保存共享对象"
+  }
+}

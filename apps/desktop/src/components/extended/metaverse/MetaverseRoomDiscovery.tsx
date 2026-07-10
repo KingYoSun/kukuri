@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { ChevronDown, Cuboid, Play } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { AuthorAvatar } from '@/components/core/AuthorAvatar';
 import { Button } from '@/components/ui/button';
@@ -51,7 +52,8 @@ export function MetaverseRoomDiscovery({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [maxPeers, setMaxPeers] = useState('8');
-  const [validationError, setValidationError] = useState<string | null>(null);
+  const { t } = useTranslation('metaverse');
+  const [validationError, setValidationError] = useState(false);
 
   function hostAuthor(room: GameRoomView): Profile | AuthorSocialView | null {
     return room.host_pubkey === localAuthorPubkey
@@ -76,10 +78,10 @@ export function MetaverseRoomDiscovery({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!title.trim()) {
-      setValidationError('Room title is required');
+      setValidationError(true);
       return;
     }
-    setValidationError(null);
+    setValidationError(false);
     const parsedMaxPeers = Number.parseInt(maxPeers, 10);
     const created = await onCreateRoom({
       title: title.trim(),
@@ -92,19 +94,19 @@ export function MetaverseRoomDiscovery({
     setTitle('');
     setDescription('');
     setMaxPeers('8');
-    setValidationError(null);
+    setValidationError(false);
   }
 
   return (
     <Card className='shell-workspace-card metaverse-discovery-card'>
       <div className='panel-header'>
         <div>
-          <h3>Metaverse Rooms</h3>
-          <small>{rooms.length} room{rooms.length === 1 ? '' : 's'} in this topic</small>
+          <h3>{t('title')}</h3>
+          <small>{t('rooms.summary', { count: rooms.length })}</small>
         </div>
       </div>
       {validationError || error ? (
-        <Notice tone='destructive'>{validationError ?? error}</Notice>
+        <Notice tone='destructive'>{validationError ? t('create.titleRequired') : error}</Notice>
       ) : null}
       <section className='shell-nav-accordion metaverse-create-accordion' data-open={createOpen}>
         <button
@@ -114,35 +116,35 @@ export function MetaverseRoomDiscovery({
           onClick={() => setCreateOpen((current) => !current)}
         >
           <Cuboid className='size-4' aria-hidden='true' />
-          <span className='shell-nav-accordion-title'>Create metaverse room</span>
+          <span className='shell-nav-accordion-title'>{t('create.action')}</span>
           <ChevronDown className='shell-nav-accordion-icon size-4' aria-hidden='true' />
         </button>
         {createOpen ? (
           <form className='composer composer-compact metaverse-create-form' onSubmit={handleSubmit}>
             <div className='metaverse-create-form-primary'>
               <Label>
-                <span>Room title</span>
-                <Input value={title} placeholder='Atrium' disabled={pending} onChange={(event) => setTitle(event.target.value)} />
+                <span>{t('create.titleLabel')}</span>
+                <Input value={title} placeholder={t('create.titlePlaceholder')} disabled={pending} onChange={(event) => setTitle(event.target.value)} />
               </Label>
               <Label>
-                <span>Max peers</span>
+                <span>{t('create.maxPeersLabel')}</span>
                 <Input value={maxPeers} disabled={pending} onChange={(event) => setMaxPeers(event.target.value)} />
               </Label>
             </div>
             <Label className='metaverse-create-form-description'>
-              <span>Description</span>
-              <Textarea value={description} placeholder='Small social space' disabled={pending} onChange={(event) => setDescription(event.target.value)} />
+              <span>{t('create.descriptionLabel')}</span>
+              <Textarea value={description} placeholder={t('create.descriptionPlaceholder')} disabled={pending} onChange={(event) => setDescription(event.target.value)} />
             </Label>
             <div className='metaverse-create-form-actions'>
               <Button type='submit' disabled={pending}>
                 <Cuboid className='size-4' aria-hidden='true' />
-                Create metaverse room
+                {t('create.action')}
               </Button>
             </div>
           </form>
         ) : null}
       </section>
-      {rooms.length === 0 ? <p className='empty-state'>No metaverse rooms in this topic.</p> : null}
+      {rooms.length === 0 ? <p className='empty-state'>{t('rooms.empty')}</p> : null}
       <ul className='metaverse-room-grid'>
         {rooms.map((room) => (
           <li key={room.room_id}>
@@ -152,22 +154,22 @@ export function MetaverseRoomDiscovery({
                 <span>{room.status}</span>
                 <span className='reply-chip'>{room.audience_label}</span>
               </div>
-              <p>{room.description || 'No description'}</p>
+              <p>{room.description || t('rooms.noDescription')}</p>
               <div className='metaverse-room-host'>
                 <AuthorAvatar label={hostLabel(room)} picture={hostPicture(room)} size='sm' />
-                <span>Host: {hostLabel(room)}</span>
+                <span>{t('room.host', { host: hostLabel(room) })}</span>
               </div>
               <div className='topic-diagnostic topic-diagnostic-secondary'>
-                <span>Updated: {formatLocalizedTime(room.updated_at, locale)}</span>
-                <span>{joinedRoomIds.has(room.room_id) ? 'Joined' : 'Not joined'}</span>
+                <span>{t('room.updated', { time: formatLocalizedTime(room.updated_at, locale) })}</span>
+                <span>{t(joinedRoomIds.has(room.room_id) ? 'room.joined' : 'room.notJoined')}</span>
               </div>
               <div className='topic-diagnostic topic-diagnostic-secondary'>
-                <span>Manifest: {room.manifest_blob_hash ?? 'pending'}</span>
-                <span>World: {room.metaverse?.world_version ?? 1}</span>
+                <span>{t('room.manifest', { value: room.manifest_blob_hash ?? t('room.pending') })}</span>
+                <span>{t('room.world', { version: room.metaverse?.world_version ?? 1 })}</span>
               </div>
               <Button variant='secondary' type='button' onClick={() => onJoinRoom(room.room_id)}>
                 <Play className='size-4' aria-hidden='true' />
-                Join Room
+                {t('room.join')}
               </Button>
             </article>
           </li>

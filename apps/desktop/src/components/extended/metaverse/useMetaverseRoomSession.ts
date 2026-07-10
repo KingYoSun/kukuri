@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type {
   GameRoomView,
@@ -86,6 +87,7 @@ export function useMetaverseRoomSession({
   localAvatarAssetUrl,
   onError,
 }: UseMetaverseRoomSessionArgs) {
+  const { t } = useTranslation('metaverse');
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [joinedRoomIds, setJoinedRoomIds] = useState<Set<string>>(() => new Set());
   const [remoteTransforms, setRemoteTransforms] = useState<Record<string, AvatarTransform>>({});
@@ -520,7 +522,7 @@ export function useMetaverseRoomSession({
       peer_id: localPeerId,
       left_at: leftAt,
     }).catch((leaveError) => {
-      onError(leaveError instanceof Error ? leaveError.message : 'Failed to publish room leave');
+      onError(leaveError instanceof Error ? leaveError.message : t('errors.publishLeaveFailed'));
     });
     setJoinedRoomIds((current) => {
       const next = new Set(current);
@@ -616,7 +618,7 @@ export function useMetaverseRoomSession({
       )
       .then(() => actions.refresh())
       .catch((updateError) => {
-        onError(updateError instanceof Error ? updateError.message : 'Failed to persist shared object');
+        onError(updateError instanceof Error ? updateError.message : t('errors.persistObjectFailed'));
       });
   }
 

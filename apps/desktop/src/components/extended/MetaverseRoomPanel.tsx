@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type {
   AuthorSocialView,
@@ -43,6 +44,7 @@ export function MetaverseRoomPanel({
   knownAuthorsByPubkey = {},
   mediaObjectUrls = {},
 }: MetaverseRoomPanelProps) {
+  const { t } = useTranslation('metaverse');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [avatarAssetStatus, setAvatarAssetStatus] = useState<AvatarAssetStatus>('loading');
@@ -69,7 +71,7 @@ export function MetaverseRoomPanel({
       await actions.refresh();
       return true;
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : 'Failed to create metaverse room');
+      setError(createError instanceof Error ? createError.message : t('errors.createFailed'));
       return false;
     } finally {
       setPending(false);
@@ -98,7 +100,7 @@ export function MetaverseRoomPanel({
       setLocalAvatarAssetUrl(resolvedUrl);
       setError(null);
     } catch (assetError) {
-      setError(assetError instanceof Error ? assetError.message : 'Failed to import VRM avatar');
+      setError(assetError instanceof Error ? assetError.message : t('errors.importAvatarFailed'));
     } finally {
       setPending(false);
     }
@@ -107,7 +109,7 @@ export function MetaverseRoomPanel({
   async function handleSampleAvatarImport() {
     const response = await fetch(DEFAULT_AVATAR_ASSET_URL);
     if (!response.ok) {
-      throw new Error(`sample VRM fetch failed: ${response.status}`);
+      throw new Error(t('errors.sampleFetchFailed', { status: response.status }));
     }
     await importAvatarBlob(await response.blob(), DEFAULT_AVATAR_ASSET_NAME);
   }

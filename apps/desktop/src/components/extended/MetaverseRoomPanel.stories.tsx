@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
 import type { GameRoomView, SyncStatus } from '@/lib/api';
+import i18n from '@/i18n';
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import { MetaverseRoomPanel } from './MetaverseRoomPanel';
 import { DEFAULT_SHARED_OBJECT } from './MetaverseSceneModel';
@@ -184,7 +185,7 @@ export const DiscoveryError: Story = {
         selectedRoomId={null}
         joinedRoomIds={new Set()}
         pending={false}
-        error='Room connectivity is unavailable'
+        error={i18n.t('metaverse:connection.details.offline')}
         locale='en'
         localAuthorPubkey={LOCAL_PUBKEY}
         localProfile={null}

@@ -10,6 +10,7 @@ import {
   createVRMAnimationClip,
   type VRMAnimation,
 } from '@pixiv/three-vrm-animation';
+import { useTranslation } from 'react-i18next';
 
 import type { GameRoomView, SharedRoomObjectV1 } from '@/lib/api';
 import {
@@ -112,12 +113,13 @@ function AvatarChatBubble({ bubble }: { bubble?: LatestChatBubble }) {
 }
 
 function AvatarStaleIndicator({ stale }: { stale: boolean }) {
+  const { t } = useTranslation('metaverse');
   if (!stale) {
     return null;
   }
   return (
     <Html position={[0.32, 1.9, 0]} center distanceFactor={8} occlude={false}>
-      <div className='metaverse-avatar-stale-icon' aria-label='Remote avatar stale'>
+      <div className='metaverse-avatar-stale-icon' aria-label={t('avatar.remoteStale')}>
         <MonitorPause className='size-3' aria-hidden='true' />
       </div>
     </Html>
@@ -724,8 +726,9 @@ export function MetaverseScene({
   onLocalTransform,
   onAvatarAssetStatus,
 }: SceneProps) {
+  const { t } = useTranslation('metaverse');
   return (
-    <div className='metaverse-viewport-shell' aria-label='Metaverse room viewport'>
+    <div className='metaverse-viewport-shell' aria-label={t('viewport.ariaLabel')}>
       <Canvas
         className='metaverse-viewport-canvas'
         camera={{ position: [0, 3.2, 5.2], fov: 54 }}
