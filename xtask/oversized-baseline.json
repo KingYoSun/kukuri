@@ -5,10 +5,6 @@
       "path": "apps/desktop/src/components/extended/MetaverseRoomPanel.tsx"
     },
     {
-      "lines": 1140,
-      "path": "apps/desktop/src/shell/useDesktopShellViewModels.ts"
-    },
-    {
       "lines": 1087,
       "path": "crates/app-api/src/service/private_channels_support.rs"
     },
