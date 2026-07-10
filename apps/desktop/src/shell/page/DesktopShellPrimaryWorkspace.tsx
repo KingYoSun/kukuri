@@ -4,6 +4,7 @@ import { Link2 } from 'lucide-react';
 import { TimelineWorkspaceHeader } from '@/components/core/TimelineWorkspaceHeader';
 import { TimelineFeed } from '@/components/core/TimelineFeed';
 import { MetaverseRoomPanel } from '@/components/extended/MetaverseRoomPanel';
+import type { MetaverseRoomActions } from '@/components/extended/metaverse/MetaverseRoomActions';
 import { ProfileConnectionsPanel } from '@/components/extended/ProfileConnectionsPanel';
 import { ProfileEditorPanel } from '@/components/extended/ProfileEditorPanel';
 import { ProfileOverviewPanel } from '@/components/extended/ProfileOverviewPanel';
@@ -48,6 +49,7 @@ type ViewModels = ReturnType<typeof useDesktopShellViewModels>;
 type DesktopShellPrimaryWorkspaceProps = {
   t: Translate;
   api: DesktopApi;
+  metaverseActions: MetaverseRoomActions;
   locale: SupportedLocale;
   routeSection: PrimarySection;
   profileAvatarInputKey: number;
@@ -56,7 +58,6 @@ type DesktopShellPrimaryWorkspaceProps = {
   viewModels: Pick<
     ViewModels,
     | 'activeComposeAudienceLabel'
-    | 'activeComposeChannel'
     | 'activeGamePanelState'
     | 'activeGameRooms'
     | 'activeLivePanelState'
@@ -81,7 +82,6 @@ type DesktopShellPrimaryWorkspaceProps = {
   openCommunityNodeSettings: () => void;
   loadReactionCatalogData: () => Promise<void>;
   refreshTimelineFeed: (topic: string, currentThread: string | null) => Promise<void>;
-  refreshCurrentTopic: () => Promise<void>;
   loadMoreTimeline: (topic: string) => Promise<void>;
   openAuthorDetail: OpenAuthorDetail;
   openThread: OpenThread;
@@ -118,6 +118,7 @@ type DesktopShellPrimaryWorkspaceProps = {
 export function DesktopShellPrimaryWorkspace({
   t,
   api,
+  metaverseActions,
   locale,
   routeSection,
   profileAvatarInputKey,
@@ -130,7 +131,6 @@ export function DesktopShellPrimaryWorkspace({
   openCommunityNodeSettings,
   loadReactionCatalogData,
   refreshTimelineFeed,
-  refreshCurrentTopic,
   loadMoreTimeline,
   openAuthorDetail,
   openThread,
@@ -519,16 +519,14 @@ export function DesktopShellPrimaryWorkspace({
 
         {shellChromeState.activePrimarySection === 'game' ? (
           <MetaverseRoomPanel
-            api={api}
+            actions={metaverseActions}
             activeTopic={activeTopic}
-            activeComposeChannel={viewModels.activeComposeChannel}
             rooms={metaverseRooms}
             syncStatus={syncStatus}
             locale={locale}
             localProfile={localProfile}
             knownAuthorsByPubkey={knownAuthorsByPubkey}
             mediaObjectUrls={mediaObjectUrls}
-            onRefresh={refreshCurrentTopic}
           />
         ) : null}
 

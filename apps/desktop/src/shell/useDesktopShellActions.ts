@@ -1,4 +1,4 @@
-import { type Dispatch, type FormEvent, type SetStateAction } from 'react';
+import { useMemo, type Dispatch, type FormEvent, type SetStateAction } from 'react';
 
 import type {
   AttachmentView,
@@ -24,6 +24,7 @@ import { createComposeInteractionsActions } from './actions/composeInteractions'
 import { createDirectMessageActions } from './actions/directMessages';
 import { createLiveGameActions } from './actions/liveGame';
 import { createMessageReactionSocialActions } from './actions/messageReactionSocial';
+import { createMetaverseRoomActions } from './actions/metaverse';
 import { createProfileTopicChannelActions } from './actions/profileTopicChannel';
 import { useShallow } from 'zustand/react/shallow';
 import type {
@@ -86,14 +87,18 @@ export function useDesktopShellActions({
   const nextActiveTopic = state.activeTopic;
   const nextSelectedChannelId = state.selectedChannelIdByTopic[nextActiveTopic] ?? null;
   const nextJoinedChannels = state.joinedChannelsByTopic[nextActiveTopic] ?? [];
-  const activeComposeChannel = state.repostTarget
-    ? PUBLIC_CHANNEL_REF
-    : state.replyTarget?.channel_id
-      ? {
-          kind: 'private_channel' as const,
-          channel_id: state.replyTarget.channel_id,
-        }
-      : state.composeChannelByTopic[nextActiveTopic] ?? PUBLIC_CHANNEL_REF;
+  const activeComposeChannel = useMemo(
+    () =>
+      state.repostTarget
+        ? PUBLIC_CHANNEL_REF
+        : state.replyTarget?.channel_id
+          ? {
+              kind: 'private_channel' as const,
+              channel_id: state.replyTarget.channel_id,
+            }
+          : state.composeChannelByTopic[nextActiveTopic] ?? PUBLIC_CHANNEL_REF,
+    [nextActiveTopic, state.composeChannelByTopic, state.replyTarget, state.repostTarget]
+  );
   const {
     trackedTopics,
     activeTopic,
@@ -126,6 +131,16 @@ export function useDesktopShellActions({
   const bookmarkedPostIds = new Set(state.bookmarkedPosts.map((item) => item.post.object_id));
   const activeGameRooms = state.gameRoomsByTopic[nextActiveTopic] ?? [];
   const localAuthorPubkey = state.syncStatus.local_author_pubkey;
+  const metaverseActions = useMemo(
+    () =>
+      createMetaverseRoomActions({
+        api,
+        activeTopic,
+        activeComposeChannel,
+        onRefresh: () => loadTopics(trackedTopics, activeTopic, selectedThread),
+      }),
+    [api, activeComposeChannel, activeTopic, loadTopics, selectedThread, trackedTopics]
+  );
 
   const setTrackedTopics = useDesktopShellFieldSetter('trackedTopics');
   const setActiveTopic = useDesktopShellFieldSetter('activeTopic');
@@ -853,6 +868,7 @@ export function useDesktopShellActions({
   }
 
   return {
+    metaverseActions,
     handleProfileFieldChange,
     handleProfileAvatarFile,
     handleClearProfileAvatar,
