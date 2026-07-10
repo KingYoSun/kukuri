@@ -236,24 +236,6 @@ pub(crate) async fn hydrate_author_state_with_services(
     projection_store: &dyn ProjectionStore,
     local_author_pubkey: &str,
     author_pubkey: &str,
-) -> Result<usize> {
-    hydrate_author_state_with_services_with_policy(
-        docs_sync,
-        store,
-        projection_store,
-        local_author_pubkey,
-        author_pubkey,
-        DocFetchPolicy::LocalThenRemote,
-    )
-    .await
-}
-
-pub(crate) async fn hydrate_author_state_with_services_with_policy(
-    docs_sync: &dyn DocsSync,
-    store: &dyn Store,
-    projection_store: &dyn ProjectionStore,
-    local_author_pubkey: &str,
-    author_pubkey: &str,
     policy: DocFetchPolicy,
 ) -> Result<usize> {
     let replica = author_replica_id(author_pubkey);
@@ -270,13 +252,9 @@ pub(crate) async fn hydrate_author_state_with_services_with_policy(
     {
         match serde_json::from_slice::<AuthorProfileDocV1>(record.value.as_slice()) {
             Ok(doc) if doc.author_pubkey.as_str() == author_pubkey => {
-                if let Some(envelope) = fetch_author_envelope_by_id_with_policy(
-                    docs_sync,
-                    &replica,
-                    &doc.envelope_id,
-                    policy,
-                )
-                .await?
+                if let Some(envelope) =
+                    fetch_author_envelope_by_id(docs_sync, &replica, &doc.envelope_id, policy)
+                        .await?
                 {
                     store.put_envelope(envelope.clone()).await?;
                     if let Some(profile) = parse_profile(&envelope)? {
@@ -313,13 +291,9 @@ pub(crate) async fn hydrate_author_state_with_services_with_policy(
     {
         match serde_json::from_slice::<FollowEdgeDocV1>(record.value.as_slice()) {
             Ok(doc) if doc.subject_pubkey.as_str() == author_pubkey => {
-                if let Some(envelope) = fetch_author_envelope_by_id_with_policy(
-                    docs_sync,
-                    &replica,
-                    &doc.envelope_id,
-                    policy,
-                )
-                .await?
+                if let Some(envelope) =
+                    fetch_author_envelope_by_id(docs_sync, &replica, &doc.envelope_id, policy)
+                        .await?
                     && let Some(edge) = parse_follow_edge(&envelope)?
                     && edge.target_pubkey == doc.target_pubkey
                     && edge.status == doc.status
@@ -352,20 +326,6 @@ pub(crate) async fn hydrate_author_state_with_services_with_policy(
 }
 
 pub(crate) async fn fetch_author_envelope_by_id(
-    docs_sync: &dyn DocsSync,
-    replica: &ReplicaId,
-    envelope_id: &EnvelopeId,
-) -> Result<Option<KukuriEnvelope>> {
-    fetch_author_envelope_by_id_with_policy(
-        docs_sync,
-        replica,
-        envelope_id,
-        DocFetchPolicy::LocalThenRemote,
-    )
-    .await
-}
-
-pub(crate) async fn fetch_author_envelope_by_id_with_policy(
     docs_sync: &dyn DocsSync,
     replica: &ReplicaId,
     envelope_id: &EnvelopeId,
@@ -411,7 +371,7 @@ pub(crate) async fn load_custom_reaction_assets_from_author_replica(
     Ok(items)
 }
 
-pub(crate) async fn load_profile_posts_from_author_replica_with_policy(
+pub(crate) async fn load_profile_posts_from_author_replica(
     docs_sync: &dyn DocsSync,
     author_pubkey: &str,
     policy: DocFetchPolicy,
@@ -435,13 +395,9 @@ pub(crate) async fn load_profile_posts_from_author_replica_with_policy(
                 if doc.author_pubkey.as_str() == author_pubkey
                     && doc.profile_topic_id == expected_profile_topic_id =>
             {
-                if let Some(envelope) = fetch_author_envelope_by_id_with_policy(
-                    docs_sync,
-                    &replica,
-                    &doc.envelope_id,
-                    policy,
-                )
-                .await?
+                if let Some(envelope) =
+                    fetch_author_envelope_by_id(docs_sync, &replica, &doc.envelope_id, policy)
+                        .await?
                 {
                     match parse_profile_post(&envelope) {
                         Ok(Some(profile_post))
@@ -494,7 +450,7 @@ pub(crate) async fn load_profile_posts_from_author_replica_with_policy(
     Ok(items)
 }
 
-pub(crate) async fn load_profile_reposts_from_author_replica_with_policy(
+pub(crate) async fn load_profile_reposts_from_author_replica(
     docs_sync: &dyn DocsSync,
     author_pubkey: &str,
     policy: DocFetchPolicy,
@@ -518,13 +474,9 @@ pub(crate) async fn load_profile_reposts_from_author_replica_with_policy(
                 if doc.author_pubkey.as_str() == author_pubkey
                     && doc.profile_topic_id == expected_profile_topic_id =>
             {
-                if let Some(envelope) = fetch_author_envelope_by_id_with_policy(
-                    docs_sync,
-                    &replica,
-                    &doc.envelope_id,
-                    policy,
-                )
-                .await?
+                if let Some(envelope) =
+                    fetch_author_envelope_by_id(docs_sync, &replica, &doc.envelope_id, policy)
+                        .await?
                 {
                     match parse_profile_repost(&envelope) {
                         Ok(Some(profile_repost))
@@ -574,7 +526,7 @@ pub(crate) async fn load_profile_reposts_from_author_replica_with_policy(
     Ok(items)
 }
 
-pub(crate) async fn snapshot_object_notification_baseline_with_policy(
+pub(crate) async fn snapshot_object_notification_baseline(
     docs_sync: &dyn DocsSync,
     replica: &ReplicaId,
     policy: DocFetchPolicy,
@@ -594,7 +546,7 @@ pub(crate) async fn snapshot_object_notification_baseline_with_policy(
     ))
 }
 
-pub(crate) async fn snapshot_follow_notification_baseline_with_policy(
+pub(crate) async fn snapshot_follow_notification_baseline(
     docs_sync: &dyn DocsSync,
     replica: &ReplicaId,
     policy: DocFetchPolicy,

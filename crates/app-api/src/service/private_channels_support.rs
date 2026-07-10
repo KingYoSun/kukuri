@@ -1,5 +1,4 @@
 use super::*;
-
 impl AppService {
     pub(crate) async fn maybe_redeem_epoch_handoff_grants_for_channel(
         &self,
@@ -16,7 +15,7 @@ impl AppService {
             };
             let local_author = self.current_author_pubkey();
             let replica = current_private_channel_replica_id(&state);
-            let grant_doc = fetch_private_channel_epoch_handoff_grant_from_replica_with_policy(
+            let grant_doc = fetch_private_channel_epoch_handoff_grant_from_replica(
                 self.docs_sync.as_ref(),
                 &replica,
                 local_author.as_str(),
@@ -47,6 +46,7 @@ impl AppService {
                     self.docs_sync.as_ref(),
                     &replica,
                     local_author.as_str(),
+                    DocFetchPolicy::LocalThenRemote,
                 )
                 .await?
             };
@@ -164,13 +164,12 @@ impl AppService {
             redeemed_any = true;
         }
     }
-
     pub(crate) async fn private_channel_diagnostics(
         &self,
         state: &JoinedPrivateChannelState,
     ) -> Result<PrivateChannelDiagnostics> {
         let replica = current_private_channel_replica_id(state);
-        let sharing_state = fetch_private_channel_policy_from_replica_with_policy(
+        let sharing_state = fetch_private_channel_policy_from_replica(
             self.docs_sync.as_ref(),
             &replica,
             DocFetchPolicy::LocalOnly,
@@ -178,7 +177,7 @@ impl AppService {
         .await?
         .map(|policy| policy.sharing_state)
         .unwrap_or(ChannelSharingState::Open);
-        let participants = fetch_private_channel_participants_from_replica_with_policy(
+        let participants = fetch_private_channel_participants_from_replica(
             self.docs_sync.as_ref(),
             &replica,
             DocFetchPolicy::LocalOnly,
@@ -217,7 +216,6 @@ impl AppService {
                 && stale_participant_count > 0,
         })
     }
-
     pub(crate) async fn joined_private_channel_view_for_state(
         &self,
         state: &JoinedPrivateChannelState,
@@ -244,7 +242,6 @@ impl AppService {
             stale_participant_count: diagnostics.stale_participant_count,
         })
     }
-
     pub(crate) async fn private_channel_capability_from_state(
         &self,
         state: &JoinedPrivateChannelState,
@@ -652,7 +649,7 @@ impl AppService {
         let replica_for_task = replica.clone();
         let hint_topic_for_task = hint_topic.clone();
         let handle = tokio::spawn(async move {
-            let notification_baseline = match snapshot_object_notification_baseline_with_policy(
+            let notification_baseline = match snapshot_object_notification_baseline(
                 docs_sync.as_ref(),
                 &replica_for_task,
                 DocFetchPolicy::LocalOnly,
@@ -672,7 +669,7 @@ impl AppService {
             };
             let mut recovery_tick = tokio::time::interval(std::time::Duration::from_secs(1));
             recovery_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-            if let Err(error) = hydrate_subscription_state_with_services_with_policy(
+            if let Err(error) = hydrate_subscription_state_with_services(
                 docs_sync.as_ref(),
                 blob_service.as_ref(),
                 projection_store.as_ref(),
@@ -766,6 +763,7 @@ impl AppService {
                                     projection_store.as_ref(),
                                     topic.as_str(),
                                     &replica_for_task,
+                                    DocFetchPolicy::LocalThenRemote,
                                 )
                                 .await {
                                     Ok(count) => count,
@@ -900,6 +898,7 @@ impl AppService {
                                             projection_store.as_ref(),
                                             topic.as_str(),
                                             &replica_for_task,
+                                            DocFetchPolicy::LocalThenRemote,
                                         )
                                         .await {
                                             Ok(count) => count,
@@ -997,6 +996,7 @@ impl AppService {
                             projection_store.as_ref(),
                             topic.as_str(),
                             &replica_for_task,
+                            DocFetchPolicy::LocalThenRemote,
                         )
                         .await {
                             Ok(count) => count,

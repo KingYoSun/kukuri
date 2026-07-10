@@ -1,6 +1,6 @@
 use super::*;
 
-pub(crate) async fn hydrate_object_projection_from_replica_with_policy(
+pub(crate) async fn hydrate_object_projection_from_replica(
     docs_sync: &dyn DocsSync,
     blob_service: &dyn BlobService,
     projection_store: &dyn ProjectionStore,
@@ -101,7 +101,7 @@ pub(crate) async fn hydrate_object_projection_from_key(
     hydrate_object_projection_from_record(blob_service, projection_store, replica, record).await
 }
 
-pub(crate) async fn hydrate_reaction_cache_from_replica_with_policy(
+pub(crate) async fn hydrate_reaction_cache_from_replica(
     docs_sync: &dyn DocsSync,
     projection_store: &dyn ProjectionStore,
     replica: &ReplicaId,
@@ -185,25 +185,9 @@ pub(crate) async fn hydrate_topic_state_with_services(
     blob_service: &dyn BlobService,
     projection_store: &dyn ProjectionStore,
     topic_id: &str,
-) -> Result<usize> {
-    hydrate_topic_state_with_services_with_policy(
-        docs_sync,
-        blob_service,
-        projection_store,
-        topic_id,
-        DocFetchPolicy::LocalThenRemote,
-    )
-    .await
-}
-
-pub(crate) async fn hydrate_topic_state_with_services_with_policy(
-    docs_sync: &dyn DocsSync,
-    blob_service: &dyn BlobService,
-    projection_store: &dyn ProjectionStore,
-    topic_id: &str,
     policy: DocFetchPolicy,
 ) -> Result<usize> {
-    hydrate_subscription_state_with_services_with_policy(
+    hydrate_subscription_state_with_services(
         docs_sync,
         blob_service,
         projection_store,
@@ -214,7 +198,7 @@ pub(crate) async fn hydrate_topic_state_with_services_with_policy(
     .await
 }
 
-pub(crate) async fn hydrate_subscription_state_with_services_with_policy(
+pub(crate) async fn hydrate_subscription_state_with_services(
     docs_sync: &dyn DocsSync,
     blob_service: &dyn BlobService,
     projection_store: &dyn ProjectionStore,
@@ -222,7 +206,7 @@ pub(crate) async fn hydrate_subscription_state_with_services_with_policy(
     replica: &ReplicaId,
     policy: DocFetchPolicy,
 ) -> Result<usize> {
-    let post_count = hydrate_object_projection_from_replica_with_policy(
+    let post_count = hydrate_object_projection_from_replica(
         docs_sync,
         blob_service,
         projection_store,
@@ -230,14 +214,9 @@ pub(crate) async fn hydrate_subscription_state_with_services_with_policy(
         policy,
     )
     .await?;
-    let reaction_count = hydrate_reaction_cache_from_replica_with_policy(
-        docs_sync,
-        projection_store,
-        replica,
-        policy,
-    )
-    .await?;
-    let live_count = hydrate_live_sessions_from_replica_with_policy(
+    let reaction_count =
+        hydrate_reaction_cache_from_replica(docs_sync, projection_store, replica, policy).await?;
+    let live_count = hydrate_live_sessions_from_replica(
         docs_sync,
         blob_service,
         projection_store,
@@ -246,7 +225,7 @@ pub(crate) async fn hydrate_subscription_state_with_services_with_policy(
         policy,
     )
     .await?;
-    let game_count = hydrate_game_rooms_from_replica_with_policy(
+    let game_count = hydrate_game_rooms_from_replica(
         docs_sync,
         blob_service,
         projection_store,
@@ -258,25 +237,7 @@ pub(crate) async fn hydrate_subscription_state_with_services_with_policy(
     Ok(post_count + reaction_count + live_count + game_count)
 }
 
-pub(crate) async fn hydrate_subscription_state_with_services(
-    docs_sync: &dyn DocsSync,
-    blob_service: &dyn BlobService,
-    projection_store: &dyn ProjectionStore,
-    topic_id: &str,
-    replica: &ReplicaId,
-) -> Result<usize> {
-    hydrate_subscription_state_with_services_with_policy(
-        docs_sync,
-        blob_service,
-        projection_store,
-        topic_id,
-        replica,
-        DocFetchPolicy::LocalThenRemote,
-    )
-    .await
-}
-
-pub(crate) async fn hydrate_live_sessions_from_replica_with_policy(
+pub(crate) async fn hydrate_live_sessions_from_replica(
     docs_sync: &dyn DocsSync,
     blob_service: &dyn BlobService,
     projection_store: &dyn ProjectionStore,
@@ -400,7 +361,7 @@ pub(crate) async fn hydrate_live_session_from_key_with_retry(
     Ok(0)
 }
 
-pub(crate) async fn hydrate_game_rooms_from_replica_with_policy(
+pub(crate) async fn hydrate_game_rooms_from_replica(
     docs_sync: &dyn DocsSync,
     blob_service: &dyn BlobService,
     projection_store: &dyn ProjectionStore,

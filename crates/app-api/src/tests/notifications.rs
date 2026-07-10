@@ -1,5 +1,4 @@
 use super::*;
-
 #[tokio::test]
 async fn remote_reply_to_local_post_creates_single_unread_reply_notification() {
     let (app, store, docs_sync, blob_service) = local_app_with_memory_services();
@@ -313,7 +312,7 @@ async fn repost_notification_survives_hydration_before_live_doc_event() {
         .create_post(topic.as_str(), "source post", None)
         .await
         .expect("create source post");
-    let baseline = snapshot_object_notification_baseline_with_policy(
+    let baseline = snapshot_object_notification_baseline(
         docs_sync.as_ref(),
         &replica,
         DocFetchPolicy::LocalThenRemote,
@@ -340,13 +339,13 @@ async fn repost_notification_survives_hydration_before_live_doc_event() {
     )
     .await
     .expect("persist simple repost");
-
     hydrate_subscription_state_with_services(
         docs_sync.as_ref(),
         blob_service.as_ref(),
         store.as_ref(),
         topic.as_str(),
         &replica,
+        DocFetchPolicy::LocalThenRemote,
     )
     .await
     .expect("hydrate topic state");
@@ -394,7 +393,7 @@ async fn quote_repost_notification_survives_hydration_before_live_doc_event() {
         .create_post(topic.as_str(), "quoted source", None)
         .await
         .expect("create source post");
-    let baseline = snapshot_object_notification_baseline_with_policy(
+    let baseline = snapshot_object_notification_baseline(
         docs_sync.as_ref(),
         &replica,
         DocFetchPolicy::LocalThenRemote,
@@ -425,13 +424,13 @@ async fn quote_repost_notification_survives_hydration_before_live_doc_event() {
     )
     .await
     .expect("persist quote repost");
-
     hydrate_subscription_state_with_services(
         docs_sync.as_ref(),
         blob_service.as_ref(),
         store.as_ref(),
         topic.as_str(),
         &replica,
+        DocFetchPolicy::LocalThenRemote,
     )
     .await
     .expect("hydrate topic state");
@@ -581,7 +580,7 @@ async fn follow_notification_survives_hydration_before_live_doc_event() {
     let remote_keys = generate_keys();
     let remote_pubkey = remote_keys.public_key_hex();
     let replica = author_replica_id(remote_pubkey.as_str());
-    let baseline = snapshot_follow_notification_baseline_with_policy(
+    let baseline = snapshot_follow_notification_baseline(
         docs_sync.as_ref(),
         &replica,
         DocFetchPolicy::LocalThenRemote,
@@ -600,13 +599,13 @@ async fn follow_notification_survives_hydration_before_live_doc_event() {
     persist_follow_edge_doc(docs_sync.as_ref(), &edge, &envelope)
         .await
         .expect("persist follow edge doc");
-
     hydrate_author_state_with_services(
         docs_sync.as_ref(),
         store.as_ref(),
         store.as_ref(),
         local_author_pubkey.as_str(),
         remote_pubkey.as_str(),
+        DocFetchPolicy::LocalThenRemote,
     )
     .await
     .expect("hydrate author state");
@@ -659,7 +658,7 @@ async fn initial_follow_baseline_prevents_backfill_notification() {
     persist_follow_edge_doc(docs_sync.as_ref(), &edge, &envelope)
         .await
         .expect("persist follow edge doc");
-    let baseline = snapshot_follow_notification_baseline_with_policy(
+    let baseline = snapshot_follow_notification_baseline(
         docs_sync.as_ref(),
         &replica,
         DocFetchPolicy::LocalThenRemote,
@@ -673,6 +672,7 @@ async fn initial_follow_baseline_prevents_backfill_notification() {
         store.as_ref(),
         local_author_pubkey.as_str(),
         remote_pubkey.as_str(),
+        DocFetchPolicy::LocalThenRemote,
     )
     .await
     .expect("hydrate author state");
@@ -806,7 +806,7 @@ async fn restart_or_manual_hydration_does_not_backfill_or_duplicate_notification
         .to_post_object()
         .expect("parse existing reply")
         .expect("existing reply object");
-    let baseline = snapshot_object_notification_baseline_with_policy(
+    let baseline = snapshot_object_notification_baseline(
         docs_sync.as_ref(),
         &replica,
         DocFetchPolicy::LocalThenRemote,
@@ -819,6 +819,7 @@ async fn restart_or_manual_hydration_does_not_backfill_or_duplicate_notification
         store.as_ref(),
         topic.as_str(),
         &replica,
+        DocFetchPolicy::LocalThenRemote,
     )
     .await
     .expect("hydrate topic state");
@@ -889,6 +890,7 @@ async fn restart_or_manual_hydration_does_not_backfill_or_duplicate_notification
         store.as_ref(),
         topic.as_str(),
         &replica,
+        DocFetchPolicy::LocalThenRemote,
     )
     .await
     .expect("rehydrate topic state");

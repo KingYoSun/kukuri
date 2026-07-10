@@ -168,7 +168,7 @@ impl AppService {
         let mut doc_stream = docs_sync.subscribe_replica(&replica).await?;
         let author_key_for_task = author_key.clone();
         let handle = tokio::spawn(async move {
-            let notification_baseline = match snapshot_follow_notification_baseline_with_policy(
+            let notification_baseline = match snapshot_follow_notification_baseline(
                 docs_sync.as_ref(),
                 &replica,
                 DocFetchPolicy::LocalOnly,
@@ -185,7 +185,7 @@ impl AppService {
                     NotificationDocEventBaseline::default()
                 }
             };
-            match hydrate_author_state_with_services_with_policy(
+            match hydrate_author_state_with_services(
                 docs_sync.as_ref(),
                 store.as_ref(),
                 projection_store.as_ref(),
@@ -241,6 +241,7 @@ impl AppService {
                         recovery_projection_store.as_ref(),
                         recovery_local_author_pubkey.as_str(),
                         recovery_author_pubkey.as_str(),
+                        DocFetchPolicy::LocalThenRemote,
                     ),
                 )
                 .await
@@ -332,6 +333,7 @@ impl AppService {
                             projection_store.as_ref(),
                             local_author_pubkey.as_str(),
                             author_key_for_task.as_str(),
+                            DocFetchPolicy::LocalThenRemote,
                         ).await
                         && count > 0
                         {

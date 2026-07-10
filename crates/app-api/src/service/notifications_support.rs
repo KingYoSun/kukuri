@@ -140,8 +140,13 @@ pub(crate) async fn notification_candidate_from_follow_event(
     if doc.subject_pubkey.as_str() != author_pubkey {
         return Ok(None);
     }
-    let Some(envelope) =
-        fetch_author_envelope_by_id(docs_sync, &event.replica_id, &doc.envelope_id).await?
+    let Some(envelope) = fetch_author_envelope_by_id(
+        docs_sync,
+        &event.replica_id,
+        &doc.envelope_id,
+        DocFetchPolicy::LocalThenRemote,
+    )
+    .await?
     else {
         return Ok(None);
     };
