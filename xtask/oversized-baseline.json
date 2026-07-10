@@ -1,10 +1,6 @@
 {
   "files": [
     {
-      "lines": 1155,
-      "path": "apps/desktop/src/components/extended/MetaverseRoomPanel.tsx"
-    },
-    {
       "lines": 1087,
       "path": "crates/app-api/src/service/private_channels_support.rs"
     },
@@ -15,6 +11,10 @@
     {
       "lines": 1079,
       "path": "crates/app-api/src/private_channels.rs"
+    },
+    {
+      "lines": 1043,
+      "path": "apps/desktop/src/components/extended/MetaverseRoomPanel.tsx"
     }
   ]
 }
