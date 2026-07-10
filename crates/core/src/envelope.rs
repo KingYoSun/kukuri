@@ -117,7 +117,7 @@ pub fn sign_envelope_json<T: Serialize>(
     sign_envelope(keys, kind, tags, content)
 }
 
-pub fn sign_envelope(
+pub(crate) fn sign_envelope(
     keys: &crate::KukuriKeys,
     kind: impl Into<String>,
     tags: Vec<Vec<String>>,
@@ -130,7 +130,7 @@ pub fn sign_envelope(
     sign_envelope_at(keys, kind, tags, content, created_at)
 }
 
-pub fn sign_envelope_at(
+pub(crate) fn sign_envelope_at(
     keys: &crate::KukuriKeys,
     kind: impl Into<String>,
     tags: Vec<Vec<String>>,

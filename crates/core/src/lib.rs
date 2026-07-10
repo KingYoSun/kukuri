@@ -22,13 +22,12 @@ pub use direct_messages::{
     DirectMessageAckV1, DirectMessageAttachmentKind, DirectMessageAttachmentManifestV1,
     DirectMessageEncryptedAttachmentV1, DirectMessageEncryptedBlobRefV1, DirectMessageFrameV1,
     DirectMessagePayloadV1, build_direct_message_ack, decrypt_direct_message_attachment,
-    decrypt_direct_message_frame, derive_direct_message_secret, derive_direct_message_topic,
-    direct_message_id_for_participants, encrypt_direct_message_attachment,
-    encrypt_direct_message_frame,
+    decrypt_direct_message_frame, derive_direct_message_topic, direct_message_id_for_participants,
+    encrypt_direct_message_attachment, encrypt_direct_message_frame,
 };
+pub(crate) use envelope::sign_envelope_at;
 pub use envelope::{
-    GossipHint, HintObjectRef, KukuriAuthEnvelopeContentV1, KukuriEnvelope, sign_envelope,
-    sign_envelope_at, sign_envelope_json,
+    GossipHint, HintObjectRef, KukuriAuthEnvelopeContentV1, KukuriEnvelope, sign_envelope_json,
 };
 pub use game::{
     GameParticipant, GameRoomKind, GameRoomManifestBlobV1, GameRoomStateDocV1, GameRoomStatus,
@@ -84,10 +83,6 @@ pub use reactions::{
     CustomReactionAssetDocV1, CustomReactionAssetSnapshotV1,
     KukuriCustomReactionAssetEnvelopeContentV1, KukuriReactionEnvelopeContentV1, ReactionDocV1,
     ReactionKeyKind, ReactionKeyV1, build_custom_reaction_asset_envelope, build_reaction_envelope,
-    deterministic_reaction_id, normalize_reaction_emoji, parse_custom_reaction_asset,
-    parse_reaction,
+    deterministic_reaction_id, parse_custom_reaction_asset, parse_reaction,
 };
-pub use rendezvous::{
-    private_topic_rendezvous_key, private_topic_rendezvous_key_hex_secret,
-    public_topic_rendezvous_key,
-};
+pub use rendezvous::{private_topic_rendezvous_key_hex_secret, public_topic_rendezvous_key};
