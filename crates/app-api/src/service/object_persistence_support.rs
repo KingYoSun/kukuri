@@ -827,3 +827,55 @@ pub(crate) fn search_key_or_asset_id(search_key: &str, asset_id: &str) -> String
     }
     normalized.to_string()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn epoch_handoff_grant_uses_legacy_rotation_grant_storage_key() {
+        let owner =
+            KukuriKeys::parse("0000000000000000000000000000000000000000000000000000000000000001")
+                .expect("owner key");
+        let recipient =
+            KukuriKeys::parse("0000000000000000000000000000000000000000000000000000000000000002")
+                .expect("recipient key");
+        let grant = encrypt_private_channel_epoch_handoff_grant(
+            &owner,
+            &PrivateChannelEpochHandoffGrantPayloadV1 {
+                channel_id: ChannelId::new("channel-fixture"),
+                topic_id: TopicId::new("kukuri:topic:fixture"),
+                owner_pubkey: owner.public_key(),
+                recipient_pubkey: recipient.public_key(),
+                old_epoch_id: "epoch-7".into(),
+                new_epoch_id: "epoch-8".into(),
+                new_namespace_secret_hex:
+                    "0000000000000000000000000000000000000000000000000000000000000003".into(),
+            },
+        )
+        .expect("grant");
+        let docs_sync = MemoryDocsSync::default();
+        let replica = ReplicaId::new("private:fixture:epoch-7");
+
+        persist_private_channel_rotation_grant(&docs_sync, &owner, &grant, &replica)
+            .await
+            .expect("persist grant");
+
+        let expected_key = format!(
+            "channels/rotation-grants/{}/envelope",
+            recipient.public_key_hex()
+        );
+        let records = docs_sync
+            .query_replica(&replica, DocQuery::Exact(expected_key.clone()))
+            .await
+            .expect("query grant");
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].key, expected_key);
+        assert_eq!(
+            serde_json::from_slice::<KukuriEnvelope>(&records[0].value)
+                .expect("stored envelope")
+                .kind,
+            "channel-rotation-grant"
+        );
+    }
+}
