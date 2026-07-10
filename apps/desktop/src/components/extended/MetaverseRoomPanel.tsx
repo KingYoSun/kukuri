@@ -2,14 +2,12 @@
 import {
   Box,
   ChevronDown,
-  Cuboid,
   LogOut,
   MessageSquare,
   MonitorPause,
   Move3D,
   PanelRightClose,
   PanelRightOpen,
-  Play,
   RefreshCw,
   Send,
   Wifi,
@@ -17,13 +15,10 @@ import {
   X,
 } from 'lucide-react';
 
-import { AuthorAvatar } from '@/components/core/AuthorAvatar';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Notice } from '@/components/ui/notice';
-import { Textarea } from '@/components/ui/textarea';
 import type {
   ChannelRef,
   DesktopApi,
@@ -36,10 +31,14 @@ import type {
   SharedRoomObjectV1,
   SyncStatus,
 } from '@/lib/api';
-import { formatLocalizedTime } from '@/i18n/format';
 import type { SupportedLocale } from '@/i18n';
+import { formatLocalizedTime } from '@/i18n/format';
 import { blobToBase64 } from '@/lib/attachments';
 import { MetaverseScene } from './MetaverseScene';
+import {
+  MetaverseRoomDiscovery,
+  type CreateMetaverseRoomInput,
+} from './metaverse/MetaverseRoomDiscovery';
 import {
   DEFAULT_AVATAR_ASSET_NAME,
   DEFAULT_AVATAR_ASSET_URL,
@@ -171,10 +170,6 @@ export function MetaverseRoomPanel({
   mediaObjectUrls = {},
   onRefresh,
 }: MetaverseRoomPanelProps) {
-  const [createOpen, setCreateOpen] = useState(false);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [maxPeers, setMaxPeers] = useState('8');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
@@ -618,32 +613,25 @@ export function MetaverseRoomPanel({
     });
   }, [onRefresh, roomConnectionState, selectedRoom]);
 
-  async function handleCreateRoom(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!title.trim()) {
-      setError('Room title is required');
-      return;
-    }
+  async function handleCreateRoom(input: CreateMetaverseRoomInput) {
     setPending(true);
     try {
-      const parsedMaxPeers = Number.parseInt(maxPeers, 10);
       const roomId = await api.createMetaverseRoom(
         activeTopic,
-        title.trim(),
-        description.trim(),
-        Number.isNaN(parsedMaxPeers) ? null : parsedMaxPeers,
+        input.title,
+        input.description,
+        input.maxPeers,
         activeComposeChannel
       );
-      setTitle('');
-      setDescription('');
-      setMaxPeers('8');
       setError(null);
       pendingCreatedRoomIdRef.current = roomId;
       setJoinedRoomIds((current) => new Set(current).add(roomId));
       setSelectedRoomId(roomId);
       await onRefresh();
+      return true;
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'Failed to create metaverse room');
+      return false;
     } finally {
       setPending(false);
     }
@@ -692,26 +680,6 @@ export function MetaverseRoomPanel({
     });
     setSelectedRoomId(null);
     resetRoomRuntimeState();
-  }
-
-  function hostAuthor(room: GameRoomView): Profile | AuthorSocialView | null {
-    return room.host_pubkey === syncStatus.local_author_pubkey
-      ? localProfile
-      : knownAuthorsByPubkey[room.host_pubkey] ?? null;
-  }
-
-  function hostLabel(room: GameRoomView) {
-    const host = hostAuthor(room);
-    return host?.display_name?.trim() || host?.name?.trim() || room.host_pubkey.slice(0, 10);
-  }
-
-  function hostPicture(room: GameRoomView) {
-    const host = hostAuthor(room);
-    const pictureAssetHash = host?.picture_asset?.hash;
-    if (pictureAssetHash && typeof mediaObjectUrls[pictureAssetHash] === 'string') {
-      return mediaObjectUrls[pictureAssetHash];
-    }
-    return host?.picture ?? null;
   }
 
   function handleLocalTransform(transform: AvatarTransform) {
@@ -854,100 +822,20 @@ export function MetaverseRoomPanel({
 
   return (
     <div className='metaverse-panel'>
-      <Card className='shell-workspace-card metaverse-discovery-card'>
-        <div className='panel-header'>
-          <div>
-            <h3>Metaverse Rooms</h3>
-            <small>{rooms.length} room{rooms.length === 1 ? '' : 's'} in this topic</small>
-          </div>
-        </div>
-        {error ? <Notice tone='destructive'>{error}</Notice> : null}
-        <section className='shell-nav-accordion metaverse-create-accordion' data-open={createOpen}>
-          <button
-            className='shell-nav-accordion-trigger'
-            type='button'
-            aria-expanded={createOpen}
-            onClick={() => setCreateOpen((current) => !current)}
-          >
-            <Cuboid className='size-4' aria-hidden='true' />
-            <span className='shell-nav-accordion-title'>Create metaverse room</span>
-            <ChevronDown className='shell-nav-accordion-icon size-4' aria-hidden='true' />
-          </button>
-          {createOpen ? (
-            <form className='composer composer-compact metaverse-create-form' onSubmit={handleCreateRoom}>
-              <div className='metaverse-create-form-primary'>
-                <Label>
-                  <span>Room title</span>
-                  <Input
-                    value={title}
-                    placeholder='Atrium'
-                    disabled={pending}
-                    onChange={(event) => setTitle(event.target.value)}
-                  />
-                </Label>
-                <Label>
-                  <span>Max peers</span>
-                  <Input
-                    value={maxPeers}
-                    disabled={pending}
-                    onChange={(event) => setMaxPeers(event.target.value)}
-                  />
-                </Label>
-              </div>
-              <Label className='metaverse-create-form-description'>
-                <span>Description</span>
-                <Textarea
-                  value={description}
-                  placeholder='Small social space'
-                  disabled={pending}
-                  onChange={(event) => setDescription(event.target.value)}
-                />
-              </Label>
-              <div className='metaverse-create-form-actions'>
-                <Button type='submit' disabled={pending}>
-                  <Cuboid className='size-4' aria-hidden='true' />
-                  Create metaverse room
-                </Button>
-              </div>
-            </form>
-          ) : null}
-        </section>
-        {rooms.length === 0 ? <p className='empty-state'>No metaverse rooms in this topic.</p> : null}
-        <ul className='metaverse-room-grid'>
-          {rooms.map((room) => (
-            <li key={room.room_id}>
-              <article className={`metaverse-room-card${selectedRoom?.room_id === room.room_id ? ' metaverse-room-card-active' : ''}`}>
-                <div className='post-meta'>
-                  <span>{room.title}</span>
-                  <span>{room.status}</span>
-                  <span className='reply-chip'>{room.audience_label}</span>
-                </div>
-                <p>{room.description || 'No description'}</p>
-                <div className='metaverse-room-host'>
-                  <AuthorAvatar label={hostLabel(room)} picture={hostPicture(room)} size='sm' />
-                  <span>Host: {hostLabel(room)}</span>
-                </div>
-                <div className='topic-diagnostic topic-diagnostic-secondary'>
-                  <span>Updated: {formatLocalizedTime(room.updated_at, locale)}</span>
-                  <span>{joinedRoomIds.has(room.room_id) ? 'Joined' : 'Not joined'}</span>
-                </div>
-                <div className='topic-diagnostic topic-diagnostic-secondary'>
-                  <span>Manifest: {room.manifest_blob_hash ?? 'pending'}</span>
-                  <span>World: {room.metaverse?.world_version ?? 1}</span>
-                </div>
-                <Button
-                  variant='secondary'
-                  type='button'
-                  onClick={() => handleJoinRoom(room.room_id)}
-                >
-                  <Play className='size-4' aria-hidden='true' />
-                  Join Room
-                </Button>
-              </article>
-            </li>
-          ))}
-        </ul>
-      </Card>
+      <MetaverseRoomDiscovery
+        rooms={rooms}
+        selectedRoomId={selectedRoomId}
+        joinedRoomIds={joinedRoomIds}
+        pending={pending}
+        error={error}
+        locale={locale}
+        localAuthorPubkey={syncStatus.local_author_pubkey}
+        localProfile={localProfile}
+        knownAuthorsByPubkey={knownAuthorsByPubkey}
+        mediaObjectUrls={mediaObjectUrls}
+        onCreateRoom={handleCreateRoom}
+        onJoinRoom={handleJoinRoom}
+      />
 
       {selectedRoom ? (
         <Card className='shell-workspace-card metaverse-room-view'>
