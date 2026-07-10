@@ -97,7 +97,9 @@ export function createMessageReactionSocialActions({
       await api.deleteDirectMessageMessage(peerPubkey, messageId);
       await openDirectMessagePane(peerPubkey, { historyMode: 'replace' });
     } catch (deleteError) {
-      setDirectMessageError(messageFromError(deleteError, 'failed to delete direct message'));
+      setDirectMessageError(
+        messageFromError(deleteError, translate('common:errors.failedToDeleteDirectMessage'))
+      );
     }
   }
 
@@ -106,7 +108,9 @@ export function createMessageReactionSocialActions({
       await api.clearDirectMessage(peerPubkey);
       await openDirectMessagePane(peerPubkey, { historyMode: 'replace' });
     } catch (clearError) {
-      setDirectMessageError(messageFromError(clearError, 'failed to clear direct message'));
+      setDirectMessageError(
+        messageFromError(clearError, translate('common:errors.failedToClearDirectMessages'))
+      );
     }
   }
 

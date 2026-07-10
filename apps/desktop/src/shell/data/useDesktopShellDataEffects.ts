@@ -493,13 +493,15 @@ export function useDesktopShellDataEffects({
                     : statusResult.status === 'rejected'
                       ? statusResult.reason
                       : null,
-                  'failed to load direct messages'
+                  translate('common:errors.failedToLoadDirectMessages')
                 )
           );
         });
       } catch (error) {
         if (!disposed) {
-          setDirectMessageError(messageFromError(error, 'failed to load direct messages'));
+          setDirectMessageError(
+            messageFromError(error, translate('common:errors.failedToLoadDirectMessages'))
+          );
         }
       }
     };
@@ -534,6 +536,7 @@ export function useDesktopShellDataEffects({
     setKnownAuthorsByPubkey,
     shellChromeState.activePrimarySection,
     storeApi,
+    translate,
   ]);
 
   useEffect(() => {

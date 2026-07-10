@@ -16,7 +16,7 @@ import type {
   Setter,
 } from './shared';
 
-type DirectMessagesParams = Pick<ActionsBaseParams, 'api'> & {
+type DirectMessagesParams = Pick<ActionsBaseParams, 'api' | 'translate'> & {
   getState: () => DesktopShellState;
   openDirectMessagePane: OpenDirectMessagePane;
   releaseAllDirectMessageDraftPreviews: () => void;
@@ -38,6 +38,7 @@ function directMessagePreviewFromAttachments(attachments: AttachmentView[]) {
 
 export function createDirectMessageActions({
   api,
+  translate,
   getState,
   openDirectMessagePane,
   releaseAllDirectMessageDraftPreviews,
@@ -141,7 +142,9 @@ export function createDirectMessageActions({
       setDirectMessageError(null);
       await openDirectMessagePane(peerPubkey, { historyMode: 'replace' });
     } catch (sendError) {
-      setDirectMessageError(messageFromError(sendError, 'failed to send direct message'));
+      setDirectMessageError(
+        messageFromError(sendError, translate('common:errors.failedToSendDirectMessage'))
+      );
     } finally {
       setDirectMessageSending(false);
     }

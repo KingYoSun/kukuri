@@ -249,7 +249,10 @@ export function useDesktopShellRouting({
           selectedThread: null,
         });
       } catch (openError) {
-        const nextError = messageFromError(openError, 'failed to open direct message');
+        const nextError = messageFromError(
+          openError,
+          translate('common:errors.failedToOpenDirectMessage')
+        );
         setDirectMessageError(nextError);
         if (options?.normalizeOnError) {
           setDirectMessagePaneOpen(true);
@@ -263,6 +266,7 @@ export function useDesktopShellRouting({
     },
     [
       api,
+      translate,
       selectedAuthorPubkey,
       selectedDirectMessagePeerPubkey,
       setAuthorError,
