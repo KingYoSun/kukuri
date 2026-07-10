@@ -64,14 +64,11 @@ type DesktopShellOverlaysProps = {
   setLeaveChannelDialogOpen: (open: boolean) => void;
   handleConfirmLeaveChannel: () => Promise<void>;
   sharePreviewOpen: boolean;
-  setSharePreviewOpen: Dispatch<SetStateAction<boolean>>;
+  handleSharePreviewOpenChange: (open: boolean) => void;
   sharePreviewToken: string | null;
-  setSharePreviewToken: Dispatch<SetStateAction<string | null>>;
   sharePreviewData: ChannelAccessTokenPreview | null;
-  setSharePreviewData: Dispatch<SetStateAction<ChannelAccessTokenPreview | null>>;
   sharePreviewLoading: boolean;
   sharePreviewError: string | null;
-  setSharePreviewError: Dispatch<SetStateAction<string | null>>;
   shareImportPending: boolean;
   handleConfirmShareImport: () => Promise<void>;
   handleCreatePrivateChannel: (event: FormEvent<HTMLFormElement>) => Promise<void>;
@@ -135,14 +132,11 @@ export function DesktopShellOverlays({
   setLeaveChannelDialogOpen,
   handleConfirmLeaveChannel,
   sharePreviewOpen,
-  setSharePreviewOpen,
+  handleSharePreviewOpenChange,
   sharePreviewToken,
-  setSharePreviewToken,
   sharePreviewData,
-  setSharePreviewData,
   sharePreviewLoading,
   sharePreviewError,
-  setSharePreviewError,
   shareImportPending,
   handleConfirmShareImport,
   handleCreatePrivateChannel,
@@ -366,14 +360,7 @@ export function DesktopShellOverlays({
 
       <Dialog
         open={sharePreviewOpen}
-        onOpenChange={(open) => {
-          setSharePreviewOpen(open);
-          if (!open) {
-            setSharePreviewError(null);
-            setSharePreviewData(null);
-            setSharePreviewToken(null);
-          }
-        }}
+        onOpenChange={handleSharePreviewOpenChange}
       >
         <DialogContent>
           <DialogHeader>
@@ -419,7 +406,7 @@ export function DesktopShellOverlays({
               <Button
                 variant='secondary'
                 type='button'
-                onClick={() => setSharePreviewOpen(false)}
+                onClick={() => handleSharePreviewOpenChange(false)}
               >
                 {t('common:actions.cancel')}
               </Button>

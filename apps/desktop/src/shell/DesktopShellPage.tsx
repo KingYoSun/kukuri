@@ -18,12 +18,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
-import { type ChannelAccessTokenPreview, runtimeApi } from '@/lib/api';
+import { runtimeApi } from '@/lib/api';
 import i18n from '@/i18n';
 import { getResolvedLocale } from '@/i18n/format';
 import {
   buildTopicLink,
-  parseChannelAccessPreviewDeepLink,
   type InternalSmartReference,
 } from '@/lib/internalLinks';
 import { CLIPBOARD_COPY_EVENT, copyTextToClipboard } from '@/lib/utils';
@@ -40,7 +39,6 @@ import {
 import {
   formatCount,
   mergeKnownAuthors,
-  messageFromError,
   privateComposeTarget,
   privateTimelineScope,
   syncStatusBadgeLabel,
@@ -63,6 +61,7 @@ import {
 import { DesktopShellOverlays } from '@/shell/page/DesktopShellOverlays';
 import { DesktopShellPrimaryWorkspace } from '@/shell/page/DesktopShellPrimaryWorkspace';
 import { DesktopShellSettingsDrawer } from '@/shell/page/DesktopShellSettingsDrawer';
+import { useSharePreview } from '@/shell/page/useSharePreview';
 import { useShallow } from 'zustand/react/shallow';
 
 const CLIPBOARD_TOAST_TIMEOUT_MS = 2200;
@@ -114,12 +113,6 @@ export function DesktopShellPage({
   const [profileAvatarCropFile, setProfileAvatarCropFile] = useState<File | null>(null);
   const [profileAvatarCropOpen, setProfileAvatarCropOpen] = useState(false);
   const [profileAvatarInputKey, setProfileAvatarInputKey] = useState(0);
-  const [sharePreviewOpen, setSharePreviewOpen] = useState(false);
-  const [sharePreviewToken, setSharePreviewToken] = useState<string | null>(null);
-  const [sharePreviewData, setSharePreviewData] = useState<ChannelAccessTokenPreview | null>(null);
-  const [sharePreviewLoading, setSharePreviewLoading] = useState(false);
-  const [sharePreviewError, setSharePreviewError] = useState<string | null>(null);
-  const [shareImportPending, setShareImportPending] = useState(false);
   const [clipboardToastId, setClipboardToastId] = useState(0);
   const previousPrimarySectionRef = useRef(shellChromeState.activePrimarySection);
   const previousTimelineViewRef = useRef(shellChromeState.timelineView);
@@ -444,90 +437,12 @@ export function DesktopShellPage({
   const handleCopyInternalLink = useCallback((link: string) => {
     void copyTextToClipboard(link);
   }, []);
-  const handleOpenSharePreview = useCallback(
-    async (token: string) => {
-      setSharePreviewOpen(true);
-      setSharePreviewToken(token);
-      setSharePreviewData(null);
-      setSharePreviewError(null);
-      setSharePreviewLoading(true);
-      try {
-        const preview = await api.previewChannelAccessToken(token);
-        setSharePreviewData(preview);
-      } catch (error) {
-        setSharePreviewError(
-          messageFromError(error, translate('channels:errors.failedPreviewToken'))
-        );
-      } finally {
-        setSharePreviewLoading(false);
-      }
-    },
-    [api, translate]
-  );
-  const handleAccessPreviewDeepLink = useCallback(
-    async (url: string) => {
-      const reference = parseChannelAccessPreviewDeepLink(url);
-      if (!reference) {
-        return;
-      }
-      await handleOpenSharePreview(reference.token);
-    },
-    [handleOpenSharePreview]
-  );
-  useEffect(() => {
-    const handleBrowserEvent = (event: Event) => {
-      const url =
-        event instanceof CustomEvent && typeof event.detail?.url === 'string'
-          ? event.detail.url
-          : null;
-      if (url) {
-        void handleAccessPreviewDeepLink(url);
-      }
-    };
-    window.addEventListener('kukuri:open-url', handleBrowserEvent);
-
-    let disposed = false;
-    let unlisten: (() => void) | undefined;
-    void import('@tauri-apps/plugin-deep-link')
-      .then(async ({ getCurrent, onOpenUrl }) => {
-        if (disposed) {
-          return;
-        }
-        const currentUrls = await getCurrent();
-        if (!disposed) {
-          for (const url of currentUrls ?? []) {
-            await handleAccessPreviewDeepLink(url);
-          }
-        }
-        unlisten = await onOpenUrl((urls) => {
-          for (const url of urls) {
-            void handleAccessPreviewDeepLink(url);
-          }
-        });
-      })
-      .catch(() => undefined);
-
-    return () => {
-      disposed = true;
-      window.removeEventListener('kukuri:open-url', handleBrowserEvent);
-      unlisten?.();
-    };
-  }, [handleAccessPreviewDeepLink]);
-  const handleConfirmShareImport = useCallback(async () => {
-    if (!sharePreviewToken) {
-      return;
-    }
-    setShareImportPending(true);
-    setSharePreviewError(null);
-    try {
-      await handleImportChannelAccessToken(sharePreviewToken);
-      setSharePreviewOpen(false);
-    } catch (error) {
-      setSharePreviewError(messageFromError(error, translate('channels:errors.failedJoinChannel')));
-    } finally {
-      setShareImportPending(false);
-    }
-  }, [handleImportChannelAccessToken, sharePreviewToken, translate]);
+  const sharePreview = useSharePreview({
+    api,
+    importChannelAccessToken: handleImportChannelAccessToken,
+    translate,
+  });
+  const handleOpenSharePreview = sharePreview.openPreview;
   const handleActivateReference = useCallback(
     async (reference: InternalSmartReference) => {
       if (reference.kind === 'share_token') {
@@ -1033,17 +948,14 @@ export function DesktopShellPage({
           setLeaveChannelDialogOpen(false);
           setPendingLeaveChannel(null);
         }}
-        sharePreviewOpen={sharePreviewOpen}
-        setSharePreviewOpen={setSharePreviewOpen}
-        sharePreviewToken={sharePreviewToken}
-        setSharePreviewToken={setSharePreviewToken}
-        sharePreviewData={sharePreviewData}
-        setSharePreviewData={setSharePreviewData}
-        sharePreviewLoading={sharePreviewLoading}
-        sharePreviewError={sharePreviewError}
-        setSharePreviewError={setSharePreviewError}
-        shareImportPending={shareImportPending}
-        handleConfirmShareImport={handleConfirmShareImport}
+        sharePreviewOpen={sharePreview.open}
+        handleSharePreviewOpenChange={sharePreview.handleOpenChange}
+        sharePreviewToken={sharePreview.token}
+        sharePreviewData={sharePreview.data}
+        sharePreviewLoading={sharePreview.loading}
+        sharePreviewError={sharePreview.error}
+        shareImportPending={sharePreview.importPending}
+        handleConfirmShareImport={sharePreview.confirmImport}
         handleCreatePrivateChannel={handleCreatePrivateChannel}
         handleJoinChannelAccess={handleJoinChannelAccess}
         handleShareChannelAccess={handleShareChannelAccess}
