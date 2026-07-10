@@ -24,7 +24,7 @@ import {
   syncCommunityNodeConfigWithStatus,
   upsertCommunityNodeStatus,
   upsertJoinedChannel,
-} from '@/shell/selectors';
+} from '@/shell/presentation';
 
 import type {
   ActionsBaseParams,

@@ -29,7 +29,7 @@ import {
   authorViewFromDirectMessageConversation,
   formatCount,
   resolveProfilePictureSrc,
-} from '@/shell/selectors';
+} from '@/shell/presentation';
 import {
   selectPrimaryImageAttachment,
   selectVideoManifestAttachment,

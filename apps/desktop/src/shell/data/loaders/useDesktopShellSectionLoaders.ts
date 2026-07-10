@@ -11,7 +11,7 @@ import {
   privateTimelineScope,
   profileInputFromProfile,
   seedPeersToEditorValue,
-} from '@/shell/selectors';
+} from '@/shell/presentation';
 import { setRecordEntry } from '@/shell/stateUpdates';
 import {
   useDesktopShellFieldSetter,

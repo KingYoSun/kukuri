@@ -10,7 +10,7 @@ import { SettingsDrawer } from '@/components/shell/SettingsDrawer';
 import type { SupportedLocale } from '@/i18n';
 import type { CustomReactionCropRect } from '@/lib/api';
 import type { DesktopTheme } from '@/lib/theme';
-import { communityNodesToDraftNodes, seedPeersToEditorValue } from '@/shell/selectors';
+import { communityNodesToDraftNodes, seedPeersToEditorValue } from '@/shell/presentation';
 import {
   SHELL_SETTINGS_ID,
   useDesktopShellFieldSetter,

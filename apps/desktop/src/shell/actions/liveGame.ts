@@ -3,7 +3,7 @@ import type { FormEvent } from 'react';
 import type { ChannelRef, GameRoomView, GameScoreView } from '@/lib/api';
 
 import { removeRecordEntry, setRecordEntry } from '@/shell/stateUpdates';
-import { createGameEditorDraft, messageFromError } from '@/shell/selectors';
+import { createGameEditorDraft, messageFromError } from '@/shell/presentation';
 import type { GameEditorDraft } from '@/shell/store';
 
 import type {

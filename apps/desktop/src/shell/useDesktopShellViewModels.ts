@@ -68,8 +68,8 @@ import {
   syncStatusBadgeLabel,
   topicConnectionLabel,
   translateTopicConnectionText,
-  selectShellViewModelsSlice,
-} from '@/shell/selectors';
+} from '@/shell/presentation';
+import { selectShellViewModelsSlice } from '@/shell/storeSelectors';
 
 type UseDesktopShellViewModelsArgs = {
   t: (key: string, options?: Record<string, unknown>) => string;

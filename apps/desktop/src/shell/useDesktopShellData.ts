@@ -42,8 +42,8 @@ import {
   mergeKnownAuthors,
   messageFromError,
   privateTimelineScope,
-  selectShellDataSlice,
-} from '@/shell/selectors';
+} from '@/shell/presentation';
+import { selectShellDataSlice } from '@/shell/storeSelectors';
 
 type UseDesktopShellDataArgs = {
   api: DesktopApi;

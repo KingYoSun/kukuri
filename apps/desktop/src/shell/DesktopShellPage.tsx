@@ -41,8 +41,8 @@ import {
   privateTimelineScope,
   syncStatusBadgeLabel,
   syncStatusBadgeTone,
-  selectShellPageSlice,
-} from '@/shell/selectors';
+} from '@/shell/presentation';
+import { selectShellPageSlice } from '@/shell/storeSelectors';
 import { setRecordEntry } from '@/shell/stateUpdates';
 import { useDesktopShellData } from '@/shell/useDesktopShellData';
 import { useDesktopShellRouting } from '@/shell/useDesktopShellRouting';

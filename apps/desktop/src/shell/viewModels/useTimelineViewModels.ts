@@ -25,7 +25,7 @@ import {
   resolveProfilePictureSrc,
   shortPubkey,
   strongestRelationshipLabel,
-} from '@/shell/selectors';
+} from '@/shell/presentation';
 import {
   useDesktopShellFieldSetter,
   type DesktopShellState,

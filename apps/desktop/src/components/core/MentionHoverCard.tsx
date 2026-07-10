@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
-import { shortPubkey } from '@/shell/selectors';
+import { shortPubkey } from '@/shell/presentation';
 
 import { AuthorAvatar } from './AuthorAvatar';
 import { type MentionAuthorView } from './types';

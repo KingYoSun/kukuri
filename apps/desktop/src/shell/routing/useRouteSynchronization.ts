@@ -23,7 +23,7 @@ import {
   isHex64,
   privateComposeTarget,
   privateTimelineScope,
-} from '@/shell/selectors';
+} from '@/shell/presentation';
 
 type OpenDirectMessagePaneOptions = {
   historyMode?: 'push' | 'replace';

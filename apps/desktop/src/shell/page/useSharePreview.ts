@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { ChannelAccessTokenPreview, DesktopApi } from '@/lib/api';
 import { parseChannelAccessPreviewDeepLink } from '@/lib/internalLinks';
 import type { Translate } from '@/shell/actions/shared';
-import { messageFromError } from '@/shell/selectors';
+import { messageFromError } from '@/shell/presentation';
 
 type UseSharePreviewArgs = {
   api: DesktopApi;

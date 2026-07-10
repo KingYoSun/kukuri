@@ -1,4 +1,4 @@
-// WP-S5 characterization テスト(selectors.ts 純関数 contract ②)。
+// WP-S5 characterization テスト(presentation.ts 純関数 contract ②)。
 // 後続 WP-H6(shell の store スライス化・selector 化・prop drilling 除去)の安全網として、
 // 「観測した現挙動」を生リテラルで固定する。このテストが落ちたら疑うべきは直近の変更で
 // ありテストではない。ラベル関数の期待値は setup.ts が毎テスト locale='en' に固定する
@@ -42,7 +42,7 @@ import {
   syncCommunityNodeConfigWithStatus,
   upsertCommunityNodeStatus,
   upsertJoinedChannel,
-} from './selectors';
+} from './presentation';
 
 function baseStatus(
   overrides: Partial<CommunityNodeNodeStatus> = {}
