@@ -30,7 +30,7 @@ fn export_ipc_types() {
         CommunityNodeAuthState, CommunityNodeAuthorityScope, CommunityNodeCapabilityScope,
         CommunityNodeConfig, CommunityNodeManifest, CommunityNodeManifestFetch,
         CommunityNodeManifestFetchStatus, CommunityNodeNodeConfig, CommunityNodeNodeStatus,
-        CommunityNodeP2pBoundary, CommunityNodeSessionPhase, DiscoveryConfig,
+        CommunityNodeP2pBoundary, CommunityNodeSessionPhase, DiscoveryConfig, RuntimeEvent,
         SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
         SubmitCommunityNodeReportStatus,
     };
@@ -150,6 +150,7 @@ fn export_ipc_types() {
         SubmitCommunityNodeReportRequest,
         SubmitCommunityNodeReportStatus,
         SubmitCommunityNodeReportResult,
+        RuntimeEvent,
     );
 
     let path = concat!(

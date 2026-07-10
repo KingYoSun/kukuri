@@ -58,5 +58,6 @@ mod identity_restart;
 mod media_blob_restore;
 mod private_channels;
 mod replication_heuristics;
+mod runtime_events;
 mod seeded_dht;
 mod static_peer;

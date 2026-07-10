@@ -193,6 +193,7 @@ pub(crate) fn build_desktop_state(
     tauri::async_runtime::block_on(runtime.start_community_node_session_scheduler());
 
     spawn_runtime_event_bridge(app_handle, &runtime);
+    tauri::async_runtime::block_on(runtime.start_sync_status_observer());
 
     Ok(DesktopState { runtime })
 }

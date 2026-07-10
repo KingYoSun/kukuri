@@ -10,7 +10,7 @@ import {
 } from '@/shell/store';
 
 // 購読の分離 smoke(WP-H6 PR2)。
-// 3 秒ポーリングが更新するフィールド(syncStatus / communityNodeStatuses)を
+// runtime event push / fallback が更新するフィールド(syncStatus / communityNodeStatuses)を
 // setState しても、それを選択していない購読者が再レンダーされないことを固定する。
 // selector なしの全ストア購読(useDesktopShellStore())ではこの分離が成立しない。
 
@@ -31,7 +31,7 @@ function RelatedProbe() {
 }
 
 describe('shell 購読の分離(レンダー回数 smoke)', () => {
-  it('ポーリング更新フィールドを選択しない購読者は再レンダーされない', () => {
+  it('接続状態の更新フィールドを選択しない購読者は再レンダーされない', () => {
     const store = createDesktopShellStore();
     renderLog.length = 0;
     render(
@@ -43,7 +43,7 @@ describe('shell 購読の分離(レンダー回数 smoke)', () => {
     expect(countRenders('unrelated')).toBe(1);
     expect(countRenders('related')).toBe(1);
 
-    // ポーリング 1 周期相当: syncStatus を新しいオブジェクトで更新する
+    // runtime event push 相当: syncStatus を新しいオブジェクトで更新する
     act(() => {
       const current = store.getState().syncStatus;
       store.setState({

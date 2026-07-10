@@ -225,3 +225,5 @@ export type SubmitCommunityNodeReportResult = { status: SubmitCommunityNodeRepor
  */
 reference_id?: string | null, };
 
+export type RuntimeEvent = { "type": "notification_status_changed" } | { "type": "sync_status_changed", sync_status?: SyncStatus | null, community_node_statuses?: Array<CommunityNodeNodeStatus> | null, };
+
