@@ -1,5 +1,4 @@
 import {
-  startTransition,
   useCallback,
   useEffect,
   useRef,
@@ -38,7 +37,6 @@ import {
 } from '@/shell/store';
 import {
   formatCount,
-  mergeKnownAuthors,
   privateComposeTarget,
   privateTimelineScope,
   syncStatusBadgeLabel,
@@ -63,6 +61,7 @@ import { DesktopShellPrimaryWorkspace } from '@/shell/page/DesktopShellPrimaryWo
 import { DesktopShellSettingsDrawer } from '@/shell/page/DesktopShellSettingsDrawer';
 import { useFocusScroll } from '@/shell/page/useFocusScroll';
 import { useSharePreview } from '@/shell/page/useSharePreview';
+import { useShellDialogs } from '@/shell/page/useShellDialogs';
 import { useShallow } from 'zustand/react/shallow';
 
 const CLIPBOARD_TOAST_TIMEOUT_MS = 2200;
@@ -100,24 +99,14 @@ export function DesktopShellPage({
     selectedGameRoomId,
     shellChromeState,
   } = useDesktopShellStore(useShallow(selectShellPageSlice));
-  const [composeDialogOpen, setComposeDialogOpen] = useState(false);
-  const [channelDialogOpen, setChannelDialogOpen] = useState(false);
-  const [channelSettingsDialogOpen, setChannelSettingsDialogOpen] = useState(false);
-  const [leaveChannelDialogOpen, setLeaveChannelDialogOpen] = useState(false);
-  const [pendingLeaveChannel, setPendingLeaveChannel] = useState<{
-    topicId: string;
-    channelId: string;
-  } | null>(null);
-  const [liveCreateDialogOpen, setLiveCreateDialogOpen] = useState(false);
-  const [gameCreateDialogOpen, setGameCreateDialogOpen] = useState(false);
   const [profileAvatarPreviewUrl, setProfileAvatarPreviewUrl] = useState<string | null>(null);
-  const [profileAvatarCropFile, setProfileAvatarCropFile] = useState<File | null>(null);
-  const [profileAvatarCropOpen, setProfileAvatarCropOpen] = useState(false);
-  const [profileAvatarInputKey, setProfileAvatarInputKey] = useState(0);
   const [clipboardToastId, setClipboardToastId] = useState(0);
-  const previousPrimarySectionRef = useRef(shellChromeState.activePrimarySection);
-  const previousTimelineViewRef = useRef(shellChromeState.timelineView);
   const clipboardToastTimeoutRef = useRef<number | null>(null);
+  const dialogs = useShellDialogs({
+    activePrimarySection: shellChromeState.activePrimarySection,
+    api,
+    timelineView: shellChromeState.timelineView,
+  });
 
   useEffect(() => {
     document.documentElement.lang = locale;
@@ -162,37 +151,6 @@ export function DesktopShellPage({
     };
   }, [showClipboardToast]);
 
-  useEffect(() => {
-    const previousPrimarySection = previousPrimarySectionRef.current;
-    const previousTimelineView = previousTimelineViewRef.current;
-    const enteredBookmarkTimeline =
-      previousPrimarySection === 'timeline' &&
-      shellChromeState.activePrimarySection === 'timeline' &&
-      previousTimelineView !== 'bookmarks' &&
-      shellChromeState.timelineView === 'bookmarks';
-
-    if (
-      (shellChromeState.activePrimarySection !== 'timeline' || enteredBookmarkTimeline) &&
-      composeDialogOpen
-    ) {
-      setComposeDialogOpen(false);
-    }
-    if (shellChromeState.activePrimarySection !== 'live' && liveCreateDialogOpen) {
-      setLiveCreateDialogOpen(false);
-    }
-    if (shellChromeState.activePrimarySection !== 'game' && gameCreateDialogOpen) {
-      setGameCreateDialogOpen(false);
-    }
-    previousPrimarySectionRef.current = shellChromeState.activePrimarySection;
-    previousTimelineViewRef.current = shellChromeState.timelineView;
-  }, [
-    composeDialogOpen,
-    gameCreateDialogOpen,
-    liveCreateDialogOpen,
-    shellChromeState.activePrimarySection,
-    shellChromeState.timelineView,
-  ]);
-
   const setTopicInput = useDesktopShellFieldSetter('topicInput');
   const setTrackedTopics = useDesktopShellFieldSetter('trackedTopics');
   const setActiveTopic = useDesktopShellFieldSetter('activeTopic');
@@ -208,8 +166,6 @@ export function DesktopShellPage({
   const setSelectedGameRoomId = useDesktopShellFieldSetter('selectedGameRoomId');
   const setInviteOutput = useDesktopShellFieldSetter('inviteOutput');
   const setChannelError = useDesktopShellFieldSetter('channelError');
-  const setSocialConnections = useDesktopShellFieldSetter('socialConnections');
-  const setKnownAuthorsByPubkey = useDesktopShellFieldSetter('knownAuthorsByPubkey');
   const draftSequenceRef = useRef(0);
   const mediaFetchAttemptRef = useRef(new Map<string, number>());
   const remoteObjectUrlRef = useRef(new Map<string, string>());
@@ -217,31 +173,6 @@ export function DesktopShellPage({
   const directMessageDraftPreviewUrlRef = useRef(new Map<string, string>());
   const loadTopicsRequestRef = useRef(0);
 
-  // Mention suggestions need the followed-users list, which is otherwise only
-  // loaded in the profile section. Fetch it lazily when the composer opens.
-  useEffect(() => {
-    if (!composeDialogOpen) {
-      return;
-    }
-    let disposed = false;
-    void (async () => {
-      try {
-        const following = await api.listSocialConnections('following');
-        if (disposed) {
-          return;
-        }
-        startTransition(() => {
-          setSocialConnections((current) => ({ ...current, following }));
-          setKnownAuthorsByPubkey((current) => mergeKnownAuthors(current, following));
-        });
-      } catch {
-        // best effort: fall back to already-known authors for suggestions
-      }
-    })();
-    return () => {
-      disposed = true;
-    };
-  }, [api, composeDialogOpen, setKnownAuthorsByPubkey, setSocialConnections]);
   const pendingRouteUrlRef = useRef<string | null>(null);
   const didSyncRouteSectionRef = useRef(false);
   const navTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -310,65 +241,7 @@ export function DesktopShellPage({
     didSyncRouteSectionRef,
   });
 
-  const {
-    handleProfileFieldChange,
-    handleProfileAvatarFile,
-    handleClearProfileAvatar,
-    resetProfileDraft,
-    handleSaveProfile,
-    handleAddTopic,
-    handleSelectTopic,
-    handleOpenOriginalTopic,
-    handleRemoveTopic,
-    handleToggleTopicGossip,
-    handleToggleChannelGossip,
-    handleSelectPrivateChannel,
-    handleCreatePrivateChannel,
-    handleLeavePrivateChannel,
-    handleShareChannelAccess,
-    handleJoinChannelAccess,
-    handleImportChannelAccessToken,
-    handlePublish,
-    handleAttachmentSelection,
-    handleRemoveDraftAttachment,
-    handleDirectMessageAttachmentSelection,
-    handleRemoveDirectMessageDraftAttachment,
-    handleSendDirectMessage,
-    handleDeleteDirectMessageMessage,
-    handleClearDirectMessage,
-    handleOpenNotification,
-    handleToggleReaction,
-    handleCreateCustomReactionAsset,
-    handleBookmarkCustomReaction,
-    handleRemoveBookmarkedCustomReaction,
-    handleToggleBookmarkedPost,
-    beginReply,
-    clearReply,
-    clearRepost,
-    openFloatingActionDialog,
-    handleSimpleRepost,
-    handleRetryLocalPost,
-    handleRestoreLocalPost,
-    beginQuoteRepost,
-    handleRelationshipAction,
-    handleMuteAction,
-    handleSaveDiscoverySeeds,
-    handleSaveCommunityNodes,
-    handleClearCommunityNodes,
-    handleAuthenticateCommunityNode,
-    handleClearCommunityNodeToken,
-    handleRefreshCommunityNode,
-    handleFetchCommunityNodeConsents,
-    handleAcceptCommunityNodeConsents,
-    handleImportPeer,
-    handleCreateLiveSession,
-    handleJoinLiveSession,
-    handleLeaveLiveSession,
-    handleEndLiveSession,
-    handleCreateGameRoom,
-    updateGameDraft,
-    handleUpdateGameRoom,
-  } = useDesktopShellActions({
+  const shellActions = useDesktopShellActions({
     api,
     translate,
     loadTopics,
@@ -377,11 +250,11 @@ export function DesktopShellPage({
     openDirectMessagePane,
     openAuthorDetail,
     openThread,
-    setComposeDialogOpen,
-    setLiveCreateDialogOpen,
-    setGameCreateDialogOpen,
+    setComposeDialogOpen: dialogs.setComposeDialogOpen,
+    setLiveCreateDialogOpen: dialogs.setLiveCreateDialogOpen,
+    setGameCreateDialogOpen: dialogs.setGameCreateDialogOpen,
     setProfileAvatarPreviewUrl,
-    setProfileAvatarInputKey,
+    setProfileAvatarInputKey: dialogs.setProfileAvatarInputKey,
     releaseDraftPreview,
     releaseAllDraftPreviews,
     rememberDraftPreview,
@@ -409,7 +282,7 @@ export function DesktopShellPage({
   const notificationBadgeLabel =
     notificationStatus.unread_count > 99 ? '99+' : formatCount(notificationStatus.unread_count);
   useOsNotificationBridge();
-  useOsNotificationActivation(notifications, handleOpenNotification);
+  useOsNotificationActivation(notifications, shellActions.handleOpenNotification);
   const syncTopicContext = useCallback(
     async (topic: string, channelId: string | null) => {
       const nextTopics = trackedTopics.includes(topic) ? trackedTopics : [...trackedTopics, topic];
@@ -437,7 +310,7 @@ export function DesktopShellPage({
   }, []);
   const sharePreview = useSharePreview({
     api,
-    importChannelAccessToken: handleImportChannelAccessToken,
+    importChannelAccessToken: shellActions.handleImportChannelAccessToken,
     translate,
   });
   const handleOpenSharePreview = sharePreview.openPreview;
@@ -666,25 +539,24 @@ export function DesktopShellPage({
   const topicList = (
     <FilterableTopicNavList
       items={topicNavItems}
-      onSelectTopic={(topic) => void handleSelectTopic(topic)}
+      onSelectTopic={(topic) => void shellActions.handleSelectTopic(topic)}
       onSelectChannel={(topic, channelId) => {
-        handleSelectPrivateChannel(topic, channelId);
+        shellActions.handleSelectPrivateChannel(topic, channelId);
       }}
       onOpenChannelSettings={(topic, channelId) => {
         setInviteOutput(null);
         setChannelError(null);
-        handleSelectPrivateChannel(topic, channelId);
-        setChannelSettingsDialogOpen(true);
+        shellActions.handleSelectPrivateChannel(topic, channelId);
+        dialogs.setChannelSettingsDialogOpen(true);
       }}
       onLeaveChannel={(topic, channelId) => {
-        setPendingLeaveChannel({ topicId: topic, channelId });
-        setLeaveChannelDialogOpen(true);
+        dialogs.openLeaveChannelDialog(topic, channelId);
       }}
-      onRemoveTopic={(topic) => void handleRemoveTopic(topic)}
+      onRemoveTopic={(topic) => void shellActions.handleRemoveTopic(topic)}
       onCopyTopicLink={(topic) => handleCopyInternalLink(buildTopicLink(topic))}
-      onToggleTopicGossip={(topic, enabled) => void handleToggleTopicGossip(topic, enabled)}
+      onToggleTopicGossip={(topic, enabled) => void shellActions.handleToggleTopicGossip(topic, enabled)}
       onToggleChannelGossip={(topic, channelId, enabled) =>
-        void handleToggleChannelGossip(topic, channelId, enabled)
+        void shellActions.handleToggleChannelGossip(topic, channelId, enabled)
       }
     />
   );
@@ -696,7 +568,7 @@ export function DesktopShellPage({
         size='icon'
         type='button'
         aria-label={t('channels:title')}
-        onClick={() => setChannelDialogOpen(true)}
+        onClick={() => dialogs.setChannelDialogOpen(true)}
       >
         <GitBranchPlus className='size-4' aria-hidden='true' />
       </Button>
@@ -711,11 +583,11 @@ export function DesktopShellPage({
       openDirectMessageList={openDirectMessageList}
       openDirectMessagePane={openDirectMessagePane}
       openAuthorDetail={openAuthorDetail}
-      handleClearDirectMessage={handleClearDirectMessage}
-      handleDeleteDirectMessageMessage={handleDeleteDirectMessageMessage}
-      handleDirectMessageAttachmentSelection={handleDirectMessageAttachmentSelection}
-      handleRemoveDirectMessageDraftAttachment={handleRemoveDirectMessageDraftAttachment}
-      handleSendDirectMessage={handleSendDirectMessage}
+      handleClearDirectMessage={shellActions.handleClearDirectMessage}
+      handleDeleteDirectMessageMessage={shellActions.handleDeleteDirectMessageMessage}
+      handleDirectMessageAttachmentSelection={shellActions.handleDirectMessageAttachmentSelection}
+      handleRemoveDirectMessageDraftAttachment={shellActions.handleRemoveDirectMessageDraftAttachment}
+      handleSendDirectMessage={shellActions.handleSendDirectMessage}
     />
   );
   const notificationsWorkspace = (
@@ -730,7 +602,7 @@ export function DesktopShellPage({
         });
         void loadTopics(trackedTopics, activeTopic, null).catch(() => undefined);
       }}
-      handleOpenNotification={handleOpenNotification}
+      handleOpenNotification={shellActions.handleOpenNotification}
     />
   );
   const detailPaneStack = (
@@ -744,18 +616,18 @@ export function DesktopShellPage({
       openAuthorDetail={openAuthorDetail}
       openDirectMessagePane={openDirectMessagePane}
       openThread={openThread}
-      beginReply={beginReply}
-      handleSimpleRepost={handleSimpleRepost}
-      beginQuoteRepost={beginQuoteRepost}
-      handleRetryLocalPost={handleRetryLocalPost}
-      handleRestoreLocalPost={handleRestoreLocalPost}
-      handleToggleReaction={handleToggleReaction}
-      handleBookmarkCustomReaction={handleBookmarkCustomReaction}
+      beginReply={shellActions.beginReply}
+      handleSimpleRepost={shellActions.handleSimpleRepost}
+      beginQuoteRepost={shellActions.beginQuoteRepost}
+      handleRetryLocalPost={shellActions.handleRetryLocalPost}
+      handleRestoreLocalPost={shellActions.handleRestoreLocalPost}
+      handleToggleReaction={shellActions.handleToggleReaction}
+      handleBookmarkCustomReaction={shellActions.handleBookmarkCustomReaction}
       handleActivateReference={handleActivateReference}
       handleCopyPostLink={handleCopyInternalLink}
-      handleRelationshipAction={handleRelationshipAction}
-      handleMuteAction={handleMuteAction}
-      handleOpenOriginalTopic={handleOpenOriginalTopic}
+      handleRelationshipAction={shellActions.handleRelationshipAction}
+      handleMuteAction={shellActions.handleMuteAction}
+      handleOpenOriginalTopic={shellActions.handleOpenOriginalTopic}
     />
   );
 
@@ -784,7 +656,7 @@ export function DesktopShellPage({
                     size='icon'
                     type='button'
                     aria-label={t('common:actions.add')}
-                    onClick={() => void handleAddTopic()}
+                    onClick={() => void shellActions.handleAddTopic()}
                   >
                     <BookPlus className='size-4' aria-hidden='true' />
                   </Button>
@@ -802,7 +674,7 @@ export function DesktopShellPage({
             api={api}
             locale={locale}
             routeSection={routeSection}
-            profileAvatarInputKey={profileAvatarInputKey}
+            profileAvatarInputKey={dialogs.profileAvatarInputKey}
             messagesWorkspace={messagesWorkspace}
             notificationsWorkspace={notificationsWorkspace}
             viewModels={viewModels}
@@ -826,35 +698,35 @@ export function DesktopShellPage({
             loadMoreTimeline={loadMoreTimeline}
             openAuthorDetail={openAuthorDetail}
             openThread={openThread}
-            beginReply={beginReply}
-            handleSimpleRepost={handleSimpleRepost}
-            beginQuoteRepost={beginQuoteRepost}
-            handleRetryLocalPost={handleRetryLocalPost}
-            handleRestoreLocalPost={handleRestoreLocalPost}
-            handleToggleReaction={handleToggleReaction}
-            handleBookmarkCustomReaction={handleBookmarkCustomReaction}
-            handleToggleBookmarkedPost={handleToggleBookmarkedPost}
+            beginReply={shellActions.beginReply}
+            handleSimpleRepost={shellActions.handleSimpleRepost}
+            beginQuoteRepost={shellActions.beginQuoteRepost}
+            handleRetryLocalPost={shellActions.handleRetryLocalPost}
+            handleRestoreLocalPost={shellActions.handleRestoreLocalPost}
+            handleToggleReaction={shellActions.handleToggleReaction}
+            handleBookmarkCustomReaction={shellActions.handleBookmarkCustomReaction}
+            handleToggleBookmarkedPost={shellActions.handleToggleBookmarkedPost}
             handleActivateReference={handleActivateReference}
             handleCopyInternalLink={handleCopyInternalLink}
-            handleJoinLiveSession={handleJoinLiveSession}
-            handleLeaveLiveSession={handleLeaveLiveSession}
-            handleEndLiveSession={handleEndLiveSession}
-            updateGameDraft={updateGameDraft}
-            handleUpdateGameRoom={handleUpdateGameRoom}
+            handleJoinLiveSession={shellActions.handleJoinLiveSession}
+            handleLeaveLiveSession={shellActions.handleLeaveLiveSession}
+            handleEndLiveSession={shellActions.handleEndLiveSession}
+            updateGameDraft={shellActions.updateGameDraft}
+            handleUpdateGameRoom={shellActions.handleUpdateGameRoom}
             openProfileOverview={openProfileOverview}
             openProfileEditor={openProfileEditor}
             openProfileConnections={openProfileConnections}
-            handleProfileFieldChange={handleProfileFieldChange}
+            handleProfileFieldChange={shellActions.handleProfileFieldChange}
             onProfilePictureSelect={(file) => {
-              setProfileAvatarCropFile(file);
-              setProfileAvatarCropOpen(true);
+              dialogs.setProfileAvatarCropFile(file);
+              dialogs.setProfileAvatarCropOpen(true);
             }}
-            handleClearProfileAvatar={handleClearProfileAvatar}
-            handleSaveProfile={handleSaveProfile}
-            resetProfileDraft={resetProfileDraft}
-            handleRelationshipAction={handleRelationshipAction}
-            handleMuteAction={handleMuteAction}
-            handleOpenOriginalTopic={handleOpenOriginalTopic}
+            handleClearProfileAvatar={shellActions.handleClearProfileAvatar}
+            handleSaveProfile={shellActions.handleSaveProfile}
+            resetProfileDraft={shellActions.resetProfileDraft}
+            handleRelationshipAction={shellActions.handleRelationshipAction}
+            handleMuteAction={shellActions.handleMuteAction}
+            handleOpenOriginalTopic={shellActions.handleOpenOriginalTopic}
           />
         }
         detailPaneStack={detailPaneStack}
@@ -881,61 +753,12 @@ export function DesktopShellPage({
       />
 
       <DesktopShellOverlays
+        actions={shellActions}
+        dialogs={dialogs}
         t={t}
         viewModels={viewModels}
-        profileAvatarCropOpen={profileAvatarCropOpen}
-        profileAvatarCropFile={profileAvatarCropFile}
-        setProfileAvatarCropOpen={setProfileAvatarCropOpen}
-        setProfileAvatarCropFile={setProfileAvatarCropFile}
-        handleProfileAvatarFile={handleProfileAvatarFile}
-        channelDialogOpen={channelDialogOpen}
-        setChannelDialogOpen={setChannelDialogOpen}
-        channelSettingsDialogOpen={channelSettingsDialogOpen}
-        setChannelSettingsDialogOpen={setChannelSettingsDialogOpen}
-        leaveChannelDialogOpen={leaveChannelDialogOpen}
-        setLeaveChannelDialogOpen={(open) => {
-          setLeaveChannelDialogOpen(open);
-          if (!open) {
-            setPendingLeaveChannel(null);
-          }
-        }}
-        handleConfirmLeaveChannel={async () => {
-          if (!pendingLeaveChannel) {
-            return;
-          }
-          await handleLeavePrivateChannel(
-            pendingLeaveChannel.topicId,
-            pendingLeaveChannel.channelId
-          );
-          setLeaveChannelDialogOpen(false);
-          setPendingLeaveChannel(null);
-        }}
-        sharePreviewOpen={sharePreview.open}
-        handleSharePreviewOpenChange={sharePreview.handleOpenChange}
-        sharePreviewToken={sharePreview.token}
-        sharePreviewData={sharePreview.data}
-        sharePreviewLoading={sharePreview.loading}
-        sharePreviewError={sharePreview.error}
-        shareImportPending={sharePreview.importPending}
-        handleConfirmShareImport={sharePreview.confirmImport}
-        handleCreatePrivateChannel={handleCreatePrivateChannel}
-        handleJoinChannelAccess={handleJoinChannelAccess}
-        handleShareChannelAccess={handleShareChannelAccess}
         handleCopyInternalLink={handleCopyInternalLink}
-        composeDialogOpen={composeDialogOpen}
-        setComposeDialogOpen={setComposeDialogOpen}
-        handlePublish={handlePublish}
-        handleAttachmentSelection={handleAttachmentSelection}
-        handleRemoveDraftAttachment={handleRemoveDraftAttachment}
-        clearReply={clearReply}
-        clearRepost={clearRepost}
-        liveCreateDialogOpen={liveCreateDialogOpen}
-        setLiveCreateDialogOpen={setLiveCreateDialogOpen}
-        handleCreateLiveSession={handleCreateLiveSession}
-        gameCreateDialogOpen={gameCreateDialogOpen}
-        setGameCreateDialogOpen={setGameCreateDialogOpen}
-        handleCreateGameRoom={handleCreateGameRoom}
-        openFloatingActionDialog={openFloatingActionDialog}
+        sharePreview={sharePreview}
         clipboardToastId={clipboardToastId}
       />
 
@@ -947,17 +770,17 @@ export function DesktopShellPage({
         syncRoute={syncRoute}
         setSettingsOpen={setSettingsOpen}
         viewModels={viewModels}
-        handleImportPeer={handleImportPeer}
-        handleSaveDiscoverySeeds={handleSaveDiscoverySeeds}
-        handleSaveCommunityNodes={handleSaveCommunityNodes}
-        handleClearCommunityNodes={handleClearCommunityNodes}
-        handleAuthenticateCommunityNode={handleAuthenticateCommunityNode}
-        handleFetchCommunityNodeConsents={handleFetchCommunityNodeConsents}
-        handleAcceptCommunityNodeConsents={handleAcceptCommunityNodeConsents}
-        handleRefreshCommunityNode={handleRefreshCommunityNode}
-        handleClearCommunityNodeToken={handleClearCommunityNodeToken}
-        handleCreateCustomReactionAsset={handleCreateCustomReactionAsset}
-        handleRemoveBookmarkedCustomReaction={handleRemoveBookmarkedCustomReaction}
+        handleImportPeer={shellActions.handleImportPeer}
+        handleSaveDiscoverySeeds={shellActions.handleSaveDiscoverySeeds}
+        handleSaveCommunityNodes={shellActions.handleSaveCommunityNodes}
+        handleClearCommunityNodes={shellActions.handleClearCommunityNodes}
+        handleAuthenticateCommunityNode={shellActions.handleAuthenticateCommunityNode}
+        handleFetchCommunityNodeConsents={shellActions.handleFetchCommunityNodeConsents}
+        handleAcceptCommunityNodeConsents={shellActions.handleAcceptCommunityNodeConsents}
+        handleRefreshCommunityNode={shellActions.handleRefreshCommunityNode}
+        handleClearCommunityNodeToken={shellActions.handleClearCommunityNodeToken}
+        handleCreateCustomReactionAsset={shellActions.handleCreateCustomReactionAsset}
+        handleRemoveBookmarkedCustomReaction={shellActions.handleRemoveBookmarkedCustomReaction}
       />
     </>
   );

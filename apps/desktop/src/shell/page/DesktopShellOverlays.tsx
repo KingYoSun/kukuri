@@ -1,5 +1,3 @@
-import type { ChangeEvent, Dispatch, FormEvent, SetStateAction } from 'react';
-
 import { Plus } from 'lucide-react';
 
 import { ComposerPanel } from '@/components/core/ComposerPanel';
@@ -28,16 +26,67 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 
-import type { ChannelAccessTokenPreview } from '@/lib/api';
 import { authorDisplayLabel } from '@/shell/selectors';
 import { useDesktopShellFieldSetter, useDesktopShellStore } from '@/shell/store';
 import type { Translate } from '@/shell/actions/shared';
+import type { useShellDialogs } from '@/shell/page/useShellDialogs';
+import type { useSharePreview } from '@/shell/page/useSharePreview';
+import type { useDesktopShellActions } from '@/shell/useDesktopShellActions';
 import { useDesktopShellViewModels } from '@/shell/useDesktopShellViewModels';
 import { useShallow } from 'zustand/react/shallow';
 
 type ViewModels = ReturnType<typeof useDesktopShellViewModels>;
+type OverlayActions = Pick<
+  ReturnType<typeof useDesktopShellActions>,
+  | 'clearReply'
+  | 'clearRepost'
+  | 'handleAttachmentSelection'
+  | 'handleCreateGameRoom'
+  | 'handleCreateLiveSession'
+  | 'handleCreatePrivateChannel'
+  | 'handleJoinChannelAccess'
+  | 'handleLeavePrivateChannel'
+  | 'handleProfileAvatarFile'
+  | 'handlePublish'
+  | 'handleRemoveDraftAttachment'
+  | 'handleShareChannelAccess'
+  | 'openFloatingActionDialog'
+>;
+type ShellDialogs = Pick<
+  ReturnType<typeof useShellDialogs>,
+  | 'channelDialogOpen'
+  | 'channelSettingsDialogOpen'
+  | 'composeDialogOpen'
+  | 'confirmLeaveChannel'
+  | 'gameCreateDialogOpen'
+  | 'leaveChannelDialogOpen'
+  | 'liveCreateDialogOpen'
+  | 'profileAvatarCropFile'
+  | 'profileAvatarCropOpen'
+  | 'setChannelDialogOpen'
+  | 'setChannelSettingsDialogOpen'
+  | 'setComposeDialogOpen'
+  | 'setGameCreateDialogOpen'
+  | 'setLeaveChannelDialogOpen'
+  | 'setLiveCreateDialogOpen'
+  | 'setProfileAvatarCropFile'
+  | 'setProfileAvatarCropOpen'
+>;
+type SharePreview = Pick<
+  ReturnType<typeof useSharePreview>,
+  | 'confirmImport'
+  | 'data'
+  | 'error'
+  | 'handleOpenChange'
+  | 'importPending'
+  | 'loading'
+  | 'open'
+  | 'token'
+>;
 
 type DesktopShellOverlaysProps = {
+  actions: OverlayActions;
+  dialogs: ShellDialogs;
   t: Translate;
   viewModels: Pick<
     ViewModels,
@@ -51,44 +100,8 @@ type DesktopShellOverlaysProps = {
     | 'activePrivateChannel'
     | 'mentionCandidates'
   >;
-  profileAvatarCropOpen: boolean;
-  profileAvatarCropFile: File | null;
-  setProfileAvatarCropOpen: Dispatch<SetStateAction<boolean>>;
-  setProfileAvatarCropFile: Dispatch<SetStateAction<File | null>>;
-  handleProfileAvatarFile: (file: File) => Promise<void>;
-  channelDialogOpen: boolean;
-  setChannelDialogOpen: Dispatch<SetStateAction<boolean>>;
-  channelSettingsDialogOpen: boolean;
-  setChannelSettingsDialogOpen: Dispatch<SetStateAction<boolean>>;
-  leaveChannelDialogOpen: boolean;
-  setLeaveChannelDialogOpen: (open: boolean) => void;
-  handleConfirmLeaveChannel: () => Promise<void>;
-  sharePreviewOpen: boolean;
-  handleSharePreviewOpenChange: (open: boolean) => void;
-  sharePreviewToken: string | null;
-  sharePreviewData: ChannelAccessTokenPreview | null;
-  sharePreviewLoading: boolean;
-  sharePreviewError: string | null;
-  shareImportPending: boolean;
-  handleConfirmShareImport: () => Promise<void>;
-  handleCreatePrivateChannel: (event: FormEvent<HTMLFormElement>) => Promise<void>;
-  handleJoinChannelAccess: (event: FormEvent<HTMLFormElement>) => Promise<void>;
-  handleShareChannelAccess: () => Promise<void>;
   handleCopyInternalLink: (link: string) => void;
-  composeDialogOpen: boolean;
-  setComposeDialogOpen: Dispatch<SetStateAction<boolean>>;
-  handlePublish: (event: FormEvent<HTMLFormElement>) => Promise<void>;
-  handleAttachmentSelection: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
-  handleRemoveDraftAttachment: (itemId: string) => void;
-  clearReply: () => void;
-  clearRepost: () => void;
-  liveCreateDialogOpen: boolean;
-  setLiveCreateDialogOpen: Dispatch<SetStateAction<boolean>>;
-  handleCreateLiveSession: (event: FormEvent<HTMLFormElement>) => Promise<void>;
-  gameCreateDialogOpen: boolean;
-  setGameCreateDialogOpen: Dispatch<SetStateAction<boolean>>;
-  handleCreateGameRoom: (event: FormEvent<HTMLFormElement>) => Promise<void>;
-  openFloatingActionDialog: () => void;
+  sharePreview: SharePreview;
   clipboardToastId: number;
 };
 
@@ -117,48 +130,56 @@ function AccessPreviewItem({
 }
 
 export function DesktopShellOverlays({
+  actions,
+  dialogs,
   t,
   viewModels,
-  profileAvatarCropOpen,
-  profileAvatarCropFile,
-  setProfileAvatarCropOpen,
-  setProfileAvatarCropFile,
-  handleProfileAvatarFile,
-  channelDialogOpen,
-  setChannelDialogOpen,
-  channelSettingsDialogOpen,
-  setChannelSettingsDialogOpen,
-  leaveChannelDialogOpen,
-  setLeaveChannelDialogOpen,
-  handleConfirmLeaveChannel,
-  sharePreviewOpen,
-  handleSharePreviewOpenChange,
-  sharePreviewToken,
-  sharePreviewData,
-  sharePreviewLoading,
-  sharePreviewError,
-  shareImportPending,
-  handleConfirmShareImport,
-  handleCreatePrivateChannel,
-  handleJoinChannelAccess,
-  handleShareChannelAccess,
   handleCopyInternalLink,
-  composeDialogOpen,
-  setComposeDialogOpen,
-  handlePublish,
-  handleAttachmentSelection,
-  handleRemoveDraftAttachment,
-  clearReply,
-  clearRepost,
-  liveCreateDialogOpen,
-  setLiveCreateDialogOpen,
-  handleCreateLiveSession,
-  gameCreateDialogOpen,
-  setGameCreateDialogOpen,
-  handleCreateGameRoom,
-  openFloatingActionDialog,
+  sharePreview,
   clipboardToastId,
 }: DesktopShellOverlaysProps) {
+  const {
+    clearReply,
+    clearRepost,
+    handleAttachmentSelection,
+    handleCreateGameRoom,
+    handleCreateLiveSession,
+    handleCreatePrivateChannel,
+    handleJoinChannelAccess,
+    handleProfileAvatarFile,
+    handlePublish,
+    handleRemoveDraftAttachment,
+    handleShareChannelAccess,
+    openFloatingActionDialog,
+  } = actions;
+  const {
+    channelDialogOpen,
+    channelSettingsDialogOpen,
+    composeDialogOpen,
+    gameCreateDialogOpen,
+    leaveChannelDialogOpen,
+    liveCreateDialogOpen,
+    profileAvatarCropFile,
+    profileAvatarCropOpen,
+    setChannelDialogOpen,
+    setChannelSettingsDialogOpen,
+    setComposeDialogOpen,
+    setGameCreateDialogOpen,
+    setLeaveChannelDialogOpen,
+    setLiveCreateDialogOpen,
+    setProfileAvatarCropFile,
+    setProfileAvatarCropOpen,
+  } = dialogs;
+  const {
+    confirmImport: handleConfirmShareImport,
+    data: sharePreviewData,
+    error: sharePreviewError,
+    handleOpenChange: handleSharePreviewOpenChange,
+    importPending: shareImportPending,
+    loading: sharePreviewLoading,
+    open: sharePreviewOpen,
+    token: sharePreviewToken,
+  } = sharePreview;
   const {
     activeComposeAudienceLabel,
     activeChannelPanelState,
@@ -349,7 +370,9 @@ export function DesktopShellOverlays({
               <Button
                 type='button'
                 disabled={channelActionPending === 'leave'}
-                onClick={() => void handleConfirmLeaveChannel()}
+                onClick={() =>
+                  void dialogs.confirmLeaveChannel(actions.handleLeavePrivateChannel)
+                }
               >
                 {t('channels:leaveDialog.yes')}
               </Button>
