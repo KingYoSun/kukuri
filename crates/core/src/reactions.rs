@@ -131,7 +131,7 @@ pub struct CustomReactionAssetDocV1 {
 }
 
 impl KukuriEnvelope {
-    pub fn reaction_content(&self) -> Result<Option<KukuriReactionEnvelopeContentV1>> {
+    pub(crate) fn reaction_content(&self) -> Result<Option<KukuriReactionEnvelopeContentV1>> {
         if self.kind != "reaction" {
             return Ok(None);
         }
@@ -140,7 +140,7 @@ impl KukuriEnvelope {
             .context("failed to parse reaction envelope content")
     }
 
-    pub fn to_reaction_doc(&self) -> Result<Option<ReactionDocV1>> {
+    pub(crate) fn to_reaction_doc(&self) -> Result<Option<ReactionDocV1>> {
         let Some(content) = self.reaction_content()? else {
             return Ok(None);
         };
@@ -162,7 +162,7 @@ impl KukuriEnvelope {
         }))
     }
 
-    pub fn custom_reaction_asset_content(
+    pub(crate) fn custom_reaction_asset_content(
         &self,
     ) -> Result<Option<KukuriCustomReactionAssetEnvelopeContentV1>> {
         if self.kind != "custom-reaction-asset" {
@@ -173,7 +173,7 @@ impl KukuriEnvelope {
             .context("failed to parse custom reaction asset envelope content")
     }
 
-    pub fn to_custom_reaction_asset_doc(&self) -> Result<Option<CustomReactionAssetDocV1>> {
+    pub(crate) fn to_custom_reaction_asset_doc(&self) -> Result<Option<CustomReactionAssetDocV1>> {
         let Some(content) = self.custom_reaction_asset_content()? else {
             return Ok(None);
         };
@@ -193,7 +193,7 @@ impl KukuriEnvelope {
     }
 }
 
-pub fn normalize_reaction_emoji(value: &str) -> Option<String> {
+pub(crate) fn normalize_reaction_emoji(value: &str) -> Option<String> {
     let normalized = value.trim();
     (!normalized.is_empty()).then(|| normalized.to_string())
 }

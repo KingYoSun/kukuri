@@ -24,7 +24,10 @@ pub fn private_topic_rendezvous_key_hex_secret(
     private_topic_rendezvous_key(namespace_secret.as_slice(), topic)
 }
 
-pub fn private_topic_rendezvous_key(namespace_secret: &[u8], topic: &TopicId) -> Result<String> {
+pub(crate) fn private_topic_rendezvous_key(
+    namespace_secret: &[u8],
+    topic: &TopicId,
+) -> Result<String> {
     let mut mac = Hmac::<Sha256>::new_from_slice(namespace_secret)
         .context("invalid private rendezvous namespace secret")?;
     mac.update(PRIVATE_TOPIC_RENDEZVOUS_DOMAIN);

@@ -144,7 +144,7 @@ pub fn direct_message_id_for_participants(left: &Pubkey, right: &Pubkey) -> Stri
     format!("dm-{}", digest.to_hex())
 }
 
-pub fn derive_direct_message_secret(
+pub(crate) fn derive_direct_message_secret(
     local_keys: &KukuriKeys,
     remote_pubkey: &Pubkey,
 ) -> Result<[u8; 32]> {
