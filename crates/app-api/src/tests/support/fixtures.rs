@@ -1,5 +1,25 @@
 use super::super::*;
 
+pub(crate) fn app_service_from_dependencies(
+    store: Arc<dyn Store>,
+    projection_store: Arc<dyn ProjectionStore>,
+    transport: Arc<dyn Transport>,
+    hint_transport: Arc<dyn HintTransport>,
+    docs_sync: Arc<dyn DocsSync>,
+    blob_service: Arc<dyn BlobService>,
+    keys: KukuriKeys,
+) -> AppService {
+    AppService::from_handles(ServiceHandles::new(
+        store,
+        projection_store,
+        transport,
+        hint_transport,
+        docs_sync,
+        blob_service,
+        keys,
+    ))
+}
+
 pub(crate) async fn persist_test_post(
     docs_sync: &dyn DocsSync,
     projection_store: Option<&dyn ProjectionStore>,
@@ -88,7 +108,7 @@ pub(crate) fn local_app_with_memory_services() -> (
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
     let docs_sync = Arc::new(MemoryDocsSync::default());
     let blob_service = Arc::new(MemoryBlobService::default());
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store.clone(),
         transport,
@@ -115,7 +135,7 @@ pub(crate) fn shared_apps_with_memory_services() -> (
     let blob_service = Arc::new(MemoryBlobService::default());
     let local_keys = generate_keys();
     let remote_keys = generate_keys();
-    let local_app = AppService::new_with_services(
+    let local_app = app_service_from_dependencies(
         store.clone(),
         store.clone(),
         transport.clone(),
@@ -124,7 +144,7 @@ pub(crate) fn shared_apps_with_memory_services() -> (
         blob_service.clone(),
         local_keys.clone(),
     );
-    let remote_app = AppService::new_with_services(
+    let remote_app = app_service_from_dependencies(
         store.clone(),
         store.clone(),
         transport,

@@ -15,7 +15,7 @@ async fn mute_author_restores_after_restart() {
     let keys = generate_keys();
     let author_pubkey = generate_keys().public_key_hex();
 
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store.clone(),
         transport.clone(),
@@ -38,7 +38,7 @@ async fn mute_author_restores_after_restart() {
             .await
             .expect("reopen sqlite store"),
     );
-    let reopened_app = AppService::new_with_services(
+    let reopened_app = app_service_from_dependencies(
         reopened.clone(),
         reopened.clone(),
         transport,
@@ -374,7 +374,7 @@ async fn social_graph_derives_friend_of_friend_and_clears_after_unfollow() {
     let keys_a = generate_keys();
     let keys_b = generate_keys();
     let keys_c = generate_keys();
-    let app_a = AppService::new_with_services(
+    let app_a = app_service_from_dependencies(
         store_a.clone(),
         store_a.clone(),
         stack_a.transport.clone(),
@@ -383,7 +383,7 @@ async fn social_graph_derives_friend_of_friend_and_clears_after_unfollow() {
         stack_a.blob_service.clone(),
         keys_a.clone(),
     );
-    let app_b = AppService::new_with_services(
+    let app_b = app_service_from_dependencies(
         store_b.clone(),
         store_b.clone(),
         stack_b.transport.clone(),

@@ -14,7 +14,7 @@ impl AppService {
             status_detail,
             last_error,
             topic_diagnostics,
-        } = self.transport.peers().await?;
+        } = self.services.transport.peers().await?;
         let subscribed_topics = normalize_topics(subscribed_topics);
         let topic_diagnostics = normalize_topic_diagnostics(topic_diagnostics);
         let docs_assist_peer_ids = self.docs_assisted_peer_ids().await?;
@@ -113,7 +113,7 @@ impl AppService {
             connected_peer_ids,
             local_endpoint_id,
             last_discovery_error,
-        } = self.transport.discovery().await?;
+        } = self.services.transport.discovery().await?;
         let docs_assist_peer_ids = self.docs_assisted_peer_ids().await?;
         let blob_assist_peer_ids = self.blob_assisted_peer_ids().await?;
         Ok(DiscoveryStatus {
@@ -134,9 +134,12 @@ impl AppService {
     }
 
     pub async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
-        self.transport.import_ticket(ticket).await?;
-        self.docs_sync.import_peer_ticket(ticket).await?;
-        self.blob_service.import_peer_ticket(ticket).await?;
+        self.services.transport.import_ticket(ticket).await?;
+        self.services.docs_sync.import_peer_ticket(ticket).await?;
+        self.services
+            .blob_service
+            .import_peer_ticket(ticket)
+            .await?;
         self.restart_active_subscriptions().await?;
         Ok(())
     }
@@ -150,7 +153,8 @@ impl AppService {
     ) -> Result<()> {
         let effective_seed_peers =
             merge_seed_peers(configured_seed_peers.clone(), bootstrap_seed_peers.clone());
-        self.transport
+        self.services
+            .transport
             .configure_discovery(
                 mode,
                 env_locked,
@@ -158,10 +162,12 @@ impl AppService {
                 bootstrap_seed_peers,
             )
             .await?;
-        self.docs_sync
+        self.services
+            .docs_sync
             .set_seed_peers(effective_seed_peers.clone())
             .await?;
-        self.blob_service
+        self.services
+            .blob_service
             .set_seed_peers(effective_seed_peers)
             .await?;
         self.restart_active_subscriptions().await?;
@@ -201,7 +207,8 @@ impl AppService {
             let mut parts = key.splitn(3, "::");
             let _ = parts.next();
             if let Some(channel_id) = parts.next() {
-                self.hint_transport
+                self.services
+                    .hint_transport
                     .unsubscribe_hints(&private_channel_hint_topic(channel_id))
                     .await?;
             }
@@ -223,13 +230,14 @@ impl AppService {
             self.stop_live_presence_task(topic_id, channel_id.as_str(), session_id.as_str())
                 .await;
         }
-        self.hint_transport
+        self.services
+            .hint_transport
             .unsubscribe_hints(&TopicId::new(topic_id))
             .await
     }
 
     pub async fn peer_ticket(&self) -> Result<Option<String>> {
-        self.transport.export_ticket().await
+        self.services.transport.export_ticket().await
     }
 
     pub async fn set_topic_gossip_enabled(&self, topic_id: &str, enabled: bool) -> Result<()> {

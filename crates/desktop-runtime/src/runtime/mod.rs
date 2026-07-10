@@ -15,7 +15,8 @@ use kukuri_app_api::{
     ImportMetaverseRoomAssetInput, JoinedPrivateChannelView, LiveSessionView,
     MetaverseAssetRefView, MetaverseRoomEventView, NotificationStatusView, NotificationView,
     PrivateChannelCapability, ProfileInput, PublishMetaverseRoomEventInput, ReactionStateView,
-    RecentReactionView, SyncStatus, TimelineView, UpdateGameRoomInput, UpdateMetaverseRoomInput,
+    RecentReactionView, ServiceHandles, SyncStatus, TimelineView, UpdateGameRoomInput,
+    UpdateMetaverseRoomInput,
 };
 use kukuri_cn_protocol::normalize_http_url;
 use kukuri_core::{
@@ -258,7 +259,7 @@ impl DesktopRuntime {
         .await?;
         let keys = load_or_create_keys(&db_path, identity_mode)?;
         let author_keys = Arc::new(keys.clone());
-        let app_service = AppService::new_with_services(
+        let services = ServiceHandles::new(
             store.clone(),
             store.clone(),
             iroh_stack.transport.clone(),
@@ -267,6 +268,7 @@ impl DesktopRuntime {
             iroh_stack.blob_service.clone(),
             keys,
         );
+        let app_service = AppService::from_handles(services);
         for capability in load_private_channel_capabilities(&db_path, identity_mode)? {
             app_service
                 .restore_private_channel_capability(capability)

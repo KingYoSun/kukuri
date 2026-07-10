@@ -45,7 +45,8 @@ impl AppService {
     ) -> Result<()> {
         let now = Utc::now().timestamp_millis();
         let author = self.current_author_pubkey();
-        self.projection_store
+        self.services
+            .projection_store
             .upsert_live_presence(
                 topic_id,
                 channel_storage_id(channel_id).as_str(),
@@ -55,10 +56,12 @@ impl AppService {
                 now,
             )
             .await?;
-        self.projection_store
+        self.services
+            .projection_store
             .clear_expired_live_presence(now)
             .await?;
-        self.hint_transport
+        self.services
+            .hint_transport
             .publish_hint(
                 &channel_hint_topic_for(topic_id, channel_id),
                 GossipHint::LivePresence {
@@ -81,8 +84,12 @@ impl AppService {
         last_envelope_id: EnvelopeId,
     ) -> Result<LiveSessionStateDocV1> {
         let now = Utc::now().timestamp_millis();
-        let stored =
-            store_manifest_blob(self.blob_service.as_ref(), &manifest, LIVE_MANIFEST_MIME).await?;
+        let stored = store_manifest_blob(
+            self.services.blob_service.as_ref(),
+            &manifest,
+            LIVE_MANIFEST_MIME,
+        )
+        .await?;
         let state = LiveSessionStateDocV1 {
             session_id: manifest.session_id.clone(),
             topic_id: TopicId::new(topic_id),
@@ -98,8 +105,9 @@ impl AppService {
             },
             last_envelope_id,
         };
-        persist_live_session_state(self.docs_sync.as_ref(), replica, &state).await?;
-        self.projection_store
+        persist_live_session_state(self.services.docs_sync.as_ref(), replica, &state).await?;
+        self.services
+            .projection_store
             .mark_blob_status(&stored.hash, BlobCacheStatus::Available)
             .await?;
         Ok(state)
@@ -114,8 +122,12 @@ impl AppService {
         last_envelope_id: EnvelopeId,
     ) -> Result<GameRoomStateDocV1> {
         let now = Utc::now().timestamp_millis();
-        let stored =
-            store_manifest_blob(self.blob_service.as_ref(), &manifest, GAME_MANIFEST_MIME).await?;
+        let stored = store_manifest_blob(
+            self.services.blob_service.as_ref(),
+            &manifest,
+            GAME_MANIFEST_MIME,
+        )
+        .await?;
         let state = GameRoomStateDocV1 {
             room_id: manifest.room_id.clone(),
             topic_id: TopicId::new(topic_id),
@@ -131,8 +143,9 @@ impl AppService {
             },
             last_envelope_id,
         };
-        persist_game_room_state(self.docs_sync.as_ref(), replica, &state).await?;
-        self.projection_store
+        persist_game_room_state(self.services.docs_sync.as_ref(), replica, &state).await?;
+        self.services
+            .projection_store
             .mark_blob_status(&stored.hash, BlobCacheStatus::Available)
             .await?;
         Ok(state)
@@ -148,7 +161,7 @@ impl AppService {
             self.joined_private_channel_states_for_topic(topic_id).await,
         ) {
             let Some(state) = fetch_live_session_state_from_replica(
-                self.docs_sync.as_ref(),
+                self.services.docs_sync.as_ref(),
                 &replica,
                 session_id,
             )
@@ -157,7 +170,7 @@ impl AppService {
                 continue;
             };
             let Some(manifest) = fetch_manifest_blob::<LiveSessionManifestBlobV1>(
-                self.blob_service.as_ref(),
+                self.services.blob_service.as_ref(),
                 &state.current_manifest,
             )
             .await?
@@ -178,14 +191,17 @@ impl AppService {
             topic_id,
             self.joined_private_channel_states_for_topic(topic_id).await,
         ) {
-            let Some(state) =
-                fetch_game_room_state_from_replica(self.docs_sync.as_ref(), &replica, room_id)
-                    .await?
+            let Some(state) = fetch_game_room_state_from_replica(
+                self.services.docs_sync.as_ref(),
+                &replica,
+                room_id,
+            )
+            .await?
             else {
                 continue;
             };
             let Some(manifest) = fetch_manifest_blob::<GameRoomManifestBlobV1>(
-                self.blob_service.as_ref(),
+                self.services.blob_service.as_ref(),
                 &state.current_manifest,
             )
             .await?

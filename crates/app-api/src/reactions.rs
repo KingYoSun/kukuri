@@ -13,6 +13,7 @@ impl AppService {
             .await?;
         let target_object_id = EnvelopeId::from(target_object_id);
         let target = self
+            .services
             .projection_store
             .get_object_projection(&target_object_id)
             .await?
@@ -40,6 +41,7 @@ impl AppService {
             normalized_reaction_key.as_str(),
         );
         let next_status = match self
+            .services
             .projection_store
             .get_reaction_cache(&target.source_replica_id, &target_object_id, &reaction_id)
             .await?
@@ -48,7 +50,7 @@ impl AppService {
             _ => ObjectStatus::Active,
         };
         let envelope = build_reaction_envelope(
-            self.keys.as_ref(),
+            self.services.keys.as_ref(),
             &target_topic_id,
             target_channel_id.as_ref(),
             &target_object_id,
@@ -59,20 +61,22 @@ impl AppService {
         let reaction = parse_reaction(&envelope)?
             .ok_or_else(|| anyhow::anyhow!("failed to parse reaction envelope"))?;
         persist_reaction_doc(
-            self.docs_sync.as_ref(),
+            self.services.docs_sync.as_ref(),
             &target.source_replica_id,
             &reaction,
             &envelope,
         )
         .await?;
-        self.store.put_envelope(envelope.clone()).await?;
-        self.projection_store
+        self.services.store.put_envelope(envelope.clone()).await?;
+        self.services
+            .projection_store
             .upsert_reaction_cache(reaction_projection_row_from_doc(
                 &reaction,
                 &target.source_replica_id,
             ))
             .await?;
         if let Err(error) = self
+            .services
             .hint_transport
             .publish_hint(
                 &channel_hint_topic_for(target_topic_id.as_str(), target_channel_id.as_ref()),
@@ -103,11 +107,12 @@ impl AppService {
         input: CreateCustomReactionAssetInput,
     ) -> Result<CustomReactionAssetView> {
         let stored_blob = self
+            .services
             .blob_service
             .put_blob(input.bytes, input.mime.as_str())
             .await?;
         let envelope = build_custom_reaction_asset_envelope(
-            self.keys.as_ref(),
+            self.services.keys.as_ref(),
             stored_blob.hash.clone(),
             input.search_key,
             input.mime,
@@ -117,9 +122,11 @@ impl AppService {
         )?;
         let asset = parse_custom_reaction_asset(&envelope)?
             .ok_or_else(|| anyhow::anyhow!("failed to parse custom reaction asset envelope"))?;
-        persist_custom_reaction_asset_doc(self.docs_sync.as_ref(), &asset, &envelope).await?;
-        self.store.put_envelope(envelope).await?;
-        self.projection_store
+        persist_custom_reaction_asset_doc(self.services.docs_sync.as_ref(), &asset, &envelope)
+            .await?;
+        self.services.store.put_envelope(envelope).await?;
+        self.services
+            .projection_store
             .mark_blob_status(&stored_blob.hash, BlobCacheStatus::Available)
             .await?;
         *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
@@ -129,7 +136,7 @@ impl AppService {
     pub async fn list_my_custom_reaction_assets(&self) -> Result<Vec<CustomReactionAssetView>> {
         let author_pubkey = self.current_author_pubkey();
         let mut items = load_custom_reaction_assets_from_author_replica(
-            self.docs_sync.as_ref(),
+            self.services.docs_sync.as_ref(),
             &author_pubkey,
         )
         .await?;
@@ -154,6 +161,7 @@ impl AppService {
         let mut seen = BTreeSet::new();
         let mut items = Vec::new();
         for row in self
+            .services
             .projection_store
             .list_recent_reaction_cache_by_author(author_pubkey.as_str())
             .await?
@@ -173,6 +181,7 @@ impl AppService {
         &self,
     ) -> Result<Vec<BookmarkedCustomReactionView>> {
         Ok(self
+            .services
             .projection_store
             .list_bookmarked_custom_reactions()
             .await?
@@ -199,14 +208,16 @@ impl AppService {
             height: asset.height,
             bookmarked_at: Utc::now().timestamp_millis(),
         };
-        self.projection_store
+        self.services
+            .projection_store
             .put_bookmarked_custom_reaction(row.clone())
             .await?;
         Ok(bookmarked_custom_reaction_view_from_row(row))
     }
 
     pub async fn remove_bookmarked_custom_reaction(&self, asset_id: &str) -> Result<()> {
-        self.projection_store
+        self.services
+            .projection_store
             .remove_bookmarked_custom_reaction(asset_id)
             .await
     }

@@ -11,7 +11,7 @@ async fn create_cross_topic_repost_renders_from_target_topic_without_tracking_so
     let blob_service = Arc::new(MemoryBlobService::default());
     let keys_a = generate_keys();
     let author_pubkey = keys_a.public_key_hex();
-    let app_a = AppService::new_with_services(
+    let app_a = app_service_from_dependencies(
         store_a.clone(),
         store_a,
         transport_a,
@@ -20,7 +20,7 @@ async fn create_cross_topic_repost_renders_from_target_topic_without_tracking_so
         blob_service.clone(),
         keys_a,
     );
-    let app_b = AppService::new_with_services(
+    let app_b = app_service_from_dependencies(
         store_b.clone(),
         store_b,
         transport_b,
@@ -93,7 +93,7 @@ async fn simple_repost_is_unique_per_author_target_and_original() {
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
     let docs_sync = Arc::new(MemoryDocsSync::default());
     let blob_service = Arc::new(MemoryBlobService::default());
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport.clone(),
@@ -140,7 +140,7 @@ async fn quote_repost_allows_multiple_distinct_quotes_for_same_original() {
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
     let docs_sync = Arc::new(MemoryDocsSync::default());
     let blob_service = Arc::new(MemoryBlobService::default());
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport.clone(),
@@ -197,7 +197,7 @@ async fn private_channel_post_cannot_be_reposted_publicly() {
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
     let docs_sync = Arc::new(MemoryDocsSync::default());
     let blob_service = Arc::new(MemoryBlobService::default());
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport.clone(),

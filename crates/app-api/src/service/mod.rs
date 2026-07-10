@@ -306,7 +306,8 @@ pub(crate) struct ResolvedRepostSource {
 pub type PrivateChannelCapabilityPersist =
     Arc<dyn Fn(&[crate::PrivateChannelCapability]) -> Result<()> + Send + Sync>;
 
-pub struct AppService {
+#[derive(Clone)]
+pub struct ServiceHandles {
     pub(crate) store: Arc<dyn Store>,
     pub(crate) projection_store: Arc<dyn ProjectionStore>,
     pub(crate) transport: Arc<dyn Transport>,
@@ -314,6 +315,32 @@ pub struct AppService {
     pub(crate) docs_sync: Arc<dyn DocsSync>,
     pub(crate) blob_service: Arc<dyn BlobService>,
     pub(crate) keys: Arc<KukuriKeys>,
+}
+
+impl ServiceHandles {
+    pub fn new(
+        store: Arc<dyn Store>,
+        projection_store: Arc<dyn ProjectionStore>,
+        transport: Arc<dyn Transport>,
+        hint_transport: Arc<dyn HintTransport>,
+        docs_sync: Arc<dyn DocsSync>,
+        blob_service: Arc<dyn BlobService>,
+        keys: KukuriKeys,
+    ) -> Self {
+        Self {
+            store,
+            projection_store,
+            transport,
+            hint_transport,
+            docs_sync,
+            blob_service,
+            keys: Arc::new(keys),
+        }
+    }
+}
+
+pub struct AppService {
+    pub(crate) services: ServiceHandles,
     /// 購読タスクの台帳(task ×5 / 世代 / 復旧 deadline。WP-H5 PR5)。
     pub(crate) subscription_registry: SubscriptionRegistry,
     pub(crate) joined_private_channels: Arc<Mutex<HashMap<String, JoinedPrivateChannelState>>>,
@@ -430,6 +457,18 @@ impl NotificationDocEventBaseline {
 }
 
 impl AppService {
+    pub(crate) fn hint_transport(&self) -> &dyn HintTransport {
+        self.services.hint_transport.as_ref()
+    }
+
+    pub(crate) fn docs_sync(&self) -> &dyn DocsSync {
+        self.services.docs_sync.as_ref()
+    }
+
+    pub(crate) fn keys(&self) -> &KukuriKeys {
+        self.services.keys.as_ref()
+    }
+
     pub fn new<S, T>(store: Arc<S>, transport: Arc<T>) -> Self
     where
         S: Store + ProjectionStore + 'static,
@@ -437,7 +476,7 @@ impl AppService {
     {
         let docs_sync = Arc::new(MemoryDocsSync::default());
         let blob_service = Arc::new(MemoryBlobService::default());
-        Self::new_with_services(
+        Self::from_handles(ServiceHandles::new(
             store.clone() as Arc<dyn Store>,
             store as Arc<dyn ProjectionStore>,
             transport.clone(),
@@ -445,26 +484,12 @@ impl AppService {
             docs_sync,
             blob_service,
             generate_keys(),
-        )
+        ))
     }
 
-    pub fn new_with_services(
-        store: Arc<dyn Store>,
-        projection_store: Arc<dyn ProjectionStore>,
-        transport: Arc<dyn Transport>,
-        hint_transport: Arc<dyn HintTransport>,
-        docs_sync: Arc<dyn DocsSync>,
-        blob_service: Arc<dyn BlobService>,
-        keys: KukuriKeys,
-    ) -> Self {
+    pub fn from_handles(services: ServiceHandles) -> Self {
         Self {
-            store,
-            transport,
-            projection_store,
-            hint_transport,
-            docs_sync,
-            blob_service,
-            keys: Arc::new(keys),
+            services,
             subscription_registry: SubscriptionRegistry::default(),
             joined_private_channels: Arc::new(Mutex::new(HashMap::new())),
             metaverse_room_events: Arc::new(Mutex::new(HashMap::new())),
@@ -499,23 +524,23 @@ impl AppService {
     ) -> Result<ResolvedRepostSource> {
         let source_object_id = EnvelopeId::from(source_object_id);
         if ObjectProjectionStore::get_object_projection(
-            self.projection_store.as_ref(),
+            self.services.projection_store.as_ref(),
             &source_object_id,
         )
         .await?
         .is_none()
         {
             let _ = hydrate_topic_state_with_services(
-                self.docs_sync.as_ref(),
-                self.blob_service.as_ref(),
-                self.projection_store.as_ref(),
+                self.services.docs_sync.as_ref(),
+                self.services.blob_service.as_ref(),
+                self.services.projection_store.as_ref(),
                 source_topic_id,
                 DocFetchPolicy::LocalThenRemote,
             )
             .await?;
         }
         let projection = ObjectProjectionStore::get_object_projection(
-            self.projection_store.as_ref(),
+            self.services.projection_store.as_ref(),
             &source_object_id,
         )
         .await?
@@ -531,7 +556,7 @@ impl AppService {
         }
 
         let header = fetch_post_object_for_projection(
-            self.docs_sync.as_ref(),
+            self.services.docs_sync.as_ref(),
             &projection.source_replica_id,
             projection.source_key.as_str(),
         )
@@ -540,7 +565,7 @@ impl AppService {
         let content = match &projection.payload_ref {
             PayloadRef::InlineText { text } => text.clone(),
             PayloadRef::BlobText { hash, .. } => {
-                fetch_projection_blob_text(self.blob_service.as_ref(), hash)
+                fetch_projection_blob_text(self.services.blob_service.as_ref(), hash)
                     .await
                     .ok_or_else(|| anyhow::anyhow!("repost source content is unavailable"))?
             }
@@ -571,6 +596,7 @@ impl AppService {
         let target_replica = topic_replica_id(target_topic_id);
         let local_author_pubkey = self.current_author_pubkey();
         for record in self
+            .services
             .docs_sync
             .query_replica(&target_replica, DocQuery::Prefix("objects/".into()))
             .await?
@@ -603,11 +629,11 @@ impl AppService {
     }
 
     pub(crate) async fn docs_assisted_peer_ids(&self) -> Result<Vec<String>> {
-        self.docs_sync.assist_peer_ids().await
+        self.services.docs_sync.assist_peer_ids().await
     }
 
     pub(crate) async fn blob_assisted_peer_ids(&self) -> Result<Vec<String>> {
-        self.blob_service.assist_peer_ids().await
+        self.services.blob_service.assist_peer_ids().await
     }
 
     pub(crate) async fn next_subscription_generation(&self, key: &str) -> u64 {
@@ -744,12 +770,14 @@ impl AppService {
         }
         for channel_id in private_channels_to_unsubscribe {
             let _ = self
+                .services
                 .hint_transport
                 .unsubscribe_hints(&private_channel_hint_topic(channel_id.as_str()))
                 .await;
         }
         for topic_id in topics_to_unsubscribe {
             let _ = self
+                .services
                 .hint_transport
                 .unsubscribe_hints(&TopicId::new(topic_id))
                 .await;
@@ -778,10 +806,11 @@ impl AppService {
             let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
         }
         for peer_pubkey in dm_peers_to_unsubscribe {
-            if let Ok(topic) =
-                derive_direct_message_topic(self.keys.as_ref(), &Pubkey::from(peer_pubkey.as_str()))
-            {
-                let _ = self.hint_transport.unsubscribe_hints(&topic).await;
+            if let Ok(topic) = derive_direct_message_topic(
+                self.services.keys.as_ref(),
+                &Pubkey::from(peer_pubkey.as_str()),
+            ) {
+                let _ = self.services.hint_transport.unsubscribe_hints(&topic).await;
             }
         }
         let author_handles = {
@@ -806,7 +835,7 @@ impl AppService {
     }
 
     pub(crate) fn current_author_pubkey(&self) -> String {
-        self.keys.public_key_hex()
+        self.services.keys.public_key_hex()
     }
 
     pub(crate) async fn reaction_state_for_target(
@@ -815,6 +844,7 @@ impl AppService {
         target_object_id: &EnvelopeId,
     ) -> Result<ReactionStateView> {
         let rows = self
+            .services
             .projection_store
             .list_reaction_cache_for_target(source_replica_id, target_object_id)
             .await?;

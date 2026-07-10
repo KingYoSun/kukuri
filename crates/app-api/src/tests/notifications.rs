@@ -472,7 +472,7 @@ async fn quote_repost_notification_survives_hydration_before_live_doc_event() {
 #[tokio::test]
 async fn incoming_dm_frame_creates_single_direct_message_notification_after_store() {
     let (app, store, _, blob_service) = local_app_with_memory_services();
-    let local_keys = app.keys.clone();
+    let local_keys = app.services.keys.clone();
     let local_author_pubkey = app.current_author_pubkey();
     let remote_keys = generate_keys();
     let remote_pubkey = remote_keys.public_key_hex();

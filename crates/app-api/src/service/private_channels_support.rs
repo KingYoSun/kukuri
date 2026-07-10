@@ -16,7 +16,7 @@ impl AppService {
             let local_author = self.current_author_pubkey();
             let replica = current_private_channel_replica_id(&state);
             let grant_doc = fetch_private_channel_epoch_handoff_grant_from_replica(
-                self.docs_sync.as_ref(),
+                self.docs_sync(),
                 &replica,
                 local_author.as_str(),
                 DocFetchPolicy::LocalOnly,
@@ -26,6 +26,7 @@ impl AppService {
                 Some(grant_doc)
             } else {
                 let has_peers = self
+                    .services
                     .transport
                     .peers()
                     .await
@@ -33,7 +34,7 @@ impl AppService {
                 if !has_peers {
                     return Ok(redeemed_any);
                 }
-                if let Err(error) = self.docs_sync.restart_replica_sync(&replica).await {
+                if let Err(error) = self.docs_sync().restart_replica_sync(&replica).await {
                     warn!(
                         topic = %topic_id,
                         channel_id = %channel_id,
@@ -43,7 +44,7 @@ impl AppService {
                     );
                 }
                 fetch_private_channel_epoch_handoff_grant_from_replica(
-                    self.docs_sync.as_ref(),
+                    self.docs_sync(),
                     &replica,
                     local_author.as_str(),
                     DocFetchPolicy::LocalThenRemote,
@@ -53,20 +54,20 @@ impl AppService {
             let Some(grant_doc) = grant_doc else {
                 return Ok(redeemed_any);
             };
-            let payload =
-                match decrypt_private_channel_epoch_handoff_grant(self.keys.as_ref(), &grant_doc) {
-                    Ok(payload) => payload,
-                    Err(error) => {
-                        warn!(
-                            topic = %topic_id,
-                            channel_id = %channel_id,
-                            epoch_id = %state.current_epoch_id,
-                            error = %error,
-                            "failed to decrypt private channel epoch handoff grant"
-                        );
-                        return Ok(redeemed_any);
-                    }
-                };
+            let payload = match decrypt_private_channel_epoch_handoff_grant(self.keys(), &grant_doc)
+            {
+                Ok(payload) => payload,
+                Err(error) => {
+                    warn!(
+                        topic = %topic_id,
+                        channel_id = %channel_id,
+                        epoch_id = %state.current_epoch_id,
+                        error = %error,
+                        "failed to decrypt private channel epoch handoff grant"
+                    );
+                    return Ok(redeemed_any);
+                }
+            };
             if payload.old_epoch_id != state.current_epoch_id
                 || private_channel_epoch_capabilities(&state)
                     .iter()
@@ -76,13 +77,18 @@ impl AppService {
             }
             let next_replica =
                 private_channel_epoch_replica_id(channel_id, payload.new_epoch_id.as_str());
-            self.docs_sync
+            self.docs_sync()
                 .register_private_replica_secret(
                     &next_replica,
                     payload.new_namespace_secret_hex.as_str(),
                 )
                 .await?;
-            if let Err(error) = self.docs_sync.restart_replica_sync(&next_replica).await {
+            if let Err(error) = self
+                .services
+                .docs_sync
+                .restart_replica_sync(&next_replica)
+                .await
+            {
                 warn!(
                     topic = %topic_id,
                     channel_id = %channel_id,
@@ -92,7 +98,7 @@ impl AppService {
                 );
             }
             let (metadata, policy, participants) = match wait_for_private_channel_epoch_snapshot(
-                self.docs_sync.as_ref(),
+                self.docs_sync(),
                 &next_replica,
                 "private channel epoch handoff sync",
             )
@@ -130,8 +136,8 @@ impl AppService {
                     && participant.left_at.is_none()
             }) {
                 persist_private_channel_participant(
-                    self.docs_sync.as_ref(),
-                    self.keys.as_ref(),
+                    self.docs_sync(),
+                    self.keys(),
                     &PrivateChannelParticipantDocV1 {
                         channel_id: metadata.channel_id.clone(),
                         topic_id: metadata.topic_id.clone(),
@@ -170,7 +176,7 @@ impl AppService {
     ) -> Result<PrivateChannelDiagnostics> {
         let replica = current_private_channel_replica_id(state);
         let sharing_state = fetch_private_channel_policy_from_replica(
-            self.docs_sync.as_ref(),
+            self.docs_sync(),
             &replica,
             DocFetchPolicy::LocalOnly,
         )
@@ -178,7 +184,7 @@ impl AppService {
         .map(|policy| policy.sharing_state)
         .unwrap_or(ChannelSharingState::Open);
         let participants = fetch_private_channel_participants_from_replica(
-            self.docs_sync.as_ref(),
+            self.docs_sync(),
             &replica,
             DocFetchPolicy::LocalOnly,
         )
@@ -197,6 +203,7 @@ impl AppService {
                 self.ensure_author_subscription(participant.participant_pubkey.as_str())
                     .await?;
                 let relationship = self
+                    .services
                     .projection_store
                     .get_author_relationship(
                         self.current_author_pubkey().as_str(),
@@ -264,7 +271,6 @@ impl AppService {
             namespace_secret_hex: state.current_epoch_secret_hex.clone(),
         })
     }
-
     pub(crate) async fn audience_label_for_storage(
         &self,
         topic_id: &str,
@@ -280,7 +286,6 @@ impl AppService {
             .map(|channel| channel.label.clone())
             .unwrap_or_else(|| "Private channel".to_string())
     }
-
     pub(crate) async fn joined_private_channel_states_for_topic(
         &self,
         topic_id: &str,
@@ -293,7 +298,6 @@ impl AppService {
             .cloned()
             .collect()
     }
-
     pub(crate) async fn joined_private_channel_state(
         &self,
         topic_id: &str,
@@ -305,7 +309,6 @@ impl AppService {
             .get(joined_private_channel_key(topic_id, channel_id).as_str())
             .cloned()
     }
-
     pub(crate) async fn ensure_private_channel_access(
         &self,
         topic_id: &str,
@@ -320,7 +323,6 @@ impl AppService {
         }
         Ok(())
     }
-
     pub(crate) async fn maybe_auto_rotate_private_channel_for_owner(
         &self,
         topic_id: &str,
@@ -355,7 +357,6 @@ impl AppService {
         }
         Ok(())
     }
-
     pub(crate) async fn private_channel_state_for_owner_action(
         &self,
         topic_id: &str,
@@ -380,9 +381,7 @@ impl AppService {
             .joined_private_channel_state(topic_id, channel_id.as_str())
             .await
             .ok_or_else(|| anyhow::anyhow!("private channel is not joined"))?;
-        if private_channel_rotation_is_pending(self.docs_sync.as_ref(), self.keys.as_ref(), &state)
-            .await?
-        {
+        if private_channel_rotation_is_pending(self.docs_sync(), self.keys(), &state).await? {
             anyhow::bail!(
                 "private channel epoch handoff is pending; wait for automatic redemption or use a fresh access token"
             );
@@ -425,7 +424,7 @@ impl AppService {
         &self,
         state: JoinedPrivateChannelState,
     ) -> Result<()> {
-        register_private_channel_replica_secrets(self.docs_sync.as_ref(), &state).await?;
+        register_private_channel_replica_secrets(self.docs_sync(), &state).await?;
         self.joined_private_channels.lock().await.insert(
             joined_private_channel_key(state.topic_id.as_str(), state.channel_id.as_str()),
             state.clone(),
@@ -476,6 +475,7 @@ impl AppService {
             }
         }
         let has_peers = self
+            .services
             .transport
             .peers()
             .await
@@ -484,7 +484,7 @@ impl AppService {
             let hint_topic = private_channel_hint_topic(channel_id);
             match tokio::time::timeout(
                 std::time::Duration::from_secs(2),
-                self.hint_transport.unsubscribe_hints(&hint_topic),
+                self.hint_transport().unsubscribe_hints(&hint_topic),
             )
             .await
             {
@@ -563,7 +563,7 @@ impl AppService {
                 handle.abort();
             }
         }
-        self.hint_transport
+        self.hint_transport()
             .unsubscribe_hints(&private_channel_hint_topic(channel_id))
             .await?;
         let Some(state) = self
@@ -579,7 +579,7 @@ impl AppService {
         &self,
         state: JoinedPrivateChannelState,
     ) -> Result<()> {
-        let docs_sync = Arc::clone(&self.docs_sync);
+        let docs_sync = Arc::clone(&self.services.docs_sync);
         for epoch in private_channel_epoch_capabilities(&state) {
             let replica = private_channel_replica_for_epoch(
                 state.channel_id.as_str(),
@@ -622,11 +622,11 @@ impl AppService {
         hint_topic: TopicId,
         private_key: Option<String>,
     ) -> Result<()> {
-        let projection_store = Arc::clone(&self.projection_store);
-        let docs_sync = Arc::clone(&self.docs_sync);
-        let blob_service = Arc::clone(&self.blob_service);
-        let hint_transport = Arc::clone(&self.hint_transport);
-        let transport = Arc::clone(&self.transport);
+        let projection_store = Arc::clone(&self.services.projection_store);
+        let docs_sync = Arc::clone(&self.services.docs_sync);
+        let blob_service = Arc::clone(&self.services.blob_service);
+        let hint_transport = Arc::clone(&self.services.hint_transport);
+        let transport = Arc::clone(&self.services.transport);
         let metaverse_room_events = Arc::clone(&self.metaverse_room_events);
         let last_sync = Arc::clone(&self.last_sync_ts);
         let notification_inserted = Arc::clone(&self.notification_inserted_notify);

@@ -304,7 +304,7 @@ async fn local_bookmarks_restore_saved_custom_reactions_after_restart() {
     let local_keys = generate_keys();
     let foreign_keys = generate_keys();
     let foreign_pubkey = foreign_keys.public_key_hex();
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store.clone(),
         transport.clone(),
@@ -334,7 +334,7 @@ async fn local_bookmarks_restore_saved_custom_reactions_after_restart() {
             .await
             .expect("reopen sqlite store"),
     );
-    let reopened_app = AppService::new_with_services(
+    let reopened_app = app_service_from_dependencies(
         reopened.clone(),
         reopened.clone(),
         transport,

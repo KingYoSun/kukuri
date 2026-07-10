@@ -75,7 +75,7 @@ async fn quote_repost_opens_own_thread_and_simple_repost_cannot_be_reply_parent(
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
     let docs_sync = Arc::new(MemoryDocsSync::default());
     let blob_service = Arc::new(MemoryBlobService::default());
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport.clone(),

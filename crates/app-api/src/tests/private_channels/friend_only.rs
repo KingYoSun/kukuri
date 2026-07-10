@@ -16,7 +16,7 @@ async fn friend_only_grant_requires_mutual_and_rotate_requires_fresh_grant() {
     let keys_b = generate_keys();
     let keys_c = generate_keys();
     let keys_d = generate_keys();
-    let app_a = AppService::new_with_services(
+    let app_a = app_service_from_dependencies(
         store_a.clone(),
         store_a.clone(),
         stack_a.transport.clone(),
@@ -25,7 +25,7 @@ async fn friend_only_grant_requires_mutual_and_rotate_requires_fresh_grant() {
         stack_a.blob_service.clone(),
         keys_a.clone(),
     );
-    let app_b = AppService::new_with_services(
+    let app_b = app_service_from_dependencies(
         store_b.clone(),
         store_b.clone(),
         stack_b.transport.clone(),
@@ -34,7 +34,7 @@ async fn friend_only_grant_requires_mutual_and_rotate_requires_fresh_grant() {
         stack_b.blob_service.clone(),
         keys_b.clone(),
     );
-    let app_c = AppService::new_with_services(
+    let app_c = app_service_from_dependencies(
         store_c.clone(),
         store_c.clone(),
         stack_c.transport.clone(),
@@ -43,7 +43,7 @@ async fn friend_only_grant_requires_mutual_and_rotate_requires_fresh_grant() {
         stack_c.blob_service.clone(),
         keys_c.clone(),
     );
-    let app_d = AppService::new_with_services(
+    let app_d = app_service_from_dependencies(
         store_d.clone(),
         store_d.clone(),
         stack_d.transport.clone(),

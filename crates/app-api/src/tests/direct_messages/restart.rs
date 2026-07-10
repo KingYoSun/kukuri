@@ -50,7 +50,7 @@ async fn dm_restart_resumes_pending_outbox_and_local_delete_prevents_duplicate_r
         .await
         .expect("seed follow edge b->a in store b");
 
-    let app_a = AppService::new_with_services(
+    let app_a = app_service_from_dependencies(
         store_a.clone(),
         store_a.clone(),
         transport.clone(),
@@ -59,7 +59,7 @@ async fn dm_restart_resumes_pending_outbox_and_local_delete_prevents_duplicate_r
         blob_service.clone(),
         keys_a.clone(),
     );
-    let app_b = AppService::new_with_services(
+    let app_b = app_service_from_dependencies(
         store_b.clone(),
         store_b.clone(),
         transport.clone(),
@@ -106,7 +106,7 @@ async fn dm_restart_resumes_pending_outbox_and_local_delete_prevents_duplicate_r
 
     drop(app_a);
 
-    let reopened_app_a = AppService::new_with_services(
+    let reopened_app_a = app_service_from_dependencies(
         store_a.clone(),
         store_a.clone(),
         transport.clone(),
@@ -283,7 +283,7 @@ async fn dm_restart_surfaces_queued_message_in_conversation_list_without_reopeni
         .await
         .expect("seed follow edge b->a in store b");
 
-    let app_a = AppService::new_with_services(
+    let app_a = app_service_from_dependencies(
         store_a.clone(),
         store_a.clone(),
         transport.clone(),
@@ -292,7 +292,7 @@ async fn dm_restart_surfaces_queued_message_in_conversation_list_without_reopeni
         blob_service.clone(),
         keys_a.clone(),
     );
-    let app_b = AppService::new_with_services(
+    let app_b = app_service_from_dependencies(
         store_b.clone(),
         store_b.clone(),
         transport.clone(),
@@ -327,7 +327,7 @@ async fn dm_restart_surfaces_queued_message_in_conversation_list_without_reopeni
     drop(app_a);
     drop(app_b);
 
-    let reopened_app_b = AppService::new_with_services(
+    let reopened_app_b = app_service_from_dependencies(
         store_b.clone(),
         store_b.clone(),
         transport.clone(),
@@ -341,7 +341,7 @@ async fn dm_restart_surfaces_queued_message_in_conversation_list_without_reopeni
         .await
         .expect("resume recipient direct message state");
 
-    let reopened_app_a = AppService::new_with_services(
+    let reopened_app_a = app_service_from_dependencies(
         store_a.clone(),
         store_a.clone(),
         transport.clone(),

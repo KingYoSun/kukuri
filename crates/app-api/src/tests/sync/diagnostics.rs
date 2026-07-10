@@ -275,7 +275,7 @@ async fn docs_assisted_peers_do_not_mark_live_sync_connected() {
     }));
     let docs_sync = Arc::new(AssistedDocsSync::new(vec!["peer-a", "peer-b"]));
     let blob_service = Arc::new(AssistedBlobService::new(vec!["peer-b", "peer-c"]));
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport.clone(),
@@ -348,7 +348,7 @@ async fn blob_only_assist_peers_do_not_mark_sync_healthy() {
             last_error: None,
         }],
     }));
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport.clone(),

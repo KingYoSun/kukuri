@@ -624,7 +624,7 @@ async fn metaverse_room_shared_object_update_allows_non_owner_without_status_cha
     let blob_service = Arc::new(MemoryBlobService::default());
     let owner_store = Arc::new(MemoryStore::default());
     let peer_store = Arc::new(MemoryStore::default());
-    let app_owner = AppService::new_with_services(
+    let app_owner = app_service_from_dependencies(
         owner_store.clone(),
         owner_store,
         transport.clone(),
@@ -633,7 +633,7 @@ async fn metaverse_room_shared_object_update_allows_non_owner_without_status_cha
         blob_service.clone(),
         generate_keys(),
     );
-    let app_peer = AppService::new_with_services(
+    let app_peer = app_service_from_dependencies(
         peer_store.clone(),
         peer_store,
         transport.clone(),
@@ -754,7 +754,7 @@ async fn metaverse_room_manifest_restores_after_restart_from_docs_and_blobs() {
     let docs_sync = Arc::new(MemoryDocsSync::default());
     let blob_service = Arc::new(MemoryBlobService::default());
     let keys = generate_keys();
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport.clone(),
@@ -809,7 +809,7 @@ async fn metaverse_room_manifest_restores_after_restart_from_docs_and_blobs() {
     .expect("publish restart chat");
 
     let restarted_store = Arc::new(MemoryStore::default());
-    let restarted = AppService::new_with_services(
+    let restarted = app_service_from_dependencies(
         restarted_store.clone(),
         restarted_store,
         transport,

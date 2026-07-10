@@ -269,7 +269,7 @@ fn app_with_hanging_remote_docs(
     blob_service: Arc<MemoryBlobService>,
     keys: KukuriKeys,
 ) -> AppService {
-    AppService::new_with_services(
+    app_service_from_dependencies(
         store.clone(),
         store,
         Arc::new(StaticTransport::new(PeerSnapshot::default())),
