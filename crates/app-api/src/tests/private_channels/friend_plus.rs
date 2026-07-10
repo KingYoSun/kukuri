@@ -347,7 +347,7 @@ async fn friend_plus_share_freeze_rotate_and_new_epoch_visibility() {
         stale_preview_d.epoch_id.as_str(),
     );
     assert!(
-        fetch_private_channel_rotation_grant_from_replica(
+        fetch_private_channel_epoch_handoff_grant_from_replica(
             app_a.docs_sync.as_ref(),
             &rotated_source_replica,
             b_pubkey.as_str(),
@@ -396,7 +396,7 @@ async fn friend_plus_share_freeze_rotate_and_new_epoch_visibility() {
                 .iter()
                 .find(|entry| entry.channel_id == channel.channel_id)
                 .cloned();
-            let grant_visible = fetch_private_channel_rotation_grant_from_replica(
+            let grant_visible = fetch_private_channel_epoch_handoff_grant_from_replica(
                 app_b.docs_sync.as_ref(),
                 &rotated_source_replica,
                 b_pubkey.as_str(),
