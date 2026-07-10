@@ -1,24 +1,5 @@
 ﻿import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
-import {
-  Box,
-  ChevronDown,
-  LogOut,
-  MessageSquare,
-  MonitorPause,
-  Move3D,
-  PanelRightClose,
-  PanelRightOpen,
-  RefreshCw,
-  Send,
-  Wifi,
-  WifiOff,
-  X,
-} from 'lucide-react';
-
-import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import type {
   ChannelRef,
   DesktopApi,
@@ -32,13 +13,13 @@ import type {
   SyncStatus,
 } from '@/lib/api';
 import type { SupportedLocale } from '@/i18n';
-import { formatLocalizedTime } from '@/i18n/format';
 import { blobToBase64 } from '@/lib/attachments';
 import { MetaverseScene } from './MetaverseScene';
 import {
   MetaverseRoomDiscovery,
   type CreateMetaverseRoomInput,
 } from './metaverse/MetaverseRoomDiscovery';
+import { MetaverseRoomControls } from './metaverse/MetaverseRoomControls';
 import {
   DEFAULT_AVATAR_ASSET_NAME,
   DEFAULT_AVATAR_ASSET_URL,
@@ -101,32 +82,6 @@ function topicDiagnosticFor(syncStatus: SyncStatus, topic: string) {
   );
 }
 
-function connectionStateLabel(state: MetaverseRoomConnectionState) {
-  if (state === 'live') {
-    return 'Live';
-  }
-  if (state === 'recovering') {
-    return 'Recovering';
-  }
-  if (state === 'stale') {
-    return 'Stale';
-  }
-  return 'Offline';
-}
-
-function connectionStateDetail(state: MetaverseRoomConnectionState) {
-  if (state === 'live') {
-    return 'Room events are flowing';
-  }
-  if (state === 'recovering') {
-    return 'Refreshing room connectivity';
-  }
-  if (state === 'stale') {
-    return 'No room activity recently';
-  }
-  return 'Peer connectivity is unavailable';
-}
-
 function latestChatBubbleFromMessage(message: RoomChatMessage, now = Date.now()): LatestChatBubble {
   return {
     peerId: message.authorPeerId,
@@ -143,19 +98,6 @@ function isEditableTarget(target: EventTarget | null) {
   }
   const tagName = target.tagName.toLowerCase();
   return tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target.isContentEditable;
-}
-
-function ConnectionStateIcon({ state }: { state: MetaverseRoomConnectionState }) {
-  if (state === 'live') {
-    return <Wifi className='size-4' aria-hidden='true' />;
-  }
-  if (state === 'recovering') {
-    return <RefreshCw className='size-4' aria-hidden='true' />;
-  }
-  if (state === 'stale') {
-    return <MonitorPause className='size-4' aria-hidden='true' />;
-  }
-  return <WifiOff className='size-4' aria-hidden='true' />;
 }
 
 export function MetaverseRoomPanel({
@@ -853,186 +795,37 @@ export function MetaverseRoomPanel({
               onLocalTransform={handleLocalTransform}
               onAvatarAssetStatus={setAvatarAssetStatus}
               hud={(
-                <>
-                  <div
-                    className='metaverse-connection-badge'
-                    data-state={roomConnectionState}
-                    title={connectionStateDetail(roomConnectionState)}
-                  >
-                    <ConnectionStateIcon state={roomConnectionState} />
-                    <span>{connectionStateLabel(roomConnectionState)}</span>
-                  </div>
-                  <div className='metaverse-hud-toolbar' data-open={hudOpen}>
-                    <Button
-                      variant='ghost'
-                      size='icon'
-                      className='metaverse-hud-icon-button'
-                      type='button'
-                      aria-label='Leave room'
-                      onClick={handleLeaveRoom}
-                    >
-                      <LogOut className='size-4' aria-hidden='true' />
-                    </Button>
-                    <Button
-                      variant='ghost'
-                      size='icon'
-                      className='metaverse-hud-icon-button'
-                      type='button'
-                      aria-label={hudOpen ? 'Hide room HUD' : 'Open room HUD'}
-                      onClick={() => setHudOpen((open) => !open)}
-                    >
-                      {hudOpen ? (
-                        <PanelRightClose className='size-4' aria-hidden='true' />
-                      ) : (
-                        <PanelRightOpen className='size-4' aria-hidden='true' />
-                      )}
-                    </Button>
-                  </div>
-                  {hudOpen ? (
-                    <>
-                    <aside className='metaverse-room-hud'>
-                      <div className='panel-header metaverse-hud-header'>
-                        <div>
-                          <h3>{selectedRoom.title}</h3>
-                          <small>{selectedRoom.room_id}</small>
-                        </div>
-                      </div>
-                      <section className='metaverse-hud-accordion' data-open={hudDebugOpen}>
-                        <button
-                          type='button'
-                          className='metaverse-hud-accordion-trigger'
-                          aria-expanded={hudDebugOpen}
-                          onClick={() => setHudDebugOpen((open) => !open)}
-                        >
-                          <span>Debug details</span>
-                          <ChevronDown className='size-4' aria-hidden='true' />
-                        </button>
-                        {hudDebugOpen ? (
-                          <div className='metaverse-room-diagnostics'>
-                            <span>Topic: {activeTopic}</span>
-                            <span>Local peer: {localPeerId}</span>
-                            <span>Known peers: {knownPeerCount}</span>
-                            <span>Last sent seq: {lastSentSeq}</span>
-                            <span>Last received: {lastReceivedAt ? formatLocalizedTime(lastReceivedAt, locale) : 'none'}</span>
-                            <span>Remote animation: {remoteAnimationSummary || 'none'}</span>
-                            <span>
-                              Avatar asset:{' '}
-                              {avatarAssetStatus === 'sample-vrm'
-                                ? 'sample VRM loaded'
-                                : avatarAssetStatus === 'blob-vrm'
-                                  ? 'blob VRM loaded'
-                                  : avatarAssetStatus}
-                            </span>
-                            <span>Blob asset resolve: {localAvatarAssetRef?.blob_hash ?? 'public sample / fallback-ready'}</span>
-                            <span>Persistence: manifest blob {selectedRoom.manifest_blob_hash ?? 'pending'}</span>
-                            <span>Community assist: {syncStatus.discovery.bootstrap_seed_peer_ids.length > 0 ? 'available' : 'optional'}</span>
-                          </div>
-                        ) : null}
-                      </section>
-                      <div className='metaverse-object-controls'>
-                        <strong>Avatar asset</strong>
-                        <div className='metaverse-avatar-asset-controls'>
-                          <Label>
-                            <span className='sr-only'>VRM file</span>
-                            <Input
-                              type='file'
-                              accept='.vrm,model/vrm,application/octet-stream'
-                              disabled={pending}
-                              onChange={(event) => {
-                                const file = event.target.files?.[0];
-                                if (file) {
-                                  void importAvatarBlob(file, file.name);
-                                }
-                                event.currentTarget.value = '';
-                              }}
-                            />
-                          </Label>
-                          <Button size='sm' variant='secondary' type='button' disabled={pending} onClick={() => void handleSampleAvatarImport()}>
-                            Default
-                          </Button>
-                        </div>
-                      </div>
-                      <div className='metaverse-object-controls'>
-                        <strong>
-                          <Box className='size-4' aria-hidden='true' />
-                          Shared object
-                        </strong>
-                        <div className='metaverse-nudge-grid'>
-                          <Button size='sm' variant='secondary' type='button' onClick={() => void moveSharedObject([0, 0, -50])}>
-                            <Move3D className='size-4' aria-hidden='true' />
-                            Forward
-                          </Button>
-                          <Button size='sm' variant='secondary' type='button' onClick={() => void moveSharedObject([-50, 0, 0])}>Left</Button>
-                          <Button size='sm' variant='secondary' type='button' onClick={() => void moveSharedObject([50, 0, 0])}>Right</Button>
-                          <Button size='sm' variant='secondary' type='button' onClick={() => void moveSharedObject([0, 0, 50])}>Back</Button>
-                        </div>
-                      </div>
-                    </aside>
-                    <span className='metaverse-hud-scrollbar-indicator' aria-hidden='true'>
-                      <span />
-                    </span>
-                    </>
-                  ) : null}
-                  {chatOpen ? (
-                    <section className='metaverse-room-chat-log' aria-label='ROOM Chat'>
-                      <div className='metaverse-room-chat-log-header'>
-                        <span>
-                          <MessageSquare className='size-4' aria-hidden='true' />
-                          ROOM Chat
-                        </span>
-                        <Button
-                          variant='ghost'
-                          size='icon'
-                          className='metaverse-chat-close-button'
-                          type='button'
-                          aria-label='Hide room chat'
-                          onClick={() => setChatOpen(false)}
-                        >
-                          <X className='size-4' aria-hidden='true' />
-                        </Button>
-                      </div>
-                      <ul className='metaverse-chat-list'>
-                        {messages.map((message) => (
-                          <li key={message.messageId}>
-                            <strong>
-                              {message.authorPeerId === localPeerId
-                                ? 'You'
-                                : message.displayName || message.authorPeerId.slice(0, 12)}
-                              <small>{formatLocalizedTime(message.createdAt, locale)}</small>
-                            </strong>
-                            <span>{message.body}</span>
-                          </li>
-                        ))}
-                      </ul>
-                      <form className='metaverse-chat-form' onSubmit={handleSendMessage}>
-                        <Label>
-                          <span className='sr-only'>Room chat message</span>
-                          <Input
-                            ref={messageInputRef}
-                            value={messageDraft}
-                            placeholder='Say something in the room'
-                            onChange={(event) => setMessageDraft(event.target.value)}
-                          />
-                        </Label>
-                        <Button size='sm' type='submit'>
-                          <Send className='size-4' aria-hidden='true' />
-                          Send
-                        </Button>
-                      </form>
-                    </section>
-                  ) : (
-                    <Button
-                      variant='secondary'
-                      size='icon'
-                      className='metaverse-chat-toggle'
-                      type='button'
-                      aria-label='Open room chat'
-                      onClick={() => setChatOpen(true)}
-                    >
-                      <MessageSquare className='size-4' aria-hidden='true' />
-                    </Button>
-                  )}
-                </>
+                <MetaverseRoomControls
+                  room={selectedRoom}
+                  activeTopic={activeTopic}
+                  localPeerId={localPeerId}
+                  knownPeerCount={knownPeerCount}
+                  lastSentSeq={lastSentSeq}
+                  lastReceivedAt={lastReceivedAt}
+                  remoteAnimationSummary={remoteAnimationSummary}
+                  avatarAssetStatus={avatarAssetStatus}
+                  localAvatarAssetRef={localAvatarAssetRef}
+                  communityAssistAvailable={syncStatus.discovery.bootstrap_seed_peer_ids.length > 0}
+                  connectionState={roomConnectionState}
+                  locale={locale}
+                  pending={pending}
+                  hudOpen={hudOpen}
+                  hudDebugOpen={hudDebugOpen}
+                  chatOpen={chatOpen}
+                  messages={messages}
+                  messageDraft={messageDraft}
+                  messageInputRef={messageInputRef}
+                  onLeaveRoom={handleLeaveRoom}
+                  onToggleHud={() => setHudOpen((open) => !open)}
+                  onToggleHudDebug={() => setHudDebugOpen((open) => !open)}
+                  onImportAvatar={(file) => void importAvatarBlob(file, file.name)}
+                  onImportDefaultAvatar={() => void handleSampleAvatarImport()}
+                  onMoveSharedObject={(delta) => void moveSharedObject(delta)}
+                  onCloseChat={() => setChatOpen(false)}
+                  onOpenChat={() => setChatOpen(true)}
+                  onMessageDraftChange={setMessageDraft}
+                  onSendMessage={handleSendMessage}
+                />
               )}
             />
           </div>

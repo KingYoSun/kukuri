@@ -11,10 +11,6 @@
     {
       "lines": 1079,
       "path": "crates/app-api/src/private_channels.rs"
-    },
-    {
-      "lines": 1043,
-      "path": "apps/desktop/src/components/extended/MetaverseRoomPanel.tsx"
     }
   ]
 }
