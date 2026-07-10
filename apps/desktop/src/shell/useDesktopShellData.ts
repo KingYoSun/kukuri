@@ -11,7 +11,6 @@ import type {
   DirectMessageMessageView,
   GameRoomView,
   JoinedPrivateChannelView,
-  NotificationView,
   PostView,
 } from '@/lib/api';
 
@@ -19,6 +18,7 @@ import { removeRecordEntry, setRecordEntry, updateRecordEntry } from '@/shell/st
 import { useConnectivityStatusRefresh } from '@/shell/data/useConnectivityStatusRefresh';
 import { useDesktopShellDataEffects } from '@/shell/data/useDesktopShellDataEffects';
 import { useDraftMediaHelpers } from '@/shell/data/useDraftMediaHelpers';
+import { useDesktopShellSectionLoaders } from '@/shell/data/loaders/useDesktopShellSectionLoaders';
 import { useQueuedLoadTopics } from '@/shell/data/useQueuedLoadTopics';
 import {
   hasLoadedOlderAuthoritativePosts,
@@ -39,14 +39,9 @@ import {
 import { THREAD_TIMELINE_LIMIT, VISIBLE_TIMELINE_LIMIT } from '@/shell/pagination';
 import { useShallow } from 'zustand/react/shallow';
 import {
-  authorViewFromDirectMessageConversation,
-  communityNodesToDraftNodes,
-  mergeCommunityNodeStatuses,
   mergeKnownAuthors,
   messageFromError,
   privateTimelineScope,
-  profileInputFromProfile,
-  seedPeersToEditorValue,
   selectShellDataSlice,
 } from '@/shell/selectors';
 
@@ -123,8 +118,6 @@ export function useDesktopShellData({
   const setPublicTimelineNextCursorByTopic = useDesktopShellFieldSetter(
     'publicTimelineNextCursorByTopic'
   );
-  const setLiveSessionsByTopic = useDesktopShellFieldSetter('liveSessionsByTopic');
-  const setGameRoomsByTopic = useDesktopShellFieldSetter('gameRoomsByTopic');
   const setJoinedChannelsByTopic = useDesktopShellFieldSetter('joinedChannelsByTopic');
   const setChannelPanelStateByTopic = useDesktopShellFieldSetter('channelPanelStateByTopic');
   const setSelectedChannelIdByTopic = useDesktopShellFieldSetter('selectedChannelIdByTopic');
@@ -133,15 +126,7 @@ export function useDesktopShellData({
   const setThread = useDesktopShellFieldSetter('thread');
   const setThreadNextCursorById = useDesktopShellFieldSetter('threadNextCursorById');
   const setThreadLoadingMoreById = useDesktopShellFieldSetter('threadLoadingMoreById');
-  const setLocalPeerTicket = useDesktopShellFieldSetter('localPeerTicket');
-  const setDiscoveryConfig = useDesktopShellFieldSetter('discoveryConfig');
-  const setDiscoverySeedInput = useDesktopShellFieldSetter('discoverySeedInput');
-  const setDiscoveryError = useDesktopShellFieldSetter('discoveryError');
-  const setCommunityNodeConfig = useDesktopShellFieldSetter('communityNodeConfig');
   const setCommunityNodeStatuses = useDesktopShellFieldSetter('communityNodeStatuses');
-  const setCommunityNodeManifests = useDesktopShellFieldSetter('communityNodeManifests');
-  const setCommunityNodeInput = useDesktopShellFieldSetter('communityNodeInput');
-  const setCommunityNodeError = useDesktopShellFieldSetter('communityNodeError');
   const setMediaObjectUrls = useDesktopShellFieldSetter('mediaObjectUrls');
   const setSyncStatus = useDesktopShellFieldSetter('syncStatus');
   const setLocalProfile = useDesktopShellFieldSetter('localProfile');
@@ -152,7 +137,6 @@ export function useDesktopShellData({
   const setSocialConnectionsPanelState = useDesktopShellFieldSetter('socialConnectionsPanelState');
   const setOwnedReactionAssets = useDesktopShellFieldSetter('ownedReactionAssets');
   const setBookmarkedReactionAssets = useDesktopShellFieldSetter('bookmarkedReactionAssets');
-  const setBookmarkedPosts = useDesktopShellFieldSetter('bookmarkedPosts');
   const setRecentReactions = useDesktopShellFieldSetter('recentReactions');
   const setProfileDraft = useDesktopShellFieldSetter('profileDraft');
   const setProfileError = useDesktopShellFieldSetter('profileError');
@@ -174,8 +158,6 @@ export function useDesktopShellData({
   );
   const setDirectMessageStatusByPeer = useDesktopShellFieldSetter('directMessageStatusByPeer');
   const setDirectMessageError = useDesktopShellFieldSetter('directMessageError');
-  const setLivePanelStateByTopic = useDesktopShellFieldSetter('livePanelStateByTopic');
-  const setGamePanelStateByTopic = useDesktopShellFieldSetter('gamePanelStateByTopic');
   const setGameDrafts = useDesktopShellFieldSetter('gameDrafts');
   const setReactionPanelState = useDesktopShellFieldSetter('reactionPanelState');
   const setError = useDesktopShellFieldSetter('error');
@@ -549,369 +531,18 @@ export function useDesktopShellData({
     translate,
   ]);
 
+  const loadShellSections = useDesktopShellSectionLoaders({
+    api,
+    loadReactionCatalogData,
+    storeApi,
+    translate,
+  });
   const runLoadTopics = useCallback(
     async (_currentTopics: string[], currentActiveTopic: string, currentThread: string | null) => {
       await refreshVisibleShellData(currentActiveTopic, currentThread, 'apply');
-
-      const currentState = storeApi.getState();
-      const selectedChannelId = currentState.selectedChannelIdByTopic[currentActiveTopic] ?? null;
-      const selectedAuthorPubkey = currentState.selectedAuthorPubkey;
-      const {
-        activePrimarySection,
-        activeSettingsSection,
-        settingsOpen,
-        timelineView,
-      } = currentState.shellChromeState;
-
-      const tasks: Promise<void>[] = [];
-
-      if (activePrimarySection === 'live') {
-        tasks.push(
-          api
-            .listLiveSessions(currentActiveTopic, privateTimelineScope(selectedChannelId))
-            .then((sessions) => {
-              startTransition(() => {
-                setLiveSessionsByTopic(setRecordEntry(currentActiveTopic, sessions));
-                setLivePanelStateByTopic(setRecordEntry(currentActiveTopic, { status: 'ready', error: null }));
-              });
-            })
-            .catch((error) => {
-              setLivePanelStateByTopic(setRecordEntry(currentActiveTopic, {
-                  status: 'error',
-                  error: messageFromError(
-                    error,
-                    translate('common:errors.failedToLoadLiveSessions')
-                  ),
-                }));
-            })
-        );
-      }
-
-      if (activePrimarySection === 'game') {
-        tasks.push(
-          api
-            .listGameRooms(currentActiveTopic, privateTimelineScope(selectedChannelId))
-            .then((rooms) => {
-              startTransition(() => {
-                setGameRoomsByTopic(setRecordEntry(currentActiveTopic, rooms));
-                setGamePanelStateByTopic(setRecordEntry(currentActiveTopic, { status: 'ready', error: null }));
-              });
-            })
-            .catch((error) => {
-              setGamePanelStateByTopic(setRecordEntry(currentActiveTopic, {
-                  status: 'error',
-                  error: messageFromError(error, translate('common:errors.failedToLoadGameRooms')),
-                }));
-            })
-        );
-      }
-
-      if (activePrimarySection === 'profile') {
-        tasks.push(
-          Promise.all([
-            api.getMyProfile(),
-            api.listSocialConnections('following'),
-            api.listSocialConnections('followed'),
-            api.listSocialConnections('muted'),
-          ])
-            .then(async ([profile, following, followed, muted]) => {
-              const timeline = await api.listProfileTimeline(profile.pubkey, null, VISIBLE_TIMELINE_LIMIT);
-              startTransition(() => {
-                setLocalProfile(profile);
-                if (!storeApi.getState().profileDirty) {
-                  setProfileDraft(profileInputFromProfile(profile));
-                }
-                setProfileTimeline(timeline.items);
-                setProfileTimelineNextCursor(timeline.next_cursor ?? null);
-                setProfileError(null);
-                setProfilePanelState({ status: 'ready', error: null });
-                setSocialConnections({ following, followed, muted });
-                setKnownAuthorsByPubkey((current) =>
-                  mergeKnownAuthors(current, [...following, ...followed, ...muted])
-                );
-                setSocialConnectionsPanelState({ status: 'ready', error: null });
-              });
-            })
-            .catch((error) => {
-              const message = messageFromError(error, translate('common:errors.failedToLoadProfile'));
-              setProfileError(message);
-              setProfilePanelState({ status: 'error', error: message });
-            })
-        );
-      }
-
-      if (selectedAuthorPubkey) {
-        tasks.push(
-          Promise.all([
-            api.getAuthorSocialView(selectedAuthorPubkey),
-            api.listProfileTimeline(selectedAuthorPubkey, null, VISIBLE_TIMELINE_LIMIT),
-          ])
-            .then(([author, timeline]) => {
-              startTransition(() => {
-                setSelectedAuthor(author);
-                setSelectedAuthorTimeline(timeline.items);
-                setSelectedAuthorTimelineNextCursor(timeline.next_cursor ?? null);
-                setAuthorError(null);
-                if (author) {
-                  setKnownAuthorsByPubkey((current) => mergeKnownAuthors(current, [author]));
-                }
-              });
-            })
-            .catch((error) => {
-              setAuthorError(messageFromError(error, translate('common:errors.failedToLoadAuthor')));
-            })
-        );
-      }
-
-      if (activePrimarySection === 'messages' || currentState.directMessagePaneOpen) {
-        tasks.push(
-          api
-            .listDirectMessages()
-            .then(async (directMessages) => {
-              startTransition(() => {
-                setDirectMessages(directMessages);
-                setKnownAuthorsByPubkey((current) =>
-                  mergeKnownAuthors(
-                    current,
-                    directMessages.map(authorViewFromDirectMessageConversation)
-                  )
-                );
-              });
-              const selectedPeerPubkey = storeApi.getState().selectedDirectMessagePeerPubkey;
-              if (!selectedPeerPubkey) {
-                setDirectMessageError(null);
-                return;
-              }
-              const [timelineResult, statusResult] = await Promise.allSettled([
-                api.listDirectMessageMessages(selectedPeerPubkey, null, VISIBLE_TIMELINE_LIMIT),
-                api.getDirectMessageStatus(selectedPeerPubkey),
-              ]);
-              startTransition(() => {
-                if (timelineResult.status === 'fulfilled') {
-                  setDirectMessageTimelineByPeer(setRecordEntry(selectedPeerPubkey, timelineResult.value.items));
-                  setDirectMessageTimelineNextCursorByPeer(setRecordEntry(selectedPeerPubkey, timelineResult.value.next_cursor ?? null));
-                }
-                if (statusResult.status === 'fulfilled') {
-                  setDirectMessageStatusByPeer(setRecordEntry(selectedPeerPubkey, statusResult.value));
-                }
-                setDirectMessageError(
-                  timelineResult.status === 'fulfilled' && statusResult.status === 'fulfilled'
-                    ? null
-                    : messageFromError(
-                        timelineResult.status === 'rejected'
-                          ? timelineResult.reason
-                          : statusResult.status === 'rejected'
-                            ? statusResult.reason
-                            : null,
-                        'failed to load direct messages'
-                      )
-                );
-              });
-            })
-            .catch((error) => {
-              setDirectMessageError(messageFromError(error, 'failed to load direct messages'));
-            })
-        );
-      }
-
-      if (activePrimarySection === 'notifications') {
-        tasks.push(
-          Promise.all([api.getNotificationStatus(), api.listNotifications()])
-            .then(async ([status, notificationItems]) => {
-              let nextNotifications: NotificationView[] = notificationItems;
-              let nextStatus = status;
-              if (notificationItems.some((notification) => !notification.read_at)) {
-                try {
-                  nextStatus = await api.markAllNotificationsRead();
-                  const readAt = Date.now();
-                  nextNotifications = notificationItems.map((notification) =>
-                    notification.read_at ? notification : { ...notification, read_at: readAt }
-                  );
-                  setNotificationAutoReadError(null);
-                } catch (notificationReadError) {
-                  setNotificationAutoReadError(
-                    messageFromError(
-                      notificationReadError,
-                      translate('shell:notifications.errors.failedAutoRead')
-                    )
-                  );
-                }
-              }
-              startTransition(() => {
-                setNotificationStatus(nextStatus);
-                setNotifications(nextNotifications);
-                setNotificationPanelState({ status: 'ready', error: null });
-              });
-            })
-            .catch((error) => {
-              setNotificationPanelState({
-                status: 'error',
-                error: messageFromError(error, translate('shell:notifications.errors.failedToLoad')),
-              });
-            })
-        );
-      }
-
-      if (activePrimarySection === 'timeline' && timelineView === 'bookmarks') {
-        tasks.push(
-          api
-            .listBookmarkedPosts()
-            .then((bookmarks) => {
-              setBookmarkedPosts(bookmarks);
-            })
-            .catch(() => undefined)
-        );
-      }
-
-      if (settingsOpen) {
-        if (activeSettingsSection === 'connectivity') {
-          tasks.push(
-            api
-              .getLocalPeerTicket()
-              .then((ticket) => {
-                setLocalPeerTicket(ticket);
-              })
-              .catch(() => undefined)
-          );
-        }
-
-        if (activeSettingsSection === 'discovery') {
-          tasks.push(
-            api
-              .getDiscoveryConfig()
-              .then((config) => {
-                setDiscoveryConfig(config);
-                if (!storeApi.getState().discoveryEditorDirty) {
-                  setDiscoverySeedInput(seedPeersToEditorValue(config));
-                }
-                setDiscoveryError(null);
-              })
-              .catch((error) => {
-                setDiscoveryError(
-                  messageFromError(error, translate('common:errors.failedToLoadSettings'))
-                );
-              })
-          );
-        }
-
-        if (activeSettingsSection === 'community-node') {
-          tasks.push(
-            Promise.all([api.getCommunityNodeConfig(), api.getCommunityNodeStatuses()])
-              .then(([config, statuses]) => {
-                startTransition(() => {
-                  setCommunityNodeConfig(config);
-                  if (!storeApi.getState().communityNodeEditorDirty) {
-                    setCommunityNodeInput(communityNodesToDraftNodes(config));
-                  }
-                  setCommunityNodeStatuses((current) =>
-                    mergeCommunityNodeStatuses(current, statuses)
-                  );
-                  setCommunityNodeError(null);
-                });
-                // public manifest endpoint (#356) から dependency 情報を best-effort 取得する。
-                const baseUrls = config.nodes
-                  .map((node) => node.base_url)
-                  .filter((baseUrl) => baseUrl.trim().length > 0);
-                if (baseUrls.length > 0) {
-                  setCommunityNodeManifests((current) => {
-                    const next = { ...current };
-                    for (const baseUrl of baseUrls) {
-                      next[baseUrl] = { status: 'loading' };
-                    }
-                    return next;
-                  });
-                  for (const baseUrl of baseUrls) {
-                    void api
-                      .fetchCommunityNodeManifest(baseUrl)
-                      .then((result) => {
-                        setCommunityNodeManifests(setRecordEntry(baseUrl, result.status === 'ok' && result.manifest
-                              ? { status: 'ok', manifest: result.manifest }
-                              : { status: 'absent' }));
-                      })
-                      .catch((error) => {
-                        setCommunityNodeManifests(setRecordEntry(baseUrl, {
-                            status: 'error',
-                            error: messageFromError(
-                              error,
-                              translate('common:errors.failedToLoadSettings')
-                            ),
-                          }));
-                      });
-                  }
-                }
-              })
-              .catch((error) => {
-                setCommunityNodeError(
-                  messageFromError(error, translate('common:errors.failedToLoadSettings'))
-                );
-              })
-          );
-        }
-
-        if (activeSettingsSection === 'reactions') {
-          tasks.push(
-            Promise.all([api.listBookmarkedPosts(), loadReactionCatalogData()])
-              .then(([bookmarkedPosts]) => {
-                startTransition(() => {
-                  setBookmarkedPosts(bookmarkedPosts);
-                });
-              })
-              .catch((error) => {
-                setReactionPanelState({
-                  status: 'error',
-                  error: messageFromError(error, translate('common:errors.failedToLoadSettings')),
-                });
-              })
-          );
-        }
-      }
-
-      await Promise.allSettled(tasks);
+      await loadShellSections(currentActiveTopic);
     },
-    [
-      api,
-      setAuthorError,
-      setBookmarkedPosts,
-      setCommunityNodeConfig,
-      setCommunityNodeError,
-      setCommunityNodeInput,
-      setCommunityNodeManifests,
-      setCommunityNodeStatuses,
-      setDirectMessages,
-      setDirectMessageError,
-      setDirectMessageTimelineNextCursorByPeer,
-      setDirectMessageTimelineByPeer,
-      setDirectMessageStatusByPeer,
-      setDiscoveryConfig,
-      setDiscoveryError,
-      setDiscoverySeedInput,
-      setGamePanelStateByTopic,
-      setGameRoomsByTopic,
-      setKnownAuthorsByPubkey,
-      setLivePanelStateByTopic,
-      setLiveSessionsByTopic,
-      setLocalPeerTicket,
-      setLocalProfile,
-      setNotifications,
-      setNotificationAutoReadError,
-      setNotificationPanelState,
-      setNotificationStatus,
-      setProfileDraft,
-      setProfileError,
-      setProfilePanelState,
-      setProfileTimelineNextCursor,
-      setProfileTimeline,
-      setReactionPanelState,
-      setSelectedAuthor,
-      setSelectedAuthorTimelineNextCursor,
-      setSelectedAuthorTimeline,
-      setSocialConnections,
-      setSocialConnectionsPanelState,
-      loadReactionCatalogData,
-      refreshVisibleShellData,
-      storeApi,
-      translate,
-    ]
+    [loadShellSections, refreshVisibleShellData]
   );
 
   const refreshConnectivityStatus = useConnectivityStatusRefresh(
