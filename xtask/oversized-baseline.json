@@ -9,10 +9,6 @@
       "path": "apps/desktop/src/shell/useDesktopShellViewModels.ts"
     },
     {
-      "lines": 1090,
-      "path": "apps/desktop/src/shell/DesktopShellPage.tsx"
-    },
-    {
       "lines": 1087,
       "path": "crates/app-api/src/service/private_channels_support.rs"
     },
@@ -27,6 +23,10 @@
     {
       "lines": 1035,
       "path": "apps/desktop/src/shell/useDesktopShellData.ts"
+    },
+    {
+      "lines": 1002,
+      "path": "apps/desktop/src/shell/DesktopShellPage.tsx"
     }
   ]
 }
