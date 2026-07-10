@@ -15,7 +15,7 @@ import {
   privateComposeTarget,
   privateTimelineScope,
   publishedTopicIdForPost,
-} from '@/shell/selectors';
+} from '@/shell/presentation';
 
 import type {
   ActionsBaseParams,

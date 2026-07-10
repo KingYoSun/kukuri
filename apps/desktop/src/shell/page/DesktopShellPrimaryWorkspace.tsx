@@ -38,7 +38,7 @@ import {
   localizeAudienceLabel,
   resolveProfilePictureSrc,
   translateLiveStatus,
-} from '@/shell/selectors';
+} from '@/shell/presentation';
 import { useDesktopShellViewModels } from '@/shell/useDesktopShellViewModels';
 import type { OpenAuthorDetail, OpenThread, Translate } from '@/shell/actions/shared';
 import { useShallow } from 'zustand/react/shallow';

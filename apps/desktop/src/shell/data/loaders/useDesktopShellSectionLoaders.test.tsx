@@ -4,7 +4,7 @@ import { describe, expect, test, vi } from 'vitest';
 
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import { useDesktopShellSectionLoaders } from '@/shell/data/loaders/useDesktopShellSectionLoaders';
-import { privateTimelineScope } from '@/shell/selectors';
+import { privateTimelineScope } from '@/shell/presentation';
 import {
   createDesktopShellStore,
   DesktopShellStoreContext,

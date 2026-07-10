@@ -1,7 +1,7 @@
 import { startTransition, useCallback } from 'react';
 
 import type { DesktopApi } from '@/lib/api';
-import { mergeCommunityNodeStatuses } from '@/shell/selectors';
+import { mergeCommunityNodeStatuses } from '@/shell/presentation';
 import type { DesktopShellState, DesktopShellStateValue } from '@/shell/store';
 
 type Setter<K extends keyof DesktopShellState> = (

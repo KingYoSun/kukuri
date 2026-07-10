@@ -18,7 +18,8 @@ import {
   useDesktopShellStoreApi,
 } from '@/shell/store';
 import { setRecordEntry, updateRecordEntry } from '@/shell/stateUpdates';
-import { publishedTopicIdForPost, selectShellActionsSlice } from '@/shell/selectors';
+import { publishedTopicIdForPost } from '@/shell/presentation';
+import { selectShellActionsSlice } from '@/shell/storeSelectors';
 import { createComposeInteractionsActions } from './actions/composeInteractions';
 import { createDirectMessageActions } from './actions/directMessages';
 import { createLiveGameActions } from './actions/liveGame';

@@ -35,7 +35,7 @@ import {
   mergeKnownAuthors,
   messageFromError,
   profileInputFromProfile,
-} from '@/shell/selectors';
+} from '@/shell/presentation';
 import { useRuntimeEventBridge } from '@/shell/data/useRuntimeEventBridge';
 import { isTauriRuntime } from '@/lib/releaseReadiness';
 

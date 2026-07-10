@@ -31,8 +31,8 @@ import {
   authorViewFromDirectMessageConversation,
   mergeKnownAuthors,
   messageFromError,
-  selectShellRoutingSlice,
-} from '@/shell/selectors';
+} from '@/shell/presentation';
+import { selectShellRoutingSlice } from '@/shell/storeSelectors';
 import {
   useDesktopShellFieldSetter,
   useDesktopShellStore,

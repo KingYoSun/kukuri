@@ -8,7 +8,7 @@ import type {
 
 import { updateRecordEntry } from '@/shell/stateUpdates';
 import type { DesktopShellState } from '@/shell/store';
-import { messageFromError } from '@/shell/selectors';
+import { messageFromError } from '@/shell/presentation';
 
 import type {
   ActionsBaseParams,

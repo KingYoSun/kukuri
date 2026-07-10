@@ -2,7 +2,7 @@ import { startTransition, useCallback, useEffect, useRef, useState } from 'react
 
 import type { PrimarySection, TimelineWorkspaceView } from '@/components/shell/types';
 import type { DesktopApi } from '@/lib/api';
-import { mergeKnownAuthors } from '@/shell/selectors';
+import { mergeKnownAuthors } from '@/shell/presentation';
 import { useDesktopShellFieldSetter } from '@/shell/store';
 
 type PendingLeaveChannel = {

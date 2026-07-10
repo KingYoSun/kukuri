@@ -11,7 +11,7 @@ import {
   canCreateRepostFromPost,
   messageFromError,
   publishedTopicIdForPost,
-} from '@/shell/selectors';
+} from '@/shell/presentation';
 
 import type {
   BoolStateDispatch,

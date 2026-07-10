@@ -26,7 +26,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 
-import { authorDisplayLabel } from '@/shell/selectors';
+import { authorDisplayLabel } from '@/shell/presentation';
 import { useDesktopShellFieldSetter, useDesktopShellStore } from '@/shell/store';
 import type { Translate } from '@/shell/actions/shared';
 import type { useShellDialogs } from '@/shell/page/useShellDialogs';
