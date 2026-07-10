@@ -171,11 +171,11 @@ fn friend_plus_share_parser_rejects_signer_mismatch() {
 }
 
 #[test]
-fn channel_rotation_grant_encrypt_decrypt_roundtrip_and_wrong_recipient_fails() {
+fn channel_epoch_handoff_grant_encrypt_decrypt_roundtrip_and_wrong_recipient_fails() {
     let owner = generate_keys();
     let recipient = generate_keys();
     let wrong_recipient = generate_keys();
-    let payload = PrivateChannelRotationGrantPayloadV1 {
+    let payload = PrivateChannelEpochHandoffGrantPayloadV1 {
         channel_id: ChannelId::new("channel-1"),
         topic_id: TopicId::new("kukuri:topic:friends-plus"),
         owner_pubkey: owner.public_key(),
@@ -184,24 +184,25 @@ fn channel_rotation_grant_encrypt_decrypt_roundtrip_and_wrong_recipient_fails() 
         new_epoch_id: "epoch-2".into(),
         new_namespace_secret_hex: generate_keys().export_secret_hex(),
     };
-    let doc =
-        encrypt_private_channel_rotation_grant(&owner, &payload).expect("encrypt rotation grant");
-    let envelope = build_private_channel_rotation_grant_envelope(&owner, &doc).expect("envelope");
-    let parsed_doc = parse_private_channel_rotation_grant(&envelope)
-        .expect("parse rotation grant")
-        .expect("rotation grant");
-    let decrypted = decrypt_private_channel_rotation_grant(&recipient, &parsed_doc)
-        .expect("decrypt rotation grant");
+    let doc = encrypt_private_channel_epoch_handoff_grant(&owner, &payload)
+        .expect("encrypt epoch handoff grant");
+    let envelope =
+        build_private_channel_epoch_handoff_grant_envelope(&owner, &doc).expect("envelope");
+    let parsed_doc = parse_private_channel_epoch_handoff_grant(&envelope)
+        .expect("parse epoch handoff grant")
+        .expect("epoch handoff grant");
+    let decrypted = decrypt_private_channel_epoch_handoff_grant(&recipient, &parsed_doc)
+        .expect("decrypt epoch handoff grant");
     assert_eq!(decrypted.new_epoch_id, "epoch-2");
     assert_eq!(decrypted.recipient_pubkey, recipient.public_key());
 
-    let error = decrypt_private_channel_rotation_grant(&wrong_recipient, &parsed_doc)
+    let error = decrypt_private_channel_epoch_handoff_grant(&wrong_recipient, &parsed_doc)
         .expect_err("wrong recipient must fail");
     assert!(error.to_string().contains("recipient pubkey"));
 }
 
 #[test]
-fn epoch_handoff_grant_reads_legacy_rotation_grant_fixture_and_preserves_wire_shape() {
+fn epoch_handoff_grant_reads_legacy_wire_fixture_and_preserves_wire_shape() {
     let owner =
         KukuriKeys::parse("0000000000000000000000000000000000000000000000000000000000000001")
             .expect("owner key");

@@ -1,7 +1,7 @@
 use super::*;
 
 impl AppService {
-    pub(crate) async fn maybe_redeem_rotation_grants_for_channel(
+    pub(crate) async fn maybe_redeem_epoch_handoff_grants_for_channel(
         &self,
         topic_id: &str,
         channel_id: &str,
@@ -16,7 +16,7 @@ impl AppService {
             };
             let local_author = self.current_author_pubkey();
             let replica = current_private_channel_replica_id(&state);
-            let grant_doc = fetch_private_channel_rotation_grant_from_replica_with_policy(
+            let grant_doc = fetch_private_channel_epoch_handoff_grant_from_replica_with_policy(
                 self.docs_sync.as_ref(),
                 &replica,
                 local_author.as_str(),
@@ -43,7 +43,7 @@ impl AppService {
                         "failed to restart private channel replica sync while polling epoch handoff"
                     );
                 }
-                fetch_private_channel_rotation_grant_from_replica(
+                fetch_private_channel_epoch_handoff_grant_from_replica(
                     self.docs_sync.as_ref(),
                     &replica,
                     local_author.as_str(),
@@ -365,7 +365,7 @@ impl AppService {
         channel_id: &ChannelId,
         action: PrivateChannelOwnerAction,
     ) -> Result<JoinedPrivateChannelState> {
-        self.maybe_redeem_rotation_grants_for_channel(topic_id, channel_id.as_str())
+        self.maybe_redeem_epoch_handoff_grants_for_channel(topic_id, channel_id.as_str())
             .await?;
         self.ensure_private_channel_access(topic_id, channel_id)
             .await?;
@@ -373,7 +373,7 @@ impl AppService {
             .await?;
         self.maybe_auto_rotate_private_channel_for_owner(topic_id, channel_id, action)
             .await?;
-        self.maybe_redeem_rotation_grants_for_channel(topic_id, channel_id.as_str())
+        self.maybe_redeem_epoch_handoff_grants_for_channel(topic_id, channel_id.as_str())
             .await?;
         self.ensure_private_channel_access(topic_id, channel_id)
             .await?;

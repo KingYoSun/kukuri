@@ -182,7 +182,7 @@ pub struct FriendPlusSharePreview {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PrivateChannelRotationGrantPayloadV1 {
+pub struct PrivateChannelEpochHandoffGrantPayloadV1 {
     pub channel_id: ChannelId,
     pub topic_id: TopicId,
     pub owner_pubkey: Pubkey,
@@ -193,7 +193,7 @@ pub struct PrivateChannelRotationGrantPayloadV1 {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PrivateChannelRotationGrantDocV1 {
+pub struct PrivateChannelEpochHandoffGrantDocV1 {
     pub channel_id: ChannelId,
     pub topic_id: TopicId,
     pub owner_pubkey: Pubkey,
@@ -203,9 +203,6 @@ pub struct PrivateChannelRotationGrantDocV1 {
     pub nonce_hex: String,
     pub ciphertext_hex: String,
 }
-
-pub type PrivateChannelEpochHandoffGrantPayloadV1 = PrivateChannelRotationGrantPayloadV1;
-pub type PrivateChannelEpochHandoffGrantDocV1 = PrivateChannelRotationGrantDocV1;
 
 pub struct PrivateChannelInviteTokenParams<'a> {
     pub topic: &'a TopicId,
@@ -545,43 +542,43 @@ pub fn parse_friend_plus_share_token(token: &str) -> Result<FriendPlusSharePrevi
     })
 }
 
-pub fn encrypt_private_channel_rotation_grant(
+pub fn encrypt_private_channel_epoch_handoff_grant(
     owner_keys: &KukuriKeys,
-    payload: &PrivateChannelRotationGrantPayloadV1,
-) -> Result<PrivateChannelRotationGrantDocV1> {
+    payload: &PrivateChannelEpochHandoffGrantPayloadV1,
+) -> Result<PrivateChannelEpochHandoffGrantDocV1> {
     if owner_keys.public_key() != payload.owner_pubkey {
-        bail!("channel rotation grant owner pubkey must match signer");
+        bail!("channel epoch handoff grant owner pubkey must match signer");
     }
     validate_pubkey(payload.recipient_pubkey.as_str())
-        .context("invalid channel rotation grant recipient pubkey")?;
+        .context("invalid channel epoch handoff grant recipient pubkey")?;
     if payload.old_epoch_id.trim().is_empty() {
-        bail!("channel rotation grant old epoch id is required");
+        bail!("channel epoch handoff grant old epoch id is required");
     }
     if payload.new_epoch_id.trim().is_empty() {
-        bail!("channel rotation grant new epoch id is required");
+        bail!("channel epoch handoff grant new epoch id is required");
     }
     validate_private_channel_secret_hex(
         payload.new_namespace_secret_hex.as_str(),
-        "channel rotation grant secret",
+        "channel epoch handoff grant secret",
     )?;
-    let plaintext =
-        serde_json::to_vec(payload).context("failed to encode channel rotation grant payload")?;
+    let plaintext = serde_json::to_vec(payload)
+        .context("failed to encode channel epoch handoff grant payload")?;
     let mut nonce = [0u8; 24];
     rng().fill_bytes(&mut nonce);
     let cipher = XChaCha20Poly1305::new_from_slice(
-        derive_rotation_grant_key(owner_keys, &payload.recipient_pubkey, payload)?.as_slice(),
+        derive_epoch_handoff_grant_key(owner_keys, &payload.recipient_pubkey, payload)?.as_slice(),
     )
-    .context("failed to initialize rotation grant cipher")?;
+    .context("failed to initialize epoch handoff grant cipher")?;
     let ciphertext = cipher
         .encrypt(
             XNonce::from_slice(&nonce),
             Payload {
                 msg: plaintext.as_slice(),
-                aad: rotation_grant_aad(payload).as_bytes(),
+                aad: epoch_handoff_grant_aad(payload).as_bytes(),
             },
         )
-        .map_err(|_| anyhow!("failed to encrypt channel rotation grant"))?;
-    Ok(PrivateChannelRotationGrantDocV1 {
+        .map_err(|_| anyhow!("failed to encrypt channel epoch handoff grant"))?;
+    Ok(PrivateChannelEpochHandoffGrantDocV1 {
         channel_id: payload.channel_id.clone(),
         topic_id: payload.topic_id.clone(),
         owner_pubkey: payload.owner_pubkey.clone(),
@@ -593,28 +590,21 @@ pub fn encrypt_private_channel_rotation_grant(
     })
 }
 
-pub fn encrypt_private_channel_epoch_handoff_grant(
-    owner_keys: &KukuriKeys,
-    payload: &PrivateChannelEpochHandoffGrantPayloadV1,
-) -> Result<PrivateChannelEpochHandoffGrantDocV1> {
-    encrypt_private_channel_rotation_grant(owner_keys, payload)
-}
-
-pub fn decrypt_private_channel_rotation_grant(
+pub fn decrypt_private_channel_epoch_handoff_grant(
     local_keys: &KukuriKeys,
-    doc: &PrivateChannelRotationGrantDocV1,
-) -> Result<PrivateChannelRotationGrantPayloadV1> {
+    doc: &PrivateChannelEpochHandoffGrantDocV1,
+) -> Result<PrivateChannelEpochHandoffGrantPayloadV1> {
     if local_keys.public_key() != doc.recipient_pubkey {
-        bail!("channel rotation grant recipient pubkey must match decrypting author");
+        bail!("channel epoch handoff grant recipient pubkey must match decrypting author");
     }
     let nonce =
-        hex::decode(doc.nonce_hex.trim()).context("invalid channel rotation grant nonce")?;
+        hex::decode(doc.nonce_hex.trim()).context("invalid channel epoch handoff grant nonce")?;
     if nonce.len() != 24 {
-        bail!("channel rotation grant nonce must be 24 bytes");
+        bail!("channel epoch handoff grant nonce must be 24 bytes");
     }
     let ciphertext = hex::decode(doc.ciphertext_hex.trim())
-        .context("invalid channel rotation grant ciphertext")?;
-    let payload_stub = PrivateChannelRotationGrantPayloadV1 {
+        .context("invalid channel epoch handoff grant ciphertext")?;
+    let payload_stub = PrivateChannelEpochHandoffGrantPayloadV1 {
         channel_id: doc.channel_id.clone(),
         topic_id: doc.topic_id.clone(),
         owner_pubkey: doc.owner_pubkey.clone(),
@@ -624,54 +614,47 @@ pub fn decrypt_private_channel_rotation_grant(
         new_namespace_secret_hex: String::new(),
     };
     let cipher = XChaCha20Poly1305::new_from_slice(
-        derive_rotation_grant_key(local_keys, &doc.owner_pubkey, &payload_stub)?.as_slice(),
+        derive_epoch_handoff_grant_key(local_keys, &doc.owner_pubkey, &payload_stub)?.as_slice(),
     )
-    .context("failed to initialize rotation grant cipher")?;
+    .context("failed to initialize epoch handoff grant cipher")?;
     let plaintext = cipher
         .decrypt(
             XNonce::from_slice(nonce.as_slice()),
             Payload {
                 msg: ciphertext.as_slice(),
-                aad: rotation_grant_aad(&payload_stub).as_bytes(),
+                aad: epoch_handoff_grant_aad(&payload_stub).as_bytes(),
             },
         )
-        .map_err(|_| anyhow!("failed to decrypt channel rotation grant"))?;
-    let payload: PrivateChannelRotationGrantPayloadV1 = serde_json::from_slice(&plaintext)
-        .context("failed to decode channel rotation grant payload")?;
+        .map_err(|_| anyhow!("failed to decrypt channel epoch handoff grant"))?;
+    let payload: PrivateChannelEpochHandoffGrantPayloadV1 = serde_json::from_slice(&plaintext)
+        .context("failed to decode channel epoch handoff grant payload")?;
     if payload.channel_id != doc.channel_id || payload.topic_id != doc.topic_id {
-        bail!("channel rotation grant payload does not match doc identity");
+        bail!("channel epoch handoff grant payload does not match doc identity");
     }
     if payload.owner_pubkey != doc.owner_pubkey || payload.recipient_pubkey != doc.recipient_pubkey
     {
-        bail!("channel rotation grant payload does not match doc recipients");
+        bail!("channel epoch handoff grant payload does not match doc recipients");
     }
     if payload.old_epoch_id != doc.old_epoch_id || payload.new_epoch_id != doc.new_epoch_id {
-        bail!("channel rotation grant payload does not match doc epochs");
+        bail!("channel epoch handoff grant payload does not match doc epochs");
     }
     validate_private_channel_secret_hex(
         payload.new_namespace_secret_hex.as_str(),
-        "channel rotation grant secret",
+        "channel epoch handoff grant secret",
     )?;
     Ok(payload)
 }
 
-pub fn decrypt_private_channel_epoch_handoff_grant(
-    local_keys: &KukuriKeys,
-    doc: &PrivateChannelEpochHandoffGrantDocV1,
-) -> Result<PrivateChannelEpochHandoffGrantPayloadV1> {
-    decrypt_private_channel_rotation_grant(local_keys, doc)
-}
-
-pub fn build_private_channel_rotation_grant_envelope(
+pub fn build_private_channel_epoch_handoff_grant_envelope(
     owner_keys: &KukuriKeys,
-    doc: &PrivateChannelRotationGrantDocV1,
+    doc: &PrivateChannelEpochHandoffGrantDocV1,
 ) -> Result<KukuriEnvelope> {
     if owner_keys.public_key() != doc.owner_pubkey {
-        bail!("channel rotation grant owner pubkey must match signer");
+        bail!("channel epoch handoff grant owner pubkey must match signer");
     }
     let created_at = now_timestamp_millis()?;
     let encoded =
-        serde_json::to_string(doc).context("failed to encode channel rotation grant doc")?;
+        serde_json::to_string(doc).context("failed to encode channel epoch handoff grant doc")?;
     crate::sign_envelope_at(
         owner_keys,
         "channel-rotation-grant",
@@ -690,50 +673,38 @@ pub fn build_private_channel_rotation_grant_envelope(
     )
 }
 
-pub fn build_private_channel_epoch_handoff_grant_envelope(
-    owner_keys: &KukuriKeys,
-    doc: &PrivateChannelEpochHandoffGrantDocV1,
-) -> Result<KukuriEnvelope> {
-    build_private_channel_rotation_grant_envelope(owner_keys, doc)
-}
-
-pub fn parse_private_channel_rotation_grant(
-    envelope: &KukuriEnvelope,
-) -> Result<Option<PrivateChannelRotationGrantDocV1>> {
-    if envelope.kind != "channel-rotation-grant" {
-        return Ok(None);
-    }
-    let doc: PrivateChannelRotationGrantDocV1 = serde_json::from_str(&envelope.content)
-        .context("failed to parse channel rotation grant")?;
-    validate_pubkey(doc.owner_pubkey.as_str()).context("invalid channel rotation grant owner")?;
-    validate_pubkey(doc.recipient_pubkey.as_str())
-        .context("invalid channel rotation grant recipient")?;
-    if envelope.pubkey != doc.owner_pubkey {
-        bail!("channel rotation grant owner pubkey must match envelope signer");
-    }
-    if doc.old_epoch_id.trim().is_empty() {
-        bail!("channel rotation grant old epoch id is required");
-    }
-    if doc.new_epoch_id.trim().is_empty() {
-        bail!("channel rotation grant new epoch id is required");
-    }
-    if doc.old_epoch_id == doc.new_epoch_id {
-        bail!("channel rotation grant must rotate to a new epoch");
-    }
-    let nonce =
-        hex::decode(doc.nonce_hex.trim()).context("invalid channel rotation grant nonce")?;
-    if nonce.len() != 24 {
-        bail!("channel rotation grant nonce must be 24 bytes");
-    }
-    let _ = hex::decode(doc.ciphertext_hex.trim())
-        .context("invalid channel rotation grant ciphertext")?;
-    Ok(Some(doc))
-}
-
 pub fn parse_private_channel_epoch_handoff_grant(
     envelope: &KukuriEnvelope,
 ) -> Result<Option<PrivateChannelEpochHandoffGrantDocV1>> {
-    parse_private_channel_rotation_grant(envelope)
+    if envelope.kind != "channel-rotation-grant" {
+        return Ok(None);
+    }
+    let doc: PrivateChannelEpochHandoffGrantDocV1 = serde_json::from_str(&envelope.content)
+        .context("failed to parse channel epoch handoff grant")?;
+    validate_pubkey(doc.owner_pubkey.as_str())
+        .context("invalid channel epoch handoff grant owner")?;
+    validate_pubkey(doc.recipient_pubkey.as_str())
+        .context("invalid channel epoch handoff grant recipient")?;
+    if envelope.pubkey != doc.owner_pubkey {
+        bail!("channel epoch handoff grant owner pubkey must match envelope signer");
+    }
+    if doc.old_epoch_id.trim().is_empty() {
+        bail!("channel epoch handoff grant old epoch id is required");
+    }
+    if doc.new_epoch_id.trim().is_empty() {
+        bail!("channel epoch handoff grant new epoch id is required");
+    }
+    if doc.old_epoch_id == doc.new_epoch_id {
+        bail!("channel epoch handoff grant must rotate to a new epoch");
+    }
+    let nonce =
+        hex::decode(doc.nonce_hex.trim()).context("invalid channel epoch handoff grant nonce")?;
+    if nonce.len() != 24 {
+        bail!("channel epoch handoff grant nonce must be 24 bytes");
+    }
+    let _ = hex::decode(doc.ciphertext_hex.trim())
+        .context("invalid channel epoch handoff grant ciphertext")?;
+    Ok(Some(doc))
 }
 
 fn validate_private_channel_secret_hex(value: &str, label: &str) -> Result<()> {
@@ -744,7 +715,7 @@ fn validate_private_channel_secret_hex(value: &str, label: &str) -> Result<()> {
     Ok(())
 }
 
-fn rotation_grant_aad(payload: &PrivateChannelRotationGrantPayloadV1) -> String {
+fn epoch_handoff_grant_aad(payload: &PrivateChannelEpochHandoffGrantPayloadV1) -> String {
     format!(
         "kukuri:rotation-grant:{}:{}:{}:{}:{}",
         payload.channel_id.as_str(),
@@ -755,16 +726,16 @@ fn rotation_grant_aad(payload: &PrivateChannelRotationGrantPayloadV1) -> String 
     )
 }
 
-fn derive_rotation_grant_key(
+fn derive_epoch_handoff_grant_key(
     local_keys: &KukuriKeys,
     remote_pubkey: &Pubkey,
-    payload: &PrivateChannelRotationGrantPayloadV1,
+    payload: &PrivateChannelEpochHandoffGrantPayloadV1,
 ) -> Result<[u8; 32]> {
     let shared = pairwise_shared_secret(local_keys, remote_pubkey)?;
     derive_hkdf_key(
         b"kukuri/private-channel/rotation-grant",
         shared.secret_bytes().as_slice(),
-        rotation_grant_aad(payload).as_bytes(),
-        "channel rotation grant key",
+        epoch_handoff_grant_aad(payload).as_bytes(),
+        "channel epoch handoff grant key",
     )
 }

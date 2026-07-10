@@ -210,7 +210,7 @@ pub(crate) async fn persist_private_channel_participant(
         .await
 }
 
-pub(crate) async fn persist_private_channel_rotation_grant(
+pub(crate) async fn persist_private_channel_epoch_handoff_grant(
     docs_sync: &dyn DocsSync,
     keys: &KukuriKeys,
     grant: &PrivateChannelEpochHandoffGrantDocV1,
@@ -339,12 +339,12 @@ pub(crate) async fn fetch_private_channel_participants_from_replica_with_policy(
     Ok(items)
 }
 
-pub(crate) async fn fetch_private_channel_rotation_grant_from_replica(
+pub(crate) async fn fetch_private_channel_epoch_handoff_grant_from_replica(
     docs_sync: &dyn DocsSync,
     replica: &ReplicaId,
     recipient_pubkey: &str,
 ) -> Result<Option<PrivateChannelEpochHandoffGrantDocV1>> {
-    fetch_private_channel_rotation_grant_from_replica_with_policy(
+    fetch_private_channel_epoch_handoff_grant_from_replica_with_policy(
         docs_sync,
         replica,
         recipient_pubkey,
@@ -353,7 +353,7 @@ pub(crate) async fn fetch_private_channel_rotation_grant_from_replica(
     .await
 }
 
-pub(crate) async fn fetch_private_channel_rotation_grant_from_replica_with_policy(
+pub(crate) async fn fetch_private_channel_epoch_handoff_grant_from_replica_with_policy(
     docs_sync: &dyn DocsSync,
     replica: &ReplicaId,
     recipient_pubkey: &str,
@@ -426,7 +426,7 @@ pub(crate) async fn private_channel_rotation_is_pending(
         return Ok(false);
     }
     let local_author = keys.public_key_hex();
-    let Some(grant) = fetch_private_channel_rotation_grant_from_replica(
+    let Some(grant) = fetch_private_channel_epoch_handoff_grant_from_replica(
         docs_sync,
         &replica,
         local_author.as_str(),
@@ -833,7 +833,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn epoch_handoff_grant_uses_legacy_rotation_grant_storage_key() {
+    async fn epoch_handoff_grant_uses_legacy_storage_key() {
         let owner =
             KukuriKeys::parse("0000000000000000000000000000000000000000000000000000000000000001")
                 .expect("owner key");
@@ -857,7 +857,7 @@ mod tests {
         let docs_sync = MemoryDocsSync::default();
         let replica = ReplicaId::new("private:fixture:epoch-7");
 
-        persist_private_channel_rotation_grant(&docs_sync, &owner, &grant, &replica)
+        persist_private_channel_epoch_handoff_grant(&docs_sync, &owner, &grant, &replica)
             .await
             .expect("persist grant");
 

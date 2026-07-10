@@ -599,7 +599,7 @@ impl AppService {
     /// フェーズ分割(WP-H5 PR4)。順序と失敗時挙動は分割前と同一:
     /// 準備・受信者収集 → 旧 epoch 凍結 → 新 epoch 作成 → handoff grant 配布 →
     /// 状態更新・通知。途中で失敗した場合の巻き戻しは行わない(分割前と同じ。
-    /// 受信側は maybe_redeem_rotation_grants_for_channel で追いつく)。
+    /// 受信側は maybe_redeem_epoch_handoff_grants_for_channel で追いつく)。
     pub async fn rotate_private_channel(
         &self,
         topic_id: &str,
@@ -612,7 +612,7 @@ impl AppService {
         let next = self
             .seed_next_private_channel_epoch(topic_id, &prep.state)
             .await?;
-        self.distribute_rotation_grants(topic_id, &prep, &next)
+        self.distribute_epoch_handoff_grants(topic_id, &prep, &next)
             .await?;
         self.finalize_rotated_channel_state(topic_id, prep.state, next)
             .await
@@ -779,7 +779,7 @@ impl AppService {
     /// フェーズ 4: 受信者へ handoff grant を暗号化して旧 replica に書く。
     /// friend-only は配布時点でも mutual を再確認し、外れていれば黙って配らない
     /// (分割前と同じ。受け取れなかった参加者は新 epoch に入れない)。
-    async fn distribute_rotation_grants(
+    async fn distribute_epoch_handoff_grants(
         &self,
         topic_id: &str,
         prep: &PrivateChannelRotationPrep,
@@ -813,7 +813,7 @@ impl AppService {
                     new_namespace_secret_hex: next.secret_hex.clone(),
                 },
             )?;
-            persist_private_channel_rotation_grant(
+            persist_private_channel_epoch_handoff_grant(
                 self.docs_sync.as_ref(),
                 self.keys.as_ref(),
                 &grant_doc,
@@ -979,7 +979,7 @@ impl AppService {
         self.maybe_restart_scope_replica_sync(topic_id, &TimelineScope::AllJoined)
             .await;
         for state in self.joined_private_channel_states_for_topic(topic_id).await {
-            self.maybe_redeem_rotation_grants_for_channel(topic_id, state.channel_id.as_str())
+            self.maybe_redeem_epoch_handoff_grants_for_channel(topic_id, state.channel_id.as_str())
                 .await?;
         }
         let mut items = Vec::new();
@@ -994,7 +994,7 @@ impl AppService {
         topic_id: &str,
         channel_id: &str,
     ) -> Result<Option<PrivateChannelCapability>> {
-        self.maybe_redeem_rotation_grants_for_channel(topic_id, channel_id)
+        self.maybe_redeem_epoch_handoff_grants_for_channel(topic_id, channel_id)
             .await?;
         let Some(state) = self
             .joined_private_channel_state(topic_id, channel_id)
