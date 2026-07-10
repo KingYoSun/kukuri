@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import type { SupportedLocale } from '@/i18n';
 import type {
   GameRoomView,
   MetaverseAssetRef,
@@ -33,6 +34,7 @@ type UseMetaverseRoomSessionArgs = {
   activeTopic: string;
   rooms: GameRoomView[];
   syncStatus: SyncStatus;
+  locale: SupportedLocale;
   localDisplayName: string | null;
   localAvatarAssetRef: MetaverseAssetRef | null;
   localAvatarAssetUrl: string | null;
@@ -82,12 +84,13 @@ export function useMetaverseRoomSession({
   activeTopic,
   rooms,
   syncStatus,
+  locale,
   localDisplayName,
   localAvatarAssetRef,
   localAvatarAssetUrl,
   onError,
 }: UseMetaverseRoomSessionArgs) {
-  const { t } = useTranslation('metaverse');
+  const { t } = useTranslation('metaverse', { lng: locale });
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [joinedRoomIds, setJoinedRoomIds] = useState<Set<string>>(() => new Set());
   const [remoteTransforms, setRemoteTransforms] = useState<Record<string, AvatarTransform>>({});

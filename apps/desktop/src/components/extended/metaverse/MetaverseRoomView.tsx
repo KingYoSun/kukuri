@@ -146,6 +146,7 @@ export function MetaverseRoomView({
           latestChatByPeer={latestChatByPeer}
           connectionState={connectionState}
           now={now}
+          locale={locale}
           onLocalTransform={onLocalTransform}
           onAvatarAssetStatus={onAvatarAssetStatus}
           hud={(

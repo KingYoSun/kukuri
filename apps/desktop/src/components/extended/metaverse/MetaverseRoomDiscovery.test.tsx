@@ -87,6 +87,13 @@ describe('MetaverseRoomDiscovery', () => {
     }
   );
 
+  test('uses the shell locale even while the global detector still reports English', async () => {
+    await i18n.changeLanguage('en');
+    renderDiscovery({ locale: 'ja' });
+
+    expect(screen.getByRole('heading', { name: 'メタバースルーム' })).toBeInTheDocument();
+  });
+
   test('shows the empty state and an action error without an API dependency', () => {
     renderDiscovery({ rooms: [], error: 'Room action failed' });
 

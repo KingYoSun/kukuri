@@ -44,7 +44,7 @@ export function MetaverseRoomPanel({
   knownAuthorsByPubkey = {},
   mediaObjectUrls = {},
 }: MetaverseRoomPanelProps) {
-  const { t } = useTranslation('metaverse');
+  const { t } = useTranslation('metaverse', { lng: locale });
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [avatarAssetStatus, setAvatarAssetStatus] = useState<AvatarAssetStatus>('loading');
@@ -56,6 +56,7 @@ export function MetaverseRoomPanel({
     activeTopic,
     rooms,
     syncStatus,
+    locale,
     localDisplayName,
     localAvatarAssetRef,
     localAvatarAssetUrl,
