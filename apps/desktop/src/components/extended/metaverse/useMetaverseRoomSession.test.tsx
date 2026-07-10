@@ -114,6 +114,7 @@ function renderSession({
         activeTopic: 'kukuri:topic:demo',
         rooms: currentRooms,
         syncStatus: currentSync,
+        locale: 'en',
         localDisplayName: 'Local Author',
         localAvatarAssetRef: null,
         localAvatarAssetUrl: null,

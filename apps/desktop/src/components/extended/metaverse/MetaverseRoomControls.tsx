@@ -105,7 +105,7 @@ export function MetaverseRoomControls({
   onMessageDraftChange,
   onSendMessage,
 }: MetaverseRoomControlsProps) {
-  const { t } = useTranslation('metaverse');
+  const { t } = useTranslation('metaverse', { lng: locale });
   const avatarStatusLabel = t(`hud.avatarStatuses.${avatarAssetStatus}`);
   return (
     <>

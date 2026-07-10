@@ -52,7 +52,7 @@ export function MetaverseRoomDiscovery({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [maxPeers, setMaxPeers] = useState('8');
-  const { t } = useTranslation('metaverse');
+  const { t } = useTranslation('metaverse', { lng: locale });
   const [validationError, setValidationError] = useState(false);
 
   function hostAuthor(room: GameRoomView): Profile | AuthorSocialView | null {

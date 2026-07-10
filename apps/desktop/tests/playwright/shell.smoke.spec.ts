@@ -161,6 +161,11 @@ test('browser mock shell persists language changes across reloads', async ({ pag
   await expect(page.locator('html')).toHaveAttribute('lang', 'ja');
   await openComposerDialog(page);
   await expect(page.getByPlaceholder('投稿を書く')).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  await page.getByRole('tab', { name: 'ゲーム' }).click();
+  await expect(page.getByRole('heading', { name: 'メタバースルーム' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'メタバースルームを作成' })).toBeVisible();
 });
 
 test('browser mock settings drawer keeps the close button clear of content and captures wheel scrolling', async ({

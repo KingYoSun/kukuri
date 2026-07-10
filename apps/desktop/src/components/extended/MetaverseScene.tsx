@@ -12,6 +12,7 @@ import {
 } from '@pixiv/three-vrm-animation';
 import { useTranslation } from 'react-i18next';
 
+import type { SupportedLocale } from '@/i18n';
 import type { GameRoomView, SharedRoomObjectV1 } from '@/lib/api';
 import {
   AVATAR_GROUND_Y,
@@ -46,6 +47,7 @@ type SceneProps = {
   latestChatByPeer: Record<string, LatestChatBubble>;
   connectionState: MetaverseRoomConnectionState;
   now: number;
+  locale: SupportedLocale;
   hud: ReactNode;
   onLocalTransform: (transform: AvatarTransform) => void;
   onAvatarAssetStatus: (status: AvatarAssetStatus) => void;
@@ -112,8 +114,14 @@ function AvatarChatBubble({ bubble }: { bubble?: LatestChatBubble }) {
   );
 }
 
-function AvatarStaleIndicator({ stale }: { stale: boolean }) {
-  const { t } = useTranslation('metaverse');
+function AvatarStaleIndicator({
+  stale,
+  locale,
+}: {
+  stale: boolean;
+  locale: SupportedLocale;
+}) {
+  const { t } = useTranslation('metaverse', { lng: locale });
   if (!stale) {
     return null;
   }
@@ -582,12 +590,14 @@ function RemoteAvatar({
   chatBubble,
   connectionState,
   now,
+  locale,
 }: {
   transform: AvatarTransform;
   presence: PeerPresence | null;
   chatBubble?: LatestChatBubble;
   connectionState: MetaverseRoomConnectionState;
   now: number;
+  locale: SupportedLocale;
 }) {
   const groupRef = useRef<THREE.Group | null>(null);
   const targetRef = useRef(transform);
@@ -632,7 +642,7 @@ function RemoteAvatar({
         animationRef={animationRef}
       />
       <AvatarChatBubble bubble={chatBubble} />
-      <AvatarStaleIndicator stale={stale} />
+      <AvatarStaleIndicator stale={stale} locale={locale} />
     </group>
   );
 }
@@ -668,6 +678,7 @@ function SceneContents({
   latestChatByPeer,
   connectionState,
   now,
+  locale,
   onLocalTransform,
   onAvatarAssetStatus,
 }: Omit<SceneProps, 'hud'>) {
@@ -705,6 +716,7 @@ function SceneContents({
           chatBubble={latestChatByPeer[peerId]}
           connectionState={connectionState}
           now={now}
+          locale={locale}
         />
       ))}
       <SharedObject object={sharedObject} />
@@ -722,11 +734,12 @@ export function MetaverseScene({
   latestChatByPeer,
   connectionState,
   now,
+  locale,
   hud,
   onLocalTransform,
   onAvatarAssetStatus,
 }: SceneProps) {
-  const { t } = useTranslation('metaverse');
+  const { t } = useTranslation('metaverse', { lng: locale });
   return (
     <div className='metaverse-viewport-shell' aria-label={t('viewport.ariaLabel')}>
       <Canvas
@@ -745,6 +758,7 @@ export function MetaverseScene({
           latestChatByPeer={latestChatByPeer}
           connectionState={connectionState}
           now={now}
+          locale={locale}
           onLocalTransform={onLocalTransform}
           onAvatarAssetStatus={onAvatarAssetStatus}
         />
