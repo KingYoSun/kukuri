@@ -23,10 +23,6 @@
     {
       "lines": 1035,
       "path": "apps/desktop/src/shell/useDesktopShellData.ts"
-    },
-    {
-      "lines": 1002,
-      "path": "apps/desktop/src/shell/DesktopShellPage.tsx"
     }
   ]
 }
