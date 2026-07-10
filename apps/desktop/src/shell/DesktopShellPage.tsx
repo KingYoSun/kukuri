@@ -61,6 +61,7 @@ import {
 import { DesktopShellOverlays } from '@/shell/page/DesktopShellOverlays';
 import { DesktopShellPrimaryWorkspace } from '@/shell/page/DesktopShellPrimaryWorkspace';
 import { DesktopShellSettingsDrawer } from '@/shell/page/DesktopShellSettingsDrawer';
+import { useFocusScroll } from '@/shell/page/useFocusScroll';
 import { useSharePreview } from '@/shell/page/useSharePreview';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -117,9 +118,6 @@ export function DesktopShellPage({
   const previousPrimarySectionRef = useRef(shellChromeState.activePrimarySection);
   const previousTimelineViewRef = useRef(shellChromeState.timelineView);
   const clipboardToastTimeoutRef = useRef<number | null>(null);
-  const lastThreadFocusKeyRef = useRef<string | null>(null);
-  const lastLiveFocusKeyRef = useRef<string | null>(null);
-  const lastGameFocusKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     document.documentElement.lang = locale;
@@ -543,61 +541,25 @@ export function DesktopShellPage({
   const threadFocusKey = selectedThread && focusedObjectId
     ? `${selectedThread}:${focusedObjectId}`
     : null;
-  useEffect(() => {
-    if (!threadFocusKey || lastThreadFocusKeyRef.current === threadFocusKey) {
-      return;
-    }
-    const frameId = window.requestAnimationFrame(() => {
-      const selector = `[data-post-object-id="${focusedObjectId}"]`;
-      const target = document.querySelector(selector);
-      if (target instanceof HTMLElement) {
-        if (typeof target.scrollIntoView === 'function') {
-          target.scrollIntoView({ block: 'center' });
-        }
-        target.focus({ preventScroll: true });
-        lastThreadFocusKeyRef.current = threadFocusKey;
-      }
-    });
-    return () => window.cancelAnimationFrame(frameId);
-  }, [focusedObjectId, threadFocusKey, threadPostViews.length]);
+  useFocusScroll({
+    focusKey: threadFocusKey,
+    readinessKey: threadPostViews.length,
+    selector: focusedObjectId ? `[data-post-object-id="${focusedObjectId}"]` : null,
+  });
   const liveFocusKey =
     shellChromeState.activePrimarySection === 'live' ? selectedLiveSessionId : null;
-  useEffect(() => {
-    if (!liveFocusKey || lastLiveFocusKeyRef.current === liveFocusKey) {
-      return;
-    }
-    const frameId = window.requestAnimationFrame(() => {
-      const selector = `[data-live-session-id="${liveFocusKey}"]`;
-      const target = document.querySelector(selector);
-      if (target instanceof HTMLElement) {
-        if (typeof target.scrollIntoView === 'function') {
-          target.scrollIntoView({ block: 'center' });
-        }
-        target.focus({ preventScroll: true });
-        lastLiveFocusKeyRef.current = liveFocusKey;
-      }
-    });
-    return () => window.cancelAnimationFrame(frameId);
-  }, [liveFocusKey, liveSessionListItems.length]);
+  useFocusScroll({
+    focusKey: liveFocusKey,
+    readinessKey: liveSessionListItems.length,
+    selector: liveFocusKey ? `[data-live-session-id="${liveFocusKey}"]` : null,
+  });
   const gameFocusKey =
     shellChromeState.activePrimarySection === 'game' ? selectedGameRoomId : null;
-  useEffect(() => {
-    if (!gameFocusKey || lastGameFocusKeyRef.current === gameFocusKey) {
-      return;
-    }
-    const frameId = window.requestAnimationFrame(() => {
-      const selector = `[data-game-room-id="${gameFocusKey}"]`;
-      const target = document.querySelector(selector);
-      if (target instanceof HTMLElement) {
-        if (typeof target.scrollIntoView === 'function') {
-          target.scrollIntoView({ block: 'center' });
-        }
-        target.focus({ preventScroll: true });
-        lastGameFocusKeyRef.current = gameFocusKey;
-      }
-    });
-    return () => window.cancelAnimationFrame(frameId);
-  }, [activeGameRooms.length, gameFocusKey]);
+  useFocusScroll({
+    focusKey: gameFocusKey,
+    readinessKey: activeGameRooms.length,
+    selector: gameFocusKey ? `[data-game-room-id="${gameFocusKey}"]` : null,
+  });
   useEffect(() => {
     if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) {
       return;
