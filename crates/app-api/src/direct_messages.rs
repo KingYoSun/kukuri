@@ -3,18 +3,24 @@ use crate::service::*;
 impl AppService {
     pub async fn resume_direct_message_state(&self) -> Result<()> {
         let mut peers = self
+            .services
             .projection_store
             .list_direct_message_conversations()
             .await?
             .into_iter()
             .map(|row| row.peer_pubkey)
             .collect::<BTreeSet<_>>();
-        for row in self.projection_store.list_direct_message_outbox().await? {
+        for row in self
+            .services
+            .projection_store
+            .list_direct_message_outbox()
+            .await?
+        {
             peers.insert(row.peer_pubkey);
         }
         peers.extend(
             current_mutual_direct_message_peers_with_services(
-                self.store.as_ref(),
+                self.services.store.as_ref(),
                 self.current_author_pubkey().as_str(),
             )
             .await?,
@@ -36,6 +42,7 @@ impl AppService {
             .await?;
         self.rebuild_author_relationships().await?;
         let existing = self
+            .services
             .projection_store
             .get_direct_message_conversation_by_peer(peer_pubkey.as_str())
             .await?;
@@ -57,6 +64,7 @@ impl AppService {
 
     pub async fn list_direct_messages(&self) -> Result<Vec<DirectMessageConversationView>> {
         let rows = self
+            .services
             .projection_store
             .list_direct_message_conversations()
             .await?;
@@ -78,6 +86,7 @@ impl AppService {
     ) -> Result<DirectMessageTimelineView> {
         let peer_pubkey = normalize_author_pubkey(peer_pubkey)?;
         let existing = self
+            .services
             .projection_store
             .get_direct_message_conversation_by_peer(peer_pubkey.as_str())
             .await?;
@@ -98,6 +107,7 @@ impl AppService {
             &Pubkey::from(peer_pubkey.as_str()),
         );
         let page = self
+            .services
             .projection_store
             .list_direct_message_messages(dm_id.as_str(), cursor, limit)
             .await?;
@@ -153,14 +163,16 @@ impl AppService {
             &Pubkey::from(self.current_author_pubkey()),
             &Pubkey::from(peer_pubkey.as_str()),
         );
-        self.projection_store
+        self.services
+            .projection_store
             .put_direct_message_tombstone(DirectMessageTombstoneRow {
                 dm_id: dm_id.clone(),
                 message_id: message_id.to_string(),
                 deleted_at: Utc::now().timestamp_millis(),
             })
             .await?;
-        self.projection_store
+        self.services
+            .projection_store
             .delete_direct_message_message_local(dm_id.as_str(), message_id)
             .await?;
         self.refresh_direct_message_conversation(peer_pubkey.as_str())
@@ -178,11 +190,13 @@ impl AppService {
         let mut cursor = None;
         loop {
             let page = self
+                .services
                 .projection_store
                 .list_direct_message_messages(dm_id.as_str(), cursor.clone(), 500)
                 .await?;
             for row in &page.items {
-                self.projection_store
+                self.services
+                    .projection_store
                     .put_direct_message_tombstone(DirectMessageTombstoneRow {
                         dm_id: dm_id.clone(),
                         message_id: row.message_id.clone(),
@@ -195,7 +209,8 @@ impl AppService {
             }
             cursor = page.next_cursor;
         }
-        self.projection_store
+        self.services
+            .projection_store
             .clear_direct_message_local(dm_id.as_str())
             .await?;
         Ok(())

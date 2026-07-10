@@ -18,7 +18,8 @@ impl AppService {
         let muted_author_pubkeys = self.current_muted_author_pubkeys().await?;
         let allowed = self.allowed_channel_ids_for_scope(topic_id, &scope).await?;
         let mut rows = filter_channel_rows(
-            self.projection_store
+            self.services
+                .projection_store
                 .list_topic_game_rooms(topic_id)
                 .await?,
             &allowed,
@@ -30,7 +31,8 @@ impl AppService {
         if rows.is_empty() {
             self.hydrate_scope_projection(topic_id, &scope).await?;
             rows = filter_channel_rows(
-                self.projection_store
+                self.services
+                    .projection_store
                     .list_topic_game_rooms(topic_id)
                     .await?,
                 &allowed,
@@ -141,7 +143,7 @@ impl AppService {
             updated_at: now,
         };
         let envelope = build_game_session_envelope(
-            self.keys.as_ref(),
+            self.services.keys.as_ref(),
             &TopicId::new(topic_id),
             room_id.as_str(),
             &serde_json::json!({
@@ -160,7 +162,8 @@ impl AppService {
                 envelope.id.clone(),
             )
             .await?;
-        self.projection_store
+        self.services
+            .projection_store
             .upsert_game_room_cache(game_projection_row_from_state(
                 &state,
                 &manifest,
@@ -168,7 +171,8 @@ impl AppService {
                 &source_replica_id,
             ))
             .await?;
-        self.hint_transport
+        self.services
+            .hint_transport
             .publish_hint(
                 &channel_hint_topic_for(topic_id, channel_id.as_ref()),
                 GossipHint::SessionChanged {
@@ -256,7 +260,7 @@ impl AppService {
             updated_at: now,
         };
         let envelope = build_game_session_envelope(
-            self.keys.as_ref(),
+            self.services.keys.as_ref(),
             &TopicId::new(topic_id),
             room_id.as_str(),
             &serde_json::json!({
@@ -276,7 +280,8 @@ impl AppService {
                 envelope.id.clone(),
             )
             .await?;
-        self.projection_store
+        self.services
+            .projection_store
             .upsert_game_room_cache(game_projection_row_from_state(
                 &state,
                 &manifest,
@@ -284,7 +289,8 @@ impl AppService {
                 &source_replica_id,
             ))
             .await?;
-        self.hint_transport
+        self.services
+            .hint_transport
             .publish_hint(
                 &channel_hint_topic_for(topic_id, channel_id.as_ref()),
                 GossipHint::SessionChanged {
@@ -331,7 +337,7 @@ impl AppService {
             .collect();
         manifest.updated_at = Utc::now().timestamp_millis();
         let envelope = build_game_session_envelope(
-            self.keys.as_ref(),
+            self.services.keys.as_ref(),
             &TopicId::new(topic_id),
             room_id,
             &serde_json::json!({
@@ -351,7 +357,8 @@ impl AppService {
                 envelope.id.clone(),
             )
             .await?;
-        self.projection_store
+        self.services
+            .projection_store
             .upsert_game_room_cache(game_projection_row_from_state(
                 &state,
                 &manifest,
@@ -359,7 +366,8 @@ impl AppService {
                 &source_replica_id,
             ))
             .await?;
-        self.hint_transport
+        self.services
+            .hint_transport
             .publish_hint(
                 &channel_hint_topic_for(topic_id, state.channel_id.as_ref()),
                 GossipHint::SessionChanged {
@@ -405,7 +413,7 @@ impl AppService {
         manifest.status = input.status;
         manifest.updated_at = now;
         let envelope = build_game_session_envelope(
-            self.keys.as_ref(),
+            self.services.keys.as_ref(),
             &TopicId::new(topic_id),
             room_id,
             &serde_json::json!({
@@ -426,7 +434,8 @@ impl AppService {
                 envelope.id.clone(),
             )
             .await?;
-        self.projection_store
+        self.services
+            .projection_store
             .upsert_game_room_cache(game_projection_row_from_state(
                 &state,
                 &manifest,
@@ -434,7 +443,8 @@ impl AppService {
                 &source_replica_id,
             ))
             .await?;
-        self.hint_transport
+        self.services
+            .hint_transport
             .publish_hint(
                 &channel_hint_topic_for(topic_id, state.channel_id.as_ref()),
                 GossipHint::SessionChanged {
@@ -487,7 +497,7 @@ impl AppService {
             event: input.event,
         };
         let envelope = build_metaverse_room_event_envelope(
-            self.keys.as_ref(),
+            self.services.keys.as_ref(),
             &TopicId::new(topic_id),
             content.room_id.as_str(),
             &content,
@@ -522,7 +532,8 @@ impl AppService {
                         envelope.id.clone(),
                     )
                     .await?;
-                self.projection_store
+                self.services
+                    .projection_store
                     .upsert_game_room_cache(game_projection_row_from_state(
                         &persisted,
                         &manifest,
@@ -532,7 +543,8 @@ impl AppService {
                     .await?;
             }
         }
-        self.hint_transport
+        self.services
+            .hint_transport
             .publish_hint(
                 &channel_hint_topic_for(topic_id, state.channel_id.as_ref()),
                 GossipHint::MetaverseRoomEvent {
@@ -563,10 +575,12 @@ impl AppService {
             anyhow::bail!("metaverse asset bytes are required");
         }
         let stored = self
+            .services
             .blob_service
             .put_blob(input.bytes, input.mime_type.as_str())
             .await?;
-        self.projection_store
+        self.services
+            .projection_store
             .mark_blob_status(&stored.hash, BlobCacheStatus::Available)
             .await?;
         Ok(MetaverseAssetRef {

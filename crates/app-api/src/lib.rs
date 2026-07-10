@@ -12,5 +12,5 @@ mod timeline;
 mod views;
 
 pub use kukuri_store::NotificationKind;
-pub use service::AppService;
+pub use service::{AppService, ServiceHandles};
 pub use views::*;

@@ -38,7 +38,7 @@ async fn dm_status_stays_enabled_during_concurrent_relationship_rebuilds() {
             .expect("connect writer store"),
     );
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         app_store.clone(),
         app_store.clone(),
         transport,
@@ -54,7 +54,7 @@ async fn dm_status_stays_enabled_during_concurrent_relationship_rebuilds() {
     app_store
         .put_envelope(
             build_follow_edge_envelope(
-                app.keys.as_ref(),
+                app.services.keys.as_ref(),
                 &Pubkey::from(peer_pubkey.as_str()),
                 FollowEdgeStatus::Active,
             )

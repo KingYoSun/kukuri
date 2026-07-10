@@ -6,7 +6,7 @@ async fn list_profile_timeline_restarts_author_subscription_with_cooldown_when_p
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
     let docs_sync = Arc::new(TrackingDocsSync::default());
     let blob_service = Arc::new(MemoryBlobService::default());
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport.clone(),
@@ -50,7 +50,7 @@ async fn topic_doc_events_do_not_rehydrate_whole_replica() {
     let docs_sync = Arc::new(CountingDocsSync::default());
     let blob_service = Arc::new(MemoryBlobService::default());
     let keys = generate_keys();
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store.clone(),
         transport.clone(),
@@ -129,7 +129,7 @@ async fn topic_object_hints_do_not_rehydrate_whole_replica() {
     let docs_sync = Arc::new(CountingDocsSync::default());
     let blob_service = Arc::new(MemoryBlobService::default());
     let keys = generate_keys();
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport.clone(),
@@ -219,7 +219,7 @@ async fn topic_reaction_hints_rehydrate_only_target_reactions() {
     let docs_sync = Arc::new(CountingDocsSync::default());
     let blob_service = Arc::new(MemoryBlobService::default());
     let keys = generate_keys();
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store.clone(),
         transport.clone(),
@@ -361,7 +361,7 @@ async fn public_topic_recovery_keeps_docs_probe_when_live_peer_has_not_delivered
         }],
     }));
     let docs_sync = Arc::new(CountingDocsSync::with_assist_peer_ids(vec!["peer-a"]));
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport.clone(),
@@ -434,7 +434,7 @@ async fn topic_session_hints_retry_until_manifest_blob_is_available() {
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
     let owner_store = Arc::new(MemoryStore::default());
     let remote_store = Arc::new(MemoryStore::default());
-    let owner_app = AppService::new_with_services(
+    let owner_app = app_service_from_dependencies(
         owner_store.clone(),
         owner_store,
         transport.clone(),

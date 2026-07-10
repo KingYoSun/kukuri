@@ -44,14 +44,14 @@ impl AppService {
             owner_pubkey: Pubkey::from(owner_pubkey.clone()),
         };
         persist_private_channel_metadata(
-            self.docs_sync.as_ref(),
+            self.docs_sync(),
             &current_private_channel_replica_id(&state),
             &metadata,
         )
         .await?;
         persist_private_channel_policy(
-            self.docs_sync.as_ref(),
-            self.keys.as_ref(),
+            self.docs_sync(),
+            self.keys(),
             &PrivateChannelPolicyDocV1 {
                 channel_id: channel_id.clone(),
                 topic_id: input.topic_id.clone(),
@@ -66,8 +66,8 @@ impl AppService {
         )
         .await?;
         persist_private_channel_participant(
-            self.docs_sync.as_ref(),
-            self.keys.as_ref(),
+            self.docs_sync(),
+            self.keys(),
             &PrivateChannelParticipantDocV1 {
                 channel_id,
                 topic_id: input.topic_id,
@@ -104,7 +104,7 @@ impl AppService {
             );
         }
         build_private_channel_invite_token(
-            self.keys.as_ref(),
+            self.keys(),
             PrivateChannelInviteTokenParams {
                 topic: &TopicId::new(topic_id),
                 channel_id: &state.channel_id,
@@ -134,6 +134,7 @@ impl AppService {
                 .await?;
             self.rebuild_author_relationships().await?;
             let relationship = self
+                .services
                 .projection_store
                 .get_author_relationship(
                     self.current_author_pubkey().as_str(),
@@ -149,19 +150,19 @@ impl AppService {
         } else {
             private_channel_epoch_replica_id(spec.channel_id.as_str(), spec.epoch_id.as_str())
         };
-        self.docs_sync
+        self.docs_sync()
             .register_private_replica_secret(&replica, spec.namespace_secret_hex.as_str())
             .await?;
         let import_result = async {
             let (metadata, policy, participants) = wait_for_private_channel_epoch_snapshot(
-                self.docs_sync.as_ref(),
+                self.docs_sync(),
                 &replica,
                 spec.sync_context,
             )
             .await?;
             let participants = if spec.refetch_participants {
                 fetch_private_channel_participants_from_replica(
-                    self.docs_sync.as_ref(),
+                    self.docs_sync(),
                     &replica,
                     LocalThenRemote,
                 )
@@ -200,8 +201,8 @@ impl AppService {
                     ImportSponsor::PolicyOwner => policy.owner_pubkey.clone(),
                 };
                 persist_private_channel_participant(
-                    self.docs_sync.as_ref(),
-                    self.keys.as_ref(),
+                    self.docs_sync(),
+                    self.keys(),
                     &PrivateChannelParticipantDocV1 {
                         channel_id: metadata.channel_id.clone(),
                         topic_id: metadata.topic_id.clone(),
@@ -236,7 +237,11 @@ impl AppService {
         }
         .await;
         if import_result.is_err() {
-            let _ = self.docs_sync.remove_private_replica_secret(&replica).await;
+            let _ = self
+                .services
+                .docs_sync
+                .remove_private_replica_secret(&replica)
+                .await;
         }
         import_result
     }
@@ -422,7 +427,7 @@ impl AppService {
             anyhow::bail!("friend-only grant export is disabled while sharing is frozen");
         }
         build_friend_only_grant_token(
-            self.keys.as_ref(),
+            self.keys(),
             &TopicId::new(topic_id),
             &state.channel_id,
             state.label.as_str(),
@@ -482,12 +487,9 @@ impl AppService {
             anyhow::bail!("friend-plus share export is only available for friends+ channels");
         }
         let replica = current_private_channel_replica_id(&state);
-        let Some(policy) = fetch_private_channel_policy_from_replica(
-            self.docs_sync.as_ref(),
-            &replica,
-            LocalThenRemote,
-        )
-        .await?
+        let Some(policy) =
+            fetch_private_channel_policy_from_replica(self.docs_sync(), &replica, LocalThenRemote)
+                .await?
         else {
             anyhow::bail!("friend-plus channel policy is missing");
         };
@@ -495,7 +497,7 @@ impl AppService {
             anyhow::bail!("friend-plus share export is disabled while sharing is frozen");
         }
         let participants = fetch_private_channel_participants_from_replica(
-            self.docs_sync.as_ref(),
+            self.docs_sync(),
             &replica,
             LocalThenRemote,
         )
@@ -511,7 +513,7 @@ impl AppService {
         let effective_expires_at =
             expires_at.or_else(|| Some(Utc::now().timestamp_millis() + 24 * 60 * 60 * 1000));
         build_friend_plus_share_token(
-            self.keys.as_ref(),
+            self.keys(),
             &TopicId::new(topic_id),
             &state.channel_id,
             state.label.as_str(),
@@ -575,7 +577,7 @@ impl AppService {
         }
         let current_replica = current_private_channel_replica_id(&state);
         let Some(current_policy) = fetch_private_channel_policy_from_replica(
-            self.docs_sync.as_ref(),
+            self.docs_sync(),
             &current_replica,
             LocalThenRemote,
         )
@@ -584,8 +586,8 @@ impl AppService {
             anyhow::bail!("friend-plus channel policy is missing");
         };
         persist_private_channel_policy(
-            self.docs_sync.as_ref(),
-            self.keys.as_ref(),
+            self.docs_sync(),
+            self.keys(),
             &PrivateChannelPolicyDocV1 {
                 sharing_state: ChannelSharingState::Frozen,
                 rotated_at: current_policy.rotated_at,
@@ -641,7 +643,7 @@ impl AppService {
         }
         let current_replica = current_private_channel_replica_id(&state);
         let current_policy = fetch_private_channel_policy_from_replica(
-            self.docs_sync.as_ref(),
+            self.docs_sync(),
             &current_replica,
             LocalThenRemote,
         )
@@ -657,7 +659,7 @@ impl AppService {
             previous_epoch_id: None,
         });
         let current_participants = fetch_private_channel_participants_from_replica(
-            self.docs_sync.as_ref(),
+            self.docs_sync(),
             &current_replica,
             LocalThenRemote,
         )
@@ -678,7 +680,7 @@ impl AppService {
             let archived_replica =
                 private_channel_epoch_replica_id(channel_id, epoch.epoch_id.as_str());
             let archived_participants = fetch_private_channel_participants_from_replica(
-                self.docs_sync.as_ref(),
+                self.docs_sync(),
                 &archived_replica,
                 LocalThenRemote,
             )
@@ -705,8 +707,8 @@ impl AppService {
     /// 以後の import(sharing_state Open 前提)を止める。
     async fn freeze_rotated_epoch_policy(&self, prep: &PrivateChannelRotationPrep) -> Result<()> {
         persist_private_channel_policy(
-            self.docs_sync.as_ref(),
-            self.keys.as_ref(),
+            self.docs_sync(),
+            self.keys(),
             &PrivateChannelPolicyDocV1 {
                 sharing_state: ChannelSharingState::Frozen,
                 rotated_at: Some(Utc::now().timestamp_millis()),
@@ -727,7 +729,7 @@ impl AppService {
         let secret_hex = generate_keys().export_secret_hex();
         let replica =
             private_channel_epoch_replica_id(state.channel_id.as_str(), epoch_id.as_str());
-        self.docs_sync
+        self.docs_sync()
             .register_private_replica_secret(&replica, secret_hex.as_str())
             .await?;
         let metadata = PrivateChannelMetadataDocV1 {
@@ -739,10 +741,10 @@ impl AppService {
             audience_kind: state.audience_kind.clone(),
             owner_pubkey: Pubkey::from(state.owner_pubkey.clone()),
         };
-        persist_private_channel_metadata(self.docs_sync.as_ref(), &replica, &metadata).await?;
+        persist_private_channel_metadata(self.docs_sync(), &replica, &metadata).await?;
         persist_private_channel_policy(
-            self.docs_sync.as_ref(),
-            self.keys.as_ref(),
+            self.docs_sync(),
+            self.keys(),
             &PrivateChannelPolicyDocV1 {
                 channel_id: state.channel_id.clone(),
                 topic_id: TopicId::new(topic_id),
@@ -757,8 +759,8 @@ impl AppService {
         )
         .await?;
         persist_private_channel_participant(
-            self.docs_sync.as_ref(),
-            self.keys.as_ref(),
+            self.docs_sync(),
+            self.keys(),
             &PrivateChannelParticipantDocV1 {
                 channel_id: state.channel_id.clone(),
                 topic_id: TopicId::new(topic_id),
@@ -794,6 +796,7 @@ impl AppService {
                 self.ensure_author_subscription(participant.participant_pubkey.as_str())
                     .await?;
                 let relationship = self
+                    .services
                     .projection_store
                     .get_author_relationship(
                         self.current_author_pubkey().as_str(),
@@ -805,7 +808,7 @@ impl AppService {
                 }
             }
             let grant_doc = encrypt_private_channel_epoch_handoff_grant(
-                self.keys.as_ref(),
+                self.keys(),
                 &PrivateChannelEpochHandoffGrantPayloadV1 {
                     channel_id: state.channel_id.clone(),
                     topic_id: TopicId::new(topic_id),
@@ -817,8 +820,8 @@ impl AppService {
                 },
             )?;
             persist_private_channel_epoch_handoff_grant(
-                self.docs_sync.as_ref(),
-                self.keys.as_ref(),
+                self.docs_sync(),
+                self.keys(),
                 &grant_doc,
                 &prep.current_replica,
             )
@@ -845,6 +848,7 @@ impl AppService {
         state.current_epoch_secret_hex = next.secret_hex;
         self.register_joined_private_channel(state.clone()).await?;
         if let Err(error) = self
+            .services
             .hint_transport
             .publish_hint(
                 &channel_hint_topic_for(topic_id, Some(&state.channel_id)),
@@ -886,7 +890,7 @@ impl AppService {
         let local_pubkey = Pubkey::from(local_author.clone());
         let now = Utc::now().timestamp_millis();
         let existing_participant = fetch_private_channel_participants_from_replica(
-            self.docs_sync.as_ref(),
+            self.docs_sync(),
             &replica,
             DocFetchPolicy::LocalOnly,
         )
@@ -897,8 +901,8 @@ impl AppService {
                 && participant.participant_pubkey == local_pubkey
         });
         persist_private_channel_participant(
-            self.docs_sync.as_ref(),
-            self.keys.as_ref(),
+            self.docs_sync(),
+            self.keys(),
             &PrivateChannelParticipantDocV1 {
                 channel_id: state.channel_id.clone(),
                 topic_id: TopicId::new(topic_id),
@@ -927,6 +931,7 @@ impl AppService {
         )
         .await?;
         let has_peers = self
+            .services
             .transport
             .peers()
             .await
@@ -934,7 +939,7 @@ impl AppService {
         if has_peers {
             let publish_result = tokio::time::timeout(
                 std::time::Duration::from_secs(2),
-                self.hint_transport.publish_hint(
+                self.hint_transport().publish_hint(
                     &channel_hint_topic_for(topic_id, Some(&state.channel_id)),
                     GossipHint::TopicObjectsChanged {
                         topic_id: TopicId::new(topic_id),
@@ -968,7 +973,6 @@ impl AppService {
             .await?;
         Ok(())
     }
-
     pub async fn list_joined_private_channels(
         &self,
         topic_id: &str,
@@ -988,7 +992,6 @@ impl AppService {
         }
         Ok(items)
     }
-
     pub async fn get_private_channel_capability(
         &self,
         topic_id: &str,
@@ -1006,7 +1009,6 @@ impl AppService {
             self.private_channel_capability_from_state(&state).await?,
         ))
     }
-
     pub async fn list_private_channel_capabilities(&self) -> Result<Vec<PrivateChannelCapability>> {
         let states = self
             .joined_private_channels
@@ -1022,7 +1024,6 @@ impl AppService {
         Ok(items)
     }
 }
-
 /// import 3 系統の差分(注入点)。詳細は import_private_channel_by_spec を参照。
 struct PrivateChannelImportSpec {
     topic_id: String,
@@ -1054,7 +1055,6 @@ struct PrivateChannelImportSpec {
     skip_persist_if_participant: bool,
     joined_via_pubkey: String,
 }
-
 /// 参加ドキュメントに載せる sponsor の出どころ。
 enum ImportSponsor {
     /// トークン preview から(招待 = inviter、friend-plus = sponsor)。

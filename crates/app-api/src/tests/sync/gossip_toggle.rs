@@ -3,7 +3,7 @@ use super::*;
 fn build_app(hint_transport: Arc<TrackingHintTransport>) -> AppService {
     let store = Arc::new(MemoryStore::default());
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
-    AppService::new_with_services(
+    app_service_from_dependencies(
         store.clone(),
         store,
         transport,

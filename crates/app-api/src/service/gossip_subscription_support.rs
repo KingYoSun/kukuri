@@ -93,7 +93,8 @@ impl AppService {
                 handle.abort();
             }
         }
-        self.hint_transport
+        self.services
+            .hint_transport
             .unsubscribe_hints(&private_channel_hint_topic(channel_id))
             .await
     }

@@ -5,12 +5,14 @@ impl AppService {
         &self,
         author_pubkey: &str,
     ) -> Result<AuthorSocialView> {
-        let profile = self.store.get_profile(author_pubkey).await?;
+        let profile = self.services.store.get_profile(author_pubkey).await?;
         let relationship = self
+            .services
             .projection_store
             .get_author_relationship(self.current_author_pubkey().as_str(), author_pubkey)
             .await?;
         let muted = self
+            .services
             .projection_store
             .get_muted_author(author_pubkey)
             .await?
@@ -25,8 +27,8 @@ impl AppService {
 
     pub(crate) async fn rebuild_author_relationships(&self) -> Result<()> {
         rebuild_author_relationships_with_services(
-            self.store.as_ref(),
-            self.projection_store.as_ref(),
+            self.services.store.as_ref(),
+            self.services.projection_store.as_ref(),
             self.current_author_pubkey().as_str(),
         )
         .await?;
@@ -47,8 +49,8 @@ impl AppService {
                 self.subscription_registry
                     .direct_message_subscriptions
                     .as_ref(),
-                self.hint_transport.as_ref(),
-                self.keys.as_ref(),
+                self.services.hint_transport.as_ref(),
+                self.services.keys.as_ref(),
                 peer_pubkey.as_str(),
             )
             .await?;
@@ -58,6 +60,7 @@ impl AppService {
 
     pub(crate) async fn current_muted_author_pubkeys(&self) -> Result<BTreeSet<String>> {
         Ok(self
+            .services
             .projection_store
             .list_muted_authors()
             .await?
@@ -150,13 +153,13 @@ impl AppService {
     }
 
     pub(crate) async fn spawn_author_subscription(&self, author_pubkey: &str) -> Result<()> {
-        let store = Arc::clone(&self.store);
-        let projection_store = Arc::clone(&self.projection_store);
-        let docs_sync = Arc::clone(&self.docs_sync);
-        let blob_service = Arc::clone(&self.blob_service);
-        let hint_transport = Arc::clone(&self.hint_transport);
-        let transport = Arc::clone(&self.transport);
-        let keys = Arc::clone(&self.keys);
+        let store = Arc::clone(&self.services.store);
+        let projection_store = Arc::clone(&self.services.projection_store);
+        let docs_sync = Arc::clone(&self.services.docs_sync);
+        let blob_service = Arc::clone(&self.services.blob_service);
+        let hint_transport = Arc::clone(&self.services.hint_transport);
+        let transport = Arc::clone(&self.services.transport);
+        let keys = Arc::clone(&self.services.keys);
         let last_sync = Arc::clone(&self.last_sync_ts);
         let notification_inserted = Arc::clone(&self.notification_inserted_notify);
         let direct_message_subscriptions =

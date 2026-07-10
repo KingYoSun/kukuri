@@ -6,7 +6,7 @@ async fn list_timeline_restarts_topic_replica_sync_with_cooldown_when_projection
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
     let docs_sync = Arc::new(TrackingDocsSync::default());
     let blob_service = Arc::new(MemoryBlobService::default());
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport.clone(),
@@ -49,7 +49,7 @@ async fn list_timeline_restarts_topic_subscription_with_cooldown_when_projection
     let store = Arc::new(MemoryStore::default());
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
     let hint_transport = Arc::new(TrackingHintTransport::default());
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport,
@@ -86,7 +86,7 @@ async fn ensure_topic_subscription_recreates_finished_handle() {
     let store = Arc::new(MemoryStore::default());
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
     let hint_transport = Arc::new(TrackingHintTransport::default());
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport,
@@ -132,7 +132,7 @@ async fn set_discovery_seeds_restarts_existing_topic_hint_subscription() {
     let store = Arc::new(MemoryStore::default());
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
     let hint_transport = Arc::new(TrackingHintTransport::default());
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport.clone(),
@@ -173,7 +173,7 @@ async fn import_peer_ticket_restarts_existing_topic_hint_subscription() {
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
     let hint_transport = Arc::new(TrackingHintTransport::default());
     let docs_sync = Arc::new(TrackingDocsSync::default());
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport,
@@ -206,7 +206,7 @@ async fn local_public_post_restarts_replica_sync_after_each_write() {
     let store = Arc::new(MemoryStore::default());
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
     let docs_sync = Arc::new(TrackingDocsSync::default());
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport.clone(),
@@ -246,7 +246,7 @@ async fn hint_miss_coalesces_replica_sync_restarts() {
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
     let hint_transport = Arc::new(TrackingHintTransport::default());
     let docs_sync = Arc::new(TrackingDocsSync::default());
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport,
@@ -301,7 +301,7 @@ async fn shutdown_unsubscribes_active_hint_topics() {
     let store = Arc::new(MemoryStore::default());
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
     let hint_transport = Arc::new(TrackingHintTransport::default());
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport,

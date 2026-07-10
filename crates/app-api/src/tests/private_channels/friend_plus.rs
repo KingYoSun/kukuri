@@ -20,7 +20,7 @@ async fn friend_plus_share_freeze_rotate_and_new_epoch_visibility() {
     let keys_b = generate_keys();
     let keys_c = generate_keys();
     let keys_d = generate_keys();
-    let app_a = AppService::new_with_services(
+    let app_a = app_service_from_dependencies(
         store_a.clone(),
         store_a.clone(),
         stack_a.transport.clone(),
@@ -29,7 +29,7 @@ async fn friend_plus_share_freeze_rotate_and_new_epoch_visibility() {
         stack_a.blob_service.clone(),
         keys_a.clone(),
     );
-    let app_b = AppService::new_with_services(
+    let app_b = app_service_from_dependencies(
         store_b.clone(),
         store_b.clone(),
         stack_b.transport.clone(),
@@ -38,7 +38,7 @@ async fn friend_plus_share_freeze_rotate_and_new_epoch_visibility() {
         stack_b.blob_service.clone(),
         keys_b.clone(),
     );
-    let app_c = AppService::new_with_services(
+    let app_c = app_service_from_dependencies(
         store_c.clone(),
         store_c.clone(),
         stack_c.transport.clone(),
@@ -47,7 +47,7 @@ async fn friend_plus_share_freeze_rotate_and_new_epoch_visibility() {
         stack_c.blob_service.clone(),
         keys_c.clone(),
     );
-    let app_d = AppService::new_with_services(
+    let app_d = app_service_from_dependencies(
         store_d.clone(),
         store_d.clone(),
         stack_d.transport.clone(),
@@ -348,7 +348,7 @@ async fn friend_plus_share_freeze_rotate_and_new_epoch_visibility() {
     );
     assert!(
         fetch_private_channel_epoch_handoff_grant_from_replica(
-            app_a.docs_sync.as_ref(),
+            app_a.services.docs_sync.as_ref(),
             &rotated_source_replica,
             b_pubkey.as_str(),
             DocFetchPolicy::LocalThenRemote,
@@ -398,7 +398,7 @@ async fn friend_plus_share_freeze_rotate_and_new_epoch_visibility() {
                 .find(|entry| entry.channel_id == channel.channel_id)
                 .cloned();
             let grant_visible = fetch_private_channel_epoch_handoff_grant_from_replica(
-                app_b.docs_sync.as_ref(),
+                app_b.services.docs_sync.as_ref(),
                 &rotated_source_replica,
                 b_pubkey.as_str(),
                 DocFetchPolicy::LocalThenRemote,

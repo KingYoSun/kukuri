@@ -346,8 +346,9 @@ impl AppService {
     }
 
     pub(crate) async fn direct_message_topic_peer_count(&self, peer_pubkey: &str) -> Result<usize> {
-        let topic = derive_direct_message_topic(self.keys.as_ref(), &Pubkey::from(peer_pubkey))?;
-        direct_message_topic_peer_count(self.transport.as_ref(), &topic).await
+        let topic =
+            derive_direct_message_topic(self.services.keys.as_ref(), &Pubkey::from(peer_pubkey))?;
+        direct_message_topic_peer_count(self.services.transport.as_ref(), &topic).await
     }
 
     pub(crate) async fn send_direct_message_internal(
@@ -372,6 +373,7 @@ impl AppService {
         );
         if let Some(reply_to_message_id) = reply_to_message_id
             && self
+                .services
                 .projection_store
                 .get_direct_message_message(dm_id.as_str(), reply_to_message_id.trim())
                 .await?
@@ -384,7 +386,7 @@ impl AppService {
             .await?;
         let created_at = Utc::now().timestamp_millis();
         let frame = encrypt_direct_message_frame(
-            self.keys.as_ref(),
+            self.services.keys.as_ref(),
             &Pubkey::from(peer_pubkey),
             dm_id.as_str(),
             message_id.as_str(),
@@ -398,10 +400,12 @@ impl AppService {
         let frame_bytes =
             serde_json::to_vec(&frame).context("failed to encode direct message frame blob")?;
         let frame_blob = self
+            .services
             .blob_service
             .put_blob(frame_bytes, DIRECT_MESSAGE_FRAME_MIME)
             .await?;
-        self.projection_store
+        self.services
+            .projection_store
             .put_direct_message_message(DirectMessageMessageRow {
                 dm_id: dm_id.clone(),
                 message_id: message_id.clone(),
@@ -417,7 +421,8 @@ impl AppService {
                 acked_at: None,
             })
             .await?;
-        self.projection_store
+        self.services
+            .projection_store
             .put_direct_message_outbox(DirectMessageOutboxRow {
                 dm_id: dm_id.clone(),
                 message_id: message_id.clone(),
@@ -430,11 +435,11 @@ impl AppService {
         self.refresh_direct_message_conversation(peer_pubkey)
             .await?;
         let _ = Self::flush_direct_message_outbox_for_peer_with_services(
-            self.projection_store.as_ref(),
-            self.hint_transport.as_ref(),
-            self.transport.as_ref(),
+            self.services.projection_store.as_ref(),
+            self.services.hint_transport.as_ref(),
+            self.services.transport.as_ref(),
             self.current_author_pubkey().as_str(),
-            self.keys.as_ref(),
+            self.services.keys.as_ref(),
             peer_pubkey,
         )
         .await?;
@@ -470,17 +475,19 @@ impl AppService {
                     );
                 }
                 let local_blob = self
+                    .services
                     .blob_service
                     .put_blob(image.bytes.clone(), image.mime.as_str())
                     .await?;
                 let encrypted = encrypt_direct_message_attachment(
-                    self.keys.as_ref(),
+                    self.services.keys.as_ref(),
                     &Pubkey::from(peer_pubkey),
                     message_id,
                     "original",
                     image.bytes.as_slice(),
                 )?;
                 let encrypted_blob = self
+                    .services
                     .blob_service
                     .put_blob(
                         serde_json::to_vec(&encrypted)
@@ -525,28 +532,31 @@ impl AppService {
                     );
                 }
                 let local_video = self
+                    .services
                     .blob_service
                     .put_blob(video.bytes.clone(), video.mime.as_str())
                     .await?;
                 let local_poster = self
+                    .services
                     .blob_service
                     .put_blob(poster.bytes.clone(), poster.mime.as_str())
                     .await?;
                 let encrypted_video = encrypt_direct_message_attachment(
-                    self.keys.as_ref(),
+                    self.services.keys.as_ref(),
                     &Pubkey::from(peer_pubkey),
                     message_id,
                     "original",
                     video.bytes.as_slice(),
                 )?;
                 let encrypted_poster = encrypt_direct_message_attachment(
-                    self.keys.as_ref(),
+                    self.services.keys.as_ref(),
                     &Pubkey::from(peer_pubkey),
                     message_id,
                     "poster",
                     poster.bytes.as_slice(),
                 )?;
                 let encrypted_video_blob = self
+                    .services
                     .blob_service
                     .put_blob(
                         serde_json::to_vec(&encrypted_video)
@@ -555,6 +565,7 @@ impl AppService {
                     )
                     .await?;
                 let encrypted_poster_blob = self
+                    .services
                     .blob_service
                     .put_blob(
                         serde_json::to_vec(&encrypted_poster)

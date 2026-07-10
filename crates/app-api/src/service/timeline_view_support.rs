@@ -23,14 +23,16 @@ impl AppService {
         }
 
         let author_pubkeys = author_pubkeys.into_iter().collect::<Vec<_>>();
-        let profiles = self.store.get_profiles(&author_pubkeys).await?;
+        let profiles = self.services.store.get_profiles(&author_pubkeys).await?;
         let relationships = self
+            .services
             .projection_store
             .list_author_relationships(local_author.as_str(), &author_pubkeys)
             .await?;
         let mut reactions_by_target = HashMap::<String, Vec<ReactionProjectionRow>>::new();
         for (replica_id, object_ids) in targets_by_replica {
             let grouped = self
+                .services
                 .projection_store
                 .list_reaction_cache_for_targets(&ReplicaId::new(replica_id.clone()), &object_ids)
                 .await?;
@@ -65,7 +67,8 @@ impl AppService {
         let content_status = if row.object_kind == "repost" {
             BlobViewStatus::Available
         } else {
-            blob_view_status_for_payload(self.blob_service.as_ref(), &row.payload_ref).await?
+            blob_view_status_for_payload(self.services.blob_service.as_ref(), &row.payload_ref)
+                .await?
         };
         let attachments = self.attachment_views_for_projection_row(&row).await?;
         let repost_of = match row.repost_of.clone() {
@@ -144,6 +147,7 @@ impl AppService {
         source_replica_id: Option<&ReplicaId>,
     ) -> Result<Option<ObjectProjectionRow>> {
         if let Some(row) = self
+            .services
             .projection_store
             .get_object_projection(object_id)
             .await?
@@ -155,7 +159,7 @@ impl AppService {
         };
         let source_key = stable_key("objects", &format!("{}/state", object_id.as_str()));
         let Some(header) = fetch_post_object_for_projection(
-            self.docs_sync.as_ref(),
+            self.services.docs_sync.as_ref(),
             source_replica_id,
             source_key.as_str(),
         )
@@ -166,11 +170,12 @@ impl AppService {
         let content = match &header.payload_ref {
             PayloadRef::InlineText { text } => Some(text.clone()),
             PayloadRef::BlobText { hash, .. } => {
-                fetch_projection_blob_text(self.blob_service.as_ref(), hash).await
+                fetch_projection_blob_text(self.services.blob_service.as_ref(), hash).await
             }
         };
         let row = projection_row_from_header(&header, content, source_replica_id);
-        self.projection_store
+        self.services
+            .projection_store
             .put_object_projection(row.clone())
             .await?;
         Ok(Some(row))
@@ -194,7 +199,12 @@ impl AppService {
         let attachments = self.attachment_views_for_projection_row(&row).await?;
         let profile = match profiles.get(row.author_pubkey.as_str()) {
             Some(profile) => Some(profile.clone()),
-            None => self.store.get_profile(row.author_pubkey.as_str()).await?,
+            None => {
+                self.services
+                    .store
+                    .get_profile(row.author_pubkey.as_str())
+                    .await?
+            }
         };
         Ok(Some(ReplyPreviewView {
             object_id: row.object_id.0.clone(),
@@ -225,17 +235,21 @@ impl AppService {
             return Ok(Vec::new());
         }
         if !row.attachments.is_empty() || row.projection_version >= 2 {
-            return attachment_views_from_refs(self.blob_service.as_ref(), &row.attachments).await;
+            return attachment_views_from_refs(
+                self.services.blob_service.as_ref(),
+                &row.attachments,
+            )
+            .await;
         }
 
         let post_object = fetch_post_object_for_projection(
-            self.docs_sync.as_ref(),
+            self.services.docs_sync.as_ref(),
             &row.source_replica_id,
             row.source_key.as_str(),
         )
         .await?;
         if let Some(post_object) = post_object {
-            return attachment_views(self.blob_service.as_ref(), &post_object).await;
+            return attachment_views(self.services.blob_service.as_ref(), &post_object).await;
         }
         Ok(Vec::new())
     }
@@ -244,8 +258,13 @@ impl AppService {
         &self,
         row: BookmarkedPostRow,
     ) -> Result<BookmarkedPostView> {
-        let profile = self.store.get_profile(row.author_pubkey.as_str()).await?;
+        let profile = self
+            .services
+            .store
+            .get_profile(row.author_pubkey.as_str())
+            .await?;
         let relationship = self
+            .services
             .projection_store
             .get_author_relationship(
                 self.current_author_pubkey().as_str(),
@@ -255,12 +274,14 @@ impl AppService {
         let content_status = if row.object_kind == "repost" {
             BlobViewStatus::Available
         } else {
-            blob_view_status_for_payload(self.blob_service.as_ref(), &row.payload_ref).await?
+            blob_view_status_for_payload(self.services.blob_service.as_ref(), &row.payload_ref)
+                .await?
         };
         let attachments = if row.object_kind == "repost" {
             Vec::new()
         } else {
-            attachment_views_from_refs(self.blob_service.as_ref(), &row.attachments).await?
+            attachment_views_from_refs(self.services.blob_service.as_ref(), &row.attachments)
+                .await?
         };
         let repost_commentary = normalize_repost_commentary(row.content.clone());
         let repost_of = match row.repost_of.clone() {
@@ -329,10 +350,12 @@ impl AppService {
 
     pub(crate) async fn profile_post_to_view(&self, profile_post: ProfilePost) -> Result<PostView> {
         let profile = self
+            .services
             .store
             .get_profile(profile_post.author_pubkey.as_str())
             .await?;
         let relationship = self
+            .services
             .projection_store
             .get_author_relationship(
                 self.current_author_pubkey().as_str(),
@@ -375,7 +398,7 @@ impl AppService {
             content: profile_post.content,
             content_status: BlobViewStatus::Available,
             attachments: attachment_views_from_refs(
-                self.blob_service.as_ref(),
+                self.services.blob_service.as_ref(),
                 &profile_post.attachments,
             )
             .await?,
@@ -400,10 +423,12 @@ impl AppService {
         profile_repost: ProfileRepost,
     ) -> Result<PostView> {
         let profile = self
+            .services
             .store
             .get_profile(profile_repost.author_pubkey.as_str())
             .await?;
         let relationship = self
+            .services
             .projection_store
             .get_author_relationship(
                 self.current_author_pubkey().as_str(),
@@ -461,6 +486,7 @@ impl AppService {
         snapshot: RepostSourceSnapshotV1,
     ) -> Result<RepostSourceView> {
         let profiles = self
+            .services
             .store
             .get_profiles(&[snapshot.source_author_pubkey.as_str().to_string()])
             .await?;
@@ -486,7 +512,7 @@ impl AppService {
             source_object_kind: snapshot.source_object_kind,
             content: snapshot.content,
             attachments: attachment_views_from_refs(
-                self.blob_service.as_ref(),
+                self.services.blob_service.as_ref(),
                 &snapshot.attachments,
             )
             .await?,

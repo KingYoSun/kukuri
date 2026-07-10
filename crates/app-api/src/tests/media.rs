@@ -145,7 +145,7 @@ async fn list_timeline_rehydrates_placeholder_from_blob_store() {
     )
     .await;
 
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport.clone(),
@@ -191,7 +191,7 @@ async fn on_demand_hydration_updates_last_sync_ts() {
     )
     .await;
 
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport.clone(),
@@ -286,7 +286,7 @@ async fn thread_open_triggers_lazy_blob_fetch() {
     )
     .await;
 
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport.clone(),
@@ -348,7 +348,7 @@ async fn image_post_visible_before_full_blob_download() {
     )
     .await;
 
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store.clone(),
         transport.clone(),
@@ -426,7 +426,7 @@ async fn video_post_visible_before_full_blob_download() {
     )
     .await;
 
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store.clone(),
         transport.clone(),
@@ -502,7 +502,7 @@ async fn blob_media_payload_roundtrip() {
     let store = Arc::new(MemoryStore::default());
     let transport = Arc::new(FakeTransport::new("app", FakeNetwork::default()));
     let blob_service = Arc::new(MemoryBlobService::default());
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport.clone(),

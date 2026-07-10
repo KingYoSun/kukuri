@@ -58,7 +58,8 @@ impl AppService {
         {
             handle.abort();
         }
-        self.hint_transport
+        self.services
+            .hint_transport
             .unsubscribe_hints(&TopicId::new(topic_id))
             .await?;
         self.spawn_topic_subscription(topic_id).await
@@ -82,7 +83,7 @@ impl AppService {
         _stored_blob: Option<StoredBlob>,
         attachments: Vec<(AssetRole, StoredBlob)>,
     ) -> Result<()> {
-        self.store.put_envelope(envelope.clone()).await?;
+        self.services.store.put_envelope(envelope.clone()).await?;
         let mut object = envelope
             .to_post_object()?
             .ok_or_else(|| anyhow::anyhow!("expected timeline envelope"))?;
@@ -100,19 +101,20 @@ impl AppService {
         let content = match &object.payload_ref {
             PayloadRef::InlineText { text } => Some(text.clone()),
             PayloadRef::BlobText { hash, .. } => self
+                .services
                 .blob_service
                 .fetch_blob(hash)
                 .await?
                 .map(|bytes| String::from_utf8_lossy(&bytes).to_string()),
         };
         persist_post_object(
-            self.docs_sync.as_ref(),
+            self.services.docs_sync.as_ref(),
             replica,
             object.clone(),
             envelope.clone(),
         )
         .await?;
-        if let Err(error) = self.docs_sync.restart_replica_sync(replica).await {
+        if let Err(error) = self.services.docs_sync.restart_replica_sync(replica).await {
             warn!(
                 replica_id = %replica.as_str(),
                 error = %error,
@@ -120,13 +122,13 @@ impl AppService {
             );
         }
         ObjectProjectionStore::put_object_projection(
-            self.projection_store.as_ref(),
+            self.services.projection_store.as_ref(),
             projection_row_from_header(&object, content, replica),
         )
         .await?;
         if let PayloadRef::BlobText { hash, .. } = &object.payload_ref {
             BlobCacheStore::mark_blob_status(
-                self.projection_store.as_ref(),
+                self.services.projection_store.as_ref(),
                 hash,
                 BlobCacheStatus::Available,
             )
@@ -134,7 +136,7 @@ impl AppService {
         }
         for (_, attachment) in attachments {
             BlobCacheStore::mark_blob_status(
-                self.projection_store.as_ref(),
+                self.services.projection_store.as_ref(),
                 &attachment.hash,
                 BlobCacheStatus::Available,
             )
@@ -148,13 +150,15 @@ impl AppService {
         &self,
         object_id: &EnvelopeId,
     ) -> Result<Option<KukuriEnvelope>> {
-        if let Some(envelope) = self.store.get_envelope(object_id).await? {
+        if let Some(envelope) = self.services.store.get_envelope(object_id).await? {
             return Ok(Some(envelope));
         }
 
-        let Some(projection) =
-            ObjectProjectionStore::get_object_projection(self.projection_store.as_ref(), object_id)
-                .await?
+        let Some(projection) = ObjectProjectionStore::get_object_projection(
+            self.services.projection_store.as_ref(),
+            object_id,
+        )
+        .await?
         else {
             return Ok(None);
         };
@@ -271,9 +275,9 @@ impl AppService {
         scope: &TimelineScope,
     ) -> Result<usize> {
         let mut hydrated = hydrate_topic_state_with_services(
-            self.docs_sync.as_ref(),
-            self.blob_service.as_ref(),
-            self.projection_store.as_ref(),
+            self.services.docs_sync.as_ref(),
+            self.services.blob_service.as_ref(),
+            self.services.projection_store.as_ref(),
             topic_id,
             DocFetchPolicy::LocalOnly,
         )
@@ -293,9 +297,9 @@ impl AppService {
                             })
                     {
                         hydrated += hydrate_subscription_state_with_services(
-                            self.docs_sync.as_ref(),
-                            self.blob_service.as_ref(),
-                            self.projection_store.as_ref(),
+                            self.services.docs_sync.as_ref(),
+                            self.services.blob_service.as_ref(),
+                            self.services.projection_store.as_ref(),
                             topic_id,
                             &replica,
                             DocFetchPolicy::LocalOnly,
@@ -322,9 +326,9 @@ impl AppService {
                             })
                     {
                         hydrated += hydrate_subscription_state_with_services(
-                            self.docs_sync.as_ref(),
-                            self.blob_service.as_ref(),
-                            self.projection_store.as_ref(),
+                            self.services.docs_sync.as_ref(),
+                            self.services.blob_service.as_ref(),
+                            self.services.projection_store.as_ref(),
                             topic_id,
                             &replica,
                             DocFetchPolicy::LocalOnly,
@@ -393,7 +397,7 @@ impl AppService {
 
     pub(crate) async fn maybe_restart_replica_sync(&self, topic_id: &str, replica: &ReplicaId) {
         maybe_restart_replica_sync_with_cooldown(
-            self.docs_sync.as_ref(),
+            self.services.docs_sync.as_ref(),
             &self.subscription_registry.replica_sync_restart_deadlines,
             topic_id,
             replica,

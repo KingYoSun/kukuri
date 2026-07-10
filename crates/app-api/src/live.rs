@@ -13,12 +13,14 @@ impl AppService {
     ) -> Result<Vec<LiveSessionView>> {
         self.ensure_scope_subscriptions(topic_id, &scope).await?;
         let muted_author_pubkeys = self.current_muted_author_pubkeys().await?;
-        self.projection_store
+        self.services
+            .projection_store
             .clear_expired_live_presence(Utc::now().timestamp_millis())
             .await?;
         let allowed = self.allowed_channel_ids_for_scope(topic_id, &scope).await?;
         let mut rows = filter_channel_rows(
-            self.projection_store
+            self.services
+                .projection_store
                 .list_topic_live_sessions(topic_id)
                 .await?,
             &allowed,
@@ -36,11 +38,13 @@ impl AppService {
             self.maybe_restart_scope_replica_sync(topic_id, &scope)
                 .await;
             self.hydrate_scope_projection(topic_id, &scope).await?;
-            self.projection_store
+            self.services
+                .projection_store
                 .clear_expired_live_presence(Utc::now().timestamp_millis())
                 .await?;
             rows = filter_channel_rows(
-                self.projection_store
+                self.services
+                    .projection_store
                     .list_topic_live_sessions(topic_id)
                     .await?,
                 &allowed,
@@ -131,7 +135,7 @@ impl AppService {
             ended_at: None,
         };
         let envelope = build_live_session_envelope(
-            self.keys.as_ref(),
+            self.services.keys.as_ref(),
             &topic,
             session_id.as_str(),
             &serde_json::json!({
@@ -152,7 +156,8 @@ impl AppService {
                 envelope.id.clone(),
             )
             .await?;
-        self.projection_store
+        self.services
+            .projection_store
             .upsert_live_session_cache(live_projection_row_from_state(
                 &state,
                 &manifest,
@@ -160,7 +165,8 @@ impl AppService {
                 &source_replica_id,
             ))
             .await?;
-        self.hint_transport
+        self.services
+            .hint_transport
             .publish_hint(
                 &channel_hint_topic_for(topic_id, channel_id.as_ref()),
                 GossipHint::SessionChanged {
@@ -195,7 +201,7 @@ impl AppService {
         manifest.status = LiveSessionStatus::Ended;
         manifest.ended_at = Some(now);
         let envelope = build_live_session_envelope(
-            self.keys.as_ref(),
+            self.services.keys.as_ref(),
             &TopicId::new(topic_id),
             session_id,
             &serde_json::json!({
@@ -214,7 +220,8 @@ impl AppService {
                 envelope.id.clone(),
             )
             .await?;
-        self.projection_store
+        self.services
+            .projection_store
             .upsert_live_session_cache(live_projection_row_from_state(
                 &state,
                 &manifest,
@@ -224,7 +231,8 @@ impl AppService {
             .await?;
         self.stop_live_presence_task(topic_id, channel_key.as_str(), session_id)
             .await;
-        self.hint_transport
+        self.services
+            .hint_transport
             .publish_hint(
                 &hint_topic,
                 GossipHint::SessionChanged {
@@ -262,8 +270,8 @@ impl AppService {
         }
         self.apply_live_presence(topic_id, state.channel_id.as_ref(), session_id, 30_000)
             .await?;
-        let hint_transport = Arc::clone(&self.hint_transport);
-        let projection_store = Arc::clone(&self.projection_store);
+        let hint_transport = Arc::clone(&self.services.hint_transport);
+        let projection_store = Arc::clone(&self.services.projection_store);
         let hint_topic = channel_hint_topic_for(topic_id, state.channel_id.as_ref());
         let topic_key = topic_id.to_string();
         let channel_key_for_task = channel_key.clone();

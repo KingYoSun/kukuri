@@ -50,7 +50,7 @@ async fn dm_first_message_appears_in_recipient_conversation_list_without_opening
         .await
         .expect("seed follow edge b->a in store b");
 
-    let app_a = AppService::new_with_services(
+    let app_a = app_service_from_dependencies(
         store_a.clone(),
         store_a,
         transport.clone(),
@@ -59,7 +59,7 @@ async fn dm_first_message_appears_in_recipient_conversation_list_without_opening
         blob_service.clone(),
         keys_a.clone(),
     );
-    let app_b = AppService::new_with_services(
+    let app_b = app_service_from_dependencies(
         store_b.clone(),
         store_b,
         transport.clone(),
@@ -178,7 +178,7 @@ async fn dm_outbox_retry_stops_when_mutual_is_lost_and_resumes_when_it_returns()
         .await
         .expect("seed follow edge peer->local");
 
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store.clone(),
         transport.clone(),

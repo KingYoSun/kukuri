@@ -52,7 +52,7 @@ async fn dm_open_does_not_duplicate_active_subscription_when_mutual_auto_subscri
         .await
         .expect("seed peer->local follow edge");
 
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store.clone(),
         transport.clone(),
@@ -126,7 +126,7 @@ async fn dm_list_does_not_restart_active_subscription_after_open() {
         .await
         .expect("seed peer->local follow edge");
 
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store.clone(),
         transport,
@@ -190,7 +190,7 @@ async fn dm_import_peer_ticket_restarts_active_mutual_subscription() {
         .await
         .expect("seed peer->local follow edge");
 
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store.clone(),
         transport.clone(),
@@ -205,8 +205,11 @@ async fn dm_import_peer_ticket_restarts_active_mutual_subscription() {
         .expect("open direct message");
     sleep(Duration::from_millis(50)).await;
 
-    let topic = derive_direct_message_topic(app.keys.as_ref(), &Pubkey::from(peer_pubkey.as_str()))
-        .expect("derive dm topic");
+    let topic = derive_direct_message_topic(
+        app.services.keys.as_ref(),
+        &Pubkey::from(peer_pubkey.as_str()),
+    )
+    .expect("derive dm topic");
     assert!(
         app.subscription_registry
             .direct_message_subscriptions
@@ -269,7 +272,7 @@ async fn dm_status_restarts_mutual_subscription_when_handle_is_missing() {
         .await
         .expect("seed peer->local follow edge");
 
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store.clone(),
         transport.clone(),
@@ -365,7 +368,7 @@ async fn dm_status_restarts_stale_active_subscription_when_topic_is_unjoined() {
         .await
         .expect("seed peer->local follow edge");
 
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store.clone(),
         transport.clone(),

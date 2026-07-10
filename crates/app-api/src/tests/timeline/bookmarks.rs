@@ -12,7 +12,7 @@ async fn local_bookmarked_posts_restore_after_restart() {
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
     let docs_sync = Arc::new(MemoryDocsSync::default());
     let blob_service = Arc::new(MemoryBlobService::default());
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store.clone(),
         transport.clone(),
@@ -41,7 +41,7 @@ async fn local_bookmarked_posts_restore_after_restart() {
             .await
             .expect("reopen sqlite store"),
     );
-    let reopened_app = AppService::new_with_services(
+    let reopened_app = app_service_from_dependencies(
         reopened.clone(),
         reopened.clone(),
         transport,

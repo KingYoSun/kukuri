@@ -117,7 +117,7 @@ pub(crate) async fn configure_seeded_dht(app: &AppService, remote_endpoint_id: S
 }
 
 pub(crate) fn app_with_iroh_services(store: Arc<MemoryStore>, stack: &TestIrohStack) -> AppService {
-    AppService::new_with_services(
+    app_service_from_dependencies(
         store.clone(),
         store,
         stack.transport.clone(),
@@ -133,7 +133,7 @@ pub(crate) async fn assert_docs_sync_recovers_post_without_hints(topic: &str, co
     let stack_b = TestIrohStack::new(&dir.path().join("b")).await;
     let store_a = Arc::new(MemoryStore::default());
     let store_b = Arc::new(MemoryStore::default());
-    let app_a = AppService::new_with_services(
+    let app_a = app_service_from_dependencies(
         store_a.clone(),
         store_a,
         stack_a.transport.clone(),
@@ -142,7 +142,7 @@ pub(crate) async fn assert_docs_sync_recovers_post_without_hints(topic: &str, co
         stack_a.blob_service.clone(),
         generate_keys(),
     );
-    let app_b = AppService::new_with_services(
+    let app_b = app_service_from_dependencies(
         store_b.clone(),
         store_b,
         stack_b.transport.clone(),

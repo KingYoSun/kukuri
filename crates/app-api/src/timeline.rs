@@ -13,13 +13,13 @@ impl AppService {
             .await?;
         let load_profile_items = || async {
             let posts = load_profile_posts_from_author_replica(
-                self.docs_sync.as_ref(),
+                self.services.docs_sync.as_ref(),
                 author_pubkey.as_str(),
                 DocFetchPolicy::LocalOnly,
             )
             .await?;
             let reposts = load_profile_reposts_from_author_replica(
-                self.docs_sync.as_ref(),
+                self.services.docs_sync.as_ref(),
                 author_pubkey.as_str(),
                 DocFetchPolicy::LocalOnly,
             )
@@ -112,7 +112,7 @@ impl AppService {
             .await?;
         let topic = TopicId::new(target_topic_id);
         let envelope = build_repost_envelope(
-            self.keys.as_ref(),
+            self.services.keys.as_ref(),
             &topic,
             source_object.repost_of.clone(),
             normalized_commentary.as_deref(),
@@ -130,7 +130,7 @@ impl AppService {
 
         let local_author_pubkey = self.current_author_pubkey();
         let profile_repost_envelope = build_profile_repost_envelope(
-            self.keys.as_ref(),
+            self.services.keys.as_ref(),
             &KukuriProfileRepostEnvelopeContentV1 {
                 author_pubkey: Pubkey::from(local_author_pubkey.as_str()),
                 profile_topic_id: author_profile_topic_id(local_author_pubkey.as_str()),
@@ -144,13 +144,14 @@ impl AppService {
         let profile_repost = parse_profile_repost(&profile_repost_envelope)?
             .ok_or_else(|| anyhow::anyhow!("failed to parse profile repost envelope"))?;
         persist_profile_repost_doc(
-            self.docs_sync.as_ref(),
+            self.services.docs_sync.as_ref(),
             &profile_repost,
             &profile_repost_envelope,
         )
         .await?;
 
-        self.hint_transport
+        self.services
+            .hint_transport
             .publish_hint(
                 &channel_hint_topic_for(target_topic_id, None),
                 GossipHint::TopicObjectsChanged {
@@ -168,6 +169,7 @@ impl AppService {
     pub async fn list_bookmarked_posts(&self) -> Result<Vec<BookmarkedPostView>> {
         let muted_author_pubkeys = self.current_muted_author_pubkeys().await?;
         let rows = self
+            .services
             .projection_store
             .list_bookmarked_posts()
             .await?
@@ -189,6 +191,7 @@ impl AppService {
         self.ensure_topic_subscription(topic_id).await?;
         let source_object_id = EnvelopeId::from(source_object_id);
         let projection = self
+            .services
             .projection_store
             .get_object_projection(&source_object_id)
             .await?
@@ -206,7 +209,7 @@ impl AppService {
             Vec::new()
         } else {
             fetch_post_object_for_projection(
-                self.docs_sync.as_ref(),
+                self.services.docs_sync.as_ref(),
                 &projection.source_replica_id,
                 projection.source_key.as_str(),
             )
@@ -234,14 +237,16 @@ impl AppService {
             repost_of: projection.repost_of.clone(),
             bookmarked_at: Utc::now().timestamp_millis(),
         };
-        self.projection_store
+        self.services
+            .projection_store
             .put_bookmarked_post(row.clone())
             .await?;
         self.bookmarked_post_view_from_row(row).await
     }
 
     pub async fn remove_bookmarked_post(&self, source_object_id: &str) -> Result<()> {
-        self.projection_store
+        self.services
+            .projection_store
             .remove_bookmarked_post(&EnvelopeId::from(source_object_id))
             .await
     }
@@ -344,12 +349,14 @@ impl AppService {
             .unwrap_or_else(|| topic_replica_id(topic_id));
         let now = Utc::now().timestamp_millis();
         let stored_blob = self
+            .services
             .blob_service
             .put_blob(content.as_bytes().to_vec(), "text/plain")
             .await?;
         let stored_attachments = futures_util::future::try_join_all(attachments.into_iter().map(
             |attachment| async move {
                 let stored = self
+                    .services
                     .blob_service
                     .put_blob(attachment.bytes, attachment.mime.as_str())
                     .await?;
@@ -386,18 +393,19 @@ impl AppService {
                     })
                     .collect(),
             };
-            let envelope = build_media_manifest_envelope(self.keys.as_ref(), &topic, &manifest)?;
+            let envelope =
+                build_media_manifest_envelope(self.services.keys.as_ref(), &topic, &manifest)?;
             persist_media_manifest(
                 &write_replica,
                 &envelope,
                 &manifest,
-                self.docs_sync.as_ref(),
+                self.services.docs_sync.as_ref(),
             )
             .await?;
             vec![manifest_id]
         };
         let envelope = build_post_envelope_with_payload_in_channel(
-            self.keys.as_ref(),
+            self.services.keys.as_ref(),
             &topic,
             PayloadRef::BlobText {
                 hash: stored_blob.hash.clone(),
@@ -435,7 +443,7 @@ impl AppService {
         if effective_channel_id.is_none() {
             let local_author_pubkey = self.current_author_pubkey();
             let profile_post_envelope = build_profile_post_envelope(
-                self.keys.as_ref(),
+                self.services.keys.as_ref(),
                 &KukuriProfilePostEnvelopeContentV1 {
                     author_pubkey: Pubkey::from(local_author_pubkey.as_str()),
                     profile_topic_id: author_profile_topic_id(local_author_pubkey.as_str()),
@@ -452,7 +460,7 @@ impl AppService {
             let profile_post = parse_profile_post(&profile_post_envelope)?
                 .ok_or_else(|| anyhow::anyhow!("failed to parse profile post envelope"))?;
             persist_profile_post_doc(
-                self.docs_sync.as_ref(),
+                self.services.docs_sync.as_ref(),
                 &profile_post,
                 &profile_post_envelope,
             )
@@ -472,6 +480,7 @@ impl AppService {
                 tokio::time::sleep(std::time::Duration::from_millis(250 * attempt)).await;
             }
             match self
+                .services
                 .hint_transport
                 .publish_hint(&hint_topic, hint.clone())
                 .await
@@ -547,7 +556,7 @@ impl AppService {
         self.ensure_scope_subscriptions(topic_id, &scope).await?;
         let muted_author_pubkeys = self.current_muted_author_pubkeys().await?;
         let mut page = filtered_timeline_page(
-            self.projection_store.as_ref(),
+            self.services.projection_store.as_ref(),
             topic_id,
             cursor.clone(),
             limit,
@@ -569,7 +578,7 @@ impl AppService {
         {
             *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
             page = filtered_timeline_page(
-                self.projection_store.as_ref(),
+                self.services.projection_store.as_ref(),
                 topic_id,
                 cursor.clone(),
                 limit,
@@ -589,7 +598,7 @@ impl AppService {
                 *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
             }
             page = filtered_timeline_page(
-                self.projection_store.as_ref(),
+                self.services.projection_store.as_ref(),
                 topic_id,
                 cursor,
                 limit,
@@ -626,7 +635,7 @@ impl AppService {
         let muted_author_pubkeys = self.current_muted_author_pubkeys().await?;
         let thread_root = EnvelopeId::from(thread_id);
         let mut page = filtered_thread_page(
-            self.projection_store.as_ref(),
+            self.services.projection_store.as_ref(),
             topic_id,
             &thread_root,
             cursor.clone(),
@@ -649,12 +658,13 @@ impl AppService {
         {
             *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
             let root_channel = self
+                .services
                 .projection_store
                 .get_object_projection(&thread_root)
                 .await?
                 .map(|row| row.channel_id);
             page = filtered_thread_page(
-                self.projection_store.as_ref(),
+                self.services.projection_store.as_ref(),
                 topic_id,
                 &thread_root,
                 cursor.clone(),
@@ -679,12 +689,13 @@ impl AppService {
                 *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
             }
             let root_channel = self
+                .services
                 .projection_store
                 .get_object_projection(&thread_root)
                 .await?
                 .map(|row| row.channel_id);
             page = filtered_thread_page(
-                self.projection_store.as_ref(),
+                self.services.projection_store.as_ref(),
                 topic_id,
                 &thread_root,
                 cursor,

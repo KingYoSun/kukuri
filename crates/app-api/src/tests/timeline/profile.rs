@@ -8,7 +8,7 @@ async fn create_public_post_persists_profile_post_doc_and_lists_profile_timeline
     let blob_service = Arc::new(MemoryBlobService::default());
     let keys = generate_keys();
     let author_pubkey = keys.public_key_hex();
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport.clone(),
@@ -61,7 +61,7 @@ async fn public_reply_is_indexed_in_profile_timeline() {
     let blob_service = Arc::new(MemoryBlobService::default());
     let keys = generate_keys();
     let author_pubkey = keys.public_key_hex();
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport.clone(),
@@ -120,7 +120,7 @@ async fn private_channel_post_is_not_indexed_in_profile_timeline() {
     let blob_service = Arc::new(MemoryBlobService::default());
     let keys = generate_keys();
     let author_pubkey = keys.public_key_hex();
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport.clone(),
@@ -301,7 +301,7 @@ async fn create_same_topic_repost_persists_repost_object_and_profile_repost_doc(
     let blob_service = Arc::new(MemoryBlobService::default());
     let keys = generate_keys();
     let author_pubkey = keys.public_key_hex();
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport.clone(),
@@ -432,7 +432,7 @@ async fn list_profile_timeline_ignores_profile_post_with_signer_mismatch() {
     let blob_service = Arc::new(MemoryBlobService::default());
     let keys = generate_keys();
     let author_pubkey = keys.public_key_hex();
-    let app = AppService::new_with_services(
+    let app = app_service_from_dependencies(
         store.clone(),
         store,
         transport.clone(),

@@ -4,6 +4,7 @@ use super::*;
 impl AppService {
     pub(crate) async fn direct_message_send_enabled(&self, peer_pubkey: &str) -> Result<bool> {
         Ok(self
+            .services
             .projection_store
             .get_author_relationship(self.current_author_pubkey().as_str(), peer_pubkey)
             .await?
@@ -13,12 +14,12 @@ impl AppService {
 
     pub(crate) async fn reconcile_direct_message_subscriptions(&self) -> Result<()> {
         reconcile_direct_message_subscriptions_with_services(
-            self.store.as_ref(),
-            Arc::clone(&self.projection_store),
-            Arc::clone(&self.blob_service),
-            Arc::clone(&self.hint_transport),
-            Arc::clone(&self.transport),
-            Arc::clone(&self.keys),
+            self.services.store.as_ref(),
+            Arc::clone(&self.services.projection_store),
+            Arc::clone(&self.services.blob_service),
+            Arc::clone(&self.services.hint_transport),
+            Arc::clone(&self.services.transport),
+            Arc::clone(&self.services.keys),
             Arc::clone(&self.last_sync_ts),
             Arc::clone(&self.subscription_registry.direct_message_subscriptions),
             Arc::clone(&self.notification_inserted_notify),
@@ -42,6 +43,7 @@ impl AppService {
             0
         };
         let pending_outbox_count = self
+            .services
             .projection_store
             .list_direct_message_outbox()
             .await?
@@ -63,6 +65,7 @@ impl AppService {
         peer_pubkey: &str,
     ) -> Result<()> {
         if self
+            .services
             .projection_store
             .get_direct_message_conversation_by_peer(peer_pubkey)
             .await?
@@ -74,7 +77,8 @@ impl AppService {
             &Pubkey::from(self.current_author_pubkey()),
             &Pubkey::from(peer_pubkey),
         );
-        self.projection_store
+        self.services
+            .projection_store
             .upsert_direct_message_conversation(DirectMessageConversationRow {
                 dm_id,
                 peer_pubkey: peer_pubkey.to_string(),
@@ -95,10 +99,12 @@ impl AppService {
             &Pubkey::from(peer_pubkey),
         );
         let existing = self
+            .services
             .projection_store
             .get_direct_message_conversation_by_peer(peer_pubkey)
             .await?;
         let page = self
+            .services
             .projection_store
             .list_direct_message_messages(dm_id.as_str(), None, 1)
             .await?;
@@ -117,7 +123,8 @@ impl AppService {
             } else {
                 return Ok(());
             };
-        self.projection_store
+        self.services
+            .projection_store
             .upsert_direct_message_conversation(DirectMessageConversationRow {
                 dm_id,
                 peer_pubkey: peer_pubkey.to_string(),
@@ -134,11 +141,12 @@ impl AppService {
         peer_pubkey: &str,
     ) -> Result<DirectMessageConversationView> {
         let conversation = self
+            .services
             .projection_store
             .get_direct_message_conversation_by_peer(peer_pubkey)
             .await?
             .ok_or_else(|| anyhow::anyhow!("direct message conversation is not initialized"))?;
-        let profile = self.store.get_profile(peer_pubkey).await?;
+        let profile = self.services.store.get_profile(peer_pubkey).await?;
         let status = self.direct_message_status_view(peer_pubkey).await?;
         Ok(DirectMessageConversationView {
             dm_id: conversation.dm_id,
@@ -174,7 +182,7 @@ impl AppService {
             text: row.text.unwrap_or_default(),
             reply_to_message_id: row.reply_to_message_id,
             attachments: direct_message_attachment_views(
-                self.blob_service.as_ref(),
+                self.services.blob_service.as_ref(),
                 row.attachment_manifest.as_ref(),
             )
             .await?,
@@ -189,7 +197,8 @@ impl AppService {
     ) -> Result<NotificationView> {
         let object_id = row.object_id.clone();
         let thread_root_object_id = if let Some(object_id) = object_id.as_ref() {
-            self.projection_store
+            self.services
+                .projection_store
                 .get_object_projection(object_id)
                 .await?
                 .map(|projection| {
@@ -202,7 +211,11 @@ impl AppService {
         } else {
             None
         };
-        let profile = self.store.get_profile(row.actor_pubkey.as_str()).await?;
+        let profile = self
+            .services
+            .store
+            .get_profile(row.actor_pubkey.as_str())
+            .await?;
         Ok(NotificationView {
             notification_id: row.notification_id,
             kind: row.kind,
@@ -238,7 +251,11 @@ impl AppService {
 
     pub(crate) async fn notification_status_view(&self) -> Result<NotificationStatusView> {
         Ok(NotificationStatusView {
-            unread_count: self.projection_store.count_unread_notifications().await?,
+            unread_count: self
+                .services
+                .projection_store
+                .count_unread_notifications()
+                .await?,
         })
     }
 
@@ -269,11 +286,11 @@ impl AppService {
         }
         Self::spawn_direct_message_subscription_with_services(
             Arc::clone(&self.subscription_registry.direct_message_subscriptions),
-            Arc::clone(&self.projection_store),
-            Arc::clone(&self.blob_service),
-            Arc::clone(&self.hint_transport),
-            Arc::clone(&self.transport),
-            Arc::clone(&self.keys),
+            Arc::clone(&self.services.projection_store),
+            Arc::clone(&self.services.blob_service),
+            Arc::clone(&self.services.hint_transport),
+            Arc::clone(&self.services.transport),
+            Arc::clone(&self.services.keys),
             Arc::clone(&self.last_sync_ts),
             Arc::clone(&self.notification_inserted_notify),
             self.current_author_pubkey().as_str(),
@@ -291,18 +308,18 @@ impl AppService {
             self.subscription_registry
                 .direct_message_subscriptions
                 .as_ref(),
-            self.hint_transport.as_ref(),
-            self.keys.as_ref(),
+            self.services.hint_transport.as_ref(),
+            self.services.keys.as_ref(),
             peer_pubkey.as_str(),
         )
         .await?;
         Self::spawn_direct_message_subscription_with_services(
             Arc::clone(&self.subscription_registry.direct_message_subscriptions),
-            Arc::clone(&self.projection_store),
-            Arc::clone(&self.blob_service),
-            Arc::clone(&self.hint_transport),
-            Arc::clone(&self.transport),
-            Arc::clone(&self.keys),
+            Arc::clone(&self.services.projection_store),
+            Arc::clone(&self.services.blob_service),
+            Arc::clone(&self.services.hint_transport),
+            Arc::clone(&self.services.transport),
+            Arc::clone(&self.services.keys),
             Arc::clone(&self.last_sync_ts),
             Arc::clone(&self.notification_inserted_notify),
             self.current_author_pubkey().as_str(),
@@ -316,10 +333,13 @@ impl AppService {
         peer_pubkey: &str,
     ) -> Result<Option<TopicPeerSnapshot>> {
         let peer_pubkey = normalize_author_pubkey(peer_pubkey)?;
-        let topic =
-            derive_direct_message_topic(self.keys.as_ref(), &Pubkey::from(peer_pubkey.as_str()))?;
+        let topic = derive_direct_message_topic(
+            self.services.keys.as_ref(),
+            &Pubkey::from(peer_pubkey.as_str()),
+        )?;
         let hint_topic = kukuri_core::wire::hint_topic_id(&topic).0;
         Ok(self
+            .services
             .transport
             .peers()
             .await?

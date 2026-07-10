@@ -13,6 +13,7 @@ impl AppService {
         }
         info!(hash = %hash, mime = %mime, "blob media payload fetch requested");
         let bytes = match self
+            .services
             .blob_service
             .fetch_blob(&kukuri_core::BlobHash::new(hash.to_string()))
             .await

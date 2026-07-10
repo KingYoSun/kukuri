@@ -7,6 +7,7 @@ impl AppService {
             .await?;
         self.rebuild_author_relationships().await?;
         for edge in self
+            .services
             .store
             .list_follow_edges_by_subject(local_author.as_str())
             .await?
@@ -24,6 +25,7 @@ impl AppService {
         self.ensure_author_subscription(local_author.as_str())
             .await?;
         Ok(self
+            .services
             .store
             .get_profile(local_author.as_str())
             .await?
@@ -61,6 +63,7 @@ impl AppService {
             None
         } else if let Some(upload) = input.picture_upload {
             let stored = self
+                .services
                 .blob_service
                 .put_blob(upload.bytes, upload.mime.as_str())
                 .await?;
@@ -74,7 +77,7 @@ impl AppService {
             current_profile.picture_asset.clone()
         };
         let envelope = build_profile_envelope(
-            self.keys.as_ref(),
+            self.services.keys.as_ref(),
             &KukuriProfileEnvelopeContentV1 {
                 author_pubkey: author_pubkey.clone(),
                 name,
@@ -86,11 +89,12 @@ impl AppService {
         )?;
         let profile = parse_profile(&envelope)?
             .ok_or_else(|| anyhow::anyhow!("failed to parse profile envelope"))?;
-        self.store.put_envelope(envelope.clone()).await?;
-        self.projection_store
+        self.services.store.put_envelope(envelope.clone()).await?;
+        self.services
+            .projection_store
             .upsert_profile_cache(profile.clone())
             .await?;
-        persist_profile_doc(self.docs_sync.as_ref(), &profile, &envelope).await?;
+        persist_profile_doc(self.services.docs_sync.as_ref(), &profile, &envelope).await?;
         self.rebuild_author_relationships().await?;
         *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
         Ok(profile)
@@ -99,14 +103,14 @@ impl AppService {
     pub async fn follow_author(&self, pubkey: &str) -> Result<AuthorSocialView> {
         let target_pubkey = Pubkey::from(normalize_author_pubkey(pubkey)?);
         let envelope = build_follow_edge_envelope(
-            self.keys.as_ref(),
+            self.services.keys.as_ref(),
             &target_pubkey,
             FollowEdgeStatus::Active,
         )?;
         let edge = parse_follow_edge(&envelope)?
             .ok_or_else(|| anyhow::anyhow!("failed to parse follow edge"))?;
-        self.store.put_envelope(envelope.clone()).await?;
-        persist_follow_edge_doc(self.docs_sync.as_ref(), &edge, &envelope).await?;
+        self.services.store.put_envelope(envelope.clone()).await?;
+        persist_follow_edge_doc(self.services.docs_sync.as_ref(), &edge, &envelope).await?;
         self.ensure_author_subscription(target_pubkey.as_str())
             .await?;
         self.rebuild_author_relationships().await?;
@@ -117,14 +121,14 @@ impl AppService {
     pub async fn unfollow_author(&self, pubkey: &str) -> Result<AuthorSocialView> {
         let target_pubkey = Pubkey::from(normalize_author_pubkey(pubkey)?);
         let envelope = build_follow_edge_envelope(
-            self.keys.as_ref(),
+            self.services.keys.as_ref(),
             &target_pubkey,
             FollowEdgeStatus::Revoked,
         )?;
         let edge = parse_follow_edge(&envelope)?
             .ok_or_else(|| anyhow::anyhow!("failed to parse follow edge"))?;
-        self.store.put_envelope(envelope.clone()).await?;
-        persist_follow_edge_doc(self.docs_sync.as_ref(), &edge, &envelope).await?;
+        self.services.store.put_envelope(envelope.clone()).await?;
+        persist_follow_edge_doc(self.services.docs_sync.as_ref(), &edge, &envelope).await?;
         self.ensure_author_subscription(target_pubkey.as_str())
             .await?;
         self.rebuild_author_relationships().await?;
@@ -146,7 +150,8 @@ impl AppService {
         let author_pubkey = normalize_author_pubkey(pubkey)?;
         self.ensure_author_subscription(author_pubkey.as_str())
             .await?;
-        self.projection_store
+        self.services
+            .projection_store
             .put_muted_author(MutedAuthorRow {
                 author_pubkey: author_pubkey.clone(),
                 muted_at: Utc::now().timestamp_millis(),
@@ -159,7 +164,8 @@ impl AppService {
         let author_pubkey = normalize_author_pubkey(pubkey)?;
         self.ensure_author_subscription(author_pubkey.as_str())
             .await?;
-        self.projection_store
+        self.services
+            .projection_store
             .remove_muted_author(author_pubkey.as_str())
             .await?;
         self.build_author_social_view(author_pubkey.as_str()).await
@@ -172,6 +178,7 @@ impl AppService {
         let local_author_pubkey = self.current_author_pubkey();
         let pubkeys = match kind {
             SocialConnectionKind::Following => self
+                .services
                 .store
                 .list_follow_edges_by_subject(local_author_pubkey.as_str())
                 .await?
@@ -180,6 +187,7 @@ impl AppService {
                 .map(|edge| edge.target_pubkey.as_str().to_string())
                 .collect::<BTreeSet<_>>(),
             SocialConnectionKind::Followed => self
+                .services
                 .store
                 .list_follow_edges_by_target(local_author_pubkey.as_str())
                 .await?
@@ -188,6 +196,7 @@ impl AppService {
                 .map(|edge| edge.subject_pubkey.as_str().to_string())
                 .collect::<BTreeSet<_>>(),
             SocialConnectionKind::Muted => self
+                .services
                 .projection_store
                 .list_muted_authors()
                 .await?
