@@ -18,7 +18,8 @@ import {
   parseHashRouteLocation,
   parseLegacyRequestedChannel,
   parsePrimarySectionPath,
-  type BuildShellUrlOptions,
+  parseShellRouteState,
+  type RouteState,
 } from './routes';
 
 // 各テストを独立させる(setup.ts は hash を掃除しない)。
@@ -128,6 +129,52 @@ describe('parseHashRouteLocation', () => {
   });
 });
 
+describe('parseShellRouteState', () => {
+  test('parses every persisted route field without reading window state', () => {
+    expect(
+      parseShellRouteState({
+        pathname: '/messages',
+        search:
+          '?topic=topic-a&channel=channel-a&context=dm&peerPubkey=peer-a&authorPubkey=author-a&settings=appearance',
+      })
+    ).toMatchObject({
+      primarySection: 'messages',
+      requestedTopic: 'topic-a',
+      requestedChannel: 'channel-a',
+      requestedContext: 'dm',
+      requestedPeerPubkey: 'peer-a',
+      requestedAuthorPubkey: 'author-a',
+      requestedSettingsSection: 'appearance',
+    });
+  });
+
+  test('round-trips canonical messages state through the URL', () => {
+    const url = buildShellUrl({
+      activeTopic: 'topic-a',
+      primarySection: 'messages',
+      timelineView: 'feed',
+      profileMode: 'overview',
+      profileConnectionsView: 'following',
+      selectedThread: null,
+      focusedObjectId: null,
+      selectedAuthorPubkey: 'a'.repeat(64),
+      selectedDirectMessagePeerPubkey: 'b'.repeat(64),
+      settingsOpen: false,
+      settingsSection: 'about',
+      selectedChannelId: null,
+      selectedLiveSessionId: null,
+      selectedGameRoomId: null,
+    });
+    const parsed = parseShellRouteState(parseHashRouteLocation(`#${url}`));
+    expect(parsed).toMatchObject({
+      primarySection: 'messages',
+      requestedTopic: 'topic-a',
+      requestedAuthorPubkey: 'a'.repeat(64),
+      requestedPeerPubkey: 'b'.repeat(64),
+    });
+  });
+});
+
 describe('parseLegacyRequestedChannel', () => {
   // 引数順は (timelineScope, composeTarget)。compose target 側が優先される。
   const cases: Array<{
@@ -188,7 +235,7 @@ describe('parseLegacyRequestedChannel', () => {
 
 describe('buildShellUrl', () => {
   // 全フィールド必須のため fixture でデフォルトを埋め、期待 URL は生リテラルで固定する。
-  function buildOptions(overrides: Partial<BuildShellUrlOptions> = {}): BuildShellUrlOptions {
+  function buildOptions(overrides: Partial<RouteState> = {}): RouteState {
     return {
       activeTopic: 'kukuri:topic:demo',
       primarySection: 'timeline',
@@ -210,7 +257,7 @@ describe('buildShellUrl', () => {
 
   const cases: Array<{
     name: string;
-    overrides: Partial<BuildShellUrlOptions>;
+    overrides: Partial<RouteState>;
     expected: string;
   }> = [
     {

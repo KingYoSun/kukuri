@@ -8,6 +8,7 @@ import {
   isProfileConnectionsView,
   isSettingsSection,
   parseLegacyRequestedChannel,
+  parseShellRouteState,
   parsePrimarySectionPath,
   type DesktopShellRouteOverrides,
   type HashRouteLocation,
@@ -159,22 +160,26 @@ export function useRouteSynchronization({
       return;
     }
 
-    const params = new URLSearchParams(resolvedRouteLocation.search);
-    const requestedTopic = params.get('topic')?.trim() ?? null;
-    const requestedChannelParam = params.get('channel')?.trim() ?? null;
-    const requestedTimelineView = params.get('timelineView');
-    const requestedTimelineScopeValue = params.get('timelineScope');
-    const requestedComposeTargetValue = params.get('composeTarget');
-    const requestedSettingsSection = params.get('settings');
-    const requestedContext = params.get('context');
-    const requestedProfileMode = params.get('profileMode');
-    const requestedConnectionsView = params.get('connectionsView');
-    const requestedThreadId = params.get('threadId');
-    const requestedFocusObjectId = params.get('focusObjectId')?.trim() ?? null;
-    const requestedAuthorPubkey = params.get('authorPubkey');
-    const requestedPeerPubkey = params.get('peerPubkey');
-    const requestedSessionId = params.get('sessionId')?.trim() ?? null;
-    const requestedRoomId = params.get('roomId')?.trim() ?? null;
+    const {
+      requestedTopic,
+      requestedChannel: requestedChannelParam,
+      requestedTimelineView,
+      requestedTimelineScope: requestedTimelineScopeValue,
+      requestedComposeTarget: requestedComposeTargetValue,
+      requestedSettingsSection,
+      requestedContext,
+      requestedProfileMode,
+      requestedConnectionsView,
+      requestedThreadId,
+      requestedFocusObjectId,
+      requestedAuthorPubkey,
+      requestedPeerPubkey,
+      requestedSessionId,
+      requestedRoomId,
+    } = parseShellRouteState({
+      pathname: resolvedRouteLocation.pathname,
+      search: resolvedRouteLocation.search,
+    });
 
     let nextTopic = activeTopic;
     let shouldReload = false;
