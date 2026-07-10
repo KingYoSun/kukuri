@@ -290,6 +290,10 @@ impl DesktopRuntime {
     }
 
     pub async fn shutdown(&self) {
+        if let Some(handle) = self.sync_status_observer_task.lock().await.take() {
+            handle.abort();
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
+        }
         if let Some(handle) = self.community_node_scheduler_task.lock().await.take() {
             handle.abort();
             let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;

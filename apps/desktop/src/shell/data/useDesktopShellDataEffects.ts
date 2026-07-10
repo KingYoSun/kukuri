@@ -7,7 +7,9 @@ import {
 
 import type {
   AttachmentView,
+  CommunityNodeNodeStatus,
   DesktopApi,
+  SyncStatus,
 } from '@/lib/api';
 
 import {
@@ -17,6 +19,7 @@ import {
 import {
   PUBLIC_CHANNEL_REF,
   PUBLIC_TIMELINE_SCOPE,
+  CONNECTIVITY_STATUS_FALLBACK_INTERVAL_MS,
   REFRESH_INTERVAL_MS,
   STATUS_REFRESH_INTERVAL_MS,
   type DesktopShellState,
@@ -28,11 +31,13 @@ import { VISIBLE_TIMELINE_LIMIT } from '@/shell/pagination';
 import {
   authorViewFromDirectMessageConversation,
   createGameEditorDraft,
+  mergeCommunityNodeStatuses,
   mergeKnownAuthors,
   messageFromError,
   profileInputFromProfile,
 } from '@/shell/selectors';
 import { useRuntimeEventBridge } from '@/shell/data/useRuntimeEventBridge';
+import { isTauriRuntime } from '@/lib/releaseReadiness';
 
 type Setter<K extends keyof DesktopShellState> = (
   value: DesktopShellStateValue<K>
@@ -63,7 +68,10 @@ type UseDesktopShellDataEffectsArgs = {
     currentThread: string | null,
     mode?: 'apply' | 'buffer'
   ) => Promise<void>;
+  refreshConnectivityStatus: () => Promise<void>;
   setNotificationStatus: Setter<'notificationStatus'>;
+  setCommunityNodeStatuses: Setter<'communityNodeStatuses'>;
+  setSyncStatus: Setter<'syncStatus'>;
   setLocalProfile: Setter<'localProfile'>;
   setProfileDraft: Setter<'profileDraft'>;
   setKnownAuthorsByPubkey: Setter<'knownAuthorsByPubkey'>;
@@ -113,7 +121,10 @@ export function useDesktopShellDataEffects({
   visibleRefreshInFlightRef,
   loadTopics,
   refreshVisibleShellData,
+  refreshConnectivityStatus,
   setNotificationStatus,
+  setCommunityNodeStatuses,
+  setSyncStatus,
   setLocalProfile,
   setProfileDraft,
   setKnownAuthorsByPubkey,
@@ -205,7 +216,39 @@ export function useDesktopShellDataEffects({
     }
   }, [api, setNotificationStatus, setNotifications, shellChromeState.activePrimarySection]);
 
-  useRuntimeEventBridge(refreshNotificationStatus);
+  const applySyncStatusChange = useCallback(
+    (
+      syncStatus: SyncStatus | null,
+      communityNodeStatuses: CommunityNodeNodeStatus[] | null
+    ) => {
+      startTransition(() => {
+        if (syncStatus) {
+          setSyncStatus(syncStatus);
+        }
+        if (communityNodeStatuses) {
+          setCommunityNodeStatuses((current) =>
+            mergeCommunityNodeStatuses(current, communityNodeStatuses)
+          );
+        }
+      });
+    },
+    [setCommunityNodeStatuses, setSyncStatus]
+  );
+
+  useRuntimeEventBridge(refreshNotificationStatus, applySyncStatusChange);
+
+  useEffect(() => {
+    void refreshConnectivityStatus();
+    const intervalMs = isTauriRuntime()
+      ? CONNECTIVITY_STATUS_FALLBACK_INTERVAL_MS
+      : REFRESH_INTERVAL_MS;
+    const intervalId = window.setInterval(() => {
+      void refreshConnectivityStatus();
+    }, intervalMs);
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [refreshConnectivityStatus]);
 
   useEffect(() => {
     void refreshNotificationStatus();

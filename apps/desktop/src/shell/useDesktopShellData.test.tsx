@@ -21,6 +21,12 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
+const { listenMock } = vi.hoisted(() => ({ listenMock: vi.fn() }));
+
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: (...args: unknown[]) => listenMock(...args),
+}));
+
 import type {
   DesktopApi,
   JoinedPrivateChannelView,
@@ -31,7 +37,10 @@ import type {
   TimelineView,
 } from '@/lib/api';
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
-import { REFRESH_INTERVAL_MS } from '@/shell/store';
+import {
+  CONNECTIVITY_STATUS_FALLBACK_INTERVAL_MS,
+  REFRESH_INTERVAL_MS,
+} from '@/shell/store';
 import { useDesktopShellData } from '@/shell/useDesktopShellData';
 import {
   actPatchState,
@@ -176,6 +185,9 @@ beforeEach(() => {
   // mount 直後からポーリングが走るため renderHook 前に必ず fake timers。
   // (afterEach の useRealTimers は setup.ts が行う)
   vi.useFakeTimers();
+  listenMock.mockReset();
+  listenMock.mockResolvedValue(() => undefined);
+  delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
 });
 
 describe('useDesktopShellData characterization', () => {
@@ -307,6 +319,43 @@ describe('useDesktopShellData characterization', () => {
     ).toEqual(['post-new', 'post-old']);
 
     view.unmount();
+  });
+
+  test('connectivity status uses mount bootstrap and 60 second fallback, not the 3 second refresh', async () => {
+    (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
+    const baseApi = createDesktopMockApi();
+    const getSyncStatus = vi.fn(baseApi.getSyncStatus);
+    const getCommunityNodeStatuses = vi.fn(baseApi.getCommunityNodeStatuses);
+    const api: DesktopApi = {
+      ...baseApi,
+      getSyncStatus,
+      getCommunityNodeStatuses,
+    };
+
+    const { view } = renderDataHook(api);
+    await flushAsyncWork();
+    expect(getSyncStatus).toHaveBeenCalledTimes(1);
+    expect(getCommunityNodeStatuses).toHaveBeenCalledTimes(1);
+
+    getSyncStatus.mockClear();
+    getCommunityNodeStatuses.mockClear();
+    await advanceTimersAsync(REFRESH_INTERVAL_MS);
+    expect(getSyncStatus).not.toHaveBeenCalled();
+    expect(getCommunityNodeStatuses).not.toHaveBeenCalled();
+
+    act(() => window.dispatchEvent(new Event('focus')));
+    await flushAsyncWork();
+    expect(getSyncStatus).not.toHaveBeenCalled();
+    expect(getCommunityNodeStatuses).not.toHaveBeenCalled();
+
+    await advanceTimersAsync(
+      CONNECTIVITY_STATUS_FALLBACK_INTERVAL_MS - REFRESH_INTERVAL_MS
+    );
+    expect(getSyncStatus).toHaveBeenCalledTimes(1);
+    expect(getCommunityNodeStatuses).toHaveBeenCalledTimes(1);
+
+    view.unmount();
+    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
   });
 
   test('refreshTimelineFeed applies pending posts without api calls and clears the pending buffers', async () => {

@@ -1,20 +1,26 @@
 import { useEffect, useRef } from 'react';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
+import type { CommunityNodeNodeStatus, RuntimeEvent, SyncStatus } from '@/lib/api';
 import { isTauriRuntime } from '@/lib/releaseReadiness';
 
-type RuntimeEventPayload = {
-  type: string;
-};
-
 export function useRuntimeEventBridge(
-  onNotificationStatusChanged: () => void
+  onNotificationStatusChanged: () => void,
+  onSyncStatusChanged: (
+    syncStatus: SyncStatus | null,
+    communityNodeStatuses: CommunityNodeNodeStatus[] | null
+  ) => void
 ): void {
-  const callbackRef = useRef(onNotificationStatusChanged);
+  const notificationCallbackRef = useRef(onNotificationStatusChanged);
+  const syncStatusCallbackRef = useRef(onSyncStatusChanged);
 
   useEffect(() => {
-    callbackRef.current = onNotificationStatusChanged;
+    notificationCallbackRef.current = onNotificationStatusChanged;
   }, [onNotificationStatusChanged]);
+
+  useEffect(() => {
+    syncStatusCallbackRef.current = onSyncStatusChanged;
+  }, [onSyncStatusChanged]);
 
   useEffect(() => {
     if (!isTauriRuntime()) {
@@ -25,12 +31,18 @@ export function useRuntimeEventBridge(
     let cancelled = false;
 
     void (async () => {
-      const dispose = await listen<RuntimeEventPayload>(
+      const dispose = await listen<RuntimeEvent>(
         'kukuri://runtime-event',
         (event) => {
           switch (event.payload?.type) {
             case 'notification_status_changed':
-              callbackRef.current();
+              notificationCallbackRef.current();
+              break;
+            case 'sync_status_changed':
+              syncStatusCallbackRef.current(
+                event.payload.sync_status ?? null,
+                event.payload.community_node_statuses ?? null
+              );
               break;
           }
         }

@@ -317,18 +317,14 @@ export function useDesktopShellData({
         publicTimelineResult,
         joinedChannelsResult,
         threadViewResult,
-        statusResult,
-        communityNodeStatusesResult,
       ] = await Promise.allSettled([
-          api.listTimeline(topic, null, VISIBLE_TIMELINE_LIMIT, timelineScope),
-          api.listTimeline(topic, null, VISIBLE_TIMELINE_LIMIT, PUBLIC_TIMELINE_SCOPE),
-          api.listJoinedPrivateChannels(topic),
-          currentThread
-            ? api.listThread(topic, currentThread, null, THREAD_TIMELINE_LIMIT)
-            : Promise.resolve(null),
-          api.getSyncStatus(),
-          api.getCommunityNodeStatuses(),
-        ]);
+        api.listTimeline(topic, null, VISIBLE_TIMELINE_LIMIT, timelineScope),
+        api.listTimeline(topic, null, VISIBLE_TIMELINE_LIMIT, PUBLIC_TIMELINE_SCOPE),
+        api.listJoinedPrivateChannels(topic),
+        currentThread
+          ? api.listThread(topic, currentThread, null, THREAD_TIMELINE_LIMIT)
+          : Promise.resolve(null),
+      ]);
 
       if (requestId !== loadTopicsRequestRef.current) {
         return;
@@ -339,7 +335,6 @@ export function useDesktopShellData({
         publicTimelineResult,
         joinedChannelsResult,
         threadViewResult,
-        statusResult,
       ].find((result) => result.status === 'rejected');
 
       startTransition(() => {
@@ -436,16 +431,6 @@ export function useDesktopShellData({
           setThread([]);
         }
 
-        if (statusResult.status === 'fulfilled') {
-          setSyncStatus(statusResult.value);
-        }
-
-        if (communityNodeStatusesResult.status === 'fulfilled') {
-          setCommunityNodeStatuses((current) =>
-            mergeCommunityNodeStatuses(current, communityNodeStatusesResult.value)
-          );
-        }
-
         setError(
           firstCoreFailure && firstCoreFailure.status === 'rejected'
             ? messageFromError(firstCoreFailure.reason, translate('common:errors.failedToLoadTopic'))
@@ -457,7 +442,6 @@ export function useDesktopShellData({
       api,
       clearPendingTimeline,
       loadTopicsRequestRef,
-      setCommunityNodeStatuses,
       setError,
       setChannelPanelStateByTopic,
       setJoinedChannelsByTopic,
@@ -466,7 +450,6 @@ export function useDesktopShellData({
       setPendingTimelineSnapshotsByKey,
       setPublicTimelineNextCursorByTopic,
       setPublicTimelinesByTopic,
-      setSyncStatus,
       setThread,
       setThreadNextCursorById,
       setTimelineNextCursorByKey,
@@ -930,7 +913,31 @@ export function useDesktopShellData({
     ]
   );
 
-  const loadTopics = useQueuedLoadTopics(runLoadTopics);
+  const refreshConnectivityStatus = useCallback(async () => {
+    const [syncStatusResult, communityNodeStatusesResult] = await Promise.allSettled([
+      api.getSyncStatus(),
+      api.getCommunityNodeStatuses(),
+    ]);
+    startTransition(() => {
+      if (syncStatusResult.status === 'fulfilled') {
+        setSyncStatus(syncStatusResult.value);
+      }
+      if (communityNodeStatusesResult.status === 'fulfilled') {
+        setCommunityNodeStatuses((current) =>
+          mergeCommunityNodeStatuses(current, communityNodeStatusesResult.value)
+        );
+      }
+    });
+  }, [api, setCommunityNodeStatuses, setSyncStatus]);
+
+  const queuedLoadTopics = useQueuedLoadTopics(runLoadTopics);
+  const loadTopics = useCallback(
+    async (topics: string[], currentActiveTopic: string, currentThread: string | null) => {
+      await queuedLoadTopics(topics, currentActiveTopic, currentThread);
+      await refreshConnectivityStatus();
+    },
+    [queuedLoadTopics, refreshConnectivityStatus]
+  );
 
   const refreshVisibleTimelineAfterPublish = useCallback(
     async (topic: string, currentThread: string | null) => {
@@ -970,7 +977,10 @@ export function useDesktopShellData({
     visibleRefreshInFlightRef,
     loadTopics,
     refreshVisibleShellData,
+    refreshConnectivityStatus,
     setNotificationStatus,
+    setCommunityNodeStatuses,
+    setSyncStatus,
     setLocalProfile,
     setProfileDraft,
     setKnownAuthorsByPubkey,

@@ -58,16 +58,23 @@ mod content_profile_api;
 mod notifications_messages_api;
 mod private_channels_game_api;
 mod sync_live_api;
+mod sync_status_observer;
 
 pub(crate) const PRIVATE_CHANNEL_CAPABILITIES_PURPOSE: &str = "private-channel-capabilities";
 pub(crate) const PRIVATE_CHANNEL_CAPABILITIES_KEY: &str = "registry";
 pub(crate) const GOSSIP_SUBSCRIPTION_STATE_PURPOSE: &str = "gossip-subscription-state";
 pub(crate) const GOSSIP_SUBSCRIPTION_STATE_KEY: &str = "registry";
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RuntimeEvent {
     NotificationStatusChanged,
+    SyncStatusChanged {
+        sync_status: Option<Box<SyncStatus>>,
+        community_node_statuses: Option<Vec<CommunityNodeNodeStatus>>,
+    },
 }
 
 pub struct DesktopRuntime {
@@ -85,6 +92,7 @@ pub struct DesktopRuntime {
     pub(crate) community_node_reconnect_state: Arc<Mutex<CommunityNodeReconnectState>>,
     pub(crate) community_node_reconnect_guard: Arc<Mutex<()>>,
     pub(crate) community_node_scheduler_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    pub(crate) sync_status_observer_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
     pub(crate) active_connectivity_urls: Arc<Mutex<Vec<String>>>,
     pub(crate) last_runtime_connectivity_assist_state:
         Arc<Mutex<Option<crate::community_node::RuntimeConnectivityAssistState>>>,
@@ -313,6 +321,7 @@ impl DesktopRuntime {
             )),
             community_node_reconnect_guard: Arc::new(Mutex::new(())),
             community_node_scheduler_task: Mutex::new(None),
+            sync_status_observer_task: Mutex::new(None),
             active_connectivity_urls: Arc::new(Mutex::new(relay_config.iroh_relay_urls.clone())),
             last_runtime_connectivity_assist_state: Arc::new(Mutex::new(Some(
                 initial_runtime_connectivity_state,
