@@ -16,6 +16,7 @@ import type {
 } from '@/lib/api';
 
 import { removeRecordEntry, setRecordEntry, updateRecordEntry } from '@/shell/stateUpdates';
+import { useConnectivityStatusRefresh } from '@/shell/data/useConnectivityStatusRefresh';
 import { useDesktopShellDataEffects } from '@/shell/data/useDesktopShellDataEffects';
 import { useDraftMediaHelpers } from '@/shell/data/useDraftMediaHelpers';
 import { useQueuedLoadTopics } from '@/shell/data/useQueuedLoadTopics';
@@ -913,22 +914,11 @@ export function useDesktopShellData({
     ]
   );
 
-  const refreshConnectivityStatus = useCallback(async () => {
-    const [syncStatusResult, communityNodeStatusesResult] = await Promise.allSettled([
-      api.getSyncStatus(),
-      api.getCommunityNodeStatuses(),
-    ]);
-    startTransition(() => {
-      if (syncStatusResult.status === 'fulfilled') {
-        setSyncStatus(syncStatusResult.value);
-      }
-      if (communityNodeStatusesResult.status === 'fulfilled') {
-        setCommunityNodeStatuses((current) =>
-          mergeCommunityNodeStatuses(current, communityNodeStatusesResult.value)
-        );
-      }
-    });
-  }, [api, setCommunityNodeStatuses, setSyncStatus]);
+  const refreshConnectivityStatus = useConnectivityStatusRefresh(
+    api,
+    setSyncStatus,
+    setCommunityNodeStatuses
+  );
 
   const queuedLoadTopics = useQueuedLoadTopics(runLoadTopics);
   const loadTopics = useCallback(
