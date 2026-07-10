@@ -351,6 +351,7 @@ async fn friend_plus_share_freeze_rotate_and_new_epoch_visibility() {
             app_a.docs_sync.as_ref(),
             &rotated_source_replica,
             b_pubkey.as_str(),
+            DocFetchPolicy::LocalThenRemote,
         )
         .await
         .expect("fetch published handoff grant")
@@ -400,6 +401,7 @@ async fn friend_plus_share_freeze_rotate_and_new_epoch_visibility() {
                 app_b.docs_sync.as_ref(),
                 &rotated_source_replica,
                 b_pubkey.as_str(),
+                DocFetchPolicy::LocalThenRemote,
             )
             .await
             .expect("fetch handoff grant on b")

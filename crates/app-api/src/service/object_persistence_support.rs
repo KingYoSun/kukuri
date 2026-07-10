@@ -235,18 +235,6 @@ pub(crate) async fn persist_private_channel_epoch_handoff_grant(
 pub(crate) async fn fetch_private_channel_metadata_from_replica(
     docs_sync: &dyn DocsSync,
     replica: &ReplicaId,
-) -> Result<Option<PrivateChannelMetadataDocV1>> {
-    fetch_private_channel_metadata_from_replica_with_policy(
-        docs_sync,
-        replica,
-        DocFetchPolicy::LocalThenRemote,
-    )
-    .await
-}
-
-pub(crate) async fn fetch_private_channel_metadata_from_replica_with_policy(
-    docs_sync: &dyn DocsSync,
-    replica: &ReplicaId,
     policy: DocFetchPolicy,
 ) -> Result<Option<PrivateChannelMetadataDocV1>> {
     let Some(record) = query_replica_with_fetch_policy(
@@ -270,18 +258,6 @@ pub(crate) async fn fetch_private_channel_metadata_from_replica_with_policy(
 pub(crate) async fn fetch_private_channel_policy_from_replica(
     docs_sync: &dyn DocsSync,
     replica: &ReplicaId,
-) -> Result<Option<PrivateChannelPolicyDocV1>> {
-    fetch_private_channel_policy_from_replica_with_policy(
-        docs_sync,
-        replica,
-        DocFetchPolicy::LocalThenRemote,
-    )
-    .await
-}
-
-pub(crate) async fn fetch_private_channel_policy_from_replica_with_policy(
-    docs_sync: &dyn DocsSync,
-    replica: &ReplicaId,
     policy: DocFetchPolicy,
 ) -> Result<Option<PrivateChannelPolicyDocV1>> {
     let Some(record) = query_replica_with_fetch_policy(
@@ -301,18 +277,6 @@ pub(crate) async fn fetch_private_channel_policy_from_replica_with_policy(
 }
 
 pub(crate) async fn fetch_private_channel_participants_from_replica(
-    docs_sync: &dyn DocsSync,
-    replica: &ReplicaId,
-) -> Result<Vec<PrivateChannelParticipantDocV1>> {
-    fetch_private_channel_participants_from_replica_with_policy(
-        docs_sync,
-        replica,
-        DocFetchPolicy::LocalThenRemote,
-    )
-    .await
-}
-
-pub(crate) async fn fetch_private_channel_participants_from_replica_with_policy(
     docs_sync: &dyn DocsSync,
     replica: &ReplicaId,
     policy: DocFetchPolicy,
@@ -340,20 +304,6 @@ pub(crate) async fn fetch_private_channel_participants_from_replica_with_policy(
 }
 
 pub(crate) async fn fetch_private_channel_epoch_handoff_grant_from_replica(
-    docs_sync: &dyn DocsSync,
-    replica: &ReplicaId,
-    recipient_pubkey: &str,
-) -> Result<Option<PrivateChannelEpochHandoffGrantDocV1>> {
-    fetch_private_channel_epoch_handoff_grant_from_replica_with_policy(
-        docs_sync,
-        replica,
-        recipient_pubkey,
-        DocFetchPolicy::LocalThenRemote,
-    )
-    .await
-}
-
-pub(crate) async fn fetch_private_channel_epoch_handoff_grant_from_replica_with_policy(
     docs_sync: &dyn DocsSync,
     replica: &ReplicaId,
     recipient_pubkey: &str,
@@ -389,10 +339,24 @@ pub(crate) async fn wait_for_private_channel_epoch_snapshot(
 )> {
     tokio::time::timeout(std::time::Duration::from_secs(10), async {
         loop {
-            let metadata = fetch_private_channel_metadata_from_replica(docs_sync, replica).await?;
-            let policy = fetch_private_channel_policy_from_replica(docs_sync, replica).await?;
-            let participants =
-                fetch_private_channel_participants_from_replica(docs_sync, replica).await?;
+            let metadata = fetch_private_channel_metadata_from_replica(
+                docs_sync,
+                replica,
+                DocFetchPolicy::LocalThenRemote,
+            )
+            .await?;
+            let policy = fetch_private_channel_policy_from_replica(
+                docs_sync,
+                replica,
+                DocFetchPolicy::LocalThenRemote,
+            )
+            .await?;
+            let participants = fetch_private_channel_participants_from_replica(
+                docs_sync,
+                replica,
+                DocFetchPolicy::LocalThenRemote,
+            )
+            .await?;
             let owner_participant_visible = policy.as_ref().is_some_and(|policy| {
                 participants.iter().any(|participant| {
                     participant.participant_pubkey == policy.owner_pubkey
@@ -419,7 +383,13 @@ pub(crate) async fn private_channel_rotation_is_pending(
     state: &JoinedPrivateChannelState,
 ) -> Result<bool> {
     let replica = current_private_channel_replica_id(state);
-    let Some(policy) = fetch_private_channel_policy_from_replica(docs_sync, &replica).await? else {
+    let Some(policy) = fetch_private_channel_policy_from_replica(
+        docs_sync,
+        &replica,
+        DocFetchPolicy::LocalThenRemote,
+    )
+    .await?
+    else {
         return Ok(false);
     };
     if policy.sharing_state != ChannelSharingState::Frozen || policy.rotated_at.is_none() {
@@ -430,6 +400,7 @@ pub(crate) async fn private_channel_rotation_is_pending(
         docs_sync,
         &replica,
         local_author.as_str(),
+        DocFetchPolicy::LocalThenRemote,
     )
     .await?
     else {

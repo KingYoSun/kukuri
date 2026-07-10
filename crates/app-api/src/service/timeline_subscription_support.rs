@@ -270,7 +270,7 @@ impl AppService {
         topic_id: &str,
         scope: &TimelineScope,
     ) -> Result<usize> {
-        let mut hydrated = hydrate_topic_state_with_services_with_policy(
+        let mut hydrated = hydrate_topic_state_with_services(
             self.docs_sync.as_ref(),
             self.blob_service.as_ref(),
             self.projection_store.as_ref(),
@@ -292,7 +292,7 @@ impl AppService {
                                 )
                             })
                     {
-                        hydrated += hydrate_subscription_state_with_services_with_policy(
+                        hydrated += hydrate_subscription_state_with_services(
                             self.docs_sync.as_ref(),
                             self.blob_service.as_ref(),
                             self.projection_store.as_ref(),
@@ -321,7 +321,7 @@ impl AppService {
                                 )
                             })
                     {
-                        hydrated += hydrate_subscription_state_with_services_with_policy(
+                        hydrated += hydrate_subscription_state_with_services(
                             self.docs_sync.as_ref(),
                             self.blob_service.as_ref(),
                             self.projection_store.as_ref(),

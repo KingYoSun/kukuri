@@ -130,9 +130,7 @@ pub(crate) use gossip_subscription_support::gossip_disabled_channel_key;
 pub(crate) use hydration_support::{
     hint_targets_topic, hydrate_subscription_event_with_services,
     hydrate_subscription_hint_with_services, hydrate_subscription_state_with_services,
-    hydrate_subscription_state_with_services_with_policy, hydrate_topic_state_with_services,
-    hydrate_topic_state_with_services_with_policy, profile_timeline_page,
-    projection_page_needs_hydration,
+    hydrate_topic_state_with_services, profile_timeline_page, projection_page_needs_hydration,
 };
 pub(crate) use metaverse_room_event_support::{
     metaverse_room_event_buffer_key, parse_metaverse_room_event_envelope,
@@ -149,31 +147,24 @@ pub(crate) use object_persistence_support::{
     bookmarked_custom_reaction_view_from_row, custom_reaction_asset_view_from_doc,
     fetch_game_room_state_from_replica, fetch_live_session_state_from_replica, fetch_manifest_blob,
     fetch_private_channel_epoch_handoff_grant_from_replica,
-    fetch_private_channel_epoch_handoff_grant_from_replica_with_policy,
-    fetch_private_channel_participants_from_replica,
-    fetch_private_channel_participants_from_replica_with_policy,
-    fetch_private_channel_policy_from_replica,
-    fetch_private_channel_policy_from_replica_with_policy, fetch_projection_blob_text,
-    game_projection_row_from_state, live_projection_row_from_state, persist_game_room_state,
-    persist_live_session_state, persist_media_manifest, persist_post_object,
-    persist_private_channel_epoch_handoff_grant, persist_private_channel_metadata,
-    persist_private_channel_participant, persist_private_channel_policy,
-    private_channel_rotation_is_pending, projection_row_from_header, reaction_cache_key,
-    reaction_projection_row_from_doc, reaction_state_view_from_rows,
-    recent_reaction_view_from_projection, search_key_or_asset_id,
+    fetch_private_channel_participants_from_replica, fetch_private_channel_policy_from_replica,
+    fetch_projection_blob_text, game_projection_row_from_state, live_projection_row_from_state,
+    persist_game_room_state, persist_live_session_state, persist_media_manifest,
+    persist_post_object, persist_private_channel_epoch_handoff_grant,
+    persist_private_channel_metadata, persist_private_channel_participant,
+    persist_private_channel_policy, private_channel_rotation_is_pending,
+    projection_row_from_header, reaction_cache_key, reaction_projection_row_from_doc,
+    reaction_state_view_from_rows, recent_reaction_view_from_projection, search_key_or_asset_id,
     session_projection_retry_attempts, session_projection_retry_delay, store_manifest_blob,
     wait_for_private_channel_epoch_snapshot,
 };
 pub(crate) use profile_docs_support::{
     fetch_author_envelope_by_id, hydrate_author_state_with_services,
-    hydrate_author_state_with_services_with_policy,
-    load_custom_reaction_assets_from_author_replica,
-    load_profile_posts_from_author_replica_with_policy,
-    load_profile_reposts_from_author_replica_with_policy, merge_seed_peers,
-    persist_custom_reaction_asset_doc, persist_follow_edge_doc, persist_profile_doc,
-    persist_profile_post_doc, persist_profile_repost_doc, persist_reaction_doc,
-    snapshot_follow_notification_baseline_with_policy,
-    snapshot_object_notification_baseline_with_policy,
+    load_custom_reaction_assets_from_author_replica, load_profile_posts_from_author_replica,
+    load_profile_reposts_from_author_replica, merge_seed_peers, persist_custom_reaction_asset_doc,
+    persist_follow_edge_doc, persist_profile_doc, persist_profile_post_doc,
+    persist_profile_repost_doc, persist_reaction_doc, snapshot_follow_notification_baseline,
+    snapshot_object_notification_baseline,
 };
 pub(crate) use projection_support::{
     active_private_channel_participants, archive_private_channel_epoch,
@@ -519,6 +510,7 @@ impl AppService {
                 self.blob_service.as_ref(),
                 self.projection_store.as_ref(),
                 source_topic_id,
+                DocFetchPolicy::LocalThenRemote,
             )
             .await?;
         }

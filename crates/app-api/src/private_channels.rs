@@ -1,5 +1,5 @@
 use crate::service::*;
-
+use DocFetchPolicy::LocalThenRemote;
 impl AppService {
     pub async fn create_private_channel(
         &self,
@@ -85,7 +85,6 @@ impl AppService {
         .await?;
         self.joined_private_channel_view_for_state(&state).await
     }
-
     pub async fn export_private_channel_invite(
         &self,
         topic_id: &str,
@@ -117,7 +116,6 @@ impl AppService {
             },
         )
     }
-
     /// private channel import 3 系統(招待 / friend-only 許可 / friend-plus 共有)の共通仕様。
     ///
     /// フローは同型(トークン検証 → 前提確認 → replica 秘密登録 → snapshot 検証 →
@@ -162,8 +160,12 @@ impl AppService {
             )
             .await?;
             let participants = if spec.refetch_participants {
-                fetch_private_channel_participants_from_replica(self.docs_sync.as_ref(), &replica)
-                    .await?
+                fetch_private_channel_participants_from_replica(
+                    self.docs_sync.as_ref(),
+                    &replica,
+                    LocalThenRemote,
+                )
+                .await?
             } else {
                 participants
             };
@@ -238,7 +240,6 @@ impl AppService {
         }
         import_result
     }
-
     pub async fn import_private_channel_invite(
         &self,
         token: &str,
@@ -272,7 +273,6 @@ impl AppService {
         .await?;
         Ok(preview)
     }
-
     pub async fn export_channel_access_token(
         &self,
         topic_id: &str,
@@ -304,7 +304,6 @@ impl AppService {
         };
         Ok(ChannelAccessTokenExport { kind, token })
     }
-
     pub async fn import_channel_access_token(
         &self,
         token: &str,
@@ -354,7 +353,6 @@ impl AppService {
         }
         anyhow::bail!("unrecognized private channel access token")
     }
-
     pub async fn preview_channel_access_token(
         &self,
         token: &str,
@@ -400,7 +398,6 @@ impl AppService {
         }
         anyhow::bail!("unrecognized private channel access token")
     }
-
     pub async fn export_friend_only_grant(
         &self,
         topic_id: &str,
@@ -434,7 +431,6 @@ impl AppService {
             expires_at,
         )
     }
-
     pub async fn import_friend_only_grant(&self, token: &str) -> Result<FriendOnlyGrantPreview> {
         let preview = parse_friend_only_grant_token(token)?;
         self.import_private_channel_by_spec(PrivateChannelImportSpec {
@@ -469,7 +465,6 @@ impl AppService {
         .await?;
         Ok(preview)
     }
-
     pub async fn export_friend_plus_share(
         &self,
         topic_id: &str,
@@ -487,17 +482,24 @@ impl AppService {
             anyhow::bail!("friend-plus share export is only available for friends+ channels");
         }
         let replica = current_private_channel_replica_id(&state);
-        let Some(policy) =
-            fetch_private_channel_policy_from_replica(self.docs_sync.as_ref(), &replica).await?
+        let Some(policy) = fetch_private_channel_policy_from_replica(
+            self.docs_sync.as_ref(),
+            &replica,
+            LocalThenRemote,
+        )
+        .await?
         else {
             anyhow::bail!("friend-plus channel policy is missing");
         };
         if policy.sharing_state != ChannelSharingState::Open {
             anyhow::bail!("friend-plus share export is disabled while sharing is frozen");
         }
-        let participants =
-            fetch_private_channel_participants_from_replica(self.docs_sync.as_ref(), &replica)
-                .await?;
+        let participants = fetch_private_channel_participants_from_replica(
+            self.docs_sync.as_ref(),
+            &replica,
+            LocalThenRemote,
+        )
+        .await?;
         let local_author = self.current_author_pubkey();
         if !participants.iter().any(|participant| {
             participant.epoch_id == state.current_epoch_id
@@ -519,7 +521,6 @@ impl AppService {
             effective_expires_at,
         )
     }
-
     pub async fn import_friend_plus_share(&self, token: &str) -> Result<FriendPlusSharePreview> {
         let preview = parse_friend_plus_share_token(token)?;
         self.import_private_channel_by_spec(PrivateChannelImportSpec {
@@ -555,7 +556,6 @@ impl AppService {
         .await?;
         Ok(preview)
     }
-
     pub async fn freeze_private_channel(
         &self,
         topic_id: &str,
@@ -574,9 +574,12 @@ impl AppService {
             anyhow::bail!("only the channel owner can freeze the channel");
         }
         let current_replica = current_private_channel_replica_id(&state);
-        let Some(current_policy) =
-            fetch_private_channel_policy_from_replica(self.docs_sync.as_ref(), &current_replica)
-                .await?
+        let Some(current_policy) = fetch_private_channel_policy_from_replica(
+            self.docs_sync.as_ref(),
+            &current_replica,
+            LocalThenRemote,
+        )
+        .await?
         else {
             anyhow::bail!("friend-plus channel policy is missing");
         };
@@ -593,7 +596,6 @@ impl AppService {
         .await?;
         self.joined_private_channel_view_for_state(&state).await
     }
-
     /// private channel の epoch rotate(所有者のみ)。
     ///
     /// フェーズ分割(WP-H5 PR4)。順序と失敗時挙動は分割前と同一:
@@ -617,7 +619,6 @@ impl AppService {
         self.finalize_rotated_channel_state(topic_id, prep.state, next)
             .await
     }
-
     /// フェーズ 1: 前提検証(参加中・epoch 対応・所有者)と、現行 replica の
     /// policy 取得、handoff grant の受信者収集(現 epoch + 過去 epoch の active
     /// 参加者。owner 除外・pubkey で重複排除)。
@@ -639,22 +640,26 @@ impl AppService {
             anyhow::bail!("only the channel owner can rotate the channel");
         }
         let current_replica = current_private_channel_replica_id(&state);
-        let current_policy =
-            fetch_private_channel_policy_from_replica(self.docs_sync.as_ref(), &current_replica)
-                .await?
-                .unwrap_or(PrivateChannelPolicyDocV1 {
-                    channel_id: state.channel_id.clone(),
-                    topic_id: TopicId::new(topic_id),
-                    audience_kind: state.audience_kind.clone(),
-                    owner_pubkey: Pubkey::from(state.owner_pubkey.clone()),
-                    epoch_id: state.current_epoch_id.clone(),
-                    sharing_state: ChannelSharingState::Open,
-                    rotated_at: None,
-                    previous_epoch_id: None,
-                });
+        let current_policy = fetch_private_channel_policy_from_replica(
+            self.docs_sync.as_ref(),
+            &current_replica,
+            LocalThenRemote,
+        )
+        .await?
+        .unwrap_or(PrivateChannelPolicyDocV1 {
+            channel_id: state.channel_id.clone(),
+            topic_id: TopicId::new(topic_id),
+            audience_kind: state.audience_kind.clone(),
+            owner_pubkey: Pubkey::from(state.owner_pubkey.clone()),
+            epoch_id: state.current_epoch_id.clone(),
+            sharing_state: ChannelSharingState::Open,
+            rotated_at: None,
+            previous_epoch_id: None,
+        });
         let current_participants = fetch_private_channel_participants_from_replica(
             self.docs_sync.as_ref(),
             &current_replica,
+            LocalThenRemote,
         )
         .await?;
         let mut rotation_recipients = BTreeMap::new();
@@ -675,6 +680,7 @@ impl AppService {
             let archived_participants = fetch_private_channel_participants_from_replica(
                 self.docs_sync.as_ref(),
                 &archived_replica,
+                LocalThenRemote,
             )
             .await?;
             for participant in
@@ -695,7 +701,6 @@ impl AppService {
             rotation_recipients,
         })
     }
-
     /// フェーズ 2: 旧 epoch の policy を Frozen + rotated_at で書き込み、
     /// 以後の import(sharing_state Open 前提)を止める。
     async fn freeze_rotated_epoch_policy(&self, prep: &PrivateChannelRotationPrep) -> Result<()> {
@@ -711,7 +716,6 @@ impl AppService {
         )
         .await
     }
-
     /// フェーズ 3: 新 epoch(id / secret / replica)を作成し、metadata・
     /// Open policy・owner 参加ドキュメントを書き込む。
     async fn seed_next_private_channel_epoch(
@@ -775,7 +779,6 @@ impl AppService {
             secret_hex,
         })
     }
-
     /// フェーズ 4: 受信者へ handoff grant を暗号化して旧 replica に書く。
     /// friend-only は配布時点でも mutual を再確認し、外れていれば黙って配らない
     /// (分割前と同じ。受け取れなかった参加者は新 epoch に入れない)。
@@ -823,7 +826,6 @@ impl AppService {
         }
         Ok(())
     }
-
     /// フェーズ 5: 旧 epoch を archive して現 epoch を差し替え、registry へ登録、
     /// rotation hint を publish(失敗は warn のみ)して view を返す。
     async fn finalize_rotated_channel_state(
@@ -863,7 +865,6 @@ impl AppService {
         }
         self.joined_private_channel_view_for_state(&state).await
     }
-
     pub async fn restore_private_channel_capability(
         &self,
         capability: PrivateChannelCapability,
@@ -873,7 +874,6 @@ impl AppService {
             .await?;
         self.register_joined_private_channel(state).await
     }
-
     pub async fn leave_private_channel(&self, topic_id: &str, channel_id: &str) -> Result<()> {
         let Some(state) = self
             .joined_private_channel_state(topic_id, channel_id)
@@ -885,7 +885,7 @@ impl AppService {
         let local_author = self.current_author_pubkey();
         let local_pubkey = Pubkey::from(local_author.clone());
         let now = Utc::now().timestamp_millis();
-        let existing_participant = fetch_private_channel_participants_from_replica_with_policy(
+        let existing_participant = fetch_private_channel_participants_from_replica(
             self.docs_sync.as_ref(),
             &replica,
             DocFetchPolicy::LocalOnly,
