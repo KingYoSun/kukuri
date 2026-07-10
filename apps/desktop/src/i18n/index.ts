@@ -10,6 +10,7 @@ import channelsEn from './locales/en/channels.json';
 import liveEn from './locales/en/live.json';
 import gameEn from './locales/en/game.json';
 import legalEn from './locales/en/legal.json';
+import metaverseEn from './locales/en/metaverse.json';
 import commonJa from './locales/ja/common.json';
 import shellJa from './locales/ja/shell.json';
 import settingsJa from './locales/ja/settings.json';
@@ -18,6 +19,7 @@ import channelsJa from './locales/ja/channels.json';
 import liveJa from './locales/ja/live.json';
 import gameJa from './locales/ja/game.json';
 import legalJa from './locales/ja/legal.json';
+import metaverseJa from './locales/ja/metaverse.json';
 import commonZhCn from './locales/zh-CN/common.json';
 import shellZhCn from './locales/zh-CN/shell.json';
 import settingsZhCn from './locales/zh-CN/settings.json';
@@ -26,6 +28,7 @@ import channelsZhCn from './locales/zh-CN/channels.json';
 import liveZhCn from './locales/zh-CN/live.json';
 import gameZhCn from './locales/zh-CN/game.json';
 import legalZhCn from './locales/zh-CN/legal.json';
+import metaverseZhCn from './locales/zh-CN/metaverse.json';
 
 export const SUPPORTED_LOCALES = ['ja', 'en', 'zh-CN'] as const;
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
@@ -58,6 +61,7 @@ export const resources = {
     game: gameEn,
     legal: legalEn,
     live: liveEn,
+    metaverse: metaverseEn,
     profile: profileEn,
     settings: settingsEn,
     shell: shellEn,
@@ -68,6 +72,7 @@ export const resources = {
     game: gameJa,
     legal: legalJa,
     live: liveJa,
+    metaverse: metaverseJa,
     profile: profileJa,
     settings: settingsJa,
     shell: shellJa,
@@ -78,6 +83,7 @@ export const resources = {
     game: gameZhCn,
     legal: legalZhCn,
     live: liveZhCn,
+    metaverse: metaverseZhCn,
     profile: profileZhCn,
     settings: settingsZhCn,
     shell: shellZhCn,
@@ -97,7 +103,7 @@ if (!i18n.isInitialized) {
       },
       defaultNS: 'common',
       fallbackNS: 'common',
-      ns: ['common', 'shell', 'settings', 'profile', 'channels', 'live', 'game', 'legal'],
+      ns: ['common', 'shell', 'settings', 'profile', 'channels', 'live', 'game', 'legal', 'metaverse'],
       react: {
         useSuspense: false,
       },

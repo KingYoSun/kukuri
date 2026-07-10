@@ -1,0 +1,100 @@
+{
+  "title": "Metaverse Rooms",
+  "rooms": {
+    "summary_one": "{{count}} room in this topic",
+    "summary_other": "{{count}} rooms in this topic",
+    "empty": "No metaverse rooms in this topic.",
+    "noDescription": "No description"
+  },
+  "create": {
+    "action": "Create metaverse room",
+    "titleLabel": "Room title",
+    "titlePlaceholder": "Atrium",
+    "maxPeersLabel": "Max peers",
+    "descriptionLabel": "Description",
+    "descriptionPlaceholder": "Small social space",
+    "titleRequired": "Room title is required"
+  },
+  "room": {
+    "host": "Host: {{host}}",
+    "updated": "Updated: {{time}}",
+    "joined": "Joined",
+    "notJoined": "Not joined",
+    "manifest": "Manifest: {{value}}",
+    "world": "World: {{version}}",
+    "join": "Join Room",
+    "pending": "pending"
+  },
+  "connection": {
+    "states": {
+      "live": "Live",
+      "recovering": "Recovering",
+      "stale": "Stale",
+      "offline": "Offline"
+    },
+    "details": {
+      "live": "Room events are flowing",
+      "recovering": "Refreshing room connectivity",
+      "stale": "No room activity recently",
+      "offline": "Peer connectivity is unavailable"
+    }
+  },
+  "hud": {
+    "leave": "Leave room",
+    "hide": "Hide room HUD",
+    "open": "Open room HUD",
+    "debug": "Debug details",
+    "topic": "Topic: {{topic}}",
+    "localPeer": "Local peer: {{peer}}",
+    "knownPeers": "Known peers: {{count}}",
+    "lastSentSeq": "Last sent seq: {{seq}}",
+    "lastReceived": "Last received: {{time}}",
+    "remoteAnimation": "Remote animation: {{value}}",
+    "avatarAsset": "Avatar asset: {{status}}",
+    "blobResolve": "Blob asset resolve: {{value}}",
+    "persistence": "Persistence: manifest blob {{value}}",
+    "communityAssist": "Community assist: {{value}}",
+    "none": "none",
+    "publicFallback": "public sample / fallback-ready",
+    "assistAvailable": "available",
+    "assistOptional": "optional",
+    "avatarStatuses": {
+      "loading": "loading",
+      "sample-vrm": "sample VRM loaded",
+      "blob-vrm": "blob VRM loaded",
+      "fallback-primitive": "fallback-primitive"
+    }
+  },
+  "avatar": {
+    "title": "Avatar asset",
+    "fileLabel": "VRM file",
+    "default": "Default",
+    "remoteStale": "Remote avatar stale"
+  },
+  "object": {
+    "title": "Shared object",
+    "forward": "Forward",
+    "left": "Left",
+    "right": "Right",
+    "back": "Back"
+  },
+  "chat": {
+    "title": "ROOM Chat",
+    "hide": "Hide room chat",
+    "open": "Open room chat",
+    "you": "You",
+    "messageLabel": "Room chat message",
+    "placeholder": "Say something in the room",
+    "send": "Send"
+  },
+  "viewport": {
+    "ariaLabel": "Metaverse room viewport"
+  },
+  "errors": {
+    "createFailed": "Failed to create metaverse room",
+    "importAvatarFailed": "Failed to import VRM avatar",
+    "sampleFetchFailed": "sample VRM fetch failed: {{status}}",
+    "publishLeaveFailed": "Failed to publish room leave",
+    "persistObjectFailed": "Failed to persist shared object"
+  }
+}

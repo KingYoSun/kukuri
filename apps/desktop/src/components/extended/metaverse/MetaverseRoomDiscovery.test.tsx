@@ -1,9 +1,14 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 
+import i18n from '@/i18n';
 import type { GameRoomView } from '@/lib/api';
 import { MetaverseRoomDiscovery } from './MetaverseRoomDiscovery';
+
+afterEach(async () => {
+  await i18n.changeLanguage('en');
+});
 
 const room: GameRoomView = {
   room_id: 'metaverse-room-1',
@@ -64,6 +69,24 @@ function renderDiscovery(
 }
 
 describe('MetaverseRoomDiscovery', () => {
+  test.each([
+    ['en', 'Metaverse Rooms', 'Create metaverse room', 'Atrium', 'Join Room'],
+    ['ja', 'メタバースルーム', 'メタバースルームを作成', 'アトリウム', 'ルームに参加'],
+    ['zh-CN', '元宇宙房间', '创建元宇宙房间', '中庭', '加入房间'],
+  ] as const)(
+    'renders the primary discovery surface in %s',
+    async (locale, title, createAction, titlePlaceholder, joinAction) => {
+      await i18n.changeLanguage(locale);
+      const user = userEvent.setup();
+      renderDiscovery({ locale });
+
+      expect(screen.getByRole('heading', { name: title })).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: createAction }));
+      expect(screen.getByPlaceholderText(titlePlaceholder)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: joinAction })).toBeInTheDocument();
+    }
+  );
+
   test('shows the empty state and an action error without an API dependency', () => {
     renderDiscovery({ rooms: [], error: 'Room action failed' });
 

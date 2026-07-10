@@ -1,10 +1,15 @@
 import { createRef } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 
+import i18n from '@/i18n';
 import type { GameRoomView } from '@/lib/api';
 import { MetaverseRoomControls } from './MetaverseRoomControls';
+
+afterEach(async () => {
+  await i18n.changeLanguage('en');
+});
 
 const room: GameRoomView = {
   room_id: 'metaverse-room-1',
@@ -61,6 +66,19 @@ function renderControls(
 }
 
 describe('MetaverseRoomControls', () => {
+  test.each([
+    ['en', 'Live', 'Leave room', 'ROOM Chat'],
+    ['ja', '接続中', 'ルームから退出', 'ルームチャット'],
+    ['zh-CN', '在线', '离开房间', '房间聊天'],
+  ] as const)('renders the main HUD/chat surface in %s', async (locale, state, leave, chat) => {
+    await i18n.changeLanguage(locale);
+    renderControls({ locale });
+
+    expect(screen.getByText(state)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: leave })).toBeInTheDocument();
+    expect(screen.getByLabelText(chat)).toBeInTheDocument();
+  });
+
   test.each([
     ['live', 'Live', 'Room events are flowing'],
     ['recovering', 'Recovering', 'Refreshing room connectivity'],

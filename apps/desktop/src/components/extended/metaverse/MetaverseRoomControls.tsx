@@ -14,6 +14,7 @@ import {
   WifiOff,
   X,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -60,32 +61,6 @@ type MetaverseRoomControlsProps = {
   onSendMessage: FormEventHandler<HTMLFormElement>;
 };
 
-function connectionStateLabel(state: MetaverseRoomConnectionState) {
-  if (state === 'live') {
-    return 'Live';
-  }
-  if (state === 'recovering') {
-    return 'Recovering';
-  }
-  if (state === 'stale') {
-    return 'Stale';
-  }
-  return 'Offline';
-}
-
-function connectionStateDetail(state: MetaverseRoomConnectionState) {
-  if (state === 'live') {
-    return 'Room events are flowing';
-  }
-  if (state === 'recovering') {
-    return 'Refreshing room connectivity';
-  }
-  if (state === 'stale') {
-    return 'No room activity recently';
-  }
-  return 'Peer connectivity is unavailable';
-}
-
 function ConnectionStateIcon({ state }: { state: MetaverseRoomConnectionState }) {
   if (state === 'live') {
     return <Wifi className='size-4' aria-hidden='true' />;
@@ -130,15 +105,17 @@ export function MetaverseRoomControls({
   onMessageDraftChange,
   onSendMessage,
 }: MetaverseRoomControlsProps) {
+  const { t } = useTranslation('metaverse');
+  const avatarStatusLabel = t(`hud.avatarStatuses.${avatarAssetStatus}`);
   return (
     <>
       <div
         className='metaverse-connection-badge'
         data-state={connectionState}
-        title={connectionStateDetail(connectionState)}
+        title={t(`connection.details.${connectionState}`)}
       >
         <ConnectionStateIcon state={connectionState} />
-        <span>{connectionStateLabel(connectionState)}</span>
+        <span>{t(`connection.states.${connectionState}`)}</span>
       </div>
       <div className='metaverse-hud-toolbar' data-open={hudOpen}>
         <Button
@@ -146,7 +123,7 @@ export function MetaverseRoomControls({
           size='icon'
           className='metaverse-hud-icon-button'
           type='button'
-          aria-label='Leave room'
+          aria-label={t('hud.leave')}
           onClick={onLeaveRoom}
         >
           <LogOut className='size-4' aria-hidden='true' />
@@ -156,7 +133,7 @@ export function MetaverseRoomControls({
           size='icon'
           className='metaverse-hud-icon-button'
           type='button'
-          aria-label={hudOpen ? 'Hide room HUD' : 'Open room HUD'}
+          aria-label={t(hudOpen ? 'hud.hide' : 'hud.open')}
           onClick={onToggleHud}
         >
           {hudOpen ? (
@@ -182,41 +159,41 @@ export function MetaverseRoomControls({
                 aria-expanded={hudDebugOpen}
                 onClick={onToggleHudDebug}
               >
-                <span>Debug details</span>
+                <span>{t('hud.debug')}</span>
                 <ChevronDown className='size-4' aria-hidden='true' />
               </button>
               {hudDebugOpen ? (
                 <div className='metaverse-room-diagnostics'>
-                  <span>Topic: {activeTopic}</span>
-                  <span>Local peer: {localPeerId}</span>
-                  <span>Known peers: {knownPeerCount}</span>
-                  <span>Last sent seq: {lastSentSeq}</span>
+                  <span>{t('hud.topic', { topic: activeTopic })}</span>
+                  <span>{t('hud.localPeer', { peer: localPeerId })}</span>
+                  <span>{t('hud.knownPeers', { count: knownPeerCount })}</span>
+                  <span>{t('hud.lastSentSeq', { seq: lastSentSeq })}</span>
                   <span>
-                    Last received: {lastReceivedAt ? formatLocalizedTime(lastReceivedAt, locale) : 'none'}
+                    {t('hud.lastReceived', {
+                      time: lastReceivedAt ? formatLocalizedTime(lastReceivedAt, locale) : t('hud.none'),
+                    })}
                   </span>
-                  <span>Remote animation: {remoteAnimationSummary || 'none'}</span>
+                  <span>{t('hud.remoteAnimation', { value: remoteAnimationSummary || t('hud.none') })}</span>
+                  <span>{t('hud.avatarAsset', { status: avatarStatusLabel })}</span>
                   <span>
-                    Avatar asset:{' '}
-                    {avatarAssetStatus === 'sample-vrm'
-                      ? 'sample VRM loaded'
-                      : avatarAssetStatus === 'blob-vrm'
-                        ? 'blob VRM loaded'
-                        : avatarAssetStatus}
+                    {t('hud.blobResolve', {
+                      value: localAvatarAssetRef?.blob_hash ?? t('hud.publicFallback'),
+                    })}
                   </span>
+                  <span>{t('hud.persistence', { value: room.manifest_blob_hash ?? t('room.pending') })}</span>
                   <span>
-                    Blob asset resolve:{' '}
-                    {localAvatarAssetRef?.blob_hash ?? 'public sample / fallback-ready'}
+                    {t('hud.communityAssist', {
+                      value: t(communityAssistAvailable ? 'hud.assistAvailable' : 'hud.assistOptional'),
+                    })}
                   </span>
-                  <span>Persistence: manifest blob {room.manifest_blob_hash ?? 'pending'}</span>
-                  <span>Community assist: {communityAssistAvailable ? 'available' : 'optional'}</span>
                 </div>
               ) : null}
             </section>
             <div className='metaverse-object-controls'>
-              <strong>Avatar asset</strong>
+              <strong>{t('avatar.title')}</strong>
               <div className='metaverse-avatar-asset-controls'>
                 <Label>
-                  <span className='sr-only'>VRM file</span>
+                  <span className='sr-only'>{t('avatar.fileLabel')}</span>
                   <Input
                     type='file'
                     accept='.vrm,model/vrm,application/octet-stream'
@@ -237,14 +214,14 @@ export function MetaverseRoomControls({
                   disabled={pending}
                   onClick={onImportDefaultAvatar}
                 >
-                  Default
+                  {t('avatar.default')}
                 </Button>
               </div>
             </div>
             <div className='metaverse-object-controls'>
               <strong>
                 <Box className='size-4' aria-hidden='true' />
-                Shared object
+                {t('object.title')}
               </strong>
               <div className='metaverse-nudge-grid'>
                 <Button
@@ -254,16 +231,16 @@ export function MetaverseRoomControls({
                   onClick={() => onMoveSharedObject([0, 0, -50])}
                 >
                   <Move3D className='size-4' aria-hidden='true' />
-                  Forward
+                  {t('object.forward')}
                 </Button>
                 <Button size='sm' variant='secondary' type='button' onClick={() => onMoveSharedObject([-50, 0, 0])}>
-                  Left
+                  {t('object.left')}
                 </Button>
                 <Button size='sm' variant='secondary' type='button' onClick={() => onMoveSharedObject([50, 0, 0])}>
-                  Right
+                  {t('object.right')}
                 </Button>
                 <Button size='sm' variant='secondary' type='button' onClick={() => onMoveSharedObject([0, 0, 50])}>
-                  Back
+                  {t('object.back')}
                 </Button>
               </div>
             </div>
@@ -274,18 +251,18 @@ export function MetaverseRoomControls({
         </>
       ) : null}
       {chatOpen ? (
-        <section className='metaverse-room-chat-log' aria-label='ROOM Chat'>
+        <section className='metaverse-room-chat-log' aria-label={t('chat.title')}>
           <div className='metaverse-room-chat-log-header'>
             <span>
               <MessageSquare className='size-4' aria-hidden='true' />
-              ROOM Chat
+              {t('chat.title')}
             </span>
             <Button
               variant='ghost'
               size='icon'
               className='metaverse-chat-close-button'
               type='button'
-              aria-label='Hide room chat'
+              aria-label={t('chat.hide')}
               onClick={onCloseChat}
             >
               <X className='size-4' aria-hidden='true' />
@@ -296,7 +273,7 @@ export function MetaverseRoomControls({
               <li key={message.messageId}>
                 <strong>
                   {message.authorPeerId === localPeerId
-                    ? 'You'
+                    ? t('chat.you')
                     : message.displayName || message.authorPeerId.slice(0, 12)}
                   <small>{formatLocalizedTime(message.createdAt, locale)}</small>
                 </strong>
@@ -306,17 +283,17 @@ export function MetaverseRoomControls({
           </ul>
           <form className='metaverse-chat-form' onSubmit={onSendMessage}>
             <Label>
-              <span className='sr-only'>Room chat message</span>
+              <span className='sr-only'>{t('chat.messageLabel')}</span>
               <Input
                 ref={messageInputRef}
                 value={messageDraft}
-                placeholder='Say something in the room'
+                placeholder={t('chat.placeholder')}
                 onChange={(event) => onMessageDraftChange(event.target.value)}
               />
             </Label>
             <Button size='sm' type='submit'>
               <Send className='size-4' aria-hidden='true' />
-              Send
+              {t('chat.send')}
             </Button>
           </form>
         </section>
@@ -326,7 +303,7 @@ export function MetaverseRoomControls({
           size='icon'
           className='metaverse-chat-toggle'
           type='button'
-          aria-label='Open room chat'
+          aria-label={t('chat.open')}
           onClick={onOpenChat}
         >
           <MessageSquare className='size-4' aria-hidden='true' />
