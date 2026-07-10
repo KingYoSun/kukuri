@@ -1,5 +1,4 @@
 ﻿import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
-import { Card } from '@/components/ui/card';
 import type {
   ChannelRef,
   DesktopApi,
@@ -14,12 +13,11 @@ import type {
 } from '@/lib/api';
 import type { SupportedLocale } from '@/i18n';
 import { blobToBase64 } from '@/lib/attachments';
-import { MetaverseScene } from './MetaverseScene';
 import {
   MetaverseRoomDiscovery,
   type CreateMetaverseRoomInput,
 } from './metaverse/MetaverseRoomDiscovery';
-import { MetaverseRoomControls } from './metaverse/MetaverseRoomControls';
+import { MetaverseRoomView } from './metaverse/MetaverseRoomView';
 import {
   DEFAULT_AVATAR_ASSET_NAME,
   DEFAULT_AVATAR_ASSET_URL,
@@ -92,14 +90,6 @@ function latestChatBubbleFromMessage(message: RoomChatMessage, now = Date.now())
   };
 }
 
-function isEditableTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-  const tagName = target.tagName.toLowerCase();
-  return tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target.isContentEditable;
-}
-
 export function MetaverseRoomPanel({
   api,
   activeTopic,
@@ -116,9 +106,6 @@ export function MetaverseRoomPanel({
   const [pending, setPending] = useState(false);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [joinedRoomIds, setJoinedRoomIds] = useState<Set<string>>(() => new Set());
-  const [hudOpen, setHudOpen] = useState(true);
-  const [chatOpen, setChatOpen] = useState(true);
-  const [hudDebugOpen, setHudDebugOpen] = useState(false);
   const [remoteTransforms, setRemoteTransforms] = useState<Record<string, AvatarTransform>>({});
   const [peerPresence, setPeerPresence] = useState<Record<string, PeerPresence>>({});
   const [messages, setMessages] = useState<RoomChatMessage[]>([]);
@@ -138,7 +125,6 @@ export function MetaverseRoomPanel({
   const lastRecoveryAtRef = useRef(0);
   const pendingCreatedRoomIdRef = useRef<string | null>(null);
   const sharedObjectRef = useRef<SharedRoomObjectV1>(DEFAULT_SHARED_OBJECT);
-  const messageInputRef = useRef<HTMLInputElement | null>(null);
   const localPeerSeed = useId().replaceAll(':', '');
   const localPeerId = `${syncStatus.discovery.local_endpoint_id || syncStatus.local_author_pubkey || 'local'}:${localPeerSeed}`;
   const lastSentTransformRef = useRef<AvatarTransform | null>(null);
@@ -735,33 +721,6 @@ export function MetaverseRoomPanel({
     persistSharedObject(nextObject, room);
   }
 
-  useEffect(() => {
-    if (!selectedRoom) {
-      return;
-    }
-    let focusFrameId = 0;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Enter' || isEditableTarget(event.target)) {
-        return;
-      }
-      event.preventDefault();
-      setChatOpen(true);
-      if (focusFrameId) {
-        window.cancelAnimationFrame(focusFrameId);
-      }
-      focusFrameId = window.requestAnimationFrame(() => {
-        messageInputRef.current?.focus();
-      });
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      if (focusFrameId) {
-        window.cancelAnimationFrame(focusFrameId);
-      }
-    };
-  }, [selectedRoom]);
-
   return (
     <div className='metaverse-panel'>
       <MetaverseRoomDiscovery
@@ -779,58 +738,37 @@ export function MetaverseRoomPanel({
         onJoinRoom={handleJoinRoom}
       />
 
-      {selectedRoom ? (
-        <Card className='shell-workspace-card metaverse-room-view'>
-          <div className='metaverse-room-stage'>
-            <MetaverseScene
-              room={selectedRoom}
-              localPeerId={localPeerId}
-              remoteTransforms={remoteTransforms}
-              peerPresence={peerPresence}
-              sharedObject={sharedObject}
-              avatarAssetUrl={localAvatarAssetUrl}
-              latestChatByPeer={latestChatByPeer}
-              connectionState={roomConnectionState}
-              now={clockNow}
-              onLocalTransform={handleLocalTransform}
-              onAvatarAssetStatus={setAvatarAssetStatus}
-              hud={(
-                <MetaverseRoomControls
-                  room={selectedRoom}
-                  activeTopic={activeTopic}
-                  localPeerId={localPeerId}
-                  knownPeerCount={knownPeerCount}
-                  lastSentSeq={lastSentSeq}
-                  lastReceivedAt={lastReceivedAt}
-                  remoteAnimationSummary={remoteAnimationSummary}
-                  avatarAssetStatus={avatarAssetStatus}
-                  localAvatarAssetRef={localAvatarAssetRef}
-                  communityAssistAvailable={syncStatus.discovery.bootstrap_seed_peer_ids.length > 0}
-                  connectionState={roomConnectionState}
-                  locale={locale}
-                  pending={pending}
-                  hudOpen={hudOpen}
-                  hudDebugOpen={hudDebugOpen}
-                  chatOpen={chatOpen}
-                  messages={messages}
-                  messageDraft={messageDraft}
-                  messageInputRef={messageInputRef}
-                  onLeaveRoom={handleLeaveRoom}
-                  onToggleHud={() => setHudOpen((open) => !open)}
-                  onToggleHudDebug={() => setHudDebugOpen((open) => !open)}
-                  onImportAvatar={(file) => void importAvatarBlob(file, file.name)}
-                  onImportDefaultAvatar={() => void handleSampleAvatarImport()}
-                  onMoveSharedObject={(delta) => void moveSharedObject(delta)}
-                  onCloseChat={() => setChatOpen(false)}
-                  onOpenChat={() => setChatOpen(true)}
-                  onMessageDraftChange={setMessageDraft}
-                  onSendMessage={handleSendMessage}
-                />
-              )}
-            />
-          </div>
-        </Card>
-      ) : null}
+      <MetaverseRoomView
+        room={selectedRoom}
+        activeTopic={activeTopic}
+        localPeerId={localPeerId}
+        remoteTransforms={remoteTransforms}
+        peerPresence={peerPresence}
+        sharedObject={sharedObject}
+        avatarAssetUrl={localAvatarAssetUrl}
+        latestChatByPeer={latestChatByPeer}
+        connectionState={roomConnectionState}
+        now={clockNow}
+        knownPeerCount={knownPeerCount}
+        lastSentSeq={lastSentSeq}
+        lastReceivedAt={lastReceivedAt}
+        remoteAnimationSummary={remoteAnimationSummary}
+        avatarAssetStatus={avatarAssetStatus}
+        localAvatarAssetRef={localAvatarAssetRef}
+        communityAssistAvailable={syncStatus.discovery.bootstrap_seed_peer_ids.length > 0}
+        locale={locale}
+        pending={pending}
+        messages={messages}
+        messageDraft={messageDraft}
+        onLocalTransform={handleLocalTransform}
+        onAvatarAssetStatus={setAvatarAssetStatus}
+        onLeaveRoom={handleLeaveRoom}
+        onImportAvatar={(file) => void importAvatarBlob(file, file.name)}
+        onImportDefaultAvatar={() => void handleSampleAvatarImport()}
+        onMoveSharedObject={(delta) => void moveSharedObject(delta)}
+        onMessageDraftChange={setMessageDraft}
+        onSendMessage={handleSendMessage}
+      />
     </div>
   );
 }
