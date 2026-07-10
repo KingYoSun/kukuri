@@ -2,8 +2,6 @@ import { useState } from 'react';
 
 import type {
   AuthorSocialView,
-  ChannelRef,
-  DesktopApi,
   GameRoomView,
   MetaverseAssetRef,
   Profile,
@@ -17,6 +15,7 @@ import {
 } from './metaverse/MetaverseRoomDiscovery';
 import { MetaverseRoomView } from './metaverse/MetaverseRoomView';
 import { useMetaverseRoomSession } from './metaverse/useMetaverseRoomSession';
+import type { MetaverseRoomActions } from './metaverse/MetaverseRoomActions';
 import {
   DEFAULT_AVATAR_ASSET_NAME,
   DEFAULT_AVATAR_ASSET_URL,
@@ -24,29 +23,25 @@ import {
 } from './MetaverseSceneModel';
 
 type MetaverseRoomPanelProps = {
-  api: DesktopApi;
+  actions: MetaverseRoomActions;
   activeTopic: string;
-  activeComposeChannel: ChannelRef;
   rooms: GameRoomView[];
   syncStatus: SyncStatus;
   locale: SupportedLocale;
   localProfile?: Profile | null;
   knownAuthorsByPubkey?: Record<string, AuthorSocialView>;
   mediaObjectUrls?: Record<string, string | null>;
-  onRefresh: () => Promise<void>;
 };
 
 export function MetaverseRoomPanel({
-  api,
+  actions,
   activeTopic,
-  activeComposeChannel,
   rooms,
   syncStatus,
   locale,
   localProfile = null,
   knownAuthorsByPubkey = {},
   mediaObjectUrls = {},
-  onRefresh,
 }: MetaverseRoomPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -55,30 +50,23 @@ export function MetaverseRoomPanel({
   const [localAvatarAssetUrl, setLocalAvatarAssetUrl] = useState<string | null>(null);
   const localDisplayName = localProfile?.display_name?.trim() || localProfile?.name?.trim() || null;
   const session = useMetaverseRoomSession({
-    api,
+    actions,
     activeTopic,
     rooms,
     syncStatus,
     localDisplayName,
     localAvatarAssetRef,
     localAvatarAssetUrl,
-    onRefresh,
     onError: setError,
   });
 
   async function handleCreateRoom(input: CreateMetaverseRoomInput) {
     setPending(true);
     try {
-      const roomId = await api.createMetaverseRoom(
-        activeTopic,
-        input.title,
-        input.description,
-        input.maxPeers,
-        activeComposeChannel
-      );
+      const roomId = await actions.createRoom(input);
       setError(null);
       session.selectCreatedRoom(roomId);
-      await onRefresh();
+      await actions.refresh();
       return true;
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'Failed to create metaverse room');
@@ -96,8 +84,7 @@ export function MetaverseRoomPanel({
     try {
       const mime = blob.type || 'model/vrm';
       const dataBase64 = await blobToBase64(blob);
-      const assetRef = await api.importMetaverseRoomAsset(
-        activeTopic,
+      const assetRef = await actions.importRoomAsset(
         session.selectedRoom.room_id,
         'vrm',
         mime,
@@ -105,7 +92,7 @@ export function MetaverseRoomPanel({
         dataBase64
       );
       const resolvedUrl =
-        (await api.getBlobPreviewUrl(assetRef.blob_hash, assetRef.mime_type ?? mime)) ??
+        (await actions.getBlobPreviewUrl(assetRef.blob_hash, assetRef.mime_type ?? mime)) ??
         `data:${mime};base64,${dataBase64}`;
       setLocalAvatarAssetRef(assetRef);
       setLocalAvatarAssetUrl(resolvedUrl);

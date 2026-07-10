@@ -6,6 +6,7 @@ import { MetaverseRoomPanel } from './MetaverseRoomPanel';
 import { DEFAULT_SHARED_OBJECT } from './MetaverseSceneModel';
 import { MetaverseRoomDiscovery } from './metaverse/MetaverseRoomDiscovery';
 import { MetaverseRoomView } from './metaverse/MetaverseRoomView';
+import { createMetaverseRoomActions } from '@/shell/actions/metaverse';
 
 const meta = {
   title: 'Extended/MetaverseRoomPanel',
@@ -89,12 +90,17 @@ function StoryFrame({ children }: { children: React.ReactNode }) {
 }
 
 function panel(rooms: GameRoomView[]) {
+  const api = createDesktopMockApi();
   return (
     <StoryFrame>
       <MetaverseRoomPanel
-        api={createDesktopMockApi()}
+        actions={createMetaverseRoomActions({
+          api,
+          activeTopic: 'kukuri:topic:demo',
+          activeComposeChannel: { kind: 'public' },
+          onRefresh: async () => undefined,
+        })}
         activeTopic='kukuri:topic:demo'
-        activeComposeChannel={{ kind: 'public' }}
         rooms={rooms}
         syncStatus={syncStatus}
         locale='en'
@@ -107,7 +113,6 @@ function panel(rooms: GameRoomView[]) {
           picture_asset: null,
           updated_at: STORY_TIMESTAMP,
         }}
-        onRefresh={async () => undefined}
       />
     </StoryFrame>
   );

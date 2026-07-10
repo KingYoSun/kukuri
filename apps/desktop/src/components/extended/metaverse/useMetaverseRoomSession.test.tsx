@@ -9,6 +9,7 @@ import {
   type MetaverseRoomEvent,
 } from '../MetaverseSceneModel';
 import { useMetaverseRoomSession } from './useMetaverseRoomSession';
+import { createMetaverseRoomActions } from '@/shell/actions/metaverse';
 
 const room: GameRoomView = {
   room_id: 'metaverse-room-1',
@@ -100,17 +101,22 @@ function renderSession({
   onRefresh?: () => Promise<void>;
 } = {}) {
   const onError = vi.fn();
+  const actions = createMetaverseRoomActions({
+    api,
+    activeTopic: 'kukuri:topic:demo',
+    activeComposeChannel: { kind: 'public' },
+    onRefresh,
+  });
   const rendered = renderHook(
     ({ rooms: currentRooms, sync: currentSync }: SessionProps) =>
       useMetaverseRoomSession({
-        api,
+        actions,
         activeTopic: 'kukuri:topic:demo',
         rooms: currentRooms,
         syncStatus: currentSync,
         localDisplayName: 'Local Author',
         localAvatarAssetRef: null,
         localAvatarAssetUrl: null,
-        onRefresh,
         onError,
       }),
     { initialProps: { rooms, sync } }

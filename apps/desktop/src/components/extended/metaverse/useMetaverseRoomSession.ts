@@ -1,7 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 
 import type {
-  DesktopApi,
   GameRoomView,
   MetaverseAssetRef,
   MetaverseRoomEventView,
@@ -9,6 +8,7 @@ import type {
   SharedRoomObjectV1,
   SyncStatus,
 } from '@/lib/api';
+import type { MetaverseRoomActions } from './MetaverseRoomActions';
 import {
   DEFAULT_SHARED_OBJECT,
   METAVERSE_CHAT_BUBBLE_TTL_MS,
@@ -28,14 +28,13 @@ import {
 } from '../MetaverseSceneModel';
 
 type UseMetaverseRoomSessionArgs = {
-  api: DesktopApi;
+  actions: MetaverseRoomActions;
   activeTopic: string;
   rooms: GameRoomView[];
   syncStatus: SyncStatus;
   localDisplayName: string | null;
   localAvatarAssetRef: MetaverseAssetRef | null;
   localAvatarAssetUrl: string | null;
-  onRefresh: () => Promise<void>;
   onError: (message: string | null) => void;
 };
 
@@ -78,14 +77,13 @@ function latestChatBubbleFromMessage(message: RoomChatMessage, now = Date.now())
 }
 
 export function useMetaverseRoomSession({
-  api,
+  actions,
   activeTopic,
   rooms,
   syncStatus,
   localDisplayName,
   localAvatarAssetRef,
   localAvatarAssetUrl,
-  onRefresh,
   onError,
 }: UseMetaverseRoomSessionArgs) {
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
@@ -311,7 +309,7 @@ export function useMetaverseRoomSession({
         lastSeenAt: now,
       };
       emit({ type: 'presence.join', presence });
-      void api.publishMetaverseRoomEvent(activeTopic, selectedRoom.room_id, localPeerId, now, {
+      void actions.publishRoomEvent(selectedRoom.room_id, localPeerId, now, {
         type: 'presence_join',
         presence: {
           room_id: selectedRoom.room_id,
@@ -332,7 +330,7 @@ export function useMetaverseRoomSession({
     };
   }, [
     activeTopic,
-    api,
+    actions,
     localAvatarAssetRef,
     localAvatarAssetUrl,
     localDisplayName,
@@ -365,7 +363,7 @@ export function useMetaverseRoomSession({
           },
         }));
         if (presence.avatarAssetRef) {
-          void api
+          void actions
             .getBlobPreviewUrl(
               presence.avatarAssetRef.blob_hash,
               presence.avatarAssetRef.mime_type ?? 'model/vrm'
@@ -437,8 +435,7 @@ export function useMetaverseRoomSession({
     };
     const poll = async () => {
       try {
-        const events = await api.listMetaverseRoomEvents(
-          activeTopic,
+        const events = await actions.listRoomEvents(
           selectedRoom.room_id,
           lastBackendEventEnvelopeIdRef.current,
           64
@@ -468,7 +465,7 @@ export function useMetaverseRoomSession({
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [activeTopic, api, localPeerId, selectedRoom]);
+  }, [actions, localPeerId, selectedRoom]);
 
   useEffect(() => {
     if (!selectedRoom || (roomConnectionState !== 'stale' && roomConnectionState !== 'offline')) {
@@ -483,10 +480,10 @@ export function useMetaverseRoomSession({
     if (roomConnectionState === 'stale') {
       setRecoveringUntil(now + 3_000);
     }
-    void Promise.resolve(onRefresh()).catch(() => {
+    void Promise.resolve(actions.refresh()).catch(() => {
       setPollErrorCount((current) => current + 1);
     });
-  }, [onRefresh, roomConnectionState, selectedRoom]);
+  }, [actions, roomConnectionState, selectedRoom]);
 
   function resetRoomRuntimeState() {
     setRemoteTransforms({});
@@ -517,7 +514,7 @@ export function useMetaverseRoomSession({
     const roomId = selectedRoom.room_id;
     const leftAt = Date.now();
     emit({ type: 'presence.leave', roomId, peerId: localPeerId, leftAt });
-    void api.publishMetaverseRoomEvent(activeTopic, roomId, localPeerId, leftAt, {
+    void actions.publishRoomEvent(roomId, localPeerId, leftAt, {
       type: 'presence_leave',
       room_id: roomId,
       peer_id: localPeerId,
@@ -550,9 +547,8 @@ export function useMetaverseRoomSession({
         sent_at: transform.sentAt,
       },
     };
-    void api
-      .publishMetaverseRoomEvent(
-        activeTopic,
+    void actions
+      .publishRoomEvent(
         transform.roomId,
         localPeerId,
         transform.seq,
@@ -583,8 +579,8 @@ export function useMetaverseRoomSession({
     }));
     setMessageDraft('');
     emit({ type: 'chat.message', message });
-    void api
-      .publishMetaverseRoomEvent(activeTopic, selectedRoom.room_id, localPeerId, Date.now(), {
+    void actions
+      .publishRoomEvent(selectedRoom.room_id, localPeerId, Date.now(), {
         type: 'chat_message',
         message: {
           room_id: message.roomId,
@@ -602,24 +598,23 @@ export function useMetaverseRoomSession({
 
   function persistSharedObject(nextObject: SharedRoomObjectV1, room: GameRoomView) {
     emit({ type: 'object.update', roomId: room.room_id, object: nextObject });
-    void api
-      .publishMetaverseRoomEvent(activeTopic, room.room_id, localPeerId, Date.now(), {
+    void actions
+      .publishRoomEvent(room.room_id, localPeerId, Date.now(), {
         type: 'object_update',
         object: nextObject,
       })
       .catch(() => {
         // Browser-only fallback is handled by BroadcastChannel.
       });
-    void api
-      .updateMetaverseRoom(
-        activeTopic,
+    void actions
+      .updateRoom(
         room.room_id,
         room.status,
         nextObject.position,
         nextObject.rotation,
         nextObject.scale
       )
-      .then(() => onRefresh())
+      .then(() => actions.refresh())
       .catch((updateError) => {
         onError(updateError instanceof Error ? updateError.message : 'Failed to persist shared object');
       });

@@ -672,6 +672,7 @@ export function DesktopShellPage({
           <DesktopShellPrimaryWorkspace
             t={t}
             api={api}
+            metaverseActions={shellActions.metaverseActions}
             locale={locale}
             routeSection={routeSection}
             profileAvatarInputKey={dialogs.profileAvatarInputKey}
@@ -694,7 +695,6 @@ export function DesktopShellPage({
             }}
             loadReactionCatalogData={loadReactionCatalogData}
             refreshTimelineFeed={refreshTimelineFeed}
-            refreshCurrentTopic={() => loadTopics(trackedTopics, activeTopic, selectedThread)}
             loadMoreTimeline={loadMoreTimeline}
             openAuthorDetail={openAuthorDetail}
             openThread={openThread}

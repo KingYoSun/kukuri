@@ -12,6 +12,7 @@ import type {
   SyncStatus,
 } from '@/lib/api';
 import { MetaverseRoomPanel } from './MetaverseRoomPanel';
+import { createMetaverseRoomActions } from '@/shell/actions/metaverse';
 
 vi.mock('./MetaverseScene', () => ({
   MetaverseScene: (props: {
@@ -194,11 +195,16 @@ function createSyncStatus(): SyncStatus {
 
 function panelElement(api: DesktopApi, options: RenderPanelOptions = {}) {
   const effectiveSyncStatus = options.syncStatus ?? createSyncStatus();
+  const onRefresh = options.onRefresh ?? vi.fn();
   return (
     <MetaverseRoomPanel
-      api={api}
+      actions={createMetaverseRoomActions({
+        api,
+        activeTopic: 'kukuri:topic:demo',
+        activeComposeChannel: { kind: 'public' },
+        onRefresh,
+      })}
       activeTopic='kukuri:topic:demo'
-      activeComposeChannel={{ kind: 'public' }}
       rooms={options.rooms ?? [room]}
       syncStatus={effectiveSyncStatus}
       locale='en'
@@ -211,7 +217,6 @@ function panelElement(api: DesktopApi, options: RenderPanelOptions = {}) {
         picture_asset: null,
         updated_at: 1,
       }}
-      onRefresh={options.onRefresh ?? vi.fn()}
     />
   );
 }
