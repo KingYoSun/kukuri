@@ -1,29 +1,24 @@
 use super::*;
 
 pub(crate) struct DirectMessageHintServices<'a> {
-    pub(crate) projection_store: &'a dyn ProjectionStore,
-    pub(crate) blob_service: &'a dyn BlobService,
-    pub(crate) hint_transport: &'a dyn HintTransport,
-    pub(crate) keys: &'a KukuriKeys,
+    pub(crate) services: &'a ServiceHandles,
     pub(crate) local_author_pubkey: &'a str,
     pub(crate) peer_pubkey: &'a str,
     pub(crate) topic: &'a TopicId,
 }
 
 impl AppService {
-    pub(crate) async fn handle_direct_message_hint_with_services(
+    pub(crate) async fn handle_direct_message_hint(
         services: DirectMessageHintServices<'_>,
         hint: &GossipHint,
     ) -> Result<bool> {
         let DirectMessageHintServices {
-            projection_store,
-            blob_service,
-            hint_transport,
-            keys,
+            services,
             local_author_pubkey,
             peer_pubkey,
             topic,
         } = services;
+        let projection_store = services.projection_store.as_ref();
         match hint {
             GossipHint::DirectMessageFrame {
                 dm_id,
@@ -31,11 +26,8 @@ impl AppService {
                 frame_hash,
                 ..
             } => {
-                AppService::ingest_direct_message_frame_with_services(
-                    projection_store,
-                    blob_service,
-                    hint_transport,
-                    keys,
+                AppService::ingest_direct_message_frame(
+                    services,
                     local_author_pubkey,
                     peer_pubkey,
                     topic,
@@ -157,11 +149,8 @@ impl AppService {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) async fn ingest_direct_message_frame_with_services(
-        projection_store: &dyn ProjectionStore,
-        blob_service: &dyn BlobService,
-        hint_transport: &dyn HintTransport,
-        keys: &KukuriKeys,
+    pub(crate) async fn ingest_direct_message_frame(
+        services: &ServiceHandles,
         local_author_pubkey: &str,
         peer_pubkey: &str,
         topic: &TopicId,
@@ -169,6 +158,10 @@ impl AppService {
         message_id: &str,
         frame_hash: &kukuri_core::BlobHash,
     ) -> Result<bool> {
+        let projection_store = services.projection_store.as_ref();
+        let blob_service = services.blob_service.as_ref();
+        let hint_transport = services.hint_transport.as_ref();
+        let keys = services.keys.as_ref();
         let expected_dm_id = direct_message_id_for_participants(
             &Pubkey::from(local_author_pubkey),
             &Pubkey::from(peer_pubkey),
@@ -291,14 +284,15 @@ impl AppService {
         Ok(true)
     }
 
-    pub(crate) async fn flush_direct_message_outbox_for_peer_with_services(
-        projection_store: &dyn ProjectionStore,
-        hint_transport: &dyn HintTransport,
-        transport: &dyn Transport,
+    pub(crate) async fn flush_direct_message_outbox_for_peer(
+        services: &ServiceHandles,
         local_author_pubkey: &str,
-        keys: &KukuriKeys,
         peer_pubkey: &str,
     ) -> Result<usize> {
+        let projection_store = services.projection_store.as_ref();
+        let hint_transport = services.hint_transport.as_ref();
+        let transport = services.transport.as_ref();
+        let keys = services.keys.as_ref();
         let relationship = projection_store
             .get_author_relationship(local_author_pubkey, peer_pubkey)
             .await?;
@@ -434,12 +428,9 @@ impl AppService {
             .await?;
         self.refresh_direct_message_conversation(peer_pubkey)
             .await?;
-        let _ = Self::flush_direct_message_outbox_for_peer_with_services(
-            self.services.projection_store.as_ref(),
-            self.services.hint_transport.as_ref(),
-            self.services.transport.as_ref(),
+        let _ = Self::flush_direct_message_outbox_for_peer(
+            &self.services,
             self.current_author_pubkey().as_str(),
-            self.services.keys.as_ref(),
             peer_pubkey,
         )
         .await?;

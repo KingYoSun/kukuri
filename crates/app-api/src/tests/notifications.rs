@@ -339,10 +339,8 @@ async fn repost_notification_survives_hydration_before_live_doc_event() {
     )
     .await
     .expect("persist simple repost");
-    hydrate_subscription_state_with_services(
-        docs_sync.as_ref(),
-        blob_service.as_ref(),
-        store.as_ref(),
+    hydrate_subscription_state(
+        &app.services,
         topic.as_str(),
         &replica,
         DocFetchPolicy::LocalThenRemote,
@@ -424,10 +422,8 @@ async fn quote_repost_notification_survives_hydration_before_live_doc_event() {
     )
     .await
     .expect("persist quote repost");
-    hydrate_subscription_state_with_services(
-        docs_sync.as_ref(),
-        blob_service.as_ref(),
-        store.as_ref(),
+    hydrate_subscription_state(
+        &app.services,
         topic.as_str(),
         &replica,
         DocFetchPolicy::LocalThenRemote,
@@ -471,7 +467,7 @@ async fn quote_repost_notification_survives_hydration_before_live_doc_event() {
 
 #[tokio::test]
 async fn incoming_dm_frame_creates_single_direct_message_notification_after_store() {
-    let (app, store, _, blob_service) = local_app_with_memory_services();
+    let (app, _store, _, blob_service) = local_app_with_memory_services();
     let local_keys = app.services.keys.clone();
     let local_author_pubkey = app.current_author_pubkey();
     let remote_keys = generate_keys();
@@ -505,11 +501,8 @@ async fn incoming_dm_frame_creates_single_direct_message_notification_after_stor
         .await
         .expect("store frame blob");
 
-    let created = AppService::ingest_direct_message_frame_with_services(
-        store.as_ref(),
-        blob_service.as_ref(),
-        &NoopHintTransport,
-        local_keys.as_ref(),
+    let created = AppService::ingest_direct_message_frame(
+        &app.services,
         local_author_pubkey.as_str(),
         remote_pubkey.as_str(),
         &topic,
@@ -599,10 +592,8 @@ async fn follow_notification_survives_hydration_before_live_doc_event() {
     persist_follow_edge_doc(docs_sync.as_ref(), &edge, &envelope)
         .await
         .expect("persist follow edge doc");
-    hydrate_author_state_with_services(
-        docs_sync.as_ref(),
-        store.as_ref(),
-        store.as_ref(),
+    hydrate_author_state(
+        &app.services,
         local_author_pubkey.as_str(),
         remote_pubkey.as_str(),
         DocFetchPolicy::LocalThenRemote,
@@ -666,10 +657,8 @@ async fn initial_follow_baseline_prevents_backfill_notification() {
     .await
     .expect("snapshot follow baseline");
 
-    hydrate_author_state_with_services(
-        docs_sync.as_ref(),
-        store.as_ref(),
-        store.as_ref(),
+    hydrate_author_state(
+        &app.services,
         local_author_pubkey.as_str(),
         remote_pubkey.as_str(),
         DocFetchPolicy::LocalThenRemote,
@@ -813,10 +802,8 @@ async fn restart_or_manual_hydration_does_not_backfill_or_duplicate_notification
     )
     .await
     .expect("snapshot object baseline");
-    hydrate_subscription_state_with_services(
-        docs_sync.as_ref(),
-        blob_service.as_ref(),
-        store.as_ref(),
+    hydrate_subscription_state(
+        &app.services,
         topic.as_str(),
         &replica,
         DocFetchPolicy::LocalThenRemote,
@@ -884,10 +871,8 @@ async fn restart_or_manual_hydration_does_not_backfill_or_duplicate_notification
         )
         .await
     );
-    hydrate_subscription_state_with_services(
-        docs_sync.as_ref(),
-        blob_service.as_ref(),
-        store.as_ref(),
+    hydrate_subscription_state(
+        &app.services,
         topic.as_str(),
         &replica,
         DocFetchPolicy::LocalThenRemote,

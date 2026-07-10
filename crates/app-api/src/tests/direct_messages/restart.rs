@@ -151,12 +151,9 @@ async fn dm_restart_resumes_pending_outbox_and_local_delete_prevents_duplicate_r
             last_error: None,
         }];
     }
-    let _published = AppService::flush_direct_message_outbox_for_peer_with_services(
-        store_a.as_ref(),
-        hint_transport.as_ref(),
-        transport.as_ref(),
+    let _published = AppService::flush_direct_message_outbox_for_peer(
+        &reopened_app_a.services,
         a_pubkey.as_str(),
-        &keys_a,
         b_pubkey.as_str(),
     )
     .await

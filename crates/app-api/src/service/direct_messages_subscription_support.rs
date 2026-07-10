@@ -13,13 +13,8 @@ impl AppService {
     }
 
     pub(crate) async fn reconcile_direct_message_subscriptions(&self) -> Result<()> {
-        reconcile_direct_message_subscriptions_with_services(
-            self.services.store.as_ref(),
-            Arc::clone(&self.services.projection_store),
-            Arc::clone(&self.services.blob_service),
-            Arc::clone(&self.services.hint_transport),
-            Arc::clone(&self.services.transport),
-            Arc::clone(&self.services.keys),
+        reconcile_direct_message_subscriptions(
+            self.services.clone(),
             Arc::clone(&self.last_sync_ts),
             Arc::clone(&self.subscription_registry.direct_message_subscriptions),
             Arc::clone(&self.notification_inserted_notify),
@@ -284,13 +279,9 @@ impl AppService {
             }
             return Ok(());
         }
-        Self::spawn_direct_message_subscription_with_services(
+        Self::spawn_direct_message_subscription(
             Arc::clone(&self.subscription_registry.direct_message_subscriptions),
-            Arc::clone(&self.services.projection_store),
-            Arc::clone(&self.services.blob_service),
-            Arc::clone(&self.services.hint_transport),
-            Arc::clone(&self.services.transport),
-            Arc::clone(&self.services.keys),
+            self.services.clone(),
             Arc::clone(&self.last_sync_ts),
             Arc::clone(&self.notification_inserted_notify),
             self.current_author_pubkey().as_str(),
@@ -304,22 +295,17 @@ impl AppService {
         peer_pubkey: &str,
     ) -> Result<()> {
         let peer_pubkey = normalize_author_pubkey(peer_pubkey)?;
-        stop_direct_message_subscription_with_services(
+        stop_direct_message_subscription(
             self.subscription_registry
                 .direct_message_subscriptions
                 .as_ref(),
-            self.services.hint_transport.as_ref(),
-            self.services.keys.as_ref(),
+            &self.services,
             peer_pubkey.as_str(),
         )
         .await?;
-        Self::spawn_direct_message_subscription_with_services(
+        Self::spawn_direct_message_subscription(
             Arc::clone(&self.subscription_registry.direct_message_subscriptions),
-            Arc::clone(&self.services.projection_store),
-            Arc::clone(&self.services.blob_service),
-            Arc::clone(&self.services.hint_transport),
-            Arc::clone(&self.services.transport),
-            Arc::clone(&self.services.keys),
+            self.services.clone(),
             Arc::clone(&self.last_sync_ts),
             Arc::clone(&self.notification_inserted_notify),
             self.current_author_pubkey().as_str(),
@@ -390,13 +376,9 @@ impl AppService {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) async fn spawn_direct_message_subscription_with_services(
+    pub(crate) async fn spawn_direct_message_subscription(
         direct_message_subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
-        projection_store: Arc<dyn ProjectionStore>,
-        blob_service: Arc<dyn BlobService>,
-        hint_transport: Arc<dyn HintTransport>,
-        transport: Arc<dyn Transport>,
-        keys: Arc<KukuriKeys>,
+        services: ServiceHandles,
         last_sync: Arc<Mutex<Option<i64>>>,
         notification_inserted: Arc<tokio::sync::Notify>,
         local_author_pubkey: &str,
@@ -413,35 +395,31 @@ impl AppService {
             }
             subscriptions.remove(peer_pubkey.as_str());
         }
-        let topic =
-            derive_direct_message_topic(keys.as_ref(), &Pubkey::from(peer_pubkey.as_str()))?;
-        let mut hint_stream = hint_transport.subscribe_hints(&topic).await?;
+        let topic = derive_direct_message_topic(
+            services.keys.as_ref(),
+            &Pubkey::from(peer_pubkey.as_str()),
+        )?;
+        let mut hint_stream = services.hint_transport.subscribe_hints(&topic).await?;
         let topic_for_task = topic.clone();
         let peer_for_task = peer_pubkey.clone();
         let local_author_pubkey = local_author_pubkey.to_string();
-        let task_hint_transport = Arc::clone(&hint_transport);
+        let cleanup_hint_transport = Arc::clone(&services.hint_transport);
         let handle = tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_millis(
                 DIRECT_MESSAGE_RETRY_INTERVAL_MS,
             ));
-            let _ = AppService::flush_direct_message_outbox_for_peer_with_services(
-                projection_store.as_ref(),
-                task_hint_transport.as_ref(),
-                transport.as_ref(),
+            let _ = AppService::flush_direct_message_outbox_for_peer(
+                &services,
                 local_author_pubkey.as_str(),
-                keys.as_ref(),
                 peer_for_task.as_str(),
             )
             .await;
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
-                        let _ = AppService::flush_direct_message_outbox_for_peer_with_services(
-                            projection_store.as_ref(),
-                            task_hint_transport.as_ref(),
-                            transport.as_ref(),
+                        let _ = AppService::flush_direct_message_outbox_for_peer(
+                            &services,
                             local_author_pubkey.as_str(),
-                            keys.as_ref(),
                             peer_for_task.as_str(),
                         ).await;
                     }
@@ -453,7 +431,7 @@ impl AppService {
                         ) {
                             continue;
                         }
-                        if let Err(error) = blob_service.learn_peer(event.source_peer.as_str()).await {
+                        if let Err(error) = services.blob_service.learn_peer(event.source_peer.as_str()).await {
                             warn!(
                                 peer_pubkey = %peer_for_task,
                                 source_peer = %event.source_peer,
@@ -461,12 +439,9 @@ impl AppService {
                                 "failed to learn direct message blob peer"
                             );
                         }
-                        match AppService::handle_direct_message_hint_with_services(
+                        match AppService::handle_direct_message_hint(
                             DirectMessageHintServices {
-                                projection_store: projection_store.as_ref(),
-                                blob_service: blob_service.as_ref(),
-                                hint_transport: task_hint_transport.as_ref(),
-                                keys: keys.as_ref(),
+                                services: &services,
                                 local_author_pubkey: local_author_pubkey.as_str(),
                                 peer_pubkey: peer_for_task.as_str(),
                                 topic: &topic_for_task,
@@ -488,7 +463,7 @@ impl AppService {
                         }
                     }
                     else => {
-                        let _ = task_hint_transport.unsubscribe_hints(&topic_for_task).await;
+                        let _ = services.hint_transport.unsubscribe_hints(&topic_for_task).await;
                         break;
                     }
                 }
@@ -516,7 +491,7 @@ impl AppService {
             pending_handle
                 .expect("direct message subscription handle must remain pending")
                 .abort();
-            hint_transport.unsubscribe_hints(&topic).await?;
+            cleanup_hint_transport.unsubscribe_hints(&topic).await?;
         }
         Ok(())
     }

@@ -443,6 +443,15 @@ async fn topic_session_hints_retry_until_manifest_blob_is_available() {
         blob_service.clone(),
         generate_keys(),
     );
+    let remote_services = ServiceHandles::new(
+        remote_store.clone(),
+        remote_store.clone(),
+        transport,
+        Arc::new(NoopHintTransport),
+        docs_sync.clone(),
+        blob_service.clone(),
+        generate_keys(),
+    );
     let topic = TopicId::new("kukuri:topic:incremental-live-session-retry");
     let replica = topic_replica_id(topic.as_str());
 
@@ -464,10 +473,8 @@ async fn topic_session_hints_retry_until_manifest_blob_is_available() {
         .delay_hash(&state.current_manifest.hash, 2)
         .await;
 
-    let hydrated = hydrate_subscription_hint_with_services(
-        docs_sync.as_ref(),
-        blob_service.as_ref(),
-        remote_store.as_ref(),
+    let hydrated = hydrate_subscription_hint(
+        &remote_services,
         topic.as_str(),
         &replica,
         &GossipHint::SessionChanged {

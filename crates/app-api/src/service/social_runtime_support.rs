@@ -26,7 +26,7 @@ impl AppService {
     }
 
     pub(crate) async fn rebuild_author_relationships(&self) -> Result<()> {
-        rebuild_author_relationships_with_services(
+        rebuild_author_relationships(
             self.services.store.as_ref(),
             self.services.projection_store.as_ref(),
             self.current_author_pubkey().as_str(),
@@ -45,12 +45,11 @@ impl AppService {
             .cloned()
             .collect::<Vec<_>>();
         for peer_pubkey in existing_peers {
-            stop_direct_message_subscription_with_services(
+            stop_direct_message_subscription(
                 self.subscription_registry
                     .direct_message_subscriptions
                     .as_ref(),
-                self.services.hint_transport.as_ref(),
-                self.services.keys.as_ref(),
+                &self.services,
                 peer_pubkey.as_str(),
             )
             .await?;
@@ -153,13 +152,7 @@ impl AppService {
     }
 
     pub(crate) async fn spawn_author_subscription(&self, author_pubkey: &str) -> Result<()> {
-        let store = Arc::clone(&self.services.store);
-        let projection_store = Arc::clone(&self.services.projection_store);
-        let docs_sync = Arc::clone(&self.services.docs_sync);
-        let blob_service = Arc::clone(&self.services.blob_service);
-        let hint_transport = Arc::clone(&self.services.hint_transport);
-        let transport = Arc::clone(&self.services.transport);
-        let keys = Arc::clone(&self.services.keys);
+        let services = self.services.clone();
         let last_sync = Arc::clone(&self.last_sync_ts);
         let notification_inserted = Arc::clone(&self.notification_inserted_notify);
         let direct_message_subscriptions =
@@ -167,10 +160,14 @@ impl AppService {
         let author_key = normalize_author_pubkey(author_pubkey)?;
         let local_author_pubkey = self.current_author_pubkey();
         let replica = author_replica_id(author_key.as_str());
-        docs_sync.open_replica(&replica).await?;
-        let mut doc_stream = docs_sync.subscribe_replica(&replica).await?;
+        services.docs_sync.open_replica(&replica).await?;
+        let mut doc_stream = services.docs_sync.subscribe_replica(&replica).await?;
         let author_key_for_task = author_key.clone();
         let handle = tokio::spawn(async move {
+            let store = &services.store;
+            let projection_store = &services.projection_store;
+            let docs_sync = &services.docs_sync;
+            let blob_service = &services.blob_service;
             let notification_baseline = match snapshot_follow_notification_baseline(
                 docs_sync.as_ref(),
                 &replica,
@@ -188,10 +185,8 @@ impl AppService {
                     NotificationDocEventBaseline::default()
                 }
             };
-            match hydrate_author_state_with_services(
-                docs_sync.as_ref(),
-                store.as_ref(),
-                projection_store.as_ref(),
+            match hydrate_author_state(
+                &services,
                 local_author_pubkey.as_str(),
                 author_key_for_task.as_str(),
                 DocFetchPolicy::LocalOnly,
@@ -200,13 +195,8 @@ impl AppService {
             {
                 Ok(initial_count) if initial_count > 0 => {
                     *last_sync.lock().await = Some(Utc::now().timestamp_millis());
-                    schedule_direct_message_reconcile_with_services(
-                        Arc::clone(&store),
-                        Arc::clone(&projection_store),
-                        Arc::clone(&blob_service),
-                        Arc::clone(&hint_transport),
-                        Arc::clone(&transport),
-                        Arc::clone(&keys),
+                    schedule_direct_message_reconcile(
+                        services.clone(),
                         Arc::clone(&last_sync),
                         Arc::clone(&direct_message_subscriptions),
                         Arc::clone(&notification_inserted),
@@ -223,13 +213,7 @@ impl AppService {
                     );
                 }
             }
-            let recovery_store = Arc::clone(&store);
-            let recovery_projection_store = Arc::clone(&projection_store);
-            let recovery_docs_sync = Arc::clone(&docs_sync);
-            let recovery_blob_service = Arc::clone(&blob_service);
-            let recovery_hint_transport = Arc::clone(&hint_transport);
-            let recovery_transport = Arc::clone(&transport);
-            let recovery_keys = Arc::clone(&keys);
+            let recovery_services = services.clone();
             let recovery_last_sync = Arc::clone(&last_sync);
             let recovery_notification_inserted = Arc::clone(&notification_inserted);
             let recovery_direct_message_subscriptions = Arc::clone(&direct_message_subscriptions);
@@ -238,10 +222,8 @@ impl AppService {
             tokio::spawn(async move {
                 match tokio::time::timeout(
                     std::time::Duration::from_secs(5),
-                    hydrate_author_state_with_services(
-                        recovery_docs_sync.as_ref(),
-                        recovery_store.as_ref(),
-                        recovery_projection_store.as_ref(),
+                    hydrate_author_state(
+                        &recovery_services,
                         recovery_local_author_pubkey.as_str(),
                         recovery_author_pubkey.as_str(),
                         DocFetchPolicy::LocalThenRemote,
@@ -251,13 +233,8 @@ impl AppService {
                 {
                     Ok(Ok(initial_count)) if initial_count > 0 => {
                         *recovery_last_sync.lock().await = Some(Utc::now().timestamp_millis());
-                        schedule_direct_message_reconcile_with_services(
-                            Arc::clone(&recovery_store),
-                            Arc::clone(&recovery_projection_store),
-                            Arc::clone(&recovery_blob_service),
-                            Arc::clone(&recovery_hint_transport),
-                            Arc::clone(&recovery_transport),
-                            Arc::clone(&recovery_keys),
+                        schedule_direct_message_reconcile(
+                            recovery_services,
                             Arc::clone(&recovery_last_sync),
                             Arc::clone(&recovery_direct_message_subscriptions),
                             Arc::clone(&recovery_notification_inserted),
@@ -330,10 +307,8 @@ impl AppService {
                                 }
                             }
                         }
-                        if let Ok(count) = hydrate_author_state_with_services(
-                            docs_sync.as_ref(),
-                            store.as_ref(),
-                            projection_store.as_ref(),
+                        if let Ok(count) = hydrate_author_state(
+                            &services,
                             local_author_pubkey.as_str(),
                             author_key_for_task.as_str(),
                             DocFetchPolicy::LocalThenRemote,
@@ -341,13 +316,8 @@ impl AppService {
                         && count > 0
                         {
                             *last_sync.lock().await = Some(Utc::now().timestamp_millis());
-                            schedule_direct_message_reconcile_with_services(
-                                Arc::clone(&store),
-                                Arc::clone(&projection_store),
-                                Arc::clone(&blob_service),
-                                Arc::clone(&hint_transport),
-                                Arc::clone(&transport),
-                                Arc::clone(&keys),
+                            schedule_direct_message_reconcile(
+                                services.clone(),
                                 Arc::clone(&last_sync),
                                 Arc::clone(&direct_message_subscriptions),
                                 Arc::clone(&notification_inserted),

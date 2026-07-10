@@ -274,14 +274,8 @@ impl AppService {
         topic_id: &str,
         scope: &TimelineScope,
     ) -> Result<usize> {
-        let mut hydrated = hydrate_topic_state_with_services(
-            self.services.docs_sync.as_ref(),
-            self.services.blob_service.as_ref(),
-            self.services.projection_store.as_ref(),
-            topic_id,
-            DocFetchPolicy::LocalOnly,
-        )
-        .await?;
+        let mut hydrated =
+            hydrate_topic_state(&self.services, topic_id, DocFetchPolicy::LocalOnly).await?;
         match scope {
             TimelineScope::Public => {}
             TimelineScope::AllJoined => {
@@ -296,10 +290,8 @@ impl AppService {
                                 )
                             })
                     {
-                        hydrated += hydrate_subscription_state_with_services(
-                            self.services.docs_sync.as_ref(),
-                            self.services.blob_service.as_ref(),
-                            self.services.projection_store.as_ref(),
+                        hydrated += hydrate_subscription_state(
+                            &self.services,
                             topic_id,
                             &replica,
                             DocFetchPolicy::LocalOnly,
@@ -325,10 +317,8 @@ impl AppService {
                                 )
                             })
                     {
-                        hydrated += hydrate_subscription_state_with_services(
-                            self.services.docs_sync.as_ref(),
-                            self.services.blob_service.as_ref(),
-                            self.services.projection_store.as_ref(),
+                        hydrated += hydrate_subscription_state(
+                            &self.services,
                             topic_id,
                             &replica,
                             DocFetchPolicy::LocalOnly,
