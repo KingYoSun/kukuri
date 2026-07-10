@@ -378,6 +378,56 @@ describe('MetaverseRoomPanel animation sharing', () => {
     expect(screen.getByPlaceholderText('Small social space')).toBeInTheDocument();
   });
 
+  test('validates and submits the normalized create-room payload', async () => {
+    const user = userEvent.setup();
+    const baseApi = createDesktopMockApi();
+    const createMetaverseRoom = vi.fn().mockResolvedValue('created-room');
+    const api: DesktopApi = {
+      ...baseApi,
+      createMetaverseRoom,
+    };
+
+    renderPanel(api, { rooms: [] });
+    await user.click(screen.getByRole('button', { name: 'Create metaverse room' }));
+    await user.click(screen.getAllByRole('button', { name: 'Create metaverse room' })[1]);
+
+    expect(screen.getByText('Room title is required')).toBeInTheDocument();
+    expect(createMetaverseRoom).not.toHaveBeenCalled();
+
+    await user.type(screen.getByPlaceholderText('Atrium'), '  Contract room  ');
+    await user.type(screen.getByPlaceholderText('Small social space'), '  Contract space  ');
+    const maxPeersInput = screen.getByLabelText('Max peers');
+    await user.clear(maxPeersInput);
+    await user.type(maxPeersInput, '12');
+    await user.click(screen.getAllByRole('button', { name: 'Create metaverse room' })[1]);
+
+    expect(createMetaverseRoom).toHaveBeenCalledWith(
+      'kukuri:topic:demo',
+      'Contract room',
+      'Contract space',
+      12,
+      { kind: 'public' }
+    );
+  });
+
+  test.each([
+    [new Error('concrete create failure'), 'concrete create failure'],
+    [null, 'Failed to create metaverse room'],
+  ])('preserves create-room error priority for %p', async (failure, expectedMessage) => {
+    const user = userEvent.setup();
+    const api: DesktopApi = {
+      ...createDesktopMockApi(),
+      createMetaverseRoom: vi.fn().mockRejectedValue(failure),
+    };
+
+    renderPanel(api, { rooms: [] });
+    await user.click(screen.getByRole('button', { name: 'Create metaverse room' }));
+    await user.type(screen.getByPlaceholderText('Atrium'), 'Contract room');
+    await user.click(screen.getAllByRole('button', { name: 'Create metaverse room' })[1]);
+
+    expect(await screen.findByText(expectedMessage)).toBeInTheDocument();
+  });
+
   test('opens the created room after refreshed rooms include it', async () => {
     const user = userEvent.setup();
     const baseApi = createDesktopMockApi();
@@ -513,6 +563,116 @@ describe('MetaverseRoomPanel animation sharing', () => {
 
     expect(screen.getByLabelText('Metaverse room viewport')).toBeInTheDocument();
     expect(screen.getByText(/fallback-primitive/)).toBeInTheDocument();
+  });
+
+  test('imports a VRM avatar and resolves its blob preview through the API boundary', async () => {
+    const user = userEvent.setup();
+    const assetRef = {
+      kind: 'vrm' as const,
+      blob_hash: 'avatar-blob-hash',
+      mime_type: 'model/vrm',
+      size_bytes: 6,
+      name: 'avatar.vrm',
+    };
+    const importMetaverseRoomAsset = vi.fn().mockResolvedValue(assetRef);
+    const getBlobPreviewUrl = vi.fn().mockResolvedValue('blob:avatar-preview');
+    const api: DesktopApi = {
+      ...createDesktopMockApi(),
+      importMetaverseRoomAsset,
+      getBlobPreviewUrl,
+      listMetaverseRoomEvents: vi.fn().mockResolvedValue([]),
+    };
+
+    renderPanel(api);
+    await user.click(screen.getByRole('button', { name: 'Join Room' }));
+    await user.upload(
+      screen.getByLabelText('VRM file'),
+      new File(['avatar'], 'avatar.vrm', { type: 'model/vrm' })
+    );
+
+    await waitFor(() => {
+      expect(importMetaverseRoomAsset).toHaveBeenCalledWith(
+        'kukuri:topic:demo',
+        room.room_id,
+        'vrm',
+        'model/vrm',
+        'avatar.vrm',
+        expect.any(String)
+      );
+      expect(getBlobPreviewUrl).toHaveBeenCalledWith('avatar-blob-hash', 'model/vrm');
+    });
+    await user.click(screen.getByRole('button', { name: 'Debug details' }));
+    expect(screen.getByText('Blob asset resolve: avatar-blob-hash')).toBeInTheDocument();
+  });
+
+  test('advances the backend poll cursor from the latest received envelope', async () => {
+    const user = userEvent.setup();
+    const listMetaverseRoomEvents = vi
+      .fn()
+      .mockResolvedValueOnce([avatarEvent('remote-peer', 'walk', 1)])
+      .mockResolvedValue([]);
+    const api: DesktopApi = {
+      ...createDesktopMockApi(),
+      listMetaverseRoomEvents,
+    };
+
+    renderPanel(api);
+    await user.click(screen.getByRole('button', { name: 'Join Room' }));
+
+    await waitFor(() => expect(listMetaverseRoomEvents).toHaveBeenCalledTimes(2));
+    expect(listMetaverseRoomEvents).toHaveBeenNthCalledWith(
+      1,
+      'kukuri:topic:demo',
+      room.room_id,
+      null,
+      64
+    );
+    expect(listMetaverseRoomEvents).toHaveBeenNthCalledWith(
+      2,
+      'kukuri:topic:demo',
+      room.room_id,
+      'event-1',
+      64
+    );
+  });
+
+  test('closes the room BroadcastChannel when the panel unmounts', async () => {
+    const user = userEvent.setup();
+    const close = vi.fn();
+    const postMessage = vi.fn();
+    class MockBroadcastChannel {
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      readonly name: string;
+
+      constructor(name: string) {
+        this.name = name;
+      }
+
+      postMessage = postMessage;
+      close = close;
+    }
+    vi.stubGlobal(
+      'BroadcastChannel',
+      MockBroadcastChannel as unknown as typeof BroadcastChannel
+    );
+    const api: DesktopApi = {
+      ...createDesktopMockApi(),
+      listMetaverseRoomEvents: vi.fn().mockResolvedValue([]),
+    };
+
+    try {
+      const view = renderPanel(api);
+      await user.click(screen.getByRole('button', { name: 'Join Room' }));
+      await waitFor(() => {
+        expect(postMessage).toHaveBeenCalled();
+      });
+
+      view.unmount();
+
+      expect(close).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   test('renders durable room chat history when joining a room', async () => {
