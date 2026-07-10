@@ -71,6 +71,20 @@ describe('useDesktopShellSectionLoaders', () => {
     expect(store.getState().directMessageError).toBe('timeline failed');
   });
 
+  test('uses the localized DM load fallback for a non-Error failure', async () => {
+    const { api, hook, store } = setup();
+    store.setState((state) => ({
+      shellChromeState: { ...state.shellChromeState, activePrimarySection: 'messages' },
+    }));
+    vi.spyOn(api, 'listDirectMessages').mockRejectedValue(null);
+
+    await act(async () => hook.result.current('topic'));
+
+    expect(store.getState().directMessageError).toBe(
+      'common:errors.failedToLoadDirectMessages'
+    );
+  });
+
   test('refreshes discovery config without overwriting a dirty editor', async () => {
     const { api, hook, store } = setup();
     const config = await api.getDiscoveryConfig();

@@ -84,6 +84,19 @@ function publishFormEvent() {
   };
 }
 
+function directMessageFormEvent(value: string) {
+  const preventDefault = vi.fn();
+  return {
+    event: {
+      preventDefault,
+      currentTarget: {
+        querySelector: () => ({ value }),
+      },
+    } as unknown as FormEvent<HTMLFormElement>,
+    preventDefault,
+  };
+}
+
 type RenderActionsOptions = {
   /** mock api のうち差し替えたいメソッドだけを vi.fn で上書きする。 */
   api?: Partial<DesktopApi>;
@@ -194,6 +207,69 @@ beforeEach(() => {
 });
 
 describe('useDesktopShellActions', () => {
+  test('DM mutations use localized fallbacks for non-Error failures', async () => {
+    const peerPubkey = 'd'.repeat(64);
+    const sendDirectMessage = vi.fn().mockRejectedValue(null);
+    const deleteDirectMessageMessage = vi.fn().mockRejectedValue(null);
+    const clearDirectMessage = vi.fn().mockRejectedValue(null);
+    const view = renderActionsHook({
+      api: { sendDirectMessage, deleteDirectMessageMessage, clearDirectMessage },
+      preset: (current) => ({
+        selectedDirectMessagePeerPubkey: peerPubkey,
+        directMessageComposer: 'hello',
+        syncStatus: { ...current.syncStatus, local_author_pubkey: SELF_PUBKEY },
+      }),
+    });
+    const { event } = directMessageFormEvent('hello');
+
+    await act(async () => view.result.current.handleSendDirectMessage(event));
+    expect(view.store.getState().directMessageError).toBe(
+      'common:errors.failedToSendDirectMessage'
+    );
+
+    await act(async () =>
+      view.result.current.handleDeleteDirectMessageMessage(peerPubkey, 'message-1')
+    );
+    expect(view.store.getState().directMessageError).toBe(
+      'common:errors.failedToDeleteDirectMessage'
+    );
+
+    await act(async () => view.result.current.handleClearDirectMessage(peerPubkey));
+    expect(view.store.getState().directMessageError).toBe(
+      'common:errors.failedToClearDirectMessages'
+    );
+  });
+
+  test('DM mutations preserve concrete Error messages', async () => {
+    const peerPubkey = 'd'.repeat(64);
+    const view = renderActionsHook({
+      api: {
+        sendDirectMessage: vi.fn().mockRejectedValue(new Error('send failed concretely')),
+        deleteDirectMessageMessage: vi
+          .fn()
+          .mockRejectedValue(new Error('delete failed concretely')),
+        clearDirectMessage: vi.fn().mockRejectedValue(new Error('clear failed concretely')),
+      },
+      preset: (current) => ({
+        selectedDirectMessagePeerPubkey: peerPubkey,
+        directMessageComposer: 'hello',
+        syncStatus: { ...current.syncStatus, local_author_pubkey: SELF_PUBKEY },
+      }),
+    });
+    const { event } = directMessageFormEvent('hello');
+
+    await act(async () => view.result.current.handleSendDirectMessage(event));
+    expect(view.store.getState().directMessageError).toBe('send failed concretely');
+
+    await act(async () =>
+      view.result.current.handleDeleteDirectMessageMessage(peerPubkey, 'message-1')
+    );
+    expect(view.store.getState().directMessageError).toBe('delete failed concretely');
+
+    await act(async () => view.result.current.handleClearDirectMessage(peerPubkey));
+    expect(view.store.getState().directMessageError).toBe('clear failed concretely');
+  });
+
   test('handlePublish inserts a pending optimistic post, clears the composer, then marks it syncing after createPost resolves', async () => {
     const deferredCreatePost = createDeferred<string>();
     const createPost = vi.fn(() => deferredCreatePost.promise);

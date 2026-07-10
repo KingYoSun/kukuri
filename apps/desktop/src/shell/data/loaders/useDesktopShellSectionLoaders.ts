@@ -259,12 +259,14 @@ export function useDesktopShellSectionLoaders({
                   : statusResult.status === 'rejected'
                     ? statusResult.reason
                     : null,
-                'failed to load direct messages'
+                  translate('common:errors.failedToLoadDirectMessages')
               )
         );
       });
     } catch (error) {
-      setDirectMessageError(messageFromError(error, 'failed to load direct messages'));
+      setDirectMessageError(
+        messageFromError(error, translate('common:errors.failedToLoadDirectMessages'))
+      );
     }
   }, [
     api,
@@ -275,6 +277,7 @@ export function useDesktopShellSectionLoaders({
     setDirectMessageTimelineNextCursorByPeer,
     setKnownAuthorsByPubkey,
     storeApi,
+    translate,
   ]);
 
   const loadNotificationsSection = useCallback(async () => {

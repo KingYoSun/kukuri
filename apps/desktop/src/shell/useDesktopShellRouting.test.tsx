@@ -400,6 +400,23 @@ describe('useDesktopShellRouting', () => {
     view.unmount();
   });
 
+  test('openDirectMessagePane uses the localized fallback for a non-Error failure', async () => {
+    const api = {
+      ...createDesktopMockApi(),
+      openDirectMessage: vi.fn().mockRejectedValue(null),
+    };
+    const { harness, view } = renderRoutingHook({ hash: BASE_TIMELINE_HASH, api });
+
+    await act(async () => {
+      await view.result.current.openDirectMessagePane(DM_PEER_PUBKEY);
+    });
+
+    expect(harness.store.getState().directMessageError).toBe(
+      'common:errors.failedToOpenDirectMessage'
+    );
+    view.unmount();
+  });
+
   test('focusPrimarySection updates chrome, clears thread/author/DM panes, and pushes the section URL', async () => {
     const { harness, view } = renderRoutingHook({
       hash:

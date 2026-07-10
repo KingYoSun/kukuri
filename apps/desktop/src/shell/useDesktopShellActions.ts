@@ -748,6 +748,7 @@ export function useDesktopShellActions({
 
   const { handleSendDirectMessage } = createDirectMessageActions({
     api,
+    translate,
     getState: storeApi.getState,
     openDirectMessagePane,
     releaseAllDirectMessageDraftPreviews,
