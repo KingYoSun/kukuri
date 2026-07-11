@@ -148,6 +148,34 @@ fn map_channel_secret_error(error: anyhow::Error) -> ApiError {
     )
 }
 
+#[cfg(test)]
+mod error_contract_tests {
+    use axum::http::StatusCode;
+    use kukuri_cn_core::ChannelSecretConflict;
+
+    use crate::errors::assert_error_contract;
+
+    use super::map_channel_secret_error;
+
+    #[tokio::test]
+    async fn channel_secret_error_contracts_are_stable() {
+        assert_error_contract(
+            map_channel_secret_error(ChannelSecretConflict::AlreadyRegistered.into()),
+            StatusCode::CONFLICT,
+            "CHANNEL_SECRET_CONFLICT",
+            "a different channel capability is already registered for this channel",
+        )
+        .await;
+        assert_error_contract(
+            map_channel_secret_error(anyhow::anyhow!("channel secret must be 32 bytes")),
+            StatusCode::BAD_REQUEST,
+            "INVALID_CHANNEL_SECRET",
+            "channel secret must be 32 bytes",
+        )
+        .await;
+    }
+}
+
 /// index query の共通クエリパラメータ(#404)。
 ///
 /// `scope_kind` + `scope_id` の組で topic 内(scope 内)読み、両方無指定で supported set 横断。
