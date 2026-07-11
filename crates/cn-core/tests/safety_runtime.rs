@@ -7,15 +7,17 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use anyhow::{Result, bail};
+use async_trait::async_trait;
 use kukuri_cn_core::{
-    MemorySafetyArtifactStore, SafetyRuntimeConfig, SafetyRuntimeProviderEntry,
-    SafetyRuntimeProvidersConfig, SafetyScanService, build_safety_orchestrator,
-    build_safety_scan_service,
+    MemorySafetyArtifactStore, SafetyArtifactStore, SafetyRuntimeConfig,
+    SafetyRuntimeProviderEntry, SafetyRuntimeProvidersConfig, SafetyScanService,
+    build_safety_orchestrator, build_safety_scan_service,
 };
 use kukuri_cn_safety::provider::{ProviderScanRequest, ScanError, SubjectKind};
 use kukuri_cn_safety::{
     MockSafetyProvider, ModerationEventSigner, ReasonCode, RiskSignalTarget, SafetyCategory,
-    SafetyProvider,
+    SafetyProvider, SafetyRiskSignal, SafetyVerdict, SignedModerationEvent,
 };
 use kukuri_cn_safety_runtime::{
     EventIdGenerator, SafetyOrchestrator, ScanClock, Secp256k1ModerationEventSigner,
@@ -81,6 +83,50 @@ fn post_request(post_id: &str) -> ProviderScanRequest {
     ProviderScanRequest::for_subject(SubjectKind::Post, post_id)
 }
 
+#[derive(Clone, Copy)]
+enum FailingStoreOperation {
+    Verdict,
+    Signal,
+    Event,
+}
+
+struct FailingSafetyArtifactStore {
+    operation: FailingStoreOperation,
+}
+
+#[async_trait]
+impl SafetyArtifactStore for FailingSafetyArtifactStore {
+    async fn persist_event(&self, _event: &SignedModerationEvent) -> Result<()> {
+        if matches!(self.operation, FailingStoreOperation::Event) {
+            bail!("event persistence rejected by contract double");
+        }
+        Ok(())
+    }
+
+    async fn persist_signal(
+        &self,
+        _issuer_node_id: &str,
+        _signal: &SafetyRiskSignal,
+    ) -> Result<String> {
+        if matches!(self.operation, FailingStoreOperation::Signal) {
+            bail!("signal persistence rejected by contract double");
+        }
+        Ok("signal-1".to_string())
+    }
+
+    async fn persist_verdict(
+        &self,
+        _subject_kind: SubjectKind,
+        _subject_id: &str,
+        _verdict: &SafetyVerdict,
+    ) -> Result<String> {
+        if matches!(self.operation, FailingStoreOperation::Verdict) {
+            bail!("verdict persistence rejected by contract double");
+        }
+        Ok("verdict-1".to_string())
+    }
+}
+
 // --- scan → verdict → artifact 永続化（#406 受け入れ条件の runtime 経由 contract） ---
 
 #[tokio::test]
@@ -136,6 +182,81 @@ async fn runtime_scan_allow_persists_no_artifacts() {
     assert!(outcome.persisted_signal_id.is_none());
     assert!(store.events().is_empty());
     assert!(store.signals().is_empty());
+    assert!(outcome.verdict_id.is_some());
+    assert!(store.verdict_for(SubjectKind::Post, "post-clean").is_some());
+}
+
+#[tokio::test]
+async fn runtime_verdict_persistence_failure_is_returned() {
+    let provider = MockSafetyProvider::known_csam("mock-known-csam");
+    let store = Arc::new(FailingSafetyArtifactStore {
+        operation: FailingStoreOperation::Verdict,
+    });
+    let service = SafetyScanService::builder(orchestrator("issuer-node", provider), store)
+        .without_signed_events("issuer-node")
+        .build()
+        .unwrap();
+
+    let error = service
+        .scan_and_record(&post_request("post-clean"))
+        .await
+        .unwrap_err();
+
+    assert!(
+        error
+            .chain()
+            .any(|cause| cause.to_string().contains("persist scan verdict state"))
+    );
+}
+
+#[tokio::test]
+async fn runtime_signal_persistence_failure_is_returned() {
+    let provider =
+        MockSafetyProvider::known_csam("mock-known-csam").with_known_hash_match("post-1");
+    let store = Arc::new(FailingSafetyArtifactStore {
+        operation: FailingStoreOperation::Signal,
+    });
+    let service = SafetyScanService::builder(orchestrator("issuer-node", provider), store)
+        .without_signed_events("issuer-node")
+        .build()
+        .unwrap();
+
+    let error = service
+        .scan_and_record(&post_request("post-1"))
+        .await
+        .unwrap_err();
+
+    assert!(
+        error
+            .chain()
+            .any(|cause| cause.to_string().contains("persist safety risk signal"))
+    );
+}
+
+#[tokio::test]
+async fn runtime_event_persistence_failure_is_returned() {
+    let signer = signer();
+    let issuer = signer.issuer_node_id().to_string();
+    let provider =
+        MockSafetyProvider::known_csam("mock-known-csam").with_known_hash_match("post-1");
+    let store = Arc::new(FailingSafetyArtifactStore {
+        operation: FailingStoreOperation::Event,
+    });
+    let service = SafetyScanService::builder(orchestrator(&issuer, provider), store)
+        .signer(Arc::new(signer))
+        .build()
+        .unwrap();
+
+    let error = service
+        .scan_and_record(&post_request("post-1"))
+        .await
+        .unwrap_err();
+
+    assert!(error.chain().any(|cause| {
+        cause
+            .to_string()
+            .contains("persist signed moderation event")
+    }));
 }
 
 // --- provider failure / unavailable の fail-closed（runtime 経由でも固定） ---
