@@ -28,6 +28,7 @@ ts-rs = { workspace = true, optional = true }
 ts = ["dep:ts-rs", "kukuri-core/ts", "kukuri-store/ts", "kukuri-transport/ts"]
 
 [dev-dependencies]
+kukuri-test-support = { path = "../test-support" }
 kukuri-iroh-node = { path = "../iroh-node" }
 tempfile.workspace = true
 iroh-mainline-address-lookup.workspace = true

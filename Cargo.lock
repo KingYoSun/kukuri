@@ -2917,6 +2917,7 @@ dependencies = [
  "kukuri-docs-sync",
  "kukuri-iroh-node",
  "kukuri-store",
+ "kukuri-test-support",
  "kukuri-transport",
  "n0-mainline",
  "serde",
@@ -3280,6 +3281,15 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "ts-rs",
+]
+
+[[package]]
+name = "kukuri-test-support"
+version = "0.1.2"
+dependencies = [
+ "async-trait",
+ "thiserror 2.0.18",
+ "tokio",
 ]
 
 [[package]]

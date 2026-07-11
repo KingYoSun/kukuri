@@ -11,6 +11,7 @@ members = [
     "crates/harness",
     "crates/app-api",
     "crates/desktop-runtime",
+    "crates/test-support",
     "crates/cn-core",
     "crates/cn-user-api",
     "crates/cn-iroh-relay",
