@@ -1,6 +1,7 @@
 use super::*;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[cfg(feature = "iroh-integration-tests")]
 async fn late_joiner_backfills_live_session_manifest() {
     let _guard = iroh_integration_test_lock().lock_owned().await;
     let dir = tempdir().expect("tempdir");

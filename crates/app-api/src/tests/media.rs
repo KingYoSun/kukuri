@@ -225,6 +225,7 @@ async fn on_demand_hydration_updates_last_sync_ts() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[cfg(feature = "iroh-integration-tests")]
 async fn missing_gossip_but_docs_sync_recovers_post() {
     let _guard = iroh_integration_test_lock().lock_owned().await;
     assert_docs_sync_recovers_post_without_hints("kukuri:topic:missing-gossip", "docs recover")
@@ -232,6 +233,7 @@ async fn missing_gossip_but_docs_sync_recovers_post() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[cfg(feature = "iroh-integration-tests")]
 async fn gossip_loss_does_not_lose_durable_post() {
     let _guard = iroh_integration_test_lock().lock_owned().await;
     assert_docs_sync_recovers_post_without_hints(
@@ -533,6 +535,7 @@ async fn blob_media_payload_roundtrip() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[cfg(feature = "iroh-integration-tests")]
 async fn iroh_transport_syncs_image_post_between_apps() {
     let _guard = iroh_integration_test_lock().lock_owned().await;
     let dir = tempdir().expect("tempdir");
@@ -611,6 +614,7 @@ async fn iroh_transport_syncs_image_post_between_apps() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[cfg(feature = "iroh-integration-tests")]
 async fn remote_video_manifest_payload_available_after_sync() {
     let _guard = iroh_integration_test_lock().lock_owned().await;
     let dir = tempdir().expect("tempdir");
@@ -710,6 +714,7 @@ async fn remote_video_manifest_payload_available_after_sync() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[cfg(feature = "iroh-integration-tests")]
 async fn late_joiner_backfills_image_post_from_docs() {
     let _guard = iroh_integration_test_lock().lock_owned().await;
     let dir = tempdir().expect("tempdir");
@@ -794,6 +799,7 @@ async fn late_joiner_backfills_image_post_from_docs() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[cfg(feature = "iroh-integration-tests")]
 async fn late_joiner_backfills_video_media_payload() {
     let _guard = iroh_integration_test_lock().lock_owned().await;
     let dir = tempdir().expect("tempdir");
@@ -873,6 +879,7 @@ async fn late_joiner_backfills_video_media_payload() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[cfg(feature = "iroh-integration-tests")]
 async fn image_reply_thread_syncs() {
     let _guard = iroh_integration_test_lock().lock_owned().await;
     let dir = tempdir().expect("tempdir");

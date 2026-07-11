@@ -364,6 +364,7 @@ async fn mute_does_not_change_follow_mutual_or_friend_gating() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[cfg(feature = "iroh-integration-tests")]
 async fn social_graph_derives_friend_of_friend_and_clears_after_unfollow() {
     let _guard = iroh_integration_test_lock().lock_owned().await;
     let dir = tempdir().expect("tempdir");

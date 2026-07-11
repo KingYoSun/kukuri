@@ -12,6 +12,29 @@ env:
   SCCACHE_GHA_VERSION: v1
 
 jobs:
+  linux-app-api-slow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.91
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.91.0
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: kukuri-nightly-${{ runner.os }}-${{ github.job }}
+
+      - name: App API slow iroh integration tests
+        run: cargo xtask app-api-slow-test
+
   linux-rust-static:
     runs-on: ubuntu-latest
     timeout-minutes: 45

@@ -57,6 +57,21 @@ pub(crate) fn rust_test() -> Result<()> {
     }
 }
 
+pub(crate) fn app_api_slow_test() -> Result<()> {
+    run_with_env(
+        "cargo",
+        [
+            "test",
+            "-p",
+            "kukuri-app-api",
+            "--features",
+            "iroh-integration-tests",
+        ],
+        &root_dir(),
+        &env_refs(&rust_test_stack_envs()),
+    )
+}
+
 pub(crate) fn rust_test_with_nextest() -> Result<()> {
     let stack_env = rust_test_stack_envs();
     let stack_env_refs = env_refs(&stack_env);
