@@ -6,7 +6,7 @@
 //! status/code/message wire contract.
 
 use axum::http::StatusCode;
-use kukuri_cn_core::{AdmissionRejection, ApiError};
+use kukuri_cn_core::{AdmissionRejection, ApiError, ChannelSecretConflict};
 
 pub(crate) fn internal_error(error: impl std::fmt::Display) -> ApiError {
     ApiError::new(
@@ -102,6 +102,61 @@ pub(crate) fn support_endpoint_error(error: SupportEndpointError) -> ApiError {
     let SupportEndpointError { operation, source } = error;
     let _ = operation;
     internal_error(source)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum IndexingOperation {
+    RegisterRequest,
+    SearchScope,
+    SearchAll,
+    Discovery,
+    Recommendations,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum IndexingError {
+    #[error("{0}")]
+    ChannelSecretConflict(ChannelSecretConflict),
+    #[error("{0}")]
+    InvalidChannelSecret(anyhow::Error),
+    #[error("{source}")]
+    Infrastructure {
+        operation: IndexingOperation,
+        #[source]
+        source: anyhow::Error,
+    },
+}
+
+impl IndexingError {
+    pub(crate) fn channel_secret(source: anyhow::Error) -> Self {
+        match source.downcast::<ChannelSecretConflict>() {
+            Ok(conflict) => Self::ChannelSecretConflict(conflict),
+            Err(source) => Self::InvalidChannelSecret(source),
+        }
+    }
+
+    pub(crate) fn infrastructure(operation: IndexingOperation, source: anyhow::Error) -> Self {
+        Self::Infrastructure { operation, source }
+    }
+}
+
+pub(crate) fn indexing_error(error: IndexingError) -> ApiError {
+    match error {
+        IndexingError::ChannelSecretConflict(conflict) => ApiError::new(
+            StatusCode::CONFLICT,
+            "CHANNEL_SECRET_CONFLICT",
+            conflict.to_string(),
+        ),
+        IndexingError::InvalidChannelSecret(source) => ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "INVALID_CHANNEL_SECRET",
+            source.to_string(),
+        ),
+        IndexingError::Infrastructure { operation, source } => {
+            let _ = operation;
+            internal_error(source)
+        }
+    }
 }
 
 #[cfg(test)]
