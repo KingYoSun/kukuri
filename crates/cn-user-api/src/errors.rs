@@ -159,6 +159,68 @@ pub(crate) fn indexing_error(error: IndexingError) -> ApiError {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TrustRelationOperation {
+    LoadTrustInputs,
+    LoadTrustPullInputs,
+    CheckRelationVisibility,
+    ReadPairwiseProximity,
+    ReadNeighbors,
+    FilterVisibleNeighbors,
+    SetOptOut,
+    GetOptOut,
+    ClearOptOut,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum TrustRelationError {
+    #[error("{source}")]
+    TrustRead {
+        operation: TrustRelationOperation,
+        #[source]
+        source: anyhow::Error,
+    },
+    #[error("{source}")]
+    RelationGraph {
+        operation: TrustRelationOperation,
+        #[source]
+        source: anyhow::Error,
+    },
+    #[error("{source}")]
+    RelationOptOut {
+        operation: TrustRelationOperation,
+        #[source]
+        source: anyhow::Error,
+    },
+}
+
+impl TrustRelationError {
+    pub(crate) fn trust_read(operation: TrustRelationOperation, source: anyhow::Error) -> Self {
+        Self::TrustRead { operation, source }
+    }
+
+    pub(crate) fn relation_graph(operation: TrustRelationOperation, source: anyhow::Error) -> Self {
+        Self::RelationGraph { operation, source }
+    }
+
+    pub(crate) fn relation_opt_out(
+        operation: TrustRelationOperation,
+        source: anyhow::Error,
+    ) -> Self {
+        Self::RelationOptOut { operation, source }
+    }
+}
+
+pub(crate) fn trust_relation_error(error: TrustRelationError) -> ApiError {
+    let (operation, source) = match error {
+        TrustRelationError::TrustRead { operation, source }
+        | TrustRelationError::RelationGraph { operation, source }
+        | TrustRelationError::RelationOptOut { operation, source } => (operation, source),
+    };
+    let _ = operation;
+    internal_error(source)
+}
+
 #[cfg(test)]
 pub(crate) async fn assert_error_contract(
     error: ApiError,
@@ -185,8 +247,8 @@ mod tests {
     use kukuri_cn_core::{ApiError, auth_required_error, consent_required_error};
 
     use super::{
-        SupportEndpointError, SupportEndpointOperation, assert_error_contract, internal_error,
-        support_endpoint_error,
+        SupportEndpointError, SupportEndpointOperation, TrustRelationError, TrustRelationOperation,
+        assert_error_contract, internal_error, support_endpoint_error, trust_relation_error,
     };
 
     #[tokio::test]
@@ -253,6 +315,33 @@ mod tests {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "INTERNAL_ERROR",
                 "backend unavailable",
+            )
+            .await;
+        }
+    }
+
+    #[tokio::test]
+    async fn trust_relation_infrastructure_errors_keep_internal_fallback() {
+        for error in [
+            TrustRelationError::trust_read(
+                TrustRelationOperation::LoadTrustInputs,
+                anyhow::anyhow!("trust store unavailable"),
+            ),
+            TrustRelationError::relation_graph(
+                TrustRelationOperation::ReadPairwiseProximity,
+                anyhow::anyhow!("relation graph unavailable"),
+            ),
+            TrustRelationError::relation_opt_out(
+                TrustRelationOperation::SetOptOut,
+                anyhow::anyhow!("opt-out store unavailable"),
+            ),
+        ] {
+            let message = error.to_string();
+            assert_error_contract(
+                trust_relation_error(error),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "INTERNAL_ERROR",
+                message.as_str(),
             )
             .await;
         }
