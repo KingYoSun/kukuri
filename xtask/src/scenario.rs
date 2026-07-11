@@ -49,3 +49,48 @@ pub(crate) fn scenario_requires_cn_postgres(name: &str) -> bool {
         "community_node_public_connectivity" | "community_node_multi_device_connectivity"
     )
 }
+
+#[cfg(test)]
+pub(crate) fn scenario_ci_lane(name: &str) -> Option<&'static str> {
+    match name {
+        "desktop_smoke_post_persist" => Some("fast+release+nightly"),
+        "community_node_public_connectivity" => Some("fast+release+nightly"),
+        "community_node_multi_device_connectivity" => Some("nightly"),
+        "desktop_smoke_bookmark_workflow"
+        | "desktop_smoke_game_room_persist"
+        | "desktop_smoke_live_session_persist"
+        | "pairwise_dm_offline_text_image_video_delivery_and_local_delete"
+        | "private_channel_invite_connectivity" => Some("nightly"),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use super::*;
+
+    #[test]
+    fn every_scenario_yaml_has_a_ci_lane() {
+        let scenario_dir = root_dir().join("harness").join("scenarios");
+        let scenario_names = std::fs::read_dir(&scenario_dir)
+            .expect("scenario directory")
+            .map(|entry| {
+                entry
+                    .expect("scenario entry")
+                    .path()
+                    .file_stem()
+                    .expect("scenario file stem")
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect::<BTreeSet<_>>();
+        assert_eq!(scenario_names.len(), 8, "scenario inventory changed");
+        let orphaned = scenario_names
+            .iter()
+            .filter(|name| scenario_ci_lane(name).is_none())
+            .collect::<Vec<_>>();
+        assert!(orphaned.is_empty(), "orphaned scenarios: {orphaned:?}");
+    }
+}
