@@ -65,7 +65,7 @@ pub struct TopicSyncSnapshot {
     pub connected_peers: Vec<String>,
     pub docs_assist_peer_ids: Vec<String>,
     pub configured_peer_ids: Vec<String>,
-    pub missing_peer_ids: Vec<String>,
+    pub missing_peer_ids: Option<Vec<String>>,
     pub delivery_state: String,
     pub status_detail: String,
 }
@@ -93,11 +93,11 @@ pub fn format_sync_snapshot(snapshot: &SyncSnapshot, topic: &str) -> String {
         .iter()
         .find(|entry| entry.topic == topic)
         .map(|entry| {
-            let missing = if entry.missing_peer_ids.is_empty() {
-                String::new()
-            } else {
-                format!(", missing_peer_ids={:?}", entry.missing_peer_ids)
-            };
+            let missing = entry
+                .missing_peer_ids
+                .as_ref()
+                .map(|ids| format!(", missing_peer_ids={ids:?}"))
+                .unwrap_or_default();
             format!(
                 "topic_peers={}, connected_peers={:?}, docs_assist_peer_ids={:?}, configured_peer_ids={:?}{missing}, delivery_state={}, status_detail={}",
                 entry.peer_count,

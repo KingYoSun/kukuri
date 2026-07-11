@@ -20,7 +20,7 @@ fn snapshot_from_status(status: &SyncStatus) -> SyncSnapshot {
                 connected_peers: entry.connected_peers.clone(),
                 docs_assist_peer_ids: entry.docs_assist_peer_ids.clone(),
                 configured_peer_ids: entry.configured_peer_ids.clone(),
-                missing_peer_ids: Vec::new(),
+                missing_peer_ids: None,
                 delivery_state: format!("{:?}", entry.delivery_state),
                 status_detail: entry.status_detail.clone(),
             })

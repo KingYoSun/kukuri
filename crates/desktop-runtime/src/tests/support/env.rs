@@ -1,35 +1,19 @@
 use super::super::*;
 
 pub(crate) fn social_graph_propagation_timeout() -> Duration {
-    if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
-        Duration::from_secs(300)
-    } else {
-        Duration::from_secs(30)
-    }
+    kukuri_test_support::constrained_timeout(Duration::from_secs(30), Duration::from_secs(300))
 }
 
 pub(crate) fn seeded_dht_runtime_ready_timeout() -> Duration {
-    if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
-        Duration::from_secs(120)
-    } else {
-        Duration::from_secs(20)
-    }
+    kukuri_test_support::constrained_timeout(Duration::from_secs(20), Duration::from_secs(120))
 }
 
 pub(crate) fn runtime_replication_timeout() -> Duration {
-    if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
-        Duration::from_secs(180)
-    } else {
-        Duration::from_secs(30)
-    }
+    kukuri_test_support::constrained_timeout(Duration::from_secs(30), Duration::from_secs(180))
 }
 
 pub(crate) fn runtime_shutdown_timeout() -> Duration {
-    if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
-        Duration::from_secs(60)
-    } else {
-        Duration::from_secs(15)
-    }
+    kukuri_test_support::constrained_timeout(Duration::from_secs(15), Duration::from_secs(60))
 }
 
 pub(crate) async fn acquire_async_test_lock() -> MutexGuard<'static, ()> {

@@ -21,6 +21,7 @@ kukuri-core = { path = "../core" }
 kukuri-desktop-runtime = { path = "../desktop-runtime" }
 kukuri-store = { path = "../store" }
 kukuri-transport = { path = "../transport" }
+kukuri-test-support = { path = "../test-support" }
 
 [lints]
 workspace = true
