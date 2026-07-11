@@ -99,6 +99,7 @@ pub(crate) use crate::views::{
 mod attachment_support;
 mod direct_messages_delivery_support;
 mod direct_messages_subscription_support;
+mod errors;
 mod gossip_subscription_support;
 mod hydration_support;
 mod live_game_support;
@@ -113,6 +114,10 @@ mod social_runtime_support;
 mod subscription_registry;
 mod timeline_subscription_support;
 mod timeline_view_support;
+
+pub(crate) use errors::{
+    PrivateChannelImportError, PrivateChannelImportKind, PrivateChannelSnapshotWaitContext,
+};
 
 pub(crate) use attachment_support::{
     attachment_views, attachment_views_from_refs, blob_status, blob_view_status,

@@ -100,7 +100,7 @@ impl AppService {
             let (metadata, policy, participants) = match wait_for_private_channel_epoch_snapshot(
                 self.docs_sync(),
                 &next_replica,
-                "private channel epoch handoff sync",
+                PrivateChannelSnapshotWaitContext::EpochHandoff,
             )
             .await
             {
