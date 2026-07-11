@@ -3,20 +3,6 @@ use anyhow::{Result, bail};
 #[allow(unused_imports)]
 use crate::*;
 
-// community-node 系のうち cn-check / cn-test の lane で検証する package 群。
-// kukuri-cn-safety-arachnid は意図的に含めない: Postgres/Valkey を要さないため
-// rust-check の clippy --workspace と rust-test 側の lane でゲートされている。
-pub(crate) const CN_PACKAGES: [&str; 9] = [
-    "kukuri-cn-core",
-    "kukuri-cn-user-api",
-    "kukuri-cn-iroh-relay",
-    "kukuri-cn-cli",
-    "kukuri-cn-operator",
-    "kukuri-cn-safety",
-    "kukuri-cn-safety-runtime",
-    "kukuri-cn-trust",
-    "kukuri-cn-indexer",
-];
 pub(crate) const SERIAL_RUST_PACKAGE: &str = "kukuri-harness";
 
 pub(crate) fn check() -> Result<()> {
@@ -32,20 +18,22 @@ pub(crate) fn test() -> Result<()> {
 
 pub(crate) fn rust_check() -> Result<()> {
     run("cargo", ["fmt", "--check"], &root_dir())?;
+    let cn_packages = cn_packages()?;
 
     let mut clippy_args = vec![
         "clippy".to_string(),
         "--workspace".to_string(),
         "--all-targets".to_string(),
     ];
-    clippy_args.extend(cargo_exclude_args(&CN_PACKAGES));
+    clippy_args.extend(cargo_exclude_args(&cn_packages));
     clippy_args.extend(["--".to_string(), "-D".to_string(), "warnings".to_string()]);
     run("cargo", clippy_args, &root_dir())
 }
 
 pub(crate) fn rust_test() -> Result<()> {
+    let cn_packages = cn_packages()?;
     if nextest_available() {
-        rust_test_with_nextest()
+        rust_test_with_nextest(&cn_packages)
     } else {
         if is_ci() {
             bail!("cargo-nextest is required in CI");
@@ -53,7 +41,7 @@ pub(crate) fn rust_test() -> Result<()> {
         eprintln!(
             "[xtask] warning: cargo-nextest was not found; falling back to cargo test for rust-test"
         );
-        rust_test_with_cargo_test()
+        rust_test_with_cargo_test(&cn_packages)
     }
 }
 
@@ -72,7 +60,7 @@ pub(crate) fn app_api_slow_test() -> Result<()> {
     )
 }
 
-pub(crate) fn rust_test_with_nextest() -> Result<()> {
+pub(crate) fn rust_test_with_nextest(cn_packages: &[String]) -> Result<()> {
     let stack_env = rust_test_stack_envs();
     let stack_env_refs = env_refs(&stack_env);
 
@@ -81,9 +69,9 @@ pub(crate) fn rust_test_with_nextest() -> Result<()> {
         "run".to_string(),
         "--workspace".to_string(),
     ];
-    nextest_args.extend(cargo_exclude_args(
-        &[&CN_PACKAGES[..], &[SERIAL_RUST_PACKAGE]].concat(),
-    ));
+    let mut excluded = cn_packages.to_vec();
+    excluded.push(SERIAL_RUST_PACKAGE.to_string());
+    nextest_args.extend(cargo_exclude_args(&excluded));
     run_with_env("cargo", nextest_args, &root_dir(), &stack_env_refs)?;
 
     run_with_env(
@@ -98,11 +86,11 @@ pub(crate) fn rust_test_with_nextest() -> Result<()> {
         "--workspace".to_string(),
         "--doc".to_string(),
     ];
-    doc_args.extend(cargo_exclude_args(&CN_PACKAGES));
+    doc_args.extend(cargo_exclude_args(cn_packages));
     run_with_env("cargo", doc_args, &root_dir(), &stack_env_refs)
 }
 
-pub(crate) fn rust_test_with_cargo_test() -> Result<()> {
+pub(crate) fn rust_test_with_cargo_test(cn_packages: &[String]) -> Result<()> {
     let mut serial_stack_env = rust_test_stack_envs();
     serial_stack_env.push(("RUST_TEST_THREADS".to_string(), "1".to_string()));
     let serial_stack_env_refs = env_refs(&serial_stack_env);
@@ -114,9 +102,9 @@ pub(crate) fn rust_test_with_cargo_test() -> Result<()> {
         "--bins".to_string(),
         "--tests".to_string(),
     ];
-    regular_test_args.extend(cargo_exclude_args(
-        &[&CN_PACKAGES[..], &[SERIAL_RUST_PACKAGE]].concat(),
-    ));
+    let mut excluded = cn_packages.to_vec();
+    excluded.push(SERIAL_RUST_PACKAGE.to_string());
+    regular_test_args.extend(cargo_exclude_args(&excluded));
     run_with_env(
         "cargo",
         regular_test_args,
@@ -145,7 +133,7 @@ pub(crate) fn rust_test_with_cargo_test() -> Result<()> {
         "--workspace".to_string(),
         "--doc".to_string(),
     ];
-    doc_args.extend(cargo_exclude_args(&CN_PACKAGES));
+    doc_args.extend(cargo_exclude_args(cn_packages));
     run_with_env("cargo", doc_args, &root_dir(), &doc_stack_env_refs)
 }
 
@@ -164,21 +152,21 @@ pub(crate) fn rust_test_stack_envs() -> Vec<(String, String)> {
     vec![("RUST_MIN_STACK".to_string(), (64 * 1024 * 1024).to_string())]
 }
 
-pub(crate) fn cargo_exclude_args(packages: &[&str]) -> Vec<String> {
+pub(crate) fn cargo_exclude_args(packages: &[String]) -> Vec<String> {
     let mut args = Vec::with_capacity(packages.len() * 2);
     for package in packages {
         args.push("--exclude".to_string());
-        args.push((*package).to_string());
+        args.push(package.clone());
     }
     args
 }
 
-pub(crate) fn cargo_package_args(command: &str, packages: &[&str]) -> Vec<String> {
+pub(crate) fn cargo_package_args(command: &str, packages: &[String]) -> Vec<String> {
     let mut args = Vec::with_capacity(1 + packages.len() * 2);
     args.push(command.to_string());
     for package in packages {
         args.push("-p".to_string());
-        args.push((*package).to_string());
+        args.push(package.clone());
     }
     args
 }
@@ -189,27 +177,29 @@ mod tests {
 
     #[test]
     fn cargo_exclude_args_expands_each_package() {
+        let packages = vec!["package-a".to_string(), "package-b".to_string()];
         assert_eq!(
-            cargo_exclude_args(&CN_PACKAGES[..2]),
+            cargo_exclude_args(&packages),
             vec![
                 "--exclude".to_string(),
-                CN_PACKAGES[0].to_string(),
+                "package-a".to_string(),
                 "--exclude".to_string(),
-                CN_PACKAGES[1].to_string(),
+                "package-b".to_string(),
             ]
         );
     }
 
     #[test]
     fn cargo_package_args_prefixes_command_and_expands_packages() {
+        let packages = vec!["package-a".to_string(), "package-b".to_string()];
         assert_eq!(
-            cargo_package_args("clippy", &CN_PACKAGES[..2]),
+            cargo_package_args("clippy", &packages),
             vec![
                 "clippy".to_string(),
                 "-p".to_string(),
-                CN_PACKAGES[0].to_string(),
+                "package-a".to_string(),
                 "-p".to_string(),
-                CN_PACKAGES[1].to_string(),
+                "package-b".to_string(),
             ]
         );
     }
