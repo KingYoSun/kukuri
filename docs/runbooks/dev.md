@@ -19,6 +19,11 @@ cargo xtask e2e-smoke
 cargo xtask release-check v0.1.0-preview.1
 cargo xtask scenario community_node_public_connectivity
 cargo xtask scenario community_node_multi_device_connectivity
+cargo xtask scenario desktop_smoke_bookmark_workflow
+cargo xtask scenario desktop_smoke_game_room_persist
+cargo xtask scenario desktop_smoke_live_session_persist
+cargo xtask scenario pairwise_dm_offline_text_image_video_delivery_and_local_delete
+cargo xtask scenario private_channel_invite_connectivity
 cargo xtask rust-check
 cargo xtask rust-test
 cargo xtask app-api-slow-test
