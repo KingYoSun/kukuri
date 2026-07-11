@@ -323,3 +323,62 @@ pub(crate) async fn wait_for_friend_plus_share_rejection(
         }
     }
 }
+
+#[cfg(test)]
+mod error_contract_tests {
+    use super::{
+        is_retryable_friend_only_grant_import_error, is_retryable_friend_plus_share_import_error,
+    };
+
+    #[test]
+    fn friend_only_import_retry_contract_is_exactly_characterized() {
+        for message in [
+            "friend-only grant import requires a mutual relationship with the channel owner",
+            "friend-only grant epoch does not match the current policy",
+            "friend-only grant owner is not an active participant",
+            "timed out waiting for friend-only channel replica sync",
+        ] {
+            assert!(
+                is_retryable_friend_only_grant_import_error(message),
+                "expected retryable: {message}"
+            );
+        }
+        for message in [
+            "friend-only grant is expired",
+            "friend-only grant replica audience must be friend_only",
+            "friend-only grant is no longer open for import",
+            "unrecognized private channel access token",
+        ] {
+            assert!(
+                !is_retryable_friend_only_grant_import_error(message),
+                "expected terminal: {message}"
+            );
+        }
+    }
+
+    #[test]
+    fn friend_plus_import_retry_contract_is_exactly_characterized() {
+        for message in [
+            "friend-plus share import requires a mutual relationship with the sponsor",
+            "sponsor is not an active participant",
+            "timed out waiting for friend-plus sponsor participant sync",
+            "timed out waiting for friend-plus channel replica sync",
+        ] {
+            assert!(
+                is_retryable_friend_plus_share_import_error(message),
+                "expected retryable: {message}"
+            );
+        }
+        for message in [
+            "friend-plus share is expired",
+            "friend-plus share replica audience must be friend_plus",
+            "friend-plus share is no longer open for import",
+            "friend-plus share epoch does not match the current policy",
+        ] {
+            assert!(
+                !is_retryable_friend_plus_share_import_error(message),
+                "expected terminal: {message}"
+            );
+        }
+    }
+}
