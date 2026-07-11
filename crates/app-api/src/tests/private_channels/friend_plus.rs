@@ -333,9 +333,9 @@ async fn friend_plus_share_freeze_rotate_and_new_epoch_visibility() {
     let freeze_error_message =
         wait_for_friend_plus_share_rejection(&app_d, stale_share_for_d.as_str(), rotation_timeout)
             .await;
-    assert!(
-        freeze_error_message.contains("no longer open"),
-        "unexpected frozen share error: {freeze_error_message}"
+    assert_eq!(
+        freeze_error_message,
+        "friend-plus share is no longer open for import"
     );
 
     let rotated = app_a
@@ -462,9 +462,9 @@ async fn friend_plus_share_freeze_rotate_and_new_epoch_visibility() {
     let old_share_error_message =
         wait_for_friend_plus_share_rejection(&app_d, stale_share_for_d.as_str(), rotation_timeout)
             .await;
-    assert!(
-        old_share_error_message.contains("no longer open"),
-        "unexpected old share error after rotate: {old_share_error_message}"
+    assert_eq!(
+        old_share_error_message,
+        "friend-plus share is no longer open for import"
     );
 
     let new_post_id = app_b

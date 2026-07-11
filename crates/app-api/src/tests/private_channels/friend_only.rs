@@ -177,7 +177,10 @@ async fn friend_only_grant_requires_mutual_and_rotate_requires_fresh_grant() {
         .import_friend_only_grant(grant.as_str())
         .await
         .expect_err("c should not join without mutual");
-    assert!(non_mutual_error.to_string().contains("mutual relationship"));
+    assert_eq!(
+        non_mutual_error.to_string(),
+        "friend-only grant import requires a mutual relationship with the channel owner"
+    );
 
     let private_channel_id = ChannelId::new(channel.channel_id.clone());
     let private_scope = TimelineScope::Channel {
