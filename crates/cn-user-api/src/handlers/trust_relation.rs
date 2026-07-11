@@ -17,7 +17,7 @@ use kukuri_cn_trust::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::errors::internal_error;
+use crate::errors::{TrustRelationError, TrustRelationOperation, trust_relation_error};
 use crate::state::{TrustReadState, UserApiState};
 
 /// trust / relation read 共通の前処理: 機能ゲート(未構成なら 404)+ 認証 + consent。
@@ -83,7 +83,10 @@ pub(crate) async fn trust_user_read(
         now.to_rfc3339().as_str(),
     )
     .await
-    .map_err(internal_error)?;
+    .map_err(|source| {
+        TrustRelationError::trust_read(TrustRelationOperation::LoadTrustInputs, source)
+    })
+    .map_err(trust_relation_error)?;
     let view = build_trust_read(
         target.as_str(),
         &inputs,
@@ -130,7 +133,10 @@ pub(crate) async fn trust_pull(
         now.to_rfc3339().as_str(),
     )
     .await
-    .map_err(internal_error)?;
+    .map_err(|source| {
+        TrustRelationError::trust_read(TrustRelationOperation::LoadTrustPullInputs, source)
+    })
+    .map_err(trust_relation_error)?;
     Ok(Json(cross_node_trust_disclosure(
         target.as_str(),
         &inputs,
@@ -170,7 +176,13 @@ pub(crate) async fn relation_user_read(
     // 「見えない」opt-out: 他者から見た relation read に出さない(§6.3。可逆・trust 非影響)。
     if is_relation_opted_out(&state.pool, target.as_str())
         .await
-        .map_err(internal_error)?
+        .map_err(|source| {
+            TrustRelationError::relation_opt_out(
+                TrustRelationOperation::CheckRelationVisibility,
+                source,
+            )
+        })
+        .map_err(trust_relation_error)?
     {
         return Err(not_found());
     }
@@ -178,7 +190,13 @@ pub(crate) async fn relation_user_read(
         .relation
         .pairwise_proximity(viewer_pubkey.as_str(), target.as_str())
         .await
-        .map_err(internal_error)?
+        .map_err(|source| {
+            TrustRelationError::relation_graph(
+                TrustRelationOperation::ReadPairwiseProximity,
+                source,
+            )
+        })
+        .map_err(trust_relation_error)?
         .ok_or_else(not_found)?;
     Ok(Json(RelationReadResponse {
         viewer_pubkey,
@@ -213,10 +231,19 @@ pub(crate) async fn relation_neighbors(
         .relation
         .neighbors(viewer_pubkey.as_str(), limit)
         .await
-        .map_err(internal_error)?;
+        .map_err(|source| {
+            TrustRelationError::relation_graph(TrustRelationOperation::ReadNeighbors, source)
+        })
+        .map_err(trust_relation_error)?;
     let neighbors = filter_relation_visible(&state.pool, neighbors.as_slice())
         .await
-        .map_err(internal_error)?;
+        .map_err(|source| {
+            TrustRelationError::relation_graph(
+                TrustRelationOperation::FilterVisibleNeighbors,
+                source,
+            )
+        })
+        .map_err(trust_relation_error)?;
     Ok(Json(RelationNeighborsResponse {
         viewer_pubkey,
         neighbors,
@@ -242,10 +269,16 @@ pub(crate) async fn relation_optout_set(
     let (_, pubkey) = require_trust_read(&state, &headers).await?;
     set_relation_optout(&state.pool, pubkey.as_str())
         .await
-        .map_err(internal_error)?;
+        .map_err(|source| {
+            TrustRelationError::relation_opt_out(TrustRelationOperation::SetOptOut, source)
+        })
+        .map_err(trust_relation_error)?;
     let opted_out_at = get_relation_optout(&state.pool, pubkey.as_str())
         .await
-        .map_err(internal_error)?;
+        .map_err(|source| {
+            TrustRelationError::relation_opt_out(TrustRelationOperation::GetOptOut, source)
+        })
+        .map_err(trust_relation_error)?;
     Ok(Json(RelationOptoutResponse {
         pubkey,
         opted_out: true,
@@ -261,7 +294,10 @@ pub(crate) async fn relation_optout_clear(
     let (_, pubkey) = require_trust_read(&state, &headers).await?;
     clear_relation_optout(&state.pool, pubkey.as_str())
         .await
-        .map_err(internal_error)?;
+        .map_err(|source| {
+            TrustRelationError::relation_opt_out(TrustRelationOperation::ClearOptOut, source)
+        })
+        .map_err(trust_relation_error)?;
     Ok(Json(RelationOptoutResponse {
         pubkey,
         opted_out: false,
