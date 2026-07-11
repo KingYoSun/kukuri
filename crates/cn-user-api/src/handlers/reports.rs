@@ -6,7 +6,7 @@ use axum::http::StatusCode;
 use kukuri_cn_core::{ApiError, ApiResult, NewCommunityNodeReport, insert_community_node_report};
 use serde::{Deserialize, Serialize};
 
-use crate::errors::internal_error;
+use crate::errors::{SupportEndpointError, SupportEndpointOperation, support_endpoint_error};
 use crate::state::UserApiState;
 
 /// 通報受信リクエスト(#370)。client(#310)が provenance + manifest authority scope で
@@ -82,7 +82,8 @@ pub(crate) async fn submit_report(
     };
     let stored = insert_community_node_report(&state.pool, &report)
         .await
-        .map_err(internal_error)?;
+        .map_err(|source| SupportEndpointError::new(SupportEndpointOperation::StoreReport, source))
+        .map_err(support_endpoint_error)?;
     Ok(Json(SubmitReportResponse {
         reference_id: stored.id,
     }))
