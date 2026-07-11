@@ -11,10 +11,10 @@
 
 use anyhow::{Context, Result, bail};
 
-use kukuri_cn_core::{
-    SafetyRuntimeConfig, SafetyRuntimeProviderEntry, SafetyRuntimeProvidersConfig,
+use kukuri_cn_safety_runtime::{
+    SAFETY_SIGNING_KEY_ENV, SafetyRuntimeConfig, SafetyRuntimeProviderEntry,
+    SafetyRuntimeProvidersConfig,
 };
-use kukuri_cn_safety_runtime::SAFETY_SIGNING_KEY_ENV;
 
 /// safety provider slot（#406。operator config の `safety.providers.*` と 1:1）の env 名。
 /// 値は provider 実装名（現状 `mock` のみ。#391 / #411 で本番実装名を追加）。
@@ -394,8 +394,15 @@ mod tests {
             let config = IndexerConfig::from_env().unwrap();
             assert!(config.safety.providers.is_empty());
 
-            let store = Arc::new(kukuri_cn_core::MemorySafetyArtifactStore::new());
-            let service = kukuri_cn_core::build_safety_scan_service(&config.safety, store).unwrap();
+            let store = Arc::new(kukuri_cn_safety_runtime::MemorySafetyArtifactStore::new());
+            let providers =
+                kukuri_cn_core::resolve_safety_providers(&config.safety.providers).unwrap();
+            let service = kukuri_cn_safety_runtime::build_safety_scan_service(
+                &config.safety,
+                providers,
+                store,
+            )
+            .unwrap();
             assert!(service.is_none());
         });
     }

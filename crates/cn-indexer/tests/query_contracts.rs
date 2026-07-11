@@ -11,10 +11,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use kukuri_cn_core::{
-    IndexScopeKind, MemoryIndexEntryStore, MemorySafetyArtifactStore, SafetyArtifactStore,
-    SafetyScanService,
-};
+use kukuri_cn_core::{IndexScopeKind, MemoryIndexEntryStore};
 use kukuri_cn_indexer::ingest::IngestPipeline;
 use kukuri_cn_indexer::projection::{IndexProjection, IndexedEntry, MemoryIndexProjection};
 use kukuri_cn_indexer::query::{FailClosedIndexQuery, IndexQuery, MAX_QUERY_LIMIT};
@@ -24,6 +21,7 @@ use kukuri_cn_safety::{
 };
 use kukuri_cn_safety_runtime::clock::SystemScanClock;
 use kukuri_cn_safety_runtime::id::UuidEventIdGenerator;
+use kukuri_cn_safety_runtime::{MemorySafetyArtifactStore, SafetyArtifactStore, SafetyScanService};
 use kukuri_cn_safety_runtime::{SafetyOrchestrator, Secp256k1ModerationEventSigner};
 use kukuri_core::{KukuriKeys, ReplicaId, TopicId, build_post_envelope};
 use kukuri_docs_sync::{DocOp, DocsSync, MemoryDocsSync, stable_key, topic_replica_id};

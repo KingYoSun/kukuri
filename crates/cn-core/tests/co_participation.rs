@@ -11,12 +11,12 @@ use anyhow::Result;
 
 use kukuri_cn_core::{
     CoParticipationPair, CoParticipationSource, IndexEntryStore, IndexScopeKind,
-    MemoryIndexEntryStore, MemorySafetyArtifactStore, NewIndexEntry, PgCoParticipationSource,
-    SafetyArtifactStore, TestDatabase, connect_postgres, initialize_database, upsert_index_entry,
-    upsert_scan_verdict,
+    MemoryIndexEntryStore, NewIndexEntry, PgCoParticipationSource, TestDatabase, connect_postgres,
+    initialize_database, upsert_index_entry, upsert_scan_verdict,
 };
 use kukuri_cn_safety::provider::SubjectKind;
 use kukuri_cn_safety::{ReasonCode, SafetyAction, SafetyVerdict};
+use kukuri_cn_safety_runtime::{MemorySafetyArtifactStore, SafetyArtifactStore};
 
 const DEFAULT_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:15432/cn";
 

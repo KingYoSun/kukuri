@@ -3092,6 +3092,7 @@ dependencies = [
 name = "kukuri-cn-safety-runtime"
 version = "0.1.2"
 dependencies = [
+ "anyhow",
  "async-trait",
  "chrono",
  "hex",
@@ -3132,6 +3133,7 @@ dependencies = [
  "kukuri-cn-operator",
  "kukuri-cn-protocol",
  "kukuri-cn-safety",
+ "kukuri-cn-safety-runtime",
  "kukuri-cn-trust",
  "kukuri-core",
  "kukuri-test-support",

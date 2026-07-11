@@ -24,8 +24,9 @@ use std::sync::Arc;
 use anyhow::{Context, Result, bail};
 use tracing::{debug, warn};
 
-use kukuri_cn_core::{IndexEntryStore, IndexScopeKind, NewIndexEntry, SafetyScanService};
+use kukuri_cn_core::{IndexEntryStore, IndexScopeKind, NewIndexEntry};
 use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
+use kukuri_cn_safety_runtime::SafetyScanService;
 use kukuri_core::{AssetRef, KukuriEnvelope, ObjectStatus, PayloadRef, ReplicaId};
 use kukuri_docs_sync::{DocFetchPolicy, DocQuery, DocRecord, DocsSync, stable_key};
 

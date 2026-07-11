@@ -23,7 +23,7 @@ use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 
 use crate::index_scope::IndexScopeKind;
-use crate::safety_runtime::MemorySafetyArtifactStore;
+use kukuri_cn_safety_runtime::MemorySafetyArtifactStore;
 
 /// 真実源に upsert する index entry（`cn-indexer` の投影 entry と同じ内容 + verdict 参照）。
 ///

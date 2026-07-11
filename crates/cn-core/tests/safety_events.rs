@@ -9,11 +9,10 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use kukuri_cn_core::{
-    DistributionAudience, PgSafetyArtifactStore, SafetyScanService, TestDatabase, connect_postgres,
-    get_risk_signal, get_signed_moderation_event, initialize_database,
-    list_distributable_moderation_events, list_distributable_risk_signals,
-    list_risk_signals_for_target, list_trust_risk_inputs, persist_risk_signal,
-    persist_signed_moderation_event,
+    DistributionAudience, PgSafetyArtifactStore, TestDatabase, connect_postgres, get_risk_signal,
+    get_signed_moderation_event, initialize_database, list_distributable_moderation_events,
+    list_distributable_risk_signals, list_risk_signals_for_target, list_trust_risk_inputs,
+    persist_risk_signal, persist_signed_moderation_event,
 };
 use kukuri_cn_safety::event::{ModerationEventBody, SignedModerationEvent, issue_signed_event};
 use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
@@ -21,6 +20,7 @@ use kukuri_cn_safety::{
     AppealStatus, Basis, MockSafetyProvider, ModerationAction, ModerationEventSigner, ReasonCode,
     RiskSignalTarget, SafetyCategory, SafetyLabel, SafetyRiskSignal, Severity, Visibility,
 };
+use kukuri_cn_safety_runtime::SafetyScanService;
 use kukuri_cn_safety_runtime::{
     SafetyOrchestrator, Secp256k1ModerationEventSigner, SystemScanClock, UuidEventIdGenerator,
     verify_signed_event,

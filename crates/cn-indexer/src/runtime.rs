@@ -58,8 +58,10 @@ async fn run(config: IndexerConfig) -> Result<()> {
     // safety scan runtime の構築境界（#406）。provider が構成されていれば service を構築・検証する
     // （構成不正 = 未知 provider 名 / emit 有効なのに署名鍵なし、は起動失敗）。未構成なら scan
     // service を構成せず、ingest は起動されない（fail-closed）。
-    let safety = kukuri_cn_core::build_safety_scan_service(
+    let safety_providers = kukuri_cn_core::resolve_safety_providers(&config.safety.providers)?;
+    let safety = kukuri_cn_safety_runtime::build_safety_scan_service(
         &config.safety,
+        safety_providers,
         Arc::new(PgSafetyArtifactStore::new(pool.clone())),
     )?;
     match safety.as_ref() {
