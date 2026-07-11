@@ -14,6 +14,12 @@ P2P network の補助層を個人・小規模グループでも説明可能に�
 そもそも P2P 基盤上には network 全体を統治する中央権者が構造的に存在しないため、生成文書も
 node 単位の説明責任に閉じる。
 
+## cn-cli との責務境界
+
+`cn-operator` は `operator-config.yaml` を真実源に、deploy 前の宣言、文書・manifest・Terraform 変数の生成、設定 drift と safety readiness の検証を行う。Postgres へ接続して稼働中 node の状態を変更する command は提供しない。
+
+稼働中 node の migration、auth rollout、通報確認、入会制御、supported set、indexing request、relation 解析には `cn-cli` を使う。運用入口と起動順は [`dev.md`](dev.md#cn-cli-と-cn-operator-の役割) を参照する。
+
 ## Phase A / Phase B（宣言と実行可能の分離）
 
 `cn-operator` は各機能を capability として扱い、`availability` を持たせている。

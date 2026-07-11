@@ -160,6 +160,14 @@ curl -fsS https://iroh-relay.kukuri.app/ping
 - `iroh_relay::server::client: failed to handle send packet frame: failed to forward packet: Full` が 3 client 同時起動などで増える場合、まず client 側の topic warmup throttling / coalescing が入った current build で確認する。
 - noisy client の ingress を運用上絞る必要がある場合だけ、`.env.community-node` に `COMMUNITY_NODE_IROH_RELAY_CLIENT_RX_BYTES_PER_SECOND` と任意の `COMMUNITY_NODE_IROH_RELAY_CLIENT_RX_MAX_BURST_BYTES` を設定する。未指定時は従来どおり unlimited。
 
+## cn-cli と cn-operator の役割
+
+- `cn-cli` は稼働中 community node の Postgres / ArcadeDB へ接続し、migration、auth rollout、通報、入会制御、supported set、indexing request、relation 解析を運用する。node の状態を読み書きするため、対象環境の `COMMUNITY_NODE_DATABASE_URL` が必要になる。
+- `cn-operator` は `operator-config.yaml` を入力に、設定検証、開示文書、manifest、Terraform 変数、safety readiness を生成・検証する。通常の DB 運用 command は持たず、稼働中 node の状態を直接変更しない。
+- 「現在の node 状態を操作する」場合は `cn-cli`、「deploy 前の宣言・生成・readiness を扱う」場合は `cn-operator` を使う。両者は相互代替ではない。
+
+`cn-operator` の詳細は [`community-node-operator-docs.md`](community-node-operator-docs.md) を参照する。
+
 ## community-node deploy 順序
 ```bash
 cargo run -p kukuri-cn-cli -- --database-url "$COMMUNITY_NODE_DATABASE_URL" prepare
