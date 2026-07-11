@@ -59,3 +59,31 @@ fn map_auth_verify_error(error: anyhow::Error) -> ApiError {
         error.to_string(),
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use axum::http::StatusCode;
+    use kukuri_cn_core::AdmissionRejection;
+
+    use crate::errors::assert_error_contract;
+
+    use super::map_auth_verify_error;
+
+    #[tokio::test]
+    async fn auth_verify_error_contracts_are_stable() {
+        assert_error_contract(
+            map_auth_verify_error(AdmissionRejection::InviteExpired.into()),
+            StatusCode::FORBIDDEN,
+            "INVITE_EXPIRED",
+            "the provided invite code has expired",
+        )
+        .await;
+        assert_error_contract(
+            map_auth_verify_error(anyhow::anyhow!("signature verification failed")),
+            StatusCode::UNAUTHORIZED,
+            "AUTH_FAILED",
+            "signature verification failed",
+        )
+        .await;
+    }
+}
