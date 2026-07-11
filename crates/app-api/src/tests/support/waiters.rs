@@ -137,11 +137,10 @@ pub(crate) async fn wait_for_mutual_author_view(
     }
 }
 
-pub(crate) fn is_retryable_friend_only_grant_import_error(message: &str) -> bool {
-    message.contains("mutual relationship")
-        || message.contains("friend-only grant epoch does not match the current policy")
-        || message.contains("friend-only grant owner is not an active participant")
-        || message.contains("timed out waiting for friend-only channel replica sync")
+pub(crate) fn is_retryable_friend_only_grant_import_error(error: &anyhow::Error) -> bool {
+    error
+        .downcast_ref::<PrivateChannelImportError>()
+        .is_some_and(PrivateChannelImportError::is_retryable_friend_only)
 }
 
 pub(crate) async fn wait_for_friend_only_grant_import(
@@ -153,9 +152,7 @@ pub(crate) async fn wait_for_friend_only_grant_import(
         loop {
             match app.import_friend_only_grant(token).await {
                 Ok(preview) => return preview,
-                Err(error)
-                    if is_retryable_friend_only_grant_import_error(error.to_string().as_str()) =>
-                {
+                Err(error) if is_retryable_friend_only_grant_import_error(&error) => {
                     sleep(Duration::from_millis(100)).await;
                 }
                 Err(error) => panic!("friend-only grant import failed: {error:#}"),
@@ -195,11 +192,10 @@ pub(crate) async fn wait_for_friend_only_grant_import(
     }
 }
 
-pub(crate) fn is_retryable_friend_plus_share_import_error(message: &str) -> bool {
-    message.contains("mutual relationship")
-        || message.contains("sponsor is not an active participant")
-        || message.contains("timed out waiting for friend-plus sponsor participant sync")
-        || message.contains("timed out waiting for friend-plus channel replica sync")
+pub(crate) fn is_retryable_friend_plus_share_import_error(error: &anyhow::Error) -> bool {
+    error
+        .downcast_ref::<PrivateChannelImportError>()
+        .is_some_and(PrivateChannelImportError::is_retryable_friend_plus)
 }
 
 pub(crate) async fn wait_for_friend_plus_share_import(
@@ -214,9 +210,7 @@ pub(crate) async fn wait_for_friend_plus_share_import(
         loop {
             match app.import_friend_plus_share(token).await {
                 Ok(preview) => return preview,
-                Err(error)
-                    if is_retryable_friend_plus_share_import_error(error.to_string().as_str()) =>
-                {
+                Err(error) if is_retryable_friend_plus_share_import_error(&error) => {
                     *retry_error_slot.lock().await = Some(error.to_string());
                     sleep(Duration::from_millis(100)).await;
                 }
@@ -275,16 +269,19 @@ pub(crate) async fn wait_for_friend_plus_share_rejection(
                 .import_friend_plus_share(token)
                 .await
                 .expect_err("friend-plus share should be rejected");
-            let message = error.to_string();
-            if message.contains("no longer open") {
-                return message;
+            match error.downcast_ref::<PrivateChannelImportError>() {
+                Some(PrivateChannelImportError::SharingClosed {
+                    kind: PrivateChannelImportKind::FriendPlus,
+                }) => return error.to_string(),
+                Some(PrivateChannelImportError::SnapshotTimeout {
+                    kind: PrivateChannelImportKind::FriendPlus,
+                }) => {
+                    *retry_error_slot.lock().await = Some(error.to_string());
+                    sleep(Duration::from_millis(100)).await;
+                    continue;
+                }
+                _ => panic!("unexpected friend-plus share rejection error: {error}"),
             }
-            if message.contains("timed out waiting for friend-plus channel replica sync") {
-                *retry_error_slot.lock().await = Some(message);
-                sleep(Duration::from_millis(100)).await;
-                continue;
-            }
-            panic!("unexpected friend-plus share rejection error: {message}");
         }
     })
     .await
@@ -326,57 +323,91 @@ pub(crate) async fn wait_for_friend_plus_share_rejection(
 
 #[cfg(test)]
 mod error_contract_tests {
+    use crate::service::{PrivateChannelImportError, PrivateChannelImportKind};
+
     use super::{
         is_retryable_friend_only_grant_import_error, is_retryable_friend_plus_share_import_error,
     };
 
     #[test]
     fn friend_only_import_retry_contract_is_exactly_characterized() {
-        for message in [
-            "friend-only grant import requires a mutual relationship with the channel owner",
-            "friend-only grant epoch does not match the current policy",
-            "friend-only grant owner is not an active participant",
-            "timed out waiting for friend-only channel replica sync",
+        for error in [
+            PrivateChannelImportError::MutualRelationshipRequired {
+                kind: PrivateChannelImportKind::FriendOnly,
+            },
+            PrivateChannelImportError::EpochMismatch {
+                kind: PrivateChannelImportKind::FriendOnly,
+            },
+            PrivateChannelImportError::OwnerInactive {
+                kind: PrivateChannelImportKind::FriendOnly,
+            },
+            PrivateChannelImportError::SnapshotTimeout {
+                kind: PrivateChannelImportKind::FriendOnly,
+            },
         ] {
+            let message = error.to_string();
             assert!(
-                is_retryable_friend_only_grant_import_error(message),
+                is_retryable_friend_only_grant_import_error(&error.into()),
                 "expected retryable: {message}"
             );
         }
-        for message in [
-            "friend-only grant is expired",
-            "friend-only grant replica audience must be friend_only",
-            "friend-only grant is no longer open for import",
-            "unrecognized private channel access token",
+        for error in [
+            PrivateChannelImportError::Expired {
+                kind: PrivateChannelImportKind::FriendOnly,
+            },
+            PrivateChannelImportError::AudienceMismatch {
+                kind: PrivateChannelImportKind::FriendOnly,
+            },
+            PrivateChannelImportError::SharingClosed {
+                kind: PrivateChannelImportKind::FriendOnly,
+            },
         ] {
+            let message = error.to_string();
             assert!(
-                !is_retryable_friend_only_grant_import_error(message),
+                !is_retryable_friend_only_grant_import_error(&error.into()),
                 "expected terminal: {message}"
             );
         }
+        assert!(!is_retryable_friend_only_grant_import_error(
+            &anyhow::anyhow!("unrecognized private channel access token")
+        ));
     }
 
     #[test]
     fn friend_plus_import_retry_contract_is_exactly_characterized() {
-        for message in [
-            "friend-plus share import requires a mutual relationship with the sponsor",
-            "sponsor is not an active participant",
-            "timed out waiting for friend-plus sponsor participant sync",
-            "timed out waiting for friend-plus channel replica sync",
+        for error in [
+            PrivateChannelImportError::MutualRelationshipRequired {
+                kind: PrivateChannelImportKind::FriendPlus,
+            },
+            PrivateChannelImportError::SponsorInactive,
+            PrivateChannelImportError::SponsorSnapshotTimeout,
+            PrivateChannelImportError::SnapshotTimeout {
+                kind: PrivateChannelImportKind::FriendPlus,
+            },
         ] {
+            let message = error.to_string();
             assert!(
-                is_retryable_friend_plus_share_import_error(message),
+                is_retryable_friend_plus_share_import_error(&error.into()),
                 "expected retryable: {message}"
             );
         }
-        for message in [
-            "friend-plus share is expired",
-            "friend-plus share replica audience must be friend_plus",
-            "friend-plus share is no longer open for import",
-            "friend-plus share epoch does not match the current policy",
+        for error in [
+            PrivateChannelImportError::Expired {
+                kind: PrivateChannelImportKind::FriendPlus,
+            },
+            PrivateChannelImportError::AudienceMismatch {
+                kind: PrivateChannelImportKind::FriendPlus,
+            },
+            PrivateChannelImportError::SharingClosed {
+                kind: PrivateChannelImportKind::FriendPlus,
+            },
+            PrivateChannelImportError::EpochMismatch {
+                kind: PrivateChannelImportKind::FriendPlus,
+            },
         ] {
+            let message = error.to_string();
             assert!(
-                !is_retryable_friend_plus_share_import_error(message),
+                !is_retryable_friend_plus_share_import_error(&error.into()),
                 "expected terminal: {message}"
             );
         }

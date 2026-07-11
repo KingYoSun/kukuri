@@ -331,7 +331,7 @@ pub(crate) async fn fetch_private_channel_epoch_handoff_grant_from_replica(
 pub(crate) async fn wait_for_private_channel_epoch_snapshot(
     docs_sync: &dyn DocsSync,
     replica: &ReplicaId,
-    timeout_label: &str,
+    context: PrivateChannelSnapshotWaitContext,
 ) -> Result<(
     PrivateChannelMetadataDocV1,
     PrivateChannelPolicyDocV1,
@@ -374,7 +374,7 @@ pub(crate) async fn wait_for_private_channel_epoch_snapshot(
         }
     })
     .await
-    .map_err(|_| anyhow::anyhow!("timed out waiting for {timeout_label}"))?
+    .map_err(|_| context.timeout_error())?
 }
 
 pub(crate) async fn private_channel_rotation_is_pending(
