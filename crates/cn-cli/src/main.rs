@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand, ValueEnum};
+use kukuri_cn_cli::{format_timestamp, parse_enforce_at};
 use kukuri_cn_core::{
     AdmissionMode, AuthMode, AuthRolloutConfig, COMMUNITY_NODE_AUTH_SERVICE_NAME, IndexScopeKind,
     IndexingRequestStatus, PgCoParticipationSource, add_allowlist, add_supported_topic,
@@ -628,19 +629,4 @@ async fn run_admission(pool: &sqlx::PgPool, action: AdmissionAction) -> Result<(
         },
     }
     Ok(())
-}
-
-fn format_timestamp(timestamp: i64) -> String {
-    DateTime::<Utc>::from_timestamp(timestamp, 0)
-        .map(|value| value.to_rfc3339())
-        .unwrap_or_else(|| timestamp.to_string())
-}
-
-fn parse_enforce_at(value: &str) -> Result<i64> {
-    if let Ok(timestamp) = value.parse::<i64>() {
-        return Ok(timestamp);
-    }
-    let parsed = DateTime::parse_from_rfc3339(value)
-        .with_context(|| format!("failed to parse RFC3339 timestamp `{value}`"))?;
-    Ok(parsed.with_timezone(&Utc).timestamp())
 }
