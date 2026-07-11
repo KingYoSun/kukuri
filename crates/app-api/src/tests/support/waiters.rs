@@ -1,37 +1,54 @@
 use super::super::*;
+use async_trait::async_trait;
+use kukuri_test_support::{
+    PollError, PollState, SyncSnapshot, SyncStatusSource, TopicSyncSnapshot, poll_until,
+};
+
+fn snapshot_from_status(status: &SyncStatus) -> SyncSnapshot {
+    SyncSnapshot {
+        connected: status.connected,
+        peer_count: status.peer_count,
+        status_detail: status.status_detail.clone(),
+        last_error: status.last_error.clone(),
+        discovery_connected_peers: status.discovery.connected_peer_ids.clone(),
+        topics: status
+            .topic_diagnostics
+            .iter()
+            .map(|entry| TopicSyncSnapshot {
+                topic: entry.topic.clone(),
+                peer_count: entry.peer_count,
+                connected_peers: entry.connected_peers.clone(),
+                docs_assist_peer_ids: entry.docs_assist_peer_ids.clone(),
+                configured_peer_ids: entry.configured_peer_ids.clone(),
+                missing_peer_ids: Vec::new(),
+                delivery_state: format!("{:?}", entry.delivery_state),
+                status_detail: entry.status_detail.clone(),
+            })
+            .collect(),
+    }
+}
+
+#[async_trait]
+impl SyncStatusSource for AppService {
+    type Error = anyhow::Error;
+
+    async fn sync_snapshot(&self) -> Result<SyncSnapshot, Self::Error> {
+        self.get_sync_status()
+            .await
+            .map(|status| snapshot_from_status(&status))
+    }
+}
 
 pub(crate) fn format_sync_snapshot(status: &SyncStatus, topic: &str) -> String {
-    let topic_status = status
-        .topic_diagnostics
-        .iter()
-            .find(|entry| entry.topic == topic)
-            .map(|entry| {
-                format!(
-                    "topic_peers={}, connected_peers={:?}, docs_assist_peer_ids={:?}, configured_peer_ids={:?}, delivery_state={:?}, status_detail={}",
-                    entry.peer_count,
-                    entry.connected_peers,
-                    entry.docs_assist_peer_ids,
-                    entry.configured_peer_ids,
-                    entry.delivery_state,
-                    entry.status_detail
-                )
-            })
-        .unwrap_or_else(|| "topic_status=missing".to_string());
-    format!(
-        "connected={}, peer_count={}, status_detail={}, last_error={:?}, discovery_connected_peers={:?}, {}",
-        status.connected,
-        status.peer_count,
-        status.status_detail,
-        status.last_error,
-        status.discovery.connected_peer_ids,
-        topic_status
-    )
+    kukuri_test_support::format_sync_snapshot(&snapshot_from_status(status), topic)
 }
 
 pub(crate) async fn wait_for_topic_delivery(app: &AppService, topic: &str, expected: usize) {
-    match timeout(social_graph_propagation_timeout(), async {
-        let mut stable_ready_polls = 0usize;
-        loop {
+    let result = poll_until(
+        social_graph_propagation_timeout(),
+        Duration::from_millis(50),
+        3,
+        || async {
             let status = app.get_sync_status().await.expect("sync status");
             let ready = status.topic_diagnostics.iter().any(|entry| {
                 let live_ready = entry.peer_count >= expected
@@ -44,28 +61,25 @@ pub(crate) async fn wait_for_topic_delivery(app: &AppService, topic: &str, expec
                     );
                 entry.topic == topic && (live_ready || durable_ready)
             });
-            if ready {
-                stable_ready_polls += 1;
-                if stable_ready_polls >= 3 {
-                    return;
-                }
+            Ok::<_, anyhow::Error>(if ready {
+                PollState::Ready(())
             } else {
-                stable_ready_polls = 0;
-            }
-            sleep(Duration::from_millis(50)).await;
-        }
-    })
-    .await
-    {
+                PollState::Pending
+            })
+        },
+    )
+    .await;
+    match result {
         Ok(()) => {}
-        Err(_) => {
+        Err(PollError::Timeout) => {
             let snapshot = app
-                .get_sync_status()
+                .sync_snapshot()
                 .await
-                .map(|status| format_sync_snapshot(&status, topic))
+                .map(|status| kukuri_test_support::format_sync_snapshot(&status, topic))
                 .unwrap_or_else(|_| "failed to read sync status".to_string());
             panic!("topic delivery timeout for {topic}; {snapshot}");
         }
+        Err(PollError::Operation(error)) => panic!("topic delivery failed: {error:#}"),
     }
 }
 
