@@ -94,11 +94,7 @@ pub use safety_events::{
     list_distributable_risk_signals, list_risk_signals_for_target, list_signed_moderation_events,
     persist_risk_signal, persist_signed_moderation_event,
 };
-pub use safety_runtime::{
-    MemorySafetyArtifactStore, PgSafetyArtifactStore, SafetyArtifactStore, SafetyRuntimeConfig,
-    SafetyRuntimeProviderEntry, SafetyRuntimeProvidersConfig, SafetyScanOutcome, SafetyScanService,
-    SafetyScanServiceBuilder, build_safety_orchestrator, build_safety_scan_service,
-};
+pub use safety_runtime::{PgSafetyArtifactStore, resolve_safety_providers};
 pub use scan_verdicts::{StoredScanVerdict, get_scan_verdict, upsert_scan_verdict};
 pub use trust_inputs::{
     TrustComponentKind, TrustRiskInput, TrustRiskInputs, list_trust_risk_inputs,

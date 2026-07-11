@@ -14,13 +14,14 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use kukuri_cn_core::{
-    IndexEntryStore, IndexScopeKind, JwtConfig, MemoryIndexEntryStore, MemorySafetyArtifactStore,
-    NewIndexEntry, SafetyArtifactStore, TestDatabase, build_auth_envelope_json,
+    IndexEntryStore, IndexScopeKind, JwtConfig, MemoryIndexEntryStore, NewIndexEntry, TestDatabase,
+    build_auth_envelope_json,
 };
 use kukuri_cn_indexer::projection::{IndexProjection, IndexedEntry, MemoryIndexProjection};
 use kukuri_cn_indexer::query::FailClosedIndexQuery;
 use kukuri_cn_safety::provider::SubjectKind;
 use kukuri_cn_safety::{ReasonCode, SafetyAction, SafetyVerdict};
+use kukuri_cn_safety_runtime::{MemorySafetyArtifactStore, SafetyArtifactStore};
 use kukuri_cn_user_api::{UserApiConfig, app_router, build_state};
 use kukuri_core::{KukuriKeys, generate_keys};
 use reqwest::{Client, StatusCode};

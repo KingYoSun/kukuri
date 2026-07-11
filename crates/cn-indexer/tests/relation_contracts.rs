@@ -10,13 +10,11 @@ use std::sync::Arc;
 
 use anyhow::Result;
 
-use kukuri_cn_core::{
-    IndexEntryStore, IndexScopeKind, MemoryIndexEntryStore, MemorySafetyArtifactStore,
-    NewIndexEntry, SafetyArtifactStore,
-};
+use kukuri_cn_core::{IndexEntryStore, IndexScopeKind, MemoryIndexEntryStore, NewIndexEntry};
 use kukuri_cn_indexer::{ArcadeDbConfig, ArcadeDbRelationGraph, analyze_relations, topic_cluster};
 use kukuri_cn_safety::provider::SubjectKind;
 use kukuri_cn_safety::{ReasonCode, SafetyAction, SafetyVerdict};
+use kukuri_cn_safety_runtime::{MemorySafetyArtifactStore, SafetyArtifactStore};
 use kukuri_cn_trust::relation_testing::assert_relation_store_contracts;
 use kukuri_cn_trust::{
     FEATURE_CO_PARTICIPATION_EVENTS, FEATURE_SHARED_TOPICS, MemoryRelationStore, RelationStore,

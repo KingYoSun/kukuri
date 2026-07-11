@@ -30,6 +30,7 @@ pub mod clock;
 pub mod error;
 pub mod id;
 pub mod orchestrator;
+pub mod service;
 pub mod signer;
 
 pub use clock::{ScanClock, SystemScanClock};
@@ -37,6 +38,11 @@ pub use error::SafetyRuntimeError;
 pub use id::{EventIdGenerator, UuidEventIdGenerator};
 pub use orchestrator::{
     SafetyOrchestrator, SafetyOrchestratorBuilder, SafetyScanReport, map_scan_error,
+};
+pub use service::{
+    MemorySafetyArtifactStore, SafetyArtifactStore, SafetyRuntimeConfig,
+    SafetyRuntimeProviderEntry, SafetyRuntimeProvidersConfig, SafetyScanOutcome, SafetyScanService,
+    SafetyScanServiceBuilder, build_safety_scan_service,
 };
 pub use signer::{
     SAFETY_SIGNING_KEY_ENV, Secp256k1ModerationEventSigner, SignatureError, SignerKeyError,

@@ -9,17 +9,17 @@
 
 use anyhow::Result;
 use kukuri_cn_core::{
-    IndexScopeKind, NewIndexEntry, PgSafetyArtifactStore, SafetyScanService, TestDatabase,
-    connect_postgres, filter_surfaceable_objects, get_index_entry, get_scan_verdict,
-    initialize_database, remove_index_entry, remove_index_scope, upsert_index_entry,
-    upsert_scan_verdict,
+    IndexScopeKind, NewIndexEntry, PgSafetyArtifactStore, TestDatabase, connect_postgres,
+    filter_surfaceable_objects, get_index_entry, get_scan_verdict, initialize_database,
+    remove_index_entry, remove_index_scope, upsert_index_entry, upsert_scan_verdict,
 };
 use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
 use kukuri_cn_safety::{
     MockSafetyProvider, ModerationEventSigner, ReasonCode, SafetyAction, SafetyVerdict,
 };
 use kukuri_cn_safety_runtime::{
-    SafetyOrchestrator, Secp256k1ModerationEventSigner, SystemScanClock, UuidEventIdGenerator,
+    SafetyOrchestrator, SafetyScanService, Secp256k1ModerationEventSigner, SystemScanClock,
+    UuidEventIdGenerator,
 };
 use std::sync::Arc;
 

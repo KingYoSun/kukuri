@@ -9,6 +9,8 @@ name = "kukuri_cn_safety_runtime"
 path = "src/lib.rs"
 
 [dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
 chrono.workspace = true
 hex.workspace = true
 kukuri-cn-safety = { path = "../cn-safety" }

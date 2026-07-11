@@ -9,18 +9,16 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::{Result, bail};
 use async_trait::async_trait;
-use kukuri_cn_core::{
-    MemorySafetyArtifactStore, SafetyArtifactStore, SafetyRuntimeConfig,
-    SafetyRuntimeProviderEntry, SafetyRuntimeProvidersConfig, SafetyScanService,
-    build_safety_orchestrator, build_safety_scan_service,
-};
+use kukuri_cn_core::resolve_safety_providers;
 use kukuri_cn_safety::provider::{ProviderScanRequest, ScanError, SubjectKind};
 use kukuri_cn_safety::{
     MockSafetyProvider, ModerationEventSigner, ReasonCode, RiskSignalTarget, SafetyCategory,
     SafetyProvider, SafetyRiskSignal, SafetyVerdict, SignedModerationEvent,
 };
 use kukuri_cn_safety_runtime::{
-    EventIdGenerator, SafetyOrchestrator, ScanClock, Secp256k1ModerationEventSigner,
+    EventIdGenerator, MemorySafetyArtifactStore, SafetyArtifactStore, SafetyOrchestrator,
+    SafetyRuntimeConfig, SafetyRuntimeProviderEntry, SafetyRuntimeProvidersConfig,
+    SafetyScanService, ScanClock, Secp256k1ModerationEventSigner, build_safety_scan_service,
     verify_signed_event,
 };
 
@@ -351,7 +349,7 @@ fn mock_slot() -> Option<SafetyRuntimeProviderEntry> {
 }
 
 #[test]
-fn build_orchestrator_rejects_unknown_provider_name() {
+fn provider_resolver_rejects_unknown_provider_name() {
     let providers = SafetyRuntimeProvidersConfig {
         known_csam: Some(SafetyRuntimeProviderEntry {
             provider: "arachnid-shield".to_string(),
@@ -359,7 +357,9 @@ fn build_orchestrator_rejects_unknown_provider_name() {
         }),
         ..Default::default()
     };
-    let error = build_safety_orchestrator("issuer-node", &providers, None).unwrap_err();
+    let error = resolve_safety_providers(&providers)
+        .err()
+        .expect("unknown provider must fail closed");
     assert!(
         error.to_string().contains("unknown safety provider"),
         "{error}"
@@ -367,7 +367,7 @@ fn build_orchestrator_rejects_unknown_provider_name() {
 }
 
 #[test]
-fn build_orchestrator_resolves_arachnid_shield_only_with_credentials() {
+fn provider_resolver_resolves_arachnid_shield_only_with_credentials() {
     // env は process-global なため、この 1 テスト内で「欠落 → Err」と「設定 → Ok」を順に
     // 検証する（他テストはこの env を読まない）。
     let providers = SafetyRuntimeProvidersConfig {
@@ -383,7 +383,9 @@ fn build_orchestrator_resolves_arachnid_shield_only_with_credentials() {
         std::env::remove_var("PROJECT_ARACHNID_API_USERNAME");
         std::env::remove_var("PROJECT_ARACHNID_API_PASSWORD");
     }
-    let error = build_safety_orchestrator("issuer-node", &providers, None).unwrap_err();
+    let error = resolve_safety_providers(&providers)
+        .err()
+        .expect("missing credentials must fail closed");
     let message = format!("{error:#}");
     assert!(message.contains("project-arachnid-shield"), "{message}");
     assert!(
@@ -396,7 +398,7 @@ fn build_orchestrator_resolves_arachnid_shield_only_with_credentials() {
         std::env::set_var("PROJECT_ARACHNID_API_USERNAME", "operator-user");
         std::env::set_var("PROJECT_ARACHNID_API_PASSWORD", "operator-pass");
     }
-    let result = build_safety_orchestrator("issuer-node", &providers, None);
+    let result = resolve_safety_providers(&providers);
     unsafe {
         std::env::remove_var("PROJECT_ARACHNID_API_USERNAME");
         std::env::remove_var("PROJECT_ARACHNID_API_PASSWORD");
@@ -405,7 +407,7 @@ fn build_orchestrator_resolves_arachnid_shield_only_with_credentials() {
 }
 
 #[test]
-fn build_orchestrator_rejects_arachnid_shield_outside_known_csam_slot() {
+fn provider_resolver_rejects_arachnid_shield_outside_known_csam_slot() {
     // Shield は known-match provider。general / unknown_csam slot への指定は fail-closed。
     let providers = SafetyRuntimeProvidersConfig {
         known_csam: mock_slot(),
@@ -415,7 +417,9 @@ fn build_orchestrator_rejects_arachnid_shield_outside_known_csam_slot() {
         }),
         ..Default::default()
     };
-    let error = build_safety_orchestrator("issuer-node", &providers, None).unwrap_err();
+    let error = resolve_safety_providers(&providers)
+        .err()
+        .expect("slot mismatch must fail closed");
     assert!(
         error
             .to_string()
@@ -425,17 +429,11 @@ fn build_orchestrator_rejects_arachnid_shield_outside_known_csam_slot() {
 }
 
 #[test]
-fn build_orchestrator_rejects_empty_provider_set() {
-    let providers = SafetyRuntimeProvidersConfig::default();
-    let error = build_safety_orchestrator("issuer-node", &providers, None).unwrap_err();
-    assert!(error.to_string().contains("no safety providers"), "{error}");
-}
-
-#[test]
 fn build_scan_service_returns_none_without_providers() {
     let config = SafetyRuntimeConfig::default();
     let store = Arc::new(MemorySafetyArtifactStore::new());
-    let service = build_safety_scan_service(&config, store).unwrap();
+    let providers = resolve_safety_providers(&config.providers).unwrap();
+    let service = build_safety_scan_service(&config, providers, store).unwrap();
     assert!(service.is_none());
 }
 
@@ -449,7 +447,8 @@ fn build_scan_service_requires_signing_key_when_emit_enabled() {
         ..Default::default()
     };
     let store = Arc::new(MemorySafetyArtifactStore::new());
-    let error = build_safety_scan_service(&config, store).unwrap_err();
+    let providers = resolve_safety_providers(&config.providers).unwrap();
+    let error = build_safety_scan_service(&config, providers, store).unwrap_err();
     assert!(error.to_string().contains("no signing key"), "{error}");
 }
 
@@ -467,7 +466,8 @@ async fn build_scan_service_constructs_mock_orchestrator_and_scans() {
         ..Default::default()
     };
     let store = Arc::new(MemorySafetyArtifactStore::new());
-    let service = build_safety_scan_service(&config, store.clone())
+    let providers = resolve_safety_providers(&config.providers).unwrap();
+    let service = build_safety_scan_service(&config, providers, store.clone())
         .unwrap()
         .expect("service should be constructed");
     assert_eq!(service.issuer_node_id(), signer().issuer_node_id());
