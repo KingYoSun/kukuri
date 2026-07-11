@@ -24,7 +24,7 @@ async fn wait_for_counter(counter: &AtomicUsize, at_least: usize, label: &str) {
 /// WP-C1 の failing test: スケジューラ導入前は heartbeat_hits が 0 のまま timeout で赤になる。
 #[tokio::test]
 async fn session_scheduler_keeps_bootstrap_registration_alive_without_getter_polling() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-scheduler-keepalive.db");
     let runtime = Arc::new(
@@ -153,7 +153,7 @@ async fn session_scheduler_keeps_bootstrap_registration_alive_without_getter_pol
 /// 固定する contract。駆動はスケジューラ(session maintenance tick)のみが担う(WP-C1 T4)。
 #[tokio::test]
 async fn get_sync_status_is_read_only_for_community_node_session() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-sync-status-read-only.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -220,7 +220,7 @@ async fn get_sync_status_is_read_only_for_community_node_session() {
 /// WP-C1 の failing test: スケジューラ導入前は verify_hits が 0 のまま timeout で赤になる。
 #[tokio::test]
 async fn session_scheduler_reauthenticates_near_expiry_token_without_getter_polling() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-scheduler-reauth.db");
     let runtime = Arc::new(

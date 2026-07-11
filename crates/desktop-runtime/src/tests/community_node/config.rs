@@ -92,7 +92,7 @@ fn community_node_config_preserves_public_kukuri_urls() {
 
 #[tokio::test]
 async fn local_community_node_seed_peer_includes_addr_hint() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::ProcessEnvironment).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-seed-peer-addr-hint.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -115,7 +115,7 @@ async fn local_community_node_seed_peer_includes_addr_hint() {
 
 #[tokio::test]
 async fn local_community_node_seed_peer_keeps_addr_hint_when_relay_urls_exist() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::ProcessEnvironment).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-seed-peer-relay-auto-hint.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -202,7 +202,7 @@ fn default_preview_community_node_config_marks_preloaded_node_auto_approve() {
 
 #[tokio::test]
 async fn runtime_preloads_preview_community_node_when_config_file_is_missing() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::ProcessEnvironment).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-preview-preload.db");
 

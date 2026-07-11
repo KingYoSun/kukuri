@@ -2,7 +2,7 @@ use super::*;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn set_discovery_seeds_reapplies_runtime_without_restart() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::DhtTestnet).await;
     let dir = tempdir().expect("tempdir");
     let db_a = dir.path().join("seeded-a.db");
     let db_b = dir.path().join("seeded-b.db");
@@ -95,7 +95,7 @@ async fn set_discovery_seeds_reapplies_runtime_without_restart() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn restart_restores_seeded_dht_config_and_endpoint_identity() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::DhtTestnet).await;
     let dir = tempdir().expect("tempdir");
     let db_a = dir.path().join("restart-seeded-a.db");
     let db_b = dir.path().join("restart-seeded-b.db");
@@ -199,7 +199,7 @@ async fn restart_restores_seeded_dht_config_and_endpoint_identity() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn invalid_seed_entry_rejected_without_mutating_runtime() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::DhtTestnet).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("invalid-seed.db");
     let testnet = Testnet::new(5).await.expect("testnet");

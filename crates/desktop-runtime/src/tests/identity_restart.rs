@@ -20,7 +20,7 @@ fn resolve_db_path_ignores_legacy_runtime_artifacts() {
 
 #[tokio::test]
 async fn desktop_runtime_persists_posts_and_author_identity_after_restart() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IdentityStorage).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("kukuri.db");
     let runtime = timeout(
@@ -111,7 +111,7 @@ async fn desktop_runtime_persists_posts_and_author_identity_after_restart() {
 
 #[tokio::test]
 async fn desktop_runtime_restores_profile_avatar_blob_after_restart() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IdentityStorage).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("profile-avatar-restart.db");
     let avatar_bytes = b"runtime-profile-avatar".to_vec();

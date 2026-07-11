@@ -2,7 +2,7 @@ use super::super::*;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn community_node_connectivity_assist_relay_backed_seed_peers_ignore_stale_addr_hints() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let relay = kukuri_cn_iroh_relay::spawn_server(kukuri_cn_iroh_relay::IrohRelayConfig {
         http_bind_addr: "127.0.0.1:0".parse().expect("relay bind addr"),
         tls: None,
@@ -137,7 +137,7 @@ async fn community_node_connectivity_assist_relay_backed_seed_peers_ignore_stale
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn community_node_connectivity_assist_backfills_public_timeline_with_relay_only_seed_peers() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let relay = kukuri_cn_iroh_relay::spawn_server(kukuri_cn_iroh_relay::IrohRelayConfig {
         http_bind_addr: "127.0.0.1:0".parse().expect("relay bind addr"),
         tls: None,
@@ -305,7 +305,7 @@ async fn external_relay_endpoint_only_seed_peers_backfill_desktop_public_timelin
         return;
     };
 
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let dir = tempdir().expect("tempdir");
     let db_a = dir.path().join("external-relay-only-a.db");
     let db_b = dir.path().join("external-relay-only-b.db");
@@ -451,7 +451,7 @@ async fn external_relay_endpoint_only_seed_peers_backfill_desktop_public_timelin
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn community_node_connectivity_assist_backfills_three_client_public_timeline_with_stale_addr_hints()
  {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let relay = kukuri_cn_iroh_relay::spawn_server(kukuri_cn_iroh_relay::IrohRelayConfig {
         http_bind_addr: "127.0.0.1:0".parse().expect("relay bind addr"),
         tls: None,
@@ -674,7 +674,7 @@ async fn community_node_connectivity_assist_backfills_three_client_public_timeli
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn runtime_starts_with_unreachable_community_node_and_recovers_via_manual_peer() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let dir = tempdir().expect("tempdir");
     let db_a = dir.path().join("community-unreachable-a.db");
     let db_b = dir.path().join("community-unreachable-b.db");
@@ -848,7 +848,7 @@ async fn runtime_starts_with_unreachable_community_node_and_recovers_via_manual_
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn community_node_connectivity_assist_relay_backed_seed_peers_ignore_stale_addr_hints_with_shared_identity()
  {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let relay = kukuri_cn_iroh_relay::spawn_server(kukuri_cn_iroh_relay::IrohRelayConfig {
         http_bind_addr: "127.0.0.1:0".parse().expect("relay bind addr"),
         tls: None,

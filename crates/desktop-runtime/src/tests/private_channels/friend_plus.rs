@@ -2,7 +2,7 @@ use super::super::*;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn friend_plus_channel_restore_accepts_fresh_share_after_restart() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let dir = tempdir().expect("tempdir");
     let db_a = dir.path().join("friend-plus-runtime-a.db");
     let db_b = dir.path().join("friend-plus-runtime-b.db");

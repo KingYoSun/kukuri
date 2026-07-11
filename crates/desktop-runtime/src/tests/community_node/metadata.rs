@@ -2,7 +2,7 @@ use super::super::*;
 
 #[tokio::test]
 async fn community_node_status_refresh_updates_bootstrap_seed_peers() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-heartbeat-refresh.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -92,7 +92,7 @@ async fn community_node_status_refresh_updates_bootstrap_seed_peers() {
 
 #[tokio::test]
 async fn community_node_session_maintenance_updates_bootstrap_seed_peers() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-sync-status-refresh.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -170,7 +170,7 @@ async fn community_node_session_maintenance_updates_bootstrap_seed_peers() {
 #[tokio::test]
 async fn community_node_metadata_refresh_heartbeats_before_bootstrap_sync_even_when_metadata_is_unchanged()
  {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-metadata-refresh-no-churn.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -290,7 +290,7 @@ async fn community_node_metadata_refresh_heartbeats_before_bootstrap_sync_even_w
 
 #[tokio::test]
 async fn community_node_ready_transition_refreshes_bootstrap_metadata_before_next_heartbeat_due() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-ready-refresh.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -410,7 +410,7 @@ async fn community_node_ready_transition_refreshes_bootstrap_metadata_before_nex
 #[tokio::test]
 async fn community_node_ready_transition_refreshes_bootstrap_metadata_only_once_before_next_heartbeat_due()
  {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-ready-refresh-once.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -492,7 +492,7 @@ async fn community_node_ready_transition_refreshes_bootstrap_metadata_only_once_
 
 #[tokio::test]
 async fn community_node_status_retries_bootstrap_metadata_when_seed_peers_are_empty() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-metadata-retry.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -608,7 +608,7 @@ async fn community_node_status_retries_bootstrap_metadata_when_seed_peers_are_em
 
 #[tokio::test]
 async fn refresh_community_node_metadata_refreshes_registration_before_bootstrap_sync() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-refresh-heartbeat.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -701,7 +701,7 @@ async fn refresh_community_node_metadata_refreshes_registration_before_bootstrap
 #[tokio::test]
 async fn refresh_community_node_metadata_requeues_heartbeat_when_runtime_connectivity_changes_local_seed_peer()
  {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server()
         .await
         .expect("relay server");
@@ -810,7 +810,7 @@ async fn refresh_community_node_metadata_requeues_heartbeat_when_runtime_connect
 
 #[tokio::test]
 async fn reapply_community_node_connectivity_forces_unchanged_runtime_inputs() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server()
         .await
         .expect("relay server");

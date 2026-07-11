@@ -31,11 +31,11 @@ use kukuri_transport::{
 use n0_mainline::{DhtBuilder, Testnet};
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, OnceLock};
 use tempfile::tempdir;
 use tokio::net::TcpListener;
-use tokio::sync::{Mutex, MutexGuard};
+use tokio::sync::Mutex;
 use tokio::time::{Duration, sleep, timeout};
 
 use crate::attachments::{normalize_custom_reaction_gif, normalize_custom_reaction_static};
@@ -48,6 +48,7 @@ use crate::community_node::{
 use crate::discovery::resolve_discovery_config_from_env;
 use crate::identity::IdentityStorageMode;
 use crate::paths::{community_node_config_path, discovery_config_path};
+pub(crate) use kukuri_test_support::{TestResource, lock_test_resource};
 
 mod support;
 pub(crate) use support::*;

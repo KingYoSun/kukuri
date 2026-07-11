@@ -9,7 +9,7 @@ use super::super::*;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn owner_invite_export_auto_rotate_survives_restart() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let dir = tempdir().expect("tempdir");
     let db = dir.path().join("private-export-persist-invite.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -96,7 +96,7 @@ async fn owner_invite_export_auto_rotate_survives_restart() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn owner_access_token_export_auto_rotate_survives_restart() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let dir = tempdir().expect("tempdir");
     let db = dir.path().join("private-export-persist-access-token.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
