@@ -155,11 +155,7 @@ async fn relation_worker_is_idempotent_and_does_not_mutate_index_source() -> Res
 /// あるときのみ実行する（他の integration テストと同じ env-gate 流儀）。
 #[tokio::test]
 async fn arcadedb_relation_store_satisfies_shared_contracts() -> Result<()> {
-    let enabled = std::env::var("KUKURI_CN_RUN_ARCADEDB_TESTS")
-        .ok()
-        .map(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "yes" | "YES"))
-        .unwrap_or(false);
-    if !enabled {
+    if !kukuri_test_support::env_flag_enabled("KUKURI_CN_RUN_ARCADEDB_TESTS") {
         eprintln!("skipping ArcadeDB relation test; set KUKURI_CN_RUN_ARCADEDB_TESTS=1");
         return Ok(());
     }

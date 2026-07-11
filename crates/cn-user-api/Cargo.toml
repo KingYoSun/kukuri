@@ -30,6 +30,7 @@ kukuri-cn-safety = { path = "../cn-safety" }
 kukuri-cn-trust = { path = "../cn-trust" }
 
 [dev-dependencies]
+kukuri-test-support = { path = "../test-support" }
 kukuri-core = { path = "../core" }
 hex.workspace = true
 reqwest.workspace = true

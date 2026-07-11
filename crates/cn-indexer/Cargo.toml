@@ -38,6 +38,7 @@ kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }
 kukuri-cn-trust = { path = "../cn-trust" }
 
 [dev-dependencies]
+kukuri-test-support = { path = "../test-support" }
 kukuri-cn-safety = { path = "../cn-safety", features = ["mock"] }
 # relation graph（ArcadeDB / in-memory）へ同一 contract を課す共有スイート。
 kukuri-cn-trust = { path = "../cn-trust", features = ["testing"] }
