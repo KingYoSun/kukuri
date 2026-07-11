@@ -21,6 +21,7 @@ cargo xtask scenario community_node_public_connectivity
 cargo xtask scenario community_node_multi_device_connectivity
 cargo xtask rust-check
 cargo xtask rust-test
+cargo xtask app-api-slow-test
 cargo xtask tauri-check
 cargo xtask desktop-lint
 cargo xtask desktop-test

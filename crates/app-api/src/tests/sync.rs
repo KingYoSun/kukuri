@@ -190,6 +190,7 @@ impl BlobService for DelayedBlobService {
     }
 }
 
+#[cfg(feature = "iroh-integration-tests")]
 async fn iroh_sync_diagnostics(
     app_a: &AppService,
     app_b: &AppService,
@@ -284,4 +285,5 @@ mod diagnostics;
 mod gossip_toggle;
 mod hint_rehydration;
 mod subscription_restarts;
+#[cfg(feature = "iroh-integration-tests")]
 mod transport_replication;

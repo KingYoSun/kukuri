@@ -364,6 +364,7 @@ async fn sync_status_normalizes_hint_topic_names() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[cfg(feature = "iroh-integration-tests")]
 async fn invalid_ticket_updates_sync_status_error_reason() {
     let _guard = iroh_integration_test_lock().lock_owned().await;
     let store = Arc::new(MemoryStore::default());

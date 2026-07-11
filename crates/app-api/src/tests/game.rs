@@ -5,6 +5,7 @@ use kukuri_core::{
 };
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[cfg(feature = "iroh-integration-tests")]
 async fn game_room_score_update_replicates() {
     let _guard = iroh_integration_test_lock().lock_owned().await;
     let dir = tempdir().expect("tempdir");
@@ -99,6 +100,7 @@ async fn game_room_score_update_replicates() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[cfg(feature = "iroh-integration-tests")]
 async fn metaverse_room_events_replicate_between_iroh_peers() {
     let _guard = iroh_integration_test_lock().lock_owned().await;
     let dir = tempdir().expect("tempdir");

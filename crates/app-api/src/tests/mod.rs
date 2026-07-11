@@ -3,20 +3,27 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use async_trait::async_trait;
 use futures_util::StreamExt;
+#[cfg(feature = "iroh-integration-tests")]
 use iroh::address_lookup::{AddrFilter, AddressLookup};
+#[cfg(feature = "iroh-integration-tests")]
 use iroh_mainline_address_lookup::DhtAddressLookup;
+#[cfg(feature = "iroh-integration-tests")]
 use kukuri_blob_service::IrohBlobService;
 use kukuri_core::build_post_envelope_with_payload;
+#[cfg(feature = "iroh-integration-tests")]
 use kukuri_docs_sync::IrohDocsSync;
+#[cfg(feature = "iroh-integration-tests")]
 use kukuri_iroh_node::IrohDocsNode;
 use kukuri_store::{
     BookmarkedCustomReactionRow, DirectMessageStore, LiveGameProjectionStore, MemoryStore,
     ReactionBookmarkStore, SocialProjectionStore, SqliteStore,
 };
+#[cfg(feature = "iroh-integration-tests")]
+use kukuri_transport::{DhtDiscoveryOptions, IrohGossipTransport, TransportRelayConfig};
 use kukuri_transport::{
-    DhtDiscoveryOptions, DiscoveryMode, FakeNetwork, FakeTransport, HintEnvelope, HintStream,
-    IrohGossipTransport, SeedPeer, TransportRelayConfig,
+    DiscoveryMode, FakeNetwork, FakeTransport, HintEnvelope, HintStream, SeedPeer,
 };
+#[cfg(feature = "iroh-integration-tests")]
 use n0_mainline::{DhtBuilder, Testnet};
 use std::sync::OnceLock;
 use tempfile::tempdir;

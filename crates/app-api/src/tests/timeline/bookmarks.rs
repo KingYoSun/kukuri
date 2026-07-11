@@ -215,6 +215,7 @@ async fn bookmarked_repost_renders_from_saved_snapshot_without_source_timeline_h
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[cfg(feature = "iroh-integration-tests")]
 async fn bookmarks_do_not_sync_between_apps() {
     let _guard = iroh_integration_test_lock().lock_owned().await;
     let dir = tempdir().expect("tempdir");
