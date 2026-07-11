@@ -1,32 +1,33 @@
 use super::*;
 use crate::*;
+use kukuri_test_support::{SyncSnapshot, TopicSyncSnapshot};
+
+fn snapshot_from_status(status: &SyncStatus) -> SyncSnapshot {
+    SyncSnapshot {
+        connected: status.connected,
+        peer_count: status.peer_count,
+        status_detail: status.status_detail.clone(),
+        last_error: status.last_error.clone(),
+        discovery_connected_peers: status.discovery.connected_peer_ids.clone(),
+        topics: status
+            .topic_diagnostics
+            .iter()
+            .map(|entry| TopicSyncSnapshot {
+                topic: entry.topic.clone(),
+                peer_count: entry.peer_count,
+                connected_peers: entry.connected_peers.clone(),
+                docs_assist_peer_ids: entry.docs_assist_peer_ids.clone(),
+                configured_peer_ids: entry.configured_peer_ids.clone(),
+                missing_peer_ids: None,
+                delivery_state: format!("{:?}", entry.delivery_state),
+                status_detail: entry.status_detail.clone(),
+            })
+            .collect(),
+    }
+}
 
 pub(crate) fn format_sync_snapshot(status: &SyncStatus, topic: &str) -> String {
-    let topic_status = status
-        .topic_diagnostics
-        .iter()
-        .find(|entry| entry.topic == topic)
-        .map(|entry| {
-            format!(
-                "topic_peers={}, connected_peers={:?}, docs_assist_peer_ids={:?}, configured_peer_ids={:?}, delivery_state={:?}, status_detail={}",
-                entry.peer_count,
-                entry.connected_peers,
-                entry.docs_assist_peer_ids,
-                entry.configured_peer_ids,
-                entry.delivery_state,
-                entry.status_detail
-            )
-        })
-        .unwrap_or_else(|| "topic_status=missing".to_string());
-    format!(
-        "connected={}, peer_count={}, status_detail={}, last_error={:?}, discovery_connected_peers={:?}, {}",
-        status.connected,
-        status.peer_count,
-        status.status_detail,
-        status.last_error,
-        status.discovery.connected_peer_ids,
-        topic_status
-    )
+    kukuri_test_support::format_sync_snapshot(&snapshot_from_status(status), topic)
 }
 
 pub(crate) async fn wait_for_timeline_object(

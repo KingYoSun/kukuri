@@ -21,11 +21,7 @@ async fn acquire_scenario_test_lock() -> MutexGuard<'static, ()> {
 }
 
 fn social_graph_propagation_timeout() -> Duration {
-    if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
-        Duration::from_secs(300)
-    } else {
-        Duration::from_secs(30)
-    }
+    kukuri_test_support::constrained_timeout(Duration::from_secs(30), Duration::from_secs(300))
 }
 
 fn sync_status_with_topic(

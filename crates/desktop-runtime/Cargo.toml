@@ -46,6 +46,7 @@ keyring = { workspace = true, features = ["sync-secret-service"] }
 keyring = { workspace = true, features = ["windows-native"] }
 
 [dev-dependencies]
+kukuri-test-support = { path = "../test-support" }
 axum.workspace = true
 tempfile.workspace = true
 futures-util.workspace = true
