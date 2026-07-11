@@ -18,7 +18,6 @@ use kukuri_cn_protocol::{
 };
 use serde_json::{Value, json};
 use tower_http::trace::TraceLayer;
-use tracing_subscriber::EnvFilter;
 
 use crate::config::{RateLimitConfig, UserApiConfig};
 use crate::handlers::auth::{auth_challenge, auth_verify};
@@ -135,12 +134,7 @@ pub async fn run_from_env() -> Result<()> {
 }
 
 pub fn init_tracing() {
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,kukuri_cn_user_api=debug"));
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(env_filter)
-        .with_target(true)
-        .try_init();
+    kukuri_cn_runtime_support::init_tracing("info,kukuri_cn_user_api=debug");
 }
 
 async fn healthz() -> Json<Value> {

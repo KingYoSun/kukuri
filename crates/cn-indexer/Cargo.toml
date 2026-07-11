@@ -24,7 +24,7 @@ serde_json.workspace = true
 sqlx.workspace = true
 tokio.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
+kukuri-cn-runtime-support = { path = "../cn-runtime-support" }
 kukuri-core = { path = "../core" }
 kukuri-docs-sync = { path = "../docs-sync" }
 # safety-mock-provider: 本番 provider 未使用構成でも runtime 構築（provider 実装名 `mock`）と

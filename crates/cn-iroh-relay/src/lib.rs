@@ -11,7 +11,6 @@ use iroh_relay::server::{
 };
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use tracing_subscriber::EnvFilter;
 
 const DEFAULT_HTTP_BIND_ADDR: &str = "127.0.0.1:3340";
 const DEFAULT_TLS_CERT_PATH: &str = "/certs/default.crt";
@@ -161,12 +160,7 @@ pub async fn spawn_server(config: IrohRelayConfig) -> Result<SpawnedIrohRelay> {
 }
 
 pub fn init_tracing() {
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,kukuri_cn_iroh_relay=debug"));
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(env_filter)
-        .with_target(true)
-        .try_init();
+    kukuri_cn_runtime_support::init_tracing("info,kukuri_cn_iroh_relay=debug");
 }
 
 fn parse_tls_config_from_lookup<F>(lookup: &F) -> Result<Option<IrohRelayTlsConfig>>
