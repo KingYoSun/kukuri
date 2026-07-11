@@ -3004,6 +3004,7 @@ dependencies = [
  "futures-util",
  "hex",
  "kukuri-cn-core",
+ "kukuri-cn-runtime-support",
  "kukuri-cn-safety",
  "kukuri-cn-safety-runtime",
  "kukuri-cn-trust",
@@ -3017,7 +3018,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -3026,12 +3026,12 @@ version = "0.1.2"
 dependencies = [
  "anyhow",
  "iroh-relay",
+ "kukuri-cn-runtime-support",
  "rcgen",
  "rustls",
  "tempfile",
  "tokio",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -3059,6 +3059,13 @@ dependencies = [
  "serde_json",
  "ts-rs",
  "url",
+]
+
+[[package]]
+name = "kukuri-cn-runtime-support"
+version = "0.1.2"
+dependencies = [
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -3132,6 +3139,7 @@ dependencies = [
  "kukuri-cn-indexer",
  "kukuri-cn-operator",
  "kukuri-cn-protocol",
+ "kukuri-cn-runtime-support",
  "kukuri-cn-safety",
  "kukuri-cn-safety-runtime",
  "kukuri-cn-trust",
@@ -3148,7 +3156,6 @@ dependencies = [
  "tower-http",
  "tower_governor",
  "tracing",
- "tracing-subscriber",
  "url",
 ]
 

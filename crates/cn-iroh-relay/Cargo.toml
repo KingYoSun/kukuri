@@ -14,7 +14,7 @@ iroh-relay.workspace = true
 rustls.workspace = true
 tokio.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
+kukuri-cn-runtime-support = { path = "../cn-runtime-support" }
 
 [dev-dependencies]
 rcgen = "0.14"

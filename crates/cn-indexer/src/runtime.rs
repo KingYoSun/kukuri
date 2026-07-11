@@ -14,7 +14,6 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use tracing::info;
-use tracing_subscriber::EnvFilter;
 
 use kukuri_cn_core::PgSafetyArtifactStore;
 
@@ -80,10 +79,5 @@ async fn run(config: IndexerConfig) -> Result<()> {
 }
 
 fn init_tracing() {
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,kukuri_cn_indexer=debug"));
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(env_filter)
-        .with_target(true)
-        .try_init();
+    kukuri_cn_runtime_support::init_tracing("info,kukuri_cn_indexer=debug");
 }

@@ -19,7 +19,6 @@ tokio.workspace = true
 tower-http.workspace = true
 tower_governor.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
 thiserror.workspace = true
 url.workspace = true
 kukuri-cn-protocol = { path = "../cn-protocol" }
@@ -28,6 +27,7 @@ kukuri-cn-indexer = { path = "../cn-indexer" }
 kukuri-cn-operator = { path = "../cn-operator" }
 kukuri-cn-safety = { path = "../cn-safety" }
 kukuri-cn-trust = { path = "../cn-trust" }
+kukuri-cn-runtime-support = { path = "../cn-runtime-support" }
 
 [dev-dependencies]
 kukuri-test-support = { path = "../test-support" }
