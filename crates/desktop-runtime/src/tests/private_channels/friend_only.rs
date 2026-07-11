@@ -2,7 +2,7 @@ use super::super::*;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn friend_only_channel_restore_keeps_archived_epoch_history() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let dir = tempdir().expect("tempdir");
     let db_a = dir.path().join("friend-only-runtime-a.db");
     let db_b = dir.path().join("friend-only-runtime-b.db");

@@ -2,7 +2,7 @@ use super::super::*;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn preview_channel_access_token_is_non_mutating() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let dir = tempdir().expect("tempdir");
     let db_a = dir.path().join("preview-runtime-a.db");
     let db_b = dir.path().join("preview-runtime-b.db");
@@ -89,7 +89,7 @@ async fn preview_channel_access_token_is_non_mutating() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn private_channel_import_without_local_posts_restores_after_restart() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let dir = tempdir().expect("tempdir");
     let db_a = dir.path().join("private-import-owner.db");
     let db_b = dir.path().join("private-import-joiner.db");
@@ -215,7 +215,7 @@ async fn private_channel_import_without_local_posts_restores_after_restart() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn private_channel_invite_restores_after_restart_without_reimport() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let dir = tempdir().expect("tempdir");
     let db_a = dir.path().join("private-runtime-a.db");
     let db_b = dir.path().join("private-runtime-b.db");

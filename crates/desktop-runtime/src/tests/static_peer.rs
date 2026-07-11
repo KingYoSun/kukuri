@@ -2,7 +2,7 @@ use super::*;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn desktop_runtime_imports_peer_ticket_and_tracks_local_posts() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let dir = tempdir().expect("tempdir");
     let db_a = dir.path().join("a.db");
     let db_b = dir.path().join("b.db");
@@ -100,7 +100,7 @@ async fn desktop_runtime_imports_peer_ticket_and_tracks_local_posts() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn profile_timeline_reads_author_public_posts_across_untracked_topics() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let dir = tempdir().expect("tempdir");
     let db_a = dir.path().join("profile-runtime-a.db");
     let db_b = dir.path().join("profile-runtime-b.db");

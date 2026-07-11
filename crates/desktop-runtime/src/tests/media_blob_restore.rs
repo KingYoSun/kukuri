@@ -2,7 +2,7 @@ use super::*;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn late_joiner_backfills_timeline_from_docs() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let dir = tempdir().expect("tempdir");
     let db_a = dir.path().join("late-a.db");
     let db_b = dir.path().join("late-b.db");
@@ -71,7 +71,7 @@ async fn late_joiner_backfills_timeline_from_docs() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn late_joiner_backfills_image_post_from_docs() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let dir = tempdir().expect("tempdir");
     let db_a = dir.path().join("late-image-a.db");
     let db_b = dir.path().join("late-image-b.db");
@@ -152,7 +152,7 @@ async fn late_joiner_backfills_image_post_from_docs() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn late_joiner_backfills_video_media_payload() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let dir = tempdir().expect("tempdir");
     let db_a = dir.path().join("late-video-a.db");
     let db_b = dir.path().join("late-video-b.db");
@@ -259,7 +259,7 @@ async fn late_joiner_backfills_video_media_payload() {
 
 #[tokio::test]
 async fn blob_media_payload_roundtrip() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("blob-media-roundtrip.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -317,7 +317,7 @@ async fn blob_media_payload_roundtrip() {
 
 #[tokio::test]
 async fn blank_blob_media_hash_returns_none_without_panicking() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("blank-blob-media-hash.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -341,7 +341,7 @@ async fn blank_blob_media_hash_returns_none_without_panicking() {
 
 #[tokio::test]
 async fn sqlite_deletion_does_not_lose_shared_state() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("delete-sqlite.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -410,7 +410,7 @@ async fn sqlite_deletion_does_not_lose_shared_state() {
 
 #[tokio::test]
 async fn restart_restores_from_docs_blobs_without_sqlite_seed() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("restart-no-seed.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -462,7 +462,7 @@ async fn restart_restores_from_docs_blobs_without_sqlite_seed() {
 
 #[tokio::test]
 async fn restart_restores_image_post_preview() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("restart-image.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -526,7 +526,7 @@ async fn restart_restores_image_post_preview() {
 
 #[tokio::test]
 async fn restart_restores_video_media_payload() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("restart-video.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -616,7 +616,7 @@ async fn restart_restores_video_media_payload() {
 
 #[tokio::test]
 async fn restart_restores_live_session_manifest() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("restart-live.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -679,7 +679,7 @@ async fn restart_restores_live_session_manifest() {
 
 #[tokio::test]
 async fn restart_restores_game_room_manifest() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::IrohNetwork).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("restart-game.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(

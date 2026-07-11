@@ -19,7 +19,7 @@ fn sync_status_changed_event_wire_shape_is_stable() {
 
 #[tokio::test]
 async fn sync_status_observer_emits_only_changed_snapshot_parts_and_stops_on_shutdown() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("runtime-events.db");
     let runtime = Arc::new(

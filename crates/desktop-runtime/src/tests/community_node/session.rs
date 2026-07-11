@@ -2,7 +2,7 @@ use super::super::*;
 
 #[tokio::test]
 async fn auto_approve_node_bootstraps_session_on_maintenance_tick() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-auto-approve-session.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -106,7 +106,7 @@ async fn status_getter_is_read_only_and_does_not_bootstrap_session() {
     // WP-Q2: get_community_node_statuses は読み取り専用。セッションの establish/refresh は
     // セッション維持スケジューラ(run_community_node_session_maintenance_once)が担い、
     // getter 単独では refresh 副作用(challenge/verify/heartbeat/bootstrap)を持たない。
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-getter-read-only.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -196,7 +196,7 @@ async fn status_getter_is_read_only_and_does_not_bootstrap_session() {
 
 #[tokio::test]
 async fn near_expiry_token_triggers_proactive_community_node_reauthentication() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-proactive-reauth.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -298,7 +298,7 @@ async fn near_expiry_token_triggers_proactive_community_node_reauthentication() 
 
 #[tokio::test]
 async fn consent_required_node_without_auto_approve_stays_pending() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-consent-pending.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -393,7 +393,7 @@ async fn consent_required_node_without_auto_approve_stays_pending() {
 
 #[tokio::test]
 async fn community_node_status_does_not_require_restart_when_connectivity_is_active() {
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-status.db");
     let test_timeout = Duration::from_secs(15);
@@ -480,7 +480,7 @@ async fn community_node_status_does_not_require_restart_when_connectivity_is_act
 #[tokio::test]
 async fn auto_approve_node_does_not_silently_reaccept_policy_update() {
     // #384: auto_approve でも、版が上がった「更新」のときは黙って再受諾せず Idle に留める。
-    let _serial = acquire_async_test_lock().await;
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-auto-approve-update.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
