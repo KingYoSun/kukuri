@@ -75,6 +75,35 @@ pub(crate) fn account_lifecycle_error(error: AccountLifecycleError) -> ApiError 
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SupportEndpointOperation {
+    LoadBootstrapNodes,
+    LoadBootstrapSeedPeers,
+    RefreshBootstrapPeer,
+    RecordRendezvousHeartbeat,
+    StoreReport,
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("{source}")]
+pub(crate) struct SupportEndpointError {
+    operation: SupportEndpointOperation,
+    #[source]
+    source: anyhow::Error,
+}
+
+impl SupportEndpointError {
+    pub(crate) fn new(operation: SupportEndpointOperation, source: anyhow::Error) -> Self {
+        Self { operation, source }
+    }
+}
+
+pub(crate) fn support_endpoint_error(error: SupportEndpointError) -> ApiError {
+    let SupportEndpointError { operation, source } = error;
+    let _ = operation;
+    internal_error(source)
+}
+
 #[cfg(test)]
 pub(crate) async fn assert_error_contract(
     error: ApiError,
@@ -100,7 +129,10 @@ mod tests {
     use axum::http::StatusCode;
     use kukuri_cn_core::{ApiError, auth_required_error, consent_required_error};
 
-    use super::{assert_error_contract, internal_error};
+    use super::{
+        SupportEndpointError, SupportEndpointOperation, assert_error_contract, internal_error,
+        support_endpoint_error,
+    };
 
     #[tokio::test]
     async fn common_error_response_contracts_are_stable() {
@@ -147,5 +179,27 @@ mod tests {
             "capability is not configured",
         )
         .await;
+    }
+
+    #[tokio::test]
+    async fn support_endpoint_infrastructure_errors_keep_internal_fallback() {
+        for operation in [
+            SupportEndpointOperation::LoadBootstrapNodes,
+            SupportEndpointOperation::LoadBootstrapSeedPeers,
+            SupportEndpointOperation::RefreshBootstrapPeer,
+            SupportEndpointOperation::RecordRendezvousHeartbeat,
+            SupportEndpointOperation::StoreReport,
+        ] {
+            assert_error_contract(
+                support_endpoint_error(SupportEndpointError::new(
+                    operation,
+                    anyhow::anyhow!("backend unavailable"),
+                )),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "INTERNAL_ERROR",
+                "backend unavailable",
+            )
+            .await;
+        }
     }
 }
