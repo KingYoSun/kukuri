@@ -58,6 +58,31 @@ pub fn constrained_timeout(local: Duration, constrained: Duration) -> Duration {
     }
 }
 
+fn flag_value_enabled(value: Option<&str>) -> bool {
+    value.is_some_and(|value| {
+        matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes"
+        )
+    })
+}
+
+pub fn env_flag_enabled(name: &str) -> bool {
+    flag_value_enabled(std::env::var(name).ok().as_deref())
+}
+
+pub fn gated_env_url(gate_name: &str, url_name: &str, default_url: &str) -> Option<String> {
+    if !env_flag_enabled(gate_name) {
+        return None;
+    }
+    Some(
+        std::env::var(url_name)
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| default_url.to_string()),
+    )
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TopicSyncSnapshot {
     pub topic: String,
@@ -174,5 +199,16 @@ mod tests {
             ..SyncSnapshot::default()
         };
         assert!(format_sync_snapshot(&snapshot, "kukuri:test").contains("delivery_state=Live"));
+    }
+
+    #[test]
+    fn env_gate_truth_values_are_normalized() {
+        for value in ["1", "true", "TRUE", " yes ", "YES"] {
+            assert!(flag_value_enabled(Some(value)), "{value}");
+        }
+        for value in ["", "0", "false", "on"] {
+            assert!(!flag_value_enabled(Some(value)), "{value}");
+        }
+        assert!(!flag_value_enabled(None));
     }
 }

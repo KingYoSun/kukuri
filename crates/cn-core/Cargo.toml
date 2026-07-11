@@ -38,6 +38,7 @@ kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }
 kukuri-cn-trust = { path = "../cn-trust" }
 
 [dev-dependencies]
+kukuri-test-support = { path = "../test-support" }
 tempfile.workspace = true
 kukuri-cn-safety = { path = "../cn-safety", features = ["mock"] }
 kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }

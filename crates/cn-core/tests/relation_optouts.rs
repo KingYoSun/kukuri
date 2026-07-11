@@ -18,18 +18,10 @@ use kukuri_cn_safety::{
 const DEFAULT_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:15432/cn";
 
 fn integration_test_admin_database_url() -> Option<String> {
-    let enabled = std::env::var("KUKURI_CN_RUN_INTEGRATION_TESTS")
-        .ok()
-        .map(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "yes" | "YES"))
-        .unwrap_or(false);
-    if !enabled {
-        return None;
-    }
-    Some(
-        std::env::var("COMMUNITY_NODE_DATABASE_URL")
-            .ok()
-            .filter(|value| !value.trim().is_empty())
-            .unwrap_or_else(|| DEFAULT_ADMIN_DATABASE_URL.to_string()),
+    kukuri_test_support::gated_env_url(
+        "KUKURI_CN_RUN_INTEGRATION_TESTS",
+        "COMMUNITY_NODE_DATABASE_URL",
+        DEFAULT_ADMIN_DATABASE_URL,
     )
 }
 
