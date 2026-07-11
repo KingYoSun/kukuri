@@ -4,7 +4,8 @@ use anyhow::Result;
 use crate::*;
 
 pub(crate) fn cn_check() -> Result<()> {
-    let mut clippy_args = cargo_package_args("clippy", &CN_PACKAGES);
+    let packages = cn_packages()?;
+    let mut clippy_args = cargo_package_args("clippy", &packages);
     clippy_args.push("--all-targets".to_string());
     clippy_args.push("--".to_string());
     clippy_args.push("-D".to_string());
@@ -13,10 +14,11 @@ pub(crate) fn cn_check() -> Result<()> {
 }
 
 pub(crate) fn cn_test() -> Result<()> {
+    let packages = cn_packages()?;
     with_cn_postgres(|| {
         run_with_owned_env(
             "cargo",
-            cargo_package_args("test", &CN_PACKAGES),
+            cargo_package_args("test", &packages),
             &root_dir(),
             &cn_test_envs(),
         )

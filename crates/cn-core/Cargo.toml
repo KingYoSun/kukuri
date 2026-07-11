@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[package.metadata.kukuri]
+cn-lane = true
+
 [features]
 # provider 実装名 `mock` を runtime 構築（build_safety_orchestrator）で解決できるようにする。
 # 本番 provider（#391 / #411）実装まで、contract test / 明示 opt-in 構成でのみ使う。
