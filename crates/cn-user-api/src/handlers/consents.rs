@@ -9,7 +9,7 @@ use kukuri_cn_core::{
 };
 use kukuri_cn_protocol::AcceptConsentsRequest;
 
-use crate::errors::internal_error;
+use crate::errors::{AccountLifecycleError, AccountLifecycleOperation, account_lifecycle_error};
 use crate::state::UserApiState;
 
 pub(crate) async fn consent_status(
@@ -19,7 +19,13 @@ pub(crate) async fn consent_status(
     let pubkey = require_bearer_pubkey(&state.pool, &state.jwt_config, &headers).await?;
     let status = get_consent_status(&state.pool, pubkey.as_str())
         .await
-        .map_err(internal_error)?;
+        .map_err(|source| {
+            AccountLifecycleError::infrastructure(
+                AccountLifecycleOperation::GetConsentStatus,
+                source,
+            )
+        })
+        .map_err(account_lifecycle_error)?;
     Ok(Json(status))
 }
 
@@ -31,6 +37,9 @@ pub(crate) async fn accept_consents_handler(
     let pubkey = require_bearer_pubkey(&state.pool, &state.jwt_config, &headers).await?;
     let status = accept_consents(&state.pool, pubkey.as_str(), &request.policy_slugs)
         .await
-        .map_err(internal_error)?;
+        .map_err(|source| {
+            AccountLifecycleError::infrastructure(AccountLifecycleOperation::AcceptConsents, source)
+        })
+        .map_err(account_lifecycle_error)?;
     Ok(Json(status))
 }
