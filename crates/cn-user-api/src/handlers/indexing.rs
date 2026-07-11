@@ -7,13 +7,13 @@ use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use kukuri_cn_core::{
-    ApiError, ApiResult, ChannelSecretConflict, IndexScopeKind, insert_indexing_request,
-    register_channel_secret, require_bearer_identity, require_consents,
+    ApiError, ApiResult, IndexScopeKind, insert_indexing_request, register_channel_secret,
+    require_bearer_identity, require_consents,
 };
 use kukuri_cn_indexer::IndexQuery;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::internal_error;
+use crate::errors::{IndexingError, IndexingOperation, indexing_error};
 use crate::state::UserApiState;
 
 /// indexing request(#413 / ADR 0025 §2.2 / §6.3)。認証済み user が「この topic / channel を
@@ -118,12 +118,14 @@ pub(crate) async fn submit_indexing_request(
         // 同一 secret の再提示は冪等。別 secret による乗っ取りは 409 で拒否する。
         register_channel_secret(&state.pool, cipher, target_id, secret_hex)
             .await
-            .map_err(map_channel_secret_error)?;
+            .map_err(IndexingError::channel_secret)
+            .map_err(indexing_error)?;
     }
 
     let stored = insert_indexing_request(&state.pool, identity.pubkey.as_str(), kind, target_id)
         .await
-        .map_err(internal_error)?;
+        .map_err(|source| IndexingError::infrastructure(IndexingOperation::RegisterRequest, source))
+        .map_err(indexing_error)?;
     Ok(Json(SubmitIndexingRequestResponse {
         request_id: stored.id,
         status: stored.status.as_str().to_string(),
@@ -133,46 +135,52 @@ pub(crate) async fn submit_indexing_request(
 /// channel secret 登録失敗を HTTP 応答へマップする。
 ///
 /// 既存 capability と異なる secret での上書き(乗っ取り試行)は 409、hex 形式不正等は 400。
-fn map_channel_secret_error(error: anyhow::Error) -> ApiError {
-    if error.downcast_ref::<ChannelSecretConflict>().is_some() {
-        return ApiError::new(
-            StatusCode::CONFLICT,
-            "CHANNEL_SECRET_CONFLICT",
-            error.to_string(),
-        );
-    }
-    ApiError::new(
-        StatusCode::BAD_REQUEST,
-        "INVALID_CHANNEL_SECRET",
-        error.to_string(),
-    )
-}
-
 #[cfg(test)]
 mod error_contract_tests {
     use axum::http::StatusCode;
     use kukuri_cn_core::ChannelSecretConflict;
 
-    use crate::errors::assert_error_contract;
-
-    use super::map_channel_secret_error;
+    use crate::errors::{IndexingError, IndexingOperation, assert_error_contract, indexing_error};
 
     #[tokio::test]
     async fn channel_secret_error_contracts_are_stable() {
         assert_error_contract(
-            map_channel_secret_error(ChannelSecretConflict::AlreadyRegistered.into()),
+            indexing_error(IndexingError::channel_secret(
+                ChannelSecretConflict::AlreadyRegistered.into(),
+            )),
             StatusCode::CONFLICT,
             "CHANNEL_SECRET_CONFLICT",
             "a different channel capability is already registered for this channel",
         )
         .await;
         assert_error_contract(
-            map_channel_secret_error(anyhow::anyhow!("channel secret must be 32 bytes")),
+            indexing_error(IndexingError::channel_secret(anyhow::anyhow!(
+                "channel secret must be 32 bytes"
+            ))),
             StatusCode::BAD_REQUEST,
             "INVALID_CHANNEL_SECRET",
             "channel secret must be 32 bytes",
         )
         .await;
+
+        for operation in [
+            IndexingOperation::RegisterRequest,
+            IndexingOperation::SearchScope,
+            IndexingOperation::SearchAll,
+            IndexingOperation::Discovery,
+            IndexingOperation::Recommendations,
+        ] {
+            assert_error_contract(
+                indexing_error(IndexingError::infrastructure(
+                    operation,
+                    anyhow::anyhow!("index backend unavailable"),
+                )),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "INTERNAL_ERROR",
+                "index backend unavailable",
+            )
+            .await;
+        }
     }
 }
 
@@ -319,11 +327,13 @@ pub(crate) async fn index_search(
         Some((scope_kind, scope_id)) => index_query
             .search_scope(scope_kind, scope_id.as_str(), query, limit)
             .await
-            .map_err(internal_error)?,
+            .map_err(|source| IndexingError::infrastructure(IndexingOperation::SearchScope, source))
+            .map_err(indexing_error)?,
         None => index_query
             .search_all(query, limit)
             .await
-            .map_err(internal_error)?,
+            .map_err(|source| IndexingError::infrastructure(IndexingOperation::SearchAll, source))
+            .map_err(indexing_error)?,
     };
     Ok(Json(entries.into()))
 }
@@ -343,7 +353,8 @@ pub(crate) async fn index_discovery(
     let entries = index_query
         .list_recent(scope.as_ref().map(|(kind, id)| (*kind, id.as_str())), limit)
         .await
-        .map_err(internal_error)?;
+        .map_err(|source| IndexingError::infrastructure(IndexingOperation::Discovery, source))
+        .map_err(indexing_error)?;
     Ok(Json(entries.into()))
 }
 
@@ -361,6 +372,7 @@ pub(crate) async fn index_recommendations(
     let entries = index_query
         .list_recent(None, limit)
         .await
-        .map_err(internal_error)?;
+        .map_err(|source| IndexingError::infrastructure(IndexingOperation::Recommendations, source))
+        .map_err(indexing_error)?;
     Ok(Json(entries.into()))
 }
