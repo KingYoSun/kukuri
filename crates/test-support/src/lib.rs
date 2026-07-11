@@ -1,10 +1,45 @@
 use std::fmt::Debug;
 use std::future::Future;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use async_trait::async_trait;
 use thiserror::Error;
+use tokio::sync::{Mutex, MutexGuard};
 use tokio::time::{sleep, timeout};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TestResource {
+    ProcessEnvironment,
+    IdentityStorage,
+    IrohNetwork,
+    DhtTestnet,
+    CommunityNodeServer,
+}
+
+fn resource_mutex(resource: TestResource) -> &'static Mutex<()> {
+    static PROCESS_ENVIRONMENT: OnceLock<Mutex<()>> = OnceLock::new();
+    static IDENTITY_STORAGE: OnceLock<Mutex<()>> = OnceLock::new();
+    static IROH_NETWORK: OnceLock<Mutex<()>> = OnceLock::new();
+    static DHT_TESTNET: OnceLock<Mutex<()>> = OnceLock::new();
+    static COMMUNITY_NODE_SERVER: OnceLock<Mutex<()>> = OnceLock::new();
+
+    match resource {
+        TestResource::ProcessEnvironment => PROCESS_ENVIRONMENT.get_or_init(Mutex::default),
+        TestResource::IdentityStorage => IDENTITY_STORAGE.get_or_init(Mutex::default),
+        TestResource::IrohNetwork => IROH_NETWORK.get_or_init(Mutex::default),
+        TestResource::DhtTestnet => DHT_TESTNET.get_or_init(Mutex::default),
+        TestResource::CommunityNodeServer => COMMUNITY_NODE_SERVER.get_or_init(Mutex::default),
+    }
+}
+
+pub async fn lock_test_resource(resource: TestResource) -> MutexGuard<'static, ()> {
+    resource_mutex(resource).lock().await
+}
+
+pub fn try_lock_test_resource(resource: TestResource) -> Option<MutexGuard<'static, ()>> {
+    resource_mutex(resource).try_lock().ok()
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PollState<T> {
@@ -210,5 +245,16 @@ mod tests {
             assert!(!flag_value_enabled(Some(value)), "{value}");
         }
         assert!(!flag_value_enabled(None));
+    }
+
+    #[tokio::test]
+    async fn resource_locks_exclude_only_the_same_resource() {
+        let environment = lock_test_resource(TestResource::ProcessEnvironment).await;
+        assert!(try_lock_test_resource(TestResource::ProcessEnvironment).is_none());
+        let iroh = try_lock_test_resource(TestResource::IrohNetwork)
+            .expect("independent resource should remain available");
+        drop(iroh);
+        drop(environment);
+        assert!(try_lock_test_resource(TestResource::ProcessEnvironment).is_some());
     }
 }
