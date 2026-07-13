@@ -453,7 +453,7 @@ export function useDesktopShellSectionLoaders({
     translate,
   ]);
 
-  return useCallback(
+  const loadShellSections = useCallback(
     async (topic: string) => {
       const state = storeApi.getState();
       const selectedChannelId = state.selectedChannelIdByTopic[topic] ?? null;
@@ -499,4 +499,14 @@ export function useDesktopShellSectionLoaders({
       storeApi,
     ]
   );
+
+  // 個別 loader も公開する: section 遷移起点の effect(useDesktopShellDataEffects)が
+  // 同じ実装を呼ぶための SSoT。取得・state 反映ロジックはこのファイルにだけ置く。
+  return {
+    loadShellSections,
+    loadProfileSection,
+    loadAuthorSection,
+    loadMessagesSection,
+    loadNotificationsSection,
+  };
 }
