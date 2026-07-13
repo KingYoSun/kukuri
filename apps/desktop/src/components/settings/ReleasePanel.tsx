@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { Download, FileText, Power, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
 import { Notice } from '@/components/ui/notice';
+import {
+  getOsNotificationPermission,
+  requestOsNotificationPermission as requestOsNotificationPermissionCommand,
+} from '@/lib/api/osNotificationPermission';
 import { copyTextToClipboard } from '@/lib/utils';
 import {
   buildSafeDiagnosticReport,
@@ -59,10 +62,10 @@ export function ReleasePanel() {
     let cancelled = false;
     // Query the Tauri backend directly instead of the WebView Web Notification
     // API, whose permission state is volatile and unreliable on Windows (#313).
-    void invoke<boolean | null>('plugin:notification|is_permission_granted')
-      .then((granted) => {
+    void getOsNotificationPermission()
+      .then((permission) => {
         if (!cancelled) {
-          setOsNotificationPermission(granted ? 'granted' : 'prompt');
+          setOsNotificationPermission(permission.toLowerCase());
         }
       })
       .catch(() => {
@@ -98,7 +101,7 @@ export function ReleasePanel() {
       setOsNotificationPermission('unavailable');
       return;
     }
-    const permission = await invoke<string>('plugin:notification|request_permission');
+    const permission = await requestOsNotificationPermissionCommand();
     const normalized = permission.toLowerCase();
     setOsNotificationPermission(normalized);
     if (normalized === 'granted') {
