@@ -23,6 +23,33 @@ fn activate_main_window(app: &AppHandle, notification_id: String) {
     );
 }
 
+/// Permission value reported to the settings release panel. Desktop OS toasts
+/// need no runtime permission (visibility is governed by OS-level settings),
+/// and the former `tauri-plugin-notification` desktop backend unconditionally
+/// returned `PermissionState::Granted` as well.
+const OS_NOTIFICATION_PERMISSION_GRANTED: &str = "granted";
+
+/// Report the OS notification permission state for the settings release panel.
+///
+/// Replaces the raw `plugin:notification|is_permission_granted` invocation.
+/// The frontend branches on the lowercase permission string
+/// (granted / prompt / unavailable), so this pins the same contract the
+/// plugin's always-granted desktop backend provided.
+#[tauri::command]
+pub fn get_os_notification_permission() -> &'static str {
+    OS_NOTIFICATION_PERMISSION_GRANTED
+}
+
+/// Request OS notification permission for the settings release panel.
+///
+/// Replaces the raw `plugin:notification|request_permission` invocation; no
+/// desktop platform we ship on has a runtime permission prompt, so this
+/// resolves to `granted` exactly like the plugin did.
+#[tauri::command]
+pub fn request_os_notification_permission() -> &'static str {
+    OS_NOTIFICATION_PERMISSION_GRANTED
+}
+
 /// Show an OS toast for an incoming notification. On platforms that support it,
 /// clicking the toast focuses the window and emits `os-notification://activated`
 /// so the frontend can open the related post.
@@ -126,4 +153,17 @@ pub(crate) fn show_platform_notification(
     }
     notification.show().map_err(|error| error.to_string())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Pins the permission contract inherited from tauri-plugin-notification's
+    // always-granted desktop backend; ReleasePanel branches on this string.
+    #[test]
+    fn permission_commands_report_granted() {
+        assert_eq!(get_os_notification_permission(), "granted");
+        assert_eq!(request_os_notification_permission(), "granted");
+    }
 }

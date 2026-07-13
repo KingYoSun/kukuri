@@ -214,6 +214,8 @@ pub fn run() {
             commands::community_node::fetch_community_node_manifest,
             commands::community_node::submit_community_node_report,
             commands::os_notification::show_os_notification,
+            commands::os_notification::get_os_notification_permission,
+            commands::os_notification::request_os_notification_permission,
             commands::background_notifications::set_os_notification_settings
         ])
         .run(tauri::generate_context!())
