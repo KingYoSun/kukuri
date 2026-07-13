@@ -18,7 +18,7 @@ The first preview targets Windows installer distribution through GitHub Releases
 
 ## Rust crates
 
-Total packages: 658
+Total packages: 665
 
 | Package | Version | License | Source |
 | --- | --- | --- | --- |
@@ -42,6 +42,7 @@ Total packages: 658
 | asn1-rs | 0.7.2 | MIT OR Apache-2.0 | https://crates.io/crates/asn1-rs |
 | asn1-rs-derive | 0.6.0 | MIT OR Apache-2.0 | https://crates.io/crates/asn1-rs-derive |
 | asn1-rs-impl | 0.2.0 | MIT/Apache-2.0 | https://crates.io/crates/asn1-rs-impl |
+| assert-json-diff | 2.0.2 | MIT | https://crates.io/crates/assert-json-diff |
 | async-channel | 2.5.0 | Apache-2.0 OR MIT | https://crates.io/crates/async-channel |
 | async-compat | 0.2.5 | Apache-2.0 OR MIT | https://crates.io/crates/async-compat |
 | async-lock | 3.4.2 | Apache-2.0 OR MIT | https://crates.io/crates/async-lock |
@@ -130,6 +131,8 @@ Total packages: 658
 | data-encoding-macro-internal | 0.1.18 | MIT | https://crates.io/crates/data-encoding-macro-internal |
 | dbus | 0.9.11 | Apache-2.0/MIT | https://crates.io/crates/dbus |
 | dbus-secret-service | 4.1.0 | MIT OR Apache-2.0 | https://crates.io/crates/dbus-secret-service |
+| deadpool | 0.12.3 | MIT OR Apache-2.0 | https://crates.io/crates/deadpool |
+| deadpool-runtime | 0.1.4 | MIT OR Apache-2.0 | https://crates.io/crates/deadpool-runtime |
 | der | 0.7.10 | Apache-2.0 OR MIT | https://crates.io/crates/der |
 | der | 0.8.0 | Apache-2.0 OR MIT | https://crates.io/crates/der |
 | der-parser | 10.0.0 | MIT OR Apache-2.0 | https://crates.io/crates/der-parser |
@@ -210,6 +213,7 @@ Total packages: 658
 | hashlink | 0.10.0 | MIT OR Apache-2.0 | https://crates.io/crates/hashlink |
 | heapless | 0.7.17 | MIT OR Apache-2.0 | https://crates.io/crates/heapless |
 | heck | 0.5.0 | MIT OR Apache-2.0 | https://crates.io/crates/heck |
+| hermit-abi | 0.5.2 | MIT OR Apache-2.0 | https://crates.io/crates/hermit-abi |
 | hex | 0.4.3 | MIT OR Apache-2.0 | https://crates.io/crates/hex |
 | hex-conservative | 0.2.2 | CC0-1.0 | https://crates.io/crates/hex-conservative |
 | hickory-net | 0.26.1 | MIT OR Apache-2.0 | https://crates.io/crates/hickory-net |
@@ -333,6 +337,7 @@ Total packages: 658
 | num-integer | 0.1.46 | MIT OR Apache-2.0 | https://crates.io/crates/num-integer |
 | num-iter | 0.1.45 | MIT OR Apache-2.0 | https://crates.io/crates/num-iter |
 | num-traits | 0.2.19 | MIT OR Apache-2.0 | https://crates.io/crates/num-traits |
+| num_cpus | 1.17.0 | MIT OR Apache-2.0 | https://crates.io/crates/num_cpus |
 | num_enum | 0.7.6 | BSD-3-Clause OR MIT OR Apache-2.0 | https://crates.io/crates/num_enum |
 | num_enum_derive | 0.7.6 | BSD-3-Clause OR MIT OR Apache-2.0 | https://crates.io/crates/num_enum_derive |
 | num_threads | 0.1.7 | MIT OR Apache-2.0 | https://crates.io/crates/num_threads |
@@ -417,6 +422,7 @@ Total packages: 658
 | ref-cast | 1.0.25 | MIT OR Apache-2.0 | https://crates.io/crates/ref-cast |
 | ref-cast-impl | 1.0.25 | MIT OR Apache-2.0 | https://crates.io/crates/ref-cast-impl |
 | reflink-copy | 0.1.29 | MIT/Apache-2.0 | https://crates.io/crates/reflink-copy |
+| regex | 1.12.3 | MIT OR Apache-2.0 | https://crates.io/crates/regex |
 | regex-automata | 0.4.14 | MIT OR Apache-2.0 | https://crates.io/crates/regex-automata |
 | regex-syntax | 0.8.10 | MIT OR Apache-2.0 | https://crates.io/crates/regex-syntax |
 | reloadable-core | 0.1.0 | MIT | https://crates.io/crates/reloadable-core |
@@ -651,6 +657,7 @@ Total packages: 658
 | windows_x86_64_msvc | 0.52.6 | MIT OR Apache-2.0 | https://crates.io/crates/windows_x86_64_msvc |
 | windows_x86_64_msvc | 0.53.1 | MIT OR Apache-2.0 | https://crates.io/crates/windows_x86_64_msvc |
 | winnow | 1.0.3 | MIT | https://crates.io/crates/winnow |
+| wiremock | 0.6.5 | MIT/Apache-2.0 | https://crates.io/crates/wiremock |
 | wit-bindgen | 0.51.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | https://crates.io/crates/wit-bindgen |
 | wit-bindgen | 0.57.1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | https://crates.io/crates/wit-bindgen |
 | wit-bindgen-core | 0.51.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | https://crates.io/crates/wit-bindgen-core |
@@ -683,7 +690,7 @@ Total packages: 658
 
 ## Desktop npm packages
 
-Total packages: 158
+Total packages: 157
 
 | Package | Version | License | Source |
 | --- | --- | --- | --- |
@@ -760,7 +767,6 @@ Total packages: 158
 | @react-three/fiber | 9.6.1 | MIT | https://github.com/pmndrs/react-three-fiber#readme |
 | @tauri-apps/api | 2.11.0 | Apache-2.0 OR MIT | https://github.com/tauri-apps/tauri#readme |
 | @tauri-apps/plugin-deep-link | 2.4.9 | MIT OR Apache-2.0 | https://github.com/tauri-apps/plugins-workspace#readme |
-| @tauri-apps/plugin-notification | 2.3.3 | MIT OR Apache-2.0 | https://github.com/tauri-apps/plugins-workspace#readme |
 | @tauri-apps/plugin-updater | 2.10.1 | MIT OR Apache-2.0 | https://github.com/tauri-apps/plugins-workspace#readme |
 | @tweenjs/tween.js | 23.1.3 | MIT | https://github.com/tweenjs/tween.js |
 | @types/draco3d | 1.4.10 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/draco3d |

@@ -81,7 +81,6 @@ pub fn run() {
     builder
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_notification::init())
         .on_window_event(|window, event| {
             // Issue #304: closing the window keeps kukuri running in the
             // background (tray) instead of exiting. Only the tray "Quit" entry
