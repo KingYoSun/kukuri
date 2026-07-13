@@ -27,13 +27,9 @@ import {
   type DesktopShellStoreApi,
 } from '@/shell/store';
 import { setRecordEntry } from '@/shell/stateUpdates';
-import { VISIBLE_TIMELINE_LIMIT } from '@/shell/pagination';
 import {
-  authorViewFromDirectMessageConversation,
   createGameEditorDraft,
   mergeCommunityNodeStatuses,
-  mergeKnownAuthors,
-  messageFromError,
   profileInputFromProfile,
 } from '@/shell/presentation';
 import { useRuntimeEventBridge } from '@/shell/data/useRuntimeEventBridge';
@@ -45,7 +41,6 @@ type Setter<K extends keyof DesktopShellState> = (
 
 type UseDesktopShellDataEffectsArgs = {
   api: DesktopApi;
-  translate: (key: string, options?: Record<string, unknown>) => string;
   storeApi: DesktopShellStoreApi;
   trackedTopics: string[];
   activeTopic: string;
@@ -63,6 +58,13 @@ type UseDesktopShellDataEffectsArgs = {
   mediaFetchAttemptRef: MutableRefObject<Map<string, number>>;
   visibleRefreshInFlightRef: MutableRefObject<boolean>;
   loadTopics: (topics: string[], activeTopic: string, currentThread: string | null) => Promise<void>;
+  // section 取得ロジックの SSoT は data/loaders/useDesktopShellSectionLoaders.ts。
+  // この hook は「いつ読むか」(section 遷移・interval)だけを持ち、
+  // 「何をどう読むか」は loader を呼ぶ。
+  loadProfileSection: () => Promise<void>;
+  loadAuthorSection: (pubkey: string) => Promise<void>;
+  loadMessagesSection: () => Promise<void>;
+  loadNotificationsSection: () => Promise<void>;
   refreshVisibleShellData: (
     topic: string,
     currentThread: string | null,
@@ -74,25 +76,7 @@ type UseDesktopShellDataEffectsArgs = {
   setSyncStatus: Setter<'syncStatus'>;
   setLocalProfile: Setter<'localProfile'>;
   setProfileDraft: Setter<'profileDraft'>;
-  setKnownAuthorsByPubkey: Setter<'knownAuthorsByPubkey'>;
-  setProfileTimeline: Setter<'profileTimeline'>;
-  setProfileTimelineNextCursor: Setter<'profileTimelineNextCursor'>;
-  setProfileError: Setter<'profileError'>;
-  setProfilePanelState: Setter<'profilePanelState'>;
-  setSocialConnections: Setter<'socialConnections'>;
-  setSocialConnectionsPanelState: Setter<'socialConnectionsPanelState'>;
-  setSelectedAuthor: Setter<'selectedAuthor'>;
-  setSelectedAuthorTimeline: Setter<'selectedAuthorTimeline'>;
-  setSelectedAuthorTimelineNextCursor: Setter<'selectedAuthorTimelineNextCursor'>;
-  setAuthorError: Setter<'authorError'>;
-  setDirectMessages: Setter<'directMessages'>;
-  setDirectMessageTimelineByPeer: Setter<'directMessageTimelineByPeer'>;
-  setDirectMessageTimelineNextCursorByPeer: Setter<'directMessageTimelineNextCursorByPeer'>;
-  setDirectMessageStatusByPeer: Setter<'directMessageStatusByPeer'>;
-  setDirectMessageError: Setter<'directMessageError'>;
   setNotifications: Setter<'notifications'>;
-  setNotificationPanelState: Setter<'notificationPanelState'>;
-  setNotificationAutoReadError: Setter<'notificationAutoReadError'>;
   setGameDrafts: Setter<'gameDrafts'>;
   setSelectedChannelIdByTopic: Setter<'selectedChannelIdByTopic'>;
   setComposeChannelByTopic: Setter<'composeChannelByTopic'>;
@@ -102,7 +86,6 @@ type UseDesktopShellDataEffectsArgs = {
 
 export function useDesktopShellDataEffects({
   api,
-  translate,
   storeApi,
   trackedTopics,
   activeTopic,
@@ -120,6 +103,10 @@ export function useDesktopShellDataEffects({
   mediaFetchAttemptRef,
   visibleRefreshInFlightRef,
   loadTopics,
+  loadProfileSection,
+  loadAuthorSection,
+  loadMessagesSection,
+  loadNotificationsSection,
   refreshVisibleShellData,
   refreshConnectivityStatus,
   setNotificationStatus,
@@ -127,25 +114,7 @@ export function useDesktopShellDataEffects({
   setSyncStatus,
   setLocalProfile,
   setProfileDraft,
-  setKnownAuthorsByPubkey,
-  setProfileTimeline,
-  setProfileTimelineNextCursor,
-  setProfileError,
-  setProfilePanelState,
-  setSocialConnections,
-  setSocialConnectionsPanelState,
-  setSelectedAuthor,
-  setSelectedAuthorTimeline,
-  setSelectedAuthorTimelineNextCursor,
-  setAuthorError,
-  setDirectMessages,
-  setDirectMessageTimelineByPeer,
-  setDirectMessageTimelineNextCursorByPeer,
-  setDirectMessageStatusByPeer,
-  setDirectMessageError,
   setNotifications,
-  setNotificationPanelState,
-  setNotificationAutoReadError,
   setGameDrafts,
   setSelectedChannelIdByTopic,
   setComposeChannelByTopic,
@@ -326,119 +295,21 @@ export function useDesktopShellDataEffects({
     trackedTopics,
   ]);
 
+  // 以下 4 つの section effect は live/game/bookmarks/settings と同じ委譲形:
+  // トリガ判定だけを持ち、取得・state 反映は loaders/ の単一実装(SSoT)を呼ぶ。
   useEffect(() => {
     if (shellChromeState.activePrimarySection !== 'profile') {
       return;
     }
-    let disposed = false;
-    void (async () => {
-      try {
-        const profile = await api.getMyProfile();
-        if (disposed) {
-          return;
-        }
-        setLocalProfile(profile);
-        if (!storeApi.getState().profileDirty) {
-          setProfileDraft(profileInputFromProfile(profile));
-        }
-        const [timeline, following, followed, muted] = await Promise.all([
-          api.listProfileTimeline(profile.pubkey, null, VISIBLE_TIMELINE_LIMIT),
-          api.listSocialConnections('following'),
-          api.listSocialConnections('followed'),
-          api.listSocialConnections('muted'),
-        ]);
-        if (disposed) {
-          return;
-        }
-        startTransition(() => {
-          setProfileTimeline(timeline.items);
-          setProfileTimelineNextCursor(timeline.next_cursor ?? null);
-          setProfilePanelState({ status: 'ready', error: null });
-          setProfileError(null);
-          setSocialConnections({
-            following,
-            followed,
-            muted,
-          });
-          setKnownAuthorsByPubkey((current) =>
-            mergeKnownAuthors(current, [...following, ...followed, ...muted])
-          );
-          setSocialConnectionsPanelState({ status: 'ready', error: null });
-        });
-      } catch (error) {
-        if (!disposed) {
-          const message = messageFromError(
-            error,
-            translate('common:errors.failedToLoadProfile')
-          );
-          setProfileError(message);
-          setProfilePanelState({ status: 'error', error: message });
-        }
-      }
-    })();
-    return () => {
-      disposed = true;
-    };
-  }, [
-    api,
-    setKnownAuthorsByPubkey,
-    setLocalProfile,
-    setProfileDraft,
-    setProfileError,
-    setProfilePanelState,
-    setProfileTimeline,
-    setProfileTimelineNextCursor,
-    setSocialConnections,
-    setSocialConnectionsPanelState,
-    shellChromeState.activePrimarySection,
-    storeApi,
-    translate,
-  ]);
+    void loadProfileSection().catch(() => undefined);
+  }, [loadProfileSection, shellChromeState.activePrimarySection]);
 
   useEffect(() => {
     if (!selectedAuthorPubkey) {
       return;
     }
-    let disposed = false;
-    void (async () => {
-      try {
-        const [author, timeline] = await Promise.all([
-          api.getAuthorSocialView(selectedAuthorPubkey),
-          api.listProfileTimeline(selectedAuthorPubkey, null, VISIBLE_TIMELINE_LIMIT),
-        ]);
-        if (disposed) {
-          return;
-        }
-        startTransition(() => {
-          setSelectedAuthor(author);
-          setSelectedAuthorTimeline(timeline.items);
-          setSelectedAuthorTimelineNextCursor(timeline.next_cursor ?? null);
-          setAuthorError(null);
-          if (author) {
-            setKnownAuthorsByPubkey((current) => mergeKnownAuthors(current, [author]));
-          }
-        });
-      } catch (error) {
-        if (!disposed) {
-          setAuthorError(
-            messageFromError(error, translate('common:errors.failedToLoadAuthor'))
-          );
-        }
-      }
-    })();
-    return () => {
-      disposed = true;
-    };
-  }, [
-    api,
-    selectedAuthorPubkey,
-    setAuthorError,
-    setKnownAuthorsByPubkey,
-    setSelectedAuthor,
-    setSelectedAuthorTimeline,
-    setSelectedAuthorTimelineNextCursor,
-    translate,
-  ]);
+    void loadAuthorSection(selectedAuthorPubkey).catch(() => undefined);
+  }, [loadAuthorSection, selectedAuthorPubkey]);
 
   useEffect(() => {
     if (
@@ -455,55 +326,7 @@ export function useDesktopShellDataEffects({
       ) {
         return;
       }
-      try {
-        const directMessages = await api.listDirectMessages();
-        if (disposed) {
-          return;
-        }
-        setDirectMessages(directMessages);
-        setKnownAuthorsByPubkey((current) =>
-          mergeKnownAuthors(current, directMessages.map(authorViewFromDirectMessageConversation))
-        );
-        const selectedPeerPubkey = storeApi.getState().selectedDirectMessagePeerPubkey;
-        if (!selectedPeerPubkey) {
-          setDirectMessageError(null);
-          return;
-        }
-        const [timelineResult, statusResult] = await Promise.allSettled([
-          api.listDirectMessageMessages(selectedPeerPubkey, null, VISIBLE_TIMELINE_LIMIT),
-          api.getDirectMessageStatus(selectedPeerPubkey),
-        ]);
-        if (disposed) {
-          return;
-        }
-        startTransition(() => {
-          if (timelineResult.status === 'fulfilled') {
-            setDirectMessageTimelineByPeer(setRecordEntry(selectedPeerPubkey, timelineResult.value.items));
-            setDirectMessageTimelineNextCursorByPeer(setRecordEntry(selectedPeerPubkey, timelineResult.value.next_cursor ?? null));
-          }
-          if (statusResult.status === 'fulfilled') {
-            setDirectMessageStatusByPeer(setRecordEntry(selectedPeerPubkey, statusResult.value));
-          }
-          setDirectMessageError(
-            timelineResult.status === 'fulfilled' && statusResult.status === 'fulfilled'
-              ? null
-              : messageFromError(
-                  timelineResult.status === 'rejected'
-                    ? timelineResult.reason
-                    : statusResult.status === 'rejected'
-                      ? statusResult.reason
-                      : null,
-                  translate('common:errors.failedToLoadDirectMessages')
-                )
-          );
-        });
-      } catch (error) {
-        if (!disposed) {
-          setDirectMessageError(
-            messageFromError(error, translate('common:errors.failedToLoadDirectMessages'))
-          );
-        }
-      }
+      await loadMessagesSection().catch(() => undefined);
     };
 
     void refresh();
@@ -526,85 +349,14 @@ export function useDesktopShellDataEffects({
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [
-    api,
-    setDirectMessageError,
-    setDirectMessages,
-    setDirectMessageStatusByPeer,
-    setDirectMessageTimelineByPeer,
-    setDirectMessageTimelineNextCursorByPeer,
-    setKnownAuthorsByPubkey,
-    shellChromeState.activePrimarySection,
-    storeApi,
-    translate,
-  ]);
+  }, [loadMessagesSection, shellChromeState.activePrimarySection, storeApi]);
 
   useEffect(() => {
     if (shellChromeState.activePrimarySection !== 'notifications') {
       return;
     }
-    let disposed = false;
-    void (async () => {
-      try {
-        const [status, notificationItems] = await Promise.all([
-          api.getNotificationStatus(),
-          api.listNotifications(),
-        ]);
-        if (disposed) {
-          return;
-        }
-        let nextNotifications = notificationItems;
-        let nextStatus = status;
-        if (notificationItems.some((notification) => !notification.read_at)) {
-          try {
-            nextStatus = await api.markAllNotificationsRead();
-            const readAt = Date.now();
-            nextNotifications = notificationItems.map((notification) =>
-              notification.read_at ? notification : { ...notification, read_at: readAt }
-            );
-            if (!disposed) {
-              setNotificationAutoReadError(null);
-            }
-          } catch (notificationReadError) {
-            if (!disposed) {
-              setNotificationAutoReadError(
-                messageFromError(
-                  notificationReadError,
-                  translate('shell:notifications.errors.failedAutoRead')
-                )
-              );
-            }
-          }
-        }
-        if (disposed) {
-          return;
-        }
-        startTransition(() => {
-          setNotificationStatus(nextStatus);
-          setNotifications(nextNotifications);
-          setNotificationPanelState({ status: 'ready', error: null });
-        });
-      } catch (error) {
-        if (!disposed) {
-          setNotificationPanelState({
-            status: 'error',
-            error: messageFromError(error, translate('shell:notifications.errors.failedToLoad')),
-          });
-        }
-      }
-    })();
-    return () => {
-      disposed = true;
-    };
-  }, [
-    api,
-    setNotificationAutoReadError,
-    setNotificationPanelState,
-    setNotifications,
-    setNotificationStatus,
-    shellChromeState.activePrimarySection,
-    translate,
-  ]);
+    void loadNotificationsSection().catch(() => undefined);
+  }, [loadNotificationsSection, shellChromeState.activePrimarySection]);
 
   useEffect(() => {
     const remoteObjectUrls = remoteObjectUrlRef.current;

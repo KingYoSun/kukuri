@@ -40,7 +40,7 @@ describe('useDesktopShellSectionLoaders', () => {
       shellChromeState: { ...state.shellChromeState, activePrimarySection: 'live' },
     }));
 
-    await act(async () => hook.result.current('topic'));
+    await act(async () => hook.result.current.loadShellSections('topic'));
 
     expect(listLiveSessions).toHaveBeenCalledWith(
       'topic',
@@ -65,7 +65,7 @@ describe('useDesktopShellSectionLoaders', () => {
     vi.spyOn(api, 'listDirectMessageMessages').mockRejectedValue(new Error('timeline failed'));
     vi.spyOn(api, 'getDirectMessageStatus').mockResolvedValue(status);
 
-    await act(async () => hook.result.current('topic'));
+    await act(async () => hook.result.current.loadShellSections('topic'));
 
     expect(store.getState().directMessageStatusByPeer[peer]).toEqual(status);
     expect(store.getState().directMessageError).toBe('timeline failed');
@@ -78,7 +78,7 @@ describe('useDesktopShellSectionLoaders', () => {
     }));
     vi.spyOn(api, 'listDirectMessages').mockRejectedValue(null);
 
-    await act(async () => hook.result.current('topic'));
+    await act(async () => hook.result.current.loadShellSections('topic'));
 
     expect(store.getState().directMessageError).toBe(
       'common:errors.failedToLoadDirectMessages'
@@ -99,7 +99,7 @@ describe('useDesktopShellSectionLoaders', () => {
     }));
     vi.spyOn(api, 'getDiscoveryConfig').mockResolvedValue(config);
 
-    await act(async () => hook.result.current('topic'));
+    await act(async () => hook.result.current.loadShellSections('topic'));
 
     expect(store.getState().discoveryConfig).toEqual(config);
     expect(store.getState().discoverySeedInput).toBe('keep-local-editor');

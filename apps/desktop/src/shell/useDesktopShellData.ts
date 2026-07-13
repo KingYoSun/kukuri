@@ -130,34 +130,13 @@ export function useDesktopShellData({
   const setMediaObjectUrls = useDesktopShellFieldSetter('mediaObjectUrls');
   const setSyncStatus = useDesktopShellFieldSetter('syncStatus');
   const setLocalProfile = useDesktopShellFieldSetter('localProfile');
-  const setProfileTimeline = useDesktopShellFieldSetter('profileTimeline');
-  const setProfileTimelineNextCursor = useDesktopShellFieldSetter('profileTimelineNextCursor');
   const setKnownAuthorsByPubkey = useDesktopShellFieldSetter('knownAuthorsByPubkey');
-  const setSocialConnections = useDesktopShellFieldSetter('socialConnections');
-  const setSocialConnectionsPanelState = useDesktopShellFieldSetter('socialConnectionsPanelState');
   const setOwnedReactionAssets = useDesktopShellFieldSetter('ownedReactionAssets');
   const setBookmarkedReactionAssets = useDesktopShellFieldSetter('bookmarkedReactionAssets');
   const setRecentReactions = useDesktopShellFieldSetter('recentReactions');
   const setProfileDraft = useDesktopShellFieldSetter('profileDraft');
-  const setProfileError = useDesktopShellFieldSetter('profileError');
-  const setProfilePanelState = useDesktopShellFieldSetter('profilePanelState');
-  const setSelectedAuthor = useDesktopShellFieldSetter('selectedAuthor');
-  const setSelectedAuthorTimeline = useDesktopShellFieldSetter('selectedAuthorTimeline');
-  const setSelectedAuthorTimelineNextCursor = useDesktopShellFieldSetter(
-    'selectedAuthorTimelineNextCursor'
-  );
-  const setAuthorError = useDesktopShellFieldSetter('authorError');
   const setNotifications = useDesktopShellFieldSetter('notifications');
   const setNotificationStatus = useDesktopShellFieldSetter('notificationStatus');
-  const setNotificationPanelState = useDesktopShellFieldSetter('notificationPanelState');
-  const setNotificationAutoReadError = useDesktopShellFieldSetter('notificationAutoReadError');
-  const setDirectMessages = useDesktopShellFieldSetter('directMessages');
-  const setDirectMessageTimelineByPeer = useDesktopShellFieldSetter('directMessageTimelineByPeer');
-  const setDirectMessageTimelineNextCursorByPeer = useDesktopShellFieldSetter(
-    'directMessageTimelineNextCursorByPeer'
-  );
-  const setDirectMessageStatusByPeer = useDesktopShellFieldSetter('directMessageStatusByPeer');
-  const setDirectMessageError = useDesktopShellFieldSetter('directMessageError');
   const setGameDrafts = useDesktopShellFieldSetter('gameDrafts');
   const setReactionPanelState = useDesktopShellFieldSetter('reactionPanelState');
   const setError = useDesktopShellFieldSetter('error');
@@ -531,7 +510,13 @@ export function useDesktopShellData({
     translate,
   ]);
 
-  const loadShellSections = useDesktopShellSectionLoaders({
+  const {
+    loadShellSections,
+    loadProfileSection,
+    loadAuthorSection,
+    loadMessagesSection,
+    loadNotificationsSection,
+  } = useDesktopShellSectionLoaders({
     api,
     loadReactionCatalogData,
     storeApi,
@@ -579,7 +564,6 @@ export function useDesktopShellData({
 
   useDesktopShellDataEffects({
     api,
-    translate,
     storeApi,
     trackedTopics,
     activeTopic,
@@ -597,6 +581,10 @@ export function useDesktopShellData({
     mediaFetchAttemptRef,
     visibleRefreshInFlightRef,
     loadTopics,
+    loadProfileSection,
+    loadAuthorSection,
+    loadMessagesSection,
+    loadNotificationsSection,
     refreshVisibleShellData,
     refreshConnectivityStatus,
     setNotificationStatus,
@@ -604,25 +592,7 @@ export function useDesktopShellData({
     setSyncStatus,
     setLocalProfile,
     setProfileDraft,
-    setKnownAuthorsByPubkey,
-    setProfileTimeline,
-    setProfileTimelineNextCursor,
-    setProfileError,
-    setProfilePanelState,
-    setSocialConnections,
-    setSocialConnectionsPanelState,
-    setSelectedAuthor,
-    setSelectedAuthorTimeline,
-    setSelectedAuthorTimelineNextCursor,
-    setAuthorError,
-    setDirectMessages,
-    setDirectMessageTimelineByPeer,
-    setDirectMessageTimelineNextCursorByPeer,
-    setDirectMessageStatusByPeer,
-    setDirectMessageError,
     setNotifications,
-    setNotificationPanelState,
-    setNotificationAutoReadError,
     setGameDrafts,
     setSelectedChannelIdByTopic,
     setComposeChannelByTopic,
