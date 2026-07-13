@@ -5,7 +5,6 @@
   "permissions": [
     "core:default",
     "deep-link:default",
-    "updater:default",
-    "notification:default"
+    "updater:default"
   ]
 }
