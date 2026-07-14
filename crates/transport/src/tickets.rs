@@ -185,10 +185,6 @@ pub fn relay_assisted_endpoint_addr(endpoint_addr: &EndpointAddr) -> EndpointAdd
     endpoint_addr.clone()
 }
 
-pub fn prefer_relay_endpoint_addr(endpoint_addr: &EndpointAddr) -> EndpointAddr {
-    relay_assisted_endpoint_addr(endpoint_addr)
-}
-
 pub(crate) fn resolve_socket_addrs(value: &str) -> Result<Vec<SocketAddr>> {
     let trimmed = value.trim();
     if let Ok(socket_addr) = trimmed.parse::<SocketAddr>() {

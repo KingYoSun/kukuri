@@ -310,14 +310,6 @@ impl SharedIrohStack {
                 .rebuild(discovery_config, bootstrap_seed_peers, relay_config)
                 .await;
         }
-        if current_relay_urls != next_relay_urls {
-            info!(
-                current_relay_url_count = current_relay_urls.len(),
-                next_relay_url_count = next_relay_urls.len(),
-                discovery_mode = ?discovery_config.mode,
-                "runtime relay connectivity change applied in place"
-            );
-        }
         let current = self.current.lock().await;
         let current = current
             .as_ref()

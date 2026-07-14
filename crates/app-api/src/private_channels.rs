@@ -977,7 +977,10 @@ impl AppService {
         }
         Ok(items)
     }
-    pub async fn get_private_channel_capability(
+    /// テスト専用: capability の取得→restore 結合テストのユーティリティ
+    /// (production の呼び出し元は WP-C2 T5 #479 で消滅)。
+    #[cfg(test)]
+    pub(crate) async fn get_private_channel_capability(
         &self,
         topic_id: &str,
         channel_id: &str,
@@ -993,20 +996,6 @@ impl AppService {
         Ok(Some(
             self.private_channel_capability_from_state(&state).await?,
         ))
-    }
-    pub async fn list_private_channel_capabilities(&self) -> Result<Vec<PrivateChannelCapability>> {
-        let states = self
-            .joined_private_channels
-            .lock()
-            .await
-            .values()
-            .cloned()
-            .collect::<Vec<_>>();
-        let mut items = Vec::with_capacity(states.len());
-        for state in states {
-            items.push(self.private_channel_capability_from_state(&state).await?);
-        }
-        Ok(items)
     }
 }
 /// import 3 系統の差分(注入点)。詳細は import_private_channel_by_spec を参照。

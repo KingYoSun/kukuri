@@ -249,6 +249,8 @@ impl AppService {
             stale_participant_count: diagnostics.stale_participant_count,
         })
     }
+    /// テスト専用: 唯一の呼び出し元が cfg(test) の get_private_channel_capability。
+    #[cfg(test)]
     pub(crate) async fn private_channel_capability_from_state(
         &self,
         state: &JoinedPrivateChannelState,

@@ -140,13 +140,6 @@ impl DhtDiscoveryOptions {
         }
     }
 
-    pub fn with_dht_builder(dht_builder: DhtBuilder) -> Self {
-        Self {
-            enabled: true,
-            dht_builder: Some(dht_builder),
-        }
-    }
-
     pub(crate) fn resolved_dht_builder(&self) -> Option<DhtBuilder> {
         if !self.enabled {
             return None;
