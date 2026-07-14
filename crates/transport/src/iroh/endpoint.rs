@@ -91,10 +91,6 @@ impl IrohGossipTransport {
     pub async fn bind_local() -> Result<Self> {
         Self::bind(TransportNetworkConfig::loopback()).await
     }
-
-    pub async fn bind_from_env() -> Result<Self> {
-        Self::bind(TransportNetworkConfig::from_env()?).await
-    }
 }
 
 pub(crate) async fn bind_endpoint_with_options(
