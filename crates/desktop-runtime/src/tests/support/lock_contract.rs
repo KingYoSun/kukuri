@@ -66,9 +66,7 @@ fn scan_acquisitions(tests_root: &Path) -> BTreeMap<(String, String), usize> {
             let variant_end = source[variant_start..]
                 .find(')')
                 .map(|end| variant_start + end)
-                .unwrap_or_else(|| {
-                    panic!("unterminated acquisition expression in {relative}")
-                });
+                .unwrap_or_else(|| panic!("unterminated acquisition expression in {relative}"));
             let variant = source[variant_start..variant_end].trim().to_string();
             *acquisitions.entry((relative.clone(), variant)).or_default() += 1;
         }
@@ -93,5 +91,8 @@ fn lock_acquisitions_match_declared_classification() {
          (表に無いファイルは lock 不要分類 = 取得 0 件を要求する)"
     );
     let total: usize = expected.values().sum();
-    assert_eq!(total, 53, "classification total drifted from the Q7 T6 baseline");
+    assert_eq!(
+        total, 53,
+        "classification total drifted from the Q7 T6 baseline"
+    );
 }
