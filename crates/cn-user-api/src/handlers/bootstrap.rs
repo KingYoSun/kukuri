@@ -4,12 +4,13 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::HeaderMap;
 use kukuri_cn_core::{
-    ApiResult, BootstrapHeartbeatResponse, CommunityNodeBootstrapNode, TopicRendezvousHeartbeat,
-    TopicRendezvousHeartbeatResponse, auth_required_error, load_bootstrap_nodes,
-    load_bootstrap_seed_peers, refresh_bootstrap_peer_registration, require_bearer_identity,
-    require_consents,
+    ApiResult, auth_required_error, load_bootstrap_nodes, load_bootstrap_seed_peers,
+    refresh_bootstrap_peer_registration, require_bearer_identity, require_consents,
 };
-use kukuri_cn_protocol::BootstrapHeartbeatRequest;
+use kukuri_cn_protocol::{
+    BootstrapHeartbeatRequest, BootstrapHeartbeatResponse, CommunityNodeBootstrapNode,
+    TopicRendezvousHeartbeat, TopicRendezvousHeartbeatResponse,
+};
 use serde::Serialize;
 
 use crate::errors::{SupportEndpointError, SupportEndpointOperation, support_endpoint_error};

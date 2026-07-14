@@ -5,12 +5,11 @@
 
 use chrono::Utc;
 
-use kukuri_cn_core::{
-    StoredRiskSignal, TrustComponentKind, trust_component_for, trust_risk_inputs_from,
-};
+use kukuri_cn_core::{StoredRiskSignal, trust_risk_inputs_from};
 use kukuri_cn_safety::{
     AppealStatus, Basis, RiskSignalTarget, SafetyCategory, SafetyRiskSignal, Severity, Visibility,
 };
+use kukuri_cn_trust::{TrustComponentKind, trust_component_for};
 
 const NOW: &str = "2026-07-02T09:00:00Z";
 

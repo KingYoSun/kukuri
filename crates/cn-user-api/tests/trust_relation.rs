@@ -14,9 +14,10 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use kukuri_cn_core::{
-    JwtConfig, NewCommunityNodeReport, TestDatabase, build_auth_envelope_json, connect_postgres,
+    JwtConfig, NewCommunityNodeReport, TestDatabase, connect_postgres,
     insert_community_node_report, persist_risk_signal,
 };
+use kukuri_cn_protocol::build_auth_envelope_json;
 use kukuri_cn_safety::{
     Basis, RiskSignalTarget, SafetyCategory, SafetyRiskSignal, Severity, Visibility,
 };
@@ -104,7 +105,7 @@ async fn authenticate_and_consent(
         .send()
         .await?
         .error_for_status()?
-        .json::<kukuri_cn_core::AuthChallengeResponse>()
+        .json::<kukuri_cn_protocol::AuthChallengeResponse>()
         .await?;
     let auth_envelope_json =
         build_auth_envelope_json(keys, challenge.challenge.as_str(), base_url)?;
@@ -117,7 +118,7 @@ async fn authenticate_and_consent(
         .send()
         .await?
         .error_for_status()?
-        .json::<kukuri_cn_core::AuthVerifyResponse>()
+        .json::<kukuri_cn_protocol::AuthVerifyResponse>()
         .await?;
     client
         .post(format!("{base_url}/v1/consents"))

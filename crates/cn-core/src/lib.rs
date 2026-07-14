@@ -9,8 +9,6 @@ mod env;
 mod errors;
 mod index_entries;
 mod index_scope;
-mod models;
-mod normalize;
 mod relation_optouts;
 mod rendezvous;
 mod reports;
@@ -29,8 +27,8 @@ pub use admission::{
     revoke_invite_code, set_admission_mode, unban_subscriber,
 };
 pub use auth::{
-    build_auth_envelope_json, create_auth_challenge, require_bearer_identity,
-    require_bearer_pubkey, verify_auth_envelope_and_issue_token,
+    create_auth_challenge, require_bearer_identity, require_bearer_pubkey,
+    verify_auth_envelope_and_issue_token,
 };
 pub use bootstrap::{
     load_bootstrap_nodes, load_bootstrap_seed_peers, refresh_bootstrap_peer_registration,
@@ -40,12 +38,12 @@ pub use co_participation::{
     AuthorDominantTopic, CoParticipationPair, CoParticipationSource, PgCoParticipationSource,
 };
 pub use config::{
-    AUTH_CHALLENGE_TTL_SECONDS, AUTH_ENVELOPE_KIND, AUTH_EVENT_MAX_SKEW_SECONDS, AuthMode,
-    AuthRolloutConfig, BOOTSTRAP_PEER_REGISTRATION_TTL_SECONDS,
-    COMMUNITY_NODE_ADMISSION_SERVICE_NAME, COMMUNITY_NODE_AUTH_SERVICE_NAME,
-    COMMUNITY_NODE_DATABASE_INIT_MODE_ENV, COMMUNITY_NODE_RENDEZVOUS_KEY_PREFIX_ENV,
-    COMMUNITY_NODE_RENDEZVOUS_REDIS_URL_ENV, DEFAULT_TOKEN_TTL_SECONDS, DatabaseInitMode,
-    JwtConfig, TOPIC_RENDEZVOUS_TTL_SECONDS, USER_API_BEARER_CHALLENGE,
+    AUTH_CHALLENGE_TTL_SECONDS, AUTH_EVENT_MAX_SKEW_SECONDS, AuthMode, AuthRolloutConfig,
+    BOOTSTRAP_PEER_REGISTRATION_TTL_SECONDS, COMMUNITY_NODE_ADMISSION_SERVICE_NAME,
+    COMMUNITY_NODE_AUTH_SERVICE_NAME, COMMUNITY_NODE_DATABASE_INIT_MODE_ENV,
+    COMMUNITY_NODE_RENDEZVOUS_KEY_PREFIX_ENV, COMMUNITY_NODE_RENDEZVOUS_REDIS_URL_ENV,
+    DEFAULT_TOKEN_TTL_SECONDS, DatabaseInitMode, JwtConfig, TOPIC_RENDEZVOUS_TTL_SECONDS,
+    USER_API_BEARER_CHALLENGE,
 };
 pub use consents::{accept_consents, get_consent_status, require_consents};
 pub use database::{
@@ -66,23 +64,11 @@ pub use index_scope::{
     list_indexing_requests, list_supported_topics, register_channel_secret,
     reject_indexing_request, remove_channel_secret, remove_supported_topic, upsert_channel_secret,
 };
-pub use models::{
-    AuthChallengeResponse, AuthVerifyResponse, BearerIdentity, BootstrapHeartbeatResponse,
-    CommunityNodeBootstrapNode, CommunityNodeConsentItem, CommunityNodeConsentStatus,
-    CommunityNodeResolvedUrls, CommunityNodeSeedPeer,
-};
-pub use normalize::{
-    first_tag_value, normalize_http_url, normalize_http_url_list, normalize_pubkey,
-    normalize_ws_url, parse_auth_envelope, parse_socket_addr_env, verify_auth_envelope,
-};
 pub use relation_optouts::{
     clear_relation_optout, filter_relation_visible, get_relation_optout, is_relation_opted_out,
     set_relation_optout,
 };
-pub use rendezvous::{
-    TopicRendezvousCandidate, TopicRendezvousHeartbeat, TopicRendezvousHeartbeatResponse,
-    TopicRendezvousStore, TopicRendezvousTopicResponse,
-};
+pub use rendezvous::TopicRendezvousStore;
 pub use reports::{
     COMMUNITY_NODE_REPORT_STATUS_RECEIVED, CommunityNodeReport, NewCommunityNodeReport,
     get_community_node_report, insert_community_node_report, list_community_node_reports,
@@ -96,7 +82,4 @@ pub use safety_events::{
 };
 pub use safety_runtime::{PgSafetyArtifactStore, resolve_safety_providers};
 pub use scan_verdicts::{StoredScanVerdict, get_scan_verdict, upsert_scan_verdict};
-pub use trust_inputs::{
-    TrustComponentKind, TrustRiskInput, TrustRiskInputs, list_trust_risk_inputs,
-    trust_component_for, trust_risk_inputs_from,
-};
+pub use trust_inputs::{list_trust_risk_inputs, trust_risk_inputs_from};

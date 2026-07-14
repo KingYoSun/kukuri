@@ -12,15 +12,15 @@ use crate::bootstrap::{
     prune_expired_bootstrap_peer_registrations, upsert_bootstrap_peer_registration,
 };
 use crate::config::{
-    AUTH_CHALLENGE_TTL_SECONDS, AUTH_ENVELOPE_KIND, AUTH_EVENT_MAX_SKEW_SECONDS,
-    JWT_CRYPTO_PROVIDER_INIT, JwtConfig,
+    AUTH_CHALLENGE_TTL_SECONDS, AUTH_EVENT_MAX_SKEW_SECONDS, JWT_CRYPTO_PROVIDER_INIT, JwtConfig,
 };
 use crate::database::ensure_active_subscriber;
 use crate::errors::{ApiError, ApiResult, auth_required_error};
-use crate::models::{
+use kukuri_cn_protocol::AUTH_ENVELOPE_KIND;
+use kukuri_cn_protocol::models::{
     AuthChallengeResponse, AuthVerifyResponse, BearerIdentity, CommunityNodeSeedPeer,
 };
-use crate::normalize::{
+use kukuri_cn_protocol::normalize::{
     first_tag_value, normalize_http_url, normalize_pubkey, parse_auth_envelope,
     verify_auth_envelope,
 };
@@ -223,9 +223,6 @@ pub async fn require_bearer_pubkey(
         .await?
         .pubkey)
 }
-
-// 認証封筒の構築(client 側)は kukuri-cn-protocol へ移動した(WP-H3)。
-pub use kukuri_cn_protocol::build_auth_envelope_json;
 
 fn ensure_jwt_crypto_provider() {
     JWT_CRYPTO_PROVIDER_INIT.call_once(|| {

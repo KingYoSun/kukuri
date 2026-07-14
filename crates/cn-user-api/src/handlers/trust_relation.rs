@@ -7,9 +7,10 @@ use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use kukuri_cn_core::{
     ApiError, ApiResult, clear_relation_optout, filter_relation_visible, get_relation_optout,
-    is_relation_opted_out, list_trust_risk_inputs, normalize_pubkey, require_bearer_identity,
-    require_consents, set_relation_optout,
+    is_relation_opted_out, list_trust_risk_inputs, require_bearer_identity, require_consents,
+    set_relation_optout,
 };
+use kukuri_cn_protocol::normalize_pubkey;
 use kukuri_cn_safety::RiskSignalTarget;
 use kukuri_cn_trust::{
     PullAudience, TrustReadView, UniformRelationWeight, build_trust_read,

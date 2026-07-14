@@ -3,11 +3,8 @@
 use axum::Json;
 use axum::extract::State;
 use axum::http::HeaderMap;
-use kukuri_cn_core::{
-    ApiResult, CommunityNodeConsentStatus, accept_consents, get_consent_status,
-    require_bearer_pubkey,
-};
-use kukuri_cn_protocol::AcceptConsentsRequest;
+use kukuri_cn_core::{ApiResult, accept_consents, get_consent_status, require_bearer_pubkey};
+use kukuri_cn_protocol::{AcceptConsentsRequest, CommunityNodeConsentStatus};
 
 use crate::errors::{AccountLifecycleError, AccountLifecycleOperation, account_lifecycle_error};
 use crate::state::UserApiState;

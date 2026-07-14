@@ -22,7 +22,7 @@ use sqlx::Row;
 use sqlx::postgres::PgPool;
 
 use crate::config::COMMUNITY_NODE_ADMISSION_SERVICE_NAME;
-use crate::normalize::normalize_pubkey;
+use kukuri_cn_protocol::normalize::normalize_pubkey;
 
 /// node 全体の入会モード。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

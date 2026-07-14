@@ -8,11 +8,11 @@ use sqlx::{Executor, Row};
 
 use crate::config::BOOTSTRAP_PEER_REGISTRATION_TTL_SECONDS;
 use crate::database::ensure_active_subscriber;
-use crate::models::{
+use kukuri_cn_protocol::models::{
     BootstrapHeartbeatResponse, CommunityNodeBootstrapNode, CommunityNodeResolvedUrls,
     CommunityNodeSeedPeer, normalize_seed_peers,
 };
-use crate::normalize::{normalize_http_url, normalize_pubkey};
+use kukuri_cn_protocol::normalize::{normalize_http_url, normalize_pubkey};
 
 pub async fn refresh_bootstrap_peer_registration(
     pool: &PgPool,

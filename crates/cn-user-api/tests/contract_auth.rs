@@ -4,9 +4,10 @@ mod support;
 
 use anyhow::Result;
 use kukuri_cn_core::{
-    AdmissionMode, add_allowlist, ban_subscriber, build_auth_envelope_json, issue_invite_code,
-    set_admission_mode, unban_subscriber,
+    AdmissionMode, add_allowlist, ban_subscriber, issue_invite_code, set_admission_mode,
+    unban_subscriber,
 };
+use kukuri_cn_protocol::build_auth_envelope_json;
 use kukuri_core::generate_keys;
 use reqwest::{Client, StatusCode};
 use sqlx::postgres::PgPool;
@@ -31,7 +32,7 @@ async fn auth_challenge_prunes_expired_challenges() -> Result<()> {
         .send()
         .await?
         .error_for_status()?
-        .json::<kukuri_cn_core::AuthChallengeResponse>()
+        .json::<kukuri_cn_protocol::AuthChallengeResponse>()
         .await?;
     sqlx::query(
         "UPDATE cn_auth.auth_challenges
@@ -89,7 +90,7 @@ async fn auth_verify_rejects_capability_url_mismatch() -> Result<()> {
         .send()
         .await?
         .error_for_status()?
-        .json::<kukuri_cn_core::AuthChallengeResponse>()
+        .json::<kukuri_cn_protocol::AuthChallengeResponse>()
         .await?;
     let auth_envelope_json =
         build_auth_envelope_json(&keys, challenge.challenge.as_str(), "http://wrong.example")?;
