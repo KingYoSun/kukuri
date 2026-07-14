@@ -1,4 +1,5 @@
 ﻿use super::*;
+use kukuri_test_support::{PollState, poll_until};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn iroh_transport_syncs_post_between_apps() {
@@ -476,9 +477,11 @@ async fn seeded_dht_updates_existing_topic_subscription_after_seed_update() {
     configure_seeded_dht(&app_a, endpoint_b.clone()).await;
     configure_seeded_dht(&app_b, endpoint_a.clone()).await;
 
-    timeout(Duration::from_secs(20), async {
-        let mut stable_ready_polls = 0usize;
-        loop {
+    poll_until(
+        Duration::from_secs(20),
+        Duration::from_millis(100),
+        3,
+        || async {
             let status_a = app_a.get_sync_status().await.expect("status a");
             let status_b = app_b.get_sync_status().await.expect("status b");
             let ready_a = status_a.topic_diagnostics.iter().any(|topic_status| {
@@ -491,17 +494,13 @@ async fn seeded_dht_updates_existing_topic_subscription_after_seed_update() {
                     && topic_status.joined
                     && !topic_status.connected_peers.is_empty()
             });
-            if ready_a && ready_b {
-                stable_ready_polls += 1;
-                if stable_ready_polls >= 3 {
-                    return;
-                }
+            Ok::<_, std::convert::Infallible>(if ready_a && ready_b {
+                PollState::Ready(())
             } else {
-                stable_ready_polls = 0;
-            }
-            sleep(Duration::from_millis(100)).await;
-        }
-    })
+                PollState::Pending
+            })
+        },
+    )
     .await
     .expect("seeded dht topic update timeout");
 

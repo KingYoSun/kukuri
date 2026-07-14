@@ -1,5 +1,7 @@
+use std::convert::Infallible;
+
 use super::super::*;
-use kukuri_test_support::{SyncSnapshot, TopicSyncSnapshot};
+use kukuri_test_support::{PollError, PollState, SyncSnapshot, TopicSyncSnapshot, poll_until};
 
 fn snapshot_from_status(status: &SyncStatus) -> SyncSnapshot {
     SyncSnapshot {
@@ -35,29 +37,23 @@ pub(crate) async fn wait_for_connected_topic_peer_count(
     expected: usize,
     timeout_label: &str,
 ) {
-    match timeout(runtime_replication_timeout(), async {
-        let mut stable_ready_polls = 0usize;
-        loop {
+    let result = poll_until(
+        runtime_replication_timeout(),
+        Duration::from_millis(100),
+        3,
+        || async {
             let status = runtime.get_sync_status().await.expect("sync status");
-            let ready = topic_has_direct_peer(&status, topic, expected);
-            if ready {
-                stable_ready_polls += 1;
-                if stable_ready_polls >= 3 {
-                    return;
-                }
+            Ok::<_, Infallible>(if topic_has_direct_peer(&status, topic, expected) {
+                PollState::Ready(())
             } else {
-                stable_ready_polls = 0;
-            }
-            sleep(Duration::from_millis(100)).await;
-        }
-    })
-    .await
-    {
-        Ok(()) => {}
-        Err(_) => {
-            let status = runtime.get_sync_status().await.expect("sync status");
-            panic!("{timeout_label}: {}", format_sync_snapshot(&status, topic));
-        }
+                PollState::Pending
+            })
+        },
+    )
+    .await;
+    if result.is_err() {
+        let status = runtime.get_sync_status().await.expect("sync status");
+        panic!("{timeout_label}: {}", format_sync_snapshot(&status, topic));
     }
 }
 
@@ -67,29 +63,23 @@ pub(crate) async fn wait_for_topic_delivery(
     expected: usize,
     timeout_label: &str,
 ) {
-    match timeout(runtime_replication_timeout(), async {
-        let mut stable_ready_polls = 0usize;
-        loop {
+    let result = poll_until(
+        runtime_replication_timeout(),
+        Duration::from_millis(100),
+        3,
+        || async {
             let status = runtime.get_sync_status().await.expect("sync status");
-            let ready = topic_has_delivery(&status, topic, expected);
-            if ready {
-                stable_ready_polls += 1;
-                if stable_ready_polls >= 3 {
-                    return;
-                }
+            Ok::<_, Infallible>(if topic_has_delivery(&status, topic, expected) {
+                PollState::Ready(())
             } else {
-                stable_ready_polls = 0;
-            }
-            sleep(Duration::from_millis(100)).await;
-        }
-    })
-    .await
-    {
-        Ok(()) => {}
-        Err(_) => {
-            let status = runtime.get_sync_status().await.expect("sync status");
-            panic!("{timeout_label}: {}", format_sync_snapshot(&status, topic));
-        }
+                PollState::Pending
+            })
+        },
+    )
+    .await;
+    if result.is_err() {
+        let status = runtime.get_sync_status().await.expect("sync status");
+        panic!("{timeout_label}: {}", format_sync_snapshot(&status, topic));
     }
 }
 
@@ -99,26 +89,19 @@ pub(crate) async fn wait_for_topic_delivery_result(
     expected: usize,
     step_timeout: Duration,
 ) -> Result<()> {
-    match timeout(step_timeout, async {
-        let mut stable_ready_polls = 0usize;
-        loop {
-            let status = runtime.get_sync_status().await.context("sync status")?;
-            let ready = topic_has_delivery(&status, topic, expected);
-            if ready {
-                stable_ready_polls += 1;
-                if stable_ready_polls >= 3 {
-                    return Ok::<(), anyhow::Error>(());
-                }
-            } else {
-                stable_ready_polls = 0;
-            }
-            sleep(Duration::from_millis(100)).await;
-        }
+    match poll_until(step_timeout, Duration::from_millis(100), 3, || async {
+        let status = runtime.get_sync_status().await.context("sync status")?;
+        Ok::<_, anyhow::Error>(if topic_has_delivery(&status, topic, expected) {
+            PollState::Ready(())
+        } else {
+            PollState::Pending
+        })
     })
     .await
     {
-        Ok(result) => result,
-        Err(_) => {
+        Ok(()) => Ok(()),
+        Err(PollError::Operation(error)) => Err(error),
+        Err(PollError::Timeout) => {
             let status = runtime
                 .get_sync_status()
                 .await
@@ -163,26 +146,19 @@ pub(crate) async fn wait_for_direct_topic_peer_count_result(
     expected: usize,
     step_timeout: Duration,
 ) -> Result<()> {
-    match timeout(step_timeout, async {
-        let mut stable_ready_polls = 0usize;
-        loop {
-            let status = runtime.get_sync_status().await.context("sync status")?;
-            let ready = topic_has_direct_peer(&status, topic, expected);
-            if ready {
-                stable_ready_polls += 1;
-                if stable_ready_polls >= 3 {
-                    return Ok::<(), anyhow::Error>(());
-                }
-            } else {
-                stable_ready_polls = 0;
-            }
-            sleep(Duration::from_millis(100)).await;
-        }
+    match poll_until(step_timeout, Duration::from_millis(100), 3, || async {
+        let status = runtime.get_sync_status().await.context("sync status")?;
+        Ok::<_, anyhow::Error>(if topic_has_direct_peer(&status, topic, expected) {
+            PollState::Ready(())
+        } else {
+            PollState::Pending
+        })
     })
     .await
     {
-        Ok(result) => result,
-        Err(_) => {
+        Ok(()) => Ok(()),
+        Err(PollError::Operation(error)) => Err(error),
+        Err(PollError::Timeout) => {
             let status = runtime
                 .get_sync_status()
                 .await
