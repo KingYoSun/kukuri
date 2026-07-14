@@ -4,14 +4,14 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use kukuri_cn_core::{
-    ChannelSecretCipher, CommunityNodeBootstrapNode, CommunityNodeResolvedUrls, DatabaseInitMode,
-    JwtConfig, PgIndexEntryStore, TopicRendezvousStore, connect_postgres, initialize_database,
-    initialize_database_for_runtime,
+    ChannelSecretCipher, DatabaseInitMode, JwtConfig, PgIndexEntryStore, TopicRendezvousStore,
+    connect_postgres, initialize_database, initialize_database_for_runtime,
 };
 use kukuri_cn_indexer::{
     ArcadeDbConfig, ArcadeDbProjection, ArcadeDbRelationGraph, FailClosedIndexQuery, IndexQuery,
 };
 use kukuri_cn_operator::{CommunityNodeManifest, build_manifest, load_and_validate};
+use kukuri_cn_protocol::{CommunityNodeBootstrapNode, CommunityNodeResolvedUrls};
 use kukuri_cn_trust::{RelationStore, TrustParams};
 use sqlx::postgres::PgPool;
 

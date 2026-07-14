@@ -13,7 +13,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 
-use crate::normalize::normalize_pubkey;
+use kukuri_cn_protocol::normalize::normalize_pubkey;
 
 /// opt-out を登録する（冪等。既に opt-out 済みなら何もしない = opted_out_at は初回を保持）。
 pub async fn set_relation_optout(pool: &PgPool, pubkey: &str) -> Result<()> {

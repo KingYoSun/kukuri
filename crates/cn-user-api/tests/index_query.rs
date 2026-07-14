@@ -15,10 +15,10 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use kukuri_cn_core::{
     IndexEntryStore, IndexScopeKind, JwtConfig, MemoryIndexEntryStore, NewIndexEntry, TestDatabase,
-    build_auth_envelope_json,
 };
 use kukuri_cn_indexer::projection::{IndexProjection, IndexedEntry, MemoryIndexProjection};
 use kukuri_cn_indexer::query::FailClosedIndexQuery;
+use kukuri_cn_protocol::build_auth_envelope_json;
 use kukuri_cn_safety::provider::SubjectKind;
 use kukuri_cn_safety::{ReasonCode, SafetyAction, SafetyVerdict};
 use kukuri_cn_safety_runtime::{MemorySafetyArtifactStore, SafetyArtifactStore};
@@ -195,7 +195,7 @@ async fn authenticate_and_consent(
         .send()
         .await?
         .error_for_status()?
-        .json::<kukuri_cn_core::AuthChallengeResponse>()
+        .json::<kukuri_cn_protocol::AuthChallengeResponse>()
         .await?;
     let auth_envelope_json =
         build_auth_envelope_json(keys, challenge.challenge.as_str(), base_url)?;
@@ -208,7 +208,7 @@ async fn authenticate_and_consent(
         .send()
         .await?
         .error_for_status()?
-        .json::<kukuri_cn_core::AuthVerifyResponse>()
+        .json::<kukuri_cn_protocol::AuthVerifyResponse>()
         .await?;
     client
         .post(format!("{base_url}/v1/consents"))

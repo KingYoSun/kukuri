@@ -5,7 +5,8 @@
 use std::net::SocketAddr;
 
 use anyhow::{Context, Result};
-use kukuri_cn_core::{JwtConfig, TestDatabase, build_auth_envelope_json};
+use kukuri_cn_core::{JwtConfig, TestDatabase};
+use kukuri_cn_protocol::build_auth_envelope_json;
 use kukuri_cn_user_api::{UserApiConfig, app_router, build_state};
 use kukuri_core::KukuriKeys;
 use redis::AsyncCommands;
@@ -83,7 +84,7 @@ pub async fn accept_required_consents(
         .send()
         .await?
         .error_for_status()?
-        .json::<kukuri_cn_core::CommunityNodeConsentStatus>()
+        .json::<kukuri_cn_protocol::CommunityNodeConsentStatus>()
         .await?;
     assert!(accepted.all_required_accepted);
     Ok(())
@@ -137,7 +138,7 @@ pub async fn authenticate_with_invite(
         .send()
         .await?
         .error_for_status()?
-        .json::<kukuri_cn_core::AuthChallengeResponse>()
+        .json::<kukuri_cn_protocol::AuthChallengeResponse>()
         .await?;
     let auth_envelope_json =
         build_auth_envelope_json(keys, challenge.challenge.as_str(), base_url)?;
@@ -152,7 +153,7 @@ pub async fn authenticate_with_invite(
         .send()
         .await?
         .error_for_status()?
-        .json::<kukuri_cn_core::AuthVerifyResponse>()
+        .json::<kukuri_cn_protocol::AuthVerifyResponse>()
         .await?;
     Ok((verify.access_token, auth_envelope_json))
 }
@@ -171,7 +172,7 @@ pub async fn raw_auth_verify(
         .send()
         .await?
         .error_for_status()?
-        .json::<kukuri_cn_core::AuthChallengeResponse>()
+        .json::<kukuri_cn_protocol::AuthChallengeResponse>()
         .await?;
     let auth_envelope_json =
         build_auth_envelope_json(keys, challenge.challenge.as_str(), base_url)?;

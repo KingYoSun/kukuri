@@ -26,11 +26,9 @@ use sqlx::PgPool;
 
 use kukuri_cn_safety::{AppealStatus, RiskSignalTarget};
 // 型（TrustComponentKind / TrustRiskInput / TrustRiskInputs / trust_component_for）は
-// pure domain の cn-trust（#415）へ移した。本 module は永続化 risk signal からの組み立て
-// （供給契約）のみを担い、既存利用箇所のため型を再エクスポートする。
-pub use kukuri_cn_trust::{
-    TrustComponentKind, TrustRiskInput, TrustRiskInputs, trust_component_for,
-};
+// pure domain の cn-trust（#415）へ移した。本 module は永続化 risk signal からの
+// 組み立て（供給契約）のみを担う。
+use kukuri_cn_trust::{TrustComponentKind, TrustRiskInput, TrustRiskInputs, trust_component_for};
 
 use crate::safety_events::{StoredRiskSignal, list_risk_signals_for_target};
 

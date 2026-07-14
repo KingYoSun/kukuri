@@ -5,7 +5,7 @@ use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 
 use crate::config::TOPIC_RENDEZVOUS_TTL_SECONDS;
-use crate::models::CommunityNodeSeedPeer;
+use kukuri_cn_protocol::models::CommunityNodeSeedPeer;
 
 #[derive(Clone, Debug)]
 pub struct TopicRendezvousStore {
@@ -14,8 +14,7 @@ pub struct TopicRendezvousStore {
     ttl_seconds: u64,
 }
 
-// rendezvous の wire 型は kukuri-cn-protocol へ移動した(WP-H3 PR2)。
-pub use kukuri_cn_protocol::{
+use kukuri_cn_protocol::{
     TopicRendezvousCandidate, TopicRendezvousHeartbeat, TopicRendezvousHeartbeatResponse,
     TopicRendezvousTopicResponse,
 };

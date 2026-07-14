@@ -10,7 +10,8 @@
 use std::net::SocketAddr;
 
 use anyhow::{Context, Result};
-use kukuri_cn_core::{JwtConfig, TestDatabase, build_auth_envelope_json};
+use kukuri_cn_core::{JwtConfig, TestDatabase};
+use kukuri_cn_protocol::build_auth_envelope_json;
 use kukuri_cn_user_api::{UserApiConfig, app_router, build_state};
 use kukuri_core::{KukuriKeys, generate_keys};
 use reqwest::{Client, StatusCode};
@@ -88,7 +89,7 @@ async fn authenticate_and_consent(
         .send()
         .await?
         .error_for_status()?
-        .json::<kukuri_cn_core::AuthChallengeResponse>()
+        .json::<kukuri_cn_protocol::AuthChallengeResponse>()
         .await?;
     let auth_envelope_json =
         build_auth_envelope_json(keys, challenge.challenge.as_str(), base_url)?;
@@ -101,7 +102,7 @@ async fn authenticate_and_consent(
         .send()
         .await?
         .error_for_status()?
-        .json::<kukuri_cn_core::AuthVerifyResponse>()
+        .json::<kukuri_cn_protocol::AuthVerifyResponse>()
         .await?;
     client
         .post(format!("{base_url}/v1/consents"))

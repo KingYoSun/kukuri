@@ -133,7 +133,7 @@ pub async fn run_from_env() -> Result<()> {
     Ok(())
 }
 
-pub fn init_tracing() {
+pub(crate) fn init_tracing() {
     kukuri_cn_runtime_support::init_tracing("info,kukuri_cn_user_api=debug");
 }
 

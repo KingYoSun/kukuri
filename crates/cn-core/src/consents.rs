@@ -5,8 +5,8 @@ use sqlx::postgres::PgPool;
 
 use crate::database::ensure_active_subscriber;
 use crate::errors::{ApiError, ApiResult, consent_required_error};
-use crate::models::{CommunityNodeConsentItem, CommunityNodeConsentStatus};
-use crate::normalize::normalize_pubkey;
+use kukuri_cn_protocol::models::{CommunityNodeConsentItem, CommunityNodeConsentStatus};
+use kukuri_cn_protocol::normalize::normalize_pubkey;
 
 pub async fn get_consent_status(pool: &PgPool, pubkey: &str) -> Result<CommunityNodeConsentStatus> {
     let pubkey = normalize_pubkey(pubkey)?;

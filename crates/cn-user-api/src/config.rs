@@ -6,9 +6,9 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use kukuri_cn_core::{
     COMMUNITY_NODE_RENDEZVOUS_KEY_PREFIX_ENV, COMMUNITY_NODE_RENDEZVOUS_REDIS_URL_ENV, JwtConfig,
-    normalize_http_url, normalize_http_url_list, parse_bool_env, parse_csv_env, parse_u32_env,
-    parse_u64_env,
+    parse_bool_env, parse_csv_env, parse_u32_env, parse_u64_env,
 };
+use kukuri_cn_protocol::{normalize_http_url, normalize_http_url_list};
 
 #[derive(Clone)]
 pub struct UserApiConfig {

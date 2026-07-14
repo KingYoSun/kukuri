@@ -1,5 +1,4 @@
 use std::collections::BTreeSet;
-use std::net::SocketAddr;
 
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
@@ -16,19 +15,6 @@ pub fn normalize_http_url(value: &str) -> Result<String> {
     }
     if parsed.query().is_some() || parsed.fragment().is_some() {
         bail!("url must not contain query or fragment");
-    }
-    Ok(parsed.to_string().trim_end_matches('/').to_string())
-}
-
-pub fn normalize_ws_url(value: &str) -> Result<String> {
-    let trimmed = value.trim();
-    let parsed = Url::parse(trimmed).with_context(|| format!("invalid ws url `{trimmed}`"))?;
-    match parsed.scheme() {
-        "ws" | "wss" => {}
-        other => bail!("unsupported websocket url scheme `{other}`"),
-    }
-    if parsed.query().is_some() || parsed.fragment().is_some() {
-        bail!("websocket url must not contain query or fragment");
     }
     Ok(parsed.to_string().trim_end_matches('/').to_string())
 }
@@ -70,9 +56,12 @@ pub fn normalize_pubkey(value: &str) -> Result<String> {
     Ok(trimmed)
 }
 
-pub fn parse_socket_addr_env(var_name: &str, default: &str) -> Result<SocketAddr> {
-    let value = std::env::var(var_name).unwrap_or_else(|_| default.to_string());
-    value
-        .parse::<SocketAddr>()
-        .with_context(|| format!("failed to parse {var_name}"))
+#[cfg(test)]
+mod tests {
+    // cn-core のシム経由テスト(WP-B9 で撤去)から移設した挙動固定。
+    #[test]
+    fn http_url_normalization_trims_trailing_slash() {
+        let normalized = super::normalize_http_url("https://example.com/").expect("normalize");
+        assert_eq!(normalized, "https://example.com");
+    }
 }

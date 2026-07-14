@@ -62,7 +62,7 @@ async fn bootstrap_requires_bearer_then_consents() -> Result<()> {
         .send()
         .await?
         .error_for_status()?
-        .json::<kukuri_cn_core::CommunityNodeConsentStatus>()
+        .json::<kukuri_cn_protocol::CommunityNodeConsentStatus>()
         .await?;
     assert!(!consent_status.all_required_accepted);
     assert!(
@@ -93,7 +93,7 @@ async fn bootstrap_requires_bearer_then_consents() -> Result<()> {
         .send()
         .await?
         .error_for_status()?
-        .json::<kukuri_cn_core::CommunityNodeConsentStatus>()
+        .json::<kukuri_cn_protocol::CommunityNodeConsentStatus>()
         .await?;
     assert!(accepted.all_required_accepted);
     // 受諾後は accepted_at と previously_accepted_version が設定されること。
@@ -163,7 +163,7 @@ async fn bootstrap_exposes_other_registered_seed_peers() -> Result<()> {
             .send()
             .await?
             .error_for_status()?
-            .json::<kukuri_cn_core::CommunityNodeConsentStatus>()
+            .json::<kukuri_cn_protocol::CommunityNodeConsentStatus>()
             .await?;
         assert!(accepted.all_required_accepted);
     }
@@ -228,7 +228,7 @@ async fn bootstrap_exposes_other_endpoints_for_same_subscriber() -> Result<()> {
         .send()
         .await?
         .error_for_status()?
-        .json::<kukuri_cn_core::CommunityNodeConsentStatus>()
+        .json::<kukuri_cn_protocol::CommunityNodeConsentStatus>()
         .await?;
     assert!(accepted.all_required_accepted);
 
@@ -314,7 +314,7 @@ async fn bootstrap_filters_expired_peer_registrations_and_heartbeat_restores_the
             .send()
             .await?
             .error_for_status()?
-            .json::<kukuri_cn_core::CommunityNodeConsentStatus>()
+            .json::<kukuri_cn_protocol::CommunityNodeConsentStatus>()
             .await?;
         assert!(accepted.all_required_accepted);
     }
