@@ -1,40 +1,38 @@
+use std::convert::Infallible;
+
 use super::super::*;
+use kukuri_test_support::{PollState, poll_until};
 
 pub(crate) async fn wait_for_seeded_dht_topic_ready(
     runtime_a: &DesktopRuntime,
     runtime_b: &DesktopRuntime,
     topic: &str,
 ) {
-    match timeout(seeded_dht_runtime_ready_timeout(), async {
-        let mut stable_ready_polls = 0usize;
-        loop {
+    let result = poll_until(
+        seeded_dht_runtime_ready_timeout(),
+        Duration::from_millis(100),
+        3,
+        || async {
             let status_a = runtime_a.get_sync_status().await.expect("status a");
             let status_b = runtime_b.get_sync_status().await.expect("status b");
             let ready_a = topic_has_direct_peer(&status_a, topic, 1)
                 || topic_has_durable_delivery(&status_a, topic);
             let ready_b = topic_has_direct_peer(&status_b, topic, 1)
                 || topic_has_durable_delivery(&status_b, topic);
-            if ready_a && ready_b {
-                stable_ready_polls += 1;
-                if stable_ready_polls >= 3 {
-                    return;
-                }
+            Ok::<_, Infallible>(if ready_a && ready_b {
+                PollState::Ready(())
             } else {
-                stable_ready_polls = 0;
-            }
-            sleep(Duration::from_millis(100)).await;
-        }
-    })
-    .await
-    {
-        Ok(()) => {}
-        Err(_) => {
-            let status_a = runtime_a.get_sync_status().await.expect("status a");
-            let status_b = runtime_b.get_sync_status().await.expect("status b");
-            panic!(
-                "seeded dht topic readiness timeout for `{topic}`: status_a={status_a:?} status_b={status_b:?}"
-            );
-        }
+                PollState::Pending
+            })
+        },
+    )
+    .await;
+    if result.is_err() {
+        let status_a = runtime_a.get_sync_status().await.expect("status a");
+        let status_b = runtime_b.get_sync_status().await.expect("status b");
+        panic!(
+            "seeded dht topic readiness timeout for `{topic}`: status_a={status_a:?} status_b={status_b:?}"
+        );
     }
 }
 pub(crate) async fn wait_for_runtime_endpoint_in_testnet(

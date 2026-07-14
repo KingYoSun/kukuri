@@ -1,4 +1,7 @@
+use std::cell::Cell;
+
 use super::super::*;
+use kukuri_test_support::{PollError, PollState, poll_until};
 
 pub(crate) async fn refresh_public_runtime_for_retry(
     runtime: &DesktopRuntime,
@@ -44,42 +47,37 @@ pub(crate) async fn wait_for_public_runtime_delivery_with_refresh(
 ) -> Result<()> {
     let refresh_interval = Duration::from_secs(5);
     let reapply_interval = public_connectivity_reapply_interval();
-    match timeout(step_timeout, async {
-        let mut next_refresh_at = tokio::time::Instant::now();
-        let mut next_reapply_at = tokio::time::Instant::now() + reapply_interval;
-        let mut stable_ready_polls = 0usize;
-        loop {
-            if tokio::time::Instant::now() >= next_refresh_at {
-                refresh_public_runtime_for_retry(runtime, topic).await?;
-                next_refresh_at = tokio::time::Instant::now() + refresh_interval;
-            }
-            if tokio::time::Instant::now() >= next_reapply_at {
-                force_public_runtime_connectivity_retry(runtime).await?;
-                next_reapply_at = tokio::time::Instant::now() + reapply_interval;
-            }
-
-            let status = runtime
-                .get_sync_status()
-                .await
-                .context("runtime sync status")?;
-            let ready = topic_has_direct_peer(&status, topic, expected)
-                || topic_has_durable_delivery(&status, topic);
-            if ready {
-                stable_ready_polls += 1;
-                if stable_ready_polls >= 3 {
-                    return Ok::<(), anyhow::Error>(());
-                }
-            } else {
-                stable_ready_polls = 0;
-            }
-
-            sleep(Duration::from_millis(100)).await;
+    // poll_until のクロージャは FnMut のため、時限アクションの締切は Cell 経由の
+    // 共有参照で持ち回る(値の意味・実行順序は従来の手書きループと同一)。
+    let next_refresh_at = Cell::new(tokio::time::Instant::now());
+    let next_reapply_at = Cell::new(tokio::time::Instant::now() + reapply_interval);
+    match poll_until(step_timeout, Duration::from_millis(100), 3, || async {
+        if tokio::time::Instant::now() >= next_refresh_at.get() {
+            refresh_public_runtime_for_retry(runtime, topic).await?;
+            next_refresh_at.set(tokio::time::Instant::now() + refresh_interval);
         }
+        if tokio::time::Instant::now() >= next_reapply_at.get() {
+            force_public_runtime_connectivity_retry(runtime).await?;
+            next_reapply_at.set(tokio::time::Instant::now() + reapply_interval);
+        }
+
+        let status = runtime
+            .get_sync_status()
+            .await
+            .context("runtime sync status")?;
+        let ready = topic_has_direct_peer(&status, topic, expected)
+            || topic_has_durable_delivery(&status, topic);
+        Ok::<_, anyhow::Error>(if ready {
+            PollState::Ready(())
+        } else {
+            PollState::Pending
+        })
     })
     .await
     {
-        Ok(result) => result,
-        Err(_) => {
+        Ok(()) => Ok(()),
+        Err(PollError::Operation(error)) => Err(error),
+        Err(PollError::Timeout) => {
             let status = runtime
                 .get_sync_status()
                 .await
@@ -100,50 +98,43 @@ pub(crate) async fn wait_for_public_pair_delivery_with_refresh(
 ) -> Result<()> {
     let refresh_interval = Duration::from_secs(5);
     let reapply_interval = public_connectivity_reapply_interval();
-    match timeout(step_timeout, async {
-        let mut next_refresh_at = tokio::time::Instant::now();
-        let mut next_reapply_at = tokio::time::Instant::now() + reapply_interval;
-        let mut stable_ready_polls = 0usize;
-        loop {
-            if tokio::time::Instant::now() >= next_refresh_at {
-                refresh_public_runtime_for_retry(runtime_a, topic).await?;
-                refresh_public_runtime_for_retry(runtime_b, topic).await?;
-                next_refresh_at = tokio::time::Instant::now() + refresh_interval;
-            }
-            if tokio::time::Instant::now() >= next_reapply_at {
-                force_public_runtime_connectivity_retry(runtime_a).await?;
-                force_public_runtime_connectivity_retry(runtime_b).await?;
-                next_reapply_at = tokio::time::Instant::now() + reapply_interval;
-            }
-
-            let status_a = runtime_a
-                .get_sync_status()
-                .await
-                .context("runtime a sync status")?;
-            let status_b = runtime_b
-                .get_sync_status()
-                .await
-                .context("runtime b sync status")?;
-            let ready_a = topic_has_direct_peer(&status_a, topic, expected)
-                || topic_has_durable_delivery(&status_a, topic);
-            let ready_b = topic_has_direct_peer(&status_b, topic, expected)
-                || topic_has_durable_delivery(&status_b, topic);
-            if ready_a && ready_b {
-                stable_ready_polls += 1;
-                if stable_ready_polls >= 3 {
-                    return Ok::<(), anyhow::Error>(());
-                }
-            } else {
-                stable_ready_polls = 0;
-            }
-
-            sleep(Duration::from_millis(100)).await;
+    let next_refresh_at = Cell::new(tokio::time::Instant::now());
+    let next_reapply_at = Cell::new(tokio::time::Instant::now() + reapply_interval);
+    match poll_until(step_timeout, Duration::from_millis(100), 3, || async {
+        if tokio::time::Instant::now() >= next_refresh_at.get() {
+            refresh_public_runtime_for_retry(runtime_a, topic).await?;
+            refresh_public_runtime_for_retry(runtime_b, topic).await?;
+            next_refresh_at.set(tokio::time::Instant::now() + refresh_interval);
         }
+        if tokio::time::Instant::now() >= next_reapply_at.get() {
+            force_public_runtime_connectivity_retry(runtime_a).await?;
+            force_public_runtime_connectivity_retry(runtime_b).await?;
+            next_reapply_at.set(tokio::time::Instant::now() + reapply_interval);
+        }
+
+        let status_a = runtime_a
+            .get_sync_status()
+            .await
+            .context("runtime a sync status")?;
+        let status_b = runtime_b
+            .get_sync_status()
+            .await
+            .context("runtime b sync status")?;
+        let ready_a = topic_has_direct_peer(&status_a, topic, expected)
+            || topic_has_durable_delivery(&status_a, topic);
+        let ready_b = topic_has_direct_peer(&status_b, topic, expected)
+            || topic_has_durable_delivery(&status_b, topic);
+        Ok::<_, anyhow::Error>(if ready_a && ready_b {
+            PollState::Ready(())
+        } else {
+            PollState::Pending
+        })
     })
     .await
     {
-        Ok(result) => result,
-        Err(_) => {
+        Ok(()) => Ok(()),
+        Err(PollError::Operation(error)) => Err(error),
+        Err(PollError::Timeout) => {
             let status_a = runtime_a
                 .get_sync_status()
                 .await
