@@ -3,25 +3,11 @@ import {
 } from 'react';
 
 import type {
-  AuthorDetailView,
   ComposerDraftMediaView,
   MentionCandidate,
   ThreadPanelState,
   TopicDiagnosticSummary,
 } from '@/components/core/types';
-import { buildCommunityNodeDependencyView } from '@/components/settings/communityNodeDependency';
-import type {
-  AppearancePanelView,
-  CommunityNodePanelView,
-  ConnectivityPanelView,
-  DiscoveryPanelView,
-  ReactionsPanelView,
-} from '@/components/settings/types';
-import type {
-  ChannelAudienceOption,
-  GameDraftView,
-  PrivateChannelListItemView,
-} from '@/components/extended/types';
 import type { TimelineWorkspaceView } from '@/components/shell/types';
 import type {
   GameRoomView,
@@ -31,6 +17,10 @@ import type {
   TopicSyncStatus,
 } from '@/lib/api';
 import type { DesktopTheme } from '@/lib/theme';
+import { useChannelsViewModels } from '@/shell/viewModels/useChannelsViewModels';
+import { useMessagesViewModels } from '@/shell/viewModels/useMessagesViewModels';
+import { useProfileViewModels } from '@/shell/viewModels/useProfileViewModels';
+import { useSettingsViewModels } from '@/shell/viewModels/useSettingsViewModels';
 import { useTimelineViewModels } from '@/shell/viewModels/useTimelineViewModels';
 
 import { useShallow } from 'zustand/react/shallow';
@@ -49,25 +39,11 @@ import {
 import {
   audienceLabelForChannelRef,
   authorDisplayLabel,
-  communityNodeAuthLabel,
-  communityNodeConnectivityUrlsLabel,
-  communityNodeConsentLabel,
-  communityNodeConsentView,
-  communityNodeNextStepLabel,
-  communityNodeRetryAfterLabel,
-  communityNodeSessionPhaseLabel,
-  communityNodeSessionActivationLabel,
-  createGameEditorDraft,
   formatBytes,
   formatCount,
   formatLastReceivedLabel,
-  formatListLabel,
   resolveProfilePictureSrc,
-  shortPubkey,
-  strongestRelationshipLabel,
-  syncStatusBadgeLabel,
   topicConnectionLabel,
-  translateTopicConnectionText,
 } from '@/shell/presentation';
 import { selectShellViewModelsSlice } from '@/shell/storeSelectors';
 
@@ -120,34 +96,6 @@ export function useDesktopShellViewModels({
     state.socialConnections[state.shellChromeState.profileConnectionsView];
   const activeSocialConnectionViews =
     state.socialConnections[state.shellChromeState.profileConnectionsView] ?? [];
-  const selectedDirectMessageConversation =
-    state.directMessages.find(
-      (conversation) => conversation.peer_pubkey === state.selectedDirectMessagePeerPubkey
-    ) ?? null;
-  const selectedDirectMessageTimeline =
-    state.directMessageTimelineByPeer[state.selectedDirectMessagePeerPubkey ?? ''] ?? [];
-  const selectedDirectMessageStatus =
-    state.directMessageStatusByPeer[state.selectedDirectMessagePeerPubkey ?? ''] ??
-    selectedDirectMessageConversation?.status ??
-    null;
-  const selectedDirectMessagePeerAuthor = selectedDirectMessageConversation
-    ? state.knownAuthorsByPubkey[selectedDirectMessageConversation.peer_pubkey] ?? null
-    : null;
-  const selectedDirectMessagePeerLabel = selectedDirectMessageConversation
-    ? authorDisplayLabel(
-        selectedDirectMessageConversation.peer_pubkey,
-        selectedDirectMessageConversation.peer_display_name,
-        selectedDirectMessageConversation.peer_name
-      )
-    : null;
-  const selectedDirectMessagePeerPicture = resolveProfilePictureSrc(
-    selectedDirectMessagePeerAuthor,
-    state.mediaObjectUrls
-  );
-  const localDirectMessageAuthorPicture = resolveProfilePictureSrc(
-    state.localProfile,
-    state.mediaObjectUrls
-  );
   const activeChannelPanelState =
     state.channelPanelStateByTopic[activeTopic] ?? DEFAULT_ASYNC_PANEL_STATE;
   const activeLivePanelState =
@@ -199,33 +147,6 @@ export function useDesktopShellViewModels({
     directMessages,
     shellChromeState,
   } = state;
-  const channelAudienceOptions = useMemo<ChannelAudienceOption[]>(
-    () => [
-      {
-        value: 'invite_only',
-        label: t('channels:audienceOptions.invite_only'),
-      },
-      {
-        value: 'friend_only',
-        label: t('channels:audienceOptions.friend_only'),
-      },
-      {
-        value: 'friend_plus',
-        label: t('channels:audienceOptions.friend_plus'),
-      },
-    ],
-    [t]
-  );
-
-  const privateChannelListItems = useMemo<PrivateChannelListItemView[]>(
-    () =>
-      activeJoinedChannels.map((channel) => ({
-        channel,
-        active: channel.channel_id === selectedPrivateChannelId,
-      })),
-    [activeJoinedChannels, selectedPrivateChannelId]
-  );
-
   const floatingActionLabel = useMemo(() => {
     if (shellChromeState.activePrimarySection === 'live') {
       return t('live:actions.start');
@@ -244,78 +165,6 @@ export function useDesktopShellViewModels({
       shellChromeState.activePrimarySection === 'timeline' &&
       shellChromeState.timelineView === 'bookmarks'
     );
-
-  const liveSessionListItems = useMemo(
-    () =>
-      activeLiveSessions.map((session) => ({
-        session,
-        isOwner: session.host_pubkey === syncStatus.local_author_pubkey,
-        pending: Boolean(livePendingBySessionId[session.session_id]),
-      })),
-    [activeLiveSessions, livePendingBySessionId, syncStatus.local_author_pubkey]
-  );
-
-  const gameDraftViews = useMemo<Record<string, GameDraftView>>(
-    () =>
-      Object.fromEntries(
-        activeGameRooms.map((room) => {
-          const draft = gameDrafts[room.room_id] ?? createGameEditorDraft(room);
-          return [
-            room.room_id,
-            {
-              status: draft.status,
-              phaseLabel: draft.phase_label,
-              scores: draft.scores,
-            },
-          ];
-        })
-      ),
-    [activeGameRooms, gameDrafts]
-  );
-
-  const profileEditorFields = useMemo(
-    () => ({
-      displayName: profileDraft.display_name ?? '',
-      name: profileDraft.name ?? '',
-      about: profileDraft.about ?? '',
-    }),
-    [profileDraft]
-  );
-
-  const profileEditorPictureSrc =
-    profileAvatarPreviewUrl ?? resolveProfilePictureSrc(localProfile, mediaObjectUrls);
-  const profileEditorHasPicture = Boolean(
-    profileAvatarPreviewUrl ||
-      profileDraft.clear_picture ||
-      profileDraft.picture_upload ||
-      localProfile?.picture ||
-      localProfile?.picture_asset
-  ) && !profileDraft.clear_picture;
-
-  const communityNodeStatusByBaseUrl = useMemo(
-    () =>
-      Object.fromEntries(communityNodeStatuses.map((status) => [status.base_url, status])) as Record<
-        string,
-        (typeof communityNodeStatuses)[number]
-      >,
-    [communityNodeStatuses]
-  );
-
-  const effectivePeerIds = useMemo(
-    () =>
-      [
-        ...new Set([
-          ...syncStatus.topic_diagnostics.flatMap((diagnostic) => diagnostic.connected_peers),
-          ...syncStatus.discovery.docs_assist_peer_ids,
-          ...syncStatus.discovery.blob_assist_peer_ids,
-        ]),
-      ],
-    [
-      syncStatus.discovery.blob_assist_peer_ids,
-      syncStatus.discovery.docs_assist_peer_ids,
-      syncStatus.topic_diagnostics,
-    ]
-  );
 
   const {
     activeTimelinePostViews,
@@ -339,6 +188,94 @@ export function useDesktopShellViewModels({
     selectedAuthorTimeline,
     thread,
     unsupportedVideoManifests,
+  });
+
+  const {
+    channelAudienceOptions,
+    privateChannelListItems,
+    liveSessionListItems,
+    gameDraftViews,
+  } = useChannelsViewModels({
+    activeGameRooms,
+    activeJoinedChannels,
+    activeLiveSessions,
+    gameDrafts,
+    livePendingBySessionId,
+    localAuthorPubkey: syncStatus.local_author_pubkey,
+    selectedPrivateChannelId,
+    t,
+  });
+
+  const {
+    profileEditorFields,
+    profileEditorPictureSrc,
+    profileEditorHasPicture,
+    authorDetailView,
+  } = useProfileViewModels({
+    authorError,
+    knownAuthorsByPubkey,
+    localAuthorPubkey: syncStatus.local_author_pubkey,
+    localProfile,
+    mediaObjectUrls,
+    profileAvatarPreviewUrl,
+    profileDraft,
+    selectedAuthor,
+    t,
+  });
+
+  const {
+    selectedDirectMessageConversation,
+    selectedDirectMessageTimeline,
+    selectedDirectMessageStatus,
+    selectedDirectMessagePeerAuthor,
+    selectedDirectMessagePeerLabel,
+    selectedDirectMessagePeerPicture,
+    localDirectMessageAuthorPicture,
+    directMessageDraftViews,
+  } = useMessagesViewModels({
+    directMessageDraftMediaItems,
+    directMessages,
+    directMessageStatusByPeer: state.directMessageStatusByPeer,
+    directMessageTimelineByPeer: state.directMessageTimelineByPeer,
+    knownAuthorsByPubkey,
+    locale,
+    localProfile,
+    mediaObjectUrls,
+    selectedDirectMessagePeerPubkey: state.selectedDirectMessagePeerPubkey,
+    translate,
+  });
+
+  const {
+    communityNodeStatusByBaseUrl,
+    effectivePeerIds,
+    connectivityPanelView,
+    appearancePanelView,
+    discoveryPanelView,
+    communityNodePanelView,
+    reactionsPanelView,
+  } = useSettingsViewModels({
+    bookmarkedReactionAssets,
+    communityNodeConfig,
+    communityNodeEditorDirty,
+    communityNodeError,
+    communityNodeInput,
+    communityNodeManifests,
+    communityNodeStatuses,
+    discoveryConfig,
+    discoveryEditorDirty,
+    discoveryError,
+    discoverySeedInput,
+    error,
+    locale,
+    localPeerTicket,
+    ownedReactionAssets,
+    peerTicket,
+    reactionPanelState,
+    syncStatus,
+    t,
+    theme,
+    topicDiagnostics,
+    trackedTopics,
   });
 
   const gossipDisabledTopics = useMemo(
@@ -421,21 +358,6 @@ export function useDesktopShellViewModels({
     }
     return result;
   }, [followingConnections, knownAuthorsByPubkey, mediaObjectUrls, syncStatus.local_author_pubkey]);
-  const directMessageDraftViews = useMemo<ComposerDraftMediaView[]>(
-    () =>
-      directMessageDraftMediaItems.map((item) => ({
-        id: item.id,
-        sourceName: item.source_name,
-        previewUrl: item.preview_url,
-        attachments: item.attachments.map((attachment) => ({
-          key: `${attachment.role ?? attachment.mime}-${attachment.file_name ?? item.source_name}`,
-          label: attachment.role ?? translate('common:fallbacks.attachment'),
-          mime: attachment.mime,
-          byteSizeLabel: formatBytes(attachment.byte_size, locale),
-        })),
-      })),
-    [directMessageDraftMediaItems, locale, translate]
-  );
   const threadPanelState = useMemo<ThreadPanelState>(
     () => ({
       selectedThreadId: selectedThread,
@@ -445,344 +367,6 @@ export function useDesktopShellViewModels({
       emptyCopy: t('shell:context.threadEmpty'),
     }),
     [selectedThread, t, thread.length]
-  );
-  const resolvedSelectedAuthor = useMemo(
-    () =>
-      selectedAuthor ? knownAuthorsByPubkey[selectedAuthor.author_pubkey] ?? selectedAuthor : null,
-    [knownAuthorsByPubkey, selectedAuthor]
-  );
-  const authorDetailView = useMemo<AuthorDetailView>(
-    () => ({
-      author: resolvedSelectedAuthor,
-      displayLabel: resolvedSelectedAuthor
-        ? authorDisplayLabel(
-            resolvedSelectedAuthor.author_pubkey,
-            resolvedSelectedAuthor.display_name,
-            resolvedSelectedAuthor.name
-          )
-        : t('common:fallbacks.authorDetail'),
-      pictureSrc: resolveProfilePictureSrc(resolvedSelectedAuthor, mediaObjectUrls),
-      summary: resolvedSelectedAuthor
-        ? {
-            label: strongestRelationshipLabel(resolvedSelectedAuthor),
-            following: resolvedSelectedAuthor.following,
-            followedBy: resolvedSelectedAuthor.followed_by,
-            mutual: resolvedSelectedAuthor.mutual,
-            friendOfFriend: resolvedSelectedAuthor.friend_of_friend,
-            muted: resolvedSelectedAuthor.muted,
-            viaPubkeys: resolvedSelectedAuthor.friend_of_friend_via_pubkeys.map(shortPubkey),
-            isSelf: resolvedSelectedAuthor.author_pubkey === syncStatus.local_author_pubkey,
-            canFollow: resolvedSelectedAuthor.author_pubkey !== syncStatus.local_author_pubkey,
-            followActionLabel: resolvedSelectedAuthor.following ? 'Unfollow' : 'Follow',
-            muteActionLabel: resolvedSelectedAuthor.muted ? 'Unmute' : 'Mute',
-          }
-        : null,
-      canMessage: Boolean(
-        resolvedSelectedAuthor &&
-          resolvedSelectedAuthor.author_pubkey !== syncStatus.local_author_pubkey &&
-          resolvedSelectedAuthor.mutual
-      ),
-      authorError,
-    }),
-    [authorError, mediaObjectUrls, resolvedSelectedAuthor, syncStatus.local_author_pubkey, t]
-  );
-  const connectivityPanelView = useMemo<ConnectivityPanelView>(
-    () => ({
-      status: 'ready' as const,
-      summaryLabel: syncStatusBadgeLabel(syncStatus),
-      panelError: error,
-      metrics: [
-        {
-          label: t('settings:connectivity.metrics.connected'),
-          value: syncStatus.connected ? t('common:states.yes') : t('common:states.no'),
-          tone: syncStatus.connected ? 'accent' : 'warning',
-        },
-        {
-          label: t('settings:connectivity.metrics.peers'),
-          value: formatCount(syncStatus.peer_count),
-        },
-        {
-          label: t('settings:connectivity.metrics.pending'),
-          value: formatCount(syncStatus.pending_events),
-          tone: syncStatus.pending_events > 0 ? 'warning' : 'default',
-        },
-      ],
-      diagnostics: [
-        {
-          label: t('settings:connectivity.diagnostics.configuredPeers'),
-          value: formatListLabel(syncStatus.configured_peers),
-          monospace: true,
-        },
-        {
-          label: t('settings:connectivity.diagnostics.connectionDetail'),
-          value: syncStatus.status_detail || t('settings:connectivity.summaryDetailFallback'),
-        },
-        {
-          label: t('settings:connectivity.diagnostics.effectivePeers'),
-          value: formatListLabel(effectivePeerIds),
-          monospace: true,
-        },
-        {
-          label: t('settings:connectivity.diagnostics.lastError'),
-          value: syncStatus.last_error ?? t('common:fallbacks.none'),
-          tone: syncStatus.last_error ? 'danger' : 'default',
-        },
-      ],
-      localPeerTicket: localPeerTicket ?? '',
-      peerTicketInput: peerTicket,
-      topics: trackedTopics.map((topic) => {
-        const diagnostic = topicDiagnostics[topic];
-        return {
-          topic,
-          summary: t('settings:connectivity.summary', {
-            status: translateTopicConnectionText(topicConnectionLabel(diagnostic)),
-            count: diagnostic?.peer_count ?? 0,
-          }),
-          lastReceivedLabel: formatLastReceivedLabel(diagnostic?.last_received_at, locale),
-          expectedPeerCount: diagnostic?.configured_peer_ids.length ?? 0,
-          missingPeerCount: diagnostic?.missing_peer_ids.length ?? 0,
-          statusDetail:
-            diagnostic?.status_detail ?? t('settings:connectivity.summaryDetailFallback'),
-          connectedPeersLabel: formatListLabel(diagnostic?.connected_peers ?? []),
-          relayAssistedPeersLabel: formatListLabel(diagnostic?.docs_assist_peer_ids ?? []),
-          configuredPeersLabel: formatListLabel(diagnostic?.configured_peer_ids ?? []),
-          missingPeersLabel: formatListLabel(diagnostic?.missing_peer_ids ?? []),
-          lastError: diagnostic?.last_error ?? null,
-        };
-      }),
-    }),
-    [
-      effectivePeerIds,
-      error,
-      localPeerTicket,
-      locale,
-      peerTicket,
-      syncStatus,
-      t,
-      topicDiagnostics,
-      trackedTopics,
-    ]
-  );
-  const appearancePanelView = useMemo<AppearancePanelView>(
-    () => ({
-      selectedTheme: theme,
-      selectedLocale: locale,
-      options: [
-        {
-          value: 'dark',
-          label: t('settings:appearance.themeOptions.dark.label'),
-          description: t('settings:appearance.themeOptions.dark.description'),
-        },
-        {
-          value: 'light',
-          label: t('settings:appearance.themeOptions.light.label'),
-          description: t('settings:appearance.themeOptions.light.description'),
-        },
-      ],
-      localeOptions: [
-        {
-          value: 'en',
-          label: t('settings:appearance.languageOptions.en'),
-        },
-        {
-          value: 'ja',
-          label: t('settings:appearance.languageOptions.ja'),
-        },
-        {
-          value: 'zh-CN',
-          label: t('settings:appearance.languageOptions.zh-CN'),
-        },
-      ],
-    }),
-    [locale, t, theme]
-  );
-  const discoveryPanelView = useMemo<DiscoveryPanelView>(
-    () => ({
-      status: 'ready' as const,
-      summaryLabel: syncStatus.discovery.mode,
-      panelError: null,
-      metrics: [
-        { label: t('settings:discovery.metrics.mode'), value: syncStatus.discovery.mode },
-        {
-          label: t('settings:discovery.metrics.connect'),
-          value: syncStatus.discovery.connect_mode,
-          tone: syncStatus.discovery.connect_mode === 'direct_or_relay' ? 'accent' : 'default',
-        },
-        {
-          label: t('settings:discovery.metrics.envLock'),
-          value: discoveryConfig.env_locked ? t('common:states.yes') : t('common:states.no'),
-          tone: discoveryConfig.env_locked ? 'warning' : 'default',
-        },
-      ],
-      diagnostics: [
-        {
-          label: t('settings:discovery.diagnostics.localEndpointId'),
-          value: syncStatus.discovery.local_endpoint_id || t('common:fallbacks.unknown'),
-          monospace: true,
-        },
-        {
-          label: t('settings:discovery.diagnostics.connectedPeers'),
-          value: formatListLabel(syncStatus.discovery.connected_peer_ids),
-          monospace: true,
-        },
-        {
-          label: 'Docs Assist Peers',
-          value: formatListLabel(syncStatus.discovery.docs_assist_peer_ids),
-          monospace: true,
-        },
-        {
-          label: 'Blob Assist Peers',
-          value: formatListLabel(syncStatus.discovery.blob_assist_peer_ids),
-          monospace: true,
-        },
-        {
-          label: t('settings:discovery.diagnostics.manualTicketPeers'),
-          value: formatListLabel(syncStatus.discovery.manual_ticket_peer_ids),
-          monospace: true,
-        },
-        {
-          label: t('settings:discovery.diagnostics.communityBootstrapPeers'),
-          value: formatListLabel(syncStatus.discovery.bootstrap_seed_peer_ids),
-          monospace: true,
-        },
-        {
-          label: t('settings:discovery.diagnostics.configuredSeedIds'),
-          value: formatListLabel(syncStatus.discovery.configured_seed_peer_ids),
-          monospace: true,
-        },
-        {
-          label: t('settings:discovery.diagnostics.discoveryError'),
-          value: discoveryError ?? syncStatus.discovery.last_discovery_error ?? t('common:fallbacks.none'),
-          tone:
-            discoveryError || syncStatus.discovery.last_discovery_error ? 'danger' : 'default',
-        },
-      ],
-      seedPeersInput: discoverySeedInput,
-      seedPeersMessage: discoveryConfig.env_locked
-        ? t('settings:discovery.messages.viewLocked')
-        : discoveryEditorDirty
-          ? t('settings:discovery.messages.unsaved')
-          : t('settings:discovery.messages.saved'),
-      seedPeersMessageTone: discoveryConfig.env_locked ? ('default' as const) : ('default' as const),
-      envLocked: discoveryConfig.env_locked,
-    }),
-    [
-      discoveryConfig.env_locked,
-      discoveryEditorDirty,
-      discoveryError,
-      discoverySeedInput,
-      syncStatus.discovery.blob_assist_peer_ids,
-      syncStatus.discovery.bootstrap_seed_peer_ids,
-      syncStatus.discovery.configured_seed_peer_ids,
-      syncStatus.discovery.connect_mode,
-      syncStatus.discovery.connected_peer_ids,
-      syncStatus.discovery.docs_assist_peer_ids,
-      syncStatus.discovery.last_discovery_error,
-      syncStatus.discovery.local_endpoint_id,
-      syncStatus.discovery.manual_ticket_peer_ids,
-      syncStatus.discovery.mode,
-      t,
-    ]
-  );
-  const communityNodePanelView = useMemo<CommunityNodePanelView>(
-    () => ({
-      status: 'ready' as const,
-      summaryLabel: t('settings:communityNode.summary', { count: communityNodeInput.length }),
-      panelError: communityNodeError,
-      editorMessage: communityNodeEditorDirty
-        ? t('settings:communityNode.editorMessage.unsaved')
-        : t('settings:communityNode.editorMessage.saved'),
-      editorMessageTone: 'default' as const,
-      nodes: communityNodeInput.map((node) => {
-        const saved =
-          communityNodeConfig.nodes.find(
-            (candidate) =>
-              candidate.base_url === node.base_url &&
-              (candidate.auto_approve ?? false) === node.auto_approve
-          ) != null;
-        const status = communityNodeStatusByBaseUrl[node.base_url];
-        return {
-          id: node.id,
-          baseUrl: node.base_url,
-          autoApprove: node.auto_approve,
-          saved,
-          diagnostics: [
-            {
-              label: t('settings:communityNode.diagnostics.autoApprove'),
-              value: node.auto_approve ? t('common:states.yes') : t('common:states.no'),
-            },
-            {
-              label: t('settings:communityNode.diagnostics.auth'),
-              value: communityNodeAuthLabel(status),
-            },
-            {
-              label: t('settings:communityNode.diagnostics.consent'),
-              value: communityNodeConsentLabel(status),
-            },
-            {
-              label: t('settings:communityNode.diagnostics.connectivityUrls'),
-              value: communityNodeConnectivityUrlsLabel(status),
-              monospace: true,
-            },
-            {
-              label: t('settings:communityNode.diagnostics.sessionPhase'),
-              value: communityNodeSessionPhaseLabel(status),
-            },
-            {
-              label: t('settings:communityNode.diagnostics.retryAfter'),
-              value: communityNodeRetryAfterLabel(status),
-            },
-            {
-              label: t('settings:communityNode.diagnostics.sessionActivation'),
-              value: communityNodeSessionActivationLabel(status),
-            },
-            {
-              label: t('settings:communityNode.diagnostics.nextStep'),
-              value: communityNodeNextStepLabel(status),
-            },
-            {
-              label: t('settings:communityNode.diagnostics.lastError'),
-              value: status?.last_error ?? t('common:fallbacks.none'),
-              tone: status?.last_error ? 'danger' : 'default',
-            },
-          ],
-          dependency: buildCommunityNodeDependencyView(
-            communityNodeManifests[node.base_url],
-            t
-          ),
-          consent: communityNodeConsentView(status),
-          lastError: status?.last_error ?? null,
-        };
-      }),
-    }),
-    [
-      communityNodeConfig.nodes,
-      communityNodeEditorDirty,
-      communityNodeError,
-      communityNodeInput,
-      communityNodeManifests,
-      communityNodeStatusByBaseUrl,
-      t,
-    ]
-  );
-  const reactionsPanelView = useMemo<ReactionsPanelView>(
-    () => ({
-      status: reactionPanelState.status,
-      summaryLabel: t('settings:reactions.summary', {
-        owned: ownedReactionAssets.length,
-        saved: bookmarkedReactionAssets.length,
-      }),
-      panelError: reactionPanelState.error,
-      ownedAssets: ownedReactionAssets,
-      bookmarkedAssets: bookmarkedReactionAssets,
-    }),
-    [
-      bookmarkedReactionAssets,
-      ownedReactionAssets,
-      reactionPanelState.error,
-      reactionPanelState.status,
-      t,
-    ]
   );
   const primarySectionItems = useMemo(
     () =>
