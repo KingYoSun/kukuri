@@ -1,4 +1,5 @@
 mod env;
+mod lock_contract;
 mod media;
 mod mock_cn;
 mod net;
