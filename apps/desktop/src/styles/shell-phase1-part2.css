@@ -332,16 +332,6 @@
   grid-template-columns: repeat(var(--reaction-grid-columns, 8), minmax(0, 1fr));
 }
 
-.post-reaction-picker-button-detailed {
-  width: 100%;
-  justify-content: flex-start;
-  min-height: 2.75rem;
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: var(--radius);
-  text-align: left;
-  background: var(--surface-panel-soft);
-}
-
 .post-reaction-picker-button.post-reaction-picker-button-compact {
   width: 100%;
   min-width: 0;
@@ -389,26 +379,14 @@
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
 }
 
-.post-reaction-picker-label,
-.post-reaction-picker-copy {
+.post-reaction-picker-label {
   min-width: 0;
 }
 
-.post-reaction-picker-copy {
-  display: grid;
-  gap: var(--space-2xs);
-}
-
-.post-reaction-picker-copy strong,
-.post-reaction-picker-copy small,
 .post-reaction-picker-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.post-reaction-picker-copy small {
-  color: var(--muted-foreground-soft);
 }
 
 .post-reaction-picker-fallback {
@@ -741,8 +719,7 @@
 }
 
 .shell-main,
-.shell-pane-heading,
-.shell-pane-copy {
+.shell-pane-heading {
   min-width: 0;
 }
 

@@ -23,7 +23,6 @@ import {
   createDesktopShellStore,
   DesktopShellStoreContext,
   type DesktopShellState,
-  type DesktopShellStateValue,
 } from '@/shell/store';
 
 export type ShellHookHarnessOptions = {
@@ -81,13 +80,3 @@ export function actPatchState(
   });
 }
 
-/** 追加ヘルパ: レンダー済みフックの外から store.setField を呼ぶための act ラッパ。 */
-export function actSetField<K extends keyof DesktopShellState>(
-  store: ShellHookHarness['store'],
-  key: K,
-  value: DesktopShellStateValue<K>
-): void {
-  act(() => {
-    store.getState().setField(key, value);
-  });
-}

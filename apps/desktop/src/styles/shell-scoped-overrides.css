@@ -23,25 +23,11 @@
   padding: var(--space-xl) var(--space-lg) var(--space-2xl);
 }
 
-.shell-phase1 .hero {
-  display: grid;
-  gap: var(--space-md);
-  grid-template-columns: 1fr minmax(240px, 320px);
-  align-items: end;
-  margin-bottom: var(--space-lg);
-}
-
 .shell-phase1 .eyebrow {
   margin: 0 0 var(--space-xs);
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--primary-start);
-}
-
-.shell-phase1 .hero h1 {
-  margin: 0;
-  font-size: var(--text-display);
-  line-height: 0.96;
 }
 
 .shell-phase1 .lede {
@@ -144,10 +130,6 @@
 .shell-phase1 .discovery-actions .button {
   flex: 1 1 9.5rem;
   min-width: 0;
-}
-
-.shell-phase1 .diagnostic-error {
-  color: var(--destructive) !important;
 }
 
 .shell-phase1 .post-card {
@@ -374,7 +356,7 @@
 }
 
 @media (max-width: 899px) {
-  .shell-phase1 .hero, .shell-phase1 .grid {
+  .shell-phase1 .grid {
     grid-template-columns: 1fr;
   }
 

@@ -155,25 +155,17 @@ export function useDesktopShellFieldSetter<K extends keyof DesktopShellState>(ke
 // 既存の import 面の互換 re-export(型・定数はスライス側が定義元)。
 export {
   DEFAULT_ASYNC_PANEL_STATE,
-  DEFAULT_TOPIC,
   PUBLIC_CHANNEL_REF,
   PUBLIC_TIMELINE_SCOPE,
-  STARTER_TOPICS,
   activeTimelineStorageKey,
   timelineScopeStorageKey,
   timelineStorageKeyForChannel,
 } from '@/shell/slices/shared';
 export type { AsyncPanelState, DraftMediaItem } from '@/shell/slices/shared';
-export {
-  DEFAULT_COMMUNITY_NODE_CONFIG,
-  DEFAULT_DISCOVERY_CONFIG,
-  DEFAULT_SYNC_STATUS,
-} from '@/shell/slices/connectivity';
+export { DEFAULT_COMMUNITY_NODE_CONFIG } from '@/shell/slices/connectivity';
 export type {
   CommunityNodeDraftNode,
   CommunityNodeManifestEntry,
 } from '@/shell/slices/connectivity';
-export { DEFAULT_SOCIAL_CONNECTIONS } from '@/shell/slices/profileSocial';
-export type { KnownAuthorsByPubkey, SocialConnectionsState } from '@/shell/slices/profileSocial';
-export { DEFAULT_NOTIFICATION_STATUS } from '@/shell/slices/notifications';
+export type { KnownAuthorsByPubkey } from '@/shell/slices/profileSocial';
 export type { GameEditorDraft } from '@/shell/slices/liveGame';

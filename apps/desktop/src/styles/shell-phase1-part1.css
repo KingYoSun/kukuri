@@ -266,13 +266,6 @@
   inset: 0;
 }
 
-.metaverse-viewport {
-  min-height: 34rem;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xs);
-  overflow: hidden;
-  background: var(--surface-metaverse);
-}
 
 .metaverse-hud-toolbar {
   position: absolute;
@@ -654,8 +647,7 @@
     grid-template-columns: 1fr;
   }
 
-  .metaverse-viewport-shell,
-  .metaverse-viewport {
+  .metaverse-viewport-shell {
     min-height: 24rem;
   }
 
