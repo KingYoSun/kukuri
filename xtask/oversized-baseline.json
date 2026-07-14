@@ -2,14 +2,14 @@
   "files": [
     {
       "lines": 1087,
-      "path": "crates/app-api/src/service/private_channels_support.rs"
-    },
-    {
-      "lines": 1087,
       "path": "crates/harness/src/scenarios/community_node.rs"
     },
     {
-      "lines": 1079,
+      "lines": 1076,
+      "path": "crates/app-api/src/service/private_channels_support.rs"
+    },
+    {
+      "lines": 1060,
       "path": "crates/app-api/src/private_channels.rs"
     }
   ]
