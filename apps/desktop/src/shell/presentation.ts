@@ -1,14 +1,12 @@
 import {
   type AuthorSocialView,
   type ChannelAccessTokenPreview,
-  type ChannelAudienceKind,
   type ChannelRef,
   type CommunityNodeConfig,
   type CommunityNodeConfigInput,
   type CommunityNodeNodeStatus,
   type DirectMessageConversationView,
   type DiscoveryConfig,
-  type GameRoomStatus,
   type GameRoomView,
   type JoinedPrivateChannelView,
   type LiveSessionView,
@@ -479,16 +477,8 @@ export function translateTopicConnectionText(label: string): string {
   return label;
 }
 
-export function translateAudienceKindLabel(kind: ChannelAudienceKind): string {
-  return translate(`channels:audienceOptions.${kind}`);
-}
-
 export function translateLiveStatus(status: LiveSessionView['status']): string {
   return translate(`live:statuses.${status}`);
-}
-
-export function translateGameStatus(status: GameRoomStatus): string {
-  return translate(`game:statuses.${status}`);
 }
 
 export function formatCount(value: number): string {

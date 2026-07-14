@@ -24,12 +24,6 @@
   min-width: 0;
 }
 
-.extended-inline-code {
-  display: block;
-  margin-top: var(--space-sm);
-  white-space: pre-wrap;
-  word-break: break-all;
-}
 
 .access-preview-list {
   display: grid;
@@ -69,11 +63,6 @@
 .shell-pane-heading {
   margin: 0;
   font-size: var(--text-h2);
-}
-
-.shell-pane-copy {
-  margin: var(--space-2xs) 0 0;
-  color: var(--muted-foreground);
 }
 
 .shell-nav,

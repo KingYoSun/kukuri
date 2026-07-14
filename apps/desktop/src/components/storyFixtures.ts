@@ -25,7 +25,6 @@ export function createStoryPrimaryItems(): Array<{
   ];
 }
 
-export const STORY_PRIMARY_ITEMS = createStoryPrimaryItems();
 
 export function createStoryTopicItems(): TopicDiagnosticSummary[] {
   return [
@@ -50,7 +49,6 @@ export function createStoryTopicItems(): TopicDiagnosticSummary[] {
   ];
 }
 
-export const STORY_TOPIC_ITEMS = createStoryTopicItems();
 
 export const STORY_IMAGE_PREVIEW =
   'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360"><rect width="640" height="360" fill="%2300b3a4"/><path d="M0 300l140-130 100 80 110-120 150 170H0z" fill="%230f2231"/></svg>';
@@ -179,7 +177,6 @@ export function createStoryTimelinePosts(): PostCardView[] {
   ];
 }
 
-export const STORY_TIMELINE_POSTS = createStoryTimelinePosts();
 
 export function createStoryThreadPosts(): PostCardView[] {
   const timelinePosts = createStoryTimelinePosts();
