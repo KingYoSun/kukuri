@@ -9,8 +9,10 @@
 //! が `TS_RS_LARGE_INT=number` を設定して実行し、CI は再生成後の
 //! `git diff --exit-code` で Rust と TS の乖離を検出する。
 //!
-//! front 専用型(入力 DTO / エラー型 / DesktopApi interface)は手書きの
-//! types.ts 側に残す。
+//! 入力方向の request DTO(requests.rs)も生成対象(WP-B6)。runtimeApi.ts の
+//! request 構築 literal は生成型への `satisfies` 注釈で拘束され、Rust 側の変更は
+//! 再生成 diff + tsc の二重で検出される。front 専用型(展開引数の便宜型 /
+//! エラー型 / DesktopApi interface)は手書きの types.ts 側に残す。
 #![cfg(feature = "ts")]
 
 use ts_rs::TS;
@@ -27,12 +29,31 @@ fn emit<T: TS>(cfg: &ts_rs::Config, out: &mut String) {
 #[test]
 fn export_ipc_types() {
     use crate::{
-        CommunityNodeAuthState, CommunityNodeAuthorityScope, CommunityNodeCapabilityScope,
-        CommunityNodeConfig, CommunityNodeManifest, CommunityNodeManifestFetch,
-        CommunityNodeManifestFetchStatus, CommunityNodeNodeConfig, CommunityNodeNodeStatus,
-        CommunityNodeP2pBoundary, CommunityNodeSessionPhase, DiscoveryConfig, RuntimeEvent,
+        AuthorRequest, BookmarkCustomReactionRequest, BookmarkPostRequest, CommunityNodeAuthState,
+        CommunityNodeAuthorityScope, CommunityNodeCapabilityScope, CommunityNodeConfig,
+        CommunityNodeManifest, CommunityNodeManifestFetch, CommunityNodeManifestFetchStatus,
+        CommunityNodeNodeConfig, CommunityNodeNodeStatus, CommunityNodeP2pBoundary,
+        CommunityNodeSessionPhase, CreateAttachmentRequest, CreateCustomReactionAssetRequest,
+        CreateGameRoomRequest, CreateLiveSessionRequest, CreateMetaverseRoomRequest,
+        CreatePostRequest, CreatePrivateChannelRequest, CreateRepostRequest,
+        CustomReactionCropRect, DeleteDirectMessageMessageRequest, DirectMessageRequest,
+        DiscoveryConfig, ExportChannelAccessTokenRequest, ExportFriendOnlyGrantRequest,
+        ExportFriendPlusShareRequest, ExportPrivateChannelInviteRequest,
+        FreezePrivateChannelRequest, GetBlobMediaRequest, GetBlobPreviewRequest,
+        ImportChannelAccessTokenRequest, ImportFriendOnlyGrantRequest,
+        ImportFriendPlusShareRequest, ImportMetaverseRoomAssetRequest, ImportPeerTicketRequest,
+        ImportPrivateChannelInviteRequest, LeavePrivateChannelRequest,
+        ListDirectMessageMessagesRequest, ListGameRoomsRequest, ListJoinedPrivateChannelsRequest,
+        ListLiveSessionsRequest, ListMetaverseRoomEventsRequest, ListProfileTimelineRequest,
+        ListRecentReactionsRequest, ListSocialConnectionsRequest, ListThreadRequest,
+        ListTimelineRequest, LiveSessionCommandRequest, NotificationIdRequest,
+        PreviewChannelAccessTokenRequest, PublishMetaverseRoomEventRequest, ReactionKeyRequest,
+        RemoveBookmarkedCustomReactionRequest, RemoveBookmarkedPostRequest,
+        RotatePrivateChannelRequest, RuntimeEvent, SendDirectMessageRequest,
+        SetChannelGossipEnabledRequest, SetMyProfileRequest, SetTopicGossipEnabledRequest,
         SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
-        SubmitCommunityNodeReportStatus,
+        SubmitCommunityNodeReportStatus, ToggleReactionRequest, UnsubscribeTopicRequest,
+        UpdateGameRoomRequest, UpdateMetaverseRoomRequest,
     };
     use kukuri_app_api::*;
     use kukuri_cn_protocol::{
@@ -151,6 +172,61 @@ fn export_ipc_types() {
         SubmitCommunityNodeReportStatus,
         SubmitCommunityNodeReportResult,
         RuntimeEvent,
+        // 入力方向の request DTO(requests.rs。WP-B6)
+        CreatePostRequest,
+        CreateRepostRequest,
+        CreateAttachmentRequest,
+        ReactionKeyRequest,
+        ToggleReactionRequest,
+        CustomReactionCropRect,
+        CreateCustomReactionAssetRequest,
+        BookmarkCustomReactionRequest,
+        RemoveBookmarkedCustomReactionRequest,
+        BookmarkPostRequest,
+        RemoveBookmarkedPostRequest,
+        ListRecentReactionsRequest,
+        ListTimelineRequest,
+        ListThreadRequest,
+        ListProfileTimelineRequest,
+        ImportPeerTicketRequest,
+        UnsubscribeTopicRequest,
+        SetTopicGossipEnabledRequest,
+        SetChannelGossipEnabledRequest,
+        GetBlobPreviewRequest,
+        GetBlobMediaRequest,
+        AuthorRequest,
+        ListSocialConnectionsRequest,
+        DirectMessageRequest,
+        NotificationIdRequest,
+        ListDirectMessageMessagesRequest,
+        SendDirectMessageRequest,
+        DeleteDirectMessageMessageRequest,
+        SetMyProfileRequest,
+        ListLiveSessionsRequest,
+        CreateLiveSessionRequest,
+        LiveSessionCommandRequest,
+        ListGameRoomsRequest,
+        CreateGameRoomRequest,
+        CreateMetaverseRoomRequest,
+        PublishMetaverseRoomEventRequest,
+        ListMetaverseRoomEventsRequest,
+        ImportMetaverseRoomAssetRequest,
+        CreatePrivateChannelRequest,
+        ExportPrivateChannelInviteRequest,
+        ImportPrivateChannelInviteRequest,
+        ExportChannelAccessTokenRequest,
+        ImportChannelAccessTokenRequest,
+        PreviewChannelAccessTokenRequest,
+        ExportFriendOnlyGrantRequest,
+        ImportFriendOnlyGrantRequest,
+        ExportFriendPlusShareRequest,
+        ImportFriendPlusShareRequest,
+        FreezePrivateChannelRequest,
+        RotatePrivateChannelRequest,
+        LeavePrivateChannelRequest,
+        ListJoinedPrivateChannelsRequest,
+        UpdateGameRoomRequest,
+        UpdateMetaverseRoomRequest,
     );
 
     let path = concat!(

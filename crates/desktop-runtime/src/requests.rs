@@ -8,6 +8,8 @@ use kukuri_store::TimelineCursor;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CreatePostRequest {
     pub topic: String,
     pub content: String,
@@ -19,6 +21,8 @@ pub struct CreatePostRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CreateRepostRequest {
     pub topic: String,
     pub source_topic: String,
@@ -28,6 +32,8 @@ pub struct CreateRepostRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CreateAttachmentRequest {
     pub file_name: Option<String>,
     pub mime: String,
@@ -37,6 +43,8 @@ pub struct CreateAttachmentRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ReactionKeyRequest {
     Emoji {
@@ -55,6 +63,8 @@ pub enum ReactionKeyRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ToggleReactionRequest {
     pub target_topic_id: String,
     pub target_object_id: String,
@@ -63,6 +73,8 @@ pub struct ToggleReactionRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CustomReactionCropRect {
     pub x: u32,
     pub y: u32,
@@ -70,6 +82,8 @@ pub struct CustomReactionCropRect {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CreateCustomReactionAssetRequest {
     pub upload: CreateAttachmentRequest,
     pub crop_rect: CustomReactionCropRect,
@@ -77,6 +91,8 @@ pub struct CreateCustomReactionAssetRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct BookmarkCustomReactionRequest {
     pub asset_id: String,
     pub owner_pubkey: String,
@@ -89,27 +105,37 @@ pub struct BookmarkCustomReactionRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct RemoveBookmarkedCustomReactionRequest {
     pub asset_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct BookmarkPostRequest {
     pub topic: String,
     pub object_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct RemoveBookmarkedPostRequest {
     pub object_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ListRecentReactionsRequest {
     pub limit: Option<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ListTimelineRequest {
     pub topic: String,
     #[serde(default)]
@@ -119,6 +145,8 @@ pub struct ListTimelineRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ListThreadRequest {
     pub topic: String,
     pub thread_id: String,
@@ -127,6 +155,8 @@ pub struct ListThreadRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ListProfileTimelineRequest {
     pub pubkey: String,
     pub cursor: Option<TimelineCursor>,
@@ -134,22 +164,30 @@ pub struct ListProfileTimelineRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ImportPeerTicketRequest {
     pub ticket: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct UnsubscribeTopicRequest {
     pub topic: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct SetTopicGossipEnabledRequest {
     pub topic: String,
     pub enabled: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct SetChannelGossipEnabledRequest {
     pub topic: String,
     pub channel: String,
@@ -157,38 +195,52 @@ pub struct SetChannelGossipEnabledRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct GetBlobPreviewRequest {
     pub hash: String,
     pub mime: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct GetBlobMediaRequest {
     pub hash: String,
     pub mime: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct AuthorRequest {
     pub pubkey: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ListSocialConnectionsRequest {
     pub kind: SocialConnectionKind,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct DirectMessageRequest {
     pub pubkey: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct NotificationIdRequest {
     pub notification_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ListDirectMessageMessagesRequest {
     pub pubkey: String,
     pub cursor: Option<TimelineCursor>,
@@ -196,6 +248,8 @@ pub struct ListDirectMessageMessagesRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct SendDirectMessageRequest {
     pub pubkey: String,
     pub text: Option<String>,
@@ -205,12 +259,16 @@ pub struct SendDirectMessageRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct DeleteDirectMessageMessageRequest {
     pub pubkey: String,
     pub message_id: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct SetMyProfileRequest {
     pub name: Option<String>,
     pub display_name: Option<String>,
@@ -222,6 +280,8 @@ pub struct SetMyProfileRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ListLiveSessionsRequest {
     pub topic: String,
     #[serde(default)]
@@ -229,6 +289,8 @@ pub struct ListLiveSessionsRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CreateLiveSessionRequest {
     pub topic: String,
     #[serde(default)]
@@ -238,12 +300,16 @@ pub struct CreateLiveSessionRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct LiveSessionCommandRequest {
     pub topic: String,
     pub session_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ListGameRoomsRequest {
     pub topic: String,
     #[serde(default)]
@@ -251,6 +317,8 @@ pub struct ListGameRoomsRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CreateGameRoomRequest {
     pub topic: String,
     #[serde(default)]
@@ -261,6 +329,8 @@ pub struct CreateGameRoomRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CreateMetaverseRoomRequest {
     pub topic: String,
     #[serde(default)]
@@ -271,6 +341,8 @@ pub struct CreateMetaverseRoomRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct PublishMetaverseRoomEventRequest {
     pub topic: String,
     pub room_id: String,
@@ -280,6 +352,8 @@ pub struct PublishMetaverseRoomEventRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ListMetaverseRoomEventsRequest {
     pub topic: String,
     pub room_id: String,
@@ -288,6 +362,8 @@ pub struct ListMetaverseRoomEventsRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ImportMetaverseRoomAssetRequest {
     pub topic: String,
     pub room_id: String,
@@ -298,6 +374,8 @@ pub struct ImportMetaverseRoomAssetRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CreatePrivateChannelRequest {
     pub topic: String,
     pub label: String,
@@ -306,6 +384,8 @@ pub struct CreatePrivateChannelRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ExportPrivateChannelInviteRequest {
     pub topic: String,
     pub channel_id: String,
@@ -313,11 +393,15 @@ pub struct ExportPrivateChannelInviteRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ImportPrivateChannelInviteRequest {
     pub token: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ExportChannelAccessTokenRequest {
     pub topic: String,
     pub channel_id: String,
@@ -325,16 +409,22 @@ pub struct ExportChannelAccessTokenRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ImportChannelAccessTokenRequest {
     pub token: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct PreviewChannelAccessTokenRequest {
     pub token: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ExportFriendOnlyGrantRequest {
     pub topic: String,
     pub channel_id: String,
@@ -342,11 +432,15 @@ pub struct ExportFriendOnlyGrantRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ImportFriendOnlyGrantRequest {
     pub token: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ExportFriendPlusShareRequest {
     pub topic: String,
     pub channel_id: String,
@@ -354,34 +448,46 @@ pub struct ExportFriendPlusShareRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ImportFriendPlusShareRequest {
     pub token: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct FreezePrivateChannelRequest {
     pub topic: String,
     pub channel_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct RotatePrivateChannelRequest {
     pub topic: String,
     pub channel_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct LeavePrivateChannelRequest {
     pub topic: String,
     pub channel_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ListJoinedPrivateChannelsRequest {
     pub topic: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct UpdateGameRoomRequest {
     pub topic: String,
     pub room_id: String,
@@ -391,6 +497,8 @@ pub struct UpdateGameRoomRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct UpdateMetaverseRoomRequest {
     pub topic: String,
     pub room_id: String,
