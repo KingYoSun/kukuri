@@ -19,17 +19,14 @@
 //! - 同一 envelope の重複 put_envelope: memory は topic_objects の Vec に id が重複蓄積し
 //!   timeline に同一 envelope が 2 回現れる(sqlite は ON CONFLICT upsert で 1 行)。
 //!   本ハーネスでは envelope の再 put を行わない(memory/envelopes.rs 未修正)。
-//! - sqlite(sqlx-sqlite)の NULL decode quirk: NULL TEXT は `Ok("")`、NULL INTEGER は
-//!   `Ok(0)` にデコードされるため、row_mapping で空文字フィルタの無い Option 列は
-//!   put(None) → get で `Some("")` / `Some(0)` になる(memory は None のまま)。該当列:
-//!   dm_messages.reply_to_message_id / acked_at、dm_outbox.last_attempt_at、
-//!   dm_conversations.last_message_at / last_message_id / last_message_preview、
-//!   notifications.read_at、live_session_cache.ended_at、game_room_cache.phase_label、
-//!   reaction_cache.emoji / custom_asset_id、object_index_cache.source_blob_hash、
-//!   bookmarked_posts.content / reply_to_object_id / root_object_id。
-//!   本ハーネスの fixture はこれらの列に NULL を投入しない(Some("既定値") を明示投入)。
-//!   memory へ quirk を移植する fix は T7 の範囲外(本筋は sqlite 読み出し側の Option
-//!   decode 適正化で Phase 2 候補)。
+//! - sqlite(sqlx-sqlite)の NULL decode quirk(NULL TEXT → `Ok("")`、NULL INTEGER →
+//!   `Ok(0)`)は WP-B16 で解消済み: row_mapping の Option 列は `try_get::<Option<T>>` で
+//!   読むため put(None) → get は両実装とも None になり、fixture は実 NULL を投入できる。
+//!   残る既知 divergence は空文字入力のみ: sqlite 側の trim + filter 列
+//!   (object_index_cache / bookmarked_posts の root/reply、notifications の参照列など)は
+//!   put(Some("")) → get で None になるが memory は Some("") のまま返す。
+//!   実書き込み経路は Option バインドで '' を書かないため、本ハーネスの fixture も
+//!   これらの列に空文字を投入しない。
 
 use super::*;
 
@@ -115,11 +112,10 @@ fn parity_dm_message(dm_id: &str, message_id: &str, created_at: i64) -> DirectMe
         recipient_pubkey: "b".repeat(64),
         created_at,
         text: Some(format!("text:{message_id}")),
-        // NULL decode quirk 回避のため Some を明示投入(mod.rs ヘッダ参照)
-        reply_to_message_id: Some(String::new()),
+        reply_to_message_id: None,
         attachment_manifest: None,
         outgoing: false,
-        acked_at: Some(0),
+        acked_at: None,
     }
 }
 
@@ -163,8 +159,7 @@ fn parity_live_session(
         description: format!("desc:{session_id}"),
         status,
         started_at,
-        // NULL decode quirk 回避のため Some を明示投入(mod.rs ヘッダ参照)
-        ended_at: Some(0),
+        ended_at: None,
         updated_at: started_at + 1,
         source_replica_id: ReplicaId::new(format!("topic::{topic_id}")),
         source_key: format!("live/{session_id}/manifest"),
@@ -189,8 +184,7 @@ fn parity_game_room(
         title: format!("room:{room_id}"),
         description: format!("desc:{room_id}"),
         status,
-        // NULL decode quirk 回避のため Some を明示投入(mod.rs ヘッダ参照)
-        phase_label: Some(String::new()),
+        phase_label: None,
         scores: Vec::new(),
         room_kind: GameRoomKind::ScoreGame,
         metaverse: None,
@@ -276,8 +270,7 @@ fn parity_reaction(
         reaction_key_kind: ReactionKeyKind::Emoji,
         normalized_reaction_key: normalized_key.to_string(),
         emoji: Some(emoji.to_string()),
-        // NULL decode quirk 回避のため Some を明示投入(mod.rs ヘッダ参照)
-        custom_asset_id: Some(String::new()),
+        custom_asset_id: None,
         custom_asset_snapshot: None,
         status: ObjectStatus::Active,
         source_key: format!("reactions/{reaction_id}"),
@@ -305,8 +298,7 @@ fn parity_reaction_custom(
         updated_at,
     );
     row.reaction_key_kind = ReactionKeyKind::CustomAsset;
-    // NULL decode quirk 回避のため Some を明示投入(mod.rs ヘッダ参照)
-    row.emoji = Some(String::new());
+    row.emoji = None;
     row.custom_asset_id = Some("asset-1".into());
     row.custom_asset_snapshot = Some(CustomReactionAssetSnapshotV1 {
         asset_id: "asset-1".into(),
@@ -336,13 +328,10 @@ fn parity_bookmarked_post(source_object_id: &str, bookmarked_at: i64) -> Bookmar
             mime: "text/plain".into(),
             bytes: 4,
         },
-        // NULL decode quirk 回避のため Some を明示投入(mod.rs ヘッダ参照)。
-        // reply_to / root の空文字はどちらの実装でも Some("") のまま返る
-        // (row_to_bookmarked_post は trim + filter しない非対称の現挙動)。
-        content: Some(String::new()),
+        content: None,
         attachments: Vec::new(),
-        reply_to_object_id: Some(EnvelopeId::from("")),
-        root_object_id: Some(EnvelopeId::from("")),
+        reply_to_object_id: None,
+        root_object_id: None,
         repost_of: None,
         bookmarked_at,
     }
@@ -398,8 +387,7 @@ fn parity_outbox(dm_id: &str, message_id: &str, created_at: i64) -> DirectMessag
         peer_pubkey: "b".repeat(64),
         frame_blob_hash: BlobHash::new("2".repeat(64)),
         created_at,
-        // NULL decode quirk 回避のため Some を明示投入(mod.rs ヘッダ参照)
-        last_attempt_at: Some(0),
+        last_attempt_at: None,
     }
 }
 
