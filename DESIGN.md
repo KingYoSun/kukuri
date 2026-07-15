@@ -234,6 +234,24 @@ kukuri にはマーケティング的な First View / ブランドロックア�
 - portal（Radix の Dialog / Tooltip / DropdownMenu / Popover）は `body` 直下に描画され `.shell-phase1` スコープの外にある。同じ semantic クラスを portal と shell で別値にしたい場合のみ、base 値を `shell-phase1-part*` に、shell 上書き値を `shell-scoped-overrides.css` に置く二層構造にする。
 - `var(--token)` は同梱スタイルシート内で定義済みのものだけ参照する（`css-vars.test.ts` が未定義参照を検出する）。
 
+### 4.8 shell 状態層とファイル構成（WP-H6 / Q3 / Q4 / B4 / B5、規約化は WP-B10）
+
+`apps/desktop/src/shell/` の状態・データ取得・表示変換は次の層に分ける。**新規コードはこのルールに従って置き場を選ぶ**（4.7 の CSS 層規約と対になる state 層の規約）。
+
+| 置き場 | 役割 |
+|---|---|
+| `slices/` | store の**状態の形と初期値**（ドメイン別スライス。単一 store の交差型合成。`set()` の原子性維持のため store は分割しない） |
+| `storeSelectors.ts` | **複数の hook が共有する**名前付き購読スライス（`useShallow` 前提）。単一コンポーネント専用の購読は、そのコンポーネント内のインライン `useShallow` でよい（2 流儀はこの使い分けが意図） |
+| `presentation.ts` | store 非依存の**表示変換 helper**（純関数） |
+| `data/` + `data/loaders/` | **取得系 hook**。section 取得ロジックの SSoT は `loaders/`（WP-B5）で、`useDesktopShellDataEffects` の section effect はトリガ判定（+ messages の interval 管理）だけを持つ |
+| `viewModels/` | **section 別の projection hook**（timeline / channels / profile / messages / settings。WP-Q3 / B4）。`useDesktopShellViewModels` はその合成 facade で、section に属さない shell 横断 projection（chrome / topic nav / composer / thread / route コピー）だけを直接持つ |
+| `actions/` | **API 副作用を持つ action creator**（操作フロー別） |
+| `page/` | **画面合成**と page 専用 hook（dialog / focus / share preview） |
+| `routing/` | URL ↔ `RouteState` の**同期 adapter**（純関数は `routes.ts` が正） |
+
+- 層ごとの分類軸は意図的に異なる（slices = 状態ドメイン / actions = 操作フロー / viewModels = 表示 section）。層をまたいで名前を無理に揃えない。
+- selector なしの全ストア購読（`useDesktopShellStore()` 引数なし）を新規に書かない（WP-H6 で全廃済み。型面では書けてしまうため、防波堤はレビュー）。
+
 ---
 
 ## 5. レイアウト原則
