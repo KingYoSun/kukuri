@@ -1047,3 +1047,23 @@ struct PrivateChannelNextEpoch {
     epoch_id: String,
     secret_hex: String,
 }
+
+/// friend-only grant import 失敗の再試行可能性(リトライ契約。WP-B11)。
+///
+/// gossip 伝播待ちで解消しうる失敗(mutual 未成立 / epoch 不一致 / owner 未着 /
+/// snapshot timeout)のみ true。判定は `PrivateChannelImportError` への downcast で
+/// 行い、**エラー文言に依存しない**(文言は表示用で、契約はこの関数が正本)。
+/// リトライ対象の分類は crate 内の characterization テスト(tests/support/waiters.rs)
+/// が固定している。
+pub fn is_retryable_friend_only_grant_import_error(error: &anyhow::Error) -> bool {
+    error
+        .downcast_ref::<PrivateChannelImportError>()
+        .is_some_and(PrivateChannelImportError::is_retryable_friend_only)
+}
+
+/// friend-plus share import 失敗の再試行可能性(リトライ契約。WP-B11)。
+pub fn is_retryable_friend_plus_share_import_error(error: &anyhow::Error) -> bool {
+    error
+        .downcast_ref::<PrivateChannelImportError>()
+        .is_some_and(PrivateChannelImportError::is_retryable_friend_plus)
+}
