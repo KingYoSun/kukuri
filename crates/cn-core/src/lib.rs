@@ -1,3 +1,16 @@
+//! コミュニティノードのサーバ側 合成・永続化層。
+//!
+//! 収容基準: **Postgres / Redis を伴うサーバ側の合成・永続化だけ**をここに置く。
+//! 次に該当するものは本 crate に足さない:
+//! - wire 型・正規化・認証封筒(serde 表現 = 凍結境界)→ `kukuri-cn-protocol`
+//! - ドメインロジック(safety / trust の純粋規則)→ `kukuri-cn-safety` / `kukuri-cn-trust`
+//!   (DB 非依存の safety 合成は `kukuri-cn-safety-runtime`。WP-Q8)
+//! - 常駐プロセス → `kukuri-cn-indexer` / `kukuri-cn-user-api`、運用 CLI → `kukuri-cn-cli`
+//! - tracing 等の実行時共通部品 → `kukuri-cn-runtime-support`
+//!
+//! 新しいサーバ側機能は、まず上のどれに属するかを判定し、DB との合成・永続化に
+//! 該当する場合だけ本 crate へ足す(「何でも入る受け皿」に戻さない。WP-B10)。
+
 mod admission;
 mod auth;
 mod bootstrap;
