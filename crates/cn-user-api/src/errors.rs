@@ -69,7 +69,8 @@ pub(crate) fn account_lifecycle_error(error: AccountLifecycleError) -> ApiError 
             ApiError::new(StatusCode::UNAUTHORIZED, "AUTH_FAILED", source.to_string())
         }
         AccountLifecycleError::Infrastructure { operation, source } => {
-            let _ = operation;
+            // HTTP 契約(500 / INTERNAL / 汎用文言)は変えず、原因箇所は tracing にだけ出す。
+            tracing::error!(?operation, error = %source, "account lifecycle infrastructure failure");
             internal_error(source)
         }
     }
@@ -100,7 +101,7 @@ impl SupportEndpointError {
 
 pub(crate) fn support_endpoint_error(error: SupportEndpointError) -> ApiError {
     let SupportEndpointError { operation, source } = error;
-    let _ = operation;
+    tracing::error!(?operation, error = %source, "support endpoint infrastructure failure");
     internal_error(source)
 }
 
@@ -153,7 +154,7 @@ pub(crate) fn indexing_error(error: IndexingError) -> ApiError {
             source.to_string(),
         ),
         IndexingError::Infrastructure { operation, source } => {
-            let _ = operation;
+            tracing::error!(?operation, error = %source, "indexing infrastructure failure");
             internal_error(source)
         }
     }
@@ -212,12 +213,17 @@ impl TrustRelationError {
 }
 
 pub(crate) fn trust_relation_error(error: TrustRelationError) -> ApiError {
-    let (operation, source) = match error {
-        TrustRelationError::TrustRead { operation, source }
-        | TrustRelationError::RelationGraph { operation, source }
-        | TrustRelationError::RelationOptOut { operation, source } => (operation, source),
+    // variant 種別(どの依存面の失敗か)と operation(どの読み書きか)を観測に乗せる。
+    let (kind, operation, source) = match error {
+        TrustRelationError::TrustRead { operation, source } => ("trust_read", operation, source),
+        TrustRelationError::RelationGraph { operation, source } => {
+            ("relation_graph", operation, source)
+        }
+        TrustRelationError::RelationOptOut { operation, source } => {
+            ("relation_opt_out", operation, source)
+        }
     };
-    let _ = operation;
+    tracing::error!(kind, ?operation, error = %source, "trust/relation infrastructure failure");
     internal_error(source)
 }
 
