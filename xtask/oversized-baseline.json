@@ -9,7 +9,7 @@
       "path": "crates/app-api/src/service/private_channels_support.rs"
     },
     {
-      "lines": 1049,
+      "lines": 1069,
       "path": "crates/app-api/src/private_channels.rs"
     }
   ]
