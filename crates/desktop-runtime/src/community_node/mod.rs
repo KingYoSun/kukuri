@@ -119,6 +119,8 @@ pub(crate) struct TopicRendezvousPeerCandidate {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct SetCommunityNodeConfigNode {
     pub base_url: String,
     #[serde(default)]
@@ -126,16 +128,22 @@ pub struct SetCommunityNodeConfigNode {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct SetCommunityNodeConfigRequest {
     pub nodes: Vec<SetCommunityNodeConfigNode>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CommunityNodeTargetRequest {
     pub base_url: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct AcceptCommunityNodeConsentsRequest {
     pub base_url: String,
     #[serde(default)]

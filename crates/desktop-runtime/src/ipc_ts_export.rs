@@ -29,11 +29,12 @@ fn emit<T: TS>(cfg: &ts_rs::Config, out: &mut String) {
 #[test]
 fn export_ipc_types() {
     use crate::{
-        AuthorRequest, BookmarkCustomReactionRequest, BookmarkPostRequest, CommunityNodeAuthState,
-        CommunityNodeAuthorityScope, CommunityNodeCapabilityScope, CommunityNodeConfig,
-        CommunityNodeManifest, CommunityNodeManifestFetch, CommunityNodeManifestFetchStatus,
-        CommunityNodeNodeConfig, CommunityNodeNodeStatus, CommunityNodeP2pBoundary,
-        CommunityNodeSessionPhase, CreateAttachmentRequest, CreateCustomReactionAssetRequest,
+        AcceptCommunityNodeConsentsRequest, AuthorRequest, BookmarkCustomReactionRequest,
+        BookmarkPostRequest, CommunityNodeAuthState, CommunityNodeAuthorityScope,
+        CommunityNodeCapabilityScope, CommunityNodeConfig, CommunityNodeManifest,
+        CommunityNodeManifestFetch, CommunityNodeManifestFetchStatus, CommunityNodeNodeConfig,
+        CommunityNodeNodeStatus, CommunityNodeP2pBoundary, CommunityNodeSessionPhase,
+        CommunityNodeTargetRequest, CreateAttachmentRequest, CreateCustomReactionAssetRequest,
         CreateGameRoomRequest, CreateLiveSessionRequest, CreateMetaverseRoomRequest,
         CreatePostRequest, CreatePrivateChannelRequest, CreateRepostRequest,
         CustomReactionCropRect, DeleteDirectMessageMessageRequest, DirectMessageRequest,
@@ -50,7 +51,8 @@ fn export_ipc_types() {
         PreviewChannelAccessTokenRequest, PublishMetaverseRoomEventRequest, ReactionKeyRequest,
         RemoveBookmarkedCustomReactionRequest, RemoveBookmarkedPostRequest,
         RotatePrivateChannelRequest, RuntimeEvent, SendDirectMessageRequest,
-        SetChannelGossipEnabledRequest, SetMyProfileRequest, SetTopicGossipEnabledRequest,
+        SetChannelGossipEnabledRequest, SetCommunityNodeConfigNode, SetCommunityNodeConfigRequest,
+        SetDiscoverySeedsRequest, SetMyProfileRequest, SetTopicGossipEnabledRequest,
         SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
         SubmitCommunityNodeReportStatus, ToggleReactionRequest, UnsubscribeTopicRequest,
         UpdateGameRoomRequest, UpdateMetaverseRoomRequest,
@@ -227,6 +229,12 @@ fn export_ipc_types() {
         ListJoinedPrivateChannelsRequest,
         UpdateGameRoomRequest,
         UpdateMetaverseRoomRequest,
+        // requests.rs 外の request DTO(community_node / discovery)
+        SetCommunityNodeConfigNode,
+        SetCommunityNodeConfigRequest,
+        CommunityNodeTargetRequest,
+        AcceptCommunityNodeConsentsRequest,
+        SetDiscoverySeedsRequest,
     );
 
     let path = concat!(

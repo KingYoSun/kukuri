@@ -335,3 +335,13 @@ export type UpdateGameRoomRequest = { topic: string, room_id: string, status: Ga
 
 export type UpdateMetaverseRoomRequest = { topic: string, room_id: string, status: GameRoomStatus, shared_object_position: [number, number, number], shared_object_rotation: [number, number, number], shared_object_scale: [number, number, number], };
 
+export type SetCommunityNodeConfigNode = { base_url: string, auto_approve: boolean, };
+
+export type SetCommunityNodeConfigRequest = { nodes: Array<SetCommunityNodeConfigNode>, };
+
+export type CommunityNodeTargetRequest = { base_url: string, };
+
+export type AcceptCommunityNodeConsentsRequest = { base_url: string, policy_slugs: Array<string>, };
+
+export type SetDiscoverySeedsRequest = { seed_entries: Array<string>, };
+
