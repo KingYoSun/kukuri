@@ -279,8 +279,9 @@ fn compute_cursor(notifications: &[NotificationView]) -> DispatchCursor {
     }
 }
 
-/// Whether an OS toast should be shown for this notification. Mirrors
-/// `shouldSendOsNotification` in apps/desktop/src/lib/releaseReadiness.ts.
+/// Whether an OS toast should be shown for this notification. This is the
+/// single implementation: the former TS twin (`shouldSendOsNotification` in
+/// releaseReadiness.ts) was production-dead and deleted in WP-Q1 (#517).
 fn should_send(
     notification: &NotificationView,
     settings: &OsNotificationSettings,
@@ -301,7 +302,8 @@ fn should_send(
     }
 }
 
-/// Mirrors `notificationTitle` in apps/desktop/src/lib/releaseReadiness.ts.
+/// OS toast title per notification kind (single implementation; the TS twin
+/// was deleted in WP-Q1 #517).
 fn notification_title(kind: &NotificationKind) -> &'static str {
     match kind {
         NotificationKind::DirectMessage => "Direct message",
@@ -313,7 +315,8 @@ fn notification_title(kind: &NotificationKind) -> &'static str {
     }
 }
 
-/// Mirrors `notificationBody` in apps/desktop/src/lib/releaseReadiness.ts.
+/// OS toast body per notification kind (single implementation; the TS twin
+/// was deleted in WP-Q1 #517).
 fn notification_body(
     kind: &NotificationKind,
     preview_text: Option<&str>,
