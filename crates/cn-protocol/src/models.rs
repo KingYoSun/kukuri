@@ -102,6 +102,12 @@ pub struct BootstrapHeartbeatResponse {
     pub expires_at: i64,
 }
 
+/// `GET /v1/bootstrap/nodes` の response(WP-B17 で server / client の二重定義を共有化)。
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BootstrapNodesResponse {
+    pub nodes: Vec<CommunityNodeBootstrapNode>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(optional_fields = nullable))]

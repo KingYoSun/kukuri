@@ -8,18 +8,12 @@ use kukuri_cn_core::{
     refresh_bootstrap_peer_registration, require_bearer_identity, require_consents,
 };
 use kukuri_cn_protocol::{
-    BootstrapHeartbeatRequest, BootstrapHeartbeatResponse, CommunityNodeBootstrapNode,
+    BootstrapHeartbeatRequest, BootstrapHeartbeatResponse, BootstrapNodesResponse,
     TopicRendezvousHeartbeat, TopicRendezvousHeartbeatResponse,
 };
-use serde::Serialize;
 
 use crate::errors::{SupportEndpointError, SupportEndpointOperation, support_endpoint_error};
 use crate::state::UserApiState;
-
-#[derive(Debug, Serialize)]
-pub(crate) struct BootstrapNodesResponse {
-    nodes: Vec<CommunityNodeBootstrapNode>,
-}
 
 pub(crate) async fn bootstrap_nodes(
     State(state): State<UserApiState>,

@@ -92,31 +92,10 @@ pub struct CommunityNodeConfig {
     pub nodes: Vec<CommunityNodeNodeConfig>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct BootstrapNodesResponse {
-    pub(crate) nodes: Vec<kukuri_cn_protocol::CommunityNodeBootstrapNode>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct TopicRendezvousHeartbeatResponse {
-    pub(crate) expires_in_seconds: u64,
-    pub(crate) topics: Vec<TopicRendezvousTopicResponse>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct TopicRendezvousTopicResponse {
-    pub(crate) topic_key: String,
-    pub(crate) peers: Vec<TopicRendezvousPeerCandidate>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct TopicRendezvousPeerCandidate {
-    pub(crate) endpoint_id: String,
-    #[serde(default)]
-    pub(crate) addr_hint: Option<String>,
-    #[serde(default)]
-    pub(crate) relay_urls: Vec<String>,
-}
+// CN HTTP response 型は kukuri-cn-protocol の共有定義を使う(WP-B17)。
+// 旧ローカルミラー(TopicRendezvousPeerCandidate = 共有側の TopicRendezvousCandidate)は
+// フィールド一致の二重定義だったため撤去した。serde 名不変 = wire 互換。
+pub(crate) use kukuri_cn_protocol::{BootstrapNodesResponse, TopicRendezvousHeartbeatResponse};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
