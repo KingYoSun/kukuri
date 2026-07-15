@@ -32,6 +32,66 @@ import type {
   TimelineView,
 } from '../types';
 
+// request DTO の生成型(WP-B6)。組み立てた literal を satisfies で拘束し、
+// Rust 側 DTO の変更を tsc で検出する。手書き types.ts の同名 shadow を避けるため
+// types.generated から直接 import する。
+import type {
+  AcceptCommunityNodeConsentsRequest,
+  AuthorRequest,
+  BookmarkCustomReactionRequest,
+  BookmarkPostRequest,
+  CommunityNodeTargetRequest,
+  CreateCustomReactionAssetRequest,
+  CreateGameRoomRequest,
+  CreateLiveSessionRequest,
+  CreateMetaverseRoomRequest,
+  CreatePostRequest,
+  CreatePrivateChannelRequest,
+  CreateRepostRequest,
+  DeleteDirectMessageMessageRequest,
+  DirectMessageRequest,
+  ExportChannelAccessTokenRequest,
+  ExportFriendOnlyGrantRequest,
+  ExportFriendPlusShareRequest,
+  ExportPrivateChannelInviteRequest,
+  FreezePrivateChannelRequest,
+  GetBlobMediaRequest,
+  GetBlobPreviewRequest,
+  ImportChannelAccessTokenRequest,
+  ImportFriendOnlyGrantRequest,
+  ImportFriendPlusShareRequest,
+  ImportMetaverseRoomAssetRequest,
+  ImportPeerTicketRequest,
+  ImportPrivateChannelInviteRequest,
+  LeavePrivateChannelRequest,
+  ListDirectMessageMessagesRequest,
+  ListGameRoomsRequest,
+  ListJoinedPrivateChannelsRequest,
+  ListLiveSessionsRequest,
+  ListMetaverseRoomEventsRequest,
+  ListProfileTimelineRequest,
+  ListRecentReactionsRequest,
+  ListSocialConnectionsRequest,
+  ListThreadRequest,
+  ListTimelineRequest,
+  LiveSessionCommandRequest,
+  NotificationIdRequest,
+  PreviewChannelAccessTokenRequest,
+  PublishMetaverseRoomEventRequest,
+  RemoveBookmarkedCustomReactionRequest,
+  RemoveBookmarkedPostRequest,
+  RotatePrivateChannelRequest,
+  SendDirectMessageRequest,
+  SetChannelGossipEnabledRequest,
+  SetCommunityNodeConfigRequest,
+  SetDiscoverySeedsRequest,
+  SetTopicGossipEnabledRequest,
+  ToggleReactionRequest,
+  UnsubscribeTopicRequest,
+  UpdateGameRoomRequest,
+  UpdateMetaverseRoomRequest,
+} from '../types.generated';
+
 import { invokeDesktop } from '../invoke/desktop';
 import { command } from '../invoke/dispatch';
 
@@ -44,7 +104,7 @@ export const runtimeApi: DesktopApi = {
         reply_to: replyTo,
         channel_ref: channelRef,
         attachments,
-      },
+      } satisfies CreatePostRequest,
     });
   }),
   createRepost: command('createRepost', async (topic, sourceTopic, sourceObjectId, commentary) => {
@@ -54,7 +114,7 @@ export const runtimeApi: DesktopApi = {
         source_topic: sourceTopic,
         source_object_id: sourceObjectId,
         commentary,
-      },
+      } satisfies CreateRepostRequest,
     });
   }),
   toggleReaction: command('toggleReaction', async (targetTopicId, targetObjectId, reactionKey, channelRef = null) => {
@@ -77,7 +137,7 @@ export const runtimeApi: DesktopApi = {
                 height: reactionKey.asset.height,
               },
         channel_ref: channelRef,
-      },
+      } satisfies ToggleReactionRequest,
     });
   }),
   listMyCustomReactionAssets: command('listMyCustomReactionAssets', async () => {
@@ -87,7 +147,7 @@ export const runtimeApi: DesktopApi = {
     return invokeDesktop<RecentReactionView[]>('list_recent_reactions', {
       request: {
         limit,
-      },
+      } satisfies ListRecentReactionsRequest,
     });
   }),
   createCustomReactionAsset: command('createCustomReactionAsset', async (upload, cropRect, searchKey) => {
@@ -96,7 +156,7 @@ export const runtimeApi: DesktopApi = {
         upload,
         crop_rect: cropRect,
         search_key: searchKey,
-      },
+      } satisfies CreateCustomReactionAssetRequest,
     });
   }),
   listBookmarkedCustomReactions: command('listBookmarkedCustomReactions', async () => {
@@ -113,14 +173,14 @@ export const runtimeApi: DesktopApi = {
         bytes: asset.bytes,
         width: asset.width,
         height: asset.height,
-      },
+      } satisfies BookmarkCustomReactionRequest,
     });
   }),
   removeBookmarkedCustomReaction: command('removeBookmarkedCustomReaction', async (assetId) => {
     return invokeDesktop<void>('remove_bookmarked_custom_reaction', {
       request: {
         asset_id: assetId,
-      },
+      } satisfies RemoveBookmarkedCustomReactionRequest,
     });
   }),
   listBookmarkedPosts: command('listBookmarkedPosts', async () => {
@@ -131,14 +191,14 @@ export const runtimeApi: DesktopApi = {
       request: {
         topic,
         object_id: objectId,
-      },
+      } satisfies BookmarkPostRequest,
     });
   }),
   removeBookmarkedPost: command('removeBookmarkedPost', async (objectId) => {
     return invokeDesktop<void>('remove_bookmarked_post', {
       request: {
         object_id: objectId,
-      },
+      } satisfies RemoveBookmarkedPostRequest,
     });
   }),
   listTimeline: command('listTimeline', async (topic, cursor, limit, scope = { kind: 'public' }) => {
@@ -148,7 +208,7 @@ export const runtimeApi: DesktopApi = {
         scope,
         cursor,
         limit,
-      },
+      } satisfies ListTimelineRequest,
     });
   }),
   listThread: command('listThread', async (topic, threadId, cursor, limit) => {
@@ -158,7 +218,7 @@ export const runtimeApi: DesktopApi = {
         thread_id: threadId,
         cursor,
         limit,
-      },
+      } satisfies ListThreadRequest,
     });
   }),
   listProfileTimeline: command('listProfileTimeline', async (pubkey, cursor, limit) => {
@@ -167,7 +227,7 @@ export const runtimeApi: DesktopApi = {
         pubkey,
         cursor,
         limit,
-      },
+      } satisfies ListProfileTimelineRequest,
     });
   }),
   getMyProfile: command('getMyProfile', async () => {
@@ -180,32 +240,32 @@ export const runtimeApi: DesktopApi = {
   }),
   followAuthor: command('followAuthor', async (pubkey) => {
     return invokeDesktop<AuthorSocialView>('follow_author', {
-      request: { pubkey },
+      request: { pubkey } satisfies AuthorRequest,
     });
   }),
   unfollowAuthor: command('unfollowAuthor', async (pubkey) => {
     return invokeDesktop<AuthorSocialView>('unfollow_author', {
-      request: { pubkey },
+      request: { pubkey } satisfies AuthorRequest,
     });
   }),
   getAuthorSocialView: command('getAuthorSocialView', async (pubkey) => {
     return invokeDesktop<AuthorSocialView>('get_author_social_view', {
-      request: { pubkey },
+      request: { pubkey } satisfies AuthorRequest,
     });
   }),
   muteAuthor: command('muteAuthor', async (pubkey) => {
     return invokeDesktop<AuthorSocialView>('mute_author', {
-      request: { pubkey },
+      request: { pubkey } satisfies AuthorRequest,
     });
   }),
   unmuteAuthor: command('unmuteAuthor', async (pubkey) => {
     return invokeDesktop<AuthorSocialView>('unmute_author', {
-      request: { pubkey },
+      request: { pubkey } satisfies AuthorRequest,
     });
   }),
   listSocialConnections: command('listSocialConnections', async (kind) => {
     return invokeDesktop<AuthorSocialView[]>('list_social_connections', {
-      request: { kind },
+      request: { kind } satisfies ListSocialConnectionsRequest,
     });
   }),
   listNotifications: command('listNotifications', async () => {
@@ -213,7 +273,7 @@ export const runtimeApi: DesktopApi = {
   }),
   markNotificationRead: command('markNotificationRead', async (notificationId) => {
     return invokeDesktop<NotificationStatusView>('mark_notification_read', {
-      request: { notification_id: notificationId },
+      request: { notification_id: notificationId } satisfies NotificationIdRequest,
     });
   }),
   markAllNotificationsRead: command('markAllNotificationsRead', async () => {
@@ -224,7 +284,7 @@ export const runtimeApi: DesktopApi = {
   }),
   openDirectMessage: command('openDirectMessage', async (pubkey) => {
     return invokeDesktop<DirectMessageConversationView>('open_direct_message', {
-      request: { pubkey },
+      request: { pubkey } satisfies DirectMessageRequest,
     });
   }),
   listDirectMessages: command('listDirectMessages', async () => {
@@ -236,7 +296,7 @@ export const runtimeApi: DesktopApi = {
         pubkey,
         cursor,
         limit,
-      },
+      } satisfies ListDirectMessageMessagesRequest,
     });
   }),
   sendDirectMessage: command('sendDirectMessage', async (pubkey, text, attachments = [], replyToMessageId) => {
@@ -246,7 +306,7 @@ export const runtimeApi: DesktopApi = {
         text,
         reply_to_message_id: replyToMessageId,
         attachments,
-      },
+      } satisfies SendDirectMessageRequest,
     });
   }),
   deleteDirectMessageMessage: command('deleteDirectMessageMessage', async (pubkey, messageId) => {
@@ -254,17 +314,17 @@ export const runtimeApi: DesktopApi = {
       request: {
         pubkey,
         message_id: messageId,
-      },
+      } satisfies DeleteDirectMessageMessageRequest,
     });
   }),
   clearDirectMessage: command('clearDirectMessage', async (pubkey) => {
     return invokeDesktop<void>('clear_direct_message', {
-      request: { pubkey },
+      request: { pubkey } satisfies DirectMessageRequest,
     });
   }),
   getDirectMessageStatus: command('getDirectMessageStatus', async (pubkey) => {
     return invokeDesktop<DirectMessageStatusView>('get_direct_message_status', {
-      request: { pubkey },
+      request: { pubkey } satisfies DirectMessageRequest,
     });
   }),
   listLiveSessions: command('listLiveSessions', async (topic, scope = { kind: 'public' }) => {
@@ -272,7 +332,7 @@ export const runtimeApi: DesktopApi = {
       request: {
         topic,
         scope,
-      },
+      } satisfies ListLiveSessionsRequest,
     });
   }),
   createLiveSession: command('createLiveSession', async (topic, title, description, channelRef = { kind: 'public' }) => {
@@ -282,7 +342,7 @@ export const runtimeApi: DesktopApi = {
         channel_ref: channelRef,
         title,
         description,
-      },
+      } satisfies CreateLiveSessionRequest,
     });
   }),
   endLiveSession: command('endLiveSession', async (topic, sessionId) => {
@@ -290,7 +350,7 @@ export const runtimeApi: DesktopApi = {
       request: {
         topic,
         session_id: sessionId,
-      },
+      } satisfies LiveSessionCommandRequest,
     });
   }),
   joinLiveSession: command('joinLiveSession', async (topic, sessionId) => {
@@ -298,7 +358,7 @@ export const runtimeApi: DesktopApi = {
       request: {
         topic,
         session_id: sessionId,
-      },
+      } satisfies LiveSessionCommandRequest,
     });
   }),
   leaveLiveSession: command('leaveLiveSession', async (topic, sessionId) => {
@@ -306,7 +366,7 @@ export const runtimeApi: DesktopApi = {
       request: {
         topic,
         session_id: sessionId,
-      },
+      } satisfies LiveSessionCommandRequest,
     });
   }),
   listGameRooms: command('listGameRooms', async (topic, scope = { kind: 'public' }) => {
@@ -314,7 +374,7 @@ export const runtimeApi: DesktopApi = {
       request: {
         topic,
         scope,
-      },
+      } satisfies ListGameRoomsRequest,
     });
   }),
   createGameRoom: command('createGameRoom', async (
@@ -331,7 +391,7 @@ export const runtimeApi: DesktopApi = {
         title,
         description,
         participants,
-      },
+      } satisfies CreateGameRoomRequest,
     });
   }),
   createMetaverseRoom: command('createMetaverseRoom', async (
@@ -348,12 +408,12 @@ export const runtimeApi: DesktopApi = {
         title,
         description,
         max_peers: maxPeers,
-      },
+      } satisfies CreateMetaverseRoomRequest,
     });
   }),
   createPrivateChannel: command('createPrivateChannel', async (topic, label, audienceKind = 'invite_only') => {
     return invokeDesktop<JoinedPrivateChannelView>('create_private_channel', {
-      request: { topic, label, audience_kind: audienceKind },
+      request: { topic, label, audience_kind: audienceKind } satisfies CreatePrivateChannelRequest,
     });
   }),
   exportPrivateChannelInvite: command('exportPrivateChannelInvite', async (topic, channelId, expiresAt = null) => {
@@ -362,12 +422,12 @@ export const runtimeApi: DesktopApi = {
         topic,
         channel_id: channelId,
         expires_at: expiresAt,
-      },
+      } satisfies ExportPrivateChannelInviteRequest,
     });
   }),
   importPrivateChannelInvite: command('importPrivateChannelInvite', async (token) => {
     return invokeDesktop<PrivateChannelInvitePreview>('import_private_channel_invite', {
-      request: { token },
+      request: { token } satisfies ImportPrivateChannelInviteRequest,
     });
   }),
   exportChannelAccessToken: command('exportChannelAccessToken', async (topic, channelId, expiresAt = null) => {
@@ -376,19 +436,19 @@ export const runtimeApi: DesktopApi = {
         topic,
         channel_id: channelId,
         expires_at: expiresAt,
-      },
+      } satisfies ExportChannelAccessTokenRequest,
     });
   }),
   previewChannelAccessToken: command('previewChannelAccessToken', async (token) => {
     return invokeDesktop<ChannelAccessTokenPreview>('preview_channel_access_token', {
       request: {
         token,
-      },
+      } satisfies PreviewChannelAccessTokenRequest,
     });
   }),
   importChannelAccessToken: command('importChannelAccessToken', async (token) => {
     return invokeDesktop<ChannelAccessTokenPreview>('import_channel_access_token', {
-      request: { token },
+      request: { token } satisfies ImportChannelAccessTokenRequest,
     });
   }),
   exportFriendOnlyGrant: command('exportFriendOnlyGrant', async (topic, channelId, expiresAt = null) => {
@@ -397,12 +457,12 @@ export const runtimeApi: DesktopApi = {
         topic,
         channel_id: channelId,
         expires_at: expiresAt,
-      },
+      } satisfies ExportFriendOnlyGrantRequest,
     });
   }),
   importFriendOnlyGrant: command('importFriendOnlyGrant', async (token) => {
     return invokeDesktop<FriendOnlyGrantPreview>('import_friend_only_grant', {
-      request: { token },
+      request: { token } satisfies ImportFriendOnlyGrantRequest,
     });
   }),
   exportFriendPlusShare: command('exportFriendPlusShare', async (topic, channelId, expiresAt = null) => {
@@ -411,12 +471,12 @@ export const runtimeApi: DesktopApi = {
         topic,
         channel_id: channelId,
         expires_at: expiresAt,
-      },
+      } satisfies ExportFriendPlusShareRequest,
     });
   }),
   importFriendPlusShare: command('importFriendPlusShare', async (token) => {
     return invokeDesktop<FriendPlusSharePreview>('import_friend_plus_share', {
-      request: { token },
+      request: { token } satisfies ImportFriendPlusShareRequest,
     });
   }),
   freezePrivateChannel: command('freezePrivateChannel', async (topic, channelId) => {
@@ -424,7 +484,7 @@ export const runtimeApi: DesktopApi = {
       request: {
         topic,
         channel_id: channelId,
-      },
+      } satisfies FreezePrivateChannelRequest,
     });
   }),
   rotatePrivateChannel: command('rotatePrivateChannel', async (topic, channelId) => {
@@ -432,7 +492,7 @@ export const runtimeApi: DesktopApi = {
       request: {
         topic,
         channel_id: channelId,
-      },
+      } satisfies RotatePrivateChannelRequest,
     });
   }),
   leavePrivateChannel: command('leavePrivateChannel', async (topic, channelId) => {
@@ -440,12 +500,12 @@ export const runtimeApi: DesktopApi = {
       request: {
         topic,
         channel_id: channelId,
-      },
+      } satisfies LeavePrivateChannelRequest,
     });
   }),
   listJoinedPrivateChannels: command('listJoinedPrivateChannels', async (topic) => {
     return invokeDesktop<JoinedPrivateChannelView[]>('list_joined_private_channels', {
-      request: { topic },
+      request: { topic } satisfies ListJoinedPrivateChannelsRequest,
     });
   }),
   updateGameRoom: command('updateGameRoom', async (topic, roomId, status, phaseLabel, scores) => {
@@ -456,7 +516,7 @@ export const runtimeApi: DesktopApi = {
         status,
         phase_label: phaseLabel,
         scores,
-      },
+      } satisfies UpdateGameRoomRequest,
     });
   }),
   updateMetaverseRoom: command('updateMetaverseRoom', async (
@@ -475,7 +535,7 @@ export const runtimeApi: DesktopApi = {
         shared_object_position: sharedObjectPosition,
         shared_object_rotation: sharedObjectRotation,
         shared_object_scale: sharedObjectScale,
-      },
+      } satisfies UpdateMetaverseRoomRequest,
     });
   }),
   publishMetaverseRoomEvent: command('publishMetaverseRoomEvent', async (topic, roomId, peerId, seq, event) => {
@@ -486,7 +546,7 @@ export const runtimeApi: DesktopApi = {
         peer_id: peerId,
         seq,
         event,
-      },
+      } satisfies PublishMetaverseRoomEventRequest,
     });
   }),
   listMetaverseRoomEvents: command('listMetaverseRoomEvents', async (topic, roomId, afterEnvelopeId = null, limit = null) => {
@@ -496,7 +556,7 @@ export const runtimeApi: DesktopApi = {
         room_id: roomId,
         after_envelope_id: afterEnvelopeId,
         limit,
-      },
+      } satisfies ListMetaverseRoomEventsRequest,
     });
   }),
   importMetaverseRoomAsset: command('importMetaverseRoomAsset', async (topic, roomId, kind, mimeType, name, dataBase64) => {
@@ -508,7 +568,7 @@ export const runtimeApi: DesktopApi = {
         mime_type: mimeType,
         name,
         data_base64: dataBase64,
-      },
+      } satisfies ImportMetaverseRoomAssetRequest,
     });
   }),
   getSyncStatus: command('getSyncStatus', async () => {
@@ -527,7 +587,7 @@ export const runtimeApi: DesktopApi = {
     return invokeDesktop<CommunityNodeConfig>('set_community_node_config', {
       request: {
         nodes,
-      },
+      } satisfies SetCommunityNodeConfigRequest,
     });
   }),
   clearCommunityNodeConfig: command('clearCommunityNodeConfig', async () => {
@@ -537,21 +597,21 @@ export const runtimeApi: DesktopApi = {
     return invokeDesktop<CommunityNodeNodeStatus>('authenticate_community_node', {
       request: {
         base_url: baseUrl,
-      },
+      } satisfies CommunityNodeTargetRequest,
     });
   }),
   clearCommunityNodeToken: command('clearCommunityNodeToken', async (baseUrl) => {
     return invokeDesktop<CommunityNodeNodeStatus>('clear_community_node_token', {
       request: {
         base_url: baseUrl,
-      },
+      } satisfies CommunityNodeTargetRequest,
     });
   }),
   getCommunityNodeConsentStatus: command('getCommunityNodeConsentStatus', async (baseUrl) => {
     return invokeDesktop<CommunityNodeNodeStatus>('get_community_node_consent_status', {
       request: {
         base_url: baseUrl,
-      },
+      } satisfies CommunityNodeTargetRequest,
     });
   }),
   acceptCommunityNodeConsents: command('acceptCommunityNodeConsents', async (baseUrl, policySlugs) => {
@@ -559,21 +619,21 @@ export const runtimeApi: DesktopApi = {
       request: {
         base_url: baseUrl,
         policy_slugs: policySlugs,
-      },
+      } satisfies AcceptCommunityNodeConsentsRequest,
     });
   }),
   refreshCommunityNodeMetadata: command('refreshCommunityNodeMetadata', async (baseUrl) => {
     return invokeDesktop<CommunityNodeNodeStatus>('refresh_community_node_metadata', {
       request: {
         base_url: baseUrl,
-      },
+      } satisfies CommunityNodeTargetRequest,
     });
   }),
   fetchCommunityNodeManifest: command('fetchCommunityNodeManifest', async (baseUrl) => {
     return invokeDesktop<CommunityNodeManifestFetch>('fetch_community_node_manifest', {
       request: {
         base_url: baseUrl,
-      },
+      } satisfies CommunityNodeTargetRequest,
     });
   }),
   submitCommunityNodeReport: command('submitCommunityNodeReport', async (request) => {
@@ -585,21 +645,21 @@ export const runtimeApi: DesktopApi = {
     return invokeDesktop<void>('import_peer_ticket', {
       request: {
         ticket,
-      },
+      } satisfies ImportPeerTicketRequest,
     });
   }),
   setDiscoverySeeds: command('setDiscoverySeeds', async (seedEntries) => {
     return invokeDesktop<DiscoveryConfig>('set_discovery_seeds', {
       request: {
         seed_entries: seedEntries,
-      },
+      } satisfies SetDiscoverySeedsRequest,
     });
   }),
   unsubscribeTopic: command('unsubscribeTopic', async (topic) => {
     return invokeDesktop<void>('unsubscribe_topic', {
       request: {
         topic,
-      },
+      } satisfies UnsubscribeTopicRequest,
     });
   }),
   setTopicGossipEnabled: command('setTopicGossipEnabled', async (topic, enabled) => {
@@ -607,7 +667,7 @@ export const runtimeApi: DesktopApi = {
       request: {
         topic,
         enabled,
-      },
+      } satisfies SetTopicGossipEnabledRequest,
     });
   }),
   setChannelGossipEnabled: command('setChannelGossipEnabled', async (topic, channelId, enabled) => {
@@ -616,7 +676,7 @@ export const runtimeApi: DesktopApi = {
         topic,
         channel: channelId,
         enabled,
-      },
+      } satisfies SetChannelGossipEnabledRequest,
     });
   }),
   getLocalPeerTicket: command('getLocalPeerTicket', async () => {
@@ -627,7 +687,7 @@ export const runtimeApi: DesktopApi = {
       request: {
         hash,
         mime,
-      },
+      } satisfies GetBlobMediaRequest,
     });
   }),
   getBlobPreviewUrl: command('getBlobPreviewUrl', async (hash, mime) => {
@@ -635,7 +695,7 @@ export const runtimeApi: DesktopApi = {
       request: {
         hash,
         mime,
-      },
+      } satisfies GetBlobPreviewRequest,
     });
   }),
 };

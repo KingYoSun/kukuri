@@ -57,6 +57,8 @@ impl DiscoveryConfig {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct SetDiscoverySeedsRequest {
     pub seed_entries: Vec<String>,
 }

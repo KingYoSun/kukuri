@@ -127,7 +127,9 @@ PR を作成または説明するときは、タスク種別を明確にする�
    同一バイナリ内契約のため両側同時変更なら改名可能だが、片側変更は silent break。
    固定: 高頻度 8 型グループは共有 fixture(apps/desktop/src/lib/api/__fixtures__/views/)を
    Rust 側 crates/app-api/src/tests/views_wire_snapshot.rs と TS 側 viewsContract.ts(+ .test.ts)が
-   両側から検証する(再生成手順は各ファイル冒頭)。CommunityNode 系・requests.rs 入力方向は未。
+   両側から検証する(再生成手順は各ファイル冒頭)。入力方向(requests.rs ほかの request DTO)は
+   WP-B6 で codegen 対象になり、runtimeApi.ts の request literal が生成型への `satisfies` で
+   拘束される(再生成 diff + tsc の二重検出)。CommunityNode 系 view の fixture 化は未。
 
 ## 地雷リスト(直したくなるが、してはいけない)
 

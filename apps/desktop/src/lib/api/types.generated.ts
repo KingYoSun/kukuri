@@ -227,3 +227,121 @@ reference_id?: string | null, };
 
 export type RuntimeEvent = { "type": "notification_status_changed" } | { "type": "sync_status_changed", sync_status?: SyncStatus | null, community_node_statuses?: Array<CommunityNodeNodeStatus> | null, };
 
+export type CreatePostRequest = { topic: string, content: string, reply_to?: string | null, channel_ref: ChannelRef, attachments: Array<CreateAttachmentRequest>, };
+
+export type CreateRepostRequest = { topic: string, source_topic: string, source_object_id: string, commentary?: string | null, };
+
+export type CreateAttachmentRequest = { file_name?: string | null, mime: string, byte_size: number, data_base64: string, role?: string | null, };
+
+export type ReactionKeyRequest = { "kind": "emoji", emoji: string, } | { "kind": "custom_asset", asset_id: string, owner_pubkey: string, blob_hash: string, search_key: string, mime: string, bytes: number, width: number, height: number, };
+
+export type ToggleReactionRequest = { target_topic_id: string, target_object_id: string, reaction_key: ReactionKeyRequest, channel_ref?: ChannelRef | null, };
+
+export type CustomReactionCropRect = { x: number, y: number, size: number, };
+
+export type CreateCustomReactionAssetRequest = { upload: CreateAttachmentRequest, crop_rect: CustomReactionCropRect, search_key: string, };
+
+export type BookmarkCustomReactionRequest = { asset_id: string, owner_pubkey: string, blob_hash: string, search_key: string, mime: string, bytes: number, width: number, height: number, };
+
+export type RemoveBookmarkedCustomReactionRequest = { asset_id: string, };
+
+export type BookmarkPostRequest = { topic: string, object_id: string, };
+
+export type RemoveBookmarkedPostRequest = { object_id: string, };
+
+export type ListRecentReactionsRequest = { limit?: number | null, };
+
+export type ListTimelineRequest = { topic: string, scope: TimelineScope, cursor?: TimelineCursor | null, limit?: number | null, };
+
+export type ListThreadRequest = { topic: string, thread_id: string, cursor?: TimelineCursor | null, limit?: number | null, };
+
+export type ListProfileTimelineRequest = { pubkey: string, cursor?: TimelineCursor | null, limit?: number | null, };
+
+export type ImportPeerTicketRequest = { ticket: string, };
+
+export type UnsubscribeTopicRequest = { topic: string, };
+
+export type SetTopicGossipEnabledRequest = { topic: string, enabled: boolean, };
+
+export type SetChannelGossipEnabledRequest = { topic: string, channel: string, enabled: boolean, };
+
+export type GetBlobPreviewRequest = { hash: string, mime: string, };
+
+export type GetBlobMediaRequest = { hash: string, mime: string, };
+
+export type AuthorRequest = { pubkey: string, };
+
+export type ListSocialConnectionsRequest = { kind: SocialConnectionKind, };
+
+export type DirectMessageRequest = { pubkey: string, };
+
+export type NotificationIdRequest = { notification_id: string, };
+
+export type ListDirectMessageMessagesRequest = { pubkey: string, cursor?: TimelineCursor | null, limit?: number | null, };
+
+export type SendDirectMessageRequest = { pubkey: string, text?: string | null, reply_to_message_id?: string | null, attachments: Array<CreateAttachmentRequest>, };
+
+export type DeleteDirectMessageMessageRequest = { pubkey: string, message_id: string, };
+
+export type SetMyProfileRequest = { name?: string | null, display_name?: string | null, about?: string | null, picture?: string | null, picture_upload?: CreateAttachmentRequest | null, clear_picture: boolean, };
+
+export type ListLiveSessionsRequest = { topic: string, scope: TimelineScope, };
+
+export type CreateLiveSessionRequest = { topic: string, channel_ref: ChannelRef, title: string, description: string, };
+
+export type LiveSessionCommandRequest = { topic: string, session_id: string, };
+
+export type ListGameRoomsRequest = { topic: string, scope: TimelineScope, };
+
+export type CreateGameRoomRequest = { topic: string, channel_ref: ChannelRef, title: string, description: string, participants: Array<string>, };
+
+export type CreateMetaverseRoomRequest = { topic: string, channel_ref: ChannelRef, title: string, description: string, max_peers?: number | null, };
+
+export type PublishMetaverseRoomEventRequest = { topic: string, room_id: string, peer_id: string, seq: number, event: MetaverseRoomEventV1, };
+
+export type ListMetaverseRoomEventsRequest = { topic: string, room_id: string, after_envelope_id?: string | null, limit?: number | null, };
+
+export type ImportMetaverseRoomAssetRequest = { topic: string, room_id: string, kind: MetaverseAssetKind, mime_type: string, name?: string | null, data_base64: string, };
+
+export type CreatePrivateChannelRequest = { topic: string, label: string, audience_kind: ChannelAudienceKind, };
+
+export type ExportPrivateChannelInviteRequest = { topic: string, channel_id: string, expires_at?: number | null, };
+
+export type ImportPrivateChannelInviteRequest = { token: string, };
+
+export type ExportChannelAccessTokenRequest = { topic: string, channel_id: string, expires_at?: number | null, };
+
+export type ImportChannelAccessTokenRequest = { token: string, };
+
+export type PreviewChannelAccessTokenRequest = { token: string, };
+
+export type ExportFriendOnlyGrantRequest = { topic: string, channel_id: string, expires_at?: number | null, };
+
+export type ImportFriendOnlyGrantRequest = { token: string, };
+
+export type ExportFriendPlusShareRequest = { topic: string, channel_id: string, expires_at?: number | null, };
+
+export type ImportFriendPlusShareRequest = { token: string, };
+
+export type FreezePrivateChannelRequest = { topic: string, channel_id: string, };
+
+export type RotatePrivateChannelRequest = { topic: string, channel_id: string, };
+
+export type LeavePrivateChannelRequest = { topic: string, channel_id: string, };
+
+export type ListJoinedPrivateChannelsRequest = { topic: string, };
+
+export type UpdateGameRoomRequest = { topic: string, room_id: string, status: GameRoomStatus, phase_label?: string | null, scores: Array<GameScoreView>, };
+
+export type UpdateMetaverseRoomRequest = { topic: string, room_id: string, status: GameRoomStatus, shared_object_position: [number, number, number], shared_object_rotation: [number, number, number], shared_object_scale: [number, number, number], };
+
+export type SetCommunityNodeConfigNode = { base_url: string, auto_approve: boolean, };
+
+export type SetCommunityNodeConfigRequest = { nodes: Array<SetCommunityNodeConfigNode>, };
+
+export type CommunityNodeTargetRequest = { base_url: string, };
+
+export type AcceptCommunityNodeConsentsRequest = { base_url: string, policy_slugs: Array<string>, };
+
+export type SetDiscoverySeedsRequest = { seed_entries: Array<string>, };
+
