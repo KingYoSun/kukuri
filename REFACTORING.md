@@ -138,15 +138,17 @@ PR を作成または説明するときは、タスク種別を明確にする�
 
 1. **`ConnectionPath::RelayFallback` は削除禁止の第3経路**: `AGENTS.md`「通信経路」節が規定する
    `Direct P2P -> Relay Supported P2P -> Relay Fallback` の 3 番目。variant は
-   `crates/transport/src/config.rs` に定義され、TS 側表示分岐(`apps/desktop/src/lib/api/types.ts` /
-   `apps/desktop/src/shell/selectors.ts` の `relay_fallback`)も実在する。**実行時に値として構築される
+   `crates/transport/src/config.rs` に定義され、TS 側表示分岐(生成型
+   `apps/desktop/src/lib/api/types.generated.ts` / `apps/desktop/src/shell/presentation.ts` の
+   `relay_fallback`)も実在する。**実行時に値として構築される
    箇所が現状ゼロ**(ライブ代入は DirectP2p / RelaySupportedP2p のみ)なので「未使用だから削除」に
    見えるが、これは削除対象ではなく診断の実装ギャップである。**variant は削除しない。診断は現状
    RelayFallback を報告しない**(判定実装は別 issue。本リファクタでは事実固定に留める)。
-2. **`apps/desktop/src/styles/shell-phase1-legacy.css` は名前に反して現役の本番 CSS**: 大半の
-   クラスが現在も使われ、Radix Portal 経由の dialog / popover では `.shell-phase1` の外に描画される
-   ため unscoped な phase1 側だけが効く。「legacy だから削除」は禁止。安全なのは改名のみ(H8)。
-   統合は宣言単位・コンテキスト別の実効値判定 + 視覚回帰ネット(検証マトリクスの
+2. **`apps/desktop/src/styles/shell-scoped-overrides.css`(旧 shell-phase1-legacy.css。H8 PR2 で
+   改名)は現役の本番 CSS**: `.shell-phase1` スコープ付き上書き層で、shell 配下では
+   `shell-phase1-part*` を specificity で上書きする。portal と shell で意図的に値が異なるクラスの
+   shell 側の値を置く層であり(DESIGN.md 4.7)、「上書きの重複に見えるから削除・統合」は禁止。
+   統合を検討する場合も宣言単位・コンテキスト別の実効値判定 + 視覚回帰ネット(検証マトリクスの
    `apps/desktop/**` = `test:e2e:visual`)を前提にする。
 3. **署名バイトは非決定的なので golden 化しない**: `KukuriKeys::sign_schnorr`
    (`crates/core/src/crypto.rs`)は毎回 aux_rand を生成するため署名バイトは実行毎に変わる。凍結対象は
