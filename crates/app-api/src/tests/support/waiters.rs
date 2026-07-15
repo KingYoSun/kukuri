@@ -151,11 +151,11 @@ pub(crate) async fn wait_for_mutual_author_view(
     }
 }
 
-pub(crate) fn is_retryable_friend_only_grant_import_error(error: &anyhow::Error) -> bool {
-    error
-        .downcast_ref::<PrivateChannelImportError>()
-        .is_some_and(PrivateChannelImportError::is_retryable_friend_only)
-}
+// リトライ判定の正本は crate::is_retryable_friend_only_grant_import_error /
+// crate::is_retryable_friend_plus_share_import_error(WP-B11 で pub 化)。
+pub(crate) use crate::{
+    is_retryable_friend_only_grant_import_error, is_retryable_friend_plus_share_import_error,
+};
 
 pub(crate) async fn wait_for_friend_only_grant_import(
     app: &AppService,
@@ -204,12 +204,6 @@ pub(crate) async fn wait_for_friend_only_grant_import(
             );
         }
     }
-}
-
-pub(crate) fn is_retryable_friend_plus_share_import_error(error: &anyhow::Error) -> bool {
-    error
-        .downcast_ref::<PrivateChannelImportError>()
-        .is_some_and(PrivateChannelImportError::is_retryable_friend_plus)
 }
 
 pub(crate) async fn wait_for_friend_plus_share_import(

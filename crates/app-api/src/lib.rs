@@ -28,5 +28,8 @@ mod timeline;
 mod views;
 
 pub use kukuri_store::NotificationKind;
+pub use private_channels::{
+    is_retryable_friend_only_grant_import_error, is_retryable_friend_plus_share_import_error,
+};
 pub use service::{AppService, ServiceHandles};
 pub use views::*;

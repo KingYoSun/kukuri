@@ -91,8 +91,9 @@ pub(crate) enum PrivateChannelImportError {
     SponsorSnapshotTimeout,
 }
 
-#[cfg(test)]
 impl PrivateChannelImportError {
+    /// friend-only grant import の再試行可能性(リトライ契約の正本。WP-B11)。
+    /// gossip 伝播待ちで解消しうる失敗のみ true。文言ではなく型で判定する。
     pub(crate) fn is_retryable_friend_only(&self) -> bool {
         matches!(
             self,
@@ -108,16 +109,21 @@ impl PrivateChannelImportError {
         )
     }
 
+    /// friend-plus share import の再試行可能性(リトライ契約の正本。WP-B11)。
     pub(crate) fn is_retryable_friend_plus(&self) -> bool {
-        matches!(
+        let retryable = matches!(
             self,
             Self::MutualRelationshipRequired {
                 kind: PrivateChannelImportKind::FriendPlus
             } | Self::SnapshotTimeout {
                 kind: PrivateChannelImportKind::FriendPlus
-            } | Self::SponsorInactive
-                | Self::SponsorSnapshotTimeout
-        )
+            }
+        );
+        // Sponsor 系はテスト専用 variant(production に発生経路が無い)。
+        #[cfg(test)]
+        let retryable =
+            retryable || matches!(self, Self::SponsorInactive | Self::SponsorSnapshotTimeout);
+        retryable
     }
 }
 

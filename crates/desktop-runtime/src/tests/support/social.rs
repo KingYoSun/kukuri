@@ -78,19 +78,12 @@ pub(crate) async fn warm_author_social_view(
     }
 }
 
-pub(crate) fn is_retryable_friend_plus_share_import_error(message: &str) -> bool {
-    message.contains("mutual relationship")
-        || message.contains("sponsor is not an active participant")
-        || message.contains("timed out waiting for friend-plus sponsor participant sync")
-        || message.contains("timed out waiting for friend-plus channel replica sync")
-}
-
-pub(crate) fn is_retryable_friend_only_grant_import_error(message: &str) -> bool {
-    message.contains("mutual relationship")
-        || message.contains("friend-only grant epoch does not match the current policy")
-        || message.contains("friend-only grant owner is not an active participant")
-        || message.contains("timed out waiting for friend-only channel replica sync")
-}
+// リトライ判定は app-api の typed 契約(WP-B11 で pub 化)を使う。DesktopRuntime は
+// app_service の anyhow チェーンを素通しするため downcast がそのまま届く。
+// 旧実装のエラー文言 contains 判定(文言 = 暗黙契約)はここで撤去した。
+use kukuri_app_api::{
+    is_retryable_friend_only_grant_import_error, is_retryable_friend_plus_share_import_error,
+};
 
 pub(crate) async fn wait_for_friend_only_grant_import(
     runtime: &DesktopRuntime,
@@ -110,9 +103,7 @@ pub(crate) async fn wait_for_friend_only_grant_import(
                 .await
             {
                 Ok(preview) => return preview,
-                Err(error)
-                    if is_retryable_friend_only_grant_import_error(error.to_string().as_str()) =>
-                {
+                Err(error) if is_retryable_friend_only_grant_import_error(&error) => {
                     *retry_error_slot.lock().await = Some(error.to_string());
                     sleep(Duration::from_millis(100)).await;
                 }
@@ -175,9 +166,7 @@ pub(crate) async fn wait_for_friend_plus_share_import(
                 .await
             {
                 Ok(preview) => return preview,
-                Err(error)
-                    if is_retryable_friend_plus_share_import_error(error.to_string().as_str()) =>
-                {
+                Err(error) if is_retryable_friend_plus_share_import_error(&error) => {
                     *retry_error_slot.lock().await = Some(error.to_string());
                     sleep(Duration::from_millis(100)).await;
                 }
