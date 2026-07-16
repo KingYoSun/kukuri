@@ -7,6 +7,7 @@
 //! 解消するため独立させた(挙動不変の移動)。
 
 mod node;
+pub mod remote_fetch;
 
 #[cfg(test)]
 mod tests;
