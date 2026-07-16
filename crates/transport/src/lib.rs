@@ -18,6 +18,8 @@ mod discovery;
 mod fake;
 mod iroh;
 mod peers;
+#[cfg(test)]
+mod test_support;
 mod tickets;
 mod traits;
 

@@ -17,8 +17,6 @@ use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Utc;
 use futures_util::StreamExt;
-#[cfg(test)]
-use kukuri_core::HintObjectRef;
 use kukuri_core::{GossipHint, TopicId};
 use tokio::sync::{Mutex, broadcast};
 #[cfg(test)]
@@ -303,114 +301,16 @@ impl HintTransport for FakeTransport {
 mod tests {
     use super::*;
 
+    use crate::test_support::{
+        HintRoundtripParticipant, format_peer_snapshot, wait_for_hint_roundtrip,
+    };
+
     fn initial_topic_join_timeout() -> Duration {
         if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
             Duration::from_secs(180)
         } else {
             Duration::from_secs(15)
         }
-    }
-
-    async fn wait_for_hint_roundtrip<T>(
-        transport_a: &T,
-        stream_a: &mut HintStream,
-        transport_b: &T,
-        stream_b: &mut HintStream,
-        topic: &TopicId,
-        step_timeout: Duration,
-        label: &str,
-    ) where
-        T: Transport + HintTransport + Sync,
-    {
-        let hint_from_a = GossipHint::TopicObjectsChanged {
-            topic_id: topic.clone(),
-            objects: vec![HintObjectRef {
-                object_id: format!("{label}-from-a"),
-                object_kind: "post".into(),
-            }],
-        };
-        let hint_from_b = GossipHint::TopicObjectsChanged {
-            topic_id: topic.clone(),
-            objects: vec![HintObjectRef {
-                object_id: format!("{label}-from-b"),
-                object_kind: "post".into(),
-            }],
-        };
-        match timeout(step_timeout, async {
-            let mut received_on_a = false;
-            let mut received_on_b = false;
-            loop {
-                if !received_on_a {
-                    transport_b
-                        .publish_hint(topic, hint_from_b.clone())
-                        .await
-                        .expect("publish hint from b");
-                }
-                if !received_on_b {
-                    transport_a
-                        .publish_hint(topic, hint_from_a.clone())
-                        .await
-                        .expect("publish hint from a");
-                }
-                if !received_on_a
-                    && let Ok(Some(envelope)) =
-                        timeout(Duration::from_millis(500), stream_a.next()).await
-                {
-                    received_on_a = envelope.hint == hint_from_b;
-                }
-                if !received_on_b
-                    && let Ok(Some(envelope)) =
-                        timeout(Duration::from_millis(500), stream_b.next()).await
-                {
-                    received_on_b = envelope.hint == hint_from_a;
-                }
-                if received_on_a && received_on_b {
-                    return;
-                }
-                tokio::time::sleep(Duration::from_millis(100)).await;
-            }
-        })
-        .await
-        {
-            Ok(()) => {}
-            Err(_) => {
-                let peers_a = transport_a.peers().await.expect("peers a");
-                let peers_b = transport_b.peers().await.expect("peers b");
-                panic!(
-                    "{label} hint roundtrip timeout: a={} b={}",
-                    format_peer_snapshot(&peers_a),
-                    format_peer_snapshot(&peers_b)
-                );
-            }
-        }
-    }
-
-    fn format_peer_snapshot(snapshot: &PeerSnapshot) -> String {
-        let topics = snapshot
-            .topic_diagnostics
-            .iter()
-            .map(|topic| {
-                format!(
-                    "{}: joined={}, peer_count={}, connected_peers={:?}, missing_peer_ids={:?}, status_detail={}, last_error={:?}",
-                    topic.topic,
-                    topic.joined,
-                    topic.peer_count,
-                    topic.connected_peers,
-                    topic.missing_peer_ids,
-                    topic.status_detail,
-                    topic.last_error
-                )
-            })
-            .collect::<Vec<_>>();
-        format!(
-            "connected={}, peer_count={}, connected_peers={:?}, configured_peers={:?}, status_detail={}, last_error={:?}, topics={topics:?}",
-            snapshot.connected,
-            snapshot.peer_count,
-            snapshot.connected_peers,
-            snapshot.configured_peers,
-            snapshot.status_detail,
-            snapshot.last_error
-        )
     }
 
     #[tokio::test]
@@ -494,10 +394,16 @@ mod tests {
         )
         .expect("subscribe demo hints");
         wait_for_hint_roundtrip(
-            &transport_a,
-            &mut demo_stream_a,
-            &transport_b,
-            &mut demo_stream_b,
+            HintRoundtripParticipant {
+                transport: &transport_a,
+                stream: &mut demo_stream_a,
+                expected_source_peer: None,
+            },
+            HintRoundtripParticipant {
+                transport: &transport_b,
+                stream: &mut demo_stream_b,
+                expected_source_peer: None,
+            },
             &demo,
             join_timeout,
             "demo",
@@ -599,10 +505,16 @@ mod tests {
             .await
             .expect("subscribe test7 b");
         wait_for_hint_roundtrip(
-            &transport_a,
-            &mut test7_stream_a,
-            &transport_b,
-            &mut test7_stream_b,
+            HintRoundtripParticipant {
+                transport: &transport_a,
+                stream: &mut test7_stream_a,
+                expected_source_peer: None,
+            },
+            HintRoundtripParticipant {
+                transport: &transport_b,
+                stream: &mut test7_stream_b,
+                expected_source_peer: None,
+            },
             &test7,
             join_timeout,
             "test7",
