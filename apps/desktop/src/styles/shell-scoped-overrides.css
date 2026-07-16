@@ -17,12 +17,6 @@
  *   - .composer / .panel … dialog 内フォーム(portal)と shell 内フォームの双方に現れる。
  * これらは phase1 = portal 基準値 / この層 = shell 上書き値 の二層を維持する。
  */
-.shell-phase1 .shell {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: var(--space-xl) var(--space-lg) var(--space-2xl);
-}
-
 .shell-phase1 .eyebrow {
   margin: 0 0 var(--space-xs);
   letter-spacing: 0.16em;
