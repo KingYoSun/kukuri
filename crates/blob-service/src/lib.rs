@@ -5,14 +5,10 @@ use std::sync::Arc;
 use anyhow::Result;
 use async_trait::async_trait;
 use kukuri_core::BlobHash;
-use kukuri_iroh_node::IrohDocsNode;
-use kukuri_transport::{
-    PeerAddrBook, RemoteFetchRetryState, RemoteFetchStart, SeedPeer, parse_endpoint_ticket,
-};
+use kukuri_iroh_node::{IrohDocsNode, remote_fetch};
+use kukuri_transport::{PeerAddrBook, RemoteFetchRetryState, SeedPeer, parse_endpoint_ticket};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, RwLock};
-use tokio::time::{Duration, Instant, timeout};
-use tracing::{info, warn};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoredBlob {
@@ -27,9 +23,6 @@ pub enum BlobStatus {
     Available,
     Pinned,
 }
-
-const REMOTE_FETCH_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
-const REMOTE_FETCH_TRANSFER_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[async_trait]
 pub trait BlobService: Send + Sync {
@@ -82,6 +75,8 @@ impl IrohBlobService {
         }
     }
 
+    // 本体ループは remote_fetch(WP-B14)へ移設。characterization テスト専用に残す。
+    #[cfg(test)]
     async fn connect_candidates(
         &self,
         imported_peer: &iroh::EndpointAddr,
@@ -89,6 +84,7 @@ impl IrohBlobService {
         self.peers.connect_candidates(imported_peer).await
     }
 
+    #[cfg(test)]
     async fn fetch_peers(&self) -> Vec<iroh::EndpointAddr> {
         self.peers.merged_peers().await
     }
@@ -122,113 +118,6 @@ impl IrohBlobService {
             .record_learned_peer(endpoint_id, &relay_urls)
             .await?;
         Ok(())
-    }
-
-    async fn fetch_blob_from_remote(
-        &self,
-        hash_text: &str,
-        hash: iroh_blobs::Hash,
-        local_error: impl std::fmt::Display,
-    ) -> Result<Option<Vec<u8>>> {
-        let peers = self.fetch_peers().await;
-        info!(
-            hash = %hash_text,
-            error = %local_error,
-            configured_peer_count = peers.len(),
-            "blob fetch local miss, trying remote peers"
-        );
-        for imported_peer in peers {
-            let candidates = self.connect_candidates(&imported_peer).await;
-            info!(
-                hash = %hash_text,
-                peer_id = %imported_peer.id,
-                imported_addrs = ?imported_peer.addrs,
-                candidate_count = candidates.len(),
-                "blob fetch prepared remote peer candidates"
-            );
-            for peer in candidates {
-                match timeout(
-                    REMOTE_FETCH_CONNECT_TIMEOUT,
-                    self.node.endpoint().connect(peer.clone(), iroh_blobs::ALPN),
-                )
-                .await
-                {
-                    Ok(Ok(conn)) => {
-                        info!(
-                            hash = %hash_text,
-                            peer_id = %peer.id,
-                            addrs = ?peer.addrs,
-                            "blob fetch connected to remote peer"
-                        );
-                        match timeout(
-                            REMOTE_FETCH_TRANSFER_TIMEOUT,
-                            self.node.blobs().remote().fetch(conn, hash),
-                        )
-                        .await
-                        {
-                            Ok(Ok(_)) => {
-                                info!(
-                                    hash = %hash_text,
-                                    peer_id = %peer.id,
-                                    "blob fetch remote transfer completed"
-                                );
-                            }
-                            Ok(Err(error)) => {
-                                warn!(
-                                    hash = %hash_text,
-                                    peer_id = %peer.id,
-                                    addrs = ?peer.addrs,
-                                    error = %error,
-                                    "blob fetch remote transfer failed"
-                                );
-                                continue;
-                            }
-                            Err(_) => {
-                                warn!(
-                                    hash = %hash_text,
-                                    peer_id = %peer.id,
-                                    addrs = ?peer.addrs,
-                                    timeout_ms = REMOTE_FETCH_TRANSFER_TIMEOUT.as_millis(),
-                                    "blob fetch remote transfer timed out"
-                                );
-                                continue;
-                            }
-                        }
-                        match self.node.blobs().blobs().get_bytes(hash).await {
-                            Ok(bytes) => return Ok(Some(bytes.to_vec())),
-                            Err(error) => {
-                                warn!(
-                                    hash = %hash_text,
-                                    peer_id = %peer.id,
-                                    error = %error,
-                                    "blob fetch transfer completed but blob still missing locally"
-                                );
-                            }
-                        }
-                    }
-                    Ok(Err(error)) => {
-                        warn!(
-                            hash = %hash_text,
-                            peer_id = %peer.id,
-                            addrs = ?peer.addrs,
-                            error = %error,
-                            "blob fetch connect failed"
-                        );
-                    }
-                    Err(_) => {
-                        warn!(
-                            hash = %hash_text,
-                            peer_id = %peer.id,
-                            addrs = ?peer.addrs,
-                            timeout_ms = REMOTE_FETCH_CONNECT_TIMEOUT.as_millis(),
-                            "blob fetch connect timed out"
-                        );
-                    }
-                }
-            }
-        }
-        warn!(hash = %hash_text, "blob fetch exhausted remote peers without success");
-        Ok(None)
     }
 }
 
@@ -289,31 +178,17 @@ impl BlobService for IrohBlobService {
         match self.node.blobs().blobs().get_bytes(hash).await {
             Ok(bytes) => Ok(Some(bytes.to_vec())),
             Err(error) => {
-                match self
-                    .remote_fetch_retries
-                    .lock()
-                    .await
-                    .try_begin(hash_text.as_str(), Instant::now())
-                {
-                    RemoteFetchStart::Ready => {}
-                    RemoteFetchStart::CoolingDown => {
-                        info!(
-                            hash = %hash_text,
-                            error = %error,
-                            "blob remote fetch skipped during retry cooldown"
-                        );
-                        return Ok(None);
-                    }
-                }
-                let result = self
-                    .fetch_blob_from_remote(hash_text.as_str(), hash, error)
-                    .await;
-                self.remote_fetch_retries.lock().await.finish(
+                // ループ本体(cooldown ゲート込み)は iroh-node の共通実装(WP-B14)。
+                remote_fetch::fetch_bytes_with_cooldown(
+                    &self.node,
+                    &self.peers,
+                    &self.remote_fetch_retries,
+                    "blob",
                     hash_text.as_str(),
-                    matches!(&result, Ok(Some(_))),
-                    Instant::now(),
-                );
-                result
+                    hash,
+                    error,
+                )
+                .await
             }
         }
     }
@@ -361,7 +236,7 @@ mod tests {
     use iroh::Endpoint;
     use kukuri_transport::{TransportNetworkConfig, encode_endpoint_ticket};
     use tempfile::tempdir;
-    use tokio::time::{sleep, timeout};
+    use tokio::time::{Duration, sleep, timeout};
 
     fn loopback_ticket(endpoint: &Endpoint, config: &TransportNetworkConfig) -> String {
         let endpoint_addr = endpoint.addr();

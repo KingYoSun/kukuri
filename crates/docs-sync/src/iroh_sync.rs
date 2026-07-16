@@ -10,21 +10,18 @@ use iroh_docs::api::Doc;
 use iroh_docs::store::Query;
 use iroh_docs::{Capability, DocTicket, NamespaceSecret};
 use kukuri_core::ReplicaId;
-use kukuri_transport::{
-    PeerAddrBook, RemoteFetchRetryState, RemoteFetchStart, SeedPeer, parse_endpoint_ticket,
-};
+use kukuri_transport::{PeerAddrBook, RemoteFetchRetryState, SeedPeer, parse_endpoint_ticket};
 use tokio::sync::{Mutex, broadcast};
 use tokio::task::JoinHandle;
-use tokio::time::{Duration, Instant, timeout};
 use tokio_stream::wrappers::BroadcastStream;
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::access::parse_namespace_secret_hex;
 use crate::replicas::public_replica_secret;
 use crate::types::{
     DocEvent, DocEventStream, DocFetchPolicy, DocOp, DocQuery, DocRecord, DocsSync,
 };
-use kukuri_iroh_node::IrohDocsNode;
+use kukuri_iroh_node::{IrohDocsNode, remote_fetch};
 
 struct ReplicaHandle {
     doc: Doc,
@@ -32,9 +29,6 @@ struct ReplicaHandle {
     sync_peer_ids: BTreeSet<String>,
     live_task: JoinHandle<()>,
 }
-
-const REMOTE_FETCH_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
-const REMOTE_FETCH_TRANSFER_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Clone, Debug, Default)]
 pub struct DocsPeerState {
@@ -100,6 +94,8 @@ impl IrohDocsSync {
         self.reapply_sync_peers().await
     }
 
+    // 本体ループは remote_fetch(WP-B14)へ移設。characterization テスト専用に残す。
+    #[cfg(test)]
     async fn connect_candidates(&self, imported_peer: &EndpointAddr) -> Vec<EndpointAddr> {
         self.peers.connect_candidates(imported_peer).await
     }
@@ -235,121 +231,19 @@ impl IrohDocsSync {
                     );
                     return Ok(None);
                 }
-                match self
-                    .remote_fetch_retries
-                    .lock()
-                    .await
-                    .try_begin(content_hash, Instant::now())
-                {
-                    RemoteFetchStart::Ready => {}
-                    RemoteFetchStart::CoolingDown => {
-                        info!(
-                            hash = %content_hash,
-                            error = %error,
-                            "docs entry remote fetch skipped during retry cooldown"
-                        );
-                        return Ok(None);
-                    }
-                }
-                let result = self
-                    .fetch_entry_bytes_from_remote(content_hash, hash, error)
-                    .await;
-                self.remote_fetch_retries.lock().await.finish(
+                // ループ本体(cooldown ゲート込み)は iroh-node の共通実装(WP-B14)。
+                remote_fetch::fetch_bytes_with_cooldown(
+                    &self.node,
+                    &self.peers,
+                    &self.remote_fetch_retries,
+                    "docs entry",
                     content_hash,
-                    matches!(&result, Ok(Some(_))),
-                    Instant::now(),
-                );
-                result
-            }
-        }
-    }
-
-    async fn fetch_entry_bytes_from_remote(
-        &self,
-        content_hash: &str,
-        hash: iroh_blobs::Hash,
-        local_error: impl std::fmt::Display,
-    ) -> Result<Option<Vec<u8>>> {
-        let peers = self.sync_peers().await;
-        info!(
-            hash = %content_hash,
-            error = %local_error,
-            configured_peer_count = peers.len(),
-            "docs entry fetch local miss, trying remote peers"
-        );
-        for imported_peer in peers {
-            let candidates = self.connect_candidates(&imported_peer).await;
-            for peer in candidates {
-                match timeout(
-                    REMOTE_FETCH_CONNECT_TIMEOUT,
-                    self.node.endpoint().connect(peer.clone(), iroh_blobs::ALPN),
+                    hash,
+                    error,
                 )
                 .await
-                {
-                    Ok(Ok(conn)) => {
-                        match timeout(
-                            REMOTE_FETCH_TRANSFER_TIMEOUT,
-                            self.node.blobs().remote().fetch(conn, hash),
-                        )
-                        .await
-                        {
-                            Ok(Ok(_)) => match self.node.blobs().blobs().get_bytes(hash).await {
-                                Ok(bytes) => return Ok(Some(bytes.to_vec())),
-                                Err(error) => {
-                                    warn!(
-                                        hash = %content_hash,
-                                        peer_id = %peer.id,
-                                        error = %error,
-                                        "docs entry transfer completed but content is still missing locally"
-                                    );
-                                }
-                            },
-                            Ok(Err(error)) => {
-                                warn!(
-                                    hash = %content_hash,
-                                    peer_id = %peer.id,
-                                    addrs = ?peer.addrs,
-                                    error = %error,
-                                    "docs entry remote transfer failed"
-                                );
-                            }
-                            Err(_) => {
-                                warn!(
-                                    hash = %content_hash,
-                                    peer_id = %peer.id,
-                                    addrs = ?peer.addrs,
-                                    timeout_ms = REMOTE_FETCH_TRANSFER_TIMEOUT.as_millis(),
-                                    "docs entry remote transfer timed out"
-                                );
-                            }
-                        }
-                    }
-                    Ok(Err(error)) => {
-                        warn!(
-                            hash = %content_hash,
-                            peer_id = %peer.id,
-                            addrs = ?peer.addrs,
-                            error = %error,
-                            "docs entry fetch connect failed"
-                        );
-                    }
-                    Err(_) => {
-                        warn!(
-                            hash = %content_hash,
-                            peer_id = %peer.id,
-                            addrs = ?peer.addrs,
-                            timeout_ms = REMOTE_FETCH_CONNECT_TIMEOUT.as_millis(),
-                            "docs entry fetch connect timed out"
-                        );
-                    }
-                }
             }
         }
-        warn!(
-            hash = %content_hash,
-            "docs entry fetch exhausted remote peers without success"
-        );
-        Ok(None)
     }
 }
 
@@ -532,7 +426,7 @@ mod tests {
     use super::*;
     use kukuri_transport::TransportNetworkConfig;
     use tempfile::tempdir;
-    use tokio::time::sleep;
+    use tokio::time::{Duration, sleep, timeout};
 
     // 接続候補の順序は外部挙動(characterization、WP-H2)。
     // direct(remote_info 由来)→ relay 付き → 元の値、の優先順位を固定する。
