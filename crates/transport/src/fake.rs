@@ -1,3 +1,13 @@
+//! ネットワーク非依存の高速テストダブル(FakeNetwork / FakeTransport)。
+//!
+//! Decision(WP-B15, 2026-07-16): FakeTransport は実 iroh 実装との「等価ダブル」
+//! ではなく、ドメインロジックを高速に検証するための意図的な単純化と定義する
+//! (例: active_path は経路判定をせず機械的に返す)。trait 挙動の実物基準の
+//! 検証は実 iroh 統合テスト(transport の iroh/tests 16 本 + app-api の
+//! TestIrohStack 経由 50 箇所超)が担い、Fake と実物を同一テストベクタで回す
+//! 共有 conformance suite は作らない(恒久 Out of Scope)。
+//! 再検討のトリガ: Fake と実物の挙動乖離に起因するバグが実際に発生した場合。
+
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 #[cfg(test)]
