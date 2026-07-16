@@ -6,6 +6,17 @@ use tracing::{info, warn};
 
 use super::*;
 
+/// Decision(WP-B13, 2026-07-16): この observer は 3 秒 pull を恒久採用する。
+/// pull 1 回は「transport のメモリロック読み + 高々 CN node 数分のローカル
+/// トークン読み」で DB / ネットワーク I/O は無く、emit は下の snapshot が
+/// PartialEq 差分を検出した時だけなのでフロント側の churn も無い。
+/// 変化点駆動(event push)化は Transport trait への通知 API 追加
+/// (iroh / fake / static の 3 実装 + 3 crate 跨ぎの契約変更)が必要で、
+/// SyncStatus は多入力の合成値のため notify を受けても full snapshot の
+/// 再計算は残る。コストがこの規模のうちは見合わない。
+/// 再検討のトリガ: pull のコストが実測で問題化した場合。その際は
+/// NotificationStatusChanged(runtime/mod.rs の Notify 待ち)と同型の
+/// 配線が前例になる。
 const SYNC_STATUS_OBSERVER_INTERVAL: Duration = Duration::from_secs(3);
 
 #[derive(Default)]
