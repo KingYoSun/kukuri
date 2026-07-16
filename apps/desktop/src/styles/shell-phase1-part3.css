@@ -81,7 +81,6 @@
   backdrop-filter: none;
 }
 
-.shell-primary-nav,
 .shell-settings-nav-list {
   display: grid;
   gap: var(--space-xs);
