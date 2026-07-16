@@ -170,14 +170,12 @@ async fn live_session_roundtrip_preserves_all_columns_and_computes_viewer_count(
     // put 時の viewer_count=99 は破棄され、COUNT(=2)が返る。
     let mut expected_max = live_session_max();
     expected_max.viewer_count = 2;
-    // 現挙動(観測値): ended_at(i64)は filter が無いため、None で put しても
-    // Some(0) で読み出される。
-    let mut expected_min = live_session_min();
-    expected_min.ended_at = Some(0);
+    // None で put した ended_at は None のまま読み出される
+    // (WP-B16 で NULL decode quirk を解消)。
     // started_at DESC, session_id DESC の順序ごと全列固定。
     assert_eq!(
         listed,
-        vec![expected_max, expected_min, live_session_ended()]
+        vec![expected_max, live_session_min(), live_session_ended()]
     );
 }
 
@@ -304,11 +302,8 @@ async fn game_room_roundtrip_preserves_all_columns() {
         .await
         .expect("upsert max room");
 
-    // 現挙動(観測値): phase_label は filter が無いため、None で put しても
-    // Some("") で読み出される(metaverse_json は filter で None のまま)。
-    let mut expected_min = min.clone();
-    expected_min.phase_label = Some(String::new());
-
+    // None で put した phase_label / metaverse は None のまま読み出される
+    // (WP-B16 で NULL decode quirk を解消)。
     // 読み出しは list のみ。主キー updated_at DESC の順序ごと全列固定
     // (副キー room_id DESC の tie-break はここでは未行使 —
     // T6 の pagination テストと T8 の backend_parity が担保)。
@@ -316,6 +311,6 @@ async fn game_room_roundtrip_preserves_all_columns() {
         LiveGameProjectionStore::list_topic_game_rooms(&store, GAME_TOPIC)
             .await
             .expect("list game rooms"),
-        vec![max, expected_min]
+        vec![max, min]
     );
 }

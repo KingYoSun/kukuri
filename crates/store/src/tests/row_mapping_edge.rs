@@ -233,10 +233,10 @@ async fn game_room_status_legacy_aliases_map_to_current_variants() {
             title: "レガシー部屋".into(),
             description: "edge-case room".into(),
             status: GameRoomStatus::Waiting,
-            // NULL の phase_label は Some("") になる(sqlx-sqlite の try_get::<String> は
-            // NULL でも Ok("") を返すため .ok() が None にならない現挙動 —
-            // sqlx-sqlite 0.8.x 時点の decode 実装に依存)。
-            phase_label: Some("".into()),
+            // NULL の phase_label は None(WP-B16 で Option decode を適正化。
+            // sqlx-sqlite の try_get::<String> は NULL でも Ok("") を返すため、
+            // Option 列は try_get::<Option<String>> で読む)。
+            phase_label: None,
             scores: vec![],
             room_kind: GameRoomKind::ScoreGame,
             metaverse: None,
@@ -356,10 +356,8 @@ async fn object_projection_blank_root_and_reply_map_to_none() {
             source_replica_id: ReplicaId::new("replica-object-edge"),
             source_key: "objects/obj-blank-refs/header".into(),
             source_envelope_id: EnvelopeId::from("env-obj-blank-refs"),
-            // NULL の source_blob_hash は Some(BlobHash("")) になる(root/reply と違い
-            // 空文字フィルタが無く、sqlx-sqlite は NULL でも Ok("") を返す現挙動 —
-            // sqlx-sqlite 0.8.x 時点の decode 実装に依存)。
-            source_blob_hash: Some(BlobHash::new("")),
+            // NULL の source_blob_hash は None(WP-B16 で Option decode を適正化)。
+            source_blob_hash: None,
             derived_at: 1001,
             projection_version: 2,
         }
@@ -376,16 +374,11 @@ async fn object_projection_blank_root_and_reply_map_to_none() {
     assert_eq!(whitespace.reply_to_object_id, None);
 }
 
-/// ケース 5: bookmarked_posts の root_object_id / reply_to_object_id = '' は
-/// **Some("") のまま読める**(row_mapping.rs row_to_bookmarked_post の
-/// reply_to_object_id / root_object_id — 空文字フィルタ無しの素通し)。
-/// NULL の行も同じく Some("") になる(sqlx-sqlite は NULL でも Ok("") を decode する —
-/// sqlx-sqlite 0.8.x 時点の decode 実装に依存)。
-///
-/// object_index_cache 側(ケース 4: '' → None)と非対称の現挙動をそのまま固定している。
-/// バグの可能性があり Phase 2 の fix 候補。仕様修正時はこのテストを更新すること。
+/// ケース 5: bookmarked_posts の root_object_id / reply_to_object_id は ''(空文字)も
+/// NULL も None として読める(row_mapping.rs row_to_bookmarked_post — WP-B16 で
+/// object_index_cache 側(ケース 4)と同じ trim + filter に統一し、非対称を解消)。
 #[tokio::test]
-async fn bookmarked_post_empty_root_and_reply_map_to_some_empty_string() {
+async fn bookmarked_post_blank_root_and_reply_map_to_none() {
     let store = SqliteStore::connect_memory().await.expect("sqlite store");
     insert_raw_bookmarked_post(&store, "bp-empty-refs", Some(""), Some(""), 300)
         .await
@@ -399,7 +392,7 @@ async fn bookmarked_post_empty_root_and_reply_map_to_some_empty_string() {
         .expect("list bookmarked posts");
     assert_eq!(rows.len(), 2);
 
-    // bookmarked_at DESC 順の先頭 = 空文字行。'' が Some("") として素通しになる(非対称の現挙動)。
+    // bookmarked_at DESC 順の先頭 = 空文字行。'' は None に落ちる(ケース 4 と対称)。
     assert_eq!(
         rows[0],
         BookmarkedPostRow {
@@ -416,19 +409,17 @@ async fn bookmarked_post_empty_root_and_reply_map_to_some_empty_string() {
             },
             content: Some("ブックマーク本文".into()),
             attachments: vec![],
-            reply_to_object_id: Some(EnvelopeId::from("")),
-            root_object_id: Some(EnvelopeId::from("")),
+            reply_to_object_id: None,
+            root_object_id: None,
             repost_of: None,
             bookmarked_at: 300,
         }
     );
 
-    // NULL でも Some(EnvelopeId("")) になる(sqlx-sqlite の try_get::<String> は NULL で
-    // Ok("") を返すため .ok().map(...) が素通しになる現挙動。'' と区別されない —
-    // sqlx-sqlite 0.8.x 時点の decode 実装に依存)。
+    // NULL も None(WP-B16 の Option decode 適正化。'' と同じ結果に正規化される)。
     assert_eq!(rows[1].source_object_id, EnvelopeId::from("bp-null-refs"));
-    assert_eq!(rows[1].root_object_id, Some(EnvelopeId::from("")));
-    assert_eq!(rows[1].reply_to_object_id, Some(EnvelopeId::from("")));
+    assert_eq!(rows[1].root_object_id, None);
+    assert_eq!(rows[1].reply_to_object_id, None);
 }
 
 /// ケース 6a: 未知の status 値('nonsense')が残った行は list_topic_game_rooms が Err になる

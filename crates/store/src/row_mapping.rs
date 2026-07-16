@@ -12,6 +12,17 @@ use crate::models::{
     NotificationKind, NotificationRow, ObjectProjectionRow, ReactionProjectionRow,
 };
 
+/// NULL 許容列の読み出し。sqlx-sqlite は NULL を `String` なら `Ok("")`、`i64` なら
+/// `Ok(0)` にデコードするため、`try_get::<T>().ok()` では NULL が Some に化ける
+/// (WP-B16 で解消した decode quirk)。Option 列は必ずこのヘルパで読むこと。
+/// `.ok()` は列欠損を None に落とす従来挙動の維持。
+fn opt_col<'r, T>(row: &'r sqlx::sqlite::SqliteRow, column: &str) -> Option<T>
+where
+    T: sqlx::Decode<'r, sqlx::Sqlite> + sqlx::Type<sqlx::Sqlite>,
+{
+    row.try_get::<Option<T>, _>(column).ok().flatten()
+}
+
 pub(crate) fn row_to_envelope(row: sqlx::sqlite::SqliteRow) -> Result<KukuriEnvelope> {
     Ok(KukuriEnvelope {
         id: row.get::<String, _>("envelope_id").into(),
@@ -45,7 +56,7 @@ pub(crate) fn row_to_object_projection(
             .filter(|value| !value.trim().is_empty())
             .map(EnvelopeId::from),
         payload_ref: serde_json::from_str(row.get::<String, _>("payload_ref_json").as_str())?,
-        content: row.try_get("content").ok(),
+        content: opt_col(&row, "content"),
         attachments: row
             .try_get::<String, _>("attachments_json")
             .ok()
@@ -62,10 +73,7 @@ pub(crate) fn row_to_object_projection(
         source_replica_id: ReplicaId::new(row.get::<String, _>("source_replica_id")),
         source_key: row.get("source_key"),
         source_envelope_id: row.get::<String, _>("source_envelope_id").into(),
-        source_blob_hash: row
-            .try_get::<String, _>("source_blob_hash")
-            .ok()
-            .map(BlobHash::new),
+        source_blob_hash: opt_col::<String>(&row, "source_blob_hash").map(BlobHash::new),
         derived_at: row.get("derived_at"),
         projection_version: row.get("projection_version"),
     })
@@ -85,8 +93,8 @@ pub(crate) fn row_to_reaction_projection(
             row.get::<String, _>("reaction_key_kind").as_str(),
         )?,
         normalized_reaction_key: row.get("normalized_reaction_key"),
-        emoji: row.try_get("emoji").ok(),
-        custom_asset_id: row.try_get("custom_asset_id").ok(),
+        emoji: opt_col(&row, "emoji"),
+        custom_asset_id: opt_col(&row, "custom_asset_id"),
         custom_asset_snapshot: row
             .try_get::<String, _>("custom_asset_snapshot_json")
             .ok()
@@ -132,15 +140,15 @@ pub(crate) fn row_to_bookmarked_post(row: sqlx::sqlite::SqliteRow) -> Result<Boo
         created_at: row.get("created_at"),
         object_kind: row.get("object_kind"),
         payload_ref: serde_json::from_str(row.get::<String, _>("payload_ref_json").as_str())?,
-        content: row.try_get("content").ok(),
+        content: opt_col(&row, "content"),
         attachments: serde_json::from_str(row.get::<String, _>("attachments_json").as_str())?,
-        reply_to_object_id: row
-            .try_get::<String, _>("reply_to_object_id")
-            .ok()
+        // 空文字は None に落とす(row_to_object_projection の root/reply と同じ規約。
+        // WP-B16 で非対称を解消)。
+        reply_to_object_id: opt_col::<String>(&row, "reply_to_object_id")
+            .filter(|value| !value.trim().is_empty())
             .map(EnvelopeId::from),
-        root_object_id: row
-            .try_get::<String, _>("root_object_id")
-            .ok()
+        root_object_id: opt_col::<String>(&row, "root_object_id")
+            .filter(|value| !value.trim().is_empty())
             .map(EnvelopeId::from),
         repost_of: row
             .try_get::<String, _>("repost_of_json")
@@ -159,9 +167,9 @@ pub(crate) fn row_to_direct_message_conversation(
         dm_id: row.get("dm_id"),
         peer_pubkey: row.get("peer_pubkey"),
         updated_at: row.get("updated_at"),
-        last_message_at: row.try_get("last_message_at").ok(),
-        last_message_id: row.try_get("last_message_id").ok(),
-        last_message_preview: row.try_get("last_message_preview").ok(),
+        last_message_at: opt_col(&row, "last_message_at"),
+        last_message_id: opt_col(&row, "last_message_id"),
+        last_message_preview: opt_col(&row, "last_message_preview"),
     })
 }
 
@@ -174,8 +182,8 @@ pub(crate) fn row_to_direct_message_message(
         sender_pubkey: row.get("sender_pubkey"),
         recipient_pubkey: row.get("recipient_pubkey"),
         created_at: row.get("created_at"),
-        text: row.try_get("text").ok(),
-        reply_to_message_id: row.try_get("reply_to_message_id").ok(),
+        text: opt_col(&row, "text"),
+        reply_to_message_id: opt_col(&row, "reply_to_message_id"),
         attachment_manifest: row
             .try_get::<String, _>("attachment_manifest_json")
             .ok()
@@ -183,7 +191,7 @@ pub(crate) fn row_to_direct_message_message(
             .map(|value| serde_json::from_str(value.as_str()))
             .transpose()?,
         outgoing: row.get::<i64, _>("outgoing") != 0,
-        acked_at: row.try_get("acked_at").ok(),
+        acked_at: opt_col(&row, "acked_at"),
     })
 }
 
@@ -230,7 +238,7 @@ pub(crate) fn row_to_notification(row: sqlx::sqlite::SqliteRow) -> Result<Notifi
             .filter(|value| !value.trim().is_empty()),
         created_at: row.get("created_at"),
         received_at: row.get("received_at"),
-        read_at: row.try_get("read_at").ok(),
+        read_at: opt_col(&row, "read_at"),
     })
 }
 
@@ -243,7 +251,7 @@ pub(crate) fn row_to_direct_message_outbox(
         peer_pubkey: row.get("peer_pubkey"),
         frame_blob_hash: BlobHash::new(row.get::<String, _>("frame_blob_hash")),
         created_at: row.get("created_at"),
-        last_attempt_at: row.try_get("last_attempt_at").ok(),
+        last_attempt_at: opt_col(&row, "last_attempt_at"),
     })
 }
 
@@ -279,7 +287,7 @@ pub(crate) fn row_to_live_session_projection(
         description: row.get("description"),
         status: parse_live_status(row.get::<String, _>("status").as_str())?,
         started_at: row.get("started_at"),
-        ended_at: row.try_get("ended_at").ok(),
+        ended_at: opt_col(&row, "ended_at"),
         updated_at: row.get("updated_at"),
         source_replica_id: ReplicaId::new(row.get::<String, _>("source_replica_id")),
         source_key: row.get("source_key"),
@@ -301,7 +309,7 @@ pub(crate) fn row_to_game_room_projection(
         title: row.get("title"),
         description: row.get("description"),
         status: parse_game_status(row.get::<String, _>("status").as_str())?,
-        phase_label: row.try_get("phase_label").ok(),
+        phase_label: opt_col(&row, "phase_label"),
         scores: serde_json::from_str(row.get::<String, _>("scores_json").as_str())?,
         room_kind: row
             .try_get::<String, _>("room_kind")

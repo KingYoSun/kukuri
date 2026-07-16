@@ -13,6 +13,7 @@ use kukuri_core::FollowEdge;
 struct NotificationScenarioResult {
     inserted: Vec<bool>,
     unread_initial: usize,
+    list_initial: Vec<NotificationRow>,
     unread_after_single: usize,
     unread_after_all: usize,
     list_final: Vec<NotificationRow>,
@@ -48,10 +49,11 @@ async fn notification_scenario<S: Store + ProjectionStore>(
     let unread_initial = NotificationStore::count_unread_notifications(store)
         .await
         .expect("count unread initial");
-    // NOTE: read_at が NULL のままの行を含む list はここでは比較しない。
-    // sqlite の NULL decode quirk により read_at NULL → Some(0) となり
-    // memory(None)と一致しないため(mod.rs ヘッダ参照)、
-    // list の比較は全件 read 済みになった最後に行う。
+    // read_at が NULL のままの行を含む list も比較対象(WP-B16 で NULL decode quirk を
+    // 解消し、sqlite も memory と同じく None を返す)。
+    let list_initial = NotificationStore::list_notifications(store)
+        .await
+        .expect("list notifications initial");
 
     NotificationStore::mark_notification_read(store, "notif-1", 110)
         .await
@@ -78,6 +80,7 @@ async fn notification_scenario<S: Store + ProjectionStore>(
     NotificationScenarioResult {
         inserted,
         unread_initial,
+        list_initial,
         unread_after_single,
         unread_after_all,
         list_final,
@@ -95,6 +98,15 @@ async fn notifications_match_between_backends() {
     // sanity: sqlite 実測(received_at DESC, notification_id DESC。100 の tie は id 降順)
     assert_eq!(from_sqlite.inserted, vec![true, true, true, false]);
     assert_eq!(from_sqlite.unread_initial, 2);
+    // 未読(read_at NULL)の行が None として読めること(WP-B16)。
+    assert_eq!(
+        from_sqlite
+            .list_initial
+            .iter()
+            .map(|row| row.read_at)
+            .collect::<Vec<_>>(),
+        vec![None, None, Some(95)],
+    );
     assert_eq!(
         from_sqlite
             .list_final
@@ -700,8 +712,8 @@ async fn direct_message_outbox_matches_between_backends() {
             .map(|row| (row.message_id.clone(), row.created_at, row.last_attempt_at))
             .collect::<Vec<_>>(),
         vec![
-            ("om-0".to_string(), 5, Some(0)),
-            ("om-1".to_string(), 8, Some(0)),
+            ("om-0".to_string(), 5, None),
+            ("om-1".to_string(), 8, None),
             ("om-2".to_string(), 10, Some(99)),
         ],
     );

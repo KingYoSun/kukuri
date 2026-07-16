@@ -51,13 +51,8 @@ async fn direct_message_conversation_roundtrip_preserves_all_columns() {
         .await
         .expect("upsert min conversation");
 
-    // 現挙動(観測値): sqlx-sqlite は NULL を TEXT→"" / INTEGER→0 に
-    // デコードするため、last_* 3 列は None で put しても Some(空値) で読み出される。
-    let mut expected_min = min.clone();
-    expected_min.last_message_at = Some(0);
-    expected_min.last_message_id = Some(String::new());
-    expected_min.last_message_preview = Some(String::new());
-
+    // None で put した last_* 3 列は None のまま読み出される
+    // (WP-B16 で NULL decode quirk を解消)。
     assert_eq!(
         DirectMessageStore::get_direct_message_conversation_by_dm_id(&store, "dm-max")
             .await
@@ -71,7 +66,7 @@ async fn direct_message_conversation_roundtrip_preserves_all_columns() {
         )
         .await
         .expect("get by peer"),
-        Some(expected_min.clone())
+        Some(min.clone())
     );
     // 主キー updated_at DESC の順序ごと固定(副キー dm_id DESC の
     // tie-break はここでは未行使 — T6 の pagination テストと T8 の backend_parity が担保)。
@@ -79,7 +74,7 @@ async fn direct_message_conversation_roundtrip_preserves_all_columns() {
         DirectMessageStore::list_direct_message_conversations(&store)
             .await
             .expect("list conversations"),
-        vec![max, expected_min]
+        vec![max, min]
     );
 }
 
@@ -156,18 +151,13 @@ async fn direct_message_message_roundtrip_preserves_all_columns() {
         Some(max)
     );
 
-    // 現挙動(観測値): text / reply_to_message_id / acked_at は filter が
-    // 無いため、None で put しても Some(空値) で読み出される
-    // (attachment_manifest_json は filter で None のまま)。
-    let mut expected_min = min.clone();
-    expected_min.text = Some(String::new());
-    expected_min.reply_to_message_id = Some(String::new());
-    expected_min.acked_at = Some(0);
+    // None で put した text / reply_to_message_id / acked_at / attachment_manifest は
+    // None のまま読み出される(WP-B16 で NULL decode quirk を解消)。
     assert_eq!(
         DirectMessageStore::get_direct_message_message(&store, "dm-min", "msg-min")
             .await
             .expect("get min message"),
-        Some(expected_min)
+        Some(min)
     );
 
     // outgoing の永続形式は i64(true→1 / false→0)。既存 DB 互換の契約として固定。
@@ -264,11 +254,8 @@ async fn direct_message_outbox_roundtrip_preserves_all_columns() {
         .await
         .expect("put min outbox");
 
-    // 現挙動(観測値): last_attempt_at は filter が無いため、
-    // None で put しても Some(0) で読み出される。
-    let mut expected_min = min.clone();
-    expected_min.last_attempt_at = Some(0);
-
+    // None で put した last_attempt_at は None のまま読み出される
+    // (WP-B16 で NULL decode quirk を解消)。
     assert_eq!(
         DirectMessageStore::get_direct_message_outbox(&store, "dm-max", "msg-out-max")
             .await
@@ -281,7 +268,7 @@ async fn direct_message_outbox_roundtrip_preserves_all_columns() {
         DirectMessageStore::list_direct_message_outbox(&store)
             .await
             .expect("list outbox"),
-        vec![expected_min, max]
+        vec![min, max]
     );
 }
 
@@ -392,19 +379,14 @@ async fn notification_roundtrip_preserves_all_15_columns() {
             .expect("put duplicate notification")
     );
 
-    // 現挙動(観測値): read_at(i64)は filter が無いため、None で put しても
-    // Some(0) で読み出される(count_unread は SQL の IS NULL で数えるため
-    // 「未読 1 件」と「read_at: Some(0)」が同時に成立する点に注意)。
-    // 他の Option 列は trim+filter があり None のまま。
-    let mut expected_min = min.clone();
-    expected_min.read_at = Some(0);
-
+    // None で put した read_at は None のまま読み出される(WP-B16 で
+    // NULL decode quirk を解消。count_unread の SQL IS NULL 判定とも整合)。
     // received_at DESC, notification_id DESC の順序ごと全列固定。
     assert_eq!(
         NotificationStore::list_notifications(&store)
             .await
             .expect("list notifications"),
-        vec![max, expected_min]
+        vec![max, min]
     );
 }
 

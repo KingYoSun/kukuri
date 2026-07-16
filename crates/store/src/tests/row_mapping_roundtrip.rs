@@ -12,10 +12,10 @@
 //! row_mapping_roundtrip_dm.rs、live_session / game_room は
 //! row_mapping_roundtrip_live_game.rs に分割)
 //!
-//! 4 ファイル共通の重要な現挙動(本 WP で実測): sqlx-sqlite は NULL を
-//! i64→0 / TEXT→"" にデコードして try_get が Ok を返すため、読み出し側に
-//! trim+filter の無い Option 列は「None で put → Some(既定値) で get」の
-//! 非対称になる。各テストの expected_min はこの観測値を生値で固定している。
+//! 4 ファイル共通の注意: sqlx-sqlite は NULL を i64→0 / TEXT→"" にデコードして
+//! try_get::<T> が Ok を返すが、row_mapping の Option 列は `try_get::<Option<T>>`
+//! (opt_col ヘルパ)で読むため None で put → None で get の対称が成り立つ
+//! (WP-B16 で decode quirk を解消。min fixture がその回帰検出を兼ねる)。
 
 use super::*;
 use kukuri_core::{
@@ -203,17 +203,13 @@ async fn object_projection_roundtrip_preserves_all_18_columns() {
         Some(max)
     );
 
-    // 現挙動(観測値): sqlx-sqlite は NULL を TEXT→"" にデコードするため、
-    // trim+filter の無い content / source_blob_hash は None で put しても
-    // Some(空値) で読み出される(root/reply/repost_of は filter があり None)。
-    let mut expected_min = min.clone();
-    expected_min.content = Some(String::new());
-    expected_min.source_blob_hash = Some(BlobHash::new(""));
+    // None で put した Option 列(content / source_blob_hash / root / reply /
+    // repost_of)は None のまま読み出される(WP-B16 で NULL decode quirk を解消)。
     assert_eq!(
         ObjectProjectionStore::get_object_projection(&store, &min.object_id)
             .await
             .expect("get min projection"),
-        Some(expected_min)
+        Some(min)
     );
 }
 
@@ -297,11 +293,8 @@ async fn reaction_projection_roundtrip_preserves_all_16_columns() {
         .expect("get max reaction"),
         Some(max)
     );
-    // 現挙動(観測値): emoji / custom_asset_id は filter が無いため
-    // None で put しても Some("") で読み出される(snapshot は filter で None)。
-    let mut expected_min = min.clone();
-    expected_min.emoji = Some(String::new());
-    expected_min.custom_asset_id = Some(String::new());
+    // None で put した emoji / custom_asset_id / snapshot は None のまま
+    // 読み出される(WP-B16 で NULL decode quirk を解消)。
     assert_eq!(
         ReactionBookmarkStore::get_reaction_cache(
             &store,
@@ -311,7 +304,7 @@ async fn reaction_projection_roundtrip_preserves_all_16_columns() {
         )
         .await
         .expect("get min reaction"),
-        Some(expected_min)
+        Some(min)
     );
 }
 
@@ -470,15 +463,9 @@ async fn bookmarked_post_roundtrip_preserves_all_15_columns() {
         .await
         .expect("put max bookmarked post");
 
-    // 現挙動(観測値): bookmarked_posts の content / reply_to / root は
-    // filter 無しの素通しのため、None で put しても Some(空値) で読み出される
-    // (object_index_cache 側と非対称 — 修正は Phase 2 候補、T5 でも raw INSERT
-    // の '' ケースを固定)。repost_of のみ filter があり None のまま。
-    let mut expected_min = min.clone();
-    expected_min.content = Some(String::new());
-    expected_min.reply_to_object_id = Some(EnvelopeId::from(""));
-    expected_min.root_object_id = Some(EnvelopeId::from(""));
-
+    // None で put した content / reply_to / root / repost_of は None のまま
+    // 読み出される(WP-B16 で object_index_cache 側と同じ trim + filter に統一し、
+    // NULL decode quirk と非対称を解消。'' ケースは T5 の raw INSERT テストで固定)。
     // 読み出しは list のみ。順序は主キー bookmarked_at DESC のみ行使して固定
     // (副キー source_object_id DESC の tie-break はここでは未行使 —
     // T6 の pagination テストと T8 の backend_parity が担保)。
@@ -486,6 +473,6 @@ async fn bookmarked_post_roundtrip_preserves_all_15_columns() {
         ReactionBookmarkStore::list_bookmarked_posts(&store)
             .await
             .expect("list bookmarked posts"),
-        vec![max, expected_min]
+        vec![max, min]
     );
 }
