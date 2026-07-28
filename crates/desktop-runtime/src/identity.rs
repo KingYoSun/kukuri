@@ -245,11 +245,8 @@ fn persist_secret_to_file(db_path: &Path, secret: &str) -> Result<()> {
 }
 
 fn persist_secret_to_file_path(path: &Path, secret: &str) -> Result<()> {
-    let mut file = open_private_write_file(path)
-        .with_context(|| format!("failed to create identity file `{}`", path.display()))?;
-    file.write_all(secret.as_bytes())
-        .with_context(|| format!("failed to write identity file `{}`", path.display()))?;
-    Ok(())
+    write_private_file_atomically(path, secret.as_bytes())
+        .with_context(|| format!("failed to persist identity file `{}`", path.display()))
 }
 
 fn load_backend_marker(db_path: &Path) -> Result<Option<String>> {
@@ -275,18 +272,55 @@ fn load_backend_marker(db_path: &Path) -> Result<Option<String>> {
 
 fn write_backend_marker(db_path: &Path, backend: &str) -> Result<()> {
     let path = backend_marker_path(db_path);
-    let mut file = open_private_write_file(&path).with_context(|| {
+    write_private_file_atomically(&path, backend.as_bytes()).with_context(|| {
         format!(
-            "failed to create identity backend marker `{}`",
+            "failed to persist identity backend marker `{}`",
+            path.display()
+        )
+    })
+}
+
+// 途中クラッシュで既存内容が破損しないよう、同一ディレクトリの temp ファイルへ
+// write → fsync → rename で置換する(issue #574)。失敗は fail-loud で伝播させる。
+fn write_private_file_atomically(path: &Path, bytes: &[u8]) -> Result<()> {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| anyhow!("invalid private file path `{}`", path.display()))?;
+    let temp_path = path.with_file_name(format!("{file_name}.tmp"));
+    let mut file = open_private_write_file(&temp_path)
+        .with_context(|| format!("failed to create temp file `{}`", temp_path.display()))?;
+    file.write_all(bytes)
+        .with_context(|| format!("failed to write temp file `{}`", temp_path.display()))?;
+    file.sync_all()
+        .with_context(|| format!("failed to sync temp file `{}`", temp_path.display()))?;
+    drop(file);
+    std::fs::rename(&temp_path, path).with_context(|| {
+        format!(
+            "failed to rename temp file `{}` to `{}`",
+            temp_path.display(),
             path.display()
         )
     })?;
-    file.write_all(backend.as_bytes()).with_context(|| {
-        format!(
-            "failed to write identity backend marker `{}`",
-            path.display()
-        )
-    })?;
+    sync_parent_dir(path)
+}
+
+// rename 自体の durability を確保するため、unix では親ディレクトリも fsync する。
+// Windows は std にディレクトリ fsync の手段がないため rename の atomic 置換のみ。
+#[cfg(unix)]
+fn sync_parent_dir(path: &Path) -> Result<()> {
+    let parent = match path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => return Ok(()),
+    };
+    let dir = std::fs::File::open(parent)
+        .with_context(|| format!("failed to open directory `{}`", parent.display()))?;
+    dir.sync_all()
+        .with_context(|| format!("failed to sync directory `{}`", parent.display()))
+}
+
+#[cfg(not(unix))]
+fn sync_parent_dir(_path: &Path) -> Result<()> {
     Ok(())
 }
 
@@ -630,6 +664,73 @@ mod tests {
             .expect("read fallback file"),
             Some("value".to_string())
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn persist_secret_replaces_existing_file_via_rename() {
+        use std::os::unix::fs::MetadataExt;
+
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("kukuri.test-secret");
+        persist_secret_to_file_path(&path, "old-value").expect("persist old value");
+        let inode_before = std::fs::metadata(&path).expect("metadata before").ino();
+
+        persist_secret_to_file_path(&path, "new-value").expect("persist new value");
+
+        let inode_after = std::fs::metadata(&path).expect("metadata after").ino();
+        assert_ne!(
+            inode_before, inode_after,
+            "persist must replace the file via rename, not truncate it in place"
+        );
+        assert_eq!(
+            load_secret_from_file_path(&path).expect("load after persist"),
+            Some("new-value".to_string())
+        );
+    }
+
+    #[test]
+    fn stale_temp_file_does_not_corrupt_persisted_secret() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("kukuri.test-secret");
+        persist_secret_to_file_path(&path, "old-value").expect("persist old value");
+
+        // 書き込み途中(rename 前)にクラッシュした状態を再現する。
+        let temp_path = path.with_file_name("kukuri.test-secret.tmp");
+        std::fs::write(&temp_path, "garbage-from-interrupted-write").expect("write stale temp");
+
+        assert_eq!(
+            load_secret_from_file_path(&path).expect("load with stale temp present"),
+            Some("old-value".to_string()),
+            "interrupted write must leave the previous content readable"
+        );
+
+        persist_secret_to_file_path(&path, "new-value").expect("persist over stale temp");
+        assert_eq!(
+            load_secret_from_file_path(&path).expect("load after recovery"),
+            Some("new-value".to_string())
+        );
+        assert!(
+            !temp_path.exists(),
+            "persist must consume the temp file via rename"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn persisted_secret_file_keeps_private_mode() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("kukuri.test-secret");
+        persist_secret_to_file_path(&path, "old-value").expect("persist first value");
+        persist_secret_to_file_path(&path, "new-value").expect("persist second value");
+
+        let mode = std::fs::metadata(&path)
+            .expect("metadata")
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o600, "secret file must stay private");
     }
 
     #[test]
