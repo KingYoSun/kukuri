@@ -274,11 +274,12 @@ export const syncStatusFull = {
         "peer-a"
       ],
       "missing_peer_ids": [],
-      "active_path": "direct_p2p",
-      "rendezvous_peer_ids": [
+      "active_path": "relay_fallback",
+      "rendezvous_peer_ids": [],
+      "fallback_peer_ids": [
+        "peer-a",
         "peer-b"
       ],
-      "fallback_peer_ids": [],
       "last_received_at": 1700000090,
       "last_docs_activity_at": 1700000095,
       "status_detail": "live",
