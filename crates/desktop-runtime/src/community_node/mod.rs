@@ -71,6 +71,11 @@ pub(crate) const COMMUNITY_NODE_RECONNECT_BACKOFF_SECONDS: [i64; 3] = [30, 60, 1
 // 15 秒は失効防止を満たしつつ、tick 毎の consent GET を可視時の現行ポーリング(3 秒 ×2 getter)
 // より低頻度に抑える値(WP-C1 プランの決定事項 1)。
 pub(crate) const COMMUNITY_NODE_SESSION_SCHEDULER_TICK_SECONDS: u64 = 15;
+// topic rendezvous presence の次回 refresh 期限は「サーバ返却 expires_in_seconds(45 秒)−
+// このマージン」で管理する(#572)。マージンは tick(15 秒)より大きいことが必須: tick 量子化で
+// 実際の POST が deadline から最大 tick 分遅れても TTL に達しないため(deadline +25 秒、
+// 最悪 POST +40 秒 < TTL 45 秒)。
+pub(crate) const COMMUNITY_NODE_TOPIC_RENDEZVOUS_REFRESH_MARGIN_SECONDS: i64 = 20;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -178,6 +183,8 @@ pub enum CommunityNodeSessionPhase {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct CommunityNodeSessionState {
     pub(crate) heartbeat_deadline: i64,
+    // default 0 = 即時 due。refresh 成功時のみ bump する(#572)。
+    pub(crate) rendezvous_refresh_deadline: i64,
     pub(crate) metadata_refresh_deadline: i64,
     pub(crate) session_retry_deadline: i64,
     pub(crate) session_phase: CommunityNodeSessionPhase,

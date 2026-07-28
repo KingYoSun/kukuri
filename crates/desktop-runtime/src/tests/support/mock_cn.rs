@@ -123,6 +123,62 @@ pub(crate) async fn mock_heartbeat_echo_bootstrap_nodes(
     })
 }
 
+// topic rendezvous heartbeat を観測するシナリオ用 state(#572)。
+// 既存 MockCommunityNodeState の構築箇所を増やさないため、シナリオ別 state として分ける
+// (MockHeartbeatEchoCommunityNodeState と同じ前例)。
+#[derive(Clone)]
+pub(crate) struct MockRendezvousCommunityNodeState {
+    pub(crate) base_url: String,
+    pub(crate) seed_peers: Vec<CommunityNodeSeedPeer>,
+    pub(crate) heartbeat_hits: Arc<AtomicUsize>,
+    pub(crate) bootstrap_hits: Arc<AtomicUsize>,
+    pub(crate) rendezvous_hits: Arc<AtomicUsize>,
+}
+
+pub(crate) async fn mock_rendezvous_bootstrap_heartbeat(
+    State(state): State<Arc<MockRendezvousCommunityNodeState>>,
+    Json(_request): Json<serde_json::Value>,
+) -> Json<BootstrapHeartbeatResponse> {
+    state.heartbeat_hits.fetch_add(1, Ordering::SeqCst);
+    Json(BootstrapHeartbeatResponse {
+        expires_at: Utc::now().timestamp() + 300,
+    })
+}
+
+pub(crate) async fn mock_rendezvous_bootstrap_nodes(
+    State(state): State<Arc<MockRendezvousCommunityNodeState>>,
+) -> Json<BootstrapNodesResponse> {
+    state.bootstrap_hits.fetch_add(1, Ordering::SeqCst);
+    Json(BootstrapNodesResponse {
+        nodes: vec![kukuri_cn_protocol::CommunityNodeBootstrapNode {
+            base_url: state.base_url.clone(),
+            resolved_urls: CommunityNodeResolvedUrls::new(
+                state.base_url.clone(),
+                Vec::new(),
+                state.seed_peers.clone(),
+            )
+            .expect("resolved urls"),
+        }],
+    })
+}
+
+pub(crate) async fn mock_rendezvous_topics_heartbeat(
+    State(state): State<Arc<MockRendezvousCommunityNodeState>>,
+    Json(request): Json<kukuri_cn_protocol::TopicRendezvousHeartbeat>,
+) -> Json<kukuri_cn_protocol::TopicRendezvousHeartbeatResponse> {
+    assert!(
+        !request.refreshes.is_empty() || !request.joins.is_empty(),
+        "rendezvous heartbeat without topics"
+    );
+    state.rendezvous_hits.fetch_add(1, Ordering::SeqCst);
+    // expires_in_seconds はクライアントのマージン(20 秒)より小さくし、deadline が
+    // 毎 maintenance pass で即時 due になるようにする(wall-clock 待ちなしの決定的テスト用)。
+    Json(kukuri_cn_protocol::TopicRendezvousHeartbeatResponse {
+        expires_in_seconds: 5,
+        topics: Vec::new(),
+    })
+}
+
 #[derive(Clone)]
 pub(crate) struct MockManagedCommunityNodeState {
     pub(crate) base_url: String,

@@ -403,6 +403,17 @@ impl DesktopRuntime {
                     error,
                 )
             })?;
+        // 便乗・独立どちらの呼び出しでも、サーバ返却 TTL − マージンで次回期限を更新する。
+        // heartbeat の「expires_at − マージン」(下の heartbeat_deadline)と同型(#572)。
+        self.community_node_sessions
+            .lock()
+            .await
+            .entry(base_url.to_string())
+            .or_insert_with(CommunityNodeSessionState::default)
+            .rendezvous_refresh_deadline = Utc::now().timestamp().saturating_add(
+            (response.expires_in_seconds.min(i64::MAX as u64) as i64)
+                .saturating_sub(COMMUNITY_NODE_TOPIC_RENDEZVOUS_REFRESH_MARGIN_SECONDS),
+        );
         let mut peers_by_endpoint = std::collections::BTreeMap::new();
         for topic in response.topics {
             for peer in topic.peers {
@@ -498,14 +509,14 @@ impl DesktopRuntime {
     ) -> std::result::Result<(), CommunityNodeRequestError> {
         let base_url = normalize_http_url(base_url).map_err(CommunityNodeRequestError::Other)?;
         let now = Utc::now().timestamp();
-        let (next_due_at, ready_refresh_pending) = {
+        let (next_due_at, ready_refresh_pending, rendezvous_due_at) = {
             let mut sessions = self.community_node_sessions.lock().await;
             let entry = sessions
                 .entry(base_url.to_string())
                 .or_insert_with(CommunityNodeSessionState::default);
             let due = entry.heartbeat_deadline;
             let pending = std::mem::replace(&mut entry.ready_refresh_pending, false);
-            (due, pending)
+            (due, pending, entry.rendezvous_refresh_deadline)
         };
         if !force_heartbeat && next_due_at > now {
             if !self
@@ -513,6 +524,13 @@ impl DesktopRuntime {
                 .await
                 && !ready_refresh_pending
             {
+                // rendezvous presence(サーバ TTL 45 秒)は heartbeat(実効約 60 秒毎)より
+                // 短命のため、heartbeat が not-due でも独立に refresh する(#572)。
+                if rendezvous_due_at <= now {
+                    self.refresh_topic_rendezvous_with_token(base_url.as_str(), access_token)
+                        .await?;
+                    return Ok(());
+                }
                 debug!(
                     %base_url,
                     next_due_at,
