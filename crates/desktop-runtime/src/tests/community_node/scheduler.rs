@@ -311,3 +311,117 @@ async fn session_scheduler_reauthenticates_near_expiry_token_without_getter_poll
     runtime.shutdown().await;
     server.abort();
 }
+
+/// topic rendezvous presence の refresh が bootstrap heartbeat の合間にも発火することを固定する
+/// characterization test(#572)。修正前は rendezvous refresh が heartbeat 便乗(実効約 60 秒毎)
+/// のみで、サーバ TTL 45 秒に対し毎サイクル約 15 秒 presence が失効していた。
+/// heartbeat が not-due のままでも maintenance pass 毎に rendezvous deadline が判定され、
+/// due なら refresh POST が独立して打たれることを検証する。
+#[tokio::test]
+async fn topic_rendezvous_refresh_fires_between_bootstrap_heartbeats() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("community-rendezvous-refresh.db");
+    let runtime = DesktopRuntime::new_with_config_and_identity(
+        &db_path,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("runtime");
+
+    // rendezvous refresh は subscribed_topics が空だと no-op のため、先に topic を購読する。
+    let _ = runtime
+        .list_timeline(ListTimelineRequest {
+            topic: "kukuri:topic:rendezvous-refresh-gap".into(),
+            scope: TimelineScope::Public,
+            cursor: None,
+            limit: Some(20),
+        })
+        .await
+        .expect("subscribe topic");
+
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind listener");
+    let base_url = format!("http://{}", listener.local_addr().expect("local addr"));
+    let state = Arc::new(MockRendezvousCommunityNodeState {
+        base_url: base_url.clone(),
+        // bootstrap nodes が空 seed だと metadata retry(5 秒周期)の便乗 refresh が
+        // 走ってテストを汚染するため、非空 seed を返す。
+        seed_peers: vec![
+            CommunityNodeSeedPeer::new(
+                "2222222222222222222222222222222222222222222222222222222222222222",
+                None,
+            )
+            .expect("seed peer"),
+        ],
+        heartbeat_hits: Arc::new(AtomicUsize::new(0)),
+        bootstrap_hits: Arc::new(AtomicUsize::new(0)),
+        rendezvous_hits: Arc::new(AtomicUsize::new(0)),
+    });
+    let app = Router::new()
+        .route("/v1/consents/status", get(mock_bootstrap_consent_status))
+        .route(
+            "/v1/bootstrap/heartbeat",
+            post(mock_rendezvous_bootstrap_heartbeat),
+        )
+        .route("/v1/bootstrap/nodes", get(mock_rendezvous_bootstrap_nodes))
+        .route(
+            "/v1/rendezvous/topics/heartbeat",
+            post(mock_rendezvous_topics_heartbeat),
+        )
+        .with_state(state.clone());
+    let server = tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+
+    persist_community_node_token(
+        &db_path,
+        IdentityStorageMode::FileOnly,
+        base_url.as_str(),
+        &StoredCommunityNodeToken {
+            access_token: "fake-token".to_string(),
+            expires_at: Utc::now().timestamp() + 3600,
+        },
+    )
+    .expect("persist community-node token");
+    *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        nodes: vec![CommunityNodeNodeConfig {
+            base_url: base_url.clone(),
+            auto_approve: false,
+            resolved_urls: Some(
+                CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
+                    .expect("resolved urls"),
+            ),
+        }],
+    };
+
+    // 1 回目: セッション確立(heartbeat 1 発 + 便乗 rendezvous refresh)。
+    // 2 回目: ready 遷移で立った ready_refresh_pending の metadata refresh(便乗 refresh)を消化。
+    runtime.run_community_node_session_maintenance_once().await;
+    runtime.run_community_node_session_maintenance_once().await;
+    assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
+    let baseline = state.rendezvous_hits.load(Ordering::SeqCst);
+    assert!(baseline >= 1, "establishment should refresh rendezvous");
+
+    // heartbeat は not-due のまま(mock の expires_at = now+300 → 次回期限 +270 秒)。
+    // mock の expires_in_seconds(5)はクライアントのマージンより小さいため、修正後は
+    // rendezvous deadline が毎 pass 即時 due になり、pass 毎に独立 refresh が打たれる。
+    for _ in 0..3 {
+        runtime.run_community_node_session_maintenance_once().await;
+    }
+    assert_eq!(
+        state.heartbeat_hits.load(Ordering::SeqCst),
+        1,
+        "bootstrap heartbeat must stay not-due during the observation window"
+    );
+    assert!(
+        state.rendezvous_hits.load(Ordering::SeqCst) > baseline,
+        "rendezvous presence must be refreshed between bootstrap heartbeats \
+         (hits stayed at {baseline}; presence would expire against the 45s server TTL)"
+    );
+
+    runtime.shutdown().await;
+    server.abort();
+}
