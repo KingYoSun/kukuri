@@ -622,4 +622,40 @@ async fn invalid_hint_payload_increments_counter_and_keeps_stream_healthy() {
     assert!(transport_a.invalid_hint_count(&topic).await >= 1);
 }
 
+/// 単一 topic のスナップショットが expected の active_path に到達するまで待つ。
+/// 接続直後は relay 経由 → holepunch で direct 化のような遷移があり得るため、
+/// 経路判定の assert は一発判定ではなく収束待ちで行う。
+async fn wait_for_topic_active_path(
+    transport: &IrohGossipTransport,
+    expected: &ConnectionPath,
+    context: &str,
+) -> PeerSnapshot {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+    loop {
+        let snapshot = transport.peers().await.expect("peer snapshot");
+        if snapshot
+            .topic_diagnostics
+            .iter()
+            .any(|topic| &topic.active_path == expected)
+        {
+            return snapshot;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            panic!(
+                "{context}: active_path did not reach {expected:?}: aggregate={:?}, topic_paths={:?}, fallback_peer_ids={:?}, snapshot={}",
+                snapshot.active_path,
+                snapshot
+                    .topic_diagnostics
+                    .iter()
+                    .map(|topic| topic.active_path.clone())
+                    .collect::<Vec<_>>(),
+                snapshot.fallback_peer_ids,
+                format_peer_snapshot(&snapshot)
+            );
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+mod connection_path;
 mod relay_connectivity;

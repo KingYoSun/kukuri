@@ -140,10 +140,14 @@ PR を作成または説明するときは、タスク種別を明確にする�
    `Direct P2P -> Relay Supported P2P -> Relay Fallback` の 3 番目。variant は
    `crates/transport/src/config.rs` に定義され、TS 側表示分岐(生成型
    `apps/desktop/src/lib/api/types.generated.ts` / `apps/desktop/src/shell/presentation.ts` の
-   `relay_fallback`)も実在する。**実行時に値として構築される
-   箇所が現状ゼロ**(ライブ代入は DirectP2p / RelaySupportedP2p のみ)なので「未使用だから削除」に
-   見えるが、これは削除対象ではなく診断の実装ギャップである。**variant は削除しない。診断は現状
-   RelayFallback を報告しない**(判定実装は別 issue。本リファクタでは事実固定に留める)。
+   `relay_fallback`)も実在する。判定は実装済み(issue #573):
+   `crates/transport/src/iroh/peer_state.rs` が snapshot 時に `Endpoint::remote_info` の
+   active transport addr を観測し、topic の全 connected peer が relay 経由でしか
+   実データを流せない場合に RelayFallback と `fallback_peer_ids` を報告する
+   (実 relay 検証は `crates/transport/src/iroh/tests/relay_connectivity.rs` の
+   relay-only テスト)。**variant は削除・改名しない**。serde 表現(`relay_fallback`)は
+   IPC 契約であり、既存 2 経路(direct / relay_supported)の判定を変える変更は
+   characterization テスト(`peer_state.rs` の unit test)を先に更新しない限り禁止。
 2. **`apps/desktop/src/styles/shell-scoped-overrides.css`(旧 shell-phase1-legacy.css。H8 PR2 で
    改名)は現役の本番 CSS**: `.shell-phase1` スコープ付き上書き層で、shell 配下では
    `shell-phase1-part*` を specificity で上書きする。portal と shell で意図的に値が異なるクラスの

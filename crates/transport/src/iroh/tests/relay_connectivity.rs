@@ -79,6 +79,13 @@ async fn transport_custom_relay_static_peer_seed_peers_with_addr_hints_sync_hint
         "custom relay static peer with addr hints",
     )
     .await;
+
+    // characterization: 実データ経路が direct(active IP)である限り、relay URL が
+    // 構成されていても active_path は direct_p2p のままで fallback にならない。
+    let snapshot_a =
+        wait_for_topic_active_path(&transport_a, &ConnectionPath::DirectP2p, "transport a").await;
+    assert_eq!(snapshot_a.active_path, ConnectionPath::DirectP2p);
+    assert!(snapshot_a.fallback_peer_ids.is_empty());
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

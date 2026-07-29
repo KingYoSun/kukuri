@@ -25,13 +25,49 @@ impl IrohGossipTransport {
             None,
         )
         .await?;
+        Ok(Self::spawn_gossip_transport(
+            endpoint,
+            discovery,
+            network_config,
+            &relay_config,
+            relay_urls,
+        ))
+    }
 
+    /// relay-only endpoint(IP transport なし)で bind するテスト専用コンストラクタ。
+    /// loopback では直接 addr が holepunch で有効化されるため、実データが relay 経由に
+    /// なる構成はこの knob でしか安定して再現できない。
+    #[cfg(test)]
+    pub(crate) async fn bind_relay_only_for_tests(
+        network_config: TransportNetworkConfig,
+        relay_config: TransportRelayConfig,
+    ) -> Result<Self> {
+        let relay_config = relay_config.normalized();
+        let relay_urls = Arc::new(StdRwLock::new(relay_config.parsed_relay_urls()?));
+        let (endpoint, discovery) =
+            bind_endpoint_relay_only(&relay_config, Arc::clone(&relay_urls)).await?;
+        Ok(Self::spawn_gossip_transport(
+            endpoint,
+            discovery,
+            network_config,
+            &relay_config,
+            relay_urls,
+        ))
+    }
+
+    fn spawn_gossip_transport(
+        endpoint: Endpoint,
+        discovery: Arc<MemoryLookup>,
+        network_config: TransportNetworkConfig,
+        relay_config: &TransportRelayConfig,
+        relay_urls: Arc<StdRwLock<Vec<RelayUrl>>>,
+    ) -> Self {
         let gossip = Gossip::builder().spawn(endpoint.clone());
         let router = Router::builder(endpoint.clone())
             .accept(GOSSIP_ALPN, gossip.clone())
             .spawn();
 
-        Ok(Self {
+        Self {
             endpoint,
             gossip,
             _router: Some(router),
@@ -48,7 +84,7 @@ impl IrohGossipTransport {
             connect_mode: Arc::new(Mutex::new(relay_config.connect_mode())),
             relay_urls,
             env_locked: Arc::new(Mutex::new(false)),
-        })
+        }
     }
 
     pub async fn bind_with_discovery(
@@ -122,6 +158,30 @@ pub(crate) async fn bind_endpoint_with_options(
     prepare_endpoint_for_discovery(&endpoint, &discovery, relay_config).await?;
     Ok((endpoint, discovery))
 }
+/// relay-only endpoint bind(テスト専用)。IP transport を除去し、実データを relay 経由に強制する。
+/// iroh 本家の relay-only テストと同じ `relay_mode(Custom) + clear_ip_transports` パターン。
+#[cfg(test)]
+async fn bind_endpoint_relay_only(
+    relay_config: &TransportRelayConfig,
+    relay_urls: Arc<StdRwLock<Vec<RelayUrl>>>,
+) -> Result<(Endpoint, Arc<MemoryLookup>)> {
+    let discovery = Arc::new(MemoryLookup::new());
+    let mut builder = build_endpoint_builder(
+        EndpointBuilder::new(presets::Minimal).relay_mode(relay_config.relay_mode()?),
+        &discovery,
+        Some(&DhtDiscoveryOptions::disabled()),
+        relay_urls,
+    )?;
+    builder = builder.ca_tls_config(CaTlsConfig::insecure_skip_verify());
+    builder = builder.clear_ip_transports();
+    let endpoint = builder
+        .bind()
+        .await
+        .context("failed to bind relay-only iroh endpoint")?;
+    prepare_endpoint_for_discovery(&endpoint, &discovery, relay_config).await?;
+    Ok((endpoint, discovery))
+}
+
 fn apply_bind(builder: EndpointBuilder, bind_addr: SocketAddr) -> Result<EndpointBuilder> {
     match bind_addr {
         SocketAddr::V4(addr) => builder
