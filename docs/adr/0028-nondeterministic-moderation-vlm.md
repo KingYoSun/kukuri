@@ -161,7 +161,17 @@ general route も同じ閾値に従う（score / confidence を持つ検知の�
 - `known_hash_match` を設定する経路が構造的に無い = basis は常に `ClassifierScore`。
 - critical を検知した scan では `derived_tags` を空にする（収集側
   `derived_tags_for_index` の allow-only / critical 除外と合わせた二重防御）。
-- `MediaFetcher` の本番実装（iroh-blobs からの一時 fetch）は後続 Issue。未構成なら media scan
+- `MediaFetcher` の本番実装は #609 で追加（`cn-indexer` の `BlobMediaFetcher`）。取得は
+  iroh-blobs の **store 非経由**転送（`get::request::get_blob` → memory 直接）で行い、remote
+  から取得した bytes をローカルストアへ書かない = no-permanent-blob-storage を構造的に守る
+  （スキャン後の破棄処理が不要）。サイズ上限 / timeout は
+  `COMMUNITY_NODE_MEDIA_FETCH_MAX_BYTES`（既定 32 MiB）/
+  `COMMUNITY_NODE_MEDIA_FETCH_TIMEOUT_SECS`（既定 30 秒）で operator が可変。取得不能は
+  `Unavailable`、サイズ超過・content type 不明は `Protocol`、時間切れは `Timeout`
+  （いずれも fail-closed）。content type は参照元 metadata（`AssetRef.mime` / manifest item）を
+  scan request の `media_mime` で運び、欠落時は magic bytes 判定に fallback する。
+  manifest 参照は cn-indexer の ingest が replica 上の署名済み manifest（post author 本人の署名を
+  要求）を item blob（hash + mime）へ展開してから scan する。未構成なら media scan
   は `Unavailable` → fail-closed。
 
 ### 7.3 visibility / appeal

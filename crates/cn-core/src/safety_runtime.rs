@@ -9,7 +9,7 @@ use anyhow::{Context as _, Result, bail};
 use async_trait::async_trait;
 use sqlx::PgPool;
 
-use kukuri_cn_safety::provider::SubjectKind;
+use kukuri_cn_safety::provider::{MediaFetcher, SubjectKind};
 use kukuri_cn_safety::{SafetyProvider, SafetyRiskSignal, SafetyVerdict, SignedModerationEvent};
 use kukuri_cn_safety_runtime::{
     SafetyArtifactStore, SafetyRuntimeProviderEntry, SafetyRuntimeProvidersConfig,
@@ -63,8 +63,13 @@ impl SafetyArtifactStore for PgSafetyArtifactStore {
 ///
 /// 未知名、slot不一致、credential欠落はすべて起動エラーとして返す。空設定はscan serviceを
 /// 無効にする正規状態なので空vectorを返す。
+///
+/// `media_fetcher` は media 参照 scan 用の一時 fetch 手段（#609）。構成されていれば media を
+/// 扱う provider（vlm / arachnid）へ接続する。未構成なら従来どおり media scan は
+/// `Unavailable` → fail-closed。env のみから構築する `resolve_provider` に対する注入シーム。
 pub fn resolve_safety_providers(
     providers: &SafetyRuntimeProvidersConfig,
+    media_fetcher: Option<Arc<dyn MediaFetcher>>,
 ) -> Result<Vec<Arc<dyn SafetyProvider>>> {
     let slots: [(&'static str, Option<&SafetyRuntimeProviderEntry>); 3] = [
         ("known_csam", providers.known_csam.as_ref()),
@@ -74,22 +79,25 @@ pub fn resolve_safety_providers(
     slots
         .into_iter()
         .filter_map(|(slot, entry)| entry.map(|entry| (slot, entry)))
-        .map(|(slot, entry)| resolve_provider(slot, entry))
+        .map(|(slot, entry)| resolve_provider(slot, entry, media_fetcher.as_ref()))
         .collect()
 }
 
 fn resolve_provider(
     slot: &'static str,
     entry: &SafetyRuntimeProviderEntry,
+    media_fetcher: Option<&Arc<dyn MediaFetcher>>,
 ) -> Result<Arc<dyn SafetyProvider>> {
+    // feature 構成によっては未使用になる（mock は fetcher を要しない）。
+    let _ = media_fetcher;
     let normalized = entry.provider.trim().replace('_', "-");
     match normalized.as_str() {
         #[cfg(feature = "safety-mock-provider")]
         "mock" => Ok(mock_provider_for_slot(slot)),
         #[cfg(feature = "safety-arachnid-provider")]
-        kukuri_cn_safety_arachnid::PROVIDER_NAME => arachnid_shield_provider(slot),
+        kukuri_cn_safety_arachnid::PROVIDER_NAME => arachnid_shield_provider(slot, media_fetcher),
         #[cfg(feature = "safety-vlm-provider")]
-        kukuri_cn_safety_vlm::PROVIDER_NAME => vlm_provider(slot),
+        kukuri_cn_safety_vlm::PROVIDER_NAME => vlm_provider(slot, media_fetcher),
         other => bail!(
             "unknown safety provider `{other}` for slot `{slot}` (fail-closed; enable the \
              matching cargo feature and use `mock` / `project-arachnid-shield` / \
@@ -99,7 +107,10 @@ fn resolve_provider(
 }
 
 #[cfg(feature = "safety-vlm-provider")]
-fn vlm_provider(slot: &'static str) -> Result<Arc<dyn SafetyProvider>> {
+fn vlm_provider(
+    slot: &'static str,
+    media_fetcher: Option<&Arc<dyn MediaFetcher>>,
+) -> Result<Arc<dyn SafetyProvider>> {
     use kukuri_cn_safety_vlm::{CapabilityProfile, VlmModerationProvider};
 
     // classifier 系 provider なので known_csam（known-match）slot には使えない（ADR 0028 §2.1:
@@ -114,13 +125,19 @@ fn vlm_provider(slot: &'static str) -> Result<Arc<dyn SafetyProvider>> {
             kukuri_cn_safety_vlm::PROVIDER_NAME
         ),
     };
-    let provider = VlmModerationProvider::from_env(profile)
+    let mut provider = VlmModerationProvider::from_env(profile)
         .context("failed to configure the openai-compatible-vlm safety provider")?;
+    if let Some(fetcher) = media_fetcher {
+        provider = provider.with_media_fetcher(fetcher.clone());
+    }
     Ok(Arc::new(provider))
 }
 
 #[cfg(feature = "safety-arachnid-provider")]
-fn arachnid_shield_provider(slot: &'static str) -> Result<Arc<dyn SafetyProvider>> {
+fn arachnid_shield_provider(
+    slot: &'static str,
+    media_fetcher: Option<&Arc<dyn MediaFetcher>>,
+) -> Result<Arc<dyn SafetyProvider>> {
     if slot != "known_csam" {
         bail!(
             "safety provider `{}` only supports the `known_csam` slot (got `{slot}`); \
@@ -128,8 +145,11 @@ fn arachnid_shield_provider(slot: &'static str) -> Result<Arc<dyn SafetyProvider
             kukuri_cn_safety_arachnid::PROVIDER_NAME
         );
     }
-    let provider = kukuri_cn_safety_arachnid::ProjectArachnidShieldProvider::from_env()
+    let mut provider = kukuri_cn_safety_arachnid::ProjectArachnidShieldProvider::from_env()
         .context("failed to configure the project-arachnid-shield safety provider")?;
+    if let Some(fetcher) = media_fetcher {
+        provider = provider.with_media_fetcher(fetcher.clone());
+    }
     Ok(Arc::new(provider))
 }
 

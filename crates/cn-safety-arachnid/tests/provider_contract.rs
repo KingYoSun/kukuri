@@ -56,10 +56,33 @@ struct StaticFetcher;
 
 #[async_trait]
 impl MediaFetcher for StaticFetcher {
-    async fn fetch(&self, _media_hint: &str) -> Result<FetchedMedia, ScanError> {
+    async fn fetch(
+        &self,
+        _media_hint: &str,
+        _content_type_hint: Option<&str>,
+    ) -> Result<FetchedMedia, ScanError> {
         Ok(FetchedMedia {
             bytes: vec![0xFF, 0xD8, 0xFF, 0xE0],
             content_type: "image/jpeg".to_string(),
+        })
+    }
+}
+
+/// content_type_hint をそのまま `FetchedMedia.content_type` に使う fetcher（mime 伝播の検証用）。
+struct EchoMimeFetcher;
+
+#[async_trait]
+impl MediaFetcher for EchoMimeFetcher {
+    async fn fetch(
+        &self,
+        _media_hint: &str,
+        content_type_hint: Option<&str>,
+    ) -> Result<FetchedMedia, ScanError> {
+        Ok(FetchedMedia {
+            bytes: vec![0x89, 0x50, 0x4E, 0x47],
+            content_type: content_type_hint
+                .expect("content type hint must be forwarded")
+                .to_string(),
         })
     }
 }
@@ -89,6 +112,36 @@ async fn mock_media_scan(server: &MockServer, body: serde_json::Value) {
         .respond_with(ResponseTemplate::new(200).set_body_json(body))
         .mount(server)
         .await;
+}
+
+#[tokio::test]
+async fn media_mime_hint_flows_through_the_fetcher_into_the_scan_request() {
+    // request の media_mime → fetcher の content_type_hint → Shield への Content-Type header
+    // まで一気通貫で伝わること（#609）。mock は `image/png` の Content-Type を要求するため、
+    // scan が成功すること自体が伝播の証明になる。
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/media"))
+        .and(basic_auth(USERNAME, PASSWORD))
+        .and(header("content-type", "image/png"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(scanned_media_body("no-known-match", None)),
+        )
+        .mount(&server)
+        .await;
+
+    let provider = ProjectArachnidShieldProvider::with_credentials(
+        &test_config(&server.uri()),
+        ShieldCredentials::new(USERNAME, PASSWORD),
+    )
+    .expect("provider construction should succeed")
+    .with_media_fetcher(Arc::new(EchoMimeFetcher));
+
+    let result = provider
+        .scan(&media_request().with_media_mime("image/png"))
+        .await
+        .expect("scan succeeds");
+    assert_eq!(result.outcome, ScanOutcome::NoKnownMatch);
 }
 
 #[tokio::test]

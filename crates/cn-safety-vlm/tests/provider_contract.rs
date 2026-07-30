@@ -66,10 +66,38 @@ struct StaticFetcher;
 
 #[async_trait]
 impl MediaFetcher for StaticFetcher {
-    async fn fetch(&self, _media_hint: &str) -> Result<FetchedMedia, ScanError> {
+    async fn fetch(
+        &self,
+        _media_hint: &str,
+        _content_type_hint: Option<&str>,
+    ) -> Result<FetchedMedia, ScanError> {
         Ok(FetchedMedia {
             bytes: vec![0xFF, 0xD8, 0xFF, 0xE0],
             content_type: "image/jpeg".to_string(),
+        })
+    }
+}
+
+/// 受け取った (media_hint, content_type_hint) を記録する fetcher（mime 伝播の検証用）。
+#[derive(Default)]
+struct RecordingFetcher {
+    calls: std::sync::Mutex<Vec<(String, Option<String>)>>,
+}
+
+#[async_trait]
+impl MediaFetcher for RecordingFetcher {
+    async fn fetch(
+        &self,
+        media_hint: &str,
+        content_type_hint: Option<&str>,
+    ) -> Result<FetchedMedia, ScanError> {
+        self.calls
+            .lock()
+            .expect("recording fetcher mutex")
+            .push((media_hint.to_string(), content_type_hint.map(String::from)));
+        Ok(FetchedMedia {
+            bytes: vec![0xFF, 0xD8, 0xFF, 0xE0],
+            content_type: content_type_hint.unwrap_or("image/jpeg").to_string(),
         })
     }
 }
@@ -634,7 +662,11 @@ async fn video_content_type_maps_csam_to_video_classifier() {
 
     #[async_trait]
     impl MediaFetcher for VideoFetcher {
-        async fn fetch(&self, _media_hint: &str) -> Result<FetchedMedia, ScanError> {
+        async fn fetch(
+            &self,
+            _media_hint: &str,
+            _content_type_hint: Option<&str>,
+        ) -> Result<FetchedMedia, ScanError> {
             Ok(FetchedMedia {
                 bytes: vec![0x00, 0x00, 0x00, 0x18],
                 content_type: "video/mp4".to_string(),
@@ -664,5 +696,33 @@ async fn video_content_type_maps_csam_to_video_classifier() {
     assert_eq!(
         result.capability,
         SafetyProviderCapability::NovelCsamVideoClassifier
+    );
+}
+
+#[tokio::test]
+async fn media_mime_hint_reaches_the_fetcher() {
+    // request の media_mime（AssetRef / manifest 由来）が fetcher の content_type_hint として
+    // 渡ること（#609: blob store は MIME を持たないため、この経路が唯一の伝達手段）。
+    let server = MockServer::start().await;
+    mock_chat(&server, chat_body(r#"{"categories":[],"tags":[]}"#)).await;
+
+    let fetcher = Arc::new(RecordingFetcher::default());
+    let provider = VlmModerationProvider::with_credentials(
+        &test_config(&server.uri(), VlmResponseFormat::Json),
+        VlmCredentials::new(API_KEY),
+        CapabilityProfile::General,
+    )
+    .expect("provider construction should succeed")
+    .with_media_fetcher(fetcher.clone());
+
+    provider
+        .scan(&media_request().with_media_mime("image/png"))
+        .await
+        .expect("scan succeeds");
+
+    let calls = fetcher.calls.lock().expect("recording fetcher mutex");
+    assert_eq!(
+        calls.as_slice(),
+        [("blake3:abc123".to_string(), Some("image/png".to_string()))]
     );
 }

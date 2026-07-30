@@ -24,7 +24,11 @@ struct TinyPngFetcher;
 
 #[async_trait]
 impl MediaFetcher for TinyPngFetcher {
-    async fn fetch(&self, _media_hint: &str) -> Result<FetchedMedia, ScanError> {
+    async fn fetch(
+        &self,
+        _media_hint: &str,
+        _content_type_hint: Option<&str>,
+    ) -> Result<FetchedMedia, ScanError> {
         const TINY_PNG_BASE64: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
         use base64::Engine as _;
         let bytes = base64::engine::general_purpose::STANDARD

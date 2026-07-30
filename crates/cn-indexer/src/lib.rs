@@ -20,6 +20,7 @@
 pub mod arcadedb;
 pub mod config;
 pub mod ingest;
+pub mod media_fetcher;
 pub mod participant;
 pub mod projection;
 pub mod query;
@@ -28,8 +29,9 @@ pub mod relation_worker;
 pub mod runtime;
 
 pub use arcadedb::ArcadeDbProjection;
-pub use config::{ArcadeDbConfig, IndexerConfig, RelayConfig, RelayValidation};
+pub use config::{ArcadeDbConfig, IndexerConfig, MediaFetchConfig, RelayConfig, RelayValidation};
 pub use ingest::{IngestPipeline, IngestSummary};
+pub use media_fetcher::BlobMediaFetcher;
 pub use participant::{IndexerParticipant, ScopeReplica};
 pub use projection::{IndexProjection, IndexedEntry, MemoryIndexProjection};
 pub use query::{FailClosedIndexQuery, IndexQuery, MAX_QUERY_LIMIT, clamp_query_limit};

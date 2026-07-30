@@ -9,15 +9,25 @@
 //! provider 未構成なら scan service を構成せず ingest を起動しない（unscanned を index しない
 //! fail-closed と整合。`CommunityIndex` capability が `Availability::Planned` である現状と一致する）。
 //! relay gate 自体はそれとは独立に起動時へ適用する。
+//!
+//! media scan 用の一時 fetch（#609）: provider が構成されている場合は iroh node（persistent、
+//! `data_dir` 配下）+ `IrohBlobService` から `BlobMediaFetcher` を組み、provider 解決時に注入する。
+//! peer 接続（seed 適用 / docs participant 起動）は ingest loop 起動の後続 Issue の範囲で、
+//! それまで remote fetch は peer 不在で miss → `Unavailable` → fail-closed hold に倒れる。
 
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use tracing::info;
 
+use kukuri_blob_service::IrohBlobService;
 use kukuri_cn_core::PgSafetyArtifactStore;
+use kukuri_cn_safety::provider::MediaFetcher;
+use kukuri_iroh_node::IrohDocsNode;
+use kukuri_transport::{DhtDiscoveryOptions, TransportNetworkConfig, TransportRelayConfig};
 
 use crate::config::IndexerConfig;
+use crate::media_fetcher::BlobMediaFetcher;
 
 /// 環境変数から設定を読み、relay validation 起動 gate を適用して cn-indexer を起動する。
 ///
@@ -54,10 +64,40 @@ async fn run(config: IndexerConfig) -> Result<()> {
         "cn-indexer configuration validated"
     );
 
+    // media scan 用の一時 fetch（#609）。provider が構成されている場合のみ iroh node を立ち上げ、
+    // `BlobMediaFetcher` を provider 解決へ注入する。provider 未構成なら scan service 自体を
+    // 構成しない（fail-closed）ため node も立てない。
+    let media_fetcher: Option<Arc<dyn MediaFetcher>> = if config.safety.providers.is_empty() {
+        None
+    } else {
+        let node = IrohDocsNode::persistent_with_discovery_config(
+            &config.data_dir,
+            TransportNetworkConfig::from_env()?,
+            DhtDiscoveryOptions::disabled(),
+            TransportRelayConfig {
+                iroh_relay_urls: config.relay.external_relay_urls.clone(),
+            }
+            .normalized(),
+        )
+        .await
+        .context("failed to start the cn-indexer iroh node for media scan fetches")?;
+        let blob_service = Arc::new(IrohBlobService::new(node));
+        info!(
+            max_bytes = config.media_fetch.max_bytes,
+            timeout_secs = config.media_fetch.timeout.as_secs(),
+            "media fetcher constructed (ephemeral blob fetch; no permanent blob storage)"
+        );
+        Some(Arc::new(BlobMediaFetcher::new(
+            blob_service,
+            config.media_fetch.clone(),
+        )))
+    };
+
     // safety scan runtime の構築境界（#406）。provider が構成されていれば service を構築・検証する
     // （構成不正 = 未知 provider 名 / emit 有効なのに署名鍵なし、は起動失敗）。未構成なら scan
     // service を構成せず、ingest は起動されない（fail-closed）。
-    let safety_providers = kukuri_cn_core::resolve_safety_providers(&config.safety.providers)?;
+    let safety_providers =
+        kukuri_cn_core::resolve_safety_providers(&config.safety.providers, media_fetcher)?;
     let safety = kukuri_cn_safety_runtime::build_safety_scan_service(
         &config.safety,
         safety_providers,
@@ -71,10 +111,11 @@ async fn run(config: IndexerConfig) -> Result<()> {
         None => info!("safety providers not configured; ingest stays disabled (fail-closed)"),
     }
 
-    // NOTE: 構築境界（orchestrator / scan service）は #406 で結線済み。実 ingest loop の起動は
-    // 本番 provider（#391 / #411）と fail-closed indexing 本体（#404）が揃い `CommunityIndex` が
-    // 昇格した段階で行う。participant / ingest pipeline（`crate::participant` / `crate::ingest`）は
-    // 上記 `safety` service を注入して起動する。
+    // NOTE: 構築境界（orchestrator / scan service / media fetcher）は #406 / #609 で結線済み。実
+    // ingest loop の起動は本番 provider（#391 / #411）と fail-closed indexing 本体（#404）が揃い
+    // `CommunityIndex` が昇格した段階で行う。participant / ingest pipeline（`crate::participant` /
+    // `crate::ingest`）は上記 `safety` service を注入して起動する（docs node は media fetch 用に
+    // 構築したものを共用する想定）。
     Ok(())
 }
 

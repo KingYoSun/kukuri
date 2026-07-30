@@ -20,6 +20,15 @@ use crate::IrohDocsNode;
 pub const REMOTE_FETCH_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 pub const REMOTE_FETCH_TRANSFER_TIMEOUT: Duration = Duration::from_secs(15);
 
+/// remote fetch の取得モード。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FetchMode {
+    /// ローカルストアへ取り込んでから読む(docs-sync / blob-service の恒久取得)。
+    Store,
+    /// ストアを経由せず memory に直接取得する(safety scan 用の一時 fetch。#609)。
+    Ephemeral,
+}
+
 /// local miss 後のリモートフェッチ一式(cooldown ゲート込み)。
 ///
 /// `subject` はログ上の対象名("docs entry" / "blob")。`local_error` は
@@ -34,6 +43,56 @@ pub async fn fetch_bytes_with_cooldown(
     hash: iroh_blobs::Hash,
     local_error: impl Display,
 ) -> Result<Option<Vec<u8>>> {
+    fetch_bytes_with_cooldown_mode(
+        node,
+        peers,
+        retries,
+        subject,
+        hash_text,
+        hash,
+        local_error,
+        FetchMode::Store,
+    )
+    .await
+}
+
+/// `fetch_bytes_with_cooldown` の一時取得版: 取得した bytes をローカルストアへ**書き込まない**。
+///
+/// safety scan の一時 fetch(#609)用。community node の no-permanent-blob-storage 前提を
+/// 構造的に守る(スキャン後の破棄処理が不要になる)。
+pub async fn fetch_bytes_ephemeral_with_cooldown(
+    node: &IrohDocsNode,
+    peers: &PeerAddrBook,
+    retries: &Mutex<RemoteFetchRetryState>,
+    subject: &str,
+    hash_text: &str,
+    hash: iroh_blobs::Hash,
+    local_error: impl Display,
+) -> Result<Option<Vec<u8>>> {
+    fetch_bytes_with_cooldown_mode(
+        node,
+        peers,
+        retries,
+        subject,
+        hash_text,
+        hash,
+        local_error,
+        FetchMode::Ephemeral,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn fetch_bytes_with_cooldown_mode(
+    node: &IrohDocsNode,
+    peers: &PeerAddrBook,
+    retries: &Mutex<RemoteFetchRetryState>,
+    subject: &str,
+    hash_text: &str,
+    hash: iroh_blobs::Hash,
+    local_error: impl Display,
+    mode: FetchMode,
+) -> Result<Option<Vec<u8>>> {
     match retries.lock().await.try_begin(hash_text, Instant::now()) {
         RemoteFetchStart::Ready => {}
         RemoteFetchStart::CoolingDown => {
@@ -46,7 +105,8 @@ pub async fn fetch_bytes_with_cooldown(
             return Ok(None);
         }
     }
-    let result = fetch_bytes_from_remote(node, peers, subject, hash_text, hash, local_error).await;
+    let result =
+        fetch_bytes_from_remote(node, peers, subject, hash_text, hash, local_error, mode).await;
     retries
         .lock()
         .await
@@ -61,6 +121,7 @@ async fn fetch_bytes_from_remote(
     hash_text: &str,
     hash: iroh_blobs::Hash,
     local_error: impl Display,
+    mode: FetchMode,
 ) -> Result<Option<Vec<u8>>> {
     let imported_peers = peers.merged_peers().await;
     info!(
@@ -95,53 +156,98 @@ async fn fetch_bytes_from_remote(
                         addrs = ?peer.addrs,
                         "fetch connected to remote peer"
                     );
-                    match timeout(
-                        REMOTE_FETCH_TRANSFER_TIMEOUT,
-                        node.blobs().remote().fetch(conn, hash),
-                    )
-                    .await
-                    {
-                        Ok(Ok(_)) => {
-                            info!(
-                                subject,
-                                hash = %hash_text,
-                                peer_id = %peer.id,
-                                "fetch remote transfer completed"
-                            );
+                    match mode {
+                        FetchMode::Store => {
+                            match timeout(
+                                REMOTE_FETCH_TRANSFER_TIMEOUT,
+                                node.blobs().remote().fetch(conn, hash),
+                            )
+                            .await
+                            {
+                                Ok(Ok(_)) => {
+                                    info!(
+                                        subject,
+                                        hash = %hash_text,
+                                        peer_id = %peer.id,
+                                        "fetch remote transfer completed"
+                                    );
+                                }
+                                Ok(Err(error)) => {
+                                    warn!(
+                                        subject,
+                                        hash = %hash_text,
+                                        peer_id = %peer.id,
+                                        addrs = ?peer.addrs,
+                                        error = %error,
+                                        "fetch remote transfer failed"
+                                    );
+                                    continue;
+                                }
+                                Err(_) => {
+                                    warn!(
+                                        subject,
+                                        hash = %hash_text,
+                                        peer_id = %peer.id,
+                                        addrs = ?peer.addrs,
+                                        timeout_ms = REMOTE_FETCH_TRANSFER_TIMEOUT.as_millis(),
+                                        "fetch remote transfer timed out"
+                                    );
+                                    continue;
+                                }
+                            }
+                            match node.blobs().blobs().get_bytes(hash).await {
+                                Ok(bytes) => return Ok(Some(bytes.to_vec())),
+                                Err(error) => {
+                                    warn!(
+                                        subject,
+                                        hash = %hash_text,
+                                        peer_id = %peer.id,
+                                        error = %error,
+                                        "fetch transfer completed but content is still missing locally"
+                                    );
+                                }
+                            }
                         }
-                        Ok(Err(error)) => {
-                            warn!(
-                                subject,
-                                hash = %hash_text,
-                                peer_id = %peer.id,
-                                addrs = ?peer.addrs,
-                                error = %error,
-                                "fetch remote transfer failed"
-                            );
-                            continue;
-                        }
-                        Err(_) => {
-                            warn!(
-                                subject,
-                                hash = %hash_text,
-                                peer_id = %peer.id,
-                                addrs = ?peer.addrs,
-                                timeout_ms = REMOTE_FETCH_TRANSFER_TIMEOUT.as_millis(),
-                                "fetch remote transfer timed out"
-                            );
-                            continue;
-                        }
-                    }
-                    match node.blobs().blobs().get_bytes(hash).await {
-                        Ok(bytes) => return Ok(Some(bytes.to_vec())),
-                        Err(error) => {
-                            warn!(
-                                subject,
-                                hash = %hash_text,
-                                peer_id = %peer.id,
-                                error = %error,
-                                "fetch transfer completed but content is still missing locally"
-                            );
+                        FetchMode::Ephemeral => {
+                            // ストアへ書き込まず、検証付きで memory へ直接取得する。
+                            match timeout(
+                                REMOTE_FETCH_TRANSFER_TIMEOUT,
+                                iroh_blobs::get::request::get_blob(conn, hash).bytes(),
+                            )
+                            .await
+                            {
+                                Ok(Ok(bytes)) => {
+                                    info!(
+                                        subject,
+                                        hash = %hash_text,
+                                        peer_id = %peer.id,
+                                        "ephemeral fetch remote transfer completed"
+                                    );
+                                    return Ok(Some(bytes.to_vec()));
+                                }
+                                Ok(Err(error)) => {
+                                    warn!(
+                                        subject,
+                                        hash = %hash_text,
+                                        peer_id = %peer.id,
+                                        addrs = ?peer.addrs,
+                                        error = %error,
+                                        "ephemeral fetch remote transfer failed"
+                                    );
+                                    continue;
+                                }
+                                Err(_) => {
+                                    warn!(
+                                        subject,
+                                        hash = %hash_text,
+                                        peer_id = %peer.id,
+                                        addrs = ?peer.addrs,
+                                        timeout_ms = REMOTE_FETCH_TRANSFER_TIMEOUT.as_millis(),
+                                        "ephemeral fetch remote transfer timed out"
+                                    );
+                                    continue;
+                                }
+                            }
                         }
                     }
                 }
