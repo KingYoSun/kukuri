@@ -2957,6 +2957,7 @@ dependencies = [
  "clap",
  "kukuri-cn-core",
  "kukuri-cn-indexer",
+ "kukuri-cn-safety",
  "serde_json",
  "sqlx",
  "tokio",

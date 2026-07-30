@@ -1,9 +1,11 @@
-//! 通報受信(#370)。
+//! 通報受信(#370)+ moderation advisory への異議申し立て受付(#420 / ADR 0028 §2.8)。
 
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
-use kukuri_cn_core::{ApiError, ApiResult, NewCommunityNodeReport, insert_community_node_report};
+use kukuri_cn_core::{
+    ApiError, ApiResult, NewCommunityNodeReport, dispute_risk_signal, insert_community_node_report,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::errors::{SupportEndpointError, SupportEndpointOperation, support_endpoint_error};
@@ -11,6 +13,10 @@ use crate::state::UserApiState;
 
 /// 通報受信リクエスト(#370)。client(#310)が provenance + manifest authority scope で
 /// 通報先を解決し、この node の report endpoint へ POST する。
+///
+/// `appeal` を伴う通報は、この node が発行した moderation advisory(risk signal)への
+/// 異議申し立て(#420)。issuer node への申し立て導線は専用 endpoint を新設せず、
+/// report routing が既に候補化している report endpoint を再利用する。
 #[derive(Debug, Default, Deserialize)]
 pub(crate) struct SubmitReportRequest {
     #[serde(default)]
@@ -25,11 +31,23 @@ pub(crate) struct SubmitReportRequest {
     details: Option<String>,
     #[serde(default)]
     reporter_contact: Option<String>,
+    #[serde(default)]
+    appeal: Option<AppealReference>,
+}
+
+/// 異議申し立ての対象参照(この node が発行した advisory の id)。
+#[derive(Debug, Deserialize)]
+pub(crate) struct AppealReference {
+    #[serde(default)]
+    risk_signal_id: String,
 }
 
 #[derive(Debug, Serialize)]
 pub(crate) struct SubmitReportResponse {
     reference_id: String,
+    /// appeal を受理した場合、`Disputed` へ遷移した risk signal の id。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    disputed_risk_signal_id: Option<String>,
 }
 
 /// 通報を受信して保存する(#370)。unauthenticated で受け付ける(匿名通報を許す)。
@@ -72,6 +90,33 @@ pub(crate) async fn submit_report(
         ));
     }
 
+    // appeal 参照の検証は report 保存より先に行う（存在しない advisory への申し立てを
+    // 受理済みとして返さない）。遷移は None→Disputed（冪等）。Cleared 済みは拒否。
+    let disputed_risk_signal_id = match request.appeal.as_ref() {
+        Some(appeal) => {
+            let risk_signal_id = appeal.risk_signal_id.trim();
+            if risk_signal_id.is_empty() {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "INVALID_APPEAL",
+                    "appeal.risk_signal_id is required",
+                ));
+            }
+            let disputed = dispute_risk_signal(&state.pool, risk_signal_id)
+                .await
+                .map_err(|_| {
+                    ApiError::new(
+                        StatusCode::BAD_REQUEST,
+                        "INVALID_APPEAL",
+                        "the referenced moderation advisory cannot be disputed \
+                         (unknown id or already resolved)",
+                    )
+                })?;
+            Some(disputed.id)
+        }
+        None => None,
+    };
+
     let report = NewCommunityNodeReport {
         subject_kind: subject_kind.to_string(),
         subject_id: subject_id.to_string(),
@@ -86,6 +131,7 @@ pub(crate) async fn submit_report(
         .map_err(support_endpoint_error)?;
     Ok(Json(SubmitReportResponse {
         reference_id: stored.id,
+        disputed_risk_signal_id,
     }))
 }
 

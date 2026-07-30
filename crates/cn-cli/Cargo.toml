@@ -20,6 +20,7 @@ sqlx.workspace = true
 tokio.workspace = true
 kukuri-cn-core = { path = "../cn-core" }
 kukuri-cn-indexer = { path = "../cn-indexer" }
+kukuri-cn-safety = { path = "../cn-safety" }
 
 [lints]
 workspace = true

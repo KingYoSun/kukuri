@@ -26,6 +26,7 @@ mod relation_optouts;
 mod rendezvous;
 mod reports;
 mod rollout;
+mod safety_appeals;
 mod safety_events;
 mod safety_runtime;
 mod scan_verdicts;
@@ -87,11 +88,16 @@ pub use reports::{
     get_community_node_report, insert_community_node_report, list_community_node_reports,
 };
 pub use rollout::{ensure_default_auth_rollout, load_auth_rollout, store_auth_rollout};
+pub use safety_appeals::{
+    RiskSignalCorrection, RiskSignalMetadataEdit, dispute_risk_signal,
+    edit_risk_signal_detection_metadata, reissue_corrected_risk_signal,
+    update_risk_signal_appeal_status,
+};
 pub use safety_events::{
     DistributionAudience, StoredModerationEvent, StoredRiskSignal, get_risk_signal,
     get_signed_moderation_event, list_distributable_moderation_events,
-    list_distributable_risk_signals, list_risk_signals_for_target, list_signed_moderation_events,
-    persist_risk_signal, persist_signed_moderation_event,
+    list_distributable_risk_signals, list_risk_signals, list_risk_signals_for_target,
+    list_signed_moderation_events, persist_risk_signal, persist_signed_moderation_event,
 };
 pub use safety_runtime::{PgSafetyArtifactStore, resolve_safety_providers};
 pub use scan_verdicts::{StoredScanVerdict, get_scan_verdict, upsert_scan_verdict};
