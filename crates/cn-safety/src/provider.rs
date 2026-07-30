@@ -110,6 +110,14 @@ pub struct ProviderScanResult {
     /// 検知ラベル。
     #[serde(default)]
     pub labels: Vec<SafetyLabel>,
+    /// 同一 scan で生成された descriptive 検索タグ（ADR 0028 §2.6 / ADR 0025 §2.3）。
+    ///
+    /// moderation verdict と同じ VLM scan の副産物（二重スキャンしない）。index への反映可否は
+    /// provider ではなく `tags::derived_tags_for_index`（`allow` verdict のみ・critical /
+    /// Match Data / 生スコア除外）が決める。critical を検知した結果では provider 側でも
+    /// 空にする（二重防御）。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub derived_tags: Vec<String>,
 }
 
 impl ProviderScanResult {
@@ -122,6 +130,7 @@ impl ProviderScanResult {
             known_hash_match: false,
             score: None,
             labels: Vec::new(),
+            derived_tags: Vec::new(),
         }
     }
 }

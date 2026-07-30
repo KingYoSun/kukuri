@@ -273,6 +273,7 @@ fn provider_scan_result_round_trips() {
         provider: "mock".to_string(),
         capability: SafetyProviderCapability::KnownCsamHashMatch,
         outcome: ScanOutcome::NoKnownMatch,
+        derived_tags: Vec::new(),
         known_hash_match: false,
         score: None,
         labels: Vec::new(),
@@ -280,8 +281,31 @@ fn provider_scan_result_round_trips() {
     let value = serde_json::to_value(&result).unwrap();
     assert_eq!(value["outcome"], "no_known_match");
     assert_eq!(value["capability"], "known_csam_hash_match");
+    // 空の derived_tags は wire に出さない（既存 serde 表現と互換）。
+    assert!(value.get("derived_tags").is_none());
     let back: ProviderScanResult = serde_json::from_value(value).unwrap();
     assert_eq!(back, result);
+}
+
+#[test]
+fn provider_scan_result_derived_tags_round_trip() {
+    // ADR 0028 §2.6: 同一 scan の副産物としての descriptive タグ。snake_case で round-trip する。
+    let mut result =
+        ProviderScanResult::completed("vlm", SafetyProviderCapability::GeneralMediaModeration);
+    result.derived_tags = vec!["sunset".to_string(), "beach".to_string()];
+    let value = serde_json::to_value(&result).unwrap();
+    assert_eq!(value["derived_tags"], json!(["sunset", "beach"]));
+    let back: ProviderScanResult = serde_json::from_value(value).unwrap();
+    assert_eq!(back, result);
+
+    // derived_tags フィールドの無い旧 wire 表現も受理する（default = 空）。
+    let legacy = json!({
+        "provider": "vlm",
+        "capability": "general_media_moderation",
+        "outcome": "completed"
+    });
+    let parsed: ProviderScanResult = serde_json::from_value(legacy).unwrap();
+    assert!(parsed.derived_tags.is_empty());
 }
 
 #[test]

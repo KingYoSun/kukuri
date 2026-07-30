@@ -169,6 +169,7 @@ async fn perceptual_match_confirmed_uses_provider_verdict_basis() {
         provider: "known".to_string(),
         capability: SafetyProviderCapability::PerceptualHashMatch,
         outcome: ScanOutcome::Completed,
+        derived_tags: Vec::new(),
         known_hash_match: true,
         score: None,
         labels: vec![SafetyLabel::new(SafetyCategory::Csam)],
@@ -206,6 +207,7 @@ async fn general_moderation_uses_classifier_basis_and_local_visibility() {
         provider: "general".to_string(),
         capability: SafetyProviderCapability::GeneralMediaModeration,
         outcome: ScanOutcome::Completed,
+        derived_tags: Vec::new(),
         known_hash_match: false,
         score: Some(95),
         labels: vec![SafetyLabel::new(SafetyCategory::Nsfw).with_confidence(95)],
@@ -291,6 +293,7 @@ async fn cse_suspected_artifacts_do_not_use_first_noncritical_label() {
         provider: "cse-classifier".to_string(),
         capability: SafetyProviderCapability::CseTextClassifier,
         outcome: ScanOutcome::Completed,
+        derived_tags: Vec::new(),
         known_hash_match: false,
         score: Some(90),
         labels: vec![

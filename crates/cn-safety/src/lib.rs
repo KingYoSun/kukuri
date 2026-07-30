@@ -27,6 +27,7 @@ pub mod event;
 pub mod policy;
 pub mod provider;
 pub mod signal;
+pub mod tags;
 pub mod verdict;
 
 /// deterministic な mock provider / signer。`mock` feature でのみ有効。
@@ -48,6 +49,7 @@ pub use provider::{
     ScanOutcome, SubjectKind,
 };
 pub use signal::{AppealStatus, RiskSignalTarget, SafetyRiskSignal};
+pub use tags::derived_tags_for_index;
 pub use verdict::{
     Basis, ModerationAction, ReasonCode, SafetyAction, SafetyCategory, SafetyLabel, SafetyVerdict,
     Severity, Visibility,

@@ -132,6 +132,7 @@ fn synthesize_failure(provider: &dyn SafetyProvider, error: &ScanError) -> Provi
         known_hash_match: false,
         score: None,
         labels: Vec::new(),
+        derived_tags: Vec::new(),
     }
 }
 

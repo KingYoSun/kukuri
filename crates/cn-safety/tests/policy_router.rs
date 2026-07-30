@@ -22,6 +22,7 @@ fn known_hash_result() -> ProviderScanResult {
         provider: "known-csam".to_string(),
         capability: SafetyProviderCapability::KnownCsamHashMatch,
         outcome: ScanOutcome::Completed,
+        derived_tags: Vec::new(),
         known_hash_match: true,
         score: None,
         labels: vec![SafetyLabel::new(SafetyCategory::Csam)],
@@ -33,6 +34,7 @@ fn no_known_match_result() -> ProviderScanResult {
         provider: "known-csam".to_string(),
         capability: SafetyProviderCapability::KnownCsamHashMatch,
         outcome: ScanOutcome::NoKnownMatch,
+        derived_tags: Vec::new(),
         known_hash_match: false,
         score: None,
         labels: Vec::new(),
@@ -48,6 +50,7 @@ fn score_result(
         provider: "classifier".to_string(),
         capability,
         outcome: ScanOutcome::Completed,
+        derived_tags: Vec::new(),
         known_hash_match: false,
         score: Some(score),
         labels: vec![SafetyLabel::new(category).with_confidence(score)],
@@ -59,6 +62,7 @@ fn general_result(category: SafetyCategory) -> ProviderScanResult {
         provider: "general".to_string(),
         capability: SafetyProviderCapability::GeneralMediaModeration,
         outcome: ScanOutcome::Completed,
+        derived_tags: Vec::new(),
         known_hash_match: false,
         score: Some(95),
         labels: vec![SafetyLabel::new(category).with_confidence(95)],
@@ -81,7 +85,7 @@ fn suspected_unknown_csam_is_quarantined_not_confirmed() {
     let outcomes = [score_result(
         SafetyProviderCapability::NovelCsamImageClassifier,
         SafetyCategory::Csam,
-        policy.unknown_csam_score_threshold,
+        policy.suspected_threshold,
     )];
     let verdict = route(&outcomes, &policy, SCANNED_AT);
     // suspected は confirmed と別扱い。
@@ -111,7 +115,7 @@ fn score_below_threshold_critical_detection_fails_closed_not_allow() {
     let outcomes = [score_result(
         SafetyProviderCapability::NovelCsamImageClassifier,
         SafetyCategory::Csam,
-        policy.unknown_csam_score_threshold - 1,
+        policy.suspected_threshold - 1,
     )];
     let verdict = route(&outcomes, &policy, SCANNED_AT);
     // 閾値未満でも critical な検知は safe と断定せず fail-closed する（Allow にしない）。
@@ -131,6 +135,7 @@ fn critical_detection_with_no_score_fails_closed() {
         provider: "classifier".to_string(),
         capability: SafetyProviderCapability::NovelCsamImageClassifier,
         outcome: ScanOutcome::Completed,
+        derived_tags: Vec::new(),
         known_hash_match: false,
         score: None,
         labels: vec![SafetyLabel::new(SafetyCategory::Csam)],
@@ -148,11 +153,11 @@ fn critical_label_confidence_drives_suspected_when_score_absent() {
         provider: "classifier".to_string(),
         capability: SafetyProviderCapability::NovelCsamImageClassifier,
         outcome: ScanOutcome::Completed,
+        derived_tags: Vec::new(),
         known_hash_match: false,
         score: None,
         labels: vec![
-            SafetyLabel::new(SafetyCategory::Csam)
-                .with_confidence(policy.unknown_csam_score_threshold),
+            SafetyLabel::new(SafetyCategory::Csam).with_confidence(policy.suspected_threshold),
         ],
     };
     let verdict = route(&[result], &policy, SCANNED_AT);
@@ -169,6 +174,7 @@ fn cse_first_label_noncritical_still_reports_cse_not_csam() {
         provider: "cse".to_string(),
         capability: SafetyProviderCapability::CseTextClassifier,
         outcome: ScanOutcome::Completed,
+        derived_tags: Vec::new(),
         known_hash_match: false,
         score: Some(95),
         labels: vec![
@@ -221,6 +227,7 @@ fn missing_required_known_csam_provider_fails_closed() {
         provider: "general".to_string(),
         capability: SafetyProviderCapability::GeneralMediaModeration,
         outcome: ScanOutcome::Completed,
+        derived_tags: Vec::new(),
         known_hash_match: false,
         score: None,
         labels: Vec::new(),
@@ -238,6 +245,7 @@ fn scan_failure_fails_closed_not_allow() {
         provider: "known-csam".to_string(),
         capability: SafetyProviderCapability::KnownCsamHashMatch,
         outcome: ScanOutcome::Failed,
+        derived_tags: Vec::new(),
         known_hash_match: false,
         score: None,
         labels: Vec::new(),
@@ -255,6 +263,7 @@ fn provider_unavailable_fails_closed_not_allow() {
         provider: "known-csam".to_string(),
         capability: SafetyProviderCapability::KnownCsamHashMatch,
         outcome: ScanOutcome::Unavailable,
+        derived_tags: Vec::new(),
         known_hash_match: false,
         score: None,
         labels: Vec::new(),
@@ -281,6 +290,7 @@ fn no_known_match_is_not_treated_as_clean() {
         provider: "known-csam".to_string(),
         capability: SafetyProviderCapability::KnownCsamHashMatch,
         outcome: ScanOutcome::NoKnownMatch,
+        derived_tags: Vec::new(),
         known_hash_match: false,
         score: None,
         labels: Vec::new(),
@@ -298,6 +308,7 @@ fn known_match_takes_priority_over_other_failures() {
         provider: "classifier".to_string(),
         capability: SafetyProviderCapability::NovelCsamImageClassifier,
         outcome: ScanOutcome::Failed,
+        derived_tags: Vec::new(),
         known_hash_match: false,
         score: None,
         labels: Vec::new(),
@@ -306,6 +317,123 @@ fn known_match_takes_priority_over_other_failures() {
     // confirmed CSAM は他 provider の失敗より優先して exclude。
     assert_eq!(verdict.action, SafetyAction::Exclude);
     assert_eq!(verdict.reason_code, ReasonCode::CsamConfirmed);
+}
+
+#[test]
+fn suspected_threshold_default_0_7_operator_tunable() {
+    // ADR 0028 §2.2: 既定閾値は 0.7（score 70）。operator が可変。
+    let policy = SafetyPolicy::public_node_default();
+    assert_eq!(policy.suspected_threshold, 70);
+
+    // score 70（閾値ちょうど）は suspected として route される。
+    let verdict = route(
+        &[score_result(
+            SafetyProviderCapability::NovelCsamImageClassifier,
+            SafetyCategory::Csam,
+            70,
+        )],
+        &policy,
+        SCANNED_AT,
+    );
+    assert_eq!(verdict.reason_code, ReasonCode::CsamSuspected);
+    assert_eq!(verdict.action, SafetyAction::Quarantine);
+
+    // operator が閾値を 90 に上げると score 80 は suspected（Quarantine）にならないが、
+    // critical 検知は Allow にも落ちない（取りこぼし防止で Hold 側に fail-closed）。
+    let mut strict = SafetyPolicy::public_node_default();
+    strict.suspected_threshold = 90;
+    let verdict = route(
+        &[score_result(
+            SafetyProviderCapability::NovelCsamImageClassifier,
+            SafetyCategory::Csam,
+            80,
+        )],
+        &strict,
+        SCANNED_AT,
+    );
+    assert!(!verdict.is_indexable());
+    assert!(verdict.critical);
+
+    // 旧 config 名 `unknown_csam_score_threshold` も deserialization で受理する（operator 互換）。
+    let legacy = serde_json::json!({
+        "policy_version": "legacy",
+        "index_before_scan": false,
+        "on_scan_error": "hold",
+        "unknown_csam_score_threshold": 85,
+        "suspected_critical_action": "quarantine",
+        "on_high_confidence_nsfw": "exclude",
+        "on_spam": "exclude",
+        "on_malware_phishing": "exclude",
+        "require_known_csam": true
+    });
+    let parsed: SafetyPolicy = serde_json::from_value(legacy).unwrap();
+    assert_eq!(parsed.suspected_threshold, 85);
+}
+
+#[test]
+fn high_confidence_critical_is_fail_closed_indexing() {
+    // ADR 0028 §2.4: critical risk タグが閾値以上の高 confidence なら allow にしない
+    // （自 node の index / discovery / recommendation に出さない）。
+    let policy = SafetyPolicy::public_node_default();
+    for capability in [
+        SafetyProviderCapability::NovelCsamImageClassifier,
+        SafetyProviderCapability::NovelCsamVideoClassifier,
+        SafetyProviderCapability::CseTextClassifier,
+        SafetyProviderCapability::GroomingTextClassifier,
+    ] {
+        let category = match capability {
+            SafetyProviderCapability::CseTextClassifier => SafetyCategory::Cse,
+            SafetyProviderCapability::GroomingTextClassifier => SafetyCategory::Grooming,
+            _ => SafetyCategory::Csam,
+        };
+        let verdict = route(
+            &[score_result(capability, category, 95)],
+            &policy,
+            SCANNED_AT,
+        );
+        assert!(
+            !verdict.is_indexable(),
+            "high-confidence critical ({capability:?}) must be fail-closed for indexing"
+        );
+        assert!(verdict.critical);
+    }
+
+    // policy が誤って suspected_critical_action=Allow を設定しても index には入れない。
+    let mut broken = SafetyPolicy::public_node_default();
+    broken.suspected_critical_action = SafetyAction::Allow;
+    let verdict = route(
+        &[score_result(
+            SafetyProviderCapability::NovelCsamImageClassifier,
+            SafetyCategory::Csam,
+            95,
+        )],
+        &broken,
+        SCANNED_AT,
+    );
+    assert!(!verdict.is_indexable());
+}
+
+#[test]
+fn general_detection_below_threshold_does_not_block_indexing() {
+    // ADR 0028 §2.2: general route も suspected 閾値に従う。閾値未満の低スコア検知は
+    // GeneralModeration として発火せず、known CSAM scan が揃っていれば allow に落ちる。
+    let policy = SafetyPolicy::public_node_default();
+    let mut low_scored = general_result(SafetyCategory::Nsfw);
+    low_scored.score = Some(policy.suspected_threshold - 1);
+    low_scored.labels = vec![
+        SafetyLabel::new(SafetyCategory::Nsfw).with_confidence(policy.suspected_threshold - 1),
+    ];
+    let verdict = route(&[no_known_match_result(), low_scored], &policy, SCANNED_AT);
+    assert_ne!(verdict.reason_code, ReasonCode::GeneralModeration);
+    assert_eq!(verdict.action, SafetyAction::Allow);
+
+    // score / confidence の無い categorical 検知は従来どおり発火する（取りこぼさない）。
+    let mut categorical = general_result(SafetyCategory::Spam);
+    categorical.score = None;
+    categorical.labels = vec![SafetyLabel::new(SafetyCategory::Spam)];
+    let verdict = route(&[no_known_match_result(), categorical], &policy, SCANNED_AT);
+    assert_eq!(verdict.reason_code, ReasonCode::GeneralModeration);
+    assert!(!verdict.is_indexable());
 }
 
 #[test]
