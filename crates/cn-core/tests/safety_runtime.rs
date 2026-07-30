@@ -429,6 +429,70 @@ fn provider_resolver_rejects_arachnid_shield_outside_known_csam_slot() {
 }
 
 #[test]
+fn provider_resolver_rejects_vlm_on_known_csam_slot() {
+    // openai-compatible-vlm(#420)は classifier provider。known_csam(known-match)slot への
+    // 指定は fail-closed(basis を confirmed に昇格させない構造的ガード)。
+    let providers = SafetyRuntimeProvidersConfig {
+        known_csam: Some(SafetyRuntimeProviderEntry {
+            provider: "openai-compatible-vlm".to_string(),
+            required: true,
+        }),
+        ..Default::default()
+    };
+    let error = resolve_safety_providers(&providers)
+        .err()
+        .expect("slot mismatch must fail closed");
+    assert!(
+        error
+            .to_string()
+            .contains("only supports the `general` / `unknown_csam` slots"),
+        "{error}"
+    );
+}
+
+#[test]
+fn provider_resolver_resolves_vlm_only_with_endpoint_env() {
+    // env は process-global なため、この 1 テスト内で「欠落 → Err」と「設定 → Ok」を順に
+    // 検証する(arachnid の resolver テストと同じ流儀。他テストはこの env を読まない)。
+    let providers = SafetyRuntimeProvidersConfig {
+        known_csam: mock_slot(),
+        unknown_csam: Some(SafetyRuntimeProviderEntry {
+            provider: "openai_compatible_vlm".to_string(),
+            required: false,
+        }),
+        ..Default::default()
+    };
+
+    // endpoint / model 欠落 → Err(起動 fail-closed)。エラーは env 名のみ。
+    unsafe {
+        std::env::remove_var("COMMUNITY_NODE_VLM_API_BASE_URL");
+        std::env::remove_var("COMMUNITY_NODE_VLM_MODEL");
+        std::env::remove_var("COMMUNITY_NODE_VLM_API_KEY");
+    }
+    let error = resolve_safety_providers(&providers)
+        .err()
+        .expect("missing endpoint must fail closed");
+    let message = format!("{error:#}");
+    assert!(message.contains("openai-compatible-vlm"), "{message}");
+    assert!(
+        message.contains("COMMUNITY_NODE_VLM_API_BASE_URL"),
+        "{message}"
+    );
+
+    // endpoint + model があれば構築できる(API key は optional = self-host 無認証を許容)。
+    unsafe {
+        std::env::set_var("COMMUNITY_NODE_VLM_API_BASE_URL", "http://127.0.0.1:8000");
+        std::env::set_var("COMMUNITY_NODE_VLM_MODEL", "test-org/test-model");
+    }
+    let result = resolve_safety_providers(&providers);
+    unsafe {
+        std::env::remove_var("COMMUNITY_NODE_VLM_API_BASE_URL");
+        std::env::remove_var("COMMUNITY_NODE_VLM_MODEL");
+    }
+    result.expect("vlm provider should build once the endpoint is configured");
+}
+
+#[test]
 fn build_scan_service_returns_none_without_providers() {
     let config = SafetyRuntimeConfig::default();
     let store = Arc::new(MemorySafetyArtifactStore::new());

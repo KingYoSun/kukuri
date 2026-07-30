@@ -2957,6 +2957,7 @@ dependencies = [
  "clap",
  "kukuri-cn-core",
  "kukuri-cn-indexer",
+ "kukuri-cn-safety",
  "serde_json",
  "sqlx",
  "tokio",
@@ -2978,6 +2979,7 @@ dependencies = [
  "kukuri-cn-safety",
  "kukuri-cn-safety-arachnid",
  "kukuri-cn-safety-runtime",
+ "kukuri-cn-safety-vlm",
  "kukuri-cn-trust",
  "kukuri-core",
  "kukuri-test-support",
@@ -3112,6 +3114,22 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "kukuri-cn-safety-vlm"
+version = "0.1.2"
+dependencies = [
+ "async-trait",
+ "base64",
+ "kukuri-cn-safety",
+ "kukuri-cn-safety-runtime",
+ "reqwest 0.13.4",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "wiremock",
 ]
 
 [[package]]

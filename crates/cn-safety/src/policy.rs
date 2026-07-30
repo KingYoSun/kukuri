@@ -13,7 +13,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::capability::SafetyProviderCapability;
 use crate::provider::{ProviderScanResult, ScanOutcome};
-use crate::verdict::{Basis, ReasonCode, SafetyAction, SafetyCategory, SafetyLabel, SafetyVerdict};
+use crate::verdict::{
+    Basis, ReasonCode, SafetyAction, SafetyCategory, SafetyLabel, SafetyVerdict, Visibility,
+};
 
 /// router の挙動を決める policy。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -24,8 +26,20 @@ pub struct SafetyPolicy {
     pub index_before_scan: bool,
     /// scan failure / provider unavailable / unscanned 時の action（fail-closed）。`Allow` にしない。
     pub on_scan_error: SafetyAction,
-    /// 未知 CSAM / CSE 疑いの classifier スコア閾値（0-100）。
-    pub unknown_csam_score_threshold: u8,
+    /// suspected 判定の classifier スコア閾値（0-100。ADR 0028 §2.2、既定 70 = 0.7）。
+    ///
+    /// critical（未知 CSAM / CSE）と general の両 route で共通に使う（ADR 0028 §6 の未決事項は
+    /// 「共通 1 本」で決定。critical は閾値未満でも規則 6 で fail-closed に取りこぼし防止される）。
+    /// operator 可変。旧名 `unknown_csam_score_threshold` も deserialization で受理する。
+    #[serde(alias = "unknown_csam_score_threshold")]
+    pub suspected_threshold: u8,
+    /// suspected（`Basis::ClassifierScore`）risk signal の配布 visibility（ADR 0028 §2.4 / §2.7）。
+    ///
+    /// 既定は `Local`（安全側）。hard cap ではなく operator が `SubscribedNodes` / `Public` へ
+    /// 上げられる。content category を持たない operational fail-closed signal には適用されない
+    /// （常に `Local`。適用点は cn-safety-runtime の artifact 生成側）。
+    #[serde(default)]
+    pub suspected_signal_visibility: Visibility,
     /// 未知 CSAM / CSE 疑いに対する action（`Hold` または `Quarantine`）。
     pub suspected_critical_action: SafetyAction,
     /// 一般 nsfw（高信頼）に対する action。
@@ -42,10 +56,11 @@ impl SafetyPolicy {
     /// public community node の最小既定（fail-closed 寄り）。
     pub fn public_node_default() -> Self {
         Self {
-            policy_version: "2026-06-public-node-v1".to_string(),
+            policy_version: "2026-07-public-node-v2".to_string(),
             index_before_scan: false,
             on_scan_error: SafetyAction::Hold,
-            unknown_csam_score_threshold: 80,
+            suspected_threshold: 70,
+            suspected_signal_visibility: Visibility::Local,
             suspected_critical_action: SafetyAction::Quarantine,
             on_high_confidence_nsfw: SafetyAction::Exclude,
             on_spam: SafetyAction::Exclude,
@@ -134,9 +149,7 @@ pub fn route(
     if let Some(result) = scan_outcomes
         .iter()
         .filter(|r| r.outcome == ScanOutcome::Completed && is_critical_detection(r))
-        .find(|r| {
-            effective_critical_score(r).is_some_and(|s| s >= policy.unknown_csam_score_threshold)
-        })
+        .find(|r| effective_critical_score(r).is_some_and(|s| s >= policy.suspected_threshold))
     {
         let category = critical_category(result).unwrap_or(SafetyCategory::Csam);
         let reason = if category == SafetyCategory::Cse {
@@ -196,10 +209,14 @@ pub fn route(
     }
 
     // 8. 一般 moderation（critical 以外のラベル）→ critical とは別 route（critical=false）。
-    if let Some((result, category)) = scan_outcomes
-        .iter()
-        .find_map(|r| general_category(r).map(|category| (r, category)))
-    {
+    //    classifier が score / confidence を返す検知は suspected 閾値以上のときのみ発火する
+    //    （ADR 0028 §2.2。VLM が全 media に低スコアのラベルを付けても index を塞がない）。
+    //    score も confidence も無い categorical な検知は従来どおり発火する。
+    if let Some((result, category)) = scan_outcomes.iter().find_map(|r| {
+        general_category(r)
+            .filter(|_| effective_general_score(r).is_none_or(|s| s >= policy.suspected_threshold))
+            .map(|category| (r, category))
+    }) {
         let action = general_action(policy, category);
         let mut verdict = base(action, ReasonCode::GeneralModeration, false);
         verdict.provider = Some(result.provider.clone());
@@ -249,6 +266,22 @@ fn effective_critical_score(result: &ProviderScanResult) -> Option<u8> {
             .labels
             .iter()
             .filter(|l| l.category.is_critical_safety())
+            .filter_map(|l| l.confidence)
+            .max()
+    })
+}
+
+/// general route の閾値判定に使う実効スコア。
+///
+/// `result.score` を優先し、無ければ non-critical category ラベルの最大 confidence を使う。
+/// どちらも無い（categorical な検知）場合は `None` を返し、呼び出し側は閾値 gating を
+/// 適用せずに発火させる（既存の categorical 検知を取りこぼさない）。
+fn effective_general_score(result: &ProviderScanResult) -> Option<u8> {
+    result.score.or_else(|| {
+        result
+            .labels
+            .iter()
+            .filter(|l| !l.category.is_critical_safety())
             .filter_map(|l| l.confidence)
             .max()
     })

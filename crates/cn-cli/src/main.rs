@@ -57,6 +57,99 @@ enum Command {
         #[command(subcommand)]
         action: RelationAction,
     },
+    /// moderation advisory（risk signal）の appeal / operator レビューを運用する（#420）。
+    Moderation {
+        #[command(subcommand)]
+        action: ModerationCliAction,
+    },
+}
+
+/// moderation advisory の運用操作（ADR 0028 §2.3 / §2.8）。
+///
+/// `edit` / `reissue` は operator レビュー機能で、env
+/// `COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW=true` の明示的有効化が必要。
+#[derive(Debug, Subcommand)]
+enum ModerationCliAction {
+    /// risk signal を新着順に一覧する（visibility を問わない node-local 参照）。
+    ListSignals {
+        #[arg(long, default_value_t = 50)]
+        limit: i64,
+        #[arg(long, default_value_t = 0)]
+        offset: i64,
+    },
+    /// risk signal の詳細を表示する。
+    Show {
+        #[arg(long)]
+        id: String,
+    },
+    /// 申し立てを受理して Disputed にする（None→Disputed。冪等）。
+    Dispute {
+        #[arg(long)]
+        id: String,
+    },
+    /// 申し立てを認容して Cleared にする（Disputed→Cleared。trust 寄与が戻る）。
+    Clear {
+        #[arg(long)]
+        id: String,
+    },
+    /// 申し立てを棄却して None に戻す（Disputed→None。確定寄与を維持）。
+    Reject {
+        #[arg(long)]
+        id: String,
+    },
+    /// 検知メタデータを直接編集する（operator レビュー。node-local advisory の是正）。
+    Edit {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        category: Option<SafetyCategoryArg>,
+        #[arg(long)]
+        severity: Option<SeverityArg>,
+        #[arg(long)]
+        confidence: Option<u8>,
+        /// 失効時刻（RFC3339）。
+        #[arg(long)]
+        expires_at: Option<String>,
+    },
+    /// 訂正 signal を再発行する（旧 signal は失効。operator レビュー）。
+    Reissue {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        category: Option<SafetyCategoryArg>,
+        #[arg(long)]
+        severity: Option<SeverityArg>,
+        #[arg(long)]
+        confidence: Option<u8>,
+        #[arg(long)]
+        visibility: Option<VisibilityArg>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum SafetyCategoryArg {
+    Csam,
+    Cse,
+    Grooming,
+    Nsfw,
+    Spam,
+    Malware,
+    Phishing,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum SeverityArg {
+    Critical,
+    High,
+    Medium,
+    Low,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum VisibilityArg {
+    Local,
+    SubscribedNodes,
+    Public,
 }
 
 #[derive(Debug, Subcommand)]

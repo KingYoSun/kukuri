@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context as _, Result, bail};
 use async_trait::async_trait;
 use sqlx::PgPool;
 
@@ -88,11 +88,35 @@ fn resolve_provider(
         "mock" => Ok(mock_provider_for_slot(slot)),
         #[cfg(feature = "safety-arachnid-provider")]
         kukuri_cn_safety_arachnid::PROVIDER_NAME => arachnid_shield_provider(slot),
+        #[cfg(feature = "safety-vlm-provider")]
+        kukuri_cn_safety_vlm::PROVIDER_NAME => vlm_provider(slot),
         other => bail!(
-            "unknown safety provider `{other}` for slot `{slot}` \
-             (fail-closed; unknown-CSAM classifier providers are added in #411)"
+            "unknown safety provider `{other}` for slot `{slot}` (fail-closed; enable the \
+             matching cargo feature and use `mock` / `project-arachnid-shield` / \
+             `openai-compatible-vlm`)"
         ),
     }
+}
+
+#[cfg(feature = "safety-vlm-provider")]
+fn vlm_provider(slot: &'static str) -> Result<Arc<dyn SafetyProvider>> {
+    use kukuri_cn_safety_vlm::{CapabilityProfile, VlmModerationProvider};
+
+    // classifier 系 provider なので known_csam（known-match）slot には使えない（ADR 0028 §2.1:
+    // basis を confirmed に昇格させない。known-match の役割は #391 系 provider が担う）。
+    let profile = match slot {
+        "general" => CapabilityProfile::General,
+        "unknown_csam" => CapabilityProfile::UnknownCsam,
+        _ => bail!(
+            "safety provider `{}` only supports the `general` / `unknown_csam` slots \
+             (got `{slot}`); it is a classifier provider and must not be used as the \
+             known-CSAM match provider",
+            kukuri_cn_safety_vlm::PROVIDER_NAME
+        ),
+    };
+    let provider = VlmModerationProvider::from_env(profile)
+        .context("failed to configure the openai-compatible-vlm safety provider")?;
+    Ok(Arc::new(provider))
 }
 
 #[cfg(feature = "safety-arachnid-provider")]

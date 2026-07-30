@@ -10,12 +10,13 @@ pub const PUBLIC_NODE_PROFILE: &str = "public-node";
 /// 通常経路（`evaluate_public_node_readiness`）と safety セクション欠落経路
 /// （`missing_safety_report`）の双方が、必ずこの集合を同じ順序で網羅する。ID で機械処理する
 /// 消費側が経路ごとの差異に依存しないことを保証する（テストで固定）。
-pub const READINESS_CHECK_IDS: [&str; 13] = [
+pub const READINESS_CHECK_IDS: [&str; 14] = [
     "safety_config_present",
     "safety_profile_public_node",
     "known_csam_provider_configured",
     "known_csam_provider_resolvable",
     "known_csam_provider_required",
+    "classifier_providers_resolvable",
     "index_before_scan_disabled",
     "scan_error_fail_closed",
     "signed_moderation_events_enabled",
@@ -124,6 +125,7 @@ pub fn evaluate_public_node_readiness(
             check_known_provider_configured(safety),
             check_known_provider_resolvable(safety),
             check_known_provider_required(safety),
+            check_classifier_providers_resolvable(safety),
             check_index_before_scan(safety),
             check_on_scan_error(safety),
             check_signed_events(safety),
@@ -228,6 +230,53 @@ fn check_known_provider_resolvable(safety: &SafetyConfig) -> ReadinessCheck {
                 provider.provider,
                 RESOLVABLE_KNOWN_CSAM_PROVIDERS.join(" / ")
             ),
+        )
+    }
+}
+
+/// runtime（`resolve_provider`、cn-core）が general / unknown_csam slot で解決できる
+/// classifier 系 provider 実装名（#420）。
+const RESOLVABLE_CLASSIFIER_PROVIDERS: [&str; 2] = ["mock", "openai-compatible-vlm"];
+
+/// general / unknown_csam slot の provider 実装名が runtime で解決可能かを検査する。
+///
+/// 両 slot とも任意（未構成は pass）。構成されている場合のみ、実装名が
+/// `RESOLVABLE_CLASSIFIER_PROVIDERS` に含まれることを要求する（known-match 専用の
+/// `project-arachnid-shield` はここでは解決できない）。
+fn check_classifier_providers_resolvable(safety: &SafetyConfig) -> ReadinessCheck {
+    let slots = [
+        ("general", safety.providers.general.as_ref()),
+        ("unknown_csam", safety.providers.unknown_csam.as_ref()),
+    ];
+    let mut resolved = Vec::new();
+    for (slot, entry) in slots {
+        let Some(entry) = entry else {
+            continue;
+        };
+        let normalized = entry.provider.trim().replace('_', "-");
+        if !RESOLVABLE_CLASSIFIER_PROVIDERS.contains(&normalized.as_str()) {
+            return fail(
+                "classifier_providers_resolvable",
+                format!(
+                    "provider `{}` for slot `{slot}` is not a known classifier implementation \
+                     (supported: {})",
+                    entry.provider,
+                    RESOLVABLE_CLASSIFIER_PROVIDERS.join(" / ")
+                ),
+            );
+        }
+        resolved.push(format!("{slot}={normalized}"));
+    }
+    if resolved.is_empty() {
+        pass(
+            "classifier_providers_resolvable",
+            "no classifier providers configured (general / unknown_csam slots are optional)"
+                .to_string(),
+        )
+    } else {
+        pass(
+            "classifier_providers_resolvable",
+            format!("resolvable: {}", resolved.join(", ")),
         )
     }
 }

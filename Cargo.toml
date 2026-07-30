@@ -20,6 +20,7 @@ members = [
     "crates/cn-safety",
     "crates/cn-safety-arachnid",
     "crates/cn-safety-runtime",
+    "crates/cn-safety-vlm",
     "crates/cn-runtime-support",
     "crates/cn-trust",
     "crates/cn-indexer",

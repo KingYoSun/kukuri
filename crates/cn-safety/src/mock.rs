@@ -101,6 +101,7 @@ impl MockSafetyProvider {
                 SafetyLabel::new(crate::verdict::SafetyCategory::Csam)
                     .with_provider_capability(capability),
             ],
+            derived_tags: Vec::new(),
         };
         self.results.insert(subject_id.into(), result);
         self
@@ -125,8 +126,27 @@ impl MockSafetyProvider {
                     .with_confidence(score)
                     .with_provider_capability(capability),
             ],
+            derived_tags: Vec::new(),
         };
         self.results.insert(subject_id.into(), result);
+        self
+    }
+
+    /// subject_id の設定済み結果に descriptive 検索タグを与える（ADR 0028 §2.6）。
+    ///
+    /// 設定が無い subject_id には「completed かつ検知なし + タグ」の結果を作る。
+    pub fn with_derived_tags(mut self, subject_id: impl Into<String>, tags: Vec<String>) -> Self {
+        let subject_id = subject_id.into();
+        let capability = self
+            .capabilities
+            .first()
+            .copied()
+            .unwrap_or(SafetyProviderCapability::KnownCsamHashMatch);
+        let result = self
+            .results
+            .entry(subject_id)
+            .or_insert_with(|| ProviderScanResult::completed(self.name.clone(), capability));
+        result.derived_tags = tags;
         self
     }
 
@@ -144,6 +164,7 @@ impl MockSafetyProvider {
             known_hash_match: false,
             score: None,
             labels: Vec::new(),
+            derived_tags: Vec::new(),
         };
         self.results.insert(subject_id.into(), result);
         self

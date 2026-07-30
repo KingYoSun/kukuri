@@ -42,7 +42,7 @@ pub use orchestrator::{
 pub use service::{
     MemorySafetyArtifactStore, SafetyArtifactStore, SafetyRuntimeConfig,
     SafetyRuntimeProviderEntry, SafetyRuntimeProvidersConfig, SafetyScanOutcome, SafetyScanService,
-    SafetyScanServiceBuilder, build_safety_scan_service,
+    SafetyScanServiceBuilder, build_safety_scan_service, resolve_safety_policy,
 };
 pub use signer::{
     SAFETY_SIGNING_KEY_ENV, Secp256k1ModerationEventSigner, SignatureError, SignerKeyError,

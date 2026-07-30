@@ -227,6 +227,26 @@ pub async fn persist_risk_signal(
     risk_signal_from_row(&row)
 }
 
+/// risk signal を新着順で取得する（operator の監査・レビュー用。visibility を問わない）。
+pub async fn list_risk_signals(
+    pool: &PgPool,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<StoredRiskSignal>> {
+    let rows = sqlx::query(
+        "SELECT id, issuer_node_id, target, target_id, category, severity, basis, visibility,
+                confidence, expires_at, appeal_status, persisted_at
+         FROM cn_safety.risk_signals
+         ORDER BY persisted_at DESC
+         LIMIT $1 OFFSET $2",
+    )
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await?;
+    rows.iter().map(risk_signal_from_row).collect()
+}
+
 /// risk signal を id で取得する。
 pub async fn get_risk_signal(pool: &PgPool, id: &str) -> Result<Option<StoredRiskSignal>> {
     let row = sqlx::query(

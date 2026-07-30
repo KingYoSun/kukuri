@@ -11,6 +11,7 @@
 
 use anyhow::{Context, Result, bail};
 
+use kukuri_cn_safety::Visibility;
 use kukuri_cn_safety_runtime::{
     SAFETY_SIGNING_KEY_ENV, SafetyRuntimeConfig, SafetyRuntimeProviderEntry,
     SafetyRuntimeProvidersConfig,
@@ -27,6 +28,12 @@ pub const SAFETY_PROVIDER_UNKNOWN_CSAM_ENV: &str = "COMMUNITY_NODE_SAFETY_PROVID
 pub const SAFETY_EMIT_SIGNED_EVENTS_ENV: &str = "COMMUNITY_NODE_SAFETY_EMIT_SIGNED_EVENTS";
 /// signed event 無効時に risk signal issuer として使う node id。
 pub const SAFETY_ISSUER_NODE_ID_ENV: &str = "COMMUNITY_NODE_SAFETY_ISSUER_NODE_ID";
+/// suspected 判定の classifier スコア閾値（1-100。未設定なら policy 既定 70。ADR 0028 §2.2）。
+pub const SAFETY_SUSPECTED_THRESHOLD_ENV: &str = "COMMUNITY_NODE_SAFETY_SUSPECTED_THRESHOLD";
+/// suspected advisory の配布 visibility（`local` / `subscribed_nodes` / `public`。
+/// 未設定なら既定 `local`。ADR 0028 §2.4 / §2.7）。
+pub const SAFETY_SUSPECTED_SIGNAL_VISIBILITY_ENV: &str =
+    "COMMUNITY_NODE_SAFETY_SUSPECTED_SIGNAL_VISIBILITY";
 
 /// relay validation の結果。fail-closed gate の単一判定点。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -214,6 +221,8 @@ impl IndexerConfig {
                 true,
             )?,
             issuer_node_id: non_empty_env(SAFETY_ISSUER_NODE_ID_ENV),
+            suspected_threshold: parse_suspected_threshold_env()?,
+            suspected_signal_visibility: parse_suspected_signal_visibility_env()?,
         };
         Ok(Self {
             database_url,
@@ -232,6 +241,36 @@ fn non_empty_env(name: &str) -> Option<String> {
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
+}
+
+/// suspected 閾値 env を読む（1-100 の整数のみ受理。空 / 未設定は policy 既定に委ねる）。
+fn parse_suspected_threshold_env() -> Result<Option<u8>> {
+    let Some(raw) = non_empty_env(SAFETY_SUSPECTED_THRESHOLD_ENV) else {
+        return Ok(None);
+    };
+    let threshold: u8 = raw.parse().with_context(|| {
+        format!("{SAFETY_SUSPECTED_THRESHOLD_ENV} must be an integer between 1 and 100")
+    })?;
+    if threshold == 0 || threshold > 100 {
+        bail!("{SAFETY_SUSPECTED_THRESHOLD_ENV} must be between 1 and 100 (got {threshold})");
+    }
+    Ok(Some(threshold))
+}
+
+/// suspected advisory visibility env を読む（`local` / `subscribed_nodes` / `public`）。
+fn parse_suspected_signal_visibility_env() -> Result<Option<Visibility>> {
+    let Some(raw) = non_empty_env(SAFETY_SUSPECTED_SIGNAL_VISIBILITY_ENV) else {
+        return Ok(None);
+    };
+    match raw.to_ascii_lowercase().as_str() {
+        "local" => Ok(Some(Visibility::Local)),
+        "subscribed_nodes" => Ok(Some(Visibility::SubscribedNodes)),
+        "public" => Ok(Some(Visibility::Public)),
+        other => bail!(
+            "{SAFETY_SUSPECTED_SIGNAL_VISIBILITY_ENV} must be one of \
+             `local` / `subscribed_nodes` / `public` (got `{other}`)"
+        ),
+    }
 }
 
 /// provider slot env の値から entry を組む。空 / 空白は「slot 未構成」。

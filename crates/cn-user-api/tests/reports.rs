@@ -165,6 +165,85 @@ async fn report_endpoint_accepts_stores_and_validates() -> Result<()> {
 }
 
 #[tokio::test]
+async fn report_endpoint_accepts_appeal_and_disputes_advisory() -> Result<()> {
+    // #420 / ADR 0028 §2.8: issuer node への異議申し立て導線。appeal 参照付きの通報を
+    // 受理すると、対象 risk signal の AppealStatus が None → Disputed に遷移する。
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api report test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let server = TestServer::spawn(
+        admin_database_url.as_str(),
+        "cn_user_api_appeal",
+        REPORT_ENABLED_YAML,
+    )
+    .await?;
+    let client = Client::new();
+
+    // issuer node（= この node）が発行済みの suspected advisory を用意する。
+    let pool = kukuri_cn_core::connect_postgres(server.database.database_url.as_str()).await?;
+    let stored = kukuri_cn_core::persist_risk_signal(
+        &pool,
+        "issuer-node-1",
+        &kukuri_cn_safety::SafetyRiskSignal {
+            target: kukuri_cn_safety::RiskSignalTarget::PostId,
+            target_id: "post-appealed".to_string(),
+            category: kukuri_cn_safety::SafetyCategory::Nsfw,
+            severity: kukuri_cn_safety::Severity::High,
+            basis: kukuri_cn_safety::Basis::ClassifierScore,
+            confidence: Some(90),
+            visibility: kukuri_cn_safety::Visibility::Local,
+            expires_at: None,
+            appeal_status: Some(kukuri_cn_safety::AppealStatus::None),
+        },
+    )
+    .await?;
+
+    let accepted = client
+        .post(format!("{}/v1/report", server.base_url))
+        .json(&serde_json::json!({
+            "subject_kind": "post",
+            "subject_id": "post-appealed",
+            "capability": "moderation",
+            "reason": "false_positive",
+            "details": "this was misclassified",
+            "appeal": { "risk_signal_id": stored.id },
+        }))
+        .send()
+        .await?;
+    assert_eq!(accepted.status(), StatusCode::OK);
+    let body = accepted.json::<serde_json::Value>().await?;
+    assert_eq!(body["disputed_risk_signal_id"], stored.id.as_str());
+
+    let disputed = kukuri_cn_core::get_risk_signal(&pool, &stored.id)
+        .await?
+        .expect("signal exists");
+    assert_eq!(
+        disputed.signal.appeal_status,
+        Some(kukuri_cn_safety::AppealStatus::Disputed)
+    );
+
+    // 存在しない advisory への appeal は 400 で拒否し、report も保存しない。
+    let unknown = client
+        .post(format!("{}/v1/report", server.base_url))
+        .json(&serde_json::json!({
+            "subject_kind": "post",
+            "subject_id": "post-appealed",
+            "capability": "moderation",
+            "reason": "false_positive",
+            "appeal": { "risk_signal_id": "no-such-signal" },
+        }))
+        .send()
+        .await?;
+    assert_eq!(unknown.status(), StatusCode::BAD_REQUEST);
+    let unknown_body = unknown.json::<serde_json::Value>().await?;
+    assert_eq!(unknown_body["code"], "INVALID_APPEAL");
+
+    server.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn report_endpoint_rejects_when_capability_disabled() -> Result<()> {
     let Some(admin_database_url) = integration_test_admin_database_url() else {
         eprintln!("skipping cn-user-api report test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");

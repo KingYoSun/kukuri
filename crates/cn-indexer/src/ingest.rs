@@ -7,7 +7,12 @@
 //!   - ghost 注入を作らない: 対象は共有 replica の entry のみ（CN 直渡しは経路が無い。§6.2）。
 //!   - fail-closed: unscanned / scan_failed / provider_unavailable / 非 allow は投影しない（§2.5）。
 //!   - no permanent blob storage: blob は scan 用の一時 fetch のみで、投影に raw blob を入れない（§2.3）。
-//!   - media 参照 post は media scan/tag pipeline 実装（#411）まで unscanned として de-index する。
+//!   - media 参照 post は本文 text に加えて **media 参照ごとに scan** し（#420 / ADR 0028）、
+//!     いずれか 1 つでも非 allow なら post 全体を index しない（worst-case 合成）。全 allow の
+//!     ときのみ、同一 scan が生成した derived 検索タグ（`SafetyScanReport.derived_tags`）を
+//!     本文 text に相乗りさせて投影する（ADR 0025 §2.3。タグ専用列は持たない）。
+//!     media provider（VLM）や `MediaFetcher` が未構成の環境では media scan が fail-closed
+//!     （Unavailable → hold）になり、従来どおり media 参照 post は index されない。
 //!
 //! docs replica からの entry 取得は `DocsSync`（`query_replica_with_policy`）越しに行うため、本番
 //! （iroh-docs）でも in-memory（テスト）でも同じ pipeline を駆動できる。
@@ -164,16 +169,6 @@ impl IngestPipeline {
             return Ok(IngestOutcome::Deindexed);
         }
 
-        if object.has_unscanned_media() {
-            self.deindex_object(scope_kind, scope_id, object.object_id.as_str())
-                .await?;
-            debug!(
-                object_id = %object.object_id,
-                "post references media without a media safety scan; not indexing (fail-closed)"
-            );
-            return Ok(IngestOutcome::SkippedNonAllow);
-        }
-
         // 本文 text を取り出す。blob 参照は scan 用の一時 fetch のみ（恒久保存しない）。
         let text = self
             .resolve_body_text(replica_id, &object, envelopes)
@@ -199,6 +194,34 @@ impl IngestPipeline {
                 "verdict is not allow; not indexing (fail-closed)"
             );
             return Ok(IngestOutcome::SkippedNonAllow);
+        }
+
+        // media 参照を 1 つずつ scan する（#420 / ADR 0028）。いずれか 1 つでも非 allow なら
+        // post 全体を index しない（worst-case 合成）。media provider / fetcher が未構成なら
+        // scan は Unavailable → fail-closed hold になり、media 参照 post は従来どおり index
+        // されない（挙動後退なし）。全 allow のときのみ derived 検索タグを収集する。
+        let mut derived_tags: Vec<String> = report.derived_tags.clone();
+        for media_hint in object.media_hints() {
+            let request = ProviderScanRequest::for_subject(SubjectKind::Blob, media_hint.clone())
+                .with_media_hint(media_hint.clone());
+            let media_outcome = self.safety.scan_and_record(&request).await?;
+            let media_report = &media_outcome.report;
+            if !media_report.verdict.is_indexable() {
+                self.deindex_object(scope_kind, scope_id, object.object_id.as_str())
+                    .await?;
+                debug!(
+                    object_id = %object.object_id,
+                    media_hint = %media_hint,
+                    reason = ?media_report.verdict.reason_code,
+                    "referenced media verdict is not allow; not indexing the post (fail-closed)"
+                );
+                return Ok(IngestOutcome::SkippedNonAllow);
+            }
+            for tag in &media_report.derived_tags {
+                if !derived_tags.contains(tag) {
+                    derived_tags.push(tag.clone());
+                }
+            }
         }
 
         // ① index 真実源（Postgres）へ upsert する。verdict record への FK と CHECK 制約
@@ -228,12 +251,14 @@ impl IngestPipeline {
 
         // ② 全文検索投影（ArcadeDB）へ upsert する。ここが失敗しても真実源には entry が残るが、
         // 投影に無い entry は検索に出ないだけで安全側（fail-closed）に倒れる。
+        // derived 検索タグは text へ相乗りさせる（ADR 0025 §2.3。`allow` verdict のみここに
+        // 到達し、タグは `derived_tags_for_index` で critical / Match Data / 生スコア除外済み）。
         let entry = IndexedEntry {
             scope_kind,
             scope_id: scope_id.to_string(),
             object_id: object.object_id.clone(),
             author_pubkey: object.author,
-            text,
+            text: text_with_tags(&text, &derived_tags),
             created_at: object.created_at,
             source_replica_id: replica_id.as_str().to_string(),
         };
@@ -316,8 +341,35 @@ struct PostObjectView {
 }
 
 impl PostObjectView {
-    fn has_unscanned_media(&self) -> bool {
-        !self.attachments.is_empty() || !self.media_manifest_refs.is_empty()
+    /// scan 対象の media 参照（attachments の blob hash + media manifest 参照）を列挙する。
+    fn media_hints(&self) -> Vec<String> {
+        let mut hints: Vec<String> = self
+            .attachments
+            .iter()
+            .map(|asset| asset.hash.as_str().to_string())
+            .collect();
+        for reference in &self.media_manifest_refs {
+            if !hints.contains(reference) {
+                hints.push(reference.clone());
+            }
+        }
+        hints
+    }
+}
+
+/// 本文 text に derived 検索タグを相乗りさせた投影用 text を組み立てる。
+///
+/// タグ専用列は持たない（`IndexedEntry.text` が全文検索の単一入力。ADR 0025 §2.3）。
+/// 本文が空（画像のみの投稿）の場合はタグのみになる。
+fn text_with_tags(text: &str, derived_tags: &[String]) -> String {
+    if derived_tags.is_empty() {
+        return text.to_string();
+    }
+    let tags = derived_tags.join(" ");
+    if text.trim().is_empty() {
+        tags
+    } else {
+        format!("{text}\n{tags}")
     }
 }
 

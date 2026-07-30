@@ -80,6 +80,57 @@ fn general_moderation_signal_feeds_relative_component() {
     assert_eq!(inputs.absolute[0].signal_id, "sig-2");
 }
 
+// --- ADR 0028 contract: 非決定論的（VLM）suspected の trust 振り分け（#420） ---
+
+/// VLM scan 由来の suspected signal（basis = ClassifierScore）を模す。
+fn classifier_signal(id: &str, category: SafetyCategory) -> StoredRiskSignal {
+    let mut stored = stored_signal(id, category, None, None);
+    stored.signal.basis = Basis::ClassifierScore;
+    stored.signal.severity = if category.is_critical_safety() {
+        Severity::Critical
+    } else {
+        Severity::High
+    };
+    stored
+}
+
+#[test]
+fn critical_suspected_feeds_trust_absolute_component() {
+    // ADR 0028 §2.5 / ADR 0026 §2.3: critical（CSAM / CSE / grooming）の suspected
+    // （厳格非決定論）は relation で薄まらない絶対成分に入る。
+    let signals = vec![
+        classifier_signal("sig-csam", SafetyCategory::Csam),
+        classifier_signal("sig-cse", SafetyCategory::Cse),
+        classifier_signal("sig-grooming", SafetyCategory::Grooming),
+    ];
+    let inputs = trust_risk_inputs_from(&signals, NOW).unwrap();
+    assert_eq!(inputs.absolute.len(), 3);
+    assert!(inputs.relative.is_empty());
+    for input in &inputs.absolute {
+        assert_eq!(input.component, TrustComponentKind::Absolute);
+        // 断定ラベルではなく suspected（ClassifierScore）の根拠を同伴する。
+        assert_eq!(input.basis, Basis::ClassifierScore);
+    }
+}
+
+#[test]
+fn general_moderation_feeds_trust_relative_component() {
+    // ADR 0028 §2.5 / ADR 0026 §2.3: general（nsfw / spam 等の文化圏依存）の suspected は
+    // relation で重み付けされる相対成分に入る。
+    let signals = vec![
+        classifier_signal("sig-nsfw", SafetyCategory::Nsfw),
+        classifier_signal("sig-spam", SafetyCategory::Spam),
+        classifier_signal("sig-phishing", SafetyCategory::Phishing),
+    ];
+    let inputs = trust_risk_inputs_from(&signals, NOW).unwrap();
+    assert_eq!(inputs.relative.len(), 3);
+    assert!(inputs.absolute.is_empty());
+    for input in &inputs.relative {
+        assert_eq!(input.component, TrustComponentKind::Relative);
+        assert_eq!(input.basis, Basis::ClassifierScore);
+    }
+}
+
 // --- expiry（失効 signal は寄与しない） ---
 
 #[test]

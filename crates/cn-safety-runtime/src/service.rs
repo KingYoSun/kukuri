@@ -8,8 +8,8 @@ use async_trait::async_trait;
 
 use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
 use kukuri_cn_safety::{
-    ModerationEventSigner, SafetyProvider, SafetyRiskSignal, SafetyVerdict, SignedModerationEvent,
-    issue_signed_event,
+    ModerationEventSigner, SafetyPolicy, SafetyProvider, SafetyRiskSignal, SafetyVerdict,
+    SignedModerationEvent, Visibility, issue_signed_event,
 };
 
 use crate::{
@@ -42,6 +42,13 @@ pub struct SafetyRuntimeConfig {
     pub signing_key: Option<String>,
     pub emit_signed_events: bool,
     pub issuer_node_id: Option<String>,
+    /// suspected 判定の classifier スコア閾値の operator override（1-100。ADR 0028 §2.2）。
+    ///
+    /// `None` なら `SafetyPolicy::public_node_default()` の既定（70）を使う。
+    pub suspected_threshold: Option<u8>,
+    /// suspected（`ClassifierScore`）advisory の配布 visibility の operator override
+    /// （ADR 0028 §2.4 / §2.7）。`None` なら既定 `Local`。
+    pub suspected_signal_visibility: Option<Visibility>,
 }
 
 impl Default for SafetyRuntimeConfig {
@@ -51,6 +58,8 @@ impl Default for SafetyRuntimeConfig {
             signing_key: None,
             emit_signed_events: true,
             issuer_node_id: None,
+            suspected_threshold: None,
+            suspected_signal_visibility: None,
         }
     }
 }
@@ -65,8 +74,34 @@ impl std::fmt::Debug for SafetyRuntimeConfig {
             )
             .field("emit_signed_events", &self.emit_signed_events)
             .field("issuer_node_id", &self.issuer_node_id)
+            .field("suspected_threshold", &self.suspected_threshold)
+            .field(
+                "suspected_signal_visibility",
+                &self.suspected_signal_visibility,
+            )
             .finish()
     }
+}
+
+/// operator override を適用した router policy を組み立てる。
+///
+/// 既定は `SafetyPolicy::public_node_default()`（fail-closed 寄り）。閾値は 1-100 のみ受理する
+/// （0 は「すべて suspected」で意図の取り違えが濃厚、100 超は u8 の範囲外の意図）。
+pub fn resolve_safety_policy(config: &SafetyRuntimeConfig) -> Result<SafetyPolicy> {
+    let mut policy = SafetyPolicy::public_node_default();
+    if let Some(threshold) = config.suspected_threshold {
+        if threshold == 0 || threshold > 100 {
+            bail!(
+                "safety suspected_threshold must be between 1 and 100 (got {threshold}); \
+                 refusing to build a scan service (fail-closed)"
+            );
+        }
+        policy.suspected_threshold = threshold;
+    }
+    if let Some(visibility) = config.suspected_signal_visibility {
+        policy.suspected_signal_visibility = visibility;
+    }
+    Ok(policy)
 }
 
 #[async_trait]
@@ -353,11 +388,13 @@ pub fn build_safety_scan_service(
         ),
     };
 
+    let policy = resolve_safety_policy(config)?;
     let mut orchestrator = SafetyOrchestrator::builder(
         &issuer,
         Arc::new(SystemScanClock::new()),
         Arc::new(UuidEventIdGenerator::new()),
-    );
+    )
+    .policy(policy);
     for provider in providers {
         orchestrator = orchestrator.provider(provider);
     }

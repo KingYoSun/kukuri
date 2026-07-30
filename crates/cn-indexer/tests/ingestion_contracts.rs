@@ -236,15 +236,52 @@ async fn content_not_in_shared_replica_is_not_indexed() -> Result<()> {
     Ok(())
 }
 
+/// known-CSAM mock + 一般 moderation（VLM 相当）mock の 2 provider で scan service を組む。
+///
+/// media scan の verdict / derived タグは VLM 相当の general provider が担い、known-CSAM は
+/// `NoKnownMatch` を返す（public_node_default の require_known_csam を満たすため）。
+fn service_with_providers(
+    providers: Vec<MockSafetyProvider>,
+) -> (Arc<SafetyScanService>, Arc<MemorySafetyArtifactStore>) {
+    let signer = Secp256k1ModerationEventSigner::from_secret(TEST_SECRET).expect("signer");
+    let issuer = signer.issuer_node_id().to_string();
+    let store = Arc::new(MemorySafetyArtifactStore::new());
+    let mut orchestrator = SafetyOrchestrator::builder(
+        &issuer,
+        Arc::new(SystemScanClock),
+        Arc::new(UuidEventIdGenerator),
+    );
+    for provider in providers {
+        orchestrator = orchestrator.provider(Arc::new(provider));
+    }
+    let orchestrator = orchestrator.build().expect("orchestrator");
+    let service = SafetyScanService::builder(Arc::new(orchestrator), store.clone())
+        .signer(Arc::new(signer))
+        .build()
+        .expect("service");
+    (Arc::new(service), store)
+}
+
+const MEDIA_HINT: &str = "media-manifest-test";
+
 #[tokio::test]
-async fn scan_before_media_is_not_indexed() -> Result<()> {
+async fn media_scan_unavailable_fails_closed_and_post_is_not_indexed() -> Result<()> {
+    // media 参照 post は media 参照ごとに scan する（#420）。media scan が実行不能
+    // （VLM provider / MediaFetcher 未構成 = Unavailable）なら post 全体を index しない
+    // （worst-case 合成の fail-closed。従来の「media 参照 post は index しない」挙動を
+    // 標準経路経由で保存する）。
     let docs = Arc::new(MemoryDocsSync::default());
     let projection = Arc::new(MemoryIndexProjection::new());
     let topic = TopicId::new("rust");
     let replica = topic_replica_id("rust");
     let object_id = persist_media_post(&docs, &replica, &topic, "media caption").await;
 
-    let (pipeline, entries, store) = pipeline_with(&docs, &projection, allow_service());
+    // post text scan は allow（NoKnownMatch）を返すが、media hint（未設定 subject）は
+    // Unavailable エラーになる mock。
+    let provider = MockSafetyProvider::known_csam("mock-known-csam")
+        .with_no_known_match(&object_id)
+        .default_error(ScanError::Unavailable("no media fetcher".to_string()));
+    let (pipeline, entries, store) = pipeline_with(&docs, &projection, service_with(provider));
     let summary = pipeline
         .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
         .await?;
@@ -257,7 +294,103 @@ async fn scan_before_media_is_not_indexed() -> Result<()> {
             .await?
     );
     assert!(!entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
-    assert!(store.verdict_for(SubjectKind::Post, &object_id).is_none());
+    // post text の verdict 自体は記録される（allow）が、media scan の fail-closed で index
+    // はされない。blob 側の verdict も fail-closed として記録される。
+    assert!(store.verdict_for(SubjectKind::Post, &object_id).is_some());
+    let blob_verdict = store
+        .verdict_for(SubjectKind::Blob, MEDIA_HINT)
+        .expect("media verdict recorded");
+    assert!(!blob_verdict.1.is_indexable());
+    Ok(())
+}
+
+#[tokio::test]
+async fn allow_media_post_is_indexed_and_searchable_via_derived_tags() -> Result<()> {
+    // ADR 0028 contract: derived_tags_only_for_allow_media（indexer 面）+
+    // ADR 0025 §2.3: allow media は同一 scan が生成した descriptive タグで検索できる。
+    let docs = Arc::new(MemoryDocsSync::default());
+    let projection = Arc::new(MemoryIndexProjection::new());
+    let topic = TopicId::new("rust");
+    let replica = topic_replica_id("rust");
+    let object_id = persist_media_post(&docs, &replica, &topic, "media caption").await;
+
+    let known = MockSafetyProvider::known_csam("mock-known-csam");
+    let vlm = MockSafetyProvider::with_capabilities(
+        "mock-vlm",
+        vec![kukuri_cn_safety::SafetyProviderCapability::GeneralMediaModeration],
+    )
+    .with_derived_tags(MEDIA_HINT, vec!["sunset".to_string(), "beach".to_string()]);
+    let (pipeline, entries, _store) =
+        pipeline_with(&docs, &projection, service_with_providers(vec![known, vlm]));
+    let summary = pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+
+    assert_eq!(summary.indexed, 1);
+    assert!(entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
+
+    // 投影 text は本文 + 派生タグの相乗り。タグ経由の検索が hit する。
+    let stored = projection
+        .entries_in_scope(IndexScopeKind::PublicTopic, "rust")
+        .await;
+    assert_eq!(stored.len(), 1);
+    assert!(stored[0].text.contains("media caption"));
+    assert!(stored[0].text.contains("sunset"));
+    let hits = kukuri_cn_indexer::query::IndexQuery::search_scope(
+        projection.as_ref(),
+        IndexScopeKind::PublicTopic,
+        "rust",
+        "sunset",
+        10,
+    )
+    .await?;
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].object_id, object_id);
+    Ok(())
+}
+
+#[tokio::test]
+async fn flagged_media_post_is_not_indexed_and_tags_do_not_leak() -> Result<()> {
+    // media scan が非 allow（general suspected → exclude）なら post 全体を index せず、
+    // その scan のタグも index に流れない（derived_tags_only_for_allow_media の否定側）。
+    let docs = Arc::new(MemoryDocsSync::default());
+    let projection = Arc::new(MemoryIndexProjection::new());
+    let topic = TopicId::new("rust");
+    let replica = topic_replica_id("rust");
+    let object_id = persist_media_post(&docs, &replica, &topic, "media caption").await;
+
+    let known = MockSafetyProvider::known_csam("mock-known-csam");
+    let vlm = MockSafetyProvider::with_capabilities(
+        "mock-vlm",
+        vec![kukuri_cn_safety::SafetyProviderCapability::GeneralMediaModeration],
+    )
+    .with_score(
+        MEDIA_HINT,
+        kukuri_cn_safety::SafetyProviderCapability::GeneralMediaModeration,
+        SafetyCategory::Nsfw,
+        95,
+    )
+    .with_derived_tags(MEDIA_HINT, vec!["leaked-tag".to_string()]);
+    let (pipeline, entries, _store) =
+        pipeline_with(&docs, &projection, service_with_providers(vec![known, vlm]));
+    let summary = pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+
+    assert_eq!(summary.indexed, 0);
+    assert_eq!(summary.skipped_non_allow, 1);
+    assert!(
+        !projection
+            .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
+            .await?
+    );
+    assert!(!entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
+    assert!(
+        projection
+            .entries_in_scope(IndexScopeKind::PublicTopic, "rust")
+            .await
+            .is_empty()
+    );
     Ok(())
 }
 

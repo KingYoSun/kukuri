@@ -1,10 +1,10 @@
 # ADR 0028: Non-Deterministic Moderation (VLM-Assisted Classification)
 
 ## Status
-Draft
+Accepted（#420 で実装。§6 の実装済み決定は「§7 実装追補」を参照）
 
 ## Date
-2026-06-30
+2026-06-30（実装追補: 2026-07-30）
 
 ## Base Branch
 `main`
@@ -128,8 +128,48 @@ community node の moderation のうち **非決定論的 moderation（VLM / cla
 - operator 編集は node-local advisory の是正であり user canonical を変更しない。
 
 ## 6. 未決事項（要設計・レビュー）
-- critical fail-closed 用の「高 confidence」閾値を suspected 閾値（0.7）と共通にするか、別のより厳格な値を operator が設定できるようにするか。
-- VLM の image / video / text 別 capability 粒度と、OpenAI-compatible API での vision 入力（media_hint = URL / blob 参照）の受け渡し方式。
+- ~~critical fail-closed 用の「高 confidence」閾値を suspected 閾値（0.7）と共通にするか、別のより厳格な値を operator が設定できるようにするか。~~ → **#420 で「共通 1 本」に決定**（§7.1）。
+- ~~VLM の image / video / text 別 capability 粒度と、OpenAI-compatible API での vision 入力（media_hint = URL / blob 参照）の受け渡し方式。~~ → **#420 で決定**: 入力は `media_hint` から `MediaFetcher` で一時 fetch した bytes を data URL（`image_url`）として渡す。capability は検知 category と media content type から導く（video/* → `NovelCsamVideoClassifier`）。§7.2。
 - タグ語彙（tag vocabulary）の標準化とサムネイル代替表示の client 挙動（ADR 0025 と共同）。
-- appeal 経路の詳細（申し立て API / issuer の appeal endpoint / 配布済み advisory への `Cleared` 伝播・失効の具体・監査ログ）。
+- ~~appeal 経路の詳細~~ → **#420 で決定**: 申し立ては既存 `POST /v1/report` の optional `appeal.risk_signal_id` で受理（専用 endpoint / manifest の appeal_endpoint は新設しない。report routing の既存候補化を再利用）。`Cleared` は失効させず配布に残して伝播し、受け手の trust 供給層が除外する。訂正は「訂正 signal 再発行 + 旧 signal へ `expires_at`」。§7.3。監査ログは後続。
 - general moderation の細分類（nsfw / 暴力 / hate / spam）と relation 相対化の対応（ADR 0026 §6 と共同）。
+
+## 7. 実装追補（#420、2026-07-30）
+
+実装 crate は `crates/cn-safety-vlm`（provider 名 `openai-compatible-vlm`、`general` /
+`unknown_csam` slot 専用。`known_csam` slot への指定は fail-closed で拒否）。
+
+### 7.1 閾値
+`SafetyPolicy.unknown_csam_score_threshold` を `suspected_threshold` に改名（旧名は serde alias
+で受理）し、既定を 70（= 0.7）に変更。critical fail-closed 用の閾値は**分けない**（共通 1 本）。
+理由: router 規則 6 が閾値未満の critical 検知を既に Hold へ fail-closed しており、閾値は
+「Quarantine か Hold か」の境界にすぎず、critical が Allow に落ちる経路は閾値に依存しない。
+general route も同じ閾値に従う（score / confidence を持つ検知のみ gating。categorical 検知は
+従来どおり発火）。operator は `COMMUNITY_NODE_SAFETY_SUSPECTED_THRESHOLD`（1-100）で可変。
+
+### 7.2 provider 実装
+- OpenAI-compatible `POST {base}/v1/chat/completions`。応答解釈は 2 モード
+  （`COMMUNITY_NODE_VLM_RESPONSE_FORMAT`）:
+  - `json`（既定）: system prompt で厳密 JSON（categories + tags）を要求する汎用モード。
+    未知カテゴリは `Protocol` → fail-closed。
+  - `guard`: guard 系モデル（SingGuard 等の「1 行目 safe/unsafe + `<answer>` カテゴリ」形式）
+    向け。score は先頭トークンの logprob（`exp(logprob)` を 0-100 換算。logprobs 欠落時は
+    保守的に 100）。guard の粗いカテゴリからは **critical へ写像しない**（A→nsfw、D→phishing、
+    E→spam、B/C/G→nsfw、F=政治的内容は moderation 対象にしない）。
+- API key は optional（self-host の無認証 endpoint を許容）。endpoint / model は既定値を持たず
+  operator が必ず指定する。credentials の値は Debug / エラーに出さない。
+- `known_hash_match` を設定する経路が構造的に無い = basis は常に `ClassifierScore`。
+- critical を検知した scan では `derived_tags` を空にする（収集側
+  `derived_tags_for_index` の allow-only / critical 除外と合わせた二重防御）。
+- `MediaFetcher` の本番実装（iroh-blobs からの一時 fetch）は後続 Issue。未構成なら media scan
+  は `Unavailable` → fail-closed。
+
+### 7.3 visibility / appeal
+- suspected advisory の visibility は `SafetyPolicy.suspected_signal_visibility`（既定 `Local`、
+  operator が `SubscribedNodes` / `Public` へ可変 = §2.4 の「Local に固定しない」）。
+  operational fail-closed（content category 無し）は常に `Local`。
+- appeal 遷移は `None → Disputed`（申し立て）/ `Disputed → Cleared`（認容）/
+  `Disputed → None`（棄却）のみ。operator レビュー（メタデータ編集 / 訂正再発行）は
+  `safety.moderation.operator_review`（env `COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW`）の
+  明示的有効化が必要。運用は `cn-cli moderation` コマンド。
+- 署名済み moderation event は不変（是正は risk signal 側）。

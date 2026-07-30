@@ -135,6 +135,7 @@ fn base_result(outcome: ScanOutcome) -> ProviderScanResult {
         known_hash_match: false,
         score: None,
         labels: Vec::new(),
+        derived_tags: Vec::new(),
     }
 }
 
@@ -156,6 +157,7 @@ fn scan_result_from(scan: ShieldScanResult) -> ProviderScanResult {
                 labels: vec![
                     SafetyLabel::new(SafetyCategory::Csam).with_provider_capability(capability),
                 ],
+                derived_tags: Vec::new(),
             }
         }
         // provider self-test データへの一致。csam_confirmed と区別する専用 route（#391）。
@@ -169,6 +171,7 @@ fn scan_result_from(scan: ShieldScanResult) -> ProviderScanResult {
                 SafetyLabel::new(SafetyCategory::ProviderTest)
                     .with_provider_capability(SafetyProviderCapability::KnownCsamHashMatch),
             ],
+            derived_tags: Vec::new(),
         },
         ShieldClassification::NoKnownMatch => base_result(ScanOutcome::NoKnownMatch),
     }
