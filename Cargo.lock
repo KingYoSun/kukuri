@@ -3115,6 +3115,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "kukuri-cn-safety-vlm"
+version = "0.1.2"
+dependencies = [
+ "async-trait",
+ "base64",
+ "kukuri-cn-safety",
+ "kukuri-cn-safety-runtime",
+ "reqwest 0.13.4",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "wiremock",
+]
+
+[[package]]
 name = "kukuri-cn-trust"
 version = "0.1.2"
 dependencies = [

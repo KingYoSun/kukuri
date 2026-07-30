@@ -1,0 +1,26 @@
+[package]
+name = "kukuri-cn-safety-vlm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "kukuri_cn_safety_vlm"
+path = "src/lib.rs"
+
+[dependencies]
+async-trait.workspace = true
+base64.workspace = true
+kukuri-cn-safety = { path = "../cn-safety" }
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }
+tokio.workspace = true
+wiremock.workspace = true
+
+[lints]
+workspace = true
