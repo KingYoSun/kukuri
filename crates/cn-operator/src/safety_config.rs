@@ -16,6 +16,8 @@ pub struct SafetyConfig {
     pub events: SafetyEventsConfig,
     #[serde(default)]
     pub providers: SafetyProvidersConfig,
+    #[serde(default)]
+    pub moderation: SafetyModerationConfig,
 }
 
 impl Default for SafetyConfig {
@@ -27,8 +29,38 @@ impl Default for SafetyConfig {
             storage: SafetyStorageConfig::default(),
             events: SafetyEventsConfig::default(),
             providers: SafetyProvidersConfig::default(),
+            moderation: SafetyModerationConfig::default(),
         }
     }
+}
+
+/// 非決定論的 moderation（VLM。#420 / ADR 0028）の operator 設定。
+///
+/// runtime へは env（`COMMUNITY_NODE_SAFETY_SUSPECTED_THRESHOLD` /
+/// `COMMUNITY_NODE_SAFETY_SUSPECTED_SIGNAL_VISIBILITY` /
+/// `COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW`）として注入される宣言。
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SafetyModerationConfig {
+    /// suspected 判定の classifier スコア閾値（1-100。未指定なら policy 既定 70 = 0.7）。
+    #[serde(default)]
+    pub suspected_threshold: Option<u8>,
+    /// suspected（classifier_score）advisory の配布 visibility。
+    /// 未指定なら既定 `local`（安全側。hard cap ではない。ADR 0028 §2.4 / §2.7）。
+    #[serde(default)]
+    pub suspected_signal_visibility: Option<SignalVisibility>,
+    /// operator レビュー（検知メタデータの直接編集）を有効化するか（既定 false。ADR 0028 §2.3）。
+    #[serde(default)]
+    pub operator_review: bool,
+}
+
+/// risk signal の配布 visibility（`cn-safety` の `Visibility` と同じ語彙）。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SignalVisibility {
+    Local,
+    SubscribedNodes,
+    Public,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
@@ -148,6 +180,14 @@ pub fn validate_safety_config(config: &SafetyConfig) -> Result<()> {
     )?;
     if let Some(secret_id) = config.events.signing_key_secret_id.as_deref() {
         validate_secret_id("safety.events.signing_key_secret_id", secret_id)?;
+    }
+    if let Some(threshold) = config.moderation.suspected_threshold {
+        if threshold == 0 || threshold > 100 {
+            bail!(
+                "safety.moderation.suspected_threshold は 1-100 の整数で指定してください \
+                 (got {threshold})"
+            );
+        }
     }
     Ok(())
 }

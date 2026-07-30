@@ -2978,6 +2978,7 @@ dependencies = [
  "kukuri-cn-safety",
  "kukuri-cn-safety-arachnid",
  "kukuri-cn-safety-runtime",
+ "kukuri-cn-safety-vlm",
  "kukuri-cn-trust",
  "kukuri-core",
  "kukuri-test-support",

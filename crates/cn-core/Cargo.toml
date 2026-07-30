@@ -14,6 +14,9 @@ safety-mock-provider = ["kukuri-cn-safety/mock"]
 # provider 実装名 `project-arachnid-shield`（#391）を known_csam slot で解決できるようにする。
 # reqwest 依存を持ち込むため optional にし、runtime を持つ crate（cn-indexer 等）が有効化する。
 safety-arachnid-provider = ["dep:kukuri-cn-safety-arachnid"]
+# provider 実装名 `openai-compatible-vlm`（#420）を general / unknown_csam slot で解決できる
+# ようにする。reqwest 依存を持ち込むため optional にする（arachnid と同じ流儀）。
+safety-vlm-provider = ["dep:kukuri-cn-safety-vlm"]
 
 [dependencies]
 anyhow.workspace = true
@@ -38,6 +41,7 @@ kukuri-cn-protocol = { path = "../cn-protocol" }
 kukuri-cn-safety = { path = "../cn-safety" }
 kukuri-cn-safety-arachnid = { path = "../cn-safety-arachnid", optional = true }
 kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }
+kukuri-cn-safety-vlm = { path = "../cn-safety-vlm", optional = true }
 kukuri-cn-trust = { path = "../cn-trust" }
 
 [dev-dependencies]
@@ -47,7 +51,11 @@ kukuri-cn-safety = { path = "../cn-safety", features = ["mock"] }
 kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }
 # 自分自身を feature 付き dev-dependency にすることで、tests/ から mock provider 解決を使える
 # （feature unification によりテストビルド時のみ有効になる。cn-safety と同じ流儀）。
-kukuri-cn-core = { path = ".", features = ["safety-mock-provider", "safety-arachnid-provider"] }
+kukuri-cn-core = { path = ".", features = [
+    "safety-mock-provider",
+    "safety-arachnid-provider",
+    "safety-vlm-provider",
+] }
 
 [lints]
 workspace = true

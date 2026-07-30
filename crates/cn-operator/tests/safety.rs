@@ -123,6 +123,61 @@ fn readiness_complete_static_config_has_unknown_runtime_checks() {
 }
 
 #[test]
+fn readiness_classifier_provider_resolvable_accepts_vlm() {
+    // general / unknown_csam slot に openai-compatible-vlm(#420)を構成しても resolvable。
+    let safety = format!(
+        "{}    general:\n      provider: openai_compatible_vlm\n    unknown_csam:\n      provider: openai-compatible-vlm\n",
+        complete_safety()
+    );
+    let resolved = load_and_validate(&config_with_safety(&safety)).unwrap();
+    let report = evaluate_public_node_readiness(&resolved, "public-node");
+    assert_check(
+        &report,
+        "classifier_providers_resolvable",
+        ReadinessStatus::Pass,
+    );
+}
+
+#[test]
+fn readiness_classifier_provider_unknown_name_fails() {
+    let safety = format!(
+        "{}    general:\n      provider: not-a-real-provider\n",
+        complete_safety()
+    );
+    let resolved = load_and_validate(&config_with_safety(&safety)).unwrap();
+    let report = evaluate_public_node_readiness(&resolved, "public-node");
+    assert_check(
+        &report,
+        "classifier_providers_resolvable",
+        ReadinessStatus::Fail,
+    );
+}
+
+#[test]
+fn safety_moderation_section_parses_and_validates_threshold() {
+    // ADR 0028 §2.2 / §2.3: suspected_threshold(1-100)/ visibility / operator_review の宣言。
+    let safety = format!(
+        "{}  moderation:\n    suspected_threshold: 70\n    suspected_signal_visibility: subscribed_nodes\n    operator_review: true\n",
+        complete_safety()
+    );
+    let resolved = load_and_validate(&config_with_safety(&safety)).unwrap();
+    let moderation = &resolved.raw.safety.as_ref().unwrap().moderation;
+    assert_eq!(moderation.suspected_threshold, Some(70));
+    assert!(moderation.operator_review);
+
+    // 範囲外は拒否（fail-closed）。
+    let invalid = format!(
+        "{}  moderation:\n    suspected_threshold: 0\n",
+        complete_safety()
+    );
+    let err = load_and_validate(&config_with_safety(&invalid)).unwrap_err();
+    assert!(
+        err.to_string().contains("suspected_threshold"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
 fn readiness_missing_safety_section_fails_closed() {
     let resolved = load_and_validate(&config_with_safety("")).unwrap();
     let report = evaluate_public_node_readiness(&resolved, "public-node");
@@ -199,7 +254,7 @@ fn safety_readiness_cli_fails_on_static_failure() {
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(!output.status.success(), "stdout:\n{stdout}");
     assert!(stdout.contains("static_ok=false"), "stdout:\n{stdout}");
-    assert!(stdout.contains("fail=13"), "stdout:\n{stdout}");
+    assert!(stdout.contains("fail=14"), "stdout:\n{stdout}");
 }
 
 #[test]
