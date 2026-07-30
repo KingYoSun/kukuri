@@ -14,7 +14,8 @@ use serde::{Deserialize, Serialize};
 
 use kukuri_cn_safety::provider::{ProviderScanRequest, ProviderScanResult, ScanError, ScanOutcome};
 use kukuri_cn_safety::{
-    ModerationEventBody, SafetyPolicy, SafetyProvider, SafetyRiskSignal, SafetyVerdict, route,
+    ModerationEventBody, SafetyPolicy, SafetyProvider, SafetyRiskSignal, SafetyVerdict,
+    derived_tags_for_index, route,
 };
 
 use crate::artifacts::build_artifacts;
@@ -37,6 +38,12 @@ pub struct SafetyScanReport {
     /// risk signal。indexable / target 欠落 / content category 不明時は `None`。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub risk_signal: Option<SafetyRiskSignal>,
+    /// index に載せてよい descriptive 検索タグ（ADR 0028 §2.6）。
+    ///
+    /// `derived_tags_for_index` を適用済みの値（`allow` verdict のみ非空。critical /
+    /// Match Data / 生スコア由来は除外済み）。indexer はこの値をそのまま使う。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub derived_tags: Vec<String>,
 }
 
 /// `ScanError` を fail-closed な `ScanOutcome` に写像する。
@@ -103,14 +110,21 @@ impl SafetyOrchestrator {
         }
 
         let verdict = route(&scan_results, &self.policy, scanned_at);
-        let (moderation_event, risk_signal) =
-            build_artifacts(&verdict, request, &self.issuer_node_id, self.ids.as_ref());
+        let (moderation_event, risk_signal) = build_artifacts(
+            &verdict,
+            request,
+            &self.issuer_node_id,
+            self.ids.as_ref(),
+            &self.policy,
+        );
+        let derived_tags = derived_tags_for_index(&verdict, &scan_results);
 
         SafetyScanReport {
             verdict,
             scan_results,
             moderation_event,
             risk_signal,
+            derived_tags,
         }
     }
 }

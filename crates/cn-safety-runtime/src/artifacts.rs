@@ -14,13 +14,16 @@
 //!   （空 target_id / 不明 target_type の moderation event は監査上危険なため）。
 //! - operational fail-closed（scan_failed / provider_unavailable / unscanned）は content の
 //!   safety category を示さないため、risk signal を生成しない（虚偽の risk label を作らない）。
-//! - suspected unknown CSAM / CSE の visibility は既定 `Local`（誤検知を public に拡散しない）。
+//! - suspected（`ClassifierScore`）advisory の visibility は既定 `Local`（誤検知を public に
+//!   拡散しない）。ただし hard cap ではなく、`SafetyPolicy::suspected_signal_visibility` で
+//!   operator が配布範囲を上げられる（ADR 0028 §2.4 / §2.7。誤検知は §2.8 の appeal で是正）。
 
 use kukuri_cn_safety::policy::basis_for_verdict;
 use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
 use kukuri_cn_safety::{
     AppealStatus, Basis, ModerationAction, ModerationEventBody, ReasonCode, RiskSignalTarget,
-    SafetyAction, SafetyCategory, SafetyRiskSignal, SafetyVerdict, Severity, Visibility,
+    SafetyAction, SafetyCategory, SafetyPolicy, SafetyRiskSignal, SafetyVerdict, Severity,
+    Visibility,
 };
 
 use crate::id::EventIdGenerator;
@@ -28,11 +31,13 @@ use crate::id::EventIdGenerator;
 /// verdict から未署名の moderation event / risk signal を生成する。
 ///
 /// `issuer_node_id` と `scanned_at` は orchestrator が供給する。`ids` は event id 生成器。
+/// `policy` は suspected（`ClassifierScore`）advisory の visibility override に使う。
 pub(crate) fn build_artifacts(
     verdict: &SafetyVerdict,
     request: &ProviderScanRequest,
     issuer_node_id: &str,
     ids: &dyn EventIdGenerator,
+    policy: &SafetyPolicy,
 ) -> (Option<ModerationEventBody>, Option<SafetyRiskSignal>) {
     // indexable（allow）な verdict では moderation artifact を作らない。
     if verdict.is_indexable() {
@@ -63,9 +68,17 @@ pub(crate) fn build_artifacts(
         basis,
         severity,
         category,
+        policy,
     );
-    let risk_signal =
-        build_risk_signal(verdict, subject_kind, subject_id, basis, severity, category);
+    let risk_signal = build_risk_signal(
+        verdict,
+        subject_kind,
+        subject_id,
+        basis,
+        severity,
+        category,
+        policy,
+    );
 
     (moderation_event, risk_signal)
 }
@@ -112,11 +125,19 @@ fn severity_for(verdict: &SafetyVerdict) -> Severity {
 
 /// visibility を導く。
 ///
-/// content category がある場合は `SafetyRiskSignal::default_visibility_for` の規則に従い、
-/// suspected unknown CSAM / CSE は `Local`、confirmed のみ `SubscribedNodes` 以上。
-/// operational fail-closed（category 無し）は `Local`。
-fn visibility_for(category: Option<SafetyCategory>, basis: Basis) -> Visibility {
+/// - suspected（`Basis::ClassifierScore`）かつ content category がある advisory は
+///   `policy.suspected_signal_visibility` に従う（ADR 0028 §2.4 / §2.7: 既定は `Local` で
+///   安全側だが hard cap ではなく、operator が `SubscribedNodes` / `Public` へ上げられる）。
+/// - それ以外の content category ありは `SafetyRiskSignal::default_visibility_for` の規則
+///   （confirmed のみ `SubscribedNodes` 以上）。
+/// - operational fail-closed（category 無し）は常に `Local`（policy でも上書きできない）。
+fn visibility_for(
+    category: Option<SafetyCategory>,
+    basis: Basis,
+    policy: &SafetyPolicy,
+) -> Visibility {
     match category {
+        Some(_) if basis == Basis::ClassifierScore => policy.suspected_signal_visibility,
         Some(category) => SafetyRiskSignal::default_visibility_for(category, basis),
         None => Visibility::Local,
     }
@@ -132,6 +153,7 @@ fn build_event(
     basis: Basis,
     severity: Severity,
     category: Option<SafetyCategory>,
+    policy: &SafetyPolicy,
 ) -> Option<ModerationEventBody> {
     let action = moderation_action_for(verdict.action)?;
     Some(ModerationEventBody {
@@ -145,12 +167,13 @@ fn build_event(
         severity,
         confidence: verdict.confidence,
         basis,
-        visibility: visibility_for(category, basis),
+        visibility: visibility_for(category, basis, policy),
         policy_version: verdict.policy_version.clone(),
         created_at: verdict.scanned_at.clone(),
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_risk_signal(
     verdict: &SafetyVerdict,
     subject_kind: SubjectKind,
@@ -158,6 +181,7 @@ fn build_risk_signal(
     basis: Basis,
     severity: Severity,
     category: Option<SafetyCategory>,
+    policy: &SafetyPolicy,
 ) -> Option<SafetyRiskSignal> {
     // content category が無い operational fail-closed では risk signal を作らない
     // （scan failure は対象 content の safety category を示さない）。
@@ -169,7 +193,7 @@ fn build_risk_signal(
         severity,
         basis,
         confidence: verdict.confidence,
-        visibility: visibility_for(Some(category), basis),
+        visibility: visibility_for(Some(category), basis, policy),
         expires_at: None,
         appeal_status: Some(AppealStatus::None),
     })

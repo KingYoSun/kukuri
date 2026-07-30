@@ -323,6 +323,116 @@ async fn cse_suspected_artifacts_do_not_use_first_noncritical_label() {
     assert_eq!(signal.visibility, Visibility::Local);
 }
 
+// --- ADR 0028 contract: advisory_is_network_distributable_per_visibility（artifact 面） ---
+
+#[tokio::test]
+async fn advisory_is_network_distributable_per_visibility() {
+    // suspected（ClassifierScore）advisory は Local 固定ではない: operator が policy の
+    // suspected_signal_visibility を SubscribedNodes に上げると、event / signal の visibility が
+    // それに従う（ADR 0028 §2.4 / §2.7。配布クエリ面は cn-core safety_events テストで固定）。
+    let make_provider = || {
+        Arc::new(
+            MockSafetyProvider::with_capabilities(
+                "classifier",
+                vec![SafetyProviderCapability::NovelCsamImageClassifier],
+            )
+            .with_score(
+                "blob-1",
+                SafetyProviderCapability::NovelCsamImageClassifier,
+                SafetyCategory::Csam,
+                90,
+            ),
+        )
+    };
+
+    let mut policy = SafetyPolicy::public_node_default();
+    policy.require_known_csam = false;
+    policy.suspected_signal_visibility = Visibility::SubscribedNodes;
+    let orchestrator = SafetyOrchestrator::builder("node-1", clock(), ids())
+        .policy(policy)
+        .provider(make_provider())
+        .build()
+        .unwrap();
+    let report = orchestrator.scan_subject(&blob_request()).await;
+
+    assert_eq!(report.verdict.reason_code, ReasonCode::CsamSuspected);
+    let signal = report.risk_signal.expect("signal for suspected content");
+    assert_eq!(signal.basis, Basis::ClassifierScore);
+    assert_eq!(signal.visibility, Visibility::SubscribedNodes);
+    let event = report
+        .moderation_event
+        .expect("event for suspected content");
+    assert_eq!(event.visibility, Visibility::SubscribedNodes);
+
+    // 一方、operational fail-closed（scan failure。content category 無し）は policy を
+    // SubscribedNodes にしても Local 固定（誤検知ですらない運用イベントを配布しない）。
+    let failing = Arc::new(
+        MockSafetyProvider::known_csam("known").default_error(ScanError::Timeout("x".into())),
+    );
+    let mut policy = SafetyPolicy::public_node_default();
+    policy.suspected_signal_visibility = Visibility::SubscribedNodes;
+    let orchestrator = SafetyOrchestrator::builder("node-1", clock(), ids())
+        .policy(policy)
+        .provider(failing)
+        .build()
+        .unwrap();
+    let report = orchestrator.scan_subject(&blob_request()).await;
+    let event = report.moderation_event.expect("event for held content");
+    assert_eq!(event.visibility, Visibility::Local);
+}
+
+// --- derived tags（report 面） ---
+
+#[tokio::test]
+async fn report_carries_filtered_derived_tags_only_for_allow() {
+    // allow verdict の scan では、report.derived_tags に収集済みタグが載る。
+    let known = Arc::new(MockSafetyProvider::known_csam("known").with_no_known_match("blob-1"));
+    let tagger = Arc::new(
+        MockSafetyProvider::with_capabilities(
+            "vlm",
+            vec![SafetyProviderCapability::GeneralMediaModeration],
+        )
+        .with_derived_tags("blob-1", vec!["sunset".to_string(), "beach".to_string()]),
+    );
+    let mut policy = SafetyPolicy::public_node_default();
+    policy.require_known_csam = false;
+    let orchestrator = SafetyOrchestrator::builder("node-1", clock(), ids())
+        .policy(policy.clone())
+        .provider(known.clone())
+        .provider(tagger)
+        .build()
+        .unwrap();
+    let report = orchestrator.scan_subject(&blob_request()).await;
+    assert!(report.verdict.is_indexable());
+    assert_eq!(
+        report.derived_tags,
+        vec!["sunset".to_string(), "beach".to_string()]
+    );
+
+    // 非 allow（suspected）の scan では derived_tags は空。
+    let flagged = Arc::new(
+        MockSafetyProvider::with_capabilities(
+            "vlm",
+            vec![SafetyProviderCapability::NovelCsamImageClassifier],
+        )
+        .with_score(
+            "blob-1",
+            SafetyProviderCapability::NovelCsamImageClassifier,
+            SafetyCategory::Csam,
+            90,
+        ),
+    );
+    let orchestrator = SafetyOrchestrator::builder("node-1", clock(), ids())
+        .policy(policy)
+        .provider(known)
+        .provider(flagged)
+        .build()
+        .unwrap();
+    let report = orchestrator.scan_subject(&blob_request()).await;
+    assert!(!report.verdict.is_indexable());
+    assert!(report.derived_tags.is_empty());
+}
+
 // --- scan failure / unavailable fail-closed ---
 
 #[tokio::test]
