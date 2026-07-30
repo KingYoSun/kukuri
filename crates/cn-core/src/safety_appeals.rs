@@ -123,9 +123,10 @@ pub async fn edit_risk_signal_detection_metadata(
         bail!("no detection metadata fields to edit");
     }
     if let Some(confidence) = edit.confidence
-        && confidence > 100 {
-            bail!("confidence must be between 0 and 100 (got {confidence})");
-        }
+        && confidence > 100
+    {
+        bail!("confidence must be between 0 and 100 (got {confidence})");
+    }
     let stored = get_risk_signal(pool, id)
         .await?
         .with_context(|| format!("risk signal `{id}` not found"))?;
@@ -181,9 +182,10 @@ pub async fn reissue_corrected_risk_signal(
         );
     }
     if let Some(confidence) = correction.confidence
-        && confidence > 100 {
-            bail!("confidence must be between 0 and 100 (got {confidence})");
-        }
+        && confidence > 100
+    {
+        bail!("confidence must be between 0 and 100 (got {confidence})");
+    }
     let stored = get_risk_signal(pool, id)
         .await?
         .with_context(|| format!("risk signal `{id}` not found"))?;

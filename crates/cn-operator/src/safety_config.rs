@@ -182,12 +182,13 @@ pub fn validate_safety_config(config: &SafetyConfig) -> Result<()> {
         validate_secret_id("safety.events.signing_key_secret_id", secret_id)?;
     }
     if let Some(threshold) = config.moderation.suspected_threshold
-        && (threshold == 0 || threshold > 100) {
-            bail!(
-                "safety.moderation.suspected_threshold は 1-100 の整数で指定してください \
+        && (threshold == 0 || threshold > 100)
+    {
+        bail!(
+            "safety.moderation.suspected_threshold は 1-100 の整数で指定してください \
                  (got {threshold})"
-            );
-        }
+        );
+    }
     Ok(())
 }
 
