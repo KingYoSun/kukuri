@@ -39,6 +39,11 @@ pub struct ProviderScanRequest {
     /// メディアの参照ヒント（hash / CID 等）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub media_hint: Option<String>,
+    /// media の MIME type ヒント（`AssetRef.mime` / manifest item 由来。#609）。
+    ///
+    /// blob store 自体は MIME を持たないため、参照元 metadata の値を fetcher まで運ぶ。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media_mime: Option<String>,
     /// テキスト本文（text moderation / grooming classifier 用）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
@@ -54,12 +59,18 @@ impl ProviderScanRequest {
             subject_kind: Some(kind),
             subject_id: Some(subject_id.into()),
             media_hint: None,
+            media_mime: None,
             text: None,
         }
     }
 
     pub fn with_media_hint(mut self, media_hint: impl Into<String>) -> Self {
         self.media_hint = Some(media_hint.into());
+        self
+    }
+
+    pub fn with_media_mime(mut self, media_mime: impl Into<String>) -> Self {
+        self.media_mime = Some(media_mime.into());
         self
     }
 
@@ -174,9 +185,17 @@ impl std::fmt::Debug for FetchedMedia {
 /// 本番実装は blob store / iroh-blobs からの一時 fetch（恒久保存しない）。fetch 失敗は
 /// `ScanError` で返し、呼び出し側が fail-closed に写像する。fetcher が未構成の場合、media を
 /// 要する provider は `ScanError::Unavailable` を返して fail-closed に倒す（#391）。
+///
+/// `content_type_hint` は参照元 metadata（`AssetRef.mime` / manifest item）由来の MIME type。
+/// blob store 自体は MIME を持たないため、fetcher はこの hint を優先して
+/// `FetchedMedia.content_type` を決める（#609）。
 #[async_trait]
 pub trait MediaFetcher: Send + Sync {
-    async fn fetch(&self, media_hint: &str) -> Result<FetchedMedia, ScanError>;
+    async fn fetch(
+        &self,
+        media_hint: &str,
+        content_type_hint: Option<&str>,
+    ) -> Result<FetchedMedia, ScanError>;
 }
 
 /// safety / moderation provider の抽象。

@@ -10,7 +10,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use anyhow::{Result, bail};
 use async_trait::async_trait;
 use kukuri_cn_core::resolve_safety_providers;
-use kukuri_cn_safety::provider::{ProviderScanRequest, ScanError, SubjectKind};
+use kukuri_cn_safety::provider::{
+    FetchedMedia, MediaFetcher, ProviderScanRequest, ScanError, SubjectKind,
+};
 use kukuri_cn_safety::{
     MockSafetyProvider, ModerationEventSigner, ReasonCode, RiskSignalTarget, SafetyCategory,
     SafetyProvider, SafetyRiskSignal, SafetyVerdict, SignedModerationEvent,
@@ -348,6 +350,20 @@ fn mock_slot() -> Option<SafetyRuntimeProviderEntry> {
     })
 }
 
+/// 注入シーム（#609）の検証用 fetcher: 呼ばれたことを識別可能なエラーで示す。
+struct SentinelFetcher;
+
+#[async_trait]
+impl MediaFetcher for SentinelFetcher {
+    async fn fetch(
+        &self,
+        _media_hint: &str,
+        _content_type_hint: Option<&str>,
+    ) -> Result<FetchedMedia, ScanError> {
+        Err(ScanError::Protocol("sentinel-fetcher-called".to_string()))
+    }
+}
+
 #[test]
 fn provider_resolver_rejects_unknown_provider_name() {
     let providers = SafetyRuntimeProvidersConfig {
@@ -357,7 +373,7 @@ fn provider_resolver_rejects_unknown_provider_name() {
         }),
         ..Default::default()
     };
-    let error = resolve_safety_providers(&providers)
+    let error = resolve_safety_providers(&providers, None)
         .err()
         .expect("unknown provider must fail closed");
     assert!(
@@ -366,8 +382,8 @@ fn provider_resolver_rejects_unknown_provider_name() {
     );
 }
 
-#[test]
-fn provider_resolver_resolves_arachnid_shield_only_with_credentials() {
+#[tokio::test]
+async fn provider_resolver_resolves_arachnid_shield_only_with_credentials() {
     // env は process-global なため、この 1 テスト内で「欠落 → Err」と「設定 → Ok」を順に
     // 検証する（他テストはこの env を読まない）。
     let providers = SafetyRuntimeProvidersConfig {
@@ -383,7 +399,7 @@ fn provider_resolver_resolves_arachnid_shield_only_with_credentials() {
         std::env::remove_var("PROJECT_ARACHNID_API_USERNAME");
         std::env::remove_var("PROJECT_ARACHNID_API_PASSWORD");
     }
-    let error = resolve_safety_providers(&providers)
+    let error = resolve_safety_providers(&providers, None)
         .err()
         .expect("missing credentials must fail closed");
     let message = format!("{error:#}");
@@ -398,12 +414,32 @@ fn provider_resolver_resolves_arachnid_shield_only_with_credentials() {
         std::env::set_var("PROJECT_ARACHNID_API_USERNAME", "operator-user");
         std::env::set_var("PROJECT_ARACHNID_API_PASSWORD", "operator-pass");
     }
-    let result = resolve_safety_providers(&providers);
+    let result = resolve_safety_providers(&providers, None);
+    let with_fetcher = resolve_safety_providers(&providers, Some(Arc::new(SentinelFetcher)));
     unsafe {
         std::env::remove_var("PROJECT_ARACHNID_API_USERNAME");
         std::env::remove_var("PROJECT_ARACHNID_API_PASSWORD");
     }
     result.expect("orchestrator should build once credentials are configured");
+
+    // 注入シーム（#609）: fetcher を渡すと provider に接続される（media scan で fetcher が
+    // 呼ばれることを sentinel エラーで確認する）。
+    let resolved = with_fetcher.expect("provider should build with a media fetcher");
+    let shield = resolved
+        .iter()
+        .find(|provider| provider.name() == "project-arachnid-shield")
+        .expect("resolved provider list should contain the shield provider");
+    let scan_error = shield
+        .scan(
+            &ProviderScanRequest::for_subject(SubjectKind::Blob, "blob-1")
+                .with_media_hint("blake3:abc123"),
+        )
+        .await
+        .expect_err("sentinel fetcher fails the scan");
+    assert!(
+        scan_error.to_string().contains("sentinel-fetcher-called"),
+        "{scan_error}"
+    );
 }
 
 #[test]
@@ -417,7 +453,7 @@ fn provider_resolver_rejects_arachnid_shield_outside_known_csam_slot() {
         }),
         ..Default::default()
     };
-    let error = resolve_safety_providers(&providers)
+    let error = resolve_safety_providers(&providers, None)
         .err()
         .expect("slot mismatch must fail closed");
     assert!(
@@ -439,7 +475,7 @@ fn provider_resolver_rejects_vlm_on_known_csam_slot() {
         }),
         ..Default::default()
     };
-    let error = resolve_safety_providers(&providers)
+    let error = resolve_safety_providers(&providers, None)
         .err()
         .expect("slot mismatch must fail closed");
     assert!(
@@ -450,8 +486,8 @@ fn provider_resolver_rejects_vlm_on_known_csam_slot() {
     );
 }
 
-#[test]
-fn provider_resolver_resolves_vlm_only_with_endpoint_env() {
+#[tokio::test]
+async fn provider_resolver_resolves_vlm_only_with_endpoint_env() {
     // env は process-global なため、この 1 テスト内で「欠落 → Err」と「設定 → Ok」を順に
     // 検証する(arachnid の resolver テストと同じ流儀。他テストはこの env を読まない)。
     let providers = SafetyRuntimeProvidersConfig {
@@ -469,7 +505,7 @@ fn provider_resolver_resolves_vlm_only_with_endpoint_env() {
         std::env::remove_var("COMMUNITY_NODE_VLM_MODEL");
         std::env::remove_var("COMMUNITY_NODE_VLM_API_KEY");
     }
-    let error = resolve_safety_providers(&providers)
+    let error = resolve_safety_providers(&providers, None)
         .err()
         .expect("missing endpoint must fail closed");
     let message = format!("{error:#}");
@@ -484,19 +520,38 @@ fn provider_resolver_resolves_vlm_only_with_endpoint_env() {
         std::env::set_var("COMMUNITY_NODE_VLM_API_BASE_URL", "http://127.0.0.1:8000");
         std::env::set_var("COMMUNITY_NODE_VLM_MODEL", "test-org/test-model");
     }
-    let result = resolve_safety_providers(&providers);
+    let result = resolve_safety_providers(&providers, None);
+    let with_fetcher = resolve_safety_providers(&providers, Some(Arc::new(SentinelFetcher)));
     unsafe {
         std::env::remove_var("COMMUNITY_NODE_VLM_API_BASE_URL");
         std::env::remove_var("COMMUNITY_NODE_VLM_MODEL");
     }
     result.expect("vlm provider should build once the endpoint is configured");
+
+    // 注入シーム（#609）: fetcher を渡すと provider に接続される。
+    let resolved = with_fetcher.expect("vlm provider should build with a media fetcher");
+    let vlm = resolved
+        .iter()
+        .find(|provider| provider.name() == "openai-compatible-vlm")
+        .expect("resolved provider list should contain the vlm provider");
+    let scan_error = vlm
+        .scan(
+            &ProviderScanRequest::for_subject(SubjectKind::Blob, "blob-1")
+                .with_media_hint("blake3:abc123"),
+        )
+        .await
+        .expect_err("sentinel fetcher fails the scan");
+    assert!(
+        scan_error.to_string().contains("sentinel-fetcher-called"),
+        "{scan_error}"
+    );
 }
 
 #[test]
 fn build_scan_service_returns_none_without_providers() {
     let config = SafetyRuntimeConfig::default();
     let store = Arc::new(MemorySafetyArtifactStore::new());
-    let providers = resolve_safety_providers(&config.providers).unwrap();
+    let providers = resolve_safety_providers(&config.providers, None).unwrap();
     let service = build_safety_scan_service(&config, providers, store).unwrap();
     assert!(service.is_none());
 }
@@ -511,7 +566,7 @@ fn build_scan_service_requires_signing_key_when_emit_enabled() {
         ..Default::default()
     };
     let store = Arc::new(MemorySafetyArtifactStore::new());
-    let providers = resolve_safety_providers(&config.providers).unwrap();
+    let providers = resolve_safety_providers(&config.providers, None).unwrap();
     let error = build_safety_scan_service(&config, providers, store).unwrap_err();
     assert!(error.to_string().contains("no signing key"), "{error}");
 }
@@ -530,7 +585,7 @@ async fn build_scan_service_constructs_mock_orchestrator_and_scans() {
         ..Default::default()
     };
     let store = Arc::new(MemorySafetyArtifactStore::new());
-    let providers = resolve_safety_providers(&config.providers).unwrap();
+    let providers = resolve_safety_providers(&config.providers, None).unwrap();
     let service = build_safety_scan_service(&config, providers, store.clone())
         .unwrap()
         .expect("service should be constructed");

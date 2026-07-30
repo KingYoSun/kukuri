@@ -167,7 +167,7 @@ impl SafetyProvider for VlmModerationProvider {
                             .to_string(),
                     ));
                 };
-                Some(fetcher.fetch(hint).await?)
+                Some(fetcher.fetch(hint, request.media_mime.as_deref()).await?)
             }
             None => None,
         };

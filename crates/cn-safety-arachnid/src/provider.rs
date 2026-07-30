@@ -116,7 +116,9 @@ impl SafetyProvider for ProjectArachnidShieldProvider {
             ));
         };
 
-        let media = fetcher.fetch(media_hint).await?;
+        let media = fetcher
+            .fetch(media_hint, request.media_mime.as_deref())
+            .await?;
         let scan = self
             .client
             .scan_media(media.bytes, &media.content_type)

@@ -27,9 +27,12 @@ serde_json.workspace = true
 sqlx.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+kukuri-blob-service = { path = "../blob-service" }
 kukuri-cn-runtime-support = { path = "../cn-runtime-support" }
 kukuri-core = { path = "../core" }
 kukuri-docs-sync = { path = "../docs-sync" }
+kukuri-iroh-node = { path = "../iroh-node" }
+kukuri-transport = { path = "../transport" }
 # safety-mock-provider: 本番 provider 未使用構成でも runtime 構築（provider 実装名 `mock`）と
 # contract test を成立させるため有効化する。mock provider は operator が env で明示指定しない
 # 限り構成されず、未知の provider 名は fail-closed で Err になる。

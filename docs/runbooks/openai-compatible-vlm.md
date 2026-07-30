@@ -34,6 +34,8 @@ kukuri 本体は endpoint / model / API key を同梱・共有・代理利用し
 | `COMMUNITY_NODE_SAFETY_SUSPECTED_THRESHOLD` | - | suspected 閾値 1-100（既定 70 = 0.7） |
 | `COMMUNITY_NODE_SAFETY_SUSPECTED_SIGNAL_VISIBILITY` | - | suspected advisory の配布範囲 `local`（既定）/ `subscribed_nodes` / `public` |
 | `COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW` | - | operator レビュー（`cn-cli moderation edit/reissue`）の有効化（既定 false） |
+| `COMMUNITY_NODE_MEDIA_FETCH_MAX_BYTES` | - | media scan 用一時 fetch のサイズ上限（既定 33554432 = 32 MiB。超過は fail-closed） |
+| `COMMUNITY_NODE_MEDIA_FETCH_TIMEOUT_SECS` | - | media scan 用一時 fetch の timeout 秒（既定 30。超過は fail-closed） |
 
 operator-config.yaml では `safety.providers.general` / `safety.providers.unknown_csam` と
 `safety.moderation`（`suspected_threshold` / `suspected_signal_visibility` / `operator_review`）
@@ -55,8 +57,10 @@ operator-config.yaml では `safety.providers.general` / `safety.providers.unkno
 
 - endpoint 不達 / 401 / 429 / 5xx / timeout / 解析不能応答は scan 失敗として扱われ、対象は
   index されない（hold。`allow` に落ちる経路は無い）。
-- `MediaFetcher`（blob の一時 fetch）が未構成の間、media 参照 post の media scan は
-  `Unavailable` → fail-closed になり、media 参照 post は index されない。
+- media 参照 post の media scan は `MediaFetcher`（blob の一時 fetch。#609 で cn-indexer に
+  実装済み）経由で行われる。blob が未複製 / peer 不達で取得できない・サイズ上限超過・
+  timeout・content type 不明のいずれも fail-closed（hold）で、media 参照 post は index
+  されない。取得した bytes はローカルストアへ書き込まれない（no permanent blob storage）。
 - endpoint / model の env 欠落は runtime 構築の失敗（ingest 起動せず）。エラーには env の
   **名前のみ**が含まれ、値は出力されない。
 

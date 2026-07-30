@@ -7,8 +7,10 @@
 //!   - ghost 注入を作らない: 対象は共有 replica の entry のみ（CN 直渡しは経路が無い。§6.2）。
 //!   - fail-closed: unscanned / scan_failed / provider_unavailable / 非 allow は投影しない（§2.5）。
 //!   - no permanent blob storage: blob は scan 用の一時 fetch のみで、投影に raw blob を入れない（§2.3）。
-//!   - media 参照 post は本文 text に加えて **media 参照ごとに scan** し（#420 / ADR 0028）、
-//!     いずれか 1 つでも非 allow なら post 全体を index しない（worst-case 合成）。全 allow の
+//!   - media 参照 post は本文 text に加えて **media blob ごとに scan** し（#420 / ADR 0028）、
+//!     いずれか 1 つでも非 allow なら post 全体を index しない（worst-case 合成）。manifest 参照
+//!     は replica 上の署名済み manifest を解決して item blob（hash + mime）へ展開する（#609。
+//!     解決できなければ index しない）。全 allow の
 //!     ときのみ、同一 scan が生成した derived 検索タグ（`SafetyScanReport.derived_tags`）を
 //!     本文 text に相乗りさせて投影する（ADR 0025 §2.3。タグ専用列は持たない）。
 //!     media provider（VLM）や `MediaFetcher` が未構成の環境では media scan が fail-closed
@@ -32,7 +34,9 @@ use tracing::{debug, warn};
 use kukuri_cn_core::{IndexEntryStore, IndexScopeKind, NewIndexEntry};
 use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
 use kukuri_cn_safety_runtime::SafetyScanService;
-use kukuri_core::{AssetRef, KukuriEnvelope, ObjectStatus, PayloadRef, ReplicaId};
+use kukuri_core::{
+    AssetRef, KukuriEnvelope, KukuriMediaManifestV1, ObjectStatus, PayloadRef, ReplicaId,
+};
 use kukuri_docs_sync::{DocFetchPolicy, DocQuery, DocRecord, DocsSync, stable_key};
 
 use crate::projection::{IndexProjection, IndexedEntry};
@@ -196,14 +200,35 @@ impl IngestPipeline {
             return Ok(IngestOutcome::SkippedNonAllow);
         }
 
-        // media 参照を 1 つずつ scan する（#420 / ADR 0028）。いずれか 1 つでも非 allow なら
-        // post 全体を index しない（worst-case 合成）。media provider / fetcher が未構成なら
-        // scan は Unavailable → fail-closed hold になり、media 参照 post は従来どおり index
-        // されない（挙動後退なし）。全 allow のときのみ derived 検索タグを収集する。
+        // media 参照を blob 単位で 1 つずつ scan する（#420 / ADR 0028、manifest 展開は #609）。
+        // attachments は `AssetRef` の blob hash + mime、manifest 参照は replica 上の署名済み
+        // manifest を解決して item の blob hash + mime に展開する。manifest が解決できない場合は
+        // scan 対象を確定できないため post を index しない（fail-closed）。
+        // いずれか 1 つでも非 allow なら post 全体を index しない（worst-case 合成）。media
+        // provider / fetcher が未構成なら scan は Unavailable → fail-closed hold になり、media
+        // 参照 post は従来どおり index されない（挙動後退なし）。全 allow のときのみ derived
+        // 検索タグを収集する。
+        let media_targets = match self.media_scan_targets(replica_id, &object).await {
+            Ok(targets) => targets,
+            Err(error) => {
+                self.deindex_object(scope_kind, scope_id, object.object_id.as_str())
+                    .await?;
+                warn!(
+                    object_id = %object.object_id,
+                    error = %format!("{error:#}"),
+                    "failed to resolve media references; not indexing the post (fail-closed)"
+                );
+                return Ok(IngestOutcome::SkippedNonAllow);
+            }
+        };
         let mut derived_tags: Vec<String> = report.derived_tags.clone();
-        for media_hint in object.media_hints() {
-            let request = ProviderScanRequest::for_subject(SubjectKind::Blob, media_hint.clone())
-                .with_media_hint(media_hint.clone());
+        for target in media_targets {
+            let mut request =
+                ProviderScanRequest::for_subject(SubjectKind::Blob, target.hash.clone())
+                    .with_media_hint(target.hash.clone());
+            if let Some(mime) = &target.mime {
+                request = request.with_media_mime(mime.clone());
+            }
             let media_outcome = self.safety.scan_and_record(&request).await?;
             let media_report = &media_outcome.report;
             if !media_report.verdict.is_indexable() {
@@ -211,7 +236,7 @@ impl IngestPipeline {
                     .await?;
                 debug!(
                     object_id = %object.object_id,
-                    media_hint = %media_hint,
+                    media_hint = %target.hash,
                     reason = ?media_report.verdict.reason_code,
                     "referenced media verdict is not allow; not indexing the post (fail-closed)"
                 );
@@ -285,6 +310,87 @@ impl IngestPipeline {
         Ok(())
     }
 
+    /// scan 対象の media 参照を blob 単位（hash + mime）に展開する（#609）。
+    ///
+    /// attachments は `AssetRef` から直接、`media_manifest_refs` は replica 上の署名済み
+    /// manifest（`manifests/media/<id>/envelope`）を解決して items（+ thumbnail）に展開する。
+    /// 同一 blob hash は先勝ちで dedup する。manifest の欠落・検証失敗は Err
+    /// （呼び出し側が index しない = fail-closed）。
+    async fn media_scan_targets(
+        &self,
+        replica_id: &ReplicaId,
+        object: &PostObjectView,
+    ) -> Result<Vec<MediaScanTarget>> {
+        let mut targets: Vec<MediaScanTarget> = Vec::new();
+        for asset in &object.attachments {
+            push_media_target(
+                &mut targets,
+                asset.hash.as_str().to_string(),
+                non_empty_mime(asset.mime.as_str()),
+            );
+        }
+        for reference in &object.media_manifest_refs {
+            let manifest = self
+                .resolve_media_manifest(replica_id, object, reference)
+                .await?;
+            for item in &manifest.items {
+                push_media_target(
+                    &mut targets,
+                    item.blob_hash.as_str().to_string(),
+                    non_empty_mime(item.mime.as_str()),
+                );
+                if let Some(thumbnail) = &item.thumbnail_blob_hash {
+                    // thumbnail の mime は manifest に無い（fetcher の magic bytes 判定に委ねる）。
+                    push_media_target(&mut targets, thumbnail.as_str().to_string(), None);
+                }
+            }
+        }
+        Ok(targets)
+    }
+
+    /// replica から署名済み media manifest を解決する。
+    ///
+    /// 共有 replica の entry が本物であること（署名検証）に加えて、post author 本人が署名した
+    /// manifest であることを要求する（他者の manifest を参照して scan 対象を偽装する経路を
+    /// 塞ぐ）。いずれの失敗も Err = fail-closed。
+    async fn resolve_media_manifest(
+        &self,
+        replica_id: &ReplicaId,
+        object: &PostObjectView,
+        manifest_id: &str,
+    ) -> Result<KukuriMediaManifestV1> {
+        let key = stable_key("manifests/media", &format!("{manifest_id}/envelope"));
+        let records = self
+            .docs_sync
+            .query_replica_with_policy(
+                replica_id,
+                DocQuery::Exact(key),
+                DocFetchPolicy::LocalThenRemote,
+            )
+            .await
+            .with_context(|| format!("failed to query media manifest `{manifest_id}`"))?;
+        let Some(record) = records.into_iter().next() else {
+            bail!("media manifest `{manifest_id}` is not present in the replica");
+        };
+        let envelope: KukuriEnvelope = serde_json::from_slice(&record.value)
+            .with_context(|| format!("failed to decode media manifest envelope `{manifest_id}`"))?;
+        envelope.verify().with_context(|| {
+            format!("media manifest envelope `{manifest_id}` failed verification")
+        })?;
+        if envelope.kind != "media-manifest" {
+            bail!(
+                "entry for media manifest `{manifest_id}` has unexpected kind `{}`",
+                envelope.kind
+            );
+        }
+        if envelope.pubkey.as_str() != object.author.as_str() {
+            bail!("media manifest `{manifest_id}` is not signed by the post author (fail-closed)");
+        }
+        let manifest: KukuriMediaManifestV1 = serde_json::from_str(envelope.content.as_str())
+            .with_context(|| format!("failed to parse media manifest content `{manifest_id}`"))?;
+        Ok(manifest)
+    }
+
     /// post 本文 text を取り出す。
     ///
     /// inline text はそのまま返す。blob text は同一 scope scan で取得済みの envelope（`envelopes`）から
@@ -340,20 +446,28 @@ struct PostObjectView {
     status: ObjectStatus,
 }
 
-impl PostObjectView {
-    /// scan 対象の media 参照（attachments の blob hash + media manifest 参照）を列挙する。
-    fn media_hints(&self) -> Vec<String> {
-        let mut hints: Vec<String> = self
-            .attachments
-            .iter()
-            .map(|asset| asset.hash.as_str().to_string())
-            .collect();
-        for reference in &self.media_manifest_refs {
-            if !hints.contains(reference) {
-                hints.push(reference.clone());
-            }
-        }
-        hints
+/// scan 対象の media 参照 1 件（blob hash + 参照元 metadata 由来の mime）。
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct MediaScanTarget {
+    hash: String,
+    mime: Option<String>,
+}
+
+/// 同一 blob hash を dedup しながら scan 対象へ追加する（mime は先勝ち）。
+fn push_media_target(targets: &mut Vec<MediaScanTarget>, hash: String, mime: Option<String>) {
+    if targets.iter().any(|target| target.hash == hash) {
+        return;
+    }
+    targets.push(MediaScanTarget { hash, mime });
+}
+
+/// 空 / 空白のみの mime は「無し」として扱う。
+fn non_empty_mime(mime: &str) -> Option<String> {
+    let trimmed = mime.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
     }
 }
 

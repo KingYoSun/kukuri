@@ -109,6 +109,8 @@ pub struct IndexerConfig {
     pub arcadedb: ArcadeDbConfig,
     /// safety scan runtime（#406）の構成。provider 未構成なら scan service は構築されない。
     pub safety: SafetyRuntimeConfig,
+    /// media scan 用の一時 blob fetch（#609）の制限。
+    pub media_fetch: MediaFetchConfig,
 }
 
 impl std::fmt::Debug for IndexerConfig {
@@ -121,7 +123,61 @@ impl std::fmt::Debug for IndexerConfig {
             .field("arcadedb", &self.arcadedb)
             // SafetyRuntimeConfig の Debug は signing_key を秘匿する。
             .field("safety", &self.safety)
+            .field("media_fetch", &self.media_fetch)
             .finish()
+    }
+}
+
+/// media scan 用の一時 blob fetch（#609）の制限。
+///
+/// いずれも fail-closed 側のガード: 超過・時間切れは scan エラー（hold）になり、
+/// allow へは落ちない。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MediaFetchConfig {
+    /// scan 対象として取得を許す最大 bytes。超過は `ScanError::Protocol`（fail-closed）。
+    pub max_bytes: u64,
+    /// 一時 fetch 全体の timeout。超過は `ScanError::Timeout`（fail-closed）。
+    pub timeout: std::time::Duration,
+}
+
+pub(crate) const MEDIA_FETCH_MAX_BYTES_ENV: &str = "COMMUNITY_NODE_MEDIA_FETCH_MAX_BYTES";
+pub(crate) const MEDIA_FETCH_TIMEOUT_SECS_ENV: &str = "COMMUNITY_NODE_MEDIA_FETCH_TIMEOUT_SECS";
+
+impl Default for MediaFetchConfig {
+    fn default() -> Self {
+        Self {
+            max_bytes: 32 * 1024 * 1024,
+            timeout: std::time::Duration::from_secs(30),
+        }
+    }
+}
+
+impl MediaFetchConfig {
+    /// 環境変数（`COMMUNITY_NODE_MEDIA_FETCH_*`）から制限を読む。不正値は起動エラー。
+    pub fn from_env() -> Result<Self> {
+        let default = Self::default();
+        let max_bytes = match non_empty_env(MEDIA_FETCH_MAX_BYTES_ENV) {
+            Some(value) => value.parse::<u64>().with_context(|| {
+                format!("{MEDIA_FETCH_MAX_BYTES_ENV} must be a positive integer (bytes)")
+            })?,
+            None => default.max_bytes,
+        };
+        if max_bytes == 0 {
+            bail!("{MEDIA_FETCH_MAX_BYTES_ENV} must not be zero");
+        }
+        let timeout_secs = match non_empty_env(MEDIA_FETCH_TIMEOUT_SECS_ENV) {
+            Some(value) => value.parse::<u64>().with_context(|| {
+                format!("{MEDIA_FETCH_TIMEOUT_SECS_ENV} must be a positive integer (seconds)")
+            })?,
+            None => default.timeout.as_secs(),
+        };
+        if timeout_secs == 0 {
+            bail!("{MEDIA_FETCH_TIMEOUT_SECS_ENV} must not be zero");
+        }
+        Ok(Self {
+            max_bytes,
+            timeout: std::time::Duration::from_secs(timeout_secs),
+        })
     }
 }
 
@@ -231,6 +287,7 @@ impl IndexerConfig {
             channel_secret_key,
             arcadedb,
             safety,
+            media_fetch: MediaFetchConfig::from_env()?,
         })
     }
 }
@@ -312,6 +369,8 @@ mod tests {
         SAFETY_SIGNING_KEY_ENV,
         SAFETY_EMIT_SIGNED_EVENTS_ENV,
         SAFETY_ISSUER_NODE_ID_ENV,
+        MEDIA_FETCH_MAX_BYTES_ENV,
+        MEDIA_FETCH_TIMEOUT_SECS_ENV,
     ];
 
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
@@ -435,7 +494,7 @@ mod tests {
 
             let store = Arc::new(kukuri_cn_safety_runtime::MemorySafetyArtifactStore::new());
             let providers =
-                kukuri_cn_core::resolve_safety_providers(&config.safety.providers).unwrap();
+                kukuri_cn_core::resolve_safety_providers(&config.safety.providers, None).unwrap();
             let service = kukuri_cn_safety_runtime::build_safety_scan_service(
                 &config.safety,
                 providers,
@@ -443,6 +502,39 @@ mod tests {
             )
             .unwrap();
             assert!(service.is_none());
+        });
+    }
+
+    #[test]
+    fn media_fetch_env_overrides_defaults_and_rejects_zero() {
+        with_clean_indexer_env(|| {
+            set_minimal_indexer_env();
+
+            // 未設定なら既定値（32 MiB / 30 秒）。
+            let config = IndexerConfig::from_env().unwrap();
+            assert_eq!(config.media_fetch, MediaFetchConfig::default());
+
+            // env で上書きできる。
+            unsafe {
+                std::env::set_var(MEDIA_FETCH_MAX_BYTES_ENV, "1048576");
+                std::env::set_var(MEDIA_FETCH_TIMEOUT_SECS_ENV, "5");
+            }
+            let config = IndexerConfig::from_env().unwrap();
+            assert_eq!(config.media_fetch.max_bytes, 1_048_576);
+            assert_eq!(
+                config.media_fetch.timeout,
+                std::time::Duration::from_secs(5)
+            );
+
+            // 0 / 非数値は起動エラー（fail-closed）。
+            unsafe {
+                std::env::set_var(MEDIA_FETCH_MAX_BYTES_ENV, "0");
+            }
+            assert!(IndexerConfig::from_env().is_err());
+            unsafe {
+                std::env::set_var(MEDIA_FETCH_MAX_BYTES_ENV, "not-a-number");
+            }
+            assert!(IndexerConfig::from_env().is_err());
         });
     }
 

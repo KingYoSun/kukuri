@@ -28,6 +28,13 @@ pub enum BlobStatus {
 pub trait BlobService: Send + Sync {
     async fn put_blob(&self, data: Vec<u8>, mime: &str) -> Result<StoredBlob>;
     async fn fetch_blob(&self, hash: &BlobHash) -> Result<Option<Vec<u8>>>;
+    /// scan 用の一時取得（#609）: remote から取得した bytes を**ローカルストアへ残さない**。
+    ///
+    /// ローカルに既在の blob はそのまま読む（別目的で存在するものは消さない）。既定実装は
+    /// `fetch_blob` に委譲する（in-memory 実装等、恒久保存の概念が無い実装向け）。
+    async fn fetch_blob_ephemeral(&self, hash: &BlobHash) -> Result<Option<Vec<u8>>> {
+        self.fetch_blob(hash).await
+    }
     async fn pin_blob(&self, hash: &BlobHash) -> Result<()>;
     async fn blob_status(&self, hash: &BlobHash) -> Result<BlobStatus>;
     async fn import_peer_ticket(&self, ticket: &str) -> Result<()>;
@@ -193,6 +200,27 @@ impl BlobService for IrohBlobService {
         }
     }
 
+    async fn fetch_blob_ephemeral(&self, hash: &BlobHash) -> Result<Option<Vec<u8>>> {
+        let hash_text = hash.as_str().to_string();
+        let hash = iroh_blobs::Hash::from_str(hash.as_str())?;
+        match self.node.blobs().blobs().get_bytes(hash).await {
+            Ok(bytes) => Ok(Some(bytes.to_vec())),
+            Err(error) => {
+                // remote からの取得はストアへ書き込まない(safety scan の一時 fetch。#609)。
+                remote_fetch::fetch_bytes_ephemeral_with_cooldown(
+                    &self.node,
+                    &self.peers,
+                    &self.remote_fetch_retries,
+                    "blob",
+                    hash_text.as_str(),
+                    hash,
+                    error,
+                )
+                .await
+            }
+        }
+    }
+
     async fn pin_blob(&self, hash: &BlobHash) -> Result<()> {
         self.pinned.write().await.insert(hash.as_str().to_string());
         Ok(())
@@ -328,6 +356,51 @@ mod tests {
         let payload = receiver.fetch_blob(&stored.hash).await.expect("fetch blob");
 
         assert_eq!(payload, Some(b"video-remote-roundtrip".to_vec()));
+    }
+
+    #[tokio::test]
+    async fn ephemeral_fetch_returns_bytes_without_persisting_them_locally() {
+        // safety scan の一時 fetch(#609): remote から取得できること、かつ取得後も
+        // ローカルストアに blob が残らないこと(no-permanent-blob-storage)を固定する。
+        let sender_dir = tempdir().expect("sender tempdir");
+        let receiver_dir = tempdir().expect("receiver tempdir");
+        let config = TransportNetworkConfig::loopback();
+
+        let sender_node = IrohDocsNode::persistent_with_config(sender_dir.path(), config.clone())
+            .await
+            .expect("sender node");
+        let receiver_node =
+            IrohDocsNode::persistent_with_config(receiver_dir.path(), config.clone())
+                .await
+                .expect("receiver node");
+
+        let sender = IrohBlobService::new(sender_node.clone());
+        let receiver = IrohBlobService::new(receiver_node.clone());
+
+        let ticket = loopback_ticket(sender_node.endpoint(), &config);
+        receiver
+            .import_peer_ticket(&ticket)
+            .await
+            .expect("import ticket");
+
+        let stored = sender
+            .put_blob(b"scan-only-media".to_vec(), "image/png")
+            .await
+            .expect("put blob");
+
+        let payload = receiver
+            .fetch_blob_ephemeral(&stored.hash)
+            .await
+            .expect("ephemeral fetch");
+        assert_eq!(payload, Some(b"scan-only-media".to_vec()));
+
+        // ローカルストアには取り込まれていない(fetch_blob 経由だと remote fetch に
+        // フォールバックしてしまうため、store を直接確認する)。
+        let hash = iroh_blobs::Hash::from_str(stored.hash.as_str()).expect("hash");
+        assert!(
+            receiver_node.blobs().blobs().get_bytes(hash).await.is_err(),
+            "ephemeral fetch must not persist the blob into the local store"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

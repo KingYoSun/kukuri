@@ -8,14 +8,18 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use async_trait::async_trait;
 use kukuri_cn_core::{IndexScopeKind, MemoryIndexEntryStore};
 use kukuri_cn_indexer::config::RelayConfig;
 use kukuri_cn_indexer::ingest::IngestPipeline;
 use kukuri_cn_indexer::participant::ScopeReplica;
 use kukuri_cn_indexer::projection::{IndexProjection, MemoryIndexProjection};
-use kukuri_cn_safety::provider::{ScanError, SubjectKind};
+use kukuri_cn_safety::provider::{
+    ProviderScanRequest, ProviderScanResult, ScanError, ScanOutcome, SubjectKind,
+};
 use kukuri_cn_safety::{
-    MockSafetyProvider, ModerationEventSigner, RiskSignalTarget, SafetyCategory,
+    MockSafetyProvider, ModerationEventSigner, RiskSignalTarget, SafetyCategory, SafetyProvider,
+    SafetyProviderCapability,
 };
 use kukuri_cn_safety_runtime::clock::SystemScanClock;
 use kukuri_cn_safety_runtime::id::UuidEventIdGenerator;
@@ -24,7 +28,8 @@ use kukuri_cn_safety_runtime::{
     SafetyOrchestrator, Secp256k1ModerationEventSigner, verify_signed_event,
 };
 use kukuri_core::{
-    KukuriKeys, ObjectVisibility, PayloadRef, ReplicaId, TopicId, build_post_envelope,
+    KukuriKeys, KukuriMediaManifestV1, MediaManifestItem, ObjectVisibility, PayloadRef, ReplicaId,
+    TopicId, blob_hash, build_media_manifest_envelope, build_post_envelope,
     build_post_envelope_with_payload,
 };
 use kukuri_docs_sync::{DocOp, DocQuery, DocsSync, MemoryDocsSync, stable_key, topic_replica_id};
@@ -138,11 +143,31 @@ async fn persist_post(
     object_id
 }
 
+const MEDIA_MANIFEST_ID: &str = "media-manifest-test";
+/// manifest item の blob 本体（scan 対象 hash はここから導出する）。
+const MEDIA_BLOB_BYTES: &[u8] = b"tiny-png-bytes";
+/// manifest item の thumbnail blob 本体（mime metadata を持たない scan 対象）。
+const MEDIA_THUMBNAIL_BYTES: &[u8] = b"tiny-thumbnail-bytes";
+
+fn media_blob_hash() -> String {
+    blob_hash(MEDIA_BLOB_BYTES).as_str().to_string()
+}
+
+fn media_thumbnail_hash() -> String {
+    blob_hash(MEDIA_THUMBNAIL_BYTES).as_str().to_string()
+}
+
+/// manifest 参照つき media post を共有 replica に実在させる（#609: manifest は署名済み envelope
+/// として `manifests/media/<id>/{state,envelope}` に persist する。app-api と同じ key 形状）。
+///
+/// `persist_manifest = false` で「post は manifest を参照するが replica に manifest が無い」
+/// fail-closed 系の状況を作れる。返り値は object_id。
 async fn persist_media_post(
     docs: &MemoryDocsSync,
     replica: &ReplicaId,
     topic: &TopicId,
     body: &str,
+    persist_manifest: bool,
 ) -> String {
     let keys = KukuriKeys::generate();
     let envelope = build_post_envelope_with_payload(
@@ -152,7 +177,7 @@ async fn persist_media_post(
             text: body.to_string(),
         },
         Vec::new(),
-        vec!["media-manifest-test".to_string()],
+        vec![MEDIA_MANIFEST_ID.to_string()],
         None,
         ObjectVisibility::Public,
     )
@@ -181,6 +206,44 @@ async fn persist_media_post(
     )
     .await
     .expect("envelope op");
+
+    if persist_manifest {
+        let manifest = KukuriMediaManifestV1 {
+            manifest_id: MEDIA_MANIFEST_ID.to_string(),
+            owner_pubkey: keys.public_key(),
+            created_at: 1_719_900_000,
+            items: vec![MediaManifestItem {
+                blob_hash: blob_hash(MEDIA_BLOB_BYTES),
+                mime: "image/png".to_string(),
+                size: MEDIA_BLOB_BYTES.len() as u64,
+                width: None,
+                height: None,
+                duration_ms: None,
+                codec: None,
+                thumbnail_blob_hash: Some(blob_hash(MEDIA_THUMBNAIL_BYTES)),
+            }],
+        };
+        let manifest_envelope =
+            build_media_manifest_envelope(&keys, topic, &manifest).expect("manifest envelope");
+        docs.apply_doc_op(
+            replica,
+            DocOp::SetJson {
+                key: stable_key("manifests/media", &format!("{MEDIA_MANIFEST_ID}/state")),
+                value: serde_json::to_value(&manifest).expect("manifest json"),
+            },
+        )
+        .await
+        .expect("manifest state op");
+        docs.apply_doc_op(
+            replica,
+            DocOp::SetJson {
+                key: stable_key("manifests/media", &format!("{MEDIA_MANIFEST_ID}/envelope")),
+                value: serde_json::to_value(&manifest_envelope).expect("manifest envelope json"),
+            },
+        )
+        .await
+        .expect("manifest envelope op");
+    }
     object_id
 }
 
@@ -262,21 +325,19 @@ fn service_with_providers(
     (Arc::new(service), store)
 }
 
-const MEDIA_HINT: &str = "media-manifest-test";
-
 #[tokio::test]
 async fn media_scan_unavailable_fails_closed_and_post_is_not_indexed() -> Result<()> {
-    // media 参照 post は media 参照ごとに scan する（#420）。media scan が実行不能
-    // （VLM provider / MediaFetcher 未構成 = Unavailable）なら post 全体を index しない
-    // （worst-case 合成の fail-closed。従来の「media 参照 post は index しない」挙動を
+    // media 参照 post は media blob ごとに scan する（#420、manifest 展開は #609）。media scan
+    // が実行不能（VLM provider / MediaFetcher 未構成 = Unavailable）なら post 全体を index
+    // しない（worst-case 合成の fail-closed。従来の「media 参照 post は index しない」挙動を
     // 標準経路経由で保存する）。
     let docs = Arc::new(MemoryDocsSync::default());
     let projection = Arc::new(MemoryIndexProjection::new());
     let topic = TopicId::new("rust");
     let replica = topic_replica_id("rust");
-    let object_id = persist_media_post(&docs, &replica, &topic, "media caption").await;
+    let object_id = persist_media_post(&docs, &replica, &topic, "media caption", true).await;
 
-    // post text scan は allow（NoKnownMatch）を返すが、media hint（未設定 subject）は
+    // post text scan は allow（NoKnownMatch）を返すが、media blob（未設定 subject）は
     // Unavailable エラーになる mock。
     let provider = MockSafetyProvider::known_csam("mock-known-csam")
         .with_no_known_match(&object_id)
@@ -295,12 +356,144 @@ async fn media_scan_unavailable_fails_closed_and_post_is_not_indexed() -> Result
     );
     assert!(!entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
     // post text の verdict 自体は記録される（allow）が、media scan の fail-closed で index
-    // はされない。blob 側の verdict も fail-closed として記録される。
+    // はされない。blob 側の verdict も fail-closed として記録される（subject は manifest 展開
+    // 後の blob hash）。
     assert!(store.verdict_for(SubjectKind::Post, &object_id).is_some());
     let blob_verdict = store
-        .verdict_for(SubjectKind::Blob, MEDIA_HINT)
+        .verdict_for(SubjectKind::Blob, &media_blob_hash())
         .expect("media verdict recorded");
     assert!(!blob_verdict.1.is_indexable());
+    Ok(())
+}
+
+#[tokio::test]
+async fn missing_media_manifest_fails_closed_and_post_is_not_indexed() -> Result<()> {
+    // manifest 参照が replica 上で解決できなければ scan 対象を確定できないため、post を
+    // index しない（#609 fail-closed）。blob scan 自体が走らないので blob verdict も無い。
+    let docs = Arc::new(MemoryDocsSync::default());
+    let projection = Arc::new(MemoryIndexProjection::new());
+    let topic = TopicId::new("rust");
+    let replica = topic_replica_id("rust");
+    let object_id = persist_media_post(&docs, &replica, &topic, "media caption", false).await;
+
+    let (pipeline, entries, store) = pipeline_with(&docs, &projection, allow_service());
+    let summary = pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+
+    assert_eq!(summary.indexed, 0);
+    assert_eq!(summary.skipped_non_allow, 1);
+    assert!(
+        !projection
+            .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
+            .await?
+    );
+    assert!(!entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
+    assert!(
+        store
+            .verdict_for(SubjectKind::Blob, &media_blob_hash())
+            .is_none()
+    );
+    Ok(())
+}
+
+/// 受け取った scan request を記録する known-CSAM provider（mime 経路の検証用）。
+///
+/// すべての subject に `NoKnownMatch`（allow 側）を返し、`public_node_default` policy の
+/// require_known_csam を満たしつつ request の中身だけを観測する。
+struct RecordingProvider {
+    requests: std::sync::Mutex<Vec<ProviderScanRequest>>,
+}
+
+#[async_trait]
+impl SafetyProvider for RecordingProvider {
+    fn name(&self) -> &str {
+        "recording-known-csam"
+    }
+
+    fn capabilities(&self) -> &[SafetyProviderCapability] {
+        &[SafetyProviderCapability::KnownCsamHashMatch]
+    }
+
+    async fn scan(&self, request: &ProviderScanRequest) -> Result<ProviderScanResult, ScanError> {
+        self.requests
+            .lock()
+            .expect("recording provider mutex")
+            .push(request.clone());
+        let mut result = ProviderScanResult::completed(
+            self.name(),
+            SafetyProviderCapability::KnownCsamHashMatch,
+        );
+        result.outcome = ScanOutcome::NoKnownMatch;
+        Ok(result)
+    }
+}
+
+#[tokio::test]
+async fn media_scan_requests_carry_blob_hash_and_mime_from_the_manifest() -> Result<()> {
+    // #609: manifest 参照は item blob（hash + mime）へ展開され、mime は scan request の
+    // `media_mime` として provider（→ fetcher）まで運ばれる。thumbnail は manifest に mime
+    // metadata が無いため media_mime 無しで scan される（fetcher の magic bytes 判定に委ねる）。
+    let docs = Arc::new(MemoryDocsSync::default());
+    let projection = Arc::new(MemoryIndexProjection::new());
+    let topic = TopicId::new("rust");
+    let replica = topic_replica_id("rust");
+    let object_id = persist_media_post(&docs, &replica, &topic, "media caption", true).await;
+
+    let signer = Secp256k1ModerationEventSigner::from_secret(TEST_SECRET).expect("signer");
+    let issuer = signer.issuer_node_id().to_string();
+    let store = Arc::new(MemorySafetyArtifactStore::new());
+    let recording = Arc::new(RecordingProvider {
+        requests: std::sync::Mutex::new(Vec::new()),
+    });
+    let orchestrator = SafetyOrchestrator::builder(
+        &issuer,
+        Arc::new(SystemScanClock),
+        Arc::new(UuidEventIdGenerator),
+    )
+    .provider(recording.clone())
+    .build()
+    .expect("orchestrator");
+    let service = SafetyScanService::builder(Arc::new(orchestrator), store.clone())
+        .signer(Arc::new(signer))
+        .build()
+        .expect("service");
+    let (pipeline, _entries, _store) =
+        pipeline_with(&docs, &projection, (Arc::new(service), store));
+
+    let summary = pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+    assert_eq!(summary.indexed, 1);
+
+    let requests = recording.requests.lock().expect("recording provider mutex");
+    let post_requests: Vec<_> = requests
+        .iter()
+        .filter(|request| request.subject_kind == Some(SubjectKind::Post))
+        .collect();
+    assert_eq!(post_requests.len(), 1);
+    assert_eq!(post_requests[0].subject_id.as_deref(), Some(&*object_id));
+
+    let blob_requests: Vec<_> = requests
+        .iter()
+        .filter(|request| request.subject_kind == Some(SubjectKind::Blob))
+        .collect();
+    assert_eq!(blob_requests.len(), 2, "manifest item + thumbnail");
+    let item = blob_requests
+        .iter()
+        .find(|request| request.subject_id.as_deref() == Some(&*media_blob_hash()))
+        .expect("manifest item scan request");
+    assert_eq!(item.media_hint.as_deref(), Some(&*media_blob_hash()));
+    assert_eq!(item.media_mime.as_deref(), Some("image/png"));
+    let thumbnail = blob_requests
+        .iter()
+        .find(|request| request.subject_id.as_deref() == Some(&*media_thumbnail_hash()))
+        .expect("thumbnail scan request");
+    assert_eq!(
+        thumbnail.media_hint.as_deref(),
+        Some(&*media_thumbnail_hash())
+    );
+    assert_eq!(thumbnail.media_mime, None);
     Ok(())
 }
 
@@ -312,14 +505,17 @@ async fn allow_media_post_is_indexed_and_searchable_via_derived_tags() -> Result
     let projection = Arc::new(MemoryIndexProjection::new());
     let topic = TopicId::new("rust");
     let replica = topic_replica_id("rust");
-    let object_id = persist_media_post(&docs, &replica, &topic, "media caption").await;
+    let object_id = persist_media_post(&docs, &replica, &topic, "media caption", true).await;
 
     let known = MockSafetyProvider::known_csam("mock-known-csam");
     let vlm = MockSafetyProvider::with_capabilities(
         "mock-vlm",
         vec![kukuri_cn_safety::SafetyProviderCapability::GeneralMediaModeration],
     )
-    .with_derived_tags(MEDIA_HINT, vec!["sunset".to_string(), "beach".to_string()]);
+    .with_derived_tags(
+        media_blob_hash(),
+        vec!["sunset".to_string(), "beach".to_string()],
+    );
     let (pipeline, entries, _store) =
         pipeline_with(&docs, &projection, service_with_providers(vec![known, vlm]));
     let summary = pipeline
@@ -357,7 +553,7 @@ async fn flagged_media_post_is_not_indexed_and_tags_do_not_leak() -> Result<()> 
     let projection = Arc::new(MemoryIndexProjection::new());
     let topic = TopicId::new("rust");
     let replica = topic_replica_id("rust");
-    let object_id = persist_media_post(&docs, &replica, &topic, "media caption").await;
+    let object_id = persist_media_post(&docs, &replica, &topic, "media caption", true).await;
 
     let known = MockSafetyProvider::known_csam("mock-known-csam");
     let vlm = MockSafetyProvider::with_capabilities(
@@ -365,12 +561,12 @@ async fn flagged_media_post_is_not_indexed_and_tags_do_not_leak() -> Result<()> 
         vec![kukuri_cn_safety::SafetyProviderCapability::GeneralMediaModeration],
     )
     .with_score(
-        MEDIA_HINT,
+        media_blob_hash(),
         kukuri_cn_safety::SafetyProviderCapability::GeneralMediaModeration,
         SafetyCategory::Nsfw,
         95,
     )
-    .with_derived_tags(MEDIA_HINT, vec!["leaked-tag".to_string()]);
+    .with_derived_tags(media_blob_hash(), vec!["leaked-tag".to_string()]);
     let (pipeline, entries, _store) =
         pipeline_with(&docs, &projection, service_with_providers(vec![known, vlm]));
     let summary = pipeline
