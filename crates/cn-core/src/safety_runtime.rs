@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context as _, Result, bail};
 use async_trait::async_trait;
 use sqlx::PgPool;
 

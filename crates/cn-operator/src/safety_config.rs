@@ -181,14 +181,13 @@ pub fn validate_safety_config(config: &SafetyConfig) -> Result<()> {
     if let Some(secret_id) = config.events.signing_key_secret_id.as_deref() {
         validate_secret_id("safety.events.signing_key_secret_id", secret_id)?;
     }
-    if let Some(threshold) = config.moderation.suspected_threshold {
-        if threshold == 0 || threshold > 100 {
+    if let Some(threshold) = config.moderation.suspected_threshold
+        && (threshold == 0 || threshold > 100) {
             bail!(
                 "safety.moderation.suspected_threshold は 1-100 の整数で指定してください \
                  (got {threshold})"
             );
         }
-    }
     Ok(())
 }
 
