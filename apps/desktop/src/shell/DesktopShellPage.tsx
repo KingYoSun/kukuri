@@ -97,6 +97,7 @@ export function DesktopShellPage({
     notificationStatus,
     selectedLiveSessionId,
     selectedGameRoomId,
+    developerModeEnabled,
     shellChromeState,
   } = useDesktopShellStore(useShallow(selectShellPageSlice));
   const [profileAvatarPreviewUrl, setProfileAvatarPreviewUrl] = useState<string | null>(null);
@@ -355,6 +356,30 @@ export function DesktopShellPage({
         });
         return;
       }
+      if ((reference.kind === 'live' || reference.kind === 'game') && !developerModeEnabled) {
+        // WIP機能が隠れている間は live/game リンクを topic timeline へ落とす。
+        await syncTopicContext(reference.topic, reference.channelId);
+        setSelectedLiveSessionId(null);
+        setSelectedGameRoomId(null);
+        setShellChromeState((current) => ({
+          ...current,
+          activePrimarySection: 'timeline',
+          navOpen: false,
+        }));
+        syncRoute('push', {
+          activeTopic: reference.topic,
+          composeTarget: privateComposeTarget(reference.channelId),
+          focusedObjectId: null,
+          primarySection: 'timeline',
+          selectedAuthorPubkey: null,
+          selectedDirectMessagePeerPubkey: null,
+          selectedGameRoomId: null,
+          selectedLiveSessionId: null,
+          selectedThread: null,
+          timelineScope: privateTimelineScope(reference.channelId),
+        });
+        return;
+      }
       if (reference.kind === 'live') {
         await syncTopicContext(reference.topic, reference.channelId);
         setSelectedLiveSessionId(reference.sessionId);
@@ -400,6 +425,7 @@ export function DesktopShellPage({
       });
     },
     [
+      developerModeEnabled,
       handleOpenSharePreview,
       openThread,
       setSelectedGameRoomId,
@@ -472,26 +498,28 @@ export function DesktopShellPage({
   );
   const navRailHeader = (
     <div className='shell-nav-status'>
-      <div className='shell-status-badges'>
-        <StatusBadge
-          label={syncStatusBadgeLabel(syncStatus)}
-          tone={syncStatusBadgeTone(syncStatus)}
-        />
-        <StatusBadge label={`${formatCount(syncStatus.peer_count)} ${t('settings:connectivity.metrics.peers').toLowerCase()}`} />
-        <StatusBadge
-          label={
-            syncStatus.discovery.mode === 'seeded_dht'
-              ? t('shell:navigation.seededDht')
-              : t('shell:navigation.staticPeers')
-          }
-        />
-        {syncStatus.pending_events > 0 ? (
+      {developerModeEnabled ? (
+        <div className='shell-status-badges'>
           <StatusBadge
-            label={`${formatCount(syncStatus.pending_events)} ${t('settings:connectivity.metrics.pending').toLowerCase()}`}
-            tone='warning'
+            label={syncStatusBadgeLabel(syncStatus)}
+            tone={syncStatusBadgeTone(syncStatus)}
           />
-        ) : null}
-      </div>
+          <StatusBadge label={`${formatCount(syncStatus.peer_count)} ${t('settings:connectivity.metrics.peers').toLowerCase()}`} />
+          <StatusBadge
+            label={
+              syncStatus.discovery.mode === 'seeded_dht'
+                ? t('shell:navigation.seededDht')
+                : t('shell:navigation.staticPeers')
+            }
+          />
+          {syncStatus.pending_events > 0 ? (
+            <StatusBadge
+              label={`${formatCount(syncStatus.pending_events)} ${t('settings:connectivity.metrics.pending').toLowerCase()}`}
+              tone='warning'
+            />
+          ) : null}
+        </div>
+      ) : null}
       {updateAvailable ? (
         <Button
           className='shell-update-button shell-icon-button'

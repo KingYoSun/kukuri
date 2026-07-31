@@ -16,12 +16,14 @@ type ConnectivityPanelProps = {
   view: ConnectivityPanelView;
   onPeerTicketInputChange: (value: string) => void;
   onImportPeer: () => void;
+  showDiagnostics?: boolean;
 };
 
 export function ConnectivityPanel({
   view,
   onPeerTicketInputChange,
   onImportPeer,
+  showDiagnostics = true,
 }: ConnectivityPanelProps) {
   const { t } = useTranslation(['common', 'settings']);
 
@@ -38,8 +40,12 @@ export function ConnectivityPanel({
         {view.status === 'loading' ? <Notice>{t('settings:connectivity.loading')}</Notice> : null}
         {view.panelError ? <Notice tone='destructive'>{view.panelError}</Notice> : null}
 
-        <SettingsMetricGrid items={view.metrics} />
-        <SettingsDiagnosticList items={view.diagnostics} columns={2} />
+        {showDiagnostics ? (
+          <>
+            <SettingsMetricGrid items={view.metrics} />
+            <SettingsDiagnosticList items={view.diagnostics} columns={2} />
+          </>
+        ) : null}
       </Card>
 
       <Card className='space-y-4'>
@@ -99,62 +105,66 @@ export function ConnectivityPanel({
                 />
               </div>
 
-              <div className='mt-4'>
-                <SettingsMetricGrid
-                  items={[
-                    {
-                      label: t('settings:connectivity.metrics.expected'),
-                      value: String(topic.expectedPeerCount),
-                    },
-                    {
-                      label: t('settings:connectivity.metrics.missing'),
-                      value: String(topic.missingPeerCount),
-                      tone: topic.missingPeerCount > 0 ? 'warning' : 'default',
-                    },
-                    {
-                      label: t('settings:connectivity.metrics.lastReceived'),
-                      value: topic.lastReceivedLabel,
-                    },
-                  ]}
-                />
-              </div>
+              {showDiagnostics ? (
+                <>
+                  <div className='mt-4'>
+                    <SettingsMetricGrid
+                      items={[
+                        {
+                          label: t('settings:connectivity.metrics.expected'),
+                          value: String(topic.expectedPeerCount),
+                        },
+                        {
+                          label: t('settings:connectivity.metrics.missing'),
+                          value: String(topic.missingPeerCount),
+                          tone: topic.missingPeerCount > 0 ? 'warning' : 'default',
+                        },
+                        {
+                          label: t('settings:connectivity.metrics.lastReceived'),
+                          value: topic.lastReceivedLabel,
+                        },
+                      ]}
+                    />
+                  </div>
 
-              <div className='mt-4'>
-                <SettingsDiagnosticList
-                  items={[
-                    {
-                      label: t('settings:connectivity.diagnostics.statusDetail'),
-                      value: topic.statusDetail,
-                    },
-                    {
-                      label: t('settings:connectivity.diagnostics.connectedPeers'),
-                      value: topic.connectedPeersLabel,
-                      monospace: true,
-                    },
-                    {
-                      label: t('settings:connectivity.diagnostics.relayAssistedPeers'),
-                      value: topic.relayAssistedPeersLabel,
-                      monospace: true,
-                    },
-                    {
-                      label: t('settings:connectivity.diagnostics.configuredPeers'),
-                      value: topic.configuredPeersLabel,
-                      monospace: true,
-                    },
-                    {
-                      label: t('settings:connectivity.diagnostics.missingPeers'),
-                      value: topic.missingPeersLabel,
-                      monospace: true,
-                    },
-                    {
-                      label: t('settings:connectivity.diagnostics.lastError'),
-                      value: topic.lastError ?? t('common:fallbacks.none'),
-                      tone: topic.lastError ? 'danger' : 'default',
-                    },
-                  ]}
-                  columns={2}
-                />
-              </div>
+                  <div className='mt-4'>
+                    <SettingsDiagnosticList
+                      items={[
+                        {
+                          label: t('settings:connectivity.diagnostics.statusDetail'),
+                          value: topic.statusDetail,
+                        },
+                        {
+                          label: t('settings:connectivity.diagnostics.connectedPeers'),
+                          value: topic.connectedPeersLabel,
+                          monospace: true,
+                        },
+                        {
+                          label: t('settings:connectivity.diagnostics.relayAssistedPeers'),
+                          value: topic.relayAssistedPeersLabel,
+                          monospace: true,
+                        },
+                        {
+                          label: t('settings:connectivity.diagnostics.configuredPeers'),
+                          value: topic.configuredPeersLabel,
+                          monospace: true,
+                        },
+                        {
+                          label: t('settings:connectivity.diagnostics.missingPeers'),
+                          value: topic.missingPeersLabel,
+                          monospace: true,
+                        },
+                        {
+                          label: t('settings:connectivity.diagnostics.lastError'),
+                          value: topic.lastError ?? t('common:fallbacks.none'),
+                          tone: topic.lastError ? 'danger' : 'default',
+                        },
+                      ]}
+                      columns={2}
+                    />
+                  </div>
+                </>
+              ) : null}
             </section>
           ))}
         </div>

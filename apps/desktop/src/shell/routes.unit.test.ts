@@ -36,6 +36,7 @@ describe('isSettingsSection', () => {
     'community-node',
     'reactions',
     'release',
+    'developer',
   ])('returns true for "%s"', (value) => {
     expect(isSettingsSection(value)).toBe(true);
   });

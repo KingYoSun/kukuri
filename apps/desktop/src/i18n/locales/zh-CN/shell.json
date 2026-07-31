@@ -104,6 +104,10 @@
       "description": "同步摘要、peer ticket 和全局错误可见性。",
       "label": "连接"
     },
+    "developer": {
+      "description": "开发者模式与开发中功能的显示设置。",
+      "label": "开发者"
+    },
     "discovery": {
       "description": "seeded DHT 配置与 discovery diagnostics。",
       "label": "发现"

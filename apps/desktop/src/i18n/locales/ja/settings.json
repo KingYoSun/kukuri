@@ -159,6 +159,14 @@
     "tracked": "{{count}} 件追跡中",
     "yourTicket": "自分のチケット"
   },
+  "developer": {
+    "mode": {
+      "description": "開発中の機能（Live・Game）と開発者向けの詳細な診断情報を表示します。",
+      "label": "開発者モードを有効にする"
+    },
+    "summary": "開発中機能と診断情報",
+    "title": "開発者"
+  },
   "discovery": {
     "actions": {
       "saveSeeds": "シードを保存"

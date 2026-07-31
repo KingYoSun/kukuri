@@ -30,6 +30,7 @@ type CommunityNodePanelProps = {
   onAcceptConsents: (baseUrl: string) => void | Promise<void>;
   onRefresh: (baseUrl: string) => void;
   onClearToken: (baseUrl: string) => void;
+  showDiagnostics?: boolean;
 };
 
 export function CommunityNodePanel({
@@ -50,6 +51,7 @@ export function CommunityNodePanel({
   onAcceptConsents,
   onRefresh,
   onClearToken,
+  showDiagnostics = true,
 }: CommunityNodePanelProps) {
   const { t } = useTranslation(['common', 'settings']);
   const [consentDialogNodeBaseUrl, setConsentDialogNodeBaseUrl] = useState<string | null>(null);
@@ -175,24 +177,28 @@ export function CommunityNodePanel({
               </Button>
             </div>
 
-            <div className='mt-4'>
-              <SettingsDiagnosticList items={node.diagnostics} columns={2} />
-            </div>
+            {showDiagnostics ? (
+              <>
+                <div className='mt-4'>
+                  <SettingsDiagnosticList items={node.diagnostics} columns={2} />
+                </div>
 
-            <div className='mt-4 space-y-2'>
-              <h5 className='text-sm font-semibold text-foreground'>
-                {t('settings:communityNode.dependency.heading')}
-              </h5>
-              <SettingsDiagnosticList items={node.dependency.diagnostics} columns={2} />
-              {node.dependency.manifestError ? (
-                <Notice tone='destructive'>{node.dependency.manifestError}</Notice>
-              ) : null}
-              {node.dependency.boundaryNotes.map((note) => (
-                <p key={note} className='text-sm text-[var(--muted-foreground)]'>
-                  {note}
-                </p>
-              ))}
-            </div>
+                <div className='mt-4 space-y-2'>
+                  <h5 className='text-sm font-semibold text-foreground'>
+                    {t('settings:communityNode.dependency.heading')}
+                  </h5>
+                  <SettingsDiagnosticList items={node.dependency.diagnostics} columns={2} />
+                  {node.dependency.manifestError ? (
+                    <Notice tone='destructive'>{node.dependency.manifestError}</Notice>
+                  ) : null}
+                  {node.dependency.boundaryNotes.map((note) => (
+                    <p key={note} className='text-sm text-[var(--muted-foreground)]'>
+                      {note}
+                    </p>
+                  ))}
+                </div>
+              </>
+            ) : null}
 
             <div className='mt-4'>
               <SettingsActionRow>

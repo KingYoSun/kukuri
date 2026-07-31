@@ -5,6 +5,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { AppearancePanel } from './AppearancePanel';
 import { CommunityNodePanel } from './CommunityNodePanel';
 import { ConnectivityPanel } from './ConnectivityPanel';
+import { DeveloperPanel } from './DeveloperPanel';
 import { DiscoveryPanel } from './DiscoveryPanel';
 import { ReactionsPanel } from './ReactionsPanel';
 import {
@@ -511,4 +512,90 @@ test('reactions panel crops an uploaded image before creating a custom asset', a
     }),
     'party'
   );
+});
+
+test('connectivity panel hides diagnostics but keeps ticket import when showDiagnostics is false', () => {
+  const connectivityPanelFixture = createConnectivityPanelFixture();
+
+  render(
+    <ConnectivityPanel
+      view={connectivityPanelFixture}
+      onPeerTicketInputChange={() => {}}
+      onImportPeer={() => {}}
+      showDiagnostics={false}
+    />
+  );
+
+  expect(screen.getByText('Your Ticket')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Import Peer' })).toBeInTheDocument();
+  expect(screen.queryByText('Effective Peers')).not.toBeInTheDocument();
+  expect(screen.queryByText('Connected Peers')).not.toBeInTheDocument();
+  expect(screen.queryByText('peer-a, peer-b')).not.toBeInTheDocument();
+});
+
+test('discovery panel hides diagnostics but keeps seed editor when showDiagnostics is false', () => {
+  const discoveryPanelFixture = createDiscoveryPanelFixture();
+
+  render(
+    <DiscoveryPanel
+      view={discoveryPanelFixture}
+      saveDisabled={false}
+      resetDisabled={false}
+      onSeedPeersChange={() => {}}
+      onSave={() => {}}
+      onReset={() => {}}
+      showDiagnostics={false}
+    />
+  );
+
+  expect(screen.getByLabelText('Seed Peers')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Save Seeds' })).toBeInTheDocument();
+  expect(screen.queryByText('Local Endpoint ID')).not.toBeInTheDocument();
+  expect(screen.queryByText('local-endpoint-a')).not.toBeInTheDocument();
+});
+
+test('community node panel hides diagnostics but keeps node editing when showDiagnostics is false', () => {
+  const communityNodePanelFixture = createCommunityNodePanelFixture();
+
+  render(
+    <CommunityNodePanel
+      view={communityNodePanelFixture}
+      saveDisabled={false}
+      resetDisabled={false}
+      clearDisabled={false}
+      onAddNode={() => {}}
+      onNodeBaseUrlChange={() => {}}
+      onNodeAutoApproveChange={() => {}}
+      onRemoveNode={() => {}}
+      onSaveNodes={() => {}}
+      onReset={() => {}}
+      onClearNodes={() => {}}
+      onAuthenticate={() => {}}
+      onFetchConsents={() => {}}
+      onAcceptConsents={() => {}}
+      onRefresh={() => {}}
+      onClearToken={() => {}}
+      showDiagnostics={false}
+    />
+  );
+
+  expect(screen.getByDisplayValue('https://api.kukuri.app')).toBeInTheDocument();
+  expect(screen.getAllByRole('button', { name: 'Authenticate' }).length).toBeGreaterThan(0);
+  expect(screen.queryByText('Session Phase')).not.toBeInTheDocument();
+  expect(screen.queryByText('Session Activation')).not.toBeInTheDocument();
+});
+
+test('developer panel toggle reports the requested developer mode state', async () => {
+  const user = userEvent.setup();
+  const onDeveloperModeChange = vi.fn();
+
+  render(
+    <DeveloperPanel developerModeEnabled={false} onDeveloperModeChange={onDeveloperModeChange} />
+  );
+
+  const toggle = screen.getByRole('checkbox', { name: 'Enable developer mode' });
+  expect(toggle).not.toBeChecked();
+
+  await user.click(toggle);
+  expect(onDeveloperModeChange).toHaveBeenCalledWith(true);
 });

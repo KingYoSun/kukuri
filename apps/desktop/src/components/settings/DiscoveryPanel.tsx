@@ -18,6 +18,7 @@ type DiscoveryPanelProps = {
   onSeedPeersChange: (value: string) => void;
   onSave: () => void;
   onReset: () => void;
+  showDiagnostics?: boolean;
 };
 
 export function DiscoveryPanel({
@@ -27,6 +28,7 @@ export function DiscoveryPanel({
   onSeedPeersChange,
   onSave,
   onReset,
+  showDiagnostics = true,
 }: DiscoveryPanelProps) {
   const { t } = useTranslation(['common', 'settings']);
 
@@ -40,8 +42,12 @@ export function DiscoveryPanel({
       {view.status === 'loading' ? <Notice>{t('settings:discovery.loading')}</Notice> : null}
       {view.panelError ? <Notice tone='destructive'>{view.panelError}</Notice> : null}
 
-      <SettingsMetricGrid items={view.metrics} />
-      <SettingsDiagnosticList items={view.diagnostics} columns={2} />
+      {showDiagnostics ? (
+        <>
+          <SettingsMetricGrid items={view.metrics} />
+          <SettingsDiagnosticList items={view.diagnostics} columns={2} />
+        </>
+      ) : null}
 
       <SettingsEditorField
         label={t('settings:discovery.seedPeersLabel')}

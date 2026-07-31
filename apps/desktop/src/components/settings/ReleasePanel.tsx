@@ -37,7 +37,11 @@ function updateErrorTranslationKey(errorMessage?: string | null): string {
   return `settings:release.update.errors.${classifyUpdateError(errorMessage)}`;
 }
 
-export function ReleasePanel() {
+type ReleasePanelProps = {
+  showDiagnostics?: boolean;
+};
+
+export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
   const { t } = useTranslation(['common', 'settings']);
   const syncStatus = useDesktopShellStore((state) => state.syncStatus);
   const notificationStatus = useDesktopShellStore((state) => state.notificationStatus);
@@ -212,12 +216,14 @@ export function ReleasePanel() {
         <h4 className='text-base font-semibold text-foreground'>
           {t('settings:release.update.title')}
         </h4>
-        <SettingsDiagnosticList items={updateDiagnostics} columns={2} />
+        {showDiagnostics ? <SettingsDiagnosticList items={updateDiagnostics} columns={2} /> : null}
         {updateState.lastError ? (
           <Notice tone='destructive'>
             <div className='space-y-1'>
               <p>{updateErrorMessage}</p>
-              <small className='font-mono'>{updateState.lastError}</small>
+              {showDiagnostics ? (
+                <small className='font-mono'>{updateState.lastError}</small>
+              ) : null}
             </div>
           </Notice>
         ) : null}
@@ -288,6 +294,7 @@ export function ReleasePanel() {
         </SettingsActionRow>
       </section>
 
+      {showDiagnostics ? (
       <section className='min-w-0 space-y-3'>
         <h4 className='text-base font-semibold text-foreground'>
           {t('settings:release.diagnostics.title')}
@@ -321,6 +328,7 @@ export function ReleasePanel() {
           />
         ) : null}
       </section>
+      ) : null}
 
       <section className='min-w-0 space-y-3'>
         <h4 className='text-base font-semibold text-foreground'>

@@ -370,11 +370,14 @@ export function useDesktopShellViewModels({
   );
   const primarySectionItems = useMemo(
     () =>
-      PRIMARY_SECTION_ITEMS.map((item) => ({
+      PRIMARY_SECTION_ITEMS.filter(
+        (item) =>
+          state.developerModeEnabled || (item.id !== 'live' && item.id !== 'game')
+      ).map((item) => ({
         ...item,
         label: t(`shell:primarySections.${item.id}`),
       })),
-    [t]
+    [state.developerModeEnabled, t]
   );
   const timelineViewItems = useMemo<Array<{ id: TimelineWorkspaceView; label: string }>>(
     () => [

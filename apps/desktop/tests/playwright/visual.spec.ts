@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { DEVELOPER_MODE_STORAGE_KEY } from '../../src/lib/developerMode';
 import { DESKTOP_THEME_STORAGE_KEY, type DesktopTheme } from '../../src/lib/theme';
 
 // src/i18n/index.ts の DESKTOP_LOCALE_STORAGE_KEY と一致（実読で確認）。
@@ -27,15 +28,18 @@ const LOCALE_EN = 'en';
  */
 async function seedAppearance(page: Page, theme: DesktopTheme): Promise<void> {
   await page.addInitScript(
-    ({ themeKey, themeValue, localeKey, localeValue }) => {
+    ({ themeKey, themeValue, localeKey, localeValue, developerModeKey }) => {
       window.localStorage.setItem(themeKey, themeValue);
       window.localStorage.setItem(localeKey, localeValue);
+      // 既存 baseline は Live/Game タブとステータスバッジを含むため developer mode を有効化する。
+      window.localStorage.setItem(developerModeKey, 'true');
     },
     {
       themeKey: DESKTOP_THEME_STORAGE_KEY,
       themeValue: theme,
       localeKey: DESKTOP_LOCALE_STORAGE_KEY,
       localeValue: LOCALE_EN,
+      developerModeKey: DEVELOPER_MODE_STORAGE_KEY,
     }
   );
 }

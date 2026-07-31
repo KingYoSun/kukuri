@@ -68,6 +68,7 @@ export const selectShellDataSlice = (s: DesktopShellStore) => ({
 export const selectShellRoutingSlice = (s: DesktopShellStore) => ({
   activeTopic: s.activeTopic,
   channelPanelStateByTopic: s.channelPanelStateByTopic,
+  developerModeEnabled: s.developerModeEnabled,
   directMessagePaneOpen: s.directMessagePaneOpen,
   focusedObjectId: s.focusedObjectId,
   gamePanelStateByTopic: s.gamePanelStateByTopic,
@@ -103,6 +104,7 @@ export const selectShellViewModelsSlice = (s: DesktopShellStore) => ({
   communityNodeManifests: s.communityNodeManifests,
   communityNodeStatuses: s.communityNodeStatuses,
   composeChannelByTopic: s.composeChannelByTopic,
+  developerModeEnabled: s.developerModeEnabled,
   directMessageDraftMediaItems: s.directMessageDraftMediaItems,
   directMessageStatusByPeer: s.directMessageStatusByPeer,
   directMessageTimelineByPeer: s.directMessageTimelineByPeer,
@@ -160,5 +162,6 @@ export const selectShellPageSlice = (s: DesktopShellStore) => ({
   notificationStatus: s.notificationStatus,
   selectedLiveSessionId: s.selectedLiveSessionId,
   selectedGameRoomId: s.selectedGameRoomId,
+  developerModeEnabled: s.developerModeEnabled,
   shellChromeState: s.shellChromeState,
 });

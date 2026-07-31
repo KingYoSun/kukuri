@@ -94,6 +94,11 @@ export const SETTINGS_SECTION_COPY: Array<{
     label: 'Release',
     description: 'Preview updates, diagnostics, and OS notifications.',
   },
+  {
+    id: 'developer',
+    label: 'Developer',
+    description: 'Developer mode and work-in-progress feature visibility.',
+  },
 ];
 
 export const PRIMARY_SECTION_PATHS: Record<PrimarySection, string> = {
@@ -113,7 +118,8 @@ export function isSettingsSection(value: string | null): value is SettingsSectio
     value === 'discovery' ||
     value === 'community-node' ||
     value === 'reactions' ||
-    value === 'release'
+    value === 'release' ||
+    value === 'developer'
   );
 }
 
