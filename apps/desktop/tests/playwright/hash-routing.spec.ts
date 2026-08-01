@@ -1,5 +1,14 @@
 ﻿import { expect, test, type Page } from '@playwright/test';
 
+import { DEVELOPER_MODE_STORAGE_KEY } from '../../src/lib/developerMode';
+
+// 既存フローは Live/Game タブなど WIP 面の表示を前提とするため developer mode を有効化する。
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript((key) => {
+    window.localStorage.setItem(key, 'true');
+  }, DEVELOPER_MODE_STORAGE_KEY);
+});
+
 async function openChannelManager(page: Page) {
   const dialog = page.getByRole('dialog', { name: 'Create / Join Private Channel' });
   if (await dialog.isVisible().catch(() => false)) {
@@ -106,4 +115,17 @@ test('browser mock hash history keeps route state stable without narrow-width ov
     () => document.documentElement.scrollWidth <= window.innerWidth
   );
   expect(noOverflow).toBeTruthy();
+});
+
+test('developer mode off falls back from live deep link to the timeline', async ({ page }) => {
+  // beforeEach の seed より後に登録した init script が勝つため、既定 OFF を再現できる。
+  await page.addInitScript((key) => {
+    window.localStorage.setItem(key, 'false');
+  }, DEVELOPER_MODE_STORAGE_KEY);
+  await page.setViewportSize({ width: 1400, height: 980 });
+
+  await page.goto('/#/live');
+  await expect(page).toHaveURL(/#\/timeline\?topic=/);
+  await expect(page.getByRole('tab', { name: 'Live' })).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: 'Timeline' })).toBeVisible();
 });

@@ -1,5 +1,14 @@
 ﻿import { expect, test, type Page } from '@playwright/test';
 
+import { DEVELOPER_MODE_STORAGE_KEY } from '../../src/lib/developerMode';
+
+// 既存フローは Live/Game タブなど WIP 面の表示を前提とするため developer mode を有効化する。
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript((key) => {
+    window.localStorage.setItem(key, 'true');
+  }, DEVELOPER_MODE_STORAGE_KEY);
+});
+
 async function openChannelManager(page: Page) {
   const dialog = page.getByRole('dialog', { name: 'Create / Join Private Channel' });
   if (await dialog.isVisible().catch(() => false)) {

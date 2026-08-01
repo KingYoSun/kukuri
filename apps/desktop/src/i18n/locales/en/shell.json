@@ -104,6 +104,10 @@
       "description": "Sync summary, peer tickets, and global error visibility.",
       "label": "Connectivity"
     },
+    "developer": {
+      "description": "Developer mode and work-in-progress feature visibility.",
+      "label": "Developer"
+    },
     "discovery": {
       "description": "Seeded DHT configuration and discovery diagnostics.",
       "label": "Discovery"

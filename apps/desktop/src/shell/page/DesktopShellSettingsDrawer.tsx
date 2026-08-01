@@ -2,6 +2,7 @@ import { AboutPanel } from '@/components/settings/AboutPanel';
 import { AppearancePanel } from '@/components/settings/AppearancePanel';
 import { CommunityNodePanel } from '@/components/settings/CommunityNodePanel';
 import { ConnectivityPanel } from '@/components/settings/ConnectivityPanel';
+import { DeveloperPanel } from '@/components/settings/DeveloperPanel';
 import { DiscoveryPanel } from '@/components/settings/DiscoveryPanel';
 import { ReleasePanel } from '@/components/settings/ReleasePanel';
 import { ReactionsPanel } from '@/components/settings/ReactionsPanel';
@@ -9,6 +10,7 @@ import { SettingsDrawer } from '@/components/shell/SettingsDrawer';
 
 import type { SupportedLocale } from '@/i18n';
 import type { CustomReactionCropRect } from '@/lib/api';
+import { writeDeveloperMode } from '@/lib/developerMode';
 import type { DesktopTheme } from '@/lib/theme';
 import { communityNodesToDraftNodes, seedPeersToEditorValue } from '@/shell/presentation';
 import {
@@ -86,6 +88,7 @@ export function DesktopShellSettingsDrawer({
   const {
     communityNodeConfig,
     communityNodeEditorDirty,
+    developerModeEnabled,
     discoveryConfig,
     discoveryEditorDirty,
     mediaObjectUrls,
@@ -95,6 +98,7 @@ export function DesktopShellSettingsDrawer({
     useShallow((s) => ({
       communityNodeConfig: s.communityNodeConfig,
       communityNodeEditorDirty: s.communityNodeEditorDirty,
+      developerModeEnabled: s.developerModeEnabled,
       discoveryConfig: s.discoveryConfig,
       discoveryEditorDirty: s.discoveryEditorDirty,
       mediaObjectUrls: s.mediaObjectUrls,
@@ -110,6 +114,7 @@ export function DesktopShellSettingsDrawer({
   const setCommunityNodeEditorDirty = useDesktopShellFieldSetter('communityNodeEditorDirty');
   const setCommunityNodeError = useDesktopShellFieldSetter('communityNodeError');
   const setShellChromeState = useDesktopShellFieldSetter('shellChromeState');
+  const setDeveloperModeEnabled = useDesktopShellFieldSetter('developerModeEnabled');
 
   const settingsSections = [
     {
@@ -133,6 +138,7 @@ export function DesktopShellSettingsDrawer({
           view={connectivityPanelView}
           onPeerTicketInputChange={setPeerTicket}
           onImportPeer={() => void handleImportPeer()}
+          showDiagnostics={developerModeEnabled}
         />
       ),
     },
@@ -141,6 +147,7 @@ export function DesktopShellSettingsDrawer({
       content: (
         <DiscoveryPanel
           view={discoveryPanelView}
+          showDiagnostics={developerModeEnabled}
           saveDisabled={discoveryConfig.env_locked || !discoveryEditorDirty}
           resetDisabled={!discoveryEditorDirty}
           onSeedPeersChange={(value) => {
@@ -161,6 +168,7 @@ export function DesktopShellSettingsDrawer({
       content: (
         <CommunityNodePanel
           view={communityNodePanelView}
+          showDiagnostics={developerModeEnabled}
           saveDisabled={!communityNodeEditorDirty}
           resetDisabled={!communityNodeEditorDirty}
           clearDisabled={communityNodeConfig.nodes.length === 0}
@@ -223,7 +231,19 @@ export function DesktopShellSettingsDrawer({
     },
     {
       ...settingsSectionCopy[6],
-      content: <ReleasePanel />,
+      content: <ReleasePanel showDiagnostics={developerModeEnabled} />,
+    },
+    {
+      ...settingsSectionCopy[7],
+      content: (
+        <DeveloperPanel
+          developerModeEnabled={developerModeEnabled}
+          onDeveloperModeChange={(enabled) => {
+            setDeveloperModeEnabled(enabled);
+            writeDeveloperMode(enabled);
+          }}
+        />
+      ),
     },
   ];
 

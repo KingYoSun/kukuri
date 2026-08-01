@@ -104,6 +104,10 @@
       "description": "同期概要、peer ticket、全体エラーの確認です。",
       "label": "接続"
     },
+    "developer": {
+      "description": "開発者モードと開発中機能の表示設定です。",
+      "label": "開発者"
+    },
     "discovery": {
       "description": "seeded DHT 設定と discovery diagnostics です。",
       "label": "ディスカバリー"

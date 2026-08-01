@@ -1,10 +1,12 @@
 import { type SettingsSection, type ShellChromeState } from '@/components/shell/types';
+import { readDeveloperMode } from '@/lib/developerMode';
 import { parseHashRouteLocation } from '@/shell/routes';
 
 /// shell chrome(ナビ・設定ドロワー)とルート記憶・全体エラー(WP-H6 PR3 のドメインスライス)。
 export type ChromeSliceState = {
   error: string | null;
   lastNonNotificationsRoute: string | null;
+  developerModeEnabled: boolean;
   shellChromeState: ShellChromeState;
 };
 
@@ -37,7 +39,8 @@ function parseInitialSettingsSection(): {
     requestedSection !== 'discovery' &&
     requestedSection !== 'community-node' &&
     requestedSection !== 'reactions' &&
-    requestedSection !== 'release'
+    requestedSection !== 'release' &&
+    requestedSection !== 'developer'
   ) {
     return {
       activeSettingsSection: DEFAULT_SETTINGS_SECTION,
@@ -56,6 +59,7 @@ export function createInitialChromeSlice(): ChromeSliceState {
   return {
     error: null,
     lastNonNotificationsRoute: null,
+    developerModeEnabled: readDeveloperMode(),
     shellChromeState: {
       activePrimarySection: 'timeline',
       timelineView: 'feed',

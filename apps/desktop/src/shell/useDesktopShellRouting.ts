@@ -66,6 +66,7 @@ export function useDesktopShellRouting({
   const state = useDesktopShellStore(useShallow(selectShellRoutingSlice));
   const {
     activeTopic,
+    developerModeEnabled,
     selectedThread,
     selectedAuthorPubkey,
     selectedDirectMessagePeerPubkey,
@@ -108,12 +109,19 @@ export function useDesktopShellRouting({
     [location.pathname, location.search]
   );
 
-  const routeSection = useMemo(
-    () =>
+  const routeSection = useMemo(() => {
+    const candidate =
       parsePrimarySectionPath(resolvedRouteLocation.pathname) ??
-      shellChromeState.activePrimarySection,
-    [resolvedRouteLocation.pathname, shellChromeState.activePrimarySection]
-  );
+      shellChromeState.activePrimarySection;
+    if (!developerModeEnabled && (candidate === 'live' || candidate === 'game')) {
+      return 'timeline';
+    }
+    return candidate;
+  }, [
+    developerModeEnabled,
+    resolvedRouteLocation.pathname,
+    shellChromeState.activePrimarySection,
+  ]);
   const pendingAnimationFrameIdsRef = useRef<number[]>([]);
   const lastObservedRouteUrlRef = useRef(
     `${resolvedRouteLocation.pathname}${resolvedRouteLocation.search}`

@@ -15,7 +15,8 @@ export type SettingsSection =
   | 'discovery'
   | 'community-node'
   | 'reactions'
-  | 'release';
+  | 'release'
+  | 'developer';
 
 export type ProfileWorkspaceMode = 'overview' | 'edit' | 'connections';
 

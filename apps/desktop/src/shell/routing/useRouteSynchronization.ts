@@ -183,7 +183,10 @@ export function useRouteSynchronization({
 
     let nextTopic = activeTopic;
     let shouldReload = false;
-    let shouldNormalize = false;
+    // URL の section が解決済み routeSection と食い違う場合(developer mode off の
+    // live/game fallback など)は URL を routeSection 側へ正規化する。
+    let shouldNormalize =
+      parsePrimarySectionPath(resolvedRouteLocation.pathname) !== routeSection;
     let normalizedSelectedThread: string | null = selectedThread;
     let normalizedFocusedObjectId: string | null = focusedObjectId;
     let normalizedSelectedAuthorPubkey: string | null = selectedAuthorPubkey;

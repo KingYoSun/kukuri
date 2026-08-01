@@ -159,6 +159,14 @@
     "tracked": "已跟踪 {{count}} 个",
     "yourTicket": "你的票据"
   },
+  "developer": {
+    "mode": {
+      "description": "显示开发中的功能（Live、Game）以及面向开发者的详细诊断信息。",
+      "label": "启用开发者模式"
+    },
+    "summary": "开发中功能与诊断信息",
+    "title": "开发者"
+  },
   "discovery": {
     "actions": {
       "saveSeeds": "保存种子"
