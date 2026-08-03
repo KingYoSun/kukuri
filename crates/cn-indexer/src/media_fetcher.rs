@@ -27,6 +27,8 @@ use crate::config::MediaFetchConfig;
 pub struct BlobMediaFetcher {
     blob_service: Arc<dyn BlobService>,
     config: MediaFetchConfig,
+    /// 観測状態（#613 T3）。設定時のみ取得の成否（成功 / 利用不可 / 時間切れ / 大きさ超過）を数える。
+    metrics: Option<Arc<crate::state::IndexerRuntimeState>>,
 }
 
 impl BlobMediaFetcher {
@@ -34,7 +36,18 @@ impl BlobMediaFetcher {
         Self {
             blob_service,
             config,
+            metrics: None,
         }
+    }
+
+    /// 観測状態を接続する（#613 T3。常駐ワーカーの組み立て時に使う）。
+    pub fn with_metrics(mut self, metrics: Arc<crate::state::IndexerRuntimeState>) -> Self {
+        self.metrics = Some(metrics);
+        self
+    }
+
+    fn metrics(&self) -> Option<&crate::state::IndexerRuntimeState> {
+        self.metrics.as_deref()
     }
 }
 
@@ -68,14 +81,25 @@ impl MediaFetcher for BlobMediaFetcher {
         )
         .await
         .map_err(|_| {
+            if let Some(metrics) = self.metrics() {
+                metrics.record_media_fetch_timeout();
+            }
             ScanError::Timeout(format!(
                 "media fetch timed out after {}s",
                 self.config.timeout.as_secs()
             ))
         })?
-        .map_err(|error| ScanError::Unavailable(format!("media fetch failed: {error:#}")))?;
+        .map_err(|error| {
+            if let Some(metrics) = self.metrics() {
+                metrics.record_media_fetch_unavailable();
+            }
+            ScanError::Unavailable(format!("media fetch failed: {error:#}"))
+        })?;
 
         let Some(bytes) = fetched else {
+            if let Some(metrics) = self.metrics() {
+                metrics.record_media_fetch_unavailable();
+            }
             return Err(ScanError::Unavailable(
                 "referenced media blob is not retrievable yet (not replicated or no reachable \
                  peers); scan stays fail-closed"
@@ -84,6 +108,9 @@ impl MediaFetcher for BlobMediaFetcher {
         };
 
         if bytes.len() as u64 > self.config.max_bytes {
+            if let Some(metrics) = self.metrics() {
+                metrics.record_media_fetch_oversize();
+            }
             return Err(ScanError::Protocol(format!(
                 "referenced media exceeds the scan size limit ({} > {} bytes)",
                 bytes.len(),
@@ -102,6 +129,9 @@ impl MediaFetcher for BlobMediaFetcher {
             })?,
         };
 
+        if let Some(metrics) = self.metrics() {
+            metrics.record_media_fetch_success();
+        }
         Ok(FetchedMedia {
             bytes,
             content_type,

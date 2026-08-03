@@ -19,7 +19,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use sqlx::postgres::PgPool;
-use tracing::info;
+use tracing::{info, warn};
 
 use kukuri_blob_service::IrohBlobService;
 use kukuri_cn_core::{ChannelSecretCipher, PgIndexEntryStore, PgSafetyArtifactStore};
@@ -34,6 +34,9 @@ use crate::config::IndexerConfig;
 use crate::ingest::IngestPipeline;
 use crate::media_fetcher::BlobMediaFetcher;
 use crate::participant::IndexerParticipant;
+use crate::state::IndexerRuntimeState;
+use crate::status::spawn_status_server;
+use crate::worker::{IndexerWorker, WorkerConfig};
 
 /// 環境変数から設定を読み、relay validation 起動 gate を適用して cn-indexer を起動する。
 ///
@@ -71,6 +74,14 @@ async fn run(config: IndexerConfig) -> Result<()> {
         "cn-indexer configuration validated"
     );
 
+    // 観測状態（#613 T3）。ワーカー・取り込みパイプライン・メディア取得器・状態エンドポイントが
+    // 共有する。
+    let state = Arc::new(IndexerRuntimeState::default());
+    let status_server = match config.status_addr {
+        Some(addr) => Some(spawn_status_server(addr, Arc::clone(&state)).await?),
+        None => None,
+    };
+
     // 共有 iroh node（#613 T1）。provider が構成されている場合のみ persistent node を 1 つ立ち上げ、
     // media scan の一時 fetch（#609）と docs replica sync の双方で共有する。provider 未構成なら
     // scan service 自体を構成しない（fail-closed）ため node も立てない。
@@ -100,10 +111,10 @@ async fn run(config: IndexerConfig) -> Result<()> {
             timeout_secs = config.media_fetch.timeout.as_secs(),
             "media fetcher constructed (ephemeral blob fetch; no permanent blob storage)"
         );
-        Arc::new(BlobMediaFetcher::new(
-            blob_service,
-            config.media_fetch.clone(),
-        )) as Arc<dyn MediaFetcher>
+        Arc::new(
+            BlobMediaFetcher::new(blob_service, config.media_fetch.clone())
+                .with_metrics(Arc::clone(&state)),
+        ) as Arc<dyn MediaFetcher>
     });
 
     // safety scan runtime の構築境界（#406）。provider が構成されていれば service を構築・検証する
@@ -122,14 +133,86 @@ async fn run(config: IndexerConfig) -> Result<()> {
                 issuer_node_id = %service.issuer_node_id(),
                 "safety scan service constructed"
             );
-            let _participant = compose_ingest_stack(&config, pool, cipher, service, node).await?;
-            // NOTE: 常駐 ingest loop の起動は #613 T2 で行う。ここでは本番依存の組み立てと
-            // 起動時検証（ArcadeDB 接続 / seed 適用）までを行い、終了する。
-            info!("ingest stack composed; resident ingest loop lands with #613 T2");
+            let (participant, docs_sync) = compose_ingest_stack(
+                &config,
+                pool,
+                cipher,
+                service,
+                Arc::clone(&node),
+                Arc::clone(&state),
+            )
+            .await?;
+            state.set_ingest_enabled(true);
+
+            // 常駐 ingest loop（#613 T2）。変更通知 + 定期の全件見直しで取り込み続ける。
+            let worker = IndexerWorker::new(
+                Arc::new(participant),
+                docs_sync.clone(),
+                Arc::clone(&state),
+                WorkerConfig {
+                    poll_interval: config.poll_interval,
+                    ..WorkerConfig::default()
+                },
+            );
+            let handle = worker.spawn();
+            info!("cn-indexer is resident; ingest loop running");
+
+            wait_for_shutdown_signal().await;
+            info!("shutdown signal received; stopping cn-indexer");
+
+            // 停止順: ワーカー → docs 同期の購読 → iroh node。
+            handle.shutdown().await;
+            docs_sync.shutdown().await;
+            if let Err(error) = node.shutdown().await {
+                warn!(error = %format!("{error:#}"), "failed to shut down the iroh node cleanly");
+            }
         }
-        _ => info!("safety providers not configured; ingest stays disabled (fail-closed)"),
+        _ => {
+            // 取り込みを始めずに常駐する（fail-closed）。観測状態の `ingest_enabled: false` で
+            // 機械的に判定できる。
+            state.set_ingest_enabled(false);
+            info!(
+                "safety providers not configured; staying resident with ingest disabled \
+                 (fail-closed)"
+            );
+            wait_for_shutdown_signal().await;
+            info!("shutdown signal received; stopping cn-indexer");
+        }
+    }
+    if let Some(server) = status_server {
+        server.shutdown().await;
     }
     Ok(())
+}
+
+/// 停止シグナル（Ctrl+C、Unix では SIGTERM も）を待つ。
+async fn wait_for_shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+        let mut sigterm = match signal(SignalKind::terminate()) {
+            Ok(sigterm) => sigterm,
+            Err(error) => {
+                warn!(%error, "failed to install the SIGTERM handler; falling back to Ctrl+C");
+                let _ = tokio::signal::ctrl_c().await;
+                return;
+            }
+        };
+        tokio::select! {
+            result = tokio::signal::ctrl_c() => {
+                if let Err(error) = result {
+                    warn!(%error, "failed to listen for Ctrl+C");
+                }
+            }
+            _ = sigterm.recv() => {}
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        if let Err(error) = tokio::signal::ctrl_c().await {
+            warn!(%error, "failed to listen for Ctrl+C");
+        }
+    }
 }
 
 /// ingest 経路の本番依存を組み立てる（#613 T1）。
@@ -144,7 +227,8 @@ async fn compose_ingest_stack(
     cipher: ChannelSecretCipher,
     safety: SafetyScanService,
     node: Arc<IrohDocsNode>,
-) -> Result<IndexerParticipant> {
+    state: Arc<IndexerRuntimeState>,
+) -> Result<(IndexerParticipant, Arc<IrohDocsSync>)> {
     let docs_sync = Arc::new(IrohDocsSync::new(node));
     if !config.seed_peers.is_empty() {
         docs_sync
@@ -171,10 +255,17 @@ async fn compose_ingest_stack(
         Arc::new(safety),
         entries.clone(),
         projection.clone(),
+    )
+    .with_metrics(state);
+    let participant = IndexerParticipant::new(
+        pool,
+        docs_sync.clone(),
+        entries,
+        projection,
+        pipeline,
+        cipher,
     );
-    Ok(IndexerParticipant::new(
-        pool, docs_sync, entries, projection, pipeline, cipher,
-    ))
+    Ok((participant, docs_sync))
 }
 
 fn init_tracing() {
