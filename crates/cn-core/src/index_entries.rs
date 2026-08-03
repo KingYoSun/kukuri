@@ -231,6 +231,12 @@ pub trait IndexEntryStore: Send + Sync {
         scope_kind: IndexScopeKind,
         candidates: &[(String, String)],
     ) -> Result<Vec<(String, String)>>;
+
+    /// 真実源にいま entry が存在する scope の一覧（#613 T2）。
+    ///
+    /// 常駐ワーカーが「サポート対象から外れたのに索引が残っている scope」を再起動をまたいで
+    /// 検知し、索引解除するために使う。
+    async fn list_scopes(&self) -> Result<Vec<(IndexScopeKind, String)>>;
 }
 
 /// Postgres 実装。`cn_index.index_entries` の persist API に委譲する。
@@ -270,6 +276,20 @@ impl IndexEntryStore for PgIndexEntryStore {
         candidates: &[(String, String)],
     ) -> Result<Vec<(String, String)>> {
         filter_surfaceable_objects(&self.pool, scope_kind, candidates).await
+    }
+
+    async fn list_scopes(&self) -> Result<Vec<(IndexScopeKind, String)>> {
+        let rows = sqlx::query("SELECT DISTINCT scope_kind, scope_id FROM cn_index.index_entries")
+            .fetch_all(&self.pool)
+            .await?;
+        rows.iter()
+            .map(|row| {
+                Ok((
+                    IndexScopeKind::parse(&row.try_get::<String, _>("scope_kind")?)?,
+                    row.try_get::<String, _>("scope_id")?,
+                ))
+            })
+            .collect()
     }
 }
 
@@ -390,6 +410,19 @@ impl IndexEntryStore for MemoryIndexEntryStore {
             })
             .cloned()
             .collect())
+    }
+
+    async fn list_scopes(&self) -> Result<Vec<(IndexScopeKind, String)>> {
+        let entries = self.entries.lock().expect("entries mutex poisoned");
+        let mut scopes: Vec<(IndexScopeKind, String)> = Vec::new();
+        for (kind, scope_id, _) in entries.keys() {
+            if !scopes.iter().any(|(existing_kind, existing_id)| {
+                existing_kind == kind && existing_id == scope_id
+            }) {
+                scopes.push((*kind, scope_id.clone()));
+            }
+        }
+        Ok(scopes)
     }
 }
 

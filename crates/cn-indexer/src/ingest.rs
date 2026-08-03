@@ -32,8 +32,9 @@ use anyhow::{Context, Result, bail};
 use tracing::{debug, warn};
 
 use kukuri_cn_core::{IndexEntryStore, IndexScopeKind, NewIndexEntry};
+use kukuri_cn_safety::ReasonCode;
 use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
-use kukuri_cn_safety_runtime::SafetyScanService;
+use kukuri_cn_safety_runtime::{SafetyScanOutcome, SafetyScanService};
 use kukuri_core::{
     AssetRef, KukuriEnvelope, KukuriMediaManifestV1, ObjectStatus, PayloadRef, ReplicaId,
 };
@@ -64,6 +65,8 @@ pub struct IngestPipeline {
     safety: Arc<SafetyScanService>,
     entries: Arc<dyn IndexEntryStore>,
     projection: Arc<dyn IndexProjection>,
+    /// 観測状態（#613 T3）。設定時のみスキャン失敗 / プロバイダ利用不可を分類して数える。
+    metrics: Option<Arc<crate::state::IndexerRuntimeState>>,
 }
 
 impl IngestPipeline {
@@ -78,7 +81,38 @@ impl IngestPipeline {
             safety,
             entries,
             projection,
+            metrics: None,
         }
+    }
+
+    /// 観測状態を接続する（#613 T3。常駐ワーカーの組み立て時に使う）。
+    pub fn with_metrics(mut self, metrics: Arc<crate::state::IndexerRuntimeState>) -> Self {
+        self.metrics = Some(metrics);
+        self
+    }
+
+    /// スキャンを実行し、観測状態に分類（スキャン失敗 / プロバイダ利用不可）を記録する。
+    async fn scan_and_record_with_metrics(
+        &self,
+        request: &ProviderScanRequest,
+    ) -> Result<SafetyScanOutcome> {
+        let outcome = match self.safety.scan_and_record(request).await {
+            Ok(outcome) => outcome,
+            Err(error) => {
+                if let Some(metrics) = &self.metrics {
+                    metrics.record_scan_error();
+                }
+                return Err(error);
+            }
+        };
+        if let Some(metrics) = &self.metrics {
+            match outcome.report.verdict.reason_code {
+                ReasonCode::ProviderUnavailable => metrics.record_provider_unavailable(),
+                ReasonCode::ScanFailed | ReasonCode::Unscanned => metrics.record_scan_error(),
+                _ => {}
+            }
+        }
+        Ok(outcome)
     }
 
     /// scope の共有 replica を走査し、実在する post entry のみを scan→allow 判定して投影へ反映する。
@@ -183,7 +217,7 @@ impl IngestPipeline {
         // 永続化失敗は `?` で呼び出し側の per-entry fail-closed（投影しない）に乗る。
         let request = ProviderScanRequest::for_subject(SubjectKind::Post, object.object_id.clone())
             .with_text(text.clone());
-        let outcome = self.safety.scan_and_record(&request).await?;
+        let outcome = self.scan_and_record_with_metrics(&request).await?;
         let report = &outcome.report;
 
         if !report.verdict.is_indexable() {
@@ -229,7 +263,7 @@ impl IngestPipeline {
             if let Some(mime) = &target.mime {
                 request = request.with_media_mime(mime.clone());
             }
-            let media_outcome = self.safety.scan_and_record(&request).await?;
+            let media_outcome = self.scan_and_record_with_metrics(&request).await?;
             let media_report = &media_outcome.report;
             if !media_report.verdict.is_indexable() {
                 self.deindex_object(scope_kind, scope_id, object.object_id.as_str())

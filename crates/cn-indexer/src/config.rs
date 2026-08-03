@@ -117,6 +117,10 @@ pub struct IndexerConfig {
     /// `COMMUNITY_NODE_INDEXER_SEED_PEERS`（カンマ区切り、`endpoint_id` または
     /// `endpoint_id@host:port`）から読む。不正な値は起動エラー（fail-closed）。
     pub seed_peers: Vec<SeedPeer>,
+    /// 常駐ワーカーの全件見直し間隔（#613 T2）。
+    pub poll_interval: std::time::Duration,
+    /// 観測状態の HTTP エンドポイントの待ち受けアドレス（#613 T3）。None なら公開しない。
+    pub status_addr: Option<std::net::SocketAddr>,
 }
 
 impl std::fmt::Debug for IndexerConfig {
@@ -131,6 +135,8 @@ impl std::fmt::Debug for IndexerConfig {
             .field("safety", &self.safety)
             .field("media_fetch", &self.media_fetch)
             .field("seed_peers", &self.seed_peers)
+            .field("poll_interval", &self.poll_interval)
+            .field("status_addr", &self.status_addr)
             .finish()
     }
 }
@@ -153,6 +159,16 @@ pub(crate) const MEDIA_FETCH_TIMEOUT_SECS_ENV: &str = "COMMUNITY_NODE_MEDIA_FETC
 /// docs replica sync / remote blob fetch のシードピア指定（#613 T1）。
 /// カンマ区切りで `endpoint_id` または `endpoint_id@host:port` を並べる。
 pub const SEED_PEERS_ENV: &str = "COMMUNITY_NODE_INDEXER_SEED_PEERS";
+
+/// 常駐ワーカーの全件見直し間隔（秒。#613 T2）。未設定なら既定 300 秒。0 は起動エラー。
+pub const POLL_INTERVAL_SECS_ENV: &str = "COMMUNITY_NODE_INDEXER_POLL_INTERVAL_SECS";
+
+/// 観測状態の HTTP エンドポイントの待ち受けアドレス（#613 T3）。
+/// 未設定なら HTTP では公開しない。例: `127.0.0.1:8630`。
+pub const STATUS_ADDR_ENV: &str = "COMMUNITY_NODE_INDEXER_STATUS_ADDR";
+
+/// 全件見直し間隔の既定値。
+pub const DEFAULT_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(300);
 
 impl Default for MediaFetchConfig {
     fn default() -> Self {
@@ -300,8 +316,35 @@ impl IndexerConfig {
             safety,
             media_fetch: MediaFetchConfig::from_env()?,
             seed_peers: parse_seed_peers_env()?,
+            poll_interval: parse_poll_interval_env()?,
+            status_addr: parse_status_addr_env()?,
         })
     }
+}
+
+/// 全件見直し間隔 env を読む。0 や非数値は起動エラー（fail-closed）。
+fn parse_poll_interval_env() -> Result<std::time::Duration> {
+    let Some(raw) = non_empty_env(POLL_INTERVAL_SECS_ENV) else {
+        return Ok(DEFAULT_POLL_INTERVAL);
+    };
+    let secs: u64 = raw.parse().with_context(|| {
+        format!("{POLL_INTERVAL_SECS_ENV} must be a positive integer (seconds)")
+    })?;
+    if secs == 0 {
+        bail!("{POLL_INTERVAL_SECS_ENV} must not be zero");
+    }
+    Ok(std::time::Duration::from_secs(secs))
+}
+
+/// 状態エンドポイントの待ち受けアドレス env を読む。不正な値は起動エラー（fail-closed）。
+fn parse_status_addr_env() -> Result<Option<std::net::SocketAddr>> {
+    let Some(raw) = non_empty_env(STATUS_ADDR_ENV) else {
+        return Ok(None);
+    };
+    let addr = raw.parse::<std::net::SocketAddr>().with_context(|| {
+        format!("{STATUS_ADDR_ENV} must be a socket address like 127.0.0.1:8630")
+    })?;
+    Ok(Some(addr))
 }
 
 /// シードピア env を読む。未設定・空は「シード無し」。不正な値は起動エラー（fail-closed）。
@@ -412,6 +455,8 @@ mod tests {
         MEDIA_FETCH_MAX_BYTES_ENV,
         MEDIA_FETCH_TIMEOUT_SECS_ENV,
         SEED_PEERS_ENV,
+        POLL_INTERVAL_SECS_ENV,
+        STATUS_ADDR_ENV,
     ];
 
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
@@ -612,6 +657,61 @@ mod tests {
     #[test]
     fn seed_peers_csv_rejects_invalid_entries() {
         assert!(parse_seed_peers_csv("not-a-valid-endpoint-id").is_err());
+    }
+
+    #[test]
+    fn poll_interval_env_defaults_and_rejects_zero() {
+        with_clean_indexer_env(|| {
+            set_minimal_indexer_env();
+
+            // 未設定なら既定値。
+            assert_eq!(
+                IndexerConfig::from_env().unwrap().poll_interval,
+                DEFAULT_POLL_INTERVAL
+            );
+
+            // 有効値は読み取れる。
+            unsafe {
+                std::env::set_var(POLL_INTERVAL_SECS_ENV, "10");
+            }
+            assert_eq!(
+                IndexerConfig::from_env().unwrap().poll_interval,
+                std::time::Duration::from_secs(10)
+            );
+
+            // 0 / 非数値は起動エラー（fail-closed）。
+            unsafe {
+                std::env::set_var(POLL_INTERVAL_SECS_ENV, "0");
+            }
+            assert!(IndexerConfig::from_env().is_err());
+            unsafe {
+                std::env::set_var(POLL_INTERVAL_SECS_ENV, "soon");
+            }
+            assert!(IndexerConfig::from_env().is_err());
+        });
+    }
+
+    #[test]
+    fn status_addr_env_defaults_to_none_and_rejects_invalid() {
+        with_clean_indexer_env(|| {
+            set_minimal_indexer_env();
+
+            // 未設定なら HTTP では公開しない。
+            assert!(IndexerConfig::from_env().unwrap().status_addr.is_none());
+
+            unsafe {
+                std::env::set_var(STATUS_ADDR_ENV, "127.0.0.1:8630");
+            }
+            assert_eq!(
+                IndexerConfig::from_env().unwrap().status_addr,
+                Some("127.0.0.1:8630".parse().unwrap())
+            );
+
+            unsafe {
+                std::env::set_var(STATUS_ADDR_ENV, "not-an-addr");
+            }
+            assert!(IndexerConfig::from_env().is_err());
+        });
     }
 
     #[test]

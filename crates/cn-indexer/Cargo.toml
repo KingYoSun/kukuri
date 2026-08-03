@@ -18,6 +18,7 @@ path = "src/lib.rs"
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
+axum.workspace = true
 chrono.workspace = true
 futures-util.workspace = true
 hex.workspace = true
@@ -25,7 +26,8 @@ reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
-tokio.workspace = true
+# 常駐ワーカーの停止シグナル（signal）と状態エンドポイントの待ち受け（net）に使う。
+tokio = { workspace = true, features = ["signal", "net"] }
 tracing.workspace = true
 kukuri-blob-service = { path = "../blob-service" }
 kukuri-cn-runtime-support = { path = "../cn-runtime-support" }

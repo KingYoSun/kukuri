@@ -80,6 +80,32 @@ impl IndexerParticipant {
         }
     }
 
+    /// いま index 対象であるべき scope を返す（#613 T2。読み取りのみ、副作用なし）。
+    ///
+    /// サポート対象一覧のうち、private channel は秘密鍵（capability）が登録済みのものだけを
+    /// 含める（鍵が無ければ索引しない）。常駐ワーカーはこの結果と索引の実在スコープ
+    /// （[`Self::indexed_scopes`]）の差分から索引解除を決める。open の成否に依存しないため、
+    /// 一時的な open 失敗で誤って索引解除することがない。
+    pub async fn desired_scopes(&self) -> Result<Vec<ScopeReplica>> {
+        let secrets = list_channel_secrets(&self.pool, &self.channel_secret_cipher).await?;
+        let mut scopes = Vec::new();
+        for supported in list_supported_topics(&self.pool).await? {
+            let scope = ScopeReplica::from_scope(supported.kind, supported.id.as_str());
+            if scope.kind == IndexScopeKind::PrivateChannel
+                && !secrets.iter().any(|secret| secret.channel_id == scope.id)
+            {
+                continue;
+            }
+            scopes.push(scope);
+        }
+        Ok(scopes)
+    }
+
+    /// 索引の真実源にいま entry が存在する scope の一覧（#613 T2）。
+    pub async fn indexed_scopes(&self) -> Result<Vec<(IndexScopeKind, String)>> {
+        self.entries.list_scopes().await
+    }
+
     /// 起動時 / 再起動時に scope 管理 state から replica を open して sync 復元する（E13）。
     ///
     /// supported topic（public / private channel）の replica を open し、private channel は登録済み

@@ -27,6 +27,9 @@ pub mod query;
 pub mod relation_graph;
 pub mod relation_worker;
 pub mod runtime;
+pub mod state;
+pub mod status;
+pub mod worker;
 
 pub use arcadedb::ArcadeDbProjection;
 pub use config::{ArcadeDbConfig, IndexerConfig, MediaFetchConfig, RelayConfig, RelayValidation};
@@ -40,3 +43,6 @@ pub use relation_worker::{
     DEFAULT_ANALYSIS_LIMIT, RelationAnalysisReport, analyze_relations, topic_cluster,
 };
 pub use runtime::run_from_env;
+pub use state::{IndexerRuntimeState, IndexerStateSnapshot};
+pub use status::{StatusServerHandle, spawn_status_server};
+pub use worker::{IndexerWorker, WorkerConfig, WorkerHandle};
