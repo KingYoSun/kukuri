@@ -12,6 +12,7 @@
 use anyhow::{Context, Result, bail};
 
 use kukuri_cn_safety::Visibility;
+use kukuri_transport::{SeedPeer, parse_seed_peer};
 use kukuri_cn_safety_runtime::{
     SAFETY_SIGNING_KEY_ENV, SafetyRuntimeConfig, SafetyRuntimeProviderEntry,
     SafetyRuntimeProvidersConfig,
@@ -111,6 +112,11 @@ pub struct IndexerConfig {
     pub safety: SafetyRuntimeConfig,
     /// media scan 用の一時 blob fetch（#609）の制限。
     pub media_fetch: MediaFetchConfig,
+    /// docs replica sync / remote blob fetch のためのシードピア（#613 T1）。
+    ///
+    /// `COMMUNITY_NODE_INDEXER_SEED_PEERS`（カンマ区切り、`endpoint_id` または
+    /// `endpoint_id@host:port`）から読む。不正な値は起動エラー（fail-closed）。
+    pub seed_peers: Vec<SeedPeer>,
 }
 
 impl std::fmt::Debug for IndexerConfig {
@@ -124,6 +130,7 @@ impl std::fmt::Debug for IndexerConfig {
             // SafetyRuntimeConfig の Debug は signing_key を秘匿する。
             .field("safety", &self.safety)
             .field("media_fetch", &self.media_fetch)
+            .field("seed_peers", &self.seed_peers)
             .finish()
     }
 }
@@ -142,6 +149,10 @@ pub struct MediaFetchConfig {
 
 pub(crate) const MEDIA_FETCH_MAX_BYTES_ENV: &str = "COMMUNITY_NODE_MEDIA_FETCH_MAX_BYTES";
 pub(crate) const MEDIA_FETCH_TIMEOUT_SECS_ENV: &str = "COMMUNITY_NODE_MEDIA_FETCH_TIMEOUT_SECS";
+
+/// docs replica sync / remote blob fetch のシードピア指定（#613 T1）。
+/// カンマ区切りで `endpoint_id` または `endpoint_id@host:port` を並べる。
+pub const SEED_PEERS_ENV: &str = "COMMUNITY_NODE_INDEXER_SEED_PEERS";
 
 impl Default for MediaFetchConfig {
     fn default() -> Self {
@@ -288,8 +299,37 @@ impl IndexerConfig {
             arcadedb,
             safety,
             media_fetch: MediaFetchConfig::from_env()?,
+            seed_peers: parse_seed_peers_env()?,
         })
     }
+}
+
+/// シードピア env を読む。未設定・空は「シード無し」。不正な値は起動エラー（fail-closed）。
+fn parse_seed_peers_env() -> Result<Vec<SeedPeer>> {
+    match non_empty_env(SEED_PEERS_ENV) {
+        Some(value) => parse_seed_peers_csv(value.as_str()),
+        None => Ok(Vec::new()),
+    }
+}
+
+/// カンマ区切りのシードピア指定を読み取る。空要素は無視し、同じ endpoint id は先勝ちで 1 つにする。
+pub(crate) fn parse_seed_peers_csv(value: &str) -> Result<Vec<SeedPeer>> {
+    let mut peers: Vec<SeedPeer> = Vec::new();
+    for entry in value.split(',') {
+        let trimmed = entry.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let peer = parse_seed_peer(trimmed)
+            .with_context(|| format!("invalid seed peer entry `{trimmed}` in {SEED_PEERS_ENV}"))?;
+        if !peers
+            .iter()
+            .any(|existing| existing.endpoint_id == peer.endpoint_id)
+        {
+            peers.push(peer);
+        }
+    }
+    Ok(peers)
 }
 
 /// 空 / 空白のみの env は未設定として扱う。
@@ -371,6 +411,7 @@ mod tests {
         SAFETY_ISSUER_NODE_ID_ENV,
         MEDIA_FETCH_MAX_BYTES_ENV,
         MEDIA_FETCH_TIMEOUT_SECS_ENV,
+        SEED_PEERS_ENV,
     ];
 
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
@@ -533,6 +574,62 @@ mod tests {
             assert!(IndexerConfig::from_env().is_err());
             unsafe {
                 std::env::set_var(MEDIA_FETCH_MAX_BYTES_ENV, "not-a-number");
+            }
+            assert!(IndexerConfig::from_env().is_err());
+        });
+    }
+
+    // 既存テストで実績のある有効なダミー endpoint id（64 桁 16 進。どの 64 桁でも有効とは
+    // 限らないため、この既知の値を再利用する）。
+    const SEED_ENDPOINT_A: &str = "1111111111111111111111111111111111111111111111111111111111111111";
+    const SEED_ENDPOINT_B: &str = "2222222222222222222222222222222222222222222222222222222222222222";
+
+    #[test]
+    fn seed_peers_csv_parses_entries_with_and_without_addr_hint() {
+        let peers = parse_seed_peers_csv(&format!(
+            " {SEED_ENDPOINT_A}@127.0.0.1:4433 , {SEED_ENDPOINT_B} ,, "
+        ))
+        .unwrap();
+        assert_eq!(peers.len(), 2);
+        assert_eq!(peers[0].endpoint_id, SEED_ENDPOINT_A);
+        assert_eq!(peers[0].addr_hint.as_deref(), Some("127.0.0.1:4433"));
+        assert_eq!(peers[1].endpoint_id, SEED_ENDPOINT_B);
+        assert_eq!(peers[1].addr_hint, None);
+    }
+
+    #[test]
+    fn seed_peers_csv_deduplicates_by_endpoint_id() {
+        let peers = parse_seed_peers_csv(&format!(
+            "{SEED_ENDPOINT_A}@127.0.0.1:4433,{SEED_ENDPOINT_A}"
+        ))
+        .unwrap();
+        assert_eq!(peers.len(), 1);
+        assert_eq!(peers[0].addr_hint.as_deref(), Some("127.0.0.1:4433"));
+    }
+
+    #[test]
+    fn seed_peers_csv_rejects_invalid_entries() {
+        assert!(parse_seed_peers_csv("not-a-valid-endpoint-id").is_err());
+    }
+
+    #[test]
+    fn seed_peers_env_defaults_to_empty_and_rejects_invalid() {
+        with_clean_indexer_env(|| {
+            set_minimal_indexer_env();
+
+            // 未設定なら空（シード無し）。
+            assert!(IndexerConfig::from_env().unwrap().seed_peers.is_empty());
+
+            // 有効値は読み取れる。
+            unsafe {
+                std::env::set_var(SEED_PEERS_ENV, format!("{SEED_ENDPOINT_A}@127.0.0.1:4433"));
+            }
+            let config = IndexerConfig::from_env().unwrap();
+            assert_eq!(config.seed_peers.len(), 1);
+
+            // 不正値は起動エラー（fail-closed）。
+            unsafe {
+                std::env::set_var(SEED_PEERS_ENV, "broken-entry");
             }
             assert!(IndexerConfig::from_env().is_err());
         });
