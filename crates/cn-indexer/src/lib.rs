@@ -42,7 +42,7 @@ pub use relation_graph::ArcadeDbRelationGraph;
 pub use relation_worker::{
     DEFAULT_ANALYSIS_LIMIT, RelationAnalysisReport, analyze_relations, topic_cluster,
 };
-pub use runtime::run_from_env;
+pub use runtime::{run_from_env, validate_config_from_env};
 pub use state::{IndexerRuntimeState, IndexerStateSnapshot};
 pub use status::{StatusServerHandle, spawn_status_server};
 pub use worker::{IndexerWorker, WorkerConfig, WorkerHandle};

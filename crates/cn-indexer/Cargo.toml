@@ -35,12 +35,13 @@ kukuri-core = { path = "../core" }
 kukuri-docs-sync = { path = "../docs-sync" }
 kukuri-iroh-node = { path = "../iroh-node" }
 kukuri-transport = { path = "../transport" }
-# safety-mock-provider: 本番 provider 未使用構成でも runtime 構築（provider 実装名 `mock`）と
-# contract test を成立させるため有効化する。mock provider は operator が env で明示指定しない
-# 限り構成されず、未知の provider 名は fail-closed で Err になる。
-# safety-arachnid-provider: Project Arachnid Shield（#391、provider 実装名
-# `project-arachnid-shield`）。operator-owned credentials は env から読む。
-kukuri-cn-core = { path = "../cn-core", features = ["safety-mock-provider", "safety-arachnid-provider"] }
+# production の provider 解決表（#614）: Project Arachnid Shield（#391、provider 実装名
+# `project-arachnid-shield`、known_csam slot 専用）と OpenAI-compatible VLM（#420、provider
+# 実装名 `openai-compatible-vlm`、general / unknown_csam slot 専用）のみ。operator-owned
+# credentials は env から読む。mock は dev-dependencies 側でのみ有効化し（feature unification で
+# テストビルドに限って解決可能になる）、release binary では unknown provider として fail-closed
+# で拒否される。
+kukuri-cn-core = { path = "../cn-core", features = ["safety-arachnid-provider", "safety-vlm-provider"] }
 kukuri-cn-safety = { path = "../cn-safety" }
 kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }
 kukuri-cn-trust = { path = "../cn-trust" }
@@ -48,6 +49,10 @@ kukuri-cn-trust = { path = "../cn-trust" }
 [dev-dependencies]
 kukuri-test-support = { path = "../test-support" }
 kukuri-cn-safety = { path = "../cn-safety", features = ["mock"] }
+# テストビルドでのみ provider 実装名 `mock` を解決可能にする（cn-core 自身の dev-deps と同じ
+# 流儀。resolver v2 の feature unification は dev target を含むビルドに限って働くため、
+# `cargo build --release -p kukuri-cn-indexer`（production artifact）には mock が入らない）。
+kukuri-cn-core = { path = "../cn-core", features = ["safety-mock-provider"] }
 # relation graph（ArcadeDB / in-memory）へ同一 contract を課す共有スイート。
 kukuri-cn-trust = { path = "../cn-trust", features = ["testing"] }
 tempfile.workspace = true
