@@ -12,11 +12,11 @@
 use anyhow::{Context, Result, bail};
 
 use kukuri_cn_safety::Visibility;
-use kukuri_transport::{SeedPeer, parse_seed_peer};
 use kukuri_cn_safety_runtime::{
     SAFETY_SIGNING_KEY_ENV, SafetyRuntimeConfig, SafetyRuntimeProviderEntry,
     SafetyRuntimeProvidersConfig,
 };
+use kukuri_transport::{SeedPeer, parse_seed_peer};
 
 /// safety provider slot（#406。operator config の `safety.providers.*` と 1:1）の env 名。
 /// 値は provider 実装名（現状 `mock` のみ。#391 / #411 で本番実装名を追加）。
@@ -581,8 +581,10 @@ mod tests {
 
     // 既存テストで実績のある有効なダミー endpoint id（64 桁 16 進。どの 64 桁でも有効とは
     // 限らないため、この既知の値を再利用する）。
-    const SEED_ENDPOINT_A: &str = "1111111111111111111111111111111111111111111111111111111111111111";
-    const SEED_ENDPOINT_B: &str = "2222222222222222222222222222222222222222222222222222222222222222";
+    const SEED_ENDPOINT_A: &str =
+        "1111111111111111111111111111111111111111111111111111111111111111";
+    const SEED_ENDPOINT_B: &str =
+        "2222222222222222222222222222222222222222222222222222222222222222";
 
     #[test]
     fn seed_peers_csv_parses_entries_with_and_without_addr_hint() {
