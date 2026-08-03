@@ -98,11 +98,27 @@ fn resolve_provider(
         kukuri_cn_safety_arachnid::PROVIDER_NAME => arachnid_shield_provider(slot, media_fetcher),
         #[cfg(feature = "safety-vlm-provider")]
         kukuri_cn_safety_vlm::PROVIDER_NAME => vlm_provider(slot, media_fetcher),
-        other => bail!(
-            "unknown safety provider `{other}` for slot `{slot}` (fail-closed; enable the \
-             matching cargo feature and use `mock` / `project-arachnid-shield` / \
-             `openai-compatible-vlm`)"
-        ),
+        other => {
+            // 候補は build に実在する provider だけを挙げる（production binary のエラーが
+            // 選択不能な mock を案内しないように。#614）。
+            #[allow(unused_mut)]
+            let mut supported: Vec<String> = Vec::new();
+            #[cfg(feature = "safety-mock-provider")]
+            supported.push("`mock`".to_string());
+            #[cfg(feature = "safety-arachnid-provider")]
+            supported.push(format!("`{}`", kukuri_cn_safety_arachnid::PROVIDER_NAME));
+            #[cfg(feature = "safety-vlm-provider")]
+            supported.push(format!("`{}`", kukuri_cn_safety_vlm::PROVIDER_NAME));
+            let supported = if supported.is_empty() {
+                "none (no safety provider feature is enabled in this build)".to_string()
+            } else {
+                supported.join(" / ")
+            };
+            bail!(
+                "unknown safety provider `{other}` for slot `{slot}` (fail-closed; providers \
+                 available in this build: {supported})"
+            )
+        }
     }
 }
 
