@@ -10,29 +10,36 @@
 //! fail-closed と整合。`CommunityIndex` capability が `Availability::Planned` である現状と一致する）。
 //! relay gate 自体はそれとは独立に起動時へ適用する。
 //!
-//! media scan 用の一時 fetch（#609）: provider が構成されている場合は iroh node（persistent、
-//! `data_dir` 配下）+ `IrohBlobService` から `BlobMediaFetcher` を組み、provider 解決時に注入する。
-//! peer 接続（seed 適用 / docs participant 起動）は ingest loop 起動の後続 Issue の範囲で、
-//! それまで remote fetch は peer 不在で miss → `Unavailable` → fail-closed hold に倒れる。
+//! media scan 用の一時 fetch（#609）と docs replica sync（#613 T1）は、同じ persistent iroh node
+//! （`data_dir` 配下）を共有する。provider が構成されている場合のみ node を立ち上げ、
+//! `IrohBlobService` + `BlobMediaFetcher`（media fetch）と `IrohDocsSync`（docs participant）の
+//! 双方へ渡す。シードピア（`COMMUNITY_NODE_INDEXER_SEED_PEERS`）は docs 同期へ適用する。
 
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use sqlx::postgres::PgPool;
 use tracing::info;
 
 use kukuri_blob_service::IrohBlobService;
-use kukuri_cn_core::PgSafetyArtifactStore;
+use kukuri_cn_core::{ChannelSecretCipher, PgIndexEntryStore, PgSafetyArtifactStore};
 use kukuri_cn_safety::provider::MediaFetcher;
+use kukuri_cn_safety_runtime::SafetyScanService;
+use kukuri_docs_sync::{DocsSync, IrohDocsSync};
 use kukuri_iroh_node::IrohDocsNode;
 use kukuri_transport::{DhtDiscoveryOptions, TransportNetworkConfig, TransportRelayConfig};
 
+use crate::arcadedb::ArcadeDbProjection;
 use crate::config::IndexerConfig;
+use crate::ingest::IngestPipeline;
 use crate::media_fetcher::BlobMediaFetcher;
+use crate::participant::IndexerParticipant;
 
 /// 環境変数から設定を読み、relay validation 起動 gate を適用して cn-indexer を起動する。
 ///
-/// 現段階では relay gate の適用と scope state の準備確認までを行う。safety provider が実装されて
-/// ingest が実運用可能になった段階（#391 / #411, `CommunityIndex` 昇格）で ingest loop を有効化する。
+/// 現段階では relay gate の適用、scope state の準備確認、ingest 経路の本番依存の組み立て
+/// （共有 iroh node / docs 同期 / ArcadeDB 投影 / 真実源 / 取り込みパイプライン）までを行う。
+/// 常駐 ingest loop の起動は #613 T2 で行う。
 pub async fn run_from_env() -> Result<()> {
     init_tracing();
     let config = IndexerConfig::from_env()?;
@@ -53,7 +60,7 @@ async fn run(config: IndexerConfig) -> Result<()> {
         .context("community-node database is not ready for cn-indexer")?;
 
     // channel secret 復号鍵を検証する（不正なら早期に失敗させる）。
-    let _cipher =
+    let cipher =
         kukuri_cn_core::ChannelSecretCipher::from_key_material(config.channel_secret_key.as_str())
             .context("invalid COMMUNITY_NODE_CHANNEL_SECRET_KEY")?;
 
@@ -64,34 +71,40 @@ async fn run(config: IndexerConfig) -> Result<()> {
         "cn-indexer configuration validated"
     );
 
-    // media scan 用の一時 fetch（#609）。provider が構成されている場合のみ iroh node を立ち上げ、
-    // `BlobMediaFetcher` を provider 解決へ注入する。provider 未構成なら scan service 自体を
-    // 構成しない（fail-closed）ため node も立てない。
-    let media_fetcher: Option<Arc<dyn MediaFetcher>> = if config.safety.providers.is_empty() {
+    // 共有 iroh node（#613 T1）。provider が構成されている場合のみ persistent node を 1 つ立ち上げ、
+    // media scan の一時 fetch（#609）と docs replica sync の双方で共有する。provider 未構成なら
+    // scan service 自体を構成しない（fail-closed）ため node も立てない。
+    let node: Option<Arc<IrohDocsNode>> = if config.safety.providers.is_empty() {
         None
     } else {
-        let node = IrohDocsNode::persistent_with_discovery_config(
-            &config.data_dir,
-            TransportNetworkConfig::from_env()?,
-            DhtDiscoveryOptions::disabled(),
-            TransportRelayConfig {
-                iroh_relay_urls: config.relay.external_relay_urls.clone(),
-            }
-            .normalized(),
+        Some(
+            IrohDocsNode::persistent_with_discovery_config(
+                &config.data_dir,
+                TransportNetworkConfig::from_env()?,
+                DhtDiscoveryOptions::disabled(),
+                TransportRelayConfig {
+                    iroh_relay_urls: config.relay.external_relay_urls.clone(),
+                }
+                .normalized(),
+            )
+            .await
+            .context("failed to start the cn-indexer iroh node")?,
         )
-        .await
-        .context("failed to start the cn-indexer iroh node for media scan fetches")?;
-        let blob_service = Arc::new(IrohBlobService::new(node));
+    };
+
+    // media scan 用の一時 fetch（#609）。共有 node の blob 経路から組み、provider 解決へ注入する。
+    let media_fetcher: Option<Arc<dyn MediaFetcher>> = node.as_ref().map(|node| {
+        let blob_service = Arc::new(IrohBlobService::new(Arc::clone(node)));
         info!(
             max_bytes = config.media_fetch.max_bytes,
             timeout_secs = config.media_fetch.timeout.as_secs(),
             "media fetcher constructed (ephemeral blob fetch; no permanent blob storage)"
         );
-        Some(Arc::new(BlobMediaFetcher::new(
+        Arc::new(BlobMediaFetcher::new(
             blob_service,
             config.media_fetch.clone(),
-        )))
-    };
+        )) as Arc<dyn MediaFetcher>
+    });
 
     // safety scan runtime の構築境界（#406）。provider が構成されていれば service を構築・検証する
     // （構成不正 = 未知 provider 名 / emit 有効なのに署名鍵なし、は起動失敗）。未構成なら scan
@@ -103,20 +116,65 @@ async fn run(config: IndexerConfig) -> Result<()> {
         safety_providers,
         Arc::new(PgSafetyArtifactStore::new(pool.clone())),
     )?;
-    match safety.as_ref() {
-        Some(service) => info!(
-            issuer_node_id = %service.issuer_node_id(),
-            "safety scan service constructed; ingest loop remains gated on #391 / #404"
-        ),
-        None => info!("safety providers not configured; ingest stays disabled (fail-closed)"),
+    match (safety, node) {
+        (Some(service), Some(node)) => {
+            info!(
+                issuer_node_id = %service.issuer_node_id(),
+                "safety scan service constructed"
+            );
+            let _participant = compose_ingest_stack(&config, pool, cipher, service, node).await?;
+            // NOTE: 常駐 ingest loop の起動は #613 T2 で行う。ここでは本番依存の組み立てと
+            // 起動時検証（ArcadeDB 接続 / seed 適用）までを行い、終了する。
+            info!("ingest stack composed; resident ingest loop lands with #613 T2");
+        }
+        _ => info!("safety providers not configured; ingest stays disabled (fail-closed)"),
+    }
+    Ok(())
+}
+
+/// ingest 経路の本番依存を組み立てる（#613 T1）。
+///
+/// - 共有 iroh node から `IrohDocsSync` を作り、シードピアを適用する。
+/// - ArcadeDB 投影は起動時に schema 準備（`ensure_schema`）を行い、接続できなければ起動失敗に
+///   する（fail-closed。投影へ書けない構成で取り込みを始めない）。
+/// - 索引の真実源は Postgres（`PgIndexEntryStore`）。
+async fn compose_ingest_stack(
+    config: &IndexerConfig,
+    pool: PgPool,
+    cipher: ChannelSecretCipher,
+    safety: SafetyScanService,
+    node: Arc<IrohDocsNode>,
+) -> Result<IndexerParticipant> {
+    let docs_sync = Arc::new(IrohDocsSync::new(node));
+    if !config.seed_peers.is_empty() {
+        docs_sync
+            .set_seed_peers(config.seed_peers.clone())
+            .await
+            .context("failed to apply COMMUNITY_NODE_INDEXER_SEED_PEERS to docs sync")?;
+        info!(
+            seed_peers = config.seed_peers.len(),
+            "applied seed peers to docs sync"
+        );
     }
 
-    // NOTE: 構築境界（orchestrator / scan service / media fetcher）は #406 / #609 で結線済み。実
-    // ingest loop の起動は本番 provider（#391 / #411）と fail-closed indexing 本体（#404）が揃い
-    // `CommunityIndex` が昇格した段階で行う。participant / ingest pipeline（`crate::participant` /
-    // `crate::ingest`）は上記 `safety` service を注入して起動する（docs node は media fetch 用に
-    // 構築したものを共用する想定）。
-    Ok(())
+    let entries = Arc::new(PgIndexEntryStore::new(pool.clone()));
+    let projection = ArcadeDbProjection::new(config.arcadedb.clone())
+        .context("failed to build the ArcadeDB projection client")?;
+    projection.ensure_schema().await.context(
+        "cn-indexer cannot reach ArcadeDB for the index projection \
+         (fail-closed startup gate)",
+    )?;
+    let projection = Arc::new(projection);
+
+    let pipeline = IngestPipeline::new(
+        docs_sync.clone(),
+        Arc::new(safety),
+        entries.clone(),
+        projection.clone(),
+    );
+    Ok(IndexerParticipant::new(
+        pool, docs_sync, entries, projection, pipeline, cipher,
+    ))
 }
 
 fn init_tracing() {
