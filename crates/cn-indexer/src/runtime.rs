@@ -86,9 +86,7 @@ fn validate_config(config: &IndexerConfig) -> Result<()> {
             issuer_node_id = %service.issuer_node_id(),
             "safety scan service configuration is valid"
         ),
-        None => info!(
-            "safety providers not configured; ingest would stay disabled (fail-closed)"
-        ),
+        None => info!("safety providers not configured; ingest would stay disabled (fail-closed)"),
     }
     Ok(())
 }
