@@ -76,17 +76,28 @@ printf '%s' "$(openssl rand -hex 24)" | \
 # 例: Set-Content -Encoding ascii -NoNewline secret.txt <hex-string>
 # BOM/改行が混じると Postgres DSN / JWT secret として読めず、起動時 migration が失敗する。
 
-# 4) GHCR の public image を用意（cn-user-api / cn-iroh-relay / cn-cli）
+# 4) GHCR の public image を用意（cn-user-api / cn-iroh-relay / cn-cli / cn-indexer）
 #    public image 前提なので VM 側の認証は不要。
 ```
 
-GHCR image は `.github/workflows/kukuri-cn-images.yml` が `docker/cn/Dockerfile` を使って 3 binary 分 build/publish する。
+GHCR image は `.github/workflows/kukuri-cn-images.yml` が `docker/cn/Dockerfile` を使って 4 binary 分 build/publish する。
 
 | binary | package | GHCR image |
 |---|---|---|
 | `cn-user-api` | `kukuri-cn-user-api` | `ghcr.io/kingyosun/kukuri-cn-user-api:<tag>` |
 | `cn-iroh-relay` | `kukuri-cn-iroh-relay` | `ghcr.io/kingyosun/kukuri-cn-iroh-relay:<tag>` |
 | `cn-cli` | `kukuri-cn-cli` | `ghcr.io/kingyosun/kukuri-cn-cli:<tag>` |
+| `cn-indexer` | `kukuri-cn-indexer` | `ghcr.io/kingyosun/kukuri-cn-indexer:<tag>` |
+
+`cn-indexer` image（#614）は production feature 構成（Project Arachnid Shield + OpenAI-compatible VLM。mock は選択不能）で build され、workflow が publish 前に `validate-config` smoke（provider 解決 / slot 制約 / credential env 欠落 / credential 非漏出）を通す。credential / endpoint / 署名鍵は image に含まれないため、デプロイ時に runtime secret（env）として注入する。手元でも次で構成だけを検証できる:
+
+```bash
+docker run --rm -e COMMUNITY_NODE_DATABASE_URL=... -e COMMUNITY_NODE_CHANNEL_SECRET_KEY=... \
+  -e COMMUNITY_NODE_INDEXER_EXTERNAL_RELAY_URLS=... \
+  ghcr.io/kingyosun/kukuri-cn-indexer:<tag> validate-config
+```
+
+なお `cn-indexer` は現状 low-cost Terraform stack の service には含まれない（#614 のスコープは image 配布まで）。
 
 初回 publish は workflow を default branch（通常 `main`）へ merge した後に手動 dispatch する。workflow file がまだ default branch に無い状態では `workflow_dispatch` が見つからないため、PR 中は build-only 検証に留める:
 
