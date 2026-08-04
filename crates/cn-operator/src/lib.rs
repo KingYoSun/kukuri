@@ -131,11 +131,26 @@ manifest:
 #   acme_email: ops@example-kukuri.net
 #   jwt_secret_id: kukuri-cn-jwt-secret
 #   postgres_password_secret_id: kukuri-cn-postgres-password
-#   machine_type: e2-small
+#   machine_type: e2-medium
 #   disk_size_gb: 30
 #   postgres_data_disk_gb: 0
 #   blob_cache_size_gb: 0
 #   backup_enabled: true
+#   # index / moderation stack（cn-indexer + ArcadeDB + relation 定期解析。#615, 任意）。
+#   # secret は値ではなく Secret Manager の ID のみ。credential / 鍵の実値は VM 起動時に取得される。
+#   deploy_indexer_stack: true
+#   cn_indexer_image: ghcr.io/kingyosun/kukuri-cn-indexer:latest
+#   arcadedb_image: arcadedata/arcadedb:latest
+#   indexer_data_disk_gb: 10
+#   relation_analyze_interval_minutes: 60
+#   channel_secret_key_secret_id: kukuri-cn-channel-secret-key
+#   arcadedb_password_secret_id: kukuri-cn-arcadedb-password
+#   arachnid_username_secret_id: kukuri-cn-arachnid-username
+#   arachnid_password_secret_id: kukuri-cn-arachnid-password
+#   vlm_api_base_url: http://10.73.0.10:8000   # self-host は private tunnel 経由の到達を推奨
+#   vlm_model: inclusionAI/SingGuard-2b
+#   vlm_response_format: guard
+#   vlm_api_key_secret_id: kukuri-cn-vlm-api-key   # 無認証 self-host endpoint なら省略
 
 # community_index / moderation / community_local_trust / report_endpoint は
 # 現行実装では未提供（計画中）。spec として記述することを明示的に承認する。

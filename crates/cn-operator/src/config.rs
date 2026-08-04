@@ -160,8 +160,22 @@ fn default_cn_cli_image() -> String {
     "ghcr.io/kingyosun/kukuri-cn-cli:latest".to_string()
 }
 
+fn default_cn_indexer_image() -> String {
+    "ghcr.io/kingyosun/kukuri-cn-indexer:latest".to_string()
+}
+
+fn default_arcadedb_image() -> String {
+    "arcadedata/arcadedb:latest".to_string()
+}
+
 fn default_machine_type() -> String {
-    "e2-small".to_string()
+    // Postgres + Valkey + ArcadeDB(JVM) + cn-indexer の同居を想定した既定（#615）。
+    // API / relay のみの最小構成なら e2-small へ下げてもよい。
+    "e2-medium".to_string()
+}
+
+fn default_relation_analyze_interval_minutes() -> u32 {
+    60
 }
 
 fn default_disk_size_gb() -> u32 {
@@ -261,6 +275,63 @@ pub struct DeployConfig {
     pub rate_limit_per_second: u32,
     #[serde(default = "default_rate_limit_burst")]
     pub rate_limit_burst: u32,
+    /// index / moderation stack（cn-indexer + ArcadeDB + relation 定期解析。#615）を配備するか。
+    ///
+    /// 既定 false（従来の API / relay のみ構成）。false へ戻すことが rollback 手順になる。
+    /// capability（`features.community_index` 等）の公開宣言とは独立: stack を配備しても
+    /// ユーザー向け read surface は `COMMUNITY_NODE_INDEX_QUERY_ENABLED` /
+    /// `COMMUNITY_NODE_TRUST_READ_ENABLED`（既定 false）が gate する。
+    #[serde(default)]
+    pub deploy_indexer_stack: bool,
+    #[serde(default = "default_cn_indexer_image")]
+    pub cn_indexer_image: String,
+    #[serde(default = "default_arcadedb_image")]
+    pub arcadedb_image: String,
+    /// cn-indexer data dir + ArcadeDB data 用の専用 persistent disk サイズ（GB）。
+    /// 0 なら boot disk 上の docker volume（VM 置換でデータ消失。ArcadeDB は rebuildable だが
+    /// indexer の iroh endpoint 同一性が失われるため本番では > 0 を推奨）。
+    #[serde(default)]
+    pub indexer_data_disk_gb: u32,
+    /// `cn-cli relation analyze` の定期実行間隔（分。>= 1）。
+    #[serde(default = "default_relation_analyze_interval_minutes")]
+    pub relation_analyze_interval_minutes: u32,
+    /// cn-indexer が discovery / relay-assist に使う外部 relay URL。
+    /// 自前 relay（`features.iroh_relay`）が無効な場合、deploy_indexer_stack=true では必須。
+    #[serde(default)]
+    pub indexer_external_relay_urls: Vec<String>,
+    /// `COMMUNITY_NODE_CHANNEL_SECRET_KEY` を保持する Secret Manager secret ID（値ではない）。
+    #[serde(default)]
+    pub channel_secret_key_secret_id: Option<String>,
+    /// ArcadeDB root password を保持する Secret Manager secret ID（値ではない）。
+    #[serde(default)]
+    pub arcadedb_password_secret_id: Option<String>,
+    /// Project Arachnid Shield の username / password を保持する Secret Manager secret ID
+    /// （値ではない）。`safety.providers.*` に `project-arachnid-shield` を使う場合は必須。
+    #[serde(default)]
+    pub arachnid_username_secret_id: Option<String>,
+    #[serde(default)]
+    pub arachnid_password_secret_id: Option<String>,
+    /// 任意の `COMMUNITY_NODE_VLM_API_KEY` を保持する Secret Manager secret ID（値ではない）。
+    /// self-host の無認証 endpoint では未指定のままでよい。
+    #[serde(default)]
+    pub vlm_api_key_secret_id: Option<String>,
+    /// OpenAI-compatible VLM endpoint（#420）。`safety.providers.*` に
+    /// `openai-compatible-vlm` を使う場合は base_url / model が必須。
+    #[serde(default)]
+    pub vlm_api_base_url: Option<String>,
+    #[serde(default)]
+    pub vlm_model: Option<String>,
+    /// VLM 応答形式（`json` / `guard`）。未指定なら binary 既定（json）。
+    #[serde(default)]
+    pub vlm_response_format: Option<String>,
+    /// VLM API timeout（秒）。0 なら binary 既定。
+    #[serde(default)]
+    pub vlm_api_timeout_secs: u32,
+    /// media scan 用一時 fetch の上限（bytes / 秒）。0 なら binary 既定。
+    #[serde(default)]
+    pub media_fetch_max_bytes: u64,
+    #[serde(default)]
+    pub media_fetch_timeout_secs: u32,
 }
 
 /// profile / features を解決し検証済みの設定。
@@ -446,8 +517,37 @@ fn validate_deploy(resolved: &ResolvedConfig, deploy: &DeployConfig) -> Result<(
     validate_deploy_string("deploy.cn_user_api_image", &deploy.cn_user_api_image)?;
     validate_deploy_string("deploy.cn_iroh_relay_image", &deploy.cn_iroh_relay_image)?;
     validate_deploy_string("deploy.cn_cli_image", &deploy.cn_cli_image)?;
+    validate_deploy_string("deploy.cn_indexer_image", &deploy.cn_indexer_image)?;
+    validate_deploy_string("deploy.arcadedb_image", &deploy.arcadedb_image)?;
     validate_deploy_string("deploy.machine_type", &deploy.machine_type)?;
     validate_deploy_string("deploy.blob_cache_path", &deploy.blob_cache_path)?;
+    for url in &deploy.indexer_external_relay_urls {
+        let trimmed = require_deploy_string("deploy.indexer_external_relay_urls", url)?;
+        if !(trimmed.starts_with("https://") || trimmed.starts_with("http://")) {
+            bail!(
+                "deploy.indexer_external_relay_urls は http(s):// で始まる URL で指定してください"
+            );
+        }
+    }
+    if let Some(format) = deploy.vlm_response_format.as_deref() {
+        let trimmed = format.trim();
+        if !trimmed.is_empty() && trimmed != "json" && trimmed != "guard" {
+            bail!(
+                "deploy.vlm_response_format は `json` または `guard` で指定してください (got `{trimmed}`)"
+            );
+        }
+    }
+    if let Some(base_url) = deploy.vlm_api_base_url.as_deref() {
+        let trimmed = require_deploy_string("deploy.vlm_api_base_url", base_url)?;
+        if !(trimmed.starts_with("https://") || trimmed.starts_with("http://")) {
+            bail!("deploy.vlm_api_base_url は http(s):// で始まる URL で指定してください");
+        }
+    }
+    if let Some(model) = deploy.vlm_model.as_deref() {
+        validate_deploy_string("deploy.vlm_model", model)?;
+    }
+
+    validate_indexer_stack(resolved, deploy)?;
 
     // low-cost template は cn-iroh-relay を常に配置し、relay_domain を Caddy / compose / certbot で使う。
     let relay_domain = if deploy.profile == DeployProfile::LowCost {
@@ -526,6 +626,38 @@ fn validate_deploy(resolved: &ResolvedConfig, deploy: &DeployConfig) -> Result<(
             deploy.cn_iroh_relay_image.trim(),
         )?;
         validate_container_image("deploy.cn_cli_image", deploy.cn_cli_image.trim())?;
+        validate_container_image("deploy.cn_indexer_image", deploy.cn_indexer_image.trim())?;
+        validate_container_image("deploy.arcadedb_image", deploy.arcadedb_image.trim())?;
+        for (field, secret_id) in [
+            (
+                "deploy.channel_secret_key_secret_id",
+                &deploy.channel_secret_key_secret_id,
+            ),
+            (
+                "deploy.arcadedb_password_secret_id",
+                &deploy.arcadedb_password_secret_id,
+            ),
+            (
+                "deploy.arachnid_username_secret_id",
+                &deploy.arachnid_username_secret_id,
+            ),
+            (
+                "deploy.arachnid_password_secret_id",
+                &deploy.arachnid_password_secret_id,
+            ),
+            (
+                "deploy.vlm_api_key_secret_id",
+                &deploy.vlm_api_key_secret_id,
+            ),
+        ] {
+            if let Some(secret_id) = secret_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                validate_secret_id(field, secret_id)?;
+            }
+        }
         validate_machine_type("deploy.machine_type", deploy.machine_type.trim())?;
         validate_absolute_path("deploy.blob_cache_path", deploy.blob_cache_path.trim())?;
         if let Some(dns_zone_name) = deploy
@@ -535,6 +667,107 @@ fn validate_deploy(resolved: &ResolvedConfig, deploy: &DeployConfig) -> Result<(
             .filter(|z| !z.is_empty())
         {
             validate_gcp_name("deploy.dns_zone_name", dns_zone_name)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// index / moderation stack（#615）配備時の整合検証。
+///
+/// runtime（cn-indexer）の起動 gate と同じ判定を config 段階で fail-closed に写す:
+/// 必須 secret ID の欠落、relay 不在、provider に対する credential / endpoint 欠落は
+/// apply 前に検出する。
+fn validate_indexer_stack(resolved: &ResolvedConfig, deploy: &DeployConfig) -> Result<()> {
+    if !deploy.deploy_indexer_stack {
+        return Ok(());
+    }
+
+    if deploy.relation_analyze_interval_minutes == 0 {
+        bail!("deploy.relation_analyze_interval_minutes は 1 以上で指定してください");
+    }
+
+    let require_secret = |field: &str, value: &Option<String>| -> Result<()> {
+        if value
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .is_none()
+        {
+            bail!("deploy.deploy_indexer_stack=true の場合、{field} は必須です");
+        }
+        Ok(())
+    };
+    require_secret(
+        "deploy.channel_secret_key_secret_id",
+        &deploy.channel_secret_key_secret_id,
+    )?;
+    require_secret(
+        "deploy.arcadedb_password_secret_id",
+        &deploy.arcadedb_password_secret_id,
+    )?;
+
+    // relay validation gate（ADR 0025 §6.4）を config 段階で写す。
+    if !resolved.enabled(Capability::IrohRelay) && deploy.indexer_external_relay_urls.is_empty() {
+        bail!(
+            "deploy.deploy_indexer_stack=true には validated relay が必要です。\n\
+             features.iroh_relay を有効化するか、deploy.indexer_external_relay_urls を指定してください。"
+        );
+    }
+
+    let safety = resolved.raw.safety.clone().unwrap_or_default();
+
+    // signed moderation event（既定 true）には signing key secret が必要。
+    if safety.events.emit_signed_moderation_events
+        && safety
+            .events
+            .signing_key_secret_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .is_none()
+    {
+        bail!(
+            "deploy.deploy_indexer_stack=true かつ safety.events.emit_signed_moderation_events=true \
+             の場合、safety.events.signing_key_secret_id は必須です"
+        );
+    }
+
+    // provider ごとの credential / endpoint 要件。
+    let providers = [
+        safety.providers.known_csam.as_ref(),
+        safety.providers.general.as_ref(),
+        safety.providers.unknown_csam.as_ref(),
+    ];
+    let uses = |name: &str| {
+        providers
+            .iter()
+            .flatten()
+            .any(|entry| entry.provider.trim() == name)
+    };
+    if uses("project-arachnid-shield") {
+        require_secret(
+            "deploy.arachnid_username_secret_id",
+            &deploy.arachnid_username_secret_id,
+        )?;
+        require_secret(
+            "deploy.arachnid_password_secret_id",
+            &deploy.arachnid_password_secret_id,
+        )?;
+    }
+    if uses("openai-compatible-vlm") {
+        for (field, value) in [
+            ("deploy.vlm_api_base_url", &deploy.vlm_api_base_url),
+            ("deploy.vlm_model", &deploy.vlm_model),
+        ] {
+            if value
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .is_none()
+            {
+                bail!("safety.providers に openai-compatible-vlm を使う場合、{field} は必須です");
+            }
         }
     }
 

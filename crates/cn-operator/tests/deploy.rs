@@ -220,6 +220,199 @@ fn generated_tfvars_guides_operator_config_path() {
     assert!(!tfvars.contains("operator_config_file = file("));
 }
 
+/// indexer stack（#615）一式を有効化した config。
+fn config_with_indexer_stack(extra_deploy: &str, extra_features: &str) -> String {
+    format!(
+        "server:\n\
+         \x20 domain: example-kukuri.net\n\
+         \x20 operator_name: Example Operator\n\
+         \x20 country: JP\n\
+         features:\n\
+         \x20 iroh_relay: true\n{extra_features}\
+         safety:\n\
+         \x20 events:\n\
+         \x20   emit_signed_moderation_events: true\n\
+         \x20   signing_key_secret_id: kukuri-cn-safety-signing-key\n\
+         \x20 providers:\n\
+         \x20   known_csam:\n\
+         \x20     provider: project-arachnid-shield\n\
+         \x20     required: true\n\
+         \x20   general:\n\
+         \x20     provider: openai-compatible-vlm\n\
+         \x20   unknown_csam:\n\
+         \x20     provider: openai-compatible-vlm\n\
+         deploy:\n\
+         \x20 profile: low-cost\n\
+         \x20 project_id: my-project\n\
+         \x20 relay_domain: relay.example-kukuri.net\n\
+         \x20 acme_email: ops@example-kukuri.net\n\
+         \x20 jwt_secret_id: kukuri-cn-jwt-secret\n\
+         \x20 postgres_password_secret_id: kukuri-cn-postgres-password\n\
+         \x20 deploy_indexer_stack: true\n\
+         \x20 channel_secret_key_secret_id: kukuri-cn-channel-secret-key\n\
+         \x20 arcadedb_password_secret_id: kukuri-cn-arcadedb-password\n\
+         \x20 arachnid_username_secret_id: kukuri-cn-arachnid-username\n\
+         \x20 arachnid_password_secret_id: kukuri-cn-arachnid-password\n\
+         \x20 vlm_api_base_url: http://10.73.0.10:8000\n\
+         \x20 vlm_model: inclusionAI/SingGuard-2b\n\
+         \x20 vlm_response_format: guard\n{extra_deploy}"
+    )
+}
+
+#[test]
+fn machine_type_defaults_to_e2_medium() {
+    let yaml = config_with_deploy("  relay_domain: relay.example-kukuri.net\n", "", false);
+    let resolved = load_and_validate(&yaml).unwrap();
+    let tfvars = generate_tfvars(&resolved).unwrap();
+    assert!(
+        tfvars.contains("machine_type          = \"e2-medium\""),
+        "tfvars:\n{tfvars}"
+    );
+}
+
+#[test]
+fn indexer_stack_defaults_to_disabled_with_images() {
+    // 既存 config（stack 未指定）でも tfvars には明示的な false と image 既定値が出る。
+    let yaml = config_with_deploy("  relay_domain: relay.example-kukuri.net\n", "", false);
+    let resolved = load_and_validate(&yaml).unwrap();
+    let tfvars = generate_tfvars(&resolved).unwrap();
+    assert!(tfvars.contains("deploy_indexer_stack = false"));
+    assert!(
+        tfvars.contains("cn_indexer_image     = \"ghcr.io/kingyosun/kukuri-cn-indexer:latest\"")
+    );
+    assert!(tfvars.contains("arcadedb_image       = \"arcadedata/arcadedb:latest\""));
+    assert!(tfvars.contains("relation_analyze_interval_minutes = 60"));
+    assert!(tfvars.contains("safety_provider_known_csam            = \"\""));
+}
+
+#[test]
+fn indexer_stack_full_config_emits_expected_tfvars() {
+    let yaml = config_with_indexer_stack(
+        "  indexer_data_disk_gb: 10\n  relation_analyze_interval_minutes: 30\n",
+        "",
+    );
+    let resolved = load_and_validate(&yaml).unwrap();
+    let tfvars = generate_tfvars(&resolved).unwrap();
+    assert!(tfvars.contains("deploy_indexer_stack = true"));
+    assert!(tfvars.contains("indexer_data_disk_gb = 10"));
+    assert!(tfvars.contains("relation_analyze_interval_minutes = 30"));
+    assert!(tfvars.contains("indexer_own_relay           = true"));
+    assert!(tfvars.contains("channel_secret_key_secret_id = \"kukuri-cn-channel-secret-key\""));
+    assert!(tfvars.contains("arcadedb_password_secret_id  = \"kukuri-cn-arcadedb-password\""));
+    assert!(tfvars.contains("arachnid_username_secret_id  = \"kukuri-cn-arachnid-username\""));
+    assert!(tfvars.contains("arachnid_password_secret_id  = \"kukuri-cn-arachnid-password\""));
+    assert!(tfvars.contains("safety_provider_known_csam            = \"project-arachnid-shield\""));
+    assert!(tfvars.contains("safety_provider_known_csam_required   = true"));
+    assert!(tfvars.contains("safety_provider_general               = \"openai-compatible-vlm\""));
+    assert!(tfvars.contains("safety_emit_signed_events             = true"));
+    assert!(tfvars.contains("safety_signing_key_secret_id = \"kukuri-cn-safety-signing-key\""));
+    assert!(tfvars.contains("vlm_api_base_url     = \"http://10.73.0.10:8000\""));
+    assert!(tfvars.contains("vlm_model            = \"inclusionAI/SingGuard-2b\""));
+    assert!(tfvars.contains("vlm_response_format  = \"guard\""));
+    // 任意 secret（VLM API key）未指定は空文字（Terraform 側で「fetch しない」の合図）。
+    assert!(tfvars.contains("vlm_api_key_secret_id        = \"\""));
+}
+
+#[test]
+fn indexer_stack_requires_channel_and_arcadedb_secret_ids() {
+    let yaml = config_with_indexer_stack("", "").replace(
+        "  channel_secret_key_secret_id: kukuri-cn-channel-secret-key\n",
+        "",
+    );
+    let err = load_and_validate(&yaml).unwrap_err();
+    assert!(
+        err.to_string().contains("channel_secret_key_secret_id"),
+        "got: {err}"
+    );
+
+    let yaml = config_with_indexer_stack("", "").replace(
+        "  arcadedb_password_secret_id: kukuri-cn-arcadedb-password\n",
+        "",
+    );
+    let err = load_and_validate(&yaml).unwrap_err();
+    assert!(
+        err.to_string().contains("arcadedb_password_secret_id"),
+        "got: {err}"
+    );
+}
+
+#[test]
+fn indexer_stack_requires_relay() {
+    // 自前 relay 無効 + 外部 relay 未指定は config 段階で fail-closed。
+    let yaml =
+        config_with_indexer_stack("", "").replace("  iroh_relay: true\n", "  iroh_relay: false\n");
+    let err = load_and_validate(&yaml).unwrap_err();
+    assert!(err.to_string().contains("relay"), "got: {err}");
+
+    // 外部 relay URL があれば成立し、tfvars に出力される。
+    let yaml = config_with_indexer_stack(
+        "  indexer_external_relay_urls:\n    - https://relay.example.net\n",
+        "",
+    )
+    .replace("  iroh_relay: true\n", "  iroh_relay: false\n");
+    let resolved = load_and_validate(&yaml).unwrap();
+    let tfvars = generate_tfvars(&resolved).unwrap();
+    assert!(tfvars.contains("indexer_own_relay           = false"));
+    assert!(
+        tfvars.contains("indexer_external_relay_urls = [\"https://relay.example.net\"]"),
+        "tfvars:\n{tfvars}"
+    );
+}
+
+#[test]
+fn indexer_stack_requires_provider_credentials() {
+    // Arachnid provider には username / password の secret ID が必要。
+    let yaml = config_with_indexer_stack("", "").replace(
+        "  arachnid_username_secret_id: kukuri-cn-arachnid-username\n",
+        "",
+    );
+    let err = load_and_validate(&yaml).unwrap_err();
+    assert!(
+        err.to_string().contains("arachnid_username_secret_id"),
+        "got: {err}"
+    );
+
+    // VLM provider には endpoint / model が必要。
+    let yaml = config_with_indexer_stack("", "")
+        .replace("  vlm_api_base_url: http://10.73.0.10:8000\n", "");
+    let err = load_and_validate(&yaml).unwrap_err();
+    assert!(err.to_string().contains("vlm_api_base_url"), "got: {err}");
+}
+
+#[test]
+fn indexer_stack_requires_signing_key_when_emitting_signed_events() {
+    let yaml = config_with_indexer_stack("", "").replace(
+        "    signing_key_secret_id: kukuri-cn-safety-signing-key\n",
+        "",
+    );
+    let err = load_and_validate(&yaml).unwrap_err();
+    assert!(
+        err.to_string().contains("signing_key_secret_id"),
+        "got: {err}"
+    );
+}
+
+#[test]
+fn indexer_stack_rejects_invalid_vlm_response_format_and_zero_interval() {
+    let yaml = config_with_indexer_stack("", "").replace(
+        "  vlm_response_format: guard\n",
+        "  vlm_response_format: xml\n",
+    );
+    let err = load_and_validate(&yaml).unwrap_err();
+    assert!(
+        err.to_string().contains("vlm_response_format"),
+        "got: {err}"
+    );
+
+    let yaml = config_with_indexer_stack("  relation_analyze_interval_minutes: 0\n", "");
+    let err = load_and_validate(&yaml).unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("relation_analyze_interval_minutes"),
+        "got: {err}"
+    );
+}
+
 #[test]
 fn tfvars_never_contains_secret_values() {
     // deploy は secret ID のみを持つ。tfvars には ID のみ出力され、値は出ない。

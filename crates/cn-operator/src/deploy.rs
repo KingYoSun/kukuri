@@ -43,6 +43,16 @@ fn hcl_string(value: &str) -> String {
     format!("\"{escaped}\"")
 }
 
+/// HCL の文字列 list を決定論的に出力する（要素は trim 済みを想定）。
+fn hcl_string_list(values: &[String]) -> String {
+    let items = values
+        .iter()
+        .map(|value| hcl_string(value.trim()))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("[{items}]")
+}
+
 /// low-cost env 用の tfvars を決定論的に組み立てる。
 fn render_low_cost_tfvars(config: &ResolvedConfig, deploy: &DeployConfig) -> String {
     let project_id = deploy.project_id.trim();
@@ -165,6 +175,186 @@ fn render_low_cost_tfvars(config: &ResolvedConfig, deploy: &DeployConfig) -> Str
         out,
         "backup_retention_days = {}",
         deploy.backup_retention_days
+    );
+
+    // --- index / moderation stack（#615） ---
+    // secret はここでも ID のみ。値・credential は startup 時に Secret Manager から取得される。
+    let safety = config.raw.safety.clone().unwrap_or_default();
+    let provider_name = |entry: Option<&crate::safety_config::SafetyProviderEntry>| {
+        entry
+            .map(|e| e.provider.trim().to_string())
+            .unwrap_or_default()
+    };
+    let provider_required = |entry: Option<&crate::safety_config::SafetyProviderEntry>| {
+        entry.map(|e| e.required).unwrap_or(false)
+    };
+    let optional_secret = |value: &Option<String>| {
+        value
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or_default()
+            .to_string()
+    };
+    let suspected_visibility = safety
+        .moderation
+        .suspected_signal_visibility
+        .map(|visibility| match visibility {
+            crate::safety_config::SignalVisibility::Local => "local",
+            crate::safety_config::SignalVisibility::SubscribedNodes => "subscribed_nodes",
+            crate::safety_config::SignalVisibility::Public => "public",
+        })
+        .unwrap_or_default();
+
+    let _ = writeln!(out);
+    let _ = writeln!(
+        out,
+        "deploy_indexer_stack = {}",
+        deploy.deploy_indexer_stack
+    );
+    let _ = writeln!(
+        out,
+        "cn_indexer_image     = {}",
+        hcl_string(deploy.cn_indexer_image.trim())
+    );
+    let _ = writeln!(
+        out,
+        "arcadedb_image       = {}",
+        hcl_string(deploy.arcadedb_image.trim())
+    );
+    let _ = writeln!(
+        out,
+        "indexer_data_disk_gb = {}",
+        deploy.indexer_data_disk_gb
+    );
+    let _ = writeln!(
+        out,
+        "relation_analyze_interval_minutes = {}",
+        deploy.relation_analyze_interval_minutes
+    );
+    let _ = writeln!(
+        out,
+        "indexer_own_relay           = {}",
+        config.enabled(crate::Capability::IrohRelay)
+    );
+    let _ = writeln!(
+        out,
+        "indexer_external_relay_urls = {}",
+        hcl_string_list(&deploy.indexer_external_relay_urls)
+    );
+    let _ = writeln!(out);
+    let _ = writeln!(
+        out,
+        "channel_secret_key_secret_id = {}",
+        hcl_string(&optional_secret(&deploy.channel_secret_key_secret_id))
+    );
+    let _ = writeln!(
+        out,
+        "arcadedb_password_secret_id  = {}",
+        hcl_string(&optional_secret(&deploy.arcadedb_password_secret_id))
+    );
+    let _ = writeln!(
+        out,
+        "arachnid_username_secret_id  = {}",
+        hcl_string(&optional_secret(&deploy.arachnid_username_secret_id))
+    );
+    let _ = writeln!(
+        out,
+        "arachnid_password_secret_id  = {}",
+        hcl_string(&optional_secret(&deploy.arachnid_password_secret_id))
+    );
+    let _ = writeln!(
+        out,
+        "vlm_api_key_secret_id        = {}",
+        hcl_string(&optional_secret(&deploy.vlm_api_key_secret_id))
+    );
+    let _ = writeln!(out);
+    let _ = writeln!(
+        out,
+        "safety_provider_known_csam            = {}",
+        hcl_string(&provider_name(safety.providers.known_csam.as_ref()))
+    );
+    let _ = writeln!(
+        out,
+        "safety_provider_known_csam_required   = {}",
+        provider_required(safety.providers.known_csam.as_ref())
+    );
+    let _ = writeln!(
+        out,
+        "safety_provider_general               = {}",
+        hcl_string(&provider_name(safety.providers.general.as_ref()))
+    );
+    let _ = writeln!(
+        out,
+        "safety_provider_general_required      = {}",
+        provider_required(safety.providers.general.as_ref())
+    );
+    let _ = writeln!(
+        out,
+        "safety_provider_unknown_csam          = {}",
+        hcl_string(&provider_name(safety.providers.unknown_csam.as_ref()))
+    );
+    let _ = writeln!(
+        out,
+        "safety_provider_unknown_csam_required = {}",
+        provider_required(safety.providers.unknown_csam.as_ref())
+    );
+    let _ = writeln!(
+        out,
+        "safety_emit_signed_events             = {}",
+        safety.events.emit_signed_moderation_events
+    );
+    let _ = writeln!(
+        out,
+        "safety_suspected_threshold            = {}",
+        safety.moderation.suspected_threshold.unwrap_or(0)
+    );
+    let _ = writeln!(
+        out,
+        "safety_suspected_signal_visibility    = {}",
+        hcl_string(suspected_visibility)
+    );
+    let _ = writeln!(out);
+    let _ = writeln!(
+        out,
+        "vlm_api_base_url     = {}",
+        hcl_string(
+            deploy
+                .vlm_api_base_url
+                .as_deref()
+                .map(str::trim)
+                .unwrap_or("")
+        )
+    );
+    let _ = writeln!(
+        out,
+        "vlm_model            = {}",
+        hcl_string(deploy.vlm_model.as_deref().map(str::trim).unwrap_or(""))
+    );
+    let _ = writeln!(
+        out,
+        "vlm_response_format  = {}",
+        hcl_string(
+            deploy
+                .vlm_response_format
+                .as_deref()
+                .map(str::trim)
+                .unwrap_or("")
+        )
+    );
+    let _ = writeln!(
+        out,
+        "vlm_api_timeout_secs = {}",
+        deploy.vlm_api_timeout_secs
+    );
+    let _ = writeln!(
+        out,
+        "media_fetch_max_bytes    = {}",
+        deploy.media_fetch_max_bytes
+    );
+    let _ = writeln!(
+        out,
+        "media_fetch_timeout_secs = {}",
+        deploy.media_fetch_timeout_secs
     );
 
     // operator-config.yaml 自体を VM に配置して manifest endpoint / report_endpoint gating を
