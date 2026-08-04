@@ -106,18 +106,20 @@ impl ArcadeDbProjection {
             &format!("CREATE DOCUMENT TYPE {ENTRY_TYPE} IF NOT EXISTS"),
         )
         .await?;
-        for property in [
-            "scope_kind STRING",
-            "scope_id STRING",
-            "object_id STRING",
-            "author_pubkey STRING",
-            "text STRING",
-            "created_at LONG",
-            "source_replica_id STRING",
+        // `IF NOT EXISTS` は property 名の直後・データ型の前に置く（ArcadeDB SQL 文法。
+        // 型の後ろに置くと 26.x で CommandSQLParsingException になる）。
+        for (name, data_type) in [
+            ("scope_kind", "STRING"),
+            ("scope_id", "STRING"),
+            ("object_id", "STRING"),
+            ("author_pubkey", "STRING"),
+            ("text", "STRING"),
+            ("created_at", "LONG"),
+            ("source_replica_id", "STRING"),
         ] {
             self.command(
                 "sql",
-                &format!("CREATE PROPERTY {ENTRY_TYPE}.{property} IF NOT EXISTS"),
+                &format!("CREATE PROPERTY {ENTRY_TYPE}.{name} IF NOT EXISTS {data_type}"),
             )
             .await?;
         }
