@@ -26,6 +26,13 @@ locals {
   use_postgres_disk   = var.deploy_local_postgres && var.postgres_data_disk_gb > 0
   use_blob_cache_disk = var.blob_cache_enabled && var.blob_cache_size_gb > 0
 
+  # index / moderation stack（#615）。indexer data（iroh endpoint 同一性 / docs replica）は
+  # 別 PD に置けるようにする。ArcadeDB data は rebuildable projection（canonical store では
+  # ない）ため docker named volume に置き、空からの再構築手順を runbook に持つ。
+  indexer_data_path   = "/var/lib/kukuri/cn-indexer"
+  use_indexer_disk    = var.deploy_indexer_stack && var.indexer_data_disk_gb > 0
+  indexer_status_port = 8630
+
   # operator-config.yaml を VM に配置するか（#380）。空文字なら配置せず manifest endpoint は 404。
   operator_config_enabled = trimspace(var.operator_config_file) != ""
   operator_config_path    = "/etc/kukuri/operator-config.yaml"
@@ -55,6 +62,12 @@ locals {
     blob_cache_path          = var.blob_cache_path
     operator_config_enabled  = local.operator_config_enabled
     operator_config_path     = local.operator_config_path
+    deploy_indexer_stack     = var.deploy_indexer_stack
+    cn_indexer_image         = var.cn_indexer_image
+    arcadedb_image           = var.arcadedb_image
+    use_indexer_disk         = local.use_indexer_disk
+    indexer_data_path        = local.indexer_data_path
+    indexer_status_port      = local.indexer_status_port
   }), "\r\n", "\n"))
 
   caddyfile_b64 = base64encode(replace(templatefile("${path.module}/templates/Caddyfile.tftpl", {
@@ -85,6 +98,31 @@ locals {
     blob_cache_path                       = var.blob_cache_path
     certs_mount                           = local.certs_mount
     cert_name                             = local.cert_name
+    deploy_indexer_stack                  = var.deploy_indexer_stack
+    indexer_data_path                     = local.indexer_data_path
+    indexer_status_port                   = local.indexer_status_port
+    indexer_own_relay                     = var.indexer_own_relay
+    indexer_external_relay_urls           = join(",", var.indexer_external_relay_urls)
+    index_query_enabled                   = var.index_query_enabled
+    trust_read_enabled                    = var.trust_read_enabled
+    trust_w_abs_negative                  = var.trust_w_abs_negative
+    trust_w_abs_positive                  = var.trust_w_abs_positive
+    trust_relative_half_life_days         = var.trust_relative_half_life_days
+    safety_provider_known_csam            = var.safety_provider_known_csam
+    safety_provider_known_csam_required   = var.safety_provider_known_csam_required
+    safety_provider_general               = var.safety_provider_general
+    safety_provider_general_required      = var.safety_provider_general_required
+    safety_provider_unknown_csam          = var.safety_provider_unknown_csam
+    safety_provider_unknown_csam_required = var.safety_provider_unknown_csam_required
+    safety_emit_signed_events             = var.safety_emit_signed_events
+    safety_suspected_threshold            = var.safety_suspected_threshold
+    safety_suspected_signal_visibility    = var.safety_suspected_signal_visibility
+    media_fetch_max_bytes                 = var.media_fetch_max_bytes
+    media_fetch_timeout_secs              = var.media_fetch_timeout_secs
+    vlm_api_base_url                      = var.vlm_api_base_url
+    vlm_model                             = var.vlm_model
+    vlm_response_format                   = var.vlm_response_format
+    vlm_api_timeout_secs                  = var.vlm_api_timeout_secs
   }), "\r\n", "\n"))
 
   backup_script_b64 = base64encode(replace(templatefile("${path.module}/templates/backup.sh.tftpl", {
@@ -135,6 +173,16 @@ locals {
     blob_cache_path                     = var.blob_cache_path
     backup_enabled                      = var.backup_enabled
     backup_schedule_oncalendar          = var.backup_schedule_oncalendar
+    deploy_indexer_stack                = var.deploy_indexer_stack
+    use_indexer_disk                    = local.use_indexer_disk
+    indexer_data_path                   = local.indexer_data_path
+    relation_analyze_interval_minutes   = var.relation_analyze_interval_minutes
+    channel_secret_key_secret_id        = var.channel_secret_key_secret_id
+    arcadedb_password_secret_id         = var.arcadedb_password_secret_id
+    safety_signing_key_secret_id        = var.safety_signing_key_secret_id
+    arachnid_username_secret_id         = var.arachnid_username_secret_id
+    arachnid_password_secret_id         = var.arachnid_password_secret_id
+    vlm_api_key_secret_id               = var.vlm_api_key_secret_id
     operator_config_enabled             = local.operator_config_enabled
     operator_config_path                = local.operator_config_path
     operator_config_b64                 = local.operator_config_b64
@@ -196,6 +244,19 @@ resource "google_compute_disk" "postgres_data" {
   }
 }
 
+# cn-indexer data 専用 PD（#615）。iroh endpoint 同一性 / docs replica を VM 置換で失わない
+# ためのもの。ArcadeDB（rebuildable projection）や raw media は置かない。再同期で復元可能な
+# ため postgres_data と違い prevent_destroy はしない。
+resource "google_compute_disk" "indexer_data" {
+  count = local.use_indexer_disk ? 1 : 0
+
+  name    = "${var.name_prefix}-indexer-data"
+  type    = "pd-ssd"
+  zone    = var.zone
+  size    = var.indexer_data_disk_gb
+  project = var.project_id
+}
+
 resource "google_compute_instance" "vm" {
   name         = "${var.name_prefix}-vm"
   project      = var.project_id
@@ -223,6 +284,14 @@ resource "google_compute_instance" "vm" {
     content {
       source      = google_compute_disk.postgres_data[0].self_link
       device_name = "postgres-data"
+    }
+  }
+
+  dynamic "attached_disk" {
+    for_each = local.use_indexer_disk ? [1] : []
+    content {
+      source      = google_compute_disk.indexer_data[0].self_link
+      device_name = "indexer-data"
     }
   }
 

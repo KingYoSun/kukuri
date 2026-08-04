@@ -59,7 +59,53 @@ module "vm" {
 
   jwt_secret_id               = var.jwt_secret_id
   postgres_password_secret_id = var.postgres_password_secret_id
-  accessor_secret_ids         = [var.jwt_secret_id, var.postgres_password_secret_id]
+  accessor_secret_ids = concat(
+    [var.jwt_secret_id, var.postgres_password_secret_id],
+    # index / moderation stack の runtime secrets（#615）。stack 無効時は binding を作らない。
+    var.deploy_indexer_stack ? compact([
+      var.channel_secret_key_secret_id,
+      var.arcadedb_password_secret_id,
+      var.safety_signing_key_secret_id,
+      var.arachnid_username_secret_id,
+      var.arachnid_password_secret_id,
+      var.vlm_api_key_secret_id,
+    ]) : [],
+  )
+
+  # --- index / moderation stack (#615) ---
+  deploy_indexer_stack              = var.deploy_indexer_stack
+  cn_indexer_image                  = var.cn_indexer_image
+  arcadedb_image                    = var.arcadedb_image
+  indexer_data_disk_gb              = var.indexer_data_disk_gb
+  relation_analyze_interval_minutes = var.relation_analyze_interval_minutes
+  indexer_own_relay                 = var.indexer_own_relay
+  indexer_external_relay_urls       = var.indexer_external_relay_urls
+  index_query_enabled               = var.index_query_enabled
+  trust_read_enabled                = var.trust_read_enabled
+
+  channel_secret_key_secret_id = var.channel_secret_key_secret_id
+  arcadedb_password_secret_id  = var.arcadedb_password_secret_id
+  safety_signing_key_secret_id = var.safety_signing_key_secret_id
+  arachnid_username_secret_id  = var.arachnid_username_secret_id
+  arachnid_password_secret_id  = var.arachnid_password_secret_id
+  vlm_api_key_secret_id        = var.vlm_api_key_secret_id
+
+  safety_provider_known_csam            = var.safety_provider_known_csam
+  safety_provider_known_csam_required   = var.safety_provider_known_csam_required
+  safety_provider_general               = var.safety_provider_general
+  safety_provider_general_required      = var.safety_provider_general_required
+  safety_provider_unknown_csam          = var.safety_provider_unknown_csam
+  safety_provider_unknown_csam_required = var.safety_provider_unknown_csam_required
+  safety_emit_signed_events             = var.safety_emit_signed_events
+  safety_suspected_threshold            = var.safety_suspected_threshold
+  safety_suspected_signal_visibility    = var.safety_suspected_signal_visibility
+  media_fetch_max_bytes                 = var.media_fetch_max_bytes
+  media_fetch_timeout_secs              = var.media_fetch_timeout_secs
+
+  vlm_api_base_url     = var.vlm_api_base_url
+  vlm_model            = var.vlm_model
+  vlm_response_format  = var.vlm_response_format
+  vlm_api_timeout_secs = var.vlm_api_timeout_secs
 
   rendezvous_key_prefix                 = var.rendezvous_key_prefix
   rate_limit_enabled                    = var.rate_limit_enabled
@@ -136,6 +182,14 @@ resource "google_compute_disk_resource_policy_attachment" "postgres_data" {
   count   = var.enable_disk_snapshots && var.postgres_data_disk_gb > 0 ? 1 : 0
   name    = google_compute_resource_policy.disk_snapshot[0].name
   disk    = module.vm.postgres_data_disk_name
+  zone    = var.zone
+  project = var.project_id
+}
+
+resource "google_compute_disk_resource_policy_attachment" "indexer_data" {
+  count   = var.enable_disk_snapshots && var.deploy_indexer_stack && var.indexer_data_disk_gb > 0 ? 1 : 0
+  name    = google_compute_resource_policy.disk_snapshot[0].name
+  disk    = module.vm.indexer_data_disk_name
   zone    = var.zone
   project = var.project_id
 }

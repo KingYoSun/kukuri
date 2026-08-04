@@ -62,9 +62,9 @@ variable "dns_zone_name" {
 
 # --- VM sizing ---
 variable "machine_type" {
-  description = "Compute Engine machine type。"
+  description = "Compute Engine machine type。Postgres + Valkey + ArcadeDB(JVM) + cn-indexer の同居を想定した既定。API / relay のみの最小構成なら e2-small へ下げてもよい。"
   type        = string
-  default     = "e2-small"
+  default     = "e2-medium"
 }
 
 variable "disk_size_gb" {
@@ -224,6 +224,189 @@ variable "extra_ingress_source_ranges" {
   description = "API/relay public ingress を絞る場合の許可レンジ。既定は全公開。"
   type        = list(string)
   default     = ["0.0.0.0/0"]
+}
+
+# --- index / moderation stack (#615) ---
+# secret 系はすべて Secret Manager の ID（値ではない）。terraform.tfvars は
+# `cn-operator generate-tfvars` が operator-config.yaml から生成する。
+variable "deploy_indexer_stack" {
+  description = "true なら cn-indexer + ArcadeDB + relation 定期解析を配備する。false へ戻すと従来の API / relay のみ構成（rollback 経路）。"
+  type        = bool
+  default     = false
+}
+
+variable "cn_indexer_image" {
+  description = "cn-indexer の公開 GHCR image（tag/digest 込み。production は digest 固定を推奨）。"
+  type        = string
+  default     = "ghcr.io/kingyosun/kukuri-cn-indexer:latest"
+}
+
+variable "arcadedb_image" {
+  description = "ArcadeDB container image（stable tag を使う。latest は SNAPSHOT）。"
+  type        = string
+  default     = "arcadedata/arcadedb:26.8.1"
+}
+
+variable "indexer_data_disk_gb" {
+  description = "cn-indexer data 用の専用 persistent disk サイズ（GB）。0 なら boot disk 上の docker volume。本番では > 0 を推奨。"
+  type        = number
+  default     = 0
+}
+
+variable "relation_analyze_interval_minutes" {
+  description = "cn-cli relation analyze の実行間隔（分）。"
+  type        = number
+  default     = 60
+}
+
+variable "indexer_own_relay" {
+  description = "COMMUNITY_NODE_INDEXER_OWN_RELAY。low-cost は cn-iroh-relay を同梱するため既定 true。"
+  type        = bool
+  default     = true
+}
+
+variable "indexer_external_relay_urls" {
+  description = "cn-indexer が使う外部 relay URL 群。"
+  type        = list(string)
+  default     = []
+}
+
+variable "index_query_enabled" {
+  description = "COMMUNITY_NODE_INDEX_QUERY_ENABLED。full-stack E2E 完了までは false を維持する。"
+  type        = bool
+  default     = false
+}
+
+variable "trust_read_enabled" {
+  description = "COMMUNITY_NODE_TRUST_READ_ENABLED。full-stack E2E 完了までは false を維持する。"
+  type        = bool
+  default     = false
+}
+
+variable "channel_secret_key_secret_id" {
+  description = "COMMUNITY_NODE_CHANNEL_SECRET_KEY を保持する Secret Manager secret ID（deploy_indexer_stack=true のとき必須）。"
+  type        = string
+  default     = ""
+}
+
+variable "arcadedb_password_secret_id" {
+  description = "ArcadeDB root password を保持する Secret Manager secret ID（deploy_indexer_stack=true のとき必須）。"
+  type        = string
+  default     = ""
+}
+
+variable "safety_signing_key_secret_id" {
+  description = "moderation event signing key を保持する Secret Manager secret ID。空なら注入しない。"
+  type        = string
+  default     = ""
+}
+
+variable "arachnid_username_secret_id" {
+  description = "PROJECT_ARACHNID_API_USERNAME を保持する Secret Manager secret ID。空なら注入しない。"
+  type        = string
+  default     = ""
+}
+
+variable "arachnid_password_secret_id" {
+  description = "PROJECT_ARACHNID_API_PASSWORD を保持する Secret Manager secret ID。空なら注入しない。"
+  type        = string
+  default     = ""
+}
+
+variable "vlm_api_key_secret_id" {
+  description = "任意の COMMUNITY_NODE_VLM_API_KEY を保持する Secret Manager secret ID。空なら注入しない。"
+  type        = string
+  default     = ""
+}
+
+variable "safety_provider_known_csam" {
+  description = "known_csam slot の provider 名（例: project-arachnid-shield）。空なら未構成。"
+  type        = string
+  default     = ""
+}
+
+variable "safety_provider_known_csam_required" {
+  description = "known_csam slot の required 宣言。"
+  type        = bool
+  default     = false
+}
+
+variable "safety_provider_general" {
+  description = "general slot の provider 名（例: openai-compatible-vlm）。空なら未構成。"
+  type        = string
+  default     = ""
+}
+
+variable "safety_provider_general_required" {
+  description = "general slot の required 宣言。"
+  type        = bool
+  default     = false
+}
+
+variable "safety_provider_unknown_csam" {
+  description = "unknown_csam slot の provider 名（例: openai-compatible-vlm）。空なら未構成。"
+  type        = string
+  default     = ""
+}
+
+variable "safety_provider_unknown_csam_required" {
+  description = "unknown_csam slot の required 宣言。"
+  type        = bool
+  default     = false
+}
+
+variable "safety_emit_signed_events" {
+  description = "COMMUNITY_NODE_SAFETY_EMIT_SIGNED_EVENTS。"
+  type        = bool
+  default     = true
+}
+
+variable "safety_suspected_threshold" {
+  description = "COMMUNITY_NODE_SAFETY_SUSPECTED_THRESHOLD（1-100）。0 なら未設定。"
+  type        = number
+  default     = 0
+}
+
+variable "safety_suspected_signal_visibility" {
+  description = "COMMUNITY_NODE_SAFETY_SUSPECTED_SIGNAL_VISIBILITY。空なら未設定。"
+  type        = string
+  default     = ""
+}
+
+variable "media_fetch_max_bytes" {
+  description = "COMMUNITY_NODE_MEDIA_FETCH_MAX_BYTES。0 なら未設定。"
+  type        = number
+  default     = 0
+}
+
+variable "media_fetch_timeout_secs" {
+  description = "COMMUNITY_NODE_MEDIA_FETCH_TIMEOUT_SECS。0 なら未設定。"
+  type        = number
+  default     = 0
+}
+
+variable "vlm_api_base_url" {
+  description = "COMMUNITY_NODE_VLM_API_BASE_URL。self-host endpoint は private 経路（WireGuard 等）で到達させる。空なら未設定。"
+  type        = string
+  default     = ""
+}
+
+variable "vlm_model" {
+  description = "COMMUNITY_NODE_VLM_MODEL。空なら未設定。"
+  type        = string
+  default     = ""
+}
+
+variable "vlm_response_format" {
+  description = "COMMUNITY_NODE_VLM_RESPONSE_FORMAT（json / guard）。空なら未設定。"
+  type        = string
+  default     = ""
+}
+
+variable "vlm_api_timeout_secs" {
+  description = "COMMUNITY_NODE_VLM_API_TIMEOUT_SECS。0 なら未設定。"
+  type        = number
+  default     = 0
 }
 
 # --- operator manifest (#380) ---
