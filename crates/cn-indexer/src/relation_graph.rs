@@ -51,11 +51,13 @@ impl ArcadeDbRelationGraph {
                 &format!("CREATE VERTEX TYPE {USER_TYPE} IF NOT EXISTS"),
             )
             .await?;
-        for property in ["pubkey STRING", "cluster STRING"] {
+        // `IF NOT EXISTS` は property 名の直後・データ型の前に置く（ArcadeDB SQL 文法。
+        // 型の後ろに置くと 26.x で CommandSQLParsingException になる）。
+        for (name, data_type) in [("pubkey", "STRING"), ("cluster", "STRING")] {
             self.client
                 .command(
                     "sql",
-                    &format!("CREATE PROPERTY {USER_TYPE}.{property} IF NOT EXISTS"),
+                    &format!("CREATE PROPERTY {USER_TYPE}.{name} IF NOT EXISTS {data_type}"),
                 )
                 .await?;
         }
@@ -74,7 +76,7 @@ impl ArcadeDbRelationGraph {
         self.client
             .command(
                 "sql",
-                &format!("CREATE PROPERTY {EDGE_TYPE}.features_json STRING IF NOT EXISTS"),
+                &format!("CREATE PROPERTY {EDGE_TYPE}.features_json IF NOT EXISTS STRING"),
             )
             .await?;
         Ok(())
