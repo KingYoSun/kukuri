@@ -104,8 +104,8 @@ docker compose --env-file .env.community-node -f docker-compose.community-node.y
 VPS 側:
 
 - `api.kukuri.app` と `iroh-relay.kukuri.app` は VPS の public IP へ向ける
-- Caddy は `api.kukuri.app -> http://10.73.0.2:18080`, `iroh-relay.kukuri.app -> http://10.73.0.2:13340` を reverse proxy する
-- nftables は `7842/udp` を Home 側 `10.73.0.2:7842` へ WireGuard 経由で forward する
+- Caddy は `api.kukuri.app -> http://192.0.2.2:18080`, `iroh-relay.kukuri.app -> http://192.0.2.2:13340` を reverse proxy する
+- nftables は `7842/udp` を Home 側 `192.0.2.2:7842` へ WireGuard 経由で forward する
 
 Home 側の `.env.community-node` には最低限この値を入れる。
 
@@ -114,10 +114,10 @@ CN_BASE_URL=https://api.kukuri.app
 CN_PUBLIC_BASE_URL=https://api.kukuri.app
 COMMUNITY_NODE_CONNECTIVITY_URLS=https://iroh-relay.kukuri.app
 
-CN_USER_API_HOST_BIND_IP=10.73.0.2
-CN_IROH_RELAY_HTTP_HOST_BIND_IP=10.73.0.2
+CN_USER_API_HOST_BIND_IP=192.0.2.2
+CN_IROH_RELAY_HTTP_HOST_BIND_IP=192.0.2.2
 CN_IROH_RELAY_QUIC_BIND_ADDR=0.0.0.0:7842
-CN_IROH_RELAY_QUIC_HOST_BIND_IP=10.73.0.2
+CN_IROH_RELAY_QUIC_HOST_BIND_IP=192.0.2.2
 CN_IROH_RELAY_QUIC_PORT=7842
 CN_IROH_RELAY_TLS_CERT_PATH=/certs/default.crt
 CN_IROH_RELAY_TLS_KEY_PATH=/certs/default.key

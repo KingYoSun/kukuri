@@ -21,15 +21,15 @@ flowchart LR
   RelayHttps --> VPS
   RelayQuic --> VPS
 
-  VPS -->|wg0 10.73.0.1/24 -> 10.73.0.2/24| Home["Home server<br/>cn-user-api + cn-iroh-relay"]
+  VPS -->|wg0 192.0.2.1/24 -> 192.0.2.2/24| Home["Home server<br/>cn-user-api + cn-iroh-relay"]
   Home --> PrivateState["Postgres + Valkey<br/>private bind only"]
 ```
 
 既定値:
 
-- WireGuard subnet: `10.73.0.0/24`
-- VPS tunnel IP: `10.73.0.1`
-- Home tunnel IP: `10.73.0.2`
+- WireGuard subnet: `192.0.2.0/24`
+- VPS tunnel IP: `192.0.2.1`
+- Home tunnel IP: `192.0.2.2`
 - Public API domain: `api.kukuri.app`
 - Public iroh relay domain: `iroh-relay.kukuri.app`
 - Public WireGuard port: `51820/udp`
@@ -56,10 +56,10 @@ cp scripts/vps/community-node-edge.env.example scripts/vps/community-node-edge.e
 ```dotenv
 PUBLIC_IFACE=eth0
 WG_ENDPOINT_HOST=api.kukuri.app
-WG_VPS_ADDRESS=10.73.0.1/24
-WG_HOME_CLIENT_ADDRESS=10.73.0.2/24
-WG_HOME_ALLOWED_IPS=10.73.0.2/32
-HOME_WG_IP=10.73.0.2
+WG_VPS_ADDRESS=192.0.2.1/24
+WG_HOME_CLIENT_ADDRESS=192.0.2.2/24
+WG_HOME_ALLOWED_IPS=192.0.2.2/32
+HOME_WG_IP=192.0.2.2
 WG_SERVER_PRIVATE_KEY=<vps-private-key>
 WG_HOME_PUBLIC_KEY=<home-public-key>
 WG_HOME_PRESHARED_KEY=<shared-psk>
@@ -83,7 +83,7 @@ sudo ./scripts/vps/setup-community-node-edge.sh scripts/vps/community-node-edge.
 - `/etc/nftables.conf`
 - `/root/wg0-home-client.conf`
 
-Caddy は `api.kukuri.app -> http://10.73.0.2:18080` と `iroh-relay.kukuri.app -> http://10.73.0.2:13340` を reverse proxy する。`7842/udp` は Caddy を通さず nftables で Home 側へ DNAT する。
+Caddy は `api.kukuri.app -> http://192.0.2.2:18080` と `iroh-relay.kukuri.app -> http://192.0.2.2:13340` を reverse proxy する。`7842/udp` は Caddy を通さず nftables で Home 側へ DNAT する。
 
 ## Home 側
 
@@ -93,14 +93,14 @@ VPS 側が生成した `/root/wg0-home-client.conf` を Home 側へコピーし�
 
 ```ini
 [Interface]
-Address = 10.73.0.2/24
+Address = 192.0.2.2/24
 PrivateKey = <home-private-key>
 
 [Peer]
 PublicKey = <server-public-key>
 PresharedKey = <same-as-WG_HOME_PRESHARED_KEY>
 Endpoint = api.kukuri.app:51820
-AllowedIPs = 10.73.0.1/32
+AllowedIPs = 192.0.2.1/32
 PersistentKeepalive = 25
 ```
 
@@ -119,12 +119,12 @@ COMMUNITY_NODE_CONNECTIVITY_URLS=https://iroh-relay.kukuri.app
 
 CN_POSTGRES_HOST_BIND_IP=127.0.0.1
 CN_VALKEY_HOST_BIND_IP=127.0.0.1
-CN_USER_API_HOST_BIND_IP=10.73.0.2
+CN_USER_API_HOST_BIND_IP=192.0.2.2
 CN_USER_API_PORT=18080
-CN_IROH_RELAY_HTTP_HOST_BIND_IP=10.73.0.2
+CN_IROH_RELAY_HTTP_HOST_BIND_IP=192.0.2.2
 CN_IROH_RELAY_PORT=13340
 CN_IROH_RELAY_QUIC_BIND_ADDR=0.0.0.0:7842
-CN_IROH_RELAY_QUIC_HOST_BIND_IP=10.73.0.2
+CN_IROH_RELAY_QUIC_HOST_BIND_IP=192.0.2.2
 CN_IROH_RELAY_QUIC_PORT=7842
 CN_IROH_RELAY_TLS_CERT_PATH=/certs/default.crt
 CN_IROH_RELAY_TLS_KEY_PATH=/certs/default.key
@@ -239,5 +239,5 @@ docker compose --env-file .env.community-node -f docker-compose.community-node.y
 
 - `https://api.kukuri.app/healthz` が成功する。
 - `https://iroh-relay.kukuri.app/ping` が成功する。
-- Home 側の `18080/tcp`, `13340/tcp`, `7842/udp` は `10.73.0.2` に bind される。
+- Home 側の `18080/tcp`, `13340/tcp`, `7842/udp` は `192.0.2.2` に bind される。
 - desktop client は `Save Nodes -> Authenticate -> Accept` 後、`connectivity_urls` として `https://iroh-relay.kukuri.app` を受け取る。

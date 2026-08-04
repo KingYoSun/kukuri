@@ -253,7 +253,7 @@ fn config_with_indexer_stack(extra_deploy: &str, extra_features: &str) -> String
          \x20 arcadedb_password_secret_id: kukuri-cn-arcadedb-password\n\
          \x20 arachnid_username_secret_id: kukuri-cn-arachnid-username\n\
          \x20 arachnid_password_secret_id: kukuri-cn-arachnid-password\n\
-         \x20 vlm_api_base_url: http://10.73.0.10:8000\n\
+         \x20 vlm_api_base_url: http://192.0.2.10:8000\n\
          \x20 vlm_model: inclusionAI/SingGuard-2b\n\
          \x20 vlm_response_format: guard\n{extra_deploy}"
     )
@@ -306,7 +306,7 @@ fn indexer_stack_full_config_emits_expected_tfvars() {
     assert!(tfvars.contains("safety_provider_general               = \"openai-compatible-vlm\""));
     assert!(tfvars.contains("safety_emit_signed_events             = true"));
     assert!(tfvars.contains("safety_signing_key_secret_id = \"kukuri-cn-safety-signing-key\""));
-    assert!(tfvars.contains("vlm_api_base_url     = \"http://10.73.0.10:8000\""));
+    assert!(tfvars.contains("vlm_api_base_url     = \"http://192.0.2.10:8000\""));
     assert!(tfvars.contains("vlm_model            = \"inclusionAI/SingGuard-2b\""));
     assert!(tfvars.contains("vlm_response_format  = \"guard\""));
     // 任意 secret（VLM API key）未指定は空文字（Terraform 側で「fetch しない」の合図）。
@@ -374,7 +374,7 @@ fn indexer_stack_requires_provider_credentials() {
 
     // VLM provider には endpoint / model が必要。
     let yaml = config_with_indexer_stack("", "")
-        .replace("  vlm_api_base_url: http://10.73.0.10:8000\n", "");
+        .replace("  vlm_api_base_url: http://192.0.2.10:8000\n", "");
     let err = load_and_validate(&yaml).unwrap_err();
     assert!(err.to_string().contains("vlm_api_base_url"), "got: {err}");
 }
