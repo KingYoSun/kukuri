@@ -41,6 +41,26 @@ services:
       timeout: 5s
       retries: 20
 
+  # index 投影 + relation graph（#615）。rebuildable projection であり canonical store ではない
+  # （真実源は Postgres。ADR 0025 / 0026）。container private network 内のみで listen し、
+  # host / internet へ port を公開しない（デバッグは `docker compose exec cn-arcadedb` を使う）。
+  cn-arcadedb:
+    image: ${CN_ARCADEDB_IMAGE:-arcadedata/arcadedb:26.8.1}
+    restart: unless-stopped
+    environment:
+      JAVA_OPTS: >-
+        -Darcadedb.server.rootPassword=${CN_ARCADEDB_ROOT_PASSWORD:?set CN_ARCADEDB_ROOT_PASSWORD}
+        -Darcadedb.server.defaultDatabases=${CN_ARCADEDB_DATABASE:-kukuri_index}[]
+    healthcheck:
+      # image は Alpine ベースで curl が無いため busybox wget を使う。
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:2480/api/v1/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    volumes:
+      - cn-arcadedb-data:/home/arcadedb/databases
+
   cn-migrate:
     build:
       context: .
@@ -83,6 +103,18 @@ services:
       COMMUNITY_NODE_RATE_LIMIT_PER_SECOND: ${COMMUNITY_NODE_RATE_LIMIT_PER_SECOND:-10}
       COMMUNITY_NODE_RATE_LIMIT_BURST: ${COMMUNITY_NODE_RATE_LIMIT_BURST:-30}
       COMMUNITY_NODE_RATE_LIMIT_TRUST_FORWARDED_FOR: ${COMMUNITY_NODE_RATE_LIMIT_TRUST_FORWARDED_FOR:-false}
+      # private channel indexing / index・trust read surface（#615）。flag は full-stack E2E
+      # 完了まで既定 false（無効時は 404）。
+      COMMUNITY_NODE_CHANNEL_SECRET_KEY: ${COMMUNITY_NODE_CHANNEL_SECRET_KEY:-}
+      COMMUNITY_NODE_ARCADEDB_URL: http://cn-arcadedb:2480
+      COMMUNITY_NODE_ARCADEDB_DATABASE: ${CN_ARCADEDB_DATABASE:-kukuri_index}
+      COMMUNITY_NODE_ARCADEDB_USER: ${CN_ARCADEDB_USER:-root}
+      COMMUNITY_NODE_ARCADEDB_PASSWORD: ${CN_ARCADEDB_ROOT_PASSWORD:?set CN_ARCADEDB_ROOT_PASSWORD}
+      COMMUNITY_NODE_INDEX_QUERY_ENABLED: ${COMMUNITY_NODE_INDEX_QUERY_ENABLED:-false}
+      COMMUNITY_NODE_TRUST_READ_ENABLED: ${COMMUNITY_NODE_TRUST_READ_ENABLED:-false}
+      COMMUNITY_NODE_TRUST_W_ABS_NEGATIVE: ${COMMUNITY_NODE_TRUST_W_ABS_NEGATIVE:-}
+      COMMUNITY_NODE_TRUST_W_ABS_POSITIVE: ${COMMUNITY_NODE_TRUST_W_ABS_POSITIVE:-}
+      COMMUNITY_NODE_TRUST_RELATIVE_HALF_LIFE_DAYS: ${COMMUNITY_NODE_TRUST_RELATIVE_HALF_LIFE_DAYS:-}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
@@ -114,5 +146,111 @@ services:
       - "${CN_IROH_RELAY_HTTPS_HOST_BIND_IP:-127.0.0.1}:${CN_IROH_RELAY_HTTPS_PORT:-13443}:3443"
       - "${CN_IROH_RELAY_QUIC_HOST_BIND_IP:-127.0.0.1}:${CN_IROH_RELAY_QUIC_PORT:-17842}:7842/udp"
 
+  # 常駐 indexing ワーカー（#613 / #615）。docs replica sync → safety scan → index 投影。
+  # provider 未構成なら ingest 無効の fail-closed 常駐（scan なしで index に載せない）。
+  # port は status endpoint の loopback bind のみで、iroh 通信は outbound で成立する。
+  cn-indexer:
+    build:
+      context: .
+      dockerfile: docker/cn/Dockerfile
+      args:
+        TARGET_PACKAGE: kukuri-cn-indexer
+        TARGET_BIN: cn-indexer
+    depends_on:
+      cn-migrate:
+        condition: service_completed_successfully
+      cn-arcadedb:
+        condition: service_healthy
+    environment:
+      COMMUNITY_NODE_DATABASE_URL: postgres://${CN_POSTGRES_USER:-cn}:${CN_POSTGRES_PASSWORD:?set CN_POSTGRES_PASSWORD}@cn-postgres:5432/${CN_POSTGRES_DB:-cn}
+      # channel secret の at-rest 暗号鍵（cn-user-api と同じ値。32 bytes 以上・placeholder 不可）。
+      COMMUNITY_NODE_CHANNEL_SECRET_KEY: ${COMMUNITY_NODE_CHANNEL_SECRET_KEY:?set COMMUNITY_NODE_CHANNEL_SECRET_KEY}
+      COMMUNITY_NODE_INDEXER_DATA_DIR: /var/lib/kukuri/cn-indexer
+      # relay validation 起動 gate（ADR 0025 §6.4）。この compose は cn-iroh-relay を同梱する
+      # ため既定 true。relay を外す構成では外部 relay URL を指定する。
+      COMMUNITY_NODE_INDEXER_OWN_RELAY: ${COMMUNITY_NODE_INDEXER_OWN_RELAY:-true}
+      COMMUNITY_NODE_INDEXER_EXTERNAL_RELAY_URLS: ${COMMUNITY_NODE_INDEXER_EXTERNAL_RELAY_URLS:-}
+      COMMUNITY_NODE_INDEXER_SEED_PEERS: ${COMMUNITY_NODE_INDEXER_SEED_PEERS:-}
+      COMMUNITY_NODE_INDEXER_POLL_INTERVAL_SECS: ${COMMUNITY_NODE_INDEXER_POLL_INTERVAL_SECS:-300}
+      COMMUNITY_NODE_INDEXER_STATUS_ADDR: 0.0.0.0:8630
+      COMMUNITY_NODE_ARCADEDB_URL: http://cn-arcadedb:2480
+      COMMUNITY_NODE_ARCADEDB_DATABASE: ${CN_ARCADEDB_DATABASE:-kukuri_index}
+      COMMUNITY_NODE_ARCADEDB_USER: ${CN_ARCADEDB_USER:-root}
+      COMMUNITY_NODE_ARCADEDB_PASSWORD: ${CN_ARCADEDB_ROOT_PASSWORD:?set CN_ARCADEDB_ROOT_PASSWORD}
+      # safety provider slot（未設定なら ingest 無効の fail-closed 常駐）。
+      COMMUNITY_NODE_SAFETY_PROVIDER_KNOWN_CSAM: ${COMMUNITY_NODE_SAFETY_PROVIDER_KNOWN_CSAM:-}
+      COMMUNITY_NODE_SAFETY_PROVIDER_KNOWN_CSAM_REQUIRED: ${COMMUNITY_NODE_SAFETY_PROVIDER_KNOWN_CSAM_REQUIRED:-false}
+      COMMUNITY_NODE_SAFETY_PROVIDER_GENERAL: ${COMMUNITY_NODE_SAFETY_PROVIDER_GENERAL:-}
+      COMMUNITY_NODE_SAFETY_PROVIDER_GENERAL_REQUIRED: ${COMMUNITY_NODE_SAFETY_PROVIDER_GENERAL_REQUIRED:-false}
+      COMMUNITY_NODE_SAFETY_PROVIDER_UNKNOWN_CSAM: ${COMMUNITY_NODE_SAFETY_PROVIDER_UNKNOWN_CSAM:-}
+      COMMUNITY_NODE_SAFETY_PROVIDER_UNKNOWN_CSAM_REQUIRED: ${COMMUNITY_NODE_SAFETY_PROVIDER_UNKNOWN_CSAM_REQUIRED:-false}
+      COMMUNITY_NODE_SAFETY_SIGNING_KEY: ${COMMUNITY_NODE_SAFETY_SIGNING_KEY:-}
+      COMMUNITY_NODE_SAFETY_EMIT_SIGNED_EVENTS: ${COMMUNITY_NODE_SAFETY_EMIT_SIGNED_EVENTS:-true}
+      COMMUNITY_NODE_SAFETY_ISSUER_NODE_ID: ${COMMUNITY_NODE_SAFETY_ISSUER_NODE_ID:-}
+      COMMUNITY_NODE_SAFETY_SUSPECTED_THRESHOLD: ${COMMUNITY_NODE_SAFETY_SUSPECTED_THRESHOLD:-}
+      COMMUNITY_NODE_SAFETY_SUSPECTED_SIGNAL_VISIBILITY: ${COMMUNITY_NODE_SAFETY_SUSPECTED_SIGNAL_VISIBILITY:-}
+      COMMUNITY_NODE_MEDIA_FETCH_MAX_BYTES: ${COMMUNITY_NODE_MEDIA_FETCH_MAX_BYTES:-}
+      COMMUNITY_NODE_MEDIA_FETCH_TIMEOUT_SECS: ${COMMUNITY_NODE_MEDIA_FETCH_TIMEOUT_SECS:-}
+      # Project Arachnid Shield（known_csam slot 用。operator 自身の credentials）。
+      PROJECT_ARACHNID_API_USERNAME: ${PROJECT_ARACHNID_API_USERNAME:-}
+      PROJECT_ARACHNID_API_PASSWORD: ${PROJECT_ARACHNID_API_PASSWORD:-}
+      PROJECT_ARACHNID_API_BASE_URL: ${PROJECT_ARACHNID_API_BASE_URL:-}
+      PROJECT_ARACHNID_API_TIMEOUT_SECS: ${PROJECT_ARACHNID_API_TIMEOUT_SECS:-}
+      # OpenAI-compatible VLM（general / unknown_csam slot 用）。
+      COMMUNITY_NODE_VLM_API_BASE_URL: ${COMMUNITY_NODE_VLM_API_BASE_URL:-}
+      COMMUNITY_NODE_VLM_MODEL: ${COMMUNITY_NODE_VLM_MODEL:-}
+      COMMUNITY_NODE_VLM_API_KEY: ${COMMUNITY_NODE_VLM_API_KEY:-}
+      COMMUNITY_NODE_VLM_RESPONSE_FORMAT: ${COMMUNITY_NODE_VLM_RESPONSE_FORMAT:-}
+      COMMUNITY_NODE_VLM_API_TIMEOUT_SECS: ${COMMUNITY_NODE_VLM_API_TIMEOUT_SECS:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8630/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    ports:
+      - "${CN_INDEXER_STATUS_HOST_BIND_IP:-127.0.0.1}:${CN_INDEXER_STATUS_PORT:-18630}:8630"
+    volumes:
+      - cn-indexer-data:/var/lib/kukuri/cn-indexer
+
+  # relation graph の定期 batch 解析（#415 / #615）。ループは直列実行なので overlap は
+  # 構造的に発生しない。成否は stdout log（[relation-analyze] 行）で観測する。
+  cn-relation-analyze:
+    build:
+      context: .
+      dockerfile: docker/cn/Dockerfile
+      args:
+        TARGET_PACKAGE: kukuri-cn-cli
+        TARGET_BIN: cn-cli
+    depends_on:
+      cn-migrate:
+        condition: service_completed_successfully
+      cn-arcadedb:
+        condition: service_healthy
+    environment:
+      COMMUNITY_NODE_DATABASE_URL: postgres://${CN_POSTGRES_USER:-cn}:${CN_POSTGRES_PASSWORD:?set CN_POSTGRES_PASSWORD}@cn-postgres:5432/${CN_POSTGRES_DB:-cn}
+      COMMUNITY_NODE_ARCADEDB_URL: http://cn-arcadedb:2480
+      COMMUNITY_NODE_ARCADEDB_DATABASE: ${CN_ARCADEDB_DATABASE:-kukuri_index}
+      COMMUNITY_NODE_ARCADEDB_USER: ${CN_ARCADEDB_USER:-root}
+      COMMUNITY_NODE_ARCADEDB_PASSWORD: ${CN_ARCADEDB_ROOT_PASSWORD:?set CN_ARCADEDB_ROOT_PASSWORD}
+      CN_RELATION_ANALYZE_INTERVAL_MINUTES: ${CN_RELATION_ANALYZE_INTERVAL_MINUTES:-60}
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -u
+        while true; do
+          echo "[relation-analyze] start $$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          if /usr/local/bin/app relation analyze; then
+            echo "[relation-analyze] success $$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          else
+            echo "[relation-analyze] failure exit=$$? $$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          fi
+          sleep $$(( $${CN_RELATION_ANALYZE_INTERVAL_MINUTES:-60} * 60 ))
+        done
+
 volumes:
   cn-postgres-data:
+  cn-arcadedb-data:
+  cn-indexer-data:
