@@ -28,6 +28,11 @@ output "postgres_data_disk_name" {
   value       = local.use_postgres_disk ? google_compute_disk.postgres_data[0].name : ""
 }
 
+output "indexer_data_disk_name" {
+  description = "cn-indexer data 専用 disk 名（未作成なら空）。snapshot policy の attach に使う。"
+  value       = local.use_indexer_disk ? google_compute_disk.indexer_data[0].name : ""
+}
+
 output "ssh_iap_command" {
   description = "IAP 経由の SSH コマンド例。"
   value       = "gcloud compute ssh ${google_compute_instance.vm.name} --zone ${google_compute_instance.vm.zone} --tunnel-through-iap --project ${var.project_id}"

@@ -61,6 +61,10 @@ services:
       COMMUNITY_NODE_DATABASE_URL: $${COMMUNITY_NODE_DATABASE_URL:?set COMMUNITY_NODE_DATABASE_URL}
       COMMUNITY_NODE_RENDEZVOUS_REDIS_URL: $${COMMUNITY_NODE_RENDEZVOUS_REDIS_URL:?set COMMUNITY_NODE_RENDEZVOUS_REDIS_URL}
       COMMUNITY_NODE_JWT_SECRET: $${COMMUNITY_NODE_JWT_SECRET:?set COMMUNITY_NODE_JWT_SECRET}
+%{ if deploy_indexer_stack ~}
+      COMMUNITY_NODE_CHANNEL_SECRET_KEY: $${COMMUNITY_NODE_CHANNEL_SECRET_KEY:-}
+      COMMUNITY_NODE_ARCADEDB_PASSWORD: $${CN_ARCADEDB_ROOT_PASSWORD:-}
+%{ endif ~}
 %{ if operator_config_enabled ~}
       # operator-config.yaml を読み込み public manifest endpoint / report_endpoint gating を有効化する。
       COMMUNITY_NODE_OPERATOR_CONFIG: ${operator_config_path}
@@ -96,6 +100,78 @@ services:
       - "${relay_http_port}"
     ports:
       - "${relay_quic_port}:${relay_quic_internal_port}/udp"
+%{ if deploy_indexer_stack ~}
+
+  # index 投影 + relation graph（#615）。rebuildable projection（canonical store ではない）。
+  # container private network 内のみで listen し、host / internet へ port を公開しない。
+  cn-arcadedb:
+    image: ${arcadedb_image}
+    restart: unless-stopped
+    environment:
+      JAVA_OPTS: >-
+        -Darcadedb.server.rootPassword=$${CN_ARCADEDB_ROOT_PASSWORD:?set CN_ARCADEDB_ROOT_PASSWORD}
+        -Darcadedb.server.defaultDatabases=kukuri_index[]
+    healthcheck:
+      # image は Alpine ベースで curl が無いため busybox wget を使う。
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:2480/api/v1/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    expose:
+      - "2480"
+    volumes:
+      - cn-arcadedb-data:/home/arcadedb/databases
+
+  # 常駐 indexing ワーカー（#613 / #615）。provider 未構成なら ingest 無効の fail-closed 常駐。
+  # port は expose のみ（host 公開しない）。iroh 通信は outbound で成立する。
+  cn-indexer:
+    image: ${cn_indexer_image}
+    restart: unless-stopped
+    env_file:
+      - ./community-node.env
+    environment:
+      COMMUNITY_NODE_DATABASE_URL: $${COMMUNITY_NODE_DATABASE_URL:?set COMMUNITY_NODE_DATABASE_URL}
+      COMMUNITY_NODE_CHANNEL_SECRET_KEY: $${COMMUNITY_NODE_CHANNEL_SECRET_KEY:?set COMMUNITY_NODE_CHANNEL_SECRET_KEY}
+      COMMUNITY_NODE_ARCADEDB_PASSWORD: $${CN_ARCADEDB_ROOT_PASSWORD:?set CN_ARCADEDB_ROOT_PASSWORD}
+      COMMUNITY_NODE_SAFETY_SIGNING_KEY: $${COMMUNITY_NODE_SAFETY_SIGNING_KEY:-}
+      PROJECT_ARACHNID_API_USERNAME: $${PROJECT_ARACHNID_API_USERNAME:-}
+      PROJECT_ARACHNID_API_PASSWORD: $${PROJECT_ARACHNID_API_PASSWORD:-}
+      COMMUNITY_NODE_VLM_API_KEY: $${COMMUNITY_NODE_VLM_API_KEY:-}
+    depends_on:
+      cn-migrate:
+        condition: service_completed_successfully
+      cn-arcadedb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:${indexer_status_port}/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    expose:
+      - "${indexer_status_port}"
+    volumes:
+%{ if use_indexer_disk ~}
+      - ${indexer_data_path}:${indexer_data_path}
+%{ else ~}
+      - cn-indexer-data:${indexer_data_path}
+%{ endif ~}
+
+  # relation graph の定期 batch 解析（#415 / #615）。systemd timer が
+  # `docker-compose run --rm cn-relation-analyze` として起動する one-shot。
+  # profiles により `up -d` では起動しない。
+  cn-relation-analyze:
+    image: ${cn_cli_image}
+    profiles: ["ops"]
+    env_file:
+      - ./community-node.env
+    environment:
+      COMMUNITY_NODE_DATABASE_URL: $${COMMUNITY_NODE_DATABASE_URL:?set COMMUNITY_NODE_DATABASE_URL}
+      COMMUNITY_NODE_ARCADEDB_PASSWORD: $${CN_ARCADEDB_ROOT_PASSWORD:?set CN_ARCADEDB_ROOT_PASSWORD}
+    command: ["relation", "analyze"]
+    restart: "no"
+%{ endif ~}
 
   caddy:
     image: ${caddy_image}
@@ -116,6 +192,14 @@ services:
 volumes:
 %{ if deploy_local_postgres && !use_postgres_disk ~}
   cn-postgres-data:
+%{ endif ~}
+%{ if deploy_indexer_stack ~}
+  # ArcadeDB data は rebuildable projection（真実源は Postgres）のため named volume。
+  # VM 置換で失われた場合は runbook の再構築手順（空 DB から indexer 再投影）で復元する。
+  cn-arcadedb-data:
+%{ if !use_indexer_disk ~}
+  cn-indexer-data:
+%{ endif ~}
 %{ endif ~}
   caddy-data:
   caddy-config:

@@ -59,6 +59,12 @@ format_and_mount() {
 format_and_mount "postgres-data" "${postgres_data_path}"
 mkdir -p "${postgres_data_path}"
 %{ endif ~}
+%{ if use_indexer_disk ~}
+format_and_mount "indexer-data" "${indexer_data_path}"
+%{ endif ~}
+%{ if deploy_indexer_stack ~}
+mkdir -p "${indexer_data_path}"
+%{ endif ~}
 %{ if use_blob_cache_disk ~}
 format_and_mount "blob-cache" "${blob_cache_path}"
 %{ endif ~}
@@ -138,6 +144,23 @@ REDIS_URL="redis://cn-valkey:6379/"
 REDIS_URL="${external_redis_url}"
 %{ endif ~}
 
+%{ if deploy_indexer_stack ~}
+# index / moderation stack の runtime secrets（#615）。値は Secret Manager からのみ取得し、
+# metadata / log / 生成 file へ出さない。
+CHANNEL_SECRET_KEY="$(fetch_secret "${channel_secret_key_secret_id}" "latest")"
+ARCADEDB_PASSWORD="$(fetch_secret "${arcadedb_password_secret_id}" "latest")"
+%{ if safety_signing_key_secret_id != "" ~}
+SAFETY_SIGNING_KEY="$(fetch_secret "${safety_signing_key_secret_id}" "latest")"
+%{ endif ~}
+%{ if arachnid_username_secret_id != "" ~}
+ARACHNID_USERNAME="$(fetch_secret "${arachnid_username_secret_id}" "latest")"
+ARACHNID_PASSWORD="$(fetch_secret "${arachnid_password_secret_id}" "latest")"
+%{ endif ~}
+%{ if vlm_api_key_secret_id != "" ~}
+VLM_API_KEY="$(fetch_secret "${vlm_api_key_secret_id}" "latest")"
+%{ endif ~}
+%{ endif ~}
+
 umask 077
 {
   echo "COMMUNITY_NODE_JWT_SECRET=$${JWT_SECRET}"
@@ -145,6 +168,20 @@ umask 077
   echo "COMMUNITY_NODE_RENDEZVOUS_REDIS_URL=$${REDIS_URL}"
 %{ if deploy_local_postgres ~}
   echo "CN_POSTGRES_PASSWORD=$${PG_PASSWORD}"
+%{ endif ~}
+%{ if deploy_indexer_stack ~}
+  echo "COMMUNITY_NODE_CHANNEL_SECRET_KEY=$${CHANNEL_SECRET_KEY}"
+  echo "CN_ARCADEDB_ROOT_PASSWORD=$${ARCADEDB_PASSWORD}"
+%{ if safety_signing_key_secret_id != "" ~}
+  echo "COMMUNITY_NODE_SAFETY_SIGNING_KEY=$${SAFETY_SIGNING_KEY}"
+%{ endif ~}
+%{ if arachnid_username_secret_id != "" ~}
+  echo "PROJECT_ARACHNID_API_USERNAME=$${ARACHNID_USERNAME}"
+  echo "PROJECT_ARACHNID_API_PASSWORD=$${ARACHNID_PASSWORD}"
+%{ endif ~}
+%{ if vlm_api_key_secret_id != "" ~}
+  echo "COMMUNITY_NODE_VLM_API_KEY=$${VLM_API_KEY}"
+%{ endif ~}
 %{ endif ~}
 } > "$INSTALL_DIR/.env"
 chmod 600 "$INSTALL_DIR/.env"
@@ -190,6 +227,30 @@ Persistent=true
 WantedBy=timers.target
 UNIT
 
+%{ if deploy_indexer_stack ~}
+# --- systemd timer: relation graph の定期 batch 解析（#615） ---
+# oneshot unit は同一 unit の並行起動をしないため、実行が interval を超えても overlap しない。
+# last success / failure は `systemctl status kukuri-relation-analyze` / journalctl で確認する。
+cat > /etc/systemd/system/kukuri-relation-analyze.service <<UNIT
+[Unit]
+Description=kukuri community node relation graph analysis
+[Service]
+Type=oneshot
+WorkingDirectory=$INSTALL_DIR
+ExecStart=$COMPOSE_BIN run --rm cn-relation-analyze
+UNIT
+cat > /etc/systemd/system/kukuri-relation-analyze.timer <<UNIT
+[Unit]
+Description=kukuri community node relation graph analysis timer
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=${relation_analyze_interval_minutes}min
+RandomizedDelaySec=60
+[Install]
+WantedBy=timers.target
+UNIT
+%{ endif ~}
+
 %{ if backup_enabled ~}
 # --- systemd timer: postgres backup ---
 cat > /etc/systemd/system/kukuri-backup.service <<UNIT
@@ -216,6 +277,9 @@ systemctl daemon-reload
 systemctl enable --now kukuri-cert-renew.timer
 %{ if backup_enabled ~}
 systemctl enable --now kukuri-backup.timer
+%{ endif ~}
+%{ if deploy_indexer_stack ~}
+systemctl enable --now kukuri-relation-analyze.timer
 %{ endif ~}
 
 log "bootstrap complete"
