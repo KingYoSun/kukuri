@@ -243,7 +243,7 @@ deploy:
   arcadedb_password_secret_id: kukuri-cn-arcadedb-password
   arachnid_username_secret_id: kukuri-cn-arachnid-username
   arachnid_password_secret_id: kukuri-cn-arachnid-password
-  vlm_api_base_url: http://10.73.0.10:8000   # self-host VLM は private 経路の先のアドレス
+  vlm_api_base_url: http://192.0.2.10:8000   # self-host VLM は private 経路の先のアドレス
   vlm_model: inclusionAI/SingGuard-2b
   vlm_response_format: guard
   # vlm_api_key_secret_id: kukuri-cn-vlm-api-key   # 無認証 self-host endpoint なら省略
@@ -287,7 +287,7 @@ journalctl -u kukuri-relation-analyze.service -n 50
 
 - self-host VLM（DGX Spark 等の OpenAI-compatible endpoint）は public internet へ直接公開しない。
 - GCP VM から WireGuard / VPN / private tunnel 等で到達させ、`vlm_api_base_url` には tunnel 先の
-  private アドレスを指定する（例: `http://10.73.0.10:8000`）。WireGuard peer の設定は
+  private アドレスを指定する（例: `http://192.0.2.10:8000`）。WireGuard peer の設定は
   `docs/runbooks/community-node-self-host-vps.md` の WireGuard 節が参考になる（COS では
   Terraform 管理外の手動設定。VM 置換時は再設定が必要）。
 - API key が必要な external VLM を使う場合は `vlm_api_key_secret_id` で注入する。

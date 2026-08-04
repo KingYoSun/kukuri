@@ -318,7 +318,7 @@ mod tests {
         )
         .expect("endpoint id");
         let endpoint_addr = EndpointAddr::new(endpoint_id)
-            .with_ip_addr("10.73.0.1:40123".parse().expect("observed socket addr"));
+            .with_ip_addr("192.0.2.1:40123".parse().expect("observed socket addr"));
         let config = TransportNetworkConfig {
             bind_addr: "0.0.0.0:40123".parse().expect("bind addr"),
             advertised_host: None,
@@ -362,7 +362,7 @@ mod tests {
 
         let resolved = ticket_network_config(
             &endpoint_addr,
-            &["10.73.0.1:40123".parse().expect("observed socket")],
+            &["192.0.2.1:40123".parse().expect("observed socket")],
             &config,
         );
 

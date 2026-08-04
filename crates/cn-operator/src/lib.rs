@@ -147,7 +147,7 @@ manifest:
 #   arcadedb_password_secret_id: kukuri-cn-arcadedb-password
 #   arachnid_username_secret_id: kukuri-cn-arachnid-username
 #   arachnid_password_secret_id: kukuri-cn-arachnid-password
-#   vlm_api_base_url: http://10.73.0.10:8000   # self-host は private tunnel 経由の到達を推奨
+#   vlm_api_base_url: http://192.0.2.10:8000   # self-host は private tunnel 経由の到達を推奨
 #   vlm_model: inclusionAI/SingGuard-2b
 #   vlm_response_format: guard
 #   vlm_api_key_secret_id: kukuri-cn-vlm-api-key   # 無認証 self-host endpoint なら省略
