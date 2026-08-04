@@ -158,6 +158,12 @@ docker compose --env-file .env.community-node -f docker-compose.community-node.y
 docker compose --env-file .env.community-node -f docker-compose.community-node.yml up -d --build cn-user-api cn-iroh-relay
 ```
 
+index / moderation stack（cn-indexer + ArcadeDB + relation 定期解析。#615）も含めて起動する場合は
+service を指定せず `up -d --build` する。ArcadeDB / cn-indexer は host へ port を公開しない
+（indexer の status endpoint のみ loopback bind）。provider / secrets の env と運用手順は
+`.env.community-node.example` のコメントと `docs/runbooks/community-node-gcp-terraform.md` の
+「index / moderation stack のデプロイ」を参照する。
+
 ## 入会制御（招待 / whitelist / ban） — #383
 
 public node の利用者を限定する場合、`cn-cli admission` で運用する。mode は DB（`cn_admin.service_configs`）に保存され runtime 可変なので、`.env.community-node` の変更や再起動は不要。
