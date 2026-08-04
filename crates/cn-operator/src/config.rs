@@ -165,7 +165,7 @@ fn default_cn_indexer_image() -> String {
 }
 
 fn default_arcadedb_image() -> String {
-    "arcadedata/arcadedb:latest".to_string()
+    "arcadedata/arcadedb:26.8.1".to_string()
 }
 
 fn default_machine_type() -> String {
