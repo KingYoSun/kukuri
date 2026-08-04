@@ -25,12 +25,20 @@ pub(crate) fn cn_test() -> Result<()> {
     })
 }
 
-pub(crate) fn cn_compose_envs() -> [(&'static str, &'static str); 2] {
+pub(crate) fn cn_compose_envs() -> [(&'static str, &'static str); 4] {
     [
         ("CN_POSTGRES_PASSWORD", "cn_password"),
         (
             "COMMUNITY_NODE_JWT_SECRET",
             "xtask-test-secret-0123456789abcdef",
+        ),
+        // #615 で compose に加わった必須 interpolation（cn-arcadedb / cn-indexer 系）。
+        // 起動するのは cn-postgres / cn-valkey だけでも、compose は file 全体を
+        // interpolate するため未設定だと `up` 自体が失敗する。
+        ("CN_ARCADEDB_ROOT_PASSWORD", "cn_arcadedb_password"),
+        (
+            "COMMUNITY_NODE_CHANNEL_SECRET_KEY",
+            "xtask-channel-secret-key-0123456789abcdef",
         ),
     ]
 }

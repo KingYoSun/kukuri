@@ -1,11 +1,13 @@
 # Community Node GCP Terraform Deploy
 
-最終更新日: 2026-06-27
+最終更新日: 2026-08-04
 
 ## 目的
 
 - community node（`cn-user-api` + `cn-iroh-relay` + Postgres + Valkey）を GCP に
   Terraform でデプロイする（Issue #381）。
+- `deploy_indexer_stack=true` で index / moderation stack（`cn-indexer` + ArcadeDB +
+  relation 定期解析 + moderation secrets）を同じ VM に追加する（Issue #615）。
 - 初期から deployment profile を切り替えられる（`low-cost` / `managed-db` / `ha`）。
 - third-party community node operator が低コストで始められる `low-cost` profile を標準入口にする。
 
@@ -29,6 +31,11 @@ client ──https://api_domain      ─▶ Caddy(:443) ─▶ cn-user-api(:8080
 client ──https://relay_domain    ─▶ Caddy(:443) ─▶ cn-iroh-relay(:3340)
 client ──relay_domain :7842/udp  ─────────────────▶ cn-iroh-relay QUIC(:7842)
 VM 内: cn-postgres / cn-valkey は private（公開しない）
+deploy_indexer_stack=true 時（#615）:
+VM 内: cn-arcadedb(:2480) / cn-indexer(:8630) も private（compose network 内のみ。
+       firewall / Caddy へ新規公開 port は追加しない）
+VM 外: cn-indexer ─outbound HTTPS─▶ Project Arachnid Shield
+       cn-indexer ─private 経路（WireGuard 等）─▶ self-host VLM endpoint
 ```
 
 ### TLS / 証明書
@@ -46,8 +53,10 @@ VM 内: cn-postgres / cn-valkey は private（公開しない）
 |---|---|---|
 | auth/consent, admission mode, invite/allowlist/ban, report metadata, operator config | Postgres（control-plane data） | low-cost: pg_dump→GCS / managed-db,ha: Cloud SQL |
 | topic rendezvous, presence, short-lived connection hints | Valkey（TTL ephemeral） | 対象外 |
-| blob/media 本体 | local cache / iroh blobs / object storage（**Postgres に置かない**） | 対象外（rebuildable cache） |
-| community_index / moderation / community_local_trust | Phase B（未提供）。canonical DB に同居させない | 対象外 |
+| blob/media 本体 | local cache / iroh blobs / object storage（**Postgres に置かない**。恒久保存しない） | 対象外（rebuildable cache） |
+| index 真実源（supported set / indexing request / channel secret）、moderation verdict / artifact / risk signal | Postgres（#615。既存 backup にそのまま含まれる） | low-cost: pg_dump→GCS |
+| index 投影 + relation graph | ArcadeDB（**rebuildable projection。canonical store ではない**） | 対象外（空からの再構築手順を後述） |
+| cn-indexer の iroh state（endpoint 同一性 / docs replica / blob store） | `indexer_data_disk_gb > 0` で専用 PD | 対象外（再同期で復元可。PD で VM 置換に耐える） |
 
 ## 人手で先に用意するもの
 
@@ -71,6 +80,25 @@ printf '%s' "$(openssl rand -hex 32)" | \
   gcloud secrets create kukuri-cn-jwt-secret --data-file=-
 printf '%s' "$(openssl rand -hex 24)" | \
   gcloud secrets create kukuri-cn-postgres-password --data-file=-
+
+# 3b) index / moderation stack（#615、deploy_indexer_stack=true のとき）の runtime secrets。
+#     値は tfvars / metadata / repo に書かず、Secret Manager だけに置く。
+# channel secret key（32 byte 以上、placeholder 不可。cn-user-api と cn-indexer が共有）
+printf '%s' "$(openssl rand -hex 32)" | \
+  gcloud secrets create kukuri-cn-channel-secret-key --data-file=-
+# ArcadeDB root password（8 文字以上）
+printf '%s' "$(openssl rand -hex 24)" | \
+  gcloud secrets create kukuri-cn-arcadedb-password --data-file=-
+# moderation event signing key（secp256k1 秘密鍵 hex。issuer node の鍵として公開鍵が event に載る）
+printf '%s' "$(openssl rand -hex 32)" | \
+  gcloud secrets create kukuri-cn-safety-signing-key --data-file=-
+# Project Arachnid Shield credentials（operator 自身が https://projectarachnid.com で取得）
+printf '%s' 'YOUR_ARACHNID_USERNAME' | \
+  gcloud secrets create kukuri-cn-arachnid-username --data-file=-
+printf '%s' 'YOUR_ARACHNID_PASSWORD' | \
+  gcloud secrets create kukuri-cn-arachnid-password --data-file=-
+# 任意: VLM API key（self-host の無認証 endpoint なら作成不要）
+# printf '%s' 'YOUR_VLM_API_KEY' | gcloud secrets create kukuri-cn-vlm-api-key --data-file=-
 
 # PowerShell で secret file を作る場合は BOM/改行が混入しないよう、ASCII + NoNewline にする。
 # 例: Set-Content -Encoding ascii -NoNewline secret.txt <hex-string>
@@ -97,7 +125,7 @@ docker run --rm -e COMMUNITY_NODE_DATABASE_URL=... -e COMMUNITY_NODE_CHANNEL_SEC
   ghcr.io/kingyosun/kukuri-cn-indexer:<tag> validate-config
 ```
 
-なお `cn-indexer` は現状 low-cost Terraform stack の service には含まれない（#614 のスコープは image 配布まで）。
+`cn-indexer` は low-cost Terraform stack へ `deploy_indexer_stack=true`（#615）で追加する。手順は後述の「index / moderation stack のデプロイ」を参照。
 
 初回 publish は workflow を default branch（通常 `main`）へ merge した後に手動 dispatch する。workflow file がまだ default branch に無い状態では `workflow_dispatch` が見つからないため、PR 中は build-only 検証に留める:
 
@@ -117,9 +145,15 @@ workflow は PR では build のみ、`main` push / `develop` push / `v*` tag pu
 cn_user_api_image   = "ghcr.io/kingyosun/kukuri-cn-user-api:latest"
 cn_iroh_relay_image = "ghcr.io/kingyosun/kukuri-cn-iroh-relay:latest"
 cn_cli_image        = "ghcr.io/kingyosun/kukuri-cn-cli:latest"
+cn_indexer_image    = "ghcr.io/kingyosun/kukuri-cn-indexer:latest"
 ```
 
 本番 apply では `latest` より digest 固定（例: `ghcr.io/kingyosun/kukuri-cn-user-api@sha256:...`）を推奨する。
+全 kukuri image の digest は次で確認できる（`cn_*_image` 変数は `@sha256:` 参照をそのまま受け付ける）:
+
+```bash
+docker buildx imagetools inspect ghcr.io/kingyosun/kukuri-cn-indexer:latest --format '{{println .Manifest.Digest}}'
+```
 
 ## low-cost deploy
 
@@ -165,11 +199,136 @@ docker run --rm --network kukuri-community-node_default \
   ghcr.io/<owner>/kukuri-cn-cli:latest admission show
 ```
 
+## index / moderation stack のデプロイ（#615）
+
+`deploy_indexer_stack=true` で `cn-indexer` + ArcadeDB + relation 定期解析を同じ VM の compose に
+追加する。既定は false（従来の API / relay のみ構成）。
+
+### 前提
+
+- 「人手で先に用意するもの」の 3b) の runtime secrets（channel key / ArcadeDB password /
+  signing key / Arachnid credentials / 任意 VLM key）を Secret Manager に作成済みであること。
+  secret の accessor 権限は Terraform が VM service account へ自動付与する。
+- `machine_type` は既定 `e2-medium`（ArcadeDB(JVM) + cn-indexer の同居前提）。`e2-small` では
+  memory が不足する可能性が高い。既存 VM を e2-small から上げる場合、apply が VM を
+  stop/start する点に注意。
+- 本番では `indexer_data_disk_gb > 0`（専用 PD）を推奨。cn-indexer の iroh endpoint 同一性と
+  docs replica が VM 置換に耐える。
+
+### 有効化（operator-config 経由を推奨）
+
+operator-config.yaml の `deploy:` に次を追加し、`generate-tfvars` で tfvars を再生成する
+（値は例。secret は **ID のみ**）:
+
+```yaml
+safety:
+  events:
+    emit_signed_moderation_events: true
+    signing_key_secret_id: kukuri-cn-safety-signing-key
+  providers:
+    known_csam:
+      provider: project-arachnid-shield
+      required: true
+    general:
+      provider: openai-compatible-vlm
+    unknown_csam:
+      provider: openai-compatible-vlm
+deploy:
+  # ...既存の設定...
+  deploy_indexer_stack: true
+  cn_indexer_image: ghcr.io/kingyosun/kukuri-cn-indexer:latest   # 本番は digest 固定
+  indexer_data_disk_gb: 10
+  relation_analyze_interval_minutes: 60
+  channel_secret_key_secret_id: kukuri-cn-channel-secret-key
+  arcadedb_password_secret_id: kukuri-cn-arcadedb-password
+  arachnid_username_secret_id: kukuri-cn-arachnid-username
+  arachnid_password_secret_id: kukuri-cn-arachnid-password
+  vlm_api_base_url: http://10.73.0.10:8000   # self-host VLM は private 経路の先のアドレス
+  vlm_model: inclusionAI/SingGuard-2b
+  vlm_response_format: guard
+  # vlm_api_key_secret_id: kukuri-cn-vlm-api-key   # 無認証 self-host endpoint なら省略
+```
+
+`validate-config` が runtime の起動 gate（必須 secret ID / relay / provider credential /
+署名鍵）を apply 前に fail-closed で検査する。tfvars を手書きする場合も同名の変数を設定する。
+
+### rollout 順序
+
+apply 1 回で startup script が次の順序を machine 的に守る（compose の depends_on / healthcheck）:
+
+1. `cn-migrate`（migration。冪等）
+2. Postgres / ArcadeDB ready（ArcadeDB は空 database `kukuri_index` を初回起動時に冪等作成）
+3. `cn-indexer` 起動（ArcadeDB schema を `ensure_schema` で冪等作成。provider / 署名鍵の構成不備は
+   fail-closed で起動失敗）
+4. relation analyze timer 有効化
+
+ユーザー向け read surface はこの後も **既定 false** のまま:
+`index_query_enabled` / `trust_read_enabled` は full-stack E2E（後続 issue）完了までは
+有効化しない。無効の間、`GET /v1/index/*` / `/v1/trust/*` / `/v1/relation/*` は 404。
+
+### 確認
+
+```bash
+terraform output ssh_iap_command   # IAP SSH
+# VM 上で:
+cd /var/lib/kukuri/community-node
+docker ps                                        # cn-arcadedb / cn-indexer が healthy
+docker exec $(docker ps -qf name=cn-indexer) curl -fsS http://127.0.0.1:8630/healthz
+docker exec $(docker ps -qf name=cn-indexer) curl -fsS http://127.0.0.1:8630/v1/status  # last ingest / backoff 等
+systemctl list-timers kukuri-relation-analyze.timer
+systemctl status kukuri-relation-analyze.service # relation analyze の last success / failure
+journalctl -u kukuri-relation-analyze.service -n 50
+```
+
+外部からの port scan で 80/443/`relay_quic_port`/udp 以外（2480 / 8630 / 5432 / 6379）が
+閉じていることも確認する（firewall には新規 ingress を追加していない）。
+
+### VLM の private 経路（self-host endpoint）
+
+- self-host VLM（DGX Spark 等の OpenAI-compatible endpoint）は public internet へ直接公開しない。
+- GCP VM から WireGuard / VPN / private tunnel 等で到達させ、`vlm_api_base_url` には tunnel 先の
+  private アドレスを指定する（例: `http://10.73.0.10:8000`）。WireGuard peer の設定は
+  `docs/runbooks/community-node-self-host-vps.md` の WireGuard 節が参考になる（COS では
+  Terraform 管理外の手動設定。VM 置換時は再設定が必要）。
+- API key が必要な external VLM を使う場合は `vlm_api_key_secret_id` で注入する。
+- VLM 不達時は cn-indexer が fail-closed（scan 失敗 = hold。allow に落ちない）。
+- Project Arachnid Shield への通信は outbound HTTPS のみで、callback / inbound port は無い。
+
+### ArcadeDB を空から再構築する
+
+ArcadeDB は rebuildable projection（真実源は Postgres + docs replica）であり、canonical store
+ではない。data が失われた / 壊れた場合:
+
+```bash
+cd /var/lib/kukuri/community-node
+/var/lib/toolbox/kukuri/bin/docker-compose stop cn-indexer cn-arcadedb
+docker volume rm community-node_cn-arcadedb-data   # volume 名は docker volume ls で確認
+/var/lib/toolbox/kukuri/bin/docker-compose up -d cn-arcadedb
+/var/lib/toolbox/kukuri/bin/docker-compose up -d cn-indexer
+# cn-indexer が起動時に schema を作成し、全件見直し（poll interval、既定 300 秒）で再投影する。
+# relation graph は次回 relation analyze 実行で再構築される（手動なら:
+#   /var/lib/toolbox/kukuri/bin/docker-compose run --rm cn-relation-analyze ）
+```
+
+### rollback（API / relay のみ構成へ戻す）
+
+`deploy_indexer_stack=false` にして apply する（operator-config 経由なら
+`deploy: deploy_indexer_stack: false` → `generate-tfvars` → apply）。
+
+- cn-indexer / ArcadeDB / relation timer が構成から外れ、公開 surface は従来どおり
+  API / relay のみになる（flag が既定 false のため index / trust API はもともと 404）。
+- Postgres の永続 data（verdict / moderation artifact / index 真実源）は残る。
+- `indexer_data_disk_gb > 0` の PD は Terraform 管理のため、変数を 0 にしない限り残る
+  （再有効化時に endpoint 同一性を保てる）。
+
 ## backup / restore
 
 - low-cost の backup は systemd timer（`kukuri-backup.timer`）が `pg_dump -Fc` を取り、
   GCS backup bucket（`terraform output backup_bucket`）へアップロードする。
-- Valkey と blob cache は backup 対象外。
+  database 全体 dump のため、#615 で増えた永続 table（moderation verdict / artifact /
+  risk signal / index 真実源）も追加設定なしで含まれる。
+- Valkey と blob cache は backup 対象外。ArcadeDB も backup 対象外
+  （rebuildable projection。前節の再構築手順で復元する）。raw blob / media は恒久保存しない。
 
 restore 例（VM 上）:
 
