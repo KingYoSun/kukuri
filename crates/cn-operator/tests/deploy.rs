@@ -81,6 +81,32 @@ fn blob_cache_enabled_derives_from_features_false() {
 }
 
 #[test]
+fn read_surface_flags_derive_from_planned_capabilities() {
+    // community_index / community_local_trust を有効化（承認済み）した config では
+    // 環境変数 gate の tfvars も true になる（実際の公開は readiness の有効化記録が関門）。
+    let yaml = config_with_deploy(
+        "  relay_domain: relay.example-kukuri.net\n",
+        "  community_index: true\n  community_local_trust: true\n",
+        true,
+    );
+    let resolved = load_and_validate(&yaml).unwrap();
+    assert!(resolved.enabled(Capability::CommunityIndex));
+    assert!(resolved.enabled(Capability::CommunityLocalTrust));
+    let tfvars = generate_tfvars(&resolved).unwrap();
+    assert!(tfvars.contains("index_query_enabled = true"));
+    assert!(tfvars.contains("trust_read_enabled  = true"));
+}
+
+#[test]
+fn read_surface_flags_default_to_false() {
+    let yaml = config_with_deploy("  relay_domain: relay.example-kukuri.net\n", "", false);
+    let resolved = load_and_validate(&yaml).unwrap();
+    let tfvars = generate_tfvars(&resolved).unwrap();
+    assert!(tfvars.contains("index_query_enabled = false"));
+    assert!(tfvars.contains("trust_read_enabled  = false"));
+}
+
+#[test]
 fn blob_cache_size_without_feature_is_rejected() {
     // features.blob_cache=false なのに sizing > 0 は矛盾（真実源は features 側）。
     let yaml = config_with_deploy(
