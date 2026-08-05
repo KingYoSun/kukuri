@@ -23,6 +23,7 @@ mod errors;
 mod index_entries;
 mod index_scope;
 mod readiness_probe;
+mod readiness_runtime;
 mod relation_optouts;
 mod rendezvous;
 mod reports;
@@ -80,6 +81,10 @@ pub use index_scope::{
     reject_indexing_request, remove_channel_secret, remove_supported_topic, upsert_channel_secret,
 };
 pub use readiness_probe::{ReadinessProbeRecord, list_readiness_probes, upsert_readiness_probe};
+pub use readiness_runtime::{
+    IndexIntegrityFindings, RelationAnalyzeRun, inspect_index_integrity,
+    latest_relation_analyze_run, record_relation_analyze_run,
+};
 pub use relation_optouts::{
     clear_relation_optout, filter_relation_visible, get_relation_optout, is_relation_opted_out,
     set_relation_optout,

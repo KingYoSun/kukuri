@@ -8,12 +8,12 @@
 use std::sync::RwLock;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::ingest::IngestSummary;
 
 /// 観測状態の写し。`GET /v1/status` はこの形をそのまま JSON で返す。
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct IndexerStateSnapshot {
     /// ワーカーが動いているか。
     pub worker_running: bool,

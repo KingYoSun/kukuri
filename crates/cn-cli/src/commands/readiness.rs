@@ -144,12 +144,16 @@ fn configured_probe_slots(
         .collect()
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn run(
     pool: &PgPool,
     config_path: &Path,
     profile: &str,
     probe_ttl_secs: u64,
     force_probe: bool,
+    indexer_status_url: &str,
+    ingest_max_age_secs: i64,
+    relation_max_age_secs: i64,
 ) -> Result<()> {
     initialize_database(pool).await?;
 
@@ -272,6 +276,16 @@ pub(super) async fn run(
         }
     };
     apply_runtime_checks(&mut report, vec![credential_check])?;
+
+    // 走査網羅系の実行時判定（#616 T2）。収集の失敗は evaluate 側で不合格へ倒す。
+    let findings = super::readiness_runtime::collect(
+        pool,
+        indexer_status_url,
+        ingest_max_age_secs,
+        relation_max_age_secs,
+    )
+    .await;
+    apply_runtime_checks(&mut report, super::readiness_runtime::evaluate(&findings))?;
 
     println!(
         "readiness profile={} ready={} fail={} unknown={}",
