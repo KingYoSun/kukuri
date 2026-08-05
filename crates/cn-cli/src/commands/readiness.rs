@@ -12,7 +12,8 @@ use chrono::{Duration, Utc};
 use sqlx::PgPool;
 
 use kukuri_cn_core::{
-    ReadinessProbeRecord, initialize_database, list_readiness_probes, upsert_readiness_probe,
+    ReadinessProbeRecord, initialize_database, list_readiness_probes, record_readiness_activation,
+    upsert_readiness_probe,
 };
 use kukuri_cn_operator::{
     ReadinessCheck, ReadinessStatus, apply_runtime_checks, evaluate_public_node_readiness,
@@ -305,7 +306,23 @@ pub(super) async fn run(
         );
     }
     if report.is_ready() {
-        println!("OK: すべての readiness check を満たしています。");
+        // 全項目合格のときにのみ有効化記録を書く（cn-user-api の読み取り面の関門）。
+        let check_ids: Vec<&str> = report.checks.iter().map(|check| check.id).collect();
+        let report_json = serde_json::json!(
+            report
+                .checks
+                .iter()
+                .map(|check| {
+                    serde_json::json!({
+                        "id": check.id,
+                        "status": check.status.key(),
+                        "detail": check.detail,
+                    })
+                })
+                .collect::<Vec<_>>()
+        );
+        record_readiness_activation(pool, now, &report.profile, &check_ids, &report_json).await?;
+        println!("OK: すべての readiness check を満たしています。有効化記録を書き込みました。");
     } else {
         println!(
             "NOTE: 残り {} 項目は runtime 接続後に確定します。",
