@@ -140,6 +140,19 @@ impl ArcadeDbProjection {
         Ok(())
     }
 
+    /// 投影に入っている項目の総数を返す（#616 readiness の真実源との突合用）。
+    ///
+    /// 接続不可・schema 未作成なら Err（呼び出し側が「投影未準備」と判定する）。
+    pub async fn count_all(&self) -> Result<u64> {
+        let value = self
+            .command(
+                "sql",
+                &format!("SELECT count(*) AS total FROM {ENTRY_TYPE}"),
+            )
+            .await?;
+        Ok(u64::try_from(count_from_result(&value)).unwrap_or(0))
+    }
+
     /// ArcadeDB `/api/v1/command/<database>` を叩く（共有 client へ委譲）。
     async fn command(&self, language: &str, command: &str) -> Result<Value> {
         self.client.command(language, command).await

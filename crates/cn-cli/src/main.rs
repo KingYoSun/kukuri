@@ -77,6 +77,15 @@ enum Command {
         /// 保存済みの疎通確認結果を無視して必ず再実行する。
         #[arg(long)]
         force_probe: bool,
+        /// cn-indexer の状態エンドポイント（compose 内から実行する想定の既定値）。
+        #[arg(long, default_value = "http://cn-indexer:8630")]
+        indexer_status_url: String,
+        /// 全件見直しの成功をこの秒数以内に要求する。
+        #[arg(long, default_value_t = 900)]
+        ingest_max_age_secs: i64,
+        /// 関係解析の成功をこの秒数以内に要求する。
+        #[arg(long, default_value_t = 7200)]
+        relation_max_age_secs: i64,
     },
 }
 

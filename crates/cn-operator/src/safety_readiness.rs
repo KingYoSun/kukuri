@@ -10,7 +10,7 @@ pub const PUBLIC_NODE_PROFILE: &str = "public-node";
 /// 通常経路（`evaluate_public_node_readiness`）と safety セクション欠落経路
 /// （`missing_safety_report`）の双方が、必ずこの集合を同じ順序で網羅する。ID で機械処理する
 /// 消費側が経路ごとの差異に依存しないことを保証する（テストで固定）。
-pub const READINESS_CHECK_IDS: [&str; 14] = [
+pub const READINESS_CHECK_IDS: [&str; 22] = [
     "safety_config_present",
     "safety_profile_public_node",
     "known_csam_provider_configured",
@@ -25,6 +25,31 @@ pub const READINESS_CHECK_IDS: [&str; 14] = [
     "known_csam_credential_secret_configured",
     "provider_credential_valid",
     "scan_coverage_metrics_available",
+    "indexer_worker_running",
+    "indexer_scopes_opened",
+    "indexer_ingest_fresh",
+    "postgres_migrations_ready",
+    "arcadedb_projection_ready",
+    "index_truth_projection_consistent",
+    "relation_analysis_recent",
+    "supported_scopes_public_only",
+];
+
+/// 実行時（runtime / indexing）接続後にのみ確定できる判定項目の id 集合（#616）。
+///
+/// 静的評価（`evaluate_public_node_readiness`）ではこれらを `Unknown` として返し、
+/// `cn-cli readiness` が実測結果で置換する。
+pub const RUNTIME_CHECK_IDS: [&str; 10] = [
+    "provider_credential_valid",
+    "scan_coverage_metrics_available",
+    "indexer_worker_running",
+    "indexer_scopes_opened",
+    "indexer_ingest_fresh",
+    "postgres_migrations_ready",
+    "arcadedb_projection_ready",
+    "index_truth_projection_consistent",
+    "relation_analysis_recent",
+    "supported_scopes_public_only",
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -141,7 +166,7 @@ pub fn evaluate_public_node_readiness(
         return missing_safety_report(profile);
     };
 
-    ReadinessReport {
+    let mut report = ReadinessReport {
         profile: profile.to_string(),
         checks: vec![
             pass(
@@ -159,19 +184,16 @@ pub fn evaluate_public_node_readiness(
             check_signing_key_secret(safety),
             check_no_permanent_blob_storage(safety),
             check_known_provider_secret(safety),
-            ReadinessCheck {
-                id: "provider_credential_valid",
-                status: ReadinessStatus::Unknown,
-                detail: "credential_secret_id の参照先検証は provider/runtime 接続後に行う"
-                    .to_string(),
-            },
-            ReadinessCheck {
-                id: "scan_coverage_metrics_available",
-                status: ReadinessStatus::Unknown,
-                detail: "scan coverage metrics は runtime/indexing 接続後に検査する".to_string(),
-            },
         ],
-    }
+    };
+    report
+        .checks
+        .extend(RUNTIME_CHECK_IDS.iter().map(|&id| ReadinessCheck {
+            id,
+            status: ReadinessStatus::Unknown,
+            detail: "runtime / indexing 接続後に `cn-cli readiness` が実測で確定する".to_string(),
+        }));
+    report
 }
 
 fn missing_safety_report(profile: &str) -> ReadinessReport {

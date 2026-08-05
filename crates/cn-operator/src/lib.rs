@@ -43,8 +43,8 @@ pub use safety_config::{
     SafetyProvidersConfig, SafetyStorageConfig,
 };
 pub use safety_readiness::{
-    PUBLIC_NODE_PROFILE, READINESS_CHECK_IDS, ReadinessCheck, ReadinessReport, ReadinessStatus,
-    apply_runtime_checks, evaluate_public_node_readiness,
+    PUBLIC_NODE_PROFILE, READINESS_CHECK_IDS, RUNTIME_CHECK_IDS, ReadinessCheck, ReadinessReport,
+    ReadinessStatus, apply_runtime_checks, evaluate_public_node_readiness,
 };
 
 /// `operator init` が出力するサンプル config。

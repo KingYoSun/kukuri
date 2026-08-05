@@ -8,6 +8,7 @@ mod database;
 mod indexing;
 mod moderation;
 mod readiness;
+mod readiness_runtime;
 mod relation;
 mod reports;
 
@@ -44,6 +45,21 @@ pub(crate) async fn dispatch(pool: &PgPool, command: Command) -> Result<()> {
             profile,
             probe_ttl_secs,
             force_probe,
-        } => readiness::run(pool, &config, &profile, probe_ttl_secs, force_probe).await,
+            indexer_status_url,
+            ingest_max_age_secs,
+            relation_max_age_secs,
+        } => {
+            readiness::run(
+                pool,
+                &config,
+                &profile,
+                probe_ttl_secs,
+                force_probe,
+                &indexer_status_url,
+                ingest_max_age_secs,
+                relation_max_age_secs,
+            )
+            .await
+        }
     }
 }

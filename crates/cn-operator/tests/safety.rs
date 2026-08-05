@@ -2,8 +2,8 @@ use std::fs;
 use std::process::Command;
 
 use kukuri_cn_operator::{
-    READINESS_CHECK_IDS, ReadinessCheck, ReadinessStatus, SafetyErrorAction, apply_runtime_checks,
-    evaluate_public_node_readiness, load_and_validate,
+    READINESS_CHECK_IDS, RUNTIME_CHECK_IDS, ReadinessCheck, ReadinessStatus, SafetyErrorAction,
+    apply_runtime_checks, evaluate_public_node_readiness, load_and_validate,
 };
 
 fn config_with_safety(safety: &str) -> String {
@@ -71,7 +71,7 @@ fn readiness_complete_static_config_has_unknown_runtime_checks() {
     assert!(report.static_checks_pass());
     assert!(!report.has_blocking_failures());
     assert_eq!(report.fail_count(), 0);
-    assert_eq!(report.unknown_count(), 2);
+    assert_eq!(report.unknown_count(), RUNTIME_CHECK_IDS.len());
     assert_check(&report, "safety_config_present", ReadinessStatus::Pass);
     assert_check(
         &report,
@@ -126,22 +126,18 @@ fn readiness_complete_static_config_has_unknown_runtime_checks() {
 fn runtime_checks_resolve_unknowns_and_gate_readiness() {
     let resolved = load_and_validate(&config_with_safety(complete_safety())).unwrap();
 
-    // 実行時判定が両方合格なら unknown が消えて is_ready が真になる。
+    // 実行時判定がすべて合格なら unknown が消えて is_ready が真になる。
     let mut report = evaluate_public_node_readiness(&resolved, "public-node");
     apply_runtime_checks(
         &mut report,
-        vec![
-            ReadinessCheck {
-                id: "provider_credential_valid",
+        RUNTIME_CHECK_IDS
+            .iter()
+            .map(|&id| ReadinessCheck {
+                id,
                 status: ReadinessStatus::Pass,
-                detail: "probe ok".to_string(),
-            },
-            ReadinessCheck {
-                id: "scan_coverage_metrics_available",
-                status: ReadinessStatus::Pass,
-                detail: "coverage ok".to_string(),
-            },
-        ],
+                detail: "runtime ok".to_string(),
+            })
+            .collect(),
     )
     .unwrap();
     assert_eq!(report.unknown_count(), 0);
@@ -307,7 +303,10 @@ fn safety_readiness_cli_fails_on_static_failure() {
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(!output.status.success(), "stdout:\n{stdout}");
     assert!(stdout.contains("static_ok=false"), "stdout:\n{stdout}");
-    assert!(stdout.contains("fail=14"), "stdout:\n{stdout}");
+    assert!(
+        stdout.contains(&format!("fail={}", READINESS_CHECK_IDS.len())),
+        "stdout:\n{stdout}"
+    );
 }
 
 #[test]

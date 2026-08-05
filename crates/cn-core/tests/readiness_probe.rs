@@ -7,8 +7,9 @@
 use anyhow::Result;
 use chrono::{TimeZone, Utc};
 use kukuri_cn_core::{
-    ReadinessProbeRecord, TestDatabase, connect_postgres, initialize_database,
-    list_readiness_probes, upsert_readiness_probe,
+    IndexIntegrityFindings, ReadinessProbeRecord, RelationAnalyzeRun, TestDatabase,
+    connect_postgres, initialize_database, inspect_index_integrity, latest_relation_analyze_run,
+    list_readiness_probes, record_relation_analyze_run, upsert_readiness_probe,
 };
 
 const DEFAULT_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:15432/cn";
@@ -60,5 +61,57 @@ async fn probe_cache_upserts_by_slot_and_round_trips() -> Result<()> {
 
     let records = list_readiness_probes(&pool).await?;
     assert_eq!(records, vec![third, second]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn index_integrity_inspection_runs_against_real_schema() -> Result<()> {
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping index integrity test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_readiness_integrity").await?;
+    let pool = connect_postgres(database.database_url.as_str()).await?;
+    initialize_database(&pool).await?;
+
+    // 空 DB では全件数 0（SQL が実 schema の列名と一致していることの固定）。
+    let findings = inspect_index_integrity(&pool).await?;
+    assert_eq!(findings, IndexIntegrityFindings::default());
+    Ok(())
+}
+
+#[tokio::test]
+async fn relation_analyze_run_records_round_trip() -> Result<()> {
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping relation run test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_relation_runs").await?;
+    let pool = connect_postgres(database.database_url.as_str()).await?;
+    initialize_database(&pool).await?;
+
+    assert_eq!(latest_relation_analyze_run(&pool).await?, None);
+
+    let failed = RelationAnalyzeRun {
+        started_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+        finished_at: Utc.timestamp_opt(1_700_000_010, 0).unwrap(),
+        success: false,
+        edges_upserted: 0,
+        clusters_assigned: 0,
+        error: Some("ArcadeDB へ到達できません".to_string()),
+    };
+    record_relation_analyze_run(&pool, &failed).await?;
+    let succeeded = RelationAnalyzeRun {
+        started_at: Utc.timestamp_opt(1_700_000_100, 0).unwrap(),
+        finished_at: Utc.timestamp_opt(1_700_000_110, 0).unwrap(),
+        success: true,
+        edges_upserted: 5,
+        clusters_assigned: 2,
+        error: None,
+    };
+    record_relation_analyze_run(&pool, &succeeded).await?;
+
+    // 最新（finished_at の降順）が返る。
+    assert_eq!(latest_relation_analyze_run(&pool).await?, Some(succeeded));
     Ok(())
 }
