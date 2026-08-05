@@ -187,18 +187,18 @@ test('desktop shell surfaces docs-assisted topic recovery in diagnostics', async
     expect(within(drawer).getAllByText('relay-peer').length).toBeGreaterThan(0);
   });
 
-  await user.type(screen.getByPlaceholderText('kukuri:topic:demo'), 'kukuri:topic:relay');
+  await user.type(screen.getByPlaceholderText('demo'), 'kukuri:topic:relay');
   await user.click(screen.getByRole('button', { name: 'Add' }));
 
   await waitFor(() => {
-    const relayTopic = screen.getByRole('button', { name: 'kukuri:topic:relay' }).closest('li');
+    const relayTopic = screen.getByRole('button', { name: 'relay' }).closest('li');
     expect(relayTopic).not.toBeNull();
     expect(relayTopic).toHaveTextContent('recovering / peers: 0');
     expect(relayTopic).not.toHaveTextContent('relay-assisted sync available via 1 peer(s)');
   });
 
   await user.click(within(drawer).getByTestId('settings-section-connectivity'));
-  const relayHeading = await within(drawer).findByRole('heading', { name: 'kukuri:topic:relay' });
+  const relayHeading = await within(drawer).findByRole('heading', { name: 'relay' });
   const relaySection = closestSection(relayHeading);
   expect(
     within(relaySection).getByText(
@@ -225,7 +225,7 @@ test('desktop shell renders diagnostics error reasons', async () => {
     ).toBeInTheDocument();
   });
 
-  const topicHeading = await within(drawer).findByRole('heading', { name: 'kukuri:topic:demo' });
+  const topicHeading = await within(drawer).findByRole('heading', { name: 'demo' });
   const topicSection = closestSection(topicHeading);
   expect(within(topicSection).getByText('timed out waiting for gossip topic join')).toBeInTheDocument();
 });

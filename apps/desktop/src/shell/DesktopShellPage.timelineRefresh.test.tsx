@@ -487,7 +487,7 @@ test('private channel timeline keeps scope-separated posts and pending counts fr
   });
   expect(screen.queryByText('public post')).not.toBeInTheDocument();
 
-  const topicItem = screen.getByRole('button', { name: 'kukuri:topic:demo' }).closest('li');
+  const topicItem = screen.getByRole('button', { name: 'demo' }).closest('li');
   if (!(topicItem instanceof HTMLElement)) {
     throw new Error('active topic item not found');
   }

@@ -111,7 +111,7 @@ describe('MetaverseRoomControls', () => {
       onMoveSharedObject,
     });
 
-    expect(screen.getByText('Topic: kukuri:topic:demo')).toBeInTheDocument();
+    expect(screen.getByText('Topic: demo')).toBeInTheDocument();
     expect(screen.getByText('Community assist: available')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Leave room' }));
     await user.click(screen.getByRole('button', { name: 'Hide room HUD' }));

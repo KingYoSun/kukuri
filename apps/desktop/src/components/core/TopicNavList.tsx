@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Link2, Plug, Settings, SquareArrowRightExit } from 'lucide-react';
 
 import { type TopicDiagnosticSummary } from './types';
+import { topicDisplayName } from '@/lib/topicId';
 import { cn } from '@/lib/utils';
 
 type TopicNavListProps = {
@@ -32,6 +33,7 @@ export function TopicNavList({
   return (
     <ul>
       {items.map((item) => {
+        const topicName = topicDisplayName(item.topic);
         const hasChannels = Boolean(item.channels?.length);
         const publicActive = item.publicActive ?? !item.channels?.some((channel) => channel.active);
         const topicGossipJoined = item.gossipJoined ?? true;
@@ -43,7 +45,7 @@ export function TopicNavList({
           >
             <button className='topic-link' type='button' onClick={() => onSelectTopic(item.topic)}>
               <span className='shell-topic-link-label' title={item.topic}>
-                {item.topic}
+                {topicName}
               </span>
             </button>
 
@@ -57,7 +59,7 @@ export function TopicNavList({
                     topicGossipJoined
                       ? 'shell:navigation.disconnectTopic'
                       : 'shell:navigation.connectTopic',
-                    { topic: item.topic }
+                    { topic: topicName }
                   )}
                   onClick={() => onToggleTopicGossip(item.topic, !topicGossipJoined)}
                 >
@@ -80,7 +82,7 @@ export function TopicNavList({
                 <button
                   className='topic-remove'
                   type='button'
-                  aria-label={t('shell:navigation.removeTopic', { topic: item.topic })}
+                  aria-label={t('shell:navigation.removeTopic', { topic: topicName })}
                   onClick={() => onRemoveTopic(item.topic)}
                 >
                   x

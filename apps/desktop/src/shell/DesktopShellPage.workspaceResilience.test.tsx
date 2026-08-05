@@ -153,7 +153,7 @@ test('timeline keeps the last successful workspace state when joined channels re
   await waitFor(() => {
     expect(screen.getByText('joined channel refresh fallback')).toBeInTheDocument();
     expect(screen.getByText('temporary joined channel failure')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'kukuri:topic:demo' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'demo' })).toBeInTheDocument();
   });
 });
 
@@ -207,7 +207,7 @@ test('timeline keeps the last successful workspace state when community-node sta
     expect(
       screen.queryByText('temporary community node status failure')
     ).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'kukuri:topic:demo' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'demo' })).toBeInTheDocument();
   });
 });
 

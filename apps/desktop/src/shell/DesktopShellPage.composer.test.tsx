@@ -35,7 +35,7 @@ test('desktop shell can publish and render a post', async () => {
   });
   expectActiveTopic('kukuri:topic:demo');
   expect(screen.queryByTestId('shell-nav-trigger')).not.toBeInTheDocument();
-  const demoTopic = screen.getByRole('button', { name: 'kukuri:topic:demo' }).closest('li');
+  const demoTopic = screen.getByRole('button', { name: 'demo' }).closest('li');
   expect(demoTopic).not.toBeNull();
   expect(demoTopic).toHaveTextContent('joined / peers: 1');
 

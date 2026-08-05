@@ -35,8 +35,8 @@ test('desktop app bootstraps the shell with the default timeline workspace', asy
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
   });
   expect(screen.getByRole('tablist', { name: 'Workspaces' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'kukuri:topic:demo' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'kukuri:topic:demo' }).closest('li')).toHaveClass(
+  expect(screen.getByRole('button', { name: 'demo' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'demo' }).closest('li')).toHaveClass(
     'topic-item-active'
   );
   expect(screen.getByRole('button', { name: 'Publish' })).toBeInTheDocument();

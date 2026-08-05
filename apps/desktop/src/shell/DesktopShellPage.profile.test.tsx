@@ -55,11 +55,11 @@ test('profile overview aggregates public posts across topics and excludes privat
   await selectWorkspace(user, 'Profile');
   expect(screen.getByText('demo public post')).toBeInTheDocument();
   expect(screen.queryByText('demo private post')).not.toBeInTheDocument();
-  expect(screen.getAllByText('kukuri:topic:demo').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('demo').length).toBeGreaterThan(0);
 
-  await user.type(screen.getByPlaceholderText('kukuri:topic:demo'), 'kukuri:topic:second');
+  await user.type(screen.getByPlaceholderText('demo'), 'kukuri:topic:second');
   await user.click(screen.getByRole('button', { name: 'Add' }));
-  await user.click(screen.getByRole('button', { name: 'kukuri:topic:second' }));
+  await user.click(screen.getByRole('button', { name: 'second' }));
   await waitFor(() => {
     expectActiveTopic('kukuri:topic:second');
   });
@@ -194,7 +194,7 @@ test('author detail shows profile topic posts and can open an untracked origin t
   const authorPane = await screen.findByRole('complementary', { name: 'Author' });
   expect(within(authorPane).getByText('post from demo topic')).toBeInTheDocument();
   expect(within(authorPane).getByText('post from relay topic')).toBeInTheDocument();
-  expect(within(authorPane).getByText('kukuri:topic:relay')).toBeInTheDocument();
+  expect(within(authorPane).getByText('relay')).toBeInTheDocument();
   expect(within(authorPane).queryByRole('button', { name: 'Reply' })).not.toBeInTheDocument();
 
   await user.click(within(authorPane).getAllByRole('button', { name: 'Open original topic' })[0]);
@@ -204,7 +204,7 @@ test('author detail shows profile topic posts and can open an untracked origin t
     expect(screen.queryByRole('complementary', { name: 'Author' })).not.toBeInTheDocument();
   });
   expect(screen.getByText('post from relay topic')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'kukuri:topic:relay' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'relay' })).toBeInTheDocument();
 });
 
 test('local profile editor saves profile draft from primary navigation and settings stays diagnostics-only', async () => {
