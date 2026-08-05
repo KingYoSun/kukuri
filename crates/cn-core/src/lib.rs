@@ -22,6 +22,7 @@ mod env;
 mod errors;
 mod index_entries;
 mod index_scope;
+mod readiness_activation;
 mod readiness_probe;
 mod readiness_runtime;
 mod relation_optouts;
@@ -79,6 +80,9 @@ pub use index_scope::{
     get_channel_secret, insert_indexing_request, is_topic_supported, list_channel_secrets,
     list_indexing_requests, list_supported_topics, register_channel_secret,
     reject_indexing_request, remove_channel_secret, remove_supported_topic, upsert_channel_secret,
+};
+pub use readiness_activation::{
+    ReadinessActivation, latest_readiness_activation, record_readiness_activation,
 };
 pub use readiness_probe::{ReadinessProbeRecord, list_readiness_probes, upsert_readiness_probe};
 pub use readiness_runtime::{

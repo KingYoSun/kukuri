@@ -1,0 +1,152 @@
+//! #616 有効化の関門の contract test。
+//!
+//! 環境変数（COMMUNITY_NODE_INDEX_QUERY_ENABLED / COMMUNITY_NODE_TRUST_READ_ENABLED）を
+//! 真にしただけでは索引・信頼の読み取り面は公開されず、`cn-cli readiness` の全項目合格
+//! 記録（cn_admin.readiness_activations）が存在するときにのみ有効化される。
+//! 判定項目集合が現行と一致しない古い記録は無効（安全側）。
+//!
+//! Postgres + Redis を要するため `KUKURI_CN_RUN_INTEGRATION_TESTS=1` で gate する。
+//! ArcadeDB へは接続しない（有効時の確認は「404 でない」ことに留める。実際の応答内容は
+//! 全構成 E2E が担う）。
+
+use std::net::SocketAddr;
+
+use anyhow::{Context, Result};
+use chrono::Utc;
+use kukuri_cn_core::{JwtConfig, TestDatabase, connect_postgres, record_readiness_activation};
+use kukuri_cn_operator::READINESS_CHECK_IDS;
+use kukuri_cn_user_api::{UserApiConfig, app_router, build_state};
+use reqwest::{Client, StatusCode};
+
+mod support;
+use support::{integration_test_admin_database_url, integration_test_rendezvous_redis_url};
+
+const SURFACES: [&str; 3] = [
+    "/v1/index/search?q=test",
+    "/v1/trust/users/0000000000000000000000000000000000000000000000000000000000000001",
+    "/v1/relation/users/0000000000000000000000000000000000000000000000000000000000000001",
+];
+
+async fn spawn_api(
+    database_url: &str,
+    prefix: &str,
+) -> Result<(String, tokio::task::JoinHandle<()>)> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .context("failed to bind test listener")?;
+    let addr = listener.local_addr()?;
+    let base_url = format!("http://{addr}");
+    let state = build_state(&UserApiConfig {
+        bind_addr: addr,
+        database_url: database_url.to_string(),
+        rendezvous_redis_url: integration_test_rendezvous_redis_url(),
+        rendezvous_key_prefix: format!("cn:test:{prefix}"),
+        base_url: base_url.clone(),
+        public_base_url: base_url.clone(),
+        connectivity_urls: vec!["http://127.0.0.1:13340".to_string()],
+        jwt_config: JwtConfig::new("kukuri-cn-tests", "test-secret", 3600),
+        operator_config_path: None,
+        channel_secret_key: None,
+        index_query_enabled: true,
+        trust_read_enabled: true,
+    })
+    .await?;
+    let app = app_router(state);
+    let task = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await
+        .expect("test user-api server");
+    });
+    Ok((base_url, task))
+}
+
+async fn surface_statuses(base_url: &str) -> Result<Vec<(String, StatusCode, String)>> {
+    let client = Client::new();
+    let mut statuses = Vec::new();
+    for path in SURFACES {
+        let response = client.get(format!("{base_url}{path}")).send().await?;
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        statuses.push((path.to_string(), status, body));
+    }
+    Ok(statuses)
+}
+
+#[tokio::test]
+async fn flags_without_activation_record_keep_surfaces_hidden() -> Result<()> {
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping activation gate test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_activation_none").await?;
+
+    // 記録なし + 環境変数真 → 全 surface が 404 のまま。
+    let (base_url, task) = spawn_api(database.database_url.as_str(), "act-none").await?;
+    for (path, status, body) in surface_statuses(&base_url).await? {
+        assert_eq!(status, StatusCode::NOT_FOUND, "{path}: {body}");
+    }
+    task.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn stale_check_id_set_keeps_surfaces_hidden() -> Result<()> {
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping activation gate test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_activation_stale").await?;
+    let pool = connect_postgres(database.database_url.as_str()).await?;
+    kukuri_cn_core::initialize_database(&pool).await?;
+
+    // 判定項目集合が現行と一致しない記録（判定基準の変更前の合格）は無効。
+    record_readiness_activation(
+        &pool,
+        Utc::now(),
+        "public-node",
+        &["old_check_only"],
+        &serde_json::json!([]),
+    )
+    .await?;
+    let (base_url, task) = spawn_api(database.database_url.as_str(), "act-stale").await?;
+    for (path, status, body) in surface_statuses(&base_url).await? {
+        assert_eq!(status, StatusCode::NOT_FOUND, "{path}: {body}");
+    }
+    task.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn valid_activation_record_enables_surfaces() -> Result<()> {
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping activation gate test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_activation_ok").await?;
+    let pool = connect_postgres(database.database_url.as_str()).await?;
+    kukuri_cn_core::initialize_database(&pool).await?;
+
+    record_readiness_activation(
+        &pool,
+        Utc::now(),
+        "public-node",
+        &READINESS_CHECK_IDS,
+        &serde_json::json!([]),
+    )
+    .await?;
+    let (base_url, task) = spawn_api(database.database_url.as_str(), "act-ok").await?;
+    // 有効化済みなら 404 ではなくなる（実際の応答内容は認証・ArcadeDB を要するため
+    // 全構成 E2E が担う。ここでは「隠されていない」ことだけを固定する）。
+    for (path, status, body) in surface_statuses(&base_url).await? {
+        assert_ne!(
+            status,
+            StatusCode::NOT_FOUND,
+            "surface が 404 のまま: {path}: {body}"
+        );
+    }
+    task.abort();
+    Ok(())
+}

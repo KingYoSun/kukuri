@@ -10,7 +10,9 @@ use kukuri_cn_core::{
 use kukuri_cn_indexer::{
     ArcadeDbConfig, ArcadeDbProjection, ArcadeDbRelationGraph, FailClosedIndexQuery, IndexQuery,
 };
-use kukuri_cn_operator::{CommunityNodeManifest, build_manifest, load_and_validate};
+use kukuri_cn_operator::{
+    CommunityNodeManifest, READINESS_CHECK_IDS, build_manifest, load_and_validate,
+};
 use kukuri_cn_protocol::{CommunityNodeBootstrapNode, CommunityNodeResolvedUrls};
 use kukuri_cn_trust::{RelationStore, TrustParams};
 use sqlx::postgres::PgPool;
@@ -100,22 +102,55 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
         .transpose()
         .context("invalid COMMUNITY_NODE_CHANNEL_SECRET_KEY")?
         .map(Arc::new);
+    // 有効化の関門（#616）。環境変数が真でも、`cn-cli readiness` の全項目合格記録が
+    // 無ければ索引・信頼の読み取り面を公開しない（該当 surface は 404 のまま）。
+    // 記録の判定項目集合が現行と不一致（判定基準の変更後）も無効に倒す（安全側）。
+    let readiness_activated = if config.index_query_enabled || config.trust_read_enabled {
+        match kukuri_cn_core::latest_readiness_activation(&pool).await? {
+            Some(activation) if activation.matches_check_ids(&READINESS_CHECK_IDS) => {
+                tracing::info!(
+                    activated_at = %activation.activated_at.to_rfc3339(),
+                    "readiness の有効化記録を確認しました"
+                );
+                true
+            }
+            Some(activation) => {
+                tracing::warn!(
+                    activated_at = %activation.activated_at.to_rfc3339(),
+                    "readiness の有効化記録の判定項目集合が現行と一致しないため、                     index / trust の読み取り面を公開しません（`cn-cli readiness` を再実行してください）"
+                );
+                false
+            }
+            None => {
+                tracing::warn!(
+                    "readiness の有効化記録が無いため、index / trust の読み取り面を公開しません                     （`cn-cli readiness` の全項目合格が必要です）"
+                );
+                false
+            }
+        }
+    } else {
+        false
+    };
+
     // ユーザー向け index query(#404)。有効時のみ ArcadeDB(投影)+ Postgres(真実源)を
     // fail-closed gate(`FailClosedIndexQuery`)で束ねる。読み口はこの gate 以外に作らない。
-    let index_query: Option<Arc<dyn IndexQuery>> = if config.index_query_enabled {
-        let projection = ArcadeDbProjection::new(ArcadeDbConfig::from_env())
-            .context("failed to build ArcadeDB client for index query")?;
-        let entries = PgIndexEntryStore::new(pool.clone());
-        Some(Arc::new(FailClosedIndexQuery::new(
-            Arc::new(projection),
-            Arc::new(entries),
-        )))
-    } else {
-        None
-    };
+    let index_query: Option<Arc<dyn IndexQuery>> =
+        if config.index_query_enabled && readiness_activated {
+            let projection = ArcadeDbProjection::new(ArcadeDbConfig::from_env())
+                .context("failed to build ArcadeDB client for index query")?;
+            let entries = PgIndexEntryStore::new(pool.clone());
+            Some(Arc::new(FailClosedIndexQuery::new(
+                Arc::new(projection),
+                Arc::new(entries),
+            )))
+        } else {
+            None
+        };
     // trust / relation read surface(#415)。有効時のみ trust パラメータ(operator 可変)を
     // 検証つきで読み、relation graph(ArcadeDB。`cn-cli relation analyze` が構築する)へ接続する。
-    let trust_read: Option<Arc<TrustReadState>> = if config.trust_read_enabled {
+    let trust_read: Option<Arc<TrustReadState>> = if config.trust_read_enabled
+        && readiness_activated
+    {
         let params = TrustParams::from_env().context("invalid COMMUNITY_NODE_TRUST_* params")?;
         let relation = ArcadeDbRelationGraph::new(ArcadeDbConfig::from_env())
             .context("failed to build ArcadeDB client for relation graph")?;
