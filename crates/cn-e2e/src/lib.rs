@@ -125,6 +125,7 @@ pub struct E2eStack {
     pub entries: Arc<PgIndexEntryStore>,
     pub api_base_url: String,
     arachnid_auth: SyntheticBasicAuth,
+    participant: Arc<IndexerParticipant>,
     worker: Option<WorkerHandle>,
     api_task: tokio::task::JoinHandle<()>,
     _relay: SpawnedIrohRelay,
@@ -370,7 +371,7 @@ impl E2eStack {
             )?,
         ));
         let worker = IndexerWorker::new(
-            participant,
+            Arc::clone(&participant),
             indexer_docs.clone(),
             Arc::clone(&runtime_state),
             WorkerConfig {
@@ -453,6 +454,7 @@ impl E2eStack {
             entries,
             api_base_url,
             arachnid_auth,
+            participant,
             worker: Some(worker),
             api_task,
             _relay: relay,
@@ -462,7 +464,13 @@ impl E2eStack {
 
     /// 投稿者ノードに本文だけの投稿を置き、object_id を返す。
     pub async fn publish_text_post(&self, body: &str) -> Result<String> {
-        self.publish_post(body, Vec::new()).await
+        self.publish_post(&self.author.keys.clone(), body, Vec::new())
+            .await
+    }
+
+    /// 指定した鍵の著者として本文だけの投稿を置く（共参加の再現用。ノードは共有）。
+    pub async fn publish_text_post_as(&self, keys: &KukuriKeys, body: &str) -> Result<String> {
+        self.publish_post(keys, body, Vec::new()).await
     }
 
     /// 投稿者ノードに blob を置き、それを添付した投稿を置く。(object_id, blob hash) を返す。
@@ -479,7 +487,9 @@ impl E2eStack {
             bytes: bytes.len() as u64,
             role: AssetRole::ImageOriginal,
         };
-        let object_id = self.publish_post(body, vec![attachment]).await?;
+        let object_id = self
+            .publish_post(&self.author.keys.clone(), body, vec![attachment])
+            .await?;
         Ok((object_id, stored.hash.as_str().to_string()))
     }
 
@@ -496,14 +506,20 @@ impl E2eStack {
             bytes: 4,
             role: AssetRole::ImageOriginal,
         };
-        self.publish_post(body, vec![attachment]).await
+        self.publish_post(&self.author.keys.clone(), body, vec![attachment])
+            .await
     }
 
-    async fn publish_post(&self, body: &str, attachments: Vec<AssetRef>) -> Result<String> {
+    async fn publish_post(
+        &self,
+        keys: &KukuriKeys,
+        body: &str,
+        attachments: Vec<AssetRef>,
+    ) -> Result<String> {
         let topic = TopicId::new(self.topic_id.clone());
         let replica = topic_replica_id(self.topic_id.as_str());
         let envelope = build_post_envelope_with_payload(
-            &self.author.keys,
+            keys,
             &topic,
             PayloadRef::InlineText {
                 text: body.to_string(),
@@ -632,7 +648,12 @@ impl E2eStack {
 
     /// 認証 + 同意を通し、bearer access token を返す。
     pub async fn authenticate(&self, client: &Client) -> Result<String> {
-        let keys = generate_keys();
+        self.authenticate_as(client, &generate_keys()).await
+    }
+
+    /// 指定した鍵で認証 + 同意を通し、bearer access token を返す
+    /// （trust / relation read の viewer は bearer の鍵に固定されるため）。
+    pub async fn authenticate_as(&self, client: &Client, keys: &KukuriKeys) -> Result<String> {
         let pubkey = keys.public_key_hex();
         let base_url = &self.api_base_url;
         let challenge = client
@@ -644,7 +665,7 @@ impl E2eStack {
             .json::<kukuri_cn_protocol::AuthChallengeResponse>()
             .await?;
         let auth_envelope_json = kukuri_cn_protocol::build_auth_envelope_json(
-            &keys,
+            keys,
             challenge.challenge.as_str(),
             base_url,
         )?;
@@ -667,6 +688,31 @@ impl E2eStack {
             .await?
             .error_for_status()?;
         Ok(verify.access_token)
+    }
+
+    /// 常駐ワーカーを停止して起動し直す（プロセス再起動後の対象範囲・取り込みの復元を模す）。
+    pub async fn restart_worker(&mut self) -> Result<()> {
+        if let Some(worker) = self.worker.take() {
+            worker.shutdown().await;
+        }
+        let worker = IndexerWorker::new(
+            Arc::clone(&self.participant),
+            self.indexer_docs.clone(),
+            Arc::clone(&self.runtime_state),
+            WorkerConfig {
+                poll_interval: Duration::from_millis(300),
+                event_debounce: Duration::from_millis(50),
+                backoff_base: Duration::from_millis(100),
+                backoff_max: Duration::from_millis(500),
+            },
+        );
+        self.worker = Some(worker.spawn());
+        Ok(())
+    }
+
+    /// 既定の許可応答を両プロバイダ模擬へ載せ直す（`MockServer::reset` 後の復旧用）。
+    pub async fn restore_default_provider_mocks(&self) {
+        mount_default_allow_mocks(&self.arachnid, &self.vlm, &self.arachnid_auth).await;
     }
 
     /// API 応答（`entries` 配列）から object_id 列を取り出す。
