@@ -283,6 +283,37 @@ journalctl -u kukuri-relation-analyze.service -n 50
 外部からの port scan で 80/443/`relay_quic_port`/udp 以外（2480 / 8630 / 5432 / 6379）が
 閉じていることも確認する（firewall には新規 ingress を追加していない）。
 
+### readiness（読み取り面の解禁判定、#616）
+
+読み取り面（索引 query / 信頼 read）は、環境変数（`COMMUNITY_NODE_INDEX_QUERY_ENABLED` /
+`COMMUNITY_NODE_TRUST_READ_ENABLED`）が真でも、`cn-cli readiness` の全項目合格記録
+（`cn_admin.readiness_activations`）が無ければ公開されない（有効化の関門）。
+全項目合格すると記録は自動で書かれる。反映には cn-user-api の再起動が必要
+（関門は起動時に評価される）。
+
+`cn-relation-analyze` サービス（cn-cli image）を流用して実行するが、プロバイダ資格情報の
+env はサービス定義に含まれないため、project `.env` を source して `-e` で転送する:
+
+```bash
+# VM 上で:
+cd /var/lib/kukuri/community-node
+sudo bash -c 'set -a; . ./.env; set +a; \
+  /var/lib/toolbox/kukuri/bin/docker-compose run --rm \
+    -e PROJECT_ARACHNID_API_USERNAME -e PROJECT_ARACHNID_API_PASSWORD \
+    -e COMMUNITY_NODE_VLM_API_KEY \
+    -v /var/lib/kukuri/community-node/operator-config.yaml:/work/operator-config.yaml:ro \
+    cn-relation-analyze readiness --config /work/operator-config.yaml'
+# 全項目合格 → 有効化記録が書かれる → cn-user-api を再起動して反映:
+sudo /var/lib/toolbox/kukuri/bin/docker-compose restart cn-user-api
+```
+
+- 疎通確認（Arachnid への合成ハッシュ送信 / VLM への無害な 1 リクエスト）の結果は
+  15 分 TTL で保存され、`--force-probe` で強制再実行できる。
+- `relation_analysis_recent` が不合格の場合は relation analyze を 1 回実行する
+  （`docker-compose run --rm cn-relation-analyze`。既定の許容は 7200 秒以内の成功記録）。
+- 判定項目集合が変わる更新を入れた場合、古い記録は無効になり面は自動で閉じる
+  （readiness の再実行 + 再起動で再解禁する）。
+
 ### VLM の private 経路（self-host endpoint）
 
 - self-host VLM（DGX Spark 等の OpenAI-compatible endpoint）は public internet へ直接公開しない。
