@@ -1,0 +1,14 @@
+# 全構成 E2E（#616 / `cargo xtask cn-e2e`）用の重ね掛け定義。
+#
+# 標準の docker-compose.community-node.yml に重ねて使い、テストプロセス
+# （同一ホスト上の cargo test）が実 ArcadeDB へ届くよう、ループバック限定で
+# HTTP API を公開する。標準構成（container private network 内のみで listen）を
+# 変えないため、本番・開発の既定では読み込まない。
+#
+#   docker compose -f docker-compose.community-node.yml \
+#                  -f docker-compose.community-node.e2e.yml up -d cn-arcadedb ...
+
+services:
+  cn-arcadedb:
+    ports:
+      - "${CN_ARCADEDB_HOST_BIND_IP:-127.0.0.1}:${CN_ARCADEDB_PORT:-12480}:2480"
