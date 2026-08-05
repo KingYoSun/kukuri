@@ -214,7 +214,8 @@ Description=kukuri community node certificate renewal
 [Service]
 Type=oneshot
 Environment=COMPOSE_BIN=$COMPOSE_BIN
-ExecStart=$INSTALL_DIR/renew-certs.sh
+# COS は /var を noexec で mount するため、script は直接 exec せず bash 経由で実行する
+ExecStart=/bin/bash $INSTALL_DIR/renew-certs.sh
 UNIT
 cat > /etc/systemd/system/kukuri-cert-renew.timer <<UNIT
 [Unit]
@@ -259,7 +260,8 @@ Description=kukuri community node postgres backup
 [Service]
 Type=oneshot
 Environment=COMPOSE_BIN=$COMPOSE_BIN
-ExecStart=$INSTALL_DIR/backup.sh
+# COS は /var を noexec で mount するため、script は直接 exec せず bash 経由で実行する
+ExecStart=/bin/bash $INSTALL_DIR/backup.sh
 UNIT
 cat > /etc/systemd/system/kukuri-backup.timer <<UNIT
 [Unit]
