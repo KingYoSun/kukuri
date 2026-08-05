@@ -11,6 +11,7 @@ import { SettingsActionRow } from './SettingsActionRow';
 import { SettingsDiagnosticList } from './SettingsDiagnosticList';
 import { SettingsMetricGrid } from './SettingsMetricGrid';
 import { type ConnectivityPanelView } from './types';
+import { topicDisplayName } from '@/lib/topicId';
 
 type ConnectivityPanelProps = {
   view: ConnectivityPanelView;
@@ -95,7 +96,7 @@ export function ConnectivityPanel({
             >
               <div className='flex flex-wrap items-start justify-between gap-3'>
                 <div className='min-w-0'>
-                  <h4 className='break-all text-base font-semibold text-foreground'>{topic.topic}</h4>
+                  <h4 className='break-all text-base font-semibold text-foreground' title={topic.topic}>{topicDisplayName(topic.topic)}</h4>
                   <p className='mt-2 text-sm text-[var(--muted-foreground)]'>{topic.summary}</p>
                 </div>
                 <StatusBadge

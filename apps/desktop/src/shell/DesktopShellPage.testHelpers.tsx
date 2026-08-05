@@ -5,6 +5,7 @@ import { expect, vi } from 'vitest';
 import { App } from '@/App';
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import type { AttachmentView, NotificationView, PostView, TimelineCursor, TimelineView } from '@/lib/api';
+import { topicDisplayName } from '@/lib/topicId';
 
 export function setViewportWidth(width: number) {
   Object.defineProperty(window, 'innerWidth', {
@@ -299,7 +300,9 @@ export function renderAtHash(hash: string, api = createDesktopMockApi()) {
 
 export function expectActiveTopic(topic: string) {
   expect(window.location.hash).toContain(`topic=${encodeURIComponent(topic)}`);
-  expect(screen.getByRole('button', { name: topic }).closest('li')).toHaveClass('topic-item-active');
+  expect(screen.getByRole('button', { name: topicDisplayName(topic) }).closest('li')).toHaveClass(
+    'topic-item-active'
+  );
 }
 
 export function getWorkspaceTabs() {

@@ -14,10 +14,16 @@ async function openComposerDialog(page: Page) {
   await expect(page.getByRole('dialog')).toBeVisible();
 }
 
+const TOPIC_ID_PREFIX = 'kukuri:topic:';
+
+function topicDisplayName(topicId: string): string {
+  return topicId.startsWith(TOPIC_ID_PREFIX) ? topicId.slice(TOPIC_ID_PREFIX.length) : topicId;
+}
+
 async function expectActiveTopic(page: Page, topic: string) {
   const navRail = page.getByRole('complementary', { name: 'Primary navigation' });
   const topicItem = navRail
-    .getByRole('button', { name: topic, exact: true })
+    .getByRole('button', { name: topicDisplayName(topic), exact: true })
     .locator('xpath=ancestor::li[1]');
   await expect(topicItem).toHaveClass(/topic-item-active/);
 }
@@ -46,9 +52,9 @@ test('browser mock shell can switch topics, publish, open thread, open author, a
 
   await expectActiveTopic(page, 'kukuri:topic:demo');
 
-  await page.getByPlaceholder('kukuri:topic:demo').fill('kukuri:topic:browser');
+  await page.getByPlaceholder('demo').fill('kukuri:topic:browser');
   await page.getByRole('button', { name: 'Add' }).click();
-  await page.getByRole('button', { name: /^kukuri:topic:browser$/ }).click();
+  await page.getByRole('button', { name: /^browser$/ }).click();
   await expectActiveTopic(page, 'kukuri:topic:browser');
 
   await openComposerDialog(page);
@@ -224,11 +230,11 @@ test('browser mock narrow shell keeps nav, context, and settings flows reachable
   await page.goto('/');
 
   await page.getByTestId('shell-nav-trigger').click();
-  await page.getByPlaceholder('kukuri:topic:demo').fill('kukuri:topic:narrow');
+  await page.getByPlaceholder('demo').fill('kukuri:topic:narrow');
   await page.getByRole('button', { name: 'Add' }).click();
 
   await page.getByTestId('shell-nav-trigger').click();
-  await page.getByRole('button', { name: /^kukuri:topic:demo$/ }).click();
+  await page.getByRole('button', { name: /^demo$/ }).click();
   await expectActiveTopic(page, 'kukuri:topic:demo');
 
   await openComposerDialog(page);

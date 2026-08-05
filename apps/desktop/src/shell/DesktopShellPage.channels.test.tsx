@@ -445,7 +445,7 @@ test('copy link actions write canonical hash routes for topic, post, and live', 
     />
   );
 
-  const topicItem = screen.getByRole('button', { name: 'kukuri:topic:demo' }).closest('li');
+  const topicItem = screen.getByRole('button', { name: 'demo' }).closest('li');
   if (!(topicItem instanceof HTMLElement)) {
     throw new Error('expected topic item');
   }

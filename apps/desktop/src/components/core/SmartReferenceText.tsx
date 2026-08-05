@@ -7,6 +7,7 @@ import {
   shortenReferenceId,
   type InternalSmartReference,
 } from '@/lib/internalLinks';
+import { topicDisplayName } from '@/lib/topicId';
 import { cn } from '@/lib/utils';
 import {
   Tooltip,
@@ -57,7 +58,7 @@ function referenceLabel(
   t: ReturnType<typeof useTranslation>['t']
 ): string {
   if (reference.kind === 'topic') {
-    return reference.topic;
+    return topicDisplayName(reference.topic);
   }
   if (reference.kind === 'post') {
     return `${t('common:labels.post')} ${shortenReferenceId(

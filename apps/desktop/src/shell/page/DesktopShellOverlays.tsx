@@ -34,6 +34,7 @@ import type { useSharePreview } from '@/shell/page/useSharePreview';
 import type { useDesktopShellActions } from '@/shell/useDesktopShellActions';
 import { useDesktopShellViewModels } from '@/shell/useDesktopShellViewModels';
 import { useShallow } from 'zustand/react/shallow';
+import { topicDisplayName } from '@/lib/topicId';
 
 type ViewModels = ReturnType<typeof useDesktopShellViewModels>;
 type OverlayActions = Pick<
@@ -305,7 +306,7 @@ export function DesktopShellOverlays({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t('channels:createDialogTitle')}</DialogTitle>
-            <DialogDescription>{activeTopic}</DialogDescription>
+            <DialogDescription>{topicDisplayName(activeTopic)}</DialogDescription>
           </DialogHeader>
           <DialogBody>
             <PrivateChannelPanel

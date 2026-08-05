@@ -6,6 +6,7 @@ import { Select } from '@/components/ui/select';
 
 import { TopicNavList } from './TopicNavList';
 import { type TopicDiagnosticSummary } from './types';
+import { topicDisplayName } from '@/lib/topicId';
 
 type TopicNavFilter = 'all' | 'connected' | 'disconnected';
 type TopicNavSort = 'added' | 'name' | 'updated';
@@ -35,7 +36,11 @@ export function FilterableTopicNavList({ items, ...listProps }: TopicNavListProp
       if (!query) {
         return true;
       }
-      if (item.topic.toLowerCase().includes(query)) {
+      // 表示名で探すのが基本だが、完全な ID の貼り付け検索も通す。
+      if (
+        topicDisplayName(item.topic).toLowerCase().includes(query) ||
+        item.topic.toLowerCase().includes(query)
+      ) {
         return true;
       }
       return Boolean(item.channels?.some((channel) => channel.label.toLowerCase().includes(query)));
@@ -60,7 +65,10 @@ export function FilterableTopicNavList({ items, ...listProps }: TopicNavListProp
 
     filtered.sort((a, b) => {
       if (sort === 'name') {
-        return a.item.topic.localeCompare(b.item.topic) || a.index - b.index;
+        return (
+          topicDisplayName(a.item.topic).localeCompare(topicDisplayName(b.item.topic)) ||
+          a.index - b.index
+        );
       }
       if (sort === 'updated') {
         const aAt = a.item.lastReceivedAt ?? null;

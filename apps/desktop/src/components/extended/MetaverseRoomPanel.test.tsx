@@ -299,13 +299,13 @@ describe('MetaverseRoomPanel animation sharing', () => {
     renderPanel(api);
     await user.click(screen.getByRole('button', { name: 'Join Room' }));
 
-    expect(screen.queryByText(/Topic: kukuri:topic:demo/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Topic: demo/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Debug details' })).toHaveAttribute(
       'aria-expanded',
       'false'
     );
     await user.click(screen.getByRole('button', { name: 'Debug details' }));
-    expect(screen.getByText(/Topic: kukuri:topic:demo/)).toBeInTheDocument();
+    expect(screen.getByText(/Topic: demo/)).toBeInTheDocument();
 
     expect(document.querySelector('.metaverse-room-hud')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Expand room HUD' })).not.toBeInTheDocument();

@@ -6,6 +6,7 @@ import type {
   ProfileInput,
 } from '@/lib/api';
 import { fileToCreateAttachment } from '@/lib/attachments';
+import { normalizeTopicId } from '@/lib/topicId';
 
 import {
   DEFAULT_COMMUNITY_NODE_CONFIG,
@@ -283,7 +284,8 @@ export function createProfileTopicChannelActions({
   }
 
   async function handleAddTopic() {
-    const nextTopic = topicInput.trim();
+    // 入力は素の名前でも完全な ID でも受け付け、wire 上は常に名前空間付き ID にする。
+    const nextTopic = normalizeTopicId(topicInput);
     if (!nextTopic) {
       return;
     }

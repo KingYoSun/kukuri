@@ -42,7 +42,7 @@ test('renders the topic plug as connected and disconnects on click', async () =>
   );
 
   const button = screen.getByLabelText(
-    'Disconnect kukuri:topic:demo from the gossip network'
+    'Disconnect demo from the gossip network'
   );
   expect(button).toHaveAttribute('aria-pressed', 'true');
   expect(button).toHaveClass('topic-plug-active');
@@ -65,7 +65,7 @@ test('renders the topic plug as disconnected and reconnects on click', async () 
     />
   );
 
-  const button = screen.getByLabelText('Connect kukuri:topic:demo to the gossip network');
+  const button = screen.getByLabelText('Connect demo to the gossip network');
   expect(button).toHaveAttribute('aria-pressed', 'false');
   expect(button).not.toHaveClass('topic-plug-active');
 

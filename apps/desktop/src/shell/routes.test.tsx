@@ -5,6 +5,7 @@ import { beforeEach, expect, test } from 'vitest';
 import { App } from '@/App';
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import { resolveHashBackedRouteLocation } from '@/shell/routes';
+import { topicDisplayName } from '@/lib/topicId';
 
 beforeEach(() => {
   Object.defineProperty(window, 'innerWidth', {
@@ -23,7 +24,9 @@ function renderAtHash(hash: string, api = createDesktopMockApi()) {
 
 function expectActiveTopic(topic: string) {
   expect(window.location.hash).toContain(`topic=${encodeURIComponent(topic)}`);
-  expect(screen.getByRole('button', { name: topic }).closest('li')).toHaveClass('topic-item-active');
+  expect(screen.getByRole('button', { name: topicDisplayName(topic) }).closest('li')).toHaveClass(
+    'topic-item-active'
+  );
 }
 
 function getTimelineViewTabs() {
@@ -459,15 +462,15 @@ test('topic and private channel selection sync into the hash route', async () =>
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
 
-  await user.type(screen.getByPlaceholderText('kukuri:topic:demo'), 'kukuri:topic:second');
+  await user.type(screen.getByPlaceholderText('demo'), 'kukuri:topic:second');
   await user.click(screen.getByRole('button', { name: 'Add' }));
-  await user.click(screen.getByRole('button', { name: 'kukuri:topic:second' }));
+  await user.click(screen.getByRole('button', { name: 'second' }));
 
   await waitFor(() => {
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Asecond');
   });
 
-  await user.click(screen.getByRole('button', { name: 'kukuri:topic:demo' }));
+  await user.click(screen.getByRole('button', { name: 'demo' }));
   const channelDialog = await openChannelManager(user);
   await user.type(within(channelDialog).getByPlaceholderText('Channel name'), 'core');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));

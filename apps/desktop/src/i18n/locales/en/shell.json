@@ -15,7 +15,7 @@
     "close": "Close navigation",
     "notificationsButton": "Notifications",
     "open": "Open navigation",
-    "placeholder": "kukuri:topic:demo",
+    "placeholder": "demo",
     "primaryNavigation": "Primary navigation",
     "connectTopic": "Connect {{topic}} to the gossip network",
     "disconnectTopic": "Disconnect {{topic}} from the gossip network",

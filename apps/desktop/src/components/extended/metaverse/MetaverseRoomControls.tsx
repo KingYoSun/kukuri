@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { SupportedLocale } from '@/i18n';
 import { formatLocalizedTime } from '@/i18n/format';
+import { topicDisplayName } from '@/lib/topicId';
 import type { GameRoomView, MetaverseAssetRef } from '@/lib/api';
 import type {
   AvatarAssetStatus,
@@ -164,7 +165,7 @@ export function MetaverseRoomControls({
               </button>
               {hudDebugOpen ? (
                 <div className='metaverse-room-diagnostics'>
-                  <span>{t('hud.topic', { topic: activeTopic })}</span>
+                  <span>{t('hud.topic', { topic: topicDisplayName(activeTopic) })}</span>
                   <span>{t('hud.localPeer', { peer: localPeerId })}</span>
                   <span>{t('hud.knownPeers', { count: knownPeerCount })}</span>
                   <span>{t('hud.lastSentSeq', { seq: lastSentSeq })}</span>
