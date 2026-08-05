@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 use kukuri_cn_core::{
@@ -61,6 +63,20 @@ enum Command {
     Moderation {
         #[command(subcommand)]
         action: ModerationCliAction,
+    },
+    /// 公開ノードの準備完了判定を実行時情報込みで検査する（#616）。
+    Readiness {
+        /// operator-config.yaml のパス。
+        #[arg(long, default_value = "operator-config.yaml")]
+        config: PathBuf,
+        #[arg(long, default_value = "public-node")]
+        profile: String,
+        /// 疎通確認結果の再利用期限（秒）。期限内は外部プロバイダを叩かない。
+        #[arg(long, default_value_t = 900)]
+        probe_ttl_secs: u64,
+        /// 保存済みの疎通確認結果を無視して必ず再実行する。
+        #[arg(long)]
+        force_probe: bool,
     },
 }
 

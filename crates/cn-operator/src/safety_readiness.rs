@@ -100,6 +100,33 @@ impl ReadinessReport {
     }
 }
 
+/// 実行時判定の結果を静的報告へ合成する（#616）。
+///
+/// `runtime` の各項目は、id が一致する既存項目を置換する。静的評価で `Unknown` のまま残る
+/// 項目（`provider_credential_valid` / `scan_coverage_metrics_available` 等）を、実際の
+/// 疎通確認・実測に基づく合格/不合格で確定させるための単一の合成点。既存 id に無い項目を
+/// 渡された場合は末尾へ追加せずエラーにする（判定項目の集合は `READINESS_CHECK_IDS` が
+/// 単一の真実源であり、勝手に増やさない）。
+pub fn apply_runtime_checks(
+    report: &mut ReadinessReport,
+    runtime: Vec<ReadinessCheck>,
+) -> anyhow::Result<()> {
+    for incoming in runtime {
+        let Some(existing) = report
+            .checks
+            .iter_mut()
+            .find(|check| check.id == incoming.id)
+        else {
+            anyhow::bail!(
+                "実行時判定の id `{}` は readiness の判定項目集合に存在しません",
+                incoming.id
+            );
+        };
+        *existing = incoming;
+    }
+    Ok(())
+}
+
 pub fn evaluate_public_node_readiness(
     config: &ResolvedConfig,
     requested_profile: &str,

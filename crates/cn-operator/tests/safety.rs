@@ -2,8 +2,8 @@ use std::fs;
 use std::process::Command;
 
 use kukuri_cn_operator::{
-    READINESS_CHECK_IDS, ReadinessStatus, SafetyErrorAction, evaluate_public_node_readiness,
-    load_and_validate,
+    READINESS_CHECK_IDS, ReadinessCheck, ReadinessStatus, SafetyErrorAction, apply_runtime_checks,
+    evaluate_public_node_readiness, load_and_validate,
 };
 
 fn config_with_safety(safety: &str) -> String {
@@ -120,6 +120,59 @@ fn readiness_complete_static_config_has_unknown_runtime_checks() {
         "scan_coverage_metrics_available",
         ReadinessStatus::Unknown,
     );
+}
+
+#[test]
+fn runtime_checks_resolve_unknowns_and_gate_readiness() {
+    let resolved = load_and_validate(&config_with_safety(complete_safety())).unwrap();
+
+    // 実行時判定が両方合格なら unknown が消えて is_ready が真になる。
+    let mut report = evaluate_public_node_readiness(&resolved, "public-node");
+    apply_runtime_checks(
+        &mut report,
+        vec![
+            ReadinessCheck {
+                id: "provider_credential_valid",
+                status: ReadinessStatus::Pass,
+                detail: "probe ok".to_string(),
+            },
+            ReadinessCheck {
+                id: "scan_coverage_metrics_available",
+                status: ReadinessStatus::Pass,
+                detail: "coverage ok".to_string(),
+            },
+        ],
+    )
+    .unwrap();
+    assert_eq!(report.unknown_count(), 0);
+    assert!(report.is_ready());
+
+    // 実行時判定の不合格は is_ready を偽へ倒す。
+    let mut report = evaluate_public_node_readiness(&resolved, "public-node");
+    apply_runtime_checks(
+        &mut report,
+        vec![ReadinessCheck {
+            id: "provider_credential_valid",
+            status: ReadinessStatus::Fail,
+            detail: "401".to_string(),
+        }],
+    )
+    .unwrap();
+    assert!(!report.is_ready());
+    assert!(report.has_blocking_failures());
+
+    // 判定項目集合に無い id はエラー（集合の単一の真実源を守る）。
+    let mut report = evaluate_public_node_readiness(&resolved, "public-node");
+    let error = apply_runtime_checks(
+        &mut report,
+        vec![ReadinessCheck {
+            id: "no_such_check",
+            status: ReadinessStatus::Pass,
+            detail: String::new(),
+        }],
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("no_such_check"));
 }
 
 #[test]

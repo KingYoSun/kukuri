@@ -7,6 +7,7 @@ mod admission;
 mod database;
 mod indexing;
 mod moderation;
+mod readiness;
 mod relation;
 mod reports;
 
@@ -38,5 +39,11 @@ pub(crate) async fn dispatch(pool: &PgPool, command: Command) -> Result<()> {
         Command::IndexingRequest { action } => indexing::run_indexing_request(pool, action).await,
         Command::Relation { action } => relation::run(pool, action).await,
         Command::Moderation { action } => moderation::run(pool, action).await,
+        Command::Readiness {
+            config,
+            profile,
+            probe_ttl_secs,
+            force_probe,
+        } => readiness::run(pool, &config, &profile, probe_ttl_secs, force_probe).await,
     }
 }

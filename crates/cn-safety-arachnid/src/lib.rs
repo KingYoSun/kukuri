@@ -33,3 +33,9 @@ pub use config::{
     DEFAULT_API_USERNAME_ENV, ShieldConfigError, ShieldCredentials, ShieldProviderConfig,
 };
 pub use provider::{PROVIDER_NAME, ProjectArachnidShieldProvider};
+
+/// 疎通確認に使う合成 PDQ hash（Shield API の期待形式 = 32 bytes の base64）。
+///
+/// 実画像から計算したものではない固定値（2026-07-02 に実 API で形式を確認済み）。
+/// `cn-operator safety test-provider` と `cn-cli readiness` の疎通確認が共有する。
+pub const SYNTHETIC_PROBE_PDQ_HASH: &str = "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=";
