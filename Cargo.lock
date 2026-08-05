@@ -3002,6 +3002,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "kukuri-cn-e2e"
+version = "0.1.2"
+dependencies = [
+ "anyhow",
+ "axum",
+ "chrono",
+ "kukuri-blob-service",
+ "kukuri-cn-core",
+ "kukuri-cn-indexer",
+ "kukuri-cn-iroh-relay",
+ "kukuri-cn-operator",
+ "kukuri-cn-protocol",
+ "kukuri-cn-runtime-support",
+ "kukuri-cn-safety",
+ "kukuri-cn-safety-arachnid",
+ "kukuri-cn-safety-runtime",
+ "kukuri-cn-safety-vlm",
+ "kukuri-cn-user-api",
+ "kukuri-core",
+ "kukuri-docs-sync",
+ "kukuri-iroh-node",
+ "kukuri-test-support",
+ "kukuri-transport",
+ "reqwest 0.13.4",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "tokio",
+ "wiremock",
+]
+
+[[package]]
 name = "kukuri-cn-indexer"
 version = "0.1.2"
 dependencies = [
