@@ -420,6 +420,19 @@ GitHub repository variables（Settings → Secrets and variables → Actions →
 - `TF_BACKEND_BUCKET`, `TF_BACKEND_PREFIX`
 - 任意: `CN_MANAGE_CLOUD_DNS`, `CN_DNS_ZONE_NAME`
 
+apply 済み環境では、個別変数の代わりに **生成済み terraform.tfvars 全体**を
+`CN_LOW_COST_TFVARS_B64` に載せる（設定されていれば個別 TF_VAR より優先される）。
+個別変数の mirror では実 state と乖離し、plan が `prevent_destroy` 資源（Postgres data PD）の
+破棄計画になって失敗するため。`generate-tfvars` で tfvars を更新したら毎回これも更新する:
+
+```bash
+grep -v '^operator_config_path' infra/terraform/envs/low-cost/terraform.tfvars \
+  | base64 -w0 | gh variable set CN_LOW_COST_TFVARS_B64
+```
+
+`operator_config_path` 行を除くのは、CI checkout には operator-config.yaml（gitignore 済み）が
+存在せず `file()` が失敗するため。tfvars は secret ID のみで secret 値を含まない。
+
 > CI は `plan` まで。`apply` は実行しない。
 
 ## deployment profile と cn-operator capability profile

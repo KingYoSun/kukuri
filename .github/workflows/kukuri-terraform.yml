@@ -70,6 +70,16 @@ jobs:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
 
+      # 実運用の tfvars（`cn-operator generate-tfvars` 生成物。secret は ID のみで値を含まない）
+      # を repository variable から復元する。個別 TF_VAR の mirror では実 state と乖離して
+      # plan が prevent_destroy 資源の破棄計画になり失敗するため、tfvars 全体を単一の
+      # 真実源として渡す。更新手順は runbook（community-node-gcp-terraform.md の CI 節）。
+      # terraform.tfvars は TF_VAR_* env より優先されるため、未設定時は従来の env で動く。
+      - name: Materialize terraform.tfvars from repository variable
+        if: ${{ vars.CN_LOW_COST_TFVARS_B64 != '' }}
+        working-directory: infra/terraform/envs/low-cost
+        run: printf '%s' "${{ vars.CN_LOW_COST_TFVARS_B64 }}" | base64 -d > terraform.tfvars
+
       - name: Terraform init (low-cost, GCS backend)
         working-directory: infra/terraform/envs/low-cost
         run: |
