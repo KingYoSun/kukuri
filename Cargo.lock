@@ -2957,10 +2957,14 @@ dependencies = [
  "clap",
  "kukuri-cn-core",
  "kukuri-cn-indexer",
+ "kukuri-cn-operator",
  "kukuri-cn-safety",
+ "kukuri-cn-safety-arachnid",
+ "kukuri-cn-safety-vlm",
  "serde_json",
  "sqlx",
  "tokio",
+ "wiremock",
 ]
 
 [[package]]

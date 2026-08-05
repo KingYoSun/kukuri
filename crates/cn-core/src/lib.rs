@@ -22,6 +22,7 @@ mod env;
 mod errors;
 mod index_entries;
 mod index_scope;
+mod readiness_probe;
 mod relation_optouts;
 mod rendezvous;
 mod reports;
@@ -78,6 +79,7 @@ pub use index_scope::{
     list_indexing_requests, list_supported_topics, register_channel_secret,
     reject_indexing_request, remove_channel_secret, remove_supported_topic, upsert_channel_secret,
 };
+pub use readiness_probe::{ReadinessProbeRecord, list_readiness_probes, upsert_readiness_probe};
 pub use relation_optouts::{
     clear_relation_optout, filter_relation_visible, get_relation_optout, is_relation_opted_out,
     set_relation_optout,

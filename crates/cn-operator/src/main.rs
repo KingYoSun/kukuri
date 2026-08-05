@@ -238,11 +238,9 @@ fn run_safety(action: SafetyCommand) -> Result<ExitCode> {
 /// 表示しない。
 #[cfg(feature = "safety-arachnid")]
 fn run_safety_test_arachnid_shield() -> Result<ExitCode> {
-    use kukuri_cn_safety_arachnid::{ShieldClient, ShieldError, ShieldProviderConfig};
-
-    // 合成 PDQ hash（Shield API の期待形式 = 32 bytes の base64。実画像から計算したものではない。
-    // 2026-07-02 に実 API で形式を確認済み）。
-    const PROBE_PDQ_HASH: &str = "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=";
+    use kukuri_cn_safety_arachnid::{
+        SYNTHETIC_PROBE_PDQ_HASH as PROBE_PDQ_HASH, ShieldClient, ShieldError, ShieldProviderConfig,
+    };
 
     let config = ShieldProviderConfig::from_env()?;
     println!("provider: project-arachnid-shield");

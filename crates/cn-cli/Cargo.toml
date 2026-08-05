@@ -20,7 +20,13 @@ sqlx.workspace = true
 tokio.workspace = true
 kukuri-cn-core = { path = "../cn-core" }
 kukuri-cn-indexer = { path = "../cn-indexer" }
+kukuri-cn-operator = { path = "../cn-operator" }
 kukuri-cn-safety = { path = "../cn-safety" }
+kukuri-cn-safety-arachnid = { path = "../cn-safety-arachnid" }
+kukuri-cn-safety-vlm = { path = "../cn-safety-vlm" }
+
+[dev-dependencies]
+wiremock.workspace = true
 
 [lints]
 workspace = true

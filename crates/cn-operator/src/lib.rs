@@ -44,7 +44,7 @@ pub use safety_config::{
 };
 pub use safety_readiness::{
     PUBLIC_NODE_PROFILE, READINESS_CHECK_IDS, ReadinessCheck, ReadinessReport, ReadinessStatus,
-    evaluate_public_node_readiness,
+    apply_runtime_checks, evaluate_public_node_readiness,
 };
 
 /// `operator init` が出力するサンプル config。
