@@ -43,6 +43,7 @@ fn main() -> Result<()> {
         "desktop-ui-check" => desktop_ui_check(),
         "cn-check" => cn_check(),
         "cn-test" => cn_test(),
+        "cn-e2e" => cn_e2e(),
         "desktop-package" => desktop_package(),
         "release-check" => {
             let tag = args.next();
@@ -107,6 +108,6 @@ fn doctor() -> Result<()> {
 
 fn print_usage() {
     eprintln!(
-        "usage: cargo xtask <doctor|check|test|rust-check|rust-test|app-api-slow-test|tauri-check|desktop-lint|desktop-test|desktop-storybook|desktop-browser-test|desktop-visual-test|desktop-ui-check|cn-check|cn-test|desktop-package|release-check [tag]|oversized-files [--update-baseline]|ipc-types [--check]|e2e-smoke|scenario <name>>"
+        "usage: cargo xtask <doctor|check|test|rust-check|rust-test|app-api-slow-test|tauri-check|desktop-lint|desktop-test|desktop-storybook|desktop-browser-test|desktop-visual-test|desktop-ui-check|cn-check|cn-test|cn-e2e|desktop-package|release-check [tag]|oversized-files [--update-baseline]|ipc-types [--check]|e2e-smoke|scenario <name>>"
     );
 }

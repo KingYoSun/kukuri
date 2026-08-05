@@ -1,0 +1,317 @@
+//! #616 T6: 信頼・申し立て・関係の E2E。
+//!
+//! - 危険信号（UserPubkey 対象。本番と同じ永続化関数で発行）が信頼値の絶対・相対成分へ
+//!   入り、閲覧者に固定された read（viewer = bearer）で読める
+//! - 申し立ての係争中は寄与が据え置かれ、認容で寄与が戻り、訂正信号が読み取り面に反映される
+//!   （申し立て受理の HTTP 経路は cn-user-api の contract test が固定済みのため、ここでは
+//!   handler と同じ遷移関数で状態を進める）
+//! - 関係: 公開トピックの共参加 → 解析後に近接度と近傍が更新される。プライベート
+//!   チャンネル由来の共参加はグラフへ入らない。離脱設定は可逆
+//!
+//! 関係解析は `cn-cli relation analyze` と同じ経路（`PgCoParticipationSource` +
+//! `ArcadeDbRelationGraph` + `analyze_relations`）を同一プロセスで実行する。
+
+use std::time::Duration;
+
+use anyhow::Result;
+use kukuri_cn_core::{IndexEntryStore, RiskSignalCorrection};
+use kukuri_cn_core::{
+    IndexScopeKind, NewIndexEntry, PgCoParticipationSource, dispute_risk_signal,
+    persist_risk_signal, reissue_corrected_risk_signal, update_risk_signal_appeal_status,
+    upsert_scan_verdict,
+};
+use kukuri_cn_e2e::E2eStack;
+use kukuri_cn_indexer::{ArcadeDbConfig, ArcadeDbRelationGraph, analyze_relations};
+use kukuri_cn_safety::provider::SubjectKind;
+use kukuri_cn_safety::{
+    AppealStatus, Basis, ReasonCode, RiskSignalTarget, SafetyAction, SafetyCategory,
+    SafetyRiskSignal, SafetyVerdict, Severity, Visibility,
+};
+use kukuri_core::generate_keys;
+use reqwest::{Client, StatusCode};
+
+const PROJECTION_TIMEOUT: Duration = Duration::from_secs(120);
+
+fn user_risk_signal(
+    target_pubkey: &str,
+    category: SafetyCategory,
+    severity: Severity,
+    basis: Basis,
+    visibility: Visibility,
+) -> SafetyRiskSignal {
+    SafetyRiskSignal {
+        target: RiskSignalTarget::UserPubkey,
+        target_id: target_pubkey.to_string(),
+        category,
+        severity,
+        basis,
+        confidence: Some(100),
+        visibility,
+        expires_at: None,
+        appeal_status: None,
+    }
+}
+
+fn allow_verdict() -> SafetyVerdict {
+    SafetyVerdict {
+        action: SafetyAction::Allow,
+        labels: Vec::new(),
+        critical: false,
+        reason_code: ReasonCode::NoKnownMatch,
+        confidence: None,
+        provider: Some("e2e-seed".to_string()),
+        provider_capability: None,
+        policy_version: "policy-e2e".to_string(),
+        scanned_at: "2026-08-06T00:00:00Z".to_string(),
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn trust_appeal_and_relation_graph_work_end_to_end() -> Result<()> {
+    let Some(stack) = E2eStack::boot("graph").await? else {
+        return Ok(());
+    };
+    let client = Client::new();
+
+    // --- 関係: 公開トピックの共参加 → 解析 → 近接度・近傍 ---
+    let author_a = stack.author.keys.clone();
+    let author_b = generate_keys();
+    let post_a = stack.publish_text_post("共参加の投稿（著者 A）").await?;
+    let post_b = stack
+        .publish_text_post_as(&author_b, "共参加の投稿（著者 B）")
+        .await?;
+    for object_id in [post_a.as_str(), post_b.as_str()] {
+        assert!(
+            stack
+                .wait_for_projection(object_id, PROJECTION_TIMEOUT)
+                .await?,
+            "co-participation post {object_id} did not reach the projection"
+        );
+    }
+
+    // `cn-cli relation analyze` と同じ経路で解析する（定期解析の 1 回分）。
+    let graph = ArcadeDbRelationGraph::new(ArcadeDbConfig::from_env())?;
+    graph.ensure_schema().await?;
+    let source = PgCoParticipationSource::new(stack.pool.clone());
+    let report = analyze_relations(&source, &graph, 100).await?;
+    assert!(
+        report.edges_upserted >= 1,
+        "co-participation must produce at least one edge: {report:?}"
+    );
+
+    let token_a = stack.authenticate_as(&client, &author_a).await?;
+    let pubkey_b = author_b.public_key_hex();
+    let relation_url = format!("{}/v1/relation/users/{pubkey_b}", stack.api_base_url);
+    let relation = client
+        .get(relation_url.as_str())
+        .bearer_auth(token_a.as_str())
+        .send()
+        .await?;
+    assert_eq!(relation.status(), StatusCode::OK);
+    let relation_body = relation.json::<serde_json::Value>().await?;
+    assert_eq!(
+        relation_body["target_pubkey"].as_str(),
+        Some(pubkey_b.as_str())
+    );
+    let neighbors = client
+        .get(format!("{}/v1/relation/neighbors", stack.api_base_url))
+        .bearer_auth(token_a.as_str())
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    let neighbor_list: Vec<&str> = neighbors["neighbors"]
+        .as_array()
+        .map(|list| list.iter().filter_map(|v| v.as_str()).collect())
+        .unwrap_or_default();
+    assert!(
+        neighbor_list.contains(&pubkey_b.as_str()),
+        "author B must appear in author A's neighbors: {neighbors}"
+    );
+
+    // --- 関係: プライベートチャンネル由来の共参加はグラフへ入らない ---
+    let author_c = generate_keys();
+    let pubkey_c = author_c.public_key_hex();
+    for (author, object_id) in [
+        (author_a.public_key_hex(), "private-post-a"),
+        (pubkey_c.clone(), "private-post-c"),
+    ] {
+        let verdict = upsert_scan_verdict(
+            &stack.pool,
+            SubjectKind::Post,
+            &format!("{}-{object_id}", stack.topic_id),
+            &allow_verdict(),
+        )
+        .await?;
+        stack
+            .entries
+            .upsert_entry(&NewIndexEntry {
+                scope_kind: IndexScopeKind::PrivateChannel,
+                scope_id: format!("chan-{}", stack.topic_id),
+                object_id: format!("{}-{object_id}", stack.topic_id),
+                author_pubkey: author,
+                created_at: 1_700_000_000,
+                source_replica_id: format!("channel::chan-{}", stack.topic_id),
+                verdict_id: verdict.id,
+                verdict_action: "allow".to_string(),
+                critical: false,
+            })
+            .await?;
+    }
+    let report = analyze_relations(&source, &graph, 100).await?;
+    let _ = report;
+    let private_pair = client
+        .get(format!(
+            "{}/v1/relation/users/{pubkey_c}",
+            stack.api_base_url
+        ))
+        .bearer_auth(token_a.as_str())
+        .send()
+        .await?;
+    assert_eq!(
+        private_pair.status(),
+        StatusCode::NOT_FOUND,
+        "private-channel co-participation must not enter the public relation graph"
+    );
+
+    // --- 関係: 離脱設定は可逆（設定中は他者から見えず、解除で戻る） ---
+    let token_b = stack.authenticate_as(&client, &author_b).await?;
+    client
+        .put(format!("{}/v1/relation/optout", stack.api_base_url))
+        .bearer_auth(token_b.as_str())
+        .send()
+        .await?
+        .error_for_status()?;
+    let hidden = client
+        .get(relation_url.as_str())
+        .bearer_auth(token_a.as_str())
+        .send()
+        .await?;
+    assert_eq!(
+        hidden.status(),
+        StatusCode::NOT_FOUND,
+        "opted-out user must be hidden"
+    );
+    client
+        .delete(format!("{}/v1/relation/optout", stack.api_base_url))
+        .bearer_auth(token_b.as_str())
+        .send()
+        .await?
+        .error_for_status()?;
+    let visible_again = client
+        .get(relation_url.as_str())
+        .bearer_auth(token_a.as_str())
+        .send()
+        .await?;
+    assert_eq!(
+        visible_again.status(),
+        StatusCode::OK,
+        "opt-out must be reversible"
+    );
+
+    // --- 信頼: 危険信号が絶対・相対成分へ入り、根拠つきで読める ---
+    persist_risk_signal(
+        &stack.pool,
+        "e2e-issuer-node",
+        &user_risk_signal(
+            pubkey_b.as_str(),
+            SafetyCategory::Csam,
+            Severity::Critical,
+            Basis::KnownHashMatch,
+            Visibility::Public,
+        ),
+    )
+    .await?;
+    let relative_signal = persist_risk_signal(
+        &stack.pool,
+        "e2e-issuer-node",
+        &user_risk_signal(
+            pubkey_b.as_str(),
+            SafetyCategory::Nsfw,
+            Severity::High,
+            Basis::ClassifierScore,
+            Visibility::Local,
+        ),
+    )
+    .await?;
+    let trust_url = format!("{}/v1/trust/users/{pubkey_b}", stack.api_base_url);
+    let read_trust = || async {
+        anyhow::Ok(
+            client
+                .get(trust_url.as_str())
+                .bearer_auth(token_a.as_str())
+                .send()
+                .await?
+                .error_for_status()?
+                .json::<serde_json::Value>()
+                .await?,
+        )
+    };
+    let initial = read_trust().await?;
+    let initial_relative = initial["relative"].as_f64().unwrap();
+    assert!(
+        initial["absolute"].as_f64().unwrap() <= -1.0 + 1e-9,
+        "confirmed CSAM signal must floor the absolute component: {initial}"
+    );
+    assert!(
+        initial_relative < 0.0,
+        "classifier signal must weigh on the relative component: {initial}"
+    );
+
+    // --- 申し立て: 係争中は寄与据え置き → 認容で寄与が戻る → 訂正信号が反映される ---
+    // （HTTP の申し立て受理経路は cn-user-api の contract test が固定済み。ここでは
+    //   handler と同じ遷移関数で係争 → 認容を進める）
+    dispute_risk_signal(&stack.pool, relative_signal.id.as_str()).await?;
+    let disputed = read_trust().await?;
+    assert_eq!(
+        disputed["relative"].as_f64().unwrap(),
+        initial_relative,
+        "disputed contribution must stay in place until resolution: {disputed}"
+    );
+
+    update_risk_signal_appeal_status(
+        &stack.pool,
+        relative_signal.id.as_str(),
+        AppealStatus::Cleared,
+    )
+    .await?;
+    let cleared = read_trust().await?;
+    assert!(
+        cleared["relative"].as_f64().unwrap() > initial_relative,
+        "accepted appeal must restore the relative component: {cleared}"
+    );
+
+    // 訂正信号の再発行: 旧信号を失効させ、訂正内容の新信号が根拠に現れる。
+    let corrected = reissue_corrected_risk_signal(
+        &stack.pool,
+        relative_signal.id.as_str(),
+        &RiskSignalCorrection {
+            severity: Some(Severity::Low),
+            confidence: Some(10),
+            ..RiskSignalCorrection::default()
+        },
+        chrono::Utc::now().to_rfc3339().as_str(),
+        true,
+    )
+    .await?;
+    let after_correction = read_trust().await?;
+    let basis_ids: Vec<&str> = after_correction["basis"]
+        .as_array()
+        .map(|list| {
+            list.iter()
+                .filter_map(|entry| entry["signal_id"].as_str())
+                .collect()
+        })
+        .unwrap_or_default();
+    assert!(
+        basis_ids.contains(&corrected.id.as_str()),
+        "corrected signal must appear in the trust evidence: {after_correction}"
+    );
+    assert!(
+        !basis_ids.contains(&relative_signal.id.as_str()),
+        "expired original signal must no longer appear: {after_correction}"
+    );
+
+    stack.shutdown().await
+}

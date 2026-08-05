@@ -1,0 +1,43 @@
+[package]
+name = "kukuri-cn-e2e"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[package.metadata.kukuri]
+cn-lane = true
+
+# #616 全構成 E2E 専用のテスト crate。出荷物ではないため、harness（src/）も
+# 通常依存に置く（テストからのみ使う）。実行は `cargo xtask cn-e2e`（実 Postgres /
+# 実 ArcadeDB / Redis を compose で用意し、`KUKURI_CN_RUN_E2E_TESTS=1` で発火する）。
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+chrono.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+reqwest.workspace = true
+wiremock.workspace = true
+tempfile.workspace = true
+sqlx.workspace = true
+kukuri-core = { path = "../core" }
+kukuri-transport = { path = "../transport" }
+kukuri-iroh-node = { path = "../iroh-node" }
+kukuri-docs-sync = { path = "../docs-sync" }
+kukuri-blob-service = { path = "../blob-service" }
+kukuri-test-support = { path = "../test-support" }
+kukuri-cn-core = { path = "../cn-core" }
+kukuri-cn-runtime-support = { path = "../cn-runtime-support" }
+kukuri-cn-indexer = { path = "../cn-indexer" }
+kukuri-cn-user-api = { path = "../cn-user-api" }
+kukuri-cn-operator = { path = "../cn-operator" }
+kukuri-cn-protocol = { path = "../cn-protocol" }
+kukuri-cn-safety = { path = "../cn-safety" }
+kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }
+kukuri-cn-safety-arachnid = { path = "../cn-safety-arachnid" }
+kukuri-cn-safety-vlm = { path = "../cn-safety-vlm" }
+kukuri-cn-iroh-relay = { path = "../cn-iroh-relay" }
+
+[lints]
+workspace = true
