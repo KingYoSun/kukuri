@@ -357,6 +357,21 @@ fn render_low_cost_tfvars(config: &ResolvedConfig, deploy: &DeployConfig) -> Str
         deploy.media_fetch_timeout_secs
     );
 
+    // ユーザー向け読み取り面（索引 query / 信頼 read）の環境変数 gate。features の
+    // community_index / community_local_trust を真実源として導出する。環境変数が真でも、
+    // `cn-cli readiness` の全項目合格記録（有効化の関門）が無ければ面は公開されない。
+    let _ = writeln!(out);
+    let _ = writeln!(
+        out,
+        "index_query_enabled = {}",
+        config.enabled(crate::Capability::CommunityIndex)
+    );
+    let _ = writeln!(
+        out,
+        "trust_read_enabled  = {}",
+        config.enabled(crate::Capability::CommunityLocalTrust)
+    );
+
     // operator-config.yaml 自体を VM に配置して manifest endpoint / report_endpoint gating を
     // 有効化する。中身はこの tfvars には埋めず、Terraform 側の .tf で file() する。
     let _ = writeln!(out);
