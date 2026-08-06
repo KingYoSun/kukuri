@@ -1,5 +1,6 @@
 //! user-api の実行時 state(DI)と構築。
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -12,7 +13,7 @@ use kukuri_cn_indexer::{
     ArcadeDbConfig, ArcadeDbProjection, ArcadeDbRelationGraph, FailClosedIndexQuery, IndexQuery,
 };
 use kukuri_cn_operator::{
-    CommunityNodeManifest, READINESS_CHECK_IDS, build_manifest, load_and_validate,
+    CommunityNodeManifest, READINESS_CHECK_IDS, build_manifest, generate_all, load_and_validate,
 };
 use kukuri_cn_protocol::{CommunityNodeBootstrapNode, CommunityNodeResolvedUrls};
 use kukuri_cn_trust::{RelationStore, TrustParams};
@@ -28,6 +29,8 @@ pub struct UserApiState {
     pub(crate) self_node: CommunityNodeBootstrapNode,
     /// 公開する manifest(operator config が設定されている場合のみ)。
     pub(crate) manifest: Option<Arc<CommunityNodeManifest>>,
+    /// manifest が指す公開開示文書。operator config と同じ入力から決定論的に生成する。
+    pub(crate) public_disclosures: Arc<BTreeMap<String, String>>,
     /// private channel の indexing request で受け取る channel secret を at-rest 暗号化する cipher。
     /// 鍵 material(`COMMUNITY_NODE_CHANNEL_SECRET_KEY`)が未設定なら None で、private channel の
     /// indexing request は受け付けない(secret を平文保存しないため)。
@@ -98,6 +101,13 @@ impl UserApiState {
 #[derive(Clone)]
 pub(crate) struct ManifestState {
     pub(crate) manifest: Option<Arc<CommunityNodeManifest>>,
+    pub(crate) public_disclosures: Arc<BTreeMap<String, String>>,
+}
+
+struct LoadedManifest {
+    manifest: Option<Arc<CommunityNodeManifest>>,
+    public_disclosures: Arc<BTreeMap<String, String>>,
+    operator_config_yaml: Vec<u8>,
 }
 
 pub async fn build_state(config: &UserApiConfig) -> Result<UserApiState> {
@@ -117,7 +127,11 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
         config.rendezvous_redis_url.as_str(),
         config.rendezvous_key_prefix.as_str(),
     )?;
-    let (manifest, operator_config_yaml) = load_manifest(config.operator_config_path.as_deref())?;
+    let LoadedManifest {
+        manifest,
+        public_disclosures,
+        operator_config_yaml,
+    } = load_manifest(config.operator_config_path.as_deref())?;
     let channel_secret_cipher = config
         .channel_secret_key
         .as_deref()
@@ -221,6 +235,7 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
             )?,
         },
         manifest,
+        public_disclosures,
         channel_secret_cipher,
         index_query,
         trust_read,
@@ -249,16 +264,36 @@ async fn activation_is_valid(
 ///
 /// config が指定されているのに読込・検証に失敗した場合は起動を失敗させる
 /// (運営者の設定ミスを黙って無視せず、明示的に止める)。
-fn load_manifest(
-    path: Option<&std::path::Path>,
-) -> Result<(Option<Arc<CommunityNodeManifest>>, Vec<u8>)> {
+fn load_manifest(path: Option<&std::path::Path>) -> Result<LoadedManifest> {
     let Some(path) = path else {
-        return Ok((None, Vec::new()));
+        return Ok(LoadedManifest {
+            manifest: None,
+            public_disclosures: Arc::new(BTreeMap::new()),
+            operator_config_yaml: Vec::new(),
+        });
     };
     let yaml = std::fs::read_to_string(path)
         .with_context(|| format!("failed to read operator config at {}", path.display()))?;
     let resolved = load_and_validate(&yaml)
         .with_context(|| format!("invalid operator config at {}", path.display()))?;
     let bytes = yaml.as_bytes().to_vec();
-    Ok((Some(Arc::new(build_manifest(&resolved))), bytes))
+    let public_disclosures = generate_all(&resolved)
+        .into_iter()
+        .filter(|file| {
+            matches!(
+                file.filename.as_str(),
+                "terms.md"
+                    | "privacy-policy.md"
+                    | "external-transmission-notice.md"
+                    | "moderation-policy.md"
+                    | "abuse-policy.md"
+            )
+        })
+        .map(|file| (file.filename, file.content))
+        .collect();
+    Ok(LoadedManifest {
+        manifest: Some(Arc::new(build_manifest(&resolved))),
+        public_disclosures: Arc::new(public_disclosures),
+        operator_config_yaml: bytes,
+    })
 }

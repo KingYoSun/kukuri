@@ -714,11 +714,17 @@ async fn indexing_startup_requires_validated_relay() -> Result<()> {
             .validate_for_startup()
             .is_err()
     );
-    // 自前 relay 有り、または外部 relay 有りで起動できる。
+    // 自前 relay は runtime が接続に使える公開 URL も必要。外部 relay URL でも起動できる。
+    assert!(
+        RelayConfig::new(true, vec![])
+            .with_own_relay_urls(vec!["https://own-relay.example.net".to_string()])
+            .validate_for_startup()
+            .is_ok()
+    );
     assert!(
         RelayConfig::new(true, vec![])
             .validate_for_startup()
-            .is_ok()
+            .is_err()
     );
     assert!(
         RelayConfig::new(false, vec!["https://relay.example.net".to_string()])

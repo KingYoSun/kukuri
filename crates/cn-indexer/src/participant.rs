@@ -17,10 +17,11 @@ use tracing::{info, warn};
 
 use kukuri_cn_core::{
     ChannelSecretCipher, IndexEntryStore, IndexScopeKind, list_channel_secrets,
-    list_supported_topics,
+    list_supported_topics, load_bootstrap_seed_peers,
 };
 use kukuri_core::ReplicaId;
 use kukuri_docs_sync::{DocsSync, private_channel_replica_id, topic_replica_id};
+use kukuri_transport::SeedPeer;
 
 use crate::ingest::{IngestPipeline, IngestSummary};
 use crate::projection::IndexProjection;
@@ -59,6 +60,7 @@ pub struct IndexerParticipant {
     projection: Arc<dyn IndexProjection>,
     pipeline: IngestPipeline,
     channel_secret_cipher: ChannelSecretCipher,
+    configured_seed_peers: Option<Vec<SeedPeer>>,
 }
 
 impl IndexerParticipant {
@@ -77,7 +79,38 @@ impl IndexerParticipant {
             projection,
             pipeline,
             channel_secret_cipher,
+            configured_seed_peers: None,
         }
+    }
+
+    pub fn with_configured_seed_peers(mut self, peers: Vec<SeedPeer>) -> Self {
+        self.configured_seed_peers = Some(peers);
+        self
+    }
+
+    /// desktop heartbeat が Postgres に保持する active peer を docs sync へ反映する。
+    /// operator 指定 seed は残し、同じ endpoint の fresh addr_hint は heartbeat 側で更新する。
+    async fn refresh_seed_peers(&self) -> Result<()> {
+        let Some(configured) = self.configured_seed_peers.as_deref() else {
+            return Ok(());
+        };
+        let active = load_bootstrap_seed_peers(&self.pool, None, None)
+            .await?
+            .into_iter()
+            .map(|peer| SeedPeer {
+                endpoint_id: peer.endpoint_id,
+                addr_hint: peer.addr_hint,
+            })
+            .collect::<Vec<_>>();
+        let peers = merge_seed_peers(configured, &active);
+        self.docs_sync.set_seed_peers(peers.clone()).await?;
+        info!(
+            configured = configured.len(),
+            active = active.len(),
+            applied = peers.len(),
+            "refreshed docs sync seed peers from active bootstrap registrations"
+        );
+        Ok(())
     }
 
     /// いま index 対象であるべき scope を返す（#613 T2。読み取りのみ、副作用なし）。
@@ -112,6 +145,8 @@ impl IndexerParticipant {
     /// capability（channel secret）を docs へ登録してから open する。secret 未登録の private channel は
     /// open せず warn する（secret 無しでは index しない）。
     pub async fn restore_scopes(&self) -> Result<Vec<ScopeReplica>> {
+        self.refresh_seed_peers().await?;
+
         // private channel の capability を先に docs へ登録する。
         let secrets = list_channel_secrets(&self.pool, &self.channel_secret_cipher).await?;
         for secret in &secrets {
@@ -217,6 +252,21 @@ impl IndexerParticipant {
     }
 }
 
+fn merge_seed_peers(configured: &[SeedPeer], active: &[SeedPeer]) -> Vec<SeedPeer> {
+    let mut peers = std::collections::BTreeMap::new();
+    for peer in configured.iter().chain(active.iter()) {
+        peers
+            .entry(peer.endpoint_id.clone())
+            .and_modify(|existing: &mut SeedPeer| {
+                if peer.addr_hint.is_some() {
+                    existing.addr_hint.clone_from(&peer.addr_hint);
+                }
+            })
+            .or_insert_with(|| peer.clone());
+    }
+    peers.into_values().collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -231,5 +281,23 @@ mod tests {
     fn private_channel_scope_maps_to_channel_replica() {
         let scope = ScopeReplica::from_scope(IndexScopeKind::PrivateChannel, "secret-room");
         assert_eq!(scope.replica_id.as_str(), "channel::secret-room");
+    }
+
+    #[test]
+    fn active_bootstrap_peer_refreshes_configured_addr_hint() {
+        let endpoint_id = "1".repeat(64);
+        let peers = merge_seed_peers(
+            &[SeedPeer {
+                endpoint_id: endpoint_id.clone(),
+                addr_hint: None,
+            }],
+            &[SeedPeer {
+                endpoint_id: endpoint_id.clone(),
+                addr_hint: Some("192.0.2.10:4433".to_string()),
+            }],
+        );
+        assert_eq!(peers.len(), 1);
+        assert_eq!(peers[0].endpoint_id, endpoint_id);
+        assert_eq!(peers[0].addr_hint.as_deref(), Some("192.0.2.10:4433"));
     }
 }

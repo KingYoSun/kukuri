@@ -29,6 +29,8 @@ pub const SAFETY_PROVIDER_UNKNOWN_CSAM_ENV: &str = "COMMUNITY_NODE_SAFETY_PROVID
 pub const SAFETY_EMIT_SIGNED_EVENTS_ENV: &str = "COMMUNITY_NODE_SAFETY_EMIT_SIGNED_EVENTS";
 /// signed event 無効時に risk signal issuer として使う node id。
 pub const SAFETY_ISSUER_NODE_ID_ENV: &str = "COMMUNITY_NODE_SAFETY_ISSUER_NODE_ID";
+/// 自前 relay を cn-indexer の iroh runtime へ渡す公開 URL。
+pub const CONNECTIVITY_URLS_ENV: &str = "COMMUNITY_NODE_CONNECTIVITY_URLS";
 /// suspected 判定の classifier スコア閾値（1-100。未設定なら policy 既定 70。ADR 0028 §2.2）。
 pub const SAFETY_SUSPECTED_THRESHOLD_ENV: &str = "COMMUNITY_NODE_SAFETY_SUSPECTED_THRESHOLD";
 /// suspected advisory の配布 visibility（`local` / `subscribed_nodes` / `public`。
@@ -54,6 +56,7 @@ pub enum RelayValidation {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RelayConfig {
     pub has_own_relay: bool,
+    pub own_relay_urls: Vec<String>,
     pub external_relay_urls: Vec<String>,
 }
 
@@ -61,8 +64,25 @@ impl RelayConfig {
     pub fn new(has_own_relay: bool, external_relay_urls: Vec<String>) -> Self {
         Self {
             has_own_relay,
+            own_relay_urls: Vec::new(),
             external_relay_urls: normalize_relay_urls(external_relay_urls),
         }
+    }
+
+    pub fn with_own_relay_urls(mut self, own_relay_urls: Vec<String>) -> Self {
+        self.own_relay_urls = normalize_relay_urls(own_relay_urls);
+        self
+    }
+
+    /// iroh node へ実際に渡す relay URL。自前 / 外部を区別せず重複排除する。
+    pub fn runtime_relay_urls(&self) -> Vec<String> {
+        normalize_relay_urls(
+            self.own_relay_urls
+                .iter()
+                .chain(self.external_relay_urls.iter())
+                .cloned()
+                .collect(),
+        )
     }
 
     /// indexing 起動の relay validation gate（ADR 0025 §6.4）。
@@ -70,14 +90,16 @@ impl RelayConfig {
     /// 自前 relay も外部 relay も無ければ `Err`（indexing を起動しない）。どちらかが有れば
     /// どの経路で成立したかを返す。
     pub fn validate_for_startup(&self) -> Result<RelayValidation> {
+        let has_own = self.has_own_relay && !self.own_relay_urls.is_empty();
         let has_external = !self.external_relay_urls.is_empty();
-        match (self.has_own_relay, has_external) {
+        match (has_own, has_external) {
             (true, true) => Ok(RelayValidation::OwnAndExternalRelay),
             (true, false) => Ok(RelayValidation::OwnRelay),
             (false, true) => Ok(RelayValidation::ExternalRelay),
             (false, false) => bail!(
                 "cn-indexer requires a validated relay to start indexing: enable the node's own \
-                 iroh_relay capability or configure COMMUNITY_NODE_INDEXER_EXTERNAL_RELAY_URLS"
+                 iroh_relay capability with COMMUNITY_NODE_CONNECTIVITY_URLS or configure \
+                 COMMUNITY_NODE_INDEXER_EXTERNAL_RELAY_URLS"
             ),
         }
     }
@@ -269,6 +291,11 @@ impl IndexerConfig {
             .into();
         let has_own_relay =
             kukuri_cn_core::parse_bool_env("COMMUNITY_NODE_INDEXER_OWN_RELAY", false)?;
+        let own_relay_urls = if has_own_relay {
+            kukuri_cn_core::parse_csv_env(CONNECTIVITY_URLS_ENV)
+        } else {
+            Vec::new()
+        };
         let external_relay_urls =
             kukuri_cn_core::parse_csv_env("COMMUNITY_NODE_INDEXER_EXTERNAL_RELAY_URLS");
         let channel_secret_key = std::env::var("COMMUNITY_NODE_CHANNEL_SECRET_KEY")
@@ -310,7 +337,8 @@ impl IndexerConfig {
         Ok(Self {
             database_url,
             data_dir,
-            relay: RelayConfig::new(has_own_relay, external_relay_urls),
+            relay: RelayConfig::new(has_own_relay, external_relay_urls)
+                .with_own_relay_urls(own_relay_urls),
             channel_secret_key,
             arcadedb,
             safety,
@@ -437,6 +465,7 @@ mod tests {
         "COMMUNITY_NODE_DATABASE_URL",
         "COMMUNITY_NODE_INDEXER_DATA_DIR",
         "COMMUNITY_NODE_INDEXER_OWN_RELAY",
+        CONNECTIVITY_URLS_ENV,
         "COMMUNITY_NODE_INDEXER_EXTERNAL_RELAY_URLS",
         "COMMUNITY_NODE_CHANNEL_SECRET_KEY",
         "COMMUNITY_NODE_ARCADEDB_URL",
@@ -505,11 +534,32 @@ mod tests {
 
     #[test]
     fn startup_succeeds_with_own_relay() {
-        let config = RelayConfig::new(true, vec![]);
+        let config = RelayConfig::new(true, vec![])
+            .with_own_relay_urls(vec!["https://relay.example.net".to_string()]);
         assert_eq!(
             config.validate_for_startup().unwrap(),
             RelayValidation::OwnRelay
         );
+    }
+
+    #[test]
+    fn own_relay_env_supplies_runtime_relay_url() {
+        with_clean_indexer_env(|| {
+            set_minimal_indexer_env();
+            unsafe {
+                std::env::set_var("COMMUNITY_NODE_INDEXER_OWN_RELAY", "true");
+                std::env::set_var(
+                    "COMMUNITY_NODE_CONNECTIVITY_URLS",
+                    "https://iroh-relay.example.net",
+                );
+            }
+
+            let config = IndexerConfig::from_env().unwrap();
+            assert_eq!(
+                config.relay.own_relay_urls,
+                vec!["https://iroh-relay.example.net"]
+            );
+        });
     }
 
     #[test]
@@ -523,7 +573,8 @@ mod tests {
 
     #[test]
     fn startup_reports_both_when_own_and_external_present() {
-        let config = RelayConfig::new(true, vec!["https://relay.example.net".to_string()]);
+        let config = RelayConfig::new(true, vec!["https://external-relay.example.net".to_string()])
+            .with_own_relay_urls(vec!["https://own-relay.example.net".to_string()]);
         assert_eq!(
             config.validate_for_startup().unwrap(),
             RelayValidation::OwnAndExternalRelay
@@ -548,6 +599,15 @@ mod tests {
             ],
         );
         assert_eq!(config.external_relay_urls.len(), 1);
+    }
+
+    #[test]
+    fn own_relay_without_connectivity_url_fails_closed() {
+        assert!(
+            RelayConfig::new(true, vec![])
+                .validate_for_startup()
+                .is_err()
+        );
     }
 
     #[test]

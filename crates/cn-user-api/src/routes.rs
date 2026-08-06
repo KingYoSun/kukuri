@@ -1,6 +1,7 @@
 //! route 定義と起動(serve / tracing)。desktop 対向のパスは kukuri-cn-protocol の
 //! 定数を参照する(パス変更が client / server 両側にコンパイルエラーとして届く)。
 
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -37,7 +38,10 @@ use crate::rate_limit::apply_rate_limit;
 use crate::state::{ManifestState, UserApiState, build_runtime_state};
 
 pub fn app_router(state: UserApiState) -> Router {
-    let manifest = manifest_routes(state.manifest.clone());
+    let manifest = manifest_routes(
+        state.manifest.clone(),
+        Arc::clone(&state.public_disclosures),
+    );
     let api = Router::new()
         .route("/healthz", get(healthz))
         .route(AUTH_CHALLENGE_PATH, post(auth_challenge))
@@ -72,14 +76,68 @@ pub fn app_router(state: UserApiState) -> Router {
 /// `GET /.well-known/kukuri/community-node.json` と `GET /v1/node/manifest` の
 /// 両方を同じ handler で提供する。manifest 単独でテスト・配信できるよう、DB を
 /// 必要としない最小 state を持つ独立 router にしている。
-pub fn manifest_routes(manifest: Option<Arc<CommunityNodeManifest>>) -> Router {
+pub fn manifest_routes(
+    manifest: Option<Arc<CommunityNodeManifest>>,
+    public_disclosures: Arc<BTreeMap<String, String>>,
+) -> Router {
     Router::new()
         .route(
             "/.well-known/kukuri/community-node.json",
             get(node_manifest),
         )
         .route(NODE_MANIFEST_PATH, get(node_manifest))
-        .with_state(ManifestState { manifest })
+        .route("/terms", get(terms))
+        .route("/privacy", get(privacy))
+        .route("/external-transmission", get(external_transmission))
+        .route("/moderation-policy", get(moderation_policy))
+        .route("/abuse-policy", get(abuse_policy))
+        .with_state(ManifestState {
+            manifest,
+            public_disclosures,
+        })
+}
+
+async fn terms(State(state): State<ManifestState>) -> Response {
+    disclosure_response(&state, "terms.md")
+}
+
+async fn privacy(State(state): State<ManifestState>) -> Response {
+    disclosure_response(&state, "privacy-policy.md")
+}
+
+async fn external_transmission(State(state): State<ManifestState>) -> Response {
+    disclosure_response(&state, "external-transmission-notice.md")
+}
+
+async fn moderation_policy(State(state): State<ManifestState>) -> Response {
+    disclosure_response(&state, "moderation-policy.md")
+}
+
+async fn abuse_policy(State(state): State<ManifestState>) -> Response {
+    disclosure_response(&state, "abuse-policy.md")
+}
+
+fn disclosure_response(state: &ManifestState, filename: &str) -> Response {
+    let Some(content) = state.public_disclosures.get(filename) else {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "error": "disclosure_not_configured",
+                "message": "this community node does not publish this disclosure"
+            })),
+        )
+            .into_response();
+    };
+    let mut response = content.clone().into_response();
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/markdown; charset=utf-8"),
+    );
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("public, max-age=300"),
+    );
+    response
 }
 
 /// public manifest を返す。設定されていなければ 404(client は別経路へ fallback)。

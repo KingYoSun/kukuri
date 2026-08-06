@@ -136,7 +136,7 @@ async fn run(config: IndexerConfig) -> Result<()> {
                 TransportNetworkConfig::from_env()?,
                 DhtDiscoveryOptions::disabled(),
                 TransportRelayConfig {
-                    iroh_relay_urls: config.relay.external_relay_urls.clone(),
+                    iroh_relay_urls: config.relay.runtime_relay_urls(),
                 }
                 .normalized(),
             )
@@ -306,7 +306,8 @@ async fn compose_ingest_stack(
         projection,
         pipeline,
         cipher,
-    );
+    )
+    .with_configured_seed_peers(config.seed_peers.clone());
     Ok((participant, docs_sync))
 }
 

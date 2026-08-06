@@ -56,6 +56,13 @@ private channel だけを `restore_scopes()` が開く（鍵が無ければ索�
 `COMMUNITY_NODE_CHANNEL_SECRET_KEY` / `COMMUNITY_NODE_ARCADEDB_*` /
 `COMMUNITY_NODE_SAFETY_*` / `COMMUNITY_NODE_MEDIA_FETCH_*` は変更なし。
 
+`COMMUNITY_NODE_INDEXER_OWN_RELAY=true` の場合、実際の iroh 接続先は
+`COMMUNITY_NODE_CONNECTIVITY_URLS` から解決する。フラグだけが設定され URL が空なら起動を
+fail-closed する。`COMMUNITY_NODE_INDEXER_EXTERNAL_RELAY_URLS` と併用した場合は両方を重複除去して使う。
+また resident worker は固定の `COMMUNITY_NODE_INDEXER_SEED_PEERS` に加え、Valkey の active
+bootstrap 登録を各 restore / 全件見直しで再取得する。これにより稼働中 client の endpoint と
+`addr_hint` を再起動なしで docs 同期へ反映する。
+
 ## テスト
 
 - **ループ契約（`tests/worker_contracts.rs`、`KUKURI_CN_RUN_INTEGRATION_TESTS=1`）**: 起動時

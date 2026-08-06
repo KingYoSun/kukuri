@@ -2,30 +2,38 @@
 //!
 //! manifest endpoint は DB を必要としないため、`manifest_routes` を単独でサーブして検証する。
 
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use kukuri_cn_operator::{build_manifest, load_and_validate};
+use kukuri_cn_operator::{build_manifest, generate_all, load_and_validate};
 use kukuri_cn_user_api::manifest_routes;
 use reqwest::{Client, StatusCode};
 
 async fn spawn_manifest_server(
     yaml: Option<&str>,
 ) -> Result<(String, tokio::task::JoinHandle<()>)> {
-    let manifest = match yaml {
+    let (manifest, disclosures) = match yaml {
         Some(yaml) => {
             let resolved = load_and_validate(yaml).context("config must validate")?;
-            Some(Arc::new(build_manifest(&resolved)))
+            let disclosures = generate_all(&resolved)
+                .into_iter()
+                .map(|file| (file.filename, file.content))
+                .collect();
+            (
+                Some(Arc::new(build_manifest(&resolved))),
+                Arc::new(disclosures),
+            )
         }
-        None => None,
+        None => (None, Arc::new(BTreeMap::new())),
     };
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .context("bind manifest test listener")?;
     let addr = listener.local_addr()?;
     let base_url = format!("http://{addr}");
-    let app = manifest_routes(manifest);
+    let app = manifest_routes(manifest, disclosures);
     let task = tokio::spawn(async move {
         axum::serve(
             listener,
@@ -35,6 +43,23 @@ async fn spawn_manifest_server(
         .expect("manifest server");
     });
     Ok((base_url, task))
+}
+
+#[tokio::test]
+async fn disclosure_urls_serve_markdown_from_operator_config_output() -> Result<()> {
+    let (base_url, task) = spawn_manifest_server(Some(SAMPLE_YAML)).await?;
+    let response = Client::new()
+        .get(format!("{base_url}/terms"))
+        .send()
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers()[reqwest::header::CONTENT_TYPE],
+        "text/markdown; charset=utf-8"
+    );
+    assert!(response.text().await?.contains("Example Operator"));
+    task.abort();
+    Ok(())
 }
 
 const SAMPLE_YAML: &str = r#"server:
