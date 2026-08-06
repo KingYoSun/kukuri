@@ -60,24 +60,21 @@ fn explicit_feature_overrides_profile() {
 }
 
 #[test]
-fn planned_capability_without_ack_fails() {
+fn promoted_capability_validates_without_ack() {
+    // #617: index / moderation / local trust は提供中へ昇格済み。承認フラグ無しで有効化できる。
     let yaml = base_config("  moderation: true\n", false);
-    let err = load_and_validate(&yaml).unwrap_err();
-    assert!(
-        err.to_string().contains("acknowledge_planned_capabilities"),
-        "error should explain the Phase B ack guard: {err}"
-    );
+    let resolved = load_and_validate(&yaml).unwrap();
+    assert!(resolved.enabled(Capability::Moderation));
+    assert!(resolved.enabled_planned_capabilities().is_empty());
 }
 
 #[test]
-fn planned_capability_with_ack_validates() {
+fn acknowledge_flag_remains_accepted_for_compatibility() {
+    // 既存 config の後方互換: 承認フラグが設定されていてもエラーにしない。
     let yaml = base_config("  moderation: true\n", true);
     let resolved = load_and_validate(&yaml).unwrap();
     assert!(resolved.enabled(Capability::Moderation));
-    assert_eq!(
-        resolved.enabled_planned_capabilities(),
-        vec![Capability::Moderation]
-    );
+    assert!(resolved.enabled_planned_capabilities().is_empty());
 }
 
 #[test]
@@ -145,12 +142,14 @@ fn manifest_has_authority_scope_and_p2p_boundary() {
     assert!(does_not.iter().any(|v| v == "user_identity"));
     assert!(does_not.iter().any(|v| v == "kukuri_network_as_a_whole"));
 
-    // capability_scope は available と planned を分離する。
+    // capability_scope は available と planned を分離する。#617 の昇格後、moderation は
+    // available 側に入り、planned は空になる。
     let scope = &m["capability_scope"];
     assert!(scope["available_enabled"].is_array());
     assert!(scope["planned_enabled"].is_array());
-    let planned = scope["planned_enabled"].as_array().unwrap();
-    assert!(planned.iter().any(|v| v == "moderation"));
+    let available = scope["available_enabled"].as_array().unwrap();
+    assert!(available.iter().any(|v| v == "moderation"));
+    assert!(scope["planned_enabled"].as_array().unwrap().is_empty());
 }
 
 #[test]
@@ -257,14 +256,13 @@ fn cloudflare_enabled_emits_external_transmission() {
 }
 
 #[test]
-fn planned_capability_marked_as_planned_not_operating() {
-    let yaml = base_config("  moderation: true\n", true);
+fn promoted_capability_listed_as_operating() {
+    // #617 の昇格後、moderation は運用中の補助機能として記載され、「計画中」分離は出ない。
+    let yaml = base_config("  moderation: true\n", false);
     let resolved = load_and_validate(&yaml).unwrap();
     let svc = doc(&generate_all(&resolved), "service-description-draft.md");
-    assert!(svc.contains("計画中（この配布物では未提供）"));
-    // moderation は「運用中の補助機能」セクションに出ない（capability が Planned のため）。
-    let operating_section = svc.split("計画中").next().unwrap();
-    assert!(!operating_section.contains("### モデレーション"));
+    assert!(!svc.contains("計画中（この配布物では未提供）"));
+    assert!(svc.contains("モデレーション"));
 }
 
 #[test]

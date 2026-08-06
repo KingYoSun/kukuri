@@ -12,8 +12,8 @@ use crate::capability::Capability;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Profile {
-    /// community index / moderation / community-local trust（いずれも計画中）。
-    /// private message storage / blob cache / analytics / crash report は無効。
+    /// community index / moderation / community-local trust を含む拡張機能は無効。
+    /// private message storage / blob cache / analytics / crash report も無効。
     Minimal,
     /// minimal + 専用 iroh relay + 暗号化済み traffic fallback 開示。
     RelayEnabled,
