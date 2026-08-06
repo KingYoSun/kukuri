@@ -161,9 +161,28 @@ async fn disallowed_content_never_surfaces_and_verdict_flip_hides_entries() -> R
     }
     assert!(hidden, "flipped verdict must hide the entry");
 
-    // 索引解除後も安全側不変条件は保たれている（非許可の表出 0）。
+    // 索引解除後も安全側不変条件は保たれている。読み取り面の非表示は即時だが、
+    // 真実源の索引行の削除は再走査の巡内でわずかに遅れる（判定更新 → 行削除の間は
+    // 一時的に「非許可の表出」が数えられ得る）ため、削除完了までは有界に待ち、
+    // 最終状態で表出 0 を固定する。
+    let deadline = tokio::time::Instant::now() + PROJECTION_TIMEOUT;
+    let mut deindexed = false;
+    while tokio::time::Instant::now() < deadline {
+        if inspect_index_integrity(&stack.pool)
+            .await?
+            .index_entries_total
+            == 0
+        {
+            deindexed = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(300)).await;
+    }
+    assert!(
+        deindexed,
+        "flipped entry must be removed from the index truth"
+    );
     let findings = inspect_index_integrity(&stack.pool).await?;
-    assert_eq!(findings.index_entries_total, 0, "{findings:?}");
     assert_eq!(findings.non_allow_or_critical_surfaced, 0, "{findings:?}");
 
     stack.shutdown().await

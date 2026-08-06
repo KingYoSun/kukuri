@@ -308,6 +308,33 @@ fn safety_providers_surface_in_external_transmission_notice() {
 }
 
 #[test]
+fn data_retention_lists_storage_classes_for_index_stack() {
+    // #617 T4: 索引・モデレーション・信頼の系統が有効な node では、データ区分と保存先・
+    // 再構築/バックアップ区分が保持ポリシーへ載る。
+    let yaml = config_with_safety_providers("      hosting: self_host\n");
+    let resolved = load_and_validate(&yaml).unwrap();
+    let retention = doc(&generate_all(&resolved), "data-retention-policy.md");
+    assert!(retention.contains("データ区分と保存先"));
+    for needle in [
+        "Postgres",
+        "ArcadeDB",
+        "Valkey",
+        "恒久保存しない",
+        "再構築可能",
+        "バックアップ対象は Postgres のみ",
+        "canonical store ではない",
+    ] {
+        assert!(retention.contains(needle), "missing: {needle}");
+    }
+
+    // 系統が無効な node には索引系の保存先区分を書かない（誤開示防止）。
+    let yaml = base_config("", false);
+    let resolved = load_and_validate(&yaml).unwrap();
+    let retention = doc(&generate_all(&resolved), "data-retention-policy.md");
+    assert!(!retention.contains("データ区分と保存先"));
+}
+
+#[test]
 fn generated_docs_never_contain_private_endpoints_or_secret_ids_values() {
     // 公開資料の非含有監査: URL・secret 値らしき文字列が生成物に出ないこと。
     // （secret は ID のみ config に書かれ、値はそもそも config に無い。ここでは

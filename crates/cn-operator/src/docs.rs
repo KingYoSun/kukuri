@@ -486,6 +486,71 @@ fn gen_data_retention(config: &ResolvedConfig) -> String {
         "- モデレーションログ: {} 日\n",
         config.raw.retention.moderation_logs_days
     );
+
+    // データ区分と保存先（#617。索引・モデレーション・信頼・関係の各系統が有効な場合）。
+    let index_stack_active = config.enabled(Capability::CommunityIndex)
+        || config.enabled(Capability::Moderation)
+        || config.enabled(Capability::CommunityLocalTrust);
+    if index_stack_active {
+        let _ = writeln!(s, "## データ区分と保存先\n");
+        let _ = writeln!(s, "| データ | 保存先 | 性質 |");
+        let _ = writeln!(s, "|---|---|---|");
+        let _ = writeln!(
+            s,
+            "| 認証・同意・通報 | Postgres | 管理系の永続データ（同意は撤回まで、通報は保持方針に従う） |"
+        );
+        let _ = writeln!(
+            s,
+            "| 走査判定（scan verdict） | Postgres | fail-closed な索引真実源が参照する判定記録 |"
+        );
+        let _ = writeln!(
+            s,
+            "| 署名付き moderation event / risk signal | Postgres | 保持期間・失効・訂正再発行・申し立ての対象 |"
+        );
+        let _ = writeln!(
+            s,
+            "| 索引の真実源（index truth） | Postgres | 許可判定のみを持つ authoritative な索引記録 |"
+        );
+        let _ = writeln!(
+            s,
+            "| 検索投影 | ArcadeDB | 真実源から再構築可能な派生データ（バックアップ対象外） |"
+        );
+        let _ = writeln!(
+            s,
+            "| relation graph | ArcadeDB | 公開トピック共参加から定期解析で再構築可能な node-local advisory（バックアップ対象外） |"
+        );
+        let _ = writeln!(
+            s,
+            "| ランデブー / presence | Valkey | TTL 付きの揮発データ（短期で自動失効） |"
+        );
+        let _ = writeln!(
+            s,
+            "| 生メディア | （保存しない） | 走査時の一時取得のみで恒久保存しない |"
+        );
+        let _ = writeln!(
+            s,
+            "| indexer のレプリカ同期状態 | ローカル永続 volume | 同期復元用であり content の canonical store ではない |"
+        );
+        s.push('\n');
+        let _ = writeln!(s, "## 削除・再構築・バックアップ\n");
+        let _ = writeln!(
+            s,
+            "- 索引項目は、対象トピックから外れた時点・判定が許可以外へ変わった時点で削除される。"
+        );
+        let _ = writeln!(
+            s,
+            "- risk signal は失効（expires_at）と半減期減衰の対象で、申し立ての認容で寄与から除外される。"
+        );
+        let _ = writeln!(
+            s,
+            "- ArcadeDB（検索投影・relation graph）は失われても真実源とレプリカから再構築できる。"
+        );
+        let _ = writeln!(
+            s,
+            "- バックアップ対象は Postgres のみ。ArcadeDB・Valkey・一時取得メディアはバックアップ対象外。\n"
+        );
+    }
+
     let _ = writeln!(s, "## capability 別の保持への影響（運用中）\n");
     for cap in available_enabled(config) {
         let m = cap.meta();
