@@ -2903,7 +2903,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-app-api"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2932,7 +2932,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-blob-service"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2950,7 +2950,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-cn-cli"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2970,7 +2970,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-cn-core"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3003,7 +3003,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-cn-e2e"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "axum",
@@ -3035,7 +3035,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-cn-indexer"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3065,7 +3065,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-cn-iroh-relay"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "iroh-relay",
@@ -3079,7 +3079,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-cn-operator"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "clap",
@@ -3094,7 +3094,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-cn-protocol"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "kukuri-core",
@@ -3106,14 +3106,14 @@ dependencies = [
 
 [[package]]
 name = "kukuri-cn-runtime-support"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "tracing-subscriber",
 ]
 
 [[package]]
 name = "kukuri-cn-safety"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "async-trait",
  "kukuri-cn-safety",
@@ -3125,7 +3125,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-cn-safety-arachnid"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "async-trait",
  "kukuri-cn-safety",
@@ -3140,7 +3140,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-cn-safety-runtime"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3159,7 +3159,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-cn-safety-vlm"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "async-trait",
  "base64",
@@ -3175,7 +3175,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-cn-trust"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3188,7 +3188,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-cn-user-api"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "axum",
@@ -3220,7 +3220,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-core"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "bech32",
@@ -3238,7 +3238,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-desktop-runtime"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3275,7 +3275,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-docs-sync"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3299,7 +3299,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-harness"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "axum",
@@ -3322,7 +3322,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-iroh-node"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "futures-util",
@@ -3341,7 +3341,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-store"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3358,7 +3358,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-test-support"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "async-trait",
  "thiserror 2.0.18",
@@ -3367,7 +3367,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-transport"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7570,7 +7570,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "kukuri-harness",
