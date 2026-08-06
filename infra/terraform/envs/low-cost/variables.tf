@@ -219,6 +219,18 @@ variable "snapshot_schedule_days" {
   default     = 14
 }
 
+variable "enable_community_node_monitoring" {
+  description = "Create Community Node custom metric descriptors and alert policies."
+  type        = bool
+  default     = true
+}
+
+variable "monitoring_notification_channels" {
+  description = "Cloud Monitoring notification channel resource names used by Community Node alert policies."
+  type        = list(string)
+  default     = []
+}
+
 # --- ingress hardening (optional) ---
 variable "extra_ingress_source_ranges" {
   description = "API/relay public ingress を絞る場合の許可レンジ。既定は全公開。"

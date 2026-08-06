@@ -729,60 +729,62 @@ async fn indexing_startup_requires_validated_relay() -> Result<()> {
 }
 
 #[tokio::test]
-async fn deleted_objects_are_deindexed() -> Result<()> {
-    // replica 上で deleted / tombstoned になった object は de-index する。
-    let docs = Arc::new(MemoryDocsSync::default());
-    let projection = Arc::new(MemoryIndexProjection::new());
-    let topic = TopicId::new("rust");
-    let replica = topic_replica_id("rust");
-    let object_id = persist_post(&docs, &replica, &topic, "to be deleted").await;
+async fn deleted_and_tombstoned_objects_are_deindexed() -> Result<()> {
+    for status in ["deleted", "tombstoned"] {
+        // replica 上で deleted / tombstoned になった object は de-index する。
+        let docs = Arc::new(MemoryDocsSync::default());
+        let projection = Arc::new(MemoryIndexProjection::new());
+        let topic = TopicId::new("rust");
+        let replica = topic_replica_id("rust");
+        let object_id = persist_post(&docs, &replica, &topic, "to be deleted").await;
 
-    let (pipeline, entries, _) = pipeline_with(&docs, &projection, allow_service());
-    pipeline
+        let (pipeline, entries, _) = pipeline_with(&docs, &projection, allow_service());
+        pipeline
+            .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+            .await?;
+        assert!(
+            projection
+                .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
+                .await?
+        );
+
+        // object state を deleted に更新する。
+        let mut object: serde_json::Value = {
+            let records = docs
+                .query_replica(
+                    &replica,
+                    DocQuery::Exact(stable_key("objects", &format!("{object_id}/state"))),
+                )
+                .await?;
+            serde_json::from_slice(&records[0].value)?
+        };
+        object["status"] = serde_json::json!(status);
+        docs.apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("objects", &format!("{object_id}/state")),
+                value: object,
+            },
+        )
+        .await?;
+
+        // 真実源 store を共有した再 ingest で de-index が両方へ届く。
+        let summary = IngestPipeline::new(
+            docs.clone(),
+            allow_service().0,
+            entries.clone(),
+            projection.clone(),
+        )
         .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
         .await?;
-    assert!(
-        projection
-            .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
-            .await?
-    );
-
-    // object state を deleted に更新する。
-    let mut object: serde_json::Value = {
-        let records = docs
-            .query_replica(
-                &replica,
-                DocQuery::Exact(stable_key("objects", &format!("{object_id}/state"))),
-            )
-            .await?;
-        serde_json::from_slice(&records[0].value)?
-    };
-    object["status"] = serde_json::json!("deleted");
-    docs.apply_doc_op(
-        &replica,
-        DocOp::SetJson {
-            key: stable_key("objects", &format!("{object_id}/state")),
-            value: object,
-        },
-    )
-    .await?;
-
-    // 真実源 store を共有した再 ingest で de-index が両方へ届く。
-    let summary = IngestPipeline::new(
-        docs.clone(),
-        allow_service().0,
-        entries.clone(),
-        projection.clone(),
-    )
-    .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
-    .await?;
-    assert_eq!(summary.deindexed, 1);
-    assert!(
-        !projection
-            .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
-            .await?
-    );
-    assert!(!entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
+        assert_eq!(summary.deindexed, 1);
+        assert!(
+            !projection
+                .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
+                .await?
+        );
+        assert!(!entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
+    }
     Ok(())
 }
 

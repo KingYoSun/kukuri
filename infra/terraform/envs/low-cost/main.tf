@@ -187,9 +187,140 @@ resource "google_compute_disk_resource_policy_attachment" "postgres_data" {
 }
 
 resource "google_compute_disk_resource_policy_attachment" "indexer_data" {
-  count   = var.enable_disk_snapshots && var.deploy_indexer_stack && var.indexer_data_disk_gb > 0 ? 1 : 0
+  count   = var.enable_disk_snapshots && var.indexer_data_disk_gb > 0 ? 1 : 0
   name    = google_compute_resource_policy.disk_snapshot[0].name
   disk    = module.vm.indexer_data_disk_name
   zone    = var.zone
   project = var.project_id
+}
+
+locals {
+  community_node_metric_descriptors = {
+    disk_percent_used = {
+      display_name = "Community Node disk used"
+      unit         = "%"
+    }
+    postgres_healthy = {
+      display_name = "Community Node Postgres healthy"
+      unit         = "1"
+    }
+    arcadedb_healthy = {
+      display_name = "Community Node ArcadeDB healthy"
+      unit         = "1"
+    }
+    indexer_healthy = {
+      display_name = "Community Node indexer healthy"
+      unit         = "1"
+    }
+    indexer_last_ingest_age_seconds = {
+      display_name = "Community Node last ingest age"
+      unit         = "s"
+    }
+    indexer_backoff_active = {
+      display_name = "Community Node indexer backoff active"
+      unit         = "1"
+    }
+    provider_failure_detected = {
+      display_name = "Community Node provider failure detected"
+      unit         = "1"
+    }
+    relation_last_success_age_seconds = {
+      display_name = "Community Node relation analysis age"
+      unit         = "s"
+    }
+  }
+
+  community_node_alerts = merge(
+    {
+      disk = {
+        metric     = "disk_percent_used"
+        display    = "Community Node disk usage high"
+        comparison = "COMPARISON_GT"
+        threshold  = 85
+      }
+      postgres = {
+        metric     = "postgres_healthy"
+        display    = "Community Node Postgres unhealthy"
+        comparison = "COMPARISON_LT"
+        threshold  = 0.5
+      }
+    },
+    var.deploy_indexer_stack ? {
+      arcadedb = {
+        metric     = "arcadedb_healthy"
+        display    = "Community Node ArcadeDB unhealthy"
+        comparison = "COMPARISON_LT"
+        threshold  = 0.5
+      }
+      indexer = {
+        metric     = "indexer_healthy"
+        display    = "Community Node indexer unhealthy"
+        comparison = "COMPARISON_LT"
+        threshold  = 0.5
+      }
+      ingest_stale = {
+        metric     = "indexer_last_ingest_age_seconds"
+        display    = "Community Node ingest stale"
+        comparison = "COMPARISON_GT"
+        threshold  = 900
+      }
+      backoff = {
+        metric     = "indexer_backoff_active"
+        display    = "Community Node indexer backoff active"
+        comparison = "COMPARISON_GT"
+        threshold  = 0.5
+      }
+      provider = {
+        metric     = "provider_failure_detected"
+        display    = "Community Node safety provider failure"
+        comparison = "COMPARISON_GT"
+        threshold  = 0.5
+      }
+      relation = {
+        metric     = "relation_last_success_age_seconds"
+        display    = "Community Node relation analysis stale"
+        comparison = "COMPARISON_GT"
+        threshold  = var.relation_analyze_interval_minutes * 180
+      }
+    } : {}
+  )
+}
+
+resource "google_monitoring_metric_descriptor" "community_node" {
+  for_each = var.enable_community_node_monitoring ? local.community_node_metric_descriptors : {}
+
+  project      = var.project_id
+  type         = "custom.googleapis.com/kukuri/community_node/${each.key}"
+  metric_kind  = "GAUGE"
+  value_type   = "DOUBLE"
+  display_name = each.value.display_name
+  unit         = each.value.unit
+}
+
+resource "google_monitoring_alert_policy" "community_node" {
+  for_each = var.enable_community_node_monitoring ? local.community_node_alerts : {}
+
+  project               = var.project_id
+  display_name          = each.value.display
+  combiner              = "OR"
+  enabled               = true
+  notification_channels = var.monitoring_notification_channels
+
+  conditions {
+    display_name = each.value.display
+    condition_threshold {
+      filter                  = "resource.type = \"gce_instance\" AND metric.type = \"custom.googleapis.com/kukuri/community_node/${each.value.metric}\""
+      comparison              = each.value.comparison
+      threshold_value         = each.value.threshold
+      duration                = "300s"
+      evaluation_missing_data = "EVALUATION_MISSING_DATA_ACTIVE"
+    }
+  }
+
+  documentation {
+    mime_type = "text/markdown"
+    content   = "Inspect `kukuri-monitor.service`, container health, and the Community Node operator runbook before recovery or rollback."
+  }
+
+  depends_on = [google_monitoring_metric_descriptor.community_node]
 }

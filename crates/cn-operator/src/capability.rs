@@ -7,8 +7,8 @@
 //!
 //! - `Availability::Available` (Phase A): 現行の community node 実装が実際に提供できる、
 //!   またはデプロイ構成として確定できる capability。生成文書では「運用中」として開示してよい。
-//! - `Availability::Planned` (Phase B): 現行実装に存在しない capability（index / moderation /
-//!   trust signal / report endpoint など）。config 上は宣言できるが、生成文書では
+//! - `Availability::Planned` (Phase B): 将来追加され、現行実装に存在しない capability。
+//!   config 上は宣言できるが、生成文書では
 //!   「計画中・この配布物では未提供」として扱い、運用中の外部送信・データ取扱い開示には載せない。
 //!
 //! これは `docs/architecture/p2p-first-community-node-responsibility-boundary.md` の
@@ -57,7 +57,7 @@ pub enum Capability {
     CrashReport,
     CloudflareProxy,
     PushNotification,
-    // --- Phase B: 未実装（spec のみ） ---
+    // Operational capabilities (availability is decided by `availability()`).
     CommunityIndex,
     Moderation,
     CommunityLocalTrust,

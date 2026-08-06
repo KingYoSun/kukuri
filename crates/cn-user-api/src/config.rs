@@ -27,15 +27,20 @@ pub struct UserApiConfig {
     /// 未設定なら private channel の indexing request は受け付けない(#413 / ADR 0025 §6.3)。
     pub channel_secret_key: Option<String>,
     /// ユーザー向け index query(search / discovery / recommendation)を公開するか(#404)。
-    /// 既定 false(`CommunityIndex` が `Availability::Planned` の現状と整合。`/v1/index/*` は 404)。
+    /// 既定 false。capability は Available だが、readiness activation 完了までは
+    /// `/v1/index/*` を公開しない。
     /// 有効化すると ArcadeDB(`COMMUNITY_NODE_ARCADEDB_*`)へ接続する。
     pub index_query_enabled: bool,
     /// trust / relation read surface を公開するか(#415)。
-    /// 既定 false(`CommunityLocalTrust` が `Availability::Planned` の現状と整合。
-    /// `/v1/trust/*` / `/v1/relation/*` は 404)。有効化すると relation graph の
+    /// 既定 false。capability は Available だが、readiness activation 完了までは
+    /// `/v1/trust/*` / `/v1/relation/*` は 404。有効化すると relation graph の
     /// ArcadeDB(`COMMUNITY_NODE_ARCADEDB_*`)へ接続し、trust パラメータを
     /// `COMMUNITY_NODE_TRUST_*` env から読む。
     pub trust_read_enabled: bool,
+    /// image/config/provider一式を識別する非秘匿のdeploy revision。
+    pub deployment_revision: String,
+    /// readiness activationを有効とみなす最大経過秒数。
+    pub readiness_activation_max_age_secs: u64,
 }
 
 impl std::fmt::Debug for UserApiConfig {
@@ -57,6 +62,11 @@ impl std::fmt::Debug for UserApiConfig {
             )
             .field("index_query_enabled", &self.index_query_enabled)
             .field("trust_read_enabled", &self.trust_read_enabled)
+            .field("deployment_revision", &self.deployment_revision)
+            .field(
+                "readiness_activation_max_age_secs",
+                &self.readiness_activation_max_age_secs,
+            )
             .finish()
     }
 }
@@ -97,6 +107,17 @@ impl UserApiConfig {
             .filter(|value| !value.trim().is_empty());
         let index_query_enabled = parse_bool_env("COMMUNITY_NODE_INDEX_QUERY_ENABLED", false)?;
         let trust_read_enabled = parse_bool_env("COMMUNITY_NODE_TRUST_READ_ENABLED", false)?;
+        let deployment_revision = std::env::var("COMMUNITY_NODE_DEPLOYMENT_REVISION")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_default();
+        if (index_query_enabled || trust_read_enabled) && deployment_revision.is_empty() {
+            anyhow::bail!(
+                "COMMUNITY_NODE_DEPLOYMENT_REVISION is required when index/trust surfaces are enabled"
+            );
+        }
+        let readiness_activation_max_age_secs =
+            parse_u64_env("COMMUNITY_NODE_READINESS_ACTIVATION_MAX_AGE_SECS", 900)?.max(1);
         Ok(Self {
             bind_addr,
             database_url,
@@ -110,6 +131,8 @@ impl UserApiConfig {
             channel_secret_key,
             index_query_enabled,
             trust_read_enabled,
+            deployment_revision,
+            readiness_activation_max_age_secs,
         })
     }
 }

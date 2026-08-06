@@ -1,0 +1,88 @@
+#!/bin/bash
+set -euo pipefail
+
+INSTALL_DIR="${install_dir}"
+COMPOSE_BIN="/var/lib/toolbox/kukuri/bin/docker-compose"
+METADATA="http://metadata.google.internal/computeMetadata/v1"
+
+metadata() {
+  curl -fsS -H "Metadata-Flavor: Google" "$METADATA/$1"
+}
+
+TOKEN="$(metadata instance/service-accounts/default/token | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')"
+PROJECT="$(metadata project/project-id)"
+INSTANCE_ID="$(metadata instance/id)"
+ZONE="$(basename "$(metadata instance/zone)")"
+NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+write_metric() {
+  local name="$1" value="$2"
+  local body
+  body="$(printf '{"timeSeries":[{"metric":{"type":"custom.googleapis.com/kukuri/community_node/%s"},"resource":{"type":"gce_instance","labels":{"project_id":"%s","instance_id":"%s","zone":"%s"}},"points":[{"interval":{"endTime":"%s"},"value":{"doubleValue":%s}}]}]}' "$name" "$PROJECT" "$INSTANCE_ID" "$ZONE" "$NOW" "$value")"
+  curl -fsS -X POST \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    "https://monitoring.googleapis.com/v3/projects/$PROJECT/timeSeries" \
+    --data-binary "$body" >/dev/null
+}
+
+container_healthy() {
+  local service="$1" container status
+  container="$(cd "$INSTALL_DIR" && "$COMPOSE_BIN" ps -q "$service" 2>/dev/null || true)"
+  if [ -z "$container" ]; then
+    echo 0
+    return
+  fi
+  status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container" 2>/dev/null || true)"
+  if [ "$status" = "healthy" ] || [ "$status" = "running" ]; then echo 1; else echo 0; fi
+}
+
+disk_paths=(/)
+[ -e "${postgres_data_path}" ] && disk_paths+=("${postgres_data_path}")
+[ -e "${indexer_data_path}" ] && disk_paths+=("${indexer_data_path}")
+disk_percent="$(df -P "$${disk_paths[@]}" | awk 'NR > 1 {gsub(/%/, "", $5); if ($5 > max) max=$5} END {print max+0}')"
+write_metric disk_percent_used "$disk_percent"
+write_metric postgres_healthy "$(container_healthy cn-postgres)"
+
+%{ if deploy_indexer_stack ~}
+write_metric arcadedb_healthy "$(container_healthy cn-arcadedb)"
+write_metric indexer_healthy "$(container_healthy cn-indexer)"
+
+indexer_container="$(cd "$INSTALL_DIR" && "$COMPOSE_BIN" ps -q cn-indexer 2>/dev/null || true)"
+status_json=""
+if [ -n "$indexer_container" ]; then
+  status_json="$(docker exec "$indexer_container" curl -fsS http://127.0.0.1:${indexer_status_port}/v1/status 2>/dev/null || true)"
+fi
+last_ingest="$(printf '%s' "$status_json" | sed -n 's/.*"last_ingest_at"[ ]*:[ ]*\([0-9][0-9]*\).*/\1/p')"
+if [ -n "$last_ingest" ]; then
+  ingest_age="$(( $(date +%s) - last_ingest ))"
+else
+  ingest_age=1000000000
+fi
+write_metric indexer_last_ingest_age_seconds "$ingest_age"
+
+if printf '%s' "$status_json" | grep -Eq '"consecutive_failures"[ ]*:[ ]*[1-9]'; then
+  backoff_active=1
+else
+  backoff_active=0
+fi
+write_metric indexer_backoff_active "$backoff_active"
+
+provider_total="$(printf '%s' "$status_json" | sed -n 's/.*"provider_unavailable"[ ]*:[ ]*\([0-9][0-9]*\).*/\1/p')"
+provider_total="$${provider_total:-0}"
+provider_state="$INSTALL_DIR/.monitor-provider-unavailable"
+previous_total="$(cat "$provider_state" 2>/dev/null || echo 0)"
+if [ "$provider_total" -gt "$previous_total" ]; then provider_failure=1; else provider_failure=0; fi
+printf '%s\n' "$provider_total" > "$provider_state"
+write_metric provider_failure_detected "$provider_failure"
+
+relation_timestamp="$(systemctl show kukuri-relation-analyze.service -p ExecMainExitTimestamp --value 2>/dev/null || true)"
+relation_epoch="$(date -d "$relation_timestamp" +%s 2>/dev/null || echo 0)"
+relation_status="$(systemctl show kukuri-relation-analyze.service -p ExecMainStatus --value 2>/dev/null || echo 1)"
+if [ "$relation_epoch" -gt 0 ] && [ "$relation_status" = "0" ]; then
+  relation_age="$(( $(date +%s) - relation_epoch ))"
+else
+  relation_age=1000000000
+fi
+write_metric relation_last_success_age_seconds "$relation_age"
+%{ endif ~}

@@ -457,6 +457,16 @@ async fn failing_scope_backs_off_without_blocking_others() -> Result<()> {
     })
     .await;
 
+    let snapshot = state.snapshot();
+    assert!(
+        snapshot.last_ingest_at.is_some(),
+        "healthy scope success must remain observable"
+    );
+    assert!(
+        snapshot.last_sync_at.is_none(),
+        "a full pass with any failed scope must not be recorded as successful"
+    );
+
     handle.shutdown().await;
     Ok(())
 }

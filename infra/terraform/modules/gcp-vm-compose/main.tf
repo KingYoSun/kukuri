@@ -29,14 +29,35 @@ locals {
   # index / moderation stack（#615）。indexer data（iroh endpoint 同一性 / docs replica）は
   # 別 PD に置けるようにする。ArcadeDB data は rebuildable projection（canonical store では
   # ない）ため docker named volume に置き、空からの再構築手順を runbook に持つ。
-  indexer_data_path   = "/var/lib/kukuri/cn-indexer"
-  use_indexer_disk    = var.deploy_indexer_stack && var.indexer_data_disk_gb > 0
+  indexer_data_path = "/var/lib/kukuri/cn-indexer"
+  # Disk ownership is independent from whether the indexer containers are
+  # currently enabled. A feature-flag rollback must not plan data deletion.
+  use_indexer_disk    = var.indexer_data_disk_gb > 0
   indexer_status_port = 8630
 
   # operator-config.yaml を VM に配置するか（#380）。空文字なら配置せず manifest endpoint は 404。
   operator_config_enabled = trimspace(var.operator_config_file) != ""
   operator_config_path    = "/etc/kukuri/operator-config.yaml"
   operator_config_b64     = local.operator_config_enabled ? base64encode(var.operator_config_file) : ""
+  deployment_revision = sha256(jsonencode({
+    cn_user_api_image                  = var.cn_user_api_image
+    cn_indexer_image                   = var.cn_indexer_image
+    cn_cli_image                       = var.cn_cli_image
+    operator_config_sha256             = sha256(var.operator_config_file)
+    index_query_enabled                = var.index_query_enabled
+    trust_read_enabled                 = var.trust_read_enabled
+    safety_provider_known_csam         = var.safety_provider_known_csam
+    safety_provider_general            = var.safety_provider_general
+    safety_provider_unknown_csam       = var.safety_provider_unknown_csam
+    vlm_api_base_url                   = var.vlm_api_base_url
+    vlm_model                          = var.vlm_model
+    vlm_response_format                = var.vlm_response_format
+    safety_emit_signed_events          = var.safety_emit_signed_events
+    safety_suspected_threshold         = var.safety_suspected_threshold
+    safety_suspected_signal_visibility = var.safety_suspected_signal_visibility
+    media_fetch_max_bytes              = var.media_fetch_max_bytes
+    media_fetch_timeout_secs           = var.media_fetch_timeout_secs
+  }))
 
   # 各テンプレートを base64 で metadata に渡し、startup script が展開する。
   compose_b64 = base64encode(replace(templatefile("${path.module}/templates/docker-compose.yml.tftpl", {
@@ -123,6 +144,7 @@ locals {
     vlm_model                             = var.vlm_model
     vlm_response_format                   = var.vlm_response_format
     vlm_api_timeout_secs                  = var.vlm_api_timeout_secs
+    deployment_revision                   = local.deployment_revision
   }), "\r\n", "\n"))
 
   backup_script_b64 = base64encode(replace(templatefile("${path.module}/templates/backup.sh.tftpl", {
@@ -140,6 +162,14 @@ locals {
     relay_domain = var.relay_domain
     acme_email   = var.acme_email
     cert_name    = local.cert_name
+  }), "\r\n", "\n"))
+
+  monitor_script_b64 = base64encode(replace(templatefile("${path.module}/templates/monitor.sh.tftpl", {
+    install_dir          = local.install_dir
+    postgres_data_path   = local.postgres_data_path
+    indexer_data_path    = local.indexer_data_path
+    deploy_indexer_stack = var.deploy_indexer_stack
+    indexer_status_port  = local.indexer_status_port
   }), "\r\n", "\n"))
 
   startup_script = replace(templatefile("${path.module}/templates/startup.sh.tftpl", {
@@ -191,6 +221,7 @@ locals {
     env_runtime_b64                     = local.env_runtime_b64
     backup_script_b64                   = local.backup_script_b64
     renew_script_b64                    = local.renew_script_b64
+    monitor_script_b64                  = local.monitor_script_b64
   }), "\r\n", "\n")
 }
 
@@ -255,6 +286,16 @@ resource "google_compute_disk" "indexer_data" {
   zone    = var.zone
   size    = var.indexer_data_disk_gb
   project = var.project_id
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_project_iam_member" "monitoring" {
+  project = var.project_id
+  role    = "roles/monitoring.metricWriter"
+  member  = "serviceAccount:${google_service_account.vm.email}"
 }
 
 resource "google_compute_instance" "vm" {
@@ -321,5 +362,6 @@ resource "google_compute_instance" "vm" {
   depends_on = [
     google_secret_manager_secret_iam_member.accessor,
     google_project_iam_member.logging,
+    google_project_iam_member.monitoring,
   ]
 }

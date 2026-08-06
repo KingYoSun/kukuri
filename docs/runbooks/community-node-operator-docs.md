@@ -1,6 +1,6 @@
 # Community Node Operator Docs Generator (`cn-operator`)
 
-最終更新日: 2026-06-19
+最終更新日: 2026-08-06
 
 ## 目的
 
@@ -25,16 +25,18 @@ node 単位の説明責任に閉じる。
 `cn-operator` は各機能を capability として扱い、`availability` を持たせている。
 
 - **Phase A (`Available`)**: 現行 community node 実装（auth / consent / bootstrap / topic
-  rendezvous / iroh relay / `report_endpoint`）またはデプロイ構成（Cloudflare / analytics /
-  crash report / blob cache / private message storage / push）として提供できる capability。
+  rendezvous / iroh relay / `report_endpoint` / `community_index` / `moderation` /
+  `community_local_trust`）またはデプロイ構成（Cloudflare / analytics / crash report /
+  blob cache / private message storage / push）として提供できる capability。
   生成文書では「運用中」として開示してよい。`report_endpoint` は `POST /v1/report` で
   通報を受信・保存し、`cn-cli reports` で運営者が確認できる。
-- **Phase B (`Planned`)**: 現行実装に存在しない capability（`community_index` / `moderation` /
-  `community_local_trust`）。config で宣言できるが、生成文書では
-  「計画中（この配布物では未提供）」として扱い、運用中の外部送信・データ取扱い開示には載せない。
+- **Phase B (`Planned`)**: 将来追加され、まだ現行配布物に実装されていない capability。
+  config で宣言できても、生成文書では「計画中（この配布物では未提供）」として分離し、
+  運用中の外部送信・データ取扱い開示には載せない。2026-08-06 時点の定義には該当項目がない。
 
-Phase B capability を有効化するには、config に `acknowledge_planned_capabilities: true` を
-明示する必要がある。これがないと検証で失敗する。実体のない「運用中」開示を生成しないためのガード。
+将来 Phase B capability が追加された場合、それを有効化するには config に
+`acknowledge_planned_capabilities: true` を明示する必要がある。現行3機能の有効化には不要だが、
+実体のない「運用中」開示を生成しないためフィールドと検証機構は維持する。
 
 ## サブコマンド
 
@@ -42,7 +44,7 @@ Phase B capability を有効化するには、config に `acknowledge_planned_ca
 # サンプル config を出力
 cn-operator init --out operator-config.yaml
 
-# config を検証（Phase B 承認ガードを含む）
+# config を検証（将来の Planned capability 承認ガードを含む）
 cn-operator validate-config --config operator-config.yaml
 
 # 文書群を生成
@@ -51,7 +53,8 @@ cn-operator generate-docs --config operator-config.yaml --out-dir dist/operator-
 # terraform.tfvars を生成（deploy セクションが必要・#380）
 cn-operator generate-tfvars --config operator-config.yaml --out infra/terraform/envs/low-cost/terraform.tfvars
 
-# 生成済み文書と config の drift を検出（差分があれば non-zero exit）
+# 生成済み文書と config の drift、および secret ID / private endpoint 混入を検出
+# （いずれかがあれば non-zero exit）
 cn-operator check-disclosures --config operator-config.yaml --out-dir dist/operator-docs
 ```
 
@@ -66,8 +69,8 @@ cargo run -p kukuri-cn-operator --bin cn-operator -- generate-docs \
 
 `profile` は features の既定値を与え、個別の `features` キーで上書きできる。
 
-- `minimal`: index / moderation / community-local trust（いずれも計画中）。relay / cache /
-  analytics / crash report は無効。
+- `minimal`: index / moderation / community-local trust を含め、任意 capability は既定で無効。
+  relay / cache / analytics / crash report も無効。
 - `relay-enabled`: minimal + 専用 iroh relay + 暗号化済み traffic fallback 開示。
 - `full-service`: relay-enabled + blob cache + push 通知 + report endpoint。analytics /
   crash report は任意（既定無効）。

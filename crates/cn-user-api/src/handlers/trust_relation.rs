@@ -39,6 +39,13 @@ async fn require_trust_read(
             "this community node does not provide trust / relation reads",
         ));
     };
+    if !state.readiness_activation_is_valid().await {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "TRUST_READ_NOT_ACTIVATED",
+            "this community node trust activation is not current",
+        ));
+    }
     let identity = require_bearer_identity(&state.pool, &state.jwt_config, headers).await?;
     let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
     Ok((trust_read, identity.pubkey))
@@ -120,6 +127,13 @@ pub(crate) async fn trust_pull(
             "this community node does not provide trust / relation reads",
         ));
     };
+    if !state.readiness_activation_is_valid().await {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "TRUST_READ_NOT_ACTIVATED",
+            "this community node trust activation is not current",
+        ));
+    }
     // bearer が有効な subscriber なら SubscribedNodes、無ければ匿名(Public visibility のみ)。
     let audience = match require_bearer_identity(&state.pool, &state.jwt_config, &headers).await {
         Ok(_) => PullAudience::SubscribedNodes,

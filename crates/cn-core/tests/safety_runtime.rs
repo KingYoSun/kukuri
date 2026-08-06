@@ -107,6 +107,7 @@ impl SafetyArtifactStore for FailingSafetyArtifactStore {
         &self,
         _issuer_node_id: &str,
         _signal: &SafetyRiskSignal,
+        _subject_author: Option<&str>,
     ) -> Result<String> {
         if matches!(self.operation, FailingStoreOperation::Signal) {
             bail!("signal persistence rejected by contract double");
@@ -164,6 +165,27 @@ async fn runtime_scan_known_csam_persists_signed_event_and_risk_signal() {
     assert_eq!(signal.target_id, "post-1");
     assert_eq!(signal.category, SafetyCategory::Csam);
     assert!(outcome.persisted_signal_id.is_some());
+}
+
+#[tokio::test]
+async fn attributed_post_scan_records_subject_author() {
+    let provider =
+        MockSafetyProvider::known_csam("mock-known-csam").with_known_hash_match("post-1");
+    let (service, store, _issuer) = signed_service(provider);
+
+    service
+        .scan_and_record_for_author(&post_request("post-1"), "author-pubkey")
+        .await
+        .unwrap();
+
+    assert_eq!(
+        store.signal_subject_authors(),
+        vec![(
+            RiskSignalTarget::PostId,
+            "post-1".to_string(),
+            "author-pubkey".to_string(),
+        )]
+    );
 }
 
 #[tokio::test]

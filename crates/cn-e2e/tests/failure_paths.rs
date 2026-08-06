@@ -112,6 +112,33 @@ async fn missing_media_holder_holds_posts() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn unknown_mime_media_holds_posts_without_retaining_the_blob() -> Result<()> {
+    let Some(stack) = E2eStack::boot("unknownmime").await? else {
+        return Ok(());
+    };
+    let (object_id, thumbnail_hash) = stack
+        .publish_post_with_unknown_mime_thumbnail("unknown MIME thumbnail")
+        .await?;
+    assert!(
+        stack
+            .wait_for_state(
+                |state| state.skipped_non_allow >= 1 || state.scan_errors >= 1,
+                HOLD_TIMEOUT
+            )
+            .await?,
+        "scan must hold when MIME metadata and recognizable magic bytes are both absent"
+    );
+    assert_held(&stack, object_id.as_str()).await?;
+    assert!(
+        stack
+            .blob_is_absent_locally(thumbnail_hash.as_str())
+            .await?,
+        "unknown-MIME media must remain ephemeral on the indexer"
+    );
+    stack.shutdown().await
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn oversize_media_holds_posts() -> Result<()> {
     let Some(stack) = E2eStack::boot_with(
         "oversize",

@@ -1,6 +1,6 @@
 # Community Node GCP Terraform Deploy
 
-最終更新日: 2026-08-04
+最終更新日: 2026-08-06
 
 ## 目的
 
@@ -35,7 +35,7 @@ deploy_indexer_stack=true 時（#615）:
 VM 内: cn-arcadedb(:2480) / cn-indexer(:8630) も private（compose network 内のみ。
        firewall / Caddy へ新規公開 port は追加しない）
 VM 外: cn-indexer ─outbound HTTPS─▶ Project Arachnid Shield
-       cn-indexer ─private 経路（WireGuard 等）─▶ self-host VLM endpoint
+       cn-indexer ─承認済み境界（private tunnel または public TLS + API key + source allowlist）─▶ self-host VLM endpoint
 ```
 
 ### TLS / 証明書
@@ -243,10 +243,10 @@ deploy:
   arcadedb_password_secret_id: kukuri-cn-arcadedb-password
   arachnid_username_secret_id: kukuri-cn-arachnid-username
   arachnid_password_secret_id: kukuri-cn-arachnid-password
-  vlm_api_base_url: http://192.0.2.10:8000   # self-host VLM は private 経路の先のアドレス
+  vlm_api_base_url: https://vlm.example.net   # public TLS + source allowlist の例
   vlm_model: inclusionAI/SingGuard-2b
   vlm_response_format: guard
-  # vlm_api_key_secret_id: kukuri-cn-vlm-api-key   # 無認証 self-host endpoint なら省略
+  vlm_api_key_secret_id: kukuri-cn-vlm-api-key
 ```
 
 `validate-config` が runtime の起動 gate（必須 secret ID / relay / provider credential /
@@ -314,16 +314,31 @@ sudo /var/lib/toolbox/kukuri/bin/docker-compose restart cn-user-api
 - 判定項目集合が変わる更新を入れた場合、古い記録は無効になり面は自動で閉じる
   （readiness の再実行 + 再起動で再解禁する）。
 
-### VLM の private 経路（self-host endpoint）
+### VLM のネットワーク境界（self-host endpoint）
 
-- self-host VLM（DGX Spark 等の OpenAI-compatible endpoint）は public internet へ直接公開しない。
-- GCP VM から WireGuard / VPN / private tunnel 等で到達させ、`vlm_api_base_url` には tunnel 先の
-  private アドレスを指定する（例: `http://192.0.2.10:8000`）。WireGuard peer の設定は
-  `docs/runbooks/community-node-self-host-vps.md` の WireGuard 節が参考になる（COS では
-  Terraform 管理外の手動設定。VM 置換時は再設定が必要）。
-- API key が必要な external VLM を使う場合は `vlm_api_key_secret_id` で注入する。
+self-host VLM は次のどちらか一方の境界に固定し、runbook・network diagram・実配備を一致させる。
+
+1. **private tunnel**: GCP VM から WireGuard / VPN 等で到達し、`vlm_api_base_url` に tunnel 先の
+   private アドレスを指定する。WireGuard peer の設定は
+   `docs/runbooks/community-node-self-host-vps.md` を参照する。
+2. **public TLS + source allowlist**: HTTPS endpoint、API key、GCP VM の static egress IP の
+   source allowlist をすべて必須とする。`vlm_api_key_secret_id` から鍵を注入し、VLM 側では
+   allowlist 外と無認証のリクエストを拒否する。現行 `vlm.kukuri.app` はこの境界を採用する。
+
+平文HTTPのpublic公開、API keyだけでsource restrictionが無い構成、検証を無効化したTLSは不可。
 - VLM 不達時は cn-indexer が fail-closed（scan 失敗 = hold。allow に落ちない）。
 - Project Arachnid Shield への通信は outbound HTTPS のみで、callback / inbound port は無い。
+
+### Cloud Monitoring / log retention
+
+- VM の `kukuri-monitor.timer` が5分ごとに disk使用率、Postgres/ArcadeDB/indexer health、
+  last ingest age、backoff、provider failure、relation最終成功時刻を custom metrics へ送る。
+- Terraform は各 custom metric descriptor と alert policy を作成する。通知を実配送するには、
+  `monitoring_notification_channels` に既存 channel の resource name を設定して apply する。
+- 確認: `systemctl status kukuri-monitor.timer`、`systemctl start kukuri-monitor.service`、
+  `journalctl -u kukuri-monitor.service -n 50`。
+- compose 全serviceは `json-file` の `max-size=20m` / `max-file=5` を共通適用する。
+  `docker inspect <container> --format '{{json .HostConfig.LogConfig}}'` で実値を確認する。
 
 ### ArcadeDB を空から再構築する
 
@@ -371,6 +386,26 @@ cat cn-postgres.dump | docker compose exec -T cn-postgres \
   sh -lc 'pg_restore --clean --if-exists --no-owner -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 docker compose start cn-user-api
 ```
+
+restore drill は本番DBへ直接上書きせず、隔離した一時DBへ復元して次を確認する。
+
+1. 最新dumpのGCS object generationとSHA-256を記録する。
+2. 一時Postgresを起動し `pg_restore --exit-on-error --no-owner` で復元する。
+3. `cn-cli prepare` を実行し、主要table件数、readiness activation、risk signal / index truthを照合する。
+4. 一時DBを削除し、実施日時・dump generation・検証結果を運用記録へ残す。
+
+## secret rotation
+
+- JWT / provider API key / Arachnid credential / safety signing keyは、Secret Managerへ新versionを追加し、
+  VMを再起動してstartup scriptに `.env` を再生成させる。再起動後に旧versionを無効化する。
+- Postgres passwordは、backup取得 → DB role password変更 → Secret Manager新version追加 → VM再起動を
+  連続したmaintenance windowで行い、`cn-migrate`・API health・readinessを確認後に旧versionを無効化する。
+- `COMMUNITY_NODE_CHANNEL_SECRET_KEY` は保存済みchannel secretの復号鍵なので、単純な値差替えは禁止。
+  再暗号化migrationとrollback可能な二重読取期間を用意した専用変更として扱う。
+- ArcadeDB passwordはprojection停止・再構築可能性を前提に、password変更とcompose secret更新を同じ
+  maintenance windowで行う。失敗時はArcadeDBを空から再構築する。
+- rotation後は `docker compose config` やjournalへ値を出力しない。secret名だけを記録し、
+  `cn-operator check-disclosures` とruntime/boot logの旧値・新値非含有検査を行う。
 
 ## managed-db / ha（拡張点）
 

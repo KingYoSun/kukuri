@@ -17,8 +17,8 @@ use anyhow::Result;
 use kukuri_cn_core::{IndexEntryStore, RiskSignalCorrection};
 use kukuri_cn_core::{
     IndexScopeKind, NewIndexEntry, PgCoParticipationSource, dispute_risk_signal,
-    persist_risk_signal, reissue_corrected_risk_signal, update_risk_signal_appeal_status,
-    upsert_scan_verdict,
+    list_risk_signals_for_target, persist_risk_signal, reissue_corrected_risk_signal,
+    update_risk_signal_appeal_status, upsert_scan_verdict,
 };
 use kukuri_cn_e2e::E2eStack;
 use kukuri_cn_indexer::{ArcadeDbConfig, ArcadeDbRelationGraph, analyze_relations};
@@ -211,18 +211,36 @@ async fn trust_appeal_and_relation_graph_work_end_to_end() -> Result<()> {
     );
 
     // --- 信頼: 危険信号が絶対・相対成分へ入り、根拠つきで読める ---
-    persist_risk_signal(
-        &stack.pool,
-        "e2e-issuer-node",
-        &user_risk_signal(
-            pubkey_b.as_str(),
-            SafetyCategory::Csam,
-            Severity::Critical,
-            Basis::KnownHashMatch,
-            Visibility::Public,
-        ),
-    )
-    .await?;
+    const ATTRIBUTED_MARKER: &str = "e2e-attributed-csam-marker";
+    stack
+        .mount_vlm_response_for_marker(
+            ATTRIBUTED_MARKER,
+            r#"{"categories":[{"category":"csam","score":0.97}],"tags":[]}"#,
+        )
+        .await;
+    let attributed_post = stack
+        .publish_text_post_as(
+            &author_b,
+            &format!("synthetic moderation contract marker: {ATTRIBUTED_MARKER}"),
+        )
+        .await?;
+    let deadline = tokio::time::Instant::now() + PROJECTION_TIMEOUT;
+    let attributed_signals = loop {
+        let signals = list_risk_signals_for_target(
+            &stack.pool,
+            RiskSignalTarget::PostId,
+            attributed_post.as_str(),
+        )
+        .await?;
+        if !signals.is_empty() {
+            break signals;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "scan-derived risk signal was not persisted"
+        );
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    };
     let relative_signal = persist_risk_signal(
         &stack.pool,
         "e2e-issuer-node",
@@ -249,10 +267,11 @@ async fn trust_appeal_and_relation_graph_work_end_to_end() -> Result<()> {
         )
     };
     let initial = read_trust().await?;
+    let initial_absolute = initial["absolute"].as_f64().unwrap();
     let initial_relative = initial["relative"].as_f64().unwrap();
     assert!(
-        initial["absolute"].as_f64().unwrap() <= -1.0 + 1e-9,
-        "confirmed CSAM signal must floor the absolute component: {initial}"
+        initial_absolute < 0.0,
+        "scan-derived CSAM signal must reduce the absolute component: {initial}"
     );
     assert!(
         initial_relative < 0.0,
@@ -262,6 +281,41 @@ async fn trust_appeal_and_relation_graph_work_end_to_end() -> Result<()> {
     // --- 申し立て: 係争中は寄与据え置き → 認容で寄与が戻る → 訂正信号が反映される ---
     // （HTTP の申し立て受理経路は cn-user-api の contract test が固定済み。ここでは
     //   handler と同じ遷移関数で係争 → 認容を進める）
+    // Stop producing duplicate scan artifacts, then prove that appeal state on
+    // the original content signal controls the author's absolute trust input.
+    stack.vlm.reset().await;
+    stack.restore_default_provider_mocks().await;
+    let mut attributed_signals = attributed_signals;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    attributed_signals.extend(
+        list_risk_signals_for_target(
+            &stack.pool,
+            RiskSignalTarget::PostId,
+            attributed_post.as_str(),
+        )
+        .await?,
+    );
+    attributed_signals.sort_by(|a, b| a.id.cmp(&b.id));
+    attributed_signals.dedup_by(|a, b| a.id == b.id);
+    for signal in &attributed_signals {
+        dispute_risk_signal(&stack.pool, signal.id.as_str()).await?;
+    }
+    let disputed_content = read_trust().await?;
+    assert_eq!(
+        disputed_content["absolute"].as_f64().unwrap(),
+        initial_absolute,
+        "a disputed content signal must remain effective: {disputed_content}"
+    );
+    for signal in &attributed_signals {
+        update_risk_signal_appeal_status(&stack.pool, signal.id.as_str(), AppealStatus::Cleared)
+            .await?;
+    }
+    let cleared_content = read_trust().await?;
+    assert!(
+        cleared_content["absolute"].as_f64().unwrap() > initial_absolute,
+        "clearing the content signal must restore the author's absolute trust: {cleared_content}"
+    );
+
     dispute_risk_signal(&stack.pool, relative_signal.id.as_str()).await?;
     let disputed = read_trust().await?;
     assert_eq!(

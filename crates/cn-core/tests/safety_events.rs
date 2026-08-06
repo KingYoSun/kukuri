@@ -9,10 +9,11 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use kukuri_cn_core::{
-    DistributionAudience, PgSafetyArtifactStore, TestDatabase, connect_postgres, get_risk_signal,
-    get_signed_moderation_event, initialize_database, list_distributable_moderation_events,
-    list_distributable_risk_signals, list_risk_signals_for_target, list_trust_risk_inputs,
-    persist_risk_signal, persist_signed_moderation_event,
+    DistributionAudience, PgSafetyArtifactStore, TestDatabase, connect_postgres,
+    dispute_risk_signal, get_risk_signal, get_signed_moderation_event, initialize_database,
+    list_distributable_moderation_events, list_distributable_risk_signals,
+    list_risk_signals_for_target, list_trust_risk_inputs, persist_risk_signal,
+    persist_signed_moderation_event, update_risk_signal_appeal_status,
 };
 use kukuri_cn_safety::event::{ModerationEventBody, SignedModerationEvent, issue_signed_event};
 use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
@@ -289,6 +290,74 @@ async fn risk_signal_persists_and_distribution_respects_visibility_and_expiry() 
         let public_targets: Vec<&str> =
             public.iter().map(|s| s.signal.target_id.as_str()).collect();
         assert_eq!(public_targets, vec!["bafy-future"]);
+
+        Ok::<(), anyhow::Error>(())
+    }
+    .await;
+    database.cleanup().await?;
+    result
+}
+
+#[tokio::test]
+async fn content_scan_is_attributed_to_author_and_appeal_updates_trust_input() -> Result<()> {
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!(
+            "skipping cn-core safety integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1"
+        );
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_core_safety_attribution").await?;
+    let pool = connect_postgres(database.database_url.as_str()).await?;
+    let result = async {
+        initialize_database(&pool).await?;
+        let signer = signer();
+        let issuer = signer.issuer_node_id().to_string();
+        let provider = MockSafetyProvider::known_csam("mock-known-csam")
+            .with_known_hash_match("post-attributed");
+        let orchestrator = Arc::new(
+            SafetyOrchestrator::builder(
+                &issuer,
+                Arc::new(SystemScanClock),
+                Arc::new(UuidEventIdGenerator),
+            )
+            .provider(Arc::new(provider))
+            .build()?,
+        );
+        let store = Arc::new(PgSafetyArtifactStore::new(pool.clone()));
+        let service = SafetyScanService::builder(orchestrator, store)
+            .signer(Arc::new(signer))
+            .build()?;
+
+        let outcome = service
+            .scan_and_record_for_author(
+                &ProviderScanRequest::for_subject(SubjectKind::Post, "post-attributed"),
+                "author-pubkey",
+            )
+            .await?;
+        let signal_id = outcome
+            .persisted_signal_id
+            .expect("known match persists a risk signal");
+
+        let attributed = list_trust_risk_inputs(
+            &pool,
+            RiskSignalTarget::UserPubkey,
+            "author-pubkey",
+            "2026-08-06T00:00:00Z",
+        )
+        .await?;
+        assert_eq!(attributed.absolute.len(), 1);
+        assert_eq!(attributed.absolute[0].signal_id, signal_id);
+
+        dispute_risk_signal(&pool, &signal_id).await?;
+        update_risk_signal_appeal_status(&pool, &signal_id, AppealStatus::Cleared).await?;
+        let cleared = list_trust_risk_inputs(
+            &pool,
+            RiskSignalTarget::UserPubkey,
+            "author-pubkey",
+            "2026-08-06T00:00:00Z",
+        )
+        .await?;
+        assert!(cleared.absolute.is_empty());
 
         Ok::<(), anyhow::Error>(())
     }

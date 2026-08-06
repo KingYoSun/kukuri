@@ -30,7 +30,9 @@ use kukuri_cn_safety::{AppealStatus, RiskSignalTarget};
 // 組み立て（供給契約）のみを担う。
 use kukuri_cn_trust::{TrustComponentKind, TrustRiskInput, TrustRiskInputs, trust_component_for};
 
-use crate::safety_events::{StoredRiskSignal, list_risk_signals_for_target};
+use crate::safety_events::{
+    StoredRiskSignal, list_risk_signals_for_target, list_risk_signals_for_user,
+};
 
 /// 永続化済み risk signal 列から trust 入力を組み立てる純関数。
 ///
@@ -102,6 +104,10 @@ pub async fn list_trust_risk_inputs(
     target_id: &str,
     now_rfc3339: &str,
 ) -> Result<TrustRiskInputs> {
-    let signals = list_risk_signals_for_target(pool, target, target_id).await?;
+    let signals = if target == RiskSignalTarget::UserPubkey {
+        list_risk_signals_for_user(pool, target_id).await?
+    } else {
+        list_risk_signals_for_target(pool, target, target_id).await?
+    };
     trust_risk_inputs_from(&signals, now_rfc3339)
 }

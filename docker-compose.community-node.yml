@@ -11,8 +11,15 @@ x-cn-service-env: &cn-service-env
   COMMUNITY_NODE_PUBLIC_BASE_URL: ${CN_PUBLIC_BASE_URL:-http://127.0.0.1:18080}
   COMMUNITY_NODE_CONNECTIVITY_URLS: ${COMMUNITY_NODE_CONNECTIVITY_URLS:-http://127.0.0.1:13340}
 
+x-cn-logging: &cn-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 services:
   cn-postgres:
+    logging: *cn-logging
     image: postgres:17-bookworm
     environment: *cn-postgres-env
     restart: unless-stopped
@@ -31,6 +38,7 @@ services:
       - cn-postgres-data:/var/lib/postgresql/data
 
   cn-valkey:
+    logging: *cn-logging
     image: valkey/valkey:8-alpine
     restart: unless-stopped
     ports:
@@ -45,6 +53,7 @@ services:
   # （真実源は Postgres。ADR 0025 / 0026）。container private network 内のみで listen し、
   # host / internet へ port を公開しない（デバッグは `docker compose exec cn-arcadedb` を使う）。
   cn-arcadedb:
+    logging: *cn-logging
     image: ${CN_ARCADEDB_IMAGE:-arcadedata/arcadedb:26.8.1}
     restart: unless-stopped
     environment:
@@ -62,6 +71,7 @@ services:
       - cn-arcadedb-data:/home/arcadedb/databases
 
   cn-migrate:
+    logging: *cn-logging
     build:
       context: .
       dockerfile: docker/cn/Dockerfile
@@ -81,6 +91,7 @@ services:
     restart: "no"
 
   cn-user-api:
+    logging: *cn-logging
     build:
       context: .
       dockerfile: docker/cn/Dockerfile
@@ -112,6 +123,8 @@ services:
       COMMUNITY_NODE_ARCADEDB_PASSWORD: ${CN_ARCADEDB_ROOT_PASSWORD:?set CN_ARCADEDB_ROOT_PASSWORD}
       COMMUNITY_NODE_INDEX_QUERY_ENABLED: ${COMMUNITY_NODE_INDEX_QUERY_ENABLED:-false}
       COMMUNITY_NODE_TRUST_READ_ENABLED: ${COMMUNITY_NODE_TRUST_READ_ENABLED:-false}
+      COMMUNITY_NODE_DEPLOYMENT_REVISION: ${COMMUNITY_NODE_DEPLOYMENT_REVISION:?set COMMUNITY_NODE_DEPLOYMENT_REVISION}
+      COMMUNITY_NODE_READINESS_ACTIVATION_MAX_AGE_SECS: ${COMMUNITY_NODE_READINESS_ACTIVATION_MAX_AGE_SECS:-900}
       COMMUNITY_NODE_TRUST_W_ABS_NEGATIVE: ${COMMUNITY_NODE_TRUST_W_ABS_NEGATIVE:-}
       COMMUNITY_NODE_TRUST_W_ABS_POSITIVE: ${COMMUNITY_NODE_TRUST_W_ABS_POSITIVE:-}
       COMMUNITY_NODE_TRUST_RELATIVE_HALF_LIFE_DAYS: ${COMMUNITY_NODE_TRUST_RELATIVE_HALF_LIFE_DAYS:-}
@@ -126,6 +139,7 @@ services:
       - "${CN_USER_API_HOST_BIND_IP:-127.0.0.1}:${CN_USER_API_PORT:-18080}:8080"
 
   cn-iroh-relay:
+    logging: *cn-logging
     build:
       context: .
       dockerfile: docker/cn/Dockerfile
@@ -150,6 +164,7 @@ services:
   # provider 未構成なら ingest 無効の fail-closed 常駐（scan なしで index に載せない）。
   # port は status endpoint の loopback bind のみで、iroh 通信は outbound で成立する。
   cn-indexer:
+    logging: *cn-logging
     build:
       context: .
       dockerfile: docker/cn/Dockerfile
@@ -217,6 +232,7 @@ services:
   # relation graph の定期 batch 解析（#415 / #615）。ループは直列実行なので overlap は
   # 構造的に発生しない。成否は stdout log（[relation-analyze] 行）で観測する。
   cn-relation-analyze:
+    logging: *cn-logging
     build:
       context: .
       dockerfile: docker/cn/Dockerfile

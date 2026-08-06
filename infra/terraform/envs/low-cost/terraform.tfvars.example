@@ -31,6 +31,13 @@ disk_size_gb = 30
 backup_enabled        = true
 backup_retention_days = 30
 
+# Cloud Monitoring alert policies are enabled by default. Add one or more
+# pre-created notification channel resource names before production apply.
+enable_community_node_monitoring = true
+# monitoring_notification_channels = [
+#   "projects/your-gcp-project/notificationChannels/1234567890",
+# ]
+
 # operator-config.yaml を VM へ配置して public manifest endpoint /
 # report_endpoint gating を有効化する（#380, 任意）。
 # この env ディレクトリに operator-config.yaml を置き、相対パスを指定する。

@@ -254,6 +254,13 @@ async fn require_index_query(
             "this community node does not provide index queries",
         ));
     };
+    if !state.readiness_activation_is_valid().await {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "INDEX_QUERY_NOT_ACTIVATED",
+            "this community node index activation is not current",
+        ));
+    }
     let identity = require_bearer_identity(&state.pool, &state.jwt_config, headers).await?;
     let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
     Ok(index_query)
