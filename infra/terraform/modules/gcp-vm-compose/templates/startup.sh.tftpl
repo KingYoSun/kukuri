@@ -252,6 +252,32 @@ RandomizedDelaySec=60
 [Install]
 WantedBy=timers.target
 UNIT
+%{ if operator_config_enabled ~}
+# --- systemd timer: public read surface readiness activation（#616 / #612） ---
+# activationの有効期限（既定15分）より短い5分間隔で再判定する。oneshotの失敗時も
+# timerは次回再試行し、CLIが旧activationをrevokeするためunsafeなsurfaceは残らない。
+cat > /etc/systemd/system/kukuri-readiness.service <<UNIT
+[Unit]
+Description=kukuri community node public readiness activation
+After=docker.service
+Requires=docker.service
+[Service]
+Type=oneshot
+WorkingDirectory=$INSTALL_DIR
+ExecStart=$COMPOSE_BIN run --rm cn-readiness
+UNIT
+cat > /etc/systemd/system/kukuri-readiness.timer <<UNIT
+[Unit]
+Description=kukuri community node public readiness activation timer
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+RandomizedDelaySec=30
+Persistent=true
+[Install]
+WantedBy=timers.target
+UNIT
+%{ endif ~}
 %{ endif ~}
 
 %{ if backup_enabled ~}
@@ -305,6 +331,9 @@ systemctl enable --now kukuri-backup.timer
 %{ endif ~}
 %{ if deploy_indexer_stack ~}
 systemctl enable --now kukuri-relation-analyze.timer
+%{ if operator_config_enabled ~}
+systemctl enable --now kukuri-readiness.timer
+%{ endif ~}
 %{ endif ~}
 
 log "bootstrap complete"

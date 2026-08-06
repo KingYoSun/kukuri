@@ -185,6 +185,28 @@ services:
       COMMUNITY_NODE_ARCADEDB_PASSWORD: $${CN_ARCADEDB_ROOT_PASSWORD:?set CN_ARCADEDB_ROOT_PASSWORD}
     command: ["relation", "analyze"]
     restart: "no"
+%{ if operator_config_enabled ~}
+
+  # readiness activation は短命（既定15分）のため、systemd timer が5分ごとに
+  # production credential probeを含む全判定を再実行する。失敗時はCLIが旧activationを
+  # revokeし、user-apiのread-time gateが直ちにsurfaceを閉じる。
+  cn-readiness:
+    logging: *cn-logging
+    image: ${cn_cli_image}
+    profiles: ["ops"]
+    env_file:
+      - ./community-node.env
+    environment:
+      COMMUNITY_NODE_DATABASE_URL: $${COMMUNITY_NODE_DATABASE_URL:?set COMMUNITY_NODE_DATABASE_URL}
+      COMMUNITY_NODE_ARCADEDB_PASSWORD: $${CN_ARCADEDB_ROOT_PASSWORD:?set CN_ARCADEDB_ROOT_PASSWORD}
+      PROJECT_ARACHNID_API_USERNAME: $${PROJECT_ARACHNID_API_USERNAME:-}
+      PROJECT_ARACHNID_API_PASSWORD: $${PROJECT_ARACHNID_API_PASSWORD:-}
+      COMMUNITY_NODE_VLM_API_KEY: $${COMMUNITY_NODE_VLM_API_KEY:-}
+    volumes:
+      - ${operator_config_path}:/work/operator-config.yaml:ro
+    command: ["readiness", "--config", "/work/operator-config.yaml"]
+    restart: "no"
+%{ endif ~}
 %{ endif ~}
 
   caddy:
