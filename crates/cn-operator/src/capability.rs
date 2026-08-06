@@ -106,14 +106,10 @@ impl Capability {
     }
 
     pub fn availability(self) -> Availability {
-        match self {
-            // index / moderation / local trust は未実装（spec のみ）。
-            Capability::CommunityIndex
-            | Capability::Moderation
-            | Capability::CommunityLocalTrust => Availability::Planned,
-            // report endpoint は #370 で実装済み（POST /v1/report・保存・運営者確認導線）。
-            _ => Availability::Available,
-        }
+        // index / moderation / local trust は #616 の実行時準備判定・有効化の関門・
+        // 全構成 E2E の完了により提供中へ昇格した（#617）。現時点で計画中の capability は
+        // 無いが、将来の Phase B 追加に備えて区分と分離表示の仕組みは残す。
+        Availability::Available
     }
 
     pub fn display_name(self) -> &'static str {

@@ -41,6 +41,8 @@ pub struct OperatorConfig {
     ///
     /// これが false のまま Planned capability を有効化すると検証で失敗する。
     /// 実体のない「運用中」開示を生成しないためのガード。
+    /// #617 の昇格後、現時点で計画中の capability は無い（既存 config の後方互換のため
+    /// フィールド自体は受理し続ける。将来の Phase B 追加時に再び効く）。
     #[serde(default)]
     pub acknowledge_planned_capabilities: bool,
 }

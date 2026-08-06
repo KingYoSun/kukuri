@@ -225,6 +225,7 @@ acknowledge_planned_capabilities: true
             server_name: "golden.example".to_string(),
             manifest_version: "v1".to_string(),
             capability_scope: CommunityNodeCapabilityScope {
+                // #617 の昇格後: index / moderation / local trust は available 側に入る。
                 available_enabled: vec![
                     "auth_consent".to_string(),
                     "bootstrap_assist".to_string(),
@@ -232,13 +233,12 @@ acknowledge_planned_capabilities: true
                     "iroh_relay".to_string(),
                     "traffic_relay_fallback".to_string(),
                     "cloudflare_proxy".to_string(),
-                    "report_endpoint".to_string(),
-                ],
-                planned_enabled: vec![
                     "community_index".to_string(),
                     "moderation".to_string(),
                     "community_local_trust".to_string(),
+                    "report_endpoint".to_string(),
                 ],
+                planned_enabled: Vec::new(),
             },
             authority_scope: CommunityNodeAuthorityScope {
                 applies_to: vec![
