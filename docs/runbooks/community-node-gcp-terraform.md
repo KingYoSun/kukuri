@@ -367,6 +367,8 @@ docker volume rm community-node_cn-arcadedb-data   # volume 名は docker volume
 
 - cn-indexer / ArcadeDB / relation timer が構成から外れ、公開 surface は従来どおり
   API / relay のみになる（flag が既定 false のため index / trust API はもともと 404）。
+- startupは `docker-compose up -d --remove-orphans` とoptional systemd unitのcleanupを行うため、
+  旧構成のcn-indexer / ArcadeDB containerやrelation / readiness timerは再起動後に残らない。
 - Postgres の永続 data（verdict / moderation artifact / index 真実源）は残る。
 - `indexer_data_disk_gb > 0` の PD は Terraform 管理のため、変数を 0 にしない限り残る
   （再有効化時に endpoint 同一性を保てる）。

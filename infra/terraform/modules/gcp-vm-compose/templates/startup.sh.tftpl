@@ -205,9 +205,23 @@ fi
 
 # --- start the stack ---
 cd "$INSTALL_DIR"
+# 前回bootの構成で作られたoptional timerを先に片付ける。現在も有効なunitはこの後で
+# 再生成・再enableする。serviceの実行中にflagを切り替える場合も次回bootで収束する。
+systemctl disable --now kukuri-relation-analyze.timer 2>/dev/null || true
+systemctl disable --now kukuri-readiness.timer 2>/dev/null || true
+systemctl disable --now kukuri-backup.timer 2>/dev/null || true
+rm -f /etc/systemd/system/kukuri-relation-analyze.service \
+  /etc/systemd/system/kukuri-relation-analyze.timer \
+  /etc/systemd/system/kukuri-readiness.service \
+  /etc/systemd/system/kukuri-readiness.timer \
+  /etc/systemd/system/kukuri-backup.service \
+  /etc/systemd/system/kukuri-backup.timer
+
 "$COMPOSE_BIN" pull
 "$COMPOSE_BIN" run --rm cn-migrate
-"$COMPOSE_BIN" up -d
+# feature flag rollbackで旧composeのindexer / ArcadeDB containerを残さない。
+# named volumeと別PDは削除しないため、再有効化時のprojection再構築・endpoint同一性は維持される。
+"$COMPOSE_BIN" up -d --remove-orphans
 
 # --- systemd timer: certificate renewal ---
 cat > /etc/systemd/system/kukuri-cert-renew.service <<UNIT
