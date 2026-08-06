@@ -243,35 +243,56 @@ impl Capability {
             Capability::CommunityIndex => CapabilityMeta {
                 capability: self,
                 display_name: "コミュニティインデックス (community index)",
-                handled_data: "（計画）index 対象 content のメタデータ、検索インデックス",
-                purpose: "（計画）community node が関与した content の検索・発見の補助",
-                retention_impact: "（計画）index 保持方針はノード設定に従う",
+                handled_data: "サポート対象の公開トピック（共有レプリカ）上の投稿の本文テキストとメタデータ。\
+                    索引の真実源は Postgres、検索投影は ArcadeDB（真実源から再構築可能）。\
+                    生メディアは索引にもデータベースにも保存しない",
+                purpose: "安全性走査を通過した許可 content のみを対象とする検索・発見・おすすめの補助",
+                retention_impact: "索引項目は、対象トピックから外れた時点・判定が許可以外へ変わった時点で\
+                    索引解除される。検索投影は派生データであり真実源から再構築できる",
                 external_transmission: None,
-                telecom_note: "（計画）index はノードの authority scope 内に限定される。",
-                privacy_note: "（計画）index 対象と保持方針を実装時に明記する。",
-                terms_note: "（計画）本ノードが index した content の範囲についてのみ責任を負う旨を記載する。",
+                telecom_note: "索引と検索・発見・おすすめの権限は、本ノードのサポート対象（公開トピック）\
+                    内に限定される。本ノードは content の真実源ではない。",
+                privacy_note: "公開トピックへ公開された投稿のみを対象とし、走査済みの許可 content のみを\
+                    索引する。生メディアを保持しない。",
+                terms_note: "本ノードが索引した content の範囲についてのみ責任を負い、検索・発見・おすすめは\
+                    本ノードの authority scope 内に限定される旨を記載する。",
             },
             Capability::Moderation => CapabilityMeta {
                 capability: self,
                 display_name: "モデレーション (moderation)",
-                handled_data: "（計画）moderation verdict、署名付き moderation event",
-                purpose: "（計画）ノードの index / discovery / recommendation からの critical safety risk の排除",
-                retention_impact: "（計画）moderation ログ保持期間に従う",
+                handled_data: "テキスト・メディアの安全性走査の判定（scan verdict）、署名付き moderation \
+                    event、根拠付き risk signal、申し立て状態。照合プロバイダの生の Match Data・生応答は\
+                    保存・配布せず、AI の入力にも使わない",
+                purpose: "既知一致照合（Project Arachnid Shield）と分類器（OpenAI 互換の視覚言語モデル）に\
+                    よる走査で、critical safety risk を本ノードの索引・発見・おすすめから排除する。\
+                    走査は fail-closed（走査失敗・プロバイダ不達・メディア不達は許可へ落とさず保留）",
+                retention_impact: "判定・moderation event はモデレーションログ保持期間に従う。risk signal \
+                    は失効・訂正再発行・申し立ての対象。走査のため一時取得したメディアは恒久保存しない",
                 external_transmission: None,
-                telecom_note: "（計画）moderation はノードの authority scope 内に限定される。",
-                privacy_note: "（計画）moderation 対象データの扱いを実装時に明記する。",
-                terms_note: "（計画）moderation event は本ノードの authority scope 内でのみ意味を持つ旨を記載する。",
+                telecom_note: "moderation は node-local の判断であり、本ノードの authority scope 内に\
+                    限定される。network 全体への命令ではない。",
+                privacy_note: "走査のためメディアを一時取得する（恒久保存しない）。プロバイダの Match Data \
+                    を保存・配布・AI 入力に使わない。プロバイダへの送信内容は外部送信ポリシーに明記する。",
+                terms_note: "moderation event は本ノードの authority scope 内でのみ意味を持ち、判定への\
+                    申し立て（異議）の導線を提供する旨を記載する。",
             },
             Capability::CommunityLocalTrust => CapabilityMeta {
                 capability: self,
-                display_name: "コミュニティローカル trust signal (community-local trust)",
-                handled_data: "（計画）根拠付き risk signal / trust signal",
-                purpose: "（計画）ノードの authority scope 内での trust / relation signal の発行",
-                retention_impact: "（計画）signal の失効ポリシーに従う",
+                display_name: "コミュニティローカル信頼・関係 (community-local trust / relation)",
+                handled_data: "根拠付き risk signal と信頼合成値（絶対・相対成分）、公開トピックの共参加\
+                    由来の pairwise relation（近接度・近傍。ArcadeDB 上の再構築可能な派生グラフ）、\
+                    関係表示の離脱設定",
+                purpose: "閲覧者に固定された node-local advisory としての信頼・関係の読み取り提供\
+                    （trust と relation の双方を含む）",
+                retention_impact: "risk signal は失効・半減期減衰・申し立てに従う。relation graph は\
+                    公開トピックの共参加から定期解析で再構築できる派生データ",
                 external_transmission: None,
-                telecom_note: "（計画）trust signal はノードの authority scope 内に限定される。",
-                privacy_note: "（計画）signal 対象データの扱いを実装時に明記する。",
-                terms_note: "（計画）trust signal は network-wide command ではなく optional trust input である旨を記載する。",
+                telecom_note: "信頼・関係は node-local advisory であり、本ノードの authority scope 内に\
+                    限定される。canonical な identity / social graph を変更しない。",
+                privacy_note: "関係の入力は公開トピックの共参加のみで、プライベートチャンネル由来の信号は\
+                    使わない。関係表示の離脱（opt-out）は可逆で、信頼値に影響しない。",
+                terms_note: "trust signal は network-wide command ではなく optional な入力であり、\
+                    cross-cluster content を自動抑制しない旨を記載する。",
             },
             Capability::ReportEndpoint => CapabilityMeta {
                 capability: self,

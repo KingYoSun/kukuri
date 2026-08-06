@@ -256,6 +256,60 @@ fn cloudflare_enabled_emits_external_transmission() {
 }
 
 #[test]
+fn promoted_capability_metadata_describes_implemented_behavior() {
+    // #617 T2: 昇格した 3 capability の説明が「（計画）」ではなく実装済みのデータフローを
+    // 記述していることを固定する（開示文書の生成元となる契約）。
+    for cap in [
+        Capability::CommunityIndex,
+        Capability::Moderation,
+        Capability::CommunityLocalTrust,
+    ] {
+        let meta = cap.meta();
+        for text in [
+            meta.handled_data,
+            meta.purpose,
+            meta.retention_impact,
+            meta.telecom_note,
+            meta.privacy_note,
+            meta.terms_note,
+        ] {
+            assert!(
+                !text.contains("計画"),
+                "{cap}: metadata must not read as planned: {text}"
+            );
+        }
+    }
+
+    // index: 許可 content のみ・真実源と投影の分離・生メディア非保存。
+    let index = Capability::CommunityIndex.meta();
+    assert!(index.handled_data.contains("公開トピック"));
+    assert!(index.handled_data.contains("Postgres"));
+    assert!(index.handled_data.contains("ArcadeDB"));
+    assert!(index.handled_data.contains("生メディア"));
+    assert!(index.purpose.contains("走査を通過した許可"));
+    assert!(index.telecom_note.contains("真実源ではない"));
+
+    // moderation: 既知一致 + 分類器・fail-closed・Match Data 非保存・authority 限定。
+    let moderation = Capability::Moderation.meta();
+    assert!(moderation.purpose.contains("Project Arachnid Shield"));
+    assert!(moderation.purpose.contains("視覚言語モデル"));
+    assert!(moderation.purpose.contains("fail-closed"));
+    assert!(moderation.handled_data.contains("Match Data"));
+    assert!(moderation.telecom_note.contains("authority scope"));
+    assert!(moderation.terms_note.contains("申し立て"));
+
+    // trust / relation: 双方を含む・node-local advisory・共参加のみ・opt-out 可逆。
+    let trust = Capability::CommunityLocalTrust.meta();
+    assert!(trust.display_name.contains("relation"));
+    assert!(trust.purpose.contains("node-local advisory"));
+    assert!(trust.privacy_note.contains("共参加"));
+    assert!(trust.privacy_note.contains("プライベートチャンネル"));
+    assert!(trust.privacy_note.contains("可逆"));
+    assert!(trust.telecom_note.contains("canonical"));
+    assert!(trust.terms_note.contains("network-wide command"));
+}
+
+#[test]
 fn promoted_capability_listed_as_operating() {
     // #617 の昇格後、moderation は運用中の補助機能として記載され、「計画中」分離は出ない。
     let yaml = base_config("  moderation: true\n", false);
