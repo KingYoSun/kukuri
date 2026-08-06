@@ -53,6 +53,63 @@ fn external_destinations(config: &ResolvedConfig) -> Vec<ExternalDestination> {
     dests
 }
 
+/// 安全性走査プロバイダへの送信先（operator config 由来の動的開示。#617）。
+///
+/// 真実源はプロバイダ構成そのもの（構成されていれば走査時に送信が発生する）。
+/// 公開資料には送信先名・区分・目的・データ区分のみを出し、接続先 URL・内部
+/// アドレス・資格情報は出さない。
+struct SafetyProviderDestination {
+    display_name: &'static str,
+    /// 真 = 運営者が管理する基盤（第三者への外部送信ではない）。
+    operator_controlled: bool,
+    purpose: &'static str,
+    data_categories: &'static str,
+}
+
+fn safety_provider_destinations(config: &ResolvedConfig) -> Vec<SafetyProviderDestination> {
+    let Some(safety) = config.raw.safety.as_ref() else {
+        return Vec::new();
+    };
+    let providers = &safety.providers;
+    let normalized = |entry: &crate::SafetyProviderEntry| entry.provider.trim().replace('_', "-");
+    let mut dests = Vec::new();
+
+    if let Some(entry) = providers.known_csam.as_ref()
+        && normalized(entry) == "project-arachnid-shield"
+    {
+        dests.push(SafetyProviderDestination {
+            display_name:
+                "Project Arachnid Shield（Canadian Centre for Child Protection が運営する照合 API）",
+            operator_controlled: false,
+            purpose: "既知 CSAM（児童性的虐待コンテンツ）との照合による検知走査",
+            data_categories: "走査対象メディアのバイト列またはそのハッシュ。認証は運営者自身の\
+                資格情報で行う。照合結果の詳細（Match Data）は保存・配布しない",
+        });
+    }
+
+    // 視覚言語モデルは general / unknown_csam のどちらの slot でも同一の送信先として
+    // 1 件に集約する。区分は hosting 宣言に従い、未指定は保守側（第三者への外部送信）。
+    let vlm_entry = [providers.general.as_ref(), providers.unknown_csam.as_ref()]
+        .into_iter()
+        .flatten()
+        .find(|entry| normalized(entry) == "openai-compatible-vlm");
+    if let Some(entry) = vlm_entry {
+        let self_host = matches!(entry.hosting, Some(crate::ProviderHosting::SelfHost));
+        dests.push(SafetyProviderDestination {
+            display_name: if self_host {
+                "運営者が管理する視覚言語モデル基盤（OpenAI 互換 API）"
+            } else {
+                "外部の視覚言語モデル API（OpenAI 互換）"
+            },
+            operator_controlled: self_host,
+            purpose: "投稿本文・メディアのモデレーション目的の分類走査",
+            data_categories: "走査対象の本文テキストおよびメディアのバイト列。モデルの生応答は\
+                保存・配布しない",
+        });
+    }
+    dests
+}
+
 /// 文書ヘッダ（タイトル + 運営者情報 + 注記）。
 fn header(config: &ResolvedConfig, title: &str) -> String {
     let s = &config.raw.server;
@@ -307,6 +364,31 @@ fn gen_external_transmission(config: &ResolvedConfig) -> String {
     for dest in external_destinations(config) {
         let _ = writeln!(s, "### {}\n", dest.display_name());
         let _ = writeln!(s, "{}\n", dest.description());
+    }
+
+    // 安全性走査プロバイダへの送信（構成されている場合のみ。#617）。
+    let safety_dests = safety_provider_destinations(config);
+    if !safety_dests.is_empty() {
+        let _ = writeln!(s, "## 安全性走査プロバイダへの送信\n");
+        let _ = writeln!(
+            s,
+            "モデレーション（安全性走査）のため、構成済みプロバイダへ次の送信が発生します。\
+             接続先の具体的なアドレスは運用上の理由で公開しません。\n"
+        );
+        for dest in safety_dests {
+            let _ = writeln!(s, "### {}\n", dest.display_name);
+            let _ = writeln!(
+                s,
+                "- 区分: {}",
+                if dest.operator_controlled {
+                    "運営者が管理する基盤内の送信（第三者への外部送信ではない）"
+                } else {
+                    "第三者への外部送信"
+                }
+            );
+            let _ = writeln!(s, "- 目的: {}", dest.purpose);
+            let _ = writeln!(s, "- 送信するデータ: {}\n", dest.data_categories);
+        }
     }
 
     // 無効化により送信されないものを明示（analytics: false 等の検証可能性）。

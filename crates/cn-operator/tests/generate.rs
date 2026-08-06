@@ -255,6 +255,76 @@ fn cloudflare_enabled_emits_external_transmission() {
     assert!(active_section.contains("Cloudflare"));
 }
 
+/// safety providers 付きの config（外部送信の動的開示の検証用）。
+/// `vlm_hosting_line` は general provider 配下の行（例: `"      hosting: self_host\n"`）か空。
+fn config_with_safety_providers(vlm_hosting_line: &str) -> String {
+    let base = r#"server:
+  domain: example-kukuri.net
+  operator_name: Example Operator
+  country: JP
+features:
+  moderation: true
+retention:
+  connection_logs_days: 30
+  moderation_logs_days: 180
+safety:
+  profile: public-node
+  policy_version: 2026-06-public-node-v1
+  providers:
+    known_csam:
+      provider: project-arachnid-shield
+      required: true
+      credential_secret_id: kukuri-cn-safety-known-csam
+    general:
+      provider: openai-compatible-vlm
+"#;
+    format!("{base}{vlm_hosting_line}")
+}
+
+#[test]
+fn safety_providers_surface_in_external_transmission_notice() {
+    // 自前ホスト宣言: 視覚言語モデルは運営者管理基盤、Arachnid は第三者への外部送信。
+    let yaml = config_with_safety_providers("      hosting: self_host\n");
+    let resolved = load_and_validate(&yaml).unwrap();
+    let ext = doc(&generate_all(&resolved), "external-transmission-notice.md");
+    assert!(ext.contains("安全性走査プロバイダへの送信"));
+    assert!(ext.contains("Project Arachnid Shield"));
+    assert!(ext.contains("第三者への外部送信"));
+    assert!(ext.contains("運営者が管理する視覚言語モデル基盤"));
+    assert!(ext.contains("第三者への外部送信ではない"));
+
+    // 外部 API 宣言: 視覚言語モデルも第三者への外部送信として表示される。
+    let yaml = config_with_safety_providers("      hosting: external\n");
+    let resolved = load_and_validate(&yaml).unwrap();
+    let ext = doc(&generate_all(&resolved), "external-transmission-notice.md");
+    assert!(ext.contains("外部の視覚言語モデル API"));
+    assert!(!ext.contains("運営者が管理する視覚言語モデル基盤"));
+
+    // 未指定は保守側（第三者への外部送信）として扱う。
+    let yaml = config_with_safety_providers("");
+    let resolved = load_and_validate(&yaml).unwrap();
+    let ext = doc(&generate_all(&resolved), "external-transmission-notice.md");
+    assert!(ext.contains("外部の視覚言語モデル API"));
+}
+
+#[test]
+fn generated_docs_never_contain_private_endpoints_or_secret_ids_values() {
+    // 公開資料の非含有監査: URL・secret 値らしき文字列が生成物に出ないこと。
+    // （secret は ID のみ config に書かれ、値はそもそも config に無い。ここでは
+    //   接続先アドレスの類が漏れないことを固定する）
+    let yaml = config_with_safety_providers("      hosting: self_host\n");
+    let resolved = load_and_validate(&yaml).unwrap();
+    for file in generate_all(&resolved) {
+        for needle in ["http://10.", "http://192.168.", "wireguard", "WireGuard"] {
+            assert!(
+                !file.content.contains(needle),
+                "{}: must not leak private endpoints: {needle}",
+                file.filename
+            );
+        }
+    }
+}
+
 #[test]
 fn promoted_capability_metadata_describes_implemented_behavior() {
     // #617 T2: 昇格した 3 capability の説明が「（計画）」ではなく実装済みのデータフローを
