@@ -8,8 +8,8 @@ use async_trait::async_trait;
 
 use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
 use kukuri_cn_safety::{
-    ModerationEventSigner, SafetyPolicy, SafetyProvider, SafetyRiskSignal, SafetyVerdict,
-    SignedModerationEvent, Visibility, issue_signed_event,
+    ModerationEventSigner, RiskSignalTarget, SafetyPolicy, SafetyProvider, SafetyRiskSignal,
+    SafetyVerdict, SignedModerationEvent, Visibility, issue_signed_event,
 };
 
 use crate::{
@@ -112,6 +112,7 @@ pub trait SafetyArtifactStore: Send + Sync {
         &self,
         issuer_node_id: &str,
         signal: &SafetyRiskSignal,
+        subject_author: Option<&str>,
     ) -> Result<String>;
 
     async fn persist_verdict(
@@ -126,6 +127,7 @@ pub trait SafetyArtifactStore: Send + Sync {
 pub struct MemorySafetyArtifactStore {
     events: Mutex<Vec<SignedModerationEvent>>,
     signals: Mutex<Vec<(String, SafetyRiskSignal)>>,
+    signal_subject_authors: Mutex<Vec<(RiskSignalTarget, String, String)>>,
     verdicts: Mutex<HashMap<(String, String), (String, SafetyVerdict)>>,
 }
 
@@ -140,6 +142,13 @@ impl MemorySafetyArtifactStore {
 
     pub fn signals(&self) -> Vec<(String, SafetyRiskSignal)> {
         self.signals.lock().expect("signals mutex poisoned").clone()
+    }
+
+    pub fn signal_subject_authors(&self) -> Vec<(RiskSignalTarget, String, String)> {
+        self.signal_subject_authors
+            .lock()
+            .expect("signal subject authors mutex poisoned")
+            .clone()
     }
 
     pub fn verdict_for(
@@ -188,10 +197,17 @@ impl SafetyArtifactStore for MemorySafetyArtifactStore {
         &self,
         issuer_node_id: &str,
         signal: &SafetyRiskSignal,
+        subject_author: Option<&str>,
     ) -> Result<String> {
         let mut signals = self.signals.lock().expect("signals mutex poisoned");
         let id = format!("memory-signal-{}", signals.len() + 1);
         signals.push((issuer_node_id.to_string(), signal.clone()));
+        if let Some(author) = subject_author {
+            self.signal_subject_authors
+                .lock()
+                .expect("signal subject authors mutex poisoned")
+                .push((signal.target, signal.target_id.clone(), author.to_string()));
+        }
         Ok(id)
     }
 
@@ -260,6 +276,26 @@ impl SafetyScanService {
         &self,
         request: &ProviderScanRequest,
     ) -> Result<SafetyScanOutcome> {
+        self.scan_and_record_inner(request, None).await
+    }
+
+    pub async fn scan_and_record_for_author(
+        &self,
+        request: &ProviderScanRequest,
+        subject_author: &str,
+    ) -> Result<SafetyScanOutcome> {
+        if subject_author.trim().is_empty() {
+            bail!("scan subject author must not be empty");
+        }
+        self.scan_and_record_inner(request, Some(subject_author))
+            .await
+    }
+
+    async fn scan_and_record_inner(
+        &self,
+        request: &ProviderScanRequest,
+        subject_author: Option<&str>,
+    ) -> Result<SafetyScanOutcome> {
         let report = self.orchestrator.scan_subject(request).await;
         let verdict_id = match (request.subject_kind, request.subject_id.as_deref()) {
             (Some(kind), Some(subject_id)) if !subject_id.trim().is_empty() => Some(
@@ -273,7 +309,7 @@ impl SafetyScanService {
         let persisted_signal_id = match report.risk_signal.as_ref() {
             Some(signal) => Some(
                 self.store
-                    .persist_signal(&self.issuer_node_id, signal)
+                    .persist_signal(&self.issuer_node_id, signal, subject_author)
                     .await
                     .context("failed to persist safety risk signal")?,
             ),

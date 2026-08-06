@@ -12,7 +12,8 @@ use chrono::{Duration, Utc};
 use sqlx::PgPool;
 
 use kukuri_cn_core::{
-    ReadinessProbeRecord, initialize_database, list_readiness_probes, record_readiness_activation,
+    ReadinessProbeRecord, initialize_database, list_readiness_probes,
+    readiness_context_fingerprint, record_readiness_activation, record_readiness_revocation,
     upsert_readiness_probe,
 };
 use kukuri_cn_operator::{
@@ -160,6 +161,12 @@ pub(super) async fn run(
 
     let yaml = std::fs::read_to_string(config_path)
         .with_context(|| format!("{} を読み込めません", config_path.display()))?;
+    let deployment_revision = std::env::var("COMMUNITY_NODE_DEPLOYMENT_REVISION")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .context("COMMUNITY_NODE_DEPLOYMENT_REVISION is required for readiness activation")?;
+    let context_fingerprint =
+        readiness_context_fingerprint(profile, &deployment_revision, yaml.as_bytes());
     let resolved = load_and_validate(&yaml)?;
     let mut report = evaluate_public_node_readiness(&resolved, profile);
 
@@ -300,6 +307,14 @@ pub(super) async fn run(
     }
 
     if report.has_blocking_failures() {
+        record_readiness_revocation(
+            pool,
+            now,
+            &report.profile,
+            &context_fingerprint,
+            "readiness_failed",
+        )
+        .await?;
         bail!(
             "readiness に不合格の項目があります (fail={})",
             report.fail_count()
@@ -321,7 +336,15 @@ pub(super) async fn run(
                 })
                 .collect::<Vec<_>>()
         );
-        record_readiness_activation(pool, now, &report.profile, &check_ids, &report_json).await?;
+        record_readiness_activation(
+            pool,
+            now,
+            &report.profile,
+            &check_ids,
+            &context_fingerprint,
+            &report_json,
+        )
+        .await?;
         println!("OK: すべての readiness check を満たしています。有効化記録を書き込みました。");
     } else {
         println!(

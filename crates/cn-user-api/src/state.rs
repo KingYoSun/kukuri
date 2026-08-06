@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use kukuri_cn_core::{
     ChannelSecretCipher, DatabaseInitMode, JwtConfig, PgIndexEntryStore, TopicRendezvousStore,
     connect_postgres, initialize_database, initialize_database_for_runtime,
+    latest_readiness_activation, readiness_context_fingerprint,
 };
 use kukuri_cn_indexer::{
     ArcadeDbConfig, ArcadeDbProjection, ArcadeDbRelationGraph, FailClosedIndexQuery, IndexQuery,
@@ -33,13 +34,21 @@ pub struct UserApiState {
     pub(crate) channel_secret_cipher: Option<Arc<ChannelSecretCipher>>,
     /// ユーザー向け search / discovery / recommendation の query 境界(#404)。
     /// fail-closed query gate(`FailClosedIndexQuery`)を通した読み口のみを持つ。
-    /// None = 機能無効(`CommunityIndex` が `Availability::Planned` の既定状態)で、
+    /// None = 設定無効または現在の deployment/config に有効な readiness activation がなく、
     /// `/v1/index/*` は 404 を返す。
     pub(crate) index_query: Option<Arc<dyn IndexQuery>>,
     /// trust / relation read surface(#415 / ADR 0026)。
-    /// None = 機能無効(`CommunityLocalTrust` が `Availability::Planned` の既定状態)で、
+    /// None = 設定無効または現在の deployment/config に有効な readiness activation がなく、
     /// `/v1/trust/*` / `/v1/relation/*` は 404 を返す。
     pub(crate) trust_read: Option<Arc<TrustReadState>>,
+    readiness_activation_requirement: Option<ReadinessActivationRequirement>,
+}
+
+#[derive(Clone)]
+struct ReadinessActivationRequirement {
+    profile: String,
+    context_fingerprint: String,
+    max_age: chrono::Duration,
 }
 
 /// trust / relation read surface の依存一式(#415)。
@@ -68,6 +77,20 @@ impl UserApiState {
         self.trust_read = Some(trust_read);
         self
     }
+
+    /// 起動後もactivationの期限・失効を各read requestで再確認する。
+    pub(crate) async fn readiness_activation_is_valid(&self) -> bool {
+        let Some(requirement) = self.readiness_activation_requirement.as_ref() else {
+            return true;
+        };
+        match activation_is_valid(&self.pool, requirement).await {
+            Ok(valid) => valid,
+            Err(error) => {
+                tracing::warn!(error = %format!("{error:#}"), "readiness activationの再確認に失敗しました");
+                false
+            }
+        }
+    }
 }
 
 /// public manifest endpoint 用の最小 state。DB を必要としないため、
@@ -94,7 +117,7 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
         config.rendezvous_redis_url.as_str(),
         config.rendezvous_key_prefix.as_str(),
     )?;
-    let manifest = load_manifest(config.operator_config_path.as_deref())?;
+    let (manifest, operator_config_yaml) = load_manifest(config.operator_config_path.as_deref())?;
     let channel_secret_cipher = config
         .channel_secret_key
         .as_deref()
@@ -105,9 +128,33 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
     // 有効化の関門（#616）。環境変数が真でも、`cn-cli readiness` の全項目合格記録が
     // 無ければ索引・信頼の読み取り面を公開しない（該当 surface は 404 のまま）。
     // 記録の判定項目集合が現行と不一致（判定基準の変更後）も無効に倒す（安全側）。
-    let readiness_activated = if config.index_query_enabled || config.trust_read_enabled {
-        match kukuri_cn_core::latest_readiness_activation(&pool).await? {
-            Some(activation) if activation.matches_check_ids(&READINESS_CHECK_IDS) => {
+    let readiness_activation_requirement =
+        if config.index_query_enabled || config.trust_read_enabled {
+            Some(ReadinessActivationRequirement {
+                profile: "public-node".to_string(),
+                context_fingerprint: readiness_context_fingerprint(
+                    "public-node",
+                    &config.deployment_revision,
+                    &operator_config_yaml,
+                ),
+                max_age: chrono::Duration::seconds(
+                    i64::try_from(config.readiness_activation_max_age_secs).unwrap_or(i64::MAX),
+                ),
+            })
+        } else {
+            None
+        };
+    let readiness_activated = if let Some(requirement) = readiness_activation_requirement.as_ref() {
+        match latest_readiness_activation(&pool).await? {
+            Some(activation)
+                if activation.is_valid(
+                    &requirement.profile,
+                    &READINESS_CHECK_IDS,
+                    &requirement.context_fingerprint,
+                    chrono::Utc::now(),
+                    requirement.max_age,
+                ) =>
+            {
                 tracing::info!(
                     activated_at = %activation.activated_at.to_rfc3339(),
                     "readiness の有効化記録を確認しました"
@@ -117,7 +164,7 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
             Some(activation) => {
                 tracing::warn!(
                     activated_at = %activation.activated_at.to_rfc3339(),
-                    "readiness の有効化記録の判定項目集合が現行と一致しないため、                     index / trust の読み取り面を公開しません（`cn-cli readiness` を再実行してください）"
+                    "readiness の有効化記録が現在のprofile/config/deploy/期限と一致しないため、                     index / trust の読み取り面を公開しません（`cn-cli readiness` を再実行してください）"
                 );
                 false
             }
@@ -177,20 +224,41 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
         channel_secret_cipher,
         index_query,
         trust_read,
+        readiness_activation_requirement,
     })
+}
+
+async fn activation_is_valid(
+    pool: &PgPool,
+    requirement: &ReadinessActivationRequirement,
+) -> Result<bool> {
+    Ok(latest_readiness_activation(pool)
+        .await?
+        .is_some_and(|activation| {
+            activation.is_valid(
+                &requirement.profile,
+                &READINESS_CHECK_IDS,
+                &requirement.context_fingerprint,
+                chrono::Utc::now(),
+                requirement.max_age,
+            )
+        }))
 }
 
 /// operator config から公開 manifest を構築する。
 ///
 /// config が指定されているのに読込・検証に失敗した場合は起動を失敗させる
 /// (運営者の設定ミスを黙って無視せず、明示的に止める)。
-fn load_manifest(path: Option<&std::path::Path>) -> Result<Option<Arc<CommunityNodeManifest>>> {
+fn load_manifest(
+    path: Option<&std::path::Path>,
+) -> Result<(Option<Arc<CommunityNodeManifest>>, Vec<u8>)> {
     let Some(path) = path else {
-        return Ok(None);
+        return Ok((None, Vec::new()));
     };
     let yaml = std::fs::read_to_string(path)
         .with_context(|| format!("failed to read operator config at {}", path.display()))?;
     let resolved = load_and_validate(&yaml)
         .with_context(|| format!("invalid operator config at {}", path.display()))?;
-    Ok(Some(Arc::new(build_manifest(&resolved))))
+    let bytes = yaml.as_bytes().to_vec();
+    Ok((Some(Arc::new(build_manifest(&resolved))), bytes))
 }

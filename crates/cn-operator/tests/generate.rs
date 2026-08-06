@@ -533,6 +533,23 @@ fn drift_check_detects_changes_and_clean() {
 }
 
 #[test]
+fn disclosure_check_rejects_private_endpoint_leaks() {
+    let resolved = load_and_validate(SAMPLE_CONFIG).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    for file in generate_all(&resolved) {
+        std::fs::write(dir.path().join(&file.filename), &file.content).unwrap();
+    }
+    let terms = dir.path().join("terms.md");
+    let mut content = std::fs::read_to_string(&terms).unwrap();
+    content.push_str("\ninternal endpoint: http://10.24.1.8:8000\n");
+    std::fs::write(&terms, content).unwrap();
+
+    let report = check_drift(&resolved, dir.path()).unwrap();
+    assert!(!report.is_clean());
+    assert_eq!(report.sensitive, vec!["terms.md".to_string()]);
+}
+
+#[test]
 fn parse_then_resolve_roundtrip() {
     let cfg = parse_config(SAMPLE_CONFIG).unwrap();
     assert_eq!(cfg.server.country, "JP");

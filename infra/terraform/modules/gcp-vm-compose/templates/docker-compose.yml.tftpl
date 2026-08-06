@@ -3,9 +3,16 @@
 # COMMUNITY_NODE_RENDEZVOUS_REDIS_URL) are provided at boot via the project .env file,
 # fetched from Secret Manager by the startup script. Non-secret container env lives in
 # community-node.env (passed literally via env_file).
+x-cn-logging: &cn-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 services:
 %{ if deploy_local_postgres ~}
   cn-postgres:
+    logging: *cn-logging
     image: ${postgres_image}
     restart: unless-stopped
     environment:
@@ -32,6 +39,7 @@ services:
 %{ endif ~}
 %{ if deploy_local_valkey ~}
   cn-valkey:
+    logging: *cn-logging
     image: ${valkey_image}
     restart: unless-stopped
     healthcheck:
@@ -41,6 +49,7 @@ services:
       retries: 20
 %{ endif ~}
   cn-migrate:
+    logging: *cn-logging
     image: ${cn_cli_image}
     restart: "no"
     environment:
@@ -53,6 +62,7 @@ services:
     command: ["prepare"]
 
   cn-user-api:
+    logging: *cn-logging
     image: ${cn_user_api_image}
     restart: unless-stopped
     env_file:
@@ -90,6 +100,7 @@ services:
       - "${api_port}"
 
   cn-iroh-relay:
+    logging: *cn-logging
     image: ${cn_iroh_relay_image}
     restart: unless-stopped
     env_file:
@@ -105,6 +116,7 @@ services:
   # index 投影 + relation graph（#615）。rebuildable projection（canonical store ではない）。
   # container private network 内のみで listen し、host / internet へ port を公開しない。
   cn-arcadedb:
+    logging: *cn-logging
     image: ${arcadedb_image}
     restart: unless-stopped
     environment:
@@ -126,6 +138,7 @@ services:
   # 常駐 indexing ワーカー（#613 / #615）。provider 未構成なら ingest 無効の fail-closed 常駐。
   # port は expose のみ（host 公開しない）。iroh 通信は outbound で成立する。
   cn-indexer:
+    logging: *cn-logging
     image: ${cn_indexer_image}
     restart: unless-stopped
     env_file:
@@ -162,6 +175,7 @@ services:
   # `docker-compose run --rm cn-relation-analyze` として起動する one-shot。
   # profiles により `up -d` では起動しない。
   cn-relation-analyze:
+    logging: *cn-logging
     image: ${cn_cli_image}
     profiles: ["ops"]
     env_file:
@@ -174,6 +188,7 @@ services:
 %{ endif ~}
 
   caddy:
+    logging: *cn-logging
     image: ${caddy_image}
     restart: unless-stopped
     depends_on:

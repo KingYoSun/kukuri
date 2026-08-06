@@ -115,6 +115,8 @@ echo "${caddyfile_b64}" | base64 -d > "$INSTALL_DIR/Caddyfile"
 echo "${env_runtime_b64}" | base64 -d > "$INSTALL_DIR/community-node.env"
 echo "${renew_script_b64}" | base64 -d > "$INSTALL_DIR/renew-certs.sh"
 chmod +x "$INSTALL_DIR/renew-certs.sh"
+echo "${monitor_script_b64}" | base64 -d > "$INSTALL_DIR/monitor.sh"
+chmod 700 "$INSTALL_DIR/monitor.sh"
 %{ if operator_config_enabled ~}
 # operator-config.yaml を VM に配置する（#380）。compose が cn-user-api に read-only mount し、
 # COMMUNITY_NODE_OPERATOR_CONFIG=${operator_config_path} で public manifest endpoint を有効化する。
@@ -275,8 +277,29 @@ WantedBy=timers.target
 UNIT
 %{ endif ~}
 
+# --- systemd timer: custom Cloud Monitoring metrics ---
+cat > /etc/systemd/system/kukuri-monitor.service <<UNIT
+[Unit]
+Description=kukuri community node health metrics
+[Service]
+Type=oneshot
+ExecStart=/bin/bash $INSTALL_DIR/monitor.sh
+UNIT
+cat > /etc/systemd/system/kukuri-monitor.timer <<UNIT
+[Unit]
+Description=kukuri community node health metrics timer
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+RandomizedDelaySec=30
+Persistent=true
+[Install]
+WantedBy=timers.target
+UNIT
+
 systemctl daemon-reload
 systemctl enable --now kukuri-cert-renew.timer
+systemctl enable --now kukuri-monitor.timer
 %{ if backup_enabled ~}
 systemctl enable --now kukuri-backup.timer
 %{ endif ~}

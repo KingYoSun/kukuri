@@ -155,6 +155,8 @@ impl TestServer {
             channel_secret_key: None,
             index_query_enabled: false,
             trust_read_enabled: false,
+            deployment_revision: "test-deployment-v1".to_string(),
+            readiness_activation_max_age_secs: 3600,
         })
         .await?;
         if let Some(index) = index {

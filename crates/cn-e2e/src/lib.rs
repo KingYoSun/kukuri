@@ -26,7 +26,7 @@ use kukuri_blob_service::{BlobService, BlobStatus, IrohBlobService};
 use kukuri_cn_core::{
     ChannelSecretCipher, IndexScopeKind, JwtConfig, PgIndexEntryStore, PgSafetyArtifactStore,
     TestDatabase, add_supported_topic, connect_postgres, initialize_database,
-    record_readiness_activation,
+    readiness_context_fingerprint, record_readiness_activation,
 };
 use kukuri_cn_indexer::ArcadeDbProjection;
 use kukuri_cn_indexer::config::{ArcadeDbConfig, MediaFetchConfig};
@@ -52,7 +52,8 @@ use kukuri_cn_safety_vlm::{
 };
 use kukuri_cn_user_api::{UserApiConfig, app_router, build_state};
 use kukuri_core::{
-    AssetRef, AssetRole, BlobHash, KukuriKeys, ObjectVisibility, PayloadRef, TopicId,
+    AssetRef, AssetRole, BlobHash, KukuriKeys, KukuriMediaManifestV1, MediaManifestItem,
+    ObjectVisibility, PayloadRef, TopicId, build_media_manifest_envelope,
     build_post_envelope_with_payload, generate_keys,
 };
 use kukuri_docs_sync::{DocOp, DocsSync, IrohDocsSync, stable_key, topic_replica_id};
@@ -407,6 +408,7 @@ impl E2eStack {
             Utc::now(),
             "public-node",
             &READINESS_CHECK_IDS,
+            &readiness_context_fingerprint("public-node", "cn-e2e-v1", b""),
             &serde_json::json!([]),
         )
         .await?;
@@ -428,6 +430,8 @@ impl E2eStack {
             channel_secret_key: None,
             index_query_enabled: true,
             trust_read_enabled: true,
+            deployment_revision: "cn-e2e-v1".to_string(),
+            readiness_activation_max_age_secs: 3600,
         })
         .await?;
         let app = app_router(state);
@@ -491,6 +495,92 @@ impl E2eStack {
             .publish_post(&self.author.keys.clone(), body, vec![attachment])
             .await?;
         Ok((object_id, stored.hash.as_str().to_string()))
+    }
+
+    /// Publish a manifest whose thumbnail has no MIME metadata and bytes that
+    /// cannot be recognized by magic-byte sniffing. The indexer must hold the
+    /// whole post fail-closed while keeping the fetched blob ephemeral.
+    pub async fn publish_post_with_unknown_mime_thumbnail(
+        &self,
+        body: &str,
+    ) -> Result<(String, String)> {
+        const ITEM_BYTES: &[u8] = &[
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
+        ];
+        const UNKNOWN_THUMBNAIL_BYTES: &[u8] = b"unrecognized-thumbnail-fixture";
+        let item = self
+            .author
+            .blobs
+            .put_blob(ITEM_BYTES.to_vec(), "image/png")
+            .await?;
+        let thumbnail = self
+            .author
+            .blobs
+            .put_blob(UNKNOWN_THUMBNAIL_BYTES.to_vec(), "application/octet-stream")
+            .await?;
+        let manifest_id = format!(
+            "e2e-manifest-{}-{}",
+            self.topic_id,
+            Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        );
+        let topic = TopicId::new(self.topic_id.clone());
+        let replica = topic_replica_id(self.topic_id.as_str());
+        let manifest = KukuriMediaManifestV1 {
+            manifest_id: manifest_id.clone(),
+            owner_pubkey: self.author.keys.public_key(),
+            created_at: Utc::now().timestamp(),
+            items: vec![MediaManifestItem {
+                blob_hash: BlobHash::new(item.hash.as_str().to_string()),
+                mime: "image/png".to_string(),
+                size: ITEM_BYTES.len() as u64,
+                width: None,
+                height: None,
+                duration_ms: None,
+                codec: None,
+                thumbnail_blob_hash: Some(BlobHash::new(thumbnail.hash.as_str().to_string())),
+            }],
+        };
+        let manifest_envelope =
+            build_media_manifest_envelope(&self.author.keys, &topic, &manifest)?;
+        let post_envelope = build_post_envelope_with_payload(
+            &self.author.keys,
+            &topic,
+            PayloadRef::InlineText {
+                text: body.to_string(),
+            },
+            Vec::new(),
+            vec![manifest_id.clone()],
+            None,
+            ObjectVisibility::Public,
+        )?;
+        let object = post_envelope
+            .to_post_object()?
+            .context("post envelope must yield a post object")?;
+        let object_id = object.object_id.as_str().to_string();
+        let docs = &self.author.docs;
+        docs.open_replica(&replica).await?;
+        for (key, value) in [
+            (
+                stable_key("objects", &format!("{object_id}/state")),
+                serde_json::to_value(&object)?,
+            ),
+            (
+                stable_key("objects", &format!("{object_id}/envelope")),
+                serde_json::to_value(&post_envelope)?,
+            ),
+            (
+                stable_key("manifests/media", &format!("{manifest_id}/state")),
+                serde_json::to_value(&manifest)?,
+            ),
+            (
+                stable_key("manifests/media", &format!("{manifest_id}/envelope")),
+                serde_json::to_value(&manifest_envelope)?,
+            ),
+        ] {
+            docs.apply_doc_op(&replica, DocOp::SetJson { key, value })
+                .await?;
+        }
+        Ok((object_id, thumbnail.hash.as_str().to_string()))
     }
 
     /// blob の実体を置かずに、指定 hash を参照する添付つき投稿を置く（不達の再現用）。

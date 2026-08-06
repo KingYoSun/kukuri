@@ -95,8 +95,13 @@ impl IngestPipeline {
     async fn scan_and_record_with_metrics(
         &self,
         request: &ProviderScanRequest,
+        subject_author: &str,
     ) -> Result<SafetyScanOutcome> {
-        let outcome = match self.safety.scan_and_record(request).await {
+        let outcome = match self
+            .safety
+            .scan_and_record_for_author(request, subject_author)
+            .await
+        {
             Ok(outcome) => outcome,
             Err(error) => {
                 if let Some(metrics) = &self.metrics {
@@ -217,7 +222,9 @@ impl IngestPipeline {
         // 永続化失敗は `?` で呼び出し側の per-entry fail-closed（投影しない）に乗る。
         let request = ProviderScanRequest::for_subject(SubjectKind::Post, object.object_id.clone())
             .with_text(text.clone());
-        let outcome = self.scan_and_record_with_metrics(&request).await?;
+        let outcome = self
+            .scan_and_record_with_metrics(&request, &object.author)
+            .await?;
         let report = &outcome.report;
 
         if !report.verdict.is_indexable() {
@@ -263,7 +270,9 @@ impl IngestPipeline {
             if let Some(mime) = &target.mime {
                 request = request.with_media_mime(mime.clone());
             }
-            let media_outcome = self.scan_and_record_with_metrics(&request).await?;
+            let media_outcome = self
+                .scan_and_record_with_metrics(&request, &object.author)
+                .await?;
             let media_report = &media_outcome.report;
             if !media_report.verdict.is_indexable() {
                 self.deindex_object(scope_kind, scope_id, object.object_id.as_str())

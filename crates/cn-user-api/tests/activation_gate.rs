@@ -13,7 +13,10 @@ use std::net::SocketAddr;
 
 use anyhow::{Context, Result};
 use chrono::Utc;
-use kukuri_cn_core::{JwtConfig, TestDatabase, connect_postgres, record_readiness_activation};
+use kukuri_cn_core::{
+    JwtConfig, TestDatabase, connect_postgres, readiness_context_fingerprint,
+    record_readiness_activation, record_readiness_revocation,
+};
 use kukuri_cn_operator::READINESS_CHECK_IDS;
 use kukuri_cn_user_api::{UserApiConfig, app_router, build_state};
 use reqwest::{Client, StatusCode};
@@ -26,6 +29,10 @@ const SURFACES: [&str; 3] = [
     "/v1/trust/users/0000000000000000000000000000000000000000000000000000000000000001",
     "/v1/relation/users/0000000000000000000000000000000000000000000000000000000000000001",
 ];
+
+fn activation_context(revision: &str) -> String {
+    readiness_context_fingerprint("public-node", revision, b"")
+}
 
 async fn spawn_api(
     database_url: &str,
@@ -49,6 +56,8 @@ async fn spawn_api(
         channel_secret_key: None,
         index_query_enabled: true,
         trust_read_enabled: true,
+        deployment_revision: "test-deployment-v1".to_string(),
+        readiness_activation_max_age_secs: 3600,
     })
     .await?;
     let app = app_router(state);
@@ -108,6 +117,7 @@ async fn stale_check_id_set_keeps_surfaces_hidden() -> Result<()> {
         Utc::now(),
         "public-node",
         &["old_check_only"],
+        &activation_context("test-deployment-v1"),
         &serde_json::json!([]),
     )
     .await?;
@@ -134,6 +144,7 @@ async fn valid_activation_record_enables_surfaces() -> Result<()> {
         Utc::now(),
         "public-node",
         &READINESS_CHECK_IDS,
+        &activation_context("test-deployment-v1"),
         &serde_json::json!([]),
     )
     .await?;
@@ -146,6 +157,90 @@ async fn valid_activation_record_enables_surfaces() -> Result<()> {
             StatusCode::NOT_FOUND,
             "surface が 404 のまま: {path}: {body}"
         );
+    }
+    task.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn different_deployment_context_keeps_surfaces_hidden() -> Result<()> {
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping activation gate test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_activation_context").await?;
+    let pool = connect_postgres(database.database_url.as_str()).await?;
+    kukuri_cn_core::initialize_database(&pool).await?;
+    record_readiness_activation(
+        &pool,
+        Utc::now(),
+        "public-node",
+        &READINESS_CHECK_IDS,
+        &activation_context("different-deployment"),
+        &serde_json::json!([]),
+    )
+    .await?;
+    let (base_url, task) = spawn_api(database.database_url.as_str(), "act-context").await?;
+    for (path, status, body) in surface_statuses(&base_url).await? {
+        assert_eq!(status, StatusCode::NOT_FOUND, "{path}: {body}");
+    }
+    task.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn expired_activation_keeps_surfaces_hidden() -> Result<()> {
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping activation gate test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_activation_expired").await?;
+    let pool = connect_postgres(database.database_url.as_str()).await?;
+    kukuri_cn_core::initialize_database(&pool).await?;
+    record_readiness_activation(
+        &pool,
+        Utc::now() - chrono::Duration::hours(2),
+        "public-node",
+        &READINESS_CHECK_IDS,
+        &activation_context("test-deployment-v1"),
+        &serde_json::json!([]),
+    )
+    .await?;
+    let (base_url, task) = spawn_api(database.database_url.as_str(), "act-expired").await?;
+    for (path, status, body) in surface_statuses(&base_url).await? {
+        assert_eq!(status, StatusCode::NOT_FOUND, "{path}: {body}");
+    }
+    task.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn revocation_hides_already_started_surfaces() -> Result<()> {
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping activation gate test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_activation_revoked").await?;
+    let pool = connect_postgres(database.database_url.as_str()).await?;
+    kukuri_cn_core::initialize_database(&pool).await?;
+    let context = activation_context("test-deployment-v1");
+    record_readiness_activation(
+        &pool,
+        Utc::now(),
+        "public-node",
+        &READINESS_CHECK_IDS,
+        &context,
+        &serde_json::json!([]),
+    )
+    .await?;
+    let (base_url, task) = spawn_api(database.database_url.as_str(), "act-revoked").await?;
+    for (path, status, body) in surface_statuses(&base_url).await? {
+        assert_ne!(status, StatusCode::NOT_FOUND, "{path}: {body}");
+    }
+
+    record_readiness_revocation(&pool, Utc::now(), "public-node", &context, "test_failure").await?;
+    for (path, status, body) in surface_statuses(&base_url).await? {
+        assert_eq!(status, StatusCode::NOT_FOUND, "{path}: {body}");
     }
     task.abort();
     Ok(())

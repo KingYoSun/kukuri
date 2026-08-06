@@ -104,6 +104,8 @@ impl CommunityNodeStack {
             channel_secret_key: None,
             index_query_enabled: false,
             trust_read_enabled: false,
+            deployment_revision: String::new(),
+            readiness_activation_max_age_secs: 900,
         })
         .await
         .context("failed to build community-node user-api state")?;

@@ -15,7 +15,7 @@ use kukuri_cn_safety_runtime::{
     SafetyArtifactStore, SafetyRuntimeProviderEntry, SafetyRuntimeProvidersConfig,
 };
 
-use crate::safety_events::{persist_risk_signal, persist_signed_moderation_event};
+use crate::safety_events::{persist_risk_signal_with_author, persist_signed_moderation_event};
 use crate::scan_verdicts::upsert_scan_verdict;
 
 #[derive(Clone, Debug)]
@@ -41,8 +41,9 @@ impl SafetyArtifactStore for PgSafetyArtifactStore {
         &self,
         issuer_node_id: &str,
         signal: &SafetyRiskSignal,
+        subject_author: Option<&str>,
     ) -> Result<String> {
-        persist_risk_signal(&self.pool, issuer_node_id, signal)
+        persist_risk_signal_with_author(&self.pool, issuer_node_id, signal, subject_author)
             .await
             .map(|stored| stored.id)
     }

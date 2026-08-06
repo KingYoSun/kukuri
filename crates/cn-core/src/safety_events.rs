@@ -196,12 +196,35 @@ pub async fn persist_risk_signal(
     issuer_node_id: &str,
     signal: &SafetyRiskSignal,
 ) -> Result<StoredRiskSignal> {
+    persist_risk_signal_with_author(pool, issuer_node_id, signal, None).await
+}
+
+/// Persist a risk signal and, for content targets, atomically associate it with
+/// the author whose trust calculation should consume the signal.
+pub async fn persist_risk_signal_with_author(
+    pool: &PgPool,
+    issuer_node_id: &str,
+    signal: &SafetyRiskSignal,
+    subject_author: Option<&str>,
+) -> Result<StoredRiskSignal> {
     if issuer_node_id.trim().is_empty() {
         bail!("risk signal issuer_node_id must not be empty");
     }
     if signal.target_id.trim().is_empty() {
         bail!("risk signal target_id must not be empty");
     }
+    if let Some(author) = subject_author {
+        if author.trim().is_empty() {
+            bail!("risk signal subject author must not be empty");
+        }
+        if !matches!(
+            signal.target,
+            RiskSignalTarget::PostId | RiskSignalTarget::BlobCid
+        ) {
+            bail!("only post_id/blob_cid risk signals can be attributed to an author");
+        }
+    }
+    let mut tx = pool.begin().await?;
     let id = Uuid::new_v4().to_string();
     let row = sqlx::query(
         "INSERT INTO cn_safety.risk_signals
@@ -222,8 +245,22 @@ pub async fn persist_risk_signal(
     .bind(signal.confidence.map(i16::from))
     .bind(signal.expires_at.as_deref())
     .bind(signal.appeal_status.map(|s| to_db_enum(&s)).transpose()?)
-    .fetch_one(pool)
+    .fetch_one(&mut *tx)
     .await?;
+    if let Some(author) = subject_author {
+        sqlx::query(
+            "INSERT INTO cn_safety.risk_signal_subject_authors
+                (target, target_id, author_pubkey)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (target, target_id, author_pubkey) DO NOTHING",
+        )
+        .bind(to_db_enum(&signal.target)?)
+        .bind(&signal.target_id)
+        .bind(author)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
     risk_signal_from_row(&row)
 }
 
@@ -276,6 +313,30 @@ pub async fn list_risk_signals_for_target(
     )
     .bind(to_db_enum(&target)?)
     .bind(target_id)
+    .fetch_all(pool)
+    .await?;
+    rows.iter().map(risk_signal_from_row).collect()
+}
+
+/// Return both user-scoped signals and content-scoped signals attributed to
+/// the user. The original content signal row is returned so expiry and appeal
+/// state remain connected to the moderation artifact that produced it.
+pub async fn list_risk_signals_for_user(
+    pool: &PgPool,
+    user_pubkey: &str,
+) -> Result<Vec<StoredRiskSignal>> {
+    let rows = sqlx::query(
+        "SELECT DISTINCT rs.id, rs.issuer_node_id, rs.target, rs.target_id, rs.category,
+                rs.severity, rs.basis, rs.visibility, rs.confidence, rs.expires_at,
+                rs.appeal_status, rs.persisted_at
+         FROM cn_safety.risk_signals rs
+         LEFT JOIN cn_safety.risk_signal_subject_authors rsa
+           ON rsa.target = rs.target AND rsa.target_id = rs.target_id
+         WHERE (rs.target = 'user_pubkey' AND rs.target_id = $1)
+            OR rsa.author_pubkey = $1
+         ORDER BY rs.persisted_at DESC",
+    )
+    .bind(user_pubkey)
     .fetch_all(pool)
     .await?;
     rows.iter().map(risk_signal_from_row).collect()

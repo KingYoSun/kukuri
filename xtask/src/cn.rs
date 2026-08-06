@@ -69,7 +69,7 @@ pub(crate) fn cn_e2e_arcadedb_url() -> String {
     format!("http://127.0.0.1:{port}")
 }
 
-pub(crate) fn cn_compose_envs() -> [(&'static str, &'static str); 4] {
+pub(crate) fn cn_compose_envs() -> [(&'static str, &'static str); 5] {
     [
         ("CN_POSTGRES_PASSWORD", "cn_password"),
         (
@@ -84,6 +84,7 @@ pub(crate) fn cn_compose_envs() -> [(&'static str, &'static str); 4] {
             "COMMUNITY_NODE_CHANNEL_SECRET_KEY",
             "xtask-channel-secret-key-0123456789abcdef",
         ),
+        ("COMMUNITY_NODE_DEPLOYMENT_REVISION", "xtask-test-v1"),
     ]
 }
 

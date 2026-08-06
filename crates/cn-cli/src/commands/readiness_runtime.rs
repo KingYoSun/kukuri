@@ -106,19 +106,20 @@ pub(crate) fn evaluate(findings: &RuntimeFindings) -> Vec<ReadinessCheck> {
                 snapshot.opened_scopes >= 1,
                 format!("opened_scopes={}", snapshot.opened_scopes),
             ));
+            let now = findings.now.timestamp();
             let fresh = snapshot
                 .last_sync_at
-                .is_some_and(|at| findings.now.timestamp() - at <= findings.ingest_max_age_secs);
+                .is_some_and(|at| now - at <= findings.ingest_max_age_secs)
+                && snapshot
+                    .last_ingest_at
+                    .is_some_and(|at| now - at <= findings.ingest_max_age_secs);
             checks.push(check(
                 "indexer_ingest_fresh",
                 fresh,
-                match snapshot.last_sync_at {
-                    Some(at) => format!(
-                        "last_sync_at={} (許容 {} 秒)",
-                        at, findings.ingest_max_age_secs
-                    ),
-                    None => "全件見直しの成功記録がありません".to_string(),
-                },
+                format!(
+                    "last_sync_at={:?} last_ingest_at={:?} (許容 {} 秒)",
+                    snapshot.last_sync_at, snapshot.last_ingest_at, findings.ingest_max_age_secs
+                ),
             ));
         }
         Err(error) => {
@@ -269,6 +270,7 @@ mod tests {
                 ingest_enabled: true,
                 opened_scopes: 4,
                 last_sync_at: Some(now.timestamp() - 60),
+                last_ingest_at: Some(now.timestamp() - 60),
                 ..IndexerStateSnapshot::default()
             }),
             migrations_ready: Ok(()),
@@ -329,6 +331,19 @@ mod tests {
         );
         assert_eq!(
             status_of(&checks, "relation_analysis_recent").status,
+            ReadinessStatus::Fail
+        );
+    }
+
+    #[test]
+    fn full_pass_timestamp_without_successful_ingest_fails_freshness() {
+        let mut findings = healthy_findings();
+        if let Ok(snapshot) = &mut findings.snapshot {
+            snapshot.last_ingest_at = None;
+        }
+        let checks = evaluate(&findings);
+        assert_eq!(
+            status_of(&checks, "indexer_ingest_fresh").status,
             ReadinessStatus::Fail
         );
     }

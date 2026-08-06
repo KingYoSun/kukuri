@@ -82,7 +82,8 @@ pub use index_scope::{
     reject_indexing_request, remove_channel_secret, remove_supported_topic, upsert_channel_secret,
 };
 pub use readiness_activation::{
-    ReadinessActivation, latest_readiness_activation, record_readiness_activation,
+    ReadinessActivation, latest_readiness_activation, readiness_context_fingerprint,
+    record_readiness_activation, record_readiness_revocation,
 };
 pub use readiness_probe::{ReadinessProbeRecord, list_readiness_probes, upsert_readiness_probe};
 pub use readiness_runtime::{
@@ -108,7 +109,8 @@ pub use safety_events::{
     DistributionAudience, StoredModerationEvent, StoredRiskSignal, get_risk_signal,
     get_signed_moderation_event, list_distributable_moderation_events,
     list_distributable_risk_signals, list_risk_signals, list_risk_signals_for_target,
-    list_signed_moderation_events, persist_risk_signal, persist_signed_moderation_event,
+    list_risk_signals_for_user, list_signed_moderation_events, persist_risk_signal,
+    persist_risk_signal_with_author, persist_signed_moderation_event,
 };
 pub use safety_runtime::{PgSafetyArtifactStore, resolve_safety_providers};
 pub use scan_verdicts::{StoredScanVerdict, get_scan_verdict, upsert_scan_verdict};

@@ -285,11 +285,14 @@ impl IndexerWorker {
         self.state.set_opened_scopes(opened.len() as u64);
 
         // 4. 各 scope の取り込み。
+        let mut all_scopes_ingested = !opened.is_empty();
         for scope in &opened {
-            self.ingest_scope_with_backoff(scope, backoff).await;
+            all_scopes_ingested &= self.ingest_scope_with_backoff(scope, backoff).await;
         }
-        self.state
-            .record_sync_success(chrono::Utc::now().timestamp());
+        if all_scopes_ingested {
+            self.state
+                .record_sync_success(chrono::Utc::now().timestamp());
+        }
     }
 
     /// scope を 1 つ取り込む。再試行間隔中なら何もしない。
@@ -297,13 +300,13 @@ impl IndexerWorker {
         &self,
         scope: &ScopeReplica,
         backoff: &mut HashMap<String, BackoffEntry>,
-    ) {
+    ) -> bool {
         let key = scope.replica_id.as_str();
         if let Some(entry) = backoff.get(key)
             && tokio::time::Instant::now() < entry.ready_at
         {
             debug!(replica_id = %key, "scope is backing off; skipping this round");
-            return;
+            return false;
         }
         match self.participant.ingest_scope(scope).await {
             Ok(summary) => {
@@ -316,6 +319,7 @@ impl IndexerWorker {
                     indexed = summary.indexed,
                     "scope ingested"
                 );
+                true
             }
             Err(error) => {
                 let failures = backoff.get(key).map(|entry| entry.failures).unwrap_or(0) + 1;
@@ -341,6 +345,7 @@ impl IndexerWorker {
                     "failed to ingest scope; backing off"
                 );
                 self.state.record_error(Some(key), &format!("{error:#}"));
+                false
             }
         }
     }

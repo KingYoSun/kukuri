@@ -174,17 +174,24 @@ cargo run -p kukuri-cn-cli -- --database-url "$COMMUNITY_NODE_DATABASE_URL" prep
 cargo run -p kukuri-cn-cli -- --database-url "$COMMUNITY_NODE_DATABASE_URL" set-auth-rollout --mode off
 cargo run -p kukuri-cn-user-api
 cargo run -p kukuri-cn-iroh-relay
+# index/moderation/trust/relation を使う構成では、provider・署名鍵・ArcadeDB・relay を設定して起動
+cargo run -p kukuri-cn-indexer
+# 全 readiness が Pass のときだけ、現在の config/deployment revision に結び付いた activation を記録
+cargo run -p kukuri-cn-cli -- readiness --profile public-node --config operator-config.yaml
 ```
 
 1. migration/seed は `cn-cli prepare` だけで行う
 2. `cn-user-api` は prepared DB を前提に起動する
-3. rollout 変更は deploy 後に `cn-cli set-auth-rollout` で行う
-4. `COMMUNITY_NODE_DATABASE_INIT_MODE=prepare` は local bring-up と test 用に限定し、常用しない
+3. index/moderation stack は `cn-indexer` と relation timer を起動し、`cn-cli readiness` の全項目合格後にのみ read surface を解禁する
+4. rollout 変更は deploy 後に `cn-cli set-auth-rollout` で行う
+5. `COMMUNITY_NODE_DATABASE_INIT_MODE=prepare` は local bring-up と test 用に限定し、常用しない
 
 compose を使う場合:
 ```bash
 docker compose --env-file .env.community-node -f docker-compose.community-node.yml run --rm cn-migrate
-docker compose --env-file .env.community-node -f docker-compose.community-node.yml up -d cn-user-api cn-iroh-relay
+# production provider + signing keyを設定した構成のpositive startup smoke
+docker compose --env-file .env.community-node -f docker-compose.community-node.yml run --rm cn-indexer validate-config
+docker compose --env-file .env.community-node -f docker-compose.community-node.yml up -d
 ```
 
 ## community-node backup / restore
