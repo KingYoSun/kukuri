@@ -66,7 +66,13 @@ $manifest = [ordered]@{
 }
 
 $manifestPath = Join-Path $OutputDir "latest-preview.json"
-$manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+$manifestJson = $manifest | ConvertTo-Json -Depth 8
+$utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText(
+  $manifestPath,
+  $manifestJson + [System.Environment]::NewLine,
+  $utf8WithoutBom
+)
 
 $smokePath = Join-Path $OutputDir "manual-smoke-checklist.md"
 @"

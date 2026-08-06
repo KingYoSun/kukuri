@@ -32,6 +32,15 @@ try {
   $manifestPath = Join-Path $outputDir "latest-preview.json"
   $checksumPath = Join-Path $outputDir "SHA256SUMS.txt"
   $assetListPath = Join-Path $outputDir "release-assets.txt"
+  $manifestBytes = [System.IO.File]::ReadAllBytes($manifestPath)
+  if (
+    $manifestBytes.Length -ge 3 -and
+    $manifestBytes[0] -eq 0xEF -and
+    $manifestBytes[1] -eq 0xBB -and
+    $manifestBytes[2] -eq 0xBF
+  ) {
+    throw "latest-preview.json must be UTF-8 without a byte order mark"
+  }
   $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
   $platform = $manifest.platforms.'windows-x86_64'
 
