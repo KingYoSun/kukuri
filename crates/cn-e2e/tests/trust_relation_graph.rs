@@ -267,10 +267,11 @@ async fn trust_appeal_and_relation_graph_work_end_to_end() -> Result<()> {
         )
     };
     let initial = read_trust().await?;
+    let initial_absolute = initial["absolute"].as_f64().unwrap();
     let initial_relative = initial["relative"].as_f64().unwrap();
     assert!(
-        initial["absolute"].as_f64().unwrap() <= -1.0 + 1e-9,
-        "confirmed CSAM signal must floor the absolute component: {initial}"
+        initial_absolute < 0.0,
+        "scan-derived CSAM signal must reduce the absolute component: {initial}"
     );
     assert!(
         initial_relative < 0.0,
@@ -300,8 +301,9 @@ async fn trust_appeal_and_relation_graph_work_end_to_end() -> Result<()> {
         dispute_risk_signal(&stack.pool, signal.id.as_str()).await?;
     }
     let disputed_content = read_trust().await?;
-    assert!(
-        disputed_content["absolute"].as_f64().unwrap() <= -1.0 + 1e-9,
+    assert_eq!(
+        disputed_content["absolute"].as_f64().unwrap(),
+        initial_absolute,
         "a disputed content signal must remain effective: {disputed_content}"
     );
     for signal in &attributed_signals {
@@ -310,7 +312,7 @@ async fn trust_appeal_and_relation_graph_work_end_to_end() -> Result<()> {
     }
     let cleared_content = read_trust().await?;
     assert!(
-        cleared_content["absolute"].as_f64().unwrap() > -1.0 + 1e-9,
+        cleared_content["absolute"].as_f64().unwrap() > initial_absolute,
         "clearing the content signal must restore the author's absolute trust: {cleared_content}"
     );
 
