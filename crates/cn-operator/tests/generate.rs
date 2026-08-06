@@ -308,6 +308,91 @@ fn safety_providers_surface_in_external_transmission_notice() {
 }
 
 #[test]
+fn moderation_policy_describes_scan_flow_and_appeals() {
+    // #617 T6: moderation-policy が「未提供」ではなく走査の流れ・申し立て導線を説明する。
+    let yaml = config_with_safety_providers("      hosting: self_host\n");
+    let resolved = load_and_validate(&yaml).unwrap();
+    let policy = doc(&generate_all(&resolved), "moderation-policy.md");
+    for needle in [
+        "走査と判定の流れ",
+        "fail-closed",
+        "視覚言語モデル",
+        "Match Data",
+        "申し立て",
+    ] {
+        assert!(policy.contains(needle), "missing: {needle}");
+    }
+    assert!(!policy.contains("未提供"));
+}
+
+#[test]
+fn generated_docs_contain_no_planned_wording_after_promotion() {
+    // #617 T6: 昇格後、全生成物から「計画中」表記が消えている（分離セクション含む）。
+    let yaml = config_with_safety_providers("      hosting: self_host\n");
+    let resolved = load_and_validate(&yaml).unwrap();
+    for file in generate_all(&resolved) {
+        assert!(
+            !file.content.contains("計画中"),
+            "{}: planned wording must not remain",
+            file.filename
+        );
+    }
+}
+
+#[test]
+fn network_diagram_shows_index_stack_data_flow() {
+    // #617 T5: 索引系が有効な node の構成図に、実データフロー（3 ブロック）と境界説明が載る。
+    let yaml = config_with_safety_providers("      hosting: self_host\n");
+    let resolved = load_and_validate(&yaml).unwrap();
+    let diagram = doc(&generate_all(&resolved), "network-diagram.md");
+    for needle in [
+        "構成要素とデータフロー",
+        "利用者端末 / 他ピア",
+        "Direct P2P",
+        "cn-user-api",
+        "cn-indexer",
+        "Postgres",
+        "Valkey",
+        "ArcadeDB",
+        "関係解析の定期実行",
+        "iroh docs / blob ピア",
+        "Project Arachnid Shield",
+        "運営者が管理する視覚言語モデル基盤",
+        "サポート対象（公開トピック）内に",
+        "恒久保存しない",
+    ] {
+        assert!(diagram.contains(needle), "missing: {needle}");
+    }
+
+    // 索引系が無効な node には実データフロー節を出さない（過大表示の防止）。
+    let yaml = base_config("", false);
+    let resolved = load_and_validate(&yaml).unwrap();
+    let diagram = doc(&generate_all(&resolved), "network-diagram.md");
+    assert!(!diagram.contains("構成要素とデータフロー"));
+}
+
+#[test]
+fn telecom_notification_carries_service_name_and_server() {
+    // 届出様式への転記元: サービス名と使用サーバーの行を持つ。
+    let yaml = config_with_safety_providers("      hosting: self_host\n");
+    let resolved = load_and_validate(&yaml).unwrap();
+    let telecom = doc(&generate_all(&resolved), "telecom-notification-draft.md");
+    assert!(telecom.contains("提供するサービス: P2P コミュニケーションネットワークの補助サービス"));
+    // fixture に cloud_provider が無い場合は行ごと出ない（誤記入の防止）。
+    assert!(!telecom.contains("使用するサーバー:"));
+
+    let with_cloud = yaml.replace(
+        "  country: JP\n",
+        "  country: JP\n  cloud_provider: Google Cloud\n",
+    );
+    let resolved = load_and_validate(&with_cloud).unwrap();
+    let telecom = doc(&generate_all(&resolved), "telecom-notification-draft.md");
+    assert!(telecom.contains("使用するサーバー: Google Cloud"));
+    let diagram = doc(&generate_all(&resolved), "network-diagram.md");
+    assert!(diagram.contains("使用するサーバー: Google Cloud"));
+}
+
+#[test]
 fn data_retention_lists_storage_classes_for_index_stack() {
     // #617 T4: 索引・モデレーション・信頼の系統が有効な node では、データ区分と保存先・
     // 再構築/バックアップ区分が保持ポリシーへ載る。

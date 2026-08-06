@@ -202,7 +202,7 @@ impl Capability {
                     "index 前に safety scan を行い、scan 前 / scan 失敗 / critical verdict を index しない（#353 fail-closed）。",
                     "index 除外を signed moderation event として説明・監査可能にする。",
                 ],
-                small_scale_tips: "safety provider を用意できるまで有効化しない判断も妥当（現状 Phase B / 未提供）。",
+                small_scale_tips: "safety provider を用意できるまで有効化しない判断も妥当。",
                 how_to_reduce: "`features.community_index: false`（既定）で無効化できる。",
             },
             Capability::Moderation => CapabilityRiskPractices {

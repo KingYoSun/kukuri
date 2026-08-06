@@ -53,6 +53,13 @@ fn external_destinations(config: &ResolvedConfig) -> Vec<ExternalDestination> {
     dests
 }
 
+/// 索引・モデレーション・信頼のいずれかが有効か（実データフロー開示の出し分けに使う）。
+fn index_stack_active(config: &ResolvedConfig) -> bool {
+    config.enabled(Capability::CommunityIndex)
+        || config.enabled(Capability::Moderation)
+        || config.enabled(Capability::CommunityLocalTrust)
+}
+
 /// 安全性走査プロバイダへの送信先（operator config 由来の動的開示。#617）。
 ///
 /// 真実源はプロバイダ構成そのもの（構成されていれば走査時に送信が発生する）。
@@ -189,6 +196,100 @@ fn gen_network_diagram(config: &ResolvedConfig) -> String {
         );
     }
 
+    // 索引・モデレーション・信頼の系統が有効な node の実データフロー（#617）。
+    if index_stack_active(config) {
+        if let Some(cloud) = config.raw.server.cloud_provider.as_deref() {
+            let _ = writeln!(s, "使用するサーバー: {cloud}\n");
+        }
+        let _ = writeln!(s, "## 構成要素とデータフロー\n");
+        let _ = writeln!(s, "```text");
+        let _ = writeln!(s, "利用者端末 / 他ピア");
+        let _ = writeln!(
+            s,
+            "  ├─ Direct P2P … 端末間の直接通信（本ノードを経由しない）"
+        );
+        let _ = writeln!(
+            s,
+            "  ├─ cn-user-api（HTTPS。リバースプロキシ経由）… 認証・同意・検索/発見/おすすめ・\
+             信頼/関係の読み取り・通報"
+        );
+        let _ = writeln!(
+            s,
+            "  └─ cn-iroh-relay（HTTP/QUIC）… 接続補助と、直接通信が成立しない場合の\
+             暗号化済み traffic の中継"
+        );
+        let _ = writeln!(s);
+        let _ = writeln!(s, "ノード内部（private network。外部へ公開しない）");
+        let _ = writeln!(
+            s,
+            "  ├─ cn-indexer … 公開トピックのレプリカ同期（iroh-docs）・安全性走査・索引書き込み\
+             の常駐ワーカー"
+        );
+        let _ = writeln!(
+            s,
+            "  ├─ Postgres … 管理系データ・走査判定・署名付き event / risk signal・索引の真実源（永続）"
+        );
+        let _ = writeln!(
+            s,
+            "  ├─ Valkey … ランデブー / presence（TTL 付きの揮発データ）"
+        );
+        let _ = writeln!(
+            s,
+            "  ├─ ArcadeDB … 検索投影・relation graph（真実源から再構築可能な派生データ）"
+        );
+        let _ = writeln!(
+            s,
+            "  └─ 関係解析の定期実行 … 公開トピックの共参加から relation graph を更新"
+        );
+        let _ = writeln!(s);
+        let _ = writeln!(s, "外部 / 運営者基盤（ノードからの outbound のみ）");
+        let safety_dests = safety_provider_destinations(config);
+        let _ = writeln!(
+            s,
+            "  {} iroh docs / blob ピア … レプリカ同期と、走査用メディアの一時取得（恒久保存しない）",
+            if safety_dests.is_empty() {
+                "└─"
+            } else {
+                "├─"
+            }
+        );
+        for (index, dest) in safety_dests.iter().enumerate() {
+            let branch = if index + 1 == safety_dests.len() {
+                "└─"
+            } else {
+                "├─"
+            };
+            let _ = writeln!(
+                s,
+                "  {branch} {} … {}",
+                dest.display_name,
+                if dest.operator_controlled {
+                    "運営者が管理する基盤（第三者への外部送信ではない）"
+                } else {
+                    "第三者への外部送信（outbound HTTPS）"
+                }
+            );
+        }
+        let _ = writeln!(s, "```");
+        let _ = writeln!(s);
+        let _ = writeln!(s, "境界の要点:\n");
+        let _ = writeln!(
+            s,
+            "- 公開するのは利用者向け API（HTTPS）と relay（HTTP/QUIC）のみ。データベース類は\
+             外部へ公開しない。"
+        );
+        let _ = writeln!(
+            s,
+            "- 索引・モデレーション・信頼・関係の権限は、本ノードのサポート対象（公開トピック）内に\
+             限定される。"
+        );
+        let _ = writeln!(
+            s,
+            "- 保存区分: 永続（Postgres）/ 揮発（Valkey、TTL）/ 再構築可能（ArcadeDB）/ \
+             一時（走査用メディア。恒久保存しない）。\n"
+        );
+    }
+
     // manifest の authority scope / P2P boundary を文書へ反映する。
     let manifest = build_manifest(config);
     let _ = writeln!(s, "## node role と責任境界 (authority scope)\n");
@@ -236,6 +337,14 @@ fn gen_telecom_notification(config: &ResolvedConfig) -> String {
          自宅サーバー構成や回線設置を伴う構成は advanced であり、個別確認が必要です。\n"
     );
     let _ = writeln!(s, "## 役務の概要\n");
+    let _ = writeln!(
+        s,
+        "提供するサービス: P2P コミュニケーションネットワークの補助サービス"
+    );
+    if let Some(cloud) = config.raw.server.cloud_provider.as_deref() {
+        let _ = writeln!(s, "使用するサーバー: {cloud}");
+    }
+    let _ = writeln!(s);
     let _ = writeln!(
         s,
         "本サービスは、P2P network の補助層として動作する community node です。\
@@ -453,9 +562,34 @@ fn gen_moderation_policy(config: &ResolvedConfig) -> String {
          これらは network-wide command ではなく、他ノード・client が任意に採用し得る optional trust input です。\n"
     );
     if config.enabled(Capability::Moderation) || config.enabled(Capability::CommunityLocalTrust) {
+        let _ = writeln!(s, "## 走査と判定の流れ\n");
         let _ = writeln!(
             s,
-            "（計画中）moderation / trust signal は現行実装では未提供です。実装方針は #353 / #362 に従います。\n"
+            "- 索引対象は走査後にのみ索引へ入ります（index_before_scan は無効。fail-closed）。"
+        );
+        let _ = writeln!(
+            s,
+            "- 既知一致照合（known-match）と分類器（OpenAI 互換の視覚言語モデル）で本文テキスト・\
+             メディアを走査します。走査失敗・プロバイダ不達・メディア不達は許可へ落とさず保留します。"
+        );
+        let _ = writeln!(
+            s,
+            "- 判定は scan verdict として保存され、非許可・重大への変化は索引から除外されます。"
+        );
+        let _ = writeln!(
+            s,
+            "- 判定に基づく moderation event は署名付きで発行され、risk signal は根拠つきで保存されます。"
+        );
+        let _ = writeln!(
+            s,
+            "- 照合プロバイダの Match Data・モデルの生応答は保存・配布せず、AI の入力にも使いません。\n"
+        );
+        let _ = writeln!(s, "## 申し立て（異議）\n");
+        let _ = writeln!(
+            s,
+            "本ノードが発行した moderation advisory（risk signal）へは、通報導線から申し立てできます。\
+             係争中の寄与は据え置かれ、認容された場合は寄与から除外され、必要に応じて訂正信号を\
+             再発行します。\n"
         );
     } else {
         let _ = writeln!(
@@ -488,10 +622,7 @@ fn gen_data_retention(config: &ResolvedConfig) -> String {
     );
 
     // データ区分と保存先（#617。索引・モデレーション・信頼・関係の各系統が有効な場合）。
-    let index_stack_active = config.enabled(Capability::CommunityIndex)
-        || config.enabled(Capability::Moderation)
-        || config.enabled(Capability::CommunityLocalTrust);
-    if index_stack_active {
+    if index_stack_active(config) {
         let _ = writeln!(s, "## データ区分と保存先\n");
         let _ = writeln!(s, "| データ | 保存先 | 性質 |");
         let _ = writeln!(s, "|---|---|---|");
