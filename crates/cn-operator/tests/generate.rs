@@ -255,6 +255,242 @@ fn cloudflare_enabled_emits_external_transmission() {
     assert!(active_section.contains("Cloudflare"));
 }
 
+/// safety providers 付きの config（外部送信の動的開示の検証用）。
+/// `vlm_hosting_line` は general provider 配下の行（例: `"      hosting: self_host\n"`）か空。
+fn config_with_safety_providers(vlm_hosting_line: &str) -> String {
+    let base = r#"server:
+  domain: example-kukuri.net
+  operator_name: Example Operator
+  country: JP
+features:
+  moderation: true
+retention:
+  connection_logs_days: 30
+  moderation_logs_days: 180
+safety:
+  profile: public-node
+  policy_version: 2026-06-public-node-v1
+  providers:
+    known_csam:
+      provider: project-arachnid-shield
+      required: true
+      credential_secret_id: kukuri-cn-safety-known-csam
+    general:
+      provider: openai-compatible-vlm
+"#;
+    format!("{base}{vlm_hosting_line}")
+}
+
+#[test]
+fn safety_providers_surface_in_external_transmission_notice() {
+    // 自前ホスト宣言: 視覚言語モデルは運営者管理基盤、Arachnid は第三者への外部送信。
+    let yaml = config_with_safety_providers("      hosting: self_host\n");
+    let resolved = load_and_validate(&yaml).unwrap();
+    let ext = doc(&generate_all(&resolved), "external-transmission-notice.md");
+    assert!(ext.contains("安全性走査プロバイダへの送信"));
+    assert!(ext.contains("Project Arachnid Shield"));
+    assert!(ext.contains("第三者への外部送信"));
+    assert!(ext.contains("運営者が管理する視覚言語モデル基盤"));
+    assert!(ext.contains("第三者への外部送信ではない"));
+
+    // 外部 API 宣言: 視覚言語モデルも第三者への外部送信として表示される。
+    let yaml = config_with_safety_providers("      hosting: external\n");
+    let resolved = load_and_validate(&yaml).unwrap();
+    let ext = doc(&generate_all(&resolved), "external-transmission-notice.md");
+    assert!(ext.contains("外部の視覚言語モデル API"));
+    assert!(!ext.contains("運営者が管理する視覚言語モデル基盤"));
+
+    // 未指定は保守側（第三者への外部送信）として扱う。
+    let yaml = config_with_safety_providers("");
+    let resolved = load_and_validate(&yaml).unwrap();
+    let ext = doc(&generate_all(&resolved), "external-transmission-notice.md");
+    assert!(ext.contains("外部の視覚言語モデル API"));
+}
+
+#[test]
+fn moderation_policy_describes_scan_flow_and_appeals() {
+    // #617 T6: moderation-policy が「未提供」ではなく走査の流れ・申し立て導線を説明する。
+    let yaml = config_with_safety_providers("      hosting: self_host\n");
+    let resolved = load_and_validate(&yaml).unwrap();
+    let policy = doc(&generate_all(&resolved), "moderation-policy.md");
+    for needle in [
+        "走査と判定の流れ",
+        "fail-closed",
+        "視覚言語モデル",
+        "Match Data",
+        "申し立て",
+    ] {
+        assert!(policy.contains(needle), "missing: {needle}");
+    }
+    assert!(!policy.contains("未提供"));
+}
+
+#[test]
+fn generated_docs_contain_no_planned_wording_after_promotion() {
+    // #617 T6: 昇格後、全生成物から「計画中」表記が消えている（分離セクション含む）。
+    let yaml = config_with_safety_providers("      hosting: self_host\n");
+    let resolved = load_and_validate(&yaml).unwrap();
+    for file in generate_all(&resolved) {
+        assert!(
+            !file.content.contains("計画中"),
+            "{}: planned wording must not remain",
+            file.filename
+        );
+    }
+}
+
+#[test]
+fn network_diagram_shows_index_stack_data_flow() {
+    // #617 T5: 索引系が有効な node の構成図に、実データフロー（3 ブロック）と境界説明が載る。
+    let yaml = config_with_safety_providers("      hosting: self_host\n");
+    let resolved = load_and_validate(&yaml).unwrap();
+    let diagram = doc(&generate_all(&resolved), "network-diagram.md");
+    for needle in [
+        "構成要素とデータフロー",
+        "利用者端末 / 他ピア",
+        "Direct P2P",
+        "cn-user-api",
+        "cn-indexer",
+        "Postgres",
+        "Valkey",
+        "ArcadeDB",
+        "関係解析の定期実行",
+        "iroh docs / blob ピア",
+        "Project Arachnid Shield",
+        "運営者が管理する視覚言語モデル基盤",
+        "サポート対象（公開トピック）内に",
+        "恒久保存しない",
+    ] {
+        assert!(diagram.contains(needle), "missing: {needle}");
+    }
+
+    // 索引系が無効な node には実データフロー節を出さない（過大表示の防止）。
+    let yaml = base_config("", false);
+    let resolved = load_and_validate(&yaml).unwrap();
+    let diagram = doc(&generate_all(&resolved), "network-diagram.md");
+    assert!(!diagram.contains("構成要素とデータフロー"));
+}
+
+#[test]
+fn telecom_notification_carries_service_name_and_server() {
+    // 届出様式への転記元: サービス名と使用サーバーの行を持つ。
+    let yaml = config_with_safety_providers("      hosting: self_host\n");
+    let resolved = load_and_validate(&yaml).unwrap();
+    let telecom = doc(&generate_all(&resolved), "telecom-notification-draft.md");
+    assert!(telecom.contains("提供するサービス: P2P コミュニケーションネットワークの補助サービス"));
+    // fixture に cloud_provider が無い場合は行ごと出ない（誤記入の防止）。
+    assert!(!telecom.contains("使用するサーバー:"));
+
+    let with_cloud = yaml.replace(
+        "  country: JP\n",
+        "  country: JP\n  cloud_provider: Google Cloud\n",
+    );
+    let resolved = load_and_validate(&with_cloud).unwrap();
+    let telecom = doc(&generate_all(&resolved), "telecom-notification-draft.md");
+    assert!(telecom.contains("使用するサーバー: Google Cloud"));
+    let diagram = doc(&generate_all(&resolved), "network-diagram.md");
+    assert!(diagram.contains("使用するサーバー: Google Cloud"));
+}
+
+#[test]
+fn data_retention_lists_storage_classes_for_index_stack() {
+    // #617 T4: 索引・モデレーション・信頼の系統が有効な node では、データ区分と保存先・
+    // 再構築/バックアップ区分が保持ポリシーへ載る。
+    let yaml = config_with_safety_providers("      hosting: self_host\n");
+    let resolved = load_and_validate(&yaml).unwrap();
+    let retention = doc(&generate_all(&resolved), "data-retention-policy.md");
+    assert!(retention.contains("データ区分と保存先"));
+    for needle in [
+        "Postgres",
+        "ArcadeDB",
+        "Valkey",
+        "恒久保存しない",
+        "再構築可能",
+        "バックアップ対象は Postgres のみ",
+        "canonical store ではない",
+    ] {
+        assert!(retention.contains(needle), "missing: {needle}");
+    }
+
+    // 系統が無効な node には索引系の保存先区分を書かない（誤開示防止）。
+    let yaml = base_config("", false);
+    let resolved = load_and_validate(&yaml).unwrap();
+    let retention = doc(&generate_all(&resolved), "data-retention-policy.md");
+    assert!(!retention.contains("データ区分と保存先"));
+}
+
+#[test]
+fn generated_docs_never_contain_private_endpoints_or_secret_ids_values() {
+    // 公開資料の非含有監査: URL・secret 値らしき文字列が生成物に出ないこと。
+    // （secret は ID のみ config に書かれ、値はそもそも config に無い。ここでは
+    //   接続先アドレスの類が漏れないことを固定する）
+    let yaml = config_with_safety_providers("      hosting: self_host\n");
+    let resolved = load_and_validate(&yaml).unwrap();
+    for file in generate_all(&resolved) {
+        for needle in ["http://10.", "http://192.168.", "wireguard", "WireGuard"] {
+            assert!(
+                !file.content.contains(needle),
+                "{}: must not leak private endpoints: {needle}",
+                file.filename
+            );
+        }
+    }
+}
+
+#[test]
+fn promoted_capability_metadata_describes_implemented_behavior() {
+    // #617 T2: 昇格した 3 capability の説明が「（計画）」ではなく実装済みのデータフローを
+    // 記述していることを固定する（開示文書の生成元となる契約）。
+    for cap in [
+        Capability::CommunityIndex,
+        Capability::Moderation,
+        Capability::CommunityLocalTrust,
+    ] {
+        let meta = cap.meta();
+        for text in [
+            meta.handled_data,
+            meta.purpose,
+            meta.retention_impact,
+            meta.telecom_note,
+            meta.privacy_note,
+            meta.terms_note,
+        ] {
+            assert!(
+                !text.contains("計画"),
+                "{cap}: metadata must not read as planned: {text}"
+            );
+        }
+    }
+
+    // index: 許可 content のみ・真実源と投影の分離・生メディア非保存。
+    let index = Capability::CommunityIndex.meta();
+    assert!(index.handled_data.contains("公開トピック"));
+    assert!(index.handled_data.contains("Postgres"));
+    assert!(index.handled_data.contains("ArcadeDB"));
+    assert!(index.handled_data.contains("生メディア"));
+    assert!(index.purpose.contains("走査を通過した許可"));
+    assert!(index.telecom_note.contains("真実源ではない"));
+
+    // moderation: 既知一致 + 分類器・fail-closed・Match Data 非保存・authority 限定。
+    let moderation = Capability::Moderation.meta();
+    assert!(moderation.purpose.contains("Project Arachnid Shield"));
+    assert!(moderation.purpose.contains("視覚言語モデル"));
+    assert!(moderation.purpose.contains("fail-closed"));
+    assert!(moderation.handled_data.contains("Match Data"));
+    assert!(moderation.telecom_note.contains("authority scope"));
+    assert!(moderation.terms_note.contains("申し立て"));
+
+    // trust / relation: 双方を含む・node-local advisory・共参加のみ・opt-out 可逆。
+    let trust = Capability::CommunityLocalTrust.meta();
+    assert!(trust.display_name.contains("relation"));
+    assert!(trust.purpose.contains("node-local advisory"));
+    assert!(trust.privacy_note.contains("共参加"));
+    assert!(trust.privacy_note.contains("プライベートチャンネル"));
+    assert!(trust.privacy_note.contains("可逆"));
+    assert!(trust.telecom_note.contains("canonical"));
+    assert!(trust.terms_note.contains("network-wide command"));
+}
+
 #[test]
 fn promoted_capability_listed_as_operating() {
     // #617 の昇格後、moderation は運用中の補助機能として記載され、「計画中」分離は出ない。

@@ -39,8 +39,8 @@ pub use manifest::{
 };
 pub use profile::Profile;
 pub use safety_config::{
-    SafetyConfig, SafetyErrorAction, SafetyEventsConfig, SafetyIndexingConfig, SafetyProviderEntry,
-    SafetyProvidersConfig, SafetyStorageConfig,
+    ProviderHosting, SafetyConfig, SafetyErrorAction, SafetyEventsConfig, SafetyIndexingConfig,
+    SafetyProviderEntry, SafetyProvidersConfig, SafetyStorageConfig,
 };
 pub use safety_readiness::{
     PUBLIC_NODE_PROFILE, READINESS_CHECK_IDS, RUNTIME_CHECK_IDS, ReadinessCheck, ReadinessReport,

@@ -53,6 +53,70 @@ fn external_destinations(config: &ResolvedConfig) -> Vec<ExternalDestination> {
     dests
 }
 
+/// 索引・モデレーション・信頼のいずれかが有効か（実データフロー開示の出し分けに使う）。
+fn index_stack_active(config: &ResolvedConfig) -> bool {
+    config.enabled(Capability::CommunityIndex)
+        || config.enabled(Capability::Moderation)
+        || config.enabled(Capability::CommunityLocalTrust)
+}
+
+/// 安全性走査プロバイダへの送信先（operator config 由来の動的開示。#617）。
+///
+/// 真実源はプロバイダ構成そのもの（構成されていれば走査時に送信が発生する）。
+/// 公開資料には送信先名・区分・目的・データ区分のみを出し、接続先 URL・内部
+/// アドレス・資格情報は出さない。
+struct SafetyProviderDestination {
+    display_name: &'static str,
+    /// 真 = 運営者が管理する基盤（第三者への外部送信ではない）。
+    operator_controlled: bool,
+    purpose: &'static str,
+    data_categories: &'static str,
+}
+
+fn safety_provider_destinations(config: &ResolvedConfig) -> Vec<SafetyProviderDestination> {
+    let Some(safety) = config.raw.safety.as_ref() else {
+        return Vec::new();
+    };
+    let providers = &safety.providers;
+    let normalized = |entry: &crate::SafetyProviderEntry| entry.provider.trim().replace('_', "-");
+    let mut dests = Vec::new();
+
+    if let Some(entry) = providers.known_csam.as_ref()
+        && normalized(entry) == "project-arachnid-shield"
+    {
+        dests.push(SafetyProviderDestination {
+            display_name:
+                "Project Arachnid Shield（Canadian Centre for Child Protection が運営する照合 API）",
+            operator_controlled: false,
+            purpose: "既知 CSAM（児童性的虐待コンテンツ）との照合による検知走査",
+            data_categories: "走査対象メディアのバイト列またはそのハッシュ。認証は運営者自身の\
+                資格情報で行う。照合結果の詳細（Match Data）は保存・配布しない",
+        });
+    }
+
+    // 視覚言語モデルは general / unknown_csam のどちらの slot でも同一の送信先として
+    // 1 件に集約する。区分は hosting 宣言に従い、未指定は保守側（第三者への外部送信）。
+    let vlm_entry = [providers.general.as_ref(), providers.unknown_csam.as_ref()]
+        .into_iter()
+        .flatten()
+        .find(|entry| normalized(entry) == "openai-compatible-vlm");
+    if let Some(entry) = vlm_entry {
+        let self_host = matches!(entry.hosting, Some(crate::ProviderHosting::SelfHost));
+        dests.push(SafetyProviderDestination {
+            display_name: if self_host {
+                "運営者が管理する視覚言語モデル基盤（OpenAI 互換 API）"
+            } else {
+                "外部の視覚言語モデル API（OpenAI 互換）"
+            },
+            operator_controlled: self_host,
+            purpose: "投稿本文・メディアのモデレーション目的の分類走査",
+            data_categories: "走査対象の本文テキストおよびメディアのバイト列。モデルの生応答は\
+                保存・配布しない",
+        });
+    }
+    dests
+}
+
 /// 文書ヘッダ（タイトル + 運営者情報 + 注記）。
 fn header(config: &ResolvedConfig, title: &str) -> String {
     let s = &config.raw.server;
@@ -132,6 +196,100 @@ fn gen_network_diagram(config: &ResolvedConfig) -> String {
         );
     }
 
+    // 索引・モデレーション・信頼の系統が有効な node の実データフロー（#617）。
+    if index_stack_active(config) {
+        if let Some(cloud) = config.raw.server.cloud_provider.as_deref() {
+            let _ = writeln!(s, "使用するサーバー: {cloud}\n");
+        }
+        let _ = writeln!(s, "## 構成要素とデータフロー\n");
+        let _ = writeln!(s, "```text");
+        let _ = writeln!(s, "利用者端末 / 他ピア");
+        let _ = writeln!(
+            s,
+            "  ├─ Direct P2P … 端末間の直接通信（本ノードを経由しない）"
+        );
+        let _ = writeln!(
+            s,
+            "  ├─ cn-user-api（HTTPS。リバースプロキシ経由）… 認証・同意・検索/発見/おすすめ・\
+             信頼/関係の読み取り・通報"
+        );
+        let _ = writeln!(
+            s,
+            "  └─ cn-iroh-relay（HTTP/QUIC）… 接続補助と、直接通信が成立しない場合の\
+             暗号化済み traffic の中継"
+        );
+        let _ = writeln!(s);
+        let _ = writeln!(s, "ノード内部（private network。外部へ公開しない）");
+        let _ = writeln!(
+            s,
+            "  ├─ cn-indexer … 公開トピックのレプリカ同期（iroh-docs）・安全性走査・索引書き込み\
+             の常駐ワーカー"
+        );
+        let _ = writeln!(
+            s,
+            "  ├─ Postgres … 管理系データ・走査判定・署名付き event / risk signal・索引の真実源（永続）"
+        );
+        let _ = writeln!(
+            s,
+            "  ├─ Valkey … ランデブー / presence（TTL 付きの揮発データ）"
+        );
+        let _ = writeln!(
+            s,
+            "  ├─ ArcadeDB … 検索投影・relation graph（真実源から再構築可能な派生データ）"
+        );
+        let _ = writeln!(
+            s,
+            "  └─ 関係解析の定期実行 … 公開トピックの共参加から relation graph を更新"
+        );
+        let _ = writeln!(s);
+        let _ = writeln!(s, "外部 / 運営者基盤（ノードからの outbound のみ）");
+        let safety_dests = safety_provider_destinations(config);
+        let _ = writeln!(
+            s,
+            "  {} iroh docs / blob ピア … レプリカ同期と、走査用メディアの一時取得（恒久保存しない）",
+            if safety_dests.is_empty() {
+                "└─"
+            } else {
+                "├─"
+            }
+        );
+        for (index, dest) in safety_dests.iter().enumerate() {
+            let branch = if index + 1 == safety_dests.len() {
+                "└─"
+            } else {
+                "├─"
+            };
+            let _ = writeln!(
+                s,
+                "  {branch} {} … {}",
+                dest.display_name,
+                if dest.operator_controlled {
+                    "運営者が管理する基盤（第三者への外部送信ではない）"
+                } else {
+                    "第三者への外部送信（outbound HTTPS）"
+                }
+            );
+        }
+        let _ = writeln!(s, "```");
+        let _ = writeln!(s);
+        let _ = writeln!(s, "境界の要点:\n");
+        let _ = writeln!(
+            s,
+            "- 公開するのは利用者向け API（HTTPS）と relay（HTTP/QUIC）のみ。データベース類は\
+             外部へ公開しない。"
+        );
+        let _ = writeln!(
+            s,
+            "- 索引・モデレーション・信頼・関係の権限は、本ノードのサポート対象（公開トピック）内に\
+             限定される。"
+        );
+        let _ = writeln!(
+            s,
+            "- 保存区分: 永続（Postgres）/ 揮発（Valkey、TTL）/ 再構築可能（ArcadeDB）/ \
+             一時（走査用メディア。恒久保存しない）。\n"
+        );
+    }
+
     // manifest の authority scope / P2P boundary を文書へ反映する。
     let manifest = build_manifest(config);
     let _ = writeln!(s, "## node role と責任境界 (authority scope)\n");
@@ -179,6 +337,14 @@ fn gen_telecom_notification(config: &ResolvedConfig) -> String {
          自宅サーバー構成や回線設置を伴う構成は advanced であり、個別確認が必要です。\n"
     );
     let _ = writeln!(s, "## 役務の概要\n");
+    let _ = writeln!(
+        s,
+        "提供するサービス: P2P コミュニケーションネットワークの補助サービス"
+    );
+    if let Some(cloud) = config.raw.server.cloud_provider.as_deref() {
+        let _ = writeln!(s, "使用するサーバー: {cloud}");
+    }
+    let _ = writeln!(s);
     let _ = writeln!(
         s,
         "本サービスは、P2P network の補助層として動作する community node です。\
@@ -309,6 +475,31 @@ fn gen_external_transmission(config: &ResolvedConfig) -> String {
         let _ = writeln!(s, "{}\n", dest.description());
     }
 
+    // 安全性走査プロバイダへの送信（構成されている場合のみ。#617）。
+    let safety_dests = safety_provider_destinations(config);
+    if !safety_dests.is_empty() {
+        let _ = writeln!(s, "## 安全性走査プロバイダへの送信\n");
+        let _ = writeln!(
+            s,
+            "モデレーション（安全性走査）のため、構成済みプロバイダへ次の送信が発生します。\
+             接続先の具体的なアドレスは運用上の理由で公開しません。\n"
+        );
+        for dest in safety_dests {
+            let _ = writeln!(s, "### {}\n", dest.display_name);
+            let _ = writeln!(
+                s,
+                "- 区分: {}",
+                if dest.operator_controlled {
+                    "運営者が管理する基盤内の送信（第三者への外部送信ではない）"
+                } else {
+                    "第三者への外部送信"
+                }
+            );
+            let _ = writeln!(s, "- 目的: {}", dest.purpose);
+            let _ = writeln!(s, "- 送信するデータ: {}\n", dest.data_categories);
+        }
+    }
+
     // 無効化により送信されないものを明示（analytics: false 等の検証可能性）。
     let mut not_sent: Vec<ExternalDestination> = Vec::new();
     let active = external_destinations(config);
@@ -371,9 +562,34 @@ fn gen_moderation_policy(config: &ResolvedConfig) -> String {
          これらは network-wide command ではなく、他ノード・client が任意に採用し得る optional trust input です。\n"
     );
     if config.enabled(Capability::Moderation) || config.enabled(Capability::CommunityLocalTrust) {
+        let _ = writeln!(s, "## 走査と判定の流れ\n");
         let _ = writeln!(
             s,
-            "（計画中）moderation / trust signal は現行実装では未提供です。実装方針は #353 / #362 に従います。\n"
+            "- 索引対象は走査後にのみ索引へ入ります（index_before_scan は無効。fail-closed）。"
+        );
+        let _ = writeln!(
+            s,
+            "- 既知一致照合（known-match）と分類器（OpenAI 互換の視覚言語モデル）で本文テキスト・\
+             メディアを走査します。走査失敗・プロバイダ不達・メディア不達は許可へ落とさず保留します。"
+        );
+        let _ = writeln!(
+            s,
+            "- 判定は scan verdict として保存され、非許可・重大への変化は索引から除外されます。"
+        );
+        let _ = writeln!(
+            s,
+            "- 判定に基づく moderation event は署名付きで発行され、risk signal は根拠つきで保存されます。"
+        );
+        let _ = writeln!(
+            s,
+            "- 照合プロバイダの Match Data・モデルの生応答は保存・配布せず、AI の入力にも使いません。\n"
+        );
+        let _ = writeln!(s, "## 申し立て（異議）\n");
+        let _ = writeln!(
+            s,
+            "本ノードが発行した moderation advisory（risk signal）へは、通報導線から申し立てできます。\
+             係争中の寄与は据え置かれ、認容された場合は寄与から除外され、必要に応じて訂正信号を\
+             再発行します。\n"
         );
     } else {
         let _ = writeln!(
@@ -404,6 +620,68 @@ fn gen_data_retention(config: &ResolvedConfig) -> String {
         "- モデレーションログ: {} 日\n",
         config.raw.retention.moderation_logs_days
     );
+
+    // データ区分と保存先（#617。索引・モデレーション・信頼・関係の各系統が有効な場合）。
+    if index_stack_active(config) {
+        let _ = writeln!(s, "## データ区分と保存先\n");
+        let _ = writeln!(s, "| データ | 保存先 | 性質 |");
+        let _ = writeln!(s, "|---|---|---|");
+        let _ = writeln!(
+            s,
+            "| 認証・同意・通報 | Postgres | 管理系の永続データ（同意は撤回まで、通報は保持方針に従う） |"
+        );
+        let _ = writeln!(
+            s,
+            "| 走査判定（scan verdict） | Postgres | fail-closed な索引真実源が参照する判定記録 |"
+        );
+        let _ = writeln!(
+            s,
+            "| 署名付き moderation event / risk signal | Postgres | 保持期間・失効・訂正再発行・申し立ての対象 |"
+        );
+        let _ = writeln!(
+            s,
+            "| 索引の真実源（index truth） | Postgres | 許可判定のみを持つ authoritative な索引記録 |"
+        );
+        let _ = writeln!(
+            s,
+            "| 検索投影 | ArcadeDB | 真実源から再構築可能な派生データ（バックアップ対象外） |"
+        );
+        let _ = writeln!(
+            s,
+            "| relation graph | ArcadeDB | 公開トピック共参加から定期解析で再構築可能な node-local advisory（バックアップ対象外） |"
+        );
+        let _ = writeln!(
+            s,
+            "| ランデブー / presence | Valkey | TTL 付きの揮発データ（短期で自動失効） |"
+        );
+        let _ = writeln!(
+            s,
+            "| 生メディア | （保存しない） | 走査時の一時取得のみで恒久保存しない |"
+        );
+        let _ = writeln!(
+            s,
+            "| indexer のレプリカ同期状態 | ローカル永続 volume | 同期復元用であり content の canonical store ではない |"
+        );
+        s.push('\n');
+        let _ = writeln!(s, "## 削除・再構築・バックアップ\n");
+        let _ = writeln!(
+            s,
+            "- 索引項目は、対象トピックから外れた時点・判定が許可以外へ変わった時点で削除される。"
+        );
+        let _ = writeln!(
+            s,
+            "- risk signal は失効（expires_at）と半減期減衰の対象で、申し立ての認容で寄与から除外される。"
+        );
+        let _ = writeln!(
+            s,
+            "- ArcadeDB（検索投影・relation graph）は失われても真実源とレプリカから再構築できる。"
+        );
+        let _ = writeln!(
+            s,
+            "- バックアップ対象は Postgres のみ。ArcadeDB・Valkey・一時取得メディアはバックアップ対象外。\n"
+        );
+    }
+
     let _ = writeln!(s, "## capability 別の保持への影響（運用中）\n");
     for cap in available_enabled(config) {
         let m = cap.meta();

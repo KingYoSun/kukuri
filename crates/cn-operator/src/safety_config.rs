@@ -134,6 +134,23 @@ pub struct SafetyProviderEntry {
     /// readiness 判定には使用しない。実際の効果は後続の runtime scan orchestration で適用する。
     #[serde(default)]
     pub on_high_confidence: Option<SafetyErrorAction>,
+    /// プロバイダ基盤の区分（外部送信表示の生成に使う。#617）。
+    ///
+    /// - `self_host`: 運営者が管理する基盤（第三者への外部送信ではない）
+    /// - `external`: 第三者の API（第三者への外部送信として開示する）
+    ///
+    /// 未指定は保守側（`external` 相当 = 第三者への外部送信として開示）で扱う。
+    /// 開示にはこの区分のみを使い、接続先 URL・内部アドレスは公開資料へ出さない。
+    #[serde(default)]
+    pub hosting: Option<ProviderHosting>,
+}
+
+/// 安全性プロバイダの基盤区分（開示用）。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderHosting {
+    SelfHost,
+    External,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
