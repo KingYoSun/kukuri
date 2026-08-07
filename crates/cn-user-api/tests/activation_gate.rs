@@ -163,6 +163,41 @@ async fn valid_activation_record_enables_surfaces() -> Result<()> {
 }
 
 #[tokio::test]
+async fn activation_record_created_after_startup_enables_surfaces() -> Result<()> {
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping activation gate test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_activation_live").await?;
+    let pool = connect_postgres(database.database_url.as_str()).await?;
+    kukuri_cn_core::initialize_database(&pool).await?;
+
+    let (base_url, task) = spawn_api(database.database_url.as_str(), "act-live").await?;
+    for (path, status, body) in surface_statuses(&base_url).await? {
+        assert_eq!(status, StatusCode::NOT_FOUND, "{path}: {body}");
+    }
+
+    record_readiness_activation(
+        &pool,
+        Utc::now(),
+        "public-node",
+        &READINESS_CHECK_IDS,
+        &activation_context("test-deployment-v1"),
+        &serde_json::json!([]),
+    )
+    .await?;
+    for (path, status, body) in surface_statuses(&base_url).await? {
+        assert_ne!(
+            status,
+            StatusCode::NOT_FOUND,
+            "startup後のactivationでsurfaceが開かない: {path}: {body}"
+        );
+    }
+    task.abort();
+    Ok(())
+}
+
+#[tokio::test]
 async fn different_deployment_context_keeps_surfaces_hidden() -> Result<()> {
     let Some(admin_url) = integration_test_admin_database_url() else {
         eprintln!("skipping activation gate test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
