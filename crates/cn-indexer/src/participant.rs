@@ -15,6 +15,7 @@ use anyhow::Result;
 use sqlx::postgres::PgPool;
 use tracing::{info, warn};
 
+use kukuri_blob_service::BlobService;
 use kukuri_cn_core::{
     ChannelSecretCipher, IndexEntryStore, IndexScopeKind, list_channel_secrets,
     list_supported_topics, load_bootstrap_seed_peers,
@@ -25,6 +26,18 @@ use kukuri_transport::SeedPeer;
 
 use crate::ingest::{IngestPipeline, IngestSummary};
 use crate::projection::IndexProjection;
+
+async fn apply_seed_peers(
+    docs_sync: &dyn DocsSync,
+    blob_service: Option<&dyn BlobService>,
+    peers: Vec<SeedPeer>,
+) -> Result<()> {
+    docs_sync.set_seed_peers(peers.clone()).await?;
+    if let Some(blob_service) = blob_service {
+        blob_service.set_seed_peers(peers).await?;
+    }
+    Ok(())
+}
 
 /// scope（種別 + id）と、それが指す共有 replica id。
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -61,6 +74,7 @@ pub struct IndexerParticipant {
     pipeline: IngestPipeline,
     channel_secret_cipher: ChannelSecretCipher,
     configured_seed_peers: Option<Vec<SeedPeer>>,
+    blob_service: Option<Arc<dyn BlobService>>,
 }
 
 impl IndexerParticipant {
@@ -80,6 +94,7 @@ impl IndexerParticipant {
             pipeline,
             channel_secret_cipher,
             configured_seed_peers: None,
+            blob_service: None,
         }
     }
 
@@ -88,7 +103,12 @@ impl IndexerParticipant {
         self
     }
 
-    /// desktop heartbeat が Postgres に保持する active peer を docs sync へ反映する。
+    pub fn with_blob_service(mut self, blob_service: Arc<dyn BlobService>) -> Self {
+        self.blob_service = Some(blob_service);
+        self
+    }
+
+    /// desktop heartbeat が Postgres に保持する active peer を docs sync と media fetch へ反映する。
     /// operator 指定 seed は残し、同じ endpoint の fresh addr_hint は heartbeat 側で更新する。
     async fn refresh_seed_peers(&self) -> Result<()> {
         let Some(configured) = self.configured_seed_peers.as_deref() else {
@@ -103,12 +123,18 @@ impl IndexerParticipant {
             })
             .collect::<Vec<_>>();
         let peers = merge_seed_peers(configured, &active);
-        self.docs_sync.set_seed_peers(peers.clone()).await?;
+        apply_seed_peers(
+            self.docs_sync.as_ref(),
+            self.blob_service.as_deref(),
+            peers.clone(),
+        )
+        .await?;
         info!(
             configured = configured.len(),
             active = active.len(),
             applied = peers.len(),
-            "refreshed docs sync seed peers from active bootstrap registrations"
+            media_fetch = self.blob_service.is_some(),
+            "refreshed docs sync and media fetch seed peers from active bootstrap registrations"
         );
         Ok(())
     }
@@ -270,6 +296,68 @@ fn merge_seed_peers(configured: &[SeedPeer], active: &[SeedPeer]) -> Vec<SeedPee
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
+    use kukuri_blob_service::{BlobStatus, StoredBlob};
+    use kukuri_core::BlobHash;
+    use kukuri_docs_sync::MemoryDocsSync;
+    use std::sync::Mutex;
+
+    #[derive(Default)]
+    struct RecordingBlobService {
+        seed_peers: Mutex<Vec<SeedPeer>>,
+    }
+
+    #[async_trait]
+    impl BlobService for RecordingBlobService {
+        async fn put_blob(&self, _data: Vec<u8>, _mime: &str) -> Result<StoredBlob> {
+            unreachable!("not used by this contract test")
+        }
+
+        async fn fetch_blob(&self, _hash: &BlobHash) -> Result<Option<Vec<u8>>> {
+            unreachable!("not used by this contract test")
+        }
+
+        async fn pin_blob(&self, _hash: &BlobHash) -> Result<()> {
+            unreachable!("not used by this contract test")
+        }
+
+        async fn blob_status(&self, _hash: &BlobHash) -> Result<BlobStatus> {
+            unreachable!("not used by this contract test")
+        }
+
+        async fn import_peer_ticket(&self, _ticket: &str) -> Result<()> {
+            unreachable!("not used by this contract test")
+        }
+
+        async fn set_seed_peers(&self, peers: Vec<SeedPeer>) -> Result<()> {
+            *self.seed_peers.lock().expect("seed peer mutex poisoned") = peers;
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn seed_refresh_applies_active_peers_to_media_fetcher() {
+        let endpoint_id = "1".repeat(64);
+        let peer = SeedPeer {
+            endpoint_id: endpoint_id.clone(),
+            addr_hint: Some("192.0.2.10:4433".to_string()),
+        };
+        let docs_sync = MemoryDocsSync::default();
+        let blob_service = RecordingBlobService::default();
+
+        apply_seed_peers(&docs_sync, Some(&blob_service), vec![peer.clone()])
+            .await
+            .expect("seed refresh succeeds");
+
+        assert_eq!(
+            *blob_service
+                .seed_peers
+                .lock()
+                .expect("seed peer mutex poisoned"),
+            vec![peer],
+            "media fetcher must receive the same active peers as docs sync"
+        );
+    }
 
     #[test]
     fn public_topic_scope_maps_to_topic_replica() {

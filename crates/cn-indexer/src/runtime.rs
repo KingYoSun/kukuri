@@ -13,7 +13,8 @@
 //! media scan 用の一時 fetch（#609）と docs replica sync（#613 T1）は、同じ persistent iroh node
 //! （`data_dir` 配下）を共有する。provider が構成されている場合のみ node を立ち上げ、
 //! `IrohBlobService` + `BlobMediaFetcher`（media fetch）と `IrohDocsSync`（docs participant）の
-//! 双方へ渡す。シードピア（`COMMUNITY_NODE_INDEXER_SEED_PEERS`）は docs 同期へ適用する。
+//! 双方へ渡す。シードピア（`COMMUNITY_NODE_INDEXER_SEED_PEERS` と active bootstrap registration）は
+//! docs 同期と media の一時 fetch の両方へ適用する。
 
 use std::sync::Arc;
 
@@ -21,7 +22,7 @@ use anyhow::{Context, Result};
 use sqlx::postgres::PgPool;
 use tracing::{info, warn};
 
-use kukuri_blob_service::IrohBlobService;
+use kukuri_blob_service::{BlobService, IrohBlobService};
 use kukuri_cn_core::{ChannelSecretCipher, PgIndexEntryStore, PgSafetyArtifactStore};
 use kukuri_cn_safety::provider::MediaFetcher;
 use kukuri_cn_safety_runtime::SafetyScanService;
@@ -146,15 +147,17 @@ async fn run(config: IndexerConfig) -> Result<()> {
     };
 
     // media scan 用の一時 fetch（#609）。共有 node の blob 経路から組み、provider 解決へ注入する。
-    let media_fetcher: Option<Arc<dyn MediaFetcher>> = node.as_ref().map(|node| {
-        let blob_service = Arc::new(IrohBlobService::new(Arc::clone(node)));
+    let blob_service: Option<Arc<dyn BlobService>> = node
+        .as_ref()
+        .map(|node| Arc::new(IrohBlobService::new(Arc::clone(node))) as Arc<dyn BlobService>);
+    let media_fetcher: Option<Arc<dyn MediaFetcher>> = blob_service.as_ref().map(|blob_service| {
         info!(
             max_bytes = config.media_fetch.max_bytes,
             timeout_secs = config.media_fetch.timeout.as_secs(),
             "media fetcher constructed (ephemeral blob fetch; no permanent blob storage)"
         );
         Arc::new(
-            BlobMediaFetcher::new(blob_service, config.media_fetch.clone())
+            BlobMediaFetcher::new(Arc::clone(blob_service), config.media_fetch.clone())
                 .with_metrics(Arc::clone(&state)),
         ) as Arc<dyn MediaFetcher>
     });
@@ -169,8 +172,8 @@ async fn run(config: IndexerConfig) -> Result<()> {
         safety_providers,
         Arc::new(PgSafetyArtifactStore::new(pool.clone())),
     )?;
-    match (safety, node) {
-        (Some(service), Some(node)) => {
+    match (safety, node, blob_service) {
+        (Some(service), Some(node), Some(blob_service)) => {
             info!(
                 issuer_node_id = %service.issuer_node_id(),
                 "safety scan service constructed"
@@ -181,6 +184,7 @@ async fn run(config: IndexerConfig) -> Result<()> {
                 cipher,
                 service,
                 Arc::clone(&node),
+                blob_service,
                 Arc::clone(&state),
             )
             .await?;
@@ -259,7 +263,8 @@ async fn wait_for_shutdown_signal() {
 
 /// ingest 経路の本番依存を組み立てる（#613 T1）。
 ///
-/// - 共有 iroh node から `IrohDocsSync` を作り、シードピアを適用する。
+/// - 共有 iroh node から `IrohDocsSync` を作り、シードピアを docs sync と blob fetch の双方へ
+///   適用できるよう participant へ渡す。
 /// - ArcadeDB 投影は起動時に schema 準備（`ensure_schema`）を行い、接続できなければ起動失敗に
 ///   する（fail-closed。投影へ書けない構成で取り込みを始めない）。
 /// - 索引の真実源は Postgres（`PgIndexEntryStore`）。
@@ -269,6 +274,7 @@ async fn compose_ingest_stack(
     cipher: ChannelSecretCipher,
     safety: SafetyScanService,
     node: Arc<IrohDocsNode>,
+    blob_service: Arc<dyn BlobService>,
     state: Arc<IndexerRuntimeState>,
 ) -> Result<(IndexerParticipant, Arc<IrohDocsSync>)> {
     let docs_sync = Arc::new(IrohDocsSync::new(node));
@@ -307,7 +313,8 @@ async fn compose_ingest_stack(
         pipeline,
         cipher,
     )
-    .with_configured_seed_peers(config.seed_peers.clone());
+    .with_configured_seed_peers(config.seed_peers.clone())
+    .with_blob_service(blob_service);
     Ok((participant, docs_sync))
 }
 
