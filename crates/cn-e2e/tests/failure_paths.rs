@@ -16,6 +16,7 @@ use kukuri_cn_core::{IndexScopeKind, inspect_index_integrity};
 use kukuri_cn_e2e::{E2eOptions, E2eStack};
 use kukuri_cn_indexer::config::MediaFetchConfig;
 use kukuri_cn_indexer::projection::IndexProjection;
+use reqwest::{Client, StatusCode};
 
 const TINY_PNG: &[u8] = &[
     0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
@@ -168,5 +169,99 @@ async fn oversize_media_holds_posts() -> Result<()> {
         "scan must hold when the media exceeds the fetch limit"
     );
     assert_held(&stack, object_id.as_str()).await?;
+    stack.shutdown().await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn replica_query_failure_keeps_new_posts_out_of_surfaces_until_recovery() -> Result<()> {
+    let Some(stack) = E2eStack::boot("replicaqueryfail").await? else {
+        return Ok(());
+    };
+
+    // 障害前に許可済みの投稿を1件作り、通常経路が成立していることを先に固定する。
+    let baseline = stack.publish_text_post("replica failure baseline").await?;
+    assert!(
+        stack
+            .wait_for_projection(baseline.as_str(), HOLD_TIMEOUT)
+            .await?,
+        "baseline post did not reach the projection"
+    );
+
+    let client = Client::new();
+    let token = stack.authenticate(&client).await?;
+
+    // 実IrohDocsSyncの直前で、この走行のreplica queryだけを失敗させる。
+    stack.set_replica_query_failure(true);
+    assert!(
+        stack
+            .wait_for_state(
+                |state| {
+                    state.last_error_scope.as_deref()
+                        == Some(format!("topic::{}", stack.topic_id).as_str())
+                },
+                HOLD_TIMEOUT,
+            )
+            .await?,
+        "replica query failure must be observable on the worker"
+    );
+
+    let blocked = stack
+        .publish_text_post("replica-failure-marker must stay hidden")
+        .await?;
+    tokio::time::sleep(Duration::from_secs(2)).await;
+
+    assert!(
+        !stack
+            .projection
+            .contains_object(
+                IndexScopeKind::PublicTopic,
+                stack.topic_id.as_str(),
+                blocked.as_str(),
+            )
+            .await?,
+        "a post published while replica queries fail must not reach ArcadeDB"
+    );
+    let findings = inspect_index_integrity(&stack.pool).await?;
+    assert_eq!(
+        findings.index_entries_total, 1,
+        "the failed replica query must not add a truth entry: {findings:?}"
+    );
+
+    let search_url = format!(
+        "{}/v1/index/search?scope_kind=public_topic&scope_id={}&q=replica-failure-marker",
+        stack.api_base_url, stack.topic_id,
+    );
+    let response = client
+        .get(&search_url)
+        .bearer_auth(token.as_str())
+        .send()
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.json::<serde_json::Value>().await?;
+    assert!(
+        !E2eStack::entry_ids(&body).contains(&blocked),
+        "the failed replica query must not expose the new post: {body}"
+    );
+
+    // 障害を解除すると同じ常駐workerが再試行し、未処理投稿を安全に取り込む。
+    stack.set_replica_query_failure(false);
+    assert!(
+        stack
+            .wait_for_projection(blocked.as_str(), HOLD_TIMEOUT)
+            .await?,
+        "the post did not reach the projection after replica query recovery"
+    );
+    let response = client
+        .get(&search_url)
+        .bearer_auth(token.as_str())
+        .send()
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.json::<serde_json::Value>().await?;
+    assert!(
+        E2eStack::entry_ids(&body).contains(&blocked),
+        "the recovered replica query must make the post searchable: {body}"
+    );
+
     stack.shutdown().await
 }
