@@ -146,6 +146,25 @@ fn critical_detection_with_no_score_fails_closed() {
 }
 
 #[test]
+fn clean_critical_classifier_capability_is_not_itself_a_detection() {
+    let policy = SafetyPolicy::public_node_default();
+    let clean_unknown_csam = ProviderScanResult::completed(
+        "unknown-csam-classifier",
+        SafetyProviderCapability::NovelCsamImageClassifier,
+    );
+
+    let verdict = route(
+        &[no_known_match_result(), clean_unknown_csam],
+        &policy,
+        SCANNED_AT,
+    );
+
+    assert_eq!(verdict.action, SafetyAction::Allow);
+    assert_eq!(verdict.reason_code, ReasonCode::NoKnownMatch);
+    assert!(!verdict.critical);
+}
+
+#[test]
 fn critical_label_confidence_drives_suspected_when_score_absent() {
     // result.score が無くても label.confidence>=threshold なら suspected として扱う。
     let policy = SafetyPolicy::public_node_default();
