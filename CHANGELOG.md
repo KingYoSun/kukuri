@@ -18,7 +18,7 @@ file; automated changelog entries start from the next preview release.
 
 ## [Unreleased]
 
-## [v0.1.3-preview.1] - 2026-08-06
+## [v0.1.3-preview.1] - 2026-08-07
 
 ### Features
 
