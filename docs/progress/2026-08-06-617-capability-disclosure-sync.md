@@ -52,7 +52,10 @@ PR: [#640](https://github.com/KingYoSun/kukuri/pull/640)（T1 昇格）·
 
 ## 残作業・持ち越し
 
-- 実機（GCP VM）の public manifest への反映は、新 image の digest 更新 + apply が必要。
+- public manifest が指す `GET /terms` / `GET /privacy` / `GET /external-transmission` /
+  `GET /moderation-policy` / `GET /abuse-policy` は、operator config から生成した同一の開示文書を
+  `cn-user-api` が Markdown として配信する。operator config 未設定時は manifest と同様に 404。
+- 実機（GCP VM）の public manifest と開示 URL への反映は、新 image の digest 更新 + apply が必要。
   現在は届出受領前の拘束条件により DNS 閉鎖中のため、再公開時（届出受領後）に
   image 更新とあわせて行う（`docs/progress/2026-08-06-616-activation.md` の再公開手順参照）。
 - kukuri.app サイト側（#602）の公開物更新は再公開時に接続する。

@@ -288,8 +288,13 @@ journalctl -u kukuri-relation-analyze.service -n 50
 読み取り面（索引 query / 信頼 read）は、環境変数（`COMMUNITY_NODE_INDEX_QUERY_ENABLED` /
 `COMMUNITY_NODE_TRUST_READ_ENABLED`）が真でも、`cn-cli readiness` の全項目合格記録
 （`cn_admin.readiness_activations`）が無ければ公開されない（有効化の関門）。
-全項目合格すると記録は自動で書かれる。反映には cn-user-api の再起動が必要
-（関門は起動時に評価される）。
+全項目合格すると記録は自動で書かれる。user-api は各read時に最新activationを再検査するため、
+記録の更新・失効に再起動は不要。
+
+GCP構成では `kukuri-readiness.timer` が5分ごとに同じ判定を実行する（activationの既定有効期限は
+15分）。`systemctl status kukuri-readiness.timer` / `systemctl status kukuri-readiness.service` /
+`journalctl -u kukuri-readiness.service -n 100` で、最終成功・失敗と次回実行を確認する。判定失敗時は
+CLIが旧activationをrevokeし、read-time gateがindex / trust surfaceを閉じる。timerは次回再試行する。
 
 `cn-relation-analyze` サービス（cn-cli image）を流用して実行するが、プロバイダ資格情報の
 env はサービス定義に含まれないため、project `.env` を source して `-e` で転送する:
@@ -303,8 +308,7 @@ sudo bash -c 'set -a; . ./.env; set +a; \
     -e COMMUNITY_NODE_VLM_API_KEY \
     -v /var/lib/kukuri/community-node/operator-config.yaml:/work/operator-config.yaml:ro \
     cn-relation-analyze readiness --config /work/operator-config.yaml'
-# 全項目合格 → 有効化記録が書かれる → cn-user-api を再起動して反映:
-sudo /var/lib/toolbox/kukuri/bin/docker-compose restart cn-user-api
+# 全項目合格 → 有効化記録が書かれ、次のreadから反映される。
 ```
 
 - 疎通確認（Arachnid への合成ハッシュ送信 / VLM への無害な 1 リクエスト）の結果は
@@ -363,6 +367,8 @@ docker volume rm community-node_cn-arcadedb-data   # volume 名は docker volume
 
 - cn-indexer / ArcadeDB / relation timer が構成から外れ、公開 surface は従来どおり
   API / relay のみになる（flag が既定 false のため index / trust API はもともと 404）。
+- startupは `docker-compose up -d --remove-orphans` とoptional systemd unitのcleanupを行うため、
+  旧構成のcn-indexer / ArcadeDB containerやrelation / readiness timerは再起動後に残らない。
 - Postgres の永続 data（verdict / moderation artifact / index 真実源）は残る。
 - `indexer_data_disk_gb > 0` の PD は Terraform 管理のため、変数を 0 にしない限り残る
   （再有効化時に endpoint 同一性を保てる）。
@@ -537,6 +543,10 @@ terraform apply
   `cn-user-api` が `COMMUNITY_NODE_OPERATOR_CONFIG` で読み込む。
 - これにより `GET /.well-known/kukuri/community-node.json` / `GET /v1/node/manifest` が応答し、
   `report_endpoint` capability を有効化した node では `POST /v1/report` が受理される。
+- manifest に記載される `GET /terms` / `GET /privacy` / `GET /external-transmission` /
+  `GET /moderation-policy` / `GET /abuse-policy` も、同じ operator config から生成した Markdown を
+  応答する。デプロイ後は manifest の各 URL が 200 であり、`Content-Type` が
+  `text/markdown; charset=utf-8` であることを確認する。
 - `operator_config_path` が空（既定）なら manifest endpoint は `404` のまま（従来挙動）。
 - blob cache の on/off は operator-config の `features.blob_cache` が真実源で、tfvars の
   `blob_cache_enabled` はそこから導出される。`features.blob_cache: false` なのに
