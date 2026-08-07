@@ -48,16 +48,27 @@ async fn spawn_manifest_server(
 #[tokio::test]
 async fn disclosure_urls_serve_markdown_from_operator_config_output() -> Result<()> {
     let (base_url, task) = spawn_manifest_server(Some(SAMPLE_YAML)).await?;
-    let response = Client::new()
-        .get(format!("{base_url}/terms"))
-        .send()
-        .await?;
-    assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(
-        response.headers()[reqwest::header::CONTENT_TYPE],
-        "text/markdown; charset=utf-8"
-    );
-    assert!(response.text().await?.contains("Example Operator"));
+    let client = Client::new();
+    for path in [
+        "/terms",
+        "/privacy",
+        "/external-transmission",
+        "/moderation-policy",
+        "/abuse-policy",
+        "/data-retention",
+    ] {
+        let response = client.get(format!("{base_url}{path}")).send().await?;
+        assert_eq!(response.status(), StatusCode::OK, "path {path}");
+        assert_eq!(
+            response.headers()[reqwest::header::CONTENT_TYPE],
+            "text/markdown; charset=utf-8",
+            "path {path}"
+        );
+        assert!(
+            response.text().await?.contains("Example Operator"),
+            "path {path}"
+        );
+    }
     task.abort();
     Ok(())
 }

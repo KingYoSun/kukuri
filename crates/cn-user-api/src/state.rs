@@ -277,6 +277,7 @@ fn load_manifest(path: Option<&std::path::Path>) -> Result<LoadedManifest> {
                     | "external-transmission-notice.md"
                     | "moderation-policy.md"
                     | "abuse-policy.md"
+                    | "data-retention-policy.md"
             )
         })
         .map(|file| (file.filename, file.content))
@@ -286,4 +287,39 @@ fn load_manifest(path: Option<&std::path::Path>) -> Result<LoadedManifest> {
         public_disclosures: Arc::new(public_disclosures),
         operator_config_yaml: bytes,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Write;
+
+    use anyhow::Result;
+    use tempfile::NamedTempFile;
+
+    use super::load_manifest;
+
+    #[test]
+    fn load_manifest_includes_every_http_disclosure() -> Result<()> {
+        let mut config = NamedTempFile::new()?;
+        write!(
+            config,
+            "server:\n  domain: example-kukuri.net\n  operator_name: Example Operator\n  country: JP\nprofile: relay-enabled\nacknowledge_planned_capabilities: true\n"
+        )?;
+
+        let loaded = load_manifest(Some(config.path()))?;
+        for filename in [
+            "terms.md",
+            "privacy-policy.md",
+            "external-transmission-notice.md",
+            "moderation-policy.md",
+            "abuse-policy.md",
+            "data-retention-policy.md",
+        ] {
+            assert!(
+                loaded.public_disclosures.contains_key(filename),
+                "missing public disclosure: {filename}"
+            );
+        }
+        Ok(())
+    }
 }
