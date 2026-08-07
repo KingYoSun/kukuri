@@ -6,7 +6,7 @@ kukuri は topic-first な P2P social app / protocol です。Nostr 由来の署
 
 ## Builder Preview
 
-- 現在の preview 配布対象は Windows installer です。GitHub Releases から取得します。
+- 現在の preview 配布対象は Windows installer です。[最新の GitHub Release](https://github.com/KingYoSun/kukuri/releases/latest) から取得します。
 - Linux は現時点では source-run を前提にします。
 - preview 更新は `Settings -> Release` の updater から `latest-preview.json` を参照します。
 - data safety、release runbook、third-party notices は `Settings -> Release` から参照できます。
@@ -118,7 +118,7 @@ cargo xtask doctor
 cargo xtask check
 cargo xtask test
 cargo xtask e2e-smoke
-cargo xtask release-check v0.1.2-preview.1
+cargo xtask release-check v0.1.3-preview.1
 
 cd apps/desktop
 npx pnpm@10.16.1 install

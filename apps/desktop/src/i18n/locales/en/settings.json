@@ -251,6 +251,20 @@
       "exported": "Diagnostic report exported.",
       "previewLabel": "Diagnostic report preview"
     },
+    "resources": {
+      "title": "Release and safety resources",
+      "summary": "Use these canonical links for installation, update safety, notices, and Community Node policies.",
+      "latestRelease": "Latest release",
+      "quickstart": "Quickstart",
+      "releaseRunbook": "Release and data safety",
+      "thirdPartyNotices": "Third-party notices",
+      "communityNodeDisclosures": "Default Community Node disclosures",
+      "terms": "Terms",
+      "privacy": "Privacy policy",
+      "externalTransmission": "External transmission",
+      "abusePolicy": "Abuse policy",
+      "dataRetention": "Data retention"
+    },
     "osNotifications": {
       "title": "OS Notifications",
       "permission": "Permission: {{osNotificationPermission}}",

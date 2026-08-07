@@ -18,6 +18,11 @@ output "ssh_iap_command" {
   value       = module.vm.ssh_iap_command
 }
 
+output "admin_iap_tunnel_command" {
+  description = "read-only admin UI の IAP TCP tunnel コマンド。"
+  value       = module.vm.admin_iap_tunnel_command
+}
+
 output "backup_bucket" {
   description = "backup bucket 名（backup 無効なら空）。"
   value       = var.backup_enabled ? module.backup[0].bucket_name : ""
