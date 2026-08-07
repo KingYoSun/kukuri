@@ -34,7 +34,7 @@ output "deployment_profile_summary" {
     backup                 = var.backup_enabled ? "pg_dump -> GCS (retention ${var.backup_retention_days}d)" : "disabled"
     managed_db             = "not used (extension point: envs/managed-db)"
     managed_cache          = "not used (extension point: envs/managed-db)"
-    index_moderation_trust = "not provisioned (Phase B; kept out of low-cost DB)"
+    index_moderation_trust = var.deploy_indexer_stack ? "provisioned (cn-indexer + ArcadeDB + relation analysis)" : "not provisioned"
   }
 }
 
