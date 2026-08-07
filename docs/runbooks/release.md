@@ -71,6 +71,28 @@ The draft release must include:
 
 `latest-preview.json` must embed the `.sig` file contents in `platforms.windows-x86_64.signature`. It must not point `signature` at a `.sig` URL.
 
+`latest-preview.json` は **UTF-8 without BOM** でなければならない。Windows PowerShell 5.1 の
+`Set-Content -Encoding UTF8` はBOMを付けるため、manifestの手動生成・上書きには使わない。
+必ず `scripts/release/create-preview-assets.ps1` を使う。このscriptは
+`System.Text.UTF8Encoding(false)` で書き出し、`test-create-preview-assets.ps1` はbyte-levelでBOMを拒否する。
+
+公開前の最低検査:
+
+```powershell
+./scripts/release/test-create-preview-assets.ps1
+
+$manifestPath = '<release-assets>/latest-preview.json'
+$bytes = [IO.File]::ReadAllBytes($manifestPath)
+if ($bytes.Length -ge 3 -and
+    $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+  throw 'latest-preview.json has a UTF-8 BOM'
+}
+$manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+if (-not $manifest.platforms.'windows-x86_64'.signature) {
+  throw 'embedded updater signature is missing'
+}
+```
+
 `RELEASE_NOTES_DRAFT.md` embeds the changelog section for the release tag (the `## Changes` block with per-pull-request links) ahead of the static `Included` / `Known limits` / `Feedback` content. The `changelog` job produces that section; see [Changelog](#changelog).
 
 ## Changelog
@@ -115,6 +137,54 @@ Use the exact draft release assets:
 4. Install a previous preview and update to the draft version.
 5. Confirm identity, local DB, Iroh data, Community Node config, private channel capability, and notification inbox state remain.
 6. If unsigned, confirm the release notes explain SmartScreen warnings.
+
+### 公開後のupdater smoke
+
+GitHub UI上のasset確認だけでは不十分。旧previewが実際に読む短いURLをCDN経由で取得し、
+redirect先の一時的な `release-assets.githubusercontent.com` URLをrunbookや設定へ保存しない。
+
+```powershell
+$out = Join-Path ([IO.Path]::GetTempPath()) 'kukuri-latest-preview.json'
+$url = 'https://github.com/KingYoSun/kukuri/releases/latest/download/latest-preview.json'
+curl.exe -L --fail --silent --show-error "$url`?verify=$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())" -o $out
+
+$bytes = [IO.File]::ReadAllBytes($out)
+if ($bytes.Length -ge 3 -and
+    $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+  throw 'published latest-preview.json has a UTF-8 BOM'
+}
+$manifest = Get-Content -LiteralPath $out -Raw -Encoding UTF8 | ConvertFrom-Json
+$manifest.version
+$manifest.platforms.'windows-x86_64'.url
+if (-not $manifest.platforms.'windows-x86_64'.signature) {
+  throw 'published updater signature is missing'
+}
+```
+
+続けて次を確認する。
+
+1. manifestのversionがrelease予定versionと一致する。
+2. installer URLがHTTP成功し、release assetのファイル名と一致する。
+3. embedded signatureが同releaseの `.sig` 内容と一致する。
+4. `SHA256SUMS.txt` を再取得し、公開assetを再計算して全件一致する。
+5. 旧previewから「更新を確認」→download→installを実行し、clean installとは別に成功を確認する。
+
+assetを差し替えた場合は `SHA256SUMS.txt` も必ず更新する。GitHub/CDNの切替後に上記の短いURLを
+cache-busting query付きで再取得し、旧previewを再起動するか更新確認を再実行する。
+
+### workflow後段だけが失敗した場合
+
+OIDC / artifact attestationなど、署名済みpackageのbuild/upload後の後段だけが外部障害で失敗した場合は、
+失敗runの**同一artifact**を取得して次の全条件を満たす場合だけ手動公開へ切り替えられる。
+
+- Windows package buildとTauri updater署名が成功済み
+- `create-preview-assets.ps1` でassetを再生成
+- release asset smoke、BOM検査、全checksum一致
+- installerのversionとtag/source SHA一致
+- release notesに欠落したattestationと理由を明記
+
+build・署名自体が失敗したrunのartifactを公開してはならない。手動回復時もinstallerや `.sig` を
+作り直して混在させず、同一run由来の一式として扱う。
 
 ## Diagnostics And Feedback
 

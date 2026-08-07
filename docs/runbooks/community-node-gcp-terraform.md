@@ -1,6 +1,6 @@
 # Community Node GCP Terraform Deploy
 
-最終更新日: 2026-08-06
+最終更新日: 2026-08-07
 
 ## 目的
 
@@ -13,6 +13,8 @@
 
 実装は `infra/terraform/`。この runbook は実行手順、設計の根拠は同 `README.md` と
 `docs/architecture/p2p-first-community-node-responsibility-boundary.md` を参照する。
+既存production環境の日常rollout、意図しないVM置換の回避、容量枯渇からの復旧、実投稿の
+live確認は `docs/runbooks/community-node-production-rollout.md` を先に参照する。
 
 > 注意: この runbook は法的助言ではない。日本国内で relay を運用する場合の電気通信事業の
 > 届出要否や記載内容は、最終的に operator 自身と総合通信局・専門家への確認が必要。region 既定の
@@ -155,7 +157,20 @@ cn_indexer_image    = "ghcr.io/kingyosun/kukuri-cn-indexer:latest"
 docker buildx imagetools inspect ghcr.io/kingyosun/kukuri-cn-indexer:latest --format '{{println .Manifest.Digest}}'
 ```
 
+digestはworkflow logの先頭の `sha256:` から転記せず、workflow成功後のregistry manifestから取得する。
+`cn-indexer` jobはpublish対象とは別のpositive smoke imageを先にbuildすることがあり、そのdigestは
+GHCRに存在しない。取得した参照はapply前に必ず解決確認する:
+
+```bash
+docker manifest inspect \
+  ghcr.io/kingyosun/kukuri-cn-indexer@sha256:<registryで確認したdigest> >/dev/null
+```
+
 ## low-cost deploy
+
+既存production nodeを更新する場合は、この節を直接実行する前に
+`docs/runbooks/community-node-production-rollout.md` のbackup、replacement gate、Docker空き容量、
+post-deploy verificationを通す。
 
 ```bash
 cd infra/terraform/envs/low-cost
@@ -192,12 +207,18 @@ VM 内のサービスは `/var/lib/kukuri/community-node` の docker compose で
 ```bash
 # VM へ IAP SSH 後
 cd /var/lib/kukuri/community-node
-docker compose run --rm cn-migrate   # 既に起動時に実行済み（再実行は冪等）
-# admission 用に cn-cli image を直接使う例:
-docker run --rm --network kukuri-community-node_default \
-  --env-file ./community-node.env -e COMMUNITY_NODE_DATABASE_URL="$(grep COMMUNITY_NODE_DATABASE_URL .env | cut -d= -f2-)" \
-  ghcr.io/<owner>/kukuri-cn-cli:latest admission show
+COMPOSE=/var/lib/toolbox/kukuri/bin/docker-compose
+sudo "$COMPOSE" run --rm cn-migrate   # 既に起動時に実行済み（再実行は冪等）
+
+# admission用に、registryで検証したcn-cli digestを直接使う例。
+# secretを含むproject .envをcommand出力へ展開しない。
+CLI_IMAGE=ghcr.io/<owner>/kukuri-cn-cli@sha256:<verified-digest>
+sudo docker run --rm --network community-node_default --env-file .env \
+  "$CLI_IMAGE" admission show
 ```
+
+Container-Optimized OSでは `docker compose` pluginが見つからない場合がある。Terraform構成では
+startup scriptが配置する `/var/lib/toolbox/kukuri/bin/docker-compose` を常に使う。
 
 ## index / moderation stack のデプロイ（#615）
 
@@ -316,7 +337,7 @@ sudo bash -c 'set -a; . ./.env; set +a; \
 - `relation_analysis_recent` が不合格の場合は relation analyze を 1 回実行する
   （`docker-compose run --rm cn-relation-analyze`。既定の許容は 7200 秒以内の成功記録）。
 - 判定項目集合が変わる更新を入れた場合、古い記録は無効になり面は自動で閉じる
-  （readiness の再実行 + 再起動で再解禁する）。
+  （readiness の再実行で再解禁する。user-apiはread時に最新activationを読むため再起動不要）。
 
 ### VLM のネットワーク境界（self-host endpoint）
 
@@ -386,11 +407,12 @@ restore 例（VM 上）:
 
 ```bash
 cd /var/lib/kukuri/community-node
+COMPOSE=/var/lib/toolbox/kukuri/bin/docker-compose
 # 取得した dump を cn-postgres に流し込む（事前に cn-user-api 停止推奨）
-docker compose stop cn-user-api
-cat cn-postgres.dump | docker compose exec -T cn-postgres \
+sudo "$COMPOSE" stop cn-user-api
+cat cn-postgres.dump | sudo "$COMPOSE" exec -T cn-postgres \
   sh -lc 'pg_restore --clean --if-exists --no-owner -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
-docker compose start cn-user-api
+sudo "$COMPOSE" start cn-user-api
 ```
 
 restore drill は本番DBへ直接上書きせず、隔離した一時DBへ復元して次を確認する。

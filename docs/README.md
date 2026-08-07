@@ -35,6 +35,7 @@
 - 新 feature 着手前に `docs/adr/0002-feature-data-classification-template.md` を埋める。
 
 ## Ops
+- community node production rollout / live media verification / recovery: `docs/runbooks/community-node-production-rollout.md`
 - community node GCP Terraform デプロイ（deployment profile: low-cost / managed-db / ha）: `docs/runbooks/community-node-gcp-terraform.md`（実装は `infra/terraform/`）
 
 ## Architecture
