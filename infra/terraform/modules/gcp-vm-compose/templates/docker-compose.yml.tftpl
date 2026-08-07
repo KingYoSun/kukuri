@@ -203,8 +203,8 @@ services:
       PROJECT_ARACHNID_API_PASSWORD: $${PROJECT_ARACHNID_API_PASSWORD:-}
       COMMUNITY_NODE_VLM_API_KEY: $${COMMUNITY_NODE_VLM_API_KEY:-}
     volumes:
-      - ${operator_config_path}:/work/operator-config.yaml:ro
-    command: ["readiness", "--config", "/work/operator-config.yaml"]
+      - ./operator-config.yaml:${operator_config_path}:ro
+    command: ["readiness", "--config", "${operator_config_path}"]
     restart: "no"
 %{ endif ~}
 %{ endif ~}
