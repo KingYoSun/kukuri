@@ -544,8 +544,9 @@ terraform apply
 - これにより `GET /.well-known/kukuri/community-node.json` / `GET /v1/node/manifest` が応答し、
   `report_endpoint` capability を有効化した node では `POST /v1/report` が受理される。
 - manifest に記載される `GET /terms` / `GET /privacy` / `GET /external-transmission` /
-  `GET /moderation-policy` / `GET /abuse-policy` も、同じ operator config から生成した Markdown を
-  応答する。デプロイ後は manifest の各 URL が 200 であり、`Content-Type` が
+  `GET /moderation-policy` / `GET /abuse-policy` と、公開用の `GET /data-retention` も、
+  同じ operator config から生成した Markdown を応答する。デプロイ後は manifest の各 URL が
+  200 であり、`Content-Type` が
   `text/markdown; charset=utf-8` であることを確認する。
 - `operator_config_path` が空（既定）なら manifest endpoint は `404` のまま（従来挙動）。
 - blob cache の on/off は operator-config の `features.blob_cache` が真実源で、tfvars の

@@ -91,6 +91,7 @@ pub fn manifest_routes(
         .route("/external-transmission", get(external_transmission))
         .route("/moderation-policy", get(moderation_policy))
         .route("/abuse-policy", get(abuse_policy))
+        .route("/data-retention", get(data_retention))
         .with_state(ManifestState {
             manifest,
             public_disclosures,
@@ -115,6 +116,10 @@ async fn moderation_policy(State(state): State<ManifestState>) -> Response {
 
 async fn abuse_policy(State(state): State<ManifestState>) -> Response {
     disclosure_response(&state, "abuse-policy.md")
+}
+
+async fn data_retention(State(state): State<ManifestState>) -> Response {
+    disclosure_response(&state, "data-retention-policy.md")
 }
 
 fn disclosure_response(state: &ManifestState, filename: &str) -> Response {
