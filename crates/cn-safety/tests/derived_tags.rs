@@ -78,10 +78,14 @@ fn derived_tags_exclude_critical_and_match_data() {
         tagged_general_result(&["harbor"]),
         critical_tagged,
     ];
-    // critical 検知（Completed + critical capability）が混ざると verdict は fail-closed。
+    // capability は provider の機能を表すだけなので、label/score の無い clean 結果は検知では
+    // ない。一方、critical capability 由来のタグは多層防御として引き続き収集しない。
     let verdict = route(&outcomes, &policy, SCANNED_AT);
-    assert!(!verdict.is_indexable());
-    assert!(derived_tags_for_index(&verdict, &outcomes).is_empty());
+    assert!(verdict.is_indexable());
+    assert_eq!(
+        derived_tags_for_index(&verdict, &outcomes),
+        vec!["harbor".to_string()]
+    );
 
     // Match Data（known_hash_match=true）の結果からもタグを流さない。
     let mut match_data =

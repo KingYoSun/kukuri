@@ -246,10 +246,11 @@ fn suspected_action(policy: &SafetyPolicy) -> SafetyAction {
 
 /// result が critical safety（CSAM / CSE / grooming）の検知か。
 ///
-/// capability か、いずれかのラベル category のどちらかが critical safety なら true。
-/// score の有無に依存しない（categorical な検知でも取りこぼさないため）。
+/// critical label があれば categorical な検知として扱う。label を持たない provider との互換性の
+/// ため、critical capability と score の組み合わせも検知として扱うが、capability だけでは検知と
+/// みなさない。`Completed` + label/score なしは classifier の clean 応答だからである。
 fn is_critical_detection(result: &ProviderScanResult) -> bool {
-    result.capability.is_critical_safety()
+    (result.capability.is_critical_safety() && result.score.is_some())
         || result
             .labels
             .iter()
