@@ -358,6 +358,16 @@ resource "google_compute_instance" "vm" {
 
   allow_stopping_for_update = true
 
+  lifecycle {
+    precondition {
+      condition = !local.operator_config_enabled || !var.deploy_indexer_stack || (
+        strcontains(base64decode(local.compose_b64), "./operator-config.yaml:${local.operator_config_path}:ro") &&
+        strcontains(base64decode(local.compose_b64), "[\"readiness\", \"--config\", \"${local.operator_config_path}\"]")
+      )
+      error_message = "cn-readiness must mount the generated operator-config.yaml file at the configured container path."
+    }
+  }
+
   # secret accessor binding と logging 権限が VM 起動前に存在することを保証する。
   depends_on = [
     google_secret_manager_secret_iam_member.accessor,
