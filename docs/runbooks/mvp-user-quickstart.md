@@ -8,7 +8,7 @@
 
 ## 3 Minute Path
 
-1. GitHub Releases から Windows installer を取得して起動する。
+1. [最新の GitHub Release](https://github.com/KingYoSun/kukuri/releases/latest) から Windows installer を取得して起動する。
 2. 初回起動後、settings を開かずに数秒待ち、Community Node が `ready` になるのを待つ。
 3. starter topic のどれかを開く。
    - `kukuri:topic:demo`
@@ -55,6 +55,7 @@ npx pnpm@10.16.1 dev
 
 ## Data Safety
 
-- `Settings -> Release` links to the release runbook and third-party notices.
+- `Settings -> Release` links to the latest release, this quickstart, the release runbook, third-party notices, and the default Community Node disclosures.
+- Browser links: [release](https://github.com/KingYoSun/kukuri/releases/latest), [terms](https://api.kukuri.app/terms), [privacy](https://api.kukuri.app/privacy), [external transmission](https://api.kukuri.app/external-transmission), [abuse policy](https://api.kukuri.app/abuse-policy), and [data retention](https://api.kukuri.app/data-retention).
 - Preview update smoke must confirm identity, local DB, Iroh data, Community Node settings, private channel capability, and notification inbox state are preserved.
 - Before uninstall or reset, keep the app data directory if the user needs to retain local state.

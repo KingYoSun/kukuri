@@ -95,6 +95,32 @@ describe('app update store', () => {
     });
   });
 
+  test('a rejected updater signature can never reach install', async () => {
+    const download = vi.fn(async () => {
+      throw new Error('signature verification failed for updater bundle');
+    });
+    const install = vi.fn(async () => undefined);
+    const update = pendingUpdate({ download, install });
+    appUpdateStore.setState({
+      pendingUpdate: update,
+      updateState: {
+        ...INITIAL_UPDATE_STATE,
+        status: 'available',
+        availableVersion: update.version,
+      },
+    });
+
+    await appUpdateStore.getState().downloadUpdate();
+    await appUpdateStore.getState().restartAndInstall();
+
+    expect(download).toHaveBeenCalledTimes(1);
+    expect(appUpdateStore.getState().updateState).toMatchObject({
+      status: 'failed',
+      lastError: 'signature verification failed for updater bundle',
+    });
+    expect(install).not.toHaveBeenCalled();
+  });
+
   test('restartAndInstall is ignored before an update is ready to restart', async () => {
     const install = vi.fn(async () => undefined);
     const update = pendingUpdate({ install });

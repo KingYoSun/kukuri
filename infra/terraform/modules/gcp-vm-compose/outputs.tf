@@ -37,3 +37,8 @@ output "ssh_iap_command" {
   description = "IAP 経由の SSH コマンド例。"
   value       = "gcloud compute ssh ${google_compute_instance.vm.name} --zone ${google_compute_instance.vm.zone} --tunnel-through-iap --project ${var.project_id}"
 }
+
+output "admin_iap_tunnel_command" {
+  description = "read-only admin UI を localhost:9090 へ転送する IAP TCP tunnel コマンド。"
+  value       = "gcloud compute start-iap-tunnel ${google_compute_instance.vm.name} ${local.admin_port} --local-host-port=localhost:${local.admin_port} --zone ${google_compute_instance.vm.zone} --project ${var.project_id}"
+}

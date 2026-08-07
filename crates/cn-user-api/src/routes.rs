@@ -20,6 +20,7 @@ use kukuri_cn_protocol::{
 use serde_json::{Value, json};
 use tower_http::trace::TraceLayer;
 
+use crate::admin::admin_router;
 use crate::config::{RateLimitConfig, UserApiConfig};
 use crate::handlers::auth::{auth_challenge, auth_verify};
 use crate::handlers::bootstrap::{
@@ -175,6 +176,13 @@ pub async fn run_from_env() -> Result<()> {
     let bind_addr = config.bind_addr;
     let rate_limit = RateLimitConfig::from_env()?;
     let state = build_runtime_state(&config).await?;
+    let admin_bind_addr = std::env::var("COMMUNITY_NODE_ADMIN_BIND_ADDR")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| value.parse::<SocketAddr>())
+        .transpose()
+        .context("invalid COMMUNITY_NODE_ADMIN_BIND_ADDR")?;
+    let admin_app = admin_bind_addr.map(|_| admin_router(state.clone()));
     let app = apply_rate_limit(app_router(state), &rate_limit)?;
     if rate_limit.enabled {
         tracing::info!(
@@ -188,11 +196,22 @@ pub async fn run_from_env() -> Result<()> {
         .await
         .with_context(|| format!("failed to bind user api at {bind_addr}"))?;
     tracing::info!(bind_addr = %bind_addr, "community-node user-api listening");
-    axum::serve(
+    let user_server = axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .await?;
+    );
+    if let (Some(admin_bind_addr), Some(admin_app)) = (admin_bind_addr, admin_app) {
+        let admin_listener = tokio::net::TcpListener::bind(admin_bind_addr)
+            .await
+            .with_context(|| format!("failed to bind admin api at {admin_bind_addr}"))?;
+        tracing::info!(bind_addr = %admin_bind_addr, "community-node IAP admin listening");
+        tokio::select! {
+            result = user_server => result?,
+            result = axum::serve(admin_listener, admin_app) => result?,
+        }
+    } else {
+        user_server.await?;
+    }
     Ok(())
 }
 

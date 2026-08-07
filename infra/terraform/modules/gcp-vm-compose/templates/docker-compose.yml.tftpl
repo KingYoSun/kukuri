@@ -71,6 +71,10 @@ services:
       COMMUNITY_NODE_DATABASE_URL: $${COMMUNITY_NODE_DATABASE_URL:?set COMMUNITY_NODE_DATABASE_URL}
       COMMUNITY_NODE_RENDEZVOUS_REDIS_URL: $${COMMUNITY_NODE_RENDEZVOUS_REDIS_URL:?set COMMUNITY_NODE_RENDEZVOUS_REDIS_URL}
       COMMUNITY_NODE_JWT_SECRET: $${COMMUNITY_NODE_JWT_SECRET:?set COMMUNITY_NODE_JWT_SECRET}
+      # admin listener is not routed by Caddy. The host port is reachable only from the
+      # Google IAP TCP forwarding range through the dedicated firewall rule.
+      COMMUNITY_NODE_ADMIN_BIND_ADDR: 0.0.0.0:${admin_port}
+      COMMUNITY_NODE_GCP_PROJECT: ${project_id}
 %{ if deploy_indexer_stack ~}
       COMMUNITY_NODE_CHANNEL_SECRET_KEY: $${COMMUNITY_NODE_CHANNEL_SECRET_KEY:-}
       COMMUNITY_NODE_ARCADEDB_PASSWORD: $${CN_ARCADEDB_ROOT_PASSWORD:-}
@@ -98,6 +102,8 @@ services:
       start_period: 20s
     expose:
       - "${api_port}"
+    ports:
+      - "${admin_port}:${admin_port}"
 
   cn-iroh-relay:
     logging: *cn-logging

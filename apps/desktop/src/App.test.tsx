@@ -63,6 +63,14 @@ test('settings drawer can open the release section', async () => {
   await user.click(screen.getByRole('button', { name: 'Release' }));
 
   expect(screen.getByRole('heading', { name: 'Release' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: /Latest release/ })).toHaveAttribute(
+    'href',
+    'https://github.com/KingYoSun/kukuri/releases/latest'
+  );
+  expect(screen.getByRole('link', { name: /Privacy policy/ })).toHaveAttribute(
+    'href',
+    'https://api.kukuri.app/privacy'
+  );
 });
 
 test('desktop app blocks startup until app-level legal consent is accepted', async () => {

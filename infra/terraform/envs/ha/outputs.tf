@@ -18,6 +18,11 @@ output "ssh_iap_command" {
   value       = module.vm.ssh_iap_command
 }
 
+output "admin_iap_tunnel_command" {
+  description = "read-only admin UI の IAP TCP tunnel コマンド。"
+  value       = module.vm.admin_iap_tunnel_command
+}
+
 output "blob_bucket" {
   description = "blob/media object storage bucket（無効なら空）。"
   value       = module.blob_storage.bucket_name

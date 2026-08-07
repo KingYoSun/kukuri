@@ -251,6 +251,20 @@
       "exported": "诊断报告已导出。",
       "previewLabel": "诊断报告预览"
     },
+    "resources": {
+      "title": "Release 与安全资料",
+      "summary": "通过这些正式链接查看安装、更新数据安全、声明以及 Community Node 政策。",
+      "latestRelease": "最新 Release",
+      "quickstart": "快速入门",
+      "releaseRunbook": "Release 与数据安全",
+      "thirdPartyNotices": "第三方声明",
+      "communityNodeDisclosures": "默认 Community Node 披露",
+      "terms": "使用条款",
+      "privacy": "隐私政策",
+      "externalTransmission": "外部传输",
+      "abusePolicy": "滥用政策",
+      "dataRetention": "数据保留"
+    },
     "osNotifications": {
       "title": "系统通知",
       "permission": "权限: {{osNotificationPermission}}",

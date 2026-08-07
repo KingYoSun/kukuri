@@ -194,10 +194,18 @@ terraform apply
 curl -fsS https://<api_domain>/healthz
 curl -fsS https://<relay_domain>/ping
 terraform output ssh_iap_command   # IAP 経由 SSH
+terraform output admin_iap_tunnel_command # read-only admin UI
 ```
 
 VM 内のサービスは `/var/lib/kukuri/community-node` の docker compose で動く。SSH は IAP のみ
-（`22/tcp` は GCP IAP レンジからのみ許可）。
+（`22/tcp` と admin UI の `9090/tcp` は GCP IAP レンジからのみ許可）。admin UI を使う場合は、
+別 terminal で output の tunnel command を実行し、`http://localhost:9090` を開く。到達には
+`iap.tunnelInstances.accessViaIAP` を含む IAM role が必要で、Caddy / public DNS には載せない。
+
+admin UI は状態、最新 readiness activation、admission mode、supported topics、直近 50 件の通報、
+Cloud Logging 導線を read-only で表示する。browser からの設定変更は、actor を記録する append-only
+audit contract、差分 preview、CSRF 防御を実装するまで有効化しない。変更は引き続き
+`operator-config.yaml` / `cn-cli` を SSoT とし、実行 command と結果を運用記録へ残す。
 
 ### admission / 運用
 

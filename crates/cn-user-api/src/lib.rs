@@ -11,6 +11,7 @@
 //! - `handlers/` … ドメイン別ハンドラ(auth / consents / reports / indexing /
 //!   trust_relation / bootstrap)
 
+mod admin;
 mod config;
 mod errors;
 mod handlers;

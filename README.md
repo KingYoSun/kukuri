@@ -6,7 +6,7 @@ kukuri is a topic-first P2P social app and protocol. It keeps Nostr-derived iden
 
 ## Builder Preview
 
-- Current preview target: Windows installer via GitHub Releases.
+- Current preview target: Windows installer via the [latest GitHub Release](https://github.com/KingYoSun/kukuri/releases/latest).
 - Linux remains source-run for now.
 - Preview updates use the in-app `Settings -> Release` updater against `latest-preview.json`.
 - Data safety, release runbook, and third-party notices are linked from `Settings -> Release`.
@@ -118,7 +118,7 @@ cargo xtask doctor
 cargo xtask check
 cargo xtask test
 cargo xtask e2e-smoke
-cargo xtask release-check v0.1.2-preview.1
+cargo xtask release-check v0.1.3-preview.1
 
 cd apps/desktop
 npx pnpm@10.16.1 install

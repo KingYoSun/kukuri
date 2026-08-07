@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Download, FileText, Power, RefreshCw } from 'lucide-react';
+import { Download, ExternalLink, FileText, Power, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
@@ -13,13 +13,18 @@ import { copyTextToClipboard } from '@/lib/utils';
 import {
   buildSafeDiagnosticReport,
   classifyUpdateError,
+  COMMUNITY_NODE_DISCLOSURE_URLS,
   DEFAULT_OS_NOTIFICATION_SETTINGS,
   isTauriRuntime,
   loadOsNotificationSettings,
   RELEASE_CHANNEL,
   RELEASE_FEEDBACK_URL,
+  RELEASE_LATEST_URL,
   RELEASE_MANIFEST_NAME,
+  RELEASE_QUICKSTART_URL,
+  RELEASE_RUNBOOK_URL,
   saveOsNotificationSettings,
+  THIRD_PARTY_NOTICES_URL,
   type OsNotificationSettings,
   type UpdateState,
 } from '@/lib/releaseReadiness';
@@ -291,6 +296,58 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
               {t('settings:release.update.install')}
             </Button>
           )}
+        </SettingsActionRow>
+      </section>
+
+      <section className='min-w-0 space-y-3'>
+        <h4 className='text-base font-semibold text-foreground'>
+          {t('settings:release.resources.title')}
+        </h4>
+        <p className='text-sm text-[var(--muted-foreground-soft)]'>
+          {t('settings:release.resources.summary')}
+        </p>
+        <SettingsActionRow>
+          {[
+            [t('settings:release.resources.latestRelease'), RELEASE_LATEST_URL],
+            [t('settings:release.resources.quickstart'), RELEASE_QUICKSTART_URL],
+            [t('settings:release.resources.releaseRunbook'), RELEASE_RUNBOOK_URL],
+            [t('settings:release.resources.thirdPartyNotices'), THIRD_PARTY_NOTICES_URL],
+          ].map(([label, href]) => (
+            <Button key={href} asChild variant='secondary'>
+              <a href={href} target='_blank' rel='noreferrer'>
+                {label}
+                <ExternalLink className='size-4' aria-hidden='true' />
+              </a>
+            </Button>
+          ))}
+        </SettingsActionRow>
+        <p className='text-sm font-medium text-foreground'>
+          {t('settings:release.resources.communityNodeDisclosures')}
+        </p>
+        <SettingsActionRow>
+          {[
+            [t('settings:release.resources.terms'), COMMUNITY_NODE_DISCLOSURE_URLS.terms],
+            [t('settings:release.resources.privacy'), COMMUNITY_NODE_DISCLOSURE_URLS.privacy],
+            [
+              t('settings:release.resources.externalTransmission'),
+              COMMUNITY_NODE_DISCLOSURE_URLS.externalTransmission,
+            ],
+            [
+              t('settings:release.resources.abusePolicy'),
+              COMMUNITY_NODE_DISCLOSURE_URLS.abusePolicy,
+            ],
+            [
+              t('settings:release.resources.dataRetention'),
+              COMMUNITY_NODE_DISCLOSURE_URLS.dataRetention,
+            ],
+          ].map(([label, href]) => (
+            <Button key={href} asChild variant='secondary' size='sm'>
+              <a href={href} target='_blank' rel='noreferrer'>
+                {label}
+                <ExternalLink className='size-4' aria-hidden='true' />
+              </a>
+            </Button>
+          ))}
         </SettingsActionRow>
       </section>
 

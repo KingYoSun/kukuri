@@ -272,6 +272,25 @@ jobs:
       - name: Build Windows package
         run: cargo xtask desktop-package
 
+      - name: Verify updater signature trust boundary
+        shell: pwsh
+        run: |
+          $bundleDir = 'apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis'
+          $bundle = Get-ChildItem -LiteralPath $bundleDir -File -Filter '*.exe' |
+            Where-Object { Test-Path -LiteralPath "$($_.FullName).sig" } |
+            Select-Object -First 1
+          if (-not $bundle) {
+            throw "no signed updater bundle found in $bundleDir"
+          }
+          $env:KUKURI_UPDATER_BUNDLE = $bundle.FullName
+          $env:KUKURI_UPDATER_SIGNATURE = "$($bundle.FullName).sig"
+          cargo test `
+            --manifest-path apps/desktop/src-tauri/Cargo.toml `
+            --test updater_signature `
+            -- `
+            --ignored `
+            --nocapture
+
       - name: Upload Windows bundle artifact
         uses: actions/upload-artifact@v4
         with:

@@ -17,6 +17,7 @@ locals {
   # ポートは single source of truth として local に集約し、全 template へ渡す。
   # api/relay-http は内部固定ポート、relay-quic の内部 bind も固定 7842。
   api_port                 = 8080
+  admin_port               = 9090
   relay_http_port          = 3340
   relay_quic_internal_port = 7842
 
@@ -74,6 +75,8 @@ locals {
     relay_quic_port          = var.relay_quic_port
     relay_quic_internal_port = local.relay_quic_internal_port
     api_port                 = local.api_port
+    admin_port               = local.admin_port
+    project_id               = var.project_id
     relay_http_port          = local.relay_http_port
     certs_mount              = local.certs_mount
     certs_dir                = local.certs_dir

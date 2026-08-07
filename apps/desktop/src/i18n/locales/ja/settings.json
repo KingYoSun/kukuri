@@ -251,6 +251,20 @@
       "exported": "診断レポートを書き出しました。",
       "previewLabel": "診断レポートプレビュー"
     },
+    "resources": {
+      "title": "リリースと安全性の資料",
+      "summary": "インストール、更新時のデータ保護、各種通知、Community Node のポリシーは、以下の正式なリンクから確認できます。",
+      "latestRelease": "最新リリース",
+      "quickstart": "クイックスタート",
+      "releaseRunbook": "リリースとデータ保護",
+      "thirdPartyNotices": "サードパーティ通知",
+      "communityNodeDisclosures": "既定 Community Node の開示",
+      "terms": "利用条件",
+      "privacy": "プライバシーポリシー",
+      "externalTransmission": "外部送信",
+      "abusePolicy": "不正利用ポリシー",
+      "dataRetention": "データ保持"
+    },
     "osNotifications": {
       "title": "OS 通知",
       "permission": "権限: {{osNotificationPermission}}",

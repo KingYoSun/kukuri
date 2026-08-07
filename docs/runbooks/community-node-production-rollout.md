@@ -268,6 +268,22 @@ sudo journalctl -u kukuri-readiness.service -n 100 --no-pager
 
 readinessの成功だけではlive media確認の代わりにならない。
 
+### 5.2.1 IAP admin UI
+
+Terraform apply 後、local workstation で次を実行する。
+
+```bash
+cd infra/terraform/envs/low-cost
+terraform output -raw admin_iap_tunnel_command
+# 表示された command を別 terminal で実行し、http://localhost:9090 を開く
+```
+
+画面で user API、admission mode、最新 readiness、supported topics、直近の通報を照合する。
+この listener は Caddy / public DNS に接続せず、firewall は Google IAP TCP forwarding range のみを
+許可する。画面は read-only で、設定変更・通報対応・provider 切替は `cn-cli` / reviewed
+`operator-config.yaml` から行う。browser write は actor-aware audit、validation preview、CSRF 防御を
+追加するまで公開しない。
+
 ### 5.3 public surface
 
 ```bash

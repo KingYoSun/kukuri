@@ -18,6 +18,11 @@ output "ssh_iap_command" {
   value       = module.vm.ssh_iap_command
 }
 
+output "admin_iap_tunnel_command" {
+  description = "read-only admin UI の IAP TCP tunnel コマンド。"
+  value       = module.vm.admin_iap_tunnel_command
+}
+
 output "cloudsql_connection_name" {
   description = "Cloud SQL connection name。"
   value       = module.cloudsql.connection_name
