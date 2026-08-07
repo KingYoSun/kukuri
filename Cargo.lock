@@ -3006,6 +3006,7 @@ name = "kukuri-cn-e2e"
 version = "0.1.3"
 dependencies = [
  "anyhow",
+ "async-trait",
  "axum",
  "chrono",
  "kukuri-blob-service",

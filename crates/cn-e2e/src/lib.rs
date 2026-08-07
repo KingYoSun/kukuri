@@ -13,9 +13,11 @@
 
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+use async_trait::async_trait;
 use chrono::Utc;
 use reqwest::Client;
 use tempfile::TempDir;
@@ -53,12 +55,17 @@ use kukuri_cn_safety_vlm::{
 use kukuri_cn_user_api::{UserApiConfig, app_router, build_state};
 use kukuri_core::{
     AssetRef, AssetRole, BlobHash, KukuriKeys, KukuriMediaManifestV1, MediaManifestItem,
-    ObjectVisibility, PayloadRef, TopicId, build_media_manifest_envelope,
+    ObjectVisibility, PayloadRef, ReplicaId, TopicId, build_media_manifest_envelope,
     build_post_envelope_with_payload, generate_keys,
 };
-use kukuri_docs_sync::{DocOp, DocsSync, IrohDocsSync, stable_key, topic_replica_id};
+use kukuri_docs_sync::{
+    DocEventStream, DocFetchPolicy, DocOp, DocQuery, DocRecord, DocsSync, IrohDocsSync, stable_key,
+    topic_replica_id,
+};
 use kukuri_iroh_node::IrohDocsNode;
-use kukuri_transport::{DhtDiscoveryOptions, TransportNetworkConfig, TransportRelayConfig};
+use kukuri_transport::{
+    DhtDiscoveryOptions, SeedPeer, TransportNetworkConfig, TransportRelayConfig,
+};
 
 /// 判定イベント署名鍵（テスト固定値。既知の有効な secp256k1 secret）。
 const TEST_SIGNER_SECRET: &str = "0000000000000000000000000000000000000000000000000000000000000001";
@@ -107,6 +114,78 @@ pub struct AuthorNode {
     _data_dir: TempDir,
 }
 
+/// 実 `IrohDocsSync` の query 境界だけを可逆に失敗させるE2E専用ラッパー。
+///
+/// production runtimeに障害注入用envやendpointを持ち込まず、残りの同期・Postgres・ArcadeDB・
+/// user-apiは本物の構成のままreplica query failureを再現する。
+struct FaultInjectingDocsSync {
+    inner: Arc<IrohDocsSync>,
+    fail_queries: Arc<AtomicBool>,
+}
+
+#[async_trait]
+impl DocsSync for FaultInjectingDocsSync {
+    async fn open_replica(&self, replica_id: &ReplicaId) -> Result<()> {
+        self.inner.open_replica(replica_id).await
+    }
+
+    async fn register_private_replica_secret(
+        &self,
+        replica_id: &ReplicaId,
+        namespace_secret_hex: &str,
+    ) -> Result<()> {
+        self.inner
+            .register_private_replica_secret(replica_id, namespace_secret_hex)
+            .await
+    }
+
+    async fn remove_private_replica_secret(&self, replica_id: &ReplicaId) -> Result<()> {
+        self.inner.remove_private_replica_secret(replica_id).await
+    }
+
+    async fn apply_doc_op(&self, replica_id: &ReplicaId, op: DocOp) -> Result<()> {
+        self.inner.apply_doc_op(replica_id, op).await
+    }
+
+    async fn query_replica_with_policy(
+        &self,
+        replica_id: &ReplicaId,
+        query: DocQuery,
+        policy: DocFetchPolicy,
+    ) -> Result<Vec<DocRecord>> {
+        if self.fail_queries.load(Ordering::SeqCst) {
+            anyhow::bail!("injected replica query failure for {}", replica_id.as_str());
+        }
+        self.inner
+            .query_replica_with_policy(replica_id, query, policy)
+            .await
+    }
+
+    async fn subscribe_replica(&self, replica_id: &ReplicaId) -> Result<DocEventStream> {
+        self.inner.subscribe_replica(replica_id).await
+    }
+
+    async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
+        self.inner.import_peer_ticket(ticket).await
+    }
+
+    async fn learn_peer(&self, endpoint_id: &str) -> Result<()> {
+        self.inner.learn_peer(endpoint_id).await
+    }
+
+    async fn restart_replica_sync(&self, replica_id: &ReplicaId) -> Result<()> {
+        self.inner.restart_replica_sync(replica_id).await
+    }
+
+    async fn set_seed_peers(&self, peers: Vec<SeedPeer>) -> Result<()> {
+        self.inner.set_seed_peers(peers).await
+    }
+
+    async fn assist_peer_ids(&self) -> Result<Vec<String>> {
+        self.inner.assist_peer_ids().await
+    }
+}
+
 /// 全構成 E2E の稼働一式。`boot` で本番相当の順序（migration → 投影 schema →
 /// 対象範囲の登録 → 常駐ワーカー → 有効化記録 → API 公開）で立ち上がる。
 pub struct E2eStack {
@@ -127,6 +206,8 @@ pub struct E2eStack {
     pub api_base_url: String,
     arachnid_auth: SyntheticBasicAuth,
     participant: Arc<IndexerParticipant>,
+    worker_docs: Arc<dyn DocsSync>,
+    replica_query_failure: Arc<AtomicBool>,
     worker: Option<WorkerHandle>,
     api_task: tokio::task::JoinHandle<()>,
     _relay: SpawnedIrohRelay,
@@ -302,6 +383,11 @@ impl E2eStack {
             _data_dir: author_dir,
         };
         let indexer_docs = Arc::new(IrohDocsSync::new(Arc::clone(&indexer_node)));
+        let replica_query_failure = Arc::new(AtomicBool::new(false));
+        let worker_docs: Arc<dyn DocsSync> = Arc::new(FaultInjectingDocsSync {
+            inner: Arc::clone(&indexer_docs),
+            fail_queries: Arc::clone(&replica_query_failure),
+        });
         let indexer_blobs = Arc::new(IrohBlobService::new(Arc::clone(&indexer_node)));
         let indexer_blob_service: Arc<dyn BlobService> = indexer_blobs.clone();
         let ticket = loopback_ticket(&author.node)?;
@@ -355,7 +441,7 @@ impl E2eStack {
 
         // 7. 常駐ワーカー（本番と同じ participant / pipeline 構成）。
         let pipeline = IngestPipeline::new(
-            indexer_docs.clone(),
+            Arc::clone(&worker_docs),
             Arc::new(safety),
             entries.clone(),
             projection.clone(),
@@ -363,7 +449,7 @@ impl E2eStack {
         .with_metrics(Arc::clone(&runtime_state));
         let participant = Arc::new(IndexerParticipant::new(
             pool.clone(),
-            indexer_docs.clone(),
+            Arc::clone(&worker_docs),
             entries.clone(),
             projection.clone(),
             pipeline,
@@ -373,7 +459,7 @@ impl E2eStack {
         ));
         let worker = IndexerWorker::new(
             Arc::clone(&participant),
-            indexer_docs.clone(),
+            Arc::clone(&worker_docs),
             Arc::clone(&runtime_state),
             WorkerConfig {
                 poll_interval: Duration::from_millis(300),
@@ -459,6 +545,8 @@ impl E2eStack {
             api_base_url,
             arachnid_auth,
             participant,
+            worker_docs,
+            replica_query_failure,
             worker: Some(worker),
             api_task,
             _relay: relay,
@@ -787,7 +875,7 @@ impl E2eStack {
         }
         let worker = IndexerWorker::new(
             Arc::clone(&self.participant),
-            self.indexer_docs.clone(),
+            Arc::clone(&self.worker_docs),
             Arc::clone(&self.runtime_state),
             WorkerConfig {
                 poll_interval: Duration::from_millis(300),
@@ -798,6 +886,11 @@ impl E2eStack {
         );
         self.worker = Some(worker.spawn());
         Ok(())
+    }
+
+    /// E2E内のdocs replica query障害を有効化・解除する。
+    pub fn set_replica_query_failure(&self, enabled: bool) {
+        self.replica_query_failure.store(enabled, Ordering::SeqCst);
     }
 
     /// 既定の許可応答を両プロバイダ模擬へ載せ直す（`MockServer::reset` 後の復旧用）。
