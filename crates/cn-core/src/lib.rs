@@ -22,6 +22,7 @@ mod env;
 mod errors;
 mod index_entries;
 mod index_scope;
+mod operator_actions;
 mod readiness_activation;
 mod readiness_probe;
 mod readiness_runtime;
@@ -80,6 +81,10 @@ pub use index_scope::{
     get_channel_secret, insert_indexing_request, is_topic_supported, list_channel_secrets,
     list_indexing_requests, list_supported_topics, register_channel_secret,
     reject_indexing_request, remove_channel_secret, remove_supported_topic, upsert_channel_secret,
+};
+pub use operator_actions::{
+    AdminOperation, OperatorAction, OperatorReportStatus, apply_operator_action,
+    list_operator_actions, validate_admin_operation,
 };
 pub use readiness_activation::{
     ReadinessActivation, latest_readiness_activation, readiness_context_fingerprint,

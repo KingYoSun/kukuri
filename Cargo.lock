@@ -3217,6 +3217,7 @@ dependencies = [
  "tower_governor",
  "tracing",
  "url",
+ "uuid",
 ]
 
 [[package]]

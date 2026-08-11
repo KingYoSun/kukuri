@@ -45,6 +45,7 @@ module "vm" {
   api_domain   = var.api_domain
   relay_domain = var.relay_domain
   acme_email   = var.acme_email
+  admin_actor  = var.admin_actor
 
   cn_user_api_image   = var.cn_user_api_image
   cn_iroh_relay_image = var.cn_iroh_relay_image

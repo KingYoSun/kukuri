@@ -114,6 +114,11 @@ services:
       COMMUNITY_NODE_RATE_LIMIT_PER_SECOND: ${COMMUNITY_NODE_RATE_LIMIT_PER_SECOND:-10}
       COMMUNITY_NODE_RATE_LIMIT_BURST: ${COMMUNITY_NODE_RATE_LIMIT_BURST:-30}
       COMMUNITY_NODE_RATE_LIMIT_TRUST_FORWARDED_FOR: ${COMMUNITY_NODE_RATE_LIMIT_TRUST_FORWARDED_FOR:-false}
+      # Admin listener is loopback-published below. Browser writes remain disabled unless
+      # COMMUNITY_NODE_ADMIN_ACTOR is explicitly configured.
+      COMMUNITY_NODE_ADMIN_BIND_ADDR: ${COMMUNITY_NODE_ADMIN_BIND_ADDR:-0.0.0.0:9090}
+      COMMUNITY_NODE_ADMIN_ACTOR: ${COMMUNITY_NODE_ADMIN_ACTOR:-}
+      COMMUNITY_NODE_GCP_PROJECT: ${COMMUNITY_NODE_GCP_PROJECT:-}
       # private channel indexing / index・trust read surface（#615）。flag は full-stack E2E
       # 完了まで既定 false（無効時は 404）。
       COMMUNITY_NODE_CHANNEL_SECRET_KEY: ${COMMUNITY_NODE_CHANNEL_SECRET_KEY:-}
@@ -137,6 +142,7 @@ services:
       start_period: 20s
     ports:
       - "${CN_USER_API_HOST_BIND_IP:-127.0.0.1}:${CN_USER_API_PORT:-18080}:8080"
+      - "${CN_ADMIN_HOST_BIND_IP:-127.0.0.1}:${CN_ADMIN_PORT:-19090}:9090"
 
   cn-iroh-relay:
     logging: *cn-logging

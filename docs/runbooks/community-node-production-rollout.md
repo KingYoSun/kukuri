@@ -278,11 +278,41 @@ terraform output -raw admin_iap_tunnel_command
 # 表示された command を別 terminal で実行し、http://localhost:9090 を開く
 ```
 
-画面で user API、admission mode、最新 readiness、supported topics、直近の通報を照合する。
+画面で user API、admission mode、最新 readiness、supported topics、直近の通報、operator action auditを照合する。
 この listener は Caddy / public DNS に接続せず、firewall は Google IAP TCP forwarding range のみを
-許可する。画面は read-only で、設定変更・通報対応・provider 切替は `cn-cli` / reviewed
-`operator-config.yaml` から行う。browser write は actor-aware audit、validation preview、CSRF 防御を
-追加するまで公開しない。
+許可する。
+
+browser writeは `admin_actor` が非空のdeploymentだけで有効になる。本番low-cost環境では、共有の
+運用identityとして次をtfvarsへ設定する。IAP TCP forwardingはHTTP identity headerを注入しないため、
+formや任意headerではなくdeployment値だけをaudit actorとして信用する。
+
+```hcl
+admin_actor = "ops@kukuri.app"
+```
+
+画面から適用できるのは、runtime Postgresがcanonical sourceの次の操作だけである。
+
+- admission mode変更
+- public supported topic追加・除去
+- report status変更（received / reviewing / actioned / dismissed）
+
+すべて `Preview` でactor・target・impactを確認し、次画面の `Confirm and apply` で確定する。apply時に
+入力と現在値を再検証し、state変更と `cn_admin.operator_actions` audit rowを同じtransactionでcommitする。
+成功画面のaudit IDを運用記録へ残す。戻る操作またはvalidation errorではstateもauditも変更されない。
+
+`cn_admin.operator_actions` はDB triggerでUPDATE / DELETEを拒否する。auditにはprovider credential、
+report details、reporter contact、private channel secretを含めない。actor未設定時はread-only表示になり、
+write endpointは503でfail-closedする。
+
+次はbrowserから変更しない。reviewed `operator-config.yaml` / Terraform / Secret Manager /
+`cn-cli readiness`の既存workflowを使う。
+
+- provider / LLM / Project Arachnid endpoint・credential
+- capability / authority scope / image revision
+- private channel secret、invite code、allowlist、ban
+
+standard Composeでは `http://127.0.0.1:19090` がadmin UIで、`COMMUNITY_NODE_ADMIN_ACTOR` を空にすれば
+read-onlyになる。loopback以外へbindする場合は、先に同等の認証・firewall境界を用意する。
 
 ### 5.3 public surface
 

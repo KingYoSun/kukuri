@@ -39,6 +39,6 @@ output "ssh_iap_command" {
 }
 
 output "admin_iap_tunnel_command" {
-  description = "read-only admin UI を localhost:9090 へ転送する IAP TCP tunnel コマンド。"
+  description = "operator admin UI を localhost:9090 へ転送する IAP TCP tunnel コマンド。write は admin_actor 設定時だけ有効。"
   value       = "gcloud compute start-iap-tunnel ${google_compute_instance.vm.name} ${local.admin_port} --local-host-port=localhost:${local.admin_port} --zone ${google_compute_instance.vm.zone} --project ${var.project_id}"
 }
