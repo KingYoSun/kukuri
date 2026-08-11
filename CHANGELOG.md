@@ -18,6 +18,31 @@ file; automated changelog entries start from the next preview release.
 
 ## [Unreleased]
 
+## [v0.1.4-preview.1] - 2026-08-11
+
+### Features
+
+- automate remaining preview operations ([#656](https://github.com/KingYoSun/kukuri/pull/656))
+
+### Fixes
+
+- do not treat clean classifier as detection ([#654](https://github.com/KingYoSun/kukuri/pull/654))
+- share active peers with media fetcher ([#653](https://github.com/KingYoSun/kukuri/pull/653))
+- report deployed indexer stack ([#652](https://github.com/KingYoSun/kukuri/pull/652))
+- publish data retention disclosure ([#650](https://github.com/KingYoSun/kukuri/pull/650))
+- honor readiness activation after startup ([#649](https://github.com/KingYoSun/kukuri/pull/649))
+- mount readiness operator config ([#648](https://github.com/KingYoSun/kukuri/pull/648))
+- sync live peers and serve disclosures ([#647](https://github.com/KingYoSun/kukuri/pull/647))
+- emit updater manifest without BOM ([#646](https://github.com/KingYoSun/kukuri/pull/646))
+
+### Other
+
+- bump preview version to 0.1.4 ([#658](https://github.com/KingYoSun/kukuri/pull/658))
+- update CHANGELOG for v0.1.3-preview.1 ([#657](https://github.com/KingYoSun/kukuri/pull/657))
+- add community node production rollout runbook ([#655](https://github.com/KingYoSun/kukuri/pull/655))
+- cover replica query failure end to end ([#651](https://github.com/KingYoSun/kukuri/pull/651))
+- update CHANGELOG for v0.1.3-preview.1 ([#645](https://github.com/KingYoSun/kukuri/pull/645))
+
 ## [v0.1.3-preview.1] - 2026-08-07
 
 ### Features
