@@ -8,6 +8,7 @@ zone       = "asia-northeast1-a"
 api_domain   = "api.example.com"
 relay_domain = "iroh-relay.example.com"
 acme_email   = "ops@example.com"
+admin_actor  = "ops@example.com"
 
 # Cloud DNS で A レコードを自動作成する場合は true + zone 名。
 # false の場合は terraform output static_ip を手動 DNS に設定する。

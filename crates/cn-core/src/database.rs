@@ -49,6 +49,7 @@ pub async fn ensure_database_ready(pool: &PgPool) -> Result<()> {
         ("cn_admin", "service_configs"),
         ("cn_admin", "invite_codes"),
         ("cn_admin", "admission_allowlist"),
+        ("cn_admin", "operator_actions"),
         ("cn_bootstrap", "bootstrap_nodes"),
         ("cn_bootstrap", "peer_registrations"),
         ("cn_safety", "signed_moderation_events"),

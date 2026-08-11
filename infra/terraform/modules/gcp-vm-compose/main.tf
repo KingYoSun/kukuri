@@ -76,6 +76,7 @@ locals {
     relay_quic_internal_port = local.relay_quic_internal_port
     api_port                 = local.api_port
     admin_port               = local.admin_port
+    admin_actor              = trimspace(var.admin_actor)
     project_id               = var.project_id
     relay_http_port          = local.relay_http_port
     certs_mount              = local.certs_mount

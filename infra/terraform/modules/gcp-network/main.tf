@@ -89,7 +89,7 @@ resource "google_compute_firewall" "iap_ssh" {
 
   allow {
     protocol = "tcp"
-    # 9090 is the cn-user-api read-only admin listener. It is not routed by Caddy and
+    # 9090 is the cn-user-api operator admin listener. It is not routed by Caddy and
     # is reachable only through IAP TCP forwarding with IAM authorization.
     ports = ["22", "9090"]
   }

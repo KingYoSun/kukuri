@@ -75,6 +75,10 @@ services:
       # Google IAP TCP forwarding range through the dedicated firewall rule.
       COMMUNITY_NODE_ADMIN_BIND_ADDR: 0.0.0.0:${admin_port}
       COMMUNITY_NODE_GCP_PROJECT: ${project_id}
+%{ if admin_actor != "" ~}
+      # Deployment-controlled actor. IAP TCP forwarding does not inject an HTTP principal.
+      COMMUNITY_NODE_ADMIN_ACTOR: ${jsonencode(admin_actor)}
+%{ endif ~}
 %{ if deploy_indexer_stack ~}
       COMMUNITY_NODE_CHANNEL_SECRET_KEY: $${COMMUNITY_NODE_CHANNEL_SECRET_KEY:-}
       COMMUNITY_NODE_ARCADEDB_PASSWORD: $${CN_ARCADEDB_ROOT_PASSWORD:-}

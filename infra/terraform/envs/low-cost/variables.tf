@@ -48,6 +48,23 @@ variable "acme_email" {
   type        = string
 }
 
+variable "admin_actor" {
+  description = "IAP 内部 admin browser write の監査 actor。空なら write 無効。"
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      var.admin_actor == "" || (
+        var.admin_actor == trimspace(var.admin_actor) &&
+        length(var.admin_actor) <= 254 &&
+        !can(regex("[\\r\\n\\x00-\\x1F\\x7F]", var.admin_actor))
+      )
+    )
+    error_message = "admin_actor must be empty or a trimmed, single-line value of at most 254 characters."
+  }
+}
+
 variable "manage_cloud_dns" {
   description = "true なら Cloud DNS の既存 zone に A レコードを作成する。false なら static IP を output して手動 DNS。"
   type        = bool

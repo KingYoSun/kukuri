@@ -256,6 +256,23 @@ variable "rate_limit_burst" {
   default     = 30
 }
 
+variable "admin_actor" {
+  description = "IAP 内部 admin browser write の append-only audit に記録する deployment-controlled actor。空なら write を fail-closed で無効化する。"
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      var.admin_actor == "" || (
+        var.admin_actor == trimspace(var.admin_actor) &&
+        length(var.admin_actor) <= 254 &&
+        !can(regex("[\\r\\n\\x00-\\x1F\\x7F]", var.admin_actor))
+      )
+    )
+    error_message = "admin_actor must be empty or a trimmed, single-line value of at most 254 characters."
+  }
+}
+
 variable "iroh_relay_client_rx_bytes_per_second" {
   description = "任意の COMMUNITY_NODE_IROH_RELAY_CLIENT_RX_BYTES_PER_SECOND。0 なら未設定。"
   type        = number
