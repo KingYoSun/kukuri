@@ -18,12 +18,13 @@ The first preview targets Windows installer distribution through GitHub Releases
 
 ## Rust crates
 
-Total packages: 665
+Total packages: 682
 
 | Package | Version | License | Source |
 | --- | --- | --- | --- |
 | adler2 | 2.0.1 | 0BSD OR MIT OR Apache-2.0 | https://crates.io/crates/adler2 |
 | aead | 0.5.2 | MIT OR Apache-2.0 | https://crates.io/crates/aead |
+| aead | 0.6.1 | MIT OR Apache-2.0 | https://crates.io/crates/aead |
 | aes | 0.8.4 | MIT OR Apache-2.0 | https://crates.io/crates/aes |
 | aes-gcm | 0.10.3 | Apache-2.0 OR MIT | https://crates.io/crates/aes-gcm |
 | aho-corasick | 1.1.4 | Unlicense OR MIT | https://crates.io/crates/aho-corasick |
@@ -34,7 +35,8 @@ Total packages: 665
 | anstyle-parse | 1.0.0 | MIT OR Apache-2.0 | https://crates.io/crates/anstyle-parse |
 | anstyle-query | 1.1.5 | MIT OR Apache-2.0 | https://crates.io/crates/anstyle-query |
 | anstyle-wincon | 3.0.11 | MIT OR Apache-2.0 | https://crates.io/crates/anstyle-wincon |
-| anyhow | 1.0.102 | MIT OR Apache-2.0 | https://crates.io/crates/anyhow |
+| anyhow | 1.0.104 | MIT OR Apache-2.0 | https://crates.io/crates/anyhow |
+| apple-native-keyring-store | 1.0.2 | MIT OR Apache-2.0 | https://crates.io/crates/apple-native-keyring-store |
 | arc-swap | 1.9.1 | MIT OR Apache-2.0 | https://crates.io/crates/arc-swap |
 | arcstr | 1.2.0 | Apache-2.0 OR MIT OR Zlib | https://crates.io/crates/arcstr |
 | arrayref | 0.3.9 | BSD-2-Clause | https://crates.io/crates/arrayref |
@@ -43,10 +45,17 @@ Total packages: 665
 | asn1-rs-derive | 0.6.0 | MIT OR Apache-2.0 | https://crates.io/crates/asn1-rs-derive |
 | asn1-rs-impl | 0.2.0 | MIT/Apache-2.0 | https://crates.io/crates/asn1-rs-impl |
 | assert-json-diff | 2.0.2 | MIT | https://crates.io/crates/assert-json-diff |
+| async-broadcast | 0.7.2 | MIT OR Apache-2.0 | https://crates.io/crates/async-broadcast |
 | async-channel | 2.5.0 | Apache-2.0 OR MIT | https://crates.io/crates/async-channel |
 | async-compat | 0.2.5 | Apache-2.0 OR MIT | https://crates.io/crates/async-compat |
+| async-executor | 1.14.0 | Apache-2.0 OR MIT | https://crates.io/crates/async-executor |
+| async-io | 2.6.0 | Apache-2.0 OR MIT | https://crates.io/crates/async-io |
 | async-lock | 3.4.2 | Apache-2.0 OR MIT | https://crates.io/crates/async-lock |
-| async-trait | 0.1.89 | MIT OR Apache-2.0 | https://crates.io/crates/async-trait |
+| async-process | 2.5.0 | Apache-2.0 OR MIT | https://crates.io/crates/async-process |
+| async-recursion | 1.1.1 | MIT OR Apache-2.0 | https://crates.io/crates/async-recursion |
+| async-signal | 0.2.14 | Apache-2.0 OR MIT | https://crates.io/crates/async-signal |
+| async-task | 4.7.1 | Apache-2.0 OR MIT | https://crates.io/crates/async-task |
+| async-trait | 0.1.92 | MIT OR Apache-2.0 | https://crates.io/crates/async-trait |
 | async_io_stream | 0.3.3 | Unlicense | https://crates.io/crates/async_io_stream |
 | atoi | 2.0.0 | MIT | https://crates.io/crates/atoi |
 | atomic-polyfill | 1.0.3 | MIT OR Apache-2.0 | https://crates.io/crates/atomic-polyfill |
@@ -62,34 +71,38 @@ Total packages: 665
 | base16ct | 1.0.0 | Apache-2.0 OR MIT | https://crates.io/crates/base16ct |
 | base32 | 0.5.1 | MIT OR Apache-2.0 | https://crates.io/crates/base32 |
 | base64 | 0.22.1 | MIT OR Apache-2.0 | https://crates.io/crates/base64 |
+| base64 | 0.23.1 | MIT OR Apache-2.0 | https://crates.io/crates/base64 |
 | base64ct | 1.8.3 | Apache-2.0 OR MIT | https://crates.io/crates/base64ct |
-| bech32 | 0.11.1 | MIT | https://crates.io/crates/bech32 |
+| bech32 | 0.12.0 | MIT | https://crates.io/crates/bech32 |
 | binary-merge | 0.1.2 | MIT OR Apache-2.0 | https://crates.io/crates/binary-merge |
 | bit-vec | 0.9.1 | Apache-2.0 OR MIT | https://crates.io/crates/bit-vec |
 | bitcoin-io | 0.1.100 | CC0-1.0 | https://crates.io/crates/bitcoin-io |
 | bitcoin_hashes | 0.14.100 | CC0-1.0 | https://crates.io/crates/bitcoin_hashes |
 | bitflags | 2.11.1 | MIT OR Apache-2.0 | https://crates.io/crates/bitflags |
-| blake3 | 1.8.5 | CC0-1.0 OR Apache-2.0 OR Apache-2.0 WITH LLVM-exception | https://crates.io/crates/blake3 |
+| blake3 | 1.8.6 | CC0-1.0 OR Apache-2.0 OR Apache-2.0 WITH LLVM-exception | https://crates.io/crates/blake3 |
 | block-buffer | 0.10.4 | MIT OR Apache-2.0 | https://crates.io/crates/block-buffer |
 | block-buffer | 0.12.0 | MIT OR Apache-2.0 | https://crates.io/crates/block-buffer |
+| block-padding | 0.3.3 | MIT OR Apache-2.0 | https://crates.io/crates/block-padding |
 | block2 | 0.6.2 | MIT | https://crates.io/crates/block2 |
+| blocking | 1.6.2 | Apache-2.0 OR MIT | https://crates.io/crates/blocking |
 | bumpalo | 3.20.3 | MIT OR Apache-2.0 | https://crates.io/crates/bumpalo |
 | bytemuck | 1.25.0 | Zlib OR Apache-2.0 OR MIT | https://crates.io/crates/bytemuck |
 | byteorder | 1.5.0 | Unlicense OR MIT | https://crates.io/crates/byteorder |
 | byteorder-lite | 0.1.0 | Unlicense OR MIT | https://crates.io/crates/byteorder-lite |
 | bytes | 1.11.1 | MIT | https://crates.io/crates/bytes |
+| cbc | 0.1.2 | MIT OR Apache-2.0 | https://crates.io/crates/cbc |
 | cc | 1.2.62 | MIT OR Apache-2.0 | https://crates.io/crates/cc |
 | cesu8 | 1.1.0 | Apache-2.0/MIT | https://crates.io/crates/cesu8 |
 | cfg-if | 1.0.4 | MIT OR Apache-2.0 | https://crates.io/crates/cfg-if |
-| cfg_aliases | 0.2.1 | MIT | https://crates.io/crates/cfg_aliases |
+| cfg_aliases | 0.2.2 | MIT | https://crates.io/crates/cfg_aliases |
 | chacha20 | 0.10.0 | MIT OR Apache-2.0 | https://crates.io/crates/chacha20 |
-| chacha20 | 0.9.1 | Apache-2.0 OR MIT | https://crates.io/crates/chacha20 |
-| chacha20poly1305 | 0.10.1 | Apache-2.0 OR MIT | https://crates.io/crates/chacha20poly1305 |
-| chrono | 0.4.44 | MIT OR Apache-2.0 | https://crates.io/crates/chrono |
+| chacha20poly1305 | 0.11.0 | Apache-2.0 OR MIT | https://crates.io/crates/chacha20poly1305 |
+| chrono | 0.4.45 | MIT OR Apache-2.0 | https://crates.io/crates/chrono |
 | cipher | 0.4.4 | MIT OR Apache-2.0 | https://crates.io/crates/cipher |
-| clap | 4.6.1 | MIT OR Apache-2.0 | https://crates.io/crates/clap |
-| clap_builder | 4.6.0 | MIT OR Apache-2.0 | https://crates.io/crates/clap_builder |
-| clap_derive | 4.6.1 | MIT OR Apache-2.0 | https://crates.io/crates/clap_derive |
+| cipher | 0.5.2 | MIT OR Apache-2.0 | https://crates.io/crates/cipher |
+| clap | 4.6.6 | MIT OR Apache-2.0 | https://crates.io/crates/clap |
+| clap_builder | 4.6.6 | MIT OR Apache-2.0 | https://crates.io/crates/clap_builder |
+| clap_derive | 4.6.4 | MIT OR Apache-2.0 | https://crates.io/crates/clap_derive |
 | clap_lex | 1.1.0 | MIT OR Apache-2.0 | https://crates.io/crates/clap_lex |
 | cmake | 0.1.58 | MIT OR Apache-2.0 | https://crates.io/crates/cmake |
 | cmov | 0.5.3 | Apache-2.0 OR MIT | https://crates.io/crates/cmov |
@@ -122,24 +135,16 @@ Total packages: 665
 | ctutils | 0.4.2 | Apache-2.0 OR MIT | https://crates.io/crates/ctutils |
 | curve25519-dalek | 5.0.0-rc.0 | BSD-3-Clause | https://crates.io/crates/curve25519-dalek |
 | curve25519-dalek-derive | 0.1.1 | MIT/Apache-2.0 | https://crates.io/crates/curve25519-dalek-derive |
-| darling | 0.20.11 | MIT | https://crates.io/crates/darling |
-| darling_core | 0.20.11 | MIT | https://crates.io/crates/darling_core |
-| darling_macro | 0.20.11 | MIT | https://crates.io/crates/darling_macro |
 | dashmap | 6.2.1 | MIT | https://crates.io/crates/dashmap |
 | data-encoding | 2.11.0 | MIT | https://crates.io/crates/data-encoding |
 | data-encoding-macro | 0.1.20 | MIT | https://crates.io/crates/data-encoding-macro |
 | data-encoding-macro-internal | 0.1.18 | MIT | https://crates.io/crates/data-encoding-macro-internal |
-| dbus | 0.9.11 | Apache-2.0/MIT | https://crates.io/crates/dbus |
-| dbus-secret-service | 4.1.0 | MIT OR Apache-2.0 | https://crates.io/crates/dbus-secret-service |
 | deadpool | 0.12.3 | MIT OR Apache-2.0 | https://crates.io/crates/deadpool |
 | deadpool-runtime | 0.1.4 | MIT OR Apache-2.0 | https://crates.io/crates/deadpool-runtime |
 | der | 0.7.10 | Apache-2.0 OR MIT | https://crates.io/crates/der |
 | der | 0.8.0 | Apache-2.0 OR MIT | https://crates.io/crates/der |
 | der-parser | 10.0.0 | MIT OR Apache-2.0 | https://crates.io/crates/der-parser |
 | deranged | 0.5.8 | MIT OR Apache-2.0 | https://crates.io/crates/deranged |
-| derive_builder | 0.20.2 | MIT OR Apache-2.0 | https://crates.io/crates/derive_builder |
-| derive_builder_core | 0.20.2 | MIT OR Apache-2.0 | https://crates.io/crates/derive_builder_core |
-| derive_builder_macro | 0.20.2 | MIT OR Apache-2.0 | https://crates.io/crates/derive_builder_macro |
 | derive_more | 2.1.1 | MIT | https://crates.io/crates/derive_more |
 | derive_more-impl | 2.1.1 | MIT | https://crates.io/crates/derive_more-impl |
 | diatomic-waker | 0.2.3 | MIT OR Apache-2.0 | https://crates.io/crates/diatomic-waker |
@@ -157,7 +162,10 @@ Total packages: 665
 | either | 1.16.0 | MIT OR Apache-2.0 | https://crates.io/crates/either |
 | embedded-io | 0.4.0 | MIT OR Apache-2.0 | https://crates.io/crates/embedded-io |
 | embedded-io | 0.6.1 | MIT OR Apache-2.0 | https://crates.io/crates/embedded-io |
+| endi | 1.1.1 | MIT | https://crates.io/crates/endi |
 | enum-assoc | 1.3.0 | MIT OR Apache-2.0 | https://crates.io/crates/enum-assoc |
+| enumflags2 | 0.7.12 | MIT OR Apache-2.0 | https://crates.io/crates/enumflags2 |
+| enumflags2_derive | 0.7.12 | MIT OR Apache-2.0 | https://crates.io/crates/enumflags2_derive |
 | equivalent | 1.0.2 | Apache-2.0 OR MIT | https://crates.io/crates/equivalent |
 | errno | 0.3.14 | MIT OR Apache-2.0 | https://crates.io/crates/errno |
 | etcetera | 0.8.0 | MIT OR Apache-2.0 | https://crates.io/crates/etcetera |
@@ -180,18 +188,18 @@ Total packages: 665
 | fs_extra | 1.3.0 | MIT | https://crates.io/crates/fs_extra |
 | futures | 0.3.32 | MIT OR Apache-2.0 | https://crates.io/crates/futures |
 | futures-buffered | 0.2.13 | MIT | https://crates.io/crates/futures-buffered |
-| futures-channel | 0.3.32 | MIT OR Apache-2.0 | https://crates.io/crates/futures-channel |
+| futures-channel | 0.3.34 | MIT OR Apache-2.0 | https://crates.io/crates/futures-channel |
 | futures-concurrency | 7.7.1 | MIT OR Apache-2.0 | https://crates.io/crates/futures-concurrency |
-| futures-core | 0.3.32 | MIT OR Apache-2.0 | https://crates.io/crates/futures-core |
+| futures-core | 0.3.34 | MIT OR Apache-2.0 | https://crates.io/crates/futures-core |
 | futures-executor | 0.3.32 | MIT OR Apache-2.0 | https://crates.io/crates/futures-executor |
 | futures-intrusive | 0.5.0 | MIT OR Apache-2.0 | https://crates.io/crates/futures-intrusive |
-| futures-io | 0.3.32 | MIT OR Apache-2.0 | https://crates.io/crates/futures-io |
+| futures-io | 0.3.34 | MIT OR Apache-2.0 | https://crates.io/crates/futures-io |
 | futures-lite | 2.6.1 | Apache-2.0 OR MIT | https://crates.io/crates/futures-lite |
-| futures-macro | 0.3.32 | MIT OR Apache-2.0 | https://crates.io/crates/futures-macro |
-| futures-sink | 0.3.32 | MIT OR Apache-2.0 | https://crates.io/crates/futures-sink |
-| futures-task | 0.3.32 | MIT OR Apache-2.0 | https://crates.io/crates/futures-task |
+| futures-macro | 0.3.34 | MIT OR Apache-2.0 | https://crates.io/crates/futures-macro |
+| futures-sink | 0.3.34 | MIT OR Apache-2.0 | https://crates.io/crates/futures-sink |
+| futures-task | 0.3.34 | MIT OR Apache-2.0 | https://crates.io/crates/futures-task |
 | futures-timer | 3.0.4 | MIT/Apache-2.0 | https://crates.io/crates/futures-timer |
-| futures-util | 0.3.32 | MIT OR Apache-2.0 | https://crates.io/crates/futures-util |
+| futures-util | 0.3.34 | MIT OR Apache-2.0 | https://crates.io/crates/futures-util |
 | genawaiter | 0.99.1 | MIT | https://crates.io/crates/genawaiter |
 | genawaiter-macro | 0.99.1 | MIT/Apache-2.0 | https://crates.io/crates/genawaiter-macro |
 | genawaiter-proc-macro | 0.99.1 | MIT/Apache-2.0 | https://crates.io/crates/genawaiter-proc-macro |
@@ -220,7 +228,9 @@ Total packages: 665
 | hickory-proto | 0.26.1 | MIT OR Apache-2.0 | https://crates.io/crates/hickory-proto |
 | hickory-resolver | 0.26.1 | MIT OR Apache-2.0 | https://crates.io/crates/hickory-resolver |
 | hkdf | 0.12.4 | MIT OR Apache-2.0 | https://crates.io/crates/hkdf |
+| hkdf | 0.13.0 | MIT OR Apache-2.0 | https://crates.io/crates/hkdf |
 | hmac | 0.12.1 | MIT OR Apache-2.0 | https://crates.io/crates/hmac |
+| hmac | 0.13.0 | MIT OR Apache-2.0 | https://crates.io/crates/hmac |
 | home | 0.5.12 | MIT OR Apache-2.0 | https://crates.io/crates/home |
 | http | 1.4.1 | MIT OR Apache-2.0 | https://crates.io/crates/http |
 | http-body | 1.0.1 | MIT | https://crates.io/crates/http-body |
@@ -242,7 +252,6 @@ Total packages: 665
 | icu_properties_data | 2.2.0 | Unicode-3.0 | https://crates.io/crates/icu_properties_data |
 | icu_provider | 2.2.0 | Unicode-3.0 | https://crates.io/crates/icu_provider |
 | id-arena | 2.3.0 | MIT/Apache-2.0 | https://crates.io/crates/id-arena |
-| ident_case | 1.0.1 | MIT/Apache-2.0 | https://crates.io/crates/ident_case |
 | identity-hash | 0.1.0 | Apache-2.0 OR MIT | https://crates.io/crates/identity-hash |
 | idna | 1.1.0 | MIT OR Apache-2.0 | https://crates.io/crates/idna |
 | idna_adapter | 1.2.2 | Apache-2.0 OR MIT | https://crates.io/crates/idna_adapter |
@@ -251,20 +260,21 @@ Total packages: 665
 | image-webp | 0.2.4 | MIT OR Apache-2.0 | https://crates.io/crates/image-webp |
 | indexmap | 2.14.0 | Apache-2.0 OR MIT | https://crates.io/crates/indexmap |
 | inout | 0.1.4 | MIT OR Apache-2.0 | https://crates.io/crates/inout |
+| inout | 0.2.2 | MIT OR Apache-2.0 | https://crates.io/crates/inout |
 | inplace-vec-builder | 0.1.1 | MIT OR Apache-2.0 | https://crates.io/crates/inplace-vec-builder |
 | ipconfig | 0.3.4 | MIT/Apache-2.0 | https://crates.io/crates/ipconfig |
 | ipnet | 2.12.0 | MIT OR Apache-2.0 | https://crates.io/crates/ipnet |
-| iroh | 1.0.0 | MIT OR Apache-2.0 | https://crates.io/crates/iroh |
-| iroh-base | 1.0.0 | MIT OR Apache-2.0 | https://crates.io/crates/iroh-base |
+| iroh | 1.0.3 | MIT OR Apache-2.0 | https://crates.io/crates/iroh |
+| iroh-base | 1.0.3 | MIT OR Apache-2.0 | https://crates.io/crates/iroh-base |
 | iroh-blobs | 0.103.0 | MIT OR Apache-2.0 | https://crates.io/crates/iroh-blobs |
-| iroh-dns | 1.0.0 | MIT OR Apache-2.0 | https://crates.io/crates/iroh-dns |
+| iroh-dns | 1.0.3 | MIT OR Apache-2.0 | https://crates.io/crates/iroh-dns |
 | iroh-docs | 0.101.0 | MIT/Apache-2.0 | https://crates.io/crates/iroh-docs |
 | iroh-gossip | 0.101.0 | MIT/Apache-2.0 | https://crates.io/crates/iroh-gossip |
 | iroh-io | 0.6.2 | Apache-2.0 OR MIT | https://crates.io/crates/iroh-io |
 | iroh-mainline-address-lookup | 0.4.0 | MIT OR Apache-2.0 | https://crates.io/crates/iroh-mainline-address-lookup |
 | iroh-metrics | 1.0.1 | MIT OR Apache-2.0 | https://crates.io/crates/iroh-metrics |
 | iroh-metrics-derive | 1.0.1 | MIT OR Apache-2.0 | https://crates.io/crates/iroh-metrics-derive |
-| iroh-relay | 1.0.0 | MIT OR Apache-2.0 | https://crates.io/crates/iroh-relay |
+| iroh-relay | 1.0.3 | MIT OR Apache-2.0 | https://crates.io/crates/iroh-relay |
 | iroh-tickets | 1.0.0 | MIT OR Apache-2.0 | https://crates.io/crates/iroh-tickets |
 | iroh-util | 0.6.0 | MIT OR Apache-2.0 | https://crates.io/crates/iroh-util |
 | irpc | 0.17.0 | Apache-2.0/MIT | https://crates.io/crates/irpc |
@@ -279,12 +289,12 @@ Total packages: 665
 | jni-sys-macros | 0.4.1 | MIT OR Apache-2.0 | https://crates.io/crates/jni-sys-macros |
 | jobserver | 0.1.34 | MIT OR Apache-2.0 | https://crates.io/crates/jobserver |
 | js-sys | 0.3.99 | MIT OR Apache-2.0 | https://crates.io/crates/js-sys |
-| jsonwebtoken | 10.4.0 | MIT | https://crates.io/crates/jsonwebtoken |
-| keyring | 3.6.3 | MIT OR Apache-2.0 | https://crates.io/crates/keyring |
+| jsonwebtoken | 11.0.0 | MIT | https://crates.io/crates/jsonwebtoken |
+| keyring | 4.1.6 | MIT OR Apache-2.0 | https://crates.io/crates/keyring |
+| keyring-core | 1.0.0 | MIT OR Apache-2.0 | https://crates.io/crates/keyring-core |
 | lazy_static | 1.5.0 | MIT OR Apache-2.0 | https://crates.io/crates/lazy_static |
 | leb128fmt | 0.1.0 | MIT OR Apache-2.0 | https://crates.io/crates/leb128fmt |
 | libc | 0.2.186 | MIT OR Apache-2.0 | https://crates.io/crates/libc |
-| libdbus-sys | 0.2.7 | Apache-2.0/MIT | https://crates.io/crates/libdbus-sys |
 | libm | 0.2.16 | MIT | https://crates.io/crates/libm |
 | libredox | 0.1.17 | MIT | https://crates.io/crates/libredox |
 | libsqlite3-sys | 0.30.1 | MIT | https://crates.io/crates/libsqlite3-sys |
@@ -303,6 +313,7 @@ Total packages: 665
 | matchit | 0.8.4 | MIT AND BSD-3-Clause | https://crates.io/crates/matchit |
 | md-5 | 0.10.6 | MIT OR Apache-2.0 | https://crates.io/crates/md-5 |
 | memchr | 2.8.1 | Unlicense OR MIT | https://crates.io/crates/memchr |
+| memoffset | 0.9.1 | MIT | https://crates.io/crates/memoffset |
 | mime | 0.3.17 | MIT OR Apache-2.0 | https://crates.io/crates/mime |
 | minimal-lexical | 0.2.1 | MIT/Apache-2.0 | https://crates.io/crates/minimal-lexical |
 | miniz_oxide | 0.8.9 | MIT OR Zlib OR Apache-2.0 | https://crates.io/crates/miniz_oxide |
@@ -316,31 +327,32 @@ Total packages: 665
 | n0-watcher | 1.0.0 | MIT OR Apache-2.0 | https://crates.io/crates/n0-watcher |
 | ndk-context | 0.1.1 | MIT OR Apache-2.0 | https://crates.io/crates/ndk-context |
 | nested_enum_utils | 0.2.3 | MIT OR Apache-2.0 | https://crates.io/crates/nested_enum_utils |
-| netdev | 0.44.0 | MIT | https://crates.io/crates/netdev |
+| netdev | 0.45.0 | MIT | https://crates.io/crates/netdev |
 | netlink-packet-core | 0.8.1 | MIT | https://crates.io/crates/netlink-packet-core |
-| netlink-packet-route | 0.29.0 | MIT | https://crates.io/crates/netlink-packet-route |
 | netlink-packet-route | 0.31.0 | MIT | https://crates.io/crates/netlink-packet-route |
 | netlink-proto | 0.12.0 | MIT | https://crates.io/crates/netlink-proto |
 | netlink-sys | 0.8.8 | MIT | https://crates.io/crates/netlink-sys |
-| netwatch | 0.19.0 | MIT OR Apache-2.0 | https://crates.io/crates/netwatch |
+| netwatch | 0.19.1 | MIT OR Apache-2.0 | https://crates.io/crates/netwatch |
 | nom | 7.1.3 | MIT | https://crates.io/crates/nom |
 | nonempty | 0.7.0 | MIT | https://crates.io/crates/nonempty |
 | nonzero_ext | 0.3.0 | Apache-2.0 | https://crates.io/crates/nonzero_ext |
-| noq | 1.0.0 | MIT OR Apache-2.0 | https://crates.io/crates/noq |
-| noq-proto | 1.0.0 | MIT OR Apache-2.0 | https://crates.io/crates/noq-proto |
-| noq-udp | 1.0.0 | MIT OR Apache-2.0 | https://crates.io/crates/noq-udp |
+| noq | 1.1.1 | MIT OR Apache-2.0 | https://crates.io/crates/noq |
+| noq-proto | 1.1.1 | MIT OR Apache-2.0 | https://crates.io/crates/noq-proto |
+| noq-udp | 1.1.1 | MIT OR Apache-2.0 | https://crates.io/crates/noq-udp |
 | ntimestamp | 1.0.0 | MIT | https://crates.io/crates/ntimestamp |
 | nu-ansi-term | 0.50.3 | MIT | https://crates.io/crates/nu-ansi-term |
+| num | 0.4.3 | MIT OR Apache-2.0 | https://crates.io/crates/num |
 | num-bigint | 0.4.6 | MIT OR Apache-2.0 | https://crates.io/crates/num-bigint |
 | num-bigint-dig | 0.8.6 | MIT/Apache-2.0 | https://crates.io/crates/num-bigint-dig |
+| num-complex | 0.4.6 | MIT OR Apache-2.0 | https://crates.io/crates/num-complex |
 | num-conv | 0.2.2 | MIT OR Apache-2.0 | https://crates.io/crates/num-conv |
 | num-integer | 0.1.46 | MIT OR Apache-2.0 | https://crates.io/crates/num-integer |
 | num-iter | 0.1.45 | MIT OR Apache-2.0 | https://crates.io/crates/num-iter |
+| num-rational | 0.4.2 | MIT OR Apache-2.0 | https://crates.io/crates/num-rational |
 | num-traits | 0.2.19 | MIT OR Apache-2.0 | https://crates.io/crates/num-traits |
 | num_cpus | 1.17.0 | MIT OR Apache-2.0 | https://crates.io/crates/num_cpus |
 | num_enum | 0.7.6 | BSD-3-Clause OR MIT OR Apache-2.0 | https://crates.io/crates/num_enum |
 | num_enum_derive | 0.7.6 | BSD-3-Clause OR MIT OR Apache-2.0 | https://crates.io/crates/num_enum_derive |
-| num_threads | 0.1.7 | MIT OR Apache-2.0 | https://crates.io/crates/num_threads |
 | objc2 | 0.6.4 | MIT | https://crates.io/crates/objc2 |
 | objc2-core-foundation | 0.3.2 | Zlib OR Apache-2.0 OR MIT | https://crates.io/crates/objc2-core-foundation |
 | objc2-core-wlan | 0.3.2 | Zlib OR Apache-2.0 OR MIT | https://crates.io/crates/objc2-core-wlan |
@@ -354,6 +366,7 @@ Total packages: 665
 | once_cell_polyfill | 1.70.2 | MIT OR Apache-2.0 | https://crates.io/crates/once_cell_polyfill |
 | opaque-debug | 0.3.1 | MIT OR Apache-2.0 | https://crates.io/crates/opaque-debug |
 | openssl-probe | 0.2.1 | MIT OR Apache-2.0 | https://crates.io/crates/openssl-probe |
+| ordered-stream | 0.2.0 | MIT OR Apache-2.0 | https://crates.io/crates/ordered-stream |
 | papaya | 0.2.4 | MIT | https://crates.io/crates/papaya |
 | parking | 2.2.1 | Apache-2.0 OR MIT | https://crates.io/crates/parking |
 | parking_lot | 0.12.5 | MIT OR Apache-2.0 | https://crates.io/crates/parking_lot |
@@ -367,6 +380,7 @@ Total packages: 665
 | pin-project | 1.1.13 | Apache-2.0 OR MIT | https://crates.io/crates/pin-project |
 | pin-project-internal | 1.1.13 | Apache-2.0 OR MIT | https://crates.io/crates/pin-project-internal |
 | pin-project-lite | 0.2.17 | Apache-2.0 OR MIT | https://crates.io/crates/pin-project-lite |
+| piper | 0.2.5 | MIT OR Apache-2.0 | https://crates.io/crates/piper |
 | pkarr | 5.0.2 | MIT | https://crates.io/crates/pkarr |
 | pkcs1 | 0.7.5 | Apache-2.0 OR MIT | https://crates.io/crates/pkcs1 |
 | pkcs8 | 0.10.2 | Apache-2.0 OR MIT | https://crates.io/crates/pkcs8 |
@@ -375,10 +389,11 @@ Total packages: 665
 | plain | 0.2.3 | MIT/Apache-2.0 | https://crates.io/crates/plain |
 | plist | 1.9.0 | MIT | https://crates.io/crates/plist |
 | png | 0.18.1 | MIT OR Apache-2.0 | https://crates.io/crates/png |
-| poly1305 | 0.8.0 | Apache-2.0 OR MIT | https://crates.io/crates/poly1305 |
+| polling | 3.11.0 | Apache-2.0 OR MIT | https://crates.io/crates/polling |
+| poly1305 | 0.9.1 | Apache-2.0 OR MIT | https://crates.io/crates/poly1305 |
 | polyval | 0.6.2 | Apache-2.0 OR MIT | https://crates.io/crates/polyval |
 | portable-atomic | 1.13.1 | Apache-2.0 OR MIT | https://crates.io/crates/portable-atomic |
-| portmapper | 0.19.0 | MIT OR Apache-2.0 | https://crates.io/crates/portmapper |
+| portmapper | 0.19.1 | MIT OR Apache-2.0 | https://crates.io/crates/portmapper |
 | positioned-io | 0.3.5 | MIT | https://crates.io/crates/positioned-io |
 | postcard | 1.1.3 | MIT OR Apache-2.0 | https://crates.io/crates/postcard |
 | postcard-derive | 0.2.2 | MIT OR Apache-2.0 | https://crates.io/crates/postcard-derive |
@@ -416,7 +431,7 @@ Total packages: 665
 | rcgen | 0.14.8 | MIT OR Apache-2.0 | https://crates.io/crates/rcgen |
 | redb | 3.1.3 | MIT OR Apache-2.0 | https://crates.io/crates/redb |
 | redb | 4.1.0 | MIT OR Apache-2.0 | https://crates.io/crates/redb |
-| redis | 1.2.2 | BSD-3-Clause | https://crates.io/crates/redis |
+| redis | 1.5.0 | BSD-3-Clause | https://crates.io/crates/redis |
 | redox_syscall | 0.5.18 | MIT | https://crates.io/crates/redox_syscall |
 | redox_syscall | 0.8.0 | MIT | https://crates.io/crates/redox_syscall |
 | ref-cast | 1.0.25 | MIT OR Apache-2.0 | https://crates.io/crates/ref-cast |
@@ -436,7 +451,7 @@ Total packages: 665
 | rustc_version | 0.4.1 | MIT OR Apache-2.0 | https://crates.io/crates/rustc_version |
 | rusticata-macros | 4.1.0 | MIT/Apache-2.0 | https://crates.io/crates/rusticata-macros |
 | rustix | 1.1.4 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | https://crates.io/crates/rustix |
-| rustls | 0.23.40 | Apache-2.0 OR ISC OR MIT | https://crates.io/crates/rustls |
+| rustls | 0.23.43 | Apache-2.0 OR ISC OR MIT | https://crates.io/crates/rustls |
 | rustls-cert-file-reader | 0.4.2 | MIT | https://crates.io/crates/rustls-cert-file-reader |
 | rustls-cert-read | 0.3.0 | MIT | https://crates.io/crates/rustls-cert-read |
 | rustls-cert-reloadable-resolver | 0.7.1 | MIT | https://crates.io/crates/rustls-cert-reloadable-resolver |
@@ -453,20 +468,22 @@ Total packages: 665
 | scopeguard | 1.2.0 | MIT OR Apache-2.0 | https://crates.io/crates/scopeguard |
 | secp256k1 | 0.31.1 | CC0-1.0 | https://crates.io/crates/secp256k1 |
 | secp256k1-sys | 0.11.0 | CC0-1.0 | https://crates.io/crates/secp256k1-sys |
+| secret-service | 5.1.0 | MIT OR Apache-2.0 | https://crates.io/crates/secret-service |
 | security-framework | 3.7.0 | MIT OR Apache-2.0 | https://crates.io/crates/security-framework |
 | security-framework-sys | 2.17.0 | MIT OR Apache-2.0 | https://crates.io/crates/security-framework-sys |
 | seize | 0.5.1 | MIT | https://crates.io/crates/seize |
 | self_cell | 1.2.2 | Apache-2.0 OR GPL-2.0-only | https://crates.io/crates/self_cell |
 | semver | 1.0.28 | MIT OR Apache-2.0 | https://crates.io/crates/semver |
 | send_wrapper | 0.6.0 | MIT/Apache-2.0 | https://crates.io/crates/send_wrapper |
-| serde | 1.0.228 | MIT OR Apache-2.0 | https://crates.io/crates/serde |
+| serde | 1.0.229 | MIT OR Apache-2.0 | https://crates.io/crates/serde |
 | serde-error | 0.1.3 | MIT | https://crates.io/crates/serde-error |
 | serde_bencode | 0.2.4 | MIT | https://crates.io/crates/serde_bencode |
 | serde_bytes | 0.11.19 | MIT OR Apache-2.0 | https://crates.io/crates/serde_bytes |
-| serde_core | 1.0.228 | MIT OR Apache-2.0 | https://crates.io/crates/serde_core |
-| serde_derive | 1.0.228 | MIT OR Apache-2.0 | https://crates.io/crates/serde_derive |
-| serde_json | 1.0.150 | MIT OR Apache-2.0 | https://crates.io/crates/serde_json |
+| serde_core | 1.0.229 | MIT OR Apache-2.0 | https://crates.io/crates/serde_core |
+| serde_derive | 1.0.229 | MIT OR Apache-2.0 | https://crates.io/crates/serde_derive |
+| serde_json | 1.0.151 | MIT OR Apache-2.0 | https://crates.io/crates/serde_json |
 | serde_path_to_error | 0.1.20 | MIT OR Apache-2.0 | https://crates.io/crates/serde_path_to_error |
+| serde_repr | 0.1.21 | MIT OR Apache-2.0 | https://crates.io/crates/serde_repr |
 | serde_spanned | 1.1.1 | MIT OR Apache-2.0 | https://crates.io/crates/serde_spanned |
 | serde_urlencoded | 0.7.1 | MIT/Apache-2.0 | https://crates.io/crates/serde_urlencoded |
 | serde_yaml | 0.9.34+deprecated | MIT OR Apache-2.0 | https://crates.io/crates/serde_yaml |
@@ -513,6 +530,7 @@ Total packages: 665
 | subtle | 2.6.1 | BSD-3-Clause | https://crates.io/crates/subtle |
 | syn | 1.0.109 | MIT OR Apache-2.0 | https://crates.io/crates/syn |
 | syn | 2.0.117 | MIT OR Apache-2.0 | https://crates.io/crates/syn |
+| syn | 3.0.3 | MIT OR Apache-2.0 | https://crates.io/crates/syn |
 | syn-mid | 0.5.4 | Apache-2.0 OR MIT | https://crates.io/crates/syn-mid |
 | sync_wrapper | 1.0.2 | Apache-2.0 | https://crates.io/crates/sync_wrapper |
 | synstructure | 0.13.2 | MIT | https://crates.io/crates/synstructure |
@@ -521,9 +539,9 @@ Total packages: 665
 | tagptr | 0.2.0 | MIT/Apache-2.0 | https://crates.io/crates/tagptr |
 | tempfile | 3.27.0 | MIT OR Apache-2.0 | https://crates.io/crates/tempfile |
 | thiserror | 1.0.69 | MIT OR Apache-2.0 | https://crates.io/crates/thiserror |
-| thiserror | 2.0.18 | MIT OR Apache-2.0 | https://crates.io/crates/thiserror |
+| thiserror | 2.0.20 | MIT OR Apache-2.0 | https://crates.io/crates/thiserror |
 | thiserror-impl | 1.0.69 | MIT OR Apache-2.0 | https://crates.io/crates/thiserror-impl |
-| thiserror-impl | 2.0.18 | MIT OR Apache-2.0 | https://crates.io/crates/thiserror-impl |
+| thiserror-impl | 2.0.20 | MIT OR Apache-2.0 | https://crates.io/crates/thiserror-impl |
 | thread_local | 1.1.9 | MIT OR Apache-2.0 | https://crates.io/crates/thread_local |
 | time | 0.3.47 | MIT OR Apache-2.0 | https://crates.io/crates/time |
 | time-core | 0.1.8 | MIT OR Apache-2.0 | https://crates.io/crates/time-core |
@@ -531,11 +549,11 @@ Total packages: 665
 | tinystr | 0.8.3 | Unicode-3.0 | https://crates.io/crates/tinystr |
 | tinyvec | 1.11.0 | Zlib OR Apache-2.0 OR MIT | https://crates.io/crates/tinyvec |
 | tinyvec_macros | 0.1.1 | MIT OR Apache-2.0 OR Zlib | https://crates.io/crates/tinyvec_macros |
-| tokio | 1.52.3 | MIT | https://crates.io/crates/tokio |
+| tokio | 1.53.1 | MIT | https://crates.io/crates/tokio |
 | tokio-macros | 2.7.0 | MIT | https://crates.io/crates/tokio-macros |
 | tokio-rustls | 0.26.4 | MIT OR Apache-2.0 | https://crates.io/crates/tokio-rustls |
 | tokio-rustls-acme | 0.9.1 | Apache-2.0 OR MIT | https://crates.io/crates/tokio-rustls-acme |
-| tokio-stream | 0.1.18 | MIT | https://crates.io/crates/tokio-stream |
+| tokio-stream | 0.1.19 | MIT | https://crates.io/crates/tokio-stream |
 | tokio-tungstenite | 0.29.0 | MIT | https://crates.io/crates/tokio-tungstenite |
 | tokio-util | 0.7.18 | MIT | https://crates.io/crates/tokio-util |
 | tokio-websockets | 0.13.2 | MIT | https://crates.io/crates/tokio-websockets |
@@ -547,6 +565,7 @@ Total packages: 665
 | tonic | 0.14.6 | MIT | https://crates.io/crates/tonic |
 | tower | 0.5.3 | MIT | https://crates.io/crates/tower |
 | tower-http | 0.6.11 | MIT | https://crates.io/crates/tower-http |
+| tower-http | 0.7.0 | MIT | https://crates.io/crates/tower-http |
 | tower-layer | 0.3.3 | MIT | https://crates.io/crates/tower-layer |
 | tower-service | 0.3.3 | MIT | https://crates.io/crates/tower-service |
 | tower_governor | 0.8.0 | MIT OR Apache-2.0 | https://crates.io/crates/tower_governor |
@@ -558,6 +577,7 @@ Total packages: 665
 | try-lock | 0.2.5 | MIT | https://crates.io/crates/try-lock |
 | tungstenite | 0.29.0 | MIT OR Apache-2.0 | https://crates.io/crates/tungstenite |
 | typenum | 1.20.0 | MIT OR Apache-2.0 | https://crates.io/crates/typenum |
+| uds_windows | 1.2.1 | MIT | https://crates.io/crates/uds_windows |
 | unicode-bidi | 0.3.18 | MIT OR Apache-2.0 | https://crates.io/crates/unicode-bidi |
 | unicode-ident | 1.0.24 | (MIT OR Apache-2.0) AND Unicode-3.0 | https://crates.io/crates/unicode-ident |
 | unicode-normalization | 0.1.25 | MIT OR Apache-2.0 | https://crates.io/crates/unicode-normalization |
@@ -565,18 +585,16 @@ Total packages: 665
 | unicode-segmentation | 1.13.2 | MIT OR Apache-2.0 | https://crates.io/crates/unicode-segmentation |
 | unicode-xid | 0.2.6 | MIT OR Apache-2.0 | https://crates.io/crates/unicode-xid |
 | universal-hash | 0.5.1 | MIT OR Apache-2.0 | https://crates.io/crates/universal-hash |
+| universal-hash | 0.6.1 | MIT OR Apache-2.0 | https://crates.io/crates/universal-hash |
 | unsafe-libyaml | 0.2.11 | MIT | https://crates.io/crates/unsafe-libyaml |
 | untrusted | 0.7.1 | ISC | https://crates.io/crates/untrusted |
 | untrusted | 0.9.0 | ISC | https://crates.io/crates/untrusted |
 | url | 2.5.8 | MIT OR Apache-2.0 | https://crates.io/crates/url |
 | utf8_iter | 1.0.4 | Apache-2.0 OR MIT | https://crates.io/crates/utf8_iter |
 | utf8parse | 0.2.2 | Apache-2.0 OR MIT | https://crates.io/crates/utf8parse |
-| uuid | 1.23.1 | Apache-2.0 OR MIT | https://crates.io/crates/uuid |
+| uuid | 1.24.0 | Apache-2.0 OR MIT | https://crates.io/crates/uuid |
 | valuable | 0.1.1 | MIT | https://crates.io/crates/valuable |
 | vcpkg | 0.2.15 | MIT/Apache-2.0 | https://crates.io/crates/vcpkg |
-| vergen | 9.1.0 | MIT OR Apache-2.0 | https://crates.io/crates/vergen |
-| vergen-gitcl | 9.1.0 | MIT OR Apache-2.0 | https://crates.io/crates/vergen-gitcl |
-| vergen-lib | 9.1.0 | MIT OR Apache-2.0 | https://crates.io/crates/vergen-lib |
 | version_check | 0.9.5 | MIT/Apache-2.0 | https://crates.io/crates/version_check |
 | walkdir | 2.5.0 | Unlicense/MIT | https://crates.io/crates/walkdir |
 | want | 0.3.1 | MIT | https://crates.io/crates/want |
@@ -612,6 +630,7 @@ Total packages: 665
 | windows-implement | 0.60.2 | MIT OR Apache-2.0 | https://crates.io/crates/windows-implement |
 | windows-interface | 0.59.3 | MIT OR Apache-2.0 | https://crates.io/crates/windows-interface |
 | windows-link | 0.2.1 | MIT OR Apache-2.0 | https://crates.io/crates/windows-link |
+| windows-native-keyring-store | 1.1.0 | MIT OR Apache-2.0 | https://crates.io/crates/windows-native-keyring-store |
 | windows-numerics | 0.3.1 | MIT OR Apache-2.0 | https://crates.io/crates/windows-numerics |
 | windows-registry | 0.6.1 | MIT OR Apache-2.0 | https://crates.io/crates/windows-registry |
 | windows-result | 0.4.1 | MIT OR Apache-2.0 | https://crates.io/crates/windows-result |
@@ -619,43 +638,33 @@ Total packages: 665
 | windows-sys | 0.45.0 | MIT OR Apache-2.0 | https://crates.io/crates/windows-sys |
 | windows-sys | 0.48.0 | MIT OR Apache-2.0 | https://crates.io/crates/windows-sys |
 | windows-sys | 0.52.0 | MIT OR Apache-2.0 | https://crates.io/crates/windows-sys |
-| windows-sys | 0.60.2 | MIT OR Apache-2.0 | https://crates.io/crates/windows-sys |
 | windows-sys | 0.61.2 | MIT OR Apache-2.0 | https://crates.io/crates/windows-sys |
 | windows-targets | 0.42.2 | MIT OR Apache-2.0 | https://crates.io/crates/windows-targets |
 | windows-targets | 0.48.5 | MIT OR Apache-2.0 | https://crates.io/crates/windows-targets |
 | windows-targets | 0.52.6 | MIT OR Apache-2.0 | https://crates.io/crates/windows-targets |
-| windows-targets | 0.53.5 | MIT OR Apache-2.0 | https://crates.io/crates/windows-targets |
 | windows-threading | 0.2.1 | MIT OR Apache-2.0 | https://crates.io/crates/windows-threading |
 | windows_aarch64_gnullvm | 0.42.2 | MIT OR Apache-2.0 | https://crates.io/crates/windows_aarch64_gnullvm |
 | windows_aarch64_gnullvm | 0.48.5 | MIT OR Apache-2.0 | https://crates.io/crates/windows_aarch64_gnullvm |
 | windows_aarch64_gnullvm | 0.52.6 | MIT OR Apache-2.0 | https://crates.io/crates/windows_aarch64_gnullvm |
-| windows_aarch64_gnullvm | 0.53.1 | MIT OR Apache-2.0 | https://crates.io/crates/windows_aarch64_gnullvm |
 | windows_aarch64_msvc | 0.42.2 | MIT OR Apache-2.0 | https://crates.io/crates/windows_aarch64_msvc |
 | windows_aarch64_msvc | 0.48.5 | MIT OR Apache-2.0 | https://crates.io/crates/windows_aarch64_msvc |
 | windows_aarch64_msvc | 0.52.6 | MIT OR Apache-2.0 | https://crates.io/crates/windows_aarch64_msvc |
-| windows_aarch64_msvc | 0.53.1 | MIT OR Apache-2.0 | https://crates.io/crates/windows_aarch64_msvc |
 | windows_i686_gnu | 0.42.2 | MIT OR Apache-2.0 | https://crates.io/crates/windows_i686_gnu |
 | windows_i686_gnu | 0.48.5 | MIT OR Apache-2.0 | https://crates.io/crates/windows_i686_gnu |
 | windows_i686_gnu | 0.52.6 | MIT OR Apache-2.0 | https://crates.io/crates/windows_i686_gnu |
-| windows_i686_gnu | 0.53.1 | MIT OR Apache-2.0 | https://crates.io/crates/windows_i686_gnu |
 | windows_i686_gnullvm | 0.52.6 | MIT OR Apache-2.0 | https://crates.io/crates/windows_i686_gnullvm |
-| windows_i686_gnullvm | 0.53.1 | MIT OR Apache-2.0 | https://crates.io/crates/windows_i686_gnullvm |
 | windows_i686_msvc | 0.42.2 | MIT OR Apache-2.0 | https://crates.io/crates/windows_i686_msvc |
 | windows_i686_msvc | 0.48.5 | MIT OR Apache-2.0 | https://crates.io/crates/windows_i686_msvc |
 | windows_i686_msvc | 0.52.6 | MIT OR Apache-2.0 | https://crates.io/crates/windows_i686_msvc |
-| windows_i686_msvc | 0.53.1 | MIT OR Apache-2.0 | https://crates.io/crates/windows_i686_msvc |
 | windows_x86_64_gnu | 0.42.2 | MIT OR Apache-2.0 | https://crates.io/crates/windows_x86_64_gnu |
 | windows_x86_64_gnu | 0.48.5 | MIT OR Apache-2.0 | https://crates.io/crates/windows_x86_64_gnu |
 | windows_x86_64_gnu | 0.52.6 | MIT OR Apache-2.0 | https://crates.io/crates/windows_x86_64_gnu |
-| windows_x86_64_gnu | 0.53.1 | MIT OR Apache-2.0 | https://crates.io/crates/windows_x86_64_gnu |
 | windows_x86_64_gnullvm | 0.42.2 | MIT OR Apache-2.0 | https://crates.io/crates/windows_x86_64_gnullvm |
 | windows_x86_64_gnullvm | 0.48.5 | MIT OR Apache-2.0 | https://crates.io/crates/windows_x86_64_gnullvm |
 | windows_x86_64_gnullvm | 0.52.6 | MIT OR Apache-2.0 | https://crates.io/crates/windows_x86_64_gnullvm |
-| windows_x86_64_gnullvm | 0.53.1 | MIT OR Apache-2.0 | https://crates.io/crates/windows_x86_64_gnullvm |
 | windows_x86_64_msvc | 0.42.2 | MIT OR Apache-2.0 | https://crates.io/crates/windows_x86_64_msvc |
 | windows_x86_64_msvc | 0.48.5 | MIT OR Apache-2.0 | https://crates.io/crates/windows_x86_64_msvc |
 | windows_x86_64_msvc | 0.52.6 | MIT OR Apache-2.0 | https://crates.io/crates/windows_x86_64_msvc |
-| windows_x86_64_msvc | 0.53.1 | MIT OR Apache-2.0 | https://crates.io/crates/windows_x86_64_msvc |
 | winnow | 1.0.3 | MIT | https://crates.io/crates/winnow |
 | wiremock | 0.6.5 | MIT/Apache-2.0 | https://crates.io/crates/wiremock |
 | wit-bindgen | 0.51.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | https://crates.io/crates/wit-bindgen |
@@ -675,6 +684,11 @@ Total packages: 665
 | yasna | 0.6.0 | MIT OR Apache-2.0 | https://crates.io/crates/yasna |
 | yoke | 0.8.2 | Unicode-3.0 | https://crates.io/crates/yoke |
 | yoke-derive | 0.8.2 | Unicode-3.0 | https://crates.io/crates/yoke-derive |
+| zbus | 5.19.0 | MIT | https://crates.io/crates/zbus |
+| zbus-secret-service-keyring-store | 1.0.0 | MIT OR Apache-2.0 | https://crates.io/crates/zbus-secret-service-keyring-store |
+| zbus_macros | 5.19.0 | MIT | https://crates.io/crates/zbus_macros |
+| zbus_names | 4.3.4 | MIT | https://crates.io/crates/zbus_names |
+| zcheapstr | 1.1.0 | MIT | https://crates.io/crates/zcheapstr |
 | zerocopy | 0.8.49 | BSD-2-Clause OR Apache-2.0 OR MIT | https://crates.io/crates/zerocopy |
 | zerocopy-derive | 0.8.49 | BSD-2-Clause OR Apache-2.0 OR MIT | https://crates.io/crates/zerocopy-derive |
 | zerofrom | 0.1.8 | Unicode-3.0 | https://crates.io/crates/zerofrom |
@@ -687,95 +701,78 @@ Total packages: 665
 | zmij | 1.0.21 | MIT | https://crates.io/crates/zmij |
 | zune-core | 0.5.1 | MIT OR Apache-2.0 OR Zlib | https://crates.io/crates/zune-core |
 | zune-jpeg | 0.5.15 | MIT OR Apache-2.0 OR Zlib | https://crates.io/crates/zune-jpeg |
+| zvariant | 5.14.0 | MIT | https://crates.io/crates/zvariant |
+| zvariant_derive | 5.14.0 | MIT | https://crates.io/crates/zvariant_derive |
+| zvariant_utils | 4.0.0 | MIT | https://crates.io/crates/zvariant_utils |
 
 ## Desktop npm packages
 
-Total packages: 157
+Total packages: 136
 
 | Package | Version | License | Source |
 | --- | --- | --- | --- |
-| @babel/runtime | 7.29.2 | MIT | https://babel.dev/docs/en/next/babel-runtime |
+| @babel/runtime | 7.29.7 | MIT | https://babel.dev/docs/en/next/babel-runtime |
 | @dimforge/rapier3d-compat | 0.12.0 | Apache-2.0 | https://rapier.rs |
-| @floating-ui/core | 1.7.5 | MIT | https://floating-ui.com |
-| @floating-ui/dom | 1.7.6 | MIT | https://floating-ui.com |
-| @floating-ui/react-dom | 2.1.8 | MIT | https://floating-ui.com/docs/react-dom |
-| @floating-ui/utils | 0.2.11 | MIT | https://floating-ui.com |
+| @floating-ui/core | 1.8.0 | MIT | https://floating-ui.com |
+| @floating-ui/dom | 1.8.0 | MIT | https://floating-ui.com |
+| @floating-ui/react-dom | 2.1.9 | MIT | https://floating-ui.com/docs/react-dom |
+| @floating-ui/utils | 0.2.12 | MIT | https://floating-ui.com |
 | @mediapipe/tasks-vision | 0.10.17 | Apache-2.0 | http://mediapipe.dev |
 | @monogrid/gainmap-js | 3.4.0 | MIT | https://github.com/MONOGRID/gainmap-js#readme |
-| @pixiv/three-vrm | 3.5.3 | MIT | https://github.com/pixiv/three-vrm#readme |
-| @pixiv/three-vrm-animation | 3.5.3 | MIT | https://github.com/pixiv/three-vrm#readme |
-| @pixiv/three-vrm-core | 3.5.3 | MIT | https://github.com/pixiv/three-vrm#readme |
-| @pixiv/three-vrm-materials-hdr-emissive-multiplier | 3.5.3 | MIT | https://github.com/pixiv/three-vrm#readme |
-| @pixiv/three-vrm-materials-mtoon | 3.5.3 | MIT | https://github.com/pixiv/three-vrm#readme |
-| @pixiv/three-vrm-materials-v0compat | 3.5.3 | MIT | https://github.com/pixiv/three-vrm#readme |
-| @pixiv/three-vrm-node-constraint | 3.5.3 | MIT | https://github.com/pixiv/three-vrm#readme |
-| @pixiv/three-vrm-springbone | 3.5.3 | MIT | https://github.com/pixiv/three-vrm#readme |
-| @pixiv/types-vrm-0.0 | 3.5.3 | MIT | https://github.com/pixiv/three-vrm#readme |
-| @pixiv/types-vrmc-materials-hdr-emissive-multiplier-1.0 | 3.5.3 | MIT | https://github.com/pixiv/three-vrm#readme |
-| @pixiv/types-vrmc-materials-mtoon-1.0 | 3.5.3 | MIT | https://github.com/pixiv/three-vrm#readme |
-| @pixiv/types-vrmc-node-constraint-1.0 | 3.5.3 | MIT | https://github.com/pixiv/three-vrm#readme |
-| @pixiv/types-vrmc-springbone-1.0 | 3.5.3 | MIT | https://github.com/pixiv/three-vrm#readme |
-| @pixiv/types-vrmc-springbone-extended-collider-1.0 | 3.5.3 | MIT | https://github.com/pixiv/three-vrm#readme |
-| @pixiv/types-vrmc-vrm-1.0 | 3.5.3 | MIT | https://github.com/pixiv/three-vrm#readme |
-| @pixiv/types-vrmc-vrm-animation-1.0 | 3.5.3 | MIT | https://github.com/pixiv/three-vrm#readme |
-| @radix-ui/primitive | 1.1.3 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/primitive | 1.1.4 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-arrow | 1.1.7 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-arrow | 1.1.9 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-compose-refs | 1.1.2 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-compose-refs | 1.1.3 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-context | 1.1.2 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-context | 1.1.4 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-dialog | 1.1.15 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-dismissable-layer | 1.1.11 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-dismissable-layer | 1.1.12 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-focus-guards | 1.1.3 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-focus-scope | 1.1.7 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-hover-card | 1.1.16 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-id | 1.1.1 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-popover | 1.1.15 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-popper | 1.2.8 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-popper | 1.3.0 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-portal | 1.1.11 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-portal | 1.1.9 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-presence | 1.1.5 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-presence | 1.1.6 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-primitive | 2.1.3 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-primitive | 2.1.5 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-slot | 1.2.3 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-slot | 1.2.4 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-slot | 1.2.5 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-tooltip | 1.2.8 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-use-callback-ref | 1.1.1 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-use-callback-ref | 1.1.2 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-use-controllable-state | 1.2.2 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-use-controllable-state | 1.2.3 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-use-effect-event | 0.0.2 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-use-effect-event | 0.0.3 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-use-escape-keydown | 1.1.1 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-use-escape-keydown | 1.1.2 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-use-layout-effect | 1.1.1 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-use-layout-effect | 1.1.2 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-use-rect | 1.1.1 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-use-rect | 1.1.2 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-use-size | 1.1.1 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-use-size | 1.1.2 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/react-visually-hidden | 1.2.3 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/rect | 1.1.1 | MIT | https://radix-ui.com/primitives |
-| @radix-ui/rect | 1.1.2 | MIT | https://radix-ui.com/primitives |
-| @react-three/drei | 10.7.7 | MIT | https://github.com/pmndrs/drei |
-| @react-three/fiber | 9.6.1 | MIT | https://github.com/pmndrs/react-three-fiber#readme |
-| @tauri-apps/api | 2.11.0 | Apache-2.0 OR MIT | https://github.com/tauri-apps/tauri#readme |
+| @pixiv/three-vrm | 3.5.5 | MIT | https://github.com/pixiv/three-vrm#readme |
+| @pixiv/three-vrm-animation | 3.5.5 | MIT | https://github.com/pixiv/three-vrm#readme |
+| @pixiv/three-vrm-core | 3.5.5 | MIT | https://github.com/pixiv/three-vrm#readme |
+| @pixiv/three-vrm-materials-hdr-emissive-multiplier | 3.5.5 | MIT | https://github.com/pixiv/three-vrm#readme |
+| @pixiv/three-vrm-materials-mtoon | 3.5.5 | MIT | https://github.com/pixiv/three-vrm#readme |
+| @pixiv/three-vrm-materials-v0compat | 3.5.5 | MIT | https://github.com/pixiv/three-vrm#readme |
+| @pixiv/three-vrm-node-constraint | 3.5.5 | MIT | https://github.com/pixiv/three-vrm#readme |
+| @pixiv/three-vrm-springbone | 3.5.5 | MIT | https://github.com/pixiv/three-vrm#readme |
+| @pixiv/types-vrm-0.0 | 3.5.5 | MIT | https://github.com/pixiv/three-vrm#readme |
+| @pixiv/types-vrmc-materials-hdr-emissive-multiplier-1.0 | 3.5.5 | MIT | https://github.com/pixiv/three-vrm#readme |
+| @pixiv/types-vrmc-materials-mtoon-1.0 | 3.5.5 | MIT | https://github.com/pixiv/three-vrm#readme |
+| @pixiv/types-vrmc-node-constraint-1.0 | 3.5.5 | MIT | https://github.com/pixiv/three-vrm#readme |
+| @pixiv/types-vrmc-springbone-1.0 | 3.5.5 | MIT | https://github.com/pixiv/three-vrm#readme |
+| @pixiv/types-vrmc-springbone-extended-collider-1.0 | 3.5.5 | MIT | https://github.com/pixiv/three-vrm#readme |
+| @pixiv/types-vrmc-vrm-1.0 | 3.5.5 | MIT | https://github.com/pixiv/three-vrm#readme |
+| @pixiv/types-vrmc-vrm-animation-1.0 | 3.5.5 | MIT | https://github.com/pixiv/three-vrm#readme |
+| @radix-ui/primitive | 1.1.7 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-arrow | 1.1.15 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-compose-refs | 1.1.5 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-context | 1.2.2 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-dialog | 1.1.23 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-dismissable-layer | 1.1.19 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-focus-guards | 1.1.6 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-focus-scope | 1.1.16 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-hover-card | 1.1.23 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-id | 1.1.4 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-popover | 1.1.23 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-popper | 1.3.7 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-portal | 1.1.17 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-presence | 1.1.10 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-primitive | 2.1.10 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-slot | 1.3.3 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-tooltip | 1.2.16 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-use-callback-ref | 1.1.4 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-use-controllable-state | 1.2.6 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-use-effect-event | 0.0.5 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-use-layout-effect | 1.1.4 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-use-rect | 1.1.4 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-use-size | 1.1.4 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-visually-hidden | 1.2.11 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/rect | 1.1.3 | MIT | https://radix-ui.com/primitives |
+| @react-three/drei | 10.7.8 | MIT | https://github.com/pmndrs/drei |
+| @react-three/fiber | 9.7.0 | MIT | https://github.com/pmndrs/react-three-fiber#readme |
+| @tauri-apps/api | 2.11.1 | Apache-2.0 OR MIT | https://github.com/tauri-apps/tauri#readme |
 | @tauri-apps/plugin-deep-link | 2.4.9 | MIT OR Apache-2.0 | https://github.com/tauri-apps/plugins-workspace#readme |
 | @tauri-apps/plugin-updater | 2.10.1 | MIT OR Apache-2.0 | https://github.com/tauri-apps/plugins-workspace#readme |
 | @tweenjs/tween.js | 23.1.3 | MIT | https://github.com/tweenjs/tween.js |
 | @types/draco3d | 1.4.10 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/draco3d |
 | @types/offscreencanvas | 2019.7.3 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/offscreencanvas |
-| @types/react | 19.2.14 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react |
-| @types/react-dom | 19.2.3 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react-dom |
+| @types/react | 19.2.18 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react |
+| @types/react-dom | 19.2.4 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react-dom |
 | @types/react-reconciler | 0.28.9 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react-reconciler |
 | @types/stats.js | 0.17.4 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/stats.js |
-| @types/three | 0.184.1 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/three |
+| @types/three | 0.185.4 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/three |
 | @types/webxr | 0.5.24 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/webxr |
 | @use-gesture/core | 10.3.1 | MIT | https://use-gesture.netlify.app |
 | @use-gesture/react | 10.3.1 | MIT | https://use-gesture.netlify.app |
@@ -793,13 +790,13 @@ Total packages: 157
 | detect-gpu | 5.0.70 | MIT | https://github.com/pmndrs/detect-gpu#readme |
 | detect-node-es | 1.1.0 | MIT | https://github.com/thekashey/detect-node |
 | draco3d | 1.5.7 | Apache-2.0 | https://github.com/google/draco#readme |
-| fflate | 0.6.10 | MIT | https://101arrowz.github.io/fflate |
+| fflate | 0.6.11 | MIT | https://101arrowz.github.io/fflate |
 | fflate | 0.8.3 | MIT | https://101arrowz.github.io/fflate |
 | get-nonce | 1.0.1 | MIT | https://github.com/theKashey/get-nonce |
 | glsl-noise | 0.0.0 | MIT | https://github.com/hughsk/glsl-noise#readme |
-| hls.js | 1.6.16 | Apache-2.0 | https://github.com/video-dev/hls.js |
-| html-parse-stringify | 3.0.1 | MIT | https://github.com/henrikjoreteg/html-parse-stringify |
-| i18next | 26.0.6 | MIT | https://www.i18next.com |
+| hls.js | 1.6.18 | Apache-2.0 | https://github.com/video-dev/hls.js |
+| html-parse-stringify | 4.0.1 | MIT | https://github.com/i18next/html-parse-stringify |
+| i18next | 26.3.6 | MIT | https://www.i18next.com |
 | i18next-browser-languagedetector | 8.2.1 | MIT | https://github.com/i18next/i18next-browser-languageDetector |
 | ieee754 | 1.2.1 | BSD-3-Clause | https://github.com/feross/ieee754#readme |
 | immediate | 3.0.6 | MIT | https://github.com/calvinmetcalf/immediate#readme |
@@ -807,20 +804,20 @@ Total packages: 157
 | isexe | 2.0.0 | ISC | https://github.com/isaacs/isexe#readme |
 | its-fine | 2.0.0 | MIT | https://github.com/pmndrs/its-fine |
 | lie | 3.3.0 | MIT | https://github.com/calvinmetcalf/lie#readme |
-| lucide-react | 1.8.0 | ISC | https://lucide.dev |
+| lucide-react | 1.31.0 | ISC | https://lucide.dev |
 | maath | 0.10.8 | MIT | - |
 | meshline | 3.3.1 | MIT | https://github.com/pmndrs/meshline#readme |
 | meshoptimizer | 1.1.1 | MIT | https://github.com/zeux/meshoptimizer |
 | path-key | 3.1.1 | MIT | https://github.com/sindresorhus/path-key#readme |
 | potpack | 1.0.2 | ISC | https://mapbox.github.io/potpack/ |
 | promise-worker-transferable | 1.0.4 | Apache-2.0 | https://github.com/terikon/promise-worker-transferable#readme |
-| react | 19.2.5 | MIT | https://react.dev/ |
-| react-dom | 19.2.5 | MIT | https://react.dev/ |
-| react-i18next | 17.0.4 | MIT | https://github.com/i18next/react-i18next |
+| react | 19.2.8 | MIT | https://react.dev/ |
+| react-dom | 19.2.8 | MIT | https://react.dev/ |
+| react-i18next | 17.0.11 | MIT | https://github.com/i18next/react-i18next |
 | react-remove-scroll | 2.7.2 | MIT | https://github.com/theKashey/react-remove-scroll#readme |
 | react-remove-scroll-bar | 2.3.8 | MIT | https://github.com/theKashey/react-remove-scroll-bar#readme |
-| react-router | 7.14.2 | MIT | https://github.com/remix-run/react-router#readme |
-| react-router-dom | 7.14.2 | MIT | https://github.com/remix-run/react-router#readme |
+| react-router | 7.18.2 | MIT | https://github.com/remix-run/react-router#readme |
+| react-router-dom | 7.18.2 | MIT | https://github.com/remix-run/react-router#readme |
 | react-style-singleton | 2.2.3 | MIT | https://github.com/theKashey/react-style-singleton#readme |
 | react-use-measure | 2.1.7 | MIT | https://github.com/pmndrs/react-use-measure |
 | require-from-string | 2.0.2 | MIT | https://github.com/floatdrop/require-from-string#readme |
@@ -831,12 +828,12 @@ Total packages: 157
 | stats-gl | 2.4.2 | MIT | https://github.com/RenaudRohlinger/stats-gl |
 | stats.js | 0.17.0 | MIT | https://github.com/mrdoob/stats.js |
 | suspend-react | 0.1.3 | MIT | https://github.com/pmndrs/suspend-react#readme |
-| tailwind-merge | 3.5.0 | MIT | https://github.com/dcastil/tailwind-merge |
-| three | 0.184.0 | MIT | https://threejs.org/ |
+| tailwind-merge | 3.6.0 | MIT | https://github.com/dcastil/tailwind-merge |
+| three | 0.185.1 | MIT | https://threejs.org/ |
 | three-mesh-bvh | 0.8.3 | MIT | https://github.com/gkjohnson/three-mesh-bvh#readme |
 | three-stdlib | 2.36.1 | MIT | https://github.com/pmndrs/three-stdlib |
-| troika-three-text | 0.52.4 | MIT | https://github.com/protectwise/troika#readme |
-| troika-three-utils | 0.52.4 | MIT | https://github.com/protectwise/troika#readme |
+| troika-three-text | 0.52.5 | MIT | https://github.com/protectwise/troika#readme |
+| troika-three-utils | 0.52.5 | MIT | https://github.com/protectwise/troika#readme |
 | troika-worker-utils | 0.52.0 | MIT | https://github.com/protectwise/troika#readme |
 | tslib | 2.8.1 | 0BSD | https://www.typescriptlang.org/ |
 | tunnel-rat | 0.1.2 | MIT | https://github.com/pmndrs/tunnel-rat#readme |
@@ -845,9 +842,8 @@ Total packages: 157
 | use-sidecar | 1.1.3 | MIT | https://github.com/theKashey/use-sidecar |
 | use-sync-external-store | 1.6.0 | MIT | https://github.com/facebook/react#readme |
 | utility-types | 3.11.0 | MIT | https://github.com/piotrwitek/utility-types |
-| void-elements | 3.1.0 | MIT | https://github.com/jadejs/void-elements |
 | webgl-constants | 1.1.1 | MIT | - |
 | webgl-sdf-generator | 1.1.1 | MIT | https://github.com/lojjic/webgl-sdf-generator#readme |
 | which | 2.0.2 | ISC | https://github.com/isaacs/node-which#readme |
 | zustand | 4.5.7 | MIT | https://github.com/pmndrs/zustand |
-| zustand | 5.0.12 | MIT | https://github.com/pmndrs/zustand |
+| zustand | 5.0.14 | MIT | https://github.com/pmndrs/zustand |

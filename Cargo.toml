@@ -37,54 +37,54 @@ license = "MIT"
 version = "0.1.4"
 
 [workspace.dependencies]
-anyhow = "1.0.102"
-async-trait = "0.1.89"
+anyhow = "1.0.104"
+async-trait = "0.1.92"
 axum = { version = "0.8.9", features = ["ws"] }
-base64 = "0.22.1"
-bech32 = "0.11.1"
-blake3 = "1.8.4"
-chrono = { version = "0.4.44", features = ["serde"] }
-clap = { version = "4.6.0", features = ["derive", "env"] }
-futures-util = "0.3.32"
+base64 = "0.23.1"
+bech32 = "0.12.0"
+blake3 = "1.8.6"
+chrono = { version = "0.4.45", features = ["serde"] }
+clap = { version = "4.6.6", features = ["derive", "env"] }
+futures-util = "0.3.34"
 hex = "0.4.3"
-hkdf = "0.12.4"
-hmac = "0.12.1"
+hkdf = "0.13.0"
+hmac = "0.13.0"
 image = { version = "0.25.10", default-features = false, features = ["png", "gif", "jpeg", "webp"] }
-iroh = "1.0.0"
+iroh = "1.0.3"
 iroh-docs = "0.101.0"
 iroh-blobs = "0.103.0"
 iroh-gossip = "0.101.0"
 iroh-mainline-address-lookup = "0.4.0"
-iroh-relay = { version = "1.0.0", features = ["server"] }
-jsonwebtoken = { version = "10.3.0", features = ["aws_lc_rs"] }
-keyring = { version = "3.6.3", default-features = false }
-chacha20poly1305 = "0.10.1"
+iroh-relay = { version = "1.0.3", features = ["server"] }
+jsonwebtoken = { version = "11.0.0", features = ["aws_lc_rs"] }
+keyring = { version = "4.1.6", default-features = false }
+chacha20poly1305 = "0.11.0"
 n0-mainline = "0.5.0"
-reqwest = { version = "0.13.2", default-features = false, features = ["json", "rustls"] }
-redis = { version = "1.2.2", default-features = false, features = ["tokio-comp"] }
-rustls = { version = "0.23.38", default-features = false, features = ["ring", "std"] }
+reqwest = { version = "0.13.4", default-features = false, features = ["json", "rustls"] }
+redis = { version = "1.5.0", default-features = false, features = ["tokio-comp"] }
+rustls = { version = "0.23.43", default-features = false, features = ["ring", "std"] }
 secp256k1 = { version = "0.31.1", features = ["global-context", "rand", "serde"] }
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
 serde_yaml = "0.9.34"
-sha2 = "0.10.9"
+sha2 = "0.11.0"
 sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "sqlite", "postgres", "json", "migrate", "chrono"] }
-thiserror = "2.0.18"
-tokio = { version = "1.52.1", features = ["macros", "rt-multi-thread", "sync", "time", "fs"] }
-tokio-stream = { version = "0.1.18", features = ["sync"] }
+thiserror = "2.0.20"
+tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "sync", "time", "fs"] }
+tokio-stream = { version = "0.1.19", features = ["sync"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 tempfile = "3.27.0"
 pkarr = { version = "=5.0.2", default-features = false, features = ["relays", "dht"] }
-tower-http = { version = "0.6.8", features = ["trace"] }
+tower-http = { version = "0.7.0", features = ["trace"] }
 tower_governor = "0.8.0"
 ts-rs = "12"
 url = "2.5.8"
-uuid = { version = "1.23.1", features = ["serde", "v4"] }
+uuid = { version = "1.24.0", features = ["serde", "v4"] }
 wiremock = "0.6"
 
 [patch.crates-io]
-netwatch = { git = "https://github.com/n0-computer/net-tools", rev = "8b2d36b9be2b44281fdbf58121a9ab6a739919bc" }
+netwatch = { git = "https://github.com/n0-computer/net-tools", rev = "e9afb4dda300dda06193b5046ba7a05e5d176e22" }
 
 [workspace.lints.clippy]
 unwrap_used = "warn"
