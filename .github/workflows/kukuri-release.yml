@@ -61,10 +61,10 @@ jobs:
         with:
           ref: refs/tags/${{ steps.release.outputs.release_tag }}
 
-      - name: Install Rust 1.91
+      - name: Install Rust 1.92
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.91.0
+          toolchain: 1.92.0
 
       - name: Install Linux system dependencies
         run: >
@@ -95,10 +95,10 @@ jobs:
         with:
           ref: refs/tags/${{ needs.validate-release-inputs.outputs.release_tag }}
 
-      - name: Install Rust 1.91
+      - name: Install Rust 1.92
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.91.0
+          toolchain: 1.92.0
           components: clippy,rustfmt
 
       - name: Install Linux system dependencies
@@ -215,10 +215,10 @@ jobs:
         with:
           ref: refs/tags/${{ needs.validate-release-inputs.outputs.release_tag }}
 
-      - name: Install Rust 1.91
+      - name: Install Rust 1.92
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.91.0
+          toolchain: 1.92.0
           components: clippy,rustfmt
 
       - name: Setup pnpm
