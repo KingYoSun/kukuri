@@ -178,7 +178,7 @@ impl ChannelSecretCipher {
         let ciphertext = self
             .cipher()?
             .encrypt(
-                XNonce::from_slice(&nonce),
+                &XNonce::from(nonce),
                 Payload {
                     msg: namespace_secret_hex.as_bytes(),
                     aad: channel_secret_aad(channel_id).as_slice(),
@@ -198,7 +198,7 @@ impl ChannelSecretCipher {
         let plaintext = self
             .cipher()?
             .decrypt(
-                XNonce::from_slice(nonce),
+                <&XNonce>::try_from(nonce).expect("nonce length checked"),
                 Payload {
                     msg: ciphertext,
                     aad: channel_secret_aad(channel_id).as_slice(),

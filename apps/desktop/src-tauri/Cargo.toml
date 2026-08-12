@@ -9,32 +9,32 @@ name = "kukuri_desktop_tauri_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.5.6", features = [] }
+tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
-anyhow = "1.0.102"
+anyhow = "1.0.104"
 kukuri-app-api = { path = "../../../crates/app-api" }
 kukuri-core = { path = "../../../crates/core" }
 kukuri-desktop-runtime = { path = "../../../crates/desktop-runtime" }
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
-tauri = { version = "2.10.3", features = ["tray-icon"] }
-tauri-plugin-deep-link = "2.0.0"
-tauri-plugin-single-instance = { version = "2.0.0", features = ["deep-link"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+tauri = { version = "2.11.5", features = ["tray-icon"] }
+tauri-plugin-deep-link = "2.4.9"
+tauri-plugin-single-instance = { version = "2.4.3", features = ["deep-link"] }
 tauri-plugin-updater = "2.10.1"
 tokio = { version = "1", features = ["time"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [target.'cfg(windows)'.dependencies]
-tauri-winrt-notification = "0.7"
+tauri-winrt-notification = "0.8"
 
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
 notify-rust = "4"
 
 [dev-dependencies]
-base64 = "0.22"
+base64 = "0.23"
 minisign-verify = "0.2"
 
 [patch.crates-io]
-netwatch = { git = "https://github.com/n0-computer/net-tools", rev = "8b2d36b9be2b44281fdbf58121a9ab6a739919bc" }
+netwatch = { git = "https://github.com/n0-computer/net-tools", rev = "e9afb4dda300dda06193b5046ba7a05e5d176e22" }

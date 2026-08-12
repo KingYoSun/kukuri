@@ -571,7 +571,7 @@ pub fn encrypt_private_channel_epoch_handoff_grant(
     .context("failed to initialize epoch handoff grant cipher")?;
     let ciphertext = cipher
         .encrypt(
-            XNonce::from_slice(&nonce),
+            &XNonce::from(nonce),
             Payload {
                 msg: plaintext.as_slice(),
                 aad: epoch_handoff_grant_aad(payload).as_bytes(),
@@ -619,7 +619,7 @@ pub fn decrypt_private_channel_epoch_handoff_grant(
     .context("failed to initialize epoch handoff grant cipher")?;
     let plaintext = cipher
         .decrypt(
-            XNonce::from_slice(nonce.as_slice()),
+            <&XNonce>::try_from(nonce.as_slice()).expect("nonce length checked"),
             Payload {
                 msg: ciphertext.as_slice(),
                 aad: epoch_handoff_grant_aad(&payload_stub).as_bytes(),

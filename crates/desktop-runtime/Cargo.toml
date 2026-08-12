@@ -40,10 +40,10 @@ ts = [
 ]
 
 [target.'cfg(target_os = "linux")'.dependencies]
-keyring = { workspace = true, features = ["sync-secret-service"] }
+keyring = { workspace = true, features = ["v1"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-keyring = { workspace = true, features = ["windows-native"] }
+keyring = { workspace = true, features = ["v1"] }
 
 [dev-dependencies]
 kukuri-test-support = { path = "../test-support" }

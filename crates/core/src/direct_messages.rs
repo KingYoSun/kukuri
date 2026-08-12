@@ -227,7 +227,7 @@ pub fn encrypt_direct_message_frame(
     );
     let ciphertext = cipher
         .encrypt(
-            XNonce::from_slice(&nonce),
+            &XNonce::from(nonce),
             Payload {
                 msg: plaintext.as_slice(),
                 aad: aad.as_bytes(),
@@ -283,7 +283,7 @@ pub fn decrypt_direct_message_frame(
     );
     let plaintext = cipher
         .decrypt(
-            XNonce::from_slice(nonce.as_slice()),
+            <&XNonce>::try_from(nonce.as_slice()).expect("nonce length checked"),
             Payload {
                 msg: ciphertext.as_slice(),
                 aad: aad.as_bytes(),
@@ -346,7 +346,7 @@ pub fn encrypt_direct_message_attachment(
     let aad = direct_message_attachment_aad(message_id, blob_id);
     let ciphertext = cipher
         .encrypt(
-            XNonce::from_slice(&nonce),
+            &XNonce::from(nonce),
             Payload {
                 msg: plaintext,
                 aad: aad.as_bytes(),
@@ -389,7 +389,7 @@ pub fn decrypt_direct_message_attachment(
     let aad = direct_message_attachment_aad(message_id, attachment.blob_id.as_str());
     cipher
         .decrypt(
-            XNonce::from_slice(nonce.as_slice()),
+            <&XNonce>::try_from(nonce.as_slice()).expect("nonce length checked"),
             Payload {
                 msg: ciphertext.as_slice(),
                 aad: aad.as_bytes(),
