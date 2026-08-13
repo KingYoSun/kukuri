@@ -184,6 +184,17 @@ impl From<kukuri_desktop_runtime::CommunityNodeIndexQueryError> for CommandError
     }
 }
 
+impl From<kukuri_desktop_runtime::CommunityNodeIndexingRequestError> for CommandError {
+    fn from(error: kukuri_desktop_runtime::CommunityNodeIndexingRequestError) -> Self {
+        Self {
+            code: error.code,
+            message: error.message,
+            status: error.status,
+            retry_after_seconds: error.retry_after_seconds,
+        }
+    }
+}
+
 pub(crate) fn map_error(error: anyhow::Error) -> CommandError {
     CommandError::from(error)
 }
@@ -312,6 +323,23 @@ mod tests {
         assert_eq!(
             json,
             r#"{"code":"RATE_LIMITED","message":"try again later","status":429,"retry_after_seconds":17}"#
+        );
+    }
+
+    #[test]
+    fn community_indexing_request_error_preserves_stable_conflict_code() {
+        let error = CommandError::from(
+            kukuri_desktop_runtime::CommunityNodeIndexingRequestError {
+                code: "CHANNEL_SECRET_CONFLICT".to_string(),
+                message: "channel capability conflicts with the existing registration".to_string(),
+                status: Some(409),
+                retry_after_seconds: None,
+            },
+        );
+        let json = serde_json::to_string(&error).expect("serialize indexing request error");
+        assert_eq!(
+            json,
+            r#"{"code":"CHANNEL_SECRET_CONFLICT","message":"channel capability conflicts with the existing registration","status":409}"#
         );
     }
 

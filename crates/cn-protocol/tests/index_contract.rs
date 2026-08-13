@@ -1,6 +1,7 @@
 use kukuri_cn_protocol::{
     ApiErrorBody, INDEX_DISCOVERY_PATH, INDEX_RECOMMENDATIONS_PATH, INDEX_SEARCH_PATH,
-    IndexEntryView, IndexQueryParams, IndexQueryResponse, IndexScopeKind,
+    INDEXING_REQUESTS_PATH, IndexEntryView, IndexQueryParams, IndexQueryResponse, IndexScopeKind,
+    IndexingRequestStatus, SubmitIndexingRequestRequest, SubmitIndexingRequestResponse,
 };
 
 #[test]
@@ -8,6 +9,36 @@ fn index_paths_are_stable() {
     assert_eq!(INDEX_SEARCH_PATH, "/v1/index/search");
     assert_eq!(INDEX_DISCOVERY_PATH, "/v1/index/discovery");
     assert_eq!(INDEX_RECOMMENDATIONS_PATH, "/v1/index/recommendations");
+    assert_eq!(INDEXING_REQUESTS_PATH, "/v1/indexing/requests");
+}
+
+#[test]
+fn indexing_request_wire_shape_and_redaction_are_stable() {
+    let request = SubmitIndexingRequestRequest {
+        kind: IndexScopeKind::PrivateChannel.as_str().to_string(),
+        target_id: "channel-1".to_string(),
+        channel_secret_hex: Some("ab".repeat(32)),
+    };
+    assert_eq!(
+        serde_json::to_value(&request).unwrap(),
+        serde_json::json!({
+            "kind": "private_channel",
+            "target_id": "channel-1",
+            "channel_secret_hex": "ab".repeat(32)
+        })
+    );
+    let debug = format!("{request:?}");
+    assert!(debug.contains("<redacted>"));
+    assert!(!debug.contains(&"ab".repeat(32)));
+
+    let response = SubmitIndexingRequestResponse {
+        request_id: "request-1".to_string(),
+        status: IndexingRequestStatus::Approved,
+    };
+    assert_eq!(
+        serde_json::to_value(response).unwrap(),
+        serde_json::json!({"request_id": "request-1", "status": "approved"})
+    );
 }
 
 #[test]

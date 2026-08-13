@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -8,6 +9,10 @@ import { useTranslation } from 'react-i18next';
 import { Bell, BookPlus, Download, GitBranchPlus, PanelLeftOpen, Settings } from 'lucide-react';
 
 import { FilterableTopicNavList } from '@/components/core/FilterableTopicNavList';
+import {
+  CommunityIndexingRequestDialog,
+  type CommunityIndexingTarget,
+} from '@/components/core/CommunityIndexingRequestDialog';
 import { ShellFrame } from '@/components/shell/ShellFrame';
 import { ShellNavRail } from '@/components/shell/ShellNavRail';
 import { type PrimarySection } from '@/components/shell/types';
@@ -18,6 +23,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 import { runtimeApi } from '@/lib/api';
+import { eligibleCommunityIndexNodes } from '@/lib/api/communityIndex';
 import i18n from '@/i18n';
 import { getResolvedLocale } from '@/i18n/format';
 import {
@@ -99,9 +105,13 @@ export function DesktopShellPage({
     selectedGameRoomId,
     developerModeEnabled,
     shellChromeState,
+    communityNodeConfig,
+    communityNodeStatuses,
+    communityNodeManifests,
   } = useDesktopShellStore(useShallow(selectShellPageSlice));
   const [profileAvatarPreviewUrl, setProfileAvatarPreviewUrl] = useState<string | null>(null);
   const [clipboardToastId, setClipboardToastId] = useState(0);
+  const [indexingTarget, setIndexingTarget] = useState<CommunityIndexingTarget | null>(null);
   const clipboardToastTimeoutRef = useRef<number | null>(null);
   const dialogs = useShellDialogs({
     activePrimarySection: shellChromeState.activePrimarySection,
@@ -440,7 +450,28 @@ export function DesktopShellPage({
   );
   const threadFocusKey = selectedThread && focusedObjectId
     ? `${selectedThread}:${focusedObjectId}`
-    : null;
+      : null;
+  const eligibleIndexingNodes = useMemo(
+    () =>
+      eligibleCommunityIndexNodes(
+        communityNodeConfig,
+        communityNodeStatuses,
+        communityNodeManifests
+      ),
+    [communityNodeConfig, communityNodeManifests, communityNodeStatuses]
+  );
+  const handleOpenCommunityNodeSettings = useCallback(() => {
+    setIndexingTarget(null);
+    setShellChromeState((current) => ({
+      ...current,
+      settingsOpen: true,
+      activeSettingsSection: 'community-node',
+    }));
+    syncRoute('push', {
+      settingsOpen: true,
+      settingsSection: 'community-node',
+    });
+  }, [setShellChromeState, syncRoute]);
   useFocusScroll({
     focusKey: threadFocusKey,
     readinessKey: threadPostViews.length,
@@ -583,6 +614,9 @@ export function DesktopShellPage({
       }}
       onRemoveTopic={(topic) => void shellActions.handleRemoveTopic(topic)}
       onCopyTopicLink={(topic) => handleCopyInternalLink(buildTopicLink(topic))}
+      onRequestTopicIndexing={(topic) =>
+        setIndexingTarget({ kind: 'public_topic', topicId: topic })
+      }
       onToggleTopicGossip={(topic, enabled) => void shellActions.handleToggleTopicGossip(topic, enabled)}
       onToggleChannelGossip={(topic, channelId, enabled) =>
         void shellActions.handleToggleChannelGossip(topic, channelId, enabled)
@@ -711,17 +745,7 @@ export function DesktopShellPage({
             setPrimarySectionRef={setPrimarySectionRef}
             focusPrimarySection={focusPrimarySection}
             focusTimelineView={focusTimelineView}
-            openCommunityNodeSettings={() => {
-              setShellChromeState((current) => ({
-                ...current,
-                settingsOpen: true,
-                activeSettingsSection: 'community-node',
-              }));
-              syncRoute('push', {
-                settingsOpen: true,
-                settingsSection: 'community-node',
-              });
-            }}
+            openCommunityNodeSettings={handleOpenCommunityNodeSettings}
             loadReactionCatalogData={loadReactionCatalogData}
             refreshTimelineFeed={refreshTimelineFeed}
             loadMoreTimeline={loadMoreTimeline}
@@ -789,6 +813,17 @@ export function DesktopShellPage({
         handleCopyInternalLink={handleCopyInternalLink}
         sharePreview={sharePreview}
         clipboardToastId={clipboardToastId}
+        onRequestPrivateIndexing={setIndexingTarget}
+      />
+
+      <CommunityIndexingRequestDialog
+        api={api}
+        target={indexingTarget}
+        eligibleNodeBaseUrls={eligibleIndexingNodes}
+        onOpenChange={(open) => {
+          if (!open) setIndexingTarget(null);
+        }}
+        onOpenCommunityNodeSettings={handleOpenCommunityNodeSettings}
       />
 
       <DesktopShellSettingsDrawer

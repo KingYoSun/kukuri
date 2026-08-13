@@ -47,3 +47,22 @@ test('searchCommunityNodeIndex invokes the typed index command', async () => {
     },
   });
 });
+
+test('submitCommunityNodeIndexingRequest invokes the typed indexing request command', async () => {
+  await runtimeApi.submitCommunityNodeIndexingRequest({
+    base_url: 'https://node.example',
+    scope_kind: 'private_channel',
+    topic_id: 'kukuri:topic:demo',
+    channel_id: 'channel-1',
+    confirm_private_channel_secret_disclosure: true,
+  });
+  expect(invokeMock).toHaveBeenCalledWith('submit_community_node_indexing_request', {
+    request: {
+      base_url: 'https://node.example',
+      scope_kind: 'private_channel',
+      topic_id: 'kukuri:topic:demo',
+      channel_id: 'channel-1',
+      confirm_private_channel_secret_disclosure: true,
+    },
+  });
+});

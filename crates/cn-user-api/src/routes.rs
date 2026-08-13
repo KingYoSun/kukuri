@@ -15,7 +15,8 @@ use kukuri_cn_operator::CommunityNodeManifest;
 use kukuri_cn_protocol::{
     AUTH_CHALLENGE_PATH, AUTH_VERIFY_PATH, BOOTSTRAP_HEARTBEAT_PATH, BOOTSTRAP_NODES_PATH,
     CONSENTS_PATH, CONSENTS_STATUS_PATH, INDEX_DISCOVERY_PATH, INDEX_RECOMMENDATIONS_PATH,
-    INDEX_SEARCH_PATH, NODE_MANIFEST_PATH, REPORT_PATH, TOPIC_RENDEZVOUS_HEARTBEAT_PATH,
+    INDEX_SEARCH_PATH, INDEXING_REQUESTS_PATH, NODE_MANIFEST_PATH, REPORT_PATH,
+    TOPIC_RENDEZVOUS_HEARTBEAT_PATH,
 };
 use serde_json::{Value, json};
 use tower_http::trace::TraceLayer;
@@ -56,7 +57,7 @@ pub fn app_router(state: UserApiState) -> Router {
             post(topic_rendezvous_heartbeat),
         )
         .route(REPORT_PATH, post(submit_report))
-        .route("/v1/indexing/requests", post(submit_indexing_request))
+        .route(INDEXING_REQUESTS_PATH, post(submit_indexing_request))
         .route(INDEX_SEARCH_PATH, get(index_search))
         .route(INDEX_DISCOVERY_PATH, get(index_discovery))
         .route(INDEX_RECOMMENDATIONS_PATH, get(index_recommendations))

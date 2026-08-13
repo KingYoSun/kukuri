@@ -3,6 +3,7 @@ import {
   type CommunityNodeIndexQueryRequest,
   type DesktopApi,
   type IndexQueryResponse,
+  type SubmitIndexingRequestResponse,
 } from '@/lib/api';
 
 import { cloneSyncStatus } from '../desktopMockModel';
@@ -25,6 +26,7 @@ type ConnectivityMock = Pick<
   | 'searchCommunityNodeIndex'
   | 'discoverCommunityNodeIndex'
   | 'recommendCommunityNodeIndex'
+  | 'submitCommunityNodeIndexingRequest'
   | 'submitCommunityNodeReport'
   | 'importPeerTicket'
   | 'setDiscoverySeeds'
@@ -226,6 +228,12 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
     },
     async recommendCommunityNodeIndex(request) {
       return queryIndex(request);
+    },
+    async submitCommunityNodeIndexingRequest(request) {
+      return {
+        request_id: `mock-indexing-${request.scope_kind}-${request.channel_id ?? request.topic_id}`,
+        status: 'pending',
+      } satisfies SubmitIndexingRequestResponse;
     },
     async submitCommunityNodeReport(request) {
       return {

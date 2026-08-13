@@ -51,6 +51,23 @@ test('renders the topic plug as connected and disconnects on click', async () =>
   expect(onToggleTopicGossip).toHaveBeenCalledWith('kukuri:topic:demo', false);
 });
 
+test('opens a public topic indexing request from topic management', async () => {
+  const user = userEvent.setup();
+  const onRequestTopicIndexing = vi.fn();
+  render(
+    <TopicNavList
+      items={[topicItem()]}
+      onSelectTopic={vi.fn()}
+      onSelectChannel={vi.fn()}
+      onRemoveTopic={vi.fn()}
+      onRequestTopicIndexing={onRequestTopicIndexing}
+    />
+  );
+
+  await user.click(screen.getByLabelText('Request indexing for demo'));
+  expect(onRequestTopicIndexing).toHaveBeenCalledWith('kukuri:topic:demo');
+});
+
 test('renders the topic plug as disconnected and reconnects on click', async () => {
   const user = userEvent.setup();
   const onToggleTopicGossip = vi.fn();

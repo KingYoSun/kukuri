@@ -11,48 +11,13 @@ use kukuri_cn_core::{
     require_bearer_identity, require_consents,
 };
 use kukuri_cn_indexer::IndexQuery;
-use kukuri_cn_protocol::{IndexEntryView, IndexQueryParams, IndexQueryResponse};
-use serde::{Deserialize, Serialize};
+use kukuri_cn_protocol::{
+    IndexEntryView, IndexQueryParams, IndexQueryResponse, SubmitIndexingRequestRequest,
+    SubmitIndexingRequestResponse,
+};
 
 use crate::errors::{IndexingError, IndexingOperation, indexing_error};
 use crate::state::UserApiState;
-
-/// indexing request(#413 / ADR 0025 §2.2 / §6.3)。認証済み user が「この topic / channel を
-/// index してほしい」と要求する。request は index を保証しない(operator 承認 + safety verdict の
-/// 多段ゲート)。private channel は channel secret(capability)の提示が必須で、それ自体が権限の証明。
-///
-/// `Debug` は手動実装で `channel_secret_hex` の中身を秘匿する(誤ってログへ平文 secret を出さない)。
-#[derive(Deserialize)]
-pub(crate) struct SubmitIndexingRequestRequest {
-    /// scope の種別(`public_topic` / `private_channel`)。
-    #[serde(default)]
-    kind: String,
-    /// 対象識別子(topic_id / channel_id)。
-    #[serde(default)]
-    target_id: String,
-    /// private channel の namespace secret hex(capability)。private_channel のときのみ必須。
-    #[serde(default)]
-    channel_secret_hex: Option<String>,
-}
-
-impl std::fmt::Debug for SubmitIndexingRequestRequest {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SubmitIndexingRequestRequest")
-            .field("kind", &self.kind)
-            .field("target_id", &self.target_id)
-            .field(
-                "channel_secret_hex",
-                &self.channel_secret_hex.as_ref().map(|_| "<redacted>"),
-            )
-            .finish()
-    }
-}
-
-#[derive(Debug, Serialize)]
-pub(crate) struct SubmitIndexingRequestResponse {
-    request_id: String,
-    status: String,
-}
 
 /// user からの indexing request を受け付けて保存する(#413 / ADR 0025 §2.2 / §6.3)。
 ///
@@ -129,7 +94,7 @@ pub(crate) async fn submit_indexing_request(
         .map_err(indexing_error)?;
     Ok(Json(SubmitIndexingRequestResponse {
         request_id: stored.id,
-        status: stored.status.as_str().to_string(),
+        status: stored.status,
     }))
 }
 

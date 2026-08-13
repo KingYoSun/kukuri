@@ -15,6 +15,70 @@ pub enum IndexScopeKind {
     PrivateChannel,
 }
 
+/// indexing request の処理状態。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum IndexingRequestStatus {
+    Pending,
+    Approved,
+    Rejected,
+}
+
+impl IndexingRequestStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Approved => "approved",
+            Self::Rejected => "rejected",
+        }
+    }
+
+    pub fn parse(value: &str) -> Result<Self> {
+        match value {
+            "pending" => Ok(Self::Pending),
+            "approved" => Ok(Self::Approved),
+            "rejected" => Ok(Self::Rejected),
+            other => bail!("unknown indexing request status `{other}`"),
+        }
+    }
+}
+
+/// `POST /v1/indexing/requests` の wire request。
+///
+/// `kind` は server が stable な `INVALID_INDEXING_REQUEST` を返せるよう文字列のまま保持する。
+/// private channel の secret を含むため TypeScript へは export しない。
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SubmitIndexingRequestRequest {
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub target_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel_secret_hex: Option<String>,
+}
+
+impl std::fmt::Debug for SubmitIndexingRequestRequest {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("SubmitIndexingRequestRequest")
+            .field("kind", &self.kind)
+            .field("target_id", &self.target_id)
+            .field(
+                "channel_secret_hex",
+                &self.channel_secret_hex.as_ref().map(|_| "<redacted>"),
+            )
+            .finish()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct SubmitIndexingRequestResponse {
+    pub request_id: String,
+    pub status: IndexingRequestStatus,
+}
+
 impl IndexScopeKind {
     pub fn as_str(self) -> &'static str {
         match self {

@@ -1,6 +1,7 @@
 use kukuri_desktop_runtime::{
     AcceptCommunityNodeConsentsRequest, CommunityNodeConfig, CommunityNodeIndexQueryRequest,
-    CommunityNodeManifestFetch, CommunityNodeNodeStatus, CommunityNodeTargetRequest,
+    CommunityNodeIndexingRequest, CommunityNodeManifestFetch, CommunityNodeNodeStatus,
+    CommunityNodeTargetRequest,
     CreatePrivateChannelRequest, DiscoveryConfig, ExportChannelAccessTokenRequest,
     ExportFriendOnlyGrantRequest, ExportFriendPlusShareRequest, ExportPrivateChannelInviteRequest,
     FreezePrivateChannelRequest, ImportChannelAccessTokenRequest, ImportFriendOnlyGrantRequest,
@@ -8,7 +9,8 @@ use kukuri_desktop_runtime::{
     IndexQueryResponse, LeavePrivateChannelRequest, ListJoinedPrivateChannelsRequest,
     PreviewChannelAccessTokenRequest, RotatePrivateChannelRequest, SetChannelGossipEnabledRequest,
     SetCommunityNodeConfigRequest, SetDiscoverySeedsRequest, SetTopicGossipEnabledRequest,
-    SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult, UnsubscribeTopicRequest,
+    SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
+    SubmitIndexingRequestResponse, UnsubscribeTopicRequest,
 };
 
 use crate::state::{CommandError, DesktopState, map_error};
@@ -393,6 +395,18 @@ pub async fn submit_community_node_report(
         .submit_community_node_report(request)
         .await
         .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn submit_community_node_indexing_request(
+    state: tauri::State<'_, DesktopState>,
+    request: CommunityNodeIndexingRequest,
+) -> Result<SubmitIndexingRequestResponse, CommandError> {
+    state
+        .runtime
+        .submit_community_node_indexing_request(request)
+        .await
+        .map_err(CommandError::from)
 }
 
 #[tauri::command]

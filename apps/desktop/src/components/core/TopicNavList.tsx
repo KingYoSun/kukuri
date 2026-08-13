@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Link2, Plug, Settings, SquareArrowRightExit } from 'lucide-react';
+import { DatabaseZap, Link2, Plug, Settings, SquareArrowRightExit } from 'lucide-react';
 
 import { type TopicDiagnosticSummary } from './types';
 import { topicDisplayName } from '@/lib/topicId';
@@ -13,6 +13,7 @@ type TopicNavListProps = {
   onLeaveChannel?: (topic: string, channelId: string) => void;
   onRemoveTopic: (topic: string) => void;
   onCopyTopicLink?: (topic: string) => void;
+  onRequestTopicIndexing?: (topic: string) => void;
   onToggleTopicGossip?: (topic: string, enabled: boolean) => void;
   onToggleChannelGossip?: (topic: string, channelId: string, enabled: boolean) => void;
 };
@@ -25,6 +26,7 @@ export function TopicNavList({
   onLeaveChannel,
   onRemoveTopic,
   onCopyTopicLink,
+  onRequestTopicIndexing,
   onToggleTopicGossip,
   onToggleChannelGossip,
 }: TopicNavListProps) {
@@ -50,6 +52,16 @@ export function TopicNavList({
             </button>
 
             <div className='topic-actions'>
+              {onRequestTopicIndexing ? (
+                <button
+                  className='topic-copy'
+                  type='button'
+                  aria-label={t('shell:indexingRequest.openPublic', { topic: topicName })}
+                  onClick={() => onRequestTopicIndexing(item.topic)}
+                >
+                  <DatabaseZap className='size-4' aria-hidden='true' />
+                </button>
+              ) : null}
               {onToggleTopicGossip ? (
                 <button
                   className={cn('topic-plug', topicGossipJoined && 'topic-plug-active')}

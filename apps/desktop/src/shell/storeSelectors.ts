@@ -164,4 +164,7 @@ export const selectShellPageSlice = (s: DesktopShellStore) => ({
   selectedGameRoomId: s.selectedGameRoomId,
   developerModeEnabled: s.developerModeEnabled,
   shellChromeState: s.shellChromeState,
+  communityNodeConfig: s.communityNodeConfig,
+  communityNodeStatuses: s.communityNodeStatuses,
+  communityNodeManifests: s.communityNodeManifests,
 });

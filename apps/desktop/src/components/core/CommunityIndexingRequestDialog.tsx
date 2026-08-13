@@ -1,0 +1,162 @@
+import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+
+import type { DesktopApi, IndexingRequestStatus } from '@/lib/api';
+import { InvokeError } from '@/lib/api/invoke/error';
+import { topicDisplayName } from '@/lib/topicId';
+
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Notice } from '@/components/ui/notice';
+import { Select } from '@/components/ui/select';
+
+export type CommunityIndexingTarget =
+  | { kind: 'public_topic'; topicId: string }
+  | { kind: 'private_channel'; topicId: string; channelId: string; channelLabel: string };
+
+type CommunityIndexingRequestDialogProps = {
+  api: DesktopApi;
+  target: CommunityIndexingTarget | null;
+  eligibleNodeBaseUrls: readonly string[];
+  onOpenChange: (open: boolean) => void;
+  onOpenCommunityNodeSettings: () => void;
+};
+
+function requestErrorKey(error: unknown): string {
+  if (!(error instanceof InvokeError)) return 'requestFailed';
+  if (error.code === 'CHANNEL_INDEXING_NOT_CONFIGURED') return 'notConfigured';
+  if (error.code === 'CHANNEL_SECRET_CONFLICT') return 'secretConflict';
+  if (error.code === 'AUTH_REQUIRED' || error.status === 401) return 'authRequired';
+  if (error.code === 'CONSENT_REQUIRED' || error.status === 403) return 'consentRequired';
+  return 'requestFailed';
+}
+
+export function CommunityIndexingRequestDialog({
+  api,
+  target,
+  eligibleNodeBaseUrls,
+  onOpenChange,
+  onOpenCommunityNodeSettings,
+}: CommunityIndexingRequestDialogProps) {
+  const { t } = useTranslation(['shell', 'common']);
+  const [selectedNode, setSelectedNode] = useState('');
+  const [confirmed, setConfirmed] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [status, setStatus] = useState<IndexingRequestStatus | null>(null);
+  const [errorKey, setErrorKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedNode(eligibleNodeBaseUrls[0] ?? '');
+    setConfirmed(false);
+    setPending(false);
+    setStatus(null);
+    setErrorKey(null);
+  }, [eligibleNodeBaseUrls, target]);
+
+  const privateTarget = target?.kind === 'private_channel';
+  const targetLabel = target
+    ? privateTarget
+      ? target.channelLabel
+      : topicDisplayName(target.topicId)
+    : '';
+
+  async function submit() {
+    if (!target || !selectedNode || (privateTarget && !confirmed)) return;
+    setPending(true);
+    setErrorKey(null);
+    try {
+      const response = await api.submitCommunityNodeIndexingRequest({
+        base_url: selectedNode,
+        scope_kind: target.kind,
+        topic_id: target.topicId,
+        channel_id: privateTarget ? target.channelId : null,
+        confirm_private_channel_secret_disclosure: privateTarget && confirmed,
+      });
+      setStatus(response.status);
+    } catch (error) {
+      setErrorKey(requestErrorKey(error));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <Dialog open={target !== null} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t('shell:indexingRequest.title')}</DialogTitle>
+          <DialogDescription>
+            {t('shell:indexingRequest.target', { target: targetLabel })}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody>
+          <div className='extended-module-stack'>
+            {eligibleNodeBaseUrls.length === 0 ? (
+              <Notice>
+                <p>{t('shell:indexingRequest.noEligibleNode')}</p>
+                <Button type='button' variant='secondary' onClick={onOpenCommunityNodeSettings}>
+                  {t('shell:indexingRequest.openSettings')}
+                </Button>
+              </Notice>
+            ) : (
+              <Label>
+                <span>{t('shell:indexingRequest.nodeLabel')}</span>
+                <Select value={selectedNode} onChange={(event) => setSelectedNode(event.target.value)}>
+                  {eligibleNodeBaseUrls.map((baseUrl) => (
+                    <option key={baseUrl} value={baseUrl}>{baseUrl}</option>
+                  ))}
+                </Select>
+              </Label>
+            )}
+
+            {privateTarget ? (
+              <Notice tone='warning'>
+                <label className='flex items-start gap-3'>
+                  <input
+                    type='checkbox'
+                    className='mt-1 size-4 shrink-0'
+                    checked={confirmed}
+                    onChange={(event) => setConfirmed(event.target.checked)}
+                  />
+                  <span className='min-w-0'>{t('shell:indexingRequest.privateConfirmation')}</span>
+                </label>
+                <p className='mb-0 mt-2'>{t('shell:indexingRequest.privateWarning')}</p>
+              </Notice>
+            ) : (
+              <Notice>{t('shell:indexingRequest.publicNotice')}</Notice>
+            )}
+            <p className='muted'>{t('shell:indexingRequest.gateNotice')}</p>
+
+            {status ? (
+              <Notice tone={status === 'rejected' ? 'destructive' : 'accent'}>
+                {t(`shell:indexingRequest.status.${status}`)}
+              </Notice>
+            ) : null}
+            {errorKey ? <Notice tone='destructive'>{t(`shell:indexingRequest.errors.${errorKey}`)}</Notice> : null}
+
+            <div className='ui-dialog-footer'>
+              <Button type='button' variant='secondary' onClick={() => onOpenChange(false)}>
+                {t('common:actions.close')}
+              </Button>
+              <Button
+                type='button'
+                disabled={pending || !selectedNode || (privateTarget && !confirmed)}
+                onClick={() => void submit()}
+              >
+                {pending ? t('shell:indexingRequest.submitting') : t('shell:indexingRequest.submit')}
+              </Button>
+            </div>
+          </div>
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
+  );
+}

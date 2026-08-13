@@ -138,6 +138,29 @@
     "communityNodeUnavailableTitle": "Community node unavailable",
     "viewScope": "View Scope"
   },
+  "indexingRequest": {
+    "title": "Request Community Node indexing",
+    "target": "Target: {{target}}",
+    "nodeLabel": "Community Node",
+    "openPublic": "Request indexing for {{topic}}",
+    "openPrivate": "Request indexing",
+    "publicNotice": "Request that the selected Community Node index this public topic.",
+    "gateNotice": "A request does not guarantee indexing. Only content that passes Community Node operator approval and safety checks is indexed.",
+    "privateConfirmation": "I agree to disclose this channel's read capability to the Community Node",
+    "privateWarning": "The Community Node will be able to decrypt and index this private channel. This confirmation is required for every request or status refresh.",
+    "noEligibleNode": "No authenticated and consented Community Node currently offers Community Index.",
+    "openSettings": "Open Community Node settings",
+    "submit": "Submit request",
+    "submitting": "Submitting…",
+    "status": { "pending": "The request is pending review.", "approved": "Indexing is approved.", "rejected": "Indexing was rejected." },
+    "errors": {
+      "notConfigured": "Channel indexing is not configured on this Community Node.",
+      "secretConflict": "The channel capability conflicts with the existing registration. Contact the node operator.",
+      "authRequired": "Authentication is required for the selected Community Node.",
+      "consentRequired": "Required consent is missing for the selected Community Node.",
+      "requestFailed": "The indexing request failed. Please try again later."
+    }
+  },
   "communityIndex": {
     "title": "Community Index",
     "topicSummary": "Search the active topic or private channel through an eligible Community Node.",

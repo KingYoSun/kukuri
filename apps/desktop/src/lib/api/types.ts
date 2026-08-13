@@ -11,6 +11,7 @@ import type {
   ChannelAudienceKind,
   ChannelRef,
   CommunityNodeConfig,
+  CommunityNodeIndexingRequest,
   CommunityNodeIndexQueryRequest,
   CommunityNodeManifestFetch,
   CommunityNodeNodeStatus,
@@ -40,6 +41,7 @@ import type {
   SocialConnectionKind,
   SubmitCommunityNodeReportRequest,
   SubmitCommunityNodeReportResult,
+  SubmitIndexingRequestResponse,
   IndexQueryResponse,
   SyncStatus,
   TimelineCursor,
@@ -355,6 +357,9 @@ export interface DesktopApi {
   recommendCommunityNodeIndex(
     request: CommunityNodeIndexQueryRequest
   ): Promise<IndexQueryResponse>;
+  submitCommunityNodeIndexingRequest(
+    request: CommunityNodeIndexingRequest
+  ): Promise<SubmitIndexingRequestResponse>;
   submitCommunityNodeReport(
     request: SubmitCommunityNodeReportRequest
   ): Promise<SubmitCommunityNodeReportResult>;
