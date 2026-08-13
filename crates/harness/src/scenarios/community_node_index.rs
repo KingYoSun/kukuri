@@ -140,10 +140,10 @@ pub(crate) async fn run_community_node_index_query_client(
         .with_state(base_url.clone());
     let server = tokio::spawn(async move { axum::serve(listener, router).await });
 
-    let db_path = artifacts_dir.join("community-index-client.db");
-    if db_path.exists() {
-        std::fs::remove_file(&db_path)?;
-    }
+    let runtime_dir = tempfile::Builder::new()
+        .prefix("community-index-client-")
+        .tempdir_in(artifacts_dir)?;
+    let db_path = runtime_dir.path().join("runtime.db");
     let runtime = DesktopRuntime::new(&db_path).await?;
     runtime
         .set_community_node_config(SetCommunityNodeConfigRequest {
