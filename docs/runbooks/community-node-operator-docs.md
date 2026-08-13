@@ -20,6 +20,21 @@ node 単位の説明責任に閉じる。
 
 稼働中 node の migration、auth rollout、通報確認、入会制御、supported set、indexing request、relation 解析には `cn-cli` を使う。運用入口と起動順は [`dev.md`](dev.md#cn-cli-と-cn-operator-の役割) を参照する。
 
+## relation distance opt-out policy
+
+`COMMUNITY_NODE_INDEX_QUERY_ENABLED=true` または `COMMUNITY_NODE_TRUST_READ_ENABLED=true` の
+node は、`COMMUNITY_NODE_RELATION_DISTANCE_OPTOUT_MIN_PROXIMITY` を `(0, 1]` の範囲で
+明示設定する。pairwise proximity がこの値未満、または未観測の場合を距離境界外とする。
+
+- user本人がdistance opt-outを有効化した場合だけ、境界外の相手とのuser / post surfacingを
+  当該node内で相互に抑制する。双方とも未選択なら距離だけで自動抑制しない。
+- これはコミュニティ間の大規模な対立を避けるための表示選択であり、privacy、block、
+  relation graphからの離脱、P2P・別node・network全体での不可視性を保証しない。
+- 既存の`cn_trust.relation_optouts`行は新しいdistance opt-out選択としてそのまま再解釈する。
+  schema migrationや行削除は不要で、rollback時も行を消さない。
+- policy値を変更したらdeployment revisionを更新し、`cn-cli readiness`を再実行する。
+  起動中の値と本人の選択状態は`GET /v1/relation/optout`で確認できる。
+
 ## Phase A / Phase B（宣言と実行可能の分離）
 
 `cn-operator` は各機能を capability として扱い、`availability` を持たせている。

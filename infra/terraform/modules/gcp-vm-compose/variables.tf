@@ -391,6 +391,12 @@ variable "trust_read_enabled" {
   default     = false
 }
 
+variable "relation_distance_optout_min_proximity" {
+  description = "COMMUNITY_NODE_RELATION_DISTANCE_OPTOUT_MIN_PROXIMITY。(0, 1]。index/trust surface 有効時は明示必須。"
+  type        = string
+  default     = ""
+}
+
 # trust 合成の operator 可変パラメータ（ADR 0026 §6.2）。空文字なら binary 既定値。
 variable "trust_w_abs_negative" {
   description = "COMMUNITY_NODE_TRUST_W_ABS_NEGATIVE。空なら未設定。"

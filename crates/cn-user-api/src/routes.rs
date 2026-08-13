@@ -9,14 +9,14 @@ use anyhow::{Context, Result};
 use axum::extract::State;
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post, put};
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use kukuri_cn_operator::CommunityNodeManifest;
 use kukuri_cn_protocol::{
     AUTH_CHALLENGE_PATH, AUTH_VERIFY_PATH, BOOTSTRAP_HEARTBEAT_PATH, BOOTSTRAP_NODES_PATH,
     CONSENTS_PATH, CONSENTS_STATUS_PATH, INDEX_DISCOVERY_PATH, INDEX_RECOMMENDATIONS_PATH,
-    INDEX_SEARCH_PATH, INDEXING_REQUESTS_PATH, NODE_MANIFEST_PATH, REPORT_PATH,
-    TOPIC_RENDEZVOUS_HEARTBEAT_PATH,
+    INDEX_SEARCH_PATH, INDEXING_REQUESTS_PATH, NODE_MANIFEST_PATH, RELATION_OPTOUT_PATH,
+    REPORT_PATH, TOPIC_RENDEZVOUS_HEARTBEAT_PATH,
 };
 use serde_json::{Value, json};
 use tower_http::trace::TraceLayer;
@@ -33,8 +33,8 @@ use crate::handlers::indexing::{
 };
 use crate::handlers::reports::submit_report;
 use crate::handlers::trust_relation::{
-    relation_neighbors, relation_optout_clear, relation_optout_set, relation_user_read, trust_pull,
-    trust_user_read,
+    relation_neighbors, relation_optout_clear, relation_optout_get, relation_optout_set,
+    relation_user_read, trust_pull, trust_user_read,
 };
 use crate::rate_limit::apply_rate_limit;
 use crate::state::{ManifestState, UserApiState, build_runtime_state};
@@ -66,8 +66,10 @@ pub fn app_router(state: UserApiState) -> Router {
         .route("/v1/relation/users/{target}", get(relation_user_read))
         .route("/v1/relation/neighbors", get(relation_neighbors))
         .route(
-            "/v1/relation/optout",
-            put(relation_optout_set).delete(relation_optout_clear),
+            RELATION_OPTOUT_PATH,
+            get(relation_optout_get)
+                .put(relation_optout_set)
+                .delete(relation_optout_clear),
         )
         .with_state(state);
     api.merge(manifest).layer(TraceLayer::new_for_http())

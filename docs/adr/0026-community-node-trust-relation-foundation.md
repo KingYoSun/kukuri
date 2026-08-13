@@ -17,7 +17,7 @@ Accepted（foundation は #409 / PR #414 で確定。§6 未決事項は #416 �
 - `docs/adr/0027-deterministic-moderation-critical-safety.md`（§2.5 / §2.6 signed event / risk signal model）
 - `crates/cn-safety/src/signal.rs`（`SafetyRiskSignal` / `RiskSignalTarget`）
 - `crates/cn-operator/src/capability.rs`（`CommunityLocalTrust` = `Availability::Planned`）
-- Issue: #406（runtime 結線で risk signal を trust/relation reads に反映）, #409（本 ADR foundation）, #416（§6 未決事項の Decision 化）
+- Issue: #406（runtime 結線で risk signal を trust/relation reads に反映）, #409（本 ADR foundation）, #416（§6 未決事項の Decision 化）, #665（client 統合と distance opt-out semantics）
 
 ## 位置づけ
 
@@ -83,12 +83,13 @@ trust と relation は **node-local かつ advisory** な derived signal であ�
   - `relation_visibility_choice_is_user_controlled_and_reversible`
   - `relation_does_not_auto_suppress_cross_cluster_content`
   - `relation_read_requires_authenticated_viewer`（viewer 相対 read は viewer 署名検証必須, §6.3）
-  - `relation_opt_out_hides_from_others_relation_and_discovery`（opt-out で他者の relation read / discovery 双方に出ない, §6.3）
+  - `relation_distance_opt_out_bidirectionally_suppresses_distant_users_and_content`（user が有効化した場合、node-local policy の距離境界より遠い相手との間で、双方の user / post surfacing を抑制する, §6.3）
+  - `relation_distance_opt_out_is_not_privacy_or_graph_deletion`（relation graph からの離脱・canonical 削除・プライバシー保証として扱わない, §6.3）
   - `relation_defaults_local_and_not_cross_node_pullable`（relation は `Local` 既定, cross-node pull に返さない, §6.3）
   - `relation_private_channel_signal_stays_local_and_scoped`（private channel 由来は channel + CN authority に閉じ Local 固定, §6.3）
 - 必須 scenario:
   - 同一 cluster の A,B は近接度が高く、別 cluster は低い（根拠つき）
-  - user が opt-out すると他者の relation / discovery 表示に出ない（node-local。canonical 削除ではない）。opt-out は trust には影響しない
+  - user が distance opt-out を有効化すると、node-local policy の距離境界より遠い相手について、相手自身と投稿を「見ない」かつ自分自身と投稿を相手へ「見せない」。解除すると surfacing が戻り、relation graph と trust は変化しない
   - cross-cluster content は user が選択しない限り自動で抑制されない
   - relation read は cross-node pull に返らない（`Local` 既定）
   - private channel 由来の co-participation は channel メンバー可視の relation に閉じ、public relation に混ざらない
@@ -105,7 +106,7 @@ trust と relation は **node-local かつ advisory** な derived signal であ�
 - 目的:
   1. **public からコミュニティを構築していくきっかけづくり**（近接クラスタの surfacing）。
   2. **クラスタの内外を俯瞰的に定量化**し、対立 / エコーチェンバーに「ある種の納得感」を与える（descriptive transparency）。
-  3. ユーザーに **「そもそも見ない / 見えない」という選択肢**を与え、コミュニティ間の大規模な対立を避ける（user agency）。
+  3. ユーザーに **「そもそも見ない / 見せない」という選択肢**を与え、距離のあるコミュニティ同士の大規模な対立を避ける（user agency）。
 
 trust が「個人の信頼度（troll でないか）」を測るのに対し、relation は「2 者のクラスタ的距離」を測る。両者は別の量である。
 
@@ -145,10 +146,12 @@ trust が「個人の信頼度（troll でないか）」を測るのに対し�
 - client は issuer / basis / confidence / visibility / subscription を説明できる前提で表示する（断定ラベルを根拠なく出さない）。
 
 ### 2.6 user agency と echo-chamber への配慮
-- relation はユーザーに **「見ない / 見えない」選択肢**を与えるための **descriptive かつ user-controlled** な signal とする。
-- **CN は relation を使って cross-cluster content を勝手に抑制しない**（auto-segregation を既定にしない）。フィルタ / 非表示はユーザーの選択で発火し、可逆・説明可能であること。
-- echo-chamber の緊張: 「見ない」選択は filter bubble を強める恐れがある。緩和として (a) 既定で隠さない、(b) 近接度と根拠を透明に提示し「納得感」を descriptive に与える、(c) 選択は可逆、(d) relation を「対立の固定化」ではなく「俯瞰と選択の材料」として位置づける。
-- 「見えない」= ユーザーが自分を他者の relation / discovery 表示から opt-out できる（node-local。canonical 削除ではない）。
+- relation はユーザーに **「見ない / 見せない」選択肢**を与えるための **descriptive かつ user-controlled** な signal とする。目的は、relation が一定以上離れたコミュニティ間で対立が大規模に増幅することを避けることであり、プライバシー保護ではない。
+- **CN は relation を使って cross-cluster content を勝手に抑制しない**（auto-segregation を既定にしない）。distance opt-out は user が明示的に有効化した場合だけ発火し、可逆・説明可能であること。
+- distance opt-out を有効化した user A と、node-local policy の距離境界より遠い user B の間では、CN の surfacing 上で **A は B 自身と B の投稿を見ない**、かつ **B には A 自身と A の投稿を見せない**。片方向の block ではなく、A の選択を起点にした node-local な相互非表示として扱う。
+- 「見せない」は当該 CN の client-facing relation read / discovery / recommendation / index-search 等の surfacing 境界に限る。user / post / social graph / relation graph の canonical や derived edge を削除せず、内部の pairwise 計算は距離判定のため保持する。P2P・別 CN・network 全体での不可視性や秘匿性を保証しない。`relation/optout` という API 名を、relation graph からの離脱やプライバシー操作と解釈してはならない。
+- 距離境界は node-local policy とし、network-wide な固定閾値を ADR に持ち込まない。適用時は利用者に境界と根拠を説明できること。
+- echo-chamber の緊張: 「見ない / 見せない」選択は filter bubble を強める恐れがある。緩和として (a) 既定で隠さない、(b) 近接度と根拠を透明に提示し「納得感」を descriptive に与える、(c) 選択は可逆、(d) relation を「対立の固定化」ではなく「俯瞰と選択の材料」として位置づける。
 
 ### 2.7 #406 の反映先 read 契約（絶対 / 相対で振り分ける）
 - #406 の「risk signal を trust/relation reads に反映」は、risk signal の category に応じて trust の **絶対成分 / 相対成分**へ振り分けて反映する。
@@ -168,14 +171,14 @@ trust が「個人の信頼度（troll でないか）」を測るのに対し�
 - 具体的 clustering / community detection アルゴリズムの評価・チューニング（入力特徴の重み実測、viewer 相対化の詳細、pairwise の計算 / 保存コスト最適化）。合成式・最終クランプ・decay・appeal・visibility の方針は §6 で決定済み。
 - recommendation での relation 利用詳細（ADR 0025 の recommendation 境界に従う）。
 - 決定論 / 非決定論 moderation の verdict 生成（#410 / #411）。
-- client UI（trust / relation の表示・「見ない / 見えない」導線）。
+- client UI（trust / relation の表示・distance opt-out による「見ない / 見せない」導線）。
 - foundation 実装（#415）。本 ADR は決定・contract を固定し、実装は #415 が担う。
 
 ## 5. 維持する境界
 - trust / relation は node-local advisory。network-wide command でも canonical でもない。
 - user identity / profile / social graph の canonical を所有・改変しない（overlay のみ）。
 - 断定ラベルを根拠なく出さない（基準は trust-semantics §4）。
-- relation で cross-cluster content を勝手に抑制しない（user 選択・可逆・透明）。
+- relation で cross-cluster content を勝手に抑制しない。distance opt-out を user が明示的に有効化した場合だけ、node-local policy の距離境界に基づく「見ない / 見せない」を相互・可逆・透明に適用する。
 - read は pull 型。cross-node pull への開示は visibility 規則に従い、confirmed 絶対成分のみに限る（相対成分・relation は Local）。誤検知を public へ拡散しない。
 - viewer 相対 read は viewer identity の署名検証を必須とし、なりすましによる他者視点の取得を許さない。
 
@@ -225,5 +228,6 @@ foundation（#409 / PR #414）が残した §6 の未決事項を #416 で決定
   - `Public`: 誰でも pull 可。
 - **cross-node pull の開示範囲（Decision）**: cross-node pull に対しては **confirmed 絶対成分のみ**を根拠つき（issuer / basis / confidence / expiry）で応答する。**相対成分・relation・suspected は `Local` 固定**とし、cross-node pull には返さない（誤検知・文化依存指標を拡散しない）。
 - **viewer 相対 read の認証（Decision, なりすまし防止）**: 相対成分 / relation は viewer 相対のため read query に **viewer（誰視点か）** を含める必要がある。ユーザー C がユーザー A を騙って「A から見た B の trust / relation」を取得することを防ぐため、**viewer 相対 read はリクエスタが viewer identity への権限を証明（viewer 鍵による署名を検証）できることを必須**とする。**絶対成分 read は viewer 非依存のため viewer 証明を要さない**が、`visibility` scope には従う。
-- **opt-out「見えない」の範囲（Decision）**: user は自分を **(a) 他者の discovery / surfacing 非表示**、かつ **(b) 他者から見た relation read にも出さない**ことを選べる（node-local, 可逆, 説明可能）。opt-out は **trust には影響しない**（troll 判定を回避する手段にしない）し、**social graph canonical の削除でもない**。
+- **distance opt-out「見ない / 見せない」の範囲（Decision）**: user A が opt-out を有効化した場合、node-local policy の距離境界より遠い user B との間で、当該 CN の surfacing を相互に抑制する。A には B 自身と B の投稿を出さず、B には A 自身と A の投稿を出さない。対象 surface は client-facing relation read / discovery / recommendation / index-search 等の user / post surfacing とする。relation graph と内部の pairwise 計算は距離判定・可逆性・説明可能性のため保持するが、抑制対象 pair の client-facing read は generic な unavailable として扱い、opt-out 状態を相手へ開示しない。既定は無効、設定 / 解除は可逆、適用した距離境界と根拠は設定 user 本人に説明可能でなければならない。
+- distance opt-out は **relation graph からの離脱ではなく、プライバシー機能でもない**。relation edge、user / post、social graph canonical を削除せず、P2P・別 CN・network 全体への秘匿性を保証しない。**trust にも影響しない**（troll 判定を回避する手段にしない）。既存の `PUT/DELETE /v1/relation/optout` はこの node-local surfacing 選択の設定 / 解除として解釈する。
 - **private channel における扱い（Decision）**: private channel（ADR 0024 admission / ADR 0025 §6.3）由来の co-participation は **channel メンバー + その CN の authority に閉じ、`Local` 固定**とする。当該 channel メンバー可視の relation に閉じ、**public relation / trust には混ぜない**。private channel の secret を提示できる権限者の scope を超えて private 由来 signal を露出させない。

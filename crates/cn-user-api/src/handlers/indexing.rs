@@ -7,8 +7,8 @@ use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use kukuri_cn_core::{
-    ApiError, ApiResult, IndexScopeKind, insert_indexing_request, register_channel_secret,
-    require_bearer_identity, require_consents,
+    ApiError, ApiResult, IndexScopeKind, filter_relation_visible, insert_indexing_request,
+    register_channel_secret, require_bearer_identity, require_consents,
 };
 use kukuri_cn_indexer::IndexQuery;
 use kukuri_cn_protocol::{
@@ -17,7 +17,7 @@ use kukuri_cn_protocol::{
 };
 
 use crate::errors::{IndexingError, IndexingOperation, indexing_error};
-use crate::state::UserApiState;
+use crate::state::{RelationVisibilityState, UserApiState};
 
 /// user からの indexing request を受け付けて保存する(#413 / ADR 0025 §2.2 / §6.3)。
 ///
@@ -122,12 +122,19 @@ fn index_query_response(entries: Vec<kukuri_cn_indexer::IndexedEntry>) -> IndexQ
 async fn require_index_query(
     state: &UserApiState,
     headers: &HeaderMap,
-) -> ApiResult<Arc<dyn IndexQuery>> {
+) -> ApiResult<(Arc<dyn IndexQuery>, Arc<RelationVisibilityState>, String)> {
     let Some(index_query) = state.index_query.clone() else {
         return Err(ApiError::new(
             StatusCode::NOT_FOUND,
             "INDEX_QUERY_NOT_CONFIGURED",
             "this community node does not provide index queries",
+        ));
+    };
+    let Some(relation_visibility) = state.relation_visibility.clone() else {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "RELATION_VISIBILITY_NOT_CONFIGURED",
+            "this community node does not provide relation distance opt-out",
         ));
     };
     if !state.readiness_activation_is_valid().await {
@@ -139,7 +146,36 @@ async fn require_index_query(
     }
     let identity = require_bearer_identity(&state.pool, &state.jwt_config, headers).await?;
     let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
-    Ok(index_query)
+    Ok((index_query, relation_visibility, identity.pubkey))
+}
+
+async fn filter_index_entries(
+    state: &UserApiState,
+    relation_visibility: &RelationVisibilityState,
+    viewer_pubkey: &str,
+    entries: Vec<kukuri_cn_indexer::IndexedEntry>,
+) -> ApiResult<Vec<kukuri_cn_indexer::IndexedEntry>> {
+    let authors: Vec<String> = entries
+        .iter()
+        .map(|entry| entry.author_pubkey.clone())
+        .collect();
+    let visible = filter_relation_visible(
+        &state.pool,
+        relation_visibility.relation.as_ref(),
+        viewer_pubkey,
+        authors.as_slice(),
+        relation_visibility.min_proximity,
+    )
+    .await
+    .map_err(|source| {
+        IndexingError::infrastructure(IndexingOperation::FilterRelationVisibility, source)
+    })
+    .map_err(indexing_error)?;
+    let visible: std::collections::HashSet<String> = visible.into_iter().collect();
+    Ok(entries
+        .into_iter()
+        .filter(|entry| visible.contains(&entry.author_pubkey))
+        .collect())
 }
 
 /// `scope_kind` / `scope_id` パラメータの組を解釈する。
@@ -192,7 +228,8 @@ pub(crate) async fn index_search(
     headers: HeaderMap,
     Query(params): Query<IndexQueryParams>,
 ) -> ApiResult<Json<IndexQueryResponse>> {
-    let index_query = require_index_query(&state, &headers).await?;
+    let (index_query, relation_visibility, viewer_pubkey) =
+        require_index_query(&state, &headers).await?;
     let query = params
         .q
         .as_deref()
@@ -218,6 +255,13 @@ pub(crate) async fn index_search(
             .map_err(|source| IndexingError::infrastructure(IndexingOperation::SearchAll, source))
             .map_err(indexing_error)?,
     };
+    let entries = filter_index_entries(
+        &state,
+        relation_visibility.as_ref(),
+        viewer_pubkey.as_str(),
+        entries,
+    )
+    .await?;
     Ok(Json(index_query_response(entries)))
 }
 
@@ -230,7 +274,8 @@ pub(crate) async fn index_discovery(
     headers: HeaderMap,
     Query(params): Query<IndexQueryParams>,
 ) -> ApiResult<Json<IndexQueryResponse>> {
-    let index_query = require_index_query(&state, &headers).await?;
+    let (index_query, relation_visibility, viewer_pubkey) =
+        require_index_query(&state, &headers).await?;
     let limit = index_query_limit(&params);
     let scope = parse_index_scope_params(&params)?;
     let entries = index_query
@@ -238,6 +283,13 @@ pub(crate) async fn index_discovery(
         .await
         .map_err(|source| IndexingError::infrastructure(IndexingOperation::Discovery, source))
         .map_err(indexing_error)?;
+    let entries = filter_index_entries(
+        &state,
+        relation_visibility.as_ref(),
+        viewer_pubkey.as_str(),
+        entries,
+    )
+    .await?;
     Ok(Json(index_query_response(entries)))
 }
 
@@ -250,13 +302,21 @@ pub(crate) async fn index_recommendations(
     headers: HeaderMap,
     Query(params): Query<IndexQueryParams>,
 ) -> ApiResult<Json<IndexQueryResponse>> {
-    let index_query = require_index_query(&state, &headers).await?;
+    let (index_query, relation_visibility, viewer_pubkey) =
+        require_index_query(&state, &headers).await?;
     let limit = index_query_limit(&params);
     let entries = index_query
         .list_recent(None, limit)
         .await
         .map_err(|source| IndexingError::infrastructure(IndexingOperation::Recommendations, source))
         .map_err(indexing_error)?;
+    let entries = filter_index_entries(
+        &state,
+        relation_visibility.as_ref(),
+        viewer_pubkey.as_str(),
+        entries,
+    )
+    .await?;
     Ok(Json(index_query_response(entries)))
 }
 
@@ -297,6 +357,7 @@ mod error_contract_tests {
             IndexingOperation::SearchAll,
             IndexingOperation::Discovery,
             IndexingOperation::Recommendations,
+            IndexingOperation::FilterRelationVisibility,
         ] {
             assert_error_contract(
                 indexing_error(IndexingError::infrastructure(

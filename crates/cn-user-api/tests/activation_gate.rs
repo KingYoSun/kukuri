@@ -56,6 +56,7 @@ async fn spawn_api(
         channel_secret_key: None,
         index_query_enabled: true,
         trust_read_enabled: true,
+        relation_distance_optout_min_proximity: Some(0.5),
         deployment_revision: "test-deployment-v1".to_string(),
         readiness_activation_max_age_secs: 3600,
     })

@@ -15,6 +15,7 @@ pub const INDEXING_REQUESTS_PATH: &str = "/v1/indexing/requests";
 pub const INDEX_SEARCH_PATH: &str = "/v1/index/search";
 pub const INDEX_DISCOVERY_PATH: &str = "/v1/index/discovery";
 pub const INDEX_RECOMMENDATIONS_PATH: &str = "/v1/index/recommendations";
+pub const RELATION_OPTOUT_PATH: &str = "/v1/relation/optout";
 /// 通報受付。client は manifest の `report_endpoint` から動的に解決するため
 /// 直接この定数で URL を組み立てるのはサーバ側(route 定義)のみ。
 pub const REPORT_PATH: &str = "/v1/report";

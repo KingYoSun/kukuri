@@ -22,7 +22,8 @@ use kukuri_cn_protocol::build_auth_envelope_json;
 use kukuri_cn_safety::provider::SubjectKind;
 use kukuri_cn_safety::{ReasonCode, SafetyAction, SafetyVerdict};
 use kukuri_cn_safety_runtime::{MemorySafetyArtifactStore, SafetyArtifactStore};
-use kukuri_cn_user_api::{UserApiConfig, app_router, build_state};
+use kukuri_cn_trust::{EdgeFeatures, FEATURE_SHARED_TOPICS, MemoryRelationStore, RelationStore};
+use kukuri_cn_user_api::{RelationVisibilityState, UserApiConfig, app_router, build_state};
 use kukuri_core::{KukuriKeys, generate_keys};
 use reqwest::{Client, StatusCode};
 
@@ -73,7 +74,13 @@ fn verdict(action: SafetyAction, critical: bool) -> SafetyVerdict {
 
 impl MemoryIndex {
     /// allow verdict つきの entry を真実源 + 投影の両方へ seed する（ingest の allow 経路と同型）。
-    async fn seed_allow(&self, scope_id: &str, object_id: &str, text: &str) -> Result<()> {
+    async fn seed_allow(
+        &self,
+        scope_id: &str,
+        object_id: &str,
+        author_pubkey: &str,
+        text: &str,
+    ) -> Result<()> {
         let verdict_id = self
             .store
             .persist_verdict(
@@ -87,7 +94,7 @@ impl MemoryIndex {
                 scope_kind: IndexScopeKind::PublicTopic,
                 scope_id: scope_id.to_string(),
                 object_id: object_id.to_string(),
-                author_pubkey: "author".to_string(),
+                author_pubkey: author_pubkey.to_string(),
                 created_at: 1_700_000_000,
                 source_replica_id: format!("topic::{scope_id}"),
                 verdict_id,
@@ -100,7 +107,7 @@ impl MemoryIndex {
                 scope_kind: IndexScopeKind::PublicTopic,
                 scope_id: scope_id.to_string(),
                 object_id: object_id.to_string(),
-                author_pubkey: "author".to_string(),
+                author_pubkey: author_pubkey.to_string(),
                 text: text.to_string(),
                 created_at: 1_700_000_000,
                 source_replica_id: format!("topic::{scope_id}"),
@@ -126,6 +133,7 @@ struct TestServer {
     task: tokio::task::JoinHandle<()>,
     database: TestDatabase,
     base_url: String,
+    relation: Arc<MemoryRelationStore>,
 }
 
 impl TestServer {
@@ -142,6 +150,7 @@ impl TestServer {
             .context("failed to bind test index query listener")?;
         let addr = listener.local_addr()?;
         let base_url = format!("http://{addr}");
+        let relation = Arc::new(MemoryRelationStore::new());
         let mut state = build_state(&UserApiConfig {
             bind_addr: addr,
             database_url: database.database_url.clone(),
@@ -155,12 +164,18 @@ impl TestServer {
             channel_secret_key: None,
             index_query_enabled: false,
             trust_read_enabled: false,
+            relation_distance_optout_min_proximity: None,
             deployment_revision: "test-deployment-v1".to_string(),
             readiness_activation_max_age_secs: 3600,
         })
         .await?;
         if let Some(index) = index {
-            state = state.with_index_query(index);
+            state = state
+                .with_index_query(index)
+                .with_relation_visibility(Arc::new(RelationVisibilityState::new(
+                    relation.clone(),
+                    0.5,
+                )?));
         }
         let app = app_router(state);
         let task = tokio::spawn(async move {
@@ -175,6 +190,7 @@ impl TestServer {
             task,
             database,
             base_url,
+            relation,
         })
     }
 
@@ -288,12 +304,13 @@ async fn search_discovery_recommendation_return_gated_allow_entries_only() -> Re
         return Ok(());
     };
     let index = memory_index();
+    let author = generate_keys().public_key_hex();
     // allow entry / verdict が後から exclude+critical に変わった entry / 投影残留（真実源なし）。
     index
-        .seed_allow("rust", "post-kept", "tokio async runtime")
+        .seed_allow("rust", "post-kept", author.as_str(), "tokio async runtime")
         .await?;
     index
-        .seed_allow("rust", "post-flipped", "tokio flips later")
+        .seed_allow("rust", "post-flipped", author.as_str(), "tokio flips later")
         .await?;
     index.flip_to_excluded("post-flipped").await?;
     index
@@ -302,7 +319,7 @@ async fn search_discovery_recommendation_return_gated_allow_entries_only() -> Re
             scope_kind: IndexScopeKind::PublicTopic,
             scope_id: "rust".to_string(),
             object_id: "post-ghost".to_string(),
-            author_pubkey: "author".to_string(),
+            author_pubkey: author.clone(),
             text: "tokio ghost residue".to_string(),
             created_at: 1_700_000_001,
             source_replica_id: "topic::rust".to_string(),
@@ -356,6 +373,129 @@ async fn search_discovery_recommendation_return_gated_allow_entries_only() -> Re
         let body = response.json::<serde_json::Value>().await?;
         assert_eq!(entry_ids(&body), vec!["post-kept".to_string()], "{path}");
     }
+
+    server.shutdown().await
+}
+
+#[tokio::test]
+async fn distance_optout_filters_posts_on_every_index_surface() -> Result<()> {
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api index query test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let index = memory_index();
+    let viewer_keys = generate_keys();
+    let far_author_keys = generate_keys();
+    let close_author_keys = generate_keys();
+    let viewer = viewer_keys.public_key_hex();
+    let far_author = far_author_keys.public_key_hex();
+    let close_author = close_author_keys.public_key_hex();
+    index
+        .seed_allow(
+            "rust",
+            "post-far",
+            far_author.as_str(),
+            "tokio distance sample",
+        )
+        .await?;
+    index
+        .seed_allow(
+            "rust",
+            "post-close",
+            close_author.as_str(),
+            "tokio distance sample",
+        )
+        .await?;
+
+    let server = TestServer::spawn(
+        admin_database_url.as_str(),
+        "cn_index_query_distance_optout",
+        Some(index.query.clone()),
+    )
+    .await?;
+    server
+        .relation
+        .upsert_edge(
+            viewer.as_str(),
+            far_author.as_str(),
+            &EdgeFeatures::new().with(FEATURE_SHARED_TOPICS, 0.1),
+        )
+        .await?;
+    server
+        .relation
+        .upsert_edge(
+            viewer.as_str(),
+            close_author.as_str(),
+            &EdgeFeatures::new().with(FEATURE_SHARED_TOPICS, 3.0),
+        )
+        .await?;
+    let client = Client::new();
+    let viewer_token =
+        authenticate_and_consent(&client, server.base_url.as_str(), &viewer_keys).await?;
+    let far_author_token =
+        authenticate_and_consent(&client, server.base_url.as_str(), &far_author_keys).await?;
+    let paths = [
+        "/v1/index/search?q=tokio",
+        "/v1/index/discovery",
+        "/v1/index/recommendations",
+    ];
+
+    // 双方未選択なら、遠距離の投稿も自動では抑制しない。
+    for path in paths {
+        let body: serde_json::Value = client
+            .get(format!("{}{path}", server.base_url))
+            .bearer_auth(viewer_token.as_str())
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        let mut ids = entry_ids(&body);
+        ids.sort();
+        assert_eq!(ids, vec!["post-close".to_string(), "post-far".to_string()]);
+    }
+
+    // author側の選択で、遠距離author本人の投稿だけを全surfaceから除外する。
+    client
+        .put(format!("{}/v1/relation/optout", server.base_url))
+        .bearer_auth(far_author_token.as_str())
+        .send()
+        .await?
+        .error_for_status()?;
+    for path in paths {
+        let body: serde_json::Value = client
+            .get(format!("{}{path}", server.base_url))
+            .bearer_auth(viewer_token.as_str())
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        assert_eq!(entry_ids(&body), vec!["post-close".to_string()], "{path}");
+    }
+
+    // 解除後は復帰し、viewer側の選択でも同じfar pairだけが再び抑制される。
+    client
+        .delete(format!("{}/v1/relation/optout", server.base_url))
+        .bearer_auth(far_author_token.as_str())
+        .send()
+        .await?
+        .error_for_status()?;
+    client
+        .put(format!("{}/v1/relation/optout", server.base_url))
+        .bearer_auth(viewer_token.as_str())
+        .send()
+        .await?
+        .error_for_status()?;
+    let body: serde_json::Value = client
+        .get(format!("{}/v1/index/recommendations", server.base_url))
+        .bearer_auth(viewer_token.as_str())
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    assert_eq!(entry_ids(&body), vec!["post-close".to_string()]);
 
     server.shutdown().await
 }

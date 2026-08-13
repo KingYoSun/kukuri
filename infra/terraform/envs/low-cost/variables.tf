@@ -312,6 +312,12 @@ variable "trust_read_enabled" {
   default     = false
 }
 
+variable "relation_distance_optout_min_proximity" {
+  description = "COMMUNITY_NODE_RELATION_DISTANCE_OPTOUT_MIN_PROXIMITY。(0, 1]。index/trust surface 有効時は明示必須。"
+  type        = string
+  default     = ""
+}
+
 variable "channel_secret_key_secret_id" {
   description = "COMMUNITY_NODE_CHANNEL_SECRET_KEY を保持する Secret Manager secret ID（deploy_indexer_stack=true のとき必須）。"
   type        = string

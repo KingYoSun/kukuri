@@ -10,6 +10,9 @@ use kukuri_cn_core::{
 };
 use kukuri_cn_protocol::{normalize_http_url, normalize_http_url_list};
 
+pub const RELATION_DISTANCE_OPTOUT_MIN_PROXIMITY_ENV: &str =
+    "COMMUNITY_NODE_RELATION_DISTANCE_OPTOUT_MIN_PROXIMITY";
+
 #[derive(Clone)]
 pub struct UserApiConfig {
     pub bind_addr: SocketAddr,
@@ -37,6 +40,9 @@ pub struct UserApiConfig {
     /// ArcadeDB(`COMMUNITY_NODE_ARCADEDB_*`)へ接続し、trust パラメータを
     /// `COMMUNITY_NODE_TRUST_*` env から読む。
     pub trust_read_enabled: bool,
+    /// distance opt-out が「遠い」と判定する node-local proximity 境界。
+    /// index / trust surface のどちらかを有効にする場合は明示設定が必須。
+    pub relation_distance_optout_min_proximity: Option<f64>,
     /// image/config/provider一式を識別する非秘匿のdeploy revision。
     pub deployment_revision: String,
     /// readiness activationを有効とみなす最大経過秒数。
@@ -62,6 +68,10 @@ impl std::fmt::Debug for UserApiConfig {
             )
             .field("index_query_enabled", &self.index_query_enabled)
             .field("trust_read_enabled", &self.trust_read_enabled)
+            .field(
+                "relation_distance_optout_min_proximity",
+                &self.relation_distance_optout_min_proximity,
+            )
             .field("deployment_revision", &self.deployment_revision)
             .field(
                 "readiness_activation_max_age_secs",
@@ -107,6 +117,12 @@ impl UserApiConfig {
             .filter(|value| !value.trim().is_empty());
         let index_query_enabled = parse_bool_env("COMMUNITY_NODE_INDEX_QUERY_ENABLED", false)?;
         let trust_read_enabled = parse_bool_env("COMMUNITY_NODE_TRUST_READ_ENABLED", false)?;
+        let relation_distance_optout_min_proximity = parse_relation_distance_optout_min_proximity(
+            std::env::var(RELATION_DISTANCE_OPTOUT_MIN_PROXIMITY_ENV)
+                .ok()
+                .as_deref(),
+            index_query_enabled || trust_read_enabled,
+        )?;
         let deployment_revision = std::env::var("COMMUNITY_NODE_DEPLOYMENT_REVISION")
             .ok()
             .filter(|value| !value.trim().is_empty())
@@ -131,10 +147,35 @@ impl UserApiConfig {
             channel_secret_key,
             index_query_enabled,
             trust_read_enabled,
+            relation_distance_optout_min_proximity,
             deployment_revision,
             readiness_activation_max_age_secs,
         })
     }
+}
+
+fn parse_relation_distance_optout_min_proximity(
+    raw: Option<&str>,
+    required: bool,
+) -> Result<Option<f64>> {
+    let raw = raw.map(str::trim).filter(|value| !value.is_empty());
+    let Some(raw) = raw else {
+        if required {
+            anyhow::bail!(
+                "{RELATION_DISTANCE_OPTOUT_MIN_PROXIMITY_ENV} is required when index/trust surfaces are enabled"
+            );
+        }
+        return Ok(None);
+    };
+    let value: f64 = raw.parse().with_context(|| {
+        format!("{RELATION_DISTANCE_OPTOUT_MIN_PROXIMITY_ENV} must be a number within (0, 1]")
+    })?;
+    if !value.is_finite() || value <= 0.0 || value > 1.0 {
+        anyhow::bail!(
+            "{RELATION_DISTANCE_OPTOUT_MIN_PROXIMITY_ENV} must be within (0, 1] (got {raw})"
+        );
+    }
+    Ok(Some(value))
 }
 
 /// Optional per-client rate limit for the public HTTP surface.
@@ -180,5 +221,26 @@ impl RateLimitConfig {
 
     pub(crate) fn replenish_period_ms(&self) -> u64 {
         (1_000 / self.per_second.max(1)).max(1)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_relation_distance_optout_min_proximity;
+
+    #[test]
+    fn distance_optout_policy_is_required_for_read_surfaces() {
+        assert!(parse_relation_distance_optout_min_proximity(None, true).is_err());
+        assert!(parse_relation_distance_optout_min_proximity(Some("0"), true).is_err());
+        assert!(parse_relation_distance_optout_min_proximity(Some("1.1"), true).is_err());
+        assert!(parse_relation_distance_optout_min_proximity(Some("NaN"), true).is_err());
+        assert_eq!(
+            parse_relation_distance_optout_min_proximity(Some("0.5"), true).unwrap(),
+            Some(0.5)
+        );
+        assert_eq!(
+            parse_relation_distance_optout_min_proximity(None, false).unwrap(),
+            None
+        );
     }
 }
