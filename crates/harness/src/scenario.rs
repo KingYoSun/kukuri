@@ -10,6 +10,7 @@ pub enum ScenarioKind {
     PrivateChannelInviteConnectivity,
     PairwiseDirectMessageConnectivity,
     CommunityNodeIndexQueryClient,
+    CommunityNodeReportRouting,
     CommunityNodeTrustRelationClient,
 }
 
@@ -120,6 +121,10 @@ pub enum ScenarioStep {
     AssertCommunityIndexError {
         query: String,
         code: String,
+    },
+    AssertNoReportProvenance,
+    AssertObservedReportRouting {
+        expect_capability: String,
     },
     ReadCommunityTrust {
         target_pubkey: String,

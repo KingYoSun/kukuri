@@ -232,6 +232,8 @@
     "copyContact": "Copy abuse contact",
     "success": "Report sent to the community node.",
     "referenceId": "Reference: {{id}}",
+    "resolvingTargets": "Checking the latest report targets…",
+    "resolveFailed": "Could not refresh report targets. No default destination will be used.",
     "unknownTitle": "Cannot determine a report target",
     "unknownBody": "It is not clear which node or source surfaced this content, so there is no responsible community node to report to.",
     "observedUnresolvedTitle": "No reachable report target",

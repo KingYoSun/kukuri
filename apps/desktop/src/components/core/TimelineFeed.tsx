@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import type {
   BookmarkedCustomReactionView,
   CommunityNodeManifest,
+  CommunityNodeManifestFetch,
   CustomReactionAssetView,
   ReactionKeyInput,
   RecentReactionView,
@@ -59,6 +60,8 @@ type TimelineFeedProps = {
     request: SubmitCommunityNodeReportRequest
   ) => Promise<SubmitCommunityNodeReportResult>;
   onCopyReportContact?: (value: string) => void;
+  onFetchReportManifest?: (baseUrl: string) => Promise<CommunityNodeManifestFetch>;
+  onMuteReportAuthor?: (authorPubkey: string) => Promise<void> | void;
 };
 
 export function TimelineFeed({
@@ -98,6 +101,8 @@ export function TimelineFeed({
   communityNodeManifests,
   onSubmitReport,
   onCopyReportContact,
+  onFetchReportManifest,
+  onMuteReportAuthor,
 }: TimelineFeedProps) {
   const { t } = useTranslation('common');
   const { sentinelRef: loadMoreRef, canAutoLoad } = useInfiniteScrollSentinel({
@@ -206,6 +211,8 @@ export function TimelineFeed({
             communityNodeManifests={communityNodeManifests}
             onSubmitReport={onSubmitReport}
             onCopyReportContact={onCopyReportContact}
+            onFetchReportManifest={onFetchReportManifest}
+            onMuteReportAuthor={onMuteReportAuthor}
           />
         </li>
       ))}

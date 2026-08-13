@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 
+import type { CommunityNodeManifest } from '@/lib/api';
+
 import { PostCard } from './PostCard';
 import { type PostCardView } from './types';
 
@@ -580,4 +582,60 @@ test('post card renders bookmark as an icon-only action with an accessible label
 
   await user.click(bookmarkButton);
   expect(onToggleBookmark).toHaveBeenCalledWith(createView().post);
+});
+
+test('report action refreshes the observed node manifest when the dialog opens', async () => {
+  const user = userEvent.setup();
+  const manifest: CommunityNodeManifest = {
+    node_id: 'node-1',
+    node_name: 'node.example',
+    node_role: 'community-node',
+    server_name: 'node.example',
+    manifest_version: 'v2',
+    capability_scope: { available_enabled: ['community_index'], planned_enabled: [] },
+    authority_scope: { applies_to: ['this_node'], does_not_apply_to: ['user_identity'] },
+    p2p_boundary: {
+      identity_authority: false,
+      profile_canonical_store: false,
+      social_graph_canonical_store: false,
+      content_truth_source: false,
+      network_wide_authority: false,
+    },
+    abuse_contact: 'abuse@node.example',
+    report_endpoint: 'https://node.example/v1/report',
+    terms_url: '',
+    privacy_url: '',
+    moderation_policy_url: '',
+  };
+  const onFetchReportManifest = vi.fn().mockResolvedValue({ status: 'ok', manifest });
+
+  render(
+    <PostCard
+      view={createView({
+        provenance: {
+          canonicalSource: 'author_docs',
+          observedVia: [
+            {
+              nodeBaseUrl: 'https://node.example',
+              capability: 'community_index',
+              observedAt: 123,
+            },
+          ],
+          responsibleReportTargets: [],
+        },
+      })}
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+      onSubmitReport={vi.fn()}
+      onFetchReportManifest={onFetchReportManifest}
+    />,
+  );
+
+  await user.click(screen.getByRole('button', { name: 'Report' }));
+
+  await waitFor(() =>
+    expect(onFetchReportManifest).toHaveBeenCalledWith('https://node.example'),
+  );
+  expect(await screen.findByText('node.example')).toBeInTheDocument();
 });

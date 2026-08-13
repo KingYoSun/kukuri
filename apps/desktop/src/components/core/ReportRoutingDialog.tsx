@@ -51,6 +51,8 @@ export type ReportRoutingDialogProps = {
   onCopyContact?: (value: string) => void;
   /// provenance 不明 / 通報先未解決時に出す local action（block / mute / local hide）導線。
   localActions?: ReactNode;
+  resolving?: boolean;
+  resolveError?: string | null;
 };
 
 function nodeHost(url: string): string {
@@ -73,6 +75,8 @@ export function ReportRoutingDialog({
   onSubmit,
   onCopyContact,
   localActions,
+  resolving = false,
+  resolveError,
 }: ReportRoutingDialogProps) {
   const { t } = useTranslation(['shell', 'common']);
   const { candidates } = plan;
@@ -151,7 +155,13 @@ export function ReportRoutingDialog({
             <p className='report-identity-boundary'>{t('report.identityBoundaryNote')}</p>
           </Notice>
 
-          {result ? (
+          {resolveError ? (
+            <Notice tone='destructive'>{t('report.resolveFailed')}</Notice>
+          ) : null}
+
+          {resolving ? (
+            <Notice aria-live='polite'>{t('report.resolvingTargets')}</Notice>
+          ) : result ? (
             <Notice tone='accent' className='report-result'>
               <p>{t('report.success')}</p>
               {result.reference_id ? (

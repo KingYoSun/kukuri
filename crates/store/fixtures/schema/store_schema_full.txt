@@ -36,6 +36,12 @@ table bookmarked_posts
   column cid=12 name=root_object_id type=TEXT notnull=0 default=None pk=0
   column cid=13 name=repost_of_json type=TEXT notnull=0 default=None pk=0
   column cid=14 name=bookmarked_at type=INTEGER notnull=1 default=None pk=0
+table content_observations
+  column cid=0 name=subject_kind type=TEXT notnull=1 default=None pk=1
+  column cid=1 name=subject_id type=TEXT notnull=1 default=None pk=2
+  column cid=2 name=node_base_url type=TEXT notnull=1 default=None pk=3
+  column cid=3 name=capability type=TEXT notnull=1 default=None pk=4
+  column cid=4 name=observed_at type=INTEGER notnull=1 default=None pk=0
 table dm_conversations
   column cid=0 name=dm_id type=TEXT notnull=0 default=None pk=1
   column cid=1 name=peer_pubkey type=TEXT notnull=1 default=None pk=0
@@ -234,6 +240,14 @@ index idx_bookmarked_posts_bookmarked_at table=bookmarked_posts unique=0 origin=
   key seqno=0 cid=14 name=Some("bookmarked_at")
   key seqno=1 cid=0 name=Some("source_object_id")
   sql=Some("CREATE INDEX idx_bookmarked_posts_bookmarked_at ON bookmarked_posts(bookmarked_at DESC, source_object_id DESC)")
+index idx_content_observations_observed_at table=content_observations unique=0 origin=c partial=0
+  key seqno=0 cid=4 name=Some("observed_at")
+  sql=Some("CREATE INDEX idx_content_observations_observed_at ON content_observations (observed_at ASC)")
+index idx_content_observations_subject table=content_observations unique=0 origin=c partial=0
+  key seqno=0 cid=0 name=Some("subject_kind")
+  key seqno=1 cid=1 name=Some("subject_id")
+  key seqno=2 cid=4 name=Some("observed_at")
+  sql=Some("CREATE INDEX idx_content_observations_subject ON content_observations (subject_kind, subject_id, observed_at DESC)")
 index idx_dm_conversations_updated_at table=dm_conversations unique=0 origin=c partial=0
   key seqno=0 cid=2 name=Some("updated_at")
   key seqno=1 cid=0 name=Some("dm_id")
@@ -380,6 +394,12 @@ index sqlite_autoindex_bookmarked_custom_reactions_1 table=bookmarked_custom_rea
   sql=None
 index sqlite_autoindex_bookmarked_posts_1 table=bookmarked_posts unique=1 origin=pk partial=0
   key seqno=0 cid=0 name=Some("source_object_id")
+  sql=None
+index sqlite_autoindex_content_observations_1 table=content_observations unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("subject_kind")
+  key seqno=1 cid=1 name=Some("subject_id")
+  key seqno=2 cid=2 name=Some("node_base_url")
+  key seqno=3 cid=3 name=Some("capability")
   sql=None
 index sqlite_autoindex_dm_conversations_1 table=dm_conversations unique=1 origin=pk partial=0
   key seqno=0 cid=0 name=Some("dm_id")

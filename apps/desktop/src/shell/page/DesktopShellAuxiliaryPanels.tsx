@@ -24,6 +24,7 @@ import type {
 import { formatLocalizedTime } from '@/i18n/format';
 import type { SupportedLocale } from '@/i18n';
 import { type InternalSmartReference } from '@/lib/internalLinks';
+import { copyTextToClipboard } from '@/lib/utils';
 import { ContextPane } from '@/components/shell/ContextPane';
 import { SHELL_CONTEXT_ID, useDesktopShellFieldSetter, useDesktopShellStore } from '@/shell/store';
 import {
@@ -631,6 +632,7 @@ export function DesktopShellDetailPaneStack({
     activeTopic,
     bookmarkedReactionAssets,
     communityNodeConfig,
+    communityNodeManifests,
     focusedObjectId,
     mediaObjectUrls,
     ownedReactionAssets,
@@ -646,6 +648,7 @@ export function DesktopShellDetailPaneStack({
       activeTopic: s.activeTopic,
       bookmarkedReactionAssets: s.bookmarkedReactionAssets,
       communityNodeConfig: s.communityNodeConfig,
+      communityNodeManifests: s.communityNodeManifests,
       focusedObjectId: s.focusedObjectId,
       mediaObjectUrls: s.mediaObjectUrls,
       ownedReactionAssets: s.ownedReactionAssets,
@@ -662,6 +665,17 @@ export function DesktopShellDetailPaneStack({
   const selectedThreadLoadingMore = selectedThread
     ? (threadLoadingMoreById[selectedThread] ?? false)
     : false;
+  const reportableManifests = useMemo(() => {
+    const manifests: Record<string, import('@/lib/api').CommunityNodeManifest> = {};
+    for (const [baseUrl, entry] of Object.entries(communityNodeManifests)) {
+      if (entry.status === 'ok') manifests[baseUrl] = entry.manifest;
+    }
+    return manifests;
+  }, [communityNodeManifests]);
+  const fetchReportManifest = (baseUrl: string) =>
+    api.fetchCommunityNodeManifest(baseUrl);
+  const submitReport = (request: import('@/lib/api').SubmitCommunityNodeReportRequest) =>
+    api.submitCommunityNodeReport(request);
 
   return (
     <>
@@ -704,6 +718,11 @@ export function DesktopShellDetailPaneStack({
             onActivateReference={(reference) => void handleActivateReference(reference)}
             onCopyPostLink={handleCopyPostLink}
             focusedPostObjectId={focusedObjectId}
+            communityNodeManifests={reportableManifests}
+            onSubmitReport={submitReport}
+            onCopyReportContact={(value) => void copyTextToClipboard(value)}
+            onFetchReportManifest={fetchReportManifest}
+            onMuteReportAuthor={(authorPubkey) => handleMuteAction(authorPubkey, false)}
           />
         </ContextPane>
       ) : null}
@@ -729,6 +748,10 @@ export function DesktopShellDetailPaneStack({
               }
               onToggleMute={(authorPubkey, muted) => void handleMuteAction(authorPubkey, muted)}
               onOpenDirectMessage={(authorPubkey) => void openDirectMessagePane(authorPubkey)}
+              communityNodeManifests={reportableManifests}
+              onSubmitReport={submitReport}
+              onCopyReportContact={(value) => void copyTextToClipboard(value)}
+              onFetchReportManifest={fetchReportManifest}
               communityNodeAdvisory={
                 selectedAuthorPubkey !== syncStatus.local_author_pubkey ? (
                   <CommunityNodeAdvisoryPanel
@@ -751,6 +774,11 @@ export function DesktopShellDetailPaneStack({
                 onOpenOriginalTopic={(topicId) => void handleOpenOriginalTopic(topicId)}
                 onActivateReference={(reference) => void handleActivateReference(reference)}
                 onCopyPostLink={handleCopyPostLink}
+                communityNodeManifests={reportableManifests}
+                onSubmitReport={submitReport}
+                onCopyReportContact={(value) => void copyTextToClipboard(value)}
+                onFetchReportManifest={fetchReportManifest}
+                onMuteReportAuthor={(authorPubkey) => handleMuteAction(authorPubkey, false)}
               />
             </Card>
           </div>

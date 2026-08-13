@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 const LOCK_CLASSIFICATION: &[(&str, &str, usize)] = &[
     ("community_node/config.rs", "ProcessEnvironment", 3),
     ("community_node/connectivity.rs", "IrohNetwork", 6),
-    ("community_node/index_query.rs", "CommunityNodeServer", 7),
+    ("community_node/index_query.rs", "CommunityNodeServer", 8),
     ("community_node/metadata.rs", "CommunityNodeServer", 9),
     ("community_node/scheduler.rs", "CommunityNodeServer", 4),
     ("community_node/session.rs", "CommunityNodeServer", 6),
@@ -94,7 +94,7 @@ fn lock_acquisitions_match_declared_classification() {
     );
     let total: usize = expected.values().sum();
     assert_eq!(
-        total, 63,
+        total, 64,
         "classification total drifted from the Q7 T6 baseline"
     );
 }

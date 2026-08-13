@@ -11,18 +11,18 @@ use tokio::sync::RwLock;
 
 use crate::models::{
     AuthorRelationshipProjectionRow, BlobCacheStatus, BookmarkedCustomReactionRow,
-    BookmarkedPostRow, DirectMessageConversationRow, DirectMessageMessageRow,
-    DirectMessageOutboxRow, DirectMessageTombstoneRow, GameRoomProjectionRow,
-    LiveSessionProjectionRow, MutedAuthorRow, NotificationRow, ObjectProjectionRow, Page,
-    ReactionProjectionRow, TimelineCursor,
+    BookmarkedPostRow, ContentObservationRow, DirectMessageConversationRow,
+    DirectMessageMessageRow, DirectMessageOutboxRow, DirectMessageTombstoneRow,
+    GameRoomProjectionRow, LiveSessionProjectionRow, MutedAuthorRow, NotificationRow,
+    ObjectProjectionRow, Page, ReactionProjectionRow, TimelineCursor,
 };
 use crate::pagination::{
     apply_asc_cursor, apply_asc_projection_cursor, apply_desc_cursor,
     apply_desc_direct_message_cursor, apply_desc_projection_cursor,
 };
 use crate::traits::{
-    BlobCacheStore, DirectMessageStore, LiveGameProjectionStore, NotificationStore,
-    ObjectProjectionStore, ReactionBookmarkStore, SocialProjectionStore, Store,
+    BlobCacheStore, ContentObservationStore, DirectMessageStore, LiveGameProjectionStore,
+    NotificationStore, ObjectProjectionStore, ReactionBookmarkStore, SocialProjectionStore, Store,
 };
 
 /// sqlite の live_presence_cache 主キー ON CONFLICT(topic_id, channel_id, session_id,
@@ -35,6 +35,8 @@ type MemoryDirectMessageRows = HashMap<(String, String), DirectMessageMessageRow
 type MemoryDirectMessageOutboxRows = HashMap<(String, String), DirectMessageOutboxRow>;
 type MemoryDirectMessageTombstones = HashMap<(String, String), DirectMessageTombstoneRow>;
 type MemoryNotificationRows = HashMap<String, NotificationRow>;
+type MemoryContentObservationRows =
+    HashMap<(String, String, String, String), ContentObservationRow>;
 
 #[derive(Clone, Default)]
 pub struct MemoryStore {
@@ -59,6 +61,7 @@ pub struct MemoryStore {
     direct_message_outbox_rows: Arc<RwLock<MemoryDirectMessageOutboxRows>>,
     direct_message_tombstones: Arc<RwLock<MemoryDirectMessageTombstones>>,
     notification_rows: Arc<RwLock<MemoryNotificationRows>>,
+    content_observation_rows: Arc<RwLock<MemoryContentObservationRows>>,
 }
 
 mod bookmarks;
@@ -66,6 +69,7 @@ mod direct_messages;
 mod envelopes;
 mod live_game;
 mod notifications;
+mod observations;
 mod projections;
 mod social;
 

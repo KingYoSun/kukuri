@@ -9,6 +9,21 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ContentObservationView {
+    pub node_base_url: String,
+    pub capability: String,
+    pub observed_at: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ContentProvenanceView {
+    pub canonical_source: String,
+    pub observed_via: Vec<ContentObservationView>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct PostView {
     pub object_id: String,
@@ -22,6 +37,8 @@ pub struct PostView {
     pub followed_by: bool,
     pub mutual: bool,
     pub friend_of_friend: bool,
+    #[serde(default)]
+    pub provenance: Option<ContentProvenanceView>,
     pub content: String,
     pub content_status: BlobViewStatus,
     pub attachments: Vec<AttachmentView>,
@@ -230,6 +247,8 @@ pub struct AuthorSocialView {
     pub mutual: bool,
     pub friend_of_friend: bool,
     pub friend_of_friend_via_pubkeys: Vec<String>,
+    #[serde(default)]
+    pub provenance: Option<ContentProvenanceView>,
     #[serde(default)]
     pub muted: bool,
 }

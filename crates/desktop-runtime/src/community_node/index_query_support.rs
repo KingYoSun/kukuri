@@ -1,9 +1,11 @@
 use std::fmt;
 
+use chrono::Utc;
 use kukuri_cn_protocol::{
     ApiErrorBody, INDEX_DISCOVERY_PATH, INDEX_RECOMMENDATIONS_PATH, INDEX_SEARCH_PATH,
     IndexQueryParams, IndexQueryResponse, IndexScopeKind, normalize_http_url,
 };
+use kukuri_store::{ContentObservationRow, ContentObservationStore};
 use reqwest::{StatusCode, header::RETRY_AFTER};
 use serde::{Deserialize, Serialize};
 
@@ -87,6 +89,13 @@ impl IndexOperation {
             Self::Recommendations => INDEX_RECOMMENDATIONS_PATH,
         }
     }
+
+    fn observation_capability(self) -> &'static str {
+        match self {
+            Self::Search | Self::Discovery => "community_index",
+            Self::Recommendations => "recommendation",
+        }
+    }
 }
 
 impl DesktopRuntime {
@@ -157,7 +166,7 @@ impl DesktopRuntime {
             limit: request.limit,
         };
 
-        match self
+        let response = match self
             .send_community_node_index_query(
                 base_url.as_str(),
                 operation,
@@ -185,7 +194,43 @@ impl DesktopRuntime {
                 .await
             }
             result => result,
+        }?;
+        self.record_index_observations(base_url.as_str(), operation, &response)
+            .await?;
+        Ok(response)
+    }
+
+    async fn record_index_observations(
+        &self,
+        base_url: &str,
+        operation: IndexOperation,
+        response: &IndexQueryResponse,
+    ) -> Result<(), CommunityNodeIndexQueryError> {
+        let observed_at = Utc::now().timestamp_millis();
+        for entry in &response.entries {
+            let observations = [
+                ("post", entry.object_id.as_str()),
+                ("profile", entry.author_pubkey.as_str()),
+            ];
+            for (subject_kind, subject_id) in observations {
+                self.store
+                    .put_content_observation(ContentObservationRow {
+                        subject_kind: subject_kind.to_string(),
+                        subject_id: subject_id.to_string(),
+                        node_base_url: base_url.to_string(),
+                        capability: operation.observation_capability().to_string(),
+                        observed_at,
+                    })
+                    .await
+                    .map_err(|error| {
+                        CommunityNodeIndexQueryError::new(
+                            "INDEX_OBSERVATION_STORE_FAILED",
+                            error.to_string(),
+                        )
+                    })?;
+            }
         }
+        Ok(())
     }
 
     async fn send_community_node_index_query(

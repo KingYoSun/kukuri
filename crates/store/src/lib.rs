@@ -11,13 +11,14 @@ mod tests;
 pub use memory::MemoryStore;
 pub use models::{
     AuthorRelationshipProjectionRow, BlobCacheStatus, BookmarkedCustomReactionRow,
-    BookmarkedPostRow, DirectMessageConversationRow, DirectMessageMessageRow,
-    DirectMessageOutboxRow, DirectMessageTombstoneRow, GameRoomProjectionRow,
-    LiveSessionProjectionRow, MutedAuthorRow, NotificationKind, NotificationRow,
-    ObjectProjectionRow, Page, ReactionProjectionRow, TimelineCursor,
+    BookmarkedPostRow, ContentObservationRow, DirectMessageConversationRow,
+    DirectMessageMessageRow, DirectMessageOutboxRow, DirectMessageTombstoneRow,
+    GameRoomProjectionRow, LiveSessionProjectionRow, MutedAuthorRow, NotificationKind,
+    NotificationRow, ObjectProjectionRow, Page, ReactionProjectionRow, TimelineCursor,
 };
 pub use sqlite::{SqliteStore, StoreStartupError};
 pub use traits::{
-    BlobCacheStore, DirectMessageStore, LiveGameProjectionStore, NotificationStore,
-    ObjectProjectionStore, ProjectionStore, ReactionBookmarkStore, SocialProjectionStore, Store,
+    BlobCacheStore, ContentObservationStore, DirectMessageStore, LiveGameProjectionStore,
+    NotificationStore, ObjectProjectionStore, ProjectionStore, ReactionBookmarkStore,
+    SocialProjectionStore, Store,
 };

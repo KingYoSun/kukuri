@@ -84,3 +84,22 @@ test('does not offer a default node when provenance is unknown', () => {
   expect(screen.queryByRole('button', { name: 'Send report' })).not.toBeInTheDocument();
   expect(onSubmit).not.toHaveBeenCalled();
 });
+
+test('keeps local actions available when manifest resolution fails', () => {
+  render(
+    <ReportRoutingDialog
+      open
+      onOpenChange={vi.fn()}
+      subject={subject}
+      plan={unknownPlan}
+      onSubmit={vi.fn()}
+      resolveError='unavailable'
+      localActions={<button type='button'>Mute author</button>}
+    />,
+  );
+
+  expect(
+    screen.getByText('Could not refresh report targets. No default destination will be used.'),
+  ).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Mute author' })).toBeInTheDocument();
+});

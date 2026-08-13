@@ -10,6 +10,7 @@
   "followed_by": false,
   "mutual": false,
   "friend_of_friend": false,
+  "provenance": null,
   "content": "minimal",
   "content_status": "Missing",
   "attachments": [],

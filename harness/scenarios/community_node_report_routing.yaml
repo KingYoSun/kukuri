@@ -1,0 +1,25 @@
+name: community_node_report_routing
+kind: community_node_report_routing
+fixtures:
+  seed: 666
+  topic: kukuri:topic:report-routing
+steps:
+  - action: create_post
+    content: observed report routing post
+  - action: assert_no_report_provenance
+  - action: search_community_index
+    query: observed
+    scope_kind: public_topic
+    scope_id: kukuri:topic:report-routing
+    expect_object_id: created_post
+  - action: assert_observed_report_routing
+    expect_capability: community_index
+  - action: restart_desktop
+  - action: assert_observed_report_routing
+    expect_capability: community_index
+artifacts:
+  dump_logs: true
+  metrics_snapshot: false
+timeouts:
+  overall_ms: 120000
+  step_ms: 15000

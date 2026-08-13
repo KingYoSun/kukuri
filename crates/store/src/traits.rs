@@ -6,10 +6,10 @@ use kukuri_core::{BlobHash, EnvelopeId, FollowEdge, KukuriEnvelope, Profile, Rep
 
 use crate::models::{
     AuthorRelationshipProjectionRow, BlobCacheStatus, BookmarkedCustomReactionRow,
-    BookmarkedPostRow, DirectMessageConversationRow, DirectMessageMessageRow,
-    DirectMessageOutboxRow, DirectMessageTombstoneRow, GameRoomProjectionRow,
-    LiveSessionProjectionRow, MutedAuthorRow, NotificationRow, ObjectProjectionRow, Page,
-    ReactionProjectionRow, TimelineCursor,
+    BookmarkedPostRow, ContentObservationRow, DirectMessageConversationRow,
+    DirectMessageMessageRow, DirectMessageOutboxRow, DirectMessageTombstoneRow,
+    GameRoomProjectionRow, LiveSessionProjectionRow, MutedAuthorRow, NotificationRow,
+    ObjectProjectionRow, Page, ReactionProjectionRow, TimelineCursor,
 };
 
 #[async_trait]
@@ -108,6 +108,18 @@ pub trait ObjectProjectionStore: Send + Sync {
         .await
     }
     async fn rebuild_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()>;
+}
+
+/// 内容をどのコミュニティノード経由で観測したかを保持する端末内記録。
+#[async_trait]
+pub trait ContentObservationStore: Send + Sync {
+    /// 対象が端末内に存在する場合だけ記録し、保存した場合は true を返す。
+    async fn put_content_observation(&self, row: ContentObservationRow) -> Result<bool>;
+    async fn list_content_observations(
+        &self,
+        subject_kind: &str,
+        subject_id: &str,
+    ) -> Result<Vec<ContentObservationRow>>;
 }
 
 /// `put_object_projections` の既定動作: 1 件ずつ `put_object_projection` を呼ぶ。
@@ -391,6 +403,7 @@ pub trait NotificationStore: Send + Sync {
 /// 場面では対応する sub-trait を直接使う。
 pub trait ProjectionStore:
     ObjectProjectionStore
+    + ContentObservationStore
     + LiveGameProjectionStore
     + SocialProjectionStore
     + BlobCacheStore
@@ -402,6 +415,7 @@ pub trait ProjectionStore:
 
 impl<T> ProjectionStore for T where
     T: ObjectProjectionStore
+        + ContentObservationStore
         + LiveGameProjectionStore
         + SocialProjectionStore
         + BlobCacheStore

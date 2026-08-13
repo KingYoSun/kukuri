@@ -1,0 +1,98 @@
+use super::*;
+
+fn observation_projection_row(object_id: &str) -> ObjectProjectionRow {
+    ObjectProjectionRow {
+        object_id: EnvelopeId::from(object_id),
+        topic_id: "kukuri:topic:observations".to_string(),
+        channel_id: "public".to_string(),
+        author_pubkey: "a".repeat(64),
+        created_at: 1,
+        object_kind: "post".to_string(),
+        root_object_id: None,
+        reply_to_object_id: None,
+        payload_ref: PayloadRef::BlobText {
+            hash: BlobHash::new("1".repeat(64)),
+            mime: "text/plain".to_string(),
+            bytes: 4,
+        },
+        content: Some("body".to_string()),
+        attachments: Vec::new(),
+        repost_of: None,
+        source_replica_id: ReplicaId::new("topic::observations"),
+        source_key: format!("objects/{object_id}/header"),
+        source_envelope_id: EnvelopeId::from(object_id),
+        source_blob_hash: None,
+        derived_at: 1,
+        projection_version: 2,
+    }
+}
+
+async fn content_observation_scenario<S>(store: &S)
+where
+    S: ContentObservationStore + ObjectProjectionStore,
+{
+    let object_id = EnvelopeId::from("observed-post");
+    let observation = ContentObservationRow {
+        subject_kind: "post".to_string(),
+        subject_id: object_id.as_str().to_string(),
+        node_base_url: "https://node.example".to_string(),
+        capability: "community_index".to_string(),
+        observed_at: 10,
+    };
+
+    assert!(
+        !store
+            .put_content_observation(observation.clone())
+            .await
+            .unwrap()
+    );
+    assert!(
+        store
+            .list_content_observations("post", object_id.as_str())
+            .await
+            .unwrap()
+            .is_empty()
+    );
+
+    store
+        .put_object_projection(observation_projection_row(object_id.as_str()))
+        .await
+        .unwrap();
+    assert!(
+        store
+            .put_content_observation(observation.clone())
+            .await
+            .unwrap()
+    );
+
+    let mut refreshed = observation.clone();
+    refreshed.observed_at = 20;
+    assert!(
+        store
+            .put_content_observation(refreshed.clone())
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        store
+            .list_content_observations("post", object_id.as_str())
+            .await
+            .unwrap(),
+        vec![refreshed]
+    );
+
+    store.rebuild_object_projections(Vec::new()).await.unwrap();
+    assert!(
+        store
+            .list_content_observations("post", object_id.as_str())
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn content_observation_requires_local_subject_and_refreshes_timestamp() {
+    content_observation_scenario(&MemoryStore::default()).await;
+    content_observation_scenario(&SqliteStore::connect_memory().await.unwrap()).await;
+}

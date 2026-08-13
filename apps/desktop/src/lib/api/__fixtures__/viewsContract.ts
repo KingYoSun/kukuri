@@ -42,6 +42,16 @@ export const postViewFull = {
   "followed_by": true,
   "mutual": true,
   "friend_of_friend": false,
+  "provenance": {
+    "canonical_source": "author_docs",
+    "observed_via": [
+      {
+        "node_base_url": "https://node.example",
+        "capability": "community_index",
+        "observed_at": 1700000003000
+      }
+    ]
+  },
   "content": "hello ipc contract",
   "content_status": "Available",
   "attachments": [
@@ -146,6 +156,7 @@ export const postViewMinimal = {
   "followed_by": false,
   "mutual": false,
   "friend_of_friend": false,
+  "provenance": null,
   "content": "minimal",
   "content_status": "Missing",
   "attachments": [],
@@ -180,6 +191,7 @@ export const timelineView = {
       "followed_by": false,
       "mutual": false,
       "friend_of_friend": false,
+      "provenance": null,
       "content": "minimal",
       "content_status": "Missing",
       "attachments": [],
@@ -220,6 +232,7 @@ export const bookmarkedPostView = {
     "followed_by": false,
     "mutual": false,
     "friend_of_friend": false,
+    "provenance": null,
     "content": "minimal",
     "content_status": "Missing",
     "attachments": [],
@@ -599,6 +612,16 @@ export const authorSocialView = {
   "friend_of_friend_via_pubkeys": [
     "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
   ],
+  "provenance": {
+    "canonical_source": "author_docs",
+    "observed_via": [
+      {
+        "node_base_url": "https://node.example",
+        "capability": "community_index",
+        "observed_at": 1700000003000
+      }
+    ]
+  },
   "muted": true
 } satisfies AuthorSocialView;
 

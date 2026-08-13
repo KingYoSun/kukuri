@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   type ContentProvenance,
   type ReportTarget,
+  contentProvenanceFromView,
   hasResolvableReportTarget,
   isProvenanceUnknown,
   reportTargetContact,
@@ -104,5 +105,35 @@ describe('content provenance', () => {
     expect(unknownSummary.unknown).toBe(true);
     expect(unknownSummary.canReport).toBe(false);
     expect(unknownSummary.reportTargets).toEqual([]);
+  });
+
+  it('観測時刻を保ち、未知の機能は通報先の判定から除外する', () => {
+    expect(
+      contentProvenanceFromView({
+        canonical_source: 'author_docs',
+        observed_via: [
+          {
+            node_base_url: 'https://node.example',
+            capability: 'community_index',
+            observed_at: 123,
+          },
+          {
+            node_base_url: 'https://unknown.example',
+            capability: 'future_capability',
+            observed_at: 456,
+          },
+        ],
+      }),
+    ).toEqual({
+      canonicalSource: 'author_docs',
+      observedVia: [
+        {
+          nodeBaseUrl: 'https://node.example',
+          capability: 'community_index',
+          observedAt: 123,
+        },
+      ],
+      responsibleReportTargets: [],
+    });
   });
 });
