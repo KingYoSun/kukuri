@@ -42,6 +42,7 @@
     "updateAvailable": "アップデートがあります"
   },
   "primarySections": {
+    "explore": "見つける",
     "game": "ゲーム",
     "live": "ライブ",
     "messages": "メッセージ",
@@ -136,6 +137,28 @@
     "communityNodeUnavailableBody": "設定済みの community node に現在接続できません。起動は継続し、direct P2P 接続は引き続き利用できます。",
     "communityNodeUnavailableTitle": "Community node unavailable",
     "viewScope": "表示範囲"
+  },
+  "communityIndex": {
+    "title": "コミュニティインデックス",
+    "topicSummary": "利用可能な Community Node を使い、現在のトピックまたはプライベートチャンネルを検索します。",
+    "exploreSummary": "インデックスされたトピックを横断して、検索・発見・おすすめを利用します。",
+    "nodeLabel": "問い合わせ先 node",
+    "surfaces": "コミュニティインデックスの機能",
+    "operations": { "search": "検索", "discovery": "発見", "recommendations": "おすすめ" },
+    "operationHints": {
+      "discovery": "検索語を指定せず、最近インデックスされた公開結果を表示します。",
+      "recommendations": "選択した node からおすすめを取得します。"
+    },
+    "queryLabel": "検索語",
+    "queryPlaceholder": "インデックスを検索",
+    "queryRequired": "検索語を入力してください。",
+    "run": "実行",
+    "loading": "読み込み中…",
+    "empty": "一致するインデックス結果はありません。",
+    "results": "コミュニティインデックスの結果",
+    "previewNotice": "派生タグを含むことがある検索プレビューです。投稿の正本文ではありません。",
+    "noEligibleNode": "認証・同意済みで、利用可能な Community Index を公開している Community Node がありません。",
+    "allJoinedDisabled": "公開トピックまたはプライベートチャンネルを1つずつ検索してください。全参加範囲は node に送信しません。"
   },
   "report": {
     "title": "コンテンツを通報",

@@ -1,6 +1,6 @@
 import { startTransition, useCallback } from 'react';
 
-import type { DesktopApi } from '@/lib/api';
+import type { CommunityNodeNodeStatus, DesktopApi } from '@/lib/api';
 import { mergeCommunityNodeStatuses } from '@/shell/presentation';
 import type { DesktopShellState, DesktopShellStateValue } from '@/shell/store';
 
@@ -12,7 +12,7 @@ export function useConnectivityStatusRefresh(
   api: DesktopApi,
   setSyncStatus: Setter<'syncStatus'>,
   setCommunityNodeStatuses: Setter<'communityNodeStatuses'>
-): () => Promise<void> {
+): () => Promise<CommunityNodeNodeStatus[] | null> {
   return useCallback(async () => {
     const [syncStatusResult, communityNodeStatusesResult] = await Promise.allSettled([
       api.getSyncStatus(),
@@ -28,5 +28,8 @@ export function useConnectivityStatusRefresh(
         );
       }
     });
+    return communityNodeStatusesResult.status === 'fulfilled'
+      ? communityNodeStatusesResult.value
+      : null;
   }, [api, setCommunityNodeStatuses, setSyncStatus]);
 }

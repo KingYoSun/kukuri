@@ -183,6 +183,16 @@ export type CommunityNodeManifestFetchStatus = "ok" | "absent";
 
 export type CommunityNodeManifestFetch = { status: CommunityNodeManifestFetchStatus, manifest?: CommunityNodeManifest | null, };
 
+export type CommunityNodeIndexQueryRequest = { base_url: string, query?: string | null, scope_kind?: IndexScopeKind | null, scope_id?: string | null, limit?: number | null, };
+
+export type CommunityNodeIndexQueryError = { code: string, message: string, status?: number | null, retry_after_seconds?: number | null, };
+
+export type IndexScopeKind = "public_topic" | "private_channel";
+
+export type IndexEntryView = { scope_kind: IndexScopeKind, scope_id: string, object_id: string, author_pubkey: string, text: string, created_at: number, };
+
+export type IndexQueryResponse = { entries: Array<IndexEntryView>, };
+
 export type SubmitCommunityNodeReportRequest = { 
 /**
  * 通報先 node の base url（記録・表示用）。

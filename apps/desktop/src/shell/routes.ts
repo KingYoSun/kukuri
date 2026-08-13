@@ -48,6 +48,7 @@ export const PRIMARY_SECTION_ITEMS: Array<{
   label: string;
 }> = [
   { id: 'timeline', label: 'Timeline' },
+  { id: 'explore', label: 'Explore' },
   { id: 'live', label: 'Live' },
   { id: 'game', label: 'Game' },
   { id: 'messages', label: 'Messages' },
@@ -103,6 +104,7 @@ export const SETTINGS_SECTION_COPY: Array<{
 
 export const PRIMARY_SECTION_PATHS: Record<PrimarySection, string> = {
   timeline: '/timeline',
+  explore: '/explore',
   live: '/live',
   game: '/game',
   messages: '/messages',

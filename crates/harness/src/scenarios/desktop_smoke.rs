@@ -328,6 +328,10 @@ pub(crate) async fn run_desktop_smoke_scenario(
                     runtime.app.take();
                     runtime.launch().await?;
                 }
+                other => anyhow::bail!(
+                    "unsupported step for desktop smoke scenario: {}",
+                    step_name(other)
+                ),
             }
 
             steps.push(StepResult {

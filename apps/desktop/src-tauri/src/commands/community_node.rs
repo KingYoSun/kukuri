@@ -1,14 +1,14 @@
 use kukuri_desktop_runtime::{
-    AcceptCommunityNodeConsentsRequest, CommunityNodeConfig, CommunityNodeManifestFetch,
-    CommunityNodeNodeStatus, CommunityNodeTargetRequest, CreatePrivateChannelRequest,
-    DiscoveryConfig, ExportChannelAccessTokenRequest, ExportFriendOnlyGrantRequest,
-    ExportFriendPlusShareRequest, ExportPrivateChannelInviteRequest, FreezePrivateChannelRequest,
-    ImportChannelAccessTokenRequest, ImportFriendOnlyGrantRequest, ImportFriendPlusShareRequest,
-    ImportPeerTicketRequest, ImportPrivateChannelInviteRequest, LeavePrivateChannelRequest,
-    ListJoinedPrivateChannelsRequest, PreviewChannelAccessTokenRequest,
-    RotatePrivateChannelRequest, SetChannelGossipEnabledRequest, SetCommunityNodeConfigRequest,
-    SetDiscoverySeedsRequest, SetTopicGossipEnabledRequest, SubmitCommunityNodeReportRequest,
-    SubmitCommunityNodeReportResult, UnsubscribeTopicRequest,
+    AcceptCommunityNodeConsentsRequest, CommunityNodeConfig, CommunityNodeIndexQueryRequest,
+    CommunityNodeManifestFetch, CommunityNodeNodeStatus, CommunityNodeTargetRequest,
+    CreatePrivateChannelRequest, DiscoveryConfig, ExportChannelAccessTokenRequest,
+    ExportFriendOnlyGrantRequest, ExportFriendPlusShareRequest, ExportPrivateChannelInviteRequest,
+    FreezePrivateChannelRequest, ImportChannelAccessTokenRequest, ImportFriendOnlyGrantRequest,
+    ImportFriendPlusShareRequest, ImportPeerTicketRequest, ImportPrivateChannelInviteRequest,
+    IndexQueryResponse, LeavePrivateChannelRequest, ListJoinedPrivateChannelsRequest,
+    PreviewChannelAccessTokenRequest, RotatePrivateChannelRequest, SetChannelGossipEnabledRequest,
+    SetCommunityNodeConfigRequest, SetDiscoverySeedsRequest, SetTopicGossipEnabledRequest,
+    SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult, UnsubscribeTopicRequest,
 };
 
 use crate::state::{CommandError, DesktopState, map_error};
@@ -393,4 +393,40 @@ pub async fn submit_community_node_report(
         .submit_community_node_report(request)
         .await
         .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn search_community_node_index(
+    state: tauri::State<'_, DesktopState>,
+    request: CommunityNodeIndexQueryRequest,
+) -> Result<IndexQueryResponse, CommandError> {
+    state
+        .runtime
+        .search_community_node_index(request)
+        .await
+        .map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub async fn discover_community_node_index(
+    state: tauri::State<'_, DesktopState>,
+    request: CommunityNodeIndexQueryRequest,
+) -> Result<IndexQueryResponse, CommandError> {
+    state
+        .runtime
+        .discover_community_node_index(request)
+        .await
+        .map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub async fn recommend_community_node_index(
+    state: tauri::State<'_, DesktopState>,
+    request: CommunityNodeIndexQueryRequest,
+) -> Result<IndexQueryResponse, CommandError> {
+    state
+        .runtime
+        .recommend_community_node_index(request)
+        .await
+        .map_err(CommandError::from)
 }

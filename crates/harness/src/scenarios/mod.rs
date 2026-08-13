@@ -1,6 +1,7 @@
 use crate::*;
 
 mod community_node;
+mod community_node_index;
 mod desktop_smoke;
 mod direct_message;
 mod private_channel;
@@ -51,6 +52,14 @@ pub async fn run_scenario(
         }
         ScenarioKind::PairwiseDirectMessageConnectivity => {
             direct_message::run_pairwise_direct_message_connectivity(scenario, artifacts_dir).await
+        }
+        ScenarioKind::CommunityNodeIndexQueryClient => {
+            community_node_index::run_community_node_index_query_client(
+                root,
+                scenario,
+                artifacts_dir,
+            )
+            .await
         }
     }
 }

@@ -1,6 +1,30 @@
 use super::*;
 
 impl DesktopRuntime {
+    pub async fn search_community_node_index(
+        &self,
+        request: CommunityNodeIndexQueryRequest,
+    ) -> std::result::Result<IndexQueryResponse, CommunityNodeIndexQueryError> {
+        self.query_community_node_index(IndexOperation::Search, request)
+            .await
+    }
+
+    pub async fn discover_community_node_index(
+        &self,
+        request: CommunityNodeIndexQueryRequest,
+    ) -> std::result::Result<IndexQueryResponse, CommunityNodeIndexQueryError> {
+        self.query_community_node_index(IndexOperation::Discovery, request)
+            .await
+    }
+
+    pub async fn recommend_community_node_index(
+        &self,
+        request: CommunityNodeIndexQueryRequest,
+    ) -> std::result::Result<IndexQueryResponse, CommunityNodeIndexQueryError> {
+        self.query_community_node_index(IndexOperation::Recommendations, request)
+            .await
+    }
+
     pub async fn get_community_node_config(&self) -> Result<CommunityNodeConfig> {
         Ok(self.community_node_config.lock().await.clone())
     }

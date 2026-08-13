@@ -6,6 +6,7 @@ import type {
   ChannelAccessTokenExport,
   ChannelAccessTokenPreview,
   CommunityNodeConfig,
+  CommunityNodeIndexQueryRequest,
   CommunityNodeManifestFetch,
   CommunityNodeNodeStatus,
   CustomReactionAssetView,
@@ -18,6 +19,7 @@ import type {
   FriendPlusSharePreview,
   GameRoomView,
   JoinedPrivateChannelView,
+  IndexQueryResponse,
   LiveSessionView,
   MetaverseAssetRef,
   MetaverseRoomEventView,
@@ -634,6 +636,21 @@ export const runtimeApi: DesktopApi = {
       request: {
         base_url: baseUrl,
       } satisfies CommunityNodeTargetRequest,
+    });
+  }),
+  searchCommunityNodeIndex: command('searchCommunityNodeIndex', async (request) => {
+    return invokeDesktop<IndexQueryResponse>('search_community_node_index', {
+      request: request satisfies CommunityNodeIndexQueryRequest,
+    });
+  }),
+  discoverCommunityNodeIndex: command('discoverCommunityNodeIndex', async (request) => {
+    return invokeDesktop<IndexQueryResponse>('discover_community_node_index', {
+      request: request satisfies CommunityNodeIndexQueryRequest,
+    });
+  }),
+  recommendCommunityNodeIndex: command('recommendCommunityNodeIndex', async (request) => {
+    return invokeDesktop<IndexQueryResponse>('recommend_community_node_index', {
+      request: request satisfies CommunityNodeIndexQueryRequest,
     });
   }),
   submitCommunityNodeReport: command('submitCommunityNodeReport', async (request) => {

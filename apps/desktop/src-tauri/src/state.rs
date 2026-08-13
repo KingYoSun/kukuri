@@ -143,6 +143,10 @@ pub(crate) fn failed_status(error: StartupError, db_path: Option<PathBuf>) -> De
 pub(crate) struct CommandError {
     pub(crate) code: String,
     pub(crate) message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) status: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) retry_after_seconds: Option<u64>,
 }
 
 pub(crate) const COMMAND_FAILED_CODE: &str = "command_failed";
@@ -152,6 +156,8 @@ impl From<anyhow::Error> for CommandError {
         Self {
             code: COMMAND_FAILED_CODE.to_string(),
             message: error_message(error),
+            status: None,
+            retry_after_seconds: None,
         }
     }
 }
@@ -161,6 +167,19 @@ impl From<String> for CommandError {
         Self {
             code: COMMAND_FAILED_CODE.to_string(),
             message,
+            status: None,
+            retry_after_seconds: None,
+        }
+    }
+}
+
+impl From<kukuri_desktop_runtime::CommunityNodeIndexQueryError> for CommandError {
+    fn from(error: kukuri_desktop_runtime::CommunityNodeIndexQueryError) -> Self {
+        Self {
+            code: error.code,
+            message: error.message,
+            status: error.status,
+            retry_after_seconds: error.retry_after_seconds,
         }
     }
 }
@@ -279,6 +298,21 @@ mod tests {
         let error = CommandError::from("failed to resolve app data dir: boom".to_string());
         assert_eq!(error.code, COMMAND_FAILED_CODE);
         assert_eq!(error.message, "failed to resolve app data dir: boom");
+    }
+
+    #[test]
+    fn community_index_error_serializes_status_and_retry_after() {
+        let error = CommandError::from(kukuri_desktop_runtime::CommunityNodeIndexQueryError {
+            code: "RATE_LIMITED".to_string(),
+            message: "try again later".to_string(),
+            status: Some(429),
+            retry_after_seconds: Some(17),
+        });
+        let json = serde_json::to_string(&error).expect("serialize index error");
+        assert_eq!(
+            json,
+            r#"{"code":"RATE_LIMITED","message":"try again later","status":429,"retry_after_seconds":17}"#
+        );
     }
 
     #[test]

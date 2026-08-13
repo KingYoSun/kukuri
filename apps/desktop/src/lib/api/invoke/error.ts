@@ -6,11 +6,20 @@ export type InvokeErrorCode = 'command_failed' | 'bridge_unavailable';
 
 export class InvokeError extends Error {
   readonly code: string;
+  readonly status: number | null;
+  readonly retryAfterSeconds: number | null;
 
-  constructor(code: string, message: string) {
+  constructor(
+    code: string,
+    message: string,
+    status: number | null = null,
+    retryAfterSeconds: number | null = null
+  ) {
     super(message);
     this.name = 'InvokeError';
     this.code = code;
+    this.status = status;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
@@ -18,7 +27,12 @@ export function isBridgeUnavailableError(error: unknown): boolean {
   return error instanceof InvokeError && error.code === 'bridge_unavailable';
 }
 
-function isCommandErrorPayload(error: unknown): error is { code: string; message: string } {
+function isCommandErrorPayload(error: unknown): error is {
+  code: string;
+  message: string;
+  status?: number | null;
+  retry_after_seconds?: number | null;
+} {
   return (
     typeof error === 'object' &&
     error !== null &&
@@ -35,7 +49,12 @@ export function normalizeInvokeError(error: unknown): InvokeError {
   }
   // バックエンドの構造化封筒はそのまま code を引き継ぐ(message は平文文言のまま)。
   if (isCommandErrorPayload(error)) {
-    return new InvokeError(error.code, error.message);
+    return new InvokeError(
+      error.code,
+      error.message,
+      typeof error.status === 'number' ? error.status : null,
+      typeof error.retry_after_seconds === 'number' ? error.retry_after_seconds : null
+    );
   }
   const message =
     error instanceof Error

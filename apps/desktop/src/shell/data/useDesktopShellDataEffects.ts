@@ -65,12 +65,15 @@ type UseDesktopShellDataEffectsArgs = {
   loadAuthorSection: (pubkey: string) => Promise<void>;
   loadMessagesSection: () => Promise<void>;
   loadNotificationsSection: () => Promise<void>;
+  loadCommunityIndexCapability: (
+    refreshedStatuses?: readonly CommunityNodeNodeStatus[]
+  ) => Promise<void>;
   refreshVisibleShellData: (
     topic: string,
     currentThread: string | null,
     mode?: 'apply' | 'buffer'
   ) => Promise<void>;
-  refreshConnectivityStatus: () => Promise<void>;
+  refreshConnectivityStatus: () => Promise<CommunityNodeNodeStatus[] | null>;
   setNotificationStatus: Setter<'notificationStatus'>;
   setCommunityNodeStatuses: Setter<'communityNodeStatuses'>;
   setSyncStatus: Setter<'syncStatus'>;
@@ -107,6 +110,7 @@ export function useDesktopShellDataEffects({
   loadAuthorSection,
   loadMessagesSection,
   loadNotificationsSection,
+  loadCommunityIndexCapability,
   refreshVisibleShellData,
   refreshConnectivityStatus,
   setNotificationStatus,
@@ -207,7 +211,9 @@ export function useDesktopShellDataEffects({
   useRuntimeEventBridge(refreshNotificationStatus, applySyncStatusChange);
 
   useEffect(() => {
-    void refreshConnectivityStatus();
+    void refreshConnectivityStatus()
+      .then((statuses) => loadCommunityIndexCapability(statuses ?? undefined))
+      .catch(() => undefined);
     const intervalMs = isTauriRuntime()
       ? CONNECTIVITY_STATUS_FALLBACK_INTERVAL_MS
       : REFRESH_INTERVAL_MS;
@@ -217,7 +223,7 @@ export function useDesktopShellDataEffects({
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [refreshConnectivityStatus]);
+  }, [loadCommunityIndexCapability, refreshConnectivityStatus]);
 
   useEffect(() => {
     void refreshNotificationStatus();

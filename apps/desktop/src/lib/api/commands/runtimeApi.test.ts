@@ -28,3 +28,22 @@ test('setChannelGossipEnabled invokes the desktop command', async () => {
     request: { topic: 'kukuri:topic:demo', channel: 'channel-1', enabled: true },
   });
 });
+
+test('searchCommunityNodeIndex invokes the typed index command', async () => {
+  await runtimeApi.searchCommunityNodeIndex({
+    base_url: 'https://node.example',
+    query: 'hello',
+    scope_kind: 'public_topic',
+    scope_id: 'rust',
+    limit: 20,
+  });
+  expect(invokeMock).toHaveBeenCalledWith('search_community_node_index', {
+    request: {
+      base_url: 'https://node.example',
+      query: 'hello',
+      scope_kind: 'public_topic',
+      scope_id: 'rust',
+      limit: 20,
+    },
+  });
+});

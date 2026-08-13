@@ -161,6 +161,7 @@ export function useDesktopShellViewModels({
     shellChromeState.activePrimarySection !== 'profile' &&
     shellChromeState.activePrimarySection !== 'messages' &&
     shellChromeState.activePrimarySection !== 'notifications' &&
+    shellChromeState.activePrimarySection !== 'explore' &&
     !(
       shellChromeState.activePrimarySection === 'timeline' &&
       shellChromeState.timelineView === 'bookmarks'

@@ -23,6 +23,8 @@ use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 use uuid::Uuid;
 
+pub use kukuri_cn_protocol::IndexScopeKind;
+
 /// private channel capability 暗号化の AEAD associated data のドメイン分離 prefix。
 /// 実際の AAD は `channel_id` を連結して channel 同一性に束縛する（`channel_secret_aad`）。
 const CHANNEL_SECRET_AAD_PREFIX: &[u8] = b"kukuri-cn-index:channel-secret:v1:";
@@ -35,32 +37,6 @@ fn channel_secret_aad(channel_id: &str) -> Vec<u8> {
     let mut aad = CHANNEL_SECRET_AAD_PREFIX.to_vec();
     aad.extend_from_slice(channel_id.as_bytes());
     aad
-}
-
-/// indexing scope の種別。public topic は導出 namespace で open でき、private channel は
-/// 登録 capability（secret）が必要（ADR 0025 §6.2 / §6.3）。
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum IndexScopeKind {
-    PublicTopic,
-    PrivateChannel,
-}
-
-impl IndexScopeKind {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            IndexScopeKind::PublicTopic => "public_topic",
-            IndexScopeKind::PrivateChannel => "private_channel",
-        }
-    }
-
-    pub fn parse(value: &str) -> Result<Self> {
-        match value {
-            "public_topic" => Ok(IndexScopeKind::PublicTopic),
-            "private_channel" => Ok(IndexScopeKind::PrivateChannel),
-            other => bail!("unknown index scope kind `{other}`"),
-        }
-    }
 }
 
 /// indexing request の処理状態。

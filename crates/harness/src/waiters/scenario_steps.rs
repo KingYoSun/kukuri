@@ -21,6 +21,10 @@ pub(crate) fn step_name(step: &ScenarioStep) -> &'static str {
         ScenarioStep::UpdateGameRoom { .. } => "update_game_room",
         ScenarioStep::AssertGameScore { .. } => "assert_game_score",
         ScenarioStep::RestartDesktop => "restart_desktop",
+        ScenarioStep::SearchCommunityIndex { .. } => "search_community_index",
+        ScenarioStep::DiscoverCommunityIndex { .. } => "discover_community_index",
+        ScenarioStep::RecommendCommunityIndex { .. } => "recommend_community_index",
+        ScenarioStep::AssertCommunityIndexError { .. } => "assert_community_index_error",
     }
 }
 

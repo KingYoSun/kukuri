@@ -180,6 +180,7 @@ export function DesktopShellPage({
   const settingsTriggerRef = useRef<HTMLButtonElement | null>(null);
   const primarySectionRefs = useRef<Record<PrimarySection, HTMLElement | null>>({
     timeline: null,
+    explore: null,
     live: null,
     game: null,
     messages: null,

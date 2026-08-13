@@ -1,5 +1,6 @@
 export type PrimarySection =
   | 'timeline'
+  | 'explore'
   | 'live'
   | 'game'
   | 'messages'

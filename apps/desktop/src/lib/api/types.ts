@@ -11,6 +11,7 @@ import type {
   ChannelAudienceKind,
   ChannelRef,
   CommunityNodeConfig,
+  CommunityNodeIndexQueryRequest,
   CommunityNodeManifestFetch,
   CommunityNodeNodeStatus,
   CustomReactionAssetView,
@@ -39,6 +40,7 @@ import type {
   SocialConnectionKind,
   SubmitCommunityNodeReportRequest,
   SubmitCommunityNodeReportResult,
+  IndexQueryResponse,
   SyncStatus,
   TimelineCursor,
   TimelineScope,
@@ -62,6 +64,8 @@ export type PostView = WirePostView & {
 export type CommandError = {
   code: string;
   message: string;
+  status?: number | null;
+  retry_after_seconds?: number | null;
 };
 
 export type DesktopStartupErrorKind = 'database_open' | 'database_migration' | 'unknown';
@@ -342,6 +346,15 @@ export interface DesktopApi {
   ): Promise<CommunityNodeNodeStatus>;
   refreshCommunityNodeMetadata(baseUrl: string): Promise<CommunityNodeNodeStatus>;
   fetchCommunityNodeManifest(baseUrl: string): Promise<CommunityNodeManifestFetch>;
+  searchCommunityNodeIndex(
+    request: CommunityNodeIndexQueryRequest
+  ): Promise<IndexQueryResponse>;
+  discoverCommunityNodeIndex(
+    request: CommunityNodeIndexQueryRequest
+  ): Promise<IndexQueryResponse>;
+  recommendCommunityNodeIndex(
+    request: CommunityNodeIndexQueryRequest
+  ): Promise<IndexQueryResponse>;
   submitCommunityNodeReport(
     request: SubmitCommunityNodeReportRequest
   ): Promise<SubmitCommunityNodeReportResult>;

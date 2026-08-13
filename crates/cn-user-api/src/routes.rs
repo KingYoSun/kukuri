@@ -14,8 +14,8 @@ use axum::{Json, Router};
 use kukuri_cn_operator::CommunityNodeManifest;
 use kukuri_cn_protocol::{
     AUTH_CHALLENGE_PATH, AUTH_VERIFY_PATH, BOOTSTRAP_HEARTBEAT_PATH, BOOTSTRAP_NODES_PATH,
-    CONSENTS_PATH, CONSENTS_STATUS_PATH, NODE_MANIFEST_PATH, REPORT_PATH,
-    TOPIC_RENDEZVOUS_HEARTBEAT_PATH,
+    CONSENTS_PATH, CONSENTS_STATUS_PATH, INDEX_DISCOVERY_PATH, INDEX_RECOMMENDATIONS_PATH,
+    INDEX_SEARCH_PATH, NODE_MANIFEST_PATH, REPORT_PATH, TOPIC_RENDEZVOUS_HEARTBEAT_PATH,
 };
 use serde_json::{Value, json};
 use tower_http::trace::TraceLayer;
@@ -57,9 +57,9 @@ pub fn app_router(state: UserApiState) -> Router {
         )
         .route(REPORT_PATH, post(submit_report))
         .route("/v1/indexing/requests", post(submit_indexing_request))
-        .route("/v1/index/search", get(index_search))
-        .route("/v1/index/discovery", get(index_discovery))
-        .route("/v1/index/recommendations", get(index_recommendations))
+        .route(INDEX_SEARCH_PATH, get(index_search))
+        .route(INDEX_DISCOVERY_PATH, get(index_discovery))
+        .route(INDEX_RECOMMENDATIONS_PATH, get(index_recommendations))
         .route("/v1/trust/users/{pubkey}", get(trust_user_read))
         .route("/v1/trust/pull/{pubkey}", get(trust_pull))
         .route("/v1/relation/users/{target}", get(relation_user_read))
