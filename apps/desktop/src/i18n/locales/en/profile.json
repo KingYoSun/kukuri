@@ -1,4 +1,35 @@
 {
+  "communityNodeAdvisory": {
+    "title": "Community Node advisory",
+    "nodeLocalNotice": "Information from the selected Community Node only. It is not a network-wide judgment and does not hide this author by default.",
+    "noNodes": "Configure and authenticate a Community Node to request advisory information.",
+    "nodeLabel": "Community Node",
+    "load": "Load advisory",
+    "loading": "Loading…",
+    "errors": {
+      "trust_not_configured": "This Community Node does not provide trust advisory reads.",
+      "trust_not_activated": "Trust advisory reads are not active for your current node session.",
+      "relation_unavailable": "Relation information is unavailable from this Community Node. The reason is intentionally not disclosed."
+    },
+    "trust": {
+      "title": "Trust advisory",
+      "continuousNotice": "Continuous values with their basis; no fixed risk label is assigned.",
+      "trust": "Composite trust",
+      "absolute": "Absolute component",
+      "relative": "Relative component",
+      "weight": "Absolute weight",
+      "noBasis": "This advisory contains no basis entries."
+    },
+    "relation": {
+      "title": "Relation proximity",
+      "score": "Continuous proximity: {{score}}"
+    },
+    "neighbors": {
+      "title": "Nearby users",
+      "notice": "Loaded only by this action. This list does not automatically filter the timeline, search, or recommendations.",
+      "empty": "No nearby users were returned."
+    }
+  },
   "editor": {
     "about": "About",
     "back": "Back to profile",

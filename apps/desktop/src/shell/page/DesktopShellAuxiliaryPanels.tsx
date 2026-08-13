@@ -2,6 +2,7 @@ import { useMemo, type ChangeEvent, type FormEvent } from 'react';
 
 import { AuthorAvatar } from '@/components/core/AuthorAvatar';
 import { AuthorDetailCard } from '@/components/core/AuthorDetailCard';
+import { CommunityNodeAdvisoryPanel } from '@/components/core/CommunityNodeAdvisoryPanel';
 import { AuthorIdentityButton } from '@/components/core/AuthorIdentityButton';
 import { ComposerDraftPreviewList } from '@/components/core/ComposerDraftPreviewList';
 import { ThreadPanel } from '@/components/core/ThreadPanel';
@@ -15,6 +16,7 @@ import { Notice } from '@/components/ui/notice';
 import { Textarea } from '@/components/ui/textarea';
 
 import type {
+  DesktopApi,
   NotificationView,
   PostView,
   ReactionKeyInput,
@@ -569,6 +571,7 @@ export function DesktopShellNotificationsWorkspace({
 }
 
 type DetailPaneStackProps = {
+  api: DesktopApi;
   t: Translate;
   viewModels: Pick<
     ViewModels,
@@ -601,6 +604,7 @@ type DetailPaneStackProps = {
 };
 
 export function DesktopShellDetailPaneStack({
+  api,
   t,
   viewModels,
   closeAuthorPane,
@@ -626,6 +630,7 @@ export function DesktopShellDetailPaneStack({
   const {
     activeTopic,
     bookmarkedReactionAssets,
+    communityNodeConfig,
     focusedObjectId,
     mediaObjectUrls,
     ownedReactionAssets,
@@ -640,6 +645,7 @@ export function DesktopShellDetailPaneStack({
     useShallow((s) => ({
       activeTopic: s.activeTopic,
       bookmarkedReactionAssets: s.bookmarkedReactionAssets,
+      communityNodeConfig: s.communityNodeConfig,
       focusedObjectId: s.focusedObjectId,
       mediaObjectUrls: s.mediaObjectUrls,
       ownedReactionAssets: s.ownedReactionAssets,
@@ -723,6 +729,15 @@ export function DesktopShellDetailPaneStack({
               }
               onToggleMute={(authorPubkey, muted) => void handleMuteAction(authorPubkey, muted)}
               onOpenDirectMessage={(authorPubkey) => void openDirectMessagePane(authorPubkey)}
+              communityNodeAdvisory={
+                selectedAuthorPubkey !== syncStatus.local_author_pubkey ? (
+                  <CommunityNodeAdvisoryPanel
+                    api={api}
+                    targetPubkey={selectedAuthorPubkey}
+                    nodeBaseUrls={communityNodeConfig.nodes.map((node) => node.base_url)}
+                  />
+                ) : null
+              }
             />
             <Card className='shell-workspace-card'>
               <TimelineFeed

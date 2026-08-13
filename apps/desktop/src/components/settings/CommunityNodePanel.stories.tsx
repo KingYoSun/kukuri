@@ -1,6 +1,7 @@
 import { useState, type ComponentProps } from 'react';
 
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { userEvent, within } from 'storybook/test';
 
 import { CommunityNodePanel } from './CommunityNodePanel';
 import { communityNodePanelFixture } from './fixtures';
@@ -92,6 +93,24 @@ const meta = {
     onAcceptConsents: () => {},
     onRefresh: () => {},
     onClearToken: () => {},
+    onGetRelationOptout: async () => ({
+      pubkey: 'story-user',
+      opted_out: false,
+      opted_out_at: null,
+      min_proximity: 0.25,
+    }),
+    onSetRelationOptout: async () => ({
+      pubkey: 'story-user',
+      opted_out: true,
+      opted_out_at: new Date(0).toISOString(),
+      min_proximity: 0.25,
+    }),
+    onClearRelationOptout: async () => ({
+      pubkey: 'story-user',
+      opted_out: false,
+      opted_out_at: null,
+      min_proximity: 0.25,
+    }),
   },
 } satisfies Meta<typeof CommunityNodePanel>;
 
@@ -100,6 +119,15 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Ready: Story = {};
+
+export const DistanceOptout: Story = {
+  args: { showDiagnostics: false },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getAllByRole('button', { name: 'Load setting' })[0]);
+    canvasElement.ownerDocument.defaultView?.scrollTo(0, 0);
+  },
+};
 
 export const NarrowError: Story = {
   args: {

@@ -10,6 +10,7 @@ pub enum ScenarioKind {
     PrivateChannelInviteConnectivity,
     PairwiseDirectMessageConnectivity,
     CommunityNodeIndexQueryClient,
+    CommunityNodeTrustRelationClient,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -118,6 +119,26 @@ pub enum ScenarioStep {
     },
     AssertCommunityIndexError {
         query: String,
+        code: String,
+    },
+    ReadCommunityTrust {
+        target_pubkey: String,
+        expect_trust_millis: i64,
+    },
+    ReadCommunityRelation {
+        target_pubkey: String,
+        expect_score_millis: i64,
+    },
+    AssertCommunityRelationNeighbor {
+        pubkey: String,
+    },
+    AssertRelationOptout {
+        operation: String,
+        expect_enabled: bool,
+    },
+    AssertTrustRelationError {
+        endpoint: String,
+        target_pubkey: String,
         code: String,
     },
 }

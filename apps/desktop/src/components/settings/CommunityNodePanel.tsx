@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
+import type { RelationOptoutResponse } from '@/lib/api';
 
 import { CommunityNodeConsentDialog } from './CommunityNodeConsentDialog';
 import { SettingsActionRow } from './SettingsActionRow';
@@ -30,6 +31,9 @@ type CommunityNodePanelProps = {
   onAcceptConsents: (baseUrl: string) => void | Promise<void>;
   onRefresh: (baseUrl: string) => void;
   onClearToken: (baseUrl: string) => void;
+  onGetRelationOptout?: (baseUrl: string) => Promise<RelationOptoutResponse>;
+  onSetRelationOptout?: (baseUrl: string) => Promise<RelationOptoutResponse>;
+  onClearRelationOptout?: (baseUrl: string) => Promise<RelationOptoutResponse>;
   showDiagnostics?: boolean;
 };
 
@@ -51,12 +55,48 @@ export function CommunityNodePanel({
   onAcceptConsents,
   onRefresh,
   onClearToken,
+  onGetRelationOptout,
+  onSetRelationOptout,
+  onClearRelationOptout,
   showDiagnostics = true,
 }: CommunityNodePanelProps) {
   const { t } = useTranslation(['common', 'settings']);
   const [consentDialogNodeBaseUrl, setConsentDialogNodeBaseUrl] = useState<string | null>(null);
   const [consentDialogLoadedBaseUrl, setConsentDialogLoadedBaseUrl] = useState<string | null>(null);
   const [consentBusy, setConsentBusy] = useState(false);
+  const [relationOptoutByNode, setRelationOptoutByNode] = useState<
+    Record<string, { busy: boolean; value: RelationOptoutResponse | null; error: string | null }>
+  >({});
+
+  const relationOptoutAvailable = Boolean(
+    onGetRelationOptout && onSetRelationOptout && onClearRelationOptout
+  );
+
+  async function updateRelationOptout(
+    baseUrl: string,
+    operation: () => Promise<RelationOptoutResponse>
+  ) {
+    setRelationOptoutByNode((current) => ({
+      ...current,
+      [baseUrl]: { busy: true, value: current[baseUrl]?.value ?? null, error: null },
+    }));
+    try {
+      const value = await operation();
+      setRelationOptoutByNode((current) => ({
+        ...current,
+        [baseUrl]: { busy: false, value, error: null },
+      }));
+    } catch (error) {
+      setRelationOptoutByNode((current) => ({
+        ...current,
+        [baseUrl]: {
+          busy: false,
+          value: current[baseUrl]?.value ?? null,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      }));
+    }
+  }
 
   const consentDialogNode =
     consentDialogNodeBaseUrl != null
@@ -134,7 +174,9 @@ export function CommunityNodePanel({
       {view.nodes.length === 0 ? <Notice>{t('settings:communityNode.noNodes')}</Notice> : null}
 
       <div className='min-w-0 space-y-3'>
-        {view.nodes.map((node) => (
+        {view.nodes.map((node) => {
+          const relationOptout = relationOptoutByNode[node.baseUrl];
+          return (
           <section
             key={node.id}
             className='min-w-0 rounded-[20px] border border-[var(--border-subtle)] bg-[var(--surface-panel-soft)] p-4 shadow-[var(--shadow-dropdown)]'
@@ -232,8 +274,72 @@ export function CommunityNodePanel({
                 </Button>
               </SettingsActionRow>
             </div>
+            {relationOptoutAvailable ? (
+              <section className='mt-4 space-y-3 rounded-[16px] border border-[var(--border-subtle)] p-4'>
+                <div className='space-y-1'>
+                  <h5 className='text-sm font-semibold text-foreground'>
+                    {t('settings:communityNode.distanceOptout.title')}
+                  </h5>
+                  <p className='text-sm text-[var(--muted-foreground)]'>
+                    {t('settings:communityNode.distanceOptout.description')}
+                  </p>
+                  <p className='text-sm text-[var(--muted-foreground)]'>
+                    {t('settings:communityNode.distanceOptout.notPrivacy')}
+                  </p>
+                </div>
+                {relationOptout?.value ? (
+                  <Notice tone={relationOptout.value.opted_out ? 'warning' : 'neutral'}>
+                    {relationOptout.value.opted_out
+                      ? t('settings:communityNode.distanceOptout.enabled', {
+                          distance: relationOptout.value.min_proximity,
+                        })
+                      : t('settings:communityNode.distanceOptout.disabled', {
+                          distance: relationOptout.value.min_proximity,
+                        })}
+                  </Notice>
+                ) : (
+                  <p className='text-sm text-[var(--muted-foreground)]'>
+                    {t('settings:communityNode.distanceOptout.notLoaded')}
+                  </p>
+                )}
+                {relationOptout?.error ? <Notice tone='destructive'>{relationOptout.error}</Notice> : null}
+                <SettingsActionRow>
+                  <Button
+                    variant='secondary'
+                    disabled={nodeActionsDisabled || !node.saved || !node.baseUrl.trim() || relationOptout?.busy}
+                    onClick={() =>
+                      void updateRelationOptout(node.baseUrl, () => onGetRelationOptout!(node.baseUrl))
+                    }
+                  >
+                    {t('settings:communityNode.distanceOptout.load')}
+                  </Button>
+                  {relationOptout?.value?.opted_out ? (
+                    <Button
+                      variant='secondary'
+                      disabled={relationOptout.busy}
+                      onClick={() =>
+                        void updateRelationOptout(node.baseUrl, () => onClearRelationOptout!(node.baseUrl))
+                      }
+                    >
+                      {t('settings:communityNode.distanceOptout.clear')}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant='secondary'
+                      disabled={!relationOptout?.value || relationOptout.busy}
+                      onClick={() =>
+                        void updateRelationOptout(node.baseUrl, () => onSetRelationOptout!(node.baseUrl))
+                      }
+                    >
+                      {t('settings:communityNode.distanceOptout.enable')}
+                    </Button>
+                  )}
+                </SettingsActionRow>
+              </section>
+            ) : null}
           </section>
-        ))}
+          );
+        })}
       </div>
 
       {consentDialogNode && consentDialogView ? (

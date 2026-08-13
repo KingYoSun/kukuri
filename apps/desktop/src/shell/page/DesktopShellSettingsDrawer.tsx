@@ -9,7 +9,7 @@ import { ReactionsPanel } from '@/components/settings/ReactionsPanel';
 import { SettingsDrawer } from '@/components/shell/SettingsDrawer';
 
 import type { SupportedLocale } from '@/i18n';
-import type { CustomReactionCropRect } from '@/lib/api';
+import type { CustomReactionCropRect, DesktopApi } from '@/lib/api';
 import { writeDeveloperMode } from '@/lib/developerMode';
 import type { DesktopTheme } from '@/lib/theme';
 import { communityNodesToDraftNodes, seedPeersToEditorValue } from '@/shell/presentation';
@@ -25,6 +25,7 @@ import { useShallow } from 'zustand/react/shallow';
 type ViewModels = ReturnType<typeof useDesktopShellViewModels>;
 
 type DesktopShellSettingsDrawerProps = {
+  api: DesktopApi;
   onThemeChange: (theme: DesktopTheme) => void;
   onLocaleChange: (locale: SupportedLocale) => void;
   syncRoute: SyncRoute;
@@ -60,6 +61,7 @@ function createCommunityNodeDraftId(): string {
 }
 
 export function DesktopShellSettingsDrawer({
+  api,
   onThemeChange,
   onLocaleChange,
   syncRoute,
@@ -212,6 +214,9 @@ export function DesktopShellSettingsDrawer({
           onAcceptConsents={(baseUrl) => handleAcceptCommunityNodeConsents(baseUrl)}
           onRefresh={(baseUrl) => void handleRefreshCommunityNode(baseUrl)}
           onClearToken={(baseUrl) => void handleClearCommunityNodeToken(baseUrl)}
+          onGetRelationOptout={(baseUrl) => api.getCommunityNodeRelationOptout(baseUrl)}
+          onSetRelationOptout={(baseUrl) => api.setCommunityNodeRelationOptout(baseUrl)}
+          onClearRelationOptout={(baseUrl) => api.clearCommunityNodeRelationOptout(baseUrl)}
         />
       ),
     },

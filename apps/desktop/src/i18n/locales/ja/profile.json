@@ -1,4 +1,35 @@
 {
+  "communityNodeAdvisory": {
+    "title": "Community Node の情報提供",
+    "nodeLocalNotice": "選択した Community Node だけが提供する情報です。ネットワーク全体の判断ではなく、既定でこの著者を非表示にはしません。",
+    "noNodes": "情報を取得するには Community Node を設定して認証してください。",
+    "nodeLabel": "Community Node",
+    "load": "情報を読み込む",
+    "loading": "読み込み中…",
+    "errors": {
+      "trust_not_configured": "この Community Node は trust 情報の読み取りを提供していません。",
+      "trust_not_activated": "現在のノードセッションでは trust 情報が有効になっていません。",
+      "relation_unavailable": "この Community Node では relation 情報を利用できません。理由は推測・開示しません。"
+    },
+    "trust": {
+      "title": "Trust advisory",
+      "continuousNotice": "固定的な危険ラベルを付けず、連続値とその根拠を表示します。",
+      "trust": "合成 trust",
+      "absolute": "absolute 成分",
+      "relative": "relative 成分",
+      "weight": "absolute の重み",
+      "noBasis": "この advisory には根拠項目がありません。"
+    },
+    "relation": {
+      "title": "Relation proximity",
+      "score": "連続値の proximity: {{score}}"
+    },
+    "neighbors": {
+      "title": "近いユーザー",
+      "notice": "この操作をしたときだけ取得します。タイムライン・検索・推薦を自動的に絞り込みません。",
+      "empty": "近いユーザーは返されませんでした。"
+    }
+  },
   "editor": {
     "about": "自己紹介",
     "back": "プロフィールに戻る",
