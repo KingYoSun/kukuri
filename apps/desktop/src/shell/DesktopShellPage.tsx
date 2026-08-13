@@ -670,6 +670,7 @@ export function DesktopShellPage({
   );
   const detailPaneStack = (
     <DesktopShellDetailPaneStack
+      api={api}
       t={t}
       viewModels={viewModels}
       closeAuthorPane={closeAuthorPane}
@@ -827,6 +828,7 @@ export function DesktopShellPage({
       />
 
       <DesktopShellSettingsDrawer
+        api={api}
         onThemeChange={onThemeChange}
         onLocaleChange={(nextLocale) => {
           void i18nInstance.changeLanguage(nextLocale);

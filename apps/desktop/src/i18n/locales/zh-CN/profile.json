@@ -1,4 +1,35 @@
 {
+  "communityNodeAdvisory": {
+    "title": "社区节点信息提示",
+    "nodeLocalNotice": "仅来自所选社区节点；这不是全网判断，默认也不会隐藏该作者。",
+    "noNodes": "请先配置并认证社区节点，再请求提示信息。",
+    "nodeLabel": "社区节点",
+    "load": "加载提示",
+    "loading": "加载中…",
+    "errors": {
+      "trust_not_configured": "该社区节点不提供信任提示读取。",
+      "trust_not_activated": "当前节点会话尚未启用信任提示读取。",
+      "relation_unavailable": "该社区节点无法提供关系信息；不会推测或披露具体原因。"
+    },
+    "trust": {
+      "title": "信任提示",
+      "continuousNotice": "显示连续值及其依据，不分配固定风险标签。",
+      "trust": "综合信任值",
+      "absolute": "绝对分量",
+      "relative": "相对分量",
+      "weight": "绝对权重",
+      "noBasis": "该提示不含依据条目。"
+    },
+    "relation": {
+      "title": "关系接近度",
+      "score": "连续接近度：{{score}}"
+    },
+    "neighbors": {
+      "title": "邻近用户",
+      "notice": "仅在执行此操作时加载；不会自动筛选时间线、搜索或推荐。",
+      "empty": "节点未返回邻近用户。"
+    }
+  },
   "editor": {
     "about": "简介",
     "back": "返回资料",

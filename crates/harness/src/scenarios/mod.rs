@@ -2,6 +2,7 @@ use crate::*;
 
 mod community_node;
 mod community_node_index;
+mod community_node_trust_relation;
 mod desktop_smoke;
 mod direct_message;
 mod private_channel;
@@ -55,6 +56,14 @@ pub async fn run_scenario(
         }
         ScenarioKind::CommunityNodeIndexQueryClient => {
             community_node_index::run_community_node_index_query_client(
+                root,
+                scenario,
+                artifacts_dir,
+            )
+            .await
+        }
+        ScenarioKind::CommunityNodeTrustRelationClient => {
+            community_node_trust_relation::run_community_node_trust_relation_client(
                 root,
                 scenario,
                 artifacts_dir,

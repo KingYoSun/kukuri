@@ -1,0 +1,41 @@
+name: community_node_trust_relation_client
+kind: community_node_trust_relation_client
+fixtures:
+  seed: 665
+  topic: kukuri:topic:trust-relation
+steps:
+  - action: read_community_trust
+    target_pubkey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    expect_trust_millis: 550
+  - action: read_community_relation
+    target_pubkey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    expect_score_millis: 420
+  - action: assert_community_relation_neighbor
+    pubkey: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  - action: assert_relation_optout
+    operation: get
+    expect_enabled: false
+  - action: assert_relation_optout
+    operation: set
+    expect_enabled: true
+  - action: assert_relation_optout
+    operation: clear
+    expect_enabled: false
+  - action: assert_trust_relation_error
+    endpoint: trust
+    target_pubkey: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    code: TRUST_READ_NOT_CONFIGURED
+  - action: assert_trust_relation_error
+    endpoint: trust
+    target_pubkey: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+    code: TRUST_READ_NOT_ACTIVATED
+  - action: assert_trust_relation_error
+    endpoint: relation
+    target_pubkey: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+    code: RELATION_NOT_FOUND
+artifacts:
+  dump_logs: true
+  metrics_snapshot: false
+timeouts:
+  overall_ms: 120000
+  step_ms: 15000

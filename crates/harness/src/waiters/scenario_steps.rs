@@ -25,6 +25,13 @@ pub(crate) fn step_name(step: &ScenarioStep) -> &'static str {
         ScenarioStep::DiscoverCommunityIndex { .. } => "discover_community_index",
         ScenarioStep::RecommendCommunityIndex { .. } => "recommend_community_index",
         ScenarioStep::AssertCommunityIndexError { .. } => "assert_community_index_error",
+        ScenarioStep::ReadCommunityTrust { .. } => "read_community_trust",
+        ScenarioStep::ReadCommunityRelation { .. } => "read_community_relation",
+        ScenarioStep::AssertCommunityRelationNeighbor { .. } => {
+            "assert_community_relation_neighbor"
+        }
+        ScenarioStep::AssertRelationOptout { .. } => "assert_relation_optout",
+        ScenarioStep::AssertTrustRelationError { .. } => "assert_trust_relation_error",
     }
 }
 

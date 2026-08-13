@@ -1,3 +1,4 @@
+import { type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Card, CardHeader } from '@/components/ui/card';
@@ -12,6 +13,7 @@ type AuthorDetailCardProps = {
   onToggleRelationship: (authorPubkey: string, following: boolean) => void;
   onToggleMute: (authorPubkey: string, muted: boolean) => void;
   onOpenDirectMessage?: (authorPubkey: string) => void;
+  communityNodeAdvisory?: ReactNode;
 };
 
 export function AuthorDetailCard({
@@ -20,6 +22,7 @@ export function AuthorDetailCard({
   onToggleRelationship,
   onToggleMute,
   onOpenDirectMessage,
+  communityNodeAdvisory,
 }: AuthorDetailCardProps) {
   const { t } = useTranslation(['common']);
   const author = view.author;
@@ -111,6 +114,7 @@ export function AuthorDetailCard({
               </div>
             </div>
           ) : null}
+          {communityNodeAdvisory}
         </>
       ) : (
         <p className='empty'>{t('fallbacks.selectAuthor')}</p>
