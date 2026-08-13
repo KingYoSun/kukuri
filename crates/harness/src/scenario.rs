@@ -9,6 +9,7 @@ pub enum ScenarioKind {
     CommunityNodeMultiDeviceConnectivity,
     PrivateChannelInviteConnectivity,
     PairwiseDirectMessageConnectivity,
+    CommunityNodeIndexQueryClient,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -103,6 +104,22 @@ pub enum ScenarioStep {
         score: i64,
     },
     RestartDesktop,
+    SearchCommunityIndex {
+        query: String,
+        scope_kind: String,
+        scope_id: String,
+        expect_object_id: String,
+    },
+    DiscoverCommunityIndex {
+        expect_object_id: String,
+    },
+    RecommendCommunityIndex {
+        expect_object_id: String,
+    },
+    AssertCommunityIndexError {
+        query: String,
+        code: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

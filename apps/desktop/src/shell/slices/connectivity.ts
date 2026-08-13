@@ -34,6 +34,7 @@ export type ConnectivitySliceState = {
   communityNodeInput: CommunityNodeDraftNode[];
   communityNodeEditorDirty: boolean;
   communityNodeError: string | null;
+  communityIndexNodeBaseUrl: string | null;
   syncStatus: SyncStatus;
 };
 
@@ -94,6 +95,7 @@ export function createInitialConnectivitySlice(): ConnectivitySliceState {
     communityNodeInput: [],
     communityNodeEditorDirty: false,
     communityNodeError: null,
+    communityIndexNodeBaseUrl: null,
     syncStatus: DEFAULT_SYNC_STATUS,
   };
 }

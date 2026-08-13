@@ -487,6 +487,11 @@ jobs:
           COMMUNITY_NODE_DATABASE_URL: postgres://cn:cn_password@127.0.0.1:55433/cn
         run: cargo xtask scenario community_node_public_connectivity
 
+      - name: Community-node index client scenario
+        env:
+          KUKURI_DISABLE_KEYRING: "1"
+        run: cargo xtask scenario community_node_index_query_client
+
       - name: Upload community-node artifacts
         if: always()
         uses: actions/upload-artifact@v4

@@ -516,6 +516,7 @@ export function useDesktopShellData({
     loadAuthorSection,
     loadMessagesSection,
     loadNotificationsSection,
+    loadCommunityIndexCapability,
   } = useDesktopShellSectionLoaders({
     api,
     loadReactionCatalogData,
@@ -585,6 +586,7 @@ export function useDesktopShellData({
     loadAuthorSection,
     loadMessagesSection,
     loadNotificationsSection,
+    loadCommunityIndexCapability,
     refreshVisibleShellData,
     refreshConnectivityStatus,
     setNotificationStatus,

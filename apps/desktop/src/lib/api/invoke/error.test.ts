@@ -15,6 +15,17 @@ describe('normalizeInvokeError', () => {
     expect(error.message).toBe('reply target missing');
   });
 
+  it('preserves status and retry-after metadata from an index error envelope', () => {
+    const error = normalizeInvokeError({
+      code: 'RATE_LIMITED',
+      message: 'try again later',
+      status: 429,
+      retry_after_seconds: 17,
+    });
+    expect(error.status).toBe(429);
+    expect(error.retryAfterSeconds).toBe(17);
+  });
+
   it('maps tauri bridge runtime errors to bridge_unavailable with the sentinel message', () => {
     const error = normalizeInvokeError(new Error('window.__TAURI_INTERNALS__ is undefined'));
     expect(error.code).toBe('bridge_unavailable');

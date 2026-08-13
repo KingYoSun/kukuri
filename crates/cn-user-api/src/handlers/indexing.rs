@@ -11,6 +11,7 @@ use kukuri_cn_core::{
     require_bearer_identity, require_consents,
 };
 use kukuri_cn_indexer::IndexQuery;
+use kukuri_cn_protocol::{IndexEntryView, IndexQueryParams, IndexQueryResponse};
 use serde::{Deserialize, Serialize};
 
 use crate::errors::{IndexingError, IndexingOperation, indexing_error};
@@ -132,109 +133,19 @@ pub(crate) async fn submit_indexing_request(
     }))
 }
 
-/// channel secret 登録失敗を HTTP 応答へマップする。
-///
-/// 既存 capability と異なる secret での上書き(乗っ取り試行)は 409、hex 形式不正等は 400。
-#[cfg(test)]
-mod error_contract_tests {
-    use axum::http::StatusCode;
-    use kukuri_cn_core::ChannelSecretConflict;
-
-    use crate::errors::{IndexingError, IndexingOperation, assert_error_contract, indexing_error};
-
-    #[tokio::test]
-    async fn channel_secret_error_contracts_are_stable() {
-        assert_error_contract(
-            indexing_error(IndexingError::channel_secret(
-                ChannelSecretConflict::AlreadyRegistered.into(),
-            )),
-            StatusCode::CONFLICT,
-            "CHANNEL_SECRET_CONFLICT",
-            "a different channel capability is already registered for this channel",
-        )
-        .await;
-        assert_error_contract(
-            indexing_error(IndexingError::channel_secret(anyhow::anyhow!(
-                "channel secret must be 32 bytes"
-            ))),
-            StatusCode::BAD_REQUEST,
-            "INVALID_CHANNEL_SECRET",
-            "channel secret must be 32 bytes",
-        )
-        .await;
-
-        for operation in [
-            IndexingOperation::RegisterRequest,
-            IndexingOperation::SearchScope,
-            IndexingOperation::SearchAll,
-            IndexingOperation::Discovery,
-            IndexingOperation::Recommendations,
-        ] {
-            assert_error_contract(
-                indexing_error(IndexingError::infrastructure(
-                    operation,
-                    anyhow::anyhow!("index backend unavailable"),
-                )),
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "INTERNAL_ERROR",
-                "index backend unavailable",
-            )
-            .await;
-        }
-    }
-}
-
-/// index query の共通クエリパラメータ(#404)。
-///
-/// `scope_kind` + `scope_id` の組で topic 内(scope 内)読み、両方無指定で supported set 横断。
-#[derive(Debug, Default, Deserialize)]
-pub(crate) struct IndexQueryParams {
-    /// 検索文字列(`/v1/index/search` のみ必須)。
-    #[serde(default)]
-    q: Option<String>,
-    /// scope 種別(`public_topic` / `private_channel`)。
-    #[serde(default)]
-    scope_kind: Option<String>,
-    /// scope 識別子(topic_id / channel_id)。
-    #[serde(default)]
-    scope_id: Option<String>,
-    /// 返す entry 数の上限(`MAX_QUERY_LIMIT` に丸められる)。
-    #[serde(default)]
-    limit: Option<usize>,
-}
-
-/// index query の応答 entry。投影 entry のうちユーザー向けに公開するフィールドのみ
-/// (`source_replica_id` は監査用の内部情報のため出さない)。
-#[derive(Debug, Serialize)]
-struct IndexEntryView {
-    scope_kind: String,
-    scope_id: String,
-    object_id: String,
-    author_pubkey: String,
-    text: String,
-    created_at: i64,
-}
-
-#[derive(Debug, Serialize)]
-pub(crate) struct IndexQueryResponse {
-    entries: Vec<IndexEntryView>,
-}
-
-impl From<Vec<kukuri_cn_indexer::IndexedEntry>> for IndexQueryResponse {
-    fn from(entries: Vec<kukuri_cn_indexer::IndexedEntry>) -> Self {
-        Self {
-            entries: entries
-                .into_iter()
-                .map(|entry| IndexEntryView {
-                    scope_kind: entry.scope_kind.as_str().to_string(),
-                    scope_id: entry.scope_id,
-                    object_id: entry.object_id,
-                    author_pubkey: entry.author_pubkey,
-                    text: entry.text,
-                    created_at: entry.created_at,
-                })
-                .collect(),
-        }
+fn index_query_response(entries: Vec<kukuri_cn_indexer::IndexedEntry>) -> IndexQueryResponse {
+    IndexQueryResponse {
+        entries: entries
+            .into_iter()
+            .map(|entry| IndexEntryView {
+                scope_kind: entry.scope_kind,
+                scope_id: entry.scope_id,
+                object_id: entry.object_id,
+                author_pubkey: entry.author_pubkey,
+                text: entry.text,
+                created_at: entry.created_at,
+            })
+            .collect(),
     }
 }
 
@@ -342,7 +253,7 @@ pub(crate) async fn index_search(
             .map_err(|source| IndexingError::infrastructure(IndexingOperation::SearchAll, source))
             .map_err(indexing_error)?,
     };
-    Ok(Json(entries.into()))
+    Ok(Json(index_query_response(entries)))
 }
 
 /// discovery(新着列挙。#404)。scope 指定で topic 内、無指定で supported set 横断。
@@ -362,7 +273,7 @@ pub(crate) async fn index_discovery(
         .await
         .map_err(|source| IndexingError::infrastructure(IndexingOperation::Discovery, source))
         .map_err(indexing_error)?;
-    Ok(Json(entries.into()))
+    Ok(Json(index_query_response(entries)))
 }
 
 /// recommendation(#404)。supported set 横断の新着列挙を最小 surface として返す。
@@ -381,5 +292,57 @@ pub(crate) async fn index_recommendations(
         .await
         .map_err(|source| IndexingError::infrastructure(IndexingOperation::Recommendations, source))
         .map_err(indexing_error)?;
-    Ok(Json(entries.into()))
+    Ok(Json(index_query_response(entries)))
+}
+
+/// channel secret 登録失敗を HTTP 応答へマップする。
+///
+/// 既存 capability と異なる secret での上書き(乗っ取り試行)は 409、hex 形式不正等は 400。
+#[cfg(test)]
+mod error_contract_tests {
+    use axum::http::StatusCode;
+    use kukuri_cn_core::ChannelSecretConflict;
+
+    use crate::errors::{IndexingError, IndexingOperation, assert_error_contract, indexing_error};
+
+    #[tokio::test]
+    async fn channel_secret_error_contracts_are_stable() {
+        assert_error_contract(
+            indexing_error(IndexingError::channel_secret(
+                ChannelSecretConflict::AlreadyRegistered.into(),
+            )),
+            StatusCode::CONFLICT,
+            "CHANNEL_SECRET_CONFLICT",
+            "a different channel capability is already registered for this channel",
+        )
+        .await;
+        assert_error_contract(
+            indexing_error(IndexingError::channel_secret(anyhow::anyhow!(
+                "channel secret must be 32 bytes"
+            ))),
+            StatusCode::BAD_REQUEST,
+            "INVALID_CHANNEL_SECRET",
+            "channel secret must be 32 bytes",
+        )
+        .await;
+
+        for operation in [
+            IndexingOperation::RegisterRequest,
+            IndexingOperation::SearchScope,
+            IndexingOperation::SearchAll,
+            IndexingOperation::Discovery,
+            IndexingOperation::Recommendations,
+        ] {
+            assert_error_contract(
+                indexing_error(IndexingError::infrastructure(
+                    operation,
+                    anyhow::anyhow!("index backend unavailable"),
+                )),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "INTERNAL_ERROR",
+                "index backend unavailable",
+            )
+            .await;
+        }
+    }
 }

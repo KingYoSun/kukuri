@@ -60,7 +60,7 @@ jsonwebtoken = { version = "11.0.0", features = ["aws_lc_rs"] }
 keyring = { version = "4.1.6", default-features = false }
 chacha20poly1305 = "0.11.0"
 n0-mainline = "0.5.0"
-reqwest = { version = "0.13.4", default-features = false, features = ["json", "rustls"] }
+reqwest = { version = "0.13.4", default-features = false, features = ["json", "query", "rustls"] }
 redis = { version = "1.5.0", default-features = false, features = ["tokio-comp"] }
 rustls = { version = "0.23.43", default-features = false, features = ["ring", "std"] }
 secp256k1 = { version = "0.31.1", features = ["global-context", "rand", "serde"] }

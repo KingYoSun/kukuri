@@ -42,6 +42,7 @@
     "updateAvailable": "有可用更新"
   },
   "primarySections": {
+    "explore": "发现",
     "game": "游戏",
     "live": "直播",
     "messages": "消息",
@@ -136,6 +137,28 @@
     "communityNodeUnavailableBody": "已配置的 community node 当前不可用。客户端会继续启动，direct P2P 连接仍然可用。",
     "communityNodeUnavailableTitle": "Community node unavailable",
     "viewScope": "查看范围"
+  },
+  "communityIndex": {
+    "title": "社区索引",
+    "topicSummary": "通过可用的 Community Node 搜索当前主题或私密频道。",
+    "exploreSummary": "跨索引主题进行搜索、发现并查看推荐。",
+    "nodeLabel": "查询节点",
+    "surfaces": "社区索引功能",
+    "operations": { "search": "搜索", "discovery": "发现", "recommendations": "推荐" },
+    "operationHints": {
+      "discovery": "无需关键词，浏览最近索引的公开结果。",
+      "recommendations": "查看所选节点提供的推荐。"
+    },
+    "queryLabel": "搜索关键词",
+    "queryPlaceholder": "搜索索引",
+    "queryRequired": "请输入搜索关键词。",
+    "run": "运行",
+    "loading": "加载中…",
+    "empty": "没有匹配的索引结果。",
+    "results": "社区索引结果",
+    "previewNotice": "这是可能包含派生标签的搜索预览，并非帖子的规范正文。",
+    "noEligibleNode": "当前没有已认证、已同意且提供可用社区索引的 Community Node。",
+    "allJoinedDisabled": "请一次搜索一个公开主题或私密频道。不会把全部已加入范围发送给节点。"
   },
   "report": {
     "title": "举报内容",

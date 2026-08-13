@@ -15,6 +15,7 @@ tempfile.workspace = true
 tokio.workspace = true
 kukuri-app-api = { path = "../app-api" }
 kukuri-cn-core = { path = "../cn-core" }
+kukuri-cn-protocol = { path = "../cn-protocol" }
 kukuri-cn-iroh-relay = { path = "../cn-iroh-relay" }
 kukuri-cn-user-api = { path = "../cn-user-api" }
 kukuri-core = { path = "../core" }

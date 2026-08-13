@@ -24,6 +24,7 @@ use crate::runtime::DesktopRuntime;
 
 mod config_support;
 mod http_client_support;
+mod index_query_support;
 mod manifest_support;
 mod reconnect_support;
 mod report_routing_support;
@@ -35,6 +36,9 @@ mod token_storage_support;
 
 pub(crate) use config_support::*;
 pub(crate) use http_client_support::*;
+pub(crate) use index_query_support::IndexOperation;
+pub use index_query_support::{CommunityNodeIndexQueryError, CommunityNodeIndexQueryRequest};
+pub use kukuri_cn_protocol::{IndexEntryView, IndexQueryResponse, IndexScopeKind};
 pub use manifest_support::{
     CommunityNodeAuthorityScope, CommunityNodeCapabilityScope, CommunityNodeManifest,
     CommunityNodeManifestFetch, CommunityNodeManifestFetchStatus, CommunityNodeP2pBoundary,

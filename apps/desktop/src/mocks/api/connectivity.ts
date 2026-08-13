@@ -1,4 +1,9 @@
-import { type BlobMediaPayload, type DesktopApi } from '@/lib/api';
+import {
+  type BlobMediaPayload,
+  type CommunityNodeIndexQueryRequest,
+  type DesktopApi,
+  type IndexQueryResponse,
+} from '@/lib/api';
 
 import { cloneSyncStatus } from '../desktopMockModel';
 import { type MockRuntime } from '../mockRuntime';
@@ -17,6 +22,9 @@ type ConnectivityMock = Pick<
   | 'acceptCommunityNodeConsents'
   | 'refreshCommunityNodeMetadata'
   | 'fetchCommunityNodeManifest'
+  | 'searchCommunityNodeIndex'
+  | 'discoverCommunityNodeIndex'
+  | 'recommendCommunityNodeIndex'
   | 'submitCommunityNodeReport'
   | 'importPeerTicket'
   | 'setDiscoverySeeds'
@@ -38,6 +46,30 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
     metaverseAssetPayloads,
     mockConsentItems,
   } = runtime;
+
+  function queryIndex(request: CommunityNodeIndexQueryRequest): IndexQueryResponse {
+    const query = request.query?.trim().toLocaleLowerCase() ?? '';
+    const entries = Object.entries(postsByTopic)
+      .flatMap(([topic, posts]) =>
+        posts.map((post) => ({
+          scope_kind: post.channel_id ? ('private_channel' as const) : ('public_topic' as const),
+          scope_id: post.channel_id ?? topic,
+          object_id: post.object_id,
+          author_pubkey: post.author_pubkey,
+          text: post.content,
+          created_at: post.created_at,
+        }))
+      )
+      .filter(
+        (entry) =>
+          (!request.scope_kind ||
+            (entry.scope_kind === request.scope_kind && entry.scope_id === request.scope_id)) &&
+          (!query || entry.text.toLocaleLowerCase().includes(query))
+      )
+      .sort((left, right) => right.created_at - left.created_at)
+      .slice(0, request.limit ?? 20);
+    return { entries };
+  }
 
   return {
     async getSyncStatus() {
@@ -159,8 +191,8 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
           server_name: baseUrl,
           manifest_version: 'v1',
           capability_scope: {
-            available_enabled: ['auth_consent', 'bootstrap_assist', 'iroh_relay'],
-            planned_enabled: ['community_index', 'moderation'],
+            available_enabled: ['auth_consent', 'bootstrap_assist', 'iroh_relay', 'community_index'],
+            planned_enabled: ['moderation'],
           },
           authority_scope: {
             applies_to: ['this_node'],
@@ -185,6 +217,15 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
           moderation_policy_url: `${baseUrl}/moderation-policy`,
         },
       };
+    },
+    async searchCommunityNodeIndex(request) {
+      return queryIndex(request);
+    },
+    async discoverCommunityNodeIndex(request) {
+      return queryIndex(request);
+    },
+    async recommendCommunityNodeIndex(request) {
+      return queryIndex(request);
     },
     async submitCommunityNodeReport(request) {
       return {

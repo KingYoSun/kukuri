@@ -1,0 +1,27 @@
+name: community_node_index_query_client
+kind: community_node_index_query_client
+fixtures:
+  seed: 663
+  topic: kukuri:topic:demo
+steps:
+  - action: search_community_index
+    query: hello
+    scope_kind: public_topic
+    scope_id: kukuri:topic:demo
+    expect_object_id: search-object
+  - action: discover_community_index
+    expect_object_id: discovery-object
+  - action: recommend_community_index
+    expect_object_id: recommendations-object
+  - action: assert_community_index_error
+    query: unconfigured
+    code: INDEX_QUERY_NOT_CONFIGURED
+  - action: assert_community_index_error
+    query: inactive
+    code: INDEX_QUERY_NOT_ACTIVATED
+artifacts:
+  dump_logs: true
+  metrics_snapshot: false
+timeouts:
+  overall_ms: 120000
+  step_ms: 15000

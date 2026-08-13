@@ -1,6 +1,6 @@
 use axum::http::{HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
-use serde_json::json;
+use kukuri_cn_protocol::ApiErrorBody;
 
 use crate::config::USER_API_BEARER_CHALLENGE;
 
@@ -40,10 +40,10 @@ impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let mut response = (
             self.status,
-            axum::Json(json!({
-                "code": self.code,
-                "message": self.message,
-            })),
+            axum::Json(ApiErrorBody {
+                code: self.code.to_string(),
+                message: self.message,
+            }),
         )
             .into_response();
         for (name, value) in self.headers {

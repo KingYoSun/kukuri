@@ -131,7 +131,10 @@ pub fn spawn(app: AppHandle) {
         let event_app = app.clone();
         tauri::async_runtime::spawn(async move {
             while let Ok(event) = rx.recv().await {
-                if matches!(event, kukuri_desktop_runtime::RuntimeEvent::NotificationStatusChanged) {
+                if matches!(
+                    event,
+                    kukuri_desktop_runtime::RuntimeEvent::NotificationStatusChanged
+                ) {
                     if let Err(error) = poll_once(&event_app).await {
                         debug!(%error, "event-driven notification poll skipped");
                     }

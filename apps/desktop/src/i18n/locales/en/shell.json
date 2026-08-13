@@ -42,6 +42,7 @@
     "updateAvailable": "Update available"
   },
   "primarySections": {
+    "explore": "Explore",
     "game": "Game",
     "live": "Live",
     "messages": "Messages",
@@ -136,6 +137,28 @@
     "communityNodeUnavailableBody": "A configured community node is currently unavailable. Startup continues, and direct P2P connections remain available.",
     "communityNodeUnavailableTitle": "Community node unavailable",
     "viewScope": "View Scope"
+  },
+  "communityIndex": {
+    "title": "Community Index",
+    "topicSummary": "Search the active topic or private channel through an eligible Community Node.",
+    "exploreSummary": "Search, discover, and view recommendations across indexed topics.",
+    "nodeLabel": "Query node",
+    "surfaces": "Community Index surfaces",
+    "operations": { "search": "Search", "discovery": "Discover", "recommendations": "Recommendations" },
+    "operationHints": {
+      "discovery": "Browse recently indexed public results without a query.",
+      "recommendations": "View recommendations from the selected node."
+    },
+    "queryLabel": "Search query",
+    "queryPlaceholder": "Search the index",
+    "queryRequired": "Enter a search query.",
+    "run": "Run",
+    "loading": "Loading…",
+    "empty": "No indexed results matched.",
+    "results": "Community Index results",
+    "previewNotice": "Search preview; may include derived tags. This is not canonical post text.",
+    "noEligibleNode": "No authenticated and consented Community Node currently advertises an available Community Index.",
+    "allJoinedDisabled": "Search one public topic or private channel at a time. All joined scopes are not sent to a node."
   },
   "report": {
     "title": "Report content",

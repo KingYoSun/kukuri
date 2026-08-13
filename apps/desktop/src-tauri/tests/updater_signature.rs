@@ -17,8 +17,7 @@ fn published_bundle_accepts_only_its_valid_signature() {
         std::env::var("KUKURI_UPDATER_BUNDLE").expect("KUKURI_UPDATER_BUNDLE is required"),
     );
     let signature_path = PathBuf::from(
-        std::env::var("KUKURI_UPDATER_SIGNATURE")
-            .expect("KUKURI_UPDATER_SIGNATURE is required"),
+        std::env::var("KUKURI_UPDATER_SIGNATURE").expect("KUKURI_UPDATER_SIGNATURE is required"),
     );
     let config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tauri.conf.json");
     let config: serde_json::Value = serde_json::from_slice(

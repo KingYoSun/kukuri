@@ -1,11 +1,14 @@
 import { startTransition, useCallback } from 'react';
 
-import type { DesktopApi, NotificationView } from '@/lib/api';
+import type { CommunityNodeNodeStatus, DesktopApi, NotificationView } from '@/lib/api';
+import {
+  eligibleCommunityIndexNodes,
+  resolveCommunityIndexNodeBaseUrl,
+} from '@/lib/api/communityIndex';
 import { VISIBLE_TIMELINE_LIMIT } from '@/shell/pagination';
 import {
   authorViewFromDirectMessageConversation,
   communityNodesToDraftNodes,
-  mergeCommunityNodeStatuses,
   mergeKnownAuthors,
   messageFromError,
   privateTimelineScope,
@@ -36,8 +39,8 @@ export function useDesktopShellSectionLoaders({
   const setCommunityNodeConfig = useDesktopShellFieldSetter('communityNodeConfig');
   const setCommunityNodeError = useDesktopShellFieldSetter('communityNodeError');
   const setCommunityNodeInput = useDesktopShellFieldSetter('communityNodeInput');
+  const setCommunityIndexNodeBaseUrl = useDesktopShellFieldSetter('communityIndexNodeBaseUrl');
   const setCommunityNodeManifests = useDesktopShellFieldSetter('communityNodeManifests');
-  const setCommunityNodeStatuses = useDesktopShellFieldSetter('communityNodeStatuses');
   const setDirectMessageError = useDesktopShellFieldSetter('directMessageError');
   const setDirectMessages = useDesktopShellFieldSetter('directMessages');
   const setDirectMessageStatusByPeer = useDesktopShellFieldSetter('directMessageStatusByPeer');
@@ -336,6 +339,77 @@ export function useDesktopShellSectionLoaders({
     }
   }, [api, setBookmarkedPosts]);
 
+  const loadCommunityIndexCapability = useCallback(async (
+    refreshedStatuses?: readonly CommunityNodeNodeStatus[]
+  ) => {
+    try {
+      const config = await api.getCommunityNodeConfig();
+      const statuses = refreshedStatuses ?? storeApi.getState().communityNodeStatuses;
+      startTransition(() => {
+        setCommunityNodeConfig(config);
+        if (!storeApi.getState().communityNodeEditorDirty) {
+          setCommunityNodeInput(communityNodesToDraftNodes(config));
+        }
+        setCommunityNodeError(null);
+      });
+      const baseUrls = config.nodes
+        .map((node) => node.base_url)
+        .filter((baseUrl) => baseUrl.trim().length > 0);
+      if (baseUrls.length === 0) {
+        setCommunityIndexNodeBaseUrl(null);
+        return;
+      }
+      setCommunityNodeManifests((current) => {
+        const next = { ...current };
+        for (const baseUrl of baseUrls) {
+          next[baseUrl] = { status: 'loading' };
+        }
+        return next;
+      });
+      const manifestResults = await Promise.all(
+        baseUrls.map(async (baseUrl) => {
+          try {
+            const result = await api.fetchCommunityNodeManifest(baseUrl);
+            return [
+              baseUrl,
+              result.status === 'ok' && result.manifest
+                ? { status: 'ok' as const, manifest: result.manifest }
+                : { status: 'absent' as const },
+            ] as const;
+          } catch (error) {
+            return [
+              baseUrl,
+              {
+                status: 'error' as const,
+                error: messageFromError(error, translate('common:errors.failedToLoadSettings')),
+              },
+            ] as const;
+          }
+        })
+      );
+      const manifests = Object.fromEntries(manifestResults);
+      setCommunityNodeManifests((current) => ({ ...current, ...manifests }));
+      const eligible = eligibleCommunityIndexNodes(config, statuses, manifests);
+      setCommunityIndexNodeBaseUrl((current) =>
+        resolveCommunityIndexNodeBaseUrl(current, eligible)
+      );
+    } catch (error) {
+      setCommunityNodeError(
+        messageFromError(error, translate('common:errors.failedToLoadSettings'))
+      );
+      setCommunityIndexNodeBaseUrl(null);
+    }
+  }, [
+    api,
+    setCommunityIndexNodeBaseUrl,
+    setCommunityNodeConfig,
+    setCommunityNodeError,
+    setCommunityNodeInput,
+    setCommunityNodeManifests,
+    storeApi,
+    translate,
+  ]);
+
   const loadSettingsSection = useCallback(async () => {
     const { activeSettingsSection } = storeApi.getState().shellChromeState;
     if (activeSettingsSection === 'connectivity') {
@@ -362,63 +436,7 @@ export function useDesktopShellSectionLoaders({
       return;
     }
     if (activeSettingsSection === 'community-node') {
-      try {
-        const [config, statuses] = await Promise.all([
-          api.getCommunityNodeConfig(),
-          api.getCommunityNodeStatuses(),
-        ]);
-        startTransition(() => {
-          setCommunityNodeConfig(config);
-          if (!storeApi.getState().communityNodeEditorDirty) {
-            setCommunityNodeInput(communityNodesToDraftNodes(config));
-          }
-          setCommunityNodeStatuses((current) =>
-            mergeCommunityNodeStatuses(current, statuses)
-          );
-          setCommunityNodeError(null);
-        });
-        const baseUrls = config.nodes
-          .map((node) => node.base_url)
-          .filter((baseUrl) => baseUrl.trim().length > 0);
-        if (baseUrls.length > 0) {
-          setCommunityNodeManifests((current) => {
-            const next = { ...current };
-            for (const baseUrl of baseUrls) {
-              next[baseUrl] = { status: 'loading' };
-            }
-            return next;
-          });
-          for (const baseUrl of baseUrls) {
-            void api
-              .fetchCommunityNodeManifest(baseUrl)
-              .then((result) => {
-                setCommunityNodeManifests(
-                  setRecordEntry(
-                    baseUrl,
-                    result.status === 'ok' && result.manifest
-                      ? { status: 'ok', manifest: result.manifest }
-                      : { status: 'absent' }
-                  )
-                );
-              })
-              .catch((error) => {
-                setCommunityNodeManifests(
-                  setRecordEntry(baseUrl, {
-                    status: 'error',
-                    error: messageFromError(
-                      error,
-                      translate('common:errors.failedToLoadSettings')
-                    ),
-                  })
-                );
-              });
-          }
-        }
-      } catch (error) {
-        setCommunityNodeError(
-          messageFromError(error, translate('common:errors.failedToLoadSettings'))
-        );
-      }
+      await loadCommunityIndexCapability();
       return;
     }
     if (activeSettingsSection === 'reactions') {
@@ -439,11 +457,7 @@ export function useDesktopShellSectionLoaders({
     api,
     loadReactionCatalogData,
     setBookmarkedPosts,
-    setCommunityNodeConfig,
-    setCommunityNodeError,
-    setCommunityNodeInput,
-    setCommunityNodeManifests,
-    setCommunityNodeStatuses,
+    loadCommunityIndexCapability,
     setDiscoveryConfig,
     setDiscoveryError,
     setDiscoverySeedInput,
@@ -460,6 +474,7 @@ export function useDesktopShellSectionLoaders({
       const selectedAuthorPubkey = state.selectedAuthorPubkey;
       const { activePrimarySection, settingsOpen, timelineView } = state.shellChromeState;
       const tasks: Promise<void>[] = [];
+      tasks.push(loadCommunityIndexCapability());
 
       if (activePrimarySection === 'live') {
         tasks.push(loadLiveSection(topic, selectedChannelId));
@@ -492,6 +507,7 @@ export function useDesktopShellSectionLoaders({
       loadBookmarksSection,
       loadGameSection,
       loadLiveSection,
+      loadCommunityIndexCapability,
       loadMessagesSection,
       loadNotificationsSection,
       loadProfileSection,
@@ -508,5 +524,6 @@ export function useDesktopShellSectionLoaders({
     loadAuthorSection,
     loadMessagesSection,
     loadNotificationsSection,
+    loadCommunityIndexCapability,
   };
 }

@@ -3,6 +3,7 @@ import { Link2 } from 'lucide-react';
 
 import { TimelineWorkspaceHeader } from '@/components/core/TimelineWorkspaceHeader';
 import { TimelineFeed } from '@/components/core/TimelineFeed';
+import { CommunityIndexWorkspace } from '@/components/core/CommunityIndexWorkspace';
 import { MetaverseRoomPanel } from '@/components/extended/MetaverseRoomPanel';
 import type { MetaverseRoomActions } from '@/components/extended/metaverse/MetaverseRoomActions';
 import { ProfileConnectionsPanel } from '@/components/extended/ProfileConnectionsPanel';
@@ -23,6 +24,7 @@ import { formatLocalizedTime } from '@/i18n/format';
 import type { SupportedLocale } from '@/i18n';
 import { buildLiveLink, type InternalSmartReference } from '@/lib/internalLinks';
 import { copyTextToClipboard } from '@/lib/utils';
+import { eligibleCommunityIndexNodes } from '@/lib/api/communityIndex';
 import type {
   CommunityNodeManifest,
   SubmitCommunityNodeReportRequest,
@@ -169,6 +171,8 @@ export function DesktopShellPrimaryWorkspace({
     localProfile,
     mediaObjectUrls,
     communityNodeManifests,
+    communityNodeConfig,
+    communityIndexNodeBaseUrl,
     communityNodeStatuses,
     ownedReactionAssets,
     pendingTimelineCountsByKey,
@@ -196,6 +200,8 @@ export function DesktopShellPrimaryWorkspace({
       localProfile: s.localProfile,
       mediaObjectUrls: s.mediaObjectUrls,
       communityNodeManifests: s.communityNodeManifests,
+      communityNodeConfig: s.communityNodeConfig,
+      communityIndexNodeBaseUrl: s.communityIndexNodeBaseUrl,
       communityNodeStatuses: s.communityNodeStatuses,
       ownedReactionAssets: s.ownedReactionAssets,
       pendingTimelineCountsByKey: s.pendingTimelineCountsByKey,
@@ -215,6 +221,7 @@ export function DesktopShellPrimaryWorkspace({
     }))
   );
   const setShellChromeState = useDesktopShellFieldSetter('shellChromeState');
+  const setCommunityIndexNodeBaseUrl = useDesktopShellFieldSetter('communityIndexNodeBaseUrl');
   const profileAuthorLabel = authorDisplayLabel(
     syncStatus.local_author_pubkey,
     localProfile?.display_name,
@@ -253,6 +260,15 @@ export function DesktopShellPrimaryWorkspace({
   ).length;
   const showCommunityNodeUnavailableNotice =
     communityNodeStatuses.length > 0 && unavailableCommunityNodeCount > 0;
+  const eligibleIndexNodeBaseUrls = useMemo(
+    () =>
+      eligibleCommunityIndexNodes(
+        communityNodeConfig,
+        communityNodeStatuses,
+        communityNodeManifests
+      ),
+    [communityNodeConfig, communityNodeManifests, communityNodeStatuses]
+  );
 
   return (
     <div className='shell-main-stack'>
@@ -332,6 +348,20 @@ export function DesktopShellPrimaryWorkspace({
               </div>
               {composerError ? <Notice tone='destructive'>{composerError}</Notice> : null}
             </Card>
+            {shellChromeState.timelineView === 'feed' ? (
+              <CommunityIndexWorkspace
+                api={api}
+                mode='topic'
+                locale={locale}
+                activeTopic={activeTopic}
+                activeTimelineScope={viewModels.activeTimelineScope}
+                eligibleNodeBaseUrls={eligibleIndexNodeBaseUrls}
+                selectedNodeBaseUrl={communityIndexNodeBaseUrl}
+                onSelectNode={setCommunityIndexNodeBaseUrl}
+                manifests={communityNodeManifests}
+                onOpenCommunityNodeSettings={openCommunityNodeSettings}
+              />
+            ) : null}
             <Card className='shell-workspace-card'>
               {shellChromeState.timelineView === 'feed' ? (
                 <TimelineFeed
@@ -399,6 +429,21 @@ export function DesktopShellPrimaryWorkspace({
               )}
             </Card>
           </>
+        ) : null}
+
+        {shellChromeState.activePrimarySection === 'explore' ? (
+          <CommunityIndexWorkspace
+            api={api}
+            mode='explore'
+            locale={locale}
+            activeTopic={activeTopic}
+            activeTimelineScope={viewModels.activeTimelineScope}
+            eligibleNodeBaseUrls={eligibleIndexNodeBaseUrls}
+            selectedNodeBaseUrl={communityIndexNodeBaseUrl}
+            onSelectNode={setCommunityIndexNodeBaseUrl}
+            manifests={communityNodeManifests}
+            onOpenCommunityNodeSettings={openCommunityNodeSettings}
+          />
         ) : null}
 
         {shellChromeState.activePrimarySection === 'live' ? (
