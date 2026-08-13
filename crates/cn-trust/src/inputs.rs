@@ -10,21 +10,8 @@
 //! visibility / expiry / appeal を同伴し、read surface が説明可能性を落とせない形にする。
 
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-
+pub use kukuri_cn_protocol::TrustComponentKind;
 use kukuri_cn_safety::{AppealStatus, Basis, SafetyCategory, Severity, Visibility};
-
-/// risk signal category の trust 成分振り分け先（ADR 0026 §2.7）。
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TrustComponentKind {
-    /// 絶対成分: critical safety（CSAM / CSE / grooming）。relation で重み付けせず、
-    /// 通報数で動かない（report-bomb 不動）。時間減衰もしない（§6.2）。
-    Absolute,
-    /// 相対成分: nsfw / spam 等の community / 文化圏依存の指標。relation で重み付けし、
-    /// viewer / cluster 相対で扱う。半減期減衰する（§6.2）。
-    Relative,
-}
 
 /// category → trust 成分の振り分け（初期規則）。
 ///

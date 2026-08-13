@@ -10,13 +10,15 @@ use kukuri_cn_core::{
     list_trust_risk_inputs, relation_pair_is_suppressed, require_bearer_identity, require_consents,
     set_relation_optout,
 };
-use kukuri_cn_protocol::{RelationOptoutResponse, normalize_pubkey};
+use kukuri_cn_protocol::{
+    RelationNeighborsResponse, RelationOptoutResponse, RelationReadResponse, TrustUserReadResponse,
+    normalize_pubkey,
+};
 use kukuri_cn_safety::RiskSignalTarget;
 use kukuri_cn_trust::{
-    PullAudience, TrustReadView, UniformRelationWeight, build_trust_read,
-    cross_node_trust_disclosure,
+    PullAudience, UniformRelationWeight, build_trust_read, cross_node_trust_disclosure,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::errors::{TrustRelationError, TrustRelationOperation, trust_relation_error};
 use crate::state::{RelationVisibilityState, TrustReadState, UserApiState};
@@ -83,15 +85,6 @@ fn parse_target_pubkey(raw: &str) -> Result<String, ApiError> {
             error.to_string(),
         )
     })
-}
-
-/// trust read の応答(node-local advisory。断定ラベルなし・根拠つき)。
-#[derive(Debug, Serialize)]
-pub(crate) struct TrustUserReadResponse {
-    /// この read の viewer(bearer identity の pubkey。相対成分の視点)。
-    viewer_pubkey: String,
-    #[serde(flatten)]
-    view: TrustReadView,
 }
 
 /// per-user trust read(ADR 0026 §2.3 / §6.2)。
@@ -185,14 +178,6 @@ pub(crate) async fn trust_pull(
 }
 
 /// relation read の応答(pairwise cluster proximity。根拠つき)。
-#[derive(Debug, Serialize)]
-pub(crate) struct RelationReadResponse {
-    viewer_pubkey: String,
-    target_pubkey: String,
-    #[serde(flatten)]
-    proximity: kukuri_cn_trust::Proximity,
-}
-
 /// pairwise relation read(ADR 0026 §2.4)。viewer = bearer identity。
 ///
 /// どちらかが distance opt-out を選択し、この node の境界より遠い場合だけ、edge が無い場合と
@@ -259,12 +244,6 @@ pub(crate) async fn relation_user_read(
 pub(crate) struct RelationNeighborsParams {
     #[serde(default)]
     limit: Option<usize>,
-}
-
-#[derive(Debug, Serialize)]
-pub(crate) struct RelationNeighborsResponse {
-    viewer_pubkey: String,
-    neighbors: Vec<String>,
 }
 
 /// discovery / surfacing 用の近接近傍(ADR 0026 §6.1 `neighbors`)。viewer = bearer identity。

@@ -213,6 +213,40 @@ export type IndexQueryResponse = { entries: Array<IndexEntryView>, };
 
 export type SubmitIndexingRequestResponse = { request_id: string, status: IndexingRequestStatus, };
 
+export type CommunityNodeUserAdvisoryRequest = { base_url: string, target_pubkey: string, };
+
+export type CommunityNodeRelationNeighborsRequest = { base_url: string, limit?: number | null, };
+
+export type CommunityNodeTrustRelationError = { code: string, message: string, status?: number | null, };
+
+export type TrustComponentKind = "absolute" | "relative";
+
+export type SafetyCategory = "csam" | "cse" | "grooming" | "nsfw" | "spam" | "malware" | "phishing" | "provider_test";
+
+export type Severity = "critical" | "high" | "medium" | "low";
+
+export type Basis = "known_hash_match" | "provider_verdict" | "classifier_score" | "local_policy";
+
+export type Visibility = "local" | "subscribed_nodes" | "public";
+
+export type AppealStatus = "none" | "disputed" | "cleared";
+
+export type TrustBasisEntry = { signal_id: string, issuer_node_id: string, component: TrustComponentKind, category: SafetyCategory, severity: Severity, basis: Basis, confidence?: number | null, visibility: Visibility, appeal_status: AppealStatus, expires_at?: string | null, raw_contribution: number, decay_factor: number, relation_weight: number, contribution: number, };
+
+export type TrustReadView = { target_id: string, absolute: number, relative: number, trust: number, w_abs_applied: number, computed_at: string, basis: Array<TrustBasisEntry>, };
+
+export type TrustUserReadResponse = { viewer_pubkey: string, target_id: string, absolute: number, relative: number, trust: number, w_abs_applied: number, computed_at: string, basis: Array<TrustBasisEntry>, };
+
+export type ProximityBasisEntry = { feature: string, value: number, weight: number, contribution: number, };
+
+export type Proximity = { score: number, basis: Array<ProximityBasisEntry>, };
+
+export type RelationReadResponse = { viewer_pubkey: string, target_pubkey: string, score: number, basis: Array<ProximityBasisEntry>, };
+
+export type RelationNeighborsResponse = { viewer_pubkey: string, neighbors: Array<string>, };
+
+export type RelationOptoutResponse = { pubkey: string, opted_out: boolean, opted_out_at?: string | null, min_proximity: number, };
+
 export type SubmitCommunityNodeReportRequest = { 
 /**
  * 通報先 node の base url（記録・表示用）。

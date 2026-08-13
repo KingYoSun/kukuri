@@ -34,6 +34,7 @@ mod scheduler_support;
 mod session_runtime_support;
 mod session_state_support;
 mod token_storage_support;
+mod trust_relation_support;
 
 pub(crate) use config_support::*;
 pub(crate) use http_client_support::*;
@@ -43,7 +44,9 @@ pub use indexing_request_support::{
     CommunityNodeIndexingRequest, CommunityNodeIndexingRequestError,
 };
 pub use kukuri_cn_protocol::{
-    IndexEntryView, IndexQueryResponse, IndexScopeKind, SubmitIndexingRequestResponse,
+    IndexEntryView, IndexQueryResponse, IndexScopeKind, RelationNeighborsResponse,
+    RelationOptoutResponse, RelationReadResponse, SubmitIndexingRequestResponse,
+    TrustUserReadResponse,
 };
 pub use manifest_support::{
     CommunityNodeAuthorityScope, CommunityNodeCapabilityScope, CommunityNodeManifest,
@@ -54,6 +57,10 @@ pub use report_routing_support::{
     SubmitCommunityNodeReportStatus,
 };
 pub(crate) use token_storage_support::*;
+pub use trust_relation_support::{
+    CommunityNodeRelationNeighborsRequest, CommunityNodeTrustRelationError,
+    CommunityNodeUserAdvisoryRequest,
+};
 
 /// 「版が上がって再同意が必要（更新）」な required ポリシーが存在するか。
 ///

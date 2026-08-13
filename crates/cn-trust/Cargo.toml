@@ -22,6 +22,7 @@ async-trait.workspace = true
 chrono.workspace = true
 serde.workspace = true
 kukuri-cn-safety = { path = "../cn-safety" }
+kukuri-cn-protocol = { path = "../cn-protocol" }
 
 [dev-dependencies]
 # 自分自身を testing feature 付き dev-dependency にすることで、tests/ から共有スイートを使える

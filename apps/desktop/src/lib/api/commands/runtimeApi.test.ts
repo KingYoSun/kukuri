@@ -66,3 +66,41 @@ test('submitCommunityNodeIndexingRequest invokes the typed indexing request comm
     },
   });
 });
+
+test('trust and relation reads invoke viewer-bound desktop commands', async () => {
+  const request = {
+    base_url: 'https://node.example',
+    target_pubkey: 'a'.repeat(64),
+  };
+
+  await runtimeApi.readCommunityNodeTrustUser(request);
+  expect(invokeMock).toHaveBeenLastCalledWith('read_community_node_trust_user', { request });
+
+  await runtimeApi.readCommunityNodeRelationUser(request);
+  expect(invokeMock).toHaveBeenLastCalledWith('read_community_node_relation_user', { request });
+
+  await runtimeApi.listCommunityNodeRelationNeighbors({
+    base_url: 'https://node.example',
+    limit: 20,
+  });
+  expect(invokeMock).toHaveBeenLastCalledWith('list_community_node_relation_neighbors', {
+    request: { base_url: 'https://node.example', limit: 20 },
+  });
+});
+
+test('distance opt-out commands preserve the configured node target', async () => {
+  await runtimeApi.getCommunityNodeRelationOptout('https://node.example');
+  expect(invokeMock).toHaveBeenLastCalledWith('get_community_node_relation_optout', {
+    request: { base_url: 'https://node.example' },
+  });
+
+  await runtimeApi.setCommunityNodeRelationOptout('https://node.example');
+  expect(invokeMock).toHaveBeenLastCalledWith('set_community_node_relation_optout', {
+    request: { base_url: 'https://node.example' },
+  });
+
+  await runtimeApi.clearCommunityNodeRelationOptout('https://node.example');
+  expect(invokeMock).toHaveBeenLastCalledWith('clear_community_node_relation_optout', {
+    request: { base_url: 'https://node.example' },
+  });
+});

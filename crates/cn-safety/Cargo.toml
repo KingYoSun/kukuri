@@ -16,12 +16,14 @@ path = "src/lib.rs"
 # （非暗号の MockSigner を本番経路で誤用させないため）。テストでは下の self
 # dev-dependency が有効化する。
 mock = []
+ts = ["dep:ts-rs"]
 
 [dependencies]
 async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+ts-rs = { workspace = true, optional = true }
 
 [dev-dependencies]
 # 自分自身を mock feature 付きで dev-dependency にすることで、tests/ から mock を使える

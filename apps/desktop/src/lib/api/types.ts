@@ -15,6 +15,8 @@ import type {
   CommunityNodeIndexQueryRequest,
   CommunityNodeManifestFetch,
   CommunityNodeNodeStatus,
+  CommunityNodeRelationNeighborsRequest,
+  CommunityNodeUserAdvisoryRequest,
   CustomReactionAssetView,
   DirectMessageConversationView,
   DirectMessageStatusView,
@@ -43,10 +45,14 @@ import type {
   SubmitCommunityNodeReportResult,
   SubmitIndexingRequestResponse,
   IndexQueryResponse,
+  RelationNeighborsResponse,
+  RelationOptoutResponse,
+  RelationReadResponse,
   SyncStatus,
   TimelineCursor,
   TimelineScope,
   TimelineView,
+  TrustUserReadResponse,
 } from './types.generated';
 
 // PostView は wire 型に front 専用のローカル下書き状態を交差させる。
@@ -348,6 +354,18 @@ export interface DesktopApi {
   ): Promise<CommunityNodeNodeStatus>;
   refreshCommunityNodeMetadata(baseUrl: string): Promise<CommunityNodeNodeStatus>;
   fetchCommunityNodeManifest(baseUrl: string): Promise<CommunityNodeManifestFetch>;
+  readCommunityNodeTrustUser(
+    request: CommunityNodeUserAdvisoryRequest
+  ): Promise<TrustUserReadResponse>;
+  readCommunityNodeRelationUser(
+    request: CommunityNodeUserAdvisoryRequest
+  ): Promise<RelationReadResponse>;
+  listCommunityNodeRelationNeighbors(
+    request: CommunityNodeRelationNeighborsRequest
+  ): Promise<RelationNeighborsResponse>;
+  getCommunityNodeRelationOptout(baseUrl: string): Promise<RelationOptoutResponse>;
+  setCommunityNodeRelationOptout(baseUrl: string): Promise<RelationOptoutResponse>;
+  clearCommunityNodeRelationOptout(baseUrl: string): Promise<RelationOptoutResponse>;
   searchCommunityNodeIndex(
     request: CommunityNodeIndexQueryRequest
   ): Promise<IndexQueryResponse>;

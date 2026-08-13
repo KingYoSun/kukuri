@@ -15,8 +15,9 @@ use kukuri_cn_operator::CommunityNodeManifest;
 use kukuri_cn_protocol::{
     AUTH_CHALLENGE_PATH, AUTH_VERIFY_PATH, BOOTSTRAP_HEARTBEAT_PATH, BOOTSTRAP_NODES_PATH,
     CONSENTS_PATH, CONSENTS_STATUS_PATH, INDEX_DISCOVERY_PATH, INDEX_RECOMMENDATIONS_PATH,
-    INDEX_SEARCH_PATH, INDEXING_REQUESTS_PATH, NODE_MANIFEST_PATH, RELATION_OPTOUT_PATH,
-    REPORT_PATH, TOPIC_RENDEZVOUS_HEARTBEAT_PATH,
+    INDEX_SEARCH_PATH, INDEXING_REQUESTS_PATH, NODE_MANIFEST_PATH, RELATION_NEIGHBORS_PATH,
+    RELATION_OPTOUT_PATH, RELATION_USERS_ROUTE, REPORT_PATH, TOPIC_RENDEZVOUS_HEARTBEAT_PATH,
+    TRUST_USERS_ROUTE,
 };
 use serde_json::{Value, json};
 use tower_http::trace::TraceLayer;
@@ -61,10 +62,10 @@ pub fn app_router(state: UserApiState) -> Router {
         .route(INDEX_SEARCH_PATH, get(index_search))
         .route(INDEX_DISCOVERY_PATH, get(index_discovery))
         .route(INDEX_RECOMMENDATIONS_PATH, get(index_recommendations))
-        .route("/v1/trust/users/{pubkey}", get(trust_user_read))
+        .route(TRUST_USERS_ROUTE, get(trust_user_read))
         .route("/v1/trust/pull/{pubkey}", get(trust_pull))
-        .route("/v1/relation/users/{target}", get(relation_user_read))
-        .route("/v1/relation/neighbors", get(relation_neighbors))
+        .route(RELATION_USERS_ROUTE, get(relation_user_read))
+        .route(RELATION_NEIGHBORS_PATH, get(relation_neighbors))
         .route(
             RELATION_OPTOUT_PATH,
             get(relation_optout_get)

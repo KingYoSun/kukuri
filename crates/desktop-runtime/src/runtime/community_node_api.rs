@@ -1,6 +1,55 @@
 use super::*;
 
 impl DesktopRuntime {
+    pub async fn read_community_node_trust_user(
+        &self,
+        request: CommunityNodeUserAdvisoryRequest,
+    ) -> std::result::Result<TrustUserReadResponse, CommunityNodeTrustRelationError> {
+        self.request_community_node_trust_user(request).await
+    }
+
+    pub async fn read_community_node_relation_user(
+        &self,
+        request: CommunityNodeUserAdvisoryRequest,
+    ) -> std::result::Result<RelationReadResponse, CommunityNodeTrustRelationError> {
+        self.request_community_node_relation_user(request).await
+    }
+
+    pub async fn list_community_node_relation_neighbors(
+        &self,
+        request: CommunityNodeRelationNeighborsRequest,
+    ) -> std::result::Result<RelationNeighborsResponse, CommunityNodeTrustRelationError> {
+        self.request_community_node_relation_neighbors(request)
+            .await
+    }
+
+    pub async fn get_community_node_relation_optout(
+        &self,
+        request: CommunityNodeTargetRequest,
+    ) -> std::result::Result<RelationOptoutResponse, CommunityNodeTrustRelationError> {
+        self.request_community_node_relation_optout(request.base_url.as_str(), reqwest::Method::GET)
+            .await
+    }
+
+    pub async fn set_community_node_relation_optout(
+        &self,
+        request: CommunityNodeTargetRequest,
+    ) -> std::result::Result<RelationOptoutResponse, CommunityNodeTrustRelationError> {
+        self.request_community_node_relation_optout(request.base_url.as_str(), reqwest::Method::PUT)
+            .await
+    }
+
+    pub async fn clear_community_node_relation_optout(
+        &self,
+        request: CommunityNodeTargetRequest,
+    ) -> std::result::Result<RelationOptoutResponse, CommunityNodeTrustRelationError> {
+        self.request_community_node_relation_optout(
+            request.base_url.as_str(),
+            reqwest::Method::DELETE,
+        )
+        .await
+    }
+
     pub async fn submit_community_node_indexing_request(
         &self,
         request: CommunityNodeIndexingRequest,

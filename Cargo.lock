@@ -3223,6 +3223,7 @@ name = "kukuri-cn-protocol"
 version = "0.1.4"
 dependencies = [
  "anyhow",
+ "kukuri-cn-safety",
  "kukuri-core",
  "serde",
  "serde_json",
@@ -3247,6 +3248,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.20",
  "tokio",
+ "ts-rs",
 ]
 
 [[package]]
@@ -3306,6 +3308,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
+ "kukuri-cn-protocol",
  "kukuri-cn-safety",
  "kukuri-cn-trust",
  "serde",
