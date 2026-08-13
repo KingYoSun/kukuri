@@ -6,7 +6,7 @@
 //!   （申し立て受理の HTTP 経路は cn-user-api の contract test が固定済みのため、ここでは
 //!   handler と同じ遷移関数で状態を進める）
 //! - 関係: 公開トピックの共参加 → 解析後に近接度と近傍が更新される。プライベート
-//!   チャンネル由来の共参加はグラフへ入らない。離脱設定は可逆
+//!   チャンネル由来の共参加はグラフへ入らない。distance opt-out は近距離の関係を維持し、解除可能
 //!
 //! 関係解析は `cn-cli relation analyze` と同じ経路（`PgCoParticipationSource` +
 //! `ArcadeDbRelationGraph` + `analyze_relations`）を同一プロセスで実行する。
@@ -175,7 +175,7 @@ async fn trust_appeal_and_relation_graph_work_end_to_end() -> Result<()> {
         "private-channel co-participation must not enter the public relation graph"
     );
 
-    // --- 関係: 離脱設定は可逆（設定中は他者から見えず、解除で戻る） ---
+    // --- 関係: distance opt-out は近距離の関係を維持し、解除可能 ---
     let token_b = stack.authenticate_as(&client, &author_b).await?;
     client
         .put(format!("{}/v1/relation/optout", stack.api_base_url))
@@ -183,15 +183,15 @@ async fn trust_appeal_and_relation_graph_work_end_to_end() -> Result<()> {
         .send()
         .await?
         .error_for_status()?;
-    let hidden = client
+    let visible_while_close = client
         .get(relation_url.as_str())
         .bearer_auth(token_a.as_str())
         .send()
         .await?;
     assert_eq!(
-        hidden.status(),
-        StatusCode::NOT_FOUND,
-        "opted-out user must be hidden"
+        visible_while_close.status(),
+        StatusCode::OK,
+        "distance opt-out must keep a sufficiently close relation visible"
     );
     client
         .delete(format!("{}/v1/relation/optout", stack.api_base_url))
@@ -207,7 +207,7 @@ async fn trust_appeal_and_relation_graph_work_end_to_end() -> Result<()> {
     assert_eq!(
         visible_again.status(),
         StatusCode::OK,
-        "opt-out must be reversible"
+        "clearing distance opt-out must keep the relation visible"
     );
 
     // --- 信頼: 危険信号が絶対・相対成分へ入り、根拠つきで読める ---
