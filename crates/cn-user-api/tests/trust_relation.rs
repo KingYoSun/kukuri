@@ -22,10 +22,11 @@ use kukuri_cn_safety::{
     Basis, RiskSignalTarget, SafetyCategory, SafetyRiskSignal, Severity, Visibility,
 };
 use kukuri_cn_trust::{
-    EdgeFeatures, FEATURE_CO_PARTICIPATION_EVENTS, FEATURE_SHARED_TOPICS, MemoryRelationStore,
-    RelationStore, TrustParams,
+    EdgeFeatures, FEATURE_SHARED_TOPICS, MemoryRelationStore, RelationStore, TrustParams,
 };
-use kukuri_cn_user_api::{TrustReadState, UserApiConfig, app_router, build_state};
+use kukuri_cn_user_api::{
+    RelationVisibilityState, TrustReadState, UserApiConfig, app_router, build_state,
+};
 use kukuri_core::{KukuriKeys, generate_keys};
 use reqwest::{Client, StatusCode};
 
@@ -65,12 +66,17 @@ impl TestServer {
             channel_secret_key: None,
             index_query_enabled: false,
             trust_read_enabled: false,
+            relation_distance_optout_min_proximity: None,
             deployment_revision: "test-deployment-v1".to_string(),
             readiness_activation_max_age_secs: 3600,
         })
         .await?;
         if let Some(trust) = trust {
-            state = state.with_trust_read(trust);
+            let relation_visibility =
+                Arc::new(RelationVisibilityState::new(trust.relation.clone(), 0.5)?);
+            state = state
+                .with_trust_read(trust)
+                .with_relation_visibility(relation_visibility);
         }
         let app = app_router(state);
         let task = tokio::spawn(async move {
@@ -460,7 +466,7 @@ async fn cross_node_pull_discloses_only_confirmed_absolute_component() -> Result
 }
 
 #[tokio::test]
-async fn relation_read_optout_and_no_auto_suppression() -> Result<()> {
+async fn relation_distance_optout_is_explicit_symmetric_and_reversible() -> Result<()> {
     let Some(admin_database_url) = integration_test_admin_database_url() else {
         eprintln!("skipping cn-user-api trust read test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
         return Ok(());
@@ -481,21 +487,19 @@ async fn relation_read_optout_and_no_auto_suppression() -> Result<()> {
     let target_token =
         authenticate_and_consent(&client, server.base_url.as_str(), &target_keys).await?;
 
-    // relation graph を seed（解析 worker 出力と同型）。
+    // target は遠距離、other は閾値以上として relation graph を seedする。
     relation
         .upsert_edge(
             viewer.as_str(),
             target.as_str(),
-            &EdgeFeatures::new()
-                .with(FEATURE_SHARED_TOPICS, 3.0)
-                .with(FEATURE_CO_PARTICIPATION_EVENTS, 10.0),
+            &EdgeFeatures::new().with(FEATURE_SHARED_TOPICS, 0.1),
         )
         .await?;
     relation
         .upsert_edge(
             viewer.as_str(),
             other.as_str(),
-            &EdgeFeatures::new().with(FEATURE_SHARED_TOPICS, 1.0),
+            &EdgeFeatures::new().with(FEATURE_SHARED_TOPICS, 3.0),
         )
         .await?;
 
@@ -528,7 +532,19 @@ async fn relation_read_optout_and_no_auto_suppression() -> Result<()> {
         "opt-out 前は両方見える"
     );
 
-    // target が「見えない」を選ぶ（自分自身のみ・user-controlled）。
+    // 未選択時は遠距離でも自動抑制しない。
+    let initial_status: serde_json::Value = client
+        .get(format!("{}/v1/relation/optout", server.base_url))
+        .bearer_auth(target_token.as_str())
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    assert_eq!(initial_status["opted_out"].as_bool(), Some(false));
+    assert_eq!(initial_status["min_proximity"].as_f64(), Some(0.5));
+
+    // target がdistance opt-outを選ぶ（自分自身のみ・user-controlled）。
     let optout: serde_json::Value = client
         .put(format!("{}/v1/relation/optout", server.base_url))
         .bearer_auth(target_token.as_str())
@@ -539,8 +555,9 @@ async fn relation_read_optout_and_no_auto_suppression() -> Result<()> {
         .await?;
     assert_eq!(optout["opted_out"].as_bool(), Some(true));
     assert_eq!(optout["pubkey"].as_str(), Some(target.as_str()));
+    assert_eq!(optout["min_proximity"].as_f64(), Some(0.5));
 
-    // 他者から見た relation read / neighbors（discovery）の双方から消える。
+    // 遠距離のtargetだけがrelation read / neighborsから消え、近距離のotherは残る。
     let hidden = client
         .get(relation_url.as_str())
         .bearer_auth(viewer_token.as_str())
@@ -601,12 +618,27 @@ async fn relation_read_optout_and_no_auto_suppression() -> Result<()> {
         .await?;
     assert_eq!(restored.status(), StatusCode::OK);
 
-    // cross-cluster content の自動抑制をしない: relation read は近接度の情報を返すだけで、
-    // どのエンドポイントの結果集合も relation 値で削らない（本 server の index query は
-    // relation state と独立に構成され、relation の有無・opt-out が index 応答を変えない
-    // ことは `/v1/index/*` が relation state を参照しない構造で保証される）。
-    // edge の無い相手（cross-cluster 相当）への read は 404 = 「情報なし」であり、
-    // 抑制指示ではない。
+    // viewer側の選択も同じpairを抑制する（相互・向きに依存しない）。
+    client
+        .put(format!("{}/v1/relation/optout", server.base_url))
+        .bearer_auth(viewer_token.as_str())
+        .send()
+        .await?
+        .error_for_status()?;
+    let hidden_by_viewer = client
+        .get(relation_url.as_str())
+        .bearer_auth(viewer_token.as_str())
+        .send()
+        .await?;
+    assert_eq!(hidden_by_viewer.status(), StatusCode::NOT_FOUND);
+    client
+        .delete(format!("{}/v1/relation/optout", server.base_url))
+        .bearer_auth(viewer_token.as_str())
+        .send()
+        .await?
+        .error_for_status()?;
+
+    // edge の無い相手へのreadは従来どおりrelation未観測の404。
     let stranger = generate_keys().public_key_hex();
     let cross = client
         .get(format!("{}/v1/relation/users/{stranger}", server.base_url))

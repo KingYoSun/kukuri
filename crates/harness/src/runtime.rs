@@ -104,6 +104,7 @@ impl CommunityNodeStack {
             channel_secret_key: None,
             index_query_enabled: false,
             trust_read_enabled: false,
+            relation_distance_optout_min_proximity: None,
             deployment_revision: String::new(),
             readiness_activation_max_age_secs: 900,
         })

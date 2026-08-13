@@ -112,6 +112,7 @@ pub(crate) enum IndexingOperation {
     SearchAll,
     Discovery,
     Recommendations,
+    FilterRelationVisibility,
 }
 
 #[derive(Debug, thiserror::Error)]

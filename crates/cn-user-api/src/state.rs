@@ -42,6 +42,8 @@ pub struct UserApiState {
     /// trust / relation read surface(#415 / ADR 0026)。
     /// None = 設定無効。readiness activation は起動後も変化するため、各requestで検査する。
     pub(crate) trust_read: Option<Arc<TrustReadState>>,
+    /// user / post surfacing に適用する node-local distance opt-out 判定依存。
+    pub(crate) relation_visibility: Option<Arc<RelationVisibilityState>>,
     readiness_activation_requirement: Option<ReadinessActivationRequirement>,
 }
 
@@ -63,6 +65,24 @@ pub struct TrustReadState {
     pub relation: Arc<dyn RelationStore>,
 }
 
+/// trust read の有無から独立した distance opt-out の判定依存。
+pub struct RelationVisibilityState {
+    pub relation: Arc<dyn RelationStore>,
+    pub min_proximity: f64,
+}
+
+impl RelationVisibilityState {
+    pub fn new(relation: Arc<dyn RelationStore>, min_proximity: f64) -> Result<Self> {
+        if !min_proximity.is_finite() || min_proximity <= 0.0 || min_proximity > 1.0 {
+            anyhow::bail!("relation distance opt-out min proximity must be within (0, 1]");
+        }
+        Ok(Self {
+            relation,
+            min_proximity,
+        })
+    }
+}
+
 impl UserApiState {
     /// query 境界を差し替える(テスト用の in-memory 実装注入、または明示的な有効化)。
     ///
@@ -76,6 +96,15 @@ impl UserApiState {
     /// または明示的な有効化)。
     pub fn with_trust_read(mut self, trust_read: Arc<TrustReadState>) -> Self {
         self.trust_read = Some(trust_read);
+        self
+    }
+
+    /// distance opt-out 判定依存を差し替える（テスト用、または明示的な有効化）。
+    pub fn with_relation_visibility(
+        mut self,
+        relation_visibility: Arc<RelationVisibilityState>,
+    ) -> Self {
+        self.relation_visibility = Some(relation_visibility);
         self
     }
 
@@ -199,16 +228,32 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
     } else {
         None
     };
+    // index / relation の表示制御で共有する relation graph。trust read が無効でも
+    // index surface の distance opt-out 判定には必要となる。
+    let relation_visibility: Option<Arc<RelationVisibilityState>> =
+        if config.index_query_enabled || config.trust_read_enabled {
+            let min_proximity = config
+                .relation_distance_optout_min_proximity
+                .context("relation distance opt-out policy is required for index/trust surfaces")?;
+            let relation = ArcadeDbRelationGraph::new(ArcadeDbConfig::from_env())
+                .context("failed to build ArcadeDB client for relation visibility")?;
+            Some(Arc::new(RelationVisibilityState::new(
+                Arc::new(relation),
+                min_proximity,
+            )?))
+        } else {
+            None
+        };
     // trust / relation read surface(#415)。有効時のみ trust パラメータ(operator 可変)を
     // 検証つきで読み、relation graph(ArcadeDB。`cn-cli relation analyze` が構築する)へ接続する。
     let trust_read: Option<Arc<TrustReadState>> = if config.trust_read_enabled {
         let params = TrustParams::from_env().context("invalid COMMUNITY_NODE_TRUST_* params")?;
-        let relation = ArcadeDbRelationGraph::new(ArcadeDbConfig::from_env())
-            .context("failed to build ArcadeDB client for relation graph")?;
-        Some(Arc::new(TrustReadState {
-            params,
-            relation: Arc::new(relation),
-        }))
+        let relation = relation_visibility
+            .as_ref()
+            .context("relation visibility must be configured for trust reads")?
+            .relation
+            .clone();
+        Some(Arc::new(TrustReadState { params, relation }))
     } else {
         None
     };
@@ -229,6 +274,7 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
         channel_secret_cipher,
         index_query,
         trust_read,
+        relation_visibility,
         readiness_activation_requirement,
     })
 }

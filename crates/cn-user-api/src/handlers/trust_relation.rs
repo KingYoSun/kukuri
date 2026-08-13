@@ -7,10 +7,10 @@ use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use kukuri_cn_core::{
     ApiError, ApiResult, clear_relation_optout, filter_relation_visible, get_relation_optout,
-    is_relation_opted_out, list_trust_risk_inputs, require_bearer_identity, require_consents,
+    list_trust_risk_inputs, relation_pair_is_suppressed, require_bearer_identity, require_consents,
     set_relation_optout,
 };
-use kukuri_cn_protocol::normalize_pubkey;
+use kukuri_cn_protocol::{RelationOptoutResponse, normalize_pubkey};
 use kukuri_cn_safety::RiskSignalTarget;
 use kukuri_cn_trust::{
     PullAudience, TrustReadView, UniformRelationWeight, build_trust_read,
@@ -19,7 +19,7 @@ use kukuri_cn_trust::{
 use serde::{Deserialize, Serialize};
 
 use crate::errors::{TrustRelationError, TrustRelationOperation, trust_relation_error};
-use crate::state::{TrustReadState, UserApiState};
+use crate::state::{RelationVisibilityState, TrustReadState, UserApiState};
 
 /// trust / relation read 共通の前処理: 機能ゲート(未構成なら 404)+ 認証 + consent。
 ///
@@ -49,6 +49,30 @@ async fn require_trust_read(
     let identity = require_bearer_identity(&state.pool, &state.jwt_config, headers).await?;
     let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
     Ok((trust_read, identity.pubkey))
+}
+
+/// distance opt-out 設定・判定の共通前処理。index だけを有効にした node でも利用できる。
+async fn require_relation_visibility(
+    state: &UserApiState,
+    headers: &HeaderMap,
+) -> ApiResult<(Arc<RelationVisibilityState>, String)> {
+    let Some(relation_visibility) = state.relation_visibility.clone() else {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "RELATION_VISIBILITY_NOT_CONFIGURED",
+            "this community node does not provide relation distance opt-out",
+        ));
+    };
+    if !state.readiness_activation_is_valid().await {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "RELATION_VISIBILITY_NOT_ACTIVATED",
+            "this community node relation activation is not current",
+        ));
+    }
+    let identity = require_bearer_identity(&state.pool, &state.jwt_config, headers).await?;
+    let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
+    Ok((relation_visibility, identity.pubkey))
 }
 
 fn parse_target_pubkey(raw: &str) -> Result<String, ApiError> {
@@ -171,15 +195,21 @@ pub(crate) struct RelationReadResponse {
 
 /// pairwise relation read(ADR 0026 §2.4)。viewer = bearer identity。
 ///
-/// target が opt-out(「見えない」)している場合は edge が無い場合と同じ 404 を返し、
-/// opt-out 状態そのものを漏らさない。relation は情報として返すのみで、index / search /
-/// discovery の結果集合をこの値で削らない(`relation_does_not_auto_suppress_cross_cluster_content`)。
+/// どちらかが distance opt-out を選択し、この node の境界より遠い場合だけ、edge が無い場合と
+/// 同じ 404 を返す。選択状態そのものは相手へ漏らさない。
 pub(crate) async fn relation_user_read(
     State(state): State<UserApiState>,
     headers: HeaderMap,
     Path(target): Path<String>,
 ) -> ApiResult<Json<RelationReadResponse>> {
     let (trust_read, viewer_pubkey) = require_trust_read(&state, &headers).await?;
+    let relation_visibility = state.relation_visibility.clone().ok_or_else(|| {
+        ApiError::new(
+            StatusCode::NOT_FOUND,
+            "RELATION_VISIBILITY_NOT_CONFIGURED",
+            "this community node does not provide relation distance opt-out",
+        )
+    })?;
     let target = parse_target_pubkey(target.as_str())?;
     let not_found = || {
         ApiError::new(
@@ -188,19 +218,6 @@ pub(crate) async fn relation_user_read(
             "no relation observed for this pair",
         )
     };
-    // 「見えない」opt-out: 他者から見た relation read に出さない(§6.3。可逆・trust 非影響)。
-    if is_relation_opted_out(&state.pool, target.as_str())
-        .await
-        .map_err(|source| {
-            TrustRelationError::relation_opt_out(
-                TrustRelationOperation::CheckRelationVisibility,
-                source,
-            )
-        })
-        .map_err(trust_relation_error)?
-    {
-        return Err(not_found());
-    }
     let proximity = trust_read
         .relation
         .pairwise_proximity(viewer_pubkey.as_str(), target.as_str())
@@ -213,6 +230,24 @@ pub(crate) async fn relation_user_read(
         })
         .map_err(trust_relation_error)?
         .ok_or_else(not_found)?;
+    if relation_pair_is_suppressed(
+        &state.pool,
+        viewer_pubkey.as_str(),
+        target.as_str(),
+        Some(proximity.score),
+        relation_visibility.min_proximity,
+    )
+    .await
+    .map_err(|source| {
+        TrustRelationError::relation_opt_out(
+            TrustRelationOperation::CheckRelationVisibility,
+            source,
+        )
+    })
+    .map_err(trust_relation_error)?
+    {
+        return Err(not_found());
+    }
     Ok(Json(RelationReadResponse {
         viewer_pubkey,
         target_pubkey: target,
@@ -234,13 +269,20 @@ pub(crate) struct RelationNeighborsResponse {
 
 /// discovery / surfacing 用の近接近傍(ADR 0026 §6.1 `neighbors`)。viewer = bearer identity。
 ///
-/// opt-out 済み user は結果から除外する(「見えない」= discovery に出ない, §6.3)。
+/// viewer または候補が opt-out 済みで、距離境界外の user だけを結果から除外する。
 pub(crate) async fn relation_neighbors(
     State(state): State<UserApiState>,
     headers: HeaderMap,
     Query(params): Query<RelationNeighborsParams>,
 ) -> ApiResult<Json<RelationNeighborsResponse>> {
     let (trust_read, viewer_pubkey) = require_trust_read(&state, &headers).await?;
+    let relation_visibility = state.relation_visibility.clone().ok_or_else(|| {
+        ApiError::new(
+            StatusCode::NOT_FOUND,
+            "RELATION_VISIBILITY_NOT_CONFIGURED",
+            "this community node does not provide relation distance opt-out",
+        )
+    })?;
     let limit = params.limit.unwrap_or(20).clamp(1, 100);
     let neighbors = trust_read
         .relation
@@ -250,27 +292,54 @@ pub(crate) async fn relation_neighbors(
             TrustRelationError::relation_graph(TrustRelationOperation::ReadNeighbors, source)
         })
         .map_err(trust_relation_error)?;
-    let neighbors = filter_relation_visible(&state.pool, neighbors.as_slice())
-        .await
-        .map_err(|source| {
-            TrustRelationError::relation_graph(
-                TrustRelationOperation::FilterVisibleNeighbors,
-                source,
-            )
-        })
-        .map_err(trust_relation_error)?;
+    let neighbors = filter_relation_visible(
+        &state.pool,
+        relation_visibility.relation.as_ref(),
+        viewer_pubkey.as_str(),
+        neighbors.as_slice(),
+        relation_visibility.min_proximity,
+    )
+    .await
+    .map_err(|source| {
+        TrustRelationError::relation_graph(TrustRelationOperation::FilterVisibleNeighbors, source)
+    })
+    .map_err(trust_relation_error)?;
     Ok(Json(RelationNeighborsResponse {
         viewer_pubkey,
         neighbors,
     }))
 }
 
-#[derive(Debug, Serialize)]
-pub(crate) struct RelationOptoutResponse {
+fn relation_optout_response(
     pubkey: String,
-    opted_out: bool,
-    /// opt-out した時刻(説明可能性。解除済みなら null)。
-    opted_out_at: Option<String>,
+    opted_out_at: Option<chrono::DateTime<chrono::Utc>>,
+    min_proximity: f64,
+) -> RelationOptoutResponse {
+    RelationOptoutResponse {
+        pubkey,
+        opted_out: opted_out_at.is_some(),
+        opted_out_at: opted_out_at.map(|at| at.to_rfc3339()),
+        min_proximity,
+    }
+}
+
+/// 本人の distance opt-out 状態と、この node の距離境界を返す。
+pub(crate) async fn relation_optout_get(
+    State(state): State<UserApiState>,
+    headers: HeaderMap,
+) -> ApiResult<Json<RelationOptoutResponse>> {
+    let (relation_visibility, pubkey) = require_relation_visibility(&state, &headers).await?;
+    let opted_out_at = get_relation_optout(&state.pool, pubkey.as_str())
+        .await
+        .map_err(|source| {
+            TrustRelationError::relation_opt_out(TrustRelationOperation::GetOptOut, source)
+        })
+        .map_err(trust_relation_error)?;
+    Ok(Json(relation_optout_response(
+        pubkey,
+        opted_out_at,
+        relation_visibility.min_proximity,
+    )))
 }
 
 /// 「見えない」opt-out の設定(ADR 0026 §2.6 / §6.3)。
@@ -281,7 +350,7 @@ pub(crate) async fn relation_optout_set(
     State(state): State<UserApiState>,
     headers: HeaderMap,
 ) -> ApiResult<Json<RelationOptoutResponse>> {
-    let (_, pubkey) = require_trust_read(&state, &headers).await?;
+    let (relation_visibility, pubkey) = require_relation_visibility(&state, &headers).await?;
     set_relation_optout(&state.pool, pubkey.as_str())
         .await
         .map_err(|source| {
@@ -298,6 +367,7 @@ pub(crate) async fn relation_optout_set(
         pubkey,
         opted_out: true,
         opted_out_at: opted_out_at.map(|at| at.to_rfc3339()),
+        min_proximity: relation_visibility.min_proximity,
     }))
 }
 
@@ -306,7 +376,7 @@ pub(crate) async fn relation_optout_clear(
     State(state): State<UserApiState>,
     headers: HeaderMap,
 ) -> ApiResult<Json<RelationOptoutResponse>> {
-    let (_, pubkey) = require_trust_read(&state, &headers).await?;
+    let (relation_visibility, pubkey) = require_relation_visibility(&state, &headers).await?;
     clear_relation_optout(&state.pool, pubkey.as_str())
         .await
         .map_err(|source| {
@@ -317,5 +387,6 @@ pub(crate) async fn relation_optout_clear(
         pubkey,
         opted_out: false,
         opted_out_at: None,
+        min_proximity: relation_visibility.min_proximity,
     }))
 }

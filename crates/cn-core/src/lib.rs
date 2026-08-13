@@ -97,7 +97,7 @@ pub use readiness_runtime::{
 };
 pub use relation_optouts::{
     clear_relation_optout, filter_relation_visible, get_relation_optout, is_relation_opted_out,
-    set_relation_optout,
+    relation_pair_is_suppressed, set_relation_optout, should_suppress_relation_pair,
 };
 pub use rendezvous::TopicRendezvousStore;
 pub use reports::{

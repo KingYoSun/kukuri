@@ -16,6 +16,7 @@ pub mod normalize;
 pub mod paths;
 pub mod rendezvous;
 pub mod requests;
+pub mod trust_relation;
 
 pub use auth::*;
 pub use index::*;
@@ -25,3 +26,4 @@ pub use normalize::*;
 pub use paths::*;
 pub use rendezvous::*;
 pub use requests::*;
+pub use trust_relation::*;

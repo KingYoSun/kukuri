@@ -74,15 +74,16 @@ module "vm" {
   )
 
   # --- index / moderation stack (#615) ---
-  deploy_indexer_stack              = var.deploy_indexer_stack
-  cn_indexer_image                  = var.cn_indexer_image
-  arcadedb_image                    = var.arcadedb_image
-  indexer_data_disk_gb              = var.indexer_data_disk_gb
-  relation_analyze_interval_minutes = var.relation_analyze_interval_minutes
-  indexer_own_relay                 = var.indexer_own_relay
-  indexer_external_relay_urls       = var.indexer_external_relay_urls
-  index_query_enabled               = var.index_query_enabled
-  trust_read_enabled                = var.trust_read_enabled
+  deploy_indexer_stack                   = var.deploy_indexer_stack
+  cn_indexer_image                       = var.cn_indexer_image
+  arcadedb_image                         = var.arcadedb_image
+  indexer_data_disk_gb                   = var.indexer_data_disk_gb
+  relation_analyze_interval_minutes      = var.relation_analyze_interval_minutes
+  indexer_own_relay                      = var.indexer_own_relay
+  indexer_external_relay_urls            = var.indexer_external_relay_urls
+  index_query_enabled                    = var.index_query_enabled
+  trust_read_enabled                     = var.trust_read_enabled
+  relation_distance_optout_min_proximity = var.relation_distance_optout_min_proximity
 
   channel_secret_key_secret_id = var.channel_secret_key_secret_id
   arcadedb_password_secret_id  = var.arcadedb_password_secret_id

@@ -22,4 +22,4 @@ mod state;
 pub use config::{RateLimitConfig, UserApiConfig};
 pub use rate_limit::apply_rate_limit;
 pub use routes::{app_router, manifest_routes, run_from_env};
-pub use state::{TrustReadState, UserApiState, build_state};
+pub use state::{RelationVisibilityState, TrustReadState, UserApiState, build_state};
