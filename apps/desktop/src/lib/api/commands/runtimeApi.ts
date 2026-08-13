@@ -10,6 +10,8 @@ import type {
   CommunityNodeIndexQueryRequest,
   CommunityNodeManifestFetch,
   CommunityNodeNodeStatus,
+  CommunityNodeRelationNeighborsRequest,
+  CommunityNodeUserAdvisoryRequest,
   CustomReactionAssetView,
   DesktopApi,
   DirectMessageConversationView,
@@ -21,6 +23,9 @@ import type {
   GameRoomView,
   JoinedPrivateChannelView,
   IndexQueryResponse,
+  RelationNeighborsResponse,
+  RelationOptoutResponse,
+  RelationReadResponse,
   LiveSessionView,
   MetaverseAssetRef,
   MetaverseRoomEventView,
@@ -34,6 +39,7 @@ import type {
   SubmitIndexingRequestResponse,
   SyncStatus,
   TimelineView,
+  TrustUserReadResponse,
 } from '../types';
 
 // request DTO の生成型(WP-B6)。組み立てた literal を satisfies で拘束し、
@@ -638,6 +644,39 @@ export const runtimeApi: DesktopApi = {
       request: {
         base_url: baseUrl,
       } satisfies CommunityNodeTargetRequest,
+    });
+  }),
+  readCommunityNodeTrustUser: command('readCommunityNodeTrustUser', async (request) => {
+    return invokeDesktop<TrustUserReadResponse>('read_community_node_trust_user', {
+      request: request satisfies CommunityNodeUserAdvisoryRequest,
+    });
+  }),
+  readCommunityNodeRelationUser: command('readCommunityNodeRelationUser', async (request) => {
+    return invokeDesktop<RelationReadResponse>('read_community_node_relation_user', {
+      request: request satisfies CommunityNodeUserAdvisoryRequest,
+    });
+  }),
+  listCommunityNodeRelationNeighbors: command(
+    'listCommunityNodeRelationNeighbors',
+    async (request) => {
+      return invokeDesktop<RelationNeighborsResponse>('list_community_node_relation_neighbors', {
+        request: request satisfies CommunityNodeRelationNeighborsRequest,
+      });
+    }
+  ),
+  getCommunityNodeRelationOptout: command('getCommunityNodeRelationOptout', async (baseUrl) => {
+    return invokeDesktop<RelationOptoutResponse>('get_community_node_relation_optout', {
+      request: { base_url: baseUrl } satisfies CommunityNodeTargetRequest,
+    });
+  }),
+  setCommunityNodeRelationOptout: command('setCommunityNodeRelationOptout', async (baseUrl) => {
+    return invokeDesktop<RelationOptoutResponse>('set_community_node_relation_optout', {
+      request: { base_url: baseUrl } satisfies CommunityNodeTargetRequest,
+    });
+  }),
+  clearCommunityNodeRelationOptout: command('clearCommunityNodeRelationOptout', async (baseUrl) => {
+    return invokeDesktop<RelationOptoutResponse>('clear_community_node_relation_optout', {
+      request: { base_url: baseUrl } satisfies CommunityNodeTargetRequest,
     });
   }),
   searchCommunityNodeIndex: command('searchCommunityNodeIndex', async (request) => {

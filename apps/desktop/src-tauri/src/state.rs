@@ -195,6 +195,17 @@ impl From<kukuri_desktop_runtime::CommunityNodeIndexingRequestError> for Command
     }
 }
 
+impl From<kukuri_desktop_runtime::CommunityNodeTrustRelationError> for CommandError {
+    fn from(error: kukuri_desktop_runtime::CommunityNodeTrustRelationError) -> Self {
+        Self {
+            code: error.code,
+            message: error.message,
+            status: error.status,
+            retry_after_seconds: None,
+        }
+    }
+}
+
 pub(crate) fn map_error(error: anyhow::Error) -> CommandError {
     CommandError::from(error)
 }
@@ -340,6 +351,22 @@ mod tests {
         assert_eq!(
             json,
             r#"{"code":"CHANNEL_SECRET_CONFLICT","message":"channel capability conflicts with the existing registration","status":409}"#
+        );
+    }
+
+    #[test]
+    fn trust_relation_error_preserves_stable_unavailable_code() {
+        let error = CommandError::from(
+            kukuri_desktop_runtime::CommunityNodeTrustRelationError {
+                code: "RELATION_NOT_FOUND".to_string(),
+                message: "no relation observed for this pair".to_string(),
+                status: Some(404),
+            },
+        );
+        let json = serde_json::to_string(&error).expect("serialize trust relation error");
+        assert_eq!(
+            json,
+            r#"{"code":"RELATION_NOT_FOUND","message":"no relation observed for this pair","status":404}"#
         );
     }
 

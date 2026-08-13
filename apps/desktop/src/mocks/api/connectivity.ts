@@ -23,6 +23,12 @@ type ConnectivityMock = Pick<
   | 'acceptCommunityNodeConsents'
   | 'refreshCommunityNodeMetadata'
   | 'fetchCommunityNodeManifest'
+  | 'readCommunityNodeTrustUser'
+  | 'readCommunityNodeRelationUser'
+  | 'listCommunityNodeRelationNeighbors'
+  | 'getCommunityNodeRelationOptout'
+  | 'setCommunityNodeRelationOptout'
+  | 'clearCommunityNodeRelationOptout'
   | 'searchCommunityNodeIndex'
   | 'discoverCommunityNodeIndex'
   | 'recommendCommunityNodeIndex'
@@ -72,6 +78,8 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
       .slice(0, request.limit ?? 20);
     return { entries };
   }
+
+  const relationOptoutNodes = new Set<string>();
 
   return {
     async getSyncStatus() {
@@ -218,6 +226,65 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
           privacy_url: `${baseUrl}/privacy`,
           moderation_policy_url: `${baseUrl}/moderation-policy`,
         },
+      };
+    },
+    async readCommunityNodeTrustUser(request) {
+      return {
+        viewer_pubkey: 'mock-viewer',
+        target_id: request.target_pubkey,
+        absolute: 0,
+        relative: 0,
+        trust: 0,
+        w_abs_applied: 0.5,
+        computed_at: new Date(0).toISOString(),
+        basis: [],
+      };
+    },
+    async readCommunityNodeRelationUser(request) {
+      return {
+        viewer_pubkey: 'mock-viewer',
+        target_pubkey: request.target_pubkey,
+        score: 0.5,
+        basis: [
+          {
+            feature: 'shared_topics',
+            value: 1,
+            weight: 1,
+            contribution: 0.5,
+          },
+        ],
+      };
+    },
+    async listCommunityNodeRelationNeighbors() {
+      const neighbors = Array.from(
+        new Set(Object.values(postsByTopic).flatMap((posts) => posts.map((post) => post.author_pubkey)))
+      );
+      return { viewer_pubkey: 'mock-viewer', neighbors };
+    },
+    async getCommunityNodeRelationOptout(baseUrl) {
+      return {
+        pubkey: 'mock-viewer',
+        opted_out: relationOptoutNodes.has(baseUrl),
+        opted_out_at: relationOptoutNodes.has(baseUrl) ? new Date(0).toISOString() : null,
+        min_proximity: 0.25,
+      };
+    },
+    async setCommunityNodeRelationOptout(baseUrl) {
+      relationOptoutNodes.add(baseUrl);
+      return {
+        pubkey: 'mock-viewer',
+        opted_out: true,
+        opted_out_at: new Date(0).toISOString(),
+        min_proximity: 0.25,
+      };
+    },
+    async clearCommunityNodeRelationOptout(baseUrl) {
+      relationOptoutNodes.delete(baseUrl);
+      return {
+        pubkey: 'mock-viewer',
+        opted_out: false,
+        opted_out_at: null,
+        min_proximity: 0.25,
       };
     },
     async searchCommunityNodeIndex(request) {

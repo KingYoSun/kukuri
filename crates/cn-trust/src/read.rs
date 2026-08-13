@@ -7,61 +7,13 @@
 //! （`trust_read_is_explainable_with_basis`）。
 
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-
-use kukuri_cn_safety::{AppealStatus, Basis, SafetyCategory, Severity, Visibility};
+pub use kukuri_cn_protocol::{TrustBasisEntry, TrustReadView};
 
 use crate::inputs::{TrustComponentKind, TrustRiskInput, TrustRiskInputs};
 use crate::params::TrustParams;
 use crate::score::{
     RelationWeighting, clamp_unit, compose_trust, contributes, decay_factor, signal_contribution,
 };
-
-/// 寄与 signal 1 件の説明（basis entry）。
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct TrustBasisEntry {
-    pub signal_id: String,
-    pub issuer_node_id: String,
-    pub component: TrustComponentKind,
-    pub category: SafetyCategory,
-    pub severity: Severity,
-    pub basis: Basis,
-    pub confidence: Option<u8>,
-    pub visibility: Visibility,
-    pub appeal_status: AppealStatus,
-    pub expires_at: Option<String>,
-    /// 生寄与（severity × confidence。decay / relation 重み前）。
-    pub raw_contribution: f64,
-    /// 適用された時間減衰係数（絶対成分は常に 1.0 = 減衰しない）。
-    pub decay_factor: f64,
-    /// 適用された relation 重み（絶対成分は常に 1.0 = relation 非依存）。
-    pub relation_weight: f64,
-    /// 実効寄与（raw × decay × relation 重み）。
-    pub contribution: f64,
-}
-
-/// trust read の応答形（node-local advisory）。
-///
-/// 単一の絶対スカラーではなく、絶対成分（viewer 非依存）+ 相対成分（viewer / cluster 依存）+
-/// 合成値を根拠つきで返す。「このユーザーは troll」等の断定ラベルは持たない（§6.2 Decision:
-/// 断定閾値を置かない）。
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct TrustReadView {
-    /// 対象 pubkey。
-    pub target_id: String,
-    /// 絶対成分（`[-1, 1]`。relation 非依存・減衰なし・viewer 非依存）。
-    pub absolute: f64,
-    /// 相対成分（`[-1, 1]`。relation 重み付け・半減期減衰・viewer / cluster 相対）。
-    pub relative: f64,
-    /// 合成 trust（`[-1, 1]` にクランプ済み）。
-    pub trust: f64,
-    /// 合成に適用された絶対成分の重み（operator 可変, §6.2）。
-    pub w_abs_applied: f64,
-    /// 計算時刻（RFC3339。相対成分の decay 基準時刻）。
-    pub computed_at: String,
-    /// 寄与 signal ごとの根拠。
-    pub basis: Vec<TrustBasisEntry>,
-}
 
 fn basis_entry(input: &TrustRiskInput, decay: f64, relation_weight: f64) -> TrustBasisEntry {
     let raw = signal_contribution(input);

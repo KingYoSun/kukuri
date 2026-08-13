@@ -14,6 +14,7 @@ use std::collections::BTreeMap;
 
 use anyhow::Result;
 use async_trait::async_trait;
+pub use kukuri_cn_protocol::{Proximity, ProximityBasisEntry};
 use serde::{Deserialize, Serialize};
 
 /// 共有 supported topic 数の feature key。
@@ -45,28 +46,6 @@ impl EdgeFeatures {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
-}
-
-/// proximity の根拠 1 件（feature ごとの内訳）。
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct ProximityBasisEntry {
-    pub feature: String,
-    /// 格納されていた feature 値。
-    pub value: f64,
-    /// この feature の重み。
-    pub weight: f64,
-    /// score への寄与（正規化後）。
-    pub contribution: f64,
-}
-
-/// pairwise cluster proximity（根拠つき, ADR 0026 §6.1）。
-///
-/// `score ∈ [0, 1]`。断定ラベルではなく、feature 内訳（basis）を必ず同伴する
-/// （`relation_read_is_explainable`）。
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Proximity {
-    pub score: f64,
-    pub basis: Vec<ProximityBasisEntry>,
 }
 
 /// cluster 帰属（相対成分の重み付け入力, §6.1）。

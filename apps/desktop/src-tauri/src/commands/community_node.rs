@@ -1,7 +1,8 @@
 use kukuri_desktop_runtime::{
     AcceptCommunityNodeConsentsRequest, CommunityNodeConfig, CommunityNodeIndexQueryRequest,
     CommunityNodeIndexingRequest, CommunityNodeManifestFetch, CommunityNodeNodeStatus,
-    CommunityNodeTargetRequest,
+    CommunityNodeRelationNeighborsRequest, CommunityNodeTargetRequest,
+    CommunityNodeUserAdvisoryRequest,
     CreatePrivateChannelRequest, DiscoveryConfig, ExportChannelAccessTokenRequest,
     ExportFriendOnlyGrantRequest, ExportFriendPlusShareRequest, ExportPrivateChannelInviteRequest,
     FreezePrivateChannelRequest, ImportChannelAccessTokenRequest, ImportFriendOnlyGrantRequest,
@@ -10,7 +11,8 @@ use kukuri_desktop_runtime::{
     PreviewChannelAccessTokenRequest, RotatePrivateChannelRequest, SetChannelGossipEnabledRequest,
     SetCommunityNodeConfigRequest, SetDiscoverySeedsRequest, SetTopicGossipEnabledRequest,
     SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
-    SubmitIndexingRequestResponse, UnsubscribeTopicRequest,
+    SubmitIndexingRequestResponse, TrustUserReadResponse, RelationReadResponse,
+    RelationNeighborsResponse, RelationOptoutResponse, UnsubscribeTopicRequest,
 };
 
 use crate::state::{CommandError, DesktopState, map_error};
@@ -441,6 +443,78 @@ pub async fn recommend_community_node_index(
     state
         .runtime
         .recommend_community_node_index(request)
+        .await
+        .map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub async fn read_community_node_trust_user(
+    state: tauri::State<'_, DesktopState>,
+    request: CommunityNodeUserAdvisoryRequest,
+) -> Result<TrustUserReadResponse, CommandError> {
+    state
+        .runtime
+        .read_community_node_trust_user(request)
+        .await
+        .map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub async fn read_community_node_relation_user(
+    state: tauri::State<'_, DesktopState>,
+    request: CommunityNodeUserAdvisoryRequest,
+) -> Result<RelationReadResponse, CommandError> {
+    state
+        .runtime
+        .read_community_node_relation_user(request)
+        .await
+        .map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub async fn list_community_node_relation_neighbors(
+    state: tauri::State<'_, DesktopState>,
+    request: CommunityNodeRelationNeighborsRequest,
+) -> Result<RelationNeighborsResponse, CommandError> {
+    state
+        .runtime
+        .list_community_node_relation_neighbors(request)
+        .await
+        .map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub async fn get_community_node_relation_optout(
+    state: tauri::State<'_, DesktopState>,
+    request: CommunityNodeTargetRequest,
+) -> Result<RelationOptoutResponse, CommandError> {
+    state
+        .runtime
+        .get_community_node_relation_optout(request)
+        .await
+        .map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub async fn set_community_node_relation_optout(
+    state: tauri::State<'_, DesktopState>,
+    request: CommunityNodeTargetRequest,
+) -> Result<RelationOptoutResponse, CommandError> {
+    state
+        .runtime
+        .set_community_node_relation_optout(request)
+        .await
+        .map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub async fn clear_community_node_relation_optout(
+    state: tauri::State<'_, DesktopState>,
+    request: CommunityNodeTargetRequest,
+) -> Result<RelationOptoutResponse, CommandError> {
+    state
+        .runtime
+        .clear_community_node_relation_optout(request)
         .await
         .map_err(CommandError::from)
 }

@@ -46,6 +46,7 @@ impl SafetyAction {
 
 /// risk signal / moderation のカテゴリ。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum SafetyCategory {
     Csam,
@@ -73,6 +74,7 @@ impl SafetyCategory {
 
 /// severity。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum Severity {
     Critical,
@@ -83,6 +85,7 @@ pub enum Severity {
 
 /// 判定の根拠。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum Basis {
     /// 既知 hash 一致（confirmed の根拠）。
@@ -100,6 +103,7 @@ pub enum Basis {
 /// suspected unknown CSAM / CSE は既定 `Local`。known hash match / provider confirmed の場合のみ
 /// `SubscribedNodes` 以上を検討する（誤検知を public advisory として拡散しない）。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum Visibility {
     /// issuer node 内のローカル判断にのみ使う（既定・最も安全側）。

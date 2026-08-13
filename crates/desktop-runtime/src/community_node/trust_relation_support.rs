@@ -1,0 +1,234 @@
+use std::fmt;
+
+use kukuri_cn_protocol::{
+    ApiErrorBody, RELATION_NEIGHBORS_PATH, RELATION_OPTOUT_PATH, RELATION_USERS_PATH_PREFIX,
+    RelationNeighborsResponse, RelationOptoutResponse, RelationReadResponse,
+    TRUST_USERS_PATH_PREFIX, TrustUserReadResponse, normalize_http_url, normalize_pubkey,
+};
+use reqwest::{Method, StatusCode};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+
+use super::{community_node_http_client, load_community_node_token};
+use crate::runtime::DesktopRuntime;
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct CommunityNodeUserAdvisoryRequest {
+    pub base_url: String,
+    pub target_pubkey: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
+pub struct CommunityNodeRelationNeighborsRequest {
+    pub base_url: String,
+    pub limit: Option<usize>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
+pub struct CommunityNodeTrustRelationError {
+    pub code: String,
+    pub message: String,
+    pub status: Option<u16>,
+}
+
+impl CommunityNodeTrustRelationError {
+    fn new(code: &str, message: impl Into<String>) -> Self {
+        Self {
+            code: code.to_string(),
+            message: message.into(),
+            status: None,
+        }
+    }
+
+    fn from_response(status: StatusCode, body: Option<ApiErrorBody>) -> Self {
+        let fallback_code = match status {
+            StatusCode::UNAUTHORIZED => "AUTH_REQUIRED",
+            StatusCode::FORBIDDEN => "CONSENT_REQUIRED",
+            StatusCode::NOT_FOUND => "TRUST_RELATION_UNAVAILABLE",
+            _ => "TRUST_RELATION_REQUEST_FAILED",
+        };
+        let fallback_message =
+            format!("community node trust / relation request failed with {status}");
+        Self {
+            code: body
+                .as_ref()
+                .map_or_else(|| fallback_code.to_string(), |body| body.code.clone()),
+            message: body.map_or(fallback_message, |body| body.message),
+            status: Some(status.as_u16()),
+        }
+    }
+}
+
+impl fmt::Display for CommunityNodeTrustRelationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}: {}", self.code, self.message)
+    }
+}
+
+impl std::error::Error for CommunityNodeTrustRelationError {}
+
+impl DesktopRuntime {
+    pub(crate) async fn request_community_node_trust_user(
+        &self,
+        request: CommunityNodeUserAdvisoryRequest,
+    ) -> Result<TrustUserReadResponse, CommunityNodeTrustRelationError> {
+        let target = normalize_pubkey(request.target_pubkey.as_str()).map_err(|error| {
+            CommunityNodeTrustRelationError::new("INVALID_TRUST_QUERY", error.to_string())
+        })?;
+        self.request_community_node_trust_relation(
+            request.base_url.as_str(),
+            Method::GET,
+            format!("{TRUST_USERS_PATH_PREFIX}{target}").as_str(),
+            None,
+        )
+        .await
+    }
+
+    pub(crate) async fn request_community_node_relation_user(
+        &self,
+        request: CommunityNodeUserAdvisoryRequest,
+    ) -> Result<RelationReadResponse, CommunityNodeTrustRelationError> {
+        let target = normalize_pubkey(request.target_pubkey.as_str()).map_err(|error| {
+            CommunityNodeTrustRelationError::new("INVALID_TRUST_QUERY", error.to_string())
+        })?;
+        self.request_community_node_trust_relation(
+            request.base_url.as_str(),
+            Method::GET,
+            format!("{RELATION_USERS_PATH_PREFIX}{target}").as_str(),
+            None,
+        )
+        .await
+    }
+
+    pub(crate) async fn request_community_node_relation_neighbors(
+        &self,
+        request: CommunityNodeRelationNeighborsRequest,
+    ) -> Result<RelationNeighborsResponse, CommunityNodeTrustRelationError> {
+        self.request_community_node_trust_relation(
+            request.base_url.as_str(),
+            Method::GET,
+            RELATION_NEIGHBORS_PATH,
+            request.limit,
+        )
+        .await
+    }
+
+    pub(crate) async fn request_community_node_relation_optout(
+        &self,
+        base_url: &str,
+        method: Method,
+    ) -> Result<RelationOptoutResponse, CommunityNodeTrustRelationError> {
+        self.request_community_node_trust_relation(base_url, method, RELATION_OPTOUT_PATH, None)
+            .await
+    }
+
+    async fn request_community_node_trust_relation<T: DeserializeOwned>(
+        &self,
+        base_url: &str,
+        method: Method,
+        path: &str,
+        limit: Option<usize>,
+    ) -> Result<T, CommunityNodeTrustRelationError> {
+        let base_url = normalize_http_url(base_url).map_err(|error| {
+            CommunityNodeTrustRelationError::new("INVALID_COMMUNITY_NODE_URL", error.to_string())
+        })?;
+        self.require_community_node(base_url.as_str())
+            .await
+            .map_err(|error| {
+                CommunityNodeTrustRelationError::new(
+                    "COMMUNITY_NODE_NOT_CONFIGURED",
+                    error.to_string(),
+                )
+            })?;
+        self.ensure_community_node_session(base_url.as_str())
+            .await
+            .map_err(|error| {
+                CommunityNodeTrustRelationError::new(
+                    "COMMUNITY_NODE_SESSION_FAILED",
+                    error.to_string(),
+                )
+            })?;
+        let token = load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())
+            .map_err(|error| {
+                CommunityNodeTrustRelationError::new("AUTH_TOKEN_LOAD_FAILED", error.to_string())
+            })?
+            .ok_or_else(|| {
+                CommunityNodeTrustRelationError::new(
+                    "AUTH_REQUIRED",
+                    "community node authentication is required",
+                )
+            })?;
+
+        match self
+            .send_community_node_trust_relation(
+                base_url.as_str(),
+                method.clone(),
+                path,
+                limit,
+                token.access_token.as_str(),
+            )
+            .await
+        {
+            Err(error) if error.status == Some(StatusCode::UNAUTHORIZED.as_u16()) => {
+                let refreshed = self
+                    .request_community_node_authentication_token(base_url.as_str())
+                    .await
+                    .map_err(|error| {
+                        CommunityNodeTrustRelationError::new(
+                            "COMMUNITY_NODE_REAUTHENTICATION_FAILED",
+                            error.to_string(),
+                        )
+                    })?;
+                self.send_community_node_trust_relation(
+                    base_url.as_str(),
+                    method,
+                    path,
+                    limit,
+                    refreshed.access_token.as_str(),
+                )
+                .await
+            }
+            result => result,
+        }
+    }
+
+    async fn send_community_node_trust_relation<T: DeserializeOwned>(
+        &self,
+        base_url: &str,
+        method: Method,
+        path: &str,
+        limit: Option<usize>,
+        access_token: &str,
+    ) -> Result<T, CommunityNodeTrustRelationError> {
+        let client = community_node_http_client().map_err(|error| {
+            CommunityNodeTrustRelationError::new(
+                "TRUST_RELATION_HTTP_CLIENT_FAILED",
+                error.to_string(),
+            )
+        })?;
+        let mut request = client
+            .request(method, format!("{base_url}{path}"))
+            .bearer_auth(access_token);
+        if let Some(limit) = limit {
+            request = request.query(&[("limit", limit)]);
+        }
+        let response = request.send().await.map_err(|error| {
+            CommunityNodeTrustRelationError::new(
+                "TRUST_RELATION_TRANSPORT_FAILED",
+                error.to_string(),
+            )
+        })?;
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.json::<ApiErrorBody>().await.ok();
+            return Err(CommunityNodeTrustRelationError::from_response(status, body));
+        }
+        response.json::<T>().await.map_err(|error| {
+            CommunityNodeTrustRelationError::new("TRUST_RELATION_DECODE_FAILED", error.to_string())
+        })
+    }
+}

@@ -23,6 +23,7 @@ pub enum RiskSignalTarget {
 
 /// 異議申し立ての状態。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum AppealStatus {
     #[default]
