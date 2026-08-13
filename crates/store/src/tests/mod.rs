@@ -14,6 +14,7 @@ use kukuri_core::{
 use tempfile::tempdir;
 
 mod backend_parity;
+mod content_observations;
 mod direct_messages;
 mod migrations;
 mod migrations_roundtrip;

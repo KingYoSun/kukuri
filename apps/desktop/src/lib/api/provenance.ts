@@ -1,3 +1,5 @@
+import type { ContentProvenanceView } from './types.generated';
+
 // Content provenance and responsible-capability metadata (#358).
 //
 // kukuri では profile / social graph の canonical source は author docs + signed
@@ -40,6 +42,7 @@ export type ObservedViaCapability =
 export type ObservedViaNode = {
   nodeBaseUrl: string;
   capability: ObservedViaCapability;
+  observedAt?: number;
   nodeRole?: string;
   manifestVersion?: string;
 };
@@ -75,6 +78,41 @@ export type ContentProvenance = {
   /// この content に関する責任ある通報先（実際に関与した node の capability に基づく）。
   responsibleReportTargets: ReportTarget[];
 };
+
+const OBSERVED_CAPABILITIES: ReadonlySet<string> = new Set<ObservedViaCapability>([
+  'bootstrap_assist',
+  'relay_assist',
+  'community_index',
+  'moderation',
+  'trust_signal',
+  'media_cache',
+  'recommendation',
+  'bridge',
+]);
+
+export function contentProvenanceFromView(
+  view: ContentProvenanceView | null | undefined
+): ContentProvenance | undefined {
+  if (!view) {
+    return undefined;
+  }
+  const observedVia = view.observed_via.flatMap((item) =>
+    OBSERVED_CAPABILITIES.has(item.capability)
+      ? [
+          {
+            nodeBaseUrl: item.node_base_url,
+            capability: item.capability as ObservedViaCapability,
+            observedAt: item.observed_at,
+          },
+        ]
+      : []
+  );
+  return {
+    canonicalSource: view.canonical_source as CanonicalSource,
+    observedVia,
+    responsibleReportTargets: [],
+  };
+}
 
 /// provenance を持ち得る DTO を表すユーティリティ型。
 export type WithProvenance<T> = T & { provenance?: ContentProvenance };

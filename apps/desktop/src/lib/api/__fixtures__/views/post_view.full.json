@@ -15,6 +15,16 @@
   "followed_by": true,
   "mutual": true,
   "friend_of_friend": false,
+  "provenance": {
+    "canonical_source": "author_docs",
+    "observed_via": [
+      {
+        "node_base_url": "https://node.example",
+        "capability": "community_index",
+        "observed_at": 1700000003000
+      }
+    ]
+  },
   "content": "hello ipc contract",
   "content_status": "Available",
   "attachments": [

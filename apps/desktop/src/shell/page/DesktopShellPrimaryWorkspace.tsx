@@ -244,6 +244,11 @@ export function DesktopShellPrimaryWorkspace({
   }, [communityNodeManifests]);
   const submitReport = (request: SubmitCommunityNodeReportRequest) =>
     api.submitCommunityNodeReport(request);
+  const fetchReportManifest = (baseUrl: string) =>
+    api.fetchCommunityNodeManifest(baseUrl);
+  const muteReportAuthor = async (authorPubkey: string) => {
+    await handleMuteAction(authorPubkey, false);
+  };
   const copyReportContact = (value: string) => void copyTextToClipboard(value);
   const activeTimelineKey = timelineScopeStorageKey(activeTopic, viewModels.activeTimelineScope);
   const activeTimelinePendingCount = pendingTimelineCountsByKey[activeTimelineKey] ?? 0;
@@ -396,6 +401,8 @@ export function DesktopShellPrimaryWorkspace({
                   communityNodeManifests={reportableManifests}
                   onSubmitReport={submitReport}
                   onCopyReportContact={copyReportContact}
+                  onFetchReportManifest={fetchReportManifest}
+                  onMuteReportAuthor={muteReportAuthor}
                 />
               ) : (
                 <TimelineFeed
@@ -425,6 +432,8 @@ export function DesktopShellPrimaryWorkspace({
                   communityNodeManifests={reportableManifests}
                   onSubmitReport={submitReport}
                   onCopyReportContact={copyReportContact}
+                  onFetchReportManifest={fetchReportManifest}
+                  onMuteReportAuthor={muteReportAuthor}
                 />
               )}
             </Card>

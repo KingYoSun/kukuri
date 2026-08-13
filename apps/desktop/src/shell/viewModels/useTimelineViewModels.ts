@@ -6,6 +6,7 @@ import type {
   ReferencedAuthorMeta,
 } from '@/components/core/types';
 import type { PostView, ProfileAssetView } from '@/lib/api';
+import { contentProvenanceFromView } from '@/lib/api/provenance';
 import type { SupportedLocale } from '@/i18n';
 import { extractMentions } from '@/lib/internalLinks';
 import {
@@ -221,6 +222,7 @@ export function useTimelineViewModels({
       }
       return {
         post,
+        provenance: contentProvenanceFromView(post.provenance),
         context,
         authorLabel: authorDisplayLabel(
           post.author_pubkey,

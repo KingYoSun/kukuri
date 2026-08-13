@@ -778,6 +778,132 @@
   margin-top: 0;
 }
 
+.report-routing-dialog {
+  width: min(46rem, calc(100vw - 2rem));
+}
+
+.report-subject,
+.report-boundary-notice p,
+.report-result p,
+.report-unresolved p {
+  margin: 0;
+}
+
+.report-subject {
+  color: var(--muted-foreground);
+  font-weight: 600;
+}
+
+.report-boundary-notice,
+.report-critical-safety,
+.report-unresolved {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.report-boundary-notice {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.report-identity-boundary,
+.report-field-hint,
+.report-target-capability,
+.report-target-contact {
+  color: var(--muted-foreground);
+}
+
+.report-target-list {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-sm);
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.report-target-list legend {
+  padding: 0;
+  margin-bottom: var(--space-xs);
+  font-weight: 700;
+}
+
+.report-target-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-input);
+  background: var(--surface-input);
+  cursor: pointer;
+}
+
+.report-target-option:has(input:checked) {
+  border-color: var(--border-accent);
+  background: var(--surface-accent-soft);
+}
+
+.report-target-option input {
+  margin-top: 0.25rem;
+}
+
+.report-target-main {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2xs);
+}
+
+.report-target-host {
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.report-target-policy {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: var(--space-2xs);
+}
+
+.report-field {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-xs);
+  font-weight: 600;
+}
+
+.report-reason-select,
+.report-details-input,
+.report-reporter-contact-input {
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-input);
+  color: var(--foreground);
+  background: var(--surface-input);
+  font-weight: 400;
+}
+
+.report-details-input {
+  resize: vertical;
+}
+
+.report-unresolved-body {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.report-unresolved-title {
+  font-weight: 700;
+}
+
+.report-local-actions {
+  margin-top: var(--space-xs);
+}
+
 .ui-dialog-close {
   position: absolute;
   top: 0.9rem;

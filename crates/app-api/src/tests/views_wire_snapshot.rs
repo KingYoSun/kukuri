@@ -25,12 +25,12 @@ use kukuri_transport::{ConnectMode, ConnectionPath, DiscoveryMode};
 
 use crate::views::{
     AttachmentView, AuthorSocialView, BlobViewStatus, BookmarkedPostView, ChannelAccessTokenExport,
-    ChannelAccessTokenKind, ChannelAccessTokenPreview, CustomReactionAssetView, DeliveryState,
-    DirectMessageConversationView, DirectMessageMessageView, DirectMessageStatusView,
-    DirectMessageTimelineView, DiscoveryStatus, GameRoomView, GameScoreView,
-    JoinedPrivateChannelView, NotificationView, PostView, ProfileAssetView, ReactionKeyView,
-    ReactionSummaryView, ReplyPreviewAuthorView, ReplyPreviewView, RepostSourceView, SyncStatus,
-    TimelineView, TopicSyncStatus,
+    ChannelAccessTokenKind, ChannelAccessTokenPreview, ContentObservationView,
+    ContentProvenanceView, CustomReactionAssetView, DeliveryState, DirectMessageConversationView,
+    DirectMessageMessageView, DirectMessageStatusView, DirectMessageTimelineView, DiscoveryStatus,
+    GameRoomView, GameScoreView, JoinedPrivateChannelView, NotificationView, PostView,
+    ProfileAssetView, ReactionKeyView, ReactionSummaryView, ReplyPreviewAuthorView,
+    ReplyPreviewView, RepostSourceView, SyncStatus, TimelineView, TopicSyncStatus,
 };
 
 const PUBKEY_A: &str = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
@@ -113,6 +113,14 @@ fn post_view_full() -> PostView {
         followed_by: true,
         mutual: true,
         friend_of_friend: false,
+        provenance: Some(ContentProvenanceView {
+            canonical_source: "author_docs".to_string(),
+            observed_via: vec![ContentObservationView {
+                node_base_url: "https://node.example".to_string(),
+                capability: "community_index".to_string(),
+                observed_at: 1_700_000_003_000,
+            }],
+        }),
         content: "hello ipc contract".to_string(),
         content_status: BlobViewStatus::Available,
         attachments: vec![attachment()],
@@ -184,6 +192,7 @@ fn post_view_minimal() -> PostView {
         followed_by: false,
         mutual: false,
         friend_of_friend: false,
+        provenance: None,
         content: "minimal".to_string(),
         content_status: BlobViewStatus::Missing,
         attachments: vec![],
@@ -528,6 +537,14 @@ fn views_wire_author_social_view() {
             mutual: false,
             friend_of_friend: true,
             friend_of_friend_via_pubkeys: vec![PUBKEY_A.to_string()],
+            provenance: Some(ContentProvenanceView {
+                canonical_source: "author_docs".to_string(),
+                observed_via: vec![ContentObservationView {
+                    node_base_url: "https://node.example".to_string(),
+                    capability: "community_index".to_string(),
+                    observed_at: 1_700_000_003_000,
+                }],
+            }),
             muted: true,
         },
     );

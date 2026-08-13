@@ -12,10 +12,10 @@ use sqlx::{Pool, QueryBuilder, Row, Sqlite};
 
 use crate::models::{
     AuthorRelationshipProjectionRow, BlobCacheStatus, BookmarkedCustomReactionRow,
-    BookmarkedPostRow, DirectMessageConversationRow, DirectMessageMessageRow,
-    DirectMessageOutboxRow, DirectMessageTombstoneRow, GameRoomProjectionRow,
-    LiveSessionProjectionRow, MutedAuthorRow, NotificationRow, ObjectProjectionRow, Page,
-    ReactionProjectionRow, TimelineCursor,
+    BookmarkedPostRow, ContentObservationRow, DirectMessageConversationRow,
+    DirectMessageMessageRow, DirectMessageOutboxRow, DirectMessageTombstoneRow,
+    GameRoomProjectionRow, LiveSessionProjectionRow, MutedAuthorRow, NotificationRow,
+    ObjectProjectionRow, Page, ReactionProjectionRow, TimelineCursor,
 };
 use crate::pagination::{
     direct_message_page_from_rows, envelope_page_from_rows, object_projection_page_from_rows,
@@ -30,8 +30,8 @@ use crate::row_mapping::{
     row_to_muted_author, row_to_notification, row_to_object_projection, row_to_reaction_projection,
 };
 use crate::traits::{
-    BlobCacheStore, DirectMessageStore, LiveGameProjectionStore, NotificationStore,
-    ObjectProjectionStore, ReactionBookmarkStore, SocialProjectionStore, Store,
+    BlobCacheStore, ContentObservationStore, DirectMessageStore, LiveGameProjectionStore,
+    NotificationStore, ObjectProjectionStore, ReactionBookmarkStore, SocialProjectionStore, Store,
 };
 
 mod bookmarks;
@@ -40,6 +40,7 @@ mod direct_messages;
 mod envelopes;
 mod live_game;
 mod notifications;
+mod observations;
 mod projections;
 mod social;
 

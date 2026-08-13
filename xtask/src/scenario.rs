@@ -56,6 +56,7 @@ pub(crate) fn scenario_ci_lane(name: &str) -> Option<&'static str> {
         "desktop_smoke_post_persist" => Some("fast+release+nightly"),
         "community_node_public_connectivity" => Some("fast+release+nightly"),
         "community_node_index_query_client" => Some("fast"),
+        "community_node_report_routing" => Some("fast"),
         "community_node_trust_relation_client" => Some("fast"),
         "community_node_multi_device_connectivity" => Some("nightly"),
         "desktop_smoke_bookmark_workflow"
@@ -88,7 +89,7 @@ mod tests {
                     .into_owned()
             })
             .collect::<BTreeSet<_>>();
-        assert_eq!(scenario_names.len(), 10, "scenario inventory changed");
+        assert_eq!(scenario_names.len(), 11, "scenario inventory changed");
         let orphaned = scenario_names
             .iter()
             .filter(|name| scenario_ci_lane(name).is_none())

@@ -146,6 +146,10 @@ impl ObjectProjectionStore for MemoryStore {
     }
 
     async fn rebuild_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()> {
+        let retained_object_ids = rows
+            .iter()
+            .map(|row| row.object_id.as_str().to_string())
+            .collect::<HashSet<_>>();
         let mut guard = self.object_projection_rows.write().await;
         guard.clear();
         for row in rows {
@@ -155,6 +159,13 @@ impl ObjectProjectionStore for MemoryStore {
         self.game_room_rows.write().await.clear();
         self.live_presence.write().await.clear();
         self.reaction_projection_rows.write().await.clear();
+        self.content_observation_rows
+            .write()
+            .await
+            .retain(|_, observation| {
+                observation.subject_kind != "post"
+                    || retained_object_ids.contains(observation.subject_id.as_str())
+            });
         Ok(())
     }
 }

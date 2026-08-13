@@ -17,12 +17,16 @@ impl AppService {
             .get_muted_author(author_pubkey)
             .await?
             .is_some();
-        Ok(author_social_view_from_parts(
+        let mut view = author_social_view_from_parts(
             author_pubkey,
             profile.as_ref(),
             relationship.as_ref(),
             muted,
-        ))
+        );
+        view.provenance = self
+            .content_provenance_view("profile", author_pubkey, "author_docs")
+            .await?;
+        Ok(view)
     }
 
     pub(crate) async fn rebuild_author_relationships(&self) -> Result<()> {

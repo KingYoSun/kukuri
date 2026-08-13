@@ -1,5 +1,5 @@
 import { useMemo, useRef } from 'react';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Flag, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ type MediaViewerDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onIndexChange: (index: number) => void;
+  onReportCurrent?: (hash: string) => void;
 };
 
 function clampIndex(index: number, length: number) {
@@ -36,6 +37,7 @@ export function MediaViewerDialog({
   open,
   onOpenChange,
   onIndexChange,
+  onReportCurrent,
 }: MediaViewerDialogProps) {
   const { t } = useTranslation('common');
   const pointerStartXRef = useRef<number | null>(null);
@@ -84,6 +86,18 @@ export function MediaViewerDialog({
           >
             <X className='size-5' aria-hidden='true' />
           </Button>
+          {currentItem && onReportCurrent ? (
+            <Button
+              variant='secondary'
+              size='icon'
+              type='button'
+              className='media-viewer-report'
+              onClick={() => onReportCurrent(currentItem.hash)}
+              aria-label={t('report.actionLabel', { ns: 'shell' })}
+            >
+              <Flag className='size-4' aria-hidden='true' />
+            </Button>
+          ) : null}
           {canNavigate ? (
             <Button
               variant='secondary'

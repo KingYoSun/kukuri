@@ -232,6 +232,8 @@
     "copyContact": "复制滥用联系方式",
     "success": "已向社区节点发送举报。",
     "referenceId": "受理编号：{{id}}",
+    "resolvingTargets": "正在确认最新的举报对象…",
+    "resolveFailed": "无法更新举报对象。不会改用默认发送目标。",
     "unknownTitle": "无法确定举报对象",
     "unknownBody": "无法确定该内容是经由哪个节点或来源显示的，因此没有可举报的负责社区节点。",
     "observedUnresolvedTitle": "没有可达的举报对象",

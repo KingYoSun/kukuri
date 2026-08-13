@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Bookmark, Flag, Link2, Reply, Repeat2 } from 'lucide-react';
 
@@ -6,6 +6,7 @@ import { formatLocalizedTime } from '@/i18n/format';
 import type {
   BookmarkedCustomReactionView,
   CommunityNodeManifest,
+  CommunityNodeManifestFetch,
   CustomReactionAssetView,
   ReactionKeyInput,
   ReactionKeyView,
@@ -33,9 +34,12 @@ import { MediaViewerDialog } from './MediaViewerDialog';
 import { PostMedia } from './PostMedia';
 import { ReactionPickerPopover } from './ReactionPickerPopover';
 import { ReportRoutingDialog, type ReportSubmitInput } from './ReportRoutingDialog';
+import type { ReportRoutingSubject } from './ReportRoutingDialog';
 import { RelationshipBadge } from './RelationshipBadge';
 import { SmartReferenceText } from './SmartReferenceText';
 import { type PostCardView } from './types';
+
+const EMPTY_COMMUNITY_NODE_MANIFESTS: Record<string, CommunityNodeManifest> = {};
 
 function sourceAuthorLabel(view: PostCardView['post']['repost_of']): string | null {
   if (!view) {
@@ -83,6 +87,8 @@ type PostCardProps = {
   ) => Promise<SubmitCommunityNodeReportResult>;
   // abuse contact（endpoint 無し node）の案内用コピー。
   onCopyReportContact?: (value: string) => void;
+  onFetchReportManifest?: (baseUrl: string) => Promise<CommunityNodeManifestFetch>;
+  onMuteReportAuthor?: (authorPubkey: string) => Promise<void> | void;
 };
 
 function reactionKeyInputFromView(reaction: ReactionKeyView): ReactionKeyInput | null {
@@ -121,14 +127,25 @@ export function PostCard({
   onActivateReference,
   onCopyLink,
   isFocused = false,
-  communityNodeManifests = {},
+  communityNodeManifests = EMPTY_COMMUNITY_NODE_MANIFESTS,
   onSubmitReport,
   onCopyReportContact,
+  onFetchReportManifest,
+  onMuteReportAuthor,
 }: PostCardProps) {
   const { t } = useTranslation(['common', 'profile']);
   const { post, context } = view;
   const [repostMenuOpen, setRepostMenuOpen] = useState(false);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
+  const [reportSubject, setReportSubject] = useState<ReportRoutingSubject>({
+    kind: 'post',
+    id: post.object_id,
+    label: view.authorLabel,
+  });
+  const [reportManifests, setReportManifests] = useState(communityNodeManifests);
+  const fetchedReportManifestUrls = useRef(new Set<string>());
+  const [reportResolving, setReportResolving] = useState(false);
+  const [reportResolveError, setReportResolveError] = useState<string | null>(null);
   const [mediaViewerOpen, setMediaViewerOpen] = useState(false);
   const [mediaViewerIndex, setMediaViewerIndex] = useState(view.media.currentImageIndex ?? 0);
   const [reactionMenuPosition, setReactionMenuPosition] = useState<ContextActionMenuPosition | null>(
@@ -193,10 +210,67 @@ export function PostCard({
   // 通報先は post の provenance（観測経路）と取得済み manifest から解決する。
   // provenance 不明 / 通報先未解決でも dialog は開き、local action のみ案内する。
   const reportPlan = useMemo(
-    () => planReportRouting(view.provenance, communityNodeManifests),
-    [view.provenance, communityNodeManifests]
+    () => planReportRouting(view.provenance, reportManifests),
+    [view.provenance, reportManifests]
   );
   const showReportAction = Boolean(onSubmitReport);
+
+  useEffect(() => {
+    setReportManifests(communityNodeManifests);
+  }, [communityNodeManifests]);
+
+  useEffect(() => {
+    if (!reportDialogOpen) {
+      fetchedReportManifestUrls.current.clear();
+      setReportResolveError(null);
+    }
+  }, [reportDialogOpen]);
+
+  useEffect(() => {
+    if (!reportDialogOpen || !onFetchReportManifest || !view.provenance) {
+      return;
+    }
+    const baseUrls = [...new Set(view.provenance.observedVia.map((item) => item.nodeBaseUrl))]
+      .filter((baseUrl) => !fetchedReportManifestUrls.current.has(baseUrl));
+    if (baseUrls.length === 0) {
+      return;
+    }
+    baseUrls.forEach((baseUrl) => fetchedReportManifestUrls.current.add(baseUrl));
+    let active = true;
+    setReportResolving(true);
+    setReportResolveError(null);
+    Promise.all(
+      baseUrls.map(async (baseUrl) => ({
+        baseUrl,
+        response: await onFetchReportManifest(baseUrl),
+      }))
+    )
+      .then((responses) => {
+        if (!active) return;
+        setReportManifests((current) => {
+          let next = current;
+          for (const { baseUrl, response } of responses) {
+            if (response.status === 'ok' && response.manifest) {
+              if (next === current) next = { ...current };
+              next[baseUrl] = response.manifest;
+            }
+          }
+          return next;
+        });
+        if (responses.some(({ response }) => response.status !== 'ok' || !response.manifest)) {
+          setReportResolveError('community node manifest is unavailable');
+        }
+      })
+      .catch((cause) => {
+        if (active) setReportResolveError(cause instanceof Error ? cause.message : String(cause));
+      })
+      .finally(() => {
+        if (active) setReportResolving(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [onFetchReportManifest, reportDialogOpen, view.provenance]);
 
   const handleSubmitReport = async (
     input: ReportSubmitInput
@@ -208,8 +282,8 @@ export function PostCard({
     const request: SubmitCommunityNodeReportRequest = {
       node_base_url: candidate.target.nodeBaseUrl,
       report_endpoint: candidate.target.reportEndpoint ?? '',
-      subject_kind: 'post',
-      subject_id: post.object_id,
+      subject_kind: reportSubject.kind,
+      subject_id: reportSubject.id,
       capability: candidate.target.capability,
       reason,
       details: details.trim() ? details.trim() : null,
@@ -688,7 +762,10 @@ export function PostCard({
                 className='post-action-button'
                 type='button'
                 aria-label={t('report.actionLabel', { ns: 'shell' })}
-                onClick={() => setReportDialogOpen(true)}
+                onClick={() => {
+                  setReportSubject({ kind: 'post', id: post.object_id, label: view.authorLabel });
+                  setReportDialogOpen(true);
+                }}
               >
                 <Flag className='size-4' aria-hidden='true' />
               </Button>
@@ -703,6 +780,15 @@ export function PostCard({
         open={mediaViewerOpen}
         onOpenChange={setMediaViewerOpen}
         onIndexChange={setMediaViewerIndex}
+        onReportCurrent={
+          showReportAction
+            ? (hash) => {
+                setMediaViewerOpen(false);
+                setReportSubject({ kind: 'media', id: hash, label: view.authorLabel });
+                setReportDialogOpen(true);
+              }
+            : undefined
+        }
       />
       <ContextActionMenu
         open={reactionMenuAsset !== null}
@@ -717,10 +803,23 @@ export function PostCard({
         <ReportRoutingDialog
           open={reportDialogOpen}
           onOpenChange={setReportDialogOpen}
-          subject={{ kind: 'post', id: post.object_id, label: view.authorLabel }}
+          subject={reportSubject}
           plan={reportPlan}
           onSubmit={handleSubmitReport}
           onCopyContact={onCopyReportContact}
+          resolving={reportResolving}
+          resolveError={reportResolveError}
+          localActions={
+            onMuteReportAuthor && post.author_pubkey !== localAuthorPubkey ? (
+              <Button
+                variant='secondary'
+                type='button'
+                onClick={() => void onMuteReportAuthor(post.author_pubkey)}
+              >
+                {t('actions.mute')}
+              </Button>
+            ) : undefined
+          }
         />
       ) : null}
     </article>

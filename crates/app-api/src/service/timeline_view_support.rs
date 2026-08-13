@@ -2,8 +2,36 @@
 //! WP-H5 PR2 で timeline_runtime_support.rs から分割。購読・復旧は timeline_subscription_support.rs。
 
 use super::*;
+use crate::{ContentObservationView, ContentProvenanceView};
 
 impl AppService {
+    pub(crate) async fn content_provenance_view(
+        &self,
+        subject_kind: &str,
+        subject_id: &str,
+        canonical_source: &str,
+    ) -> Result<Option<ContentProvenanceView>> {
+        let observed_via = self
+            .services
+            .projection_store
+            .list_content_observations(subject_kind, subject_id)
+            .await?
+            .into_iter()
+            .map(|row| ContentObservationView {
+                node_base_url: row.node_base_url,
+                capability: row.capability,
+                observed_at: row.observed_at,
+            })
+            .collect::<Vec<_>>();
+        if observed_via.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(ContentProvenanceView {
+            canonical_source: canonical_source.to_string(),
+            observed_via,
+        }))
+    }
+
     pub(crate) async fn page_to_view(
         &self,
         page: Page<ObjectProjectionRow>,
@@ -97,6 +125,9 @@ impl AppService {
                 .unwrap_or_default(),
             self.current_author_pubkey().as_str(),
         );
+        let provenance = self
+            .content_provenance_view("post", row.object_id.as_str(), "author_docs")
+            .await?;
 
         let AuthorViewParts {
             author_name,
@@ -121,6 +152,7 @@ impl AppService {
             followed_by,
             mutual,
             friend_of_friend,
+            provenance,
             content: row.content.unwrap_or_else(|| "[blob pending]".to_string()),
             content_status,
             attachments,
@@ -302,6 +334,9 @@ impl AppService {
                 &empty_profiles,
             )
             .await?;
+        let provenance = self
+            .content_provenance_view("post", row.source_object_id.as_str(), "author_docs")
+            .await?;
 
         let AuthorViewParts {
             author_name,
@@ -327,6 +362,7 @@ impl AppService {
                 followed_by,
                 mutual,
                 friend_of_friend,
+                provenance,
                 object_kind: row.object_kind.clone(),
                 content: row.content.unwrap_or_else(|| "[blob pending]".to_string()),
                 content_status,
@@ -371,6 +407,9 @@ impl AppService {
                 &empty_profiles,
             )
             .await?;
+        let provenance = self
+            .content_provenance_view("post", profile_post.object_id.as_str(), "author_docs")
+            .await?;
 
         let AuthorViewParts {
             author_name,
@@ -394,6 +433,7 @@ impl AppService {
             followed_by,
             mutual,
             friend_of_friend,
+            provenance,
             object_kind: profile_post.object_kind,
             content: profile_post.content,
             content_status: BlobViewStatus::Available,
@@ -446,6 +486,9 @@ impl AppService {
             mutual,
             friend_of_friend,
         } = AuthorViewParts::new(profile.as_ref(), relationship.as_ref());
+        let provenance = self
+            .content_provenance_view("post", profile_repost.object_id.as_str(), "author_docs")
+            .await?;
         Ok(PostView {
             object_id: profile_repost.object_id.0.clone(),
             envelope_id: profile_repost.envelope_id.0.clone(),
@@ -458,6 +501,7 @@ impl AppService {
             followed_by,
             mutual,
             friend_of_friend,
+            provenance,
             object_kind: "repost".into(),
             content: profile_repost.commentary.clone().unwrap_or_default(),
             content_status: BlobViewStatus::Available,

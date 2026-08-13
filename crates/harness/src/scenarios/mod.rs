@@ -62,6 +62,14 @@ pub async fn run_scenario(
             )
             .await
         }
+        ScenarioKind::CommunityNodeReportRouting => {
+            community_node_index::run_community_node_index_query_client(
+                root,
+                scenario,
+                artifacts_dir,
+            )
+            .await
+        }
         ScenarioKind::CommunityNodeTrustRelationClient => {
             community_node_trust_relation::run_community_node_trust_relation_client(
                 root,

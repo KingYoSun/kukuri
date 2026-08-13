@@ -236,6 +236,8 @@
     "copyContact": "通報連絡先をコピー",
     "success": "community node へ通報を送信しました。",
     "referenceId": "受付参照: {{id}}",
+    "resolvingTargets": "通報先を確認しています…",
+    "resolveFailed": "通報先の確認に失敗しました。既定の送信先へは代替しません。",
     "unknownTitle": "通報先を特定できません",
     "unknownBody": "この content がどの node / source 経由で表示されたかが不明なため、通報すべき責任ある community node がありません。",
     "observedUnresolvedTitle": "到達可能な通報先がありません",

@@ -1,8 +1,12 @@
 import type {
   BookmarkedCustomReactionView,
+  CommunityNodeManifest,
+  CommunityNodeManifestFetch,
   CustomReactionAssetView,
   ReactionKeyInput,
   RecentReactionView,
+  SubmitCommunityNodeReportRequest,
+  SubmitCommunityNodeReportResult,
 } from '@/lib/api';
 import type { InternalSmartReference } from '@/lib/internalLinks';
 
@@ -34,6 +38,13 @@ type ThreadPanelProps = {
   hasMore?: boolean;
   loadingMore?: boolean;
   onLoadMore?: () => void;
+  communityNodeManifests?: Record<string, CommunityNodeManifest>;
+  onSubmitReport?: (
+    request: SubmitCommunityNodeReportRequest
+  ) => Promise<SubmitCommunityNodeReportResult>;
+  onCopyReportContact?: (value: string) => void;
+  onFetchReportManifest?: (baseUrl: string) => Promise<CommunityNodeManifestFetch>;
+  onMuteReportAuthor?: (authorPubkey: string) => Promise<void> | void;
 };
 
 export function ThreadPanel({
@@ -61,6 +72,11 @@ export function ThreadPanel({
   hasMore = false,
   loadingMore = false,
   onLoadMore,
+  communityNodeManifests,
+  onSubmitReport,
+  onCopyReportContact,
+  onFetchReportManifest,
+  onMuteReportAuthor,
 }: ThreadPanelProps) {
   return (
     <div className='shell-main-stack'>
@@ -89,6 +105,11 @@ export function ThreadPanel({
         hasMore={hasMore}
         loadingMore={loadingMore}
         onLoadMore={onLoadMore}
+        communityNodeManifests={communityNodeManifests}
+        onSubmitReport={onSubmitReport}
+        onCopyReportContact={onCopyReportContact}
+        onFetchReportManifest={onFetchReportManifest}
+        onMuteReportAuthor={onMuteReportAuthor}
       />
     </div>
   );

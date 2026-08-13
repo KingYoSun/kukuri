@@ -11,8 +11,16 @@ use kukuri_cn_protocol::{
     ApiErrorBody, IndexEntryView, IndexQueryParams, IndexQueryResponse, IndexScopeKind,
 };
 use kukuri_desktop_runtime::{CommunityNodeIndexQueryRequest, SetCommunityNodeConfigNode};
+use tokio::sync::Mutex;
 
 const ACCESS_TOKEN: &str = "harness-index-token";
+
+#[derive(Clone)]
+struct HarnessIndexState {
+    base_url: String,
+    object_override: Arc<Mutex<Option<(String, String)>>>,
+    reports: Arc<Mutex<Vec<serde_json::Value>>>,
+}
 
 async fn auth_challenge() -> Json<serde_json::Value> {
     Json(serde_json::json!({
@@ -38,7 +46,12 @@ async fn heartbeat() -> Json<serde_json::Value> {
     Json(serde_json::json!({ "expires_at": 4_102_444_800_i64 }))
 }
 
-async fn bootstrap_nodes(State(base_url): State<String>) -> Json<serde_json::Value> {
+async fn rendezvous_heartbeat() -> Json<serde_json::Value> {
+    Json(serde_json::json!({"expires_in_seconds": 45, "topics": []}))
+}
+
+async fn bootstrap_nodes(State(state): State<HarnessIndexState>) -> Json<serde_json::Value> {
+    let base_url = state.base_url;
     Json(serde_json::json!({
         "nodes": [{
             "base_url": base_url.clone(),
@@ -52,6 +65,7 @@ async fn bootstrap_nodes(State(base_url): State<String>) -> Json<serde_json::Val
 }
 
 async fn index_query(
+    State(state): State<HarnessIndexState>,
     uri: Uri,
     headers: HeaderMap,
     Query(params): Query<IndexQueryParams>,
@@ -98,17 +112,46 @@ async fn index_query(
         ),
         _ => (IndexScopeKind::PublicTopic, "cross-topic".to_string()),
     };
+    let overridden = state.object_override.lock().await.clone();
+    let (object_id, author_pubkey) =
+        overridden.unwrap_or_else(|| (format!("{operation}-object"), "harness-author".to_string()));
     Json(IndexQueryResponse {
         entries: vec![IndexEntryView {
             scope_kind,
             scope_id,
-            object_id: format!("{operation}-object"),
-            author_pubkey: "harness-author".to_string(),
+            object_id,
+            author_pubkey,
             text: format!("{operation} preview\nderived-tag"),
             created_at: 42,
         }],
     })
     .into_response()
+}
+
+async fn node_manifest(State(state): State<HarnessIndexState>) -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "node_id": "harness-index-node",
+        "node_name": "harness-index-node",
+        "node_role": "community-node",
+        "server_name": "harness-index-node",
+        "manifest_version": "v1",
+        "capability_scope": {"available_enabled": ["community_index", "report_endpoint"], "planned_enabled": []},
+        "authority_scope": {"applies_to": ["this_node"], "does_not_apply_to": ["kukuri_network_as_a_whole"]},
+        "p2p_boundary": {"identity_authority": false, "profile_canonical_store": false, "social_graph_canonical_store": false, "content_truth_source": false, "network_wide_authority": false},
+        "abuse_contact": "abuse@harness.invalid",
+        "report_endpoint": format!("{}/v1/report", state.base_url),
+        "terms_url": "",
+        "privacy_url": "",
+        "moderation_policy_url": ""
+    }))
+}
+
+async fn submit_report(
+    State(state): State<HarnessIndexState>,
+    Json(report): Json<serde_json::Value>,
+) -> Json<serde_json::Value> {
+    state.reports.lock().await.push(report);
+    Json(serde_json::json!({"reference_id": "harness-report-1"}))
 }
 
 fn request(base_url: &str) -> CommunityNodeIndexQueryRequest {
@@ -128,23 +171,34 @@ pub(crate) async fn run_community_node_index_query_client(
 ) -> Result<HarnessResult> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let base_url = format!("http://{}", listener.local_addr()?);
+    let index_state = HarnessIndexState {
+        base_url: base_url.clone(),
+        object_override: Arc::new(Mutex::new(None)),
+        reports: Arc::new(Mutex::new(Vec::new())),
+    };
     let router = Router::new()
         .route("/v1/auth/challenge", post(auth_challenge))
         .route("/v1/auth/verify", post(auth_verify))
         .route("/v1/consents/status", get(consent_status))
         .route("/v1/bootstrap/heartbeat", post(heartbeat))
         .route("/v1/bootstrap/nodes", get(bootstrap_nodes))
+        .route(
+            "/v1/rendezvous/topics/heartbeat",
+            post(rendezvous_heartbeat),
+        )
         .route("/v1/index/search", get(index_query))
         .route("/v1/index/discovery", get(index_query))
         .route("/v1/index/recommendations", get(index_query))
-        .with_state(base_url.clone());
+        .route("/v1/node/manifest", get(node_manifest))
+        .route("/v1/report", post(submit_report))
+        .with_state(index_state.clone());
     let server = tokio::spawn(async move { axum::serve(listener, router).await });
 
     let runtime_dir = tempfile::Builder::new()
         .prefix("community-index-client-")
         .tempdir_in(artifacts_dir)?;
     let db_path = runtime_dir.path().join("runtime.db");
-    let runtime = DesktopRuntime::new(&db_path).await?;
+    let mut runtime = DesktopRuntime::new(&db_path).await?;
     runtime
         .set_community_node_config(SetCommunityNodeConfigRequest {
             nodes: vec![SetCommunityNodeConfigNode {
@@ -162,9 +216,30 @@ pub(crate) async fn run_community_node_index_query_client(
     let overall_timeout = Duration::from_millis(scenario.timeouts.overall_ms);
     let run_result = timeout(overall_timeout, async {
         let mut steps = Vec::new();
+        let mut created_object_id = None::<String>;
         for step in &scenario.steps {
             let started_at = Instant::now();
             match step {
+                ScenarioStep::CreatePost { content } => {
+                    let object_id = runtime
+                        .create_post(CreatePostRequest {
+                            topic: scenario.fixtures.topic.clone(),
+                            content: content.clone(),
+                            reply_to: None,
+                            channel_ref: ChannelRef::Public,
+                            attachments: Vec::new(),
+                        })
+                        .await?;
+                    *index_state.object_override.lock().await = Some((
+                        object_id.clone(),
+                        runtime.get_sync_status().await?.local_author_pubkey,
+                    ));
+                    created_object_id = Some(object_id);
+                }
+                ScenarioStep::RestartDesktop => {
+                    runtime.shutdown().await;
+                    runtime = DesktopRuntime::new(&db_path).await?;
+                }
                 ScenarioStep::SearchCommunityIndex {
                     query,
                     scope_kind,
@@ -179,12 +254,17 @@ pub(crate) async fn run_community_node_index_query_client(
                             ..request(base_url.as_str())
                         })
                         .await?;
+                    let expected = if expect_object_id == "created_post" {
+                        created_object_id.as_deref()
+                    } else {
+                        Some(expect_object_id.as_str())
+                    };
                     anyhow::ensure!(
                         response
                             .entries
                             .first()
                             .map(|entry| entry.object_id.as_str())
-                            == Some(expect_object_id.as_str()),
+                            == expected,
                         "search result mismatch: {:?}",
                         response.entries
                     );
@@ -231,6 +311,75 @@ pub(crate) async fn run_community_node_index_query_client(
                         error.code == *code,
                         "index error mismatch: expected {code}, got {}",
                         error.code
+                    );
+                }
+                ScenarioStep::AssertNoReportProvenance => {
+                    let object_id = created_object_id
+                        .as_deref()
+                        .context("created post missing")?;
+                    let timeline = runtime
+                        .list_timeline(ListTimelineRequest {
+                            topic: scenario.fixtures.topic.clone(),
+                            scope: TimelineScope::Public,
+                            cursor: None,
+                            limit: Some(20),
+                        })
+                        .await?;
+                    let post = timeline
+                        .items
+                        .iter()
+                        .find(|post| post.object_id == object_id)
+                        .context("created post missing from timeline")?;
+                    anyhow::ensure!(
+                        post.provenance.is_none(),
+                        "direct post unexpectedly has provenance"
+                    );
+                }
+                ScenarioStep::AssertObservedReportRouting { expect_capability } => {
+                    let object_id = created_object_id
+                        .as_deref()
+                        .context("created post missing")?;
+                    let timeline = runtime
+                        .list_timeline(ListTimelineRequest {
+                            topic: scenario.fixtures.topic.clone(),
+                            scope: TimelineScope::Public,
+                            cursor: None,
+                            limit: Some(20),
+                        })
+                        .await?;
+                    let observation = timeline
+                        .items
+                        .iter()
+                        .find(|post| post.object_id == object_id)
+                        .and_then(|post| post.provenance.as_ref())
+                        .and_then(|provenance| provenance.observed_via.first())
+                        .context("observed provenance missing")?;
+                    anyhow::ensure!(
+                        observation.capability == *expect_capability,
+                        "capability mismatch"
+                    );
+                    let manifest = runtime
+                        .fetch_community_node_manifest(CommunityNodeTargetRequest {
+                            base_url: observation.node_base_url.clone(),
+                        })
+                        .await?
+                        .manifest
+                        .context("manifest missing")?;
+                    runtime
+                        .submit_community_node_report(SubmitCommunityNodeReportRequest {
+                            node_base_url: observation.node_base_url.clone(),
+                            report_endpoint: manifest.report_endpoint,
+                            subject_kind: "post".to_string(),
+                            subject_id: object_id.to_string(),
+                            capability: observation.capability.clone(),
+                            reason: "spam".to_string(),
+                            details: None,
+                            reporter_contact: None,
+                        })
+                        .await?;
+                    anyhow::ensure!(
+                        !index_state.reports.lock().await.is_empty(),
+                        "report was not received"
                     );
                 }
                 other => anyhow::bail!(

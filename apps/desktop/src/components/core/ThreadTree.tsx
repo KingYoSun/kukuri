@@ -2,9 +2,13 @@ import { useMemo } from 'react';
 
 import type {
   BookmarkedCustomReactionView,
+  CommunityNodeManifest,
+  CommunityNodeManifestFetch,
   CustomReactionAssetView,
   ReactionKeyInput,
   RecentReactionView,
+  SubmitCommunityNodeReportRequest,
+  SubmitCommunityNodeReportResult,
 } from '@/lib/api';
 import type { InternalSmartReference } from '@/lib/internalLinks';
 
@@ -42,6 +46,13 @@ type ThreadTreeProps = {
   hasMore?: boolean;
   loadingMore?: boolean;
   onLoadMore?: () => void;
+  communityNodeManifests?: Record<string, CommunityNodeManifest>;
+  onSubmitReport?: (
+    request: SubmitCommunityNodeReportRequest
+  ) => Promise<SubmitCommunityNodeReportResult>;
+  onCopyReportContact?: (value: string) => void;
+  onFetchReportManifest?: (baseUrl: string) => Promise<CommunityNodeManifestFetch>;
+  onMuteReportAuthor?: (authorPubkey: string) => Promise<void> | void;
 };
 
 export function ThreadTree({
@@ -69,6 +80,11 @@ export function ThreadTree({
   hasMore = false,
   loadingMore = false,
   onLoadMore,
+  communityNodeManifests,
+  onSubmitReport,
+  onCopyReportContact,
+  onFetchReportManifest,
+  onMuteReportAuthor,
 }: ThreadTreeProps) {
   const nodes = useMemo(() => buildThreadTree(posts), [posts]);
   const { sentinelRef: loadMoreRef, canAutoLoad } = useInfiniteScrollSentinel({
@@ -124,6 +140,11 @@ export function ThreadTree({
               onActivateReference={onActivateReference}
               onCopyLink={onCopyPostLink}
               isFocused={focusedPostObjectId === view.post.object_id}
+              communityNodeManifests={communityNodeManifests}
+              onSubmitReport={onSubmitReport}
+              onCopyReportContact={onCopyReportContact}
+              onFetchReportManifest={onFetchReportManifest}
+              onMuteReportAuthor={onMuteReportAuthor}
             />
             </div>
           </li>

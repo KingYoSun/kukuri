@@ -332,6 +332,18 @@ impl ObjectProjectionStore for SqliteStore {
             .await?;
         tx.commit().await?;
         self.put_object_projections(rows).await?;
+        sqlx::query(
+            r#"
+            DELETE FROM content_observations
+            WHERE subject_kind = 'post'
+              AND NOT EXISTS (
+                SELECT 1 FROM object_index_cache
+                WHERE object_index_cache.object_id = content_observations.subject_id
+              )
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 }

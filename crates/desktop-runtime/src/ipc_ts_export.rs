@@ -110,6 +110,8 @@ fn export_ipc_types() {
         RecentReactionView,
         CustomReactionAssetView,
         RepostSourceView,
+        ContentObservationView,
+        ContentProvenanceView,
         PostView,
         BookmarkedPostView,
         AuthorSocialView,

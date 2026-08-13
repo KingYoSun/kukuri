@@ -492,6 +492,7 @@ jobs:
           KUKURI_DISABLE_KEYRING: "1"
         run: |
           cargo xtask scenario community_node_index_query_client
+          cargo xtask scenario community_node_report_routing
           cargo xtask scenario community_node_trust_relation_client
 
       - name: Upload community-node artifacts

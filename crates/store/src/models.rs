@@ -51,6 +51,15 @@ pub struct ObjectProjectionRow {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContentObservationRow {
+    pub subject_kind: String,
+    pub subject_id: String,
+    pub node_base_url: String,
+    pub capability: String,
+    pub observed_at: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReactionProjectionRow {
     pub source_replica_id: ReplicaId,
     pub target_object_id: EnvelopeId,

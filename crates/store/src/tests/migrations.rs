@@ -255,7 +255,7 @@ async fn connect_file_migrates_pre_metaverse_game_room_fixture() {
     let latest_migration = sqlx::query_scalar::<_, i64>(
         "SELECT 1 FROM _sqlx_migrations WHERE version = ?1 AND success = true",
     )
-    .bind(20260527000000_i64)
+    .bind(20260814000000_i64)
     .fetch_optional(migrated.pool())
     .await
     .expect("check latest migration record")
@@ -268,10 +268,10 @@ async fn connect_file_migrates_pre_metaverse_game_room_fixture() {
 // 後続 WP-H1(ProjectionStore 分割)の安全網として、
 // (1) 全世代に up/down が embed で揃うこと、
 // (2) 全適用 → undo(0) → 再適用でスキーマと migration 記録が完全復元されること
-// を固定する。期待値は観測した現挙動の生リテラル(世代数 16 など)。
+// を固定する。期待値は観測した現挙動の生リテラル(世代数 17 など)。
 // ---------------------------------------------------------------------------
 
-/// 全 16 世代に ReversibleUp / ReversibleDown が揃っていることを固定する(DB 不要)。
+/// 全 17 世代に ReversibleUp / ReversibleDown が揃っていることを固定する(DB 不要)。
 /// down が embed されていない世代は `Migrator::undo` に黙ってスキップされ、
 /// round-trip を静かに破壊するため、ここで欠落を即検出する。
 #[tokio::test]
@@ -297,8 +297,8 @@ async fn all_generations_have_paired_down() {
 
     assert_eq!(
         generations.len(),
-        16,
-        "store migrations must cover exactly 16 generations, found versions: {:?}",
+        17,
+        "store migrations must cover exactly 17 generations, found versions: {:?}",
         generations.keys().collect::<Vec<_>>()
     );
 
@@ -390,8 +390,8 @@ async fn full_migration_round_trip() {
     expected_versions.dedup();
     assert_eq!(
         applied_versions.len(),
-        16,
-        "round trip must restore all 16 migration generations"
+        17,
+        "round trip must restore all 17 migration generations"
     );
     assert_eq!(applied_versions, expected_versions);
 }

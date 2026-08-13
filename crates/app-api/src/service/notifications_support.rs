@@ -299,6 +299,7 @@ pub(crate) fn author_social_view_from_parts(
         friend_of_friend_via_pubkeys: relationship
             .map(|relationship| relationship.friend_of_friend_via_pubkeys.clone())
             .unwrap_or_default(),
+        provenance: None,
         muted,
     }
 }

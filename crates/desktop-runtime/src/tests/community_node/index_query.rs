@@ -15,6 +15,8 @@ struct MockIndexQueryState {
     indexing_requests: Arc<Mutex<Vec<SubmitIndexingRequestRequest>>>,
     forced_error: Arc<Mutex<Option<ForcedIndexError>>>,
     unauthorized_remaining: Arc<AtomicUsize>,
+    response_object_id: Arc<Mutex<String>>,
+    response_author_pubkey: Arc<Mutex<String>>,
 }
 
 async fn mock_indexing_request(
@@ -121,8 +123,8 @@ async fn mock_index_query(
         entries: vec![IndexEntryView {
             scope_kind: IndexScopeKind::PublicTopic,
             scope_id: "rust".to_string(),
-            object_id: "post-1".to_string(),
-            author_pubkey: "author".to_string(),
+            object_id: state.response_object_id.lock().await.clone(),
+            author_pubkey: state.response_author_pubkey.lock().await.clone(),
             text: "hello\nderived-tag".to_string(),
             created_at: 42,
         }],
@@ -171,6 +173,8 @@ async fn index_runtime(
         indexing_requests: Arc::new(Mutex::new(Vec::new())),
         forced_error: Arc::new(Mutex::new(forced_error)),
         unauthorized_remaining: Arc::new(AtomicUsize::new(0)),
+        response_object_id: Arc::new(Mutex::new("post-1".to_string())),
+        response_author_pubkey: Arc::new(Mutex::new("author".to_string())),
     };
     let managed_router = Router::new()
         .route("/v1/auth/challenge", post(mock_managed_auth_challenge))
@@ -264,6 +268,80 @@ async fn community_node_index_client_uses_session_and_preserves_query_contract()
     assert_eq!(requests[0].1.scope_kind.as_deref(), Some("public_topic"));
     assert_eq!(requests[0].1.scope_id.as_deref(), Some("rust"));
     assert_eq!(requests[2].1.scope_kind, None);
+    runtime.shutdown().await;
+    server.abort();
+}
+
+#[tokio::test]
+async fn community_node_index_records_only_existing_local_subjects() {
+    use kukuri_store::ContentObservationStore;
+
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let (runtime, base_url, _managed, state, server, _dir) = index_runtime(None).await;
+
+    runtime
+        .search_community_node_index(scoped_request(base_url.as_str()))
+        .await
+        .expect("search without local subject");
+    assert!(
+        runtime
+            .store
+            .list_content_observations("post", "post-1")
+            .await
+            .expect("list absent observations")
+            .is_empty()
+    );
+
+    let object_id = runtime
+        .create_post(CreatePostRequest {
+            topic: "kukuri:topic:rust".to_string(),
+            content: "locally stored post".to_string(),
+            reply_to: None,
+            channel_ref: ChannelRef::Public,
+            attachments: Vec::new(),
+        })
+        .await
+        .expect("create post");
+    *state.response_object_id.lock().await = object_id.clone();
+    *state.response_author_pubkey.lock().await = runtime.author_keys.public_key_hex();
+
+    runtime
+        .search_community_node_index(scoped_request(base_url.as_str()))
+        .await
+        .expect("search with local subject");
+    let post_observations = runtime
+        .store
+        .list_content_observations("post", object_id.as_str())
+        .await
+        .expect("list post observations");
+    assert_eq!(post_observations.len(), 1);
+    assert_eq!(post_observations[0].node_base_url, base_url);
+    assert_eq!(post_observations[0].capability, "community_index");
+
+    let timeline = runtime
+        .list_timeline(ListTimelineRequest {
+            topic: "kukuri:topic:rust".to_string(),
+            scope: Default::default(),
+            cursor: None,
+            limit: Some(20),
+        })
+        .await
+        .expect("timeline");
+    let observed_post = timeline
+        .items
+        .iter()
+        .find(|post| post.object_id == object_id)
+        .expect("observed post");
+    assert_eq!(
+        observed_post
+            .provenance
+            .as_ref()
+            .expect("provenance")
+            .observed_via[0]
+            .node_base_url,
+        post_observations[0].node_base_url
+    );
+
     runtime.shutdown().await;
     server.abort();
 }
