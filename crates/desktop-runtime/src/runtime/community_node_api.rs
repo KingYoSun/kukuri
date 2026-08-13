@@ -1,6 +1,13 @@
 use super::*;
 
 impl DesktopRuntime {
+    pub async fn submit_community_node_indexing_request(
+        &self,
+        request: CommunityNodeIndexingRequest,
+    ) -> std::result::Result<SubmitIndexingRequestResponse, CommunityNodeIndexingRequestError> {
+        self.request_community_node_indexing(request).await
+    }
+
     pub async fn search_community_node_index(
         &self,
         request: CommunityNodeIndexQueryRequest,

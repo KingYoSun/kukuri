@@ -32,7 +32,8 @@ fn export_ipc_types() {
         AcceptCommunityNodeConsentsRequest, AuthorRequest, BookmarkCustomReactionRequest,
         BookmarkPostRequest, CommunityNodeAuthState, CommunityNodeAuthorityScope,
         CommunityNodeCapabilityScope, CommunityNodeConfig, CommunityNodeIndexQueryError,
-        CommunityNodeIndexQueryRequest, CommunityNodeManifest, CommunityNodeManifestFetch,
+        CommunityNodeIndexQueryRequest, CommunityNodeIndexingRequest,
+        CommunityNodeIndexingRequestError, CommunityNodeManifest, CommunityNodeManifestFetch,
         CommunityNodeManifestFetchStatus, CommunityNodeNodeConfig, CommunityNodeNodeStatus,
         CommunityNodeP2pBoundary, CommunityNodeSessionPhase, CommunityNodeTargetRequest,
         CreateAttachmentRequest, CreateCustomReactionAssetRequest, CreateGameRoomRequest,
@@ -55,13 +56,13 @@ fn export_ipc_types() {
         SetChannelGossipEnabledRequest, SetCommunityNodeConfigNode, SetCommunityNodeConfigRequest,
         SetDiscoverySeedsRequest, SetMyProfileRequest, SetTopicGossipEnabledRequest,
         SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
-        SubmitCommunityNodeReportStatus, ToggleReactionRequest, UnsubscribeTopicRequest,
-        UpdateGameRoomRequest, UpdateMetaverseRoomRequest,
+        SubmitCommunityNodeReportStatus, SubmitIndexingRequestResponse, ToggleReactionRequest,
+        UnsubscribeTopicRequest, UpdateGameRoomRequest, UpdateMetaverseRoomRequest,
     };
     use kukuri_app_api::*;
     use kukuri_cn_protocol::{
         CommunityNodeConsentItem, CommunityNodeConsentStatus, CommunityNodeResolvedUrls,
-        CommunityNodeSeedPeer,
+        CommunityNodeSeedPeer, IndexingRequestStatus,
     };
     use kukuri_core::{
         ChannelAudienceKind, ChannelId, ChannelRef, ChannelSharingState, FriendOnlyGrantPreview,
@@ -173,9 +174,13 @@ fn export_ipc_types() {
         CommunityNodeManifestFetch,
         CommunityNodeIndexQueryRequest,
         CommunityNodeIndexQueryError,
+        CommunityNodeIndexingRequest,
+        CommunityNodeIndexingRequestError,
         IndexScopeKind,
+        IndexingRequestStatus,
         IndexEntryView,
         IndexQueryResponse,
+        SubmitIndexingRequestResponse,
         SubmitCommunityNodeReportRequest,
         SubmitCommunityNodeReportStatus,
         SubmitCommunityNodeReportResult,

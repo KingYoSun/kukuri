@@ -167,6 +167,17 @@ async fn public_topic_indexing_request_is_accepted_pending() -> Result<()> {
     assert_eq!(body["status"], "pending");
     assert!(body["request_id"].as_str().is_some_and(|id| !id.is_empty()));
 
+    let repeated = client
+        .post(format!("{}/v1/indexing/requests", server.base_url))
+        .bearer_auth(token.as_str())
+        .json(&serde_json::json!({ "kind": "public_topic", "target_id": "rust" }))
+        .send()
+        .await?;
+    assert_eq!(repeated.status(), StatusCode::OK);
+    let repeated_body = repeated.json::<serde_json::Value>().await?;
+    assert_eq!(repeated_body["request_id"], body["request_id"]);
+    assert_eq!(repeated_body["status"], body["status"]);
+
     server.shutdown().await
 }
 

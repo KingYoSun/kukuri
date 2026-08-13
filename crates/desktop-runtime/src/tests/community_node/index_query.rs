@@ -3,6 +3,7 @@ use axum::extract::Query;
 use axum::http::{Uri, header::RETRY_AFTER};
 use kukuri_cn_protocol::{
     ApiErrorBody, IndexEntryView, IndexQueryParams, IndexQueryResponse, IndexScopeKind,
+    IndexingRequestStatus, SubmitIndexingRequestRequest, SubmitIndexingRequestResponse,
 };
 
 type ForcedIndexError = (StatusCode, ApiErrorBody, Option<&'static str>);
@@ -11,8 +12,58 @@ type ForcedIndexError = (StatusCode, ApiErrorBody, Option<&'static str>);
 struct MockIndexQueryState {
     expected_token: Arc<Mutex<String>>,
     requests: Arc<Mutex<Vec<(String, IndexQueryParams)>>>,
+    indexing_requests: Arc<Mutex<Vec<SubmitIndexingRequestRequest>>>,
     forced_error: Arc<Mutex<Option<ForcedIndexError>>>,
     unauthorized_remaining: Arc<AtomicUsize>,
+}
+
+async fn mock_indexing_request(
+    State(state): State<MockIndexQueryState>,
+    headers: HeaderMap,
+    Json(request): Json<SubmitIndexingRequestRequest>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+
+    let expected = state.expected_token.lock().await.clone();
+    let expected_header = format!("Bearer {expected}");
+    if headers
+        .get(AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        != Some(expected_header.as_str())
+    {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(ApiErrorBody {
+                code: "AUTH_REQUIRED".to_string(),
+                message: "community node authentication is required".to_string(),
+            }),
+        )
+            .into_response();
+    }
+    if let Some((status, body, retry_after)) = state.forced_error.lock().await.clone() {
+        let mut response = (status, Json(body)).into_response();
+        if let Some(value) = retry_after {
+            response
+                .headers_mut()
+                .insert(RETRY_AFTER, value.parse().expect("retry-after"));
+        }
+        return response;
+    }
+    state.indexing_requests.lock().await.push(request);
+    Json(SubmitIndexingRequestResponse {
+        request_id: "request-1".to_string(),
+        status: IndexingRequestStatus::Pending,
+    })
+    .into_response()
+}
+
+async fn mock_index_rendezvous(
+    Json(_request): Json<serde_json::Value>,
+) -> Json<kukuri_cn_protocol::TopicRendezvousHeartbeatResponse> {
+    Json(kukuri_cn_protocol::TopicRendezvousHeartbeatResponse {
+        expires_in_seconds: 45,
+        topics: Vec::new(),
+    })
 }
 
 async fn mock_index_query(
@@ -117,6 +168,7 @@ async fn index_runtime(
     let index = MockIndexQueryState {
         expected_token,
         requests: Arc::new(Mutex::new(Vec::new())),
+        indexing_requests: Arc::new(Mutex::new(Vec::new())),
         forced_error: Arc::new(Mutex::new(forced_error)),
         unauthorized_remaining: Arc::new(AtomicUsize::new(0)),
     };
@@ -135,6 +187,11 @@ async fn index_runtime(
         .route("/v1/index/search", get(mock_index_query))
         .route("/v1/index/discovery", get(mock_index_query))
         .route("/v1/index/recommendations", get(mock_index_query))
+        .route("/v1/indexing/requests", post(mock_indexing_request))
+        .route(
+            "/v1/rendezvous/topics/heartbeat",
+            post(mock_index_rendezvous),
+        )
         .with_state(index.clone());
     let server = tokio::spawn(async move {
         axum::serve(listener, managed_router.merge(index_router))
@@ -265,6 +322,114 @@ async fn community_node_index_client_rejects_half_scope_before_http() {
         .expect_err("half scope should fail");
     assert_eq!(error.code, "INVALID_INDEX_QUERY");
     assert!(state.requests.lock().await.is_empty());
+    runtime.shutdown().await;
+    server.abort();
+}
+
+#[tokio::test]
+async fn community_node_indexing_request_preserves_public_and_private_contracts() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let (runtime, base_url, _managed, state, server, _dir) = index_runtime(None).await;
+    let topic = "kukuri:topic:indexing-request";
+
+    let public_response = runtime
+        .submit_community_node_indexing_request(CommunityNodeIndexingRequest {
+            base_url: base_url.clone(),
+            scope_kind: IndexScopeKind::PublicTopic,
+            topic_id: topic.to_string(),
+            channel_id: None,
+            confirm_private_channel_secret_disclosure: false,
+        })
+        .await
+        .expect("public indexing request");
+    assert_eq!(public_response.status, IndexingRequestStatus::Pending);
+
+    let channel = runtime
+        .create_private_channel(CreatePrivateChannelRequest {
+            topic: topic.to_string(),
+            label: "indexable private channel".to_string(),
+            audience_kind: ChannelAudienceKind::InviteOnly,
+        })
+        .await
+        .expect("create private channel");
+    let private_response = runtime
+        .submit_community_node_indexing_request(CommunityNodeIndexingRequest {
+            base_url,
+            scope_kind: IndexScopeKind::PrivateChannel,
+            topic_id: topic.to_string(),
+            channel_id: Some(channel.channel_id.clone()),
+            confirm_private_channel_secret_disclosure: true,
+        })
+        .await
+        .expect("private indexing request");
+    assert_eq!(private_response.status, IndexingRequestStatus::Pending);
+
+    let requests = state.indexing_requests.lock().await;
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[0].kind, "public_topic");
+    assert_eq!(requests[0].target_id, topic);
+    assert_eq!(requests[0].channel_secret_hex, None);
+    assert_eq!(requests[1].kind, "private_channel");
+    assert_eq!(requests[1].target_id, channel.channel_id);
+    assert!(
+        requests[1]
+            .channel_secret_hex
+            .as_deref()
+            .is_some_and(|secret| !secret.is_empty())
+    );
+    drop(requests);
+    runtime.shutdown().await;
+    server.abort();
+}
+
+#[tokio::test]
+async fn community_node_private_indexing_requires_confirmation_before_http() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let (runtime, base_url, _managed, state, server, _dir) = index_runtime(None).await;
+
+    let error = runtime
+        .submit_community_node_indexing_request(CommunityNodeIndexingRequest {
+            base_url,
+            scope_kind: IndexScopeKind::PrivateChannel,
+            topic_id: "kukuri:topic:indexing-request".to_string(),
+            channel_id: Some("private-channel".to_string()),
+            confirm_private_channel_secret_disclosure: false,
+        })
+        .await
+        .expect_err("confirmation must be required");
+
+    assert_eq!(
+        error.code,
+        "PRIVATE_CHANNEL_SECRET_DISCLOSURE_NOT_CONFIRMED"
+    );
+    assert!(state.indexing_requests.lock().await.is_empty());
+    runtime.shutdown().await;
+    server.abort();
+}
+
+#[tokio::test]
+async fn community_node_indexing_request_preserves_stable_error() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let body = ApiErrorBody {
+        code: "CHANNEL_SECRET_CONFLICT".to_string(),
+        message: "the submitted channel secret conflicts with the current request".to_string(),
+    };
+    let (runtime, base_url, _managed, _state, server, _dir) =
+        index_runtime(Some((StatusCode::CONFLICT, body, None))).await;
+
+    let error = runtime
+        .submit_community_node_indexing_request(CommunityNodeIndexingRequest {
+            base_url,
+            scope_kind: IndexScopeKind::PublicTopic,
+            topic_id: "kukuri:topic:indexing-request".to_string(),
+            channel_id: None,
+            confirm_private_channel_secret_disclosure: false,
+        })
+        .await
+        .expect_err("request should fail");
+    assert_eq!(error.status, Some(409));
+    assert_eq!(error.code, "CHANNEL_SECRET_CONFLICT");
+
     runtime.shutdown().await;
     server.abort();
 }

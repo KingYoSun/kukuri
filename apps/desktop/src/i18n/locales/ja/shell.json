@@ -138,6 +138,33 @@
     "communityNodeUnavailableTitle": "Community node unavailable",
     "viewScope": "表示範囲"
   },
+  "indexingRequest": {
+    "title": "Community Node への索引登録申請",
+    "target": "対象: {{target}}",
+    "nodeLabel": "申請先 Community Node",
+    "openPublic": "{{topic}} の索引登録を申請",
+    "openPrivate": "索引登録を申請",
+    "publicNotice": "公開トピックを選択した Community Node の索引対象として申請します。",
+    "gateNotice": "申請しても索引登録は保証されません。Community Node の operator 承認と safety 判定を通過した内容だけが索引されます。",
+    "privateConfirmation": "チャネルの閲覧 capability を Community Node に送信することに同意します",
+    "privateWarning": "同意すると、この Community Node はプライベートチャネルの内容を復号し、索引へ登録できるようになります。申請や状態確認のたびに、この確認が必要です。",
+    "noEligibleNode": "認証と必須同意が完了し、Community Index を利用できる Community Node がありません。",
+    "openSettings": "Community Node 設定を開く",
+    "submit": "申請する",
+    "submitting": "申請中…",
+    "status": {
+      "pending": "申請は審査待ちです。",
+      "approved": "索引登録が承認されています。",
+      "rejected": "索引登録は却下されています。"
+    },
+    "errors": {
+      "notConfigured": "この Community Node ではチャネル索引登録が設定されていません。",
+      "secretConflict": "登録済みのチャネル capability と一致しません。管理者へ確認してください。",
+      "authRequired": "選択した Community Node への認証が必要です。",
+      "consentRequired": "選択した Community Node の必須同意が必要です。",
+      "requestFailed": "索引登録申請に失敗しました。時間をおいて再度お試しください。"
+    }
+  },
   "communityIndex": {
     "title": "コミュニティインデックス",
     "topicSummary": "利用可能な Community Node を使い、現在のトピックまたはプライベートチャンネルを検索します。",

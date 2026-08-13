@@ -138,6 +138,29 @@
     "communityNodeUnavailableTitle": "Community node unavailable",
     "viewScope": "查看范围"
   },
+  "indexingRequest": {
+    "title": "申请 Community Node 索引",
+    "target": "对象：{{target}}",
+    "nodeLabel": "Community Node",
+    "openPublic": "申请索引 {{topic}}",
+    "openPrivate": "申请索引",
+    "publicNotice": "申请由所选 Community Node 为此公开主题建立索引。",
+    "gateNotice": "提交申请并不保证建立索引。只有通过 Community Node 运营者批准和安全检查的内容才会进入索引。",
+    "privateConfirmation": "我同意向 Community Node 披露此频道的读取 capability",
+    "privateWarning": "该 Community Node 将能够解密并索引此私密频道。每次申请或刷新状态都需要重新确认。",
+    "noEligibleNode": "没有已认证、已同意且支持 Community Index 的 Community Node。",
+    "openSettings": "打开 Community Node 设置",
+    "submit": "提交申请",
+    "submitting": "提交中…",
+    "status": { "pending": "申请正在等待审核。", "approved": "索引已获批准。", "rejected": "索引申请已被拒绝。" },
+    "errors": {
+      "notConfigured": "此 Community Node 未配置频道索引。",
+      "secretConflict": "频道 capability 与现有注册冲突，请联系节点运营者。",
+      "authRequired": "需要对所选 Community Node 进行认证。",
+      "consentRequired": "尚未完成所选 Community Node 的必要同意。",
+      "requestFailed": "索引申请失败，请稍后重试。"
+    }
+  },
   "communityIndex": {
     "title": "社区索引",
     "topicSummary": "通过可用的 Community Node 搜索当前主题或私密频道。",

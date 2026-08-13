@@ -15,12 +15,14 @@ mod tests;
 pub use community_node::{
     AcceptCommunityNodeConsentsRequest, CommunityNodeAuthState, CommunityNodeAuthorityScope,
     CommunityNodeCapabilityScope, CommunityNodeConfig, CommunityNodeIndexQueryError,
-    CommunityNodeIndexQueryRequest, CommunityNodeManifest, CommunityNodeManifestFetch,
+    CommunityNodeIndexQueryRequest, CommunityNodeIndexingRequest,
+    CommunityNodeIndexingRequestError, CommunityNodeManifest, CommunityNodeManifestFetch,
     CommunityNodeManifestFetchStatus, CommunityNodeNodeConfig, CommunityNodeNodeStatus,
     CommunityNodeP2pBoundary, CommunityNodeSessionPhase, CommunityNodeTargetRequest,
     IndexEntryView, IndexQueryResponse, IndexScopeKind, SetCommunityNodeConfigNode,
     SetCommunityNodeConfigRequest, SubmitCommunityNodeReportRequest,
     SubmitCommunityNodeReportResult, SubmitCommunityNodeReportStatus,
+    SubmitIndexingRequestResponse,
 };
 pub use discovery::{DiscoveryConfig, SetDiscoverySeedsRequest};
 // 起動エラーの typed 分類(WP-Q2)。src-tauri は downcast で DatabaseOpen/Migration を判定する。

@@ -187,11 +187,31 @@ export type CommunityNodeIndexQueryRequest = { base_url: string, query?: string 
 
 export type CommunityNodeIndexQueryError = { code: string, message: string, status?: number | null, retry_after_seconds?: number | null, };
 
+export type CommunityNodeIndexingRequest = { base_url: string, scope_kind: IndexScopeKind, 
+/**
+ * public の target、private capability の親 topic。
+ */
+topic_id: string, 
+/**
+ * private の target。public では指定しない。
+ */
+channel_id?: string | null, 
+/**
+ * private secret の外部送信を UI で明示確認したことを示す。
+ */
+confirm_private_channel_secret_disclosure: boolean, };
+
+export type CommunityNodeIndexingRequestError = { code: string, message: string, status?: number | null, retry_after_seconds?: number | null, };
+
 export type IndexScopeKind = "public_topic" | "private_channel";
+
+export type IndexingRequestStatus = "pending" | "approved" | "rejected";
 
 export type IndexEntryView = { scope_kind: IndexScopeKind, scope_id: string, object_id: string, author_pubkey: string, text: string, created_at: number, };
 
 export type IndexQueryResponse = { entries: Array<IndexEntryView>, };
+
+export type SubmitIndexingRequestResponse = { request_id: string, status: IndexingRequestStatus, };
 
 export type SubmitCommunityNodeReportRequest = { 
 /**

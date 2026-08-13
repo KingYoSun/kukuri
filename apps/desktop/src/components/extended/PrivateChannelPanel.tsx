@@ -67,6 +67,7 @@ type PrivateChannelSettingsPanelProps = {
   inviteOutput: string | null;
   inviteOutputLabel: InviteOutputLabel;
   onShare: () => void;
+  onRequestIndexing?: () => void;
   onCopyInviteOutput?: (token: string) => void;
 };
 
@@ -87,7 +88,7 @@ export function PrivateChannelPanel({
   onJoin,
   onCopyInviteOutput,
 }: PrivateChannelPanelProps) {
-  const { t } = useTranslation(['channels', 'common']);
+  const { t } = useTranslation(['channels', 'common', 'shell']);
   const channelActionDisabled = pendingAction !== null;
   const channelAccessDeepLink = inviteOutput
     ? buildChannelAccessPreviewDeepLink(inviteOutput)
@@ -190,9 +191,10 @@ export function PrivateChannelSettingsPanel({
   inviteOutput,
   inviteOutputLabel,
   onShare,
+  onRequestIndexing,
   onCopyInviteOutput,
 }: PrivateChannelSettingsPanelProps) {
-  const { t } = useTranslation(['channels', 'common']);
+  const { t } = useTranslation(['channels', 'common', 'shell']);
   const channelActionDisabled = pendingAction !== null;
   const policyLabel = policyDescription(channel.audience_kind, t);
   const channelAccessDeepLink = inviteOutput
@@ -233,6 +235,17 @@ export function PrivateChannelSettingsPanel({
           >
             {t('channels:actions.createShareLink')}
           </Button>
+          {onRequestIndexing ? (
+            <Button
+              className='w-full'
+              variant='secondary'
+              type='button'
+              disabled={channelActionDisabled}
+              onClick={onRequestIndexing}
+            >
+              {t('shell:indexingRequest.openPrivate')}
+            </Button>
+          ) : null}
         </div>
 
         {inviteOutput && channelAccessDeepLink ? (

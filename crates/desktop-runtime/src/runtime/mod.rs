@@ -33,11 +33,12 @@ use crate::attachments::{
 };
 use crate::community_node::{
     AcceptCommunityNodeConsentsRequest, COMMUNITY_NODE_TOKEN_PURPOSE, CommunityNodeConfig,
-    CommunityNodeIndexQueryError, CommunityNodeIndexQueryRequest, CommunityNodeManifestFetch,
-    CommunityNodeNodeConfig, CommunityNodeNodeStatus, CommunityNodeReconnectState,
-    CommunityNodeSessionPhase, CommunityNodeSessionState, CommunityNodeTargetRequest,
-    IndexOperation, IndexQueryResponse, SetCommunityNodeConfigRequest,
-    SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
+    CommunityNodeIndexQueryError, CommunityNodeIndexQueryRequest, CommunityNodeIndexingRequest,
+    CommunityNodeIndexingRequestError, CommunityNodeManifestFetch, CommunityNodeNodeConfig,
+    CommunityNodeNodeStatus, CommunityNodeReconnectState, CommunityNodeSessionPhase,
+    CommunityNodeSessionState, CommunityNodeTargetRequest, IndexOperation, IndexQueryResponse,
+    SetCommunityNodeConfigRequest, SubmitCommunityNodeReportRequest,
+    SubmitCommunityNodeReportResult, SubmitIndexingRequestResponse,
     community_node_consent_has_pending_update, community_node_seed_peers,
     default_preview_community_node_config, effective_seed_peer_apply_state,
     load_community_node_config_from_file, load_community_node_token,

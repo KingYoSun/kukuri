@@ -35,6 +35,7 @@ import type { useDesktopShellActions } from '@/shell/useDesktopShellActions';
 import { useDesktopShellViewModels } from '@/shell/useDesktopShellViewModels';
 import { useShallow } from 'zustand/react/shallow';
 import { topicDisplayName } from '@/lib/topicId';
+import type { CommunityIndexingTarget } from '@/components/core/CommunityIndexingRequestDialog';
 
 type ViewModels = ReturnType<typeof useDesktopShellViewModels>;
 type OverlayActions = Pick<
@@ -104,6 +105,7 @@ type DesktopShellOverlaysProps = {
   handleCopyInternalLink: (link: string) => void;
   sharePreview: SharePreview;
   clipboardToastId: number;
+  onRequestPrivateIndexing: (target: CommunityIndexingTarget) => void;
 };
 
 function AccessPreviewItem({
@@ -138,6 +140,7 @@ export function DesktopShellOverlays({
   handleCopyInternalLink,
   sharePreview,
   clipboardToastId,
+  onRequestPrivateIndexing,
 }: DesktopShellOverlaysProps) {
   const {
     clearReply,
@@ -344,6 +347,14 @@ export function DesktopShellOverlays({
                 inviteOutput={inviteOutput}
                 inviteOutputLabel={inviteOutputLabel}
                 onShare={() => void handleShareChannelAccess()}
+                onRequestIndexing={() =>
+                  onRequestPrivateIndexing({
+                    kind: 'private_channel',
+                    topicId: activeTopic,
+                    channelId: activePrivateChannel.channel_id,
+                    channelLabel: activePrivateChannel.label,
+                  })
+                }
                 onCopyInviteOutput={handleCopyInternalLink}
               />
             ) : (

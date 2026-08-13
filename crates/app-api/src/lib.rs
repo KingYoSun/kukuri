@@ -19,6 +19,7 @@ mod game;
 mod live;
 mod media;
 mod notifications;
+mod private_channel_indexing;
 mod private_channels;
 mod reactions;
 mod service;

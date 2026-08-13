@@ -23,7 +23,7 @@ use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 use uuid::Uuid;
 
-pub use kukuri_cn_protocol::IndexScopeKind;
+pub use kukuri_cn_protocol::{IndexScopeKind, IndexingRequestStatus};
 
 /// private channel capability 暗号化の AEAD associated data のドメイン分離 prefix。
 /// 実際の AAD は `channel_id` を連結して channel 同一性に束縛する（`channel_secret_aad`）。
@@ -37,34 +37,6 @@ fn channel_secret_aad(channel_id: &str) -> Vec<u8> {
     let mut aad = CHANNEL_SECRET_AAD_PREFIX.to_vec();
     aad.extend_from_slice(channel_id.as_bytes());
     aad
-}
-
-/// indexing request の処理状態。
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum IndexingRequestStatus {
-    Pending,
-    Approved,
-    Rejected,
-}
-
-impl IndexingRequestStatus {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            IndexingRequestStatus::Pending => "pending",
-            IndexingRequestStatus::Approved => "approved",
-            IndexingRequestStatus::Rejected => "rejected",
-        }
-    }
-
-    pub fn parse(value: &str) -> Result<Self> {
-        match value {
-            "pending" => Ok(IndexingRequestStatus::Pending),
-            "approved" => Ok(IndexingRequestStatus::Approved),
-            "rejected" => Ok(IndexingRequestStatus::Rejected),
-            other => bail!("unknown indexing request status `{other}`"),
-        }
-    }
 }
 
 /// operator が index を引き受けた scope エントリ。

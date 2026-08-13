@@ -6,6 +6,7 @@ import type {
   ChannelAccessTokenExport,
   ChannelAccessTokenPreview,
   CommunityNodeConfig,
+  CommunityNodeIndexingRequest,
   CommunityNodeIndexQueryRequest,
   CommunityNodeManifestFetch,
   CommunityNodeNodeStatus,
@@ -30,6 +31,7 @@ import type {
   ReactionStateView,
   RecentReactionView,
   SubmitCommunityNodeReportResult,
+  SubmitIndexingRequestResponse,
   SyncStatus,
   TimelineView,
 } from '../types';
@@ -653,6 +655,17 @@ export const runtimeApi: DesktopApi = {
       request: request satisfies CommunityNodeIndexQueryRequest,
     });
   }),
+  submitCommunityNodeIndexingRequest: command(
+    'submitCommunityNodeIndexingRequest',
+    async (request) => {
+      return invokeDesktop<SubmitIndexingRequestResponse>(
+        'submit_community_node_indexing_request',
+        {
+          request: request satisfies CommunityNodeIndexingRequest,
+        }
+      );
+    }
+  ),
   submitCommunityNodeReport: command('submitCommunityNodeReport', async (request) => {
     return invokeDesktop<SubmitCommunityNodeReportResult>('submit_community_node_report', {
       request,
