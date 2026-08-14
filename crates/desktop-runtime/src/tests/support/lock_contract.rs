@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 
 /// (tests/ からの相対パス, TestResource variant 名, 取得数)。
 const LOCK_CLASSIFICATION: &[(&str, &str, usize)] = &[
+    ("community_node/admission.rs", "CommunityNodeServer", 5),
     ("community_node/config.rs", "ProcessEnvironment", 3),
     ("community_node/connectivity.rs", "IrohNetwork", 6),
     ("community_node/index_query.rs", "CommunityNodeServer", 8),
@@ -94,7 +95,7 @@ fn lock_acquisitions_match_declared_classification() {
     );
     let total: usize = expected.values().sum();
     assert_eq!(
-        total, 64,
+        total, 69,
         "classification total drifted from the Q7 T6 baseline"
     );
 }

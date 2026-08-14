@@ -50,6 +50,7 @@ function baseStatus(
   return {
     base_url: 'https://node.example',
     auth_state: { authenticated: true },
+    invite_code_saved: false,
     restart_required: false,
     ...overrides,
   };

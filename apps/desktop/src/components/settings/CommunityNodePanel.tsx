@@ -31,6 +31,7 @@ type CommunityNodePanelProps = {
   onAcceptConsents: (baseUrl: string) => void | Promise<void>;
   onRefresh: (baseUrl: string) => void;
   onClearToken: (baseUrl: string) => void;
+  onSubmitInviteCode: (baseUrl: string, inviteCode: string) => Promise<void>;
   onGetRelationOptout?: (baseUrl: string) => Promise<RelationOptoutResponse>;
   onSetRelationOptout?: (baseUrl: string) => Promise<RelationOptoutResponse>;
   onClearRelationOptout?: (baseUrl: string) => Promise<RelationOptoutResponse>;
@@ -55,6 +56,7 @@ export function CommunityNodePanel({
   onAcceptConsents,
   onRefresh,
   onClearToken,
+  onSubmitInviteCode,
   onGetRelationOptout,
   onSetRelationOptout,
   onClearRelationOptout,
@@ -67,6 +69,8 @@ export function CommunityNodePanel({
   const [relationOptoutByNode, setRelationOptoutByNode] = useState<
     Record<string, { busy: boolean; value: RelationOptoutResponse | null; error: string | null }>
   >({});
+  const [inviteCodeByNode, setInviteCodeByNode] = useState<Record<string, string>>({});
+  const [inviteBusyByNode, setInviteBusyByNode] = useState<Record<string, boolean>>({});
 
   const relationOptoutAvailable = Boolean(
     onGetRelationOptout && onSetRelationOptout && onClearRelationOptout
@@ -136,6 +140,20 @@ export function CommunityNodePanel({
     }
   }
 
+  async function submitInviteCode(baseUrl: string) {
+    const inviteCode = inviteCodeByNode[baseUrl]?.trim() ?? '';
+    if (!inviteCode) {
+      return;
+    }
+    setInviteBusyByNode((current) => ({ ...current, [baseUrl]: true }));
+    try {
+      await onSubmitInviteCode(baseUrl, inviteCode);
+      setInviteCodeByNode((current) => ({ ...current, [baseUrl]: '' }));
+    } finally {
+      setInviteBusyByNode((current) => ({ ...current, [baseUrl]: false }));
+    }
+  }
+
   return (
     <Card className='min-w-0 space-y-4'>
       <CardHeader>
@@ -176,6 +194,11 @@ export function CommunityNodePanel({
       <div className='min-w-0 space-y-3'>
         {view.nodes.map((node) => {
           const relationOptout = relationOptoutByNode[node.baseUrl];
+          const admissionCode = node.admissionRejectionCode;
+          const inviteActionAvailable = admissionCode == null || admissionCode.startsWith('INVITE_');
+          const inviteCode = inviteCodeByNode[node.baseUrl] ?? '';
+          const inviteBusy = inviteBusyByNode[node.baseUrl] ?? false;
+          const inviteHelpId = `community-node-invite-help-${node.id}`;
           return (
           <section
             key={node.id}
@@ -213,6 +236,60 @@ export function CommunityNodePanel({
                     ? t('settings:communityNode.nodeSummary')
                     : t('settings:communityNode.unsavedNodeSummary')}
                 </p>
+                {admissionCode ? (
+                  <Notice tone={admissionCode === 'BANNED' ? 'destructive' : 'warning'}>
+                    <span className='block font-semibold'>
+                      {t(`settings:communityNode.admission.reasons.${admissionCode}`)}
+                    </span>
+                    <span className='block'>
+                      {t(`settings:communityNode.admission.nextSteps.${admissionCode}`)}
+                    </span>
+                  </Notice>
+                ) : null}
+                {inviteActionAvailable ? (
+                  <div className='space-y-2'>
+                    <label className='block text-sm font-medium text-foreground'>
+                      {t('settings:communityNode.admission.inviteCodeLabel')}
+                    </label>
+                    <Input
+                      type='password'
+                      autoComplete='off'
+                      spellCheck={false}
+                      aria-label={t('settings:communityNode.admission.inviteCodeLabel')}
+                      aria-describedby={inviteHelpId}
+                      value={inviteCode}
+                      onChange={(event) =>
+                        setInviteCodeByNode((current) => ({
+                          ...current,
+                          [node.baseUrl]: event.target.value,
+                        }))
+                      }
+                      placeholder={t('settings:communityNode.admission.inviteCodePlaceholder')}
+                    />
+                    <p id={inviteHelpId} className='text-sm text-[var(--muted-foreground)]'>
+                      {node.inviteCodeSaved
+                        ? t('settings:communityNode.admission.inviteCodeSaved')
+                        : t('settings:communityNode.admission.inviteCodeHint')}
+                    </p>
+                    <SettingsActionRow>
+                      <Button
+                        variant='secondary'
+                        disabled={
+                          nodeActionsDisabled ||
+                          !node.saved ||
+                          !node.baseUrl.trim() ||
+                          !inviteCode.trim() ||
+                          inviteBusy
+                        }
+                        onClick={() => void submitInviteCode(node.baseUrl)}
+                      >
+                        {inviteBusy
+                          ? t('settings:communityNode.admission.savingInviteCode')
+                          : t('settings:communityNode.admission.saveInviteCode')}
+                      </Button>
+                    </SettingsActionRow>
+                  </div>
+                ) : null}
               </div>
               <Button variant='secondary' onClick={() => onRemoveNode(node.id)}>
                 {t('common:actions.remove')}

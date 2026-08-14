@@ -374,6 +374,11 @@ export function communityNodeNextStepLabel(status?: CommunityNodeNodeStatus): st
     return translate('settings:communityNode.values.saveNodesToBegin');
   }
   if (!status.auth_state.authenticated) {
+    if (status.admission_rejection) {
+      return translate(
+        `settings:communityNode.admission.nextSteps.${status.admission_rejection.code}`
+      );
+    }
     return translate('settings:communityNode.values.authenticateThisNode');
   }
   if (status.consent_state && !status.consent_state.all_required_accepted) {

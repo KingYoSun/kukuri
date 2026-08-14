@@ -352,6 +352,8 @@ export function createMockRuntime(options?: DesktopMockApiOptions): MockRuntime 
           seed_peers: [],
         },
         last_error: null,
+        invite_code_saved: false,
+        admission_rejection: null,
         session_phase: 'ready',
         retry_after: null,
         restart_required: false,

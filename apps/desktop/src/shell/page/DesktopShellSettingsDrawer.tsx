@@ -44,6 +44,7 @@ type DesktopShellSettingsDrawerProps = {
   handleSaveCommunityNodes: () => Promise<void>;
   handleClearCommunityNodes: () => Promise<void>;
   handleAuthenticateCommunityNode: (baseUrl: string) => Promise<void>;
+  handleSetCommunityNodeInviteCode: (baseUrl: string, inviteCode: string) => Promise<void>;
   handleFetchCommunityNodeConsents: (baseUrl: string) => Promise<void>;
   handleAcceptCommunityNodeConsents: (baseUrl: string) => Promise<void>;
   handleRefreshCommunityNode: (baseUrl: string) => Promise<void>;
@@ -72,6 +73,7 @@ export function DesktopShellSettingsDrawer({
   handleSaveCommunityNodes,
   handleClearCommunityNodes,
   handleAuthenticateCommunityNode,
+  handleSetCommunityNodeInviteCode,
   handleFetchCommunityNodeConsents,
   handleAcceptCommunityNodeConsents,
   handleRefreshCommunityNode,
@@ -210,6 +212,7 @@ export function DesktopShellSettingsDrawer({
           }}
           onClearNodes={() => void handleClearCommunityNodes()}
           onAuthenticate={(baseUrl) => void handleAuthenticateCommunityNode(baseUrl)}
+          onSubmitInviteCode={handleSetCommunityNodeInviteCode}
           onFetchConsents={(baseUrl) => handleFetchCommunityNodeConsents(baseUrl)}
           onAcceptConsents={(baseUrl) => handleAcceptCommunityNodeConsents(baseUrl)}
           onRefresh={(baseUrl) => void handleRefreshCommunityNode(baseUrl)}

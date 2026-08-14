@@ -36,6 +36,8 @@ const status = (baseUrl: string, ready: boolean): CommunityNodeNodeStatus => ({
   consent_state: ready ? { all_required_accepted: true, items: [] } : null,
   resolved_urls: null,
   last_error: null,
+  invite_code_saved: false,
+  admission_rejection: null,
   session_phase: ready ? 'ready' : 'idle',
   retry_after: null,
   restart_required: false,

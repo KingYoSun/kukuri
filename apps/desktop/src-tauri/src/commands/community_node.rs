@@ -9,7 +9,8 @@ use kukuri_desktop_runtime::{
     ImportFriendPlusShareRequest, ImportPeerTicketRequest, ImportPrivateChannelInviteRequest,
     IndexQueryResponse, LeavePrivateChannelRequest, ListJoinedPrivateChannelsRequest,
     PreviewChannelAccessTokenRequest, RotatePrivateChannelRequest, SetChannelGossipEnabledRequest,
-    SetCommunityNodeConfigRequest, SetDiscoverySeedsRequest, SetTopicGossipEnabledRequest,
+    SetCommunityNodeConfigRequest, SetCommunityNodeInviteCodeRequest, SetDiscoverySeedsRequest,
+    SetTopicGossipEnabledRequest,
     SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
     SubmitIndexingRequestResponse, TrustUserReadResponse, RelationReadResponse,
     RelationNeighborsResponse, RelationOptoutResponse, UnsubscribeTopicRequest,
@@ -323,6 +324,18 @@ pub async fn authenticate_community_node(
     state
         .runtime
         .authenticate_community_node(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn set_community_node_invite_code(
+    state: tauri::State<'_, DesktopState>,
+    request: SetCommunityNodeInviteCodeRequest,
+) -> Result<CommunityNodeNodeStatus, CommandError> {
+    state
+        .runtime
+        .set_community_node_invite_code(request)
         .await
         .map_err(map_error)
 }

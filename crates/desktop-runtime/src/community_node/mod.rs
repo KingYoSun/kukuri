@@ -4,12 +4,13 @@ use std::path::Path;
 use anyhow::{Context, Result, anyhow};
 use chrono::Utc;
 use kukuri_cn_protocol::{
-    AUTH_CHALLENGE_PATH, AUTH_VERIFY_PATH, AcceptConsentsRequest, AuthChallengeRequest,
-    AuthChallengeResponse, AuthVerifyRequest, AuthVerifyResponse, BOOTSTRAP_HEARTBEAT_PATH,
-    BOOTSTRAP_NODES_PATH, BootstrapHeartbeatRequest, BootstrapHeartbeatResponse, CONSENTS_PATH,
-    CONSENTS_STATUS_PATH, CommunityNodeConsentStatus, CommunityNodeResolvedUrls,
-    CommunityNodeSeedPeer, NODE_MANIFEST_PATH, TOPIC_RENDEZVOUS_HEARTBEAT_PATH,
-    TopicRendezvousHeartbeat, build_auth_envelope_json, normalize_http_url,
+    AUTH_CHALLENGE_PATH, AUTH_VERIFY_PATH, AcceptConsentsRequest, ApiErrorBody,
+    AuthChallengeRequest, AuthChallengeResponse, AuthVerifyRequest, AuthVerifyResponse,
+    BOOTSTRAP_HEARTBEAT_PATH, BOOTSTRAP_NODES_PATH, BootstrapHeartbeatRequest,
+    BootstrapHeartbeatResponse, CONSENTS_PATH, CONSENTS_STATUS_PATH, CommunityNodeConsentStatus,
+    CommunityNodeResolvedUrls, CommunityNodeSeedPeer, NODE_MANIFEST_PATH,
+    TOPIC_RENDEZVOUS_HEARTBEAT_PATH, TopicRendezvousHeartbeat, build_auth_envelope_json,
+    normalize_http_url,
 };
 use kukuri_core::{TopicId, public_topic_rendezvous_key};
 use kukuri_transport::{SeedPeer, Transport, TransportRelayConfig, parse_seed_peer};
@@ -26,6 +27,7 @@ mod config_support;
 mod http_client_support;
 mod index_query_support;
 mod indexing_request_support;
+mod invite_storage_support;
 mod manifest_support;
 mod reconnect_support;
 mod report_routing_support;
@@ -43,6 +45,7 @@ pub use index_query_support::{CommunityNodeIndexQueryError, CommunityNodeIndexQu
 pub use indexing_request_support::{
     CommunityNodeIndexingRequest, CommunityNodeIndexingRequestError,
 };
+pub(crate) use invite_storage_support::*;
 pub use kukuri_cn_protocol::{
     IndexEntryView, IndexQueryResponse, IndexScopeKind, RelationNeighborsResponse,
     RelationOptoutResponse, RelationReadResponse, SubmitIndexingRequestResponse,
@@ -76,6 +79,7 @@ pub(crate) fn community_node_consent_has_pending_update(
 }
 
 pub(crate) const COMMUNITY_NODE_TOKEN_PURPOSE: &str = "community-node-token";
+pub(crate) const COMMUNITY_NODE_INVITE_CODE_PURPOSE: &str = "community-node-invite-code";
 pub(crate) const COMMUNITY_NODE_PREVIEW_BASE_URL: &str = "https://api.kukuri.app";
 pub(crate) const COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_INTERVAL_SECONDS: i64 = 30;
 pub(crate) const COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_RETRY_SECONDS: i64 = 10;
@@ -142,6 +146,57 @@ pub struct CommunityNodeTargetRequest {
     pub base_url: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
+pub struct SetCommunityNodeInviteCodeRequest {
+    pub base_url: String,
+    pub invite_code: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum CommunityNodeAdmissionRejectionCode {
+    InviteRequired,
+    InviteInvalid,
+    InviteExpired,
+    InviteExhausted,
+    InviteRevoked,
+    NotAllowlisted,
+    Banned,
+}
+
+impl CommunityNodeAdmissionRejectionCode {
+    pub(crate) fn from_wire_code(code: &str) -> Option<Self> {
+        match code {
+            "INVITE_REQUIRED" => Some(Self::InviteRequired),
+            "INVITE_INVALID" => Some(Self::InviteInvalid),
+            "INVITE_EXPIRED" => Some(Self::InviteExpired),
+            "INVITE_EXHAUSTED" => Some(Self::InviteExhausted),
+            "INVITE_REVOKED" => Some(Self::InviteRevoked),
+            "NOT_ALLOWLISTED" => Some(Self::NotAllowlisted),
+            "BANNED" => Some(Self::Banned),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct CommunityNodeAdmissionRejection {
+    pub code: CommunityNodeAdmissionRejectionCode,
+    pub message: String,
+}
+
+impl std::fmt::Display for CommunityNodeAdmissionRejection {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{:?}: {}", self.code, self.message)
+    }
+}
+
+impl std::error::Error for CommunityNodeAdmissionRejection {}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
@@ -195,6 +250,7 @@ pub enum CommunityNodeSessionPhase {
     Refreshing,
     Ready,
     Retrying,
+    AwaitingAdmission,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -207,6 +263,7 @@ pub(crate) struct CommunityNodeSessionState {
     pub(crate) session_phase: CommunityNodeSessionPhase,
     pub(crate) ready_refresh_pending: bool,
     pub(crate) last_error: Option<String>,
+    pub(crate) admission_rejection: Option<CommunityNodeAdmissionRejection>,
     pub(crate) cached_consent: Option<CommunityNodeConsentStatus>,
 }
 
@@ -223,6 +280,9 @@ pub struct CommunityNodeNodeStatus {
     pub consent_state: Option<CommunityNodeConsentStatus>,
     pub resolved_urls: Option<CommunityNodeResolvedUrls>,
     pub last_error: Option<String>,
+    #[serde(default)]
+    pub invite_code_saved: bool,
+    pub admission_rejection: Option<CommunityNodeAdmissionRejection>,
     #[serde(default)]
     #[cfg_attr(feature = "ts", ts(as = "Option<CommunityNodeSessionPhase>"))]
     pub session_phase: CommunityNodeSessionPhase,

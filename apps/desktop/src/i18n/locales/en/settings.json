@@ -69,6 +69,32 @@
       "disabled": "Disabled. The node-local minimum proximity would be {{distance}}."
     },
     "autoApproveLabel": "Auto-approve consent for this node",
+    "admission": {
+      "inviteCodeLabel": "Invite code",
+      "inviteCodePlaceholder": "Enter invite code",
+      "inviteCodeHint": "Save a code received from an invite-only node for this node only.",
+      "inviteCodeSaved": "An invite code is saved for this node. Its value is never displayed.",
+      "saveInviteCode": "Save invite code and authenticate",
+      "savingInviteCode": "Saving and authenticating…",
+      "reasons": {
+        "INVITE_REQUIRED": "This node requires an invite code to join.",
+        "INVITE_INVALID": "The invite code is not valid.",
+        "INVITE_EXPIRED": "The invite code has expired.",
+        "INVITE_EXHAUSTED": "The invite code has reached its usage limit.",
+        "INVITE_REVOKED": "The invite code has been revoked.",
+        "NOT_ALLOWLISTED": "This node only admits accounts on its allowlist.",
+        "BANNED": "This node has stopped providing support services to this account. This is not a network-wide ban."
+      },
+      "nextSteps": {
+        "INVITE_REQUIRED": "Enter an invite code and authenticate again.",
+        "INVITE_INVALID": "Check the code or obtain a new invite code and enter it.",
+        "INVITE_EXPIRED": "Obtain a new invite code from the node operator.",
+        "INVITE_EXHAUSTED": "Obtain an available invite code from the node operator.",
+        "INVITE_REVOKED": "Obtain a new invite code from the node operator.",
+        "NOT_ALLOWLISTED": "Ask the node operator to add your account to the allowlist.",
+        "BANNED": "Contact this node's operator if needed. Automatic retries are stopped."
+      }
+    },
     "consent": {
       "title": "Community node policies",
       "authRequired": "Authenticate with this node before reviewing or accepting its policies.",
@@ -115,7 +141,8 @@
       "idle": "idle",
       "ready": "ready",
       "refreshing": "refreshing",
-      "retrying": "retrying"
+      "retrying": "retrying",
+      "awaiting_admission": "waiting for admission"
     },
     "summary": "{{count}} configured",
     "title": "Community Node",

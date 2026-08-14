@@ -41,6 +41,8 @@ function CommunityNodePanelStory({
                   hasPendingUpdate: false,
                   policies: [],
                 },
+                inviteCodeSaved: false,
+                admissionRejectionCode: null,
                 lastError: null,
               },
             ])
@@ -66,6 +68,7 @@ function CommunityNodePanelStory({
           onAcceptConsents={() => {}}
           onRefresh={() => {}}
           onClearToken={() => {}}
+          onSubmitInviteCode={args.onSubmitInviteCode}
         />
       </div>
     </SettingsStoryFrame>
@@ -93,6 +96,7 @@ const meta = {
     onAcceptConsents: () => {},
     onRefresh: () => {},
     onClearToken: () => {},
+    onSubmitInviteCode: async () => {},
     onGetRelationOptout: async () => ({
       pubkey: 'story-user',
       opted_out: false,
@@ -126,6 +130,28 @@ export const DistanceOptout: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getAllByRole('button', { name: 'Load setting' })[0]);
     canvasElement.ownerDocument.defaultView?.scrollTo(0, 0);
+  },
+};
+
+export const InviteRequired: Story = {
+  args: {
+    showDiagnostics: false,
+    view: {
+      ...communityNodePanelFixture,
+      nodes: communityNodePanelFixture.nodes.map((node, index) =>
+        index === 0
+          ? {
+              ...node,
+              inviteCodeSaved: false,
+              admissionRejectionCode: 'INVITE_REQUIRED' as const,
+            }
+          : node
+      ),
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.type(canvas.getAllByLabelText(/Invite code|招待コード/)[0], 'join-code');
   },
 };
 

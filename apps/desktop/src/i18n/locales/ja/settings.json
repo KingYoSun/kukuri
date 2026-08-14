@@ -69,6 +69,32 @@
       "disabled": "無効です。有効時の node-local 最小 proximity は {{distance}} です。"
     },
     "autoApproveLabel": "このノードの consent を自動承認する",
+    "admission": {
+      "inviteCodeLabel": "招待コード",
+      "inviteCodePlaceholder": "招待コードを入力",
+      "inviteCodeHint": "招待制のノードから受け取ったコードを、このノードだけに保存します。",
+      "inviteCodeSaved": "このノード用の招待コードを保存済みです。値そのものは表示しません。",
+      "saveInviteCode": "招待コードを保存して認証",
+      "savingInviteCode": "保存して認証中…",
+      "reasons": {
+        "INVITE_REQUIRED": "このノードへの参加には招待コードが必要です。",
+        "INVITE_INVALID": "入力した招待コードは正しくありません。",
+        "INVITE_EXPIRED": "入力した招待コードは有効期限が切れています。",
+        "INVITE_EXHAUSTED": "入力した招待コードは利用回数の上限に達しています。",
+        "INVITE_REVOKED": "入力した招待コードは失効しています。",
+        "NOT_ALLOWLISTED": "このノードは許可一覧に登録された利用者だけ参加できます。",
+        "BANNED": "このノードは、このアカウントへの補助機能の提供を停止しています。ネットワーク全体の利用禁止ではありません。"
+      },
+      "nextSteps": {
+        "INVITE_REQUIRED": "招待コードを入力して、もう一度認証してください。",
+        "INVITE_INVALID": "コードを確認するか、新しい招待コードを取得して入力してください。",
+        "INVITE_EXPIRED": "ノード運営者から新しい招待コードを取得してください。",
+        "INVITE_EXHAUSTED": "ノード運営者から利用可能な招待コードを取得してください。",
+        "INVITE_REVOKED": "ノード運営者から新しい招待コードを取得してください。",
+        "NOT_ALLOWLISTED": "参加するには、ノード運営者へ許可一覧への登録を依頼してください。",
+        "BANNED": "必要な場合は、このノードの運営者へお問い合わせください。自動再試行は行いません。"
+      }
+    },
     "consent": {
       "title": "コミュニティノードのポリシー",
       "authRequired": "ポリシーを確認・同意する前に、このノードで認証してください。",
@@ -115,7 +141,8 @@
       "idle": "待機中",
       "ready": "準備完了",
       "refreshing": "メタデータ更新中",
-      "retrying": "再試行待ち"
+      "retrying": "再試行待ち",
+      "awaiting_admission": "参加手続き待ち"
     },
     "summary": "{{count}} 件設定済み",
     "title": "コミュニティノード",

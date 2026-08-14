@@ -18,6 +18,7 @@ type ConnectivityMock = Pick<
   | 'setCommunityNodeConfig'
   | 'clearCommunityNodeConfig'
   | 'authenticateCommunityNode'
+  | 'setCommunityNodeInviteCode'
   | 'clearCommunityNodeToken'
   | 'getCommunityNodeConsentStatus'
   | 'acceptCommunityNodeConsents'
@@ -109,6 +110,8 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
         consent_state: null,
         resolved_urls: null,
         last_error: null,
+        invite_code_saved: false,
+        admission_rejection: null,
         session_phase: node.auto_approve ? 'connecting' : 'idle',
         retry_after: null,
         restart_required: false,
@@ -127,6 +130,20 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
               auth_state: { authenticated: true, expires_at: Date.now() },
               consent_state: { all_required_accepted: false, items: mockConsentItems(false) },
               session_phase: status.auto_approve ? 'accepting' : 'authenticating',
+            }
+          : status
+      );
+      return runtime.communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
+    },
+    async setCommunityNodeInviteCode(baseUrl, inviteCode) {
+      runtime.communityNodeStatuses = runtime.communityNodeStatuses.map((status) =>
+        status.base_url === baseUrl
+          ? {
+              ...status,
+              invite_code_saved: Boolean(inviteCode?.trim()),
+              admission_rejection: null,
+              auth_state: { authenticated: true, expires_at: Date.now() },
+              session_phase: 'authenticating',
             }
           : status
       );

@@ -169,6 +169,7 @@ test('community node panel renders ready and error states', async () => {
       onReset={() => {}}
       onClearNodes={() => {}}
       onAuthenticate={() => {}}
+      onSubmitInviteCode={async () => {}}
       onFetchConsents={onFetchConsents}
       onAcceptConsents={onAcceptConsents}
       onRefresh={() => {}}
@@ -236,6 +237,7 @@ test('community node consent dialog shows policy body, version, and update notic
       onReset={() => {}}
       onClearNodes={() => {}}
       onAuthenticate={() => {}}
+      onSubmitInviteCode={async () => {}}
       onFetchConsents={onFetchConsents}
       onAcceptConsents={onAcceptConsents}
       onRefresh={() => {}}
@@ -293,6 +295,7 @@ test('community node consent dialog disables accept when latest policy fetch fai
       onReset={() => {}}
       onClearNodes={() => {}}
       onAuthenticate={() => {}}
+      onSubmitInviteCode={async () => {}}
       onFetchConsents={onFetchConsents}
       onAcceptConsents={onAcceptConsents}
       onRefresh={() => {}}
@@ -349,6 +352,7 @@ test('settings panels avoid the legacy grid classname collision', () => {
         onReset={() => {}}
         onClearNodes={() => {}}
         onAuthenticate={() => {}}
+        onSubmitInviteCode={async () => {}}
         onFetchConsents={() => {}}
         onAcceptConsents={() => {}}
         onRefresh={() => {}}
@@ -571,6 +575,7 @@ test('community node panel hides diagnostics but keeps node editing when showDia
       onReset={() => {}}
       onClearNodes={() => {}}
       onAuthenticate={() => {}}
+      onSubmitInviteCode={async () => {}}
       onFetchConsents={() => {}}
       onAcceptConsents={() => {}}
       onRefresh={() => {}}

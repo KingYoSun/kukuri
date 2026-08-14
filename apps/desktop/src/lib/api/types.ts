@@ -346,6 +346,10 @@ export interface DesktopApi {
   setCommunityNodeConfig(nodes: CommunityNodeConfigInput[]): Promise<CommunityNodeConfig>;
   clearCommunityNodeConfig(): Promise<void>;
   authenticateCommunityNode(baseUrl: string): Promise<CommunityNodeNodeStatus>;
+  setCommunityNodeInviteCode(
+    baseUrl: string,
+    inviteCode: string | null
+  ): Promise<CommunityNodeNodeStatus>;
   clearCommunityNodeToken(baseUrl: string): Promise<CommunityNodeNodeStatus>;
   getCommunityNodeConsentStatus(baseUrl: string): Promise<CommunityNodeNodeStatus>;
   acceptCommunityNodeConsents(

@@ -166,9 +166,13 @@ previously_accepted_version?: number | null, };
 
 export type CommunityNodeConsentStatus = { all_required_accepted: boolean, items: Array<CommunityNodeConsentItem>, };
 
-export type CommunityNodeSessionPhase = "idle" | "connecting" | "authenticating" | "accepting" | "refreshing" | "ready" | "retrying";
+export type CommunityNodeAdmissionRejectionCode = "INVITE_REQUIRED" | "INVITE_INVALID" | "INVITE_EXPIRED" | "INVITE_EXHAUSTED" | "INVITE_REVOKED" | "NOT_ALLOWLISTED" | "BANNED";
 
-export type CommunityNodeNodeStatus = { base_url: string, auto_approve?: boolean | null, auth_state: CommunityNodeAuthState, consent_state?: CommunityNodeConsentStatus | null, resolved_urls?: CommunityNodeResolvedUrls | null, last_error?: string | null, session_phase?: CommunityNodeSessionPhase | null, retry_after?: number | null, restart_required: boolean, };
+export type CommunityNodeAdmissionRejection = { code: CommunityNodeAdmissionRejectionCode, message: string, };
+
+export type CommunityNodeSessionPhase = "idle" | "connecting" | "authenticating" | "accepting" | "refreshing" | "ready" | "retrying" | "awaiting_admission";
+
+export type CommunityNodeNodeStatus = { base_url: string, auto_approve?: boolean | null, auth_state: CommunityNodeAuthState, consent_state?: CommunityNodeConsentStatus | null, resolved_urls?: CommunityNodeResolvedUrls | null, last_error?: string | null, invite_code_saved: boolean, admission_rejection?: CommunityNodeAdmissionRejection | null, session_phase?: CommunityNodeSessionPhase | null, retry_after?: number | null, restart_required: boolean, };
 
 export type CommunityNodeCapabilityScope = { available_enabled: Array<string>, planned_enabled: Array<string>, };
 
@@ -406,6 +410,8 @@ export type UpdateMetaverseRoomRequest = { topic: string, room_id: string, statu
 export type SetCommunityNodeConfigNode = { base_url: string, auto_approve: boolean, };
 
 export type SetCommunityNodeConfigRequest = { nodes: Array<SetCommunityNodeConfigNode>, };
+
+export type SetCommunityNodeInviteCodeRequest = { base_url: string, invite_code?: string | null, };
 
 export type CommunityNodeTargetRequest = { base_url: string, };
 

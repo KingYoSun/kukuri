@@ -1,3 +1,4 @@
+mod admission;
 mod config;
 mod connectivity;
 mod index_query;
