@@ -841,6 +841,7 @@ export function DesktopShellPage({
         handleSaveCommunityNodes={shellActions.handleSaveCommunityNodes}
         handleClearCommunityNodes={shellActions.handleClearCommunityNodes}
         handleAuthenticateCommunityNode={shellActions.handleAuthenticateCommunityNode}
+        handleSetCommunityNodeInviteCode={shellActions.handleSetCommunityNodeInviteCode}
         handleFetchCommunityNodeConsents={shellActions.handleFetchCommunityNodeConsents}
         handleAcceptCommunityNodeConsents={shellActions.handleAcceptCommunityNodeConsents}
         handleRefreshCommunityNode={shellActions.handleRefreshCommunityNode}

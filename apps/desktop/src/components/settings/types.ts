@@ -1,3 +1,4 @@
+import { type CommunityNodeAdmissionRejectionCode } from '@/lib/api';
 import { type DesktopTheme } from '@/lib/theme';
 import { type SupportedLocale } from '@/i18n';
 import { type BookmarkedCustomReactionView, type CustomReactionAssetView } from '@/lib/api';
@@ -97,6 +98,8 @@ export type CommunityNodeEntryView = {
   diagnostics: SettingsDiagnosticItemView[];
   dependency: CommunityNodeDependencyView;
   consent: CommunityNodeConsentView;
+  inviteCodeSaved: boolean;
+  admissionRejectionCode?: CommunityNodeAdmissionRejectionCode | null;
   lastError?: string | null;
 };
 

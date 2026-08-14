@@ -94,6 +94,7 @@ import type {
   SendDirectMessageRequest,
   SetChannelGossipEnabledRequest,
   SetCommunityNodeConfigRequest,
+  SetCommunityNodeInviteCodeRequest,
   SetDiscoverySeedsRequest,
   SetTopicGossipEnabledRequest,
   ToggleReactionRequest,
@@ -610,6 +611,17 @@ export const runtimeApi: DesktopApi = {
       } satisfies CommunityNodeTargetRequest,
     });
   }),
+  setCommunityNodeInviteCode: command(
+    'setCommunityNodeInviteCode',
+    async (baseUrl, inviteCode) => {
+      return invokeDesktop<CommunityNodeNodeStatus>('set_community_node_invite_code', {
+        request: {
+          base_url: baseUrl,
+          invite_code: inviteCode,
+        } satisfies SetCommunityNodeInviteCodeRequest,
+      });
+    }
+  ),
   clearCommunityNodeToken: command('clearCommunityNodeToken', async (baseUrl) => {
     return invokeDesktop<CommunityNodeNodeStatus>('clear_community_node_token', {
       request: {

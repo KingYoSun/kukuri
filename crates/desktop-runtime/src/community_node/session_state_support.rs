@@ -14,7 +14,9 @@ impl DesktopRuntime {
         if phase != CommunityNodeSessionPhase::Ready
             && matches!(
                 phase,
-                CommunityNodeSessionPhase::Idle | CommunityNodeSessionPhase::Retrying
+                CommunityNodeSessionPhase::Idle
+                    | CommunityNodeSessionPhase::Retrying
+                    | CommunityNodeSessionPhase::AwaitingAdmission
             )
         {
             entry.ready_refresh_pending = false;
@@ -75,7 +77,35 @@ impl DesktopRuntime {
         if let Some(entry) = sessions.get_mut(base_url) {
             entry.session_retry_deadline = 0;
             entry.last_error = None;
+            entry.admission_rejection = None;
         }
+    }
+
+    pub(crate) async fn set_community_node_admission_rejection(
+        &self,
+        base_url: &str,
+        rejection: CommunityNodeAdmissionRejection,
+    ) {
+        {
+            let mut sessions = self.community_node_sessions.lock().await;
+            let entry = sessions
+                .entry(base_url.to_string())
+                .or_insert_with(CommunityNodeSessionState::default);
+            entry.session_retry_deadline = 0;
+            entry.last_error = None;
+            entry.admission_rejection = Some(rejection);
+        }
+        self.set_community_node_session_phase(
+            base_url,
+            CommunityNodeSessionPhase::AwaitingAdmission,
+        )
+        .await;
+    }
+
+    pub(crate) fn community_node_admission_rejection(
+        error: &anyhow::Error,
+    ) -> Option<&CommunityNodeAdmissionRejection> {
+        error.downcast_ref::<CommunityNodeAdmissionRejection>()
     }
 
     pub(crate) async fn set_community_node_retry_state(
@@ -90,6 +120,7 @@ impl DesktopRuntime {
                 .entry(base_url.to_string())
                 .or_insert_with(CommunityNodeSessionState::default);
             entry.last_error = Some(error.to_string());
+            entry.admission_rejection = None;
             entry.session_retry_deadline = now.saturating_add(COMMUNITY_NODE_SESSION_RETRY_SECONDS);
         }
         self.set_community_node_session_phase(base_url, CommunityNodeSessionPhase::Retrying)

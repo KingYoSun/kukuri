@@ -233,6 +233,8 @@ export function createCommunityNodePanelFixture(): CommunityNodePanelView {
             },
           ],
         },
+        inviteCodeSaved: false,
+        admissionRejectionCode: null,
         lastError: null,
       },
       {
@@ -279,6 +281,8 @@ export function createCommunityNodePanelFixture(): CommunityNodePanelView {
           hasPendingUpdate: false,
           policies: [],
         },
+        inviteCodeSaved: false,
+        admissionRejectionCode: null,
         lastError: i18n.t('common:errors.failedToRefreshCommunityNode'),
       },
     ],

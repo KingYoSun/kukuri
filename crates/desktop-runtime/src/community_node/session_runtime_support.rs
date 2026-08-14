@@ -4,12 +4,18 @@ impl DesktopRuntime {
     pub(crate) async fn ensure_community_node_session(&self, base_url: &str) -> Result<()> {
         let base_url = normalize_http_url(base_url)?;
         let now = Utc::now().timestamp();
-        let retry_after = self
+        let session_gate = self
             .community_node_sessions
             .lock()
             .await
             .get(base_url.as_str())
-            .map(|s| s.session_retry_deadline);
+            .map(|s| (s.session_retry_deadline, s.session_phase));
+        if session_gate
+            .is_some_and(|(_, phase)| phase == CommunityNodeSessionPhase::AwaitingAdmission)
+        {
+            return Ok(());
+        }
+        let retry_after = session_gate.map(|(retry_after, _)| retry_after);
         if retry_after.is_some_and(|retry_after| retry_after > now) {
             self.set_community_node_session_phase(
                 base_url.as_str(),
@@ -21,12 +27,18 @@ impl DesktopRuntime {
 
         let _guard = self.community_node_session_guard.lock().await;
         let now = Utc::now().timestamp();
-        let retry_after = self
+        let session_gate = self
             .community_node_sessions
             .lock()
             .await
             .get(base_url.as_str())
-            .map(|s| s.session_retry_deadline);
+            .map(|s| (s.session_retry_deadline, s.session_phase));
+        if session_gate
+            .is_some_and(|(_, phase)| phase == CommunityNodeSessionPhase::AwaitingAdmission)
+        {
+            return Ok(());
+        }
+        let retry_after = session_gate.map(|(retry_after, _)| retry_after);
         if retry_after.is_some_and(|retry_after| retry_after > now) {
             self.set_community_node_session_phase(
                 base_url.as_str(),
@@ -132,8 +144,13 @@ impl DesktopRuntime {
         match self.ensure_community_node_session(base_url.as_str()).await {
             Ok(()) => Ok(()),
             Err(error) => {
-                self.set_community_node_retry_state(base_url.as_str(), error)
-                    .await;
+                if let Some(rejection) = Self::community_node_admission_rejection(&error).cloned() {
+                    self.set_community_node_admission_rejection(base_url.as_str(), rejection)
+                        .await;
+                } else {
+                    self.set_community_node_retry_state(base_url.as_str(), error)
+                        .await;
+                }
                 Ok(())
             }
         }
@@ -178,6 +195,7 @@ impl DesktopRuntime {
         let consent_state =
             consent_state.or_else(|| session.and_then(|s| s.cached_consent.clone()));
         let last_error = last_error.or_else(|| session.and_then(|s| s.last_error.clone()));
+        let admission_rejection = session.and_then(|session| session.admission_rejection.clone());
         let retry_after = session
             .map(|s| s.session_retry_deadline)
             .filter(|deadline| *deadline > now);
@@ -194,6 +212,12 @@ impl DesktopRuntime {
             }
         });
         drop(sessions);
+        let invite_code_saved = load_community_node_invite_code(
+            &self.db_path,
+            self.identity_mode,
+            node.base_url.as_str(),
+        )?
+        .is_some();
         let current_connectivity_urls = relay_config_from_community_node_config(
             &self.community_node_config.lock().await.clone(),
         )
@@ -205,6 +229,8 @@ impl DesktopRuntime {
             consent_state,
             resolved_urls: node.resolved_urls,
             last_error,
+            invite_code_saved,
+            admission_rejection,
             session_phase,
             retry_after,
             restart_required: current_connectivity_urls

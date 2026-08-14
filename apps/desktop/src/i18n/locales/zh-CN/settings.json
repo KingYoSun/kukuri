@@ -69,6 +69,32 @@
       "disabled": "已停用。启用时的节点本地最小接近度为 {{distance}}。"
     },
     "autoApproveLabel": "自动批准此节点的 consent",
+    "admission": {
+      "inviteCodeLabel": "邀请码",
+      "inviteCodePlaceholder": "输入邀请码",
+      "inviteCodeHint": "将邀请制节点提供的代码仅保存给此节点使用。",
+      "inviteCodeSaved": "已保存此节点的邀请码，但不会显示其内容。",
+      "saveInviteCode": "保存邀请码并认证",
+      "savingInviteCode": "正在保存并认证…",
+      "reasons": {
+        "INVITE_REQUIRED": "加入此节点需要邀请码。",
+        "INVITE_INVALID": "输入的邀请码无效。",
+        "INVITE_EXPIRED": "输入的邀请码已过期。",
+        "INVITE_EXHAUSTED": "输入的邀请码已达到使用次数上限。",
+        "INVITE_REVOKED": "输入的邀请码已被撤销。",
+        "NOT_ALLOWLISTED": "此节点只允许已列入许可名单的账户加入。",
+        "BANNED": "此节点已停止向该账户提供辅助服务。这并非全网封禁。"
+      },
+      "nextSteps": {
+        "INVITE_REQUIRED": "请输入邀请码并重新认证。",
+        "INVITE_INVALID": "请检查代码，或获取新的邀请码后重新输入。",
+        "INVITE_EXPIRED": "请向节点运营者获取新的邀请码。",
+        "INVITE_EXHAUSTED": "请向节点运营者获取仍可使用的邀请码。",
+        "INVITE_REVOKED": "请向节点运营者获取新的邀请码。",
+        "NOT_ALLOWLISTED": "请联系节点运营者将账户加入许可名单。",
+        "BANNED": "如有需要，请联系此节点的运营者。系统不会自动重试。"
+      }
+    },
     "consent": {
       "title": "社区节点政策",
       "authRequired": "在查看或接受其政策前，请先与该节点完成认证。",
@@ -115,7 +141,8 @@
       "idle": "空闲",
       "ready": "就绪",
       "refreshing": "刷新元数据中",
-      "retrying": "等待重试"
+      "retrying": "等待重试",
+      "awaiting_admission": "等待加入处理"
     },
     "summary": "已配置 {{count}} 个",
     "title": "社区节点",

@@ -98,6 +98,8 @@ function SettingsDrawerStory({ initialSection = 'connectivity' }: { initialSecti
                   hasPendingUpdate: false,
                   policies: [],
                 },
+                inviteCodeSaved: false,
+                admissionRejectionCode: null,
                 lastError: null,
               },
             ])
@@ -119,6 +121,7 @@ function SettingsDrawerStory({ initialSection = 'connectivity' }: { initialSecti
           onReset={() => setCommunityNodes(communityNodePanelFixture.nodes)}
           onClearNodes={() => setCommunityNodes([])}
           onAuthenticate={() => undefined}
+          onSubmitInviteCode={async () => undefined}
           onFetchConsents={() => undefined}
           onAcceptConsents={() => undefined}
           onRefresh={() => undefined}

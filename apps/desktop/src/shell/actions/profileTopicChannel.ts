@@ -656,6 +656,23 @@ export function createProfileTopicChannelActions({
     }
   }
 
+  async function handleSetCommunityNodeInviteCode(baseUrl: string, inviteCode: string) {
+    try {
+      const nextStatus = await api.setCommunityNodeInviteCode(baseUrl, inviteCode);
+      setCommunityNodeStatuses((current) => upsertCommunityNodeStatus(current, nextStatus));
+      setCommunityNodeConfig((current) => syncCommunityNodeConfigWithStatus(current, nextStatus));
+      setCommunityNodeError(null);
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (inviteError) {
+      setCommunityNodeError(
+        inviteError instanceof Error
+          ? inviteError.message
+          : translate('common:errors.failedToAuthenticateCommunityNode')
+      );
+      throw inviteError;
+    }
+  }
+
   async function handleClearCommunityNodeToken(baseUrl: string) {
     try {
       const nextStatus = await api.clearCommunityNodeToken(baseUrl);
@@ -744,6 +761,7 @@ export function createProfileTopicChannelActions({
     handleSaveCommunityNodes,
     handleClearCommunityNodes,
     handleAuthenticateCommunityNode,
+    handleSetCommunityNodeInviteCode,
     handleClearCommunityNodeToken,
     handleRefreshCommunityNode,
     handleFetchCommunityNodeConsents,

@@ -13,7 +13,8 @@ mod stack;
 mod tests;
 
 pub use community_node::{
-    AcceptCommunityNodeConsentsRequest, CommunityNodeAuthState, CommunityNodeAuthorityScope,
+    AcceptCommunityNodeConsentsRequest, CommunityNodeAdmissionRejection,
+    CommunityNodeAdmissionRejectionCode, CommunityNodeAuthState, CommunityNodeAuthorityScope,
     CommunityNodeCapabilityScope, CommunityNodeConfig, CommunityNodeIndexQueryError,
     CommunityNodeIndexQueryRequest, CommunityNodeIndexingRequest,
     CommunityNodeIndexingRequestError, CommunityNodeManifest, CommunityNodeManifestFetch,
@@ -22,9 +23,9 @@ pub use community_node::{
     CommunityNodeTargetRequest, CommunityNodeTrustRelationError, CommunityNodeUserAdvisoryRequest,
     IndexEntryView, IndexQueryResponse, IndexScopeKind, RelationNeighborsResponse,
     RelationOptoutResponse, RelationReadResponse, SetCommunityNodeConfigNode,
-    SetCommunityNodeConfigRequest, SubmitCommunityNodeReportRequest,
-    SubmitCommunityNodeReportResult, SubmitCommunityNodeReportStatus,
-    SubmitIndexingRequestResponse, TrustUserReadResponse,
+    SetCommunityNodeConfigRequest, SetCommunityNodeInviteCodeRequest,
+    SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
+    SubmitCommunityNodeReportStatus, SubmitIndexingRequestResponse, TrustUserReadResponse,
 };
 pub use discovery::{DiscoveryConfig, SetDiscoverySeedsRequest};
 // 起動エラーの typed 分類(WP-Q2)。src-tauri は downcast で DatabaseOpen/Migration を判定する。

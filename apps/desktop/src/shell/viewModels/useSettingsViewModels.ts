@@ -373,6 +373,8 @@ export function useSettingsViewModels({
             t
           ),
           consent: communityNodeConsentView(status),
+          inviteCodeSaved: status?.invite_code_saved ?? false,
+          admissionRejectionCode: status?.admission_rejection?.code ?? null,
           lastError: status?.last_error ?? null,
         };
       }),

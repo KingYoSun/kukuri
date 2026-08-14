@@ -7,9 +7,9 @@ Accepted
 - Feature 名: community-node admission (invite code / whitelist / ban)
 - Durable / Transient: Durable server state
 - Canonical Source: server `Postgres`（`cn_admin.service_configs` の admission mode、`cn_admin.invite_codes`、`cn_admin.admission_allowlist`、`cn_user.subscriber_accounts.status`）
-- Replicated?: client へは replicate しない（server-side enforcement のみ）
+- Replicated?: server の admission state は client へ replicate しない。client が入力した招待コードも端末間同期しない
 - Rebuildable From: `Postgres` migrations + 運営者が cn-cli で投入した admission state
-- Public Replica / Private Replica / Local Only: private server state のみ。public manifest には admission の運用データ（招待コード・allowlist・ban list）を載せない
+- Public Replica / Private Replica / Local Only: server の運用データは private server state のみ。client が入力した招待コードは node の正規化済み `base_url` を鍵にした Local Only の秘密情報として keyring（利用不能時は権限を制限した秘密ファイル）へ保存する。public manifest、通常の community-node 設定、状態取得、診断、ログには平文を載せない
 - Gossip Hint 必要有無: No
 - Blob 必要有無: No
 - SQLite projection 必要有無: No（server は SQLite を使わない）
@@ -41,9 +41,11 @@ Accepted
   2. 既存 `status='active'` subscriber は mode 変更後も再認証を通す（運用変更で既存利用者を突然締め出さない）。
   3. それ以外（未登録 pubkey）のみ mode を適用する（`open`=admit / `whitelist`=allowlist 登録のみ / `invite`=有効コード必須、ただし allowlist 該当はコード不要 bypass）。
 - 拒否は `POST /v1/auth/verify` で HTTP 403 + 専用コード（`INVITE_REQUIRED` / `INVITE_INVALID` / `INVITE_EXPIRED` / `INVITE_EXHAUSTED` / `INVITE_REVOKED` / `NOT_ALLOWLISTED` / `BANNED`）として返す。
+- client は HTTP 403 の応答本文を破棄せず、上記の安定コードと message を保持する。招待コードは入力対象の node にだけ送信し、別 node へ転用しない。
+- client は admission 拒否を一時的な通信失敗と区別し、自動再試行を止めて利用者対応待ちにする。招待関連の拒否はコードの入力または再取得を案内し、`NOT_ALLOWLISTED` と `BANNED` は node 運営者への連絡を案内する。この扱いは `auto_approve` の有無で変えない。
 
 ## Consequences
 - admission は node-local な「補助機能提供の可否」判断である。`docs/architecture/p2p-first-community-node-responsibility-boundary.md` の責任境界に従い、ban は kukuri network 全体からのアカウント凍結ではなく、この node が提供する接続補助・auth/consent をこの pubkey へ提供しないという node-local な制限として扱う。user identity / profile / social graph は node-independent であり admission の対象にしない。
 - `ensure_database_ready` の必須テーブルに `cn_admin.invite_codes` と `cn_admin.admission_allowlist` を加えるため、prepared DB 前提の本番起動は migration 未適用時に fail-fast する（標準入口は `cn-cli prepare` / `cn-migrate`）。
 - 課金ゲート（payment gate）は本 ADR のスコープ外だが、admission mode と enforcement の拡張点として将来差し込める構造とする。
-- client UI（招待コード入力導線）は本 ADR のスコープ外。現行 client は 403 を接続エラーとして表示できる。
+- client は node ごとの招待コード入力導線、保存済み表示、安定コードに対応した理由と次の操作を提供する。秘密値そのものは UI 状態へ戻さず、保存有無だけを返す。

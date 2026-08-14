@@ -39,6 +39,7 @@ test('loads, enables, and clears reversible node-local distance opt-out', async 
       onReset={() => undefined}
       onClearNodes={() => undefined}
       onAuthenticate={() => undefined}
+      onSubmitInviteCode={async () => undefined}
       onFetchConsents={() => undefined}
       onAcceptConsents={() => undefined}
       onRefresh={() => undefined}

@@ -44,17 +44,40 @@ impl DesktopRuntime {
             public_base_url.as_str(),
         )?;
         let verify_url = format!("{base_url}{AUTH_VERIFY_PATH}");
-        let verify = client
+        let invite_code =
+            load_community_node_invite_code(&self.db_path, self.identity_mode, base_url.as_str())?;
+        let verify_response = client
             .post(verify_url)
             .json(&AuthVerifyRequest {
                 auth_envelope_json,
                 endpoint_id: Some(seed_peer.endpoint_id),
                 addr_hint: seed_peer.addr_hint,
-                invite_code: None,
+                invite_code,
             })
             .send()
             .await
-            .context("failed to verify auth envelope")?
+            .context("failed to verify auth envelope")?;
+        if verify_response.status() == StatusCode::FORBIDDEN {
+            let body = verify_response
+                .json::<ApiErrorBody>()
+                .await
+                .context("failed to decode auth verify rejection response")?;
+            if let Some(code) =
+                CommunityNodeAdmissionRejectionCode::from_wire_code(body.code.as_str())
+            {
+                return Err(CommunityNodeAdmissionRejection {
+                    code,
+                    message: body.message,
+                }
+                .into());
+            }
+            return Err(anyhow!(
+                "auth verify request was rejected with unknown code `{}`: {}",
+                body.code,
+                body.message
+            ));
+        }
+        let verify = verify_response
             .error_for_status()
             .context("auth verify request failed")?
             .json::<AuthVerifyResponse>()

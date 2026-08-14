@@ -121,6 +121,18 @@ impl DesktopRuntime {
             })
             .collect::<Result<Vec<_>>>()?;
         let next_config = normalize_community_node_config(CommunityNodeConfig { nodes })?;
+        for removed_node in current_config.nodes.iter().filter(|current| {
+            next_config
+                .nodes
+                .iter()
+                .all(|next| next.base_url != current.base_url)
+        }) {
+            delete_community_node_invite_code(
+                &self.db_path,
+                self.identity_mode,
+                removed_node.base_url.as_str(),
+            )?;
+        }
         save_community_node_config(&self.db_path, &next_config)?;
         *self.community_node_config.lock().await = next_config.clone();
         self.community_node_sessions.lock().await.clear();
@@ -137,6 +149,11 @@ impl DesktopRuntime {
     pub async fn clear_community_node_config(&self) -> Result<()> {
         let existing = self.community_node_config.lock().await.clone();
         for node in existing.nodes {
+            delete_community_node_invite_code(
+                &self.db_path,
+                self.identity_mode,
+                node.base_url.as_str(),
+            )?;
             self.clear_community_node_token(CommunityNodeTargetRequest {
                 base_url: node.base_url,
             })
@@ -162,9 +179,20 @@ impl DesktopRuntime {
             CommunityNodeSessionPhase::Authenticating,
         )
         .await;
-        let mut token = self
+        let mut token = match self
             .request_community_node_authentication_token(base_url.as_str())
-            .await?;
+            .await
+        {
+            Ok(token) => token,
+            Err(error) => {
+                if let Some(rejection) = Self::community_node_admission_rejection(&error).cloned() {
+                    self.set_community_node_admission_rejection(base_url.as_str(), rejection)
+                        .await;
+                    return self.community_node_status(node, None, None).await;
+                }
+                return Err(error);
+            }
+        };
         let mut consent_state = self
             .fetch_community_node_consent_status_with_retry(base_url.as_str(), &mut token, false)
             .await?;
@@ -212,6 +240,38 @@ impl DesktopRuntime {
         self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Idle)
             .await;
         self.community_node_status(node, Some(consent_state), None)
+            .await
+    }
+
+    pub async fn set_community_node_invite_code(
+        &self,
+        request: SetCommunityNodeInviteCodeRequest,
+    ) -> Result<CommunityNodeNodeStatus> {
+        let base_url = normalize_http_url(request.base_url.as_str())?;
+        self.require_community_node(base_url.as_str()).await?;
+        match request
+            .invite_code
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            Some(invite_code) => persist_community_node_invite_code(
+                &self.db_path,
+                self.identity_mode,
+                base_url.as_str(),
+                invite_code,
+            )?,
+            None => delete_community_node_invite_code(
+                &self.db_path,
+                self.identity_mode,
+                base_url.as_str(),
+            )?,
+        }
+        self.clear_community_node_retry_state(base_url.as_str())
+            .await;
+        self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Idle)
+            .await;
+        self.authenticate_community_node(CommunityNodeTargetRequest { base_url })
             .await
     }
 
