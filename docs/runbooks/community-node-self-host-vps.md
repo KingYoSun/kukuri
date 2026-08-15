@@ -212,7 +212,9 @@ docker compose --env-file .env.community-node -f docker-compose.community-node.y
   cn-cli admission ban remove --pubkey <hex-pubkey>
 ```
 
-client 側では、招待が必要な node に未登録の pubkey で接続すると `POST /v1/auth/verify` が HTTP 403（`INVITE_REQUIRED` / `INVITE_INVALID` / `INVITE_EXPIRED` / `INVITE_EXHAUSTED` / `INVITE_REVOKED` / `NOT_ALLOWLISTED` / `BANNED`）を返す。現行 client はこれを接続エラーとして表示する（招待コード入力 UI は後続）。
+クライアントは、招待が必要なノードへ未登録の公開鍵で接続して `POST /v1/auth/verify` から HTTP 403（`INVITE_REQUIRED` / `INVITE_INVALID` / `INVITE_EXPIRED` / `INVITE_EXHAUSTED` / `INVITE_REVOKED` / `NOT_ALLOWLISTED` / `BANNED`）を受けると、自動再試行を止め、対象ノードの設定欄に理由と次の操作を表示する。
+
+招待関連の理由では、そのノード専用の招待コードを入力して再認証できる。招待コードはノードごとに端末内へ保存し、別のノードへ送信しない。`NOT_ALLOWLISTED` と `BANNED` ではノード運営者への連絡を案内する。画面へ招待コードそのものは戻さず、保存済みかどうかだけを表示する。
 
 ## 確認
 
