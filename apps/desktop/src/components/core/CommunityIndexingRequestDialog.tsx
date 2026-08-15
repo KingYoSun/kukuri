@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { DesktopApi, IndexingRequestStatus } from '@/lib/api';
@@ -52,8 +52,10 @@ export function CommunityIndexingRequestDialog({
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState<IndexingRequestStatus | null>(null);
   const [errorKey, setErrorKey] = useState<string | null>(null);
+  const requestVersionRef = useRef(0);
 
   useEffect(() => {
+    requestVersionRef.current += 1;
     setSelectedNode(eligibleNodeBaseUrls[0] ?? '');
     setConfirmed(false);
     setPending(false);
@@ -68,9 +70,21 @@ export function CommunityIndexingRequestDialog({
       : topicDisplayName(target.topicId)
     : '';
 
+  function selectNode(baseUrl: string) {
+    requestVersionRef.current += 1;
+    setSelectedNode(baseUrl);
+    setConfirmed(false);
+    setStatus(null);
+    setErrorKey(null);
+  }
+
   async function submit() {
     if (!target || !selectedNode || (privateTarget && !confirmed)) return;
+    const requestVersion = requestVersionRef.current + 1;
+    requestVersionRef.current = requestVersion;
+    if (privateTarget) setConfirmed(false);
     setPending(true);
+    setStatus(null);
     setErrorKey(null);
     try {
       const response = await api.submitCommunityNodeIndexingRequest({
@@ -80,11 +94,13 @@ export function CommunityIndexingRequestDialog({
         channel_id: privateTarget ? target.channelId : null,
         confirm_private_channel_secret_disclosure: privateTarget && confirmed,
       });
+      if (requestVersionRef.current !== requestVersion) return;
       setStatus(response.status);
     } catch (error) {
+      if (requestVersionRef.current !== requestVersion) return;
       setErrorKey(requestErrorKey(error));
     } finally {
-      setPending(false);
+      if (requestVersionRef.current === requestVersion) setPending(false);
     }
   }
 
@@ -109,7 +125,11 @@ export function CommunityIndexingRequestDialog({
             ) : (
               <Label>
                 <span>{t('shell:indexingRequest.nodeLabel')}</span>
-                <Select value={selectedNode} onChange={(event) => setSelectedNode(event.target.value)}>
+                <Select
+                  value={selectedNode}
+                  disabled={pending}
+                  onChange={(event) => selectNode(event.target.value)}
+                >
                   {eligibleNodeBaseUrls.map((baseUrl) => (
                     <option key={baseUrl} value={baseUrl}>{baseUrl}</option>
                   ))}
@@ -124,6 +144,7 @@ export function CommunityIndexingRequestDialog({
                     type='checkbox'
                     className='mt-1 size-4 shrink-0'
                     checked={confirmed}
+                    disabled={pending}
                     onChange={(event) => setConfirmed(event.target.checked)}
                   />
                   <span className='min-w-0'>{t('shell:indexingRequest.privateConfirmation')}</span>

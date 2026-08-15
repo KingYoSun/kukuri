@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
 import type { DesktopApi } from '@/lib/api';
@@ -72,4 +72,190 @@ test('private channel request stays disabled until explicit disclosure confirmat
       confirm_private_channel_secret_disclosure: true,
     })
   );
+  expect(screen.getByRole('checkbox')).not.toBeChecked();
+  expect(submit).toBeDisabled();
+});
+
+test('private confirmation and status reset when the selected node changes', async () => {
+  const submitCommunityNodeIndexingRequest = vi.fn().mockResolvedValue({
+    request_id: 'request-3',
+    status: 'pending',
+  });
+  render(
+    <CommunityIndexingRequestDialog
+      api={{ submitCommunityNodeIndexingRequest } as unknown as DesktopApi}
+      target={{
+        kind: 'private_channel',
+        topicId: 'kukuri:topic:demo',
+        channelId: 'channel-1',
+        channelLabel: 'Core',
+      }}
+      eligibleNodeBaseUrls={['https://index-a.example', 'https://index-b.example']}
+      onOpenChange={vi.fn()}
+      onOpenCommunityNodeSettings={vi.fn()}
+    />
+  );
+
+  const confirmation = screen.getByRole('checkbox');
+  const submit = screen.getByRole('button', { name: 'Submit request' });
+  fireEvent.click(confirmation);
+  fireEvent.click(submit);
+
+  expect(await screen.findByText('The request is pending review.')).toBeInTheDocument();
+  expect(confirmation).not.toBeChecked();
+  expect(submit).toBeDisabled();
+
+  fireEvent.click(confirmation);
+  fireEvent.change(screen.getByLabelText('Community Node'), {
+    target: { value: 'https://index-b.example' },
+  });
+
+  expect(confirmation).not.toBeChecked();
+  expect(submit).toBeDisabled();
+  expect(screen.queryByText('The request is pending review.')).not.toBeInTheDocument();
+
+  fireEvent.click(confirmation);
+  fireEvent.click(submit);
+  await waitFor(() => expect(submitCommunityNodeIndexingRequest).toHaveBeenCalledTimes(2));
+  expect(submitCommunityNodeIndexingRequest).toHaveBeenLastCalledWith(
+    expect.objectContaining({ base_url: 'https://index-b.example' })
+  );
+});
+
+test('failed private request consumes confirmation and node change clears the error', async () => {
+  const submitCommunityNodeIndexingRequest = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('request failed'))
+    .mockResolvedValueOnce({ request_id: 'request-4', status: 'approved' });
+  render(
+    <CommunityIndexingRequestDialog
+      api={{ submitCommunityNodeIndexingRequest } as unknown as DesktopApi}
+      target={{
+        kind: 'private_channel',
+        topicId: 'kukuri:topic:demo',
+        channelId: 'channel-1',
+        channelLabel: 'Core',
+      }}
+      eligibleNodeBaseUrls={['https://index-a.example', 'https://index-b.example']}
+      onOpenChange={vi.fn()}
+      onOpenCommunityNodeSettings={vi.fn()}
+    />
+  );
+
+  const confirmation = screen.getByRole('checkbox');
+  const submit = screen.getByRole('button', { name: 'Submit request' });
+  fireEvent.click(confirmation);
+  fireEvent.click(submit);
+
+  expect(await screen.findByText('The indexing request failed. Please try again later.')).toBeInTheDocument();
+  expect(confirmation).not.toBeChecked();
+  expect(submit).toBeDisabled();
+
+  fireEvent.click(confirmation);
+  fireEvent.change(screen.getByLabelText('Community Node'), {
+    target: { value: 'https://index-b.example' },
+  });
+  expect(confirmation).not.toBeChecked();
+  expect(submit).toBeDisabled();
+  expect(
+    screen.queryByText('The indexing request failed. Please try again later.')
+  ).not.toBeInTheDocument();
+});
+
+test('private confirmation and status reset when the request target changes', async () => {
+  const submitCommunityNodeIndexingRequest = vi.fn().mockResolvedValue({
+    request_id: 'request-5',
+    status: 'approved',
+  });
+  const eligibleNodeBaseUrls = ['https://index.example'];
+  const props = {
+    api: { submitCommunityNodeIndexingRequest } as unknown as DesktopApi,
+    eligibleNodeBaseUrls,
+    onOpenChange: vi.fn(),
+    onOpenCommunityNodeSettings: vi.fn(),
+  };
+  const { rerender } = render(
+    <CommunityIndexingRequestDialog
+      {...props}
+      target={{
+        kind: 'private_channel',
+        topicId: 'kukuri:topic:demo',
+        channelId: 'channel-1',
+        channelLabel: 'Core',
+      }}
+    />
+  );
+
+  const confirmation = screen.getByRole('checkbox');
+  fireEvent.click(confirmation);
+  fireEvent.click(screen.getByRole('button', { name: 'Submit request' }));
+  expect(await screen.findByText('Indexing is approved.')).toBeInTheDocument();
+  fireEvent.click(confirmation);
+
+  rerender(
+    <CommunityIndexingRequestDialog
+      {...props}
+      target={{
+        kind: 'private_channel',
+        topicId: 'kukuri:topic:demo',
+        channelId: 'channel-2',
+        channelLabel: 'Review',
+      }}
+    />
+  );
+
+  expect(screen.getByRole('checkbox')).not.toBeChecked();
+  expect(screen.getByRole('button', { name: 'Submit request' })).toBeDisabled();
+  expect(screen.queryByText('Indexing is approved.')).not.toBeInTheDocument();
+});
+
+test('stale private request result does not overwrite a changed target', async () => {
+  let resolveRequest:
+    | ((value: { request_id: string; status: 'approved' }) => void)
+    | undefined;
+  const response = new Promise<{ request_id: string; status: 'approved' }>((resolve) => {
+    resolveRequest = resolve;
+  });
+  const submitCommunityNodeIndexingRequest = vi.fn().mockReturnValue(response);
+  const eligibleNodeBaseUrls = ['https://index.example'];
+  const props = {
+    api: { submitCommunityNodeIndexingRequest } as unknown as DesktopApi,
+    eligibleNodeBaseUrls,
+    onOpenChange: vi.fn(),
+    onOpenCommunityNodeSettings: vi.fn(),
+  };
+  const { rerender } = render(
+    <CommunityIndexingRequestDialog
+      {...props}
+      target={{
+        kind: 'private_channel',
+        topicId: 'kukuri:topic:demo',
+        channelId: 'channel-1',
+        channelLabel: 'Core',
+      }}
+    />
+  );
+
+  fireEvent.click(screen.getByRole('checkbox'));
+  fireEvent.click(screen.getByRole('button', { name: 'Submit request' }));
+  rerender(
+    <CommunityIndexingRequestDialog
+      {...props}
+      target={{
+        kind: 'private_channel',
+        topicId: 'kukuri:topic:demo',
+        channelId: 'channel-2',
+        channelLabel: 'Review',
+      }}
+    />
+  );
+
+  await act(async () => {
+    resolveRequest?.({ request_id: 'request-6', status: 'approved' });
+    await response;
+  });
+
+  expect(screen.getByText('Target: Review')).toBeInTheDocument();
+  expect(screen.queryByText('Indexing is approved.')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Submit request' })).toBeDisabled();
 });
