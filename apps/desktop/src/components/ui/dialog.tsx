@@ -27,8 +27,9 @@ export const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     hideClose?: boolean;
+    closeLabel?: string;
   }
->(({ className, children, hideClose = false, ...props }, ref) => (
+>(({ className, children, hideClose = false, closeLabel = 'Close dialog', ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -38,7 +39,7 @@ export const DialogContent = React.forwardRef<
     >
       {children}
       {!hideClose ? (
-        <DialogPrimitive.Close className='ui-dialog-close button-ghost' aria-label='Close dialog'>
+        <DialogPrimitive.Close className='ui-dialog-close button-ghost' aria-label={closeLabel}>
           <X className='size-5' aria-hidden='true' />
         </DialogPrimitive.Close>
       ) : null}

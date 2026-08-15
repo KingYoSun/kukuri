@@ -409,7 +409,7 @@ pub async fn submit_community_node_report(
         .runtime
         .submit_community_node_report(request)
         .await
-        .map_err(map_error)
+        .map_err(CommandError::from)
 }
 
 #[tauri::command]

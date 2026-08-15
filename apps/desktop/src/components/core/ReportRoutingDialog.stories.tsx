@@ -68,7 +68,15 @@ const observedUnresolvedPlan: ReportRoutingPlan = {
   candidates: [],
 };
 
-function DialogHarness({ plan, label }: { plan: ReportRoutingPlan; label: string }) {
+function DialogHarness({
+  plan,
+  label,
+  appeal,
+}: {
+  plan: ReportRoutingPlan;
+  label: string;
+  appeal?: { riskSignalId: string; issuerNodeId: string };
+}) {
   const [open, setOpen] = useState(false);
   return (
     <div className='flex flex-col items-center gap-4'>
@@ -80,9 +88,11 @@ function DialogHarness({ plan, label }: { plan: ReportRoutingPlan; label: string
         onOpenChange={setOpen}
         subject={subject}
         plan={plan}
-        onSubmit={async ({ candidate, reason }) => ({
+        appeal={appeal}
+        onSubmit={async ({ candidate, reason, appeal: appealInput }) => ({
           status: 'submitted',
           reference_id: `story-${candidate.target.capability}-${reason}`,
+          disputed_risk_signal_id: appealInput?.risk_signal_id ?? null,
         })}
         onCopyContact={() => {}}
         localActions={
@@ -105,4 +115,33 @@ export const UnknownProvenance: Story = {
 
 export const ObservedButUnresolved: Story = {
   render: () => <DialogHarness plan={observedUnresolvedPlan} label='Report (observed, unresolved)' />,
+};
+
+const appealPlan: ReportRoutingPlan = {
+  provenanceUnknown: false,
+  observedButUnresolved: false,
+  localActionsOnly: false,
+  candidates: [
+    {
+      target: {
+        nodeBaseUrl: 'https://index.kukuri.example',
+        nodeId: 'index-node',
+        capability: 'trust_signal',
+        reportEndpoint: 'https://index.kukuri.example/v1/report',
+        policyUrl: 'https://index.kukuri.example/moderation',
+        authorityScope: ['this_node'],
+      },
+      contact: { kind: 'endpoint', value: 'https://index.kukuri.example/v1/report' },
+    },
+  ],
+};
+
+export const Appeal: Story = {
+  render: () => (
+    <DialogHarness
+      plan={appealPlan}
+      label='異議申し立てを開く'
+      appeal={{ riskSignalId: 'signal-1', issuerNodeId: 'index-node' }}
+    />
+  ),
 };

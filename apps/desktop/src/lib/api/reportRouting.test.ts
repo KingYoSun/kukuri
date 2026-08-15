@@ -4,6 +4,7 @@ import { type ContentProvenance, unknownProvenance } from './provenance';
 import {
   manifestToReportTarget,
   nodeAcceptsReportForCapability,
+  planAppealReportRouting,
   planReportRouting,
   resolveReportTargetsFromManifests,
 } from './reportRouting';
@@ -218,5 +219,33 @@ describe('planReportRouting', () => {
     expect(plan.observedButUnresolved).toBe(true);
     expect(plan.localActionsOnly).toBe(true);
     expect(plan.candidates).toEqual([]);
+  });
+});
+
+describe('planAppealReportRouting', () => {
+  it('routes only to a report endpoint whose node id matches the signal issuer', () => {
+    const plan = planAppealReportRouting('issuer-node', {
+      'https://issuer.example': manifest({ node_id: 'issuer-node' }),
+      'https://other.example': manifest({ node_id: 'other-node' }),
+    });
+
+    expect(plan.candidates).toHaveLength(1);
+    expect(plan.candidates[0].target.nodeId).toBe('issuer-node');
+    expect(plan.candidates[0].target.capability).toBe('trust_signal');
+    expect(plan.candidates[0].contact).toEqual({
+      kind: 'endpoint',
+      value: 'https://node.example/v1/report',
+    });
+  });
+
+  it('does not fall back to contact or a different node when issuer routing is unavailable', () => {
+    const plan = planAppealReportRouting('issuer-node', {
+      'https://issuer.example': manifest({ node_id: 'issuer-node', report_endpoint: '' }),
+      'https://other.example': manifest({ node_id: 'other-node' }),
+    });
+
+    expect(plan.candidates).toEqual([]);
+    expect(plan.observedButUnresolved).toBe(true);
+    expect(plan.localActionsOnly).toBe(true);
   });
 });

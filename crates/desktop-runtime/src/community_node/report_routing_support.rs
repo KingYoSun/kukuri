@@ -1,4 +1,12 @@
 use super::*;
+use std::fmt;
+
+/// 異議申し立ての対象となる、このノード発行のリスク判定。
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct CommunityNodeReportAppeal {
+    pub risk_signal_id: String,
+}
 
 /// 分散通報ルーティング（#310）の通報送信リクエスト。
 ///
@@ -30,7 +38,55 @@ pub struct SubmitCommunityNodeReportRequest {
     /// 任意の通報者連絡先（node が follow-up に使える）。
     #[serde(default)]
     pub reporter_contact: Option<String>,
+    /// リスク判定への異議申し立て。通常の通報では省略する。
+    #[serde(default)]
+    pub appeal: Option<CommunityNodeReportAppeal>,
 }
+
+/// コミュニティノードへの通報送信で返る、機械判定可能な失敗。
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
+pub struct CommunityNodeReportError {
+    pub code: String,
+    pub message: String,
+    pub status: Option<u16>,
+}
+
+impl CommunityNodeReportError {
+    fn new(code: &str, message: impl Into<String>) -> Self {
+        Self {
+            code: code.to_string(),
+            message: message.into(),
+            status: None,
+        }
+    }
+
+    fn from_response(status: StatusCode, body: Option<ApiErrorBody>) -> Self {
+        let fallback_code = match status {
+            StatusCode::NOT_FOUND => "REPORT_NOT_CONFIGURED",
+            StatusCode::BAD_REQUEST => "INVALID_REPORT",
+            StatusCode::TOO_MANY_REQUESTS => "RATE_LIMITED",
+            _ => "REPORT_SUBMISSION_FAILED",
+        };
+        let fallback_message = format!("通報の送信に失敗しました（{status}）");
+        Self {
+            code: body
+                .as_ref()
+                .map_or_else(|| fallback_code.to_string(), |body| body.code.clone()),
+            message: body.map_or(fallback_message, |body| body.message),
+            status: Some(status.as_u16()),
+        }
+    }
+}
+
+impl fmt::Display for CommunityNodeReportError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}: {}", self.code, self.message)
+    }
+}
+
+impl std::error::Error for CommunityNodeReportError {}
 
 /// 通報送信結果の状態。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -50,6 +106,9 @@ pub struct SubmitCommunityNodeReportResult {
     /// node が返した受付参照 ID（任意）。
     #[serde(default)]
     pub reference_id: Option<String>,
+    /// 異議申し立てが受理され、`Disputed` へ移ったリスク判定の識別子。
+    #[serde(default)]
+    pub disputed_risk_signal_id: Option<String>,
 }
 
 /// node の report endpoint へ送る payload。reporter の identity / social graph は
@@ -64,6 +123,8 @@ struct ReportPayload<'a> {
     details: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reporter_contact: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    appeal: Option<&'a CommunityNodeReportAppeal>,
 }
 
 /// node が返し得る受付応答（任意フィールド）。
@@ -71,6 +132,8 @@ struct ReportPayload<'a> {
 struct ReportAck {
     #[serde(default)]
     reference_id: Option<String>,
+    #[serde(default)]
+    disputed_risk_signal_id: Option<String>,
 }
 
 /// report endpoint が POST 可能な http(s) 絶対 URL か検証する。
@@ -97,9 +160,13 @@ impl DesktopRuntime {
     pub(crate) async fn request_community_node_report_submit(
         &self,
         request: &SubmitCommunityNodeReportRequest,
-    ) -> Result<SubmitCommunityNodeReportResult> {
-        let endpoint = validate_report_endpoint(&request.report_endpoint)?;
-        let client = community_node_http_client()?;
+    ) -> Result<SubmitCommunityNodeReportResult, CommunityNodeReportError> {
+        let endpoint = validate_report_endpoint(&request.report_endpoint).map_err(|error| {
+            CommunityNodeReportError::new("INVALID_REPORT_ENDPOINT", error.to_string())
+        })?;
+        let client = community_node_http_client().map_err(|error| {
+            CommunityNodeReportError::new("REPORT_CLIENT_UNAVAILABLE", error.to_string())
+        })?;
         let payload = ReportPayload {
             subject_kind: request.subject_kind.as_str(),
             subject_id: request.subject_id.as_str(),
@@ -107,24 +174,26 @@ impl DesktopRuntime {
             reason: request.reason.as_str(),
             details: request.details.as_deref(),
             reporter_contact: request.reporter_contact.as_deref(),
+            appeal: request.appeal.as_ref(),
         };
         let response = client
             .post(endpoint)
             .json(&payload)
             .send()
             .await
-            .context("failed to submit community node report")?;
-        let response = response
-            .error_for_status()
-            .context("community node report submission failed")?;
-        let reference_id = response
-            .json::<ReportAck>()
-            .await
-            .ok()
-            .and_then(|ack| ack.reference_id);
+            .map_err(|error| {
+                CommunityNodeReportError::new("REPORT_SUBMISSION_FAILED", error.to_string())
+            })?;
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.json::<ApiErrorBody>().await.ok();
+            return Err(CommunityNodeReportError::from_response(status, body));
+        }
+        let ack = response.json::<ReportAck>().await.unwrap_or_default();
         Ok(SubmitCommunityNodeReportResult {
             status: SubmitCommunityNodeReportStatus::Submitted,
-            reference_id,
+            reference_id: ack.reference_id,
+            disputed_risk_signal_id: ack.disputed_risk_signal_id,
         })
     }
 }
@@ -161,11 +230,32 @@ mod tests {
             reason: "spam",
             details: None,
             reporter_contact: None,
+            appeal: None,
         };
         let json = serde_json::to_value(&payload).unwrap();
         assert_eq!(json["subject_kind"], "post");
         assert_eq!(json["capability"], "community_index");
         assert!(json.get("details").is_none());
+        assert!(json.get("reporter_contact").is_none());
+        assert!(json.get("appeal").is_none());
+    }
+
+    #[test]
+    fn report_payload_includes_appeal_without_reporter_identity() {
+        let appeal = CommunityNodeReportAppeal {
+            risk_signal_id: "signal-1".to_string(),
+        };
+        let payload = ReportPayload {
+            subject_kind: "profile",
+            subject_id: "author-pubkey",
+            capability: "trust_signal",
+            reason: "other",
+            details: Some("誤検知として再確認を求めます"),
+            reporter_contact: None,
+            appeal: Some(&appeal),
+        };
+        let json = serde_json::to_value(&payload).unwrap();
+        assert_eq!(json["appeal"]["risk_signal_id"], "signal-1");
         assert!(json.get("reporter_contact").is_none());
     }
 
@@ -185,6 +275,7 @@ mod tests {
         assert_eq!(request.node_base_url, "https://node.example");
         assert_eq!(request.capability, "community_index");
         assert!(request.details.is_none());
+        assert!(request.appeal.is_none());
     }
 
     #[test]
@@ -192,9 +283,11 @@ mod tests {
         let result = SubmitCommunityNodeReportResult {
             status: SubmitCommunityNodeReportStatus::Submitted,
             reference_id: Some("ref-1".to_string()),
+            disputed_risk_signal_id: Some("signal-1".to_string()),
         };
         let json = serde_json::to_value(&result).unwrap();
         assert_eq!(json["status"], "submitted");
         assert_eq!(json["reference_id"], "ref-1");
+        assert_eq!(json["disputed_risk_signal_id"], "signal-1");
     }
 }

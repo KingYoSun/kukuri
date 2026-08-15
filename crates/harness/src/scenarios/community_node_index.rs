@@ -375,6 +375,7 @@ pub(crate) async fn run_community_node_index_query_client(
                             reason: "spam".to_string(),
                             details: None,
                             reporter_contact: None,
+                            appeal: None,
                         })
                         .await?;
                     anyhow::ensure!(

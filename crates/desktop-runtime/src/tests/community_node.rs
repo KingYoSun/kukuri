@@ -3,6 +3,7 @@ mod config;
 mod connectivity;
 mod index_query;
 mod metadata;
+mod report_submission;
 mod scheduler;
 mod session;
 mod trust_relation;

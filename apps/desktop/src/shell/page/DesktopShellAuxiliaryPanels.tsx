@@ -753,13 +753,12 @@ export function DesktopShellDetailPaneStack({
               onCopyReportContact={(value) => void copyTextToClipboard(value)}
               onFetchReportManifest={fetchReportManifest}
               communityNodeAdvisory={
-                selectedAuthorPubkey !== syncStatus.local_author_pubkey ? (
-                  <CommunityNodeAdvisoryPanel
-                    api={api}
-                    targetPubkey={selectedAuthorPubkey}
-                    nodeBaseUrls={communityNodeConfig.nodes.map((node) => node.base_url)}
-                  />
-                ) : null
+                <CommunityNodeAdvisoryPanel
+                  api={api}
+                  targetPubkey={selectedAuthorPubkey}
+                  nodeBaseUrls={communityNodeConfig.nodes.map((node) => node.base_url)}
+                  communityNodeManifests={reportableManifests}
+                />
               }
             />
             <Card className='shell-workspace-card'>

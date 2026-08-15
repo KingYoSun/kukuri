@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
 import { type ReportRoutingPlan } from '@/lib/api/reportRouting';
+import { InvokeError } from '@/lib/api/invoke/error';
 
 import { ReportRoutingDialog, type ReportRoutingSubject } from './ReportRoutingDialog';
 
@@ -102,4 +103,58 @@ test('keeps local actions available when manifest resolution fails', () => {
     screen.getByText('Could not refresh report targets. No default destination will be used.'),
   ).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Mute author' })).toBeInTheDocument();
+});
+
+test('uses the appeal presentation, omits contact, and confirms the disputed signal', async () => {
+  const onSubmitted = vi.fn();
+  const onSubmit = vi.fn().mockResolvedValue({
+    status: 'submitted',
+    reference_id: 'report-1',
+    disputed_risk_signal_id: 'signal-1',
+  });
+  render(
+    <ReportRoutingDialog
+      open
+      onOpenChange={vi.fn()}
+      subject={{ kind: 'profile', id: 'author-pubkey' }}
+      plan={endpointPlan}
+      appeal={{ riskSignalId: 'signal-1', issuerNodeId: 'issuer-node' }}
+      onSubmit={onSubmit}
+      onSubmitted={onSubmitted}
+    />,
+  );
+
+  expect(screen.getByText('リスク判定への異議申し立て')).toBeInTheDocument();
+  expect(screen.queryByLabelText(/contact|連絡先/i)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '異議を申し立てる' }));
+
+  await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+  expect(onSubmit).toHaveBeenCalledWith(
+    expect.objectContaining({
+      reason: 'other',
+      reporterContact: '',
+      appeal: { risk_signal_id: 'signal-1' },
+    }),
+  );
+  expect(await screen.findByText(/受付対象のリスク判定: signal-1/)).toBeInTheDocument();
+  expect(onSubmitted).toHaveBeenCalledTimes(1);
+});
+
+test('shows a stable Japanese message for an invalid appeal', async () => {
+  render(
+    <ReportRoutingDialog
+      open
+      onOpenChange={vi.fn()}
+      subject={{ kind: 'profile', id: 'author-pubkey' }}
+      plan={endpointPlan}
+      appeal={{ riskSignalId: 'signal-1', issuerNodeId: 'issuer-node' }}
+      onSubmit={vi.fn().mockRejectedValue(new InvokeError('INVALID_APPEAL', 'unknown'))}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole('button', { name: '異議を申し立てる' }));
+  expect(
+    await screen.findByText(/対象のリスク判定を確認できないか、すでに解決済みです/),
+  ).toBeInTheDocument();
+  expect(screen.queryByText('unknown')).not.toBeInTheDocument();
 });

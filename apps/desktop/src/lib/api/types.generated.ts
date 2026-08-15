@@ -227,6 +227,10 @@ export type CommunityNodeRelationNeighborsRequest = { base_url: string, limit?: 
 
 export type CommunityNodeTrustRelationError = { code: string, message: string, status?: number | null, };
 
+export type CommunityNodeReportAppeal = { risk_signal_id: string, };
+
+export type CommunityNodeReportError = { code: string, message: string, status?: number | null, };
+
 export type TrustComponentKind = "absolute" | "relative";
 
 export type SafetyCategory = "csam" | "cse" | "grooming" | "nsfw" | "spam" | "malware" | "phishing" | "provider_test";
@@ -287,7 +291,11 @@ details?: string | null,
 /**
  * 任意の通報者連絡先（node が follow-up に使える）。
  */
-reporter_contact?: string | null, };
+reporter_contact?: string | null, 
+/**
+ * リスク判定への異議申し立て。通常の通報では省略する。
+ */
+appeal?: CommunityNodeReportAppeal | null, };
 
 export type SubmitCommunityNodeReportStatus = "submitted";
 
@@ -295,7 +303,11 @@ export type SubmitCommunityNodeReportResult = { status: SubmitCommunityNodeRepor
 /**
  * node が返した受付参照 ID（任意）。
  */
-reference_id?: string | null, };
+reference_id?: string | null, 
+/**
+ * 異議申し立てが受理され、`Disputed` へ移ったリスク判定の識別子。
+ */
+disputed_risk_signal_id?: string | null, };
 
 export type RuntimeEvent = { "type": "notification_status_changed" } | { "type": "sync_status_changed", sync_status?: SyncStatus | null, community_node_statuses?: Array<CommunityNodeNodeStatus> | null, };
 

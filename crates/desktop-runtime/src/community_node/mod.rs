@@ -59,8 +59,8 @@ pub use manifest_support::{
     CommunityNodeManifestFetch, CommunityNodeManifestFetchStatus, CommunityNodeP2pBoundary,
 };
 pub use report_routing_support::{
-    SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
-    SubmitCommunityNodeReportStatus,
+    CommunityNodeReportAppeal, CommunityNodeReportError, SubmitCommunityNodeReportRequest,
+    SubmitCommunityNodeReportResult, SubmitCommunityNodeReportStatus,
 };
 pub(crate) use token_storage_support::*;
 pub use trust_relation_support::{
