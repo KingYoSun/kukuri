@@ -17,6 +17,7 @@ use support::{integration_test_admin_database_url, integration_test_rendezvous_r
 /// report_endpoint capability を有効化した operator config。
 const REPORT_ENABLED_YAML: &str = r#"server:
   domain: example-kukuri.net
+  node_id: issuer-node-1
   operator_name: Example Operator
   country: JP
 features:
@@ -210,6 +211,7 @@ async fn report_endpoint_accepts_appeal_and_disputes_advisory() -> Result<()> {
             "capability": "moderation",
             "reason": "false_positive",
             "details": "this was misclassified",
+            "reporter_contact": "must-not-be-stored@example.com",
             "appeal": { "risk_signal_id": stored.id },
         }))
         .send()
@@ -217,6 +219,15 @@ async fn report_endpoint_accepts_appeal_and_disputes_advisory() -> Result<()> {
     assert_eq!(accepted.status(), StatusCode::OK);
     let body = accepted.json::<serde_json::Value>().await?;
     assert_eq!(body["disputed_risk_signal_id"], stored.id.as_str());
+    let reference_id = body["reference_id"].as_str().expect("reference id");
+    let linked = kukuri_cn_core::get_community_node_report(&pool, reference_id)
+        .await?
+        .expect("linked appeal report");
+    assert_eq!(
+        linked.appeal_risk_signal_id.as_deref(),
+        Some(stored.id.as_str())
+    );
+    assert!(linked.reporter_contact.is_none());
 
     let disputed = kukuri_cn_core::get_risk_signal(&pool, &stored.id)
         .await?
@@ -241,6 +252,43 @@ async fn report_endpoint_accepts_appeal_and_disputes_advisory() -> Result<()> {
     assert_eq!(unknown.status(), StatusCode::BAD_REQUEST);
     let unknown_body = unknown.json::<serde_json::Value>().await?;
     assert_eq!(unknown_body["code"], "INVALID_APPEAL");
+
+    let foreign = kukuri_cn_core::persist_risk_signal(
+        &pool,
+        "another-node",
+        &kukuri_cn_safety::SafetyRiskSignal {
+            target: kukuri_cn_safety::RiskSignalTarget::PostId,
+            target_id: "post-foreign".to_string(),
+            category: kukuri_cn_safety::SafetyCategory::Nsfw,
+            severity: kukuri_cn_safety::Severity::High,
+            basis: kukuri_cn_safety::Basis::ClassifierScore,
+            confidence: Some(80),
+            visibility: kukuri_cn_safety::Visibility::Local,
+            expires_at: None,
+            appeal_status: Some(kukuri_cn_safety::AppealStatus::None),
+        },
+    )
+    .await?;
+    let rejected = client
+        .post(format!("{}/v1/report", server.base_url))
+        .json(&serde_json::json!({
+            "subject_kind": "post",
+            "subject_id": "post-foreign",
+            "capability": "moderation",
+            "reason": "false_positive",
+            "appeal": { "risk_signal_id": foreign.id },
+        }))
+        .send()
+        .await?;
+    assert_eq!(rejected.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        kukuri_cn_core::get_risk_signal(&pool, &foreign.id)
+            .await?
+            .expect("foreign signal")
+            .signal
+            .appeal_status,
+        Some(kukuri_cn_safety::AppealStatus::None)
+    );
 
     server.shutdown().await?;
     Ok(())

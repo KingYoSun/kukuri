@@ -36,6 +36,7 @@ async fn admin_operations_commit_state_and_append_only_audit_together() -> Resul
             reason: "spam".to_string(),
             details: Some("must not enter audit".to_string()),
             reporter_contact: Some("private@example.com".to_string()),
+            appeal_risk_signal_id: None,
         },
     )
     .await?;

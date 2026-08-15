@@ -24,9 +24,16 @@ admin listener では、runtime Postgres が canonical source である次の操
 - admission mode の変更
 - public supported topic の追加・除去
 - 受信済み report の状態変更
+- 異議申し立て中のリスク判定の認容・棄却・検知情報調整・訂正版再発行
 
 各操作は `preview -> confirm -> apply` の二段階にする。apply 時にも入力を再検証し、対象 state の
 変更と append-only audit row の追加を同じ Postgres transaction で commit する。
+
+異議申し立て審査は `COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW` も明示的に有効な場合だけ変更できる。
+異議申し立て通報は対象のリスク判定へ関連付け、同じ判定への複数通報を一つの審査対象として表示する。
+認容は `Disputed` から `Cleared` へ移して関連通報を `actioned` にし、信頼評価への寄与を除外する。
+棄却は `Disputed` から `None` へ戻して関連通報を `dismissed` にし、寄与を維持する。検知情報の
+調整と訂正版再発行は署名済みモデレーション事象と利用者の正本状態を変更しない。
 
 ### Browser から適用しない操作
 
@@ -58,6 +65,8 @@ principal へ置き換えられる。任意 header だけを根拠に actor を�
 - state-changing endpoint は POST のみとし、hidden token の一致を必須にする。
 - preview は変更前後、影響、actor を表示し、apply は明示的な confirm action からのみ到達させる。
 - apply は preview を信用せず、現在値と入力を再取得・再検証する。
+- 異議申し立て審査は preview 時の判定情報と関連通報状態を確認情報に含め、apply 時に一項目でも
+  変化していれば古い確認として拒否する。
 
 ### Audit
 
@@ -70,6 +79,9 @@ principal へ置き換えられる。任意 header だけを根拠に actor を�
 DB trigger で UPDATE / DELETE を拒否する。秘密、credential、report details、reporter contact、
 private channel capability は audit payload に含めない。
 
+異議申し立て審査の操作記録には、判定状態、分類、深刻度、確信度、公開範囲、失効時刻、関連通報の
+識別子と状態だけを変更前後として保存する。申し立て本文、申立者の識別情報、連絡先は保存しない。
+
 ### Feature Data Classification
 
 - Feature 名: Community Node admin operations and audit
@@ -81,8 +93,8 @@ private channel capability は audit payload に含めない。
 - Gossip Hint 必要有無: 不要
 - Blob 必要有無: 不要
 - SQLite projection 必要有無: 不要
-- 必須 contract: actor 未設定 fail-closed、CSRF 拒否、preview と apply の再検証、mutation と audit の transaction 原子性、audit UPDATE / DELETE 拒否、secret 非記録
-- 必須 scenario: Postgres integration で admission / supported topic / report status と audit の同時反映を確認。production は IAP tunnel 経由の read/preview と harmless no-op apply を smoke する
+- 必須 contract: actor 未設定 fail-closed、CSRF 拒否、preview と apply の再検証、異議申し立ての発行元検証、mutation と audit の transaction 原子性、audit UPDATE / DELETE 拒否、secret・申し立て本文・連絡先の非記録
+- 必須 scenario: Postgres integration で admission / supported topic / report status / 異議申し立て審査と audit の同時反映を確認。production は IAP tunnel 経由の read/preview と harmless no-op apply を smoke する
 
 ## Consequences
 

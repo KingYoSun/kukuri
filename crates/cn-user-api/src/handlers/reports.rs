@@ -4,7 +4,8 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use kukuri_cn_core::{
-    ApiError, ApiResult, NewCommunityNodeReport, dispute_risk_signal, insert_community_node_report,
+    ApiError, ApiResult, NewCommunityNodeReport, insert_community_node_appeal,
+    insert_community_node_report,
 };
 use serde::{Deserialize, Serialize};
 
@@ -90,11 +91,30 @@ pub(crate) async fn submit_report(
         ));
     }
 
-    // appeal 参照の検証は report 保存より先に行う（存在しない advisory への申し立てを
-    // 受理済みとして返さない）。遷移は None→Disputed（冪等）。Cleared 済みは拒否。
-    let disputed_risk_signal_id = match request.appeal.as_ref() {
+    let mut report = NewCommunityNodeReport {
+        subject_kind: subject_kind.to_string(),
+        subject_id: subject_id.to_string(),
+        capability: capability.to_string(),
+        reason: reason.to_string(),
+        details: normalize_optional(request.details),
+        reporter_contact: normalize_optional(request.reporter_contact),
+        appeal_risk_signal_id: None,
+    };
+    let (stored, disputed_risk_signal_id) = match request.appeal.as_ref() {
         Some(appeal) => {
             let risk_signal_id = appeal.risk_signal_id.trim();
+            let issuer_node_id = state
+                .manifest
+                .as_ref()
+                .map(|manifest| manifest.node_id.trim())
+                .filter(|value| !value.is_empty());
+            let Some(issuer_node_id) = issuer_node_id else {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "INVALID_APPEAL",
+                    "this community node does not publish an issuer node id",
+                ));
+            };
             if risk_signal_id.is_empty() {
                 return Err(ApiError::new(
                     StatusCode::BAD_REQUEST,
@@ -102,33 +122,30 @@ pub(crate) async fn submit_report(
                     "appeal.risk_signal_id is required",
                 ));
             }
-            let disputed = dispute_risk_signal(&state.pool, risk_signal_id)
-                .await
-                .map_err(|_| {
-                    ApiError::new(
-                        StatusCode::BAD_REQUEST,
-                        "INVALID_APPEAL",
-                        "the referenced moderation advisory cannot be disputed \
-                         (unknown id or already resolved)",
-                    )
-                })?;
-            Some(disputed.id)
+            report.reporter_contact = None;
+            report.appeal_risk_signal_id = Some(risk_signal_id.to_string());
+            let stored =
+                insert_community_node_appeal(&state.pool, issuer_node_id, risk_signal_id, &report)
+                    .await
+                    .map_err(|_| {
+                        ApiError::new(
+                            StatusCode::BAD_REQUEST,
+                            "INVALID_APPEAL",
+                            "the referenced moderation advisory cannot be disputed",
+                        )
+                    })?;
+            (stored, Some(risk_signal_id.to_string()))
         }
-        None => None,
+        None => {
+            let stored = insert_community_node_report(&state.pool, &report)
+                .await
+                .map_err(|source| {
+                    SupportEndpointError::new(SupportEndpointOperation::StoreReport, source)
+                })
+                .map_err(support_endpoint_error)?;
+            (stored, None)
+        }
     };
-
-    let report = NewCommunityNodeReport {
-        subject_kind: subject_kind.to_string(),
-        subject_id: subject_id.to_string(),
-        capability: capability.to_string(),
-        reason: reason.to_string(),
-        details: normalize_optional(request.details),
-        reporter_contact: normalize_optional(request.reporter_contact),
-    };
-    let stored = insert_community_node_report(&state.pool, &report)
-        .await
-        .map_err(|source| SupportEndpointError::new(SupportEndpointOperation::StoreReport, source))
-        .map_err(support_endpoint_error)?;
     Ok(Json(SubmitReportResponse {
         reference_id: stored.id,
         disputed_risk_signal_id,
