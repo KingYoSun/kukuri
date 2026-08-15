@@ -295,6 +295,7 @@ admin_actor = "ops@kukuri.app"
 - admission mode変更
 - public supported topic追加・除去
 - report status変更（received / reviewing / actioned / dismissed）
+- 異議申し立て中のリスク判定の認容・棄却・検知情報調整・訂正版再発行
 
 すべて `Preview` でactor・target・impactを確認し、次画面の `Confirm and apply` で確定する。apply時に
 入力と現在値を再検証し、state変更と `cn_admin.operator_actions` audit rowを同じtransactionでcommitする。
@@ -303,6 +304,20 @@ admin_actor = "ops@kukuri.app"
 `cn_admin.operator_actions` はDB triggerでUPDATE / DELETEを拒否する。auditにはprovider credential、
 report details、reporter contact、private channel secretを含めない。actor未設定時はread-only表示になり、
 write endpointは503でfail-closedする。
+
+異議申し立て審査の変更操作には `COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW=true` も必要である。無効時は
+申し立て内容と対象のリスク判定を参照できるが、操作欄は参照専用になる。同じリスク判定へ複数の
+申し立てが届いても、一覧では一つの審査対象にまとめて表示する。
+
+- 認容: `Disputed` から `Cleared` へ移し、関連通報を `actioned` にする。次回の信頼評価から寄与を除外する。
+- 棄却: `Disputed` から `None` へ戻し、関連通報を `dismissed` にする。信頼評価への寄与は維持する。
+- 検知情報調整: 分類、深刻度、確信度、失効時刻を変更する。異議申し立ては審査中のままにする。
+- 訂正版再発行: 旧判定を失効させ、公開範囲を含む訂正版を新規発行する。異議申し立ては審査中のままにする。
+
+確認画面を開いた後で判定または関連通報が変化した場合、適用は拒否される。画面を読み直し、現在値を
+確認してから再度適用する。適用失敗時は、対象のリスク判定、関連通報、`cn_admin.operator_actions` を
+照合する。操作記録が無ければ同じ取引内の変更も確定していない。操作記録があるのに状態が一致しない
+場合は追加操作を行わず、Postgres のバックアップを確保して障害として調査する。
 
 次はbrowserから変更しない。reviewed `operator-config.yaml` / Terraform / Secret Manager /
 `cn-cli readiness`の既存workflowを使う。

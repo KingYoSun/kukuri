@@ -8,7 +8,7 @@
 //! reporter の identity / social graph は node-independent であり保持しない。明示的に入力された
 //! 連絡先（任意）のみ保存する。
 
-use anyhow::Result;
+use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
@@ -30,6 +30,8 @@ pub struct CommunityNodeReport {
     pub details: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reporter_contact: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub appeal_risk_signal_id: Option<String>,
     pub status: String,
     pub created_at: DateTime<Utc>,
 }
@@ -43,6 +45,7 @@ pub struct NewCommunityNodeReport {
     pub reason: String,
     pub details: Option<String>,
     pub reporter_contact: Option<String>,
+    pub appeal_risk_signal_id: Option<String>,
 }
 
 /// 受信した通報を保存し、受付参照 ID を含むレコードを返す。
@@ -53,9 +56,11 @@ pub async fn insert_community_node_report(
     let id = Uuid::new_v4().to_string();
     let row = sqlx::query(
         "INSERT INTO cn_admin.reports
-            (id, subject_kind, subject_id, capability, reason, details, reporter_contact, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         RETURNING id, subject_kind, subject_id, capability, reason, details, reporter_contact, status, created_at",
+            (id, subject_kind, subject_id, capability, reason, details, reporter_contact,
+             appeal_risk_signal_id, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         RETURNING id, subject_kind, subject_id, capability, reason, details, reporter_contact,
+                   appeal_risk_signal_id, status, created_at",
     )
     .bind(&id)
     .bind(&input.subject_kind)
@@ -64,10 +69,85 @@ pub async fn insert_community_node_report(
     .bind(&input.reason)
     .bind(&input.details)
     .bind(&input.reporter_contact)
+    .bind(&input.appeal_risk_signal_id)
     .bind(COMMUNITY_NODE_REPORT_STATUS_RECEIVED)
     .fetch_one(pool)
     .await?;
     report_from_row(&row)
+}
+
+/// この node が発行したリスク判定への異議申し立てを、状態遷移と通報保存を一体で受理する。
+pub async fn insert_community_node_appeal(
+    pool: &PgPool,
+    issuer_node_id: &str,
+    risk_signal_id: &str,
+    input: &NewCommunityNodeReport,
+) -> Result<CommunityNodeReport> {
+    let issuer_node_id = issuer_node_id.trim();
+    if issuer_node_id.is_empty() {
+        bail!("community node issuer id must not be empty");
+    }
+    let risk_signal_id = risk_signal_id.trim();
+    if risk_signal_id.is_empty() {
+        bail!("appeal risk signal id must not be empty");
+    }
+
+    let mut tx = pool.begin().await?;
+    let row = sqlx::query(
+        "SELECT issuer_node_id, target_id, COALESCE(appeal_status, 'none') AS appeal_status
+         FROM cn_safety.risk_signals
+         WHERE id = $1
+         FOR UPDATE",
+    )
+    .bind(risk_signal_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .with_context(|| format!("risk signal `{risk_signal_id}` was not found"))?;
+    let stored_issuer: String = row.try_get("issuer_node_id")?;
+    if stored_issuer != issuer_node_id {
+        bail!("risk signal `{risk_signal_id}` was not issued by this community node");
+    }
+    let stored_target_id: String = row.try_get("target_id")?;
+    if stored_target_id != input.subject_id {
+        bail!("appeal subject does not match risk signal `{risk_signal_id}`");
+    }
+    let appeal_status: String = row.try_get("appeal_status")?;
+    match appeal_status.as_str() {
+        "none" => {
+            sqlx::query(
+                "UPDATE cn_safety.risk_signals SET appeal_status = 'disputed' WHERE id = $1",
+            )
+            .bind(risk_signal_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+        "disputed" => {}
+        "cleared" => bail!("risk signal `{risk_signal_id}` is already cleared"),
+        other => bail!("risk signal `{risk_signal_id}` has invalid appeal status `{other}`"),
+    }
+
+    let id = Uuid::new_v4().to_string();
+    let row = sqlx::query(
+        "INSERT INTO cn_admin.reports
+            (id, subject_kind, subject_id, capability, reason, details, reporter_contact,
+             appeal_risk_signal_id, status)
+         VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $8)
+         RETURNING id, subject_kind, subject_id, capability, reason, details, reporter_contact,
+                   appeal_risk_signal_id, status, created_at",
+    )
+    .bind(&id)
+    .bind(&input.subject_kind)
+    .bind(&input.subject_id)
+    .bind(&input.capability)
+    .bind(&input.reason)
+    .bind(&input.details)
+    .bind(risk_signal_id)
+    .bind(COMMUNITY_NODE_REPORT_STATUS_RECEIVED)
+    .fetch_one(&mut *tx)
+    .await?;
+    let report = report_from_row(&row)?;
+    tx.commit().await?;
+    Ok(report)
 }
 
 /// 受信した通報を新着順で取得する（運営者の確認用）。
@@ -77,7 +157,8 @@ pub async fn list_community_node_reports(
     offset: i64,
 ) -> Result<Vec<CommunityNodeReport>> {
     let rows = sqlx::query(
-        "SELECT id, subject_kind, subject_id, capability, reason, details, reporter_contact, status, created_at
+        "SELECT id, subject_kind, subject_id, capability, reason, details, reporter_contact,
+                appeal_risk_signal_id, status, created_at
          FROM cn_admin.reports
          ORDER BY created_at DESC
          LIMIT $1 OFFSET $2",
@@ -95,7 +176,8 @@ pub async fn get_community_node_report(
     id: &str,
 ) -> Result<Option<CommunityNodeReport>> {
     let row = sqlx::query(
-        "SELECT id, subject_kind, subject_id, capability, reason, details, reporter_contact, status, created_at
+        "SELECT id, subject_kind, subject_id, capability, reason, details, reporter_contact,
+                appeal_risk_signal_id, status, created_at
          FROM cn_admin.reports
          WHERE id = $1",
     )
@@ -114,6 +196,7 @@ fn report_from_row(row: &PgRow) -> Result<CommunityNodeReport> {
         reason: row.try_get("reason")?,
         details: row.try_get("details")?,
         reporter_contact: row.try_get("reporter_contact")?,
+        appeal_risk_signal_id: row.try_get("appeal_risk_signal_id")?,
         status: row.try_get("status")?,
         created_at: row.try_get("created_at")?,
     })

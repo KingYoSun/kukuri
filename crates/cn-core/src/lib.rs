@@ -12,6 +12,7 @@
 //! 該当する場合だけ本 crate へ足す(「何でも入る受け皿」に戻さない。WP-B10)。
 
 mod admission;
+mod appeal_reviews;
 mod auth;
 mod bootstrap;
 mod co_participation;
@@ -43,6 +44,10 @@ pub use admission::{
     InviteCodeSummary, add_allowlist, ban_subscriber, invite_code_hash, issue_invite_code,
     list_allowlist, list_banned, list_invite_codes, load_admission_config, remove_allowlist,
     revoke_invite_code, set_admission_mode, unban_subscriber,
+};
+pub use appeal_reviews::{
+    AppealReview, AppealReviewOperation, AppealReviewReport, AppealReviewVersion,
+    apply_appeal_review_action, get_appeal_review, list_appeal_reviews,
 };
 pub use auth::{
     create_auth_challenge, require_bearer_identity, require_bearer_pubkey,
@@ -102,7 +107,8 @@ pub use relation_optouts::{
 pub use rendezvous::TopicRendezvousStore;
 pub use reports::{
     COMMUNITY_NODE_REPORT_STATUS_RECEIVED, CommunityNodeReport, NewCommunityNodeReport,
-    get_community_node_report, insert_community_node_report, list_community_node_reports,
+    get_community_node_report, insert_community_node_appeal, insert_community_node_report,
+    list_community_node_reports,
 };
 pub use rollout::{ensure_default_auth_rollout, load_auth_rollout, store_auth_rollout};
 pub use safety_appeals::{

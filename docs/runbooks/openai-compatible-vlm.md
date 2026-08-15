@@ -81,7 +81,11 @@ cargo test -p kukuri-cn-safety-vlm --test live_endpoint -- --ignored --nocapture
 
 - user / client からの異議申し立ては `POST /v1/report` の `appeal.risk_signal_id` で届き、
   対象 advisory が `disputed` になる。
-- レビューは `cn-cli moderation` で行う:
+- 通常のレビューは、IAP 内のコミュニティノード運営画面で行う。変更操作には
+  `COMMUNITY_NODE_ADMIN_ACTOR` と `COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW=true` の両方が必要である。
+  認容・棄却・検知情報調整・訂正版再発行は、確認画面を経てリスク判定、関連通報、操作記録を
+  一つの Postgres 取引で確定する。
+- 障害調査や運営画面へ接続できない場合は `cn-cli moderation` で状態を確認できる:
 
 ```bash
 cn-cli moderation list-signals
