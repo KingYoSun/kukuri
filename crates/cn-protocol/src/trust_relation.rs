@@ -1,6 +1,8 @@
 //! trust / relation の共有 wire 契約。
 
-pub use kukuri_cn_safety::{AppealStatus, Basis, SafetyCategory, Severity, Visibility};
+pub use kukuri_cn_safety::{
+    AppealStatus, Basis, RiskSignalTarget, SafetyCategory, Severity, Visibility,
+};
 use serde::{Deserialize, Serialize};
 
 /// risk signal category の trust 成分振り分け先。
@@ -19,6 +21,8 @@ pub enum TrustComponentKind {
 pub struct TrustBasisEntry {
     pub signal_id: String,
     pub issuer_node_id: String,
+    pub target: RiskSignalTarget,
+    pub target_id: String,
     pub component: TrustComponentKind,
     pub category: SafetyCategory,
     pub severity: Severity,

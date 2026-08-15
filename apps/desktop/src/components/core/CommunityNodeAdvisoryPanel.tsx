@@ -18,7 +18,11 @@ import {
   type TrustRelationUnavailableReason,
 } from '@/lib/api/trustRelationPresentation';
 
-import { ReportRoutingDialog, type ReportSubmitInput } from './ReportRoutingDialog';
+import {
+  ReportRoutingDialog,
+  type ReportRoutingSubject,
+  type ReportSubmitInput,
+} from './ReportRoutingDialog';
 
 type ReadState<T> =
   | { status: 'idle' | 'loading'; value: null; reason: null; message: null }
@@ -38,6 +42,17 @@ function resultState<T>(result: PromiseSettledResult<T>): ReadState<T> {
     reason: trustRelationUnavailableReason(result.reason),
     message: trustRelationErrorMessage(result.reason),
   };
+}
+
+function appealSubjectForBasis(basis: TrustBasisEntry): ReportRoutingSubject | null {
+  switch (basis.target) {
+    case 'user_pubkey':
+      return { kind: 'profile', id: basis.target_id };
+    case 'post_id':
+      return { kind: 'post', id: basis.target_id };
+    default:
+      return null;
+  }
 }
 
 function continuous(value: number): string {
@@ -110,14 +125,15 @@ export function CommunityNodeAdvisoryPanel({
   }
 
   async function submitAppeal(input: ReportSubmitInput) {
-    if (!input.appeal || input.candidate.contact.kind !== 'endpoint') {
+    const subject = appealBasis ? appealSubjectForBasis(appealBasis) : null;
+    if (!input.appeal || input.candidate.contact.kind !== 'endpoint' || !subject) {
       throw new Error(t('profile:communityNodeAdvisory.appeal.unresolvedBody'));
     }
     return api.submitCommunityNodeReport({
       node_base_url: input.candidate.target.nodeBaseUrl,
       report_endpoint: input.candidate.contact.value,
-      subject_kind: 'profile',
-      subject_id: targetPubkey,
+      subject_kind: subject.kind,
+      subject_id: subject.id,
       capability: input.candidate.target.capability,
       reason: 'other',
       details: input.details.trim() || null,
@@ -195,6 +211,7 @@ export function CommunityNodeAdvisoryPanel({
                     <div><dt className='inline font-medium'>{t('profile:communityNodeAdvisory.basisLabels.confidence')}: </dt><dd className='inline'>{basis.confidence == null ? '—' : continuous(basis.confidence)}</dd></div>
                     <div><dt className='inline font-medium'>{t('profile:communityNodeAdvisory.basisLabels.visibility')}: </dt><dd className='inline'>{basis.visibility}</dd></div>
                     <div><dt className='inline font-medium'>{t('profile:communityNodeAdvisory.basisLabels.appealStatus')}: </dt><dd className='inline'>{t(`profile:communityNodeAdvisory.appeal.status.${basis.appeal_status}`)}</dd></div>
+                    <div><dt className='inline font-medium'>{t('profile:communityNodeAdvisory.basisLabels.target')}: </dt><dd className='inline'>{t(`profile:communityNodeAdvisory.appeal.target.${basis.target}`)} · {basis.target_id}</dd></div>
                     <div><dt className='inline font-medium'>{t('profile:communityNodeAdvisory.basisLabels.expiresAt')}: </dt><dd className='inline'>{basis.expires_at ?? '—'}</dd></div>
                     <div><dt className='inline font-medium'>{t('profile:communityNodeAdvisory.basisLabels.decayFactor')}: </dt><dd className='inline'>{continuous(basis.decay_factor)}</dd></div>
                     <div><dt className='inline font-medium'>{t('profile:communityNodeAdvisory.basisLabels.relationWeight')}: </dt><dd className='inline'>{continuous(basis.relation_weight)}</dd></div>
@@ -206,9 +223,13 @@ export function CommunityNodeAdvisoryPanel({
                         <p className='text-xs text-[var(--muted-foreground)]'>
                           {t('profile:communityNodeAdvisory.appeal.noneContribution')}
                         </p>
-                        <Button type='button' variant='secondary' onClick={() => setAppealBasis(basis)}>
-                          {t('profile:communityNodeAdvisory.appeal.action')}
-                        </Button>
+                        {appealSubjectForBasis(basis) ? (
+                          <Button type='button' variant='secondary' onClick={() => setAppealBasis(basis)}>
+                            {t('profile:communityNodeAdvisory.appeal.action')}
+                          </Button>
+                        ) : (
+                          <Notice>{t('profile:communityNodeAdvisory.appeal.unsupportedTarget')}</Notice>
+                        )}
                       </>
                     ) : basis.appeal_status === 'disputed' ? (
                       <Notice>{t('profile:communityNodeAdvisory.appeal.disputedContribution')}</Notice>
@@ -257,13 +278,13 @@ export function CommunityNodeAdvisoryPanel({
         <Notice>{unavailableCopy(neighbors)}</Notice>
       ) : null}
 
-      {appealBasis && appealPlan ? (
+      {appealBasis && appealPlan && appealSubjectForBasis(appealBasis) ? (
         <ReportRoutingDialog
           open
           onOpenChange={(open) => {
             if (!open) setAppealBasis(null);
           }}
-          subject={{ kind: 'profile', id: targetPubkey }}
+          subject={appealSubjectForBasis(appealBasis)!}
           plan={appealPlan}
           appeal={{
             riskSignalId: appealBasis.signal_id,

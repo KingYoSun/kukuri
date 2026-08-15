@@ -8,8 +8,12 @@ import { CommunityNodeAdvisoryPanel } from './CommunityNodeAdvisoryPanel';
 
 const targetPubkey = 'a'.repeat(64);
 
-function api() {
-  let appealStatus: 'none' | 'disputed' = 'none';
+function api(
+  signalTarget: 'user_pubkey' | 'post_id' = 'user_pubkey',
+  signalTargetId = targetPubkey,
+  initialAppealStatus: 'none' | 'disputed' | 'cleared' = 'none'
+) {
+  let appealStatus: 'none' | 'disputed' | 'cleared' = initialAppealStatus;
   return {
     readCommunityNodeTrustUser: vi.fn(async () => ({
       viewer_pubkey: 'viewer',
@@ -23,6 +27,8 @@ function api() {
         {
           signal_id: 'signal-1',
           issuer_node_id: 'node-a',
+          target: signalTarget,
+          target_id: signalTargetId,
           component: 'relative' as const,
           category: 'spam' as const,
           severity: 'low' as const,
@@ -148,6 +154,8 @@ describe('CommunityNodeAdvisoryPanel', () => {
       expect.objectContaining({
         node_base_url: 'https://node.example',
         report_endpoint: 'https://node.example/v1/report',
+        subject_kind: 'profile',
+        subject_id: targetPubkey,
         capability: 'trust_signal',
         reporter_contact: null,
         appeal: { risk_signal_id: 'signal-1' },
@@ -156,5 +164,54 @@ describe('CommunityNodeAdvisoryPanel', () => {
     expect(await screen.findByText(/受付対象のリスク判定: signal-1/)).toBeInTheDocument();
     expect(client.readCommunityNodeTrustUser).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('button', { name: '異議を申し立てる' })).not.toBeInTheDocument();
+  });
+
+  test('uses the original post target when appealing a post risk judgment', async () => {
+    const client = api('post_id', 'post-appealed');
+    render(
+      <CommunityNodeAdvisoryPanel
+        api={client}
+        targetPubkey={targetPubkey}
+        nodeBaseUrls={['https://node.example']}
+        communityNodeManifests={communityNodeManifests}
+      />
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(await screen.findByText(/node-a/));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'このリスク判定に異議を申し立てる' })
+    );
+    await userEvent.click(screen.getByRole('button', { name: '異議を申し立てる' }));
+
+    expect(client.submitCommunityNodeReport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subject_kind: 'post',
+        subject_id: 'post-appealed',
+        appeal: { risk_signal_id: 'signal-1' },
+      })
+    );
+  });
+
+  test('shows a cleared post judgment as resolved without another appeal action', async () => {
+    const client = api('post_id', 'post-cleared', 'cleared');
+    render(
+      <CommunityNodeAdvisoryPanel
+        api={client}
+        targetPubkey={targetPubkey}
+        nodeBaseUrls={['https://node.example']}
+        communityNodeManifests={communityNodeManifests}
+      />
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(await screen.findByText(/node-a/));
+
+    expect(screen.getByText('認容済み')).toBeInTheDocument();
+    expect(screen.getByText(/評価への寄与から除外されています/)).toBeInTheDocument();
+    expect(screen.getByText(/投稿 · post-cleared/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'このリスク判定に異議を申し立てる' })
+    ).not.toBeInTheDocument();
   });
 });

@@ -203,7 +203,9 @@ async fn operator_review_revalidates_and_commits_state_reports_and_audit_togethe
         );
         let trust =
             list_trust_risk_inputs(&pool, RiskSignalTarget::UserPubkey, "alice", NOW).await?;
-        assert!(trust.absolute.is_empty() && trust.relative.is_empty());
+        assert!(trust.absolute.is_empty());
+        assert_eq!(trust.relative.len(), 1);
+        assert_eq!(trust.relative[0].appeal_status, AppealStatus::Cleared);
 
         let rejected =
             persist_risk_signal(&pool, ISSUER, &signal("bob", AppealStatus::None)).await?;

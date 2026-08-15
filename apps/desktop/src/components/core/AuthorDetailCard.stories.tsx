@@ -26,6 +26,8 @@ const advisoryApi = {
         {
           signal_id: 'story-signal',
           issuer_node_id: 'community.example.com',
+          target: 'user_pubkey' as const,
+          target_id: request.target_pubkey,
           component: 'relative' as const,
           category: 'spam' as const,
           severity: 'low' as const,
@@ -50,6 +52,29 @@ const advisoryApi = {
       status: 'submitted' as const,
       reference_id: 'story-report',
       disputed_risk_signal_id: request.appeal?.risk_signal_id ?? null,
+    };
+  },
+};
+
+const clearedPostAdvisoryApi = {
+  ...advisoryApi,
+  async readCommunityNodeTrustUser(request: { target_pubkey: string }) {
+    const view = await advisoryApi.readCommunityNodeTrustUser(request);
+    return {
+      ...view,
+      absolute: 0,
+      relative: 0,
+      trust: 0,
+      basis: [
+        {
+          ...view.basis[0],
+          signal_id: 'story-cleared-post-signal',
+          target: 'post_id' as const,
+          target_id: 'post-cleared-by-operator',
+          appeal_status: 'cleared' as const,
+          contribution: 0,
+        },
+      ],
     };
   },
 };
@@ -106,6 +131,25 @@ export const CommunityNodeAdvisory: Story = {
     communityNodeAdvisory: (
       <CommunityNodeAdvisoryPanel
         api={advisoryApi}
+        targetPubkey={authorDetailView.author?.author_pubkey ?? 'a'.repeat(64)}
+        nodeBaseUrls={['https://community.example.com']}
+        communityNodeManifests={advisoryManifests}
+      />
+    ),
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Load advisory' }));
+    await userEvent.click(await canvas.findByText(/community\.example\.com · spam · low/));
+    canvasElement.ownerDocument.defaultView?.scrollTo(0, 0);
+  },
+};
+
+export const CommunityNodeClearedPostAdvisory: Story = {
+  args: {
+    communityNodeAdvisory: (
+      <CommunityNodeAdvisoryPanel
+        api={clearedPostAdvisoryApi}
         targetPubkey={authorDetailView.author?.author_pubkey ?? 'a'.repeat(64)}
         nodeBaseUrls={['https://community.example.com']}
         communityNodeManifests={advisoryManifests}

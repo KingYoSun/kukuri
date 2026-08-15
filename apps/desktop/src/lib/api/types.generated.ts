@@ -243,7 +243,9 @@ export type Visibility = "local" | "subscribed_nodes" | "public";
 
 export type AppealStatus = "none" | "disputed" | "cleared";
 
-export type TrustBasisEntry = { signal_id: string, issuer_node_id: string, component: TrustComponentKind, category: SafetyCategory, severity: Severity, basis: Basis, confidence?: number | null, visibility: Visibility, appeal_status: AppealStatus, expires_at?: string | null, raw_contribution: number, decay_factor: number, relation_weight: number, contribution: number, };
+export type RiskSignalTarget = "user_pubkey" | "peer_node" | "post_id" | "blob_cid";
+
+export type TrustBasisEntry = { signal_id: string, issuer_node_id: string, target: RiskSignalTarget, target_id: string, component: TrustComponentKind, category: SafetyCategory, severity: Severity, basis: Basis, confidence?: number | null, visibility: Visibility, appeal_status: AppealStatus, expires_at?: string | null, raw_contribution: number, decay_factor: number, relation_weight: number, contribution: number, };
 
 export type TrustReadView = { target_id: string, absolute: number, relative: number, trust: number, w_abs_applied: number, computed_at: string, basis: Array<TrustBasisEntry>, };
 

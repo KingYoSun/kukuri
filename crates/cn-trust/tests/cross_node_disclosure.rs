@@ -2,7 +2,9 @@
 
 use chrono::{DateTime, Utc};
 
-use kukuri_cn_safety::{AppealStatus, Basis, SafetyCategory, Severity, Visibility};
+use kukuri_cn_safety::{
+    AppealStatus, Basis, RiskSignalTarget, SafetyCategory, Severity, Visibility,
+};
 use kukuri_cn_trust::{
     PullAudience, TrustComponentKind, TrustRiskInput, TrustRiskInputs, cross_node_trust_disclosure,
 };
@@ -24,6 +26,8 @@ fn input(
     TrustRiskInput {
         signal_id: id.to_string(),
         issuer_node_id: "issuer-node".to_string(),
+        target: RiskSignalTarget::UserPubkey,
+        target_id: "pubkey-1".to_string(),
         component,
         category,
         severity: Severity::Critical,

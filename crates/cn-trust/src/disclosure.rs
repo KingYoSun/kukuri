@@ -14,7 +14,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use kukuri_cn_safety::{Basis, Visibility};
+use kukuri_cn_safety::{AppealStatus, Basis, Visibility};
 
 use crate::inputs::{TrustComponentKind, TrustRiskInput, TrustRiskInputs};
 use crate::params::TrustParams;
@@ -45,6 +45,9 @@ pub struct CrossNodeTrustDisclosure {
 
 /// 入力 1 件が `audience` へ開示可能か（§6.3 の全条件）。
 fn disclosable(input: &TrustRiskInput, audience: PullAudience) -> bool {
+    if input.appeal_status == AppealStatus::Cleared {
+        return false;
+    }
     // 絶対成分のみ（相対成分・relation は node-local に閉じる）。
     if input.component != TrustComponentKind::Absolute {
         return false;

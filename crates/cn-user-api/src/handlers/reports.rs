@@ -7,7 +7,7 @@ use kukuri_cn_core::{
     ApiError, ApiResult, NewCommunityNodeReport, insert_community_node_appeal,
     insert_community_node_report,
 };
-use serde::{Deserialize, Serialize};
+use kukuri_cn_protocol::{CommunityNodeReportRequest, CommunityNodeReportResponse};
 
 use crate::errors::{SupportEndpointError, SupportEndpointOperation, support_endpoint_error};
 use crate::state::UserApiState;
@@ -18,39 +18,6 @@ use crate::state::UserApiState;
 /// `appeal` を伴う通報は、この node が発行した moderation advisory(risk signal)への
 /// 異議申し立て(#420)。issuer node への申し立て導線は専用 endpoint を新設せず、
 /// report routing が既に候補化している report endpoint を再利用する。
-#[derive(Debug, Default, Deserialize)]
-pub(crate) struct SubmitReportRequest {
-    #[serde(default)]
-    subject_kind: String,
-    #[serde(default)]
-    subject_id: String,
-    #[serde(default)]
-    capability: String,
-    #[serde(default)]
-    reason: String,
-    #[serde(default)]
-    details: Option<String>,
-    #[serde(default)]
-    reporter_contact: Option<String>,
-    #[serde(default)]
-    appeal: Option<AppealReference>,
-}
-
-/// 異議申し立ての対象参照(この node が発行した advisory の id)。
-#[derive(Debug, Deserialize)]
-pub(crate) struct AppealReference {
-    #[serde(default)]
-    risk_signal_id: String,
-}
-
-#[derive(Debug, Serialize)]
-pub(crate) struct SubmitReportResponse {
-    reference_id: String,
-    /// appeal を受理した場合、`Disputed` へ遷移した risk signal の id。
-    #[serde(skip_serializing_if = "Option::is_none")]
-    disputed_risk_signal_id: Option<String>,
-}
-
 /// 通報を受信して保存する(#370)。unauthenticated で受け付ける(匿名通報を許す)。
 ///
 /// 受付可否は「この node が report_endpoint capability を有効化しているか」で判断する。これが
@@ -59,8 +26,8 @@ pub(crate) struct SubmitReportResponse {
 /// この node が関与した範囲に絞られている。reporter の identity / social graph は保持しない。
 pub(crate) async fn submit_report(
     State(state): State<UserApiState>,
-    Json(request): Json<SubmitReportRequest>,
-) -> ApiResult<Json<SubmitReportResponse>> {
+    Json(request): Json<CommunityNodeReportRequest>,
+) -> ApiResult<Json<CommunityNodeReportResponse>> {
     // report endpoint capability が無効な node は通報を受け付けない。
     let report_enabled = state
         .manifest
@@ -146,8 +113,8 @@ pub(crate) async fn submit_report(
             (stored, None)
         }
     };
-    Ok(Json(SubmitReportResponse {
-        reference_id: stored.id,
+    Ok(Json(CommunityNodeReportResponse {
+        reference_id: Some(stored.id),
         disputed_risk_signal_id,
     }))
 }

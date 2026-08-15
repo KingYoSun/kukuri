@@ -15,11 +15,18 @@ use crate::score::{
     RelationWeighting, clamp_unit, compose_trust, contributes, decay_factor, signal_contribution,
 };
 
-fn basis_entry(input: &TrustRiskInput, decay: f64, relation_weight: f64) -> TrustBasisEntry {
+fn basis_entry(
+    input: &TrustRiskInput,
+    decay: f64,
+    relation_weight: f64,
+    included: bool,
+) -> TrustBasisEntry {
     let raw = signal_contribution(input);
     TrustBasisEntry {
         signal_id: input.signal_id.clone(),
         issuer_node_id: input.issuer_node_id.clone(),
+        target: input.target,
+        target_id: input.target_id.clone(),
         component: input.component,
         category: input.category,
         severity: input.severity,
@@ -31,7 +38,11 @@ fn basis_entry(input: &TrustRiskInput, decay: f64, relation_weight: f64) -> Trus
         raw_contribution: raw,
         decay_factor: decay,
         relation_weight,
-        contribution: raw * decay * relation_weight,
+        contribution: if included {
+            raw * decay * relation_weight
+        } else {
+            0.0
+        },
     }
 }
 
@@ -53,24 +64,28 @@ pub fn build_trust_read(
 
     let mut absolute_sum = 0.0;
     for input in &inputs.absolute {
-        if !contributes(input) || input.component != TrustComponentKind::Absolute {
+        if input.component != TrustComponentKind::Absolute {
             continue;
         }
         // 絶対成分は relation 非依存（重み 1.0 固定）かつ減衰しない（decay 1.0 固定）。
-        let entry = basis_entry(input, 1.0, 1.0);
-        absolute_sum += entry.contribution;
+        let entry = basis_entry(input, 1.0, 1.0, contributes(input));
+        if contributes(input) {
+            absolute_sum += entry.contribution;
+        }
         basis.push(entry);
     }
 
     let mut relative_sum = 0.0;
     for input in &inputs.relative {
-        if !contributes(input) || input.component != TrustComponentKind::Relative {
+        if input.component != TrustComponentKind::Relative {
             continue;
         }
         let decay = decay_factor(input.persisted_at, now, params.relative_half_life_days);
         let weight = relation_weighting.weight_for(input).clamp(0.0, 1.0);
-        let entry = basis_entry(input, decay, weight);
-        relative_sum += entry.contribution;
+        let entry = basis_entry(input, decay, weight, contributes(input));
+        if contributes(input) {
+            relative_sum += entry.contribution;
+        }
         basis.push(entry);
     }
 

@@ -5,10 +5,16 @@
 //! node での拒否（404）を再現する。Postgres を要するため `KUKURI_CN_RUN_INTEGRATION_TESTS=1` で gate する。
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use kukuri_cn_core::{JwtConfig, TestDatabase};
-use kukuri_cn_user_api::{UserApiConfig, app_router, build_state};
+use kukuri_cn_core::{
+    AppealReviewOperation, JwtConfig, TestDatabase, apply_appeal_review_action, get_appeal_review,
+};
+use kukuri_cn_protocol::{CommunityNodeReportAppeal, CommunityNodeReportRequest};
+use kukuri_cn_trust::{MemoryRelationStore, TrustParams};
+use kukuri_cn_user_api::{TrustReadState, UserApiConfig, app_router, build_state};
+use kukuri_core::{KukuriKeys, generate_keys};
 use reqwest::{Client, StatusCode};
 
 mod support;
@@ -44,6 +50,24 @@ struct TestServer {
 
 impl TestServer {
     async fn spawn(admin_database_url: &str, prefix: &str, operator_yaml: &str) -> Result<Self> {
+        Self::spawn_inner(admin_database_url, prefix, operator_yaml, None).await
+    }
+
+    async fn spawn_with_trust(
+        admin_database_url: &str,
+        prefix: &str,
+        operator_yaml: &str,
+        trust: Arc<TrustReadState>,
+    ) -> Result<Self> {
+        Self::spawn_inner(admin_database_url, prefix, operator_yaml, Some(trust)).await
+    }
+
+    async fn spawn_inner(
+        admin_database_url: &str,
+        prefix: &str,
+        operator_yaml: &str,
+        trust: Option<Arc<TrustReadState>>,
+    ) -> Result<Self> {
         use std::io::Write;
 
         let database = TestDatabase::create(admin_database_url, prefix).await?;
@@ -61,7 +85,7 @@ impl TestServer {
             .context("failed to bind test report listener")?;
         let addr = listener.local_addr()?;
         let base_url = format!("http://{addr}");
-        let state = build_state(&UserApiConfig {
+        let mut state = build_state(&UserApiConfig {
             bind_addr: addr,
             database_url: database.database_url.clone(),
             rendezvous_redis_url: integration_test_rendezvous_redis_url(),
@@ -79,6 +103,9 @@ impl TestServer {
             readiness_activation_max_age_secs: 3600,
         })
         .await?;
+        if let Some(trust) = trust {
+            state = state.with_trust_read(trust);
+        }
         let app = app_router(state);
         let task = tokio::spawn(async move {
             axum::serve(
@@ -100,6 +127,42 @@ impl TestServer {
         self.task.abort();
         self.database.cleanup().await
     }
+}
+
+async fn authenticate_and_consent(
+    client: &Client,
+    base_url: &str,
+    keys: &KukuriKeys,
+) -> Result<String> {
+    let challenge = client
+        .post(format!("{base_url}/v1/auth/challenge"))
+        .json(&serde_json::json!({ "pubkey": keys.public_key_hex() }))
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<kukuri_cn_protocol::AuthChallengeResponse>()
+        .await?;
+    let auth_envelope_json =
+        kukuri_cn_protocol::build_auth_envelope_json(keys, challenge.challenge.as_str(), base_url)?;
+    let verify = client
+        .post(format!("{base_url}/v1/auth/verify"))
+        .json(&serde_json::json!({
+            "auth_envelope_json": auth_envelope_json,
+            "endpoint_id": "appeal-test-peer",
+        }))
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<kukuri_cn_protocol::AuthVerifyResponse>()
+        .await?;
+    client
+        .post(format!("{base_url}/v1/consents"))
+        .bearer_auth(verify.access_token.as_str())
+        .json(&serde_json::json!({ "policy_slugs": [] }))
+        .send()
+        .await?
+        .error_for_status()?;
+    Ok(verify.access_token)
 }
 
 #[tokio::test]
@@ -203,6 +266,22 @@ async fn report_endpoint_accepts_appeal_and_disputes_advisory() -> Result<()> {
     )
     .await?;
 
+    // 判定識別子と対象識別子だけが一致しても、元の対象種別と異なる申立ては拒否する。
+    let wrong_kind = client
+        .post(format!("{}/v1/report", server.base_url))
+        .json(&serde_json::json!({
+            "subject_kind": "profile",
+            "subject_id": "post-appealed",
+            "capability": "moderation",
+            "reason": "false_positive",
+            "appeal": { "risk_signal_id": stored.id },
+        }))
+        .send()
+        .await?;
+    assert_eq!(wrong_kind.status(), StatusCode::BAD_REQUEST);
+    let wrong_kind_body = wrong_kind.json::<serde_json::Value>().await?;
+    assert_eq!(wrong_kind_body["code"], "INVALID_APPEAL");
+
     let accepted = client
         .post(format!("{}/v1/report", server.base_url))
         .json(&serde_json::json!({
@@ -236,6 +315,36 @@ async fn report_endpoint_accepts_appeal_and_disputes_advisory() -> Result<()> {
         disputed.signal.appeal_status,
         Some(kukuri_cn_safety::AppealStatus::Disputed)
     );
+
+    // 利用者対象の判定はプロフィールを対象として受理する。
+    let user_signal = kukuri_cn_core::persist_risk_signal(
+        &pool,
+        "issuer-node-1",
+        &kukuri_cn_safety::SafetyRiskSignal {
+            target: kukuri_cn_safety::RiskSignalTarget::UserPubkey,
+            target_id: "author-pubkey".to_string(),
+            category: kukuri_cn_safety::SafetyCategory::Spam,
+            severity: kukuri_cn_safety::Severity::Medium,
+            basis: kukuri_cn_safety::Basis::ClassifierScore,
+            confidence: Some(80),
+            visibility: kukuri_cn_safety::Visibility::Local,
+            expires_at: None,
+            appeal_status: Some(kukuri_cn_safety::AppealStatus::None),
+        },
+    )
+    .await?;
+    let accepted_user = client
+        .post(format!("{}/v1/report", server.base_url))
+        .json(&serde_json::json!({
+            "subject_kind": "profile",
+            "subject_id": "author-pubkey",
+            "capability": "moderation",
+            "reason": "false_positive",
+            "appeal": { "risk_signal_id": user_signal.id },
+        }))
+        .send()
+        .await?;
+    assert_eq!(accepted_user.status(), StatusCode::OK);
 
     // 存在しない advisory への appeal は 400 で拒否し、report も保存しない。
     let unknown = client
@@ -292,6 +401,114 @@ async fn report_endpoint_accepts_appeal_and_disputes_advisory() -> Result<()> {
 
     server.shutdown().await?;
     Ok(())
+}
+
+#[tokio::test]
+async fn post_appeal_acceptance_is_visible_after_trust_refetch() -> Result<()> {
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api report test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let trust = Arc::new(TrustReadState {
+        params: TrustParams::default(),
+        relation: Arc::new(MemoryRelationStore::new()),
+    });
+    let server = TestServer::spawn_with_trust(
+        admin_database_url.as_str(),
+        "cn_user_api_appeal_refetch",
+        REPORT_ENABLED_YAML,
+        trust,
+    )
+    .await?;
+    let pool = kukuri_cn_core::connect_postgres(server.database.database_url.as_str()).await?;
+    let client = Client::new();
+    let viewer = generate_keys();
+    let author = generate_keys();
+    let author_pubkey = author.public_key_hex();
+    let token = authenticate_and_consent(&client, server.base_url.as_str(), &viewer).await?;
+    let stored = kukuri_cn_core::persist_risk_signal_with_author(
+        &pool,
+        "issuer-node-1",
+        &kukuri_cn_safety::SafetyRiskSignal {
+            target: kukuri_cn_safety::RiskSignalTarget::PostId,
+            target_id: "post-appeal-refetch".to_string(),
+            category: kukuri_cn_safety::SafetyCategory::Csam,
+            severity: kukuri_cn_safety::Severity::Critical,
+            basis: kukuri_cn_safety::Basis::KnownHashMatch,
+            confidence: Some(100),
+            visibility: kukuri_cn_safety::Visibility::Local,
+            expires_at: None,
+            appeal_status: Some(kukuri_cn_safety::AppealStatus::None),
+        },
+        Some(author_pubkey.as_str()),
+    )
+    .await?;
+    let trust_url = format!("{}/v1/trust/users/{author_pubkey}", server.base_url);
+    let before = client
+        .get(trust_url.as_str())
+        .bearer_auth(token.as_str())
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    assert!(before["absolute"].as_f64().is_some_and(|value| value < 0.0));
+    assert_eq!(before["basis"][0]["target"], "post_id");
+    assert_eq!(before["basis"][0]["target_id"], "post-appeal-refetch");
+
+    let appeal = CommunityNodeReportRequest {
+        subject_kind: "post".to_string(),
+        subject_id: "post-appeal-refetch".to_string(),
+        capability: "moderation".to_string(),
+        reason: "false_positive".to_string(),
+        details: Some("誤判定として再確認を求めます".to_string()),
+        reporter_contact: None,
+        appeal: Some(CommunityNodeReportAppeal {
+            risk_signal_id: stored.id.clone(),
+        }),
+    };
+    let submitted = client
+        .post(format!("{}/v1/report", server.base_url))
+        .json(&appeal)
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<kukuri_cn_protocol::CommunityNodeReportResponse>()
+        .await?;
+    assert_eq!(
+        submitted.disputed_risk_signal_id.as_deref(),
+        Some(stored.id.as_str())
+    );
+
+    let expected = get_appeal_review(&pool, stored.id.as_str())
+        .await?
+        .expect("appeal review")
+        .version();
+    apply_appeal_review_action(
+        &pool,
+        "ops@kukuri.app",
+        stored.id.as_str(),
+        &AppealReviewOperation::Accept { expected },
+        true,
+    )
+    .await?;
+
+    let after = client
+        .get(trust_url)
+        .bearer_auth(token)
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    assert_eq!(after["absolute"].as_f64(), Some(0.0));
+    assert_eq!(after["trust"].as_f64(), Some(0.0));
+    assert_eq!(after["basis"][0]["signal_id"], stored.id);
+    assert_eq!(after["basis"][0]["target"], "post_id");
+    assert_eq!(after["basis"][0]["appeal_status"], "cleared");
+    assert_eq!(after["basis"][0]["contribution"].as_f64(), Some(0.0));
+
+    server.shutdown().await
 }
 
 #[tokio::test]

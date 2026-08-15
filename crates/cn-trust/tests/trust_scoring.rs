@@ -4,7 +4,9 @@
 
 use chrono::{DateTime, Duration, Utc};
 
-use kukuri_cn_safety::{AppealStatus, Basis, SafetyCategory, Severity, Visibility};
+use kukuri_cn_safety::{
+    AppealStatus, Basis, RiskSignalTarget, SafetyCategory, Severity, Visibility,
+};
 use kukuri_cn_trust::{
     TrustComponentKind, TrustParams, TrustRiskInput, TrustRiskInputs, UniformRelationWeight,
     build_trust_read, compose_trust, trust_component_for,
@@ -28,6 +30,8 @@ fn input(
     TrustRiskInput {
         signal_id: id.to_string(),
         issuer_node_id: "issuer-node".to_string(),
+        target: RiskSignalTarget::UserPubkey,
+        target_id: "pubkey-1".to_string(),
         component,
         category,
         severity,
@@ -376,8 +380,7 @@ fn trust_appeal_pending_holds_contribution() {
 
 #[test]
 fn trust_appeal_accepted_excludes_contribution() {
-    // accepted（Cleared）は供給層で除外されるが、万一 scoring まで届いても寄与させない
-    // （defense in depth）。
+    // accepted（Cleared）は説明用根拠に残すが、評価値へは寄与させない。
     let mut cleared = csam_input("sig-cleared", now());
     cleared.appeal_status = AppealStatus::Cleared;
     let view = build_trust_read(
@@ -391,7 +394,9 @@ fn trust_appeal_accepted_excludes_contribution() {
         &UniformRelationWeight::default(),
     );
     assert_eq!(view.absolute, 0.0);
-    assert!(view.basis.is_empty(), "除外された signal は根拠にも出ない");
+    assert_eq!(view.basis.len(), 1);
+    assert_eq!(view.basis[0].appeal_status, AppealStatus::Cleared);
+    assert_eq!(view.basis[0].contribution, 0.0);
 }
 
 // --- 根拠つき read（trust-semantics §4） ---

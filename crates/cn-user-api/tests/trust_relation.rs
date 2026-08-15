@@ -14,12 +14,12 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use kukuri_cn_core::{
-    JwtConfig, NewCommunityNodeReport, TestDatabase, connect_postgres,
-    insert_community_node_report, persist_risk_signal,
+    JwtConfig, NewCommunityNodeReport, TestDatabase, connect_postgres, dispute_risk_signal,
+    insert_community_node_report, persist_risk_signal, update_risk_signal_appeal_status,
 };
 use kukuri_cn_protocol::build_auth_envelope_json;
 use kukuri_cn_safety::{
-    Basis, RiskSignalTarget, SafetyCategory, SafetyRiskSignal, Severity, Visibility,
+    AppealStatus, Basis, RiskSignalTarget, SafetyCategory, SafetyRiskSignal, Severity, Visibility,
 };
 use kukuri_cn_trust::{
     EdgeFeatures, FEATURE_SHARED_TOPICS, MemoryRelationStore, RelationStore, TrustParams,
@@ -342,6 +342,60 @@ async fn trust_read_returns_components_with_basis_and_ignores_reports() -> Resul
     assert_eq!(after["absolute"], body["absolute"]);
     assert_eq!(after["relative"], body["relative"]);
     assert_eq!(after["trust"], body["trust"]);
+
+    server.shutdown().await
+}
+
+#[tokio::test]
+async fn trust_read_keeps_cleared_basis_with_zero_contribution() -> Result<()> {
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api trust read test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let (trust, _relation) = memory_trust_state();
+    let server = TestServer::spawn(
+        admin_database_url.as_str(),
+        "cn_trust_read_cleared",
+        Some(trust),
+    )
+    .await?;
+    let pool = connect_postgres(server.database.database_url.as_str()).await?;
+    let client = Client::new();
+    let viewer_keys = generate_keys();
+    let token = authenticate_and_consent(&client, server.base_url.as_str(), &viewer_keys).await?;
+    let target = generate_keys().public_key_hex();
+    let stored = persist_risk_signal(
+        &pool,
+        "issuer-node",
+        &risk_signal(
+            target.as_str(),
+            SafetyCategory::Nsfw,
+            Severity::High,
+            Basis::ClassifierScore,
+            Visibility::Local,
+        ),
+    )
+    .await?;
+    dispute_risk_signal(&pool, stored.id.as_str()).await?;
+    update_risk_signal_appeal_status(&pool, stored.id.as_str(), AppealStatus::Cleared).await?;
+
+    let body = client
+        .get(format!("{}/v1/trust/users/{target}", server.base_url))
+        .bearer_auth(token)
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    assert_eq!(body["relative"].as_f64(), Some(0.0));
+    assert_eq!(body["trust"].as_f64(), Some(0.0));
+    let basis = body["basis"].as_array().expect("basis");
+    assert_eq!(basis.len(), 1);
+    assert_eq!(basis[0]["signal_id"], stored.id);
+    assert_eq!(basis[0]["target"], "user_pubkey");
+    assert_eq!(basis[0]["target_id"], target);
+    assert_eq!(basis[0]["appeal_status"], "cleared");
+    assert_eq!(basis[0]["contribution"].as_f64(), Some(0.0));
 
     server.shutdown().await
 }

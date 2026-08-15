@@ -219,6 +219,9 @@ foundation（#409 / PR #414）が残した §6 の未決事項を #416 で決定
   - `pending`: 該当 signal の寄与を**据え置き**（申し立て中に勝手に緩めない）。
   - `accepted`: 該当 signal の寄与を**除外**して再計算する。
   - `rejected`: 確定寄与のまま維持する。
+- ノード内の利用者向け取得は、`accepted` に対応する `Cleared` の判定を実効寄与 0 の
+  説明用 `basis` として残す。これにより利用者は審査結果を再取得できる。評価値と別ノード向け取得
+  には寄与させず、失効済み判定は従来どおり返さない。
 
 ### 6.3 visibility / cross-node 開示（pull 型）・opt-out・private channel（Decision）
 

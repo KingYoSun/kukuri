@@ -182,4 +182,6 @@ general route も同じ閾値に従う（score / confidence を持つ検知の�
   `Disputed → None`（棄却）のみ。operator レビュー（メタデータ編集 / 訂正再発行）は
   `safety.moderation.operator_review`（env `COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW`）の
   明示的有効化が必要。運用は `cn-cli moderation` コマンド。
+- `Cleared` はノード内の利用者向け信頼評価取得に実効寄与 0 の `basis` として残し、利用者が
+  審査結果を再取得できるようにする。評価計算と別ノード向け取得からは除外する。
 - 署名済み moderation event は不変（是正は risk signal 側）。

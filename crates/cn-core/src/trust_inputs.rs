@@ -17,14 +17,14 @@
 //! appeal の反映（ADR 0026 §6.2。code の `AppealStatus` は ADR の語彙と次の対応）:
 //! - `Disputed`（= ADR の `pending`）: 寄与を**据え置き**。入力に含めたまま返す
 //!   （申し立て中に勝手に緩めない）。
-//! - `Cleared`（= ADR の `accepted`）: 寄与を**除外**。入力に含めない。
+//! - `Cleared`（= ADR の `accepted`）: 評価への寄与を**除外**し、端末向け説明用に状態を同伴する。
 //! - `None`: 確定寄与（ADR の `rejected` 相当を含む、異議が立っていない状態）。
 
 use anyhow::{Context, Result};
 use chrono::DateTime;
 use sqlx::PgPool;
 
-use kukuri_cn_safety::{AppealStatus, RiskSignalTarget};
+use kukuri_cn_safety::RiskSignalTarget;
 // 型（TrustComponentKind / TrustRiskInput / TrustRiskInputs / trust_component_for）は
 // pure domain の cn-trust（#415）へ移した。本 module は永続化 risk signal からの
 // 組み立て（供給契約）のみを担う。
@@ -38,7 +38,8 @@ use crate::safety_events::{
 ///
 /// - `expires_at` が `now_rfc3339` 時点で失効した signal は除外する（`expires_at` が無い signal は
 ///   無期限で残る。相対成分の半減期 decay 本体は #415）。
-/// - `AppealStatus::Cleared`（= accepted）は寄与除外。`Disputed`（= pending）は据え置きで含む。
+/// - `AppealStatus::Cleared`（= accepted）は状態を保持し、評価層で寄与ゼロにする。
+///   `Disputed`（= pending）は寄与据え置きで含む。
 /// - category は [`trust_component_for`] で絶対 / 相対へ振り分ける。
 ///
 /// 不正な RFC3339（`now_rfc3339` / `expires_at`）は Err（黙って含めたり落としたりしない）。
@@ -66,15 +67,12 @@ pub fn trust_risk_inputs_from(
         }
 
         let appeal_status = signal.appeal_status.unwrap_or_default();
-        if appeal_status == AppealStatus::Cleared {
-            // accepted された異議は寄与から除外する（ADR 0026 §6.2）。
-            continue;
-        }
-
         let component = trust_component_for(signal.category);
         let input = TrustRiskInput {
             signal_id: stored.id.clone(),
             issuer_node_id: stored.issuer_node_id.clone(),
+            target: signal.target,
+            target_id: signal.target_id.clone(),
             component,
             category: signal.category,
             severity: signal.severity,

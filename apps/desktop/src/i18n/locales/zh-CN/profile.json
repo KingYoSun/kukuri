@@ -11,6 +11,7 @@
       "confidence": "確信度",
       "visibility": "公開範囲",
       "appealStatus": "異議申し立ての状態",
+      "target": "判定対象",
       "expiresAt": "失効時刻",
       "decayFactor": "時間減衰",
       "relationWeight": "関係の重み",
@@ -20,7 +21,17 @@
       "action": "このリスク判定に異議を申し立てる",
       "title": "リスク判定への異議申し立て",
       "description": "リスク判定を発行したコミュニティノードへ再確認を求めます。",
-      "subjectProfile": "プロフィールに関するリスク判定",
+      "subject": {
+        "profile": "プロフィールに関するリスク判定",
+        "post": "投稿に関するリスク判定"
+      },
+      "target": {
+        "user_pubkey": "プロフィール",
+        "post_id": "投稿",
+        "peer_node": "接続先ノード",
+        "blob_cid": "添付"
+      },
+      "unsupportedTarget": "この種類のリスク判定は、現在の画面から異議申し立てできません。",
       "targetsHeading": "送信先",
       "capability": "リスク判定の発行元",
       "endpoint": "ノードの通報受付先へ送信",

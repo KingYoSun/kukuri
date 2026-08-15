@@ -151,10 +151,11 @@ async fn appeal_cleared_propagates_and_reverts_trust_contribution() -> Result<()
             .expect("cleared advisory keeps distributing the correction");
         assert_eq!(found.signal.appeal_status, Some(AppealStatus::Cleared));
 
-        // trust 寄与の戻し: 供給層が Cleared を除外する（絶対成分への負寄与が消える）。
+        // trust 寄与の戻し: Cleared を説明用に残し、評価層が負の寄与をゼロにする。
         let inputs =
             list_trust_risk_inputs(&pool, RiskSignalTarget::BlobCid, "pubkey-target", NOW).await?;
-        assert!(inputs.absolute.is_empty());
+        assert_eq!(inputs.absolute.len(), 1);
+        assert_eq!(inputs.absolute[0].appeal_status, AppealStatus::Cleared);
         assert!(inputs.relative.is_empty());
 
         Ok::<(), anyhow::Error>(())

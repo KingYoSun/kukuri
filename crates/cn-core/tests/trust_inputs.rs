@@ -189,8 +189,10 @@ fn cleared_appeal_excludes_contribution() {
         stored_signal("sig-kept", SafetyCategory::Csam, None, None),
     ];
     let inputs = trust_risk_inputs_from(&signals, NOW).unwrap();
-    assert_eq!(inputs.absolute.len(), 1);
-    assert_eq!(inputs.absolute[0].signal_id, "sig-kept");
+    assert_eq!(inputs.absolute.len(), 2);
+    assert_eq!(inputs.absolute[0].signal_id, "sig-cleared");
+    assert_eq!(inputs.absolute[0].appeal_status, AppealStatus::Cleared);
+    assert_eq!(inputs.absolute[1].signal_id, "sig-kept");
 }
 
 #[test]
