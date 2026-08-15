@@ -52,11 +52,21 @@ test('public and private indexing requests expose status and require private dis
   await settingsDialog.getByRole('button', { name: 'Request indexing' }).click();
   requestDialog = page.getByRole('dialog', { name: 'Request Community Node indexing' });
   const submit = requestDialog.getByRole('button', { name: 'Submit request' });
+  const confirmation = requestDialog.getByRole('checkbox', {
+    name: /I agree to disclose this channel's read capability/,
+  });
   await expect(submit).toBeDisabled();
-  await requestDialog
-    .getByRole('checkbox', { name: /I agree to disclose this channel's read capability/ })
-    .check();
+  await confirmation.check();
   await expect(submit).toBeEnabled();
   await submit.click();
   await expect(requestDialog.getByText('The request is pending review.')).toBeVisible();
+  await expect(confirmation).not.toBeChecked();
+  await expect(submit).toBeDisabled();
+
+  await confirmation.check();
+  await expect(submit).toBeEnabled();
+  await submit.click();
+  await expect(requestDialog.getByText('The request is pending review.')).toBeVisible();
+  await expect(confirmation).not.toBeChecked();
+  await expect(submit).toBeDisabled();
 });
