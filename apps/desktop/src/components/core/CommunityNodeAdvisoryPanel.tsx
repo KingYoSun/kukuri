@@ -1,19 +1,24 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
 import type {
   DesktopApi,
+  CommunityNodeManifest,
   RelationNeighborsResponse,
   RelationReadResponse,
+  TrustBasisEntry,
   TrustUserReadResponse,
 } from '@/lib/api';
+import { planAppealReportRouting } from '@/lib/api/reportRouting';
 import {
   trustRelationErrorMessage,
   trustRelationUnavailableReason,
   type TrustRelationUnavailableReason,
 } from '@/lib/api/trustRelationPresentation';
+
+import { ReportRoutingDialog, type ReportSubmitInput } from './ReportRoutingDialog';
 
 type ReadState<T> =
   | { status: 'idle' | 'loading'; value: null; reason: null; message: null }
@@ -45,21 +50,33 @@ export type CommunityNodeAdvisoryPanelProps = {
     | 'readCommunityNodeTrustUser'
     | 'readCommunityNodeRelationUser'
     | 'listCommunityNodeRelationNeighbors'
+    | 'submitCommunityNodeReport'
   >;
   targetPubkey: string;
   nodeBaseUrls: string[];
+  communityNodeManifests: Readonly<Record<string, CommunityNodeManifest>>;
 };
 
 export function CommunityNodeAdvisoryPanel({
   api,
   targetPubkey,
   nodeBaseUrls,
+  communityNodeManifests,
 }: CommunityNodeAdvisoryPanelProps) {
   const { t } = useTranslation(['profile', 'common']);
   const [baseUrl, setBaseUrl] = useState(nodeBaseUrls[0] ?? '');
   const [trust, setTrust] = useState<ReadState<TrustUserReadResponse>>(IDLE_STATE);
   const [relation, setRelation] = useState<ReadState<RelationReadResponse>>(IDLE_STATE);
   const [neighbors, setNeighbors] = useState<ReadState<RelationNeighborsResponse>>(IDLE_STATE);
+  const [appealBasis, setAppealBasis] = useState<TrustBasisEntry | null>(null);
+
+  const appealPlan = useMemo(
+    () =>
+      appealBasis
+        ? planAppealReportRouting(appealBasis.issuer_node_id, communityNodeManifests)
+        : null,
+    [appealBasis, communityNodeManifests],
+  );
 
   useEffect(() => {
     if (!nodeBaseUrls.includes(baseUrl)) setBaseUrl(nodeBaseUrls[0] ?? '');
@@ -90,6 +107,23 @@ export function CommunityNodeAdvisoryPanel({
   function unavailableCopy(state: Extract<ReadState<unknown>, { status: 'unavailable' }>) {
     if (state.reason === 'other') return state.message;
     return t(`profile:communityNodeAdvisory.errors.${state.reason}`);
+  }
+
+  async function submitAppeal(input: ReportSubmitInput) {
+    if (!input.appeal || input.candidate.contact.kind !== 'endpoint') {
+      throw new Error(t('profile:communityNodeAdvisory.appeal.unresolvedBody'));
+    }
+    return api.submitCommunityNodeReport({
+      node_base_url: input.candidate.target.nodeBaseUrl,
+      report_endpoint: input.candidate.contact.value,
+      subject_kind: 'profile',
+      subject_id: targetPubkey,
+      capability: input.candidate.target.capability,
+      reason: 'other',
+      details: input.details.trim() || null,
+      reporter_contact: null,
+      appeal: input.appeal,
+    });
   }
 
   return (
@@ -157,15 +191,33 @@ export function CommunityNodeAdvisoryPanel({
                     {basis.issuer_node_id} · {basis.category} · {basis.severity}
                   </summary>
                   <dl className='mt-3 space-y-1 break-all text-[var(--muted-foreground)]'>
-                    <div><dt className='inline font-medium'>basis: </dt><dd className='inline'>{basis.basis}</dd></div>
-                    <div><dt className='inline font-medium'>confidence: </dt><dd className='inline'>{basis.confidence == null ? '—' : continuous(basis.confidence)}</dd></div>
-                    <div><dt className='inline font-medium'>visibility: </dt><dd className='inline'>{basis.visibility}</dd></div>
-                    <div><dt className='inline font-medium'>appeal_status: </dt><dd className='inline'>{basis.appeal_status}</dd></div>
-                    <div><dt className='inline font-medium'>expires_at: </dt><dd className='inline'>{basis.expires_at ?? '—'}</dd></div>
-                    <div><dt className='inline font-medium'>decay_factor: </dt><dd className='inline'>{continuous(basis.decay_factor)}</dd></div>
-                    <div><dt className='inline font-medium'>relation_weight: </dt><dd className='inline'>{continuous(basis.relation_weight)}</dd></div>
-                    <div><dt className='inline font-medium'>contribution: </dt><dd className='inline'>{continuous(basis.contribution)}</dd></div>
+                    <div><dt className='inline font-medium'>{t('profile:communityNodeAdvisory.basisLabels.basis')}: </dt><dd className='inline'>{basis.basis}</dd></div>
+                    <div><dt className='inline font-medium'>{t('profile:communityNodeAdvisory.basisLabels.confidence')}: </dt><dd className='inline'>{basis.confidence == null ? '—' : continuous(basis.confidence)}</dd></div>
+                    <div><dt className='inline font-medium'>{t('profile:communityNodeAdvisory.basisLabels.visibility')}: </dt><dd className='inline'>{basis.visibility}</dd></div>
+                    <div><dt className='inline font-medium'>{t('profile:communityNodeAdvisory.basisLabels.appealStatus')}: </dt><dd className='inline'>{t(`profile:communityNodeAdvisory.appeal.status.${basis.appeal_status}`)}</dd></div>
+                    <div><dt className='inline font-medium'>{t('profile:communityNodeAdvisory.basisLabels.expiresAt')}: </dt><dd className='inline'>{basis.expires_at ?? '—'}</dd></div>
+                    <div><dt className='inline font-medium'>{t('profile:communityNodeAdvisory.basisLabels.decayFactor')}: </dt><dd className='inline'>{continuous(basis.decay_factor)}</dd></div>
+                    <div><dt className='inline font-medium'>{t('profile:communityNodeAdvisory.basisLabels.relationWeight')}: </dt><dd className='inline'>{continuous(basis.relation_weight)}</dd></div>
+                    <div><dt className='inline font-medium'>{t('profile:communityNodeAdvisory.basisLabels.contribution')}: </dt><dd className='inline'>{continuous(basis.contribution)}</dd></div>
                   </dl>
+                  <div className='mt-3 space-y-2'>
+                    {basis.appeal_status === 'none' ? (
+                      <>
+                        <p className='text-xs text-[var(--muted-foreground)]'>
+                          {t('profile:communityNodeAdvisory.appeal.noneContribution')}
+                        </p>
+                        <Button type='button' variant='secondary' onClick={() => setAppealBasis(basis)}>
+                          {t('profile:communityNodeAdvisory.appeal.action')}
+                        </Button>
+                      </>
+                    ) : basis.appeal_status === 'disputed' ? (
+                      <Notice>{t('profile:communityNodeAdvisory.appeal.disputedContribution')}</Notice>
+                    ) : (
+                      <Notice tone='accent'>
+                        {t('profile:communityNodeAdvisory.appeal.clearedContribution')}
+                      </Notice>
+                    )}
+                  </div>
                 </details>
               ))}
             </div>
@@ -203,6 +255,25 @@ export function CommunityNodeAdvisoryPanel({
         </section>
       ) : neighbors.status === 'unavailable' ? (
         <Notice>{unavailableCopy(neighbors)}</Notice>
+      ) : null}
+
+      {appealBasis && appealPlan ? (
+        <ReportRoutingDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setAppealBasis(null);
+          }}
+          subject={{ kind: 'profile', id: targetPubkey }}
+          plan={appealPlan}
+          appeal={{
+            riskSignalId: appealBasis.signal_id,
+            issuerNodeId: appealBasis.issuer_node_id,
+          }}
+          onSubmit={submitAppeal}
+          onSubmitted={async () => {
+            await loadAdvisory();
+          }}
+        />
       ) : null}
     </section>
   );

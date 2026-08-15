@@ -419,7 +419,7 @@ impl DesktopRuntime {
     pub async fn submit_community_node_report(
         &self,
         request: SubmitCommunityNodeReportRequest,
-    ) -> Result<SubmitCommunityNodeReportResult> {
+    ) -> Result<SubmitCommunityNodeReportResult, CommunityNodeReportError> {
         self.request_community_node_report_submit(&request).await
     }
 

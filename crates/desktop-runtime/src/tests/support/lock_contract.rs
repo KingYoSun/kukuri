@@ -19,6 +19,11 @@ const LOCK_CLASSIFICATION: &[(&str, &str, usize)] = &[
     ("community_node/connectivity.rs", "IrohNetwork", 6),
     ("community_node/index_query.rs", "CommunityNodeServer", 8),
     ("community_node/metadata.rs", "CommunityNodeServer", 9),
+    (
+        "community_node/report_submission.rs",
+        "CommunityNodeServer",
+        2,
+    ),
     ("community_node/scheduler.rs", "CommunityNodeServer", 5),
     ("community_node/session.rs", "CommunityNodeServer", 6),
     ("community_node/trust_relation.rs", "CommunityNodeServer", 2),
@@ -95,7 +100,7 @@ fn lock_acquisitions_match_declared_classification() {
     );
     let total: usize = expected.values().sum();
     assert_eq!(
-        total, 70,
+        total, 72,
         "classification total drifted from the Q7 T6 baseline"
     );
 }

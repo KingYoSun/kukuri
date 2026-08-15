@@ -45,6 +45,37 @@ const advisoryApi = {
   async listCommunityNodeRelationNeighbors() {
     return { viewer_pubkey: 'story-viewer', neighbors: ['c'.repeat(64)] };
   },
+  async submitCommunityNodeReport(request: { appeal?: { risk_signal_id: string } | null }) {
+    return {
+      status: 'submitted' as const,
+      reference_id: 'story-report',
+      disputed_risk_signal_id: request.appeal?.risk_signal_id ?? null,
+    };
+  },
+};
+
+const advisoryManifests = {
+  'https://community.example.com': {
+    node_id: 'community.example.com',
+    node_name: 'コミュニティノード',
+    node_role: 'community-node',
+    server_name: 'community.example.com',
+    manifest_version: 'v1',
+    capability_scope: { available_enabled: ['trust_signal'], planned_enabled: [] },
+    authority_scope: { applies_to: ['this_node'], does_not_apply_to: [] },
+    p2p_boundary: {
+      identity_authority: false,
+      profile_canonical_store: false,
+      social_graph_canonical_store: false,
+      content_truth_source: false,
+      network_wide_authority: false,
+    },
+    abuse_contact: '',
+    report_endpoint: 'https://community.example.com/v1/report',
+    terms_url: '',
+    privacy_url: '',
+    moderation_policy_url: '',
+  },
 };
 
 const meta = {
@@ -77,6 +108,7 @@ export const CommunityNodeAdvisory: Story = {
         api={advisoryApi}
         targetPubkey={authorDetailView.author?.author_pubkey ?? 'a'.repeat(64)}
         nodeBaseUrls={['https://community.example.com']}
+        communityNodeManifests={advisoryManifests}
       />
     ),
   },

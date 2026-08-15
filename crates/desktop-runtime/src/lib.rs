@@ -19,13 +19,14 @@ pub use community_node::{
     CommunityNodeIndexQueryRequest, CommunityNodeIndexingRequest,
     CommunityNodeIndexingRequestError, CommunityNodeManifest, CommunityNodeManifestFetch,
     CommunityNodeManifestFetchStatus, CommunityNodeNodeConfig, CommunityNodeNodeStatus,
-    CommunityNodeP2pBoundary, CommunityNodeRelationNeighborsRequest, CommunityNodeSessionPhase,
-    CommunityNodeTargetRequest, CommunityNodeTrustRelationError, CommunityNodeUserAdvisoryRequest,
-    IndexEntryView, IndexQueryResponse, IndexScopeKind, RelationNeighborsResponse,
-    RelationOptoutResponse, RelationReadResponse, SetCommunityNodeConfigNode,
-    SetCommunityNodeConfigRequest, SetCommunityNodeInviteCodeRequest,
-    SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
-    SubmitCommunityNodeReportStatus, SubmitIndexingRequestResponse, TrustUserReadResponse,
+    CommunityNodeP2pBoundary, CommunityNodeRelationNeighborsRequest, CommunityNodeReportAppeal,
+    CommunityNodeReportError, CommunityNodeSessionPhase, CommunityNodeTargetRequest,
+    CommunityNodeTrustRelationError, CommunityNodeUserAdvisoryRequest, IndexEntryView,
+    IndexQueryResponse, IndexScopeKind, RelationNeighborsResponse, RelationOptoutResponse,
+    RelationReadResponse, SetCommunityNodeConfigNode, SetCommunityNodeConfigRequest,
+    SetCommunityNodeInviteCodeRequest, SubmitCommunityNodeReportRequest,
+    SubmitCommunityNodeReportResult, SubmitCommunityNodeReportStatus,
+    SubmitIndexingRequestResponse, TrustUserReadResponse,
 };
 pub use discovery::{DiscoveryConfig, SetDiscoverySeedsRequest};
 // 起動エラーの typed 分類(WP-Q2)。src-tauri は downcast で DatabaseOpen/Migration を判定する。

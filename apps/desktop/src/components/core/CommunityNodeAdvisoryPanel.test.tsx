@@ -9,6 +9,7 @@ import { CommunityNodeAdvisoryPanel } from './CommunityNodeAdvisoryPanel';
 const targetPubkey = 'a'.repeat(64);
 
 function api() {
+  let appealStatus: 'none' | 'disputed' = 'none';
   return {
     readCommunityNodeTrustUser: vi.fn(async () => ({
       viewer_pubkey: 'viewer',
@@ -28,7 +29,7 @@ function api() {
           basis: 'provider_verdict' as const,
           confidence: 0.75,
           visibility: 'subscribed_nodes' as const,
-          appeal_status: 'none' as const,
+          appeal_status: appealStatus,
           expires_at: null,
           raw_contribution: 0.5,
           decay_factor: 0.8,
@@ -47,8 +48,40 @@ function api() {
       viewer_pubkey: 'viewer',
       neighbors: ['b'.repeat(64)],
     })),
+    submitCommunityNodeReport: vi.fn(async (request: { appeal?: { risk_signal_id: string } | null }) => {
+      appealStatus = 'disputed';
+      return {
+        status: 'submitted' as const,
+        reference_id: 'report-1',
+        disputed_risk_signal_id: request.appeal?.risk_signal_id ?? null,
+      };
+    }),
   };
 }
+
+const communityNodeManifests = {
+  'https://node.example': {
+    node_id: 'node-a',
+    node_name: 'ノード A',
+    node_role: 'community-node',
+    server_name: 'node.example',
+    manifest_version: 'v1',
+    capability_scope: { available_enabled: ['trust_signal'], planned_enabled: [] },
+    authority_scope: { applies_to: ['this_node'], does_not_apply_to: [] },
+    p2p_boundary: {
+      identity_authority: false,
+      profile_canonical_store: false,
+      social_graph_canonical_store: false,
+      content_truth_source: false,
+      network_wide_authority: false,
+    },
+    abuse_contact: '',
+    report_endpoint: 'https://node.example/v1/report',
+    terms_url: '',
+    privacy_url: '',
+    moderation_policy_url: '',
+  },
+};
 
 describe('CommunityNodeAdvisoryPanel', () => {
   test('loads continuous trust basis, relation, and neighbors only after user action', async () => {
@@ -58,6 +91,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
         api={client}
         targetPubkey={targetPubkey}
         nodeBaseUrls={['https://node.example']}
+        communityNodeManifests={communityNodeManifests}
       />
     );
 
@@ -80,6 +114,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
         api={client}
         targetPubkey={targetPubkey}
         nodeBaseUrls={['https://node.example']}
+        communityNodeManifests={communityNodeManifests}
       />
     );
 
@@ -87,5 +122,39 @@ describe('CommunityNodeAdvisoryPanel', () => {
 
     expect(await screen.findByText(/reason is intentionally not disclosed|理由は推測・開示しません/)).toBeInTheDocument();
     expect(screen.queryByText(/hidden by target opt-out/)).not.toBeInTheDocument();
+  });
+
+  test('sends an anonymous appeal only to the matching issuer and refreshes the advisory', async () => {
+    const client = api();
+    render(
+      <CommunityNodeAdvisoryPanel
+        api={client}
+        targetPubkey={targetPubkey}
+        nodeBaseUrls={['https://node.example']}
+        communityNodeManifests={communityNodeManifests}
+      />
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(await screen.findByText(/node-a/));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'このリスク判定に異議を申し立てる' })
+    );
+
+    expect(screen.queryByLabelText(/contact|連絡先/i)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '異議を申し立てる' }));
+
+    expect(client.submitCommunityNodeReport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        node_base_url: 'https://node.example',
+        report_endpoint: 'https://node.example/v1/report',
+        capability: 'trust_signal',
+        reporter_contact: null,
+        appeal: { risk_signal_id: 'signal-1' },
+      })
+    );
+    expect(await screen.findByText(/受付対象のリスク判定: signal-1/)).toBeInTheDocument();
+    expect(client.readCommunityNodeTrustUser).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('button', { name: '異議を申し立てる' })).not.toBeInTheDocument();
   });
 });

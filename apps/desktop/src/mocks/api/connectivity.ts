@@ -323,6 +323,7 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
       return {
         status: 'submitted',
         reference_id: `mock-${request.subject_kind}-${request.subject_id}`,
+        disputed_risk_signal_id: request.appeal?.risk_signal_id ?? null,
       };
     },
     async importPeerTicket() {},

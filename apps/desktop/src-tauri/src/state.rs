@@ -206,6 +206,17 @@ impl From<kukuri_desktop_runtime::CommunityNodeTrustRelationError> for CommandEr
     }
 }
 
+impl From<kukuri_desktop_runtime::CommunityNodeReportError> for CommandError {
+    fn from(error: kukuri_desktop_runtime::CommunityNodeReportError) -> Self {
+        Self {
+            code: error.code,
+            message: error.message,
+            status: error.status,
+            retry_after_seconds: None,
+        }
+    }
+}
+
 pub(crate) fn map_error(error: anyhow::Error) -> CommandError {
     CommandError::from(error)
 }

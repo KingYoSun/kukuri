@@ -10,6 +10,7 @@ import {
   isCriticalSafetyReason,
 } from '@/lib/api/reportRouting';
 import { type SubmitCommunityNodeReportResult } from '@/lib/api';
+import { InvokeError } from '@/lib/api/invoke/error';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -38,6 +39,12 @@ export type ReportSubmitInput = {
   reason: ReportReason;
   details: string;
   reporterContact: string;
+  appeal: { risk_signal_id: string } | null;
+};
+
+export type ReportAppealContext = {
+  riskSignalId: string;
+  issuerNodeId: string;
 };
 
 export type ReportRoutingDialogProps = {
@@ -53,6 +60,10 @@ export type ReportRoutingDialogProps = {
   localActions?: ReactNode;
   resolving?: boolean;
   resolveError?: string | null;
+  /// リスク判定への異議申し立てとして表示する場合の対象。
+  appeal?: ReportAppealContext | null;
+  /// 受付後の再取得など、成功応答を確認してから行う処理。
+  onSubmitted?: (result: SubmitCommunityNodeReportResult) => void | Promise<void>;
 };
 
 function nodeHost(url: string): string {
@@ -77,9 +88,13 @@ export function ReportRoutingDialog({
   localActions,
   resolving = false,
   resolveError,
+  appeal = null,
+  onSubmitted,
 }: ReportRoutingDialogProps) {
-  const { t } = useTranslation(['shell', 'common']);
+  const { t } = useTranslation(['shell', 'common', 'profile']);
   const { candidates } = plan;
+  const appealRiskSignalId = appeal?.riskSignalId ?? null;
+  const isAppeal = appealRiskSignalId !== null;
 
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [reason, setReason] = useState<ReportReason>('spam');
@@ -93,14 +108,14 @@ export function ReportRoutingDialog({
   useEffect(() => {
     if (open) {
       setSelectedKey(candidates.length > 0 ? candidateKey(candidates[0]) : null);
-      setReason('spam');
+      setReason(isAppeal ? 'other' : 'spam');
       setDetails('');
       setReporterContact('');
       setSubmitting(false);
       setError(null);
       setResult(null);
     }
-  }, [open, candidates]);
+  }, [open, candidates, appealRiskSignalId, isAppeal]);
 
   const selectedCandidate = useMemo(
     () => candidates.find((candidate) => candidateKey(candidate) === selectedKey) ?? null,
@@ -125,10 +140,26 @@ export function ReportRoutingDialog({
     setSubmitting(true);
     setError(null);
     try {
-      const submitted = await onSubmit({ candidate: selectedCandidate, reason, details, reporterContact });
+      const submitted = await onSubmit({
+        candidate: selectedCandidate,
+        reason: appeal ? 'other' : reason,
+        details,
+        reporterContact: appeal ? '' : reporterContact,
+        appeal: appeal ? { risk_signal_id: appeal.riskSignalId } : null,
+      });
+      if (appeal && submitted.disputed_risk_signal_id !== appeal.riskSignalId) {
+        throw new Error(t('profile:communityNodeAdvisory.appeal.responseMismatch'));
+      }
+      await onSubmitted?.(submitted);
       setResult(submitted);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(
+        appeal && cause instanceof InvokeError && cause.code === 'INVALID_APPEAL'
+          ? t('profile:communityNodeAdvisory.appeal.invalidAppeal')
+          : cause instanceof Error
+            ? cause.message
+            : String(cause),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -138,21 +169,42 @@ export function ReportRoutingDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='report-routing-dialog'>
+      <DialogContent
+        className='report-routing-dialog'
+        closeLabel={appeal ? t('profile:communityNodeAdvisory.appeal.close') : undefined}
+      >
         <DialogHeader>
-          <DialogTitle>{t('report.title')}</DialogTitle>
-          <DialogDescription>{t('report.boundaryNotice')}</DialogDescription>
+          <DialogTitle>
+            {appeal ? t('profile:communityNodeAdvisory.appeal.title') : t('report.title')}
+          </DialogTitle>
+          <DialogDescription>
+            {appeal
+              ? t('profile:communityNodeAdvisory.appeal.description')
+              : t('report.boundaryNotice')}
+          </DialogDescription>
         </DialogHeader>
         <DialogBody className='report-routing-body'>
           <p className='report-subject'>
-            {t(`report.subject.${subject.kind}`)}
+            {appeal
+              ? t('profile:communityNodeAdvisory.appeal.subjectProfile')
+              : t(`report.subject.${subject.kind}`)}
             {subject.label ? ` · ${subject.label}` : ''}
           </p>
 
           {/* 通報先が kukuri 全体ではないことを常に明示する。 */}
           <Notice tone='accent' className='report-boundary-notice'>
-            <p>{t('report.boundaryDetail')}</p>
-            <p className='report-identity-boundary'>{t('report.identityBoundaryNote')}</p>
+            <p>
+              {appeal
+                ? t('profile:communityNodeAdvisory.appeal.boundary', {
+                    issuer: appeal.issuerNodeId,
+                  })
+                : t('report.boundaryDetail')}
+            </p>
+            <p className='report-identity-boundary'>
+              {appeal
+                ? t('profile:communityNodeAdvisory.appeal.anonymous')
+                : t('report.identityBoundaryNote')}
+            </p>
           </Notice>
 
           {resolveError ? (
@@ -163,17 +215,34 @@ export function ReportRoutingDialog({
             <Notice aria-live='polite'>{t('report.resolvingTargets')}</Notice>
           ) : result ? (
             <Notice tone='accent' className='report-result'>
-              <p>{t('report.success')}</p>
+              <p>
+                {appeal ? t('profile:communityNodeAdvisory.appeal.success') : t('report.success')}
+              </p>
               {result.reference_id ? (
                 <p className='report-result-reference'>
-                  {t('report.referenceId', { id: result.reference_id })}
+                  {appeal
+                    ? t('profile:communityNodeAdvisory.appeal.reportReference', {
+                        id: result.reference_id,
+                      })
+                    : t('report.referenceId', { id: result.reference_id })}
+                </p>
+              ) : null}
+              {appeal && result.disputed_risk_signal_id ? (
+                <p className='report-result-reference'>
+                  {t('profile:communityNodeAdvisory.appeal.disputedId', {
+                    id: result.disputed_risk_signal_id,
+                  })}
                 </p>
               ) : null}
             </Notice>
           ) : canRoute ? (
             <>
               <fieldset className='report-target-list'>
-                <legend>{t('report.targetsHeading')}</legend>
+                <legend>
+                  {appeal
+                    ? t('profile:communityNodeAdvisory.appeal.targetsHeading')
+                    : t('report.targetsHeading')}
+                </legend>
                 {candidates.map((candidate) => {
                   const key = candidateKey(candidate);
                   const { target, contact } = candidate;
@@ -189,11 +258,15 @@ export function ReportRoutingDialog({
                       <span className='report-target-main'>
                         <span className='report-target-host'>{nodeHost(target.nodeBaseUrl)}</span>
                         <span className='report-target-capability'>
-                          {t(`report.capability.${target.capability}`)}
+                          {appeal
+                            ? t('profile:communityNodeAdvisory.appeal.capability')
+                            : t(`report.capability.${target.capability}`)}
                         </span>
                         <span className='report-target-contact'>
                           {contact.kind === 'endpoint'
-                            ? t('report.contact.endpoint')
+                            ? appeal
+                              ? t('profile:communityNodeAdvisory.appeal.endpoint')
+                              : t('report.contact.endpoint')
                             : contact.kind === 'contact'
                               ? t('report.contact.mailto', { contact: contact.value })
                               : null}
@@ -206,7 +279,9 @@ export function ReportRoutingDialog({
                             rel='noreferrer'
                           >
                             <ExternalLink className='size-3.5' aria-hidden='true' />
-                            {t('report.openPolicy')}
+                            {appeal
+                              ? t('profile:communityNodeAdvisory.appeal.openPolicy')
+                              : t('report.openPolicy')}
                           </a>
                         ) : null}
                       </span>
@@ -215,22 +290,24 @@ export function ReportRoutingDialog({
                 })}
               </fieldset>
 
-              <label className='report-field'>
-                <span>{t('report.reasonLabel')}</span>
-                <select
-                  className='report-reason-select'
-                  value={reason}
-                  onChange={(event) => setReason(event.target.value as ReportReason)}
-                >
-                  {REPORT_REASONS.map((value) => (
-                    <option key={value} value={value}>
-                      {t(`report.reasons.${value}`)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {!appeal ? (
+                <label className='report-field'>
+                  <span>{t('report.reasonLabel')}</span>
+                  <select
+                    className='report-reason-select'
+                    value={reason}
+                    onChange={(event) => setReason(event.target.value as ReportReason)}
+                  >
+                    {REPORT_REASONS.map((value) => (
+                      <option key={value} value={value}>
+                        {t(`report.reasons.${value}`)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
 
-              {isCriticalSafety ? (
+              {!appeal && isCriticalSafety ? (
                 <Notice tone='warning' className='report-critical-safety'>
                   <ShieldAlert className='size-4' aria-hidden='true' />
                   <span>{t('report.criticalSafetyNote')}</span>
@@ -238,27 +315,37 @@ export function ReportRoutingDialog({
               ) : null}
 
               <label className='report-field'>
-                <span>{t('report.detailsLabel')}</span>
+                <span>
+                  {appeal
+                    ? t('profile:communityNodeAdvisory.appeal.detailsLabel')
+                    : t('report.detailsLabel')}
+                </span>
                 <textarea
                   className='report-details-input'
                   rows={3}
                   value={details}
-                  placeholder={t('report.detailsPlaceholder')}
+                  placeholder={
+                    appeal
+                      ? t('profile:communityNodeAdvisory.appeal.detailsPlaceholder')
+                      : t('report.detailsPlaceholder')
+                  }
                   onChange={(event) => setDetails(event.target.value)}
                 />
               </label>
 
-              <label className='report-field'>
-                <span>{t('report.reporterContactLabel')}</span>
-                <input
-                  className='report-reporter-contact-input'
-                  type='text'
-                  value={reporterContact}
-                  placeholder={t('report.reporterContactPlaceholder')}
-                  onChange={(event) => setReporterContact(event.target.value)}
-                />
-                <small className='report-field-hint'>{t('report.reporterContactHint')}</small>
-              </label>
+              {!appeal ? (
+                <label className='report-field'>
+                  <span>{t('report.reporterContactLabel')}</span>
+                  <input
+                    className='report-reporter-contact-input'
+                    type='text'
+                    value={reporterContact}
+                    placeholder={t('report.reporterContactPlaceholder')}
+                    onChange={(event) => setReporterContact(event.target.value)}
+                  />
+                  <small className='report-field-hint'>{t('report.reporterContactHint')}</small>
+                </label>
+              ) : null}
 
               {error ? (
                 <Notice tone='destructive' className='report-error'>
@@ -272,16 +359,22 @@ export function ReportRoutingDialog({
               <AlertTriangle className='size-4' aria-hidden='true' />
               <div className='report-unresolved-body'>
                 <p className='report-unresolved-title'>
-                  {plan.provenanceUnknown
-                    ? t('report.unknownTitle')
-                    : t('report.observedUnresolvedTitle')}
+                  {appeal
+                    ? t('profile:communityNodeAdvisory.appeal.unresolvedTitle')
+                    : plan.provenanceUnknown
+                      ? t('report.unknownTitle')
+                      : t('report.observedUnresolvedTitle')}
                 </p>
                 <p>
-                  {plan.provenanceUnknown
-                    ? t('report.unknownBody')
-                    : t('report.observedUnresolvedBody')}
+                  {appeal
+                    ? t('profile:communityNodeAdvisory.appeal.unresolvedBody')
+                    : plan.provenanceUnknown
+                      ? t('report.unknownBody')
+                      : t('report.observedUnresolvedBody')}
                 </p>
-                <p className='report-local-actions-hint'>{t('report.localActionsHint')}</p>
+                {!appeal ? (
+                  <p className='report-local-actions-hint'>{t('report.localActionsHint')}</p>
+                ) : null}
                 {localActions ? <div className='report-local-actions'>{localActions}</div> : null}
               </div>
             </Notice>
@@ -289,19 +382,31 @@ export function ReportRoutingDialog({
         </DialogBody>
         <DialogFooter className='report-routing-footer'>
           <Button variant='secondary' type='button' onClick={() => onOpenChange(false)}>
-            {t(result ? 'common:actions.close' : 'common:actions.cancel')}
+            {appeal
+              ? t(
+                  result
+                    ? 'profile:communityNodeAdvisory.appeal.close'
+                    : 'profile:communityNodeAdvisory.appeal.cancel',
+                )
+              : t(result ? 'common:actions.close' : 'common:actions.cancel')}
           </Button>
           {!result && canRoute && selectedCandidate ? (
             <Button
               type='button'
               disabled={submitting}
               onClick={handleSubmit}
-              aria-label={t('report.submit')}
+              aria-label={
+                appeal ? t('profile:communityNodeAdvisory.appeal.submit') : t('report.submit')
+              }
             >
               {selectedCandidate.contact.kind === 'endpoint'
                 ? submitting
-                  ? t('report.submitting')
-                  : t('report.submit')
+                  ? appeal
+                    ? t('profile:communityNodeAdvisory.appeal.submitting')
+                    : t('report.submitting')
+                  : appeal
+                    ? t('profile:communityNodeAdvisory.appeal.submit')
+                    : t('report.submit')
                 : t('report.copyContact')}
             </Button>
           ) : null}
