@@ -20,6 +20,7 @@ mod live;
 mod media;
 mod notifications;
 mod private_channel_indexing;
+mod private_channel_rendezvous;
 mod private_channels;
 mod reactions;
 mod service;

@@ -69,6 +69,14 @@ Accepted
 - upgrade 後に legacy `invite_only` participant が継続参加するには fresh invite が必要とする。
 - 新規作成される `invite_only` channel は常に epoch-aware 初期 epoch を持つ。
 
+### 7. 非公開チャンネルのランデブー鍵を現在の世代秘密へ結び付ける
+- 非公開チャンネルの通知用話題は、通信層が実際に購読する `hint/private/<channel_id>` を派生入力にする。`hint/` を付ける前の `private/<channel_id>` は使わない。
+- `hint/private/<channel_id>` のランデブー鍵は、現在の世代の `current_epoch_secret_hex` を `private_topic_rendezvous_key_hex_secret` に渡して作る。
+- 現在の世代秘密が見つからない非公開通知用話題は送信対象から除外し、`public_topic_rendezvous_key` へ後退させない。
+- 世代切替後は旧鍵の更新を止め、新鍵だけを送る。旧鍵はコミュニティノードの有効期限により最大45秒で失効する。
+- 旧方式の公開情報由来の鍵と新方式の鍵は併送しない。併送すると失効済み参加者が旧鍵で在席情報を追跡できるためである。
+- 新旧クライアントが混在する間は、同じ非公開チャンネルの参加者でもコミュニティノード経由の発見が成立しない場合がある。参加者のクライアント更新を移行条件とし、サーバー側の別名解決は設けない。
+
 ## Implementation Contract
 
 ### Desktop shell
@@ -90,6 +98,11 @@ Accepted
 - `invite_only` を含む private audience はすべて `channel-policy` と `channel-participant` に参加する。
 - auto rotate は handoff grant の配布までを 1 operation として扱う。
 - participant redeem は read path から呼べる idempotent operation とする。
+
+### 非公開チャンネルのランデブー
+- `AppService` は参加中チャンネルの現在世代から派生済みランデブー鍵だけを実行時へ渡し、世代秘密そのものをコミュニティノード更新処理へ渡さない。
+- 定期更新処理は公開話題だけを `public_topic_rendezvous_key` へ渡し、`hint/private/` で始まる話題には現在世代から派生済みの鍵だけを使う。
+- 明示的な世代切替が成功した場合、接続中のコミュニティノードセッションは次のランデブー更新を直ちに実行対象へ戻す。
 
 ## Consequences
 - channel を workspace と見なす実装は以後の正本ではなくなる。`Channels` tab や route を前提にした UI は削除対象になる。

@@ -133,6 +133,7 @@ pub(crate) struct MockRendezvousCommunityNodeState {
     pub(crate) heartbeat_hits: Arc<AtomicUsize>,
     pub(crate) bootstrap_hits: Arc<AtomicUsize>,
     pub(crate) rendezvous_hits: Arc<AtomicUsize>,
+    pub(crate) rendezvous_requests: Arc<Mutex<Vec<kukuri_cn_protocol::TopicRendezvousHeartbeat>>>,
 }
 
 pub(crate) async fn mock_rendezvous_bootstrap_heartbeat(
@@ -171,6 +172,7 @@ pub(crate) async fn mock_rendezvous_topics_heartbeat(
         "rendezvous heartbeat without topics"
     );
     state.rendezvous_hits.fetch_add(1, Ordering::SeqCst);
+    state.rendezvous_requests.lock().await.push(request);
     // expires_in_seconds はクライアントのマージン(20 秒)より小さくし、deadline が
     // 毎 maintenance pass で即時 due になるようにする(wall-clock 待ちなしの決定的テスト用)。
     Json(kukuri_cn_protocol::TopicRendezvousHeartbeatResponse {
