@@ -359,6 +359,7 @@ async fn topic_rendezvous_refresh_fires_between_bootstrap_heartbeats() {
         heartbeat_hits: Arc::new(AtomicUsize::new(0)),
         bootstrap_hits: Arc::new(AtomicUsize::new(0)),
         rendezvous_hits: Arc::new(AtomicUsize::new(0)),
+        rendezvous_requests: Arc::new(Mutex::new(Vec::new())),
     });
     let app = Router::new()
         .route("/v1/consents/status", get(mock_bootstrap_consent_status))
@@ -420,6 +421,205 @@ async fn topic_rendezvous_refresh_fires_between_bootstrap_heartbeats() {
         state.rendezvous_hits.load(Ordering::SeqCst) > baseline,
         "rendezvous presence must be refreshed between bootstrap heartbeats \
          (hits stayed at {baseline}; presence would expire against the 45s server TTL)"
+    );
+
+    runtime.shutdown().await;
+    server.abort();
+}
+
+#[tokio::test]
+async fn private_channel_rendezvous_refresh_uses_only_the_current_epoch_secret() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let dir = tempdir().expect("一時ディレクトリを作成できる");
+    let db_path = dir.path().join("community-private-rendezvous.db");
+    let runtime = DesktopRuntime::new_with_config_and_identity(
+        &db_path,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("実行環境を作成できる");
+    let topic = "kukuri:topic:private-rendezvous";
+    runtime
+        .list_timeline(ListTimelineRequest {
+            topic: topic.into(),
+            scope: TimelineScope::Public,
+            cursor: None,
+            limit: Some(20),
+        })
+        .await
+        .expect("公開話題を購読できる");
+    let channel = runtime
+        .create_private_channel(CreatePrivateChannelRequest {
+            topic: topic.into(),
+            label: "非公開ランデブー".into(),
+            audience_kind: ChannelAudienceKind::InviteOnly,
+        })
+        .await
+        .expect("非公開チャンネルを作成できる");
+    let invite = runtime
+        .export_private_channel_invite(ExportPrivateChannelInviteRequest {
+            topic: topic.into(),
+            channel_id: channel.channel_id.clone(),
+            expires_at: None,
+        })
+        .await
+        .expect("現在の招待を出力できる");
+    let preview = kukuri_core::parse_private_channel_invite_token(invite.as_str())
+        .expect("現在の招待を解析できる");
+    let private_topic = kukuri_core::wire::hint_topic_id(
+        &kukuri_docs_sync::private_channel_hint_topic(channel.channel_id.as_str()),
+    );
+    let expected_private = kukuri_core::private_topic_rendezvous_key_hex_secret(
+        preview.namespace_secret_hex.as_str(),
+        &private_topic,
+    )
+    .expect("現在の非公開ランデブー鍵を派生できる");
+    let forbidden_public_private = kukuri_core::public_topic_rendezvous_key(&private_topic);
+    let public_hint_topic = kukuri_core::wire::hint_topic_id(&kukuri_core::TopicId::new(topic));
+    let expected_public = kukuri_core::public_topic_rendezvous_key(&public_hint_topic);
+    let missing_private_base = kukuri_docs_sync::private_channel_hint_topic("missing-secret");
+    let missing_private_topic = kukuri_core::wire::hint_topic_id(&missing_private_base);
+    let forbidden_missing_private =
+        kukuri_core::public_topic_rendezvous_key(&missing_private_topic);
+    let _missing_private_stream = kukuri_transport::HintTransport::subscribe_hints(
+        runtime.iroh_stack.transport.as_ref(),
+        &missing_private_base,
+    )
+    .await
+    .expect("現在の秘密を持たない非公開話題を購読できる");
+
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("待受先を確保できる");
+    let base_url = format!(
+        "http://{}",
+        listener.local_addr().expect("待受先を取得できる")
+    );
+    let state = Arc::new(MockRendezvousCommunityNodeState {
+        base_url: base_url.clone(),
+        seed_peers: vec![
+            CommunityNodeSeedPeer::new("2".repeat(64), None).expect("初期接続先を作成できる"),
+        ],
+        heartbeat_hits: Arc::new(AtomicUsize::new(0)),
+        bootstrap_hits: Arc::new(AtomicUsize::new(0)),
+        rendezvous_hits: Arc::new(AtomicUsize::new(0)),
+        rendezvous_requests: Arc::new(Mutex::new(Vec::new())),
+    });
+    let app = Router::new()
+        .route("/v1/consents/status", get(mock_bootstrap_consent_status))
+        .route(
+            "/v1/bootstrap/heartbeat",
+            post(mock_rendezvous_bootstrap_heartbeat),
+        )
+        .route("/v1/bootstrap/nodes", get(mock_rendezvous_bootstrap_nodes))
+        .route(
+            "/v1/rendezvous/topics/heartbeat",
+            post(mock_rendezvous_topics_heartbeat),
+        )
+        .with_state(state.clone());
+    let server = tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+    persist_community_node_token(
+        &db_path,
+        IdentityStorageMode::FileOnly,
+        base_url.as_str(),
+        &StoredCommunityNodeToken {
+            access_token: "fake-token".to_string(),
+            expires_at: Utc::now().timestamp() + 3600,
+        },
+    )
+    .expect("コミュニティノードの認証情報を保存できる");
+    *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        nodes: vec![CommunityNodeNodeConfig {
+            base_url: base_url.clone(),
+            auto_approve: false,
+            resolved_urls: Some(
+                CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
+                    .expect("接続先を解決できる"),
+            ),
+        }],
+    };
+
+    runtime.run_community_node_session_maintenance_once().await;
+    runtime.run_community_node_session_maintenance_once().await;
+    let requests = state.rendezvous_requests.lock().await.clone();
+    assert!(!requests.is_empty(), "ランデブー更新が送信される");
+    assert!(
+        requests
+            .iter()
+            .any(|request| request.refreshes.contains(&expected_private)),
+        "現在の非公開ランデブー鍵が更新される"
+    );
+    assert!(
+        requests
+            .iter()
+            .any(|request| request.refreshes.contains(&expected_public)),
+        "公開話題のランデブー鍵は変わらない"
+    );
+    assert!(requests.iter().all(|request| {
+        !request.refreshes.contains(&forbidden_public_private)
+            && !request.refreshes.contains(&forbidden_missing_private)
+            && !request
+                .refreshes
+                .iter()
+                .any(|key| key == private_topic.as_str())
+            && !request
+                .refreshes
+                .iter()
+                .any(|key| key == missing_private_topic.as_str())
+    }));
+
+    state.rendezvous_requests.lock().await.clear();
+    let old_private = expected_private;
+    runtime
+        .rotate_private_channel(RotatePrivateChannelRequest {
+            topic: topic.into(),
+            channel_id: channel.channel_id.clone(),
+        })
+        .await
+        .expect("非公開チャンネルの世代を切り替えられる");
+    assert_eq!(
+        runtime
+            .community_node_sessions
+            .lock()
+            .await
+            .get(base_url.as_str())
+            .expect("コミュニティノードの接続状態がある")
+            .rendezvous_refresh_deadline,
+        0,
+        "世代切替後はランデブー更新を直ちに実行する"
+    );
+    let fresh_invite = runtime
+        .export_private_channel_invite(ExportPrivateChannelInviteRequest {
+            topic: topic.into(),
+            channel_id: channel.channel_id.clone(),
+            expires_at: None,
+        })
+        .await
+        .expect("新しい招待を出力できる");
+    let fresh_preview = kukuri_core::parse_private_channel_invite_token(fresh_invite.as_str())
+        .expect("新しい招待を解析できる");
+    let current_private = kukuri_core::private_topic_rendezvous_key_hex_secret(
+        fresh_preview.namespace_secret_hex.as_str(),
+        &private_topic,
+    )
+    .expect("切替後の非公開ランデブー鍵を派生できる");
+    assert_ne!(old_private, current_private);
+
+    runtime.run_community_node_session_maintenance_once().await;
+    let rotated_requests = state.rendezvous_requests.lock().await.clone();
+    assert!(
+        rotated_requests
+            .iter()
+            .any(|request| request.refreshes.contains(&current_private)),
+        "切替後の非公開ランデブー鍵が更新される"
+    );
+    assert!(
+        rotated_requests
+            .iter()
+            .all(|request| !request.refreshes.contains(&old_private))
     );
 
     runtime.shutdown().await;

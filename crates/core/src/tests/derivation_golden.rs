@@ -24,12 +24,13 @@ fn private_topic_rendezvous_key_matches_golden() {
     // HMAC-SHA256(namespace_secret, "kukuri:rendezvous:private-topic:v1" || 0x00 || topic)
     let key = private_topic_rendezvous_key_hex_secret(
         "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
-        &TopicId::new("kukuri:topic:golden"),
+        // `subscribed_topics` に入る、`hint/` 付与後の通信形式の文字列を固定する。
+        &TopicId::new("hint/private/channel-golden"),
     )
-    .expect("private rendezvous key");
+    .expect("非公開ランデブー鍵を派生できる");
     assert_eq!(
         key,
-        "72d34635686d4a3f177b033941879fa4dfc01c3c881abd92fe3eeb18561e63f7"
+        "abd813b33010433f3ce2032f67c55e1ec94062ee422a123bf430143d5df5241a"
     );
 }
 

@@ -12,7 +12,10 @@ use kukuri_cn_protocol::{
     TOPIC_RENDEZVOUS_HEARTBEAT_PATH, TopicRendezvousHeartbeat, build_auth_envelope_json,
     normalize_http_url,
 };
-use kukuri_core::{TopicId, public_topic_rendezvous_key};
+use kukuri_core::{
+    TopicId, public_topic_rendezvous_key,
+    wire::{HINT_TOPIC_PREFIX, PRIVATE_CHANNEL_TOPIC_PREFIX},
+};
 use kukuri_transport::{SeedPeer, Transport, TransportRelayConfig, parse_seed_peer};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};

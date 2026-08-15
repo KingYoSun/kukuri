@@ -126,9 +126,14 @@ impl DesktopRuntime {
         &self,
         request: RotatePrivateChannelRequest,
     ) -> Result<JoinedPrivateChannelView> {
-        self.app_service
+        let rotated = self
+            .app_service
             .rotate_private_channel(request.topic.as_str(), request.channel_id.as_str())
-            .await
+            .await?;
+        for session in self.community_node_sessions.lock().await.values_mut() {
+            session.rendezvous_refresh_deadline = 0;
+        }
+        Ok(rotated)
     }
 
     pub async fn leave_private_channel(&self, request: LeavePrivateChannelRequest) -> Result<()> {

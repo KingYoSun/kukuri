@@ -378,13 +378,30 @@ impl DesktopRuntime {
             .peers()
             .await
             .map_err(CommunityNodeRequestError::Other)?;
-        let topic_keys = snapshot
-            .subscribed_topics
-            .iter()
-            .map(|topic| public_topic_rendezvous_key(&TopicId::new(topic.clone())))
-            .collect::<std::collections::BTreeSet<_>>()
-            .into_iter()
-            .collect::<Vec<_>>();
+        let private_topic_keys = self.app_service.private_channel_rendezvous_keys().await;
+        let mut topic_keys = std::collections::BTreeSet::new();
+        let mut skipped_private_topics = 0usize;
+        for topic in &snapshot.subscribed_topics {
+            let is_private_channel_hint = topic
+                .strip_prefix(HINT_TOPIC_PREFIX)
+                .is_some_and(|topic| topic.starts_with(PRIVATE_CHANNEL_TOPIC_PREFIX));
+            if is_private_channel_hint {
+                if let Some(key) = private_topic_keys.get(topic) {
+                    topic_keys.insert(key.clone());
+                } else {
+                    skipped_private_topics += 1;
+                }
+                continue;
+            }
+            topic_keys.insert(public_topic_rendezvous_key(&TopicId::new(topic.clone())));
+        }
+        if skipped_private_topics > 0 {
+            warn!(
+                skipped_private_topics,
+                "現在世代の秘密がない非公開チャンネルのランデブー話題を除外しました"
+            );
+        }
+        let topic_keys = topic_keys.into_iter().collect::<Vec<_>>();
         if topic_keys.is_empty() {
             return Ok(());
         }
