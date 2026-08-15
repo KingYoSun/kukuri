@@ -639,3 +639,92 @@ test('report action refreshes the observed node manifest when the dialog opens',
   );
   expect(await screen.findByText('node.example')).toBeInTheDocument();
 });
+
+test('attachment report resolves the selected blob provenance instead of the post provenance', async () => {
+  const user = userEvent.setup();
+  const manifest = (nodeId: string): CommunityNodeManifest => ({
+    node_id: nodeId,
+    node_name: nodeId,
+    node_role: 'community-node',
+    server_name: nodeId,
+    manifest_version: 'v1',
+    capability_scope: { available_enabled: ['community_index'], planned_enabled: [] },
+    authority_scope: { applies_to: ['this_node'], does_not_apply_to: [] },
+    p2p_boundary: {
+      identity_authority: false,
+      profile_canonical_store: false,
+      social_graph_canonical_store: false,
+      content_truth_source: false,
+      network_wide_authority: false,
+    },
+    abuse_contact: '',
+    report_endpoint: `https://${nodeId}/v1/report`,
+    terms_url: '',
+    privacy_url: '',
+    moderation_policy_url: '',
+  });
+  const onFetchReportManifest = vi.fn(async (baseUrl: string) => ({
+    status: 'ok' as const,
+    manifest: manifest(new URL(baseUrl).hostname),
+  }));
+  const onSubmitReport = vi
+    .fn()
+    .mockResolvedValue({ status: 'submitted', reference_id: 'media-report-1' });
+
+  render(
+    <PostCard
+      view={createView({
+        provenance: {
+          canonicalSource: 'author_docs',
+          observedVia: [
+            { nodeBaseUrl: 'https://post-node.example', capability: 'community_index' },
+          ],
+          responsibleReportTargets: [],
+        },
+        media: {
+          ...createView().media,
+          kind: 'image',
+          imagePreviewSrc: 'blob:attachment-preview',
+          imageGalleryItems: [
+            {
+              hash: 'attachment-hash',
+              src: 'blob:attachment-preview',
+              mime: 'image/png',
+              provenance: {
+                canonicalSource: 'blob',
+                observedVia: [
+                  { nodeBaseUrl: 'https://media-node.example', capability: 'community_index' },
+                ],
+                responsibleReportTargets: [],
+              },
+            },
+          ],
+          currentImageIndex: 0,
+        },
+      })}
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+      onSubmitReport={onSubmitReport}
+      onFetchReportManifest={onFetchReportManifest}
+    />
+  );
+
+  await user.click(screen.getByRole('button', { name: 'image attachment' }));
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Report' }));
+
+  await waitFor(() =>
+    expect(onFetchReportManifest).toHaveBeenCalledWith('https://media-node.example')
+  );
+  expect(onFetchReportManifest).not.toHaveBeenCalledWith('https://post-node.example');
+  expect(await screen.findByText('media-node.example')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Send report' }));
+  await waitFor(() => expect(onSubmitReport).toHaveBeenCalledTimes(1));
+  expect(onSubmitReport).toHaveBeenCalledWith(
+    expect.objectContaining({
+      node_base_url: 'https://media-node.example',
+      subject_kind: 'media',
+      subject_id: 'attachment-hash',
+    })
+  );
+});

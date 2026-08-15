@@ -7,6 +7,7 @@ import type {
   BookmarkedCustomReactionView,
   CommunityNodeManifest,
   CommunityNodeManifestFetch,
+  ContentProvenance,
   CustomReactionAssetView,
   ReactionKeyInput,
   ReactionKeyView,
@@ -142,6 +143,9 @@ export function PostCard({
     id: post.object_id,
     label: view.authorLabel,
   });
+  const [reportProvenance, setReportProvenance] = useState<ContentProvenance | undefined>(
+    view.provenance
+  );
   const [reportManifests, setReportManifests] = useState(communityNodeManifests);
   const fetchedReportManifestUrls = useRef(new Set<string>());
   const [reportResolving, setReportResolving] = useState(false);
@@ -207,11 +211,11 @@ export function PostCard({
     onOpenThread(view.threadTargetId);
   };
 
-  // 通報先は post の provenance（観測経路）と取得済み manifest から解決する。
+  // 通報先は現在選択中の対象の provenance（観測経路）と取得済み manifest から解決する。
   // provenance 不明 / 通報先未解決でも dialog は開き、local action のみ案内する。
   const reportPlan = useMemo(
-    () => planReportRouting(view.provenance, reportManifests),
-    [view.provenance, reportManifests]
+    () => planReportRouting(reportProvenance, reportManifests),
+    [reportProvenance, reportManifests]
   );
   const showReportAction = Boolean(onSubmitReport);
 
@@ -227,10 +231,10 @@ export function PostCard({
   }, [reportDialogOpen]);
 
   useEffect(() => {
-    if (!reportDialogOpen || !onFetchReportManifest || !view.provenance) {
+    if (!reportDialogOpen || !onFetchReportManifest || !reportProvenance) {
       return;
     }
-    const baseUrls = [...new Set(view.provenance.observedVia.map((item) => item.nodeBaseUrl))]
+    const baseUrls = [...new Set(reportProvenance.observedVia.map((item) => item.nodeBaseUrl))]
       .filter((baseUrl) => !fetchedReportManifestUrls.current.has(baseUrl));
     if (baseUrls.length === 0) {
       return;
@@ -270,7 +274,7 @@ export function PostCard({
     return () => {
       active = false;
     };
-  }, [onFetchReportManifest, reportDialogOpen, view.provenance]);
+  }, [onFetchReportManifest, reportDialogOpen, reportProvenance]);
 
   const handleSubmitReport = async (
     input: ReportSubmitInput
@@ -764,6 +768,7 @@ export function PostCard({
                 aria-label={t('report.actionLabel', { ns: 'shell' })}
                 onClick={() => {
                   setReportSubject({ kind: 'post', id: post.object_id, label: view.authorLabel });
+                  setReportProvenance(view.provenance);
                   setReportDialogOpen(true);
                 }}
               >
@@ -784,7 +789,9 @@ export function PostCard({
           showReportAction
             ? (hash) => {
                 setMediaViewerOpen(false);
+                const attachment = view.media.imageGalleryItems?.find((item) => item.hash === hash);
                 setReportSubject({ kind: 'media', id: hash, label: view.authorLabel });
+                setReportProvenance(attachment?.provenance);
                 setReportDialogOpen(true);
               }
             : undefined

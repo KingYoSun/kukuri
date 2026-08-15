@@ -25,7 +25,7 @@ export type ChannelAccessTokenKind = "invite" | "grant" | "share";
 
 export type ProfileAssetView = { hash: string, mime: string, bytes: number, role: 'profile_avatar', };
 
-export type AttachmentView = { hash: string, mime: string, bytes: number, role: string, status: BlobViewStatus, };
+export type AttachmentView = { hash: string, mime: string, bytes: number, role: string, status: BlobViewStatus, provenance?: ContentProvenanceView | null, };
 
 export type BlobMediaPayload = { bytes_base64: string, mime: string, };
 

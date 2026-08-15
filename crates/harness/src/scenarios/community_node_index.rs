@@ -212,6 +212,18 @@ pub(crate) async fn run_community_node_index_query_client(
             base_url: base_url.clone(),
         })
         .await?;
+    if scenario.kind == ScenarioKind::CommunityNodeReportRouting {
+        runtime
+            .set_my_profile(SetMyProfileRequest {
+                name: Some("harness-author".to_string()),
+                display_name: Some("Harness Author".to_string()),
+                about: Some("observed profile".to_string()),
+                picture: None,
+                picture_upload: None,
+                clear_picture: false,
+            })
+            .await?;
+    }
 
     let overall_timeout = Duration::from_millis(scenario.timeouts.overall_ms);
     let run_result = timeout(overall_timeout, async {
@@ -227,7 +239,17 @@ pub(crate) async fn run_community_node_index_query_client(
                             content: content.clone(),
                             reply_to: None,
                             channel_ref: ChannelRef::Public,
-                            attachments: Vec::new(),
+                            attachments: if scenario.kind
+                                == ScenarioKind::CommunityNodeReportRouting
+                            {
+                                vec![image_attachment_request(
+                                    "observed.png",
+                                    "image/png",
+                                    b"community node report routing attachment",
+                                )]
+                            } else {
+                                Vec::new()
+                            },
                         })
                         .await?;
                     *index_state.object_override.lock().await = Some((
@@ -335,7 +357,10 @@ pub(crate) async fn run_community_node_index_query_client(
                         "direct post unexpectedly has provenance"
                     );
                 }
-                ScenarioStep::AssertObservedReportRouting { expect_capability } => {
+                ScenarioStep::AssertObservedReportRouting {
+                    expect_capability,
+                    expect_subject_kinds,
+                } => {
                     let object_id = created_object_id
                         .as_deref()
                         .context("created post missing")?;
@@ -347,41 +372,126 @@ pub(crate) async fn run_community_node_index_query_client(
                             limit: Some(20),
                         })
                         .await?;
-                    let observation = timeline
+                    let post = timeline
                         .items
                         .iter()
                         .find(|post| post.object_id == object_id)
-                        .and_then(|post| post.provenance.as_ref())
-                        .and_then(|provenance| provenance.observed_via.first())
-                        .context("observed provenance missing")?;
-                    anyhow::ensure!(
-                        observation.capability == *expect_capability,
-                        "capability mismatch"
-                    );
-                    let manifest = runtime
-                        .fetch_community_node_manifest(CommunityNodeTargetRequest {
-                            base_url: observation.node_base_url.clone(),
-                        })
-                        .await?
-                        .manifest
-                        .context("manifest missing")?;
-                    runtime
-                        .submit_community_node_report(SubmitCommunityNodeReportRequest {
-                            node_base_url: observation.node_base_url.clone(),
-                            report_endpoint: manifest.report_endpoint,
-                            subject_kind: "post".to_string(),
-                            subject_id: object_id.to_string(),
-                            capability: observation.capability.clone(),
-                            reason: "spam".to_string(),
-                            details: None,
-                            reporter_contact: None,
-                            appeal: None,
+                        .context("created post missing from timeline")?;
+                    let author = runtime
+                        .get_author_social_view(AuthorRequest {
+                            pubkey: post.author_pubkey.clone(),
                         })
                         .await?;
+                    let expected_kinds = if expect_subject_kinds.is_empty() {
+                        vec!["post".to_string()]
+                    } else {
+                        expect_subject_kinds.clone()
+                    };
+                    let report_subjects = expected_kinds
+                        .iter()
+                        .map(|kind| match kind.as_str() {
+                            "post" => Ok((
+                                "post".to_string(),
+                                object_id.to_string(),
+                                post.provenance
+                                    .as_ref()
+                                    .context("post provenance missing")?,
+                            )),
+                            "profile" => Ok((
+                                "profile".to_string(),
+                                post.author_pubkey.clone(),
+                                author
+                                    .provenance
+                                    .as_ref()
+                                    .context("profile provenance missing")?,
+                            )),
+                            "media" => {
+                                let attachment =
+                                    post.attachments.first().context("attachment missing")?;
+                                Ok((
+                                    "media".to_string(),
+                                    attachment.hash.clone(),
+                                    attachment
+                                        .provenance
+                                        .as_ref()
+                                        .context("attachment provenance missing")?,
+                                ))
+                            }
+                            other => anyhow::bail!("unsupported report subject kind: {other}"),
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    let expected_reports = report_subjects
+                        .iter()
+                        .map(|(kind, id, _)| (kind.clone(), id.clone()))
+                        .collect::<Vec<_>>();
+                    let reports_before = index_state.reports.lock().await.len();
+                    for (subject_kind, subject_id, provenance) in report_subjects {
+                        if subject_kind == "media" {
+                            anyhow::ensure!(
+                                provenance.canonical_source == "blob",
+                                "attachment canonical source mismatch"
+                            );
+                        }
+                        let observation = provenance
+                            .observed_via
+                            .first()
+                            .context("observed provenance missing")?;
+                        anyhow::ensure!(
+                            observation.capability == *expect_capability,
+                            "capability mismatch"
+                        );
+                        let manifest = runtime
+                            .fetch_community_node_manifest(CommunityNodeTargetRequest {
+                                base_url: observation.node_base_url.clone(),
+                            })
+                            .await?
+                            .manifest
+                            .context("manifest missing")?;
+                        anyhow::ensure!(
+                            !manifest.p2p_boundary.network_wide_authority
+                                && !manifest.authority_scope.applies_to.is_empty()
+                                && !manifest
+                                    .authority_scope
+                                    .does_not_apply_to
+                                    .contains(&observation.capability)
+                                && !manifest.report_endpoint.trim().is_empty(),
+                            "screen-facing report plan produced no endpoint candidate"
+                        );
+                        runtime
+                            .submit_community_node_report(SubmitCommunityNodeReportRequest {
+                                node_base_url: observation.node_base_url.clone(),
+                                report_endpoint: manifest.report_endpoint,
+                                subject_kind,
+                                subject_id,
+                                capability: observation.capability.clone(),
+                                reason: "spam".to_string(),
+                                details: None,
+                                reporter_contact: None,
+                                appeal: None,
+                            })
+                            .await?;
+                    }
+                    let reports = index_state.reports.lock().await;
                     anyhow::ensure!(
-                        !index_state.reports.lock().await.is_empty(),
-                        "report was not received"
+                        reports.len() == reports_before + expected_reports.len(),
+                        "report count mismatch"
                     );
+                    for (report, (expected_kind, expected_id)) in
+                        reports[reports_before..].iter().zip(expected_reports)
+                    {
+                        anyhow::ensure!(
+                            report
+                                .get("subject_kind")
+                                .and_then(serde_json::Value::as_str)
+                                == Some(expected_kind.as_str()),
+                            "report subject kind mismatch"
+                        );
+                        anyhow::ensure!(
+                            report.get("subject_id").and_then(serde_json::Value::as_str)
+                                == Some(expected_id.as_str()),
+                            "report subject id mismatch"
+                        );
+                    }
                 }
                 other => anyhow::bail!(
                     "unsupported step for community index client scenario: {}",

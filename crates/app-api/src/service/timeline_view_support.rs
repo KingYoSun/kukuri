@@ -4,6 +4,21 @@
 use super::*;
 use crate::{ContentObservationView, ContentProvenanceView};
 
+fn inherit_post_observation_for_attachments(
+    attachments: &mut [AttachmentView],
+    post_provenance: Option<&ContentProvenanceView>,
+) {
+    let Some(post_provenance) = post_provenance else {
+        return;
+    };
+    for attachment in attachments {
+        attachment.provenance = Some(ContentProvenanceView {
+            canonical_source: "blob".to_string(),
+            observed_via: post_provenance.observed_via.clone(),
+        });
+    }
+}
+
 impl AppService {
     pub(crate) async fn content_provenance_view(
         &self,
@@ -98,7 +113,11 @@ impl AppService {
             blob_view_status_for_payload(self.services.blob_service.as_ref(), &row.payload_ref)
                 .await?
         };
-        let attachments = self.attachment_views_for_projection_row(&row).await?;
+        let provenance = self
+            .content_provenance_view("post", row.object_id.as_str(), "author_docs")
+            .await?;
+        let mut attachments = self.attachment_views_for_projection_row(&row).await?;
+        inherit_post_observation_for_attachments(&mut attachments, provenance.as_ref());
         let repost_of = match row.repost_of.clone() {
             Some(snapshot) => Some(
                 self.repost_snapshot_to_view_with_profiles(snapshot, profiles)
@@ -125,10 +144,6 @@ impl AppService {
                 .unwrap_or_default(),
             self.current_author_pubkey().as_str(),
         );
-        let provenance = self
-            .content_provenance_view("post", row.object_id.as_str(), "author_docs")
-            .await?;
-
         let AuthorViewParts {
             author_name,
             author_display_name,
@@ -228,7 +243,11 @@ impl AppService {
         else {
             return Ok(None);
         };
-        let attachments = self.attachment_views_for_projection_row(&row).await?;
+        let provenance = self
+            .content_provenance_view("post", row.object_id.as_str(), "author_docs")
+            .await?;
+        let mut attachments = self.attachment_views_for_projection_row(&row).await?;
+        inherit_post_observation_for_attachments(&mut attachments, provenance.as_ref());
         let profile = match profiles.get(row.author_pubkey.as_str()) {
             Some(profile) => Some(profile.clone()),
             None => {
@@ -309,7 +328,7 @@ impl AppService {
             blob_view_status_for_payload(self.services.blob_service.as_ref(), &row.payload_ref)
                 .await?
         };
-        let attachments = if row.object_kind == "repost" {
+        let mut attachments = if row.object_kind == "repost" {
             Vec::new()
         } else {
             attachment_views_from_refs(self.services.blob_service.as_ref(), &row.attachments)
@@ -337,6 +356,7 @@ impl AppService {
         let provenance = self
             .content_provenance_view("post", row.source_object_id.as_str(), "author_docs")
             .await?;
+        inherit_post_observation_for_attachments(&mut attachments, provenance.as_ref());
 
         let AuthorViewParts {
             author_name,
@@ -421,6 +441,12 @@ impl AppService {
             mutual,
             friend_of_friend,
         } = AuthorViewParts::new(profile.as_ref(), relationship.as_ref());
+        let mut attachments = attachment_views_from_refs(
+            self.services.blob_service.as_ref(),
+            &profile_post.attachments,
+        )
+        .await?;
+        inherit_post_observation_for_attachments(&mut attachments, provenance.as_ref());
         Ok(PostView {
             object_id: profile_post.object_id.0.clone(),
             envelope_id: profile_post.object_id.0.clone(),
@@ -437,11 +463,7 @@ impl AppService {
             object_kind: profile_post.object_kind,
             content: profile_post.content,
             content_status: BlobViewStatus::Available,
-            attachments: attachment_views_from_refs(
-                self.services.blob_service.as_ref(),
-                &profile_post.attachments,
-            )
-            .await?,
+            attachments,
             created_at: profile_post.created_at,
             reply_to: profile_post.reply_to_object_id.map(|id| id.0),
             reply_preview,

@@ -91,8 +91,102 @@ where
     );
 }
 
+async fn content_observation_retention_scenario<S>(store: &S)
+where
+    S: ContentObservationStore + ObjectProjectionStore,
+{
+    const DAY_MS: i64 = 24 * 60 * 60 * 1000;
+    let object_id = EnvelopeId::from("retained-post");
+    store
+        .put_object_projection(observation_projection_row(object_id.as_str()))
+        .await
+        .unwrap();
+    let now = 100 * DAY_MS;
+    for (node_base_url, observed_at) in [
+        ("https://expired.example", now - 90 * DAY_MS - 1),
+        ("https://boundary.example", now - 90 * DAY_MS),
+        ("https://current.example", now),
+    ] {
+        assert!(
+            store
+                .put_content_observation(ContentObservationRow {
+                    subject_kind: "post".to_string(),
+                    subject_id: object_id.as_str().to_string(),
+                    node_base_url: node_base_url.to_string(),
+                    capability: "community_index".to_string(),
+                    observed_at,
+                })
+                .await
+                .unwrap()
+        );
+    }
+    let rows = store
+        .list_content_observations("post", object_id.as_str())
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 2);
+    assert!(
+        rows.iter()
+            .any(|row| row.node_base_url == "https://boundary.example")
+    );
+    assert!(
+        rows.iter()
+            .all(|row| row.node_base_url != "https://expired.example")
+    );
+}
+
+async fn content_observation_limit_scenario<S>(store: &S)
+where
+    S: ContentObservationStore + ObjectProjectionStore,
+{
+    let object_id = EnvelopeId::from("limited-post");
+    store
+        .put_object_projection(observation_projection_row(object_id.as_str()))
+        .await
+        .unwrap();
+    for index in 0..2049 {
+        assert!(
+            store
+                .put_content_observation(ContentObservationRow {
+                    subject_kind: "post".to_string(),
+                    subject_id: object_id.as_str().to_string(),
+                    node_base_url: format!("https://node-{index:04}.example"),
+                    capability: "community_index".to_string(),
+                    observed_at: index,
+                })
+                .await
+                .unwrap()
+        );
+    }
+    let rows = store
+        .list_content_observations("post", object_id.as_str())
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 2048);
+    assert!(
+        rows.iter()
+            .all(|row| row.node_base_url != "https://node-0000.example")
+    );
+    assert!(
+        rows.iter()
+            .any(|row| row.node_base_url == "https://node-2048.example")
+    );
+}
+
 #[tokio::test]
 async fn content_observation_requires_local_subject_and_refreshes_timestamp() {
     content_observation_scenario(&MemoryStore::default()).await;
     content_observation_scenario(&SqliteStore::connect_memory().await.unwrap()).await;
+}
+
+#[tokio::test]
+async fn content_observation_removes_rows_older_than_ninety_days() {
+    content_observation_retention_scenario(&MemoryStore::default()).await;
+    content_observation_retention_scenario(&SqliteStore::connect_memory().await.unwrap()).await;
+}
+
+#[tokio::test]
+async fn content_observation_keeps_only_the_newest_2048_rows() {
+    content_observation_limit_scenario(&MemoryStore::default()).await;
+    content_observation_limit_scenario(&SqliteStore::connect_memory().await.unwrap()).await;
 }

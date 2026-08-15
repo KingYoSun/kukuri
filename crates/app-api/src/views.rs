@@ -192,12 +192,15 @@ pub enum BlobViewStatus {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct AttachmentView {
     pub hash: String,
     pub mime: String,
     pub bytes: u64,
     pub role: String,
     pub status: BlobViewStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<ContentProvenanceView>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

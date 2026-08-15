@@ -84,6 +84,21 @@ fn attachment() -> AttachmentView {
         bytes: 4096,
         role: "image_original".to_string(),
         status: BlobViewStatus::Available,
+        provenance: None,
+    }
+}
+
+fn observed_attachment() -> AttachmentView {
+    AttachmentView {
+        provenance: Some(ContentProvenanceView {
+            canonical_source: "blob".to_string(),
+            observed_via: vec![ContentObservationView {
+                node_base_url: "https://node.example".to_string(),
+                capability: "community_index".to_string(),
+                observed_at: 1_700_000_003_000,
+            }],
+        }),
+        ..attachment()
     }
 }
 
@@ -123,7 +138,7 @@ fn post_view_full() -> PostView {
         }),
         content: "hello ipc contract".to_string(),
         content_status: BlobViewStatus::Available,
-        attachments: vec![attachment()],
+        attachments: vec![observed_attachment()],
         created_at: 1_700_000_000,
         reply_to: Some("parent-1".to_string()),
         reply_preview: Some(ReplyPreviewView {
@@ -137,7 +152,7 @@ fn post_view_full() -> PostView {
                 picture_asset: Some(profile_asset()),
             },
             content: "parent content".to_string(),
-            attachments: vec![attachment()],
+            attachments: vec![observed_attachment()],
             root_id: Some("root-1".to_string()),
             reply_to: None,
         }),

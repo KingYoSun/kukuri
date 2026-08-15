@@ -71,6 +71,7 @@ pub(crate) async fn attachment_views(
             bytes: attachment.bytes,
             role: attachment_role_name(&attachment.role).to_string(),
             status: best_effort_blob_view_status(blob_service, &attachment.hash).await,
+            provenance: None,
         });
     }
     Ok(attachments)
@@ -88,6 +89,7 @@ pub(crate) async fn attachment_views_from_refs(
             bytes: attachment.bytes,
             role: attachment_role_name(&attachment.role).to_string(),
             status: best_effort_blob_view_status(blob_service, &attachment.hash).await,
+            provenance: None,
         });
     }
     Ok(attachments)
@@ -110,6 +112,7 @@ pub(crate) async fn direct_message_attachment_views(
             DirectMessageAttachmentKind::Video => "video_manifest".into(),
         },
         status: best_effort_blob_view_status(blob_service, &manifest.original.hash).await,
+        provenance: None,
     });
     if let Some(poster) = manifest.poster.as_ref() {
         attachments.push(AttachmentView {
@@ -118,6 +121,7 @@ pub(crate) async fn direct_message_attachment_views(
             bytes: poster.bytes,
             role: "video_poster".into(),
             status: best_effort_blob_view_status(blob_service, &poster.hash).await,
+            provenance: None,
         });
     }
     Ok(attachments)
