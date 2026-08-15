@@ -15,6 +15,7 @@ pub mod models;
 pub mod normalize;
 pub mod paths;
 pub mod rendezvous;
+pub mod report;
 pub mod requests;
 pub mod trust_relation;
 
@@ -25,5 +26,6 @@ pub use models::*;
 pub use normalize::*;
 pub use paths::*;
 pub use rendezvous::*;
+pub use report::*;
 pub use requests::*;
 pub use trust_relation::*;

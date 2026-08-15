@@ -8,9 +8,9 @@ use kukuri_cn_protocol::{
     AuthChallengeRequest, AuthChallengeResponse, AuthVerifyRequest, AuthVerifyResponse,
     BOOTSTRAP_HEARTBEAT_PATH, BOOTSTRAP_NODES_PATH, BootstrapHeartbeatRequest,
     BootstrapHeartbeatResponse, CONSENTS_PATH, CONSENTS_STATUS_PATH, CommunityNodeConsentStatus,
-    CommunityNodeResolvedUrls, CommunityNodeSeedPeer, NODE_MANIFEST_PATH,
-    TOPIC_RENDEZVOUS_HEARTBEAT_PATH, TopicRendezvousHeartbeat, build_auth_envelope_json,
-    normalize_http_url,
+    CommunityNodeReportRequest, CommunityNodeReportResponse, CommunityNodeResolvedUrls,
+    CommunityNodeSeedPeer, NODE_MANIFEST_PATH, TOPIC_RENDEZVOUS_HEARTBEAT_PATH,
+    TopicRendezvousHeartbeat, build_auth_envelope_json, normalize_http_url,
 };
 use kukuri_core::{
     TopicId, public_topic_rendezvous_key,
@@ -50,17 +50,17 @@ pub use indexing_request_support::{
 };
 pub(crate) use invite_storage_support::*;
 pub use kukuri_cn_protocol::{
-    IndexEntryView, IndexQueryResponse, IndexScopeKind, RelationNeighborsResponse,
-    RelationOptoutResponse, RelationReadResponse, SubmitIndexingRequestResponse,
-    TrustUserReadResponse,
+    CommunityNodeReportAppeal, IndexEntryView, IndexQueryResponse, IndexScopeKind,
+    RelationNeighborsResponse, RelationOptoutResponse, RelationReadResponse,
+    SubmitIndexingRequestResponse, TrustUserReadResponse,
 };
 pub use manifest_support::{
     CommunityNodeAuthorityScope, CommunityNodeCapabilityScope, CommunityNodeManifest,
     CommunityNodeManifestFetch, CommunityNodeManifestFetchStatus, CommunityNodeP2pBoundary,
 };
 pub use report_routing_support::{
-    CommunityNodeReportAppeal, CommunityNodeReportError, SubmitCommunityNodeReportRequest,
-    SubmitCommunityNodeReportResult, SubmitCommunityNodeReportStatus,
+    CommunityNodeReportError, SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
+    SubmitCommunityNodeReportStatus,
 };
 pub(crate) use token_storage_support::*;
 pub use trust_relation_support::{

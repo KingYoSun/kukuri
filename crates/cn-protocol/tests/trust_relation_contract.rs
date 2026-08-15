@@ -3,7 +3,9 @@ use kukuri_cn_protocol::{
     RelationReadResponse, TrustBasisEntry, TrustComponentKind, TrustReadView,
     TrustUserReadResponse,
 };
-use kukuri_cn_safety::{AppealStatus, Basis, SafetyCategory, Severity, Visibility};
+use kukuri_cn_safety::{
+    AppealStatus, Basis, RiskSignalTarget, SafetyCategory, Severity, Visibility,
+};
 
 #[test]
 fn trust_read_wire_contract_keeps_flattened_view_and_explainable_basis() {
@@ -19,6 +21,8 @@ fn trust_read_wire_contract_keeps_flattened_view_and_explainable_basis() {
             basis: vec![TrustBasisEntry {
                 signal_id: "signal-1".to_string(),
                 issuer_node_id: "node-1".to_string(),
+                target: RiskSignalTarget::PostId,
+                target_id: "post-1".to_string(),
                 component: TrustComponentKind::Relative,
                 category: SafetyCategory::Spam,
                 severity: Severity::Medium,
@@ -40,6 +44,8 @@ fn trust_read_wire_contract_keeps_flattened_view_and_explainable_basis() {
     assert_eq!(json["target_id"], "target");
     assert_eq!(json["basis"][0]["component"], "relative");
     assert_eq!(json["basis"][0]["category"], "spam");
+    assert_eq!(json["basis"][0]["target"], "post_id");
+    assert_eq!(json["basis"][0]["target_id"], "post-1");
     assert_eq!(
         serde_json::from_value::<TrustUserReadResponse>(json).unwrap(),
         response

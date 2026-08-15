@@ -186,7 +186,7 @@ export function ReportRoutingDialog({
         <DialogBody className='report-routing-body'>
           <p className='report-subject'>
             {appeal
-              ? t('profile:communityNodeAdvisory.appeal.subjectProfile')
+              ? t(`profile:communityNodeAdvisory.appeal.subject.${subject.kind}`)
               : t(`report.subject.${subject.kind}`)}
             {subject.label ? ` · ${subject.label}` : ''}
           </p>

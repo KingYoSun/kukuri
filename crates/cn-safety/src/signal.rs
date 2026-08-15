@@ -13,6 +13,7 @@ use crate::verdict::{Basis, SafetyCategory, Severity, Visibility};
 
 /// risk signal の対象種別。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum RiskSignalTarget {
     UserPubkey,

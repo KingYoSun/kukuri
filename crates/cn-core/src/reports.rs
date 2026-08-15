@@ -94,7 +94,7 @@ pub async fn insert_community_node_appeal(
 
     let mut tx = pool.begin().await?;
     let row = sqlx::query(
-        "SELECT issuer_node_id, target_id, COALESCE(appeal_status, 'none') AS appeal_status
+        "SELECT issuer_node_id, target, target_id, COALESCE(appeal_status, 'none') AS appeal_status
          FROM cn_safety.risk_signals
          WHERE id = $1
          FOR UPDATE",
@@ -107,8 +107,11 @@ pub async fn insert_community_node_appeal(
     if stored_issuer != issuer_node_id {
         bail!("risk signal `{risk_signal_id}` was not issued by this community node");
     }
+    let stored_target: String = row.try_get("target")?;
     let stored_target_id: String = row.try_get("target_id")?;
-    if stored_target_id != input.subject_id {
+    if !appeal_subject_kind_matches(stored_target.as_str(), input.subject_kind.as_str())
+        || stored_target_id != input.subject_id
+    {
         bail!("appeal subject does not match risk signal `{risk_signal_id}`");
     }
     let appeal_status: String = row.try_get("appeal_status")?;
@@ -148,6 +151,16 @@ pub async fn insert_community_node_appeal(
     let report = report_from_row(&row)?;
     tx.commit().await?;
     Ok(report)
+}
+
+fn appeal_subject_kind_matches(target: &str, subject_kind: &str) -> bool {
+    matches!(
+        (target, subject_kind.trim()),
+        ("user_pubkey", "profile")
+            | ("peer_node", "peer_node")
+            | ("post_id", "post")
+            | ("blob_cid", "media")
+    )
 }
 
 /// 受信した通報を新着順で取得する（運営者の確認用）。

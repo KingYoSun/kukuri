@@ -357,7 +357,8 @@ async fn content_scan_is_attributed_to_author_and_appeal_updates_trust_input() -
             "2026-08-06T00:00:00Z",
         )
         .await?;
-        assert!(cleared.absolute.is_empty());
+        assert_eq!(cleared.absolute.len(), 1);
+        assert_eq!(cleared.absolute[0].appeal_status, AppealStatus::Cleared);
 
         Ok::<(), anyhow::Error>(())
     }

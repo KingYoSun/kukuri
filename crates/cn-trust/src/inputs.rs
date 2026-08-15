@@ -11,7 +11,9 @@
 
 use chrono::{DateTime, Utc};
 pub use kukuri_cn_protocol::TrustComponentKind;
-use kukuri_cn_safety::{AppealStatus, Basis, SafetyCategory, Severity, Visibility};
+use kukuri_cn_safety::{
+    AppealStatus, Basis, RiskSignalTarget, SafetyCategory, Severity, Visibility,
+};
 
 /// category → trust 成分の振り分け（初期規則）。
 ///
@@ -35,6 +37,10 @@ pub struct TrustRiskInput {
     pub signal_id: String,
     /// この signal を発行した issuer node。
     pub issuer_node_id: String,
+    /// 判定元の対象種別。
+    pub target: RiskSignalTarget,
+    /// 判定元の対象識別子。
+    pub target_id: String,
     /// 振り分け先の trust 成分。
     pub component: TrustComponentKind,
     pub category: SafetyCategory,
