@@ -14,9 +14,17 @@ steps:
     expect_object_id: created_post
   - action: assert_observed_report_routing
     expect_capability: community_index
+    expect_subject_kinds:
+      - post
+      - profile
+      - media
   - action: restart_desktop
   - action: assert_observed_report_routing
     expect_capability: community_index
+    expect_subject_kinds:
+      - post
+      - profile
+      - media
 artifacts:
   dump_logs: true
   metrics_snapshot: false

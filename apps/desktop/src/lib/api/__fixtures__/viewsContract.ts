@@ -60,7 +60,17 @@ export const postViewFull = {
       "mime": "image/png",
       "bytes": 4096,
       "role": "image_original",
-      "status": "Available"
+      "status": "Available",
+      "provenance": {
+        "canonical_source": "blob",
+        "observed_via": [
+          {
+            "node_base_url": "https://node.example",
+            "capability": "community_index",
+            "observed_at": 1700000003000
+          }
+        ]
+      }
     }
   ],
   "created_at": 1700000000,
@@ -87,7 +97,17 @@ export const postViewFull = {
         "mime": "image/png",
         "bytes": 4096,
         "role": "image_original",
-        "status": "Available"
+        "status": "Available",
+        "provenance": {
+          "canonical_source": "blob",
+          "observed_via": [
+            {
+              "node_base_url": "https://node.example",
+              "capability": "community_index",
+              "observed_at": 1700000003000
+            }
+          ]
+        }
       }
     ],
     "root_id": "root-1",

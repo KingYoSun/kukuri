@@ -52,8 +52,8 @@ pub(crate) use kukuri_desktop_runtime::{
     ImportPeerTicketRequest, ImportPrivateChannelInviteRequest, ListDirectMessageMessagesRequest,
     ListGameRoomsRequest, ListJoinedPrivateChannelsRequest, ListLiveSessionsRequest,
     ListThreadRequest, ListTimelineRequest, LiveSessionCommandRequest, ReactionKeyRequest,
-    SendDirectMessageRequest, SetCommunityNodeConfigRequest, SubmitCommunityNodeReportRequest,
-    ToggleReactionRequest,
+    SendDirectMessageRequest, SetCommunityNodeConfigRequest, SetMyProfileRequest,
+    SubmitCommunityNodeReportRequest, ToggleReactionRequest,
 };
 pub(crate) use kukuri_store::SqliteStore;
 pub(crate) use kukuri_transport::{

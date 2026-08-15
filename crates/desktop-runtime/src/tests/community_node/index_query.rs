@@ -273,11 +273,12 @@ async fn community_node_index_client_uses_session_and_preserves_query_contract()
 }
 
 #[tokio::test]
-async fn community_node_index_records_only_existing_local_subjects() {
+async fn community_node_index_records_and_restores_existing_local_subjects() {
     use kukuri_store::ContentObservationStore;
 
     let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
-    let (runtime, base_url, _managed, state, server, _dir) = index_runtime(None).await;
+    let (runtime, base_url, _managed, state, server, dir) = index_runtime(None).await;
+    let db_path = dir.path().join("community-index-query.db");
 
     runtime
         .search_community_node_index(scoped_request(base_url.as_str()))
@@ -292,13 +293,29 @@ async fn community_node_index_records_only_existing_local_subjects() {
             .is_empty()
     );
 
+    runtime
+        .set_my_profile(SetMyProfileRequest {
+            name: Some("observed-author".to_string()),
+            display_name: Some("Observed Author".to_string()),
+            about: Some("profile retained across restart".to_string()),
+            picture: None,
+            picture_upload: None,
+            clear_picture: false,
+        })
+        .await
+        .expect("set profile");
+
     let object_id = runtime
         .create_post(CreatePostRequest {
             topic: "kukuri:topic:rust".to_string(),
             content: "locally stored post".to_string(),
             reply_to: None,
             channel_ref: ChannelRef::Public,
-            attachments: Vec::new(),
+            attachments: vec![image_attachment_request(
+                "observed.png",
+                "image/png",
+                b"observed attachment",
+            )],
         })
         .await
         .expect("create post");
@@ -341,8 +358,82 @@ async fn community_node_index_records_only_existing_local_subjects() {
             .node_base_url,
         post_observations[0].node_base_url
     );
+    let attachment_provenance = observed_post.attachments[0]
+        .provenance
+        .as_ref()
+        .expect("attachment provenance");
+    assert_eq!(attachment_provenance.canonical_source, "blob");
+    assert_eq!(
+        attachment_provenance.observed_via,
+        observed_post
+            .provenance
+            .as_ref()
+            .expect("post provenance")
+            .observed_via
+    );
+    let author_pubkey = runtime.author_keys.public_key_hex();
+    let observed_author = runtime
+        .get_author_social_view(AuthorRequest {
+            pubkey: author_pubkey.clone(),
+        })
+        .await
+        .expect("author view");
+    assert_eq!(
+        observed_author
+            .provenance
+            .as_ref()
+            .expect("author provenance")
+            .observed_via[0]
+            .node_base_url,
+        base_url
+    );
 
     runtime.shutdown().await;
+    let restored = DesktopRuntime::new_with_config_and_identity(
+        &db_path,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("restored runtime");
+    let restored_timeline = restored
+        .list_timeline(ListTimelineRequest {
+            topic: "kukuri:topic:rust".to_string(),
+            scope: Default::default(),
+            cursor: None,
+            limit: Some(20),
+        })
+        .await
+        .expect("restored timeline");
+    let restored_post = restored_timeline
+        .items
+        .iter()
+        .find(|post| post.object_id == object_id)
+        .expect("restored observed post");
+    assert_eq!(
+        restored_post.attachments[0]
+            .provenance
+            .as_ref()
+            .expect("restored attachment provenance")
+            .canonical_source,
+        "blob"
+    );
+    let restored_author = restored
+        .get_author_social_view(AuthorRequest {
+            pubkey: author_pubkey.clone(),
+        })
+        .await
+        .expect("restored author view");
+    assert_eq!(
+        restored_author
+            .provenance
+            .as_ref()
+            .expect("restored author provenance")
+            .observed_via[0]
+            .node_base_url,
+        base_url
+    );
+    restored.shutdown().await;
     server.abort();
 }
 

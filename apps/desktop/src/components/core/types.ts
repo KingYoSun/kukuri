@@ -56,6 +56,7 @@ export type PostMediaView = {
     hash: string;
     src: string | null;
     mime: string;
+    provenance?: ContentProvenance;
   }>;
   currentImageIndex?: number;
   videoPosterPreviewSrc?: string | null;

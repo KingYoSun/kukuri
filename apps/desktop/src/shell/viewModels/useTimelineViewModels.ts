@@ -85,6 +85,7 @@ export function useTimelineViewModels({
               ? mediaObjectUrls[attachment.hash]
               : null,
           mime: attachment.mime,
+          provenance: contentProvenanceFromView(attachment.provenance),
         }));
       const mediaKind = primaryImage ? 'image' : videoManifest || videoPoster ? 'video' : null;
       const mediaMetaAttachment =
@@ -272,6 +273,7 @@ export function useTimelineViewModels({
           videoPosterPreviewSrc,
           videoPlaybackSrc,
           videoUnsupportedOnClient,
+          provenance: contentProvenanceFromView(mediaMetaAttachment?.provenance),
           videoProps:
             mediaKind === 'video' && videoPlaybackSrc && !videoUnsupportedOnClient
               ? {

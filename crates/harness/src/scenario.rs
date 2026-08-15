@@ -125,6 +125,8 @@ pub enum ScenarioStep {
     AssertNoReportProvenance,
     AssertObservedReportRouting {
         expect_capability: String,
+        #[serde(default)]
+        expect_subject_kinds: Vec<String>,
     },
     ReadCommunityTrust {
         target_pubkey: String,

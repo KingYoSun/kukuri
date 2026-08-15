@@ -209,6 +209,16 @@ describe('useDesktopShellViewModels', () => {
           bytes: 2048,
           role: 'image_original',
           status: 'Missing',
+          provenance: {
+            canonical_source: 'blob',
+            observed_via: [
+              {
+                node_base_url: 'https://node.example',
+                capability: 'community_index',
+                observed_at: 123,
+              },
+            ],
+          },
         },
         // primary image でも video 系でもない添付は extraAttachmentCount に数えられる
         {
@@ -235,7 +245,22 @@ describe('useDesktopShellViewModels', () => {
     expect(card.media.metaMime).toBe('image/png');
     // gallery は image mime のみ(video_poster 以外)。src は object url 未取得なら null
     expect(card.media.imageGalleryItems).toEqual([
-      { hash: imageHash, src: null, mime: 'image/png' },
+      {
+        hash: imageHash,
+        src: null,
+        mime: 'image/png',
+        provenance: {
+          canonicalSource: 'blob',
+          observedVia: [
+            {
+              nodeBaseUrl: 'https://node.example',
+              capability: 'community_index',
+              observedAt: 123,
+            },
+          ],
+          responsibleReportTargets: [],
+        },
+      },
     ]);
     expect(card.media.currentImageIndex).toBe(0);
 
@@ -247,7 +272,22 @@ describe('useDesktopShellViewModels', () => {
     expect(readyCard.media.state).toBe('ready');
     expect(readyCard.media.imagePreviewSrc).toBe('blob:image-preview-1');
     expect(readyCard.media.imageGalleryItems).toEqual([
-      { hash: imageHash, src: 'blob:image-preview-1', mime: 'image/png' },
+      {
+        hash: imageHash,
+        src: 'blob:image-preview-1',
+        mime: 'image/png',
+        provenance: {
+          canonicalSource: 'blob',
+          observedVia: [
+            {
+              nodeBaseUrl: 'https://node.example',
+              capability: 'community_index',
+              observedAt: 123,
+            },
+          ],
+          responsibleReportTargets: [],
+        },
+      },
     ]);
 
     view.unmount();
