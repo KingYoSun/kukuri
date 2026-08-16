@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, test, vi } from 'vitest';
 
@@ -7,6 +7,62 @@ import { InvokeError } from '@/lib/api/invoke/error';
 import { CommunityNodeAdvisoryPanel } from './CommunityNodeAdvisoryPanel';
 
 const targetPubkey = 'a'.repeat(64);
+const otherTargetPubkey = 'd'.repeat(64);
+const nodeA = 'https://node.example';
+const nodeB = 'https://node-b.example';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+function trustResponse(target: string, issuerNodeId: string) {
+  return {
+    viewer_pubkey: 'viewer',
+    target_id: target,
+    absolute: 0.4,
+    relative: 0.6,
+    trust: 0.5,
+    w_abs_applied: 0.5,
+    computed_at: '2026-08-14T00:00:00Z',
+    basis: [
+      {
+        signal_id: `signal-${issuerNodeId}`,
+        issuer_node_id: issuerNodeId,
+        target: 'user_pubkey' as const,
+        target_id: target,
+        component: 'relative' as const,
+        category: 'spam' as const,
+        severity: 'low' as const,
+        basis: 'provider_verdict' as const,
+        confidence: 0.75,
+        visibility: 'subscribed_nodes' as const,
+        appeal_status: 'none' as const,
+        expires_at: null,
+        raw_contribution: 0.5,
+        decay_factor: 0.8,
+        relation_weight: 1,
+        contribution: 0.4,
+      },
+    ],
+  };
+}
+
+function relationResponse(target: string, score = 0.42) {
+  return {
+    viewer_pubkey: 'viewer',
+    target_pubkey: target,
+    score,
+    basis: [{ feature: 'shared_topics', value: 1, weight: score, contribution: score }],
+  };
+}
+
+function neighborsResponse(pubkey: string) {
+  return { viewer_pubkey: 'viewer', neighbors: [pubkey] };
+}
 
 function api(
   signalTarget: 'user_pubkey' | 'post_id' = 'user_pubkey',
@@ -66,7 +122,7 @@ function api(
 }
 
 const communityNodeManifests = {
-  'https://node.example': {
+  [nodeA]: {
     node_id: 'node-a',
     node_name: 'ノード A',
     node_role: 'community-node',
@@ -83,6 +139,27 @@ const communityNodeManifests = {
     },
     abuse_contact: '',
     report_endpoint: 'https://node.example/v1/report',
+    terms_url: '',
+    privacy_url: '',
+    moderation_policy_url: '',
+  },
+  [nodeB]: {
+    node_id: 'node-b',
+    node_name: 'ノード B',
+    node_role: 'community-node',
+    server_name: 'node-b.example',
+    manifest_version: 'v1',
+    capability_scope: { available_enabled: ['trust_signal'], planned_enabled: [] },
+    authority_scope: { applies_to: ['this_node'], does_not_apply_to: [] },
+    p2p_boundary: {
+      identity_authority: false,
+      profile_canonical_store: false,
+      social_graph_canonical_store: false,
+      content_truth_source: false,
+      network_wide_authority: false,
+    },
+    abuse_contact: '',
+    report_endpoint: `${nodeB}/v1/report`,
     terms_url: '',
     privacy_url: '',
     moderation_policy_url: '',
@@ -213,5 +290,150 @@ describe('CommunityNodeAdvisoryPanel', () => {
     expect(
       screen.queryByRole('button', { name: 'このリスク判定に異議を申し立てる' })
     ).not.toBeInTheDocument();
+  });
+
+  test('clears loaded results and an open appeal when the target author changes', async () => {
+    const client = api();
+    const { rerender } = render(
+      <CommunityNodeAdvisoryPanel
+        api={client}
+        targetPubkey={targetPubkey}
+        nodeBaseUrls={[nodeA]}
+        communityNodeManifests={communityNodeManifests}
+      />
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(await screen.findByText(/node-a/));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'このリスク判定に異議を申し立てる' })
+    );
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    rerender(
+      <CommunityNodeAdvisoryPanel
+        api={client}
+        targetPubkey={otherTargetPubkey}
+        nodeBaseUrls={[nodeA]}
+        communityNodeManifests={communityNodeManifests}
+      />
+    );
+
+    await waitFor(() => expect(screen.queryAllByText(/node-a/)).toHaveLength(0));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  test('clears an open appeal when the selected node changes', async () => {
+    const client = api();
+    render(
+      <CommunityNodeAdvisoryPanel
+        api={client}
+        targetPubkey={targetPubkey}
+        nodeBaseUrls={[nodeA, nodeB]}
+        communityNodeManifests={communityNodeManifests}
+      />
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(await screen.findByText(/node-a/));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'このリスク判定に異議を申し立てる' })
+    );
+    fireEvent.change(screen.getByRole('combobox', { hidden: true }), { target: { value: nodeB } });
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.queryAllByText(/node-a/)).toHaveLength(0);
+  });
+
+  test('discards a pending response after the target author changes', async () => {
+    const pendingTrust = deferred<ReturnType<typeof trustResponse>>();
+    const pendingRelation = deferred<ReturnType<typeof relationResponse>>();
+    const pendingNeighbors = deferred<ReturnType<typeof neighborsResponse>>();
+    const client = {
+      readCommunityNodeTrustUser: vi.fn(() => pendingTrust.promise),
+      readCommunityNodeRelationUser: vi.fn(() => pendingRelation.promise),
+      listCommunityNodeRelationNeighbors: vi.fn(() => pendingNeighbors.promise),
+      submitCommunityNodeReport: vi.fn(),
+    };
+    const { rerender } = render(
+      <CommunityNodeAdvisoryPanel
+        api={client}
+        targetPubkey={targetPubkey}
+        nodeBaseUrls={[nodeA]}
+        communityNodeManifests={communityNodeManifests}
+      />
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    rerender(
+      <CommunityNodeAdvisoryPanel
+        api={client}
+        targetPubkey={otherTargetPubkey}
+        nodeBaseUrls={[nodeA]}
+        communityNodeManifests={communityNodeManifests}
+      />
+    );
+    pendingTrust.resolve(trustResponse(targetPubkey, 'stale-node-a'));
+    pendingRelation.resolve(relationResponse(targetPubkey));
+    pendingNeighbors.resolve(neighborsResponse('b'.repeat(64)));
+
+    await waitFor(() => expect(client.readCommunityNodeTrustUser).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/stale-node-a/)).not.toBeInTheDocument();
+    expect(screen.queryByText('b'.repeat(64))).not.toBeInTheDocument();
+  });
+
+  test('keeps the current author result when responses complete in reverse order', async () => {
+    const trustA = deferred<ReturnType<typeof trustResponse>>();
+    const trustB = deferred<ReturnType<typeof trustResponse>>();
+    const relationA = deferred<ReturnType<typeof relationResponse>>();
+    const relationB = deferred<ReturnType<typeof relationResponse>>();
+    const neighborsA = deferred<ReturnType<typeof neighborsResponse>>();
+    const neighborsB = deferred<ReturnType<typeof neighborsResponse>>();
+    const client = {
+      readCommunityNodeTrustUser: vi.fn((request: { target_pubkey: string }) =>
+        request.target_pubkey === targetPubkey ? trustA.promise : trustB.promise
+      ),
+      readCommunityNodeRelationUser: vi.fn((request: { target_pubkey: string }) =>
+        request.target_pubkey === targetPubkey ? relationA.promise : relationB.promise
+      ),
+      listCommunityNodeRelationNeighbors: vi
+        .fn()
+        .mockImplementationOnce(() => neighborsA.promise)
+        .mockImplementationOnce(() => neighborsB.promise),
+      submitCommunityNodeReport: vi.fn(),
+    };
+    const { rerender } = render(
+      <CommunityNodeAdvisoryPanel
+        api={client}
+        targetPubkey={targetPubkey}
+        nodeBaseUrls={[nodeA]}
+        communityNodeManifests={communityNodeManifests}
+      />
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    rerender(
+      <CommunityNodeAdvisoryPanel
+        api={client}
+        targetPubkey={otherTargetPubkey}
+        nodeBaseUrls={[nodeA]}
+        communityNodeManifests={communityNodeManifests}
+      />
+    );
+    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+
+    trustB.resolve(trustResponse(otherTargetPubkey, 'current-node-b'));
+    relationB.resolve(relationResponse(otherTargetPubkey, 0.73));
+    neighborsB.resolve(neighborsResponse('e'.repeat(64)));
+    expect(await screen.findByText(/current-node-b/)).toBeInTheDocument();
+
+    trustA.resolve(trustResponse(targetPubkey, 'stale-node-a'));
+    relationA.resolve(relationResponse(targetPubkey, 0.11));
+    neighborsA.resolve(neighborsResponse('b'.repeat(64)));
+
+    await waitFor(() => expect(client.readCommunityNodeTrustUser).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText(/stale-node-a/)).not.toBeInTheDocument();
+    expect(screen.getByText(/current-node-b/)).toBeInTheDocument();
+    expect(screen.getByText('e'.repeat(64))).toBeInTheDocument();
   });
 });

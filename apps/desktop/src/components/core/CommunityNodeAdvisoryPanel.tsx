@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
@@ -31,6 +31,36 @@ type ReadState<T> =
 
 const IDLE_STATE = { status: 'idle', value: null, reason: null, message: null } as const;
 const LOADING_STATE = { status: 'loading', value: null, reason: null, message: null } as const;
+
+type AdvisoryContext = {
+  key: string;
+  targetPubkey: string;
+  baseUrl: string;
+  generation: number;
+};
+
+type AdvisoryState = {
+  context: AdvisoryContext | null;
+  trust: ReadState<TrustUserReadResponse>;
+  relation: ReadState<RelationReadResponse>;
+  neighbors: ReadState<RelationNeighborsResponse>;
+};
+
+type AppealSelection = {
+  context: AdvisoryContext;
+  basis: TrustBasisEntry;
+};
+
+const IDLE_ADVISORY_STATE: AdvisoryState = {
+  context: null,
+  trust: IDLE_STATE,
+  relation: IDLE_STATE,
+  neighbors: IDLE_STATE,
+};
+
+function advisoryContextKey(targetPubkey: string, baseUrl: string): string {
+  return `${targetPubkey}\u0000${baseUrl}`;
+}
 
 function resultState<T>(result: PromiseSettledResult<T>): ReadState<T> {
   if (result.status === 'fulfilled') {
@@ -80,10 +110,30 @@ export function CommunityNodeAdvisoryPanel({
 }: CommunityNodeAdvisoryPanelProps) {
   const { t } = useTranslation(['profile', 'common']);
   const [baseUrl, setBaseUrl] = useState(nodeBaseUrls[0] ?? '');
-  const [trust, setTrust] = useState<ReadState<TrustUserReadResponse>>(IDLE_STATE);
-  const [relation, setRelation] = useState<ReadState<RelationReadResponse>>(IDLE_STATE);
-  const [neighbors, setNeighbors] = useState<ReadState<RelationNeighborsResponse>>(IDLE_STATE);
-  const [appealBasis, setAppealBasis] = useState<TrustBasisEntry | null>(null);
+  const [advisoryState, setAdvisoryState] = useState<AdvisoryState>(IDLE_ADVISORY_STATE);
+  const [appealSelection, setAppealSelection] = useState<AppealSelection | null>(null);
+  const requestGeneration = useRef(0);
+
+  const selectedBaseUrl = nodeBaseUrls.includes(baseUrl) ? baseUrl : (nodeBaseUrls[0] ?? '');
+  const currentContextKey = selectedBaseUrl
+    ? advisoryContextKey(targetPubkey, selectedBaseUrl)
+    : null;
+  const currentContextKeyRef = useRef(currentContextKey);
+  const visibleAdvisoryState =
+    advisoryState.context?.key === currentContextKey ? advisoryState : IDLE_ADVISORY_STATE;
+  const activeAppealSelection =
+    appealSelection?.context.key === currentContextKey &&
+    appealSelection.context.generation === visibleAdvisoryState.context?.generation
+      ? appealSelection
+      : null;
+  const { trust, relation, neighbors } = visibleAdvisoryState;
+  const appealBasis = activeAppealSelection?.basis ?? null;
+
+  const invalidateAdvisory = useCallback(() => {
+    requestGeneration.current += 1;
+    setAdvisoryState(IDLE_ADVISORY_STATE);
+    setAppealSelection(null);
+  }, []);
 
   const appealPlan = useMemo(
     () =>
@@ -94,29 +144,55 @@ export function CommunityNodeAdvisoryPanel({
   );
 
   useEffect(() => {
-    if (!nodeBaseUrls.includes(baseUrl)) setBaseUrl(nodeBaseUrls[0] ?? '');
-  }, [baseUrl, nodeBaseUrls]);
+    if (baseUrl !== selectedBaseUrl) setBaseUrl(selectedBaseUrl);
+  }, [baseUrl, selectedBaseUrl]);
 
-  function resetReads() {
-    setTrust(IDLE_STATE);
-    setRelation(IDLE_STATE);
-    setNeighbors(IDLE_STATE);
-  }
+  useEffect(() => {
+    currentContextKeyRef.current = currentContextKey;
+    invalidateAdvisory();
+  }, [currentContextKey, invalidateAdvisory]);
 
-  async function loadAdvisory() {
-    if (!baseUrl) return;
-    setTrust(LOADING_STATE);
-    setRelation(LOADING_STATE);
-    setNeighbors(LOADING_STATE);
-    const request = { base_url: baseUrl, target_pubkey: targetPubkey };
+  async function loadAdvisory({ preserveAppeal = false } = {}) {
+    if (!selectedBaseUrl || !currentContextKey) return;
+    const generation = ++requestGeneration.current;
+    const context: AdvisoryContext = {
+      key: currentContextKey,
+      targetPubkey,
+      baseUrl: selectedBaseUrl,
+      generation,
+    };
+    if (!preserveAppeal) {
+      setAppealSelection(null);
+      setAdvisoryState({
+        context,
+        trust: LOADING_STATE,
+        relation: LOADING_STATE,
+        neighbors: LOADING_STATE,
+      });
+    }
+    const request = { base_url: context.baseUrl, target_pubkey: context.targetPubkey };
     const [trustResult, relationResult, neighborsResult] = await Promise.allSettled([
       api.readCommunityNodeTrustUser(request),
       api.readCommunityNodeRelationUser(request),
-      api.listCommunityNodeRelationNeighbors({ base_url: baseUrl, limit: 20 }),
+      api.listCommunityNodeRelationNeighbors({ base_url: context.baseUrl, limit: 20 }),
     ]);
-    setTrust(resultState(trustResult));
-    setRelation(resultState(relationResult));
-    setNeighbors(resultState(neighborsResult));
+    if (
+      generation !== requestGeneration.current ||
+      context.key !== currentContextKeyRef.current
+    ) {
+      return;
+    }
+    if (preserveAppeal) {
+      setAppealSelection((selection) =>
+        selection?.context.key === context.key ? { ...selection, context } : null
+      );
+    }
+    setAdvisoryState({
+      context,
+      trust: resultState(trustResult),
+      relation: resultState(relationResult),
+      neighbors: resultState(neighborsResult),
+    });
   }
 
   function unavailableCopy(state: Extract<ReadState<unknown>, { status: 'unavailable' }>) {
@@ -125,8 +201,16 @@ export function CommunityNodeAdvisoryPanel({
   }
 
   async function submitAppeal(input: ReportSubmitInput) {
-    const subject = appealBasis ? appealSubjectForBasis(appealBasis) : null;
-    if (!input.appeal || input.candidate.contact.kind !== 'endpoint' || !subject) {
+    const selection = activeAppealSelection;
+    const subject = selection ? appealSubjectForBasis(selection.basis) : null;
+    if (
+      !selection ||
+      selection.context.key !== currentContextKeyRef.current ||
+      selection.context.generation !== requestGeneration.current ||
+      !input.appeal ||
+      input.candidate.contact.kind !== 'endpoint' ||
+      !subject
+    ) {
       throw new Error(t('profile:communityNodeAdvisory.appeal.unresolvedBody'));
     }
     return api.submitCommunityNodeReport({
@@ -159,10 +243,10 @@ export function CommunityNodeAdvisoryPanel({
             <span>{t('profile:communityNodeAdvisory.nodeLabel')}</span>
             <select
               className='input min-h-10 w-full min-w-0 max-w-full'
-              value={baseUrl}
+              value={selectedBaseUrl}
               onChange={(event) => {
+                invalidateAdvisory();
                 setBaseUrl(event.currentTarget.value);
-                resetReads();
               }}
             >
               {nodeBaseUrls.map((node) => (
@@ -224,7 +308,18 @@ export function CommunityNodeAdvisoryPanel({
                           {t('profile:communityNodeAdvisory.appeal.noneContribution')}
                         </p>
                         {appealSubjectForBasis(basis) ? (
-                          <Button type='button' variant='secondary' onClick={() => setAppealBasis(basis)}>
+                          <Button
+                            type='button'
+                            variant='secondary'
+                            onClick={() => {
+                              if (visibleAdvisoryState.context) {
+                                setAppealSelection({
+                                  context: visibleAdvisoryState.context,
+                                  basis,
+                                });
+                              }
+                            }}
+                          >
                             {t('profile:communityNodeAdvisory.appeal.action')}
                           </Button>
                         ) : (
@@ -282,7 +377,7 @@ export function CommunityNodeAdvisoryPanel({
         <ReportRoutingDialog
           open
           onOpenChange={(open) => {
-            if (!open) setAppealBasis(null);
+            if (!open) setAppealSelection(null);
           }}
           subject={appealSubjectForBasis(appealBasis)!}
           plan={appealPlan}
@@ -292,7 +387,7 @@ export function CommunityNodeAdvisoryPanel({
           }}
           onSubmit={submitAppeal}
           onSubmitted={async () => {
-            await loadAdvisory();
+            await loadAdvisory({ preserveAppeal: true });
           }}
         />
       ) : null}
