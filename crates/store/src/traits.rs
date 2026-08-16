@@ -1,4 +1,5 @@
 use std::collections::{BTreeSet, HashMap};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -11,6 +12,8 @@ use crate::models::{
     GameRoomProjectionRow, LiveSessionProjectionRow, MutedAuthorRow, NotificationRow,
     ObjectProjectionRow, Page, ReactionProjectionRow, TimelineCursor,
 };
+
+pub(crate) const CONTENT_OBSERVATION_RETENTION_MS: i64 = 90 * 24 * 60 * 60 * 1000;
 
 #[async_trait]
 pub trait Store: Send + Sync {
@@ -119,6 +122,17 @@ pub trait ContentObservationStore: Send + Sync {
         &self,
         subject_kind: &str,
         subject_id: &str,
+    ) -> Result<Vec<ContentObservationRow>> {
+        let now_millis = i64::try_from(SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis())?;
+        self.list_content_observations_at(subject_kind, subject_id, now_millis)
+            .await
+    }
+    /// 保持期間の契約試験で基準時刻を固定するための読み取り境界。
+    async fn list_content_observations_at(
+        &self,
+        subject_kind: &str,
+        subject_id: &str,
+        now_millis: i64,
     ) -> Result<Vec<ContentObservationRow>>;
 }
 

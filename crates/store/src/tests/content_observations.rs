@@ -48,7 +48,7 @@ where
     );
     assert!(
         store
-            .list_content_observations("post", object_id.as_str())
+            .list_content_observations_at("post", object_id.as_str(), observation.observed_at)
             .await
             .unwrap()
             .is_empty()
@@ -75,7 +75,7 @@ where
     );
     assert_eq!(
         store
-            .list_content_observations("post", object_id.as_str())
+            .list_content_observations_at("post", object_id.as_str(), refreshed.observed_at)
             .await
             .unwrap(),
         vec![refreshed]
@@ -84,7 +84,7 @@ where
     store.rebuild_object_projections(Vec::new()).await.unwrap();
     assert!(
         store
-            .list_content_observations("post", object_id.as_str())
+            .list_content_observations_at("post", object_id.as_str(), 20)
             .await
             .unwrap()
             .is_empty()
@@ -121,7 +121,7 @@ where
         );
     }
     let rows = store
-        .list_content_observations("post", object_id.as_str())
+        .list_content_observations_at("post", object_id.as_str(), now)
         .await
         .unwrap();
     assert_eq!(rows.len(), 2);
@@ -159,7 +159,7 @@ where
         );
     }
     let rows = store
-        .list_content_observations("post", object_id.as_str())
+        .list_content_observations_at("post", object_id.as_str(), 2048)
         .await
         .unwrap();
     assert_eq!(rows.len(), 2048);
@@ -170,6 +170,59 @@ where
     assert!(
         rows.iter()
             .any(|row| row.node_base_url == "https://node-2048.example")
+    );
+}
+
+async fn content_observation_expires_without_another_write_scenario<S>(store: &S)
+where
+    S: ContentObservationStore + ObjectProjectionStore,
+{
+    const DAY_MS: i64 = 24 * 60 * 60 * 1000;
+    let object_id = EnvelopeId::from("time-only-expiring-post");
+    let observed_at = 10;
+    let observation = ContentObservationRow {
+        subject_kind: "post".to_string(),
+        subject_id: object_id.as_str().to_string(),
+        node_base_url: "https://time-only.example".to_string(),
+        capability: "community_index".to_string(),
+        observed_at,
+    };
+    store
+        .put_object_projection(observation_projection_row(object_id.as_str()))
+        .await
+        .unwrap();
+    assert!(
+        store
+            .put_content_observation(observation.clone())
+            .await
+            .unwrap()
+    );
+
+    assert_eq!(
+        store
+            .list_content_observations_at("post", object_id.as_str(), observed_at + 90 * DAY_MS,)
+            .await
+            .unwrap(),
+        vec![observation]
+    );
+    assert!(
+        store
+            .list_content_observations_at(
+                "post",
+                object_id.as_str(),
+                observed_at + 90 * DAY_MS + 1,
+            )
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        store
+            .list_content_observations_at("post", object_id.as_str(), observed_at)
+            .await
+            .unwrap()
+            .is_empty(),
+        "期限切れ記録は読み取り時に物理削除される"
     );
 }
 
@@ -189,4 +242,13 @@ async fn content_observation_removes_rows_older_than_ninety_days() {
 async fn content_observation_keeps_only_the_newest_2048_rows() {
     content_observation_limit_scenario(&MemoryStore::default()).await;
     content_observation_limit_scenario(&SqliteStore::connect_memory().await.unwrap()).await;
+}
+
+#[tokio::test]
+async fn content_observation_expires_after_time_passes_without_another_write() {
+    content_observation_expires_without_another_write_scenario(&MemoryStore::default()).await;
+    content_observation_expires_without_another_write_scenario(
+        &SqliteStore::connect_memory().await.unwrap(),
+    )
+    .await;
 }
