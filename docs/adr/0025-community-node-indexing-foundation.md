@@ -1,7 +1,11 @@
 # ADR 0025: Community Node Indexing Foundation
 
 ## Status
-Draft
+Accepted
+
+**2026-08-16 改訂**: #617 で `CommunityIndex` は `Availability::Available` へ移行済みである。
+実際の読み取り面は設定と、現在の構成・配布版・判定項目に結び付いた有効な準備完了記録の
+両方が揃った場合だけ公開する。
 
 ## Date
 2026-06-30
@@ -17,7 +21,7 @@ Draft
 - `docs/adr/0027-deterministic-moderation-critical-safety.md`（§2 component boundary / data flow / fail-closed invariants / §2.9 readiness。旧 `community-node-critical-safety.md` を集約）
 - `docs/architecture/p2p-first-community-node-responsibility-boundary.md`（authority scope）
 - `docs/adr/0027-deterministic-moderation-critical-safety.md`（§2.1 advisory ≠ command。旧 `moderation-event-trust-semantics.md` を集約）
-- `crates/cn-operator/src/capability.rs`（`CommunityIndex` = `Availability::Planned`）
+- `crates/cn-operator/src/capability.rs`（`CommunityIndex` = `Availability::Available`、#617）
 - `crates/cn-indexer/`（#413 Model C ingestion participant + relay validation gate + ArcadeDB 投影）
 - `crates/cn-core/src/index_scope.rs` + `crates/cn-core/migrations/202607010001_index_scope.sql`（#413 scope 管理 state）
 - 実装側 Issue: #404（fail-closed community indexing 本体）, #413（Model C ingestion / supported-topic scope / indexing request）
@@ -25,7 +29,7 @@ Draft
 
 ## 位置づけ
 
-community node の主要未検討機能のひとつ「indexing（index / search / discovery / recommendation）」の責務境界を固定する foundation ADR である。`cn-core` に index の実体はまだ無く（実装は #404）、現状 fail-closed 不変条件は決定論 moderation ADR（`docs/adr/0027-deterministic-moderation-critical-safety.md` §2.4）に集約されている。本 ADR は、その土台として **何を index し、何を index しないか**を先に確定し、その上に trust/relation（#409）・moderation（#410/#411）を載せられるようにする。
+community node の `indexing`（`index` / `search` / `discovery` / `recommendation`）の責務境界を固定する基礎の設計判断記録である。索引の実体と安全側に倒す読み取り境界は #404、共有文書からの取り込みは #413、実行時の準備判定と有効化関門は #616、提供中への移行は #617 で実装した。本記録は、その土台として **何を索引し、何を索引しないか**を固定し、`trust` / `relation`（#409）・`moderation`（#410/#411）との境界を説明する。
 
 本 ADR は indexing の **scope（範囲）と content kind（対象種別）と fail-closed（安全）** の境界を定義する。trust / relation への risk signal 反映、provider 接続、ranking/recommendation アルゴリズムの詳細は本 ADR のスコープ外（後続 ADR / Issue）。
 
@@ -70,7 +74,7 @@ community node の主要未検討機能のひとつ「indexing（index / search 
 
 ## 1. 背景
 
-- 現状 `community_index` / `moderation` / `community_local_trust` は `Availability::Planned`（spec のみ）で、index / search / discovery / recommendation の実体が無い。
+- `community_index` / `moderation` / `community_local_trust` は #617 で `Availability::Available` へ移行した。`community_index` の検索・発見・おすすめは実装済みだが、設定だけでは公開せず、有効な準備完了記録も要求する。
 - index は content-surfacing path（content を公開的に浮上させる経路）であり、安全設計が無いまま解禁してはならない（critical-safety.md §1）。
 - index を「無制限に何でも拾う」設計にすると、(a) operator が責任を負えない範囲まで authority scope が膨張し、(b) media を含む有害 content の surfacing 経路が広がる。本 ADR はこれを scope と content kind の両面で**絞る**ことを既定とする。
 
@@ -145,7 +149,7 @@ content が index に入る条件は次の AND とする:
 - ingestion = Model C を基本とするため、CN は supported topic / 許可 channel の **docs sync participant node を新たに常駐**させる（純 relay + KV rendezvous の現行構成を一段拡張）。indexing 起動時に **relay validation** を gate として通し、自前 relay が無ければ外部 relay 設定を必須化する。Model B / A は Appendix（optional）。
 - private channel の indexing は「indexing リクエスト＝secret 送信」で C に capability を注入して解決し、別 ingestion 経路を新設しない。リクエスト権限は channel の権限モデルを応用する。
 - index 本体（schema / storage / query boundary）と fail-closed 制約の実装は #404 が担う。本 ADR は #404 が満たすべき contract / scenario の必要集合を先に固定する。
-- `CommunityIndex` capability の `Availability::Planned` → 昇格は、§2 の scope/content/safety ゲートと critical-safety.md §11 readiness（known-CSAM provider 設定・signed event 有効・blob 恒久保存無効 等）が実装・テストで満たされた段階で別途判断する（本 ADR では昇格しない）。
+- `CommunityIndex` capability は、§2 の範囲・内容・安全性の関門と ADR 0027 §2.9 の準備完了条件を #616 の実行時関門で固定した後、#617 で `Availability::Available` へ移行した。提供可能であることと個々の配備で読み取り面を公開することは分離し、後者は設定と有効な準備完了記録の両方を要求する。
 
 ## 4. Out of scope（後続へ申し送り）
 
@@ -228,9 +232,10 @@ fail-closed indexing 本体（DB 制約 + query 境界）は #404 で実装し�
   `FailClosedIndexQuery`（唯一のユーザー向け読み口。投影 hit を真実源 + 最新 verdict と突合して
   非 allow / critical / 残留 hit を落とす）。`cn-user-api` の `GET /v1/index/{search,discovery,recommendations}`
   （認証 + consent + rate limit）が公開面。
-- **既定無効**: `COMMUNITY_NODE_INDEX_QUERY_ENABLED`（既定 false → 404）。`CommunityIndex` の
-  `Availability::Planned` → 昇格（および ingest loop 常駐化・エンドポイント既定有効化）は
-  readiness（ADR 0027 §2.9）が揃った段階で別途判断する。
+- **安全側の公開関門**: `CommunityIndex` 自体は #617 で `Availability::Available` へ移行済み。
+  ただし `COMMUNITY_NODE_INDEX_QUERY_ENABLED` は既定 false で、真にしても現在の profile、
+  operator config、配布版、判定項目、有効期限に一致する準備完了記録が無ければ検索・発見・
+  おすすめの読み取り面を公開しない。条件不成立時は 404 へ倒す。
 - **スコープ外のまま**: ranking / 関連度スコアリングの具体（§4）。discovery / recommendation は
   created_at 降順の新着列挙を最小 surface とする。
 

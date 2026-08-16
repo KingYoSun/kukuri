@@ -181,7 +181,15 @@
     "results": "社区索引结果",
     "previewNotice": "这是可能包含派生标签的搜索预览，并非帖子的规范正文。",
     "noEligibleNode": "当前没有已认证、已同意且提供可用社区索引的 Community Node。",
-    "allJoinedDisabled": "请一次搜索一个公开主题或私密频道。不会把全部已加入范围发送给节点。"
+    "allJoinedDisabled": "请一次搜索一个公开主题或私密频道。不会把全部已加入范围发送给节点。",
+    "errors": {
+      "authRequired": "需要对所选 Community Node 进行身份验证。",
+      "consentRequired": "需要同意所选 Community Node 的必选条款。",
+      "notConfigured": "所选节点未配置社区索引。",
+      "notActivated": "所选节点的社区索引暂时不可用。",
+      "rateLimited": "请求过多，请稍后重试。",
+      "rateLimitedWithRetry": "请求过多，请在 {{seconds}} 秒后重试。"
+    }
   },
   "report": {
     "title": "举报内容",
