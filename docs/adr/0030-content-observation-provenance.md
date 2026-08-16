@@ -10,6 +10,8 @@
 - #310
 - #612
 - #666
+- #684
+- #692
 - `docs/adr/0002-feature-data-classification-template.md`
 - `docs/adr/0027-deterministic-moderation-critical-safety.md`
 - `docs/architecture/p2p-first-community-node-responsibility-boundary.md`
@@ -28,7 +30,9 @@
   - `content_observation_requires_local_subject`
   - `content_observation_upsert_refreshes_timestamp`
   - `content_observation_restores_after_restart`
+  - `content_observation_expires_after_time_passes_without_another_write`
   - `post_view_exposes_content_provenance`
+  - `expired_content_observations_do_not_reach_post_profile_or_attachment_views`
   - `unknown_provenance_has_no_report_candidate`
   - `report_manifest_loads_without_settings_visit`
 - `必須 scenario`:
@@ -42,7 +46,9 @@
 - 手動接続、`DHT`、直接接続、単なる待ち合わせ参加からコミュニティノード由来を推測しない。
 - 索引応答を受けても、対象の投稿またはプロフィールが端末内に存在しない場合は永続化しない。
 - 同じ対象、ノード、能力を再観測した場合は最終観測時刻だけを更新する。
-- 保持期間は最終観測から90日、総数は2048件を上限とし、古い記録から削除する。
+- 保持期間は最終観測から90日、総数は2048件を上限とする。ちょうど90日の記録は残し、90日を超えた記録を期限切れとする。
+- 期限切れ記録は書き込み時の整理に加え、観測記録の読み取り時にも現在時刻で判定する。読み取りでは期限切れの物理削除と対象記録の取得を同じ取引または排他範囲で行い、削除対象を返さない。これにより、新しい観測がない端末でも保持期間を強制する。
+- 2048件の上限を超えた場合は、引き続き最終観測時刻が古い記録から削除する。
 - 投稿の端末内射影が削除された場合、その投稿の観測記録も削除する。プロフィールは端末内プロフィールが存在する間だけ記録できる。
 - 添付は親投稿の観測元を表示時に引き継ぎ、正本を `blob` とする。添付単位の観測記録は保存しない。
 - 通報先は保存せず、通報を開いた時に観測元の基底アドレスから最新の `CommunityNodeManifest` を取得して求める。

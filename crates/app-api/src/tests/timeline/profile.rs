@@ -54,6 +54,86 @@ async fn create_public_post_persists_profile_post_doc_and_lists_profile_timeline
 }
 
 #[tokio::test]
+async fn expired_content_observations_do_not_reach_post_profile_or_attachment_views() {
+    let (app, store, _docs_sync, _blob_service) = local_app_with_memory_services();
+    let profile = app
+        .set_my_profile(ProfileInput {
+            name: Some("retention-owner".into()),
+            display_name: Some("保持期限の確認用".into()),
+            about: None,
+            picture: None,
+            picture_upload: None,
+            clear_picture: false,
+        })
+        .await
+        .expect("set profile");
+    let topic = "kukuri:topic:observation-retention";
+    let object_id = app
+        .create_post_with_attachments(
+            topic,
+            "retention body",
+            None,
+            vec![pending_image_attachment(
+                "image/png",
+                tiny_png_bytes().as_slice(),
+            )],
+        )
+        .await
+        .expect("create observed post");
+
+    for (subject_kind, subject_id) in [
+        ("post", object_id.as_str()),
+        ("profile", profile.pubkey.as_str()),
+    ] {
+        assert!(
+            store
+                .put_content_observation(ContentObservationRow {
+                    subject_kind: subject_kind.to_string(),
+                    subject_id: subject_id.to_string(),
+                    node_base_url: "https://expired-observer.example".to_string(),
+                    capability: "community_index".to_string(),
+                    observed_at: 1,
+                })
+                .await
+                .expect("store expired observation")
+        );
+    }
+
+    let timeline = app
+        .list_timeline(topic, None, 20)
+        .await
+        .expect("list timeline");
+    let post = timeline
+        .items
+        .iter()
+        .find(|post| post.object_id == object_id)
+        .expect("observed post");
+    assert_eq!(post.provenance, None);
+    assert_eq!(post.attachments.len(), 1);
+    assert_eq!(post.attachments[0].provenance, None);
+
+    let author = app
+        .build_author_social_view(profile.pubkey.as_str())
+        .await
+        .expect("build author view");
+    assert_eq!(author.provenance, None);
+    assert!(
+        store
+            .list_content_observations("post", object_id.as_str())
+            .await
+            .expect("list post observations")
+            .is_empty()
+    );
+    assert!(
+        store
+            .list_content_observations("profile", profile.pubkey.as_str())
+            .await
+            .expect("list profile observations")
+            .is_empty()
+    );
+}
+
+#[tokio::test]
 async fn public_reply_is_indexed_in_profile_timeline() {
     let store = Arc::new(MemoryStore::default());
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));

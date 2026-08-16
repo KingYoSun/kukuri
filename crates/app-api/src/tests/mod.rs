@@ -15,8 +15,9 @@ use kukuri_docs_sync::IrohDocsSync;
 #[cfg(feature = "iroh-integration-tests")]
 use kukuri_iroh_node::IrohDocsNode;
 use kukuri_store::{
-    BookmarkedCustomReactionRow, DirectMessageStore, LiveGameProjectionStore, MemoryStore,
-    ReactionBookmarkStore, SocialProjectionStore, SqliteStore,
+    BookmarkedCustomReactionRow, ContentObservationRow, ContentObservationStore,
+    DirectMessageStore, LiveGameProjectionStore, MemoryStore, ReactionBookmarkStore,
+    SocialProjectionStore, SqliteStore,
 };
 #[cfg(feature = "iroh-integration-tests")]
 use kukuri_transport::{DhtDiscoveryOptions, IrohGossipTransport, TransportRelayConfig};

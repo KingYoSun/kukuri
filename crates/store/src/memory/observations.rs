@@ -1,7 +1,7 @@
 use super::*;
+use crate::traits::CONTENT_OBSERVATION_RETENTION_MS;
 
 const MAX_CONTENT_OBSERVATIONS: usize = 2048;
-const CONTENT_OBSERVATION_RETENTION_MS: i64 = 90 * 24 * 60 * 60 * 1000;
 
 #[async_trait]
 impl ContentObservationStore for MemoryStore {
@@ -56,15 +56,16 @@ impl ContentObservationStore for MemoryStore {
         Ok(true)
     }
 
-    async fn list_content_observations(
+    async fn list_content_observations_at(
         &self,
         subject_kind: &str,
         subject_id: &str,
+        now_millis: i64,
     ) -> Result<Vec<ContentObservationRow>> {
-        let mut rows = self
-            .content_observation_rows
-            .read()
-            .await
+        let cutoff = now_millis.saturating_sub(CONTENT_OBSERVATION_RETENTION_MS);
+        let mut observations = self.content_observation_rows.write().await;
+        observations.retain(|_, observation| observation.observed_at >= cutoff);
+        let mut rows = observations
             .values()
             .filter(|row| row.subject_kind == subject_kind && row.subject_id == subject_id)
             .cloned()

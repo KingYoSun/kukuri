@@ -1,7 +1,7 @@
 use super::*;
+use crate::traits::CONTENT_OBSERVATION_RETENTION_MS;
 
 const MAX_CONTENT_OBSERVATIONS: i64 = 2048;
-const CONTENT_OBSERVATION_RETENTION_MS: i64 = 90 * 24 * 60 * 60 * 1000;
 
 #[async_trait]
 impl ContentObservationStore for SqliteStore {
@@ -73,11 +73,18 @@ impl ContentObservationStore for SqliteStore {
         Ok(true)
     }
 
-    async fn list_content_observations(
+    async fn list_content_observations_at(
         &self,
         subject_kind: &str,
         subject_id: &str,
+        now_millis: i64,
     ) -> Result<Vec<ContentObservationRow>> {
+        let cutoff = now_millis.saturating_sub(CONTENT_OBSERVATION_RETENTION_MS);
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("DELETE FROM content_observations WHERE observed_at < ?1")
+            .bind(cutoff)
+            .execute(&mut *tx)
+            .await?;
         let rows = sqlx::query(
             r#"
             SELECT subject_kind, subject_id, node_base_url, capability, observed_at
@@ -88,8 +95,9 @@ impl ContentObservationStore for SqliteStore {
         )
         .bind(subject_kind)
         .bind(subject_id)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut *tx)
         .await?;
+        tx.commit().await?;
         rows.into_iter()
             .map(|row| {
                 Ok(ContentObservationRow {

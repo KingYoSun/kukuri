@@ -640,6 +640,30 @@ test('report action refreshes the observed node manifest when the dialog opens',
   expect(await screen.findByText('node.example')).toBeInTheDocument();
 });
 
+test('report action does not fetch a manifest or create a candidate without provenance', async () => {
+  const user = userEvent.setup();
+  const onFetchReportManifest = vi.fn();
+
+  render(
+    <PostCard
+      view={createView()}
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+      onSubmitReport={vi.fn()}
+      onFetchReportManifest={onFetchReportManifest}
+    />
+  );
+
+  await user.click(screen.getByRole('button', { name: 'Report' }));
+
+  expect(screen.getByRole('dialog')).toBeInTheDocument();
+  expect(onFetchReportManifest).not.toHaveBeenCalled();
+  expect(screen.getByText('Cannot determine a report target')).toBeInTheDocument();
+  expect(screen.getByText(/block, mute, or hide this locally/i)).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Send report' })).not.toBeInTheDocument();
+});
+
 test('attachment report resolves the selected blob provenance instead of the post provenance', async () => {
   const user = userEvent.setup();
   const manifest = (nodeId: string): CommunityNodeManifest => ({
