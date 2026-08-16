@@ -27,6 +27,14 @@ test('topic search and cross-topic explore keep scope and reporting behavior vis
   await explore.getByRole('tab', { name: 'Discover' }).click();
   await explore.getByRole('button', { name: 'Run' }).click();
   await expect(explore.getByRole('list', { name: 'Community Index results' })).toBeVisible();
+
+  await explore.getByRole('tab', { name: 'Recommendations' }).click();
+  await explore.getByRole('button', { name: 'Run' }).click();
+  await expect(explore.getByRole('list', { name: 'Community Index results' })).toBeVisible();
+  await explore.getByRole('button', { name: 'Report' }).first().click();
+  await expect(reportDialog).toContainText('Recommendation');
+  await expect(reportDialog).toContainText('api.kukuri.app');
+  await expect(reportDialog.getByRole('button', { name: 'Send report' })).toBeVisible();
 });
 
 test('public and private indexing requests expose status and require private disclosure confirmation', async ({

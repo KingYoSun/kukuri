@@ -181,7 +181,15 @@
     "results": "Community Index results",
     "previewNotice": "Search preview; may include derived tags. This is not canonical post text.",
     "noEligibleNode": "No authenticated and consented Community Node currently advertises an available Community Index.",
-    "allJoinedDisabled": "Search one public topic or private channel at a time. All joined scopes are not sent to a node."
+    "allJoinedDisabled": "Search one public topic or private channel at a time. All joined scopes are not sent to a node.",
+    "errors": {
+      "authRequired": "Authentication is required for the selected Community Node.",
+      "consentRequired": "Consent is required for the selected Community Node.",
+      "notConfigured": "Community Index is not configured on the selected node.",
+      "notActivated": "Community Index is temporarily unavailable on the selected node.",
+      "rateLimited": "Too many requests. Please try again later.",
+      "rateLimitedWithRetry": "Too many requests. Try again in {{seconds}} seconds."
+    }
   },
   "report": {
     "title": "Report content",

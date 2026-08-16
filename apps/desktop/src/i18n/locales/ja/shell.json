@@ -185,7 +185,15 @@
     "results": "コミュニティインデックスの結果",
     "previewNotice": "派生タグを含むことがある検索プレビューです。投稿の正本文ではありません。",
     "noEligibleNode": "認証・同意済みで、利用可能な Community Index を公開している Community Node がありません。",
-    "allJoinedDisabled": "公開トピックまたはプライベートチャンネルを1つずつ検索してください。全参加範囲は node に送信しません。"
+    "allJoinedDisabled": "公開トピックまたはプライベートチャンネルを1つずつ検索してください。全参加範囲は node に送信しません。",
+    "errors": {
+      "authRequired": "選択した Community Node への認証が必要です。",
+      "consentRequired": "選択した Community Node の必須同意が必要です。",
+      "notConfigured": "選択した Community Node ではコミュニティ索引が設定されていません。",
+      "notActivated": "選択した Community Node のコミュニティ索引は一時的に利用できません。",
+      "rateLimited": "要求が多すぎます。時間をおいてもう一度お試しください。",
+      "rateLimitedWithRetry": "要求が多すぎます。{{seconds}}秒後にもう一度お試しください。"
+    }
   },
   "report": {
     "title": "コンテンツを通報",

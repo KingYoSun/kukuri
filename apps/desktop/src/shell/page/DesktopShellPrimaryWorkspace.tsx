@@ -363,7 +363,6 @@ export function DesktopShellPrimaryWorkspace({
                 eligibleNodeBaseUrls={eligibleIndexNodeBaseUrls}
                 selectedNodeBaseUrl={communityIndexNodeBaseUrl}
                 onSelectNode={setCommunityIndexNodeBaseUrl}
-                manifests={communityNodeManifests}
                 onOpenCommunityNodeSettings={openCommunityNodeSettings}
               />
             ) : null}
@@ -450,7 +449,6 @@ export function DesktopShellPrimaryWorkspace({
             eligibleNodeBaseUrls={eligibleIndexNodeBaseUrls}
             selectedNodeBaseUrl={communityIndexNodeBaseUrl}
             onSelectNode={setCommunityIndexNodeBaseUrl}
-            manifests={communityNodeManifests}
             onOpenCommunityNodeSettings={openCommunityNodeSettings}
           />
         ) : null}

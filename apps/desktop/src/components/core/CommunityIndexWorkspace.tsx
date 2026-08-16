@@ -1,14 +1,15 @@
-import { type FormEvent, useMemo, useRef, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { TFunction } from 'i18next';
 import { Search, ShieldAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import type {
+  CommunityNodeManifest,
   CommunityNodeIndexQueryRequest,
   DesktopApi,
   IndexEntryView,
   TimelineScope,
 } from '@/lib/api';
-import type { CommunityIndexManifestEntry } from '@/lib/api/communityIndex';
 import { formatLocalizedTime } from '@/i18n/format';
 import type { SupportedLocale } from '@/i18n';
 import { InvokeError } from '@/lib/api/invoke/error';
@@ -33,9 +34,36 @@ type CommunityIndexWorkspaceProps = {
   eligibleNodeBaseUrls: readonly string[];
   selectedNodeBaseUrl: string | null;
   onSelectNode: (baseUrl: string) => void;
-  manifests: Readonly<Record<string, CommunityIndexManifestEntry>>;
   onOpenCommunityNodeSettings: () => void;
 };
+
+type IndexRequestContext = {
+  key: string;
+  nodeBaseUrl: string;
+  operation: IndexOperation;
+  scopeKind: CommunityNodeIndexQueryRequest['scope_kind'];
+  scopeId: CommunityNodeIndexQueryRequest['scope_id'];
+};
+
+type IndexResultState = {
+  context: IndexRequestContext;
+  entries: IndexEntryView[];
+};
+
+type ReportSelection = {
+  context: IndexRequestContext;
+  entry: IndexEntryView;
+};
+
+const INDEX_REPORT_IDENTITY = {
+  capability: 'community_index',
+  subjectKind: 'search_result',
+} as const;
+
+const RECOMMENDATION_REPORT_IDENTITY = {
+  capability: 'recommendation',
+  subjectKind: 'recommendation',
+} as const;
 
 function operationMethod(api: DesktopApi, operation: IndexOperation) {
   if (operation === 'search') return api.searchCommunityNodeIndex.bind(api);
@@ -43,28 +71,72 @@ function operationMethod(api: DesktopApi, operation: IndexOperation) {
   return api.recommendCommunityNodeIndex.bind(api);
 }
 
-function communityIndexErrorMessage(error: unknown): string {
+function communityIndexErrorMessage(error: unknown, t: TFunction): string {
   if (!(error instanceof InvokeError)) {
     return error instanceof Error ? error.message : String(error);
   }
   if (error.code === 'AUTH_REQUIRED' || error.status === 401) {
-    return 'Authentication is required for the selected Community Node.';
+    return t('shell:communityIndex.errors.authRequired');
   }
   if (error.code === 'CONSENT_REQUIRED' || error.status === 403) {
-    return 'Consent is required for the selected Community Node.';
+    return t('shell:communityIndex.errors.consentRequired');
   }
   if (error.code === 'INDEX_QUERY_NOT_CONFIGURED') {
-    return 'Community Index is not configured on the selected node.';
+    return t('shell:communityIndex.errors.notConfigured');
   }
   if (error.code === 'INDEX_QUERY_NOT_ACTIVATED') {
-    return 'Community Index is temporarily unavailable on the selected node.';
+    return t('shell:communityIndex.errors.notActivated');
   }
   if (error.status === 429 || error.code === 'RATE_LIMITED') {
     return error.retryAfterSeconds
-      ? `Too many requests. Try again in ${error.retryAfterSeconds} seconds.`
-      : 'Too many requests. Please try again later.';
+      ? t('shell:communityIndex.errors.rateLimitedWithRetry', {
+          seconds: error.retryAfterSeconds,
+        })
+      : t('shell:communityIndex.errors.rateLimited');
   }
   return error.message;
+}
+
+function indexContext(
+  mode: CommunityIndexWorkspaceProps['mode'],
+  operation: IndexOperation,
+  selectedNodeBaseUrl: string | null,
+  activeTopic: string,
+  activeTimelineScope: TimelineScope
+): IndexRequestContext | null {
+  if (!selectedNodeBaseUrl) return null;
+  const scopeKind =
+    mode !== 'topic'
+      ? null
+      : activeTimelineScope.kind === 'channel'
+        ? 'private_channel'
+        : 'public_topic';
+  const scopeId =
+    mode !== 'topic'
+      ? null
+      : activeTimelineScope.kind === 'channel'
+        ? activeTimelineScope.channel_id
+        : activeTopic;
+  return {
+    key: [
+      selectedNodeBaseUrl,
+      operation,
+      mode,
+      activeTimelineScope.kind,
+      scopeKind ?? '',
+      scopeId ?? '',
+    ].join('\u0000'),
+    nodeBaseUrl: selectedNodeBaseUrl,
+    operation,
+    scopeKind,
+    scopeId,
+  };
+}
+
+function reportIdentity(operation: IndexOperation) {
+  return operation === 'recommendations'
+    ? RECOMMENDATION_REPORT_IDENTITY
+    : INDEX_REPORT_IDENTITY;
 }
 
 export function CommunityIndexWorkspace({
@@ -76,73 +148,137 @@ export function CommunityIndexWorkspace({
   eligibleNodeBaseUrls,
   selectedNodeBaseUrl,
   onSelectNode,
-  manifests,
   onOpenCommunityNodeSettings,
 }: CommunityIndexWorkspaceProps) {
   const { t } = useTranslation(['shell', 'common']);
   const [operation, setOperation] = useState<IndexOperation>('search');
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<IndexEntryView[]>([]);
+  const [resultState, setResultState] = useState<IndexResultState | null>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
-  const [reportEntry, setReportEntry] = useState<IndexEntryView | null>(null);
+  const [reportSelection, setReportSelection] = useState<ReportSelection | null>(null);
+  const [reportManifest, setReportManifest] = useState<CommunityNodeManifest | null>(null);
+  const [reportResolving, setReportResolving] = useState(false);
+  const [reportResolveError, setReportResolveError] = useState<string | null>(null);
   const requestSequence = useRef(0);
 
   const effectiveOperation: IndexOperation = mode === 'topic' ? 'search' : operation;
   const isAllJoined = mode === 'topic' && activeTimelineScope.kind === 'all_joined';
   const disabled = selectedNodeBaseUrl === null || isAllJoined;
-  const selectedManifest = selectedNodeBaseUrl ? manifests[selectedNodeBaseUrl] : undefined;
+  const currentContext = useMemo(
+    () => indexContext(mode, effectiveOperation, selectedNodeBaseUrl, activeTopic, activeTimelineScope),
+    [activeTimelineScope, activeTopic, effectiveOperation, mode, selectedNodeBaseUrl]
+  );
+  const currentContextKey = currentContext?.key ?? null;
+  const currentContextKeyRef = useRef(currentContextKey);
+  const visibleResult =
+    resultState && resultState.context.key === currentContextKey ? resultState : null;
+  const activeReportSelection =
+    reportSelection && reportSelection.context.key === currentContextKey ? reportSelection : null;
+
+  const invalidateResults = useCallback(() => {
+    requestSequence.current += 1;
+    setStatus('idle');
+    setResultState(null);
+    setError(null);
+    setReportSelection(null);
+  }, []);
+
+  useEffect(() => {
+    currentContextKeyRef.current = currentContextKey;
+    invalidateResults();
+  }, [currentContextKey, invalidateResults]);
+
+  useEffect(() => {
+    if (!activeReportSelection) {
+      setReportManifest(null);
+      setReportResolving(false);
+      setReportResolveError(null);
+      return;
+    }
+    let active = true;
+    setReportManifest(null);
+    setReportResolving(true);
+    setReportResolveError(null);
+    void api
+      .fetchCommunityNodeManifest(activeReportSelection.context.nodeBaseUrl)
+      .then((response) => {
+        if (!active) return;
+        if (response.status === 'ok' && response.manifest) {
+          setReportManifest(response.manifest);
+        } else {
+          setReportResolveError(t('shell:report.resolveFailed'));
+        }
+      })
+      .catch(() => {
+        if (active) setReportResolveError(t('shell:report.resolveFailed'));
+      })
+      .finally(() => {
+        if (active) setReportResolving(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [activeReportSelection, api, t]);
+
+  const activeReportIdentity = activeReportSelection
+    ? reportIdentity(activeReportSelection.context.operation)
+    : null;
   const reportPlan = useMemo(() => {
-    if (!selectedNodeBaseUrl || selectedManifest?.status !== 'ok') {
+    if (!activeReportSelection || !activeReportIdentity) {
       return planReportRouting(null, {});
     }
+    const sourceNodeBaseUrl = activeReportSelection.context.nodeBaseUrl;
     return planReportRouting(
       {
         canonicalSource: 'unknown',
-        observedVia: [{ nodeBaseUrl: selectedNodeBaseUrl, capability: 'community_index' }],
+        observedVia: [
+          { nodeBaseUrl: sourceNodeBaseUrl, capability: activeReportIdentity.capability },
+        ],
         responsibleReportTargets: [],
       },
-      { [selectedNodeBaseUrl]: selectedManifest.manifest }
+      reportManifest ? { [sourceNodeBaseUrl]: reportManifest } : {}
     );
-  }, [selectedManifest, selectedNodeBaseUrl]);
+  }, [activeReportIdentity, activeReportSelection, reportManifest]);
 
   async function runQuery(event?: FormEvent) {
     event?.preventDefault();
-    if (disabled || !selectedNodeBaseUrl) return;
+    if (disabled || !currentContext) return;
     if (effectiveOperation === 'search' && !query.trim()) {
       setStatus('error');
       setError(t('shell:communityIndex.queryRequired'));
       return;
     }
     const request: CommunityNodeIndexQueryRequest = {
-      base_url: selectedNodeBaseUrl,
-      query: effectiveOperation === 'search' ? query.trim() : null,
-      scope_kind:
-        mode !== 'topic'
-          ? null
-          : activeTimelineScope.kind === 'channel'
-            ? 'private_channel'
-            : 'public_topic',
-      scope_id:
-        mode !== 'topic'
-          ? null
-          : activeTimelineScope.kind === 'channel'
-            ? activeTimelineScope.channel_id
-            : activeTopic,
+      base_url: currentContext.nodeBaseUrl,
+      query: currentContext.operation === 'search' ? query.trim() : null,
+      scope_kind: currentContext.scopeKind,
+      scope_id: currentContext.scopeId,
       limit: 50,
     };
+    const requestContext = currentContext;
     const sequence = ++requestSequence.current;
     setStatus('loading');
     setError(null);
     try {
-      const response = await operationMethod(api, effectiveOperation)(request);
-      if (sequence !== requestSequence.current) return;
-      setResults(response.entries);
+      const response = await operationMethod(api, requestContext.operation)(request);
+      if (
+        sequence !== requestSequence.current ||
+        requestContext.key !== currentContextKeyRef.current
+      ) {
+        return;
+      }
+      setResultState({ context: requestContext, entries: response.entries });
       setStatus('success');
     } catch (cause) {
-      if (sequence !== requestSequence.current) return;
-      setResults([]);
-      setError(communityIndexErrorMessage(cause));
+      if (
+        sequence !== requestSequence.current ||
+        requestContext.key !== currentContextKeyRef.current
+      ) {
+        return;
+      }
+      setResultState(null);
+      setError(communityIndexErrorMessage(cause, t));
       setStatus('error');
     }
   }
@@ -164,7 +300,10 @@ export function CommunityIndexWorkspace({
             <select
               className='rounded-lg border border-[var(--border-subtle)] bg-background px-3 py-2'
               value={selectedNodeBaseUrl ?? ''}
-              onChange={(event) => onSelectNode(event.currentTarget.value)}
+              onChange={(event) => {
+                invalidateResults();
+                onSelectNode(event.currentTarget.value);
+              }}
             >
               {eligibleNodeBaseUrls.map((baseUrl) => (
                 <option key={baseUrl} value={baseUrl}>{baseUrl}</option>
@@ -184,11 +323,8 @@ export function CommunityIndexWorkspace({
               role='tab'
               aria-selected={operation === value}
               onClick={() => {
-                requestSequence.current += 1;
+                invalidateResults();
                 setOperation(value);
-                setStatus('idle');
-                setResults([]);
-                setError(null);
               }}
             >
               {t(`shell:communityIndex.operations.${value}`)}
@@ -232,12 +368,12 @@ export function CommunityIndexWorkspace({
       )}
 
       {error ? <Notice tone='destructive'>{error}</Notice> : null}
-      {status === 'success' && results.length === 0 ? (
+      {status === 'success' && visibleResult && visibleResult.entries.length === 0 ? (
         <p className='empty-state'>{t('shell:communityIndex.empty')}</p>
       ) : null}
-      {results.length > 0 ? (
+      {visibleResult && visibleResult.entries.length > 0 ? (
         <ul className='space-y-3' aria-label={t('shell:communityIndex.results')}>
-          {results.map((entry) => (
+          {visibleResult.entries.map((entry) => (
             <li key={`${entry.scope_kind}:${entry.scope_id}:${entry.object_id}`}>
               <article className='rounded-[18px] border border-[var(--border-subtle)] bg-[var(--surface-panel-soft)] p-4'>
                 <div className='flex flex-wrap items-center gap-2 text-xs text-[var(--muted-foreground)]'>
@@ -251,7 +387,11 @@ export function CommunityIndexWorkspace({
                 </p>
                 <div className='mt-3 flex flex-wrap items-center justify-between gap-2 text-xs'>
                   <span className='break-all font-mono'>{entry.author_pubkey} · {entry.object_id}</span>
-                  <Button variant='secondary' type='button' onClick={() => setReportEntry(entry)}>
+                  <Button
+                    variant='secondary'
+                    type='button'
+                    onClick={() => setReportSelection({ context: visibleResult.context, entry })}
+                  >
                     <ShieldAlert className='size-4' aria-hidden='true' />
                     {t('shell:report.actionLabel')}
                   </Button>
@@ -262,23 +402,29 @@ export function CommunityIndexWorkspace({
         </ul>
       ) : null}
 
-      {reportEntry ? (
+      {activeReportSelection && activeReportIdentity ? (
         <ReportRoutingDialog
           open={true}
-          onOpenChange={(open) => { if (!open) setReportEntry(null); }}
-          subject={{ kind: 'search_result', id: reportEntry.object_id, label: reportEntry.scope_id }}
+          onOpenChange={(open) => { if (!open) setReportSelection(null); }}
+          subject={{
+            kind: activeReportIdentity.subjectKind,
+            id: activeReportSelection.entry.object_id,
+            label: activeReportSelection.entry.scope_id,
+          }}
           plan={reportPlan}
+          resolving={reportResolving}
+          resolveError={reportResolveError}
           onCopyContact={(value) => void copyTextToClipboard(value)}
           onSubmit={async ({ candidate, reason, details, reporterContact }) => {
             if (candidate.contact.kind !== 'endpoint') {
-              throw new Error('report endpoint is unavailable');
+              throw new Error(t('shell:report.resolveFailed'));
             }
             return api.submitCommunityNodeReport({
-              node_base_url: candidate.target.nodeBaseUrl,
+              node_base_url: activeReportSelection.context.nodeBaseUrl,
               report_endpoint: candidate.contact.value,
-              subject_kind: 'search_result',
-              subject_id: reportEntry.object_id,
-              capability: candidate.target.capability,
+              subject_kind: activeReportIdentity.subjectKind,
+              subject_id: activeReportSelection.entry.object_id,
+              capability: activeReportIdentity.capability,
               reason,
               details: details || null,
               reporter_contact: reporterContact || null,
