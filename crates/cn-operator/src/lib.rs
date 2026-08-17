@@ -55,6 +55,10 @@ pub const SAMPLE_CONFIG: &str = r#"server:
   cloud_provider: AWS
   region: ap-northeast-1
   contact: abuse@example-kukuri.net
+  # 公開ノード情報の node_id。モデレーションを提供する場合は、モデレーション事象の発行元識別子
+  # (署名鍵の公開鍵 hex。`cn-cli moderation issuer-node-id` で導出)と同じ値を記入する。
+  # 異議申し立ては node_id と risk signal の issuer_node_id が一致する場合だけ受理される。
+  node_id: 0000000000000000000000000000000000000000000000000000000000000000
 
 # profile が features の既定値を与える。個別の features キーで上書きできる。
 profile: relay-enabled

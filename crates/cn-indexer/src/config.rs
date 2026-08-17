@@ -27,8 +27,8 @@ pub const SAFETY_PROVIDER_UNKNOWN_CSAM_ENV: &str = "COMMUNITY_NODE_SAFETY_PROVID
 /// signed moderation event を発行するか（operator config の
 /// `safety.events.emit_signed_moderation_events` に対応。既定 true）。
 pub const SAFETY_EMIT_SIGNED_EVENTS_ENV: &str = "COMMUNITY_NODE_SAFETY_EMIT_SIGNED_EVENTS";
-/// signed event 無効時に risk signal issuer として使う node id。
-pub const SAFETY_ISSUER_NODE_ID_ENV: &str = "COMMUNITY_NODE_SAFETY_ISSUER_NODE_ID";
+/// signed event 無効時に risk signal issuer として使う node id(定数は cn-safety-runtime と共有)。
+pub use kukuri_cn_safety_runtime::SAFETY_ISSUER_NODE_ID_ENV;
 /// 自前 relay を cn-indexer の iroh runtime へ渡す公開 URL。
 pub const CONNECTIVITY_URLS_ENV: &str = "COMMUNITY_NODE_CONNECTIVITY_URLS";
 /// suspected 判定の classifier スコア閾値（1-100。未設定なら policy 既定 70。ADR 0028 §2.2）。

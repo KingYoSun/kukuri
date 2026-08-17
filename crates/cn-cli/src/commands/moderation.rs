@@ -22,8 +22,27 @@ use crate::{ModerationCliAction, SafetyCategoryArg, SeverityArg, VisibilityArg};
 /// `safety.moderation.operator_review` に対応）。
 pub(crate) const OPERATOR_REVIEW_ENV: &str = "COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW";
 
+/// この配備がリスク判定に載せる発行元識別子を標準出力へ 1 行で表示する(#706)。
+///
+/// 導出は cn-indexer の signer および cn-user-api の起動時検査と同じ
+/// [`kukuri_cn_safety_runtime::expected_issuer_node_id_from_env`] を使う。
+/// 署名鍵は env からしか読まず、出力には公開鍵 hex(または明示識別子)だけを含める。
+pub(crate) fn print_issuer_node_id() -> Result<()> {
+    let issuer = kukuri_cn_safety_runtime::expected_issuer_node_id_from_env()
+        .map_err(|error| anyhow::anyhow!("{error}"))?
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "発行元識別子を導出できません。COMMUNITY_NODE_SAFETY_SIGNING_KEY(署名鍵)または \
+                 COMMUNITY_NODE_SAFETY_ISSUER_NODE_ID(署名無効時の明示識別子)を設定してください"
+            )
+        })?;
+    println!("{issuer}");
+    Ok(())
+}
+
 pub(super) async fn run(pool: &PgPool, action: ModerationCliAction) -> Result<()> {
     match action {
+        ModerationCliAction::IssuerNodeId => print_issuer_node_id()?,
         ModerationCliAction::ListSignals { limit, offset } => {
             let signals = list_risk_signals(pool, limit, offset).await?;
             if signals.is_empty() {

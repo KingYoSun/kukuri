@@ -110,6 +110,7 @@ community node の moderation のうち **決定論的 moderation（既知 hash 
 - 永続化（`cn-core` `persist_signed_moderation_event`）は **保存前に `verify_signed_event` で署名検証**し、改竄 / 別鍵 / issuer 詐称を拒否する（配布クエリが常に検証済みを返す保証）。id 冪等（最初の writer が権威）。
 - event の `ModerationAction` は `Exclude` / `Hold` / `Quarantine` / `RiskLabel`。`RiskLabel` は「強制排除等ではなく根拠つき risk label を付す」action であり、その内容は §2.6 の `SafetyRiskSignal`（target / category / basis / severity / confidence / visibility）として表現・配布される（event action ↔ signal payload の対応）。
 - 事象記録・監査は event id / reference id / basis category を使い、有害コンテンツ本体を証拠として再配布しない。
+- **issuer 同一性と公開ノード情報（#706）**: risk signal / event の `issuer_node_id` は署名鍵の x-only 公開鍵 hex（署名無効時は `COMMUNITY_NODE_SAFETY_ISSUER_NODE_ID`）であり、公開ノード情報 `CommunityNodeManifest.node_id`（operator-config `server.node_id`）は **同じ値でなければならない**。異議申し立て（§2.8）はサーバ・クライアントとも `manifest.node_id == issuer_node_id` で発行元を照合するためである。`safety` 節があり moderation を提供する設定では `server.node_id` を必須にし（`validate-config`）、cn-user-api は起動時に env 由来の発行元識別子と `manifest.node_id` を突合して不一致なら起動を拒否する。導出は `cn-cli moderation issuer-node-id`。
 
 ### 2.6 risk signals + visibility
 - `SafetyRiskSignal`（target / category / severity / basis / confidence / visibility / expiry / appeal）は断定ラベルではなく根拠つき advisory。

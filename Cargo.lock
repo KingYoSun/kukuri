@@ -3085,6 +3085,7 @@ dependencies = [
  "kukuri-cn-operator",
  "kukuri-cn-safety",
  "kukuri-cn-safety-arachnid",
+ "kukuri-cn-safety-runtime",
  "kukuri-cn-safety-vlm",
  "reqwest 0.13.4",
  "serde_json",

@@ -50,7 +50,25 @@ struct TestServer {
 
 impl TestServer {
     async fn spawn(admin_database_url: &str, prefix: &str, operator_yaml: &str) -> Result<Self> {
-        Self::spawn_inner(admin_database_url, prefix, operator_yaml, None).await
+        Self::spawn_inner(admin_database_url, prefix, operator_yaml, None, None).await
+    }
+
+    /// 発行元識別子(署名鍵の公開鍵 hex 等)を与えて起動する。公開ノード情報の node_id と
+    /// 一致しない場合は起動が失敗する(#706)。
+    async fn spawn_with_expected_issuer(
+        admin_database_url: &str,
+        prefix: &str,
+        operator_yaml: &str,
+        expected_issuer_node_id: &str,
+    ) -> Result<Self> {
+        Self::spawn_inner(
+            admin_database_url,
+            prefix,
+            operator_yaml,
+            None,
+            Some(expected_issuer_node_id.to_string()),
+        )
+        .await
     }
 
     async fn spawn_with_trust(
@@ -59,7 +77,7 @@ impl TestServer {
         operator_yaml: &str,
         trust: Arc<TrustReadState>,
     ) -> Result<Self> {
-        Self::spawn_inner(admin_database_url, prefix, operator_yaml, Some(trust)).await
+        Self::spawn_inner(admin_database_url, prefix, operator_yaml, Some(trust), None).await
     }
 
     async fn spawn_inner(
@@ -67,6 +85,7 @@ impl TestServer {
         prefix: &str,
         operator_yaml: &str,
         trust: Option<Arc<TrustReadState>>,
+        expected_issuer_node_id: Option<String>,
     ) -> Result<Self> {
         use std::io::Write;
 
@@ -85,7 +104,7 @@ impl TestServer {
             .context("failed to bind test report listener")?;
         let addr = listener.local_addr()?;
         let base_url = format!("http://{addr}");
-        let mut state = build_state(&UserApiConfig {
+        let state = build_state(&UserApiConfig {
             bind_addr: addr,
             database_url: database.database_url.clone(),
             rendezvous_redis_url: integration_test_rendezvous_redis_url(),
@@ -101,8 +120,16 @@ impl TestServer {
             relation_distance_optout_min_proximity: None,
             deployment_revision: "test-deployment-v1".to_string(),
             readiness_activation_max_age_secs: 3600,
+            expected_issuer_node_id,
         })
-        .await?;
+        .await;
+        let mut state = match state {
+            Ok(state) => state,
+            Err(error) => {
+                database.cleanup().await?;
+                return Err(error);
+            }
+        };
         if let Some(trust) = trust {
             state = state.with_trust_read(trust);
         }
@@ -542,4 +569,94 @@ async fn report_endpoint_rejects_when_capability_disabled() -> Result<()> {
 
     server.shutdown().await?;
     Ok(())
+}
+
+/// テスト専用の決定論的な署名鍵(本番鍵ではない)。
+const TEST_SIGNING_KEY: &str = "0000000000000000000000000000000000000000000000000000000000000001";
+
+#[tokio::test]
+async fn appeal_is_accepted_when_manifest_node_id_matches_signing_key_issuer() -> Result<()> {
+    // #706: リスク判定の issuer_node_id は署名鍵の公開鍵 hex。公開ノード情報の node_id を同じ値に
+    // した構成で異議申し立てが端から端まで通ること、別値の構成では起動時に拒否されることを固定する。
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api report test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let signer =
+        kukuri_cn_safety_runtime::Secp256k1ModerationEventSigner::from_secret(TEST_SIGNING_KEY)?;
+    let issuer = kukuri_cn_safety::ModerationEventSigner::issuer_node_id(&signer).to_string();
+    let matching_yaml =
+        REPORT_ENABLED_YAML.replace("node_id: issuer-node-1", &format!("node_id: {issuer}"));
+
+    // node_id が発行元識別子と一致しない構成(既存 fixture の issuer-node-1)は起動を拒否する。
+    let mismatch = TestServer::spawn_with_expected_issuer(
+        admin_database_url.as_str(),
+        "cn_user_api_issuer_mismatch",
+        REPORT_ENABLED_YAML,
+        issuer.as_str(),
+    )
+    .await;
+    let error = mismatch
+        .err()
+        .expect("mismatched node_id must refuse to start");
+    let message = format!("{error:#}");
+    assert!(message.contains("server.node_id"), "{message}");
+    assert!(message.contains(issuer.as_str()), "{message}");
+
+    // 一致する構成では、署名鍵由来の issuer で保存した判定への異議申し立てが受理される。
+    let server = TestServer::spawn_with_expected_issuer(
+        admin_database_url.as_str(),
+        "cn_user_api_issuer_match",
+        matching_yaml.as_str(),
+        issuer.as_str(),
+    )
+    .await?;
+    let manifest = Client::new()
+        .get(format!("{}/v1/node/manifest", server.base_url))
+        .send()
+        .await?
+        .json::<serde_json::Value>()
+        .await?;
+    assert_eq!(manifest["node_id"], issuer);
+
+    let pool = kukuri_cn_core::connect_postgres(server.database.database_url.as_str()).await?;
+    let stored = kukuri_cn_core::persist_risk_signal(
+        &pool,
+        issuer.as_str(),
+        &kukuri_cn_safety::SafetyRiskSignal {
+            target: kukuri_cn_safety::RiskSignalTarget::PostId,
+            target_id: "post-signed-issuer".to_string(),
+            category: kukuri_cn_safety::SafetyCategory::Nsfw,
+            severity: kukuri_cn_safety::Severity::High,
+            basis: kukuri_cn_safety::Basis::ClassifierScore,
+            confidence: Some(90),
+            visibility: kukuri_cn_safety::Visibility::Local,
+            expires_at: None,
+            appeal_status: Some(kukuri_cn_safety::AppealStatus::None),
+        },
+    )
+    .await?;
+    let accepted = Client::new()
+        .post(format!("{}/v1/report", server.base_url))
+        .json(&serde_json::json!({
+            "subject_kind": "post",
+            "subject_id": "post-signed-issuer",
+            "capability": "moderation",
+            "reason": "false_positive",
+            "appeal": { "risk_signal_id": stored.id },
+        }))
+        .send()
+        .await?;
+    assert_eq!(accepted.status(), StatusCode::OK);
+    let body = accepted.json::<serde_json::Value>().await?;
+    assert_eq!(body["disputed_risk_signal_id"], stored.id);
+    let refreshed = kukuri_cn_core::get_risk_signal(&pool, &stored.id)
+        .await?
+        .expect("signal exists");
+    assert_eq!(
+        refreshed.signal.appeal_status,
+        Some(kukuri_cn_safety::AppealStatus::Disputed)
+    );
+
+    server.shutdown().await
 }

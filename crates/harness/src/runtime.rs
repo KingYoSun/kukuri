@@ -107,6 +107,7 @@ impl CommunityNodeStack {
             relation_distance_optout_min_proximity: None,
             deployment_revision: String::new(),
             readiness_activation_max_age_secs: 900,
+            expected_issuer_node_id: None,
         })
         .await
         .context("failed to build community-node user-api state")?;

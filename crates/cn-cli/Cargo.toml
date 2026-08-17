@@ -23,6 +23,7 @@ kukuri-cn-core = { path = "../cn-core" }
 kukuri-cn-indexer = { path = "../cn-indexer" }
 kukuri-cn-operator = { path = "../cn-operator" }
 kukuri-cn-safety = { path = "../cn-safety" }
+kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }
 kukuri-cn-safety-arachnid = { path = "../cn-safety-arachnid" }
 kukuri-cn-safety-vlm = { path = "../cn-safety-vlm" }
 

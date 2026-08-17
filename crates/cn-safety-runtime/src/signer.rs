@@ -30,6 +30,38 @@ use thiserror::Error;
 /// Secret Manager の secret（operator-config の `safety.events.signing_key_secret_id` が指す）を
 /// runtime に注入する経路。値は secp256k1 秘密鍵（hex / `nsec` bech32）。
 pub const SAFETY_SIGNING_KEY_ENV: &str = "COMMUNITY_NODE_SAFETY_SIGNING_KEY";
+/// signed event 無効時に risk signal issuer として使う node id を注入する env var。
+pub const SAFETY_ISSUER_NODE_ID_ENV: &str = "COMMUNITY_NODE_SAFETY_ISSUER_NODE_ID";
+
+/// この配備でリスク判定の `issuer_node_id` になる値を、署名鍵(優先)または明示指定から導出する。
+///
+/// - 署名鍵があれば x-only 公開鍵 hex(`Secp256k1ModerationEventSigner` と同一の導出)
+/// - 無ければ明示指定の識別子(前後空白除去)
+/// - どちらも無ければ `None`
+///
+/// cn-indexer が signal を発行する値と、公開ノード情報 `node_id` の一致検査(cn-user-api 起動時)、
+/// 運用者向けの導出コマンド(`cn-cli moderation issuer-node-id`)が同じ関数を共有する(#706)。
+pub fn expected_issuer_node_id(
+    signing_key: Option<&str>,
+    explicit_issuer_node_id: Option<&str>,
+) -> Result<Option<String>, SignerKeyError> {
+    if let Some(secret) = signing_key.map(str::trim).filter(|value| !value.is_empty()) {
+        let signer = Secp256k1ModerationEventSigner::from_secret(secret)?;
+        return Ok(Some(signer.issuer_node_id().to_string()));
+    }
+    Ok(explicit_issuer_node_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string))
+}
+
+/// [`expected_issuer_node_id`] を env var([`SAFETY_SIGNING_KEY_ENV`] / [`SAFETY_ISSUER_NODE_ID_ENV`])
+/// から評価する。
+pub fn expected_issuer_node_id_from_env() -> Result<Option<String>, SignerKeyError> {
+    let signing_key = std::env::var(SAFETY_SIGNING_KEY_ENV).ok();
+    let explicit = std::env::var(SAFETY_ISSUER_NODE_ID_ENV).ok();
+    expected_issuer_node_id(signing_key.as_deref(), explicit.as_deref())
+}
 
 /// 本番 [`ModerationEventSigner`] 実装（secp256k1 schnorr）。
 ///

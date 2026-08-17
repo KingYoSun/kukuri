@@ -201,3 +201,29 @@ fn signed_event_fixture_still_verifies_and_reserializes_identically() {
     verify_signed_event(&signed).expect("historically signed event must keep verifying");
     assert_eq!(serde_json::to_string(&signed).expect("serialize"), FIXTURE);
 }
+
+// #706: 公開ノード情報 node_id と突合する発行元識別子は、signer と同じ導出で得られる。
+#[test]
+fn expected_issuer_node_id_prefers_signing_key_and_falls_back_to_explicit_id() {
+    use kukuri_cn_safety_runtime::expected_issuer_node_id;
+
+    let signer = Secp256k1ModerationEventSigner::from_secret(TEST_SECRET_A).unwrap();
+    // 署名鍵があれば公開鍵 hex(明示指定は無視される)。
+    assert_eq!(
+        expected_issuer_node_id(Some(TEST_SECRET_A), Some("explicit-node")).unwrap(),
+        Some(signer.issuer_node_id().to_string())
+    );
+    // 署名鍵が無ければ明示指定(前後空白は除去)。
+    assert_eq!(
+        expected_issuer_node_id(None, Some(" explicit-node ")).unwrap(),
+        Some("explicit-node".to_string())
+    );
+    assert_eq!(
+        expected_issuer_node_id(Some("  "), Some("explicit-node")).unwrap(),
+        Some("explicit-node".to_string())
+    );
+    // どちらも無ければ None。
+    assert_eq!(expected_issuer_node_id(None, None).unwrap(), None);
+    // 不正な署名鍵は明示指定へ後退せずエラー。
+    assert!(expected_issuer_node_id(Some("not-a-key"), Some("explicit-node")).is_err());
+}

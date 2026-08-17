@@ -159,6 +159,12 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
         public_disclosures,
         operator_config_yaml,
     } = load_manifest(config.operator_config_path.as_deref())?;
+    if let (Some(manifest), Some(expected)) = (
+        manifest.as_deref(),
+        config.expected_issuer_node_id.as_deref(),
+    ) {
+        ensure_manifest_node_id_matches_issuer(manifest.node_id.as_str(), expected)?;
+    }
     let channel_secret_cipher = config
         .channel_secret_key
         .as_deref()
@@ -296,6 +302,30 @@ async fn activation_is_valid(
         }))
 }
 
+/// 公開ノード情報の `node_id` が、この配備がリスク判定に載せる `issuer_node_id`
+/// (署名鍵の公開鍵 hex、または明示指定)と一致することを起動時に強制する(#706)。
+///
+/// 異議申し立てはサーバ(`/v1/report`)もクライアントも `manifest.node_id == issuer_node_id`
+/// を前提にするため、不一致のまま起動すると本番で異議申し立てが端から端まで成立しない。
+/// 運用者設定の誤りを黙って通さず、理由を明示して起動を止める。
+pub(crate) fn ensure_manifest_node_id_matches_issuer(
+    manifest_node_id: &str,
+    expected_issuer_node_id: &str,
+) -> Result<()> {
+    let manifest_node_id = manifest_node_id.trim();
+    let expected = expected_issuer_node_id.trim();
+    if manifest_node_id == expected {
+        return Ok(());
+    }
+    anyhow::bail!(
+        "operator config の server.node_id (`{manifest_node_id}`) が、この配備のモデレーション事象の \
+         発行元識別子 (`{expected}`; COMMUNITY_NODE_SAFETY_SIGNING_KEY の公開鍵 hex、または \
+         COMMUNITY_NODE_SAFETY_ISSUER_NODE_ID) と一致しません。異議申し立てが受理されなくなるため \
+         起動を拒否します。`cn-cli moderation issuer-node-id` で導出した値を server.node_id に \
+         記入してください"
+    );
+}
+
 /// operator config から公開 manifest を構築する。
 ///
 /// config が指定されているのに読込・検証に失敗した場合は起動を失敗させる
@@ -343,6 +373,16 @@ mod tests {
     use tempfile::NamedTempFile;
 
     use super::load_manifest;
+
+    #[test]
+    fn manifest_node_id_must_match_expected_issuer() {
+        assert!(super::ensure_manifest_node_id_matches_issuer("node-a", "node-a").is_ok());
+        assert!(super::ensure_manifest_node_id_matches_issuer(" node-a ", "node-a").is_ok());
+        let err = super::ensure_manifest_node_id_matches_issuer("", "79be66").unwrap_err();
+        assert!(err.to_string().contains("server.node_id"), "{err}");
+        assert!(err.to_string().contains("79be66"), "{err}");
+        assert!(super::ensure_manifest_node_id_matches_issuer("node-a", "node-b").is_err());
+    }
 
     #[test]
     fn load_manifest_includes_every_http_disclosure() -> Result<()> {

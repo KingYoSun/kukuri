@@ -47,6 +47,10 @@ pub struct UserApiConfig {
     pub deployment_revision: String,
     /// readiness activationを有効とみなす最大経過秒数。
     pub readiness_activation_max_age_secs: u64,
+    /// この配備がリスク判定に載せる `issuer_node_id`(署名鍵の公開鍵 hex、または明示指定)。
+    /// 公開ノード情報の `node_id` と一致しなければ起動を拒否する(#706)。
+    /// 署名鍵も明示指定も無い構成では `None`(検査を省略)。
+    pub expected_issuer_node_id: Option<String>,
 }
 
 impl std::fmt::Debug for UserApiConfig {
@@ -77,6 +81,7 @@ impl std::fmt::Debug for UserApiConfig {
                 "readiness_activation_max_age_secs",
                 &self.readiness_activation_max_age_secs,
             )
+            .field("expected_issuer_node_id", &self.expected_issuer_node_id)
             .finish()
     }
 }
@@ -134,6 +139,10 @@ impl UserApiConfig {
         }
         let readiness_activation_max_age_secs =
             parse_u64_env("COMMUNITY_NODE_READINESS_ACTIVATION_MAX_AGE_SECS", 900)?.max(1);
+        // 署名鍵(または明示識別子)は cn-indexer と同じ env_file で届く。値そのものは保持せず、
+        // 公開鍵 hex(発行元識別子)だけを設定に残す。
+        let expected_issuer_node_id = kukuri_cn_safety_runtime::expected_issuer_node_id_from_env()
+            .context("invalid COMMUNITY_NODE_SAFETY_SIGNING_KEY")?;
         Ok(Self {
             bind_addr,
             database_url,
@@ -150,6 +159,7 @@ impl UserApiConfig {
             relation_distance_optout_min_proximity,
             deployment_revision,
             readiness_activation_max_age_secs,
+            expected_issuer_node_id,
         })
     }
 }

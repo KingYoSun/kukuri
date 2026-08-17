@@ -89,7 +89,13 @@ job成功後のregistry manifestである。VMからも `docker manifest inspect
 
 ### 2.1 検証とbackup
 
+`operator-config.yaml` の `server.node_id` が、Secret Manager の署名鍵から導出した発行元識別子
+(`cn-cli moderation issuer-node-id`。導出手順は `community-node-gcp-terraform.md`)と一致することを
+先に確認する(#706)。不一致のままだと cn-user-api は起動を拒否し、異議申し立ても受理されない。
+署名鍵を差し替えた場合は node_id も更新し、生成文書を再生成する。
+
 ```bash
+cargo run -q -p kukuri-cn-operator -- validate-config --config operator-config.yaml
 cargo xtask cn-check
 cargo xtask cn-test
 cargo xtask cn-e2e
@@ -339,7 +345,9 @@ curl -fsS "https://<api-domain>/v1/node/manifest"
 ```
 
 manifestが示すterms / privacy / external-transmission / moderation-policy / abuse-policy /
-data-retentionもHTTP 200と `text/markdown; charset=utf-8` を確認する。index / trust surfaceは、
+data-retentionもHTTP 200と `text/markdown; charset=utf-8` を確認する。manifest の `node_id` が
+`cn-cli moderation issuer-node-id` の出力(署名鍵の公開鍵 hex)と一致することも確認する
+(異議申し立ての発行元照合に使われる。#706)。index / trust surfaceは、
 有効時に未認証401または入力不備400となり、構成未完了を示す404へ戻っていないことを確認する。
 
 ### 5.4 monitoring通知とlog / secret監査

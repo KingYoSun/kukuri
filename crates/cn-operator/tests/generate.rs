@@ -262,6 +262,7 @@ fn config_with_safety_providers(vlm_hosting_line: &str) -> String {
   domain: example-kukuri.net
   operator_name: Example Operator
   country: JP
+  node_id: 79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798
 features:
   moderation: true
 retention:
@@ -681,4 +682,47 @@ fn generated_docs_reflect_authority_scope() {
     assert!(diagram.contains("authority scope"));
     assert!(diagram.contains("does_not_apply_to"));
     assert!(diagram.contains("network-wide authority: false"));
+}
+
+// #706: モデレーションを提供する公開ノードでは、公開ノード情報の node_id を
+// リスク判定の issuer_node_id と一致させるために必須にする。
+#[test]
+fn moderation_public_node_requires_server_node_id() {
+    let yaml = config_with_safety_providers("").replace(
+        "  node_id: 79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\n",
+        "",
+    );
+    let err = load_and_validate(&yaml).expect_err("node_id missing must fail");
+    let message = err.to_string();
+    assert!(message.contains("server.node_id"), "got: {message}");
+    assert!(message.contains("issuer_node_id"), "got: {message}");
+
+    let blank = config_with_safety_providers("").replace(
+        "  node_id: 79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\n",
+        "  node_id: \"  \"\n",
+    );
+    assert!(
+        load_and_validate(&blank).is_err(),
+        "blank node_id must fail"
+    );
+}
+
+#[test]
+fn server_node_id_stays_optional_without_safety_or_moderation() {
+    // safety 節が無い設定(開発用・relay 専用など)は従来どおり node_id 無しで通る。
+    let yaml = base_config("  moderation: true\n", false);
+    assert!(
+        load_and_validate(&yaml).is_ok(),
+        "no safety section must stay valid"
+    );
+    // safety 節があってもモデレーションが無効なら node_id は不要。
+    let yaml = config_with_safety_providers("").replace(
+        "  node_id: 79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\n",
+        "",
+    );
+    let yaml = yaml.replace("  moderation: true\n", "  moderation: false\n");
+    assert!(
+        load_and_validate(&yaml).is_ok(),
+        "moderation disabled must stay valid"
+    );
 }
