@@ -45,6 +45,7 @@ pub use service::{
     SafetyScanServiceBuilder, build_safety_scan_service, resolve_safety_policy,
 };
 pub use signer::{
-    SAFETY_SIGNING_KEY_ENV, Secp256k1ModerationEventSigner, SignatureError, SignerKeyError,
+    SAFETY_ISSUER_NODE_ID_ENV, SAFETY_SIGNING_KEY_ENV, Secp256k1ModerationEventSigner,
+    SignatureError, SignerKeyError, expected_issuer_node_id, expected_issuer_node_id_from_env,
     verify_signed_event,
 };

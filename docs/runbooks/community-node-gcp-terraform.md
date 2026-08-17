@@ -94,6 +94,13 @@ printf '%s' "$(openssl rand -hex 24)" | \
 # moderation event signing key（secp256k1 秘密鍵 hex。issuer node の鍵として公開鍵が event に載る）
 printf '%s' "$(openssl rand -hex 32)" | \
   gcloud secrets create kukuri-cn-safety-signing-key --data-file=-
+# 署名鍵の公開鍵 hex(= risk signal の issuer_node_id)を導出し、operator-config.yaml の
+# server.node_id に記入する(#706)。秘密鍵は同一シェルの環境変数に留め、標準出力には公開鍵だけが出る。
+# 異議申し立ては公開ノード情報の node_id と issuer_node_id が一致する場合だけ受理され、
+# 一致しない構成は validate-config と cn-user-api の起動時検査で拒否される。
+COMMUNITY_NODE_SAFETY_SIGNING_KEY="$(gcloud secrets versions access latest \
+  --secret=kukuri-cn-safety-signing-key --project=YOUR_PROJECT)" \
+  cargo run -q -p kukuri-cn-cli -- moderation issuer-node-id
 # Project Arachnid Shield credentials（operator 自身が https://projectarachnid.com で取得）
 printf '%s' 'YOUR_ARACHNID_USERNAME' | \
   gcloud secrets create kukuri-cn-arachnid-username --data-file=-

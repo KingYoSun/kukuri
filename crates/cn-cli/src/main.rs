@@ -11,8 +11,9 @@ mod commands;
 
 #[derive(Debug, Parser)]
 struct Cli {
+    /// PostgreSQL 接続先。`moderation issuer-node-id` 以外の全コマンドで必須。
     #[arg(long, env = "COMMUNITY_NODE_DATABASE_URL")]
-    database_url: String,
+    database_url: Option<String>,
     #[command(subcommand)]
     command: Command,
 }
@@ -107,6 +108,12 @@ enum ModerationCliAction {
         #[arg(long)]
         id: String,
     },
+    /// この配備がリスク判定に載せる発行元識別子(`issuer_node_id`)を表示する(#706)。
+    ///
+    /// env `COMMUNITY_NODE_SAFETY_SIGNING_KEY` があれば署名鍵の公開鍵 hex、無ければ
+    /// `COMMUNITY_NODE_SAFETY_ISSUER_NODE_ID` を出力する。秘密鍵は引数で受け取らず、
+    /// 出力にも含めない。得た値を operator-config の `server.node_id` に記入する。
+    IssuerNodeId,
     /// 申し立てを受理して Disputed にする（None→Disputed。冪等）。
     Dispute {
         #[arg(long)]
@@ -360,6 +367,18 @@ enum AuthModeArg {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
-    let pool = connect_postgres(cli.database_url.as_str()).await?;
+    if matches!(
+        cli.command,
+        Command::Moderation {
+            action: ModerationCliAction::IssuerNodeId
+        }
+    ) {
+        // DB 接続を伴わない導出専用コマンド。
+        return commands::moderation::print_issuer_node_id();
+    }
+    let database_url = cli.database_url.as_deref().ok_or_else(|| {
+        anyhow::anyhow!("--database-url または COMMUNITY_NODE_DATABASE_URL が必要です")
+    })?;
+    let pool = connect_postgres(database_url).await?;
     commands::dispatch(&pool, cli.command).await
 }

@@ -114,6 +114,10 @@ services:
       COMMUNITY_NODE_RATE_LIMIT_PER_SECOND: ${COMMUNITY_NODE_RATE_LIMIT_PER_SECOND:-10}
       COMMUNITY_NODE_RATE_LIMIT_BURST: ${COMMUNITY_NODE_RATE_LIMIT_BURST:-30}
       COMMUNITY_NODE_RATE_LIMIT_TRUST_FORWARDED_FOR: ${COMMUNITY_NODE_RATE_LIMIT_TRUST_FORWARDED_FOR:-false}
+      # 公開ノード情報の node_id と、cn-indexer がリスク判定に載せる発行元識別子(署名鍵の
+      # 公開鍵 hex、または明示識別子)の一致を起動時に検査する(#706)。cn-indexer と同じ値を渡す。
+      COMMUNITY_NODE_SAFETY_SIGNING_KEY: ${COMMUNITY_NODE_SAFETY_SIGNING_KEY:-}
+      COMMUNITY_NODE_SAFETY_ISSUER_NODE_ID: ${COMMUNITY_NODE_SAFETY_ISSUER_NODE_ID:-}
       # Admin listener is loopback-published below. Browser writes remain disabled unless
       # COMMUNITY_NODE_ADMIN_ACTOR is explicitly configured.
       COMMUNITY_NODE_ADMIN_BIND_ADDR: ${COMMUNITY_NODE_ADMIN_BIND_ADDR:-0.0.0.0:9090}

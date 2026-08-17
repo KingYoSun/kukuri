@@ -6,7 +6,7 @@ use crate::Command;
 mod admission;
 mod database;
 mod indexing;
-mod moderation;
+pub(crate) mod moderation;
 mod readiness;
 mod readiness_runtime;
 mod relation;

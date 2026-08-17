@@ -49,6 +49,7 @@ impl TestServer {
             relation_distance_optout_min_proximity: None,
             deployment_revision: "test-deployment-v1".to_string(),
             readiness_activation_max_age_secs: 3600,
+            expected_issuer_node_id: None,
         })
         .await?;
         let app = app_router(state);

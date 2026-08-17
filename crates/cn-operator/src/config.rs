@@ -61,6 +61,9 @@ pub struct ServerConfig {
     /// abuse / 問い合わせ連絡先。未指定なら domain から導出する。
     #[serde(default)]
     pub contact: Option<String>,
+    /// 公開ノード情報の `node_id`。モデレーション事象の発行元識別子(署名鍵の x-only 公開鍵 hex、
+    /// 署名無効時は `COMMUNITY_NODE_SAFETY_ISSUER_NODE_ID`)と一致させる必要がある(#706)。
+    /// `safety` 節があり `features.moderation` が有効な設定では必須。
     #[serde(default)]
     pub node_id: Option<String>,
     #[serde(default)]
@@ -494,6 +497,23 @@ pub fn resolve_and_validate(config: OperatorConfig) -> Result<ResolvedConfig> {
 
     if let Some(safety) = resolved.raw.safety.as_ref() {
         validate_safety_config(safety)?;
+        // 公開ノード情報の node_id は異議申し立ての発行元照合に使われる。モデレーションを提供する
+        // 公開ノードでは、リスク判定の issuer_node_id(署名鍵の公開鍵 hex)と同じ値を必ず記入する(#706)。
+        if resolved.enabled(Capability::Moderation)
+            && resolved
+                .raw
+                .server
+                .node_id
+                .as_deref()
+                .is_none_or(|node_id| node_id.trim().is_empty())
+        {
+            bail!(
+                "server.node_id は必須です(safety 節があり features.moderation が有効な公開ノード)。\
+                 モデレーション事象の発行元識別子(署名鍵の公開鍵 hex。`cn-cli moderation issuer-node-id` で導出)\
+                 と同じ値を記入してください。異議申し立ては公開ノード情報の node_id と \
+                 risk signal の issuer_node_id が一致する場合だけ受理されます"
+            );
+        }
     }
 
     // deploy セクションの検証（指定されている場合のみ。未指定は従来通り通す）。
