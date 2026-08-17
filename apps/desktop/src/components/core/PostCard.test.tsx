@@ -824,7 +824,7 @@ test('report dialog offers no target and no send action while the latest manifes
 
   pending.resolve({ status: 'ok', manifest: reportManifest('node.example') });
   expect(await screen.findByText('node.example')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Send report' })).toBeEnabled();
+  expect(await screen.findByRole('button', { name: 'Send report' })).toBeEnabled();
   expect(onSubmitReport).not.toHaveBeenCalled();
 });
 
