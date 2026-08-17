@@ -11,6 +11,8 @@ struct AdmissionMockState {
     forced_rejection: Arc<Mutex<Option<ApiErrorBody>>>,
     received_invites: Arc<Mutex<Vec<Option<String>>>>,
     verify_hits: Arc<AtomicUsize>,
+    /// 真にすると心拍を 401 で拒否する(参加禁止後の既存トークンをサーバが失効させた状態)。
+    heartbeat_unauthorized: Arc<AtomicBool>,
 }
 
 async fn admission_challenge() -> Json<kukuri_cn_protocol::AuthChallengeResponse> {
@@ -66,10 +68,21 @@ async fn admission_consent_status() -> Json<CommunityNodeConsentStatus> {
     })
 }
 
-async fn admission_heartbeat() -> Json<BootstrapHeartbeatResponse> {
+async fn admission_heartbeat(State(state): State<Arc<AdmissionMockState>>) -> Response {
+    if state.heartbeat_unauthorized.load(Ordering::SeqCst) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(ApiErrorBody {
+                code: "AUTH_REQUIRED".into(),
+                message: "subscriber is banned".into(),
+            }),
+        )
+            .into_response();
+    }
     Json(BootstrapHeartbeatResponse {
         expires_at: Utc::now().timestamp() + 300,
     })
+    .into_response()
 }
 
 async fn admission_bootstrap_nodes(
@@ -101,6 +114,7 @@ async fn spawn_admission_mock(
         forced_rejection: Arc::new(Mutex::new(None)),
         received_invites: Arc::new(Mutex::new(Vec::new())),
         verify_hits: Arc::new(AtomicUsize::new(0)),
+        heartbeat_unauthorized: Arc::new(AtomicBool::new(false)),
     });
     let app = Router::new()
         .route("/v1/auth/challenge", post(admission_challenge))
@@ -415,6 +429,96 @@ async fn banned_auto_approve_node_does_not_schedule_retries() {
             .code,
         CommunityNodeAdmissionRejectionCode::Banned
     );
+
+    runtime.shutdown().await;
+    server.abort();
+}
+
+#[tokio::test]
+async fn banned_member_with_stored_token_stops_self_heal_reauthentication() {
+    // #708: 参加済み利用者が禁止された場合、端末側トークンが未失効でも「認証済み」と扱わず、
+    // 自己修復経路(refresh_community_node_metadata)からも再認証を繰り返さない。
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("admission-banned-member.db");
+    let (base_url, state, server) = spawn_admission_mock(None).await;
+    let runtime = admission_runtime(&db_path, vec![(base_url.clone(), true)]).await;
+
+    // まず正常に認証・接続する。
+    let ready = runtime
+        .authenticate_community_node(CommunityNodeTargetRequest {
+            base_url: base_url.clone(),
+        })
+        .await
+        .expect("authenticate");
+    assert!(ready.auth_state.authenticated);
+    assert_eq!(state.verify_hits.load(Ordering::SeqCst), 1);
+
+    // サーバ側で参加禁止: 既存トークンの心拍は 401、再認証は 403 BANNED。
+    state.heartbeat_unauthorized.store(true, Ordering::SeqCst);
+    *state.forced_rejection.lock().await = Some(ApiErrorBody {
+        code: "BANNED".into(),
+        message: "node-local support denied".into(),
+    });
+
+    // 自己修復経路が呼ぶ metadata 更新: 心拍 401 → 再認証 → 403 で参加拒否に落ちる。
+    let rejected = runtime
+        .refresh_community_node_metadata(CommunityNodeTargetRequest {
+            base_url: base_url.clone(),
+        })
+        .await
+        .expect("rejection is folded into session state, not an error");
+    assert_eq!(state.verify_hits.load(Ordering::SeqCst), 2);
+    assert!(
+        !rejected.auth_state.authenticated,
+        "banned member must not stay authenticated"
+    );
+    assert_eq!(
+        rejected.session_phase,
+        CommunityNodeSessionPhase::AwaitingAdmission
+    );
+    assert_eq!(rejected.retry_after, None);
+    assert_eq!(
+        rejected
+            .admission_rejection
+            .as_ref()
+            .expect("banned rejection")
+            .code,
+        CommunityNodeAdmissionRejectionCode::Banned
+    );
+    assert!(
+        crate::community_node::load_community_node_token(
+            &db_path,
+            IdentityStorageMode::FileOnly,
+            base_url.as_str()
+        )
+        .expect("load token")
+        .is_none(),
+        "stored token must be discarded on admission rejection"
+    );
+
+    // 以後、定期処理でも自己修復判定でも認証要求は増えない。
+    runtime.run_community_node_session_maintenance_once().await;
+    runtime.run_community_node_session_maintenance_once().await;
+    assert_eq!(state.verify_hits.load(Ordering::SeqCst), 2);
+    assert!(
+        runtime
+            .ready_community_node_base_urls()
+            .await
+            .expect("ready base urls")
+            .is_empty(),
+        "rejected node must not be a self-heal target"
+    );
+    let status = runtime
+        .get_community_node_statuses()
+        .await
+        .expect("status")
+        .remove(0);
+    assert_eq!(
+        status.session_phase,
+        CommunityNodeSessionPhase::AwaitingAdmission
+    );
+    assert!(!status.auth_state.authenticated);
 
     runtime.shutdown().await;
     server.abort();

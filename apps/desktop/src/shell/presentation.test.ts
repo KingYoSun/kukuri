@@ -565,6 +565,18 @@ describe('communityNodeNextStepLabel', () => {
     );
   });
 
+  it('prioritizes an admission rejection even while a local token still looks valid', () => {
+    // #708: 参加拒否後に端末側トークンが残っていても、次の操作は拒否の案内を優先する。
+    expect(
+      communityNodeNextStepLabel(
+        baseStatus({
+          auth_state: { authenticated: true, expires_at: 4102444800 },
+          admission_rejection: { code: 'BANNED', message: 'node-local support denied' },
+        })
+      )
+    ).toBe("Contact this node's operator if needed. Automatic retries are stopped.");
+  });
+
   it('asks to refresh metadata until urls resolve, then reports active', () => {
     expect(communityNodeNextStepLabel(baseStatus())).toBe(
       'refresh metadata if connectivity urls stay unresolved'

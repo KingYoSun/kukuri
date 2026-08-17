@@ -68,8 +68,10 @@ impl DesktopRuntime {
                 .consent_state
                 .as_ref()
                 .is_some_and(|consent| consent.all_required_accepted);
+            // 参加拒否(AwaitingAdmission)のノードは利用者の操作待ちであり、自己修復の対象にしない(#708)。
             if has_connectivity_inputs
                 && node_status.auth_state.authenticated
+                && node_status.admission_rejection.is_none()
                 && consent_accepted
                 && node_status.last_error.is_none()
             {
@@ -95,7 +97,7 @@ impl DesktopRuntime {
         Ok(())
     }
 
-    async fn ready_community_node_base_urls(&self) -> Result<Vec<String>> {
+    pub(crate) async fn ready_community_node_base_urls(&self) -> Result<Vec<String>> {
         let config = self.community_node_config.lock().await.clone();
         let mut base_urls = Vec::new();
         for node in config.nodes {
@@ -109,8 +111,10 @@ impl DesktopRuntime {
                 .consent_state
                 .as_ref()
                 .is_some_and(|consent| consent.all_required_accepted);
+            // 参加拒否(AwaitingAdmission)のノードは利用者の操作待ちであり、自己修復の対象にしない(#708)。
             if has_connectivity_inputs
                 && node_status.auth_state.authenticated
+                && node_status.admission_rejection.is_none()
                 && consent_accepted
                 && node_status.last_error.is_none()
             {

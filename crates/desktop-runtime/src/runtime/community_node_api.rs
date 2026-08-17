@@ -389,17 +389,32 @@ impl DesktopRuntime {
             CommunityNodeSessionPhase::Refreshing,
         )
         .await;
-        self.refresh_community_node_registration_with_token_if_due(
-            base_url.as_str(),
-            &mut token,
-            node.auto_approve,
-            true,
-        )
-        .await?;
-        self.clear_community_node_retry_state(base_url.as_str())
-            .await;
-        self.set_community_node_session_ready(base_url.as_str(), false)
-            .await;
+        match self
+            .refresh_community_node_registration_with_token_if_due(
+                base_url.as_str(),
+                &mut token,
+                node.auto_approve,
+                true,
+            )
+            .await
+        {
+            Ok(()) => {
+                self.clear_community_node_retry_state(base_url.as_str())
+                    .await;
+                self.set_community_node_session_ready(base_url.as_str(), false)
+                    .await;
+            }
+            Err(error) => {
+                // 心拍 401 → 再認証 → 参加拒否(403)の経路は、定期処理と同じく AwaitingAdmission へ
+                // 落として利用者の操作待ちにする。それ以外の失敗は従来どおり呼び出し元へ返す(#708)。
+                let Some(rejection) = Self::community_node_admission_rejection(&error).cloned()
+                else {
+                    return Err(error);
+                };
+                self.set_community_node_admission_rejection(base_url.as_str(), rejection)
+                    .await;
+            }
+        }
         let refreshed = self.require_community_node(base_url.as_str()).await?;
         self.community_node_status(refreshed, None, None).await
     }

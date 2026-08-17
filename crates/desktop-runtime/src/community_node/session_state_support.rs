@@ -86,6 +86,20 @@ impl DesktopRuntime {
         base_url: &str,
         rejection: CommunityNodeAdmissionRejection,
     ) {
+        // 参加拒否後の既存トークンはサーバ側で 401 になる。端末側に残すと「認証済み」判定が
+        // 続き、自己修復経路が再認証を繰り返すため、拒否と同時に破棄する(#708)。
+        if let Err(error) = crate::identity::delete_optional_secret(
+            &self.db_path,
+            self.identity_mode,
+            COMMUNITY_NODE_TOKEN_PURPOSE,
+            base_url,
+        ) {
+            warn!(
+                error = %error,
+                base_url,
+                "failed to discard community-node token after admission rejection"
+            );
+        }
         {
             let mut sessions = self.community_node_sessions.lock().await;
             let entry = sessions
