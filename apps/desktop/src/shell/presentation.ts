@@ -373,12 +373,13 @@ export function communityNodeNextStepLabel(status?: CommunityNodeNodeStatus): st
   if (!status) {
     return translate('settings:communityNode.values.saveNodesToBegin');
   }
+  // 参加拒否は認証状態の表示に関わらず利用者の操作待ちなので最優先で案内する(#708)。
+  if (status.admission_rejection) {
+    return translate(
+      `settings:communityNode.admission.nextSteps.${status.admission_rejection.code}`
+    );
+  }
   if (!status.auth_state.authenticated) {
-    if (status.admission_rejection) {
-      return translate(
-        `settings:communityNode.admission.nextSteps.${status.admission_rejection.code}`
-      );
-    }
     return translate('settings:communityNode.values.authenticateThisNode');
   }
   if (status.consent_state && !status.consent_state.all_required_accepted) {
