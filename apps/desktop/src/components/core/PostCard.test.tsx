@@ -752,3 +752,170 @@ test('attachment report resolves the selected blob provenance instead of the pos
     })
   );
 });
+
+// #696: 通報先は開いた時に取得成功した最新 manifest だけから作る。
+function reportManifest(nodeId: string, overrides: Partial<CommunityNodeManifest> = {}): CommunityNodeManifest {
+  return {
+    node_id: nodeId,
+    node_name: nodeId,
+    node_role: 'community-node',
+    server_name: nodeId,
+    manifest_version: 'v1',
+    capability_scope: { available_enabled: ['community_index'], planned_enabled: [] },
+    authority_scope: { applies_to: ['this_node'], does_not_apply_to: [] },
+    p2p_boundary: {
+      identity_authority: false,
+      profile_canonical_store: false,
+      social_graph_canonical_store: false,
+      content_truth_source: false,
+      network_wide_authority: false,
+    },
+    abuse_contact: 'abuse@node.example',
+    report_endpoint: `https://${nodeId}/v1/report`,
+    terms_url: '',
+    privacy_url: '',
+    moderation_policy_url: '',
+    ...overrides,
+  };
+}
+
+function observedView() {
+  return createView({
+    provenance: {
+      canonicalSource: 'author_docs',
+      observedVia: [{ nodeBaseUrl: 'https://node.example', capability: 'community_index' }],
+      responsibleReportTargets: [],
+    },
+  });
+}
+
+const OBSERVED_UNRESOLVED_TITLE = 'No reachable report target';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
+test('report dialog offers no target and no send action while the latest manifest is resolving', async () => {
+  const user = userEvent.setup();
+  const pending = deferred<{ status: 'ok'; manifest: CommunityNodeManifest }>();
+  const onFetchReportManifest = vi.fn().mockReturnValue(pending.promise);
+  const onSubmitReport = vi.fn();
+
+  render(
+    <PostCard
+      view={observedView()}
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+      onSubmitReport={onSubmitReport}
+      onFetchReportManifest={onFetchReportManifest}
+    />
+  );
+
+  await user.click(screen.getByRole('button', { name: 'Report' }));
+  await waitFor(() => expect(onFetchReportManifest).toHaveBeenCalledTimes(1));
+  expect(screen.getByText('Checking the latest report targets…')).toBeInTheDocument();
+  expect(screen.queryByText('node.example')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Send report' })).not.toBeInTheDocument();
+
+  pending.resolve({ status: 'ok', manifest: reportManifest('node.example') });
+  expect(await screen.findByText('node.example')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Send report' })).toBeEnabled();
+  expect(onSubmitReport).not.toHaveBeenCalled();
+});
+
+test('a failed latest manifest fetch does not fall back to a target fetched by a previous open', async () => {
+  const user = userEvent.setup();
+  const onFetchReportManifest = vi
+    .fn()
+    .mockResolvedValueOnce({ status: 'ok', manifest: reportManifest('node.example') })
+    .mockResolvedValueOnce({ status: 'absent', manifest: null });
+  const onSubmitReport = vi.fn();
+
+  render(
+    <PostCard
+      view={observedView()}
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+      onSubmitReport={onSubmitReport}
+      onFetchReportManifest={onFetchReportManifest}
+    />
+  );
+
+  await user.click(screen.getByRole('button', { name: 'Report' }));
+  expect(await screen.findByText('node.example')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Cancel' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+  await user.click(screen.getByRole('button', { name: 'Report' }));
+  await waitFor(() => expect(onFetchReportManifest).toHaveBeenCalledTimes(2));
+  expect(await screen.findByText(/Could not refresh report targets/)).toBeInTheDocument();
+  expect(screen.queryByText('node.example')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Send report' })).not.toBeInTheDocument();
+  expect(onSubmitReport).not.toHaveBeenCalled();
+});
+
+test('a node that withdrew its report endpoint and contact is not offered as a target', async () => {
+  const user = userEvent.setup();
+  const onFetchReportManifest = vi.fn().mockResolvedValue({
+    status: 'ok',
+    manifest: reportManifest('node.example', { report_endpoint: '', abuse_contact: '' }),
+  });
+
+  render(
+    <PostCard
+      view={observedView()}
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+      onSubmitReport={vi.fn()}
+      onFetchReportManifest={onFetchReportManifest}
+    />
+  );
+
+  await user.click(screen.getByRole('button', { name: 'Report' }));
+  await waitFor(() => expect(onFetchReportManifest).toHaveBeenCalledTimes(1));
+  expect(await screen.findByText(OBSERVED_UNRESOLVED_TITLE)).toBeInTheDocument();
+  expect(screen.queryByText('node.example')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Send report' })).not.toBeInTheDocument();
+});
+
+test('a manifest response that arrives after the dialog was closed does not seed the next open', async () => {
+  const user = userEvent.setup();
+  const first = deferred<{ status: 'ok'; manifest: CommunityNodeManifest }>();
+  const second = deferred<{ status: 'ok'; manifest: CommunityNodeManifest }>();
+  const onFetchReportManifest = vi
+    .fn()
+    .mockReturnValueOnce(first.promise)
+    .mockReturnValueOnce(second.promise);
+
+  render(
+    <PostCard
+      view={observedView()}
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+      onSubmitReport={vi.fn()}
+      onFetchReportManifest={onFetchReportManifest}
+    />
+  );
+
+  await user.click(screen.getByRole('button', { name: 'Report' }));
+  await waitFor(() => expect(onFetchReportManifest).toHaveBeenCalledTimes(1));
+  await user.click(screen.getByRole('button', { name: 'Cancel' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+  await user.click(screen.getByRole('button', { name: 'Report' }));
+  await waitFor(() => expect(onFetchReportManifest).toHaveBeenCalledTimes(2));
+  first.resolve({ status: 'ok', manifest: reportManifest('node.example') });
+  await new Promise((r) => setTimeout(r, 0));
+
+  expect(screen.getByText('Checking the latest report targets…')).toBeInTheDocument();
+  expect(screen.queryByText('node.example')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Send report' })).not.toBeInTheDocument();
+});

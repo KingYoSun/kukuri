@@ -71,6 +71,10 @@ function api(
 ) {
   let appealStatus: 'none' | 'disputed' | 'cleared' = initialAppealStatus;
   return {
+    fetchCommunityNodeManifest: vi.fn(async (baseUrl: string) => ({
+      status: 'ok' as const,
+      manifest: communityNodeManifests[baseUrl as keyof typeof communityNodeManifests] ?? null,
+    })),
     readCommunityNodeTrustUser: vi.fn(async () => ({
       viewer_pubkey: 'viewer',
       target_id: targetPubkey,
@@ -174,7 +178,6 @@ describe('CommunityNodeAdvisoryPanel', () => {
         api={client}
         targetPubkey={targetPubkey}
         nodeBaseUrls={['https://node.example']}
-        communityNodeManifests={communityNodeManifests}
       />
     );
 
@@ -197,7 +200,6 @@ describe('CommunityNodeAdvisoryPanel', () => {
         api={client}
         targetPubkey={targetPubkey}
         nodeBaseUrls={['https://node.example']}
-        communityNodeManifests={communityNodeManifests}
       />
     );
 
@@ -214,7 +216,6 @@ describe('CommunityNodeAdvisoryPanel', () => {
         api={client}
         targetPubkey={targetPubkey}
         nodeBaseUrls={['https://node.example']}
-        communityNodeManifests={communityNodeManifests}
       />
     );
 
@@ -225,7 +226,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
     );
 
     expect(screen.queryByLabelText(/contact|連絡先/i)).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: '異議を申し立てる' }));
+    await userEvent.click(await screen.findByRole('button', { name: '異議を申し立てる' }));
 
     expect(client.submitCommunityNodeReport).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -250,7 +251,6 @@ describe('CommunityNodeAdvisoryPanel', () => {
         api={client}
         targetPubkey={targetPubkey}
         nodeBaseUrls={['https://node.example']}
-        communityNodeManifests={communityNodeManifests}
       />
     );
 
@@ -259,7 +259,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
     await userEvent.click(
       screen.getByRole('button', { name: 'このリスク判定に異議を申し立てる' })
     );
-    await userEvent.click(screen.getByRole('button', { name: '異議を申し立てる' }));
+    await userEvent.click(await screen.findByRole('button', { name: '異議を申し立てる' }));
 
     expect(client.submitCommunityNodeReport).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -277,7 +277,6 @@ describe('CommunityNodeAdvisoryPanel', () => {
         api={client}
         targetPubkey={targetPubkey}
         nodeBaseUrls={['https://node.example']}
-        communityNodeManifests={communityNodeManifests}
       />
     );
 
@@ -299,7 +298,6 @@ describe('CommunityNodeAdvisoryPanel', () => {
         api={client}
         targetPubkey={targetPubkey}
         nodeBaseUrls={[nodeA]}
-        communityNodeManifests={communityNodeManifests}
       />
     );
 
@@ -315,7 +313,6 @@ describe('CommunityNodeAdvisoryPanel', () => {
         api={client}
         targetPubkey={otherTargetPubkey}
         nodeBaseUrls={[nodeA]}
-        communityNodeManifests={communityNodeManifests}
       />
     );
 
@@ -330,7 +327,6 @@ describe('CommunityNodeAdvisoryPanel', () => {
         api={client}
         targetPubkey={targetPubkey}
         nodeBaseUrls={[nodeA, nodeB]}
-        communityNodeManifests={communityNodeManifests}
       />
     );
 
@@ -354,13 +350,13 @@ describe('CommunityNodeAdvisoryPanel', () => {
       readCommunityNodeRelationUser: vi.fn(() => pendingRelation.promise),
       listCommunityNodeRelationNeighbors: vi.fn(() => pendingNeighbors.promise),
       submitCommunityNodeReport: vi.fn(),
+      fetchCommunityNodeManifest: vi.fn(),
     };
     const { rerender } = render(
       <CommunityNodeAdvisoryPanel
         api={client}
         targetPubkey={targetPubkey}
         nodeBaseUrls={[nodeA]}
-        communityNodeManifests={communityNodeManifests}
       />
     );
 
@@ -370,7 +366,6 @@ describe('CommunityNodeAdvisoryPanel', () => {
         api={client}
         targetPubkey={otherTargetPubkey}
         nodeBaseUrls={[nodeA]}
-        communityNodeManifests={communityNodeManifests}
       />
     );
     pendingTrust.resolve(trustResponse(targetPubkey, 'stale-node-a'));
@@ -401,13 +396,13 @@ describe('CommunityNodeAdvisoryPanel', () => {
         .mockImplementationOnce(() => neighborsA.promise)
         .mockImplementationOnce(() => neighborsB.promise),
       submitCommunityNodeReport: vi.fn(),
+      fetchCommunityNodeManifest: vi.fn(),
     };
     const { rerender } = render(
       <CommunityNodeAdvisoryPanel
         api={client}
         targetPubkey={targetPubkey}
         nodeBaseUrls={[nodeA]}
-        communityNodeManifests={communityNodeManifests}
       />
     );
 
@@ -417,7 +412,6 @@ describe('CommunityNodeAdvisoryPanel', () => {
         api={client}
         targetPubkey={otherTargetPubkey}
         nodeBaseUrls={[nodeA]}
-        communityNodeManifests={communityNodeManifests}
       />
     );
     await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
@@ -435,5 +429,96 @@ describe('CommunityNodeAdvisoryPanel', () => {
     expect(screen.queryByText(/stale-node-a/)).not.toBeInTheDocument();
     expect(screen.getByText(/current-node-b/)).toBeInTheDocument();
     expect(screen.getByText('e'.repeat(64))).toBeInTheDocument();
+  });
+  // #696: 異議申し立ては開いた時に選択中ノードの最新 manifest を取得し、その結果だけから受付先を決める。
+  test('fetches the selected node manifest when an appeal opens and blocks sending until it arrives', async () => {
+    const pending = deferred<{ status: 'ok'; manifest: (typeof communityNodeManifests)[typeof nodeA] }>();
+    const client = { ...api(), fetchCommunityNodeManifest: vi.fn(() => pending.promise) };
+    render(<CommunityNodeAdvisoryPanel api={client} targetPubkey={targetPubkey} nodeBaseUrls={[nodeA]} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(await screen.findByText(/node-a/));
+    expect(client.fetchCommunityNodeManifest).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'このリスク判定に異議を申し立てる' }));
+
+    await waitFor(() => expect(client.fetchCommunityNodeManifest).toHaveBeenCalledTimes(1));
+    expect(client.fetchCommunityNodeManifest).toHaveBeenCalledWith(nodeA);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '異議を申し立てる' })).not.toBeInTheDocument();
+    expect(client.submitCommunityNodeReport).not.toHaveBeenCalled();
+
+    pending.resolve({ status: 'ok', manifest: communityNodeManifests[nodeA] });
+    await userEvent.click(await screen.findByRole('button', { name: '異議を申し立てる' }));
+    expect(client.submitCommunityNodeReport).toHaveBeenCalledWith(
+      expect.objectContaining({ node_base_url: nodeA, appeal: { risk_signal_id: 'signal-1' } })
+    );
+  });
+
+  test('offers no appeal target when the latest manifest fetch fails', async () => {
+    const client = {
+      ...api(),
+      fetchCommunityNodeManifest: vi.fn(async () => ({ status: 'absent' as const, manifest: null })),
+    };
+    render(<CommunityNodeAdvisoryPanel api={client} targetPubkey={targetPubkey} nodeBaseUrls={[nodeA]} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(await screen.findByText(/node-a/));
+    await userEvent.click(screen.getByRole('button', { name: 'このリスク判定に異議を申し立てる' }));
+
+    await waitFor(() => expect(client.fetchCommunityNodeManifest).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/Could not refresh report targets/)).toBeInTheDocument();
+    expect(screen.getByText('発行元の送信先を確認できません')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '異議を申し立てる' })).not.toBeInTheDocument();
+    expect(client.submitCommunityNodeReport).not.toHaveBeenCalled();
+  });
+
+  test('offers no appeal target when the fetched manifest belongs to a different issuer', async () => {
+    const client = {
+      ...api(),
+      fetchCommunityNodeManifest: vi.fn(async () => ({
+        status: 'ok' as const,
+        manifest: communityNodeManifests[nodeB],
+      })),
+    };
+    render(<CommunityNodeAdvisoryPanel api={client} targetPubkey={targetPubkey} nodeBaseUrls={[nodeA]} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(await screen.findByText(/node-a/));
+    await userEvent.click(screen.getByRole('button', { name: 'このリスク判定に異議を申し立てる' }));
+
+    await waitFor(() => expect(client.fetchCommunityNodeManifest).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: '異議を申し立てる' })).not.toBeInTheDocument()
+    );
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(client.submitCommunityNodeReport).not.toHaveBeenCalled();
+  });
+
+  test('ignores a manifest response that arrives after the appeal was closed and reopened', async () => {
+    const first = deferred<{ status: 'ok'; manifest: (typeof communityNodeManifests)[typeof nodeA] }>();
+    const second = deferred<{ status: 'ok'; manifest: (typeof communityNodeManifests)[typeof nodeA] }>();
+    const client = {
+      ...api(),
+      fetchCommunityNodeManifest: vi
+        .fn()
+        .mockReturnValueOnce(first.promise)
+        .mockReturnValueOnce(second.promise),
+    };
+    render(<CommunityNodeAdvisoryPanel api={client} targetPubkey={targetPubkey} nodeBaseUrls={[nodeA]} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(await screen.findByText(/node-a/));
+    await userEvent.click(screen.getByRole('button', { name: 'このリスク判定に異議を申し立てる' }));
+    await waitFor(() => expect(client.fetchCommunityNodeManifest).toHaveBeenCalledTimes(1));
+    await userEvent.click(screen.getByRole('button', { name: /キャンセル|Cancel/ }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: 'このリスク判定に異議を申し立てる' }));
+    await waitFor(() => expect(client.fetchCommunityNodeManifest).toHaveBeenCalledTimes(2));
+    first.resolve({ status: 'ok', manifest: communityNodeManifests[nodeA] });
+    await new Promise((done) => setTimeout(done, 0));
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '異議を申し立てる' })).not.toBeInTheDocument();
   });
 });

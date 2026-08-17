@@ -13,6 +13,13 @@ import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 const authorDetailView = createStoryAuthorDetailView();
 const advisoryApi = {
   ...createDesktopMockApi(),
+  // 異議申し立てを開いた時に取得する発行元ノードの最新 manifest(#696)。
+  async fetchCommunityNodeManifest(baseUrl: string) {
+    const manifest = advisoryManifests[baseUrl as keyof typeof advisoryManifests];
+    return manifest
+      ? { status: 'ok' as const, manifest }
+      : { status: 'absent' as const, manifest: null };
+  },
   async readCommunityNodeTrustUser(request: { target_pubkey: string }) {
     return {
       viewer_pubkey: 'story-viewer',
@@ -133,7 +140,6 @@ export const CommunityNodeAdvisory: Story = {
         api={advisoryApi}
         targetPubkey={authorDetailView.author?.author_pubkey ?? 'a'.repeat(64)}
         nodeBaseUrls={['https://community.example.com']}
-        communityNodeManifests={advisoryManifests}
       />
     ),
   },
@@ -152,7 +158,6 @@ export const CommunityNodeClearedPostAdvisory: Story = {
         api={clearedPostAdvisoryApi}
         targetPubkey={authorDetailView.author?.author_pubkey ?? 'a'.repeat(64)}
         nodeBaseUrls={['https://community.example.com']}
-        communityNodeManifests={advisoryManifests}
       />
     ),
   },

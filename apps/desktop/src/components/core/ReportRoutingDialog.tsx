@@ -104,10 +104,10 @@ export function ReportRoutingDialog({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SubmitCommunityNodeReportResult | null>(null);
 
-  // ダイアログを開くたびに入力状態を初期化する。
+  // ダイアログを開くたびに入力状態を初期化する。候補は取得完了後に届くため、
+  // 候補の変化では入力を消さず、選択候補だけを追随させる(#696)。
   useEffect(() => {
     if (open) {
-      setSelectedKey(candidates.length > 0 ? candidateKey(candidates[0]) : null);
       setReason(isAppeal ? 'other' : 'spam');
       setDetails('');
       setReporterContact('');
@@ -115,7 +115,18 @@ export function ReportRoutingDialog({
       setError(null);
       setResult(null);
     }
-  }, [open, candidates, appealRiskSignalId, isAppeal]);
+  }, [open, appealRiskSignalId, isAppeal]);
+
+  useEffect(() => {
+    if (!open) return;
+    setSelectedKey((current) =>
+      current && candidates.some((candidate) => candidateKey(candidate) === current)
+        ? current
+        : candidates.length > 0
+          ? candidateKey(candidates[0])
+          : null,
+    );
+  }, [open, candidates]);
 
   const selectedCandidate = useMemo(
     () => candidates.find((candidate) => candidateKey(candidate) === selectedKey) ?? null,
@@ -125,7 +136,8 @@ export function ReportRoutingDialog({
   const isCriticalSafety = isCriticalSafetyReason(reason);
 
   const handleSubmit = async () => {
-    if (!selectedCandidate) {
+    // 最新の manifest を取得し終えるまで、古い候補への送信も連絡先の複写もしない(#696)。
+    if (!selectedCandidate || resolving) {
       return;
     }
     const contact = selectedCandidate.contact;
@@ -393,7 +405,7 @@ export function ReportRoutingDialog({
           {!result && canRoute && selectedCandidate ? (
             <Button
               type='button'
-              disabled={submitting}
+              disabled={submitting || resolving}
               onClick={handleSubmit}
               aria-label={
                 appeal ? t('profile:communityNodeAdvisory.appeal.submit') : t('report.submit')

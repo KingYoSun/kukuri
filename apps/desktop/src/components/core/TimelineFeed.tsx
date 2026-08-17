@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 
 import type {
   BookmarkedCustomReactionView,
-  CommunityNodeManifest,
   CommunityNodeManifestFetch,
   CustomReactionAssetView,
   ReactionKeyInput,
@@ -55,7 +54,6 @@ type TimelineFeedProps = {
   pendingCount?: number;
   onApplyPending?: () => void;
   // 分散通報ルーティング（#310）。取得済み community node manifest（ok のみ）と送信導線。
-  communityNodeManifests?: Record<string, CommunityNodeManifest>;
   onSubmitReport?: (
     request: SubmitCommunityNodeReportRequest
   ) => Promise<SubmitCommunityNodeReportResult>;
@@ -98,7 +96,6 @@ export function TimelineFeed({
   onLoadMore,
   pendingCount = 0,
   onApplyPending,
-  communityNodeManifests,
   onSubmitReport,
   onCopyReportContact,
   onFetchReportManifest,
@@ -208,7 +205,6 @@ export function TimelineFeed({
             onActivateReference={onActivateReference}
             onCopyLink={onCopyPostLink}
             isFocused={focusedPostObjectId === view.post.object_id}
-            communityNodeManifests={communityNodeManifests}
             onSubmitReport={onSubmitReport}
             onCopyReportContact={onCopyReportContact}
             onFetchReportManifest={onFetchReportManifest}
