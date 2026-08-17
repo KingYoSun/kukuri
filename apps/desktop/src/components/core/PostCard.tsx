@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Bookmark, Flag, Link2, Reply, Repeat2 } from 'lucide-react';
 
 import { formatLocalizedTime } from '@/i18n/format';
 import type {
   BookmarkedCustomReactionView,
-  CommunityNodeManifest,
   CommunityNodeManifestFetch,
   ContentProvenance,
   CustomReactionAssetView,
@@ -16,6 +15,7 @@ import type {
   SubmitCommunityNodeReportResult,
 } from '@/lib/api';
 import { planReportRouting } from '@/lib/api/reportRouting';
+import { useReportManifests } from './useReportManifests';
 import { copyTextToClipboard } from '@/lib/utils';
 import {
   buildPostLink,
@@ -39,8 +39,6 @@ import type { ReportRoutingSubject } from './ReportRoutingDialog';
 import { RelationshipBadge } from './RelationshipBadge';
 import { SmartReferenceText } from './SmartReferenceText';
 import { type PostCardView } from './types';
-
-const EMPTY_COMMUNITY_NODE_MANIFESTS: Record<string, CommunityNodeManifest> = {};
 
 function sourceAuthorLabel(view: PostCardView['post']['repost_of']): string | null {
   if (!view) {
@@ -79,15 +77,13 @@ type PostCardProps = {
   onActivateReference?: (reference: InternalSmartReference) => void;
   onCopyLink?: (link: string) => void;
   isFocused?: boolean;
-  // 分散通報ルーティング（#310）。取得済み community node manifest（ok のみ）。
-  // 通報先は post の provenance（観測経路）と突き合わせて解決する。
-  communityNodeManifests?: Record<string, CommunityNodeManifest>;
   // 解決済みの通報先 node へ通報を送信する。未指定なら通報導線を表示しない。
   onSubmitReport?: (
     request: SubmitCommunityNodeReportRequest
   ) => Promise<SubmitCommunityNodeReportResult>;
   // abuse contact（endpoint 無し node）の案内用コピー。
   onCopyReportContact?: (value: string) => void;
+  // 通報画面を開いた時に観測元ノードの最新 manifest を取得する。未指定なら候補は作らない(#696)。
   onFetchReportManifest?: (baseUrl: string) => Promise<CommunityNodeManifestFetch>;
   onMuteReportAuthor?: (authorPubkey: string) => Promise<void> | void;
 };
@@ -128,7 +124,6 @@ export function PostCard({
   onActivateReference,
   onCopyLink,
   isFocused = false,
-  communityNodeManifests = EMPTY_COMMUNITY_NODE_MANIFESTS,
   onSubmitReport,
   onCopyReportContact,
   onFetchReportManifest,
@@ -146,10 +141,6 @@ export function PostCard({
   const [reportProvenance, setReportProvenance] = useState<ContentProvenance | undefined>(
     view.provenance
   );
-  const [reportManifests, setReportManifests] = useState(communityNodeManifests);
-  const fetchedReportManifestUrls = useRef(new Set<string>());
-  const [reportResolving, setReportResolving] = useState(false);
-  const [reportResolveError, setReportResolveError] = useState<string | null>(null);
   const [mediaViewerOpen, setMediaViewerOpen] = useState(false);
   const [mediaViewerIndex, setMediaViewerIndex] = useState(view.media.currentImageIndex ?? 0);
   const [reactionMenuPosition, setReactionMenuPosition] = useState<ContextActionMenuPosition | null>(
@@ -211,70 +202,23 @@ export function PostCard({
     onOpenThread(view.threadTargetId);
   };
 
-  // 通報先は現在選択中の対象の provenance（観測経路）と取得済み manifest から解決する。
-  // provenance 不明 / 通報先未解決でも dialog は開き、local action のみ案内する。
+  // 通報先は現在選択中の対象の provenance（観測経路）と、通報画面を開いた時に取得成功した
+  // 最新 manifest だけから解決する(#696)。provenance 不明 / 通報先未解決でも dialog は開き、
+  // local action のみ案内する。
+  const {
+    manifests: reportManifests,
+    resolving: reportResolving,
+    resolveError: reportResolveError,
+  } = useReportManifests({
+    open: reportDialogOpen,
+    provenance: reportProvenance,
+    fetchManifest: onFetchReportManifest,
+  });
   const reportPlan = useMemo(
     () => planReportRouting(reportProvenance, reportManifests),
     [reportProvenance, reportManifests]
   );
   const showReportAction = Boolean(onSubmitReport);
-
-  useEffect(() => {
-    setReportManifests(communityNodeManifests);
-  }, [communityNodeManifests]);
-
-  useEffect(() => {
-    if (!reportDialogOpen) {
-      fetchedReportManifestUrls.current.clear();
-      setReportResolveError(null);
-    }
-  }, [reportDialogOpen]);
-
-  useEffect(() => {
-    if (!reportDialogOpen || !onFetchReportManifest || !reportProvenance) {
-      return;
-    }
-    const baseUrls = [...new Set(reportProvenance.observedVia.map((item) => item.nodeBaseUrl))]
-      .filter((baseUrl) => !fetchedReportManifestUrls.current.has(baseUrl));
-    if (baseUrls.length === 0) {
-      return;
-    }
-    baseUrls.forEach((baseUrl) => fetchedReportManifestUrls.current.add(baseUrl));
-    let active = true;
-    setReportResolving(true);
-    setReportResolveError(null);
-    Promise.all(
-      baseUrls.map(async (baseUrl) => ({
-        baseUrl,
-        response: await onFetchReportManifest(baseUrl),
-      }))
-    )
-      .then((responses) => {
-        if (!active) return;
-        setReportManifests((current) => {
-          let next = current;
-          for (const { baseUrl, response } of responses) {
-            if (response.status === 'ok' && response.manifest) {
-              if (next === current) next = { ...current };
-              next[baseUrl] = response.manifest;
-            }
-          }
-          return next;
-        });
-        if (responses.some(({ response }) => response.status !== 'ok' || !response.manifest)) {
-          setReportResolveError('community node manifest is unavailable');
-        }
-      })
-      .catch((cause) => {
-        if (active) setReportResolveError(cause instanceof Error ? cause.message : String(cause));
-      })
-      .finally(() => {
-        if (active) setReportResolving(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [onFetchReportManifest, reportDialogOpen, reportProvenance]);
 
   const handleSubmitReport = async (
     input: ReportSubmitInput

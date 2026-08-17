@@ -25,10 +25,7 @@ import type { SupportedLocale } from '@/i18n';
 import { buildLiveLink, type InternalSmartReference } from '@/lib/internalLinks';
 import { copyTextToClipboard } from '@/lib/utils';
 import { eligibleCommunityIndexNodes } from '@/lib/api/communityIndex';
-import type {
-  CommunityNodeManifest,
-  SubmitCommunityNodeReportRequest,
-} from '@/lib/api';
+import type { SubmitCommunityNodeReportRequest } from '@/lib/api';
 import {
   timelineScopeStorageKey,
   type GameEditorDraft,
@@ -231,17 +228,6 @@ export function DesktopShellPrimaryWorkspace({
     () => new Set(bookmarkedPosts.map((item) => item.post.object_id)),
     [bookmarkedPosts]
   );
-  // 分散通報ルーティング（#310）。取得済み（ok）の manifest だけを base_url で引けるようにする。
-  // 通報先は post の provenance（観測経路）と突き合わせて解決する。
-  const reportableManifests = useMemo(() => {
-    const out: Record<string, CommunityNodeManifest> = {};
-    for (const [baseUrl, entry] of Object.entries(communityNodeManifests)) {
-      if (entry.status === 'ok') {
-        out[baseUrl] = entry.manifest;
-      }
-    }
-    return out;
-  }, [communityNodeManifests]);
   const submitReport = (request: SubmitCommunityNodeReportRequest) =>
     api.submitCommunityNodeReport(request);
   const fetchReportManifest = (baseUrl: string) =>
@@ -397,7 +383,6 @@ export function DesktopShellPrimaryWorkspace({
                   onLoadMore={() => void loadMoreTimeline(activeTopic)}
                   pendingCount={activeTimelinePendingCount}
                   onApplyPending={() => void refreshTimelineFeed(activeTopic, selectedThread)}
-                  communityNodeManifests={reportableManifests}
                   onSubmitReport={submitReport}
                   onCopyReportContact={copyReportContact}
                   onFetchReportManifest={fetchReportManifest}
@@ -428,7 +413,6 @@ export function DesktopShellPrimaryWorkspace({
                   onToggleBookmark={(post) => void handleToggleBookmarkedPost(post)}
                   onActivateReference={(reference) => void handleActivateReference(reference)}
                   onCopyPostLink={handleCopyInternalLink}
-                  communityNodeManifests={reportableManifests}
                   onSubmitReport={submitReport}
                   onCopyReportContact={copyReportContact}
                   onFetchReportManifest={fetchReportManifest}

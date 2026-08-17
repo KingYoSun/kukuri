@@ -1,11 +1,10 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Flag } from 'lucide-react';
 
 import { Card, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import type {
-  CommunityNodeManifest,
   CommunityNodeManifestFetch,
   SubmitCommunityNodeReportRequest,
   SubmitCommunityNodeReportResult,
@@ -16,9 +15,8 @@ import { planReportRouting } from '@/lib/api/reportRouting';
 import { AuthorAvatar } from './AuthorAvatar';
 import { RelationshipBadge } from './RelationshipBadge';
 import { ReportRoutingDialog, type ReportSubmitInput } from './ReportRoutingDialog';
+import { useReportManifests } from './useReportManifests';
 import { type AuthorDetailView } from './types';
-
-const EMPTY_COMMUNITY_NODE_MANIFESTS: Record<string, CommunityNodeManifest> = {};
 
 type AuthorDetailCardProps = {
   view: AuthorDetailView;
@@ -27,7 +25,6 @@ type AuthorDetailCardProps = {
   onToggleMute: (authorPubkey: string, muted: boolean) => void;
   onOpenDirectMessage?: (authorPubkey: string) => void;
   communityNodeAdvisory?: ReactNode;
-  communityNodeManifests?: Record<string, CommunityNodeManifest>;
   onSubmitReport?: (
     request: SubmitCommunityNodeReportRequest
   ) => Promise<SubmitCommunityNodeReportResult>;
@@ -42,7 +39,6 @@ export function AuthorDetailCard({
   onToggleMute,
   onOpenDirectMessage,
   communityNodeAdvisory,
-  communityNodeManifests = EMPTY_COMMUNITY_NODE_MANIFESTS,
   onSubmitReport,
   onCopyReportContact,
   onFetchReportManifest,
@@ -59,67 +55,24 @@ export function AuthorDetailCard({
   );
   const showMuteAction = Boolean(author && author.author_pubkey !== localAuthorPubkey);
   const [reportOpen, setReportOpen] = useState(false);
-  const [reportManifests, setReportManifests] = useState(communityNodeManifests);
-  const fetchedReportManifestUrls = useRef(new Set<string>());
-  const [reportResolving, setReportResolving] = useState(false);
-  const [reportResolveError, setReportResolveError] = useState<string | null>(null);
   const provenance = useMemo(
     () => contentProvenanceFromView(author?.provenance),
     [author?.provenance]
   );
+  // 通報画面を開いた時に取得成功した最新 manifest だけを候補源にする(#696)。
+  const {
+    manifests: reportManifests,
+    resolving: reportResolving,
+    resolveError: reportResolveError,
+  } = useReportManifests({
+    open: reportOpen,
+    provenance,
+    fetchManifest: onFetchReportManifest,
+  });
   const reportPlan = useMemo(
     () => planReportRouting(provenance, reportManifests),
     [provenance, reportManifests]
   );
-
-  useEffect(() => setReportManifests(communityNodeManifests), [communityNodeManifests]);
-  useEffect(() => {
-    if (!reportOpen) {
-      fetchedReportManifestUrls.current.clear();
-      setReportResolveError(null);
-    }
-  }, [reportOpen]);
-  useEffect(() => {
-    if (!reportOpen || !onFetchReportManifest || !provenance) return;
-    const baseUrls = [...new Set(provenance.observedVia.map((item) => item.nodeBaseUrl))]
-      .filter((baseUrl) => !fetchedReportManifestUrls.current.has(baseUrl));
-    if (baseUrls.length === 0) return;
-    baseUrls.forEach((baseUrl) => fetchedReportManifestUrls.current.add(baseUrl));
-    let active = true;
-    setReportResolving(true);
-    setReportResolveError(null);
-    Promise.all(
-      baseUrls.map(async (baseUrl) => ({
-        baseUrl,
-        response: await onFetchReportManifest(baseUrl),
-      }))
-    )
-      .then((responses) => {
-        if (!active) return;
-        setReportManifests((current) => {
-          let next = current;
-          for (const { baseUrl, response } of responses) {
-            if (response.status === 'ok' && response.manifest) {
-              if (next === current) next = { ...current };
-              next[baseUrl] = response.manifest;
-            }
-          }
-          return next;
-        });
-        if (responses.some(({ response }) => response.status !== 'ok' || !response.manifest)) {
-          setReportResolveError('community node manifest is unavailable');
-        }
-      })
-      .catch((cause) => {
-        if (active) setReportResolveError(cause instanceof Error ? cause.message : String(cause));
-      })
-      .finally(() => {
-        if (active) setReportResolving(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [onFetchReportManifest, provenance, reportOpen]);
 
   const submitReport = async (input: ReportSubmitInput) => {
     if (!author || !onSubmitReport) throw new Error('report submission is not available');

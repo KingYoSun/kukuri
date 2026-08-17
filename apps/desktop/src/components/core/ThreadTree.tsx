@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 
 import type {
   BookmarkedCustomReactionView,
-  CommunityNodeManifest,
   CommunityNodeManifestFetch,
   CustomReactionAssetView,
   ReactionKeyInput,
@@ -46,7 +45,6 @@ type ThreadTreeProps = {
   hasMore?: boolean;
   loadingMore?: boolean;
   onLoadMore?: () => void;
-  communityNodeManifests?: Record<string, CommunityNodeManifest>;
   onSubmitReport?: (
     request: SubmitCommunityNodeReportRequest
   ) => Promise<SubmitCommunityNodeReportResult>;
@@ -80,7 +78,6 @@ export function ThreadTree({
   hasMore = false,
   loadingMore = false,
   onLoadMore,
-  communityNodeManifests,
   onSubmitReport,
   onCopyReportContact,
   onFetchReportManifest,
@@ -140,7 +137,6 @@ export function ThreadTree({
               onActivateReference={onActivateReference}
               onCopyLink={onCopyPostLink}
               isFocused={focusedPostObjectId === view.post.object_id}
-              communityNodeManifests={communityNodeManifests}
               onSubmitReport={onSubmitReport}
               onCopyReportContact={onCopyReportContact}
               onFetchReportManifest={onFetchReportManifest}

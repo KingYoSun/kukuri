@@ -158,3 +158,91 @@ test('shows a stable Japanese message for an invalid appeal', async () => {
   ).toBeInTheDocument();
   expect(screen.queryByText('unknown')).not.toBeInTheDocument();
 });
+
+// #696: 最新 manifest の取得中は送信も連絡先の複写もしない。
+test('disables sending and contact copy while the latest report targets are resolving', () => {
+  const onSubmit = vi.fn();
+  const onCopyContact = vi.fn();
+  const contactPlan: ReportRoutingPlan = {
+    ...endpointPlan,
+    candidates: [
+      {
+        target: { ...endpointPlan.candidates[0].target, reportEndpoint: undefined },
+        contact: { kind: 'contact', value: 'abuse@index.example' },
+      },
+    ],
+  };
+  const { rerender } = render(
+    <ReportRoutingDialog
+      open
+      onOpenChange={vi.fn()}
+      subject={subject}
+      plan={endpointPlan}
+      onSubmit={onSubmit}
+      resolving
+    />,
+  );
+  expect(screen.getByText(/Checking the latest report targets/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Send report' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Send report' }));
+  expect(onSubmit).not.toHaveBeenCalled();
+
+  rerender(
+    <ReportRoutingDialog
+      open
+      onOpenChange={vi.fn()}
+      subject={subject}
+      plan={contactPlan}
+      onSubmit={onSubmit}
+      onCopyContact={onCopyContact}
+      resolving
+    />,
+  );
+  const copyButton = screen.getByRole('button', { name: 'Send report' });
+  expect(copyButton).toHaveTextContent('Copy abuse contact');
+  expect(copyButton).toBeDisabled();
+  fireEvent.click(copyButton);
+  expect(onCopyContact).not.toHaveBeenCalled();
+});
+
+// #696: 候補が後から届いても、入力途中の詳細と選択候補は保たれる。
+test('keeps typed details and the selected candidate when the candidate list is refreshed', () => {
+  const { rerender } = render(
+    <ReportRoutingDialog
+      open
+      onOpenChange={vi.fn()}
+      subject={subject}
+      plan={endpointPlan}
+      onSubmit={vi.fn()}
+    />,
+  );
+  const details = screen.getByPlaceholderText(/Describe the problem/);
+  fireEvent.change(details, { target: { value: 'typed while refreshing' } });
+
+  const refreshedPlan: ReportRoutingPlan = {
+    ...endpointPlan,
+    candidates: [
+      {
+        target: {
+          nodeBaseUrl: 'https://media.example',
+          capability: 'media_cache',
+          reportEndpoint: 'https://media.example/v1/report',
+          authorityScope: ['this_node'],
+        },
+        contact: { kind: 'endpoint', value: 'https://media.example/v1/report' },
+      },
+      { ...endpointPlan.candidates[0] },
+    ],
+  };
+  rerender(
+    <ReportRoutingDialog
+      open
+      onOpenChange={vi.fn()}
+      subject={subject}
+      plan={refreshedPlan}
+      onSubmit={vi.fn()}
+    />,
+  );
+  expect(screen.getByDisplayValue('typed while refreshing')).toBeInTheDocument();
+  expect(screen.getByRole('radio', { name: /index\.example/ })).toBeChecked();
+});

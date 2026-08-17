@@ -96,22 +96,25 @@ export type CommunityNodeAdvisoryPanelProps = {
     | 'readCommunityNodeRelationUser'
     | 'listCommunityNodeRelationNeighbors'
     | 'submitCommunityNodeReport'
+    | 'fetchCommunityNodeManifest'
   >;
   targetPubkey: string;
   nodeBaseUrls: string[];
-  communityNodeManifests: Readonly<Record<string, CommunityNodeManifest>>;
 };
 
 export function CommunityNodeAdvisoryPanel({
   api,
   targetPubkey,
   nodeBaseUrls,
-  communityNodeManifests,
 }: CommunityNodeAdvisoryPanelProps) {
   const { t } = useTranslation(['profile', 'common']);
   const [baseUrl, setBaseUrl] = useState(nodeBaseUrls[0] ?? '');
   const [advisoryState, setAdvisoryState] = useState<AdvisoryState>(IDLE_ADVISORY_STATE);
   const [appealSelection, setAppealSelection] = useState<AppealSelection | null>(null);
+  // 異議申し立てを開いた時に取得した発行元ノードの最新 manifest(#696)。
+  const [appealManifest, setAppealManifest] = useState<CommunityNodeManifest | null>(null);
+  const [appealResolving, setAppealResolving] = useState(false);
+  const [appealResolveError, setAppealResolveError] = useState<string | null>(null);
   const requestGeneration = useRef(0);
 
   const selectedBaseUrl = nodeBaseUrls.includes(baseUrl) ? baseUrl : (nodeBaseUrls[0] ?? '');
@@ -135,12 +138,50 @@ export function CommunityNodeAdvisoryPanel({
     setAppealSelection(null);
   }, []);
 
+  // 異議申し立ての受付先は、信頼評価を取得した選択中ノードから開いた時に取得した
+  // 最新 manifest だけから決める。取得中・失敗・発行元不一致では候補を作らない(#696)。
+  const appealFetchKey = activeAppealSelection
+    ? `${activeAppealSelection.context.key}\u0000${activeAppealSelection.basis.signal_id}`
+    : null;
+  const appealBaseUrl = activeAppealSelection?.context.baseUrl ?? null;
+  useEffect(() => {
+    setAppealManifest(null);
+    setAppealResolveError(null);
+    if (!appealFetchKey || !appealBaseUrl) {
+      setAppealResolving(false);
+      return;
+    }
+    let active = true;
+    setAppealResolving(true);
+    api
+      .fetchCommunityNodeManifest(appealBaseUrl)
+      .then((response) => {
+        if (!active) return;
+        if (response.status === 'ok' && response.manifest) {
+          setAppealManifest(response.manifest);
+        } else {
+          setAppealResolveError('community node manifest is unavailable');
+        }
+      })
+      .catch((cause) => {
+        if (active) setAppealResolveError(cause instanceof Error ? cause.message : String(cause));
+      })
+      .finally(() => {
+        if (active) setAppealResolving(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [api, appealBaseUrl, appealFetchKey]);
   const appealPlan = useMemo(
     () =>
-      appealBasis
-        ? planAppealReportRouting(appealBasis.issuer_node_id, communityNodeManifests)
+      appealBasis && appealBaseUrl
+        ? planAppealReportRouting(
+            appealBasis.issuer_node_id,
+            appealManifest ? { [appealBaseUrl]: appealManifest } : {},
+          )
         : null,
-    [appealBasis, communityNodeManifests],
+    [appealBasis, appealBaseUrl, appealManifest],
   );
 
   useEffect(() => {
@@ -386,6 +427,8 @@ export function CommunityNodeAdvisoryPanel({
             issuerNodeId: appealBasis.issuer_node_id,
           }}
           onSubmit={submitAppeal}
+          resolving={appealResolving}
+          resolveError={appealResolveError}
           onSubmitted={async () => {
             await loadAdvisory({ preserveAppeal: true });
           }}
