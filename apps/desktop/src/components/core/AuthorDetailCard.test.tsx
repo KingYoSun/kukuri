@@ -139,7 +139,7 @@ test('author report fetches the observed node manifest on open and submits a pro
   await user.click(screen.getByRole('button', { name: 'Report' }));
   await waitFor(() => expect(onFetchReportManifest).toHaveBeenCalledWith('https://node.example'));
   expect(await screen.findByText('node.example')).toBeInTheDocument();
-  await user.click(screen.getByRole('button', { name: 'Send report' }));
+  await user.click(await screen.findByRole('button', { name: 'Send report' }));
   await waitFor(() => expect(onSubmitReport).toHaveBeenCalledTimes(1));
   expect(onSubmitReport).toHaveBeenCalledWith(
     expect.objectContaining({
