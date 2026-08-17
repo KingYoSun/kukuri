@@ -80,6 +80,9 @@ function appealSubjectForBasis(basis: TrustBasisEntry): ReportRoutingSubject | n
       return { kind: 'profile', id: basis.target_id };
     case 'post_id':
       return { kind: 'post', id: basis.target_id };
+    case 'blob_cid':
+      // 添付由来の判定(#707)。サーバは (blob_cid, media) を受理する。
+      return { kind: 'media', id: basis.target_id };
     default:
       return null;
   }
