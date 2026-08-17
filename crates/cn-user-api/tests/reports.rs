@@ -660,3 +660,122 @@ async fn appeal_is_accepted_when_manifest_node_id_matches_signing_key_issuer() -
 
     server.shutdown().await
 }
+
+#[tokio::test]
+async fn attachment_appeal_is_accepted_as_media_and_disputes_the_signal() -> Result<()> {
+    // #707: 添付(blob_cid)由来の判定は対象著者の信頼評価根拠に寄与する。クライアントは
+    // subject_kind=media / subject_id=<添付ハッシュ> で異議申し立てを送り、係争中になる。
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api report test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let trust = Arc::new(TrustReadState {
+        params: TrustParams::default(),
+        relation: Arc::new(MemoryRelationStore::new()),
+    });
+    let server = TestServer::spawn_with_trust(
+        admin_database_url.as_str(),
+        "cn_user_api_blob_appeal",
+        REPORT_ENABLED_YAML,
+        trust,
+    )
+    .await?;
+    let pool = kukuri_cn_core::connect_postgres(server.database.database_url.as_str()).await?;
+    let client = Client::new();
+    let viewer = generate_keys();
+    let author = generate_keys();
+    let author_pubkey = author.public_key_hex();
+    let token = authenticate_and_consent(&client, server.base_url.as_str(), &viewer).await?;
+    let stored = kukuri_cn_core::persist_risk_signal_with_author(
+        &pool,
+        "issuer-node-1",
+        &kukuri_cn_safety::SafetyRiskSignal {
+            target: kukuri_cn_safety::RiskSignalTarget::BlobCid,
+            target_id: "blob-hash-appeal".to_string(),
+            category: kukuri_cn_safety::SafetyCategory::Nsfw,
+            severity: kukuri_cn_safety::Severity::High,
+            basis: kukuri_cn_safety::Basis::ProviderVerdict,
+            confidence: Some(90),
+            visibility: kukuri_cn_safety::Visibility::Local,
+            expires_at: None,
+            appeal_status: Some(kukuri_cn_safety::AppealStatus::None),
+        },
+        Some(author_pubkey.as_str()),
+    )
+    .await?;
+
+    // 添付判定が対象著者の信頼評価根拠に現れる(クライアントはこの basis から申し立てる)。
+    let trust_url = format!("{}/v1/trust/users/{author_pubkey}", server.base_url);
+    let before = client
+        .get(trust_url.as_str())
+        .bearer_auth(token.as_str())
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    assert_eq!(before["basis"][0]["signal_id"], stored.id);
+    assert_eq!(before["basis"][0]["target"], "blob_cid");
+    assert_eq!(before["basis"][0]["target_id"], "blob-hash-appeal");
+    assert_eq!(before["basis"][0]["appeal_status"], "none");
+
+    // 元の対象種別(添付)と異なる post での申し立ては拒否される。
+    let wrong_kind = client
+        .post(format!("{}/v1/report", server.base_url))
+        .json(&serde_json::json!({
+            "subject_kind": "post",
+            "subject_id": "blob-hash-appeal",
+            "capability": "trust_signal",
+            "reason": "other",
+            "appeal": { "risk_signal_id": stored.id },
+        }))
+        .send()
+        .await?;
+    assert_eq!(wrong_kind.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        wrong_kind.json::<serde_json::Value>().await?["code"],
+        "INVALID_APPEAL"
+    );
+
+    let submitted = client
+        .post(format!("{}/v1/report", server.base_url))
+        .json(&CommunityNodeReportRequest {
+            subject_kind: "media".to_string(),
+            subject_id: "blob-hash-appeal".to_string(),
+            capability: "trust_signal".to_string(),
+            reason: "other".to_string(),
+            details: Some("添付の誤判定として再確認を求めます".to_string()),
+            reporter_contact: None,
+            appeal: Some(CommunityNodeReportAppeal {
+                risk_signal_id: stored.id.clone(),
+            }),
+        })
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<kukuri_cn_protocol::CommunityNodeReportResponse>()
+        .await?;
+    assert_eq!(
+        submitted.disputed_risk_signal_id.as_deref(),
+        Some(stored.id.as_str())
+    );
+
+    // 係争中は寄与を維持したまま、根拠の状態だけが disputed になる。
+    let after = client
+        .get(trust_url)
+        .bearer_auth(token)
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    assert_eq!(after["basis"][0]["signal_id"], stored.id);
+    assert_eq!(after["basis"][0]["target"], "blob_cid");
+    assert_eq!(after["basis"][0]["appeal_status"], "disputed");
+    assert_eq!(
+        after["basis"][0]["contribution"],
+        before["basis"][0]["contribution"]
+    );
+
+    server.shutdown().await
+}

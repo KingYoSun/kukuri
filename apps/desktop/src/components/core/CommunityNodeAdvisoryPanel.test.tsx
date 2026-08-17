@@ -65,7 +65,7 @@ function neighborsResponse(pubkey: string) {
 }
 
 function api(
-  signalTarget: 'user_pubkey' | 'post_id' = 'user_pubkey',
+  signalTarget: 'user_pubkey' | 'post_id' | 'blob_cid' | 'peer_node' = 'user_pubkey',
   signalTargetId = targetPubkey,
   initialAppealStatus: 'none' | 'disputed' | 'cleared' = 'none'
 ) {
@@ -520,5 +520,44 @@ describe('CommunityNodeAdvisoryPanel', () => {
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '異議を申し立てる' })).not.toBeInTheDocument();
+  });
+  // #707: 添付(blob_cid)由来の判定も対象著者の信頼評価に寄与するため、media として異議申し立てできる。
+  test('appeals an attachment risk judgment as media with the blob hash', async () => {
+    const client = api('blob_cid', 'blob-hash-1');
+    render(<CommunityNodeAdvisoryPanel api={client} targetPubkey={targetPubkey} nodeBaseUrls={[nodeA]} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(await screen.findByText(/node-a/));
+    await userEvent.click(screen.getByRole('button', { name: 'このリスク判定に異議を申し立てる' }));
+    expect(await screen.findByText('添付に関するリスク判定')).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: '異議を申し立てる' }));
+
+    expect(client.submitCommunityNodeReport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        node_base_url: nodeA,
+        subject_kind: 'media',
+        subject_id: 'blob-hash-1',
+        capability: 'trust_signal',
+        reporter_contact: null,
+        appeal: { risk_signal_id: 'signal-1' },
+      })
+    );
+    expect(await screen.findByText(/受付対象のリスク判定: signal-1/)).toBeInTheDocument();
+    expect(client.readCommunityNodeTrustUser).toHaveBeenCalledTimes(2);
+  });
+
+  test('keeps peer node judgments unappealable from this screen', async () => {
+    const client = api('peer_node', 'peer-node-1');
+    render(<CommunityNodeAdvisoryPanel api={client} targetPubkey={targetPubkey} nodeBaseUrls={[nodeA]} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(await screen.findByText(/node-a/));
+    expect(
+      screen.queryByRole('button', { name: 'このリスク判定に異議を申し立てる' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText('この種類のリスク判定は、現在の画面から異議申し立てできません。')
+    ).toBeInTheDocument();
+    expect(client.submitCommunityNodeReport).not.toHaveBeenCalled();
   });
 });
