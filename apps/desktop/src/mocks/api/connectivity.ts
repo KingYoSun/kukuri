@@ -218,7 +218,15 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
           server_name: baseUrl,
           manifest_version: 'v1',
           capability_scope: {
-            available_enabled: ['auth_consent', 'bootstrap_assist', 'iroh_relay', 'community_index'],
+            // この mock は trust / relation 読み取りも提供するため、公開ノード情報でも
+            // community_local_trust を提供中として宣言する(#705 の適格判定と一致させる)。
+            available_enabled: [
+              'auth_consent',
+              'bootstrap_assist',
+              'iroh_relay',
+              'community_index',
+              'community_local_trust',
+            ],
             planned_enabled: ['moderation'],
           },
           authority_scope: {
