@@ -391,6 +391,7 @@ export function createStoryImageMedia(): PostMediaView {
     imagePreviewSrc: STORY_IMAGE_PREVIEW,
     videoPosterPreviewSrc: null,
     videoPlaybackSrc: null,
+    videoReportHash: 'story-video-poster-hash',
     videoUnsupportedOnClient: false,
   };
 }
@@ -409,6 +410,7 @@ export function createStoryVideoPosterMedia(): PostMediaView {
     imagePreviewSrc: null,
     videoPosterPreviewSrc: STORY_VIDEO_POSTER_PREVIEW,
     videoPlaybackSrc: null,
+    videoReportHash: 'story-video-poster-hash',
     videoUnsupportedOnClient: false,
   };
 }
@@ -427,6 +429,7 @@ export function createStoryVideoPlayableMedia(): PostMediaView {
     imagePreviewSrc: null,
     videoPosterPreviewSrc: STORY_VIDEO_POSTER_PREVIEW,
     videoPlaybackSrc: STORY_VIDEO_PLAYBACK_SRC,
+    videoReportHash: 'story-video-manifest-hash',
     videoUnsupportedOnClient: false,
   };
 }

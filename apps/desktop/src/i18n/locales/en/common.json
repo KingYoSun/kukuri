@@ -146,6 +146,7 @@
   },
   "media": {
     "imageAlt": "image attachment",
+    "reportVideo": "Report video attachment",
     "imageReady": "image ready",
     "playableVideo": "playable video",
     "posterReady": "poster ready",

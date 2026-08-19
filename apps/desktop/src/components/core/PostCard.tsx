@@ -487,6 +487,17 @@ export function PostCard({
             setMediaViewerIndex(index);
             setMediaViewerOpen(true);
           }}
+          onReportVideo={
+            showReportAction
+              ? (hash) => {
+                  // 動画添付そのものを media として通報する。観測元は親投稿から引き継いだ
+                  // media.provenance(正本 blob)をそのまま使う(#697)。
+                  setReportSubject({ kind: 'media', id: hash, label: view.authorLabel });
+                  setReportProvenance(view.media.provenance);
+                  setReportDialogOpen(true);
+                }
+              : undefined
+          }
         />
       ) : null}
 

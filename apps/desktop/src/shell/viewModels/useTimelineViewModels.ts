@@ -272,6 +272,8 @@ export function useTimelineViewModels({
             : 0,
           videoPosterPreviewSrc,
           videoPlaybackSrc,
+          videoReportHash:
+            mediaKind === 'video' ? (videoManifest?.hash ?? videoPoster?.hash ?? null) : null,
           videoUnsupportedOnClient,
           provenance: contentProvenanceFromView(mediaMetaAttachment?.provenance),
           videoProps:

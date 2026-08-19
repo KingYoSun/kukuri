@@ -146,6 +146,7 @@
   },
   "media": {
     "imageAlt": "图片附件",
+    "reportVideo": "举报视频附件",
     "imageReady": "图片已就绪",
     "playableVideo": "视频可播放",
     "posterReady": "海报已就绪",

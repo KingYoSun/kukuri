@@ -61,6 +61,9 @@ export type PostMediaView = {
   currentImageIndex?: number;
   videoPosterPreviewSrc?: string | null;
   videoPlaybackSrc?: string | null;
+  // 動画添付を media として通報するときの識別子(video_manifest の blob ハッシュ。無ければ
+  // poster のハッシュ)。観測元は `provenance` をそのまま使う(#697)。
+  videoReportHash?: string | null;
   videoUnsupportedOnClient: boolean;
   videoProps?: React.VideoHTMLAttributes<HTMLVideoElement>;
   // どの source を正本とし、どの community node capability（media_cache 等）経由で

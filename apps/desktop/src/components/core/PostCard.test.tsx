@@ -928,3 +928,104 @@ test('a manifest response that arrives after the dialog was closed does not seed
   expect(screen.queryByText('node.example')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Send report' })).not.toBeInTheDocument();
 });
+
+// #697: 動画添付そのものを media として、動画のハッシュと親投稿から引き継いだ観測元で通報できる。
+test('video attachment report uses the video hash as media subject with the inherited provenance', async () => {
+  const user = userEvent.setup();
+  const onFetchReportManifest = vi.fn(async (baseUrl: string) => ({
+    status: 'ok' as const,
+    manifest: reportManifest(new URL(baseUrl).hostname),
+  }));
+  const onSubmitReport = vi
+    .fn()
+    .mockResolvedValue({ status: 'submitted', reference_id: 'video-report-1' });
+
+  render(
+    <PostCard
+      view={createView({
+        provenance: {
+          canonicalSource: 'author_docs',
+          observedVia: [{ nodeBaseUrl: 'https://post-node.example', capability: 'community_index' }],
+          responsibleReportTargets: [],
+        },
+        media: {
+          ...createView().media,
+          kind: 'video',
+          videoPlaybackSrc: 'blob:video-playback',
+          videoReportHash: 'video-manifest-hash',
+          provenance: {
+            canonicalSource: 'blob',
+            observedVia: [
+              { nodeBaseUrl: 'https://video-node.example', capability: 'community_index' },
+            ],
+            responsibleReportTargets: [],
+          },
+        },
+      })}
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+      onSubmitReport={onSubmitReport}
+      onFetchReportManifest={onFetchReportManifest}
+    />
+  );
+
+  await user.click(screen.getByRole('button', { name: 'Report video attachment' }));
+  const dialog = screen.getByRole('dialog');
+  expect(within(dialog).getByText(/^Media/)).toBeInTheDocument();
+  await waitFor(() =>
+    expect(onFetchReportManifest).toHaveBeenCalledWith('https://video-node.example')
+  );
+  expect(onFetchReportManifest).not.toHaveBeenCalledWith('https://post-node.example');
+  expect(await screen.findByText('video-node.example')).toBeInTheDocument();
+  await user.click(await screen.findByRole('button', { name: 'Send report' }));
+  await waitFor(() => expect(onSubmitReport).toHaveBeenCalledTimes(1));
+  expect(onSubmitReport).toHaveBeenCalledWith(
+    expect.objectContaining({
+      node_base_url: 'https://video-node.example',
+      subject_kind: 'media',
+      subject_id: 'video-manifest-hash',
+    })
+  );
+});
+
+test('the post-level report keeps the post subject even when the post carries a video', async () => {
+  const user = userEvent.setup();
+  const onFetchReportManifest = vi
+    .fn()
+    .mockResolvedValue({ status: 'ok', manifest: reportManifest('node.example') });
+  const onSubmitReport = vi.fn().mockResolvedValue({ status: 'submitted', reference_id: 'r-1' });
+
+  render(
+    <PostCard
+      view={createView({
+        provenance: {
+          canonicalSource: 'author_docs',
+          observedVia: [{ nodeBaseUrl: 'https://node.example', capability: 'community_index' }],
+          responsibleReportTargets: [],
+        },
+        media: {
+          ...createView().media,
+          kind: 'video',
+          videoPlaybackSrc: 'blob:video-playback',
+          videoReportHash: 'video-manifest-hash',
+        },
+      })}
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+      onSubmitReport={onSubmitReport}
+      onFetchReportManifest={onFetchReportManifest}
+    />
+  );
+
+  // 投稿操作列の通報は投稿全体(post)。動画の通報ボタンとは別に存在する。
+  expect(screen.getByRole('button', { name: 'Report video attachment' })).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Report' }));
+  expect(within(screen.getByRole('dialog')).getByText(/^Post/)).toBeInTheDocument();
+  await user.click(await screen.findByRole('button', { name: 'Send report' }));
+  await waitFor(() => expect(onSubmitReport).toHaveBeenCalledTimes(1));
+  expect(onSubmitReport).toHaveBeenCalledWith(
+    expect.objectContaining({ subject_kind: 'post', subject_id: createView().post.object_id })
+  );
+});

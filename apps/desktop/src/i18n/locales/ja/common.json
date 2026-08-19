@@ -146,6 +146,7 @@
   },
   "media": {
     "imageAlt": "画像添付",
+    "reportVideo": "動画添付を通報",
     "imageReady": "画像を表示可能",
     "playableVideo": "動画を再生可能",
     "posterReady": "ポスターを表示可能",
