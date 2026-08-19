@@ -13,6 +13,8 @@ struct MockTrustRelationState {
     expected_token: Arc<Mutex<String>>,
     requests: Arc<Mutex<Vec<(Method, String)>>>,
     forced_error: Arc<Mutex<Option<(StatusCode, ApiErrorBody)>>>,
+    /// 設定すると、応答本文の対象識別子を要求対象ではなくこの値にする(規約に従わないノードの再現)。
+    mismatch_target: Arc<Mutex<Option<String>>>,
 }
 
 impl MockTrustRelationState {
@@ -57,6 +59,7 @@ async fn mock_trust_user(
     if let Some(error) = state.authorize_or_error(&headers).await {
         return error;
     }
+    let target = state.mismatch_target.lock().await.clone().unwrap_or(target);
     Json(TrustUserReadResponse {
         viewer_pubkey: "viewer".to_string(),
         view: TrustReadView {
@@ -87,6 +90,7 @@ async fn mock_relation_user(
     if let Some(error) = state.authorize_or_error(&headers).await {
         return error;
     }
+    let target = state.mismatch_target.lock().await.clone().unwrap_or(target);
     Json(RelationReadResponse {
         viewer_pubkey: "viewer".to_string(),
         target_pubkey: target,
@@ -194,6 +198,7 @@ async fn trust_relation_runtime(
         expected_token,
         requests: Arc::new(Mutex::new(Vec::new())),
         forced_error: Arc::new(Mutex::new(forced_error)),
+        mismatch_target: Arc::new(Mutex::new(None)),
     };
     let managed_router = Router::new()
         .route("/v1/auth/challenge", post(mock_managed_auth_challenge))
@@ -369,6 +374,46 @@ async fn community_node_trust_relation_client_stops_before_http_when_consent_is_
         state.requests.lock().await.is_empty(),
         "no trust / relation / opt-out request may reach the node while consent is pending"
     );
+    runtime.shutdown().await;
+    server.abort();
+}
+
+// #699: 応答本文の対象識別子が要求対象と違う応答は採用しない。
+#[tokio::test]
+async fn community_node_trust_relation_client_rejects_responses_for_another_target() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let (runtime, base_url, state, _managed, server, _dir) = trust_relation_runtime(None).await;
+    *state.mismatch_target.lock().await = Some("b".repeat(64));
+
+    let trust_error = runtime
+        .read_community_node_trust_user(CommunityNodeUserAdvisoryRequest {
+            base_url: base_url.clone(),
+            target_pubkey: "A".repeat(64),
+        })
+        .await
+        .expect_err("trust response for another target must be rejected");
+    assert_eq!(trust_error.code, "TRUST_RELATION_RESPONSE_MISMATCH");
+
+    let relation_error = runtime
+        .read_community_node_relation_user(CommunityNodeUserAdvisoryRequest {
+            base_url: base_url.clone(),
+            target_pubkey: "a".repeat(64),
+        })
+        .await
+        .expect_err("relation response for another target must be rejected");
+    assert_eq!(relation_error.code, "TRUST_RELATION_RESPONSE_MISMATCH");
+
+    // 大文字混じりで要求しても、正規化した同じ対象の応答は受理される。
+    *state.mismatch_target.lock().await = Some("a".repeat(64));
+    let trust = runtime
+        .read_community_node_trust_user(CommunityNodeUserAdvisoryRequest {
+            base_url,
+            target_pubkey: "A".repeat(64),
+        })
+        .await
+        .expect("normalized target matches");
+    assert_eq!(trust.view.target_id, "a".repeat(64));
+
     runtime.shutdown().await;
     server.abort();
 }
