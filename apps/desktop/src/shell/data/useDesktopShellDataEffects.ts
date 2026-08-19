@@ -5,6 +5,7 @@ import {
   type MutableRefObject,
 } from 'react';
 
+import { reconcileCommunityIndexNodeSelection } from '@/lib/api/communityIndex';
 import type {
   AttachmentView,
   CommunityNodeNodeStatus,
@@ -218,12 +219,21 @@ export function useDesktopShellDataEffects({
       ? CONNECTIVITY_STATUS_FALLBACK_INTERVAL_MS
       : REFRESH_INTERVAL_MS;
     const intervalId = window.setInterval(() => {
-      void refreshConnectivityStatus();
+      // 接続状態(認証・同意・通信エラー)が変わって適格ノードが入れ替わった場合に備え、
+      // 定期更新の後は既存の構成情報記録で選択中の索引ノードを再調整する(#698)。
+      void refreshConnectivityStatus().then((statuses) => {
+        if (!statuses) return;
+        const state = storeApi.getState();
+        const next = reconcileCommunityIndexNodeSelection(state);
+        if (next !== state.communityIndexNodeBaseUrl) {
+          state.patchState({ communityIndexNodeBaseUrl: next });
+        }
+      });
     }, intervalMs);
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [loadCommunityIndexCapability, refreshConnectivityStatus]);
+  }, [loadCommunityIndexCapability, refreshConnectivityStatus, storeApi]);
 
   useEffect(() => {
     void refreshNotificationStatus();

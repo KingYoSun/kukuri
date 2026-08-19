@@ -39,3 +39,19 @@ export function resolveCommunityIndexNodeBaseUrl(
   }
   return eligibleBaseUrls[0] ?? null;
 }
+
+/// 接続状態の定期更新後などに、現在の構成・接続状態・取得済み構成情報から適格一覧を求め直し、
+/// 選択中の索引ノードを再調整する(#698)。構成情報の再取得は行わず、既存の記録だけを使う。
+export function reconcileCommunityIndexNodeSelection(state: {
+  communityNodeConfig: CommunityNodeConfig;
+  communityNodeStatuses: readonly CommunityNodeNodeStatus[];
+  communityNodeManifests: Readonly<Record<string, CommunityIndexManifestEntry>>;
+  communityIndexNodeBaseUrl: string | null;
+}): string | null {
+  const eligible = eligibleCommunityIndexNodes(
+    state.communityNodeConfig,
+    state.communityNodeStatuses,
+    state.communityNodeManifests
+  );
+  return resolveCommunityIndexNodeBaseUrl(state.communityIndexNodeBaseUrl, eligible);
+}

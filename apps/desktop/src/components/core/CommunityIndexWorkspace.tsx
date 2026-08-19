@@ -164,10 +164,16 @@ export function CommunityIndexWorkspace({
 
   const effectiveOperation: IndexOperation = mode === 'topic' ? 'search' : operation;
   const isAllJoined = mode === 'topic' && activeTimelineScope.kind === 'all_joined';
-  const disabled = selectedNodeBaseUrl === null || isAllJoined;
+  // 選択値が適格一覧(認証・同意・通信・提供中能力)に含まれない間は、再調整が追いつくまで
+  // 古いノードへ要求を送らない(#698)。文脈も無効化するので古い結果・通報対象は失効する。
+  const activeNodeBaseUrl =
+    selectedNodeBaseUrl !== null && eligibleNodeBaseUrls.includes(selectedNodeBaseUrl)
+      ? selectedNodeBaseUrl
+      : null;
+  const disabled = activeNodeBaseUrl === null || isAllJoined;
   const currentContext = useMemo(
-    () => indexContext(mode, effectiveOperation, selectedNodeBaseUrl, activeTopic, activeTimelineScope),
-    [activeTimelineScope, activeTopic, effectiveOperation, mode, selectedNodeBaseUrl]
+    () => indexContext(mode, effectiveOperation, activeNodeBaseUrl, activeTopic, activeTimelineScope),
+    [activeNodeBaseUrl, activeTimelineScope, activeTopic, effectiveOperation, mode]
   );
   const currentContextKey = currentContext?.key ?? null;
   const currentContextKeyRef = useRef(currentContextKey);
@@ -299,7 +305,7 @@ export function CommunityIndexWorkspace({
             <span className='font-medium'>{t('shell:communityIndex.nodeLabel')}</span>
             <select
               className='rounded-lg border border-[var(--border-subtle)] bg-background px-3 py-2'
-              value={selectedNodeBaseUrl ?? ''}
+              value={activeNodeBaseUrl ?? ''}
               onChange={(event) => {
                 invalidateResults();
                 onSelectNode(event.currentTarget.value);

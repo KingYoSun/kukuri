@@ -101,6 +101,25 @@ impl DesktopRuntime {
                 "topic_id is required",
             ));
         }
+        // セッション確立と同意確認は秘密値を組み立てる前に行う。必須同意が未承認のノードへは
+        // 非公開チャンネルの秘密値を含む申請を送らない(#698)。
+        self.ensure_community_node_session(base_url.as_str())
+            .await
+            .map_err(|error| {
+                CommunityNodeIndexingRequestError::new(
+                    "COMMUNITY_NODE_SESSION_FAILED",
+                    error.to_string(),
+                )
+            })?;
+        if self
+            .community_node_required_consent_is_pending(base_url.as_str())
+            .await
+        {
+            return Err(CommunityNodeIndexingRequestError::new(
+                "CONSENT_REQUIRED",
+                "community node required policies must be accepted before indexing requests",
+            ));
+        }
         let (target_id, channel_secret_hex) = match request.scope_kind {
             IndexScopeKind::PublicTopic => {
                 if request
@@ -147,14 +166,6 @@ impl DesktopRuntime {
             }
         };
 
-        self.ensure_community_node_session(base_url.as_str())
-            .await
-            .map_err(|error| {
-                CommunityNodeIndexingRequestError::new(
-                    "COMMUNITY_NODE_SESSION_FAILED",
-                    error.to_string(),
-                )
-            })?;
         let token = load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())
             .map_err(|error| {
                 CommunityNodeIndexingRequestError::new("AUTH_TOKEN_LOAD_FAILED", error.to_string())

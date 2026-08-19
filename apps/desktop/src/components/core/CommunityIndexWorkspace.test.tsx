@@ -274,3 +274,32 @@ test.each([
 
   expect(await screen.findByText(expected)).toBeInTheDocument();
 });
+
+// #698: 選択値が適格一覧から外れている間は古いノードへ要求を送らない。
+test('a selected node that is no longer eligible does not receive queries until it is eligible again', async () => {
+  const searchCommunityNodeIndex = vi.fn().mockResolvedValue({ entries: [] });
+  const api = { searchCommunityNodeIndex } as unknown as DesktopApi;
+  const { rerender } = render(
+    <CommunityIndexWorkspace
+      {...workspaceProps(api, { eligibleNodeBaseUrls: [NODE_B], selectedNodeBaseUrl: NODE_A })}
+    />
+  );
+
+  // 適格一覧 [B] と古い選択値 A が同時に渡っても、A へ検索語を送らない。
+  const runButton = screen.queryByRole('button', { name: 'Run' });
+  if (runButton) fireEvent.click(runButton);
+  await new Promise((done) => setTimeout(done, 0));
+  expect(searchCommunityNodeIndex).not.toHaveBeenCalled();
+
+  // 再調整で選択が適格ノードになれば送れる。
+  rerender(
+    <CommunityIndexWorkspace
+      {...workspaceProps(api, { eligibleNodeBaseUrls: [NODE_B], selectedNodeBaseUrl: NODE_B })}
+    />
+  );
+  runSearch('hello');
+  await waitFor(() => expect(searchCommunityNodeIndex).toHaveBeenCalledTimes(1));
+  expect(searchCommunityNodeIndex).toHaveBeenCalledWith(
+    expect.objectContaining({ base_url: NODE_B, query: 'hello' })
+  );
+});

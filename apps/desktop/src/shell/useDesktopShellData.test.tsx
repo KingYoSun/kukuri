@@ -321,6 +321,55 @@ describe('useDesktopShellData characterization', () => {
     view.unmount();
   });
 
+  test('periodic connectivity refresh re-resolves the community index node from the eligible list', async () => {
+    // #698: 選択中ノードの同意/接続が落ちて適格一覧が変わったら、次の定期更新で選択を再調整する。
+    (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
+    const NODE_A = 'https://index-a.example';
+    const NODE_B = 'https://index-b.example';
+    const baseApi = createDesktopMockApi();
+    const nodeStatus = (baseUrl: string, lastError: string | null) => ({
+      base_url: baseUrl,
+      auto_approve: true,
+      auth_state: { authenticated: true, expires_at: null },
+      consent_state: { all_required_accepted: true, items: [] },
+      resolved_urls: null,
+      last_error: lastError,
+      invite_code_saved: false,
+      admission_rejection: null,
+      session_phase: 'ready' as const,
+      retry_after: null,
+      restart_required: false,
+    });
+    let statuses = [nodeStatus(NODE_A, null), nodeStatus(NODE_B, null)];
+    const api: DesktopApi = {
+      ...baseApi,
+      getCommunityNodeConfig: async () => ({
+        nodes: [
+          { base_url: NODE_A, auto_approve: true, resolved_urls: null },
+          { base_url: NODE_B, auto_approve: true, resolved_urls: null },
+        ],
+      }),
+      getCommunityNodeStatuses: async () => statuses,
+    };
+
+    const { harness, view } = renderDataHook(api);
+    await flushAsyncWork();
+    expect(harness.store.getState().communityIndexNodeBaseUrl).toBe(NODE_A);
+
+    // A が通信エラーになり B だけが適格になる。
+    statuses = [nodeStatus(NODE_A, 'connection refused'), nodeStatus(NODE_B, null)];
+    await advanceTimersAsync(CONNECTIVITY_STATUS_FALLBACK_INTERVAL_MS);
+    expect(harness.store.getState().communityIndexNodeBaseUrl).toBe(NODE_B);
+
+    // 適格ノードが無くなれば選択なし。
+    statuses = [nodeStatus(NODE_A, 'connection refused'), nodeStatus(NODE_B, 'connection refused')];
+    await advanceTimersAsync(CONNECTIVITY_STATUS_FALLBACK_INTERVAL_MS);
+    expect(harness.store.getState().communityIndexNodeBaseUrl).toBeNull();
+
+    view.unmount();
+    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
+  });
+
   test('connectivity status uses mount bootstrap and 60 second fallback, not the 3 second refresh', async () => {
     (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
     const baseApi = createDesktopMockApi();

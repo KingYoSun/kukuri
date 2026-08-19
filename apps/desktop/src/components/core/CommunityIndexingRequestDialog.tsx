@@ -54,14 +54,17 @@ export function CommunityIndexingRequestDialog({
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const requestVersionRef = useRef(0);
 
+  // 適格一覧は定期更新のたびに新しい配列になり得るため、参照ではなく内容の変化で初期化する(#698)。
+  const eligibleKey = JSON.stringify(eligibleNodeBaseUrls);
   useEffect(() => {
     requestVersionRef.current += 1;
-    setSelectedNode(eligibleNodeBaseUrls[0] ?? '');
+    setSelectedNode((JSON.parse(eligibleKey) as string[])[0] ?? '');
     setConfirmed(false);
     setPending(false);
     setStatus(null);
     setErrorKey(null);
-  }, [eligibleNodeBaseUrls, target]);
+  }, [eligibleKey, target]);
+  const selectedNodeEligible = selectedNode !== '' && eligibleNodeBaseUrls.includes(selectedNode);
 
   const privateTarget = target?.kind === 'private_channel';
   const targetLabel = target
@@ -79,7 +82,8 @@ export function CommunityIndexingRequestDialog({
   }
 
   async function submit() {
-    if (!target || !selectedNode || (privateTarget && !confirmed)) return;
+    // 選択ノードが適格一覧から外れた瞬間から申請(非公開チャンネルでは秘密値)を送らない(#698)。
+    if (!target || !selectedNodeEligible || (privateTarget && !confirmed)) return;
     const requestVersion = requestVersionRef.current + 1;
     requestVersionRef.current = requestVersion;
     if (privateTarget) setConfirmed(false);
@@ -169,7 +173,7 @@ export function CommunityIndexingRequestDialog({
               </Button>
               <Button
                 type='button'
-                disabled={pending || !selectedNode || (privateTarget && !confirmed)}
+                disabled={pending || !selectedNodeEligible || (privateTarget && !confirmed)}
                 onClick={() => void submit()}
               >
                 {pending ? t('shell:indexingRequest.submitting') : t('shell:indexingRequest.submit')}

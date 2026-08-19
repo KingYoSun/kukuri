@@ -259,3 +259,80 @@ test('stale private request result does not overwrite a changed target', async (
   expect(screen.queryByText('Indexing is approved.')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Submit request' })).toBeDisabled();
 });
+
+// #698: 適格一覧の参照が変わるだけ(内容不変)では確認状態を消さない。
+test('an equal eligible list rendered as a new array keeps the private confirmation', async () => {
+  const submitCommunityNodeIndexingRequest = vi.fn().mockResolvedValue({
+    request_id: 'request-1',
+    status: 'pending',
+  });
+  const api = { submitCommunityNodeIndexingRequest } as unknown as DesktopApi;
+  const target = { kind: 'private_channel' as const, topicId: 'kukuri:topic:demo', channelId: 'ch-1', channelLabel: 'demo' };
+  const { rerender } = render(
+    <CommunityIndexingRequestDialog
+      api={api}
+      target={target}
+      eligibleNodeBaseUrls={['https://index.example']}
+      onOpenChange={vi.fn()}
+      onOpenCommunityNodeSettings={vi.fn()}
+    />
+  );
+  fireEvent.click(screen.getByRole('checkbox'));
+  expect(screen.getByRole('checkbox')).toBeChecked();
+
+  rerender(
+    <CommunityIndexingRequestDialog
+      api={api}
+      target={target}
+      eligibleNodeBaseUrls={['https://index.example']}
+      onOpenChange={vi.fn()}
+      onOpenCommunityNodeSettings={vi.fn()}
+    />
+  );
+  expect(screen.getByRole('checkbox')).toBeChecked();
+  expect(screen.getByRole('button', { name: 'Submit request' })).toBeEnabled();
+});
+
+// #698: 選択ノードが適格一覧から外れると、確認済みでも申請(秘密値)を送らない。
+test('a selected node dropped from the eligible list cannot receive a private request', async () => {
+  const submitCommunityNodeIndexingRequest = vi.fn().mockResolvedValue({
+    request_id: 'request-1',
+    status: 'pending',
+  });
+  const api = { submitCommunityNodeIndexingRequest } as unknown as DesktopApi;
+  const target = { kind: 'private_channel' as const, topicId: 'kukuri:topic:demo', channelId: 'ch-1', channelLabel: 'demo' };
+  const { rerender } = render(
+    <CommunityIndexingRequestDialog
+      api={api}
+      target={target}
+      eligibleNodeBaseUrls={['https://index-a.example', 'https://index-b.example']}
+      onOpenChange={vi.fn()}
+      onOpenCommunityNodeSettings={vi.fn()}
+    />
+  );
+  fireEvent.click(screen.getByRole('checkbox'));
+  expect(screen.getByRole('button', { name: 'Submit request' })).toBeEnabled();
+
+  // A の同意/能力が失効し、適格一覧が [B] だけになる。
+  rerender(
+    <CommunityIndexingRequestDialog
+      api={api}
+      target={target}
+      eligibleNodeBaseUrls={['https://index-b.example']}
+      onOpenChange={vi.fn()}
+      onOpenCommunityNodeSettings={vi.fn()}
+    />
+  );
+  // 内容が変わったので確認は消え、送信は無効。改めて確認しても送信先は B になる。
+  expect(screen.getByRole('checkbox')).not.toBeChecked();
+  expect(screen.getByRole('button', { name: 'Submit request' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('checkbox'));
+  fireEvent.click(screen.getByRole('button', { name: 'Submit request' }));
+  await waitFor(() => expect(submitCommunityNodeIndexingRequest).toHaveBeenCalledTimes(1));
+  expect(submitCommunityNodeIndexingRequest).toHaveBeenCalledWith(
+    expect.objectContaining({ base_url: 'https://index-b.example' })
+  );
+  expect(submitCommunityNodeIndexingRequest).not.toHaveBeenCalledWith(
+    expect.objectContaining({ base_url: 'https://index-a.example' })
+  );
+});

@@ -147,6 +147,16 @@ impl DesktopRuntime {
                     error.to_string(),
                 )
             })?;
+        // 必須同意が未承認のノードへは検索語を送らない(#698)。
+        if self
+            .community_node_required_consent_is_pending(base_url.as_str())
+            .await
+        {
+            return Err(CommunityNodeIndexQueryError::new(
+                "CONSENT_REQUIRED",
+                "community node required policies must be accepted before index queries",
+            ));
+        }
         let token = load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())
             .map_err(|error| {
                 CommunityNodeIndexQueryError::new("AUTH_TOKEN_LOAD_FAILED", error.to_string())
