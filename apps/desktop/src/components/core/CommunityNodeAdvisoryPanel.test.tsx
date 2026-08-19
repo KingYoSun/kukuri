@@ -132,8 +132,11 @@ const communityNodeManifests = {
     node_role: 'community-node',
     server_name: 'node.example',
     manifest_version: 'v1',
-    capability_scope: { available_enabled: ['trust_signal'], planned_enabled: [] },
-    authority_scope: { applies_to: ['this_node'], does_not_apply_to: [] },
+    capability_scope: { available_enabled: ['community_local_trust'], planned_enabled: [] },
+    authority_scope: {
+      applies_to: ['this_node', 'trust_signals_issued_by_this_node'],
+      does_not_apply_to: [],
+    },
     p2p_boundary: {
       identity_authority: false,
       profile_canonical_store: false,
@@ -153,8 +156,11 @@ const communityNodeManifests = {
     node_role: 'community-node',
     server_name: 'node-b.example',
     manifest_version: 'v1',
-    capability_scope: { available_enabled: ['trust_signal'], planned_enabled: [] },
-    authority_scope: { applies_to: ['this_node'], does_not_apply_to: [] },
+    capability_scope: { available_enabled: ['community_local_trust'], planned_enabled: [] },
+    authority_scope: {
+      applies_to: ['this_node', 'trust_signals_issued_by_this_node'],
+      does_not_apply_to: [],
+    },
     p2p_boundary: {
       identity_authority: false,
       profile_canonical_store: false,

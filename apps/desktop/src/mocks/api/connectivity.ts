@@ -230,7 +230,11 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
             planned_enabled: ['moderation'],
           },
           authority_scope: {
-            applies_to: ['this_node'],
+            applies_to: [
+              'this_node',
+              'communities_indexed_by_this_node',
+              'trust_signals_issued_by_this_node',
+            ],
             does_not_apply_to: [
               'kukuri_network_as_a_whole',
               'user_identity',
