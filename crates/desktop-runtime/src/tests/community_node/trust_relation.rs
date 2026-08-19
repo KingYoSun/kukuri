@@ -161,6 +161,7 @@ async fn trust_relation_runtime(
     DesktopRuntime,
     String,
     MockTrustRelationState,
+    Arc<MockManagedCommunityNodeState>,
     tokio::task::JoinHandle<()>,
     tempfile::TempDir,
 ) {
@@ -204,7 +205,7 @@ async fn trust_relation_runtime(
             post(mock_managed_bootstrap_heartbeat),
         )
         .route("/v1/bootstrap/nodes", get(mock_managed_bootstrap_nodes))
-        .with_state(managed);
+        .with_state(Arc::clone(&managed));
     let trust_relation_router = Router::new()
         .route("/v1/trust/users/{target}", get(mock_trust_user))
         .route("/v1/relation/users/{target}", get(mock_relation_user))
@@ -245,13 +246,13 @@ async fn trust_relation_runtime(
             ),
         }],
     };
-    (runtime, base_url, trust_relation, server, dir)
+    (runtime, base_url, trust_relation, managed, server, dir)
 }
 
 #[tokio::test]
 async fn community_node_trust_relation_client_preserves_wire_contract_and_methods() {
     let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
-    let (runtime, base_url, state, server, _dir) = trust_relation_runtime(None).await;
+    let (runtime, base_url, state, _managed, server, _dir) = trust_relation_runtime(None).await;
     let target = "a".repeat(64);
 
     let trust = runtime
@@ -323,7 +324,7 @@ async fn community_node_trust_relation_client_preserves_stable_unavailable_codes
         code: "RELATION_NOT_FOUND".to_string(),
         message: "no relation observed for this pair".to_string(),
     };
-    let (runtime, base_url, _state, server, _dir) =
+    let (runtime, base_url, _state, _managed, server, _dir) =
         trust_relation_runtime(Some((StatusCode::NOT_FOUND, forced))).await;
 
     let error = runtime
@@ -336,6 +337,38 @@ async fn community_node_trust_relation_client_preserves_stable_unavailable_codes
     assert_eq!(error.code, "RELATION_NOT_FOUND");
     assert_eq!(error.status, Some(404));
 
+    runtime.shutdown().await;
+    server.abort();
+}
+
+// #705: 必須同意が未承認のノードへは、対象利用者の公開鍵を含む要求も距離利用停止の操作も送らない。
+#[tokio::test]
+async fn community_node_trust_relation_client_stops_before_http_when_consent_is_pending() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let (runtime, base_url, state, managed, server, _dir) = trust_relation_runtime(None).await;
+    managed.consent_accepted.store(false, Ordering::SeqCst);
+
+    let trust_error = runtime
+        .read_community_node_trust_user(CommunityNodeUserAdvisoryRequest {
+            base_url: base_url.clone(),
+            target_pubkey: "a".repeat(64),
+        })
+        .await
+        .expect_err("pending consent must stop the trust read");
+    assert_eq!(trust_error.code, "CONSENT_REQUIRED");
+
+    let optout_error = runtime
+        .set_community_node_relation_optout(CommunityNodeTargetRequest {
+            base_url: base_url.clone(),
+        })
+        .await
+        .expect_err("pending consent must stop the opt-out change");
+    assert_eq!(optout_error.code, "CONSENT_REQUIRED");
+
+    assert!(
+        state.requests.lock().await.is_empty(),
+        "no trust / relation / opt-out request may reach the node while consent is pending"
+    );
     runtime.shutdown().await;
     server.abort();
 }

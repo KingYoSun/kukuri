@@ -5,7 +5,12 @@ import type {
   CommunityNodeManifest,
   CommunityNodeNodeStatus,
 } from './types';
-import { eligibleCommunityIndexNodes, resolveCommunityIndexNodeBaseUrl } from './communityIndex';
+import {
+  eligibleCommunityIndexNodes,
+  eligibleDistanceOptoutNodes,
+  eligibleTrustRelationNodes,
+  resolveCommunityIndexNodeBaseUrl,
+} from './communityIndex';
 
 const manifest = (available: string[]): CommunityNodeManifest => ({
   node_id: 'node',
@@ -63,6 +68,37 @@ describe('community index node eligibility', () => {
         'https://a': { status: 'ok', manifest: manifest([]) },
       })
     ).toEqual([]);
+  });
+
+  // #705: 能力名を変えると判定が変わる(信頼・関係は community_local_trust、距離利用停止はどちらか)。
+  it('separates trust relation and distance opt-out eligibility by capability', () => {
+    const config: CommunityNodeConfig = {
+      nodes: [
+        { base_url: 'https://index-only', auto_approve: false, resolved_urls: null },
+        { base_url: 'https://trust', auto_approve: false, resolved_urls: null },
+      ],
+    };
+    const statuses = [status('https://index-only', true), status('https://trust', true)];
+    const manifests = {
+      'https://index-only': { status: 'ok' as const, manifest: manifest(['community_index']) },
+      'https://trust': { status: 'ok' as const, manifest: manifest(['community_local_trust']) },
+    };
+    expect(eligibleCommunityIndexNodes(config, statuses, manifests)).toEqual(['https://index-only']);
+    expect(eligibleTrustRelationNodes(config, statuses, manifests)).toEqual(['https://trust']);
+    expect(eligibleDistanceOptoutNodes(config, statuses, manifests)).toEqual([
+      'https://index-only',
+      'https://trust',
+    ]);
+    // 同意未承認・通信エラー・構成情報未取得はどの能力でも不適格。
+    expect(
+      eligibleTrustRelationNodes(config, [status('https://index-only', true), status('https://trust', false)], manifests)
+    ).toEqual([]);
+    expect(
+      eligibleDistanceOptoutNodes(config, statuses, {
+        ...manifests,
+        'https://trust': { status: 'loading' as const },
+      })
+    ).toEqual(['https://index-only']);
   });
 
   it('preserves an eligible choice and otherwise selects the first configured node', () => {

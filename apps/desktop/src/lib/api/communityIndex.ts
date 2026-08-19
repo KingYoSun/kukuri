@@ -9,10 +9,14 @@ export type CommunityIndexManifestEntry =
   | { status: 'error'; error: string }
   | { status: 'ok'; manifest: CommunityNodeManifest };
 
-export function eligibleCommunityIndexNodes(
+/// 索引・信頼関係・距離利用停止で共通の利用可否境界(#663 / #698 / #705)。
+/// 認証済み・必須同意承認済み・通信エラーなし・公開ノード情報が取得済みで、`capabilities` の
+/// いずれかが提供中(`available_enabled`)のノードだけを返す。
+export function eligibleCommunityNodes(
   config: CommunityNodeConfig,
   statuses: readonly CommunityNodeNodeStatus[],
-  manifests: Readonly<Record<string, CommunityIndexManifestEntry>>
+  manifests: Readonly<Record<string, CommunityIndexManifestEntry>>,
+  capabilities: readonly string[]
 ): string[] {
   const statusByUrl = new Map(statuses.map((status) => [status.base_url, status]));
   return config.nodes
@@ -25,9 +29,40 @@ export function eligibleCommunityIndexNodes(
           status.consent_state?.all_required_accepted &&
           !status.last_error &&
           manifest?.status === 'ok' &&
-          manifest.manifest.capability_scope.available_enabled.includes('community_index')
+          capabilities.some((capability) =>
+            manifest.manifest.capability_scope.available_enabled.includes(capability)
+          )
       );
     });
+}
+
+export function eligibleCommunityIndexNodes(
+  config: CommunityNodeConfig,
+  statuses: readonly CommunityNodeNodeStatus[],
+  manifests: Readonly<Record<string, CommunityIndexManifestEntry>>
+): string[] {
+  return eligibleCommunityNodes(config, statuses, manifests, ['community_index']);
+}
+
+/// 信頼評価・関係分析の参照は `community_local_trust` を提供中のノードに限る(#705)。
+export function eligibleTrustRelationNodes(
+  config: CommunityNodeConfig,
+  statuses: readonly CommunityNodeNodeStatus[],
+  manifests: Readonly<Record<string, CommunityIndexManifestEntry>>
+): string[] {
+  return eligibleCommunityNodes(config, statuses, manifests, ['community_local_trust']);
+}
+
+/// 距離利用停止は、サーバが索引か信頼のいずれかを提供していれば構成される(#705)。
+export function eligibleDistanceOptoutNodes(
+  config: CommunityNodeConfig,
+  statuses: readonly CommunityNodeNodeStatus[],
+  manifests: Readonly<Record<string, CommunityIndexManifestEntry>>
+): string[] {
+  return eligibleCommunityNodes(config, statuses, manifests, [
+    'community_local_trust',
+    'community_index',
+  ]);
 }
 
 export function resolveCommunityIndexNodeBaseUrl(

@@ -41,6 +41,7 @@ function CommunityNodePanelStory({
                   hasPendingUpdate: false,
                   policies: [],
                 },
+                distanceOptoutEligible: true,
                 inviteCodeSaved: false,
                 admissionRejectionCode: null,
                 lastError: null,
@@ -142,6 +143,7 @@ export const InviteRequired: Story = {
         index === 0
           ? {
               ...node,
+              distanceOptoutEligible: true,
               inviteCodeSaved: false,
               admissionRejectionCode: 'INVITE_REQUIRED' as const,
             }

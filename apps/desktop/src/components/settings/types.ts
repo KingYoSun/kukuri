@@ -98,6 +98,8 @@ export type CommunityNodeEntryView = {
   diagnostics: SettingsDiagnosticItemView[];
   dependency: CommunityNodeDependencyView;
   consent: CommunityNodeConsentView;
+  // 距離利用停止の読込・設定・解除ができる利用可否(認証・必須同意・通信・提供中能力。#705)。
+  distanceOptoutEligible: boolean;
   inviteCodeSaved: boolean;
   admissionRejectionCode?: CommunityNodeAdmissionRejectionCode | null;
   lastError?: string | null;

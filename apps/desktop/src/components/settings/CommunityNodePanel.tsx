@@ -379,11 +379,20 @@ export function CommunityNodePanel({
                     {t('settings:communityNode.distanceOptout.notLoaded')}
                   </p>
                 )}
+                {!node.distanceOptoutEligible ? (
+                  <Notice tone='warning'>{t('settings:communityNode.distanceOptout.notEligible')}</Notice>
+                ) : null}
                 {relationOptout?.error ? <Notice tone='destructive'>{relationOptout.error}</Notice> : null}
                 <SettingsActionRow>
                   <Button
                     variant='secondary'
-                    disabled={nodeActionsDisabled || !node.saved || !node.baseUrl.trim() || relationOptout?.busy}
+                    disabled={
+                      nodeActionsDisabled ||
+                      !node.saved ||
+                      !node.baseUrl.trim() ||
+                      !node.distanceOptoutEligible ||
+                      relationOptout?.busy
+                    }
                     onClick={() =>
                       void updateRelationOptout(node.baseUrl, () => onGetRelationOptout!(node.baseUrl))
                     }
@@ -393,7 +402,7 @@ export function CommunityNodePanel({
                   {relationOptout?.value?.opted_out ? (
                     <Button
                       variant='secondary'
-                      disabled={relationOptout.busy}
+                      disabled={relationOptout.busy || !node.distanceOptoutEligible}
                       onClick={() =>
                         void updateRelationOptout(node.baseUrl, () => onClearRelationOptout!(node.baseUrl))
                       }
@@ -403,7 +412,7 @@ export function CommunityNodePanel({
                   ) : (
                     <Button
                       variant='secondary'
-                      disabled={!relationOptout?.value || relationOptout.busy}
+                      disabled={!relationOptout?.value || relationOptout.busy || !node.distanceOptoutEligible}
                       onClick={() =>
                         void updateRelationOptout(node.baseUrl, () => onSetRelationOptout!(node.baseUrl))
                       }

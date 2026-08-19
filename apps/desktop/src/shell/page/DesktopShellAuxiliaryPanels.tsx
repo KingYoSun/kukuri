@@ -24,6 +24,7 @@ import type {
 import { formatLocalizedTime } from '@/i18n/format';
 import type { SupportedLocale } from '@/i18n';
 import { type InternalSmartReference } from '@/lib/internalLinks';
+import { eligibleTrustRelationNodes } from '@/lib/api/communityIndex';
 import { copyTextToClipboard } from '@/lib/utils';
 import { ContextPane } from '@/components/shell/ContextPane';
 import { SHELL_CONTEXT_ID, useDesktopShellFieldSetter, useDesktopShellStore } from '@/shell/store';
@@ -602,6 +603,7 @@ type DetailPaneStackProps = {
   handleRelationshipAction: (authorPubkey: string, following: boolean) => Promise<void>;
   handleMuteAction: (authorPubkey: string, muted: boolean) => Promise<void>;
   handleOpenOriginalTopic: (topicId: string) => Promise<void>;
+  openCommunityNodeSettings: () => void;
 };
 
 export function DesktopShellDetailPaneStack({
@@ -627,11 +629,14 @@ export function DesktopShellDetailPaneStack({
   handleRelationshipAction,
   handleMuteAction,
   handleOpenOriginalTopic,
+  openCommunityNodeSettings,
 }: DetailPaneStackProps) {
   const {
     activeTopic,
     bookmarkedReactionAssets,
     communityNodeConfig,
+    communityNodeManifests,
+    communityNodeStatuses,
     focusedObjectId,
     mediaObjectUrls,
     ownedReactionAssets,
@@ -647,6 +652,8 @@ export function DesktopShellDetailPaneStack({
       activeTopic: s.activeTopic,
       bookmarkedReactionAssets: s.bookmarkedReactionAssets,
       communityNodeConfig: s.communityNodeConfig,
+      communityNodeManifests: s.communityNodeManifests,
+      communityNodeStatuses: s.communityNodeStatuses,
       focusedObjectId: s.focusedObjectId,
       mediaObjectUrls: s.mediaObjectUrls,
       ownedReactionAssets: s.ownedReactionAssets,
@@ -663,6 +670,12 @@ export function DesktopShellDetailPaneStack({
   const selectedThreadLoadingMore = selectedThread
     ? (threadLoadingMoreById[selectedThread] ?? false)
     : false;
+  // 信頼・関係の候補は、認証済み・必須同意承認済み・通信エラーなし・community_local_trust 提供中の
+  // ノードに限る(#705)。索引側の適格判定と同じ境界。
+  const trustRelationNodeBaseUrls = useMemo(
+    () => eligibleTrustRelationNodes(communityNodeConfig, communityNodeStatuses, communityNodeManifests),
+    [communityNodeConfig, communityNodeManifests, communityNodeStatuses]
+  );
   const fetchReportManifest = (baseUrl: string) =>
     api.fetchCommunityNodeManifest(baseUrl);
   const submitReport = (request: import('@/lib/api').SubmitCommunityNodeReportRequest) =>
@@ -745,7 +758,8 @@ export function DesktopShellDetailPaneStack({
                 <CommunityNodeAdvisoryPanel
                   api={api}
                   targetPubkey={selectedAuthorPubkey}
-                  nodeBaseUrls={communityNodeConfig.nodes.map((node) => node.base_url)}
+                  nodeBaseUrls={trustRelationNodeBaseUrls}
+                  onOpenCommunityNodeSettings={openCommunityNodeSettings}
                 />
               }
             />

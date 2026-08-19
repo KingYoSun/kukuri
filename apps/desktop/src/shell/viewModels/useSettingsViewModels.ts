@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { eligibleDistanceOptoutNodes } from '@/lib/api/communityIndex';
 
 import { buildCommunityNodeDependencyView } from '@/components/settings/communityNodeDependency';
 import type {
@@ -316,6 +317,12 @@ export function useSettingsViewModels({
         : t('settings:communityNode.editorMessage.saved'),
       editorMessageTone: 'default' as const,
       nodes: communityNodeInput.map((node) => {
+        // 距離利用停止は索引か信頼のいずれかを提供中の適格ノードでだけ操作できる(#705)。
+        const distanceOptoutEligibleBaseUrls = eligibleDistanceOptoutNodes(
+          communityNodeConfig,
+          communityNodeStatuses,
+          communityNodeManifests
+        );
         const saved =
           communityNodeConfig.nodes.find(
             (candidate) =>
@@ -328,6 +335,7 @@ export function useSettingsViewModels({
           baseUrl: node.base_url,
           autoApprove: node.auto_approve,
           saved,
+          distanceOptoutEligible: distanceOptoutEligibleBaseUrls.includes(node.base_url),
           diagnostics: [
             {
               label: t('settings:communityNode.diagnostics.autoApprove'),
@@ -380,12 +388,13 @@ export function useSettingsViewModels({
       }),
     }),
     [
-      communityNodeConfig.nodes,
+      communityNodeConfig,
       communityNodeEditorDirty,
       communityNodeError,
       communityNodeInput,
       communityNodeManifests,
       communityNodeStatusByBaseUrl,
+      communityNodeStatuses,
       t,
     ]
   );
