@@ -111,6 +111,14 @@
   z-index: 1;
 }
 
+/* 動画添付の通報ボタン(#697)。右上の種別バッジと重ならないよう左上に置く。 */
+.media-video-report {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 1;
+}
+
 .media-type-badge,
 .media-count-badge {
   display: inline-flex;

@@ -1,15 +1,21 @@
 import type * as React from 'react';
 import { useTranslation } from 'react-i18next';
+import { Flag } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
 
 import { type PostMediaView } from './types';
 
 type PostMediaProps = {
   media: PostMediaView;
   onOpenImage?: (index: number) => void;
+  /// 動画添付そのものを media として通報する(#697)。未指定なら操作を出さない。
+  onReportVideo?: (hash: string) => void;
 };
 
-export function PostMedia({ media, onOpenImage }: PostMediaProps) {
-  const { t } = useTranslation('common');
+export function PostMedia({ media, onOpenImage, onReportVideo }: PostMediaProps) {
+  const { t } = useTranslation(['common', 'shell']);
+  const videoReportHash = media.kind === 'video' ? media.videoReportHash : null;
 
   if (!media.kind) {
     return null;
@@ -28,6 +34,19 @@ export function PostMedia({ media, onOpenImage }: PostMediaProps) {
             <span className='media-count-badge'>+{media.extraAttachmentCount}</span>
           ) : null}
         </div>
+        {onReportVideo && videoReportHash ? (
+          <Button
+            variant='secondary'
+            size='icon'
+            type='button'
+            className='media-video-report'
+            onClick={() => onReportVideo(videoReportHash)}
+            aria-label={t('media.reportVideo')}
+            data-testid={`media-video-report-${media.objectId}`}
+          >
+            <Flag className='size-4' aria-hidden='true' />
+          </Button>
+        ) : null}
 
         {media.kind === 'video' && media.videoPlaybackSrc && !media.videoUnsupportedOnClient ? (
           <video
