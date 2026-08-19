@@ -17,8 +17,28 @@ function manifest(overrides: Partial<CommunityNodeManifest> = {}): CommunityNode
     node_role: 'community-node',
     server_name: 'node.example',
     manifest_version: 'v1',
-    capability_scope: { available_enabled: ['community_index'], planned_enabled: [] },
-    authority_scope: { applies_to: ['this_node'], does_not_apply_to: ['user_identity'] },
+    // 本番の語彙(cn-operator の capability key / authority scope)で、索引・モデレーション・
+    // 信頼・添付保管を提供中のノード。
+    capability_scope: {
+      available_enabled: [
+        'community_index',
+        'moderation',
+        'community_local_trust',
+        'blob_cache',
+        'report_endpoint',
+      ],
+      planned_enabled: [],
+    },
+    authority_scope: {
+      applies_to: [
+        'this_node',
+        'communities_indexed_by_this_node',
+        'moderation_events_issued_by_this_node',
+        'trust_signals_issued_by_this_node',
+        'media_cached_by_this_node',
+      ],
+      does_not_apply_to: ['user_identity'],
+    },
     p2p_boundary: {
       identity_authority: false,
       profile_canonical_store: false,
@@ -53,10 +73,66 @@ describe('nodeAcceptsReportForCapability', () => {
 
   it('rejects when the capability is explicitly disclaimed', () => {
     const m = manifest({
-      authority_scope: { applies_to: ['this_node'], does_not_apply_to: ['moderation'] },
+      authority_scope: {
+        applies_to: ['this_node', 'communities_indexed_by_this_node', 'moderation_events_issued_by_this_node'],
+        does_not_apply_to: ['moderation'],
+      },
     });
     expect(nodeAcceptsReportForCapability(m, 'moderation')).toBe(false);
     expect(nodeAcceptsReportForCapability(m, 'community_index')).toBe(true);
+  });
+
+  // #702: 提供中能力と責任範囲の両方を要求する。
+  it('rejects capabilities the node does not provide even if it claims this_node', () => {
+    const indexOnly = manifest({
+      capability_scope: { available_enabled: ['community_index'], planned_enabled: [] },
+      authority_scope: { applies_to: ['this_node'], does_not_apply_to: [] },
+    });
+    expect(nodeAcceptsReportForCapability(indexOnly, 'moderation')).toBe(false);
+    expect(nodeAcceptsReportForCapability(indexOnly, 'trust_signal')).toBe(false);
+    expect(nodeAcceptsReportForCapability(indexOnly, 'media_cache')).toBe(false);
+    // 索引の責任範囲語彙が無ければ索引の通報先にもならない。
+    expect(nodeAcceptsReportForCapability(indexOnly, 'community_index')).toBe(false);
+    expect(manifestToReportTarget('https://node.example', indexOnly, 'moderation')).toBeNull();
+  });
+
+  const indexScoped = (available: string[], applies: string[]) =>
+    manifest({
+      capability_scope: { available_enabled: available, planned_enabled: [] },
+      authority_scope: { applies_to: applies, does_not_apply_to: [] },
+    });
+
+  it.each([
+    ['community_index', ['community_index'], 'communities_indexed_by_this_node'],
+    ['recommendation', ['community_index'], 'communities_indexed_by_this_node'],
+    ['moderation', ['moderation'], 'moderation_events_issued_by_this_node'],
+    ['trust_signal', ['community_local_trust'], 'trust_signals_issued_by_this_node'],
+    ['media_cache', ['blob_cache'], 'media_cached_by_this_node'],
+    ['bootstrap_assist', ['bootstrap_assist'], 'this_node'],
+    ['relay_assist', ['iroh_relay'], 'this_node'],
+    ['relay_assist', ['traffic_relay_fallback'], 'this_node'],
+  ] as const)('requires the provided capability and scope for %s', (capability, available, scope) => {
+    const applies = scope === 'this_node' ? ['this_node'] : ['this_node', scope];
+    // 提供中 + 責任範囲あり → 候補。
+    expect(nodeAcceptsReportForCapability(indexScoped([...available], applies), capability)).toBe(true);
+    // 責任範囲が this_node だけ → 候補にしない(接続補助系を除く)。
+    if (scope !== 'this_node') {
+      expect(nodeAcceptsReportForCapability(indexScoped([...available], ['this_node']), capability)).toBe(false);
+    }
+    // 能力が未提供(失効)→ 候補にしない。
+    expect(nodeAcceptsReportForCapability(indexScoped([], applies), capability)).toBe(false);
+    // 計画中だけ → 候補にしない。
+    const planned = manifest({
+      capability_scope: { available_enabled: [], planned_enabled: [...available] },
+      authority_scope: { applies_to: applies, does_not_apply_to: [] },
+    });
+    expect(nodeAcceptsReportForCapability(planned, capability)).toBe(false);
+    // 責任範囲語彙の明示的否認 → 候補にしない。
+    const disclaimed = manifest({
+      capability_scope: { available_enabled: [...available], planned_enabled: [] },
+      authority_scope: { applies_to: applies, does_not_apply_to: [scope] },
+    });
+    expect(nodeAcceptsReportForCapability(disclaimed, capability)).toBe(false);
   });
 
   it('rejects nodes that claim network-wide authority (P2P boundary invariant)', () => {
@@ -83,7 +159,13 @@ describe('manifestToReportTarget', () => {
       reportEndpoint: 'https://node.example/v1/report',
       abuseContact: 'abuse@node.example',
       policyUrl: 'https://node.example/terms',
-      authorityScope: ['this_node'],
+      authorityScope: [
+        'this_node',
+        'communities_indexed_by_this_node',
+        'moderation_events_issued_by_this_node',
+        'trust_signals_issued_by_this_node',
+        'media_cached_by_this_node',
+      ],
     });
   });
 
@@ -236,6 +318,19 @@ describe('planAppealReportRouting', () => {
       kind: 'endpoint',
       value: 'https://node.example/v1/report',
     });
+  });
+
+  // #702: 異議申し立ても同じ判定(community_local_trust + trust_signals_issued_by_this_node)を使う。
+  it('does not route an appeal to the issuer when it no longer provides trust signals', () => {
+    const plan = planAppealReportRouting('issuer-node', {
+      'https://issuer.example': manifest({
+        node_id: 'issuer-node',
+        capability_scope: { available_enabled: ['community_index'], planned_enabled: [] },
+        authority_scope: { applies_to: ['this_node', 'communities_indexed_by_this_node'], does_not_apply_to: [] },
+      }),
+    });
+    expect(plan.candidates).toHaveLength(0);
+    expect(plan.observedButUnresolved).toBe(true);
   });
 
   it('does not fall back to contact or a different node when issuer routing is unavailable', () => {

@@ -136,7 +136,7 @@ async fn node_manifest(State(state): State<HarnessIndexState>) -> Json<serde_jso
         "server_name": "harness-index-node",
         "manifest_version": "v1",
         "capability_scope": {"available_enabled": ["community_index", "report_endpoint"], "planned_enabled": []},
-        "authority_scope": {"applies_to": ["this_node"], "does_not_apply_to": ["kukuri_network_as_a_whole"]},
+        "authority_scope": {"applies_to": ["this_node", "communities_indexed_by_this_node"], "does_not_apply_to": ["kukuri_network_as_a_whole"]},
         "p2p_boundary": {"identity_authority": false, "profile_canonical_store": false, "social_graph_canonical_store": false, "content_truth_source": false, "network_wide_authority": false},
         "abuse_contact": "abuse@harness.invalid",
         "report_endpoint": format!("{}/v1/report", state.base_url),
@@ -447,6 +447,10 @@ pub(crate) async fn run_community_node_index_query_client(
                             .await?
                             .manifest
                             .context("manifest missing")?;
+                        // 画面側の通報先判定(apps/desktop/src/lib/api/reportRouting.ts、#702)を写す:
+                        // 観測能力 community_index は、提供中能力 community_index と責任範囲語彙
+                        // communities_indexed_by_this_node の両方を要求する。
+                        let required_scope = "communities_indexed_by_this_node";
                         anyhow::ensure!(
                             !manifest.p2p_boundary.network_wide_authority
                                 && !manifest.authority_scope.applies_to.is_empty()
@@ -454,6 +458,21 @@ pub(crate) async fn run_community_node_index_query_client(
                                     .authority_scope
                                     .does_not_apply_to
                                     .contains(&observation.capability)
+                                && !manifest
+                                    .authority_scope
+                                    .does_not_apply_to
+                                    .iter()
+                                    .any(|entry| entry == required_scope)
+                                && manifest
+                                    .capability_scope
+                                    .available_enabled
+                                    .iter()
+                                    .any(|entry| entry == "community_index")
+                                && manifest
+                                    .authority_scope
+                                    .applies_to
+                                    .iter()
+                                    .any(|entry| entry == required_scope)
                                 && !manifest.report_endpoint.trim().is_empty(),
                             "screen-facing report plan produced no endpoint candidate"
                         );

@@ -593,7 +593,10 @@ test('report action refreshes the observed node manifest when the dialog opens',
     server_name: 'node.example',
     manifest_version: 'v2',
     capability_scope: { available_enabled: ['community_index'], planned_enabled: [] },
-    authority_scope: { applies_to: ['this_node'], does_not_apply_to: ['user_identity'] },
+    authority_scope: {
+      applies_to: ['this_node', 'communities_indexed_by_this_node'],
+      does_not_apply_to: ['user_identity'],
+    },
     p2p_boundary: {
       identity_authority: false,
       profile_canonical_store: false,
@@ -673,7 +676,10 @@ test('attachment report resolves the selected blob provenance instead of the pos
     server_name: nodeId,
     manifest_version: 'v1',
     capability_scope: { available_enabled: ['community_index'], planned_enabled: [] },
-    authority_scope: { applies_to: ['this_node'], does_not_apply_to: [] },
+    authority_scope: {
+      applies_to: ['this_node', 'communities_indexed_by_this_node'],
+      does_not_apply_to: [],
+    },
     p2p_boundary: {
       identity_authority: false,
       profile_canonical_store: false,
@@ -762,7 +768,10 @@ function reportManifest(nodeId: string, overrides: Partial<CommunityNodeManifest
     server_name: nodeId,
     manifest_version: 'v1',
     capability_scope: { available_enabled: ['community_index'], planned_enabled: [] },
-    authority_scope: { applies_to: ['this_node'], does_not_apply_to: [] },
+    authority_scope: {
+      applies_to: ['this_node', 'communities_indexed_by_this_node'],
+      does_not_apply_to: [],
+    },
     p2p_boundary: {
       identity_authority: false,
       profile_canonical_store: false,

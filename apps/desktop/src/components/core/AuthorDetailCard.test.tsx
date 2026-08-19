@@ -89,7 +89,10 @@ function authorReportManifest(nodeId: string) {
     server_name: nodeId,
     manifest_version: 'v1',
     capability_scope: { available_enabled: ['community_index'], planned_enabled: [] },
-    authority_scope: { applies_to: ['this_node'], does_not_apply_to: [] },
+    authority_scope: {
+      applies_to: ['this_node', 'communities_indexed_by_this_node'],
+      does_not_apply_to: [],
+    },
     p2p_boundary: {
       identity_authority: false,
       profile_canonical_store: false,

@@ -53,6 +53,16 @@
 - 添付は親投稿の観測元を表示時に引き継ぎ、正本を `blob` とする。添付単位の観測記録は保存しない。
 - 通報先は保存せず、通報を開いた時に観測元の基底アドレスから最新の `CommunityNodeManifest` を取得して求める。
 - 観測元不明、ノード情報の取得失敗、能力または責任範囲の不一致では候補を作らず、既定ノードへ代替しない。
+- 能力と責任範囲の一致は次の対応表で判定する(#702)。通報能力ごとに、公開ノード情報の `capability_scope.available_enabled` に提供中能力キーが含まれ、かつ `authority_scope.applies_to` に責任範囲の語彙が含まれる場合だけ候補にする。`planned_enabled` だけの能力、失効した能力、`this_node` だけの責任範囲は候補にしない。`does_not_apply_to` に通報能力名または責任範囲語彙が含まれれば明示的否認として除外し、`network_wide_authority` を僭称するノードも除外する。通常通報と異議申し立て(`trust_signal`)は同じ判定を使う。
+
+  | 通報能力 | 提供中能力キー(いずれか) | 責任範囲の語彙 |
+  |---|---|---|
+  | `community_index` / `recommendation` | `community_index` | `communities_indexed_by_this_node` |
+  | `moderation` | `moderation` | `moderation_events_issued_by_this_node` |
+  | `trust_signal` | `community_local_trust` | `trust_signals_issued_by_this_node` |
+  | `media_cache` | `blob_cache` | `media_cached_by_this_node` |
+  | `bootstrap_assist` | `bootstrap_assist` | `this_node`(観測記録の生成経路が整うまで) |
+  | `relay_assist` | `iroh_relay` または `traffic_relay_fallback` | `this_node`(同上) |
 
 ## 影響
 - 観測記録は共有文書や他端末へ流れず、利用者の受信経路を新たに公開しない。
