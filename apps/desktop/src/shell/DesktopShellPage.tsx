@@ -692,6 +692,7 @@ export function DesktopShellPage({
       handleRelationshipAction={shellActions.handleRelationshipAction}
       handleMuteAction={shellActions.handleMuteAction}
       handleOpenOriginalTopic={shellActions.handleOpenOriginalTopic}
+      openCommunityNodeSettings={handleOpenCommunityNodeSettings}
     />
   );
 

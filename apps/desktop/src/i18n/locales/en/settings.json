@@ -59,6 +59,7 @@
     },
     "distanceOptout": {
       "title": "Distance opt-out",
+      "notEligible": "Distance opt-out is unavailable for this node (authentication, required consent, connectivity, or index/trust provision is missing).",
       "description": "When enabled, this node mutually suppresses surfacing between you and users beyond its displayed proximity boundary, helping avoid large-scale conflict amplification between distant communities.",
       "notPrivacy": "This is reversible node-local display control. It is not a privacy feature, block, graph departure, P2P restriction, or network-wide invisibility guarantee.",
       "notLoaded": "Load the current setting and node-local boundary before changing it.",

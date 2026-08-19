@@ -98,6 +98,7 @@ function SettingsDrawerStory({ initialSection = 'connectivity' }: { initialSecti
                   hasPendingUpdate: false,
                   policies: [],
                 },
+                distanceOptoutEligible: true,
                 inviteCodeSaved: false,
                 admissionRejectionCode: null,
                 lastError: null,

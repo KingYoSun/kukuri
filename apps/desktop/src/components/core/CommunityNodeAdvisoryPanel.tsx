@@ -102,13 +102,16 @@ export type CommunityNodeAdvisoryPanelProps = {
     | 'fetchCommunityNodeManifest'
   >;
   targetPubkey: string;
+  /// 適格(認証・必須同意・通信・community_local_trust 提供中)なノードだけを渡す(#705)。
   nodeBaseUrls: string[];
+  onOpenCommunityNodeSettings?: () => void;
 };
 
 export function CommunityNodeAdvisoryPanel({
   api,
   targetPubkey,
   nodeBaseUrls,
+  onOpenCommunityNodeSettings,
 }: CommunityNodeAdvisoryPanelProps) {
   const { t } = useTranslation(['profile', 'common']);
   const [baseUrl, setBaseUrl] = useState(nodeBaseUrls[0] ?? '');
@@ -280,7 +283,16 @@ export function CommunityNodeAdvisoryPanel({
       </div>
 
       {nodeBaseUrls.length === 0 ? (
-        <Notice>{t('profile:communityNodeAdvisory.noNodes')}</Notice>
+        <Notice>
+          <div className='flex flex-wrap items-center justify-between gap-3'>
+            <span>{t('profile:communityNodeAdvisory.noNodes')}</span>
+            {onOpenCommunityNodeSettings ? (
+              <Button variant='secondary' type='button' onClick={onOpenCommunityNodeSettings}>
+                {t('profile:communityNodeAdvisory.openSettings')}
+              </Button>
+            ) : null}
+          </div>
+        </Notice>
       ) : (
         <div className='flex min-w-0 flex-wrap items-end gap-3'>
           <label className='min-w-0 flex-1 space-y-1 text-sm font-medium'>

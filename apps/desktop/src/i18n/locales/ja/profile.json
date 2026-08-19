@@ -2,7 +2,8 @@
   "communityNodeAdvisory": {
     "title": "Community Node の情報提供",
     "nodeLocalNotice": "選択した Community Node だけが提供する情報です。ネットワーク全体の判断ではなく、既定でこの著者を非表示にはしません。",
-    "noNodes": "情報を取得するには Community Node を設定して認証してください。",
+    "noNodes": "情報を取得するには、認証・必須同意済みで信頼評価を提供中の Community Node が必要です。設定を確認してください。",
+    "openSettings": "ノード設定を開く",
     "nodeLabel": "Community Node",
     "load": "情報を読み込む",
     "loading": "読み込み中…",
@@ -64,7 +65,9 @@
     "errors": {
       "trust_not_configured": "この Community Node は trust 情報の読み取りを提供していません。",
       "trust_not_activated": "現在のノードセッションでは trust 情報が有効になっていません。",
-      "relation_unavailable": "この Community Node では relation 情報を利用できません。理由は推測・開示しません。"
+      "relation_unavailable": "この Community Node では relation 情報を利用できません。理由は推測・開示しません。",
+      "auth_required": "選択した Community Node への認証が必要です。",
+      "consent_required": "選択した Community Node の必須同意が必要です。"
     },
     "trust": {
       "title": "Trust advisory",

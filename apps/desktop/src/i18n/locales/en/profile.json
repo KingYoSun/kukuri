@@ -2,7 +2,8 @@
   "communityNodeAdvisory": {
     "title": "Community Node advisory",
     "nodeLocalNotice": "Information from the selected Community Node only. It is not a network-wide judgment and does not hide this author by default.",
-    "noNodes": "Configure and authenticate a Community Node to request advisory information.",
+    "noNodes": "An authenticated, consented Community Node that provides trust advisories is required. Check your node settings.",
+    "openSettings": "Open node settings",
     "nodeLabel": "Community Node",
     "load": "Load advisory",
     "loading": "Loading…",
@@ -64,7 +65,9 @@
     "errors": {
       "trust_not_configured": "This Community Node does not provide trust advisory reads.",
       "trust_not_activated": "Trust advisory reads are not active for your current node session.",
-      "relation_unavailable": "Relation information is unavailable from this Community Node. The reason is intentionally not disclosed."
+      "relation_unavailable": "Relation information is unavailable from this Community Node. The reason is intentionally not disclosed.",
+      "auth_required": "Authenticate with the selected Community Node first.",
+      "consent_required": "Accept the required policies of the selected Community Node first."
     },
     "trust": {
       "title": "Trust advisory",

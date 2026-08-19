@@ -60,3 +60,46 @@ test('loads, enables, and clears reversible node-local distance opt-out', async 
   await userEvent.click(screen.getAllByRole('button', { name: /Disable|解除する/ })[0]);
   expect(clearState).toHaveBeenCalledWith('https://api.kukuri.app');
 });
+
+// #705: 適格でないノード(同意未承認・能力未提供など)では距離利用停止を操作できない。
+test('disables distance opt-out actions for a node that is not eligible', async () => {
+  const getState = vi.fn();
+  const fixture = createCommunityNodePanelFixture();
+  const view = {
+    ...fixture,
+    nodes: fixture.nodes.map((node) => ({ ...node, distanceOptoutEligible: false })),
+  };
+
+  render(
+    <CommunityNodePanel
+      view={view}
+      saveDisabled={false}
+      resetDisabled={false}
+      clearDisabled={false}
+      onAddNode={() => undefined}
+      onNodeBaseUrlChange={() => undefined}
+      onNodeAutoApproveChange={() => undefined}
+      onRemoveNode={() => undefined}
+      onSaveNodes={() => undefined}
+      onReset={() => undefined}
+      onClearNodes={() => undefined}
+      onAuthenticate={() => undefined}
+      onSubmitInviteCode={async () => undefined}
+      onFetchConsents={() => undefined}
+      onAcceptConsents={() => undefined}
+      onRefresh={() => undefined}
+      onClearToken={() => undefined}
+      onGetRelationOptout={getState}
+      onSetRelationOptout={vi.fn()}
+      onClearRelationOptout={vi.fn()}
+    />
+  );
+
+  expect(
+    screen.getAllByText(/Distance opt-out is unavailable for this node|距離利用停止を扱えません/).length
+  ).toBeGreaterThan(0);
+  const loadButtons = screen.getAllByRole('button', { name: /Load setting|設定を読み込む/ });
+  loadButtons.forEach((button) => expect(button).toBeDisabled());
+  await userEvent.click(loadButtons[0]);
+  expect(getState).not.toHaveBeenCalled();
+});

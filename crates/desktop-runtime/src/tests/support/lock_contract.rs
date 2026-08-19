@@ -26,7 +26,7 @@ const LOCK_CLASSIFICATION: &[(&str, &str, usize)] = &[
     ),
     ("community_node/scheduler.rs", "CommunityNodeServer", 5),
     ("community_node/session.rs", "CommunityNodeServer", 6),
-    ("community_node/trust_relation.rs", "CommunityNodeServer", 2),
+    ("community_node/trust_relation.rs", "CommunityNodeServer", 3),
     ("identity_restart.rs", "IdentityStorage", 2),
     ("media_blob_restore.rs", "IrohNetwork", 11),
     ("private_channels/friend_only.rs", "IrohNetwork", 1),
@@ -100,7 +100,7 @@ fn lock_acquisitions_match_declared_classification() {
     );
     let total: usize = expected.values().sum();
     assert_eq!(
-        total, 75,
+        total, 76,
         "classification total drifted from the Q7 T6 baseline(#708 で admission 試験を 1 件追加)"
     );
 }

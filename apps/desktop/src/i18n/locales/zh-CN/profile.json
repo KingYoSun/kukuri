@@ -2,7 +2,8 @@
   "communityNodeAdvisory": {
     "title": "社区节点信息提示",
     "nodeLocalNotice": "仅来自所选社区节点；这不是全网判断，默认也不会隐藏该作者。",
-    "noNodes": "请先配置并认证社区节点，再请求提示信息。",
+    "noNodes": "需要一个已认证、已同意必需条款且提供信任提示的社区节点。请检查节点设置。",
+    "openSettings": "打开节点设置",
     "nodeLabel": "社区节点",
     "load": "加载提示",
     "loading": "加载中…",
@@ -64,7 +65,9 @@
     "errors": {
       "trust_not_configured": "该社区节点不提供信任提示读取。",
       "trust_not_activated": "当前节点会话尚未启用信任提示读取。",
-      "relation_unavailable": "该社区节点无法提供关系信息；不会推测或披露具体原因。"
+      "relation_unavailable": "该社区节点无法提供关系信息；不会推测或披露具体原因。",
+      "auth_required": "请先对所选社区节点完成认证。",
+      "consent_required": "请先接受所选社区节点的必需条款。"
     },
     "trust": {
       "title": "信任提示",

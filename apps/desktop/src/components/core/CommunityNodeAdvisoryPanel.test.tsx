@@ -560,4 +560,56 @@ describe('CommunityNodeAdvisoryPanel', () => {
     ).toBeInTheDocument();
     expect(client.submitCommunityNodeReport).not.toHaveBeenCalled();
   });
+  // #705: 候補が無いときは設定画面への導線を出し、要求は送らない。
+  test('offers the node settings action when no eligible node remains', async () => {
+    const client = api();
+    const onOpenCommunityNodeSettings = vi.fn();
+    render(
+      <CommunityNodeAdvisoryPanel
+        api={client}
+        targetPubkey={targetPubkey}
+        nodeBaseUrls={[]}
+        onOpenCommunityNodeSettings={onOpenCommunityNodeSettings}
+      />
+    );
+    expect(screen.queryByRole('button', { name: /Load advisory|情報を読み込む/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Open node settings|ノード設定を開く/ }));
+    expect(onOpenCommunityNodeSettings).toHaveBeenCalledTimes(1);
+    expect(client.readCommunityNodeTrustUser).not.toHaveBeenCalled();
+  });
+
+  // #705: 候補が絞られて選択ノードが外れると、古い評価と異議申し立て選択は失効する。
+  test('drops loaded results and an open appeal when the selected node stops being eligible', async () => {
+    const client = api();
+    const { rerender } = render(
+      <CommunityNodeAdvisoryPanel api={client} targetPubkey={targetPubkey} nodeBaseUrls={[nodeA, nodeB]} />
+    );
+    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(await screen.findByText(/node-a/));
+    await userEvent.click(screen.getByRole('button', { name: 'このリスク判定に異議を申し立てる' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    // A の同意が失効し、候補が B だけになる。
+    rerender(<CommunityNodeAdvisoryPanel api={client} targetPubkey={targetPubkey} nodeBaseUrls={[nodeB]} />);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.queryAllByText(/node-a/)).toHaveLength(0);
+    expect((screen.getByRole('combobox') as HTMLSelectElement).value).toBe(nodeB);
+    expect(client.submitCommunityNodeReport).not.toHaveBeenCalled();
+  });
+
+  // #705: 認証・同意の未達は索引画面と同じく安定コードで案内する。
+  test('explains consent and authentication requirements in Japanese', async () => {
+    const client = api();
+    client.readCommunityNodeTrustUser.mockRejectedValue(
+      new InvokeError('CONSENT_REQUIRED', 'required policies must be accepted', 403)
+    );
+    client.readCommunityNodeRelationUser.mockRejectedValue(
+      new InvokeError('AUTH_REQUIRED', 'community node authentication is required', 401)
+    );
+    render(<CommunityNodeAdvisoryPanel api={client} targetPubkey={targetPubkey} nodeBaseUrls={[nodeA]} />);
+    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    expect(await screen.findByText(/必須同意が必要です|Accept the required policies/)).toBeInTheDocument();
+    expect(await screen.findByText(/認証が必要です|Authenticate with the selected/)).toBeInTheDocument();
+    expect(screen.queryByText(/required policies must be accepted/)).not.toBeInTheDocument();
+  });
 });

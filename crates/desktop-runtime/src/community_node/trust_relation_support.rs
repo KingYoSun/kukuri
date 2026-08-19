@@ -152,6 +152,16 @@ impl DesktopRuntime {
                     error.to_string(),
                 )
             })?;
+        // 必須同意が未承認のノードへは、対象利用者の公開鍵を含む要求も距離利用停止の操作も送らない(#705)。
+        if self
+            .community_node_required_consent_is_pending(base_url.as_str())
+            .await
+        {
+            return Err(CommunityNodeTrustRelationError::new(
+                "CONSENT_REQUIRED",
+                "community node required policies must be accepted before trust and relation requests",
+            ));
+        }
         let token = load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())
             .map_err(|error| {
                 CommunityNodeTrustRelationError::new("AUTH_TOKEN_LOAD_FAILED", error.to_string())
