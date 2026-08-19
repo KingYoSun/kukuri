@@ -8,14 +8,19 @@ use std::fmt;
 /// client 側（provenance + manifest）で通報先を解決し、その `report_endpoint` を
 /// この request に載せて渡す。endpoint が無い node は client 側で `abuse_contact`
 /// 案内に切り替えるため、この command には到達しない。
+///
+/// 実行時層は画面側の判定を信頼せず、`node_base_url` が構成済みノードであることと、
+/// `report_endpoint` のオリジンが `node_base_url` と一致することを送信前に強制する(#703)。
+/// 提供中能力・責任範囲の照合は画面側(`reportRouting.ts`、#702)が正であり、ここでは行わない。
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 #[serde(rename_all = "snake_case")]
 pub struct SubmitCommunityNodeReportRequest {
-    /// 通報先 node の base url（記録・表示用）。
+    /// 通報先 node の base url。構成済みノードでなければ送信しない(#703)。
     pub node_base_url: String,
     /// node manifest が公開する通報受付 endpoint（絶対 http(s) URL）。
+    /// `node_base_url` と同一オリジンでなければ送信しない(#703)。
     pub report_endpoint: String,
     /// 通報対象の種別（post / profile / media / search_result / recommendation 等）。
     pub subject_kind: String,
@@ -119,6 +124,29 @@ pub(crate) fn validate_report_endpoint(endpoint: &str) -> Result<&str> {
     Ok(trimmed)
 }
 
+/// `report_endpoint` のオリジン(scheme / host / port)が、正規化済みの `node_base_url` と
+/// 一致することを確認する(#703)。実運用の公開ノード情報は受付先を基底アドレスと同一オリジンの
+/// `/v1/report` に置くため、別オリジンの受付先は画面側の不具合か改変された呼び出しとみなす。
+pub(crate) fn ensure_report_endpoint_origin(
+    normalized_base_url: &str,
+    endpoint: &str,
+) -> Result<()> {
+    let base = url::Url::parse(normalized_base_url)
+        .with_context(|| format!("invalid community node base url `{normalized_base_url}`"))?;
+    let target = url::Url::parse(endpoint)
+        .with_context(|| format!("invalid report endpoint `{endpoint}`"))?;
+    let same_origin = base.scheme() == target.scheme()
+        && base.host_str().map(str::to_ascii_lowercase)
+            == target.host_str().map(str::to_ascii_lowercase)
+        && base.port_or_known_default() == target.port_or_known_default();
+    if !same_origin {
+        return Err(anyhow!(
+            "report endpoint `{endpoint}` is not on the same origin as community node `{normalized_base_url}`"
+        ));
+    }
+    Ok(())
+}
+
 impl DesktopRuntime {
     /// 解決済みの通報先 node の report endpoint へ通報を POST する（#310）。
     ///
@@ -132,7 +160,19 @@ impl DesktopRuntime {
         let endpoint = validate_report_endpoint(&request.report_endpoint).map_err(|error| {
             CommunityNodeReportError::new("INVALID_REPORT_ENDPOINT", error.to_string())
         })?;
-        let client = community_node_http_client().map_err(|error| {
+        // 構成情報にないノード、基底アドレスと異なるオリジンの受付先へは送らない(#703)。
+        let base_url = normalize_http_url(request.node_base_url.as_str()).map_err(|error| {
+            CommunityNodeReportError::new("REPORT_TARGET_NOT_CONFIGURED", error.to_string())
+        })?;
+        self.require_community_node(base_url.as_str())
+            .await
+            .map_err(|error| {
+                CommunityNodeReportError::new("REPORT_TARGET_NOT_CONFIGURED", error.to_string())
+            })?;
+        ensure_report_endpoint_origin(base_url.as_str(), endpoint).map_err(|error| {
+            CommunityNodeReportError::new("REPORT_ENDPOINT_MISMATCH", error.to_string())
+        })?;
+        let client = community_node_report_http_client().map_err(|error| {
             CommunityNodeReportError::new("REPORT_CLIENT_UNAVAILABLE", error.to_string())
         })?;
         let payload = CommunityNodeReportRequest {
@@ -153,6 +193,14 @@ impl DesktopRuntime {
                 CommunityNodeReportError::new("REPORT_SUBMISSION_FAILED", error.to_string())
             })?;
         let status = response.status();
+        if status.is_redirection() {
+            // 転送は追跡しない。受付先の境界を越えて本文を再送しないために拒否する(#703)。
+            return Err(CommunityNodeReportError {
+                code: "REPORT_REDIRECT_REJECTED".to_string(),
+                message: format!("report endpoint responded with a redirect ({status})"),
+                status: Some(status.as_u16()),
+            });
+        }
         if !status.is_success() {
             let body = response.json::<ApiErrorBody>().await.ok();
             return Err(CommunityNodeReportError::from_response(status, body));
@@ -172,6 +220,46 @@ impl DesktopRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn report_endpoint_must_share_the_node_origin() {
+        assert!(
+            ensure_report_endpoint_origin("https://node.example", "https://node.example/v1/report")
+                .is_ok()
+        );
+        assert!(
+            ensure_report_endpoint_origin(
+                "https://node.example",
+                "https://NODE.example:443/v1/report"
+            )
+            .is_ok()
+        );
+        assert!(
+            ensure_report_endpoint_origin(
+                "http://127.0.0.1:8080",
+                "http://127.0.0.1:8080/v1/report"
+            )
+            .is_ok()
+        );
+        assert!(
+            ensure_report_endpoint_origin(
+                "https://node.example",
+                "https://other.example/v1/report"
+            )
+            .is_err()
+        );
+        assert!(
+            ensure_report_endpoint_origin("https://node.example", "http://node.example/v1/report")
+                .is_err()
+        );
+        assert!(
+            ensure_report_endpoint_origin(
+                "http://127.0.0.1:8080",
+                "http://127.0.0.1:9090/v1/report"
+            )
+            .is_err()
+        );
+    }
 
     #[test]
     fn validates_http_endpoints() {

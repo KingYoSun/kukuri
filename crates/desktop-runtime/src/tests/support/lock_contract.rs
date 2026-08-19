@@ -22,7 +22,7 @@ const LOCK_CLASSIFICATION: &[(&str, &str, usize)] = &[
     (
         "community_node/report_submission.rs",
         "CommunityNodeServer",
-        2,
+        5,
     ),
     ("community_node/scheduler.rs", "CommunityNodeServer", 5),
     ("community_node/session.rs", "CommunityNodeServer", 6),
@@ -100,7 +100,7 @@ fn lock_acquisitions_match_declared_classification() {
     );
     let total: usize = expected.values().sum();
     assert_eq!(
-        total, 76,
+        total, 79,
         "classification total drifted from the Q7 T6 baseline(#708 で admission 試験を 1 件追加)"
     );
 }
