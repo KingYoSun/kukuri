@@ -618,4 +618,34 @@ describe('CommunityNodeAdvisoryPanel', () => {
     expect(await screen.findByText(/認証が必要です|Authenticate with the selected/)).toBeInTheDocument();
     expect(screen.queryByText(/required policies must be accepted/)).not.toBeInTheDocument();
   });
+  // #699: 実行時層が対象不一致を返したら、内容を表示せず異議申し立て導線も出さない。
+  test('shows a mismatch notice and no appeal when the runtime rejects a response for another target', async () => {
+    const client = api();
+    client.readCommunityNodeTrustUser.mockRejectedValue(
+      new InvokeError('TRUST_RELATION_RESPONSE_MISMATCH', 'response for another target')
+    );
+    client.readCommunityNodeRelationUser.mockRejectedValue(
+      new InvokeError('TRUST_RELATION_RESPONSE_MISMATCH', 'response for another target')
+    );
+    render(<CommunityNodeAdvisoryPanel api={client} targetPubkey={targetPubkey} nodeBaseUrls={[nodeA]} />);
+    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+
+    expect((await screen.findAllByText(/別の利用者を対象にしていた|answered for a different user/)).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/node-a/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'このリスク判定に異議を申し立てる' })).not.toBeInTheDocument();
+  });
+
+  // #699: 利用者対象の根拠が表示中の利用者と異なる場合は、この画面から申し立てできない。
+  test('does not offer an appeal for a user judgment that targets another user', async () => {
+    const client = api('user_pubkey', otherTargetPubkey);
+    render(<CommunityNodeAdvisoryPanel api={client} targetPubkey={targetPubkey} nodeBaseUrls={[nodeA]} />);
+    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(await screen.findByText(/node-a/));
+
+    expect(screen.queryByRole('button', { name: 'このリスク判定に異議を申し立てる' })).not.toBeInTheDocument();
+    expect(
+      screen.getByText('この種類のリスク判定は、現在の画面から異議申し立てできません。')
+    ).toBeInTheDocument();
+    expect(client.submitCommunityNodeReport).not.toHaveBeenCalled();
+  });
 });

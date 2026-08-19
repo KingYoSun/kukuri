@@ -74,9 +74,15 @@ function resultState<T>(result: PromiseSettledResult<T>): ReadState<T> {
   };
 }
 
-function appealSubjectForBasis(basis: TrustBasisEntry): ReportRoutingSubject | null {
+/// 根拠から異議申し立ての対象を決める。利用者対象の根拠は、表示中の利用者と一致する場合だけ
+/// 対象にする(#699: 別利用者の判定を申し立てない)。投稿・添付対象は #685 / #707 の契約どおり。
+function appealSubjectForBasis(
+  basis: TrustBasisEntry,
+  targetPubkey: string
+): ReportRoutingSubject | null {
   switch (basis.target) {
     case 'user_pubkey':
+      if (basis.target_id.trim().toLowerCase() !== targetPubkey.trim().toLowerCase()) return null;
       return { kind: 'profile', id: basis.target_id };
     case 'post_id':
       return { kind: 'post', id: basis.target_id };
@@ -249,7 +255,7 @@ export function CommunityNodeAdvisoryPanel({
 
   async function submitAppeal(input: ReportSubmitInput) {
     const selection = activeAppealSelection;
-    const subject = selection ? appealSubjectForBasis(selection.basis) : null;
+    const subject = selection ? appealSubjectForBasis(selection.basis, targetPubkey) : null;
     if (
       !selection ||
       selection.context.key !== currentContextKeyRef.current ||
@@ -363,7 +369,7 @@ export function CommunityNodeAdvisoryPanel({
                         <p className='text-xs text-[var(--muted-foreground)]'>
                           {t('profile:communityNodeAdvisory.appeal.noneContribution')}
                         </p>
-                        {appealSubjectForBasis(basis) ? (
+                        {appealSubjectForBasis(basis, targetPubkey) ? (
                           <Button
                             type='button'
                             variant='secondary'
@@ -429,13 +435,13 @@ export function CommunityNodeAdvisoryPanel({
         <Notice>{unavailableCopy(neighbors)}</Notice>
       ) : null}
 
-      {appealBasis && appealPlan && appealSubjectForBasis(appealBasis) ? (
+      {appealBasis && appealPlan && appealSubjectForBasis(appealBasis, targetPubkey) ? (
         <ReportRoutingDialog
           open
           onOpenChange={(open) => {
             if (!open) setAppealSelection(null);
           }}
-          subject={appealSubjectForBasis(appealBasis)!}
+          subject={appealSubjectForBasis(appealBasis, targetPubkey)!}
           plan={appealPlan}
           appeal={{
             riskSignalId: appealBasis.signal_id,

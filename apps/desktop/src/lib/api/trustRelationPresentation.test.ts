@@ -11,6 +11,7 @@ describe('trustRelationUnavailableReason', () => {
     // #705: 認証・同意の未達は索引画面と同じ安定理由で案内する。
     ['AUTH_REQUIRED', 'auth_required'],
     ['CONSENT_REQUIRED', 'consent_required'],
+    ['TRUST_RELATION_RESPONSE_MISMATCH', 'response_mismatch'],
     ['SOMETHING_ELSE', 'other'],
   ] as const)('maps %s without inferring an opt-out cause', (code, expected) => {
     expect(trustRelationUnavailableReason(new InvokeError(code, 'server detail'))).toBe(expected);

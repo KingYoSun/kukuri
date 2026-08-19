@@ -67,7 +67,8 @@
       "trust_not_activated": "Trust advisory reads are not active for your current node session.",
       "relation_unavailable": "Relation information is unavailable from this Community Node. The reason is intentionally not disclosed.",
       "auth_required": "Authenticate with the selected Community Node first.",
-      "consent_required": "Accept the required policies of the selected Community Node first."
+      "consent_required": "Accept the required policies of the selected Community Node first.",
+      "response_mismatch": "The node answered for a different user, so the response was not used."
     },
     "trust": {
       "title": "Trust advisory",

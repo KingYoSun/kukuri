@@ -6,6 +6,7 @@ export type TrustRelationUnavailableReason =
   | 'relation_unavailable'
   | 'auth_required'
   | 'consent_required'
+  | 'response_mismatch'
   | 'other';
 
 export function trustRelationUnavailableReason(error: unknown): TrustRelationUnavailableReason {
@@ -20,6 +21,9 @@ export function trustRelationUnavailableReason(error: unknown): TrustRelationUna
       return 'trust_not_activated';
     case 'RELATION_NOT_FOUND':
       return 'relation_unavailable';
+    case 'TRUST_RELATION_RESPONSE_MISMATCH':
+      // 応答本文の対象が要求した利用者と一致しない(#699)。内容は採用しない。
+      return 'response_mismatch';
     default:
       return 'other';
   }

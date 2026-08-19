@@ -71,6 +71,27 @@ impl fmt::Display for CommunityNodeTrustRelationError {
 
 impl std::error::Error for CommunityNodeTrustRelationError {}
 
+/// 応答本文の対象識別子が要求した利用者(正規化済み)と一致することを確認する(#699)。
+///
+/// 規約に従わないノードが別の利用者の評価・関係を返した場合に、その内容を表示したり
+/// 別の判定を異議申し立て対象にしたりしないための実行時層の照合。比較は `normalize_pubkey`
+/// と同じ正規化(前後空白除去・小文字化)で行う。
+pub(crate) fn ensure_trust_relation_target(
+    requested_normalized: &str,
+    response_target: &str,
+) -> Result<(), CommunityNodeTrustRelationError> {
+    let response_target = response_target.trim().to_ascii_lowercase();
+    if response_target == requested_normalized {
+        return Ok(());
+    }
+    Err(CommunityNodeTrustRelationError::new(
+        "TRUST_RELATION_RESPONSE_MISMATCH",
+        format!(
+            "community node returned a response for `{response_target}` while `{requested_normalized}` was requested"
+        ),
+    ))
+}
+
 impl DesktopRuntime {
     pub(crate) async fn request_community_node_trust_user(
         &self,
@@ -79,13 +100,16 @@ impl DesktopRuntime {
         let target = normalize_pubkey(request.target_pubkey.as_str()).map_err(|error| {
             CommunityNodeTrustRelationError::new("INVALID_TRUST_QUERY", error.to_string())
         })?;
-        self.request_community_node_trust_relation(
-            request.base_url.as_str(),
-            Method::GET,
-            format!("{TRUST_USERS_PATH_PREFIX}{target}").as_str(),
-            None,
-        )
-        .await
+        let response: TrustUserReadResponse = self
+            .request_community_node_trust_relation(
+                request.base_url.as_str(),
+                Method::GET,
+                format!("{TRUST_USERS_PATH_PREFIX}{target}").as_str(),
+                None,
+            )
+            .await?;
+        ensure_trust_relation_target(target.as_str(), response.view.target_id.as_str())?;
+        Ok(response)
     }
 
     pub(crate) async fn request_community_node_relation_user(
@@ -95,13 +119,16 @@ impl DesktopRuntime {
         let target = normalize_pubkey(request.target_pubkey.as_str()).map_err(|error| {
             CommunityNodeTrustRelationError::new("INVALID_TRUST_QUERY", error.to_string())
         })?;
-        self.request_community_node_trust_relation(
-            request.base_url.as_str(),
-            Method::GET,
-            format!("{RELATION_USERS_PATH_PREFIX}{target}").as_str(),
-            None,
-        )
-        .await
+        let response: RelationReadResponse = self
+            .request_community_node_trust_relation(
+                request.base_url.as_str(),
+                Method::GET,
+                format!("{RELATION_USERS_PATH_PREFIX}{target}").as_str(),
+                None,
+            )
+            .await?;
+        ensure_trust_relation_target(target.as_str(), response.target_pubkey.as_str())?;
+        Ok(response)
     }
 
     pub(crate) async fn request_community_node_relation_neighbors(
