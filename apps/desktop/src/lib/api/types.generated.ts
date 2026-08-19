@@ -263,11 +263,12 @@ export type RelationOptoutResponse = { pubkey: string, opted_out: boolean, opted
 
 export type SubmitCommunityNodeReportRequest = { 
 /**
- * 通報先 node の base url（記録・表示用）。
+ * 通報先 node の base url。構成済みノードでなければ送信しない(#703)。
  */
 node_base_url: string, 
 /**
  * node manifest が公開する通報受付 endpoint（絶対 http(s) URL）。
+ * `node_base_url` と同一オリジンでなければ送信しない(#703)。
  */
 report_endpoint: string, 
 /**

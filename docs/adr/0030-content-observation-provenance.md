@@ -63,6 +63,7 @@
   | `media_cache` | `blob_cache` | `media_cached_by_this_node` |
   | `bootstrap_assist` | `bootstrap_assist` | `this_node`(観測記録の生成経路が整うまで) |
   | `relay_assist` | `iroh_relay` または `traffic_relay_fallback` | `this_node`(同上) |
+- 実行時層(`desktop-runtime`)は画面側の判定を信頼せず、送信前に `node_base_url` が構成済みノードであること、`report_endpoint` のオリジンが `node_base_url` と一致することを強制し、通報用の HTTP クライアントは転送を追跡しない(#703)。不一致は `REPORT_TARGET_NOT_CONFIGURED` / `REPORT_ENDPOINT_MISMATCH` / `REPORT_REDIRECT_REJECTED` で拒否する。提供中能力と責任範囲の照合は画面側が正であり、実行時層では重複して行わない。
 
 ## 影響
 - 観測記録は共有文書や他端末へ流れず、利用者の受信経路を新たに公開しない。
