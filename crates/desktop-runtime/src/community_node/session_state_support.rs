@@ -72,6 +72,19 @@ impl DesktopRuntime {
         entry.cached_consent = consent_state;
     }
 
+    /// `ensure_community_node_session` 直後の同意確認(#698 / #705)。
+    ///
+    /// キャッシュ済み同意が「必須同意未承認」なら真を返す。索引参照・索引申請・信頼関係の
+    /// クライアントは、真なら HTTP を送らず `CONSENT_REQUIRED` を返す(サーバの 403 に頼らない)。
+    /// 同意を未取得(`None`)の場合は判定しない(セッション確立が別経路で失敗を返す)。
+    pub(crate) async fn community_node_required_consent_is_pending(&self, base_url: &str) -> bool {
+        let sessions = self.community_node_sessions.lock().await;
+        sessions
+            .get(base_url)
+            .and_then(|session| session.cached_consent.as_ref())
+            .is_some_and(|consent| !consent.all_required_accepted)
+    }
+
     pub(crate) async fn clear_community_node_retry_state(&self, base_url: &str) {
         let mut sessions = self.community_node_sessions.lock().await;
         if let Some(entry) = sessions.get_mut(base_url) {

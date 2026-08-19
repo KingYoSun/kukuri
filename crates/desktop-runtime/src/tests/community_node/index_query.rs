@@ -602,3 +602,48 @@ async fn community_node_indexing_request_preserves_stable_error() {
     runtime.shutdown().await;
     server.abort();
 }
+
+// #698: 必須同意が未承認のノードへは、検索語も非公開チャンネルの秘密値も送らない。
+#[tokio::test]
+async fn community_node_index_query_stops_before_http_when_consent_is_pending() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let (runtime, base_url, managed, state, server, _dir) = index_runtime(None).await;
+    managed.consent_accepted.store(false, Ordering::SeqCst);
+
+    let error = runtime
+        .search_community_node_index(scoped_request(base_url.as_str()))
+        .await
+        .expect_err("pending consent must stop the query");
+
+    assert_eq!(error.code, "CONSENT_REQUIRED");
+    assert!(
+        state.requests.lock().await.is_empty(),
+        "no index request may reach the node while required consent is pending"
+    );
+    runtime.shutdown().await;
+    server.abort();
+}
+
+#[tokio::test]
+async fn community_node_private_indexing_stops_before_secret_when_consent_is_pending() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let (runtime, base_url, managed, state, server, _dir) = index_runtime(None).await;
+    managed.consent_accepted.store(false, Ordering::SeqCst);
+
+    let error = runtime
+        .submit_community_node_indexing_request(CommunityNodeIndexingRequest {
+            base_url,
+            scope_kind: IndexScopeKind::PrivateChannel,
+            topic_id: "kukuri:topic:indexing-request".to_string(),
+            channel_id: Some("private-channel".to_string()),
+            confirm_private_channel_secret_disclosure: true,
+        })
+        .await
+        .expect_err("pending consent must stop the request");
+
+    // 秘密値の取得(PRIVATE_CHANNEL_CAPABILITY_UNAVAILABLE)より前に同意で止まる。
+    assert_eq!(error.code, "CONSENT_REQUIRED");
+    assert!(state.indexing_requests.lock().await.is_empty());
+    runtime.shutdown().await;
+    server.abort();
+}
