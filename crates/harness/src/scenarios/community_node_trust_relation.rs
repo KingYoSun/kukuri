@@ -1,7 +1,7 @@
 use crate::*;
 
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
 };
 
@@ -12,18 +12,30 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use kukuri_cn_protocol::ApiErrorBody;
+use kukuri_cn_protocol::{
+    ApiErrorBody, AppealStatus, Basis, CommunityNodeReportRequest, CommunityNodeReportResponse,
+    IndexEntryView, IndexQueryResponse, IndexScopeKind, Proximity, ProximityBasisEntry,
+    RelationNeighborsResponse, RelationOptoutResponse, RelationReadResponse, RiskSignalTarget,
+    SafetyCategory, Severity, TrustBasisEntry, TrustComponentKind, TrustReadView,
+    TrustUserReadResponse, Visibility,
+};
 use kukuri_desktop_runtime::{
-    CommunityNodeRelationNeighborsRequest, CommunityNodeTargetRequest,
-    CommunityNodeUserAdvisoryRequest, SetCommunityNodeConfigNode,
+    CommunityNodeIndexQueryRequest, CommunityNodeRelationNeighborsRequest,
+    CommunityNodeTargetRequest, CommunityNodeUserAdvisoryRequest, SetCommunityNodeConfigNode,
+    SubmitCommunityNodeReportRequest,
 };
 
 const ACCESS_TOKEN: &str = "harness-trust-relation-token";
+
+/// 異議申し立て対象の固定のリスク判定識別子。
+const APPEAL_SIGNAL_ID: &str = "signal-1";
 
 #[derive(Clone)]
 struct ServerState {
     base_url: String,
     opted_out: Arc<AtomicBool>,
+    /// signal-1 の異議申し立て状態(none → disputed → cleared)。#685 の契約を写す。
+    appeal_status: Arc<Mutex<AppealStatus>>,
 }
 
 fn authenticated(headers: &HeaderMap) -> bool {
@@ -94,7 +106,11 @@ fn api_error(code: &str, message: &str) -> Response {
         .into_response()
 }
 
-async fn trust_user(AxumPath(target): AxumPath<String>, headers: HeaderMap) -> Response {
+async fn trust_user(
+    State(state): State<ServerState>,
+    AxumPath(target): AxumPath<String>,
+    headers: HeaderMap,
+) -> Response {
     if let Some(response) = require_auth(&headers) {
         return response;
     }
@@ -104,17 +120,103 @@ async fn trust_user(AxumPath(target): AxumPath<String>, headers: HeaderMap) -> R
     if target.starts_with('d') {
         return api_error("TRUST_READ_NOT_ACTIVATED", "trust read is not activated");
     }
-    Json(serde_json::json!({
-        "viewer_pubkey": "harness-user",
-        "target_id": target,
-        "absolute": 0.5,
-        "relative": 0.6,
-        "trust": 0.55,
-        "w_abs_applied": 0.5,
-        "computed_at": "2026-08-14T00:00:00Z",
-        "basis": []
-    }))
+    // #685 の契約: cleared は根拠に残したまま寄与を 0 にする。none / disputed は寄与を維持する。
+    let appeal_status = *state.appeal_status.lock().expect("appeal status lock");
+    let contribution = if appeal_status == AppealStatus::Cleared {
+        0.0
+    } else {
+        0.55
+    };
+    Json(TrustUserReadResponse {
+        viewer_pubkey: "harness-user".to_string(),
+        view: TrustReadView {
+            target_id: target.clone(),
+            absolute: 0.5,
+            relative: 0.6,
+            trust: 0.55,
+            w_abs_applied: 0.5,
+            computed_at: "2026-08-14T00:00:00Z".to_string(),
+            basis: vec![TrustBasisEntry {
+                signal_id: APPEAL_SIGNAL_ID.to_string(),
+                issuer_node_id: "harness-issuer-node".to_string(),
+                target: RiskSignalTarget::UserPubkey,
+                target_id: target,
+                component: TrustComponentKind::Relative,
+                category: SafetyCategory::Spam,
+                severity: Severity::Low,
+                basis: Basis::ProviderVerdict,
+                confidence: Some(75),
+                visibility: Visibility::SubscribedNodes,
+                appeal_status,
+                expires_at: None,
+                raw_contribution: contribution,
+                decay_factor: 1.0,
+                relation_weight: 1.0,
+                contribution,
+            }],
+        },
+    })
     .into_response()
+}
+
+/// 匿名の異議申し立てを受理して signal-1 を disputed にする(#669 / #685 の契約を写す)。
+async fn report(
+    State(state): State<ServerState>,
+    Json(request): Json<CommunityNodeReportRequest>,
+) -> Response {
+    let Some(appeal) = request.appeal.as_ref() else {
+        return api_error(
+            "REPORT_NOT_CONFIGURED",
+            "only appeals are accepted by this stub",
+        );
+    };
+    if request.reporter_contact.is_some() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiErrorBody {
+                code: "INVALID_APPEAL".to_string(),
+                message: "appeals must stay anonymous".to_string(),
+            }),
+        )
+            .into_response();
+    }
+    let mut status = state.appeal_status.lock().expect("appeal status lock");
+    if appeal.risk_signal_id != APPEAL_SIGNAL_ID || *status == AppealStatus::Cleared {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiErrorBody {
+                code: "INVALID_APPEAL".to_string(),
+                message: "unknown or already resolved risk signal".to_string(),
+            }),
+        )
+            .into_response();
+    }
+    *status = AppealStatus::Disputed;
+    Json(CommunityNodeReportResponse {
+        reference_id: Some("harness-appeal-1".to_string()),
+        disputed_risk_signal_id: Some(appeal.risk_signal_id.clone()),
+    })
+    .into_response()
+}
+
+/// 距離利用停止の結線確認用の索引検索。opt-out 中は境界外の投稿が抑制され 0 件になる(#665)。
+async fn index_search(State(state): State<ServerState>, headers: HeaderMap) -> Response {
+    if let Some(response) = require_auth(&headers) {
+        return response;
+    }
+    let entries = if state.opted_out.load(Ordering::SeqCst) {
+        Vec::new()
+    } else {
+        vec![IndexEntryView {
+            scope_kind: IndexScopeKind::PublicTopic,
+            scope_id: "trust-relation".to_string(),
+            object_id: "distant-post-1".to_string(),
+            author_pubkey: "f".repeat(64),
+            text: "distant community post".to_string(),
+            created_at: 42,
+        }]
+    };
+    Json(IndexQueryResponse { entries }).into_response()
 }
 
 async fn relation_user(AxumPath(target): AxumPath<String>, headers: HeaderMap) -> Response {
@@ -124,12 +226,19 @@ async fn relation_user(AxumPath(target): AxumPath<String>, headers: HeaderMap) -
     if target.starts_with('e') {
         return api_error("RELATION_NOT_FOUND", "relation is unavailable");
     }
-    Json(serde_json::json!({
-        "viewer_pubkey": "harness-user",
-        "target_pubkey": target,
-        "score": 0.42,
-        "basis": [{"feature": "shared_topics", "value": 1.0, "weight": 0.42, "contribution": 0.42}]
-    }))
+    Json(RelationReadResponse {
+        viewer_pubkey: "harness-user".to_string(),
+        target_pubkey: target,
+        proximity: Proximity {
+            score: 0.42,
+            basis: vec![ProximityBasisEntry {
+                feature: "shared_topics".to_string(),
+                value: 1.0,
+                weight: 0.42,
+                contribution: 0.42,
+            }],
+        },
+    })
     .into_response()
 }
 
@@ -140,21 +249,21 @@ async fn relation_neighbors(
     if let Some(response) = require_auth(&headers) {
         return response;
     }
-    Json(serde_json::json!({
-        "viewer_pubkey": "harness-user",
-        "neighbors": ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]
-    }))
+    Json(RelationNeighborsResponse {
+        viewer_pubkey: "harness-user".to_string(),
+        neighbors: vec!["b".repeat(64)],
+    })
     .into_response()
 }
 
-fn optout_value(state: &ServerState) -> serde_json::Value {
+fn optout_value(state: &ServerState) -> RelationOptoutResponse {
     let enabled = state.opted_out.load(Ordering::SeqCst);
-    serde_json::json!({
-        "pubkey": "harness-user",
-        "opted_out": enabled,
-        "opted_out_at": enabled.then_some("2026-08-14T00:00:00Z"),
-        "min_proximity": 0.25
-    })
+    RelationOptoutResponse {
+        pubkey: "harness-user".to_string(),
+        opted_out: enabled,
+        opted_out_at: enabled.then(|| "2026-08-14T00:00:00Z".to_string()),
+        min_proximity: 0.25,
+    }
 }
 
 async fn get_optout(State(state): State<ServerState>, headers: HeaderMap) -> Response {
@@ -190,6 +299,7 @@ pub(crate) async fn run_community_node_trust_relation_client(
     let state = ServerState {
         base_url: base_url.clone(),
         opted_out: Arc::new(AtomicBool::new(false)),
+        appeal_status: Arc::new(Mutex::new(AppealStatus::None)),
     };
     let router = Router::new()
         .route("/v1/auth/challenge", post(auth_challenge))
@@ -204,7 +314,9 @@ pub(crate) async fn run_community_node_trust_relation_client(
             "/v1/relation/optout",
             get(get_optout).put(set_optout).delete(clear_optout),
         )
-        .with_state(state);
+        .route("/v1/report", post(report))
+        .route("/v1/index/search", get(index_search))
+        .with_state(state.clone());
     let server = tokio::spawn(async move { axum::serve(listener, router).await });
 
     let runtime_dir = tempfile::Builder::new()
@@ -315,6 +427,105 @@ pub(crate) async fn run_community_node_trust_relation_client(
                         error.code == *code,
                         "error code mismatch: expected {code}, got {}",
                         error.code
+                    );
+                }
+                ScenarioStep::SubmitCommunityAppeal {
+                    target_pubkey,
+                    risk_signal_id,
+                } => {
+                    // 匿名の異議申し立て(#669)。受付先は #703 の制約どおり構成済みノードの
+                    // 同一オリジンの受付先を使う。
+                    let submitted = runtime
+                        .submit_community_node_report(SubmitCommunityNodeReportRequest {
+                            node_base_url: base_url.clone(),
+                            report_endpoint: format!("{base_url}/v1/report"),
+                            subject_kind: "profile".to_string(),
+                            subject_id: target_pubkey.clone(),
+                            capability: "trust_signal".to_string(),
+                            reason: "other".to_string(),
+                            details: None,
+                            reporter_contact: None,
+                            appeal: Some(kukuri_cn_protocol::CommunityNodeReportAppeal {
+                                risk_signal_id: risk_signal_id.clone(),
+                            }),
+                        })
+                        .await?;
+                    anyhow::ensure!(
+                        submitted.disputed_risk_signal_id.as_deref()
+                            == Some(risk_signal_id.as_str()),
+                        "disputed risk signal mismatch"
+                    );
+                }
+                ScenarioStep::AssertTrustBasisAppeal {
+                    target_pubkey,
+                    signal_id,
+                    expect_status,
+                    expect_contribution_zero,
+                } => {
+                    // 再取得で係争中 / 解消済みの状態と寄与(#685 の契約)を確認する。
+                    let value = runtime
+                        .read_community_node_trust_user(CommunityNodeUserAdvisoryRequest {
+                            base_url: base_url.clone(),
+                            target_pubkey: target_pubkey.clone(),
+                        })
+                        .await?;
+                    let entry = value
+                        .view
+                        .basis
+                        .iter()
+                        .find(|entry| entry.signal_id == *signal_id)
+                        .context("appealed basis entry missing")?;
+                    let status = match entry.appeal_status {
+                        AppealStatus::None => "none",
+                        AppealStatus::Disputed => "disputed",
+                        AppealStatus::Cleared => "cleared",
+                    };
+                    anyhow::ensure!(
+                        status == expect_status,
+                        "appeal status mismatch: expected {expect_status}, got {status}"
+                    );
+                    let contribution_zero = entry.contribution == 0.0;
+                    anyhow::ensure!(
+                        contribution_zero == *expect_contribution_zero,
+                        "contribution mismatch: expected zero={expect_contribution_zero}, got {}",
+                        entry.contribution
+                    );
+                }
+                ScenarioStep::ResolveCommunityAppeal => {
+                    // 運営者の認容をスタブ上で確定させる。実際の審査の原子性・寄与反映は
+                    // サーバ側結合試験(post_appeal_acceptance_is_visible_after_trust_refetch)で
+                    // 固定済みのため、ここでは審査後のクライアント表示だけを確認する。
+                    let mut status = state.appeal_status.lock().expect("appeal status lock");
+                    anyhow::ensure!(
+                        *status == AppealStatus::Disputed,
+                        "only a disputed appeal can be resolved"
+                    );
+                    *status = AppealStatus::Cleared;
+                }
+                ScenarioStep::AssertCommunityIndexEntryCount {
+                    query,
+                    scope_kind,
+                    scope_id,
+                    expect_entry_count,
+                } => {
+                    // 距離利用停止の結線確認(#665): 設定前後で索引応答が変わり、解除後に戻る。
+                    let response = runtime
+                        .search_community_node_index(CommunityNodeIndexQueryRequest {
+                            base_url: base_url.clone(),
+                            query: Some(query.clone()),
+                            scope_kind: Some(match scope_kind.as_str() {
+                                "public_topic" => IndexScopeKind::PublicTopic,
+                                "private_channel" => IndexScopeKind::PrivateChannel,
+                                other => anyhow::bail!("unsupported scope kind: {other}"),
+                            }),
+                            scope_id: Some(scope_id.clone()),
+                            limit: Some(20),
+                        })
+                        .await?;
+                    anyhow::ensure!(
+                        response.entries.len() == *expect_entry_count,
+                        "index entry count mismatch: expected {expect_entry_count}, got {}",
+                        response.entries.len()
                     );
                 }
                 other => anyhow::bail!(

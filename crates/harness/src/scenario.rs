@@ -148,6 +148,27 @@ pub enum ScenarioStep {
         target_pubkey: String,
         code: String,
     },
+    /// リスク判定への匿名の異議申し立てを送り、受理された判定識別子を確認する(#704)。
+    SubmitCommunityAppeal {
+        target_pubkey: String,
+        risk_signal_id: String,
+    },
+    /// 信頼評価を再取得し、根拠の異議申し立て状態と寄与を確認する(#704)。
+    AssertTrustBasisAppeal {
+        target_pubkey: String,
+        signal_id: String,
+        expect_status: String,
+        expect_contribution_zero: bool,
+    },
+    /// 運営者の審査(認容)をスタブ上で確定させる(#704。実効果はサーバ側結合試験で固定済み)。
+    ResolveCommunityAppeal,
+    /// 索引検索の件数だけを確認する(距離利用停止の結線確認。#704)。
+    AssertCommunityIndexEntryCount {
+        query: String,
+        scope_kind: String,
+        scope_id: String,
+        expect_entry_count: usize,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

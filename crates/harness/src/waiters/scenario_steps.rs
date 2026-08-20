@@ -34,6 +34,10 @@ pub(crate) fn step_name(step: &ScenarioStep) -> &'static str {
         }
         ScenarioStep::AssertRelationOptout { .. } => "assert_relation_optout",
         ScenarioStep::AssertTrustRelationError { .. } => "assert_trust_relation_error",
+        ScenarioStep::SubmitCommunityAppeal { .. } => "submit_community_appeal",
+        ScenarioStep::AssertTrustBasisAppeal { .. } => "assert_trust_basis_appeal",
+        ScenarioStep::ResolveCommunityAppeal => "resolve_community_appeal",
+        ScenarioStep::AssertCommunityIndexEntryCount { .. } => "assert_community_index_entry_count",
     }
 }
 
