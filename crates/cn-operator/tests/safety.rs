@@ -488,3 +488,49 @@ fn assert_check(report: &kukuri_cn_operator::ReadinessReport, id: &str, status: 
         .unwrap_or_else(|| panic!("missing readiness check {id}"));
     assert_eq!(check.status, status, "{}: {}", check.id, check.detail);
 }
+
+#[test]
+fn safety_moderation_env_wiring_reaches_compose_and_terraform() {
+    // #709 / ADR 0029: safety.moderation が runtime へ注入宣言する環境変数は、
+    // 「審査済みの運用者設定と terraform で変更する」経路(compose と terraform の
+    // env テンプレート)まで実際に配線されていなければならない。宣言だけ増えて配線が
+    // 漏れると、本番でその機能を有効化できない(例: 審査画面が参照専用のまま)。
+    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+    let compose = fs::read_to_string(format!("{root}/docker-compose.community-node.yml"))
+        .expect("docker-compose.community-node.yml");
+    let tftpl = fs::read_to_string(format!(
+        "{root}/infra/terraform/modules/gcp-vm-compose/templates/community-node.env.tftpl"
+    ))
+    .expect("community-node.env.tftpl");
+    for env_name in [
+        "COMMUNITY_NODE_SAFETY_SUSPECTED_THRESHOLD",
+        "COMMUNITY_NODE_SAFETY_SUSPECTED_SIGNAL_VISIBILITY",
+        "COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW",
+    ] {
+        assert!(
+            compose.contains(env_name),
+            "docker-compose.community-node.yml に {env_name} の配線が無い"
+        );
+        assert!(
+            tftpl.contains(env_name),
+            "community-node.env.tftpl に {env_name} の配線が無い"
+        );
+    }
+
+    // repo root の operator-config.yaml は運用者ローカルの実設定(.gitignore 済み)なので
+    // CI には存在しない。存在する環境(運用者の作業環境)でだけ、moderation 節が解析でき
+    // 既定どおり無効(参照専用)であることを確認する(#709 の「既定は無効のまま」)。
+    if let Ok(production) = fs::read_to_string(format!("{root}/operator-config.yaml")) {
+        let resolved = load_and_validate(&production).expect("operator-config parses");
+        let moderation = &resolved
+            .raw
+            .safety
+            .as_ref()
+            .expect("safety section")
+            .moderation;
+        assert!(
+            !moderation.operator_review,
+            "operator_review の既定は無効(有効化は審査済みの設定変更で行う)"
+        );
+    }
+}

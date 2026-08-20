@@ -335,6 +335,11 @@ write endpointは503でfail-closedする。
 standard Composeでは `http://127.0.0.1:19090` がadmin UIで、`COMMUNITY_NODE_ADMIN_ACTOR` を空にすれば
 read-onlyになる。loopback以外へbindする場合は、先に同等の認証・firewall境界を用意する。
 
+異議申し立て審査の変更操作は、`COMMUNITY_NODE_ADMIN_ACTOR` に加えて運用者設定
+`safety.moderation.operator_review`（terraform 変数 `safety_operator_review` →
+`COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW`）の有効化が必要（既定は無効 = 参照専用。#709）。
+有効化手順は `docs/runbooks/openai-compatible-vlm.md` の「appeal / operator レビュー運用」を参照。
+
 ### 5.3 public surface
 
 ```bash

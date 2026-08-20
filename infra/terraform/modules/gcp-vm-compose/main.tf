@@ -57,6 +57,7 @@ locals {
     safety_emit_signed_events              = var.safety_emit_signed_events
     safety_suspected_threshold             = var.safety_suspected_threshold
     safety_suspected_signal_visibility     = var.safety_suspected_signal_visibility
+    safety_operator_review                 = var.safety_operator_review
     media_fetch_max_bytes                  = var.media_fetch_max_bytes
     media_fetch_timeout_secs               = var.media_fetch_timeout_secs
   }))
@@ -144,6 +145,7 @@ locals {
     safety_emit_signed_events              = var.safety_emit_signed_events
     safety_suspected_threshold             = var.safety_suspected_threshold
     safety_suspected_signal_visibility     = var.safety_suspected_signal_visibility
+    safety_operator_review                 = var.safety_operator_review
     media_fetch_max_bytes                  = var.media_fetch_max_bytes
     media_fetch_timeout_secs               = var.media_fetch_timeout_secs
     vlm_api_base_url                       = var.vlm_api_base_url
