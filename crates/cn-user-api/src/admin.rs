@@ -907,9 +907,8 @@ mod tests {
         assert!(html.contains("kukuri:topic:&lt;script&gt;"));
     }
 
-    #[test]
-    fn appeal_form_maps_only_supported_review_operations() {
-        let expected = AppealReviewVersion {
+    fn disputed_appeal_version() -> AppealReviewVersion {
+        AppealReviewVersion {
             appeal_status: "disputed".to_string(),
             category: "nsfw".to_string(),
             severity: "high".to_string(),
@@ -917,7 +916,12 @@ mod tests {
             visibility: "local".to_string(),
             expires_at: None,
             reports: vec![("report-1".to_string(), "received".to_string())],
-        };
+        }
+    }
+
+    #[test]
+    fn appeal_form_maps_only_supported_review_operations() {
+        let expected = disputed_appeal_version();
         let form = AdminActionForm {
             action: "appeal.edit".to_string(),
             target_id: "signal-1".to_string(),
@@ -938,15 +942,7 @@ mod tests {
     #[test]
     fn appeal_form_rejects_invalid_expires_at_with_japanese_message() {
         // #700: RFC 3339 でない有効期限は解析段階（確認・適用の両方が通る経路）で拒否する。
-        let expected = AppealReviewVersion {
-            appeal_status: "disputed".to_string(),
-            category: "nsfw".to_string(),
-            severity: "high".to_string(),
-            confidence: Some(90),
-            visibility: "local".to_string(),
-            expires_at: None,
-            reports: vec![("report-1".to_string(), "received".to_string())],
-        };
+        let expected = disputed_appeal_version();
         let mut form = AdminActionForm {
             action: "appeal.edit".to_string(),
             target_id: "signal-1".to_string(),
@@ -973,15 +969,7 @@ mod tests {
 
     #[test]
     fn appeal_form_rejects_out_of_range_confidence_with_japanese_message() {
-        let expected = AppealReviewVersion {
-            appeal_status: "disputed".to_string(),
-            category: "nsfw".to_string(),
-            severity: "high".to_string(),
-            confidence: Some(90),
-            visibility: "local".to_string(),
-            expires_at: None,
-            reports: vec![("report-1".to_string(), "received".to_string())],
-        };
+        let expected = disputed_appeal_version();
         // 再発行（適用時にも同じ解析を通る）でも範囲外・数値以外は拒否される。
         for invalid in ["101", "255", "abc", "-1"] {
             let form = AdminActionForm {
