@@ -256,12 +256,16 @@ pub async fn apply_appeal_review_action(
         }
         AppealReviewOperation::Reissue { correction, .. } => {
             validate_correction(correction)?;
-            let now = Utc::now().to_rfc3339();
-            sqlx::query("UPDATE cn_safety.risk_signals SET expires_at = $2 WHERE id = $1")
-                .bind(risk_signal_id)
-                .bind(&now)
-                .execute(&mut *tx)
-                .await?;
+            // #710(案A): 旧判定は失効させず、同一取引で認容(cleared)として終結させる。
+            // 失効させると trust 供給層の失効除外で根拠一覧から消え、利用者が審査の終結を
+            // 確認できない。cleared は失効させず配布に残り、受け手が寄与 0 で保持する
+            // 既存契約(#685)にそのまま乗る(訂正版と旧判定の二重寄与は起きない)。
+            sqlx::query(
+                "UPDATE cn_safety.risk_signals SET appeal_status = 'cleared' WHERE id = $1",
+            )
+            .bind(risk_signal_id)
+            .execute(&mut *tx)
+            .await?;
             let new_id = Uuid::new_v4().to_string();
             let category = enum_or_current(correction.category, &current.category)?;
             let severity = enum_or_current(correction.severity, &current.severity)?;
@@ -284,7 +288,7 @@ pub async fn apply_appeal_review_action(
             .bind(confidence.map(i16::from))
             .execute(&mut *tx)
             .await?;
-            set_linked_report_status(&mut tx, risk_signal_id, "reviewing").await?;
+            set_linked_report_status(&mut tx, risk_signal_id, "actioned").await?;
             (
                 "appeal.reissue_correction",
                 Some(json!({

@@ -84,7 +84,9 @@ cargo test -p kukuri-cn-safety-vlm --test live_endpoint -- --ignored --nocapture
 - 通常のレビューは、IAP 内のコミュニティノード運営画面で行う。変更操作には
   `COMMUNITY_NODE_ADMIN_ACTOR` と `COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW=true` の両方が必要である。
   認容・棄却・検知情報調整・訂正版再発行は、確認画面を経てリスク判定、関連通報、操作記録を
-  一つの Postgres 取引で確定する。
+  一つの Postgres 取引で確定する。訂正版再発行は旧判定を認容（寄与なし）として終結させたまま
+  根拠一覧に残し、訂正版を新規発行する（#710。利用者は再取得で終結を確認できる）。
+  `cn-cli moderation reissue` の appeal を伴わない個別再発行は従来どおり旧判定へ失効時刻を刻む。
 - **審査の有効化手順（#709。既定は無効 = 参照専用）**: browser から直接変更しない。
   1. `operator-config.yaml` の `safety.moderation.operator_review` を `true` にしてレビューを通す。
   2. terraform（`infra/terraform/envs/low-cost`）の変数 `safety_operator_review` を `true` にして

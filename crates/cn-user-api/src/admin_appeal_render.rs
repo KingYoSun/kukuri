@@ -146,7 +146,7 @@ pub(crate) fn render_appeal_preview(
         AppealReviewOperation::Reissue { correction, .. } => (
             "appeal.reissue",
             "訂正版を再発行しますか",
-            "現在のリスク判定を失効させ、指定した検知情報と公開範囲で新しいリスク判定を発行します。新しいリスク判定の失効時刻は未設定になります。異議申し立ては審査中のままです。",
+            "現在のリスク判定を認容(信頼評価への寄与なし)として終結させたまま根拠一覧に残し、指定した検知情報と公開範囲で新しいリスク判定を発行します。新しいリスク判定の失効時刻は未設定になります。関連通報は処理済みになります。",
             Some(render_change_list(&reissue_changes(correction, review))),
         ),
     };
@@ -451,6 +451,10 @@ mod tests {
             html.contains("新しいリスク判定の失効時刻は未設定になります"),
             "{html}"
         );
+        // #710(案A): 再発行は旧判定を認容として終結させる(審査中のままにしない)。
+        assert!(html.contains("認容"), "{html}");
+        assert!(html.contains("終結"), "{html}");
+        assert!(!html.contains("審査中のまま"), "{html}");
         assert!(
             html.contains(r#"<input type="hidden" name="visibility" value="public">"#),
             "{html}"

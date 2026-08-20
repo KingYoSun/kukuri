@@ -131,7 +131,7 @@ community node の moderation のうち **非決定論的 moderation（VLM / cla
 - ~~critical fail-closed 用の「高 confidence」閾値を suspected 閾値（0.7）と共通にするか、別のより厳格な値を operator が設定できるようにするか。~~ → **#420 で「共通 1 本」に決定**（§7.1）。
 - ~~VLM の image / video / text 別 capability 粒度と、OpenAI-compatible API での vision 入力（media_hint = URL / blob 参照）の受け渡し方式。~~ → **#420 で決定**: 入力は `media_hint` から `MediaFetcher` で一時 fetch した bytes を data URL（`image_url`）として渡す。capability は検知 category と media content type から導く（video/* → `NovelCsamVideoClassifier`）。§7.2。
 - タグ語彙（tag vocabulary）の標準化とサムネイル代替表示の client 挙動（ADR 0025 と共同）。
-- ~~appeal 経路の詳細~~ → **#420 で決定**: 申し立ては既存 `POST /v1/report` の optional `appeal.risk_signal_id` で受理（専用 endpoint / manifest の appeal_endpoint は新設しない。report routing の既存候補化を再利用）。`Cleared` は失効させず配布に残して伝播し、受け手の trust 供給層が除外する。訂正は「訂正 signal 再発行 + 旧 signal へ `expires_at`」。§7.3。監査ログは後続。
+- ~~appeal 経路の詳細~~ → **#420 で決定**: 申し立ては既存 `POST /v1/report` の optional `appeal.risk_signal_id` で受理（専用 endpoint / manifest の appeal_endpoint は新設しない。report routing の既存候補化を再利用）。`Cleared` は失効させず配布に残して伝播し、受け手の trust 供給層が除外する。訂正は「訂正 signal 再発行 + 旧 signal の終結」（審査経路は #710 で旧 signal を `Cleared` として終結させる。`cn-cli` の appeal を伴わない個別再発行は従来どおり旧 signal へ `expires_at`）。§7.3。監査ログは後続。
 - general moderation の細分類（nsfw / 暴力 / hate / spam）と relation 相対化の対応（ADR 0026 §6 と共同）。
 
 ## 7. 実装追補（#420、2026-07-30）
@@ -184,4 +184,11 @@ general route も同じ閾値に従う（score / confidence を持つ検知の�
   明示的有効化が必要。運用は `cn-cli moderation` コマンド。
 - `Cleared` はノード内の利用者向け信頼評価取得に実効寄与 0 の `basis` として残し、利用者が
   審査結果を再取得できるようにする。評価計算と別ノード向け取得からは除外する。
+- **訂正版再発行の終結（#710・案A）**: 審査経路の再発行は、旧 signal を失効させる代わりに
+  **同一取引で `Cleared` にして終結**させ、関連通報を処理済み（actioned）にする。失効させると
+  trust 供給層の失効除外で根拠一覧から消え、利用者が審査の終結を確認できないため。旧 signal は
+  `Cleared` の既存伝播契約（失効させず配布に残し、受け手が寄与 0 で保持）に乗り、訂正版の
+  新 signal と二重寄与しない。appeal を伴わない `cn-cli` の個別再発行（運用是正）は従来どおり
+  旧 signal へ `expires_at` を刻む。contract:
+  `post_appeal_reissue_closure_is_visible_after_trust_refetch`。
 - 署名済み moderation event は不変（是正は risk signal 側）。

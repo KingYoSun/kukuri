@@ -9,7 +9,8 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use kukuri_cn_core::{
-    AppealReviewOperation, JwtConfig, TestDatabase, apply_appeal_review_action, get_appeal_review,
+    AppealReviewOperation, JwtConfig, RiskSignalCorrection, TestDatabase,
+    apply_appeal_review_action, get_appeal_review,
 };
 use kukuri_cn_protocol::{CommunityNodeReportAppeal, CommunityNodeReportRequest};
 use kukuri_cn_trust::{MemoryRelationStore, TrustParams};
@@ -775,6 +776,124 @@ async fn attachment_appeal_is_accepted_as_media_and_disputes_the_signal() -> Res
     assert_eq!(
         after["basis"][0]["contribution"],
         before["basis"][0]["contribution"]
+    );
+
+    server.shutdown().await
+}
+
+#[tokio::test]
+async fn post_appeal_reissue_closure_is_visible_after_trust_refetch() -> Result<()> {
+    // #710(案A): 訂正版再発行を伴う審査でも、利用者は信頼評価の再取得で終結を確認できる。
+    // 旧判定は失効させず cleared(寄与 0)として根拠一覧に残り、訂正版の新判定が現れる。
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api report test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let trust = Arc::new(TrustReadState {
+        params: TrustParams::default(),
+        relation: Arc::new(MemoryRelationStore::new()),
+    });
+    let server = TestServer::spawn_with_trust(
+        admin_database_url.as_str(),
+        "cn_user_api_reissue_refetch",
+        REPORT_ENABLED_YAML,
+        trust,
+    )
+    .await?;
+    let pool = kukuri_cn_core::connect_postgres(server.database.database_url.as_str()).await?;
+    let client = Client::new();
+    let viewer = generate_keys();
+    let author = generate_keys();
+    let author_pubkey = author.public_key_hex();
+    let token = authenticate_and_consent(&client, server.base_url.as_str(), &viewer).await?;
+    let stored = kukuri_cn_core::persist_risk_signal_with_author(
+        &pool,
+        "issuer-node-1",
+        &kukuri_cn_safety::SafetyRiskSignal {
+            target: kukuri_cn_safety::RiskSignalTarget::PostId,
+            target_id: "post-reissue-refetch".to_string(),
+            category: kukuri_cn_safety::SafetyCategory::Csam,
+            severity: kukuri_cn_safety::Severity::Critical,
+            basis: kukuri_cn_safety::Basis::KnownHashMatch,
+            confidence: Some(100),
+            visibility: kukuri_cn_safety::Visibility::Local,
+            expires_at: None,
+            appeal_status: Some(kukuri_cn_safety::AppealStatus::None),
+        },
+        Some(author_pubkey.as_str()),
+    )
+    .await?;
+
+    let appeal = CommunityNodeReportRequest {
+        subject_kind: "post".to_string(),
+        subject_id: "post-reissue-refetch".to_string(),
+        capability: "moderation".to_string(),
+        reason: "false_positive".to_string(),
+        details: Some("訂正を求めます".to_string()),
+        reporter_contact: None,
+        appeal: Some(CommunityNodeReportAppeal {
+            risk_signal_id: stored.id.clone(),
+        }),
+    };
+    client
+        .post(format!("{}/v1/report", server.base_url))
+        .json(&appeal)
+        .send()
+        .await?
+        .error_for_status()?;
+
+    let expected = get_appeal_review(&pool, stored.id.as_str())
+        .await?
+        .expect("appeal review")
+        .version();
+    apply_appeal_review_action(
+        &pool,
+        "ops@kukuri.app",
+        stored.id.as_str(),
+        &AppealReviewOperation::Reissue {
+            expected,
+            correction: RiskSignalCorrection {
+                category: None,
+                severity: Some(kukuri_cn_safety::Severity::Low),
+                confidence: Some(10),
+                visibility: None,
+            },
+        },
+        true,
+    )
+    .await?;
+
+    let trust_url = format!("{}/v1/trust/users/{author_pubkey}", server.base_url);
+    let after = client
+        .get(trust_url)
+        .bearer_auth(token)
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    let basis = after["basis"].as_array().expect("basis array");
+    assert_eq!(
+        basis.len(),
+        2,
+        "旧判定(cleared)と訂正版の両方が現れる: {after}"
+    );
+    let old_entry = basis
+        .iter()
+        .find(|entry| entry["signal_id"] == serde_json::json!(stored.id))
+        .expect("旧判定が根拠一覧に残る");
+    assert_eq!(old_entry["appeal_status"], "cleared");
+    assert_eq!(old_entry["contribution"].as_f64(), Some(0.0));
+    let corrected_entry = basis
+        .iter()
+        .find(|entry| entry["signal_id"] != serde_json::json!(stored.id))
+        .expect("訂正版の新判定が現れる");
+    assert_eq!(corrected_entry["appeal_status"], "none");
+    assert!(
+        corrected_entry["contribution"]
+            .as_f64()
+            .is_some_and(|value| value < 0.0),
+        "訂正版は通常の判定として寄与する: {corrected_entry}"
     );
 
     server.shutdown().await
