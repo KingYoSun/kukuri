@@ -517,19 +517,20 @@ fn safety_moderation_env_wiring_reaches_compose_and_terraform() {
         );
     }
 
-    // 本番の運用者設定(repo root の operator-config.yaml)が moderation 節を宣言し、
-    // 既定どおり無効(参照専用)であることも固定する(#709 の「既定は無効のまま」)。
-    let production =
-        fs::read_to_string(format!("{root}/operator-config.yaml")).expect("operator-config.yaml");
-    let resolved = load_and_validate(&production).expect("production operator-config parses");
-    let moderation = &resolved
-        .raw
-        .safety
-        .as_ref()
-        .expect("safety section")
-        .moderation;
-    assert!(
-        !moderation.operator_review,
-        "operator_review の既定は無効(有効化は審査済みの設定変更で行う)"
-    );
+    // repo root の operator-config.yaml は運用者ローカルの実設定(.gitignore 済み)なので
+    // CI には存在しない。存在する環境(運用者の作業環境)でだけ、moderation 節が解析でき
+    // 既定どおり無効(参照専用)であることを確認する(#709 の「既定は無効のまま」)。
+    if let Ok(production) = fs::read_to_string(format!("{root}/operator-config.yaml")) {
+        let resolved = load_and_validate(&production).expect("operator-config parses");
+        let moderation = &resolved
+            .raw
+            .safety
+            .as_ref()
+            .expect("safety section")
+            .moderation;
+        assert!(
+            !moderation.operator_review,
+            "operator_review の既定は無効(有効化は審査済みの設定変更で行う)"
+        );
+    }
 }
