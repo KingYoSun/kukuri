@@ -85,6 +85,14 @@ cargo test -p kukuri-cn-safety-vlm --test live_endpoint -- --ignored --nocapture
   `COMMUNITY_NODE_ADMIN_ACTOR` と `COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW=true` の両方が必要である。
   認容・棄却・検知情報調整・訂正版再発行は、確認画面を経てリスク判定、関連通報、操作記録を
   一つの Postgres 取引で確定する。
+- **審査の有効化手順（#709。既定は無効 = 参照専用）**: browser から直接変更しない。
+  1. `operator-config.yaml` の `safety.moderation.operator_review` を `true` にしてレビューを通す。
+  2. terraform（`infra/terraform/envs/low-cost`）の変数 `safety_operator_review` を `true` にして
+     適用する。生成される env に `COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW=true` が入り、
+     `cn-user-api` の再起動後に審査画面から変更操作ができるようになる。
+  3. 無効へ戻すときは両方を `false` に戻して適用する（未設定・false は参照専用）。
+  standard Compose 構成では `.env.community-node` に
+  `COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW=true` を設定する。
 - 障害調査や運営画面へ接続できない場合は `cn-cli moderation` で状態を確認できる:
 
 ```bash

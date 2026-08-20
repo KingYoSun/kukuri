@@ -122,6 +122,9 @@ services:
       # COMMUNITY_NODE_ADMIN_ACTOR is explicitly configured.
       COMMUNITY_NODE_ADMIN_BIND_ADDR: ${COMMUNITY_NODE_ADMIN_BIND_ADDR:-0.0.0.0:9090}
       COMMUNITY_NODE_ADMIN_ACTOR: ${COMMUNITY_NODE_ADMIN_ACTOR:-}
+      # 異議申し立ての運営者審査(検知情報の調整・訂正再発行)。運用者設定
+      # safety.moderation.operator_review から注入する(既定 false = 参照専用。#709)。
+      COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW: ${COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW:-}
       COMMUNITY_NODE_GCP_PROJECT: ${COMMUNITY_NODE_GCP_PROJECT:-}
       # private channel indexing / index・trust read surface（#615）。flag は full-stack E2E
       # 完了まで既定 false（無効時は 404）。

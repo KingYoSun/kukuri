@@ -502,6 +502,12 @@ variable "safety_suspected_threshold" {
   default     = 0
 }
 
+variable "safety_operator_review" {
+  description = "COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW。異議申し立ての運営者審査（変更操作）を有効化する。既定 false（参照専用）。運用者設定 safety.moderation.operator_review と一致させる。"
+  type        = bool
+  default     = false
+}
+
 variable "safety_suspected_signal_visibility" {
   description = "COMMUNITY_NODE_SAFETY_SUSPECTED_SIGNAL_VISIBILITY（local / subscribed_nodes / public）。空なら未設定。"
   type        = string
