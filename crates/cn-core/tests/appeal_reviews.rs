@@ -244,8 +244,9 @@ async fn operator_review_revalidates_and_commits_state_reports_and_audit_togethe
 
         let edited =
             persist_risk_signal(&pool, ISSUER, &signal("carol", AppealStatus::None)).await?;
-        insert_community_node_appeal(&pool, ISSUER, &edited.id, &report("carol", "調整対象"))
-            .await?;
+        let edited_report =
+            insert_community_node_appeal(&pool, ISSUER, &edited.id, &report("carol", "調整対象"))
+                .await?;
         let expected = get_appeal_review(&pool, &edited.id)
             .await?
             .expect("review")
@@ -295,13 +296,47 @@ async fn operator_review_revalidates_and_commits_state_reports_and_audit_togethe
                 .fetch_all(&pool)
                 .await?;
         assert_eq!(after_ids.len(), before_ids.len() + 1);
-        assert!(
-            get_risk_signal(&pool, &edited.id)
+        // #710(案A): 旧判定は失効させず、同一取引で cleared にして終結させる。
+        // 利用者は再取得で「係争中だった判定が認容として終結した」ことを確認できる。
+        let old_signal = get_risk_signal(&pool, &edited.id)
+            .await?
+            .expect("old signal");
+        assert_eq!(
+            old_signal.signal.expires_at, None,
+            "旧判定は失効させない(失効すると根拠一覧から消え、終結を確認できない)"
+        );
+        assert_eq!(
+            old_signal.signal.appeal_status,
+            Some(AppealStatus::Cleared),
+            "旧判定は認容として終結する"
+        );
+        assert_eq!(
+            get_community_node_report(&pool, &edited_report.id)
                 .await?
-                .expect("old signal")
-                .signal
-                .expires_at
-                .is_some()
+                .expect("report")
+                .status,
+            "actioned",
+            "関連通報は訂正版発行という対応を取った処理済みになる"
+        );
+        // 再取得(trust 入力): 旧判定が cleared(寄与 0)で残り、訂正版の新判定が現れる。
+        let trust =
+            list_trust_risk_inputs(&pool, RiskSignalTarget::UserPubkey, "carol", NOW).await?;
+        assert_eq!(trust.relative.len(), 2);
+        assert!(
+            trust
+                .relative
+                .iter()
+                .any(|input| input.signal_id == edited.id
+                    && input.appeal_status == AppealStatus::Cleared),
+            "旧判定は cleared として根拠一覧に残る"
+        );
+        assert!(
+            trust
+                .relative
+                .iter()
+                .any(|input| input.signal_id != edited.id
+                    && input.appeal_status == AppealStatus::None),
+            "訂正版の新判定が根拠一覧に現れる"
         );
 
         let audit = list_operator_actions(&pool, 50, 0).await?;
