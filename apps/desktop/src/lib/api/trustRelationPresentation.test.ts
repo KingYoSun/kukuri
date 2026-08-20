@@ -8,6 +8,9 @@ describe('trustRelationUnavailableReason', () => {
     ['TRUST_READ_NOT_CONFIGURED', 'trust_not_configured'],
     ['TRUST_READ_NOT_ACTIVATED', 'trust_not_activated'],
     ['RELATION_NOT_FOUND', 'relation_unavailable'],
+    // #712: 距離利用停止の未提供・失効を安定コードで判別する。
+    ['RELATION_VISIBILITY_NOT_CONFIGURED', 'relation_visibility_not_configured'],
+    ['RELATION_VISIBILITY_NOT_ACTIVATED', 'relation_visibility_not_activated'],
     // #705: 認証・同意の未達は索引画面と同じ安定理由で案内する。
     ['AUTH_REQUIRED', 'auth_required'],
     ['CONSENT_REQUIRED', 'consent_required'],

@@ -66,6 +66,8 @@
       "trust_not_configured": "この Community Node は trust 情報の読み取りを提供していません。",
       "trust_not_activated": "現在のノードセッションでは trust 情報が有効になっていません。",
       "relation_unavailable": "この Community Node では relation 情報を利用できません。理由は推測・開示しません。",
+      "relation_visibility_not_configured": "この Community Node は距離利用停止を提供していません。",
+      "relation_visibility_not_activated": "この Community Node の距離利用停止は一時的に利用できません。",
       "auth_required": "選択した Community Node への認証が必要です。",
       "consent_required": "選択した Community Node の必須同意が必要です。",
       "response_mismatch": "ノードの応答が別の利用者を対象にしていたため、内容を採用しませんでした。"

@@ -8,7 +8,9 @@ use axum::{
     routing::{get, post},
 };
 use kukuri_cn_protocol::{
-    ApiErrorBody, IndexEntryView, IndexQueryParams, IndexQueryResponse, IndexScopeKind,
+    AUTH_REQUIRED_CODE, ApiErrorBody, INDEX_QUERY_NOT_ACTIVATED_CODE,
+    INDEX_QUERY_NOT_CONFIGURED_CODE, IndexEntryView, IndexQueryParams, IndexQueryResponse,
+    IndexScopeKind,
 };
 use kukuri_desktop_runtime::{CommunityNodeIndexQueryRequest, SetCommunityNodeConfigNode};
 use tokio::sync::Mutex;
@@ -78,7 +80,7 @@ async fn index_query(
         return (
             StatusCode::UNAUTHORIZED,
             Json(ApiErrorBody {
-                code: "AUTH_REQUIRED".to_string(),
+                code: AUTH_REQUIRED_CODE.to_string(),
                 message: "authentication is required".to_string(),
             }),
         )
@@ -88,7 +90,7 @@ async fn index_query(
         return (
             StatusCode::NOT_FOUND,
             Json(ApiErrorBody {
-                code: "INDEX_QUERY_NOT_CONFIGURED".to_string(),
+                code: INDEX_QUERY_NOT_CONFIGURED_CODE.to_string(),
                 message: "index query is not configured".to_string(),
             }),
         )
@@ -96,9 +98,10 @@ async fn index_query(
     }
     if params.q.as_deref() == Some("inactive") {
         return (
-            StatusCode::SERVICE_UNAVAILABLE,
+            // 実サーバ(cn-user-api)は有効化失効を 404 で返す。契約を一致させる(#712)。
+            StatusCode::NOT_FOUND,
             Json(ApiErrorBody {
-                code: "INDEX_QUERY_NOT_ACTIVATED".to_string(),
+                code: INDEX_QUERY_NOT_ACTIVATED_CODE.to_string(),
                 message: "index query activation is not current".to_string(),
             }),
         )

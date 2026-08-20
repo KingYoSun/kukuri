@@ -12,9 +12,10 @@ use kukuri_cn_core::{
 };
 use kukuri_cn_indexer::IndexQuery;
 use kukuri_cn_protocol::{
-    CHANNEL_MEMBERSHIP_REQUIRED_CODE, CHANNEL_MEMBERSHIP_SECRET_HEADER, IndexEntryView,
-    IndexQueryParams, IndexQueryResponse, SubmitIndexingRequestRequest,
-    SubmitIndexingRequestResponse,
+    CHANNEL_MEMBERSHIP_REQUIRED_CODE, CHANNEL_MEMBERSHIP_SECRET_HEADER,
+    INDEX_QUERY_NOT_ACTIVATED_CODE, INDEX_QUERY_NOT_CONFIGURED_CODE, IndexEntryView,
+    IndexQueryParams, IndexQueryResponse, RELATION_VISIBILITY_NOT_CONFIGURED_CODE,
+    SubmitIndexingRequestRequest, SubmitIndexingRequestResponse,
 };
 
 use crate::errors::{IndexingError, IndexingOperation, indexing_error};
@@ -127,21 +128,21 @@ async fn require_index_query(
     let Some(index_query) = state.index_query.clone() else {
         return Err(ApiError::new(
             StatusCode::NOT_FOUND,
-            "INDEX_QUERY_NOT_CONFIGURED",
+            INDEX_QUERY_NOT_CONFIGURED_CODE,
             "this community node does not provide index queries",
         ));
     };
     let Some(relation_visibility) = state.relation_visibility.clone() else {
         return Err(ApiError::new(
             StatusCode::NOT_FOUND,
-            "RELATION_VISIBILITY_NOT_CONFIGURED",
+            RELATION_VISIBILITY_NOT_CONFIGURED_CODE,
             "this community node does not provide relation distance opt-out",
         ));
     };
     if !state.readiness_activation_is_valid().await {
         return Err(ApiError::new(
             StatusCode::NOT_FOUND,
-            "INDEX_QUERY_NOT_ACTIVATED",
+            INDEX_QUERY_NOT_ACTIVATED_CODE,
             "this community node index activation is not current",
         ));
     }

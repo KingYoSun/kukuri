@@ -4,6 +4,8 @@ export type TrustRelationUnavailableReason =
   | 'trust_not_configured'
   | 'trust_not_activated'
   | 'relation_unavailable'
+  | 'relation_visibility_not_configured'
+  | 'relation_visibility_not_activated'
   | 'auth_required'
   | 'consent_required'
   | 'response_mismatch'
@@ -21,6 +23,11 @@ export function trustRelationUnavailableReason(error: unknown): TrustRelationUna
       return 'trust_not_activated';
     case 'RELATION_NOT_FOUND':
       return 'relation_unavailable';
+    // 距離利用停止(relation visibility)の未提供・失効(#712)。
+    case 'RELATION_VISIBILITY_NOT_CONFIGURED':
+      return 'relation_visibility_not_configured';
+    case 'RELATION_VISIBILITY_NOT_ACTIVATED':
+      return 'relation_visibility_not_activated';
     case 'TRUST_RELATION_RESPONSE_MISMATCH':
       // 応答本文の対象が要求した利用者と一致しない(#699)。内容は採用しない。
       return 'response_mismatch';

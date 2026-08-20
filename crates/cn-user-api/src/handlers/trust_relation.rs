@@ -11,8 +11,10 @@ use kukuri_cn_core::{
     set_relation_optout,
 };
 use kukuri_cn_protocol::{
-    RelationNeighborsResponse, RelationOptoutResponse, RelationReadResponse, TrustUserReadResponse,
-    normalize_pubkey,
+    RELATION_NOT_FOUND_CODE, RELATION_VISIBILITY_NOT_ACTIVATED_CODE,
+    RELATION_VISIBILITY_NOT_CONFIGURED_CODE, RelationNeighborsResponse, RelationOptoutResponse,
+    RelationReadResponse, TRUST_READ_NOT_ACTIVATED_CODE, TRUST_READ_NOT_CONFIGURED_CODE,
+    TrustUserReadResponse, normalize_pubkey,
 };
 use kukuri_cn_safety::RiskSignalTarget;
 use kukuri_cn_trust::{
@@ -37,14 +39,14 @@ async fn require_trust_read(
     let Some(trust_read) = state.trust_read.clone() else {
         return Err(ApiError::new(
             StatusCode::NOT_FOUND,
-            "TRUST_READ_NOT_CONFIGURED",
+            TRUST_READ_NOT_CONFIGURED_CODE,
             "this community node does not provide trust / relation reads",
         ));
     };
     if !state.readiness_activation_is_valid().await {
         return Err(ApiError::new(
             StatusCode::NOT_FOUND,
-            "TRUST_READ_NOT_ACTIVATED",
+            TRUST_READ_NOT_ACTIVATED_CODE,
             "this community node trust activation is not current",
         ));
     }
@@ -61,14 +63,14 @@ async fn require_relation_visibility(
     let Some(relation_visibility) = state.relation_visibility.clone() else {
         return Err(ApiError::new(
             StatusCode::NOT_FOUND,
-            "RELATION_VISIBILITY_NOT_CONFIGURED",
+            RELATION_VISIBILITY_NOT_CONFIGURED_CODE,
             "this community node does not provide relation distance opt-out",
         ));
     };
     if !state.readiness_activation_is_valid().await {
         return Err(ApiError::new(
             StatusCode::NOT_FOUND,
-            "RELATION_VISIBILITY_NOT_ACTIVATED",
+            RELATION_VISIBILITY_NOT_ACTIVATED_CODE,
             "this community node relation activation is not current",
         ));
     }
@@ -140,14 +142,14 @@ pub(crate) async fn trust_pull(
     let Some(_) = state.trust_read.clone() else {
         return Err(ApiError::new(
             StatusCode::NOT_FOUND,
-            "TRUST_READ_NOT_CONFIGURED",
+            TRUST_READ_NOT_CONFIGURED_CODE,
             "this community node does not provide trust / relation reads",
         ));
     };
     if !state.readiness_activation_is_valid().await {
         return Err(ApiError::new(
             StatusCode::NOT_FOUND,
-            "TRUST_READ_NOT_ACTIVATED",
+            TRUST_READ_NOT_ACTIVATED_CODE,
             "this community node trust activation is not current",
         ));
     }
@@ -191,7 +193,7 @@ pub(crate) async fn relation_user_read(
     let relation_visibility = state.relation_visibility.clone().ok_or_else(|| {
         ApiError::new(
             StatusCode::NOT_FOUND,
-            "RELATION_VISIBILITY_NOT_CONFIGURED",
+            RELATION_VISIBILITY_NOT_CONFIGURED_CODE,
             "this community node does not provide relation distance opt-out",
         )
     })?;
@@ -199,7 +201,7 @@ pub(crate) async fn relation_user_read(
     let not_found = || {
         ApiError::new(
             StatusCode::NOT_FOUND,
-            "RELATION_NOT_FOUND",
+            RELATION_NOT_FOUND_CODE,
             "no relation observed for this pair",
         )
     };
@@ -258,7 +260,7 @@ pub(crate) async fn relation_neighbors(
     let relation_visibility = state.relation_visibility.clone().ok_or_else(|| {
         ApiError::new(
             StatusCode::NOT_FOUND,
-            "RELATION_VISIBILITY_NOT_CONFIGURED",
+            RELATION_VISIBILITY_NOT_CONFIGURED_CODE,
             "this community node does not provide relation distance opt-out",
         )
     })?;

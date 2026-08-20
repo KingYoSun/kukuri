@@ -299,6 +299,9 @@ async fn index_query_is_not_found_when_not_configured() -> Result<()> {
             .send()
             .await?;
         assert_eq!(response.status(), StatusCode::NOT_FOUND, "{path}");
+        // 安定コードは通信契約(#712)。名前の変更はこの試験で検知する。
+        let body: serde_json::Value = response.json().await?;
+        assert_eq!(body["code"], "INDEX_QUERY_NOT_CONFIGURED", "{path}");
     }
     server.shutdown().await
 }
