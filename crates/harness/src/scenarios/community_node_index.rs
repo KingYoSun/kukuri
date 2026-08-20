@@ -160,6 +160,7 @@ fn request(base_url: &str) -> CommunityNodeIndexQueryRequest {
         query: None,
         scope_kind: None,
         scope_id: None,
+        topic_id: None,
         limit: Some(20),
     }
 }

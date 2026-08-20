@@ -14,11 +14,12 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use kukuri_cn_core::{
-    IndexEntryStore, IndexScopeKind, JwtConfig, MemoryIndexEntryStore, NewIndexEntry, TestDatabase,
+    ChannelSecretCipher, IndexEntryStore, IndexScopeKind, JwtConfig, MemoryIndexEntryStore,
+    NewIndexEntry, TestDatabase, connect_postgres, register_channel_secret,
 };
 use kukuri_cn_indexer::projection::{IndexProjection, IndexedEntry, MemoryIndexProjection};
 use kukuri_cn_indexer::query::FailClosedIndexQuery;
-use kukuri_cn_protocol::build_auth_envelope_json;
+use kukuri_cn_protocol::{CHANNEL_MEMBERSHIP_SECRET_HEADER, build_auth_envelope_json};
 use kukuri_cn_safety::provider::SubjectKind;
 use kukuri_cn_safety::{ReasonCode, SafetyAction, SafetyVerdict};
 use kukuri_cn_safety_runtime::{MemorySafetyArtifactStore, SafetyArtifactStore};
@@ -81,6 +82,24 @@ impl MemoryIndex {
         author_pubkey: &str,
         text: &str,
     ) -> Result<()> {
+        self.seed_allow_in(
+            IndexScopeKind::PublicTopic,
+            scope_id,
+            object_id,
+            author_pubkey,
+            text,
+        )
+        .await
+    }
+
+    async fn seed_allow_in(
+        &self,
+        scope_kind: IndexScopeKind,
+        scope_id: &str,
+        object_id: &str,
+        author_pubkey: &str,
+        text: &str,
+    ) -> Result<()> {
         let verdict_id = self
             .store
             .persist_verdict(
@@ -91,7 +110,7 @@ impl MemoryIndex {
             .await?;
         self.entries
             .upsert_entry(&NewIndexEntry {
-                scope_kind: IndexScopeKind::PublicTopic,
+                scope_kind,
                 scope_id: scope_id.to_string(),
                 object_id: object_id.to_string(),
                 author_pubkey: author_pubkey.to_string(),
@@ -104,7 +123,7 @@ impl MemoryIndex {
             .await?;
         self.projection
             .upsert_entry(&IndexedEntry {
-                scope_kind: IndexScopeKind::PublicTopic,
+                scope_kind,
                 scope_id: scope_id.to_string(),
                 object_id: object_id.to_string(),
                 author_pubkey: author_pubkey.to_string(),
@@ -144,6 +163,16 @@ impl TestServer {
         prefix: &str,
         index: Option<Arc<FailClosedIndexQuery>>,
     ) -> Result<Self> {
+        Self::spawn_with_channel_secret_key(admin_database_url, prefix, index, None).await
+    }
+
+    /// channel secret の at-rest 暗号鍵つきで起動する(#711 の所属証明検証用)。
+    async fn spawn_with_channel_secret_key(
+        admin_database_url: &str,
+        prefix: &str,
+        index: Option<Arc<FailClosedIndexQuery>>,
+        channel_secret_key: Option<&str>,
+    ) -> Result<Self> {
         let database = TestDatabase::create(admin_database_url, prefix).await?;
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
@@ -161,7 +190,7 @@ impl TestServer {
             connectivity_urls: vec!["http://127.0.0.1:13340".to_string()],
             jwt_config: JwtConfig::new("kukuri-cn-tests", "test-secret", 3600),
             operator_config_path: None,
-            channel_secret_key: None,
+            channel_secret_key: channel_secret_key.map(str::to_string),
             index_query_enabled: false,
             trust_read_enabled: false,
             relation_distance_optout_min_proximity: None,
@@ -547,6 +576,116 @@ async fn index_query_validates_parameters() -> Result<()> {
         .send()
         .await?;
     assert_eq!(bad_kind.status(), StatusCode::BAD_REQUEST);
+
+    server.shutdown().await
+}
+
+#[tokio::test]
+async fn private_channel_reads_are_limited_to_members_with_secret_proof() -> Result<()> {
+    // #711 / ADR 0025 §6.3: 非公開チャンネルの索引は参加者に閉じる。
+    // - 横断読み(search_all / discovery / recommendations)には項目も scope_id も出ない。
+    // - 範囲指定読みは channel secret の提示(所属証明)を検証し、未提示・不一致・未登録は
+    //   同一の安定コード 403 CHANNEL_MEMBERSHIP_REQUIRED で拒否する(存在の秘匿)。
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api index query test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let index = memory_index();
+    let author = generate_keys().public_key_hex();
+    index
+        .seed_allow("rust", "post-public", author.as_str(), "tokio public post")
+        .await?;
+    index
+        .seed_allow_in(
+            IndexScopeKind::PrivateChannel,
+            "secret-room",
+            "post-private",
+            author.as_str(),
+            "tokio private post",
+        )
+        .await?;
+
+    let key_material = "index-membership-test-key-material-0123456789";
+    let server = TestServer::spawn_with_channel_secret_key(
+        admin_database_url.as_str(),
+        "cn_index_query_membership",
+        Some(index.query.clone()),
+        Some(key_material),
+    )
+    .await?;
+    let namespace_secret = "2".repeat(64);
+    {
+        // サーバと同じ鍵 material から cipher を組み、所属者の申請済み capability を再現する。
+        let pool = connect_postgres(server.database.database_url.as_str()).await?;
+        let cipher = ChannelSecretCipher::from_key_material(key_material)?;
+        register_channel_secret(&pool, &cipher, "secret-room", namespace_secret.as_str()).await?;
+    }
+    let client = Client::new();
+    let keys = generate_keys();
+    let token = authenticate_and_consent(&client, &server.base_url, &keys).await?;
+
+    // 横断読みには非公開チャンネルの項目も識別子も出ない。
+    for path in [
+        "/v1/index/search?q=tokio",
+        "/v1/index/discovery",
+        "/v1/index/recommendations",
+    ] {
+        let response = client
+            .get(format!("{}{path}", server.base_url))
+            .bearer_auth(token.as_str())
+            .send()
+            .await?;
+        assert_eq!(response.status(), StatusCode::OK, "{path}");
+        let body = response.json::<serde_json::Value>().await?;
+        assert_eq!(entry_ids(&body), vec!["post-public".to_string()], "{path}");
+        assert!(
+            !body.to_string().contains("secret-room"),
+            "{path}: 非公開チャンネルの識別子を漏らさない"
+        );
+    }
+
+    // 範囲指定読み: 未提示・不一致・未登録チャンネルは同一コードで拒否する。
+    let scoped_search =
+        "/v1/index/search?scope_kind=private_channel&scope_id=secret-room&q=tokio".to_string();
+    let scoped_discovery =
+        "/v1/index/discovery?scope_kind=private_channel&scope_id=secret-room".to_string();
+    let unregistered =
+        "/v1/index/search?scope_kind=private_channel&scope_id=no-such-room&q=tokio".to_string();
+    let wrong_secret = "3".repeat(64);
+    for (path, secret) in [
+        (scoped_search.as_str(), None),
+        (scoped_search.as_str(), Some(wrong_secret.as_str())),
+        (scoped_discovery.as_str(), None),
+        (unregistered.as_str(), Some(namespace_secret.as_str())),
+    ] {
+        let mut request = client
+            .get(format!("{}{path}", server.base_url))
+            .bearer_auth(token.as_str());
+        if let Some(secret) = secret {
+            request = request.header(CHANNEL_MEMBERSHIP_SECRET_HEADER, secret);
+        }
+        let response = request.send().await?;
+        assert_eq!(
+            response.status(),
+            StatusCode::FORBIDDEN,
+            "{path} secret={secret:?}"
+        );
+        let body = response.json::<serde_json::Value>().await?;
+        assert_eq!(body["code"], "CHANNEL_MEMBERSHIP_REQUIRED");
+    }
+
+    // 正しい secret を提示した所属者は従来どおり範囲指定で読める。
+    for path in [scoped_search.as_str(), scoped_discovery.as_str()] {
+        let response = client
+            .get(format!("{}{path}", server.base_url))
+            .bearer_auth(token.as_str())
+            .header(CHANNEL_MEMBERSHIP_SECRET_HEADER, namespace_secret.as_str())
+            .send()
+            .await?;
+        assert_eq!(response.status(), StatusCode::OK, "{path}");
+        let body = response.json::<serde_json::Value>().await?;
+        assert_eq!(entry_ids(&body), vec!["post-private".to_string()], "{path}");
+    }
 
     server.shutdown().await
 }

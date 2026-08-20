@@ -96,6 +96,19 @@ impl IndexScopeKind {
     }
 }
 
+/// 非公開チャンネル範囲指定読みの所属証明(channel secret hex)を運ぶ HTTP ヘッダ名(#711)。
+///
+/// 秘密値を URL クエリへ載せるとアクセスログに露出するため、専用ヘッダで送る。
+/// 提示された値はサーバが保存済み capability の復号値と照合する(ADR 0025 §6.3
+/// 「秘密値の提示が権限の証明」を read にも適用)。
+pub const CHANNEL_MEMBERSHIP_SECRET_HEADER: &str = "x-kukuri-channel-secret";
+
+/// 非公開チャンネル範囲指定読みで所属証明が満たされないときの安定コード(#711)。
+///
+/// 未提示・不一致・チャンネル未登録・暗号鍵未設定を区別せず同一コード(403)で返し、
+/// 非所属者に索引の存在有無を漏らさない。
+pub const CHANNEL_MEMBERSHIP_REQUIRED_CODE: &str = "CHANNEL_MEMBERSHIP_REQUIRED";
+
 /// Query parameters shared by search, discovery, and recommendations.
 ///
 /// `scope_kind` and `scope_id` must either both be present or both be absent.

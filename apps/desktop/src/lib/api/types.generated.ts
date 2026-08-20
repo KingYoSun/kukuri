@@ -191,7 +191,12 @@ export type CommunityNodeManifestFetchStatus = "ok" | "absent";
 
 export type CommunityNodeManifestFetch = { status: CommunityNodeManifestFetchStatus, manifest?: CommunityNodeManifest | null, };
 
-export type CommunityNodeIndexQueryRequest = { base_url: string, query?: string | null, scope_kind?: IndexScopeKind | null, scope_id?: string | null, limit?: number | null, };
+export type CommunityNodeIndexQueryRequest = { base_url: string, query?: string | null, scope_kind?: IndexScopeKind | null, scope_id?: string | null, 
+/**
+ * scope_kind が private_channel のとき必須。所属証明(channel secret)を参加中
+ * チャンネルの capability から引くために使う(#711)。
+ */
+topic_id?: string | null, limit?: number | null, };
 
 export type CommunityNodeIndexQueryError = { code: string, message: string, status?: number | null, retry_after_seconds?: number | null, };
 

@@ -519,6 +519,7 @@ pub(crate) async fn run_community_node_trust_relation_client(
                                 other => anyhow::bail!("unsupported scope kind: {other}"),
                             }),
                             scope_id: Some(scope_id.clone()),
+                            topic_id: None,
                             limit: Some(20),
                         })
                         .await?;

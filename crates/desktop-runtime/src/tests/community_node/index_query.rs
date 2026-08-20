@@ -12,6 +12,7 @@ type ForcedIndexError = (StatusCode, ApiErrorBody, Option<&'static str>);
 struct MockIndexQueryState {
     expected_token: Arc<Mutex<String>>,
     requests: Arc<Mutex<Vec<(String, IndexQueryParams)>>>,
+    channel_secret_headers: Arc<Mutex<Vec<Option<String>>>>,
     indexing_requests: Arc<Mutex<Vec<SubmitIndexingRequestRequest>>>,
     forced_error: Arc<Mutex<Option<ForcedIndexError>>>,
     unauthorized_remaining: Arc<AtomicUsize>,
@@ -78,6 +79,12 @@ async fn mock_index_query(
 
     let path = uri.path().to_string();
     state.requests.lock().await.push((path, params.clone()));
+    state.channel_secret_headers.lock().await.push(
+        headers
+            .get("x-kukuri-channel-secret")
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string),
+    );
     let expected = state.expected_token.lock().await.clone();
     let expected_header = format!("Bearer {expected}");
     if headers
@@ -170,6 +177,7 @@ async fn index_runtime(
     let index = MockIndexQueryState {
         expected_token,
         requests: Arc::new(Mutex::new(Vec::new())),
+        channel_secret_headers: Arc::new(Mutex::new(Vec::new())),
         indexing_requests: Arc::new(Mutex::new(Vec::new())),
         forced_error: Arc::new(Mutex::new(forced_error)),
         unauthorized_remaining: Arc::new(AtomicUsize::new(0)),
@@ -231,6 +239,7 @@ fn scoped_request(base_url: &str) -> CommunityNodeIndexQueryRequest {
         query: Some("hello".to_string()),
         scope_kind: Some(IndexScopeKind::PublicTopic),
         scope_id: Some("rust".to_string()),
+        topic_id: None,
         limit: Some(10),
     }
 }
@@ -644,6 +653,76 @@ async fn community_node_private_indexing_stops_before_secret_when_consent_is_pen
     // 秘密値の取得(PRIVATE_CHANNEL_CAPABILITY_UNAVAILABLE)より前に同意で止まる。
     assert_eq!(error.code, "CONSENT_REQUIRED");
     assert!(state.indexing_requests.lock().await.is_empty());
+    runtime.shutdown().await;
+    server.abort();
+}
+
+#[tokio::test]
+async fn community_node_private_scoped_query_attaches_membership_proof() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let (runtime, base_url, _managed, state, server, _dir) = index_runtime(None).await;
+    let topic = "kukuri:topic:private-scope";
+    let channel = runtime
+        .create_private_channel(CreatePrivateChannelRequest {
+            topic: topic.to_string(),
+            label: "searchable private channel".to_string(),
+            audience_kind: ChannelAudienceKind::InviteOnly,
+        })
+        .await
+        .expect("create private channel");
+
+    // #711: topic_id なしの非公開チャンネル範囲指定は HTTP 前に拒否する。
+    let error = runtime
+        .search_community_node_index(CommunityNodeIndexQueryRequest {
+            scope_kind: Some(IndexScopeKind::PrivateChannel),
+            scope_id: Some(channel.channel_id.clone()),
+            ..scoped_request(base_url.as_str())
+        })
+        .await
+        .expect_err("missing topic_id should fail");
+    assert_eq!(error.code, "INVALID_INDEX_QUERY");
+    // 参加していないチャンネルは所属証明を引けないため HTTP 前に拒否する。
+    let error = runtime
+        .search_community_node_index(CommunityNodeIndexQueryRequest {
+            scope_kind: Some(IndexScopeKind::PrivateChannel),
+            scope_id: Some("not-joined-channel".to_string()),
+            topic_id: Some(topic.to_string()),
+            ..scoped_request(base_url.as_str())
+        })
+        .await
+        .expect_err("not joined channel should fail");
+    assert_eq!(error.code, "PRIVATE_CHANNEL_CAPABILITY_UNAVAILABLE");
+    assert!(state.requests.lock().await.is_empty());
+
+    // 参加中チャンネルの範囲指定は所属証明(channel secret)をヘッダで同伴する。
+    runtime
+        .search_community_node_index(CommunityNodeIndexQueryRequest {
+            scope_kind: Some(IndexScopeKind::PrivateChannel),
+            scope_id: Some(channel.channel_id.clone()),
+            topic_id: Some(topic.to_string()),
+            ..scoped_request(base_url.as_str())
+        })
+        .await
+        .expect("private scoped search");
+    let headers = state.channel_secret_headers.lock().await.clone();
+    assert_eq!(headers.len(), 1);
+    assert!(
+        headers[0]
+            .as_deref()
+            .is_some_and(|secret| !secret.is_empty()),
+        "所属証明ヘッダを同伴する"
+    );
+    let requests = state.requests.lock().await.clone();
+    assert_eq!(requests[0].1.scope_kind.as_deref(), Some("private_channel"));
+
+    // 公開範囲の検索には秘密値ヘッダを付けない。
+    runtime
+        .search_community_node_index(scoped_request(base_url.as_str()))
+        .await
+        .expect("public scoped search");
+    let headers = state.channel_secret_headers.lock().await.clone();
+    assert_eq!(headers.len(), 2);
+    assert!(headers[1].is_none());
     runtime.shutdown().await;
     server.abort();
 }

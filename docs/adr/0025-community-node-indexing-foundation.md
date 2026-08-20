@@ -140,6 +140,7 @@ content が index に入る条件は次の AND とする:
 - 基本 UX は **トピック毎の検索窓**（topic-scoped search）。あるトピックの中で検索するのが既定の体験。
 - **CN ベースのトピック横断検索（cross-topic search）は別画面**として用意する。supported topic set 全体を対象に、node の authority scope 内で横断検索する。
 - どちらの検索面も §2.2 の supported-topic scope と §2.5 の safety ゲートに従う（横断検索でも supported 外 topic / 非 `allow` content は出ない）。
+- **横断検索の対象は supported set のうち公開 scope（public topic）全体**（#711 で明確化）。非公開チャンネルの索引は §6.3 の閲覧境界（チャンネル参加者に閉じる）に従い、横断検索・発見・推薦には項目も識別子も出さない。非公開チャンネルの読み口は所属証明つきの範囲指定読みだけである。「supported set 全体」と「参加者に閉じる」は矛盾しない: 横断面は公開 scope の集合、非公開 scope は範囲指定面、と読み口を分ける。
 
 ## 3. Consequences
 
@@ -191,7 +192,8 @@ index する content（post 本文・media タグ・room メタデータ）を c
 - **解決**: **indexing リクエスト＝secret 送信**とする。リクエスト時に channel secret（capability）を CN に渡し、CN はそれを登録して **Model C と同じ仕組みで `channel::` replica を sync** する。private channel 専用の別 ingestion 経路は新設せず、C に capability を注入するだけで解決する。
 - **リクエスト権限**: indexing をリクエストできる権限は **channel の既存権限モデルをそのまま応用**する（channel の secret にアクセスできる権限者が、その secret を提示して indexing をリクエストできる）。CN は新しい権限体系を作らない。
 - scope / consent: private channel index は channel メンバー + その CN の authority に閉じ、risk signal / visibility は `local` 寄り（trust-semantics）。
-- contract: `index_private_channel_requires_submitted_channel_secret` / `index_private_channel_request_authz_reuses_channel_permission`。
+- **閲覧境界（read 側。#711）**: 「channel メンバーに閉じる」は読み口にも適用する。範囲指定読み（`scope_kind = private_channel` の search / discovery）は、申請と同じ「secret を提示できること自体が権限の証明」の原則で **channel secret の提示を所属証明として要求**し、保存済み capability の復号値と定数時間比較で照合する。秘密値はアクセスログへ露出する URL クエリでなく専用ヘッダ（`x-kukuri-channel-secret`。`cn-protocol` に定数化）で送る。未提示・不一致・チャンネル未登録・暗号鍵未設定は同一の安定コード `CHANNEL_MEMBERSHIP_REQUIRED`（403）で拒否し、非所属者に索引の存在有無を漏らさない。横断読み（scope 無指定）には非公開チャンネルの項目を出さない（§2.7）。
+- contract: `index_private_channel_requires_submitted_channel_secret` / `index_private_channel_request_authz_reuses_channel_permission` / `cross_scope_reads_exclude_private_channel_entries` / `private_channel_reads_are_limited_to_members_with_secret_proof`。
 
 ### 6.4 課題 2 の解決: relay validation（relay 抜き CN）
 

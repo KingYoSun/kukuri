@@ -2,8 +2,9 @@ use std::fmt;
 
 use chrono::Utc;
 use kukuri_cn_protocol::{
-    ApiErrorBody, INDEX_DISCOVERY_PATH, INDEX_RECOMMENDATIONS_PATH, INDEX_SEARCH_PATH,
-    IndexQueryParams, IndexQueryResponse, IndexScopeKind, normalize_http_url,
+    ApiErrorBody, CHANNEL_MEMBERSHIP_SECRET_HEADER, INDEX_DISCOVERY_PATH,
+    INDEX_RECOMMENDATIONS_PATH, INDEX_SEARCH_PATH, IndexQueryParams, IndexQueryResponse,
+    IndexScopeKind, normalize_http_url,
 };
 use kukuri_store::{ContentObservationRow, ContentObservationStore};
 use reqwest::{StatusCode, header::RETRY_AFTER};
@@ -20,6 +21,9 @@ pub struct CommunityNodeIndexQueryRequest {
     pub query: Option<String>,
     pub scope_kind: Option<IndexScopeKind>,
     pub scope_id: Option<String>,
+    /// scope_kind が private_channel のとき必須。所属証明(channel secret)を参加中
+    /// チャンネルの capability から引くために使う(#711)。
+    pub topic_id: Option<String>,
     pub limit: Option<usize>,
 }
 
@@ -157,6 +161,40 @@ impl DesktopRuntime {
                 "community node required policies must be accepted before index queries",
             ));
         }
+        // 非公開チャンネルの範囲指定は所属証明(channel secret)を同伴する(#711)。
+        // 参加中でない(capability が無い)チャンネルへは送信前に拒否する。
+        // 秘密値の組み立ては同意確認の後に行う(#698 と同じ順序)。
+        let channel_secret = if request.scope_kind == Some(IndexScopeKind::PrivateChannel) {
+            let channel_id = request
+                .scope_id
+                .as_deref()
+                .map(str::trim)
+                .unwrap_or_default();
+            let topic_id = request
+                .topic_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| {
+                    CommunityNodeIndexQueryError::new(
+                        "INVALID_INDEX_QUERY",
+                        "topic_id is required for private channel scoped queries",
+                    )
+                })?;
+            let secret = self
+                .app_service
+                .private_channel_indexing_secret(topic_id, channel_id)
+                .await
+                .map_err(|error| {
+                    CommunityNodeIndexQueryError::new(
+                        "PRIVATE_CHANNEL_CAPABILITY_UNAVAILABLE",
+                        error.to_string(),
+                    )
+                })?;
+            Some(secret)
+        } else {
+            None
+        };
         let token = load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())
             .map_err(|error| {
                 CommunityNodeIndexQueryError::new("AUTH_TOKEN_LOAD_FAILED", error.to_string())
@@ -182,6 +220,7 @@ impl DesktopRuntime {
                 operation,
                 &params,
                 token.access_token.as_str(),
+                channel_secret.as_deref(),
             )
             .await
         {
@@ -200,6 +239,7 @@ impl DesktopRuntime {
                     operation,
                     &params,
                     refreshed.access_token.as_str(),
+                    channel_secret.as_deref(),
                 )
                 .await
             }
@@ -249,19 +289,23 @@ impl DesktopRuntime {
         operation: IndexOperation,
         params: &IndexQueryParams,
         access_token: &str,
+        channel_secret: Option<&str>,
     ) -> Result<IndexQueryResponse, CommunityNodeIndexQueryError> {
         let client = community_node_http_client().map_err(|error| {
             CommunityNodeIndexQueryError::new("INDEX_HTTP_CLIENT_FAILED", error.to_string())
         })?;
-        let response = client
+        let mut request_builder = client
             .get(format!("{base_url}{}", operation.path()))
             .bearer_auth(access_token)
-            .query(params)
-            .send()
-            .await
-            .map_err(|error| {
-                CommunityNodeIndexQueryError::new("INDEX_QUERY_TRANSPORT_FAILED", error.to_string())
-            })?;
+            .query(params);
+        // 所属証明は URL クエリでなくヘッダで送る(アクセスログへの露出を避ける。#711)。
+        if let Some(channel_secret) = channel_secret {
+            request_builder =
+                request_builder.header(CHANNEL_MEMBERSHIP_SECRET_HEADER, channel_secret);
+        }
+        let response = request_builder.send().await.map_err(|error| {
+            CommunityNodeIndexQueryError::new("INDEX_QUERY_TRANSPORT_FAILED", error.to_string())
+        })?;
         let status = response.status();
         let retry_after_seconds = response
             .headers()

@@ -43,6 +43,7 @@ type IndexRequestContext = {
   operation: IndexOperation;
   scopeKind: CommunityNodeIndexQueryRequest['scope_kind'];
   scopeId: CommunityNodeIndexQueryRequest['scope_id'];
+  topicId: CommunityNodeIndexQueryRequest['topic_id'];
 };
 
 type IndexResultState = {
@@ -130,6 +131,8 @@ function indexContext(
     operation,
     scopeKind,
     scopeId,
+    // 非公開チャンネル範囲では所属証明(channel secret)を引くために topic が要る(#711)。
+    topicId: scopeKind === 'private_channel' ? activeTopic : null,
   };
 }
 
@@ -260,6 +263,7 @@ export function CommunityIndexWorkspace({
       query: currentContext.operation === 'search' ? query.trim() : null,
       scope_kind: currentContext.scopeKind,
       scope_id: currentContext.scopeId,
+      topic_id: currentContext.topicId,
       limit: 50,
     };
     const requestContext = currentContext;
