@@ -128,7 +128,7 @@ impl IndexQuery for FailClosedIndexQuery {
 
     async fn search_all(&self, query: &str, limit: usize) -> Result<Vec<IndexedEntry>> {
         let limit = clamp_query_limit(limit);
-        let hits = self.inner.search_all(query, limit).await?;
+        let hits = exclude_private_channel(self.inner.search_all(query, limit).await?);
         self.gate(hits).await
     }
 
@@ -139,6 +139,23 @@ impl IndexQuery for FailClosedIndexQuery {
     ) -> Result<Vec<IndexedEntry>> {
         let limit = clamp_query_limit(limit);
         let hits = self.inner.list_recent(scope, limit).await?;
+        let hits = if scope.is_none() {
+            exclude_private_channel(hits)
+        } else {
+            hits
+        };
         self.gate(hits).await
     }
+}
+
+/// 横断読みから非公開チャンネルの項目を除外する(#711 / ADR 0025 §6.3)。
+///
+/// 非公開チャンネルの索引は参加者に閉じるため、scope 無指定の search / discovery /
+/// recommendation には項目も識別子(`scope_id`)も出さない。所属証明つきの範囲指定読み
+/// (`search_scope` / scope 指定の `list_recent`)だけが読み口になる(所属証明の検証は
+/// cn-user-api の門が担う)。
+fn exclude_private_channel(hits: Vec<IndexedEntry>) -> Vec<IndexedEntry> {
+    hits.into_iter()
+        .filter(|hit| hit.scope_kind != IndexScopeKind::PrivateChannel)
+        .collect()
 }

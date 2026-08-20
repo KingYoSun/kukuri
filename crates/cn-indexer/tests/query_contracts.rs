@@ -24,7 +24,9 @@ use kukuri_cn_safety_runtime::id::UuidEventIdGenerator;
 use kukuri_cn_safety_runtime::{MemorySafetyArtifactStore, SafetyArtifactStore, SafetyScanService};
 use kukuri_cn_safety_runtime::{SafetyOrchestrator, Secp256k1ModerationEventSigner};
 use kukuri_core::{KukuriKeys, ReplicaId, TopicId, build_post_envelope};
-use kukuri_docs_sync::{DocOp, DocsSync, MemoryDocsSync, stable_key, topic_replica_id};
+use kukuri_docs_sync::{
+    DocOp, DocsSync, MemoryDocsSync, private_channel_replica_id, stable_key, topic_replica_id,
+};
 
 const TEST_SECRET: &str = "0000000000000000000000000000000000000000000000000000000000000001";
 
@@ -258,6 +260,64 @@ async fn deindexed_scope_disappears_from_all_read_surfaces() -> Result<()> {
 
     assert!(f.query.search_all("unsupported", 10).await?.is_empty());
     assert!(f.query.list_recent(None, 10).await?.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn cross_scope_reads_exclude_private_channel_entries() -> Result<()> {
+    // #711 / ADR 0025 §6.3: 非公開チャンネルの索引は参加者に閉じる。横断読み
+    // (search_all / list_recent(None)) には private_channel 項目を出さず、範囲指定読みは
+    // 返す(所属証明の検証は cn-user-api の門が担う)。
+    let f = fixture();
+    let topic = TopicId::new("rust");
+    let topic_replica = topic_replica_id("rust");
+    let public_post = persist_post(&f.docs, &topic_replica, &topic, "shared async post").await;
+    let channel_replica = private_channel_replica_id("secret-room");
+    // MemoryDocsSync の非公開 replica は capability 登録後に開ける。
+    f.docs
+        .register_private_replica_secret(
+            &channel_replica,
+            "1111111111111111111111111111111111111111111111111111111111111111",
+        )
+        .await?;
+    let private_post = persist_post(&f.docs, &channel_replica, &topic, "hidden async post").await;
+
+    f.pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &topic_replica)
+        .await?;
+    f.pipeline
+        .ingest_scope(
+            IndexScopeKind::PrivateChannel,
+            "secret-room",
+            &channel_replica,
+        )
+        .await?;
+
+    // 横断検索・横断新着には非公開チャンネルの項目も識別子(scope_id)も出ない。
+    let hits = f.query.search_all("async", 10).await?;
+    let ids: Vec<&str> = hits.iter().map(|hit| hit.object_id.as_str()).collect();
+    assert_eq!(
+        ids,
+        vec![public_post.as_str()],
+        "search_all は公開 scope のみ"
+    );
+    let recent = f.query.list_recent(None, 10).await?;
+    let ids: Vec<&str> = recent.iter().map(|hit| hit.object_id.as_str()).collect();
+    assert_eq!(ids, vec![public_post.as_str()], "横断新着は公開 scope のみ");
+
+    // 範囲指定読みは従来どおり返す(この層では所属を判定しない)。
+    let scoped = f
+        .query
+        .search_scope(IndexScopeKind::PrivateChannel, "secret-room", "async", 10)
+        .await?;
+    assert_eq!(scoped.len(), 1);
+    assert_eq!(scoped[0].object_id, private_post);
+    let scoped_recent = f
+        .query
+        .list_recent(Some((IndexScopeKind::PrivateChannel, "secret-room")), 10)
+        .await?;
+    assert_eq!(scoped_recent.len(), 1);
+    assert_eq!(scoped_recent[0].object_id, private_post);
     Ok(())
 }
 

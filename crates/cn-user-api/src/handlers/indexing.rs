@@ -7,12 +7,13 @@ use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use kukuri_cn_core::{
-    ApiError, ApiResult, IndexScopeKind, filter_relation_visible, insert_indexing_request,
-    register_channel_secret, require_bearer_identity, require_consents,
+    ApiError, ApiResult, IndexScopeKind, filter_relation_visible, get_channel_secret,
+    insert_indexing_request, register_channel_secret, require_bearer_identity, require_consents,
 };
 use kukuri_cn_indexer::IndexQuery;
 use kukuri_cn_protocol::{
-    IndexEntryView, IndexQueryParams, IndexQueryResponse, SubmitIndexingRequestRequest,
+    CHANNEL_MEMBERSHIP_REQUIRED_CODE, CHANNEL_MEMBERSHIP_SECRET_HEADER, IndexEntryView,
+    IndexQueryParams, IndexQueryResponse, SubmitIndexingRequestRequest,
     SubmitIndexingRequestResponse,
 };
 
@@ -178,6 +179,63 @@ async fn filter_index_entries(
         .collect())
 }
 
+/// 非公開チャンネル範囲指定読みの所属証明(#711 / ADR 0025 §6.3)。
+///
+/// 提示された channel secret を保存済み capability の復号値と定数時間比較する。
+/// 「秘密値の提示が権限の証明」(申請側と同じ原則)を read にも適用し、新しい権限体系は
+/// 作らない。未提示・不一致・チャンネル未登録・暗号鍵未設定は同一の安定コードで拒否し、
+/// 非所属者に索引の存在有無を漏らさない。提示値・保存値はログへ出さない。
+async fn require_channel_membership(
+    state: &UserApiState,
+    headers: &HeaderMap,
+    channel_id: &str,
+) -> ApiResult<()> {
+    let denied = || {
+        ApiError::new(
+            StatusCode::FORBIDDEN,
+            CHANNEL_MEMBERSHIP_REQUIRED_CODE,
+            "private channel index queries require the channel secret of a participant",
+        )
+    };
+    let presented = headers
+        .get(CHANNEL_MEMBERSHIP_SECRET_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let Some(presented) = presented else {
+        return Err(denied());
+    };
+    let Some(cipher) = state.channel_secret_cipher.as_ref() else {
+        return Err(denied());
+    };
+    let stored = get_channel_secret(&state.pool, cipher, channel_id)
+        .await
+        .map_err(|source| {
+            IndexingError::infrastructure(IndexingOperation::VerifyChannelMembership, source)
+        })
+        .map_err(indexing_error)?;
+    let Some(stored) = stored else {
+        return Err(denied());
+    };
+    if !constant_time_str_eq(stored.namespace_secret_hex.as_str(), presented) {
+        return Err(denied());
+    }
+    Ok(())
+}
+
+fn constant_time_str_eq(expected: &str, supplied: &str) -> bool {
+    if expected.len() != supplied.len() || expected.is_empty() {
+        return false;
+    }
+    expected
+        .bytes()
+        .zip(supplied.bytes())
+        .fold(0_u8, |difference, (left, right)| {
+            difference | (left ^ right)
+        })
+        == 0
+}
+
 /// `scope_kind` / `scope_id` パラメータの組を解釈する。
 ///
 /// 両方指定 = scope 内読み、両方無指定 = 横断。片方のみは 400。
@@ -244,11 +302,18 @@ pub(crate) async fn index_search(
         })?;
     let limit = index_query_limit(&params);
     let entries = match parse_index_scope_params(&params)? {
-        Some((scope_kind, scope_id)) => index_query
-            .search_scope(scope_kind, scope_id.as_str(), query, limit)
-            .await
-            .map_err(|source| IndexingError::infrastructure(IndexingOperation::SearchScope, source))
-            .map_err(indexing_error)?,
+        Some((scope_kind, scope_id)) => {
+            if scope_kind == IndexScopeKind::PrivateChannel {
+                require_channel_membership(&state, &headers, scope_id.as_str()).await?;
+            }
+            index_query
+                .search_scope(scope_kind, scope_id.as_str(), query, limit)
+                .await
+                .map_err(|source| {
+                    IndexingError::infrastructure(IndexingOperation::SearchScope, source)
+                })
+                .map_err(indexing_error)?
+        }
         None => index_query
             .search_all(query, limit)
             .await
@@ -278,6 +343,9 @@ pub(crate) async fn index_discovery(
         require_index_query(&state, &headers).await?;
     let limit = index_query_limit(&params);
     let scope = parse_index_scope_params(&params)?;
+    if let Some((IndexScopeKind::PrivateChannel, scope_id)) = scope.as_ref() {
+        require_channel_membership(&state, &headers, scope_id.as_str()).await?;
+    }
     let entries = index_query
         .list_recent(scope.as_ref().map(|(kind, id)| (*kind, id.as_str())), limit)
         .await

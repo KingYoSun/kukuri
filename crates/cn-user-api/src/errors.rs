@@ -113,6 +113,7 @@ pub(crate) enum IndexingOperation {
     Discovery,
     Recommendations,
     FilterRelationVisibility,
+    VerifyChannelMembership,
 }
 
 #[derive(Debug, thiserror::Error)]
