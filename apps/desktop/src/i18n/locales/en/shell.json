@@ -154,6 +154,8 @@
     "submitting": "Submitting…",
     "status": { "pending": "The request is pending review.", "approved": "Indexing is approved.", "rejected": "Indexing was rejected." },
     "errors": {
+      "requestNotConfigured": "This Community Node does not provide indexing, so it does not accept requests.",
+      "requestNotActivated": "Indexing on this Community Node is temporarily unavailable, so it does not accept requests.",
       "notConfigured": "Channel indexing is not configured on this Community Node.",
       "secretConflict": "The channel capability conflicts with the existing registration. Contact the node operator.",
       "authRequired": "Authentication is required for the selected Community Node.",

@@ -158,6 +158,8 @@
       "rejected": "索引登録は却下されています。"
     },
     "errors": {
+      "requestNotConfigured": "この Community Node は索引を提供していないため、申請を受け付けていません。",
+      "requestNotActivated": "この Community Node の索引は一時的に利用できないため、申請を受け付けていません。",
       "notConfigured": "この Community Node ではチャネル索引登録が設定されていません。",
       "secretConflict": "登録済みのチャネル capability と一致しません。管理者へ確認してください。",
       "authRequired": "選択した Community Node への認証が必要です。",

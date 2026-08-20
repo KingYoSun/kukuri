@@ -10,7 +10,12 @@
 use std::net::SocketAddr;
 
 use anyhow::{Context, Result};
-use kukuri_cn_core::{JwtConfig, TestDatabase};
+use chrono::Utc;
+use kukuri_cn_core::{
+    JwtConfig, TestDatabase, connect_postgres, readiness_context_fingerprint,
+    record_readiness_activation,
+};
+use kukuri_cn_operator::READINESS_CHECK_IDS;
 use kukuri_cn_protocol::build_auth_envelope_json;
 use kukuri_cn_user_api::{UserApiConfig, app_router, build_state};
 use kukuri_core::{KukuriKeys, generate_keys};
@@ -27,11 +32,37 @@ struct TestServer {
     base_url: String,
 }
 
+/// 索引参照の提供状態(#713 の受付門)。申請の受付は Activated のときだけ許される。
+#[derive(Clone, Copy, PartialEq)]
+enum IndexGate {
+    /// 索引参照が未構成(このノードは索引を提供しない)。
+    NotConfigured,
+    /// 構成済みだが有効化(準備完了記録)が無い・失効している。
+    Inactive,
+    /// 構成済みかつ有効化済み。
+    Activated,
+}
+
 impl TestServer {
     async fn spawn(
         admin_database_url: &str,
         prefix: &str,
         channel_secret_key: Option<String>,
+    ) -> Result<Self> {
+        Self::spawn_with_index_gate(
+            admin_database_url,
+            prefix,
+            channel_secret_key,
+            IndexGate::Activated,
+        )
+        .await
+    }
+
+    async fn spawn_with_index_gate(
+        admin_database_url: &str,
+        prefix: &str,
+        channel_secret_key: Option<String>,
+        gate: IndexGate,
     ) -> Result<Self> {
         let database = TestDatabase::create(admin_database_url, prefix).await?;
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -50,14 +81,27 @@ impl TestServer {
             jwt_config: JwtConfig::new("kukuri-cn-tests", "test-secret", 3600),
             operator_config_path: None,
             channel_secret_key,
-            index_query_enabled: false,
+            index_query_enabled: gate != IndexGate::NotConfigured,
             trust_read_enabled: false,
-            relation_distance_optout_min_proximity: None,
+            relation_distance_optout_min_proximity: (gate != IndexGate::NotConfigured)
+                .then_some(0.5),
             deployment_revision: "test-deployment-v1".to_string(),
             readiness_activation_max_age_secs: 3600,
             expected_issuer_node_id: None,
         })
         .await?;
+        if gate == IndexGate::Activated {
+            let pool = connect_postgres(database.database_url.as_str()).await?;
+            record_readiness_activation(
+                &pool,
+                Utc::now(),
+                "public-node",
+                &READINESS_CHECK_IDS,
+                &readiness_context_fingerprint("public-node", "test-deployment-v1", b""),
+                &serde_json::json!([]),
+            )
+            .await?;
+        }
         let app = app_router(state);
         let task = tokio::spawn(async move {
             axum::serve(
@@ -356,6 +400,103 @@ async fn invalid_kind_is_rejected() -> Result<()> {
     assert_eq!(rejected.status(), StatusCode::BAD_REQUEST);
     let body = rejected.json::<serde_json::Value>().await?;
     assert_eq!(body["code"], "INVALID_INDEXING_REQUEST");
+
+    server.shutdown().await
+}
+
+/// 拒否後にデータベースへ何も残っていないことを確認する(#713: 秘密値の不保存)。
+async fn assert_nothing_stored(server: &TestServer) -> Result<()> {
+    let pool = connect_postgres(server.database.database_url.as_str()).await?;
+    let requests: i64 = sqlx::query_scalar("SELECT count(*) FROM cn_index.indexing_requests")
+        .fetch_one(&pool)
+        .await?;
+    let secrets: i64 = sqlx::query_scalar("SELECT count(*) FROM cn_index.channel_secrets")
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(requests, 0, "申請行が保存されてはならない");
+    assert_eq!(secrets, 0, "channel secret が保存されてはならない");
+    Ok(())
+}
+
+#[tokio::test]
+async fn indexing_request_is_rejected_when_index_query_not_configured() -> Result<()> {
+    // #713: 索引参照を提供しないノードは申請を受理・保存しない(サーバ側の門)。
+    // 未提供の面は read 面と同じく認証前でも 404 で存在しない扱いにする。
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api indexing test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let server = TestServer::spawn_with_index_gate(
+        admin_database_url.as_str(),
+        "cn_indexing_gate_off",
+        Some(TEST_CHANNEL_SECRET_KEY.to_string()),
+        IndexGate::NotConfigured,
+    )
+    .await?;
+    let client = Client::new();
+
+    let unauthenticated = client
+        .post(format!("{}/v1/indexing/requests", server.base_url))
+        .json(&serde_json::json!({ "kind": "public_topic", "target_id": "rust" }))
+        .send()
+        .await?;
+    assert_eq!(unauthenticated.status(), StatusCode::NOT_FOUND);
+    let body = unauthenticated.json::<serde_json::Value>().await?;
+    assert_eq!(body["code"], "INDEXING_REQUEST_NOT_CONFIGURED");
+
+    // 認証・同意済みで秘密値を提示しても、受理も保存もされない。
+    let keys = generate_keys();
+    let token = authenticate_and_consent(&client, &server.base_url, &keys).await?;
+    let rejected = client
+        .post(format!("{}/v1/indexing/requests", server.base_url))
+        .bearer_auth(token.as_str())
+        .json(&serde_json::json!({
+            "kind": "private_channel",
+            "target_id": "secret-room",
+            "channel_secret_hex": hex::encode([7u8; 32]),
+        }))
+        .send()
+        .await?;
+    assert_eq!(rejected.status(), StatusCode::NOT_FOUND);
+    let body = rejected.json::<serde_json::Value>().await?;
+    assert_eq!(body["code"], "INDEXING_REQUEST_NOT_CONFIGURED");
+    assert_nothing_stored(&server).await?;
+
+    server.shutdown().await
+}
+
+#[tokio::test]
+async fn indexing_request_is_rejected_when_activation_is_stale() -> Result<()> {
+    // #713: 構成済みでも有効化(準備完了記録)が無い・失効しているノードは申請を受け付けない。
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api indexing test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let server = TestServer::spawn_with_index_gate(
+        admin_database_url.as_str(),
+        "cn_indexing_gate_stale",
+        Some(TEST_CHANNEL_SECRET_KEY.to_string()),
+        IndexGate::Inactive,
+    )
+    .await?;
+    let client = Client::new();
+    let keys = generate_keys();
+    let token = authenticate_and_consent(&client, &server.base_url, &keys).await?;
+
+    let rejected = client
+        .post(format!("{}/v1/indexing/requests", server.base_url))
+        .bearer_auth(token.as_str())
+        .json(&serde_json::json!({
+            "kind": "private_channel",
+            "target_id": "secret-room",
+            "channel_secret_hex": hex::encode([7u8; 32]),
+        }))
+        .send()
+        .await?;
+    assert_eq!(rejected.status(), StatusCode::NOT_FOUND);
+    let body = rejected.json::<serde_json::Value>().await?;
+    assert_eq!(body["code"], "INDEXING_REQUEST_NOT_ACTIVATED");
+    assert_nothing_stored(&server).await?;
 
     server.shutdown().await
 }

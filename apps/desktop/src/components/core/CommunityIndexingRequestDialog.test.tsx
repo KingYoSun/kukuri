@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { expect, test, vi } from 'vitest';
 
 import type { DesktopApi } from '@/lib/api';
+import { InvokeError } from '@/lib/api/invoke/error';
 
 import { CommunityIndexingRequestDialog } from './CommunityIndexingRequestDialog';
 
@@ -335,4 +336,36 @@ test('a selected node dropped from the eligible list cannot receive a private re
   expect(submitCommunityNodeIndexingRequest).not.toHaveBeenCalledWith(
     expect.objectContaining({ base_url: 'https://index-a.example' })
   );
+});
+
+test('explains the server-side indexing request gate with stable codes', async () => {
+  // #713: 索引未提供・有効化失効のノードは申請を受け付けない。安定コードで案内する。
+  const submitCommunityNodeIndexingRequest = vi
+    .fn()
+    .mockRejectedValueOnce(new InvokeError('INDEXING_REQUEST_NOT_CONFIGURED', 'gate'))
+    .mockRejectedValueOnce(new InvokeError('INDEXING_REQUEST_NOT_ACTIVATED', 'gate'));
+  render(
+    <CommunityIndexingRequestDialog
+      api={{ submitCommunityNodeIndexingRequest } as unknown as DesktopApi}
+      target={{ kind: 'public_topic', topicId: 'kukuri:topic:demo' }}
+      eligibleNodeBaseUrls={['https://index-a.example']}
+      onOpenChange={vi.fn()}
+      onOpenCommunityNodeSettings={vi.fn()}
+    />
+  );
+
+  const submit = screen.getByRole('button', { name: 'Submit request' });
+  fireEvent.click(submit);
+  expect(
+    await screen.findByText(
+      'This Community Node does not provide indexing, so it does not accept requests.'
+    )
+  ).toBeInTheDocument();
+
+  fireEvent.click(submit);
+  expect(
+    await screen.findByText(
+      'Indexing on this Community Node is temporarily unavailable, so it does not accept requests.'
+    )
+  ).toBeInTheDocument();
 });

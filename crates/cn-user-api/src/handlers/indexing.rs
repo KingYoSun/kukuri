@@ -13,7 +13,8 @@ use kukuri_cn_core::{
 use kukuri_cn_indexer::IndexQuery;
 use kukuri_cn_protocol::{
     CHANNEL_MEMBERSHIP_REQUIRED_CODE, CHANNEL_MEMBERSHIP_SECRET_HEADER,
-    INDEX_QUERY_NOT_ACTIVATED_CODE, INDEX_QUERY_NOT_CONFIGURED_CODE, IndexEntryView,
+    INDEX_QUERY_NOT_ACTIVATED_CODE, INDEX_QUERY_NOT_CONFIGURED_CODE,
+    INDEXING_REQUEST_NOT_ACTIVATED_CODE, INDEXING_REQUEST_NOT_CONFIGURED_CODE, IndexEntryView,
     IndexQueryParams, IndexQueryResponse, RELATION_VISIBILITY_NOT_CONFIGURED_CODE,
     SubmitIndexingRequestRequest, SubmitIndexingRequestResponse,
 };
@@ -32,11 +33,27 @@ use crate::state::{RelationVisibilityState, UserApiState};
 ///   権限の証明とみなす(ADR 0025 §6.3。CN は新権限体系を作らない)。secret は at-rest 暗号化して保存し、
 ///   cn-indexer が Model C と同じ機構で `channel::` replica を sync する。channel secret 暗号鍵が未設定の
 ///   node は private channel request を受け付けない(平文保存しないため)。
+/// - 受付の門(#713): 索引参照が未構成・有効化失効のノードは申請を受け付けない。索引を
+///   提供しないノードへ秘密値が保存されるのを防ぐ(検査は read 面と同じ順で認証より先)。
 pub(crate) async fn submit_indexing_request(
     State(state): State<UserApiState>,
     headers: HeaderMap,
     Json(request): Json<SubmitIndexingRequestRequest>,
 ) -> ApiResult<Json<SubmitIndexingRequestResponse>> {
+    if state.index_query.is_none() {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            INDEXING_REQUEST_NOT_CONFIGURED_CODE,
+            "this community node does not provide indexing, so it does not accept indexing requests",
+        ));
+    }
+    if !state.readiness_activation_is_valid().await {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            INDEXING_REQUEST_NOT_ACTIVATED_CODE,
+            "this community node index activation is not current, so it does not accept indexing requests",
+        ));
+    }
     let identity = require_bearer_identity(&state.pool, &state.jwt_config, &headers).await?;
     let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
 

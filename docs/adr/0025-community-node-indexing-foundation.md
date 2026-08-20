@@ -194,6 +194,7 @@ index する content（post 本文・media タグ・room メタデータ）を c
 - scope / consent: private channel index は channel メンバー + その CN の authority に閉じ、risk signal / visibility は `local` 寄り（trust-semantics）。
 - **閲覧境界（read 側。#711）**: 「channel メンバーに閉じる」は読み口にも適用する。範囲指定読み（`scope_kind = private_channel` の search / discovery）は、申請と同じ「secret を提示できること自体が権限の証明」の原則で **channel secret の提示を所属証明として要求**し、保存済み capability の復号値と定数時間比較で照合する。秘密値はアクセスログへ露出する URL クエリでなく専用ヘッダ（`x-kukuri-channel-secret`。`cn-protocol` に定数化）で送る。未提示・不一致・チャンネル未登録・暗号鍵未設定は同一の安定コード `CHANNEL_MEMBERSHIP_REQUIRED`（403）で拒否し、非所属者に索引の存在有無を漏らさない。横断読み（scope 無指定）には非公開チャンネルの項目を出さない（§2.7）。
 - contract: `index_private_channel_requires_submitted_channel_secret` / `index_private_channel_request_authz_reuses_channel_permission` / `cross_scope_reads_exclude_private_channel_entries` / `private_channel_reads_are_limited_to_members_with_secret_proof`。
+- **申請の受付条件（#713）**: indexing request の受付は、そのノードで索引参照が**構成済みかつ有効化（準備完了記録）が有効**であることを必須とする（Decision。「申請だけ受け付けて索引時に判定する」案は不採用）。索引を提供しない・提供が停止中のノードが申請（private channel では channel secret を含む）を受理・保存するのを防ぐ — 「秘密値の提示が権限の証明」は、提示先が索引を実際に提供していることの確認とセットで初めて意味を持つ。未構成は `INDEXING_REQUEST_NOT_CONFIGURED`、有効化失効は `INDEXING_REQUEST_NOT_ACTIVATED`（いずれも 404。検査は read 面と同じ順で認証より先）。拒否時は申請行も channel secret も保存されない。#698 の client 側送信前判定と対になるサーバ側の門。contract: `indexing_request_is_rejected_when_index_query_not_configured` / `indexing_request_is_rejected_when_activation_is_stale`。
 
 ### 6.4 課題 2 の解決: relay validation（relay 抜き CN）
 
