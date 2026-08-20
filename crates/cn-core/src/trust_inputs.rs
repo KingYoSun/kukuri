@@ -42,7 +42,9 @@ use crate::safety_events::{
 ///   `Disputed`（= pending）は寄与据え置きで含む。
 /// - category は [`trust_component_for`] で絶対 / 相対へ振り分ける。
 ///
-/// 不正な RFC3339（`now_rfc3339` / `expires_at`）は Err（黙って含めたり落としたりしない）。
+/// 不正な RFC3339 の扱い（#700）: `now_rfc3339` はサーバ生成値なので不正なら Err。
+/// signal 側の `expires_at` は保存前検証で新規流入を防いだうえで、既存の不正値は
+/// 警告ログを残して該当 signal だけを除外する（不正値 1 件で read 全体を失敗させない）。
 pub fn trust_risk_inputs_from(
     signals: &[StoredRiskSignal],
     now_rfc3339: &str,
@@ -55,12 +57,14 @@ pub fn trust_risk_inputs_from(
         let signal = &stored.signal;
 
         if let Some(expires_at) = signal.expires_at.as_deref() {
-            let expires = DateTime::parse_from_rfc3339(expires_at).with_context(|| {
-                format!(
-                    "risk signal `{}` has invalid expires_at `{expires_at}` (expected RFC3339)",
-                    stored.id
-                )
-            })?;
+            let Ok(expires) = DateTime::parse_from_rfc3339(expires_at) else {
+                tracing::warn!(
+                    signal_id = %stored.id,
+                    expires_at,
+                    "risk signal の expires_at が RFC3339 として解析できないため trust 入力から除外します"
+                );
+                continue;
+            };
             if expires <= now {
                 continue;
             }

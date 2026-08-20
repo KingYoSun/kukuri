@@ -16,6 +16,7 @@
 //!   失効させる（ADR 0028 §2.8 の第 3 の是正手段）。
 
 use anyhow::{Context, Result, bail};
+use chrono::DateTime;
 use sqlx::postgres::PgPool;
 
 use kukuri_cn_safety::{AppealStatus, SafetyCategory, SafetyRiskSignal, Severity, Visibility};
@@ -82,6 +83,32 @@ pub async fn dispute_risk_signal(pool: &PgPool, id: &str) -> Result<StoredRiskSi
     }
 }
 
+/// operator レビュー入力の共通検証: confidence は 0-100 のみ受理する（#700）。
+///
+/// 審査（調整・訂正再発行）・個別編集・`cn-cli` の全経路で共有し、範囲外の値が
+/// どの経路からも保存されないようにする（多層防御）。
+pub fn validate_optional_confidence(confidence: Option<u8>) -> Result<()> {
+    if let Some(confidence) = confidence
+        && confidence > 100
+    {
+        bail!("confidence must be between 0 and 100 (got {confidence})");
+    }
+    Ok(())
+}
+
+/// operator レビュー入力の共通検証: expires_at は RFC 3339 のみ受理する（#700）。
+///
+/// 過去時刻は単独失効の正規手段なので受理する。不正な形式を保存すると trust 入力の
+/// 組み立て（`trust_risk_inputs_from`）や配布クエリの時刻変換が失敗するため、
+/// 保存前にここで拒否する。
+pub fn validate_optional_expires_at(expires_at: Option<&str>) -> Result<()> {
+    if let Some(expires_at) = expires_at {
+        DateTime::parse_from_rfc3339(expires_at)
+            .with_context(|| format!("invalid expires_at `{expires_at}` (expected RFC3339)"))?;
+    }
+    Ok(())
+}
+
 /// operator レビューによる検知メタデータの編集内容。`None` のフィールドは変更しない。
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RiskSignalMetadataEdit {
@@ -122,11 +149,8 @@ pub async fn edit_risk_signal_detection_metadata(
     if edit.is_empty() {
         bail!("no detection metadata fields to edit");
     }
-    if let Some(confidence) = edit.confidence
-        && confidence > 100
-    {
-        bail!("confidence must be between 0 and 100 (got {confidence})");
-    }
+    validate_optional_confidence(edit.confidence)?;
+    validate_optional_expires_at(edit.expires_at.as_deref())?;
     let stored = get_risk_signal(pool, id)
         .await?
         .with_context(|| format!("risk signal `{id}` not found"))?;
@@ -181,11 +205,7 @@ pub async fn reissue_corrected_risk_signal(
              (set safety.moderation.operator_review / COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW)"
         );
     }
-    if let Some(confidence) = correction.confidence
-        && confidence > 100
-    {
-        bail!("confidence must be between 0 and 100 (got {confidence})");
-    }
+    validate_optional_confidence(correction.confidence)?;
     let stored = get_risk_signal(pool, id)
         .await?
         .with_context(|| format!("risk signal `{id}` not found"))?;
@@ -209,4 +229,44 @@ pub async fn reissue_corrected_risk_signal(
         appeal_status: Some(AppealStatus::None),
     };
     persist_risk_signal(pool, &stored.issuer_node_id, &corrected).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- #700: operator レビュー入力の共通検証（保存前検証の contract） ---
+
+    #[test]
+    fn confidence_within_0_to_100_is_accepted() {
+        assert!(validate_optional_confidence(None).is_ok());
+        assert!(validate_optional_confidence(Some(0)).is_ok());
+        assert!(validate_optional_confidence(Some(100)).is_ok());
+    }
+
+    #[test]
+    fn confidence_above_100_is_rejected() {
+        for confidence in [101, 255] {
+            let error = validate_optional_confidence(Some(confidence)).unwrap_err();
+            assert!(error.to_string().contains("between 0 and 100"), "{error}");
+        }
+    }
+
+    #[test]
+    fn expires_at_accepts_rfc3339_including_offsets_and_past() {
+        assert!(validate_optional_expires_at(None).is_ok());
+        assert!(validate_optional_expires_at(Some("2026-07-30T09:00:00Z")).is_ok());
+        // 時差付き表記も RFC 3339 として妥当。
+        assert!(validate_optional_expires_at(Some("2026-07-30T18:00:00+09:00")).is_ok());
+        // 過去時刻は単独失効の正規手段なので受理する。
+        assert!(validate_optional_expires_at(Some("2000-01-01T00:00:00Z")).is_ok());
+    }
+
+    #[test]
+    fn expires_at_rejects_non_rfc3339() {
+        for invalid in ["not-a-timestamp", "", "2026-07-30", "2026/07/30 09:00"] {
+            let error = validate_optional_expires_at(Some(invalid)).unwrap_err();
+            assert!(error.to_string().contains("RFC3339"), "{invalid}: {error}");
+        }
+    }
 }

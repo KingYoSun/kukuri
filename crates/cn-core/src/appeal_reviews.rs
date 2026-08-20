@@ -9,7 +9,10 @@ use sqlx::postgres::{PgPool, PgRow};
 use uuid::Uuid;
 
 use crate::operator_actions::OperatorAction;
-use crate::safety_appeals::{RiskSignalCorrection, RiskSignalMetadataEdit};
+use crate::safety_appeals::{
+    RiskSignalCorrection, RiskSignalMetadataEdit, validate_optional_confidence,
+    validate_optional_expires_at,
+};
 use crate::safety_events::to_db_enum;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -416,6 +419,8 @@ fn validate_edit(edit: &RiskSignalMetadataEdit) -> Result<()> {
     {
         bail!("no detection metadata fields to edit");
     }
+    validate_optional_confidence(edit.confidence)?;
+    validate_optional_expires_at(edit.expires_at.as_deref())?;
     Ok(())
 }
 
@@ -427,6 +432,7 @@ fn validate_correction(correction: &RiskSignalCorrection) -> Result<()> {
     {
         bail!("no correction fields to reissue");
     }
+    validate_optional_confidence(correction.confidence)?;
     Ok(())
 }
 

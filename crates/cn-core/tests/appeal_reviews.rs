@@ -315,3 +315,115 @@ async fn operator_review_revalidates_and_commits_state_reports_and_audit_togethe
     database.cleanup().await?;
     result
 }
+
+/// #700: 中核処理へ不正な入力値(RFC 3339 でない有効期限・範囲外の確信度)を直接渡すと
+/// 保存前に拒否され、`risk_signals` / `reports` / `operator_actions` が一切変化しない。
+#[tokio::test]
+async fn invalid_review_inputs_are_rejected_without_state_change() -> Result<()> {
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping appeal review integration test");
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_appeal_invalid_700").await?;
+    let pool = connect_postgres(database.database_url.as_str()).await?;
+    let result = async {
+        initialize_database(&pool).await?;
+        let stored =
+            persist_risk_signal(&pool, ISSUER, &signal("dave", AppealStatus::None)).await?;
+        let appeal_report = insert_community_node_appeal(
+            &pool,
+            ISSUER,
+            &stored.id,
+            &report("dave", "不正入力の対象"),
+        )
+        .await?;
+        let expected = get_appeal_review(&pool, &stored.id)
+            .await?
+            .expect("review")
+            .version();
+        let before_signal = get_risk_signal(&pool, &stored.id).await?.expect("signal");
+        let before_signal_ids =
+            sqlx::query_scalar::<_, String>("SELECT id FROM cn_safety.risk_signals ORDER BY id")
+                .fetch_all(&pool)
+                .await?;
+
+        let invalid_operations = vec![
+            AppealReviewOperation::Edit {
+                expected: expected.clone(),
+                edit: RiskSignalMetadataEdit {
+                    expires_at: Some("not-a-timestamp".to_string()),
+                    ..RiskSignalMetadataEdit::default()
+                },
+            },
+            AppealReviewOperation::Edit {
+                expected: expected.clone(),
+                edit: RiskSignalMetadataEdit {
+                    confidence: Some(101),
+                    ..RiskSignalMetadataEdit::default()
+                },
+            },
+            AppealReviewOperation::Edit {
+                expected: expected.clone(),
+                edit: RiskSignalMetadataEdit {
+                    confidence: Some(255),
+                    ..RiskSignalMetadataEdit::default()
+                },
+            },
+            AppealReviewOperation::Reissue {
+                expected: expected.clone(),
+                correction: RiskSignalCorrection {
+                    confidence: Some(101),
+                    ..RiskSignalCorrection::default()
+                },
+            },
+        ];
+        for operation in &invalid_operations {
+            assert!(
+                apply_appeal_review_action(&pool, "ops@kukuri.app", &stored.id, operation, true)
+                    .await
+                    .is_err(),
+                "不正な入力値は拒否されるべき: {operation:?}"
+            );
+        }
+
+        // 拒否された操作でデータベースが一切変化していないこと。
+        let after_signal = get_risk_signal(&pool, &stored.id).await?.expect("signal");
+        assert_eq!(after_signal.signal, before_signal.signal);
+        let after_signal_ids =
+            sqlx::query_scalar::<_, String>("SELECT id FROM cn_safety.risk_signals ORDER BY id")
+                .fetch_all(&pool)
+                .await?;
+        assert_eq!(
+            after_signal_ids, before_signal_ids,
+            "再発行の新規行が残ってはならない"
+        );
+        assert_eq!(
+            get_community_node_report(&pool, &appeal_report.id)
+                .await?
+                .expect("report")
+                .status,
+            "received"
+        );
+        assert!(list_operator_actions(&pool, 50, 0).await?.is_empty());
+
+        // 妥当な入力(過去時刻を含む RFC 3339)は従来どおり適用できる。
+        apply_appeal_review_action(
+            &pool,
+            "ops@kukuri.app",
+            &stored.id,
+            &AppealReviewOperation::Edit {
+                expected,
+                edit: RiskSignalMetadataEdit {
+                    expires_at: Some("2000-01-01T00:00:00Z".to_string()),
+                    ..RiskSignalMetadataEdit::default()
+                },
+            },
+            true,
+        )
+        .await?;
+        Ok::<(), anyhow::Error>(())
+    }
+    .await;
+    database.cleanup().await?;
+    result
+}
