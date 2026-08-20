@@ -206,6 +206,31 @@ async fn operator_review_can_edit_detection_metadata() -> Result<()> {
         assert_eq!(edited.signal.severity, Severity::Low);
         assert_eq!(edited.signal.confidence, Some(20));
 
+        // #700: 個別編集経路(cn-cli もここを通る)でも不正値は保存前に拒否される。
+        let invalid_expiry = RiskSignalMetadataEdit {
+            expires_at: Some("not-a-timestamp".to_string()),
+            ..RiskSignalMetadataEdit::default()
+        };
+        assert!(
+            edit_risk_signal_detection_metadata(&pool, &stored.id, &invalid_expiry, true)
+                .await
+                .is_err(),
+            "RFC 3339 でない有効期限は拒否する"
+        );
+        let invalid_confidence = RiskSignalCorrection {
+            confidence: Some(255),
+            ..RiskSignalCorrection::default()
+        };
+        assert!(
+            reissue_corrected_risk_signal(&pool, &stored.id, &invalid_confidence, NOW, true)
+                .await
+                .is_err(),
+            "範囲外の確信度は拒否する"
+        );
+        let unchanged = get_risk_signal(&pool, &stored.id).await?.expect("exists");
+        assert_eq!(unchanged.signal.expires_at, None);
+        assert_eq!(unchanged.signal.confidence, Some(20));
+
         // 訂正 signal の再発行: 旧 signal は失効し、訂正版が同じ issuer で新規発行される。
         let correction = RiskSignalCorrection {
             category: Some(SafetyCategory::Spam),

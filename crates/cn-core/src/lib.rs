@@ -114,7 +114,7 @@ pub use rollout::{ensure_default_auth_rollout, load_auth_rollout, store_auth_rol
 pub use safety_appeals::{
     RiskSignalCorrection, RiskSignalMetadataEdit, dispute_risk_signal,
     edit_risk_signal_detection_metadata, reissue_corrected_risk_signal,
-    update_risk_signal_appeal_status,
+    update_risk_signal_appeal_status, validate_optional_confidence, validate_optional_expires_at,
 };
 pub use safety_events::{
     DistributionAudience, StoredModerationEvent, StoredRiskSignal, get_risk_signal,

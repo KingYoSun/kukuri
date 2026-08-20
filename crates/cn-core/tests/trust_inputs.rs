@@ -163,16 +163,38 @@ fn expired_signal_is_excluded_from_trust_inputs() {
 }
 
 #[test]
-fn invalid_expires_at_is_an_error() {
-    // 不正な RFC3339 は黙って含めたり落としたりせず Err にする。
-    let signals = vec![stored_signal(
-        "sig-broken",
-        SafetyCategory::Csam,
-        Some("not-a-timestamp"),
-        None,
-    )];
-    let error = trust_risk_inputs_from(&signals, NOW).unwrap_err();
-    assert!(error.to_string().contains("invalid expires_at"), "{error}");
+fn invalid_expires_at_signal_is_ignored_and_read_succeeds() {
+    // #700: 保存済みの不正な expires_at は移行せず「無視」する決定。該当判定だけを
+    // 寄与から除外して読み取りは成功させ、他の判定には影響させない
+    // （不正値 1 件で trust read 全体が 500 にならない）。
+    let signals = vec![
+        stored_signal(
+            "sig-broken",
+            SafetyCategory::Csam,
+            Some("not-a-timestamp"),
+            None,
+        ),
+        stored_signal("sig-valid", SafetyCategory::Csam, None, None),
+    ];
+    let inputs = trust_risk_inputs_from(&signals, NOW).unwrap();
+    let ids: Vec<&str> = inputs
+        .absolute
+        .iter()
+        .map(|input| input.signal_id.as_str())
+        .collect();
+    assert_eq!(ids, vec!["sig-valid"]);
+    assert!(inputs.relative.is_empty());
+}
+
+#[test]
+fn invalid_now_timestamp_is_still_an_error() {
+    // now はサーバ生成値なので、不正なら従来どおり Err にする（設定・呼び出し側の欠陥検出）。
+    let signals = vec![stored_signal("sig-1", SafetyCategory::Csam, None, None)];
+    let error = trust_risk_inputs_from(&signals, "not-a-timestamp").unwrap_err();
+    assert!(
+        error.to_string().contains("invalid now timestamp"),
+        "{error}"
+    );
 }
 
 // --- appeal 反映（ADR 0026 §6.2。Disputed = pending / Cleared = accepted） ---

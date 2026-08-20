@@ -14,7 +14,8 @@ use kukuri_cn_core::{
     OperatorReportStatus, RiskSignalCorrection, RiskSignalMetadataEdit, apply_appeal_review_action,
     apply_operator_action, get_appeal_review, latest_readiness_activation, list_appeal_reviews,
     list_community_node_reports, list_operator_actions, list_supported_topics,
-    load_admission_config, parse_bool_env, validate_admin_operation,
+    load_admission_config, parse_bool_env, validate_admin_operation, validate_optional_confidence,
+    validate_optional_expires_at,
 };
 use serde::Deserialize;
 use tower_http::trace::TraceLayer;
@@ -257,7 +258,7 @@ fn appeal_operation_from_form(
                 category: parse_optional_enum("category", &form.category)?,
                 severity: parse_optional_enum("severity", &form.severity)?,
                 confidence: parse_optional_confidence(&form.confidence)?,
-                expires_at: optional_text(&form.expires_at),
+                expires_at: parse_optional_expires_at(&form.expires_at)?,
             },
         }),
         "appeal.reissue" => Ok(AppealReviewOperation::Reissue {
@@ -291,11 +292,25 @@ fn parse_optional_confidence(value: &str) -> anyhow::Result<Option<u8>> {
     if value.is_empty() {
         return Ok(None);
     }
-    let confidence = value.parse::<u8>().context("invalid confidence")?;
-    if confidence > 100 {
-        bail!("confidence must be between 0 and 100");
+    let Ok(confidence) = value.parse::<u8>() else {
+        bail!("確信度は 0 から 100 の整数で入力してください。");
+    };
+    if validate_optional_confidence(Some(confidence)).is_err() {
+        bail!("確信度は 0 から 100 の整数で入力してください。");
     }
     Ok(Some(confidence))
+}
+
+fn parse_optional_expires_at(value: &str) -> anyhow::Result<Option<String>> {
+    let Some(value) = optional_text(value) else {
+        return Ok(None);
+    };
+    if validate_optional_expires_at(Some(value.as_str())).is_err() {
+        bail!(
+            "有効期限は RFC 3339 形式（例: 2026-08-20T09:00:00+09:00）で入力してください。過去時刻は失効として受理されます。"
+        );
+    }
+    Ok(Some(value))
 }
 
 fn optional_text(value: &str) -> Option<String> {
@@ -918,5 +933,68 @@ mod tests {
         let mut unsupported = form;
         unsupported.category = "not-a-category".to_string();
         assert!(appeal_operation_from_form(&unsupported, expected).is_err());
+    }
+
+    #[test]
+    fn appeal_form_rejects_invalid_expires_at_with_japanese_message() {
+        // #700: RFC 3339 でない有効期限は解析段階（確認・適用の両方が通る経路）で拒否する。
+        let expected = AppealReviewVersion {
+            appeal_status: "disputed".to_string(),
+            category: "nsfw".to_string(),
+            severity: "high".to_string(),
+            confidence: Some(90),
+            visibility: "local".to_string(),
+            expires_at: None,
+            reports: vec![("report-1".to_string(), "received".to_string())],
+        };
+        let mut form = AdminActionForm {
+            action: "appeal.edit".to_string(),
+            target_id: "signal-1".to_string(),
+            expires_at: "not-a-timestamp".to_string(),
+            ..AdminActionForm::default()
+        };
+        let error = appeal_operation_from_form(&form, expected.clone()).unwrap_err();
+        assert!(error.to_string().contains("RFC 3339"), "{error}");
+        assert!(error.to_string().contains("有効期限"), "{error}");
+
+        // 妥当な RFC 3339（時差付き・過去を含む）は受理される。
+        for valid in [
+            "2026-08-20T09:00:00Z",
+            "2026-08-20T18:00:00+09:00",
+            "2000-01-01T00:00:00Z",
+        ] {
+            form.expires_at = valid.to_string();
+            assert!(
+                appeal_operation_from_form(&form, expected.clone()).is_ok(),
+                "{valid} は受理されるべき"
+            );
+        }
+    }
+
+    #[test]
+    fn appeal_form_rejects_out_of_range_confidence_with_japanese_message() {
+        let expected = AppealReviewVersion {
+            appeal_status: "disputed".to_string(),
+            category: "nsfw".to_string(),
+            severity: "high".to_string(),
+            confidence: Some(90),
+            visibility: "local".to_string(),
+            expires_at: None,
+            reports: vec![("report-1".to_string(), "received".to_string())],
+        };
+        // 再発行（適用時にも同じ解析を通る）でも範囲外・数値以外は拒否される。
+        for invalid in ["101", "255", "abc", "-1"] {
+            let form = AdminActionForm {
+                action: "appeal.reissue".to_string(),
+                target_id: "signal-1".to_string(),
+                confidence: invalid.to_string(),
+                ..AdminActionForm::default()
+            };
+            let error = appeal_operation_from_form(&form, expected.clone()).unwrap_err();
+            assert!(
+                error.to_string().contains("0 から 100"),
+                "{invalid}: {error}"
+            );
+        }
     }
 }
