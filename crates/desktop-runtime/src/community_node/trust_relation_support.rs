@@ -1,9 +1,10 @@
 use std::fmt;
 
 use kukuri_cn_protocol::{
-    ApiErrorBody, RELATION_NEIGHBORS_PATH, RELATION_OPTOUT_PATH, RELATION_USERS_PATH_PREFIX,
-    RelationNeighborsResponse, RelationOptoutResponse, RelationReadResponse,
-    TRUST_USERS_PATH_PREFIX, TrustUserReadResponse, normalize_http_url, normalize_pubkey,
+    AUTH_REQUIRED_CODE, ApiErrorBody, CONSENT_REQUIRED_CODE, RELATION_NEIGHBORS_PATH,
+    RELATION_OPTOUT_PATH, RELATION_USERS_PATH_PREFIX, RelationNeighborsResponse,
+    RelationOptoutResponse, RelationReadResponse, TRUST_USERS_PATH_PREFIX, TrustUserReadResponse,
+    normalize_http_url, normalize_pubkey,
 };
 use reqwest::{Method, StatusCode};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -46,8 +47,8 @@ impl CommunityNodeTrustRelationError {
 
     fn from_response(status: StatusCode, body: Option<ApiErrorBody>) -> Self {
         let fallback_code = match status {
-            StatusCode::UNAUTHORIZED => "AUTH_REQUIRED",
-            StatusCode::FORBIDDEN => "CONSENT_REQUIRED",
+            StatusCode::UNAUTHORIZED => AUTH_REQUIRED_CODE,
+            StatusCode::FORBIDDEN => CONSENT_REQUIRED_CODE,
             StatusCode::NOT_FOUND => "TRUST_RELATION_UNAVAILABLE",
             _ => "TRUST_RELATION_REQUEST_FAILED",
         };
@@ -185,7 +186,7 @@ impl DesktopRuntime {
             .await
         {
             return Err(CommunityNodeTrustRelationError::new(
-                "CONSENT_REQUIRED",
+                CONSENT_REQUIRED_CODE,
                 "community node required policies must be accepted before trust and relation requests",
             ));
         }
@@ -195,7 +196,7 @@ impl DesktopRuntime {
             })?
             .ok_or_else(|| {
                 CommunityNodeTrustRelationError::new(
-                    "AUTH_REQUIRED",
+                    AUTH_REQUIRED_CODE,
                     "community node authentication is required",
                 )
             })?;

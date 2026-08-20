@@ -63,6 +63,12 @@
       "description": "有効にすると、このノードが表示する proximity 境界より遠い相手との間で、相手自身と投稿を互いに表示対象から外し、距離のあるコミュニティ間で対立が大規模に増幅することを避けます。",
       "notPrivacy": "可逆な node-local 表示制御です。プライバシー機能、block、relation graph からの離脱、P2P 制限、ネットワーク全体での不可視化ではありません。",
       "notLoaded": "変更する前に、現在の設定と node-local 境界を読み込んでください。",
+      "errors": {
+        "notConfigured": "この Community Node は距離利用停止を提供していません。",
+        "notActivated": "この Community Node の距離利用停止は一時的に利用できません。",
+        "authRequired": "選択した Community Node への認証が必要です。",
+        "consentRequired": "選択した Community Node の必須同意が必要です。"
+      },
       "load": "設定を読み込む",
       "enable": "有効にする",
       "clear": "解除する",

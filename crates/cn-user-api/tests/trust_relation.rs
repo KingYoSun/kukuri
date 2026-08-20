@@ -194,7 +194,20 @@ async fn trust_read_is_not_found_when_not_configured() -> Result<()> {
             .send()
             .await?;
         assert_eq!(response.status(), StatusCode::NOT_FOUND, "{path}");
+        // 安定コードは通信契約(#712)。名前の変更はこの試験で検知する。
+        let body: serde_json::Value = response.json().await?;
+        assert_eq!(body["code"], "TRUST_READ_NOT_CONFIGURED", "{path}");
     }
+
+    // 距離利用停止の面は独立した安定コードで縮退を判別できる(#712)。
+    let optout = client
+        .get(format!("{}/v1/relation/optout", server.base_url))
+        .bearer_auth(token.as_str())
+        .send()
+        .await?;
+    assert_eq!(optout.status(), StatusCode::NOT_FOUND);
+    let body: serde_json::Value = optout.json().await?;
+    assert_eq!(body["code"], "RELATION_VISIBILITY_NOT_CONFIGURED");
     server.shutdown().await
 }
 
@@ -620,6 +633,11 @@ async fn relation_distance_optout_is_explicit_symmetric_and_reversible() -> Resu
         .send()
         .await?;
     assert_eq!(hidden.status(), StatusCode::NOT_FOUND);
+    // 距離利用停止の抑制は存在秘匿と同じ RELATION_NOT_FOUND を返す(#712)。
+    assert_eq!(
+        hidden.json::<serde_json::Value>().await?["code"],
+        "RELATION_NOT_FOUND"
+    );
     let neighbors_after: serde_json::Value = client
         .get(neighbors_url.as_str())
         .bearer_auth(viewer_token.as_str())

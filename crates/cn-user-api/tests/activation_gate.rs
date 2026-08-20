@@ -24,11 +24,30 @@ use reqwest::{Client, StatusCode};
 mod support;
 use support::{integration_test_admin_database_url, integration_test_rendezvous_redis_url};
 
-const SURFACES: [&str; 3] = [
-    "/v1/index/search?q=test",
-    "/v1/trust/users/0000000000000000000000000000000000000000000000000000000000000001",
-    "/v1/relation/users/0000000000000000000000000000000000000000000000000000000000000001",
+/// 各 read surface と、有効化が無効なときに返るべき安定コード(#712)。
+///
+/// コード名は通信契約(クライアントが縮退判別に使う)なので、変更はこの契約試験の
+/// 失敗として検知させる。ここでは意図的にリテラルで固定する。
+const SURFACES: [(&str, &str); 4] = [
+    ("/v1/index/search?q=test", "INDEX_QUERY_NOT_ACTIVATED"),
+    (
+        "/v1/trust/users/0000000000000000000000000000000000000000000000000000000000000001",
+        "TRUST_READ_NOT_ACTIVATED",
+    ),
+    (
+        "/v1/relation/users/0000000000000000000000000000000000000000000000000000000000000001",
+        "TRUST_READ_NOT_ACTIVATED",
+    ),
+    ("/v1/relation/optout", "RELATION_VISIBILITY_NOT_ACTIVATED"),
 ];
+
+/// 404 応答の body から安定コードを取り出す。
+fn body_code(body: &str) -> String {
+    serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|value| value["code"].as_str().map(str::to_string))
+        .unwrap_or_default()
+}
 
 fn activation_context(revision: &str) -> String {
     readiness_context_fingerprint("public-node", revision, b"")
@@ -74,14 +93,14 @@ async fn spawn_api(
     Ok((base_url, task))
 }
 
-async fn surface_statuses(base_url: &str) -> Result<Vec<(String, StatusCode, String)>> {
+async fn surface_statuses(base_url: &str) -> Result<Vec<(String, String, StatusCode, String)>> {
     let client = Client::new();
     let mut statuses = Vec::new();
-    for path in SURFACES {
+    for (path, expected_code) in SURFACES {
         let response = client.get(format!("{base_url}{path}")).send().await?;
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
-        statuses.push((path.to_string(), status, body));
+        statuses.push((path.to_string(), expected_code.to_string(), status, body));
     }
     Ok(statuses)
 }
@@ -96,8 +115,9 @@ async fn flags_without_activation_record_keep_surfaces_hidden() -> Result<()> {
 
     // 記録なし + 環境変数真 → 全 surface が 404 のまま。
     let (base_url, task) = spawn_api(database.database_url.as_str(), "act-none").await?;
-    for (path, status, body) in surface_statuses(&base_url).await? {
+    for (path, expected_code, status, body) in surface_statuses(&base_url).await? {
         assert_eq!(status, StatusCode::NOT_FOUND, "{path}: {body}");
+        assert_eq!(body_code(&body), expected_code, "{path}: {body}");
     }
     task.abort();
     Ok(())
@@ -124,8 +144,9 @@ async fn stale_check_id_set_keeps_surfaces_hidden() -> Result<()> {
     )
     .await?;
     let (base_url, task) = spawn_api(database.database_url.as_str(), "act-stale").await?;
-    for (path, status, body) in surface_statuses(&base_url).await? {
+    for (path, expected_code, status, body) in surface_statuses(&base_url).await? {
         assert_eq!(status, StatusCode::NOT_FOUND, "{path}: {body}");
+        assert_eq!(body_code(&body), expected_code, "{path}: {body}");
     }
     task.abort();
     Ok(())
@@ -153,7 +174,7 @@ async fn valid_activation_record_enables_surfaces() -> Result<()> {
     let (base_url, task) = spawn_api(database.database_url.as_str(), "act-ok").await?;
     // 有効化済みなら 404 ではなくなる（実際の応答内容は認証・ArcadeDB を要するため
     // 全構成 E2E が担う。ここでは「隠されていない」ことだけを固定する）。
-    for (path, status, body) in surface_statuses(&base_url).await? {
+    for (path, _expected_code, status, body) in surface_statuses(&base_url).await? {
         assert_ne!(
             status,
             StatusCode::NOT_FOUND,
@@ -175,8 +196,9 @@ async fn activation_record_created_after_startup_enables_surfaces() -> Result<()
     kukuri_cn_core::initialize_database(&pool).await?;
 
     let (base_url, task) = spawn_api(database.database_url.as_str(), "act-live").await?;
-    for (path, status, body) in surface_statuses(&base_url).await? {
+    for (path, expected_code, status, body) in surface_statuses(&base_url).await? {
         assert_eq!(status, StatusCode::NOT_FOUND, "{path}: {body}");
+        assert_eq!(body_code(&body), expected_code, "{path}: {body}");
     }
 
     record_readiness_activation(
@@ -188,7 +210,7 @@ async fn activation_record_created_after_startup_enables_surfaces() -> Result<()
         &serde_json::json!([]),
     )
     .await?;
-    for (path, status, body) in surface_statuses(&base_url).await? {
+    for (path, _expected_code, status, body) in surface_statuses(&base_url).await? {
         assert_ne!(
             status,
             StatusCode::NOT_FOUND,
@@ -218,8 +240,9 @@ async fn different_deployment_context_keeps_surfaces_hidden() -> Result<()> {
     )
     .await?;
     let (base_url, task) = spawn_api(database.database_url.as_str(), "act-context").await?;
-    for (path, status, body) in surface_statuses(&base_url).await? {
+    for (path, expected_code, status, body) in surface_statuses(&base_url).await? {
         assert_eq!(status, StatusCode::NOT_FOUND, "{path}: {body}");
+        assert_eq!(body_code(&body), expected_code, "{path}: {body}");
     }
     task.abort();
     Ok(())
@@ -244,8 +267,9 @@ async fn expired_activation_keeps_surfaces_hidden() -> Result<()> {
     )
     .await?;
     let (base_url, task) = spawn_api(database.database_url.as_str(), "act-expired").await?;
-    for (path, status, body) in surface_statuses(&base_url).await? {
+    for (path, expected_code, status, body) in surface_statuses(&base_url).await? {
         assert_eq!(status, StatusCode::NOT_FOUND, "{path}: {body}");
+        assert_eq!(body_code(&body), expected_code, "{path}: {body}");
     }
     task.abort();
     Ok(())
@@ -271,13 +295,14 @@ async fn revocation_hides_already_started_surfaces() -> Result<()> {
     )
     .await?;
     let (base_url, task) = spawn_api(database.database_url.as_str(), "act-revoked").await?;
-    for (path, status, body) in surface_statuses(&base_url).await? {
+    for (path, _expected_code, status, body) in surface_statuses(&base_url).await? {
         assert_ne!(status, StatusCode::NOT_FOUND, "{path}: {body}");
     }
 
     record_readiness_revocation(&pool, Utc::now(), "public-node", &context, "test_failure").await?;
-    for (path, status, body) in surface_statuses(&base_url).await? {
+    for (path, expected_code, status, body) in surface_statuses(&base_url).await? {
         assert_eq!(status, StatusCode::NOT_FOUND, "{path}: {body}");
+        assert_eq!(body_code(&body), expected_code, "{path}: {body}");
     }
     task.abort();
     Ok(())

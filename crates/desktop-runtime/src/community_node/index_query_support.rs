@@ -2,9 +2,9 @@ use std::fmt;
 
 use chrono::Utc;
 use kukuri_cn_protocol::{
-    ApiErrorBody, CHANNEL_MEMBERSHIP_SECRET_HEADER, INDEX_DISCOVERY_PATH,
-    INDEX_RECOMMENDATIONS_PATH, INDEX_SEARCH_PATH, IndexQueryParams, IndexQueryResponse,
-    IndexScopeKind, normalize_http_url,
+    AUTH_REQUIRED_CODE, ApiErrorBody, CHANNEL_MEMBERSHIP_SECRET_HEADER, CONSENT_REQUIRED_CODE,
+    INDEX_DISCOVERY_PATH, INDEX_RECOMMENDATIONS_PATH, INDEX_SEARCH_PATH, IndexQueryParams,
+    IndexQueryResponse, IndexScopeKind, normalize_http_url,
 };
 use kukuri_store::{ContentObservationRow, ContentObservationStore};
 use reqwest::{StatusCode, header::RETRY_AFTER};
@@ -53,8 +53,8 @@ impl CommunityNodeIndexQueryError {
         body: Option<ApiErrorBody>,
     ) -> Self {
         let fallback_code = match status {
-            StatusCode::UNAUTHORIZED => "AUTH_REQUIRED",
-            StatusCode::FORBIDDEN => "CONSENT_REQUIRED",
+            StatusCode::UNAUTHORIZED => AUTH_REQUIRED_CODE,
+            StatusCode::FORBIDDEN => CONSENT_REQUIRED_CODE,
             StatusCode::TOO_MANY_REQUESTS => "RATE_LIMITED",
             _ => "INDEX_QUERY_FAILED",
         };
@@ -157,7 +157,7 @@ impl DesktopRuntime {
             .await
         {
             return Err(CommunityNodeIndexQueryError::new(
-                "CONSENT_REQUIRED",
+                CONSENT_REQUIRED_CODE,
                 "community node required policies must be accepted before index queries",
             ));
         }
@@ -201,7 +201,7 @@ impl DesktopRuntime {
             })?
             .ok_or_else(|| {
                 CommunityNodeIndexQueryError::new(
-                    "AUTH_REQUIRED",
+                    AUTH_REQUIRED_CODE,
                     "community node authentication is required",
                 )
             })?;

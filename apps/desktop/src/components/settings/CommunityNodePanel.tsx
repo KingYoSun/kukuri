@@ -6,6 +6,10 @@ import { Card, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
 import type { RelationOptoutResponse } from '@/lib/api';
+import {
+  trustRelationUnavailableReason,
+  type TrustRelationUnavailableReason,
+} from '@/lib/api/trustRelationPresentation';
 
 import { CommunityNodeConsentDialog } from './CommunityNodeConsentDialog';
 import { SettingsActionRow } from './SettingsActionRow';
@@ -76,6 +80,21 @@ export function CommunityNodePanel({
     onGetRelationOptout && onSetRelationOptout && onClearRelationOptout
   );
 
+  // 距離利用停止欄の縮退案内(#712)。未提供・失効・認証・同意を安定コードで判別し、
+  // 索引画面と同じ文言で案内する。判別できないときだけ従来どおり生メッセージを表示する。
+  const DISTANCE_OPTOUT_ERROR_KEYS: Partial<Record<TrustRelationUnavailableReason, string>> = {
+    relation_visibility_not_configured: 'notConfigured',
+    relation_visibility_not_activated: 'notActivated',
+    auth_required: 'authRequired',
+    consent_required: 'consentRequired',
+  };
+
+  function distanceOptoutErrorMessage(error: unknown): string {
+    const key = DISTANCE_OPTOUT_ERROR_KEYS[trustRelationUnavailableReason(error)];
+    if (key) return t(`settings:communityNode.distanceOptout.errors.${key}`);
+    return error instanceof Error ? error.message : String(error);
+  }
+
   async function updateRelationOptout(
     baseUrl: string,
     operation: () => Promise<RelationOptoutResponse>
@@ -96,7 +115,7 @@ export function CommunityNodePanel({
         [baseUrl]: {
           busy: false,
           value: current[baseUrl]?.value ?? null,
-          error: error instanceof Error ? error.message : String(error),
+          error: distanceOptoutErrorMessage(error),
         },
       }));
     }

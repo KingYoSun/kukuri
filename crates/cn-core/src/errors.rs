@@ -1,6 +1,6 @@
 use axum::http::{HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
-use kukuri_cn_protocol::ApiErrorBody;
+use kukuri_cn_protocol::{AUTH_REQUIRED_CODE, ApiErrorBody, CONSENT_REQUIRED_CODE};
 
 use crate::config::USER_API_BEARER_CHALLENGE;
 
@@ -54,12 +54,12 @@ impl IntoResponse for ApiError {
 }
 
 pub fn auth_required_error(message: impl Into<String>) -> ApiError {
-    ApiError::new(StatusCode::UNAUTHORIZED, "AUTH_REQUIRED", message).with_header(
+    ApiError::new(StatusCode::UNAUTHORIZED, AUTH_REQUIRED_CODE, message).with_header(
         HeaderName::from_static("www-authenticate"),
         USER_API_BEARER_CHALLENGE,
     )
 }
 
 pub fn consent_required_error(message: impl Into<String>) -> ApiError {
-    ApiError::new(StatusCode::FORBIDDEN, "CONSENT_REQUIRED", message)
+    ApiError::new(StatusCode::FORBIDDEN, CONSENT_REQUIRED_CODE, message)
 }

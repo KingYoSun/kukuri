@@ -1,8 +1,9 @@
 use std::fmt;
 
 use kukuri_cn_protocol::{
-    ApiErrorBody, INDEXING_REQUESTS_PATH, IndexScopeKind, SubmitIndexingRequestRequest,
-    SubmitIndexingRequestResponse, normalize_http_url,
+    AUTH_REQUIRED_CODE, ApiErrorBody, CONSENT_REQUIRED_CODE, INDEXING_REQUESTS_PATH,
+    IndexScopeKind, SubmitIndexingRequestRequest, SubmitIndexingRequestResponse,
+    normalize_http_url,
 };
 use reqwest::{StatusCode, header::RETRY_AFTER};
 use serde::{Deserialize, Serialize};
@@ -52,8 +53,8 @@ impl CommunityNodeIndexingRequestError {
         body: Option<ApiErrorBody>,
     ) -> Self {
         let fallback_code = match status {
-            StatusCode::UNAUTHORIZED => "AUTH_REQUIRED",
-            StatusCode::FORBIDDEN => "CONSENT_REQUIRED",
+            StatusCode::UNAUTHORIZED => AUTH_REQUIRED_CODE,
+            StatusCode::FORBIDDEN => CONSENT_REQUIRED_CODE,
             StatusCode::TOO_MANY_REQUESTS => "RATE_LIMITED",
             _ => "INDEXING_REQUEST_FAILED",
         };
@@ -116,7 +117,7 @@ impl DesktopRuntime {
             .await
         {
             return Err(CommunityNodeIndexingRequestError::new(
-                "CONSENT_REQUIRED",
+                CONSENT_REQUIRED_CODE,
                 "community node required policies must be accepted before indexing requests",
             ));
         }
@@ -172,7 +173,7 @@ impl DesktopRuntime {
             })?
             .ok_or_else(|| {
                 CommunityNodeIndexingRequestError::new(
-                    "AUTH_REQUIRED",
+                    AUTH_REQUIRED_CODE,
                     "community node authentication is required",
                 )
             })?;

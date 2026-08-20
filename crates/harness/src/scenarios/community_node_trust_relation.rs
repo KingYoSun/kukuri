@@ -13,11 +13,12 @@ use axum::{
     routing::{get, post},
 };
 use kukuri_cn_protocol::{
-    ApiErrorBody, AppealStatus, Basis, CommunityNodeReportRequest, CommunityNodeReportResponse,
-    IndexEntryView, IndexQueryResponse, IndexScopeKind, Proximity, ProximityBasisEntry,
-    RelationNeighborsResponse, RelationOptoutResponse, RelationReadResponse, RiskSignalTarget,
-    SafetyCategory, Severity, TrustBasisEntry, TrustComponentKind, TrustReadView,
-    TrustUserReadResponse, Visibility,
+    AUTH_REQUIRED_CODE, ApiErrorBody, AppealStatus, Basis, CommunityNodeReportRequest,
+    CommunityNodeReportResponse, IndexEntryView, IndexQueryResponse, IndexScopeKind, Proximity,
+    ProximityBasisEntry, RELATION_NOT_FOUND_CODE, RelationNeighborsResponse,
+    RelationOptoutResponse, RelationReadResponse, RiskSignalTarget, SafetyCategory, Severity,
+    TRUST_READ_NOT_ACTIVATED_CODE, TRUST_READ_NOT_CONFIGURED_CODE, TrustBasisEntry,
+    TrustComponentKind, TrustReadView, TrustUserReadResponse, Visibility,
 };
 use kukuri_desktop_runtime::{
     CommunityNodeIndexQueryRequest, CommunityNodeRelationNeighborsRequest,
@@ -50,7 +51,7 @@ fn require_auth(headers: &HeaderMap) -> Option<Response> {
         (
             StatusCode::UNAUTHORIZED,
             Json(ApiErrorBody {
-                code: "AUTH_REQUIRED".to_string(),
+                code: AUTH_REQUIRED_CODE.to_string(),
                 message: "authentication is required".to_string(),
             }),
         )
@@ -115,10 +116,13 @@ async fn trust_user(
         return response;
     }
     if target.starts_with('c') {
-        return api_error("TRUST_READ_NOT_CONFIGURED", "trust read is not configured");
+        return api_error(
+            TRUST_READ_NOT_CONFIGURED_CODE,
+            "trust read is not configured",
+        );
     }
     if target.starts_with('d') {
-        return api_error("TRUST_READ_NOT_ACTIVATED", "trust read is not activated");
+        return api_error(TRUST_READ_NOT_ACTIVATED_CODE, "trust read is not activated");
     }
     // #685 の契約: cleared は根拠に残したまま寄与を 0 にする。none / disputed は寄与を維持する。
     let appeal_status = *state.appeal_status.lock().expect("appeal status lock");
@@ -224,7 +228,7 @@ async fn relation_user(AxumPath(target): AxumPath<String>, headers: HeaderMap) -
         return response;
     }
     if target.starts_with('e') {
-        return api_error("RELATION_NOT_FOUND", "relation is unavailable");
+        return api_error(RELATION_NOT_FOUND_CODE, "relation is unavailable");
     }
     Json(RelationReadResponse {
         viewer_pubkey: "harness-user".to_string(),
