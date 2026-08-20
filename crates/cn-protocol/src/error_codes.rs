@@ -14,6 +14,12 @@ pub const AUTH_REQUIRED_CODE: &str = "AUTH_REQUIRED";
 /// 必須ポリシーへの同意が未完了(403)。
 pub const CONSENT_REQUIRED_CODE: &str = "CONSENT_REQUIRED";
 
+/// このノードは索引を提供しないため索引申請を受け付けない(未構成。404。#713)。
+pub const INDEXING_REQUEST_NOT_CONFIGURED_CODE: &str = "INDEXING_REQUEST_NOT_CONFIGURED";
+
+/// 索引の有効化が失効しているため索引申請を受け付けない(404。#713)。
+pub const INDEXING_REQUEST_NOT_ACTIVATED_CODE: &str = "INDEXING_REQUEST_NOT_ACTIVATED";
+
 /// このノードは索引参照を提供しない(未構成。404)。
 pub const INDEX_QUERY_NOT_CONFIGURED_CODE: &str = "INDEX_QUERY_NOT_CONFIGURED";
 

@@ -154,6 +154,8 @@
     "submitting": "提交中…",
     "status": { "pending": "申请正在等待审核。", "approved": "索引已获批准。", "rejected": "索引申请已被拒绝。" },
     "errors": {
+      "requestNotConfigured": "该社区节点不提供索引，因此不接受申请。",
+      "requestNotActivated": "该社区节点的索引暂时不可用，因此不接受申请。",
       "notConfigured": "此 Community Node 未配置频道索引。",
       "secretConflict": "频道 capability 与现有注册冲突，请联系节点运营者。",
       "authRequired": "需要对所选 Community Node 进行认证。",

@@ -32,6 +32,9 @@ type CommunityIndexingRequestDialogProps = {
 
 function requestErrorKey(error: unknown): string {
   if (!(error instanceof InvokeError)) return 'requestFailed';
+  // #713: 索引を提供しない・停止中のノードは申請を受け付けない(サーバ側の門)。
+  if (error.code === 'INDEXING_REQUEST_NOT_CONFIGURED') return 'requestNotConfigured';
+  if (error.code === 'INDEXING_REQUEST_NOT_ACTIVATED') return 'requestNotActivated';
   if (error.code === 'CHANNEL_INDEXING_NOT_CONFIGURED') return 'notConfigured';
   if (error.code === 'CHANNEL_SECRET_CONFLICT') return 'secretConflict';
   if (error.code === 'AUTH_REQUIRED' || error.status === 401) return 'authRequired';
