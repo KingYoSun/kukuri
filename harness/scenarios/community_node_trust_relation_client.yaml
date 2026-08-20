@@ -33,6 +33,48 @@ steps:
     endpoint: relation
     target_pubkey: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
     code: RELATION_NOT_FOUND
+  # 異議申し立ての一続き(#704): 根拠の確認 → 匿名送信 → 係争中(寄与維持)→ 審査 → 解消済み(寄与0)
+  - action: assert_trust_basis_appeal
+    target_pubkey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    signal_id: signal-1
+    expect_status: none
+    expect_contribution_zero: false
+  - action: submit_community_appeal
+    target_pubkey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    risk_signal_id: signal-1
+  - action: assert_trust_basis_appeal
+    target_pubkey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    signal_id: signal-1
+    expect_status: disputed
+    expect_contribution_zero: false
+  - action: resolve_community_appeal
+  - action: assert_trust_basis_appeal
+    target_pubkey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    signal_id: signal-1
+    expect_status: cleared
+    expect_contribution_zero: true
+  # 距離利用停止の結線確認(#704): 設定前は表示され、設定後に抑制、解除後に復帰する
+  - action: assert_community_index_entry_count
+    query: distant
+    scope_kind: public_topic
+    scope_id: trust-relation
+    expect_entry_count: 1
+  - action: assert_relation_optout
+    operation: set
+    expect_enabled: true
+  - action: assert_community_index_entry_count
+    query: distant
+    scope_kind: public_topic
+    scope_id: trust-relation
+    expect_entry_count: 0
+  - action: assert_relation_optout
+    operation: clear
+    expect_enabled: false
+  - action: assert_community_index_entry_count
+    query: distant
+    scope_kind: public_topic
+    scope_id: trust-relation
+    expect_entry_count: 1
 artifacts:
   dump_logs: true
   metrics_snapshot: false
