@@ -21,7 +21,7 @@ use serde::Deserialize;
 use tower_http::trace::TraceLayer;
 use uuid::Uuid;
 
-use crate::admin_appeal_render::render_appeal_reviews;
+use crate::admin_appeal_render::{render_appeal_preview, render_appeal_reviews};
 use crate::state::UserApiState;
 
 pub(crate) fn admin_router(state: UserApiState) -> Router {
@@ -198,16 +198,18 @@ async fn preview_appeal_action(
             return render_action_error(StatusCode::BAD_REQUEST, format!("{error:#}").as_str());
         }
     };
-    let expected = review.version();
-    if let Err(error) = appeal_operation_from_form(form, expected.clone()) {
-        return render_action_error(StatusCode::BAD_REQUEST, format!("{error:#}").as_str());
-    }
+    // 表示値と適用値の出所を一致させるため、解析済み操作をそのまま描画へ渡す(#701)。
+    let operation = match appeal_operation_from_form(form, review.version()) {
+        Ok(operation) => operation,
+        Err(error) => {
+            return render_action_error(StatusCode::BAD_REQUEST, format!("{error:#}").as_str());
+        }
+    };
     Html(render_appeal_preview(
         state.csrf_token.as_str(),
         actor,
-        form,
+        &operation,
         &review,
-        &expected,
     ))
     .into_response()
 }
@@ -658,67 +660,6 @@ fn render_preview(
     render_simple_page("運営操作の確認", body.as_str())
 }
 
-fn render_appeal_preview(
-    csrf_token: &str,
-    actor: &str,
-    form: &AdminActionForm,
-    review: &AppealReview,
-    expected: &AppealReviewVersion,
-) -> String {
-    let (title, impact) = match form.action.as_str() {
-        "appeal.accept" => (
-            "異議申し立てを認容しますか",
-            "このリスク判定を Cleared にし、関連通報を処理済みにします。次回の信頼評価から、この判定の寄与は除外されます。",
-        ),
-        "appeal.reject" => (
-            "異議申し立てを棄却しますか",
-            "このリスク判定を None に戻し、関連通報を棄却済みにします。信頼評価への寄与は残ります。",
-        ),
-        "appeal.edit" => (
-            "検知情報を調整しますか",
-            "署名済みモデレーション事象と利用者の正本状態は変更せず、このノードのリスク判定だけを調整します。異議申し立ては審査中のままです。",
-        ),
-        "appeal.reissue" => (
-            "訂正版を再発行しますか",
-            "現在のリスク判定を失効させ、指定した検知情報と公開範囲で新しいリスク判定を発行します。異議申し立ては審査中のままです。",
-        ),
-        _ => ("操作を確認しますか", "指定した審査操作を適用します。"),
-    };
-    let expected_state = serde_json::to_string(expected).expect("appeal review version serializes");
-    let fields = [
-        ("category", form.category.as_str()),
-        ("severity", form.severity.as_str()),
-        ("confidence", form.confidence.as_str()),
-        ("expires_at", form.expires_at.as_str()),
-        ("visibility", form.visibility.as_str()),
-    ]
-    .into_iter()
-    .map(|(name, value)| {
-        format!(
-            "<input type=\"hidden\" name=\"{}\" value=\"{}\">",
-            name,
-            escape_html(value)
-        )
-    })
-    .collect::<String>();
-    let body = format!(
-        r#"<div class="dialog"><p class="meta">適用前の確認</p><h1>{}</h1><dl><dt>運営者</dt><dd><code>{}</code></dd><dt>リスク判定</dt><dd><code>{}</code></dd><dt>対象</dt><dd><code>{}/{}</code></dd><dt>現在の状態</dt><dd>{}</dd><dt>影響</dt><dd>{}</dd></dl><p class="boundary">適用時に現在値をもう一度取得し、確認後に変更されていた場合は拒否します。リスク判定、関連通報、操作記録は一つの取引で確定します。</p><form method="post" action="/actions/apply"><input type="hidden" name="csrf_token" value="{}"><input type="hidden" name="action" value="{}"><input type="hidden" name="target_id" value="{}"><input type="hidden" name="expected_state" value="{}">{}<button type="submit">確認して適用</button> <a href="/">取り消す</a></form></div>"#,
-        escape_html(title),
-        escape_html(actor),
-        escape_html(&review.risk_signal_id),
-        escape_html(&review.target),
-        escape_html(&review.target_id),
-        escape_html(&review.appeal_status),
-        escape_html(impact),
-        escape_html(csrf_token),
-        escape_html(&form.action),
-        escape_html(&form.target_id),
-        escape_html(&expected_state),
-        fields,
-    );
-    render_simple_page("異議申し立て審査の確認", body.as_str())
-}
-
 fn operation_summary(operation: &AdminOperation) -> (&'static str, String, String) {
     match operation {
         AdminOperation::SetAdmissionMode { mode } => (
@@ -778,7 +719,7 @@ fn render_action_error(status: StatusCode, message: &str) -> Response {
         .into_response()
 }
 
-fn render_simple_page(title: &str, body: &str) -> String {
+pub(crate) fn render_simple_page(title: &str, body: &str) -> String {
     format!(
         r#"<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{}</title><style>:root{{color-scheme:dark light;font-family:system-ui,sans-serif}}body{{max-width:760px;margin:0 auto;padding:24px;line-height:1.5}}.dialog{{border:1px solid currentColor;border-radius:18px;padding:20px}}code{{overflow-wrap:anywhere}}.meta{{opacity:.72}}.boundary{{border-left:4px solid #d59b16;padding-left:12px}}button{{min-height:44px;border:0;border-radius:999px;padding:10px 16px;font-weight:700}}dt{{font-weight:700;margin-top:10px}}dd{{margin-left:0}}</style></head><body>{}</body></html>"#,
         escape_html(title),
