@@ -18,6 +18,61 @@ file; automated changelog entries start from the next preview release.
 
 ## [Unreleased]
 
+## [v0.1.5-preview.1] - 2026-08-21
+
+### Features
+
+- 安定エラーコードを通信境界で定数化し契約試験と画面判別を揃える ([#712](https://github.com/KingYoSun/kukuri/pull/712), [#730](https://github.com/KingYoSun/kukuri/pull/730))
+- 動画添付を media 対象として個別に通報できるようにする ([#697](https://github.com/KingYoSun/kukuri/pull/697), [#724](https://github.com/KingYoSun/kukuri/pull/724))
+- add Community Node index client ([#671](https://github.com/KingYoSun/kukuri/pull/671))
+- add audited Community Node admin actions ([#660](https://github.com/KingYoSun/kukuri/pull/660))
+
+### Fixes
+
+- propagate CN distance policy to Terraform ([#736](https://github.com/KingYoSun/kukuri/pull/736))
+- 訂正版再発行後に利用者が審査結果を確認できるようにする ([#710](https://github.com/KingYoSun/kukuri/pull/710), [#732](https://github.com/KingYoSun/kukuri/pull/732))
+- 索引申請の受付で索引参照の構成と有効化を確認する ([#713](https://github.com/KingYoSun/kukuri/pull/713), [#731](https://github.com/KingYoSun/kukuri/pull/731))
+- 非公開チャンネルの索引参照を所属者に限定する ([#711](https://github.com/KingYoSun/kukuri/pull/711), [#728](https://github.com/KingYoSun/kukuri/pull/728))
+- 異議申し立て審査の確認画面に変更前後の値を表示する ([#701](https://github.com/KingYoSun/kukuri/pull/701), [#727](https://github.com/KingYoSun/kukuri/pull/727))
+- 異議申し立て審査の入力値を保存前に検証する ([#700](https://github.com/KingYoSun/kukuri/pull/700), [#726](https://github.com/KingYoSun/kukuri/pull/726))
+- 信頼・関係応答の対象識別子を要求対象へ照合する ([#723](https://github.com/KingYoSun/kukuri/pull/723))
+- 通報送信時に受付先を構成済みノードと同一オリジンへ限定し転送を追跡しない ([#722](https://github.com/KingYoSun/kukuri/pull/722))
+- 通報先候補で提供中能力と責任範囲を厳密に照合する ([#721](https://github.com/KingYoSun/kukuri/pull/721))
+- 信頼・関係機能を同意済みで提供中のノードに限定する ([#705](https://github.com/KingYoSun/kukuri/pull/705), [#720](https://github.com/KingYoSun/kukuri/pull/720))
+- 索引ノードの利用可否変更時に古い選択・結果・索引申請を失効させる ([#719](https://github.com/KingYoSun/kukuri/pull/719))
+- 参加拒否後に保持したトークンで自己修復経路が再認証を繰り返す問題を止める ([#718](https://github.com/KingYoSun/kukuri/pull/718))
+- 添付対象のリスク判定を画面から異議申し立てできるようにする ([#717](https://github.com/KingYoSun/kukuri/pull/717))
+- 異議申し立ての発行元識別子を公開ノード情報の node_id と一致させる ([#716](https://github.com/KingYoSun/kukuri/pull/716))
+- 通報画面で開いた時に取得した最新ノード情報だけを送信先候補にする ([#714](https://github.com/KingYoSun/kukuri/pull/714))
+- 観測記録の90日保持を読み取り時にも強制 ([#695](https://github.com/KingYoSun/kukuri/pull/695))
+- 信頼・関係画面の取得文脈を固定 ([#694](https://github.com/KingYoSun/kukuri/pull/694))
+- 索引結果の通報文脈を固定 ([#693](https://github.com/KingYoSun/kukuri/pull/693))
+- 異議申し立ての対象と解消済み状態を修正 ([#689](https://github.com/KingYoSun/kukuri/pull/689))
+- 添付の観測元と通報経路を修正 ([#688](https://github.com/KingYoSun/kukuri/pull/688))
+- 索引申請の秘密値確認を送信ごとに消費 ([#687](https://github.com/KingYoSun/kukuri/pull/687))
+
+### Other
+
+- bump preview version to 0.1.5 ([#735](https://github.com/KingYoSun/kukuri/pull/735))
+- stabilize docs sync relay tests ([#734](https://github.com/KingYoSun/kukuri/pull/734))
+- 運営者審査の有効化設定を compose と terraform に配線する ([#709](https://github.com/KingYoSun/kukuri/pull/709), [#729](https://github.com/KingYoSun/kukuri/pull/729))
+- クライアント視点の結合試験に異議申し立ての一続きと距離利用停止の結線確認を加える ([#725](https://github.com/KingYoSun/kukuri/pull/725))
+- 通報画面試験で送信ボタンの出現を待ち合わせる ([#715](https://github.com/KingYoSun/kukuri/pull/715))
+- 招待制参加認証の運用手順を更新 ([#686](https://github.com/KingYoSun/kukuri/pull/686))
+- Issue #680 の異議申し立て審査を追加 ([#682](https://github.com/KingYoSun/kukuri/pull/682))
+- 課題 #669 リスク判定への異議申し立てを追加 ([#681](https://github.com/KingYoSun/kukuri/pull/681))
+- 非公開チャンネルのランデブー鍵を世代秘密から派生 ([#679](https://github.com/KingYoSun/kukuri/pull/679))
+- Community Node の招待認証にクライアントを対応させる ([#678](https://github.com/KingYoSun/kukuri/pull/678))
+- 課題 #666 の観測元記録と分散通報を実装 ([#677](https://github.com/KingYoSun/kukuri/pull/677))
+- Add trust relation desktop UI and harness ([#676](https://github.com/KingYoSun/kukuri/pull/676))
+- Issue #665: trust/relation desktop clientを追加 ([#675](https://github.com/KingYoSun/kukuri/pull/675))
+- Fix distance opt-out E2E contract ([#674](https://github.com/KingYoSun/kukuri/pull/674))
+- Implement community node distance opt-out ([#673](https://github.com/KingYoSun/kukuri/pull/673))
+- Implement Community Node indexing request flows ([#672](https://github.com/KingYoSun/kukuri/pull/672))
+- run workflows with Rust 1.92 ([#662](https://github.com/KingYoSun/kukuri/pull/662))
+- update Rust and TypeScript dependencies ([#661](https://github.com/KingYoSun/kukuri/pull/661))
+- update CHANGELOG for v0.1.4-preview.1 ([#659](https://github.com/KingYoSun/kukuri/pull/659))
+
 ## [v0.1.4-preview.1] - 2026-08-11
 
 ### Features
