@@ -85,7 +85,7 @@ fn read_surface_flags_derive_from_planned_capabilities() {
     // community_index / community_local_trust を有効化（承認済み）した config では
     // 環境変数 gate の tfvars も true になる（実際の公開は readiness の有効化記録が関門）。
     let yaml = config_with_deploy(
-        "  relay_domain: relay.example-kukuri.net\n",
+        "  relay_domain: relay.example-kukuri.net\n  relation_distance_optout_min_proximity: 0.5\n",
         "  community_index: true\n  community_local_trust: true\n",
         true,
     );
@@ -95,6 +95,37 @@ fn read_surface_flags_derive_from_planned_capabilities() {
     let tfvars = generate_tfvars(&resolved).unwrap();
     assert!(tfvars.contains("index_query_enabled = true"));
     assert!(tfvars.contains("trust_read_enabled  = true"));
+    assert!(tfvars.contains("relation_distance_optout_min_proximity = \"0.5\""));
+}
+
+#[test]
+fn enabled_read_surface_requires_valid_relation_distance_policy() {
+    let missing = config_with_deploy(
+        "  relay_domain: relay.example-kukuri.net\n",
+        "  community_index: true\n",
+        true,
+    );
+    let err = load_and_validate(&missing).unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("deploy.relation_distance_optout_min_proximity"),
+        "missing distance policy should be rejected: {err}"
+    );
+
+    for value in ["0", "1.1"] {
+        let yaml = config_with_deploy(
+            &format!(
+                "  relay_domain: relay.example-kukuri.net\n  relation_distance_optout_min_proximity: {value}\n"
+            ),
+            "  community_local_trust: true\n",
+            true,
+        );
+        let err = load_and_validate(&yaml).unwrap_err();
+        assert!(
+            err.to_string().contains("(0, 1]"),
+            "invalid distance policy should be rejected: {err}"
+        );
+    }
 }
 
 #[test]
@@ -104,6 +135,7 @@ fn read_surface_flags_default_to_false() {
     let tfvars = generate_tfvars(&resolved).unwrap();
     assert!(tfvars.contains("index_query_enabled = false"));
     assert!(tfvars.contains("trust_read_enabled  = false"));
+    assert!(tfvars.contains("relation_distance_optout_min_proximity = \"\""));
 }
 
 #[test]

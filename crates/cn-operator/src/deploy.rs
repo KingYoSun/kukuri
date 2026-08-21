@@ -371,6 +371,15 @@ fn render_low_cost_tfvars(config: &ResolvedConfig, deploy: &DeployConfig) -> Str
         "trust_read_enabled  = {}",
         config.enabled(crate::Capability::CommunityLocalTrust)
     );
+    let relation_distance_optout_min_proximity = deploy
+        .relation_distance_optout_min_proximity
+        .map(|value| value.to_string())
+        .unwrap_or_default();
+    let _ = writeln!(
+        out,
+        "relation_distance_optout_min_proximity = {}",
+        hcl_string(&relation_distance_optout_min_proximity)
+    );
 
     // operator-config.yaml 自体を VM に配置して manifest endpoint / report_endpoint gating を
     // 有効化する。中身はこの tfvars には埋めず、Terraform 側の .tf で file() する。
