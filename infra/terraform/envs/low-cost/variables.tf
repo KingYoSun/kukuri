@@ -51,7 +51,7 @@ variable "acme_email" {
 variable "admin_actor" {
   description = "IAP 内部 admin browser write の監査 actor。空なら write 無効。"
   type        = string
-  default     = ""
+  default     = "ops@kukuri.app"
 
   validation {
     condition = (
@@ -403,9 +403,9 @@ variable "safety_suspected_threshold" {
 }
 
 variable "safety_operator_review" {
-  description = "COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW。既定 false（審査画面は参照専用）。"
+  description = "COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW。既定 true（IAP 管理画面から審査操作を許可）。"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "safety_suspected_signal_visibility" {

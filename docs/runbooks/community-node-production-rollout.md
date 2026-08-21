@@ -288,8 +288,8 @@ terraform output -raw admin_iap_tunnel_command
 この listener は Caddy / public DNS に接続せず、firewall は Google IAP TCP forwarding range のみを
 許可する。
 
-browser writeは `admin_actor` が非空のdeploymentだけで有効になる。本番low-cost環境では、共有の
-運用identityとして次をtfvarsへ設定する。IAP TCP forwardingはHTTP identity headerを注入しないため、
+browser writeは `admin_actor` が非空のdeploymentだけで有効になる。本番low-cost環境では次の共有
+運用identityを既定値とする。IAP TCP forwardingはHTTP identity headerを注入しないため、
 formや任意headerではなくdeployment値だけをaudit actorとして信用する。
 
 ```hcl
@@ -311,7 +311,7 @@ admin_actor = "ops@kukuri.app"
 report details、reporter contact、private channel secretを含めない。actor未設定時はread-only表示になり、
 write endpointは503でfail-closedする。
 
-異議申し立て審査の変更操作には `COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW=true` も必要である。無効時は
+異議申し立て審査の変更操作には、既定で有効な `COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW=true` も必要である。無効時は
 申し立て内容と対象のリスク判定を参照できるが、操作欄は参照専用になる。同じリスク判定へ複数の
 申し立てが届いても、一覧では一つの審査対象にまとめて表示する。
 
@@ -332,13 +332,14 @@ write endpointは503でfail-closedする。
 - capability / authority scope / image revision
 - private channel secret、invite code、allowlist、ban
 
-standard Composeでは `http://127.0.0.1:19090` がadmin UIで、`COMMUNITY_NODE_ADMIN_ACTOR` を空にすれば
-read-onlyになる。loopback以外へbindする場合は、先に同等の認証・firewall境界を用意する。
+standard Composeでは `http://127.0.0.1:19090` がadmin UIで、既定actorは `ops@kukuri.app`、
+operator reviewも既定有効である。`COMMUNITY_NODE_ADMIN_ACTOR` を空にすればread-onlyになる。
+loopback以外へbindする場合は、先に同等の認証・firewall境界を用意する。
 
 異議申し立て審査の変更操作は、`COMMUNITY_NODE_ADMIN_ACTOR` に加えて運用者設定
 `safety.moderation.operator_review`（terraform 変数 `safety_operator_review` →
-`COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW`）の有効化が必要（既定は無効 = 参照専用。#709）。
-有効化手順は `docs/runbooks/openai-compatible-vlm.md` の「appeal / operator レビュー運用」を参照。
+`COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW`）の有効化が必要（標準配備は既定有効。#709）。
+無効化・再有効化手順は `docs/runbooks/openai-compatible-vlm.md` の「appeal / operator レビュー運用」を参照。
 
 ### 5.3 public surface
 

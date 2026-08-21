@@ -19,7 +19,7 @@ output "ssh_iap_command" {
 }
 
 output "admin_iap_tunnel_command" {
-  description = "read-only admin UI の IAP TCP tunnel コマンド。"
+  description = "operator admin UI の IAP TCP tunnel コマンド。"
   value       = module.vm.admin_iap_tunnel_command
 }
 

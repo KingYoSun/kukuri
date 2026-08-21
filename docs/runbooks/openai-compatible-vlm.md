@@ -87,14 +87,10 @@ cargo test -p kukuri-cn-safety-vlm --test live_endpoint -- --ignored --nocapture
   一つの Postgres 取引で確定する。訂正版再発行は旧判定を認容（寄与なし）として終結させたまま
   根拠一覧に残し、訂正版を新規発行する（#710。利用者は再取得で終結を確認できる）。
   `cn-cli moderation reissue` の appeal を伴わない個別再発行は従来どおり旧判定へ失効時刻を刻む。
-- **審査の有効化手順（#709。既定は無効 = 参照専用）**: browser から直接変更しない。
-  1. `operator-config.yaml` の `safety.moderation.operator_review` を `true` にしてレビューを通す。
-  2. terraform（`infra/terraform/envs/low-cost`）の変数 `safety_operator_review` を `true` にして
-     適用する。生成される env に `COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW=true` が入り、
-     `cn-user-api` の再起動後に審査画面から変更操作ができるようになる。
-  3. 無効へ戻すときは両方を `false` に戻して適用する（未設定・false は参照専用）。
-  standard Compose 構成では `.env.community-node` に
-  `COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW=true` を設定する。
+- **審査の有効化状態（#709。標準配備は既定有効）**: `operator-config.yaml` の
+  `safety.moderation.operator_review` とterraformの `safety_operator_review` は既定で `true` とし、
+  生成envへ `COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW=true` を注入する。無効へ戻すときは両方を
+  `false` にして適用する。standard Composeでは環境変数を `false` にすると参照専用になる。
 - 障害調査や運営画面へ接続できない場合は `cn-cli moderation` で状態を確認できる:
 
 ```bash

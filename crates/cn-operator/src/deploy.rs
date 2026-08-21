@@ -313,6 +313,11 @@ fn render_low_cost_tfvars(config: &ResolvedConfig, deploy: &DeployConfig) -> Str
         "safety_suspected_signal_visibility    = {}",
         hcl_string(suspected_visibility)
     );
+    let _ = writeln!(
+        out,
+        "safety_operator_review                 = {}",
+        safety.moderation.operator_review
+    );
     let _ = writeln!(out);
     let _ = writeln!(
         out,

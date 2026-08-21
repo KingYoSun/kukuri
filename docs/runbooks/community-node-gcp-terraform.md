@@ -201,7 +201,7 @@ terraform apply
 curl -fsS https://<api_domain>/healthz
 curl -fsS https://<relay_domain>/ping
 terraform output ssh_iap_command   # IAP 経由 SSH
-terraform output admin_iap_tunnel_command # read-only admin UI
+terraform output admin_iap_tunnel_command # IAP 内部 admin UI
 ```
 
 VM 内のサービスは `/var/lib/kukuri/community-node` の docker compose で動く。SSH は IAP のみ
@@ -210,9 +210,11 @@ VM 内のサービスは `/var/lib/kukuri/community-node` の docker compose で
 `iap.tunnelInstances.accessViaIAP` を含む IAM role が必要で、Caddy / public DNS には載せない。
 
 admin UI は状態、最新 readiness activation、admission mode、supported topics、直近 50 件の通報、
-Cloud Logging 導線を read-only で表示する。browser からの設定変更は、actor を記録する append-only
-audit contract、差分 preview、CSRF 防御を実装するまで有効化しない。変更は引き続き
-`operator-config.yaml` / `cn-cli` を SSoT とし、実行 command と結果を運用記録へ残す。
+Cloud Logging 導線を表示する。low-cost標準配備では `admin_actor = "ops@kukuri.app"` と
+`safety_operator_review = true` を既定にし、append-only audit、差分 preview、CSRF 防御の内側で
+browser writeを有効にする。actorを空にすればwrite endpointはfail-closedし、read-onlyになる。
+credentialや配備宣言は引き続き `operator-config.yaml` / Terraform / Secret Manager / `cn-cli` を
+SSoTとし、admin UIから変更しない。
 
 ### admission / 運用
 
