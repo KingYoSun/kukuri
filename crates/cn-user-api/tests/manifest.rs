@@ -140,6 +140,7 @@ deploy:
   acme_email: ops@example-kukuri.net
   jwt_secret_id: kukuri-cn-jwt-secret
   postgres_password_secret_id: kukuri-cn-postgres-password
+  relation_distance_optout_min_proximity: 0.5
 acknowledge_planned_capabilities: true
 "#;
 

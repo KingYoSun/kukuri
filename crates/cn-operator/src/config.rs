@@ -304,6 +304,10 @@ pub struct DeployConfig {
     /// 自前 relay（`features.iroh_relay`）が無効な場合、deploy_indexer_stack=true では必須。
     #[serde(default)]
     pub indexer_external_relay_urls: Vec<String>,
+    /// distance opt-out が「遠い」と判定する node-local proximity 境界。
+    /// community index / local trust のどちらかを公開する場合は明示設定が必須。
+    #[serde(default)]
+    pub relation_distance_optout_min_proximity: Option<f64>,
     /// `COMMUNITY_NODE_CHANNEL_SECRET_KEY` を保持する Secret Manager secret ID（値ではない）。
     #[serde(default)]
     pub channel_secret_key_secret_id: Option<String>,
@@ -567,6 +571,19 @@ fn validate_deploy(resolved: &ResolvedConfig, deploy: &DeployConfig) -> Result<(
     }
     if let Some(model) = deploy.vlm_model.as_deref() {
         validate_deploy_string("deploy.vlm_model", model)?;
+    }
+
+    let read_surface_enabled = resolved.enabled(Capability::CommunityIndex)
+        || resolved.enabled(Capability::CommunityLocalTrust);
+    match deploy.relation_distance_optout_min_proximity {
+        Some(value) if value.is_finite() && value > 0.0 && value <= 1.0 => {}
+        Some(value) => bail!(
+            "deploy.relation_distance_optout_min_proximity は (0, 1] で指定してください (got `{value}`)"
+        ),
+        None if read_surface_enabled => bail!(
+            "community_index または community_local_trust が有効な場合、deploy.relation_distance_optout_min_proximity は必須です"
+        ),
+        None => {}
     }
 
     validate_indexer_stack(resolved, deploy)?;
