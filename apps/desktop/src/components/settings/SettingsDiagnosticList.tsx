@@ -13,12 +13,12 @@ export function SettingsDiagnosticList({
 }: SettingsDiagnosticListProps) {
   return (
     <dl
-      className='gap-3'
+      className='min-w-0 max-w-full gap-3'
       style={
         columns === 2
           ? {
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(16rem, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(16rem, 100%), 1fr))',
             }
           : { display: 'grid' }
       }
@@ -33,7 +33,7 @@ export function SettingsDiagnosticList({
           </dt>
           <dd
             className={cn(
-              'mt-2 min-w-0 break-words text-sm leading-6 text-[var(--muted-foreground-soft)]',
+              'mt-2 min-w-0 [overflow-wrap:anywhere] text-sm leading-6 text-[var(--muted-foreground-soft)]',
               item.monospace && 'break-all font-mono text-[0.8rem]',
               item.tone === 'danger' && 'text-[var(--destructive)]'
             )}

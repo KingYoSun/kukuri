@@ -9,10 +9,10 @@ type SettingsMetricGridProps = {
 export function SettingsMetricGrid({ items }: SettingsMetricGridProps) {
   return (
     <dl
-      className='gap-3'
+      className='min-w-0 max-w-full gap-3'
       style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(9rem, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(9rem, 100%), 1fr))',
       }}
     >
       {items.map((item) => (
@@ -34,7 +34,7 @@ export function SettingsMetricGrid({ items }: SettingsMetricGridProps) {
           </dt>
           <dd
             className={cn(
-              'mt-2 break-words text-lg font-semibold text-foreground',
+              'mt-2 [overflow-wrap:anywhere] text-lg font-semibold text-foreground',
               item.tone === 'danger' && 'text-[var(--destructive)]'
             )}
           >
