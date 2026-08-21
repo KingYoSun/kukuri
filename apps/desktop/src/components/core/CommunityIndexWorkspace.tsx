@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
+import { Select } from '@/components/ui/select';
 import { ReportRoutingDialog } from './ReportRoutingDialog';
 
 type IndexOperation = 'search' | 'discovery' | 'recommendations';
@@ -307,8 +308,8 @@ export function CommunityIndexWorkspace({
         {eligibleNodeBaseUrls.length > 0 ? (
           <label className='flex min-w-56 flex-col gap-1 text-sm'>
             <span className='font-medium'>{t('shell:communityIndex.nodeLabel')}</span>
-            <select
-              className='rounded-lg border border-[var(--border-subtle)] bg-background px-3 py-2'
+            <Select
+              className='h-auto rounded-lg px-3 py-2'
               value={activeNodeBaseUrl ?? ''}
               onChange={(event) => {
                 invalidateResults();
@@ -318,7 +319,7 @@ export function CommunityIndexWorkspace({
               {eligibleNodeBaseUrls.map((baseUrl) => (
                 <option key={baseUrl} value={baseUrl}>{baseUrl}</option>
               ))}
-            </select>
+            </Select>
           </label>
         ) : null}
       </div>

@@ -25,6 +25,16 @@ select {
   font: inherit;
 }
 
+select {
+  color: var(--foreground);
+  background-color: var(--surface-input);
+}
+
+select option {
+  color: var(--foreground);
+  background-color: var(--surface-input);
+}
+
 code,
 kbd,
 samp {
