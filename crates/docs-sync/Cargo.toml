@@ -24,8 +24,8 @@ kukuri-transport = { path = "../transport" }
 kukuri-iroh-node = { path = "../iroh-node" }
 
 [dev-dependencies]
-iroh = { workspace = true, features = ["test-utils"] }
 tempfile.workspace = true
+kukuri-cn-iroh-relay = { path = "../cn-iroh-relay" }
 
 [lints]
 workspace = true

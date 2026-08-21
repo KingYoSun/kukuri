@@ -6,6 +6,7 @@ use iroh::RelayUrl;
 use tempfile::tempdir;
 use tokio::time::{sleep, timeout};
 
+use kukuri_cn_iroh_relay::{IrohRelayConfig, SpawnedIrohRelay, spawn_server};
 use kukuri_iroh_node::IrohDocsNode;
 
 use crate::{DocOp, DocQuery, DocsSync, IrohDocsSync, stable_key, topic_replica_id};
@@ -26,6 +27,17 @@ fn external_relay_url() -> Option<String> {
         .ok()
         .map(|value| value.trim().trim_end_matches('/').to_string())
         .filter(|value| !value.is_empty())
+}
+
+async fn spawn_local_test_relay() -> Result<(String, SpawnedIrohRelay)> {
+    let relay = spawn_server(IrohRelayConfig {
+        http_bind_addr: "127.0.0.1:0".parse()?,
+        tls: None,
+        client_rx_limit: None,
+    })
+    .await?;
+    let relay_url = format!("http://{}", relay.http_addr());
+    Ok((relay_url, relay))
 }
 
 async fn wait_for_relay_seeded_replica_row(
@@ -181,12 +193,9 @@ async fn apply_relay_config_tolerates_relay_activation_timeout() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn public_replica_syncs_over_custom_relay_seed_peers() -> Result<()> {
-    if std::env::var_os("GITHUB_ACTIONS").is_some() {
-        return Ok(());
-    }
-    let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server().await?;
+    let (relay_url, _relay) = spawn_local_test_relay().await?;
     let relay_config = TransportRelayConfig {
-        iroh_relay_urls: vec![relay_url.to_string()],
+        iroh_relay_urls: vec![relay_url],
     }
     .normalized();
     let dir = tempdir()?;
@@ -302,12 +311,9 @@ async fn public_replica_syncs_over_external_relay_when_configured() -> Result<()
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn learned_peer_recovers_relay_backfilled_doc_entry_after_seed_peers_are_cleared()
 -> Result<()> {
-    if std::env::var_os("GITHUB_ACTIONS").is_some() {
-        return Ok(());
-    }
-    let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server().await?;
+    let (relay_url, _relay) = spawn_local_test_relay().await?;
     let relay_config = TransportRelayConfig {
-        iroh_relay_urls: vec![relay_url.to_string()],
+        iroh_relay_urls: vec![relay_url],
     }
     .normalized();
     let dir = tempdir()?;

@@ -3417,6 +3417,7 @@ dependencies = [
  "iroh-blobs",
  "iroh-docs",
  "iroh-gossip",
+ "kukuri-cn-iroh-relay",
  "kukuri-core",
  "kukuri-iroh-node",
  "kukuri-transport",
