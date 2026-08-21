@@ -15,6 +15,9 @@ async function openComposerDialog(page: Page) {
 }
 
 const TOPIC_ID_PREFIX = 'kukuri:topic:';
+const LONG_PEER_ID = `12D3KooW${'a'.repeat(240)}`;
+const LONG_PEER_TICKET = `${LONG_PEER_ID}@192.0.2.10:7777,2001:db8::10:7777`;
+const LONG_ENDPOINT_DETAIL = `endpoint://${'b'.repeat(320)}@iroh-relay.kukuri.app:7842`;
 
 function topicDisplayName(topicId: string): string {
   return topicId.startsWith(TOPIC_ID_PREFIX) ? topicId.slice(TOPIC_ID_PREFIX.length) : topicId;
@@ -221,6 +224,95 @@ test('browser mock settings drawer keeps the close button clear of content and c
   await page.mouse.wheel(0, 960);
 
   await expect.poll(() => scrollContainer.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+});
+
+test('browser mock connectivity settings keep long identifiers within the content width', async ({
+  page,
+}) => {
+  await page.addInitScript(
+    ({ endpointDetail, peerId, peerTicket }) => {
+      let desktopApi = window.__KUKURI_DESKTOP__;
+
+      Object.defineProperty(window, '__KUKURI_DESKTOP__', {
+        configurable: true,
+        get: () => desktopApi,
+        set: (api: typeof desktopApi) => {
+          desktopApi = api;
+          if (!api) {
+            return;
+          }
+
+          const getSyncStatus = api.getSyncStatus.bind(api);
+          api.getSyncStatus = async () => {
+            const status = await getSyncStatus();
+            return {
+              ...status,
+              configured_peers: [peerId],
+              status_detail: endpointDetail,
+              discovery: {
+                ...status.discovery,
+                connected_peer_ids: [peerId],
+                local_endpoint_id: peerId,
+              },
+              topic_diagnostics: status.topic_diagnostics.map((diagnostic) => ({
+                ...diagnostic,
+                connected_peers: [peerId],
+                configured_peer_ids: [peerId],
+                docs_assist_peer_ids: [peerId],
+                status_detail: endpointDetail,
+              })),
+            };
+          };
+          api.getLocalPeerTicket = async () => peerTicket;
+        },
+      });
+    },
+    {
+      endpointDetail: LONG_ENDPOINT_DETAIL,
+      peerId: LONG_PEER_ID,
+      peerTicket: LONG_PEER_TICKET,
+    }
+  );
+
+  await page.setViewportSize({ width: 1024, height: 870 });
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo&settings=connectivity');
+
+  const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
+  const scrollContainer = settingsDialog.locator('.shell-settings-content');
+  const localPeerTicket = settingsDialog.getByRole('textbox', { name: 'Your Ticket' });
+  await expect(settingsDialog).toBeVisible();
+  await expect(localPeerTicket).toHaveValue(LONG_PEER_TICKET);
+  await expect(settingsDialog.getByText(LONG_ENDPOINT_DETAIL).first()).toBeVisible();
+  await expect(settingsDialog.getByText(LONG_PEER_ID).first()).toBeVisible();
+
+  for (const width of [1024, 1280, 1440, 700]) {
+    await page.setViewportSize({ width, height: 870 });
+
+    const layout = await scrollContainer.evaluate((element) => {
+      const contentRect = element.getBoundingClientRect();
+      const contentRight = contentRect.left + element.clientWidth;
+      const overflowingPanels = Array.from(element.querySelectorAll<HTMLElement>('.panel')).filter(
+        (panel) => panel.getBoundingClientRect().right > contentRight + 0.5
+      );
+
+      return {
+        contentFits: element.scrollWidth <= element.clientWidth,
+        horizontalOverflowPolicy: getComputedStyle(element).overflowX,
+        overflowingPanelCount: overflowingPanels.length,
+      };
+    });
+    const ticketFits = await localPeerTicket.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth
+    );
+
+    expect(layout, `viewport width: ${width}`).toEqual({
+      contentFits: true,
+      horizontalOverflowPolicy: 'hidden',
+      overflowingPanelCount: 0,
+    });
+    expect(ticketFits, `peer ticket at viewport width: ${width}`).toBeTruthy();
+    await expect(settingsDialog.getByRole('button', { name: 'Import Peer' })).toBeVisible();
+  }
 });
 
 test('browser mock narrow shell keeps nav, context, and settings flows reachable without overflow', async ({

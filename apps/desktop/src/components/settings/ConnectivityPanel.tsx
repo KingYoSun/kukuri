@@ -29,10 +29,10 @@ export function ConnectivityPanel({
   const { t } = useTranslation(['common', 'settings']);
 
   return (
-    <div className='space-y-4'>
-      <Card className='space-y-4'>
+    <div className='min-w-0 space-y-4'>
+      <Card className='min-w-0 max-w-full space-y-4'>
         <CardHeader className='items-start justify-between gap-3 md:flex'>
-          <div>
+          <div className='min-w-0'>
             <h3>{t('settings:connectivity.title')}</h3>
           </div>
           <StatusBadge label={view.summaryLabel} tone={view.status === 'error' ? 'destructive' : 'accent'} />
@@ -49,27 +49,28 @@ export function ConnectivityPanel({
         ) : null}
       </Card>
 
-      <Card className='space-y-4'>
+      <Card className='min-w-0 max-w-full space-y-4'>
         <CardHeader>
           <h3>{t('settings:connectivity.peerTickets')}</h3>
           <small>{t('settings:connectivity.manualConnectivity')}</small>
         </CardHeader>
 
-        <label className='flex flex-col gap-3'>
+        <label className='flex min-w-0 flex-col gap-3'>
           <span>{t('settings:connectivity.yourTicket')}</span>
           <Textarea
             readOnly
             value={view.localPeerTicket}
-            className='min-h-[88px] resize-y font-mono text-[0.8rem]'
+            className='min-h-[88px] min-w-0 max-w-full resize-y font-mono text-[0.8rem] [overflow-wrap:anywhere]'
           />
         </label>
 
-        <label className='flex flex-col gap-3'>
+        <label className='flex min-w-0 flex-col gap-3'>
           <span>{t('settings:connectivity.peerTicket')}</span>
           <Input
             value={view.peerTicketInput}
             onChange={(event) => onPeerTicketInputChange(event.target.value)}
             placeholder={t('settings:connectivity.peerTicketPlaceholder')}
+            className='min-w-0 max-w-full'
           />
         </label>
 
@@ -80,7 +81,7 @@ export function ConnectivityPanel({
         </SettingsActionRow>
       </Card>
 
-      <Card className='space-y-4'>
+      <Card className='min-w-0 max-w-full space-y-4'>
         <CardHeader>
           <h3>{t('settings:connectivity.topicConnectivity')}</h3>
           <small>{t('settings:connectivity.tracked', { count: view.topics.length })}</small>
@@ -88,11 +89,11 @@ export function ConnectivityPanel({
 
         {view.topics.length === 0 ? <Notice>{t('settings:connectivity.noTopicDiagnostics')}</Notice> : null}
 
-        <div className='space-y-3'>
+        <div className='min-w-0 space-y-3'>
           {view.topics.map((topic) => (
             <section
               key={topic.topic}
-              className='rounded-[20px] border border-[var(--border-subtle)] bg-[var(--surface-panel-soft)] p-4 shadow-[var(--shadow-dropdown)]'
+              className='min-w-0 max-w-full rounded-[20px] border border-[var(--border-subtle)] bg-[var(--surface-panel-soft)] p-4 shadow-[var(--shadow-dropdown)]'
             >
               <div className='flex flex-wrap items-start justify-between gap-3'>
                 <div className='min-w-0'>
