@@ -363,6 +363,7 @@ fn indexer_stack_full_config_emits_expected_tfvars() {
     assert!(tfvars.contains("safety_provider_known_csam_required   = true"));
     assert!(tfvars.contains("safety_provider_general               = \"openai-compatible-vlm\""));
     assert!(tfvars.contains("safety_emit_signed_events             = true"));
+    assert!(tfvars.contains("safety_operator_review                 = true"));
     assert!(tfvars.contains("safety_signing_key_secret_id = \"kukuri-cn-safety-signing-key\""));
     assert!(tfvars.contains("vlm_api_base_url     = \"http://192.0.2.10:8000\""));
     assert!(tfvars.contains("vlm_model            = \"inclusionAI/SingGuard-2b\""));

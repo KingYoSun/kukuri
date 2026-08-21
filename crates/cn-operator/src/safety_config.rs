@@ -39,7 +39,7 @@ impl Default for SafetyConfig {
 /// runtime へは env（`COMMUNITY_NODE_SAFETY_SUSPECTED_THRESHOLD` /
 /// `COMMUNITY_NODE_SAFETY_SUSPECTED_SIGNAL_VISIBILITY` /
 /// `COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW`）として注入される宣言。
-#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SafetyModerationConfig {
     /// suspected 判定の classifier スコア閾値（1-100。未指定なら policy 既定 70 = 0.7）。
@@ -49,9 +49,23 @@ pub struct SafetyModerationConfig {
     /// 未指定なら既定 `local`（安全側。hard cap ではない。ADR 0028 §2.4 / §2.7）。
     #[serde(default)]
     pub suspected_signal_visibility: Option<SignalVisibility>,
-    /// operator レビュー（検知メタデータの直接編集）を有効化するか（既定 false。ADR 0028 §2.3）。
-    #[serde(default)]
+    /// operator レビュー（検知メタデータの直接編集）を有効化するか（既定 true。ADR 0028 §2.3）。
+    #[serde(default = "default_operator_review")]
     pub operator_review: bool,
+}
+
+impl Default for SafetyModerationConfig {
+    fn default() -> Self {
+        Self {
+            suspected_threshold: None,
+            suspected_signal_visibility: None,
+            operator_review: default_operator_review(),
+        }
+    }
+}
+
+const fn default_operator_review() -> bool {
+    true
 }
 
 /// risk signal の配布 visibility（`cn-safety` の `Visibility` と同じ語彙）。
