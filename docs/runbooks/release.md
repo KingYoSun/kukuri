@@ -28,7 +28,7 @@ Windows code signing certificates are optional for the first preview. If code si
 ## Local Gates
 
 ```bash
-cargo xtask release-check v0.1.4-preview.1
+cargo xtask release-check v0.1.5-preview.1
 cargo xtask check
 cargo xtask test
 cargo xtask e2e-smoke
@@ -108,7 +108,7 @@ The repository keeps a [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)-
 To preview the generated section locally before tagging (no commit, branch, or PR is created):
 
 ```powershell
-./scripts/release/update-changelog.ps1 -Tag v0.1.4-preview.1 -Repository KingYoSun/kukuri -PreviousTag v0.1.3-preview.1
+./scripts/release/update-changelog.ps1 -Tag v0.1.5-preview.1 -Repository KingYoSun/kukuri -PreviousTag v0.1.4-preview.1
 ```
 
 The `changelog` job needs `contents: write` and `pull-requests: write` permissions (already set in the workflow) to push the branch and open the PR.
@@ -174,7 +174,7 @@ if (-not $manifest.platforms.'windows-x86_64'.signature) {
 network access が必要。
 
 ```powershell
-./scripts/release/test-published-updater-signature.ps1 -Tag v0.1.4-preview.1
+./scripts/release/test-published-updater-signature.ps1 -Tag v0.1.5-preview.1
 ```
 
 assetを差し替えた場合は `SHA256SUMS.txt` も必ず更新する。GitHub/CDNの切替後に上記の短いURLを
