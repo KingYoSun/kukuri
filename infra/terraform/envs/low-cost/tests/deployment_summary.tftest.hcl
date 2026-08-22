@@ -24,6 +24,21 @@ run "indexer_stack_enabled_summary" {
     condition     = output.deployment_profile_summary.index_moderation_trust == "provisioned (cn-indexer + ArcadeDB + relation analysis)"
     error_message = "deployment summary must report the enabled indexer stack as provisioned"
   }
+
+  assert {
+    condition     = google_monitoring_metric_descriptor.community_node["media_fetch_unavailable_total"].display_name == "Community Node media fetch unavailable total"
+    error_message = "media fetch unavailability must remain observable as a dedicated metric"
+  }
+
+  assert {
+    condition     = google_monitoring_alert_policy.community_node["provider"].display_name == "Community Node external safety provider failure"
+    error_message = "the provider alert must identify external safety provider failures"
+  }
+
+  assert {
+    condition     = !contains(keys(google_monitoring_alert_policy.community_node), "media_fetch_unavailable")
+    error_message = "peer-dependent media fetch unavailability must not create a paging alert"
+  }
 }
 
 run "indexer_stack_disabled_summary" {

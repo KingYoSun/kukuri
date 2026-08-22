@@ -37,7 +37,7 @@ pub struct IndexerStateSnapshot {
     pub skipped_non_allow: u64,
     /// スキャン失敗（scan_failed / unscanned / スキャン呼び出しの失敗）の件数。
     pub scan_errors: u64,
-    /// プロバイダ利用不可の件数。
+    /// media 取得不能を除く、外部 safety provider 利用不可の件数。
     pub provider_unavailable: u64,
     /// 索引から外した件数の累計。
     pub deindexed: u64,
@@ -131,6 +131,14 @@ impl IndexerRuntimeState {
 
     pub fn record_media_fetch_unavailable(&self) {
         self.media_fetch_unavailable.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// media 取得不能の現在値を返す。
+    ///
+    /// scan 前後の差分から、`ProviderUnavailable` が外部 provider ではなく media fetch 境界で
+    /// 発生したかを分類するために使う。常駐 worker は scope / entry を逐次 scan する。
+    pub(crate) fn media_fetch_unavailable_count(&self) -> u64 {
+        self.media_fetch_unavailable.load(Ordering::Relaxed)
     }
 
     pub fn record_media_fetch_timeout(&self) {

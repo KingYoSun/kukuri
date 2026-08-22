@@ -224,7 +224,11 @@ locals {
       unit         = "1"
     }
     provider_failure_detected = {
-      display_name = "Community Node provider failure detected"
+      display_name = "Community Node external safety provider failure detected"
+      unit         = "1"
+    }
+    media_fetch_unavailable_total = {
+      display_name = "Community Node media fetch unavailable total"
       unit         = "1"
     }
     relation_last_success_age_seconds = {
@@ -275,7 +279,7 @@ locals {
       }
       provider = {
         metric     = "provider_failure_detected"
-        display    = "Community Node safety provider failure"
+        display    = "Community Node external safety provider failure"
         comparison = "COMPARISON_GT"
         threshold  = 0.5
       }
