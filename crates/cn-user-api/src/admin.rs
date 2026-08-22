@@ -21,7 +21,9 @@ use serde::Deserialize;
 use tower_http::trace::TraceLayer;
 use uuid::Uuid;
 
+use crate::admin_action_render::{render_action_error_page, render_action_success, render_preview};
 use crate::admin_appeal_render::{render_appeal_preview, render_appeal_reviews};
+use crate::admin_shell::render_admin_page;
 use crate::state::UserApiState;
 
 pub(crate) fn admin_router(state: UserApiState) -> Router {
@@ -59,25 +61,25 @@ struct AdminState {
 }
 
 #[derive(Debug, Default, Deserialize)]
-struct AdminActionForm {
-    csrf_token: String,
-    action: String,
+pub(crate) struct AdminActionForm {
+    pub(crate) csrf_token: String,
+    pub(crate) action: String,
     #[serde(default)]
-    target_id: String,
+    pub(crate) target_id: String,
     #[serde(default)]
-    value: String,
+    pub(crate) value: String,
     #[serde(default)]
-    expected_state: String,
+    pub(crate) expected_state: String,
     #[serde(default)]
-    category: String,
+    pub(crate) category: String,
     #[serde(default)]
-    severity: String,
+    pub(crate) severity: String,
     #[serde(default)]
-    confidence: String,
+    pub(crate) confidence: String,
     #[serde(default)]
-    expires_at: String,
+    pub(crate) expires_at: String,
     #[serde(default)]
-    visibility: String,
+    pub(crate) visibility: String,
 }
 
 async fn dashboard(State(state): State<AdminState>) -> Html<String> {
@@ -533,21 +535,14 @@ fn render_dashboard(view: &DashboardView) -> String {
         ),
     );
 
-    format!(
-        r#"<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>kukuri コミュニティノード運営</title><style>
-	:root{{color-scheme:dark light;font-family:system-ui,sans-serif;--surface:#101923;--panel:#162231;--raised:#233241;--text:#f6f1e8;--muted:#cbbdae;--border:#39495a;--primary:#f59d62;--primary-text:#0e1b26;--focus:#00b3a4;--warning:#e6b066}}@media(prefers-color-scheme:light){{:root{{--surface:#f4efe6;--panel:#fff;--raised:#dfe6ec;--text:#21303b;--muted:#5f6c76;--border:#b7c2cb;--primary:#d77d45;--primary-text:#fff7ef;--focus:#0f8c82;--warning:#9a6e2a}}}}*{{box-sizing:border-box}}body{{max-width:1240px;margin:0 auto;padding:24px;line-height:1.5;background:var(--surface);color:var(--text)}}header,section,.dialog{{border:1px solid var(--border);border-radius:18px;padding:18px;margin-bottom:18px;background:var(--panel)}}.metrics{{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}}.metric{{background:var(--raised);border-radius:12px;padding:12px}}table{{border-collapse:collapse;width:100%;display:block;overflow:auto}}th,td{{border-bottom:1px solid var(--border);padding:9px;text-align:left;vertical-align:top}}code{{overflow-wrap:anywhere}}.boundary{{border-left:4px solid var(--warning);padding-left:12px}}a{{color:var(--focus)}}button{{min-height:44px;border:0;border-radius:999px;padding:8px 14px;background:var(--primary);color:var(--primary-text);font-weight:700;cursor:pointer}}button.secondary{{background:var(--raised);color:var(--text)}}input,select{{min-height:44px;border:1px solid var(--border);border-radius:10px;padding:7px 10px;background:var(--surface);color:var(--text)}}.inline-form,.compact-form,.review-actions{{display:flex;flex-wrap:wrap;align-items:end;gap:10px;margin:12px 0}}.compact-form{{min-width:270px}}label{{display:grid;gap:4px}}.meta{{color:var(--muted);font-size:.875rem}}.danger{{color:var(--warning)}}.appeal-card{{border:1px solid var(--border);border-radius:14px;padding:14px;margin:14px 0;background:var(--surface)}}.appeal-grid{{display:grid;grid-template-columns:minmax(100px,auto) minmax(0,1fr);gap:6px 12px}}.appeal-grid dt{{font-weight:700}}.appeal-grid dd{{margin:0}}.edit-form{{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;width:100%;padding:12px;border:1px solid var(--border);border-radius:12px}}@media(max-width:720px){{body{{padding:12px}}.appeal-grid{{grid-template-columns:1fr}}}}
-</style></head><body>
-<header><h1>コミュニティノード運営</h1><p>運営者専用の画面です。接続は <code>GCP IAP</code> の転送と権限管理で制限されます。</p></header>
-<section><h2>稼働状態と受け入れ方式</h2><div class="metrics"><div class="metric"><strong>利用者向け接続先</strong><br>稼働中</div><div class="metric"><strong>受け入れ方式</strong><br>{}</div><div class="metric"><strong>直近の準備確認</strong><br>{}</div></div>{}</section>
+    let main = format!(
+        r#"<section><h2>稼働状態と受け入れ方式</h2><div class="metrics"><div class="metric"><strong>利用者向け接続先</strong><br>稼働中</div><div class="metric"><strong>受け入れ方式</strong><br>{}</div><div class="metric"><strong>直近の準備確認</strong><br>{}</div></div>{}</section>
 <section><h2>対応トピック</h2><p>この画面で変更できるのは公開トピックだけです。非公開チャンネルの権限は変更できません。</p>{}<table><thead><tr><th>種類</th><th>識別子</th><th>作成時刻</th><th>操作</th></tr></thead><tbody>{}</tbody></table></section>
 <section><h2>最近の通報</h2><p>新しい順に 50 件を表示します。補足説明と連絡先は、この一覧と操作記録には表示しません。</p><table><thead><tr><th>受信時刻</th><th>識別子</th><th>対象</th><th>機能</th><th>理由</th><th>状態</th><th>操作</th></tr></thead><tbody>{}</tbody></table></section>
-	<section><h2>異議申し立ての審査</h2>{}</section>
-	<section><h2>運営操作の記録</h2><p>画面から行った直近 50 件の操作です。データベースで追記専用に保護されています。</p><table><thead><tr><th>実行時刻</th><th>識別子</th><th>運営者</th><th>操作</th><th>対象</th><th>変更</th></tr></thead><tbody>{}</tbody></table></section>
+<section><h2>異議申し立ての審査</h2>{}</section>
+<section><h2>運営操作の記録</h2><p>画面から行った直近 50 件の操作です。データベースで追記専用に保護されています。</p><table><thead><tr><th>実行時刻</th><th>識別子</th><th>運営者</th><th>操作</th><th>対象</th><th>変更</th></tr></thead><tbody>{}</tbody></table></section>
 <section><h2>運用ログ</h2><p>実行時ログは既存のログ基盤に残します。この画面が秘密情報や生ログを複製することはありません。</p>{}<p><code>sudo journalctl -u kukuri-readiness.service -n 100 --no-pager</code></p></section>
-<section><h2>配備との責任境界</h2><p class="boundary">プロバイダーや言語モデルの認証情報、機能の有効化、配備版、非公開チャンネルの秘密、招待符号、許可一覧、禁止一覧はこの画面から変更できません。確認済みの <code>operator-config.yaml</code>、<code>Terraform</code>、秘密管理、<code>cn-cli readiness</code> を使ってください。画面からの変更は、内容確認と明示的な確定を必須にします。</p></section>
-</body></html>"#,
+<section><h2>配備との責任境界</h2><p class="boundary">プロバイダーや言語モデルの認証情報、機能の有効化、配備版、非公開チャンネルの秘密、招待符号、許可一覧、禁止一覧はこの画面から変更できません。確認済みの <code>operator-config.yaml</code>、<code>Terraform</code>、秘密管理、<code>cn-cli readiness</code> を使ってください。画面からの変更は、内容確認と明示的な確定を必須にします。</p></section>"#,
         escape_html(&view.admission_mode),
         escape_html(&view.readiness),
         admission_control,
@@ -557,6 +552,11 @@ fn render_dashboard(view: &DashboardView) -> String {
         appeals,
         audit,
         logs_link,
+    );
+    render_admin_page(
+        "kukuri コミュニティノード運営",
+        "<h1>コミュニティノード運営</h1><p>運営者専用の画面です。接続は <code>GCP IAP</code> の転送と権限管理で制限されます。</p>",
+        &main,
     )
 }
 
@@ -639,92 +639,8 @@ fn csrf_matches(expected: &str, supplied: &str) -> bool {
         == 0
 }
 
-fn render_preview(
-    csrf_token: &str,
-    actor: &str,
-    form: &AdminActionForm,
-    operation: &AdminOperation,
-) -> String {
-    let (title, target, impact) = operation_summary(operation);
-    let body = format!(
-        r#"<div class="dialog"><p class="meta">適用前の確認</p><h1>{}</h1><dl><dt>運営者</dt><dd><code>{}</code></dd><dt>対象</dt><dd><code>{}</code></dd><dt>影響</dt><dd>{}</dd></dl><p class="boundary">適用時に現在値と入力をもう一度検証します。状態変更と操作記録は一つの取引で確定します。</p><form method="post" action="/actions/apply"><input type="hidden" name="csrf_token" value="{}"><input type="hidden" name="action" value="{}"><input type="hidden" name="target_id" value="{}"><input type="hidden" name="value" value="{}"><button type="submit">確認して適用</button> <a href="/">取り消す</a></form></div>"#,
-        escape_html(title),
-        escape_html(actor),
-        escape_html(&target),
-        escape_html(&impact),
-        escape_html(csrf_token),
-        escape_html(&form.action),
-        escape_html(&form.target_id),
-        escape_html(&form.value),
-    );
-    render_simple_page("運営操作の確認", body.as_str())
-}
-
-fn operation_summary(operation: &AdminOperation) -> (&'static str, String, String) {
-    match operation {
-        AdminOperation::SetAdmissionMode { mode } => (
-            "受け入れ方式を変更しますか",
-            "community-node admission".to_string(),
-            format!(
-                "受け入れ方式を {} に変更します。現在接続中の利用者は維持されます。",
-                mode.as_str()
-            ),
-        ),
-        AdminOperation::AddSupportedPublicTopic { topic_id } => (
-            "対応する公開トピックを追加しますか",
-            topic_id.clone(),
-            "この公開トピックの取り込みを許可します。安全性確認と準備確認は引き続き適用されます。"
-                .to_string(),
-        ),
-        AdminOperation::RemoveSupportedPublicTopic { topic_id } => (
-            "対応する公開トピックを削除しますか",
-            topic_id.clone(),
-            "この範囲の今後の取り込みを停止します。索引からの除去と処理状態の整合は非同期です。"
-                .to_string(),
-        ),
-        AdminOperation::SetReportStatus { report_id, status } => (
-            "通報の状態を変更しますか",
-            report_id.clone(),
-            format!(
-                "このノード内の通報状態を {} に変更します。",
-                status.as_str()
-            ),
-        ),
-    }
-}
-
-fn render_action_success(action: &kukuri_cn_core::OperatorAction) -> String {
-    let body = format!(
-        r#"<div class="dialog"><p class="meta">操作完了</p><h1>運営操作を適用しました</h1><dl><dt>操作記録の識別子</dt><dd><code>{}</code></dd><dt>運営者</dt><dd><code>{}</code></dd><dt>操作</dt><dd>{}</dd><dt>対象</dt><dd><code>{}/{}</code></dd><dt>変更</dt><dd><code>{} -&gt; {}</code></dd></dl><p><a href="/">運営画面へ戻る</a></p></div>"#,
-        escape_html(&action.id),
-        escape_html(&action.actor),
-        escape_html(&action.action),
-        escape_html(&action.target_kind),
-        escape_html(&action.target_id),
-        escape_html(&action.before.to_string()),
-        escape_html(&action.after.to_string()),
-    );
-    render_simple_page("運営操作を適用しました", body.as_str())
-}
-
 fn render_action_error(status: StatusCode, message: &str) -> Response {
-    let body = format!(
-        r#"<div class="dialog"><p class="meta">未適用</p><h1>運営操作を拒否しました</h1><p class="danger">{}</p><p>状態と操作記録は変更されていません。</p><p><a href="/">運営画面へ戻る</a></p></div>"#,
-        escape_html(message)
-    );
-    (
-        status,
-        Html(render_simple_page("運営操作を拒否しました", body.as_str())),
-    )
-        .into_response()
-}
-
-pub(crate) fn render_simple_page(title: &str, body: &str) -> String {
-    format!(
-        r#"<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{}</title><style>:root{{color-scheme:dark light;font-family:system-ui,sans-serif}}body{{max-width:760px;margin:0 auto;padding:24px;line-height:1.5}}.dialog{{border:1px solid currentColor;border-radius:18px;padding:20px}}code{{overflow-wrap:anywhere}}.meta{{opacity:.72}}.boundary{{border-left:4px solid #d59b16;padding-left:12px}}button{{min-height:44px;border:0;border-radius:999px;padding:10px 16px;font-weight:700}}dt{{font-weight:700;margin-top:10px}}dd{{margin-left:0}}</style></head><body>{}</body></html>"#,
-        escape_html(title),
-        body,
-    )
+    (status, Html(render_action_error_page(message))).into_response()
 }
 
 fn render_error() -> String {
@@ -824,28 +740,6 @@ mod tests {
         let mut unsupported = form;
         unsupported.action = "provider.set_api_key".to_string();
         assert!(operation_from_form(&unsupported).is_err());
-    }
-
-    #[test]
-    fn preview_escapes_actor_target_and_values() {
-        let html = render_preview(
-            "csrf",
-            "ops<script>@kukuri.app",
-            &AdminActionForm {
-                csrf_token: "csrf".to_string(),
-                action: "supported_topic.add".to_string(),
-                target_id: "kukuri:topic:<script>".to_string(),
-                value: String::new(),
-                ..AdminActionForm::default()
-            },
-            &kukuri_cn_core::AdminOperation::AddSupportedPublicTopic {
-                topic_id: "kukuri:topic:<script>".to_string(),
-            },
-        );
-        assert!(!html.contains("ops<script>"));
-        assert!(!html.contains("kukuri:topic:<script>"));
-        assert!(html.contains("ops&lt;script&gt;@kukuri.app"));
-        assert!(html.contains("kukuri:topic:&lt;script&gt;"));
     }
 
     fn disputed_appeal_version() -> AppealReviewVersion {

@@ -12,7 +12,9 @@
 //!   trust_relation / bootstrap)
 
 mod admin;
+mod admin_action_render;
 mod admin_appeal_render;
+mod admin_shell;
 mod config;
 mod errors;
 mod handlers;

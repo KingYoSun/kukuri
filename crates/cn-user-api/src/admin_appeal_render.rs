@@ -4,7 +4,10 @@ use kukuri_cn_core::{
     AppealReview, AppealReviewOperation, RiskSignalCorrection, RiskSignalMetadataEdit,
 };
 
-use crate::admin::{escape_html, option, render_simple_page};
+use crate::admin::{escape_html, option};
+use crate::admin_shell::{
+    action_header, code_fact, dashboard_link, facts, render_admin_page, text_fact,
+};
 
 pub(crate) fn render_appeal_reviews(
     reviews: &[AppealReview],
@@ -114,6 +117,8 @@ fn enum_options(values: &[&str], current: &str) -> String {
         .collect()
 }
 
+const TRANSACTION_BOUNDARY: &str = "リスク判定、関連通報、操作記録は一つの取引で確定します。";
+
 /// 審査操作の確認画面(#680 / #701)。
 ///
 /// 表示値と隠し入力を同じ解析済み操作から生成し、確認画面に見えた値と適用時に
@@ -157,23 +162,32 @@ pub(crate) fn render_appeal_preview(
         | AppealReviewOperation::Reissue { expected, .. } => expected,
     };
     let expected_state = serde_json::to_string(expected).expect("appeal review version serializes");
-    let body = format!(
-        r#"<div class="dialog"><p class="meta">適用前の確認</p><h1>{}</h1><dl><dt>運営者</dt><dd><code>{}</code></dd><dt>リスク判定</dt><dd><code>{}</code></dd><dt>対象</dt><dd><code>{}/{}</code></dd><dt>現在の状態</dt><dd>{}</dd>{}<dt>影響</dt><dd>{}</dd></dl><p class="boundary">適用時に現在値をもう一度取得し、確認後に変更されていた場合は拒否します。リスク判定、関連通報、操作記録は一つの取引で確定します。</p><form method="post" action="/actions/apply"><input type="hidden" name="csrf_token" value="{}"><input type="hidden" name="action" value="{}"><input type="hidden" name="target_id" value="{}"><input type="hidden" name="expected_state" value="{}">{}<button type="submit">確認して適用</button> <a href="/">取り消す</a></form></div>"#,
-        escape_html(title),
-        escape_html(actor),
-        escape_html(&review.risk_signal_id),
-        escape_html(&review.target),
-        escape_html(&review.target_id),
-        escape_html(&review.appeal_status),
-        changes.unwrap_or_default(),
-        escape_html(impact),
+    let header = action_header("適用前の確認", title);
+    let mut items = vec![
+        code_fact("運営者", actor),
+        code_fact("リスク判定", &review.risk_signal_id),
+        code_fact("対象", &format!("{}/{}", review.target, review.target_id)),
+        text_fact("現在の状態", &review.appeal_status),
+    ];
+    if let Some(changes) = changes {
+        items.push((
+            "変更内容",
+            format!("<p class=\"meta\">変更前は確認時点の審査情報です。</p>{changes}"),
+        ));
+    }
+    items.push(text_fact("影響", impact));
+    items.push(text_fact("取引境界", TRANSACTION_BOUNDARY));
+    let main = format!(
+        r#"<section class="dialog">{}<p class="boundary">適用時に現在値をもう一度取得し、確認後に変更されていた場合は拒否します。</p><form method="post" action="/actions/apply"><input type="hidden" name="csrf_token" value="{}"><input type="hidden" name="action" value="{}"><input type="hidden" name="target_id" value="{}"><input type="hidden" name="expected_state" value="{}">{}<div class="actions"><button class="primary" type="submit">確認して適用</button>{}</div></form></section>"#,
+        facts(&items),
         escape_html(csrf_token),
         escape_html(action),
         escape_html(&review.risk_signal_id),
         escape_html(&expected_state),
         hidden_metadata_fields(operation),
+        dashboard_link("取り消す", false),
     );
-    render_simple_page("異議申し立て審査の確認", body.as_str())
+    render_admin_page("異議申し立て審査の確認", &header, &main)
 }
 
 /// 変更前後表示の 1 項目。`after` が `None`(未入力)の項目は現在値を維持する。
@@ -258,7 +272,7 @@ fn render_change_list(changes: &[FieldChange]) -> String {
             }
         })
         .collect::<String>();
-    format!("<dt>変更内容(変更前は確認時点の審査情報)</dt><dd><ul>{items}</ul></dd>")
+    format!("<ul>{items}</ul>")
 }
 
 /// 適用フォームへ写す検知情報の隠し入力。解析済み操作から生成し、未変更(None)は
@@ -513,5 +527,29 @@ mod tests {
         );
         assert!(!html.contains("signal-<script>"), "{html}");
         assert!(!html.contains("ops<script>"), "{html}");
+    }
+
+    #[test]
+    fn appeal_preview_uses_shared_admin_shell() {
+        // #740: 審査の確認画面も dashboard と同じ style・header・操作階層を使う。
+        let review = review_fixture();
+        let html = render_appeal_preview(
+            "csrf",
+            "ops@kukuri.app",
+            &AppealReviewOperation::Accept {
+                expected: review.version(),
+            },
+            &review,
+        );
+        assert!(html.contains(crate::admin_shell::ADMIN_STYLE));
+        assert!(html.contains(
+            "<nav class=\"crumbs\" aria-label=\"現在位置\"><a href=\"/\">コミュニティノード運営</a>"
+        ));
+        assert!(html.contains("<span aria-current=\"page\">適用前の確認</span>"));
+        assert!(html.contains("<dl class=\"facts\">"));
+        assert!(html.contains("<dt>取引境界</dt>"));
+        assert!(html.contains("<button class=\"primary\" type=\"submit\">確認して適用</button>"));
+        assert!(html.contains("<a class=\"button secondary\" href=\"/\">取り消す</a>"));
+        assert!(html.contains("<input type=\"hidden\" name=\"expected_state\""));
     }
 }
