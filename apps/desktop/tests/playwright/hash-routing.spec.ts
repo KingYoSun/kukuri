@@ -159,6 +159,19 @@ test('production Columns retain a pinned causal chain and close back through its
     })
     .toBeLessThanOrEqual(0);
   await expect
+    .poll(() =>
+      profileColumn.locator('.shell-column-body').evaluate((body) => {
+        const bodyRight = body.getBoundingClientRect().right;
+        return Math.max(
+          0,
+          ...Array.from(body.querySelectorAll<HTMLElement>('*'), (element) =>
+            element.getBoundingClientRect().right - bodyRight
+          )
+        );
+      })
+    )
+    .toBeLessThanOrEqual(0.5);
+  await expect
     .poll(async () => {
       const canvasBox = await page.locator('.shell-column-canvas').boundingBox();
       const profileBox = await profileColumn.boundingBox();

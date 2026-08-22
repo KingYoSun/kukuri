@@ -552,8 +552,8 @@
 
 .shell-phase1 .shell-column-body > .shell-main-stack {
   grid-template-columns: minmax(0, 1fr);
-  inline-size: 100cqi;
-  max-inline-size: 100cqi;
+  inline-size: calc(100cqi - var(--space-md) - var(--space-md));
+  max-inline-size: calc(100cqi - var(--space-md) - var(--space-md));
 }
 
 .shell-phase1 .shell-column-footer {
