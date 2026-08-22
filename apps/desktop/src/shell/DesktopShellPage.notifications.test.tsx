@@ -42,7 +42,7 @@ test('sidebar notifications button shows unread count and opening inbox auto-mar
 
   render(<App api={api} />);
 
-  const sidebarButton = screen.getByRole('button', { name: /Notifications/ });
+  const sidebarButton = screen.getByRole('button', { name: /^Notifications (?:\d+|99\+)$/ });
   await waitFor(() => {
     expect(sidebarButton).toHaveTextContent('2');
   });
@@ -74,7 +74,7 @@ test('desktop shell loads unread notification rows outside the inbox for OS noti
   renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo', api);
 
   await waitFor(() => {
-    expect(screen.getByRole('button', { name: /Notifications/ })).toHaveTextContent('1');
+    expect(screen.getByRole('button', { name: /^Notifications (?:\d+|99\+)$/ })).toHaveTextContent('1');
     expect(listNotifications).toHaveBeenCalled();
   });
   expect(markAllNotificationsRead).not.toHaveBeenCalled();
@@ -87,15 +87,15 @@ test('clicking the active notifications button returns to the previous route', a
 
   expect(await screen.findByRole('button', { name: 'Edit Profile' })).toBeInTheDocument();
 
-  const notificationsButton = screen.getByRole('button', { name: /Notifications/ });
+  const notificationsButton = screen.getByRole('button', { name: /^Notifications (?:\d+|99\+)$/ });
   await user.click(notificationsButton);
 
   await waitFor(() => {
     expect(window.location.hash).toBe('#/notifications?topic=kukuri%3Atopic%3Ademo');
   });
-  expect(screen.getByRole('heading', { name: 'Notifications' })).toBeInTheDocument();
+  expect(screen.getAllByRole('heading', { name: 'Notifications' }).length).toBeGreaterThan(0);
 
-  await user.click(screen.getByRole('button', { name: /Notifications/ }));
+  await user.click(screen.getByRole('button', { name: /^Notifications (?:\d+|99\+)$/ }));
 
   await waitFor(() => {
     expect(window.location.hash).toBe('#/profile?topic=kukuri%3Atopic%3Ademo');
@@ -117,10 +117,10 @@ test('notifications route renders inbox and marks unread notifications as read o
 
   renderAtHash('#/notifications?topic=kukuri%3Atopic%3Ademo', api);
 
-  expect(await screen.findByRole('heading', { name: 'Notifications' })).toBeInTheDocument();
+  expect((await screen.findAllByRole('heading', { name: 'Notifications' })).length).toBeGreaterThan(0);
   await waitFor(() => {
     expect(markAllNotificationsRead).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('button', { name: /Notifications/ })).toHaveTextContent('0');
+    expect(screen.getByRole('button', { name: /^Notifications (?:\d+|99\+)$/ })).toHaveTextContent('0');
   });
   expect(screen.getByText('open from route')).toBeInTheDocument();
 });
@@ -128,7 +128,7 @@ test('notifications route renders inbox and marks unread notifications as read o
 test('notifications route renders an empty state when the inbox has no items', async () => {
   renderAtHash('#/notifications?topic=kukuri%3Atopic%3Ademo', createDesktopMockApi());
 
-  expect(await screen.findByRole('heading', { name: 'Notifications' })).toBeInTheDocument();
+  expect((await screen.findAllByRole('heading', { name: 'Notifications' })).length).toBeGreaterThan(0);
   expect(await screen.findByText('No notifications yet.')).toBeInTheDocument();
 });
 
@@ -138,7 +138,7 @@ test('notifications route surfaces a load error when the inbox request fails', a
 
   renderAtHash('#/notifications?topic=kukuri%3Atopic%3Ademo', api);
 
-  expect(await screen.findByRole('heading', { name: 'Notifications' })).toBeInTheDocument();
+  expect((await screen.findAllByRole('heading', { name: 'Notifications' })).length).toBeGreaterThan(0);
   expect(await screen.findByText('load notifications exploded')).toBeInTheDocument();
 });
 
@@ -155,12 +155,12 @@ test('notifications route surfaces auto-read errors and keeps unread state visib
 
   renderAtHash('#/notifications?topic=kukuri%3Atopic%3Ademo', api);
 
-  expect(await screen.findByRole('heading', { name: 'Notifications' })).toBeInTheDocument();
+  expect((await screen.findAllByRole('heading', { name: 'Notifications' })).length).toBeGreaterThan(0);
   expect(await screen.findByText('mark read failed')).toBeInTheDocument();
   expect(screen.getByText('still unread notification')).toBeInTheDocument();
   expect(screen.getByText('Unread')).toBeInTheDocument();
   await waitFor(() => {
-    expect(screen.getByRole('button', { name: /Notifications/ })).toHaveTextContent('1');
+    expect(screen.getByRole('button', { name: /^Notifications (?:\d+|99\+)$/ })).toHaveTextContent('1');
   });
 });
 
@@ -224,7 +224,7 @@ test('reply notification click-through opens the source thread in timeline', asy
     })
   );
 
-  await screen.findByRole('heading', { name: 'Notifications' });
+  await screen.findAllByRole('heading', { name: 'Notifications' });
   await user.click(screen.getByText('open thread from notification'));
 
   await waitFor(() => {
@@ -266,7 +266,7 @@ test('direct message notification click-through opens the messages pane', async 
     })
   );
 
-  await screen.findByRole('heading', { name: 'Notifications' });
+  await screen.findAllByRole('heading', { name: 'Notifications' });
   await user.click(screen.getByText('hello from dm notification'));
 
   await waitFor(() => {
@@ -302,7 +302,7 @@ test('follow notification click-through opens the author pane from timeline', as
     })
   );
 
-  await screen.findByRole('heading', { name: 'Notifications' });
+  await screen.findAllByRole('heading', { name: 'Notifications' });
   await user.click(screen.getByText('Started following you.'));
 
   await waitFor(() => {

@@ -6,6 +6,7 @@ import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import { App } from '@/App';
 import {
   getSocialConnectionsTabs,
+  getDetailPane,
   selectTimelineView,
   selectWorkspace,
   setViewportWidth,
@@ -404,7 +405,8 @@ test('author detail mute toggle updates the selected author state', async () => 
 
   await user.click(await screen.findByRole('button', { name: 'bob' }));
 
-  const authorPane = await screen.findByRole('complementary', { name: 'Author' });
+  await waitFor(() => expect(getDetailPane('Author')).toBeInTheDocument());
+  const authorPane = getDetailPane('Author');
   expect(within(authorPane).getByRole('button', { name: 'Mute' })).toBeInTheDocument();
 
   await user.click(within(authorPane).getByRole('button', { name: 'Mute' }));

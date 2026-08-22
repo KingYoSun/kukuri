@@ -7,6 +7,7 @@ import { AuthorIdentityButton } from '@/components/core/AuthorIdentityButton';
 import { ComposerDraftPreviewList } from '@/components/core/ComposerDraftPreviewList';
 import { ThreadPanel } from '@/components/core/ThreadPanel';
 import { TimelineFeed } from '@/components/core/TimelineFeed';
+import type { AuthorDetailView } from '@/components/core/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -33,6 +34,8 @@ import {
   authorViewFromDirectMessageConversation,
   formatCount,
   resolveProfilePictureSrc,
+  shortPubkey,
+  strongestRelationshipLabel,
 } from '@/shell/presentation';
 import {
   selectPrimaryImageAttachment,
@@ -80,6 +83,8 @@ export type DesktopShellMessagesSurfaceProps = {
   handleDirectMessageAttachmentSelection: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
   handleRemoveDirectMessageDraftAttachment: (itemId: string) => void;
   handleSendDirectMessage: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  surfaceKind?: 'messages' | 'conversation';
+  peerPubkey?: string;
 };
 
 export function DesktopShellMessagesSurface({
@@ -94,6 +99,8 @@ export function DesktopShellMessagesSurface({
   handleDirectMessageAttachmentSelection,
   handleRemoveDirectMessageDraftAttachment,
   handleSendDirectMessage,
+  surfaceKind,
+  peerPubkey,
 }: DesktopShellMessagesSurfaceProps) {
   const {
     directMessageAttachmentInputKey,
@@ -101,6 +108,8 @@ export function DesktopShellMessagesSurface({
     directMessageError,
     directMessageSending,
     directMessages,
+    directMessageStatusByPeer,
+    directMessageTimelineByPeer,
     knownAuthorsByPubkey,
     localProfile,
     mediaObjectUrls,
@@ -114,6 +123,8 @@ export function DesktopShellMessagesSurface({
       directMessageError: s.directMessageError,
       directMessageSending: s.directMessageSending,
       directMessages: s.directMessages,
+      directMessageStatusByPeer: s.directMessageStatusByPeer,
+      directMessageTimelineByPeer: s.directMessageTimelineByPeer,
       knownAuthorsByPubkey: s.knownAuthorsByPubkey,
       localProfile: s.localProfile,
       mediaObjectUrls: s.mediaObjectUrls,
@@ -128,10 +139,33 @@ export function DesktopShellMessagesSurface({
     localProfile?.display_name,
     localProfile?.name
   );
+  const conversationPeerPubkey = peerPubkey ?? selectedDirectMessagePeerPubkey;
+  const conversation = directMessages.find(
+    (item) => item.peer_pubkey === conversationPeerPubkey
+  );
+  const conversationTimeline = conversationPeerPubkey
+    ? directMessageTimelineByPeer[conversationPeerPubkey] ?? []
+    : [];
+  const conversationStatus = conversationPeerPubkey
+    ? directMessageStatusByPeer[conversationPeerPubkey] ?? conversation?.status ?? null
+    : null;
+  const conversationAuthor = conversationPeerPubkey
+    ? knownAuthorsByPubkey[conversationPeerPubkey] ?? null
+    : null;
+  const conversationLabel = conversationPeerPubkey
+    ? authorDisplayLabel(
+        conversationPeerPubkey,
+        conversation?.peer_display_name,
+        conversation?.peer_name
+      )
+    : null;
+  const conversationPicture = resolveProfilePictureSrc(conversationAuthor, mediaObjectUrls);
+  const activeConversation = conversationPeerPubkey === selectedDirectMessagePeerPubkey;
 
   return (
     <>
-      <Card className='shell-workspace-card'>
+      {surfaceKind !== 'conversation' ? (
+        <Card className='shell-workspace-card'>
         <div className='panel-header'>
           <div>
             <h3>Messages</h3>
@@ -201,33 +235,37 @@ export function DesktopShellMessagesSurface({
             })}
           </ul>
         )}
-      </Card>
+        </Card>
+      ) : null}
 
-      {selectedDirectMessagePeerPubkey ? (
+      {conversationPeerPubkey && surfaceKind !== 'messages' ? (
         <>
+          {activeConversation && directMessageError ? (
+            <Notice tone='destructive'>{directMessageError}</Notice>
+          ) : null}
           <Card className='shell-workspace-card'>
             <div className='shell-workspace-header'>
               <div className='shell-workspace-summary'>
                 <AuthorIdentityButton
                   label={
-                    viewModels.selectedDirectMessagePeerLabel ?? selectedDirectMessagePeerPubkey
+                    conversationLabel ?? conversationPeerPubkey
                   }
-                  picture={viewModels.selectedDirectMessagePeerPicture}
+                  picture={conversationPicture}
                   avatarSize='lg'
                   avatarTestId='dm-active-header-avatar'
                   className='relationship-badge'
                   onClick={() =>
-                    void openAuthorDetail(selectedDirectMessagePeerPubkey, {
+                    void openAuthorDetail(conversationPeerPubkey, {
                       historyMode: 'push',
                       preserveDirectMessageContext: true,
-                      directMessagePeerPubkey: selectedDirectMessagePeerPubkey,
+                      directMessagePeerPubkey: conversationPeerPubkey,
                     })
                   }
                 />
-                {viewModels.selectedDirectMessageStatus ? (
+                {conversationStatus ? (
                   <span className='relationship-badge relationship-badge-direct'>
-                    {viewModels.selectedDirectMessageStatus.send_enabled
-                      ? `peers ${formatCount(viewModels.selectedDirectMessageStatus.peer_count)}`
+                    {conversationStatus.send_enabled
+                      ? `peers ${formatCount(conversationStatus.peer_count)}`
                       : 'send disabled'}
                   </span>
                 ) : null}
@@ -237,7 +275,7 @@ export function DesktopShellMessagesSurface({
                   variant='secondary'
                   type='button'
                   onClick={() =>
-                    void openDirectMessagePane(selectedDirectMessagePeerPubkey, {
+                    void openDirectMessagePane(conversationPeerPubkey, {
                       historyMode: 'replace',
                     })
                   }
@@ -247,8 +285,8 @@ export function DesktopShellMessagesSurface({
                 <Button
                   variant='secondary'
                   type='button'
-                  disabled={viewModels.selectedDirectMessageTimeline.length === 0}
-                  onClick={() => void handleClearDirectMessage(selectedDirectMessagePeerPubkey)}
+                  disabled={conversationTimeline.length === 0}
+                  onClick={() => void handleClearDirectMessage(conversationPeerPubkey)}
                 >
                   {t('common:actions.clear')}
                 </Button>
@@ -257,11 +295,11 @@ export function DesktopShellMessagesSurface({
           </Card>
 
           <Card className='shell-workspace-card'>
-            {viewModels.selectedDirectMessageTimeline.length === 0 ? (
+            {conversationTimeline.length === 0 ? (
               <p className='empty'>No messages yet.</p>
             ) : (
               <ul className='post-list'>
-                {viewModels.selectedDirectMessageTimeline.map((message) => {
+                {conversationTimeline.map((message) => {
                   const image = selectPrimaryImageAttachment(message.attachments);
                   const poster = selectVideoPosterAttachment(message.attachments);
                   const video = selectVideoManifestAttachment(message.attachments);
@@ -271,13 +309,13 @@ export function DesktopShellMessagesSurface({
                   const videoUnsupported = Boolean(video && unsupportedVideoManifests[video.hash]);
                   const authorPubkey = message.outgoing
                     ? syncStatus.local_author_pubkey
-                    : selectedDirectMessagePeerPubkey;
+                    : conversationPeerPubkey;
                   const authorLabel = message.outgoing
                     ? profileAuthorLabel
-                    : viewModels.selectedDirectMessagePeerLabel ?? selectedDirectMessagePeerPubkey;
+                    : conversationLabel ?? conversationPeerPubkey;
                   const authorPicture = message.outgoing
                     ? viewModels.localDirectMessageAuthorPicture
-                    : viewModels.selectedDirectMessagePeerPicture;
+                    : conversationPicture;
                   return (
                     <li key={message.message_id}>
                       <article className='post-card'>
@@ -290,7 +328,7 @@ export function DesktopShellMessagesSurface({
                               void openAuthorDetail(authorPubkey, {
                                 historyMode: 'push',
                                 preserveDirectMessageContext: true,
-                                directMessagePeerPubkey: selectedDirectMessagePeerPubkey,
+                                directMessagePeerPubkey: conversationPeerPubkey,
                               })
                             }
                           />
@@ -344,7 +382,7 @@ export function DesktopShellMessagesSurface({
                             type='button'
                             onClick={() =>
                               void handleDeleteDirectMessageMessage(
-                                selectedDirectMessagePeerPubkey,
+                                conversationPeerPubkey,
                                 message.message_id
                               )
                             }
@@ -360,9 +398,8 @@ export function DesktopShellMessagesSurface({
             )}
           </Card>
 
-          <Card className='shell-workspace-card'>
-            {viewModels.selectedDirectMessageStatus &&
-            !viewModels.selectedDirectMessageStatus.send_enabled ? (
+          {activeConversation ? <Card className='shell-workspace-card'>
+            {conversationStatus && !conversationStatus.send_enabled ? (
               <Notice tone='warning'>
                 Direct message send is disabled until the relationship is mutual again.
               </Notice>
@@ -373,7 +410,7 @@ export function DesktopShellMessagesSurface({
                 onChange={(event) => setDirectMessageComposer(event.target.value)}
                 placeholder='Write a message'
                 disabled={
-                  directMessageSending || viewModels.selectedDirectMessageStatus?.send_enabled === false
+                  directMessageSending || conversationStatus?.send_enabled === false
                 }
               />
               <Label className='file-field file-field-compact'>
@@ -384,7 +421,7 @@ export function DesktopShellMessagesSurface({
                   type='file'
                   accept='image/*,video/*'
                   disabled={
-                    directMessageSending || viewModels.selectedDirectMessageStatus?.send_enabled === false
+                    directMessageSending || conversationStatus?.send_enabled === false
                   }
                   onChange={(event) => {
                     void handleDirectMessageAttachmentSelection(event);
@@ -397,19 +434,19 @@ export function DesktopShellMessagesSurface({
               />
               <div className='topic-diagnostic topic-diagnostic-secondary'>
                 <span>
-                  pending outbox {formatCount(viewModels.selectedDirectMessageStatus?.pending_outbox_count ?? 0)}
+                  pending outbox {formatCount(conversationStatus?.pending_outbox_count ?? 0)}
                 </span>
               </div>
               <Button
                 type='submit'
                 disabled={
-                  directMessageSending || viewModels.selectedDirectMessageStatus?.send_enabled === false
+                  directMessageSending || conversationStatus?.send_enabled === false
                 }
               >
                 {directMessageSending ? 'Sending...' : 'Send'}
               </Button>
             </form>
-          </Card>
+          </Card> : null}
         </>
       ) : null}
     </>
@@ -586,6 +623,7 @@ export type DesktopShellDetailSurfaceStackProps = {
   viewModels: Pick<
     ViewModels,
     | 'authorDetailView'
+    | 'buildPostCardView'
     | 'selectedAuthorTimelinePostViews'
     | 'threadPanelState'
     | 'threadPostViews'
@@ -612,6 +650,9 @@ export type DesktopShellDetailSurfaceStackProps = {
   handleMuteAction: (authorPubkey: string, muted: boolean) => Promise<void>;
   handleOpenOriginalTopic: (topicId: string) => Promise<void>;
   openCommunityNodeSettings: () => void;
+  surfaceKind?: 'thread' | 'profile';
+  entityId?: string;
+  topicId?: string;
 };
 
 export function DesktopShellDetailSurfaceStack({
@@ -638,6 +679,9 @@ export function DesktopShellDetailSurfaceStack({
   handleMuteAction,
   handleOpenOriginalTopic,
   openCommunityNodeSettings,
+  surfaceKind,
+  entityId,
+  topicId,
 }: DesktopShellDetailSurfaceStackProps) {
   const {
     activeTopic,
@@ -646,6 +690,9 @@ export function DesktopShellDetailSurfaceStack({
     communityNodeManifests,
     communityNodeStatuses,
     focusedObjectId,
+    authorErrorsByPubkey,
+    authorTimelinesByPubkey,
+    knownAuthorsByPubkey,
     mediaObjectUrls,
     ownedReactionAssets,
     recentReactions,
@@ -655,6 +702,8 @@ export function DesktopShellDetailSurfaceStack({
     syncStatus,
     threadLoadingMoreById,
     threadNextCursorById,
+    thread,
+    threadsById,
   } = useDesktopShellStore(
     useShallow((s) => ({
       activeTopic: s.activeTopic,
@@ -663,6 +712,9 @@ export function DesktopShellDetailSurfaceStack({
       communityNodeManifests: s.communityNodeManifests,
       communityNodeStatuses: s.communityNodeStatuses,
       focusedObjectId: s.focusedObjectId,
+      authorErrorsByPubkey: s.authorErrorsByPubkey,
+      authorTimelinesByPubkey: s.authorTimelinesByPubkey,
+      knownAuthorsByPubkey: s.knownAuthorsByPubkey,
       mediaObjectUrls: s.mediaObjectUrls,
       ownedReactionAssets: s.ownedReactionAssets,
       recentReactions: s.recentReactions,
@@ -672,12 +724,90 @@ export function DesktopShellDetailSurfaceStack({
       syncStatus: s.syncStatus,
       threadLoadingMoreById: s.threadLoadingMoreById,
       threadNextCursorById: s.threadNextCursorById,
+      thread: s.thread,
+      threadsById: s.threadsById,
     }))
   );
-  const selectedThreadHasMore = selectedThread ? Boolean(threadNextCursorById[selectedThread]) : false;
-  const selectedThreadLoadingMore = selectedThread
-    ? (threadLoadingMoreById[selectedThread] ?? false)
+  const effectiveThreadId = surfaceKind === 'thread' && entityId ? entityId : selectedThread;
+  const effectiveAuthorPubkey =
+    surfaceKind === 'profile' && entityId ? entityId : selectedAuthorPubkey;
+  const effectiveTopicId = topicId ?? activeTopic;
+  const selectedThreadHasMore = effectiveThreadId
+    ? Boolean(threadNextCursorById[effectiveThreadId])
     : false;
+  const selectedThreadLoadingMore = effectiveThreadId
+    ? (threadLoadingMoreById[effectiveThreadId] ?? false)
+    : false;
+  const effectiveThreadPostViews = useMemo(
+    () => {
+      const posts = effectiveThreadId
+        ? threadsById[effectiveThreadId] ?? (effectiveThreadId === selectedThread ? thread : [])
+        : [];
+      return posts.map((post) => viewModels.buildPostCardView(post, 'thread'));
+    },
+    [effectiveThreadId, selectedThread, thread, threadsById, viewModels]
+  );
+  const effectiveAuthor = effectiveAuthorPubkey
+    ? knownAuthorsByPubkey[effectiveAuthorPubkey] ??
+      (effectiveAuthorPubkey === selectedAuthorPubkey ? selectedAuthor : null)
+    : null;
+  const effectiveAuthorTimelinePostViews = useMemo(
+    () => {
+      const posts = effectiveAuthorPubkey
+        ? authorTimelinesByPubkey[effectiveAuthorPubkey] ??
+          (effectiveAuthorPubkey === selectedAuthorPubkey
+            ? viewModels.selectedAuthorTimelinePostViews.map((item) => item.post)
+            : [])
+        : [];
+      return posts.map((post) => viewModels.buildPostCardView(post, 'timeline'));
+    },
+    [authorTimelinesByPubkey, effectiveAuthorPubkey, selectedAuthorPubkey, viewModels]
+  );
+  const effectiveAuthorDetailView = useMemo<AuthorDetailView>(() => {
+    if (!effectiveAuthor) {
+      return {
+        author: null,
+        displayLabel: t('common:fallbacks.authorDetail'),
+        summary: null,
+        authorError: effectiveAuthorPubkey
+          ? authorErrorsByPubkey[effectiveAuthorPubkey] ?? null
+          : null,
+      };
+    }
+    return {
+      author: effectiveAuthor,
+      displayLabel: authorDisplayLabel(
+        effectiveAuthor.author_pubkey,
+        effectiveAuthor.display_name,
+        effectiveAuthor.name
+      ),
+      pictureSrc: resolveProfilePictureSrc(effectiveAuthor, mediaObjectUrls),
+      summary: {
+        label: strongestRelationshipLabel(effectiveAuthor),
+        following: effectiveAuthor.following,
+        followedBy: effectiveAuthor.followed_by,
+        mutual: effectiveAuthor.mutual,
+        friendOfFriend: effectiveAuthor.friend_of_friend,
+        muted: effectiveAuthor.muted,
+        viaPubkeys: effectiveAuthor.friend_of_friend_via_pubkeys.map(shortPubkey),
+        isSelf: effectiveAuthor.author_pubkey === syncStatus.local_author_pubkey,
+        canFollow: effectiveAuthor.author_pubkey !== syncStatus.local_author_pubkey,
+        followActionLabel: effectiveAuthor.following ? 'Unfollow' : 'Follow',
+        muteActionLabel: effectiveAuthor.muted ? 'Unmute' : 'Mute',
+      },
+      canMessage:
+        effectiveAuthor.author_pubkey !== syncStatus.local_author_pubkey &&
+        effectiveAuthor.mutual,
+      authorError: authorErrorsByPubkey[effectiveAuthor.author_pubkey] ?? null,
+    };
+  }, [
+    authorErrorsByPubkey,
+    effectiveAuthor,
+    effectiveAuthorPubkey,
+    mediaObjectUrls,
+    syncStatus.local_author_pubkey,
+    t,
+  ]);
   // 信頼・関係の候補は、認証済み・必須同意承認済み・通信エラーなし・community_local_trust 提供中の
   // ノードに限る(#705)。索引側の適格判定と同じ境界。
   const trustRelationNodeBaseUrls = useMemo(
@@ -688,6 +818,88 @@ export function DesktopShellDetailSurfaceStack({
     api.fetchCommunityNodeManifest(baseUrl);
   const submitReport = (request: import('@/lib/api').SubmitCommunityNodeReportRequest) =>
     api.submitCommunityNodeReport(request);
+  const threadContent = effectiveThreadId ? (
+    <ThreadPanel
+      state={{ ...viewModels.threadPanelState, selectedThreadId: effectiveThreadId }}
+      posts={effectiveThreadPostViews}
+      hasMore={selectedThreadHasMore}
+      loadingMore={selectedThreadLoadingMore}
+      onLoadMore={() => void loadMoreThread(effectiveTopicId, effectiveThreadId)}
+      onOpenAuthor={(authorPubkey) =>
+        void openAuthorDetail(authorPubkey, {
+          fromThread: true,
+          threadId: effectiveThreadId,
+        })
+      }
+      onOpenThread={(threadId) => void openThread(threadId)}
+      onOpenThreadInTopic={(threadId, topicId) => void openThread(threadId, { topic: topicId })}
+      onReply={beginReply}
+      onRepost={(post) => void handleSimpleRepost(post)}
+      onQuoteRepost={beginQuoteRepost}
+      onRetryLocalPost={handleRetryLocalPost}
+      onRestoreLocalPost={handleRestoreLocalPost}
+      localAuthorPubkey={syncStatus.local_author_pubkey}
+      mediaObjectUrls={mediaObjectUrls}
+      ownedReactionAssets={ownedReactionAssets}
+      bookmarkedReactionAssets={bookmarkedReactionAssets}
+      recentReactions={recentReactions}
+      onToggleReaction={(post, reactionKey) => void handleToggleReaction(post, reactionKey)}
+      onBookmarkCustomReaction={(asset) => void handleBookmarkCustomReaction(asset)}
+      onReactionPickerOpen={() => void loadReactionCatalogData()}
+      onActivateReference={(reference) => void handleActivateReference(reference)}
+      onCopyPostLink={handleCopyPostLink}
+      focusedPostObjectId={effectiveThreadId === selectedThread ? focusedObjectId : null}
+      onSubmitReport={submitReport}
+      onCopyReportContact={(value) => void copyTextToClipboard(value)}
+      onFetchReportManifest={fetchReportManifest}
+      onMuteReportAuthor={(authorPubkey) => handleMuteAction(authorPubkey, false)}
+    />
+  ) : null;
+  const authorContent = effectiveAuthorPubkey ? (
+    <div className='shell-main-stack'>
+      <AuthorDetailCard
+        view={effectiveAuthorDetailView}
+        localAuthorPubkey={syncStatus.local_author_pubkey}
+        onToggleRelationship={(authorPubkey, following) =>
+          void handleRelationshipAction(authorPubkey, following)
+        }
+        onToggleMute={(authorPubkey, muted) => void handleMuteAction(authorPubkey, muted)}
+        onOpenDirectMessage={(authorPubkey) => void openDirectMessagePane(authorPubkey)}
+        onSubmitReport={submitReport}
+        onCopyReportContact={(value) => void copyTextToClipboard(value)}
+        onFetchReportManifest={fetchReportManifest}
+        communityNodeAdvisory={
+          <CommunityNodeAdvisoryPanel
+            api={api}
+            targetPubkey={effectiveAuthorPubkey}
+            nodeBaseUrls={trustRelationNodeBaseUrls}
+            onOpenCommunityNodeSettings={openCommunityNodeSettings}
+          />
+        }
+      />
+      <Card className='shell-workspace-card'>
+        <TimelineFeed
+          posts={effectiveAuthorTimelinePostViews}
+          emptyCopy={t('profile:feed.noAuthorPosts')}
+          onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
+          onOpenThread={(threadId) => void openThread(threadId)}
+          onOpenThreadInTopic={(threadId, topicId) => void openThread(threadId, { topic: topicId })}
+          onReply={beginReply}
+          readOnly={true}
+          onOpenOriginalTopic={(topicId) => void handleOpenOriginalTopic(topicId)}
+          onActivateReference={(reference) => void handleActivateReference(reference)}
+          onCopyPostLink={handleCopyPostLink}
+          onSubmitReport={submitReport}
+          onCopyReportContact={(value) => void copyTextToClipboard(value)}
+          onFetchReportManifest={fetchReportManifest}
+          onMuteReportAuthor={(authorPubkey) => handleMuteAction(authorPubkey, false)}
+        />
+      </Card>
+    </div>
+  ) : null;
+
+  if (surfaceKind === 'thread') return threadContent;
+  if (surfaceKind === 'profile') return authorContent;
 
   return (
     <>
@@ -700,41 +912,7 @@ export function DesktopShellDetailSurfaceStack({
           stackIndex={0}
           onClose={closeThreadPane}
         >
-          <ThreadPanel
-            state={viewModels.threadPanelState}
-            posts={viewModels.threadPostViews}
-            hasMore={selectedThreadHasMore}
-            loadingMore={selectedThreadLoadingMore}
-            onLoadMore={() => void loadMoreThread(activeTopic, selectedThread)}
-            onOpenAuthor={(authorPubkey) =>
-              void openAuthorDetail(authorPubkey, {
-                fromThread: true,
-                threadId: selectedThread,
-              })
-            }
-            onOpenThread={(threadId) => void openThread(threadId)}
-            onOpenThreadInTopic={(threadId, topicId) => void openThread(threadId, { topic: topicId })}
-            onReply={beginReply}
-            onRepost={(post) => void handleSimpleRepost(post)}
-            onQuoteRepost={beginQuoteRepost}
-            onRetryLocalPost={handleRetryLocalPost}
-            onRestoreLocalPost={handleRestoreLocalPost}
-            localAuthorPubkey={syncStatus.local_author_pubkey}
-            mediaObjectUrls={mediaObjectUrls}
-            ownedReactionAssets={ownedReactionAssets}
-            bookmarkedReactionAssets={bookmarkedReactionAssets}
-            recentReactions={recentReactions}
-            onToggleReaction={(post, reactionKey) => void handleToggleReaction(post, reactionKey)}
-            onBookmarkCustomReaction={(asset) => void handleBookmarkCustomReaction(asset)}
-            onReactionPickerOpen={() => void loadReactionCatalogData()}
-            onActivateReference={(reference) => void handleActivateReference(reference)}
-            onCopyPostLink={handleCopyPostLink}
-            focusedPostObjectId={focusedObjectId}
-            onSubmitReport={submitReport}
-            onCopyReportContact={(value) => void copyTextToClipboard(value)}
-            onFetchReportManifest={fetchReportManifest}
-            onMuteReportAuthor={(authorPubkey) => handleMuteAction(authorPubkey, false)}
-          />
+          {threadContent}
         </ContextPane>
       ) : null}
       {selectedAuthorPubkey ? (
@@ -750,46 +928,7 @@ export function DesktopShellDetailSurfaceStack({
           stackIndex={selectedThread ? 1 : 0}
           onClose={closeAuthorPane}
         >
-          <div className='shell-main-stack'>
-            <AuthorDetailCard
-              view={viewModels.authorDetailView}
-              localAuthorPubkey={syncStatus.local_author_pubkey}
-              onToggleRelationship={(authorPubkey, following) =>
-                void handleRelationshipAction(authorPubkey, following)
-              }
-              onToggleMute={(authorPubkey, muted) => void handleMuteAction(authorPubkey, muted)}
-              onOpenDirectMessage={(authorPubkey) => void openDirectMessagePane(authorPubkey)}
-              onSubmitReport={submitReport}
-              onCopyReportContact={(value) => void copyTextToClipboard(value)}
-              onFetchReportManifest={fetchReportManifest}
-              communityNodeAdvisory={
-                <CommunityNodeAdvisoryPanel
-                  api={api}
-                  targetPubkey={selectedAuthorPubkey}
-                  nodeBaseUrls={trustRelationNodeBaseUrls}
-                  onOpenCommunityNodeSettings={openCommunityNodeSettings}
-                />
-              }
-            />
-            <Card className='shell-workspace-card'>
-              <TimelineFeed
-                posts={viewModels.selectedAuthorTimelinePostViews}
-                emptyCopy={t('profile:feed.noAuthorPosts')}
-                onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
-                onOpenThread={(threadId) => void openThread(threadId)}
-                onOpenThreadInTopic={(threadId, topicId) => void openThread(threadId, { topic: topicId })}
-                onReply={beginReply}
-                readOnly={true}
-                onOpenOriginalTopic={(topicId) => void handleOpenOriginalTopic(topicId)}
-                onActivateReference={(reference) => void handleActivateReference(reference)}
-                onCopyPostLink={handleCopyPostLink}
-                onSubmitReport={submitReport}
-                onCopyReportContact={(value) => void copyTextToClipboard(value)}
-                onFetchReportManifest={fetchReportManifest}
-                onMuteReportAuthor={(authorPubkey) => handleMuteAction(authorPubkey, false)}
-              />
-            </Card>
-          </div>
+          {authorContent}
         </ContextPane>
       ) : null}
     </>

@@ -124,6 +124,7 @@ export function useDesktopShellData({
   const setTimelineScopeByTopic = useDesktopShellFieldSetter('timelineScopeByTopic');
   const setComposeChannelByTopic = useDesktopShellFieldSetter('composeChannelByTopic');
   const setThread = useDesktopShellFieldSetter('thread');
+  const setThreadsById = useDesktopShellFieldSetter('threadsById');
   const setThreadNextCursorById = useDesktopShellFieldSetter('threadNextCursorById');
   const setThreadLoadingMoreById = useDesktopShellFieldSetter('threadLoadingMoreById');
   const setCommunityNodeStatuses = useDesktopShellFieldSetter('communityNodeStatuses');
@@ -387,6 +388,14 @@ export function useDesktopShellData({
             setThread((current) =>
               mergeRefreshedVisiblePosts(current, incomingThreadItems, preserveThreadPages)
             );
+            setThreadsById((current) => ({
+              ...current,
+              [currentThread]: mergeRefreshedVisiblePosts(
+                current[currentThread] ?? [],
+                incomingThreadItems,
+                preserveThreadPages
+              ),
+            }));
             setThreadNextCursorById(setRecordEntry(currentThread, resolvedThreadCursor));
           }
         } else {
@@ -413,6 +422,7 @@ export function useDesktopShellData({
       setPublicTimelineNextCursorByTopic,
       setPublicTimelinesByTopic,
       setThread,
+      setThreadsById,
       setThreadNextCursorById,
       setTimelineNextCursorByKey,
       setTimelinesByKey,
@@ -467,6 +477,10 @@ export function useDesktopShellData({
         const threadView = await api.listThread(topic, threadId, cursor, THREAD_TIMELINE_LIMIT);
         startTransition(() => {
           setThread((current) => mergeUniquePosts(current, threadView.items));
+          setThreadsById((current) => ({
+            ...current,
+            [threadId]: mergeUniquePosts(current[threadId] ?? [], threadView.items),
+          }));
           setThreadNextCursorById(setRecordEntry(threadId, threadView.next_cursor ?? null));
         });
       } finally {
@@ -476,6 +490,7 @@ export function useDesktopShellData({
     [
       api,
       setThread,
+      setThreadsById,
       setThreadLoadingMoreById,
       setThreadNextCursorById,
       storeApi,

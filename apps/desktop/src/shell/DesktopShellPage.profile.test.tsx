@@ -6,6 +6,8 @@ import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import { App } from '@/App';
 import {
   expectActiveTopic,
+  getActiveColumn,
+  getDetailPane,
   getSocialConnectionsTabs,
   openChannelManager,
   openSettingsDrawer,
@@ -53,8 +55,9 @@ test('profile overview aggregates public posts across topics and excludes privat
   });
 
   await selectWorkspace(user, 'Profile');
-  expect(screen.getByText('demo public post')).toBeInTheDocument();
-  expect(screen.queryByText('demo private post')).not.toBeInTheDocument();
+  let profileColumn = getActiveColumn('Profile');
+  expect(within(profileColumn).getByText('demo public post')).toBeInTheDocument();
+  expect(within(profileColumn).queryByText('demo private post')).not.toBeInTheDocument();
   expect(screen.getAllByText('demo').length).toBeGreaterThan(0);
 
   await user.type(screen.getByPlaceholderText('demo'), 'kukuri:topic:second');
@@ -71,13 +74,11 @@ test('profile overview aggregates public posts across topics and excludes privat
   });
 
   await selectWorkspace(user, 'Profile');
-  expect(screen.getByText('demo public post')).toBeInTheDocument();
-  expect(screen.getByText('second public post')).toBeInTheDocument();
-  expect(screen.queryByText('demo private post')).not.toBeInTheDocument();
-  const profileSection = screen.getByText('second public post').closest('.shell-section');
-  if (!(profileSection instanceof HTMLElement)) {
-    throw new Error('profile section not found');
-  }
+  profileColumn = getActiveColumn('Profile');
+  expect(within(profileColumn).getByText('demo public post')).toBeInTheDocument();
+  expect(within(profileColumn).getByText('second public post')).toBeInTheDocument();
+  expect(within(profileColumn).queryByText('demo private post')).not.toBeInTheDocument();
+  const profileSection = profileColumn;
   expect(within(profileSection).queryByRole('button', { name: 'Reply' })).not.toBeInTheDocument();
   expect(within(profileSection).getAllByRole('button', { name: 'Open original topic' }).length).toBe(2);
 });
@@ -191,7 +192,8 @@ test('author detail shows profile topic posts and can open an untracked origin t
 
   await user.click(await screen.findByRole('button', { name: 'bob' }));
 
-  const authorPane = await screen.findByRole('complementary', { name: 'Author' });
+  await waitFor(() => expect(getDetailPane('Author')).toBeInTheDocument());
+  const authorPane = getDetailPane('Author');
   expect(within(authorPane).getByText('post from demo topic')).toBeInTheDocument();
   expect(within(authorPane).getByText('post from relay topic')).toBeInTheDocument();
   expect(within(authorPane).getByText('relay')).toBeInTheDocument();
@@ -201,10 +203,15 @@ test('author detail shows profile topic posts and can open an untracked origin t
 
   await waitFor(() => {
     expectActiveTopic('kukuri:topic:relay');
-    expect(screen.queryByRole('complementary', { name: 'Author' })).not.toBeInTheDocument();
+    expect(getActiveColumn('Timeline')).toBeInTheDocument();
   });
-  expect(screen.getByText('post from relay topic')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'relay' })).toBeInTheDocument();
+  expect(within(getActiveColumn('Timeline')).getByText('post from relay topic')).toBeInTheDocument();
+  expect(
+    within(screen.getByRole('complementary', { name: 'Primary navigation' })).getByRole(
+      'button',
+      { name: 'relay' }
+    )
+  ).toBeInTheDocument();
 });
 
 test('local profile editor saves profile draft from primary navigation and settings stays diagnostics-only', async () => {

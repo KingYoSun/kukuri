@@ -35,6 +35,11 @@ export function useDesktopShellSectionLoaders({
   translate,
 }: UseDesktopShellSectionLoadersArgs) {
   const setAuthorError = useDesktopShellFieldSetter('authorError');
+  const setAuthorErrorsByPubkey = useDesktopShellFieldSetter('authorErrorsByPubkey');
+  const setAuthorTimelinesByPubkey = useDesktopShellFieldSetter('authorTimelinesByPubkey');
+  const setAuthorTimelineNextCursorByPubkey = useDesktopShellFieldSetter(
+    'authorTimelineNextCursorByPubkey'
+  );
   const setBookmarkedPosts = useDesktopShellFieldSetter('bookmarkedPosts');
   const setCommunityNodeConfig = useDesktopShellFieldSetter('communityNodeConfig');
   const setCommunityNodeError = useDesktopShellFieldSetter('communityNodeError');
@@ -196,20 +201,28 @@ export function useDesktopShellSectionLoaders({
           setSelectedAuthor(author);
           setSelectedAuthorTimeline(timeline.items);
           setSelectedAuthorTimelineNextCursor(timeline.next_cursor ?? null);
+          setAuthorTimelinesByPubkey(setRecordEntry(pubkey, timeline.items));
+          setAuthorTimelineNextCursorByPubkey(
+            setRecordEntry(pubkey, timeline.next_cursor ?? null)
+          );
           setAuthorError(null);
+          setAuthorErrorsByPubkey(setRecordEntry(pubkey, null));
           if (author) {
             setKnownAuthorsByPubkey((current) => mergeKnownAuthors(current, [author]));
           }
         });
       } catch (error) {
-        setAuthorError(
-          messageFromError(error, translate('common:errors.failedToLoadAuthor'))
-        );
+        const message = messageFromError(error, translate('common:errors.failedToLoadAuthor'));
+        setAuthorError(message);
+        setAuthorErrorsByPubkey(setRecordEntry(pubkey, message));
       }
     },
     [
       api,
       setAuthorError,
+      setAuthorErrorsByPubkey,
+      setAuthorTimelinesByPubkey,
+      setAuthorTimelineNextCursorByPubkey,
       setKnownAuthorsByPubkey,
       setSelectedAuthor,
       setSelectedAuthorTimeline,

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import { App } from '@/App';
 import {
+  getDetailPane,
   buildImagePost,
   buildVideoPost,
   installObjectUrlMocks,
@@ -145,7 +146,8 @@ test('thread pane reuses the same image placeholder renderer', async () => {
     expect(screen.getByText('envelope-image-post')).toBeInTheDocument();
   });
   await user.click(screen.getByText('envelope-image-post'));
-  const threadPanel = await screen.findByRole('complementary', { name: 'Thread' });
+  await waitFor(() => expect(getDetailPane('Thread')).toBeInTheDocument());
+  const threadPanel = getDetailPane('Thread');
 
   await waitFor(() => {
     expect(within(threadPanel).getByTestId('media-skeleton-image-post')).toBeInTheDocument();

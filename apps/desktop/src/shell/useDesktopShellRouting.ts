@@ -78,6 +78,7 @@ export function useDesktopShellRouting({
   const setSelectedThread = useDesktopShellFieldSetter('selectedThread');
   const setFocusedObjectId = useDesktopShellFieldSetter('focusedObjectId');
   const setThread = useDesktopShellFieldSetter('thread');
+  const setThreadsById = useDesktopShellFieldSetter('threadsById');
   const setThreadNextCursorById = useDesktopShellFieldSetter('threadNextCursorById');
   const setReplyTarget = useDesktopShellFieldSetter('replyTarget');
   const setRepostTarget = useDesktopShellFieldSetter('repostTarget');
@@ -348,6 +349,7 @@ export function useDesktopShellRouting({
           setSelectedThread(threadId);
           setFocusedObjectId(nextFocusedObjectId);
           setThread(threadView.items);
+          setThreadsById(setRecordEntry(threadId, threadView.items));
           setThreadNextCursorById(setRecordEntry(threadId, threadView.next_cursor ?? null));
           setSelectedAuthorPubkey(null);
           setSelectedAuthor(null);
@@ -421,6 +423,7 @@ export function useDesktopShellRouting({
       setSelectedThread,
       setShellChromeState,
       setThread,
+      setThreadsById,
       setThreadNextCursorById,
       syncRoute,
       translate,

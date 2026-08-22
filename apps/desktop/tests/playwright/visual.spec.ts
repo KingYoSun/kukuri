@@ -72,6 +72,12 @@ async function openComposerDialog(page: Page): Promise<void> {
   await expect(page.getByRole('dialog')).toBeVisible();
 }
 
+function activeColumn(page: Page, title: string) {
+  return page.getByRole('region', {
+    name: new RegExp(`^${title} Column,.*Active,`),
+  });
+}
+
 test.describe('visual regression smoke', () => {
   // 1: timeline wide dark（シェル全体の基準）
   test('timeline wide dark', async ({ page }) => {
@@ -121,7 +127,7 @@ test.describe('visual regression smoke', () => {
     await page.setViewportSize(WIDE);
     await page.goto('/');
     await page.getByText('browser mock peer post').click();
-    await expect(page.getByRole('complementary', { name: 'Thread' })).toBeVisible();
+    await expect(activeColumn(page, 'Thread')).toBeVisible();
     await settleForShot(page, 'dark');
     await expect(page).toHaveScreenshot('thread-pane-wide-dark.png');
   });
@@ -132,14 +138,14 @@ test.describe('visual regression smoke', () => {
     await page.setViewportSize(WIDE);
     await page.goto('/');
     await page.getByText('browser mock peer post').click();
-    const threadPane = page.getByRole('complementary', { name: 'Thread' });
+    const threadPane = activeColumn(page, 'Thread');
     await expect(threadPane).toBeVisible();
     // Thread 内のシード post の著者（browser peer）を開いて Author pane を積む。
     await threadPane
       .getByRole('button', { name: 'browser peer' })
       .first()
       .click();
-    await expect(page.getByRole('complementary', { name: 'Author' })).toBeVisible();
+    await expect(activeColumn(page, 'Profile')).toBeVisible();
     await settleForShot(page, 'dark');
     await expect(page).toHaveScreenshot('author-pane-wide-dark.png');
   });
@@ -149,7 +155,7 @@ test.describe('visual regression smoke', () => {
     await seedAppearance(page, 'dark');
     await page.setViewportSize(WIDE);
     await page.goto('/#/messages');
-    await expect(page.getByRole('heading', { name: 'Messages' })).toBeVisible();
+    await expect(activeColumn(page, 'Messages')).toBeVisible();
     await settleForShot(page, 'dark');
     await expect(page).toHaveScreenshot('messages-wide-dark.png');
   });
@@ -159,7 +165,7 @@ test.describe('visual regression smoke', () => {
     await seedAppearance(page, 'dark');
     await page.setViewportSize(WIDE);
     await page.goto('/#/notifications?topic=kukuri%3Atopic%3Ademo');
-    await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible();
+    await expect(activeColumn(page, 'Notifications')).toBeVisible();
     await expect(page.getByText('browser mock reply notification')).toBeVisible();
     await settleForShot(page, 'dark');
     await expect(page).toHaveScreenshot('notifications-wide-dark.png');
@@ -239,7 +245,7 @@ test.describe('visual regression smoke', () => {
     await seedAppearance(page, 'dark');
     await page.setViewportSize(WIDE);
     await page.goto('/#/live');
-    await expect(page.getByRole('heading', { name: 'Live Sessions' })).toBeVisible();
+    await expect(activeColumn(page, 'Live Sessions')).toBeVisible();
     await settleForShot(page, 'dark');
     await expect(page).toHaveScreenshot('live-wide-dark.png');
   });
@@ -249,7 +255,7 @@ test.describe('visual regression smoke', () => {
     await seedAppearance(page, 'dark');
     await page.setViewportSize(WIDE);
     await page.goto('/#/game');
-    await expect(page.getByRole('heading', { name: 'Metaverse Rooms' })).toBeVisible();
+    await expect(activeColumn(page, 'Metaverse')).toBeVisible();
     await settleForShot(page, 'dark');
     await expect(page).toHaveScreenshot('game-wide-dark.png');
   });

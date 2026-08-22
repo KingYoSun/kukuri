@@ -34,6 +34,7 @@ export type TimelineSliceState = {
   timelineScopeByTopic: Record<string, TimelineScope>;
   composeChannelByTopic: Record<string, ChannelRef>;
   thread: PostView[];
+  threadsById: Record<string, PostView[]>;
   threadNextCursorById: Record<string, TimelineCursor | null>;
   threadLoadingMoreById: Record<string, boolean>;
   selectedThread: string | null;
@@ -69,6 +70,7 @@ export function createInitialTimelineSlice(): TimelineSliceState {
     timelineScopeByTopic: buildStarterTopicRecord(() => ({ ...PUBLIC_TIMELINE_SCOPE })),
     composeChannelByTopic: buildStarterTopicRecord(() => ({ ...PUBLIC_CHANNEL_REF })),
     thread: [],
+    threadsById: {},
     threadNextCursorById: {},
     threadLoadingMoreById: {},
     selectedThread: null,

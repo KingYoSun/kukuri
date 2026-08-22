@@ -211,8 +211,13 @@
 
 .shell-phase1 .author-detail {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-sm);
+  box-sizing: border-box;
+  inline-size: 100%;
+  max-inline-size: 100%;
   min-width: 0;
+  overflow-x: clip;
 }
 
 .shell-phase1 .author-detail-toolbar {
@@ -274,7 +279,9 @@
 
 .shell-phase1 .author-detail-actions {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-sm);
+  min-width: 0;
 }
 
 .shell-phase1 .author-detail-action-buttons {
@@ -282,7 +289,21 @@
   flex-wrap: wrap;
   justify-content: flex-start;
   gap: var(--space-xs);
+  inline-size: 100%;
+  max-inline-size: 100%;
+  min-inline-size: 0;
   margin: 0;
+}
+
+.shell-phase1 .shell-column-body .author-detail-action-buttons > * {
+  inline-size: 100%;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.shell-phase1 .shell-column-body .author-detail-action-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .shell-phase1 .author-detail-break,
@@ -293,10 +314,15 @@
 
 .shell-phase1 .author-detail-monotext {
   display: block;
+  inline-size: 100%;
+  max-inline-size: 100%;
   margin: 0;
   font-size: var(--text-caption);
   line-height: 1.45;
   color: var(--muted-foreground-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .shell-phase1 .shell-icon-button {
@@ -367,7 +393,7 @@
 .shell-phase1 .shell-column-canvas {
   display: flex;
   align-items: stretch;
-  justify-content: safe center;
+  justify-content: flex-start;
   gap: var(--column-gap);
   box-sizing: border-box;
   width: 100%;
@@ -417,7 +443,7 @@
 .shell-phase1 .shell-column-surface {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  flex: 0 1 var(--column-unit);
+  flex: 0 0 var(--column-unit);
   width: var(--column-unit);
   max-width: min(var(--column-unit), calc(100vw - (var(--space-lg) * 2)));
   min-width: min(100%, 20rem);
@@ -497,6 +523,13 @@
   min-width: 0;
 }
 
+.shell-phase1 .shell-column-title-row h2 {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .shell-phase1 .shell-column-state-label {
   border: 1px solid var(--border-accent);
   border-radius: var(--radius-pill);
@@ -515,6 +548,12 @@
   overflow: auto;
   padding: var(--space-md);
   container-type: inline-size;
+}
+
+.shell-phase1 .shell-column-body > .shell-main-stack {
+  grid-template-columns: minmax(0, 1fr);
+  inline-size: 100cqi;
+  max-inline-size: 100cqi;
 }
 
 .shell-phase1 .shell-column-footer {

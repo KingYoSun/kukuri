@@ -1,0 +1,22 @@
+# 2026-08-23 Issue #748 production Columns Wave 2
+
+- PR: 作成後に追記
+- Preview: [Timeline → pinned Thread → Profile](assets/2026-08-23-issue-748-wave-2/timeline-thread-profile-production.png)
+- Storybook review surface: `Review/ProductionColumnWorkspace/InteractiveProductionShell`。既存の`Review/VariableSpanColumnWorkspace`ではactive / pinned / transient、loading / empty / error、reduced motionを引き続き比較できる。
+- Summary: Timeline、Notifications、Explore、Messages、Conversation、Thread、Profile、Live Sessions、Game Rooms、Metaverseを同じproduction `ColumnCanvas` / `ColumnSurface`へ移し、旧primary surface切替と`ContextPane` detail stackをproduction DOMから外した。全surfaceはWave 2契約どおり1 spanで、既存domain APIとactionを再利用する。
+- User flow: primary navigationとdeep linkは一致するroot Columnをfocusし、post / author / peer選択は起点の右へentity Columnを開く。Timeline → Thread → Profile、Messages → Conversation → Profileの親子関係を保持し、active Columnを閉じると親へ戻る。active Columnの対象をcanonical hashへ同期し、back / forwardでも一致Columnをfocusまたは復元する。
+- Retention / reversal: kind + scope + entityの安定identityで重複を避け、未固定childは親の直後で対象を入れ替える。pin済みThread / Profile / Conversationは別対象を開いてもentity別cacheの本文を保持する。pin、unpin、closeは同サイズのheaderアイコンボタンからkeyboardでも操作できる。
+- Timeline controls: `Feed` / `Bookmarks`は独立行を作らず、pin / closeと同じ40×40pxのheaderアイコンタブに限定した。狭いColumn内へテキストlabelを押し込まない。
+- Narrow surface review: Profileのアクションは1 span内で2列に折り返し、長いpubkeyは省略表示してsurface外へ押し出さない。Canvasが横overflowを所有し、document-level overflowを作らない。
+- Shneiderman 1 — consistency: 全kindで共通header、scope、active / pinned / temporary state、pin、close、1 spanを使う。
+- Shneiderman 2 — universal usability: Columnはregionのaccessible nameにtitle、位置、総数、span、active、pin stateを含み、header操作はbutton / tabとしてkeyboardとscreen readerから識別できる。
+- Shneiderman 3 — informative feedback: active borderとlabel、pinned上端とlabel、temporary破線、`aria-current` / `aria-pressed`を同時に更新する。
+- Shneiderman 4 — closure: close後は親、次に隣接Columnをactiveにし、DOM focusとURLを同じ対象へ戻す。
+- Shneiderman 5 — error prevention: active Conversationだけにeditable composerを表示し、別peerへ誤送信しない。developer mode無効時のLive / Game / Metaverse deep linkはTimelineへ安全側normalizeする。
+- Shneiderman 6 — easy reversal: pin / unpinとcloseが即時に反映され、browser back / forwardでもroute由来のColumnを復元する。
+- Shneiderman 7 — internal locus of control: pointer / focus activationが`WorkspaceState.activeColumnId`とcanonical routeを更新し、非active Column内の操作は先にそのColumnをactiveにする。
+- Shneiderman 8 — reduced memory load: 因果chainを左から右へ残し、利用者が元post、conversation、authorの関係を記憶して画面を往復する必要を減らす。
+- Accessibility / motion: Playwrightでproduction chainのpin / close / parent focus、700px narrow flow、1400px wide flowを確認した。既存reduced-motion tokenを共通`ColumnSurface` transitionへ適用し、surface固有animationは追加していない。
+- Review result: production screenshotでTimeline / Thread / Profileの3列、同サイズのheaderアイコン、pinned保持、active temporary stateを確認した。初回確認で見つけたProfileのアクション・長識別子の横切れは、1-span用のgrid / ellipsis規則で修正した。
+- Exceptions: Column独立scope、Column footer Composer、Control Center、常設Sidebar撤去、2〜4 span、reorder / persistence、mobile paging、immersive resource lifecycleはWave 3〜6へ残す。Wave 2では既存primary navigationを互換入口として維持する。
+- Validation: frontend Vitest 87 files / 739 tests、Chromium Playwright 16 tests、visual smoke 14 tests、Storybook production build、frontend build / typecheckが成功。Linux visual baselineとrepository全体gateはPR CIを一次結果として追記する。

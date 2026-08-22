@@ -23,6 +23,12 @@ function topicDisplayName(topicId: string): string {
   return topicId.startsWith(TOPIC_ID_PREFIX) ? topicId.slice(TOPIC_ID_PREFIX.length) : topicId;
 }
 
+function activeColumn(page: Page, title: string) {
+  return page.getByRole('region', {
+    name: new RegExp(`^${title} Column,.*Active,`),
+  });
+}
+
 async function expectActiveTopic(page: Page, topic: string) {
   const navRail = page.getByRole('complementary', { name: 'Primary navigation' });
   const topicItem = navRail
@@ -133,14 +139,10 @@ test('browser mock shell can switch topics, publish, open thread, open author, a
   await expect(page.getByText('hello browser mock')).toBeVisible();
 
   await page.getByText('hello browser mock').click();
-  const threadPane = page.getByRole('complementary', { name: 'Thread' });
+  const threadPane = activeColumn(page, 'Thread');
   await expect(threadPane).toBeVisible();
-  await page
-    .getByRole('complementary', { name: 'Thread' })
-    .getByRole('button', { name: 'ffffffffffff' })
-    .first()
-    .click();
-  await expect(page.getByRole('complementary', { name: 'Author' })).toBeVisible();
+  await threadPane.getByRole('button', { name: 'ffffffffffff' }).first().click();
+  await expect(activeColumn(page, 'Profile')).toBeVisible();
 
   await page.getByTestId('shell-settings-trigger').click();
   const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
@@ -182,7 +184,7 @@ test('browser mock shell can open an author from messages without leaving the dm
   await page.goto('/');
 
   await page.getByRole('button', { name: 'browser peer' }).first().click();
-  const authorPane = page.getByRole('complementary', { name: 'Author' });
+  const authorPane = activeColumn(page, 'Profile');
   await expect(authorPane).toBeVisible();
 
   await authorPane.getByRole('button', { name: 'Message' }).click();
@@ -191,11 +193,11 @@ test('browser mock shell can open an author from messages without leaving the dm
 
   const workspace = page.locator('main[aria-label="Primary workspace"]');
   await workspace.getByRole('button', { name: 'browser peer' }).first().click();
-  await expect(page.getByRole('complementary', { name: 'Author' })).toBeVisible();
+  await expect(activeColumn(page, 'Profile')).toBeVisible();
   await expect(page).toHaveURL(/authorPubkey=/);
 
-  await page.getByRole('button', { name: 'Close Author' }).click();
-  await expect(page.getByRole('complementary', { name: 'Author' })).toHaveCount(0);
+  await activeColumn(page, 'Profile').getByRole('button', { name: 'Close Profile' }).click();
+  await expect(activeColumn(page, 'Conversation')).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Messages' })).toHaveAttribute('aria-selected', 'true');
   await expect(page).toHaveURL(/#\/messages\?topic=.*peerPubkey=/);
 });
@@ -401,14 +403,11 @@ test('browser mock narrow shell keeps nav, context, and settings flows reachable
   await expect(page.getByText('narrow browser mock')).toBeVisible();
 
   await page.getByText('narrow browser mock').click();
-  await expect(page.getByRole('complementary', { name: 'Thread' })).toBeVisible();
+  const threadColumn = activeColumn(page, 'Thread');
+  await expect(threadColumn).toBeVisible();
 
-  await page
-    .getByRole('complementary', { name: 'Thread' })
-    .getByRole('button', { name: 'ffffffffffff' })
-    .first()
-    .click();
-  await expect(page.getByRole('complementary', { name: 'Author' })).toBeVisible();
+  await threadColumn.getByRole('button', { name: 'ffffffffffff' }).first().click();
+  await expect(activeColumn(page, 'Profile')).toBeVisible();
 
   await page.goto('/');
   await page.getByTestId('shell-nav-trigger').click();

@@ -4,12 +4,19 @@ type ColumnCanvasProps = {
   activeColumnId: string;
   children: ReactNode;
   label?: string;
-  onActivateColumn: (columnId: string) => void;
+  onActivateColumn: (columnId: string, syncRoute: boolean) => void;
 };
 
 function findColumnId(target: EventTarget | null) {
   if (!(target instanceof Element)) return null;
   return target.closest<HTMLElement>('[data-column-id]')?.dataset.columnId ?? null;
+}
+
+function isInteractiveTarget(target: EventTarget | null) {
+  if (!(target instanceof Element)) return false;
+  return Boolean(
+    target.closest('button, a, input, textarea, select, [role="button"], [role="link"]')
+  );
 }
 
 export function ColumnCanvas({
@@ -34,7 +41,9 @@ export function ColumnCanvas({
 
   const activateFromEvent = (target: EventTarget | null) => {
     const columnId = findColumnId(target);
-    if (columnId && columnId !== activeColumnId) onActivateColumn(columnId);
+    if (columnId && columnId !== activeColumnId) {
+      onActivateColumn(columnId, !isInteractiveTarget(target));
+    }
   };
 
   return (

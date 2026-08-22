@@ -174,6 +174,7 @@ export function useDesktopShellViewModels({
     profileTimelinePostViews,
     selectedAuthorTimelinePostViews,
     threadPostViews,
+    buildPostCardView,
   } = useTimelineViewModels({
     activeJoinedChannels,
     activeTimeline,
@@ -415,6 +416,7 @@ export function useDesktopShellViewModels({
     profileTimelinePostViews,
     selectedAuthorTimelinePostViews,
     threadPostViews,
+    buildPostCardView,
     composerSourcePreview,
     topicNavItems,
     composerDraftViews,

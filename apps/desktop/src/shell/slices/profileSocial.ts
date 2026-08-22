@@ -30,6 +30,9 @@ export type ProfileSocialSliceState = {
   selectedAuthorPubkey: string | null;
   selectedAuthor: AuthorSocialView | null;
   selectedAuthorTimeline: PostView[];
+  authorTimelinesByPubkey: Record<string, PostView[]>;
+  authorTimelineNextCursorByPubkey: Record<string, TimelineCursor | null>;
+  authorErrorsByPubkey: Record<string, string | null>;
   selectedAuthorTimelineNextCursor: TimelineCursor | null;
   selectedAuthorTimelineLoadingMore: boolean;
   authorError: string | null;
@@ -58,6 +61,9 @@ export function createInitialProfileSocialSlice(): ProfileSocialSliceState {
     selectedAuthorPubkey: null,
     selectedAuthor: null,
     selectedAuthorTimeline: [],
+    authorTimelinesByPubkey: {},
+    authorTimelineNextCursorByPubkey: {},
+    authorErrorsByPubkey: {},
     selectedAuthorTimelineNextCursor: null,
     selectedAuthorTimelineLoadingMore: false,
     authorError: null,

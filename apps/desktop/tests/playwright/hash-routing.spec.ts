@@ -26,6 +26,12 @@ async function openComposerDialog(page: Page) {
   return dialog;
 }
 
+function activeColumn(page: Page, title: string) {
+  return page.getByRole('region', {
+    name: new RegExp(`^${title} Column,.*Active,`),
+  });
+}
+
 test('browser mock hash routes deep link profile, notifications, timeline normalization, and settings surfaces', async ({
   page,
 }) => {
@@ -59,15 +65,15 @@ test('browser mock hash routes deep link profile, notifications, timeline normal
   await expect(settingsDialog).not.toBeVisible();
 
   await page.goto('/#/notifications?topic=kukuri%3Atopic%3Ademo');
-  await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible();
+  await expect(activeColumn(page, 'Notifications')).toBeVisible();
   await expect(page.getByText('browser mock reply notification')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Notifications/ })).toContainText('0');
+  await expect(page.getByRole('button', { name: /^Notifications \d+$/ })).toContainText('0');
 
   await page.getByText('browser mock reply notification').click();
   await expect(page).toHaveURL(
     /#\/timeline\?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=browser-seed-post/
   );
-  await expect(page.getByRole('complementary', { name: 'Thread' })).toBeVisible();
+  await expect(activeColumn(page, 'Thread')).toBeVisible();
 });
 
 test('browser mock hash history keeps route state stable without narrow-width overflow', async ({
@@ -93,7 +99,7 @@ test('browser mock hash history keeps route state stable without narrow-width ov
 
   await page.getByText('route history post').click();
   await expect(page).toHaveURL(/context=thread/);
-  await expect(page.getByRole('complementary', { name: 'Thread' })).toBeVisible();
+  await expect(activeColumn(page, 'Thread')).toBeVisible();
 
   await page.goBack();
   await expect(page).not.toHaveURL(/context=thread/);
@@ -103,7 +109,7 @@ test('browser mock hash history keeps route state stable without narrow-width ov
 
   await page.goForward();
   await expect(page).toHaveURL(/context=thread/);
-  await expect(page.getByRole('complementary', { name: 'Thread' })).toBeVisible();
+  await expect(activeColumn(page, 'Thread')).toBeVisible();
 
   await page.goBack();
   await page.getByTestId('shell-nav-trigger').click();
@@ -116,6 +122,59 @@ test('browser mock hash history keeps route state stable without narrow-width ov
     () => document.documentElement.scrollWidth <= window.innerWidth
   );
   expect(noOverflow).toBeTruthy();
+});
+
+test('production Columns retain a pinned causal chain and close back through its parents', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1400, height: 980 });
+  await page.goto('/');
+
+  const timelineColumn = activeColumn(page, 'Timeline');
+  await expect(timelineColumn).toBeVisible();
+  await timelineColumn.getByText('browser mock peer post').click();
+
+  const threadColumn = activeColumn(page, 'Thread');
+  await expect(threadColumn).toBeVisible();
+  await expect(page.getByRole('region', { name: /^Timeline Column,/ })).toBeVisible();
+  await threadColumn.getByRole('button', { name: 'Pin Thread' }).click();
+  await expect(threadColumn.getByRole('button', { name: 'Unpin Thread' })).toBeVisible();
+
+  await threadColumn.getByRole('button', { name: 'browser peer' }).first().click();
+  const profileColumn = activeColumn(page, 'Profile');
+  await expect(profileColumn).toBeVisible();
+  await expect(page.getByRole('region', { name: /^Thread Column,.*Pinned$/ })).toBeVisible();
+  await expect
+    .poll(() =>
+      profileColumn
+        .locator('.shell-column-body')
+        .evaluate((element) => element.scrollWidth - element.clientWidth)
+    )
+    .toBeLessThanOrEqual(0);
+  await expect
+    .poll(async () => {
+      const bodyBox = await profileColumn.locator('.shell-column-body').boundingBox();
+      const actionsBox = await profileColumn.locator('.author-detail-action-buttons').boundingBox();
+      return actionsBox && bodyBox ? actionsBox.x + actionsBox.width - (bodyBox.x + bodyBox.width) : 1;
+    })
+    .toBeLessThanOrEqual(0);
+  await expect
+    .poll(async () => {
+      const canvasBox = await page.locator('.shell-column-canvas').boundingBox();
+      const profileBox = await profileColumn.boundingBox();
+      return canvasBox && profileBox
+        ? profileBox.x + profileBox.width - (canvasBox.x + canvasBox.width)
+        : 1;
+    })
+    .toBeLessThanOrEqual(0);
+
+  await profileColumn.getByRole('button', { name: 'Close Profile' }).click();
+  await expect(activeColumn(page, 'Thread')).toBeVisible();
+  await expect(page).toHaveURL(/context=thread/);
+
+  await activeColumn(page, 'Thread').getByRole('button', { name: 'Close Thread' }).click();
+  await expect(activeColumn(page, 'Timeline')).toBeVisible();
+  await expect(page).not.toHaveURL(/context=thread/);
 });
 
 test('developer mode off falls back from live deep link to the timeline', async ({ page }) => {
