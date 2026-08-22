@@ -1,6 +1,6 @@
 # 2026-08-23 Issue #748 production Columns Wave 2
 
-- PR: 作成後に追記
+- PR: [#754 Issue #748 Wave 2: migrate production surfaces to Columns](https://github.com/KingYoSun/kukuri/pull/754)
 - Preview: [Timeline → pinned Thread → Profile](assets/2026-08-23-issue-748-wave-2/timeline-thread-profile-production.png)
 - Storybook review surface: `Review/ProductionColumnWorkspace/InteractiveProductionShell`。既存の`Review/VariableSpanColumnWorkspace`ではactive / pinned / transient、loading / empty / error、reduced motionを引き続き比較できる。
 - Summary: Timeline、Notifications、Explore、Messages、Conversation、Thread、Profile、Live Sessions、Game Rooms、Metaverseを同じproduction `ColumnCanvas` / `ColumnSurface`へ移し、旧primary surface切替と`ContextPane` detail stackをproduction DOMから外した。全surfaceはWave 2契約どおり1 spanで、既存domain APIとactionを再利用する。
