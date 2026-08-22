@@ -151,7 +151,7 @@ function renderDataHook(
   harness: ShellHookHarness = createShellHookHarness()
 ) {
   const refs = {
-    loadTopicsRequestRef: { current: 0 },
+    loadTopicsRequestRef: { current: new Map<string, number>() },
     remoteObjectUrlRef: { current: new Map<string, string>() },
     draftPreviewUrlRef: { current: new Map<string, string>() },
     directMessageDraftPreviewUrlRef: { current: new Map<string, string>() },

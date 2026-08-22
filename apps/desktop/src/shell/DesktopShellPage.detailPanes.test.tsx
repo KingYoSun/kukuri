@@ -114,15 +114,16 @@ test('thread focus auto-scroll runs only once even when the thread loads additio
     expect(getDetailPane('Thread')).toBeInTheDocument();
   });
   await waitFor(() => {
-    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
   });
+  const initialScrollCount = scrollIntoView.mock.calls.length;
 
   await user.click(within(getDetailPane('Thread')).getByRole('button', { name: 'Load more' }));
 
   await waitFor(() => {
     expect(within(getDetailPane('Thread')).getByText('paginated post 1')).toBeInTheDocument();
   });
-  expect(scrollIntoView).toHaveBeenCalledTimes(1);
+  expect(scrollIntoView).toHaveBeenCalledTimes(initialScrollCount);
 });
 
 test('timeline author detail opens as one Column, and thread author detail opens to its right', async () => {

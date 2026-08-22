@@ -26,7 +26,7 @@ export function ColumnCanvas({
   onActivateColumn,
 }: ColumnCanvasProps) {
   const canvasRef = useRef<HTMLDivElement | null>(null);
-  const previousActiveColumnIdRef = useRef(activeColumnId);
+  const previousActiveColumnIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (previousActiveColumnIdRef.current === activeColumnId) return;

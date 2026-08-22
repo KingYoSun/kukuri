@@ -490,6 +490,7 @@ test('topic and private channel selection sync into the hash route', async () =>
 });
 
 test('messages hash route restores the direct message and author pane together', async () => {
+  const user = userEvent.setup();
   const authorPubkey = 'b'.repeat(64);
   const api = createDesktopMockApi({
     authorSocialViews: {
@@ -514,7 +515,9 @@ test('messages hash route restores the direct message and author pane together',
     );
     expect(getDetailPane('Author')).toBeInTheDocument();
   });
-  expect(screen.getByPlaceholderText('Write a message')).toBeInTheDocument();
+  const conversationColumn = await screen.findByRole('region', { name: /Conversation Column/ });
+  await user.click(within(conversationColumn).getByRole('button', { name: /Message to / }));
+  expect(within(conversationColumn).getByPlaceholderText('Write a message')).toBeInTheDocument();
   expect(window.location.hash).toBe(
     `#/messages?topic=kukuri%3Atopic%3Ademo&peerPubkey=${authorPubkey}&authorPubkey=${authorPubkey}`
   );

@@ -129,12 +129,12 @@ export function createLiveGameActions({
     }
   }
 
-  async function handleJoinLiveSession(sessionId: string) {
+  async function handleJoinLiveSession(sessionId: string, topic: string = activeTopic) {
     setLivePendingBySessionId(setRecordEntry(sessionId, true));
     try {
-      await api.joinLiveSession(activeTopic, sessionId);
+      await api.joinLiveSession(topic, sessionId);
       setLiveError(null);
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
+      await loadTopics(trackedTopics, topic, selectedThread);
     } catch (joinError) {
       setLiveError(messageFromError(joinError, translate('live:errors.failedJoin')));
     } finally {
@@ -142,12 +142,12 @@ export function createLiveGameActions({
     }
   }
 
-  async function handleLeaveLiveSession(sessionId: string) {
+  async function handleLeaveLiveSession(sessionId: string, topic: string = activeTopic) {
     setLivePendingBySessionId(setRecordEntry(sessionId, true));
     try {
-      await api.leaveLiveSession(activeTopic, sessionId);
+      await api.leaveLiveSession(topic, sessionId);
       setLiveError(null);
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
+      await loadTopics(trackedTopics, topic, selectedThread);
     } catch (leaveError) {
       setLiveError(messageFromError(leaveError, translate('live:errors.failedLeave')));
     } finally {
@@ -155,12 +155,12 @@ export function createLiveGameActions({
     }
   }
 
-  async function handleEndLiveSession(sessionId: string) {
+  async function handleEndLiveSession(sessionId: string, topic: string = activeTopic) {
     setLivePendingBySessionId(setRecordEntry(sessionId, true));
     try {
-      await api.endLiveSession(activeTopic, sessionId);
+      await api.endLiveSession(topic, sessionId);
       setLiveError(null);
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
+      await loadTopics(trackedTopics, topic, selectedThread);
     } catch (endError) {
       setLiveError(messageFromError(endError, translate('live:errors.failedEnd')));
     } finally {

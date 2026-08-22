@@ -43,6 +43,7 @@ type RepostTargetView = {
 };
 
 type ComposerPanelProps = {
+  mode?: 'post' | 'reply' | 'message';
   value: string;
   onChange: ChangeEventHandler<HTMLTextAreaElement>;
   onSubmit: FormEventHandler<HTMLFormElement>;
@@ -65,6 +66,7 @@ type ComposerPanelProps = {
 const EMPTY_MENTION_CANDIDATES: MentionCandidate[] = [];
 
 export function ComposerPanel({
+  mode = 'post',
   value,
   onChange,
   onSubmit,
@@ -105,7 +107,10 @@ export function ComposerPanel({
     <form className='composer' onSubmit={onSubmit}>
       {replyTarget || repostTarget ? (
         <div className='reply-banner'>
-          <strong>{replyTarget ? t('composer.replying') : t('composer.quoteReposting')}</strong>
+          <span className='composer-target-summary'>
+            <strong>{replyTarget ? t('composer.replying') : t('composer.quoteReposting')}</strong>
+            {replyTarget ? <span className='post-copy-wrap'>{replyTarget.content}</span> : null}
+          </span>
           <Button
             className='shell-icon-button'
             variant='ghost'
@@ -150,11 +155,13 @@ export function ComposerPanel({
           aria-expanded={mentionOpen}
           aria-controls={mentionOpen ? 'composer-mention-listbox' : undefined}
           placeholder={
-            replyTarget
+            replyTarget || mode === 'reply'
               ? t('composer.writeReply')
               : repostTarget
                 ? t('composer.writeQuoteRepost')
-                : t('composer.writePost')
+                : mode === 'message'
+                  ? t('composer.writeMessage')
+                  : t('composer.writePost')
           }
         />
         {mentionOpen ? (
@@ -223,11 +230,13 @@ export function ComposerPanel({
       </div>
 
       <Button type='submit'>
-        {replyTarget
+        {replyTarget || mode === 'reply'
           ? t('actions.reply')
           : repostTarget
             ? t('actions.quoteRepost')
-            : t('actions.publish')}
+            : mode === 'message'
+              ? t('actions.send')
+              : t('actions.publish')}
       </Button>
     </form>
   );

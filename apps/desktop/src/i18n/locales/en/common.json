@@ -31,6 +31,7 @@
     "reset": "Reset",
     "rotate": "Rotate",
     "save": "Save",
+    "send": "Send",
     "unmute": "Unmute",
     "unfollow": "Unfollow",
     "zoom": "Zoom",
@@ -45,6 +46,7 @@
     "mentionSuggestionsLabel": "Mention suggestions",
     "sourcePost": "Original post",
     "writePost": "Write a post",
+    "writeMessage": "Write a message",
     "writeQuoteRepost": "Write a quote repost",
     "writeReply": "Write a reply"
   },

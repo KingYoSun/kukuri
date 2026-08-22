@@ -23,6 +23,14 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+async function expandConversationComposer(user: ReturnType<typeof userEvent.setup>) {
+  const conversationColumn = await screen.findByRole('region', { name: /Conversation Column/ });
+  await user.click(
+    within(conversationColumn).getByRole('button', { name: /Message to / })
+  );
+  return conversationColumn;
+}
+
 test('author detail mutual action opens the messages workspace and sends a local message', async () => {
   const authorPubkey = 'b'.repeat(64);
   const api = createDesktopMockApi({
@@ -79,14 +87,16 @@ test('author detail mutual action opens the messages workspace and sends a local
     );
   });
 
+  const conversationColumn = await expandConversationComposer(user);
+
   await waitFor(() => {
-    expect(screen.getByPlaceholderText('Write a message')).not.toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Send' })).not.toBeDisabled();
+    expect(within(conversationColumn).getByPlaceholderText('Write a message')).not.toBeDisabled();
+    expect(within(conversationColumn).getByRole('button', { name: 'Send' })).not.toBeDisabled();
   });
-  fireEvent.change(screen.getByPlaceholderText('Write a message'), {
+  fireEvent.change(within(conversationColumn).getByPlaceholderText('Write a message'), {
     target: { value: 'hello dm' },
   });
-  await user.click(screen.getByRole('button', { name: 'Send' }));
+  await user.click(within(conversationColumn).getByRole('button', { name: 'Send' }));
 
   await waitFor(() => {
     expect(screen.getAllByText('hello dm').length).toBeGreaterThan(0);
@@ -239,6 +249,7 @@ test('messages hash route restores the direct message and author pane together',
     `#/messages?topic=kukuri%3Atopic%3Ademo&peerPubkey=${authorPubkey}&authorPubkey=${authorPubkey}`,
     api
   );
+  const user = userEvent.setup();
 
   await waitFor(() => {
     expect(within(getWorkspaceTabs()).getByRole('tab', { name: 'Messages' })).toHaveAttribute(
@@ -247,7 +258,8 @@ test('messages hash route restores the direct message and author pane together',
     );
     expect(getDetailPane('Author')).toBeInTheDocument();
   });
-  expect(screen.getByPlaceholderText('Write a message')).toBeInTheDocument();
+  const conversationColumn = await expandConversationComposer(user);
+  expect(within(conversationColumn).getByPlaceholderText('Write a message')).toBeInTheDocument();
   expect(window.location.hash).toBe(
     `#/messages?topic=kukuri%3Atopic%3Ademo&peerPubkey=${authorPubkey}&authorPubkey=${authorPubkey}`
   );
@@ -361,14 +373,15 @@ test('messages workspace keeps the last successful DM state when status refresh 
       'true'
     );
   });
+  const conversationColumn = await expandConversationComposer(user);
   await waitFor(() => {
-    expect(screen.getByPlaceholderText('Write a message')).not.toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Send' })).not.toBeDisabled();
+    expect(within(conversationColumn).getByPlaceholderText('Write a message')).not.toBeDisabled();
+    expect(within(conversationColumn).getByRole('button', { name: 'Send' })).not.toBeDisabled();
   });
-  fireEvent.change(screen.getByPlaceholderText('Write a message'), {
+  fireEvent.change(within(conversationColumn).getByPlaceholderText('Write a message'), {
     target: { value: 'hello dm' },
   });
-  await user.click(screen.getByRole('button', { name: 'Send' }));
+  await user.click(within(conversationColumn).getByRole('button', { name: 'Send' }));
 
   await waitFor(() => {
     expect(screen.getAllByText('hello dm').length).toBeGreaterThan(0);

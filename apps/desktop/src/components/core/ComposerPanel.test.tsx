@@ -101,7 +101,7 @@ test('mention autocomplete stays inert without onValueChange', async () => {
   expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
 });
 
-test('reply banner keeps only the replying label and a compact clear icon action', () => {
+test('reply banner keeps the target summary and a compact clear icon action', () => {
   render(
     <ComposerPanel
       value=''
@@ -170,6 +170,6 @@ test('reply banner keeps only the replying label and a compact clear icon action
   expect(screen.getByRole('button', { name: 'Clear reply' })).toHaveClass('shell-icon-button');
   expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
   expect(screen.getByText('Original post')).toBeInTheDocument();
-  expect(screen.getByText('reply target body')).toBeInTheDocument();
+  expect(screen.getAllByText('reply target body').length).toBeGreaterThan(0);
   expect(screen.getAllByText('Imported').length).toBeGreaterThan(0);
 });

@@ -184,7 +184,7 @@ export function DesktopShellPage({
   const remoteObjectUrlRef = useRef(new Map<string, string>());
   const draftPreviewUrlRef = useRef(new Map<string, string>());
   const directMessageDraftPreviewUrlRef = useRef(new Map<string, string>());
-  const loadTopicsRequestRef = useRef(0);
+  const loadTopicsRequestRef = useRef(new Map<string, number>());
 
   const pendingRouteUrlRef = useRef<string | null>(null);
   const didSyncRouteSectionRef = useRef(false);
@@ -657,6 +657,7 @@ export function DesktopShellPage({
       handleSendDirectMessage={shellActions.handleSendDirectMessage}
       surfaceKind={surfaceKind}
       peerPubkey={peerPubkey}
+      showComposer={false}
     />
   );
   const notificationsSurface = (
@@ -690,7 +691,7 @@ export function DesktopShellPage({
       openAuthorDetail={openAuthorDetail}
       openDirectMessagePane={openDirectMessagePane}
       openThread={openThread}
-      beginReply={shellActions.beginReply}
+      beginReply={shellActions.beginColumnReply}
       handleSimpleRepost={shellActions.handleSimpleRepost}
       beginQuoteRepost={shellActions.beginQuoteRepost}
       handleRetryLocalPost={shellActions.handleRetryLocalPost}
@@ -717,6 +718,7 @@ export function DesktopShellPage({
       routeSection={routeSection}
       surfaceSection={surfaceSection}
       surfaceColumnKind={column?.kind}
+      surfaceScope={column?.scope}
       profileAvatarInputKey={dialogs.profileAvatarInputKey}
       messagesWorkspace={null}
       notificationsWorkspace={null}
@@ -729,7 +731,7 @@ export function DesktopShellPage({
       loadMoreTimeline={loadMoreTimeline}
       openAuthorDetail={openAuthorDetail}
       openThread={openThread}
-      beginReply={shellActions.beginReply}
+      beginReply={shellActions.beginColumnReply}
       handleSimpleRepost={shellActions.handleSimpleRepost}
       beginQuoteRepost={shellActions.beginQuoteRepost}
       handleRetryLocalPost={shellActions.handleRetryLocalPost}
@@ -808,6 +810,16 @@ export function DesktopShellPage({
     <DesktopShellColumnWorkspace
       scopeLabel={viewModels.activeComposeAudienceLabel}
       activeTimelineView={shellChromeState.timelineView}
+      locale={locale}
+      mentionCandidates={viewModels.mentionCandidates}
+      onColumnAttachmentSelection={shellActions.handleColumnDraftAttachmentSelection}
+      onRemoveColumnAttachment={shellActions.handleRemoveColumnDraftAttachment}
+      onSubmitColumnDraft={shellActions.handleSubmitColumnDraft}
+      onEndLiveSession={shellActions.handleEndLiveSession}
+      onJoinLiveSession={shellActions.handleJoinLiveSession}
+      onLeaveLiveSession={shellActions.handleLeaveLiveSession}
+      onOpenGameCreate={() => dialogs.setGameCreateDialogOpen(true)}
+      onOpenLiveCreate={() => dialogs.setLiveCreateDialogOpen(true)}
       timelineViewItems={viewModels.timelineViewItems}
       onSelectTimelineView={focusTimelineView}
       onActivateColumn={(column) => void activateWorkspaceColumn(column)}

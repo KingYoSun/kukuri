@@ -48,7 +48,7 @@ import { selectShellDataSlice } from '@/shell/storeSelectors';
 type UseDesktopShellDataArgs = {
   api: DesktopApi;
   translate: (key: string, options?: Record<string, unknown>) => string;
-  loadTopicsRequestRef: MutableRefObject<number>;
+  loadTopicsRequestRef: MutableRefObject<Map<string, number>>;
   remoteObjectUrlRef: MutableRefObject<Map<string, string>>;
   draftPreviewUrlRef: MutableRefObject<Map<string, string>>;
   directMessageDraftPreviewUrlRef: MutableRefObject<Map<string, string>>;
@@ -266,14 +266,18 @@ export function useDesktopShellData({
     async (
       topic: string,
       currentThread: string | null,
-      mode: 'apply' | 'buffer' = 'buffer'
+      mode: 'apply' | 'buffer' = 'buffer',
+      scopeChannelId?: string | null
     ) => {
-      const requestId = loadTopicsRequestRef.current + 1;
-      loadTopicsRequestRef.current = requestId;
       const requestState = storeApi.getState();
-      const selectedChannelId = requestState.selectedChannelIdByTopic[topic] ?? null;
+      const selectedChannelId =
+        scopeChannelId === undefined
+          ? requestState.selectedChannelIdByTopic[topic] ?? null
+          : scopeChannelId;
       const timelineScope = privateTimelineScope(selectedChannelId);
       const timelineKey = timelineScopeStorageKey(topic, timelineScope);
+      const requestId = (loadTopicsRequestRef.current.get(timelineKey) ?? 0) + 1;
+      loadTopicsRequestRef.current.set(timelineKey, requestId);
 
       const [
         timelineResult,
@@ -289,7 +293,7 @@ export function useDesktopShellData({
           : Promise.resolve(null),
       ]);
 
-      if (requestId !== loadTopicsRequestRef.current) {
+      if (requestId !== loadTopicsRequestRef.current.get(timelineKey)) {
         return;
       }
 
@@ -432,21 +436,25 @@ export function useDesktopShellData({
   );
 
   const loadMoreTimeline = useCallback(
-    async (topic: string) => {
+    async (topic: string, scopeChannelId?: string | null) => {
       const currentState = storeApi.getState();
-      const timelineKey = activeTimelineStorageKey(currentState, topic);
+      const selectedChannelId =
+        scopeChannelId === undefined
+          ? currentState.selectedChannelIdByTopic[topic] ?? null
+          : scopeChannelId;
+      const timelineScope = privateTimelineScope(selectedChannelId);
+      const timelineKey = timelineScopeStorageKey(topic, timelineScope);
       const cursor = currentState.timelineNextCursorByKey[timelineKey] ?? null;
       if (!cursor || currentState.timelineLoadingMoreByKey[timelineKey]) {
         return;
       }
-      const selectedChannelId = currentState.selectedChannelIdByTopic[topic] ?? null;
       setTimelineLoadingMoreByKey(setRecordEntry(timelineKey, true));
       try {
         const timeline = await api.listTimeline(
           topic,
           cursor,
           VISIBLE_TIMELINE_LIMIT,
-          privateTimelineScope(selectedChannelId)
+          timelineScope
         );
         startTransition(() => {
           setTimelinesByKey(updateRecordEntry(timelineKey, (prev) => mergeUniquePosts(prev ?? EMPTY_POSTS, timeline.items)));
@@ -562,20 +570,25 @@ export function useDesktopShellData({
   );
 
   const refreshVisibleTimelineAfterPublish = useCallback(
-    async (topic: string, currentThread: string | null) => {
-      await refreshVisibleShellData(topic, currentThread, 'apply');
+    async (topic: string, currentThread: string | null, scopeChannelId?: string | null) => {
+      await refreshVisibleShellData(topic, currentThread, 'apply', scopeChannelId);
     },
     [refreshVisibleShellData]
   );
 
   const refreshTimelineFeed = useCallback(
-    async (topic: string, currentThread: string | null) => {
-      if (applyPendingTimeline(topic)) {
+    async (topic: string, currentThread: string | null, scopeChannelId?: string | null) => {
+      const timelineScope = privateTimelineScope(
+        scopeChannelId === undefined
+          ? storeApi.getState().selectedChannelIdByTopic[topic] ?? null
+          : scopeChannelId
+      );
+      if (applyPendingTimeline(topic, timelineScope)) {
         return;
       }
-      await refreshVisibleShellData(topic, currentThread, 'apply');
+      await refreshVisibleShellData(topic, currentThread, 'apply', scopeChannelId);
     },
-    [applyPendingTimeline, refreshVisibleShellData]
+    [applyPendingTimeline, refreshVisibleShellData, storeApi]
   );
 
   useDesktopShellDataEffects({

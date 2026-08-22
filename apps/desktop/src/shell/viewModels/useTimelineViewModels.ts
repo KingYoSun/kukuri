@@ -69,7 +69,11 @@ export function useTimelineViewModels({
     'unsupportedVideoManifests'
   );
   const buildPostCardView = useCallback(
-    (post: PostView, context: 'timeline' | 'thread'): PostCardView => {
+    (
+      post: PostView,
+      context: 'timeline' | 'thread',
+      joinedChannels = activeJoinedChannels
+    ): PostCardView => {
       const primaryImage = selectPrimaryImage(post);
       const videoPoster = selectVideoPoster(post);
       const videoManifest = selectVideoManifest(post);
@@ -233,7 +237,7 @@ export function useTimelineViewModels({
         authorPicture,
         relationshipLabel: strongestRelationshipLabel(post),
         audienceChipLabel: post.channel_id
-          ? activeJoinedChannels.find((channel) => channel.channel_id === post.channel_id)?.label ??
+          ? joinedChannels.find((channel) => channel.channel_id === post.channel_id)?.label ??
             localizeAudienceLabel(post.audience_label)
           : localizeAudienceLabel(post.audience_label),
         threadTargetId,

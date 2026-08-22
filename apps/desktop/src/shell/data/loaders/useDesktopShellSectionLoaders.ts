@@ -17,6 +17,7 @@ import {
 } from '@/shell/presentation';
 import { setRecordEntry } from '@/shell/stateUpdates';
 import {
+  timelineStorageKeyForChannel,
   useDesktopShellFieldSetter,
   type DesktopShellStoreApi,
 } from '@/shell/store';
@@ -59,10 +60,14 @@ export function useDesktopShellSectionLoaders({
   const setDiscoveryError = useDesktopShellFieldSetter('discoveryError');
   const setDiscoverySeedInput = useDesktopShellFieldSetter('discoverySeedInput');
   const setGamePanelStateByTopic = useDesktopShellFieldSetter('gamePanelStateByTopic');
+  const setGamePanelStateByScopeKey = useDesktopShellFieldSetter('gamePanelStateByScopeKey');
   const setGameRoomsByTopic = useDesktopShellFieldSetter('gameRoomsByTopic');
+  const setGameRoomsByScopeKey = useDesktopShellFieldSetter('gameRoomsByScopeKey');
   const setKnownAuthorsByPubkey = useDesktopShellFieldSetter('knownAuthorsByPubkey');
   const setLivePanelStateByTopic = useDesktopShellFieldSetter('livePanelStateByTopic');
+  const setLivePanelStateByScopeKey = useDesktopShellFieldSetter('livePanelStateByScopeKey');
   const setLiveSessionsByTopic = useDesktopShellFieldSetter('liveSessionsByTopic');
+  const setLiveSessionsByScopeKey = useDesktopShellFieldSetter('liveSessionsByScopeKey');
   const setLocalPeerTicket = useDesktopShellFieldSetter('localPeerTicket');
   const setLocalProfile = useDesktopShellFieldSetter('localProfile');
   const setNotificationAutoReadError = useDesktopShellFieldSetter(
@@ -91,6 +96,7 @@ export function useDesktopShellSectionLoaders({
 
   const loadLiveSection = useCallback(
     async (topic: string, selectedChannelId: string | null) => {
+      const scopeKey = timelineStorageKeyForChannel(topic, selectedChannelId);
       try {
         const sessions = await api.listLiveSessions(
           topic,
@@ -98,45 +104,68 @@ export function useDesktopShellSectionLoaders({
         );
         startTransition(() => {
           setLiveSessionsByTopic(setRecordEntry(topic, sessions));
+          setLiveSessionsByScopeKey(setRecordEntry(scopeKey, sessions));
           setLivePanelStateByTopic(
             setRecordEntry(topic, { status: 'ready', error: null })
           );
+          setLivePanelStateByScopeKey(
+            setRecordEntry(scopeKey, { status: 'ready', error: null })
+          );
         });
       } catch (error) {
-        setLivePanelStateByTopic(
-          setRecordEntry(topic, {
-            status: 'error',
-            error: messageFromError(
-              error,
-              translate('common:errors.failedToLoadLiveSessions')
-            ),
-          })
-        );
+        const panelState = {
+          status: 'error' as const,
+          error: messageFromError(
+            error,
+            translate('common:errors.failedToLoadLiveSessions')
+          ),
+        };
+        setLivePanelStateByTopic(setRecordEntry(topic, panelState));
+        setLivePanelStateByScopeKey(setRecordEntry(scopeKey, panelState));
       }
     },
-    [api, setLivePanelStateByTopic, setLiveSessionsByTopic, translate]
+    [
+      api,
+      setLivePanelStateByScopeKey,
+      setLivePanelStateByTopic,
+      setLiveSessionsByScopeKey,
+      setLiveSessionsByTopic,
+      translate,
+    ]
   );
 
   const loadGameSection = useCallback(
     async (topic: string, selectedChannelId: string | null) => {
+      const scopeKey = timelineStorageKeyForChannel(topic, selectedChannelId);
       try {
         const rooms = await api.listGameRooms(topic, privateTimelineScope(selectedChannelId));
         startTransition(() => {
           setGameRoomsByTopic(setRecordEntry(topic, rooms));
+          setGameRoomsByScopeKey(setRecordEntry(scopeKey, rooms));
           setGamePanelStateByTopic(
             setRecordEntry(topic, { status: 'ready', error: null })
           );
+          setGamePanelStateByScopeKey(
+            setRecordEntry(scopeKey, { status: 'ready', error: null })
+          );
         });
       } catch (error) {
-        setGamePanelStateByTopic(
-          setRecordEntry(topic, {
-            status: 'error',
-            error: messageFromError(error, translate('common:errors.failedToLoadGameRooms')),
-          })
-        );
+        const panelState = {
+          status: 'error' as const,
+          error: messageFromError(error, translate('common:errors.failedToLoadGameRooms')),
+        };
+        setGamePanelStateByTopic(setRecordEntry(topic, panelState));
+        setGamePanelStateByScopeKey(setRecordEntry(scopeKey, panelState));
       }
     },
-    [api, setGamePanelStateByTopic, setGameRoomsByTopic, translate]
+    [
+      api,
+      setGamePanelStateByScopeKey,
+      setGamePanelStateByTopic,
+      setGameRoomsByScopeKey,
+      setGameRoomsByTopic,
+      translate,
+    ]
   );
 
   const loadProfileSection = useCallback(async () => {

@@ -471,13 +471,13 @@ test('private channel timeline keeps scope-separated posts and pending counts fr
     ).toBeInTheDocument();
     expect(screen.getByText('channel post')).toBeInTheDocument();
   });
-  expect(screen.queryByText('public post')).not.toBeInTheDocument();
+  expect(screen.getByText('public post')).toBeInTheDocument();
 
   channelTimelineItems = [channelNewPost, channelPost];
   window.dispatchEvent(new Event('focus'));
 
   expect(await screen.findByRole('button', { name: 'Show 1 new post' })).toBeInTheDocument();
-  expect(screen.queryByText('public post')).not.toBeInTheDocument();
+  expect(screen.getByText('public post')).toBeInTheDocument();
   expect(screen.queryByText('channel post new')).not.toBeInTheDocument();
 
   await user.click(screen.getByRole('button', { name: 'Show 1 new post' }));
@@ -485,7 +485,7 @@ test('private channel timeline keeps scope-separated posts and pending counts fr
   await waitFor(() => {
     expect(screen.getByText('channel post new')).toBeInTheDocument();
   });
-  expect(screen.queryByText('public post')).not.toBeInTheDocument();
+  expect(screen.getByText('public post')).toBeInTheDocument();
 
   const topicItem = screen.getByRole('button', { name: 'demo' }).closest('li');
   if (!(topicItem instanceof HTMLElement)) {
@@ -502,8 +502,8 @@ test('private channel timeline keeps scope-separated posts and pending counts fr
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
     expect(screen.getByText('public post')).toBeInTheDocument();
   });
-  expect(screen.queryByText('channel post')).not.toBeInTheDocument();
-  expect(screen.queryByText('channel post new')).not.toBeInTheDocument();
+  expect(screen.getByText('channel post')).toBeInTheDocument();
+  expect(screen.getByText('channel post new')).toBeInTheDocument();
 });
 
 test('background refresh preserves loaded timeline pages and does not restore a stale load-more cursor', async () => {
