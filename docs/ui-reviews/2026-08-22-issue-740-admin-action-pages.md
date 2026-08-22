@@ -1,6 +1,6 @@
 # 課題 #740 管理画面の確認・完了・拒否ページの確認記録
 
-- 対象: 課題 #740 の実装ブランチ `codex/issue-740-admin-action-pages-shell`
+- PR: https://github.com/KingYoSun/kukuri/pull/747(実装ブランチ `codex/issue-740-admin-action-pages-shell`)
 - 画面見本:
   - [確認ページ 1280px / dark](assets/2026-08-22-issue-740/preview-1280-dark.png)
   - [確認ページ 375px / light](assets/2026-08-22-issue-740/preview-375-light.png)
