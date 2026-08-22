@@ -104,6 +104,7 @@ impl IndexerParticipant {
     }
 
     pub fn with_blob_service(mut self, blob_service: Arc<dyn BlobService>) -> Self {
+        self.pipeline = self.pipeline.with_blob_service(Arc::clone(&blob_service));
         self.blob_service = Some(blob_service);
         self
     }

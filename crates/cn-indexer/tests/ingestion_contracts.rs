@@ -5,10 +5,11 @@
 //! するため、supported set の scope ゲート自体（Postgres 依存）は cn-core 側の DB テストに委ね、ここでは
 //! pipeline の不変条件（共有 replica 実在のみ / fail-closed / de-index）と relay gate を固定する。
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use async_trait::async_trait;
+use kukuri_blob_service::{BlobService, BlobStatus, MemoryBlobService, StoredBlob};
 use kukuri_cn_core::{IndexScopeKind, MemoryIndexEntryStore};
 use kukuri_cn_indexer::config::RelayConfig;
 use kukuri_cn_indexer::ingest::IngestPipeline;
@@ -143,6 +144,137 @@ async fn persist_post(
     object_id
 }
 
+/// app-api の通常投稿と同じ `BlobText` を blob service と共有 replica に配置する。
+async fn persist_blob_text_post(
+    docs: &MemoryDocsSync,
+    blobs: &MemoryBlobService,
+    replica: &ReplicaId,
+    topic: &TopicId,
+    body: &str,
+) -> String {
+    let stored = blobs
+        .put_blob(body.as_bytes().to_vec(), "text/markdown")
+        .await
+        .expect("store body blob");
+    persist_blob_text_ref(
+        docs,
+        replica,
+        topic,
+        PayloadRef::BlobText {
+            hash: stored.hash,
+            mime: stored.mime,
+            bytes: stored.bytes,
+        },
+    )
+    .await
+}
+
+async fn persist_blob_text_ref(
+    docs: &MemoryDocsSync,
+    replica: &ReplicaId,
+    topic: &TopicId,
+    payload_ref: PayloadRef,
+) -> String {
+    persist_blob_text_refs(docs, replica, topic, payload_ref.clone(), payload_ref).await
+}
+
+async fn persist_blob_text_refs(
+    docs: &MemoryDocsSync,
+    replica: &ReplicaId,
+    topic: &TopicId,
+    envelope_payload_ref: PayloadRef,
+    state_payload_ref: PayloadRef,
+) -> String {
+    let keys = KukuriKeys::generate();
+    let envelope = build_post_envelope_with_payload(
+        &keys,
+        topic,
+        envelope_payload_ref,
+        Vec::new(),
+        Vec::new(),
+        None,
+        ObjectVisibility::Public,
+    )
+    .expect("blob text envelope");
+    let mut object = envelope
+        .to_post_object()
+        .expect("post object")
+        .expect("post object present");
+    object.payload_ref = state_payload_ref;
+    let object_id = object.object_id.as_str().to_string();
+    docs.open_replica(replica).await.expect("open");
+    docs.apply_doc_op(
+        replica,
+        DocOp::SetJson {
+            key: stable_key("objects", &format!("{object_id}/state")),
+            value: serde_json::to_value(&object).expect("state json"),
+        },
+    )
+    .await
+    .expect("state op");
+    docs.apply_doc_op(
+        replica,
+        DocOp::SetJson {
+            key: stable_key("objects", &format!("{object_id}/envelope")),
+            value: serde_json::to_value(&envelope).expect("envelope json"),
+        },
+    )
+    .await
+    .expect("envelope op");
+    object_id
+}
+
+#[derive(Default)]
+struct SwitchableBlobService {
+    body: Mutex<Option<Vec<u8>>>,
+}
+
+impl SwitchableBlobService {
+    fn with_body(body: Vec<u8>) -> Self {
+        Self {
+            body: Mutex::new(Some(body)),
+        }
+    }
+
+    fn set_body(&self, body: Option<Vec<u8>>) {
+        *self.body.lock().expect("blob body mutex") = body;
+    }
+}
+
+#[async_trait]
+impl BlobService for SwitchableBlobService {
+    async fn put_blob(&self, data: Vec<u8>, mime: &str) -> Result<StoredBlob> {
+        let hash = blob_hash(&data);
+        let bytes = data.len() as u64;
+        self.set_body(Some(data));
+        Ok(StoredBlob {
+            hash,
+            mime: mime.to_string(),
+            bytes,
+        })
+    }
+
+    async fn fetch_blob(&self, _hash: &kukuri_core::BlobHash) -> Result<Option<Vec<u8>>> {
+        Ok(self.body.lock().expect("blob body mutex").clone())
+    }
+
+    async fn pin_blob(&self, _hash: &kukuri_core::BlobHash) -> Result<()> {
+        Ok(())
+    }
+
+    async fn blob_status(&self, _hash: &kukuri_core::BlobHash) -> Result<BlobStatus> {
+        Ok(if self.body.lock().expect("blob body mutex").is_some() {
+            BlobStatus::Available
+        } else {
+            BlobStatus::Missing
+        })
+    }
+
+    async fn import_peer_ticket(&self, _ticket: &str) -> Result<()> {
+        Ok(())
+    }
+}
+
 const MEDIA_MANIFEST_ID: &str = "media-manifest-test";
 /// manifest item の blob 本体（scan 対象 hash はここから導出する）。
 const MEDIA_BLOB_BYTES: &[u8] = b"tiny-png-bytes";
@@ -271,6 +403,207 @@ async fn index_only_indexes_shared_replica_entries() -> Result<()> {
     );
     // 真実源（index_entries）にも記録される（投影とペア。#404）。
     assert!(entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
+    Ok(())
+}
+
+#[tokio::test]
+async fn blob_text_post_body_is_searchable_in_scope_and_across_supported_entries() -> Result<()> {
+    let docs = Arc::new(MemoryDocsSync::default());
+    let blobs = Arc::new(MemoryBlobService::default());
+    let projection = Arc::new(MemoryIndexProjection::new());
+    let topic = TopicId::new("rust");
+    let replica = topic_replica_id("rust");
+    let object_id = persist_blob_text_post(
+        &docs,
+        blobs.as_ref(),
+        &replica,
+        &topic,
+        "Community Index CUA E2E テスト",
+    )
+    .await;
+
+    let (pipeline, entries, _) = pipeline_with(&docs, &projection, allow_service());
+    let pipeline = pipeline.with_blob_service(blobs);
+    let summary = pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+
+    assert_eq!(summary.indexed, 1);
+    assert!(entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
+    let stored = projection
+        .entries_in_scope(IndexScopeKind::PublicTopic, "rust")
+        .await;
+    assert_eq!(stored.len(), 1);
+    assert_eq!(stored[0].text, "Community Index CUA E2E テスト");
+
+    for query in ["CUA", "テスト"] {
+        let scoped = kukuri_cn_indexer::query::IndexQuery::search_scope(
+            projection.as_ref(),
+            IndexScopeKind::PublicTopic,
+            "rust",
+            query,
+            10,
+        )
+        .await?;
+        assert_eq!(scoped.len(), 1);
+        assert_eq!(scoped[0].object_id, object_id);
+
+        let all = kukuri_cn_indexer::query::IndexQuery::search_all(projection.as_ref(), query, 10)
+            .await?;
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].object_id, object_id);
+    }
+    Ok(())
+}
+
+async fn assert_blob_text_rejected(
+    payload_ref: PayloadRef,
+    blob_service: Option<Arc<dyn BlobService>>,
+) -> Result<()> {
+    assert_blob_text_refs_rejected(payload_ref.clone(), payload_ref, blob_service).await
+}
+
+async fn assert_blob_text_refs_rejected(
+    envelope_payload_ref: PayloadRef,
+    state_payload_ref: PayloadRef,
+    blob_service: Option<Arc<dyn BlobService>>,
+) -> Result<()> {
+    let docs = Arc::new(MemoryDocsSync::default());
+    let projection = Arc::new(MemoryIndexProjection::new());
+    let topic = TopicId::new("rust");
+    let replica = topic_replica_id("rust");
+    let object_id = persist_blob_text_refs(
+        &docs,
+        &replica,
+        &topic,
+        envelope_payload_ref,
+        state_payload_ref,
+    )
+    .await;
+    let (pipeline, entries, _) = pipeline_with(&docs, &projection, allow_service());
+    let pipeline = match blob_service {
+        Some(blob_service) => pipeline.with_blob_service(blob_service),
+        None => pipeline,
+    };
+
+    let summary = pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+
+    assert_eq!(summary.scanned, 1);
+    assert_eq!(summary.indexed, 0);
+    assert_eq!(summary.skipped_non_allow, 1);
+    assert!(!entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
+    assert!(
+        !projection
+            .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
+            .await?
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn blob_text_validation_failures_are_not_indexed() -> Result<()> {
+    let valid = b"body".to_vec();
+    let valid_ref = PayloadRef::BlobText {
+        hash: blob_hash(&valid),
+        mime: "text/markdown".to_string(),
+        bytes: valid.len() as u64,
+    };
+
+    assert_blob_text_rejected(valid_ref.clone(), None).await?;
+    assert_blob_text_rejected(
+        valid_ref.clone(),
+        Some(Arc::new(SwitchableBlobService::default())),
+    )
+    .await?;
+    assert_blob_text_rejected(
+        valid_ref.clone(),
+        Some(Arc::new(SwitchableBlobService::with_body(b"evil".to_vec()))),
+    )
+    .await?;
+    assert_blob_text_rejected(
+        valid_ref.clone(),
+        Some(Arc::new(SwitchableBlobService::with_body(b"x".to_vec()))),
+    )
+    .await?;
+
+    let mismatched_state_ref = PayloadRef::BlobText {
+        hash: blob_hash(&valid),
+        mime: "text/plain".to_string(),
+        bytes: valid.len() as u64,
+    };
+    assert_blob_text_refs_rejected(
+        valid_ref,
+        mismatched_state_ref,
+        Some(Arc::new(SwitchableBlobService::with_body(valid))),
+    )
+    .await?;
+
+    let invalid_utf8 = vec![0xff, 0xfe];
+    assert_blob_text_rejected(
+        PayloadRef::BlobText {
+            hash: blob_hash(&invalid_utf8),
+            mime: "text/markdown".to_string(),
+            bytes: invalid_utf8.len() as u64,
+        },
+        Some(Arc::new(SwitchableBlobService::with_body(invalid_utf8))),
+    )
+    .await?;
+
+    let oversized = vec![b'a'; 40_001];
+    assert_blob_text_rejected(
+        PayloadRef::BlobText {
+            hash: blob_hash(&oversized),
+            mime: "text/markdown".to_string(),
+            bytes: oversized.len() as u64,
+        },
+        Some(Arc::new(SwitchableBlobService::with_body(oversized))),
+    )
+    .await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn blob_text_fetch_failure_deindexes_an_existing_entry() -> Result<()> {
+    let body = b"Community Index body".to_vec();
+    let payload_ref = PayloadRef::BlobText {
+        hash: blob_hash(&body),
+        mime: "text/markdown".to_string(),
+        bytes: body.len() as u64,
+    };
+    let docs = Arc::new(MemoryDocsSync::default());
+    let projection = Arc::new(MemoryIndexProjection::new());
+    let topic = TopicId::new("rust");
+    let replica = topic_replica_id("rust");
+    let object_id = persist_blob_text_ref(&docs, &replica, &topic, payload_ref).await;
+    let blobs = Arc::new(SwitchableBlobService::with_body(body));
+    let (pipeline, entries, _) = pipeline_with(&docs, &projection, allow_service());
+    let pipeline = pipeline.with_blob_service(blobs.clone());
+
+    let initial = pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+    assert_eq!(initial.indexed, 1);
+    assert!(entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
+    assert!(
+        projection
+            .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
+            .await?
+    );
+
+    blobs.set_body(None);
+    let retry = pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+    assert_eq!(retry.indexed, 0);
+    assert_eq!(retry.skipped_non_allow, 1);
+    assert!(!entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
+    assert!(
+        !projection
+            .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
+            .await?
+    );
     Ok(())
 }
 
