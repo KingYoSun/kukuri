@@ -31,16 +31,21 @@ use std::sync::Arc;
 use anyhow::{Context, Result, bail};
 use tracing::{debug, warn};
 
+use kukuri_blob_service::BlobService;
 use kukuri_cn_core::{IndexEntryStore, IndexScopeKind, NewIndexEntry};
 use kukuri_cn_safety::ReasonCode;
 use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
 use kukuri_cn_safety_runtime::{SafetyScanOutcome, SafetyScanService};
 use kukuri_core::{
-    AssetRef, KukuriEnvelope, KukuriMediaManifestV1, ObjectStatus, PayloadRef, ReplicaId,
+    AssetRef, KukuriEnvelope, KukuriMediaManifestV1, ObjectStatus, PayloadRef, ReplicaId, blob_hash,
 };
 use kukuri_docs_sync::{DocFetchPolicy, DocQuery, DocRecord, DocsSync, stable_key};
 
 use crate::projection::{IndexProjection, IndexedEntry};
+
+/// app-api の投稿上限（10,000 Unicode scalar values）を UTF-8 bytes でも有界にする。
+const MAX_INDEXABLE_POST_BODY_CHARS: usize = 10_000;
+const MAX_INDEXABLE_POST_BODY_BYTES: u64 = (MAX_INDEXABLE_POST_BODY_CHARS as u64) * 4;
 
 /// 単一 scope（topic / channel）を ingest した結果のサマリ（監査 / テスト用）。
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -65,6 +70,8 @@ pub struct IngestPipeline {
     safety: Arc<SafetyScanService>,
     entries: Arc<dyn IndexEntryStore>,
     projection: Arc<dyn IndexProjection>,
+    /// `BlobText` 本文を scan 用に一時取得する。未構成時は blob 本文を fail-closed に除外する。
+    blob_service: Option<Arc<dyn BlobService>>,
     /// 観測状態（#613 T3）。設定時のみスキャン失敗 / プロバイダ利用不可を分類して数える。
     metrics: Option<Arc<crate::state::IndexerRuntimeState>>,
 }
@@ -81,8 +88,15 @@ impl IngestPipeline {
             safety,
             entries,
             projection,
+            blob_service: None,
             metrics: None,
         }
+    }
+
+    /// `BlobText` 本文の一時取得境界を接続する。
+    pub fn with_blob_service(mut self, blob_service: Arc<dyn BlobService>) -> Self {
+        self.blob_service = Some(blob_service);
+        self
     }
 
     /// 観測状態を接続する（#613 T3。常駐ワーカーの組み立て時に使う）。
@@ -213,9 +227,19 @@ impl IngestPipeline {
         }
 
         // 本文 text を取り出す。blob 参照は scan 用の一時 fetch のみ（恒久保存しない）。
-        let text = self
-            .resolve_body_text(replica_id, &object, envelopes)
-            .await?;
+        let text = match self.resolve_body_text(replica_id, &object, envelopes).await {
+            Ok(text) => text,
+            Err(error) => {
+                self.deindex_object(scope_kind, scope_id, object.object_id.as_str())
+                    .await?;
+                warn!(
+                    object_id = %object.object_id,
+                    error = %format!("{error:#}"),
+                    "failed to resolve post body; not indexing the post (fail-closed)"
+                );
+                return Ok(IngestOutcome::SkippedNonAllow);
+            }
+        };
 
         // safety scan（fail-closed）。post 本文 text を scan service に渡す。生成された
         // moderation artifact（risk signal / signed event）は service が署名・永続化する（#406）。
@@ -436,9 +460,9 @@ impl IngestPipeline {
 
     /// post 本文 text を取り出す。
     ///
-    /// inline text はそのまま返す。blob text は同一 scope scan で取得済みの envelope（`envelopes`）から
-    /// 本文を得る。envelope は scan 用途のみで、raw blob を恒久保存しない。envelope が無ければ空文字
-    /// （scan は fail-closed 側に倒る）。同一 prefix scan の結果を再利用するため追加クエリを発生させない。
+    /// inline text はそのまま返す。blob text は同一 scope scan で取得済みの署名済み envelope と object
+    /// state の参照を突合し、`BlobService::fetch_blob_ephemeral` で本文 bytes を一時取得する。取得した
+    /// bytes は宣言サイズ・上限・BLAKE3 hash・UTF-8 を検証し、raw blob は恒久保存しない。
     async fn resolve_body_text(
         &self,
         _replica_id: &ReplicaId,
@@ -447,18 +471,74 @@ impl IngestPipeline {
     ) -> Result<String> {
         match &object.payload_ref {
             PayloadRef::InlineText { text } => Ok(text.clone()),
-            PayloadRef::BlobText { hash, .. } => {
-                let Some(record) = envelopes.get(object.object_id.as_str()) else {
-                    debug!(hash = %hash.as_str(), "blob text envelope missing; scanning empty body");
-                    return Ok(String::new());
-                };
+            PayloadRef::BlobText { hash, bytes, .. } => {
+                if *bytes > MAX_INDEXABLE_POST_BODY_BYTES {
+                    bail!(
+                        "blob text declared size exceeds the index body limit ({} > {} bytes)",
+                        bytes,
+                        MAX_INDEXABLE_POST_BODY_BYTES
+                    );
+                }
+                let record = envelopes
+                    .get(object.object_id.as_str())
+                    .context("blob text envelope is missing")?;
                 let envelope: KukuriEnvelope = serde_json::from_slice(&record.value)
                     .context("failed to decode post envelope for blob text")?;
-                // 共有 replica の entry が本物であることを署名検証する。
                 envelope
                     .verify()
                     .context("post envelope failed verification")?;
-                Ok(inline_text_from_envelope(&envelope).unwrap_or_default())
+                if envelope.id.as_str() != object.object_id {
+                    bail!("blob text envelope id does not match the object state");
+                }
+                if envelope.pubkey.as_str() != object.author {
+                    bail!("blob text envelope author does not match the object state");
+                }
+                let content = envelope
+                    .post_content()
+                    .context("failed to parse blob text post content")?
+                    .context("blob text envelope is not a post")?;
+                if content.payload_ref != object.payload_ref {
+                    bail!("blob text payload metadata does not match the signed envelope");
+                }
+
+                let blob_service = self
+                    .blob_service
+                    .as_ref()
+                    .context("blob service is not configured for blob text")?;
+                let fetched = blob_service
+                    .fetch_blob_ephemeral(hash)
+                    .await
+                    .context("failed to fetch blob text body")?
+                    .context("blob text body is not retrievable")?;
+                let actual_bytes = u64::try_from(fetched.len())
+                    .context("blob text body size does not fit in u64")?;
+                if actual_bytes != *bytes {
+                    bail!(
+                        "blob text body size does not match metadata ({} != {} bytes)",
+                        actual_bytes,
+                        bytes
+                    );
+                }
+                if actual_bytes > MAX_INDEXABLE_POST_BODY_BYTES {
+                    bail!(
+                        "blob text body exceeds the index body limit ({} > {} bytes)",
+                        actual_bytes,
+                        MAX_INDEXABLE_POST_BODY_BYTES
+                    );
+                }
+                if blob_hash(&fetched) != *hash {
+                    bail!("blob text body hash does not match metadata");
+                }
+                let text = String::from_utf8(fetched).context("blob text body is not UTF-8")?;
+                let char_count = text.chars().count();
+                if char_count > MAX_INDEXABLE_POST_BODY_CHARS {
+                    bail!(
+                        "blob text body exceeds the index character limit ({} > {} characters)",
+                        char_count,
+                        MAX_INDEXABLE_POST_BODY_CHARS
+                    );
+                }
+                Ok(text)
             }
         }
     }
@@ -527,14 +607,5 @@ fn text_with_tags(text: &str, derived_tags: &[String]) -> String {
         tags
     } else {
         format!("{text}\n{tags}")
-    }
-}
-
-/// envelope から inline 本文 text を取り出す（blob text の scan 用フォールバック）。
-fn inline_text_from_envelope(envelope: &KukuriEnvelope) -> Option<String> {
-    let content = envelope.post_content().ok().flatten()?;
-    match content.payload_ref {
-        PayloadRef::InlineText { text } => Some(text),
-        PayloadRef::BlobText { .. } => None,
     }
 }

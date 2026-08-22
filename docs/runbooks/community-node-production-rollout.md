@@ -380,6 +380,22 @@ match countだけにする。journal、startup log、全稼働container logを�
 journal archive / container logを保持方針に従ってrotate・vacuumした後、新旧両方の値で0件を再確認する。
 秘密値そのものをincident記録へ転記しない。
 
+### 5.5 `BlobText` 本文の再投影と検索確認
+
+本文取得処理を変更した `cn-indexer` のrolloutでは、ArcadeDBのvolumeやentryを手動削除しない。
+workerは起動直後とpoll interval（既定300秒）ごとにsupported scopeを全件見直しし、同一objectを
+冪等upsertする。新revision起動後に次を実施する。
+
+1. `cn-indexer` の `/v1/status` とlogで、起動後の全件見直しが完了し、対象scopeにbackoffが無いことを確認する。
+2. read-onlyのArcadeDB照会で、対象objectの `text` が空文字でなく、期待する本文を含むことを確認する。
+3. topic内検索とsupported set横断検索でASCII語と日本語語をそれぞれ検索し、期待object IDが返ることを確認する。
+4. 同じscopeの発見一覧にも同じobject IDが存在し、検索だけが欠落する不整合が無いことを確認する。
+5. 取得不能、hash不一致、byte数不一致、上限超過、非UTF-8の本文は真実源と投影から除外され、空本文entryとして残らないことを確認する。
+
+`BlobText` のraw bytesは `BlobService::fetch_blob_ephemeral` で取得し、検証とscanの間だけ保持する。
+Postgresは本文を持たず、ArcadeDBには検証・allow判定済みの検索用textだけを投影する。本文blobの非残留は
+6.2と同じlocal miss、ephemeral transfer、再度のlocal missの組で確認する。
+
 ## 6. 実クライアントのbenign media確認
 
 実在の違法mediaや疑わしいmediaを検証に使わない。権利上問題のない小さな画像をpublic topicへ投稿し、
