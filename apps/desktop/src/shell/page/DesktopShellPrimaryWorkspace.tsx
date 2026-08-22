@@ -56,6 +56,7 @@ export type DesktopShellPrimarySurfaceProps = {
   routeSection: PrimarySection;
   surfaceSection?: PrimarySection;
   surfaceColumnKind?: ColumnKind;
+  surfaceEntityId?: string;
   surfaceScope?: ColumnScope;
   profileAvatarInputKey: number;
   messagesWorkspace: ReactNode;
@@ -134,6 +135,7 @@ export function DesktopShellPrimarySurface({
   routeSection,
   surfaceSection,
   surfaceColumnKind,
+  surfaceEntityId,
   surfaceScope,
   profileAvatarInputKey,
   messagesWorkspace,
@@ -531,7 +533,7 @@ export function DesktopShellPrimarySurface({
         ) : null}
 
         {activeSurfaceSection === 'live' ? (
-          <>
+          <div className='shell-stream-layout'>
             <Card className='shell-workspace-card'>
               <div className='panel-header'>
                 <div>
@@ -643,7 +645,7 @@ export function DesktopShellPrimarySurface({
                 ))}
               </ul>
             </Card>
-          </>
+          </div>
         ) : null}
 
         {activeSurfaceSection === 'game' && surfaceColumnKind === 'game' ? (
@@ -687,6 +689,7 @@ export function DesktopShellPrimarySurface({
             localProfile={localProfile}
             knownAuthorsByPubkey={knownAuthorsByPubkey}
             mediaObjectUrls={mediaObjectUrls}
+            initialSelectedRoomId={surfaceEntityId}
           />
         ) : null}
 

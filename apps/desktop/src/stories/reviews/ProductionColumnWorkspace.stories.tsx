@@ -22,3 +22,17 @@ export const ControlCenterOpen: Story = {
   },
 };
 export const InteractiveProductionShell: Story = {};
+export const VariableSpanWideSurfaces: Story = {
+  globals: { shellWidth: 'ultrawide1920' },
+  args: {
+    scenario: 'wide-surfaces',
+    metaverseSpan: 3,
+  },
+};
+export const MetaverseFourSpan: Story = {
+  globals: { shellWidth: 'ultrawide1920' },
+  args: {
+    scenario: 'wide-surfaces',
+    metaverseSpan: 4,
+  },
+};

@@ -46,7 +46,7 @@ export function ShellFrame({
   }, []);
 
   return (
-    <div className='shell-phase1'>
+    <div className='shell-phase1' data-workspace-layout={workspaceLayout}>
       <a className='shell-skip-link' href={`#${skipTargetId}`}>
         Skip to workspace
       </a>

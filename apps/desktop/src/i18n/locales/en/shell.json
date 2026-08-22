@@ -68,6 +68,22 @@
     "release": "Release and updates",
     "settings": "Settings"
   },
+  "columnMenu": {
+    "open": "Open {{title}} menu",
+    "close": "Close {{title}} menu",
+    "actions": "{{title}} actions",
+    "drag": "Move {{title}} Column",
+    "moveLeft": "Move {{title}} left",
+    "moveRight": "Move {{title}} right",
+    "moved": "{{title}} moved to position {{position}} of {{total}}.",
+    "pin": "Pin {{title}}",
+    "unpin": "Unpin {{title}}",
+    "closeColumn": "Close {{title}}",
+    "span_one": "{{count}} span",
+    "span_other": "{{count}} spans",
+    "spanChanged_one": "{{title}} changed to {{count}} span.",
+    "spanChanged_other": "{{title}} changed to {{count}} spans."
+  },
   "primarySections": {
     "explore": "Explore",
     "game": "Game",

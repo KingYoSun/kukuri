@@ -1,0 +1,131 @@
+/* ADR 0031 Wave 5: variable spans, reorder feedback, and wide-surface containers. */
+.shell-phase1 .shell-column-drop-indicator {
+  position: absolute;
+  top: var(--space-sm);
+  bottom: var(--space-sm);
+  z-index: 4;
+  width: 0.25rem;
+  border: 1px solid var(--surface-panel-solid);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 34%, transparent);
+  pointer-events: none;
+}
+
+.shell-phase1 .shell-column-surface[data-span='2'] {
+  --column-preferred-width: calc(var(--column-unit) + var(--column-gap) + var(--column-unit));
+}
+
+.shell-phase1 .shell-column-surface[data-span='3'] {
+  --column-preferred-width: calc(
+    var(--column-unit) + var(--column-gap) + var(--column-unit) + var(--column-gap) +
+      var(--column-unit)
+  );
+}
+
+.shell-phase1 .shell-column-surface[data-span='4'] {
+  --column-preferred-width: calc(
+    var(--column-unit) + var(--column-gap) + var(--column-unit) + var(--column-gap) +
+      var(--column-unit) + var(--column-gap) + var(--column-unit)
+  );
+}
+
+.shell-phase1 .shell-column-surface[data-dragging] {
+  opacity: 0.66;
+  outline: 2px dashed var(--accent);
+  outline-offset: -0.35rem;
+}
+
+.shell-phase1 .shell-column-drag-grip {
+  flex: none;
+  cursor: grab;
+  touch-action: none;
+}
+
+.shell-phase1 .shell-column-drag-grip:active {
+  cursor: grabbing;
+}
+
+.shell-phase1 .shell-column-menu-wrap {
+  position: relative;
+  flex: none;
+}
+
+.shell-phase1 .shell-column-menu {
+  position: fixed;
+  z-index: 80;
+  display: grid;
+  gap: var(--space-2xs);
+  width: max-content;
+  min-width: 12rem;
+  padding: var(--space-xs);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel-solid);
+  box-shadow: var(--shadow-panel);
+}
+
+.shell-phase1 .shell-column-menu button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: 2.5rem;
+  border: 0;
+  border-radius: var(--radius-xs);
+  padding: var(--space-xs) var(--space-sm);
+  background: transparent;
+  color: var(--foreground);
+  text-align: left;
+}
+
+.shell-phase1 .shell-column-menu button:hover,
+.shell-phase1 .shell-column-menu button:focus-visible,
+.shell-phase1 .shell-column-menu button[aria-checked='true'] {
+  background: var(--surface-accent-soft);
+}
+
+.shell-phase1 .shell-column-menu button:disabled {
+  opacity: 0.46;
+}
+
+.shell-phase1 .shell-column-menu-separator {
+  height: 1px;
+  margin: var(--space-2xs) 0;
+  background: var(--border-subtle);
+}
+
+.shell-phase1 .shell-stream-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+@container (min-width: 46rem) {
+  .shell-phase1 .shell-stream-layout {
+    grid-template-columns: minmax(0, 1.25fr) minmax(18rem, 0.75fr);
+    align-items: start;
+  }
+
+  .shell-phase1 .shell-stream-layout > .shell-workspace-card {
+    margin: 0;
+  }
+}
+
+@container (min-width: 68rem) {
+  .shell-phase1 .metaverse-viewport-shell {
+    padding-right: 19.5rem;
+  }
+
+  .shell-phase1 .metaverse-viewport-canvas {
+    right: 19.5rem !important;
+  }
+
+  .shell-phase1 .metaverse-room-hud {
+    top: 3.75rem;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    width: 18rem;
+    max-height: none;
+  }
+}

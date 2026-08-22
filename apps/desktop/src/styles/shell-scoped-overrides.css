@@ -390,7 +390,12 @@
 }
 
 /* ADR 0031 Wave 1: production Column Canvas foundation. */
+.shell-phase1[data-workspace-layout='column'] {
+  max-width: none;
+}
+
 .shell-phase1 .shell-column-canvas {
+  position: relative;
   display: flex;
   align-items: stretch;
   justify-content: flex-start;
@@ -427,11 +432,12 @@
 }
 
 .shell-phase1 .shell-column-surface {
+  --column-preferred-width: var(--column-unit);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  flex: 0 0 var(--column-unit);
-  width: var(--column-unit);
-  max-width: min(var(--column-unit), calc(100vw - (var(--space-lg) * 2)));
+  flex: 0 0 var(--column-preferred-width);
+  width: var(--column-preferred-width);
+  max-width: calc(100vw - (var(--space-lg) * 2));
   min-width: min(100%, 20rem);
   min-height: 0;
   overflow: hidden;

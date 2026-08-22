@@ -559,6 +559,7 @@ export function DesktopShellPage({
       routeSection={routeSection}
       surfaceSection={surfaceSection}
       surfaceColumnKind={column?.kind}
+      surfaceEntityId={column?.entityId}
       surfaceScope={column?.scope}
       profileAvatarInputKey={dialogs.profileAvatarInputKey}
       messagesWorkspace={null}

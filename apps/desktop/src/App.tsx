@@ -24,11 +24,14 @@ import {
   writeDesktopTheme,
 } from '@/lib/theme';
 import { copyTextToClipboard } from '@/lib/utils';
+import { startWorkspaceLayoutPersistence } from '@/shell/workspacePersistence';
 
 type StartupGateState = { status: 'checking' } | DesktopStartupStatus;
 
 export function App(props: AppProps) {
-  const [store] = useState(() => createDesktopShellStore());
+  const [store] = useState(() =>
+    createDesktopShellStore({ workspaceStorage: window.localStorage })
+  );
   const [theme, setTheme] = useState<DesktopTheme>(() => readDesktopTheme());
   const [startupGate, setStartupGate] = useState<StartupGateState>(() =>
     props.api ? { status: 'ready' } : { status: 'checking' }
@@ -41,6 +44,11 @@ export function App(props: AppProps) {
   useEffect(() => {
     writeDesktopTheme(theme);
   }, [theme]);
+
+  useEffect(
+    () => startWorkspaceLayoutPersistence(store, window.localStorage),
+    [store]
+  );
 
   useEffect(() => {
     if (props.api) {

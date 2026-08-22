@@ -29,6 +29,10 @@ export type ColumnState = {
   preferredDesktopSpan: ColumnSpan;
 };
 
+export type ColumnStateInput = Omit<ColumnState, 'preferredDesktopSpan'> & {
+  preferredDesktopSpan?: number;
+};
+
 export type WorkspaceState = {
   columns: ColumnState[];
   activeColumnId: string;
@@ -39,6 +43,54 @@ export type WorkspaceState = {
 export type WorkspaceSliceState = {
   workspaceState: WorkspaceState;
 };
+
+type ColumnSpanPolicy = {
+  default: ColumnSpan;
+  min: ColumnSpan;
+  max: ColumnSpan;
+};
+
+const FIXED_COLUMN_SPAN_POLICY: ColumnSpanPolicy = { default: 1, min: 1, max: 1 };
+
+const COLUMN_SPAN_POLICIES: Record<ColumnKind, ColumnSpanPolicy> = {
+  timeline: FIXED_COLUMN_SPAN_POLICY,
+  notifications: FIXED_COLUMN_SPAN_POLICY,
+  thread: FIXED_COLUMN_SPAN_POLICY,
+  profile: FIXED_COLUMN_SPAN_POLICY,
+  explore: FIXED_COLUMN_SPAN_POLICY,
+  messages: { default: 1, min: 1, max: 2 },
+  conversation: { default: 1, min: 1, max: 2 },
+  stream: { default: 2, min: 1, max: 2 },
+  game: FIXED_COLUMN_SPAN_POLICY,
+  metaverse: { default: 3, min: 1, max: 4 },
+};
+
+export function columnSpanPolicy(kind: ColumnKind): ColumnSpanPolicy {
+  return COLUMN_SPAN_POLICIES[kind];
+}
+
+export function defaultColumnSpan(kind: ColumnKind): ColumnSpan {
+  return columnSpanPolicy(kind).default;
+}
+
+export function normalizeColumnSpan(kind: ColumnKind, requestedSpan?: number): ColumnSpan {
+  const policy = columnSpanPolicy(kind);
+  if (!Number.isFinite(requestedSpan)) return policy.default;
+  return Math.min(policy.max, Math.max(policy.min, Math.round(requestedSpan!))) as ColumnSpan;
+}
+
+function resolveColumnInput(
+  requestedColumn: ColumnStateInput,
+  fallbackSpan?: ColumnSpan
+): ColumnState {
+  return {
+    ...requestedColumn,
+    preferredDesktopSpan: normalizeColumnSpan(
+      requestedColumn.kind,
+      requestedColumn.preferredDesktopSpan ?? fallbackSpan
+    ),
+  };
+}
 
 function identityPart(value: string | null | undefined) {
   return value ? encodeURIComponent(value) : '-';
@@ -74,7 +126,7 @@ export function createInitialWorkspaceState(
         kind: 'timeline',
         scope,
         pinned: true,
-        preferredDesktopSpan: 1,
+        preferredDesktopSpan: defaultColumnSpan('timeline'),
       },
     ],
     activeColumnId: initialTimelineColumnId,
@@ -99,10 +151,13 @@ export function activateColumn(state: WorkspaceState, columnId: string): Workspa
 
 export function openTransientColumn(
   state: WorkspaceState,
-  requestedColumn: ColumnState
+  requestedColumn: ColumnStateInput
 ): WorkspaceState {
-  const column = { ...requestedColumn, pinned: false };
-  const existingIndex = state.columns.findIndex((candidate) => candidate.id === column.id);
+  const existingIndex = state.columns.findIndex((candidate) => candidate.id === requestedColumn.id);
+  const column = {
+    ...resolveColumnInput(requestedColumn, state.columns[existingIndex]?.preferredDesktopSpan),
+    pinned: false,
+  };
   if (existingIndex >= 0) {
     const existing = state.columns[existingIndex];
     if (existing.pinned) return activateColumn(state, column.id);
@@ -155,7 +210,7 @@ export function openTransientColumn(
 
 export function openPinnedColumn(
   state: WorkspaceState,
-  requestedColumn: ColumnState
+  requestedColumn: ColumnStateInput
 ): WorkspaceState {
   const existing = state.columns.find((column) => column.id === requestedColumn.id);
   if (existing) {
@@ -163,12 +218,46 @@ export function openPinnedColumn(
     return activateColumn(pinned, existing.id);
   }
 
-  const column = { ...requestedColumn, pinned: true };
+  const column = { ...resolveColumnInput(requestedColumn), pinned: true };
   return {
     ...state,
     columns: [...state.columns, column],
     activeColumnId: column.id,
   };
+}
+
+export function setColumnSpan(
+  state: WorkspaceState,
+  columnId: string,
+  requestedSpan: number
+): WorkspaceState {
+  let changed = false;
+  const columns = state.columns.map((column) => {
+    if (column.id !== columnId) return column;
+    const preferredDesktopSpan = normalizeColumnSpan(column.kind, requestedSpan);
+    if (preferredDesktopSpan === column.preferredDesktopSpan) return column;
+    changed = true;
+    return { ...column, preferredDesktopSpan };
+  });
+  return changed ? { ...state, columns } : state;
+}
+
+export function moveColumn(
+  state: WorkspaceState,
+  columnId: string,
+  requestedIndex: number
+): WorkspaceState {
+  const currentIndex = state.columns.findIndex((column) => column.id === columnId);
+  if (currentIndex < 0 || !Number.isFinite(requestedIndex)) return state;
+  const targetIndex = Math.min(
+    state.columns.length - 1,
+    Math.max(0, Math.round(requestedIndex))
+  );
+  if (targetIndex === currentIndex) return state;
+  const columns = [...state.columns];
+  const [column] = columns.splice(currentIndex, 1);
+  columns.splice(targetIndex, 0, column);
+  return { ...state, columns };
 }
 
 export function setColumnPinned(
