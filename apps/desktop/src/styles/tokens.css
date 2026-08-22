@@ -22,8 +22,36 @@
   --space-lg: 1.5rem;
   --space-xl: 2rem;
   --space-2xl: 3rem;
+  --column-unit: 27.5rem;
+  --column-gap: var(--space-md);
+  --motion-duration-fast: 120ms;
+  --motion-duration-standard: 200ms;
+  --motion-duration-slow: 280ms;
+  --motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --motion-easing-enter: cubic-bezier(0, 0, 0, 1);
+  --motion-easing-exit: cubic-bezier(0.3, 0, 1, 1);
+  --motion-distance-column: 1.5rem;
+  --motion-distance-control-center: 2rem;
   --blur-hud: 14px;
   --surface-metaverse: #101318;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-fast: 1ms;
+    --motion-duration-standard: 1ms;
+    --motion-duration-slow: 1ms;
+    --motion-distance-column: 0px;
+    --motion-distance-control-center: 0px;
+  }
+}
+
+:root[data-reduced-motion='reduce'] {
+  --motion-duration-fast: 1ms;
+  --motion-duration-standard: 1ms;
+  --motion-duration-slow: 1ms;
+  --motion-distance-column: 0px;
+  --motion-distance-control-center: 0px;
 }
 
 :root,

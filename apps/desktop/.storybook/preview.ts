@@ -33,6 +33,26 @@ const preview: Preview = {
         items: [
           { value: 'narrow', title: 'Narrow desktop' },
           { value: 'desktop', title: 'Desktop' },
+          { value: 'mobile375', title: 'Mobile 375' },
+          { value: 'mobile390', title: 'Mobile 390' },
+          { value: 'mobile430', title: 'Mobile 430' },
+          { value: 'compact760', title: 'Desktop 760' },
+          { value: 'standard1024', title: 'Desktop 1024' },
+          { value: 'wide1280', title: 'Desktop 1280' },
+          { value: 'review1440', title: 'Desktop 1440' },
+          { value: 'ultrawide1920', title: 'Ultrawide 1920' },
+        ],
+      },
+    },
+    motion: {
+      name: 'Motion',
+      description: 'Motion preference used by review surfaces',
+      defaultValue: 'full',
+      toolbar: {
+        icon: 'lightning',
+        items: [
+          { value: 'full', title: 'Full motion' },
+          { value: 'reduce', title: 'Reduced motion' },
         ],
       },
     },
@@ -59,9 +79,24 @@ const preview: Preview = {
   decorators: [
     (Story, context) => {
       const theme = context.globals.theme === 'light' ? 'light' : 'dark';
-      const shellWidth = context.globals.shellWidth === 'narrow' ? 420 : 960;
+      const shellWidths: Record<string, number> = {
+        narrow: 420,
+        desktop: 960,
+        mobile375: 375,
+        mobile390: 390,
+        mobile430: 430,
+        compact760: 760,
+        standard1024: 1024,
+        wide1280: 1280,
+        review1440: 1440,
+        ultrawide1920: 1920,
+      };
+      const shellWidth = shellWidths[String(context.globals.shellWidth)] ?? 960;
+      const reviewCanvas = context.parameters.reviewCanvas === true;
+      const motion = context.globals.motion === 'reduce' ? 'reduce' : 'full';
       const locale = (context.globals.locale ?? 'en') as SupportedLocale;
       document.documentElement.dataset.theme = theme;
+      document.documentElement.dataset.reducedMotion = motion;
       document.documentElement.lang = locale;
       void i18n.changeLanguage(locale);
 
@@ -70,7 +105,7 @@ const preview: Preview = {
         {
           style: {
             minHeight: '100vh',
-            padding: '24px',
+            padding: reviewCanvas ? 0 : '24px',
             background: 'var(--shell-background)',
           },
         },
