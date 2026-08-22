@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { Bell, BookPlus, Download, GitBranchPlus, PanelLeftOpen, Settings } from 'lucide-react';
 
 import { FilterableTopicNavList } from '@/components/core/FilterableTopicNavList';
+import { TimelineWorkspaceHeader } from '@/components/core/TimelineWorkspaceHeader';
 import {
   CommunityIndexingRequestDialog,
   type CommunityIndexingTarget,
@@ -63,6 +64,7 @@ import {
   DesktopShellNotificationsWorkspace,
 } from '@/shell/page/DesktopShellAuxiliaryPanels';
 import { DesktopShellOverlays } from '@/shell/page/DesktopShellOverlays';
+import { DesktopShellColumnWorkspace } from '@/shell/page/DesktopShellColumnWorkspace';
 import { DesktopShellPrimaryWorkspace } from '@/shell/page/DesktopShellPrimaryWorkspace';
 import { DesktopShellSettingsDrawer } from '@/shell/page/DesktopShellSettingsDrawer';
 import { useFocusScroll } from '@/shell/page/useFocusScroll';
@@ -529,70 +531,77 @@ export function DesktopShellPage({
     </Button>
   );
   const navRailHeader = (
-    <div className='shell-nav-status'>
-      {developerModeEnabled ? (
-        <div className='shell-status-badges'>
-          <StatusBadge
-            label={syncStatusBadgeLabel(syncStatus)}
-            tone={syncStatusBadgeTone(syncStatus)}
-          />
-          <StatusBadge label={`${formatCount(syncStatus.peer_count)} ${t('settings:connectivity.metrics.peers').toLowerCase()}`} />
-          <StatusBadge
-            label={
-              syncStatus.discovery.mode === 'seeded_dht'
-                ? t('shell:navigation.seededDht')
-                : t('shell:navigation.staticPeers')
-            }
-          />
-          {syncStatus.pending_events > 0 ? (
+    <div className='shell-nav-header-content'>
+      <TimelineWorkspaceHeader
+        activeSection={shellChromeState.activePrimarySection}
+        items={viewModels.primarySectionItems}
+        onSelectSection={focusPrimarySection}
+      />
+      <div className='shell-nav-status'>
+        {developerModeEnabled ? (
+          <div className='shell-status-badges'>
             <StatusBadge
-              label={`${formatCount(syncStatus.pending_events)} ${t('settings:connectivity.metrics.pending').toLowerCase()}`}
-              tone='warning'
+              label={syncStatusBadgeLabel(syncStatus)}
+              tone={syncStatusBadgeTone(syncStatus)}
             />
-          ) : null}
-        </div>
-      ) : null}
-      {updateAvailable ? (
+            <StatusBadge label={`${formatCount(syncStatus.peer_count)} ${t('settings:connectivity.metrics.peers').toLowerCase()}`} />
+            <StatusBadge
+              label={
+                syncStatus.discovery.mode === 'seeded_dht'
+                  ? t('shell:navigation.seededDht')
+                  : t('shell:navigation.staticPeers')
+              }
+            />
+            {syncStatus.pending_events > 0 ? (
+              <StatusBadge
+                label={`${formatCount(syncStatus.pending_events)} ${t('settings:connectivity.metrics.pending').toLowerCase()}`}
+                tone='warning'
+              />
+            ) : null}
+          </div>
+        ) : null}
+        {updateAvailable ? (
+          <Button
+            className='shell-update-button shell-icon-button'
+            variant='ghost'
+            size='icon'
+            type='button'
+            aria-label={t('shell:navigation.updateAvailable')}
+            data-testid='shell-update-trigger'
+            onClick={() => {
+              setSettingsOpen(true, false);
+              setShellChromeState((current) => ({
+                ...current,
+                activeSettingsSection: 'release',
+              }));
+              syncRoute('replace', {
+                settingsOpen: true,
+                settingsSection: 'release',
+              });
+            }}
+          >
+            <Download className='size-5' aria-hidden='true' />
+          </Button>
+        ) : null}
         <Button
-          className='shell-update-button shell-icon-button'
+          ref={settingsTriggerRef}
+          className='shell-settings-button shell-icon-button'
           variant='ghost'
           size='icon'
           type='button'
-          aria-label={t('shell:navigation.updateAvailable')}
-          data-testid='shell-update-trigger'
-          onClick={() => {
-            setSettingsOpen(true, false);
-            setShellChromeState((current) => ({
-              ...current,
-              activeSettingsSection: 'release',
-            }));
-            syncRoute('replace', {
-              settingsOpen: true,
-              settingsSection: 'release',
-            });
-          }}
+          aria-label={
+            shellChromeState.settingsOpen
+              ? t('shell:settingsDrawer.close')
+              : t('shell:settingsDrawer.open')
+          }
+          aria-controls={SHELL_SETTINGS_ID}
+          aria-expanded={shellChromeState.settingsOpen}
+          data-testid='shell-settings-trigger'
+          onClick={() => setSettingsOpen(!shellChromeState.settingsOpen)}
         >
-          <Download className='size-5' aria-hidden='true' />
+          <Settings className='size-5' aria-hidden='true' />
         </Button>
-      ) : null}
-      <Button
-        ref={settingsTriggerRef}
-        className='shell-settings-button shell-icon-button'
-        variant='ghost'
-        size='icon'
-        type='button'
-        aria-label={
-          shellChromeState.settingsOpen
-            ? t('shell:settingsDrawer.close')
-            : t('shell:settingsDrawer.open')
-        }
-        aria-controls={SHELL_SETTINGS_ID}
-        aria-expanded={shellChromeState.settingsOpen}
-        data-testid='shell-settings-trigger'
-        onClick={() => setSettingsOpen(!shellChromeState.settingsOpen)}
-      >
-        <Settings className='size-5' aria-hidden='true' />
-      </Button>
+      </div>
     </div>
   );
 
@@ -695,6 +704,68 @@ export function DesktopShellPage({
       openCommunityNodeSettings={handleOpenCommunityNodeSettings}
     />
   );
+  const columnWorkspaceActive = shellChromeState.activePrimarySection === 'timeline';
+  const primaryWorkspace = (
+    <DesktopShellPrimaryWorkspace
+      t={t}
+      api={api}
+      metaverseActions={shellActions.metaverseActions}
+      locale={locale}
+      routeSection={routeSection}
+      profileAvatarInputKey={dialogs.profileAvatarInputKey}
+      messagesWorkspace={messagesWorkspace}
+      notificationsWorkspace={notificationsWorkspace}
+      viewModels={viewModels}
+      setPrimarySectionRef={setPrimarySectionRef}
+      focusTimelineView={focusTimelineView}
+      openCommunityNodeSettings={handleOpenCommunityNodeSettings}
+      loadReactionCatalogData={loadReactionCatalogData}
+      refreshTimelineFeed={refreshTimelineFeed}
+      loadMoreTimeline={loadMoreTimeline}
+      openAuthorDetail={openAuthorDetail}
+      openThread={openThread}
+      beginReply={shellActions.beginReply}
+      handleSimpleRepost={shellActions.handleSimpleRepost}
+      beginQuoteRepost={shellActions.beginQuoteRepost}
+      handleRetryLocalPost={shellActions.handleRetryLocalPost}
+      handleRestoreLocalPost={shellActions.handleRestoreLocalPost}
+      handleToggleReaction={shellActions.handleToggleReaction}
+      handleBookmarkCustomReaction={shellActions.handleBookmarkCustomReaction}
+      handleToggleBookmarkedPost={shellActions.handleToggleBookmarkedPost}
+      handleActivateReference={handleActivateReference}
+      handleCopyInternalLink={handleCopyInternalLink}
+      handleJoinLiveSession={shellActions.handleJoinLiveSession}
+      handleLeaveLiveSession={shellActions.handleLeaveLiveSession}
+      handleEndLiveSession={shellActions.handleEndLiveSession}
+      updateGameDraft={shellActions.updateGameDraft}
+      handleUpdateGameRoom={shellActions.handleUpdateGameRoom}
+      openProfileOverview={openProfileOverview}
+      openProfileEditor={openProfileEditor}
+      openProfileConnections={openProfileConnections}
+      handleProfileFieldChange={shellActions.handleProfileFieldChange}
+      onProfilePictureSelect={(file) => {
+        dialogs.setProfileAvatarCropFile(file);
+        dialogs.setProfileAvatarCropOpen(true);
+      }}
+      handleClearProfileAvatar={shellActions.handleClearProfileAvatar}
+      handleSaveProfile={shellActions.handleSaveProfile}
+      resetProfileDraft={shellActions.resetProfileDraft}
+      handleRelationshipAction={shellActions.handleRelationshipAction}
+      handleMuteAction={shellActions.handleMuteAction}
+      handleOpenOriginalTopic={shellActions.handleOpenOriginalTopic}
+      columnMode={columnWorkspaceActive}
+    />
+  );
+  const workspace = columnWorkspaceActive ? (
+    <DesktopShellColumnWorkspace
+      title={t('shell:primarySections.timeline')}
+      scopeLabel={viewModels.activeComposeAudienceLabel}
+    >
+      {primaryWorkspace}
+    </DesktopShellColumnWorkspace>
+  ) : (
+    primaryWorkspace
+  );
 
   return (
     <>
@@ -733,57 +804,8 @@ export function DesktopShellPage({
             topicCount={syncStatus.subscribed_topics.length}
           />
         }
-        workspace={
-          <DesktopShellPrimaryWorkspace
-            t={t}
-            api={api}
-            metaverseActions={shellActions.metaverseActions}
-            locale={locale}
-            routeSection={routeSection}
-            profileAvatarInputKey={dialogs.profileAvatarInputKey}
-            messagesWorkspace={messagesWorkspace}
-            notificationsWorkspace={notificationsWorkspace}
-            viewModels={viewModels}
-            setPrimarySectionRef={setPrimarySectionRef}
-            focusPrimarySection={focusPrimarySection}
-            focusTimelineView={focusTimelineView}
-            openCommunityNodeSettings={handleOpenCommunityNodeSettings}
-            loadReactionCatalogData={loadReactionCatalogData}
-            refreshTimelineFeed={refreshTimelineFeed}
-            loadMoreTimeline={loadMoreTimeline}
-            openAuthorDetail={openAuthorDetail}
-            openThread={openThread}
-            beginReply={shellActions.beginReply}
-            handleSimpleRepost={shellActions.handleSimpleRepost}
-            beginQuoteRepost={shellActions.beginQuoteRepost}
-            handleRetryLocalPost={shellActions.handleRetryLocalPost}
-            handleRestoreLocalPost={shellActions.handleRestoreLocalPost}
-            handleToggleReaction={shellActions.handleToggleReaction}
-            handleBookmarkCustomReaction={shellActions.handleBookmarkCustomReaction}
-            handleToggleBookmarkedPost={shellActions.handleToggleBookmarkedPost}
-            handleActivateReference={handleActivateReference}
-            handleCopyInternalLink={handleCopyInternalLink}
-            handleJoinLiveSession={shellActions.handleJoinLiveSession}
-            handleLeaveLiveSession={shellActions.handleLeaveLiveSession}
-            handleEndLiveSession={shellActions.handleEndLiveSession}
-            updateGameDraft={shellActions.updateGameDraft}
-            handleUpdateGameRoom={shellActions.handleUpdateGameRoom}
-            openProfileOverview={openProfileOverview}
-            openProfileEditor={openProfileEditor}
-            openProfileConnections={openProfileConnections}
-            handleProfileFieldChange={shellActions.handleProfileFieldChange}
-            onProfilePictureSelect={(file) => {
-              dialogs.setProfileAvatarCropFile(file);
-              dialogs.setProfileAvatarCropOpen(true);
-            }}
-            handleClearProfileAvatar={shellActions.handleClearProfileAvatar}
-            handleSaveProfile={shellActions.handleSaveProfile}
-            resetProfileDraft={shellActions.resetProfileDraft}
-            handleRelationshipAction={shellActions.handleRelationshipAction}
-            handleMuteAction={shellActions.handleMuteAction}
-            handleOpenOriginalTopic={shellActions.handleOpenOriginalTopic}
-          />
-        }
+        workspace={workspace}
+        workspaceLayout={columnWorkspaceActive ? 'column' : 'legacy'}
         detailPaneStack={detailPaneStack}
         detailPaneCount={(selectedThread ? 1 : 0) + (selectedAuthorPubkey ? 1 : 0)}
         mobileFooter={

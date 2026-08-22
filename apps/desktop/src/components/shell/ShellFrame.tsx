@@ -6,6 +6,7 @@ type ShellFrameProps = {
   skipTargetId: string;
   navRail: React.ReactNode;
   workspace: React.ReactNode;
+  workspaceLayout?: 'legacy' | 'column';
   detailPaneStack?: React.ReactNode;
   detailPaneCount?: number;
   mobileFooter?: React.ReactNode;
@@ -22,6 +23,7 @@ export function ShellFrame({
   skipTargetId,
   navRail,
   workspace,
+  workspaceLayout = 'legacy',
   detailPaneStack,
   detailPaneCount = 0,
   mobileFooter,
@@ -46,7 +48,11 @@ export function ShellFrame({
       <a className='shell-skip-link' href={`#${skipTargetId}`}>
         Skip to workspace
       </a>
-      <div className='shell-layout' data-detail-pane-count={layoutDetailPaneCount}>
+      <div
+        className='shell-layout'
+        data-detail-pane-count={layoutDetailPaneCount}
+        data-workspace-layout={workspaceLayout}
+      >
         {navRail}
         <main
           id={skipTargetId}

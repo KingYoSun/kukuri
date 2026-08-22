@@ -9,12 +9,10 @@ import {
   closestSection,
   getFloatingActionButton,
   getPrimaryNavigation,
-  getWorkspaceTabs,
   openChannelManager,
   openSettingsSection,
   renderAtHash,
   selectTimelineView,
-  selectWorkspace,
   setViewportWidth,
 } from './DesktopShellPage.testHelpers';
 
@@ -41,22 +39,26 @@ test('mobile nav trigger is footer-only and desktop omits it', async () => {
 
 test('floating action button tracks the active section and hides on profile', async () => {
   const user = userEvent.setup();
-  render(<App api={createDesktopMockApi()} />);
+  const initial = render(<App api={createDesktopMockApi()} />);
 
   expect(getFloatingActionButton()).toHaveAccessibleName('Publish');
   expect(getFloatingActionButton()).toHaveClass('shell-fab');
 
-  await selectWorkspace(user, 'Live');
+  initial.unmount();
+  const live = renderAtHash('#/live?topic=kukuri%3Atopic%3Ademo');
   expect(getFloatingActionButton()).toHaveAccessibleName('Start Live');
 
-  await selectWorkspace(user, 'Game');
+  live.unmount();
+  const game = renderAtHash('#/game?topic=kukuri%3Atopic%3Ademo');
   expect(getFloatingActionButton()).toHaveAccessibleName('Create Room');
 
-  await selectWorkspace(user, 'Timeline');
+  game.unmount();
+  const timeline = renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo');
   await selectTimelineView(user, 'Bookmarks');
   expect(screen.queryByTestId('shell-fab')).not.toBeInTheDocument();
 
-  await selectWorkspace(user, 'Profile');
+  timeline.unmount();
+  renderAtHash('#/profile?topic=kukuri%3Atopic%3Ademo');
   expect(screen.queryByTestId('shell-fab')).not.toBeInTheDocument();
 });
 
@@ -230,22 +232,18 @@ test('desktop shell renders diagnostics error reasons', async () => {
   expect(within(topicSection).getByText('timed out waiting for gossip topic join')).toBeInTheDocument();
 });
 
-test('desktop shell primary nav jumps focus and settings drawer restores trigger focus on escape', async () => {
+test('desktop shell exposes the Timeline Column and settings drawer restores trigger focus on escape', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
 
-  const gameNav = within(getWorkspaceTabs()).getByRole('tab', { name: 'Game' });
-  await user.click(gameNav);
-
-  const gameSection = screen.getByText('Metaverse Rooms').closest('.shell-section');
-  if (!(gameSection instanceof HTMLElement)) {
-    throw new Error('game section not found');
-  }
-
-  await waitFor(() => {
-    expect(gameNav).toHaveAttribute('aria-selected', 'true');
-    expect(gameSection).toHaveFocus();
-  });
+  expect(screen.getByRole('tablist', { name: 'Workspaces' })).toBeInTheDocument();
+  expect(
+    screen.getByRole('main', { name: 'Primary workspace' }).querySelector('.shell-workspace-header-card')
+  ).toBeNull();
+  expect(screen.getByRole('region', { name: /Timeline Column/ })).toHaveAttribute(
+    'aria-current',
+    'true'
+  );
 
   const settingsTrigger = screen.getByTestId('shell-settings-trigger');
   expect(settingsTrigger.querySelector('.lucide-settings')).toBeTruthy();

@@ -1,7 +1,6 @@
 import { type FormEvent, type ReactNode, useMemo } from 'react';
 import { Link2 } from 'lucide-react';
 
-import { TimelineWorkspaceHeader } from '@/components/core/TimelineWorkspaceHeader';
 import { TimelineFeed } from '@/components/core/TimelineFeed';
 import { CommunityIndexWorkspace } from '@/components/core/CommunityIndexWorkspace';
 import { MetaverseRoomPanel } from '@/components/extended/MetaverseRoomPanel';
@@ -76,7 +75,6 @@ type DesktopShellPrimaryWorkspaceProps = {
     | 'timelineViewItems'
   >;
   setPrimarySectionRef: (section: PrimarySection) => (node: HTMLElement | null) => void;
-  focusPrimarySection: (section: PrimarySection) => void;
   focusTimelineView: (view: 'feed' | 'bookmarks') => void;
   openCommunityNodeSettings: () => void;
   loadReactionCatalogData: () => Promise<void>;
@@ -112,6 +110,7 @@ type DesktopShellPrimaryWorkspaceProps = {
   handleRelationshipAction: (authorPubkey: string, following: boolean) => Promise<void>;
   handleMuteAction: (authorPubkey: string, muted: boolean) => Promise<void>;
   handleOpenOriginalTopic: (topicId: string) => Promise<void>;
+  columnMode?: boolean;
 };
 
 export function DesktopShellPrimaryWorkspace({
@@ -125,7 +124,6 @@ export function DesktopShellPrimaryWorkspace({
   notificationsWorkspace,
   viewModels,
   setPrimarySectionRef,
-  focusPrimarySection,
   focusTimelineView,
   openCommunityNodeSettings,
   loadReactionCatalogData,
@@ -157,6 +155,7 @@ export function DesktopShellPrimaryWorkspace({
   handleRelationshipAction,
   handleMuteAction,
   handleOpenOriginalTopic,
+  columnMode = false,
 }: DesktopShellPrimaryWorkspaceProps) {
   const {
     activeTopic,
@@ -282,16 +281,6 @@ export function DesktopShellPrimaryWorkspace({
           </Button>
         </Notice>
       ) : null}
-      {shellChromeState.activePrimarySection !== 'notifications' ? (
-        <Card className='shell-workspace-card shell-workspace-header-card'>
-          <TimelineWorkspaceHeader
-            activeSection={shellChromeState.activePrimarySection}
-            items={viewModels.primarySectionItems}
-            onSelectSection={focusPrimarySection}
-          />
-        </Card>
-      ) : null}
-
       <section
         className='shell-section'
         ref={setPrimarySectionRef(shellChromeState.activePrimarySection)}
@@ -339,7 +328,7 @@ export function DesktopShellPrimaryWorkspace({
               </div>
               {composerError ? <Notice tone='destructive'>{composerError}</Notice> : null}
             </Card>
-            {shellChromeState.timelineView === 'feed' ? (
+            {!columnMode && shellChromeState.timelineView === 'feed' ? (
               <CommunityIndexWorkspace
                 api={api}
                 mode='topic'

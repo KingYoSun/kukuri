@@ -32,6 +32,10 @@ import {
   createInitialReactionsBookmarksSlice,
 } from '@/shell/slices/reactionsBookmarks';
 import { type TimelineSliceState, createInitialTimelineSlice } from '@/shell/slices/timeline';
+import {
+  type WorkspaceSliceState,
+  createInitialWorkspaceSlice,
+} from '@/shell/slices/workspace';
 
 export type AppProps = {
   api?: DesktopApi;
@@ -49,7 +53,8 @@ export type DesktopShellState = TimelineSliceState &
   NotificationsSliceState &
   DirectMessagesSliceState &
   LiveGameSliceState &
-  ChromeSliceState;
+  ChromeSliceState &
+  WorkspaceSliceState;
 
 export type DesktopShellStateValue<K extends keyof DesktopShellState> =
   | DesktopShellState[K]
@@ -80,9 +85,11 @@ export const SHELL_CONTEXT_ID = 'shell-context-pane';
 export const SHELL_SETTINGS_ID = 'shell-settings-drawer';
 
 export function createInitialShellState(): DesktopShellState {
+  const timeline = createInitialTimelineSlice();
+  const privateChannels = createInitialPrivateChannelSlice();
   return {
-    ...createInitialTimelineSlice(),
-    ...createInitialPrivateChannelSlice(),
+    ...timeline,
+    ...privateChannels,
     ...createInitialConnectivitySlice(),
     ...createInitialMediaSlice(),
     ...createInitialProfileSocialSlice(),
@@ -91,6 +98,10 @@ export function createInitialShellState(): DesktopShellState {
     ...createInitialDirectMessagesSlice(),
     ...createInitialLiveGameSlice(),
     ...createInitialChromeSlice(),
+    ...createInitialWorkspaceSlice({
+      topicId: timeline.activeTopic,
+      channelId: privateChannels.selectedChannelIdByTopic[timeline.activeTopic] ?? null,
+    }),
   };
 }
 
