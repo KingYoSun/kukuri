@@ -272,8 +272,16 @@ export async function openSettingsDrawer(user: ReturnType<typeof userEvent.setup
   await waitFor(() => {
     expect(window.location.hash).toMatch(/^#\/(?:timeline|channels|live|game|profile)/);
   });
-  await user.click(screen.getByTestId('shell-settings-trigger'));
+  const controlCenter = await openControlCenter(user);
+  await user.click(within(controlCenter).getByRole('button', { name: 'Settings' }));
   return await screen.findByRole('dialog', { name: 'Settings' });
+}
+
+export async function openControlCenter(user: ReturnType<typeof userEvent.setup>) {
+  const existing = screen.queryByRole('complementary', { name: 'Control Center' });
+  if (existing) return existing;
+  await user.click(await screen.findByTestId('control-center-trigger'));
+  return screen.getByRole('complementary', { name: 'Control Center' });
 }
 
 export async function openSettingsSection(
@@ -300,11 +308,7 @@ export function renderAtHash(hash: string, api = createDesktopMockApi()) {
 
 export function expectActiveTopic(topic: string) {
   expect(window.location.hash).toContain(`topic=${encodeURIComponent(topic)}`);
-  expect(
-    within(screen.getByRole('complementary', { name: 'Primary navigation' }))
-      .getByRole('button', { name: topicDisplayName(topic) })
-      .closest('li')
-  ).toHaveClass('topic-item-active');
+  expect(getActiveColumn('Timeline')).toHaveTextContent(topicDisplayName(topic));
 }
 
 export function getWorkspaceTabs() {
@@ -321,14 +325,24 @@ export function getSocialConnectionsTabs() {
 
 export async function selectWorkspace(
   user: ReturnType<typeof userEvent.setup>,
-  label: 'Timeline' | 'Live' | 'Game' | 'Messages' | 'Profile'
+  label: 'Timeline' | 'Live' | 'Metaverse' | 'Messages' | 'Profile'
 ) {
-  await user.click(within(getWorkspaceTabs()).getByRole('tab', { name: label }));
+  const titleByLabel = {
+    Timeline: 'Timeline',
+    Live: 'Live',
+    Metaverse: 'Metaverse',
+    Messages: 'Messages',
+    Profile: 'Profile',
+  } as const;
+  const controlCenter = await openControlCenter(user);
+  await user.click(
+    within(controlCenter).getByRole('button', {
+      name: `Add ${titleByLabel[label]} Column`,
+    })
+  );
   await waitFor(() => {
-    expect(within(getWorkspaceTabs()).getByRole('tab', { name: label })).toHaveAttribute(
-      'aria-selected',
-      'true'
-    );
+    expect(screen.getByRole('region', { name: new RegExp(`${titleByLabel[label]} Column.*Active`) }))
+      .toHaveAttribute('aria-current', 'true');
   });
 }
 
@@ -349,13 +363,9 @@ export function getPrimaryNavigation() {
   return screen.getByLabelText('Primary navigation');
 }
 
-export function getFloatingActionButton() {
-  return screen.getByTestId('shell-fab');
-}
-
 export async function openPublishDialog(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(getFloatingActionButton());
-  return await screen.findByRole('dialog', { name: 'Publish' });
+  await user.click(within(getActiveColumn('Timeline')).getByRole('button', { name: /^Publish to / }));
+  return getActiveColumn('Timeline');
 }
 
 export async function publishPost(user: ReturnType<typeof userEvent.setup>, content: string) {
@@ -363,12 +373,13 @@ export async function publishPost(user: ReturnType<typeof userEvent.setup>, cont
   await user.type(within(dialog).getByPlaceholderText('Write a post'), content);
   await user.click(within(dialog).getByRole('button', { name: 'Publish' }));
   await waitFor(() => {
-    expect(screen.queryByRole('dialog', { name: 'Publish' })).not.toBeInTheDocument();
+    expect(within(dialog).queryByPlaceholderText('Write a post')).not.toBeInTheDocument();
   });
 }
 
 export async function openChannelManager(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole('button', { name: 'Private Channels' }));
+  const controlCenter = await openControlCenter(user);
+  await user.click(within(controlCenter).getByRole('button', { name: 'Create or join channel' }));
   return await screen.findByRole('dialog', { name: 'Create / Join Private Channel' });
 }
 
@@ -385,27 +396,23 @@ export function getChannelShareButton(
 }
 
 export async function openChannelSettings(user: ReturnType<typeof userEvent.setup>, channelLabel: string) {
+  const controlCenter = await openControlCenter(user);
   await user.click(
-    screen.getByRole('button', { name: `Open ${channelLabel} channel settings` })
+    within(controlCenter).getByRole('button', { name: `Open ${channelLabel} channel settings` })
   );
   return await screen.findByRole('dialog', { name: 'Channel Settings' });
 }
 
 export async function openLiveCreateDialog(user: ReturnType<typeof userEvent.setup>) {
   await selectWorkspace(user, 'Live');
-  await user.click(getFloatingActionButton());
+  await user.click(within(getActiveColumn('Live')).getByRole('button', { name: 'Start Live' }));
   return await screen.findByRole('dialog', { name: 'Start Live' });
 }
 
-export async function openGameCreateDialog(user: ReturnType<typeof userEvent.setup>) {
-  await selectWorkspace(user, 'Game');
-  await user.click(getFloatingActionButton());
-  return await screen.findByRole('dialog', { name: 'Create Room' });
-}
-
 export async function openNotificationsInbox(user: ReturnType<typeof userEvent.setup>) {
+  const controlCenter = await openControlCenter(user);
   await user.click(
-    screen.getByRole('button', { name: /^(?:Notifications|通知) (?:\d+|99\+)$/ })
+    within(controlCenter).getByRole('button', { name: /^(?:Notifications|通知) (?:\d+|99\+)$/ })
   );
   return (await screen.findAllByRole('heading', { name: 'Notifications' }))[0];
 }
@@ -423,7 +430,10 @@ export function getDetailPane(name: 'Thread' | 'Author') {
 }
 
 export function getActiveColumn(title: string) {
-  return screen.getByRole('region', {
-    name: new RegExp(`^${title} Column, .*?, Active,`),
+  const columns = screen.getAllByRole('region', {
+    name: new RegExp(`^${title} Column,`),
   });
+  const active = columns.find((column) => column.getAttribute('aria-current') === 'true');
+  if (!active) throw new Error(`expected active ${title} Column`);
+  return active;
 }

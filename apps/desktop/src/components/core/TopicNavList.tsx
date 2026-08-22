@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 
 type TopicNavListProps = {
   items: TopicDiagnosticSummary[];
+  showAllScopes?: boolean;
   onSelectTopic: (topic: string) => void;
   onSelectChannel: (topic: string, channelId: string) => void;
   onOpenChannelSettings?: (topic: string, channelId: string) => void;
@@ -20,6 +21,7 @@ type TopicNavListProps = {
 
 export function TopicNavList({
   items,
+  showAllScopes = false,
   onSelectTopic,
   onSelectChannel,
   onOpenChannelSettings,
@@ -117,7 +119,7 @@ export function TopicNavList({
               <small>{item.lastReceivedLabel}</small>
             </div>
 
-            {item.active ? (
+            {item.active || showAllScopes ? (
               <div className='topic-scope-group'>
                 <button
                   className={cn('topic-subitem', publicActive && 'topic-subitem-active')}

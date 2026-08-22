@@ -72,7 +72,6 @@ function workspaceProps(
     activeTimelineScope: { kind: 'public' },
     eligibleNodeBaseUrls: [NODE_A, NODE_B],
     selectedNodeBaseUrl: NODE_A,
-    onSelectNode: vi.fn(),
     onOpenCommunityNodeSettings: vi.fn(),
     ...overrides,
   };
@@ -83,14 +82,12 @@ function runSearch(query = 'hello') {
   fireEvent.click(screen.getByRole('button', { name: 'Run' }));
 }
 
-test('query node selection uses the shared semantic select surface', () => {
+test('healthy query node selection stays automatic and out of the primary surface', () => {
   const api = {} as DesktopApi;
   render(<CommunityIndexWorkspace {...workspaceProps(api)} />);
 
-  expect(screen.getByLabelText('Query node')).toHaveClass(
-    'bg-[var(--surface-input)]',
-    'text-foreground'
-  );
+  expect(screen.queryByLabelText('Query node')).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Search query')).toBeInTheDocument();
 });
 
 test('topic search always sends the active public scope and labels preview text', async () => {

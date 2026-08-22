@@ -45,7 +45,7 @@ test('community node panel keeps the auto-approve node active on the current ses
   });
 });
 
-test('workspace shows a community-node unavailable notice when a configured node reports an error', async () => {
+test('community-node failure marks the global trigger without warning an unaffected Timeline Column', async () => {
   const user = userEvent.setup();
   const baseApi = createDesktopMockApi();
   const baseStatuses = await baseApi.getCommunityNodeStatuses();
@@ -62,12 +62,17 @@ test('workspace shows a community-node unavailable notice when a configured node
 
   render(<App api={api} />);
 
-  const notice = await screen.findByTestId('community-node-unavailable-notice');
-  expect(notice).toHaveTextContent('Community node unavailable');
-  expect(notice).toHaveTextContent(
-    'A configured community node is currently unavailable. Startup continues, and direct P2P connections remain available.'
+  const trigger = await screen.findByTestId('control-center-trigger');
+  await waitFor(() => {
+    expect(trigger).toHaveAccessibleName('Open Control Center · Community node needs attention');
+  });
+  expect(screen.queryByTestId('community-node-unavailable-notice')).not.toBeInTheDocument();
+
+  await user.click(trigger);
+  const controlCenter = screen.getByRole('complementary', { name: 'Control Center' });
+  await user.click(
+    within(controlCenter).getByRole('button', { name: 'Open Community Node Settings' })
   );
-  await user.click(within(notice).getByRole('button', { name: 'Open Community Node Settings' }));
 
   const drawer = await screen.findByRole('dialog', { name: 'Settings' });
   expect(within(drawer).getByTestId('settings-section-community-node')).toHaveAttribute(
@@ -78,7 +83,7 @@ test('workspace shows a community-node unavailable notice when a configured node
   expect(window.location.hash).toContain('settings=community-node');
 });
 
-test('workspace clears the community-node unavailable notice after the node recovers', async () => {
+test('global community-node status clears after the node recovers', async () => {
   let recovered = false;
   const baseApi = createDesktopMockApi();
   const baseStatuses = await baseApi.getCommunityNodeStatuses();
@@ -95,14 +100,56 @@ test('workspace clears the community-node unavailable notice after the node reco
 
   render(<App api={api} />);
 
-  await screen.findByTestId('community-node-unavailable-notice');
+  const trigger = await screen.findByTestId('control-center-trigger');
+  await waitFor(() => {
+    expect(trigger).toHaveAccessibleName('Open Control Center · Community node needs attention');
+  });
 
   recovered = true;
   await new Promise((resolve) => window.setTimeout(resolve, REFRESH_INTERVAL_MS + 300));
 
   await waitFor(() => {
-    expect(screen.queryByTestId('community-node-unavailable-notice')).not.toBeInTheDocument();
+    expect(trigger).toHaveAccessibleName('Open Control Center · Connected');
   });
+});
+
+test('Explore owns the affected-column notice and hides the healthy primary node selector', async () => {
+  const healthyApi = createDesktopMockApi();
+  const healthy = render(<App api={healthyApi} />);
+  const healthyUser = userEvent.setup();
+
+  await healthyUser.click(await screen.findByTestId('control-center-trigger'));
+  const healthyControlCenter = screen.getByRole('complementary', { name: 'Control Center' });
+  await healthyUser.click(within(healthyControlCenter).getByRole('button', { name: 'Add Explore Column' }));
+
+  const explore = await screen.findByTestId('community-index-explore');
+  expect(within(explore).queryByText('Community node')).not.toBeInTheDocument();
+  expect(within(explore).queryByRole('combobox')).not.toBeInTheDocument();
+  expect(screen.queryByTestId('community-index-topic')).not.toBeInTheDocument();
+
+  healthy.unmount();
+
+  const baseApi = createDesktopMockApi();
+  const baseStatuses = await baseApi.getCommunityNodeStatuses();
+  const failingApi: DesktopApi = {
+    ...baseApi,
+    async getCommunityNodeStatuses() {
+      return baseStatuses.map((status) => ({
+        ...status,
+        last_error: 'community node timeout',
+        session_phase: 'retrying',
+      }));
+    },
+  };
+  const failingUser = userEvent.setup();
+  render(<App api={failingApi} />);
+  await failingUser.click(await screen.findByTestId('control-center-trigger'));
+  const failingControlCenter = screen.getByRole('complementary', { name: 'Control Center' });
+  await failingUser.click(within(failingControlCenter).getByRole('button', { name: 'Add Explore Column' }));
+
+  const notice = await screen.findByTestId('community-node-unavailable-notice');
+  const exploreColumn = notice.closest('[data-column-id]');
+  expect(exploreColumn).toHaveAccessibleName(/^Explore Column/);
 });
 
 test('timeline keeps the last successful workspace state when joined channels refresh fails', async () => {
@@ -153,7 +200,7 @@ test('timeline keeps the last successful workspace state when joined channels re
   await waitFor(() => {
     expect(screen.getByText('joined channel refresh fallback')).toBeInTheDocument();
     expect(screen.getByText('temporary joined channel failure')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'demo' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /Timeline Column/ })).toHaveTextContent('demo');
   });
 });
 
@@ -207,7 +254,7 @@ test('timeline keeps the last successful workspace state when community-node sta
     expect(
       screen.queryByText('temporary community node status failure')
     ).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'demo' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /Timeline Column/ })).toHaveTextContent('demo');
   });
 });
 

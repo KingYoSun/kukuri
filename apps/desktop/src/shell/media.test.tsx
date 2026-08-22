@@ -185,8 +185,8 @@ function installFailedPosterGenerationMocks() {
 }
 
 async function openPublishDialog(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByTestId('shell-fab'));
-  return await screen.findByRole('dialog', { name: 'Publish' });
+  await user.click(screen.getByRole('button', { name: /^Publish to / }));
+  return screen.getByRole('region', { name: /^Timeline Column/ });
 }
 
 test('single attach button classifies mixed image and video files', async () => {

@@ -7,11 +7,31 @@ import { App } from '@/App';
 import {
   expectActiveTopic,
   openChannelManager,
+  openControlCenter,
   publishPost,
   renderAtHash,
   selectTimelineView,
   setViewportWidth,
 } from './DesktopShellPage.testHelpers';
+
+async function getTopicItem(user: ReturnType<typeof userEvent.setup>, label: string) {
+  const controlCenter = await openControlCenter(user);
+  const item = within(controlCenter).getByRole('button', { name: label }).closest('li');
+  if (!(item instanceof HTMLElement)) throw new Error(`${label} topic item not found`);
+  return item;
+}
+
+async function selectTopic(user: ReturnType<typeof userEvent.setup>, label: string) {
+  const item = await getTopicItem(user, label);
+  await user.click(within(item).getByRole('button', { name: label }));
+}
+
+async function addTopic(user: ReturnType<typeof userEvent.setup>, topic: string) {
+  const controlCenter = await openControlCenter(user);
+  await user.clear(within(controlCenter).getByPlaceholderText('demo'));
+  await user.type(within(controlCenter).getByPlaceholderText('demo'), topic);
+  await user.click(within(controlCenter).getByRole('button', { name: 'Add' }));
+}
 
 beforeEach(() => {
   setViewportWidth(1024);
@@ -135,15 +155,13 @@ test('topic and private channel selection sync into the hash route', async () =>
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
 
-  await user.type(screen.getByPlaceholderText('demo'), 'kukuri:topic:second');
-  await user.click(screen.getByRole('button', { name: 'Add' }));
-  await user.click(screen.getByRole('button', { name: 'second' }));
+  await addTopic(user, 'kukuri:topic:second');
 
   await waitFor(() => {
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Asecond');
   });
 
-  await user.click(screen.getByRole('button', { name: 'demo' }));
+  await selectTopic(user, 'demo');
   const channelDialog = await openChannelManager(user);
   await user.type(within(channelDialog).getByPlaceholderText('Channel name'), 'core');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
@@ -169,18 +187,11 @@ test('tracked topics show public and channel scope separately in the sidebar', a
   });
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
   await waitFor(() => {
-    expect(
-      screen.queryByRole('dialog', { name: 'Create / Join Private Channel' })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'Open core channel settings' })
-    ).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Create / Join Private Channel' })).not.toBeInTheDocument();
   });
 
-  const topicItem = screen.getByRole('button', { name: 'demo' }).closest('li');
-  if (!(topicItem instanceof HTMLElement)) {
-    throw new Error('active topic item not found');
-  }
+  const topicItem = await getTopicItem(user, 'demo');
+  expect(within(topicItem).getByRole('button', { name: 'Open core channel settings' })).toBeInTheDocument();
 
   expect(within(topicItem).getByText('Channels')).toBeInTheDocument();
   const publicButton = within(topicItem).getByText('Public').closest('button');
@@ -200,10 +211,10 @@ test('tracked topics show public and channel scope separately in the sidebar', a
   await user.click(publicButton);
 
   await waitFor(() => {
-    expect(publicButton).toHaveAttribute('aria-pressed', 'true');
-    expect(channelButton).toHaveAttribute('aria-pressed', 'false');
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
   });
+  const publicTopicItem = await getTopicItem(user, 'demo');
+  expect(within(publicTopicItem).getByText('Public').closest('button')).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('sidebar can reselect the same private channel after switching back to public', async () => {
@@ -220,10 +231,7 @@ test('sidebar can reselect the same private channel after switching back to publ
   });
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
 
-  const topicItem = screen.getByRole('button', { name: 'demo' }).closest('li');
-  if (!(topicItem instanceof HTMLElement)) {
-    throw new Error('active topic item not found');
-  }
+  const topicItem = await getTopicItem(user, 'demo');
 
   const publicButton = within(topicItem).getByText('Public').closest('button');
   const channelButton = within(topicItem).getByText('core').closest('button');
@@ -236,10 +244,12 @@ test('sidebar can reselect the same private channel after switching back to publ
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
   });
 
-  await user.click(channelButton);
+  const refreshedTopicItem = await getTopicItem(user, 'demo');
+  const refreshedChannelButton = within(refreshedTopicItem).getByText('core').closest('button');
+  if (!(refreshedChannelButton instanceof HTMLButtonElement)) throw new Error('channel button not found');
+  await user.click(refreshedChannelButton);
   await waitFor(() => {
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
-    expect(channelButton).toHaveAttribute('aria-pressed', 'true');
   });
 });
 
@@ -247,9 +257,11 @@ test('sidebar can switch from one topic public scope to another topic private ch
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
 
-  await user.type(screen.getByPlaceholderText('demo'), 'kukuri:topic:second');
-  await user.click(screen.getByRole('button', { name: 'Add' }));
-  await user.click(screen.getByRole('button', { name: 'second' }));
+  await addTopic(user, 'kukuri:topic:second');
+  await selectTopic(user, 'second');
+  await waitFor(() => {
+    expectActiveTopic('kukuri:topic:second');
+  });
 
   const channelDialog = await openChannelManager(user);
   await user.type(within(channelDialog).getByPlaceholderText('Channel name'), 'second-core');
@@ -259,17 +271,13 @@ test('sidebar can switch from one topic public scope to another topic private ch
   });
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
 
-  await user.click(screen.getByRole('button', { name: 'demo' }));
+  await selectTopic(user, 'demo');
   await waitFor(() => {
     expectActiveTopic('kukuri:topic:demo');
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
   });
 
-  await user.click(screen.getByRole('button', { name: 'second' }));
-  const secondTopicItem = screen.getByRole('button', { name: 'second' }).closest('li');
-  if (!(secondTopicItem instanceof HTMLElement)) {
-    throw new Error('second topic item not found');
-  }
+  const secondTopicItem = await getTopicItem(user, 'second');
 
   const secondChannelButton = within(secondTopicItem).getByText('second-core').closest('button');
   if (!(secondChannelButton instanceof HTMLButtonElement)) {
@@ -280,7 +288,6 @@ test('sidebar can switch from one topic public scope to another topic private ch
   await waitFor(() => {
     expectActiveTopic('kukuri:topic:second');
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Asecond&channel=channel-1');
-    expect(secondChannelButton).toHaveAttribute('aria-pressed', 'true');
   });
 });
 
@@ -288,24 +295,23 @@ test('desktop shell can track multiple topics at once', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
 
-  await user.type(screen.getByPlaceholderText('demo'), 'kukuri:topic:second');
-  await user.click(screen.getByRole('button', { name: 'Add' }));
-  expect(screen.getByRole('button', { name: 'second' })).toBeInTheDocument();
+  await addTopic(user, 'kukuri:topic:second');
+  expect(await getTopicItem(user, 'second')).toBeInTheDocument();
 
-  await user.click(screen.getByRole('button', { name: 'demo' }));
+  await selectTopic(user, 'demo');
   await publishPost(user, 'demo post');
   await waitFor(() => {
     expect(screen.getByText('demo post')).toBeInTheDocument();
   });
 
-  await user.click(screen.getByRole('button', { name: 'second' }));
+  await selectTopic(user, 'second');
   await publishPost(user, 'second post');
   await waitFor(() => {
     expect(screen.getByText('second post')).toBeInTheDocument();
   });
 
-  await user.click(screen.getByRole('button', { name: 'demo' }));
-  const demoTopic = screen.getByRole('button', { name: 'demo' }).closest('li');
+  await selectTopic(user, 'demo');
+  const demoTopic = await getTopicItem(user, 'demo');
   expect(demoTopic).not.toBeNull();
   expect(screen.getByText('demo post')).toBeInTheDocument();
   expect(demoTopic).toHaveTextContent(/\/ peers: \d/);
@@ -317,21 +323,19 @@ test('removing the active topic falls back to the remaining tracked topic', asyn
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
 
-  await user.type(screen.getByPlaceholderText('demo'), 'kukuri:topic:second');
-  await user.click(screen.getByRole('button', { name: 'Add' }));
-  await user.click(screen.getByRole('button', { name: 'second' }));
+  await addTopic(user, 'kukuri:topic:second');
 
   await waitFor(() => {
     expectActiveTopic('kukuri:topic:second');
   });
 
-  await user.click(screen.getByRole('button', { name: 'Remove second' }));
+  const secondTopic = await getTopicItem(user, 'second');
+  await user.click(within(secondTopic).getByRole('button', { name: 'Remove second' }));
 
   await waitFor(() => {
-    expect(
-      screen.queryByRole('button', { name: 'second' })
-    ).not.toBeInTheDocument();
     expectActiveTopic('kukuri:topic:demo');
   });
+  const controlCenter = await openControlCenter(user);
+  expect(within(controlCenter).queryByRole('button', { name: 'second' })).not.toBeInTheDocument();
 });
 

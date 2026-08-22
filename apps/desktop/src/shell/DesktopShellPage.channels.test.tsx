@@ -11,7 +11,7 @@ import {
   getChannelShareButton,
   openChannelManager,
   openChannelSettings,
-  openGameCreateDialog,
+  openControlCenter,
   openLiveCreateDialog,
   renderAtHash,
   selectWorkspace,
@@ -112,18 +112,21 @@ test('desktop shell confirms and leaves a private channel', async () => {
   });
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
 
-  await user.click(screen.getByRole('button', { name: 'Leave core channel' }));
+  let controlCenter = await openControlCenter(user);
+  await user.click(within(controlCenter).getByRole('button', { name: 'Leave core channel' }));
   let leaveDialog = await screen.findByRole('dialog', { name: 'Leave channel' });
   expect(within(leaveDialog).getByText('Leave this channel?')).toBeInTheDocument();
   await user.click(within(leaveDialog).getByRole('button', { name: 'Close dialog' }));
   expect(leavePrivateChannel).not.toHaveBeenCalled();
 
-  await user.click(screen.getByRole('button', { name: 'Leave core channel' }));
+  controlCenter = await openControlCenter(user);
+  await user.click(within(controlCenter).getByRole('button', { name: 'Leave core channel' }));
   leaveDialog = await screen.findByRole('dialog', { name: 'Leave channel' });
   await user.click(within(leaveDialog).getByRole('button', { name: 'No' }));
   expect(leavePrivateChannel).not.toHaveBeenCalled();
 
-  await user.click(screen.getByRole('button', { name: 'Leave core channel' }));
+  controlCenter = await openControlCenter(user);
+  await user.click(within(controlCenter).getByRole('button', { name: 'Leave core channel' }));
   leaveDialog = await screen.findByRole('dialog', { name: 'Leave channel' });
   await user.click(within(leaveDialog).getByRole('button', { name: 'Yes' }));
 
@@ -166,6 +169,7 @@ test('desktop shell joins an imported private channel and selects its topic scop
 });
 
 test('channel route restore waits for joined channel list before normalizing', async () => {
+  const user = userEvent.setup();
   const joinedChannels = createDeferred<JoinedPrivateChannelView[]>();
   const api = createDesktopMockApi();
   const listJoinedPrivateChannels = vi
@@ -209,10 +213,11 @@ test('channel route restore waits for joined channel list before normalizing', a
     expect(window.location.hash).toBe(
       '#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-restored'
     );
-    expect(screen.getByRole('button', { name: /restored.*Friends\+/ })).toHaveClass(
-      'topic-subitem-active'
-    );
   });
+  const controlCenter = await openControlCenter(user);
+  expect(within(controlCenter).getByRole('button', { name: /restored.*Friends\+/ })).toHaveClass(
+    'topic-subitem-active'
+  );
 });
 
 test('desktop shell shows friend-only controls and can create a grant', async () => {
@@ -445,7 +450,8 @@ test('copy link actions write canonical hash routes for topic, post, and live', 
     />
   );
 
-  const topicItem = screen.getByRole('button', { name: 'demo' }).closest('li');
+  const controlCenter = await openControlCenter(user);
+  const topicItem = within(controlCenter).getByRole('button', { name: 'demo' }).closest('li');
   if (!(topicItem instanceof HTMLElement)) {
     throw new Error('expected topic item');
   }
@@ -481,7 +487,7 @@ test('copy link actions write canonical hash routes for topic, post, and live', 
     expect(screen.getAllByRole('status')).toHaveLength(1);
   });
 
-  await selectWorkspace(user, 'Game');
+  await selectWorkspace(user, 'Metaverse');
   expect(screen.getByText('Metaverse Rooms')).toBeInTheDocument();
   expect(screen.queryByText('Room Demo')).not.toBeInTheDocument();
 });
@@ -516,23 +522,17 @@ test('channel settings copy removes duplicate summary and share button icon', as
   expect(shareButton.querySelector('svg')).not.toBeInTheDocument();
 });
 
-test('desktop shell game workspace hides score game room list and keeps metaverse rooms', async () => {
+test('desktop shell metaverse workspace hides the legacy score game room list', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
 
-  const gameDialog = await openGameCreateDialog(user);
-  await user.type(within(gameDialog).getByPlaceholderText('Top 8 Finals'), 'Grand Finals');
-  await user.type(within(gameDialog).getByPlaceholderText('match summary'), 'set one');
-  await user.type(within(gameDialog).getByPlaceholderText('Alice, Bob'), 'Alice, Bob');
-  await user.click(within(gameDialog).getByRole('button', { name: 'Create Room' }));
+  await selectWorkspace(user, 'Metaverse');
 
   await waitFor(() => {
     expect(screen.getByText('Metaverse Rooms')).toBeInTheDocument();
   });
   expect(screen.queryByText('Game Rooms')).not.toBeInTheDocument();
   expect(screen.queryByText('No game rooms')).not.toBeInTheDocument();
-  expect(screen.queryByText('Grand Finals')).not.toBeInTheDocument();
-  expect(screen.queryByText('set one')).not.toBeInTheDocument();
   expect(screen.queryByLabelText(/game-.*-status/)).not.toBeInTheDocument();
 });
 

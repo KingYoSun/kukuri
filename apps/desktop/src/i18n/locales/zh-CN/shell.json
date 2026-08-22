@@ -41,6 +41,33 @@
     "trackedTopics": "跟踪的主题",
     "updateAvailable": "有可用更新"
   },
+  "controlCenter": {
+    "eyebrow": "全局导航",
+    "title": "控制中心",
+    "openWithStatus": "打开控制中心 · {{status}}",
+    "closeWithStatus": "关闭控制中心 · {{status}}",
+    "close": "关闭控制中心",
+    "status": {
+      "connected": "已连接",
+      "connectionAttention": "连接需要注意",
+      "communityNodeAttention": "社区节点需要注意"
+    },
+    "sections": {
+      "columns": "栏目",
+      "places": "位置",
+      "activity": "活动",
+      "system": "系统"
+    },
+    "addColumn": "添加 {{title}} 栏目",
+    "focusColumn": "聚焦 {{title}}",
+    "pinColumn": "固定 {{title}}",
+    "unpinColumn": "取消固定 {{title}}",
+    "closeColumn": "关闭 {{title}} 栏目",
+    "createJoinChannel": "创建或加入频道",
+    "shareChannel": "分享当前频道",
+    "release": "版本与更新",
+    "settings": "设置"
+  },
   "primarySections": {
     "explore": "发现",
     "game": "游戏",

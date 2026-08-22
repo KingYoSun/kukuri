@@ -6,22 +6,13 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bell, BookPlus, Download, GitBranchPlus, PanelLeftOpen, Settings } from 'lucide-react';
 
-import { FilterableTopicNavList } from '@/components/core/FilterableTopicNavList';
-import { TimelineWorkspaceHeader } from '@/components/core/TimelineWorkspaceHeader';
 import {
   CommunityIndexingRequestDialog,
   type CommunityIndexingTarget,
 } from '@/components/core/CommunityIndexingRequestDialog';
 import { ShellFrame } from '@/components/shell/ShellFrame';
-import { ShellNavRail } from '@/components/shell/ShellNavRail';
-import { type PrimarySection } from '@/components/shell/types';
-import { StatusBadge } from '@/components/StatusBadge';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { type PrimarySection, type SettingsSection } from '@/components/shell/types';
 
 import { runtimeApi } from '@/lib/api';
 import { eligibleCommunityIndexNodes } from '@/lib/api/communityIndex';
@@ -33,8 +24,6 @@ import {
 } from '@/lib/internalLinks';
 import { CLIPBOARD_COPY_EVENT, copyTextToClipboard } from '@/lib/utils';
 import {
-  SHELL_NAV_ID,
-  SHELL_SETTINGS_ID,
   SHELL_WORKSPACE_ID,
   type DesktopShellPageProps,
   PUBLIC_CHANNEL_REF,
@@ -43,11 +32,8 @@ import {
   useDesktopShellStore,
 } from '@/shell/store';
 import {
-  formatCount,
   privateComposeTarget,
   privateTimelineScope,
-  syncStatusBadgeLabel,
-  syncStatusBadgeTone,
 } from '@/shell/presentation';
 import { selectShellPageSlice } from '@/shell/storeSelectors';
 import { setRecordEntry } from '@/shell/stateUpdates';
@@ -65,6 +51,7 @@ import {
 } from '@/shell/page/DesktopShellAuxiliaryPanels';
 import { DesktopShellOverlays } from '@/shell/page/DesktopShellOverlays';
 import { DesktopShellColumnWorkspace } from '@/shell/page/DesktopShellColumnWorkspace';
+import { DesktopShellControlCenter } from '@/shell/page/DesktopShellControlCenter';
 import { DesktopShellPrimarySurface } from '@/shell/page/DesktopShellPrimaryWorkspace';
 import { DesktopShellSettingsDrawer } from '@/shell/page/DesktopShellSettingsDrawer';
 import { useFocusScroll } from '@/shell/page/useFocusScroll';
@@ -99,10 +86,8 @@ export function DesktopShellPage({
     trackedTopics,
     activeTopic,
     topicInput,
-    syncStatus,
     selectedChannelIdByTopic,
     notifications,
-    notificationStatus,
     selectedLiveSessionId,
     selectedGameRoomId,
     developerModeEnabled,
@@ -188,8 +173,7 @@ export function DesktopShellPage({
 
   const pendingRouteUrlRef = useRef<string | null>(null);
   const didSyncRouteSectionRef = useRef(false);
-  const navTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const settingsTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const controlCenterTriggerRef = useRef<HTMLButtonElement | null>(null);
   const primarySectionRefs = useRef<Record<PrimarySection, HTMLElement | null>>({
     timeline: null,
     explore: null,
@@ -229,11 +213,9 @@ export function DesktopShellPage({
   const {
     routeSection,
     syncRoute,
-    setNavOpen,
     setSettingsOpen,
     setPrimarySectionRef,
     focusPrimarySection,
-    toggleNotificationsSection,
     focusTimelineView,
     closeAuthorPane,
     closeThreadPane,
@@ -249,8 +231,8 @@ export function DesktopShellPage({
     translate,
     loadTopics,
     primarySectionRefs,
-    navTriggerRef,
-    settingsTriggerRef,
+    navTriggerRef: controlCenterTriggerRef,
+    settingsTriggerRef: controlCenterTriggerRef,
     pendingRouteUrlRef,
     didSyncRouteSectionRef,
   });
@@ -293,8 +275,6 @@ export function DesktopShellPage({
     activeGameRooms,
   } = viewModels;
   useDesktopShellColumnSynchronization(activeGameRooms);
-  const notificationBadgeLabel =
-    notificationStatus.unread_count > 99 ? '99+' : formatCount(notificationStatus.unread_count);
   useOsNotificationBridge();
   useOsNotificationActivation(notifications, shellActions.handleOpenNotification);
   const syncTopicContext = useCallback(
@@ -459,18 +439,23 @@ export function DesktopShellPage({
       ),
     [communityNodeConfig, communityNodeManifests, communityNodeStatuses]
   );
-  const handleOpenCommunityNodeSettings = useCallback(() => {
-    setIndexingTarget(null);
+  const handleOpenSettingsSection = useCallback((section: SettingsSection) => {
+    if (section === 'community-node') setIndexingTarget(null);
+    setSettingsOpen(true, false);
     setShellChromeState((current) => ({
       ...current,
       settingsOpen: true,
-      activeSettingsSection: 'community-node',
+      activeSettingsSection: section,
     }));
     syncRoute('push', {
       settingsOpen: true,
-      settingsSection: 'community-node',
+      settingsSection: section,
     });
-  }, [setShellChromeState, syncRoute]);
+  }, [setSettingsOpen, setShellChromeState, syncRoute]);
+  const handleOpenCommunityNodeSettings = useCallback(
+    () => handleOpenSettingsSection('community-node'),
+    [handleOpenSettingsSection]
+  );
   const liveFocusKey =
     shellChromeState.activePrimarySection === 'live' ? selectedLiveSessionId : null;
   useFocusScroll({
@@ -495,150 +480,6 @@ export function DesktopShellPage({
     }, UPDATE_CHECK_INTERVAL_MS);
     return () => window.clearInterval(intervalId);
   }, [checkForUpdate]);
-  const notificationAction = (
-    <Button
-      className='shell-notification-button'
-      variant={shellChromeState.activePrimarySection === 'notifications' ? 'primary' : 'secondary'}
-      type='button'
-      aria-current={shellChromeState.activePrimarySection === 'notifications' ? 'page' : undefined}
-      onClick={() => {
-        if (shellChromeState.activePrimarySection !== 'notifications') {
-          setNotificationAutoReadError(null);
-          setNotificationPanelState({
-            status: 'loading',
-            error: null,
-          });
-        }
-        toggleNotificationsSection();
-      }}
-    >
-      <Bell className='size-4' aria-hidden='true' />
-      <span>{t('shell:navigation.notificationsButton')}</span>
-      <Badge
-        className='shell-notification-button-badge'
-        tone={notificationStatus.unread_count > 0 ? 'accent' : 'neutral'}
-      >
-        {notificationBadgeLabel}
-      </Badge>
-    </Button>
-  );
-  const navRailHeader = (
-    <div className='shell-nav-header-content'>
-      <TimelineWorkspaceHeader
-        activeSection={shellChromeState.activePrimarySection}
-        items={viewModels.primarySectionItems}
-        onSelectSection={focusPrimarySection}
-      />
-      <div className='shell-nav-status'>
-        {developerModeEnabled ? (
-          <div className='shell-status-badges'>
-            <StatusBadge
-              label={syncStatusBadgeLabel(syncStatus)}
-              tone={syncStatusBadgeTone(syncStatus)}
-            />
-            <StatusBadge label={`${formatCount(syncStatus.peer_count)} ${t('settings:connectivity.metrics.peers').toLowerCase()}`} />
-            <StatusBadge
-              label={
-                syncStatus.discovery.mode === 'seeded_dht'
-                  ? t('shell:navigation.seededDht')
-                  : t('shell:navigation.staticPeers')
-              }
-            />
-            {syncStatus.pending_events > 0 ? (
-              <StatusBadge
-                label={`${formatCount(syncStatus.pending_events)} ${t('settings:connectivity.metrics.pending').toLowerCase()}`}
-                tone='warning'
-              />
-            ) : null}
-          </div>
-        ) : null}
-        {updateAvailable ? (
-          <Button
-            className='shell-update-button shell-icon-button'
-            variant='ghost'
-            size='icon'
-            type='button'
-            aria-label={t('shell:navigation.updateAvailable')}
-            data-testid='shell-update-trigger'
-            onClick={() => {
-              setSettingsOpen(true, false);
-              setShellChromeState((current) => ({
-                ...current,
-                activeSettingsSection: 'release',
-              }));
-              syncRoute('replace', {
-                settingsOpen: true,
-                settingsSection: 'release',
-              });
-            }}
-          >
-            <Download className='size-5' aria-hidden='true' />
-          </Button>
-        ) : null}
-        <Button
-          ref={settingsTriggerRef}
-          className='shell-settings-button shell-icon-button'
-          variant='ghost'
-          size='icon'
-          type='button'
-          aria-label={
-            shellChromeState.settingsOpen
-              ? t('shell:settingsDrawer.close')
-              : t('shell:settingsDrawer.open')
-          }
-          aria-controls={SHELL_SETTINGS_ID}
-          aria-expanded={shellChromeState.settingsOpen}
-          data-testid='shell-settings-trigger'
-          onClick={() => setSettingsOpen(!shellChromeState.settingsOpen)}
-        >
-          <Settings className='size-5' aria-hidden='true' />
-        </Button>
-      </div>
-    </div>
-  );
-
-  const topicList = (
-    <FilterableTopicNavList
-      items={topicNavItems}
-      onSelectTopic={(topic) => void shellActions.handleSelectTopic(topic)}
-      onSelectChannel={(topic, channelId) => {
-        shellActions.handleSelectPrivateChannel(topic, channelId);
-      }}
-      onOpenChannelSettings={(topic, channelId) => {
-        setInviteOutput(null);
-        setChannelError(null);
-        shellActions.handleSelectPrivateChannel(topic, channelId);
-        dialogs.setChannelSettingsDialogOpen(true);
-      }}
-      onLeaveChannel={(topic, channelId) => {
-        dialogs.openLeaveChannelDialog(topic, channelId);
-      }}
-      onRemoveTopic={(topic) => void shellActions.handleRemoveTopic(topic)}
-      onCopyTopicLink={(topic) => handleCopyInternalLink(buildTopicLink(topic))}
-      onRequestTopicIndexing={(topic) =>
-        setIndexingTarget({ kind: 'public_topic', topicId: topic })
-      }
-      onToggleTopicGossip={(topic, enabled) => void shellActions.handleToggleTopicGossip(topic, enabled)}
-      onToggleChannelGossip={(topic, channelId, enabled) =>
-        void shellActions.handleToggleChannelGossip(topic, channelId, enabled)
-      }
-    />
-  );
-  const channelAction = (
-    <div className='shell-nav-channel-actions'>
-      <Button
-        className='shell-icon-button shell-nav-channel-action'
-        variant='secondary'
-        size='icon'
-        type='button'
-        aria-label={t('channels:title')}
-        onClick={() => dialogs.setChannelDialogOpen(true)}
-      >
-        <GitBranchPlus className='size-4' aria-hidden='true' />
-      </Button>
-    </div>
-  );
-
   const renderMessagesSurface = (
     surfaceKind: 'messages' | 'conversation',
     peerPubkey?: string
@@ -806,6 +647,18 @@ export function DesktopShellPage({
     const section = sectionByKind[column.kind];
     if (section) focusPrimarySection(section);
   };
+  const columnTitles: Record<ColumnKind, string> = {
+    timeline: t('shell:primarySections.timeline'),
+    notifications: t('shell:primarySections.notifications'),
+    thread: t('shell:context.thread'),
+    profile: t('shell:primarySections.profile'),
+    explore: t('shell:primarySections.explore'),
+    messages: t('shell:primarySections.messages'),
+    conversation: 'Conversation',
+    stream: t('shell:primarySections.live'),
+    game: t('shell:primarySections.game'),
+    metaverse: 'Metaverse',
+  };
   const workspace = (
     <DesktopShellColumnWorkspace
       scopeLabel={viewModels.activeComposeAudienceLabel}
@@ -835,18 +688,7 @@ export function DesktopShellPage({
       renderProfileSurface={(column) =>
         renderDetailSurface('profile', column.entityId, column.scope?.topicId)
       }
-      titles={{
-        timeline: t('shell:primarySections.timeline'),
-        notifications: t('shell:primarySections.notifications'),
-        thread: t('shell:context.thread'),
-        profile: t('shell:primarySections.profile'),
-        explore: t('shell:primarySections.explore'),
-        messages: t('shell:primarySections.messages'),
-        conversation: 'Conversation',
-        stream: t('live:title'),
-        game: t('game:title'),
-        metaverse: 'Metaverse',
-      }}
+      titles={columnTitles}
     />
   );
 
@@ -854,59 +696,43 @@ export function DesktopShellPage({
     <>
       <ShellFrame
         skipTargetId={SHELL_WORKSPACE_ID}
-        navRail={
-          <ShellNavRail
-            railId={SHELL_NAV_ID}
-            open={shellChromeState.navOpen}
-            onOpenChange={(open) => setNavOpen(open, !open)}
-            notificationAction={notificationAction}
-            headerContent={navRailHeader}
-            addTopicControl={
-              <Label>
-                <span>{t('shell:navigation.addTopic')}</span>
-                <div className='topic-input-row'>
-                  <Input
-                    value={topicInput}
-                    onChange={(event) => setTopicInput(event.target.value)}
-                    placeholder={t('shell:navigation.placeholder')}
-                  />
-                  <Button
-                    variant='secondary'
-                    size='icon'
-                    type='button'
-                    aria-label={t('common:actions.add')}
-                    onClick={() => void shellActions.handleAddTopic()}
-                  >
-                    <BookPlus className='size-4' aria-hidden='true' />
-                  </Button>
-                </div>
-              </Label>
-            }
-            channelAction={channelAction}
-            topicList={topicList}
-            topicCount={syncStatus.subscribed_topics.length}
-          />
-        }
         workspace={workspace}
         workspaceLayout='column'
-        mobileFooter={
-          <Button
-            ref={navTriggerRef}
-            variant='secondary'
-            type='button'
-            aria-label={
-              shellChromeState.navOpen
-                ? t('shell:navigation.close')
-                : t('shell:navigation.open')
+        globalControls={
+          <DesktopShellControlCenter
+            triggerRef={controlCenterTriggerRef}
+            topicItems={topicNavItems}
+            topicInput={topicInput}
+            titles={columnTitles}
+            updateAvailable={updateAvailable}
+            onTopicInputChange={setTopicInput}
+            onAddTopic={shellActions.handleAddTopic}
+            onOpenChannelManager={() => dialogs.setChannelDialogOpen(true)}
+            onActivateColumn={activateWorkspaceColumn}
+            onOpenSettings={handleOpenSettingsSection}
+            onSelectTopic={(topic) => void shellActions.handleSelectTopic(topic)}
+            onSelectChannel={(topic, channelId) => {
+              shellActions.handleSelectPrivateChannel(topic, channelId);
+            }}
+            onOpenChannelSettings={(topic, channelId) => {
+              setInviteOutput(null);
+              setChannelError(null);
+              shellActions.handleSelectPrivateChannel(topic, channelId);
+              dialogs.setChannelSettingsDialogOpen(true);
+            }}
+            onLeaveChannel={(topic, channelId) => dialogs.openLeaveChannelDialog(topic, channelId)}
+            onRemoveTopic={(topic) => void shellActions.handleRemoveTopic(topic)}
+            onCopyTopicLink={(topic) => handleCopyInternalLink(buildTopicLink(topic))}
+            onRequestTopicIndexing={(topic) =>
+              setIndexingTarget({ kind: 'public_topic', topicId: topic })
             }
-            aria-controls={SHELL_NAV_ID}
-            aria-expanded={shellChromeState.navOpen}
-            data-testid='shell-nav-trigger'
-            onClick={() => setNavOpen(!shellChromeState.navOpen)}
-          >
-            <PanelLeftOpen className='size-5' aria-hidden='true' />
-            {t('shell:navigation.topicsButton')}
-          </Button>
+            onToggleTopicGossip={(topic, enabled) =>
+              void shellActions.handleToggleTopicGossip(topic, enabled)
+            }
+            onToggleChannelGossip={(topic, channelId, enabled) =>
+              void shellActions.handleToggleChannelGossip(topic, channelId, enabled)
+            }
+          />
         }
       />
 

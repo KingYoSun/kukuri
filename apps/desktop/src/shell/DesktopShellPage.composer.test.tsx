@@ -8,6 +8,7 @@ import {
   closestSection,
   createDeferred,
   expectActiveTopic,
+  openControlCenter,
   openPublishDialog,
   openSettingsSection,
   publishPost,
@@ -35,7 +36,8 @@ test('desktop shell can publish and render a post', async () => {
   });
   expectActiveTopic('kukuri:topic:demo');
   expect(screen.queryByTestId('shell-nav-trigger')).not.toBeInTheDocument();
-  const demoTopic = screen.getByRole('button', { name: 'demo' }).closest('li');
+  const controlCenter = await openControlCenter(user);
+  const demoTopic = within(controlCenter).getByRole('button', { name: 'demo' }).closest('li');
   expect(demoTopic).not.toBeNull();
   expect(demoTopic).toHaveTextContent('joined / peers: 1');
 

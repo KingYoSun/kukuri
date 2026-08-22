@@ -1,0 +1,23 @@
+# 2026-08-23 Issue #748 production Columns Wave 4
+
+- Preview: [Control Center desktop](assets/2026-08-23-issue-748-wave-4/control-center-production.png) / [Control Center narrow](assets/2026-08-23-issue-748-wave-4/control-center-narrow.png)
+- Storybook review surface: `Review/ProductionColumnWorkspace/ControlCenterOpen`。production `DesktopShellPage`に3本のTimeline Column、private Draft、参加済みchannelをseedし、非modal Control Centerを開いた状態を再現する。
+- Summary: 常設sidebar、global workspace tabs、global FABを撤去し、左下のControl CenterへColumns、Places、Activity、Systemを集約した。投稿・返信・配信等のprimary actionは各Column footerだけが所有する。
+- Columns: 開いているColumnのfocus、pin / unpin、closeと、新規Timeline / Explore / Notifications / Messages / Profile / Live / Metaverse Columnの追加を同じ面で操作する。新規Columnは明示追加なのでpinned、topic / channel選択は通常のtransient navigationとする。
+- Places: tracked topicsと全topicのjoined channelsを単一の検索・filter・sort対象にし、inactive topicのchannelも直接選択できる。topic追加、channel create / join、active channel share、gossip toggle、indexing requestを同じsectionに置く。
+- Activity / System: unread count付きNotifications、Messages、接続経路、release、Community Node、settings、about、developer modeをまとめる。triggerのstatus dotはCommunity Node attentionをconnection attentionより優先する。
+- Community Node impact: TimelineからCommunity Indexを完全に外し、ExploreだけがCommunity Index surfaceと依存エラーを所有する。node selectorは撤去し、eligible nodesのroutingは既存policyに委ねる。
+- Interaction: drawerは背景操作を無効化しない非modal `complementary`で、header closeとtriggerから開閉できる。開いている間はtriggerを隠してdrawer内容を覆わず、close後はtriggerへfocusを戻す。
+- Narrow / overflow review: 700×980では4 sectionを自然高さの単一列にしてdrawer全体をscroll ownerにする。初回E2Eでnested gridが重なりtopic clickを遮る問題を検出し、mobile layoutをflex columnへ修正した。1440×980では4 sectionを同時表示し、各長尺listだけが内部scrollを持つ。
+- Keyboard / accessibility: trigger、close、Column focus / pin / close、topic / channel、settings routeはnative button / input / selectを使う。drawerと各sectionにaccessible nameを付け、icon-only controlには操作対象込みのlabelを付ける。
+- Shneiderman 1 — consistency: global navigationを4 sectionへ統一し、Column管理をheaderと同じfocus / pin / close語彙へ揃えた。
+- Shneiderman 2 — universal usability: desktop / narrowの双方で同じDOM順とnative controlsを保ち、狭幅だけscroll ownershipを切り替える。
+- Shneiderman 3 — informative feedback: active Column、pin state、unread count、connection / Community Node attentionをその場で表示する。
+- Shneiderman 4 — closure: drawer close後はtriggerへfocusを戻し、Column追加・focus・topic / channel選択は対象Columnをactiveにしてdrawerを閉じる。
+- Shneiderman 5 — error prevention: 最後の1 Columnはclose不可、channel未選択時はshare不可、developer mode OFF時はWIP Column追加を表示しない。
+- Shneiderman 6 — easy reversal: pin / unpinは即時切替でき、Control Center自体は背景stateを壊さず開閉できる。
+- Shneiderman 7 — internal locus of control: global actionはControl Center、object / compose actionは対象Columnに限定し、背景ColumnのDraftやscopeを流用しない。
+- Shneiderman 8 — reduced memory load: 開いているColumn、topic / channel、system stateと遷移先を一画面で再提示する。
+- Review result: production Storybookをin-app browserで1440×980 / 700×980確認した。desktopは4 section、narrowは単一列scroll、trigger非干渉、全topic channel表示、TimelineからCommunity Indexが消えていることを確認した。console error / warningは0件だった。
+- Exceptions: 可変span / reorder / layout persistence、restart後Draft復元、mobile Column paging、immersive lifecycleはWave 5〜6へ残す。
+- Validation: production Storybook実画面review、`cargo xtask desktop-ui-check`（frontend typecheck / lint、Vitest 89 files / 750 tests、Storybook build、Chromium E2E 16件、visual smoke 14件）、`cargo xtask check`、`cargo xtask test`（workspace 584件成功 / 3件skip、harness 18件、frontend 750件）、`cargo xtask oversized-files`、`git diff --check`を完了した。`oversized-files`の警告3件は既存Rustファイルで、今回の変更による新規超過はない。リポジトリCIはPR記録を一次記録とする。

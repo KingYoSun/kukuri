@@ -1,5 +1,3 @@
-import { Plus } from 'lucide-react';
-
 import { ComposerPanel } from '@/components/core/ComposerPanel';
 import {
   PrivateChannelPanel,
@@ -52,7 +50,6 @@ type OverlayActions = Pick<
   | 'handlePublish'
   | 'handleRemoveDraftAttachment'
   | 'handleShareChannelAccess'
-  | 'openFloatingActionDialog'
 >;
 type ShellDialogs = Pick<
   ReturnType<typeof useShellDialogs>,
@@ -97,8 +94,6 @@ type DesktopShellOverlaysProps = {
     | 'channelAudienceOptions'
     | 'composerDraftViews'
     | 'composerSourcePreview'
-    | 'floatingActionLabel'
-    | 'showFloatingActionButton'
     | 'activePrivateChannel'
     | 'mentionCandidates'
   >;
@@ -154,7 +149,6 @@ export function DesktopShellOverlays({
     handlePublish,
     handleRemoveDraftAttachment,
     handleShareChannelAccess,
-    openFloatingActionDialog,
   } = actions;
   const {
     channelDialogOpen,
@@ -190,8 +184,6 @@ export function DesktopShellOverlays({
     channelAudienceOptions,
     composerDraftViews,
     composerSourcePreview,
-    floatingActionLabel,
-    showFloatingActionButton,
     activePrivateChannel,
     mentionCandidates,
   } = viewModels;
@@ -605,20 +597,6 @@ export function DesktopShellOverlays({
           </DialogBody>
         </DialogContent>
       </Dialog>
-
-      {showFloatingActionButton ? (
-        <Button
-          className='shell-fab'
-          variant='primary'
-          size='icon'
-          type='button'
-          data-testid='shell-fab'
-          aria-label={floatingActionLabel}
-          onClick={openFloatingActionDialog}
-        >
-          <Plus className='size-5' aria-hidden='true' />
-        </Button>
-      ) : null}
 
       {clipboardToastId > 0 ? (
         <div className='pointer-events-none fixed right-4 bottom-4 z-[90] w-[calc(100vw-2rem)] max-w-xs'>

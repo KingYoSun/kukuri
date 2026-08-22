@@ -10,8 +10,33 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function openComposerDialog(page: Page) {
-  await page.getByTestId('shell-fab').click();
-  await expect(page.getByRole('dialog')).toBeVisible();
+  const composer = page.getByPlaceholder(/Write a post|投稿を書く/);
+  if (!(await composer.isVisible().catch(() => false))) {
+    const englishTimeline = activeColumn(page, 'Timeline');
+    if (await englishTimeline.isVisible().catch(() => false)) {
+      await englishTimeline.getByRole('button', { name: /^Publish to / }).click();
+    } else {
+      await page.getByRole('button', { name: /^(Publish|投稿) to / }).last().click();
+    }
+  }
+  await expect(composer).toBeVisible();
+}
+
+async function openControlCenter(page: Page) {
+  const controlCenter = page.getByRole('complementary', { name: 'Control Center' });
+  if (!(await controlCenter.isVisible().catch(() => false))) {
+    await page.getByTestId('control-center-trigger').click();
+  }
+  await expect(controlCenter).toBeVisible();
+  return controlCenter;
+}
+
+async function openSettings(page: Page) {
+  const controlCenter = await openControlCenter(page);
+  await controlCenter.getByRole('button', { name: 'Settings', exact: true }).click();
+  const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
+  await expect(settingsDialog).toBeVisible();
+  return settingsDialog;
 }
 
 const TOPIC_ID_PREFIX = 'kukuri:topic:';
@@ -30,27 +55,24 @@ function activeColumn(page: Page, title: string) {
 }
 
 async function expectActiveTopic(page: Page, topic: string) {
-  const navRail = page.getByRole('complementary', { name: 'Primary navigation' });
-  const topicItem = navRail
+  const controlCenter = await openControlCenter(page);
+  const topicItem = controlCenter
     .getByRole('button', { name: topicDisplayName(topic), exact: true })
     .locator('xpath=ancestor::li[1]');
   await expect(topicItem).toHaveClass(/topic-item-active/);
+  await controlCenter.getByRole('button', { name: 'Close Control Center' }).click();
 }
 
-test('browser mock wide shell keeps navigation rail beside the workspace', async ({ page }) => {
+test('browser mock wide shell keeps global navigation in the fixed Control Center', async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 980 });
   await page.goto('/');
 
-  await expect(page.getByTestId('shell-nav-trigger')).toHaveCount(0);
-
-  const navRail = page.getByRole('complementary', { name: 'Primary navigation' });
-  const workspace = page.locator('main[aria-label="Primary workspace"]');
-  const navBox = await navRail.boundingBox();
-  const workspaceBox = await workspace.boundingBox();
-
-  expect(navBox).not.toBeNull();
-  expect(workspaceBox).not.toBeNull();
-  expect(navBox!.x + navBox!.width).toBeLessThan(workspaceBox!.x);
+  await expect(page.getByRole('complementary', { name: 'Primary navigation' })).toHaveCount(0);
+  const trigger = page.getByTestId('control-center-trigger');
+  await expect(trigger).toBeVisible();
+  await expect(trigger).toHaveCSS('position', 'fixed');
+  await trigger.click();
+  await expect(page.getByRole('complementary', { name: 'Control Center' })).toBeVisible();
 });
 
 test('browser mock starts with one accessible Timeline Column without legacy workspace chrome', async ({
@@ -70,18 +92,7 @@ test('browser mock starts with one accessible Timeline Column without legacy wor
   await expect(timelineColumn).toHaveAccessibleName(/Pinned/);
   await expect(page.locator('main .shell-workspace-header-card')).toHaveCount(0);
   await expect(page.getByTestId('community-index-topic')).toHaveCount(0);
-  await expect
-    .poll(() =>
-      page
-        .getByRole('tablist', { name: 'Workspaces' })
-        .evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length)
-    )
-    .toBe(2);
-  const workspaceTabRows = await page
-    .getByRole('tablist', { name: 'Workspaces' })
-    .getByRole('tab')
-    .evaluateAll((tabs) => new Set(tabs.map((tab) => tab.getBoundingClientRect().y)).size);
-  expect(workspaceTabRows).toBe(3);
+  await expect(page.getByRole('tablist', { name: 'Workspaces' })).toHaveCount(0);
 
   const columnHeader = timelineColumn.locator('.shell-column-header');
   const timelineViews = columnHeader.getByRole('tablist', { name: 'Timeline views' });
@@ -127,14 +138,15 @@ test('browser mock shell can switch topics, publish, open thread, open author, a
 
   await expectActiveTopic(page, 'kukuri:topic:demo');
 
-  await page.getByPlaceholder('demo').fill('kukuri:topic:browser');
-  await page.getByRole('button', { name: 'Add' }).click();
-  await page.getByRole('button', { name: /^browser$/ }).click();
+  const controlCenter = await openControlCenter(page);
+  await controlCenter.getByPlaceholder('demo').fill('kukuri:topic:browser');
+  await controlCenter.getByRole('button', { name: 'Add', exact: true }).click();
+  await controlCenter.getByRole('button', { name: /^browser$/ }).click();
   await expectActiveTopic(page, 'kukuri:topic:browser');
 
   await openComposerDialog(page);
   await page.getByPlaceholder('Write a post').fill('hello browser mock');
-  await page.getByRole('button', { name: 'Publish' }).click();
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
 
   await expect(page.getByText('hello browser mock')).toBeVisible();
 
@@ -144,9 +156,7 @@ test('browser mock shell can switch topics, publish, open thread, open author, a
   await threadPane.getByRole('button', { name: 'ffffffffffff' }).first().click();
   await expect(activeColumn(page, 'Profile')).toBeVisible();
 
-  await page.getByTestId('shell-settings-trigger').click();
-  const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
-  await expect(settingsDialog).toBeVisible();
+  const settingsDialog = await openSettings(page);
   await settingsDialog.getByTestId('settings-section-discovery').click();
   await settingsDialog.getByPlaceholder('node_id or node_id@host:port').fill('seed-peer-1');
   await settingsDialog.getByRole('button', { name: 'Save Seeds' }).click();
@@ -188,7 +198,7 @@ test('browser mock shell can open an author from messages without leaving the dm
   await expect(authorPane).toBeVisible();
 
   await authorPane.getByRole('button', { name: 'Message' }).click();
-  await expect(page.getByRole('tab', { name: 'Messages' })).toHaveAttribute('aria-selected', 'true');
+  await expect(activeColumn(page, 'Conversation')).toBeVisible();
   await expect(page).toHaveURL(/#\/messages\?topic=.*peerPubkey=/);
 
   const workspace = page.locator('main[aria-label="Primary workspace"]');
@@ -198,7 +208,7 @@ test('browser mock shell can open an author from messages without leaving the dm
 
   await activeColumn(page, 'Profile').getByRole('button', { name: 'Close Profile' }).click();
   await expect(activeColumn(page, 'Conversation')).toBeVisible();
-  await expect(page.getByRole('tab', { name: 'Messages' })).toHaveAttribute('aria-selected', 'true');
+  await expect(activeColumn(page, 'Conversation')).toBeVisible();
   await expect(page).toHaveURL(/#\/messages\?topic=.*peerPubkey=/);
 });
 
@@ -208,8 +218,7 @@ test('browser mock shell persists appearance theme changes across reloads', asyn
 
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 
-  await page.getByTestId('shell-settings-trigger').click();
-  const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
+  const settingsDialog = await openSettings(page);
   await settingsDialog.getByTestId('settings-section-appearance').click();
   await settingsDialog.getByRole('radio', { name: /Light/i }).click();
 
@@ -229,8 +238,7 @@ test('browser mock shell persists language changes across reloads', async ({ pag
   await expect(page.getByPlaceholder('Write a post')).toBeVisible();
   await page.keyboard.press('Escape');
 
-  await page.getByTestId('shell-settings-trigger').click();
-  const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
+  const settingsDialog = await openSettings(page);
   await settingsDialog.getByTestId('settings-section-appearance').click();
   await settingsDialog.getByLabel('Language').selectOption('ja');
 
@@ -249,7 +257,7 @@ test('browser mock shell persists language changes across reloads', async ({ pag
   await expect(page.getByPlaceholder('投稿を書く')).toBeVisible();
   await page.keyboard.press('Escape');
 
-  await page.getByRole('tab', { name: 'ゲーム' }).click();
+  await page.goto('/#/game');
   await expect(page.getByRole('heading', { name: 'メタバースルーム' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'メタバースルームを作成' })).toBeVisible();
 });
@@ -260,9 +268,7 @@ test('browser mock settings drawer keeps the close button clear of content and c
   await page.setViewportSize({ width: 1400, height: 980 });
   await page.goto('/');
 
-  await page.getByTestId('shell-settings-trigger').click();
-  const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
-  await expect(settingsDialog).toBeVisible();
+  const settingsDialog = await openSettings(page);
   await settingsDialog.getByTestId('settings-section-connectivity').click();
 
   const closeButton = settingsDialog.getByRole('button', { name: 'Close settings' });
@@ -389,17 +395,17 @@ test('browser mock narrow shell keeps nav, context, and settings flows reachable
   await page.setViewportSize({ width: 700, height: 980 });
   await page.goto('/');
 
-  await page.getByTestId('shell-nav-trigger').click();
-  await page.getByPlaceholder('demo').fill('kukuri:topic:narrow');
-  await page.getByRole('button', { name: 'Add' }).click();
+  let controlCenter = await openControlCenter(page);
+  await controlCenter.getByPlaceholder('demo').fill('kukuri:topic:narrow');
+  await controlCenter.getByRole('button', { name: 'Add', exact: true }).click();
 
-  await page.getByTestId('shell-nav-trigger').click();
-  await page.getByRole('button', { name: /^demo$/ }).click();
+  controlCenter = await openControlCenter(page);
+  await controlCenter.getByRole('button', { name: /^demo$/ }).click();
   await expectActiveTopic(page, 'kukuri:topic:demo');
 
   await openComposerDialog(page);
   await page.getByPlaceholder('Write a post').fill('narrow browser mock');
-  await page.getByRole('button', { name: 'Publish' }).click();
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
   await expect(page.getByText('narrow browser mock')).toBeVisible();
 
   await page.getByText('narrow browser mock').click();
@@ -410,9 +416,7 @@ test('browser mock narrow shell keeps nav, context, and settings flows reachable
   await expect(activeColumn(page, 'Profile')).toBeVisible();
 
   await page.goto('/');
-  await page.getByTestId('shell-nav-trigger').click();
-  await page.getByTestId('shell-settings-trigger').click();
-  const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
+  const settingsDialog = await openSettings(page);
   await settingsDialog.getByTestId('settings-section-connectivity').click();
   await settingsDialog.getByPlaceholder('nodeid@127.0.0.1:7777').fill('peer-b@127.0.0.1:8888');
   await settingsDialog.getByRole('button', { name: 'Import Peer' }).click();
@@ -435,10 +439,6 @@ test('browser mock narrow shell keeps nav, context, and settings flows reachable
   expect(settingsNoOverflow).toBeTruthy();
 
   await page.keyboard.press('Escape');
-  await page
-    .getByRole('complementary', { name: 'Primary navigation' })
-    .getByLabel('Close navigation')
-    .click();
   await page.goto('/#/profile?topic=kukuri%3Atopic%3Ademo');
   await expect(page.getByRole('button', { name: 'Edit Profile' })).toBeVisible();
 

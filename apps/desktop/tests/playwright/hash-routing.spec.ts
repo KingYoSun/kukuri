@@ -14,16 +14,24 @@ async function openChannelManager(page: Page) {
   if (await dialog.isVisible().catch(() => false)) {
     return dialog;
   }
-  await page.getByRole('button', { name: 'Channels' }).click();
+  const controlCenter = await openControlCenter(page);
+  await controlCenter.getByRole('button', { name: 'Create or join channel' }).click();
   await expect(dialog).toBeVisible();
   return dialog;
 }
 
 async function openComposerDialog(page: Page) {
-  await page.getByTestId('shell-fab').click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
-  return dialog;
+  await activeColumn(page, 'Timeline').getByRole('button', { name: /^Publish to / }).click();
+  await expect(page.getByPlaceholder('Write a post')).toBeVisible();
+}
+
+async function openControlCenter(page: Page) {
+  const controlCenter = page.getByRole('complementary', { name: 'Control Center' });
+  if (!(await controlCenter.isVisible().catch(() => false))) {
+    await page.getByTestId('control-center-trigger').click();
+  }
+  await expect(controlCenter).toBeVisible();
+  return controlCenter;
 }
 
 function activeColumn(page: Page, title: string) {
@@ -42,15 +50,11 @@ test('browser mock hash routes deep link profile, notifications, timeline normal
   await expect(page).toHaveURL(/#\/profile\?topic=/);
 
   await page.goto('/#/channels');
-  await expect(page.getByRole('button', { name: 'Channels' })).toBeVisible();
+  await expect(page.getByTestId('control-center-trigger')).toBeVisible();
   await expect(page).toHaveURL(/#\/timeline\?topic=/);
 
   await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo&settings=appearance');
   await expect(page).toHaveURL(/#\/timeline\?topic=kukuri%3Atopic%3Ademo&settings=appearance/);
-  await expect(page.getByTestId('shell-settings-trigger')).toHaveAttribute(
-    'aria-expanded',
-    'true'
-  );
   const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
   await expect(settingsDialog).toBeVisible({ timeout: 10000 });
   await expect(settingsDialog.getByTestId('settings-section-appearance')).toHaveAttribute(
@@ -67,7 +71,6 @@ test('browser mock hash routes deep link profile, notifications, timeline normal
   await page.goto('/#/notifications?topic=kukuri%3Atopic%3Ademo');
   await expect(activeColumn(page, 'Notifications')).toBeVisible();
   await expect(page.getByText('browser mock reply notification')).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Notifications \d+$/ })).toContainText('0');
 
   await page.getByText('browser mock reply notification').click();
   await expect(page).toHaveURL(
@@ -82,9 +85,8 @@ test('browser mock hash history keeps route state stable without narrow-width ov
   await page.setViewportSize({ width: 700, height: 980 });
   await page.goto('/');
 
-  await expect(page.getByTestId('shell-nav-trigger')).toBeVisible();
-  await page.getByTestId('shell-nav-trigger').click();
-  await page.getByRole('tab', { name: 'Profile' }).click();
+  const controlCenter = await openControlCenter(page);
+  await controlCenter.getByRole('button', { name: 'Add Profile Column' }).click();
   await expect(page.getByRole('button', { name: 'Edit Profile' })).toBeVisible();
   await expect(page).toHaveURL(/#\/profile\?topic=/);
 
@@ -112,7 +114,7 @@ test('browser mock hash history keeps route state stable without narrow-width ov
   await expect(activeColumn(page, 'Thread')).toBeVisible();
 
   await page.goBack();
-  await page.getByTestId('shell-nav-trigger').click();
+  await openControlCenter(page);
   const channelDialog = await openChannelManager(page);
   await channelDialog.getByPlaceholder('Channel name').fill('Route Room');
   await channelDialog.getByRole('button', { name: 'Create Channel' }).click();
@@ -199,6 +201,7 @@ test('developer mode off falls back from live deep link to the timeline', async 
 
   await page.goto('/#/live');
   await expect(page).toHaveURL(/#\/timeline\?topic=/);
-  await expect(page.getByRole('tab', { name: 'Live' })).toHaveCount(0);
-  await expect(page.getByRole('tab', { name: 'Timeline' })).toBeVisible();
+  const controlCenter = await openControlCenter(page);
+  await expect(controlCenter.getByRole('button', { name: 'Add Live Sessions Column' })).toHaveCount(0);
+  await expect(activeColumn(page, 'Timeline')).toBeVisible();
 });

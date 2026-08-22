@@ -7,6 +7,7 @@ import { App } from '@/App';
 import {
   buildNotification,
   getDetailPane,
+  openControlCenter,
   openNotificationsInbox,
   renderAtHash,
   setViewportWidth,
@@ -21,7 +22,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-test('sidebar notifications button shows unread count and opening inbox auto-marks read', async () => {
+test('Control Center notifications action shows unread count and opening inbox auto-marks read', async () => {
   const user = userEvent.setup();
   const api = createDesktopMockApi({
     notifications: [
@@ -42,17 +43,19 @@ test('sidebar notifications button shows unread count and opening inbox auto-mar
 
   render(<App api={api} />);
 
-  const sidebarButton = screen.getByRole('button', { name: /^Notifications (?:\d+|99\+)$/ });
+  let controlCenter = await openControlCenter(user);
+  const activityButton = within(controlCenter).getByRole('button', { name: /^Notifications (?:\d+|99\+)$/ });
   await waitFor(() => {
-    expect(sidebarButton).toHaveTextContent('2');
+    expect(activityButton).toHaveTextContent('2');
   });
 
   await openNotificationsInbox(user);
 
   await waitFor(() => {
     expect(window.location.hash).toBe('#/notifications?topic=kukuri%3Atopic%3Ademo');
-    expect(sidebarButton).toHaveTextContent('0');
   });
+  controlCenter = await openControlCenter(user);
+  expect(within(controlCenter).getByRole('button', { name: /^Notifications/ })).toHaveTextContent('0');
   expect(screen.getByText('first unread notification')).toBeInTheDocument();
   expect(screen.getByText('second unread notification')).toBeInTheDocument();
 });
@@ -74,33 +77,33 @@ test('desktop shell loads unread notification rows outside the inbox for OS noti
   renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo', api);
 
   await waitFor(() => {
-    expect(screen.getByRole('button', { name: /^Notifications (?:\d+|99\+)$/ })).toHaveTextContent('1');
+    expect(screen.getByTestId('control-center-trigger')).toHaveTextContent('1');
     expect(listNotifications).toHaveBeenCalled();
   });
   expect(markAllNotificationsRead).not.toHaveBeenCalled();
 });
 
-test('clicking the active notifications button returns to the previous route', async () => {
+test('clicking the active notifications action focuses the existing inbox', async () => {
   const user = userEvent.setup();
 
   renderAtHash('#/profile?topic=kukuri%3Atopic%3Ademo');
 
   expect(await screen.findByRole('button', { name: 'Edit Profile' })).toBeInTheDocument();
 
-  const notificationsButton = screen.getByRole('button', { name: /^Notifications (?:\d+|99\+)$/ });
-  await user.click(notificationsButton);
+  await openNotificationsInbox(user);
 
   await waitFor(() => {
     expect(window.location.hash).toBe('#/notifications?topic=kukuri%3Atopic%3Ademo');
   });
   expect(screen.getAllByRole('heading', { name: 'Notifications' }).length).toBeGreaterThan(0);
 
-  await user.click(screen.getByRole('button', { name: /^Notifications (?:\d+|99\+)$/ }));
+  const controlCenter = await openControlCenter(user);
+  await user.click(within(controlCenter).getByRole('button', { name: /^Notifications/ }));
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/profile?topic=kukuri%3Atopic%3Ademo');
+    expect(window.location.hash).toBe('#/notifications?topic=kukuri%3Atopic%3Ademo');
   });
-  expect(screen.getByRole('button', { name: 'Edit Profile' })).toBeInTheDocument();
+  expect(screen.getAllByRole('region', { name: /^Notifications Column/ })).toHaveLength(1);
 });
 
 test('notifications route renders inbox and marks unread notifications as read on load', async () => {
@@ -120,7 +123,7 @@ test('notifications route renders inbox and marks unread notifications as read o
   expect((await screen.findAllByRole('heading', { name: 'Notifications' })).length).toBeGreaterThan(0);
   await waitFor(() => {
     expect(markAllNotificationsRead).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('button', { name: /^Notifications (?:\d+|99\+)$/ })).toHaveTextContent('0');
+    expect(screen.getByTestId('control-center-trigger')).not.toHaveTextContent('1');
   });
   expect(screen.getByText('open from route')).toBeInTheDocument();
 });
@@ -160,7 +163,7 @@ test('notifications route surfaces auto-read errors and keeps unread state visib
   expect(screen.getByText('still unread notification')).toBeInTheDocument();
   expect(screen.getByText('Unread')).toBeInTheDocument();
   await waitFor(() => {
-    expect(screen.getByRole('button', { name: /^Notifications (?:\d+|99\+)$/ })).toHaveTextContent('1');
+    expect(screen.getByTestId('control-center-trigger')).toHaveTextContent('1');
   });
 });
 

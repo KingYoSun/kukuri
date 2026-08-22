@@ -41,6 +41,33 @@
     "trackedTopics": "追跡中のトピック",
     "updateAvailable": "アップデートがあります"
   },
+  "controlCenter": {
+    "eyebrow": "全体ナビゲーション",
+    "title": "コントロールセンター",
+    "openWithStatus": "コントロールセンターを開く · {{status}}",
+    "closeWithStatus": "コントロールセンターを閉じる · {{status}}",
+    "close": "コントロールセンターを閉じる",
+    "status": {
+      "connected": "接続済み",
+      "connectionAttention": "接続の確認が必要です",
+      "communityNodeAttention": "Community Node の確認が必要です"
+    },
+    "sections": {
+      "columns": "カラム",
+      "places": "場所",
+      "activity": "アクティビティ",
+      "system": "システム"
+    },
+    "addColumn": "{{title}} カラムを追加",
+    "focusColumn": "{{title}} に移動",
+    "pinColumn": "{{title}} をピン留め",
+    "unpinColumn": "{{title}} のピン留めを解除",
+    "closeColumn": "{{title}} カラムを閉じる",
+    "createJoinChannel": "チャンネルを作成または参加",
+    "shareChannel": "選択中のチャンネルを共有",
+    "release": "リリースと更新",
+    "settings": "設定"
+  },
   "primarySections": {
     "explore": "見つける",
     "game": "ゲーム",

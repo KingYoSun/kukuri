@@ -7,6 +7,7 @@ import {
   createInitialWorkspaceState,
   INITIAL_TIMELINE_COLUMN_ID,
   openTransientColumn,
+  openPinnedColumn,
   setColumnPinned,
   type ColumnState,
 } from '@/shell/slices/workspace';
@@ -119,6 +120,25 @@ describe('workspace state transitions', () => {
       'thread-1',
       'conversation-1',
     ]);
+  });
+
+  it('adds an explicit pinned Column without replacing transient siblings', () => {
+    const initial = openTransientColumn(createInitialWorkspaceState(), transientColumn());
+    const explore = transientColumn({
+      id: 'explore-demo',
+      kind: 'explore',
+      entityId: undefined,
+      parentColumnId: undefined,
+    });
+    const next = openPinnedColumn(initial, explore);
+
+    expect(next.columns.map((column) => column.id)).toEqual([
+      INITIAL_TIMELINE_COLUMN_ID,
+      'thread-1',
+      'explore-demo',
+    ]);
+    expect(next.columns.at(-1)?.pinned).toBe(true);
+    expect(next.activeColumnId).toBe('explore-demo');
   });
 
   it('inserts a new child immediately to the right of its parent', () => {

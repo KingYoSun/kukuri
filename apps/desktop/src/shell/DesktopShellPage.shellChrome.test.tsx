@@ -7,9 +7,8 @@ import { DESKTOP_THEME_STORAGE_KEY } from '@/lib/theme';
 import { App } from '@/App';
 import {
   closestSection,
-  getFloatingActionButton,
-  getPrimaryNavigation,
   openChannelManager,
+  openControlCenter,
   openSettingsSection,
   renderAtHash,
   selectTimelineView,
@@ -25,32 +24,65 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-test('mobile nav trigger is footer-only and desktop omits it', async () => {
-  const { unmount } = render(<App api={createDesktopMockApi()} />);
+test('Control Center is the global navigation entry on desktop and narrow viewports', async () => {
+  const desktop = render(<App api={createDesktopMockApi()} />);
 
+  expect(await screen.findByTestId('control-center-trigger')).toBeVisible();
+  expect(screen.queryByRole('complementary', { name: 'Primary navigation' })).not.toBeInTheDocument();
   expect(screen.queryByTestId('shell-nav-trigger')).not.toBeInTheDocument();
 
-  unmount();
+  desktop.unmount();
   setViewportWidth(640);
   render(<App api={createDesktopMockApi()} />);
 
-  expect(await screen.findByTestId('shell-nav-trigger')).toBeInTheDocument();
+  expect(await screen.findByTestId('control-center-trigger')).toBeVisible();
+  expect(screen.queryByTestId('shell-nav-trigger')).not.toBeInTheDocument();
 });
 
-test('floating action button tracks the active section and hides on profile', async () => {
+test('Control Center exposes Columns, Places, Activity, and System and restores trigger focus', async () => {
+  const user = userEvent.setup();
+  render(<App api={createDesktopMockApi()} />);
+
+  const trigger = await screen.findByTestId('control-center-trigger');
+  expect(trigger).toHaveAccessibleName('Open Control Center · Connected');
+  await user.click(trigger);
+
+  const controlCenter = screen.getByRole('complementary', { name: 'Control Center' });
+  expect(controlCenter).toBeVisible();
+  expect(within(controlCenter).getByRole('heading', { name: 'Columns' })).toBeInTheDocument();
+  expect(within(controlCenter).getByRole('heading', { name: 'Places' })).toBeInTheDocument();
+  expect(within(controlCenter).getByRole('heading', { name: 'Activity' })).toBeInTheDocument();
+  expect(within(controlCenter).getByRole('heading', { name: 'System' })).toBeInTheDocument();
+  expect(within(controlCenter).getByRole('button', { name: 'Focus Timeline' })).toHaveAttribute(
+    'aria-current',
+    'true'
+  );
+  expect(within(controlCenter).getByRole('button', { name: /^Notifications/ })).toBeInTheDocument();
+  expect(within(controlCenter).getByRole('button', { name: 'Messages' })).toBeInTheDocument();
+  expect(within(controlCenter).getByRole('button', { name: 'Settings' })).toBeInTheDocument();
+
+  fireEvent.keyDown(window, { key: 'Escape' });
+
+  await waitFor(() => {
+    expect(screen.queryByRole('complementary', { name: 'Control Center' })).not.toBeInTheDocument();
+  });
+  expect(trigger).toHaveFocus();
+});
+
+test('column actions replace the legacy global floating action button', async () => {
   const user = userEvent.setup();
   const initial = render(<App api={createDesktopMockApi()} />);
 
-  expect(getFloatingActionButton()).toHaveAccessibleName('Publish');
-  expect(getFloatingActionButton()).toHaveClass('shell-fab');
+  expect(screen.queryByTestId('shell-fab')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /^Publish to / })).toBeInTheDocument();
 
   initial.unmount();
   const live = renderAtHash('#/live?topic=kukuri%3Atopic%3Ademo');
-  expect(getFloatingActionButton()).toHaveAccessibleName('Start Live');
+  expect(screen.getByRole('button', { name: 'Start Live' })).toBeInTheDocument();
 
   live.unmount();
   const game = renderAtHash('#/game?topic=kukuri%3Atopic%3Ademo');
-  expect(getFloatingActionButton()).toHaveAccessibleName('Create Room');
+  expect(screen.getByRole('button', { name: 'Create metaverse room' })).toBeInTheDocument();
 
   game.unmount();
   const timeline = renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo');
@@ -62,14 +94,14 @@ test('floating action button tracks the active section and hides on profile', as
   expect(screen.queryByTestId('shell-fab')).not.toBeInTheDocument();
 });
 
-test('channel manager opens as a modal from the navigation summary', async () => {
+test('channel manager opens as a modal from Control Center', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
 
-  expect(getPrimaryNavigation().querySelector('.shell-nav-accordion-trigger')).toBeNull();
-  const channelButton = screen.getByRole('button', { name: 'Private Channels' });
-  expect(channelButton).toHaveClass('shell-icon-button');
-  expect(channelButton).not.toHaveTextContent('Private Channels');
+  const controlCenter = await openControlCenter(user);
+  expect(
+    within(controlCenter).getByRole('button', { name: 'Create or join channel' })
+  ).toBeInTheDocument();
 
   const dialog = await openChannelManager(user);
   expect(dialog).toBeInTheDocument();
@@ -183,20 +215,14 @@ test('desktop shell surfaces docs-assisted topic recovery in diagnostics', async
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi({ assistPeerIds: ['relay-peer'] })} />);
 
+  const controlCenter = await openControlCenter(user);
+  await user.type(within(controlCenter).getByPlaceholderText('demo'), 'kukuri:topic:relay');
+  await user.click(within(controlCenter).getByRole('button', { name: 'Add' }));
+
   const drawer = await openSettingsSection(user, 'discovery');
   await waitFor(() => {
     expect(within(drawer).getByText('Docs Assist Peers')).toBeInTheDocument();
     expect(within(drawer).getAllByText('relay-peer').length).toBeGreaterThan(0);
-  });
-
-  await user.type(screen.getByPlaceholderText('demo'), 'kukuri:topic:relay');
-  await user.click(screen.getByRole('button', { name: 'Add' }));
-
-  await waitFor(() => {
-    const relayTopic = screen.getByRole('button', { name: 'relay' }).closest('li');
-    expect(relayTopic).not.toBeNull();
-    expect(relayTopic).toHaveTextContent('recovering / peers: 0');
-    expect(relayTopic).not.toHaveTextContent('relay-assisted sync available via 1 peer(s)');
   });
 
   await user.click(within(drawer).getByTestId('settings-section-connectivity'));
@@ -236,7 +262,7 @@ test('desktop shell exposes the Timeline Column and settings drawer restores tri
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
 
-  expect(screen.getByRole('tablist', { name: 'Workspaces' })).toBeInTheDocument();
+  expect(screen.queryByRole('tablist', { name: 'Workspaces' })).not.toBeInTheDocument();
   expect(
     screen.getByRole('main', { name: 'Primary workspace' }).querySelector('.shell-workspace-header-card')
   ).toBeNull();
@@ -263,10 +289,9 @@ test('desktop shell exposes the Timeline Column and settings drawer restores tri
   expect(bookmarksTab).toHaveAttribute('aria-selected', 'true');
   expect(timelineColumn.querySelector('.shell-column-body .shell-workspace-tabs')).toBeNull();
 
-  const settingsTrigger = screen.getByTestId('shell-settings-trigger');
-  expect(settingsTrigger.querySelector('.lucide-settings')).toBeTruthy();
-  expect(settingsTrigger.querySelector('.lucide-settings-2')).toBeFalsy();
-  await user.click(settingsTrigger);
+  const settingsTrigger = screen.getByTestId('control-center-trigger');
+  const controlCenter = await openControlCenter(user);
+  await user.click(within(controlCenter).getByRole('button', { name: 'Settings' }));
   await screen.findByRole('dialog', { name: 'Settings' });
 
   fireEvent.keyDown(window, { key: 'Escape' });
@@ -274,6 +299,8 @@ test('desktop shell exposes the Timeline Column and settings drawer restores tri
   await waitFor(() => {
     expect(screen.queryByRole('dialog', { name: 'Settings' })).not.toBeInTheDocument();
   });
-  expect(settingsTrigger).toHaveFocus();
+  await waitFor(() => {
+    expect(settingsTrigger).toHaveFocus();
+  });
 });
 

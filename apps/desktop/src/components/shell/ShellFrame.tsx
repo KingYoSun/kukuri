@@ -4,12 +4,13 @@ import { cn } from '@/lib/utils';
 
 type ShellFrameProps = {
   skipTargetId: string;
-  navRail: React.ReactNode;
+  navRail?: React.ReactNode;
   workspace: React.ReactNode;
   workspaceLayout?: 'legacy' | 'column';
   detailPaneStack?: React.ReactNode;
   detailPaneCount?: number;
   mobileFooter?: React.ReactNode;
+  globalControls?: React.ReactNode;
 };
 
 function isMobileViewport() {
@@ -27,6 +28,7 @@ export function ShellFrame({
   detailPaneStack,
   detailPaneCount = 0,
   mobileFooter,
+  globalControls,
 }: ShellFrameProps) {
   const [showMobileFooter, setShowMobileFooter] = React.useState(() => isMobileViewport());
   const layoutDetailPaneCount = Math.max(0, Math.min(detailPaneCount, 2));
@@ -67,6 +69,7 @@ export function ShellFrame({
       {mobileFooter && showMobileFooter ? (
         <div className='shell-mobile-footer'>{mobileFooter}</div>
       ) : null}
+      {globalControls}
     </div>
   );
 }

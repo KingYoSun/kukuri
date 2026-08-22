@@ -11,12 +11,18 @@ import { topicDisplayName } from '@/lib/topicId';
 type TopicNavFilter = 'all' | 'connected' | 'disconnected';
 type TopicNavSort = 'added' | 'name' | 'updated';
 
-type TopicNavListProps = Parameters<typeof TopicNavList>[0];
+type TopicNavListProps = Parameters<typeof TopicNavList>[0] & {
+  alwaysShowControls?: boolean;
+};
 
 // Wraps TopicNavList with search / filter / sort controls. The list grows as
 // topics are tracked, so these controls keep it manageable. State is kept local
 // (session-only); `items` is expected in added order (trackedTopics order).
-export function FilterableTopicNavList({ items, ...listProps }: TopicNavListProps) {
+export function FilterableTopicNavList({
+  items,
+  alwaysShowControls = false,
+  ...listProps
+}: TopicNavListProps) {
   const { t } = useTranslation('shell');
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<TopicNavFilter>('all');
@@ -24,7 +30,7 @@ export function FilterableTopicNavList({ items, ...listProps }: TopicNavListProp
   const filterId = useId();
   const sortId = useId();
 
-  const showControls = items.length > 1;
+  const showControls = alwaysShowControls || items.length > 1;
 
   const visibleItems = useMemo(() => {
     if (!showControls) {

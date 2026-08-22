@@ -68,8 +68,8 @@ async function settleForShot(page: Page, theme: DesktopTheme): Promise<void> {
 }
 
 async function openComposerDialog(page: Page): Promise<void> {
-  await page.getByTestId('shell-fab').click();
-  await expect(page.getByRole('dialog')).toBeVisible();
+  await activeColumn(page, 'Timeline').getByRole('button', { name: /^Publish to / }).click();
+  await expect(page.getByPlaceholder('Write a post')).toBeVisible();
 }
 
 function activeColumn(page: Page, title: string) {
@@ -105,7 +105,7 @@ test.describe('visual regression smoke', () => {
     await page.setViewportSize(NARROW);
     await page.goto('/');
     await expect(page.getByText('browser mock peer post')).toBeVisible();
-    await expect(page.getByTestId('shell-nav-trigger')).toBeVisible();
+    await expect(page.getByTestId('control-center-trigger')).toBeVisible();
     await settleForShot(page, 'dark');
     await expect(page).toHaveScreenshot('timeline-narrow-dark.png');
   });
@@ -116,7 +116,7 @@ test.describe('visual regression smoke', () => {
     await page.setViewportSize(NARROW);
     await page.goto('/');
     await expect(page.getByText('browser mock peer post')).toBeVisible();
-    await expect(page.getByTestId('shell-nav-trigger')).toBeVisible();
+    await expect(page.getByTestId('control-center-trigger')).toBeVisible();
     await settleForShot(page, 'light');
     await expect(page).toHaveScreenshot('timeline-narrow-light.png');
   });
@@ -178,10 +178,6 @@ test.describe('visual regression smoke', () => {
     await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo&settings=appearance');
     const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
     await expect(settingsDialog).toBeVisible();
-    await expect(page.getByTestId('shell-settings-trigger')).toHaveAttribute(
-      'aria-expanded',
-      'true'
-    );
     await expect(settingsDialog.getByTestId('settings-section-appearance')).toHaveAttribute(
       'aria-current',
       'location'
@@ -197,10 +193,6 @@ test.describe('visual regression smoke', () => {
     await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo&settings=appearance');
     const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
     await expect(settingsDialog).toBeVisible();
-    await expect(page.getByTestId('shell-settings-trigger')).toHaveAttribute(
-      'aria-expanded',
-      'true'
-    );
     await expect(settingsDialog.getByTestId('settings-section-appearance')).toHaveAttribute(
       'aria-current',
       'location'
@@ -245,7 +237,7 @@ test.describe('visual regression smoke', () => {
     await seedAppearance(page, 'dark');
     await page.setViewportSize(WIDE);
     await page.goto('/#/live');
-    await expect(activeColumn(page, 'Live Sessions')).toBeVisible();
+    await expect(activeColumn(page, 'Live')).toBeVisible();
     await settleForShot(page, 'dark');
     await expect(page).toHaveScreenshot('live-wide-dark.png');
   });

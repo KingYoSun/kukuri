@@ -374,7 +374,7 @@ describe('useDesktopShellViewModels', () => {
     view.unmount();
   });
 
-  test('builds topicNavItems from diagnostics and expands channels only for the active topic', () => {
+  test('builds topicNavItems from diagnostics and exposes joined channels for every topic', () => {
     const view = renderViewModels((current) => ({
       syncStatus: {
         ...current.syncStatus,
@@ -423,8 +423,8 @@ describe('useDesktopShellViewModels', () => {
     expect(demoItem.connectionLabel).toBe('joined');
     expect(demoItem.peerCount).toBe(3);
     expect(demoItem.gossipJoined).toBe(true);
-    // channels は activeTopic のみ展開。`topic::channel_id` が
-    // gossip_disabled_channels にあれば channel 単位で gossipJoined=false
+    // `topic::channel_id` が gossip_disabled_channels にあれば
+    // channel 単位で gossipJoined=false
     expect(demoItem.channels).toEqual([
       {
         channelId: 'channel-alpha',
@@ -449,8 +449,16 @@ describe('useDesktopShellViewModels', () => {
     expect(irohItem.peerCount).toBe(0);
     // gossip_disabled_topics に載っている topic は gossipJoined=false
     expect(irohItem.gossipJoined).toBe(false);
-    // activeTopic でない topic は joinedChannels があっても展開しない
-    expect(irohItem.channels).toEqual([]);
+    // Control Center の検索と直接選択のため、inactive topic の joined channel も公開する。
+    expect(irohItem.channels).toEqual([
+      {
+        channelId: 'channel-iroh',
+        label: 'Iroh Channel',
+        audienceKind: 'invite_only',
+        active: false,
+        gossipJoined: false,
+      },
+    ]);
 
     view.unmount();
   });

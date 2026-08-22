@@ -18,7 +18,6 @@ const meta = {
     activeTimelineScope: { kind: 'public' },
     eligibleNodeBaseUrls: [node],
     selectedNodeBaseUrl: node,
-    onSelectNode: () => {},
     onOpenCommunityNodeSettings: () => {},
   },
 } satisfies Meta<typeof CommunityIndexWorkspace>;

@@ -4,9 +4,9 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import {
   expectActiveTopic,
+  getActiveColumn,
   getDetailPane,
   getTimelineViewTabs,
-  getWorkspaceTabs,
   renderAtHash,
   setViewportWidth,
 } from './DesktopShellPage.testHelpers';
@@ -24,12 +24,12 @@ test.each([
   {
     path: '#/timeline',
     workspaceLabel: 'Timeline',
-    expectedControl: () => screen.getByRole('button', { name: 'Publish' }),
+    expectedControl: () => screen.getByRole('button', { name: /^Publish to / }),
   },
   {
     path: '#/channels',
     workspaceLabel: 'Timeline',
-    expectedControl: () => screen.getByRole('button', { name: 'Publish' }),
+    expectedControl: () => screen.getByRole('button', { name: /^Publish to / }),
   },
   {
     path: '#/live',
@@ -38,8 +38,8 @@ test.each([
   },
   {
     path: '#/game',
-    workspaceLabel: 'Game',
-    expectedControl: () => screen.getByRole('button', { name: 'Create Room' }),
+    workspaceLabel: 'Metaverse',
+    expectedControl: () => screen.getByRole('button', { name: 'Create metaverse room' }),
   },
   {
     path: '#/messages',
@@ -56,11 +56,10 @@ test.each([
   async ({ path, workspaceLabel, expectedControl }) => {
     renderAtHash(path);
 
-    const tab = within(getWorkspaceTabs()).getByRole('tab', { name: workspaceLabel });
     expect(expectedControl()).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(tab).toHaveAttribute('aria-selected', 'true');
+      expect(getActiveColumn(workspaceLabel)).toHaveAttribute('aria-current', 'true');
       expect(window.location.hash).toBe(
         path === '#/channels'
           ? '#/timeline?topic=kukuri%3Atopic%3Ademo'

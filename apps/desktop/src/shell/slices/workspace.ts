@@ -153,6 +153,24 @@ export function openTransientColumn(
   };
 }
 
+export function openPinnedColumn(
+  state: WorkspaceState,
+  requestedColumn: ColumnState
+): WorkspaceState {
+  const existing = state.columns.find((column) => column.id === requestedColumn.id);
+  if (existing) {
+    const pinned = setColumnPinned(state, existing.id, true);
+    return activateColumn(pinned, existing.id);
+  }
+
+  const column = { ...requestedColumn, pinned: true };
+  return {
+    ...state,
+    columns: [...state.columns, column],
+    activeColumnId: column.id,
+  };
+}
+
 export function setColumnPinned(
   state: WorkspaceState,
   columnId: string,

@@ -145,28 +145,7 @@ export function useDesktopShellViewModels({
     repostTarget,
     unsupportedVideoManifests,
     directMessages,
-    shellChromeState,
   } = state;
-  const floatingActionLabel = useMemo(() => {
-    if (shellChromeState.activePrimarySection === 'live') {
-      return t('live:actions.start');
-    }
-    if (shellChromeState.activePrimarySection === 'game') {
-      return t('game:actions.createRoom');
-    }
-    return t('common:actions.publish');
-  }, [shellChromeState.activePrimarySection, t]);
-
-  const showFloatingActionButton =
-    shellChromeState.activePrimarySection !== 'profile' &&
-    shellChromeState.activePrimarySection !== 'messages' &&
-    shellChromeState.activePrimarySection !== 'notifications' &&
-    shellChromeState.activePrimarySection !== 'explore' &&
-    !(
-      shellChromeState.activePrimarySection === 'timeline' &&
-      shellChromeState.timelineView === 'bookmarks'
-    );
-
   const {
     activeTimelinePostViews,
     bookmarkedTimelinePostViews,
@@ -300,18 +279,15 @@ export function useDesktopShellViewModels({
         lastReceivedLabel: formatLastReceivedLabel(topicDiagnostics[topic]?.last_received_at, locale),
         lastReceivedAt: topicDiagnostics[topic]?.last_received_at ?? null,
         gossipJoined: !gossipDisabledTopics.has(topic),
-        channels:
-          topic === activeTopic
-            ? (joinedChannelsByTopic[topic] ?? []).map((channel) => ({
-                channelId: channel.channel_id,
-                label: channel.label,
-                audienceKind: channel.audience_kind,
-                active: selectedChannelIdByTopic[topic] === channel.channel_id,
-                gossipJoined:
-                  !gossipDisabledTopics.has(topic) &&
-                  !gossipDisabledChannels.has(`${topic}::${channel.channel_id}`),
-              }))
-            : [],
+        channels: (joinedChannelsByTopic[topic] ?? []).map((channel) => ({
+          channelId: channel.channel_id,
+          label: channel.label,
+          audienceKind: channel.audience_kind,
+          active: topic === activeTopic && selectedChannelIdByTopic[topic] === channel.channel_id,
+          gossipJoined:
+            !gossipDisabledTopics.has(topic) &&
+            !gossipDisabledChannels.has(`${topic}::${channel.channel_id}`),
+        })),
       })),
     [
       activeTopic,
@@ -401,8 +377,6 @@ export function useDesktopShellViewModels({
   return {
     channelAudienceOptions,
     privateChannelListItems,
-    floatingActionLabel,
-    showFloatingActionButton,
     liveSessionListItems,
     gameDraftViews,
     profileEditorFields,

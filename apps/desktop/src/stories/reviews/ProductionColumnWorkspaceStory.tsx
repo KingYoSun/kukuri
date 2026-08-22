@@ -32,7 +32,11 @@ const REVIEW_CHANNEL: JoinedPrivateChannelView = {
   stale_participant_count: 0,
 };
 
-function createReviewStore() {
+type ProductionColumnWorkspaceStoryProps = {
+  initialControlCenterOpen?: boolean;
+};
+
+function createReviewStore(initialControlCenterOpen = false) {
   window.localStorage.setItem(DEVELOPER_MODE_STORAGE_KEY, 'true');
   window.history.replaceState(
     null,
@@ -56,6 +60,7 @@ function createReviewStore() {
     workspaceState: {
       ...current.workspaceState,
       activeColumnId: friendsColumnId,
+      controlCenterOpen: initialControlCenterOpen,
       columns: [
         {
           id: publicColumnId,
@@ -97,8 +102,10 @@ function createReviewStore() {
   return store;
 }
 
-export function ProductionColumnWorkspaceStory() {
-  const [store] = useState(createReviewStore);
+export function ProductionColumnWorkspaceStory({
+  initialControlCenterOpen = false,
+}: ProductionColumnWorkspaceStoryProps) {
+  const [store] = useState(() => createReviewStore(initialControlCenterOpen));
   const api = useMemo(() => {
     const mock = createDesktopMockApi();
     return {
