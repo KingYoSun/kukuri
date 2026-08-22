@@ -19,5 +19,6 @@
 - Shneiderman 7 — internal locus of control: footer actionは自身のColumnをactiveにしたうえで自身のDraft keyを開き、背景Columnのstateを変更しない。
 - Shneiderman 8 — reduced memory load: headerとComposerの両方に送信先を置き、Thread replyは対象post本文もbannerへ短く再表示する。
 - Review result: 初回reviewで初期active ColumnがCanvas外へ一部隠れる問題を検出し、initial mountでもactive Columnへscrollするよう修正した。3つのscope Columnとprivate Draftが同時に保持され、document overflowが発生しないことを確認した。
+- Linux baseline: PR初回CIのvisual artifactを確認し、今回意図したColumn footer、active Columnへの初期scroll、Stream actionが反映された6画面のactualを正規baselineへ更新した。
 - Exceptions: Control Center、sidebar撤去、可変span / reorder / layout persistence、restart後Draft復元、mobile paging、immersive lifecycleはWave 4〜6へ残す。Metaverseの新規chat / comment contractは追加していない。
 - Validation: production Storybook実画面reviewに加え、`cargo xtask check`、`cargo xtask test`（Rust workspace 584件、harness 18件、frontend 747件）、`cargo xtask desktop-ui-check`（lint、typecheck、Vitest 89 files / 747 tests、Storybook build、Chromium 16件、visual regression 14件）、`cargo xtask oversized-files`、`git diff --check`をローカルで完了した。Linuxを含むリポジトリCIは下記PRの結果を一次記録とする。
