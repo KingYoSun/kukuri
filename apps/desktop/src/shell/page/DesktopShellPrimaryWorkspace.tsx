@@ -44,7 +44,7 @@ import { useShallow } from 'zustand/react/shallow';
 
 type ViewModels = ReturnType<typeof useDesktopShellViewModels>;
 
-type DesktopShellPrimaryWorkspaceProps = {
+export type DesktopShellPrimarySurfaceProps = {
   t: Translate;
   api: DesktopApi;
   metaverseActions: MetaverseRoomActions;
@@ -113,7 +113,7 @@ type DesktopShellPrimaryWorkspaceProps = {
   columnMode?: boolean;
 };
 
-export function DesktopShellPrimaryWorkspace({
+export function DesktopShellPrimarySurface({
   t,
   api,
   metaverseActions,
@@ -156,7 +156,7 @@ export function DesktopShellPrimaryWorkspace({
   handleMuteAction,
   handleOpenOriginalTopic,
   columnMode = false,
-}: DesktopShellPrimaryWorkspaceProps) {
+}: DesktopShellPrimarySurfaceProps) {
   const {
     activeTopic,
     bookmarkedPosts,
@@ -640,4 +640,8 @@ export function DesktopShellPrimaryWorkspace({
       </section>
     </div>
   );
+}
+
+export function DesktopShellPrimaryWorkspace(props: DesktopShellPrimarySurfaceProps) {
+  return <DesktopShellPrimarySurface {...props} />;
 }
