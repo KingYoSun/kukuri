@@ -256,24 +256,62 @@ kukuri にはマーケティング的な First View / ブランドロックア�
 
 ## 5. レイアウト原則
 
-### 5.1 シェル構造（[`shell/ShellFrame.tsx`](apps/desktop/src/components/shell/ShellFrame.tsx)）
+### 5.1 現行シェル構造（移行元、[`shell/ShellFrame.tsx`](apps/desktop/src/components/shell/ShellFrame.tsx)）
 
 - **3 カラム CSS Grid**: 左 nav rail（`ShellNavRail`）＋ メインワークスペース ＋ 右 detail pane stack（thread → author、最大 2）。
 - `.shell-layout` は `data-detail-pane-count='0|1|2'` で detail pane 幅を切替える。
 - viewport `≤759px` で mobile footer を表示（`isMobileViewport()`）。
 - **ルーティング**: hash routing（React Router v7）。`#/timeline` / `#/channels` / `#/live` / `#/game` / `#/profile`。search params: `topic` / `timelineScope` / `composeTarget` / `context` / `threadId` / `authorPubkey` / `profileMode` / `settings`。
+- この構造は [ADR 0031](docs/adr/0031-variable-span-column-workspace.md) の Column Canvas へ移行するまでの現行実装を記録する。新規 shell の target としては扱わない。
 
-### 5.2 推奨コンテンツ幅（将来定義）
+### 5.2 Column Canvas と可変 span（ADR 0031）
 
-現グリッドは流動的（固定 sidebar 幅を持たない）。以下は推奨最大幅で、固定値化は将来の決定とする。
+保存済み layout がない初期表示は、中央寄せした Timeline Column 1本、Column 下部の primary action、左下の Control Center trigger だけにする。常設 Sidebar、global workspace tab header、detail pane の予約領域を置かない。
 
-| エリア | 推奨幅 | 用途 |
-|--------|--------|------|
-| Nav Rail | ~280px | 左ナビ（topic / 通知 / 設定） |
-| Workspace Content | ~640–720px | timeline / thread / composer の可読幅 |
-| Detail Pane | ~360–420px | thread / author の詳細 |
+desktop の Column unit は `--column-unit: 27.5rem`（440px）、Column 間 gap は `--column-gap: var(--space-md)`（16px）とする。表示幅は次で求める。
 
-### 5.3 spacing スケール
+```text
+width = span * columnUnit + (span - 1) * gap
+```
+
+| Column kind | Desktop default | Desktop width | Mobile |
+|---|---:|---:|---:|
+| Timeline / Notifications / Profile / Thread | 1 span | 440px | 1 viewport |
+| Messages / Conversation | 1〜2 span | 440〜896px | 1 viewport |
+| Stream | 2 span | 896px | 1 viewport |
+| Metaverse | 3 span | 1352px | 1 viewport |
+| Metaverse focused | 最大4 span | 1808px | 1 viewport |
+
+- 複数 span Column は分割不能な atomic surface とし、drag ghost と並べ替えでも元 span を保つ。
+- Window が狭い場合は actual width を縮めてよいが、保存した preferred desktop span は失わない。
+- internal layout は Column 自身の実幅に基づく container query 等で切り替え、viewport 幅だけに依存しない。
+- 横方向の overflow は Column Canvas 内に閉じ込め、document-level の横 overflow を発生させない。
+
+### 5.3 Column state と focus
+
+| State | 視覚表現 | 非視覚表現 |
+|---|---|---|
+| active | accent border + header indicator | `aria-current` と state label |
+| focused | teal focus ring | DOM focus |
+| pinned | pin icon + `Pinned` label | `aria-pressed='true'` |
+| transient | dashed border + `Temporary` label | state label |
+| dragging | elevation + grip state label | `aria-grabbed` 相当の説明 |
+| drop target | insertion line + position label | live region / position copy |
+
+- active と focused は別 state とし、partially visible な Column を active とみなさない。
+- drag grip は Column header に置いて focus 可能にする。Column 本体、post、media、3D viewport、text selection を grip にしない。
+- Column menu に close、pin、span、左へ移動、右へ移動を置き、drag を唯一の並べ替え手段にしない。
+- screen reader に Column title、位置、総数、span、active / pinned / transient state を伝える。
+
+### 5.4 Control Center
+
+- desktop trigger の既定位置は左下。左側 / 左下をアプリ全体、各 Column 下部を Column 固有 action とする。
+- Control Center は画面下から開く bottom drawer とし、通常の移動では background interaction を完全に遮断しない。
+- drawer は Column、場所、アクティビティ、システムの4区分を持つ。設定編集、認証、同意、破壊的確認だけ modal Sheet / Dialog へ遷移する。
+- trigger は最小44px、状態 dot / unread badge、accessible name、visible focus を持つ。Community Node 障害は trigger の状態と affected Column の inline Notice の両方で示す。
+- mobile では safe area を避け、Column position indicator と下部 action / Composer の操作領域を塞がない。
+
+### 5.5 spacing スケール
 
 `gap` / `padding` / `margin` は `--space-*` トークンに集約済み（#325、4px ベース）。off-grid 値は最寄りの step へ正規化した。
 
@@ -287,7 +325,7 @@ kukuri にはマーケティング的な First View / ブランドロックア�
 | `--space-xl` | 2rem | 32 |
 | `--space-2xl` | 3rem | 48 |
 
-### 5.4 角丸スケール
+### 5.6 角丸スケール
 
 `border-radius` は以下のトークンに集約済み（#325）。
 
@@ -303,6 +341,8 @@ kukuri にはマーケティング的な First View / ブランドロックア�
 ---
 
 ## 6. 奥行きとエレベーション
+
+### 6.1 Shadow
 
 **既存（実装済み）**:
 
@@ -322,6 +362,26 @@ kukuri にはマーケティング的な First View / ブランドロックア�
 |-------|------|-------|------|
 | `--shadow-modal` | `0 28px 80px rgba(2,7,15,0.30)` | `0 28px 64px rgba(33,48,59,0.16)` | dialog / modal |
 | `--shadow-overlay` | `0 0 0 100vmax rgba(7,16,25,0.55)` | `0 0 0 100vmax rgba(33,48,59,0.30)` | backdrop / overlay |
+
+### 6.2 Motion
+
+motion は state 変化と hierarchy を説明する目的に限定し、位置移動、fade、drawer の開閉で同じ token を使う。
+
+| Token | 値 | 用途 |
+|---|---:|---|
+| `--motion-duration-fast` | 120ms | hover、focus、indicator |
+| `--motion-duration-standard` | 200ms | Column state、menu、短い移動 |
+| `--motion-duration-slow` | 280ms | Control Center drawer、Column 追加 / 移動 |
+| `--motion-easing-standard` | `cubic-bezier(0.2, 0, 0, 1)` | 通常の state transition |
+| `--motion-easing-enter` | `cubic-bezier(0, 0, 0, 1)` | surface の出現 |
+| `--motion-easing-exit` | `cubic-bezier(0.3, 0, 1, 1)` | surface の退出 |
+| `--motion-distance-column` | 24px | Column 追加 / 移動の最大距離 |
+| `--motion-distance-control-center` | 32px | Control Center drawer の説明的移動量 |
+
+- `prefers-reduced-motion: reduce` または Storybook の `data-reduced-motion='reduce'` では duration を 1ms、移動距離を 0 にする。
+- reduced motion でも state の最終表示、focus、active、drawer open / closed は省略しない。
+- viewport 端の drag auto-scroll、scroll snap の補間、fullscreen 復帰で長い animation を強制しない。
+- opacity だけで active / pinned / transient / dragging / drop target を区別しない。
 
 ---
 
@@ -367,13 +427,13 @@ shell の responsive は次の境界に統一済み（#325）。隣接レンジ�
 
 | Name | レンジ | 境界 | 説明 |
 |------|--------|------|------|
-| mobile | `≤ 759px` | `max-width: 759` | モバイル幅。footer nav 出現（JS `isMobileViewport()` の `≤759` と一致） |
-| small | `760–899px` | `min-width: 760` / `max-width: 899` | 狭いデスクトップ。workspace tabs/controls を 1 列化 |
-| medium | `900–1099px` | `min-width: 900` / `max-width: 1099` | detail pane を**オーバーレイ**表示（trigger + backdrop） |
-| large | `≥ 1100px` | `min-width: 1100` | detail pane を**インライン**表示（フル 3 カラム、backdrop 無し） |
+| mobile | `≤ 759px` | `max-width: 759` | 1 Column = 1 viewport。横 scroll snap と Control Center の direct jump を使う |
+| small | `760–899px` | `min-width: 760` / `max-width: 899` | 狭い desktop。Column Canvas を開始し、actual Column width を縮小可能にする |
+| medium | `900–1099px` | `min-width: 900` / `max-width: 1099` | 440px unit 2本を比較できる標準 desktop review range |
+| large | `≥ 1100px` | `min-width: 1100` | 複数 Column と Stream / Metaverse wide surface の desktop range |
 
 - 旧 `720px`（`base.css`）と `980px`（legacy）の外れ値、および `900` の off-by-one は上記境界へ寄せて統一した。
-- detail pane のオーバーレイ/インライン切替境界は `1100px`（既存実装を維持。`1280` 等への変更は別途レイアウト判断）。
+- ADR 0031 の Desktop / Mobile 境界は `759px / 760px` とする。現行 detail pane の `1100px` 境界は移行元 shell にだけ適用し、新しい Column kind や span の契約には使わない。
 
 ### 8.3 タッチターゲット
 

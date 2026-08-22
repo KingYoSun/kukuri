@@ -18,6 +18,7 @@ Accepted
 
 ## Note
 - pairwise DM は channel / epoch lifecycle の対象外であり、global pairwise surface として `0020` の contract を優先する。
+- desktop shell の配置と state ownership は [`0031`](0031-variable-span-column-workspace.md) が本 ADR を部分的に置き換える。channel が topic 配下の scope であること、Join / Share、epoch lifecycle、auto distribution / auto apply、private channel の domain / transport contract は本 ADR を維持する。一方、常設 left rail、全画面で単一の active topic / channel、単一 primary workspace switch、Thread / Author 専用 detail pane stack は `0031` を優先する。
 
 ## Context
 - 現行 desktop shell では `channel` が `topic` の子である一方、UI 上は `Timeline / Channels / Live / Game / Profile` の並列 workspace として扱われていた。
