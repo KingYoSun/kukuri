@@ -68,6 +68,22 @@
     "release": "版本与更新",
     "settings": "设置"
   },
+  "columnMenu": {
+    "open": "打开 {{title}} 菜单",
+    "close": "关闭 {{title}} 菜单",
+    "actions": "{{title}} 操作",
+    "drag": "移动 {{title}} 栏目",
+    "moveLeft": "向左移动 {{title}}",
+    "moveRight": "向右移动 {{title}}",
+    "moved": "已将 {{title}} 移动到第 {{position}} 项，共 {{total}} 项。",
+    "pin": "固定 {{title}}",
+    "unpin": "取消固定 {{title}}",
+    "closeColumn": "关闭 {{title}}",
+    "span_one": "{{count}} span",
+    "span_other": "{{count}} span",
+    "spanChanged_one": "已将 {{title}} 更改为 {{count}} span。",
+    "spanChanged_other": "已将 {{title}} 更改为 {{count}} span。"
+  },
   "primarySections": {
     "explore": "发现",
     "game": "游戏",

@@ -38,6 +38,7 @@ import {
   activateColumn,
   closeColumn,
   columnIdentityId,
+  defaultColumnSpan,
   openPinnedColumn,
   setColumnPinned,
   type ColumnKind,
@@ -202,7 +203,7 @@ export function DesktopShellControlCenter({
       kind,
       scope,
       pinned: true,
-      preferredDesktopSpan: 1,
+      preferredDesktopSpan: defaultColumnSpan(kind),
     };
     setWorkspaceState((current) => ({
       ...openPinnedColumn(current, column),

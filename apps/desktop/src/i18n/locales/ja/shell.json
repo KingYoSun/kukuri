@@ -68,6 +68,22 @@
     "release": "リリースと更新",
     "settings": "設定"
   },
+  "columnMenu": {
+    "open": "{{title}} メニューを開く",
+    "close": "{{title}} メニューを閉じる",
+    "actions": "{{title}} の操作",
+    "drag": "{{title}} カラムを移動",
+    "moveLeft": "{{title}} を左へ移動",
+    "moveRight": "{{title}} を右へ移動",
+    "moved": "{{title}} を {{total}} 件中 {{position}} 番目へ移動しました。",
+    "pin": "{{title}} をピン留め",
+    "unpin": "{{title}} のピン留めを解除",
+    "closeColumn": "{{title}} を閉じる",
+    "span_one": "{{count}} span",
+    "span_other": "{{count}} span",
+    "spanChanged_one": "{{title}} を {{count}} span に変更しました。",
+    "spanChanged_other": "{{title}} を {{count}} span に変更しました。"
+  },
   "primarySections": {
     "explore": "見つける",
     "game": "ゲーム",

@@ -40,6 +40,10 @@ import {
   type WorkspaceSliceState,
   createInitialWorkspaceSlice,
 } from '@/shell/slices/workspace';
+import {
+  readWorkspaceLayout,
+  type WorkspaceStorage,
+} from '@/shell/workspacePersistence';
 
 export type AppProps = {
   api?: DesktopApi;
@@ -111,9 +115,18 @@ export function createInitialShellState(): DesktopShellState {
   };
 }
 
-export function createDesktopShellStore() {
+type CreateDesktopShellStoreOptions = {
+  workspaceStorage?: WorkspaceStorage;
+};
+
+export function createDesktopShellStore(options: CreateDesktopShellStoreOptions = {}) {
+  const initialState = createInitialShellState();
+  const workspaceState = options.workspaceStorage
+    ? readWorkspaceLayout(options.workspaceStorage, initialState.workspaceState)
+    : initialState.workspaceState;
   return createStore<DesktopShellStore>((set) => ({
-    ...createInitialShellState(),
+    ...initialState,
+    workspaceState,
     patchState: (patch) => set((current) => ({ ...current, ...patch })),
     resetState: () => set(createInitialShellState()),
     setField: (key, value) =>

@@ -13,6 +13,7 @@ const CSS_FILES = [
   'shell-phase1-part3.css',
   'shell-phase1-part4.css',
   'shell-scoped-overrides.css',
+  'column-span-workspace.css',
 ] as const;
 
 // Custom properties intentionally injected at runtime (inline style / JS) rather

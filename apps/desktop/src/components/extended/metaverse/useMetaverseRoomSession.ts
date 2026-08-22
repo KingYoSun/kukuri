@@ -38,6 +38,7 @@ type UseMetaverseRoomSessionArgs = {
   localDisplayName: string | null;
   localAvatarAssetRef: MetaverseAssetRef | null;
   localAvatarAssetUrl: string | null;
+  initialSelectedRoomId?: string | null;
   onError: (message: string | null) => void;
 };
 
@@ -88,10 +89,11 @@ export function useMetaverseRoomSession({
   localDisplayName,
   localAvatarAssetRef,
   localAvatarAssetUrl,
+  initialSelectedRoomId = null,
   onError,
 }: UseMetaverseRoomSessionArgs) {
   const { t } = useTranslation('metaverse', { lng: locale });
-  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(initialSelectedRoomId);
   const [joinedRoomIds, setJoinedRoomIds] = useState<Set<string>>(() => new Set());
   const [remoteTransforms, setRemoteTransforms] = useState<Record<string, AvatarTransform>>({});
   const [peerPresence, setPeerPresence] = useState<Record<string, PeerPresence>>({});

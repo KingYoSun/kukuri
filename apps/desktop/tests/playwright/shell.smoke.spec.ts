@@ -229,6 +229,58 @@ test('browser mock shell persists appearance theme changes across reloads', asyn
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 });
 
+test('desktop Columns use kind spans, keyboard reorder, drag reorder, and persisted layout', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
+
+  let controlCenter = await openControlCenter(page);
+  await controlCenter.getByRole('button', { name: 'Add Live Column' }).click();
+  const liveColumn = page.getByRole('region', { name: /^Live Column/ });
+  await expect(liveColumn).toHaveAttribute('data-span', '2');
+  expect(Math.round((await liveColumn.boundingBox())!.width)).toBe(896);
+  const wideStreamTracks = await liveColumn.locator('.shell-stream-layout').evaluate(
+    (element) => getComputedStyle(element).gridTemplateColumns
+  );
+  expect(wideStreamTracks.split(' ').length).toBeGreaterThan(1);
+
+  controlCenter = await openControlCenter(page);
+  await controlCenter.getByRole('button', { name: 'Add Metaverse Column' }).click();
+  let metaverseColumn = page.getByRole('region', { name: /^Metaverse Column/ });
+  await expect(metaverseColumn).toHaveAttribute('data-span', '3');
+  expect(Math.round((await metaverseColumn.boundingBox())!.width)).toBe(1352);
+
+  await metaverseColumn.getByRole('button', { name: 'Open Metaverse menu' }).click();
+  const menu = page.getByRole('menu', { name: 'Metaverse actions' });
+  await expect(menu).toBeVisible();
+  await menu.getByRole('menuitemradio', { name: '4 spans' }).click();
+  await expect(metaverseColumn).toHaveAttribute('data-span', '4');
+  expect(Math.round((await metaverseColumn.boundingBox())!.width)).toBe(1808);
+
+  await metaverseColumn.getByRole('button', { name: 'Open Metaverse menu' }).click();
+  await page.getByRole('menuitem', { name: 'Move Metaverse left' }).click();
+  await expect(metaverseColumn).toHaveAccessibleName(/Column 2 of 3/);
+
+  const canvas = page.locator('.shell-column-canvas');
+  await canvas.evaluate((element) => { element.scrollLeft = 0; });
+  const metaverseGrip = metaverseColumn.getByRole('button', {
+    name: 'Move Metaverse Column',
+  });
+  await metaverseGrip.dragTo(canvas, {
+    targetPosition: { x: 12, y: 160 },
+  });
+  await expect(metaverseColumn).toHaveAccessibleName(/Column 1 of 3/);
+  await expect(liveColumn).toHaveAccessibleName(/Column 3 of 3/);
+
+  await page.reload();
+  metaverseColumn = page.getByRole('region', { name: /^Metaverse Column/ });
+  await expect(page.getByRole('region', { name: /^Live Column/ })).toHaveAccessibleName(/Column 3 of 3/);
+  await expect(metaverseColumn).toHaveAttribute('data-span', '4');
+  await expect(metaverseColumn).toHaveAccessibleName(/Column 1 of 3/);
+  await expect(page).not.toHaveURL(/span|layout|column/i);
+});
+
 test('browser mock shell persists language changes across reloads', async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 980 });
   await page.goto('/');

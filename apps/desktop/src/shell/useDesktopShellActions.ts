@@ -796,7 +796,6 @@ export function useDesktopShellActions({
         entityId: threadId,
         parentColumnId: timelineColumnId,
         pinned: false,
-        preferredDesktopSpan: 1,
       })
     );
     setActiveTopic(topicId);

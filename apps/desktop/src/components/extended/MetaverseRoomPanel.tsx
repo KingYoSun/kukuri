@@ -32,6 +32,7 @@ type MetaverseRoomPanelProps = {
   localProfile?: Profile | null;
   knownAuthorsByPubkey?: Record<string, AuthorSocialView>;
   mediaObjectUrls?: Record<string, string | null>;
+  initialSelectedRoomId?: string | null;
 };
 
 export function MetaverseRoomPanel({
@@ -43,6 +44,7 @@ export function MetaverseRoomPanel({
   localProfile = null,
   knownAuthorsByPubkey = {},
   mediaObjectUrls = {},
+  initialSelectedRoomId = null,
 }: MetaverseRoomPanelProps) {
   const { t } = useTranslation('metaverse', { lng: locale });
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +62,7 @@ export function MetaverseRoomPanel({
     localDisplayName,
     localAvatarAssetRef,
     localAvatarAssetUrl,
+    initialSelectedRoomId,
     onError: setError,
   });
 

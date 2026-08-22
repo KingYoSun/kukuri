@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ColumnCanvas } from './ColumnCanvas';
+import { columnCanvasEdgeScrollDirection } from './columnCanvasGeometry';
 import { ColumnSurface } from './ColumnSurface';
 
 describe('ColumnCanvas', () => {
@@ -135,5 +136,156 @@ describe('ColumnCanvas', () => {
     await user.click(screen.getByRole('button', { name: 'Close Thread' }));
     expect(onPinnedChange).toHaveBeenCalledWith(true);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers keyboard reorder and allowed span choices from the Column menu', async () => {
+    const user = userEvent.setup();
+    const onMoveLeft = vi.fn();
+    const onMoveRight = vi.fn();
+    const onSpanChange = vi.fn();
+    render(
+      <ColumnCanvas activeColumnId='stream-1' onActivateColumn={() => undefined}>
+        <ColumnSurface
+          columnId='stream-1'
+          title='Stream'
+          scopeLabel='Public'
+          position={2}
+          total={3}
+          span={2}
+          spanOptions={[1, 2]}
+          active
+          pinned
+          onMoveLeft={onMoveLeft}
+          onMoveRight={onMoveRight}
+          onSpanChange={onSpanChange}
+        >
+          Stream body
+        </ColumnSurface>
+      </ColumnCanvas>
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Open Stream menu' }));
+    expect(screen.getByRole('menu', { name: 'Stream actions' })).toBeVisible();
+    expect(screen.getByRole('menuitemradio', { name: '1 span' })).not.toBeChecked();
+    expect(screen.getByRole('menuitemradio', { name: '2 spans' })).toBeChecked();
+
+    await user.click(screen.getByRole('menuitem', { name: 'Move Stream left' }));
+    expect(onMoveLeft).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole('button', { name: 'Open Stream menu' }));
+    await user.click(screen.getByRole('menuitemradio', { name: '1 span' }));
+    expect(onSpanChange).toHaveBeenCalledWith(1);
+    expect(onMoveRight).not.toHaveBeenCalled();
+  });
+
+  it('uses only the dedicated grip as a draggable target', () => {
+    render(
+      <ColumnCanvas activeColumnId='metaverse-1' onActivateColumn={() => undefined}>
+        <ColumnSurface
+          columnId='metaverse-1'
+          title='Metaverse'
+          scopeLabel='Room'
+          position={1}
+          total={1}
+          span={3}
+          active
+          pinned
+        >
+          <p>Selectable scene description</p>
+        </ColumnSurface>
+      </ColumnCanvas>
+    );
+
+    expect(screen.getByRole('button', { name: 'Move Metaverse Column' })).toHaveAttribute(
+      'draggable',
+      'true'
+    );
+    expect(screen.getByRole('region', { name: /Metaverse Column/ })).not.toHaveAttribute(
+      'draggable'
+    );
+    expect(screen.getByText('Selectable scene description')).not.toHaveAttribute('draggable');
+  });
+
+  it('moves the full Column to the drop index', () => {
+    const onMoveColumn = vi.fn();
+    const { container } = render(
+      <ColumnCanvas
+        activeColumnId='timeline'
+        onActivateColumn={() => undefined}
+        onMoveColumn={onMoveColumn}
+      >
+        {['timeline', 'stream', 'profile'].map((id, index) => (
+          <ColumnSurface
+            key={id}
+            columnId={id}
+            title={id}
+            scopeLabel='Public'
+            position={index + 1}
+            total={3}
+            span={id === 'stream' ? 2 : 1}
+            active={id === 'timeline'}
+            pinned
+          >
+            {id} body
+          </ColumnSurface>
+        ))}
+      </ColumnCanvas>
+    );
+    const canvas = container.querySelector('.shell-column-canvas') as HTMLElement;
+    const columns = Array.from(
+      container.querySelectorAll<HTMLElement>('[data-column-id]')
+    );
+    Object.defineProperty(canvas, 'getBoundingClientRect', {
+      value: () => ({ left: 0, right: 900, top: 0, bottom: 500, width: 900, height: 500 }),
+    });
+    columns.forEach((column, index) => {
+      Object.defineProperty(column, 'offsetLeft', { value: index * 300 });
+      Object.defineProperty(column, 'offsetWidth', { value: 280 });
+      Object.defineProperty(column, 'getBoundingClientRect', {
+        value: () => ({
+          left: index * 300,
+          right: index * 300 + 280,
+          top: 0,
+          bottom: 500,
+          width: 280,
+          height: 500,
+        }),
+      });
+    });
+    const dataTransfer = {
+      effectAllowed: '',
+      dropEffect: '',
+      setData: vi.fn(),
+      getData: vi.fn(() => 'stream'),
+      setDragImage: vi.fn(),
+    };
+
+    fireEvent.dragStart(screen.getByRole('button', { name: /Move stream Column/i }), {
+      dataTransfer,
+      clientX: 350,
+    });
+    fireEvent.dragOver(canvas, { dataTransfer, clientX: 850 });
+    expect(screen.getByRole('separator', { name: 'Drop Column at position 3' })).toBeVisible();
+    fireEvent.drop(canvas, { dataTransfer, clientX: 850 });
+
+    expect(onMoveColumn).toHaveBeenCalledWith('stream', 2);
+  });
+
+  it('starts edge auto-scroll only in a direction with remaining overflow', () => {
+    const base = {
+      left: 0,
+      right: 500,
+      scrollLeft: 100,
+      clientWidth: 500,
+      scrollWidth: 1000,
+    };
+    expect(columnCanvasEdgeScrollDirection({ ...base, clientX: 20 })).toBe(-1);
+    expect(columnCanvasEdgeScrollDirection({ ...base, clientX: 490 })).toBe(1);
+    expect(columnCanvasEdgeScrollDirection({ ...base, clientX: 250 })).toBe(0);
+    expect(
+      columnCanvasEdgeScrollDirection({ ...base, clientX: 20, scrollLeft: 0 })
+    ).toBe(0);
+    expect(
+      columnCanvasEdgeScrollDirection({ ...base, clientX: 490, scrollLeft: 500 })
+    ).toBe(0);
   });
 });

@@ -94,11 +94,13 @@ function renderSession({
   rooms = [room],
   sync = syncStatus(),
   onRefresh = vi.fn().mockResolvedValue(undefined),
+  initialSelectedRoomId,
 }: {
   api?: DesktopApi;
   rooms?: GameRoomView[];
   sync?: SyncStatus;
   onRefresh?: () => Promise<void>;
+  initialSelectedRoomId?: string | null;
 } = {}) {
   const onError = vi.fn();
   const actions = createMetaverseRoomActions({
@@ -118,6 +120,7 @@ function renderSession({
         localDisplayName: 'Local Author',
         localAvatarAssetRef: null,
         localAvatarAssetUrl: null,
+        initialSelectedRoomId,
         onError,
       }),
     { initialProps: { rooms, sync } }
@@ -140,6 +143,12 @@ afterEach(() => {
 });
 
 describe('useMetaverseRoomSession', () => {
+  test('opens the room addressed by the column entity on first render', () => {
+    const session = renderSession({ initialSelectedRoomId: room.room_id });
+
+    expect(session.result.current.selectedRoom?.room_id).toBe(room.room_id);
+  });
+
   test('clears a missing selected room but preserves a pending created-room selection', async () => {
     const session = renderSession();
     act(() => session.result.current.joinRoom(room.room_id));

@@ -3,11 +3,15 @@ import { describe, expect, it } from 'vitest';
 import {
   activateColumn,
   closeColumn,
+  columnSpanPolicy,
   columnIdentityId,
   createInitialWorkspaceState,
+  defaultColumnSpan,
   INITIAL_TIMELINE_COLUMN_ID,
+  moveColumn,
   openTransientColumn,
   openPinnedColumn,
+  setColumnSpan,
   setColumnPinned,
   type ColumnState,
 } from '@/shell/slices/workspace';
@@ -25,6 +29,22 @@ function transientColumn(overrides: Partial<ColumnState> = {}): ColumnState {
 }
 
 describe('workspace state transitions', () => {
+  it.each([
+    ['timeline', 1, 1, 1],
+    ['notifications', 1, 1, 1],
+    ['thread', 1, 1, 1],
+    ['profile', 1, 1, 1],
+    ['explore', 1, 1, 1],
+    ['messages', 1, 1, 2],
+    ['conversation', 1, 1, 2],
+    ['stream', 2, 1, 2],
+    ['game', 1, 1, 1],
+    ['metaverse', 3, 1, 4],
+  ] as const)('defines %s span policy', (kind, defaultSpan, min, max) => {
+    expect(columnSpanPolicy(kind)).toEqual({ default: defaultSpan, min, max });
+    expect(defaultColumnSpan(kind)).toBe(defaultSpan);
+  });
+
   it('starts with one active Timeline Column', () => {
     const state = createInitialWorkspaceState({
       topicId: 'kukuri:topic:demo',
@@ -139,6 +159,67 @@ describe('workspace state transitions', () => {
     ]);
     expect(next.columns.at(-1)?.pinned).toBe(true);
     expect(next.activeColumnId).toBe('explore-demo');
+  });
+
+  it('applies the kind default when a new Column omits its preferred span', () => {
+    const initial = createInitialWorkspaceState();
+    const next = openPinnedColumn(initial, {
+      id: 'stream-demo',
+      kind: 'stream',
+      pinned: true,
+    });
+
+    expect(next.columns.at(-1)?.preferredDesktopSpan).toBe(2);
+  });
+
+  it('clamps span changes without touching Column identity or relationships', () => {
+    const initial = createInitialWorkspaceState();
+    const withMetaverse = openPinnedColumn(initial, {
+      id: 'metaverse-demo',
+      kind: 'metaverse',
+      parentColumnId: INITIAL_TIMELINE_COLUMN_ID,
+      pinned: true,
+    });
+    const expanded = setColumnSpan(withMetaverse, 'metaverse-demo', 4);
+    const clampedTimeline = setColumnSpan(expanded, INITIAL_TIMELINE_COLUMN_ID, 4);
+
+    expect(expanded.columns.at(-1)).toMatchObject({
+      id: 'metaverse-demo',
+      parentColumnId: INITIAL_TIMELINE_COLUMN_ID,
+      preferredDesktopSpan: 4,
+    });
+    expect(clampedTimeline.columns[0].preferredDesktopSpan).toBe(1);
+    expect(setColumnSpan(clampedTimeline, 'missing', 2)).toBe(clampedTimeline);
+  });
+
+  it('moves a multi-span Column atomically and preserves product state', () => {
+    let state = createInitialWorkspaceState();
+    state = openPinnedColumn(state, {
+      id: 'stream-demo',
+      kind: 'stream',
+      scope: { topicId: 'kukuri:topic:stream', channelId: null },
+      entityId: 'session-1',
+      parentColumnId: INITIAL_TIMELINE_COLUMN_ID,
+      pinned: true,
+    });
+    state = openPinnedColumn(state, {
+      id: 'profile-demo',
+      kind: 'profile',
+      entityId: 'alice',
+      pinned: true,
+    });
+    const streamBefore = state.columns[1];
+    const moved = moveColumn(state, 'stream-demo', 0);
+
+    expect(moved.columns.map((column) => column.id)).toEqual([
+      'stream-demo',
+      INITIAL_TIMELINE_COLUMN_ID,
+      'profile-demo',
+    ]);
+    expect(moved.columns[0]).toEqual(streamBefore);
+    expect(moved.activeColumnId).toBe('profile-demo');
+    expect(moveColumn(moved, 'stream-demo', 0)).toBe(moved);
+    expect(moveColumn(moved, 'missing', 1)).toBe(moved);
   });
 
   it('inserts a new child immediately to the right of its parent', () => {

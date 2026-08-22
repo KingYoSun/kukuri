@@ -15,7 +15,10 @@ import type { ColumnDraftTarget } from '@/shell/slices/columnDrafts';
 import {
   activateColumn,
   closeColumn,
+  columnSpanPolicy,
+  moveColumn,
   setColumnPinned,
+  setColumnSpan,
   type ColumnKind,
   type ColumnState,
 } from '@/shell/slices/workspace';
@@ -206,7 +209,13 @@ export function DesktopShellColumnWorkspace({
   };
 
   return (
-    <ColumnCanvas activeColumnId={workspaceState.activeColumnId} onActivateColumn={activate}>
+    <ColumnCanvas
+      activeColumnId={workspaceState.activeColumnId}
+      onActivateColumn={activate}
+      onMoveColumn={(columnId, targetIndex) =>
+        setWorkspaceState((current) => moveColumn(current, columnId, targetIndex))
+      }
+    >
       {workspaceState.columns.map((column, index) => (
         <ColumnSurface
           key={column.id}
@@ -216,6 +225,13 @@ export function DesktopShellColumnWorkspace({
           position={index + 1}
           total={workspaceState.columns.length}
           span={column.preferredDesktopSpan}
+          spanOptions={(() => {
+            const policy = columnSpanPolicy(column.kind);
+            return Array.from(
+              { length: policy.max - policy.min + 1 },
+              (_, optionIndex) => (policy.min + optionIndex) as 1 | 2 | 3 | 4
+            );
+          })()}
           active={workspaceState.activeColumnId === column.id}
           pinned={column.pinned}
           footer={renderFooter(column, workspaceState.activeColumnId === column.id)}
@@ -230,6 +246,19 @@ export function DesktopShellColumnWorkspace({
           }
           onPinnedChange={(pinned) =>
             setWorkspaceState((current) => setColumnPinned(current, column.id, pinned))
+          }
+          onMoveLeft={
+            index > 0
+              ? () => setWorkspaceState((current) => moveColumn(current, column.id, index - 1))
+              : undefined
+          }
+          onMoveRight={
+            index < workspaceState.columns.length - 1
+              ? () => setWorkspaceState((current) => moveColumn(current, column.id, index + 1))
+              : undefined
+          }
+          onSpanChange={(span) =>
+            setWorkspaceState((current) => setColumnSpan(current, column.id, span))
           }
           onClose={workspaceState.columns.length > 1 ? () => close(column.id) : undefined}
         >

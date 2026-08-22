@@ -98,7 +98,6 @@ export function useDesktopShellColumnSynchronization(activeGameRooms: GameRoomVi
           kind: 'timeline',
           scope,
           pinned: false,
-          preferredDesktopSpan: 1,
         });
       };
       if (selectedAuthorPubkey && selectedDirectMessagePeerPubkey) {
@@ -108,7 +107,6 @@ export function useDesktopShellColumnSynchronization(activeGameRooms: GameRoomVi
           kind: 'messages',
           scope,
           pinned: false,
-          preferredDesktopSpan: 1,
         });
         const conversationId = columnIdentityId(
           'conversation',
@@ -122,7 +120,6 @@ export function useDesktopShellColumnSynchronization(activeGameRooms: GameRoomVi
           entityId: selectedDirectMessagePeerPubkey,
           parentColumnId: messagesId,
           pinned: false,
-          preferredDesktopSpan: 1,
         });
         return openTransientColumn(next, {
           id: columnIdentityId('profile', scope, selectedAuthorPubkey),
@@ -131,7 +128,6 @@ export function useDesktopShellColumnSynchronization(activeGameRooms: GameRoomVi
           entityId: selectedAuthorPubkey,
           parentColumnId: conversationId,
           pinned: false,
-          preferredDesktopSpan: 1,
         });
       }
       if (selectedAuthorPubkey && selectedThread) {
@@ -144,7 +140,6 @@ export function useDesktopShellColumnSynchronization(activeGameRooms: GameRoomVi
           entityId: selectedThread,
           parentColumnId: timelineId,
           pinned: false,
-          preferredDesktopSpan: 1,
         });
         next = openTransientColumn(next, {
           id: columnIdentityId('profile', scope, selectedAuthorPubkey),
@@ -153,7 +148,6 @@ export function useDesktopShellColumnSynchronization(activeGameRooms: GameRoomVi
           entityId: selectedAuthorPubkey,
           parentColumnId: threadId,
           pinned: false,
-          preferredDesktopSpan: 1,
         });
         return next;
       }
@@ -172,7 +166,6 @@ export function useDesktopShellColumnSynchronization(activeGameRooms: GameRoomVi
         entityId,
         parentColumnId,
         pinned: false,
-        preferredDesktopSpan: 1,
       });
     });
   }, [

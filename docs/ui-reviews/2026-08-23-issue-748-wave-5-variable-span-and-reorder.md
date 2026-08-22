@@ -1,0 +1,23 @@
+# 2026-08-23 Issue #748 production Columns Wave 5
+
+- Preview: [1 / 2 / 3 span production workspace](assets/2026-08-23-issue-748-wave-5/variable-span-production.png) / [4 span Metaverse production workspace](assets/2026-08-23-issue-748-wave-5/metaverse-four-span-production.png)
+- Storybook review surfaces: `Review/ProductionColumnWorkspace/VariableSpanWideSurfaces` と `Review/ProductionColumnWorkspace/MetaverseFourSpan`。production `DesktopShellPage`にTimeline、配信中のLive session、Metaverse roomをseedし、実際のStream / Metaverse surfaceを表示する。
+- Summary: desktop Columnを1 span = 440px、gap = 16pxとして、1 / 2 / 3 / 4 spanを440 / 896 / 1352 / 1808pxに統一した。Timeline等は1固定、Messages / Conversationは1〜2、Streamは既定2、Metaverseは既定3・最大4とする。
+- Container response: Streamは2 spanでsession cardを2 track、狭幅では1 trackにする。Metaverseは68rem以上でHUDをscene右側へ分離し、それ未満ではscene上の全幅panelへ戻す。Column自体はviewportより広くならず、Column Canvasだけが横scrollを所有する。
+- Direct room surface: Metaverse Columnの`entityId`を初期選択roomとして使い、deep linkで指定されたroomのscene / HUD / ROOM Chatを発見cardと同じColumn内に表示する。
+- Reorder: header先頭の専用gripだけをdrag sourceにする。drag中はColumn全体をghostにし、挿入位置をindicatorで示してdrop時に1回だけ順序を更新する。左右端で自動scrollし、`prefers-reduced-motion`では即時scrollへ切り替える。
+- Keyboard / menu: header末尾のmenuから左へ移動、右へ移動、対応spanの選択、pin / unpin、closeを操作できる。ArrowUp / ArrowDownで項目移動、Escape / outside clickで閉じ、close後はtriggerへfocusを戻す。移動・span変更はlive regionでも通知する。
+- Persistence: `kukuri:workspace-layout:v1`へversion付きでColumnの順序、kind、scope、entity、pin、span、active Columnを保存する。control center、active layout mode、transient UI、URLにはspan / orderを保存しない。decode時はunknown kind、duplicate id、dangling parent、範囲外spanを検証し、破損時は安全な初期layoutへ戻す。
+- Navigation precedence: URL / deep linkは対象objectとtopicのnavigationを担い、保存layoutはworkspace chromeを担う。明示navigationで既存Columnを再利用しても、ユーザーが選んだspanは維持する。
+- Responsive review: 760 / 1024 / 1280 / 1440 / 1920pxでproduction storyを確認した。全幅でdocument overflowは発生せず、Column Canvas内だけが横scrollする。Metaverse 4 spanは順にviewportへclampされ、1920pxで1808px、HUDは1024px以上で288pxのside panel、760pxで全幅fallbackになった。
+- Shneiderman 1 — consistency: span token、grip、menu、drop indicatorを全Columnで共通化した。
+- Shneiderman 2 — universal usability: pointer dragと同じ順序・span操作をkeyboard menuから実行でき、reduced motionにも対応した。
+- Shneiderman 3 — informative feedback: ghost、drop indicator、active / pinned badge、live announcementで操作結果を即時提示する。
+- Shneiderman 4 — closure: dropまたはmenu actionの1回でatomicにstateを更新し、menu close後はtriggerへfocusを戻す。
+- Shneiderman 5 — error prevention: drag開始をgripに限定し、無効な移動方向と固定spanをmenuから除外し、復元値をpolicyへclampする。
+- Shneiderman 6 — easy reversal: 左右移動、span、pinは同じmenuから逆操作でき、誤った保存値は初期layoutへ戻せる。
+- Shneiderman 7 — internal locus of control: navigationはユーザー指定spanを上書きせず、layout stateはURLへ漏らさない。
+- Shneiderman 8 — reduced memory load: menuに現在spanをradio stateで示し、対象Column名を各accessible labelへ含める。
+- Review result: 1920×1080のproduction storyで1 / 2 / 3 / 4 spanの実寸、Stream 2-track、Metaverse sceneのside HUDを確認した。760〜1920pxの5段階ではdocument overflowなし、Canvas内overflow、side / full-width HUD切替を確認した。menu、keyboard reorder、drag reorder、reload復元、URL非依存はChromium E2Eで確認した。
+- Exceptions: mobile Column paging / switcher、immersive lifecycle、restart後のdraft / active game state復元はWave 6以降へ残す。
+- Validation: production Storybook実画面review、`cargo xtask desktop-ui-check`（frontend lint / typecheck、Vitest 90 files / 772 tests、Storybook build、Chromium E2E 17件、visual smoke 14件）、`cargo xtask check`、`cargo xtask test`（workspace 584件成功 / 3件skip、harness 18件、frontend 772件）、`cargo xtask oversized-files`、`git diff --check`を完了した。`oversized-files`の警告3件は既存Rustファイルで、Wave 5 CSSは専用fileへ分離して新規超過を解消した。リポジトリCIはPR記録を一次記録とする。
