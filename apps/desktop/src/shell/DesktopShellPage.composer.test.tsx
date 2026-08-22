@@ -57,13 +57,12 @@ test('desktop shell can enter reply mode and render reply state', async () => {
   });
 
   await user.click(screen.getAllByRole('button', { name: 'Reply' })[0]);
-  const replyDialog = await screen.findByRole('dialog', { name: 'Reply' });
-  expect(within(replyDialog).getByPlaceholderText('Write a reply')).toBeInTheDocument();
-  expect(within(replyDialog).getByText('Replying')).toBeInTheDocument();
-  expect(within(replyDialog).getByText('Original post')).toBeInTheDocument();
-  expect(within(replyDialog).getByText('root post')).toBeInTheDocument();
+  const replyColumn = await screen.findByRole('region', { name: /Thread Column/ });
+  expect(within(replyColumn).getByPlaceholderText('Write a reply')).toBeInTheDocument();
+  expect(within(replyColumn).getByText('Replying')).toBeInTheDocument();
+  expect(within(replyColumn).getAllByText('root post').length).toBeGreaterThan(0);
 
-  const replyInput = within(replyDialog).getByPlaceholderText('Write a reply');
+  const replyInput = within(replyColumn).getByPlaceholderText('Write a reply');
   await user.type(replyInput, 'reply post');
   const composer = replyInput.closest('form');
   if (!composer) {
@@ -97,10 +96,9 @@ test('compose dialog stays width-safe when the source post contains a long token
   });
 
   await user.click(screen.getAllByRole('button', { name: 'Reply' })[0]);
-  const replyDialog = await screen.findByRole('dialog', { name: 'Reply' });
+  const replyColumn = await screen.findByRole('region', { name: /Thread Column/ });
 
-  expect(replyDialog).toHaveClass('shell-compose-dialog');
-  expect(within(replyDialog).getAllByText(longContent)[0]).toHaveClass('post-copy-wrap');
+  expect(within(replyColumn).getAllByText(longContent)[0]).toHaveClass('post-copy-wrap');
 });
 
 test('reply publish reloads thread only once after a successful submit', async () => {
@@ -120,10 +118,10 @@ test('reply publish reloads thread only once after a successful submit', async (
   });
 
   await user.click(screen.getAllByRole('button', { name: 'Reply' })[0]);
-  const replyDialog = await screen.findByRole('dialog', { name: 'Reply' });
+  const replyColumn = await screen.findByRole('region', { name: /Thread Column/ });
   const threadCallsBeforeSubmit = listThreadSpy.mock.calls.length;
 
-  const replyInput = within(replyDialog).getByPlaceholderText('Write a reply');
+  const replyInput = within(replyColumn).getByPlaceholderText('Write a reply');
   await user.type(replyInput, 'reply post');
   const composer = replyInput.closest('form');
   if (!composer) {

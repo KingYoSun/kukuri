@@ -6,6 +6,10 @@ import { type DesktopApi } from '@/lib/api';
 import type { DesktopTheme } from '@/lib/theme';
 import { type ChromeSliceState, createInitialChromeSlice } from '@/shell/slices/chrome';
 import {
+  type ColumnDraftsSliceState,
+  createInitialColumnDraftsSlice,
+} from '@/shell/slices/columnDrafts';
+import {
   type ConnectivitySliceState,
   createInitialConnectivitySlice,
 } from '@/shell/slices/connectivity';
@@ -54,6 +58,7 @@ export type DesktopShellState = TimelineSliceState &
   DirectMessagesSliceState &
   LiveGameSliceState &
   ChromeSliceState &
+  ColumnDraftsSliceState &
   WorkspaceSliceState;
 
 export type DesktopShellStateValue<K extends keyof DesktopShellState> =
@@ -98,6 +103,7 @@ export function createInitialShellState(): DesktopShellState {
     ...createInitialDirectMessagesSlice(),
     ...createInitialLiveGameSlice(),
     ...createInitialChromeSlice(),
+    ...createInitialColumnDraftsSlice(),
     ...createInitialWorkspaceSlice({
       topicId: timeline.activeTopic,
       channelId: privateChannels.selectedChannelIdByTopic[timeline.activeTopic] ?? null,

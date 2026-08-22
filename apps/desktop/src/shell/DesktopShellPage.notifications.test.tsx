@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
@@ -272,7 +272,9 @@ test('direct message notification click-through opens the messages pane', async 
   await waitFor(() => {
     expect(window.location.hash).toContain('#/messages?topic=kukuri%3Atopic%3Ademo&peerPubkey=');
   });
-  expect(screen.getByPlaceholderText('Write a message')).toBeInTheDocument();
+  const conversationColumn = await screen.findByRole('region', { name: /Conversation Column/ });
+  await user.click(within(conversationColumn).getByRole('button', { name: /Message to / }));
+  expect(within(conversationColumn).getByPlaceholderText('Write a message')).toBeInTheDocument();
 });
 
 test('follow notification click-through opens the author pane from timeline', async () => {

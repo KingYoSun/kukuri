@@ -5,6 +5,7 @@ import type {
   DirectMessageConversationView,
   DirectMessageMessageView,
 } from '@/lib/api';
+import type { DraftMediaItem } from '@/shell/slices/shared';
 
 import { updateRecordEntry } from '@/shell/stateUpdates';
 import type { DesktopShellState } from '@/shell/store';
@@ -50,19 +51,17 @@ export function createDirectMessageActions({
   setDirectMessageError,
   setDirectMessageSending,
 }: DirectMessagesParams) {
-  async function handleSendDirectMessage(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function sendDirectMessageDraft(
+    peerPubkey: string,
+    composerValue: string,
+    draftMediaItems: DraftMediaItem[],
+    onSuccess: () => void
+  ) {
     const currentState = getState();
-    const peerPubkey = currentState.selectedDirectMessagePeerPubkey;
-    if (!peerPubkey) {
-      return;
-    }
-    const composerField = event.currentTarget.querySelector('textarea');
-    const composerValue = composerField?.value ?? currentState.directMessageComposer;
     const trimmedComposer = composerValue.trim();
-    const attachments = currentState.directMessageDraftMediaItems.flatMap((item) => item.attachments);
+    const attachments = draftMediaItems.flatMap((item) => item.attachments);
     if (!trimmedComposer && attachments.length === 0) {
-      return;
+      return false;
     }
     setDirectMessageSending(true);
     try {
@@ -135,22 +134,50 @@ export function createDirectMessageActions({
         const remaining = current.filter((conversation) => conversation.peer_pubkey !== peerPubkey);
         return [optimisticConversation, ...remaining];
       });
-      releaseAllDirectMessageDraftPreviews();
-      setDirectMessageComposer('');
-      setDirectMessageDraftMediaItems([]);
-      setDirectMessageAttachmentInputKey((value) => value + 1);
+      onSuccess();
       setDirectMessageError(null);
-      await openDirectMessagePane(peerPubkey, { historyMode: 'replace' });
     } catch (sendError) {
       setDirectMessageError(
         messageFromError(sendError, translate('common:errors.failedToSendDirectMessage'))
       );
+      return false;
     } finally {
       setDirectMessageSending(false);
     }
+    try {
+      await openDirectMessagePane(peerPubkey, { historyMode: 'replace' });
+    } catch (refreshError) {
+      setDirectMessageError(
+        messageFromError(refreshError, translate('common:errors.failedToOpenDirectMessage'))
+      );
+    }
+    return true;
+  }
+
+  async function handleSendDirectMessage(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    const currentState = getState();
+    const peerPubkey = currentState.selectedDirectMessagePeerPubkey;
+    if (!peerPubkey) {
+      return;
+    }
+    const composerField = event.currentTarget.querySelector('textarea');
+    const composerValue = composerField?.value ?? currentState.directMessageComposer;
+    await sendDirectMessageDraft(
+      peerPubkey,
+      composerValue,
+      currentState.directMessageDraftMediaItems,
+      () => {
+        releaseAllDirectMessageDraftPreviews();
+        setDirectMessageComposer('');
+        setDirectMessageDraftMediaItems([]);
+        setDirectMessageAttachmentInputKey((value) => value + 1);
+      }
+    );
   }
 
   return {
     handleSendDirectMessage,
+    sendDirectMessageDraft,
   };
 }

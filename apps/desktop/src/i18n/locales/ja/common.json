@@ -31,6 +31,7 @@
     "reset": "リセット",
     "rotate": "ローテーション",
     "save": "保存",
+    "send": "送信",
     "unmute": "ミュート解除",
     "unfollow": "フォロー解除",
     "zoom": "拡大率",
@@ -45,6 +46,7 @@
     "mentionSuggestionsLabel": "メンション候補",
     "sourcePost": "元投稿",
     "writePost": "投稿を書く",
+    "writeMessage": "メッセージを書く",
     "writeQuoteRepost": "引用リポストを書く",
     "writeReply": "返信を書く"
   },

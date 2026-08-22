@@ -566,6 +566,38 @@
   background: var(--surface-panel-accent);
 }
 
+.shell-phase1 .shell-column-primary-action {
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+}
+
+.shell-phase1 .shell-column-composer {
+  width: 100%;
+  max-height: min(32rem, 68vh);
+  overflow: auto;
+}
+
+.shell-phase1 .shell-column-composer-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-xs);
+}
+
+.shell-phase1 .composer-target-summary {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2xs);
+}
+
+.shell-phase1 .shell-column-composer .composer {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 @media (max-width: 759px) {
   .shell-phase1 .shell-column-canvas {
     height: calc(100vh - 5rem);

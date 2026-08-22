@@ -6,9 +6,7 @@ import { useDesktopShellFieldSetter, useDesktopShellStore } from '@/shell/store'
 import {
   activateColumn,
   columnIdentityId,
-  INITIAL_TIMELINE_COLUMN_ID,
   openTransientColumn,
-  updateColumnScope,
   type ColumnKind,
 } from '@/shell/slices/workspace';
 
@@ -92,6 +90,17 @@ export function useDesktopShellColumnSynchronization(activeGameRooms: GameRoomVi
     }
 
     setWorkspaceState((current) => {
+      const timelineId = columnIdentityId('timeline', scope);
+      const ensureTimelineColumn = (state: typeof current) => {
+        if (state.columns.some((column) => column.id === timelineId)) return state;
+        return openTransientColumn(state, {
+          id: timelineId,
+          kind: 'timeline',
+          scope,
+          pinned: false,
+          preferredDesktopSpan: 1,
+        });
+      };
       if (selectedAuthorPubkey && selectedDirectMessagePeerPubkey) {
         const messagesId = columnIdentityId('messages', scope);
         let next = openTransientColumn(current, {
@@ -127,12 +136,13 @@ export function useDesktopShellColumnSynchronization(activeGameRooms: GameRoomVi
       }
       if (selectedAuthorPubkey && selectedThread) {
         const threadId = columnIdentityId('thread', scope, selectedThread);
-        let next = openTransientColumn(current, {
+        let next = ensureTimelineColumn(current);
+        next = openTransientColumn(next, {
           id: threadId,
           kind: 'thread',
           scope,
           entityId: selectedThread,
-          parentColumnId: INITIAL_TIMELINE_COLUMN_ID,
+          parentColumnId: timelineId,
           pinned: false,
           preferredDesktopSpan: 1,
         });
@@ -148,18 +158,19 @@ export function useDesktopShellColumnSynchronization(activeGameRooms: GameRoomVi
         return next;
       }
       if (kind === 'timeline') {
-        return activateColumn(
-          updateColumnScope(current, INITIAL_TIMELINE_COLUMN_ID, scope),
-          INITIAL_TIMELINE_COLUMN_ID
-        );
+        const next = ensureTimelineColumn(current);
+        return activateColumn(next, timelineId);
       }
       const id = columnIdentityId(kind, scope, entityId);
-      return openTransientColumn(current, {
+      const parentColumnId =
+        kind === 'thread' ? timelineId : childColumn ? current.activeColumnId : undefined;
+      const base = kind === 'thread' ? ensureTimelineColumn(current) : current;
+      return openTransientColumn(base, {
         id,
         kind,
         scope,
         entityId,
-        parentColumnId: childColumn ? current.activeColumnId : undefined,
+        parentColumnId,
         pinned: false,
         preferredDesktopSpan: 1,
       });

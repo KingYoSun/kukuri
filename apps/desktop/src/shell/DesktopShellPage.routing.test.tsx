@@ -34,7 +34,7 @@ test.each([
   {
     path: '#/live',
     workspaceLabel: 'Live',
-    expectedControl: () => screen.getByRole('button', { name: 'Start Live' }),
+    expectedControl: () => screen.getAllByRole('button', { name: 'Start Live' })[0],
   },
   {
     path: '#/game',

@@ -27,6 +27,7 @@ import type {
 } from '@/lib/api';
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import type { DesktopShellState, DraftMediaItem } from '@/shell/store';
+import { columnDraftKey, setColumnDraft } from '@/shell/slices/columnDrafts';
 import { useDesktopShellActions } from '@/shell/useDesktopShellActions';
 import {
   createShellHookHarness,
@@ -384,6 +385,7 @@ describe('useDesktopShellActions', () => {
     expect(view.mocks.refreshVisibleTimelineAfterPublish).toHaveBeenCalledTimes(1);
     expect(view.mocks.refreshVisibleTimelineAfterPublish).toHaveBeenCalledWith(
       'kukuri:topic:demo',
+      null,
       null
     );
 
@@ -775,5 +777,130 @@ describe('useDesktopShellActions', () => {
     );
 
     view.unmount();
+  });
+
+  test('Column post sends to its own private scope and clears only that Draft', async () => {
+    const createPost = vi.fn(async () => 'private-post-1');
+    const privateTarget = {
+      columnId: 'timeline-private',
+      action: 'post' as const,
+      scope: { topicId: 'topic-a', channelId: 'friends' },
+    };
+    const publicTarget = {
+      columnId: 'timeline-public',
+      action: 'post' as const,
+      scope: { topicId: 'topic-a', channelId: null },
+    };
+    const view = renderActionsHook({
+      api: { createPost },
+      preset: (current) => ({
+        columnDraftsByKey: setColumnDraft(
+          setColumnDraft(current.columnDraftsByKey, privateTarget, (draft) => ({
+            ...draft,
+            content: 'private hello',
+            expanded: true,
+          })),
+          publicTarget,
+          (draft) => ({ ...draft, content: 'public remains' })
+        ),
+      }),
+    });
+
+    await act(async () => {
+      await view.result.current.handleSubmitColumnDraft(
+        privateTarget,
+        publishFormEvent().event
+      );
+    });
+
+    expect(createPost).toHaveBeenCalledWith(
+      'topic-a',
+      'private hello',
+      null,
+      [],
+      { kind: 'private_channel', channel_id: 'friends' }
+    );
+    const state = view.store.getState();
+    expect(state.columnDraftsByKey[columnDraftKey(privateTarget)]).toBeUndefined();
+    expect(state.columnDraftsByKey[columnDraftKey(publicTarget)]?.content).toBe('public remains');
+    expect(state.timelinesByKey['topic-a::channel::friends']?.[0]).toMatchObject({
+      content: 'private hello',
+      channel_id: 'friends',
+      local_state: 'syncing',
+    });
+    expect(view.mocks.refreshVisibleTimelineAfterPublish).toHaveBeenCalledWith(
+      'topic-a',
+      null,
+      'friends'
+    );
+  });
+
+  test('Column message uses its peer Draft without clearing another conversation Draft', async () => {
+    const sendDirectMessage = vi.fn(async () => 'message-1');
+    const peerTarget = {
+      columnId: 'conversation-peer-a',
+      action: 'message' as const,
+      peerPubkey: AUTHOR_A_PUBKEY,
+    };
+    const otherTarget = {
+      columnId: 'conversation-peer-b',
+      action: 'message' as const,
+      peerPubkey: 'b'.repeat(64),
+    };
+    const view = renderActionsHook({
+      api: { sendDirectMessage },
+      preset: (current) => ({
+        columnDraftsByKey: setColumnDraft(
+          setColumnDraft(current.columnDraftsByKey, peerTarget, (draft) => ({
+            ...draft,
+            content: 'hello peer',
+            expanded: true,
+          })),
+          otherTarget,
+          (draft) => ({ ...draft, content: 'keep this' })
+        ),
+      }),
+    });
+
+    await act(async () => {
+      await view.result.current.handleSubmitColumnDraft(peerTarget, publishFormEvent().event);
+    });
+
+    expect(sendDirectMessage).toHaveBeenCalledWith(AUTHOR_A_PUBKEY, 'hello peer', [], null);
+    const state = view.store.getState();
+    expect(state.columnDraftsByKey[columnDraftKey(peerTarget)]).toBeUndefined();
+    expect(state.columnDraftsByKey[columnDraftKey(otherTarget)]?.content).toBe('keep this');
+    expect(state.directMessageTimelineByPeer[AUTHOR_A_PUBKEY]?.[0]).toMatchObject({
+      message_id: 'message-1',
+      text: 'hello peer',
+    });
+  });
+
+  test('failed Column post keeps the addressed Draft with its error', async () => {
+    const target = {
+      columnId: 'timeline-b',
+      action: 'post' as const,
+      scope: { topicId: 'topic-b', channelId: null },
+    };
+    const view = renderActionsHook({
+      api: { createPost: vi.fn(async () => Promise.reject(new Error('offline'))) },
+      preset: (current) => ({
+        columnDraftsByKey: setColumnDraft(current.columnDraftsByKey, target, (draft) => ({
+          ...draft,
+          content: 'retry me',
+          expanded: true,
+        })),
+      }),
+    });
+
+    await act(async () => {
+      await view.result.current.handleSubmitColumnDraft(target, publishFormEvent().event);
+    });
+
+    expect(view.store.getState().columnDraftsByKey[columnDraftKey(target)]).toMatchObject({
+      content: 'retry me',
+      pending: false,
+      error: 'offline',
+    });
   });
 });

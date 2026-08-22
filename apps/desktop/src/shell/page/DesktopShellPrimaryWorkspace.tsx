@@ -14,7 +14,7 @@ import { Card } from '@/components/ui/card';
 import { Notice } from '@/components/ui/notice';
 import { SmartReferenceText } from '@/components/core/SmartReferenceText';
 import type { PrimarySection, ProfileConnectionsView } from '@/components/shell/types';
-import type { ColumnKind } from '@/shell/slices/workspace';
+import type { ColumnKind, ColumnScope } from '@/shell/slices/workspace';
 
 import type {
   DesktopApi,
@@ -28,7 +28,7 @@ import { copyTextToClipboard } from '@/lib/utils';
 import { eligibleCommunityIndexNodes } from '@/lib/api/communityIndex';
 import type { SubmitCommunityNodeReportRequest } from '@/lib/api';
 import {
-  timelineScopeStorageKey,
+  timelineStorageKeyForChannel,
   type GameEditorDraft,
   useDesktopShellFieldSetter,
   useDesktopShellStore,
@@ -36,7 +36,9 @@ import {
 import {
   authorDisplayLabel,
   formatCount,
+  createGameEditorDraft,
   localizeAudienceLabel,
+  privateTimelineScope,
   resolveProfilePictureSrc,
   translateLiveStatus,
 } from '@/shell/presentation';
@@ -54,6 +56,7 @@ export type DesktopShellPrimarySurfaceProps = {
   routeSection: PrimarySection;
   surfaceSection?: PrimarySection;
   surfaceColumnKind?: ColumnKind;
+  surfaceScope?: ColumnScope;
   profileAvatarInputKey: number;
   messagesWorkspace: ReactNode;
   notificationsWorkspace: ReactNode;
@@ -67,6 +70,7 @@ export type DesktopShellPrimarySurfaceProps = {
     | 'activeTimelinePostViews'
     | 'activeTimelineScope'
     | 'bookmarkedTimelinePostViews'
+    | 'buildPostCardView'
     | 'composerSourcePreview'
     | 'gameDraftViews'
     | 'liveSessionListItems'
@@ -82,8 +86,12 @@ export type DesktopShellPrimarySurfaceProps = {
   focusTimelineView: (view: 'feed' | 'bookmarks') => void;
   openCommunityNodeSettings: () => void;
   loadReactionCatalogData: () => Promise<void>;
-  refreshTimelineFeed: (topic: string, currentThread: string | null) => Promise<void>;
-  loadMoreTimeline: (topic: string) => Promise<void>;
+  refreshTimelineFeed: (
+    topic: string,
+    currentThread: string | null,
+    channelId?: string | null
+  ) => Promise<void>;
+  loadMoreTimeline: (topic: string, channelId?: string | null) => Promise<void>;
   openAuthorDetail: OpenAuthorDetail;
   openThread: OpenThread;
   beginReply: (post: PostView) => void;
@@ -126,6 +134,7 @@ export function DesktopShellPrimarySurface({
   routeSection,
   surfaceSection,
   surfaceColumnKind,
+  surfaceScope,
   profileAvatarInputKey,
   messagesWorkspace,
   notificationsWorkspace,
@@ -201,6 +210,17 @@ export function DesktopShellPrimarySurface({
     syncStatus,
     timelineLoadingMoreByKey,
     timelineNextCursorByKey,
+    timelinesByKey,
+    joinedChannelsByTopic,
+    selectedChannelIdByTopic,
+    liveSessionsByTopic,
+    liveSessionsByScopeKey,
+    livePanelStateByScopeKey,
+    livePendingBySessionId,
+    gameRoomsByTopic,
+    gameRoomsByScopeKey,
+    gamePanelStateByScopeKey,
+    gameDrafts,
   } = useDesktopShellStore(
     useShallow((s) => ({
       activeTopic: s.activeTopic,
@@ -236,6 +256,17 @@ export function DesktopShellPrimarySurface({
       syncStatus: s.syncStatus,
       timelineLoadingMoreByKey: s.timelineLoadingMoreByKey,
       timelineNextCursorByKey: s.timelineNextCursorByKey,
+      timelinesByKey: s.timelinesByKey,
+      joinedChannelsByTopic: s.joinedChannelsByTopic,
+      selectedChannelIdByTopic: s.selectedChannelIdByTopic,
+      liveSessionsByTopic: s.liveSessionsByTopic,
+      liveSessionsByScopeKey: s.liveSessionsByScopeKey,
+      livePanelStateByScopeKey: s.livePanelStateByScopeKey,
+      livePendingBySessionId: s.livePendingBySessionId,
+      gameRoomsByTopic: s.gameRoomsByTopic,
+      gameRoomsByScopeKey: s.gameRoomsByScopeKey,
+      gamePanelStateByScopeKey: s.gamePanelStateByScopeKey,
+      gameDrafts: s.gameDrafts,
     }))
   );
   const setShellChromeState = useDesktopShellFieldSetter('shellChromeState');
@@ -260,17 +291,66 @@ export function DesktopShellPrimarySurface({
     await handleMuteAction(authorPubkey, false);
   };
   const copyReportContact = (value: string) => void copyTextToClipboard(value);
-  const activeTimelineKey = timelineScopeStorageKey(activeTopic, viewModels.activeTimelineScope);
+  const surfaceTopic = surfaceScope?.topicId ?? activeTopic;
+  const surfaceChannelId = surfaceScope
+    ? surfaceScope.channelId
+    : selectedChannelIdByTopic[surfaceTopic] ?? null;
+  const surfaceTimelineScope = privateTimelineScope(surfaceChannelId);
+  const activeTimelineKey = timelineStorageKeyForChannel(surfaceTopic, surfaceChannelId);
+  const surfaceJoinedChannels = useMemo(
+    () => joinedChannelsByTopic[surfaceTopic] ?? [],
+    [joinedChannelsByTopic, surfaceTopic]
+  );
+  const surfaceTimelinePostViews = useMemo(
+    () =>
+      (timelinesByKey[activeTimelineKey] ?? []).map((post) =>
+        viewModels.buildPostCardView(post, 'timeline', surfaceJoinedChannels)
+      ),
+    [activeTimelineKey, surfaceJoinedChannels, timelinesByKey, viewModels]
+  );
+  const surfaceScopeKey = timelineStorageKeyForChannel(surfaceTopic, surfaceChannelId);
+  const surfaceLiveSessions =
+    liveSessionsByScopeKey[surfaceScopeKey] ?? liveSessionsByTopic[surfaceTopic] ?? [];
+  const surfaceGameRooms = useMemo(
+    () => gameRoomsByScopeKey[surfaceScopeKey] ?? gameRoomsByTopic[surfaceTopic] ?? [],
+    [gameRoomsByScopeKey, gameRoomsByTopic, surfaceScopeKey, surfaceTopic]
+  );
+  const surfaceLivePanelState =
+    livePanelStateByScopeKey[surfaceScopeKey] ?? viewModels.activeLivePanelState;
+  const surfaceGamePanelState =
+    gamePanelStateByScopeKey[surfaceScopeKey] ?? viewModels.activeGamePanelState;
+  const surfaceAudienceLabel = surfaceChannelId
+    ? surfaceJoinedChannels.find((channel) => channel.channel_id === surfaceChannelId)?.label ??
+      surfaceChannelId
+    : 'Public';
+  const surfaceLiveSessionListItems = surfaceLiveSessions.map((session) => ({
+    session,
+    isOwner: session.host_pubkey === syncStatus.local_author_pubkey,
+    pending: Boolean(livePendingBySessionId[session.session_id]),
+  }));
+  const surfaceGameDraftViews = Object.fromEntries(
+    surfaceGameRooms.map((room) => {
+      const draft = gameDrafts[room.room_id] ?? createGameEditorDraft(room);
+      return [
+        room.room_id,
+        {
+          status: draft.status,
+          phaseLabel: draft.phase_label,
+          scores: draft.scores,
+        },
+      ];
+    })
+  );
   const activeTimelinePendingCount = pendingTimelineCountsByKey[activeTimelineKey] ?? 0;
   const activeTimelineHasMore = Boolean(timelineNextCursorByKey[activeTimelineKey]);
   const activeTimelineLoadingMore = timelineLoadingMoreByKey[activeTimelineKey] ?? false;
   const metaverseRooms = useMemo(
-    () => viewModels.activeGameRooms.filter((room) => room.room_kind === 'metaverse_room'),
-    [viewModels.activeGameRooms]
+    () => surfaceGameRooms.filter((room) => room.room_kind === 'metaverse_room'),
+    [surfaceGameRooms]
   );
   const scoreGameRooms = useMemo(
-    () => viewModels.activeGameRooms.filter((room) => room.room_kind === 'score_game'),
-    [viewModels.activeGameRooms]
+    () => surfaceGameRooms.filter((room) => room.room_kind === 'score_game'),
+    [surfaceGameRooms]
   );
   const profileMode = shellChromeState.profileMode;
   const profileConnectionsView = shellChromeState.profileConnectionsView;
@@ -370,8 +450,8 @@ export function DesktopShellPrimarySurface({
                 api={api}
                 mode='topic'
                 locale={locale}
-                activeTopic={activeTopic}
-                activeTimelineScope={viewModels.activeTimelineScope}
+                activeTopic={surfaceTopic}
+                activeTimelineScope={surfaceTimelineScope}
                 eligibleNodeBaseUrls={eligibleIndexNodeBaseUrls}
                 selectedNodeBaseUrl={communityIndexNodeBaseUrl}
                 onSelectNode={setCommunityIndexNodeBaseUrl}
@@ -381,7 +461,7 @@ export function DesktopShellPrimarySurface({
             <Card className='shell-workspace-card'>
               {shellChromeState.timelineView === 'feed' ? (
                 <TimelineFeed
-                  posts={viewModels.activeTimelinePostViews}
+                  posts={surfaceTimelinePostViews}
                   emptyCopy={t('shell:workspace.noPosts')}
                   onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
                   onOpenThread={(threadId) => void openThread(threadId)}
@@ -406,9 +486,11 @@ export function DesktopShellPrimarySurface({
                   onCopyPostLink={handleCopyInternalLink}
                   hasMore={activeTimelineHasMore}
                   loadingMore={activeTimelineLoadingMore}
-                  onLoadMore={() => void loadMoreTimeline(activeTopic)}
+                  onLoadMore={() => void loadMoreTimeline(surfaceTopic, surfaceChannelId)}
                   pendingCount={activeTimelinePendingCount}
-                  onApplyPending={() => void refreshTimelineFeed(activeTopic, selectedThread)}
+                  onApplyPending={() =>
+                    void refreshTimelineFeed(surfaceTopic, selectedThread, surfaceChannelId)
+                  }
                   onSubmitReport={submitReport}
                   onCopyReportContact={copyReportContact}
                   onFetchReportManifest={fetchReportManifest}
@@ -454,8 +536,8 @@ export function DesktopShellPrimarySurface({
             api={api}
             mode='explore'
             locale={locale}
-            activeTopic={activeTopic}
-            activeTimelineScope={viewModels.activeTimelineScope}
+            activeTopic={surfaceTopic}
+            activeTimelineScope={surfaceTimelineScope}
             eligibleNodeBaseUrls={eligibleIndexNodeBaseUrls}
             selectedNodeBaseUrl={communityIndexNodeBaseUrl}
             onSelectNode={setCommunityIndexNodeBaseUrl}
@@ -469,24 +551,24 @@ export function DesktopShellPrimarySurface({
               <div className='panel-header'>
                 <div>
                   <h3>{t('live:title')}</h3>
-                  <small>{t('live:summary', { count: viewModels.liveSessionListItems.length })}</small>
+                  <small>{t('live:summary', { count: surfaceLiveSessionListItems.length })}</small>
                 </div>
               </div>
-              {viewModels.activeLivePanelState.status === 'loading' ? (
+              {surfaceLivePanelState.status === 'loading' ? (
                 <Notice>{t('live:loading')}</Notice>
               ) : null}
-              {viewModels.activeLivePanelState.status === 'error' &&
-              (liveError ?? viewModels.activeLivePanelState.error) ? (
-                <Notice tone='destructive'>{liveError ?? viewModels.activeLivePanelState.error}</Notice>
+              {surfaceLivePanelState.status === 'error' &&
+              (liveError ?? surfaceLivePanelState.error) ? (
+                <Notice tone='destructive'>{liveError ?? surfaceLivePanelState.error}</Notice>
               ) : null}
             </Card>
             <Card className='shell-workspace-card'>
-              {viewModels.liveSessionListItems.length === 0 &&
-              viewModels.activeLivePanelState.status === 'ready' ? (
+              {surfaceLiveSessionListItems.length === 0 &&
+              surfaceLivePanelState.status === 'ready' ? (
                 <p className='empty-state'>{t('live:empty')}</p>
               ) : null}
               <ul className='post-list'>
-                {viewModels.liveSessionListItems.map(({ session, isOwner, pending }) => (
+                {surfaceLiveSessionListItems.map(({ session, isOwner, pending }) => (
                   <li key={session.session_id}>
                     <article
                       className={`post-card${
@@ -564,7 +646,7 @@ export function DesktopShellPrimarySurface({
                           aria-label={t('common:actions.copyLink')}
                           onClick={() =>
                             handleCopyInternalLink(
-                              buildLiveLink(activeTopic, session.session_id, session.channel_id ?? null)
+                              buildLiveLink(surfaceTopic, session.session_id, session.channel_id ?? null)
                             )
                           }
                         >
@@ -581,15 +663,15 @@ export function DesktopShellPrimarySurface({
 
         {activeSurfaceSection === 'game' && surfaceColumnKind === 'game' ? (
           <GameRoomPanel
-            status={viewModels.activeGamePanelState.status}
-            error={gameError ?? viewModels.activeGamePanelState.error}
-            audienceLabel={viewModels.activeComposeAudienceLabel}
+            status={surfaceGamePanelState.status}
+            error={gameError ?? surfaceGamePanelState.error}
+            audienceLabel={surfaceAudienceLabel}
             title={gameTitle}
             description={gameDescription}
             participantsInput={gameParticipantsInput}
             createPending={gameCreatePending}
             rooms={scoreGameRooms}
-            drafts={viewModels.gameDraftViews}
+            drafts={surfaceGameDraftViews}
             savingByRoomId={gameSavingByRoomId}
             localAuthorPubkey={syncStatus.local_author_pubkey}
             onTitleChange={setGameTitle}
@@ -613,7 +695,7 @@ export function DesktopShellPrimarySurface({
         ) : activeSurfaceSection === 'game' ? (
           <MetaverseRoomPanel
             actions={metaverseActions}
-            activeTopic={activeTopic}
+            activeTopic={surfaceTopic}
             rooms={metaverseRooms}
             syncStatus={syncStatus}
             locale={locale}

@@ -16,11 +16,14 @@ export type GameEditorDraft = {
 
 export type LiveGameSliceState = {
   liveSessionsByTopic: Record<string, LiveSessionView[]>;
+  liveSessionsByScopeKey: Record<string, LiveSessionView[]>;
   gameRoomsByTopic: Record<string, GameRoomView[]>;
+  gameRoomsByScopeKey: Record<string, GameRoomView[]>;
   liveTitle: string;
   liveDescription: string;
   liveError: string | null;
   livePanelStateByTopic: Record<string, AsyncPanelState>;
+  livePanelStateByScopeKey: Record<string, AsyncPanelState>;
   liveCreatePending: boolean;
   livePendingBySessionId: Record<string, true>;
   selectedLiveSessionId: string | null;
@@ -30,6 +33,7 @@ export type LiveGameSliceState = {
   gameError: string | null;
   gameDrafts: Record<string, GameEditorDraft>;
   gamePanelStateByTopic: Record<string, AsyncPanelState>;
+  gamePanelStateByScopeKey: Record<string, AsyncPanelState>;
   gameCreatePending: boolean;
   gameSavingByRoomId: Record<string, true>;
   selectedGameRoomId: string | null;
@@ -38,11 +42,14 @@ export type LiveGameSliceState = {
 export function createInitialLiveGameSlice(): LiveGameSliceState {
   return {
     liveSessionsByTopic: buildStarterTopicRecord(() => [] as LiveSessionView[]),
+    liveSessionsByScopeKey: {},
     gameRoomsByTopic: buildStarterTopicRecord(() => [] as GameRoomView[]),
+    gameRoomsByScopeKey: {},
     liveTitle: '',
     liveDescription: '',
     liveError: null,
     livePanelStateByTopic: buildStarterTopicRecord(() => ({ ...DEFAULT_ASYNC_PANEL_STATE })),
+    livePanelStateByScopeKey: {},
     liveCreatePending: false,
     livePendingBySessionId: {},
     selectedLiveSessionId: null,
@@ -52,6 +59,7 @@ export function createInitialLiveGameSlice(): LiveGameSliceState {
     gameError: null,
     gameDrafts: {},
     gamePanelStateByTopic: buildStarterTopicRecord(() => ({ ...DEFAULT_ASYNC_PANEL_STATE })),
+    gamePanelStateByScopeKey: {},
     gameCreatePending: false,
     gameSavingByRoomId: {},
     selectedGameRoomId: null,

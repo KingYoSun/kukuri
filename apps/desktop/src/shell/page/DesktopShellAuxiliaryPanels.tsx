@@ -85,6 +85,7 @@ export type DesktopShellMessagesSurfaceProps = {
   handleSendDirectMessage: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   surfaceKind?: 'messages' | 'conversation';
   peerPubkey?: string;
+  showComposer?: boolean;
 };
 
 export function DesktopShellMessagesSurface({
@@ -101,6 +102,7 @@ export function DesktopShellMessagesSurface({
   handleSendDirectMessage,
   surfaceKind,
   peerPubkey,
+  showComposer = true,
 }: DesktopShellMessagesSurfaceProps) {
   const {
     directMessageAttachmentInputKey,
@@ -398,7 +400,7 @@ export function DesktopShellMessagesSurface({
             )}
           </Card>
 
-          {activeConversation ? <Card className='shell-workspace-card'>
+          {activeConversation && showComposer ? <Card className='shell-workspace-card'>
             {conversationStatus && !conversationStatus.send_enabled ? (
               <Notice tone='warning'>
                 Direct message send is disabled until the relationship is mutual again.

@@ -5,6 +5,7 @@ import {
   closeColumn,
   columnIdentityId,
   createInitialWorkspaceState,
+  INITIAL_TIMELINE_COLUMN_ID,
   openTransientColumn,
   setColumnPinned,
   type ColumnState,
@@ -15,7 +16,7 @@ function transientColumn(overrides: Partial<ColumnState> = {}): ColumnState {
     id: 'thread-1',
     kind: 'thread',
     entityId: 'thread-1',
-    parentColumnId: 'timeline-initial',
+    parentColumnId: INITIAL_TIMELINE_COLUMN_ID,
     pinned: false,
     preferredDesktopSpan: 1,
     ...overrides,
@@ -31,17 +32,23 @@ describe('workspace state transitions', () => {
 
     expect(state.columns).toEqual([
       {
-        id: 'timeline-initial',
+        id: INITIAL_TIMELINE_COLUMN_ID,
         kind: 'timeline',
         scope: { topicId: 'kukuri:topic:demo', channelId: null },
         pinned: true,
         preferredDesktopSpan: 1,
       },
     ]);
-    expect(state.activeColumnId).toBe('timeline-initial');
+    expect(state.activeColumnId).toBe(INITIAL_TIMELINE_COLUMN_ID);
   });
 
   it('builds stable identity from kind, scope, and entity', () => {
+    expect(
+      columnIdentityId('timeline', {
+        topicId: 'kukuri:topic:demo',
+        channelId: null,
+      })
+    ).toBe('column:timeline:kukuri%3Atopic%3Ademo:-:-');
     expect(
       columnIdentityId(
         'conversation',
@@ -51,15 +58,25 @@ describe('workspace state transitions', () => {
     ).toBe(
       'column:conversation:kukuri%3Atopic%3Ademo:friends%2Fplus:peer%3Aalice'
     );
-    expect(columnIdentityId('timeline')).toBe('timeline-initial');
+    expect(
+      columnIdentityId('timeline', {
+        topicId: 'kukuri:topic:demo',
+        channelId: 'friends',
+      })
+    ).not.toBe(
+      columnIdentityId('timeline', {
+        topicId: 'kukuri:topic:demo',
+        channelId: null,
+      })
+    );
   });
 
   it('activates an existing Column without changing the layout', () => {
     const initial = createInitialWorkspaceState();
     const withThread = openTransientColumn(initial, transientColumn());
-    const next = activateColumn(withThread, 'timeline-initial');
+    const next = activateColumn(withThread, INITIAL_TIMELINE_COLUMN_ID);
 
-    expect(next.activeColumnId).toBe('timeline-initial');
+    expect(next.activeColumnId).toBe(INITIAL_TIMELINE_COLUMN_ID);
     expect(next.columns).toEqual(withThread.columns);
   });
 
@@ -72,7 +89,7 @@ describe('workspace state transitions', () => {
     );
 
     expect(withProfile.columns.map((column) => column.id)).toEqual([
-      'timeline-initial',
+      INITIAL_TIMELINE_COLUMN_ID,
       'profile-1',
     ]);
     expect(withProfile.activeColumnId).toBe('profile-1');
@@ -97,7 +114,7 @@ describe('workspace state transitions', () => {
     );
 
     expect(withConversation.columns.map((column) => column.id)).toEqual([
-      'timeline-initial',
+      INITIAL_TIMELINE_COLUMN_ID,
       'profile-1',
       'thread-1',
       'conversation-1',
@@ -112,11 +129,11 @@ describe('workspace state transitions', () => {
     );
     const withThread = openTransientColumn(
       withProfile,
-      transientColumn({ parentColumnId: 'timeline-initial' })
+      transientColumn({ parentColumnId: INITIAL_TIMELINE_COLUMN_ID })
     );
 
     expect(withThread.columns.map((column) => column.id)).toEqual([
-      'timeline-initial',
+      INITIAL_TIMELINE_COLUMN_ID,
       'thread-1',
       'profile-1',
     ]);
@@ -148,7 +165,7 @@ describe('workspace state transitions', () => {
     });
 
     expect(state.columns.map((column) => column.id)).toEqual([
-      'timeline-initial',
+      INITIAL_TIMELINE_COLUMN_ID,
       'messages',
       'conversation-bob',
       'profile-bob',
@@ -161,14 +178,14 @@ describe('workspace state transitions', () => {
     const withThread = openTransientColumn(initial, transientColumn());
     const afterThreadClose = closeColumn(withThread, 'thread-1');
 
-    expect(afterThreadClose.activeColumnId).toBe('timeline-initial');
+    expect(afterThreadClose.activeColumnId).toBe(INITIAL_TIMELINE_COLUMN_ID);
     expect(afterThreadClose.columns).toHaveLength(1);
 
     const withOrphan = openTransientColumn(
       initial,
       transientColumn({ id: 'profile-1', kind: 'profile', parentColumnId: undefined })
     );
-    const afterTimelineClose = closeColumn(withOrphan, 'timeline-initial');
+    const afterTimelineClose = closeColumn(withOrphan, INITIAL_TIMELINE_COLUMN_ID);
 
     expect(afterTimelineClose.activeColumnId).toBe('profile-1');
     expect(afterTimelineClose.columns).toHaveLength(1);

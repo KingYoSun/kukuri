@@ -1,5 +1,7 @@
-import { useEffect, type ReactNode } from 'react';
+import { type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 
+import { ColumnComposerFooter } from '@/components/shell/ColumnComposerFooter';
+import { ColumnDomainActionFooter } from '@/components/shell/ColumnDomainActionFooter';
 import { ColumnCanvas } from '@/components/shell/ColumnCanvas';
 import { ColumnSurface } from '@/components/shell/ColumnSurface';
 import {
@@ -7,12 +9,13 @@ import {
   type TimelineViewId,
 } from '@/components/shell/TimelineViewIconTabs';
 import type { PrimarySection } from '@/components/shell/types';
+import type { MentionCandidate } from '@/components/core/types';
+import { authorDisplayLabel, shortPubkey } from '@/shell/presentation';
+import type { ColumnDraftTarget } from '@/shell/slices/columnDrafts';
 import {
   activateColumn,
   closeColumn,
-  INITIAL_TIMELINE_COLUMN_ID,
   setColumnPinned,
-  updateColumnScope,
   type ColumnKind,
   type ColumnState,
 } from '@/shell/slices/workspace';
@@ -20,6 +23,22 @@ import { useDesktopShellFieldSetter, useDesktopShellStore } from '@/shell/store'
 
 type DesktopShellColumnWorkspaceProps = {
   activeTimelineView: TimelineViewId;
+  locale: string;
+  mentionCandidates: MentionCandidate[];
+  onColumnAttachmentSelection: (
+    target: ColumnDraftTarget,
+    event: ChangeEvent<HTMLInputElement>
+  ) => Promise<void>;
+  onRemoveColumnAttachment: (target: ColumnDraftTarget, itemId: string) => void;
+  onSubmitColumnDraft: (
+    target: ColumnDraftTarget,
+    event: FormEvent<HTMLFormElement>
+  ) => Promise<void>;
+  onEndLiveSession: (sessionId: string, topic: string) => Promise<void>;
+  onJoinLiveSession: (sessionId: string, topic: string) => Promise<void>;
+  onLeaveLiveSession: (sessionId: string, topic: string) => Promise<void>;
+  onOpenGameCreate: () => void;
+  onOpenLiveCreate: () => void;
   renderConversationSurface: (column: ColumnState) => ReactNode;
   messagesSurface: ReactNode;
   notificationsSurface: ReactNode;
@@ -46,6 +65,16 @@ const PRIMARY_SECTION_BY_KIND: Partial<Record<ColumnKind, PrimarySection>> = {
 
 export function DesktopShellColumnWorkspace({
   activeTimelineView,
+  locale,
+  mentionCandidates,
+  onColumnAttachmentSelection,
+  onRemoveColumnAttachment,
+  onSubmitColumnDraft,
+  onEndLiveSession,
+  onJoinLiveSession,
+  onLeaveLiveSession,
+  onOpenGameCreate,
+  onOpenLiveCreate,
   renderConversationSurface,
   messagesSurface,
   notificationsSurface,
@@ -58,21 +87,11 @@ export function DesktopShellColumnWorkspace({
   timelineViewItems,
   titles,
 }: DesktopShellColumnWorkspaceProps) {
-  const activeTopic = useDesktopShellStore((state) => state.activeTopic);
-  const selectedChannelId = useDesktopShellStore(
-    (state) => state.selectedChannelIdByTopic[state.activeTopic] ?? null
-  );
   const workspaceState = useDesktopShellStore((state) => state.workspaceState);
+  const joinedChannelsByTopic = useDesktopShellStore((state) => state.joinedChannelsByTopic);
+  const directMessages = useDesktopShellStore((state) => state.directMessages);
+  const knownAuthorsByPubkey = useDesktopShellStore((state) => state.knownAuthorsByPubkey);
   const setWorkspaceState = useDesktopShellFieldSetter('workspaceState');
-
-  useEffect(() => {
-    setWorkspaceState((current) =>
-      updateColumnScope(current, INITIAL_TIMELINE_COLUMN_ID, {
-        topicId: activeTopic,
-        channelId: selectedChannelId,
-      })
-    );
-  }, [activeTopic, selectedChannelId, setWorkspaceState]);
 
   const activate = (columnId: string, syncRoute: boolean) => {
     const column = workspaceState.columns.find((candidate) => candidate.id === columnId);
@@ -96,11 +115,94 @@ export function DesktopShellColumnWorkspace({
     const primarySection = PRIMARY_SECTION_BY_KIND[column.kind];
     return primarySection ? renderPrimarySurface(primarySection, column) : null;
   };
-  const columnScopeLabel = (column: ColumnState) => {
-    if (column.entityId) return column.entityId;
+  const scopeDestinationLabel = (column: ColumnState) => {
     if (!column.scope) return scopeLabel;
-    const channel = column.scope.channelId ?? 'Public';
-    return `${channel} · ${column.scope.topicId}`;
+    const topicLabel = column.scope.topicId.split(':').filter(Boolean).at(-1) ?? column.scope.topicId;
+    const channel = column.scope.channelId
+      ? joinedChannelsByTopic[column.scope.topicId]?.find(
+          (candidate) => candidate.channel_id === column.scope?.channelId
+        )?.label ?? column.scope.channelId
+      : 'Public';
+    return `${channel} · ${topicLabel}`;
+  };
+  const conversationLabel = (peerPubkey: string) => {
+    const conversation = directMessages.find((item) => item.peer_pubkey === peerPubkey);
+    const author = knownAuthorsByPubkey[peerPubkey];
+    return authorDisplayLabel(
+      peerPubkey,
+      author?.display_name ?? conversation?.peer_display_name,
+      author?.name ?? conversation?.peer_name
+    );
+  };
+  const columnScopeLabel = (column: ColumnState) => {
+    if (column.kind === 'conversation' && column.entityId) {
+      return conversationLabel(column.entityId);
+    }
+    if (column.kind === 'profile' && column.entityId) {
+      const author = knownAuthorsByPubkey[column.entityId];
+      return authorDisplayLabel(column.entityId, author?.display_name, author?.name);
+    }
+    if (column.kind === 'thread') return `Thread · ${scopeDestinationLabel(column)}`;
+    if (column.entityId) return shortPubkey(column.entityId);
+    return scopeDestinationLabel(column);
+  };
+  const renderFooter = (column: ColumnState, active: boolean) => {
+    const common = {
+      active,
+      locale,
+      mentionCandidates,
+      onActivate: () => activate(column.id, true),
+      onAttachmentSelection: onColumnAttachmentSelection,
+      onRemoveAttachment: onRemoveColumnAttachment,
+      onSubmit: onSubmitColumnDraft,
+    };
+    if (column.kind === 'timeline' && column.scope) {
+      return (
+        <ColumnComposerFooter
+          {...common}
+          destinationLabel={scopeDestinationLabel(column)}
+          target={{ columnId: column.id, action: 'post', scope: column.scope }}
+        />
+      );
+    }
+    if (column.kind === 'thread' && column.scope && column.entityId) {
+      return (
+        <ColumnComposerFooter
+          {...common}
+          destinationLabel={`Thread · ${scopeDestinationLabel(column)}`}
+          target={{
+            columnId: column.id,
+            action: 'reply',
+            scope: column.scope,
+            threadId: column.entityId,
+          }}
+        />
+      );
+    }
+    if (column.kind === 'conversation' && column.entityId) {
+      return (
+        <ColumnComposerFooter
+          {...common}
+          destinationLabel={conversationLabel(column.entityId)}
+          target={{ columnId: column.id, action: 'message', peerPubkey: column.entityId }}
+        />
+      );
+    }
+    if (column.kind === 'stream' || column.kind === 'game' || column.kind === 'metaverse') {
+      return (
+        <ColumnDomainActionFooter
+          active={active}
+          column={column}
+          onActivate={() => activate(column.id, true)}
+          onEndLiveSession={onEndLiveSession}
+          onJoinLiveSession={onJoinLiveSession}
+          onLeaveLiveSession={onLeaveLiveSession}
+          onOpenGameCreate={onOpenGameCreate}
+          onOpenLiveCreate={onOpenLiveCreate}
+        />
+      );
+    }
+    return undefined;
   };
 
   return (
@@ -116,6 +218,7 @@ export function DesktopShellColumnWorkspace({
           span={column.preferredDesktopSpan}
           active={workspaceState.activeColumnId === column.id}
           pinned={column.pinned}
+          footer={renderFooter(column, workspaceState.activeColumnId === column.id)}
           headerActions={
             column.kind === 'timeline' ? (
               <TimelineViewIconTabs

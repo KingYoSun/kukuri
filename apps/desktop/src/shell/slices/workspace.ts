@@ -40,8 +40,6 @@ export type WorkspaceSliceState = {
   workspaceState: WorkspaceState;
 };
 
-export const INITIAL_TIMELINE_COLUMN_ID = 'timeline-initial';
-
 function identityPart(value: string | null | undefined) {
   return value ? encodeURIComponent(value) : '-';
 }
@@ -51,7 +49,6 @@ export function columnIdentityId(
   scope?: ColumnScope,
   entityId?: string
 ): string {
-  if (kind === 'timeline') return INITIAL_TIMELINE_COLUMN_ID;
   return [
     'column',
     kind,
@@ -61,20 +58,26 @@ export function columnIdentityId(
   ].join(':');
 }
 
+export const INITIAL_TIMELINE_COLUMN_ID = columnIdentityId('timeline', {
+  topicId: STARTER_TOPICS[0],
+  channelId: null,
+});
+
 export function createInitialWorkspaceState(
   scope: ColumnScope = { topicId: STARTER_TOPICS[0], channelId: null }
 ): WorkspaceState {
+  const initialTimelineColumnId = columnIdentityId('timeline', scope);
   return {
     columns: [
       {
-        id: INITIAL_TIMELINE_COLUMN_ID,
+        id: initialTimelineColumnId,
         kind: 'timeline',
         scope,
         pinned: true,
         preferredDesktopSpan: 1,
       },
     ],
-    activeColumnId: INITIAL_TIMELINE_COLUMN_ID,
+    activeColumnId: initialTimelineColumnId,
     controlCenterOpen: false,
     activeLayoutId: null,
   };
