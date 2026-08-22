@@ -83,6 +83,16 @@ function runSearch(query = 'hello') {
   fireEvent.click(screen.getByRole('button', { name: 'Run' }));
 }
 
+test('query node selection uses the shared semantic select surface', () => {
+  const api = {} as DesktopApi;
+  render(<CommunityIndexWorkspace {...workspaceProps(api)} />);
+
+  expect(screen.getByLabelText('Query node')).toHaveClass(
+    'bg-[var(--surface-input)]',
+    'text-foreground'
+  );
+});
+
 test('topic search always sends the active public scope and labels preview text', async () => {
   const searchCommunityNodeIndex = vi.fn().mockResolvedValue({
     entries: [

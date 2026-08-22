@@ -357,6 +357,7 @@ kukuri にはマーケティング的な First View / ブランドロックア�
 - `<html data-theme="dark|light">` 属性で切替。デフォルトは `dark`。
 - 永続化は localStorage key `kukuri.desktop.theme`（`lib/theme.ts`）。
 - **`prefers-color-scheme` は使わない**（OS 設定に追従しない）。
+- native control の描画 hint は app theme と一致する `color-scheme: dark|light` を `tokens.css` から与える。`select` / `option` の前景・背景は `base.css` で semantic token に固定する。
 - 切替 UI は設定ドロワーの `AppearancePanel`。
 - 全セマンティックカラーを `tokens.css` の CSS 変数で切替える。light / dark どちらでも本文の可読性と focus リングの視認性を保つ。
 

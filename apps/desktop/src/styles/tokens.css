@@ -28,6 +28,7 @@
 
 :root,
 :root[data-theme='dark'] {
+  color-scheme: dark;
   --background: #101923;
   --shell-background: #101923;
   --foreground: #f6f1e8;
@@ -82,6 +83,7 @@
 }
 
 :root[data-theme='light'] {
+  color-scheme: light;
   --background: #f4efe6;
   --shell-background: #f4efe6;
   --foreground: #21303b;
