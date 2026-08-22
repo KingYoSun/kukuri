@@ -60,7 +60,7 @@ type NotificationItemView = NotificationView & {
   unread: boolean;
 };
 
-type MessagesWorkspaceProps = {
+export type DesktopShellMessagesSurfaceProps = {
   t: Translate;
   locale: SupportedLocale;
   viewModels: Pick<
@@ -82,7 +82,7 @@ type MessagesWorkspaceProps = {
   handleSendDirectMessage: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 };
 
-export function DesktopShellMessagesWorkspace({
+export function DesktopShellMessagesSurface({
   t,
   locale,
   viewModels,
@@ -94,7 +94,7 @@ export function DesktopShellMessagesWorkspace({
   handleDirectMessageAttachmentSelection,
   handleRemoveDirectMessageDraftAttachment,
   handleSendDirectMessage,
-}: MessagesWorkspaceProps) {
+}: DesktopShellMessagesSurfaceProps) {
   const {
     directMessageAttachmentInputKey,
     directMessageComposer,
@@ -416,19 +416,23 @@ export function DesktopShellMessagesWorkspace({
   );
 }
 
-type NotificationsWorkspaceProps = {
+export function DesktopShellMessagesWorkspace(props: DesktopShellMessagesSurfaceProps) {
+  return <DesktopShellMessagesSurface {...props} />;
+}
+
+export type DesktopShellNotificationsSurfaceProps = {
   t: Translate;
   locale: SupportedLocale;
   onRefresh: () => void;
   handleOpenNotification: (notification: NotificationView) => Promise<void>;
 };
 
-export function DesktopShellNotificationsWorkspace({
+export function DesktopShellNotificationsSurface({
   t,
   locale,
   onRefresh,
   handleOpenNotification,
-}: NotificationsWorkspaceProps) {
+}: DesktopShellNotificationsSurfaceProps) {
   const {
     knownAuthorsByPubkey,
     mediaObjectUrls,
@@ -572,7 +576,11 @@ export function DesktopShellNotificationsWorkspace({
   );
 }
 
-type DetailPaneStackProps = {
+export function DesktopShellNotificationsWorkspace(props: DesktopShellNotificationsSurfaceProps) {
+  return <DesktopShellNotificationsSurface {...props} />;
+}
+
+export type DesktopShellDetailSurfaceStackProps = {
   api: DesktopApi;
   t: Translate;
   viewModels: Pick<
@@ -606,7 +614,7 @@ type DetailPaneStackProps = {
   openCommunityNodeSettings: () => void;
 };
 
-export function DesktopShellDetailPaneStack({
+export function DesktopShellDetailSurfaceStack({
   api,
   t,
   viewModels,
@@ -630,7 +638,7 @@ export function DesktopShellDetailPaneStack({
   handleMuteAction,
   handleOpenOriginalTopic,
   openCommunityNodeSettings,
-}: DetailPaneStackProps) {
+}: DesktopShellDetailSurfaceStackProps) {
   const {
     activeTopic,
     bookmarkedReactionAssets,
@@ -786,4 +794,8 @@ export function DesktopShellDetailPaneStack({
       ) : null}
     </>
   );
+}
+
+export function DesktopShellDetailPaneStack(props: DesktopShellDetailSurfaceStackProps) {
+  return <DesktopShellDetailSurfaceStack {...props} />;
 }
