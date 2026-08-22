@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 
 import { ColumnCanvas } from './ColumnCanvas';
 import { ColumnSurface } from './ColumnSurface';
+import { TimelineViewIconTabs, type TimelineViewId } from './TimelineViewIconTabs';
 
 const meta = {
   title: 'Shell/ColumnCanvas',
@@ -30,6 +31,7 @@ const columns: StoryColumn[] = [
 function CanvasStory({ count = 1 }: { count?: number }) {
   const visibleColumns = columns.slice(0, count);
   const [activeColumnId, setActiveColumnId] = useState(visibleColumns[0].id);
+  const [timelineView, setTimelineView] = useState<TimelineViewId>('feed');
   return (
     <div className='shell-phase1 min-h-screen'>
       <ColumnCanvas activeColumnId={activeColumnId} onActivateColumn={setActiveColumnId}>
@@ -44,6 +46,18 @@ function CanvasStory({ count = 1 }: { count?: number }) {
             span={1}
             active={column.id === activeColumnId}
             pinned={column.pinned}
+            headerActions={
+              column.id === 'timeline' ? (
+                <TimelineViewIconTabs
+                  activeView={timelineView}
+                  items={[
+                    { id: 'feed', label: 'Feed' },
+                    { id: 'bookmarks', label: 'Bookmarks' },
+                  ]}
+                  onSelect={setTimelineView}
+                />
+              ) : undefined
+            }
           >
             <div className='shell-main-stack'>
               <Card className='shell-workspace-card'>

@@ -460,6 +460,19 @@
   flex: 1;
 }
 
+.shell-phase1 .shell-column-header-actions,
+.shell-phase1 .shell-column-view-tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex: none;
+}
+
+.shell-phase1 .shell-column-view-tab[aria-selected='true'] {
+  color: var(--accent-foreground);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
 .shell-phase1 .shell-column-heading h2,
 .shell-phase1 .shell-column-heading p {
   margin: 0;

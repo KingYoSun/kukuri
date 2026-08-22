@@ -294,40 +294,44 @@ export function DesktopShellPrimaryWorkspace({
       >
         {shellChromeState.activePrimarySection === 'timeline' ? (
           <>
-            <Card className='shell-workspace-card'>
-              <div className='shell-workspace-header'>
-                <div className='shell-workspace-summary'>
-                  <div
-                    className='shell-workspace-tabs'
-                    role='tablist'
-                    aria-label={t('shell:workspace.timelineViews')}
-                  >
-                    {viewModels.timelineViewItems.map((item) => (
-                      <button
-                        key={item.id}
-                        className={`shell-tab${
-                          shellChromeState.timelineView === item.id ? ' shell-tab-active' : ''
-                        }`}
-                        role='tab'
-                        type='button'
-                        aria-selected={shellChromeState.timelineView === item.id}
-                        onClick={() => focusTimelineView(item.id)}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
+            {!columnMode ? (
+              <Card className='shell-workspace-card'>
+                <div className='shell-workspace-header'>
+                  <div className='shell-workspace-summary'>
+                    <div
+                      className='shell-workspace-tabs'
+                      role='tablist'
+                      aria-label={t('shell:workspace.timelineViews')}
+                    >
+                      {viewModels.timelineViewItems.map((item) => (
+                        <button
+                          key={item.id}
+                          className={`shell-tab${
+                            shellChromeState.timelineView === item.id ? ' shell-tab-active' : ''
+                          }`}
+                          role='tab'
+                          type='button'
+                          aria-selected={shellChromeState.timelineView === item.id}
+                          onClick={() => focusTimelineView(item.id)}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                    {shellChromeState.timelineView === 'bookmarks' ? (
+                      <span className='relationship-badge'>
+                        {t('shell:workspace.savedCount', {
+                          count: viewModels.bookmarkedTimelinePostViews.length,
+                        })}
+                      </span>
+                    ) : null}
                   </div>
-                  {shellChromeState.timelineView === 'bookmarks' ? (
-                    <span className='relationship-badge'>
-                      {t('shell:workspace.savedCount', {
-                        count: viewModels.bookmarkedTimelinePostViews.length,
-                      })}
-                    </span>
-                  ) : null}
                 </div>
-              </div>
-              {composerError ? <Notice tone='destructive'>{composerError}</Notice> : null}
-            </Card>
+                {composerError ? <Notice tone='destructive'>{composerError}</Notice> : null}
+              </Card>
+            ) : composerError ? (
+              <Notice tone='destructive'>{composerError}</Notice>
+            ) : null}
             {!columnMode && shellChromeState.timelineView === 'feed' ? (
               <CommunityIndexWorkspace
                 api={api}

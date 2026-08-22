@@ -3,6 +3,10 @@ import { useEffect, type ReactNode } from 'react';
 import { ColumnCanvas } from '@/components/shell/ColumnCanvas';
 import { ColumnSurface } from '@/components/shell/ColumnSurface';
 import {
+  TimelineViewIconTabs,
+  type TimelineViewId,
+} from '@/components/shell/TimelineViewIconTabs';
+import {
   activateColumn,
   INITIAL_TIMELINE_COLUMN_ID,
   setColumnPinned,
@@ -11,14 +15,20 @@ import {
 import { useDesktopShellFieldSetter, useDesktopShellStore } from '@/shell/store';
 
 type DesktopShellColumnWorkspaceProps = {
+  activeTimelineView: TimelineViewId;
   children: ReactNode;
+  onSelectTimelineView: (view: TimelineViewId) => void;
   scopeLabel: string;
+  timelineViewItems: Array<{ id: TimelineViewId; label: string }>;
   title: string;
 };
 
 export function DesktopShellColumnWorkspace({
+  activeTimelineView,
   children,
+  onSelectTimelineView,
   scopeLabel,
+  timelineViewItems,
   title,
 }: DesktopShellColumnWorkspaceProps) {
   const activeTopic = useDesktopShellStore((state) => state.activeTopic);
@@ -57,6 +67,13 @@ export function DesktopShellColumnWorkspace({
         span={1}
         active={workspaceState.activeColumnId === timelineColumn.id}
         pinned={timelineColumn.pinned}
+        headerActions={
+          <TimelineViewIconTabs
+            activeView={activeTimelineView}
+            items={timelineViewItems}
+            onSelect={onSelectTimelineView}
+          />
+        }
         onPinnedChange={(pinned) =>
           setWorkspaceState((current) => setColumnPinned(current, timelineColumn.id, pinned))
         }
