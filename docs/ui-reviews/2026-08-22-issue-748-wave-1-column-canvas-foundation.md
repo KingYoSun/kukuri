@@ -1,6 +1,7 @@
 # 2026-08-22 Issue #748 variable-span Column workspace Wave 1
 
 - PR: [#750 Issue #748 Wave 1: Column Canvas foundation](https://github.com/KingYoSun/kukuri/pull/750)
+- Follow-up PR: [#752 Issue #748 Wave 1: use icon tabs in the Column header](https://github.com/KingYoSun/kukuri/pull/752)
 - Preview: [production Timeline Column](assets/2026-08-22-issue-748-wave-1/timeline-column-production.png)
 - Storybook review surface: `Shell/ColumnCanvas/SingleTimeline`、`Shell/ColumnCanvas/ActivePinnedTransient`、`Shell/ColumnCanvas/HorizontalCanvas`
 - Summary: ADR 0031のproduction foundationとして`WorkspaceState` / `ColumnState`、1 spanの`ColumnCanvas` / `ColumnSurface`、active / pinned / transient / parent relationを導入し、既定Timeline routeを中央寄せの440px Column 1本へ移行した。
