@@ -42,6 +42,25 @@ export type WorkspaceSliceState = {
 
 export const INITIAL_TIMELINE_COLUMN_ID = 'timeline-initial';
 
+function identityPart(value: string | null | undefined) {
+  return value ? encodeURIComponent(value) : '-';
+}
+
+export function columnIdentityId(
+  kind: ColumnKind,
+  scope?: ColumnScope,
+  entityId?: string
+): string {
+  if (kind === 'timeline') return INITIAL_TIMELINE_COLUMN_ID;
+  return [
+    'column',
+    kind,
+    identityPart(scope?.topicId),
+    identityPart(scope?.channelId),
+    identityPart(entityId),
+  ].join(':');
+}
+
 export function createInitialWorkspaceState(
   scope: ColumnScope = { topicId: STARTER_TOPICS[0], channelId: null }
 ): WorkspaceState {
@@ -82,7 +101,20 @@ export function openTransientColumn(
   const column = { ...requestedColumn, pinned: false };
   const existingIndex = state.columns.findIndex((candidate) => candidate.id === column.id);
   if (existingIndex >= 0) {
-    return activateColumn(state, column.id);
+    const existing = state.columns[existingIndex];
+    if (existing.pinned) return activateColumn(state, column.id);
+
+    const columns = state.columns.filter((candidate) => candidate.id !== column.id);
+    const parentIndex = column.parentColumnId
+      ? columns.findIndex((candidate) => candidate.id === column.parentColumnId)
+      : -1;
+    const insertIndex = parentIndex >= 0 ? parentIndex + 1 : columns.length;
+    columns.splice(insertIndex, 0, column);
+    return {
+      ...state,
+      columns,
+      activeColumnId: column.id,
+    };
   }
 
   const replaceIndex = state.columns.findIndex(
@@ -91,9 +123,15 @@ export function openTransientColumn(
       candidate.parentColumnId === column.parentColumnId
   );
   if (replaceIndex < 0) {
+    const parentIndex = column.parentColumnId
+      ? state.columns.findIndex((candidate) => candidate.id === column.parentColumnId)
+      : -1;
+    const insertIndex = parentIndex >= 0 ? parentIndex + 1 : state.columns.length;
+    const columns = [...state.columns];
+    columns.splice(insertIndex, 0, column);
     return {
       ...state,
-      columns: [...state.columns, column],
+      columns,
       activeColumnId: column.id,
     };
   }

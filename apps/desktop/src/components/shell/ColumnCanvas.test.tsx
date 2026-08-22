@@ -71,7 +71,7 @@ describe('ColumnCanvas', () => {
     );
 
     await user.click(screen.getByRole('button', { name: 'Thread action' }));
-    expect(onActivateColumn).toHaveBeenCalledWith('thread-1');
+    expect(onActivateColumn).toHaveBeenCalledWith('thread-1', false);
 
     rerender(
       <ColumnCanvas activeColumnId='thread-1' onActivateColumn={onActivateColumn}>
@@ -106,5 +106,34 @@ describe('ColumnCanvas', () => {
       block: 'nearest',
       inline: 'nearest',
     });
+  });
+
+  it('exposes same-header pin and close controls without changing Column activation', async () => {
+    const user = userEvent.setup();
+    const onPinnedChange = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <ColumnCanvas activeColumnId='thread-1' onActivateColumn={() => undefined}>
+        <ColumnSurface
+          columnId='thread-1'
+          title='Thread'
+          scopeLabel='Launch planning'
+          position={1}
+          total={2}
+          span={1}
+          active
+          pinned={false}
+          onPinnedChange={onPinnedChange}
+          onClose={onClose}
+        >
+          Thread body
+        </ColumnSurface>
+      </ColumnCanvas>
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Pin Thread' }));
+    await user.click(screen.getByRole('button', { name: 'Close Thread' }));
+    expect(onPinnedChange).toHaveBeenCalledWith(true);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

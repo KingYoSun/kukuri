@@ -125,7 +125,7 @@ test('thread focus auto-scroll runs only once even when the thread loads additio
   expect(scrollIntoView).toHaveBeenCalledTimes(1);
 });
 
-test('timeline author detail opens as a single pane, and thread author detail stacks to the right', async () => {
+test('timeline author detail opens as one Column, and thread author detail opens to its right', async () => {
   const user = userEvent.setup();
   const authorPubkey = 'a'.repeat(64);
   const createApi = () =>
@@ -166,7 +166,7 @@ test('timeline author detail opens as a single pane, and thread author detail st
   await waitFor(() => {
     expect(getDetailPane('Author')).toBeInTheDocument();
   });
-  expect(screen.queryByRole('complementary', { name: 'Thread' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: /^Thread Column,/ })).not.toBeInTheDocument();
 
   unmount();
   renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo', createApi());
@@ -175,7 +175,7 @@ test('timeline author detail opens as a single pane, and thread author detail st
   await waitFor(() => {
     expect(getDetailPane('Thread')).toBeInTheDocument();
   });
-  expect(screen.queryByRole('complementary', { name: 'Author' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: /^Profile Column,/ })).not.toBeInTheDocument();
 
   await user.click(within(getDetailPane('Thread')).getByRole('button', { name: 'alice' }));
   await waitFor(() => {
@@ -241,10 +241,10 @@ test('author avatar blob stays visible on the timeline after the author pane clo
   });
 
   const authorPane = getDetailPane('Author');
-  await user.click(within(authorPane).getByRole('button', { name: 'Close Author' }));
+  await user.click(within(authorPane).getByRole('button', { name: 'Close Profile' }));
 
   await waitFor(() => {
-    expect(screen.queryByRole('complementary', { name: 'Author' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: /^Profile Column,/ })).not.toBeInTheDocument();
     expect(
       screen
         .getAllByTestId('post-author-avatar-author-avatar')

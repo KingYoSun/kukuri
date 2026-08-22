@@ -24,9 +24,11 @@ function renderAtHash(hash: string, api = createDesktopMockApi()) {
 
 function expectActiveTopic(topic: string) {
   expect(window.location.hash).toContain(`topic=${encodeURIComponent(topic)}`);
-  expect(screen.getByRole('button', { name: topicDisplayName(topic) }).closest('li')).toHaveClass(
-    'topic-item-active'
-  );
+  expect(
+    within(screen.getByRole('complementary', { name: 'Primary navigation' }))
+      .getByRole('button', { name: topicDisplayName(topic) })
+      .closest('li')
+  ).toHaveClass('topic-item-active');
 }
 
 function getTimelineViewTabs() {
@@ -38,7 +40,15 @@ function getWorkspaceTabs() {
 }
 
 function getDetailPane(name: 'Thread' | 'Author') {
-  return screen.getByRole('complementary', { name });
+  return screen.queryByRole('complementary', { name }) ?? getActiveColumn(
+    name === 'Author' ? 'Profile' : 'Thread'
+  );
+}
+
+function getActiveColumn(title: string) {
+  return screen.getByRole('region', {
+    name: new RegExp(`^${title} Column,.*Active,`),
+  });
 }
 
 async function openChannelManager(user: ReturnType<typeof userEvent.setup>) {
@@ -129,7 +139,7 @@ test('notifications route keeps topic context and strips unrelated nested params
   await waitFor(() => {
     expect(window.location.hash).toBe('#/notifications?topic=kukuri%3Atopic%3Ademo');
   });
-  expect(screen.getByRole('heading', { name: 'Notifications' })).toBeInTheDocument();
+  expect(within(getActiveColumn('Notifications')).getAllByRole('heading', { name: 'Notifications' })[0]).toBeInTheDocument();
   expect(screen.queryByRole('complementary', { name: 'Thread' })).not.toBeInTheDocument();
 });
 
@@ -320,7 +330,7 @@ test('live session route restores and normalizes invalid session targets without
   await waitFor(() => {
     expect(window.location.hash).toBe('#/live?topic=kukuri%3Atopic%3Ademo&sessionId=session-demo');
   });
-  expect(screen.getByText('Live Demo').closest('article')).toHaveClass('post-card-targeted');
+  expect(within(getActiveColumn('Live Sessions')).getByText('Live Demo').closest('article')).toHaveClass('post-card-targeted');
 
   firstRender.unmount();
 
@@ -349,10 +359,10 @@ test('live session route restores and normalizes invalid session targets without
   await waitFor(() => {
     expect(window.location.hash).toBe('#/live?topic=kukuri%3Atopic%3Ademo');
   });
-  expect(screen.getByRole('heading', { name: 'Live Sessions' })).toBeInTheDocument();
+  expect(within(getActiveColumn('Live Sessions')).getAllByRole('heading', { name: 'Live Sessions' })[0]).toBeInTheDocument();
 });
 
-test('game route restores and normalizes invalid score room targets without showing score rooms', async () => {
+test('game route restores score rooms in Game Columns and normalizes invalid targets', async () => {
   const firstRender = renderAtHash(
     '#/game?topic=kukuri%3Atopic%3Ademo&roomId=room-demo',
     createDesktopMockApi({
@@ -378,8 +388,8 @@ test('game route restores and normalizes invalid score room targets without show
   await waitFor(() => {
     expect(window.location.hash).toBe('#/game?topic=kukuri%3Atopic%3Ademo&roomId=room-demo');
   });
-  expect(screen.getByRole('heading', { name: 'Metaverse Rooms' })).toBeInTheDocument();
-  expect(screen.queryByText('Room Demo')).not.toBeInTheDocument();
+  expect(within(getActiveColumn('Game Rooms')).getAllByRole('heading', { name: 'Game Rooms' })[0]).toBeInTheDocument();
+  expect(within(getActiveColumn('Game Rooms')).getByText('Room Demo')).toBeInTheDocument();
 
   firstRender.unmount();
 
@@ -408,8 +418,7 @@ test('game route restores and normalizes invalid score room targets without show
   await waitFor(() => {
     expect(window.location.hash).toBe('#/game?topic=kukuri%3Atopic%3Ademo');
   });
-  expect(screen.getByRole('heading', { name: 'Metaverse Rooms' })).toBeInTheDocument();
-  expect(screen.queryByText('Room Demo')).not.toBeInTheDocument();
+  expect(within(getActiveColumn('Metaverse')).getByRole('heading', { name: 'Metaverse Rooms' })).toBeInTheDocument();
 });
 
 test('profile connections route restores the requested view', async () => {

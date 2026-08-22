@@ -4,6 +4,7 @@ import { Link2 } from 'lucide-react';
 import { TimelineFeed } from '@/components/core/TimelineFeed';
 import { CommunityIndexWorkspace } from '@/components/core/CommunityIndexWorkspace';
 import { MetaverseRoomPanel } from '@/components/extended/MetaverseRoomPanel';
+import { GameRoomPanel } from '@/components/extended/GameRoomPanel';
 import type { MetaverseRoomActions } from '@/components/extended/metaverse/MetaverseRoomActions';
 import { ProfileConnectionsPanel } from '@/components/extended/ProfileConnectionsPanel';
 import { ProfileEditorPanel } from '@/components/extended/ProfileEditorPanel';
@@ -13,6 +14,7 @@ import { Card } from '@/components/ui/card';
 import { Notice } from '@/components/ui/notice';
 import { SmartReferenceText } from '@/components/core/SmartReferenceText';
 import type { PrimarySection, ProfileConnectionsView } from '@/components/shell/types';
+import type { ColumnKind } from '@/shell/slices/workspace';
 
 import type {
   DesktopApi,
@@ -50,6 +52,8 @@ export type DesktopShellPrimarySurfaceProps = {
   metaverseActions: MetaverseRoomActions;
   locale: SupportedLocale;
   routeSection: PrimarySection;
+  surfaceSection?: PrimarySection;
+  surfaceColumnKind?: ColumnKind;
   profileAvatarInputKey: number;
   messagesWorkspace: ReactNode;
   notificationsWorkspace: ReactNode;
@@ -97,6 +101,7 @@ export type DesktopShellPrimarySurfaceProps = {
   handleJoinLiveSession: (sessionId: string) => Promise<void>;
   handleLeaveLiveSession: (sessionId: string) => Promise<void>;
   handleEndLiveSession: (sessionId: string) => Promise<void>;
+  handleCreateGameRoom: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   updateGameDraft: (roomId: string, update: (draft: GameEditorDraft) => GameEditorDraft) => void;
   handleUpdateGameRoom: (roomId: string) => Promise<void>;
   openProfileOverview: () => void;
@@ -119,6 +124,8 @@ export function DesktopShellPrimarySurface({
   metaverseActions,
   locale,
   routeSection,
+  surfaceSection,
+  surfaceColumnKind,
   profileAvatarInputKey,
   messagesWorkspace,
   notificationsWorkspace,
@@ -144,6 +151,9 @@ export function DesktopShellPrimarySurface({
   handleJoinLiveSession,
   handleLeaveLiveSession,
   handleEndLiveSession,
+  handleCreateGameRoom,
+  updateGameDraft,
+  handleUpdateGameRoom,
   openProfileOverview,
   openProfileEditor,
   openProfileConnections,
@@ -163,6 +173,12 @@ export function DesktopShellPrimarySurface({
     bookmarkedReactionAssets,
     composerError,
     knownAuthorsByPubkey,
+    gameCreatePending,
+    gameDescription,
+    gameError,
+    gameParticipantsInput,
+    gameSavingByRoomId,
+    gameTitle,
     liveError,
     localProfile,
     mediaObjectUrls,
@@ -192,6 +208,12 @@ export function DesktopShellPrimarySurface({
       bookmarkedReactionAssets: s.bookmarkedReactionAssets,
       composerError: s.composerError,
       knownAuthorsByPubkey: s.knownAuthorsByPubkey,
+      gameCreatePending: s.gameCreatePending,
+      gameDescription: s.gameDescription,
+      gameError: s.gameError,
+      gameParticipantsInput: s.gameParticipantsInput,
+      gameSavingByRoomId: s.gameSavingByRoomId,
+      gameTitle: s.gameTitle,
       liveError: s.liveError,
       localProfile: s.localProfile,
       mediaObjectUrls: s.mediaObjectUrls,
@@ -217,6 +239,9 @@ export function DesktopShellPrimarySurface({
     }))
   );
   const setShellChromeState = useDesktopShellFieldSetter('shellChromeState');
+  const setGameTitle = useDesktopShellFieldSetter('gameTitle');
+  const setGameDescription = useDesktopShellFieldSetter('gameDescription');
+  const setGameParticipantsInput = useDesktopShellFieldSetter('gameParticipantsInput');
   const setCommunityIndexNodeBaseUrl = useDesktopShellFieldSetter('communityIndexNodeBaseUrl');
   const profileAuthorLabel = authorDisplayLabel(
     syncStatus.local_author_pubkey,
@@ -243,8 +268,13 @@ export function DesktopShellPrimarySurface({
     () => viewModels.activeGameRooms.filter((room) => room.room_kind === 'metaverse_room'),
     [viewModels.activeGameRooms]
   );
+  const scoreGameRooms = useMemo(
+    () => viewModels.activeGameRooms.filter((room) => room.room_kind === 'score_game'),
+    [viewModels.activeGameRooms]
+  );
   const profileMode = shellChromeState.profileMode;
   const profileConnectionsView = shellChromeState.profileConnectionsView;
+  const activeSurfaceSection = surfaceSection ?? shellChromeState.activePrimarySection;
   const unavailableCommunityNodeCount = communityNodeStatuses.filter(
     (status) => Boolean(status.last_error)
   ).length;
@@ -283,16 +313,19 @@ export function DesktopShellPrimarySurface({
       ) : null}
       <section
         className='shell-section'
-        ref={setPrimarySectionRef(shellChromeState.activePrimarySection)}
+        ref={columnMode ? undefined : setPrimarySectionRef(shellChromeState.activePrimarySection)}
         tabIndex={-1}
-        onFocusCapture={() =>
-          setShellChromeState((current) => ({
-            ...current,
-            activePrimarySection: routeSection,
-          }))
+        onFocusCapture={
+          columnMode
+            ? undefined
+            : () =>
+                setShellChromeState((current) => ({
+                  ...current,
+                  activePrimarySection: routeSection,
+                }))
         }
       >
-        {shellChromeState.activePrimarySection === 'timeline' ? (
+        {activeSurfaceSection === 'timeline' ? (
           <>
             {!columnMode ? (
               <Card className='shell-workspace-card'>
@@ -416,7 +449,7 @@ export function DesktopShellPrimarySurface({
           </>
         ) : null}
 
-        {shellChromeState.activePrimarySection === 'explore' ? (
+        {activeSurfaceSection === 'explore' ? (
           <CommunityIndexWorkspace
             api={api}
             mode='explore'
@@ -430,7 +463,7 @@ export function DesktopShellPrimarySurface({
           />
         ) : null}
 
-        {shellChromeState.activePrimarySection === 'live' ? (
+        {activeSurfaceSection === 'live' ? (
           <>
             <Card className='shell-workspace-card'>
               <div className='panel-header'>
@@ -546,7 +579,38 @@ export function DesktopShellPrimarySurface({
           </>
         ) : null}
 
-        {shellChromeState.activePrimarySection === 'game' ? (
+        {activeSurfaceSection === 'game' && surfaceColumnKind === 'game' ? (
+          <GameRoomPanel
+            status={viewModels.activeGamePanelState.status}
+            error={gameError ?? viewModels.activeGamePanelState.error}
+            audienceLabel={viewModels.activeComposeAudienceLabel}
+            title={gameTitle}
+            description={gameDescription}
+            participantsInput={gameParticipantsInput}
+            createPending={gameCreatePending}
+            rooms={scoreGameRooms}
+            drafts={viewModels.gameDraftViews}
+            savingByRoomId={gameSavingByRoomId}
+            localAuthorPubkey={syncStatus.local_author_pubkey}
+            onTitleChange={setGameTitle}
+            onDescriptionChange={setGameDescription}
+            onParticipantsChange={setGameParticipantsInput}
+            onSubmit={handleCreateGameRoom}
+            onDraftStatusChange={(roomId, status) =>
+              updateGameDraft(roomId, (draft) => ({ ...draft, status }))
+            }
+            onDraftPhaseChange={(roomId, phaseLabel) =>
+              updateGameDraft(roomId, (draft) => ({ ...draft, phase_label: phaseLabel }))
+            }
+            onDraftScoreChange={(roomId, participantId, score) =>
+              updateGameDraft(roomId, (draft) => ({
+                ...draft,
+                scores: { ...draft.scores, [participantId]: score },
+              }))
+            }
+            onSaveRoom={(roomId) => void handleUpdateGameRoom(roomId)}
+          />
+        ) : activeSurfaceSection === 'game' ? (
           <MetaverseRoomPanel
             actions={metaverseActions}
             activeTopic={activeTopic}
@@ -559,11 +623,11 @@ export function DesktopShellPrimarySurface({
           />
         ) : null}
 
-        {shellChromeState.activePrimarySection === 'notifications' ? notificationsWorkspace : null}
+        {activeSurfaceSection === 'notifications' ? notificationsWorkspace : null}
 
-        {shellChromeState.activePrimarySection === 'messages' ? messagesWorkspace : null}
+        {activeSurfaceSection === 'messages' ? messagesWorkspace : null}
 
-        {shellChromeState.activePrimarySection === 'profile' ? (
+        {activeSurfaceSection === 'profile' ? (
           <>
             {profileMode === 'edit' ? (
               <ProfileEditorPanel

@@ -59,18 +59,20 @@ import { useOsNotificationActivation } from '@/shell/useOsNotificationActivation
 import { selectUpdateAvailable, useAppUpdateStore } from '@/shell/useAppUpdateStore';
 import { useDesktopShellViewModels } from '@/shell/useDesktopShellViewModels';
 import {
-  DesktopShellDetailPaneStack,
-  DesktopShellMessagesWorkspace,
-  DesktopShellNotificationsWorkspace,
+  DesktopShellDetailSurfaceStack,
+  DesktopShellMessagesSurface,
+  DesktopShellNotificationsSurface,
 } from '@/shell/page/DesktopShellAuxiliaryPanels';
 import { DesktopShellOverlays } from '@/shell/page/DesktopShellOverlays';
 import { DesktopShellColumnWorkspace } from '@/shell/page/DesktopShellColumnWorkspace';
-import { DesktopShellPrimaryWorkspace } from '@/shell/page/DesktopShellPrimaryWorkspace';
+import { DesktopShellPrimarySurface } from '@/shell/page/DesktopShellPrimaryWorkspace';
 import { DesktopShellSettingsDrawer } from '@/shell/page/DesktopShellSettingsDrawer';
 import { useFocusScroll } from '@/shell/page/useFocusScroll';
 import { useSharePreview } from '@/shell/page/useSharePreview';
 import { useShellDialogs } from '@/shell/page/useShellDialogs';
+import { useDesktopShellColumnSynchronization } from '@/shell/page/useDesktopShellColumnSynchronization';
 import { useShallow } from 'zustand/react/shallow';
+import { type ColumnKind, type ColumnState } from '@/shell/slices/workspace';
 
 const CLIPBOARD_TOAST_TIMEOUT_MS = 2200;
 const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
@@ -97,10 +99,8 @@ export function DesktopShellPage({
     trackedTopics,
     activeTopic,
     topicInput,
-    selectedThread,
-    focusedObjectId,
     syncStatus,
-    selectedAuthorPubkey,
+    selectedChannelIdByTopic,
     notifications,
     notificationStatus,
     selectedLiveSessionId,
@@ -289,10 +289,10 @@ export function DesktopShellPage({
 
   const {
     liveSessionListItems,
-    threadPostViews,
     topicNavItems,
     activeGameRooms,
   } = viewModels;
+  useDesktopShellColumnSynchronization(activeGameRooms);
   const notificationBadgeLabel =
     notificationStatus.unread_count > 99 ? '99+' : formatCount(notificationStatus.unread_count);
   useOsNotificationBridge();
@@ -450,9 +450,6 @@ export function DesktopShellPage({
       trackedTopics,
     ]
   );
-  const threadFocusKey = selectedThread && focusedObjectId
-    ? `${selectedThread}:${focusedObjectId}`
-      : null;
   const eligibleIndexingNodes = useMemo(
     () =>
       eligibleCommunityIndexNodes(
@@ -474,11 +471,6 @@ export function DesktopShellPage({
       settingsSection: 'community-node',
     });
   }, [setShellChromeState, syncRoute]);
-  useFocusScroll({
-    focusKey: threadFocusKey,
-    readinessKey: threadPostViews.length,
-    selector: focusedObjectId ? `[data-post-object-id="${focusedObjectId}"]` : null,
-  });
   const liveFocusKey =
     shellChromeState.activePrimarySection === 'live' ? selectedLiveSessionId : null;
   useFocusScroll({
@@ -647,8 +639,11 @@ export function DesktopShellPage({
     </div>
   );
 
-  const messagesWorkspace = (
-    <DesktopShellMessagesWorkspace
+  const renderMessagesSurface = (
+    surfaceKind: 'messages' | 'conversation',
+    peerPubkey?: string
+  ) => (
+    <DesktopShellMessagesSurface
       t={t}
       locale={locale}
       viewModels={viewModels}
@@ -660,10 +655,12 @@ export function DesktopShellPage({
       handleDirectMessageAttachmentSelection={shellActions.handleDirectMessageAttachmentSelection}
       handleRemoveDirectMessageDraftAttachment={shellActions.handleRemoveDirectMessageDraftAttachment}
       handleSendDirectMessage={shellActions.handleSendDirectMessage}
+      surfaceKind={surfaceKind}
+      peerPubkey={peerPubkey}
     />
   );
-  const notificationsWorkspace = (
-    <DesktopShellNotificationsWorkspace
+  const notificationsSurface = (
+    <DesktopShellNotificationsSurface
       t={t}
       locale={locale}
       onRefresh={() => {
@@ -677,8 +674,12 @@ export function DesktopShellPage({
       handleOpenNotification={shellActions.handleOpenNotification}
     />
   );
-  const detailPaneStack = (
-    <DesktopShellDetailPaneStack
+  const renderDetailSurface = (
+    surfaceKind: 'thread' | 'profile',
+    entityId?: string,
+    topicId?: string
+  ) => (
+    <DesktopShellDetailSurfaceStack
       api={api}
       t={t}
       viewModels={viewModels}
@@ -702,19 +703,23 @@ export function DesktopShellPage({
       handleMuteAction={shellActions.handleMuteAction}
       handleOpenOriginalTopic={shellActions.handleOpenOriginalTopic}
       openCommunityNodeSettings={handleOpenCommunityNodeSettings}
+      surfaceKind={surfaceKind}
+      entityId={entityId}
+      topicId={topicId}
     />
   );
-  const columnWorkspaceActive = shellChromeState.activePrimarySection === 'timeline';
-  const primaryWorkspace = (
-    <DesktopShellPrimaryWorkspace
+  const renderPrimarySurface = (surfaceSection: PrimarySection, column?: ColumnState) => (
+    <DesktopShellPrimarySurface
       t={t}
       api={api}
       metaverseActions={shellActions.metaverseActions}
       locale={locale}
       routeSection={routeSection}
+      surfaceSection={surfaceSection}
+      surfaceColumnKind={column?.kind}
       profileAvatarInputKey={dialogs.profileAvatarInputKey}
-      messagesWorkspace={messagesWorkspace}
-      notificationsWorkspace={notificationsWorkspace}
+      messagesWorkspace={null}
+      notificationsWorkspace={null}
       viewModels={viewModels}
       setPrimarySectionRef={setPrimarySectionRef}
       focusTimelineView={focusTimelineView}
@@ -737,6 +742,7 @@ export function DesktopShellPage({
       handleJoinLiveSession={shellActions.handleJoinLiveSession}
       handleLeaveLiveSession={shellActions.handleLeaveLiveSession}
       handleEndLiveSession={shellActions.handleEndLiveSession}
+      handleCreateGameRoom={shellActions.handleCreateGameRoom}
       updateGameDraft={shellActions.updateGameDraft}
       handleUpdateGameRoom={shellActions.handleUpdateGameRoom}
       openProfileOverview={openProfileOverview}
@@ -753,21 +759,83 @@ export function DesktopShellPage({
       handleRelationshipAction={shellActions.handleRelationshipAction}
       handleMuteAction={shellActions.handleMuteAction}
       handleOpenOriginalTopic={shellActions.handleOpenOriginalTopic}
-      columnMode={columnWorkspaceActive}
+      columnMode
     />
   );
-  const workspace = columnWorkspaceActive ? (
+  const activateWorkspaceColumn = async (column: ColumnState) => {
+    if (
+      column.scope &&
+      (column.scope.topicId !== activeTopic ||
+        column.scope.channelId !== (selectedChannelIdByTopic[activeTopic] ?? null))
+    ) {
+      await syncTopicContext(column.scope.topicId, column.scope.channelId);
+    }
+    if (column.kind === 'thread' && column.entityId) {
+      await openThread(column.entityId, { topic: column.scope?.topicId });
+      return;
+    }
+    if (column.kind === 'profile' && column.entityId) {
+      await openAuthorDetail(column.entityId);
+      return;
+    }
+    if (column.kind === 'conversation' && column.entityId) {
+      await openDirectMessagePane(column.entityId);
+      return;
+    }
+    if (column.kind === 'stream') {
+      setSelectedLiveSessionId(column.entityId ?? null);
+      setSelectedGameRoomId(null);
+      focusPrimarySection('live');
+      return;
+    }
+    if (column.kind === 'game' || column.kind === 'metaverse') {
+      setSelectedGameRoomId(column.entityId ?? null);
+      setSelectedLiveSessionId(null);
+      focusPrimarySection('game');
+      return;
+    }
+    const sectionByKind: Partial<Record<ColumnKind, PrimarySection>> = {
+      timeline: 'timeline',
+      notifications: 'notifications',
+      explore: 'explore',
+      messages: 'messages',
+      profile: 'profile',
+    };
+    const section = sectionByKind[column.kind];
+    if (section) focusPrimarySection(section);
+  };
+  const workspace = (
     <DesktopShellColumnWorkspace
-      title={t('shell:primarySections.timeline')}
       scopeLabel={viewModels.activeComposeAudienceLabel}
       activeTimelineView={shellChromeState.timelineView}
       timelineViewItems={viewModels.timelineViewItems}
       onSelectTimelineView={focusTimelineView}
-    >
-      {primaryWorkspace}
-    </DesktopShellColumnWorkspace>
-  ) : (
-    primaryWorkspace
+      onActivateColumn={(column) => void activateWorkspaceColumn(column)}
+      renderPrimarySurface={renderPrimarySurface}
+      messagesSurface={renderMessagesSurface('messages')}
+      renderConversationSurface={(column) =>
+        renderMessagesSurface('conversation', column.entityId)
+      }
+      notificationsSurface={notificationsSurface}
+      renderThreadSurface={(column) =>
+        renderDetailSurface('thread', column.entityId, column.scope?.topicId)
+      }
+      renderProfileSurface={(column) =>
+        renderDetailSurface('profile', column.entityId, column.scope?.topicId)
+      }
+      titles={{
+        timeline: t('shell:primarySections.timeline'),
+        notifications: t('shell:primarySections.notifications'),
+        thread: t('shell:context.thread'),
+        profile: t('shell:primarySections.profile'),
+        explore: t('shell:primarySections.explore'),
+        messages: t('shell:primarySections.messages'),
+        conversation: 'Conversation',
+        stream: t('live:title'),
+        game: t('game:title'),
+        metaverse: 'Metaverse',
+      }}
+    />
   );
 
   return (
@@ -808,9 +876,7 @@ export function DesktopShellPage({
           />
         }
         workspace={workspace}
-        workspaceLayout={columnWorkspaceActive ? 'column' : 'legacy'}
-        detailPaneStack={detailPaneStack}
-        detailPaneCount={(selectedThread ? 1 : 0) + (selectedAuthorPubkey ? 1 : 0)}
+        workspaceLayout='column'
         mobileFooter={
           <Button
             ref={navTriggerRef}

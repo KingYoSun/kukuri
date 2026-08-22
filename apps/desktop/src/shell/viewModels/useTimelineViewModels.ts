@@ -304,6 +304,7 @@ export function useTimelineViewModels({
   );
 
   return {
+    buildPostCardView,
     activeTimelinePostViews: useMemo(
       () => activeTimeline.map((post) => buildPostCardView(post, 'timeline')),
       [activeTimeline, buildPostCardView]

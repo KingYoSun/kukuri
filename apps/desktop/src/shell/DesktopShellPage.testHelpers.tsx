@@ -300,9 +300,11 @@ export function renderAtHash(hash: string, api = createDesktopMockApi()) {
 
 export function expectActiveTopic(topic: string) {
   expect(window.location.hash).toContain(`topic=${encodeURIComponent(topic)}`);
-  expect(screen.getByRole('button', { name: topicDisplayName(topic) }).closest('li')).toHaveClass(
-    'topic-item-active'
-  );
+  expect(
+    within(screen.getByRole('complementary', { name: 'Primary navigation' }))
+      .getByRole('button', { name: topicDisplayName(topic) })
+      .closest('li')
+  ).toHaveClass('topic-item-active');
 }
 
 export function getWorkspaceTabs() {
@@ -402,10 +404,26 @@ export async function openGameCreateDialog(user: ReturnType<typeof userEvent.set
 }
 
 export async function openNotificationsInbox(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole('button', { name: /Notifications|通知/ }));
-  return await screen.findByRole('heading', { name: 'Notifications' });
+  await user.click(
+    screen.getByRole('button', { name: /^(?:Notifications|通知) (?:\d+|99\+)$/ })
+  );
+  return (await screen.findAllByRole('heading', { name: 'Notifications' }))[0];
 }
 
 export function getDetailPane(name: 'Thread' | 'Author') {
-  return screen.getByRole('complementary', { name });
+  const columnTitle = name === 'Author' ? 'Profile' : 'Thread';
+  const columns = screen.queryAllByRole('region', {
+    name: new RegExp(`^${columnTitle} Column,`),
+  });
+  const activeColumn = columns.find(
+    (column) => column.getAttribute('aria-current') === 'true',
+  );
+
+  return activeColumn ?? columns.at(-1) ?? screen.getByRole('complementary', { name });
+}
+
+export function getActiveColumn(title: string) {
+  return screen.getByRole('region', {
+    name: new RegExp(`^${title} Column, .*?, Active,`),
+  });
 }

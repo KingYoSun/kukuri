@@ -158,6 +158,8 @@ export const selectShellPageSlice = (s: DesktopShellStore) => ({
   focusedObjectId: s.focusedObjectId,
   syncStatus: s.syncStatus,
   selectedAuthorPubkey: s.selectedAuthorPubkey,
+  selectedDirectMessagePeerPubkey: s.selectedDirectMessagePeerPubkey,
+  selectedChannelIdByTopic: s.selectedChannelIdByTopic,
   notifications: s.notifications,
   notificationStatus: s.notificationStatus,
   selectedLiveSessionId: s.selectedLiveSessionId,

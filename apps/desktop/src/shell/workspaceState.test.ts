@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   activateColumn,
   closeColumn,
+  columnIdentityId,
   createInitialWorkspaceState,
   openTransientColumn,
   setColumnPinned,
@@ -38,6 +39,19 @@ describe('workspace state transitions', () => {
       },
     ]);
     expect(state.activeColumnId).toBe('timeline-initial');
+  });
+
+  it('builds stable identity from kind, scope, and entity', () => {
+    expect(
+      columnIdentityId(
+        'conversation',
+        { topicId: 'kukuri:topic:demo', channelId: 'friends/plus' },
+        'peer:alice'
+      )
+    ).toBe(
+      'column:conversation:kukuri%3Atopic%3Ademo:friends%2Fplus:peer%3Aalice'
+    );
+    expect(columnIdentityId('timeline')).toBe('timeline-initial');
   });
 
   it('activates an existing Column without changing the layout', () => {
@@ -84,10 +98,62 @@ describe('workspace state transitions', () => {
 
     expect(withConversation.columns.map((column) => column.id)).toEqual([
       'timeline-initial',
-      'thread-1',
       'profile-1',
+      'thread-1',
       'conversation-1',
     ]);
+  });
+
+  it('inserts a new child immediately to the right of its parent', () => {
+    const initial = createInitialWorkspaceState();
+    const withProfile = openTransientColumn(
+      initial,
+      transientColumn({ id: 'profile-1', kind: 'profile', parentColumnId: undefined })
+    );
+    const withThread = openTransientColumn(
+      withProfile,
+      transientColumn({ parentColumnId: 'timeline-initial' })
+    );
+
+    expect(withThread.columns.map((column) => column.id)).toEqual([
+      'timeline-initial',
+      'thread-1',
+      'profile-1',
+    ]);
+  });
+
+  it('reparents and reorders an existing transient Column when its causal chain changes', () => {
+    const profile = transientColumn({
+      id: 'profile-bob',
+      kind: 'profile',
+      entityId: 'bob',
+    });
+    let state = openTransientColumn(createInitialWorkspaceState(), profile);
+    state = openTransientColumn(
+      state,
+      transientColumn({ id: 'messages', kind: 'messages', parentColumnId: undefined })
+    );
+    state = openTransientColumn(
+      state,
+      transientColumn({
+        id: 'conversation-bob',
+        kind: 'conversation',
+        entityId: 'bob',
+        parentColumnId: 'messages',
+      })
+    );
+    state = openTransientColumn(state, {
+      ...profile,
+      parentColumnId: 'conversation-bob',
+    });
+
+    expect(state.columns.map((column) => column.id)).toEqual([
+      'timeline-initial',
+      'messages',
+      'conversation-bob',
+      'profile-bob',
+    ]);
+    expect(state.columns.at(-1)?.parentColumnId).toBe('conversation-bob');
   });
 
   it('moves active state to the parent, then a neighbor, when closing a Column', () => {

@@ -1,4 +1,4 @@
-import { Pin, PinOff } from 'lucide-react';
+import { Pin, PinOff, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ type ColumnSurfaceProps = {
   footer?: ReactNode;
   headerActions?: ReactNode;
   onPinnedChange?: (pinned: boolean) => void;
+  onClose?: () => void;
   pinned: boolean;
   position: number;
   scopeLabel: string;
@@ -26,6 +27,7 @@ export function ColumnSurface({
   footer,
   headerActions,
   onPinnedChange,
+  onClose,
   pinned,
   position,
   scopeLabel,
@@ -60,7 +62,7 @@ export function ColumnSurface({
           </div>
           <p>{scopeLabel}</p>
         </div>
-        {headerActions || onPinnedChange ? (
+        {headerActions || onPinnedChange || onClose ? (
           <div className='shell-column-header-actions'>
             {headerActions}
             {onPinnedChange ? (
@@ -77,6 +79,17 @@ export function ColumnSurface({
                 ) : (
                   <Pin className='size-4' aria-hidden='true' />
                 )}
+              </Button>
+            ) : null}
+            {onClose ? (
+              <Button
+                variant='ghost'
+                size='icon'
+                type='button'
+                aria-label={`Close ${title}`}
+                onClick={onClose}
+              >
+                <X className='size-4' aria-hidden='true' />
               </Button>
             ) : null}
           </div>
