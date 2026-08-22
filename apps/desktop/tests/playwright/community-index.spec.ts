@@ -1,5 +1,14 @@
 import { expect, test } from '@playwright/test';
 
+async function openControlCenter(page: import('@playwright/test').Page) {
+  const controlCenter = page.getByRole('complementary', { name: 'Control Center' });
+  if (!(await controlCenter.isVisible().catch(() => false))) {
+    await page.getByTestId('control-center-trigger').click();
+  }
+  await expect(controlCenter).toBeVisible();
+  return controlCenter;
+}
+
 test('Timeline keeps Community Index out of the primary surface and Explore keeps reporting behavior visible', async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 980 });
   await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
@@ -7,7 +16,8 @@ test('Timeline keeps Community Index out of the primary surface and Explore keep
   const topicIndex = page.getByTestId('community-index-topic');
   await expect(topicIndex).toHaveCount(0);
 
-  await page.getByRole('tab', { name: 'Explore' }).click();
+  const controlCenter = await openControlCenter(page);
+  await controlCenter.getByRole('button', { name: 'Add Explore Column' }).click();
   await expect(page).toHaveURL(/#\/explore\?topic=/);
   const explore = page.getByTestId('community-index-explore');
   await explore.getByLabel('Search query').fill('iroh topic');
@@ -34,19 +44,24 @@ test('public and private indexing requests expose status and require private dis
   await page.setViewportSize({ width: 1400, height: 980 });
   await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
 
-  await page.getByRole('button', { name: 'Request indexing for demo' }).click();
+  let controlCenter = await openControlCenter(page);
+  await controlCenter.getByRole('button', { name: 'Request indexing for demo' }).click();
   let requestDialog = page.getByRole('dialog', { name: 'Request Community Node indexing' });
   await requestDialog.getByRole('button', { name: 'Submit request' }).click();
   await expect(requestDialog.getByText('The request is pending review.')).toBeVisible();
   await requestDialog.getByRole('button', { name: 'Close', exact: true }).click();
 
-  await page.getByRole('button', { name: 'Channels' }).click();
+  controlCenter = await openControlCenter(page);
+  await controlCenter.getByRole('button', { name: 'Create or join channel' }).click();
   const channelDialog = page.getByRole('dialog', { name: 'Create / Join Private Channel' });
   await channelDialog.getByPlaceholder('Channel name').fill('Index Review');
   await channelDialog.getByRole('button', { name: 'Create Channel' }).click();
   await page.keyboard.press('Escape');
 
-  await page.getByRole('button', { name: 'Open Index Review channel settings' }).click();
+  controlCenter = await openControlCenter(page);
+  await controlCenter
+    .getByRole('button', { name: 'Open Index Review channel settings' })
+    .click();
   const settingsDialog = page.getByRole('dialog', { name: 'Channel Settings' });
   await settingsDialog.getByRole('button', { name: 'Request indexing' }).click();
   requestDialog = page.getByRole('dialog', { name: 'Request Community Node indexing' });

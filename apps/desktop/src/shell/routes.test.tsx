@@ -24,19 +24,11 @@ function renderAtHash(hash: string, api = createDesktopMockApi()) {
 
 function expectActiveTopic(topic: string) {
   expect(window.location.hash).toContain(`topic=${encodeURIComponent(topic)}`);
-  expect(
-    within(screen.getByRole('complementary', { name: 'Primary navigation' }))
-      .getByRole('button', { name: topicDisplayName(topic) })
-      .closest('li')
-  ).toHaveClass('topic-item-active');
+  expect(getActiveColumn('Timeline')).toHaveTextContent(topicDisplayName(topic));
 }
 
 function getTimelineViewTabs() {
   return screen.getByRole('tablist', { name: 'Timeline views' });
-}
-
-function getWorkspaceTabs() {
-  return screen.getByRole('tablist', { name: 'Workspaces' });
 }
 
 function getDetailPane(name: 'Thread' | 'Author') {
@@ -52,8 +44,16 @@ function getActiveColumn(title: string) {
 }
 
 async function openChannelManager(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole('button', { name: 'Private Channels' }));
+  const controlCenter = await openControlCenter(user);
+  await user.click(within(controlCenter).getByRole('button', { name: 'Create or join channel' }));
   return await screen.findByRole('dialog', { name: 'Create / Join Private Channel' });
+}
+
+async function openControlCenter(user: ReturnType<typeof userEvent.setup>) {
+  const existing = screen.queryByRole('complementary', { name: 'Control Center' });
+  if (existing) return existing;
+  await user.click(await screen.findByTestId('control-center-trigger'));
+  return screen.getByRole('complementary', { name: 'Control Center' });
 }
 
 test('invalid hash routes fall back to the active public timeline and normalize the URL', async () => {
@@ -330,7 +330,7 @@ test('live session route restores and normalizes invalid session targets without
   await waitFor(() => {
     expect(window.location.hash).toBe('#/live?topic=kukuri%3Atopic%3Ademo&sessionId=session-demo');
   });
-  expect(within(getActiveColumn('Live Sessions')).getByText('Live Demo').closest('article')).toHaveClass('post-card-targeted');
+  expect(within(getActiveColumn('Live')).getByText('Live Demo').closest('article')).toHaveClass('post-card-targeted');
 
   firstRender.unmount();
 
@@ -359,7 +359,7 @@ test('live session route restores and normalizes invalid session targets without
   await waitFor(() => {
     expect(window.location.hash).toBe('#/live?topic=kukuri%3Atopic%3Ademo');
   });
-  expect(within(getActiveColumn('Live Sessions')).getAllByRole('heading', { name: 'Live Sessions' })[0]).toBeInTheDocument();
+  expect(within(getActiveColumn('Live')).getAllByRole('heading', { name: 'Live Sessions' })[0]).toBeInTheDocument();
 });
 
 test('game route restores score rooms in Game Columns and normalizes invalid targets', async () => {
@@ -388,8 +388,8 @@ test('game route restores score rooms in Game Columns and normalizes invalid tar
   await waitFor(() => {
     expect(window.location.hash).toBe('#/game?topic=kukuri%3Atopic%3Ademo&roomId=room-demo');
   });
-  expect(within(getActiveColumn('Game Rooms')).getAllByRole('heading', { name: 'Game Rooms' })[0]).toBeInTheDocument();
-  expect(within(getActiveColumn('Game Rooms')).getByText('Room Demo')).toBeInTheDocument();
+  expect(within(getActiveColumn('Game')).getAllByRole('heading', { name: 'Game Rooms' })[0]).toBeInTheDocument();
+  expect(within(getActiveColumn('Game')).getByText('Room Demo')).toBeInTheDocument();
 
   firstRender.unmount();
 
@@ -471,15 +471,16 @@ test('topic and private channel selection sync into the hash route', async () =>
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
 
-  await user.type(screen.getByPlaceholderText('demo'), 'kukuri:topic:second');
-  await user.click(screen.getByRole('button', { name: 'Add' }));
-  await user.click(screen.getByRole('button', { name: 'second' }));
+  let controlCenter = await openControlCenter(user);
+  await user.type(within(controlCenter).getByPlaceholderText('demo'), 'kukuri:topic:second');
+  await user.click(within(controlCenter).getByRole('button', { name: 'Add' }));
 
   await waitFor(() => {
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Asecond');
   });
 
-  await user.click(screen.getByRole('button', { name: 'demo' }));
+  controlCenter = await openControlCenter(user);
+  await user.click(within(controlCenter).getByRole('button', { name: 'demo' }));
   const channelDialog = await openChannelManager(user);
   await user.type(within(channelDialog).getByPlaceholderText('Channel name'), 'core');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
@@ -509,10 +510,7 @@ test('messages hash route restores the direct message and author pane together',
   );
 
   await waitFor(() => {
-    expect(within(getWorkspaceTabs()).getByRole('tab', { name: 'Messages' })).toHaveAttribute(
-      'aria-selected',
-      'true'
-    );
+    expect(screen.getByRole('region', { name: /^Messages Column/ })).toBeInTheDocument();
     expect(getDetailPane('Author')).toBeInTheDocument();
   });
   const conversationColumn = await screen.findByRole('region', { name: /Conversation Column/ });

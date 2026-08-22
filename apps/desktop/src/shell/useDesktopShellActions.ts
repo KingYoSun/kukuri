@@ -139,7 +139,6 @@ export function useDesktopShellActions({
     localProfile,
     profileDraft,
     selectedAuthorPubkey,
-    shellChromeState,
   } = state;
   const activePrivateChannel =
     nextJoinedChannels.find((channel) => channel.channel_id === nextSelectedChannelId) ?? null;
@@ -478,7 +477,6 @@ export function useDesktopShellActions({
     clearReply,
     clearRepost,
     openNewPostDialog,
-    openFloatingActionDialog,
     handleSimpleRepost,
     handleRestoreLocalPost,
     handleRetryLocalPost,
@@ -497,7 +495,6 @@ export function useDesktopShellActions({
     rememberDirectMessageDraftPreview,
     rememberDraftPreview,
     restoreLocalDraft,
-    shellChromeState,
     submitOptimisticPost: async (post) => {
       await submitOptimisticPost(post);
     },
@@ -519,8 +516,6 @@ export function useDesktopShellActions({
     setShellChromeState,
     setThread,
     setComposeDialogOpen,
-    setGameCreateDialogOpen,
-    setLiveCreateDialogOpen,
   });
 
   const { handleSendDirectMessage, sendDirectMessageDraft } = createDirectMessageActions({
@@ -851,7 +846,6 @@ export function useDesktopShellActions({
     clearReply,
     clearRepost,
     openNewPostDialog,
-    openFloatingActionDialog,
     handleSimpleRepost,
     handleRetryLocalPost,
     handleRestoreLocalPost,

@@ -41,6 +41,33 @@
     "trackedTopics": "Tracked Topics",
     "updateAvailable": "Update available"
   },
+  "controlCenter": {
+    "eyebrow": "Global navigation",
+    "title": "Control Center",
+    "openWithStatus": "Open Control Center · {{status}}",
+    "closeWithStatus": "Close Control Center · {{status}}",
+    "close": "Close Control Center",
+    "status": {
+      "connected": "Connected",
+      "connectionAttention": "Connection needs attention",
+      "communityNodeAttention": "Community node needs attention"
+    },
+    "sections": {
+      "columns": "Columns",
+      "places": "Places",
+      "activity": "Activity",
+      "system": "System"
+    },
+    "addColumn": "Add {{title}} Column",
+    "focusColumn": "Focus {{title}}",
+    "pinColumn": "Pin {{title}}",
+    "unpinColumn": "Unpin {{title}}",
+    "closeColumn": "Close {{title}} Column",
+    "createJoinChannel": "Create or join channel",
+    "shareChannel": "Share active channel",
+    "release": "Release and updates",
+    "settings": "Settings"
+  },
   "primarySections": {
     "explore": "Explore",
     "game": "Game",

@@ -142,17 +142,6 @@
   gap: var(--space-2xs);
 }
 
-.shell-nav-channel-action {
-  flex: none;
-}
-
-.shell-nav-channel-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  margin: 0;
-}
-
 .shell-nav-accordion {
   gap: var(--space-sm);
 }

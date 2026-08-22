@@ -747,17 +747,6 @@
   margin-bottom: var(--space-xs);
 }
 
-.shell-notification-button {
-  width: 100%;
-  justify-content: space-between;
-  gap: var(--space-sm);
-}
-
-.shell-notification-button-badge {
-  min-width: 2.75rem;
-  justify-content: center;
-}
-
 .shell-nav-status {
   display: flex;
   justify-content: space-between;

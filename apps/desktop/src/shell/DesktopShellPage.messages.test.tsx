@@ -6,7 +6,7 @@ import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import { App } from '@/App';
 import {
   getDetailPane,
-  getWorkspaceTabs,
+  getActiveColumn,
   installObjectUrlMocks,
   renderAtHash,
   setViewportWidth,
@@ -78,8 +78,8 @@ test('author detail mutual action opens the messages workspace and sends a local
   await user.click(screen.getByRole('button', { name: 'Message' }));
 
   await waitFor(() => {
-    expect(within(getWorkspaceTabs()).getByRole('tab', { name: 'Messages' })).toHaveAttribute(
-      'aria-selected',
+    expect(getActiveColumn('Conversation')).toHaveAttribute(
+      'aria-current',
       'true'
     );
     expect(window.location.hash).toBe(
@@ -167,10 +167,7 @@ test('messages author click opens the author pane without leaving the selected d
 
   await waitFor(() => {
     expect(getDetailPane('Author')).toBeInTheDocument();
-    expect(within(getWorkspaceTabs()).getByRole('tab', { name: 'Messages' })).toHaveAttribute(
-      'aria-selected',
-      'true'
-    );
+    expect(screen.getByRole('region', { name: /^Conversation Column,/ })).toBeInTheDocument();
     expect(window.location.hash).toBe(
       `#/messages?topic=kukuri%3Atopic%3Ademo&peerPubkey=${authorPubkey}&authorPubkey=${authorPubkey}`
     );
@@ -252,10 +249,7 @@ test('messages hash route restores the direct message and author pane together',
   const user = userEvent.setup();
 
   await waitFor(() => {
-    expect(within(getWorkspaceTabs()).getByRole('tab', { name: 'Messages' })).toHaveAttribute(
-      'aria-selected',
-      'true'
-    );
+    expect(screen.getByRole('region', { name: /^Conversation Column,/ })).toBeInTheDocument();
     expect(getDetailPane('Author')).toBeInTheDocument();
   });
   const conversationColumn = await expandConversationComposer(user);
@@ -368,8 +362,8 @@ test('messages workspace keeps the last successful DM state when status refresh 
 
   await user.click(screen.getByRole('button', { name: 'Message' }));
   await waitFor(() => {
-    expect(within(getWorkspaceTabs()).getByRole('tab', { name: 'Messages' })).toHaveAttribute(
-      'aria-selected',
+    expect(getActiveColumn('Conversation')).toHaveAttribute(
+      'aria-current',
       'true'
     );
   });

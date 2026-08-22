@@ -10,6 +10,7 @@ import {
   getDetailPane,
   getSocialConnectionsTabs,
   openChannelManager,
+  openControlCenter,
   openSettingsDrawer,
   openSettingsSection,
   publishPost,
@@ -60,9 +61,9 @@ test('profile overview aggregates public posts across topics and excludes privat
   expect(within(profileColumn).queryByText('demo private post')).not.toBeInTheDocument();
   expect(screen.getAllByText('demo').length).toBeGreaterThan(0);
 
-  await user.type(screen.getByPlaceholderText('demo'), 'kukuri:topic:second');
-  await user.click(screen.getByRole('button', { name: 'Add' }));
-  await user.click(screen.getByRole('button', { name: 'second' }));
+  const controlCenter = await openControlCenter(user);
+  await user.type(within(controlCenter).getByPlaceholderText('demo'), 'kukuri:topic:second');
+  await user.click(within(controlCenter).getByRole('button', { name: 'Add' }));
   await waitFor(() => {
     expectActiveTopic('kukuri:topic:second');
   });
@@ -206,12 +207,8 @@ test('author detail shows profile topic posts and can open an untracked origin t
     expect(getActiveColumn('Timeline')).toBeInTheDocument();
   });
   expect(within(getActiveColumn('Timeline')).getByText('post from relay topic')).toBeInTheDocument();
-  expect(
-    within(screen.getByRole('complementary', { name: 'Primary navigation' })).getByRole(
-      'button',
-      { name: 'relay' }
-    )
-  ).toBeInTheDocument();
+  const controlCenter = await openControlCenter(user);
+  expect(within(controlCenter).getByRole('button', { name: 'relay' })).toBeInTheDocument();
 });
 
 test('local profile editor saves profile draft from primary navigation and settings stays diagnostics-only', async () => {

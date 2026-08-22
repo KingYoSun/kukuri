@@ -8,6 +8,7 @@ import {
   buildPaginatedPost,
   createDeferred,
   openChannelManager,
+  openControlCenter,
   paginatePosts,
   setViewportWidth,
 } from './DesktopShellPage.testHelpers';
@@ -466,9 +467,6 @@ test('private channel timeline keeps scope-separated posts and pending counts fr
     expect(
       screen.queryByRole('dialog', { name: 'Create / Join Private Channel' })
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'Open core channel settings' })
-    ).toBeInTheDocument();
     expect(screen.getByText('channel post')).toBeInTheDocument();
   });
   expect(screen.getByText('public post')).toBeInTheDocument();
@@ -487,7 +485,8 @@ test('private channel timeline keeps scope-separated posts and pending counts fr
   });
   expect(screen.getByText('public post')).toBeInTheDocument();
 
-  const topicItem = screen.getByRole('button', { name: 'demo' }).closest('li');
+  const controlCenter = await openControlCenter(user);
+  const topicItem = within(controlCenter).getByRole('button', { name: 'demo' }).closest('li');
   if (!(topicItem instanceof HTMLElement)) {
     throw new Error('active topic item not found');
   }

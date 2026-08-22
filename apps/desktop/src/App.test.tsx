@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
 
@@ -34,12 +34,10 @@ test('desktop app bootstraps the shell with the default timeline workspace', asy
   await waitFor(() => {
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
   });
-  expect(screen.getByRole('tablist', { name: 'Workspaces' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'demo' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'demo' }).closest('li')).toHaveClass(
-    'topic-item-active'
-  );
-  expect(screen.getByRole('button', { name: 'Publish' })).toBeInTheDocument();
+  const timelineColumn = screen.getByRole('region', { name: /^Timeline Column/ });
+  expect(timelineColumn).toHaveTextContent('demo');
+  expect(within(timelineColumn).getByRole('button', { name: /^Publish to / })).toBeInTheDocument();
+  expect(screen.getByTestId('control-center-trigger')).toBeInTheDocument();
   expect(window.localStorage.getItem(DESKTOP_THEME_STORAGE_KEY)).toBe('dark');
 });
 
@@ -57,7 +55,12 @@ test('settings drawer can open the release section', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
 
-  await user.click(await screen.findByRole('button', { name: 'Open settings' }));
+  await user.click(await screen.findByTestId('control-center-trigger'));
+  await user.click(
+    within(screen.getByRole('complementary', { name: 'Control Center' })).getByRole('button', {
+      name: 'Settings',
+    })
+  );
   expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
 
   await user.click(screen.getByRole('button', { name: 'Release' }));

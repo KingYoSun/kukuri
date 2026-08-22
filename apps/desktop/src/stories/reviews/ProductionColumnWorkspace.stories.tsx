@@ -16,4 +16,9 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const ScopedDraftsAndComposer: Story = {};
+export const ControlCenterOpen: Story = {
+  args: {
+    initialControlCenterOpen: true,
+  },
+};
 export const InteractiveProductionShell: Story = {};

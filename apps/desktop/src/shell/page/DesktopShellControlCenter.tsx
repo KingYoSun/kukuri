@@ -1,0 +1,508 @@
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  type ComponentProps,
+  type RefObject,
+} from 'react';
+import { useTranslation } from 'react-i18next';
+import {
+  Bell,
+  BookPlus,
+  Columns3,
+  Compass,
+  Download,
+  GitBranchPlus,
+  Info,
+  Menu,
+  MessageCircle,
+  Pin,
+  PinOff,
+  Plus,
+  Radio,
+  Settings,
+  SlidersHorizontal,
+  X,
+} from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
+
+import { FilterableTopicNavList } from '@/components/core/FilterableTopicNavList';
+import type { TopicDiagnosticSummary } from '@/components/core/types';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { topicDisplayName } from '@/lib/topicId';
+import type { SettingsSection } from '@/components/shell/types';
+import {
+  activateColumn,
+  closeColumn,
+  columnIdentityId,
+  openPinnedColumn,
+  setColumnPinned,
+  type ColumnKind,
+  type ColumnState,
+} from '@/shell/slices/workspace';
+import { formatCount, syncStatusBadgeLabel } from '@/shell/presentation';
+import { useDesktopShellFieldSetter, useDesktopShellStore } from '@/shell/store';
+
+export const CONTROL_CENTER_ID = 'shell-control-center';
+
+type TopicListProps = Omit<
+  ComponentProps<typeof FilterableTopicNavList>,
+  'alwaysShowControls' | 'items'
+>;
+
+type DesktopShellControlCenterProps = TopicListProps & {
+  triggerRef: RefObject<HTMLButtonElement | null>;
+  topicItems: TopicDiagnosticSummary[];
+  topicInput: string;
+  titles: Record<ColumnKind, string>;
+  updateAvailable: boolean;
+  onTopicInputChange: (value: string) => void;
+  onAddTopic: () => void | Promise<void>;
+  onOpenChannelManager: () => void;
+  onActivateColumn: (column: ColumnState) => void | Promise<void>;
+  onOpenSettings: (section: SettingsSection) => void;
+};
+
+const ADDABLE_COLUMN_KINDS: ColumnKind[] = [
+  'timeline',
+  'explore',
+  'notifications',
+  'messages',
+  'profile',
+  'stream',
+  'metaverse',
+];
+
+function connectionPathLabel(path: string) {
+  if (path === 'relay_supported_p2p') return 'Relay Supported P2P';
+  if (path === 'relay_fallback') return 'Relay Fallback';
+  return 'Direct P2P';
+}
+
+export function DesktopShellControlCenter({
+  triggerRef,
+  topicItems,
+  topicInput,
+  titles,
+  updateAvailable,
+  onTopicInputChange,
+  onAddTopic,
+  onOpenChannelManager,
+  onActivateColumn,
+  onOpenSettings,
+  onSelectTopic,
+  onSelectChannel,
+  onOpenChannelSettings,
+  onLeaveChannel,
+  onRemoveTopic,
+  onCopyTopicLink,
+  onRequestTopicIndexing,
+  onToggleTopicGossip,
+  onToggleChannelGossip,
+}: DesktopShellControlCenterProps) {
+  const { t } = useTranslation(['shell', 'common', 'settings', 'channels']);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const {
+    activeTopic,
+    communityNodeStatuses,
+    developerModeEnabled,
+    joinedChannelsByTopic,
+    notificationStatus,
+    selectedChannelIdByTopic,
+    syncStatus,
+    workspaceState,
+  } = useDesktopShellStore(
+    useShallow((state) => ({
+      activeTopic: state.activeTopic,
+      communityNodeStatuses: state.communityNodeStatuses,
+      developerModeEnabled: state.developerModeEnabled,
+      joinedChannelsByTopic: state.joinedChannelsByTopic,
+      notificationStatus: state.notificationStatus,
+      selectedChannelIdByTopic: state.selectedChannelIdByTopic,
+      syncStatus: state.syncStatus,
+      workspaceState: state.workspaceState,
+    }))
+  );
+  const setWorkspaceState = useDesktopShellFieldSetter('workspaceState');
+  const communityNodeNeedsAttention = communityNodeStatuses.some((status) => status.last_error);
+  const connectionNeedsAttention = Boolean(syncStatus.last_error) || syncStatus.delivery_state !== 'Live';
+  const statusKey = communityNodeNeedsAttention
+    ? 'communityNodeAttention'
+    : connectionNeedsAttention
+      ? 'connectionAttention'
+      : 'connected';
+  const statusLabel = t(`shell:controlCenter.status.${statusKey}`);
+  const triggerLabel = t(
+    workspaceState.controlCenterOpen
+      ? 'shell:controlCenter.closeWithStatus'
+      : 'shell:controlCenter.openWithStatus',
+    { status: statusLabel }
+  );
+  const addableColumnKinds = developerModeEnabled
+    ? ADDABLE_COLUMN_KINDS
+    : ADDABLE_COLUMN_KINDS.filter(
+        (kind) => kind !== 'stream' && kind !== 'metaverse'
+      );
+
+  const activeScope = useMemo(
+    () => ({
+      topicId: activeTopic,
+      channelId: selectedChannelIdByTopic[activeTopic] ?? null,
+    }),
+    [activeTopic, selectedChannelIdByTopic]
+  );
+
+  const setOpen = useCallback(
+    (open: boolean, restoreFocus = false) => {
+      setWorkspaceState((current) => ({ ...current, controlCenterOpen: open }));
+      if (!open && restoreFocus) {
+        triggerRef.current?.focus();
+      }
+    },
+    [setWorkspaceState, triggerRef]
+  );
+
+  useEffect(() => {
+    if (!workspaceState.controlCenterOpen) return;
+    closeButtonRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setOpen(false, true);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [setOpen, workspaceState.controlCenterOpen]);
+
+  const scopeLabel = (column: ColumnState) => {
+    if (!column.scope) return null;
+    const channel = column.scope.channelId
+      ? joinedChannelsByTopic[column.scope.topicId]?.find(
+          (candidate) => candidate.channel_id === column.scope?.channelId
+        )?.label ?? column.scope.channelId
+      : t('common:audience.public');
+    return `${topicDisplayName(column.scope.topicId)} · ${channel}`;
+  };
+
+  const focusColumn = (column: ColumnState) => {
+    setWorkspaceState((current) => ({
+      ...activateColumn(current, column.id),
+      controlCenterOpen: false,
+    }));
+    void onActivateColumn(column);
+  };
+
+  const addColumn = (kind: ColumnKind) => {
+    const scope = activeScope;
+    const column: ColumnState = {
+      id: columnIdentityId(kind, scope),
+      kind,
+      scope,
+      pinned: true,
+      preferredDesktopSpan: 1,
+    };
+    setWorkspaceState((current) => ({
+      ...openPinnedColumn(current, column),
+      controlCenterOpen: false,
+    }));
+    void onActivateColumn(column);
+  };
+
+  const closeManagedColumn = (columnId: string) => {
+    const next = closeColumn(workspaceState, columnId);
+    if (next === workspaceState) return;
+    setWorkspaceState(next);
+    if (next.activeColumnId !== workspaceState.activeColumnId) {
+      const nextActive = next.columns.find((column) => column.id === next.activeColumnId);
+      if (nextActive) void onActivateColumn(nextActive);
+    }
+  };
+
+  const openSettings = (section: SettingsSection) => {
+    setOpen(false);
+    onOpenSettings(section);
+  };
+
+  const selectTopic = (topic: string) => {
+    setOpen(false);
+    onSelectTopic(topic);
+  };
+
+  const selectChannel = (topic: string, channelId: string) => {
+    setOpen(false);
+    onSelectChannel(topic, channelId);
+  };
+
+  const selectedChannelId = selectedChannelIdByTopic[activeTopic] ?? null;
+
+  return (
+    <>
+      <Button
+        ref={triggerRef}
+        className='shell-control-center-trigger'
+        variant='secondary'
+        type='button'
+        aria-label={triggerLabel}
+        aria-controls={CONTROL_CENTER_ID}
+        aria-expanded={workspaceState.controlCenterOpen}
+        data-status={statusKey}
+        data-testid='control-center-trigger'
+        onClick={() => setOpen(!workspaceState.controlCenterOpen)}
+      >
+        <Menu className='size-5' aria-hidden='true' />
+        <span>{t('shell:controlCenter.title')}</span>
+        <span className='shell-control-center-status-dot' aria-hidden='true' />
+        {notificationStatus.unread_count > 0 ? (
+          <Badge className='shell-control-center-trigger-badge' tone='accent'>
+            {notificationStatus.unread_count > 99
+              ? '99+'
+              : formatCount(notificationStatus.unread_count)}
+          </Badge>
+        ) : null}
+      </Button>
+
+      {workspaceState.controlCenterOpen ? (
+        <aside
+          id={CONTROL_CENTER_ID}
+          className='shell-control-center'
+          role='complementary'
+          aria-label={t('shell:controlCenter.title')}
+        >
+          <header className='shell-control-center-header'>
+            <div>
+              <p className='eyebrow'>{t('shell:controlCenter.eyebrow')}</p>
+              <h2>{t('shell:controlCenter.title')}</h2>
+              <p className='shell-control-center-summary'>{statusLabel}</p>
+            </div>
+            <Button
+              ref={closeButtonRef}
+              variant='ghost'
+              size='icon'
+              type='button'
+              aria-label={t('shell:controlCenter.close')}
+              onClick={() => setOpen(false, true)}
+            >
+              <X className='size-5' aria-hidden='true' />
+            </Button>
+          </header>
+
+          <div className='shell-control-center-grid'>
+            <section className='shell-control-center-section' aria-labelledby='control-center-columns'>
+              <div className='shell-control-center-section-heading'>
+                <Columns3 className='size-5' aria-hidden='true' />
+                <h3 id='control-center-columns'>{t('shell:controlCenter.sections.columns')}</h3>
+              </div>
+              <div className='shell-control-center-add-grid'>
+                {addableColumnKinds.map((kind) => (
+                  <Button
+                    key={kind}
+                    variant='secondary'
+                    size='sm'
+                    type='button'
+                    aria-label={t('shell:controlCenter.addColumn', { title: titles[kind] })}
+                    onClick={() => addColumn(kind)}
+                  >
+                    <Plus className='size-4' aria-hidden='true' />
+                    {titles[kind]}
+                  </Button>
+                ))}
+              </div>
+              <ul className='shell-control-center-column-list'>
+                {workspaceState.columns.map((column, index) => {
+                  const active = workspaceState.activeColumnId === column.id;
+                  return (
+                    <li key={column.id} className='shell-control-center-column-row'>
+                      <button
+                        className='shell-control-center-column-focus'
+                        type='button'
+                        aria-label={t('shell:controlCenter.focusColumn', {
+                          title: titles[column.kind],
+                        })}
+                        aria-current={active ? 'true' : undefined}
+                        onClick={() => focusColumn(column)}
+                      >
+                        <span>
+                          {index + 1}. {titles[column.kind]}
+                        </span>
+                        {scopeLabel(column) ? <small>{scopeLabel(column)}</small> : null}
+                      </button>
+                      <Button
+                        variant='ghost'
+                        size='icon'
+                        type='button'
+                        aria-label={t(
+                          column.pinned
+                            ? 'shell:controlCenter.unpinColumn'
+                            : 'shell:controlCenter.pinColumn',
+                          { title: titles[column.kind] }
+                        )}
+                        aria-pressed={column.pinned}
+                        onClick={() =>
+                          setWorkspaceState((current) =>
+                            setColumnPinned(current, column.id, !column.pinned)
+                          )
+                        }
+                      >
+                        {column.pinned ? (
+                          <PinOff className='size-4' aria-hidden='true' />
+                        ) : (
+                          <Pin className='size-4' aria-hidden='true' />
+                        )}
+                      </Button>
+                      <Button
+                        variant='ghost'
+                        size='icon'
+                        type='button'
+                        disabled={workspaceState.columns.length <= 1}
+                        aria-label={t('shell:controlCenter.closeColumn', {
+                          title: titles[column.kind],
+                        })}
+                        onClick={() => closeManagedColumn(column.id)}
+                      >
+                        <X className='size-4' aria-hidden='true' />
+                      </Button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+
+            <section className='shell-control-center-section' aria-labelledby='control-center-places'>
+              <div className='shell-control-center-section-heading'>
+                <Compass className='size-5' aria-hidden='true' />
+                <h3 id='control-center-places'>{t('shell:controlCenter.sections.places')}</h3>
+              </div>
+              <div className='shell-control-center-topic-entry'>
+                <Input
+                  value={topicInput}
+                  onChange={(event) => onTopicInputChange(event.target.value)}
+                  placeholder={t('shell:navigation.placeholder')}
+                  aria-label={t('shell:navigation.addTopic')}
+                />
+                <Button
+                  variant='secondary'
+                  size='icon'
+                  type='button'
+                  aria-label={t('common:actions.add')}
+                  onClick={() => void onAddTopic()}
+                >
+                  <BookPlus className='size-4' aria-hidden='true' />
+                </Button>
+              </div>
+              <div className='shell-control-center-place-actions'>
+                <Button
+                  variant='secondary'
+                  type='button'
+                  onClick={() => {
+                    setOpen(false);
+                    onOpenChannelManager();
+                  }}
+                >
+                  <GitBranchPlus className='size-4' aria-hidden='true' />
+                  {t('shell:controlCenter.createJoinChannel')}
+                </Button>
+                <Button
+                  variant='ghost'
+                  type='button'
+                  disabled={!selectedChannelId || !onOpenChannelSettings}
+                  onClick={() => {
+                    if (selectedChannelId) {
+                      setOpen(false);
+                      onOpenChannelSettings?.(activeTopic, selectedChannelId);
+                    }
+                  }}
+                >
+                  <Radio className='size-4' aria-hidden='true' />
+                  {t('shell:controlCenter.shareChannel')}
+                </Button>
+              </div>
+              <div className='shell-control-center-place-list'>
+                <FilterableTopicNavList
+                  alwaysShowControls
+                  showAllScopes
+                  items={topicItems}
+                  onSelectTopic={selectTopic}
+                  onSelectChannel={selectChannel}
+                  onOpenChannelSettings={onOpenChannelSettings}
+                  onLeaveChannel={onLeaveChannel}
+                  onRemoveTopic={onRemoveTopic}
+                  onCopyTopicLink={onCopyTopicLink}
+                  onRequestTopicIndexing={onRequestTopicIndexing}
+                  onToggleTopicGossip={onToggleTopicGossip}
+                  onToggleChannelGossip={onToggleChannelGossip}
+                />
+              </div>
+            </section>
+
+            <section className='shell-control-center-section' aria-labelledby='control-center-activity'>
+              <div className='shell-control-center-section-heading'>
+                <Bell className='size-5' aria-hidden='true' />
+                <h3 id='control-center-activity'>{t('shell:controlCenter.sections.activity')}</h3>
+              </div>
+              <div className='shell-control-center-action-list'>
+                <Button variant='secondary' type='button' onClick={() => addColumn('notifications')}>
+                  <Bell className='size-4' aria-hidden='true' />
+                  {t('shell:primarySections.notifications')}
+                  <Badge tone={notificationStatus.unread_count > 0 ? 'accent' : 'neutral'}>
+                    {notificationStatus.unread_count > 99
+                      ? '99+'
+                      : formatCount(notificationStatus.unread_count)}
+                  </Badge>
+                </Button>
+                <Button variant='ghost' type='button' onClick={() => addColumn('messages')}>
+                  <MessageCircle className='size-4' aria-hidden='true' />
+                  {t('shell:primarySections.messages')}
+                </Button>
+              </div>
+            </section>
+
+            <section className='shell-control-center-section' aria-labelledby='control-center-system'>
+              <div className='shell-control-center-section-heading'>
+                <SlidersHorizontal className='size-5' aria-hidden='true' />
+                <h3 id='control-center-system'>{t('shell:controlCenter.sections.system')}</h3>
+              </div>
+              <div className='shell-control-center-action-list'>
+                <Button variant='secondary' type='button' onClick={() => openSettings('connectivity')}>
+                  <Radio className='size-4' aria-hidden='true' />
+                  {syncStatusBadgeLabel(syncStatus)} · {connectionPathLabel(syncStatus.active_path)}
+                </Button>
+                <Button variant='ghost' type='button' onClick={() => openSettings('release')}>
+                  <Download className='size-4' aria-hidden='true' />
+                  {updateAvailable
+                    ? t('shell:navigation.updateAvailable')
+                    : t('shell:controlCenter.release')}
+                </Button>
+                <Button
+                  variant='ghost'
+                  type='button'
+                  aria-label={t('shell:workspace.communityNodeUnavailableAction')}
+                  onClick={() => openSettings('community-node')}
+                >
+                  <Radio className='size-4' aria-hidden='true' />
+                  {t('shell:settingsSections.community-node.label')}
+                </Button>
+                <Button variant='ghost' type='button' onClick={() => openSettings('appearance')}>
+                  <Settings className='size-4' aria-hidden='true' />
+                  {t('shell:controlCenter.settings')}
+                </Button>
+                <Button variant='ghost' type='button' onClick={() => openSettings('about')}>
+                  <Info className='size-4' aria-hidden='true' />
+                  {t('shell:settingsSections.about.label')}
+                </Button>
+                {developerModeEnabled ? (
+                  <Button variant='ghost' type='button' onClick={() => openSettings('developer')}>
+                    <SlidersHorizontal className='size-4' aria-hidden='true' />
+                    {t('shell:settingsSections.developer.label')}
+                  </Button>
+                ) : null}
+              </div>
+            </section>
+          </div>
+        </aside>
+      ) : null}
+    </>
+  );
+}

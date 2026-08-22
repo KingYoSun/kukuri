@@ -273,7 +273,6 @@ export function DesktopShellPrimarySurface({
   const setGameTitle = useDesktopShellFieldSetter('gameTitle');
   const setGameDescription = useDesktopShellFieldSetter('gameDescription');
   const setGameParticipantsInput = useDesktopShellFieldSetter('gameParticipantsInput');
-  const setCommunityIndexNodeBaseUrl = useDesktopShellFieldSetter('communityIndexNodeBaseUrl');
   const profileAuthorLabel = authorDisplayLabel(
     syncStatus.local_author_pubkey,
     localProfile?.display_name,
@@ -355,11 +354,6 @@ export function DesktopShellPrimarySurface({
   const profileMode = shellChromeState.profileMode;
   const profileConnectionsView = shellChromeState.profileConnectionsView;
   const activeSurfaceSection = surfaceSection ?? shellChromeState.activePrimarySection;
-  const unavailableCommunityNodeCount = communityNodeStatuses.filter(
-    (status) => Boolean(status.last_error)
-  ).length;
-  const showCommunityNodeUnavailableNotice =
-    communityNodeStatuses.length > 0 && unavailableCommunityNodeCount > 0;
   const eligibleIndexNodeBaseUrls = useMemo(
     () =>
       eligibleCommunityIndexNodes(
@@ -369,6 +363,11 @@ export function DesktopShellPrimarySurface({
       ),
     [communityNodeConfig, communityNodeManifests, communityNodeStatuses]
   );
+  const showCommunityNodeUnavailableNotice =
+    activeSurfaceSection === 'explore' &&
+    communityNodeConfig.nodes.length > 0 &&
+    eligibleIndexNodeBaseUrls.length === 0 &&
+    communityNodeStatuses.some((status) => Boolean(status.last_error));
 
   return (
     <div className='shell-main-stack'>
@@ -444,19 +443,6 @@ export function DesktopShellPrimarySurface({
               </Card>
             ) : composerError ? (
               <Notice tone='destructive'>{composerError}</Notice>
-            ) : null}
-            {!columnMode && shellChromeState.timelineView === 'feed' ? (
-              <CommunityIndexWorkspace
-                api={api}
-                mode='topic'
-                locale={locale}
-                activeTopic={surfaceTopic}
-                activeTimelineScope={surfaceTimelineScope}
-                eligibleNodeBaseUrls={eligibleIndexNodeBaseUrls}
-                selectedNodeBaseUrl={communityIndexNodeBaseUrl}
-                onSelectNode={setCommunityIndexNodeBaseUrl}
-                onOpenCommunityNodeSettings={openCommunityNodeSettings}
-              />
             ) : null}
             <Card className='shell-workspace-card'>
               {shellChromeState.timelineView === 'feed' ? (
@@ -540,7 +526,6 @@ export function DesktopShellPrimarySurface({
             activeTimelineScope={surfaceTimelineScope}
             eligibleNodeBaseUrls={eligibleIndexNodeBaseUrls}
             selectedNodeBaseUrl={communityIndexNodeBaseUrl}
-            onSelectNode={setCommunityIndexNodeBaseUrl}
             onOpenCommunityNodeSettings={openCommunityNodeSettings}
           />
         ) : null}

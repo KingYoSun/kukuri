@@ -21,7 +21,6 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
-import { Select } from '@/components/ui/select';
 import { ReportRoutingDialog } from './ReportRoutingDialog';
 
 type IndexOperation = 'search' | 'discovery' | 'recommendations';
@@ -34,7 +33,6 @@ type CommunityIndexWorkspaceProps = {
   activeTimelineScope: TimelineScope;
   eligibleNodeBaseUrls: readonly string[];
   selectedNodeBaseUrl: string | null;
-  onSelectNode: (baseUrl: string) => void;
   onOpenCommunityNodeSettings: () => void;
 };
 
@@ -151,7 +149,6 @@ export function CommunityIndexWorkspace({
   activeTimelineScope,
   eligibleNodeBaseUrls,
   selectedNodeBaseUrl,
-  onSelectNode,
   onOpenCommunityNodeSettings,
 }: CommunityIndexWorkspaceProps) {
   const { t } = useTranslation(['shell', 'common']);
@@ -305,23 +302,6 @@ export function CommunityIndexWorkspace({
               : t('shell:communityIndex.exploreSummary')}
           </p>
         </div>
-        {eligibleNodeBaseUrls.length > 0 ? (
-          <label className='flex min-w-56 flex-col gap-1 text-sm'>
-            <span className='font-medium'>{t('shell:communityIndex.nodeLabel')}</span>
-            <Select
-              className='h-auto rounded-lg px-3 py-2'
-              value={activeNodeBaseUrl ?? ''}
-              onChange={(event) => {
-                invalidateResults();
-                onSelectNode(event.currentTarget.value);
-              }}
-            >
-              {eligibleNodeBaseUrls.map((baseUrl) => (
-                <option key={baseUrl} value={baseUrl}>{baseUrl}</option>
-              ))}
-            </Select>
-          </label>
-        ) : null}
       </div>
 
       {mode === 'explore' ? (

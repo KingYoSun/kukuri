@@ -6,7 +6,7 @@ import type {
   PostView,
 } from '@/lib/api';
 
-import { PUBLIC_CHANNEL_REF, type DraftMediaItem, type DesktopShellState } from '@/shell/store';
+import { PUBLIC_CHANNEL_REF, type DraftMediaItem } from '@/shell/store';
 import {
   canCreateRepostFromPost,
   messageFromError,
@@ -42,7 +42,6 @@ type ComposeInteractionsParams = {
   rememberDirectMessageDraftPreview: (item: DraftMediaItem) => void;
   rememberDraftPreview: (item: DraftMediaItem) => void;
   restoreLocalDraft: (post: PostView) => void;
-  shellChromeState: DesktopShellState['shellChromeState'];
   submitOptimisticPost: (post: PostView) => Promise<void>;
   syncRoute: SyncRoute;
   translate: Translate;
@@ -62,8 +61,6 @@ type ComposeInteractionsParams = {
   setShellChromeState: Setter<'shellChromeState'>;
   setThread: Setter<'thread'>;
   setComposeDialogOpen: BoolStateDispatch;
-  setGameCreateDialogOpen: BoolStateDispatch;
-  setLiveCreateDialogOpen: BoolStateDispatch;
 };
 
 export function createComposeInteractionsActions({
@@ -80,7 +77,6 @@ export function createComposeInteractionsActions({
   rememberDirectMessageDraftPreview,
   rememberDraftPreview,
   restoreLocalDraft,
-  shellChromeState,
   submitOptimisticPost,
   syncRoute,
   translate,
@@ -100,8 +96,6 @@ export function createComposeInteractionsActions({
   setShellChromeState,
   setThread,
   setComposeDialogOpen,
-  setGameCreateDialogOpen,
-  setLiveCreateDialogOpen,
 }: ComposeInteractionsParams) {
   async function handleAttachmentSelection(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
@@ -213,18 +207,6 @@ export function createComposeInteractionsActions({
     setComposeDialogOpen(true);
   }
 
-  function openFloatingActionDialog() {
-    if (shellChromeState.activePrimarySection === 'live') {
-      setLiveCreateDialogOpen(true);
-      return;
-    }
-    if (shellChromeState.activePrimarySection === 'game') {
-      setGameCreateDialogOpen(true);
-      return;
-    }
-    openNewPostDialog();
-  }
-
   async function handleSimpleRepost(post: PostView) {
     const sourceTopic = publishedTopicIdForPost(post);
     if (!sourceTopic || !canCreateRepostFromPost(post)) {
@@ -305,7 +287,6 @@ export function createComposeInteractionsActions({
     clearReply,
     clearRepost,
     openNewPostDialog,
-    openFloatingActionDialog,
     handleSimpleRepost,
     handleRestoreLocalPost,
     handleRetryLocalPost,

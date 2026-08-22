@@ -14,20 +14,39 @@ async function openChannelManager(page: Page) {
   if (await dialog.isVisible().catch(() => false)) {
     return dialog;
   }
-  await page.getByRole('button', { name: 'Channels' }).click();
+  const controlCenter = await openControlCenter(page);
+  await controlCenter.getByRole('button', { name: 'Create or join channel' }).click();
   await expect(dialog).toBeVisible();
   return dialog;
 }
 
 async function openChannelSettings(page: Page, channelLabel: string) {
-  await page.getByRole('button', { name: `Open ${channelLabel} channel settings` }).click();
+  const controlCenter = await openControlCenter(page);
+  await controlCenter
+    .getByRole('button', { name: `Open ${channelLabel} channel settings` })
+    .click();
   const dialog = page.getByRole('dialog', { name: 'Channel Settings' });
   await expect(dialog).toBeVisible();
   return dialog;
 }
 
-async function openFloatingActionDialog(page: Page) {
-  await page.getByTestId('shell-fab').click();
+async function openControlCenter(page: Page) {
+  const controlCenter = page.getByRole('complementary', { name: 'Control Center' });
+  if (!(await controlCenter.isVisible().catch(() => false))) {
+    await page.getByTestId('control-center-trigger').click();
+  }
+  await expect(controlCenter).toBeVisible();
+  return controlCenter;
+}
+
+function activeColumn(page: Page, title: string) {
+  return page.getByRole('region', {
+    name: new RegExp(`^${title} Column,.*Active,`),
+  });
+}
+
+async function openLiveCreateDialog(page: Page) {
+  await activeColumn(page, 'Live').getByRole('button', { name: 'Start Live' }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   return dialog;
@@ -62,7 +81,7 @@ test('browser mock shell can run profile, private channel, live, and game flows'
   await page.keyboard.press('Escape');
 
   await page.goto('/#/live');
-  const liveDialog = await openFloatingActionDialog(page);
+  const liveDialog = await openLiveCreateDialog(page);
   const liveTitle = liveDialog.getByLabel('Live Title');
   const liveDescription = liveDialog.getByLabel('Live Description');
   await liveTitle.fill('Launch Party');
@@ -94,15 +113,9 @@ test('browser mock shell can run profile, private channel, live, and game flows'
   await expect(page.getByRole('heading', { name: 'Metaverse Rooms' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Game Rooms' })).toHaveCount(0);
   await expect(page.getByText('No game rooms', { exact: true })).toHaveCount(0);
-  const gameDialog = await openFloatingActionDialog(page);
-  await gameDialog.getByPlaceholder('Top 8 Finals').fill('Grand Finals');
-  await gameDialog.getByPlaceholder('match summary').fill('set one');
-  await gameDialog.getByPlaceholder('Alice, Bob').fill('Alice, Bob');
-  await gameDialog.getByRole('button', { name: 'Create Room' }).click();
-  await expect(page.getByRole('heading', { name: 'Metaverse Rooms' })).toBeVisible();
-  await expect(page.getByText('Grand Finals')).toHaveCount(0);
-  await expect(page.getByText('set one')).toHaveCount(0);
-  await expect(page.getByLabel(/game-.*-status/)).toHaveCount(0);
+  await expect(
+    activeColumn(page, 'Metaverse').getByRole('button', { name: 'Create Metaverse Room' })
+  ).toBeVisible();
 
   await page.goto('/#/profile?profileMode=edit');
   await page.getByPlaceholder('Visible label').fill('Browser Author');

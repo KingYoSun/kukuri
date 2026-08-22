@@ -302,7 +302,7 @@ test('profile social management updates follow and mute lists and muted authors 
   });
   expect(screen.getByText('Visible Live')).toBeInTheDocument();
 
-  await selectWorkspace(user, 'Game');
+  await selectWorkspace(user, 'Metaverse');
   await waitFor(() => {
     expect(screen.queryByText('Muted Room')).not.toBeInTheDocument();
   });
