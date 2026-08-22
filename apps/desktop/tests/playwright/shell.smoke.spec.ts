@@ -47,6 +47,50 @@ test('browser mock wide shell keeps navigation rail beside the workspace', async
   expect(navBox!.x + navBox!.width).toBeLessThan(workspaceBox!.x);
 });
 
+test('browser mock starts with one accessible Timeline Column without legacy workspace chrome', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1400, height: 980 });
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
+
+  const layout = page.locator('.shell-layout');
+  const timelineColumn = page.getByRole('region', { name: /Timeline Column/ });
+
+  await expect(layout).toHaveAttribute('data-workspace-layout', 'column');
+  await expect(timelineColumn).toHaveCount(1);
+  await expect(timelineColumn).toHaveAttribute('aria-current', 'true');
+  await expect(timelineColumn).toHaveAttribute('data-span', '1');
+  await expect(timelineColumn).toHaveAccessibleName(/Column 1 of 1/);
+  await expect(timelineColumn).toHaveAccessibleName(/Pinned/);
+  await expect(page.locator('main .shell-workspace-header-card')).toHaveCount(0);
+  await expect(page.getByTestId('community-index-topic')).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page
+        .getByRole('tablist', { name: 'Workspaces' })
+        .evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length)
+    )
+    .toBe(2);
+  const workspaceTabRows = await page
+    .getByRole('tablist', { name: 'Workspaces' })
+    .getByRole('tab')
+    .evaluateAll((tabs) => new Set(tabs.map((tab) => tab.getBoundingClientRect().y)).size);
+  expect(workspaceTabRows).toBe(3);
+
+  const unpin = timelineColumn.getByRole('button', { name: 'Unpin Timeline' });
+  await unpin.click();
+  await expect(timelineColumn).toHaveAttribute('data-transient', 'true');
+  await expect(timelineColumn).toHaveAccessibleName(/Temporary/);
+
+  const overflow = await page.evaluate(() => ({
+    canvasOwnsHorizontalOverflow:
+      getComputedStyle(document.querySelector('.shell-column-canvas')!).overflowX === 'auto',
+    documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  }));
+  expect(overflow.canvasOwnsHorizontalOverflow).toBe(true);
+  expect(overflow.documentOverflow).toBeLessThanOrEqual(0);
+});
+
 test('browser mock shell can switch topics, publish, open thread, open author, and update discovery from settings', async ({
   page,
 }) => {
@@ -374,7 +418,7 @@ test('browser mock narrow shell keeps nav, context, and settings flows reachable
     .getByRole('complementary', { name: 'Primary navigation' })
     .getByLabel('Close navigation')
     .click();
-  await page.getByRole('tab', { name: 'Profile' }).click();
+  await page.goto('/#/profile?topic=kukuri%3Atopic%3Ademo');
   await expect(page.getByRole('button', { name: 'Edit Profile' })).toBeVisible();
 
   const noOverflow = await page.evaluate(

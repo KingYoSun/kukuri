@@ -362,3 +362,175 @@
     width: 100%;
   }
 }
+
+/* ADR 0031 Wave 1: production Column Canvas foundation. */
+.shell-phase1 .shell-column-canvas {
+  display: flex;
+  align-items: stretch;
+  justify-content: safe center;
+  gap: var(--column-gap);
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: calc(100vh - (var(--space-lg) * 2));
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0 var(--space-lg);
+  scroll-padding-inline: var(--space-lg);
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+.shell-phase1 .shell-nav-header-content {
+  display: grid;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.shell-phase1 .shell-nav-header-content .shell-workspace-tabs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.shell-phase1 .shell-nav-header-content .shell-tab {
+  min-width: 0;
+}
+
+.shell-phase1 .shell-layout[data-workspace-layout='column'] {
+  grid-template-columns: minmax(260px, 280px) minmax(0, 1fr);
+}
+
+.shell-phase1 .shell-layout[data-workspace-layout='column'] .shell-main-lane {
+  max-inline-size: 100%;
+}
+
+@media (min-width: 1100px) {
+  .shell-phase1 .shell-layout[data-workspace-layout='column'] .shell-context {
+    position: fixed;
+    right: calc(1rem + (var(--shell-detail-pane-index, 0) * 1.5rem));
+    top: 1rem;
+    bottom: 1rem;
+    z-index: 65;
+    width: min(380px, calc(100vw - 2rem));
+    max-height: none;
+  }
+}
+
+.shell-phase1 .shell-column-surface {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  flex: 0 1 var(--column-unit);
+  width: var(--column-unit);
+  max-width: min(var(--column-unit), calc(100vw - (var(--space-lg) * 2)));
+  min-width: min(100%, 20rem);
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-panel);
+  background: var(--surface-panel-solid);
+  box-shadow: var(--shadow-panel);
+  transition:
+    border-color var(--motion-duration-fast) var(--motion-easing-standard),
+    box-shadow var(--motion-duration-standard) var(--motion-easing-standard);
+}
+
+.shell-phase1 .shell-column-surface[data-active] {
+  border-color: var(--border-accent);
+  box-shadow: var(--shadow-panel), inset 0 3px 0 var(--accent);
+}
+
+.shell-phase1 .shell-column-surface[data-pinned] .shell-column-header {
+  border-top: 3px solid var(--primary-start);
+}
+
+.shell-phase1 .shell-column-surface[data-transient] {
+  border-style: dashed;
+}
+
+.shell-phase1 .shell-column-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: 4.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+  padding: var(--space-sm);
+  background: var(--surface-panel-accent);
+}
+
+.shell-phase1 .shell-column-heading {
+  min-width: 0;
+  flex: 1;
+}
+
+.shell-phase1 .shell-column-heading h2,
+.shell-phase1 .shell-column-heading p {
+  margin: 0;
+}
+
+.shell-phase1 .shell-column-heading h2 {
+  font-size: var(--text-h3);
+}
+
+.shell-phase1 .shell-column-heading p {
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: var(--text-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-phase1 .shell-column-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  min-width: 0;
+}
+
+.shell-phase1 .shell-column-state-label {
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-pill);
+  padding: 0.125rem var(--space-xs);
+  background: var(--surface-accent-soft);
+  color: var(--foreground);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.shell-phase1 .shell-column-body {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-md);
+  container-type: inline-size;
+}
+
+.shell-phase1 .shell-column-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  border-top: 1px solid var(--border-subtle);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-panel-accent);
+}
+
+@media (max-width: 759px) {
+  .shell-phase1 .shell-column-canvas {
+    height: calc(100vh - 5rem);
+    padding: 0;
+  }
+
+  .shell-phase1 .shell-column-surface {
+    flex-basis: 100%;
+    width: 100%;
+    max-width: none;
+    min-width: 100%;
+    border-radius: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-phase1 .shell-column-surface {
+    transition-duration: 1ms;
+  }
+}

@@ -1,21 +1,11 @@
 import { expect, test } from '@playwright/test';
 
-test('topic search and cross-topic explore keep scope and reporting behavior visible', async ({ page }) => {
+test('Timeline keeps Community Index out of the primary surface and Explore keeps reporting behavior visible', async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 980 });
   await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
 
   const topicIndex = page.getByTestId('community-index-topic');
-  await expect(topicIndex).toBeVisible();
-  await topicIndex.getByLabel('Search query').fill('browser mock peer');
-  await topicIndex.getByRole('button', { name: 'Run' }).click();
-  await expect(topicIndex.getByText('browser mock peer post')).toBeVisible();
-  await expect(topicIndex.getByText(/not canonical post text/i)).toBeVisible();
-
-  await topicIndex.getByRole('button', { name: 'Report' }).first().click();
-  const reportDialog = page.getByRole('dialog', { name: 'Report content' });
-  await expect(reportDialog).toContainText('api.kukuri.app');
-  await expect(reportDialog).toContainText('Community index');
-  await page.keyboard.press('Escape');
+  await expect(topicIndex).toHaveCount(0);
 
   await page.getByRole('tab', { name: 'Explore' }).click();
   await expect(page).toHaveURL(/#\/explore\?topic=/);
@@ -32,6 +22,7 @@ test('topic search and cross-topic explore keep scope and reporting behavior vis
   await explore.getByRole('button', { name: 'Run' }).click();
   await expect(explore.getByRole('list', { name: 'Community Index results' })).toBeVisible();
   await explore.getByRole('button', { name: 'Report' }).first().click();
+  const reportDialog = page.getByRole('dialog', { name: 'Report content' });
   await expect(reportDialog).toContainText('Recommendation');
   await expect(reportDialog).toContainText('api.kukuri.app');
   await expect(reportDialog.getByRole('button', { name: 'Send report' })).toBeVisible();

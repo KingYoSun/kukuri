@@ -77,6 +77,7 @@ test('browser mock hash history keeps route state stable without narrow-width ov
   await page.goto('/');
 
   await expect(page.getByTestId('shell-nav-trigger')).toBeVisible();
+  await page.getByTestId('shell-nav-trigger').click();
   await page.getByRole('tab', { name: 'Profile' }).click();
   await expect(page.getByRole('button', { name: 'Edit Profile' })).toBeVisible();
   await expect(page).toHaveURL(/#\/profile\?topic=/);
