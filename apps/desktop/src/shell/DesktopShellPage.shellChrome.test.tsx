@@ -240,10 +240,28 @@ test('desktop shell exposes the Timeline Column and settings drawer restores tri
   expect(
     screen.getByRole('main', { name: 'Primary workspace' }).querySelector('.shell-workspace-header-card')
   ).toBeNull();
-  expect(screen.getByRole('region', { name: /Timeline Column/ })).toHaveAttribute(
-    'aria-current',
-    'true'
-  );
+  const timelineColumn = screen.getByRole('region', { name: /Timeline Column/ });
+  expect(timelineColumn).toHaveAttribute('aria-current', 'true');
+  const columnHeader = timelineColumn.querySelector('.shell-column-header');
+  expect(columnHeader).not.toBeNull();
+  const timelineViews = within(columnHeader as HTMLElement).getByRole('tablist', {
+    name: 'Timeline views',
+  });
+  const feedTab = within(timelineViews).getByRole('tab', { name: 'Feed' });
+  const bookmarksTab = within(timelineViews).getByRole('tab', { name: 'Bookmarks' });
+  expect(feedTab).toHaveAttribute('aria-label', 'Feed');
+  expect(feedTab).not.toHaveTextContent('Feed');
+  expect(feedTab.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+  expect(bookmarksTab).toHaveAttribute('aria-label', 'Bookmarks');
+  expect(bookmarksTab).not.toHaveTextContent('Bookmarks');
+  expect(bookmarksTab.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+  expect(feedTab).toHaveAttribute('tabindex', '0');
+  expect(bookmarksTab).toHaveAttribute('tabindex', '-1');
+  feedTab.focus();
+  fireEvent.keyDown(feedTab, { key: 'ArrowRight' });
+  expect(bookmarksTab).toHaveFocus();
+  expect(bookmarksTab).toHaveAttribute('aria-selected', 'true');
+  expect(timelineColumn.querySelector('.shell-column-body .shell-workspace-tabs')).toBeNull();
 
   const settingsTrigger = screen.getByTestId('shell-settings-trigger');
   expect(settingsTrigger.querySelector('.lucide-settings')).toBeTruthy();

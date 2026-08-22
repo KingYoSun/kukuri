@@ -6,6 +6,7 @@
 - Summary: ADR 0031のproduction foundationとして`WorkspaceState` / `ColumnState`、1 spanの`ColumnCanvas` / `ColumnSurface`、active / pinned / transient / parent relationを導入し、既定Timeline routeを中央寄せの440px Column 1本へ移行した。
 - User flow summary: 初期表示はTimeline Column 1本から始まり、headerでtitle、scope、active、pinned / temporary、位置、総数、spanを確認できる。focusまたはpointer activationで対象Columnをactiveにし、programmatic activation時はCanvas内へscrollする。Timelineのfeed、bookmark、投稿、Thread / Authorを開く既存操作は同じdata / action hookを再利用する。
 - Legacy chrome removal: primary workspace内のglobal workspace tab header Card、Timeline上のCommunity Index常設Card、Column modeのdetail pane予約laneを撤去した。Wave 2〜4まで必要な未移行workspace navigationは左nav内の2列tablistへ限定し、Thread / Author detailは予約幅を持たないoverlay互換として維持する。
+- Timeline view controls: 狭いColumn本文に独立した`Feed` / `Bookmarks`テキストタブ行を置かず、Column header右側へ移した。両方をpin操作と同じ40×40pxのアイコンタブとし、active state、accessible name、tooltipで意味を伝える。
 - Shneiderman 1 — consistency: Wave 0で確定したColumn header、状態label、440px unit、16px gap、motion tokenをproduction componentへ引き継いだ。
 - Shneiderman 2 — universal usability: Column surfaceとpin操作をkeyboardで到達可能にし、title、位置、総数、span、active / pinned / temporaryをaccessible nameへ含めた。mobile専用pagingはWave 6まで現行navigationを維持する。
 - Shneiderman 3 — informative feedback: activeはaccent borderと`Active` label、pinned / transientはborder形状と`Pinned` / `Temporary` label、`aria-current`、`aria-pressed`で伝える。
@@ -15,6 +16,6 @@
 - Shneiderman 7 — internal locus of control: focus / pointer activationとpin操作が`WorkspaceState`の正本を更新し、既存の全画面domain stateをColumn stateへ複製しない。
 - Shneiderman 8 — reduced memory load: Column headerにkind、scope、state、位置、総数、spanを常時表示し、旧global header Cardを本文から除いた。
 - Viewport review: desktop 1400×980で440pxのTimeline Columnを中央寄せし、Canvas自身が`overflow-x: auto`を所有してdocument-level horizontal overflowが0であることをPlaywrightで確認した。700×980ではColumnを1 viewportへ縮め、既存nav / settings / detail flowへ到達できることを確認した。
-- Accessibility / motion review: component testでfocus capture、programmatic scroll、accessible name、`aria-current`、`aria-pressed`を確認した。Storybookとvisual regressionではlight / dark、wide / narrow、active / pinned / transient、reduced motion tokenを確認対象とする。
+- Accessibility / motion review: component testでfocus capture、programmatic scroll、accessible name、`aria-current`、`aria-pressed`を確認した。Timeline viewのアイコンタブは`aria-label`、`aria-selected`、roving `tabIndex`、tooltipを持ち、Playwrightでpin操作と同じ40×40pxであることを確認した。Storybookとvisual regressionではlight / dark、wide / narrow、active / pinned / transient、reduced motion tokenを確認対象とする。
 - Exceptions: Wave 1ではTimeline以外のsurface Column化、Column単位scopeの正本移行、Column下部Composer、Control Center、2〜4 span、drag reorder、layout persistence、mobile pagingを実装しない。未移行routeは既存componentを呼ぶ短期compatibility pathであり、Wave 2〜6で順次撤去する。
 - Validation: `cargo xtask desktop-ui-check`（frontend 735件、browser 15件、visual 14件、Storybook build、lint、typecheck）、`cargo xtask check`、`cargo xtask test`（workspace 584件、harness 18件、doc tests、frontend 735件）、`cargo xtask oversized-files`、`git diff --check`が成功した。oversized-file検査は既存baselineの3件のみ警告し、新規超過はない。

@@ -77,7 +77,29 @@ test('browser mock starts with one accessible Timeline Column without legacy wor
     .evaluateAll((tabs) => new Set(tabs.map((tab) => tab.getBoundingClientRect().y)).size);
   expect(workspaceTabRows).toBe(3);
 
+  const columnHeader = timelineColumn.locator('.shell-column-header');
+  const timelineViews = columnHeader.getByRole('tablist', { name: 'Timeline views' });
+  const feedTab = timelineViews.getByRole('tab', { name: 'Feed' });
+  const bookmarksTab = timelineViews.getByRole('tab', { name: 'Bookmarks' });
   const unpin = timelineColumn.getByRole('button', { name: 'Unpin Timeline' });
+  await expect(feedTab.locator('svg')).toHaveCount(1);
+  await expect(feedTab).toHaveText('');
+  await expect(bookmarksTab.locator('svg')).toHaveCount(1);
+  await expect(bookmarksTab).toHaveText('');
+  await expect(timelineColumn.locator('.shell-column-body .shell-workspace-tabs')).toHaveCount(0);
+  const [feedBox, bookmarksBox, unpinBox] = await Promise.all([
+    feedTab.boundingBox(),
+    bookmarksTab.boundingBox(),
+    unpin.boundingBox(),
+  ]);
+  expect(feedBox).not.toBeNull();
+  expect(bookmarksBox).not.toBeNull();
+  expect(unpinBox).not.toBeNull();
+  expect(feedBox!.width).toBe(unpinBox!.width);
+  expect(feedBox!.height).toBe(unpinBox!.height);
+  expect(bookmarksBox!.width).toBe(unpinBox!.width);
+  expect(bookmarksBox!.height).toBe(unpinBox!.height);
+
   await unpin.click();
   await expect(timelineColumn).toHaveAttribute('data-transient', 'true');
   await expect(timelineColumn).toHaveAccessibleName(/Temporary/);

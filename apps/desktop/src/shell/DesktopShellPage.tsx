@@ -760,6 +760,9 @@ export function DesktopShellPage({
     <DesktopShellColumnWorkspace
       title={t('shell:primarySections.timeline')}
       scopeLabel={viewModels.activeComposeAudienceLabel}
+      activeTimelineView={shellChromeState.timelineView}
+      timelineViewItems={viewModels.timelineViewItems}
+      onSelectTimelineView={focusTimelineView}
     >
       {primaryWorkspace}
     </DesktopShellColumnWorkspace>

@@ -9,6 +9,7 @@ type ColumnSurfaceProps = {
   children: ReactNode;
   columnId: string;
   footer?: ReactNode;
+  headerActions?: ReactNode;
   onPinnedChange?: (pinned: boolean) => void;
   pinned: boolean;
   position: number;
@@ -23,6 +24,7 @@ export function ColumnSurface({
   children,
   columnId,
   footer,
+  headerActions,
   onPinnedChange,
   pinned,
   position,
@@ -58,21 +60,26 @@ export function ColumnSurface({
           </div>
           <p>{scopeLabel}</p>
         </div>
-        {onPinnedChange ? (
-          <Button
-            variant='ghost'
-            size='icon'
-            type='button'
-            aria-label={pinned ? `Unpin ${title}` : `Pin ${title}`}
-            aria-pressed={pinned}
-            onClick={() => onPinnedChange(!pinned)}
-          >
-            {pinned ? (
-              <PinOff className='size-4' aria-hidden='true' />
-            ) : (
-              <Pin className='size-4' aria-hidden='true' />
-            )}
-          </Button>
+        {headerActions || onPinnedChange ? (
+          <div className='shell-column-header-actions'>
+            {headerActions}
+            {onPinnedChange ? (
+              <Button
+                variant='ghost'
+                size='icon'
+                type='button'
+                aria-label={pinned ? `Unpin ${title}` : `Pin ${title}`}
+                aria-pressed={pinned}
+                onClick={() => onPinnedChange(!pinned)}
+              >
+                {pinned ? (
+                  <PinOff className='size-4' aria-hidden='true' />
+                ) : (
+                  <Pin className='size-4' aria-hidden='true' />
+                )}
+              </Button>
+            ) : null}
+          </div>
         ) : null}
       </header>
       <div className='shell-column-body'>{children}</div>
