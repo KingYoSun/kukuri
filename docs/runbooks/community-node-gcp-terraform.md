@@ -374,7 +374,9 @@ self-host VLM は次のどちらか一方の境界に固定し、runbook・netwo
 ### Cloud Monitoring / log retention
 
 - VM の `kukuri-monitor.timer` が5分ごとに disk使用率、Postgres/ArcadeDB/indexer health、
-  last ingest age、backoff、provider failure、relation最終成功時刻を custom metrics へ送る。
+  last ingest age、backoff、外部 safety provider failure、media fetch unavailable累計、
+  relation最終成功時刻を custom metrics へ送る。ピア不在・未複製によるmedia取得不能は
+  `media_fetch_unavailable_total` で観測するが、外部provider障害のpaging対象には含めない。
 - Terraform は各 custom metric descriptor と alert policy を作成する。通知を実配送するには、
   `monitoring_notification_channels` に既存 channel の resource name を設定して apply する。
 - 確認: `systemctl status kukuri-monitor.timer`、`systemctl start kukuri-monitor.service`、

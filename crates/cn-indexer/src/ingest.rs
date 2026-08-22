@@ -105,12 +105,20 @@ impl IngestPipeline {
         self
     }
 
-    /// スキャンを実行し、観測状態に分類（スキャン失敗 / プロバイダ利用不可）を記録する。
+    /// スキャンを実行し、観測状態に分類（スキャン失敗 / 外部プロバイダ利用不可）を記録する。
+    ///
+    /// media blob の未複製・ピア不在も verdict 上は `ProviderUnavailable` になるが、外部 safety
+    /// provider 障害ではない。scan 中に media fetch の利用不可カウンタが増えた場合は、専用の
+    /// `media_fetch_unavailable` だけに記録し、provider 障害カウンタへ重複計上しない。
     async fn scan_and_record_with_metrics(
         &self,
         request: &ProviderScanRequest,
         subject_author: &str,
     ) -> Result<SafetyScanOutcome> {
+        let media_fetch_unavailable_before = self
+            .metrics
+            .as_ref()
+            .map(|metrics| metrics.media_fetch_unavailable_count());
         let outcome = match self
             .safety
             .scan_and_record_for_author(request, subject_author)
@@ -125,8 +133,12 @@ impl IngestPipeline {
             }
         };
         if let Some(metrics) = &self.metrics {
+            let media_fetch_became_unavailable = media_fetch_unavailable_before
+                .is_some_and(|before| metrics.media_fetch_unavailable_count() > before);
             match outcome.report.verdict.reason_code {
-                ReasonCode::ProviderUnavailable => metrics.record_provider_unavailable(),
+                ReasonCode::ProviderUnavailable if !media_fetch_became_unavailable => {
+                    metrics.record_provider_unavailable();
+                }
                 ReasonCode::ScanFailed | ReasonCode::Unscanned => metrics.record_scan_error(),
                 _ => {}
             }

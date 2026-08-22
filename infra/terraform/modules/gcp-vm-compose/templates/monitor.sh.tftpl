@@ -76,6 +76,12 @@ if [ "$provider_total" -gt "$previous_total" ]; then provider_failure=1; else pr
 printf '%s\n' "$provider_total" > "$provider_state"
 write_metric provider_failure_detected "$provider_failure"
 
+# Peer absence / incomplete replication is observable but is not an external safety provider
+# outage. Keep it as a non-paging metric so operators can distinguish the two causes.
+media_fetch_unavailable_total="$(printf '%s' "$status_json" | sed -n 's/.*"media_fetch_unavailable"[ ]*:[ ]*\([0-9][0-9]*\).*/\1/p')"
+media_fetch_unavailable_total="$${media_fetch_unavailable_total:-0}"
+write_metric media_fetch_unavailable_total "$media_fetch_unavailable_total"
+
 relation_timestamp="$(systemctl show kukuri-relation-analyze.service -p ExecMainExitTimestamp --value 2>/dev/null || true)"
 relation_epoch="$(date -d "$relation_timestamp" +%s 2>/dev/null || echo 0)"
 relation_status="$(systemctl show kukuri-relation-analyze.service -p ExecMainStatus --value 2>/dev/null || echo 1)"

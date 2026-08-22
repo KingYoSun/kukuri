@@ -9,13 +9,16 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
+use kukuri_blob_service::MemoryBlobService;
 use kukuri_cn_core::{IndexScopeKind, MemoryIndexEntryStore};
-use kukuri_cn_indexer::config::RelayConfig;
+use kukuri_cn_indexer::config::{MediaFetchConfig, RelayConfig};
 use kukuri_cn_indexer::ingest::IngestPipeline;
+use kukuri_cn_indexer::media_fetcher::BlobMediaFetcher;
 use kukuri_cn_indexer::participant::ScopeReplica;
 use kukuri_cn_indexer::projection::{IndexProjection, MemoryIndexProjection};
+use kukuri_cn_indexer::state::IndexerRuntimeState;
 use kukuri_cn_safety::provider::{
-    ProviderScanRequest, ProviderScanResult, ScanError, ScanOutcome, SubjectKind,
+    MediaFetcher, ProviderScanRequest, ProviderScanResult, ScanError, ScanOutcome, SubjectKind,
 };
 use kukuri_cn_safety::{
     MockSafetyProvider, ModerationEventSigner, RiskSignalTarget, SafetyCategory, SafetyProvider,
@@ -366,6 +369,89 @@ async fn media_scan_unavailable_fails_closed_and_post_is_not_indexed() -> Result
     Ok(())
 }
 
+/// 本番と同じ `MediaFetcher` 境界を通して media blob を取得する known-CSAM provider。
+///
+/// 本文は `NoKnownMatch`、media は fetch 成功後に `NoKnownMatch` を返す。fetch 失敗はそのまま
+/// provider error として返し、取得不能と外部 provider 障害の観測分類を検証できるようにする。
+struct FetchingProvider {
+    fetcher: Arc<dyn MediaFetcher>,
+}
+
+#[async_trait]
+impl SafetyProvider for FetchingProvider {
+    fn name(&self) -> &str {
+        "fetching-known-csam"
+    }
+
+    fn capabilities(&self) -> &[SafetyProviderCapability] {
+        &[SafetyProviderCapability::KnownCsamHashMatch]
+    }
+
+    async fn scan(&self, request: &ProviderScanRequest) -> Result<ProviderScanResult, ScanError> {
+        if let Some(media_hint) = request.media_hint.as_deref() {
+            self.fetcher
+                .fetch(media_hint, request.media_mime.as_deref())
+                .await?;
+        }
+        let mut result = ProviderScanResult::completed(
+            self.name(),
+            SafetyProviderCapability::KnownCsamHashMatch,
+        );
+        result.outcome = ScanOutcome::NoKnownMatch;
+        Ok(result)
+    }
+}
+
+#[tokio::test]
+async fn missing_media_is_not_counted_as_external_provider_unavailable() -> Result<()> {
+    // ピア不在などで media blob を取得できない場合も verdict は fail-closed の
+    // ProviderUnavailable になるが、外部 safety provider 障害の監視値には含めない。
+    let docs = Arc::new(MemoryDocsSync::default());
+    let projection = Arc::new(MemoryIndexProjection::new());
+    let topic = TopicId::new("rust");
+    let replica = topic_replica_id("rust");
+    persist_media_post(&docs, &replica, &topic, "missing media", true).await;
+
+    let metrics = Arc::new(IndexerRuntimeState::default());
+    let fetcher = BlobMediaFetcher::new(
+        Arc::new(MemoryBlobService::default()),
+        MediaFetchConfig::default(),
+    )
+    .with_metrics(Arc::clone(&metrics));
+    let provider = Arc::new(FetchingProvider {
+        fetcher: Arc::new(fetcher),
+    });
+
+    let signer = Secp256k1ModerationEventSigner::from_secret(TEST_SECRET).expect("signer");
+    let issuer = signer.issuer_node_id().to_string();
+    let store = Arc::new(MemorySafetyArtifactStore::new());
+    let orchestrator = SafetyOrchestrator::builder(
+        &issuer,
+        Arc::new(SystemScanClock),
+        Arc::new(UuidEventIdGenerator),
+    )
+    .provider(provider)
+    .build()
+    .expect("orchestrator");
+    let service = SafetyScanService::builder(Arc::new(orchestrator), store.clone())
+        .signer(Arc::new(signer))
+        .build()
+        .expect("service");
+    let (pipeline, _, _) = pipeline_with(&docs, &projection, (Arc::new(service), store));
+    let pipeline = pipeline.with_metrics(Arc::clone(&metrics));
+
+    let summary = pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+    let snapshot = metrics.snapshot();
+
+    assert_eq!(summary.indexed, 0);
+    assert_eq!(summary.skipped_non_allow, 1);
+    assert_eq!(snapshot.media_fetch_unavailable, 1);
+    assert_eq!(snapshot.provider_unavailable, 0);
+    Ok(())
+}
+
 #[tokio::test]
 async fn missing_media_manifest_fails_closed_and_post_is_not_indexed() -> Result<()> {
     // manifest 参照が replica 上で解決できなければ scan 対象を確定できないため、post を
@@ -625,7 +711,9 @@ async fn provider_unavailable_is_never_allowed_and_not_indexed() -> Result<()> {
     let replica = topic_replica_id("rust");
     let object_id = persist_post(&docs, &replica, &topic, "provider is down").await;
 
+    let metrics = Arc::new(IndexerRuntimeState::default());
     let (pipeline, entries, _) = pipeline_with(&docs, &projection, provider_unavailable_service());
+    let pipeline = pipeline.with_metrics(Arc::clone(&metrics));
     let summary = pipeline
         .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
         .await?;
@@ -638,6 +726,8 @@ async fn provider_unavailable_is_never_allowed_and_not_indexed() -> Result<()> {
             .await?
     );
     assert!(!entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
+    assert_eq!(metrics.snapshot().provider_unavailable, 1);
+    assert_eq!(metrics.snapshot().media_fetch_unavailable, 0);
     Ok(())
 }
 
