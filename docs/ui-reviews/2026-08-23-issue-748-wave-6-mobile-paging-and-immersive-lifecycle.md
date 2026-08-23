@@ -23,4 +23,5 @@
 - Shneiderman 7 — internal locus of control: background audioは明示playだけでfocusを得て、offscreen mediaやMetaverseが勝手に再生 / 入力捕捉しない。
 - Shneiderman 8 — reduced memory load: title / scope、position / total、active / pinned、menuを常時または1操作以内に保ち、Desktopと同じColumn順をMobileでも使う。
 - Review result: 390×844のproduction appでCanvas / 3 Columnが各390px、document overflow 0、snap `x mandatory`、header action 44×44pxを確認した。Composerへfocus中はindicator / Control Center triggerが非表示になり、footerはviewport内に収まった。production Storybookではoffscreen Streamのsuspension、active Metaverseのscene / HUD / chat、gesture owner、44px pagerを確認した。
+- Linux baseline: [Kukuri Visual Baseline run 32613101830](https://github.com/KingYoSun/kukuri/actions/runs/32613101830)で再生成し、意図したmobile root余白除去とheader action集約が反映された`timeline-narrow-dark.png` / `timeline-narrow-light.png`の2枚だけを更新した。
 - Validation: `cargo xtask oversized-files`、`cargo xtask desktop-ui-check`（Vitest 782、Chromium E2E 19、visual 14）、`cargo xtask check`、`cargo xtask test`（Rust 584、harness 18、Vitest 782）を完了した。加えて390×844のproduction appとproduction Storybookを目視確認した。PR CIはPR記録を一次記録とする。
