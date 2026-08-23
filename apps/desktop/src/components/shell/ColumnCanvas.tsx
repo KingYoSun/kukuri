@@ -1,4 +1,5 @@
 import {
+  Children,
   useCallback,
   useEffect,
   useRef,
@@ -7,16 +8,25 @@ import {
   type ReactNode,
 } from 'react';
 import { columnCanvasEdgeScrollDirection } from './columnCanvasGeometry';
+import { nearestColumnToViewportCenter } from './columnPagingGeometry';
 
 type ColumnCanvasProps = {
   activeColumnId: string;
   children: ReactNode;
+  columnIds?: string[];
   label?: string;
   onActivateColumn: (columnId: string, syncRoute: boolean) => void;
   onMoveColumn?: (columnId: string, targetIndex: number) => void;
+  onVisibleColumnIdsChange?: (columnIds: string[]) => void;
 };
 
 const EDGE_SCROLL_STEP_PX = 18;
+const MOBILE_QUERY = '(max-width: 759px)';
+const SCROLL_SETTLE_MS = 120;
+
+function isMobileViewport() {
+  return window.matchMedia?.(MOBILE_QUERY).matches ?? false;
+}
 
 function findColumnId(target: EventTarget | null) {
   if (!(target instanceof Element)) return null;
@@ -33,15 +43,18 @@ function isInteractiveTarget(target: EventTarget | null) {
 export function ColumnCanvas({
   activeColumnId,
   children,
+  columnIds = [],
   label = 'Column workspace',
   onActivateColumn,
   onMoveColumn,
+  onVisibleColumnIdsChange,
 }: ColumnCanvasProps) {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const previousActiveColumnIdRef = useRef<string | null>(null);
   const autoScrollFrameRef = useRef<number | null>(null);
   const autoScrollDirectionRef = useRef<-1 | 0 | 1>(0);
   const draggingColumnIdRef = useRef<string | null>(null);
+  const scrollSettleTimeoutRef = useRef<number | null>(null);
   const [dropTarget, setDropTarget] = useState<{ index: number; left: number } | null>(null);
   const [announcement, setAnnouncement] = useState('');
 
@@ -83,6 +96,12 @@ export function ColumnCanvas({
 
   useEffect(() => resetDrag, [resetDrag]);
 
+  useEffect(() => () => {
+    if (scrollSettleTimeoutRef.current !== null) {
+      window.clearTimeout(scrollSettleTimeoutRef.current);
+    }
+  }, []);
+
   useEffect(() => {
     if (previousActiveColumnIdRef.current === activeColumnId) return;
     previousActiveColumnIdRef.current = activeColumnId;
@@ -90,11 +109,75 @@ export function ColumnCanvas({
       `[data-column-id="${CSS.escape(activeColumnId)}"]`
     );
     if (typeof column?.scrollIntoView === 'function') {
-      column.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      const mobile = isMobileViewport();
+      const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      column.scrollIntoView({
+        block: 'nearest',
+        inline: mobile ? 'center' : 'nearest',
+        ...(mobile ? { behavior: reducedMotion ? 'auto' : 'smooth' } : {}),
+      });
+    }
+    if (column && (!document.activeElement || document.activeElement === document.body)) {
+      const focusFrameId = window.requestAnimationFrame(() => {
+        if (!document.activeElement || document.activeElement === document.body) {
+          column.focus({ preventScroll: true });
+        }
+      });
+      return () => window.cancelAnimationFrame(focusFrameId);
     }
   }, [activeColumnId]);
 
+  const columnCount = Children.count(children);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !onVisibleColumnIdsChange) return;
+    const columns = Array.from(canvas.querySelectorAll<HTMLElement>('[data-column-id]'));
+    if (typeof IntersectionObserver === 'undefined') {
+      onVisibleColumnIdsChange(columns.map((column) => column.dataset.columnId!).filter(Boolean));
+      return;
+    }
+    const visible = new Set<string>();
+    const publish = () => onVisibleColumnIdsChange(
+      columns.flatMap((column) => {
+        const id = column.dataset.columnId;
+        return id && visible.has(id) ? [id] : [];
+      })
+    );
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        const id = (entry.target as HTMLElement).dataset.columnId;
+        if (!id) continue;
+        if (entry.isIntersecting && entry.intersectionRatio > 0.01) visible.add(id);
+        else visible.delete(id);
+      }
+      publish();
+    }, { root: canvas, threshold: [0, 0.01, 0.5, 1] });
+    columns.forEach((column) => observer.observe(column));
+    return () => observer.disconnect();
+  }, [columnCount, onVisibleColumnIdsChange]);
+
+  const settleMobileScroll = () => {
+    if (!isMobileViewport()) return;
+    if (scrollSettleTimeoutRef.current !== null) {
+      window.clearTimeout(scrollSettleTimeoutRef.current);
+    }
+    scrollSettleTimeoutRef.current = window.setTimeout(() => {
+      scrollSettleTimeoutRef.current = null;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const columns = Array.from(
+        canvas.querySelectorAll<HTMLElement>('[data-column-id]')
+      ).flatMap((column) => {
+        const id = column.dataset.columnId;
+        return id ? [{ id, left: column.offsetLeft, width: column.offsetWidth }] : [];
+      });
+      const nearest = nearestColumnToViewportCenter(columns, canvas.scrollLeft, canvas.clientWidth);
+      if (nearest && nearest !== activeColumnId) onActivateColumn(nearest, true);
+    }, SCROLL_SETTLE_MS);
+  };
+
   const activateFromEvent = (target: EventTarget | null) => {
+    if (target instanceof Element && target.closest('[data-column-gesture-owner]')) return;
     const columnId = findColumnId(target);
     if (columnId && columnId !== activeColumnId) {
       onActivateColumn(columnId, !isInteractiveTarget(target));
@@ -143,6 +226,7 @@ export function ColumnCanvas({
       ref={canvasRef}
       className='shell-column-canvas'
       aria-label={label}
+      onScroll={settleMobileScroll}
       onDragStartCapture={(event: DragEvent<HTMLDivElement>) => {
         const columnId = findColumnId(event.target);
         if (!columnId || !(event.target as Element).closest('[data-column-drag-grip]')) return;
@@ -168,7 +252,9 @@ export function ColumnCanvas({
       }}
       onDragEndCapture={resetDrag}
       onFocusCapture={(event) => activateFromEvent(event.target)}
-      onPointerDown={(event) => activateFromEvent(event.target)}
+      onPointerDown={(event) => {
+        if (!isMobileViewport()) activateFromEvent(event.target);
+      }}
     >
       {children}
       {dropTarget ? (
@@ -180,6 +266,26 @@ export function ColumnCanvas({
         />
       ) : null}
       <span className='sr-only' aria-live='polite'>{announcement}</span>
+      {columnIds.length > 1 ? (
+        <nav className='shell-column-page-indicator' aria-label='Column pages'>
+          <span className='shell-column-page-count' aria-live='polite'>
+            {Math.max(1, columnIds.indexOf(activeColumnId) + 1)} / {columnIds.length}
+          </span>
+          <span className='shell-column-page-dots'>
+            {columnIds.map((columnId, index) => (
+              <button
+                key={columnId}
+                type='button'
+                aria-label={`Go to Column ${index + 1} of ${columnIds.length}`}
+                aria-current={columnId === activeColumnId ? 'page' : undefined}
+                onClick={() => onActivateColumn(columnId, true)}
+              >
+                <span aria-hidden='true' />
+              </button>
+            ))}
+          </span>
+        </nav>
+      ) : null}
     </div>
   );
 }

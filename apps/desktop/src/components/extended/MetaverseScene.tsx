@@ -51,6 +51,8 @@ type SceneProps = {
   hud: ReactNode;
   onLocalTransform: (transform: AvatarTransform) => void;
   onAvatarAssetStatus: (status: AvatarAssetStatus) => void;
+  controlsEnabled?: boolean;
+  suspended?: boolean;
 };
 
 const AVATAR_ANIMATION_ASSETS = {
@@ -428,7 +430,8 @@ function LocalAvatar({
   chatBubble,
   onLocalTransform,
   onAvatarAssetStatus,
-}: Pick<SceneProps, 'room' | 'localPeerId' | 'avatarAssetUrl' | 'onLocalTransform' | 'onAvatarAssetStatus'> & {
+  controlsEnabled = true,
+}: Pick<SceneProps, 'room' | 'localPeerId' | 'avatarAssetUrl' | 'onLocalTransform' | 'onAvatarAssetStatus' | 'controlsEnabled'> & {
   chatBubble?: LatestChatBubble;
 }) {
   const groupRef = useRef<THREE.Group | null>(null);
@@ -473,7 +476,7 @@ function LocalAvatar({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (isEditableTarget(event.target)) {
+      if (!controlsEnabled || isEditableTarget(event.target)) {
         return;
       }
       const key = event.key.toLowerCase();
@@ -510,7 +513,7 @@ function LocalAvatar({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, []);
+  }, [controlsEnabled]);
 
   useFrame((_, deltaSeconds) => {
     const delta = Math.min(0.05, deltaSeconds);
@@ -681,7 +684,8 @@ function SceneContents({
   locale,
   onLocalTransform,
   onAvatarAssetStatus,
-}: Omit<SceneProps, 'hud'>) {
+  controlsEnabled,
+}: Omit<SceneProps, 'hud' | 'suspended'>) {
   const remoteEntries = useMemo(() => Object.entries(remoteTransforms), [remoteTransforms]);
   const { camera } = useThree();
 
@@ -707,6 +711,7 @@ function SceneContents({
         chatBubble={latestChatByPeer[localPeerId]}
         onLocalTransform={onLocalTransform}
         onAvatarAssetStatus={onAvatarAssetStatus}
+        controlsEnabled={controlsEnabled}
       />
       {remoteEntries.map(([peerId, transform]) => (
         <RemoteAvatar
@@ -738,15 +743,22 @@ export function MetaverseScene({
   hud,
   onLocalTransform,
   onAvatarAssetStatus,
+  controlsEnabled = true,
+  suspended = false,
 }: SceneProps) {
   const { t } = useTranslation('metaverse', { lng: locale });
   return (
-    <div className='metaverse-viewport-shell' aria-label={t('viewport.ariaLabel')}>
+    <div
+      className='metaverse-viewport-shell'
+      aria-label={t('viewport.ariaLabel')}
+      data-render-suspended={suspended || undefined}
+    >
       <Canvas
         className='metaverse-viewport-canvas'
         camera={{ position: [0, 3.2, 5.2], fov: 54 }}
         gl={{ antialias: true }}
         dpr={[1, 2]}
+        frameloop={suspended ? 'never' : 'always'}
       >
         <SceneContents
           room={room}
@@ -761,6 +773,7 @@ export function MetaverseScene({
           locale={locale}
           onLocalTransform={onLocalTransform}
           onAvatarAssetStatus={onAvatarAssetStatus}
+          controlsEnabled={controlsEnabled && !suspended}
         />
       </Canvas>
       {hud}

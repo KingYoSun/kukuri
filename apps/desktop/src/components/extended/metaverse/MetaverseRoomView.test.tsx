@@ -5,6 +5,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import type { GameRoomView, SharedRoomObjectV1 } from '@/lib/api';
 import { MetaverseRoomView } from './MetaverseRoomView';
+import { ColumnRuntimeProvider } from '@/shell/ColumnRuntimeContext';
 
 vi.mock('../MetaverseScene', () => ({
   MetaverseScene: (props: {
@@ -13,12 +14,16 @@ vi.mock('../MetaverseScene', () => ({
     sharedObject: SharedRoomObjectV1;
     connectionState: string;
     hud: ReactNode;
+    controlsEnabled?: boolean;
+    suspended?: boolean;
   }) => (
     <div aria-label='Metaverse room viewport'>
       <span>{`Scene room: ${props.room.room_id}`}</span>
       <span>{`Scene peer: ${props.localPeerId}`}</span>
       <span>{`Scene object: ${props.sharedObject.object_id}`}</span>
       <span>{`Scene connection: ${props.connectionState}`}</span>
+      <span>{`Scene controls: ${String(props.controlsEnabled)}`}</span>
+      <span>{`Scene suspended: ${String(props.suspended)}`}</span>
       {props.hud}
     </div>
   ),
@@ -108,6 +113,8 @@ describe('MetaverseRoomView', () => {
     render(<MetaverseRoomView {...viewProps({ initialChatOpen: false })} />);
     expect(screen.getByRole('button', { name: 'Open room chat' })).toBeInTheDocument();
 
+    screen.getByLabelText('Metaverse room viewport').parentElement?.focus();
+    await screen.findByText('Scene controls: true');
     fireEvent.keyDown(window, { key: 'Enter' });
 
     const input = await screen.findByLabelText('Room chat message');
@@ -137,7 +144,7 @@ describe('MetaverseRoomView', () => {
     expect(screen.getByRole('button', { name: 'Open room chat' })).toBeInTheDocument();
   });
 
-  test('removes the key listener and cancels a pending focus frame on cleanup', () => {
+  test('removes the key listener and cancels a pending focus frame on cleanup', async () => {
     const removeEventListener = vi.spyOn(window, 'removeEventListener');
     const requestAnimationFrame = vi
       .spyOn(window, 'requestAnimationFrame')
@@ -145,11 +152,34 @@ describe('MetaverseRoomView', () => {
     const cancelAnimationFrame = vi.spyOn(window, 'cancelAnimationFrame');
     const view = render(<MetaverseRoomView {...viewProps({ initialChatOpen: false })} />);
 
+    screen.getByLabelText('Metaverse room viewport').parentElement?.focus();
+    await screen.findByText('Scene controls: true');
     fireEvent.keyDown(window, { key: 'Enter' });
     view.unmount();
 
     expect(requestAnimationFrame).toHaveBeenCalledTimes(1);
     expect(cancelAnimationFrame).toHaveBeenCalledWith(17);
     expect(removeEventListener).toHaveBeenCalledWith('keydown', expect.any(Function));
+  });
+
+  test('suspends rendering and keyboard controls without removing room session UI', () => {
+    render(
+      <ColumnRuntimeProvider value={{
+        visible: false,
+        active: false,
+        audioFocused: false,
+        suspended: true,
+        requestAudioFocus: vi.fn(),
+        releaseAudioFocus: vi.fn(),
+      }}>
+        <MetaverseRoomView {...viewProps({ initialChatOpen: false })} />
+      </ColumnRuntimeProvider>
+    );
+
+    expect(screen.getByText('Scene controls: false')).toBeInTheDocument();
+    expect(screen.getByText('Scene suspended: true')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open room chat' })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(screen.queryByLabelText('Room chat message')).not.toBeInTheDocument();
   });
 });

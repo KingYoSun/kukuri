@@ -1,4 +1,12 @@
-import { type ChangeEvent, type FormEvent, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 
 import { ColumnComposerFooter } from '@/components/shell/ColumnComposerFooter';
 import { ColumnDomainActionFooter } from '@/components/shell/ColumnDomainActionFooter';
@@ -23,6 +31,12 @@ import {
   type ColumnState,
 } from '@/shell/slices/workspace';
 import { useDesktopShellFieldSetter, useDesktopShellStore } from '@/shell/store';
+import { ColumnRuntimeProvider } from '@/shell/ColumnRuntimeContext';
+import {
+  projectColumnRuntime,
+  releaseColumnAudioFocus,
+  requestColumnAudioFocus,
+} from '@/shell/columnRuntime';
 
 type DesktopShellColumnWorkspaceProps = {
   activeTimelineView: TimelineViewId;
@@ -95,6 +109,26 @@ export function DesktopShellColumnWorkspace({
   const directMessages = useDesktopShellStore((state) => state.directMessages);
   const knownAuthorsByPubkey = useDesktopShellStore((state) => state.knownAuthorsByPubkey);
   const setWorkspaceState = useDesktopShellFieldSetter('workspaceState');
+  const [visibleColumnIds, setVisibleColumnIds] = useState<string[]>([
+    workspaceState.activeColumnId,
+  ]);
+  const [audioFocusedColumnId, setAudioFocusedColumnId] = useState<string | null>(null);
+
+  const updateVisibleColumnIds = useCallback((columnIds: string[]) => {
+    setVisibleColumnIds((current) =>
+      current.length === columnIds.length && current.every((id, index) => id === columnIds[index])
+        ? current
+        : columnIds
+    );
+  }, []);
+
+  useEffect(() => {
+    const ids = new Set(workspaceState.columns.map((column) => column.id));
+    setVisibleColumnIds((current) => current.filter((id) => ids.has(id)));
+    setAudioFocusedColumnId((current) => current && ids.has(current) ? current : null);
+  }, [workspaceState.columns]);
+
+  const visibleColumnIdSet = useMemo(() => new Set(visibleColumnIds), [visibleColumnIds]);
 
   const activate = (columnId: string, syncRoute: boolean) => {
     const column = workspaceState.columns.find((candidate) => candidate.id === columnId);
@@ -211,60 +245,88 @@ export function DesktopShellColumnWorkspace({
   return (
     <ColumnCanvas
       activeColumnId={workspaceState.activeColumnId}
+      columnIds={workspaceState.columns.map((column) => column.id)}
       onActivateColumn={activate}
+      onVisibleColumnIdsChange={updateVisibleColumnIds}
       onMoveColumn={(columnId, targetIndex) =>
         setWorkspaceState((current) => moveColumn(current, columnId, targetIndex))
       }
     >
-      {workspaceState.columns.map((column, index) => (
-        <ColumnSurface
-          key={column.id}
-          columnId={column.id}
-          title={titles[column.kind]}
-          scopeLabel={columnScopeLabel(column)}
-          position={index + 1}
-          total={workspaceState.columns.length}
-          span={column.preferredDesktopSpan}
-          spanOptions={(() => {
-            const policy = columnSpanPolicy(column.kind);
-            return Array.from(
-              { length: policy.max - policy.min + 1 },
-              (_, optionIndex) => (policy.min + optionIndex) as 1 | 2 | 3 | 4
-            );
-          })()}
-          active={workspaceState.activeColumnId === column.id}
-          pinned={column.pinned}
-          footer={renderFooter(column, workspaceState.activeColumnId === column.id)}
-          headerActions={
-            column.kind === 'timeline' ? (
-              <TimelineViewIconTabs
-                activeView={activeTimelineView}
-                items={timelineViewItems}
-                onSelect={onSelectTimelineView}
-              />
-            ) : undefined
-          }
-          onPinnedChange={(pinned) =>
-            setWorkspaceState((current) => setColumnPinned(current, column.id, pinned))
-          }
-          onMoveLeft={
-            index > 0
-              ? () => setWorkspaceState((current) => moveColumn(current, column.id, index - 1))
-              : undefined
-          }
-          onMoveRight={
-            index < workspaceState.columns.length - 1
-              ? () => setWorkspaceState((current) => moveColumn(current, column.id, index + 1))
-              : undefined
-          }
-          onSpanChange={(span) =>
-            setWorkspaceState((current) => setColumnSpan(current, column.id, span))
-          }
-          onClose={workspaceState.columns.length > 1 ? () => close(column.id) : undefined}
-        >
-          {renderBody(column)}
-        </ColumnSurface>
-      ))}
+      {workspaceState.columns.map((column, index) => {
+        const runtime = projectColumnRuntime({
+          kind: column.kind,
+          columnId: column.id,
+          activeColumnId: workspaceState.activeColumnId,
+          visibleColumnIds: visibleColumnIdSet,
+          audioFocusedColumnId,
+        });
+        return (
+          <ColumnRuntimeProvider
+            key={column.id}
+            value={{
+              ...runtime,
+              requestAudioFocus: () =>
+                setAudioFocusedColumnId((current) =>
+                  requestColumnAudioFocus(current, column.id)
+                ),
+              releaseAudioFocus: () =>
+                setAudioFocusedColumnId((current) =>
+                  releaseColumnAudioFocus(current, column.id)
+                ),
+            }}
+          >
+            <ColumnSurface
+              columnId={column.id}
+              title={titles[column.kind]}
+              scopeLabel={columnScopeLabel(column)}
+              position={index + 1}
+              total={workspaceState.columns.length}
+              span={column.preferredDesktopSpan}
+              spanOptions={(() => {
+                const policy = columnSpanPolicy(column.kind);
+                return Array.from(
+                  { length: policy.max - policy.min + 1 },
+                  (_, optionIndex) => (policy.min + optionIndex) as 1 | 2 | 3 | 4
+                );
+              })()}
+              active={runtime.active}
+              pinned={column.pinned}
+              resourceManaged={column.kind === 'stream' || column.kind === 'metaverse'}
+              footer={renderFooter(column, runtime.active)}
+              headerActions={
+                column.kind === 'timeline' ? (
+                  <TimelineViewIconTabs
+                    activeView={activeTimelineView}
+                    items={timelineViewItems}
+                    onSelect={onSelectTimelineView}
+                  />
+                ) : undefined
+              }
+              onPinnedChange={(pinned) =>
+                setWorkspaceState((current) => setColumnPinned(current, column.id, pinned))
+              }
+              onMoveLeft={
+                index > 0
+                  ? () =>
+                      setWorkspaceState((current) => moveColumn(current, column.id, index - 1))
+                  : undefined
+              }
+              onMoveRight={
+                index < workspaceState.columns.length - 1
+                  ? () =>
+                      setWorkspaceState((current) => moveColumn(current, column.id, index + 1))
+                  : undefined
+              }
+              onSpanChange={(span) =>
+                setWorkspaceState((current) => setColumnSpan(current, column.id, span))
+              }
+              onClose={workspaceState.columns.length > 1 ? () => close(column.id) : undefined}
+            >
+              {renderBody(column)}
+            </ColumnSurface>
+          </ColumnRuntimeProvider>
+        );
+      })}
     </ColumnCanvas>
   );
 }

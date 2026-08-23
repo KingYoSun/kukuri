@@ -36,3 +36,11 @@ export const MetaverseFourSpan: Story = {
     metaverseSpan: 4,
   },
 };
+
+export const MobilePagingAndImmersiveLifecycle: Story = {
+  globals: { shellWidth: 'mobile390' },
+  args: {
+    scenario: 'wide-surfaces',
+    metaverseSpan: 4,
+  },
+};

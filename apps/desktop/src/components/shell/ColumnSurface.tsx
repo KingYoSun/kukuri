@@ -1,9 +1,10 @@
 import { GripVertical, Pin, PinOff, X } from 'lucide-react';
-import { useState, type DragEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import type { ColumnSpan } from '@/shell/slices/workspace';
+import { useColumnRuntime } from '@/shell/ColumnRuntimeContext';
 import { ColumnMenu } from './ColumnMenu';
 
 type ColumnSurfaceProps = {
@@ -24,6 +25,7 @@ type ColumnSurfaceProps = {
   spanOptions?: ColumnSpan[];
   title: string;
   total: number;
+  resourceManaged?: boolean;
 };
 
 export function ColumnSurface({
@@ -44,8 +46,11 @@ export function ColumnSurface({
   spanOptions = [span],
   title,
   total,
+  resourceManaged = false,
 }: ColumnSurfaceProps) {
   const { t } = useTranslation('shell');
+  const runtime = useColumnRuntime();
+  const surfaceRef = useRef<HTMLElement | null>(null);
   const [dragging, setDragging] = useState(false);
   const [announcement, setAnnouncement] = useState('');
   const stateLabel = pinned ? 'Pinned' : 'Temporary';
@@ -53,8 +58,19 @@ export function ColumnSurface({
     active ? 'Active' : 'Inactive'
   }, ${stateLabel}`;
 
+  useEffect(() => {
+    if (!resourceManaged || (!runtime.suspended && runtime.audioFocused)) return;
+    const media = surfaceRef.current?.querySelectorAll<HTMLMediaElement>('audio, video');
+    media?.forEach((item) => {
+      if (!item.muted && !item.paused && (runtime.suspended || !runtime.audioFocused)) {
+        item.pause();
+      }
+    });
+  }, [resourceManaged, runtime.audioFocused, runtime.suspended]);
+
   return (
     <section
+      ref={surfaceRef}
       className='shell-column-surface'
       data-active={active || undefined}
       data-column-id={columnId}
@@ -62,10 +78,22 @@ export function ColumnSurface({
       data-pinned={pinned || undefined}
       data-span={span}
       data-transient={!pinned || undefined}
+      data-runtime-visible={runtime.visible}
+      data-runtime-suspended={runtime.suspended || undefined}
       aria-current={active ? 'true' : undefined}
       aria-label={accessibleLabel}
       aria-roledescription='Column'
       tabIndex={-1}
+      onPlayCapture={(event) => {
+        if (event.target instanceof HTMLMediaElement && !event.target.muted) {
+          runtime.requestAudioFocus();
+        }
+      }}
+      onPauseCapture={(event) => {
+        if (event.target instanceof HTMLMediaElement) {
+          runtime.releaseAudioFocus();
+        }
+      }}
     >
       <header className='shell-column-header'>
         <Button
@@ -110,6 +138,7 @@ export function ColumnSurface({
                 variant='ghost'
                 size='icon'
                 type='button'
+                className='shell-column-pin-button'
                 aria-label={t(pinned ? 'columnMenu.unpin' : 'columnMenu.pin', { title })}
                 aria-pressed={pinned}
                 onClick={() => onPinnedChange(!pinned)}
@@ -126,6 +155,7 @@ export function ColumnSurface({
                 variant='ghost'
                 size='icon'
                 type='button'
+                className='shell-column-close-button'
                 aria-label={t('columnMenu.closeColumn', { title })}
                 onClick={onClose}
               >

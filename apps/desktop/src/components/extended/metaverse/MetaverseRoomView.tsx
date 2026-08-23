@@ -19,6 +19,7 @@ import type {
   RoomChatMessage,
 } from '../MetaverseSceneModel';
 import { MetaverseRoomControls } from './MetaverseRoomControls';
+import { useColumnRuntime } from '@/shell/ColumnRuntimeContext';
 
 export type MetaverseRoomViewProps = {
   room: GameRoomView | null;
@@ -100,10 +101,14 @@ export function MetaverseRoomView({
   const [hudOpen, setHudOpen] = useState(initialHudOpen);
   const [hudDebugOpen, setHudDebugOpen] = useState(initialHudDebugOpen);
   const [chatOpen, setChatOpen] = useState(initialChatOpen);
+  const [sceneFocused, setSceneFocused] = useState(false);
   const messageInputRef = useRef<HTMLInputElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const runtime = useColumnRuntime();
+  const controlsEnabled = runtime.active && runtime.visible && !runtime.suspended && sceneFocused;
 
   useEffect(() => {
-    if (!room) {
+    if (!room || !controlsEnabled) {
       return;
     }
     let focusFrameId = 0;
@@ -127,7 +132,7 @@ export function MetaverseRoomView({
         window.cancelAnimationFrame(focusFrameId);
       }
     };
-  }, [room]);
+  }, [controlsEnabled, room]);
 
   if (!room) {
     return null;
@@ -135,7 +140,22 @@ export function MetaverseRoomView({
 
   return (
     <Card className='shell-workspace-card metaverse-room-view'>
-      <div className='metaverse-room-stage'>
+      <div
+        ref={stageRef}
+        className='metaverse-room-stage'
+        data-column-gesture-owner='metaverse'
+        data-scene-focused={sceneFocused || undefined}
+        tabIndex={0}
+        onFocus={(event) => setSceneFocused(event.target === event.currentTarget)}
+        onBlur={() => setSceneFocused(false)}
+        onPointerDown={(event) => {
+          if (
+            event.target instanceof Element &&
+            event.target.closest('button, input, textarea, select, a, [contenteditable="true"]')
+          ) return;
+          stageRef.current?.focus({ preventScroll: true });
+        }}
+      >
         <MetaverseScene
           room={room}
           localPeerId={localPeerId}
@@ -149,6 +169,8 @@ export function MetaverseRoomView({
           locale={locale}
           onLocalTransform={onLocalTransform}
           onAvatarAssetStatus={onAvatarAssetStatus}
+          controlsEnabled={controlsEnabled}
+          suspended={runtime.suspended}
           hud={(
             <MetaverseRoomControls
               room={room}
