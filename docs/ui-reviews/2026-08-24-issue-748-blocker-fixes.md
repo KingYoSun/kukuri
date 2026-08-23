@@ -1,6 +1,6 @@
 # 2026-08-24 issue-748-blocker-fixes
 
-- PR: （後述の PR 番号を参照。Issue #748 監査コメント https://github.com/KingYoSun/kukuri/issues/748#issuecomment-5387831754 の blocker B1〜B5）
+- PR: https://github.com/KingYoSun/kukuri/pull/769 （Issue #748 監査コメント https://github.com/KingYoSun/kukuri/issues/748#issuecomment-5387831754 の blocker B1〜B5）
 - Preview: [初期 Timeline Column の中央寄せと Control Center trigger の非干渉](assets/2026-08-24-issue-748-blocker-fixes/initial-timeline-centered.png) / [keyboard で開いた Column menu の focus](assets/2026-08-24-issue-748-blocker-fixes/column-menu-keyboard-focus.png)
 - Summary:
   - B1: 保存 layout が無い desktop 初期表示で Timeline Column を Canvas 中央へ戻した（Wave 2 で `safe center` → `flex-start` に無言で変わっていた回帰）。Canvas 下端を `--control-center-reserve: 2.5rem` だけ予約し、左下 Control Center trigger が最左 Column の footer / primary action / 展開後 Composer と重ならないようにした。DESIGN.md §5.4 に規則を追記。
