@@ -346,6 +346,11 @@ describe('MetaverseRoomPanel animation sharing', () => {
     await user.click(screen.getByRole('button', { name: 'Hide room chat' }));
     expect(screen.queryByLabelText('ROOM Chat')).not.toBeInTheDocument();
 
+    const scene = screen.getByLabelText('Metaverse room viewport');
+    const stage = scene.closest<HTMLElement>('.metaverse-room-stage');
+    expect(stage).not.toBeNull();
+    stage?.focus();
+    await waitFor(() => expect(stage).toHaveFocus());
     await user.keyboard('{Enter}');
 
     const input = await screen.findByPlaceholderText('Say something in the room');

@@ -44,6 +44,10 @@ import {
   readWorkspaceLayout,
   type WorkspaceStorage,
 } from '@/shell/workspacePersistence';
+import {
+  readColumnDrafts,
+  type ColumnDraftStorage,
+} from '@/shell/columnDraftPersistence';
 
 export type AppProps = {
   api?: DesktopApi;
@@ -117,6 +121,7 @@ export function createInitialShellState(): DesktopShellState {
 
 type CreateDesktopShellStoreOptions = {
   workspaceStorage?: WorkspaceStorage;
+  draftStorage?: ColumnDraftStorage;
 };
 
 export function createDesktopShellStore(options: CreateDesktopShellStoreOptions = {}) {
@@ -124,9 +129,13 @@ export function createDesktopShellStore(options: CreateDesktopShellStoreOptions 
   const workspaceState = options.workspaceStorage
     ? readWorkspaceLayout(options.workspaceStorage, initialState.workspaceState)
     : initialState.workspaceState;
+  const columnDraftsByKey = options.draftStorage
+    ? readColumnDrafts(options.draftStorage)
+    : initialState.columnDraftsByKey;
   return createStore<DesktopShellStore>((set) => ({
     ...initialState,
     workspaceState,
+    columnDraftsByKey,
     patchState: (patch) => set((current) => ({ ...current, ...patch })),
     resetState: () => set(createInitialShellState()),
     setField: (key, value) =>

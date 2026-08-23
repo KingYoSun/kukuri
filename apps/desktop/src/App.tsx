@@ -25,12 +25,16 @@ import {
 } from '@/lib/theme';
 import { copyTextToClipboard } from '@/lib/utils';
 import { startWorkspaceLayoutPersistence } from '@/shell/workspacePersistence';
+import { startColumnDraftPersistence } from '@/shell/columnDraftPersistence';
 
 type StartupGateState = { status: 'checking' } | DesktopStartupStatus;
 
 export function App(props: AppProps) {
   const [store] = useState(() =>
-    createDesktopShellStore({ workspaceStorage: window.localStorage })
+    createDesktopShellStore({
+      workspaceStorage: window.localStorage,
+      draftStorage: window.localStorage,
+    })
   );
   const [theme, setTheme] = useState<DesktopTheme>(() => readDesktopTheme());
   const [startupGate, setStartupGate] = useState<StartupGateState>(() =>
@@ -47,6 +51,11 @@ export function App(props: AppProps) {
 
   useEffect(
     () => startWorkspaceLayoutPersistence(store, window.localStorage),
+    [store]
+  );
+
+  useEffect(
+    () => startColumnDraftPersistence(store, window.localStorage),
     [store]
   );
 

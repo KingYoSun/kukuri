@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -287,5 +287,62 @@ describe('ColumnCanvas', () => {
     expect(
       columnCanvasEdgeScrollDirection({ ...base, clientX: 490, scrollLeft: 500 })
     ).toBe(0);
+  });
+
+  it('syncs the nearest mobile snap page after settle and offers direct indicator jumps', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      matches: query === '(max-width: 759px)',
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })));
+    const onActivateColumn = vi.fn();
+    const { container } = render(
+      <ColumnCanvas
+        activeColumnId='timeline'
+        columnIds={['timeline', 'thread', 'profile']}
+        onActivateColumn={onActivateColumn}
+      >
+        {['timeline', 'thread', 'profile'].map((id, index) => (
+          <ColumnSurface
+            key={id}
+            columnId={id}
+            title={id}
+            scopeLabel='Public'
+            position={index + 1}
+            total={3}
+            span={1}
+            active={id === 'timeline'}
+            pinned
+          >
+            {id}
+          </ColumnSurface>
+        ))}
+      </ColumnCanvas>
+    );
+    const canvas = container.querySelector('.shell-column-canvas') as HTMLElement;
+    Object.defineProperty(canvas, 'clientWidth', { value: 390 });
+    Object.defineProperty(canvas, 'scrollLeft', { value: 390, writable: true });
+    Array.from(container.querySelectorAll<HTMLElement>('[data-column-id]')).forEach(
+      (column, index) => {
+        Object.defineProperty(column, 'offsetLeft', { value: index * 390 });
+        Object.defineProperty(column, 'offsetWidth', { value: 390 });
+      }
+    );
+
+    fireEvent.scroll(canvas);
+    await act(async () => vi.advanceTimersByTime(120));
+    expect(onActivateColumn).toHaveBeenCalledWith('thread', true);
+    expect(screen.getByText('1 / 3')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Go to Column 3 of 3' }));
+    expect(onActivateColumn).toHaveBeenLastCalledWith('profile', true);
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 });

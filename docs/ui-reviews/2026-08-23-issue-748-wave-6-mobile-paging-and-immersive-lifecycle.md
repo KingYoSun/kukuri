@@ -1,0 +1,27 @@
+# 2026-08-23 Issue #748 production Columns Wave 6
+
+- Preview: [Mobile paging](assets/2026-08-23-issue-748-wave-6/mobile-paging-production.png) / [Mobile Column Composer](assets/2026-08-23-issue-748-wave-6/mobile-composer-production.png) / [Mobile immersive surface](assets/2026-08-23-issue-748-wave-6/mobile-immersive-production.png)
+- Storybook review surface: `Review/ProductionColumnWorkspace/MobilePagingAndImmersiveLifecycle`。production `DesktopShellPage`へTimeline、Stream、Metaverseをseedし、390pxでDesktop span 1 / 2 / 4がすべて1 viewport pageへ正規化される状態を表示する。
+- Summary: Mobile breakpoint（759px以下）ではroot shellの外余白を除去し、Canvas / Columnを実viewport幅へ揃えた。Canvasは`scroll-snap-type: x mandatory`、各Columnは`scroll-snap-align: center`と`scroll-snap-stop: always`を持つ。375 / 390 / 430pxのbrowser testではdocument overflowなし、各Column width = Canvas widthを確認した。
+- Active synchronization: native horizontal scrollがsettleした後、viewport中央に最も近いColumnだけを`WorkspaceState.activeColumnId`とcanonical routeへ反映する。途中のpartially visible stateやprogrammatic scrollでは別のactive正本を作らない。`scrollend`専用APIには依存せず、WebView互換のdebounced settleを使う。
+- Alternate navigation: 下部indicatorは現在位置 / 総数と44pxの直接jump buttonを持つ。Control CenterのColumn一覧も同じactivation / scroll経路を使うため、swipeを唯一の移動手段にしない。indicatorはComposer展開中に隠れ、Control Center triggerはComposer内にfocusがある間だけsubmit buttonと競合しないよう一時的に隠れる。Escape等でfocusが外れれば再び到達できる。
+- Parent / history: Timeline → Thread → Profileの既存canonical route historyを維持し、mobile browser / system backでThread、Timelineへ順に戻る。route同期後に既存Columnをactivateして対象pageへ移動し、Column自体を暗黙closeしない。dangling parentは既存workspace normalizationに従う。
+- Header density: MobileではDesktop専用drag gripと重複するdirect pin / closeを隠し、pin / close / reorderはColumn menuに保持する。Timeline viewとmenuのvisible icon buttonは44×44pxで、title / scopeを同じheader内に残す。
+- Gesture ownership: Metaverse stageは`data-column-gesture-owner="metaverse"`を持ち、mobileでは`touch-action: none`としてscene pointerを優先する。video / audio / range controlにも同じownershipを適用する。Column header、44px indicator、Control Centerはimmersive surface外の移動経路として残す。
+- Metaverse input: scene wrapperを明示focusした時だけWASD / arrow / Space等を有効化する。input / textarea / contenteditable、HUD control、Composer、Control Center、inactive / offscreen / suspended時はscene key handlerを有効化しない。
+- Runtime lifecycle: `visible`はCanvasをrootとする`IntersectionObserver`、`active`はworkspace state、`audioFocused`は明示media play、`suspended`はkind / visibility / audio focusから導出する。Story上ではactive Metaverseがvisible、offscreen Streamが`suspended`となることを確認した。audio focusはColumn ID 1つだけを保持し、次のplayで移譲し、pause / closeでreleaseする。
+- Resource reduction: offscreen MetaverseはReact Three Fiber Canvasを`frameloop="never"`へ切り替え、scene inputを停止する。`MetaverseRoomPanel`と`useMetaverseRoomSession`はColumn内にmountしたままなのでroom event / presence / chat等のnetwork sessionはrenderer suspensionから分離される。media要素はoffscreenかaudio focus喪失時にpauseし、復帰時のautoplayは行わない。現行Streamはsession管理UIでplayerを持たないため、架空のvideo UIは追加していない。
+- Safe area / Composer: Mobile shellは`100dvh`と`env(safe-area-inset-*)`を使い、footer bottom paddingをhome indicatorから離す。Grid columnを`minmax(0, 1fr)`へ制約してfile inputのintrinsic widthがfooterを390px外へ押し出さない。Composer展開時はfooter right=389px / viewport=390pxで、close / textarea / attachment / submitが到達可能だった。
+- Draft persistence: `kukuri:column-drafts:v1`へdirtyな`ColumnDraftTarget + content + expanded`だけをdebounce保存し、`pagehide` / cleanupでflushする。`mediaItems`、`blob:` URL、`replyTarget`、pending / error / input keyは保存せず、安全な`createColumnDraft`へ重ねて復元する。layout payload、URL、logへDraft本文を混ぜない。
+- Restart / focus precedence: store作成時にlayoutとDraftを同期復元し、`deep link > restored activeColumnId > initial Timeline`の既存route同期へ渡す。Canvas layout後、focusがbodyにある場合だけactive Column surfaceへfocusし、editable element / dialogの既存focusを奪わない。
+- Shneiderman 1 — consistency: swipe、indicator、Control Center、deep linkを同じactive / scroll contractへ統一した。
+- Shneiderman 2 — universal usability: swipe以外に44px indicator、Control Center、Column menu、browser backを用意し、reduced motionではprogrammatic scrollを即時化する。
+- Shneiderman 3 — informative feedback: active border / badge、position / total、`aria-current="page"`、Column accessible label、live textで現在位置を示す。
+- Shneiderman 4 — closure: scroll settle、direct jump、backの各操作は1つのactive Columnとcanonical routeへ収束する。
+- Shneiderman 5 — error prevention: interactive media / 3D inputをpagingから分離し、Composer中はoverlay controlを隠し、破損Draft / storage例外を非fatalにする。
+- Shneiderman 6 — easy reversal: system / browser backでparent chainを戻り、indicator / Control Centerから任意Columnへ再移動できる。
+- Shneiderman 7 — internal locus of control: background audioは明示playだけでfocusを得て、offscreen mediaやMetaverseが勝手に再生 / 入力捕捉しない。
+- Shneiderman 8 — reduced memory load: title / scope、position / total、active / pinned、menuを常時または1操作以内に保ち、Desktopと同じColumn順をMobileでも使う。
+- Review result: 390×844のproduction appでCanvas / 3 Columnが各390px、document overflow 0、snap `x mandatory`、header action 44×44pxを確認した。Composerへfocus中はindicator / Control Center triggerが非表示になり、footerはviewport内に収まった。production Storybookではoffscreen Streamのsuspension、active Metaverseのscene / HUD / chat、gesture owner、44px pagerを確認した。
+- Linux baseline: [Kukuri Visual Baseline run 32613101830](https://github.com/KingYoSun/kukuri/actions/runs/32613101830)で再生成し、意図したmobile root余白除去とheader action集約が反映された`timeline-narrow-dark.png` / `timeline-narrow-light.png`の2枚だけを更新した。
+- Validation: `cargo xtask oversized-files`、`cargo xtask desktop-ui-check`（Vitest 782、Chromium E2E 19、visual 14）、`cargo xtask check`、`cargo xtask test`（Rust 584、harness 18、Vitest 782）を完了した。加えて390×844のproduction appとproduction Storybookを目視確認した。PR CIはPR記録を一次記録とする。

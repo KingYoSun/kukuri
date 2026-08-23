@@ -281,6 +281,95 @@ test('desktop Columns use kind spans, keyboard reorder, drag reorder, and persis
   await expect(page).not.toHaveURL(/span|layout|column/i);
 });
 
+test('mobile Columns page one viewport at a time with snap, direct jump, and history back', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
+
+  await openComposerDialog(page);
+  await page.getByPlaceholder('Write a post').fill('mobile paging thread');
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await page.getByText('mobile paging thread').click();
+  const thread = activeColumn(page, 'Thread');
+  await expect(thread).toBeVisible();
+  await thread.getByRole('button', { name: 'ffffffffffff' }).first().click();
+  await expect(activeColumn(page, 'Profile')).toBeVisible();
+
+  const canvas = page.locator('.shell-column-canvas');
+  const geometry = await page.evaluate(() => {
+    const root = document.querySelector<HTMLElement>('.shell-column-canvas')!;
+    return {
+      canvasWidth: root.clientWidth,
+      snapType: getComputedStyle(root).scrollSnapType,
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      widths: Array.from(root.querySelectorAll<HTMLElement>('[data-column-id]')).map(
+        (column) => Math.round(column.getBoundingClientRect().width)
+      ),
+    };
+  });
+  expect(geometry.snapType).toContain('mandatory');
+  expect(geometry.overflow).toBeLessThanOrEqual(0);
+  expect(geometry.widths.every((width) => Math.abs(width - geometry.canvasWidth) <= 1)).toBe(true);
+  const headerTargets = await activeColumn(page, 'Profile')
+    .locator('.shell-column-header-actions button:visible')
+    .evaluateAll((buttons) => buttons.map((button) => {
+      const rect = button.getBoundingClientRect();
+      return { width: rect.width, height: rect.height };
+    }));
+  expect(headerTargets.every((box) => box.width >= 44 && box.height >= 44)).toBe(true);
+
+  await page.goBack();
+  await expect(activeColumn(page, 'Thread')).toBeVisible();
+  await page.goBack();
+  await expect(activeColumn(page, 'Timeline')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Go to Column 3 of 3' }).click();
+  await expect(activeColumn(page, 'Profile')).toBeVisible();
+  await page.getByRole('button', { name: 'Go to Column 1 of 3' }).click();
+  await expect(activeColumn(page, 'Timeline')).toBeVisible();
+  await expect(page.getByText('1 / 3')).toBeVisible();
+  await canvas.evaluate((element) => {
+    element.scrollLeft = element.clientWidth;
+    element.dispatchEvent(new Event('scroll'));
+  });
+  await expect(activeColumn(page, 'Thread')).toBeVisible();
+  await page.getByRole('button', { name: 'Go to Column 1 of 3' }).click();
+  await expect(activeColumn(page, 'Timeline')).toBeVisible();
+  await expect(canvas).toBeVisible();
+});
+
+test('mobile restart restores text Draft and active Column focus without unsafe fields', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
+  await openComposerDialog(page);
+  const composer = page.getByPlaceholder('Write a post');
+  await composer.fill('restart-safe mobile Draft');
+  const composerLayout = await page.evaluate(() => ({
+    controlCenterDisplay: getComputedStyle(
+      document.querySelector<HTMLElement>('.shell-control-center-trigger')!
+    ).display,
+    footerRight: document.querySelector<HTMLElement>('.shell-column-footer')!
+      .getBoundingClientRect().right,
+    viewportWidth: document.documentElement.clientWidth,
+  }));
+  expect(composerLayout.controlCenterDisplay).toBe('none');
+  expect(composerLayout.footerRight).toBeLessThanOrEqual(composerLayout.viewportWidth);
+  await page.waitForTimeout(300);
+
+  const payload = await page.evaluate(() => localStorage.getItem('kukuri:column-drafts:v1'));
+  expect(payload).toContain('restart-safe mobile Draft');
+  expect(payload).not.toContain('mediaItems');
+  expect(payload).not.toContain('pending');
+  expect(payload).not.toContain('error');
+
+  await page.reload();
+  await expect(page.getByPlaceholder('Write a post')).toHaveValue('restart-safe mobile Draft');
+  await expect(activeColumn(page, 'Timeline')).toBeFocused();
+});
+
 test('browser mock shell persists language changes across reloads', async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 980 });
   await page.goto('/');

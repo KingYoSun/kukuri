@@ -1,0 +1,145 @@
+/* ADR 0031 Wave 6: mobile paging, safe areas, and immersive gesture ownership. */
+.shell-phase1 .shell-column-surface {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.shell-phase1 .shell-column-footer {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.shell-phase1 .shell-column-composer {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.shell-phase1 .shell-column-composer input[type='file'] {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.shell-phase1 .shell-column-page-indicator {
+  display: none;
+}
+
+@media (max-width: 759px) {
+  .shell-phase1[data-workspace-layout='column'] {
+    width: 100%;
+    min-height: 100dvh;
+    padding: 0;
+  }
+
+  .shell-phase1 .shell-column-canvas {
+    height: calc(100dvh - env(safe-area-inset-top));
+    gap: 0;
+    padding: env(safe-area-inset-top) 0 0;
+    scroll-padding-inline: 0;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .shell-phase1 .shell-column-surface {
+    scroll-snap-align: center;
+    scroll-snap-stop: always;
+  }
+
+  .shell-phase1 .shell-column-drag-grip,
+  .shell-phase1 .shell-column-pin-button,
+  .shell-phase1 .shell-column-close-button {
+    display: none;
+  }
+
+  .shell-phase1 .shell-column-header-actions button,
+  .shell-phase1 .shell-column-view-tab {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .shell-phase1 .shell-column-footer {
+    padding-bottom: max(var(--space-sm), env(safe-area-inset-bottom));
+  }
+
+  .shell-phase1 .shell-column-body {
+    overscroll-behavior-y: contain;
+  }
+
+  .shell-phase1 [data-column-gesture-owner] {
+    touch-action: none;
+    overscroll-behavior: contain;
+  }
+
+  .shell-phase1 .shell-column-body video,
+  .shell-phase1 .shell-column-body audio,
+  .shell-phase1 .shell-column-body input[type='range'] {
+    touch-action: none;
+  }
+
+  .shell-phase1 .shell-column-page-indicator {
+    position: fixed;
+    right: 50%;
+    bottom: calc(max(var(--space-sm), env(safe-area-inset-bottom)) + 4.25rem);
+    z-index: 71;
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    max-width: calc(100vw - 8rem);
+    min-height: 44px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    padding: 0 var(--space-xs);
+    background: color-mix(in srgb, var(--surface-panel-solid) 92%, transparent);
+    box-shadow: var(--shadow-panel);
+    transform: translateX(50%);
+    backdrop-filter: blur(12px);
+  }
+
+  .shell-phase1 .shell-column-page-count {
+    flex: none;
+    min-width: 2.75rem;
+    color: var(--muted-foreground);
+    font-size: var(--text-caption);
+    text-align: center;
+  }
+
+  .shell-phase1 .shell-column-page-dots {
+    display: flex;
+    max-width: min(15rem, 58vw);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .shell-phase1 .shell-column-page-dots button {
+    display: grid;
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+    place-items: center;
+    border: 0;
+    padding: 0;
+    background: transparent;
+  }
+
+  .shell-phase1 .shell-column-page-dots button > span {
+    width: 0.45rem;
+    height: 0.45rem;
+    border: 1px solid var(--muted-foreground);
+    border-radius: 50%;
+    background: transparent;
+  }
+
+  .shell-phase1 .shell-column-page-dots button[aria-current='page'] > span {
+    width: 0.7rem;
+    height: 0.7rem;
+    border-color: var(--accent);
+    background: var(--accent);
+  }
+
+  .shell-phase1 .shell-column-canvas:has(.shell-column-composer) .shell-column-page-indicator,
+  .shell-phase1:has(.shell-column-composer:focus-within) .shell-control-center-trigger {
+    display: none;
+  }
+}
