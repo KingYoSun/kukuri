@@ -118,8 +118,10 @@ export function readWorkspaceLayout(
       return [column];
     });
     if (columns.length === 0) return fallback;
+    // 存在しない id への参照と、自分自身への参照(自己参照)は読み込み時に解除する。
     const normalizedColumns = columns.map((column) =>
-      column.parentColumnId && !ids.has(column.parentColumnId)
+      column.parentColumnId &&
+      (!ids.has(column.parentColumnId) || column.parentColumnId === column.id)
         ? { ...column, parentColumnId: undefined }
         : column
     );

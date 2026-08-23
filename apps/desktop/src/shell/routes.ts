@@ -28,6 +28,12 @@ export type DesktopShellRouteOverrides = {
 };
 
 export type OpenThreadOptions = {
+  /**
+   * Thread を開く時点で topic の選択 channel として固定する channel。
+   * 指定(null 含む)があれば global の選択 channel ではなくこの値で scope / route を同期する。
+   * 未指定なら従来どおり現在の選択 channel を引き継ぐ。
+   */
+  channelId?: string | null;
   focusObjectId?: string | null;
   historyMode?: 'push' | 'replace';
   normalizeOnEmpty?: boolean;

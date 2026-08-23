@@ -112,6 +112,50 @@ describe('workspace layout persistence', () => {
     });
   });
 
+  it('clears a persisted parentColumnId that points at the Column itself', () => {
+    const fallback = createInitialWorkspaceState();
+    const storage = memoryStorage(
+      JSON.stringify({
+        version: 1,
+        activeColumnId: 'profile-alice',
+        columns: [
+          { id: 'timeline', kind: 'timeline', pinned: true, preferredDesktopSpan: 1 },
+          {
+            id: 'profile-alice',
+            kind: 'profile',
+            entityId: 'alice',
+            parentColumnId: 'profile-alice',
+            pinned: false,
+            preferredDesktopSpan: 1,
+          },
+          {
+            id: 'thread-1',
+            kind: 'thread',
+            entityId: 'thread-1',
+            parentColumnId: 'timeline',
+            pinned: false,
+            preferredDesktopSpan: 1,
+          },
+        ],
+      })
+    );
+
+    const restored = readWorkspaceLayout(storage, fallback);
+
+    // 自己参照は「存在しない id」と同様に読み込み時へ解除し、正常な親子関係は維持する。
+    expect(restored.columns.find((column) => column.id === 'profile-alice')).toEqual({
+      id: 'profile-alice',
+      kind: 'profile',
+      entityId: 'alice',
+      pinned: false,
+      preferredDesktopSpan: 1,
+    });
+    expect(
+      restored.columns.find((column) => column.id === 'thread-1')?.parentColumnId
+    ).toBe('timeline');
+    expect(restored.activeColumnId).toBe('profile-alice');
+  });
+
   it('falls back for malformed, unknown-version, empty, and failing storage', () => {
     const fallback = createInitialWorkspaceState();
     expect(readWorkspaceLayout(memoryStorage('{'), fallback)).toBe(fallback);

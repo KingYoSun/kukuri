@@ -801,7 +801,8 @@ export function useDesktopShellActions({
     setActiveTopic(topicId);
     setSelectedChannelIdByTopic(setRecordEntry(topicId, scope.channelId));
     setTimelineScopeByTopic(setRecordEntry(topicId, privateTimelineScope(scope.channelId)));
-    void openThread(threadId, { topic: topicId });
+    // 返信元投稿の channel を route / selection にも載せ、Thread Column の scope を global 選択に依存させない。
+    void openThread(threadId, { topic: topicId, channelId: scope.channelId });
   }
 
   return {

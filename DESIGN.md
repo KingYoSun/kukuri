@@ -305,6 +305,7 @@ width = span * columnUnit + (span - 1) * gap
 ### 5.4 Control Center
 
 - desktop trigger の既定位置は左下。左側 / 左下をアプリ全体、各 Column 下部を Column 固有 action とする。
+- desktop では Column Canvas の下端を trigger 分（`--control-center-reserve: 2.5rem`）だけ予約し、最左 Column の footer / primary action / Composer と trigger を重ねない。Column が Canvas に収まる間は Canvas 内で中央寄せ（`justify-content: safe center`）し、溢れたら start 揃えへ倒す。
 - Control Center は画面下から開く bottom drawer とし、通常の移動では background interaction を完全に遮断しない。
 - drawer は Column、場所、アクティビティ、システムの4区分を持つ。設定編集、認証、同意、破壊的確認だけ modal Sheet / Dialog へ遷移する。
 - trigger は最小44px、状態 dot / unread badge、accessible name、visible focus を持つ。Community Node 障害は trigger の状態と affected Column の inline Notice の両方で示す。

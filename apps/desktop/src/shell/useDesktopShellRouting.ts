@@ -31,6 +31,8 @@ import {
   authorViewFromDirectMessageConversation,
   mergeKnownAuthors,
   messageFromError,
+  privateComposeTarget,
+  privateTimelineScope,
 } from '@/shell/presentation';
 import { selectShellRoutingSlice } from '@/shell/storeSelectors';
 import {
@@ -100,6 +102,9 @@ export function useDesktopShellRouting({
   const setError = useDesktopShellFieldSetter('error');
   const setLastNonNotificationsRoute = useDesktopShellFieldSetter('lastNonNotificationsRoute');
   const setShellChromeState = useDesktopShellFieldSetter('shellChromeState');
+  const setSelectedChannelIdByTopic = useDesktopShellFieldSetter('selectedChannelIdByTopic');
+  const setTimelineScopeByTopic = useDesktopShellFieldSetter('timelineScopeByTopic');
+  const setComposeChannelByTopic = useDesktopShellFieldSetter('composeChannelByTopic');
   const resolvedRouteLocation = useMemo(
     () =>
       resolveHashBackedRouteLocation(
@@ -304,6 +309,17 @@ export function useDesktopShellRouting({
   const openThread = useCallback(
     async (threadId: string, options?: OpenThreadOptions) => {
       const topic = options?.topic ?? activeTopic;
+      // 非 active Column など、global の選択 channel と異なる scope から Thread を開く場合は
+      // 呼び出し元が channelId を明示する。その場合は handleSelectPrivateChannel / handleSelectTopic と
+      // 同じ 3 つの状態(選択 channel / timeline scope / compose target)を更新し、route にも channel を載せる。
+      const hasChannelOverride = options?.channelId !== undefined;
+      const channelId = options?.channelId ?? null;
+      const channelRouteOverrides = hasChannelOverride
+        ? {
+            timelineScope: privateTimelineScope(channelId),
+            composeTarget: privateComposeTarget(channelId),
+          }
+        : {};
       try {
         const threadView = await api.listThread(topic, threadId, null, THREAD_TIMELINE_LIMIT);
         const nextFocusedObjectId =
@@ -340,6 +356,11 @@ export function useDesktopShellRouting({
         }
         startTransition(() => {
           setActiveTopic(topic);
+          if (hasChannelOverride) {
+            setSelectedChannelIdByTopic(setRecordEntry(topic, channelId));
+            setTimelineScopeByTopic(setRecordEntry(topic, privateTimelineScope(channelId)));
+            setComposeChannelByTopic(setRecordEntry(topic, privateComposeTarget(channelId)));
+          }
           setShellChromeState((current) => ({
             ...current,
             activePrimarySection: 'timeline',
@@ -371,6 +392,7 @@ export function useDesktopShellRouting({
           selectedAuthorPubkey: null,
           selectedLiveSessionId: null,
           selectedThread: threadId,
+          ...channelRouteOverrides,
         });
       } catch (threadError) {
         const nextError =
@@ -411,12 +433,14 @@ export function useDesktopShellRouting({
       api,
       setActiveTopic,
       setAuthorError,
+      setComposeChannelByTopic,
       setDirectMessageError,
       setDirectMessagePaneOpen,
       setError,
       setFocusedObjectId,
       setSelectedAuthor,
       setSelectedAuthorPubkey,
+      setSelectedChannelIdByTopic,
       setSelectedDirectMessagePeerPubkey,
       setSelectedGameRoomId,
       setSelectedLiveSessionId,
@@ -425,6 +449,7 @@ export function useDesktopShellRouting({
       setThread,
       setThreadsById,
       setThreadNextCursorById,
+      setTimelineScopeByTopic,
       syncRoute,
       translate,
     ]

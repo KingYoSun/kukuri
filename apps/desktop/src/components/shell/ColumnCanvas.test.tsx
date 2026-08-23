@@ -177,6 +177,58 @@ describe('ColumnCanvas', () => {
     expect(onMoveRight).not.toHaveBeenCalled();
   });
 
+  it('reaches reorder and span actions from the Column menu with the keyboard only', async () => {
+    const user = userEvent.setup();
+    const onMoveLeft = vi.fn();
+    const onMoveRight = vi.fn();
+    const onSpanChange = vi.fn();
+    render(
+      <ColumnCanvas activeColumnId='stream-1' onActivateColumn={() => undefined}>
+        <ColumnSurface
+          columnId='stream-1'
+          title='Stream'
+          scopeLabel='Public'
+          position={2}
+          total={3}
+          span={2}
+          spanOptions={[1, 2]}
+          active
+          pinned
+          onMoveLeft={onMoveLeft}
+          onMoveRight={onMoveRight}
+          onSpanChange={onSpanChange}
+        >
+          <button type='button'>Stream body action</button>
+        </ColumnSurface>
+      </ColumnCanvas>
+    );
+
+    const trigger = screen.getByRole('button', { name: 'Open Stream menu' });
+    trigger.focus();
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('menu', { name: 'Stream actions' })).toBeVisible();
+    expect(document.activeElement).toBe(
+      screen.getByRole('menuitem', { name: 'Move Stream left' })
+    );
+
+    await user.keyboard('{ArrowDown}');
+    expect(document.activeElement).toBe(
+      screen.getByRole('menuitem', { name: 'Move Stream right' })
+    );
+    await user.keyboard('{Enter}');
+    expect(onMoveRight).toHaveBeenCalledTimes(1);
+    expect(onMoveLeft).not.toHaveBeenCalled();
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Open Stream menu' }));
+
+    await user.keyboard('{ArrowDown}');
+    await user.keyboard('{ArrowDown}{ArrowDown}');
+    expect(document.activeElement).toBe(screen.getByRole('menuitemradio', { name: '1 span' }));
+    await user.keyboard('{Enter}');
+    expect(onSpanChange).toHaveBeenCalledWith(1);
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
   it('uses only the dedicated grip as a draggable target', () => {
     render(
       <ColumnCanvas activeColumnId='metaverse-1' onActivateColumn={() => undefined}>

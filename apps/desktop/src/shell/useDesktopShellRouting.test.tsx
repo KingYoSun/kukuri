@@ -24,6 +24,7 @@ import type {
   AuthorSocialView,
   DesktopApi,
   DirectMessageConversationView,
+  JoinedPrivateChannelView,
   PostView,
 } from '@/lib/api';
 import type { PrimarySection } from '@/components/shell/types';
@@ -109,6 +110,25 @@ function buildConversation(peerPubkey: string): DirectMessageConversationView {
       peer_count: 1,
       pending_outbox_count: 0,
     },
+  };
+}
+
+function buildJoinedChannel(channelId: string): JoinedPrivateChannelView {
+  return {
+    topic_id: 'kukuri:topic:demo',
+    channel_id: channelId,
+    label: 'core',
+    creator_pubkey: 'c'.repeat(64),
+    owner_pubkey: 'c'.repeat(64),
+    joined_via_pubkey: null,
+    audience_kind: 'invite_only',
+    is_owner: false,
+    current_epoch_id: 'epoch-1',
+    archived_epoch_ids: [],
+    sharing_state: 'open',
+    rotation_required: false,
+    participant_count: 2,
+    stale_participant_count: 0,
   };
 }
 
@@ -291,6 +311,109 @@ describe('useDesktopShellRouting', () => {
     });
     // replace なので履歴は積まれない(thread param は履歴に残らない)。
     expect(window.history.length).toBe(historyLengthBefore);
+    view.unmount();
+  });
+
+  test('openThread with channelId pins the topic channel selection and puts channel on the thread URL', async () => {
+    const baseApi = createDesktopMockApi({
+      seedPosts: {
+        'kukuri:topic:demo': [
+          buildPost({ object_id: 'post-1', root_id: 'post-1', channel_id: 'channel-1' }),
+        ],
+      },
+    });
+    const api = { ...baseApi, listThread: vi.fn(baseApi.listThread) };
+    // global の選択 channel は public(未選択)のまま、非 active な private Column から
+    // Thread を開く状況を再現する。channel-1 は joined 済みにして route 正規化で落とされないようにする。
+    const { harness, view } = renderRoutingHook({
+      hash: BASE_TIMELINE_HASH,
+      api,
+      preset: (store) => {
+        store.getState().patchState({
+          joinedChannelsByTopic: { 'kukuri:topic:demo': [buildJoinedChannel('channel-1')] },
+          channelPanelStateByTopic: {
+            'kukuri:topic:demo': { status: 'ready', error: null },
+          },
+        });
+      },
+    });
+
+    await act(async () => {
+      await view.result.current.openThread('post-1', {
+        topic: 'kukuri:topic:demo',
+        channelId: 'channel-1',
+      });
+    });
+
+    expect(api.listThread).toHaveBeenCalledWith('kukuri:topic:demo', 'post-1', null, 30);
+    await waitFor(() => {
+      expect(harness.store.getState().selectedThread).toBe('post-1');
+    });
+    const state = harness.store.getState();
+    // handleSelectPrivateChannel と同じ 3 つの状態が channel-1 に揃う。
+    expect(state.selectedChannelIdByTopic['kukuri:topic:demo']).toBe('channel-1');
+    expect(state.timelineScopeByTopic['kukuri:topic:demo']).toEqual({
+      kind: 'channel',
+      channel_id: 'channel-1',
+    });
+    expect(state.composeChannelByTopic['kukuri:topic:demo']).toEqual({
+      kind: 'private_channel',
+      channel_id: 'channel-1',
+    });
+    await waitFor(() => {
+      expect(window.location.hash).toBe(
+        '#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1&context=thread&threadId=post-1'
+      );
+    });
+    view.unmount();
+  });
+
+  test('openThread with channelId null resets the topic channel selection to public', async () => {
+    const baseApi = createDesktopMockApi({
+      seedPosts: {
+        'kukuri:topic:demo': [buildPost({ object_id: 'post-1', root_id: 'post-1' })],
+      },
+    });
+    const api = { ...baseApi, listThread: vi.fn(baseApi.listThread) };
+    const { harness, view } = renderRoutingHook({
+      hash: '#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1',
+      api,
+      preset: (store) => {
+        store.getState().patchState({
+          joinedChannelsByTopic: { 'kukuri:topic:demo': [buildJoinedChannel('channel-1')] },
+          channelPanelStateByTopic: {
+            'kukuri:topic:demo': { status: 'ready', error: null },
+          },
+          selectedChannelIdByTopic: { 'kukuri:topic:demo': 'channel-1' },
+          timelineScopeByTopic: {
+            'kukuri:topic:demo': { kind: 'channel', channel_id: 'channel-1' },
+          },
+          composeChannelByTopic: {
+            'kukuri:topic:demo': { kind: 'private_channel', channel_id: 'channel-1' },
+          },
+        });
+      },
+    });
+
+    await act(async () => {
+      await view.result.current.openThread('post-1', {
+        topic: 'kukuri:topic:demo',
+        channelId: null,
+      });
+    });
+
+    await waitFor(() => {
+      expect(harness.store.getState().selectedThread).toBe('post-1');
+    });
+    const state = harness.store.getState();
+    expect(state.selectedChannelIdByTopic['kukuri:topic:demo']).toBeNull();
+    expect(state.timelineScopeByTopic['kukuri:topic:demo']).toEqual({ kind: 'public' });
+    expect(state.composeChannelByTopic['kukuri:topic:demo']).toEqual({ kind: 'public' });
+    await waitFor(() => {
+      expect(window.location.hash).toBe(
+        '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-1'
+      );
+    });
     view.unmount();
   });
 

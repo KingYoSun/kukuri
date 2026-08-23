@@ -1,0 +1,153 @@
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+
+import { createDesktopMockApi } from '@/mocks/desktopApiMock';
+import { App } from '@/App';
+import {
+  openChannelManager,
+  openControlCenter,
+  publishPost,
+  setViewportWidth,
+} from './DesktopShellPage.testHelpers';
+
+beforeEach(() => {
+  setViewportWidth(1024);
+  window.history.replaceState(null, '', '/');
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+const DEMO_TOPIC_HASH = '#/timeline?topic=kukuri%3Atopic%3Ademo';
+const CHANNEL_HASH = `${DEMO_TOPIC_HASH}&channel=channel-1`;
+
+function findTimelineColumnByScope(scopeLabel: string) {
+  const column = screen
+    .getAllByRole('region', { name: /^Timeline Column,/ })
+    .find((candidate) => candidate.querySelector('.shell-column-header')?.textContent?.includes(scopeLabel));
+  if (!column) {
+    throw new Error(`Timeline Column (${scopeLabel}) が見つかりません`);
+  }
+  return column;
+}
+
+async function setUpPublicAndPrivateColumns(user: ReturnType<typeof userEvent.setup>) {
+  // private channel を作成すると選択 channel が channel-1 になり、Timeline Column が Public / core の 2 本になる。
+  const channelDialog = await openChannelManager(user);
+  await user.type(within(channelDialog).getByPlaceholderText('Channel name'), 'core');
+  await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
+  await waitFor(() => {
+    expect(window.location.hash).toBe(CHANNEL_HASH);
+  });
+  await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
+
+  // private channel 側に投稿を 1 件入れる。
+  await publishPost(user, 'channel post');
+  await waitFor(() => {
+    expect(within(findTimelineColumnByScope('core · demo')).getByText('channel post')).toBeInTheDocument();
+  });
+
+  // Control Center の topic 行で「Public」を押して global 選択を public に戻す。
+  const controlCenter = await openControlCenter(user);
+  const demoTopicRow = within(controlCenter).getByRole('button', { name: 'demo' }).closest('li');
+  if (!(demoTopicRow instanceof HTMLElement)) {
+    throw new Error('demo topic row not found');
+  }
+  await user.click(within(demoTopicRow).getByRole('button', { name: /^Public/ }));
+  await waitFor(() => {
+    expect(window.location.hash).toBe(DEMO_TOPIC_HASH);
+  });
+  await waitFor(() => {
+    expect(findTimelineColumnByScope('Public · demo')).toHaveAttribute('aria-current', 'true');
+  });
+  const privateColumn = findTimelineColumnByScope('core · demo');
+  expect(privateColumn).not.toHaveAttribute('aria-current');
+  return privateColumn;
+}
+
+async function submitThreadReply(
+  user: ReturnType<typeof userEvent.setup>,
+  threadColumn: HTMLElement,
+  content: string
+) {
+  await user.click(within(threadColumn).getByRole('button', { name: /^Reply to Thread · core · demo/ }));
+  const replyInput = await within(threadColumn).findByPlaceholderText('Write a reply');
+  await user.type(replyInput, content);
+  const composer = replyInput.closest('form');
+  if (!composer) {
+    throw new Error('reply composer form not found');
+  }
+  await user.click(within(composer).getByRole('button', { name: 'Reply' }));
+}
+
+test('non-active な private Column の投稿本文クリックで開いた Thread は private channel scope を保ち、返信も同 channel に送られる', async () => {
+  const user = userEvent.setup();
+  const api = createDesktopMockApi();
+  const createPost = vi.spyOn(api, 'createPost');
+  render(<App api={api} />);
+
+  const privateColumn = await setUpPublicAndPrivateColumns(user);
+
+  // 非 active な private Column の投稿本文(role=button)をクリックして Thread を開く。
+  const postBody = within(privateColumn).getByText('channel post').closest('[role="button"]');
+  if (!(postBody instanceof HTMLElement)) {
+    throw new Error('post body button not found');
+  }
+  await user.click(postBody);
+
+  const threadColumn = await screen.findByRole('region', { name: /^Thread Column,/ });
+  await waitFor(() => {
+    expect(threadColumn.querySelector('.shell-column-header')).toHaveTextContent('Thread · core · demo');
+    expect(window.location.hash).toContain('channel=channel-1');
+  });
+  expect(threadColumn.querySelector('.shell-column-header')).not.toHaveTextContent('Thread · Public · demo');
+
+  await submitThreadReply(user, threadColumn, 'private reply');
+  await waitFor(() => {
+    expect(createPost).toHaveBeenLastCalledWith(
+      'kukuri:topic:demo',
+      'private reply',
+      expect.any(String),
+      expect.any(Array),
+      { kind: 'private_channel', channel_id: 'channel-1' }
+    );
+  });
+});
+
+// Reply ボタン経路(beginColumnReply)も返信元投稿の channel を openThread に渡し、
+// Thread Column が Public / private の 2 本に分裂しないことを固定する。
+test('non-active な private Column の Reply ボタンで開いた Thread も private channel scope を保つ', async () => {
+  const user = userEvent.setup();
+  const api = createDesktopMockApi();
+  const createPost = vi.spyOn(api, 'createPost');
+  render(<App api={api} />);
+
+  const privateColumn = await setUpPublicAndPrivateColumns(user);
+
+  await user.click(within(privateColumn).getAllByRole('button', { name: 'Reply' })[0]);
+
+  const threadColumn = await screen.findByRole('region', { name: /^Thread Column,/ });
+  await waitFor(() => {
+    expect(threadColumn.querySelector('.shell-column-header')).toHaveTextContent('Thread · core · demo');
+    expect(window.location.hash).toContain('channel=channel-1');
+  });
+
+  const replyInput = await within(threadColumn).findByPlaceholderText('Write a reply');
+  await user.type(replyInput, 'private reply via button');
+  const composer = replyInput.closest('form');
+  if (!composer) {
+    throw new Error('reply composer form not found');
+  }
+  await user.click(within(composer).getByRole('button', { name: 'Reply' }));
+  await waitFor(() => {
+    expect(createPost).toHaveBeenLastCalledWith(
+      'kukuri:topic:demo',
+      'private reply via button',
+      expect.any(String),
+      expect.any(Array),
+      { kind: 'private_channel', channel_id: 'channel-1' }
+    );
+  });
+});

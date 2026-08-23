@@ -274,6 +274,45 @@ describe('workspace state transitions', () => {
     expect(state.columns.at(-1)?.parentColumnId).toBe('conversation-bob');
   });
 
+  it('does not let a re-opened transient Column adopt itself as its parent', () => {
+    const profile = transientColumn({
+      id: 'profile-alice',
+      kind: 'profile',
+      entityId: 'alice',
+    });
+    const withProfile = openTransientColumn(createInitialWorkspaceState(), profile);
+    // 自分自身を parent に指定して再 open しても、自己参照にはならず既存の parent を維持する。
+    const reopened = openTransientColumn(withProfile, {
+      ...profile,
+      parentColumnId: 'profile-alice',
+    });
+
+    expect(reopened.columns.map((column) => column.id)).toEqual([
+      INITIAL_TIMELINE_COLUMN_ID,
+      'profile-alice',
+    ]);
+    expect(reopened.columns.at(-1)?.parentColumnId).toBe(INITIAL_TIMELINE_COLUMN_ID);
+
+    // 以後、同じ parent から別 author を開くと置き換わる(蓄積しない)。
+    const replaced = openTransientColumn(
+      reopened,
+      transientColumn({ id: 'profile-bob', kind: 'profile', entityId: 'bob' })
+    );
+    expect(replaced.columns.map((column) => column.id)).toEqual([
+      INITIAL_TIMELINE_COLUMN_ID,
+      'profile-bob',
+    ]);
+  });
+
+  it('drops a self-referencing parent when a new transient Column is opened', () => {
+    const next = openTransientColumn(
+      createInitialWorkspaceState(),
+      transientColumn({ id: 'profile-alice', kind: 'profile', parentColumnId: 'profile-alice' })
+    );
+
+    expect(next.columns.at(-1)?.parentColumnId).toBeUndefined();
+  });
+
   it('moves active state to the parent, then a neighbor, when closing a Column', () => {
     const initial = createInitialWorkspaceState();
     const withThread = openTransientColumn(initial, transientColumn());
