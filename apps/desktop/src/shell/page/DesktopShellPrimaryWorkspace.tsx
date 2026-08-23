@@ -297,6 +297,16 @@ export function DesktopShellPrimarySurface({
     ? surfaceScope.channelId
     : selectedChannelIdByTopic[surfaceTopic] ?? null;
   const surfaceTimelineScope = privateTimelineScope(surfaceChannelId);
+  // Thread は「この surface(Column)の scope」で開く。非 active Column の投稿本文クリックは
+  // Column の activate(route 同期)を伴わないため、global の選択 channel に依存すると別 channel の
+  // scope で Thread が開き返信先がずれる。topic が異なる場合は public として開く。
+  const openThreadInSurfaceScope = (threadId: string) =>
+    void openThread(threadId, { topic: surfaceTopic, channelId: surfaceChannelId });
+  const openThreadInTopicFromSurface = (threadId: string, topicId: string) =>
+    void openThread(threadId, {
+      topic: topicId,
+      channelId: topicId === surfaceTopic ? surfaceChannelId : null,
+    });
   const activeTimelineKey = timelineStorageKeyForChannel(surfaceTopic, surfaceChannelId);
   const surfaceJoinedChannels = useMemo(
     () => joinedChannelsByTopic[surfaceTopic] ?? [],
@@ -452,8 +462,8 @@ export function DesktopShellPrimarySurface({
                   posts={surfaceTimelinePostViews}
                   emptyCopy={t('shell:workspace.noPosts')}
                   onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
-                  onOpenThread={(threadId) => void openThread(threadId)}
-                  onOpenThreadInTopic={(threadId, topicId) => void openThread(threadId, { topic: topicId })}
+                  onOpenThread={openThreadInSurfaceScope}
+                  onOpenThreadInTopic={openThreadInTopicFromSurface}
                   onReply={beginReply}
                   onRepost={(post) => void handleSimpleRepost(post)}
                   onQuoteRepost={beginQuoteRepost}
@@ -489,8 +499,8 @@ export function DesktopShellPrimarySurface({
                   posts={viewModels.bookmarkedTimelinePostViews}
                   emptyCopy={t('shell:workspace.noBookmarks')}
                   onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
-                  onOpenThread={(threadId) => void openThread(threadId)}
-                  onOpenThreadInTopic={(threadId, topicId) => void openThread(threadId, { topic: topicId })}
+                  onOpenThread={openThreadInSurfaceScope}
+                  onOpenThreadInTopic={openThreadInTopicFromSurface}
                   onReply={beginReply}
                   onRepost={(post) => void handleSimpleRepost(post)}
                   onQuoteRepost={beginQuoteRepost}
@@ -759,8 +769,8 @@ export function DesktopShellPrimarySurface({
                   posts={viewModels.profileTimelinePostViews}
                   emptyCopy={t('profile:feed.noOwnPosts')}
                   onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
-                  onOpenThread={(threadId) => void openThread(threadId)}
-                  onOpenThreadInTopic={(threadId, topicId) => void openThread(threadId, { topic: topicId })}
+                  onOpenThread={openThreadInSurfaceScope}
+                  onOpenThreadInTopic={openThreadInTopicFromSurface}
                   onReply={beginReply}
                   readOnly={true}
                   onOpenOriginalTopic={(topicId) => void handleOpenOriginalTopic(topicId)}

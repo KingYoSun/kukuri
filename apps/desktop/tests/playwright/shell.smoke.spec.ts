@@ -130,6 +130,60 @@ test('browser mock starts with one accessible Timeline Column without legacy wor
   expect(overflow.documentOverflow).toBeLessThanOrEqual(0);
 });
 
+// ADR 0031 §2: 保存 layout が無い desktop 初期表示は Timeline Column 1本を中央寄せし、
+// 左下 Control Center trigger は Column footer の primary action / Composer と重ねない。
+for (const viewport of [
+  { width: 1400, height: 980 },
+  { width: 900, height: 760 },
+]) {
+  test(`browser mock centers the initial Timeline Column and keeps the Control Center trigger clear at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
+
+    const timelineColumn = page.getByRole('region', { name: /Timeline Column/ });
+    const footer = timelineColumn.locator('.shell-column-footer');
+    const primaryAction = timelineColumn.getByRole('button', { name: /^Publish to / });
+    const trigger = page.getByTestId('control-center-trigger');
+    await expect(timelineColumn).toHaveCount(1);
+    await expect(primaryAction).toBeVisible();
+    await expect(trigger).toBeVisible();
+
+    const [columnBox, footerBox, actionBox, triggerBox] = await Promise.all([
+      timelineColumn.boundingBox(),
+      footer.boundingBox(),
+      primaryAction.boundingBox(),
+      trigger.boundingBox(),
+    ]);
+    expect(columnBox).not.toBeNull();
+    expect(footerBox).not.toBeNull();
+    expect(actionBox).not.toBeNull();
+    expect(triggerBox).not.toBeNull();
+
+    const columnCenter = columnBox!.x + columnBox!.width / 2;
+    expect(Math.abs(columnCenter - viewport.width / 2)).toBeLessThanOrEqual(2);
+    expect(intersects(footerBox!, triggerBox!)).toBe(false);
+    expect(intersects(actionBox!, triggerBox!)).toBe(false);
+
+    await primaryAction.click();
+    const submit = timelineColumn.getByRole('button', { name: /^Publish$/ });
+    await expect(submit).toBeVisible();
+    const [submitBox, expandedFooterBox] = await Promise.all([submit.boundingBox(), footer.boundingBox()]);
+    expect(submitBox).not.toBeNull();
+    expect(expandedFooterBox).not.toBeNull();
+    expect(intersects(submitBox!, triggerBox!)).toBe(false);
+    expect(intersects(expandedFooterBox!, triggerBox!)).toBe(false);
+  });
+}
+
+function intersects(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number }
+) {
+  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+}
+
 test('browser mock shell can switch topics, publish, open thread, open author, and update discovery from settings', async ({
   page,
 }) => {
@@ -201,8 +255,12 @@ test('browser mock shell can open an author from messages without leaving the dm
   await expect(activeColumn(page, 'Conversation')).toBeVisible();
   await expect(page).toHaveURL(/#\/messages\?topic=.*peerPubkey=/);
 
-  const workspace = page.locator('main[aria-label="Primary workspace"]');
-  await workspace.getByRole('button', { name: 'browser peer' }).first().click();
+  // Conversation Column 内の peer ボタンから author を開く(Timeline の author chip ではなく
+  // dm workspace 起点の導線。開いた Profile の親は Conversation になる)。
+  await activeColumn(page, 'Conversation')
+    .getByRole('button', { name: 'browser peer' })
+    .first()
+    .click();
   await expect(activeColumn(page, 'Profile')).toBeVisible();
   await expect(page).toHaveURL(/authorPubkey=/);
 

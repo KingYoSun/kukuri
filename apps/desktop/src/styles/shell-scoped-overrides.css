@@ -388,15 +388,19 @@
 }
 
 .shell-phase1 .shell-column-canvas {
+  /* ADR 0031 §2 / §5: Column が Canvas に収まる間は中央寄せし、溢れたら start 揃えへ倒す。
+     下端は左下 Control Center trigger(2.75rem + 余白)の分だけ予約し、
+     最左 Column の footer / Composer と trigger を重ねない。 */
+  --control-center-reserve: 2.5rem;
   position: relative;
   display: flex;
   align-items: stretch;
-  justify-content: flex-start;
+  justify-content: safe center;
   gap: var(--column-gap);
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
-  height: calc(100vh - (var(--space-lg) * 2));
+  height: calc(100vh - (var(--space-lg) * 2) - var(--control-center-reserve));
   overflow-x: auto;
   overflow-y: hidden;
   padding: 0 var(--space-lg);

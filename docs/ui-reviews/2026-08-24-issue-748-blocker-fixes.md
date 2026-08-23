@@ -1,0 +1,25 @@
+# 2026-08-24 issue-748-blocker-fixes
+
+- PR: （後述の PR 番号を参照。Issue #748 監査コメント https://github.com/KingYoSun/kukuri/issues/748#issuecomment-5387831754 の blocker B1〜B5）
+- Preview: [初期 Timeline Column の中央寄せと Control Center trigger の非干渉](assets/2026-08-24-issue-748-blocker-fixes/initial-timeline-centered.png) / [keyboard で開いた Column menu の focus](assets/2026-08-24-issue-748-blocker-fixes/column-menu-keyboard-focus.png)
+- Summary:
+  - B1: 保存 layout が無い desktop 初期表示で Timeline Column を Canvas 中央へ戻した（Wave 2 で `safe center` → `flex-start` に無言で変わっていた回帰）。Canvas 下端を `--control-center-reserve: 2.5rem` だけ予約し、左下 Control Center trigger が最左 Column の footer / primary action / 展開後 Composer と重ならないようにした。DESIGN.md §5.4 に規則を追記。
+  - B2: `useDesktopShellColumnSynchronization` が既存 child Column を再 activate した際に `parentColumnId` を自分自身にしていた欠陥を修正（既存 parent を維持）。`openTransientColumn` と `readWorkspaceLayout` でも自己参照を正規化し、一時 Column の置換規則（同じ親の未固定 Column を置き換える）が通常の pointer / indicator / swipe 操作で壊れないようにした。
+  - B3: 非 active Column の投稿本文クリックで開く Thread が global 選択の scope で作られ、private 投稿への返信が public `channel_ref` で送られる経路を修正。`openThread` が発信元 Column の channel を受け取り、route / selection / Composer target を同期する。
+  - B4: Column menu を WAI-ARIA menu button pattern に揃えた。Enter / Space / ArrowDown / ArrowUp で開くと最初（末尾）の menuitem へ focus が移り、Arrow / Home / End で移動、Tab / Escape / focus 離脱で閉じて trigger へ戻る。keyboard 操作中は本文 scroll で閉じない。
+  - B5: Issue 設計判断 12 / 13 の browser 固定として `tests/playwright/column-immersive.spec.ts` を追加（desktop pointer ownership、mobile の実 touch swipe による gesture ownership、画面外 Live / Metaverse の suspend → resume と session 維持）。
+- Review result:
+  - Shneiderman 1（一貫性）: 中央寄せ・左下 trigger・Column footer の空間分担が ADR 0031 §2 / DESIGN.md §5.4 と一致。
+  - Shneiderman 2（ショートカット）: Column menu の keyboard 操作が trigger から menuitem まで切れずに通る。
+  - Shneiderman 3（フィードバック）: menu open 時に focus ring が最初の menuitem へ移り、現在位置が視覚・SR 双方で分かる。
+  - Shneiderman 5（エラー防止）: Thread Column の scope label と footer の投稿先が発信元 Column の channel と一致し、別 scope への誤送信を防ぐ。
+  - Shneiderman 6（取り消し容易）: Escape / Tab で menu を閉じると focus が trigger へ戻る。
+  - Shneiderman 7（主導権）: Metaverse stage 内の pointer / touch は scene 操作に留まり Column 切替を奪わない。header swipe では従来どおり paging する。
+  - Shneiderman 8（記憶負荷）: 一時 Column が蓄積せず、同じ親からの Thread / Profile は置き換わる。
+  - Keyboard / reduced motion: menu の focus 移動は即時（animation なし）。Canvas の中央寄せは layout のみで motion token に影響しない。
+- Exceptions: なし。
+- Validation:
+  - Vitest: `ColumnMenu.test.tsx`（新規 11 件）、`ColumnCanvas.test.tsx`（keyboard 駆動 1 件追加）、`workspaceState.test.ts`（2 件追加）、`workspacePersistence.test.ts`（1 件追加）、`DesktopShellPage.columnParents.test.tsx`（新規）、`DesktopShellPage.columnScope.test.tsx`（新規）はいずれも修正前に失敗 → 修正後 pass。
+  - Playwright chromium: `shell.smoke.spec.ts` に中央寄せ / trigger 非干渉（1400×980、900×760）を追加、`column-immersive.spec.ts` 3 件を追加。
+  - Playwright visual: 中央寄せにより wide 系 baseline が変わるため Linux CI（`kukuri-visual-baseline.yml`）で再生成した画像に差し替え。
+  - `cargo xtask desktop-ui-check` / `cargo xtask check` / `git diff --check`。

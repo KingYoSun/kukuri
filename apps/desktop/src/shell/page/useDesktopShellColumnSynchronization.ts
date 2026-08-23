@@ -156,8 +156,18 @@ export function useDesktopShellColumnSynchronization(activeGameRooms: GameRoomVi
         return activateColumn(next, timelineId);
       }
       const id = columnIdentityId(kind, scope, entityId);
+      // 対象 Column 自身が active のまま effect が再実行された場合(header 再アクティブ化など)は、
+      // activeColumnId を parent に採ると自己参照になるため、既存の parent を維持する。
+      const existingParentColumnId = current.columns.find((column) => column.id === id)
+        ?.parentColumnId;
       const parentColumnId =
-        kind === 'thread' ? timelineId : childColumn ? current.activeColumnId : undefined;
+        kind === 'thread'
+          ? timelineId
+          : !childColumn
+            ? undefined
+            : current.activeColumnId === id
+              ? existingParentColumnId
+              : current.activeColumnId;
       const base = kind === 'thread' ? ensureTimelineColumn(current) : current;
       return openTransientColumn(base, {
         id,

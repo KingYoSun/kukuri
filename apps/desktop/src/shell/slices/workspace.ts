@@ -154,12 +154,21 @@ export function openTransientColumn(
   requestedColumn: ColumnStateInput
 ): WorkspaceState {
   const existingIndex = state.columns.findIndex((candidate) => candidate.id === requestedColumn.id);
+  const existing = existingIndex >= 0 ? state.columns[existingIndex] : undefined;
+  // 自分自身を parent に指定された場合は自己参照を生成せず、既存 Column の parent(無ければ undefined)へ正規化する。
+  // 自己参照が残ると親一致による置換対象から外れ、同じ parent の一時 Column が蓄積してしまう。
+  const parentColumnId =
+    requestedColumn.parentColumnId === requestedColumn.id
+      ? existing?.parentColumnId
+      : requestedColumn.parentColumnId;
   const column = {
-    ...resolveColumnInput(requestedColumn, state.columns[existingIndex]?.preferredDesktopSpan),
+    ...resolveColumnInput(
+      { ...requestedColumn, parentColumnId },
+      existing?.preferredDesktopSpan
+    ),
     pinned: false,
   };
-  if (existingIndex >= 0) {
-    const existing = state.columns[existingIndex];
+  if (existing) {
     if (existing.pinned) return activateColumn(state, column.id);
 
     const columns = state.columns.filter((candidate) => candidate.id !== column.id);
