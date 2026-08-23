@@ -11,7 +11,6 @@ import {
   CommunityIndexingRequestDialog,
   type CommunityIndexingTarget,
 } from '@/components/core/CommunityIndexingRequestDialog';
-import { ShellFrame } from '@/components/shell/ShellFrame';
 import { type PrimarySection, type SettingsSection } from '@/components/shell/types';
 
 import { runtimeApi } from '@/lib/api';
@@ -217,8 +216,6 @@ export function DesktopShellPage({
     setPrimarySectionRef,
     focusPrimarySection,
     focusTimelineView,
-    closeAuthorPane,
-    closeThreadPane,
     openDirectMessageList,
     openDirectMessagePane,
     openThread,
@@ -525,8 +522,6 @@ export function DesktopShellPage({
       api={api}
       t={t}
       viewModels={viewModels}
-      closeAuthorPane={closeAuthorPane}
-      closeThreadPane={closeThreadPane}
       loadMoreThread={loadMoreThread}
       loadReactionCatalogData={loadReactionCatalogData}
       openAuthorDetail={openAuthorDetail}
@@ -695,47 +690,53 @@ export function DesktopShellPage({
 
   return (
     <>
-      <ShellFrame
-        skipTargetId={SHELL_WORKSPACE_ID}
-        workspace={workspace}
-        workspaceLayout='column'
-        globalControls={
-          <DesktopShellControlCenter
-            triggerRef={controlCenterTriggerRef}
-            topicItems={topicNavItems}
-            topicInput={topicInput}
-            titles={columnTitles}
-            updateAvailable={updateAvailable}
-            onTopicInputChange={setTopicInput}
-            onAddTopic={shellActions.handleAddTopic}
-            onOpenChannelManager={() => dialogs.setChannelDialogOpen(true)}
-            onActivateColumn={activateWorkspaceColumn}
-            onOpenSettings={handleOpenSettingsSection}
-            onSelectTopic={(topic) => void shellActions.handleSelectTopic(topic)}
-            onSelectChannel={(topic, channelId) => {
-              shellActions.handleSelectPrivateChannel(topic, channelId);
-            }}
-            onOpenChannelSettings={(topic, channelId) => {
-              setInviteOutput(null);
-              setChannelError(null);
-              shellActions.handleSelectPrivateChannel(topic, channelId);
-              dialogs.setChannelSettingsDialogOpen(true);
-            }}
-            onLeaveChannel={(topic, channelId) => dialogs.openLeaveChannelDialog(topic, channelId)}
-            onRemoveTopic={(topic) => void shellActions.handleRemoveTopic(topic)}
-            onCopyTopicLink={(topic) => handleCopyInternalLink(buildTopicLink(topic))}
-            onRequestTopicIndexing={(topic) =>
-              setIndexingTarget({ kind: 'public_topic', topicId: topic })
-            }
-            onToggleTopicGossip={(topic, enabled) =>
-              void shellActions.handleToggleTopicGossip(topic, enabled)
-            }
-            onToggleChannelGossip={(topic, channelId, enabled) =>
-              void shellActions.handleToggleChannelGossip(topic, channelId, enabled)
-            }
-          />
-        }
-      />
+      <div className='shell-phase1' data-workspace-layout='column'>
+        <a className='shell-skip-link' href={`#${SHELL_WORKSPACE_ID}`}>
+          Skip to workspace
+        </a>
+        <main
+          id={SHELL_WORKSPACE_ID}
+          className='shell-column-workspace-main'
+          tabIndex={-1}
+          aria-label='Primary workspace'
+        >
+          {workspace}
+        </main>
+        <DesktopShellControlCenter
+          triggerRef={controlCenterTriggerRef}
+          topicItems={topicNavItems}
+          topicInput={topicInput}
+          titles={columnTitles}
+          updateAvailable={updateAvailable}
+          onTopicInputChange={setTopicInput}
+          onAddTopic={shellActions.handleAddTopic}
+          onOpenChannelManager={() => dialogs.setChannelDialogOpen(true)}
+          onActivateColumn={activateWorkspaceColumn}
+          onOpenSettings={handleOpenSettingsSection}
+          onSelectTopic={(topic) => void shellActions.handleSelectTopic(topic)}
+          onSelectChannel={(topic, channelId) => {
+            shellActions.handleSelectPrivateChannel(topic, channelId);
+          }}
+          onOpenChannelSettings={(topic, channelId) => {
+            setInviteOutput(null);
+            setChannelError(null);
+            shellActions.handleSelectPrivateChannel(topic, channelId);
+            dialogs.setChannelSettingsDialogOpen(true);
+          }}
+          onLeaveChannel={(topic, channelId) => dialogs.openLeaveChannelDialog(topic, channelId)}
+          onRemoveTopic={(topic) => void shellActions.handleRemoveTopic(topic)}
+          onCopyTopicLink={(topic) => handleCopyInternalLink(buildTopicLink(topic))}
+          onRequestTopicIndexing={(topic) =>
+            setIndexingTarget({ kind: 'public_topic', topicId: topic })
+          }
+          onToggleTopicGossip={(topic, enabled) =>
+            void shellActions.handleToggleTopicGossip(topic, enabled)
+          }
+          onToggleChannelGossip={(topic, channelId, enabled) =>
+            void shellActions.handleToggleChannelGossip(topic, channelId, enabled)
+          }
+        />
+      </div>
 
       <DesktopShellOverlays
         actions={shellActions}

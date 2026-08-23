@@ -7,6 +7,12 @@
 - scope は whole shell rewrite だが、execution order は `infra-first -> staged slices` に固定し、big-bang rewrite は前提にしない。
 - この計画では backend、Tauri command、frontend API contract を変更しない。将来 contract 変更が必要な場合は、この文書に黙って含めず別の implementation change または ADR で明示する。
 
+## 2026-08-23 Column Canvas Cleanup Update
+- Issue #748のColumn Canvas移行完了後、production wrapperだった`ShellFrame`と、到達不能になっていた`ContextPane` detail stack分岐を撤去した。
+- 常設`ShellNavRail`、旧mobile footer、detail pane grid、旧経路だけが保持していたStorybook surfaceとCSS selectorも削除した。
+- hash route、Thread / Profile表示、skip link、Control Center、Settings drawerは維持し、route targetはColumnとして描画する。
+- `shell-scoped-overrides.css`はColumn Canvasとportal / shell間の実効値差を担う現役style layerとして維持する。
+
 ## 2026-03-25 Status Update
 - Phase 5 の cutover and cleanup は 2026-03-25 時点で implementation 完了扱いに更新した。
 - shell routing は `HashRouter` に固定され、primary section は `#/timeline`, `#/channels`, `#/live`, `#/game`, `#/profile` を使う。route search param は `topic`, `timelineScope`, `composeTarget`, `context`, `threadId`, `authorPubkey`, `settings` に固定した。

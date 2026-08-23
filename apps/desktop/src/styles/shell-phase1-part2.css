@@ -726,7 +726,6 @@
   transform: translateY(0);
 }
 
-.shell-main,
 .shell-pane-heading {
   min-width: 0;
 }
@@ -736,30 +735,6 @@
   flex-wrap: wrap;
   gap: var(--space-xs);
   align-items: center;
-}
-
-.shell-nav-meta {
-  display: grid;
-  gap: var(--space-md);
-}
-
-.shell-nav-notification-action {
-  margin-bottom: var(--space-xs);
-}
-
-.shell-nav-status {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--space-md);
-}
-
-.shell-settings-button {
-  width: 2.75rem;
-  height: 2.75rem;
-  min-width: 2.75rem;
-  padding: 0;
-  border-radius: var(--radius);
 }
 
 .shell-icon-button {
@@ -774,41 +749,6 @@
 .shell-icon-button svg {
   width: 1.1rem;
   height: 1.1rem;
-}
-
-.shell-settings-button svg {
-  width: 1.2rem;
-  height: 1.2rem;
-}
-
-.shell-layout {
-  display: grid;
-  gap: var(--space-md);
-  align-items: start;
-  grid-template-columns: minmax(260px, 280px) minmax(0, 1fr);
-}
-
-.shell-layout[data-detail-pane-count='1'] {
-  grid-template-columns: minmax(260px, 280px) minmax(0, 1fr) minmax(280px, 320px);
-}
-
-.shell-layout[data-detail-pane-count='2'] {
-  grid-template-columns:
-    minmax(260px, 280px)
-    minmax(0, 1fr)
-    minmax(280px, 320px)
-    minmax(280px, 320px);
-}
-
-.shell-main {
-  min-width: 0;
-}
-
-.shell-main-lane {
-  width: 100%;
-  max-inline-size: min(100%, 60vw);
-  margin-inline: auto;
-  min-width: 0;
 }
 
 .shell-main-stack {

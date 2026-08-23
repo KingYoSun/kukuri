@@ -81,7 +81,7 @@ test('browser mock starts with one accessible Timeline Column without legacy wor
   await page.setViewportSize({ width: 1400, height: 980 });
   await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
 
-  const layout = page.locator('.shell-layout');
+  const layout = page.locator('.shell-phase1');
   const timelineColumn = page.getByRole('region', { name: /Timeline Column/ });
 
   await expect(layout).toHaveAttribute('data-workspace-layout', 'column');

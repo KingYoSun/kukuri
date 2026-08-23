@@ -1,7 +1,7 @@
 /*
  * shell-scoped-overrides.css
  *
- * 全規則が `.shell-phase1` スコープ付き(ShellFrame のルート div に付与)。
+ * 全規則が `.shell-phase1` スコープ付き(production workspace のルート div に付与)。
  * アプリ shell 配下では shell-phase1-part*.css の同名セレクタを specificity で上書きし、
  * body 直下の Radix portal(dialog / tooltip / dropdown 等)には効かない層。
  * shell 固有スタイルもここに置く。index.css で shell-phase1-part*.css の後に @import する。
@@ -337,12 +337,6 @@
   box-shadow: none;
 }
 
-.shell-phase1 .shell-settings-button {
-  inline-size: 2.2rem;
-  block-size: 2.2rem;
-  min-inline-size: 2.2rem;
-}
-
 .shell-phase1 .shell-icon-button:hover,
 .shell-phase1 .shell-icon-button:focus-visible {
   background: var(--surface-button-ghost-hover);
@@ -352,11 +346,6 @@
   inline-size: 1.1rem;
   block-size: 1.1rem;
   stroke-width: 2.35;
-}
-
-.shell-phase1 .shell-settings-button svg {
-  inline-size: 1.15rem;
-  block-size: 1.15rem;
 }
 
 .shell-phase1 .post-card small {
@@ -394,6 +383,10 @@
   max-width: none;
 }
 
+.shell-phase1 .shell-column-workspace-main {
+  min-width: 0;
+}
+
 .shell-phase1 .shell-column-canvas {
   position: relative;
   display: flex;
@@ -409,26 +402,6 @@
   padding: 0 var(--space-lg);
   scroll-padding-inline: var(--space-lg);
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
-}
-
-.shell-phase1 .shell-layout[data-workspace-layout='column'] {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.shell-phase1 .shell-layout[data-workspace-layout='column'] .shell-main-lane {
-  max-inline-size: 100%;
-}
-
-@media (min-width: 1100px) {
-  .shell-phase1 .shell-layout[data-workspace-layout='column'] .shell-context {
-    position: fixed;
-    right: calc(1rem + (var(--shell-detail-pane-index, 0) * 1.5rem));
-    top: 1rem;
-    bottom: 1rem;
-    z-index: 65;
-    width: min(380px, calc(100vw - 2rem));
-    max-height: none;
-  }
 }
 
 .shell-phase1 .shell-column-surface {
