@@ -39,15 +39,6 @@
   color: var(--muted-foreground);
 }
 
-.topic-input-row {
-  display: flex;
-  gap: var(--space-sm);
-}
-
-.topic-input-row input {
-  flex: 1;
-}
-
 .field input,
 .composer textarea,
 .ticket-output {

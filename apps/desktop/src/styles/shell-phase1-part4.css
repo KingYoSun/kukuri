@@ -22,7 +22,6 @@
   background: var(--surface-panel, var(--surface-input));
   box-shadow: var(--shadow-dropdown);
 }
-
 .composer-mention-option {
   display: flex;
   align-items: center;
@@ -206,52 +205,6 @@
   -webkit-backdrop-filter: blur(var(--blur-hud));
 }
 
-.shell-mobile-close {
-  display: none;
-}
-
-.shell-context-close {
-  display: inline-flex;
-}
-
-@media (max-width: 1099px) {
-  .shell-layout {
-    grid-template-columns: minmax(260px, 280px) minmax(0, 1fr);
-  }
-
-  .shell-main-lane {
-    max-inline-size: 100%;
-  }
-
-  .shell-context {
-    position: fixed;
-    right: calc(1rem + (var(--shell-detail-pane-index, 0) * 1.5rem));
-    top: 1rem;
-    bottom: 1rem;
-    z-index: 65;
-    width: min(380px, calc(100vw - 2rem));
-    max-height: none;
-    transform: translateX(calc(100% + 2rem));
-    visibility: hidden;
-    pointer-events: none;
-    transition:
-      transform 180ms ease,
-      visibility 180ms ease;
-  }
-
-  .shell-context[data-open='true'] {
-    transform: translateX(0);
-    visibility: visible;
-    pointer-events: auto;
-  }
-}
-
-@media (min-width: 1100px) {
-  .shell-context-backdrop {
-    display: none;
-  }
-}
-
 @media (max-width: 899px) {
   .shell-workspace-tabs {
     grid-template-columns: minmax(0, 1fr);
@@ -259,43 +212,6 @@
 }
 
 @media (max-width: 759px) {
-  .shell-phase1 {
-    padding-inline: var(--space-sm);
-  }
-
-  .shell-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .shell-nav {
-    position: fixed;
-    left: 0.75rem;
-    top: 0.75rem;
-    bottom: 0.75rem;
-    z-index: 65;
-    width: min(92vw, 360px);
-    max-height: none;
-    transform: translateX(calc(-100% - 2rem));
-    visibility: hidden;
-    pointer-events: none;
-    transition:
-      transform 180ms ease,
-      visibility 180ms ease;
-  }
-
-  .shell-nav[data-open='true'] {
-    transform: translateX(0);
-    visibility: visible;
-    pointer-events: auto;
-  }
-
-  .shell-context {
-    right: calc(0.75rem + (var(--shell-detail-pane-index, 0) * 0.85rem));
-    top: 0.75rem;
-    bottom: 0.75rem;
-    width: min(92vw, 360px);
-  }
-
   .shell-settings-drawer {
     top: 0.75rem;
     right: 0.75rem;
@@ -303,26 +219,6 @@
     width: calc(100vw - 1.5rem);
     grid-template-columns: 1fr;
     grid-template-rows: auto auto minmax(0, 1fr);
-  }
-
-  .shell-mobile-close {
-    display: inline-flex;
-  }
-
-  .shell-mobile-footer {
-    position: fixed;
-    left: 0.75rem;
-    right: 0.75rem;
-    bottom: 0.75rem;
-    z-index: 40;
-    display: flex;
-    justify-content: center;
-    pointer-events: none;
-  }
-
-  .shell-mobile-footer > * {
-    width: min(100%, 18rem);
-    pointer-events: auto;
   }
 
   .shell-workspace-header {
@@ -333,11 +229,5 @@
     gap: var(--space-md);
     flex-direction: column;
     align-items: stretch;
-  }
-}
-
-@media (min-width: 760px) {
-  .shell-nav-backdrop {
-    display: none;
   }
 }

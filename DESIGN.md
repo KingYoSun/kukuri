@@ -202,9 +202,10 @@ font-size は `--text-*` トークンに集約済み（#325）。kukuri は dark
 - **Badge**: `rounded-full`、`px-2.5 py-1`、`text-xs font-semibold tracking-[0.08em] uppercase`。
 - **Notice**: 角丸 `var(--radius-input)`、`px-4 py-3 text-sm leading-6`。影は現状 `0 12px 32px rgba(2,7,15,0.12)` の直書き（`ui/notice.tsx:8`）→ 将来 `--shadow-dropdown` 化（§6・評価記録ギャップ6,8）。
 
-### 4.5 Navigation（[`shell/ShellNavRail.tsx`](apps/desktop/src/components/shell/ShellNavRail.tsx)）
+### 4.5 Navigation（[`shell/page/DesktopShellControlCenter.tsx`](apps/desktop/src/shell/page/DesktopShellControlCenter.tsx)）
 
-- 左 nav rail に topic ナビ、通知ボタン、設定トリガを置く。アクティブ項目は `--surface-active`。
+- 常設 nav rail は置かず、左下の Control Center trigger から Column、場所、アクティビティ、システムへ移動する。
+- 現在の Column は一覧とmobile position indicatorの両方で示し、直接jumpとkeyboard操作を提供する。
 - グローバル導線は短いラベルと安定配置を優先し、製品コンテンツの邪魔をしない。
 
 ### 4.6 入口 / 空・オンボーディング状態
@@ -256,13 +257,11 @@ kukuri にはマーケティング的な First View / ブランドロックア�
 
 ## 5. レイアウト原則
 
-### 5.1 現行シェル構造（移行元、[`shell/ShellFrame.tsx`](apps/desktop/src/components/shell/ShellFrame.tsx)）
+### 5.1 旧シェル構造（撤去済み）
 
-- **3 カラム CSS Grid**: 左 nav rail（`ShellNavRail`）＋ メインワークスペース ＋ 右 detail pane stack（thread → author、最大 2）。
-- `.shell-layout` は `data-detail-pane-count='0|1|2'` で detail pane 幅を切替える。
-- viewport `≤759px` で mobile footer を表示（`isMobileViewport()`）。
-- **ルーティング**: hash routing（React Router v7）。`#/timeline` / `#/channels` / `#/live` / `#/game` / `#/profile`。search params: `topic` / `timelineScope` / `composeTarget` / `context` / `threadId` / `authorPubkey` / `profileMode` / `settings`。
-- この構造は [ADR 0031](docs/adr/0031-variable-span-column-workspace.md) の Column Canvas へ移行するまでの現行実装を記録する。新規 shell の target としては扱わない。
+- 左 nav rail＋main workspace＋右 detail pane stackの3カラム構造と、`ShellFrame` / `ContextPane` / `ShellNavRail`はIssue #748でproduction・Storybookから撤去した。
+- Thread / Profileを右paneへ積む旧分岐、mobile footer、`data-detail-pane-count`による予約幅は残さない。
+- hash route contractは維持し、route targetは§5.2のColumn stateと同期する。
 
 ### 5.2 Column Canvas と可変 span（ADR 0031）
 

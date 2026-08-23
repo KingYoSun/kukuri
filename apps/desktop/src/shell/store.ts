@@ -93,8 +93,6 @@ export const STATUS_REFRESH_INTERVAL_MS = 60000;
 export const VIDEO_POSTER_TIMEOUT_MS = 5000;
 export const MEDIA_DEBUG_STORAGE_KEY = 'kukuri:media-debug';
 export const SHELL_WORKSPACE_ID = 'shell-primary-workspace';
-export const SHELL_NAV_ID = 'shell-nav-rail';
-export const SHELL_CONTEXT_ID = 'shell-context-pane';
 export const SHELL_SETTINGS_ID = 'shell-settings-drawer';
 
 export function createInitialShellState(): DesktopShellState {

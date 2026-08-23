@@ -27,8 +27,7 @@ import type { SupportedLocale } from '@/i18n';
 import { type InternalSmartReference } from '@/lib/internalLinks';
 import { eligibleTrustRelationNodes } from '@/lib/api/communityIndex';
 import { copyTextToClipboard } from '@/lib/utils';
-import { ContextPane } from '@/components/shell/ContextPane';
-import { SHELL_CONTEXT_ID, useDesktopShellFieldSetter, useDesktopShellStore } from '@/shell/store';
+import { useDesktopShellFieldSetter, useDesktopShellStore } from '@/shell/store';
 import {
   authorDisplayLabel,
   authorViewFromDirectMessageConversation,
@@ -630,8 +629,6 @@ export type DesktopShellDetailSurfaceStackProps = {
     | 'threadPanelState'
     | 'threadPostViews'
   >;
-  closeAuthorPane: () => void;
-  closeThreadPane: () => void;
   loadMoreThread: (topic: string, threadId: string) => Promise<void>;
   loadReactionCatalogData: () => Promise<void>;
   openAuthorDetail: OpenAuthorDetail;
@@ -652,7 +649,7 @@ export type DesktopShellDetailSurfaceStackProps = {
   handleMuteAction: (authorPubkey: string, muted: boolean) => Promise<void>;
   handleOpenOriginalTopic: (topicId: string) => Promise<void>;
   openCommunityNodeSettings: () => void;
-  surfaceKind?: 'thread' | 'profile';
+  surfaceKind: 'thread' | 'profile';
   entityId?: string;
   topicId?: string;
 };
@@ -661,8 +658,6 @@ export function DesktopShellDetailSurfaceStack({
   api,
   t,
   viewModels,
-  closeAuthorPane,
-  closeThreadPane,
   loadMoreThread,
   loadReactionCatalogData,
   openAuthorDetail,
@@ -900,43 +895,5 @@ export function DesktopShellDetailSurfaceStack({
     </div>
   ) : null;
 
-  if (surfaceKind === 'thread') return threadContent;
-  if (surfaceKind === 'profile') return authorContent;
-
-  return (
-    <>
-      {selectedThread ? (
-        <ContextPane
-          paneId={`${SHELL_CONTEXT_ID}-thread`}
-          title={t('shell:context.thread')}
-          summary={viewModels.threadPanelState.summary}
-          showBackdrop={!selectedAuthorPubkey}
-          stackIndex={0}
-          onClose={closeThreadPane}
-        >
-          {threadContent}
-        </ContextPane>
-      ) : null}
-      {selectedAuthorPubkey ? (
-        <ContextPane
-          paneId={`${SHELL_CONTEXT_ID}-author`}
-          title={t('shell:context.author')}
-          summary={
-            selectedAuthor
-              ? viewModels.authorDetailView.displayLabel
-              : t('common:fallbacks.selectAuthor')
-          }
-          showBackdrop={true}
-          stackIndex={selectedThread ? 1 : 0}
-          onClose={closeAuthorPane}
-        >
-          {authorContent}
-        </ContextPane>
-      ) : null}
-    </>
-  );
-}
-
-export function DesktopShellDetailPaneStack(props: DesktopShellDetailSurfaceStackProps) {
-  return <DesktopShellDetailSurfaceStack {...props} />;
+  return surfaceKind === 'thread' ? threadContent : authorContent;
 }
