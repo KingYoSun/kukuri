@@ -333,6 +333,15 @@ export function CommunityIndexWorkspace({
             </Button>
           </div>
         </Notice>
+      ) : activeNodeBaseUrl === null ? (
+        <Notice tone='warning'>
+          <div className='flex flex-wrap items-center justify-between gap-3'>
+            <span>{t('shell:communityIndex.selectedNodeUnavailable')}</span>
+            <Button variant='secondary' type='button' onClick={onOpenCommunityNodeSettings}>
+              {t('shell:workspace.communityNodeUnavailableAction')}
+            </Button>
+          </div>
+        </Notice>
       ) : isAllJoined ? (
         <Notice tone='warning'>{t('shell:communityIndex.allJoinedDisabled')}</Notice>
       ) : (

@@ -440,6 +440,20 @@
   border-style: dashed;
 }
 
+.shell-phase1 .shell-column-surface:fullscreen {
+  width: 100vw;
+  max-width: none;
+  height: 100vh;
+  flex: none;
+  border: 0;
+  border-radius: 0;
+  background: var(--surface-panel-solid);
+}
+
+.shell-phase1 .shell-column-surface:fullscreen::backdrop {
+  background: var(--background);
+}
+
 .shell-phase1 .shell-column-header {
   display: flex;
   align-items: center;
@@ -536,8 +550,8 @@
 }
 
 .shell-phase1 .shell-column-primary-action {
-  min-width: 2.5rem;
-  min-height: 2.5rem;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
 }
 
 .shell-phase1 .shell-column-composer {
@@ -751,9 +765,16 @@
 
 .shell-phase1 .shell-control-center-column-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) 2.75rem 2.75rem;
   gap: var(--space-2xs);
   align-items: center;
+}
+
+.shell-phase1 .shell-control-center-column-row > .button {
+  inline-size: 2.75rem;
+  min-inline-size: 2.75rem;
+  block-size: 2.75rem;
+  min-block-size: 2.75rem;
 }
 
 .shell-phase1 .shell-control-center-column-focus {

@@ -24,6 +24,13 @@
     "title": "表示"
   },
   "communityNode": {
+    "indexNode": {
+      "label": "Community Index の問い合わせ先",
+      "hint": "自動では利用可能な設定済みノードを先頭から選びます。明示選択したノードが利用不能な場合は、別ノードへ切り替えず問い合わせを停止します。",
+      "automatic": "自動",
+      "unavailable": "明示選択したノードは現在利用できません。",
+      "optionUnavailable": "{{baseUrl}}（利用不可）"
+    },
     "actions": {
       "addNode": "ノードを追加",
       "clearNodes": "クリア",

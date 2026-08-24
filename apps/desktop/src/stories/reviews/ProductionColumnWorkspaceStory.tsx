@@ -18,6 +18,7 @@ import type {
 import { DEFAULT_SHARED_OBJECT } from '@/components/extended/MetaverseSceneModel';
 import { setColumnDraft } from '@/shell/slices/columnDrafts';
 import { columnIdentityId, defaultColumnSpan } from '@/shell/slices/workspace';
+import { captureSavedWorkspaceLayout } from '@/shell/savedWorkspaceLayouts';
 
 const DEMO_SCOPE = { topicId: 'kukuri:topic:demo', channelId: null };
 const FRIENDS_SCOPE = { topicId: 'kukuri:topic:demo', channelId: 'channel-review' };
@@ -45,6 +46,7 @@ type ProductionColumnWorkspaceStoryProps = {
   metaverseSpan?: 1 | 3 | 4;
   streamSpan?: 1 | 2;
   communityNodeUnavailable?: boolean;
+  seedSavedLayout?: 'active' | 'dirty';
 };
 
 const REVIEW_TIMESTAMP = 1_787_420_800_000;
@@ -191,6 +193,7 @@ function createReviewStore({
   scenario = 'scoped-drafts',
   metaverseSpan = 3,
   streamSpan = 2,
+  seedSavedLayout,
 }: ProductionColumnWorkspaceStoryProps) {
   window.localStorage.setItem(DEVELOPER_MODE_STORAGE_KEY, 'true');
   window.history.replaceState(null, '', scenarioHash(scenario));
@@ -342,6 +345,27 @@ function createReviewStore({
       })
     ),
   }));
+  if (seedSavedLayout) {
+    const workspaceState = store.getState().workspaceState;
+    const layout = captureSavedWorkspaceLayout(
+      'review-daily-layout',
+      'Daily workspace',
+      workspaceState
+    );
+    store.setState({
+      savedWorkspaceLayouts: [layout],
+      workspaceState: {
+        ...workspaceState,
+        activeLayoutId: layout.id,
+        columns:
+          seedSavedLayout === 'dirty'
+            ? workspaceState.columns.map((column, index) =>
+                index === 0 ? { ...column, pinned: !column.pinned } : column
+              )
+            : workspaceState.columns,
+      },
+    });
+  }
   return store;
 }
 
@@ -351,9 +375,16 @@ export function ProductionColumnWorkspaceStory({
   metaverseSpan = 3,
   streamSpan = 2,
   communityNodeUnavailable = false,
+  seedSavedLayout,
 }: ProductionColumnWorkspaceStoryProps) {
   const [store] = useState(() =>
-    createReviewStore({ initialControlCenterOpen, scenario, metaverseSpan, streamSpan })
+    createReviewStore({
+      initialControlCenterOpen,
+      scenario,
+      metaverseSpan,
+      streamSpan,
+      seedSavedLayout,
+    })
   );
   const api = useMemo(() => {
     const mock = createDesktopMockApi({

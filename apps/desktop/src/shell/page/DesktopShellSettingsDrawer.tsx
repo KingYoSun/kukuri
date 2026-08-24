@@ -10,6 +10,10 @@ import { SettingsDrawer } from '@/components/shell/SettingsDrawer';
 
 import type { SupportedLocale } from '@/i18n';
 import type { CustomReactionCropRect, DesktopApi } from '@/lib/api';
+import {
+  eligibleCommunityIndexNodes,
+  resolveCommunityIndexNodePreference,
+} from '@/lib/api/communityIndex';
 import { writeDeveloperMode } from '@/lib/developerMode';
 import type { DesktopTheme } from '@/lib/theme';
 import { communityNodesToDraftNodes, seedPeersToEditorValue } from '@/shell/presentation';
@@ -92,6 +96,9 @@ export function DesktopShellSettingsDrawer({
   const {
     communityNodeConfig,
     communityNodeEditorDirty,
+    communityIndexNodePreference,
+    communityNodeManifests,
+    communityNodeStatuses,
     developerModeEnabled,
     discoveryConfig,
     discoveryEditorDirty,
@@ -102,6 +109,9 @@ export function DesktopShellSettingsDrawer({
     useShallow((s) => ({
       communityNodeConfig: s.communityNodeConfig,
       communityNodeEditorDirty: s.communityNodeEditorDirty,
+      communityIndexNodePreference: s.communityIndexNodePreference,
+      communityNodeManifests: s.communityNodeManifests,
+      communityNodeStatuses: s.communityNodeStatuses,
       developerModeEnabled: s.developerModeEnabled,
       discoveryConfig: s.discoveryConfig,
       discoveryEditorDirty: s.discoveryEditorDirty,
@@ -119,6 +129,12 @@ export function DesktopShellSettingsDrawer({
   const setCommunityNodeError = useDesktopShellFieldSetter('communityNodeError');
   const setShellChromeState = useDesktopShellFieldSetter('shellChromeState');
   const setDeveloperModeEnabled = useDesktopShellFieldSetter('developerModeEnabled');
+  const patchState = useDesktopShellStore((s) => s.patchState);
+  const eligibleIndexNodeBaseUrls = eligibleCommunityIndexNodes(
+    communityNodeConfig,
+    communityNodeStatuses,
+    communityNodeManifests
+  );
 
   const settingsSections = [
     {
@@ -177,6 +193,19 @@ export function DesktopShellSettingsDrawer({
           resetDisabled={!communityNodeEditorDirty}
           clearDisabled={communityNodeConfig.nodes.length === 0}
           nodeActionsDisabled={communityNodeEditorDirty}
+          indexNodePreference={communityIndexNodePreference}
+          eligibleIndexNodeBaseUrls={eligibleIndexNodeBaseUrls}
+          onIndexNodePreferenceChange={(preference) => {
+            const resolution = resolveCommunityIndexNodePreference(
+              preference,
+              communityNodeConfig.nodes.map((node) => node.base_url),
+              eligibleIndexNodeBaseUrls
+            );
+            patchState({
+              communityIndexNodePreference: resolution.preference,
+              communityIndexNodeBaseUrl: resolution.selectedBaseUrl,
+            });
+          }}
           onAddNode={() => {
             setCommunityNodeInput((current) => [
               ...current,

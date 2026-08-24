@@ -3,7 +3,7 @@ import { startTransition, useCallback } from 'react';
 import type { CommunityNodeNodeStatus, DesktopApi, NotificationView } from '@/lib/api';
 import {
   eligibleCommunityIndexNodes,
-  resolveCommunityIndexNodeBaseUrl,
+  resolveCommunityIndexNodePreference,
 } from '@/lib/api/communityIndex';
 import { VISIBLE_TIMELINE_LIMIT } from '@/shell/pagination';
 import {
@@ -45,7 +45,6 @@ export function useDesktopShellSectionLoaders({
   const setCommunityNodeConfig = useDesktopShellFieldSetter('communityNodeConfig');
   const setCommunityNodeError = useDesktopShellFieldSetter('communityNodeError');
   const setCommunityNodeInput = useDesktopShellFieldSetter('communityNodeInput');
-  const setCommunityIndexNodeBaseUrl = useDesktopShellFieldSetter('communityIndexNodeBaseUrl');
   const setCommunityNodeManifests = useDesktopShellFieldSetter('communityNodeManifests');
   const setDirectMessageError = useDesktopShellFieldSetter('directMessageError');
   const setDirectMessages = useDesktopShellFieldSetter('directMessages');
@@ -398,7 +397,10 @@ export function useDesktopShellSectionLoaders({
         .map((node) => node.base_url)
         .filter((baseUrl) => baseUrl.trim().length > 0);
       if (baseUrls.length === 0) {
-        setCommunityIndexNodeBaseUrl(null);
+        storeApi.getState().patchState({
+          communityIndexNodePreference: { mode: 'auto' },
+          communityIndexNodeBaseUrl: null,
+        });
         return;
       }
       setCommunityNodeManifests((current) => {
@@ -432,18 +434,23 @@ export function useDesktopShellSectionLoaders({
       const manifests = Object.fromEntries(manifestResults);
       setCommunityNodeManifests((current) => ({ ...current, ...manifests }));
       const eligible = eligibleCommunityIndexNodes(config, statuses, manifests);
-      setCommunityIndexNodeBaseUrl((current) =>
-        resolveCommunityIndexNodeBaseUrl(current, eligible)
+      const resolution = resolveCommunityIndexNodePreference(
+        storeApi.getState().communityIndexNodePreference,
+        baseUrls,
+        eligible
       );
+      storeApi.getState().patchState({
+        communityIndexNodePreference: resolution.preference,
+        communityIndexNodeBaseUrl: resolution.selectedBaseUrl,
+      });
     } catch (error) {
       setCommunityNodeError(
         messageFromError(error, translate('common:errors.failedToLoadSettings'))
       );
-      setCommunityIndexNodeBaseUrl(null);
+      storeApi.getState().patchState({ communityIndexNodeBaseUrl: null });
     }
   }, [
     api,
-    setCommunityIndexNodeBaseUrl,
     setCommunityNodeConfig,
     setCommunityNodeError,
     setCommunityNodeInput,

@@ -77,7 +77,7 @@ export function ColumnComposerFooter({
   if (!draft.expanded) {
     return (
       <Button
-        className='shell-column-primary-action'
+        className='shell-column-primary-action min-h-11 min-w-11'
         variant='primary'
         size={active ? 'default' : 'icon'}
         type='button'
@@ -100,6 +100,7 @@ export function ColumnComposerFooter({
         <Button
           variant='ghost'
           size='sm'
+          className='min-h-11'
           type='button'
           onClick={() => updateDraft((current) => ({ ...current, expanded: false }))}
         >

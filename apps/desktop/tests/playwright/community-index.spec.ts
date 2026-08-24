@@ -84,3 +84,34 @@ test('public and private indexing requests expose status and require private dis
   await expect(confirmation).not.toBeChecked();
   await expect(submit).toBeDisabled();
 });
+
+test('advanced Community Node settings persist manual and automatic index preferences', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1400, height: 980 });
+  await page.goto('/#/explore?topic=kukuri%3Atopic%3Ademo');
+
+  let controlCenter = await openControlCenter(page);
+  await controlCenter.getByRole('button', { name: 'Settings', exact: true }).click();
+  let settings = page.getByRole('dialog', { name: 'Settings' });
+  await settings.getByTestId('settings-section-community-node').click();
+  let selector = settings.getByRole('combobox', { name: 'Community Index query node' });
+  const selectorBox = (await selector.boundingBox())!;
+  expect(selectorBox.height).toBeGreaterThanOrEqual(44);
+  await selector.selectOption('https://api.kukuri.app');
+  await expect.poll(() => page.evaluate(() =>
+    localStorage.getItem('kukuri:community-index-node-preference:v1')
+  )).toContain('manual');
+
+  await page.reload();
+  controlCenter = await openControlCenter(page);
+  await controlCenter.getByRole('button', { name: 'Settings', exact: true }).click();
+  settings = page.getByRole('dialog', { name: 'Settings' });
+  await settings.getByTestId('settings-section-community-node').click();
+  selector = settings.getByRole('combobox', { name: 'Community Index query node' });
+  await expect(selector).toHaveValue('https://api.kukuri.app');
+  await selector.selectOption('auto');
+  await expect.poll(() => page.evaluate(() =>
+    localStorage.getItem('kukuri:community-index-node-preference:v1')
+  )).toContain('auto');
+});

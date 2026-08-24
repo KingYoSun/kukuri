@@ -12,6 +12,7 @@ type ColumnSurfaceProps = {
   children: ReactNode;
   columnId: string;
   footer?: ReactNode;
+  fullscreenable?: boolean;
   headerActions?: ReactNode;
   onPinnedChange?: (pinned: boolean) => void;
   onClose?: () => void;
@@ -33,6 +34,7 @@ export function ColumnSurface({
   children,
   columnId,
   footer,
+  fullscreenable = false,
   headerActions,
   onPinnedChange,
   onClose,
@@ -52,7 +54,9 @@ export function ColumnSurface({
   const runtime = useColumnRuntime();
   const surfaceRef = useRef<HTMLElement | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const [announcement, setAnnouncement] = useState('');
+  const wasFullscreenRef = useRef(false);
   const stateLabel = pinned ? 'Pinned' : 'Temporary';
   const accessibleLabel = `${title} Column, Column ${position} of ${total}, ${span} span, ${
     active ? 'Active' : 'Inactive'
@@ -67,6 +71,44 @@ export function ColumnSurface({
       }
     });
   }, [resourceManaged, runtime.audioFocused, runtime.suspended]);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const nextFullscreen = document.fullscreenElement === surfaceRef.current;
+      if (wasFullscreenRef.current && !nextFullscreen) {
+        surfaceRef.current?.focus();
+      }
+      wasFullscreenRef.current = nextFullscreen;
+      setFullscreen(nextFullscreen);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    const surface = surfaceRef.current;
+    try {
+      if (!surface) {
+        throw new Error('fullscreen surface unavailable');
+      }
+      if (document.fullscreenElement === surface) {
+        if (typeof document.exitFullscreen !== 'function') {
+          throw new Error('fullscreen exit unavailable');
+        }
+        await document.exitFullscreen();
+      } else {
+        if (
+          document.fullscreenEnabled === false ||
+          typeof surface.requestFullscreen !== 'function'
+        ) {
+          throw new Error('fullscreen request unavailable');
+        }
+        await surface.requestFullscreen();
+      }
+    } catch {
+      setAnnouncement(t('columnMenu.fullscreenFailed', { title }));
+    }
+  };
 
   return (
     <section
@@ -189,6 +231,8 @@ export function ColumnSurface({
               }
               onPinnedChange={onPinnedChange}
               onClose={onClose}
+              fullscreen={fullscreen}
+              onToggleFullscreen={fullscreenable ? () => void toggleFullscreen() : undefined}
               onSpanChange={
                 onSpanChange
                   ? (nextSpan) => {
@@ -208,6 +252,8 @@ export function ColumnSurface({
               spanOptions={spanOptions}
               onMoveLeft={onMoveLeft}
               onMoveRight={onMoveRight}
+              fullscreen={fullscreen}
+              onToggleFullscreen={fullscreenable ? () => void toggleFullscreen() : undefined}
               onSpanChange={onSpanChange}
             />
           </div>

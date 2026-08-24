@@ -352,6 +352,40 @@ test('desktop Columns use kind spans, keyboard reorder, drag reorder, and persis
   await expect(page).not.toHaveURL(/span|layout|column/i);
 });
 
+test('named layouts save, restore, rename, survive reload, and delete', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 980 });
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
+
+  let controlCenter = await openControlCenter(page);
+  await controlCenter.getByRole('textbox', { name: 'Layout name' }).fill('Research');
+  await controlCenter.getByRole('button', { name: 'Save new layout' }).click();
+  await expect(controlCenter.getByRole('button', { name: 'Research', exact: true })).toBeVisible();
+
+  await controlCenter.getByRole('button', { name: 'Add Live Column' }).click();
+  await expect(page.getByRole('region', { name: /^Live Column/ })).toBeVisible();
+  controlCenter = await openControlCenter(page);
+  await expect(controlCenter.getByText('Unsaved changes')).toBeVisible();
+  await controlCenter.getByRole('button', { name: 'Research', exact: true }).click();
+  const replaceDialog = page.getByRole('dialog', { name: 'Replace unsaved workspace?' });
+  await replaceDialog.getByRole('button', { name: 'Open saved layout' }).click();
+  await expect(page.getByRole('complementary', { name: 'Control Center' })).not.toBeVisible();
+  await expect(page.getByRole('region', { name: /^Live Column/ })).toHaveCount(0);
+
+  controlCenter = await openControlCenter(page);
+  await controlCenter.getByRole('button', { name: 'Rename Research' }).click();
+  const rename = controlCenter.getByRole('textbox', { name: 'Rename layout' });
+  await rename.fill('Reading');
+  await controlCenter.getByRole('button', { name: 'Save layout name' }).click();
+  await page.reload();
+  controlCenter = await openControlCenter(page);
+  await expect(controlCenter.getByRole('button', { name: 'Reading', exact: true })).toBeVisible();
+  await controlCenter.getByRole('button', { name: 'Delete Reading' }).click();
+  await page.getByRole('dialog', { name: 'Delete saved layout?' })
+    .getByRole('button', { name: 'Delete layout' })
+    .click();
+  await expect(controlCenter.getByRole('button', { name: 'Reading', exact: true })).toHaveCount(0);
+});
+
 // Issue #768 T4: 代表 mobile test を 375 / 390 / 430px の viewport パラメタで実行する
 // (test 名の変更は viewport 寸法 suffix の付与のみ)。restart 復元系など他の mobile test は
 // 実行時間を抑えるためパラメタ化しない。
@@ -417,6 +451,86 @@ for (const mobileViewport of [
   await page.getByRole('button', { name: 'Go to Column 1 of 3' }).click();
   await expect(activeColumn(page, 'Timeline')).toBeVisible();
   await expect(page.getByText('1 / 3')).toBeVisible();
+
+  const indicator = page.getByRole('navigation', { name: 'Column pages' });
+  const indicatorBox = (await indicator.boundingBox())!;
+  await indicator.dispatchEvent('pointerdown', {
+    pointerId: 91,
+    clientX: indicatorBox.x + indicatorBox.width / 2,
+    clientY: indicatorBox.y + indicatorBox.height / 2,
+  });
+  await indicator.dispatchEvent('pointerup', {
+    pointerId: 91,
+    clientX: indicatorBox.x + indicatorBox.width / 2 - 80,
+    clientY: indicatorBox.y + indicatorBox.height / 2 + 4,
+  });
+  await expect(activeColumn(page, 'Thread')).toBeVisible();
+  await indicator.dispatchEvent('pointerdown', {
+    pointerId: 92,
+    clientX: indicatorBox.x + indicatorBox.width / 2,
+    clientY: indicatorBox.y + indicatorBox.height / 2,
+  });
+  await indicator.dispatchEvent('pointerup', {
+    pointerId: 92,
+    clientX: indicatorBox.x + indicatorBox.width / 2 + 80,
+    clientY: indicatorBox.y + indicatorBox.height / 2 + 4,
+  });
+  await expect(activeColumn(page, 'Timeline')).toBeVisible();
+
+  // indicator 切替の smooth scroll / settle が完了してから独立した edge gesture を開始する。
+  // 固定 wait では並列実行時の animation frame 遅延を吸収できないため、scroll の無通信期間を待つ。
+  await canvas.evaluate((element) => new Promise<void>((resolve) => {
+    let settleTimer = window.setTimeout(finish, 180);
+    function finish() {
+      element.removeEventListener('scroll', scheduleFinish);
+      resolve();
+    }
+    function scheduleFinish() {
+      window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(finish, 180);
+    }
+    element.addEventListener('scroll', scheduleFinish);
+  }));
+  const canvasBox = (await canvas.boundingBox())!;
+  await canvas.dispatchEvent('pointerdown', {
+    pointerId: 93,
+    clientX: canvasBox.x + canvasBox.width - 4,
+    clientY: canvasBox.y + canvasBox.height / 2,
+  });
+  await canvas.dispatchEvent('pointerup', {
+    pointerId: 93,
+    clientX: canvasBox.x + canvasBox.width - 84,
+    clientY: canvasBox.y + canvasBox.height / 2 + 3,
+  });
+  await expect(activeColumn(page, 'Thread')).toBeVisible();
+  await page.getByRole('button', { name: 'Go to Column 1 of 3' }).click();
+  await expect(activeColumn(page, 'Timeline')).toBeVisible();
+
+  const primaryTargets = await page.locator('.shell-column-primary-action:visible').evaluateAll(
+    (buttons) => buttons.map((button) => {
+      const rect = button.getBoundingClientRect();
+      return { width: rect.width, height: rect.height };
+    })
+  );
+  expect(primaryTargets.every((box) => box.width >= 44 && box.height >= 44)).toBe(true);
+  await activeColumn(page, 'Timeline').locator('.shell-column-primary-action').click();
+  const composerClose = activeColumn(page, 'Timeline').getByRole('button', { name: 'Close' });
+  const composerCloseBox = (await composerClose.boundingBox())!;
+  expect(composerCloseBox.width).toBeGreaterThanOrEqual(44);
+  expect(composerCloseBox.height).toBeGreaterThanOrEqual(44);
+  await composerClose.click();
+
+  const mobileControlCenter = await openControlCenter(page);
+  const columnListTargets = await mobileControlCenter
+    .locator('.shell-control-center-column-row button:not(.shell-control-center-column-focus)')
+    .evaluateAll((buttons) => buttons.map((button) => {
+      const rect = button.getBoundingClientRect();
+      return { width: rect.width, height: rect.height };
+    }));
+  expect(columnListTargets.length).toBeGreaterThan(0);
+  expect(columnListTargets.every((box) => box.width >= 44 && box.height >= 44)).toBe(true);
+  await mobileControlCenter.getByRole('button', { name: 'Close Control Center' }).click();
+
   await canvas.evaluate((element) => {
     element.scrollLeft = element.clientWidth;
     element.dispatchEvent(new Event('scroll'));

@@ -30,6 +30,51 @@ async function addColumn(page: Page, name: 'Add Live Column' | 'Add Metaverse Co
   await controlCenter.getByRole('button', { name }).click();
 }
 
+test('Stream and Metaverse fullscreen return to the same Column workspace state', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
+  await addColumn(page, 'Add Live Column');
+  await addColumn(page, 'Add Metaverse Column');
+  const { metaverse, stage } = await createMetaverseRoom(page);
+  const live = page.getByRole('region', { name: /^Live Column/ });
+  const before = await page.locator('[data-column-id]').evaluateAll((columns) =>
+    columns.map((column) => ({
+      id: (column as HTMLElement).dataset.columnId,
+      span: (column as HTMLElement).dataset.span,
+    }))
+  );
+
+  await live.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(150);
+  await live.getByRole('button', { name: 'Open Live menu' }).click();
+  await page.getByRole('menuitem', { name: 'Enter Live fullscreen' }).click();
+  await expect.poll(() => live.evaluate((element) => document.fullscreenElement === element)).toBe(true);
+  // Headless Chromium は browser chrome が所有する Escape を合成keyから実行しないため、
+  // 標準 Escape と同じ exitFullscreen -> fullscreenchange 経路を直接発火する。
+  await page.evaluate(() => document.exitFullscreen());
+  await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
+  await expect(live).toBeFocused();
+
+  await metaverse.getByRole('button', { name: 'Open Metaverse menu' }).click();
+  await page.getByRole('menuitem', { name: 'Enter Metaverse fullscreen' }).click();
+  await expect.poll(() => metaverse.evaluate((element) => document.fullscreenElement === element)).toBe(true);
+  await metaverse.getByRole('button', { name: 'Open Metaverse menu' }).click();
+  await page.getByRole('menuitem', { name: 'Exit Metaverse fullscreen' }).click();
+  await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
+
+  expect(
+    await page.locator('[data-column-id]').evaluateAll((columns) =>
+      columns.map((column) => ({
+        id: (column as HTMLElement).dataset.columnId,
+        span: (column as HTMLElement).dataset.span,
+      }))
+    )
+  ).toEqual(before);
+  await expect(stage).toHaveCount(1);
+});
+
 // Metaverse Column 内で room を作成して stage(data-column-gesture-owner)を表示する。
 async function createMetaverseRoom(page: Page) {
   const metaverse = page.getByRole('region', { name: /^Metaverse Column/ });

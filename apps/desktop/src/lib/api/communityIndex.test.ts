@@ -9,6 +9,7 @@ import {
   eligibleCommunityIndexNodes,
   eligibleDistanceOptoutNodes,
   eligibleTrustRelationNodes,
+  resolveCommunityIndexNodePreference,
   resolveCommunityIndexNodeBaseUrl,
 } from './communityIndex';
 
@@ -109,5 +110,32 @@ describe('community index node eligibility', () => {
       'https://a'
     );
     expect(resolveCommunityIndexNodeBaseUrl('https://missing', [])).toBeNull();
+  });
+
+  it('keeps an unavailable manual preference without silently falling back', () => {
+    expect(
+      resolveCommunityIndexNodePreference(
+        { mode: 'manual', baseUrl: 'https://b' },
+        ['https://a', 'https://b'],
+        ['https://a']
+      )
+    ).toEqual({
+      preference: { mode: 'manual', baseUrl: 'https://b' },
+      selectedBaseUrl: null,
+    });
+    expect(
+      resolveCommunityIndexNodePreference(
+        { mode: 'manual', baseUrl: 'https://missing' },
+        ['https://a'],
+        ['https://a']
+      )
+    ).toEqual({ preference: { mode: 'auto' }, selectedBaseUrl: 'https://a' });
+    expect(
+      resolveCommunityIndexNodePreference(
+        { mode: 'auto' },
+        ['https://a', 'https://b'],
+        ['https://b']
+      )
+    ).toEqual({ preference: { mode: 'auto' }, selectedBaseUrl: 'https://b' });
   });
 });

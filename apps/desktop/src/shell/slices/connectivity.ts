@@ -5,6 +5,7 @@ import type {
   DiscoveryConfig,
   SyncStatus,
 } from '@/lib/api';
+import type { CommunityIndexNodePreference } from '@/lib/api/communityIndex';
 
 /// 接続まわり(discovery / community node / sync 状態)(WP-H6 PR3 のドメインスライス)。
 
@@ -35,6 +36,7 @@ export type ConnectivitySliceState = {
   communityNodeEditorDirty: boolean;
   communityNodeError: string | null;
   communityIndexNodeBaseUrl: string | null;
+  communityIndexNodePreference: CommunityIndexNodePreference;
   syncStatus: SyncStatus;
 };
 
@@ -96,6 +98,7 @@ export function createInitialConnectivitySlice(): ConnectivitySliceState {
     communityNodeEditorDirty: false,
     communityNodeError: null,
     communityIndexNodeBaseUrl: null,
+    communityIndexNodePreference: { mode: 'auto' },
     syncStatus: DEFAULT_SYNC_STATUS,
   };
 }

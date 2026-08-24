@@ -313,3 +313,17 @@ test('a selected node that is no longer eligible does not receive queries until 
     expect.objectContaining({ base_url: NODE_B, query: 'hello' })
   );
 });
+
+test('an unavailable explicit node reports the stopped state instead of offering a query form', () => {
+  const api = { searchCommunityNodeIndex: vi.fn() } as unknown as DesktopApi;
+  render(
+    <CommunityIndexWorkspace
+      {...workspaceProps(api, { eligibleNodeBaseUrls: [NODE_B], selectedNodeBaseUrl: null })}
+    />
+  );
+
+  expect(
+    screen.getByText('The explicitly selected Community Node is unavailable. Queries are paused.')
+  ).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Run' })).not.toBeInTheDocument();
+});

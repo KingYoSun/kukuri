@@ -6,6 +6,7 @@ import { Card, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
 import type { RelationOptoutResponse } from '@/lib/api';
+import type { CommunityIndexNodePreference } from '@/lib/api/communityIndex';
 import {
   trustRelationUnavailableReason,
   type TrustRelationUnavailableReason,
@@ -39,6 +40,9 @@ type CommunityNodePanelProps = {
   onGetRelationOptout?: (baseUrl: string) => Promise<RelationOptoutResponse>;
   onSetRelationOptout?: (baseUrl: string) => Promise<RelationOptoutResponse>;
   onClearRelationOptout?: (baseUrl: string) => Promise<RelationOptoutResponse>;
+  indexNodePreference?: CommunityIndexNodePreference;
+  eligibleIndexNodeBaseUrls?: readonly string[];
+  onIndexNodePreferenceChange?: (preference: CommunityIndexNodePreference) => void;
   showDiagnostics?: boolean;
 };
 
@@ -64,6 +68,9 @@ export function CommunityNodePanel({
   onGetRelationOptout,
   onSetRelationOptout,
   onClearRelationOptout,
+  indexNodePreference = { mode: 'auto' },
+  eligibleIndexNodeBaseUrls = [],
+  onIndexNodePreferenceChange = () => {},
   showDiagnostics = true,
 }: CommunityNodePanelProps) {
   const { t } = useTranslation(['common', 'settings']);
@@ -79,6 +86,12 @@ export function CommunityNodePanel({
   const relationOptoutAvailable = Boolean(
     onGetRelationOptout && onSetRelationOptout && onClearRelationOptout
   );
+  const configuredIndexNodes = view.nodes.filter((node) => node.saved && node.baseUrl.trim());
+  const selectedIndexNodeValue =
+    indexNodePreference.mode === 'manual' ? indexNodePreference.baseUrl : 'auto';
+  const selectedIndexNodeUnavailable =
+    indexNodePreference.mode === 'manual' &&
+    !eligibleIndexNodeBaseUrls.includes(indexNodePreference.baseUrl);
 
   // 距離利用停止欄の縮退案内(#712)。未提供・失効・認証・同意を安定コードで判別し、
   // 索引画面と同じ文言で案内する。判別できないときだけ従来どおり生メッセージを表示する。
@@ -207,6 +220,40 @@ export function CommunityNodePanel({
           {t('settings:communityNode.actions.clearNodes')}
         </Button>
       </SettingsActionRow>
+
+      <SettingsEditorField
+        label={t('settings:communityNode.indexNode.label')}
+        hint={t('settings:communityNode.indexNode.hint')}
+      >
+        <select
+          aria-label={t('settings:communityNode.indexNode.label')}
+          className='min-h-11 w-full rounded-[var(--radius-control)] border border-[var(--border-subtle)] bg-[var(--surface-panel)] px-3 text-sm text-foreground'
+          value={selectedIndexNodeValue}
+          onChange={(event) => {
+            const baseUrl = event.currentTarget.value;
+            onIndexNodePreferenceChange(
+              baseUrl === 'auto' ? { mode: 'auto' } : { mode: 'manual', baseUrl }
+            );
+          }}
+        >
+          <option value='auto'>{t('settings:communityNode.indexNode.automatic')}</option>
+          {configuredIndexNodes.map((node) => {
+            const available = eligibleIndexNodeBaseUrls.includes(node.baseUrl);
+            return (
+              <option key={node.id} value={node.baseUrl}>
+                {available
+                  ? node.baseUrl
+                  : t('settings:communityNode.indexNode.optionUnavailable', {
+                      baseUrl: node.baseUrl,
+                    })}
+              </option>
+            );
+          })}
+        </select>
+        {selectedIndexNodeUnavailable ? (
+          <Notice tone='warning'>{t('settings:communityNode.indexNode.unavailable')}</Notice>
+        ) : null}
+      </SettingsEditorField>
 
       {view.nodes.length === 0 ? <Notice>{t('settings:communityNode.noNodes')}</Notice> : null}
 

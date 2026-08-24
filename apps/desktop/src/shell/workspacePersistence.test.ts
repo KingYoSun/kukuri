@@ -55,7 +55,6 @@ describe('workspace layout persistence', () => {
     expect(restored).toEqual({
       ...state,
       controlCenterOpen: false,
-      activeLayoutId: null,
     });
   });
 

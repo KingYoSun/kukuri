@@ -24,6 +24,13 @@
     "title": "Appearance"
   },
   "communityNode": {
+    "indexNode": {
+      "label": "Community Index query node",
+      "hint": "Automatic uses the first eligible configured node. An explicit selection stops queries instead of silently switching when that node is unavailable.",
+      "automatic": "Automatic",
+      "unavailable": "The explicitly selected node is currently unavailable.",
+      "optionUnavailable": "{{baseUrl}} (unavailable)"
+    },
     "actions": {
       "addNode": "Add Node",
       "clearNodes": "Clear",

@@ -43,7 +43,7 @@ export function ColumnDomainActionFooter({
     disabled = false
   ) => (
     <Button
-      className='shell-column-primary-action'
+      className='shell-column-primary-action min-h-11 min-w-11'
       variant='primary'
       size={active ? 'default' : 'icon'}
       type='button'

@@ -95,6 +95,7 @@
     box-shadow: var(--shadow-panel);
     transform: translateX(50%);
     backdrop-filter: blur(12px);
+    touch-action: pan-y;
   }
 
   .shell-phase1 .shell-column-page-count {
