@@ -24,18 +24,40 @@ import {
   writeDesktopTheme,
 } from '@/lib/theme';
 import { copyTextToClipboard } from '@/lib/utils';
-import { startWorkspaceLayoutPersistence } from '@/shell/workspacePersistence';
+import {
+  WORKSPACE_LAYOUT_STORAGE_KEY,
+  startWorkspaceLayoutPersistence,
+} from '@/shell/workspacePersistence';
+import {
+  initialHashForRestoredWorkspace,
+  isDefaultStartupHash,
+} from '@/shell/routing/initialWorkspaceRoute';
 import { startColumnDraftPersistence } from '@/shell/columnDraftPersistence';
 
 type StartupGateState = { status: 'checking' } | DesktopStartupStatus;
 
 export function App(props: AppProps) {
-  const [store] = useState(() =>
-    createDesktopShellStore({
+  const [store] = useState(() => {
+    const createdStore = createDesktopShellStore({
       workspaceStorage: window.localStorage,
       draftStorage: window.localStorage,
-    })
-  );
+    });
+    // Issue #765 T4: hash の無い cold start では、復元した active Column の canonical target を
+    // 初期 route として仕込み、既存の deep link 機構に focus 復元を委ねる。
+    // 明示的な deep link(hash あり)と、保存 layout が無い初回起動では何もしない。
+    if (
+      isDefaultStartupHash(window.location.hash) &&
+      window.localStorage.getItem(WORKSPACE_LAYOUT_STORAGE_KEY) !== null
+    ) {
+      const restoredHash = initialHashForRestoredWorkspace(
+        createdStore.getState().workspaceState
+      );
+      if (restoredHash) {
+        window.history.replaceState(null, '', restoredHash);
+      }
+    }
+    return createdStore;
+  });
   const [theme, setTheme] = useState<DesktopTheme>(() => readDesktopTheme());
   const [startupGate, setStartupGate] = useState<StartupGateState>(() =>
     props.api ? { status: 'ready' } : { status: 'checking' }

@@ -54,6 +54,8 @@ type UseDesktopShellDataArgs = {
   directMessageDraftPreviewUrlRef: MutableRefObject<Map<string, string>>;
   mediaFetchAttemptRef: MutableRefObject<Map<string, number>>;
   draftSequenceRef: MutableRefObject<number>;
+  /// 表示中(viewport 内)の Column id 列。背景 Timeline Column の定期 refresh(Issue #765)に使う。
+  visibleColumnIdsRef?: MutableRefObject<string[]>;
 };
 
 const EMPTY_POSTS: PostView[] = [];
@@ -70,6 +72,7 @@ export function useDesktopShellData({
   directMessageDraftPreviewUrlRef,
   mediaFetchAttemptRef,
   draftSequenceRef,
+  visibleColumnIdsRef,
 }: UseDesktopShellDataArgs) {
   const storeApi = useDesktopShellStoreApi();
   const state = useDesktopShellStore(useShallow(selectShellDataSlice));
@@ -609,6 +612,7 @@ export function useDesktopShellData({
     directMessageDraftPreviewUrlRef,
     mediaFetchAttemptRef,
     visibleRefreshInFlightRef,
+    visibleColumnIdsRef,
     loadTopics,
     loadProfileSection,
     loadAuthorSection,

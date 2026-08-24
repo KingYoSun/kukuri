@@ -459,6 +459,24 @@ test('mobile restart restores text Draft and active Column focus without unsafe 
   await expect(activeColumn(page, 'Timeline')).toBeFocused();
 });
 
+// Issue #765 T4: hash を持たない cold start でも、保存 layout の active Column が復元される。
+test('cold start without a hash restores the persisted active Thread Column', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 980 });
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
+
+  // seed 済み投稿(reload 後も存在する)から Thread を開く。
+  // 実行中に publish した投稿は browser mock のメモリにしか無く、reload 後は
+  // 無効 target として安全側 normalize に倒れてしまうため使わない。
+  await page.getByText('browser mock peer post').click();
+  await expect(activeColumn(page, 'Thread')).toBeVisible();
+  await page.waitForTimeout(300);
+
+  // hash 無しで開き直す(cold start 相当。localStorage は同一 context で保持される)。
+  await page.goto('/');
+  await expect(activeColumn(page, 'Thread')).toBeVisible();
+  await expect(page).toHaveURL(/context=thread&threadId=/);
+});
+
 test('browser mock shell persists language changes across reloads', async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 980 });
   await page.goto('/');

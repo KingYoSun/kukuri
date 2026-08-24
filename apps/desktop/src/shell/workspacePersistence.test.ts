@@ -156,6 +156,54 @@ describe('workspace layout persistence', () => {
     expect(restored.activeColumnId).toBe('profile-alice');
   });
 
+  it('round-trips per-Column timelineView and defaults legacy layouts to feed', () => {
+    const fallback = createInitialWorkspaceState();
+    const storage = memoryStorage();
+    const state = {
+      ...fallback,
+      columns: [
+        { ...fallback.columns[0], timelineView: 'bookmarks' as const },
+        {
+          id: 'timeline-core',
+          kind: 'timeline' as const,
+          scope: { topicId: 'kukuri:topic:demo', channelId: 'channel-1' },
+          pinned: false,
+          preferredDesktopSpan: 1 as const,
+        },
+      ],
+    };
+
+    expect(writeWorkspaceLayout(storage, state)).toBe(true);
+    const restored = readWorkspaceLayout(storage, fallback);
+
+    expect(restored.columns[0].timelineView).toBe('bookmarks');
+    // timelineView 未設定の Column は undefined(既定 feed)のまま。
+    expect(restored.columns[1].timelineView).toBeUndefined();
+  });
+
+  it('drops invalid persisted timelineView values', () => {
+    const fallback = createInitialWorkspaceState();
+    const storage = memoryStorage(
+      JSON.stringify({
+        version: 1,
+        activeColumnId: 'timeline',
+        columns: [
+          {
+            id: 'timeline',
+            kind: 'timeline',
+            pinned: true,
+            preferredDesktopSpan: 1,
+            timelineView: 'invalid',
+          },
+        ],
+      })
+    );
+
+    const restored = readWorkspaceLayout(storage, fallback);
+    // 旧 layout / 破損値は既定(feed)へ倒す。
+    expect(restored.columns[0].timelineView).toBeUndefined();
+  });
+
   it('falls back for malformed, unknown-version, empty, and failing storage', () => {
     const fallback = createInitialWorkspaceState();
     expect(readWorkspaceLayout(memoryStorage('{'), fallback)).toBe(fallback);

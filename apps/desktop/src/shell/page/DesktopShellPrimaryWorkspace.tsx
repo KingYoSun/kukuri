@@ -58,6 +58,9 @@ export type DesktopShellPrimarySurfaceProps = {
   surfaceColumnKind?: ColumnKind;
   surfaceEntityId?: string;
   surfaceScope?: ColumnScope;
+  // columnMode の Timeline surface が表示する view(Column の timelineView)。
+  // 未指定時は chrome projection(shellChromeState.timelineView)へ fallback する(Issue #765)。
+  surfaceTimelineView?: 'feed' | 'bookmarks';
   profileAvatarInputKey: number;
   messagesWorkspace: ReactNode;
   notificationsWorkspace: ReactNode;
@@ -137,6 +140,7 @@ export function DesktopShellPrimarySurface({
   surfaceColumnKind,
   surfaceEntityId,
   surfaceScope,
+  surfaceTimelineView,
   profileAvatarInputKey,
   messagesWorkspace,
   notificationsWorkspace,
@@ -366,6 +370,8 @@ export function DesktopShellPrimarySurface({
   const profileMode = shellChromeState.profileMode;
   const profileConnectionsView = shellChromeState.profileConnectionsView;
   const activeSurfaceSection = surfaceSection ?? shellChromeState.activePrimarySection;
+  // feed / bookmarks の body 分岐は Column 単位の view を優先する(Issue #765)。
+  const activeTimelineView = surfaceTimelineView ?? shellChromeState.timelineView;
   const eligibleIndexNodeBaseUrls = useMemo(
     () =>
       eligibleCommunityIndexNodes(
@@ -457,7 +463,7 @@ export function DesktopShellPrimarySurface({
               <Notice tone='destructive'>{composerError}</Notice>
             ) : null}
             <Card className='shell-workspace-card'>
-              {shellChromeState.timelineView === 'feed' ? (
+              {activeTimelineView === 'feed' ? (
                 <TimelineFeed
                   posts={surfaceTimelinePostViews}
                   emptyCopy={t('shell:workspace.noPosts')}

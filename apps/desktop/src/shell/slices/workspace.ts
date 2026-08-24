@@ -19,6 +19,10 @@ export type ColumnScope = {
   channelId: string | null;
 };
 
+// Timeline Column の表示 view。正本は Column 単位で持ち、
+// chrome 側の shellChromeState.timelineView は「active Timeline Column の view の投影」に留める(Issue #765)。
+export type ColumnTimelineView = 'feed' | 'bookmarks';
+
 export type ColumnState = {
   id: string;
   kind: ColumnKind;
@@ -27,6 +31,8 @@ export type ColumnState = {
   parentColumnId?: string;
   pinned: boolean;
   preferredDesktopSpan: ColumnSpan;
+  // kind === 'timeline' の Column のみ意味を持つ。未設定は 'feed'。
+  timelineView?: ColumnTimelineView;
 };
 
 export type ColumnStateInput = Omit<ColumnState, 'preferredDesktopSpan'> & {
@@ -67,6 +73,22 @@ const COLUMN_SPAN_POLICIES: Record<ColumnKind, ColumnSpanPolicy> = {
 
 export function columnSpanPolicy(kind: ColumnKind): ColumnSpanPolicy {
   return COLUMN_SPAN_POLICIES[kind];
+}
+
+// 親なし transient(deep link / section 遷移で開く Column)同士の置換対象。
+// scope を持つ会話系(timeline / thread / profile / conversation)は、close 時の
+// 孫付け替え等で親を失っても deep link に巻き込まれて消えないよう対象外とする(Issue #765)。
+const PARENTLESS_REPLACEABLE_COLUMN_KINDS: ReadonlySet<ColumnKind> = new Set([
+  'stream',
+  'game',
+  'metaverse',
+  'notifications',
+  'messages',
+  'explore',
+]);
+
+export function isParentlessReplaceableColumnKind(kind: ColumnKind): boolean {
+  return PARENTLESS_REPLACEABLE_COLUMN_KINDS.has(kind);
 }
 
 export function defaultColumnSpan(kind: ColumnKind): ColumnSpan {
@@ -184,10 +206,16 @@ export function openTransientColumn(
     };
   }
 
+  // 「同じ親の未固定 Column を置換」する。ただし親なし(parentColumnId === undefined)同士は
+  // immersive kind 同士に限定する: 親なし transient が unpinned な Timeline Column を巻き込んだり、
+  // close 時の孫付け替えで親を失った profile 等を置換したりしないため(Issue #765)。
   const replaceIndex = state.columns.findIndex(
     (candidate) =>
       !candidate.pinned &&
-      candidate.parentColumnId === column.parentColumnId
+      candidate.parentColumnId === column.parentColumnId &&
+      (column.parentColumnId !== undefined ||
+        (isParentlessReplaceableColumnKind(column.kind) &&
+          isParentlessReplaceableColumnKind(candidate.kind)))
   );
   if (replaceIndex < 0) {
     const parentIndex = column.parentColumnId
@@ -279,6 +307,21 @@ export function setColumnPinned(
     if (column.id !== columnId || column.pinned === pinned) return column;
     changed = true;
     return { ...column, pinned };
+  });
+  return changed ? { ...state, columns } : state;
+}
+
+export function setColumnTimelineView(
+  state: WorkspaceState,
+  columnId: string,
+  view: ColumnTimelineView
+): WorkspaceState {
+  let changed = false;
+  const columns = state.columns.map((column) => {
+    if (column.id !== columnId || column.kind !== 'timeline') return column;
+    if ((column.timelineView ?? 'feed') === view) return column;
+    changed = true;
+    return { ...column, timelineView: view };
   });
   return changed ? { ...state, columns } : state;
 }

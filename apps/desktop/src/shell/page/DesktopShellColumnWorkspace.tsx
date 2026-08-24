@@ -39,8 +39,9 @@ import {
 } from '@/shell/columnRuntime';
 
 type DesktopShellColumnWorkspaceProps = {
-  activeTimelineView: TimelineViewId;
   locale: string;
+  /// 表示中 Column id の変化を親へ通知する(背景 refresh 用、Issue #765)。
+  onVisibleColumnsChange?: (columnIds: string[]) => void;
   mentionCandidates: MentionCandidate[];
   onColumnAttachmentSelection: (
     target: ColumnDraftTarget,
@@ -60,7 +61,7 @@ type DesktopShellColumnWorkspaceProps = {
   messagesSurface: ReactNode;
   notificationsSurface: ReactNode;
   onActivateColumn: (column: ColumnState) => void;
-  onSelectTimelineView: (view: TimelineViewId) => void;
+  onSelectTimelineView: (column: ColumnState, view: TimelineViewId) => void;
   renderProfileSurface: (column: ColumnState) => ReactNode;
   renderPrimarySurface: (section: PrimarySection, column: ColumnState) => ReactNode;
   scopeLabel: string;
@@ -81,8 +82,8 @@ const PRIMARY_SECTION_BY_KIND: Partial<Record<ColumnKind, PrimarySection>> = {
 };
 
 export function DesktopShellColumnWorkspace({
-  activeTimelineView,
   locale,
+  onVisibleColumnsChange,
   mentionCandidates,
   onColumnAttachmentSelection,
   onRemoveColumnAttachment,
@@ -114,13 +115,17 @@ export function DesktopShellColumnWorkspace({
   ]);
   const [audioFocusedColumnId, setAudioFocusedColumnId] = useState<string | null>(null);
 
-  const updateVisibleColumnIds = useCallback((columnIds: string[]) => {
-    setVisibleColumnIds((current) =>
-      current.length === columnIds.length && current.every((id, index) => id === columnIds[index])
-        ? current
-        : columnIds
-    );
-  }, []);
+  const updateVisibleColumnIds = useCallback(
+    (columnIds: string[]) => {
+      onVisibleColumnsChange?.(columnIds);
+      setVisibleColumnIds((current) =>
+        current.length === columnIds.length && current.every((id, index) => id === columnIds[index])
+          ? current
+          : columnIds
+      );
+    },
+    [onVisibleColumnsChange]
+  );
 
   useEffect(() => {
     const ids = new Set(workspaceState.columns.map((column) => column.id));
@@ -296,9 +301,10 @@ export function DesktopShellColumnWorkspace({
               headerActions={
                 column.kind === 'timeline' ? (
                   <TimelineViewIconTabs
-                    activeView={activeTimelineView}
+                    // 表示・切替の正本は Column 単位の timelineView(Issue #765)。
+                    activeView={column.timelineView ?? 'feed'}
                     items={timelineViewItems}
-                    onSelect={onSelectTimelineView}
+                    onSelect={(view) => onSelectTimelineView(column, view)}
                   />
                 ) : undefined
               }

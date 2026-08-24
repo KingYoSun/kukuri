@@ -551,3 +551,46 @@ test('background refresh preserves loaded timeline pages and does not restore a 
   expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
 });
 
+
+// Issue #765 T5: 表示中の背景(非 active)Timeline Column の scope も定期 refresh される。
+test('periodic refresh also fetches visible background Timeline Column scopes', async () => {
+  vi.useFakeTimers();
+  const { WORKSPACE_LAYOUT_STORAGE_KEY } = await import('@/shell/workspacePersistence');
+  const { columnIdentityId } = await import('@/shell/slices/workspace');
+  const demoScope = { topicId: 'kukuri:topic:demo', channelId: null };
+  const irohScope = { topicId: 'kukuri:topic:iroh', channelId: null };
+  window.localStorage.setItem(
+    WORKSPACE_LAYOUT_STORAGE_KEY,
+    JSON.stringify({
+      version: 1,
+      activeColumnId: columnIdentityId('timeline', demoScope),
+      columns: [
+        {
+          id: columnIdentityId('timeline', demoScope),
+          kind: 'timeline',
+          scope: demoScope,
+          pinned: true,
+          preferredDesktopSpan: 1,
+        },
+        {
+          id: columnIdentityId('timeline', irohScope),
+          kind: 'timeline',
+          scope: irohScope,
+          pinned: true,
+          preferredDesktopSpan: 1,
+        },
+      ],
+    })
+  );
+  const api = createDesktopMockApi();
+  const listTimelineSpy = vi.spyOn(api, 'listTimeline');
+
+  render(<App api={api} />);
+  await vi.advanceTimersByTimeAsync(0);
+  await vi.advanceTimersByTimeAsync(REFRESH_INTERVAL_MS + 50);
+
+  const refreshedTopics = new Set(listTimelineSpy.mock.calls.map(([topic]) => topic));
+  expect(refreshedTopics.has('kukuri:topic:demo')).toBe(true);
+  // 背景の iroh Timeline Column も定期 refresh の対象になる。
+  expect(refreshedTopics.has('kukuri:topic:iroh')).toBe(true);
+});

@@ -129,6 +129,10 @@ export function ColumnCanvas({
   }, [activeColumnId]);
 
   const columnCount = Children.count(children);
+  // Issue #765: 同数の transient 置換(Column 数は不変で id 列だけ入れ替わる)でも
+  // 新しい Column 要素を observe し直すため、id 列を安定 key にして再購読する。
+  // visible 集合は effect ローカルなので、再購読時に作り直され置換前の id は残留しない。
+  const columnIdsKey = columnIds.join('\u0000');
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !onVisibleColumnIdsChange) return;
@@ -155,7 +159,7 @@ export function ColumnCanvas({
     }, { root: canvas, threshold: [0, 0.01, 0.5, 1] });
     columns.forEach((column) => observer.observe(column));
     return () => observer.disconnect();
-  }, [columnCount, onVisibleColumnIdsChange]);
+  }, [columnCount, columnIdsKey, onVisibleColumnIdsChange]);
 
   const settleMobileScroll = () => {
     if (!isMobileViewport()) return;

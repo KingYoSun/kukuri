@@ -72,6 +72,10 @@ function parseColumn(value: unknown): ColumnState | null {
   if (typeof value.parentColumnId === 'string' && value.parentColumnId) {
     column.parentColumnId = value.parentColumnId;
   }
+  // schema v1 への後方互換 optional field(Issue #765)。旧 layout / 不正値は未設定(既定 feed)として読む。
+  if (kind === 'timeline' && (value.timelineView === 'feed' || value.timelineView === 'bookmarks')) {
+    column.timelineView = value.timelineView;
+  }
   return column;
 }
 
@@ -85,6 +89,7 @@ function persistedLayout(state: WorkspaceState): PersistedWorkspaceLayout {
       ...(column.scope ? { scope: column.scope } : {}),
       ...(column.entityId ? { entityId: column.entityId } : {}),
       ...(column.parentColumnId ? { parentColumnId: column.parentColumnId } : {}),
+      ...(column.timelineView ? { timelineView: column.timelineView } : {}),
       pinned: column.pinned,
       preferredDesktopSpan: normalizeColumnSpan(column.kind, column.preferredDesktopSpan),
     })),

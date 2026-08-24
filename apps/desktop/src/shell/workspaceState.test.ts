@@ -13,6 +13,7 @@ import {
   openPinnedColumn,
   setColumnSpan,
   setColumnPinned,
+  setColumnTimelineView,
   type ColumnState,
 } from '@/shell/slices/workspace';
 
@@ -313,6 +314,117 @@ describe('workspace state transitions', () => {
     expect(next.columns.at(-1)?.parentColumnId).toBeUndefined();
   });
 
+  it('replaces a parentless immersive transient Column with another immersive one', () => {
+    // stream ↔ game / metaverse の deep link 切替は親なし transient 同士で置換され、増殖しない。
+    const withStream = openTransientColumn(
+      createInitialWorkspaceState(),
+      transientColumn({
+        id: 'stream-1',
+        kind: 'stream',
+        entityId: 'session-1',
+        parentColumnId: undefined,
+      })
+    );
+    const withGame = openTransientColumn(
+      withStream,
+      transientColumn({
+        id: 'game-1',
+        kind: 'game',
+        entityId: 'room-1',
+        parentColumnId: undefined,
+      })
+    );
+
+    expect(withGame.columns.map((column) => column.id)).toEqual([
+      INITIAL_TIMELINE_COLUMN_ID,
+      'game-1',
+    ]);
+    expect(withGame.activeColumnId).toBe('game-1');
+  });
+
+  it('does not let a parentless immersive transient Column replace an unpinned Timeline Column', () => {
+    const withSecondTimeline = openTransientColumn(
+      createInitialWorkspaceState(),
+      transientColumn({
+        id: 'timeline-2',
+        kind: 'timeline',
+        entityId: undefined,
+        parentColumnId: undefined,
+      })
+    );
+    const withStream = openTransientColumn(
+      withSecondTimeline,
+      transientColumn({
+        id: 'stream-1',
+        kind: 'stream',
+        entityId: 'session-1',
+        parentColumnId: undefined,
+      })
+    );
+
+    expect(withStream.columns.map((column) => column.id)).toEqual([
+      INITIAL_TIMELINE_COLUMN_ID,
+      'timeline-2',
+      'stream-1',
+    ]);
+  });
+
+  it('keeps orphaned conversation-family Columns out of the parentless replacement pool', () => {
+    // close 時の孫付け替え等で parent を失った profile などは immersive の置換に巻き込まない。
+    const withOrphanProfile = openTransientColumn(
+      createInitialWorkspaceState(),
+      transientColumn({ id: 'profile-1', kind: 'profile', parentColumnId: undefined })
+    );
+    const withStream = openTransientColumn(
+      withOrphanProfile,
+      transientColumn({
+        id: 'stream-1',
+        kind: 'stream',
+        entityId: 'session-1',
+        parentColumnId: undefined,
+      })
+    );
+
+    expect(withStream.columns.map((column) => column.id)).toEqual([
+      INITIAL_TIMELINE_COLUMN_ID,
+      'profile-1',
+      'stream-1',
+    ]);
+
+    // section 系(notifications / messages / explore)は置換プールに含まれ、
+    // 親なし transient 同士として immersive とも相互置換される(従来挙動の維持)。
+    const withMessages = openTransientColumn(
+      withStream,
+      transientColumn({
+        id: 'messages-1',
+        kind: 'messages',
+        entityId: undefined,
+        parentColumnId: undefined,
+      })
+    );
+    expect(withMessages.columns.map((column) => column.id)).toEqual([
+      INITIAL_TIMELINE_COLUMN_ID,
+      'profile-1',
+      'messages-1',
+    ]);
+
+    // section 同士も置換され、Column が増殖しない。
+    const withExplore = openTransientColumn(
+      withMessages,
+      transientColumn({
+        id: 'explore-1',
+        kind: 'explore',
+        entityId: undefined,
+        parentColumnId: undefined,
+      })
+    );
+    expect(withExplore.columns.map((column) => column.id)).toEqual([
+      INITIAL_TIMELINE_COLUMN_ID,
+      'profile-1',
+      'explore-1',
+    ]);
+  });
+
   it('moves active state to the parent, then a neighbor, when closing a Column', () => {
     const initial = createInitialWorkspaceState();
     const withThread = openTransientColumn(initial, transientColumn());
@@ -329,5 +441,41 @@ describe('workspace state transitions', () => {
 
     expect(afterTimelineClose.activeColumnId).toBe('profile-1');
     expect(afterTimelineClose.columns).toHaveLength(1);
+  });
+
+  it('sets timelineView only on the target Timeline Column', () => {
+    const initial = createInitialWorkspaceState();
+    const withThread = openTransientColumn(initial, transientColumn());
+
+    const next = setColumnTimelineView(withThread, INITIAL_TIMELINE_COLUMN_ID, 'bookmarks');
+
+    expect(
+      next.columns.find((column) => column.id === INITIAL_TIMELINE_COLUMN_ID)?.timelineView
+    ).toBe('bookmarks');
+    // 他 Column と active 状態は不変。
+    expect(next.columns.find((column) => column.id === 'thread-1')?.timelineView).toBeUndefined();
+    expect(next.activeColumnId).toBe(withThread.activeColumnId);
+
+    const backToFeed = setColumnTimelineView(next, INITIAL_TIMELINE_COLUMN_ID, 'feed');
+    expect(
+      backToFeed.columns.find((column) => column.id === INITIAL_TIMELINE_COLUMN_ID)?.timelineView
+    ).toBe('feed');
+  });
+
+  it('ignores timelineView updates for unknown ids, non-timeline Columns, and same values', () => {
+    const initial = createInitialWorkspaceState();
+    const withThread = openTransientColumn(initial, transientColumn());
+
+    // 未知の id / timeline 以外の Column には何もしない(同一参照)。
+    expect(setColumnTimelineView(withThread, 'missing', 'bookmarks')).toBe(withThread);
+    expect(setColumnTimelineView(withThread, 'thread-1', 'bookmarks')).toBe(withThread);
+
+    // 未設定(既定 feed)へ feed を設定しても no-op。
+    expect(setColumnTimelineView(withThread, INITIAL_TIMELINE_COLUMN_ID, 'feed')).toBe(withThread);
+
+    const bookmarks = setColumnTimelineView(withThread, INITIAL_TIMELINE_COLUMN_ID, 'bookmarks');
+    expect(setColumnTimelineView(bookmarks, INITIAL_TIMELINE_COLUMN_ID, 'bookmarks')).toBe(
+      bookmarks
+    );
   });
 });

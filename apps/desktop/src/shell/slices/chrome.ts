@@ -62,6 +62,9 @@ export function createInitialChromeSlice(): ChromeSliceState {
     developerModeEnabled: readDeveloperMode(),
     shellChromeState: {
       activePrimarySection: 'timeline',
+      // timelineView の正本は ColumnState.timelineView(workspace slice)。ここは
+      // 「active(route focus 中)Timeline Column の view の投影」で、route 同期や
+      // useShellDialogs 等の既存参照との互換のために残している(Issue #765)。
       timelineView: 'feed',
       activeSettingsSection: initialSettingsState.activeSettingsSection,
       profileMode: 'overview',

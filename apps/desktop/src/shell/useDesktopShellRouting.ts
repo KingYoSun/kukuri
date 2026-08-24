@@ -41,6 +41,40 @@ import {
   useDesktopShellStoreApi,
 } from '@/shell/store';
 
+// Issue #765: window レベルの Escape cascade が Composer などの入力を巻き込まない
+// ようにするための editable 判定(MetaverseScene の isEditableTarget を基準に、
+// contenteditable 祖先の判定を加えたもの)。checkbox / radio / button 等の
+// 非 text 入力は「編集中」ではないため cascade を止めない(Settings の toggle に
+// focus したまま Escape で drawer を閉じる既存挙動を維持する)。
+const NON_TEXT_INPUT_TYPES = new Set([
+  'button',
+  'checkbox',
+  'color',
+  'file',
+  'radio',
+  'range',
+  'reset',
+  'submit',
+]);
+
+function isEditableTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  const tagName = target.tagName.toLowerCase();
+  if (tagName === 'input') {
+    return !NON_TEXT_INPUT_TYPES.has((target as HTMLInputElement).type);
+  }
+  if (tagName === 'textarea' || tagName === 'select') {
+    return true;
+  }
+  if (target.isContentEditable) {
+    return true;
+  }
+  const editableAncestor = target.closest('[contenteditable]');
+  return editableAncestor !== null && editableAncestor.getAttribute('contenteditable') !== 'false';
+}
+
 type UseDesktopShellRoutingArgs = {
   api: DesktopApi;
   translate: (key: string, options?: Record<string, unknown>) => string;
@@ -541,10 +575,14 @@ export function useDesktopShellRouting({
   );
 
   const focusPrimarySection = useCallback(
-    (section: PrimarySection) => {
+    // options.timelineView: timeline section を focus する際に、focus 対象の Timeline Column の
+    // view を chrome projection と route の timelineView query に投影する(Issue #765)。
+    // 未指定なら従来どおり現在の chrome 値を維持する。
+    (section: PrimarySection, options?: { timelineView?: TimelineWorkspaceView }) => {
       setShellChromeState((current) => ({
         ...current,
         activePrimarySection: section,
+        timelineView: options?.timelineView ?? current.timelineView,
         profileMode: section === 'profile' ? 'overview' : current.profileMode,
         profileConnectionsView: section === 'profile' ? 'following' : current.profileConnectionsView,
         navOpen: false,
@@ -569,6 +607,7 @@ export function useDesktopShellRouting({
         selectedAuthorPubkey: null,
         selectedDirectMessagePeerPubkey: null,
         selectedThread: null,
+        ...(options?.timelineView ? { timelineView: options.timelineView } : {}),
       });
     },
     [
@@ -793,6 +832,16 @@ export function useDesktopShellRouting({
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') {
+        return;
+      }
+      // Issue #765: Radix の dismissable layer は Escape を document capture で
+      // preventDefault して Dialog を閉じる。その場合はここで cascade せず、
+      // Dialog close と selection 解除を分離する。
+      if (event.defaultPrevented) {
+        return;
+      }
+      // Composer の textarea など editable 要素での Escape は selection を閉じない。
+      if (isEditableTarget(event.target)) {
         return;
       }
       if (shellChromeState.settingsOpen) {

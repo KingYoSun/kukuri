@@ -448,4 +448,96 @@ describe('ColumnCanvas', () => {
     delete document.documentElement.dataset.reducedMotion;
     vi.unstubAllGlobals();
   });
+
+  it('re-observes replaced column elements when the id set changes without a count change', () => {
+    // Issue #765 T3: 同数の transient 置換(Column 数は不変で id 列だけ入れ替わる)でも
+    // IntersectionObserver が新しい Column 要素を observe し直し、置換前の id が
+    // visible 集合に残留しないことを固定する。
+    class MockIntersectionObserver {
+      static instances: MockIntersectionObserver[] = [];
+      observed = new Set<Element>();
+      constructor(
+        private readonly callback: IntersectionObserverCallback,
+        public readonly options?: IntersectionObserverInit
+      ) {
+        MockIntersectionObserver.instances.push(this);
+      }
+      observe(target: Element) {
+        this.observed.add(target);
+      }
+      unobserve(target: Element) {
+        this.observed.delete(target);
+      }
+      disconnect() {
+        this.observed.clear();
+      }
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      }
+      trigger(entries: Array<Pick<IntersectionObserverEntry, 'target' | 'isIntersecting' | 'intersectionRatio'>>) {
+        this.callback(
+          entries as IntersectionObserverEntry[],
+          this as unknown as IntersectionObserver
+        );
+      }
+    }
+    vi.stubGlobal('IntersectionObserver', MockIntersectionObserver);
+
+    const onVisibleColumnIdsChange = vi.fn();
+    const canvasWith = (ids: string[]) => (
+      <ColumnCanvas
+        activeColumnId={ids[0]}
+        columnIds={ids}
+        onActivateColumn={() => undefined}
+        onVisibleColumnIdsChange={onVisibleColumnIdsChange}
+      >
+        {ids.map((id) => (
+          <div key={id} data-column-id={id}>
+            {id}
+          </div>
+        ))}
+      </ColumnCanvas>
+    );
+    const { rerender } = render(canvasWith(['timeline-1', 'stream-1']));
+
+    const initialObserver = MockIntersectionObserver.instances.at(-1)!;
+    const initialColumns = Array.from(document.querySelectorAll<HTMLElement>('[data-column-id]'));
+    expect(initialColumns).toHaveLength(2);
+    initialColumns.forEach((column) => {
+      expect(initialObserver.observed.has(column)).toBe(true);
+    });
+    act(() => {
+      initialObserver.trigger(
+        initialColumns.map((column) => ({
+          target: column,
+          isIntersecting: true,
+          intersectionRatio: 1,
+        }))
+      );
+    });
+    expect(onVisibleColumnIdsChange).toHaveBeenLastCalledWith(['timeline-1', 'stream-1']);
+
+    // 同数のまま stream-1 -> game-1 へ置換する(Column 数は 2 のまま)。
+    rerender(canvasWith(['timeline-1', 'game-1']));
+    const gameColumn = document.querySelector<HTMLElement>('[data-column-id="game-1"]');
+    expect(gameColumn).not.toBeNull();
+
+    // 置換後の Column 要素が observe されている(修正前は旧 observer のままで失敗する)。
+    const latestObserver = MockIntersectionObserver.instances.at(-1)!;
+    expect(latestObserver.observed.has(gameColumn!)).toBe(true);
+
+    // 新要素の可視化が publish され、置換前の id は visible 集合から消える。
+    const timelineColumn = document.querySelector<HTMLElement>('[data-column-id="timeline-1"]')!;
+    act(() => {
+      latestObserver.trigger([
+        { target: timelineColumn, isIntersecting: true, intersectionRatio: 1 },
+        { target: gameColumn!, isIntersecting: true, intersectionRatio: 1 },
+      ]);
+    });
+    expect(onVisibleColumnIdsChange).toHaveBeenLastCalledWith(['timeline-1', 'game-1']);
+    const published = onVisibleColumnIdsChange.mock.calls.map(([ids]) => ids as string[]);
+    expect(published.at(-1)).not.toContain('stream-1');
+
+    vi.unstubAllGlobals();
+  });
 });
