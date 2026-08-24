@@ -29,6 +29,7 @@ import {
 
 import type {
   ActionsBaseParams,
+  DerivedSetter,
   NullableStringDispatch,
   NumberStateDispatch,
   Setter,
@@ -60,11 +61,11 @@ type ProfileTopicChannelParams = ActionsBaseParams & {
   setProfileAvatarPreviewUrl: NullableStringDispatch;
   setProfileAvatarInputKey: NumberStateDispatch;
   setTrackedTopics: Setter<'trackedTopics'>;
-  setActiveTopic: Setter<'activeTopic'>;
+  setActiveTopic: DerivedSetter<string>;
   setTopicInput: Setter<'topicInput'>;
   setTimelineScopeByTopic: Setter<'timelineScopeByTopic'>;
   setComposeChannelByTopic: Setter<'composeChannelByTopic'>;
-  setSelectedChannelIdByTopic: Setter<'selectedChannelIdByTopic'>;
+  setSelectedChannelIdByTopic: DerivedSetter<Record<string, string | null>>;
   setShellChromeState: Setter<'shellChromeState'>;
   setProfileDraft: Setter<'profileDraft'>;
   setProfileDirty: Setter<'profileDirty'>;
@@ -222,8 +223,6 @@ export function createProfileTopicChannelActions({
     setActiveTopic(topicId);
     setShellChromeState((current) => ({
       ...current,
-      activePrimarySection: 'timeline',
-      navOpen: false,
     }));
     syncRoute('replace', {
       activeTopic: topicId,
@@ -297,8 +296,6 @@ export function createProfileTopicChannelActions({
     setTopicInput('');
     setShellChromeState((current) => ({
       ...current,
-      activePrimarySection: 'timeline',
-      navOpen: false,
     }));
     clearThreadContext();
     syncRoute('replace', {
@@ -315,8 +312,6 @@ export function createProfileTopicChannelActions({
     setComposeChannelByTopic(setRecordEntry(topic, PUBLIC_CHANNEL_REF));
     setShellChromeState((current) => ({
       ...current,
-      activePrimarySection: 'timeline',
-      navOpen: false,
     }));
     clearThreadContext();
     syncRoute('replace', {
@@ -334,8 +329,6 @@ export function createProfileTopicChannelActions({
     setActiveTopic(topicId);
     setShellChromeState((current) => ({
       ...current,
-      activePrimarySection: 'timeline',
-      navOpen: false,
     }));
     clearThreadContext();
     syncRoute('replace', {
@@ -360,7 +353,6 @@ export function createProfileTopicChannelActions({
     setActiveTopic(nextActiveTopic);
     setShellChromeState((current) => ({
       ...current,
-      navOpen: false,
     }));
     clearThreadContext();
     syncRoute('replace', {
@@ -427,8 +419,6 @@ export function createProfileTopicChannelActions({
         }));
       setShellChromeState((current) => ({
         ...current,
-        activePrimarySection: 'timeline',
-        navOpen: false,
       }));
       syncRoute('replace', {
         activeTopic,
@@ -535,8 +525,6 @@ export function createProfileTopicChannelActions({
     setChannelError(null);
     setShellChromeState((current) => ({
       ...current,
-      activePrimarySection: 'timeline',
-      navOpen: false,
     }));
     clearThreadContext();
     syncRoute('replace', {

@@ -27,6 +27,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { useSyncRoute } from '@/shell/routing/useSyncRoute';
 import { createDesktopShellStore, type DesktopShellStoreApi } from '@/shell/store';
 import { resetWindowHash } from '@/shell/testSupport/renderShellHook';
+import { columnIdentityId, openTransientColumn } from '@/shell/slices/workspace';
 
 type SyncRouteArgs = Parameters<typeof useSyncRoute>[0];
 
@@ -55,7 +56,21 @@ describe('useSyncRoute', () => {
   describe('overrides own-property semantics', () => {
     test('keeps current store selections in the url when override keys are omitted', () => {
       const storeApi = createDesktopShellStore();
-      storeApi.getState().patchState({ selectedThread: 'post-1', focusedObjectId: 'obj-1' });
+      storeApi.getState().patchState({
+        selectedThread: 'post-1',
+        focusedObjectId: 'obj-1',
+        workspaceState: openTransientColumn(storeApi.getState().workspaceState, {
+          id: columnIdentityId(
+            'thread',
+            { topicId: 'kukuri:topic:demo', channelId: null },
+            'post-1'
+          ),
+          kind: 'thread',
+          scope: { topicId: 'kukuri:topic:demo', channelId: null },
+          entityId: 'post-1',
+          pinned: false,
+        }),
+      });
       const args = createHookArgs(storeApi);
       const view = renderHook(() => useSyncRoute(args));
 
@@ -185,12 +200,16 @@ describe('useSyncRoute', () => {
 
     test('a public composeTarget override drops the channel param even when the store has a selected channel', () => {
       const storeApi = createDesktopShellStore();
-      const initial = storeApi.getState();
       storeApi.getState().patchState({
-        selectedChannelIdByTopic: {
-          ...initial.selectedChannelIdByTopic,
-          'kukuri:topic:demo': 'chan-1',
-        },
+        workspaceState: openTransientColumn(storeApi.getState().workspaceState, {
+          id: columnIdentityId('timeline', {
+            topicId: 'kukuri:topic:demo',
+            channelId: 'chan-1',
+          }),
+          kind: 'timeline',
+          scope: { topicId: 'kukuri:topic:demo', channelId: 'chan-1' },
+          pinned: false,
+        }),
       });
       const args = createHookArgs(storeApi);
       const view = renderHook(() => useSyncRoute(args));

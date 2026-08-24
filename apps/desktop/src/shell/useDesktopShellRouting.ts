@@ -40,6 +40,17 @@ import {
   useDesktopShellStore,
   useDesktopShellStoreApi,
 } from '@/shell/store';
+import {
+  activeWorkspaceColumn,
+  activeWorkspaceScope,
+  closeColumn,
+  columnIdentityId,
+  openTransientColumn,
+  primarySectionForColumn,
+  setColumnTimelineView,
+  type ColumnKind,
+  type ColumnScope,
+} from '@/shell/slices/workspace';
 
 // Issue #765: window レベルの Escape cascade が Composer などの入力を巻き込まない
 // ようにするための editable 判定(MetaverseScene の isEditableTarget を基準に、
@@ -79,22 +90,16 @@ type UseDesktopShellRoutingArgs = {
   api: DesktopApi;
   translate: (key: string, options?: Record<string, unknown>) => string;
   loadTopics: (topics: string[], activeTopic: string, currentThread: string | null) => Promise<void>;
-  primarySectionRefs: MutableRefObject<Partial<Record<PrimarySection, HTMLElement | null>>>;
-  navTriggerRef: RefObject<HTMLButtonElement | null>;
   settingsTriggerRef: RefObject<HTMLButtonElement | null>;
   pendingRouteUrlRef: MutableRefObject<string | null>;
-  didSyncRouteSectionRef: MutableRefObject<boolean>;
 };
 
 export function useDesktopShellRouting({
   api,
   translate,
   loadTopics,
-  primarySectionRefs,
-  navTriggerRef,
   settingsTriggerRef,
   pendingRouteUrlRef,
-  didSyncRouteSectionRef,
 }: UseDesktopShellRoutingArgs) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -110,14 +115,10 @@ export function useDesktopShellRouting({
     shellChromeState,
   } = state;
 
-  const setActiveTopic = useDesktopShellFieldSetter('activeTopic');
   const setSelectedThread = useDesktopShellFieldSetter('selectedThread');
   const setFocusedObjectId = useDesktopShellFieldSetter('focusedObjectId');
-  const setThread = useDesktopShellFieldSetter('thread');
   const setThreadsById = useDesktopShellFieldSetter('threadsById');
   const setThreadNextCursorById = useDesktopShellFieldSetter('threadNextCursorById');
-  const setReplyTarget = useDesktopShellFieldSetter('replyTarget');
-  const setRepostTarget = useDesktopShellFieldSetter('repostTarget');
   const setSelectedAuthorPubkey = useDesktopShellFieldSetter('selectedAuthorPubkey');
   const setSelectedAuthor = useDesktopShellFieldSetter('selectedAuthor');
   const setSelectedAuthorTimeline = useDesktopShellFieldSetter('selectedAuthorTimeline');
@@ -136,9 +137,9 @@ export function useDesktopShellRouting({
   const setError = useDesktopShellFieldSetter('error');
   const setLastNonNotificationsRoute = useDesktopShellFieldSetter('lastNonNotificationsRoute');
   const setShellChromeState = useDesktopShellFieldSetter('shellChromeState');
-  const setSelectedChannelIdByTopic = useDesktopShellFieldSetter('selectedChannelIdByTopic');
   const setTimelineScopeByTopic = useDesktopShellFieldSetter('timelineScopeByTopic');
   const setComposeChannelByTopic = useDesktopShellFieldSetter('composeChannelByTopic');
+  const setWorkspaceState = useDesktopShellFieldSetter('workspaceState');
   const resolvedRouteLocation = useMemo(
     () =>
       resolveHashBackedRouteLocation(
@@ -152,7 +153,7 @@ export function useDesktopShellRouting({
   const routeSection = useMemo(() => {
     const candidate =
       parsePrimarySectionPath(resolvedRouteLocation.pathname) ??
-      shellChromeState.activePrimarySection;
+      primarySectionForColumn(activeWorkspaceColumn(storeApi.getState().workspaceState));
     if (!developerModeEnabled && (candidate === 'live' || candidate === 'game')) {
       return 'timeline';
     }
@@ -160,7 +161,7 @@ export function useDesktopShellRouting({
   }, [
     developerModeEnabled,
     resolvedRouteLocation.pathname,
-    shellChromeState.activePrimarySection,
+    storeApi,
   ]);
   const pendingAnimationFrameIdsRef = useRef<number[]>([]);
   const lastObservedRouteUrlRef = useRef(
@@ -193,19 +194,23 @@ export function useDesktopShellRouting({
     storeApi,
   });
 
-  const setNavOpen = useCallback(
-    (open: boolean, restoreToTrigger = false) => {
-      setShellChromeState((current) => ({
-        ...current,
-        navOpen: open,
-      }));
-      if (!open && restoreToTrigger) {
-        scheduleAnimationFrame(() => {
-          navTriggerRef.current?.focus();
-        });
-      }
+  const openWorkspaceColumn = useCallback(
+    (kind: ColumnKind, scope?: ColumnScope, entityId?: string, parentColumnId?: string) => {
+      const id = columnIdentityId(kind, scope, entityId);
+      setWorkspaceState((current) =>
+        current.activeColumnId === id
+          ? current
+          : openTransientColumn(current, {
+              id,
+              kind,
+              scope,
+              entityId,
+              parentColumnId,
+              pinned: false,
+            })
+      );
     },
-    [navTriggerRef, scheduleAnimationFrame, setShellChromeState]
+    [setWorkspaceState]
   );
 
   const setSettingsOpen = useCallback(
@@ -224,15 +229,6 @@ export function useDesktopShellRouting({
       });
     },
     [scheduleAnimationFrame, setShellChromeState, settingsTriggerRef, syncRoute]
-  );
-
-  const setPrimarySectionRef = useCallback(
-    (section: PrimarySection) => {
-      return (element: HTMLElement | null) => {
-        primarySectionRefs.current[section] = element;
-      };
-    },
-    [primarySectionRefs]
   );
 
   const openDirectMessagePane = useCallback(
@@ -257,11 +253,8 @@ export function useDesktopShellRouting({
         const nextSelectedAuthorPubkey = preserveSelectedAuthor
           ? options?.preservedAuthorPubkey ?? selectedAuthorPubkey
           : null;
-        setReplyTarget(null);
-        setRepostTarget(null);
         setSelectedThread(null);
         setFocusedObjectId(null);
-        setThread([]);
         if (!preserveSelectedAuthor) {
           setSelectedAuthorPubkey(null);
           setSelectedAuthor(null);
@@ -277,11 +270,13 @@ export function useDesktopShellRouting({
         setKnownAuthorsByPubkey((current) =>
           mergeKnownAuthors(current, [authorViewFromDirectMessageConversation(conversation)])
         );
-        setShellChromeState((current) => ({
-          ...current,
-          activePrimarySection: 'messages',
-          navOpen: false,
-        }));
+        const scope = activeWorkspaceScope(storeApi.getState().workspaceState);
+        openWorkspaceColumn(
+          'conversation',
+          scope,
+          peerPubkey,
+          storeApi.getState().workspaceState.activeColumnId
+        );
         setDirectMessagePaneOpen(true);
         setSelectedLiveSessionId(null);
         setSelectedGameRoomId(null);
@@ -324,8 +319,6 @@ export function useDesktopShellRouting({
       setDirectMessageStatusByPeer,
       setDirectMessageTimelineByPeer,
       setKnownAuthorsByPubkey,
-      setReplyTarget,
-      setRepostTarget,
       setSelectedAuthor,
       setSelectedAuthorPubkey,
       setSelectedAuthorTimeline,
@@ -334,8 +327,8 @@ export function useDesktopShellRouting({
       setSelectedLiveSessionId,
       setSelectedThread,
       setFocusedObjectId,
-      setShellChromeState,
-      setThread,
+      openWorkspaceColumn,
+      storeApi,
       syncRoute,
     ]
   );
@@ -365,7 +358,6 @@ export function useDesktopShellRouting({
           startTransition(() => {
             setSelectedThread(null);
             setFocusedObjectId(null);
-            setThread([]);
             setSelectedAuthorPubkey(null);
             setSelectedAuthor(null);
             setAuthorError(null);
@@ -389,21 +381,12 @@ export function useDesktopShellRouting({
           return;
         }
         startTransition(() => {
-          setActiveTopic(topic);
           if (hasChannelOverride) {
-            setSelectedChannelIdByTopic(setRecordEntry(topic, channelId));
             setTimelineScopeByTopic(setRecordEntry(topic, privateTimelineScope(channelId)));
             setComposeChannelByTopic(setRecordEntry(topic, privateComposeTarget(channelId)));
           }
-          setShellChromeState((current) => ({
-            ...current,
-            activePrimarySection: 'timeline',
-            timelineView: 'feed',
-            navOpen: false,
-          }));
           setSelectedThread(threadId);
           setFocusedObjectId(nextFocusedObjectId);
-          setThread(threadView.items);
           setThreadsById(setRecordEntry(threadId, threadView.items));
           setThreadNextCursorById(setRecordEntry(threadId, threadView.next_cursor ?? null));
           setSelectedAuthorPubkey(null);
@@ -416,6 +399,13 @@ export function useDesktopShellRouting({
           setSelectedGameRoomId(null);
           setError(null);
         });
+        const scope = { topicId: topic, channelId };
+        openWorkspaceColumn(
+          'thread',
+          scope,
+          threadId,
+          storeApi.getState().workspaceState.activeColumnId
+        );
         syncRoute(options?.historyMode ?? 'push', {
           activeTopic: topic,
           primarySection: 'timeline',
@@ -438,7 +428,6 @@ export function useDesktopShellRouting({
           startTransition(() => {
             setSelectedThread(null);
             setFocusedObjectId(null);
-            setThread([]);
             setSelectedAuthorPubkey(null);
             setSelectedAuthor(null);
             setAuthorError(null);
@@ -465,7 +454,6 @@ export function useDesktopShellRouting({
     [
       activeTopic,
       api,
-      setActiveTopic,
       setAuthorError,
       setComposeChannelByTopic,
       setDirectMessageError,
@@ -474,13 +462,12 @@ export function useDesktopShellRouting({
       setFocusedObjectId,
       setSelectedAuthor,
       setSelectedAuthorPubkey,
-      setSelectedChannelIdByTopic,
       setSelectedDirectMessagePeerPubkey,
       setSelectedGameRoomId,
       setSelectedLiveSessionId,
       setSelectedThread,
-      setShellChromeState,
-      setThread,
+      openWorkspaceColumn,
+      storeApi,
       setThreadsById,
       setThreadNextCursorById,
       setTimelineScopeByTopic,
@@ -514,7 +501,6 @@ export function useDesktopShellRouting({
         if (!options?.fromThread) {
           setSelectedThread(null);
           setFocusedObjectId(null);
-          setThread([]);
         }
         syncRoute(options?.historyMode ?? 'push', {
           primarySection: options?.preserveDirectMessageContext ? 'messages' : 'timeline',
@@ -526,6 +512,19 @@ export function useDesktopShellRouting({
             ? nextDirectMessagePeerPubkey
             : undefined,
         });
+        const currentState = storeApi.getState();
+        const scope = activeWorkspaceScope(currentState.workspaceState);
+        const parentColumnId = options?.fromThread && nextThreadId
+          ? columnIdentityId('thread', scope, nextThreadId)
+          : options?.preserveDirectMessageContext && nextDirectMessagePeerPubkey
+            ? columnIdentityId('conversation', scope, nextDirectMessagePeerPubkey)
+            : currentState.workspaceState.columns.find(
+                (column) =>
+                  column.kind === 'timeline' &&
+                  column.scope?.topicId === scope.topicId &&
+                  column.scope.channelId === scope.channelId
+              )?.id ?? currentState.workspaceState.activeColumnId;
+        openWorkspaceColumn('profile', scope, authorPubkey, parentColumnId);
       } catch (detailError) {
         const nextError =
           detailError instanceof Error
@@ -539,7 +538,6 @@ export function useDesktopShellRouting({
           if (!options?.fromThread) {
             setSelectedThread(null);
             setFocusedObjectId(null);
-            setThread([]);
           }
           syncRoute('replace', {
             primarySection: options?.preserveDirectMessageContext ? 'messages' : 'timeline',
@@ -568,37 +566,46 @@ export function useDesktopShellRouting({
       setSelectedDirectMessagePeerPubkey,
       setFocusedObjectId,
       setSelectedThread,
-      setThread,
+      openWorkspaceColumn,
+      storeApi,
       syncRoute,
       translate,
     ]
   );
 
   const focusPrimarySection = useCallback(
-    // options.timelineView: timeline section を focus する際に、focus 対象の Timeline Column の
-    // view を chrome projection と route の timelineView query に投影する(Issue #765)。
-    // 未指定なら従来どおり現在の chrome 値を維持する。
     (section: PrimarySection, options?: { timelineView?: TimelineWorkspaceView }) => {
+      const currentState = storeApi.getState();
+      const scope = activeWorkspaceScope(currentState.workspaceState);
+      const parentColumnId = currentState.workspaceState.activeColumnId;
+      const kindBySection: Record<PrimarySection, ColumnKind> = {
+        timeline: 'timeline',
+        explore: 'explore',
+        live: 'stream',
+        game: 'metaverse',
+        messages: 'messages',
+        profile: 'profile',
+        notifications: 'notifications',
+      };
+      const kind = kindBySection[section];
+      openWorkspaceColumn(kind, scope, undefined, section === 'timeline' ? undefined : parentColumnId);
+      if (section === 'timeline' && options?.timelineView) {
+        const columnId = columnIdentityId('timeline', scope);
+        setWorkspaceState((current) => setColumnTimelineView(current, columnId, options.timelineView!));
+      }
       setShellChromeState((current) => ({
         ...current,
-        activePrimarySection: section,
-        timelineView: options?.timelineView ?? current.timelineView,
         profileMode: section === 'profile' ? 'overview' : current.profileMode,
         profileConnectionsView: section === 'profile' ? 'following' : current.profileConnectionsView,
-        navOpen: false,
       }));
       setSelectedThread(null);
       setFocusedObjectId(null);
-      setThread([]);
       setSelectedAuthorPubkey(null);
       setSelectedAuthor(null);
       setAuthorError(null);
       setDirectMessagePaneOpen(section === 'messages');
       setSelectedDirectMessagePeerPubkey(null);
       setDirectMessageError(null);
-      scheduleAnimationFrame(() => {
-        primarySectionRefs.current[section]?.focus();
-      });
       syncRoute('push', {
         primarySection: section,
         focusedObjectId: null,
@@ -611,7 +618,7 @@ export function useDesktopShellRouting({
       });
     },
     [
-      primarySectionRefs,
+      openWorkspaceColumn,
       setAuthorError,
       setDirectMessageError,
       setDirectMessagePaneOpen,
@@ -621,8 +628,8 @@ export function useDesktopShellRouting({
       setSelectedDirectMessagePeerPubkey,
       setSelectedThread,
       setShellChromeState,
-      setThread,
-      scheduleAnimationFrame,
+      setWorkspaceState,
+      storeApi,
       syncRoute,
     ]
   );
@@ -653,18 +660,14 @@ export function useDesktopShellRouting({
 
   const focusTimelineView = useCallback(
     (view: TimelineWorkspaceView) => {
-      setShellChromeState((current) => ({
-        ...current,
-        activePrimarySection: 'timeline',
-        timelineView: view,
-        navOpen: false,
-      }));
+      const currentState = storeApi.getState();
+      const activeColumn = activeWorkspaceColumn(currentState.workspaceState);
+      if (activeColumn.kind === 'timeline') {
+        setWorkspaceState((current) => setColumnTimelineView(current, activeColumn.id, view));
+      }
       if (view === 'bookmarks') {
         setSelectedThread(null);
         setFocusedObjectId(null);
-        setThread([]);
-        setReplyTarget(null);
-        setRepostTarget(null);
         setSelectedAuthorPubkey(null);
         setSelectedAuthor(null);
         setSelectedAuthorTimeline([]);
@@ -673,9 +676,6 @@ export function useDesktopShellRouting({
         setSelectedDirectMessagePeerPubkey(null);
         setDirectMessageError(null);
       }
-      scheduleAnimationFrame(() => {
-        primarySectionRefs.current.timeline?.focus();
-      });
       syncRoute('push', {
         primarySection: 'timeline',
         timelineView: view,
@@ -686,45 +686,52 @@ export function useDesktopShellRouting({
       });
     },
     [
-      primarySectionRefs,
       setAuthorError,
       setDirectMessageError,
       setDirectMessagePaneOpen,
       setFocusedObjectId,
-      setReplyTarget,
-      setRepostTarget,
       setSelectedAuthor,
       setSelectedAuthorPubkey,
       setSelectedAuthorTimeline,
       setSelectedDirectMessagePeerPubkey,
       setSelectedThread,
-      setShellChromeState,
-      setThread,
-      scheduleAnimationFrame,
+      setWorkspaceState,
+      storeApi,
       syncRoute,
     ]
   );
 
   const closeAuthorPane = useCallback(() => {
+    const currentState = storeApi.getState();
+    const profileColumn = currentState.workspaceState.columns.find(
+      (column) =>
+        column.kind === 'profile' &&
+        column.entityId === currentState.selectedAuthorPubkey
+    );
     setSelectedAuthorPubkey(null);
     setSelectedAuthor(null);
     setSelectedAuthorTimeline([]);
     setAuthorError(null);
+    if (profileColumn && currentState.workspaceState.columns.length > 1) {
+      setWorkspaceState(closeColumn(currentState.workspaceState, profileColumn.id));
+    }
     syncRoute('replace', {
       selectedAuthorPubkey: null,
     });
-  }, [setAuthorError, setSelectedAuthor, setSelectedAuthorTimeline, setSelectedAuthorPubkey, syncRoute]);
+  }, [setAuthorError, setSelectedAuthor, setSelectedAuthorTimeline, setSelectedAuthorPubkey, setWorkspaceState, storeApi, syncRoute]);
 
   const closeThreadPane = useCallback(() => {
     setSelectedThread(null);
     setFocusedObjectId(null);
-    setThread([]);
-    setReplyTarget(null);
-    setRepostTarget(null);
     setSelectedAuthorPubkey(null);
     setSelectedAuthor(null);
     setSelectedAuthorTimeline([]);
     setAuthorError(null);
+    const currentState = storeApi.getState();
+    const activeColumn = activeWorkspaceColumn(currentState.workspaceState);
+    if (activeColumn.kind === 'thread' && currentState.workspaceState.columns.length > 1) {
+      setWorkspaceState(closeColumn(currentState.workspaceState, activeColumn.id));
+    }
     syncRoute('replace', {
       focusedObjectId: null,
       selectedThread: null,
@@ -733,32 +740,26 @@ export function useDesktopShellRouting({
   }, [
     setAuthorError,
     setFocusedObjectId,
-    setReplyTarget,
-    setRepostTarget,
     setSelectedAuthor,
     setSelectedAuthorPubkey,
     setSelectedAuthorTimeline,
     setSelectedThread,
-    setThread,
+    setWorkspaceState,
+    storeApi,
     syncRoute,
   ]);
 
   const openDirectMessageList = useCallback(
     (historyMode: 'push' | 'replace' = 'push') => {
-      setReplyTarget(null);
-      setRepostTarget(null);
       setSelectedThread(null);
       setFocusedObjectId(null);
-      setThread([]);
       setSelectedAuthorPubkey(null);
       setSelectedAuthor(null);
       setSelectedAuthorTimeline([]);
       setAuthorError(null);
-      setShellChromeState((current) => ({
-        ...current,
-        activePrimarySection: 'messages',
-        navOpen: false,
-      }));
+      const currentState = storeApi.getState();
+      const scope = activeWorkspaceScope(currentState.workspaceState);
+      openWorkspaceColumn('messages', scope, undefined, currentState.workspaceState.activeColumnId);
       setDirectMessagePaneOpen(true);
       setSelectedDirectMessagePeerPubkey(null);
       setDirectMessageError(null);
@@ -775,15 +776,13 @@ export function useDesktopShellRouting({
       setDirectMessageError,
       setDirectMessagePaneOpen,
       setFocusedObjectId,
-      setReplyTarget,
-      setRepostTarget,
       setSelectedAuthor,
       setSelectedAuthorPubkey,
       setSelectedAuthorTimeline,
       setSelectedDirectMessagePeerPubkey,
       setSelectedThread,
-      setShellChromeState,
-      setThread,
+      openWorkspaceColumn,
+      storeApi,
       syncRoute,
     ]
   );
@@ -791,7 +790,6 @@ export function useDesktopShellRouting({
   const openProfileOverview = useCallback(() => {
     setShellChromeState((current) => ({
       ...current,
-      activePrimarySection: 'profile',
       profileMode: 'overview',
     }));
     syncRoute('push', {
@@ -803,7 +801,6 @@ export function useDesktopShellRouting({
   const openProfileEditor = useCallback(() => {
     setShellChromeState((current) => ({
       ...current,
-      activePrimarySection: 'profile',
       profileMode: 'edit',
     }));
     syncRoute('push', {
@@ -816,7 +813,6 @@ export function useDesktopShellRouting({
     (view: ProfileConnectionsView = 'following') => {
       setShellChromeState((current) => ({
         ...current,
-        activePrimarySection: 'profile',
         profileMode: 'connections',
         profileConnectionsView: view,
       }));
@@ -859,10 +855,6 @@ export function useDesktopShellRouting({
         closeThreadPane();
         return;
       }
-      if (shellChromeState.navOpen) {
-        event.preventDefault();
-        setNavOpen(false, true);
-      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -874,35 +866,8 @@ export function useDesktopShellRouting({
     closeThreadPane,
     selectedAuthorPubkey,
     selectedThread,
-    setNavOpen,
     setSettingsOpen,
-    shellChromeState.navOpen,
     shellChromeState.settingsOpen,
-  ]);
-
-  useEffect(() => {
-    const shouldFocusSection = didSyncRouteSectionRef.current;
-    didSyncRouteSectionRef.current = true;
-    setShellChromeState((current) =>
-      current.activePrimarySection === routeSection
-        ? current
-        : {
-            ...current,
-            activePrimarySection: routeSection,
-          }
-    );
-    if (!shouldFocusSection) {
-      return;
-    }
-    scheduleAnimationFrame(() => {
-      primarySectionRefs.current[routeSection]?.focus();
-    });
-  }, [
-    didSyncRouteSectionRef,
-    primarySectionRefs,
-    routeSection,
-    scheduleAnimationFrame,
-    setShellChromeState,
   ]);
 
   useRouteSynchronization({
@@ -924,9 +889,7 @@ export function useDesktopShellRouting({
   return {
     routeSection,
     syncRoute,
-    setNavOpen,
     setSettingsOpen,
-    setPrimarySectionRef,
     focusPrimarySection,
     toggleNotificationsSection,
     focusTimelineView,

@@ -14,7 +14,6 @@ import {
 /// プライベートチャンネル(参加・作成・共有トークン)(WP-H6 PR3 のドメインスライス)。
 export type PrivateChannelSliceState = {
   joinedChannelsByTopic: Record<string, JoinedPrivateChannelView[]>;
-  selectedChannelIdByTopic: Record<string, string | null>;
   channelLabelInput: string;
   channelAudienceInput: ChannelAudienceOption['value'];
   inviteTokenInput: string;
@@ -28,7 +27,6 @@ export type PrivateChannelSliceState = {
 export function createInitialPrivateChannelSlice(): PrivateChannelSliceState {
   return {
     joinedChannelsByTopic: buildStarterTopicRecord(() => [] as JoinedPrivateChannelView[]),
-    selectedChannelIdByTopic: buildStarterTopicRecord(() => null as string | null),
     channelLabelInput: '',
     channelAudienceInput: 'invite_only',
     inviteTokenInput: '',

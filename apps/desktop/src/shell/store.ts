@@ -116,8 +116,8 @@ export function createInitialShellState(): DesktopShellState {
     ...createInitialChromeSlice(),
     ...createInitialColumnDraftsSlice(),
     ...createInitialWorkspaceSlice({
-      topicId: timeline.activeTopic,
-      channelId: privateChannels.selectedChannelIdByTopic[timeline.activeTopic] ?? null,
+      topicId: timeline.trackedTopics[0],
+      channelId: null,
     }),
   };
 }

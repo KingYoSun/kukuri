@@ -9,6 +9,7 @@ import {
   createDesktopShellStore,
   DesktopShellStoreContext,
 } from '@/shell/store';
+import { columnIdentityId, openTransientColumn } from '@/shell/slices/workspace';
 
 function setup() {
   const api = createDesktopMockApi();
@@ -36,8 +37,12 @@ describe('useDesktopShellSectionLoaders', () => {
     const listLiveSessions = vi.spyOn(api, 'listLiveSessions').mockResolvedValue([]);
     const listGameRooms = vi.spyOn(api, 'listGameRooms');
     store.setState((state) => ({
-      selectedChannelIdByTopic: { topic: 'channel-a' },
-      shellChromeState: { ...state.shellChromeState, activePrimarySection: 'live' },
+      workspaceState: openTransientColumn(state.workspaceState, {
+        id: columnIdentityId('stream', { topicId: 'topic', channelId: 'channel-a' }),
+        kind: 'stream',
+        scope: { topicId: 'topic', channelId: 'channel-a' },
+        pinned: false,
+      }),
     }));
 
     await act(async () => hook.result.current.loadShellSections('topic'));
@@ -46,7 +51,7 @@ describe('useDesktopShellSectionLoaders', () => {
       'topic',
       privateTimelineScope('channel-a')
     );
-    expect(store.getState().livePanelStateByTopic.topic).toEqual({
+    expect(store.getState().livePanelStateByScopeKey['topic::channel::channel-a']).toEqual({
       status: 'ready',
       error: null,
     });
@@ -59,7 +64,13 @@ describe('useDesktopShellSectionLoaders', () => {
     const status = await api.getDirectMessageStatus(peer);
     store.setState((state) => ({
       selectedDirectMessagePeerPubkey: peer,
-      shellChromeState: { ...state.shellChromeState, activePrimarySection: 'messages' },
+      workspaceState: openTransientColumn(state.workspaceState, {
+        id: columnIdentityId('conversation', { topicId: 'topic', channelId: null }, peer),
+        kind: 'conversation',
+        scope: { topicId: 'topic', channelId: null },
+        entityId: peer,
+        pinned: false,
+      }),
     }));
     vi.spyOn(api, 'listDirectMessages').mockResolvedValue([]);
     vi.spyOn(api, 'listDirectMessageMessages').mockRejectedValue(new Error('timeline failed'));
@@ -74,7 +85,12 @@ describe('useDesktopShellSectionLoaders', () => {
   test('uses the localized DM load fallback for a non-Error failure', async () => {
     const { api, hook, store } = setup();
     store.setState((state) => ({
-      shellChromeState: { ...state.shellChromeState, activePrimarySection: 'messages' },
+      workspaceState: openTransientColumn(state.workspaceState, {
+        id: columnIdentityId('messages', { topicId: 'topic', channelId: null }),
+        kind: 'messages',
+        scope: { topicId: 'topic', channelId: null },
+        pinned: false,
+      }),
     }));
     vi.spyOn(api, 'listDirectMessages').mockRejectedValue(null);
 

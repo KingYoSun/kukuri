@@ -38,10 +38,10 @@ test('timeline polling does not overlap refreshes while a refresh is in flight',
   const view = render(<App api={api} />);
 
   await vi.advanceTimersByTimeAsync(0);
-  expect(listTimelineSpy).toHaveBeenCalledTimes(2);
+  expect(listTimelineSpy).toHaveBeenCalledTimes(1);
 
   await vi.advanceTimersByTimeAsync(REFRESH_INTERVAL_MS * 3);
-  expect(listTimelineSpy).toHaveBeenCalledTimes(2);
+  expect(listTimelineSpy).toHaveBeenCalledTimes(1);
 
   const initialDeferreds = [...listTimelineDeferreds];
   for (const deferred of initialDeferreds) {
@@ -53,13 +53,13 @@ test('timeline polling does not overlap refreshes while a refresh is in flight',
 
   await Promise.resolve();
   await vi.advanceTimersByTimeAsync(0);
-  expect(listTimelineSpy).toHaveBeenCalledTimes(2);
+  expect(listTimelineSpy).toHaveBeenCalledTimes(1);
 
   await vi.advanceTimersByTimeAsync(REFRESH_INTERVAL_MS);
-  expect(listTimelineSpy).toHaveBeenCalledTimes(4);
+  expect(listTimelineSpy).toHaveBeenCalledTimes(2);
 
   await vi.advanceTimersByTimeAsync(REFRESH_INTERVAL_MS * 2);
-  expect(listTimelineSpy).toHaveBeenCalledTimes(4);
+  expect(listTimelineSpy).toHaveBeenCalledTimes(2);
 
   view.unmount();
 });

@@ -19,6 +19,7 @@ import {
 
 import type {
   ActionsBaseParams,
+  DerivedSetter,
   NavigationActions,
   Setter,
 } from './shared';
@@ -32,13 +33,12 @@ type MessageReactionSocialParams = ActionsBaseParams &
     trackedTopics: string[];
     clearAuxiliaryPanels: () => void;
     setTrackedTopics: Setter<'trackedTopics'>;
-    setActiveTopic: Setter<'activeTopic'>;
-    setSelectedChannelIdByTopic: Setter<'selectedChannelIdByTopic'>;
+    setActiveTopic: DerivedSetter<string>;
+    setSelectedChannelIdByTopic: DerivedSetter<Record<string, string | null>>;
     setTimelineScopeByTopic: Setter<'timelineScopeByTopic'>;
     setComposeChannelByTopic: Setter<'composeChannelByTopic'>;
     setTimelinesByKey: Setter<'timelinesByKey'>;
-    setPublicTimelinesByTopic: Setter<'publicTimelinesByTopic'>;
-    setThread: Setter<'thread'>;
+    setThreadsById: Setter<'threadsById'>;
     setProfileTimeline: Setter<'profileTimeline'>;
     setSelectedAuthorTimeline: Setter<'selectedAuthorTimeline'>;
     setKnownAuthorsByPubkey: Setter<'knownAuthorsByPubkey'>;
@@ -75,8 +75,7 @@ export function createMessageReactionSocialActions({
   setTimelineScopeByTopic,
   setComposeChannelByTopic,
   setTimelinesByKey,
-  setPublicTimelinesByTopic,
-  setThread,
+  setThreadsById,
   setProfileTimeline,
   setSelectedAuthorTimeline,
   setKnownAuthorsByPubkey,
@@ -126,9 +125,6 @@ export function createMessageReactionSocialActions({
       clearAuxiliaryPanels();
       setShellChromeState((current) => ({
         ...current,
-        activePrimarySection: 'timeline',
-        timelineView: 'feed',
-        navOpen: false,
       }));
       syncRoute('push', {
         primarySection: 'timeline',
@@ -158,9 +154,6 @@ export function createMessageReactionSocialActions({
     clearAuxiliaryPanels();
     setShellChromeState((current) => ({
       ...current,
-      activePrimarySection: 'timeline',
-      timelineView: 'feed',
-      navOpen: false,
     }));
 
     await loadTopics(nextTopics, targetTopic, threadTargetId);
@@ -194,7 +187,7 @@ export function createMessageReactionSocialActions({
         ])
       )
     );
-    setPublicTimelinesByTopic((current) =>
+    setThreadsById((current) =>
       Object.fromEntries(
         Object.entries(current).map(([topic, posts]) => [
           topic,
@@ -202,7 +195,6 @@ export function createMessageReactionSocialActions({
         ])
       )
     );
-    setThread((current) => patchReactionStateIntoPosts(current, reactionState));
     setProfileTimeline((current) => patchReactionStateIntoPosts(current, reactionState));
     setSelectedAuthorTimeline((current) => patchReactionStateIntoPosts(current, reactionState));
   }

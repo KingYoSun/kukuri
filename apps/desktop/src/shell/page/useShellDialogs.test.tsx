@@ -1,66 +1,47 @@
 import type { ReactNode } from 'react';
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { describe, expect, test, vi } from 'vitest';
-
-import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import { useShellDialogs } from '@/shell/page/useShellDialogs';
 import { createDesktopShellStore, DesktopShellStoreContext } from '@/shell/store';
 
 type DialogRouteProps = {
   activePrimarySection: 'timeline' | 'live' | 'game';
-  timelineView: 'feed' | 'bookmarks';
 };
 
 describe('useShellDialogs', () => {
-  test('applies section close rules and loads mention authors when compose opens', async () => {
+  test('applies live and game section close rules', () => {
     const store = createDesktopShellStore();
-    const api = createDesktopMockApi();
-    const listSocialConnections = vi.spyOn(api, 'listSocialConnections');
     const wrapper = ({ children }: { children: ReactNode }) => (
       <DesktopShellStoreContext.Provider value={store}>{children}</DesktopShellStoreContext.Provider>
     );
     const hook = renderHook(
-      ({ activePrimarySection, timelineView }: DialogRouteProps) =>
-        useShellDialogs({ activePrimarySection, api, timelineView }),
+      ({ activePrimarySection }: DialogRouteProps) => useShellDialogs({ activePrimarySection }),
       {
         initialProps: {
           activePrimarySection: 'timeline',
-          timelineView: 'feed',
         },
         wrapper,
       }
     );
 
-    act(() => hook.result.current.setComposeDialogOpen(true));
-    await waitFor(() =>
-      expect(listSocialConnections).toHaveBeenCalledWith('following')
-    );
-    hook.rerender({ activePrimarySection: 'timeline', timelineView: 'bookmarks' });
-    expect(hook.result.current.composeDialogOpen).toBe(false);
-
-    hook.rerender({ activePrimarySection: 'live', timelineView: 'feed' });
+    hook.rerender({ activePrimarySection: 'live' });
     act(() => hook.result.current.setLiveCreateDialogOpen(true));
-    hook.rerender({ activePrimarySection: 'game', timelineView: 'feed' });
+    hook.rerender({ activePrimarySection: 'game' });
     expect(hook.result.current.liveCreateDialogOpen).toBe(false);
 
     act(() => hook.result.current.setGameCreateDialogOpen(true));
-    hook.rerender({ activePrimarySection: 'timeline', timelineView: 'feed' });
+    hook.rerender({ activePrimarySection: 'timeline' });
     expect(hook.result.current.gameCreateDialogOpen).toBe(false);
   });
 
   test('owns pending leave state across confirm and cancel', async () => {
     const store = createDesktopShellStore();
-    const api = createDesktopMockApi();
     const wrapper = ({ children }: { children: ReactNode }) => (
       <DesktopShellStoreContext.Provider value={store}>{children}</DesktopShellStoreContext.Provider>
     );
     const hook = renderHook(
       () =>
-        useShellDialogs({
-          activePrimarySection: 'timeline',
-          api,
-          timelineView: 'feed',
-        }),
+        useShellDialogs({ activePrimarySection: 'timeline' }),
       { wrapper }
     );
     const leaveChannel = vi.fn().mockResolvedValue(undefined);

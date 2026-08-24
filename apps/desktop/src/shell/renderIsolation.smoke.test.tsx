@@ -19,9 +19,9 @@ const renderLog: string[] = [];
 const countRenders = (name: string) => renderLog.filter((entry) => entry === name).length;
 
 function UnrelatedProbe() {
-  const { composer } = useDesktopShellStore(useShallow((s) => ({ composer: s.composer })));
+  const { topicInput } = useDesktopShellStore(useShallow((s) => ({ topicInput: s.topicInput })));
   renderLog.push('unrelated');
-  return <div data-testid="unrelated">{composer}</div>;
+  return <div data-testid="unrelated">{topicInput}</div>;
 }
 
 function RelatedProbe() {

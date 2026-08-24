@@ -266,4 +266,29 @@ describe('workspace layout persistence', () => {
     store.getState().setField('workspaceState', fallback);
     expect(storage.setItem).toHaveBeenCalledTimes(1);
   });
+
+  it('persists the current workspace when startup changes it before subscription begins', () => {
+    const storage = memoryStorage();
+    const store = createDesktopShellStore({ workspaceStorage: storage });
+    store.getState().setField('workspaceState', (current) => ({
+      ...current,
+      columns: [
+        ...current.columns,
+        {
+          id: 'stream',
+          kind: 'stream',
+          pinned: false,
+          preferredDesktopSpan: 2,
+        },
+      ],
+      activeColumnId: 'stream',
+    }));
+
+    const unsubscribe = startWorkspaceLayoutPersistence(store, storage);
+
+    expect(readWorkspaceLayout(storage, createInitialWorkspaceState()).activeColumnId).toBe(
+      'stream'
+    );
+    unsubscribe();
+  });
 });

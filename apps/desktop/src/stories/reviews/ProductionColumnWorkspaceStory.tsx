@@ -4,6 +4,7 @@ import { DesktopShellPage } from '@/shell/DesktopShellPage';
 import {
   createDesktopShellStore,
   DesktopShellStoreContext,
+  timelineStorageKeyForChannel,
 } from '@/shell/store';
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import { DEVELOPER_MODE_STORAGE_KEY } from '@/lib/developerMode';
@@ -288,22 +289,7 @@ function createReviewStore({
     'explore-status': exploreColumnId,
     'scoped-drafts': friendsColumnId,
   };
-  const primarySectionByScenario = {
-    'wide-surfaces': 'game',
-    'activity-surfaces': 'notifications',
-    'explore-status': 'explore',
-    'scoped-drafts': 'timeline',
-  } as const;
   store.setState((current) => ({
-    activeTopic: DEMO_SCOPE.topicId,
-    selectedChannelIdByTopic: {
-      ...current.selectedChannelIdByTopic,
-      [DEMO_SCOPE.topicId]: scenario === 'scoped-drafts' ? FRIENDS_SCOPE.channelId : null,
-    },
-    shellChromeState: {
-      ...current.shellChromeState,
-      activePrimarySection: primarySectionByScenario[scenario],
-    },
     joinedChannelsByTopic: {
       ...current.joinedChannelsByTopic,
       [DEMO_SCOPE.topicId]: [REVIEW_CHANNEL],
@@ -314,13 +300,17 @@ function createReviewStore({
       controlCenterOpen: initialControlCenterOpen,
       columns: columnsByScenario[scenario],
     },
-    liveSessionsByTopic: {
-      ...current.liveSessionsByTopic,
-      [DEMO_SCOPE.topicId]: [REVIEW_LIVE_SESSION],
+    liveSessionsByScopeKey: {
+      ...current.liveSessionsByScopeKey,
+      [timelineStorageKeyForChannel(DEMO_SCOPE.topicId, DEMO_SCOPE.channelId)]: [
+        REVIEW_LIVE_SESSION,
+      ],
     },
-    gameRoomsByTopic: {
-      ...current.gameRoomsByTopic,
-      [DEMO_SCOPE.topicId]: [REVIEW_METAVERSE_ROOM],
+    gameRoomsByScopeKey: {
+      ...current.gameRoomsByScopeKey,
+      [timelineStorageKeyForChannel(DEMO_SCOPE.topicId, DEMO_SCOPE.channelId)]: [
+        REVIEW_METAVERSE_ROOM,
+      ],
     },
     selectedGameRoomId:
       scenario === 'wide-surfaces' ? REVIEW_METAVERSE_ROOM.room_id : current.selectedGameRoomId,

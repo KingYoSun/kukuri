@@ -42,8 +42,6 @@ type UseTimelineViewModelsArgs = {
   localProfile: DesktopShellState['localProfile'];
   mediaObjectUrls: DesktopShellState['mediaObjectUrls'];
   profileTimeline: PostView[];
-  replyTarget: PostView | null;
-  repostTarget: PostView | null;
   selectedAuthorTimeline: PostView[];
   thread: PostView[];
   unsupportedVideoManifests: DesktopShellState['unsupportedVideoManifests'];
@@ -59,8 +57,6 @@ export function useTimelineViewModels({
   localProfile,
   mediaObjectUrls,
   profileTimeline,
-  replyTarget,
-  repostTarget,
   selectedAuthorTimeline,
   thread,
   unsupportedVideoManifests,
@@ -328,15 +324,6 @@ export function useTimelineViewModels({
     threadPostViews: useMemo(
       () => thread.map((post) => buildPostCardView(post, 'thread')),
       [buildPostCardView, thread]
-    ),
-    composerSourcePreview: useMemo(
-      () =>
-        replyTarget
-          ? buildPostCardView(replyTarget, 'timeline')
-          : repostTarget
-            ? buildPostCardView(repostTarget, 'timeline')
-            : null,
-      [buildPostCardView, replyTarget, repostTarget]
     ),
   };
 }

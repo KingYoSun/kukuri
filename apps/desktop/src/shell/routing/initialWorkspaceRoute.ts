@@ -31,7 +31,7 @@ function baseRouteState(activeTopic: string): RouteState {
   };
 }
 
-function routeStateForColumn(column: ColumnState): RouteState | null {
+export function routeStateForColumn(column: ColumnState): RouteState | null {
   const topicId = column.scope?.topicId;
   if (!topicId) return null;
   const route = baseRouteState(topicId);

@@ -24,6 +24,8 @@ import type { JoinedPrivateChannelView, PostView } from '@/lib/api';
 import { useRouteSynchronization } from '@/shell/routing/useRouteSynchronization';
 import { createDesktopShellStore, type DesktopShellStoreApi } from '@/shell/store';
 import { resetWindowHash } from '@/shell/testSupport/renderShellHook';
+import { selectShellRoutingSlice } from '@/shell/storeSelectors';
+import { activeWorkspaceScope } from '@/shell/slices/workspace';
 
 const DM_PEER_PUBKEY = 'd'.repeat(64);
 
@@ -48,7 +50,7 @@ function createHookArgs(
     resolvedRouteLocation: { pathname: '/timeline', search: '?topic=kukuri%3Atopic%3Ademo' },
     routeSection: 'timeline',
     scheduleAnimationFrame: (callback: () => void) => callback(),
-    state: storeApi.getState(),
+    state: selectShellRoutingSlice(storeApi.getState()),
     storeApi,
     syncRoute: vi.fn(),
     ...overrides,
@@ -141,7 +143,7 @@ describe('useRouteSynchronization', () => {
 
       const view = renderHook(() => useRouteSynchronization(args));
 
-      expect(storeApi.getState().activeTopic).toBe('kukuri:topic:iroh');
+      expect(activeWorkspaceScope(storeApi.getState().workspaceState).topicId).toBe('kukuri:topic:iroh');
       expect(args.loadTopics).toHaveBeenCalledTimes(1);
       expect(args.loadTopics).toHaveBeenCalledWith(
         ['kukuri:topic:demo', 'kukuri:topic:iroh', 'kukuri:topic:nostr', 'kukuri:topic:operators'],
@@ -164,7 +166,7 @@ describe('useRouteSynchronization', () => {
 
       const view = renderHook(() => useRouteSynchronization(args));
 
-      expect(storeApi.getState().activeTopic).toBe('kukuri:topic:iroh');
+      expect(activeWorkspaceScope(storeApi.getState().workspaceState).topicId).toBe('kukuri:topic:iroh');
       // topic 切替(shouldReload)× context=thread の複合では loadTopics の第 3 引数に
       // requestedThreadId がそのまま渡る(useRouteSynchronization.ts L827-833)。
       expect(args.loadTopics).toHaveBeenCalledTimes(1);
@@ -197,7 +199,7 @@ describe('useRouteSynchronization', () => {
       const view = renderHook(() => useRouteSynchronization(args));
 
       // activeTopic は現状維持のまま、URL 側だけを replace で正規化する
-      expect(storeApi.getState().activeTopic).toBe('kukuri:topic:demo');
+      expect(activeWorkspaceScope(storeApi.getState().workspaceState).topicId).toBe('kukuri:topic:demo');
       expect(args.loadTopics).not.toHaveBeenCalled();
       expect(args.navigate).not.toHaveBeenCalled();
       expect(args.syncRoute).toHaveBeenCalledTimes(1);
@@ -245,7 +247,7 @@ describe('useRouteSynchronization', () => {
       // null であり、current===next===null のため map は書かれない
       // (useRouteSynchronization.ts L249-266)。実質的な normalize の固定は
       // 直後の syncRoute 引数 assert が担う。
-      expect(storeApi.getState().selectedChannelIdByTopic['kukuri:topic:demo']).toBeNull();
+      expect(activeWorkspaceScope(storeApi.getState().workspaceState).channelId).toBeNull();
       expect(args.loadTopics).not.toHaveBeenCalled();
       expect(args.syncRoute).toHaveBeenCalledTimes(1);
       // channel は落とされ public scope / public compose target へ正規化される
@@ -285,7 +287,7 @@ describe('useRouteSynchronization', () => {
       expect(args.syncRoute).not.toHaveBeenCalled();
       expect(args.navigate).not.toHaveBeenCalled();
       expect(args.loadTopics).not.toHaveBeenCalled();
-      expect(storeApi.getState().selectedChannelIdByTopic['kukuri:topic:demo']).toBeNull();
+      expect(activeWorkspaceScope(storeApi.getState().workspaceState).channelId).toBeNull();
       expect(storeApi.getState().timelineScopeByTopic['kukuri:topic:demo']).toEqual({
         kind: 'public',
       });
@@ -315,7 +317,7 @@ describe('useRouteSynchronization', () => {
       const view = renderHook(() => useRouteSynchronization(args));
 
       const state = storeApi.getState();
-      expect(state.selectedChannelIdByTopic['kukuri:topic:demo']).toBe('chan-1');
+      expect(activeWorkspaceScope(state.workspaceState).channelId).toBe('chan-1');
       expect(state.timelineScopeByTopic['kukuri:topic:demo']).toEqual({
         kind: 'channel',
         channel_id: 'chan-1',
@@ -363,10 +365,10 @@ describe('useRouteSynchronization', () => {
       act(() => {
         storeApi.getState().patchState({
           selectedThread: 'post-1',
-          thread: [buildPost({ object_id: 'post-1' })],
+          threadsById: { 'post-1': [buildPost({ object_id: 'post-1' })] },
         });
       });
-      view.rerender({ ...args, state: storeApi.getState() });
+      view.rerender({ ...args, state: selectShellRoutingSlice(storeApi.getState()) });
 
       // threadId が selectedThread と一致し thread が読み込み済みなら再オープンしない
       expect(args.openThread).toHaveBeenCalledTimes(1);

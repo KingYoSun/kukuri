@@ -16,6 +16,7 @@ export type ColumnDraftState = ColumnDraftTarget & {
   content: string;
   mediaItems: DraftMediaItem[];
   replyTarget: PostView | null;
+  repostTarget: PostView | null;
   expanded: boolean;
   error: string | null;
   pending: boolean;
@@ -48,6 +49,7 @@ export function createColumnDraft(target: ColumnDraftTarget): ColumnDraftState {
     content: '',
     mediaItems: [],
     replyTarget: null,
+    repostTarget: null,
     expanded: false,
     error: null,
     pending: false,
@@ -79,7 +81,9 @@ export function removeColumnDraft(
 }
 
 export function isColumnDraftDirty(draft: ColumnDraftState): boolean {
-  return Boolean(draft.content.trim() || draft.mediaItems.length > 0 || draft.replyTarget);
+  return Boolean(
+    draft.content.trim() || draft.mediaItems.length > 0 || draft.replyTarget || draft.repostTarget
+  );
 }
 
 export function createInitialColumnDraftsSlice(): ColumnDraftsSliceState {

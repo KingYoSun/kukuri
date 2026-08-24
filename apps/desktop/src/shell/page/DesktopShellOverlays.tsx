@@ -1,4 +1,3 @@
-import { ComposerPanel } from '@/components/core/ComposerPanel';
 import {
   PrivateChannelPanel,
   PrivateChannelSettingsPanel,
@@ -26,6 +25,7 @@ import {
 
 import { authorDisplayLabel } from '@/shell/presentation';
 import { useDesktopShellFieldSetter, useDesktopShellStore } from '@/shell/store';
+import { activeWorkspaceScope } from '@/shell/slices/workspace';
 import type { Translate } from '@/shell/actions/shared';
 import type { useShellDialogs } from '@/shell/page/useShellDialogs';
 import type { useSharePreview } from '@/shell/page/useSharePreview';
@@ -38,24 +38,18 @@ import type { CommunityIndexingTarget } from '@/components/core/CommunityIndexin
 type ViewModels = ReturnType<typeof useDesktopShellViewModels>;
 type OverlayActions = Pick<
   ReturnType<typeof useDesktopShellActions>,
-  | 'clearReply'
-  | 'clearRepost'
-  | 'handleAttachmentSelection'
   | 'handleCreateGameRoom'
   | 'handleCreateLiveSession'
   | 'handleCreatePrivateChannel'
   | 'handleJoinChannelAccess'
   | 'handleLeavePrivateChannel'
   | 'handleProfileAvatarFile'
-  | 'handlePublish'
-  | 'handleRemoveDraftAttachment'
   | 'handleShareChannelAccess'
 >;
 type ShellDialogs = Pick<
   ReturnType<typeof useShellDialogs>,
   | 'channelDialogOpen'
   | 'channelSettingsDialogOpen'
-  | 'composeDialogOpen'
   | 'confirmLeaveChannel'
   | 'gameCreateDialogOpen'
   | 'leaveChannelDialogOpen'
@@ -64,7 +58,6 @@ type ShellDialogs = Pick<
   | 'profileAvatarCropOpen'
   | 'setChannelDialogOpen'
   | 'setChannelSettingsDialogOpen'
-  | 'setComposeDialogOpen'
   | 'setGameCreateDialogOpen'
   | 'setLeaveChannelDialogOpen'
   | 'setLiveCreateDialogOpen'
@@ -92,10 +85,7 @@ type DesktopShellOverlaysProps = {
     | 'activeComposeAudienceLabel'
     | 'activeChannelPanelState'
     | 'channelAudienceOptions'
-    | 'composerDraftViews'
-    | 'composerSourcePreview'
     | 'activePrivateChannel'
-    | 'mentionCandidates'
   >;
   handleCopyInternalLink: (link: string) => void;
   sharePreview: SharePreview;
@@ -138,22 +128,16 @@ export function DesktopShellOverlays({
   onRequestPrivateIndexing,
 }: DesktopShellOverlaysProps) {
   const {
-    clearReply,
-    clearRepost,
-    handleAttachmentSelection,
     handleCreateGameRoom,
     handleCreateLiveSession,
     handleCreatePrivateChannel,
     handleJoinChannelAccess,
     handleProfileAvatarFile,
-    handlePublish,
-    handleRemoveDraftAttachment,
     handleShareChannelAccess,
   } = actions;
   const {
     channelDialogOpen,
     channelSettingsDialogOpen,
-    composeDialogOpen,
     gameCreateDialogOpen,
     leaveChannelDialogOpen,
     liveCreateDialogOpen,
@@ -161,7 +145,6 @@ export function DesktopShellOverlays({
     profileAvatarCropOpen,
     setChannelDialogOpen,
     setChannelSettingsDialogOpen,
-    setComposeDialogOpen,
     setGameCreateDialogOpen,
     setLeaveChannelDialogOpen,
     setLiveCreateDialogOpen,
@@ -182,20 +165,14 @@ export function DesktopShellOverlays({
     activeComposeAudienceLabel,
     activeChannelPanelState,
     channelAudienceOptions,
-    composerDraftViews,
-    composerSourcePreview,
     activePrivateChannel,
-    mentionCandidates,
   } = viewModels;
   const {
     activeTopic,
-    attachmentInputKey,
     channelActionPending,
     channelAudienceInput,
     channelError,
     channelLabelInput,
-    composer,
-    composerError,
     gameCreatePending,
     gameDescription,
     gameError,
@@ -210,19 +187,14 @@ export function DesktopShellOverlays({
     liveDescription,
     liveError,
     liveTitle,
-    replyTarget,
-    repostTarget,
     syncStatus,
   } = useDesktopShellStore(
     useShallow((s) => ({
-      activeTopic: s.activeTopic,
-      attachmentInputKey: s.attachmentInputKey,
+      activeTopic: activeWorkspaceScope(s.workspaceState).topicId,
       channelActionPending: s.channelActionPending,
       channelAudienceInput: s.channelAudienceInput,
       channelError: s.channelError,
       channelLabelInput: s.channelLabelInput,
-      composer: s.composer,
-      composerError: s.composerError,
       gameCreatePending: s.gameCreatePending,
       gameDescription: s.gameDescription,
       gameError: s.gameError,
@@ -237,15 +209,12 @@ export function DesktopShellOverlays({
       liveDescription: s.liveDescription,
       liveError: s.liveError,
       liveTitle: s.liveTitle,
-      replyTarget: s.replyTarget,
-      repostTarget: s.repostTarget,
       syncStatus: s.syncStatus,
     }))
   );
   const setChannelLabelInput = useDesktopShellFieldSetter('channelLabelInput');
   const setChannelAudienceInput = useDesktopShellFieldSetter('channelAudienceInput');
   const setInviteTokenInput = useDesktopShellFieldSetter('inviteTokenInput');
-  const setComposer = useDesktopShellFieldSetter('composer');
   const setLiveTitle = useDesktopShellFieldSetter('liveTitle');
   const setLiveDescription = useDesktopShellFieldSetter('liveDescription');
   const setGameTitle = useDesktopShellFieldSetter('gameTitle');
@@ -445,64 +414,6 @@ export function DesktopShellOverlays({
                 {shareImportPending ? t('common:actions.join') : t('channels:previewDialog.import')}
               </Button>
             </div>
-          </DialogBody>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={composeDialogOpen} onOpenChange={setComposeDialogOpen}>
-        <DialogContent className='shell-compose-dialog'>
-          <DialogHeader>
-            <DialogTitle>
-              {replyTarget
-                ? t('common:actions.reply')
-                : repostTarget
-                  ? t('common:actions.quoteRepost')
-                  : t('common:actions.publish')}
-            </DialogTitle>
-            <DialogDescription>
-              {t('common:labels.audience')}: {activeComposeAudienceLabel}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogBody>
-            <ComposerPanel
-              value={composer}
-              onChange={(event) => setComposer(event.target.value)}
-              onValueChange={setComposer}
-              mentionCandidates={mentionCandidates}
-              onSubmit={(event) => void handlePublish(event)}
-              attachmentInputKey={attachmentInputKey}
-              onAttachmentSelection={(event) => {
-                void handleAttachmentSelection(event);
-              }}
-              draftMediaItems={composerDraftViews}
-              onRemoveDraftAttachment={handleRemoveDraftAttachment}
-              composerError={composerError}
-              audienceLabel={activeComposeAudienceLabel}
-              sourcePreview={composerSourcePreview}
-              replyTarget={
-                replyTarget
-                  ? {
-                      content: replyTarget.content,
-                      audienceLabel: replyTarget.audience_label,
-                    }
-                  : null
-              }
-              repostTarget={
-                repostTarget
-                  ? {
-                      content: repostTarget.content,
-                      authorLabel: authorDisplayLabel(
-                        repostTarget.author_pubkey,
-                        repostTarget.author_display_name,
-                        repostTarget.author_name
-                      ),
-                    }
-                  : null
-              }
-              onClearReply={clearReply}
-              onClearRepost={clearRepost}
-              attachmentsDisabled={Boolean(repostTarget)}
-            />
           </DialogBody>
         </DialogContent>
       </Dialog>

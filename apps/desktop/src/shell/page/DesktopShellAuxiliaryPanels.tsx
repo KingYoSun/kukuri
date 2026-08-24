@@ -28,6 +28,7 @@ import { type InternalSmartReference } from '@/lib/internalLinks';
 import { eligibleTrustRelationNodes } from '@/lib/api/communityIndex';
 import { copyTextToClipboard } from '@/lib/utils';
 import { useDesktopShellFieldSetter, useDesktopShellStore } from '@/shell/store';
+import { activeWorkspaceScope } from '@/shell/slices/workspace';
 import {
   authorDisplayLabel,
   authorViewFromDirectMessageConversation,
@@ -634,9 +635,9 @@ export type DesktopShellDetailSurfaceStackProps = {
   openAuthorDetail: OpenAuthorDetail;
   openDirectMessagePane: OpenDirectMessagePane;
   openThread: OpenThread;
-  beginReply: (post: PostView) => void;
+  beginColumnReply: (post: PostView) => void;
   handleSimpleRepost: (post: PostView) => Promise<void>;
-  beginQuoteRepost: (post: PostView) => void;
+  beginColumnQuoteRepost: (post: PostView) => void;
   handleRetryLocalPost: (post: PostView) => void;
   handleRestoreLocalPost: (post: PostView) => void;
   handleToggleReaction: (post: PostView, reactionKey: ReactionKeyInput) => Promise<void>;
@@ -663,9 +664,9 @@ export function DesktopShellDetailSurfaceStack({
   openAuthorDetail,
   openDirectMessagePane,
   openThread,
-  beginReply,
+  beginColumnReply,
   handleSimpleRepost,
-  beginQuoteRepost,
+  beginColumnQuoteRepost,
   handleRetryLocalPost,
   handleRestoreLocalPost,
   handleToggleReaction,
@@ -699,11 +700,10 @@ export function DesktopShellDetailSurfaceStack({
     syncStatus,
     threadLoadingMoreById,
     threadNextCursorById,
-    thread,
     threadsById,
   } = useDesktopShellStore(
     useShallow((s) => ({
-      activeTopic: s.activeTopic,
+      activeTopic: activeWorkspaceScope(s.workspaceState).topicId,
       bookmarkedReactionAssets: s.bookmarkedReactionAssets,
       communityNodeConfig: s.communityNodeConfig,
       communityNodeManifests: s.communityNodeManifests,
@@ -721,7 +721,6 @@ export function DesktopShellDetailSurfaceStack({
       syncStatus: s.syncStatus,
       threadLoadingMoreById: s.threadLoadingMoreById,
       threadNextCursorById: s.threadNextCursorById,
-      thread: s.thread,
       threadsById: s.threadsById,
     }))
   );
@@ -737,12 +736,10 @@ export function DesktopShellDetailSurfaceStack({
     : false;
   const effectiveThreadPostViews = useMemo(
     () => {
-      const posts = effectiveThreadId
-        ? threadsById[effectiveThreadId] ?? (effectiveThreadId === selectedThread ? thread : [])
-        : [];
+      const posts = effectiveThreadId ? threadsById[effectiveThreadId] ?? [] : [];
       return posts.map((post) => viewModels.buildPostCardView(post, 'thread'));
     },
-    [effectiveThreadId, selectedThread, thread, threadsById, viewModels]
+    [effectiveThreadId, threadsById, viewModels]
   );
   const effectiveAuthor = effectiveAuthorPubkey
     ? knownAuthorsByPubkey[effectiveAuthorPubkey] ??
@@ -830,9 +827,9 @@ export function DesktopShellDetailSurfaceStack({
       }
       onOpenThread={(threadId) => void openThread(threadId)}
       onOpenThreadInTopic={(threadId, topicId) => void openThread(threadId, { topic: topicId })}
-      onReply={beginReply}
+      onReply={beginColumnReply}
       onRepost={(post) => void handleSimpleRepost(post)}
-      onQuoteRepost={beginQuoteRepost}
+      onQuoteRepost={beginColumnQuoteRepost}
       onRetryLocalPost={handleRetryLocalPost}
       onRestoreLocalPost={handleRestoreLocalPost}
       localAuthorPubkey={syncStatus.local_author_pubkey}
@@ -881,7 +878,7 @@ export function DesktopShellDetailSurfaceStack({
           onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
           onOpenThread={(threadId) => void openThread(threadId)}
           onOpenThreadInTopic={(threadId, topicId) => void openThread(threadId, { topic: topicId })}
-          onReply={beginReply}
+          onReply={beginColumnReply}
           readOnly={true}
           onOpenOriginalTopic={(topicId) => void handleOpenOriginalTopic(topicId)}
           onActivateReference={(reference) => void handleActivateReference(reference)}
