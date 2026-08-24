@@ -16,8 +16,9 @@ use kukuri_cn_protocol::{
     AUTH_CHALLENGE_PATH, AUTH_VERIFY_PATH, BOOTSTRAP_HEARTBEAT_PATH, BOOTSTRAP_NODES_PATH,
     CONSENTS_PATH, CONSENTS_STATUS_PATH, INDEX_DISCOVERY_PATH, INDEX_RECOMMENDATIONS_PATH,
     INDEX_SEARCH_PATH, INDEXING_REQUESTS_PATH, NODE_MANIFEST_PATH, RELATION_NEIGHBORS_PATH,
-    RELATION_OPTOUT_PATH, RELATION_USERS_ROUTE, REPORT_PATH, TOPIC_RENDEZVOUS_HEARTBEAT_PATH,
-    TRUST_USERS_ROUTE,
+    RELATION_OPTOUT_PATH, RELATION_USERS_ROUTE, REPORT_PATH, RIGHTS_REQUEST_CREATE_PATH,
+    RIGHTS_REQUEST_FORM_PATH, RIGHTS_REQUEST_SCOPE_PATH, RIGHTS_REQUEST_STATUS_PATH,
+    RIGHTS_REQUEST_WITHDRAW_PATH, TOPIC_RENDEZVOUS_HEARTBEAT_PATH, TRUST_USERS_ROUTE,
 };
 use serde_json::{Value, json};
 use tower_http::trace::TraceLayer;
@@ -33,6 +34,11 @@ use crate::handlers::indexing::{
     index_discovery, index_recommendations, index_search, submit_indexing_request,
 };
 use crate::handlers::reports::submit_report;
+use crate::handlers::rights_requests::{
+    rights_request_form, rights_request_scope, rights_request_status, rights_request_status_form,
+    rights_request_status_form_submit, submit_rights_request, submit_rights_request_form,
+    withdraw_rights_request_form_submit, withdraw_rights_request_handler,
+};
 use crate::handlers::transmission_prevention::transmission_prevention_status;
 use crate::handlers::trust_relation::{
     relation_neighbors, relation_optout_clear, relation_optout_get, relation_optout_set,
@@ -59,6 +65,25 @@ pub fn app_router(state: UserApiState) -> Router {
             post(topic_rendezvous_heartbeat),
         )
         .route(REPORT_PATH, post(submit_report))
+        .route(RIGHTS_REQUEST_SCOPE_PATH, get(rights_request_scope))
+        .route(RIGHTS_REQUEST_CREATE_PATH, post(submit_rights_request))
+        .route(RIGHTS_REQUEST_STATUS_PATH, post(rights_request_status))
+        .route(
+            RIGHTS_REQUEST_WITHDRAW_PATH,
+            post(withdraw_rights_request_handler),
+        )
+        .route(
+            RIGHTS_REQUEST_FORM_PATH,
+            get(rights_request_form).post(submit_rights_request_form),
+        )
+        .route(
+            "/rights-requests/status",
+            get(rights_request_status_form).post(rights_request_status_form_submit),
+        )
+        .route(
+            "/rights-requests/withdraw",
+            post(withdraw_rights_request_form_submit),
+        )
         .route(INDEXING_REQUESTS_PATH, post(submit_indexing_request))
         .route(INDEX_SEARCH_PATH, get(index_search))
         .route(INDEX_DISCOVERY_PATH, get(index_discovery))
@@ -102,6 +127,10 @@ pub fn manifest_routes(
         .route("/moderation-policy", get(moderation_policy))
         .route("/abuse-policy", get(abuse_policy))
         .route("/data-retention", get(data_retention))
+        .route(
+            "/rights-infringement-policy",
+            get(rights_infringement_policy),
+        )
         .with_state(ManifestState {
             manifest,
             public_disclosures,
@@ -130,6 +159,10 @@ async fn abuse_policy(State(state): State<ManifestState>) -> Response {
 
 async fn data_retention(State(state): State<ManifestState>) -> Response {
     disclosure_response(&state, "data-retention-policy.md")
+}
+
+async fn rights_infringement_policy(State(state): State<ManifestState>) -> Response {
+    disclosure_response(&state, "rights-infringement-policy.md")
 }
 
 fn disclosure_response(state: &ManifestState, filename: &str) -> Response {

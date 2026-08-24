@@ -187,7 +187,11 @@ export type CommunityNodeManifest = { node_id: string, node_name: string, node_r
  * node が公開する通報受付 endpoint(#310)。未公開の場合は空文字。
  * client は空なら `abuse_contact` を mailto / copyable contact として案内する。
  */
-report_endpoint: string, terms_url: string, privacy_url: string, moderation_policy_url: string, };
+report_endpoint: string, 
+/**
+ * node が公開する権利侵害申出画面。未公開の場合は空文字。
+ */
+rights_request_url?: string | null, rights_request_policy_url?: string | null, rights_request_initial_response_target_days?: number | null, terms_url: string, privacy_url: string, moderation_policy_url: string, };
 
 export type CommunityNodeManifestFetchStatus = "ok" | "absent";
 

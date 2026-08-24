@@ -48,6 +48,9 @@ function manifest(overrides: Partial<CommunityNodeManifest> = {}): CommunityNode
     },
     abuse_contact: 'abuse@node.example',
     report_endpoint: 'https://node.example/v1/report',
+    rights_request_url: 'https://node.example/rights-requests/new',
+    rights_request_policy_url: 'https://node.example/rights-infringement-policy',
+    rights_request_initial_response_target_days: 7,
     terms_url: 'https://node.example/terms',
     privacy_url: '',
     moderation_policy_url: '',
@@ -157,6 +160,8 @@ describe('manifestToReportTarget', () => {
       nodeId: 'node-1',
       capability: 'community_index',
       reportEndpoint: 'https://node.example/v1/report',
+      rightsRequestUrl: 'https://node.example/rights-requests/new',
+      rightsRequestPolicyUrl: 'https://node.example/rights-infringement-policy',
       abuseContact: 'abuse@node.example',
       policyUrl: 'https://node.example/terms',
       authorityScope: [
@@ -178,8 +183,13 @@ describe('manifestToReportTarget', () => {
     expect(target?.policyUrl).toBe('https://node.example/moderation');
   });
 
-  it('returns null when the node has neither endpoint nor abuse contact', () => {
-    const m = manifest({ report_endpoint: '', abuse_contact: '' });
+  it('returns null when the node has neither report contact nor rights-request intake', () => {
+    const m = manifest({
+      report_endpoint: '',
+      abuse_contact: '',
+      rights_request_url: '',
+      rights_request_policy_url: '',
+    });
     expect(manifestToReportTarget('https://node.example', m, 'community_index')).toBeNull();
   });
 

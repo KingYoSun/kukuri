@@ -18,6 +18,7 @@ pub mod paths;
 pub mod rendezvous;
 pub mod report;
 pub mod requests;
+pub mod rights_request;
 pub mod trust_relation;
 
 pub use auth::*;
@@ -30,4 +31,5 @@ pub use paths::*;
 pub use rendezvous::*;
 pub use report::*;
 pub use requests::*;
+pub use rights_request::*;
 pub use trust_relation::*;

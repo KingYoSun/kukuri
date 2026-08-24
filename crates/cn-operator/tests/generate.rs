@@ -123,6 +123,45 @@ fn report_endpoint_absent_when_capability_disabled() {
 }
 
 #[test]
+fn rights_request_endpoint_publishes_dedicated_intake_and_scope_policy() {
+    let yaml = format!(
+        "{}\nmanifest:\n  rights_request_initial_response_target_days: 5\n",
+        base_config("  rights_request_endpoint: true\n", true)
+    );
+    let resolved = load_and_validate(&yaml).unwrap();
+    let manifest = build_manifest(&resolved);
+
+    assert_eq!(
+        manifest.rights_request_url,
+        "https://example-kukuri.net/rights-requests/new"
+    );
+    assert_eq!(
+        manifest.rights_request_policy_url,
+        "https://example-kukuri.net/rights-infringement-policy"
+    );
+    assert_eq!(manifest.rights_request_initial_response_target_days, 5);
+    assert!(manifest.capabilities.rights_request_endpoint);
+    assert!(
+        manifest
+            .capability_scope
+            .available_enabled
+            .iter()
+            .any(|capability| capability == "rights_request_endpoint")
+    );
+}
+
+#[test]
+fn rights_request_endpoint_is_opt_in() {
+    let resolved =
+        load_and_validate("server:\n  domain: d.net\n  operator_name: Op\n  country: JP\n")
+            .unwrap();
+    let manifest = build_manifest(&resolved);
+    assert_eq!(manifest.rights_request_url, "");
+    assert_eq!(manifest.rights_request_policy_url, "");
+    assert_eq!(manifest.rights_request_initial_response_target_days, 7);
+}
+
+#[test]
 fn manifest_has_authority_scope_and_p2p_boundary() {
     let resolved = load_and_validate(SAMPLE_CONFIG).unwrap();
     let m = manifest_value(&resolved);

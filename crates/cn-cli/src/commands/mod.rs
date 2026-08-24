@@ -11,6 +11,7 @@ mod readiness;
 mod readiness_runtime;
 mod relation;
 mod reports;
+mod rights_requests;
 mod transmission_prevention;
 
 pub(crate) async fn dispatch(pool: &PgPool, command: Command) -> Result<()> {
@@ -36,6 +37,7 @@ pub(crate) async fn dispatch(pool: &PgPool, command: Command) -> Result<()> {
             .await
         }
         Command::Reports { action } => reports::run(pool, action).await,
+        Command::RightsRequests { action } => rights_requests::run(pool, action).await,
         Command::Admission { action } => admission::run(pool, action).await,
         Command::SupportedTopic { action } => indexing::run_supported_topic(pool, action).await,
         Command::IndexingRequest { action } => indexing::run_indexing_request(pool, action).await,

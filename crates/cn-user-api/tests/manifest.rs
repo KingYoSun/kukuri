@@ -56,6 +56,7 @@ async fn disclosure_urls_serve_markdown_from_operator_config_output() -> Result<
         "/moderation-policy",
         "/abuse-policy",
         "/data-retention",
+        "/rights-infringement-policy",
     ] {
         let response = client.get(format!("{base_url}{path}")).send().await?;
         assert_eq!(response.status(), StatusCode::OK, "path {path}");

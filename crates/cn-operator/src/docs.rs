@@ -553,6 +553,61 @@ fn gen_abuse_policy(config: &ResolvedConfig) -> String {
     s
 }
 
+fn gen_rights_infringement_policy(config: &ResolvedConfig) -> String {
+    let mut s = header(config, "権利侵害申出ポリシー（ドラフト）");
+    let _ = writeln!(s, "\n## 申出前に確認する対応範囲\n");
+    let _ = writeln!(
+        s,
+        "本ノードが実行できるのは、本ノード自身が提供する索引・検索・発見・推薦・moderation・\
+         blob cache のうち有効な機能に対する node-local な措置だけです。対象と本ノードの関与を\
+         確認できない場合は追加情報をお願いし、authority 外の申出は範囲外として回答します。\n"
+    );
+    let _ = writeln!(s, "## 本ノードでは実行できないこと\n");
+    for item in [
+        "他の Community Node の索引・cache の削除",
+        "第三者端末または source peer のデータ削除",
+        "author-owned replica にある投稿正本の削除",
+        "Direct P2P の遮断",
+        "暗号化 relay packet の内容検査または遮断",
+        "既に取得されたデータの回収",
+    ] {
+        let _ = writeln!(s, "- {item}");
+    }
+    let _ = writeln!(
+        s,
+        "\n申出の受付は権利侵害の認定や希望する措置を保証するものではありません。申出画面では、\
+         この範囲を版付きで表示し、明示的な同意がなければ送信できません。\n"
+    );
+    let _ = writeln!(s, "## 受付情報と証拠\n");
+    let _ = writeln!(
+        s,
+        "申出人区分、氏名・連絡先、代理権、権利根拠、対象、侵害態様、許諾していない旨、\
+         希望する node-local 措置を受け取ります。証拠は URL・hash・外部識別子だけを受け取り、\
+         ファイル upload や対象コンテンツの複製は行いません。申出情報は local-only とし、\
+         公開 status に申出人情報・operator・内部メモを表示しません。\n"
+    );
+    let _ = writeln!(s, "## 応答と追跡\n");
+    let _ = writeln!(
+        s,
+        "初回応答は {} 日以内を運用目標とします。これは法定期限ではなく、回答時期や措置を保証しません。\
+         受付時に発行される参照 ID と一度だけ表示される追跡 secret で、公開可能な状態を確認・取下げできます。\n",
+        config
+            .raw
+            .manifest
+            .rights_request_initial_response_target_days
+    );
+    if config.enabled(Capability::RightsRequestEndpoint) {
+        let _ = writeln!(s, "- 申出画面: {}", config.rights_request_url());
+    } else {
+        let _ = writeln!(
+            s,
+            "本ノードでは現在、専用の権利侵害申出受付を有効にしていません。"
+        );
+    }
+    s.push_str(&planned_section(config));
+    s
+}
+
 fn gen_moderation_policy(config: &ResolvedConfig) -> String {
     let mut s = header(config, "モデレーションポリシー（ドラフト）");
     let _ = writeln!(s, "\n## authority scope\n");
@@ -863,6 +918,10 @@ pub fn generate_all(config: &ResolvedConfig) -> Vec<GeneratedFile> {
         GeneratedFile {
             filename: "abuse-policy.md".to_string(),
             content: gen_abuse_policy(config),
+        },
+        GeneratedFile {
+            filename: "rights-infringement-policy.md".to_string(),
+            content: gen_rights_infringement_policy(config),
         },
         GeneratedFile {
             filename: "moderation-policy.md".to_string(),

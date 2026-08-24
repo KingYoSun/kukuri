@@ -354,6 +354,7 @@ fn load_manifest(path: Option<&std::path::Path>) -> Result<LoadedManifest> {
                     | "moderation-policy.md"
                     | "abuse-policy.md"
                     | "data-retention-policy.md"
+                    | "rights-infringement-policy.md"
             )
         })
         .map(|file| (file.filename, file.content))
@@ -400,6 +401,7 @@ mod tests {
             "moderation-policy.md",
             "abuse-policy.md",
             "data-retention-policy.md",
+            "rights-infringement-policy.md",
         ] {
             assert!(
                 loaded.public_disclosures.contains_key(filename),

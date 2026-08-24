@@ -249,6 +249,22 @@ impl Capability {
                 small_scale_tips: "完全な ticketing system は不要。`cn-cli reports list/show` で確認できれば十分。",
                 how_to_reduce: "`features.report_endpoint: false` で無効化できる。無効時は abuse contact が窓口になる。",
             },
+            Capability::RightsRequestEndpoint => CapabilityRiskPractices {
+                user_expectation: "申請前に本ノードが実行できる措置と authority 外の範囲を確認し、申出後の状態を追跡できること。",
+                authority_scope: "本ノードの索引・検索・発見・推薦・moderation・blob cache に適用可能な node-local 措置のみ。",
+                responsibility_boundary: "他ノード、第三者端末、投稿正本、Direct P2P、暗号化 relay packet、既取得データには強制力を持たない。",
+                risks: &[
+                    "申出人の個人情報、代理権、権利主張、証拠参照を取り扱う。",
+                    "対応範囲の説明が不十分だと、network-wide な削除が可能だという誤解を招く。",
+                ],
+                recommended_practices: &[
+                    "版付き scope と明示同意を受付前に検証し、client の申告とは独立に対象 scope を判定する。",
+                    "証拠は URL・hash・識別子だけを受け取り、ファイルや対象内容を複製しない。",
+                    "状態遷移と送信防止を append-only event と operator audit に記録する。",
+                ],
+                small_scale_tips: "初回応答の現実的な運用目標を設定し、専用 CLI と公開 status で小さく運用できる。",
+                how_to_reduce: "`features.rights_request_endpoint: false`（既定）で無効化できる。無効時は専用 URL を公開しない。",
+            },
         }
     }
 }

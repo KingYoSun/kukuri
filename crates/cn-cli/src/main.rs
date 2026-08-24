@@ -40,6 +40,11 @@ enum Command {
         #[command(subcommand)]
         action: ReportsAction,
     },
+    /// 権利侵害申出を確認し、状態遷移または node-local 措置を実行する（#760）。
+    RightsRequests {
+        #[command(subcommand)]
+        action: RightsRequestsAction,
+    },
     /// 入会制御（招待 / whitelist / ban）を運用する（#383）。
     Admission {
         #[command(subcommand)]
@@ -129,6 +134,58 @@ enum TransmissionPreventionAction {
         #[arg(long)]
         subject_id: String,
     },
+}
+
+#[derive(Debug, Subcommand)]
+enum RightsRequestsAction {
+    List {
+        #[arg(long, default_value_t = 50)]
+        limit: i64,
+        #[arg(long, default_value_t = 0)]
+        offset: i64,
+    },
+    Show {
+        #[arg(long)]
+        id: String,
+    },
+    Transition {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        expected_version: i32,
+        #[arg(long)]
+        actor: String,
+        #[arg(long, value_enum)]
+        status: RightsRequestStatusArg,
+        #[arg(long)]
+        public_message: Option<String>,
+        #[arg(long, default_value = "status_surface")]
+        delivery_status: String,
+    },
+    Action {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        expected_version: i32,
+        #[arg(long)]
+        actor: String,
+        #[arg(long, value_enum, value_delimiter = ',', required = true)]
+        capabilities: Vec<TransmissionPreventionCapabilityArg>,
+        #[arg(long)]
+        public_message: String,
+    },
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum RightsRequestStatusArg {
+    Received,
+    NeedsInformation,
+    Reviewing,
+    SenderContacting,
+    Actioned,
+    Declined,
+    OutOfScope,
+    Withdrawn,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]

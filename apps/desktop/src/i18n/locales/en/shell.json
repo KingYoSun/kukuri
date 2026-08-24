@@ -302,7 +302,14 @@
       "malware": "Malware",
       "phishing": "Phishing",
       "illegal": "Other illegal content",
+      "rights_infringement": "Copyright, privacy, trademark, or other rights",
       "other": "Other"
+    },
+    "rightsRequest": {
+      "boundary": "A rights-infringement request needs identity, contact, and rights-basis details. Do not send those through the general report endpoint. First review what this Community Node can and cannot do on its dedicated page.",
+      "openDedicated": "The next page explains the node-local scope and submits only after your explicit acknowledgement.",
+      "unavailable": "The selected Community Node does not publish a dedicated rights-request intake. Do not put rights claims or personal information in the general report.",
+      "open": "Review scope and submit a rights request"
     },
     "criticalSafetyNote": "Critical safety reports are routed to the responsible node. Do not attach or redistribute the material itself; describe it instead.",
     "detailsLabel": "Details (optional)",

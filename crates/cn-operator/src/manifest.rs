@@ -111,6 +111,8 @@ pub struct Capabilities {
     pub moderation: bool,
     pub community_local_trust: bool,
     pub report_endpoint: bool,
+    #[serde(default)]
+    pub rights_request_endpoint: bool,
 }
 
 impl Capabilities {
@@ -131,6 +133,7 @@ impl Capabilities {
             moderation: config.enabled(Capability::Moderation),
             community_local_trust: config.enabled(Capability::CommunityLocalTrust),
             report_endpoint: config.enabled(Capability::ReportEndpoint),
+            rights_request_endpoint: config.enabled(Capability::RightsRequestEndpoint),
         }
     }
 }
@@ -205,6 +208,13 @@ pub struct CommunityNodeManifest {
     /// 通報受付 endpoint（#370）。report_endpoint capability が有効なときの絶対 URL、
     /// 無効なら空文字。client（#310）は空なら abuse_contact 案内に切り替える。
     pub report_endpoint: String,
+    /// 権利侵害申出の専用画面。capability 無効時は空文字。
+    #[serde(default)]
+    pub rights_request_url: String,
+    #[serde(default)]
+    pub rights_request_policy_url: String,
+    #[serde(default)]
+    pub rights_request_initial_response_target_days: u32,
     pub terms_url: String,
     pub privacy_url: String,
     pub external_transmission_url: String,
@@ -300,6 +310,16 @@ pub fn build_manifest(config: &ResolvedConfig) -> CommunityNodeManifest {
         contact: config.contact(),
         abuse_contact: config.contact(),
         report_endpoint: config.report_endpoint(),
+        rights_request_url: config.rights_request_url(),
+        rights_request_policy_url: if config.enabled(Capability::RightsRequestEndpoint) {
+            config.policy_url("rights-infringement-policy")
+        } else {
+            String::new()
+        },
+        rights_request_initial_response_target_days: config
+            .raw
+            .manifest
+            .rights_request_initial_response_target_days,
         terms_url: config.policy_url("terms"),
         privacy_url: config.policy_url("privacy"),
         external_transmission_url: config.policy_url("external-transmission"),
