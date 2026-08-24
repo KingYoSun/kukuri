@@ -22,3 +22,9 @@
 - Linux baseline: PR初回CIのvisual artifactを確認し、今回意図したColumn footer、active Columnへの初期scroll、Stream actionが反映された6画面のactualを正規baselineへ更新した。
 - Exceptions: Control Center、sidebar撤去、可変span / reorder / layout persistence、restart後Draft復元、mobile paging、immersive lifecycleはWave 4〜6へ残す。Metaverseの新規chat / comment contractは追加していない。
 - Validation: production Storybook実画面reviewに加え、`cargo xtask check`、`cargo xtask test`（Rust workspace 584件、harness 18件、frontend 747件）、`cargo xtask desktop-ui-check`（lint、typecheck、Vitest 89 files / 747 tests、Storybook build、Chromium 16件、visual regression 14件）、`cargo xtask oversized-files`、`git diff --check`をローカルで完了した。Linuxを含むリポジトリCIは下記PRの結果を一次記録とする。
+
+
+## 追記（2026-08-24、Issue #768）
+
+- PR: https://github.com/KingYoSun/kukuri/pull/755 （本文中の「下記PR」はこの PR を指す）
+- Reduced motion: Wave 3 は新規 transition / animation を追加しておらず、Composer の展開は Wave 0 で確定した motion token の範囲内で動作する。`prefers-reduced-motion: reduce` 時に token が 1ms / 0px へ縮退することを Storybook toolbar の Reduced motion で確認した（Wave 0 record の確認手順に同じ）。

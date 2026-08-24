@@ -21,3 +21,9 @@
 - Review result: production Storybookをin-app browserで1440×980 / 700×980確認した。desktopは4 section、narrowは単一列scroll、trigger非干渉、全topic channel表示、TimelineからCommunity Indexが消えていることを確認した。console error / warningは0件だった。
 - Exceptions: 可変span / reorder / layout persistence、restart後Draft復元、mobile Column paging、immersive lifecycleはWave 5〜6へ残す。
 - Validation: production Storybook実画面review、`cargo xtask desktop-ui-check`（frontend typecheck / lint、Vitest 89 files / 750 tests、Storybook build、Chromium E2E 16件、visual smoke 14件）、`cargo xtask check`、`cargo xtask test`（workspace 584件成功 / 3件skip、harness 18件、frontend 750件）、`cargo xtask oversized-files`、`git diff --check`を完了した。`oversized-files`の警告3件は既存Rustファイルで、今回の変更による新規超過はない。リポジトリCIはPR記録を一次記録とする。
+
+
+## 追記（2026-08-24、Issue #768）
+
+- PR: https://github.com/KingYoSun/kukuri/pull/756
+- Reduced motion: Wave 4 で追加した Control Center drawer の slide は `--motion-duration-standard` / `--motion-distance-control-center` を用いており、`prefers-reduced-motion: reduce`（および review 用 `data-reduced-motion='reduce'`）で 1ms / 0px に縮退して即時表示になることを Storybook の Reduced motion toggle で確認した。

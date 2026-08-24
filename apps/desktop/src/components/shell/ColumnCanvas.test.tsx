@@ -397,4 +397,55 @@ describe('ColumnCanvas', () => {
     vi.unstubAllGlobals();
     vi.useRealTimers();
   });
+
+  it('drops smooth scrolling on mobile when a review surface sets data-reduced-motion', () => {
+    // OS 設定(matchMedia)は reduce でなくても、data-reduced-motion='reduce' が
+    // prefersReducedMotion() 経由で拾われ、mobile の Column 切替 scroll が即時になる。
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      matches: query === '(max-width: 759px)',
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })));
+    document.documentElement.dataset.reducedMotion = 'reduce';
+    const surfaces = (activeColumnId: string) =>
+      ['timeline', 'thread'].map((id, index) => (
+        <ColumnSurface
+          key={id}
+          columnId={id}
+          title={id}
+          scopeLabel='Public'
+          position={index + 1}
+          total={2}
+          span={1}
+          active={id === activeColumnId}
+          pinned
+        >
+          {id}
+        </ColumnSurface>
+      ));
+    const { rerender } = render(
+      <ColumnCanvas activeColumnId='timeline' onActivateColumn={() => undefined}>
+        {surfaces('timeline')}
+      </ColumnCanvas>
+    );
+
+    rerender(
+      <ColumnCanvas activeColumnId='thread' onActivateColumn={() => undefined}>
+        {surfaces('thread')}
+      </ColumnCanvas>
+    );
+
+    expect(Element.prototype.scrollIntoView).toHaveBeenLastCalledWith({
+      block: 'nearest',
+      inline: 'center',
+      behavior: 'auto',
+    });
+    delete document.documentElement.dataset.reducedMotion;
+    vi.unstubAllGlobals();
+  });
 });

@@ -7,6 +7,7 @@ import {
   type DragEvent,
   type ReactNode,
 } from 'react';
+import { prefersReducedMotion } from '@/lib/reducedMotion';
 import { columnCanvasEdgeScrollDirection } from './columnCanvasGeometry';
 import { nearestColumnToViewportCenter } from './columnPagingGeometry';
 
@@ -71,7 +72,7 @@ export function ColumnCanvas({
     if (!canvas) return;
     autoScrollDirectionRef.current = direction;
     canvas.scrollLeft += direction * EDGE_SCROLL_STEP_PX;
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    if (prefersReducedMotion()) {
       return;
     }
     if (autoScrollFrameRef.current !== null) return;
@@ -110,7 +111,7 @@ export function ColumnCanvas({
     );
     if (typeof column?.scrollIntoView === 'function') {
       const mobile = isMobileViewport();
-      const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      const reducedMotion = prefersReducedMotion();
       column.scrollIntoView({
         block: 'nearest',
         inline: mobile ? 'center' : 'nearest',

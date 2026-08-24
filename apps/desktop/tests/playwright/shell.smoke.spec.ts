@@ -316,8 +316,21 @@ test('desktop Columns use kind spans, keyboard reorder, drag reorder, and persis
   await expect(metaverseColumn).toHaveAttribute('data-span', '4');
   expect(Math.round((await metaverseColumn.boundingBox())!.width)).toBe(1808);
 
-  await metaverseColumn.getByRole('button', { name: 'Open Metaverse menu' }).click();
-  await page.getByRole('menuitem', { name: 'Move Metaverse left' }).click();
+  // Issue #768 T4: reorder は click を併用せず、trigger への実 key 入力だけで実行する
+  // (WAI-ARIA menu button pattern / PR #769: Enter で開くと先頭 menuitem に focus、
+  //  ArrowDown / ArrowUp で有効項目を循環、Enter で実行)。span 変更側の click 操作は上に残す。
+  const metaverseMenuTrigger = metaverseColumn.getByRole('button', {
+    name: 'Open Metaverse menu',
+  });
+  await metaverseMenuTrigger.focus();
+  await page.keyboard.press('Enter');
+  const moveLeftItem = page.getByRole('menuitem', { name: 'Move Metaverse left' });
+  await expect(moveLeftItem).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(moveLeftItem).not.toBeFocused();
+  await page.keyboard.press('ArrowUp');
+  await expect(moveLeftItem).toBeFocused();
+  await page.keyboard.press('Enter');
   await expect(metaverseColumn).toHaveAccessibleName(/Column 2 of 3/);
 
   const canvas = page.locator('.shell-column-canvas');
@@ -339,10 +352,18 @@ test('desktop Columns use kind spans, keyboard reorder, drag reorder, and persis
   await expect(page).not.toHaveURL(/span|layout|column/i);
 });
 
-test('mobile Columns page one viewport at a time with snap, direct jump, and history back', async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+// Issue #768 T4: 代表 mobile test を 375 / 390 / 430px の viewport パラメタで実行する
+// (test 名の変更は viewport 寸法 suffix の付与のみ)。restart 復元系など他の mobile test は
+// 実行時間を抑えるためパラメタ化しない。
+for (const mobileViewport of [
+  { width: 375, height: 812 },
+  { width: 390, height: 844 },
+  { width: 430, height: 932 },
+]) {
+  test(`mobile Columns page one viewport at a time with snap, direct jump, and history back at ${mobileViewport.width}x${mobileViewport.height}`, async ({
+    page,
+  }) => {
+  await page.setViewportSize(mobileViewport);
   await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
 
   await openComposerDialog(page);
@@ -376,6 +397,15 @@ test('mobile Columns page one viewport at a time with snap, direct jump, and his
       return { width: rect.width, height: rect.height };
     }));
   expect(headerTargets.every((box) => box.width >= 44 && box.height >= 44)).toBe(true);
+  // page indicator の dot も 44px のタップ目標として到達可能であること(Issue #768 T4)。
+  const indicatorTargets = await page
+    .locator('.shell-column-page-dots button:visible')
+    .evaluateAll((buttons) => buttons.map((button) => {
+      const rect = button.getBoundingClientRect();
+      return { width: rect.width, height: rect.height };
+    }));
+  expect(indicatorTargets.length).toBeGreaterThan(0);
+  expect(indicatorTargets.every((box) => box.width >= 44 && box.height >= 44)).toBe(true);
 
   await page.goBack();
   await expect(activeColumn(page, 'Thread')).toBeVisible();
@@ -395,7 +425,8 @@ test('mobile Columns page one viewport at a time with snap, direct jump, and his
   await page.getByRole('button', { name: 'Go to Column 1 of 3' }).click();
   await expect(activeColumn(page, 'Timeline')).toBeVisible();
   await expect(canvas).toBeVisible();
-});
+  });
+}
 
 test('mobile restart restores text Draft and active Column focus without unsafe fields', async ({
   page,
