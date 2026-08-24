@@ -29,6 +29,7 @@ import {
   createShellHookHarness,
   resetWindowHash,
 } from '@/shell/testSupport/renderShellHook';
+import { columnIdentityId, openTransientColumn } from '@/shell/slices/workspace';
 
 const SELF_PUBKEY = 'f'.repeat(64);
 const AUTHOR_A_PUBKEY = 'a'.repeat(64);
@@ -399,10 +400,15 @@ describe('useDesktopShellViewModels', () => {
           }),
         ],
       },
-      selectedChannelIdByTopic: {
-        ...current.selectedChannelIdByTopic,
-        'kukuri:topic:demo': 'channel-alpha',
-      },
+      workspaceState: openTransientColumn(current.workspaceState, {
+        id: columnIdentityId('timeline', {
+          topicId: 'kukuri:topic:demo',
+          channelId: 'channel-alpha',
+        }),
+        kind: 'timeline',
+        scope: { topicId: 'kukuri:topic:demo', channelId: 'channel-alpha' },
+        pinned: false,
+      }),
     }));
 
     const items = view.result.current.topicNavItems;
@@ -463,7 +469,7 @@ describe('useDesktopShellViewModels', () => {
     view.unmount();
   });
 
-  test('resolves compose channel/audience with priority repostTarget > replyTarget.channel_id > composeChannelByTopic', () => {
+  test('resolves compose channel and audience from the active scope target', () => {
     const view = renderViewModels((current) => ({
       composeChannelByTopic: {
         ...current.composeChannelByTopic,
@@ -476,28 +482,8 @@ describe('useDesktopShellViewModels', () => {
         ...current.joinedChannelsByTopic,
         'kukuri:topic:demo': [buildJoinedChannel('channel-alpha', 'Alpha Channel')],
       },
-      replyTarget: buildPost({
-        object_id: 'reply-target-1',
-        channel_id: 'channel-beta',
-        audience_label: 'Beta Friends',
-      }),
-      repostTarget: buildPost({ object_id: 'repost-target-1' }),
     }));
 
-    // 1) repostTarget が最優先: 常に public + translate('common:audience.public')
-    expect(view.result.current.activeComposeChannel).toEqual({ kind: 'public' });
-    expect(view.result.current.activeComposeAudienceLabel).toBe('common:audience.public');
-
-    // 2) repostTarget が消えると replyTarget.channel_id + replyTarget.audience_label
-    actPatchState(view.store, { repostTarget: null });
-    expect(view.result.current.activeComposeChannel).toEqual({
-      kind: 'private_channel',
-      channel_id: 'channel-beta',
-    });
-    expect(view.result.current.activeComposeAudienceLabel).toBe('Beta Friends');
-
-    // 3) どちらも無ければ composeChannelByTopic + joinedChannels の label
-    actPatchState(view.store, { replyTarget: null });
     expect(view.result.current.activeComposeChannel).toEqual({
       kind: 'private_channel',
       channel_id: 'channel-alpha',

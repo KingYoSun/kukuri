@@ -6,6 +6,7 @@ import { ComposerPanel } from '@/components/core/ComposerPanel';
 import type { ComposerDraftMediaView, MentionCandidate } from '@/components/core/types';
 import { Button } from '@/components/ui/button';
 import { formatLocalizedBytes } from '@/i18n/format';
+import { authorDisplayLabel } from '@/shell/presentation';
 import {
   columnDraftKey,
   createColumnDraft,
@@ -131,10 +132,25 @@ export function ColumnComposerFooter({
               }
             : null
         }
+        repostTarget={
+          draft.repostTarget
+            ? {
+                content: draft.repostTarget.content,
+                authorLabel: authorDisplayLabel(
+                  draft.repostTarget.author_pubkey,
+                  draft.repostTarget.author_display_name,
+                  draft.repostTarget.author_name
+                ),
+              }
+            : null
+        }
         onClearReply={() =>
           updateDraft((current) => ({ ...current, replyTarget: null, error: null }))
         }
-        attachmentsDisabled={draft.pending}
+        onClearRepost={() =>
+          updateDraft((current) => ({ ...current, repostTarget: null, error: null }))
+        }
+        attachmentsDisabled={draft.pending || Boolean(draft.repostTarget)}
         mentionCandidates={mentionCandidates}
       />
     </div>

@@ -13,8 +13,11 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Notice } from '@/components/ui/notice';
 import { SmartReferenceText } from '@/components/core/SmartReferenceText';
-import type { PrimarySection, ProfileConnectionsView } from '@/components/shell/types';
-import type { ColumnKind, ColumnScope } from '@/shell/slices/workspace';
+import type { ProfileConnectionsView } from '@/components/shell/types';
+import {
+  primarySectionForColumn,
+  type ColumnState,
+} from '@/shell/slices/workspace';
 
 import type {
   DesktopApi,
@@ -45,6 +48,7 @@ import {
 import { useDesktopShellViewModels } from '@/shell/useDesktopShellViewModels';
 import type { OpenAuthorDetail, OpenThread, Translate } from '@/shell/actions/shared';
 import { useShallow } from 'zustand/react/shallow';
+import { DEFAULT_ASYNC_PANEL_STATE } from '@/shell/slices/shared';
 
 type ViewModels = ReturnType<typeof useDesktopShellViewModels>;
 
@@ -53,14 +57,7 @@ export type DesktopShellPrimarySurfaceProps = {
   api: DesktopApi;
   metaverseActions: MetaverseRoomActions;
   locale: SupportedLocale;
-  routeSection: PrimarySection;
-  surfaceSection?: PrimarySection;
-  surfaceColumnKind?: ColumnKind;
-  surfaceEntityId?: string;
-  surfaceScope?: ColumnScope;
-  // columnMode の Timeline surface が表示する view(Column の timelineView)。
-  // 未指定時は chrome projection(shellChromeState.timelineView)へ fallback する(Issue #765)。
-  surfaceTimelineView?: 'feed' | 'bookmarks';
+  column: ColumnState;
   profileAvatarInputKey: number;
   messagesWorkspace: ReactNode;
   notificationsWorkspace: ReactNode;
@@ -75,7 +72,6 @@ export type DesktopShellPrimarySurfaceProps = {
     | 'activeTimelineScope'
     | 'bookmarkedTimelinePostViews'
     | 'buildPostCardView'
-    | 'composerSourcePreview'
     | 'gameDraftViews'
     | 'liveSessionListItems'
     | 'primarySectionItems'
@@ -86,8 +82,6 @@ export type DesktopShellPrimarySurfaceProps = {
     | 'selectedAuthorTimelinePostViews'
     | 'timelineViewItems'
   >;
-  setPrimarySectionRef: (section: PrimarySection) => (node: HTMLElement | null) => void;
-  focusTimelineView: (view: 'feed' | 'bookmarks') => void;
   openCommunityNodeSettings: () => void;
   loadReactionCatalogData: () => Promise<void>;
   refreshTimelineFeed: (
@@ -98,9 +92,9 @@ export type DesktopShellPrimarySurfaceProps = {
   loadMoreTimeline: (topic: string, channelId?: string | null) => Promise<void>;
   openAuthorDetail: OpenAuthorDetail;
   openThread: OpenThread;
-  beginReply: (post: PostView) => void;
+  beginColumnReply: (post: PostView) => void;
   handleSimpleRepost: (post: PostView) => Promise<void>;
-  beginQuoteRepost: (post: PostView) => void;
+  beginColumnQuoteRepost: (post: PostView) => void;
   handleRetryLocalPost: (post: PostView) => void;
   handleRestoreLocalPost: (post: PostView) => void;
   handleToggleReaction: (post: PostView, reactionKey: ReactionKeyInput) => Promise<void>;
@@ -127,7 +121,6 @@ export type DesktopShellPrimarySurfaceProps = {
   handleRelationshipAction: (authorPubkey: string, following: boolean) => Promise<void>;
   handleMuteAction: (authorPubkey: string, muted: boolean) => Promise<void>;
   handleOpenOriginalTopic: (topicId: string) => Promise<void>;
-  columnMode?: boolean;
 };
 
 export function DesktopShellPrimarySurface({
@@ -135,27 +128,20 @@ export function DesktopShellPrimarySurface({
   api,
   metaverseActions,
   locale,
-  routeSection,
-  surfaceSection,
-  surfaceColumnKind,
-  surfaceEntityId,
-  surfaceScope,
-  surfaceTimelineView,
+  column,
   profileAvatarInputKey,
   messagesWorkspace,
   notificationsWorkspace,
   viewModels,
-  setPrimarySectionRef,
-  focusTimelineView,
   openCommunityNodeSettings,
   loadReactionCatalogData,
   refreshTimelineFeed,
   loadMoreTimeline,
   openAuthorDetail,
   openThread,
-  beginReply,
+  beginColumnReply,
   handleSimpleRepost,
-  beginQuoteRepost,
+  beginColumnQuoteRepost,
   handleRetryLocalPost,
   handleRestoreLocalPost,
   handleToggleReaction,
@@ -180,13 +166,10 @@ export function DesktopShellPrimarySurface({
   handleRelationshipAction,
   handleMuteAction,
   handleOpenOriginalTopic,
-  columnMode = false,
 }: DesktopShellPrimarySurfaceProps) {
   const {
-    activeTopic,
     bookmarkedPosts,
     bookmarkedReactionAssets,
-    composerError,
     knownAuthorsByPubkey,
     gameCreatePending,
     gameDescription,
@@ -218,21 +201,16 @@ export function DesktopShellPrimarySurface({
     timelineNextCursorByKey,
     timelinesByKey,
     joinedChannelsByTopic,
-    selectedChannelIdByTopic,
-    liveSessionsByTopic,
     liveSessionsByScopeKey,
     livePanelStateByScopeKey,
     livePendingBySessionId,
-    gameRoomsByTopic,
     gameRoomsByScopeKey,
     gamePanelStateByScopeKey,
     gameDrafts,
   } = useDesktopShellStore(
     useShallow((s) => ({
-      activeTopic: s.activeTopic,
       bookmarkedPosts: s.bookmarkedPosts,
       bookmarkedReactionAssets: s.bookmarkedReactionAssets,
-      composerError: s.composerError,
       knownAuthorsByPubkey: s.knownAuthorsByPubkey,
       gameCreatePending: s.gameCreatePending,
       gameDescription: s.gameDescription,
@@ -264,18 +242,14 @@ export function DesktopShellPrimarySurface({
       timelineNextCursorByKey: s.timelineNextCursorByKey,
       timelinesByKey: s.timelinesByKey,
       joinedChannelsByTopic: s.joinedChannelsByTopic,
-      selectedChannelIdByTopic: s.selectedChannelIdByTopic,
-      liveSessionsByTopic: s.liveSessionsByTopic,
       liveSessionsByScopeKey: s.liveSessionsByScopeKey,
       livePanelStateByScopeKey: s.livePanelStateByScopeKey,
       livePendingBySessionId: s.livePendingBySessionId,
-      gameRoomsByTopic: s.gameRoomsByTopic,
       gameRoomsByScopeKey: s.gameRoomsByScopeKey,
       gamePanelStateByScopeKey: s.gamePanelStateByScopeKey,
       gameDrafts: s.gameDrafts,
     }))
   );
-  const setShellChromeState = useDesktopShellFieldSetter('shellChromeState');
   const setGameTitle = useDesktopShellFieldSetter('gameTitle');
   const setGameDescription = useDesktopShellFieldSetter('gameDescription');
   const setGameParticipantsInput = useDesktopShellFieldSetter('gameParticipantsInput');
@@ -296,10 +270,8 @@ export function DesktopShellPrimarySurface({
     await handleMuteAction(authorPubkey, false);
   };
   const copyReportContact = (value: string) => void copyTextToClipboard(value);
-  const surfaceTopic = surfaceScope?.topicId ?? activeTopic;
-  const surfaceChannelId = surfaceScope
-    ? surfaceScope.channelId
-    : selectedChannelIdByTopic[surfaceTopic] ?? null;
+  const surfaceTopic = column.scope?.topicId ?? '';
+  const surfaceChannelId = column.scope?.channelId ?? null;
   const surfaceTimelineScope = privateTimelineScope(surfaceChannelId);
   // Thread は「この surface(Column)の scope」で開く。非 active Column の投稿本文クリックは
   // Column の activate(route 同期)を伴わないため、global の選択 channel に依存すると別 channel の
@@ -324,16 +296,15 @@ export function DesktopShellPrimarySurface({
     [activeTimelineKey, surfaceJoinedChannels, timelinesByKey, viewModels]
   );
   const surfaceScopeKey = timelineStorageKeyForChannel(surfaceTopic, surfaceChannelId);
-  const surfaceLiveSessions =
-    liveSessionsByScopeKey[surfaceScopeKey] ?? liveSessionsByTopic[surfaceTopic] ?? [];
+  const surfaceLiveSessions = liveSessionsByScopeKey[surfaceScopeKey] ?? [];
   const surfaceGameRooms = useMemo(
-    () => gameRoomsByScopeKey[surfaceScopeKey] ?? gameRoomsByTopic[surfaceTopic] ?? [],
-    [gameRoomsByScopeKey, gameRoomsByTopic, surfaceScopeKey, surfaceTopic]
+    () => gameRoomsByScopeKey[surfaceScopeKey] ?? [],
+    [gameRoomsByScopeKey, surfaceScopeKey]
   );
   const surfaceLivePanelState =
-    livePanelStateByScopeKey[surfaceScopeKey] ?? viewModels.activeLivePanelState;
+    livePanelStateByScopeKey[surfaceScopeKey] ?? DEFAULT_ASYNC_PANEL_STATE;
   const surfaceGamePanelState =
-    gamePanelStateByScopeKey[surfaceScopeKey] ?? viewModels.activeGamePanelState;
+    gamePanelStateByScopeKey[surfaceScopeKey] ?? DEFAULT_ASYNC_PANEL_STATE;
   const surfaceAudienceLabel = surfaceChannelId
     ? surfaceJoinedChannels.find((channel) => channel.channel_id === surfaceChannelId)?.label ??
       surfaceChannelId
@@ -369,9 +340,8 @@ export function DesktopShellPrimarySurface({
   );
   const profileMode = shellChromeState.profileMode;
   const profileConnectionsView = shellChromeState.profileConnectionsView;
-  const activeSurfaceSection = surfaceSection ?? shellChromeState.activePrimarySection;
-  // feed / bookmarks の body 分岐は Column 単位の view を優先する(Issue #765)。
-  const activeTimelineView = surfaceTimelineView ?? shellChromeState.timelineView;
+  const activeSurfaceSection = primarySectionForColumn(column);
+  const activeTimelineView = column.kind === 'timeline' ? column.timelineView ?? 'feed' : 'feed';
   const eligibleIndexNodeBaseUrls = useMemo(
     () =>
       eligibleCommunityIndexNodes(
@@ -408,60 +378,9 @@ export function DesktopShellPrimarySurface({
           </Button>
         </Notice>
       ) : null}
-      <section
-        className='shell-section'
-        ref={columnMode ? undefined : setPrimarySectionRef(shellChromeState.activePrimarySection)}
-        tabIndex={-1}
-        onFocusCapture={
-          columnMode
-            ? undefined
-            : () =>
-                setShellChromeState((current) => ({
-                  ...current,
-                  activePrimarySection: routeSection,
-                }))
-        }
-      >
+      <section className='shell-section'>
         {activeSurfaceSection === 'timeline' ? (
           <>
-            {!columnMode ? (
-              <Card className='shell-workspace-card'>
-                <div className='shell-workspace-header'>
-                  <div className='shell-workspace-summary'>
-                    <div
-                      className='shell-workspace-tabs'
-                      role='tablist'
-                      aria-label={t('shell:workspace.timelineViews')}
-                    >
-                      {viewModels.timelineViewItems.map((item) => (
-                        <button
-                          key={item.id}
-                          className={`shell-tab${
-                            shellChromeState.timelineView === item.id ? ' shell-tab-active' : ''
-                          }`}
-                          role='tab'
-                          type='button'
-                          aria-selected={shellChromeState.timelineView === item.id}
-                          onClick={() => focusTimelineView(item.id)}
-                        >
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                    {shellChromeState.timelineView === 'bookmarks' ? (
-                      <span className='relationship-badge'>
-                        {t('shell:workspace.savedCount', {
-                          count: viewModels.bookmarkedTimelinePostViews.length,
-                        })}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-                {composerError ? <Notice tone='destructive'>{composerError}</Notice> : null}
-              </Card>
-            ) : composerError ? (
-              <Notice tone='destructive'>{composerError}</Notice>
-            ) : null}
             <Card className='shell-workspace-card'>
               {activeTimelineView === 'feed' ? (
                 <TimelineFeed
@@ -470,9 +389,9 @@ export function DesktopShellPrimarySurface({
                   onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
                   onOpenThread={openThreadInSurfaceScope}
                   onOpenThreadInTopic={openThreadInTopicFromSurface}
-                  onReply={beginReply}
+                  onReply={beginColumnReply}
                   onRepost={(post) => void handleSimpleRepost(post)}
-                  onQuoteRepost={beginQuoteRepost}
+                  onQuoteRepost={beginColumnQuoteRepost}
                   onRetryLocalPost={handleRetryLocalPost}
                   onRestoreLocalPost={handleRestoreLocalPost}
                   localAuthorPubkey={syncStatus.local_author_pubkey}
@@ -507,9 +426,9 @@ export function DesktopShellPrimarySurface({
                   onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
                   onOpenThread={openThreadInSurfaceScope}
                   onOpenThreadInTopic={openThreadInTopicFromSurface}
-                  onReply={beginReply}
+                  onReply={beginColumnReply}
                   onRepost={(post) => void handleSimpleRepost(post)}
-                  onQuoteRepost={beginQuoteRepost}
+                  onQuoteRepost={beginColumnQuoteRepost}
                   onRetryLocalPost={handleRetryLocalPost}
                   onRestoreLocalPost={handleRestoreLocalPost}
                   localAuthorPubkey={syncStatus.local_author_pubkey}
@@ -664,7 +583,7 @@ export function DesktopShellPrimarySurface({
           </div>
         ) : null}
 
-        {activeSurfaceSection === 'game' && surfaceColumnKind === 'game' ? (
+        {activeSurfaceSection === 'game' && column.kind === 'game' ? (
           <GameRoomPanel
             status={surfaceGamePanelState.status}
             error={gameError ?? surfaceGamePanelState.error}
@@ -705,7 +624,7 @@ export function DesktopShellPrimarySurface({
             localProfile={localProfile}
             knownAuthorsByPubkey={knownAuthorsByPubkey}
             mediaObjectUrls={mediaObjectUrls}
-            initialSelectedRoomId={surfaceEntityId}
+            initialSelectedRoomId={column.entityId}
           />
         ) : null}
 
@@ -777,7 +696,7 @@ export function DesktopShellPrimarySurface({
                   onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
                   onOpenThread={openThreadInSurfaceScope}
                   onOpenThreadInTopic={openThreadInTopicFromSurface}
-                  onReply={beginReply}
+                  onReply={beginColumnReply}
                   readOnly={true}
                   onOpenOriginalTopic={(topicId) => void handleOpenOriginalTopic(topicId)}
                   onActivateReference={(reference) => void handleActivateReference(reference)}
@@ -790,8 +709,4 @@ export function DesktopShellPrimarySurface({
       </section>
     </div>
   );
-}
-
-export function DesktopShellPrimaryWorkspace(props: DesktopShellPrimarySurfaceProps) {
-  return <DesktopShellPrimarySurface {...props} />;
 }

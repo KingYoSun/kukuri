@@ -1,5 +1,5 @@
 import { setRecordEntry } from '@/shell/stateUpdates';
-import { useEffect, type MutableRefObject } from 'react';
+import { useEffect, useRef, type MutableRefObject } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 
 import type { PrimarySection } from '@/components/shell/types';
@@ -19,11 +19,20 @@ import type {
   DesktopShellState,
   DesktopShellStateValue,  DesktopShellStoreApi,
 } from '@/shell/store';
+import { timelineStorageKeyForChannel } from '@/shell/store';
 import {
   isHex64,
   privateComposeTarget,
   privateTimelineScope,
 } from '@/shell/presentation';
+import { selectShellRoutingSlice } from '@/shell/storeSelectors';
+import {
+  activeWorkspaceColumn,
+  activeWorkspaceScope,
+  columnIdentityId,
+  openTransientColumn,
+} from '@/shell/slices/workspace';
+import { workspaceForRoute } from '@/shell/routing/routeWorkspaceProjection';
 
 type OpenDirectMessagePaneOptions = {
   historyMode?: 'push' | 'replace';
@@ -47,7 +56,7 @@ type UseRouteSynchronizationArgs = {
   routeSection: PrimarySection;
   scheduleAnimationFrame: (callback: () => void) => void;
   // 読むフィールドだけを要求する(全ストア購読を強制しない。WP-H6 PR2)。
-  state: Pick<DesktopShellState, 'activeTopic' | 'directMessagePaneOpen' | 'focusedObjectId' | 'gamePanelStateByTopic' | 'gameRoomsByTopic' | 'joinedChannelsByTopic' | 'channelPanelStateByTopic' | 'livePanelStateByTopic' | 'liveSessionsByTopic' | 'selectedAuthor' | 'selectedAuthorPubkey' | 'selectedChannelIdByTopic' | 'selectedDirectMessagePeerPubkey' | 'selectedGameRoomId' | 'selectedLiveSessionId' | 'selectedThread' | 'shellChromeState' | 'thread' | 'trackedTopics'>;
+  state: ReturnType<typeof selectShellRoutingSlice>;
   syncRoute: (mode?: 'push' | 'replace', overrides?: DesktopShellRouteOverrides) => void;
   storeApi: DesktopShellStoreApi;
 };
@@ -67,16 +76,17 @@ export function useRouteSynchronization({
   syncRoute,
   storeApi,
 }: UseRouteSynchronizationArgs) {
+  const routeProjectionInitializedRef = useRef(false);
   const {
     activeTopic,
     directMessagePaneOpen,
     focusedObjectId,
-    gamePanelStateByTopic,
-    gameRoomsByTopic,
+    gamePanelStateByScopeKey,
+    gameRoomsByScopeKey,
     joinedChannelsByTopic,
     channelPanelStateByTopic,
-    livePanelStateByTopic,
-    liveSessionsByTopic,
+    livePanelStateByScopeKey,
+    liveSessionsByScopeKey,
     selectedAuthor,
     selectedAuthorPubkey,
     selectedChannelIdByTopic,
@@ -85,7 +95,7 @@ export function useRouteSynchronization({
     selectedLiveSessionId,
     selectedThread,
     shellChromeState,
-    thread,
+    threadsById,
     trackedTopics,
   } = state;
 
@@ -96,8 +106,17 @@ export function useRouteSynchronization({
     ) => {
       storeApi.getState().setField(key, value);
     };
-    const setActiveTopic = (value: DesktopShellStateValue<'activeTopic'>) =>
-      setField('activeTopic', value);
+    const setActiveTopic = (topicId: string) => {
+      const scope = { topicId, channelId: null };
+      setField('workspaceState', (current) =>
+        openTransientColumn(current, {
+          id: columnIdentityId('timeline', scope),
+          kind: 'timeline',
+          scope,
+          pinned: false,
+        })
+      );
+    };
     const setAuthorError = (value: DesktopShellStateValue<'authorError'>) =>
       setField('authorError', value);
     const setComposeChannelByTopic = (value: DesktopShellStateValue<'composeChannelByTopic'>) =>
@@ -112,18 +131,32 @@ export function useRouteSynchronization({
     const setLastNonNotificationsRoute = (
       value: DesktopShellStateValue<'lastNonNotificationsRoute'>
     ) => setField('lastNonNotificationsRoute', value);
-    const setReplyTarget = (value: DesktopShellStateValue<'replyTarget'>) =>
-      setField('replyTarget', value);
-    const setRepostTarget = (value: DesktopShellStateValue<'repostTarget'>) =>
-      setField('repostTarget', value);
     const setSelectedAuthor = (value: DesktopShellStateValue<'selectedAuthor'>) =>
       setField('selectedAuthor', value);
     const setSelectedAuthorPubkey = (
       value: DesktopShellStateValue<'selectedAuthorPubkey'>
     ) => setField('selectedAuthorPubkey', value);
     const setSelectedChannelIdByTopic = (
-      value: DesktopShellStateValue<'selectedChannelIdByTopic'>
-    ) => setField('selectedChannelIdByTopic', value);
+      value:
+        | Record<string, string | null>
+        | ((current: Record<string, string | null>) => Record<string, string | null>)
+    ) => {
+      const currentScope = activeWorkspaceScope(storeApi.getState().workspaceState);
+      const currentProjection = { [currentScope.topicId]: currentScope.channelId };
+      const nextProjection = typeof value === 'function' ? value(currentProjection) : value;
+      const topicId = Object.keys(nextProjection).find(
+        (topic) => nextProjection[topic] !== currentProjection[topic]
+      ) ?? currentScope.topicId;
+      const scope = { topicId, channelId: nextProjection[topicId] ?? null };
+      setField('workspaceState', (current) =>
+        openTransientColumn(current, {
+          id: columnIdentityId('timeline', scope),
+          kind: 'timeline',
+          scope,
+          pinned: false,
+        })
+      );
+    };
     const setSelectedDirectMessagePeerPubkey = (
       value: DesktopShellStateValue<'selectedDirectMessagePeerPubkey'>
     ) => setField('selectedDirectMessagePeerPubkey', value);
@@ -135,7 +168,6 @@ export function useRouteSynchronization({
       setField('selectedThread', value);
     const setShellChromeState = (value: DesktopShellStateValue<'shellChromeState'>) =>
       setField('shellChromeState', value);
-    const setThread = (value: DesktopShellStateValue<'thread'>) => setField('thread', value);
     const setTimelineScopeByTopic = (value: DesktopShellStateValue<'timelineScopeByTopic'>) =>
       setField('timelineScopeByTopic', value);
 
@@ -215,10 +247,6 @@ export function useRouteSynchronization({
       routeSection === 'timeline' && requestedTimelineView === 'bookmarks' ? 'bookmarks' : 'feed';
     const joinedChannelsForTopic = joinedChannelsByTopic[nextTopic] ?? [];
     const channelPanelState = channelPanelStateByTopic[nextTopic];
-    const liveSessionsForTopic = liveSessionsByTopic[nextTopic] ?? [];
-    const gameRoomsForTopic = gameRoomsByTopic[nextTopic] ?? [];
-    const livePanelState = livePanelStateByTopic[nextTopic];
-    const gamePanelState = gamePanelStateByTopic[nextTopic];
     const currentSelectedChannelIdForTopic = selectedChannelIdByTopic[nextTopic] ?? null;
     const allowChannelRouteParam =
       routeSection !== 'messages' && routeSection !== 'notifications';
@@ -253,6 +281,11 @@ export function useRouteSynchronization({
         channelPanelState?.status !== 'ready' &&
         !joinedChannelsForTopic.some((channel) => channel.channel_id === nextSelectedChannelId)
     );
+    const routeScopeKey = timelineStorageKeyForChannel(nextTopic, nextSelectedChannelId);
+    const liveSessionsForTopic = liveSessionsByScopeKey[routeScopeKey] ?? [];
+    const gameRoomsForTopic = gameRoomsByScopeKey[routeScopeKey] ?? [];
+    const livePanelState = livePanelStateByScopeKey[routeScopeKey];
+    const gamePanelState = gamePanelStateByScopeKey[routeScopeKey];
 
     if (
       currentSelectedChannelIdForTopic !== nextSelectedChannelId &&
@@ -298,8 +331,6 @@ export function useRouteSynchronization({
         : shellChromeState.profileConnectionsView;
 
     if (
-      shellChromeState.activePrimarySection !== routeSection ||
-      shellChromeState.timelineView !== nextTimelineView ||
       shellChromeState.activeSettingsSection !== nextSettingsResolvedSection ||
       shellChromeState.settingsOpen !== nextSettingsOpen ||
       shellChromeState.profileMode !== nextProfileMode ||
@@ -307,8 +338,6 @@ export function useRouteSynchronization({
     ) {
       setShellChromeState((current) => ({
         ...current,
-        activePrimarySection: routeSection,
-        timelineView: nextTimelineView,
         activeSettingsSection: nextSettingsResolvedSection,
         settingsOpen: nextSettingsOpen,
         profileMode: nextProfileMode,
@@ -376,9 +405,6 @@ export function useRouteSynchronization({
       if (selectedThread) {
         setSelectedThread(null);
         setFocusedObjectId(null);
-        setThread([]);
-        setReplyTarget(null);
-        setRepostTarget(null);
       }
       if (focusedObjectId) {
         setFocusedObjectId(null);
@@ -408,9 +434,6 @@ export function useRouteSynchronization({
       if (selectedThread) {
         setSelectedThread(null);
         setFocusedObjectId(null);
-        setThread([]);
-        setReplyTarget(null);
-        setRepostTarget(null);
       }
       if (focusedObjectId) {
         setFocusedObjectId(null);
@@ -486,9 +509,6 @@ export function useRouteSynchronization({
       if (selectedThread) {
         setSelectedThread(null);
         setFocusedObjectId(null);
-        setThread([]);
-        setReplyTarget(null);
-        setRepostTarget(null);
       }
       if (focusedObjectId) {
         setFocusedObjectId(null);
@@ -513,7 +533,7 @@ export function useRouteSynchronization({
         requestedThreadId !== null &&
         requestedThreadId.length > 0 &&
         requestedThreadId === selectedThread &&
-        thread.length > 0;
+        (threadsById[requestedThreadId]?.length ?? 0) > 0;
 
       if (!requestedThreadId) {
         shouldNormalize = true;
@@ -523,14 +543,14 @@ export function useRouteSynchronization({
         if (selectedThread || selectedAuthorPubkey) {
           setSelectedThread(null);
           setFocusedObjectId(null);
-          setThread([]);
-          setReplyTarget(null);
-          setRepostTarget(null);
           setSelectedAuthorPubkey(null);
           setSelectedAuthor(null);
           setAuthorError(null);
         }
-      } else if (requestedThreadId !== selectedThread || thread.length === 0) {
+      } else if (
+        requestedThreadId !== selectedThread ||
+        (threadsById[requestedThreadId]?.length ?? 0) === 0
+      ) {
         normalizedSelectedThread = requestedThreadId;
         normalizedFocusedObjectId = requestedFocusObjectId;
         void openThread(requestedThreadId, {
@@ -546,7 +566,11 @@ export function useRouteSynchronization({
           if (focusedObjectId) {
             setFocusedObjectId(null);
           }
-        } else if (thread.some((item) => item.object_id === requestedFocusObjectId)) {
+        } else if (
+          (threadsById[requestedThreadId] ?? []).some(
+            (item) => item.object_id === requestedFocusObjectId
+          )
+        ) {
           normalizedFocusedObjectId = requestedFocusObjectId;
           if (focusedObjectId !== requestedFocusObjectId) {
             setFocusedObjectId(requestedFocusObjectId);
@@ -613,9 +637,6 @@ export function useRouteSynchronization({
       if (selectedThread) {
         setSelectedThread(null);
         setFocusedObjectId(null);
-        setThread([]);
-        setReplyTarget(null);
-        setRepostTarget(null);
       }
       if (focusedObjectId) {
         setFocusedObjectId(null);
@@ -663,9 +684,6 @@ export function useRouteSynchronization({
       if (selectedThread) {
         setSelectedThread(null);
         setFocusedObjectId(null);
-        setThread([]);
-        setReplyTarget(null);
-        setRepostTarget(null);
       }
       if (focusedObjectId) {
         setFocusedObjectId(null);
@@ -722,9 +740,6 @@ export function useRouteSynchronization({
       if (selectedThread) {
         setSelectedThread(null);
         setFocusedObjectId(null);
-        setThread([]);
-        setReplyTarget(null);
-        setRepostTarget(null);
       }
       if (focusedObjectId) {
         setFocusedObjectId(null);
@@ -772,9 +787,6 @@ export function useRouteSynchronization({
       if (selectedThread || selectedAuthorPubkey) {
         setSelectedThread(null);
         setFocusedObjectId(null);
-        setThread([]);
-        setReplyTarget(null);
-        setRepostTarget(null);
         setSelectedAuthorPubkey(null);
         setSelectedAuthor(null);
         setAuthorError(null);
@@ -811,9 +823,6 @@ export function useRouteSynchronization({
       ) {
         setSelectedThread(null);
         setFocusedObjectId(null);
-        setThread([]);
-        setReplyTarget(null);
-        setRepostTarget(null);
         setSelectedAuthorPubkey(null);
         setSelectedAuthor(null);
         setAuthorError(null);
@@ -823,6 +832,55 @@ export function useRouteSynchronization({
       }
     }
 
+    const routeScope = {
+      topicId: nextTopic,
+      channelId: channelRoutePendingValidation
+        ? currentSelectedChannelIdForTopic
+        : nextSelectedChannelId,
+    };
+    const selectedRouteGameRoom = normalizedSelectedGameRoomId
+      ? gameRoomsForTopic.find((room) => room.room_id === normalizedSelectedGameRoomId)
+      : undefined;
+    const gameColumnResolutionPending = Boolean(
+      routeSection === 'game' &&
+        normalizedSelectedGameRoomId &&
+        !selectedRouteGameRoom &&
+        gamePanelState?.status !== 'ready' &&
+        gamePanelState?.status !== 'error'
+    );
+    const currentRouteColumn = activeWorkspaceColumn(storeApi.getState().workspaceState);
+    const resolvingCurrentGameColumn = Boolean(
+      routeSection === 'game' &&
+        currentRouteColumn.scope?.topicId === routeScope.topicId &&
+        currentRouteColumn.scope?.channelId === routeScope.channelId &&
+        (currentRouteColumn.kind === 'game' || currentRouteColumn.kind === 'metaverse') &&
+        ((normalizedSelectedGameRoomId &&
+          currentRouteColumn.entityId === normalizedSelectedGameRoomId) ||
+          (requestedRoomId &&
+            !normalizedSelectedGameRoomId &&
+            currentRouteColumn.entityId === requestedRoomId))
+    );
+    if (
+      !routeProjectionInitializedRef.current ||
+      routeChanged ||
+      resolvingCurrentGameColumn
+    ) {
+      routeProjectionInitializedRef.current = true;
+      setField('workspaceState', (current) =>
+        workspaceForRoute(current, {
+          gameColumnResolutionPending,
+          isScoreGameRoom: selectedRouteGameRoom?.room_kind === 'score_game',
+          nextTimelineView,
+          routeScope,
+          routeSection,
+          selectedAuthorPubkey: normalizedSelectedAuthorPubkey,
+          selectedDirectMessagePeerPubkey: normalizedSelectedDirectMessagePeerPubkey,
+          selectedGameRoomId: normalizedSelectedGameRoomId,
+          selectedLiveSessionId: normalizedSelectedLiveSessionId,
+          selectedThread: normalizedSelectedThread,
+        })
+      );
+    }
     if (shouldReload) {
       void loadTopics(
         trackedTopics,
@@ -857,12 +915,12 @@ export function useRouteSynchronization({
     channelPanelStateByTopic,
     directMessagePaneOpen,
     focusedObjectId,
-    gamePanelStateByTopic,
-    gameRoomsByTopic,
+    gamePanelStateByScopeKey,
+    gameRoomsByScopeKey,
     joinedChannelsByTopic,
     loadTopics,
-    livePanelStateByTopic,
-    liveSessionsByTopic,
+    livePanelStateByScopeKey,
+    liveSessionsByScopeKey,
     lastObservedRouteUrlRef,
     navigate,
     openAuthorDetail,
@@ -880,15 +938,13 @@ export function useRouteSynchronization({
     selectedGameRoomId,
     selectedLiveSessionId,
     selectedThread,
-    shellChromeState.activePrimarySection,
     shellChromeState.activeSettingsSection,
     shellChromeState.profileConnectionsView,
     shellChromeState.profileMode,
     shellChromeState.settingsOpen,
-    shellChromeState.timelineView,
     storeApi,
     syncRoute,
-    thread,
+    threadsById,
     trackedTopics,
   ]);
 }

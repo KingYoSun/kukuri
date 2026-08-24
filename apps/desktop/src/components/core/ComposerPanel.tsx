@@ -109,7 +109,13 @@ export function ComposerPanel({
         <div className='reply-banner'>
           <span className='composer-target-summary'>
             <strong>{replyTarget ? t('composer.replying') : t('composer.quoteReposting')}</strong>
-            {replyTarget ? <span className='post-copy-wrap'>{replyTarget.content}</span> : null}
+            {replyTarget ? (
+              <span className='post-copy-wrap'>{replyTarget.content}</span>
+            ) : repostTarget ? (
+              <span className='post-copy-wrap'>
+                {t('composer.sourcePost')} · {repostTarget.authorLabel}: {repostTarget.content}
+              </span>
+            ) : null}
           </span>
           <Button
             className='shell-icon-button'

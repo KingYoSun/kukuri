@@ -11,7 +11,7 @@ import {
   CommunityIndexingRequestDialog,
   type CommunityIndexingTarget,
 } from '@/components/core/CommunityIndexingRequestDialog';
-import { type PrimarySection, type SettingsSection } from '@/components/shell/types';
+import { type SettingsSection } from '@/components/shell/types';
 
 import { runtimeApi } from '@/lib/api';
 import { eligibleCommunityIndexNodes } from '@/lib/api/communityIndex';
@@ -56,14 +56,16 @@ import { DesktopShellSettingsDrawer } from '@/shell/page/DesktopShellSettingsDra
 import { useFocusScroll } from '@/shell/page/useFocusScroll';
 import { useSharePreview } from '@/shell/page/useSharePreview';
 import { useShellDialogs } from '@/shell/page/useShellDialogs';
-import { useDesktopShellColumnSynchronization } from '@/shell/page/useDesktopShellColumnSynchronization';
 import { useShallow } from 'zustand/react/shallow';
 import {
+  columnIdentityId,
+  openTransientColumn,
   setColumnTimelineView,
   type ColumnKind,
   type ColumnState,
   type ColumnTimelineView,
 } from '@/shell/slices/workspace';
+import { routeStateForColumn } from '@/shell/routing/initialWorkspaceRoute';
 
 const CLIPBOARD_TOAST_TIMEOUT_MS = 2200;
 const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
@@ -87,11 +89,13 @@ export function DesktopShellPage({
     return i18n.t(key, options) as string;
   }, []);
   const {
+    workspaceState,
     trackedTopics,
     activeTopic,
     topicInput,
-    selectedChannelIdByTopic,
     notifications,
+    selectedAuthorPubkey,
+    selectedDirectMessagePeerPubkey,
     selectedLiveSessionId,
     selectedGameRoomId,
     developerModeEnabled,
@@ -106,8 +110,6 @@ export function DesktopShellPage({
   const clipboardToastTimeoutRef = useRef<number | null>(null);
   const dialogs = useShellDialogs({
     activePrimarySection: shellChromeState.activePrimarySection,
-    api,
-    timelineView: shellChromeState.timelineView,
   });
 
   useEffect(() => {
@@ -155,13 +157,11 @@ export function DesktopShellPage({
 
   const setTopicInput = useDesktopShellFieldSetter('topicInput');
   const setTrackedTopics = useDesktopShellFieldSetter('trackedTopics');
-  const setActiveTopic = useDesktopShellFieldSetter('activeTopic');
   const setNotificationAutoReadError = useDesktopShellFieldSetter('notificationAutoReadError');
   const setNotificationPanelState = useDesktopShellFieldSetter('notificationPanelState');
   const setShellChromeState = useDesktopShellFieldSetter('shellChromeState');
   const updateAvailable = useAppUpdateStore(selectUpdateAvailable);
   const checkForUpdate = useAppUpdateStore((state) => state.checkForUpdate);
-  const setSelectedChannelIdByTopic = useDesktopShellFieldSetter('selectedChannelIdByTopic');
   const setComposeChannelByTopic = useDesktopShellFieldSetter('composeChannelByTopic');
   const setTimelineScopeByTopic = useDesktopShellFieldSetter('timelineScopeByTopic');
   const setSelectedLiveSessionId = useDesktopShellFieldSetter('selectedLiveSessionId');
@@ -179,17 +179,7 @@ export function DesktopShellPage({
   const loadTopicsRequestRef = useRef(new Map<string, number>());
 
   const pendingRouteUrlRef = useRef<string | null>(null);
-  const didSyncRouteSectionRef = useRef(false);
   const controlCenterTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const primarySectionRefs = useRef<Record<PrimarySection, HTMLElement | null>>({
-    timeline: null,
-    explore: null,
-    live: null,
-    game: null,
-    messages: null,
-    profile: null,
-    notifications: null,
-  });
 
   const {
     loadTopics,
@@ -200,7 +190,6 @@ export function DesktopShellPage({
     loadMoreThread,
     rememberDraftPreview,
     releaseDraftPreview,
-    releaseAllDraftPreviews,
     rememberDirectMessageDraftPreview,
     releaseDirectMessageDraftPreview,
     releaseAllDirectMessageDraftPreviews,
@@ -222,8 +211,6 @@ export function DesktopShellPage({
     routeSection,
     syncRoute,
     setSettingsOpen,
-    setPrimarySectionRef,
-    focusPrimarySection,
     focusTimelineView,
     openDirectMessageList,
     openDirectMessagePane,
@@ -236,11 +223,8 @@ export function DesktopShellPage({
     api,
     translate,
     loadTopics,
-    primarySectionRefs,
-    navTriggerRef: controlCenterTriggerRef,
     settingsTriggerRef: controlCenterTriggerRef,
     pendingRouteUrlRef,
-    didSyncRouteSectionRef,
   });
 
   const shellActions = useDesktopShellActions({
@@ -252,13 +236,11 @@ export function DesktopShellPage({
     openDirectMessagePane,
     openAuthorDetail,
     openThread,
-    setComposeDialogOpen: dialogs.setComposeDialogOpen,
     setLiveCreateDialogOpen: dialogs.setLiveCreateDialogOpen,
     setGameCreateDialogOpen: dialogs.setGameCreateDialogOpen,
     setProfileAvatarPreviewUrl,
     setProfileAvatarInputKey: dialogs.setProfileAvatarInputKey,
     releaseDraftPreview,
-    releaseAllDraftPreviews,
     rememberDraftPreview,
     releaseDirectMessageDraftPreview,
     releaseAllDirectMessageDraftPreviews,
@@ -280,7 +262,6 @@ export function DesktopShellPage({
     topicNavItems,
     activeGameRooms,
   } = viewModels;
-  useDesktopShellColumnSynchronization(activeGameRooms);
   useOsNotificationBridge();
   useOsNotificationActivation(notifications, shellActions.handleOpenNotification);
   const syncTopicContext = useCallback(
@@ -289,19 +270,26 @@ export function DesktopShellPage({
       if (!trackedTopics.includes(topic)) {
         setTrackedTopics(nextTopics);
       }
-      setActiveTopic(topic);
-      setSelectedChannelIdByTopic(setRecordEntry(topic, channelId));
       setTimelineScopeByTopic(setRecordEntry(topic, privateTimelineScope(channelId)));
       setComposeChannelByTopic(setRecordEntry(topic, privateComposeTarget(channelId)));
+      const scope = { topicId: topic, channelId };
+      const columnId = columnIdentityId('timeline', scope);
+      setWorkspaceState((current) =>
+        openTransientColumn(current, {
+          id: columnId,
+          kind: 'timeline',
+          scope,
+          pinned: false,
+        })
+      );
       await loadTopics(nextTopics, topic, null);
     },
     [
       loadTopics,
-      setActiveTopic,
       setComposeChannelByTopic,
-      setSelectedChannelIdByTopic,
       setTimelineScopeByTopic,
       setTrackedTopics,
+      setWorkspaceState,
       trackedTopics,
     ]
   );
@@ -324,12 +312,6 @@ export function DesktopShellPage({
         await syncTopicContext(reference.topic, null);
         setSelectedLiveSessionId(null);
         setSelectedGameRoomId(null);
-        setShellChromeState((current) => ({
-          ...current,
-          activePrimarySection: 'timeline',
-          timelineView: 'feed',
-          navOpen: false,
-        }));
         syncRoute('push', {
           activeTopic: reference.topic,
           composeTarget: PUBLIC_CHANNEL_REF,
@@ -360,11 +342,6 @@ export function DesktopShellPage({
         await syncTopicContext(reference.topic, reference.channelId);
         setSelectedLiveSessionId(null);
         setSelectedGameRoomId(null);
-        setShellChromeState((current) => ({
-          ...current,
-          activePrimarySection: 'timeline',
-          navOpen: false,
-        }));
         syncRoute('push', {
           activeTopic: reference.topic,
           composeTarget: privateComposeTarget(reference.channelId),
@@ -383,11 +360,17 @@ export function DesktopShellPage({
         await syncTopicContext(reference.topic, reference.channelId);
         setSelectedLiveSessionId(reference.sessionId);
         setSelectedGameRoomId(null);
-        setShellChromeState((current) => ({
-          ...current,
-          activePrimarySection: 'live',
-          navOpen: false,
-        }));
+        const scope = { topicId: reference.topic, channelId: reference.channelId };
+        setWorkspaceState((current) =>
+          openTransientColumn(current, {
+            id: columnIdentityId('stream', scope, reference.sessionId),
+            kind: 'stream',
+            scope,
+            entityId: reference.sessionId,
+            parentColumnId: current.activeColumnId,
+            pinned: false,
+          })
+        );
         syncRoute('push', {
           activeTopic: reference.topic,
           composeTarget: privateComposeTarget(reference.channelId),
@@ -405,11 +388,17 @@ export function DesktopShellPage({
       await syncTopicContext(reference.topic, reference.channelId);
       setSelectedGameRoomId(reference.roomId);
       setSelectedLiveSessionId(null);
-      setShellChromeState((current) => ({
-        ...current,
-        activePrimarySection: 'game',
-        navOpen: false,
-      }));
+      const scope = { topicId: reference.topic, channelId: reference.channelId };
+      setWorkspaceState((current) =>
+        openTransientColumn(current, {
+          id: columnIdentityId('game', scope, reference.roomId),
+          kind: 'game',
+          scope,
+          entityId: reference.roomId,
+          parentColumnId: current.activeColumnId,
+          pinned: false,
+        })
+      );
       syncRoute('push', {
         activeTopic: reference.topic,
         composeTarget: privateComposeTarget(reference.channelId),
@@ -429,7 +418,7 @@ export function DesktopShellPage({
       openThread,
       setSelectedGameRoomId,
       setSelectedLiveSessionId,
-      setShellChromeState,
+      setWorkspaceState,
       setTrackedTopics,
       syncRoute,
       syncTopicContext,
@@ -536,9 +525,9 @@ export function DesktopShellPage({
       openAuthorDetail={openAuthorDetail}
       openDirectMessagePane={openDirectMessagePane}
       openThread={openThread}
-      beginReply={shellActions.beginColumnReply}
+      beginColumnReply={shellActions.beginColumnReply}
       handleSimpleRepost={shellActions.handleSimpleRepost}
-      beginQuoteRepost={shellActions.beginQuoteRepost}
+      beginColumnQuoteRepost={shellActions.beginColumnQuoteRepost}
       handleRetryLocalPost={shellActions.handleRetryLocalPost}
       handleRestoreLocalPost={shellActions.handleRestoreLocalPost}
       handleToggleReaction={shellActions.handleToggleReaction}
@@ -554,35 +543,26 @@ export function DesktopShellPage({
       topicId={topicId}
     />
   );
-  const renderPrimarySurface = (surfaceSection: PrimarySection, column?: ColumnState) => (
+  const renderPrimarySurface = (column: ColumnState) => (
     <DesktopShellPrimarySurface
       t={t}
       api={api}
       metaverseActions={shellActions.metaverseActions}
       locale={locale}
-      routeSection={routeSection}
-      surfaceSection={surfaceSection}
-      surfaceColumnKind={column?.kind}
-      surfaceEntityId={column?.entityId}
-      surfaceScope={column?.scope}
-      surfaceTimelineView={
-        column?.kind === 'timeline' ? column.timelineView ?? 'feed' : undefined
-      }
+      column={column}
       profileAvatarInputKey={dialogs.profileAvatarInputKey}
       messagesWorkspace={null}
       notificationsWorkspace={null}
       viewModels={viewModels}
-      setPrimarySectionRef={setPrimarySectionRef}
-      focusTimelineView={focusTimelineView}
       openCommunityNodeSettings={handleOpenCommunityNodeSettings}
       loadReactionCatalogData={loadReactionCatalogData}
       refreshTimelineFeed={refreshTimelineFeed}
       loadMoreTimeline={loadMoreTimeline}
       openAuthorDetail={openAuthorDetail}
       openThread={openThread}
-      beginReply={shellActions.beginColumnReply}
+      beginColumnReply={shellActions.beginColumnReply}
       handleSimpleRepost={shellActions.handleSimpleRepost}
-      beginQuoteRepost={shellActions.beginQuoteRepost}
+      beginColumnQuoteRepost={shellActions.beginColumnQuoteRepost}
       handleRetryLocalPost={shellActions.handleRetryLocalPost}
       handleRestoreLocalPost={shellActions.handleRestoreLocalPost}
       handleToggleReaction={shellActions.handleToggleReaction}
@@ -610,55 +590,54 @@ export function DesktopShellPage({
       handleRelationshipAction={shellActions.handleRelationshipAction}
       handleMuteAction={shellActions.handleMuteAction}
       handleOpenOriginalTopic={shellActions.handleOpenOriginalTopic}
-      columnMode
     />
   );
-  const activateWorkspaceColumn = async (column: ColumnState) => {
-    if (
-      column.scope &&
-      (column.scope.topicId !== activeTopic ||
-        column.scope.channelId !== (selectedChannelIdByTopic[activeTopic] ?? null))
-    ) {
-      await syncTopicContext(column.scope.topicId, column.scope.channelId);
+  const activateWorkspaceColumn = async (
+    column: ColumnState,
+    preserveAuthorPane = true
+  ) => {
+    const route = routeStateForColumn(column);
+    if (route) {
+      syncRoute('push', {
+        ...route,
+        selectedAuthorPubkey:
+          preserveAuthorPane &&
+          column.kind === 'conversation' &&
+          column.entityId === selectedDirectMessagePeerPubkey
+            ? selectedAuthorPubkey
+            : route.selectedAuthorPubkey,
+      });
     }
-    if (column.kind === 'timeline') {
-      // active になった Timeline Column の view を chrome projection と route の
-      // timelineView query に投影する(Issue #765)。
-      focusPrimarySection('timeline', { timelineView: column.timelineView ?? 'feed' });
-      return;
+    if (column.scope) {
+      const nextTopics = trackedTopics.includes(column.scope.topicId)
+        ? trackedTopics
+        : [...trackedTopics, column.scope.topicId];
+      if (nextTopics !== trackedTopics) setTrackedTopics(nextTopics);
+      await loadTopics(nextTopics, column.scope.topicId, column.kind === 'thread' ? column.entityId ?? null : null);
     }
     if (column.kind === 'thread' && column.entityId) {
-      await openThread(column.entityId, { topic: column.scope?.topicId });
+      await openThread(column.entityId, {
+        historyMode: 'replace',
+        topic: column.scope?.topicId,
+        channelId: column.scope?.channelId,
+      });
       return;
     }
     if (column.kind === 'profile' && column.entityId) {
-      await openAuthorDetail(column.entityId);
+      await openAuthorDetail(column.entityId, { historyMode: 'replace' });
       return;
     }
     if (column.kind === 'conversation' && column.entityId) {
-      await openDirectMessagePane(column.entityId);
+      await openDirectMessagePane(column.entityId, { historyMode: 'replace' });
       return;
     }
     if (column.kind === 'stream') {
       setSelectedLiveSessionId(column.entityId ?? null);
       setSelectedGameRoomId(null);
-      focusPrimarySection('live');
-      return;
-    }
-    if (column.kind === 'game' || column.kind === 'metaverse') {
+    } else if (column.kind === 'game' || column.kind === 'metaverse') {
       setSelectedGameRoomId(column.entityId ?? null);
       setSelectedLiveSessionId(null);
-      focusPrimarySection('game');
-      return;
     }
-    const sectionByKind: Partial<Record<ColumnKind, PrimarySection>> = {
-      notifications: 'notifications',
-      explore: 'explore',
-      messages: 'messages',
-      profile: 'profile',
-    };
-    const section = sectionByKind[column.kind];
-    if (section) focusPrimarySection(section);
   };
   // Timeline Column header の view tabs。正本(Column の timelineView)を更新し、
   // その Column が route の focus 対象(timeline section + 同一 scope)の場合のみ
@@ -668,9 +647,7 @@ export function DesktopShellPage({
     setWorkspaceState((current) => setColumnTimelineView(current, column.id, view));
     const routeFocusedTimelineColumn =
       routeSection === 'timeline' &&
-      column.scope !== undefined &&
-      column.scope.topicId === activeTopic &&
-      column.scope.channelId === (selectedChannelIdByTopic[activeTopic] ?? null);
+      column.id === workspaceState.activeColumnId;
     if (routeFocusedTimelineColumn) focusTimelineView(view);
   };
   const columnTitles: Record<ColumnKind, string> = {
@@ -703,7 +680,9 @@ export function DesktopShellPage({
       onOpenLiveCreate={() => dialogs.setLiveCreateDialogOpen(true)}
       timelineViewItems={viewModels.timelineViewItems}
       onSelectTimelineView={selectColumnTimelineView}
-      onActivateColumn={(column) => void activateWorkspaceColumn(column)}
+      onActivateColumn={(column, preserveAuthorPane) =>
+        void activateWorkspaceColumn(column, preserveAuthorPane)
+      }
       renderPrimarySurface={renderPrimarySurface}
       messagesSurface={renderMessagesSurface('messages')}
       renderConversationSurface={(column) =>

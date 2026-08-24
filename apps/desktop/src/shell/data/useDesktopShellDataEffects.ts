@@ -10,8 +10,10 @@ import type {
   AttachmentView,
   CommunityNodeNodeStatus,
   DesktopApi,
+  GameRoomView,
   SyncStatus,
 } from '@/lib/api';
+import type { ShellChromeProjection } from '@/components/shell/types';
 
 import {
   createObjectUrlFromPayload,
@@ -28,6 +30,7 @@ import {
   type DesktopShellStateValue,
   type DesktopShellStoreApi,
 } from '@/shell/store';
+import { activeWorkspaceScope } from '@/shell/slices/workspace';
 import { setRecordEntry } from '@/shell/stateUpdates';
 import {
   createGameEditorDraft,
@@ -47,11 +50,11 @@ type UseDesktopShellDataEffectsArgs = {
   trackedTopics: string[];
   activeTopic: string;
   selectedThread: string | null;
-  activeGameRooms: DesktopShellState['gameRoomsByTopic'][string];
+  activeGameRooms: GameRoomView[];
   activeJoinedChannels: DesktopShellState['joinedChannelsByTopic'][string];
   selectedPrivateChannelId: string | null;
   mediaObjectUrls: DesktopShellState['mediaObjectUrls'];
-  shellChromeState: DesktopShellState['shellChromeState'];
+  shellChromeState: ShellChromeProjection;
   selectedAuthorPubkey: string | null;
   previewableMediaAttachments: AttachmentView[];
   remoteObjectUrlRef: MutableRefObject<Map<string, string>>;
@@ -86,7 +89,11 @@ type UseDesktopShellDataEffectsArgs = {
   setProfileDraft: Setter<'profileDraft'>;
   setNotifications: Setter<'notifications'>;
   setGameDrafts: Setter<'gameDrafts'>;
-  setSelectedChannelIdByTopic: Setter<'selectedChannelIdByTopic'>;
+  setSelectedChannelIdByTopic: (
+    value:
+      | Record<string, string | null>
+      | ((current: Record<string, string | null>) => Record<string, string | null>)
+  ) => void;
   setComposeChannelByTopic: Setter<'composeChannelByTopic'>;
   setTimelineScopeByTopic: Setter<'timelineScopeByTopic'>;
   setMediaObjectUrls: Setter<'mediaObjectUrls'>;
@@ -154,8 +161,9 @@ export function useDesktopShellDataEffects({
         // 非表示 Column は取得しない(API 呼び出し数の上限 = 表示中 Column 数)。
         const currentState = storeApi.getState();
         const visibleIds = new Set(visibleColumnIdsRef?.current ?? []);
+        const activeScope = activeWorkspaceScope(currentState.workspaceState);
         const activeSelectedChannelId =
-          currentState.selectedChannelIdByTopic[activeTopic] ?? null;
+          activeScope.topicId === activeTopic ? activeScope.channelId : null;
         const seenScopeKeys = new Set<string>([
           `${activeTopic}\u0000${activeSelectedChannelId ?? ''}`,
           `${activeTopic}\u0000`,

@@ -3,7 +3,6 @@ import {
 } from 'react';
 
 import type {
-  ComposerDraftMediaView,
   MentionCandidate,
   ThreadPanelState,
   TopicDiagnosticSummary,
@@ -34,12 +33,13 @@ import {
 import {
   activeTimelineStorageKey,
   DEFAULT_ASYNC_PANEL_STATE,
+  timelineStorageKeyForChannel,
   useDesktopShellStore,
 } from '@/shell/store';
+import { activeWorkspaceScope } from '@/shell/slices/workspace';
 import {
   audienceLabelForChannelRef,
   authorDisplayLabel,
-  formatBytes,
   formatCount,
   formatLastReceivedLabel,
   resolveProfilePictureSrc,
@@ -69,25 +69,23 @@ export function useDesktopShellViewModels({
 }: UseDesktopShellViewModelsArgs) {
   const state = useDesktopShellStore(useShallow(selectShellViewModelsSlice));
   const activeTopic = state.activeTopic;
+  const activeScope = activeWorkspaceScope(state.workspaceState);
+  const activeScopeKey = timelineStorageKeyForChannel(
+    activeScope.topicId,
+    activeScope.channelId
+  );
   const selectedPrivateChannelId = state.selectedChannelIdByTopic[activeTopic] ?? null;
   const activeJoinedChannels = state.joinedChannelsByTopic[activeTopic] ?? EMPTY_JOINED_CHANNELS;
   const activeTimeline = state.timelinesByKey[activeTimelineStorageKey(state, activeTopic)] ?? EMPTY_POSTS;
-  const activeLiveSessions = state.liveSessionsByTopic[activeTopic] ?? EMPTY_LIVE_SESSIONS;
-  const activeGameRooms = state.gameRoomsByTopic[activeTopic] ?? EMPTY_GAME_ROOMS;
+  const activeLiveSessions = state.liveSessionsByScopeKey[activeScopeKey] ?? EMPTY_LIVE_SESSIONS;
+  const activeGameRooms = state.gameRoomsByScopeKey[activeScopeKey] ?? EMPTY_GAME_ROOMS;
   const activeTimelineScope = state.timelineScopeByTopic[activeTopic] ?? { kind: 'public' as const };
-  const activeComposeChannel = state.repostTarget
-    ? { kind: 'public' as const }
-    : state.replyTarget?.channel_id
-      ? {
-          kind: 'private_channel' as const,
-          channel_id: state.replyTarget.channel_id,
-        }
-      : state.composeChannelByTopic[activeTopic] ?? { kind: 'public' as const };
-  const activeComposeAudienceLabel = state.repostTarget
-    ? translate('common:audience.public')
-    : state.replyTarget
-      ? state.replyTarget.audience_label
-      : audienceLabelForChannelRef(activeComposeChannel, activeJoinedChannels);
+  const activeComposeChannel =
+    state.composeChannelByTopic[activeTopic] ?? { kind: 'public' as const };
+  const activeComposeAudienceLabel = audienceLabelForChannelRef(
+    activeComposeChannel,
+    activeJoinedChannels
+  );
   const activePrivateChannel =
     selectedPrivateChannelId
       ? activeJoinedChannels.find((channel) => channel.channel_id === selectedPrivateChannelId) ?? null
@@ -99,9 +97,9 @@ export function useDesktopShellViewModels({
   const activeChannelPanelState =
     state.channelPanelStateByTopic[activeTopic] ?? DEFAULT_ASYNC_PANEL_STATE;
   const activeLivePanelState =
-    state.livePanelStateByTopic[activeTopic] ?? DEFAULT_ASYNC_PANEL_STATE;
+    state.livePanelStateByScopeKey[activeScopeKey] ?? DEFAULT_ASYNC_PANEL_STATE;
   const activeGamePanelState =
-    state.gamePanelStateByTopic[activeTopic] ?? DEFAULT_ASYNC_PANEL_STATE;
+    state.gamePanelStateByScopeKey[activeScopeKey] ?? DEFAULT_ASYNC_PANEL_STATE;
   const topicDiagnostics = Object.fromEntries(
     state.syncStatus.topic_diagnostics.map((diagnostic) => [diagnostic.topic, diagnostic])
   ) as Record<string, TopicSyncStatus>;
@@ -113,11 +111,10 @@ export function useDesktopShellViewModels({
     localProfile,
     mediaObjectUrls,
     communityNodeStatuses,
-    thread,
+    threadsById,
     trackedTopics,
     joinedChannelsByTopic,
     selectedChannelIdByTopic,
-    draftMediaItems,
     directMessageDraftMediaItems,
     selectedThread,
     selectedAuthor,
@@ -141,15 +138,13 @@ export function useDesktopShellViewModels({
     bookmarkedPosts,
     profileTimeline,
     selectedAuthorTimeline,
-    replyTarget,
-    repostTarget,
     unsupportedVideoManifests,
     directMessages,
   } = state;
+  const thread = selectedThread ? threadsById[selectedThread] ?? EMPTY_POSTS : EMPTY_POSTS;
   const {
     activeTimelinePostViews,
     bookmarkedTimelinePostViews,
-    composerSourcePreview,
     profileTimelinePostViews,
     selectedAuthorTimelinePostViews,
     threadPostViews,
@@ -164,8 +159,6 @@ export function useDesktopShellViewModels({
     localProfile,
     mediaObjectUrls,
     profileTimeline,
-    replyTarget,
-    repostTarget,
     selectedAuthorTimeline,
     thread,
     unsupportedVideoManifests,
@@ -300,21 +293,6 @@ export function useDesktopShellViewModels({
       trackedTopics,
     ]
   );
-  const composerDraftViews = useMemo<ComposerDraftMediaView[]>(
-    () =>
-      draftMediaItems.map((item) => ({
-        id: item.id,
-        sourceName: item.source_name,
-        previewUrl: item.preview_url,
-        attachments: item.attachments.map((attachment) => ({
-          key: `${attachment.role ?? attachment.mime}-${attachment.file_name ?? item.source_name}`,
-          label: attachment.role ?? translate('common:fallbacks.attachment'),
-          mime: attachment.mime,
-          byteSizeLabel: formatBytes(attachment.byte_size, locale),
-        })),
-      })),
-    [draftMediaItems, locale, translate]
-  );
   const followingConnections = state.socialConnections.following;
   const mentionCandidates = useMemo<MentionCandidate[]>(() => {
     const seen = new Set<string>();
@@ -391,9 +369,7 @@ export function useDesktopShellViewModels({
     selectedAuthorTimelinePostViews,
     threadPostViews,
     buildPostCardView,
-    composerSourcePreview,
     topicNavItems,
-    composerDraftViews,
     mentionCandidates,
     directMessageDraftViews,
     threadPanelState,

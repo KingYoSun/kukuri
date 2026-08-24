@@ -14,7 +14,7 @@
  *   (H6 のリファクタで無意味に割れるため)。固定するのは api 呼び出し引数
  *   (toHaveBeenCalledWith)・store 状態遷移・キー/フィールド単位の値のみ。
  */
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import type { FormEvent } from 'react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
@@ -28,6 +28,11 @@ import type {
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import type { DesktopShellState, DraftMediaItem } from '@/shell/store';
 import { columnDraftKey, setColumnDraft } from '@/shell/slices/columnDrafts';
+import {
+  activeWorkspaceColumn,
+  activeWorkspaceScope,
+  primarySectionForColumn,
+} from '@/shell/slices/workspace';
 import { useDesktopShellActions } from '@/shell/useDesktopShellActions';
 import {
   createShellHookHarness,
@@ -65,18 +70,7 @@ function buildPost(overrides: Partial<PostView> = {}): PostView {
   };
 }
 
-// api を deferred で凍結し、optimistic post の 'pending' 状態を決定的に観測する。
-function createDeferred<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((nextResolve, nextReject) => {
-    resolve = nextResolve;
-    reject = nextReject;
-  });
-  return { promise, resolve, reject };
-}
-
-// handlePublish は FormEvent を受けるため preventDefault 記録付きの stub を渡す。
+// Column Draft submit は FormEvent を受けるため preventDefault 記録付きの stub を渡す。
 function publishFormEvent() {
   const preventDefault = vi.fn();
   return {
@@ -119,13 +113,11 @@ function renderActionsHook(options: RenderActionsOptions = {}) {
   const openDirectMessagePane = vi.fn(async () => undefined);
   const openAuthorDetail = vi.fn(async () => undefined);
   const openThread = vi.fn(async () => undefined);
-  const setComposeDialogOpen = vi.fn();
   const setLiveCreateDialogOpen = vi.fn();
   const setGameCreateDialogOpen = vi.fn();
   const setProfileAvatarPreviewUrl = vi.fn();
   const setProfileAvatarInputKey = vi.fn();
   const releaseDraftPreview = vi.fn();
-  const releaseAllDraftPreviews = vi.fn();
   const rememberDraftPreview = vi.fn();
   const releaseDirectMessageDraftPreview = vi.fn();
   const releaseAllDirectMessageDraftPreviews = vi.fn();
@@ -158,13 +150,11 @@ function renderActionsHook(options: RenderActionsOptions = {}) {
         openDirectMessagePane,
         openAuthorDetail,
         openThread,
-        setComposeDialogOpen,
         setLiveCreateDialogOpen,
         setGameCreateDialogOpen,
         setProfileAvatarPreviewUrl,
         setProfileAvatarInputKey,
         releaseDraftPreview,
-        releaseAllDraftPreviews,
         rememberDraftPreview,
         releaseDirectMessageDraftPreview,
         releaseAllDirectMessageDraftPreviews,
@@ -186,13 +176,11 @@ function renderActionsHook(options: RenderActionsOptions = {}) {
       openDirectMessagePane,
       openAuthorDetail,
       openThread,
-      setComposeDialogOpen,
       setLiveCreateDialogOpen,
       setGameCreateDialogOpen,
       setProfileAvatarPreviewUrl,
       setProfileAvatarInputKey,
       releaseDraftPreview,
-      releaseAllDraftPreviews,
       rememberDraftPreview,
       releaseDirectMessageDraftPreview,
       releaseAllDirectMessageDraftPreviews,
@@ -269,294 +257,6 @@ describe('useDesktopShellActions', () => {
 
     await act(async () => view.result.current.handleClearDirectMessage(peerPubkey));
     expect(view.store.getState().directMessageError).toBe('clear failed concretely');
-  });
-
-  test('handlePublish inserts a pending optimistic post, clears the composer, then marks it syncing after createPost resolves', async () => {
-    const deferredCreatePost = createDeferred<string>();
-    const createPost = vi.fn(() => deferredCreatePost.promise);
-    const existingPost = buildPost({
-      object_id: 'existing-post-1',
-      origin_topic_id: 'kukuri:topic:demo',
-    });
-    const view = renderActionsHook({
-      api: { createPost },
-      preset: (current) => ({
-        syncStatus: { ...current.syncStatus, local_author_pubkey: SELF_PUBKEY },
-        // 前後空白は trim されて投稿される
-        composer: '  hello world  ',
-        timelinesByKey: {
-          ...current.timelinesByKey,
-          'kukuri:topic:demo::public': [existingPost],
-        },
-        publicTimelinesByTopic: {
-          ...current.publicTimelinesByTopic,
-          'kukuri:topic:demo': [existingPost],
-        },
-      }),
-    });
-    const { event, preventDefault } = publishFormEvent();
-
-    await act(async () => {
-      await view.result.current.handlePublish(event);
-    });
-
-    expect(preventDefault).toHaveBeenCalledTimes(1);
-
-    // optimistic post が両タイムラインの先頭に pending で入る
-    const timelinePosts = view.store.getState().timelinesByKey['kukuri:topic:demo::public'];
-    expect(timelinePosts).toHaveLength(2);
-    const optimistic = timelinePosts[0]!;
-    expect(optimistic.object_id).toMatch(/^local-post:/);
-    expect(optimistic.local_id).toBe(optimistic.object_id);
-    expect(optimistic.local_state).toBe('pending');
-    expect(optimistic.local_error).toBeNull();
-    expect(optimistic.server_object_id).toBeNull();
-    expect(optimistic.content).toBe('hello world');
-    expect(optimistic.author_pubkey).toBe(SELF_PUBKEY);
-    expect(optimistic.object_kind).toBe('post');
-    expect(optimistic.channel_id).toBeNull();
-    expect(optimistic.audience_label).toBe('Public');
-    expect(optimistic.published_topic_id).toBe('kukuri:topic:demo');
-    expect(optimistic.origin_topic_id).toBe('kukuri:topic:demo');
-    expect(optimistic.root_id).toBe(optimistic.object_id);
-    expect(optimistic.attachments).toEqual([]);
-    expect(optimistic.local_draft).toEqual({
-      kind: 'post',
-      topic: 'kukuri:topic:demo',
-      content: 'hello world',
-      reply_to: null,
-      channel_ref: { kind: 'public' },
-      attachments: [],
-    });
-    expect(timelinePosts[1]?.object_id).toBe('existing-post-1');
-
-    const publicPosts = view.store.getState().publicTimelinesByTopic['kukuri:topic:demo'];
-    expect(publicPosts).toHaveLength(2);
-    expect(publicPosts[0]?.object_id).toBe(optimistic.object_id);
-    expect(publicPosts[0]?.local_state).toBe('pending');
-    expect(publicPosts[1]?.object_id).toBe('existing-post-1');
-
-    // composer / draft のクリアとダイアログ閉鎖
-    const cleared = view.store.getState();
-    expect(cleared.composer).toBe('');
-    expect(cleared.draftMediaItems).toEqual([]);
-    expect(cleared.attachmentInputKey).toBe(1);
-    expect(cleared.composerError).toBeNull();
-    expect(cleared.replyTarget).toBeNull();
-    expect(cleared.repostTarget).toBeNull();
-    expect(cleared.shellChromeState.activePrimarySection).toBe('timeline');
-    expect(view.mocks.setComposeDialogOpen).toHaveBeenCalledTimes(1);
-    expect(view.mocks.setComposeDialogOpen).toHaveBeenCalledWith(false);
-    expect(view.mocks.syncRoute).toHaveBeenCalledTimes(1);
-    expect(view.mocks.syncRoute).toHaveBeenCalledWith('replace', {
-      primarySection: 'timeline',
-    });
-
-    // api には trim 済み本文 + public channel ref が渡る
-    expect(createPost).toHaveBeenCalledTimes(1);
-    expect(createPost).toHaveBeenCalledWith(
-      'kukuri:topic:demo',
-      'hello world',
-      null,
-      [],
-      { kind: 'public' }
-    );
-    expect(view.mocks.refreshVisibleTimelineAfterPublish).not.toHaveBeenCalled();
-
-    // createPost 解決後は syncing + server_object_id に遷移する
-    await act(async () => {
-      deferredCreatePost.resolve('server-object-1');
-      await deferredCreatePost.promise;
-    });
-    await waitFor(() => {
-      expect(
-        view.store.getState().timelinesByKey['kukuri:topic:demo::public'][0]?.local_state
-      ).toBe('syncing');
-    });
-    const synced = view.store.getState().timelinesByKey['kukuri:topic:demo::public'][0]!;
-    expect(synced.server_object_id).toBe('server-object-1');
-    expect(synced.local_error).toBeNull();
-    expect(
-      view.store.getState().publicTimelinesByTopic['kukuri:topic:demo'][0]?.local_state
-    ).toBe('syncing');
-    expect(
-      view.store.getState().publicTimelinesByTopic['kukuri:topic:demo'][0]?.server_object_id
-    ).toBe('server-object-1');
-    expect(view.mocks.refreshVisibleTimelineAfterPublish).toHaveBeenCalledTimes(1);
-    expect(view.mocks.refreshVisibleTimelineAfterPublish).toHaveBeenCalledWith(
-      'kukuri:topic:demo',
-      null,
-      null
-    );
-
-    view.unmount();
-  });
-
-  test('handlePublish aborts a quote repost without commentary by setting composerError to the translation key', async () => {
-    const createPost = vi.fn(async () => 'server-post-1');
-    const createRepost = vi.fn(async () => 'server-repost-1');
-    const view = renderActionsHook({
-      api: { createPost, createRepost },
-      preset: () => ({
-        // 空白のみの本文は trim されて空扱いになる
-        composer: '   ',
-        repostTarget: buildPost({
-          object_id: 'source-post-1',
-          origin_topic_id: 'kukuri:topic:demo',
-        }),
-      }),
-    });
-    const { event } = publishFormEvent();
-
-    await act(async () => {
-      await view.result.current.handlePublish(event);
-    });
-
-    const state = view.store.getState();
-    // 訳キーそのものが composerError に入る(translate stub が key を返すため)
-    expect(state.composerError).toBe('common:errors.quoteRepostRequiresCommentary');
-    expect(createRepost).not.toHaveBeenCalled();
-    expect(createPost).not.toHaveBeenCalled();
-    // 中断: composer / repostTarget は保持され、optimistic 挿入もダイアログ閉鎖も起きない
-    expect(state.composer).toBe('   ');
-    expect(state.repostTarget?.object_id).toBe('source-post-1');
-    expect(state.timelinesByKey['kukuri:topic:demo::public']).toEqual([]);
-    expect(state.publicTimelinesByTopic['kukuri:topic:demo']).toEqual([]);
-    expect(view.mocks.setComposeDialogOpen).not.toHaveBeenCalled();
-    expect(view.mocks.syncRoute).not.toHaveBeenCalled();
-
-    view.unmount();
-  });
-
-  test('handlePublish marks the optimistic post failed and surfaces the error when createPost rejects', async () => {
-    const createPost = vi.fn(async (): Promise<string> => {
-      throw new Error('publish failed: boom');
-    });
-    const view = renderActionsHook({
-      api: { createPost },
-      preset: (current) => ({
-        syncStatus: { ...current.syncStatus, local_author_pubkey: SELF_PUBKEY },
-        composer: 'will fail',
-      }),
-    });
-    const { event } = publishFormEvent();
-
-    await act(async () => {
-      await view.result.current.handlePublish(event);
-    });
-
-    await waitFor(() => {
-      expect(
-        view.store.getState().publicTimelinesByTopic['kukuri:topic:demo'][0]?.local_state
-      ).toBe('failed');
-    });
-    const failedPost = view.store.getState().publicTimelinesByTopic['kukuri:topic:demo'][0]!;
-    expect(failedPost.local_error).toBe('publish failed: boom');
-    const timelinePost = view.store.getState().timelinesByKey['kukuri:topic:demo::public'][0]!;
-    expect(timelinePost.local_state).toBe('failed');
-    expect(timelinePost.local_error).toBe('publish failed: boom');
-    // Error.message がそのまま composerError になる(訳キーではない)
-    expect(view.store.getState().composerError).toBe('publish failed: boom');
-    expect(view.mocks.refreshVisibleTimelineAfterPublish).not.toHaveBeenCalled();
-
-    view.unmount();
-  });
-
-  test('handleRestoreLocalPost restores composer state from local_draft and reopens the compose dialog', () => {
-    const parentPost = buildPost({
-      object_id: 'parent-post-1',
-      root_id: 'parent-root-1',
-    });
-    const failedPost = buildPost({
-      object_id: 'local-post:failed-1',
-      local_id: 'local-post:failed-1',
-      object_kind: 'comment',
-      root_id: 'parent-root-1',
-      reply_to: 'parent-post-1',
-      content: 'draft content to restore',
-      local_state: 'failed',
-      local_error: 'previous publish error',
-      local_draft: {
-        kind: 'post',
-        topic: 'kukuri:topic:demo',
-        content: 'draft content to restore',
-        reply_to: 'parent-post-1',
-        channel_ref: { kind: 'public' },
-        attachments: [],
-      },
-      local_draft_media_items: [
-        {
-          id: 'draft-media-1',
-          source_name: 'photo.png',
-          preview_url: 'blob:draft-media-1',
-          attachments: [
-            {
-              mime: 'image/png',
-              byte_size: 128,
-              data_base64: 'aGVsbG8=',
-              role: 'image_original',
-            },
-          ],
-        },
-      ],
-    });
-    const view = renderActionsHook({
-      preset: (current) => ({
-        // reply_to の復元先(findKnownPost)が publicTimelinesByTopic から解決される
-        publicTimelinesByTopic: {
-          ...current.publicTimelinesByTopic,
-          'kukuri:topic:demo': [parentPost],
-        },
-        shellChromeState: {
-          ...current.shellChromeState,
-          activePrimarySection: 'profile',
-        },
-      }),
-    });
-
-    act(() => {
-      view.result.current.handleRestoreLocalPost(failedPost);
-    });
-
-    const state = view.store.getState();
-    expect(state.composer).toBe('draft content to restore');
-    expect(state.draftMediaItems).toEqual([
-      {
-        id: 'draft-media-1',
-        source_name: 'photo.png',
-        preview_url: 'blob:draft-media-1',
-        attachments: [
-          {
-            mime: 'image/png',
-            byte_size: 128,
-            data_base64: 'aGVsbG8=',
-            role: 'image_original',
-          },
-        ],
-      },
-    ]);
-    expect(state.attachmentInputKey).toBe(1);
-    expect(state.composeChannelByTopic['kukuri:topic:demo']).toEqual({ kind: 'public' });
-    // replyTarget は draft.reply_to から既知 post を引き当てて復元される
-    expect(state.replyTarget?.object_id).toBe('parent-post-1');
-    expect(state.repostTarget).toBeNull();
-    expect(state.selectedThread).toBe('parent-root-1');
-    expect(state.composerError).toBe('previous publish error');
-    expect(state.shellChromeState.activePrimarySection).toBe('timeline');
-    expect(view.mocks.rememberDraftPreview).toHaveBeenCalledTimes(1);
-    expect(view.mocks.rememberDraftPreview).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'draft-media-1' })
-    );
-    expect(view.mocks.setComposeDialogOpen).toHaveBeenCalledTimes(1);
-    expect(view.mocks.setComposeDialogOpen).toHaveBeenCalledWith(true);
-    expect(view.mocks.syncRoute).toHaveBeenCalledTimes(1);
-    expect(view.mocks.syncRoute).toHaveBeenCalledWith('replace', {
-      activeTopic: 'kukuri:topic:demo',
-      primarySection: 'timeline',
-      selectedThread: 'parent-root-1',
-    });
-
-    view.unmount();
   });
 
   test('handleToggleBookmarkedPost bookmarks then removes the post through the api', async () => {
@@ -647,10 +347,6 @@ describe('useDesktopShellActions', () => {
           ...current.timelinesByKey,
           'kukuri:topic:demo::public': [post],
         },
-        publicTimelinesByTopic: {
-          ...current.publicTimelinesByTopic,
-          'kukuri:topic:demo': [post],
-        },
         error: 'previous error',
       }),
     });
@@ -685,7 +381,7 @@ describe('useDesktopShellActions', () => {
         custom_asset: null,
       },
     ]);
-    expect(state.publicTimelinesByTopic['kukuri:topic:demo'][0]?.reaction_summary).toEqual([
+    expect(state.timelinesByKey['kukuri:topic:demo::public'][0]?.reaction_summary).toEqual([
       {
         reaction_key_kind: 'emoji',
         normalized_reaction_key: 'emoji:👍',
@@ -715,17 +411,11 @@ describe('useDesktopShellActions', () => {
     const view = renderActionsHook({
       preset: (current) => ({
         selectedThread: 'thread-post-1',
-        thread: [threadPost],
-        replyTarget: threadPost,
-        repostTarget: threadPost,
+        threadsById: { 'thread-post-1': [threadPost] },
         selectedAuthorPubkey: AUTHOR_A_PUBKEY,
         selectedAuthorTimeline: [threadPost],
         authorError: 'previous author error',
         // 選択し直した topic の channel 選択と scope は public にリセットされる
-        selectedChannelIdByTopic: {
-          ...current.selectedChannelIdByTopic,
-          'kukuri:topic:iroh': 'channel-x',
-        },
         timelineScopeByTopic: {
           ...current.timelineScopeByTopic,
           'kukuri:topic:iroh': { kind: 'channel', channel_id: 'channel-x' },
@@ -736,8 +426,6 @@ describe('useDesktopShellActions', () => {
         },
         shellChromeState: {
           ...current.shellChromeState,
-          activePrimarySection: 'profile',
-          navOpen: true,
         },
       }),
     });
@@ -747,17 +435,14 @@ describe('useDesktopShellActions', () => {
     });
 
     const state = view.store.getState();
-    expect(state.activeTopic).toBe('kukuri:topic:iroh');
-    expect(state.selectedChannelIdByTopic['kukuri:topic:iroh']).toBeNull();
+    expect(activeWorkspaceScope(state.workspaceState).topicId).toBe('kukuri:topic:iroh');
+    expect(activeWorkspaceScope(state.workspaceState).channelId).toBeNull();
     expect(state.timelineScopeByTopic['kukuri:topic:iroh']).toEqual({ kind: 'public' });
     expect(state.composeChannelByTopic['kukuri:topic:iroh']).toEqual({ kind: 'public' });
-    expect(state.shellChromeState.activePrimarySection).toBe('timeline');
-    expect(state.shellChromeState.navOpen).toBe(false);
+    expect(primarySectionForColumn(activeWorkspaceColumn(state.workspaceState))).toBe('timeline');
     // clearThreadContext 相当のリセット
     expect(state.selectedThread).toBeNull();
-    expect(state.thread).toEqual([]);
-    expect(state.replyTarget).toBeNull();
-    expect(state.repostTarget).toBeNull();
+    expect(state.threadsById['thread-post-1']).toEqual([threadPost]);
     expect(state.selectedAuthorPubkey).toBeNull();
     expect(state.selectedAuthor).toBeNull();
     expect(state.selectedAuthorTimeline).toEqual([]);
@@ -832,6 +517,169 @@ describe('useDesktopShellActions', () => {
       'topic-a',
       null,
       'friends'
+    );
+  });
+
+  test('quote repost expands the source topic public Column Draft and submits through createRepost', async () => {
+    const createRepost = vi.fn(async () => 'repost-1');
+    const source = buildPost({
+      object_id: 'source-post-1',
+      published_topic_id: 'kukuri:topic:iroh',
+      origin_topic_id: 'kukuri:topic:iroh',
+    });
+    const view = renderActionsHook({ api: { createRepost } });
+
+    act(() => view.result.current.beginColumnQuoteRepost(source));
+
+    const scope = { topicId: 'kukuri:topic:iroh', channelId: null };
+    const target = {
+      columnId: 'column:timeline:kukuri%3Atopic%3Airoh:-:-',
+      action: 'post' as const,
+      scope,
+    };
+    expect(activeWorkspaceScope(view.store.getState().workspaceState)).toEqual(scope);
+    expect(view.store.getState().columnDraftsByKey[columnDraftKey(target)]).toMatchObject({
+      expanded: true,
+      replyTarget: null,
+      repostTarget: { object_id: 'source-post-1' },
+    });
+
+    await act(async () => {
+      await view.result.current.handleSubmitColumnDraft(target, publishFormEvent().event);
+    });
+    expect(createRepost).toHaveBeenCalledWith(
+      'kukuri:topic:iroh',
+      'kukuri:topic:iroh',
+      'source-post-1',
+      null
+    );
+    expect(view.store.getState().columnDraftsByKey[columnDraftKey(target)]).toBeUndefined();
+  });
+
+  test('failed quote repost restores its source snapshot after the canonical post is evicted', async () => {
+    const createRepost = vi.fn(async () => 'repost-restored-1');
+    const failed = buildPost({
+      object_id: 'local-failed-repost-1',
+      object_kind: 'repost',
+      content: 'quote me',
+      local_state: 'failed',
+      local_error: 'offline',
+      local_draft: {
+        kind: 'repost',
+        topic: 'kukuri:topic:demo',
+        content: 'quote me',
+        source_topic: 'kukuri:topic:iroh',
+        source_object_id: 'source-evicted-1',
+        attachments: [],
+      },
+      repost_of: {
+        source_object_id: 'source-evicted-1',
+        source_topic_id: 'kukuri:topic:iroh',
+        source_author_pubkey: AUTHOR_A_PUBKEY,
+        source_author_name: 'source-author',
+        source_object_kind: 'post',
+        content: 'source snapshot',
+        attachments: [],
+        reply_to: null,
+        root_id: 'source-evicted-1',
+      },
+      repost_commentary: 'quote me',
+    });
+    const view = renderActionsHook({ api: { createRepost } });
+
+    act(() => view.result.current.handleRestoreLocalPost(failed));
+
+    const target = {
+      columnId: 'column:timeline:kukuri%3Atopic%3Ademo:-:-',
+      action: 'post' as const,
+      scope: { topicId: 'kukuri:topic:demo', channelId: null },
+    };
+    expect(view.store.getState().columnDraftsByKey[columnDraftKey(target)]).toMatchObject({
+      content: 'quote me',
+      expanded: true,
+      error: 'offline',
+      repostTarget: {
+        object_id: 'source-evicted-1',
+        published_topic_id: 'kukuri:topic:iroh',
+        author_name: 'source-author',
+        content: 'source snapshot',
+      },
+    });
+
+    await act(async () => {
+      await view.result.current.handleSubmitColumnDraft(target, publishFormEvent().event);
+    });
+    expect(createRepost).toHaveBeenCalledWith(
+      'kukuri:topic:demo',
+      'kukuri:topic:iroh',
+      'source-evicted-1',
+      'quote me'
+    );
+  });
+
+  test('failed reply restore expands the matching Thread Column Draft with media and error', () => {
+    const parent = buildPost({ object_id: 'parent-1', root_id: 'root-1' });
+    const failed = buildPost({
+      object_id: 'local-failed-1',
+      root_id: 'root-1',
+      reply_to: 'parent-1',
+      local_state: 'failed',
+      local_error: 'offline',
+      local_draft: {
+        kind: 'post',
+        topic: 'kukuri:topic:demo',
+        content: 'restore me',
+        reply_to: 'parent-1',
+        channel_ref: { kind: 'public' },
+        attachments: [],
+      },
+      local_draft_media_items: [
+        {
+          id: 'media-1',
+          source_name: 'image.png',
+          preview_url: 'blob:media-1',
+          attachments: [
+            {
+              mime: 'image/png',
+              byte_size: 10,
+              data_base64: 'aGVsbG8=',
+              role: 'image_original',
+            },
+          ],
+        },
+      ],
+    });
+    const view = renderActionsHook({
+      preset: (current) => ({
+        timelinesByKey: {
+          ...current.timelinesByKey,
+          'kukuri:topic:demo::public': [parent],
+        },
+      }),
+    });
+
+    act(() => view.result.current.handleRestoreLocalPost(failed));
+
+    const target = {
+      columnId: 'column:thread:kukuri%3Atopic%3Ademo:-:root-1',
+      action: 'reply' as const,
+      scope: { topicId: 'kukuri:topic:demo', channelId: null },
+      threadId: 'root-1',
+    };
+    expect(view.store.getState().columnDraftsByKey[columnDraftKey(target)]).toMatchObject({
+      content: 'restore me',
+      expanded: true,
+      error: 'offline',
+      replyTarget: { object_id: 'parent-1' },
+      repostTarget: null,
+      mediaItems: [{ id: 'media-1' }],
+    });
+    expect(activeWorkspaceColumn(view.store.getState().workspaceState)).toMatchObject({
+      kind: 'thread',
+      entityId: 'root-1',
+    });
+    expect(view.mocks.rememberDraftPreview).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'media-1' })
     );
   });
 

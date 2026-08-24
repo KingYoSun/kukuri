@@ -166,10 +166,6 @@
   min-width: 0;
 }
 
-.shell-workspace-header-card {
-  padding-block: var(--space-sm);
-}
-
 .shell-workspace-header {
   display: flex;
   justify-content: space-between;
@@ -522,14 +518,6 @@
   display: grid;
   gap: var(--space-md);
   margin-top: var(--space-md);
-  min-width: 0;
-}
-
-.shell-compose-dialog,
-.shell-compose-dialog .ui-dialog-header,
-.shell-compose-dialog .ui-dialog-body,
-.shell-compose-dialog .composer,
-.shell-compose-dialog .composer-source-preview {
   min-width: 0;
 }
 

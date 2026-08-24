@@ -1,4 +1,5 @@
 import { STARTER_TOPICS } from '@/shell/slices/shared';
+import type { PrimarySection } from '@/components/shell/types';
 
 export type ColumnSpan = 1 | 2 | 3 | 4;
 
@@ -19,8 +20,7 @@ export type ColumnScope = {
   channelId: string | null;
 };
 
-// Timeline Column の表示 view。正本は Column 単位で持ち、
-// chrome 側の shellChromeState.timelineView は「active Timeline Column の view の投影」に留める(Issue #765)。
+// Timeline Column の表示 view。正本は Column 単位で持つ。
 export type ColumnTimelineView = 'feed' | 'bookmarks';
 
 export type ColumnState = {
@@ -160,6 +160,44 @@ export function createInitialWorkspaceState(
 
 export function createInitialWorkspaceSlice(scope?: ColumnScope): WorkspaceSliceState {
   return { workspaceState: createInitialWorkspaceState(scope), savedWorkspaceLayouts: [] };
+}
+
+export function activeWorkspaceColumn(state: WorkspaceState): ColumnState {
+  return (
+    state.columns.find((column) => column.id === state.activeColumnId) ??
+    state.columns[0] ??
+    createInitialWorkspaceState().columns[0]
+  );
+}
+
+export function activeWorkspaceScope(state: WorkspaceState): ColumnScope {
+  return activeWorkspaceColumn(state).scope ?? {
+    topicId: STARTER_TOPICS[0],
+    channelId: null,
+  };
+}
+
+export function primarySectionForColumn(column: ColumnState): PrimarySection {
+  switch (column.kind) {
+    case 'notifications':
+      return 'notifications';
+    case 'profile':
+      return 'profile';
+    case 'explore':
+      return 'explore';
+    case 'messages':
+    case 'conversation':
+      return 'messages';
+    case 'stream':
+      return 'live';
+    case 'game':
+    case 'metaverse':
+      return 'game';
+    case 'timeline':
+    case 'thread':
+    default:
+      return 'timeline';
+  }
 }
 
 export function activateColumn(state: WorkspaceState, columnId: string): WorkspaceState {

@@ -1,20 +1,60 @@
 import type { DesktopShellStore } from '@/shell/store';
+import {
+  activeWorkspaceColumn,
+  activeWorkspaceScope,
+  primarySectionForColumn,
+} from '@/shell/slices/workspace';
+import type { ShellChromeProjection, ShellChromeState } from '@/components/shell/types';
+import type { WorkspaceState } from '@/shell/slices/workspace';
+
+const selectedChannelProjectionCache = new WeakMap<
+  WorkspaceState,
+  Record<string, string | null>
+>();
+const chromeProjectionCache = new WeakMap<
+  WorkspaceState,
+  { chrome: ShellChromeState; projection: ShellChromeProjection }
+>();
+
+function activeTopic(s: DesktopShellStore) {
+  return activeWorkspaceScope(s.workspaceState).topicId;
+}
+
+function selectedChannelIdByTopic(s: DesktopShellStore) {
+  const cached = selectedChannelProjectionCache.get(s.workspaceState);
+  if (cached) return cached;
+  const scope = activeWorkspaceScope(s.workspaceState);
+  const projection = { [scope.topicId]: scope.channelId };
+  selectedChannelProjectionCache.set(s.workspaceState, projection);
+  return projection;
+}
+
+function projectedChromeState(s: DesktopShellStore) {
+  const cached = chromeProjectionCache.get(s.workspaceState);
+  if (cached?.chrome === s.shellChromeState) return cached.projection;
+  const column = activeWorkspaceColumn(s.workspaceState);
+  const projection = {
+    ...s.shellChromeState,
+    activePrimarySection: primarySectionForColumn(column),
+    timelineView: column.kind === 'timeline' ? column.timelineView ?? 'feed' : 'feed',
+  };
+  chromeProjectionCache.set(s.workspaceState, { chrome: s.shellChromeState, projection });
+  return projection;
+}
 
 /// useDesktopShellActions.ts が読むフィールド(購読スライス。WP-H6 PR2)。
 export const selectShellActionsSlice = (s: DesktopShellStore) => ({
-  activeTopic: s.activeTopic,
+  activeTopic: activeTopic(s),
   bookmarkedPosts: s.bookmarkedPosts,
   channelAudienceInput: s.channelAudienceInput,
   channelLabelInput: s.channelLabelInput,
   communityNodeInput: s.communityNodeInput,
   composeChannelByTopic: s.composeChannelByTopic,
-  composer: s.composer,
   discoverySeedInput: s.discoverySeedInput,
-  draftMediaItems: s.draftMediaItems,
   gameDescription: s.gameDescription,
   gameDrafts: s.gameDrafts,
   gameParticipantsInput: s.gameParticipantsInput,
-  gameRoomsByTopic: s.gameRoomsByTopic,
+  gameRoomsByScopeKey: s.gameRoomsByScopeKey,
   gameTitle: s.gameTitle,
   inviteTokenInput: s.inviteTokenInput,
   joinedChannelsByTopic: s.joinedChannelsByTopic,
@@ -23,24 +63,22 @@ export const selectShellActionsSlice = (s: DesktopShellStore) => ({
   localProfile: s.localProfile,
   peerTicket: s.peerTicket,
   profileDraft: s.profileDraft,
-  replyTarget: s.replyTarget,
-  repostTarget: s.repostTarget,
   selectedAuthorPubkey: s.selectedAuthorPubkey,
-  selectedChannelIdByTopic: s.selectedChannelIdByTopic,
+  selectedChannelIdByTopic: selectedChannelIdByTopic(s),
   selectedThread: s.selectedThread,
-  shellChromeState: s.shellChromeState,
+  shellChromeState: projectedChromeState(s),
   syncStatus: s.syncStatus,
   topicInput: s.topicInput,
   trackedTopics: s.trackedTopics,
-
+  workspaceState: s.workspaceState,
 });
 
 /// useDesktopShellData.ts が読むフィールド(購読スライス。WP-H6 PR2)。
 export const selectShellDataSlice = (s: DesktopShellStore) => ({
-  activeTopic: s.activeTopic,
+  activeTopic: activeTopic(s),
   bookmarkedReactionAssets: s.bookmarkedReactionAssets,
   directMessageTimelineByPeer: s.directMessageTimelineByPeer,
-  gameRoomsByTopic: s.gameRoomsByTopic,
+  gameRoomsByScopeKey: s.gameRoomsByScopeKey,
   joinedChannelsByTopic: s.joinedChannelsByTopic,
   knownAuthorsByPubkey: s.knownAuthorsByPubkey,
   localProfile: s.localProfile,
@@ -48,51 +86,49 @@ export const selectShellDataSlice = (s: DesktopShellStore) => ({
   notifications: s.notifications,
   ownedReactionAssets: s.ownedReactionAssets,
   profileTimeline: s.profileTimeline,
-  publicTimelinesByTopic: s.publicTimelinesByTopic,
   recentReactions: s.recentReactions,
   selectedAuthorPubkey: s.selectedAuthorPubkey,
   selectedAuthorTimeline: s.selectedAuthorTimeline,
-  selectedChannelIdByTopic: s.selectedChannelIdByTopic,
+  selectedChannelIdByTopic: selectedChannelIdByTopic(s),
   selectedDirectMessagePeerPubkey: s.selectedDirectMessagePeerPubkey,
   selectedThread: s.selectedThread,
-  shellChromeState: s.shellChromeState,
+  shellChromeState: projectedChromeState(s),
   syncStatus: s.syncStatus,
-  thread: s.thread,
+  threadsById: s.threadsById,
   timelineScopeByTopic: s.timelineScopeByTopic,
   timelinesByKey: s.timelinesByKey,
   trackedTopics: s.trackedTopics,
-
+  workspaceState: s.workspaceState,
 });
 
 /// useDesktopShellRouting.ts が読むフィールド(購読スライス。WP-H6 PR2)。
 export const selectShellRoutingSlice = (s: DesktopShellStore) => ({
-  activeTopic: s.activeTopic,
+  activeTopic: activeTopic(s),
   channelPanelStateByTopic: s.channelPanelStateByTopic,
   developerModeEnabled: s.developerModeEnabled,
   directMessagePaneOpen: s.directMessagePaneOpen,
   focusedObjectId: s.focusedObjectId,
-  gamePanelStateByTopic: s.gamePanelStateByTopic,
-  gameRoomsByTopic: s.gameRoomsByTopic,
+  gamePanelStateByScopeKey: s.gamePanelStateByScopeKey,
+  gameRoomsByScopeKey: s.gameRoomsByScopeKey,
   joinedChannelsByTopic: s.joinedChannelsByTopic,
   lastNonNotificationsRoute: s.lastNonNotificationsRoute,
-  livePanelStateByTopic: s.livePanelStateByTopic,
-  liveSessionsByTopic: s.liveSessionsByTopic,
+  livePanelStateByScopeKey: s.livePanelStateByScopeKey,
+  liveSessionsByScopeKey: s.liveSessionsByScopeKey,
   selectedAuthor: s.selectedAuthor,
   selectedAuthorPubkey: s.selectedAuthorPubkey,
-  selectedChannelIdByTopic: s.selectedChannelIdByTopic,
+  selectedChannelIdByTopic: selectedChannelIdByTopic(s),
   selectedDirectMessagePeerPubkey: s.selectedDirectMessagePeerPubkey,
   selectedGameRoomId: s.selectedGameRoomId,
   selectedLiveSessionId: s.selectedLiveSessionId,
   selectedThread: s.selectedThread,
-  shellChromeState: s.shellChromeState,
-  thread: s.thread,
+  shellChromeState: projectedChromeState(s),
+  threadsById: s.threadsById,
   trackedTopics: s.trackedTopics,
-    
 });
 
 /// useDesktopShellViewModels.ts が読むフィールド(購読スライス。WP-H6 PR2)。
 export const selectShellViewModelsSlice = (s: DesktopShellStore) => ({
-  activeTopic: s.activeTopic,
+  activeTopic: activeTopic(s),
   authorError: s.authorError,
   bookmarkedPosts: s.bookmarkedPosts,
   bookmarkedReactionAssets: s.bookmarkedReactionAssets,
@@ -113,16 +149,15 @@ export const selectShellViewModelsSlice = (s: DesktopShellStore) => ({
   discoveryEditorDirty: s.discoveryEditorDirty,
   discoveryError: s.discoveryError,
   discoverySeedInput: s.discoverySeedInput,
-  draftMediaItems: s.draftMediaItems,
   error: s.error,
   gameDrafts: s.gameDrafts,
-  gamePanelStateByTopic: s.gamePanelStateByTopic,
-  gameRoomsByTopic: s.gameRoomsByTopic,
+  gamePanelStateByScopeKey: s.gamePanelStateByScopeKey,
+  gameRoomsByScopeKey: s.gameRoomsByScopeKey,
   joinedChannelsByTopic: s.joinedChannelsByTopic,
   knownAuthorsByPubkey: s.knownAuthorsByPubkey,
-  livePanelStateByTopic: s.livePanelStateByTopic,
+  livePanelStateByScopeKey: s.livePanelStateByScopeKey,
   livePendingBySessionId: s.livePendingBySessionId,
-  liveSessionsByTopic: s.liveSessionsByTopic,
+  liveSessionsByScopeKey: s.liveSessionsByScopeKey,
   localPeerTicket: s.localPeerTicket,
   localProfile: s.localProfile,
   mediaObjectUrls: s.mediaObjectUrls,
@@ -131,41 +166,40 @@ export const selectShellViewModelsSlice = (s: DesktopShellStore) => ({
   profileDraft: s.profileDraft,
   profileTimeline: s.profileTimeline,
   reactionPanelState: s.reactionPanelState,
-  replyTarget: s.replyTarget,
-  repostTarget: s.repostTarget,
   selectedAuthor: s.selectedAuthor,
   selectedAuthorTimeline: s.selectedAuthorTimeline,
-  selectedChannelIdByTopic: s.selectedChannelIdByTopic,
+  selectedChannelIdByTopic: selectedChannelIdByTopic(s),
   selectedDirectMessagePeerPubkey: s.selectedDirectMessagePeerPubkey,
   selectedThread: s.selectedThread,
-  shellChromeState: s.shellChromeState,
+  shellChromeState: projectedChromeState(s),
   socialConnections: s.socialConnections,
   syncStatus: s.syncStatus,
-  thread: s.thread,
+  threadsById: s.threadsById,
   timelineScopeByTopic: s.timelineScopeByTopic,
   timelinesByKey: s.timelinesByKey,
   trackedTopics: s.trackedTopics,
   unsupportedVideoManifests: s.unsupportedVideoManifests,
-    
+  workspaceState: s.workspaceState,
 });
 
 /// DesktopShellPage が読むフィールド(購読スライス。WP-H6 PR2)。
 export const selectShellPageSlice = (s: DesktopShellStore) => ({
+  workspaceState: s.workspaceState,
   trackedTopics: s.trackedTopics,
-  activeTopic: s.activeTopic,
+  activeTopic: activeTopic(s),
   topicInput: s.topicInput,
   selectedThread: s.selectedThread,
   focusedObjectId: s.focusedObjectId,
   syncStatus: s.syncStatus,
   selectedAuthorPubkey: s.selectedAuthorPubkey,
   selectedDirectMessagePeerPubkey: s.selectedDirectMessagePeerPubkey,
-  selectedChannelIdByTopic: s.selectedChannelIdByTopic,
+  selectedChannelIdByTopic: selectedChannelIdByTopic(s),
   notifications: s.notifications,
   notificationStatus: s.notificationStatus,
   selectedLiveSessionId: s.selectedLiveSessionId,
   selectedGameRoomId: s.selectedGameRoomId,
   developerModeEnabled: s.developerModeEnabled,
-  shellChromeState: s.shellChromeState,
+  shellChromeState: projectedChromeState(s),
   communityNodeConfig: s.communityNodeConfig,
   communityNodeStatuses: s.communityNodeStatuses,
   communityNodeManifests: s.communityNodeManifests,

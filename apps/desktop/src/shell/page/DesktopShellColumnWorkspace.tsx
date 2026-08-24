@@ -16,7 +16,6 @@ import {
   TimelineViewIconTabs,
   type TimelineViewId,
 } from '@/components/shell/TimelineViewIconTabs';
-import type { PrimarySection } from '@/components/shell/types';
 import type { MentionCandidate } from '@/components/core/types';
 import { authorDisplayLabel, shortPubkey } from '@/shell/presentation';
 import type { ColumnDraftTarget } from '@/shell/slices/columnDrafts';
@@ -60,25 +59,14 @@ type DesktopShellColumnWorkspaceProps = {
   renderConversationSurface: (column: ColumnState) => ReactNode;
   messagesSurface: ReactNode;
   notificationsSurface: ReactNode;
-  onActivateColumn: (column: ColumnState) => void;
+  onActivateColumn: (column: ColumnState, preserveAuthorPane?: boolean) => void;
   onSelectTimelineView: (column: ColumnState, view: TimelineViewId) => void;
   renderProfileSurface: (column: ColumnState) => ReactNode;
-  renderPrimarySurface: (section: PrimarySection, column: ColumnState) => ReactNode;
+  renderPrimarySurface: (column: ColumnState) => ReactNode;
   scopeLabel: string;
   renderThreadSurface: (column: ColumnState) => ReactNode;
   timelineViewItems: Array<{ id: TimelineViewId; label: string }>;
   titles: Record<ColumnKind, string>;
-};
-
-const PRIMARY_SECTION_BY_KIND: Partial<Record<ColumnKind, PrimarySection>> = {
-  timeline: 'timeline',
-  notifications: 'notifications',
-  explore: 'explore',
-  messages: 'messages',
-  profile: 'profile',
-  stream: 'live',
-  game: 'game',
-  metaverse: 'game',
 };
 
 export function DesktopShellColumnWorkspace({
@@ -146,7 +134,7 @@ export function DesktopShellColumnWorkspace({
     if (next === workspaceState) return;
     setWorkspaceState(next);
     const activeColumn = next.columns.find((column) => column.id === next.activeColumnId);
-    if (activeColumn) onActivateColumn(activeColumn);
+    if (activeColumn) onActivateColumn(activeColumn, false);
   };
   const renderBody = (column: ColumnState) => {
     if (column.kind === 'thread') return renderThreadSurface(column);
@@ -154,8 +142,7 @@ export function DesktopShellColumnWorkspace({
     if (column.kind === 'conversation') return renderConversationSurface(column);
     if (column.kind === 'messages') return messagesSurface;
     if (column.kind === 'notifications') return notificationsSurface;
-    const primarySection = PRIMARY_SECTION_BY_KIND[column.kind];
-    return primarySection ? renderPrimarySurface(primarySection, column) : null;
+    return renderPrimarySurface(column);
   };
   const scopeDestinationLabel = (column: ColumnState) => {
     if (!column.scope) return scopeLabel;

@@ -22,11 +22,13 @@ export type SettingsSection =
 export type ProfileWorkspaceMode = 'overview' | 'edit' | 'connections';
 
 export type ShellChromeState = {
-  activePrimarySection: PrimarySection;
-  timelineView: TimelineWorkspaceView;
   activeSettingsSection: SettingsSection;
   profileMode: ProfileWorkspaceMode;
   profileConnectionsView: ProfileConnectionsView;
-  navOpen: boolean;
   settingsOpen: boolean;
+};
+
+export type ShellChromeProjection = ShellChromeState & {
+  activePrimarySection: PrimarySection;
+  timelineView: TimelineWorkspaceView;
 };

@@ -184,6 +184,13 @@ export function startWorkspaceLayoutPersistence(
   storage: WorkspaceStorage
 ) {
   let previous = serializedLayout(store.getState().workspaceState);
+  try {
+    if (storage.getItem(WORKSPACE_LAYOUT_STORAGE_KEY) !== previous) {
+      writeWorkspaceLayout(storage, store.getState().workspaceState);
+    }
+  } catch {
+    // Storage access can be denied independently of the in-memory workspace.
+  }
   return store.subscribe((state) => {
     const next = serializedLayout(state.workspaceState);
     if (next === previous) return;

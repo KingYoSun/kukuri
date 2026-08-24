@@ -29,7 +29,11 @@ import {
   setColumnDraft,
   type ColumnDraftTarget,
 } from '@/shell/slices/columnDrafts';
-import { columnIdentityId, openTransientColumn } from '@/shell/slices/workspace';
+import {
+  activeWorkspaceScope,
+  columnIdentityId,
+  openTransientColumn,
+} from '@/shell/slices/workspace';
 import { createComposeInteractionsActions } from './actions/composeInteractions';
 import { createDirectMessageActions } from './actions/directMessages';
 import { createLiveGameActions } from './actions/liveGame';
@@ -59,13 +63,11 @@ type UseDesktopShellActionsArgs = {
   openDirectMessagePane: OpenDirectMessagePane;
   openAuthorDetail: OpenAuthorDetail;
   openThread: OpenThread;
-  setComposeDialogOpen: Dispatch<SetStateAction<boolean>>;
   setLiveCreateDialogOpen: Dispatch<SetStateAction<boolean>>;
   setGameCreateDialogOpen: Dispatch<SetStateAction<boolean>>;
   setProfileAvatarPreviewUrl: Dispatch<SetStateAction<string | null>>;
   setProfileAvatarInputKey: Dispatch<SetStateAction<number>>;
   releaseDraftPreview: (itemId: string) => void;
-  releaseAllDraftPreviews: () => void;
   rememberDraftPreview: (item: DraftMediaItem) => void;
   releaseDirectMessageDraftPreview: (itemId: string) => void;
   releaseAllDirectMessageDraftPreviews: () => void;
@@ -73,6 +75,45 @@ type UseDesktopShellActionsArgs = {
   buildImageDraftItem: (file: File) => Promise<DraftMediaItem>;
   buildVideoDraftItem: (file: File) => Promise<DraftMediaItem>;
 };
+
+function repostTargetFromSnapshot(post: PostView): PostView | null {
+  const source = post.repost_of;
+  if (!source) return null;
+
+  return {
+    object_id: source.source_object_id,
+    envelope_id: source.source_object_id,
+    author_pubkey: source.source_author_pubkey,
+    author_name: source.source_author_name ?? null,
+    author_display_name: source.source_author_display_name ?? null,
+    author_picture: source.source_author_picture ?? null,
+    author_picture_asset: source.source_author_picture_asset ?? null,
+    following: false,
+    followed_by: false,
+    mutual: false,
+    friend_of_friend: false,
+    content: source.content,
+    content_status: post.content_status,
+    attachments: source.attachments.map((attachment) => ({ ...attachment })),
+    created_at: post.created_at,
+    reply_to: source.reply_to ?? null,
+    root_id: source.root_id ?? null,
+    object_kind: source.source_object_kind,
+    published_topic_id: source.source_topic_id,
+    origin_topic_id: source.source_topic_id,
+    repost_of: null,
+    repost_commentary: null,
+    is_threadable: true,
+    channel_id: null,
+    audience_label: 'Public',
+    local_id: null,
+    local_state: null,
+    local_error: null,
+    server_object_id: null,
+    local_draft: null,
+    local_draft_media_items: [],
+  };
+}
 
 export function useDesktopShellActions({
   api,
@@ -83,13 +124,11 @@ export function useDesktopShellActions({
   openDirectMessagePane,
   openAuthorDetail,
   openThread,
-  setComposeDialogOpen,
   setLiveCreateDialogOpen,
   setGameCreateDialogOpen,
   setProfileAvatarPreviewUrl,
   setProfileAvatarInputKey,
   releaseDraftPreview,
-  releaseAllDraftPreviews,
   rememberDraftPreview,
   releaseDirectMessageDraftPreview,
   releaseAllDirectMessageDraftPreviews,
@@ -103,25 +142,13 @@ export function useDesktopShellActions({
   const nextSelectedChannelId = state.selectedChannelIdByTopic[nextActiveTopic] ?? null;
   const nextJoinedChannels = state.joinedChannelsByTopic[nextActiveTopic] ?? [];
   const activeComposeChannel = useMemo(
-    () =>
-      state.repostTarget
-        ? PUBLIC_CHANNEL_REF
-        : state.replyTarget?.channel_id
-          ? {
-              kind: 'private_channel' as const,
-              channel_id: state.replyTarget.channel_id,
-            }
-          : state.composeChannelByTopic[nextActiveTopic] ?? PUBLIC_CHANNEL_REF,
-    [nextActiveTopic, state.composeChannelByTopic, state.replyTarget, state.repostTarget]
+    () => state.composeChannelByTopic[nextActiveTopic] ?? PUBLIC_CHANNEL_REF,
+    [nextActiveTopic, state.composeChannelByTopic]
   );
   const {
     trackedTopics,
     activeTopic,
     topicInput,
-    composer,
-    draftMediaItems,
-    repostTarget,
-    replyTarget,
     selectedThread,
     selectedChannelIdByTopic,
     channelLabelInput,
@@ -143,7 +170,11 @@ export function useDesktopShellActions({
   const activePrivateChannel =
     nextJoinedChannels.find((channel) => channel.channel_id === nextSelectedChannelId) ?? null;
   const bookmarkedPostIds = new Set(state.bookmarkedPosts.map((item) => item.post.object_id));
-  const activeGameRooms = state.gameRoomsByTopic[nextActiveTopic] ?? [];
+  const activeScope = activeWorkspaceScope(state.workspaceState);
+  const activeGameRooms =
+    state.gameRoomsByScopeKey[
+      timelineStorageKeyForChannel(activeScope.topicId, activeScope.channelId)
+    ] ?? [];
   const localAuthorPubkey = state.syncStatus.local_author_pubkey;
   const metaverseActions = useMemo(
     () =>
@@ -157,21 +188,13 @@ export function useDesktopShellActions({
   );
 
   const setTrackedTopics = useDesktopShellFieldSetter('trackedTopics');
-  const setActiveTopic = useDesktopShellFieldSetter('activeTopic');
   const setTopicInput = useDesktopShellFieldSetter('topicInput');
-  const setComposer = useDesktopShellFieldSetter('composer');
-  const setDraftMediaItems = useDesktopShellFieldSetter('draftMediaItems');
-  const setAttachmentInputKey = useDesktopShellFieldSetter('attachmentInputKey');
   const setTimelinesByKey = useDesktopShellFieldSetter('timelinesByKey');
-  const setPublicTimelinesByTopic = useDesktopShellFieldSetter('publicTimelinesByTopic');
   const setJoinedChannelsByTopic = useDesktopShellFieldSetter('joinedChannelsByTopic');
-  const setSelectedChannelIdByTopic = useDesktopShellFieldSetter('selectedChannelIdByTopic');
   const setTimelineScopeByTopic = useDesktopShellFieldSetter('timelineScopeByTopic');
   const setComposeChannelByTopic = useDesktopShellFieldSetter('composeChannelByTopic');
   const setSelectedThread = useDesktopShellFieldSetter('selectedThread');
-  const setThread = useDesktopShellFieldSetter('thread');
-  const setReplyTarget = useDesktopShellFieldSetter('replyTarget');
-  const setRepostTarget = useDesktopShellFieldSetter('repostTarget');
+  const setThreadsById = useDesktopShellFieldSetter('threadsById');
   const setPeerTicket = useDesktopShellFieldSetter('peerTicket');
   const setDiscoveryConfig = useDesktopShellFieldSetter('discoveryConfig');
   const setDiscoverySeedInput = useDesktopShellFieldSetter('discoverySeedInput');
@@ -211,7 +234,6 @@ export function useDesktopShellActions({
   );
   const setDirectMessageError = useDesktopShellFieldSetter('directMessageError');
   const setDirectMessageSending = useDesktopShellFieldSetter('directMessageSending');
-  const setComposerError = useDesktopShellFieldSetter('composerError');
   const setColumnDraftsByKey = useDesktopShellFieldSetter('columnDraftsByKey');
   const setLiveTitle = useDesktopShellFieldSetter('liveTitle');
   const setLiveDescription = useDesktopShellFieldSetter('liveDescription');
@@ -239,11 +261,47 @@ export function useDesktopShellActions({
   const setWorkspaceState = useDesktopShellFieldSetter('workspaceState');
   const setError = useDesktopShellFieldSetter('error');
 
+  const setActiveTopic = (value: string | ((current: string) => string)) => {
+    const currentScope = activeWorkspaceScope(storeApi.getState().workspaceState);
+    const topicId = typeof value === 'function' ? value(currentScope.topicId) : value;
+    const scope = { topicId, channelId: null };
+    setWorkspaceState((current) =>
+      openTransientColumn(current, {
+        id: columnIdentityId('timeline', scope),
+        kind: 'timeline',
+        scope,
+        pinned: false,
+      })
+    );
+  };
+
+  const setSelectedChannelIdByTopic = (
+    value:
+      | Record<string, string | null>
+      | ((current: Record<string, string | null>) => Record<string, string | null>)
+  ) => {
+    const currentScope = activeWorkspaceScope(storeApi.getState().workspaceState);
+    const currentProjection = { [currentScope.topicId]: currentScope.channelId };
+    const nextProjection = typeof value === 'function' ? value(currentProjection) : value;
+    const topicId = Object.keys(nextProjection).find(
+      (topic) => nextProjection[topic] !== currentProjection[topic]
+    ) ?? currentScope.topicId;
+    const scope = { topicId, channelId: nextProjection[topicId] ?? null };
+    setWorkspaceState((current) =>
+      openTransientColumn(current, {
+        id: columnIdentityId('timeline', scope),
+        kind: 'timeline',
+        scope,
+        pinned: false,
+      })
+    );
+  };
+
   const {
     cloneDraftMediaItems,
     createOptimisticPost,
+    findKnownPost,
     insertOptimisticPost,
-    restoreLocalDraft,
     submitOptimisticPost,
   } = createOptimisticPostActions({
     api,
@@ -252,34 +310,16 @@ export function useDesktopShellActions({
     localProfile,
     refreshVisibleTimelineAfterPublish,
     releaseDraftPreview,
-    rememberDraftPreview,
     storeApi,
-    syncRoute,
     translate,
-    setActiveTopic,
-    setAttachmentInputKey,
-    setComposeChannelByTopic,
-    setComposeDialogOpen,
-    setComposer,
-    setComposerError,
-    setDraftMediaItems,
     setProfileTimeline,
-    setPublicTimelinesByTopic,
-    setReplyTarget,
-    setRepostTarget,
     setSelectedAuthorTimeline,
-    setSelectedChannelIdByTopic,
-    setSelectedThread,
-    setShellChromeState,
-    setThread,
+    setThreadsById,
     setTimelinesByKey,
   });
 
   function clearThreadContext() {
     setSelectedThread(null);
-    setThread([]);
-    setReplyTarget(null);
-    setRepostTarget(null);
     setSelectedAuthorPubkey(null);
     setSelectedAuthor(null);
     setSelectedAuthorTimeline([]);
@@ -405,8 +445,7 @@ export function useDesktopShellActions({
     setTimelineScopeByTopic,
     setComposeChannelByTopic,
     setTimelinesByKey,
-    setPublicTimelinesByTopic,
-    setThread,
+    setThreadsById,
     setProfileTimeline,
     setSelectedAuthorTimeline,
     setKnownAuthorsByPubkey,
@@ -469,53 +508,30 @@ export function useDesktopShellActions({
   });
 
   const {
-    handleAttachmentSelection,
-    handleRemoveDraftAttachment,
     handleDirectMessageAttachmentSelection,
     handleRemoveDirectMessageDraftAttachment,
-    beginReply,
-    clearReply,
-    clearRepost,
-    openNewPostDialog,
     handleSimpleRepost,
-    handleRestoreLocalPost,
     handleRetryLocalPost,
-    beginQuoteRepost,
   } = createComposeInteractionsActions({
     activeTopic,
     buildImageDraftItem,
     buildVideoDraftItem,
     createOptimisticPost,
     insertOptimisticPost,
-    openThread,
     releaseAllDirectMessageDraftPreviews,
-    releaseAllDraftPreviews,
     releaseDirectMessageDraftPreview,
-    releaseDraftPreview,
     rememberDirectMessageDraftPreview,
-    rememberDraftPreview,
-    restoreLocalDraft,
     submitOptimisticPost: async (post) => {
       await submitOptimisticPost(post);
     },
     syncRoute,
     translate,
-    setAttachmentInputKey,
-    setAuthorError,
-    setComposer,
-    setComposerError,
     setDirectMessageAttachmentInputKey,
     setDirectMessageDraftMediaItems,
     setDirectMessageError,
-    setDraftMediaItems,
-    setReplyTarget,
-    setRepostTarget,
-    setSelectedAuthor,
-    setSelectedAuthorPubkey,
+    setError,
     setSelectedThread,
     setShellChromeState,
-    setThread,
-    setComposeDialogOpen,
   });
 
   const { handleSendDirectMessage, sendDirectMessageDraft } = createDirectMessageActions({
@@ -532,97 +548,6 @@ export function useDesktopShellActions({
     setDirectMessageError,
     setDirectMessageSending,
   });
-
-  async function handlePublish(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const trimmedComposer = composer.trim();
-    const draftMediaSnapshot = cloneDraftMediaItems(draftMediaItems);
-    const attachments = draftMediaSnapshot.flatMap((item) => item.attachments);
-    if (repostTarget) {
-      const sourceTopic = publishedTopicIdForPost(repostTarget);
-      if (!sourceTopic) {
-        setComposerError(translate('common:errors.failedToPublish'));
-        return;
-      }
-      if (!trimmedComposer) {
-        setComposerError(translate('common:errors.quoteRepostRequiresCommentary'));
-        return;
-      }
-      const createdAt = Math.floor(Date.now() / 1000);
-      const localId = `local-post:${Date.now()}:${Math.random().toString(16).slice(2)}`;
-      const optimisticPost = createOptimisticPost({
-        createdAt,
-        localId,
-        draft: {
-          kind: 'repost',
-          topic: activeTopic,
-          content: trimmedComposer,
-          source_topic: sourceTopic,
-          source_object_id: repostTarget.object_id,
-          channel_ref: PUBLIC_CHANNEL_REF,
-        },
-        draftMedia: [],
-        repostPost: repostTarget,
-      });
-      insertOptimisticPost(optimisticPost);
-      setComposer('');
-      setDraftMediaItems([]);
-      setAttachmentInputKey((value) => value + 1);
-      setComposerError(null);
-      setReplyTarget(null);
-      setRepostTarget(null);
-      setComposeDialogOpen(false);
-      setSelectedThread(null);
-      setThread([]);
-      setShellChromeState((current) => ({
-        ...current,
-        activePrimarySection: 'timeline',
-      }));
-      syncRoute('replace', {
-        primarySection: 'timeline',
-        selectedThread: null,
-      });
-      void submitOptimisticPost(optimisticPost);
-      return;
-    }
-
-    if (!trimmedComposer && attachments.length === 0) {
-      return;
-    }
-
-    const createdAt = Math.floor(Date.now() / 1000);
-    const localId = `local-post:${Date.now()}:${Math.random().toString(16).slice(2)}`;
-    const optimisticPost = createOptimisticPost({
-      createdAt,
-      localId,
-      draft: {
-        kind: 'post',
-        topic: activeTopic,
-        content: trimmedComposer,
-        reply_to: replyTarget?.object_id ?? null,
-        channel_ref: activeComposeChannel,
-        attachments,
-      },
-      draftMedia: draftMediaSnapshot,
-      replyPost: replyTarget,
-    });
-    insertOptimisticPost(optimisticPost);
-    setComposer('');
-    setDraftMediaItems([]);
-    setAttachmentInputKey((value) => value + 1);
-    setComposerError(null);
-    setComposeDialogOpen(false);
-    setReplyTarget(null);
-    setRepostTarget(null);
-    setShellChromeState((current) => ({
-      ...current,
-      activePrimarySection: 'timeline',
-    }));
-    syncRoute('replace', {
-      primarySection: 'timeline',
-    });
-    void submitOptimisticPost(optimisticPost);
-  }
 
   async function handleColumnDraftAttachmentSelection(
     target: ColumnDraftTarget,
@@ -681,7 +606,7 @@ export function useDesktopShellActions({
     const trimmedContent = draft.content.trim();
     const draftMediaSnapshot = cloneDraftMediaItems(draft.mediaItems);
     const attachments = draftMediaSnapshot.flatMap((item) => item.attachments);
-    if (!trimmedContent && attachments.length === 0) return;
+    if (!draft.repostTarget && !trimmedContent && attachments.length === 0) return;
     setColumnDraftsByKey((current) =>
       setColumnDraft(current, target, (currentDraft) => ({
         ...currentDraft,
@@ -716,6 +641,19 @@ export function useDesktopShellActions({
     }
 
     if (!target.scope) return;
+    const repostSourceTopic = draft.repostTarget
+      ? publishedTopicIdForPost(draft.repostTarget)
+      : null;
+    if (draft.repostTarget && !repostSourceTopic) {
+      setColumnDraftsByKey((current) =>
+        setColumnDraft(current, target, (currentDraft) => ({
+          ...currentDraft,
+          pending: false,
+          error: translate('common:errors.failedToPublish'),
+        }))
+      );
+      return;
+    }
     const replyObjectId =
       target.action === 'reply'
         ? draft.replyTarget?.object_id ?? target.threadId ?? null
@@ -725,8 +663,11 @@ export function useDesktopShellActions({
       currentState.timelinesByKey[
         timelineStorageKeyForChannel(target.scope.topicId, target.scope.channelId)
       ] ?? [];
+    const targetThread = target.threadId
+      ? currentState.threadsById[target.threadId] ?? []
+      : [];
     const replyPost = replyObjectId
-      ? [...currentState.thread, ...targetTimeline].find(
+      ? [...targetThread, ...targetTimeline].find(
           (post) => post.object_id === replyObjectId
         ) ?? draft.replyTarget
       : null;
@@ -735,18 +676,28 @@ export function useDesktopShellActions({
     const optimisticPost = createOptimisticPost({
       createdAt,
       localId,
-      draft: {
-        kind: 'post',
-        topic: target.scope.topicId,
-        content: trimmedContent,
-        reply_to: replyObjectId,
-        channel_ref: target.scope.channelId
-          ? { kind: 'private_channel', channel_id: target.scope.channelId }
-          : PUBLIC_CHANNEL_REF,
-        attachments,
-      },
+      draft: draft.repostTarget
+        ? {
+            kind: 'repost',
+            topic: target.scope.topicId,
+            content: trimmedContent,
+            source_topic: repostSourceTopic!,
+            source_object_id: draft.repostTarget.object_id,
+            channel_ref: PUBLIC_CHANNEL_REF,
+          }
+        : {
+            kind: 'post',
+            topic: target.scope.topicId,
+            content: trimmedContent,
+            reply_to: replyObjectId,
+            channel_ref: target.scope.channelId
+              ? { kind: 'private_channel', channel_id: target.scope.channelId }
+              : PUBLIC_CHANNEL_REF,
+            attachments,
+          },
       draftMedia: draftMediaSnapshot,
       replyPost,
+      repostPost: draft.repostTarget,
     });
     insertOptimisticPost(optimisticPost);
     const published = await submitOptimisticPost(optimisticPost);
@@ -785,6 +736,7 @@ export function useDesktopShellActions({
         ...draft,
         expanded: true,
         replyTarget: post,
+        repostTarget: null,
         error: null,
       }))
     );
@@ -803,6 +755,97 @@ export function useDesktopShellActions({
     setTimelineScopeByTopic(setRecordEntry(topicId, privateTimelineScope(scope.channelId)));
     // 返信元投稿の channel を route / selection にも載せ、Thread Column の scope を global 選択に依存させない。
     void openThread(threadId, { topic: topicId, channelId: scope.channelId });
+  }
+
+  function beginColumnQuoteRepost(post: PostView) {
+    const topicId = publishedTopicIdForPost(post) ?? activeTopic;
+    const scope = { topicId, channelId: null };
+    const columnId = columnIdentityId('timeline', scope);
+    const target: ColumnDraftTarget = { columnId, action: 'post', scope };
+    setColumnDraftsByKey((current) =>
+      setColumnDraft(current, target, (draft) => ({
+        ...draft,
+        expanded: true,
+        replyTarget: null,
+        repostTarget: post,
+        error: null,
+      }))
+    );
+    setWorkspaceState((current) =>
+      openTransientColumn(current, {
+        id: columnId,
+        kind: 'timeline',
+        scope,
+        pinned: false,
+      })
+    );
+    syncRoute('replace', {
+      activeTopic: topicId,
+      primarySection: 'timeline',
+      selectedThread: null,
+      timelineScope: privateTimelineScope(null),
+      timelineView: 'feed',
+    });
+  }
+
+  function restoreLocalPostToColumn(post: PostView) {
+    const localDraft = post.local_draft;
+    if (!localDraft) return;
+    const mediaItems = cloneDraftMediaItems(post.local_draft_media_items ?? []) as DraftMediaItem[];
+    mediaItems.forEach((item) => rememberDraftPreview(item));
+    const channelId =
+      localDraft.kind === 'repost'
+        ? null
+        : localDraft.channel_ref?.kind === 'private_channel'
+          ? localDraft.channel_ref.channel_id
+          : null;
+    const scope = { topicId: localDraft.topic, channelId };
+    const threadId = localDraft.reply_to ? post.root_id ?? localDraft.reply_to : undefined;
+    const kind = threadId ? 'thread' : 'timeline';
+    const columnId = columnIdentityId(kind, scope, threadId);
+    const target: ColumnDraftTarget = {
+      columnId,
+      action: threadId ? 'reply' : 'post',
+      scope,
+      ...(threadId ? { threadId } : {}),
+    };
+    setColumnDraftsByKey((current) =>
+      setColumnDraft(current, target, (draft) => ({
+        ...draft,
+        content: localDraft.content,
+        mediaItems,
+        replyTarget: localDraft.reply_to ? findKnownPost(localDraft.reply_to) : null,
+        repostTarget:
+          localDraft.kind === 'repost' && localDraft.source_object_id
+            ? (findKnownPost(localDraft.source_object_id) ?? repostTargetFromSnapshot(post))
+            : null,
+        expanded: true,
+        error: post.local_error ?? null,
+        pending: false,
+        attachmentInputKey: draft.attachmentInputKey + 1,
+      }))
+    );
+    setWorkspaceState((current) =>
+      openTransientColumn(current, {
+        id: columnId,
+        kind,
+        scope,
+        entityId: threadId,
+        parentColumnId: threadId ? columnIdentityId('timeline', scope) : undefined,
+        pinned: false,
+      })
+    );
+    if (threadId) {
+      void openThread(threadId, { topic: scope.topicId, channelId: scope.channelId });
+    } else {
+      syncRoute('replace', {
+        activeTopic: scope.topicId,
+        primarySection: 'timeline',
+        selectedThread: null,
+        timelineScope: privateTimelineScope(scope.channelId),
+        timelineView: 'feed',
+      });
+    }
   }
 
   return {
@@ -824,9 +867,6 @@ export function useDesktopShellActions({
     handleShareChannelAccess,
     handleJoinChannelAccess,
     handleImportChannelAccessToken,
-    handlePublish,
-    handleAttachmentSelection,
-    handleRemoveDraftAttachment,
     handleDirectMessageAttachmentSelection,
     handleRemoveDirectMessageDraftAttachment,
     handleSendDirectMessage,
@@ -841,15 +881,11 @@ export function useDesktopShellActions({
     handleBookmarkCustomReaction,
     handleRemoveBookmarkedCustomReaction,
     handleToggleBookmarkedPost,
-    beginReply,
     beginColumnReply,
-    clearReply,
-    clearRepost,
-    openNewPostDialog,
+    beginColumnQuoteRepost,
     handleSimpleRepost,
     handleRetryLocalPost,
-    handleRestoreLocalPost,
-    beginQuoteRepost,
+    handleRestoreLocalPost: restoreLocalPostToColumn,
     handleRelationshipAction,
     handleMuteAction,
     handleSaveDiscoverySeeds,

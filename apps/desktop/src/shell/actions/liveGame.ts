@@ -116,7 +116,6 @@ export function createLiveGameActions({
       setLiveCreateDialogOpen(false);
       setShellChromeState((current) => ({
         ...current,
-        activePrimarySection: 'live',
       }));
       syncRoute('replace', {
         primarySection: 'live',
@@ -202,7 +201,6 @@ export function createLiveGameActions({
       setGameCreateDialogOpen(false);
       setShellChromeState((current) => ({
         ...current,
-        activePrimarySection: 'game',
       }));
       syncRoute('replace', {
         primarySection: 'game',

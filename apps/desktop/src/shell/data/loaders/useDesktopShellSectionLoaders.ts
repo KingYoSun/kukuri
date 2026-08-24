@@ -21,6 +21,11 @@ import {
   useDesktopShellFieldSetter,
   type DesktopShellStoreApi,
 } from '@/shell/store';
+import {
+  activeWorkspaceColumn,
+  activeWorkspaceScope,
+  primarySectionForColumn,
+} from '@/shell/slices/workspace';
 
 type UseDesktopShellSectionLoadersArgs = {
   api: DesktopApi;
@@ -58,14 +63,10 @@ export function useDesktopShellSectionLoaders({
   const setDiscoveryConfig = useDesktopShellFieldSetter('discoveryConfig');
   const setDiscoveryError = useDesktopShellFieldSetter('discoveryError');
   const setDiscoverySeedInput = useDesktopShellFieldSetter('discoverySeedInput');
-  const setGamePanelStateByTopic = useDesktopShellFieldSetter('gamePanelStateByTopic');
   const setGamePanelStateByScopeKey = useDesktopShellFieldSetter('gamePanelStateByScopeKey');
-  const setGameRoomsByTopic = useDesktopShellFieldSetter('gameRoomsByTopic');
   const setGameRoomsByScopeKey = useDesktopShellFieldSetter('gameRoomsByScopeKey');
   const setKnownAuthorsByPubkey = useDesktopShellFieldSetter('knownAuthorsByPubkey');
-  const setLivePanelStateByTopic = useDesktopShellFieldSetter('livePanelStateByTopic');
   const setLivePanelStateByScopeKey = useDesktopShellFieldSetter('livePanelStateByScopeKey');
-  const setLiveSessionsByTopic = useDesktopShellFieldSetter('liveSessionsByTopic');
   const setLiveSessionsByScopeKey = useDesktopShellFieldSetter('liveSessionsByScopeKey');
   const setLocalPeerTicket = useDesktopShellFieldSetter('localPeerTicket');
   const setLocalProfile = useDesktopShellFieldSetter('localProfile');
@@ -102,11 +103,7 @@ export function useDesktopShellSectionLoaders({
           privateTimelineScope(selectedChannelId)
         );
         startTransition(() => {
-          setLiveSessionsByTopic(setRecordEntry(topic, sessions));
           setLiveSessionsByScopeKey(setRecordEntry(scopeKey, sessions));
-          setLivePanelStateByTopic(
-            setRecordEntry(topic, { status: 'ready', error: null })
-          );
           setLivePanelStateByScopeKey(
             setRecordEntry(scopeKey, { status: 'ready', error: null })
           );
@@ -119,16 +116,13 @@ export function useDesktopShellSectionLoaders({
             translate('common:errors.failedToLoadLiveSessions')
           ),
         };
-        setLivePanelStateByTopic(setRecordEntry(topic, panelState));
         setLivePanelStateByScopeKey(setRecordEntry(scopeKey, panelState));
       }
     },
     [
       api,
       setLivePanelStateByScopeKey,
-      setLivePanelStateByTopic,
       setLiveSessionsByScopeKey,
-      setLiveSessionsByTopic,
       translate,
     ]
   );
@@ -139,11 +133,7 @@ export function useDesktopShellSectionLoaders({
       try {
         const rooms = await api.listGameRooms(topic, privateTimelineScope(selectedChannelId));
         startTransition(() => {
-          setGameRoomsByTopic(setRecordEntry(topic, rooms));
           setGameRoomsByScopeKey(setRecordEntry(scopeKey, rooms));
-          setGamePanelStateByTopic(
-            setRecordEntry(topic, { status: 'ready', error: null })
-          );
           setGamePanelStateByScopeKey(
             setRecordEntry(scopeKey, { status: 'ready', error: null })
           );
@@ -153,16 +143,13 @@ export function useDesktopShellSectionLoaders({
           status: 'error' as const,
           error: messageFromError(error, translate('common:errors.failedToLoadGameRooms')),
         };
-        setGamePanelStateByTopic(setRecordEntry(topic, panelState));
         setGamePanelStateByScopeKey(setRecordEntry(scopeKey, panelState));
       }
     },
     [
       api,
       setGamePanelStateByScopeKey,
-      setGamePanelStateByTopic,
       setGameRoomsByScopeKey,
-      setGameRoomsByTopic,
       translate,
     ]
   );
@@ -519,9 +506,13 @@ export function useDesktopShellSectionLoaders({
   const loadShellSections = useCallback(
     async (topic: string) => {
       const state = storeApi.getState();
-      const selectedChannelId = state.selectedChannelIdByTopic[topic] ?? null;
+      const activeColumn = activeWorkspaceColumn(state.workspaceState);
+      const activeScope = activeWorkspaceScope(state.workspaceState);
+      const selectedChannelId = activeScope.topicId === topic ? activeScope.channelId : null;
       const selectedAuthorPubkey = state.selectedAuthorPubkey;
-      const { activePrimarySection, settingsOpen, timelineView } = state.shellChromeState;
+      const { settingsOpen } = state.shellChromeState;
+      const activePrimarySection = primarySectionForColumn(activeColumn);
+      const timelineView = activeColumn.kind === 'timeline' ? activeColumn.timelineView ?? 'feed' : 'feed';
       const tasks: Promise<void>[] = [];
       tasks.push(loadCommunityIndexCapability());
 

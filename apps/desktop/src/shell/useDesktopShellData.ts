@@ -17,6 +17,11 @@ import type {
 import { removeRecordEntry, setRecordEntry, updateRecordEntry } from '@/shell/stateUpdates';
 import { useConnectivityStatusRefresh } from '@/shell/data/useConnectivityStatusRefresh';
 import { useDesktopShellDataEffects } from '@/shell/data/useDesktopShellDataEffects';
+import {
+  activeWorkspaceScope,
+  columnIdentityId,
+  openTransientColumn,
+} from '@/shell/slices/workspace';
 import { useDraftMediaHelpers } from '@/shell/data/useDraftMediaHelpers';
 import { useDesktopShellSectionLoaders } from '@/shell/data/loaders/useDesktopShellSectionLoaders';
 import { useQueuedLoadTopics } from '@/shell/data/useQueuedLoadTopics';
@@ -80,7 +85,7 @@ export function useDesktopShellData({
     trackedTopics,
     activeTopic,
     selectedThread,
-    gameRoomsByTopic,
+    gameRoomsByScopeKey,
     joinedChannelsByTopic,
     selectedChannelIdByTopic,
     mediaObjectUrls,
@@ -88,7 +93,7 @@ export function useDesktopShellData({
     knownAuthorsByPubkey,
     profileTimeline,
     selectedAuthorTimeline,
-    thread,
+    threadsById,
     ownedReactionAssets,
     bookmarkedReactionAssets,
     recentReactions,
@@ -99,12 +104,17 @@ export function useDesktopShellData({
     state.directMessageTimelineByPeer[state.selectedDirectMessagePeerPubkey ?? ''] ??
     EMPTY_DIRECT_MESSAGE_TIMELINE;
   const activeTimelineKey = activeTimelineStorageKey(state, activeTopic);
-  const activePublicTimeline = state.publicTimelinesByTopic[activeTopic] ?? EMPTY_POSTS;
+  const activePublicTimeline =
+    state.timelinesByKey[timelineScopeStorageKey(activeTopic, PUBLIC_TIMELINE_SCOPE)] ?? EMPTY_POSTS;
   const activeTimeline = state.timelinesByKey[activeTimelineKey] ?? EMPTY_POSTS;
-  const activeGameRooms = gameRoomsByTopic[activeTopic] ?? EMPTY_GAME_ROOMS;
+  const activeScope = activeWorkspaceScope(state.workspaceState);
+  const activeGameRooms =
+    gameRoomsByScopeKey[timelineScopeStorageKey(activeScope.topicId, privateTimelineScope(activeScope.channelId))] ??
+    EMPTY_GAME_ROOMS;
   const activeJoinedChannels = joinedChannelsByTopic[activeTopic] ?? EMPTY_JOINED_CHANNELS;
   const selectedPrivateChannelId = selectedChannelIdByTopic[activeTopic] ?? null;
   const selectedAuthorPubkey = state.selectedAuthorPubkey;
+  const thread = selectedThread ? threadsById[selectedThread] ?? EMPTY_POSTS : EMPTY_POSTS;
   const visibleRefreshInFlightRef = useRef(false);
 
   const setTimelinesByKey = useDesktopShellFieldSetter('timelinesByKey');
@@ -117,16 +127,32 @@ export function useDesktopShellData({
   const setPendingTimelineNextCursorByKey = useDesktopShellFieldSetter(
     'pendingTimelineNextCursorByKey'
   );
-  const setPublicTimelinesByTopic = useDesktopShellFieldSetter('publicTimelinesByTopic');
-  const setPublicTimelineNextCursorByTopic = useDesktopShellFieldSetter(
-    'publicTimelineNextCursorByTopic'
-  );
   const setJoinedChannelsByTopic = useDesktopShellFieldSetter('joinedChannelsByTopic');
   const setChannelPanelStateByTopic = useDesktopShellFieldSetter('channelPanelStateByTopic');
-  const setSelectedChannelIdByTopic = useDesktopShellFieldSetter('selectedChannelIdByTopic');
+  const setWorkspaceState = useDesktopShellFieldSetter('workspaceState');
+  const setSelectedChannelIdByTopic = (
+    value:
+      | Record<string, string | null>
+      | ((current: Record<string, string | null>) => Record<string, string | null>)
+  ) => {
+    const currentScope = activeWorkspaceScope(storeApi.getState().workspaceState);
+    const currentProjection = { [currentScope.topicId]: currentScope.channelId };
+    const nextProjection = typeof value === 'function' ? value(currentProjection) : value;
+    const topicId = Object.keys(nextProjection).find(
+      (topic) => nextProjection[topic] !== currentProjection[topic]
+    ) ?? currentScope.topicId;
+    const scope = { topicId, channelId: nextProjection[topicId] ?? null };
+    setWorkspaceState((current) =>
+      openTransientColumn(current, {
+        id: columnIdentityId('timeline', scope),
+        kind: 'timeline',
+        scope,
+        pinned: false,
+      })
+    );
+  };
   const setTimelineScopeByTopic = useDesktopShellFieldSetter('timelineScopeByTopic');
   const setComposeChannelByTopic = useDesktopShellFieldSetter('composeChannelByTopic');
-  const setThread = useDesktopShellFieldSetter('thread');
   const setThreadsById = useDesktopShellFieldSetter('threadsById');
   const setThreadNextCursorById = useDesktopShellFieldSetter('threadNextCursorById');
   const setThreadLoadingMoreById = useDesktopShellFieldSetter('threadLoadingMoreById');
@@ -236,7 +262,11 @@ export function useDesktopShellData({
     (
       topic: string,
       scope = storeApi.getState().timelineScopeByTopic[topic] ??
-        privateTimelineScope(storeApi.getState().selectedChannelIdByTopic[topic] ?? null)
+        privateTimelineScope(
+          activeWorkspaceScope(storeApi.getState().workspaceState).topicId === topic
+            ? activeWorkspaceScope(storeApi.getState().workspaceState).channelId
+            : null
+        )
     ) => {
       const key = timelineScopeStorageKey(topic, scope);
       const currentState = storeApi.getState();
@@ -275,7 +305,9 @@ export function useDesktopShellData({
       const requestState = storeApi.getState();
       const selectedChannelId =
         scopeChannelId === undefined
-          ? requestState.selectedChannelIdByTopic[topic] ?? null
+          ? activeWorkspaceScope(requestState.workspaceState).topicId === topic
+            ? activeWorkspaceScope(requestState.workspaceState).channelId
+            : null
           : scopeChannelId;
       const timelineScope = privateTimelineScope(selectedChannelId);
       const timelineKey = timelineScopeStorageKey(topic, timelineScope);
@@ -289,7 +321,9 @@ export function useDesktopShellData({
         threadViewResult,
       ] = await Promise.allSettled([
         api.listTimeline(topic, null, VISIBLE_TIMELINE_LIMIT, timelineScope),
-        api.listTimeline(topic, null, VISIBLE_TIMELINE_LIMIT, PUBLIC_TIMELINE_SCOPE),
+        selectedChannelId === null
+          ? Promise.resolve(null)
+          : api.listTimeline(topic, null, VISIBLE_TIMELINE_LIMIT, PUBLIC_TIMELINE_SCOPE),
         api.listJoinedPrivateChannels(topic),
         currentThread
           ? api.listThread(topic, currentThread, null, THREAD_TIMELINE_LIMIT)
@@ -348,21 +382,25 @@ export function useDesktopShellData({
           }
         }
 
-        if (publicTimelineResult.status === 'fulfilled') {
+        if (publicTimelineResult.status === 'fulfilled' && publicTimelineResult.value) {
           const publicTimeline = publicTimelineResult.value;
-          const baselinePublicTimeline = currentState.publicTimelinesByTopic[topic] ?? EMPTY_POSTS;
+          const publicTimelineKey = timelineScopeStorageKey(topic, PUBLIC_TIMELINE_SCOPE);
+          const baselinePublicTimeline =
+            currentState.timelinesByKey[publicTimelineKey] ?? EMPTY_POSTS;
           const preservePublicTimelinePages =
             mode === 'buffer' &&
             hasLoadedOlderAuthoritativePosts(baselinePublicTimeline, publicTimeline.items);
           const resolvedPublicTimelineCursor = preservePublicTimelinePages
-            ? (currentState.publicTimelineNextCursorByTopic[topic] ?? null)
+            ? (currentState.timelineNextCursorByKey[publicTimelineKey] ?? null)
             : (publicTimeline.next_cursor ?? null);
-          setPublicTimelinesByTopic(updateRecordEntry(topic, (prev) => mergeRefreshedVisiblePosts(
+          setTimelinesByKey(updateRecordEntry(publicTimelineKey, (prev) => mergeRefreshedVisiblePosts(
               prev ?? EMPTY_POSTS,
               publicTimeline.items,
               preservePublicTimelinePages
             )));
-          setPublicTimelineNextCursorByTopic(setRecordEntry(topic, resolvedPublicTimelineCursor));
+          setTimelineNextCursorByKey(
+            setRecordEntry(publicTimelineKey, resolvedPublicTimelineCursor)
+          );
         }
 
         if (joinedChannelsResult.status === 'fulfilled') {
@@ -385,16 +423,13 @@ export function useDesktopShellData({
           if (threadViewResult.status === 'fulfilled') {
             const threadView = threadViewResult.value;
             const incomingThreadItems = threadView?.items ?? [];
-            const currentThreadPosts = currentState.thread;
+            const currentThreadPosts = currentState.threadsById[currentThread] ?? EMPTY_POSTS;
             const preserveThreadPages =
               mode === 'buffer' &&
               hasLoadedOlderAuthoritativePosts(currentThreadPosts, incomingThreadItems);
             const resolvedThreadCursor = preserveThreadPages
               ? (currentState.threadNextCursorById[currentThread] ?? null)
               : (threadView?.next_cursor ?? null);
-            setThread((current) =>
-              mergeRefreshedVisiblePosts(current, incomingThreadItems, preserveThreadPages)
-            );
             setThreadsById((current) => ({
               ...current,
               [currentThread]: mergeRefreshedVisiblePosts(
@@ -405,8 +440,6 @@ export function useDesktopShellData({
             }));
             setThreadNextCursorById(setRecordEntry(currentThread, resolvedThreadCursor));
           }
-        } else {
-          setThread([]);
         }
 
         setError(
@@ -426,9 +459,6 @@ export function useDesktopShellData({
       setPendingTimelineCountsByKey,
       setPendingTimelineNextCursorByKey,
       setPendingTimelineSnapshotsByKey,
-      setPublicTimelineNextCursorByTopic,
-      setPublicTimelinesByTopic,
-      setThread,
       setThreadsById,
       setThreadNextCursorById,
       setTimelineNextCursorByKey,
@@ -443,7 +473,9 @@ export function useDesktopShellData({
       const currentState = storeApi.getState();
       const selectedChannelId =
         scopeChannelId === undefined
-          ? currentState.selectedChannelIdByTopic[topic] ?? null
+          ? activeWorkspaceScope(currentState.workspaceState).topicId === topic
+            ? activeWorkspaceScope(currentState.workspaceState).channelId
+            : null
           : scopeChannelId;
       const timelineScope = privateTimelineScope(selectedChannelId);
       const timelineKey = timelineScopeStorageKey(topic, timelineScope);
@@ -487,7 +519,6 @@ export function useDesktopShellData({
       try {
         const threadView = await api.listThread(topic, threadId, cursor, THREAD_TIMELINE_LIMIT);
         startTransition(() => {
-          setThread((current) => mergeUniquePosts(current, threadView.items));
           setThreadsById((current) => ({
             ...current,
             [threadId]: mergeUniquePosts(current[threadId] ?? [], threadView.items),
@@ -500,7 +531,6 @@ export function useDesktopShellData({
     },
     [
       api,
-      setThread,
       setThreadsById,
       setThreadLoadingMoreById,
       setThreadNextCursorById,
@@ -583,7 +613,9 @@ export function useDesktopShellData({
     async (topic: string, currentThread: string | null, scopeChannelId?: string | null) => {
       const timelineScope = privateTimelineScope(
         scopeChannelId === undefined
-          ? storeApi.getState().selectedChannelIdByTopic[topic] ?? null
+          ? activeWorkspaceScope(storeApi.getState().workspaceState).topicId === topic
+            ? activeWorkspaceScope(storeApi.getState().workspaceState).channelId
+            : null
           : scopeChannelId
       );
       if (applyPendingTimeline(topic, timelineScope)) {

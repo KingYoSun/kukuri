@@ -55,7 +55,7 @@ test('desktop shell can create a simple repost from timeline', async () => {
   expect(document.querySelector('.post-repost-attribution')).not.toBeNull();
 });
 
-test('desktop shell can create a quote repost from the composer', async () => {
+test('desktop shell can create a quote repost from the Column composer', async () => {
   const user = userEvent.setup();
   const api = createDesktopMockApi();
   const originalCreateRepost = api.createRepost;
@@ -76,18 +76,16 @@ test('desktop shell can create a quote repost from the composer', async () => {
   await user.click(within(card).getByRole('button', { name: 'Repost' }));
   await user.click(await screen.findByRole('button', { name: 'Quote Repost' }));
 
-  const quoteDialog = await screen.findByRole('dialog', { name: 'Quote Repost' });
-  const quoteInput = within(quoteDialog).getByPlaceholderText('Write a quote repost');
-  expect(within(quoteDialog).getByText('Quote reposting')).toBeInTheDocument();
-  expect(within(quoteDialog).getByText('Original post')).toBeInTheDocument();
-  expect(within(quoteDialog).getByText('source post')).toBeInTheDocument();
-  expect(within(quoteDialog).getByLabelText(/attachment/i)).toBeDisabled();
-
-  await user.type(quoteInput, 'quoted take');
+  const quoteInput = await screen.findByPlaceholderText('Write a quote repost');
   const composer = quoteInput.closest('form');
   if (!composer) {
     throw new Error('quote repost composer form not found');
   }
+  expect(within(composer).getByText('Quote reposting')).toBeInTheDocument();
+  expect(within(composer).getByText(/Original post.*source post/)).toBeInTheDocument();
+  expect(within(composer).getByLabelText(/attachment/i)).toBeDisabled();
+
+  await user.type(quoteInput, 'quoted take');
   const submitButton = within(composer).getByRole('button', { name: 'Quote Repost' });
   await user.click(submitButton);
 

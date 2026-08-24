@@ -730,13 +730,6 @@
   min-width: 0;
 }
 
-.shell-status-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-xs);
-  align-items: center;
-}
-
 .shell-icon-button {
   flex: none;
   width: 2.5rem;

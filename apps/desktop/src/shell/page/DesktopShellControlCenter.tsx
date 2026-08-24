@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   type ComponentProps,
   type RefObject,
@@ -38,6 +37,7 @@ import {
   activateColumn,
   closeColumn,
   columnIdentityId,
+  activeWorkspaceScope,
   defaultColumnSpan,
   openPinnedColumn,
   setColumnPinned,
@@ -109,26 +109,25 @@ export function DesktopShellControlCenter({
   const { t } = useTranslation(['shell', 'common', 'settings', 'channels']);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const {
-    activeTopic,
     communityNodeStatuses,
     developerModeEnabled,
     joinedChannelsByTopic,
     notificationStatus,
-    selectedChannelIdByTopic,
     syncStatus,
     workspaceState,
   } = useDesktopShellStore(
     useShallow((state) => ({
-      activeTopic: state.activeTopic,
       communityNodeStatuses: state.communityNodeStatuses,
       developerModeEnabled: state.developerModeEnabled,
       joinedChannelsByTopic: state.joinedChannelsByTopic,
       notificationStatus: state.notificationStatus,
-      selectedChannelIdByTopic: state.selectedChannelIdByTopic,
       syncStatus: state.syncStatus,
       workspaceState: state.workspaceState,
     }))
   );
+  const activeScope = activeWorkspaceScope(workspaceState);
+  const activeTopic = activeScope.topicId;
+  const selectedChannelId = activeScope.channelId;
   const setWorkspaceState = useDesktopShellFieldSetter('workspaceState');
   const communityNodeNeedsAttention = communityNodeStatuses.some((status) => status.last_error);
   const connectionNeedsAttention = Boolean(syncStatus.last_error) || syncStatus.delivery_state !== 'Live';
@@ -149,14 +148,6 @@ export function DesktopShellControlCenter({
     : ADDABLE_COLUMN_KINDS.filter(
         (kind) => kind !== 'stream' && kind !== 'metaverse'
       );
-
-  const activeScope = useMemo(
-    () => ({
-      topicId: activeTopic,
-      channelId: selectedChannelIdByTopic[activeTopic] ?? null,
-    }),
-    [activeTopic, selectedChannelIdByTopic]
-  );
 
   const setOpen = useCallback(
     (open: boolean, restoreFocus = false) => {
@@ -239,7 +230,6 @@ export function DesktopShellControlCenter({
     onSelectChannel(topic, channelId);
   };
 
-  const selectedChannelId = selectedChannelIdByTopic[activeTopic] ?? null;
 
   return (
     <>

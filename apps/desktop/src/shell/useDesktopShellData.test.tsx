@@ -48,6 +48,7 @@ import {
   resetWindowHash,
   type ShellHookHarness,
 } from '@/shell/testSupport/renderShellHook';
+import { columnIdentityId, openTransientColumn } from '@/shell/slices/workspace';
 
 const AUTHOR_PUBKEY = 'a'.repeat(64);
 
@@ -232,10 +233,15 @@ describe('useDesktopShellData characterization', () => {
         ...harness.store.getState().joinedChannelsByTopic,
         'kukuri:topic:demo': [joinedChannel],
       },
-      selectedChannelIdByTopic: {
-        ...harness.store.getState().selectedChannelIdByTopic,
-        'kukuri:topic:demo': 'channel-1',
-      },
+      workspaceState: openTransientColumn(harness.store.getState().workspaceState, {
+        id: columnIdentityId('timeline', {
+          topicId: 'kukuri:topic:demo',
+          channelId: 'channel-1',
+        }),
+        kind: 'timeline',
+        scope: { topicId: 'kukuri:topic:demo', channelId: 'channel-1' },
+        pinned: false,
+      }),
     });
 
     const { view } = renderDataHook(api, harness);
@@ -258,7 +264,7 @@ describe('useDesktopShellData characterization', () => {
       )
     ).toEqual(['post-channel']);
     expect(
-      state.publicTimelinesByTopic['kukuri:topic:demo']?.map((post) => post.object_id)
+      state.timelinesByKey['kukuri:topic:demo::public']?.map((post) => post.object_id)
     ).toEqual(['post-public']);
     expect(state.timelineNextCursorByKey['kukuri:topic:demo::channel::channel-1']).toBeNull();
 
@@ -313,11 +319,6 @@ describe('useDesktopShellData characterization', () => {
     ).toEqual(['post-new', 'post-old']);
     expect('kukuri:topic:demo::public' in state.pendingTimelineNextCursorByKey).toBe(true);
     expect(state.pendingTimelineNextCursorByKey['kukuri:topic:demo::public']).toBeNull();
-    // public timeline には pending バッファが無く、そのまま merge される。
-    expect(
-      state.publicTimelinesByTopic['kukuri:topic:demo']?.map((post) => post.object_id)
-    ).toEqual(['post-new', 'post-old']);
-
     view.unmount();
   });
 
@@ -511,7 +512,7 @@ describe('useDesktopShellData characterization', () => {
       harness.store.getState().timelineLoadingMoreByKey['kukuri:topic:demo::public']
     ).toBe(true);
     // cursor 付きで同じ scope に対して追加ページを要求する。
-    expect(listTimeline).toHaveBeenCalledTimes(3);
+    expect(listTimeline).toHaveBeenCalledTimes(2);
     expect(listTimeline).toHaveBeenLastCalledWith(
       'kukuri:topic:demo',
       { created_at: 10, object_id: 'post-page-1' },
@@ -536,7 +537,7 @@ describe('useDesktopShellData characterization', () => {
     await act(async () => {
       await view.result.current.loadMoreTimeline('kukuri:topic:demo');
     });
-    expect(listTimeline).toHaveBeenCalledTimes(3);
+    expect(listTimeline).toHaveBeenCalledTimes(2);
     expect(
       harness.store.getState().timelineLoadingMoreByKey['kukuri:topic:demo::public']
     ).toBe(false);
@@ -563,10 +564,15 @@ describe('useDesktopShellData characterization', () => {
 
     const harness = createShellHookHarness();
     harness.store.getState().patchState({
-      shellChromeState: {
-        ...harness.store.getState().shellChromeState,
-        activePrimarySection: 'notifications',
-      },
+      workspaceState: openTransientColumn(harness.store.getState().workspaceState, {
+        id: columnIdentityId('notifications', {
+          topicId: 'kukuri:topic:demo',
+          channelId: null,
+        }),
+        kind: 'notifications',
+        scope: { topicId: 'kukuri:topic:demo', channelId: null },
+        pinned: false,
+      }),
     });
 
     const { view } = renderDataHook(api, harness);

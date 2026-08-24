@@ -8,6 +8,8 @@ export type Setter<K extends keyof DesktopShellState> = (
   value: DesktopShellStateValue<K>
 ) => void;
 
+export type DerivedSetter<T> = (value: T | ((current: T) => T)) => void;
+
 export type SyncRoute = (
   mode?: 'push' | 'replace',
   overrides?: Record<string, unknown>

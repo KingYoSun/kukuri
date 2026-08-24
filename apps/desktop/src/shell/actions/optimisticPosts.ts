@@ -14,9 +14,14 @@ import {
   type DraftMediaItem,
 } from '@/shell/store';
 import { publishedTopicIdForPost } from '@/shell/presentation';
-import { setRecordEntry, updateRecordEntry } from '@/shell/stateUpdates';
+import {
+  activeWorkspaceColumn,
+  activeWorkspaceScope,
+  primarySectionForColumn,
+} from '@/shell/slices/workspace';
+import { updateRecordEntry } from '@/shell/stateUpdates';
 
-import type { BoolStateDispatch, Setter, SyncRoute, Translate } from './shared';
+import type { Setter, Translate } from './shared';
 
 type OptimisticPostActionsParams = {
   api: DesktopApi;
@@ -29,26 +34,11 @@ type OptimisticPostActionsParams = {
     scopeChannelId?: string | null
   ) => Promise<void>;
   releaseDraftPreview: (itemId: string) => void;
-  rememberDraftPreview: (item: DraftMediaItem) => void;
   storeApi: DesktopShellStoreApi;
-  syncRoute: SyncRoute;
   translate: Translate;
-  setActiveTopic: Setter<'activeTopic'>;
-  setAttachmentInputKey: Setter<'attachmentInputKey'>;
-  setComposeChannelByTopic: Setter<'composeChannelByTopic'>;
-  setComposeDialogOpen: BoolStateDispatch;
-  setComposer: Setter<'composer'>;
-  setComposerError: Setter<'composerError'>;
-  setDraftMediaItems: Setter<'draftMediaItems'>;
   setProfileTimeline: Setter<'profileTimeline'>;
-  setPublicTimelinesByTopic: Setter<'publicTimelinesByTopic'>;
-  setReplyTarget: Setter<'replyTarget'>;
-  setRepostTarget: Setter<'repostTarget'>;
   setSelectedAuthorTimeline: Setter<'selectedAuthorTimeline'>;
-  setSelectedChannelIdByTopic: Setter<'selectedChannelIdByTopic'>;
-  setSelectedThread: Setter<'selectedThread'>;
-  setShellChromeState: Setter<'shellChromeState'>;
-  setThread: Setter<'thread'>;
+  setThreadsById: Setter<'threadsById'>;
   setTimelinesByKey: Setter<'timelinesByKey'>;
 };
 
@@ -59,26 +49,11 @@ export function createOptimisticPostActions({
   localProfile,
   refreshVisibleTimelineAfterPublish,
   releaseDraftPreview,
-  rememberDraftPreview,
   storeApi,
-  syncRoute,
   translate,
-  setActiveTopic,
-  setAttachmentInputKey,
-  setComposeChannelByTopic,
-  setComposeDialogOpen,
-  setComposer,
-  setComposerError,
-  setDraftMediaItems,
   setProfileTimeline,
-  setPublicTimelinesByTopic,
-  setReplyTarget,
-  setRepostTarget,
   setSelectedAuthorTimeline,
-  setSelectedChannelIdByTopic,
-  setSelectedThread,
-  setShellChromeState,
-  setThread,
+  setThreadsById,
   setTimelinesByKey,
 }: OptimisticPostActionsParams) {
   function cloneDraftMediaItems(items: DraftMediaItem[]): LocalDraftMediaItem[] {
@@ -130,20 +105,29 @@ export function createOptimisticPostActions({
       }
       return changed ? next : current;
     });
-    setPublicTimelinesByTopic(updateRecordEntry(topicId, (prev) => patch(prev ?? [])));
-    setThread((current) => patch(current));
+    setThreadsById((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const [threadId, posts] of Object.entries(current)) {
+        if (!posts.some((post) => post.local_id === localId)) continue;
+        next[threadId] = patch(posts);
+        changed = true;
+      }
+      return changed ? next : current;
+    });
     setProfileTimeline((current) => patch(current));
     setSelectedAuthorTimeline((current) => patch(current));
   }
 
   function findKnownPost(objectId: string): PostView | null {
     const currentState = storeApi.getState();
+    const activeScope = activeWorkspaceScope(currentState.workspaceState);
     const lists = [
-      currentState.thread,
+      ...Object.values(currentState.threadsById),
       currentState.timelinesByKey[
-        activeTimelineStorageKey(currentState, currentState.activeTopic)
+        activeTimelineStorageKey(currentState, activeScope.topicId)
       ] ?? [],
-      currentState.publicTimelinesByTopic[currentState.activeTopic] ?? [],
+      ...Object.values(currentState.timelinesByKey),
       currentState.profileTimeline,
       currentState.selectedAuthorTimeline,
     ];
@@ -154,55 +138,6 @@ export function createOptimisticPostActions({
       }
     }
     return null;
-  }
-
-  function restoreLocalDraft(post: PostView) {
-    const draft = post.local_draft;
-    if (!draft) {
-      return;
-    }
-    const draftMedia = cloneDraftMediaItems(post.local_draft_media_items ?? []);
-    for (const item of draftMedia) {
-      rememberDraftPreview(item as DraftMediaItem);
-    }
-    if (draft.topic !== activeTopic) {
-      setActiveTopic(draft.topic);
-    }
-    setComposer(draft.content);
-    setDraftMediaItems(draftMedia as DraftMediaItem[]);
-    setAttachmentInputKey((value) => value + 1);
-    setComposeChannelByTopic(
-      setRecordEntry(
-        draft.topic,
-        draft.kind === 'repost' ? PUBLIC_CHANNEL_REF : (draft.channel_ref ?? PUBLIC_CHANNEL_REF)
-      )
-    );
-    if (draft.kind === 'repost' && draft.source_object_id) {
-      setRepostTarget(findKnownPost(draft.source_object_id));
-      setReplyTarget(null);
-    } else if (draft.reply_to) {
-      setReplyTarget(findKnownPost(draft.reply_to));
-      setRepostTarget(null);
-      setSelectedThread(post.root_id ?? draft.reply_to);
-    } else {
-      setReplyTarget(null);
-      setRepostTarget(null);
-      const channelRef = draft.channel_ref;
-      if (channelRef && channelRef.kind === 'private_channel') {
-        setSelectedChannelIdByTopic(setRecordEntry(draft.topic, channelRef.channel_id));
-      }
-    }
-    setComposerError(post.local_error ?? null);
-    setComposeDialogOpen(true);
-    setShellChromeState((current) => ({
-      ...current,
-      activePrimarySection: 'timeline',
-    }));
-    syncRoute('replace', {
-      activeTopic: draft.topic,
-      primarySection: 'timeline',
-      selectedThread: draft.reply_to ? post.root_id ?? draft.reply_to : null,
-    });
   }
 
   function createOptimisticPost(args: {
@@ -299,26 +234,26 @@ export function createOptimisticPostActions({
 
   function insertOptimisticPost(post: PostView) {
     const currentState = storeApi.getState();
+    const activeSection = primarySectionForColumn(activeWorkspaceColumn(currentState.workspaceState));
     const topicId = post.published_topic_id ?? activeTopic;
     const timelineKey = timelineStorageKeyForChannel(topicId, post.channel_id ?? null);
     setTimelinesByKey(updateRecordEntry(timelineKey, (prev) => prependPost(prev ?? [], post)));
-    if (!post.channel_id) {
-      setPublicTimelinesByTopic(updateRecordEntry(topicId, (prev) => prependPost(prev ?? [], post)));
-    }
     if (post.root_id && currentState.selectedThread === post.root_id) {
-      setThread((current) => prependPost(current, post));
+      setThreadsById(
+        updateRecordEntry(post.root_id, (current) => prependPost(current ?? [], post))
+      );
     }
     if (
       !post.channel_id &&
       localProfile &&
-      currentState.shellChromeState.activePrimarySection === 'profile'
+      activeSection === 'profile'
     ) {
       setProfileTimeline((current) => prependPost(current, post));
     }
     if (
       !post.channel_id &&
       currentState.selectedAuthorPubkey === localAuthorPubkey &&
-      currentState.shellChromeState.activePrimarySection === 'timeline'
+      activeSection === 'timeline'
     ) {
       setSelectedAuthorTimeline((current) => prependPost(current, post));
     }
@@ -388,7 +323,6 @@ export function createOptimisticPostActions({
         }),
         draft.topic
       );
-      setComposerError(message);
       return false;
     }
   }
@@ -396,8 +330,8 @@ export function createOptimisticPostActions({
   return {
     cloneDraftMediaItems,
     createOptimisticPost,
+    findKnownPost,
     insertOptimisticPost,
-    restoreLocalDraft,
     submitOptimisticPost,
   };
 }

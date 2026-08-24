@@ -27,7 +27,6 @@ import type {
   JoinedPrivateChannelView,
   PostView,
 } from '@/lib/api';
-import type { PrimarySection } from '@/components/shell/types';
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import { useDesktopShellRouting } from '@/shell/useDesktopShellRouting';
 import {
@@ -35,6 +34,13 @@ import {
   resetWindowHash,
   type ShellHookHarness,
 } from '@/shell/testSupport/renderShellHook';
+import {
+  activeWorkspaceColumn,
+  activeWorkspaceScope,
+  columnIdentityId,
+  openTransientColumn,
+  primarySectionForColumn,
+} from '@/shell/slices/workspace';
 
 const AUTHOR_PUBKEY = 'a'.repeat(64);
 const DM_PEER_PUBKEY = 'd'.repeat(64);
@@ -150,24 +156,16 @@ function renderRoutingHook(options: RenderRoutingHookOptions) {
   options.preset?.(harness.store);
   const api = options.api ?? createDesktopMockApi();
   const loadTopics = vi.fn(async () => {});
-  const primarySectionRefs: { current: Partial<Record<PrimarySection, HTMLElement | null>> } = {
-    current: {},
-  };
-  const navTriggerRef = { current: null as HTMLButtonElement | null };
   const settingsTriggerRef = { current: null as HTMLButtonElement | null };
   const pendingRouteUrlRef = { current: null as string | null };
-  const didSyncRouteSectionRef = { current: false };
   const view = renderHook(
     () =>
       useDesktopShellRouting({
         api,
         translate: stubTranslate,
         loadTopics,
-        primarySectionRefs,
-        navTriggerRef,
         settingsTriggerRef,
         pendingRouteUrlRef,
-        didSyncRouteSectionRef,
       }),
     { wrapper: harness.wrapper }
   );
@@ -208,7 +206,6 @@ describe('useDesktopShellRouting', () => {
     const api = { ...baseApi, listThread: vi.fn(baseApi.listThread) };
     // URL と整合する author ペイン(+DM ペイン)が開いた状態から始めて
     // 「openThread が他ペインを閉じる」ことを観測する。nav も開いておき、
-    // openThread が nav を閉じる(navOpen: false を設定する)ことも観測する。
     const { harness, loadTopics, view } = renderRoutingHook({
       hash: `#/timeline?topic=kukuri%3Atopic%3Ademo&context=author&authorPubkey=${AUTHOR_PUBKEY}`,
       api,
@@ -218,9 +215,6 @@ describe('useDesktopShellRouting', () => {
           selectedAuthor: buildAuthor(AUTHOR_PUBKEY),
           directMessagePaneOpen: true,
           selectedDirectMessagePeerPubkey: DM_PEER_PUBKEY,
-        });
-        store.getState().patchState({
-          shellChromeState: { ...store.getState().shellChromeState, navOpen: true },
         });
       },
     });
@@ -238,7 +232,10 @@ describe('useDesktopShellRouting', () => {
       expect(harness.store.getState().selectedThread).toBe('post-1');
     });
     const state = harness.store.getState();
-    expect(state.thread.map((item) => item.object_id)).toEqual(['post-1', 'comment-1']);
+    expect(state.threadsById['post-1'].map((item) => item.object_id)).toEqual([
+      'post-1',
+      'comment-1',
+    ]);
     expect(state.threadNextCursorById).toEqual({ 'post-1': null });
     expect(state.focusedObjectId).toBeNull();
     // author / DM ペインは閉じる。
@@ -246,10 +243,8 @@ describe('useDesktopShellRouting', () => {
     expect(state.selectedAuthor).toBeNull();
     expect(state.directMessagePaneOpen).toBe(false);
     expect(state.selectedDirectMessagePeerPubkey).toBeNull();
-    expect(state.shellChromeState.activePrimarySection).toBe('timeline');
-    expect(state.shellChromeState.timelineView).toBe('feed');
-    // preset で navOpen=true にしてある → openThread が nav を閉じる。
-    expect(state.shellChromeState.navOpen).toBe(false);
+    expect(primarySectionForColumn(activeWorkspaceColumn(state.workspaceState))).toBe('timeline');
+    expect(activeWorkspaceColumn(state.workspaceState).kind).toBe('thread');
     expect(state.error).toBeNull();
     await waitFor(() => {
       expect(window.location.hash).toBe(
@@ -278,7 +273,9 @@ describe('useDesktopShellRouting', () => {
       preset: (store) => {
         store.getState().patchState({
           selectedThread: 'post-1',
-          thread: [buildPost({ object_id: 'post-1', root_id: 'post-1' })],
+          threadsById: {
+            'post-1': [buildPost({ object_id: 'post-1', root_id: 'post-1' })],
+          },
           selectedLiveSessionId: 'live-1',
           selectedGameRoomId: 'room-1',
         });
@@ -295,7 +292,7 @@ describe('useDesktopShellRouting', () => {
       expect(harness.store.getState().selectedThread).toBeNull();
     });
     const state = harness.store.getState();
-    expect(state.thread).toEqual([]);
+    expect(state.threadsById['post-1']?.map((item) => item.object_id)).toEqual(['post-1']);
     expect(state.focusedObjectId).toBeNull();
     expect(state.selectedAuthorPubkey).toBeNull();
     expect(state.selectedAuthor).toBeNull();
@@ -351,7 +348,7 @@ describe('useDesktopShellRouting', () => {
     });
     const state = harness.store.getState();
     // handleSelectPrivateChannel と同じ 3 つの状態が channel-1 に揃う。
-    expect(state.selectedChannelIdByTopic['kukuri:topic:demo']).toBe('channel-1');
+    expect(activeWorkspaceScope(state.workspaceState).channelId).toBe('channel-1');
     expect(state.timelineScopeByTopic['kukuri:topic:demo']).toEqual({
       kind: 'channel',
       channel_id: 'channel-1',
@@ -384,7 +381,15 @@ describe('useDesktopShellRouting', () => {
           channelPanelStateByTopic: {
             'kukuri:topic:demo': { status: 'ready', error: null },
           },
-          selectedChannelIdByTopic: { 'kukuri:topic:demo': 'channel-1' },
+          workspaceState: openTransientColumn(store.getState().workspaceState, {
+            id: columnIdentityId('timeline', {
+              topicId: 'kukuri:topic:demo',
+              channelId: 'channel-1',
+            }),
+            kind: 'timeline',
+            scope: { topicId: 'kukuri:topic:demo', channelId: 'channel-1' },
+            pinned: false,
+          }),
           timelineScopeByTopic: {
             'kukuri:topic:demo': { kind: 'channel', channel_id: 'channel-1' },
           },
@@ -406,7 +411,7 @@ describe('useDesktopShellRouting', () => {
       expect(harness.store.getState().selectedThread).toBe('post-1');
     });
     const state = harness.store.getState();
-    expect(state.selectedChannelIdByTopic['kukuri:topic:demo']).toBeNull();
+    expect(activeWorkspaceScope(state.workspaceState).channelId).toBeNull();
     expect(state.timelineScopeByTopic['kukuri:topic:demo']).toEqual({ kind: 'public' });
     expect(state.composeChannelByTopic['kukuri:topic:demo']).toEqual({ kind: 'public' });
     await waitFor(() => {
@@ -471,8 +476,7 @@ describe('useDesktopShellRouting', () => {
       name: 'dana',
       mutual: true,
     });
-    expect(state.shellChromeState.activePrimarySection).toBe('messages');
-    expect(state.shellChromeState.navOpen).toBe(false);
+    expect(primarySectionForColumn(activeWorkspaceColumn(state.workspaceState))).toBe('messages');
     expect(state.directMessagePaneOpen).toBe(true);
     expect(state.directMessageError).toBeNull();
     expect(state.selectedThread).toBeNull();
@@ -518,7 +522,7 @@ describe('useDesktopShellRouting', () => {
     const state = harness.store.getState();
     expect(state.directMessagePaneOpen).toBe(true);
     expect(state.selectedDirectMessagePeerPubkey).toBeNull();
-    expect(state.shellChromeState.activePrimarySection).toBe('messages');
+    expect(primarySectionForColumn(activeWorkspaceColumn(state.workspaceState))).toBe('messages');
     unsubscribe();
     view.unmount();
   });
@@ -548,7 +552,9 @@ describe('useDesktopShellRouting', () => {
       preset: (store) => {
         store.getState().patchState({
           selectedThread: 'post-1',
-          thread: [buildPost({ object_id: 'post-1', root_id: 'post-1' })],
+          threadsById: {
+            'post-1': [buildPost({ object_id: 'post-1', root_id: 'post-1' })],
+          },
           selectedAuthorPubkey: AUTHOR_PUBKEY,
           selectedAuthor: buildAuthor(AUTHOR_PUBKEY),
         });
@@ -577,16 +583,20 @@ describe('useDesktopShellRouting', () => {
     await waitFor(() => {
       expect(window.location.hash).toBe('#/live?topic=kukuri%3Atopic%3Ademo');
     });
+    await waitFor(() => {
+      expect(
+        primarySectionForColumn(
+          activeWorkspaceColumn(harness.store.getState().workspaceState)
+        )
+      ).toBe('live');
+    });
     const state = harness.store.getState();
-    expect(state.shellChromeState.activePrimarySection).toBe('live');
-    expect(state.shellChromeState.navOpen).toBe(false);
     // focusPrimarySection は section!=='profile' では profileMode / profileConnectionsView を
     // 触らない(useDesktopShellRouting.ts L509-510)。profileMode は上記 mount 時同期で既に
     // 'overview'、preset した profileConnectionsView='muted' は遷移後もそのまま残る。
     expect(state.shellChromeState.profileMode).toBe('overview');
     expect(state.shellChromeState.profileConnectionsView).toBe('muted');
     expect(state.selectedThread).toBeNull();
-    expect(state.thread).toEqual([]);
     expect(state.focusedObjectId).toBeNull();
     expect(state.selectedAuthorPubkey).toBeNull();
     expect(state.selectedAuthor).toBeNull();
@@ -615,7 +625,9 @@ describe('useDesktopShellRouting', () => {
     await waitFor(() => {
       expect(window.location.hash).toBe('#/notifications?topic=kukuri%3Atopic%3Ademo');
     });
-    expect(harness.store.getState().shellChromeState.activePrimarySection).toBe('notifications');
+    expect(
+      primarySectionForColumn(activeWorkspaceColumn(harness.store.getState().workspaceState))
+    ).toBe('notifications');
     // notifications 滞在中も直前の非 notifications ルートを保持し続ける。
     expect(harness.store.getState().lastNonNotificationsRoute).toBe(
       '/timeline?topic=kukuri%3Atopic%3Ademo'
@@ -628,27 +640,36 @@ describe('useDesktopShellRouting', () => {
     await waitFor(() => {
       expect(window.location.hash).toBe(BASE_TIMELINE_HASH);
     });
-    expect(harness.store.getState().shellChromeState.activePrimarySection).toBe('timeline');
+    expect(
+      primarySectionForColumn(activeWorkspaceColumn(harness.store.getState().workspaceState))
+    ).toBe('timeline');
     view.unmount();
   });
 
-  test('Escape cascade closes exactly one layer per press: settings -> author -> thread -> nav', async () => {
-    // settings drawer + author ペイン + thread ペイン + nav を全て開いた状態から始める。
-    // settings=connectivity は store 生成時(createInitialShellState)にも反映されるので
-    // shellChromeState のプリセットは navOpen のみでよい。
+  test('Escape cascade closes exactly one layer per press: settings -> author -> thread', async () => {
+    // settings drawer + author pane + thread paneを全て開いた状態から始める。
     const { harness, view } = renderRoutingHook({
       hash:
         '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-1' +
         `&authorPubkey=${AUTHOR_PUBKEY}&settings=connectivity`,
       preset: (store) => {
+        const scope = { topicId: 'kukuri:topic:demo', channelId: null };
+        const threadColumnId = columnIdentityId('thread', scope, 'post-1');
         store.getState().patchState({
           selectedThread: 'post-1',
-          thread: [buildPost({ object_id: 'post-1', root_id: 'post-1' })],
+          threadsById: {
+            'post-1': [buildPost({ object_id: 'post-1', root_id: 'post-1' })],
+          },
           selectedAuthorPubkey: AUTHOR_PUBKEY,
           selectedAuthor: buildAuthor(AUTHOR_PUBKEY),
-        });
-        store.getState().patchState({
-          shellChromeState: { ...store.getState().shellChromeState, navOpen: true },
+          workspaceState: openTransientColumn(store.getState().workspaceState, {
+            id: threadColumnId,
+            kind: 'thread',
+            scope,
+            entityId: 'post-1',
+            parentColumnId: store.getState().workspaceState.activeColumnId,
+            pinned: false,
+          }),
         });
       },
     });
@@ -676,7 +697,6 @@ describe('useDesktopShellRouting', () => {
     });
     expect(harness.store.getState().selectedAuthorPubkey).toBe(AUTHOR_PUBKEY);
     expect(harness.store.getState().selectedThread).toBe('post-1');
-    expect(harness.store.getState().shellChromeState.navOpen).toBe(true);
 
     // 2 回目: author ペインだけが閉じる。
     const second = dispatchEscape();
@@ -691,7 +711,6 @@ describe('useDesktopShellRouting', () => {
     });
     expect(harness.store.getState().selectedAuthor).toBeNull();
     expect(harness.store.getState().selectedThread).toBe('post-1');
-    expect(harness.store.getState().shellChromeState.navOpen).toBe(true);
 
     // 3 回目: thread ペインだけが閉じる。
     const third = dispatchEscape();
@@ -702,20 +721,10 @@ describe('useDesktopShellRouting', () => {
     await waitFor(() => {
       expect(window.location.hash).toBe(BASE_TIMELINE_HASH);
     });
-    expect(harness.store.getState().thread).toEqual([]);
-    expect(harness.store.getState().shellChromeState.navOpen).toBe(true);
-
-    // 4 回目: nav が閉じる(URL は変わらない)。
+    // 4 回目: 閉じる対象が無く、イベントは消費されない。
     const fourth = dispatchEscape();
-    expect(fourth.defaultPrevented).toBe(true);
-    await waitFor(() => {
-      expect(harness.store.getState().shellChromeState.navOpen).toBe(false);
-    });
+    expect(fourth.defaultPrevented).toBe(false);
     expect(window.location.hash).toBe(BASE_TIMELINE_HASH);
-
-    // 5 回目: 閉じる対象が無く、イベントは消費されない。
-    const fifth = dispatchEscape();
-    expect(fifth.defaultPrevented).toBe(false);
     view.unmount();
   });
 
@@ -728,7 +737,9 @@ describe('useDesktopShellRouting', () => {
       preset: (store) => {
         store.getState().patchState({
           selectedThread: 'post-1',
-          thread: [buildPost({ object_id: 'post-1', root_id: 'post-1' })],
+          threadsById: {
+            'post-1': [buildPost({ object_id: 'post-1', root_id: 'post-1' })],
+          },
         });
       },
     });
