@@ -243,6 +243,7 @@ IntersectionObserver や focus から導出する runtime state を、persist �
 - active と visible を分離するため、focus、audio、media / render lifecycle の明示管理が必要になる。
 - Stream / Metaverse の interactive gesture と mobile Column paging の競合を test で固定する必要がある。
 - ADR 0014 の Storybook、PR preview、Shneiderman checklist、keyboard、resize、reduced-motion の review flow は引き続き適用する。
+- 対象外 / 後続の明示（2026-08-24 追記、Issue #768）: (a) Stream の Fullscreen 表示状態と「退出後に元の Column layout へ戻る」挙動、および Metaverse の Fullscreen は未実装であり、本 ADR の §7 の記述は将来実装時の契約として残す。実装と validation は Issue #766 で扱う。 (b) Stream Column は現行 LiveSession domain に player / chat / reactions surface が無いため session 管理 card の 2-track 配置までを実装済みとし、video seek と Column swipe の非競合 test は player 導入時に追加する（Issue #766）。 (c) Metaverse の参加 / 退出 / チャットは Column footer ではなく viewport 内 HUD / discovery card に置く現行判断を維持し、footer への移設可否は Issue #766 で再評価する。
 
 ## Non-goals
 

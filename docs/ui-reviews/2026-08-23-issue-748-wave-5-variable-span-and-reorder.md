@@ -21,3 +21,8 @@
 - Review result: 1920×1080のproduction storyで1 / 2 / 3 / 4 spanの実寸、Stream 2-track、Metaverse sceneのside HUDを確認した。760〜1920pxの5段階ではdocument overflowなし、Canvas内overflow、side / full-width HUD切替を確認した。menu、keyboard reorder、drag reorder、reload復元、URL非依存はChromium E2Eで確認した。
 - Exceptions: mobile Column paging / switcher、immersive lifecycle、restart後のdraft / active game state復元はWave 6以降へ残す。
 - Validation: production Storybook実画面review、`cargo xtask desktop-ui-check`（frontend lint / typecheck、Vitest 90 files / 772 tests、Storybook build、Chromium E2E 17件、visual smoke 14件）、`cargo xtask check`、`cargo xtask test`（workspace 584件成功 / 3件skip、harness 18件、frontend 772件）、`cargo xtask oversized-files`、`git diff --check`を完了した。`oversized-files`の警告3件は既存Rustファイルで、Wave 5 CSSは専用fileへ分離して新規超過を解消した。リポジトリCIはPR記録を一次記録とする。
+
+
+## 追記（2026-08-24、Issue #768）
+
+- PR: https://github.com/KingYoSun/kukuri/pull/757

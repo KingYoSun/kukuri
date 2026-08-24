@@ -25,3 +25,9 @@
 - Review result: 390×844のproduction appでCanvas / 3 Columnが各390px、document overflow 0、snap `x mandatory`、header action 44×44pxを確認した。Composerへfocus中はindicator / Control Center triggerが非表示になり、footerはviewport内に収まった。production Storybookではoffscreen Streamのsuspension、active Metaverseのscene / HUD / chat、gesture owner、44px pagerを確認した。
 - Linux baseline: [Kukuri Visual Baseline run 32613101830](https://github.com/KingYoSun/kukuri/actions/runs/32613101830)で再生成し、意図したmobile root余白除去とheader action集約が反映された`timeline-narrow-dark.png` / `timeline-narrow-light.png`の2枚だけを更新した。
 - Validation: `cargo xtask oversized-files`、`cargo xtask desktop-ui-check`（Vitest 782、Chromium E2E 19、visual 14）、`cargo xtask check`、`cargo xtask test`（Rust 584、harness 18、Vitest 782）を完了した。加えて390×844のproduction appとproduction Storybookを目視確認した。PR CIはPR記録を一次記録とする。
+
+
+## 追記（2026-08-24、Issue #768）
+
+- PR: https://github.com/KingYoSun/kukuri/pull/758
+- 375 / 430px の再現手順: 本文の 375 / 390 / 430px 確認のうち、repo に残る自動裏付けは 390px（Playwright / asset）のみだった。Issue #768 で mobile paging の Playwright を 375×812 / 390×844 / 430×932 のパラメタ実行へ拡張し、Storybook toolbar の Mobile 375 / 390 / 430 preset を再現手順として明記する。
