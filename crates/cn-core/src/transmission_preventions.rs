@@ -120,8 +120,20 @@ pub async fn apply_transmission_prevention(
     validate_actor(actor)?;
     validate_input(input)?;
     let mut tx = pool.begin().await?;
-    lock_subject(&mut tx, &input.subject_id).await?;
-    if let Some(current) = active_in_tx(&mut tx, &input.subject_kind, &input.subject_id).await? {
+    let mutation = apply_transmission_prevention_in_tx(&mut tx, actor, input).await?;
+    tx.commit().await?;
+    Ok(mutation)
+}
+
+pub(crate) async fn apply_transmission_prevention_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    actor: &str,
+    input: &NewTransmissionPrevention,
+) -> Result<TransmissionPreventionMutation> {
+    validate_actor(actor)?;
+    validate_input(input)?;
+    lock_subject(tx, &input.subject_id).await?;
+    if let Some(current) = active_in_tx(tx, &input.subject_kind, &input.subject_id).await? {
         let before = audit_snapshot(&current);
         let expired = sqlx::query(
             "UPDATE cn_legal.transmission_preventions
@@ -131,12 +143,12 @@ pub async fn apply_transmission_prevention(
              RETURNING *",
         )
         .bind(&current.id)
-        .fetch_optional(&mut *tx)
+        .fetch_optional(&mut **tx)
         .await?;
         if let Some(row) = expired {
             let expired_decision = from_row(&row)?;
             append_audit(
-                &mut tx,
+                tx,
                 "system:expiry",
                 "transmission_prevention.expire",
                 &current.subject_kind,
@@ -168,7 +180,7 @@ pub async fn apply_transmission_prevention(
     .bind(actor.trim())
     .bind(input.expires_at)
     .bind(input.related_report_id.as_deref())
-    .fetch_one(&mut *tx)
+    .fetch_one(&mut **tx)
     .await?;
     let decision = from_row(&row)?;
     let mut removed_index_scopes = Vec::new();
@@ -178,7 +190,7 @@ pub async fn apply_transmission_prevention(
              RETURNING scope_kind, scope_id",
         )
         .bind(input.subject_id.trim())
-        .fetch_all(&mut *tx)
+        .fetch_all(&mut **tx)
         .await?
         {
             removed_index_scopes.push((
@@ -188,7 +200,7 @@ pub async fn apply_transmission_prevention(
         }
     }
     let audit = append_audit(
-        &mut tx,
+        tx,
         actor,
         "transmission_prevention.apply",
         &input.subject_kind,
@@ -197,7 +209,6 @@ pub async fn apply_transmission_prevention(
         audit_snapshot(&decision),
     )
     .await?;
-    tx.commit().await?;
     Ok(TransmissionPreventionMutation {
         decision,
         audit,

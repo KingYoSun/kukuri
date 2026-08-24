@@ -57,6 +57,23 @@ pub(crate) async fn submit_report(
             "subject_kind, subject_id, capability and reason are required",
         ));
     }
+    if reason == "rights_infringement" {
+        let message = state
+            .manifest
+            .as_ref()
+            .map(|manifest| manifest.rights_request_url.trim())
+            .filter(|url| !url.is_empty())
+            .map(|url| format!("権利侵害申出は一般通報では受け付けません。対応範囲を確認して {url} から送信してください"))
+            .unwrap_or_else(|| {
+                "権利侵害申出は一般通報では受け付けません。この node は専用受付を公開していません"
+                    .to_string()
+            });
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "RIGHTS_REQUEST_REQUIRES_DEDICATED_INTAKE",
+            message,
+        ));
+    }
 
     let mut report = NewCommunityNodeReport {
         subject_kind: subject_kind.to_string(),

@@ -96,7 +96,7 @@ fn default_moderation_logs_days() -> u32 {
     180
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ManifestConfig {
     /// node role。未指定なら profile / 有効 capability から推定する。
@@ -109,10 +109,29 @@ pub struct ManifestConfig {
     /// 未指定なら applies_to は有効 capability から導出し、does_not_apply_to は安全な default を使う。
     #[serde(default)]
     pub authority_scope: AuthorityScopeOverride,
+    /// 権利侵害申出に対する初回応答の運用目標。法定期限を表さない。
+    #[serde(default = "default_rights_request_initial_response_target_days")]
+    pub rights_request_initial_response_target_days: u32,
+}
+
+impl Default for ManifestConfig {
+    fn default() -> Self {
+        Self {
+            node_role: None,
+            manifest_version: default_manifest_version(),
+            authority_scope: AuthorityScopeOverride::default(),
+            rights_request_initial_response_target_days:
+                default_rights_request_initial_response_target_days(),
+        }
+    }
 }
 
 fn default_manifest_version() -> String {
     "v1".to_string()
+}
+
+fn default_rights_request_initial_response_target_days() -> u32 {
+    7
 }
 
 /// terraform deployment profile（コスト/データ階層の軸）。
@@ -400,6 +419,15 @@ impl ResolvedConfig {
     pub fn report_endpoint(&self) -> String {
         if self.enabled(Capability::ReportEndpoint) {
             self.policy_url("v1/report")
+        } else {
+            String::new()
+        }
+    }
+
+    /// 権利侵害申出画面。専用 capability が有効なときだけ公開する。
+    pub fn rights_request_url(&self) -> String {
+        if self.enabled(Capability::RightsRequestEndpoint) {
+            self.policy_url("rights-requests/new")
         } else {
             String::new()
         }

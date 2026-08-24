@@ -30,6 +30,7 @@ mod readiness_runtime;
 mod relation_optouts;
 mod rendezvous;
 mod reports;
+mod rights_requests;
 mod rollout;
 mod safety_appeals;
 mod safety_events;
@@ -110,6 +111,12 @@ pub use reports::{
     COMMUNITY_NODE_REPORT_STATUS_RECEIVED, CommunityNodeReport, NewCommunityNodeReport,
     get_community_node_report, insert_community_node_appeal, insert_community_node_report,
     list_community_node_reports,
+};
+pub use rights_requests::{
+    CreatedRightsRequest, RightsRequestActionResult, RightsRequestEvent, RightsRequestRecord,
+    action_rights_request, get_public_rights_request_status, get_rights_request,
+    insert_rights_request, list_rights_requests, resolve_rights_request_scope,
+    transition_rights_request, withdraw_rights_request,
 };
 pub use rollout::{ensure_default_auth_rollout, load_auth_rollout, store_auth_rollout};
 pub use safety_appeals::{

@@ -62,11 +62,12 @@ pub enum Capability {
     Moderation,
     CommunityLocalTrust,
     ReportEndpoint,
+    RightsRequestEndpoint,
 }
 
 impl Capability {
     /// 決定論的な出力順序を与える全 capability。
-    pub const ALL: [Capability; 15] = [
+    pub const ALL: [Capability; 16] = [
         Capability::AuthConsent,
         Capability::BootstrapAssist,
         Capability::TopicRendezvous,
@@ -82,6 +83,7 @@ impl Capability {
         Capability::Moderation,
         Capability::CommunityLocalTrust,
         Capability::ReportEndpoint,
+        Capability::RightsRequestEndpoint,
     ];
 
     /// config / manifest の snake_case キー。
@@ -102,6 +104,7 @@ impl Capability {
             Capability::Moderation => "moderation",
             Capability::CommunityLocalTrust => "community_local_trust",
             Capability::ReportEndpoint => "report_endpoint",
+            Capability::RightsRequestEndpoint => "rights_request_endpoint",
         }
     }
 
@@ -304,6 +307,17 @@ impl Capability {
                 telecom_note: "通報受付はノードの authority scope 内に限定される。",
                 privacy_note: "reporter の identity / social graph は保持せず、明示入力された連絡先のみ任意保存する。",
                 terms_note: "通報は本ノードが関与した対象に限定され、中央通報窓口ではない。",
+            },
+            Capability::RightsRequestEndpoint => CapabilityMeta {
+                capability: self,
+                display_name: "権利侵害申出エンドポイント (rights request endpoint)",
+                handled_data: "申出人の氏名・連絡先・代理権、権利根拠、対象、侵害態様、証拠参照",
+                purpose: "本ノードの対応範囲を事前確認した権利者等から、権利侵害申出を受け付けて追跡可能にする",
+                retention_impact: "申出 record と append-only event は権利侵害申出の保持方針に従って保持される",
+                external_transmission: None,
+                telecom_note: "措置は本ノードの索引・moderation・cache 等の authority scope 内に限定される。",
+                privacy_note: "申出人情報と権利主張は local-only とし、公開 status へ PII や内部判断を出さない。",
+                terms_note: "申請前に可能・不可能な措置を提示し、版付きの明示同意を必須にする。",
             },
         }
     }

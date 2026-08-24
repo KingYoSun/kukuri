@@ -18,6 +18,8 @@ const endpointPlan: ReportRoutingPlan = {
         nodeBaseUrl: 'https://index.example',
         capability: 'community_index',
         reportEndpoint: 'https://index.example/v1/report',
+        rightsRequestUrl: 'https://index.example/rights-requests/new',
+        rightsRequestPolicyUrl: 'https://index.example/rights-infringement-policy',
         abuseContact: 'abuse@index.example',
         authorityScope: ['this_node'],
       },
@@ -82,6 +84,28 @@ test('does not offer a default node when provenance is unknown', () => {
   expect(screen.getByText('Cannot determine a report target')).toBeInTheDocument();
   // local action のみ案内し、送信ボタンは出さない。
   expect(screen.getByText(/block, mute, or hide this locally/i)).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Send report' })).not.toBeInTheDocument();
+  expect(onSubmit).not.toHaveBeenCalled();
+});
+
+test('routes rights claims to the dedicated scope-first intake without posting a general report', () => {
+  const onSubmit = vi.fn();
+  render(
+    <ReportRoutingDialog
+      open
+      onOpenChange={vi.fn()}
+      subject={subject}
+      plan={endpointPlan}
+      onSubmit={onSubmit}
+    />,
+  );
+
+  fireEvent.change(screen.getByLabelText('Reason'), {
+    target: { value: 'rights_infringement' },
+  });
+  const link = screen.getByRole('link', { name: /review scope and submit a rights request/i });
+  expect(link).toHaveAttribute('href', 'https://index.example/rights-requests/new');
+  expect(screen.getByText(/first review what this Community Node can and cannot do/i)).toBeVisible();
   expect(screen.queryByRole('button', { name: 'Send report' })).not.toBeInTheDocument();
   expect(onSubmit).not.toHaveBeenCalled();
 });

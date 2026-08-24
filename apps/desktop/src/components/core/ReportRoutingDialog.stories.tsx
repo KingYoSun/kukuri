@@ -36,6 +36,8 @@ const endpointPlan: ReportRoutingPlan = {
         nodeId: 'index-node',
         capability: 'community_index',
         reportEndpoint: 'https://index.kukuri.example/v1/report',
+        rightsRequestUrl: 'https://index.kukuri.example/rights-requests/new',
+        rightsRequestPolicyUrl: 'https://index.kukuri.example/rights-infringement-policy',
         abuseContact: 'abuse@index.kukuri.example',
         policyUrl: 'https://index.kukuri.example/moderation',
         authorityScope: ['this_node'],

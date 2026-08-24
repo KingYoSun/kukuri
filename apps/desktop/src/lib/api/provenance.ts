@@ -63,6 +63,9 @@ export type ReportTarget = {
   nodeId?: string;
   capability: ReportTargetCapability;
   reportEndpoint?: string;
+  /// 一般通報へ権利主張を混ぜず、専用の scope 確認画面へ移動する URL。
+  rightsRequestUrl?: string;
+  rightsRequestPolicyUrl?: string;
   abuseContact?: string;
   policyUrl?: string;
   authorityScope?: string[];

@@ -306,7 +306,14 @@
       "malware": "マルウェア",
       "phishing": "フィッシング",
       "illegal": "その他の違法コンテンツ",
+      "rights_infringement": "著作権・プライバシー・商標などの権利侵害",
       "other": "その他"
+    },
+    "rightsRequest": {
+      "boundary": "権利侵害申出には氏名・連絡先・権利根拠などが必要です。一般通報には送信せず、Community Node が対応できる範囲と対応できない範囲を先に示す専用画面で確認してください。",
+      "openDedicated": "次の画面で node-local な措置の範囲を確認し、同意した場合だけ申出を送信できます。",
+      "unavailable": "選択した Community Node は専用の権利侵害申出受付を公開していません。一般通報へ権利主張や個人情報を送信しないでください。",
+      "open": "対応範囲を確認して権利侵害を申し出る"
     },
     "criticalSafetyNote": "critical safety の通報は責任ある node へ route されます。対象物そのものを添付・再配布せず、内容を説明してください。",
     "detailsLabel": "詳細（任意）",

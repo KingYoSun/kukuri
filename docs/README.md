@@ -37,6 +37,7 @@
 ## Ops
 - community node production rollout / live media verification / recovery: `docs/runbooks/community-node-production-rollout.md`
 - community node GCP Terraform デプロイ（deployment profile: low-cost / managed-db / ha）: `docs/runbooks/community-node-gcp-terraform.md`（実装は `infra/terraform/`）
+- community node 権利侵害申出の受付・審査・送信防止: `docs/runbooks/community-node-rights-infringement-requests.md`
 
 ## Architecture
 - P2P-first community node の責任境界: `docs/architecture/p2p-first-community-node-responsibility-boundary.md`（operator docs / safety / report routing の共通前提）

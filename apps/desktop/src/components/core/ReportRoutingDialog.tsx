@@ -134,6 +134,8 @@ export function ReportRoutingDialog({
   );
 
   const isCriticalSafety = isCriticalSafetyReason(reason);
+  const isRightsInfringement = !isAppeal && reason === 'rights_infringement';
+  const rightsRequestUrl = selectedCandidate?.target.rightsRequestUrl;
 
   const handleSubmit = async () => {
     // 最新の manifest を取得し終えるまで、古い候補への送信も連絡先の複写もしない(#696)。
@@ -326,7 +328,20 @@ export function ReportRoutingDialog({
                 </Notice>
               ) : null}
 
-              <label className='report-field'>
+              {isRightsInfringement ? (
+                <Notice tone='warning' className='report-rights-request'>
+                  <div>
+                    <p>{t('report.rightsRequest.boundary')}</p>
+                    {rightsRequestUrl ? (
+                      <p>{t('report.rightsRequest.openDedicated')}</p>
+                    ) : (
+                      <p>{t('report.rightsRequest.unavailable')}</p>
+                    )}
+                  </div>
+                </Notice>
+              ) : null}
+
+              {!isRightsInfringement ? <label className='report-field'>
                 <span>
                   {appeal
                     ? t('profile:communityNodeAdvisory.appeal.detailsLabel')
@@ -343,9 +358,9 @@ export function ReportRoutingDialog({
                   }
                   onChange={(event) => setDetails(event.target.value)}
                 />
-              </label>
+              </label> : null}
 
-              {!appeal ? (
+              {!appeal && !isRightsInfringement ? (
                 <label className='report-field'>
                   <span>{t('report.reporterContactLabel')}</span>
                   <input
@@ -402,7 +417,18 @@ export function ReportRoutingDialog({
                 )
               : t(result ? 'common:actions.close' : 'common:actions.cancel')}
           </Button>
-          {!result && canRoute && selectedCandidate ? (
+          {!result && canRoute && selectedCandidate && isRightsInfringement && rightsRequestUrl ? (
+            <Button asChild>
+              <a href={rightsRequestUrl} target='_blank' rel='noreferrer'>
+                <ExternalLink className='size-4' aria-hidden='true' />
+                {t('report.rightsRequest.open')}
+              </a>
+            </Button>
+          ) : !result &&
+            canRoute &&
+            selectedCandidate &&
+            !isRightsInfringement &&
+            selectedCandidate.contact.kind !== 'none' ? (
             <Button
               type='button'
               disabled={submitting || resolving}

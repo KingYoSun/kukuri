@@ -33,6 +33,16 @@ pub struct CommunityNodeManifest {
     /// client は空なら `abuse_contact` を mailto / copyable contact として案内する。
     #[serde(default)]
     pub report_endpoint: String,
+    /// node が公開する権利侵害申出画面。未公開の場合は空文字。
+    #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<String>"))]
+    pub rights_request_url: String,
+    #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<String>"))]
+    pub rights_request_policy_url: String,
+    #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<u32>"))]
+    pub rights_request_initial_response_target_days: u32,
     #[serde(default)]
     pub terms_url: String,
     #[serde(default)]

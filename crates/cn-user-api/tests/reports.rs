@@ -240,6 +240,26 @@ async fn report_endpoint_accepts_stores_and_validates() -> Result<()> {
         .await?;
     assert_eq!(anonymous.status(), StatusCode::OK);
 
+    // 権利侵害の申出内容や連絡先は一般通報へ保存せず、専用受付へ案内する。
+    let rights_request = client
+        .post(format!("{}/v1/report", server.base_url))
+        .json(&serde_json::json!({
+            "subject_kind": "post",
+            "subject_id": "object-rights",
+            "capability": "community_index",
+            "reason": "rights_infringement",
+            "details": "一般通報へ保存してはならない権利主張",
+            "reporter_contact": "rights-holder@example.com",
+        }))
+        .send()
+        .await?;
+    assert_eq!(rights_request.status(), StatusCode::CONFLICT);
+    let rights_request_body = rights_request.json::<serde_json::Value>().await?;
+    assert_eq!(
+        rights_request_body["code"],
+        "RIGHTS_REQUEST_REQUIRES_DEDICATED_INTAKE"
+    );
+
     // 必須欠落は 400。
     let invalid = client
         .post(format!("{}/v1/report", server.base_url))
