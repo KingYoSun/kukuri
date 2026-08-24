@@ -718,4 +718,71 @@ describe('useDesktopShellRouting', () => {
     expect(fifth.defaultPrevented).toBe(false);
     view.unmount();
   });
+
+  test('Escape cascade skips default-prevented events and editable targets', async () => {
+    // Issue #765 T3: Radix Dialog(dismissable layer が document capture で
+    // preventDefault する)や Composer の textarea からの Escape では
+    // selection cascade を発火しないことを固定する。
+    const { harness, view } = renderRoutingHook({
+      hash: '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-1',
+      preset: (store) => {
+        store.getState().patchState({
+          selectedThread: 'post-1',
+          thread: [buildPost({ object_id: 'post-1', root_id: 'post-1' })],
+        });
+      },
+    });
+    expect(harness.store.getState().selectedThread).toBe('post-1');
+
+    // Radix dismissable layer 相当: preventDefault 済みの Escape は何もしない。
+    const prevented = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true });
+    prevented.preventDefault();
+    act(() => {
+      window.dispatchEvent(prevented);
+    });
+    expect(harness.store.getState().selectedThread).toBe('post-1');
+
+    // Composer 相当: textarea から bubble してきた Escape は何もしない
+    // (消費もしないので defaultPrevented は false のまま)。
+    const textarea = document.createElement('textarea');
+    document.body.appendChild(textarea);
+    const fromEditable = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => {
+      textarea.dispatchEvent(fromEditable);
+    });
+    expect(fromEditable.defaultPrevented).toBe(false);
+    expect(harness.store.getState().selectedThread).toBe('post-1');
+    textarea.remove();
+
+    // contenteditable からの Escape も何もしない。
+    const editableRegion = document.createElement('div');
+    editableRegion.setAttribute('contenteditable', 'true');
+    document.body.appendChild(editableRegion);
+    const fromContentEditable = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => {
+      editableRegion.dispatchEvent(fromContentEditable);
+    });
+    expect(fromContentEditable.defaultPrevented).toBe(false);
+    expect(harness.store.getState().selectedThread).toBe('post-1');
+    editableRegion.remove();
+
+    // 通常の Escape は従来どおり thread を閉じる。
+    const plain = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true });
+    act(() => {
+      window.dispatchEvent(plain);
+    });
+    expect(plain.defaultPrevented).toBe(true);
+    await waitFor(() => {
+      expect(harness.store.getState().selectedThread).toBeNull();
+    });
+    view.unmount();
+  });
 });

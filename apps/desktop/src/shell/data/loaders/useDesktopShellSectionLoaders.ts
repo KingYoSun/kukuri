@@ -536,7 +536,11 @@ export function useDesktopShellSectionLoaders({
       if (activePrimarySection === 'notifications') {
         tasks.push(loadNotificationsSection());
       }
-      if (activePrimarySection === 'timeline' && timelineView === 'bookmarks') {
+      if (
+        (activePrimarySection === 'timeline' && timelineView === 'bookmarks') ||
+        // 非 active な Timeline Column が Bookmarks を表示している場合もロードする(Issue #765)。
+        state.workspaceState.columns.some((column) => column.timelineView === 'bookmarks')
+      ) {
         tasks.push(loadBookmarksSection());
       }
       if (settingsOpen) {

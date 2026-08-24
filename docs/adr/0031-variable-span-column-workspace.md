@@ -244,6 +244,7 @@ IntersectionObserver や focus から導出する runtime state を、persist �
 - Stream / Metaverse の interactive gesture と mobile Column paging の競合を test で固定する必要がある。
 - ADR 0014 の Storybook、PR preview、Shneiderman checklist、keyboard、resize、reduced-motion の review flow は引き続き適用する。
 - 対象外 / 後続の明示（2026-08-24 追記、Issue #768）: (a) Stream の Fullscreen 表示状態と「退出後に元の Column layout へ戻る」挙動、および Metaverse の Fullscreen は未実装であり、本 ADR の §7 の記述は将来実装時の契約として残す。実装と validation は Issue #766 で扱う。 (b) Stream Column は現行 LiveSession domain に player / chat / reactions surface が無いため session 管理 card の 2-track 配置までを実装済みとし、video seek と Column swipe の非競合 test は player 導入時に追加する（Issue #766）。 (c) Metaverse の参加 / 退出 / チャットは Column footer ではなく viewport 内 HUD / discovery card に置く現行判断を維持し、footer への移設可否は Issue #766 で再評価する。
+- 対象外 / 見送りの明示（2026-08-24 追記、Issue #765）: (a) §12 の「必要な scroll restoration key」は現時点で対象外とする。Column は表示時に最新内容を提示する方針で、session 内の縦 scroll は React の DOM 保持（Column id を key にした mount 維持）で足りるため、persistence への scroll 位置保存は行わない。必要になった場合は schema version を上げて追加する。 (b) bookmarks 一覧の Column scope フィルタは見送る。bookmarks は topic / channel を横断する利用者個人の集約であり、Column scope（表示・投稿先の正本）とは責務が異なるため、Timeline Column の Bookmarks view は global 一覧のまま維持する。scope 別に絞る必要が生じた場合は view 側の filter として再検討する。
 
 ## Non-goals
 

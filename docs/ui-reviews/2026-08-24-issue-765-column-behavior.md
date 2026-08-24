@@ -1,0 +1,21 @@
+# 2026-08-24 issue-765-column-behavior
+
+- PR: https://github.com/KingYoSun/kukuri/pull/771 （Issue #765 / #748 監査コメント https://github.com/KingYoSun/kukuri/issues/748#issuecomment-5387831754 ）
+- Preview: [Timeline Column ごとの feed / bookmarks 独立切替](assets/2026-08-24-issue-765/per-column-timeline-view.png)
+- Summary:
+  - 設計判断 9: Stream / Game / Metaverse の deep link を独立 transient（親なし）として開き、未固定 Thread を置換しないようにした。親なし transient の置換プールは stream / game / metaverse / notifications / messages / explore に限定し、unpinned Timeline や親を失った profile / conversation を巻き込まない。game rooms 未ロード時は room deep link の Column 生成を rooms 確定まで待ち、`metaverse` 残骸 Column を解消した。
+  - 設計判断 3: `timelineView` を `ColumnState` の per-column 値に移し、各 Timeline Column が feed / bookmarks を独立に切り替えられる。route の `timelineView` は focus 中 Column とのみ同期し、deep link は対象 Column へ反映、persistence（schema v1、後方互換）で復元される。`chrome.timelineView` は active Column の投影として残置。
+  - runtime / routing: global Escape cascade に `event.defaultPrevented` / editable target guard を追加（Radix Dialog・Composer 入力中に Thread / Profile selection を閉じない）。ColumnCanvas の IntersectionObserver を Column id 列に追随させ、同数の transient 置換でも suspended 誤判定を起こさない。hash の無い cold start では復元 layout の active Column の canonical target を初期 route に採用し focus を復元（明示 deep link は常に優先、無効 target は既存 normalize）。定期 refresh は表示中の背景 Timeline Column の distinct scope も取得する（非表示は取得せず、単一 Column 構成では従来と同一の呼び出し回数）。
+  - 対象外の記録: scroll restoration key と bookmarks 一覧の Column scope フィルタは ADR 0031 Consequences に判断を追記（2026-08-24、Issue #765）。
+- Review result:
+  - Shneiderman 1（一貫性）: transient の置換規則が「会話系は親単位 / 独立 surface は同種プール」に整理され、deep link と Control Center 経路で挙動が揃う。
+  - Shneiderman 5（エラー防止）: 入力中・Dialog 中の Escape が selection を壊さない。返信・編集中の誤操作で Column が切り替わらない。
+  - Shneiderman 6（取り消し容易）: browser back と Escape の役割が分離され、Dialog を閉じても会話 Column の文脈が残る。
+  - Shneiderman 7（主導権）: 各 Timeline Column の view を利用者が Column 単位で選べ、他の Column に波及しない。restart 後も選択が維持される。
+  - Shneiderman 8（記憶負荷）: cold start で最後に見ていた Column へ戻るため、再開時の文脈再構築が不要。
+  - Preview のとおり、demo Column（Bookmarks・bookmark 済み投稿を表示）と iroh Column（Feed）が併存し、URL は focus 中 Column の view のみを表す。
+- Exceptions: bookmarks 一覧は global のまま（scope フィルタは見送り、ADR 0031 追記参照）。Stream / Metaverse の deep link は rooms 確定までの間 Column を表示しない（ロード完了後に確定 kind で開く）。
+- Validation:
+  - Vitest: `DesktopShellPage.immersiveColumns.test.tsx`（新規 4 件）、`DesktopShellPage.timelineView.test.tsx`（新規 4 件）、`DesktopShellPage.escapeGuard.test.tsx`（新規 3 件）、`DesktopShellPage.coldStart.test.tsx`（新規 3 件）、`routing/initialWorkspaceRoute.test.ts`（新規）、`workspaceState` / `workspacePersistence` / `ColumnCanvas` / `useDesktopShellRouting` / `timelineRefresh` への追加ケースはいずれも failing 先行 → 修正後 pass。全件緑。
+  - Playwright chromium: cold start 復元 1 件を追加し全件緑。visual 14 件緑（baseline 変更なし）。
+  - `cargo xtask desktop-ui-check` / `cargo xtask check` / `git diff --check`。

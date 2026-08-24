@@ -58,7 +58,12 @@ import { useSharePreview } from '@/shell/page/useSharePreview';
 import { useShellDialogs } from '@/shell/page/useShellDialogs';
 import { useDesktopShellColumnSynchronization } from '@/shell/page/useDesktopShellColumnSynchronization';
 import { useShallow } from 'zustand/react/shallow';
-import { type ColumnKind, type ColumnState } from '@/shell/slices/workspace';
+import {
+  setColumnTimelineView,
+  type ColumnKind,
+  type ColumnState,
+  type ColumnTimelineView,
+} from '@/shell/slices/workspace';
 
 const CLIPBOARD_TOAST_TIMEOUT_MS = 2200;
 const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
@@ -163,7 +168,10 @@ export function DesktopShellPage({
   const setSelectedGameRoomId = useDesktopShellFieldSetter('selectedGameRoomId');
   const setInviteOutput = useDesktopShellFieldSetter('inviteOutput');
   const setChannelError = useDesktopShellFieldSetter('channelError');
+  const setWorkspaceState = useDesktopShellFieldSetter('workspaceState');
   const draftSequenceRef = useRef(0);
+  // 表示中 Column id(背景 Timeline refresh 用、Issue #765)。runtime 情報なので store には置かない。
+  const visibleColumnIdsRef = useRef<string[]>([]);
   const mediaFetchAttemptRef = useRef(new Map<string, number>());
   const remoteObjectUrlRef = useRef(new Map<string, string>());
   const draftPreviewUrlRef = useRef(new Map<string, string>());
@@ -207,6 +215,7 @@ export function DesktopShellPage({
     directMessageDraftPreviewUrlRef,
     mediaFetchAttemptRef,
     draftSequenceRef,
+    visibleColumnIdsRef,
   });
 
   const {
@@ -556,6 +565,9 @@ export function DesktopShellPage({
       surfaceColumnKind={column?.kind}
       surfaceEntityId={column?.entityId}
       surfaceScope={column?.scope}
+      surfaceTimelineView={
+        column?.kind === 'timeline' ? column.timelineView ?? 'feed' : undefined
+      }
       profileAvatarInputKey={dialogs.profileAvatarInputKey}
       messagesWorkspace={null}
       notificationsWorkspace={null}
@@ -609,6 +621,12 @@ export function DesktopShellPage({
     ) {
       await syncTopicContext(column.scope.topicId, column.scope.channelId);
     }
+    if (column.kind === 'timeline') {
+      // active になった Timeline Column の view を chrome projection と route の
+      // timelineView query に投影する(Issue #765)。
+      focusPrimarySection('timeline', { timelineView: column.timelineView ?? 'feed' });
+      return;
+    }
     if (column.kind === 'thread' && column.entityId) {
       await openThread(column.entityId, { topic: column.scope?.topicId });
       return;
@@ -634,7 +652,6 @@ export function DesktopShellPage({
       return;
     }
     const sectionByKind: Partial<Record<ColumnKind, PrimarySection>> = {
-      timeline: 'timeline',
       notifications: 'notifications',
       explore: 'explore',
       messages: 'messages',
@@ -642,6 +659,19 @@ export function DesktopShellPage({
     };
     const section = sectionByKind[column.kind];
     if (section) focusPrimarySection(section);
+  };
+  // Timeline Column header の view tabs。正本(Column の timelineView)を更新し、
+  // その Column が route の focus 対象(timeline section + 同一 scope)の場合のみ
+  // 既存の focusTimelineView で chrome projection と route を同期する。
+  // 非 focus Column の切替では chrome / route を変えない(Issue #765)。
+  const selectColumnTimelineView = (column: ColumnState, view: ColumnTimelineView) => {
+    setWorkspaceState((current) => setColumnTimelineView(current, column.id, view));
+    const routeFocusedTimelineColumn =
+      routeSection === 'timeline' &&
+      column.scope !== undefined &&
+      column.scope.topicId === activeTopic &&
+      column.scope.channelId === (selectedChannelIdByTopic[activeTopic] ?? null);
+    if (routeFocusedTimelineColumn) focusTimelineView(view);
   };
   const columnTitles: Record<ColumnKind, string> = {
     timeline: t('shell:primarySections.timeline'),
@@ -658,8 +688,10 @@ export function DesktopShellPage({
   const workspace = (
     <DesktopShellColumnWorkspace
       scopeLabel={viewModels.activeComposeAudienceLabel}
-      activeTimelineView={shellChromeState.timelineView}
       locale={locale}
+      onVisibleColumnsChange={(columnIds) => {
+        visibleColumnIdsRef.current = columnIds;
+      }}
       mentionCandidates={viewModels.mentionCandidates}
       onColumnAttachmentSelection={shellActions.handleColumnDraftAttachmentSelection}
       onRemoveColumnAttachment={shellActions.handleRemoveColumnDraftAttachment}
@@ -670,7 +702,7 @@ export function DesktopShellPage({
       onOpenGameCreate={() => dialogs.setGameCreateDialogOpen(true)}
       onOpenLiveCreate={() => dialogs.setLiveCreateDialogOpen(true)}
       timelineViewItems={viewModels.timelineViewItems}
-      onSelectTimelineView={focusTimelineView}
+      onSelectTimelineView={selectColumnTimelineView}
       onActivateColumn={(column) => void activateWorkspaceColumn(column)}
       renderPrimarySurface={renderPrimarySurface}
       messagesSurface={renderMessagesSurface('messages')}

@@ -23,6 +23,7 @@ import {
   CONNECTIVITY_STATUS_FALLBACK_INTERVAL_MS,
   REFRESH_INTERVAL_MS,
   STATUS_REFRESH_INTERVAL_MS,
+  useDesktopShellStore,
   type DesktopShellState,
   type DesktopShellStateValue,
   type DesktopShellStoreApi,
@@ -58,6 +59,8 @@ type UseDesktopShellDataEffectsArgs = {
   directMessageDraftPreviewUrlRef: MutableRefObject<Map<string, string>>;
   mediaFetchAttemptRef: MutableRefObject<Map<string, number>>;
   visibleRefreshInFlightRef: MutableRefObject<boolean>;
+  /// 表示中の Column id 列(DesktopShellColumnWorkspace の IntersectionObserver 由来)。
+  visibleColumnIdsRef?: MutableRefObject<string[]>;
   loadTopics: (topics: string[], activeTopic: string, currentThread: string | null) => Promise<void>;
   // section 取得ロジックの SSoT は data/loaders/useDesktopShellSectionLoaders.ts。
   // この hook は「いつ読むか」(section 遷移・interval)だけを持ち、
@@ -72,7 +75,8 @@ type UseDesktopShellDataEffectsArgs = {
   refreshVisibleShellData: (
     topic: string,
     currentThread: string | null,
-    mode?: 'apply' | 'buffer'
+    mode?: 'apply' | 'buffer',
+    scopeChannelId?: string | null
   ) => Promise<void>;
   refreshConnectivityStatus: () => Promise<CommunityNodeNodeStatus[] | null>;
   setNotificationStatus: Setter<'notificationStatus'>;
@@ -106,6 +110,7 @@ export function useDesktopShellDataEffects({
   directMessageDraftPreviewUrlRef,
   mediaFetchAttemptRef,
   visibleRefreshInFlightRef,
+  visibleColumnIdsRef,
   loadTopics,
   loadProfileSection,
   loadAuthorSection,
@@ -126,6 +131,10 @@ export function useDesktopShellDataEffects({
   setTimelineScopeByTopic,
   setMediaObjectUrls,
 }: UseDesktopShellDataEffectsArgs) {
+  // 非 active な Timeline Column が Bookmarks を表示しているか(bookmarks ロード gate 用、Issue #765)。
+  const hasBookmarksTimelineColumn = useDesktopShellStore((state) =>
+    state.workspaceState.columns.some((column) => column.timelineView === 'bookmarks')
+  );
   useEffect(() => {
     let disposed = false;
 
@@ -140,6 +149,29 @@ export function useDesktopShellDataEffects({
       visibleRefreshInFlightRef.current = true;
       try {
         await refreshVisibleShellData(activeTopic, selectedThread, 'buffer');
+        // Issue #765: 表示中の背景 Timeline Column の scope も定期 refresh する。
+        // active scope(選択 channel と public)は上で取得済みなので除外し、
+        // 非表示 Column は取得しない(API 呼び出し数の上限 = 表示中 Column 数)。
+        const currentState = storeApi.getState();
+        const visibleIds = new Set(visibleColumnIdsRef?.current ?? []);
+        const activeSelectedChannelId =
+          currentState.selectedChannelIdByTopic[activeTopic] ?? null;
+        const seenScopeKeys = new Set<string>([
+          `${activeTopic}\u0000${activeSelectedChannelId ?? ''}`,
+          `${activeTopic}\u0000`,
+        ]);
+        const backgroundScopes = currentState.workspaceState.columns.flatMap((column) => {
+          if (column.kind !== 'timeline' || !column.scope) return [];
+          if (!visibleIds.has(column.id)) return [];
+          const key = `${column.scope.topicId}\u0000${column.scope.channelId ?? ''}`;
+          if (seenScopeKeys.has(key)) return [];
+          seenScopeKeys.add(key);
+          return [column.scope];
+        });
+        for (const scope of backgroundScopes) {
+          if (disposed) break;
+          await refreshVisibleShellData(scope.topicId, null, 'buffer', scope.channelId);
+        }
       } finally {
         visibleRefreshInFlightRef.current = false;
       }
@@ -167,7 +199,14 @@ export function useDesktopShellDataEffects({
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [activeTopic, refreshVisibleShellData, selectedThread, visibleRefreshInFlightRef]);
+  }, [
+    activeTopic,
+    refreshVisibleShellData,
+    selectedThread,
+    storeApi,
+    visibleColumnIdsRef,
+    visibleRefreshInFlightRef,
+  ]);
 
   const refreshNotificationStatus = useCallback(async () => {
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
@@ -281,15 +320,19 @@ export function useDesktopShellDataEffects({
   }, [activeTopic, loadTopics, selectedThread, shellChromeState.activePrimarySection, trackedTopics]);
 
   useEffect(() => {
+    // Bookmarks データは chrome projection(active Column)だけでなく、非 active な
+    // Timeline Column が Bookmarks を表示している場合もロードする(Issue #765)。
     if (
-      shellChromeState.activePrimarySection !== 'timeline' ||
-      shellChromeState.timelineView !== 'bookmarks'
+      (shellChromeState.activePrimarySection !== 'timeline' ||
+        shellChromeState.timelineView !== 'bookmarks') &&
+      !hasBookmarksTimelineColumn
     ) {
       return;
     }
     void loadTopics(trackedTopics, activeTopic, selectedThread).catch(() => undefined);
   }, [
     activeTopic,
+    hasBookmarksTimelineColumn,
     loadTopics,
     selectedThread,
     shellChromeState.activePrimarySection,
