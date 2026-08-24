@@ -1,6 +1,6 @@
 # 2026-08-24 issue-765-column-behavior
 
-- PR: （本 record を含む PR。Issue #765 / #748 監査コメント https://github.com/KingYoSun/kukuri/issues/748#issuecomment-5387831754 ）
+- PR: https://github.com/KingYoSun/kukuri/pull/771 （Issue #765 / #748 監査コメント https://github.com/KingYoSun/kukuri/issues/748#issuecomment-5387831754 ）
 - Preview: [Timeline Column ごとの feed / bookmarks 独立切替](assets/2026-08-24-issue-765/per-column-timeline-view.png)
 - Summary:
   - 設計判断 9: Stream / Game / Metaverse の deep link を独立 transient（親なし）として開き、未固定 Thread を置換しないようにした。親なし transient の置換プールは stream / game / metaverse / notifications / messages / explore に限定し、unpinned Timeline や親を失った profile / conversation を巻き込まない。game rooms 未ロード時は room deep link の Column 生成を rooms 確定まで待ち、`metaverse` 残骸 Column を解消した。
