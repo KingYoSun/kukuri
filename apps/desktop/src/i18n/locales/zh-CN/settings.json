@@ -24,6 +24,13 @@
     "title": "显示"
   },
   "communityNode": {
+    "indexNode": {
+      "label": "Community Index 查询节点",
+      "hint": "自动模式会使用首个符合条件的已配置节点。明确选择的节点不可用时，将停止查询而不会静默切换。",
+      "automatic": "自动",
+      "unavailable": "明确选择的节点当前不可用。",
+      "optionUnavailable": "{{baseUrl}}（不可用）"
+    },
     "actions": {
       "addNode": "添加节点",
       "clearNodes": "清除",

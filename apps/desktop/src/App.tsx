@@ -33,6 +33,7 @@ import {
   isDefaultStartupHash,
 } from '@/shell/routing/initialWorkspaceRoute';
 import { startColumnDraftPersistence } from '@/shell/columnDraftPersistence';
+import { startCommunityIndexNodePreferencePersistence } from '@/shell/communityIndexNodePreference';
 
 type StartupGateState = { status: 'checking' } | DesktopStartupStatus;
 
@@ -41,6 +42,7 @@ export function App(props: AppProps) {
     const createdStore = createDesktopShellStore({
       workspaceStorage: window.localStorage,
       draftStorage: window.localStorage,
+      communityIndexPreferenceStorage: window.localStorage,
     });
     // Issue #765 T4: hash の無い cold start では、復元した active Column の canonical target を
     // 初期 route として仕込み、既存の deep link 機構に focus 復元を委ねる。
@@ -78,6 +80,11 @@ export function App(props: AppProps) {
 
   useEffect(
     () => startColumnDraftPersistence(store, window.localStorage),
+    [store]
+  );
+
+  useEffect(
+    () => startCommunityIndexNodePreferencePersistence(store, window.localStorage),
     [store]
   );
 

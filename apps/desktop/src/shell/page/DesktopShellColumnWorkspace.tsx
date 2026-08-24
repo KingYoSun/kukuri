@@ -296,6 +296,7 @@ export function DesktopShellColumnWorkspace({
               })()}
               active={runtime.active}
               pinned={column.pinned}
+              fullscreenable={column.kind === 'stream' || column.kind === 'metaverse'}
               resourceManaged={column.kind === 'stream' || column.kind === 'metaverse'}
               footer={renderFooter(column, runtime.active)}
               headerActions={

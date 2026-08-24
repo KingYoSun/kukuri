@@ -29,6 +29,7 @@ export const ScopedDraftsAndComposer: Story = {};
 export const ControlCenterOpen: Story = {
   args: {
     initialControlCenterOpen: true,
+    seedSavedLayout: 'dirty',
   },
 };
 export const InteractiveProductionShell: Story = {};
@@ -44,6 +45,16 @@ export const MetaverseFourSpan: Story = {
   args: {
     scenario: 'wide-surfaces',
     metaverseSpan: 4,
+  },
+};
+
+/** Stream / Metaverse の Column menu から一時 fullscreen に入る review surface。 */
+export const ImmersiveFullscreenColumns: Story = {
+  globals: { shellWidth: 'ultrawide1920' },
+  args: {
+    scenario: 'wide-surfaces',
+    streamSpan: 2,
+    metaverseSpan: 3,
   },
 };
 

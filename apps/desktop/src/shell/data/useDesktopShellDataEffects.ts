@@ -5,7 +5,7 @@ import {
   type MutableRefObject,
 } from 'react';
 
-import { reconcileCommunityIndexNodeSelection } from '@/lib/api/communityIndex';
+import { reconcileCommunityIndexNodePreference } from '@/lib/api/communityIndex';
 import type {
   AttachmentView,
   CommunityNodeNodeStatus,
@@ -263,9 +263,16 @@ export function useDesktopShellDataEffects({
       void refreshConnectivityStatus().then((statuses) => {
         if (!statuses) return;
         const state = storeApi.getState();
-        const next = reconcileCommunityIndexNodeSelection(state);
-        if (next !== state.communityIndexNodeBaseUrl) {
-          state.patchState({ communityIndexNodeBaseUrl: next });
+        const resolution = reconcileCommunityIndexNodePreference(state);
+        if (
+          resolution.selectedBaseUrl !== state.communityIndexNodeBaseUrl ||
+          JSON.stringify(resolution.preference) !==
+            JSON.stringify(state.communityIndexNodePreference)
+        ) {
+          state.patchState({
+            communityIndexNodeBaseUrl: resolution.selectedBaseUrl,
+            communityIndexNodePreference: resolution.preference,
+          });
         }
       });
     }, intervalMs);

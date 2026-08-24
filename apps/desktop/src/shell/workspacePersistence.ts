@@ -28,8 +28,14 @@ const COLUMN_KINDS = new Set<ColumnKind>([
 type PersistedWorkspaceLayout = {
   version: typeof WORKSPACE_LAYOUT_VERSION;
   activeColumnId: string;
+  activeLayoutId?: string | null;
   columns: ColumnState[];
 };
+
+export type WorkspaceLayoutSnapshot = Pick<
+  PersistedWorkspaceLayout,
+  'activeColumnId' | 'columns'
+>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -79,9 +85,10 @@ function parseColumn(value: unknown): ColumnState | null {
   return column;
 }
 
-function persistedLayout(state: WorkspaceState): PersistedWorkspaceLayout {
+export function captureWorkspaceLayoutSnapshot(
+  state: Pick<WorkspaceState, 'activeColumnId' | 'columns'>
+): WorkspaceLayoutSnapshot {
   return {
-    version: WORKSPACE_LAYOUT_VERSION,
     activeColumnId: state.activeColumnId,
     columns: state.columns.map((column) => ({
       id: column.id,
@@ -93,6 +100,39 @@ function persistedLayout(state: WorkspaceState): PersistedWorkspaceLayout {
       pinned: column.pinned,
       preferredDesktopSpan: normalizeColumnSpan(column.kind, column.preferredDesktopSpan),
     })),
+  };
+}
+
+export function normalizeWorkspaceLayoutSnapshot(
+  value: unknown
+): WorkspaceLayoutSnapshot | null {
+  if (!isRecord(value) || !Array.isArray(value.columns)) return null;
+  const ids = new Set<string>();
+  const columns = value.columns.flatMap((candidate) => {
+    const column = parseColumn(candidate);
+    if (!column || ids.has(column.id)) return [];
+    ids.add(column.id);
+    return [column];
+  });
+  if (columns.length === 0) return null;
+  const normalizedColumns = columns.map((column) =>
+    column.parentColumnId &&
+    (!ids.has(column.parentColumnId) || column.parentColumnId === column.id)
+      ? { ...column, parentColumnId: undefined }
+      : column
+  );
+  const activeColumnId =
+    typeof value.activeColumnId === 'string' && ids.has(value.activeColumnId)
+      ? value.activeColumnId
+      : normalizedColumns[0].id;
+  return { columns: normalizedColumns, activeColumnId };
+}
+
+function persistedLayout(state: WorkspaceState): PersistedWorkspaceLayout {
+  return {
+    version: WORKSPACE_LAYOUT_VERSION,
+    ...captureWorkspaceLayoutSnapshot(state),
+    activeLayoutId: state.activeLayoutId,
   };
 }
 
@@ -115,30 +155,15 @@ export function readWorkspaceLayout(
     ) {
       return fallback;
     }
-    const ids = new Set<string>();
-    const columns = parsed.columns.flatMap((candidate) => {
-      const column = parseColumn(candidate);
-      if (!column || ids.has(column.id)) return [];
-      ids.add(column.id);
-      return [column];
-    });
-    if (columns.length === 0) return fallback;
-    // 存在しない id への参照と、自分自身への参照(自己参照)は読み込み時に解除する。
-    const normalizedColumns = columns.map((column) =>
-      column.parentColumnId &&
-      (!ids.has(column.parentColumnId) || column.parentColumnId === column.id)
-        ? { ...column, parentColumnId: undefined }
-        : column
-    );
-    const activeColumnId =
-      typeof parsed.activeColumnId === 'string' && ids.has(parsed.activeColumnId)
-        ? parsed.activeColumnId
-        : normalizedColumns[0].id;
+    const normalized = normalizeWorkspaceLayoutSnapshot(parsed);
+    if (!normalized) return fallback;
     return {
-      columns: normalizedColumns,
-      activeColumnId,
+      ...normalized,
       controlCenterOpen: false,
-      activeLayoutId: null,
+      activeLayoutId:
+        typeof parsed.activeLayoutId === 'string' && parsed.activeLayoutId
+          ? parsed.activeLayoutId
+          : null,
     };
   } catch {
     return fallback;

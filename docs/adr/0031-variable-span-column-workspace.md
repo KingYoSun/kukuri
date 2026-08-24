@@ -213,6 +213,26 @@ IntersectionObserver や focus から導出する runtime state を、persist �
 - reduced motion では移動量と auto-scroll animation を抑制する
 - touch target は最小44pxを維持する
 
+### 15. 名前付き layout は local snapshot として扱う
+
+名前付き layout は、最後の作業状態を自動復元する `kukuri:workspace-layout:v1` とは別の version 付き local snapshot とする。snapshot は Column の kind、scope、entity、親子関係、順序、pin、preferred span、Timeline view、active Column だけを持ち、Draft、Control Center、Fullscreen、audio focus、session runtime を含めない。
+
+保存、更新、呼び出し、rename、delete は Control Center の Column section から行う。呼び出しは active Column の canonical URL だけを同期する。active layout に未保存差分がある状態で別 layout を呼び出す場合は破棄確認を要求し、active layout を削除しても現在の workspace 自体は維持する。
+
+### 16. Community Index の node 固定は advanced preference とする
+
+Community Index の問い合わせ先は `自動`を既定とし、健康な状態では primary Explore surface に selector を置かない。Settings の Community Node 詳細設定で、構成済み node を明示選択できる。
+
+明示 node が一時的に認証・同意・health・manifest・capability の適格条件を失った場合、preference は保持するが query target を `null` にし、別 node へ黙って切り替えない。影響を受ける Column と設定面に理由と Settings 導線を表示する。明示 node が構成から削除された場合だけ `自動`へ戻す。
+
+### 17. immersive lifecycle と mobile gesture の境界を固定する
+
+Stream / Metaverse Column の fullscreen は Fullscreen API の `fullscreenchange` を正本にする一時的 runtime state とする。入退出で Column 順、span、scope、active layout、Draft、LiveSession / Metaverse room stateを変更せず、退出後は元 Column へ focus を戻す。保存 layout と URL へ fullscreen 状態を含めない。
+
+mobile の明示的な追加導線は viewport 左右端と Column indicator から始まる主方向 horizontal swipe とする。1回の gesture で隣接1 Column だけへ移動し、先頭・末尾では wrap しない。短い drag、縦優位、cancel、indicator tap は切替にしない。Metaverse scene、media control、Composer 等の中央操作は各 surface が所有し、edge または indicator 以外から Column gesture を開始しない。
+
+現行 Stream は映像 source、transport、seek、background playback の product contract を持たないため、架空の player や設定は追加しない。player 導入時に、seek と Column swipe の非競合、および background playback を明示 opt-in とする試験を追加する。Metaverse の参加・退出・chat は viewport 内 HUD / discovery card を正本とし、Column footerへ複製しない。
+
 ## ADR 0018 との優先関係
 
 次の ADR 0018 の判断は維持する。
@@ -243,7 +263,7 @@ IntersectionObserver や focus から導出する runtime state を、persist �
 - active と visible を分離するため、focus、audio、media / render lifecycle の明示管理が必要になる。
 - Stream / Metaverse の interactive gesture と mobile Column paging の競合を test で固定する必要がある。
 - ADR 0014 の Storybook、PR preview、Shneiderman checklist、keyboard、resize、reduced-motion の review flow は引き続き適用する。
-- 対象外 / 後続の明示（2026-08-24 追記、Issue #768）: (a) Stream の Fullscreen 表示状態と「退出後に元の Column layout へ戻る」挙動、および Metaverse の Fullscreen は未実装であり、本 ADR の §7 の記述は将来実装時の契約として残す。実装と validation は Issue #766 で扱う。 (b) Stream Column は現行 LiveSession domain に player / chat / reactions surface が無いため session 管理 card の 2-track 配置までを実装済みとし、video seek と Column swipe の非競合 test は player 導入時に追加する（Issue #766）。 (c) Metaverse の参加 / 退出 / チャットは Column footer ではなく viewport 内 HUD / discovery card に置く現行判断を維持し、footer への移設可否は Issue #766 で再評価する。
+- immersive lifecycle の確定（2026-08-24 追記、Issue #766）: Stream / Metaverse Column の一時 fullscreen、mobile の edge / indicator swipe、対象 control の44px最小領域を実装した。Stream player と seek 非競合試験は media contract 導入時へ留保し、background playback は将来も明示 opt-in とする。Metaverse の参加 / 退出 / chat は viewport 内 HUD / discovery card を正本として維持し、Column footerへ複製しない。
 - 対象外 / 見送りの明示（2026-08-24 追記、Issue #765）: (a) §12 の「必要な scroll restoration key」は現時点で対象外とする。Column は表示時に最新内容を提示する方針で、session 内の縦 scroll は React の DOM 保持（Column id を key にした mount 維持）で足りるため、persistence への scroll 位置保存は行わない。必要になった場合は schema version を上げて追加する。 (b) bookmarks 一覧の Column scope フィルタは見送る。bookmarks は topic / channel を横断する利用者個人の集約であり、Column scope（表示・投稿先の正本）とは責務が異なるため、Timeline Column の Bookmarks view は global 一覧のまま維持する。scope 別に絞る必要が生じた場合は view 側の filter として再検討する。
 
 ## Non-goals

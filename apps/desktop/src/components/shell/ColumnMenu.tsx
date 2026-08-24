@@ -1,7 +1,16 @@
 import { useEffect, useId, useRef, useState, type FocusEvent, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft, ChevronRight, MoreHorizontal, Pin, PinOff, X } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Maximize2,
+  Minimize2,
+  MoreHorizontal,
+  Pin,
+  PinOff,
+  X,
+} from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import type { ColumnSpan } from '@/shell/slices/workspace';
@@ -12,6 +21,8 @@ type ColumnMenuProps = {
   onMoveRight?: () => void;
   onPinnedChange?: (pinned: boolean) => void;
   onSpanChange?: (span: ColumnSpan) => void;
+  onToggleFullscreen?: () => void;
+  fullscreen?: boolean;
   pinned: boolean;
   span: ColumnSpan;
   spanOptions: ColumnSpan[];
@@ -31,6 +42,8 @@ export function ColumnMenu({
   onMoveRight,
   onPinnedChange,
   onSpanChange,
+  onToggleFullscreen,
+  fullscreen = false,
   pinned,
   span,
   spanOptions,
@@ -128,10 +141,14 @@ export function ColumnMenu({
     interactionRef.current = 'opening';
     pendingFocusRef.current = focusTarget;
     const rect = trigger.getBoundingClientRect();
+    const fullscreenTarget = document.fullscreenElement;
     setPlacement({
       top: rect.bottom + 4,
       right: Math.max(8, window.innerWidth - rect.right),
-      target: trigger.closest('.shell-phase1') ?? document.body,
+      target:
+        fullscreenTarget instanceof Element && fullscreenTarget.contains(trigger)
+          ? fullscreenTarget
+          : trigger.closest('.shell-phase1') ?? document.body,
     });
     setOpen(true);
   };
@@ -282,6 +299,18 @@ export function ColumnMenu({
               {t('columnMenu.span', { count: option })}
             </button>
           ))}
+          {onToggleFullscreen ? (
+            <button type='button' role='menuitem' onClick={() => select(onToggleFullscreen)}>
+              {fullscreen ? (
+                <Minimize2 className='size-4' aria-hidden='true' />
+              ) : (
+                <Maximize2 className='size-4' aria-hidden='true' />
+              )}
+              {t(fullscreen ? 'columnMenu.exitFullscreen' : 'columnMenu.enterFullscreen', {
+                title,
+              })}
+            </button>
+          ) : null}
           {onPinnedChange ? (
             <button
               type='button'

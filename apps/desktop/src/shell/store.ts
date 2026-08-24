@@ -44,10 +44,15 @@ import {
   readWorkspaceLayout,
   type WorkspaceStorage,
 } from '@/shell/workspacePersistence';
+import { readSavedWorkspaceLayouts } from '@/shell/savedWorkspaceLayouts';
 import {
   readColumnDrafts,
   type ColumnDraftStorage,
 } from '@/shell/columnDraftPersistence';
+import {
+  readCommunityIndexNodePreference,
+  type CommunityIndexNodePreferenceStorage,
+} from '@/shell/communityIndexNodePreference';
 
 export type AppProps = {
   api?: DesktopApi;
@@ -120,6 +125,7 @@ export function createInitialShellState(): DesktopShellState {
 type CreateDesktopShellStoreOptions = {
   workspaceStorage?: WorkspaceStorage;
   draftStorage?: ColumnDraftStorage;
+  communityIndexPreferenceStorage?: CommunityIndexNodePreferenceStorage;
 };
 
 export function createDesktopShellStore(options: CreateDesktopShellStoreOptions = {}) {
@@ -127,13 +133,26 @@ export function createDesktopShellStore(options: CreateDesktopShellStoreOptions 
   const workspaceState = options.workspaceStorage
     ? readWorkspaceLayout(options.workspaceStorage, initialState.workspaceState)
     : initialState.workspaceState;
+  const savedWorkspaceLayouts = options.workspaceStorage
+    ? readSavedWorkspaceLayouts(options.workspaceStorage)
+    : initialState.savedWorkspaceLayouts;
+  const normalizedWorkspaceState =
+    workspaceState.activeLayoutId &&
+    !savedWorkspaceLayouts.some((layout) => layout.id === workspaceState.activeLayoutId)
+      ? { ...workspaceState, activeLayoutId: null }
+      : workspaceState;
   const columnDraftsByKey = options.draftStorage
     ? readColumnDrafts(options.draftStorage)
     : initialState.columnDraftsByKey;
+  const communityIndexNodePreference = options.communityIndexPreferenceStorage
+    ? readCommunityIndexNodePreference(options.communityIndexPreferenceStorage)
+    : initialState.communityIndexNodePreference;
   return createStore<DesktopShellStore>((set) => ({
     ...initialState,
-    workspaceState,
+    workspaceState: normalizedWorkspaceState,
+    savedWorkspaceLayouts,
     columnDraftsByKey,
+    communityIndexNodePreference,
     patchState: (patch) => set((current) => ({ ...current, ...patch })),
     resetState: () => set(createInitialShellState()),
     setField: (key, value) =>

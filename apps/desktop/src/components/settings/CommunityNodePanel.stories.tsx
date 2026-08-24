@@ -17,6 +17,9 @@ function CommunityNodePanelStory({
   width = 'wide',
 }: CommunityNodeStoryProps) {
   const [nodes, setNodes] = useState(args.view.nodes);
+  const [indexNodePreference, setIndexNodePreference] = useState(
+    args.indexNodePreference ?? { mode: 'auto' as const }
+  );
 
   return (
     <SettingsStoryFrame width={width}>
@@ -24,6 +27,8 @@ function CommunityNodePanelStory({
         <CommunityNodePanel
           {...args}
           view={{ ...args.view, nodes }}
+          indexNodePreference={indexNodePreference}
+          onIndexNodePreferenceChange={setIndexNodePreference}
           onAddNode={() =>
             setNodes((current) => [
               ...current,
@@ -98,6 +103,8 @@ const meta = {
     onRefresh: () => {},
     onClearToken: () => {},
     onSubmitInviteCode: async () => {},
+    indexNodePreference: { mode: 'auto' },
+    eligibleIndexNodeBaseUrls: communityNodePanelFixture.nodes.map((node) => node.baseUrl),
     onGetRelationOptout: async () => ({
       pubkey: 'story-user',
       opted_out: false,
@@ -124,6 +131,25 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Ready: Story = {};
+
+export const ManualIndexNode: Story = {
+  args: {
+    indexNodePreference: {
+      mode: 'manual',
+      baseUrl: communityNodePanelFixture.nodes[1].baseUrl,
+    },
+  },
+};
+
+export const ManualIndexNodeUnavailable: Story = {
+  args: {
+    indexNodePreference: {
+      mode: 'manual',
+      baseUrl: communityNodePanelFixture.nodes[1].baseUrl,
+    },
+    eligibleIndexNodeBaseUrls: [communityNodePanelFixture.nodes[0].baseUrl],
+  },
+};
 
 export const DistanceOptout: Story = {
   args: { showDiagnostics: false },

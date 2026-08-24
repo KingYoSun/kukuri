@@ -1,0 +1,26 @@
+# 2026-08-24 issue-766-staged-column-features
+
+- Issue: https://github.com/KingYoSun/kukuri/issues/766
+- Preview: [名前付き layout と Column Canvas](assets/2026-08-24-issue-766/saved-layouts-and-columns.png)
+- Summary:
+  - Control Center に version 付き local snapshot の名前付き layout を追加した。現在の Column 構成を新規保存・更新し、呼び出し・rename・deleteできる。呼び出し時だけ active Column の canonical route へ同期し、Draft と runtime state は snapshot に含めない。
+  - Community Node 詳細設定に `自動` / 明示 node selector を追加した。明示 node が一時利用不能な場合は preference を保持し、別 nodeへfallbackせず Community Index queryを停止して設定導線付き Notice を表示する。
+  - Stream / Metaverse Column menu に一時 fullscreen を追加した。`fullscreenchange` に追随し、標準 Escape と menu の両方で退出でき、元 Columnへfocusを戻す。
+  - mobile の viewport edge / Column indicator swipe は隣接1 Columnだけへ移動する。短距離・縦優位・範囲外・cancelを無視し、scene中央の通常pointer操作を奪わない。非active footer、Composer Close、Control Center pin / close は44px以上に揃えた。
+  - Stream playerは現行domainに映像source / transport / seek contractが無いため追加していない。seek非競合とbackground playback opt-in試験はplayer導入時へ留保した。Metaverseの参加・退出・chatはviewport内HUD / discovery cardを正本として維持する。
+- Review result:
+  - Shneiderman 1（一貫性）: layout管理をControl Center、node運用をSettings、障害理由をaffected Columnへ置き、既存の情報設計に沿う。
+  - Shneiderman 2（ショートカット）: 保存済みlayoutとColumn indicatorにより、複数Columnの復元・直接移動を短縮する。
+  - Shneiderman 3（有益なfeedback）: active / 未保存、storage error、manual node unavailable、fullscreen failureを操作面に残す。
+  - Shneiderman 4（完結性）: save / rename / delete / activateは成功後に一覧へ結果が残り、layout呼び出しは対象Columnへfocusしてdrawerを閉じる。
+  - Shneiderman 5（エラー防止）: 空名・重複名・破損payloadを拒否し、未保存差分の破棄を確認する。manual nodeはfail-closedで誤送信しない。
+  - Shneiderman 6（取り消し容易）: rename / delete / layout置換はcancelでき、fullscreenはEscapeまたはmenuで元layoutへ戻る。
+  - Shneiderman 7（主導権）: nodeを自動または明示選択でき、無断fallbackしない。swipeはedge / indicatorに限定する。
+  - Shneiderman 8（記憶負荷）: 名前付きlayoutと再起動後のpreference復元により、作業構成とquery先を覚え直す必要を減らす。
+- Accessibility / responsive:
+  - keyboard: Column menu、layout CRUD、selector、confirm dialogをkeyboardで操作可能。Fullscreen退出後は元Columnへfocusを戻す。
+  - screen reader: selector label、Column position / span / active state、layout action名、Notice、live announcementを保持。
+  - touch / safe area: 対象controlは44px以上。375 / 390 / 430pxでindicatorとfooter safe areaを確認する。
+  - resize: 760 / 1024 / 1280 / 1440 / 1920px、dark / light、reduced motionでColumn overflow、drawer、fullscreen復帰を確認する。
+- Exceptions: Stream player / seek / background playbackはmedia contract導入時の対象。Metaverse actionはColumn footerへ複製しない。layout共有URL、import / export、端末間同期は対象外。
+- Validation: `cargo xtask desktop-ui-check`（Vitest 108 files / 854 tests、Playwright chromium 35 tests、visual 14 tests、Storybook build、lint、typecheck）、`cargo xtask check`、`cargo xtask test`、`cargo xtask oversized-files`、`git diff --check`を完走した。PR CIで最終確認する。

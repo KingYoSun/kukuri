@@ -9,6 +9,15 @@ export type CommunityIndexManifestEntry =
   | { status: 'error'; error: string }
   | { status: 'ok'; manifest: CommunityNodeManifest };
 
+export type CommunityIndexNodePreference =
+  | { mode: 'auto' }
+  | { mode: 'manual'; baseUrl: string };
+
+export type CommunityIndexNodeResolution = {
+  preference: CommunityIndexNodePreference;
+  selectedBaseUrl: string | null;
+};
+
 /// 索引・信頼関係・距離利用停止で共通の利用可否境界(#663 / #698 / #705)。
 /// 認証済み・必須同意承認済み・通信エラーなし・公開ノード情報が取得済みで、`capabilities` の
 /// いずれかが提供中(`available_enabled`)のノードだけを返す。
@@ -73,6 +82,47 @@ export function resolveCommunityIndexNodeBaseUrl(
     return current;
   }
   return eligibleBaseUrls[0] ?? null;
+}
+
+export function resolveCommunityIndexNodePreference(
+  preference: CommunityIndexNodePreference,
+  configuredBaseUrls: readonly string[],
+  eligibleBaseUrls: readonly string[]
+): CommunityIndexNodeResolution {
+  if (preference.mode === 'manual') {
+    if (!configuredBaseUrls.includes(preference.baseUrl)) {
+      return {
+        preference: { mode: 'auto' },
+        selectedBaseUrl: eligibleBaseUrls[0] ?? null,
+      };
+    }
+    return {
+      preference,
+      selectedBaseUrl: eligibleBaseUrls.includes(preference.baseUrl)
+        ? preference.baseUrl
+        : null,
+    };
+  }
+  return { preference, selectedBaseUrl: eligibleBaseUrls[0] ?? null };
+}
+
+export function reconcileCommunityIndexNodePreference(state: {
+  communityNodeConfig: CommunityNodeConfig;
+  communityNodeStatuses: readonly CommunityNodeNodeStatus[];
+  communityNodeManifests: Readonly<Record<string, CommunityIndexManifestEntry>>;
+  communityIndexNodePreference: CommunityIndexNodePreference;
+}): CommunityIndexNodeResolution {
+  const configured = state.communityNodeConfig.nodes.map((node) => node.base_url);
+  const eligible = eligibleCommunityIndexNodes(
+    state.communityNodeConfig,
+    state.communityNodeStatuses,
+    state.communityNodeManifests
+  );
+  return resolveCommunityIndexNodePreference(
+    state.communityIndexNodePreference,
+    configured,
+    eligible
+  );
 }
 
 /// 接続状態の定期更新後などに、現在の構成・接続状態・取得済み構成情報から適格一覧を求め直し、

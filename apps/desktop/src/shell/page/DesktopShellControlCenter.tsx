@@ -46,6 +46,8 @@ import {
 } from '@/shell/slices/workspace';
 import { formatCount, syncStatusBadgeLabel } from '@/shell/presentation';
 import { useDesktopShellFieldSetter, useDesktopShellStore } from '@/shell/store';
+import { SavedWorkspaceLayouts } from '@/components/shell/SavedWorkspaceLayouts';
+import { applySavedWorkspaceLayout } from '@/shell/savedWorkspaceLayouts';
 
 export const CONTROL_CENTER_ID = 'shell-control-center';
 
@@ -311,6 +313,19 @@ export function DesktopShellControlCenter({
                   </Button>
                 ))}
               </div>
+              <SavedWorkspaceLayouts
+                onActivateLayout={(layout) => {
+                  const next = {
+                    ...applySavedWorkspaceLayout(workspaceState, layout),
+                    controlCenterOpen: false,
+                  };
+                  setWorkspaceState(next);
+                  const activeColumn = next.columns.find(
+                    (column) => column.id === next.activeColumnId
+                  );
+                  if (activeColumn) void onActivateColumn(activeColumn);
+                }}
+              />
               <ul className='shell-control-center-column-list'>
                 {workspaceState.columns.map((column, index) => {
                   const active = workspaceState.activeColumnId === column.id;
@@ -333,6 +348,7 @@ export function DesktopShellControlCenter({
                       <Button
                         variant='ghost'
                         size='icon'
+                        className='min-h-11 min-w-11'
                         type='button'
                         aria-label={t(
                           column.pinned
@@ -356,6 +372,7 @@ export function DesktopShellControlCenter({
                       <Button
                         variant='ghost'
                         size='icon'
+                        className='min-h-11 min-w-11'
                         type='button'
                         disabled={workspaceState.columns.length <= 1}
                         aria-label={t('shell:controlCenter.closeColumn', {

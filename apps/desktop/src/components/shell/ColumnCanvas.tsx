@@ -10,6 +10,7 @@ import {
 import { prefersReducedMotion } from '@/lib/reducedMotion';
 import { columnCanvasEdgeScrollDirection } from './columnCanvasGeometry';
 import { nearestColumnToViewportCenter } from './columnPagingGeometry';
+import { columnSwipeTargetIndex } from './columnSwipeGesture';
 
 type ColumnCanvasProps = {
   activeColumnId: string;
@@ -24,6 +25,7 @@ type ColumnCanvasProps = {
 const EDGE_SCROLL_STEP_PX = 18;
 const MOBILE_QUERY = '(max-width: 759px)';
 const SCROLL_SETTLE_MS = 120;
+const MOBILE_SWIPE_EDGE_PX = 24;
 
 function isMobileViewport() {
   return window.matchMedia?.(MOBILE_QUERY).matches ?? false;
@@ -55,6 +57,12 @@ export function ColumnCanvas({
   const autoScrollFrameRef = useRef<number | null>(null);
   const autoScrollDirectionRef = useRef<-1 | 0 | 1>(0);
   const draggingColumnIdRef = useRef<string | null>(null);
+  const swipeGestureRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+  } | null>(null);
+  const swipeConsumedRef = useRef(false);
   const scrollSettleTimeoutRef = useRef<number | null>(null);
   const [dropTarget, setDropTarget] = useState<{ index: number; left: number } | null>(null);
   const [announcement, setAnnouncement] = useState('');
@@ -232,6 +240,51 @@ export function ColumnCanvas({
       className='shell-column-canvas'
       aria-label={label}
       onScroll={settleMobileScroll}
+      onClickCapture={(event) => {
+        if (!swipeConsumedRef.current) return;
+        event.preventDefault();
+        event.stopPropagation();
+        swipeConsumedRef.current = false;
+      }}
+      onPointerDownCapture={(event) => {
+        if (!isMobileViewport() || columnIds.length < 2) return;
+        if (swipeGestureRef.current) return;
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const target = event.target instanceof Element ? event.target : null;
+        const rect = canvas.getBoundingClientRect();
+        const startsAtEdge =
+          event.clientX - rect.left <= MOBILE_SWIPE_EDGE_PX ||
+          rect.right - event.clientX <= MOBILE_SWIPE_EDGE_PX;
+        const startsOnIndicator = Boolean(target?.closest('[data-column-swipe-indicator]'));
+        if (!startsAtEdge && !startsOnIndicator) return;
+        swipeGestureRef.current = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+        };
+      }}
+      onPointerUpCapture={(event) => {
+        const gesture = swipeGestureRef.current;
+        if (!gesture || gesture.pointerId !== event.pointerId) return;
+        swipeGestureRef.current = null;
+        const targetIndex = columnSwipeTargetIndex({
+          activeIndex: columnIds.indexOf(activeColumnId),
+          columnCount: columnIds.length,
+          deltaX: event.clientX - gesture.startX,
+          deltaY: event.clientY - gesture.startY,
+        });
+        if (targetIndex === null) return;
+        event.preventDefault();
+        swipeConsumedRef.current = true;
+        window.setTimeout(() => {
+          swipeConsumedRef.current = false;
+        }, 0);
+        onActivateColumn(columnIds[targetIndex], true);
+      }}
+      onPointerCancelCapture={() => {
+        swipeGestureRef.current = null;
+      }}
       onDragStartCapture={(event: DragEvent<HTMLDivElement>) => {
         const columnId = findColumnId(event.target);
         if (!columnId || !(event.target as Element).closest('[data-column-drag-grip]')) return;
@@ -272,7 +325,11 @@ export function ColumnCanvas({
       ) : null}
       <span className='sr-only' aria-live='polite'>{announcement}</span>
       {columnIds.length > 1 ? (
-        <nav className='shell-column-page-indicator' aria-label='Column pages'>
+        <nav
+          className='shell-column-page-indicator'
+          aria-label='Column pages'
+          data-column-swipe-indicator
+        >
           <span className='shell-column-page-count' aria-live='polite'>
             {Math.max(1, columnIds.indexOf(activeColumnId) + 1)} / {columnIds.length}
           </span>

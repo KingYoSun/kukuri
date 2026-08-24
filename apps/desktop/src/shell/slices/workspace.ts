@@ -48,6 +48,7 @@ export type WorkspaceState = {
 
 export type WorkspaceSliceState = {
   workspaceState: WorkspaceState;
+  savedWorkspaceLayouts: import('@/shell/savedWorkspaceLayouts').SavedWorkspaceLayout[];
 };
 
 type ColumnSpanPolicy = {
@@ -158,7 +159,7 @@ export function createInitialWorkspaceState(
 }
 
 export function createInitialWorkspaceSlice(scope?: ColumnScope): WorkspaceSliceState {
-  return { workspaceState: createInitialWorkspaceState(scope) };
+  return { workspaceState: createInitialWorkspaceState(scope), savedWorkspaceLayouts: [] };
 }
 
 export function activateColumn(state: WorkspaceState, columnId: string): WorkspaceState {
