@@ -530,6 +530,7 @@ export function DesktopShellPage({
       beginColumnQuoteRepost={shellActions.beginColumnQuoteRepost}
       handleRetryLocalPost={shellActions.handleRetryLocalPost}
       handleRestoreLocalPost={shellActions.handleRestoreLocalPost}
+      handleWithdrawPost={shellActions.handleWithdrawPost}
       handleToggleReaction={shellActions.handleToggleReaction}
       handleBookmarkCustomReaction={shellActions.handleBookmarkCustomReaction}
       handleActivateReference={handleActivateReference}
@@ -568,6 +569,7 @@ export function DesktopShellPage({
       handleToggleReaction={shellActions.handleToggleReaction}
       handleBookmarkCustomReaction={shellActions.handleBookmarkCustomReaction}
       handleToggleBookmarkedPost={shellActions.handleToggleBookmarkedPost}
+      handleWithdrawPost={shellActions.handleWithdrawPost}
       handleActivateReference={handleActivateReference}
       handleCopyInternalLink={handleCopyInternalLink}
       handleJoinLiveSession={shellActions.handleJoinLiveSession}

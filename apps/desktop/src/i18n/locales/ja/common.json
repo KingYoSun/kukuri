@@ -24,6 +24,8 @@
     "manageReactions": "リアクション管理",
     "remove": "削除",
     "removeBookmark": "ブックマーク解除",
+    "withdrawPost": "投稿を撤回",
+    "confirmWithdrawPost": "この投稿を撤回しますか？本文とメディアは表示されなくなりますが、他のピアがすでに受信した複製を消去することはできません。",
     "restoreDraft": "下書きを復元",
     "repost": "リポスト",
     "reply": "返信",
@@ -98,7 +100,8 @@
     "quoteRepost": "引用リポスト",
     "replyingTo": "{{author}}さんへの返信",
     "reposted": "リポスト",
-    "repostedBy": "{{author}}さんがリポスト"
+    "repostedBy": "{{author}}さんがリポスト",
+    "withdrawnPost": "この投稿は投稿者により撤回されました。"
   },
   "feedback": {
     "copiedToClipboard": "クリップボードにコピーしました。"

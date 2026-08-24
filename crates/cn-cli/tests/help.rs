@@ -23,6 +23,7 @@ fn root_help_keeps_public_command_surface() {
         "supported-topic",
         "indexing-request",
         "relation",
+        "transmission-prevention",
     ] {
         assert!(
             output.contains(command),
@@ -45,6 +46,10 @@ fn command_and_nested_help_remain_parseable() {
         &["supported-topic"],
         &["indexing-request"],
         &["relation"],
+        &["transmission-prevention"],
+        &["transmission-prevention", "apply"],
+        &["transmission-prevention", "release"],
+        &["transmission-prevention", "status"],
     ] {
         let output = help(args);
         assert!(output.contains("Usage:"), "args={args:?}: {output}");

@@ -39,6 +39,7 @@ type ThreadTreeProps = {
   onReactionPickerOpen?: () => void;
   onRetryLocalPost?: (post: PostCardView['post']) => void;
   onRestoreLocalPost?: (post: PostCardView['post']) => void;
+  onWithdraw?: (post: PostCardView['post']) => void;
   onActivateReference?: (reference: InternalSmartReference) => void;
   onCopyPostLink?: (link: string) => void;
   focusedPostObjectId?: string | null;
@@ -72,6 +73,7 @@ export function ThreadTree({
   onReactionPickerOpen,
   onRetryLocalPost,
   onRestoreLocalPost,
+  onWithdraw,
   onActivateReference,
   onCopyPostLink,
   focusedPostObjectId,
@@ -134,6 +136,7 @@ export function ThreadTree({
               onReactionPickerOpen={onReactionPickerOpen}
               onRetryLocalPost={onRetryLocalPost}
               onRestoreLocalPost={onRestoreLocalPost}
+              onWithdraw={onWithdraw}
               onActivateReference={onActivateReference}
               onCopyLink={onCopyPostLink}
               isFocused={focusedPostObjectId === view.post.object_id}

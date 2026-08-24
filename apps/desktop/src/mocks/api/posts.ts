@@ -16,6 +16,7 @@ type PostsMock = Pick<
   DesktopApi,
   | 'createPost'
   | 'createRepost'
+  | 'withdrawPost'
   | 'listTimeline'
   | 'listThread'
   | 'listProfileTimeline'
@@ -185,6 +186,31 @@ export function createPostsMock(runtime: MockRuntime): PostsMock {
         ),
       ];
       return objectId;
+    },
+    async withdrawPost(topic, objectId) {
+      const withdrawal = {
+        withdrawn_at: ++runtime.sequence,
+        replacement_object_id: null,
+        reason_visibility: 'public',
+        reason: 'author_request',
+      };
+      const applyWithdrawal = (post: (typeof postsByTopic)[string][number]) =>
+        post.object_id === objectId
+          ? {
+              ...post,
+              withdrawal,
+              content: '',
+              attachments: [],
+              repost_of: null,
+              repost_commentary: null,
+              is_threadable: false,
+            }
+          : post;
+      postsByTopic[topic] = (postsByTopic[topic] ?? []).map(applyWithdrawal);
+      authorProfileTimelines[syncStatus.local_author_pubkey] = (
+        authorProfileTimelines[syncStatus.local_author_pubkey] ?? []
+      ).map(applyWithdrawal);
+      return `withdrawal-${objectId}`;
     },
     async listTimeline(topic, _cursor, _limit, scope: TimelineScope = { kind: 'public' }) {
       syncStatus.subscribed_topics = Array.from(new Set([...syncStatus.subscribed_topics, topic]));

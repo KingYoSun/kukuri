@@ -25,6 +25,7 @@
       }
     ]
   },
+  "withdrawal": null,
   "content": "hello ipc contract",
   "content_status": "Available",
   "attachments": [

@@ -49,10 +49,12 @@ pub use media::{
     ManifestBlobRef, MediaManifestItem, blob_hash, build_media_manifest_envelope,
 };
 pub use posts::{
-    CanonicalPostHeader, ChannelRef, KukuriPostEnvelopeContentV1, KukuriPostObjectV1, ObjectStatus,
-    ObjectVisibility, PayloadRef, RepostSourceSnapshotV1, ThreadRef, TimelineScope,
-    build_post_envelope, build_post_envelope_with_payload,
-    build_post_envelope_with_payload_in_channel, build_repost_envelope, timeline_sort_key,
+    CanonicalPostHeader, ChannelRef, KukuriPostEnvelopeContentV1, KukuriPostObjectV1,
+    KukuriPostWithdrawalEnvelopeContentV1, ObjectStatus, ObjectVisibility, PayloadRef,
+    PostWithdrawalReason, PostWithdrawalV1, RepostSourceSnapshotV1, ThreadRef, TimelineScope,
+    WithdrawalReasonVisibility, build_post_envelope, build_post_envelope_with_payload,
+    build_post_envelope_with_payload_in_channel, build_post_withdrawal_envelope,
+    build_repost_envelope, timeline_sort_key, verify_post_withdrawal,
 };
 pub use private_channels::{
     ChannelAudienceKind, ChannelSharingState, CreatePrivateChannelInput, FriendOnlyGrantPreview,

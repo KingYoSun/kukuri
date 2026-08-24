@@ -52,6 +52,7 @@ export const postViewFull = {
       }
     ]
   },
+  "withdrawal": null,
   "content": "hello ipc contract",
   "content_status": "Available",
   "attachments": [
@@ -177,6 +178,7 @@ export const postViewMinimal = {
   "mutual": false,
   "friend_of_friend": false,
   "provenance": null,
+  "withdrawal": null,
   "content": "minimal",
   "content_status": "Missing",
   "attachments": [],
@@ -212,6 +214,7 @@ export const timelineView = {
       "mutual": false,
       "friend_of_friend": false,
       "provenance": null,
+      "withdrawal": null,
       "content": "minimal",
       "content_status": "Missing",
       "attachments": [],
@@ -253,6 +256,7 @@ export const bookmarkedPostView = {
     "mutual": false,
     "friend_of_friend": false,
     "provenance": null,
+    "withdrawal": null,
     "content": "minimal",
     "content_status": "Missing",
     "attachments": [],

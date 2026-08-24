@@ -43,6 +43,7 @@ type TimelineFeedProps = {
   showBookmarkAction?: boolean;
   bookmarkedPostIds?: Set<string>;
   onToggleBookmark?: (post: PostCardView['post']) => void;
+  onWithdraw?: (post: PostCardView['post']) => void;
   onRetryLocalPost?: (post: PostCardView['post']) => void;
   onRestoreLocalPost?: (post: PostCardView['post']) => void;
   onActivateReference?: (reference: InternalSmartReference) => void;
@@ -86,6 +87,7 @@ export function TimelineFeed({
   showBookmarkAction = false,
   bookmarkedPostIds,
   onToggleBookmark,
+  onWithdraw,
   onRetryLocalPost,
   onRestoreLocalPost,
   onActivateReference,
@@ -200,6 +202,7 @@ export function TimelineFeed({
             showBookmarkAction={showBookmarkAction}
             isBookmarked={bookmarkedPostIds?.has(view.post.object_id) ?? false}
             onToggleBookmark={onToggleBookmark}
+            onWithdraw={onWithdraw}
             onRetryLocalPost={onRetryLocalPost}
             onRestoreLocalPost={onRestoreLocalPost}
             onActivateReference={onActivateReference}

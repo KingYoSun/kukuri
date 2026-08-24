@@ -1,8 +1,8 @@
 use kukuri_core::{
     AssetRef, BlobHash, CustomReactionAssetSnapshotV1, DirectMessageAttachmentManifestV1,
     EnvelopeId, GameRoomKind, GameRoomStatus, GameScoreEntry, LiveSessionStatus,
-    MetaverseRoomStateV1, ObjectStatus, PayloadRef, ReactionKeyKind, ReplicaId,
-    RepostSourceSnapshotV1,
+    MetaverseRoomStateV1, ObjectStatus, PayloadRef, PostWithdrawalReason, ReactionKeyKind,
+    ReplicaId, RepostSourceSnapshotV1, WithdrawalReasonVisibility,
 };
 use serde::{Deserialize, Serialize};
 
@@ -48,6 +48,19 @@ pub struct ObjectProjectionRow {
     pub source_blob_hash: Option<BlobHash>,
     pub derived_at: i64,
     pub projection_version: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PostWithdrawalRow {
+    pub target_object_id: EnvelopeId,
+    pub target_author_pubkey: String,
+    pub source_replica_id: ReplicaId,
+    pub withdrawal_envelope_id: EnvelopeId,
+    pub withdrawn_at: i64,
+    pub generation: u64,
+    pub replacement_object_id: Option<EnvelopeId>,
+    pub reason_visibility: WithdrawalReasonVisibility,
+    pub reason: Option<PostWithdrawalReason>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

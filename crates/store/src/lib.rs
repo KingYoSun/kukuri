@@ -14,11 +14,12 @@ pub use models::{
     BookmarkedPostRow, ContentObservationRow, DirectMessageConversationRow,
     DirectMessageMessageRow, DirectMessageOutboxRow, DirectMessageTombstoneRow,
     GameRoomProjectionRow, LiveSessionProjectionRow, MutedAuthorRow, NotificationKind,
-    NotificationRow, ObjectProjectionRow, Page, ReactionProjectionRow, TimelineCursor,
+    NotificationRow, ObjectProjectionRow, Page, PostWithdrawalRow, ReactionProjectionRow,
+    TimelineCursor,
 };
 pub use sqlite::{SqliteStore, StoreStartupError};
 pub use traits::{
     BlobCacheStore, ContentObservationStore, DirectMessageStore, LiveGameProjectionStore,
-    NotificationStore, ObjectProjectionStore, ProjectionStore, ReactionBookmarkStore,
-    SocialProjectionStore, Store,
+    NotificationStore, ObjectProjectionStore, PostWithdrawalStore, ProjectionStore,
+    ReactionBookmarkStore, SocialProjectionStore, Store,
 };

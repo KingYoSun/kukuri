@@ -17,8 +17,9 @@ use serde::de::DeserializeOwned;
 
 use crate::{
     BlobHash, ChannelId, ChannelRef, DirectMessageAckV1, EnvelopeId, GossipHint, HintObjectRef,
-    KukuriEnvelope, KukuriPostEnvelopeContentV1, ObjectStatus, ObjectVisibility, PayloadRef,
-    Pubkey, TimelineScope, TopicId,
+    KukuriEnvelope, KukuriPostEnvelopeContentV1, KukuriPostWithdrawalEnvelopeContentV1,
+    ObjectStatus, ObjectVisibility, PayloadRef, PostWithdrawalReason, Pubkey, TimelineScope,
+    TopicId, WithdrawalReasonVisibility,
 };
 
 const PUBKEY_A: &str = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
@@ -289,4 +290,21 @@ fn post_envelope_content_accepts_legacy_json_without_defaulted_fields() {
     assert_eq!(parsed.media_manifest_refs, Vec::<String>::new());
     assert_eq!(parsed.visibility, ObjectVisibility::Public);
     assert_eq!(parsed.repost_of, None);
+}
+
+#[test]
+fn post_withdrawal_content_snapshot() {
+    assert_wire(
+        &KukuriPostWithdrawalEnvelopeContentV1 {
+            target_object_id: EnvelopeId::from("object-1"),
+            target_author: author(),
+            topic_id: demo_topic(),
+            channel_id: None,
+            generation: 1,
+            replacement_object_id: None,
+            reason_visibility: WithdrawalReasonVisibility::Public,
+            reason: Some(PostWithdrawalReason::AuthorRequest),
+        },
+        r#"{"target_object_id":"object-1","target_author":"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798","topic_id":"kukuri:topic:demo","channel_id":null,"generation":1,"replacement_object_id":null,"reason_visibility":"public","reason":"author_request"}"#,
+    );
 }

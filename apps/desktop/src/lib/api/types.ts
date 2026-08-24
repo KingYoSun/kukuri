@@ -36,6 +36,7 @@ import type {
   NotificationStatusView,
   NotificationView,
   PostView as WirePostView,
+  PostWithdrawalReasonRequest,
   PrivateChannelInvitePreview,
   Profile,
   ReactionStateView,
@@ -53,6 +54,7 @@ import type {
   TimelineScope,
   TimelineView,
   TrustUserReadResponse,
+  WithdrawalReasonVisibilityRequest,
 } from './types.generated';
 
 // PostView は wire 型に front 専用のローカル下書き状態を交差させる。
@@ -179,6 +181,14 @@ export interface DesktopApi {
     sourceTopic: string,
     sourceObjectId: string,
     commentary?: string | null
+  ): Promise<string>;
+  withdrawPost(
+    topic: string,
+    objectId: string,
+    channelRef?: ChannelRef,
+    replacementObjectId?: string | null,
+    reasonVisibility?: WithdrawalReasonVisibilityRequest,
+    reason?: PostWithdrawalReasonRequest | null
   ): Promise<string>;
   toggleReaction(
     targetTopicId: string,

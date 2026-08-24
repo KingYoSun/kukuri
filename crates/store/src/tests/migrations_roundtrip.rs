@@ -5,7 +5,7 @@
 //!
 //! - stepwise round-trip: 各世代 k について
 //!   「全適用 → undo(V[k-1]) → V[k-1] まで適用した別 DB とスキーマ一致
-//!   → run() 再適用 → 全適用スキーマと一致」を全 17 世代で固定する。
+//!   → run() 再適用 → 全適用スキーマと一致」を全世代で固定する。
 //! - schema golden: 全適用後スキーマの正規化 dump を
 //!   `crates/store/fixtures/schema/store_schema_full.txt` と比較して固定する。
 //!
@@ -38,9 +38,9 @@ use std::path::PathBuf;
 
 use super::migrations::materialize_sqlite_fixture;
 
-/// 全 17 世代の up migration version(migrations/ ディレクトリのファイル名から
+/// 全世代の up migration version(migrations/ ディレクトリのファイル名から
 /// 観測した生リテラル、昇順)。世代の追加・削除はここと golden の両方に現れる。
-const EXPECTED_VERSIONS: [i64; 17] = [
+const EXPECTED_VERSIONS: [i64; 18] = [
     20260310000000,
     20260312000000,
     20260315000000,
@@ -58,6 +58,7 @@ const EXPECTED_VERSIONS: [i64; 17] = [
     20260413000000,
     20260527000000,
     20260814000000,
+    20260825000000,
 ];
 
 /// 各世代 k について「全適用 → undo(V[k-1]) → 中間世代スキーマと一致 →

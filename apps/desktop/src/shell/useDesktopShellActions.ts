@@ -423,6 +423,7 @@ export function useDesktopShellActions({
     handleBookmarkCustomReaction,
     handleRemoveBookmarkedCustomReaction,
     handleToggleBookmarkedPost,
+    handleWithdrawPost,
     handleRelationshipAction,
     handleMuteAction,
   } = createMessageReactionSocialActions({
@@ -881,6 +882,7 @@ export function useDesktopShellActions({
     handleBookmarkCustomReaction,
     handleRemoveBookmarkedCustomReaction,
     handleToggleBookmarkedPost,
+    handleWithdrawPost,
     beginColumnReply,
     beginColumnQuoteRepost,
     handleSimpleRepost,

@@ -15,7 +15,7 @@ use crate::models::{
     BookmarkedPostRow, ContentObservationRow, DirectMessageConversationRow,
     DirectMessageMessageRow, DirectMessageOutboxRow, DirectMessageTombstoneRow,
     GameRoomProjectionRow, LiveSessionProjectionRow, MutedAuthorRow, NotificationRow,
-    ObjectProjectionRow, Page, ReactionProjectionRow, TimelineCursor,
+    ObjectProjectionRow, Page, PostWithdrawalRow, ReactionProjectionRow, TimelineCursor,
 };
 use crate::pagination::{
     direct_message_page_from_rows, envelope_page_from_rows, object_projection_page_from_rows,
@@ -31,7 +31,8 @@ use crate::row_mapping::{
 };
 use crate::traits::{
     BlobCacheStore, ContentObservationStore, DirectMessageStore, LiveGameProjectionStore,
-    NotificationStore, ObjectProjectionStore, ReactionBookmarkStore, SocialProjectionStore, Store,
+    NotificationStore, ObjectProjectionStore, PostWithdrawalStore, ReactionBookmarkStore,
+    SocialProjectionStore, Store,
 };
 
 mod bookmarks;
@@ -43,6 +44,7 @@ mod notifications;
 mod observations;
 mod projections;
 mod social;
+mod withdrawals;
 
 pub use connection::StoreStartupError;
 

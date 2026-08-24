@@ -19,6 +19,7 @@ mod direct_messages;
 mod migrations;
 mod migrations_roundtrip;
 mod pagination;
+mod post_withdrawals;
 mod row_mapping_edge;
 mod row_mapping_enums;
 mod row_mapping_roundtrip;

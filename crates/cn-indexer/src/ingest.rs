@@ -25,7 +25,7 @@
 //! entry は query 境界の突合で surfacing されないため、投影残留も安全側に倒れる）。
 //! de-index は真実源 → 投影の順で両方から消す。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
@@ -37,7 +37,8 @@ use kukuri_cn_safety::ReasonCode;
 use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
 use kukuri_cn_safety_runtime::{SafetyScanOutcome, SafetyScanService};
 use kukuri_core::{
-    AssetRef, KukuriEnvelope, KukuriMediaManifestV1, ObjectStatus, PayloadRef, ReplicaId, blob_hash,
+    AssetRef, KukuriEnvelope, KukuriMediaManifestV1, ObjectStatus, PayloadRef, ReplicaId,
+    blob_hash, verify_post_withdrawal,
 };
 use kukuri_docs_sync::{DocFetchPolicy, DocQuery, DocRecord, DocsSync, stable_key};
 
@@ -185,11 +186,51 @@ impl IngestPipeline {
             }
         }
 
+        // Docs are canonical for withdrawals; gossip only wakes the subscriber. A target is
+        // suppressed only after the withdrawal verifies against the original signed envelope.
+        let withdrawal_records = self
+            .docs_sync
+            .query_replica_with_policy(
+                replica_id,
+                DocQuery::Prefix(stable_key("withdrawals", "")),
+                DocFetchPolicy::LocalThenRemote,
+            )
+            .await
+            .with_context(|| format!("failed to query withdrawals in {}", replica_id.as_str()))?;
+        let mut withdrawn_object_ids = HashSet::new();
+        for record in withdrawal_records {
+            if !record.key.ends_with("/state") {
+                continue;
+            }
+            let Ok(withdrawal) = serde_json::from_slice::<KukuriEnvelope>(&record.value) else {
+                continue;
+            };
+            let Ok(Some(content)) = withdrawal.post_withdrawal_content() else {
+                continue;
+            };
+            let Some(target_record) = envelopes.get(content.target_object_id.as_str()) else {
+                continue;
+            };
+            let Ok(target) = serde_json::from_slice::<KukuriEnvelope>(&target_record.value) else {
+                continue;
+            };
+            if verify_post_withdrawal(&withdrawal, &target).is_ok() {
+                withdrawn_object_ids.insert(content.target_object_id.0);
+            }
+        }
+
         let mut summary = IngestSummary::default();
         for record in &state_records {
             summary.scanned += 1;
             match self
-                .ingest_object_record(scope_kind, scope_id, replica_id, record, &envelopes)
+                .ingest_object_record(
+                    scope_kind,
+                    scope_id,
+                    replica_id,
+                    record,
+                    &envelopes,
+                    &withdrawn_object_ids,
+                )
                 .await
             {
                 Ok(IngestOutcome::Indexed) => summary.indexed += 1,
@@ -218,6 +259,7 @@ impl IngestPipeline {
         replica_id: &ReplicaId,
         record: &DocRecord,
         envelopes: &HashMap<String, DocRecord>,
+        withdrawn_object_ids: &HashSet<String>,
     ) -> Result<IngestOutcome> {
         let object: PostObjectView = match serde_json::from_slice(&record.value) {
             Ok(object) => object,
@@ -227,12 +269,30 @@ impl IngestPipeline {
             }
         };
 
+        if withdrawn_object_ids.contains(object.object_id.as_str()) {
+            self.deindex_object(scope_kind, scope_id, object.object_id.as_str())
+                .await?;
+            return Ok(IngestOutcome::Deindexed);
+        }
+
         // tombstone / deleted は de-index する（replica 上で消えた content を真実源にも投影にも
         // 残さない）。
         if matches!(
             object.status,
             ObjectStatus::Deleted | ObjectStatus::Tombstoned
         ) {
+            self.deindex_object(scope_kind, scope_id, object.object_id.as_str())
+                .await?;
+            return Ok(IngestOutcome::Deindexed);
+        }
+
+        // A node-local legal decision wins over a successful safety scan. Check before resolving
+        // body/media so a prevented subject is neither fetched nor reintroduced by backfill.
+        if self
+            .entries
+            .is_transmission_prevented(object.object_id.as_str())
+            .await?
+        {
             self.deindex_object(scope_kind, scope_id, object.object_id.as_str())
                 .await?;
             return Ok(IngestOutcome::Deindexed);

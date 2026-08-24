@@ -640,6 +640,7 @@ export type DesktopShellDetailSurfaceStackProps = {
   beginColumnQuoteRepost: (post: PostView) => void;
   handleRetryLocalPost: (post: PostView) => void;
   handleRestoreLocalPost: (post: PostView) => void;
+  handleWithdrawPost: (post: PostView) => Promise<void>;
   handleToggleReaction: (post: PostView, reactionKey: ReactionKeyInput) => Promise<void>;
   handleBookmarkCustomReaction: (
     asset: Parameters<import('@/lib/api').DesktopApi['bookmarkCustomReaction']>[0]
@@ -669,6 +670,7 @@ export function DesktopShellDetailSurfaceStack({
   beginColumnQuoteRepost,
   handleRetryLocalPost,
   handleRestoreLocalPost,
+  handleWithdrawPost,
   handleToggleReaction,
   handleBookmarkCustomReaction,
   handleActivateReference,
@@ -832,6 +834,7 @@ export function DesktopShellDetailSurfaceStack({
       onQuoteRepost={beginColumnQuoteRepost}
       onRetryLocalPost={handleRetryLocalPost}
       onRestoreLocalPost={handleRestoreLocalPost}
+      onWithdraw={(post) => void handleWithdrawPost(post)}
       localAuthorPubkey={syncStatus.local_author_pubkey}
       mediaObjectUrls={mediaObjectUrls}
       ownedReactionAssets={ownedReactionAssets}

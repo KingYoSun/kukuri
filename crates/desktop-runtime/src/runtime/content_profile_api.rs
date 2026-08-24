@@ -18,6 +18,37 @@ impl DesktopRuntime {
             .await
     }
 
+    pub async fn withdraw_post(&self, request: WithdrawPostRequest) -> Result<String> {
+        let reason_visibility = match request.reason_visibility {
+            WithdrawalReasonVisibilityRequest::Public => {
+                kukuri_core::WithdrawalReasonVisibility::Public
+            }
+            WithdrawalReasonVisibilityRequest::Private => {
+                kukuri_core::WithdrawalReasonVisibility::Private
+            }
+        };
+        let reason = request.reason.map(|reason| match reason {
+            PostWithdrawalReasonRequest::AuthorRequest => {
+                kukuri_core::PostWithdrawalReason::AuthorRequest
+            }
+            PostWithdrawalReasonRequest::Correction => {
+                kukuri_core::PostWithdrawalReason::Correction
+            }
+            PostWithdrawalReasonRequest::Privacy => kukuri_core::PostWithdrawalReason::Privacy,
+            PostWithdrawalReasonRequest::Other => kukuri_core::PostWithdrawalReason::Other,
+        });
+        self.app_service
+            .withdraw_post(
+                request.topic.as_str(),
+                request.object_id.as_str(),
+                request.channel_ref,
+                request.replacement_object_id.as_deref(),
+                reason_visibility,
+                reason,
+            )
+            .await
+    }
+
     pub async fn create_repost(&self, request: CreateRepostRequest) -> Result<String> {
         self.app_service
             .create_repost(

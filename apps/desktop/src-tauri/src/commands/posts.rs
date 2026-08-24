@@ -2,7 +2,7 @@ use ::tracing::{info, warn};
 use kukuri_desktop_runtime::{
     BookmarkPostRequest, CreatePostRequest, CreateRepostRequest, GetBlobMediaRequest,
     GetBlobPreviewRequest, ListProfileTimelineRequest, ListThreadRequest, ListTimelineRequest,
-    RemoveBookmarkedPostRequest,
+    RemoveBookmarkedPostRequest, WithdrawPostRequest,
 };
 
 use crate::state::{CommandError, DesktopState, map_error};
@@ -13,6 +13,14 @@ pub async fn create_post(
     request: CreatePostRequest,
 ) -> Result<String, CommandError> {
     state.runtime.create_post(request).await.map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn withdraw_post(
+    state: tauri::State<'_, DesktopState>,
+    request: WithdrawPostRequest,
+) -> Result<String, CommandError> {
+    state.runtime.withdraw_post(request).await.map_err(map_error)
 }
 
 #[tauri::command]

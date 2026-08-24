@@ -101,6 +101,7 @@ import type {
   UnsubscribeTopicRequest,
   UpdateGameRoomRequest,
   UpdateMetaverseRoomRequest,
+  WithdrawPostRequest,
 } from '../types.generated';
 
 import { invokeDesktop } from '../invoke/desktop';
@@ -128,6 +129,28 @@ export const runtimeApi: DesktopApi = {
       } satisfies CreateRepostRequest,
     });
   }),
+  withdrawPost: command(
+    'withdrawPost',
+    async (
+      topic,
+      objectId,
+      channelRef = { kind: 'public' },
+      replacementObjectId = null,
+      reasonVisibility = 'public',
+      reason = 'author_request'
+    ) => {
+      return invokeDesktop<string>('withdraw_post', {
+        request: {
+          topic,
+          object_id: objectId,
+          channel_ref: channelRef,
+          replacement_object_id: replacementObjectId,
+          reason_visibility: reasonVisibility,
+          reason,
+        } satisfies WithdrawPostRequest,
+      });
+    }
+  ),
   toggleReaction: command('toggleReaction', async (targetTopicId, targetObjectId, reactionKey, channelRef = null) => {
     return invokeDesktop<ReactionStateView>('toggle_reaction', {
       request: {

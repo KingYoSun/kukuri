@@ -1,6 +1,6 @@
 # P2P-first community node の責任境界
 
-最終更新日: 2026-06-19
+最終更新日: 2026-08-25
 
 ## この文書の位置づけ
 
@@ -45,6 +45,14 @@ community node は、operator の設定に応じて以下の capability を**提
 
 - 例: `community index` を有効化した node は、自分が index した content についてのみ index 責任を負う。他 node が index した content には責任を負わない。
 - 例: `moderation` を有効化した node の moderation event / trust signal は、その node の authority scope 内でのみ意味を持つ。
+
+### 投稿者による撤回と node-local な送信防止
+
+投稿者は、自分の署名鍵で対象投稿を指定した撤回 envelope を発行できる。client は検証済みの最新世代を canonical state とし、timeline、bookmark、通知、返信・引用 preview、添付を placeholder へ置き換える。これは署名済みの撤回意思を後から同期する仕組みであり、既に他 peer や別 node が保持した暗号化済み object / blob を network 全体から消去する機能ではない。
+
+community node operator は、権利侵害等への対応として、自 node の capability ごとに送信防止を決定できる。決定は Postgres の node-local ledger と immutable operator audit に記録し、対象が `community_index` / `search` / `discovery` / `recommendation` に含まれる場合は Postgres の index truth と ArcadeDB projection から除外する。`moderation` と `blob_cache` も個別 scope として指定できるが、他 node、Direct P2P、既に他者が保持する copy には効力を持たない。
+
+投稿者撤回、法的送信防止、safety verdict、operator policy は独立した gate であり、最終表示・送信は**全 gate が許可した場合だけ**許可する。競合時の説明理由は `投稿者撤回 > 法的送信防止 > critical safety > operator policy` の順で決定論的に選ぶ。解除しても過去の index を自動復活させず、fresh ingest とその時点の全 gate の再評価を要求する。
 
 ## 3. Community node の非責務
 
@@ -95,4 +103,5 @@ operator docs / safety / report flow の整備は、community node を中央 SNS
 - `AGENTS.md`（通信経路の優先度と community node の役割）
 - `docs/adr/0009-community-node-relay-auth-data-classification.md`（community-node connectivity/auth のデータ分類）
 - `docs/adr/0010-kukuri-protocol-v1-boundary-definition.md`（kukuri Protocol v1 の境界）
+- `docs/adr/0032-author-withdrawal-transmission-prevention.md`（署名付き投稿撤回、node-local 送信防止、合成規則）
 - `docs/runbooks/community-node-self-host-vps.md`（community node self-host 運用）

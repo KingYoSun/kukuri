@@ -2,6 +2,27 @@
 //! WP-H5 PR2 で timeline_runtime_support.rs から分割。購読・復旧は timeline_subscription_support.rs。
 
 use super::*;
+
+fn post_withdrawal_view_from_row(row: PostWithdrawalRow) -> PostWithdrawalView {
+    PostWithdrawalView {
+        withdrawn_at: row.withdrawn_at,
+        replacement_object_id: row.replacement_object_id.map(|id| id.0),
+        reason_visibility: match row.reason_visibility {
+            WithdrawalReasonVisibility::Public => "public",
+            WithdrawalReasonVisibility::Private => "private",
+        }
+        .to_string(),
+        reason: row.reason.map(|reason| {
+            match reason {
+                PostWithdrawalReason::AuthorRequest => "author_request",
+                PostWithdrawalReason::Correction => "correction",
+                PostWithdrawalReason::Privacy => "privacy",
+                PostWithdrawalReason::Other => "other",
+            }
+            .to_string()
+        }),
+    }
+}
 use crate::{ContentObservationView, ContentProvenanceView};
 
 fn inherit_post_observation_for_attachments(
@@ -104,10 +125,17 @@ impl AppService {
         relationships: &HashMap<String, AuthorRelationshipProjectionRow>,
         reactions_by_target: &HashMap<String, Vec<ReactionProjectionRow>>,
     ) -> Result<PostView> {
+        let withdrawal = self
+            .services
+            .projection_store
+            .get_post_withdrawal(&row.object_id)
+            .await?
+            .map(post_withdrawal_view_from_row);
+        let is_withdrawn = withdrawal.is_some();
         let profile = profiles.get(row.author_pubkey.as_str());
         let relationship = relationships.get(row.author_pubkey.as_str());
         let repost_commentary = normalize_repost_commentary(row.content.clone());
-        let content_status = if row.object_kind == "repost" {
+        let content_status = if is_withdrawn || row.object_kind == "repost" {
             BlobViewStatus::Available
         } else {
             blob_view_status_for_payload(self.services.blob_service.as_ref(), &row.payload_ref)
@@ -116,14 +144,19 @@ impl AppService {
         let provenance = self
             .content_provenance_view("post", row.object_id.as_str(), "author_docs")
             .await?;
-        let mut attachments = self.attachment_views_for_projection_row(&row).await?;
+        let mut attachments = if is_withdrawn {
+            Vec::new()
+        } else {
+            self.attachment_views_for_projection_row(&row).await?
+        };
         inherit_post_observation_for_attachments(&mut attachments, provenance.as_ref());
-        let repost_of = match row.repost_of.clone() {
-            Some(snapshot) => Some(
+        let repost_of = match (is_withdrawn, row.repost_of.clone()) {
+            (true, _) => None,
+            (false, Some(snapshot)) => Some(
                 self.repost_snapshot_to_view_with_profiles(snapshot, profiles)
                     .await?,
             ),
-            None => None,
+            (false, None) => None,
         };
         let reply_preview = self
             .reply_preview_for_object_id(
@@ -168,7 +201,12 @@ impl AppService {
             mutual,
             friend_of_friend,
             provenance,
-            content: row.content.unwrap_or_else(|| "[blob pending]".to_string()),
+            withdrawal,
+            content: if is_withdrawn {
+                String::new()
+            } else {
+                row.content.unwrap_or_else(|| "[blob pending]".to_string())
+            },
             content_status,
             attachments,
             created_at: row.created_at,
@@ -179,8 +217,13 @@ impl AppService {
             published_topic_id: Some(row.topic_id.clone()),
             origin_topic_id: Some(row.topic_id.clone()),
             repost_of,
-            repost_commentary: repost_commentary.clone(),
-            is_threadable: row.object_kind != "repost" || repost_commentary.is_some(),
+            repost_commentary: if is_withdrawn {
+                None
+            } else {
+                repost_commentary.clone()
+            },
+            is_threadable: !is_withdrawn
+                && (row.object_kind != "repost" || repost_commentary.is_some()),
             channel_id: channel_id_for_view(row.channel_id.as_str()),
             audience_label,
             reaction_summary: reaction_state.reaction_summary,
@@ -214,10 +257,20 @@ impl AppService {
         else {
             return Ok(None);
         };
-        let content = match &header.payload_ref {
-            PayloadRef::InlineText { text } => Some(text.clone()),
-            PayloadRef::BlobText { hash, .. } => {
-                fetch_projection_blob_text(self.services.blob_service.as_ref(), hash).await
+        let is_withdrawn = self
+            .services
+            .projection_store
+            .get_post_withdrawal(object_id)
+            .await?
+            .is_some();
+        let content = if is_withdrawn {
+            Some(String::new())
+        } else {
+            match &header.payload_ref {
+                PayloadRef::InlineText { text } => Some(text.clone()),
+                PayloadRef::BlobText { hash, .. } => {
+                    fetch_projection_blob_text(self.services.blob_service.as_ref(), hash).await
+                }
             }
         };
         let row = projection_row_from_header(&header, content, source_replica_id);
@@ -237,6 +290,12 @@ impl AppService {
         let Some(object_id) = object_id else {
             return Ok(None);
         };
+        let is_withdrawn = self
+            .services
+            .projection_store
+            .get_post_withdrawal(object_id)
+            .await?
+            .is_some();
         let Some(row) = self
             .hydrate_reply_preview_row(object_id, source_replica_id)
             .await?
@@ -246,7 +305,11 @@ impl AppService {
         let provenance = self
             .content_provenance_view("post", row.object_id.as_str(), "author_docs")
             .await?;
-        let mut attachments = self.attachment_views_for_projection_row(&row).await?;
+        let mut attachments = if is_withdrawn {
+            Vec::new()
+        } else {
+            self.attachment_views_for_projection_row(&row).await?
+        };
         inherit_post_observation_for_attachments(&mut attachments, provenance.as_ref());
         let profile = match profiles.get(row.author_pubkey.as_str()) {
             Some(profile) => Some(profile.clone()),
@@ -271,7 +334,11 @@ impl AppService {
                     .as_ref()
                     .and_then(|value| profile_asset_view_from_ref(value.picture_asset.as_ref())),
             },
-            content: row.content.unwrap_or_else(|| "[blob pending]".to_string()),
+            content: if is_withdrawn {
+                String::new()
+            } else {
+                row.content.unwrap_or_else(|| "[blob pending]".to_string())
+            },
             attachments,
             root_id: row.root_object_id.map(|id| id.0),
             reply_to: row.reply_to_object_id.map(|id| id.0),
@@ -309,6 +376,13 @@ impl AppService {
         &self,
         row: BookmarkedPostRow,
     ) -> Result<BookmarkedPostView> {
+        let withdrawal = self
+            .services
+            .projection_store
+            .get_post_withdrawal(&row.source_object_id)
+            .await?
+            .map(post_withdrawal_view_from_row);
+        let is_withdrawn = withdrawal.is_some();
         let profile = self
             .services
             .store
@@ -334,10 +408,14 @@ impl AppService {
             attachment_views_from_refs(self.services.blob_service.as_ref(), &row.attachments)
                 .await?
         };
+        if is_withdrawn {
+            attachments.clear();
+        }
         let repost_commentary = normalize_repost_commentary(row.content.clone());
-        let repost_of = match row.repost_of.clone() {
-            Some(snapshot) => Some(self.repost_snapshot_to_view(snapshot).await?),
-            None => None,
+        let repost_of = match (is_withdrawn, row.repost_of.clone()) {
+            (true, _) => None,
+            (false, Some(snapshot)) => Some(self.repost_snapshot_to_view(snapshot).await?),
+            (false, None) => None,
         };
         let audience_label = self
             .audience_label_for_storage(row.topic_id.as_str(), row.channel_id.as_str())
@@ -383,8 +461,13 @@ impl AppService {
                 mutual,
                 friend_of_friend,
                 provenance,
+                withdrawal,
                 object_kind: row.object_kind.clone(),
-                content: row.content.unwrap_or_else(|| "[blob pending]".to_string()),
+                content: if is_withdrawn {
+                    String::new()
+                } else {
+                    row.content.unwrap_or_else(|| "[blob pending]".to_string())
+                },
                 content_status,
                 attachments,
                 created_at: row.created_at,
@@ -405,6 +488,20 @@ impl AppService {
     }
 
     pub(crate) async fn profile_post_to_view(&self, profile_post: ProfilePost) -> Result<PostView> {
+        hydrate_post_withdrawals_from_replica(
+            self.services.docs_sync.as_ref(),
+            self.services.projection_store.as_ref(),
+            &topic_replica_id(profile_post.published_topic_id.as_str()),
+            DocFetchPolicy::LocalThenRemote,
+        )
+        .await?;
+        let withdrawal = self
+            .services
+            .projection_store
+            .get_post_withdrawal(&profile_post.object_id)
+            .await?
+            .map(post_withdrawal_view_from_row);
+        let is_withdrawn = withdrawal.is_some();
         let profile = self
             .services
             .store
@@ -446,6 +543,9 @@ impl AppService {
             &profile_post.attachments,
         )
         .await?;
+        if is_withdrawn {
+            attachments.clear();
+        }
         inherit_post_observation_for_attachments(&mut attachments, provenance.as_ref());
         Ok(PostView {
             object_id: profile_post.object_id.0.clone(),
@@ -460,8 +560,13 @@ impl AppService {
             mutual,
             friend_of_friend,
             provenance,
+            withdrawal,
             object_kind: profile_post.object_kind,
-            content: profile_post.content,
+            content: if is_withdrawn {
+                String::new()
+            } else {
+                profile_post.content
+            },
             content_status: BlobViewStatus::Available,
             attachments,
             created_at: profile_post.created_at,
@@ -484,6 +589,20 @@ impl AppService {
         &self,
         profile_repost: ProfileRepost,
     ) -> Result<PostView> {
+        hydrate_post_withdrawals_from_replica(
+            self.services.docs_sync.as_ref(),
+            self.services.projection_store.as_ref(),
+            &topic_replica_id(profile_repost.published_topic_id.as_str()),
+            DocFetchPolicy::LocalThenRemote,
+        )
+        .await?;
+        let withdrawal = self
+            .services
+            .projection_store
+            .get_post_withdrawal(&profile_repost.object_id)
+            .await?
+            .map(post_withdrawal_view_from_row);
+        let is_withdrawn = withdrawal.is_some();
         let profile = self
             .services
             .store
@@ -524,8 +643,13 @@ impl AppService {
             mutual,
             friend_of_friend,
             provenance,
+            withdrawal,
             object_kind: "repost".into(),
-            content: profile_repost.commentary.clone().unwrap_or_default(),
+            content: if is_withdrawn {
+                String::new()
+            } else {
+                profile_repost.commentary.clone().unwrap_or_default()
+            },
             content_status: BlobViewStatus::Available,
             attachments: Vec::new(),
             created_at: profile_repost.created_at,
@@ -534,12 +658,20 @@ impl AppService {
             root_id: None,
             published_topic_id: Some(profile_repost.published_topic_id.as_str().to_string()),
             origin_topic_id: Some(profile_repost.published_topic_id.as_str().to_string()),
-            repost_of: Some(
-                self.repost_snapshot_to_view(profile_repost.repost_of)
-                    .await?,
-            ),
-            repost_commentary: profile_repost.commentary.clone(),
-            is_threadable: profile_repost.commentary.is_some(),
+            repost_of: if is_withdrawn {
+                None
+            } else {
+                Some(
+                    self.repost_snapshot_to_view(profile_repost.repost_of)
+                        .await?,
+                )
+            },
+            repost_commentary: if is_withdrawn {
+                None
+            } else {
+                profile_repost.commentary.clone()
+            },
+            is_threadable: !is_withdrawn && profile_repost.commentary.is_some(),
             channel_id: None,
             audience_label: "Public".into(),
             reaction_summary: Vec::new(),
@@ -565,6 +697,19 @@ impl AppService {
         snapshot: RepostSourceSnapshotV1,
         profiles: &HashMap<String, Profile>,
     ) -> Result<RepostSourceView> {
+        hydrate_post_withdrawals_from_replica(
+            self.services.docs_sync.as_ref(),
+            self.services.projection_store.as_ref(),
+            &topic_replica_id(snapshot.source_topic_id.as_str()),
+            DocFetchPolicy::LocalThenRemote,
+        )
+        .await?;
+        let is_withdrawn = self
+            .services
+            .projection_store
+            .get_post_withdrawal(&snapshot.source_object_id)
+            .await?
+            .is_some();
         let source_profile = profiles.get(snapshot.source_author_pubkey.as_str());
         let author = AuthorViewParts::new(source_profile, None);
         Ok(RepostSourceView {
@@ -576,12 +721,20 @@ impl AppService {
             source_author_picture: author.author_picture,
             source_author_picture_asset: author.author_picture_asset,
             source_object_kind: snapshot.source_object_kind,
-            content: snapshot.content,
-            attachments: attachment_views_from_refs(
-                self.services.blob_service.as_ref(),
-                &snapshot.attachments,
-            )
-            .await?,
+            content: if is_withdrawn {
+                String::new()
+            } else {
+                snapshot.content
+            },
+            attachments: if is_withdrawn {
+                Vec::new()
+            } else {
+                attachment_views_from_refs(
+                    self.services.blob_service.as_ref(),
+                    &snapshot.attachments,
+                )
+                .await?
+            },
             reply_to: snapshot.reply_to_object_id.map(|id| id.0),
             root_id: snapshot.root_id.map(|id| id.0),
         })

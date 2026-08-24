@@ -65,6 +65,59 @@ test('clicking the author avatar triggers the same author action as the name', a
   expect(onOpenAuthor).toHaveBeenCalledWith('a'.repeat(64));
 });
 
+test('withdrawn post shows an author placeholder and disables content interactions', () => {
+  const base = createView();
+  render(
+    <PostCard
+      view={createView({
+        post: {
+          ...base.post,
+          content: '',
+          attachments: [],
+          withdrawal: {
+            withdrawn_at: 1,
+            replacement_object_id: null,
+            reason_visibility: 'public',
+            reason: 'author_request',
+          },
+        },
+      })}
+      localAuthorPubkey={base.post.author_pubkey}
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+      onWithdraw={() => undefined}
+    />
+  );
+
+  expect(screen.getByText('This post was withdrawn by its author.')).toBeInTheDocument();
+  expect(screen.queryByText('hello')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Reply' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Withdraw post' })).not.toBeInTheDocument();
+});
+
+test('author can confirm withdrawal from an active post', async () => {
+  const user = userEvent.setup();
+  const view = createView();
+  const onWithdraw = vi.fn();
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+  render(
+    <PostCard
+      view={view}
+      localAuthorPubkey={view.post.author_pubkey}
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+      onWithdraw={onWithdraw}
+    />
+  );
+
+  await user.click(screen.getByRole('button', { name: 'Withdraw post' }));
+  expect(confirm).toHaveBeenCalledOnce();
+  expect(onWithdraw).toHaveBeenCalledWith(view.post);
+  confirm.mockRestore();
+});
+
 test('post card renders repost source context for quote reposts', () => {
   render(
     <PostCard

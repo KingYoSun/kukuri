@@ -14,7 +14,7 @@ use crate::models::{
     BookmarkedPostRow, ContentObservationRow, DirectMessageConversationRow,
     DirectMessageMessageRow, DirectMessageOutboxRow, DirectMessageTombstoneRow,
     GameRoomProjectionRow, LiveSessionProjectionRow, MutedAuthorRow, NotificationRow,
-    ObjectProjectionRow, Page, ReactionProjectionRow, TimelineCursor,
+    ObjectProjectionRow, Page, PostWithdrawalRow, ReactionProjectionRow, TimelineCursor,
 };
 use crate::pagination::{
     apply_asc_cursor, apply_asc_projection_cursor, apply_desc_cursor,
@@ -22,7 +22,8 @@ use crate::pagination::{
 };
 use crate::traits::{
     BlobCacheStore, ContentObservationStore, DirectMessageStore, LiveGameProjectionStore,
-    NotificationStore, ObjectProjectionStore, ReactionBookmarkStore, SocialProjectionStore, Store,
+    NotificationStore, ObjectProjectionStore, PostWithdrawalStore, ReactionBookmarkStore,
+    SocialProjectionStore, Store,
 };
 
 /// sqlite の live_presence_cache 主キー ON CONFLICT(topic_id, channel_id, session_id,
@@ -62,6 +63,7 @@ pub struct MemoryStore {
     direct_message_tombstones: Arc<RwLock<MemoryDirectMessageTombstones>>,
     notification_rows: Arc<RwLock<MemoryNotificationRows>>,
     content_observation_rows: Arc<RwLock<MemoryContentObservationRows>>,
+    post_withdrawal_rows: Arc<RwLock<HashMap<EnvelopeId, PostWithdrawalRow>>>,
 }
 
 mod bookmarks;
@@ -72,6 +74,7 @@ mod notifications;
 mod observations;
 mod projections;
 mod social;
+mod withdrawals;
 
 #[async_trait]
 impl Store for MemoryStore {

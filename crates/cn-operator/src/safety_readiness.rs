@@ -10,7 +10,7 @@ pub const PUBLIC_NODE_PROFILE: &str = "public-node";
 /// 通常経路（`evaluate_public_node_readiness`）と safety セクション欠落経路
 /// （`missing_safety_report`）の双方が、必ずこの集合を同じ順序で網羅する。ID で機械処理する
 /// 消費側が経路ごとの差異に依存しないことを保証する（テストで固定）。
-pub const READINESS_CHECK_IDS: [&str; 22] = [
+pub const READINESS_CHECK_IDS: [&str; 23] = [
     "safety_config_present",
     "safety_profile_public_node",
     "known_csam_provider_configured",
@@ -22,6 +22,7 @@ pub const READINESS_CHECK_IDS: [&str; 22] = [
     "signed_moderation_events_enabled",
     "signing_key_secret_configured",
     "permanent_blob_storage_disabled",
+    "blob_cache_legal_eviction_ready",
     "known_csam_credential_secret_configured",
     "provider_credential_valid",
     "scan_coverage_metrics_available",
@@ -183,6 +184,7 @@ pub fn evaluate_public_node_readiness(
             check_signed_events(safety),
             check_signing_key_secret(safety),
             check_no_permanent_blob_storage(safety),
+            check_blob_cache_legal_eviction(config),
             check_known_provider_secret(safety),
         ],
     };
@@ -416,6 +418,21 @@ fn check_no_permanent_blob_storage(safety: &SafetyConfig) -> ReadinessCheck {
         pass(
             "permanent_blob_storage_disabled",
             "permanent_blob_storage=false".to_string(),
+        )
+    }
+}
+
+fn check_blob_cache_legal_eviction(config: &ResolvedConfig) -> ReadinessCheck {
+    if config.blob_cache_enabled() {
+        fail(
+            "blob_cache_legal_eviction_ready",
+            "features.blob_cache=true ですが、法的な送信防止対象を削除し再 cache を拒否する backend は未接続です。backend が実装されるまでは blob_cache を無効にしてください"
+                .to_string(),
+        )
+    } else {
+        pass(
+            "blob_cache_legal_eviction_ready",
+            "blob_cache=false のため永続 cache の削除・再取得拒否は不要です".to_string(),
         )
     }
 }

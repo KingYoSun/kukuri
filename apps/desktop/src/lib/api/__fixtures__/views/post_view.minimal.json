@@ -11,6 +11,7 @@
   "mutual": false,
   "friend_of_friend": false,
   "provenance": null,
+  "withdrawal": null,
   "content": "minimal",
   "content_status": "Missing",
   "attachments": [],

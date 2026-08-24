@@ -37,6 +37,7 @@ mod safety_runtime;
 mod scan_verdicts;
 #[cfg(test)]
 mod tests;
+mod transmission_preventions;
 mod trust_inputs;
 
 pub use admission::{
@@ -125,4 +126,10 @@ pub use safety_events::{
 };
 pub use safety_runtime::{PgSafetyArtifactStore, resolve_safety_providers};
 pub use scan_verdicts::{StoredScanVerdict, get_scan_verdict, upsert_scan_verdict};
+pub use transmission_preventions::{
+    NewTransmissionPrevention, TransmissionPrevention, TransmissionPreventionBasis,
+    TransmissionPreventionCapability, TransmissionPreventionMutation,
+    apply_transmission_prevention, get_active_transmission_prevention, is_transmission_prevented,
+    is_transmission_prevented_for_any, release_transmission_prevention,
+};
 pub use trust_inputs::{list_trust_risk_inputs, trust_risk_inputs_from};
