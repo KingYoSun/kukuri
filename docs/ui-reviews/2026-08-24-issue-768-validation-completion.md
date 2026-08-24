@@ -1,6 +1,6 @@
 # 2026-08-24 issue-768-validation-completion
 
-- PR: （本 record を含む PR。Issue #768 / #748 監査コメント https://github.com/KingYoSun/kukuri/issues/748#issuecomment-5387831754 ）
+- PR: https://github.com/KingYoSun/kukuri/pull/770 （Issue #768 / #748 監査コメント https://github.com/KingYoSun/kukuri/issues/748#issuecomment-5387831754 ）
 - Preview: [Community Node unavailable（trigger 状態 dot + Explore inline Notice）](assets/2026-08-24-issue-768/community-node-unavailable.png) / [Notifications / Messages Column](assets/2026-08-24-issue-768/notifications-and-messages-columns.png) / [Stream 1 span](assets/2026-08-24-issue-768/stream-one-span.png) / [Metaverse 1 span](assets/2026-08-24-issue-768/metaverse-one-span.png) / [narrow Desktop 760px](assets/2026-08-24-issue-768/narrow-desktop-columns.png)
 - Summary:
   - Issue #748 Validation マトリクスの欠落を補完した。Storybook: `Review/ProductionColumnWorkspace` に NotificationsAndMessagesColumns / StreamOneSpan / MetaverseOneSpan / CommunityNodeHealthy / CommunityNodeUnavailable / NarrowDesktopColumns / ReducedMotionProduction を追加し、MobilePagingAndImmersiveLifecycle は Storybook コアの viewport（390×844）で preview iframe 自体を縮めて production の `@media (max-width: 759px)` 規則（snap / indicator / gesture owner）を発火させる形にした。
