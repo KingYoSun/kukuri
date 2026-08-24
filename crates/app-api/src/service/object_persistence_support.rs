@@ -73,6 +73,44 @@ pub(crate) async fn persist_post_object(
     Ok(())
 }
 
+pub(crate) async fn persist_post_withdrawal(
+    docs_sync: &dyn DocsSync,
+    replica: &ReplicaId,
+    target_object_id: &EnvelopeId,
+    envelope: &KukuriEnvelope,
+) -> Result<()> {
+    docs_sync.open_replica(replica).await?;
+    docs_sync
+        .apply_doc_op(
+            replica,
+            DocOp::SetJson {
+                key: stable_key(
+                    "withdrawals",
+                    &format!("{}/state", target_object_id.as_str()),
+                ),
+                value: serde_json::to_value(envelope)?,
+            },
+        )
+        .await
+}
+
+pub(crate) fn post_withdrawal_row(
+    withdrawal: PostWithdrawalV1,
+    replica: &ReplicaId,
+) -> PostWithdrawalRow {
+    PostWithdrawalRow {
+        target_object_id: withdrawal.target_object_id,
+        target_author_pubkey: withdrawal.target_author.as_str().to_string(),
+        source_replica_id: replica.clone(),
+        withdrawal_envelope_id: withdrawal.withdrawal_envelope_id,
+        withdrawn_at: withdrawal.withdrawn_at,
+        generation: withdrawal.generation,
+        replacement_object_id: withdrawal.replacement_object_id,
+        reason_visibility: withdrawal.reason_visibility,
+        reason: withdrawal.reason,
+    }
+}
+
 pub(crate) async fn persist_media_manifest(
     replica: &ReplicaId,
     envelope: &KukuriEnvelope,

@@ -47,3 +47,64 @@ fn repost_envelope_roundtrip() {
         "quote commentary"
     );
 }
+
+#[test]
+fn post_withdrawal_roundtrip_is_bound_to_the_original_author() {
+    let author = generate_keys();
+    let topic = TopicId::new("kukuri:topic:withdrawal");
+    let original =
+        build_post_envelope(&author, &topic, "withdraw me", None).expect("original envelope");
+    let withdrawal = build_post_withdrawal_envelope(
+        &author,
+        &original,
+        1,
+        None,
+        WithdrawalReasonVisibility::Public,
+        Some(PostWithdrawalReason::AuthorRequest),
+    )
+    .expect("withdrawal envelope");
+
+    withdrawal.verify().expect("withdrawal signature");
+    let parsed = verify_post_withdrawal(&withdrawal, &original).expect("verified withdrawal");
+    assert_eq!(parsed.target_object_id, original.id);
+    assert_eq!(parsed.target_author, original.pubkey);
+    assert_eq!(parsed.topic_id, topic);
+    assert_eq!(parsed.withdrawn_at, withdrawal.created_at);
+    assert_eq!(parsed.generation, 1);
+    assert_eq!(parsed.reason, Some(PostWithdrawalReason::AuthorRequest));
+}
+
+#[test]
+fn post_withdrawal_rejects_a_non_author_and_private_reason_disclosure() {
+    let author = generate_keys();
+    let attacker = generate_keys();
+    let original = build_post_envelope(
+        &author,
+        &TopicId::new("kukuri:topic:withdrawal"),
+        "withdraw me",
+        None,
+    )
+    .expect("original envelope");
+
+    let error = build_post_withdrawal_envelope(
+        &attacker,
+        &original,
+        1,
+        None,
+        WithdrawalReasonVisibility::Public,
+        Some(PostWithdrawalReason::AuthorRequest),
+    )
+    .expect_err("a non-author must not issue a withdrawal");
+    assert!(error.to_string().contains("original author"));
+
+    let error = build_post_withdrawal_envelope(
+        &author,
+        &original,
+        1,
+        None,
+        WithdrawalReasonVisibility::Private,
+        Some(PostWithdrawalReason::Other),
+    )
+    .expect_err("a private reason must not be replicated");
+    assert!(error.to_string().contains("private withdrawal reason"));
+}

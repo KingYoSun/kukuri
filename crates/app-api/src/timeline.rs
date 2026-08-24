@@ -295,6 +295,111 @@ impl AppService {
         .await
     }
 
+    pub async fn withdraw_post(
+        &self,
+        topic_id: &str,
+        object_id: &str,
+        channel_ref: ChannelRef,
+        replacement_object_id: Option<&str>,
+        reason_visibility: WithdrawalReasonVisibility,
+        reason: Option<PostWithdrawalReason>,
+    ) -> Result<String> {
+        self.ensure_topic_subscription(topic_id).await?;
+        let target_object_id = EnvelopeId::from(object_id);
+        let target = self
+            .services
+            .store
+            .get_envelope(&target_object_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("withdrawal target envelope was not found"))?;
+        let target_content = target
+            .post_content()?
+            .ok_or_else(|| anyhow::anyhow!("withdrawal target must be a post object"))?;
+        if target_content.topic_id.as_str() != topic_id {
+            anyhow::bail!("withdrawal target topic does not match");
+        }
+
+        let private_state = match target_content.channel_id.as_ref() {
+            Some(channel_id) => {
+                match &channel_ref {
+                    ChannelRef::PrivateChannel {
+                        channel_id: requested,
+                    } if requested == channel_id => {}
+                    _ => anyhow::bail!("withdrawal target channel does not match"),
+                }
+                Some(
+                    self.private_channel_write_state(topic_id, channel_id)
+                        .await?,
+                )
+            }
+            None => {
+                if !matches!(channel_ref, ChannelRef::Public) {
+                    anyhow::bail!("withdrawal target channel does not match");
+                }
+                None
+            }
+        };
+        let replica = private_state
+            .as_ref()
+            .map(current_private_channel_replica_id)
+            .unwrap_or_else(|| topic_replica_id(topic_id));
+        let generation = self
+            .services
+            .projection_store
+            .get_post_withdrawal(&target_object_id)
+            .await?
+            .map(|row| row.generation.saturating_add(1))
+            .unwrap_or(1);
+        let envelope = build_post_withdrawal_envelope(
+            self.services.keys.as_ref(),
+            &target,
+            generation,
+            replacement_object_id.map(EnvelopeId::from),
+            reason_visibility,
+            reason,
+        )?;
+        let withdrawal = verify_post_withdrawal(&envelope, &target)?;
+        persist_post_withdrawal(
+            self.services.docs_sync.as_ref(),
+            &replica,
+            &target_object_id,
+            &envelope,
+        )
+        .await?;
+        self.services
+            .projection_store
+            .put_post_withdrawal(post_withdrawal_row(withdrawal, &replica))
+            .await?;
+
+        let hint_topic = channel_hint_topic_for(topic_id, target_content.channel_id.as_ref());
+        if let Err(error) = self
+            .services
+            .hint_transport
+            .publish_hint(
+                &hint_topic,
+                GossipHint::TopicObjectsChanged {
+                    topic_id: TopicId::new(topic_id),
+                    objects: vec![HintObjectRef {
+                        object_id: target_object_id.0.clone(),
+                        object_kind: "post_withdrawal".to_string(),
+                    }],
+                },
+            )
+            .await
+        {
+            warn!(
+                topic = %topic_id,
+                object_id = %target_object_id.0,
+                error = %error,
+                "failed to publish withdrawal hint; durable docs state was already persisted"
+            );
+        }
+        if target_content.channel_id.is_none() {
+            self.maybe_restart_replica_sync(topic_id, &replica).await;
+        }
+        Ok(envelope.id.0)
+    }
+
     pub async fn create_post_with_attachments_in_channel(
         &self,
         topic_id: &str,

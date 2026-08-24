@@ -17,8 +17,9 @@ use tracing::{info, warn};
 
 use kukuri_blob_service::BlobService;
 use kukuri_cn_core::{
-    ChannelSecretCipher, IndexEntryStore, IndexScopeKind, list_channel_secrets,
-    list_supported_topics, load_bootstrap_seed_peers,
+    ChannelSecretCipher, IndexEntryStore, IndexScopeKind, NewTransmissionPrevention,
+    TransmissionPreventionMutation, apply_transmission_prevention, list_channel_secrets,
+    list_supported_topics, load_bootstrap_seed_peers, release_transmission_prevention,
 };
 use kukuri_core::ReplicaId;
 use kukuri_docs_sync::{DocsSync, private_channel_replica_id, topic_replica_id};
@@ -224,6 +225,34 @@ impl IndexerParticipant {
         self.pipeline
             .ingest_scope(scope.kind, scope.id.as_str(), &scope.replica_id)
             .await
+    }
+
+    /// Apply durable legal state, remove authoritative entries transactionally, then evict every
+    /// derived projection hit. Query reconciliation is already fail-closed after the first step.
+    pub async fn apply_transmission_prevention(
+        &self,
+        actor: &str,
+        input: &NewTransmissionPrevention,
+    ) -> Result<TransmissionPreventionMutation> {
+        let mutation = apply_transmission_prevention(&self.pool, actor, input).await?;
+        for (scope_kind, scope_id) in &mutation.removed_index_scopes {
+            self.projection
+                .remove_object(*scope_kind, scope_id, input.subject_id.as_str())
+                .await?;
+        }
+        Ok(mutation)
+    }
+
+    /// Release only changes durable policy. Reappearance requires a later fresh docs ingest and
+    /// successful current safety verdict; stale projections are never restored directly.
+    pub async fn release_transmission_prevention(
+        &self,
+        actor: &str,
+        subject_kind: &str,
+        subject_id: &str,
+        reason: &str,
+    ) -> Result<TransmissionPreventionMutation> {
+        release_transmission_prevention(&self.pool, actor, subject_kind, subject_id, reason).await
     }
 
     /// supported set 全体を 1 巡 ingest する。

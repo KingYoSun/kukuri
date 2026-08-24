@@ -180,6 +180,16 @@ table object_threads
   column cid=3 name=reply_to_object_id type=TEXT notnull=0 default=None pk=0
   column cid=4 name=created_at type=INTEGER notnull=1 default=None pk=0
   fk id=0 seq=0 table=envelopes from=object_id to=Some("envelope_id") on_update=NO ACTION on_delete=NO ACTION match=NONE
+table post_withdrawals
+  column cid=0 name=target_object_id type=TEXT notnull=1 default=None pk=1
+  column cid=1 name=target_author_pubkey type=TEXT notnull=1 default=None pk=0
+  column cid=2 name=source_replica_id type=TEXT notnull=1 default=None pk=0
+  column cid=3 name=withdrawal_envelope_id type=TEXT notnull=1 default=None pk=0
+  column cid=4 name=withdrawn_at type=INTEGER notnull=1 default=None pk=0
+  column cid=5 name=generation type=INTEGER notnull=1 default=None pk=0
+  column cid=6 name=replacement_object_id type=TEXT notnull=0 default=None pk=0
+  column cid=7 name=reason_visibility type=TEXT notnull=1 default=None pk=0
+  column cid=8 name=reason type=TEXT notnull=0 default=None pk=0
 table profile_cache
   column cid=0 name=pubkey type=TEXT notnull=0 default=None pk=1
   column cid=1 name=name type=TEXT notnull=0 default=None pk=0
@@ -366,6 +376,10 @@ index idx_object_threads_root table=object_threads unique=0 origin=c partial=0
   key seqno=2 cid=4 name=Some("created_at")
   key seqno=3 cid=1 name=Some("object_id")
   sql=Some("CREATE INDEX idx_object_threads_root ON object_threads (topic_id, root_object_id, created_at ASC, object_id ASC)")
+index idx_post_withdrawals_author table=post_withdrawals unique=0 origin=c partial=0
+  key seqno=0 cid=1 name=Some("target_author_pubkey")
+  key seqno=1 cid=4 name=Some("withdrawn_at")
+  sql=Some("CREATE INDEX idx_post_withdrawals_author ON post_withdrawals (target_author_pubkey, withdrawn_at DESC)")
 index idx_reaction_cache_author_updated_at table=reaction_cache unique=0 origin=c partial=0
   key seqno=0 cid=3 name=Some("author_pubkey")
   key seqno=1 cid=5 name=Some("updated_at")
@@ -454,6 +468,9 @@ index sqlite_autoindex_object_thread_cache_1 table=object_thread_cache unique=1 
   sql=None
 index sqlite_autoindex_object_threads_1 table=object_threads unique=1 origin=pk partial=0
   key seqno=0 cid=1 name=Some("object_id")
+  sql=None
+index sqlite_autoindex_post_withdrawals_1 table=post_withdrawals unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("target_object_id")
   sql=None
 index sqlite_autoindex_profile_cache_1 table=profile_cache unique=1 origin=pk partial=0
   key seqno=0 cid=0 name=Some("pubkey")

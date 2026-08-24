@@ -10,7 +10,7 @@ use crate::models::{
     BookmarkedPostRow, ContentObservationRow, DirectMessageConversationRow,
     DirectMessageMessageRow, DirectMessageOutboxRow, DirectMessageTombstoneRow,
     GameRoomProjectionRow, LiveSessionProjectionRow, MutedAuthorRow, NotificationRow,
-    ObjectProjectionRow, Page, ReactionProjectionRow, TimelineCursor,
+    ObjectProjectionRow, Page, PostWithdrawalRow, ReactionProjectionRow, TimelineCursor,
 };
 
 pub(crate) const CONTENT_OBSERVATION_RETENTION_MS: i64 = 90 * 24 * 60 * 60 * 1000;
@@ -134,6 +134,17 @@ pub trait ContentObservationStore: Send + Sync {
         subject_id: &str,
         now_millis: i64,
     ) -> Result<Vec<ContentObservationRow>>;
+}
+
+/// 著者署名付き投稿撤回の端末内最小 ledger。
+#[async_trait]
+pub trait PostWithdrawalStore: Send + Sync {
+    /// 世代、撤回時刻、envelope ID の順で新しい事象だけを採用する。
+    async fn put_post_withdrawal(&self, row: PostWithdrawalRow) -> Result<bool>;
+    async fn get_post_withdrawal(
+        &self,
+        target_object_id: &EnvelopeId,
+    ) -> Result<Option<PostWithdrawalRow>>;
 }
 
 /// `put_object_projections` の既定動作: 1 件ずつ `put_object_projection` を呼ぶ。
@@ -418,6 +429,7 @@ pub trait NotificationStore: Send + Sync {
 pub trait ProjectionStore:
     ObjectProjectionStore
     + ContentObservationStore
+    + PostWithdrawalStore
     + LiveGameProjectionStore
     + SocialProjectionStore
     + BlobCacheStore
@@ -430,6 +442,7 @@ pub trait ProjectionStore:
 impl<T> ProjectionStore for T where
     T: ObjectProjectionStore
         + ContentObservationStore
+        + PostWithdrawalStore
         + LiveGameProjectionStore
         + SocialProjectionStore
         + BlobCacheStore

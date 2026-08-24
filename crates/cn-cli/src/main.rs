@@ -88,6 +88,66 @@ enum Command {
         #[arg(long, default_value_t = 7200)]
         relation_max_age_secs: i64,
     },
+    /// Apply, release, or inspect node-local legal transmission prevention (#761).
+    TransmissionPrevention {
+        #[command(subcommand)]
+        action: TransmissionPreventionAction,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum TransmissionPreventionAction {
+    Apply {
+        #[arg(long)]
+        actor: String,
+        #[arg(long, default_value = "post")]
+        subject_kind: String,
+        #[arg(long)]
+        subject_id: String,
+        #[arg(long, value_enum)]
+        basis: TransmissionPreventionBasisArg,
+        #[arg(long, value_enum, value_delimiter = ',', required = true)]
+        capabilities: Vec<TransmissionPreventionCapabilityArg>,
+        #[arg(long)]
+        expires_at: Option<String>,
+        #[arg(long)]
+        related_report_id: Option<String>,
+    },
+    Release {
+        #[arg(long)]
+        actor: String,
+        #[arg(long, default_value = "post")]
+        subject_kind: String,
+        #[arg(long)]
+        subject_id: String,
+        #[arg(long)]
+        reason: String,
+    },
+    Status {
+        #[arg(long, default_value = "post")]
+        subject_kind: String,
+        #[arg(long)]
+        subject_id: String,
+    },
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum TransmissionPreventionBasisArg {
+    Copyright,
+    Privacy,
+    PersonalityRights,
+    Trademark,
+    OtherRights,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum TransmissionPreventionCapabilityArg {
+    CommunityIndex,
+    Search,
+    Discovery,
+    Recommendation,
+    Moderation,
+    BlobCache,
 }
 
 /// moderation advisory の運用操作（ADR 0028 §2.3 / §2.8）。

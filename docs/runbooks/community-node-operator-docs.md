@@ -1,6 +1,6 @@
 # Community Node Operator Docs Generator (`cn-operator`)
 
-最終更新日: 2026-08-06
+最終更新日: 2026-08-25
 
 ## 目的
 
@@ -18,7 +18,36 @@ node 単位の説明責任に閉じる。
 
 `cn-operator` は `operator-config.yaml` を真実源に、deploy 前の宣言、文書・manifest・Terraform 変数の生成、設定 drift と safety readiness の検証を行う。Postgres へ接続して稼働中 node の状態を変更する command は提供しない。
 
-稼働中 node の migration、auth rollout、通報確認、入会制御、supported set、indexing request、relation 解析には `cn-cli` を使う。運用入口と起動順は [`dev.md`](dev.md#cn-cli-と-cn-operator-の役割) を参照する。
+稼働中 node の migration、auth rollout、通報確認、入会制御、supported set、indexing request、relation 解析、法的な送信防止には `cn-cli` を使う。運用入口と起動順は [`dev.md`](dev.md#cn-cli-と-cn-operator-の役割) を参照する。
+
+## 法的な送信防止
+
+権利侵害等の判断は node ごとの authority scope に閉じる。決定には、basis category、対象 capability、判断者、判断時刻、任意の期限・関連 report ID を必ず記録する。
+
+```bash
+# 自 node の index/search/discovery/recommendation から対象投稿を除外
+cn-cli transmission-prevention apply \
+  --actor operator@example.net \
+  --subject-kind post \
+  --subject-id <object-id> \
+  --basis copyright \
+  --capabilities community-index,search,discovery,recommendation \
+  --related-report-id <report-id>
+
+# 現在有効な判断を確認
+cn-cli transmission-prevention status --subject-kind post --subject-id <object-id>
+
+# 解除。既存 index は自動復活せず、fresh ingest 後にだけ再評価される
+cn-cli transmission-prevention release \
+  --actor operator@example.net \
+  --subject-kind post \
+  --subject-id <object-id> \
+  --reason "claim resolved"
+```
+
+適用は Postgres index truth の削除と ArcadeDB projection の除外を同じ運用操作として行う。再起動・再 ingest 時も active decision を本文・media fetch より先に確認する。公開 status は `GET /v1/transmission-preventions/{subject_kind}/{subject_id}` で確認でき、異議申立先として当該 node の `POST /v1/report` を案内する。
+
+これは network-wide deletion ではない。別 node、Direct P2P、既に他 peer が保持する copy は対象外であり、利用者向け説明でも「ネットワーク全体から削除」と表現してはならない。`features.blob_cache=true` は対象 blob の eviction と再 cache 拒否 backend が必要であり、現配布物では未接続のため `cn-cli readiness` が fail-closed で停止する。backend が接続されるまでは blob cache を無効にする。
 
 ## relation distance opt-out policy
 

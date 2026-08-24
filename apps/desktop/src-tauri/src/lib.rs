@@ -131,6 +131,7 @@ pub fn run() {
             commands::app_consent::get_app_consent_status,
             commands::app_consent::accept_app_consents,
             commands::posts::create_post,
+            commands::posts::withdraw_post,
             commands::posts::create_repost,
             commands::reactions::toggle_reaction,
             commands::reactions::list_my_custom_reaction_assets,

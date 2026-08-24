@@ -25,6 +25,16 @@ pub struct ContentProvenanceView {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
+pub struct PostWithdrawalView {
+    pub withdrawn_at: i64,
+    pub replacement_object_id: Option<String>,
+    pub reason_visibility: String,
+    pub reason: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct PostView {
     pub object_id: String,
     pub envelope_id: String,
@@ -39,6 +49,8 @@ pub struct PostView {
     pub friend_of_friend: bool,
     #[serde(default)]
     pub provenance: Option<ContentProvenanceView>,
+    #[serde(default)]
+    pub withdrawal: Option<PostWithdrawalView>,
     pub content: String,
     pub content_status: BlobViewStatus,
     pub attachments: Vec<AttachmentView>,

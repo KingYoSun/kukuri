@@ -24,6 +24,8 @@
     "manageReactions": "管理回应",
     "remove": "移除",
     "removeBookmark": "取消收藏",
+    "withdrawPost": "撤回帖子",
+    "confirmWithdrawPost": "要撤回这条帖子吗？正文和媒体将不再显示，但无法删除其他对等节点已经收到的副本。",
     "restoreDraft": "恢复草稿",
     "repost": "转发",
     "reply": "回复",
@@ -98,7 +100,8 @@
     "quoteRepost": "引用转发",
     "replyingTo": "回复 {{author}}",
     "reposted": "已转发",
-    "repostedBy": "{{author}} 已转发"
+    "repostedBy": "{{author}} 已转发",
+    "withdrawnPost": "此帖子已被作者撤回。"
   },
   "feedback": {
     "copiedToClipboard": "已复制到剪贴板。"

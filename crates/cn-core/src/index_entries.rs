@@ -13,7 +13,7 @@
 //! （`verdict_id` join。verdict 行は対象ごとに upsert されるため常に最新値）と突合し、真実源に
 //! 無い / 現在の verdict が非 allow / critical の hit を落とす（fail-closed query gate）。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Result, bail};
@@ -72,6 +72,23 @@ pub async fn upsert_index_entry(pool: &PgPool, entry: &NewIndexEntry) -> Result<
     if entry.scope_id.trim().is_empty() {
         bail!("index entry scope_id must not be empty");
     }
+    let mut tx = pool.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 761))")
+        .bind(&entry.object_id)
+        .execute(&mut *tx)
+        .await?;
+    let prevented: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM cn_legal.transmission_preventions
+         WHERE subject_kind = 'post' AND subject_id = $1 AND released_at IS NULL
+           AND (expires_at IS NULL OR expires_at > NOW())
+           AND capabilities && ARRAY['community_index','search','discovery','recommendation']::text[])",
+    )
+    .bind(&entry.object_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if prevented {
+        bail!("index entry is blocked by an active transmission-prevention decision");
+    }
     let row = sqlx::query(
         "INSERT INTO cn_index.index_entries
             (scope_kind, scope_id, object_id, author_pubkey, created_at, source_replica_id,
@@ -97,9 +114,11 @@ pub async fn upsert_index_entry(pool: &PgPool, entry: &NewIndexEntry) -> Result<
     .bind(&entry.verdict_id)
     .bind(&entry.verdict_action)
     .bind(entry.critical)
-    .fetch_one(pool)
+    .fetch_one(&mut *tx)
     .await?;
-    index_entry_from_row(&row)
+    let stored = index_entry_from_row(&row)?;
+    tx.commit().await?;
+    Ok(stored)
 }
 
 /// 単一 object を真実源から削除する（tombstone / 非 allow への verdict 変化時の de-index）。
@@ -185,7 +204,14 @@ pub async fn filter_surfaceable_objects(
          JOIN cn_safety.scan_verdicts v
            ON v.id = e.verdict_id
          WHERE v.action = 'allow'
-           AND NOT v.critical",
+           AND NOT v.critical
+           AND NOT EXISTS (
+               SELECT 1 FROM cn_legal.transmission_preventions p
+               WHERE p.subject_kind = 'post' AND p.subject_id = e.object_id
+                 AND p.released_at IS NULL
+                 AND (p.expires_at IS NULL OR p.expires_at > NOW())
+                 AND p.capabilities && ARRAY['community_index','search','discovery','recommendation']::text[]
+           )",
     )
     .bind(scope_kind.as_str())
     .bind(&scope_ids)
@@ -237,6 +263,9 @@ pub trait IndexEntryStore: Send + Sync {
     /// 常駐ワーカーが「サポート対象から外れたのに索引が残っている scope」を再起動をまたいで
     /// 検知し、索引解除するために使う。
     async fn list_scopes(&self) -> Result<Vec<(IndexScopeKind, String)>>;
+
+    /// Active legal decisions are checked before any body or media fetch.
+    async fn is_transmission_prevented(&self, object_id: &str) -> Result<bool>;
 }
 
 /// Postgres 実装。`cn_index.index_entries` の persist API に委譲する。
@@ -291,6 +320,21 @@ impl IndexEntryStore for PgIndexEntryStore {
             })
             .collect()
     }
+
+    async fn is_transmission_prevented(&self, object_id: &str) -> Result<bool> {
+        crate::is_transmission_prevented_for_any(
+            &self.pool,
+            "post",
+            object_id,
+            &[
+                crate::TransmissionPreventionCapability::CommunityIndex,
+                crate::TransmissionPreventionCapability::Search,
+                crate::TransmissionPreventionCapability::Discovery,
+                crate::TransmissionPreventionCapability::Recommendation,
+            ],
+        )
+        .await
+    }
 }
 
 /// contract test 用の in-memory 実装。
@@ -306,6 +350,7 @@ type MemoryEntryMap = HashMap<(IndexScopeKind, String, String), NewIndexEntry>;
 pub struct MemoryIndexEntryStore {
     verdicts: Arc<MemorySafetyArtifactStore>,
     entries: Arc<Mutex<MemoryEntryMap>>,
+    prevented: Arc<Mutex<HashSet<String>>>,
 }
 
 impl MemoryIndexEntryStore {
@@ -313,6 +358,7 @@ impl MemoryIndexEntryStore {
         Self {
             verdicts,
             entries: Arc::new(Mutex::new(HashMap::new())),
+            prevented: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
@@ -333,11 +379,38 @@ impl MemoryIndexEntryStore {
             .expect("entries mutex poisoned")
             .contains_key(&(scope_kind, scope_id.to_string(), object_id.to_string()))
     }
+
+    pub fn prevent_subject(&self, object_id: impl Into<String>) {
+        let object_id = object_id.into();
+        self.prevented
+            .lock()
+            .expect("prevented mutex poisoned")
+            .insert(object_id.clone());
+        self.entries
+            .lock()
+            .expect("entries mutex poisoned")
+            .retain(|(_, _, entry_object_id), _| entry_object_id != &object_id);
+    }
+
+    pub fn release_subject(&self, object_id: &str) {
+        self.prevented
+            .lock()
+            .expect("prevented mutex poisoned")
+            .remove(object_id);
+    }
 }
 
 #[async_trait]
 impl IndexEntryStore for MemoryIndexEntryStore {
     async fn upsert_entry(&self, entry: &NewIndexEntry) -> Result<()> {
+        if self
+            .prevented
+            .lock()
+            .expect("prevented mutex poisoned")
+            .contains(&entry.object_id)
+        {
+            bail!("index entry is blocked by an active transmission-prevention decision");
+        }
         // Postgres の CHECK / FK 制約と同じ不変条件を模す（fail-closed contract の等価性）。
         if entry.verdict_action != "allow" {
             bail!(
@@ -423,6 +496,14 @@ impl IndexEntryStore for MemoryIndexEntryStore {
             }
         }
         Ok(scopes)
+    }
+
+    async fn is_transmission_prevented(&self, object_id: &str) -> Result<bool> {
+        Ok(self
+            .prevented
+            .lock()
+            .expect("prevented mutex poisoned")
+            .contains(object_id))
     }
 }
 

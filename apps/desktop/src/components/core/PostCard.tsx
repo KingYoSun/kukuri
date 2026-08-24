@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bookmark, Flag, Link2, Reply, Repeat2 } from 'lucide-react';
+import { Bookmark, Flag, Link2, Reply, Repeat2, Trash2 } from 'lucide-react';
 
 import { formatLocalizedTime } from '@/i18n/format';
 import type {
@@ -71,6 +71,7 @@ type PostCardProps = {
   showBookmarkAction?: boolean;
   isBookmarked?: boolean;
   onToggleBookmark?: (post: PostCardView['post']) => void;
+  onWithdraw?: (post: PostCardView['post']) => void;
   onRetryLocalPost?: (post: PostCardView['post']) => void;
   onRestoreLocalPost?: (post: PostCardView['post']) => void;
   onReactionPickerOpen?: () => void;
@@ -118,6 +119,7 @@ export function PostCard({
   showBookmarkAction = false,
   isBookmarked = false,
   onToggleBookmark,
+  onWithdraw,
   onRetryLocalPost,
   onRestoreLocalPost,
   onReactionPickerOpen,
@@ -149,7 +151,8 @@ export function PostCard({
   const [reactionMenuAsset, setReactionMenuAsset] = useState<CustomReactionAssetView | null>(null);
   const isPendingText = post.content_status === 'Missing' && post.content === '[blob pending]';
   const localState = post.local_state ?? null;
-  const interactionDisabled = localState !== null;
+  const isWithdrawn = post.withdrawal != null;
+  const interactionDisabled = localState !== null || isWithdrawn;
   const audienceChipLabel = view.audienceChipLabel ?? post.audience_label;
   const publishedTopicId = post.published_topic_id?.trim() || post.origin_topic_id?.trim() || null;
   const canonicalPostTopicId = view.threadTopicId?.trim() || publishedTopicId;
@@ -376,7 +379,11 @@ export function PostCard({
           </div>
         ) : null}
 
-        {isPendingText ? (
+        {isWithdrawn ? (
+          <p className='topic-diagnostic topic-diagnostic-secondary' role='status'>
+            {t('feed.withdrawnPost')}
+          </p>
+        ) : isPendingText ? (
           <div
             className='text-skeleton-group'
             data-testid={`text-skeleton-${post.object_id}`}
@@ -480,7 +487,7 @@ export function PostCard({
         </div>
       </div>
 
-      {view.media.kind ? (
+      {!isWithdrawn && view.media.kind ? (
         <PostMedia
           media={view.media}
           onOpenImage={(index) => {
@@ -712,6 +719,22 @@ export function PostCard({
                   fill={isBookmarked ? 'currentColor' : 'none'}
                   aria-hidden='true'
                 />
+              </Button>
+            ) : null}
+            {!isWithdrawn && post.author_pubkey === localAuthorPubkey && onWithdraw ? (
+              <Button
+                variant='secondary'
+                size='icon'
+                className='post-action-button'
+                type='button'
+                aria-label={t('actions.withdrawPost')}
+                onClick={() => {
+                  if (window.confirm(t('actions.confirmWithdrawPost'))) {
+                    onWithdraw(post);
+                  }
+                }}
+              >
+                <Trash2 className='size-4' aria-hidden='true' />
               </Button>
             ) : null}
             {showReportAction ? (

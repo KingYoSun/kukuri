@@ -11,6 +11,7 @@ mod readiness;
 mod readiness_runtime;
 mod relation;
 mod reports;
+mod transmission_prevention;
 
 pub(crate) async fn dispatch(pool: &PgPool, command: Command) -> Result<()> {
     match command {
@@ -40,6 +41,9 @@ pub(crate) async fn dispatch(pool: &PgPool, command: Command) -> Result<()> {
         Command::IndexingRequest { action } => indexing::run_indexing_request(pool, action).await,
         Command::Relation { action } => relation::run(pool, action).await,
         Command::Moderation { action } => moderation::run(pool, action).await,
+        Command::TransmissionPrevention { action } => {
+            transmission_prevention::run(pool, action).await
+        }
         Command::Readiness {
             config,
             profile,

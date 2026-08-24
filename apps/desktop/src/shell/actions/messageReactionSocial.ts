@@ -311,6 +311,27 @@ export function createMessageReactionSocialActions({
     }
   }
 
+  async function handleWithdrawPost(post: PostView) {
+    const topicId = publishedTopicIdForPost(post);
+    if (!topicId) {
+      setError(translate('common:errors.failedToPublish'));
+      return;
+    }
+    try {
+      await api.withdrawPost(
+        topicId,
+        post.object_id,
+        post.channel_id
+          ? { kind: 'private_channel', channel_id: post.channel_id }
+          : { kind: 'public' }
+      );
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+      setError(null);
+    } catch (withdrawError) {
+      setError(messageFromError(withdrawError, translate('common:errors.failedToPublish')));
+    }
+  }
+
   async function handleRelationshipAction(authorPubkey: string, following: boolean) {
     try {
       const nextView = following
@@ -360,6 +381,7 @@ export function createMessageReactionSocialActions({
     handleBookmarkCustomReaction,
     handleRemoveBookmarkedCustomReaction,
     handleToggleBookmarkedPost,
+    handleWithdrawPost,
     handleRelationshipAction,
     handleMuteAction,
   };

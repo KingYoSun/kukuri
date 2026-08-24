@@ -33,6 +33,7 @@ use crate::handlers::indexing::{
     index_discovery, index_recommendations, index_search, submit_indexing_request,
 };
 use crate::handlers::reports::submit_report;
+use crate::handlers::transmission_prevention::transmission_prevention_status;
 use crate::handlers::trust_relation::{
     relation_neighbors, relation_optout_clear, relation_optout_get, relation_optout_set,
     relation_user_read, trust_pull, trust_user_read,
@@ -62,6 +63,10 @@ pub fn app_router(state: UserApiState) -> Router {
         .route(INDEX_SEARCH_PATH, get(index_search))
         .route(INDEX_DISCOVERY_PATH, get(index_discovery))
         .route(INDEX_RECOMMENDATIONS_PATH, get(index_recommendations))
+        .route(
+            "/v1/transmission-preventions/{subject_kind}/{subject_id}",
+            get(transmission_prevention_status),
+        )
         .route(TRUST_USERS_ROUTE, get(trust_user_read))
         .route("/v1/trust/pull/{pubkey}", get(trust_pull))
         .route(RELATION_USERS_ROUTE, get(relation_user_read))

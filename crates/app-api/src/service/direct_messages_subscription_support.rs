@@ -191,6 +191,15 @@ impl AppService {
         row: NotificationRow,
     ) -> Result<NotificationView> {
         let object_id = row.object_id.clone();
+        let is_withdrawn = match object_id.as_ref() {
+            Some(object_id) => self
+                .services
+                .projection_store
+                .get_post_withdrawal(object_id)
+                .await?
+                .is_some(),
+            None => false,
+        };
         let thread_root_object_id = if let Some(object_id) = object_id.as_ref() {
             self.services
                 .projection_store
@@ -237,7 +246,7 @@ impl AppService {
             thread_root_object_id,
             dm_id: row.dm_id,
             message_id: row.message_id,
-            preview_text: row.preview_text,
+            preview_text: if is_withdrawn { None } else { row.preview_text },
             created_at: row.created_at,
             received_at: row.received_at,
             read_at: row.read_at,

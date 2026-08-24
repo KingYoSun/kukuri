@@ -31,6 +31,7 @@ type ThreadPanelProps = {
   onReactionPickerOpen?: () => void;
   onRetryLocalPost?: (post: PostCardView['post']) => void;
   onRestoreLocalPost?: (post: PostCardView['post']) => void;
+  onWithdraw?: (post: PostCardView['post']) => void;
   onActivateReference?: (reference: InternalSmartReference) => void;
   onCopyPostLink?: (link: string) => void;
   focusedPostObjectId?: string | null;
@@ -64,6 +65,7 @@ export function ThreadPanel({
   onReactionPickerOpen,
   onRetryLocalPost,
   onRestoreLocalPost,
+  onWithdraw,
   onActivateReference,
   onCopyPostLink,
   focusedPostObjectId,
@@ -96,6 +98,7 @@ export function ThreadPanel({
         onReactionPickerOpen={onReactionPickerOpen}
         onRetryLocalPost={onRetryLocalPost}
         onRestoreLocalPost={onRestoreLocalPost}
+        onWithdraw={onWithdraw}
         onActivateReference={onActivateReference}
         onCopyPostLink={onCopyPostLink}
         focusedPostObjectId={focusedPostObjectId}

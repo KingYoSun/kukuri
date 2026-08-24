@@ -24,6 +24,8 @@
     "manageReactions": "Manage reactions",
     "remove": "Remove",
     "removeBookmark": "Remove bookmark",
+    "withdrawPost": "Withdraw post",
+    "confirmWithdrawPost": "Withdraw this post? Its content and media will no longer be shown, but copies already received by other peers cannot be erased.",
     "restoreDraft": "Restore draft",
     "repost": "Repost",
     "reply": "Reply",
@@ -98,7 +100,8 @@
     "quoteRepost": "Quote repost",
     "replyingTo": "Replying to {{author}}",
     "reposted": "Reposted",
-    "repostedBy": "{{author}} reposted"
+    "repostedBy": "{{author}} reposted",
+    "withdrawnPost": "This post was withdrawn by its author."
   },
   "feedback": {
     "copiedToClipboard": "Copied to clipboard."

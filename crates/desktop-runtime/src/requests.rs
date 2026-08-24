@@ -20,6 +20,37 @@ pub struct CreatePostRequest {
     pub attachments: Vec<CreateAttachmentRequest>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum WithdrawalReasonVisibilityRequest {
+    Public,
+    Private,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum PostWithdrawalReasonRequest {
+    AuthorRequest,
+    Correction,
+    Privacy,
+    Other,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
+pub struct WithdrawPostRequest {
+    pub topic: String,
+    pub object_id: String,
+    #[serde(default)]
+    pub channel_ref: ChannelRef,
+    pub replacement_object_id: Option<String>,
+    pub reason_visibility: WithdrawalReasonVisibilityRequest,
+    pub reason: Option<PostWithdrawalReasonRequest>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(optional_fields = nullable))]

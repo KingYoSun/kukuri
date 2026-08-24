@@ -95,6 +95,55 @@ pub struct KukuriPostEnvelopeContentV1 {
     pub repost_of: Option<RepostSourceSnapshotV1>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WithdrawalReasonVisibility {
+    Public,
+    Private,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PostWithdrawalReason {
+    AuthorRequest,
+    Correction,
+    Privacy,
+    Other,
+}
+
+/// 投稿本文とは別に同期する著者署名付き撤回事象の署名対象。
+///
+/// 撤回時刻は署名 envelope の `created_at` を正とし、非公開理由の説明本文は
+/// public/private のいずれの replica にも載せない。
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KukuriPostWithdrawalEnvelopeContentV1 {
+    pub target_object_id: EnvelopeId,
+    pub target_author: Pubkey,
+    pub topic_id: TopicId,
+    #[serde(default)]
+    pub channel_id: Option<ChannelId>,
+    pub generation: u64,
+    #[serde(default)]
+    pub replacement_object_id: Option<EnvelopeId>,
+    pub reason_visibility: WithdrawalReasonVisibility,
+    #[serde(default)]
+    pub reason: Option<PostWithdrawalReason>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PostWithdrawalV1 {
+    pub withdrawal_envelope_id: EnvelopeId,
+    pub target_object_id: EnvelopeId,
+    pub target_author: Pubkey,
+    pub topic_id: TopicId,
+    pub channel_id: Option<ChannelId>,
+    pub withdrawn_at: i64,
+    pub generation: u64,
+    pub replacement_object_id: Option<EnvelopeId>,
+    pub reason_visibility: WithdrawalReasonVisibility,
+    pub reason: Option<PostWithdrawalReason>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KukuriPostObjectV1 {
     pub object_id: EnvelopeId,
@@ -197,6 +246,15 @@ impl KukuriEnvelope {
         serde_json::from_str(self.content.as_str())
             .map(Some)
             .context("failed to parse post envelope content")
+    }
+
+    pub fn post_withdrawal_content(&self) -> Result<Option<KukuriPostWithdrawalEnvelopeContentV1>> {
+        if self.kind != "post_withdrawal" {
+            return Ok(None);
+        }
+        serde_json::from_str(self.content.as_str())
+            .map(Some)
+            .context("failed to parse post withdrawal envelope content")
     }
 
     pub fn to_post_object(&self) -> Result<Option<KukuriPostObjectV1>> {
@@ -376,4 +434,124 @@ pub fn build_repost_envelope(
         ],
         &content,
     )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn build_post_withdrawal_envelope(
+    keys: &KukuriKeys,
+    target: &KukuriEnvelope,
+    generation: u64,
+    replacement_object_id: Option<EnvelopeId>,
+    reason_visibility: WithdrawalReasonVisibility,
+    reason: Option<PostWithdrawalReason>,
+) -> Result<KukuriEnvelope> {
+    target.verify().context("invalid target post envelope")?;
+    let target_content = target
+        .post_content()?
+        .ok_or_else(|| anyhow::anyhow!("post withdrawal target must be a post"))?;
+    if keys.public_key() != target.pubkey {
+        bail!("post withdrawal signer must be the original author");
+    }
+    validate_post_withdrawal_fields(
+        &target.id,
+        generation,
+        replacement_object_id.as_ref(),
+        reason_visibility,
+        reason,
+    )?;
+
+    let content = KukuriPostWithdrawalEnvelopeContentV1 {
+        target_object_id: target.id.clone(),
+        target_author: target.pubkey.clone(),
+        topic_id: target_content.topic_id.clone(),
+        channel_id: target_content.channel_id.clone(),
+        generation,
+        replacement_object_id: replacement_object_id.clone(),
+        reason_visibility,
+        reason,
+    };
+    let mut tags = vec![
+        vec!["topic".into(), target_content.topic_id.as_str().to_string()],
+        vec!["object".into(), "post_withdrawal".into()],
+        vec!["target".into(), target.id.as_str().to_string()],
+        vec!["target_author".into(), target.pubkey.as_str().to_string()],
+        vec!["generation".into(), generation.to_string()],
+    ];
+    if let Some(channel_id) = target_content.channel_id {
+        tags.push(vec!["channel".into(), channel_id.as_str().to_string()]);
+    }
+    if let Some(replacement) = replacement_object_id {
+        tags.push(vec!["replacement".into(), replacement.as_str().to_string()]);
+    }
+    crate::sign_envelope_json(keys, "post_withdrawal", tags, &content)
+}
+
+pub fn verify_post_withdrawal(
+    withdrawal: &KukuriEnvelope,
+    target: &KukuriEnvelope,
+) -> Result<PostWithdrawalV1> {
+    withdrawal
+        .verify()
+        .context("invalid post withdrawal envelope")?;
+    target.verify().context("invalid target post envelope")?;
+    let content = withdrawal
+        .post_withdrawal_content()?
+        .ok_or_else(|| anyhow::anyhow!("expected post withdrawal envelope"))?;
+    let target_content = target
+        .post_content()?
+        .ok_or_else(|| anyhow::anyhow!("post withdrawal target must be a post"))?;
+    if withdrawal.pubkey != target.pubkey || content.target_author != target.pubkey {
+        bail!("post withdrawal signer must be the original author");
+    }
+    if content.target_object_id != target.id {
+        bail!("post withdrawal target object does not match the original envelope");
+    }
+    if content.topic_id != target_content.topic_id
+        || content.channel_id != target_content.channel_id
+    {
+        bail!("post withdrawal scope does not match the original post");
+    }
+    validate_post_withdrawal_fields(
+        &content.target_object_id,
+        content.generation,
+        content.replacement_object_id.as_ref(),
+        content.reason_visibility,
+        content.reason,
+    )?;
+    Ok(PostWithdrawalV1 {
+        withdrawal_envelope_id: withdrawal.id.clone(),
+        target_object_id: content.target_object_id,
+        target_author: content.target_author,
+        topic_id: content.topic_id,
+        channel_id: content.channel_id,
+        withdrawn_at: withdrawal.created_at,
+        generation: content.generation,
+        replacement_object_id: content.replacement_object_id,
+        reason_visibility: content.reason_visibility,
+        reason: content.reason,
+    })
+}
+
+fn validate_post_withdrawal_fields(
+    target_object_id: &EnvelopeId,
+    generation: u64,
+    replacement_object_id: Option<&EnvelopeId>,
+    reason_visibility: WithdrawalReasonVisibility,
+    reason: Option<PostWithdrawalReason>,
+) -> Result<()> {
+    if generation == 0 {
+        bail!("post withdrawal generation must be greater than zero");
+    }
+    if replacement_object_id == Some(target_object_id) {
+        bail!("post withdrawal replacement must differ from the target");
+    }
+    match (reason_visibility, reason) {
+        (WithdrawalReasonVisibility::Public, None) => {
+            bail!("public post withdrawal requires a reason code")
+        }
+        (WithdrawalReasonVisibility::Private, Some(_)) => {
+            bail!("private withdrawal reason must not be replicated")
+        }
+        _ => Ok(()),
+    }
 }

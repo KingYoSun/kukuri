@@ -111,6 +111,11 @@ fn readiness_complete_static_config_has_unknown_runtime_checks() {
     );
     assert_check(
         &report,
+        "blob_cache_legal_eviction_ready",
+        ReadinessStatus::Pass,
+    );
+    assert_check(
+        &report,
         "known_csam_credential_secret_configured",
         ReadinessStatus::Pass,
     );
@@ -407,6 +412,21 @@ fn readiness_fails_when_permanent_blob_storage_is_enabled() {
     assert_check(
         &report,
         "permanent_blob_storage_disabled",
+        ReadinessStatus::Fail,
+    );
+}
+
+#[test]
+fn readiness_fails_closed_when_blob_cache_has_no_legal_eviction_backend() {
+    let yaml = format!(
+        "{}features:\n  blob_cache: true\n",
+        config_with_safety(complete_safety())
+    );
+    let resolved = load_and_validate(&yaml).unwrap();
+    let report = evaluate_public_node_readiness(&resolved, "public-node");
+    assert_check(
+        &report,
+        "blob_cache_legal_eviction_ready",
         ReadinessStatus::Fail,
     );
 }

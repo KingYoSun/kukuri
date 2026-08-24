@@ -102,6 +102,7 @@ export type DesktopShellPrimarySurfaceProps = {
     asset: Parameters<DesktopApi['bookmarkCustomReaction']>[0]
   ) => Promise<void>;
   handleToggleBookmarkedPost: (post: PostView) => Promise<void>;
+  handleWithdrawPost: (post: PostView) => Promise<void>;
   handleActivateReference: (reference: InternalSmartReference) => Promise<void>;
   handleCopyInternalLink: (link: string) => void;
   handleJoinLiveSession: (sessionId: string) => Promise<void>;
@@ -147,6 +148,7 @@ export function DesktopShellPrimarySurface({
   handleToggleReaction,
   handleBookmarkCustomReaction,
   handleToggleBookmarkedPost,
+  handleWithdrawPost,
   handleActivateReference,
   handleCopyInternalLink,
   handleJoinLiveSession,
@@ -405,6 +407,7 @@ export function DesktopShellPrimarySurface({
                   showBookmarkAction={true}
                   bookmarkedPostIds={bookmarkedPostIds}
                   onToggleBookmark={(post) => void handleToggleBookmarkedPost(post)}
+                  onWithdraw={(post) => void handleWithdrawPost(post)}
                   onActivateReference={(reference) => void handleActivateReference(reference)}
                   onCopyPostLink={handleCopyInternalLink}
                   hasMore={activeTimelineHasMore}
@@ -442,6 +445,7 @@ export function DesktopShellPrimarySurface({
                   showBookmarkAction={true}
                   bookmarkedPostIds={bookmarkedPostIds}
                   onToggleBookmark={(post) => void handleToggleBookmarkedPost(post)}
+                  onWithdraw={(post) => void handleWithdrawPost(post)}
                   onActivateReference={(reference) => void handleActivateReference(reference)}
                   onCopyPostLink={handleCopyInternalLink}
                   onSubmitReport={submitReport}

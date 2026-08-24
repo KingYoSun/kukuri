@@ -1,5 +1,90 @@
 use super::*;
 
+fn scrub_withdrawn_header(mut header: CanonicalPostHeader) -> CanonicalPostHeader {
+    header.payload_ref = PayloadRef::InlineText {
+        text: String::new(),
+    };
+    header.attachments.clear();
+    header.media_manifest_refs.clear();
+    header.repost_of = None;
+    header
+}
+
+async fn hydrate_post_withdrawal_from_record(
+    docs_sync: &dyn DocsSync,
+    projection_store: &dyn ProjectionStore,
+    replica: &ReplicaId,
+    record: DocRecord,
+) -> Result<bool> {
+    let envelope: KukuriEnvelope = serde_json::from_slice(&record.value)?;
+    let Some(content) = envelope.post_withdrawal_content()? else {
+        return Ok(false);
+    };
+    let target_envelope_key = stable_key(
+        "objects",
+        &format!("{}/envelope", content.target_object_id.as_str()),
+    );
+    let Some(target_record) = docs_sync
+        .query_replica(replica, DocQuery::Exact(target_envelope_key))
+        .await?
+        .into_iter()
+        .next()
+    else {
+        return Ok(false);
+    };
+    let target: KukuriEnvelope = serde_json::from_slice(&target_record.value)?;
+    let withdrawal = verify_post_withdrawal(&envelope, &target)?;
+    projection_store
+        .put_post_withdrawal(post_withdrawal_row(withdrawal, replica))
+        .await?;
+
+    let target_state_key = stable_key(
+        "objects",
+        &format!("{}/state", content.target_object_id.as_str()),
+    );
+    if let Some(state_record) = docs_sync
+        .query_replica(replica, DocQuery::Exact(target_state_key))
+        .await?
+        .into_iter()
+        .next()
+    {
+        let header: CanonicalPostHeader = serde_json::from_slice(&state_record.value)?;
+        projection_store
+            .put_object_projection(projection_row_from_header(
+                &scrub_withdrawn_header(header),
+                Some(String::new()),
+                replica,
+            ))
+            .await?;
+    }
+    Ok(true)
+}
+
+pub(crate) async fn hydrate_post_withdrawals_from_replica(
+    docs_sync: &dyn DocsSync,
+    projection_store: &dyn ProjectionStore,
+    replica: &ReplicaId,
+    policy: DocFetchPolicy,
+) -> Result<usize> {
+    let records = query_replica_with_fetch_policy(
+        docs_sync,
+        replica,
+        DocQuery::Prefix("withdrawals/".into()),
+        policy,
+    )
+    .await?;
+    let mut hydrated = 0usize;
+    for record in records {
+        if record.key.ends_with("/state")
+            && hydrate_post_withdrawal_from_record(docs_sync, projection_store, replica, record)
+                .await?
+        {
+            hydrated += 1;
+        }
+    }
+    Ok(hydrated)
+}
+
 pub(crate) async fn hydrate_object_projection_from_replica(
     docs_sync: &dyn DocsSync,
     blob_service: &dyn BlobService,
@@ -21,7 +106,21 @@ pub(crate) async fn hydrate_object_projection_from_replica(
         if !record.key.ends_with("/state") {
             continue;
         }
-        let header: CanonicalPostHeader = serde_json::from_slice(&record.value)?;
+        let mut header: CanonicalPostHeader = serde_json::from_slice(&record.value)?;
+        if projection_store
+            .get_post_withdrawal(&header.object_id)
+            .await?
+            .is_some()
+        {
+            header = scrub_withdrawn_header(header);
+            projections.push(projection_row_from_header(
+                &header,
+                Some(String::new()),
+                replica,
+            ));
+            hydrated += 1;
+            continue;
+        }
         let content = match &header.payload_ref {
             PayloadRef::InlineText { text } => Some(text.clone()),
             PayloadRef::BlobText { hash, .. } => {
@@ -54,7 +153,22 @@ pub(crate) async fn hydrate_object_projection_from_record(
     replica: &ReplicaId,
     record: DocRecord,
 ) -> Result<bool> {
-    let header: CanonicalPostHeader = serde_json::from_slice(&record.value)?;
+    let mut header: CanonicalPostHeader = serde_json::from_slice(&record.value)?;
+    if projection_store
+        .get_post_withdrawal(&header.object_id)
+        .await?
+        .is_some()
+    {
+        header = scrub_withdrawn_header(header);
+        projection_store
+            .put_object_projection(projection_row_from_header(
+                &header,
+                Some(String::new()),
+                replica,
+            ))
+            .await?;
+        return Ok(true);
+    }
     let content = match &header.payload_ref {
         PayloadRef::InlineText { text } => Some(text.clone()),
         PayloadRef::BlobText { hash, .. } => {
@@ -197,6 +311,8 @@ pub(crate) async fn hydrate_subscription_state(
     let docs_sync = services.docs_sync.as_ref();
     let blob_service = services.blob_service.as_ref();
     let projection_store = services.projection_store.as_ref();
+    let withdrawal_count =
+        hydrate_post_withdrawals_from_replica(docs_sync, projection_store, replica, policy).await?;
     let post_count = hydrate_object_projection_from_replica(
         docs_sync,
         blob_service,
@@ -225,7 +341,7 @@ pub(crate) async fn hydrate_subscription_state(
         policy,
     )
     .await?;
-    Ok(post_count + reaction_count + live_count + game_count)
+    Ok(withdrawal_count + post_count + reaction_count + live_count + game_count)
 }
 
 pub(crate) async fn hydrate_live_sessions_from_replica(
@@ -538,6 +654,27 @@ pub(crate) async fn hydrate_subscription_hint(
         GossipHint::TopicObjectsChanged { objects, .. } => {
             let mut hydrated = 0usize;
             for object in objects {
+                if object.object_kind == "post_withdrawal" {
+                    let key = stable_key(
+                        "withdrawals",
+                        &format!("{}/state", object.object_id.as_str()),
+                    );
+                    if let Some(record) = docs_sync
+                        .query_replica(replica, DocQuery::Exact(key))
+                        .await?
+                        .into_iter()
+                        .next()
+                    {
+                        hydrated += hydrate_post_withdrawal_from_record(
+                            docs_sync,
+                            projection_store,
+                            replica,
+                            record,
+                        )
+                        .await? as usize;
+                    }
+                    continue;
+                }
                 if object.object_kind == "reaction" {
                     hydrated += hydrate_reaction_cache_for_target(
                         docs_sync,

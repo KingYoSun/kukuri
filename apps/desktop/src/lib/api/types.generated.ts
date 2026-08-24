@@ -49,7 +49,9 @@ export type ContentObservationView = { node_base_url: string, capability: string
 
 export type ContentProvenanceView = { canonical_source: string, observed_via: Array<ContentObservationView>, };
 
-export type PostView = { object_id: string, envelope_id: string, author_pubkey: string, author_name?: string | null, author_display_name?: string | null, author_picture?: string | null, author_picture_asset?: ProfileAssetView | null, following: boolean, followed_by: boolean, mutual: boolean, friend_of_friend: boolean, provenance?: ContentProvenanceView | null, content: string, content_status: BlobViewStatus, attachments: Array<AttachmentView>, created_at: number, reply_to?: string | null, reply_preview?: ReplyPreviewView | null, root_id?: string | null, object_kind: string, published_topic_id?: string | null, origin_topic_id?: string | null, repost_of?: RepostSourceView | null, repost_commentary?: string | null, is_threadable: boolean, channel_id?: string | null, audience_label: string, reaction_summary?: Array<ReactionSummaryView> | null, my_reactions?: Array<ReactionKeyView> | null, };
+export type PostWithdrawalView = { withdrawn_at: number, replacement_object_id?: string | null, reason_visibility: string, reason?: string | null, };
+
+export type PostView = { object_id: string, envelope_id: string, author_pubkey: string, author_name?: string | null, author_display_name?: string | null, author_picture?: string | null, author_picture_asset?: ProfileAssetView | null, following: boolean, followed_by: boolean, mutual: boolean, friend_of_friend: boolean, provenance?: ContentProvenanceView | null, withdrawal?: PostWithdrawalView | null, content: string, content_status: BlobViewStatus, attachments: Array<AttachmentView>, created_at: number, reply_to?: string | null, reply_preview?: ReplyPreviewView | null, root_id?: string | null, object_kind: string, published_topic_id?: string | null, origin_topic_id?: string | null, repost_of?: RepostSourceView | null, repost_commentary?: string | null, is_threadable: boolean, channel_id?: string | null, audience_label: string, reaction_summary?: Array<ReactionSummaryView> | null, my_reactions?: Array<ReactionKeyView> | null, };
 
 export type BookmarkedPostView = { bookmarked_at: number, post: PostView, };
 
@@ -320,6 +322,12 @@ disputed_risk_signal_id?: string | null, };
 export type RuntimeEvent = { "type": "notification_status_changed" } | { "type": "sync_status_changed", sync_status?: SyncStatus | null, community_node_statuses?: Array<CommunityNodeNodeStatus> | null, };
 
 export type CreatePostRequest = { topic: string, content: string, reply_to?: string | null, channel_ref: ChannelRef, attachments: Array<CreateAttachmentRequest>, };
+
+export type WithdrawalReasonVisibilityRequest = "public" | "private";
+
+export type PostWithdrawalReasonRequest = "author_request" | "correction" | "privacy" | "other";
+
+export type WithdrawPostRequest = { topic: string, object_id: string, channel_ref: ChannelRef, replacement_object_id?: string | null, reason_visibility: WithdrawalReasonVisibilityRequest, reason?: PostWithdrawalReasonRequest | null, };
 
 export type CreateRepostRequest = { topic: string, source_topic: string, source_object_id: string, commentary?: string | null, };
 
