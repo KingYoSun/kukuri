@@ -73,17 +73,17 @@
       "response_mismatch": "ノードの応答が別の利用者を対象にしていたため、内容を採用しませんでした。"
     },
     "trust": {
-      "title": "Trust advisory",
+      "title": "信頼評価情報",
       "continuousNotice": "固定的な危険ラベルを付けず、連続値とその根拠を表示します。",
-      "trust": "合成 trust",
-      "absolute": "absolute 成分",
-      "relative": "relative 成分",
-      "weight": "absolute の重み",
-      "noBasis": "この advisory には根拠項目がありません。"
+      "trust": "総合信頼度",
+      "absolute": "絶対成分",
+      "relative": "相対成分",
+      "weight": "絶対成分の重み",
+      "noBasis": "この信頼評価情報には根拠項目がありません。"
     },
     "relation": {
-      "title": "Relation proximity",
-      "score": "連続値の proximity: {{score}}"
+      "title": "関係の近さ",
+      "score": "連続値の近さ: {{score}}"
     },
     "neighbors": {
       "title": "近いユーザー",
@@ -127,9 +127,9 @@
     "loading": "フォローとミュートを読み込み中…",
     "mutedBadge": "ミュート中",
     "tabs": {
-      "followed": "Followed",
-      "following": "Following",
-      "muted": "Muted"
+      "followed": "フォロワー",
+      "following": "フォロー中",
+      "muted": "ミュート中"
     },
     "tabsLabel": "ソーシャル一覧",
     "title": "フォローとミュート"

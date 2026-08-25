@@ -1,5 +1,6 @@
 import { Bookmark, List } from 'lucide-react';
 import { useRef, type KeyboardEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -22,6 +23,7 @@ export function TimelineViewIconTabs({
   items,
   onSelect,
 }: TimelineViewIconTabsProps) {
+  const { t } = useTranslation('shell');
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const moveSelection = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
@@ -44,7 +46,11 @@ export function TimelineViewIconTabs({
 
   return (
     <TooltipProvider delayDuration={180}>
-      <div className='shell-column-view-tabs' role='tablist' aria-label='Timeline views'>
+      <div
+        className='shell-column-view-tabs'
+        role='tablist'
+        aria-label={t('workspace.timelineViews')}
+      >
         {items.map((item, index) => {
           const active = activeView === item.id;
           return (

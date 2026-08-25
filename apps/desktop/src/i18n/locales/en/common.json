@@ -41,7 +41,9 @@
     "report": "Report"
   },
   "composer": {
+    "actionTo": "{{action}} to {{destination}}",
     "clearQuoteRepost": "Clear quote repost",
+    "draftPreviewAlt": "draft preview {{name}}",
     "quoteReposting": "Quote reposting",
     "clearReply": "Clear reply",
     "replying": "Replying",
@@ -127,6 +129,7 @@
     "noBio": "No profile bio published yet.",
     "noDescription": "no description",
     "noEvents": "no events",
+    "loadingMore": "Loading more…",
     "none": "none",
     "selectAuthor": "Select an author to inspect profile and relationship.",
     "unknown": "unknown"
@@ -150,11 +153,14 @@
     "viewers": "viewers"
   },
   "media": {
+    "closeDialog": "Close image viewer",
     "imageAlt": "image attachment",
     "reportVideo": "Report video attachment",
     "imageReady": "image ready",
+    "nextImage": "Next image",
     "playableVideo": "playable video",
     "posterReady": "poster ready",
+    "previousImage": "Previous image",
     "syncingImage": "syncing image",
     "syncingPoster": "syncing poster",
     "unsupportedOnClient": "unsupported on this client",

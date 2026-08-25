@@ -10,13 +10,15 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function openComposerDialog(page: Page) {
-  const composer = page.getByPlaceholder(/Write a post|投稿を書く/);
+  const composer = page.getByPlaceholder(/Write a post|投稿を書く|写一条帖子/);
   if (!(await composer.isVisible().catch(() => false))) {
     const englishTimeline = activeColumn(page, 'Timeline');
     if (await englishTimeline.isVisible().catch(() => false)) {
       await englishTimeline.getByRole('button', { name: /^Publish to / }).click();
     } else {
-      await page.getByRole('button', { name: /^(Publish|投稿) to / }).last().click();
+      await page
+        .locator('[data-column-id][aria-current="true"] .shell-column-primary-action')
+        .click();
     }
   }
   await expect(composer).toBeVisible();

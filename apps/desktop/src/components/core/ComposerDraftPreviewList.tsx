@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 import { Button } from '@/components/ui/button';
 
 import { type ComposerDraftMediaView } from './types';
@@ -8,6 +10,8 @@ type ComposerDraftPreviewListProps = {
 };
 
 export function ComposerDraftPreviewList({ items, onRemove }: ComposerDraftPreviewListProps) {
+  const { t } = useTranslation('common');
+
   if (items.length === 0) {
     return null;
   }
@@ -18,7 +22,11 @@ export function ComposerDraftPreviewList({ items, onRemove }: ComposerDraftPrevi
         <li key={item.id} className='draft-attachment-item'>
           <div className='draft-attachment-content'>
             <div className='draft-preview-frame'>
-              <img className='draft-preview-image' src={item.previewUrl} alt={`draft preview ${item.sourceName}`} />
+              <img
+                className='draft-preview-image'
+                src={item.previewUrl}
+                alt={t('composer.draftPreviewAlt', { name: item.sourceName })}
+              />
             </div>
             <div>
               <strong>{item.sourceName}</strong>
@@ -30,7 +38,7 @@ export function ComposerDraftPreviewList({ items, onRemove }: ComposerDraftPrevi
             </div>
           </div>
           <Button variant='secondary' type='button' onClick={() => onRemove(item.id)}>
-            Remove
+            {t('actions.remove')}
           </Button>
         </li>
       ))}

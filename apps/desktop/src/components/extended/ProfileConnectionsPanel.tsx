@@ -65,7 +65,11 @@ export function ProfileConnectionsPanel({
         </Button>
       </CardHeader>
 
-      <div className='shell-workspace-tabs' role='tablist' aria-label={t('connections.tabsLabel')}>
+      <div
+        className='shell-workspace-tabs shell-profile-connections-tabs'
+        role='tablist'
+        aria-label={t('connections.tabsLabel')}
+      >
         {CONNECTION_VIEWS.map((view) => (
           <button
             key={view}

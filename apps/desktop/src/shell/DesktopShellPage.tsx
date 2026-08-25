@@ -705,13 +705,13 @@ export function DesktopShellPage({
     <>
       <div className='shell-phase1' data-workspace-layout='column'>
         <a className='shell-skip-link' href={`#${SHELL_WORKSPACE_ID}`}>
-          Skip to workspace
+          {t('shell:workspace.skipToWorkspace')}
         </a>
         <main
           id={SHELL_WORKSPACE_ID}
           className='shell-column-workspace-main'
           tabIndex={-1}
-          aria-label='Primary workspace'
+          aria-label={t('shell:workspace.primaryLabel')}
         >
           {workspace}
         </main>

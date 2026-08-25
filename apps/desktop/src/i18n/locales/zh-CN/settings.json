@@ -204,7 +204,7 @@
     "peerTicket": "Peer 票据",
     "peerTicketPlaceholder": "nodeid@127.0.0.1:7777",
     "peerTickets": "Peer 票据",
-    "summary": "{{status}} / peers: {{count}}",
+    "summary": "{{status}} / 对等节点: {{count}}",
     "summaryDetailFallback": "尚无主题诊断",
     "title": "同步状态",
     "topicConnectivity": "主题连接详情",
@@ -269,7 +269,7 @@
     "noSavedAssets": "还没有已保存的回应。"
   },
   "release": {
-    "title": "Release",
+    "title": "发布",
     "summary": "预览频道、更新、诊断和本地通知设置。",
     "update": {
       "title": "更新",

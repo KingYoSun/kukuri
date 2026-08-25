@@ -170,18 +170,18 @@ export function DesktopShellMessagesSurface({
         <Card className='shell-workspace-card'>
         <div className='panel-header'>
           <div>
-            <h3>Messages</h3>
-            <small>{formatCount(directMessages.length)} conversations</small>
+            <h3>{t('shell:messages.title')}</h3>
+            <small>{t('shell:messages.conversationCount', { count: directMessages.length })}</small>
           </div>
           {selectedDirectMessagePeerPubkey ? (
             <Button variant='secondary' type='button' onClick={() => void openDirectMessageList('replace')}>
-              All
+              {t('shell:messages.all')}
             </Button>
           ) : null}
         </div>
         {directMessageError ? <Notice tone='destructive'>{directMessageError}</Notice> : null}
         {directMessages.length === 0 ? (
-          <p className='empty'>No direct messages yet.</p>
+          <p className='empty'>{t('shell:messages.empty')}</p>
         ) : (
           <ul className='post-list'>
             {directMessages.map((conversation) => {
@@ -219,7 +219,9 @@ export function DesktopShellMessagesSurface({
                     </div>
                     <div className='post-body'>
                       <strong className='post-title'>
-                        Latest: {conversation.last_message_preview ?? t('common:fallbacks.none')}
+                        {t('shell:messages.latest', {
+                          preview: conversation.last_message_preview ?? t('common:fallbacks.none'),
+                        })}
                       </strong>
                     </div>
                     <div className='post-actions'>
@@ -228,7 +230,7 @@ export function DesktopShellMessagesSurface({
                         type='button'
                         onClick={() => void openDirectMessagePane(conversation.peer_pubkey)}
                       >
-                        Open
+                        {t('shell:messages.open')}
                       </Button>
                     </div>
                   </article>
@@ -267,8 +269,10 @@ export function DesktopShellMessagesSurface({
                 {conversationStatus ? (
                   <span className='relationship-badge relationship-badge-direct'>
                     {conversationStatus.send_enabled
-                      ? `peers ${formatCount(conversationStatus.peer_count)}`
-                      : 'send disabled'}
+                      ? t('shell:messages.peerCount', {
+                          count: formatCount(conversationStatus.peer_count),
+                        })
+                      : t('shell:messages.sendDisabled')}
                   </span>
                 ) : null}
               </div>
@@ -298,7 +302,7 @@ export function DesktopShellMessagesSurface({
 
           <Card className='shell-workspace-card'>
             {conversationTimeline.length === 0 ? (
-              <p className='empty'>No messages yet.</p>
+              <p className='empty'>{t('shell:messages.noMessages')}</p>
             ) : (
               <ul className='post-list'>
                 {conversationTimeline.map((message) => {
@@ -336,7 +340,11 @@ export function DesktopShellMessagesSurface({
                           />
                           <span>{formatLocalizedTime(message.created_at, locale)}</span>
                           <span className='reply-chip'>
-                            {message.delivered ? 'Delivered' : 'Pending'}
+                            {t(
+                              message.delivered
+                                ? 'shell:messages.delivered'
+                                : 'shell:messages.pending'
+                            )}
                           </span>
                         </div>
                         {message.text ? (
@@ -403,14 +411,14 @@ export function DesktopShellMessagesSurface({
           {activeConversation && showComposer ? <Card className='shell-workspace-card'>
             {conversationStatus && !conversationStatus.send_enabled ? (
               <Notice tone='warning'>
-                Direct message send is disabled until the relationship is mutual again.
+                {t('shell:messages.mutualRequired')}
               </Notice>
             ) : null}
             <form className='composer' onSubmit={(event) => void handleSendDirectMessage(event)}>
               <Textarea
                 value={directMessageComposer}
                 onChange={(event) => setDirectMessageComposer(event.target.value)}
-                placeholder='Write a message'
+                placeholder={t('common:composer.writeMessage')}
                 disabled={
                   directMessageSending || conversationStatus?.send_enabled === false
                 }
@@ -436,7 +444,9 @@ export function DesktopShellMessagesSurface({
               />
               <div className='topic-diagnostic topic-diagnostic-secondary'>
                 <span>
-                  pending outbox {formatCount(conversationStatus?.pending_outbox_count ?? 0)}
+                  {t('shell:messages.pendingOutbox', {
+                    count: formatCount(conversationStatus?.pending_outbox_count ?? 0),
+                  })}
                 </span>
               </div>
               <Button
@@ -445,7 +455,9 @@ export function DesktopShellMessagesSurface({
                   directMessageSending || conversationStatus?.send_enabled === false
                 }
               >
-                {directMessageSending ? 'Sending...' : 'Send'}
+                {directMessageSending
+                  ? t('shell:messages.sending')
+                  : t('common:actions.send')}
               </Button>
             </form>
           </Card> : null}

@@ -94,6 +94,13 @@
     "release": "Release and updates",
     "settings": "Settings"
   },
+  "columnState": {
+    "active": "Active",
+    "inactive": "Inactive",
+    "pinned": "Pinned",
+    "temporary": "Temporary",
+    "accessibleLabel": "{{title}} Column, Column {{position}} of {{total}}, {{span}} span, {{activity}}, {{persistence}}"
+  },
   "columnMenu": {
     "open": "Open {{title}} menu",
     "close": "Close {{title}} menu",
@@ -121,6 +128,22 @@
     "notifications": "Notifications",
     "profile": "Profile",
     "timeline": "Timeline"
+  },
+  "messages": {
+    "all": "All",
+    "conversationCount": "{{count}} conversations",
+    "delivered": "Delivered",
+    "empty": "No direct messages yet.",
+    "latest": "Latest: {{preview}}",
+    "mutualRequired": "Direct message sending is disabled until the relationship is mutual again.",
+    "noMessages": "No messages yet.",
+    "open": "Open",
+    "peerCount": "{{count}} peers",
+    "pending": "Pending",
+    "pendingOutbox": "Pending outbox: {{count}}",
+    "sendDisabled": "Sending disabled",
+    "sending": "Sending…",
+    "title": "Messages"
   },
   "notifications": {
     "context": {
@@ -196,6 +219,11 @@
   },
   "workspace": {
     "bookmarks": "Bookmarks",
+    "columnCanvas": "Column workspace",
+    "columnDrop": "Drop Column at position {{position}}",
+    "columnMoved": "Column moved to position {{position}}.",
+    "columnPage": "Go to Column {{position}} of {{total}}",
+    "columnPages": "Column pages",
     "composeTarget": "Compose Target",
     "feed": "Feed",
     "noBookmarks": "No bookmarked posts yet.",
@@ -205,6 +233,8 @@
     "savedCount": "{{count}} saved",
     "tabs": "Workspaces",
     "timelineViews": "Timeline views",
+    "primaryLabel": "Primary workspace",
+    "skipToWorkspace": "Skip to workspace",
     "communityNodeUnavailableAction": "Open Community Node Settings",
     "communityNodeUnavailableBody": "A configured community node is currently unavailable. Startup continues, and direct P2P connections remain available.",
     "communityNodeUnavailableTitle": "Community node unavailable",

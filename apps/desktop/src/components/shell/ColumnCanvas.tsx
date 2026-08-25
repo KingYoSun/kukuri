@@ -7,6 +7,7 @@ import {
   type DragEvent,
   type ReactNode,
 } from 'react';
+import { useTranslation } from 'react-i18next';
 import { prefersReducedMotion } from '@/lib/reducedMotion';
 import { columnCanvasEdgeScrollDirection } from './columnCanvasGeometry';
 import { nearestColumnToViewportCenter } from './columnPagingGeometry';
@@ -47,11 +48,13 @@ export function ColumnCanvas({
   activeColumnId,
   children,
   columnIds = [],
-  label = 'Column workspace',
+  label,
   onActivateColumn,
   onMoveColumn,
   onVisibleColumnIdsChange,
 }: ColumnCanvasProps) {
+  const { t } = useTranslation('shell');
+  const canvasLabel = label ?? t('workspace.columnCanvas');
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const previousActiveColumnIdRef = useRef<string | null>(null);
   const autoScrollFrameRef = useRef<number | null>(null);
@@ -250,7 +253,7 @@ export function ColumnCanvas({
     <div
       ref={canvasRef}
       className='shell-column-canvas'
-      aria-label={label}
+      aria-label={canvasLabel}
       onScroll={settleMobileScroll}
       onClickCapture={(event) => {
         if (!swipeConsumedRef.current) return;
@@ -317,9 +320,7 @@ export function ColumnCanvas({
         if (!draggedColumnId || !dropTarget) return;
         event.preventDefault();
         onMoveColumn?.(draggedColumnId, dropTarget.index);
-        setAnnouncement(
-          `Column moved to position ${dropTarget.index + 1}.`
-        );
+        setAnnouncement(t('workspace.columnMoved', { position: dropTarget.index + 1 }));
         resetDrag();
       }}
       onDragEndCapture={resetDrag}
@@ -334,14 +335,14 @@ export function ColumnCanvas({
           className='shell-column-drop-indicator'
           style={{ left: `${dropTarget.left}px` }}
           role='separator'
-          aria-label={`Drop Column at position ${dropTarget.index + 1}`}
+          aria-label={t('workspace.columnDrop', { position: dropTarget.index + 1 })}
         />
       ) : null}
       <span className='sr-only' aria-live='polite'>{announcement}</span>
       {columnIds.length > 1 ? (
         <nav
           className='shell-column-page-indicator'
-          aria-label='Column pages'
+          aria-label={t('workspace.columnPages')}
           data-column-swipe-indicator
         >
           <span className='shell-column-page-count' aria-live='polite'>
@@ -352,7 +353,10 @@ export function ColumnCanvas({
               <button
                 key={columnId}
                 type='button'
-                aria-label={`Go to Column ${index + 1} of ${columnIds.length}`}
+                aria-label={t('workspace.columnPage', {
+                  position: index + 1,
+                  total: columnIds.length,
+                })}
                 aria-current={columnId === activeColumnId ? 'page' : undefined}
                 onClick={() => {
                   programmaticScrollTargetRef.current = columnId;

@@ -82,7 +82,7 @@ export function MediaViewerDialog({
             type='button'
             className='media-viewer-close'
             onClick={() => onOpenChange(false)}
-            aria-label='Close dialog'
+            aria-label={t('media.closeDialog')}
           >
             <X className='size-5' aria-hidden='true' />
           </Button>
@@ -105,7 +105,7 @@ export function MediaViewerDialog({
               type='button'
               className='media-viewer-nav media-viewer-nav-prev'
               onClick={() => moveBy(-1)}
-              aria-label='Previous image'
+              aria-label={t('media.previousImage')}
             >
               <ChevronLeft className='size-5' aria-hidden='true' />
             </Button>
@@ -145,7 +145,7 @@ export function MediaViewerDialog({
               type='button'
               className='media-viewer-nav media-viewer-nav-next'
               onClick={() => moveBy(1)}
-              aria-label='Next image'
+              aria-label={t('media.nextImage')}
             >
               <ChevronRight className='size-5' aria-hidden='true' />
             </Button>

@@ -82,7 +82,10 @@ export function ColumnComposerFooter({
         variant='primary'
         size={active ? 'default' : 'icon'}
         type='button'
-        aria-label={`${actionLabel} to ${destinationLabel}`}
+        aria-label={t('composer.actionTo', {
+          action: actionLabel,
+          destination: destinationLabel,
+        })}
         onClick={() => {
           onActivate();
           updateDraft((current) => ({ ...current, expanded: true, error: null }));
