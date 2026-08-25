@@ -122,7 +122,6 @@ export function ColumnCanvas({
       const mobile = isMobileViewport();
       const reducedMotion = prefersReducedMotion();
       if (mobile) {
-        programmaticScrollTargetRef.current = activeColumnId;
         if (scrollSettleTimeoutRef.current !== null) {
           window.clearTimeout(scrollSettleTimeoutRef.current);
           scrollSettleTimeoutRef.current = null;

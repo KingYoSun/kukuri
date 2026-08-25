@@ -394,6 +394,17 @@ describe('ColumnCanvas', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Go to Column 3 of 3' }));
     expect(onActivateColumn).toHaveBeenLastCalledWith('profile', true);
+
+    // A delayed settle from the previous page must not override a direct indicator jump.
+    fireEvent.scroll(canvas);
+    await act(async () => vi.advanceTimersByTime(120));
+    expect(onActivateColumn).toHaveBeenCalledTimes(2);
+    expect(onActivateColumn).toHaveBeenLastCalledWith('profile', true);
+
+    canvas.scrollLeft = 780;
+    fireEvent.scroll(canvas);
+    await act(async () => vi.advanceTimersByTime(120));
+    expect(onActivateColumn).toHaveBeenCalledTimes(2);
     vi.unstubAllGlobals();
     vi.useRealTimers();
   });
