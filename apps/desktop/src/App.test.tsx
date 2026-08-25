@@ -80,7 +80,7 @@ test('desktop app blocks startup until app-level legal consent is accepted', asy
   const user = userEvent.setup();
   invokeMock.mockResolvedValueOnce({
     status: 'consent_required',
-    current_bundle_version: 1,
+    current_bundle_version: 2,
     accepted_bundle_version: null,
   });
   invokeMock.mockResolvedValueOnce({
@@ -103,10 +103,45 @@ test('desktop app blocks startup until app-level legal consent is accepted', asy
   await user.click(screen.getByRole('button', { name: 'Accept and continue' }));
 
   await waitFor(() => {
-    expect(invokeMock).toHaveBeenCalledWith('accept_app_consents', { bundleVersion: 1 });
+    expect(invokeMock).toHaveBeenCalledWith('accept_app_consents', { bundleVersion: 2 });
   });
   expect(await screen.findByText('kukuri could not open the local database.')).toBeInTheDocument();
   expect(screen.getByDisplayValue(/runtime starts after consent/)).toBeInTheDocument();
+});
+
+test('desktop app requires renewed consent for an older legal bundle', async () => {
+  const user = userEvent.setup();
+  invokeMock.mockResolvedValueOnce({
+    status: 'consent_required',
+    current_bundle_version: 2,
+    accepted_bundle_version: 1,
+  });
+  invokeMock.mockResolvedValueOnce({
+    status: 'failed',
+    error: {
+      kind: 'unknown',
+      message: 'kukuri could not open the local app database.',
+      detail: 'runtime starts only after renewed consent',
+      db_path: null,
+    },
+  });
+
+  render(<App />);
+
+  expect(
+    await screen.findByText(
+      'The terms of service or privacy policy have been updated. Please review and accept again to continue.'
+    )
+  ).toBeInTheDocument();
+  expect(screen.getByText('v2')).toBeInTheDocument();
+  expect(screen.queryByTestId('control-center-trigger')).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'Accept and continue' }));
+
+  await waitFor(() => {
+    expect(invokeMock).toHaveBeenCalledWith('accept_app_consents', { bundleVersion: 2 });
+  });
+  expect(await screen.findByText('kukuri could not open the local database.')).toBeInTheDocument();
 });
 
 test('desktop app renders a startup error when the local database cannot be opened', async () => {

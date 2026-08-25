@@ -253,6 +253,86 @@ fn generated_docs_contain_legal_disclaimer() {
     }
 }
 
+#[test]
+fn terms_limit_content_permissions_to_enabled_capabilities() {
+    let yaml = base_config(
+        "  community_index: true\n  moderation: true\n  blob_cache: true\n  private_message_storage: true\n",
+        true,
+    );
+    let resolved = load_and_validate(&yaml).unwrap();
+    let terms = doc(&generate_all(&resolved), "terms.md");
+
+    for enabled_clause in [
+        "索引・検索・発見・おすすめ",
+        "安全性走査と走査に必要な一時取得",
+        "添付 blob の一時 cache",
+        "暗号化済み private message の一時保管",
+    ] {
+        assert!(
+            terms.contains(enabled_clause),
+            "terms must contain `{enabled_clause}`"
+        );
+    }
+    for required_limit in [
+        "本ノードの authority scope",
+        "公開 topic に転用",
+        "広告・宣伝・AI 学習",
+        "既に受信 peer が取得した copy",
+    ] {
+        assert!(
+            terms.contains(required_limit),
+            "terms must contain `{required_limit}`"
+        );
+    }
+}
+
+#[test]
+fn relay_only_terms_do_not_grant_index_scan_cache_or_private_storage_permissions() {
+    let yaml = base_config(
+        "  iroh_relay: true\n  traffic_relay_fallback: true\n  community_index: false\n  moderation: false\n  blob_cache: false\n  private_message_storage: false\n",
+        true,
+    );
+    let resolved = load_and_validate(&yaml).unwrap();
+    let terms = doc(&generate_all(&resolved), "terms.md");
+
+    assert!(terms.contains("暗号化済み通信の経路上の一時的な伝送"));
+    for disabled_clause in [
+        "索引・検索・発見・おすすめのために",
+        "安全性走査と走査に必要な一時取得のために",
+        "添付 blob の一時 cache のために",
+        "暗号化済み private message の一時保管のために",
+    ] {
+        assert!(
+            !terms.contains(disabled_clause),
+            "relay-only terms must not contain `{disabled_clause}`"
+        );
+    }
+}
+
+#[test]
+fn terms_content_license_section_matches_golden() {
+    let yaml = base_config(
+        "  community_index: true\n  moderation: true\n  blob_cache: true\n  private_message_storage: true\n",
+        true,
+    );
+    let resolved = load_and_validate(&yaml).unwrap();
+    let terms = doc(&generate_all(&resolved), "terms.md");
+    let section = terms
+        .split("## 第3条（本ノードへの限定的な利用許諾）\n\n")
+        .nth(1)
+        .and_then(|rest| rest.split("\n## 第4条（共有範囲の維持）").next())
+        .expect("content-license section");
+    let expected = concat!(
+        "ユーザーは、本ノードの運営者に対し、ユーザーが選択した共有範囲と本ノードの authority scope の双方に含まれるコンテンツについて、次の有効な capability を提供するために必要な範囲に限り、非独占的かつ無償の利用を許諾します。著作権その他の権利はユーザーから移転しません。\n\n",
+        "- サポート対象の公開 topic に含まれる投稿の索引・検索・発見・おすすめのために、本文とメタデータを取得、複製、保存、解析、表示すること。\n",
+        "- 本ノードの authority scope 内の安全性走査と走査に必要な一時取得のために、本文、メタデータ、添付を取得、複製、解析すること。\n",
+        "- 添付 blob の一時 cache のために、対象 blob を取得、複製、一時保存、配信すること。\n",
+        "- 指定された受信者への暗号化済み private message の一時保管のために、暗号文を取得、複製、一時保存、配信すること。\n",
+        "- 上記の許諾は、各 capability が有効であり、本ノードが対象コンテンツへ実際に関与する期間と範囲に限られます。無効な capability、関与していないコンテンツ、他 node、kukuri network 全体には及びません。\n",
+    );
+    assert_eq!(section, expected);
+}
+
 fn doc(files: &[kukuri_cn_operator::GeneratedFile], name: &str) -> String {
     files
         .iter()

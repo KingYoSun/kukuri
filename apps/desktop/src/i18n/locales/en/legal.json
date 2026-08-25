@@ -40,6 +40,44 @@
           ]
         },
         {
+          "heading": "Ownership of your content",
+          "paragraphs": [
+            "Copyright and other rights in text, images, audio, video, models, attachments, and other content you post or share remain, as a rule, with you or the lawful rightsholder.",
+            "Sharing content through kukuri does not by itself transfer those rights to the developers, the default community node, or any other Community Node."
+          ]
+        },
+        {
+          "heading": "Your rights and permissions",
+          "paragraphs": [
+            "You represent that you own the necessary rights in any work, likeness, name, audio, video, 3D model, attachment, or other content you post or share, or have permission from the lawful rightsholder for the sharing and technical processing described here.",
+            "When quoting, reposting, editing, or combining third-party content, you are responsible for complying with applicable law and license terms."
+          ]
+        },
+        {
+          "heading": "Limited technical license",
+          "paragraphs": [
+            "To make communication, display, and synchronization work within the audience you select, you grant the kukuri client and receiving peers in that audience a non-exclusive, royalty-free license only to receive, copy, store locally, display, and synchronize the content. This is not a transfer of ownership.",
+            "A public-topic post is shared with peers that obtain that topic. Private channels and DMs are limited to their designated recipients and may not be repurposed for a public topic or an unrestricted audience.",
+            "Docs handle text and metadata, and blobs handle attachments, within the selected audience. Hints only announce updates and do not expand the audience or license. Connectivity features only assist connections and do not grant rights to use content for another purpose.",
+            "Any license to a Community Node is limited by that node's per-node terms, capabilities that are actually enabled, authority scope, and content in which that node is involved.",
+            "No lasting or comprehensive network-wide rights are granted to disabled capabilities, uninvolved nodes, other nodes, the default node, or the kukuri project."
+          ]
+        },
+        {
+          "heading": "After withdrawal",
+          "paragraphs": [
+            "A compatible client or node that recognizes a valid author withdrawal or node-local transmission prevention stops future display, indexing, search, discovery, recommendation, synchronization, retrieval, caching, or delivery within its applicable scope. Records may be retained only where required by law and with their subject, purpose, and duration limited.",
+            "Copies already obtained by receiving peers or third-party nodes before withdrawal cannot be guaranteed to be remotely recovered or erased. Withdrawal does not mean immediate, complete deletion from the entire network."
+          ]
+        },
+        {
+          "heading": "Uses not licensed",
+          "paragraphs": [
+            "The limited license does not include the right to use content for advertising, promotion, generative-AI training, machine-learning model training, or another independent secondary purpose.",
+            "It does not permit bypassing private-channel or DM access controls, expanding the selected audience, or repurposing content for a different public use."
+          ]
+        },
+        {
           "heading": "Disclaimer for developers and node operators",
           "paragraphs": [
             "The kukuri developers provide software that runs on a P2P foundation and are not responsible for the network as a whole, other users, or the activities of any community node.",

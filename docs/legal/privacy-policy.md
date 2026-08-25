@@ -1,7 +1,7 @@
 # kukuri プライバシーポリシー（ドラフト）
 
-Last updated: 2026-06-25
-Legal bundle version: 1
+Last updated: 2026-08-25
+Legal bundle version: 2
 
 > これはドラフトであり、法的助言ではありません。最終的な運用上・法的判断は、適切な専門家・規制当局への相談のもとで行ってください。
 > 本文書は、kukuri デスクトップアプリ（client）自体に対する app-level のプライバシーポリシーです。各 community node が個別に提示するプライバシーポリシー（per-node consent）とは別建てです。
