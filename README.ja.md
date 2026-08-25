@@ -1,132 +1,147 @@
-日本語 | [English](./README.md)
+[English](./README.md) | 日本語
 
 # kukuri
 
-kukuri は topic-first な P2P social app / protocol です。Nostr 由来の署名付き identity と envelope の利点は活かしつつ、内部の同期モデルは relay-first ではなく、`docs`、`blobs`、`hints`、connectivity を分離した構成を中核に据えています。
+kukuri は、興味のある話題から人やコミュニティにつながる、トピック中心の P2P ソーシャルアプリです。公開の会話に参加したり、同じ話題の中で小さな非公開チャンネルへ移ったりしながら、自分の端末を基点にアイデンティティを保持できます。
 
-## Builder Preview
+![トピックのタイムラインと返信スレッドを表示した kukuri デスクトッププレビュー](./docs/assets/readme/kukuri-desktop-preview.png)
 
-- 現在の preview 配布対象は Windows installer です。[最新の GitHub Release](https://github.com/KingYoSun/kukuri/releases/latest) から取得します。
-- Linux は現時点では source-run を前提にします。
-- preview 更新は `Settings -> Release` の updater から `latest-preview.json` を参照します。
-- data safety、release runbook、third-party notices は `Settings -> Release` から参照できます。
-- preview build が未署名の場合は、GitHub Release notes に SmartScreen warning が想定内であることを明記します。
-- preview の主線は `起動 -> preloaded community node が ready になる -> starter topic -> post/reply -> private channel -> feedback` です。
-- quickstart: [docs/runbooks/mvp-user-quickstart.md](./docs/runbooks/mvp-user-quickstart.md)
-- troubleshooting: [docs/runbooks/mvp-troubleshooting.md](./docs/runbooks/mvp-troubleshooting.md)
+## Builder Preview をダウンロードする
 
-## 3 分で試すこと
+> [!IMPORTANT]
+> 現在の kukuri は、テスター向けの **Builder Preview** です。一般公開の安定版ではありません。
 
-1. アプリを起動し、preloaded community node が `ready` になるまで待ちます。
-2. `kukuri:topic:demo`, `kukuri:topic:iroh`, `kukuri:topic:nostr`, `kukuri:topic:operators` の starter topic を開きます。
-3. public post または thread reply を 1 本試します。
-4. 同じ topic 配下で private channel を作るか参加します。
-5. diagnostics を確認し、GitHub に feedback を送ります。
+**[最新の Windows プレビューをダウンロード](https://github.com/KingYoSun/kukuri/releases/latest)**
 
-diagnostics は `Settings -> Release` からコピーまたは書き出しできます。既定のレポートには secret key、認証 token、private channel secret、invite/share token、DM 本文、ローカル DB path を含めません。
+| 環境 | 現在の対応状況 |
+| --- | --- |
+| Windows 10 / 11 | 最新の GitHub Release から NSIS インストーラーを配布 |
+| Linux | ソースから起動。インストーラーは未提供 |
+| macOS | 現在パッケージは未提供 |
 
-preview 更新では identity、local DB、Iroh data、Community Node 設定、private channel capability、通知 inbox を保持する前提です。third-party notice review は [docs/THIRD_PARTY_NOTICES.md](./docs/THIRD_PARTY_NOTICES.md) で追跡します。
+プレビューのインストーラーは未署名の場合があります。その場合は Windows SmartScreen の警告が表示されることがあるため、実行前にリリースノートを確認してください。
 
-## Community Node の役割
+詳しいセットアップと復旧方法は、[利用者向けクイックスタート](./docs/runbooks/mvp-user-quickstart.md)と[トラブルシューティング](./docs/runbooks/mvp-troubleshooting.md)を参照してください。
 
-- community node は bootstrap、auth、control plane、connectivity assist を担います。
-- connectivity URL や seed peer の取得を助けます。
-- ユーザーデータの canonical content store ではありません。
-- preview の自動導線は node ごとの `auto_approve` policy で制御し、official/custom のような別モデルには分けません。
+## kukuri でできること
 
-## kukuri は何ではないか
+- 興味のあるトピックを見つけ、投稿や返信でスレッド形式の会話に参加できます。
+- コミュニティを別々の場所へ分断せず、同じトピック内で公開投稿と非公開チャンネルを使い分けられます。
+- フォロー、リアクション、再投稿、引用、ブックマークを利用し、見たくない投稿者は自分の端末上でミュートできます。
+- 相互につながった相手と DM を交わし、画像や動画を共有できます。
+- 返信、メンション、フォロー、再投稿、メッセージをアプリ内通知や OS 通知で確認できます。
+- 再起動、一時的なオフライン、プレビュー版の更新を挟んでも、アイデンティティとローカルの状態を引き継げます。
 
-- kukuri は full Nostr client ではありません。
-- Nostr compatibility は identity、envelope 形状、一部 semantics に限られます。
-- kukuri の内部同期は relay-first ではありません。
-- community node は canonical content ownership を持つ relay ではありません。
+## 3 分で試す
 
-## kukuri とは何か
+1. Windows プレビューをインストールして起動するか、[Linux でソースから起動](#開発クイックスタート)します。
+2. あらかじめ設定された Community Node が `ready` になるまで数秒待ち、最初から用意されたトピックを開きます。
+3. 公開投稿を 1 件作成し、既存の投稿へ返信します。
+4. 同じトピックの中で非公開チャンネルを作成するか、既存のチャンネルへ参加します。
+5. `Settings -> Release` から診断レポートを書き出し、GitHub へフィードバックを送ります。
 
-- topic が閲覧と発信の主軸です。
-- channel は topic 配下の audience / scope であり、独立した workspace ではありません。
-- public timeline、private channel、pairwise DM、live session、game room を同じ設計思想で扱います。
-- ユーザーは鍵をローカルに保持し、自分の identity で signed object を発行します。
+既定の診断レポートには、秘密鍵、認証トークン、非公開チャンネルの秘密情報、招待・共有トークン、DM 本文、ローカルデータベースのパスを含めません。
 
-## 重要な設計原則
+## プレビューの状態と制限
 
-- signed envelope は証明とメタデータであり、データプレーン全体そのものではありません。
-- hint は通知と同期のきっかけであり、source of truth ではありません。
-- structured state は `docs` で同期します。
-- media や大きな payload は `blobs` で同期します。
-- connectivity は static-peer、seeded DHT discovery、community-node assist が担います。
-- durability は offline 利用、restart 復元、late join backfill を前提に設計します。
-- community-node は bootstrap、auth、control plane、connectivity assist を担うもので、ユーザーコンテンツの canonical store ではありません。
-- moderation event / safety advisory は optional な trust input であり、network-wide command ではありません。適用方法は各 client が判断します。
-- Nostr 互換は identity、envelope 形状、一部 tag に限った subset であり、kukuri の内部同期モデルは kukuri 固有です。
+- パッケージ版プレビューの現在の対象は Windows 10 / 11 のみです。Linux はソース起動、macOS はパッケージ未提供です。
+- DM の確認には、別のテスト用ピアと相互関係が必要です。P2P の動作は、2 台の端末またはデータ領域を分けた 2 つのアプリで確認しやすくなります。
+- Live、Metaverse、ゲームルームの画面は現在も発展途上です。一部の拡張機能は開発者モードの段階にあり、Stream にはまだメディアプレーヤーがありません。
+- プレビュー版の更新では、アイデンティティ、ローカルデータベース、Iroh のデータ、Community Node の設定、非公開チャンネルの権限情報、通知一覧を保持する前提です。ローカル状態を残したい場合は、アンインストールやリセットの前にアプリのデータディレクトリを保管してください。
+- テスト中のソフトウェアです。接続、更新、復旧の問題を報告するときは、秘匿情報を除去した診断レポートを添付してください。
 
-## 現在動いている範囲
+現在のマイルストーンは [Builder Preview 計画](./docs/progress/2026-04-16-mvp-builder-preview-plan.md)、配布とデータ安全性の検査は[リリース手順書](./docs/runbooks/release.md)を参照してください。
 
-- desktop target: Linux / Windows
-- connectivity: static-peer、seeded DHT discovery、community-node connectivity/auth、topic/channel ごとの gossip 接続トグル
-- topic timeline: public post、reply/thread、image 添付、video 添付
-- topic discovery: topic 一覧の search / filter / sort
-- post interaction: reaction / custom reaction、repost、quote repost
-- social graph v1: public profile、follow/unfollow、`mutual`、`friend of friend` 表示
-- local social management: post bookmark library、local author mute
-- private channel audience v1: `invite_only`、`friend_only`、`friend_plus` と epoch-aware lifecycle
-- pairwise DM v1: 1on1、mutual 限定、offline 可、local transcript/delete、image/video attachment
-- local notification inbox v1: mention、reply、repost、quote repost、DM、follow 通知
-- OS 通知 / tray 常駐: ユーザー許可制、click-to-open、background OS 通知。local notification inbox とは独立
-- builder preview リリース面: in-app updater、`Settings -> Release`、秘匿情報除去済み診断レポート、feedback 導線
-- safety / operations: content provenance と capability scope 表示、community node 宛ての分散通報ルーティング、community-node 運営者向け文書生成
-- `docs + blobs` から復元できる live session / game room state
+## kukuri の仕組み
 
-現在のスコープは [foundation progress](./docs/progress/2026-03-10-foundation.md)、[release readiness plan](./docs/progress/2026-06-11-release-readiness-execution-plan.md)、[docs/adr/](./docs/adr/) 配下の accepted ADR を正とします。
+- **アイデンティティは利用者のものです。** 署名鍵はローカルに保存します。Community Node はアカウントの所有者でもホームサーバーでもありません。
+- **P2P が基盤です。** 通信は Direct P2P、Relay Supported P2P の順に優先し、それらでデータを運べない場合だけ Relay Fallback を使います。
+- **Community Node の支援範囲は限定されています。** ノードは初期接続、認証、トピックの合流支援、接続、索引、モデレーション、通報などを補助できます。一方、利用者の投稿、プロフィール、ソーシャルグラフの恒久的な正本ではなく、ネットワーク全体への権限も持ちません。
+- **データの種類ごとに経路を分けます。** 構造化された共有状態は `docs`、メディアや大きなデータは `blobs` で同期します。`hints` は同期が必要かもしれないことをピアへ知らせるだけです。
+- **Nostr 互換は意図的に限定しています。** アイデンティティ、署名付きエンベロープ、一部タグの有用な意味づけを利用しますが、完全な Nostr クライアントではなく、内部同期もリレー優先ではありません。
+- **モデレーションの効力は発行元の範囲に閉じます。** モデレーションイベントや安全性の勧告は、発行したノードからの任意の信頼情報であり、ネットワーク全体への命令ではありません。適用方法は各クライアントが判断します。
+
+恒久的な責任境界は [P2P-first Community Node の責任境界](./docs/architecture/p2p-first-community-node-responsibility-boundary.md)に記載しています。
+
+## 現在利用できる範囲
+
+| 分野 | 現在の Builder Preview で利用できる機能 |
+| --- | --- |
+| トピックと投稿 | トピックの検索・絞り込み、公開投稿、返信とスレッド、リアクション、再投稿、引用、ブックマーク、ローカルミュート |
+| 非公開の会話 | `invite_only`、`friend_only`、`friend_plus` の各ポリシーと世代更新に対応したチャンネル、相互関係に限定した 1 対 1 の DM |
+| 人と活動 | 公開プロフィール、フォローと解除、相互関係と友達の友達という文脈、アプリ内通知と OS 通知 |
+| メディア | 投稿と DM への画像・動画添付 |
+| 接続と復旧 | 静的ピア、シード情報を使った DHT 探索、Community Node による接続支援、オフライン対応のローカル状態、再起動からの復元、後から参加したピアへの履歴補完 |
+| プレビュー運用 | アプリ内の更新確認、秘匿情報除去済みの診断、フィードバックへのリンク、来歴表示、分散通報ルーティング |
+
+出荷済み機能の詳細な基準は、[基盤の進捗記録](./docs/progress/2026-03-10-foundation.md)、承認済みの [ADR](./docs/adr/)、テスト、[ハーネスのシナリオ](./harness/scenarios/)を正とします。
 
 ## 今後の方向性
 
-- 検索やサジェストは、core sync plane に必須で埋め込むのではなく、optional な specialized service として扱えるようにする方針です。
-- gateway / bridge 層によって、選択的な import/export や ecosystem interoperability を持てる余地を残します。
-- trust、moderation、policy assist は community-node の周辺で拡張しうる一方、canonical content store にはしません。分散通報ルーティングと運営者向け文書はその最初の一歩です。
-- これらは longer-term direction / optional ecosystem services であり、現行 workspace ですべて出荷済みという意味ではありません。
+- 検索、発見、推薦、ゲートウェイ、ブリッジは、P2P の中核に必須の正本を置かず、任意のサービスとして拡張できます。
+- Community Node の信頼、モデレーション、ポリシー支援、運用者向け機能は、各ノードが宣言した能力と権限の範囲内で発展させられます。
+- Live、Metaverse、ゲーム、より豊かなメディア体験は、トピック中心の所有権と同期境界を変えずに成熟させていきます。
 
-## コントリビューター向け
+これらは方向性であり、現在のプレビューですべて利用できるという約束ではありません。
 
-- 新規実装・修正は root workspace を対象にします。
-- 現在の truth は主に次です。
-  - [docs/progress/2026-03-10-foundation.md](./docs/progress/2026-03-10-foundation.md)
-  - [docs/progress/2026-06-11-release-readiness-execution-plan.md](./docs/progress/2026-06-11-release-readiness-execution-plan.md)
-  - [docs/README.md](./docs/README.md)
-  - [docs/runbooks/dev.md](./docs/runbooks/dev.md)
-  - [CHANGELOG.md](./CHANGELOG.md)
-  - [harness/scenarios/](./harness/scenarios/)
-- protocol / product の主要参照は次です。
-  - [docs/adr/0010-kukuri-protocol-v1-boundary-definition.md](./docs/adr/0010-kukuri-protocol-v1-boundary-definition.md)
-  - [docs/adr/0011-kukuri-protocol-v1-draft.md](./docs/adr/0011-kukuri-protocol-v1-draft.md)
-  - [docs/adr/0012-topic-first_progressive_community_filtering_draft.md](./docs/adr/0012-topic-first_progressive_community_filtering_draft.md)
-  - [docs/adr/0013-social-graph-foundation-draft.md](./docs/adr/0013-social-graph-foundation-draft.md)
-  - [docs/adr/0016-repost-data-classification.md](./docs/adr/0016-repost-data-classification.md)
-  - [docs/adr/0017-reaction-data-classification.md](./docs/adr/0017-reaction-data-classification.md)
-  - [docs/adr/0018-channel-first-sidebar-and-unified-epoch-lifecycle.md](./docs/adr/0018-channel-first-sidebar-and-unified-epoch-lifecycle.md)
-  - [docs/adr/0020-pairwise-dm-v1.md](./docs/adr/0020-pairwise-dm-v1.md)
-  - [docs/adr/0023-local-notification-inbox-v1.md](./docs/adr/0023-local-notification-inbox-v1.md)
-- community-node の責任境界 / trust 境界は次です。
-  - [docs/architecture/p2p-first-community-node-responsibility-boundary.md](./docs/architecture/p2p-first-community-node-responsibility-boundary.md)
-  - [docs/adr/0027-deterministic-moderation-critical-safety.md](./docs/adr/0027-deterministic-moderation-critical-safety.md)
-  - [docs/architecture/default-community-node-dependency-reduction.md](./docs/architecture/default-community-node-dependency-reduction.md)
+## フィードバックとコミュニティ
 
-### 作業入口
+- 再現可能な不具合やリグレッションは [GitHub Issues](https://github.com/KingYoSun/kukuri/issues) へ報告してください。
+- 質問、製品アイデア、UX 提案、大きな変更の事前相談には [GitHub Discussions](https://github.com/KingYoSun/kukuri/discussions) を利用してください。
+- 接続、更新機能、復旧の問題には、`Settings -> Release` から取得した秘匿情報除去済みレポートを添付してください。
+- Community Node 運用者からのデプロイ、情報開示、モデレーション、分散通報に関するフィードバックも、同じ GitHub の窓口で受け付けます。
+
+## コントリビューション
+
+コード以外の貢献も歓迎します。不具合報告、UI/UX 提案、文書、翻訳、テスト、実装、Community Node 運用上のフィードバックはいずれもプロジェクトの助けになります。
+
+大きな機能、プロトコル変更、責任境界の変更、大規模なリファクタリングは、実装前に Discussion で相談してください。不具合は Issue に焦点を絞って報告し、振る舞いの正本にはリポジトリ内のテストと文書を使ってください。
+
+### 開発クイックスタート
+
+必要な環境:
+
+- Git
+- `rust-toolchain.toml` で固定された Rust `1.92.0`
+- Node.js `^20.19.0` または `>=22.12.0`
+- 以下のコマンドから利用する pnpm `10.16.1`
+- [開発手順書](./docs/runbooks/dev.md)に記載された環境別の依存パッケージ。Windows 開発には [Tauri の事前要件](https://v2.tauri.app/start/prerequisites/#windows) も必要です
+- Docker は Community Node の統合テストとローカル Community Node 構成を使う場合のみ必要です
 
 ```bash
+git clone https://github.com/KingYoSun/kukuri.git
+cd kukuri
+
+npx pnpm@10.16.1 install --dir apps/desktop
 cargo xtask doctor
+
+cd apps/desktop
+npx pnpm@10.16.1 tauri:dev
+```
+
+通常の検査はリポジトリのルートで実行します。
+
+```bash
 cargo xtask check
 cargo xtask test
 cargo xtask e2e-smoke
-cargo xtask release-check v0.1.6-preview.1
-
-cd apps/desktop
-npx pnpm@10.16.1 install
-npx pnpm@10.16.1 dev
 ```
 
-日常コマンドや検証手順の詳細は [docs/runbooks/dev.md](./docs/runbooks/dev.md) を参照してください。
+ブラウザー上のフロントエンドだけを扱う場合は `npx pnpm@10.16.1 --dir apps/desktop dev` を利用できます。対象別の検査、UI 検証、Community Node の作業手順、環境ごとの設定は[開発手順書](./docs/runbooks/dev.md)にまとめています。
+
+## 文書
+
+- [文書索引](./docs/README.md)
+- [Builder Preview 計画](./docs/progress/2026-04-16-mvp-builder-preview-plan.md)
+- [基盤と出荷済み機能の基準](./docs/progress/2026-03-10-foundation.md)
+- [利用者向けクイックスタート](./docs/runbooks/mvp-user-quickstart.md)
+- [トラブルシューティング](./docs/runbooks/mvp-troubleshooting.md)
+- [開発手順書](./docs/runbooks/dev.md)
+- [リリース手順書](./docs/runbooks/release.md)
+- [P2P-first Community Node の責任境界](./docs/architecture/p2p-first-community-node-responsibility-boundary.md)
+- [アーキテクチャ判断記録](./docs/adr/)
+- [サードパーティー通知](./docs/THIRD_PARTY_NOTICES.md)
 
 ## ライセンス
 
-MIT
+[MIT](./LICENSE)

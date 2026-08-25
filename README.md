@@ -2,131 +2,146 @@ English | [日本語](./README.ja.md)
 
 # kukuri
 
-kukuri is a topic-first P2P social app and protocol. It keeps Nostr-derived identity and signed envelope semantics where they are useful, but its internal sync plane is built around separated `docs`, `blobs`, `hints`, and connectivity instead of a relay-first design.
+kukuri is a topic-first P2P social app. Find a topic you care about, join a public conversation, or move into a smaller private channel while keeping your identity rooted on your own device.
 
-## Builder Preview
+![kukuri desktop preview showing a topic timeline and its reply thread](./docs/assets/readme/kukuri-desktop-preview.png)
 
-- Current preview target: Windows installer via the [latest GitHub Release](https://github.com/KingYoSun/kukuri/releases/latest).
-- Linux remains source-run for now.
-- Preview updates use the in-app `Settings -> Release` updater against `latest-preview.json`.
-- Data safety, release runbook, and third-party notices are linked from `Settings -> Release`.
-- If a preview build is unsigned, the GitHub Release notes call out the expected SmartScreen warning.
-- Preview flow: launch the desktop app, let the preloaded community node reach `ready`, open a starter topic, post or reply, then send feedback.
-- Preview quickstart: [docs/runbooks/mvp-user-quickstart.md](./docs/runbooks/mvp-user-quickstart.md)
-- Troubleshooting: [docs/runbooks/mvp-troubleshooting.md](./docs/runbooks/mvp-troubleshooting.md)
+## Download the Builder Preview
 
-## What To Try In 3 Minutes
+> [!IMPORTANT]
+> kukuri is currently a **Builder Preview for testers**, not a stable general release.
 
-1. Launch the app and wait for the preloaded community node to become `ready`.
-2. Open one of the starter topics: `kukuri:topic:demo`, `kukuri:topic:iroh`, `kukuri:topic:nostr`, or `kukuri:topic:operators`.
-3. Publish a public post or reply in-thread.
+**[Download the latest Windows Preview](https://github.com/KingYoSun/kukuri/releases/latest)**
+
+| Platform | Current support |
+| --- | --- |
+| Windows 10 / 11 | NSIS installer from the latest GitHub Release |
+| Linux | Run from source; no packaged installer yet |
+| macOS | No package is currently provided |
+
+Preview installers may be unsigned. Windows SmartScreen can therefore show a warning; check the release notes before running the installer.
+
+For detailed setup and recovery help, see the [user quickstart](./docs/runbooks/mvp-user-quickstart.md) and [troubleshooting guide](./docs/runbooks/mvp-troubleshooting.md).
+
+## What You Can Do
+
+- Find and follow topics, then publish posts and replies in threaded conversations.
+- Keep public posts and private channels under the same topic instead of splitting the community into separate spaces.
+- Follow people, react, repost, quote, bookmark posts, and mute authors locally.
+- Exchange direct messages with mutual connections and share images or videos.
+- Receive local and operating-system notifications for replies, mentions, follows, reposts, and messages.
+- Keep your identity and local state across restarts, temporary offline periods, and Preview updates.
+
+## Try It in 3 Minutes
+
+1. Install and launch the Windows Preview, or [run it from source on Linux](#development-quickstart).
+2. Wait a few seconds for the preloaded Community Node to become `ready`, then open a starter topic.
+3. Publish a public post and reply to an existing post.
 4. Create or join a private channel under the same topic.
-5. Export diagnostics and send feedback through GitHub before you close the app.
+5. Open `Settings -> Release`, export the diagnostic report, and send feedback through GitHub.
 
-Diagnostics are available in `Settings -> Release`. The default report omits secret keys, auth tokens, private channel secrets, invite/share tokens, DM bodies, and local DB paths.
+The default diagnostic report omits secret keys, authentication tokens, private-channel secrets, invite/share tokens, direct-message bodies, and local database paths.
 
-Preview updates are expected to preserve identity, local DB state, Iroh data, Community Node settings, private channel capability, and notification inbox state. Third-party notice review is tracked in [docs/THIRD_PARTY_NOTICES.md](./docs/THIRD_PARTY_NOTICES.md).
+## Preview Status and Limits
 
-## What Community Nodes Do
+- The packaged Preview currently targets Windows 10 and 11 only. Linux remains source-run, and macOS has no package.
+- A direct message needs another test peer and a mutual relationship. P2P behavior is easiest to evaluate with two devices or two isolated app instances.
+- Live, Metaverse, and game-room surfaces are still evolving. Some extended features remain staged behind developer mode, and the Stream surface does not yet include a media player.
+- Preview updates are expected to preserve identity, local database state, Iroh data, Community Node settings, private-channel capabilities, and the notification inbox. Keep the app data directory before uninstalling or resetting if you need to retain local state.
+- This is testing software. Please attach a sanitized diagnostic report when reporting connectivity, upgrade, or recovery problems.
 
-- Community nodes are bootstrap, auth, control-plane, and connectivity-assist components.
-- They help the app discover connectivity URLs and seed peers.
-- They are not the canonical content store for user data.
-- Each configured node stays part of the same `Community Node` model. Preview automation is controlled per node with an `auto_approve` policy, not with a separate official/custom split.
+See the [Builder Preview plan](./docs/progress/2026-04-16-mvp-builder-preview-plan.md) for the current milestone and the [release runbook](./docs/runbooks/release.md) for packaging and data-safety gates.
 
-## What kukuri Is Not
+## How kukuri Works
 
-- kukuri is not a full Nostr client.
-- Nostr compatibility is limited to identity, envelope shape, and selected semantics.
-- kukuri is not relay-first internally.
-- Community nodes are not relays with canonical content ownership.
+- **Your identity stays with you.** The signing key is stored locally. A Community Node is not your account owner or home server.
+- **P2P is the foundation.** Connectivity prefers direct P2P, then relay-supported P2P, and uses relay fallback only when the earlier paths cannot carry the data.
+- **Community Nodes provide scoped assistance.** A node may help with bootstrap, authentication, topic rendezvous, connectivity, indexing, moderation, or reporting. It is not the permanent canonical store for user posts, profiles, or the social graph, and it has no network-wide authority.
+- **Different data has different paths.** Structured shared state is synchronized through `docs`, media and large payloads through `blobs`, and `hints` only notify peers that something may need to be synchronized.
+- **Nostr compatibility is intentionally limited.** kukuri keeps useful identity, signed-envelope, and selected tag semantics; it is not a full Nostr client and does not use a relay-first internal sync model.
+- **Moderation remains scoped.** A moderation event or safety advisory is optional trust input from its issuing node, not a command applied to the entire network. Each client decides how to use it.
 
-## What Is kukuri
+The durable responsibility boundary is documented in [P2P-first Community Node responsibilities](./docs/architecture/p2p-first-community-node-responsibility-boundary.md).
 
-- Topics are the main browsing and publishing surface.
-- Channels are audience scopes under a topic, not standalone workspaces.
-- The same design aims to cover public timelines, private channels, pairwise DM, live sessions, and game rooms.
-- Users keep local key ownership and publish signed objects from their own identity.
+## Available Today
 
-## Core Concepts
+| Area | Current Builder Preview capability |
+| --- | --- |
+| Topics and posts | Topic discovery, public posts, replies and threads, reactions, reposts, quotes, bookmarks, and local mute |
+| Private conversation | Invite-only, friends-only, and friends-plus channels with epoch-aware membership; pairwise mutual-only direct messages |
+| People and activity | Public profiles, follow/unfollow, mutual and friend-of-friend context, local and OS notifications |
+| Media | Image and video attachments in posts and direct messages |
+| Connectivity and recovery | Static-peer links, seeded DHT discovery, Community Node assistance, offline-capable local state, restart recovery, and late-join backfill |
+| Preview operations | In-app update checks, sanitized diagnostics, feedback links, provenance display, and distributed report routing |
 
-- Signed envelopes are proof and metadata, not the whole data plane.
-- Hints are notifications and sync triggers, not a source of truth.
-- Structured state is synchronized through `docs`.
-- Media and other large payloads are synchronized through `blobs`.
-- Connectivity comes from static-peer links, seeded DHT discovery, and community-node assist.
-- Durability is designed around offline use, restart recovery, and late join backfill.
-- Community nodes are bootstrap, auth, control-plane, and connectivity-assist components, not the canonical store for user content.
-- Moderation events and safety advisories are an optional trust input, not a network-wide command; each client decides how to apply them.
-- Nostr compatibility is a limited subset for identity, envelope shape, and some tags; kukuri's internal sync model is its own.
-
-## What Works Today
-
-- Desktop targets: Linux and Windows.
-- Connectivity: static-peer, seeded DHT discovery, and community-node connectivity/auth, with per-topic/channel gossip toggles.
-- Topic timeline flow: public posts, reply/thread, image attachments, and video attachments.
-- Topic discovery: topic-list search, filter, and sort.
-- Post interaction: reactions and custom reactions, repost, and quote repost.
-- Social graph v1: public profiles, follow/unfollow, `mutual`, and `friend of friend` display.
-- Local social management: post bookmark library and local author mute.
-- Private channel audience v1: `invite_only`, `friend_only`, and `friend_plus` with epoch-aware lifecycle.
-- Pairwise DM v1: 1:1, mutual-only, offline-capable, local transcript/delete, and image/video attachments.
-- Local notification inbox v1: mentions, replies, reposts, quote reposts, DMs, and follow notifications.
-- OS notifications and tray residency: user-permission-gated, with click-to-open and background OS notifications, kept independent of the local notification inbox.
-- Builder preview release plane: in-app updater, `Settings -> Release`, sanitized diagnostics report, and feedback flow.
-- Safety/operations: content provenance and capability-scope display, distributed report routing to community nodes, and community-node operator docs generation.
-- Live session and game room state that recover from `docs + blobs`.
-
-Current scope is defined by [foundation progress](./docs/progress/2026-03-10-foundation.md), the [release readiness plan](./docs/progress/2026-06-11-release-readiness-execution-plan.md), and the accepted ADRs under [docs/adr/](./docs/adr/).
+The [foundation progress record](./docs/progress/2026-03-10-foundation.md), accepted [ADRs](./docs/adr/), tests, and [harness scenarios](./harness/scenarios/) define the detailed shipped baseline.
 
 ## Longer-Term Direction
 
-- Search and suggestion can be provided by optional specialized services instead of becoming required parts of the core sync plane.
-- Gateway and bridge layers can provide selective import/export and ecosystem interoperability.
-- Trust, moderation, and policy-assist functions can grow around community nodes without turning them into the canonical content store. Distributed report routing and operator docs are an initial step in this direction.
-- These are planned directions and optional ecosystem services, not a statement that they are all shipped in the current workspace.
+- Optional search, discovery, recommendation, gateway, and bridge services can grow around the P2P core without becoming mandatory canonical stores.
+- Community Node trust, moderation, policy-assist, and operator tooling can evolve within each node's declared capability and authority scope.
+- Live, Metaverse, game, and richer media experiences can mature without changing the topic-first ownership and synchronization boundaries.
 
-## For Contributors
+These are directions, not a promise that every capability is available in the current Preview.
 
-- New work targets the root workspace.
-- Current sources of truth:
-  - [docs/progress/2026-03-10-foundation.md](./docs/progress/2026-03-10-foundation.md)
-  - [docs/progress/2026-06-11-release-readiness-execution-plan.md](./docs/progress/2026-06-11-release-readiness-execution-plan.md)
-  - [docs/README.md](./docs/README.md)
-  - [docs/runbooks/dev.md](./docs/runbooks/dev.md)
-  - [CHANGELOG.md](./CHANGELOG.md)
-  - [harness/scenarios/](./harness/scenarios/)
-- Key protocol and product references:
-  - [docs/adr/0010-kukuri-protocol-v1-boundary-definition.md](./docs/adr/0010-kukuri-protocol-v1-boundary-definition.md)
-  - [docs/adr/0011-kukuri-protocol-v1-draft.md](./docs/adr/0011-kukuri-protocol-v1-draft.md)
-  - [docs/adr/0012-topic-first_progressive_community_filtering_draft.md](./docs/adr/0012-topic-first_progressive_community_filtering_draft.md)
-  - [docs/adr/0013-social-graph-foundation-draft.md](./docs/adr/0013-social-graph-foundation-draft.md)
-  - [docs/adr/0016-repost-data-classification.md](./docs/adr/0016-repost-data-classification.md)
-  - [docs/adr/0017-reaction-data-classification.md](./docs/adr/0017-reaction-data-classification.md)
-  - [docs/adr/0018-channel-first-sidebar-and-unified-epoch-lifecycle.md](./docs/adr/0018-channel-first-sidebar-and-unified-epoch-lifecycle.md)
-  - [docs/adr/0020-pairwise-dm-v1.md](./docs/adr/0020-pairwise-dm-v1.md)
-  - [docs/adr/0023-local-notification-inbox-v1.md](./docs/adr/0023-local-notification-inbox-v1.md)
-- Community-node responsibility and trust boundaries:
-  - [docs/architecture/p2p-first-community-node-responsibility-boundary.md](./docs/architecture/p2p-first-community-node-responsibility-boundary.md)
-  - [docs/adr/0027-deterministic-moderation-critical-safety.md](./docs/adr/0027-deterministic-moderation-critical-safety.md)
-  - [docs/architecture/default-community-node-dependency-reduction.md](./docs/architecture/default-community-node-dependency-reduction.md)
+## Feedback and Community
 
-### Entry Points
+- Report reproducible bugs and regressions in [GitHub Issues](https://github.com/KingYoSun/kukuri/issues).
+- Use [GitHub Discussions](https://github.com/KingYoSun/kukuri/discussions) for questions, product ideas, UX proposals, and early discussion of larger changes.
+- Include the sanitized report from `Settings -> Release` for connectivity, updater, and recovery problems.
+- Community Node operators are welcome to report deployment, disclosure, moderation, and distributed-reporting feedback through the same GitHub entry points.
+
+## Contributing
+
+Contributions are welcome in code and beyond it: bug reports, UI/UX proposals, documentation, translations, tests, implementation work, and Community Node operational feedback all help.
+
+For a substantial feature, protocol change, responsibility-boundary change, or large refactor, start a Discussion before implementation. Keep bug reports focused in Issues, and use the repository's tests and documentation as the source of truth for behavior.
+
+### Development Quickstart
+
+Prerequisites:
+
+- Git
+- Rust `1.92.0` (pinned by `rust-toolchain.toml`)
+- Node.js `^20.19.0` or `>=22.12.0`
+- pnpm `10.16.1` through the commands below
+- The platform dependencies from the [development runbook](./docs/runbooks/dev.md); Windows development also needs the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/#windows)
+- Docker only for Community Node integration tests and local Community Node stacks
 
 ```bash
+git clone https://github.com/KingYoSun/kukuri.git
+cd kukuri
+
+npx pnpm@10.16.1 install --dir apps/desktop
 cargo xtask doctor
+
+cd apps/desktop
+npx pnpm@10.16.1 tauri:dev
+```
+
+Run the normal validation paths from the repository root:
+
+```bash
 cargo xtask check
 cargo xtask test
 cargo xtask e2e-smoke
-cargo xtask release-check v0.1.6-preview.1
-
-cd apps/desktop
-npx pnpm@10.16.1 install
-npx pnpm@10.16.1 dev
 ```
 
-For day-to-day commands and validation paths, use [docs/runbooks/dev.md](./docs/runbooks/dev.md).
+For browser-only frontend work, use `npx pnpm@10.16.1 --dir apps/desktop dev`. The [development runbook](./docs/runbooks/dev.md) lists targeted checks, UI validation, Community Node workflows, and platform-specific setup.
+
+## Documentation
+
+- [Documentation index](./docs/README.md)
+- [Builder Preview plan](./docs/progress/2026-04-16-mvp-builder-preview-plan.md)
+- [Foundation and shipped baseline](./docs/progress/2026-03-10-foundation.md)
+- [User quickstart](./docs/runbooks/mvp-user-quickstart.md)
+- [Troubleshooting](./docs/runbooks/mvp-troubleshooting.md)
+- [Development runbook](./docs/runbooks/dev.md)
+- [Release runbook](./docs/runbooks/release.md)
+- [P2P-first Community Node responsibility boundary](./docs/architecture/p2p-first-community-node-responsibility-boundary.md)
+- [Architecture Decision Records](./docs/adr/)
+- [Third-party notices](./docs/THIRD_PARTY_NOTICES.md)
 
 ## License
 
-MIT
+[MIT](./LICENSE)
