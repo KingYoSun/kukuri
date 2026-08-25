@@ -115,17 +115,35 @@ The `changelog` job needs `contents: write` and `pull-requests: write` permissio
 
 ## Third-party Notices
 
-Before publishing a preview release, generate and review the Rust and desktop npm dependency
-license inventories from the release tag.
+Before publishing a preview release, validate the non-code asset rights manifest, then generate
+and review the Rust, desktop npm, and bundled asset license inventories from the release tag.
 
 The distribution notice lives at `docs/THIRD_PARTY_NOTICES.md` and is included in the draft release
-assets as `THIRD_PARTY_NOTICES.md`. Update the generator if a dependency requires specific
-attribution text beyond the package-level license inventory.
+assets as `THIRD_PARTY_NOTICES.md`. Exact non-code asset paths, SHA-256 digests, provenance,
+source-only versus bundled-binary scope, modification status, redistribution conditions, and credit
+requirements live in `docs/ASSET_MANIFEST.json`. The repository root MIT license does not replace a
+third-party asset license.
 
 ```powershell
+cargo xtask asset-check
 ./scripts/release/generate-third-party-notices.ps1
 ./scripts/release/generate-third-party-notices.ps1 -Check
 ```
+
+For every non-code asset addition, update, or deletion under `apps/desktop/public/`,
+`apps/desktop/app-icon.png`, or `apps/desktop/src-tauri/icons/`:
+
+1. Update the manifest entry and exact file SHA-256. Do not reuse the previous digest after editing.
+2. Record the author and rights holder, source and acquisition or creation date, license text or URL,
+   modification status, commercial use, repository and binary redistribution, and credit condition.
+3. For generated or generation-assisted material, also record the service, model, input rights, and
+   output terms URL. Do not mark unknown provenance or redistribution as allowed.
+4. Run the three commands above and review the generated asset sections separately from the package
+   inventories.
+5. Confirm the draft release contains the generated `THIRD_PARTY_NOTICES.md` before publication.
+
+`cargo xtask asset-check` and `cargo xtask release-check` fail on unregistered, missing, duplicate,
+or changed files and on unknown or insufficient rights. Pull request CI runs the same asset check.
 
 ## Manual Smoke
 

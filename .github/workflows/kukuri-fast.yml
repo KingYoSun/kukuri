@@ -84,6 +84,9 @@ jobs:
       - name: Oversized file report
         run: cargo xtask oversized-files
 
+      - name: Asset rights manifest
+        run: cargo xtask asset-check
+
       - name: Rust checks
         run: cargo xtask rust-check
 
