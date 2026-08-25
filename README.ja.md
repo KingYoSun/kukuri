@@ -118,7 +118,7 @@ cargo xtask doctor
 cargo xtask check
 cargo xtask test
 cargo xtask e2e-smoke
-cargo xtask release-check v0.1.5-preview.1
+cargo xtask release-check v0.1.6-preview.1
 
 cd apps/desktop
 npx pnpm@10.16.1 install
