@@ -1,6 +1,10 @@
 {
   "files": [
     {
+      "lines": 1096,
+      "path": "crates/cn-operator/src/docs.rs"
+    },
+    {
       "lines": 1087,
       "path": "crates/harness/src/scenarios/community_node.rs"
     },

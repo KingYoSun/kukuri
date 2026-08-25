@@ -16,6 +16,7 @@ ADR 0002 (`docs/adr/0002-feature-data-classification-template.md`) に基づく�
 - 必須 scenario: 起動 gate（未同意 → runtime 非構築 = network 非開始 → 同意 → ready）。frontend は `App.test.tsx`、backend は `src-tauri` のユニットテストで担保。
 
 ## 補足
-- 同意は単一 legal bundle（TOS + PP）を `legal_bundle_version`（単調増加の整数、初期値 1）で管理し、一括同意する。
+- 同意は単一 legal bundle（TOS + PP）を `legal_bundle_version`（単調増加の整数、初期値 1、現在値 2）で管理し、一括同意する。
 - `accepted_bundle_version < current_bundle_version` の場合に再同意を要求する。
+- version 2 は、投稿コンテンツの権利帰属、権利保有の表明、共有範囲と Community Node capability に限定した技術的利用許諾を追加する重要変更である。version 1 の同意記録では再同意を要求する。
 - 同意するまで `DesktopRuntime` を構築せず、iroh endpoint の bind / discovery を開始しない（fail-closed = IP 取得前に同意）。

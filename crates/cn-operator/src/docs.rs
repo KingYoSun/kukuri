@@ -407,6 +407,74 @@ fn gen_service_description(config: &ResolvedConfig) -> String {
     s
 }
 
+/// operator config から、投稿内容を直接扱う提供中 capability だけを抽出する。
+///
+/// ここでは技術的な有効／無効だけを決め、規約文言は `render_node_content_license` に閉じる。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct TermsContentScope {
+    community_index: bool,
+    moderation: bool,
+    blob_cache: bool,
+    private_message_storage: bool,
+    encrypted_transit: bool,
+}
+
+fn terms_content_scope(config: &ResolvedConfig) -> TermsContentScope {
+    let enabled = available_enabled(config);
+    let has = |capability| enabled.contains(&capability);
+    TermsContentScope {
+        community_index: has(Capability::CommunityIndex),
+        moderation: has(Capability::Moderation),
+        blob_cache: has(Capability::BlobCache),
+        private_message_storage: has(Capability::PrivateMessageStorage),
+        encrypted_transit: has(Capability::IrohRelay) || has(Capability::TrafficRelayFallback),
+    }
+}
+
+/// 技術的な capability scope を、当該 node に限る法的な許諾文言へ変換する。
+fn render_node_content_license(scope: TermsContentScope) -> String {
+    let mut s = String::new();
+    let _ = writeln!(
+        s,
+        "ユーザーは、本ノードの運営者に対し、ユーザーが選択した共有範囲と本ノードの authority scope の双方に含まれるコンテンツについて、次の有効な capability を提供するために必要な範囲に限り、非独占的かつ無償の利用を許諾します。著作権その他の権利はユーザーから移転しません。\n"
+    );
+    if scope.community_index {
+        let _ = writeln!(
+            s,
+            "- サポート対象の公開 topic に含まれる投稿の索引・検索・発見・おすすめのために、本文とメタデータを取得、複製、保存、解析、表示すること。"
+        );
+    }
+    if scope.moderation {
+        let _ = writeln!(
+            s,
+            "- 本ノードの authority scope 内の安全性走査と走査に必要な一時取得のために、本文、メタデータ、添付を取得、複製、解析すること。"
+        );
+    }
+    if scope.blob_cache {
+        let _ = writeln!(
+            s,
+            "- 添付 blob の一時 cache のために、対象 blob を取得、複製、一時保存、配信すること。"
+        );
+    }
+    if scope.private_message_storage {
+        let _ = writeln!(
+            s,
+            "- 指定された受信者への暗号化済み private message の一時保管のために、暗号文を取得、複製、一時保存、配信すること。"
+        );
+    }
+    if scope.encrypted_transit {
+        let _ = writeln!(
+            s,
+            "- relay capability による暗号化済み通信の経路上の一時的な伝送を行うこと。この許諾は投稿内容の表示、索引、解析、保存または二次利用を含みません。"
+        );
+    }
+    let _ = writeln!(
+        s,
+        "- 上記の許諾は、各 capability が有効であり、本ノードが対象コンテンツへ実際に関与する期間と範囲に限られます。無効な capability、関与していないコンテンツ、他 node、kukuri network 全体には及びません。\n"
+    );
+    s
+}
+
 fn gen_terms(config: &ResolvedConfig) -> String {
     let mut s = header(config, "利用規約（ドラフト）");
     let _ = writeln!(s, "\n## 第1条（本ノードの位置づけ）\n");
@@ -415,17 +483,47 @@ fn gen_terms(config: &ResolvedConfig) -> String {
         "本 community node は P2P network の補助層であり、ユーザーの identity / profile / social graph を\
          所有しません。本ノードの停止・変更によってもこれらは失われません。\n"
     );
-    let _ = writeln!(s, "## 第2条（禁止事項）\n");
+    let _ = writeln!(s, "## 第2条（投稿コンテンツの権利と権利保有の表明）\n");
+    let _ = writeln!(
+        s,
+        "投稿コンテンツの著作権その他の権利は、原則としてユーザーまたは正当な権利者に帰属します。本ノードへ権利が譲渡されることはありません。\n"
+    );
+    let _ = writeln!(
+        s,
+        "ユーザーは、投稿する著作物、肖像、氏名、音源、映像、3D モデル、添付その他のコンテンツについて、投稿・共有と本規約に定める処理に必要な権利を有するか、正当な権利者から許諾を得ていることを表明します。\n"
+    );
+    let _ = writeln!(s, "## 第3条（本ノードへの限定的な利用許諾）\n");
+    s.push_str(&render_node_content_license(terms_content_scope(config)));
+    let _ = writeln!(s, "## 第4条（共有範囲の維持）\n");
+    let _ = writeln!(
+        s,
+        "公開 topic に含まれる投稿は、本ノードがサポートする当該公開 topic の範囲でのみ扱います。private channel と DM は、指定された受信者への提供に必要な処理だけを対象とし、公開 topic に転用したり、不特定多数へ表示したりする許諾を含みません。\n"
+    );
+    let _ = writeln!(s, "## 第5条（撤回・送信防止後の取扱い）\n");
+    let _ = writeln!(
+        s,
+        "有効な投稿撤回または本ノードの送信防止を認識した場合、本ノードは適用対象 capability での将来の新規索引、検索、発見、推薦、走査用取得、cache または配信を停止します。法令上必要な場合は、対象・目的・期間を限定して記録を保持することがあります。\n"
+    );
+    let _ = writeln!(
+        s,
+        "P2P の性質上、既に受信 peer が取得した copy、他 node、Direct P2P の経路から、投稿や添付を完全に回収または消去することは保証できません。\n"
+    );
+    let _ = writeln!(s, "## 第6条（許諾に含まれない利用）\n");
+    let _ = writeln!(
+        s,
+        "本規約の限定的な利用許諾には、投稿コンテンツを広告・宣伝・AI 学習・機械学習モデルの訓練その他の独立した二次目的へ利用する権利は含まれません。default node、kukuri project または本ノードが、network 全体の恒久的・包括的な権利主体になることもありません。\n"
+    );
+    let _ = writeln!(s, "## 第7条（禁止事項）\n");
     let _ = writeln!(s, "- 法令に違反する目的での利用");
     let _ = writeln!(s, "- 他者の権利を侵害する行為");
     let _ = writeln!(s, "- 本ノードの補助機能の妨害\n");
-    let _ = writeln!(s, "## 第3条（免責）\n");
+    let _ = writeln!(s, "## 第8条（免責）\n");
     let _ = writeln!(
         s,
         "運営者は、本ノードが関与した補助機能の範囲でのみ責任を負い、kukuri network 全体・他ノードの\
          活動については責任を負いません。\n"
     );
-    let _ = writeln!(s, "## 第4条（capability 別の取扱い）\n");
+    let _ = writeln!(s, "## 第9条（その他の capability 別の取扱い）\n");
     for cap in available_enabled(config) {
         let m = cap.meta();
         let _ = writeln!(s, "- {}: {}", m.display_name, m.terms_note);

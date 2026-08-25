@@ -55,7 +55,7 @@ export function AboutPanel() {
       },
       {
         label: t('legal:about.bundleVersionLabel'),
-        value: String(consentStatus?.currentBundleVersion ?? 1),
+        value: String(consentStatus?.currentBundleVersion ?? 2),
       },
       {
         label: t('legal:about.acceptedVersionLabel'),
@@ -83,7 +83,7 @@ export function AboutPanel() {
         <h4 className='text-base font-semibold text-foreground'>
           {t('legal:about.documentsHeading')}
         </h4>
-        <LegalDocumentView bundleVersion={consentStatus?.currentBundleVersion ?? 1} compact />
+        <LegalDocumentView bundleVersion={consentStatus?.currentBundleVersion ?? 2} compact />
       </section>
     </Card>
   );

@@ -12,7 +12,7 @@ pub(crate) struct DesktopState {
     pub(crate) runtime: Arc<DesktopRuntime>,
 }
 
-pub(crate) const LEGAL_BUNDLE_VERSION: i32 = 1;
+pub(crate) const LEGAL_BUNDLE_VERSION: i32 = 2;
 
 const APP_CONSENT_FILE_EXTENSION: &str = "app-consent.json";
 
@@ -383,10 +383,33 @@ mod tests {
 
     #[test]
     fn consent_satisfied_requires_current_or_newer_version() {
+        assert_eq!(LEGAL_BUNDLE_VERSION, 2);
         assert!(!consent_satisfied(None));
-        assert!(!consent_satisfied(Some(LEGAL_BUNDLE_VERSION - 1)));
+        assert!(!consent_satisfied(Some(1)));
         assert!(consent_satisfied(Some(LEGAL_BUNDLE_VERSION)));
         assert!(consent_satisfied(Some(LEGAL_BUNDLE_VERSION + 1)));
+    }
+
+    #[test]
+    fn canonical_legal_documents_match_the_runtime_bundle_version() {
+        const TERMS: &str = include_str!("../../../../docs/legal/terms-of-service.md");
+        const PRIVACY: &str = include_str!("../../../../docs/legal/privacy-policy.md");
+        let expected = format!("Legal bundle version: {LEGAL_BUNDLE_VERSION}");
+
+        assert!(TERMS.contains(&expected));
+        assert!(PRIVACY.contains(&expected));
+        for required_clause in [
+            "投稿コンテンツの権利帰属",
+            "必要な権利または許諾",
+            "限定的な利用許諾",
+            "投稿撤回後の取扱い",
+            "広告、宣伝、生成 AI の学習",
+        ] {
+            assert!(
+                TERMS.contains(required_clause),
+                "terms must contain `{required_clause}`"
+            );
+        }
     }
 
     #[test]
