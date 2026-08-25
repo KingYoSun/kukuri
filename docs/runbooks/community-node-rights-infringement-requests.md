@@ -14,6 +14,9 @@ Community Node が実行できるのは、その node 自身の索引、検索�
 features:
   rights_request_endpoint: true
 
+deploy:
+  legal_data_key_secret_id: kukuri-cn-legal-data-key
+
 manifest:
   rights_request_initial_response_target_days: 7
 ```
@@ -61,9 +64,10 @@ cargo run -p kukuri-cn-cli -- rights-requests action `
 - 追跡 secret は受付直後に一度だけ表示され、DB には SHA-256 hash だけが保存される。
 - 参照 ID と secret の不一致は、存在しない参照 ID と同じ公開応答にする。
 - 証拠は URL、hash、外部識別子だけを扱う。ファイルや侵害対象コンテンツを upload・複製しない。
-- 申出人情報と権利主張は `cn_legal.rights_requests` に local-only で保存し、一般通報、public replica、operator audit へ複製しない。
+- 申出本体は `cn_legal.rights_requests`、連絡先・本人／代理権情報・証拠参照は専用鍵で暗号化した `cn_legal.sensitive_items` に local-only で保存し、一般通報、public replica、operator audit へ複製しない。
 - 公開 status は scope、状態、更新時刻、公開メッセージだけを返す。
+- 保持期限、legal hold、限定 export は [ADR 0034](../adr/0034-community-node-case-retention-legal-hold.md) と [発信者情報開示 runbook](community-node-sender-information-disclosure.md) に従う。
 
 ## 無効化
 
-`features.rights_request_endpoint: false` にして再配備すると manifest と公開受付が無効になる。既存 record は監査・追跡のため自動削除しない。保持・削除は node の文書化された保持方針と適用法令に従い、DB を直接編集して append-only event を破壊しない。
+`features.rights_request_endpoint: false` にして再配備すると manifest と公開受付が無効になる。既存 record は無効化だけでは即時削除せず、文書化された保持期限に達すると通常読取から除外され、定期 sweep で削除される。DB を直接編集して append-only event を破壊しない。

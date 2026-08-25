@@ -15,6 +15,11 @@ use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 use uuid::Uuid;
 
+use crate::{
+    LegalDataCipher, RetentionPolicy, SensitiveDataCategory, load_sensitive_json,
+    upsert_sensitive_json_in_tx,
+};
+
 /// 受信直後の通報状態。
 pub const COMMUNITY_NODE_REPORT_STATUS_RECEIVED: &str = "received";
 
@@ -53,14 +58,36 @@ pub async fn insert_community_node_report(
     pool: &PgPool,
     input: &NewCommunityNodeReport,
 ) -> Result<CommunityNodeReport> {
+    insert_community_node_report_with_retention(
+        pool,
+        input,
+        None,
+        &RetentionPolicy::default(),
+        Utc::now(),
+    )
+    .await
+}
+
+pub async fn insert_community_node_report_with_retention(
+    pool: &PgPool,
+    input: &NewCommunityNodeReport,
+    cipher: Option<&LegalDataCipher>,
+    retention: &RetentionPolicy,
+    now: DateTime<Utc>,
+) -> Result<CommunityNodeReport> {
+    if input.reporter_contact.is_some() && cipher.is_none() {
+        bail!("legal data encryption key is required for reporter contact");
+    }
     let id = Uuid::new_v4().to_string();
+    let expires_at = retention.expiry(now, retention.report_days);
+    let mut tx = pool.begin().await?;
     let row = sqlx::query(
         "INSERT INTO cn_admin.reports
             (id, subject_kind, subject_id, capability, reason, details, reporter_contact,
-             appeal_risk_signal_id, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+             appeal_risk_signal_id, status, created_at, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $8, $9, $10)
          RETURNING id, subject_kind, subject_id, capability, reason, details, reporter_contact,
-                   appeal_risk_signal_id, status, created_at",
+                   appeal_risk_signal_id, status, created_at, expires_at",
     )
     .bind(&id)
     .bind(&input.subject_kind)
@@ -68,12 +95,27 @@ pub async fn insert_community_node_report(
     .bind(&input.capability)
     .bind(&input.reason)
     .bind(&input.details)
-    .bind(&input.reporter_contact)
     .bind(&input.appeal_risk_signal_id)
     .bind(COMMUNITY_NODE_REPORT_STATUS_RECEIVED)
-    .fetch_one(pool)
+    .bind(now)
+    .bind(expires_at)
+    .fetch_one(&mut *tx)
     .await?;
-    report_from_row(&row)
+    if let (Some(cipher), Some(contact)) = (cipher, input.reporter_contact.as_ref()) {
+        upsert_sensitive_json_in_tx(
+            &mut tx,
+            cipher,
+            "report",
+            &id,
+            SensitiveDataCategory::ReportContact,
+            contact,
+            retention.expiry(now, retention.report_contact_days),
+        )
+        .await?;
+    }
+    let report = report_from_row(&row)?;
+    tx.commit().await?;
+    Ok(report)
 }
 
 /// この node が発行したリスク判定への異議申し立てを、状態遷移と通報保存を一体で受理する。
@@ -82,6 +124,25 @@ pub async fn insert_community_node_appeal(
     issuer_node_id: &str,
     risk_signal_id: &str,
     input: &NewCommunityNodeReport,
+) -> Result<CommunityNodeReport> {
+    insert_community_node_appeal_with_retention(
+        pool,
+        issuer_node_id,
+        risk_signal_id,
+        input,
+        &RetentionPolicy::default(),
+        Utc::now(),
+    )
+    .await
+}
+
+pub async fn insert_community_node_appeal_with_retention(
+    pool: &PgPool,
+    issuer_node_id: &str,
+    risk_signal_id: &str,
+    input: &NewCommunityNodeReport,
+    retention: &RetentionPolicy,
+    now: DateTime<Utc>,
 ) -> Result<CommunityNodeReport> {
     let issuer_node_id = issuer_node_id.trim();
     if issuer_node_id.is_empty() {
@@ -96,7 +157,7 @@ pub async fn insert_community_node_appeal(
     let row = sqlx::query(
         "SELECT issuer_node_id, target, target_id, COALESCE(appeal_status, 'none') AS appeal_status
          FROM cn_safety.risk_signals
-         WHERE id = $1
+         WHERE id = $1 AND retention_expires_at > NOW()
          FOR UPDATE",
     )
     .bind(risk_signal_id)
@@ -133,8 +194,8 @@ pub async fn insert_community_node_appeal(
     let row = sqlx::query(
         "INSERT INTO cn_admin.reports
             (id, subject_kind, subject_id, capability, reason, details, reporter_contact,
-             appeal_risk_signal_id, status)
-         VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $8)
+             appeal_risk_signal_id, status, created_at, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $8, $9, $10)
          RETURNING id, subject_kind, subject_id, capability, reason, details, reporter_contact,
                    appeal_risk_signal_id, status, created_at",
     )
@@ -146,6 +207,8 @@ pub async fn insert_community_node_appeal(
     .bind(&input.details)
     .bind(risk_signal_id)
     .bind(COMMUNITY_NODE_REPORT_STATUS_RECEIVED)
+    .bind(now)
+    .bind(retention.expiry(now, retention.report_days))
     .fetch_one(&mut *tx)
     .await?;
     let report = report_from_row(&row)?;
@@ -171,8 +234,9 @@ pub async fn list_community_node_reports(
 ) -> Result<Vec<CommunityNodeReport>> {
     let rows = sqlx::query(
         "SELECT id, subject_kind, subject_id, capability, reason, details, reporter_contact,
-                appeal_risk_signal_id, status, created_at
+                appeal_risk_signal_id, status, created_at, expires_at
          FROM cn_admin.reports
+         WHERE expires_at > NOW()
          ORDER BY created_at DESC
          LIMIT $1 OFFSET $2",
     )
@@ -190,14 +254,72 @@ pub async fn get_community_node_report(
 ) -> Result<Option<CommunityNodeReport>> {
     let row = sqlx::query(
         "SELECT id, subject_kind, subject_id, capability, reason, details, reporter_contact,
-                appeal_risk_signal_id, status, created_at
+                appeal_risk_signal_id, status, created_at, expires_at
          FROM cn_admin.reports
-         WHERE id = $1",
+         WHERE id = $1 AND expires_at > NOW()",
     )
     .bind(id)
     .fetch_optional(pool)
     .await?;
     row.as_ref().map(report_from_row).transpose()
+}
+
+pub async fn get_community_node_report_with_contact(
+    pool: &PgPool,
+    cipher: &LegalDataCipher,
+    id: &str,
+    now: DateTime<Utc>,
+) -> Result<Option<CommunityNodeReport>> {
+    let Some(mut report) = get_community_node_report(pool, id).await? else {
+        return Ok(None);
+    };
+    report.reporter_contact = load_sensitive_json(
+        pool,
+        cipher,
+        "report",
+        &report.id,
+        SensitiveDataCategory::ReportContact,
+        now,
+    )
+    .await?;
+    Ok(Some(report))
+}
+
+pub async fn seal_legacy_report_contacts(
+    pool: &PgPool,
+    cipher: &LegalDataCipher,
+    retention: &RetentionPolicy,
+) -> Result<u64> {
+    let rows = sqlx::query(
+        "SELECT id, reporter_contact, created_at FROM cn_admin.reports
+         WHERE reporter_contact IS NOT NULL",
+    )
+    .fetch_all(pool)
+    .await?;
+    let mut sealed = 0;
+    for row in rows {
+        let id: String = row.try_get("id")?;
+        let contact: String = row.try_get("reporter_contact")?;
+        let created_at: DateTime<Utc> = row.try_get("created_at")?;
+        let mut tx = pool.begin().await?;
+        upsert_sensitive_json_in_tx(
+            &mut tx,
+            cipher,
+            "report",
+            &id,
+            SensitiveDataCategory::ReportContact,
+            &contact,
+            retention.expiry(created_at, retention.report_contact_days),
+        )
+        .await?;
+        sqlx::query("UPDATE cn_admin.reports SET reporter_contact = NULL WHERE id = $1")
+            .bind(&id)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        sealed += 1;
+    }
+    Ok(sealed)
 }
 
 fn report_from_row(row: &PgRow) -> Result<CommunityNodeReport> {

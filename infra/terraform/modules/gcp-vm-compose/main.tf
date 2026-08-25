@@ -89,6 +89,7 @@ locals {
     blob_cache_path          = var.blob_cache_path
     operator_config_enabled  = local.operator_config_enabled
     operator_config_path     = local.operator_config_path
+    legal_data_key_secret_id = var.legal_data_key_secret_id
     deploy_indexer_stack     = var.deploy_indexer_stack
     cn_indexer_image         = var.cn_indexer_image
     arcadedb_image           = var.arcadedb_image
@@ -216,6 +217,7 @@ locals {
     indexer_data_path                   = local.indexer_data_path
     relation_analyze_interval_minutes   = var.relation_analyze_interval_minutes
     channel_secret_key_secret_id        = var.channel_secret_key_secret_id
+    legal_data_key_secret_id            = var.legal_data_key_secret_id
     arcadedb_password_secret_id         = var.arcadedb_password_secret_id
     safety_signing_key_secret_id        = var.safety_signing_key_secret_id
     arachnid_username_secret_id         = var.arachnid_username_secret_id

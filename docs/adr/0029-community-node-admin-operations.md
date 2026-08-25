@@ -4,6 +4,8 @@
 
 Accepted
 
+案件データの保持、legal hold、限定 export は [ADR 0034](0034-community-node-case-retention-legal-hold.md) を正とする。hold の開始・解除・export は既存 admin 認証と CSRF 保護を通し、機微本文を含めない append-only audit を残す。
+
 ## Context
 
 Community Node の admin Web surface は GCP IAP TCP forwarding と IAM を公開境界にし、

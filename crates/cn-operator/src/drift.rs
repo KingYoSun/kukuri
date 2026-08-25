@@ -113,6 +113,7 @@ fn forbidden_disclosure_values(config: &ResolvedConfig) -> Vec<String> {
                 Some(deploy.jwt_secret_id.clone()),
                 Some(deploy.postgres_password_secret_id.clone()),
                 deploy.channel_secret_key_secret_id.clone(),
+                deploy.legal_data_key_secret_id.clone(),
                 deploy.arcadedb_password_secret_id.clone(),
                 deploy.arachnid_username_secret_id.clone(),
                 deploy.arachnid_password_secret_id.clone(),

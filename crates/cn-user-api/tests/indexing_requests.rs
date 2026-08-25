@@ -81,6 +81,7 @@ impl TestServer {
             jwt_config: JwtConfig::new("kukuri-cn-tests", "test-secret", 3600),
             operator_config_path: None,
             channel_secret_key,
+            legal_data_key: None,
             index_query_enabled: gate != IndexGate::NotConfigured,
             trust_read_enabled: false,
             relation_distance_optout_min_proximity: (gate != IndexGate::NotConfigured)

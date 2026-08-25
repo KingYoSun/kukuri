@@ -4,8 +4,8 @@ use axum::extract::{Form, Path, State};
 use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Response};
 use kukuri_cn_core::{
-    TransmissionPreventionCapability, action_rights_request, get_rights_request,
-    list_rights_requests, transition_rights_request,
+    TransmissionPreventionCapability, action_rights_request, get_rights_request_with_sensitive,
+    list_rights_requests_with_sensitive, transition_rights_request,
 };
 use kukuri_cn_protocol::RightsRequestStatus;
 use serde::Deserialize;
@@ -34,7 +34,20 @@ fn default_delivery_status() -> String {
 }
 
 pub(crate) async fn rights_requests_page(State(state): State<AdminState>) -> Html<String> {
-    let main = match list_rights_requests(&state.runtime.pool, 100, 0).await {
+    let requests = match state.runtime.legal_data_cipher.as_deref() {
+        Some(cipher) => {
+            list_rights_requests_with_sensitive(
+                &state.runtime.pool,
+                cipher,
+                100,
+                0,
+                chrono::Utc::now(),
+            )
+            .await
+        }
+        None => Err(anyhow::anyhow!("legal data encryption is not configured")),
+    };
+    let main = match requests {
         Ok(requests) => {
             let rows = if requests.is_empty() {
                 "<tr><td colspan=\"6\">権利侵害申出はありません。</td></tr>".to_string()
@@ -76,7 +89,17 @@ pub(crate) async fn rights_request_detail(
     State(state): State<AdminState>,
     Path(id): Path<String>,
 ) -> Response {
-    let request = match get_rights_request(&state.runtime.pool, &id).await {
+    let Some(cipher) = state.runtime.legal_data_cipher.as_deref() else {
+        return render_action_error(StatusCode::SERVICE_UNAVAILABLE, "暗号鍵が未設定です。");
+    };
+    let request = match get_rights_request_with_sensitive(
+        &state.runtime.pool,
+        cipher,
+        &id,
+        chrono::Utc::now(),
+    )
+    .await
+    {
         Ok(Some(request)) => request,
         Ok(None) => return render_action_error(StatusCode::NOT_FOUND, "申出が見つかりません。"),
         Err(error) => {
@@ -130,7 +153,17 @@ pub(crate) async fn preview_rights_request_action(
     if !csrf_matches(&state.csrf_token, &form.csrf_token) {
         return render_action_error(StatusCode::FORBIDDEN, "画面を読み直してください。");
     }
-    let current = match get_rights_request(&state.runtime.pool, &form.id).await {
+    let Some(cipher) = state.runtime.legal_data_cipher.as_deref() else {
+        return render_action_error(StatusCode::SERVICE_UNAVAILABLE, "暗号鍵が未設定です。");
+    };
+    let current = match get_rights_request_with_sensitive(
+        &state.runtime.pool,
+        cipher,
+        &form.id,
+        chrono::Utc::now(),
+    )
+    .await
+    {
         Ok(Some(value)) if value.version == form.expected_version => value,
         Ok(Some(_)) => {
             return render_action_error(
@@ -201,6 +234,8 @@ pub(crate) async fn apply_rights_request_action(
                     status,
                     nonempty(&form.public_message),
                     &form.delivery_status,
+                    &state.runtime.retention,
+                    chrono::Utc::now(),
                 )
                 .await
             }
@@ -214,6 +249,8 @@ pub(crate) async fn apply_rights_request_action(
                 actor,
                 capabilities,
                 &form.public_message,
+                &state.runtime.retention,
+                chrono::Utc::now(),
             )
             .await
             .map(|result| result.request),

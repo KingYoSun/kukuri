@@ -20,14 +20,15 @@ pub mod docs;
 pub mod drift;
 pub mod manifest;
 pub mod profile;
+pub mod retention_config;
 pub mod safety_config;
 pub mod safety_readiness;
 
 pub use capability::{Availability, Capability, CapabilityMeta, ExternalDestination};
 pub use capability_risk::CapabilityRiskPractices;
 pub use config::{
-    DeployConfig, DeployProfile, OperatorConfig, ResolvedConfig, RetentionConfig, ServerConfig,
-    load_and_validate, parse_config, resolve_and_validate,
+    DeployConfig, DeployProfile, OperatorConfig, ResolvedConfig, ServerConfig, load_and_validate,
+    parse_config, resolve_and_validate,
 };
 pub use deploy::generate_tfvars;
 pub use docs::{GeneratedFile, generate_all};
@@ -38,6 +39,7 @@ pub use manifest::{
     render_manifest,
 };
 pub use profile::Profile;
+pub use retention_config::RetentionConfig;
 pub use safety_config::{
     ProviderHosting, SafetyConfig, SafetyErrorAction, SafetyEventsConfig, SafetyIndexingConfig,
     SafetyProviderEntry, SafetyProvidersConfig, SafetyStorageConfig,
@@ -78,6 +80,18 @@ features:
 retention:
   connection_logs_days: 30
   moderation_logs_days: 180
+  report_days: 180
+  report_contact_days: 90
+  rights_request_active_days: 730
+  rights_request_resolved_days: 365
+  rights_request_rejected_days: 180
+  rights_request_contact_days: 180
+  rights_request_identity_days: 180
+  rights_request_evidence_days: 180
+  rights_request_history_days: 365
+  operator_audit_days: 365
+  moderation_event_days: 180
+  risk_signal_days: 180
 
 safety:
   profile: public-node
@@ -148,6 +162,7 @@ manifest:
 #   indexer_data_disk_gb: 10
 #   relation_analyze_interval_minutes: 60
 #   channel_secret_key_secret_id: kukuri-cn-channel-secret-key
+#   legal_data_key_secret_id: kukuri-cn-legal-data-key
 #   arcadedb_password_secret_id: kukuri-cn-arcadedb-password
 #   arachnid_username_secret_id: kukuri-cn-arachnid-username
 #   arachnid_password_secret_id: kukuri-cn-arachnid-password

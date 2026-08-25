@@ -82,7 +82,7 @@
           "heading": "Disclosure to third parties",
           "paragraphs": [
             "The kukuri client does not centrally aggregate your personal information and disclose it to third parties.",
-            "Due to the nature of P2P, content and connection information you share can become technically visible to peers, community nodes, and relays. This is not third-party disclosure but an inherent technical characteristic of P2P communication."
+            "Due to the nature of P2P, content and connection information you share may be visible, as needed for each function, to communicating peers, community nodes that assist connection establishment, and relays that carry traffic. Whether this is legally treated as third-party disclosure depends on the actor, purpose, and deployment and is not characterized uniformly."
           ]
         },
         {

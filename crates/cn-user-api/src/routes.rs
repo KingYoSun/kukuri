@@ -46,6 +46,7 @@ use crate::handlers::trust_relation::{
 };
 use crate::rate_limit::apply_rate_limit;
 use crate::state::{ManifestState, UserApiState, build_runtime_state};
+use kukuri_cn_core::{apply_retention_policy, cleanup_expired};
 
 pub fn app_router(state: UserApiState) -> Router {
     let manifest = manifest_routes(
@@ -218,6 +219,7 @@ pub async fn run_from_env() -> Result<()> {
     let bind_addr = config.bind_addr;
     let rate_limit = RateLimitConfig::from_env()?;
     let state = build_runtime_state(&config).await?;
+    spawn_retention_cleanup(state.clone());
     let admin_bind_addr = std::env::var("COMMUNITY_NODE_ADMIN_BIND_ADDR")
         .ok()
         .filter(|value| !value.trim().is_empty())
@@ -255,6 +257,25 @@ pub async fn run_from_env() -> Result<()> {
         user_server.await?;
     }
     Ok(())
+}
+
+fn spawn_retention_cleanup(state: UserApiState) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60 * 60));
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            let result = async {
+                apply_retention_policy(&state.pool, &state.retention).await?;
+                cleanup_expired(&state.pool, chrono::Utc::now()).await
+            }
+            .await;
+            match result {
+                Ok(counts) => tracing::info!(?counts, "community-node retention cleanup completed"),
+                Err(error) => tracing::error!(%error, "community-node retention cleanup failed"),
+            }
+        }
+    });
 }
 
 pub(crate) fn init_tracing() {

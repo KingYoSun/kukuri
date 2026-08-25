@@ -23,6 +23,8 @@ mod env;
 mod errors;
 mod index_entries;
 mod index_scope;
+mod legal_data;
+mod legal_holds;
 mod operator_actions;
 mod readiness_activation;
 mod readiness_probe;
@@ -30,6 +32,8 @@ mod readiness_runtime;
 mod relation_optouts;
 mod rendezvous;
 mod reports;
+mod retention;
+mod rights_request_sensitive;
 mod rights_requests;
 mod rollout;
 mod safety_appeals;
@@ -89,6 +93,13 @@ pub use index_scope::{
     list_indexing_requests, list_supported_topics, register_channel_secret,
     reject_indexing_request, remove_channel_secret, remove_supported_topic, upsert_channel_secret,
 };
+pub use legal_data::{
+    LegalDataCipher, SensitiveDataCategory, load_sensitive_json, upsert_sensitive_json_in_tx,
+    verify_sensitive_items,
+};
+pub use legal_holds::{
+    LegalHold, LegalHoldExport, export_legal_hold, release_legal_hold, start_legal_hold,
+};
 pub use operator_actions::{
     AdminOperation, OperatorAction, OperatorReportStatus, apply_operator_action,
     list_operator_actions, validate_admin_operation,
@@ -109,14 +120,21 @@ pub use relation_optouts::{
 pub use rendezvous::TopicRendezvousStore;
 pub use reports::{
     COMMUNITY_NODE_REPORT_STATUS_RECEIVED, CommunityNodeReport, NewCommunityNodeReport,
-    get_community_node_report, insert_community_node_appeal, insert_community_node_report,
-    list_community_node_reports,
+    get_community_node_report, get_community_node_report_with_contact,
+    insert_community_node_appeal, insert_community_node_appeal_with_retention,
+    insert_community_node_report, insert_community_node_report_with_retention,
+    list_community_node_reports, seal_legacy_report_contacts,
 };
+pub use retention::{
+    CleanupCounts, RetentionPolicy, apply_retention_policy, cleanup_expired, retention_counts,
+};
+pub use rights_request_sensitive::seal_legacy_rights_request_data;
 pub use rights_requests::{
     CreatedRightsRequest, RightsRequestActionResult, RightsRequestEvent, RightsRequestRecord,
     action_rights_request, get_public_rights_request_status, get_rights_request,
-    insert_rights_request, list_rights_requests, resolve_rights_request_scope,
-    transition_rights_request, withdraw_rights_request,
+    get_rights_request_with_sensitive, insert_rights_request, list_rights_requests,
+    list_rights_requests_with_sensitive, resolve_rights_request_scope, transition_rights_request,
+    withdraw_rights_request,
 };
 pub use rollout::{ensure_default_auth_rollout, load_auth_rollout, store_auth_rollout};
 pub use safety_appeals::{

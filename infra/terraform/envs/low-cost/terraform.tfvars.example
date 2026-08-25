@@ -24,6 +24,7 @@ cn_cli_image        = "ghcr.io/kingyosun/kukuri-cn-cli:latest"
 # Secret Manager secret IDs（payload は事前に gcloud で作成しておく）
 jwt_secret_id               = "kukuri-cn-jwt-secret"
 postgres_password_secret_id = "kukuri-cn-postgres-password"
+legal_data_key_secret_id    = "kukuri-cn-legal-data-key"
 
 # sizing（任意。既定は e2-small / 30GB）
 machine_type = "e2-small"

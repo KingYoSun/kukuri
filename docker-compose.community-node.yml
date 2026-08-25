@@ -129,6 +129,7 @@ services:
       # private channel indexing / index・trust read surface（#615）。flag は full-stack E2E
       # 完了まで既定 false（無効時は 404）。
       COMMUNITY_NODE_CHANNEL_SECRET_KEY: ${COMMUNITY_NODE_CHANNEL_SECRET_KEY:-}
+      COMMUNITY_NODE_LEGAL_DATA_KEY: ${COMMUNITY_NODE_LEGAL_DATA_KEY:-}
       COMMUNITY_NODE_ARCADEDB_URL: http://cn-arcadedb:2480
       COMMUNITY_NODE_ARCADEDB_DATABASE: ${CN_ARCADEDB_DATABASE:-kukuri_index}
       COMMUNITY_NODE_ARCADEDB_USER: ${CN_ARCADEDB_USER:-root}

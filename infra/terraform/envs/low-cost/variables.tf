@@ -324,6 +324,12 @@ variable "channel_secret_key_secret_id" {
   default     = ""
 }
 
+variable "legal_data_key_secret_id" {
+  description = "COMMUNITY_NODE_LEGAL_DATA_KEY を保持する Secret Manager secret ID（通報・権利侵害受付を有効にする場合は必須）。"
+  type        = string
+  default     = ""
+}
+
 variable "arcadedb_password_secret_id" {
   description = "ArcadeDB root password を保持する Secret Manager secret ID（deploy_indexer_stack=true のとき必須）。"
   type        = string

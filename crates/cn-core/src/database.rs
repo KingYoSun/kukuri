@@ -52,6 +52,8 @@ pub async fn ensure_database_ready(pool: &PgPool) -> Result<()> {
         ("cn_admin", "operator_actions"),
         ("cn_legal", "rights_requests"),
         ("cn_legal", "rights_request_events"),
+        ("cn_legal", "sensitive_items"),
+        ("cn_legal", "legal_holds"),
         ("cn_legal", "transmission_preventions"),
         ("cn_bootstrap", "bootstrap_nodes"),
         ("cn_bootstrap", "peer_registrations"),

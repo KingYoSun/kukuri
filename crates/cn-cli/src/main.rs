@@ -98,6 +98,57 @@ enum Command {
         #[command(subcommand)]
         action: TransmissionPreventionAction,
     },
+    /// 案件単位の legal hold を開始・解除・export する（#763）。
+    LegalHold {
+        #[command(subcommand)]
+        action: LegalHoldAction,
+    },
+    /// 期限切れ案件データを整理する（#763）。
+    Retention {
+        #[command(subcommand)]
+        action: RetentionAction,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum LegalHoldAction {
+    Start {
+        #[arg(long)]
+        target_kind: String,
+        #[arg(long)]
+        target_id: String,
+        #[arg(long, value_delimiter = ',', required = true)]
+        data_categories: Vec<String>,
+        #[arg(long)]
+        basis: String,
+        #[arg(long)]
+        release_condition: String,
+        #[arg(long)]
+        actor: String,
+    },
+    Release {
+        #[arg(long = "hold-id")]
+        id: String,
+        #[arg(long)]
+        actor: String,
+    },
+    Export {
+        #[arg(long = "hold-id")]
+        id: String,
+        #[arg(long)]
+        actor: String,
+        #[arg(long)]
+        output: PathBuf,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum RetentionAction {
+    Sweep {
+        /// 試験・復元 drill 用の基準時刻。未指定は現在時刻。
+        #[arg(long)]
+        now: Option<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]

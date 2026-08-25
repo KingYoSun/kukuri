@@ -4,8 +4,8 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use kukuri_cn_core::{
-    ApiError, ApiResult, NewCommunityNodeReport, insert_community_node_appeal,
-    insert_community_node_report,
+    ApiError, ApiResult, NewCommunityNodeReport, insert_community_node_appeal_with_retention,
+    insert_community_node_report_with_retention,
 };
 use kukuri_cn_protocol::{CommunityNodeReportRequest, CommunityNodeReportResponse};
 
@@ -108,25 +108,44 @@ pub(crate) async fn submit_report(
             }
             report.reporter_contact = None;
             report.appeal_risk_signal_id = Some(risk_signal_id.to_string());
-            let stored =
-                insert_community_node_appeal(&state.pool, issuer_node_id, risk_signal_id, &report)
-                    .await
-                    .map_err(|_| {
-                        ApiError::new(
-                            StatusCode::BAD_REQUEST,
-                            "INVALID_APPEAL",
-                            "the referenced moderation advisory cannot be disputed",
-                        )
-                    })?;
+            let stored = insert_community_node_appeal_with_retention(
+                &state.pool,
+                issuer_node_id,
+                risk_signal_id,
+                &report,
+                &state.retention,
+                chrono::Utc::now(),
+            )
+            .await
+            .map_err(|_| {
+                ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "INVALID_APPEAL",
+                    "the referenced moderation advisory cannot be disputed",
+                )
+            })?;
             (stored, Some(risk_signal_id.to_string()))
         }
         None => {
-            let stored = insert_community_node_report(&state.pool, &report)
-                .await
-                .map_err(|source| {
-                    SupportEndpointError::new(SupportEndpointOperation::StoreReport, source)
-                })
-                .map_err(support_endpoint_error)?;
+            let cipher = state.legal_data_cipher.as_deref().ok_or_else(|| {
+                ApiError::new(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "REPORT_ENCRYPTION_NOT_CONFIGURED",
+                    "report intake encryption is not configured",
+                )
+            })?;
+            let stored = insert_community_node_report_with_retention(
+                &state.pool,
+                &report,
+                Some(cipher),
+                &state.retention,
+                chrono::Utc::now(),
+            )
+            .await
+            .map_err(|source| {
+                SupportEndpointError::new(SupportEndpointOperation::StoreReport, source)
+            })
+            .map_err(support_endpoint_error)?;
             (stored, None)
         }
     };

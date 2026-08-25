@@ -154,7 +154,8 @@ pub async fn apply_operator_action(
                 bail!("report id must not be empty");
             }
             let current = sqlx::query_scalar::<_, String>(
-                "SELECT status FROM cn_admin.reports WHERE id = $1 FOR UPDATE",
+                "SELECT status FROM cn_admin.reports
+                 WHERE id = $1 AND expires_at > NOW() FOR UPDATE",
             )
             .bind(report_id)
             .fetch_optional(&mut *tx)
@@ -224,6 +225,7 @@ pub async fn list_operator_actions(
     let rows = sqlx::query(
         "SELECT id, occurred_at, actor, action, target_kind, target_id, before_json, after_json
          FROM cn_admin.operator_actions
+         WHERE expires_at > NOW()
          ORDER BY occurred_at DESC, id DESC
          LIMIT $1 OFFSET $2",
     )
