@@ -1,8 +1,10 @@
 use anyhow::Result;
 use kukuri_cn_core::{
-    TestDatabase, TransmissionPreventionCapability, action_rights_request, connect_postgres,
-    get_active_transmission_prevention, get_public_rights_request_status, get_rights_request,
-    initialize_database, insert_rights_request, list_operator_actions, transition_rights_request,
+    LegalDataCipher, RetentionPolicy, TestDatabase, TransmissionPreventionCapability,
+    action_rights_request, apply_retention_policy, cleanup_expired, connect_postgres,
+    export_legal_hold, get_active_transmission_prevention, get_public_rights_request_status,
+    get_rights_request, initialize_database, insert_rights_request, list_operator_actions,
+    release_legal_hold, start_legal_hold, transition_rights_request, verify_sensitive_items,
 };
 use kukuri_cn_protocol::{
     RightsCategory, RightsRequestCreateRequest, RightsRequestScopeStatus, RightsRequestStatus,
@@ -56,9 +58,22 @@ async fn accountless_tracking_and_action_are_durable_and_redacted() -> Result<()
     let pool = connect_postgres(database.database_url.as_str()).await?;
     let result = async {
         initialize_database(&pool).await?;
-        let created =
-            insert_rights_request(&pool, &request(), RightsRequestScopeStatus::UnverifiedScope)
-                .await?;
+        let cipher =
+            LegalDataCipher::from_key_material("unit-test-legal-data-key-0123456789abcdef")?;
+        let retention = RetentionPolicy::default();
+        let created = insert_rights_request(
+            &pool,
+            &request(),
+            RightsRequestScopeStatus::UnverifiedScope,
+            &cipher,
+            &retention,
+            chrono::Utc::now(),
+        )
+        .await?;
+        let wrong_cipher =
+            LegalDataCipher::from_key_material("wrong-unit-test-legal-key-0123456789abcdef")?;
+        assert!(verify_sensitive_items(&pool, &wrong_cipher).await.is_err());
+        assert!(verify_sensitive_items(&pool, &cipher).await? > 0);
         assert_eq!(created.record.status, RightsRequestStatus::NeedsInformation);
         assert!(
             get_public_rights_request_status(&pool, &created.record.id, "wrong")
@@ -86,6 +101,8 @@ async fn accountless_tracking_and_action_are_durable_and_redacted() -> Result<()
             RightsRequestStatus::Reviewing,
             Some("審査を開始しました"),
             "status_surface",
+            &retention,
+            chrono::Utc::now(),
         )
         .await?;
         let actioned = action_rights_request(
@@ -95,6 +112,8 @@ async fn accountless_tracking_and_action_are_durable_and_redacted() -> Result<()
             "legal@node.example",
             vec![TransmissionPreventionCapability::Moderation],
             "このノードの moderation 対象から除外しました",
+            &retention,
+            chrono::Utc::now(),
         )
         .await?;
         assert_eq!(actioned.request.status, RightsRequestStatus::Actioned);
@@ -134,6 +153,105 @@ async fn accountless_tracking_and_action_are_durable_and_redacted() -> Result<()
                 .is_err(),
             "rights request events must be append-only"
         );
+        anyhow::Ok(())
+    }
+    .await;
+    database.cleanup().await?;
+    result
+}
+
+#[tokio::test]
+async fn expired_held_case_is_hidden_exportable_and_deleted_after_release() -> Result<()> {
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping legal-hold integration test");
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_legal_hold").await?;
+    let pool = connect_postgres(database.database_url.as_str()).await?;
+    let result = async {
+        initialize_database(&pool).await?;
+        let cipher =
+            LegalDataCipher::from_key_material("unit-test-legal-data-key-0123456789abcdef")?;
+        let retention = RetentionPolicy::default();
+        let now = chrono::Utc::now();
+        let created = insert_rights_request(
+            &pool,
+            &request(),
+            RightsRequestScopeStatus::UnverifiedScope,
+            &cipher,
+            &retention,
+            now - chrono::Duration::days(800),
+        )
+        .await?;
+        let categories = vec![
+            "rights_request".to_string(),
+            "rights_request_contact".to_string(),
+            "rights_request_identity".to_string(),
+            "rights_request_evidence".to_string(),
+            "rights_request_history".to_string(),
+            "operator_audit".to_string(),
+        ];
+        let hold = start_legal_hold(
+            &pool,
+            "rights_request",
+            &created.record.id,
+            &categories,
+            "court preservation order",
+            "final disposition",
+            "legal@node.example",
+            &retention,
+            now,
+        )
+        .await?;
+
+        apply_retention_policy(&pool, &retention).await?;
+        cleanup_expired(&pool, now).await?;
+        assert!(
+            get_rights_request(&pool, &created.record.id)
+                .await?
+                .is_none()
+        );
+        let physical_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM cn_legal.rights_requests WHERE id = $1")
+                .bind(&created.record.id)
+                .fetch_one(&pool)
+                .await?;
+        assert_eq!(physical_count, 1, "hold must prevent physical deletion");
+
+        let export = export_legal_hold(
+            &pool,
+            &cipher,
+            &hold.id,
+            "reviewer@node.example",
+            &retention,
+            now,
+        )
+        .await?;
+        let exported = serde_json::to_string(&export)?;
+        assert!(exported.contains("rights@example.com"));
+        for forbidden in [
+            "tracking_secret_hash",
+            "ciphertext",
+            "nonce",
+            "unit-test-legal-data-key",
+        ] {
+            assert!(!exported.contains(forbidden), "export leaked {forbidden}");
+        }
+
+        release_legal_hold(&pool, &hold.id, "legal@node.example", &retention, now).await?;
+        assert!(
+            release_legal_hold(&pool, &hold.id, "legal@node.example", &retention, now,)
+                .await
+                .is_err(),
+            "double release must fail"
+        );
+        cleanup_expired(&pool, now).await?;
+        let physical_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM cn_legal.rights_requests WHERE id = $1")
+                .bind(&created.record.id)
+                .fetch_one(&pool)
+                .await?;
+        assert_eq!(physical_count, 0, "released expired case must be deleted");
         anyhow::Ok(())
     }
     .await;

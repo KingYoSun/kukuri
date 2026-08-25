@@ -188,6 +188,22 @@ pub struct ManifestFeatures {
 pub struct ManifestRetention {
     pub connection_logs_days: u32,
     pub moderation_logs_days: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub report_days: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub report_contact_days: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rights_request_active_days: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rights_request_resolved_days: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rights_request_rejected_days: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operator_audit_days: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub moderation_event_days: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub risk_signal_days: Option<u32>,
 }
 
 /// community node manifest（`server-manifest.json` の型付き表現）。
@@ -346,6 +362,14 @@ pub fn build_manifest(config: &ResolvedConfig) -> CommunityNodeManifest {
         retention: ManifestRetention {
             connection_logs_days: config.raw.retention.connection_logs_days,
             moderation_logs_days: config.raw.retention.moderation_logs_days,
+            report_days: Some(config.raw.retention.report_days),
+            report_contact_days: Some(config.raw.retention.report_contact_days),
+            rights_request_active_days: Some(config.raw.retention.rights_request_active_days),
+            rights_request_resolved_days: Some(config.raw.retention.rights_request_resolved_days),
+            rights_request_rejected_days: Some(config.raw.retention.rights_request_rejected_days),
+            operator_audit_days: Some(config.raw.retention.operator_audit_days),
+            moderation_event_days: Some(config.raw.retention.moderation_event_days),
+            risk_signal_days: Some(config.raw.retention.risk_signal_days),
         },
     }
 }

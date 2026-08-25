@@ -61,7 +61,7 @@ module "vm" {
   jwt_secret_id               = var.jwt_secret_id
   postgres_password_secret_id = var.postgres_password_secret_id
   accessor_secret_ids = concat(
-    [var.jwt_secret_id, var.postgres_password_secret_id],
+    compact([var.jwt_secret_id, var.postgres_password_secret_id, var.legal_data_key_secret_id]),
     # index / moderation stack の runtime secrets（#615）。stack 無効時は binding を作らない。
     var.deploy_indexer_stack ? compact([
       var.channel_secret_key_secret_id,
@@ -86,6 +86,7 @@ module "vm" {
   relation_distance_optout_min_proximity = var.relation_distance_optout_min_proximity
 
   channel_secret_key_secret_id = var.channel_secret_key_secret_id
+  legal_data_key_secret_id     = var.legal_data_key_secret_id
   arcadedb_password_secret_id  = var.arcadedb_password_secret_id
   safety_signing_key_secret_id = var.safety_signing_key_secret_id
   arachnid_username_secret_id  = var.arachnid_username_secret_id

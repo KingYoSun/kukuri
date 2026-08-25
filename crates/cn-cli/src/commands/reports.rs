@@ -1,7 +1,9 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use sqlx::PgPool;
 
-use kukuri_cn_core::{get_community_node_report, list_community_node_reports};
+use kukuri_cn_core::{
+    LegalDataCipher, get_community_node_report_with_contact, list_community_node_reports,
+};
 
 use crate::ReportsAction;
 
@@ -32,7 +34,17 @@ pub(super) async fn run(pool: &PgPool, action: ReportsAction) -> Result<()> {
                 }
             }
         }
-        ReportsAction::Show { id } => match get_community_node_report(pool, id.as_str()).await? {
+        ReportsAction::Show { id } => match get_community_node_report_with_contact(
+            pool,
+            &LegalDataCipher::from_key_material(
+                &std::env::var("COMMUNITY_NODE_LEGAL_DATA_KEY")
+                    .context("COMMUNITY_NODE_LEGAL_DATA_KEY is required")?,
+            )?,
+            id.as_str(),
+            chrono::Utc::now(),
+        )
+        .await?
+        {
             Some(report) => {
                 println!("id:               {}", report.id);
                 println!("created_at:       {}", report.created_at.to_rfc3339());

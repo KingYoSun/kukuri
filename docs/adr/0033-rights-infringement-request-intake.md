@@ -85,3 +85,5 @@ client が指定した capability は希望として扱う。server は manifest
 - Direct P2P の遮断、暗号化 relay packet の内容検査、既取得データの回収
 - 証拠ファイルの upload、保管、malware scan
 - 自動 SMTP 配信、郵送、裁判所・行政機関への自動提出
+
+保持期限、機微区分の暗号化、legal hold、復元後 cleanup は [ADR 0034](0034-community-node-case-retention-legal-hold.md) を正とする。

@@ -44,6 +44,29 @@ fn deploy_unknown_key_is_rejected() {
 }
 
 #[test]
+fn report_intake_deploy_requires_legal_data_key_secret_id() {
+    let yaml = config_with_deploy(
+        "  relay_domain: relay.example-kukuri.net\n",
+        "  report_endpoint: true\n",
+        false,
+    );
+    let err = load_and_validate(&yaml).unwrap_err();
+    assert!(
+        err.to_string().contains("legal_data_key_secret_id"),
+        "got: {err}"
+    );
+
+    let yaml = config_with_deploy(
+        "  relay_domain: relay.example-kukuri.net\n  legal_data_key_secret_id: kukuri-cn-legal-data-key\n",
+        "  report_endpoint: true\n",
+        false,
+    );
+    let resolved = load_and_validate(&yaml).unwrap();
+    let tfvars = generate_tfvars(&resolved).unwrap();
+    assert!(tfvars.contains("legal_data_key_secret_id     = \"kukuri-cn-legal-data-key\""));
+}
+
+#[test]
 fn generate_tfvars_is_deterministic() {
     let yaml = config_with_deploy("  relay_domain: relay.example-kukuri.net\n", "", false);
     let resolved = load_and_validate(&yaml).unwrap();

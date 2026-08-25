@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::capability::{Availability, Capability};
 use crate::manifest::{AuthorityScopeOverride, NodeRole};
 use crate::profile::Profile;
+use crate::retention_config::{RetentionConfig, validate_retention};
 use crate::safety_config::{SafetyConfig, validate_safety_config};
 
 /// `operator-config.yaml` の生表現。
@@ -68,32 +69,6 @@ pub struct ServerConfig {
     pub node_id: Option<String>,
     #[serde(default)]
     pub node_name: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct RetentionConfig {
-    #[serde(default = "default_connection_logs_days")]
-    pub connection_logs_days: u32,
-    #[serde(default = "default_moderation_logs_days")]
-    pub moderation_logs_days: u32,
-}
-
-impl Default for RetentionConfig {
-    fn default() -> Self {
-        Self {
-            connection_logs_days: default_connection_logs_days(),
-            moderation_logs_days: default_moderation_logs_days(),
-        }
-    }
-}
-
-fn default_connection_logs_days() -> u32 {
-    30
-}
-
-fn default_moderation_logs_days() -> u32 {
-    180
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -330,6 +305,10 @@ pub struct DeployConfig {
     /// `COMMUNITY_NODE_CHANNEL_SECRET_KEY` を保持する Secret Manager secret ID（値ではない）。
     #[serde(default)]
     pub channel_secret_key_secret_id: Option<String>,
+    /// 通報・権利侵害案件の機微情報を暗号化する
+    /// `COMMUNITY_NODE_LEGAL_DATA_KEY` の Secret Manager secret ID（値ではない）。
+    #[serde(default)]
+    pub legal_data_key_secret_id: Option<String>,
     /// ArcadeDB root password を保持する Secret Manager secret ID（値ではない）。
     #[serde(default)]
     pub arcadedb_password_secret_id: Option<String>,
@@ -468,6 +447,7 @@ pub fn resolve_and_validate(config: OperatorConfig) -> Result<ResolvedConfig> {
     if config.server.country.trim().len() != 2 {
         bail!("server.country は ISO 3166-1 alpha-2（2文字、例: JP）で指定してください");
     }
+    validate_retention(&config.retention)?;
 
     // 未知の feature キーを拒否する（typo によるサイレントな無効化を防ぐ）。
     let known: BTreeMap<&str, Capability> = Capability::ALL.iter().map(|c| (c.key(), *c)).collect();
@@ -616,6 +596,21 @@ fn validate_deploy(resolved: &ResolvedConfig, deploy: &DeployConfig) -> Result<(
 
     validate_indexer_stack(resolved, deploy)?;
 
+    if resolved.enabled(Capability::ReportEndpoint)
+        || resolved.enabled(Capability::RightsRequestEndpoint)
+    {
+        let present = deploy
+            .legal_data_key_secret_id
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty());
+        if !present {
+            bail!(
+                "report_endpoint または rights_request_endpoint が有効な場合、deploy.legal_data_key_secret_id は必須です"
+            );
+        }
+    }
+
     // low-cost template は cn-iroh-relay を常に配置し、relay_domain を Caddy / compose / certbot で使う。
     let relay_domain = if deploy.profile == DeployProfile::LowCost {
         let relay_domain = deploy
@@ -699,6 +694,10 @@ fn validate_deploy(resolved: &ResolvedConfig, deploy: &DeployConfig) -> Result<(
             (
                 "deploy.channel_secret_key_secret_id",
                 &deploy.channel_secret_key_secret_id,
+            ),
+            (
+                "deploy.legal_data_key_secret_id",
+                &deploy.legal_data_key_secret_id,
             ),
             (
                 "deploy.arcadedb_password_secret_id",

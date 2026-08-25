@@ -6,11 +6,13 @@ use crate::Command;
 mod admission;
 mod database;
 mod indexing;
+mod legal_hold;
 pub(crate) mod moderation;
 mod readiness;
 mod readiness_runtime;
 mod relation;
 mod reports;
+mod retention;
 mod rights_requests;
 mod transmission_prevention;
 
@@ -46,6 +48,8 @@ pub(crate) async fn dispatch(pool: &PgPool, command: Command) -> Result<()> {
         Command::TransmissionPrevention { action } => {
             transmission_prevention::run(pool, action).await
         }
+        Command::LegalHold { action } => legal_hold::run(pool, action).await,
+        Command::Retention { action } => retention::run(pool, action).await,
         Command::Readiness {
             config,
             profile,

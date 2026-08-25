@@ -1,7 +1,7 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use kukuri_cn_core::{
-    action_rights_request, get_rights_request, initialize_database, list_rights_requests,
-    transition_rights_request,
+    LegalDataCipher, RetentionPolicy, action_rights_request, get_rights_request_with_sensitive,
+    initialize_database, list_rights_requests_with_sensitive, transition_rights_request,
 };
 use kukuri_cn_protocol::RightsRequestStatus;
 use sqlx::PgPool;
@@ -10,9 +10,21 @@ use crate::{RightsRequestStatusArg, RightsRequestsAction};
 
 pub(super) async fn run(pool: &PgPool, action: RightsRequestsAction) -> Result<()> {
     initialize_database(pool).await?;
+    let cipher = LegalDataCipher::from_key_material(
+        &std::env::var("COMMUNITY_NODE_LEGAL_DATA_KEY")
+            .context("COMMUNITY_NODE_LEGAL_DATA_KEY is required")?,
+    )?;
+    let retention = RetentionPolicy::default();
     match action {
         RightsRequestsAction::List { limit, offset } => {
-            let requests = list_rights_requests(pool, limit, offset).await?;
+            let requests = list_rights_requests_with_sensitive(
+                pool,
+                &cipher,
+                limit,
+                offset,
+                chrono::Utc::now(),
+            )
+            .await?;
             if requests.is_empty() {
                 println!("no rights requests");
             }
@@ -29,10 +41,12 @@ pub(super) async fn run(pool: &PgPool, action: RightsRequestsAction) -> Result<(
                 );
             }
         }
-        RightsRequestsAction::Show { id } => match get_rights_request(pool, &id).await? {
-            Some(request) => println!("{}", serde_json::to_string_pretty(&request)?),
-            None => println!("rights request not found: {id}"),
-        },
+        RightsRequestsAction::Show { id } => {
+            match get_rights_request_with_sensitive(pool, &cipher, &id, chrono::Utc::now()).await? {
+                Some(request) => println!("{}", serde_json::to_string_pretty(&request)?),
+                None => println!("rights request not found: {id}"),
+            }
+        }
         RightsRequestsAction::Transition {
             id,
             expected_version,
@@ -49,6 +63,8 @@ pub(super) async fn run(pool: &PgPool, action: RightsRequestsAction) -> Result<(
                 status.into(),
                 public_message.as_deref(),
                 &delivery_status,
+                &retention,
+                chrono::Utc::now(),
             )
             .await?;
             println!(
@@ -70,6 +86,8 @@ pub(super) async fn run(pool: &PgPool, action: RightsRequestsAction) -> Result<(
                 &actor,
                 capabilities.into_iter().map(Into::into).collect(),
                 &public_message,
+                &retention,
+                chrono::Utc::now(),
             )
             .await?;
             println!(

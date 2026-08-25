@@ -136,7 +136,7 @@ pub async fn get_signed_moderation_event(
         "SELECT id, issuer_node_id, target_type, target_id, action, reason_code, severity, basis,
                 visibility, confidence, policy_version, labels, signature, event_created_at, persisted_at
          FROM cn_safety.signed_moderation_events
-         WHERE id = $1",
+         WHERE id = $1 AND retention_expires_at > NOW()",
     )
     .bind(id)
     .fetch_optional(pool)
@@ -154,6 +154,7 @@ pub async fn list_signed_moderation_events(
         "SELECT id, issuer_node_id, target_type, target_id, action, reason_code, severity, basis,
                 visibility, confidence, policy_version, labels, signature, event_created_at, persisted_at
          FROM cn_safety.signed_moderation_events
+         WHERE retention_expires_at > NOW()
          ORDER BY persisted_at DESC
          LIMIT $1 OFFSET $2",
     )
@@ -179,6 +180,7 @@ pub async fn list_distributable_moderation_events(
                 visibility, confidence, policy_version, labels, signature, event_created_at, persisted_at
          FROM cn_safety.signed_moderation_events
          WHERE visibility = ANY($1)
+           AND retention_expires_at > NOW()
          ORDER BY persisted_at DESC
          LIMIT $2 OFFSET $3",
     )
@@ -274,6 +276,7 @@ pub async fn list_risk_signals(
         "SELECT id, issuer_node_id, target, target_id, category, severity, basis, visibility,
                 confidence, expires_at, appeal_status, persisted_at
          FROM cn_safety.risk_signals
+         WHERE retention_expires_at > NOW()
          ORDER BY persisted_at DESC
          LIMIT $1 OFFSET $2",
     )
@@ -290,7 +293,7 @@ pub async fn get_risk_signal(pool: &PgPool, id: &str) -> Result<Option<StoredRis
         "SELECT id, issuer_node_id, target, target_id, category, severity, basis, visibility,
                 confidence, expires_at, appeal_status, persisted_at
          FROM cn_safety.risk_signals
-         WHERE id = $1",
+         WHERE id = $1 AND retention_expires_at > NOW()",
     )
     .bind(id)
     .fetch_optional(pool)
@@ -309,6 +312,7 @@ pub async fn list_risk_signals_for_target(
                 confidence, expires_at, appeal_status, persisted_at
          FROM cn_safety.risk_signals
          WHERE target = $1 AND target_id = $2
+           AND retention_expires_at > NOW()
          ORDER BY persisted_at DESC",
     )
     .bind(to_db_enum(&target)?)
@@ -332,8 +336,9 @@ pub async fn list_risk_signals_for_user(
          FROM cn_safety.risk_signals rs
          LEFT JOIN cn_safety.risk_signal_subject_authors rsa
            ON rsa.target = rs.target AND rsa.target_id = rs.target_id
-         WHERE (rs.target = 'user_pubkey' AND rs.target_id = $1)
-            OR rsa.author_pubkey = $1
+         WHERE ((rs.target = 'user_pubkey' AND rs.target_id = $1)
+            OR rsa.author_pubkey = $1)
+           AND rs.retention_expires_at > NOW()
          ORDER BY rs.persisted_at DESC",
     )
     .bind(user_pubkey)
@@ -359,6 +364,7 @@ pub async fn list_distributable_risk_signals(
          FROM cn_safety.risk_signals
          WHERE visibility = ANY($1)
            AND (expires_at IS NULL OR expires_at::timestamptz > $2::timestamptz)
+           AND retention_expires_at > NOW()
          ORDER BY persisted_at DESC
          LIMIT $3 OFFSET $4",
     )

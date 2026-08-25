@@ -454,6 +454,15 @@ fn gen_privacy(config: &ResolvedConfig) -> String {
         "- モデレーションログ保持期間: {} 日\n",
         config.raw.retention.moderation_logs_days
     );
+    let _ = writeln!(s, "## 案件データの保持と保全\n");
+    for (label, days) in retention_rows(config) {
+        let _ = writeln!(s, "- {label}: {days} 日");
+    }
+    let _ = writeln!(
+        s,
+        "\n期限切れデータは通常の読取から除外し、案件・区分を限定した legal hold が無ければ削除します。\
+         hold は通常の表示期限を延長しません。連絡先、本人・代理権確認情報、証拠参照は専用鍵で暗号化します。\n"
+    );
     let _ = writeln!(s, "## 外部送信\n");
     let _ = writeln!(
         s,
@@ -548,6 +557,11 @@ fn gen_abuse_policy(config: &ResolvedConfig) -> String {
              reporter の identity / social graph は保持しません。上記連絡先も引き続き窓口とします。\n",
             config.report_endpoint()
         );
+        let _ = writeln!(
+            s,
+            "通報本体は {} 日、任意連絡先は {} 日保持し、期限切れ後は通常読取から除外します。\n",
+            config.raw.retention.report_days, config.raw.retention.report_contact_days
+        );
     }
     s.push_str(&planned_section(config));
     s
@@ -604,6 +618,15 @@ fn gen_rights_infringement_policy(config: &ResolvedConfig) -> String {
             "本ノードでは現在、専用の権利侵害申出受付を有効にしていません。"
         );
     }
+    let _ = writeln!(
+        s,
+        "\n申出本体は未解決 {} 日、措置済み {} 日、却下・範囲外・取下げ {} 日を既定とします。\
+         連絡先・本人確認・証拠参照は本体から分離して暗号化し、各区分の期限で削除します。\
+         有効な法的手続に基づく案件限定 legal hold 中は対象区分の物理削除だけを停止します。",
+        config.raw.retention.rights_request_active_days,
+        config.raw.retention.rights_request_resolved_days,
+        config.raw.retention.rights_request_rejected_days
+    );
     s.push_str(&planned_section(config));
     s
 }
@@ -675,6 +698,15 @@ fn gen_data_retention(config: &ResolvedConfig) -> String {
         "- モデレーションログ: {} 日\n",
         config.raw.retention.moderation_logs_days
     );
+    for (label, days) in retention_rows(config) {
+        let _ = writeln!(s, "- {label}: {days} 日");
+    }
+    let _ = writeln!(
+        s,
+        "\n期限切れは通常読取時にも除外し、起動時・定期 cleanup で物理削除します。\
+         backup から復元した場合も API 公開前に同じ cleanup を適用します。案件・データ区分を限定した\
+         active legal hold は物理削除だけを停止し、期限切れデータを通常画面へ再表示しません。\n"
+    );
 
     // データ区分と保存先（#617。索引・モデレーション・信頼・関係の各系統が有効な場合）。
     if index_stack_active(config) {
@@ -744,6 +776,27 @@ fn gen_data_retention(config: &ResolvedConfig) -> String {
     }
     s.push_str(&planned_section(config));
     s
+}
+
+fn retention_rows(config: &ResolvedConfig) -> [(&'static str, u32); 12] {
+    let r = &config.raw.retention;
+    [
+        ("通報本体", r.report_days),
+        ("通報者連絡先", r.report_contact_days),
+        ("未解決の権利侵害申出", r.rights_request_active_days),
+        ("措置済みの権利侵害申出", r.rights_request_resolved_days),
+        (
+            "却下・範囲外・取下げの権利侵害申出",
+            r.rights_request_rejected_days,
+        ),
+        ("申出者連絡先", r.rights_request_contact_days),
+        ("本人・代理権確認情報", r.rights_request_identity_days),
+        ("証拠参照", r.rights_request_evidence_days),
+        ("判断・通知履歴", r.rights_request_history_days),
+        ("operator audit", r.operator_audit_days),
+        ("signed moderation event", r.moderation_event_days),
+        ("risk signal", r.risk_signal_days),
+    ]
 }
 
 fn gen_prior_consultation_email(config: &ResolvedConfig) -> String {

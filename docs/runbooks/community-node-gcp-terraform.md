@@ -418,7 +418,7 @@ docker volume rm community-node_cn-arcadedb-data   # volume 名は docker volume
 - low-cost の backup は systemd timer（`kukuri-backup.timer`）が `pg_dump -Fc` を取り、
   GCS backup bucket（`terraform output backup_bucket`）へアップロードする。
   database 全体 dump のため、#615 で増えた永続 table（moderation verdict / artifact /
-  risk signal / index 真実源）も追加設定なしで含まれる。
+  risk signal / index 真実源）と暗号化済み案件データ／legal hold も追加設定なしで含まれる。
 - Valkey と blob cache は backup 対象外。ArcadeDB も backup 対象外
   （rebuildable projection。前節の再構築手順で復元する）。raw blob / media は恒久保存しない。
 
@@ -431,6 +431,7 @@ COMPOSE=/var/lib/toolbox/kukuri/bin/docker-compose
 sudo "$COMPOSE" stop cn-user-api
 cat cn-postgres.dump | sudo "$COMPOSE" exec -T cn-postgres \
   sh -lc 'pg_restore --clean --if-exists --no-owner -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+# 起動時にoperator-configの保持期限を再計算し、期限切れ（非hold）をlisten前に削除する。
 sudo "$COMPOSE" start cn-user-api
 ```
 
@@ -438,8 +439,9 @@ restore drill は本番DBへ直接上書きせず、隔離した一時DBへ復�
 
 1. 最新dumpのGCS object generationとSHA-256を記録する。
 2. 一時Postgresを起動し `pg_restore --exit-on-error --no-owner` で復元する。
-3. `cn-cli prepare` を実行し、主要table件数、readiness activation、risk signal / index truthを照合する。
-4. 一時DBを削除し、実施日時・dump generation・検証結果を運用記録へ残す。
+3. `cn-cli prepare` の後、`COMMUNITY_NODE_OPERATOR_CONFIG` を復元対象と同じ設定へ向けて `cn-cli retention sweep` を実行する。
+4. 期限切れ非hold行が削除され、有効行と期限切れhold行が保持されること、通常APIが期限切れhold行を返さないことを照合する。
+5. 一時DBを削除し、実施日時・dump generation・検証結果を運用記録へ残す。
 
 ## secret rotation
 
@@ -449,6 +451,8 @@ restore drill は本番DBへ直接上書きせず、隔離した一時DBへ復�
   連続したmaintenance windowで行い、`cn-migrate`・API health・readinessを確認後に旧versionを無効化する。
 - `COMMUNITY_NODE_CHANNEL_SECRET_KEY` は保存済みchannel secretの復号鍵なので、単純な値差替えは禁止。
   再暗号化migrationとrollback可能な二重読取期間を用意した専用変更として扱う。
+- `COMMUNITY_NODE_LEGAL_DATA_KEY` も案件の機微区分の復号鍵であり、単純な値差替えは禁止。
+  鍵を失うと受付・管理読取・復元がfail-closedになるため、Secret Managerのversion保護と再暗号化手順を先に用意する。
 - ArcadeDB passwordはprojection停止・再構築可能性を前提に、password変更とcompose secret更新を同じ
   maintenance windowで行う。失敗時はArcadeDBを空から再構築する。
 - rotation後は `docker compose config` やjournalへ値を出力しない。secret名だけを記録し、

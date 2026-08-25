@@ -95,9 +95,11 @@ pub async fn list_appeal_reviews(
         "SELECT rs.id
          FROM cn_safety.risk_signals rs
          WHERE COALESCE(rs.appeal_status, 'none') = 'disputed'
+           AND rs.retention_expires_at > NOW()
            AND EXISTS (
                SELECT 1 FROM cn_admin.reports report
                WHERE report.appeal_risk_signal_id = rs.id
+                 AND report.expires_at > NOW()
            )
          ORDER BY rs.persisted_at DESC, rs.id DESC
          LIMIT $1 OFFSET $2",
@@ -123,7 +125,7 @@ pub async fn get_appeal_review(
         "SELECT id, issuer_node_id, target, target_id, category, severity, basis, confidence,
                 visibility, expires_at, COALESCE(appeal_status, 'none') AS appeal_status
          FROM cn_safety.risk_signals
-         WHERE id = $1",
+         WHERE id = $1 AND retention_expires_at > NOW()",
     )
     .bind(risk_signal_id)
     .fetch_optional(pool)
@@ -162,7 +164,7 @@ pub async fn apply_appeal_review_action(
         "SELECT id, issuer_node_id, target, target_id, category, severity, basis, confidence,
                 visibility, expires_at, COALESCE(appeal_status, 'none') AS appeal_status
          FROM cn_safety.risk_signals
-         WHERE id = $1
+         WHERE id = $1 AND retention_expires_at > NOW()
          FOR UPDATE",
     )
     .bind(risk_signal_id)
@@ -172,7 +174,7 @@ pub async fn apply_appeal_review_action(
     let report_rows = sqlx::query(
         "SELECT id, details, status, created_at
          FROM cn_admin.reports
-         WHERE appeal_risk_signal_id = $1
+         WHERE appeal_risk_signal_id = $1 AND expires_at > NOW()
          ORDER BY created_at, id
          FOR UPDATE",
     )
@@ -313,7 +315,8 @@ pub async fn apply_appeal_review_action(
     .await?;
     let after_reports = sqlx::query(
         "SELECT id, details, status, created_at FROM cn_admin.reports
-         WHERE appeal_risk_signal_id = $1 ORDER BY created_at, id",
+         WHERE appeal_risk_signal_id = $1 AND expires_at > NOW()
+         ORDER BY created_at, id",
     )
     .bind(risk_signal_id)
     .fetch_all(&mut *tx)
@@ -353,7 +356,8 @@ pub async fn apply_appeal_review_action(
 async fn load_reports(pool: &PgPool, risk_signal_id: &str) -> Result<Vec<AppealReviewReport>> {
     let rows = sqlx::query(
         "SELECT id, details, status, created_at FROM cn_admin.reports
-         WHERE appeal_risk_signal_id = $1 ORDER BY created_at, id",
+         WHERE appeal_risk_signal_id = $1 AND expires_at > NOW()
+         ORDER BY created_at, id",
     )
     .bind(risk_signal_id)
     .fetch_all(pool)
@@ -393,11 +397,14 @@ async fn set_linked_report_status(
     risk_signal_id: &str,
     status: &str,
 ) -> Result<()> {
-    sqlx::query("UPDATE cn_admin.reports SET status = $2 WHERE appeal_risk_signal_id = $1")
-        .bind(risk_signal_id)
-        .bind(status)
-        .execute(&mut **tx)
-        .await?;
+    sqlx::query(
+        "UPDATE cn_admin.reports SET status = $2
+         WHERE appeal_risk_signal_id = $1 AND expires_at > NOW()",
+    )
+    .bind(risk_signal_id)
+    .bind(status)
+    .execute(&mut **tx)
+    .await?;
     Ok(())
 }
 

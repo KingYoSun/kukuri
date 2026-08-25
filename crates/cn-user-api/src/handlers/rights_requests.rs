@@ -58,6 +58,8 @@ pub(crate) async fn withdraw_rights_request_handler(
         &state.pool,
         access.reference_id.trim(),
         access.tracking_secret.trim(),
+        &state.retention,
+        chrono::Utc::now(),
     )
     .await
     .map_err(|error| {
@@ -124,6 +126,8 @@ pub(crate) async fn withdraw_rights_request_form_submit(
         &state.pool,
         access.reference_id.trim(),
         access.tracking_secret.trim(),
+        &state.retention,
+        chrono::Utc::now(),
     )
     .await
     .map_err(|error| {
@@ -233,15 +237,29 @@ async fn create(
     )
     .await
     .map_err(internal_error)?;
-    let created = insert_rights_request(&state.pool, &request, scope_status)
-        .await
-        .map_err(|error| {
-            ApiError::new(
-                StatusCode::BAD_REQUEST,
-                "INVALID_RIGHTS_REQUEST",
-                error.to_string(),
-            )
-        })?;
+    let cipher = state.legal_data_cipher.as_deref().ok_or_else(|| {
+        ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "RIGHTS_REQUEST_ENCRYPTION_NOT_CONFIGURED",
+            "rights request encryption is not configured",
+        )
+    })?;
+    let created = insert_rights_request(
+        &state.pool,
+        &request,
+        scope_status,
+        cipher,
+        &state.retention,
+        chrono::Utc::now(),
+    )
+    .await
+    .map_err(|error| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "INVALID_RIGHTS_REQUEST",
+            error.to_string(),
+        )
+    })?;
     Ok(RightsRequestCreateResponse {
         reference_id: created.record.id,
         tracking_secret: created.tracking_secret,

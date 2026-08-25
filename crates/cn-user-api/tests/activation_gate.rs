@@ -73,6 +73,7 @@ async fn spawn_api(
         jwt_config: JwtConfig::new("kukuri-cn-tests", "test-secret", 3600),
         operator_config_path: None,
         channel_secret_key: None,
+        legal_data_key: None,
         index_query_enabled: true,
         trust_read_enabled: true,
         relation_distance_optout_min_proximity: Some(0.5),

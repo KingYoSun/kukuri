@@ -249,6 +249,11 @@ fn render_low_cost_tfvars(config: &ResolvedConfig, deploy: &DeployConfig) -> Str
     );
     let _ = writeln!(
         out,
+        "legal_data_key_secret_id     = {}",
+        hcl_string(&optional_secret(&deploy.legal_data_key_secret_id))
+    );
+    let _ = writeln!(
+        out,
         "arcadedb_password_secret_id  = {}",
         hcl_string(&optional_secret(&deploy.arcadedb_password_secret_id))
     );

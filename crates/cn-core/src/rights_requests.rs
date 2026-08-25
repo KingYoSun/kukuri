@@ -13,10 +13,12 @@ use sqlx::postgres::{PgPool, PgRow};
 use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
 
+use crate::rights_request_sensitive::{hydrate_sensitive_request, split_sensitive_request};
 use crate::transmission_preventions::apply_transmission_prevention_in_tx;
 use crate::{
-    NewTransmissionPrevention, TransmissionPreventionBasis, TransmissionPreventionCapability,
-    TransmissionPreventionMutation,
+    LegalDataCipher, NewTransmissionPrevention, RetentionPolicy, SensitiveDataCategory,
+    TransmissionPreventionBasis, TransmissionPreventionCapability, TransmissionPreventionMutation,
+    upsert_sensitive_json_in_tx,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -124,6 +126,7 @@ pub async fn resolve_rights_request_scope(
                 UNION ALL
                 SELECT 1 FROM cn_safety.risk_signals
                 WHERE target = $3 AND target_id = $2
+                  AND retention_expires_at > NOW()
             )",
         )
         .bind(subject_kind)
@@ -155,18 +158,23 @@ pub async fn insert_rights_request(
     pool: &PgPool,
     request: &RightsRequestCreateRequest,
     scope_status: RightsRequestScopeStatus,
+    cipher: &LegalDataCipher,
+    retention: &RetentionPolicy,
+    now: DateTime<Utc>,
 ) -> Result<CreatedRightsRequest> {
     validate_request(request)?;
     let id = Uuid::new_v4().to_string();
     let tracking_secret = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
     let tracking_secret_hash = tracking_secret_hash(&tracking_secret);
     let status = initial_status(scope_status);
+    let expires_at = retention.expiry(now, retention.rights_request_days(status));
+    let (stored_request, contact, identity, evidence) = split_sensitive_request(request);
     let mut tx = pool.begin().await?;
     let row = sqlx::query(
         "INSERT INTO cn_legal.rights_requests
             (id, tracking_secret_hash, scope_revision, scope_status, status, subject_kind,
-             subject_id, requested_capabilities, request_data)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+             subject_id, requested_capabilities, request_data, created_at, updated_at, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, $11)
          RETURNING *",
     )
     .bind(&id)
@@ -177,9 +185,45 @@ pub async fn insert_rights_request(
     .bind(request.subject_kind.trim())
     .bind(request.subject_id.trim())
     .bind(&request.requested_capabilities)
-    .bind(serde_json::to_value(request)?)
+    .bind(serde_json::to_value(&stored_request)?)
+    .bind(now)
+    .bind(expires_at)
     .fetch_one(&mut *tx)
     .await?;
+    upsert_sensitive_json_in_tx(
+        &mut tx,
+        cipher,
+        "rights_request",
+        &id,
+        SensitiveDataCategory::RightsRequestContact,
+        &contact,
+        retention.expiry(now, retention.rights_request_contact_days),
+    )
+    .await?;
+    if identity != serde_json::Value::Null {
+        upsert_sensitive_json_in_tx(
+            &mut tx,
+            cipher,
+            "rights_request",
+            &id,
+            SensitiveDataCategory::RightsRequestIdentity,
+            &identity,
+            retention.expiry(now, retention.rights_request_identity_days),
+        )
+        .await?;
+    }
+    if !evidence.is_empty() {
+        upsert_sensitive_json_in_tx(
+            &mut tx,
+            cipher,
+            "rights_request",
+            &id,
+            SensitiveDataCategory::RightsRequestEvidence,
+            &evidence,
+            retention.expiry(now, retention.rights_request_evidence_days),
+        )
+        .await?;
+    }
     append_event(
         &mut tx,
         RightsRequestEventInput {
@@ -190,10 +234,13 @@ pub async fn insert_rights_request(
             to_status: status,
             public_message: None,
             delivery_status: "status_surface",
+            occurred_at: now,
+            expires_at: retention.expiry(now, retention.rights_request_history_days),
         },
     )
     .await?;
-    let record = record_from_row(&row)?;
+    let mut record = record_from_row(&row)?;
+    record.request = request.clone();
     tx.commit().await?;
     Ok(CreatedRightsRequest {
         record,
@@ -202,11 +249,25 @@ pub async fn insert_rights_request(
 }
 
 pub async fn get_rights_request(pool: &PgPool, id: &str) -> Result<Option<RightsRequestRecord>> {
-    let row = sqlx::query("SELECT * FROM cn_legal.rights_requests WHERE id = $1")
-        .bind(id.trim())
-        .fetch_optional(pool)
-        .await?;
+    let row =
+        sqlx::query("SELECT * FROM cn_legal.rights_requests WHERE id = $1 AND expires_at > NOW()")
+            .bind(id.trim())
+            .fetch_optional(pool)
+            .await?;
     row.as_ref().map(record_from_row).transpose()
+}
+
+pub async fn get_rights_request_with_sensitive(
+    pool: &PgPool,
+    cipher: &LegalDataCipher,
+    id: &str,
+    now: DateTime<Utc>,
+) -> Result<Option<RightsRequestRecord>> {
+    let Some(mut record) = get_rights_request(pool, id).await? else {
+        return Ok(None);
+    };
+    hydrate_sensitive_request(pool, cipher, &mut record, now).await?;
+    Ok(Some(record))
 }
 
 pub async fn list_rights_requests(
@@ -215,7 +276,7 @@ pub async fn list_rights_requests(
     offset: i64,
 ) -> Result<Vec<RightsRequestRecord>> {
     let rows = sqlx::query(
-        "SELECT * FROM cn_legal.rights_requests
+        "SELECT * FROM cn_legal.rights_requests WHERE expires_at > NOW()
          ORDER BY created_at DESC LIMIT $1 OFFSET $2",
     )
     .bind(limit.clamp(1, 200))
@@ -223,6 +284,20 @@ pub async fn list_rights_requests(
     .fetch_all(pool)
     .await?;
     rows.iter().map(record_from_row).collect()
+}
+
+pub async fn list_rights_requests_with_sensitive(
+    pool: &PgPool,
+    cipher: &LegalDataCipher,
+    limit: i64,
+    offset: i64,
+    now: DateTime<Utc>,
+) -> Result<Vec<RightsRequestRecord>> {
+    let mut records = list_rights_requests(pool, limit, offset).await?;
+    for record in &mut records {
+        hydrate_sensitive_request(pool, cipher, record, now).await?;
+    }
+    Ok(records)
 }
 
 pub async fn get_public_rights_request_status(
@@ -241,6 +316,10 @@ pub async fn get_public_rights_request_status(
     let Some(row) = row else {
         return Ok(None);
     };
+    let expires_at: DateTime<Utc> = row.try_get("expires_at")?;
+    if expires_at <= Utc::now() {
+        return Ok(None);
+    }
     let record = record_from_row(&row)?;
     Ok(Some(RightsRequestStatusResponse {
         reference_id: record.id,
@@ -251,6 +330,7 @@ pub async fn get_public_rights_request_status(
     }))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn transition_rights_request(
     pool: &PgPool,
     id: &str,
@@ -259,16 +339,20 @@ pub async fn transition_rights_request(
     to_status: RightsRequestStatus,
     public_message: Option<&str>,
     delivery_status: &str,
+    retention: &RetentionPolicy,
+    now: DateTime<Utc>,
 ) -> Result<RightsRequestRecord> {
     validate_actor(actor)?;
     validate_delivery_status(delivery_status)?;
     let mut tx = pool.begin().await?;
-    let current_row =
-        sqlx::query("SELECT * FROM cn_legal.rights_requests WHERE id = $1 FOR UPDATE")
-            .bind(id.trim())
-            .fetch_optional(&mut *tx)
-            .await?
-            .context("rights request was not found")?;
+    let current_row = sqlx::query(
+        "SELECT * FROM cn_legal.rights_requests
+             WHERE id = $1 AND expires_at > NOW() FOR UPDATE",
+    )
+    .bind(id.trim())
+    .fetch_optional(&mut *tx)
+    .await?
+    .context("rights request was not found")?;
     let current = record_from_row(&current_row)?;
     if current.version != expected_version {
         bail!(
@@ -286,12 +370,15 @@ pub async fn transition_rights_request(
     let public_message = normalize_optional(public_message, 2_000)?;
     let row = sqlx::query(
         "UPDATE cn_legal.rights_requests
-         SET status = $2, public_message = $3, version = version + 1, updated_at = NOW()
+         SET status = $2, public_message = $3, version = version + 1,
+             updated_at = $4, expires_at = $5
          WHERE id = $1 RETURNING *",
     )
     .bind(id.trim())
     .bind(status_as_str(to_status))
     .bind(public_message.as_deref())
+    .bind(now)
+    .bind(retention.expiry(now, retention.rights_request_days(to_status)))
     .fetch_one(&mut *tx)
     .await?;
     append_event(
@@ -304,6 +391,8 @@ pub async fn transition_rights_request(
             to_status,
             public_message: public_message.as_deref(),
             delivery_status,
+            occurred_at: now,
+            expires_at: retention.expiry(now, retention.rights_request_history_days),
         },
     )
     .await?;
@@ -313,6 +402,8 @@ pub async fn transition_rights_request(
         id,
         status_as_str(current.status),
         status_as_str(to_status),
+        now,
+        retention.expiry(now, retention.operator_audit_days),
     )
     .await?;
     let updated = record_from_row(&row)?;
@@ -321,6 +412,7 @@ pub async fn transition_rights_request(
 }
 
 /// 申出を node-local 送信防止へ結び、措置・申出 event・audit を同じ transaction で確定する。
+#[allow(clippy::too_many_arguments)]
 pub async fn action_rights_request(
     pool: &PgPool,
     id: &str,
@@ -328,17 +420,21 @@ pub async fn action_rights_request(
     actor: &str,
     capabilities: Vec<TransmissionPreventionCapability>,
     public_message: &str,
+    retention: &RetentionPolicy,
+    now: DateTime<Utc>,
 ) -> Result<RightsRequestActionResult> {
     validate_actor(actor)?;
     let public_message = normalize_optional(Some(public_message), 2_000)?
         .context("public_message must not be empty")?;
     let mut tx = pool.begin().await?;
-    let current_row =
-        sqlx::query("SELECT * FROM cn_legal.rights_requests WHERE id = $1 FOR UPDATE")
-            .bind(id.trim())
-            .fetch_optional(&mut *tx)
-            .await?
-            .context("rights request was not found")?;
+    let current_row = sqlx::query(
+        "SELECT * FROM cn_legal.rights_requests
+             WHERE id = $1 AND expires_at > NOW() FOR UPDATE",
+    )
+    .bind(id.trim())
+    .fetch_optional(&mut *tx)
+    .await?
+    .context("rights request was not found")?;
     let current = record_from_row(&current_row)?;
     if current.version != expected_version {
         bail!(
@@ -374,11 +470,14 @@ pub async fn action_rights_request(
     .await?;
     let row = sqlx::query(
         "UPDATE cn_legal.rights_requests
-         SET status = 'actioned', public_message = $2, version = version + 1, updated_at = NOW()
+         SET status = 'actioned', public_message = $2, version = version + 1,
+             updated_at = $3, expires_at = $4
          WHERE id = $1 RETURNING *",
     )
     .bind(id.trim())
     .bind(&public_message)
+    .bind(now)
+    .bind(retention.expiry(now, retention.rights_request_resolved_days))
     .fetch_one(&mut *tx)
     .await?;
     append_event(
@@ -391,6 +490,8 @@ pub async fn action_rights_request(
             to_status: RightsRequestStatus::Actioned,
             public_message: Some(&public_message),
             delivery_status: "status_surface",
+            occurred_at: now,
+            expires_at: retention.expiry(now, retention.rights_request_history_days),
         },
     )
     .await?;
@@ -400,6 +501,8 @@ pub async fn action_rights_request(
         id,
         status_as_str(current.status),
         "actioned",
+        now,
+        retention.expiry(now, retention.operator_audit_days),
     )
     .await?;
     let request = record_from_row(&row)?;
@@ -414,12 +517,15 @@ pub async fn withdraw_rights_request(
     pool: &PgPool,
     reference_id: &str,
     tracking_secret: &str,
+    retention: &RetentionPolicy,
+    now: DateTime<Utc>,
 ) -> Result<Option<RightsRequestStatusResponse>> {
     let hash = tracking_secret_hash(tracking_secret.trim());
     let mut tx = pool.begin().await?;
     let row = sqlx::query(
         "SELECT * FROM cn_legal.rights_requests
-         WHERE id = $1 AND tracking_secret_hash = $2 FOR UPDATE",
+         WHERE id = $1 AND tracking_secret_hash = $2
+           AND expires_at > NOW() FOR UPDATE",
     )
     .bind(reference_id.trim())
     .bind(hash)
@@ -439,10 +545,12 @@ pub async fn withdraw_rights_request(
     let row = sqlx::query(
         "UPDATE cn_legal.rights_requests
          SET status = 'withdrawn', public_message = '申出人が申出を取り下げました',
-             version = version + 1, updated_at = NOW()
+             version = version + 1, updated_at = $2, expires_at = $3
          WHERE id = $1 RETURNING *",
     )
     .bind(reference_id.trim())
+    .bind(now)
+    .bind(retention.expiry(now, retention.rights_request_rejected_days))
     .fetch_one(&mut *tx)
     .await?;
     append_event(
@@ -455,6 +563,8 @@ pub async fn withdraw_rights_request(
             to_status: RightsRequestStatus::Withdrawn,
             public_message: Some("申出人が申出を取り下げました"),
             delivery_status: "status_surface",
+            occurred_at: now,
+            expires_at: retention.expiry(now, retention.rights_request_history_days),
         },
     )
     .await?;
@@ -464,6 +574,8 @@ pub async fn withdraw_rights_request(
         reference_id,
         status_as_str(current.status),
         "withdrawn",
+        now,
+        retention.expiry(now, retention.operator_audit_days),
     )
     .await?;
     let updated = record_from_row(&row)?;
@@ -597,6 +709,8 @@ struct RightsRequestEventInput<'a> {
     to_status: RightsRequestStatus,
     public_message: Option<&'a str>,
     delivery_status: &'a str,
+    occurred_at: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
 }
 
 async fn append_event(
@@ -605,8 +719,9 @@ async fn append_event(
 ) -> Result<()> {
     sqlx::query(
         "INSERT INTO cn_legal.rights_request_events
-            (id, request_id, actor, action, from_status, to_status, public_message, delivery_status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+            (id, request_id, actor, action, from_status, to_status, public_message,
+             delivery_status, occurred_at, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
     )
     .bind(Uuid::new_v4().to_string())
     .bind(event.request_id.trim())
@@ -616,6 +731,8 @@ async fn append_event(
     .bind(status_as_str(event.to_status))
     .bind(event.public_message)
     .bind(event.delivery_status)
+    .bind(event.occurred_at)
+    .bind(event.expires_at)
     .execute(&mut **tx)
     .await?;
     Ok(())
@@ -627,17 +744,22 @@ async fn append_operator_audit(
     request_id: &str,
     from_status: &str,
     to_status: &str,
+    occurred_at: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
 ) -> Result<()> {
     sqlx::query(
         "INSERT INTO cn_admin.operator_actions
-            (id, actor, action, target_kind, target_id, before_json, after_json)
-         VALUES ($1, $2, 'rights_request.transition', 'rights_request', $3, $4, $5)",
+            (id, actor, action, target_kind, target_id, before_json, after_json,
+             occurred_at, expires_at)
+         VALUES ($1, $2, 'rights_request.transition', 'rights_request', $3, $4, $5, $6, $7)",
     )
     .bind(Uuid::new_v4().to_string())
     .bind(actor.trim())
     .bind(request_id.trim())
     .bind(json!({ "status": from_status }))
     .bind(json!({ "status": to_status }))
+    .bind(occurred_at)
+    .bind(expires_at)
     .execute(&mut **tx)
     .await?;
     Ok(())

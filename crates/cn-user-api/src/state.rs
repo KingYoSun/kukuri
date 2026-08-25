@@ -5,9 +5,11 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use kukuri_cn_core::{
-    ChannelSecretCipher, DatabaseInitMode, JwtConfig, PgIndexEntryStore, TopicRendezvousStore,
+    ChannelSecretCipher, DatabaseInitMode, JwtConfig, LegalDataCipher, PgIndexEntryStore,
+    RetentionPolicy, TopicRendezvousStore, apply_retention_policy, cleanup_expired,
     connect_postgres, initialize_database, initialize_database_for_runtime,
-    latest_readiness_activation, readiness_context_fingerprint,
+    latest_readiness_activation, readiness_context_fingerprint, seal_legacy_report_contacts,
+    seal_legacy_rights_request_data, verify_sensitive_items,
 };
 use kukuri_cn_indexer::{
     ArcadeDbConfig, ArcadeDbProjection, ArcadeDbRelationGraph, FailClosedIndexQuery, IndexQuery,
@@ -35,6 +37,8 @@ pub struct UserApiState {
     /// 鍵 material(`COMMUNITY_NODE_CHANNEL_SECRET_KEY`)が未設定なら None で、private channel の
     /// indexing request は受け付けない(secret を平文保存しないため)。
     pub(crate) channel_secret_cipher: Option<Arc<ChannelSecretCipher>>,
+    pub(crate) legal_data_cipher: Option<Arc<LegalDataCipher>>,
+    pub(crate) retention: RetentionPolicy,
     /// ユーザー向け search / discovery / recommendation の query 境界(#404)。
     /// fail-closed query gate(`FailClosedIndexQuery`)を通した読み口のみを持つ。
     /// None = 設定無効。readiness activation は起動後も変化するため、各requestで検査する。
@@ -135,6 +139,7 @@ struct LoadedManifest {
     manifest: Option<Arc<CommunityNodeManifest>>,
     public_disclosures: Arc<BTreeMap<String, String>>,
     operator_config_yaml: Vec<u8>,
+    retention: RetentionPolicy,
 }
 
 pub async fn build_state(config: &UserApiConfig) -> Result<UserApiState> {
@@ -158,6 +163,7 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
         manifest,
         public_disclosures,
         operator_config_yaml,
+        retention,
     } = load_manifest(config.operator_config_path.as_deref())?;
     if let (Some(manifest), Some(expected)) = (
         manifest.as_deref(),
@@ -172,6 +178,55 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
         .transpose()
         .context("invalid COMMUNITY_NODE_CHANNEL_SECRET_KEY")?
         .map(Arc::new);
+    let legal_data_cipher = config
+        .legal_data_key
+        .as_deref()
+        .map(LegalDataCipher::from_key_material)
+        .transpose()
+        .context("invalid COMMUNITY_NODE_LEGAL_DATA_KEY")?
+        .map(Arc::new);
+    let legal_intake_enabled = manifest.as_ref().is_some_and(|manifest| {
+        !manifest.report_endpoint.trim().is_empty()
+            || !manifest.rights_request_url.trim().is_empty()
+    });
+    if legal_intake_enabled && legal_data_cipher.is_none() {
+        anyhow::bail!(
+            "COMMUNITY_NODE_LEGAL_DATA_KEY is required when report or rights-request intake is enabled"
+        );
+    }
+    if let Some(cipher) = legal_data_cipher.as_deref() {
+        verify_sensitive_items(&pool, cipher)
+            .await
+            .context("failed to verify stored legal data with configured key")?;
+        seal_legacy_report_contacts(&pool, cipher, &retention)
+            .await
+            .context("failed to seal legacy report contacts")?;
+        seal_legacy_rights_request_data(&pool, cipher, &retention)
+            .await
+            .context("failed to seal legacy rights-request data")?;
+    } else {
+        let sensitive_exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (SELECT 1 FROM cn_legal.sensitive_items)
+                 OR EXISTS (SELECT 1 FROM cn_admin.reports WHERE reporter_contact IS NOT NULL)
+                 OR EXISTS (
+                    SELECT 1 FROM cn_legal.rights_requests
+                    WHERE COALESCE(request_data->>'email', '') <> ''
+                 )",
+        )
+        .fetch_one(&pool)
+        .await?;
+        if sensitive_exists {
+            anyhow::bail!(
+                "COMMUNITY_NODE_LEGAL_DATA_KEY is required to read or migrate stored legal data"
+            );
+        }
+    }
+    apply_retention_policy(&pool, &retention)
+        .await
+        .context("initial retention reconciliation failed")?;
+    cleanup_expired(&pool, chrono::Utc::now())
+        .await
+        .context("initial retention cleanup failed")?;
     // 有効化の関門（#616）。activation は起動後にtimerが作成・更新・失効するため、
     // backendの構成有無とは分離し、各requestで現在値を検査する。ここでは起動時点の状態を
     // 運用logへ残すだけにする。
@@ -278,6 +333,8 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
         manifest,
         public_disclosures,
         channel_secret_cipher,
+        legal_data_cipher,
+        retention,
         index_query,
         trust_read,
         relation_visibility,
@@ -336,6 +393,7 @@ fn load_manifest(path: Option<&std::path::Path>) -> Result<LoadedManifest> {
             manifest: None,
             public_disclosures: Arc::new(BTreeMap::new()),
             operator_config_yaml: Vec::new(),
+            retention: RetentionPolicy::default(),
         });
     };
     let yaml = std::fs::read_to_string(path)
@@ -359,10 +417,26 @@ fn load_manifest(path: Option<&std::path::Path>) -> Result<LoadedManifest> {
         })
         .map(|file| (file.filename, file.content))
         .collect();
+    let r = &resolved.raw.retention;
+    let retention = RetentionPolicy {
+        report_days: r.report_days,
+        report_contact_days: r.report_contact_days,
+        rights_request_active_days: r.rights_request_active_days,
+        rights_request_resolved_days: r.rights_request_resolved_days,
+        rights_request_rejected_days: r.rights_request_rejected_days,
+        rights_request_contact_days: r.rights_request_contact_days,
+        rights_request_identity_days: r.rights_request_identity_days,
+        rights_request_evidence_days: r.rights_request_evidence_days,
+        rights_request_history_days: r.rights_request_history_days,
+        operator_audit_days: r.operator_audit_days,
+        moderation_event_days: r.moderation_event_days,
+        risk_signal_days: r.risk_signal_days,
+    };
     Ok(LoadedManifest {
         manifest: Some(Arc::new(build_manifest(&resolved))),
         public_disclosures: Arc::new(public_disclosures),
         operator_config_yaml: bytes,
+        retention,
     })
 }
 
