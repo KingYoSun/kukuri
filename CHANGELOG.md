@@ -18,6 +18,47 @@ file; automated changelog entries start from the next preview release.
 
 ## [Unreleased]
 
+## [v0.1.6-preview.1] - 2026-08-25
+
+### Features
+
+- 配布素材の権利と再配布条件を管理する ([#778](https://github.com/KingYoSun/kukuri/pull/778))
+- 投稿コンテンツの権利表明と限定的利用許諾を追加 ([#777](https://github.com/KingYoSun/kukuri/pull/777))
+- add scoped case retention and legal holds ([#776](https://github.com/KingYoSun/kukuri/pull/776))
+- add rights infringement request intake ([#760](https://github.com/KingYoSun/kukuri/pull/760), [#775](https://github.com/KingYoSun/kukuri/pull/775))
+- add signed withdrawals and transmission prevention ([#774](https://github.com/KingYoSun/kukuri/pull/774))
+- add staged column workspace features ([#772](https://github.com/KingYoSun/kukuri/pull/772))
+- add Issue #748 Wave 6 mobile lifecycle ([#758](https://github.com/KingYoSun/kukuri/pull/758))
+- add Issue #748 Wave 5 variable spans ([#757](https://github.com/KingYoSun/kukuri/pull/757))
+- add Issue #748 Wave 4 Control Center ([#756](https://github.com/KingYoSun/kukuri/pull/756))
+- 管理画面の確認・結果ページを dashboard と共通 shell にする ([#740](https://github.com/KingYoSun/kukuri/pull/740), [#747](https://github.com/KingYoSun/kukuri/pull/747))
+- 管理画面の操作を標準で有効化 ([#742](https://github.com/KingYoSun/kukuri/pull/742))
+
+### Fixes
+
+- pin release XML assets to LF ([#780](https://github.com/KingYoSun/kukuri/pull/780))
+- Issue #765 Column 振る舞いの残課題を解消 ([#771](https://github.com/KingYoSun/kukuri/pull/771))
+- Issue #748 監査 blocker B1-B5 を修正 ([#769](https://github.com/KingYoSun/kukuri/pull/769))
+- Community Node provider alertの誤検知を分離 ([#746](https://github.com/KingYoSun/kukuri/pull/746))
+- BlobText投稿本文をCommunity Indexへ投影する ([#745](https://github.com/KingYoSun/kukuri/pull/745))
+- preserve native select contrast on Linux ([#743](https://github.com/KingYoSun/kukuri/pull/743))
+- 接続設定の横スクロールを防ぐ ([#744](https://github.com/KingYoSun/kukuri/pull/744))
+
+### Other
+
+- bump preview version to 0.1.6 ([#779](https://github.com/KingYoSun/kukuri/pull/779))
+- remove legacy shell projections ([#773](https://github.com/KingYoSun/kukuri/pull/773))
+- Issue #768 Validation マトリクスと review record を補完 ([#770](https://github.com/KingYoSun/kukuri/pull/770))
+- [codex][refactor:delete] 旧ShellFrame経路を削除 ([#759](https://github.com/KingYoSun/kukuri/pull/759))
+- Issue #748 Wave 3: scope Columns and composers ([#755](https://github.com/KingYoSun/kukuri/pull/755))
+- Issue #748 Wave 2: migrate production surfaces to Columns ([#754](https://github.com/KingYoSun/kukuri/pull/754))
+- extract existing surface renderers ([#753](https://github.com/KingYoSun/kukuri/pull/753))
+- Issue #748 Wave 1: use icon tabs in the Column header ([#752](https://github.com/KingYoSun/kukuri/pull/752))
+- align detail visual baselines with Linux CI ([#751](https://github.com/KingYoSun/kukuri/pull/751))
+- Issue #748 Wave 1: Column Canvas foundation ([#750](https://github.com/KingYoSun/kukuri/pull/750))
+- Issue #748 Wave 0: 可変span Column Canvasのreview prototype ([#749](https://github.com/KingYoSun/kukuri/pull/749))
+- update CHANGELOG for v0.1.5-preview.1 ([#737](https://github.com/KingYoSun/kukuri/pull/737))
+
 ## [v0.1.5-preview.1] - 2026-08-21
 
 ### Features
