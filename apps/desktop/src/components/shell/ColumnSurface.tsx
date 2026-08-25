@@ -57,10 +57,16 @@ export function ColumnSurface({
   const [fullscreen, setFullscreen] = useState(false);
   const [announcement, setAnnouncement] = useState('');
   const wasFullscreenRef = useRef(false);
-  const stateLabel = pinned ? 'Pinned' : 'Temporary';
-  const accessibleLabel = `${title} Column, Column ${position} of ${total}, ${span} span, ${
-    active ? 'Active' : 'Inactive'
-  }, ${stateLabel}`;
+  const activityLabel = t(active ? 'columnState.active' : 'columnState.inactive');
+  const stateLabel = t(pinned ? 'columnState.pinned' : 'columnState.temporary');
+  const accessibleLabel = t('columnState.accessibleLabel', {
+    title,
+    position,
+    total,
+    span,
+    activity: activityLabel,
+    persistence: stateLabel,
+  });
 
   useEffect(() => {
     if (!resourceManaged || (!runtime.suspended && runtime.audioFocused)) return;
@@ -167,7 +173,7 @@ export function ColumnSurface({
         <div className='shell-column-heading'>
           <div className='shell-column-title-row'>
             <h2>{title}</h2>
-            {active ? <span className='shell-column-state-label'>Active</span> : null}
+            {active ? <span className='shell-column-state-label'>{activityLabel}</span> : null}
             <span className='shell-column-state-label'>{stateLabel}</span>
           </div>
           <p>{scopeLabel}</p>

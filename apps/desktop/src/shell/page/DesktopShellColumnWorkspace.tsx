@@ -17,7 +17,7 @@ import {
   type TimelineViewId,
 } from '@/components/shell/TimelineViewIconTabs';
 import type { MentionCandidate } from '@/components/core/types';
-import { authorDisplayLabel, shortPubkey } from '@/shell/presentation';
+import { authorDisplayLabel, localizeAudienceLabel, shortPubkey } from '@/shell/presentation';
 import type { ColumnDraftTarget } from '@/shell/slices/columnDrafts';
 import {
   activateColumn,
@@ -151,7 +151,7 @@ export function DesktopShellColumnWorkspace({
       ? joinedChannelsByTopic[column.scope.topicId]?.find(
           (candidate) => candidate.channel_id === column.scope?.channelId
         )?.label ?? column.scope.channelId
-      : 'Public';
+      : localizeAudienceLabel('Public');
     return `${channel} · ${topicLabel}`;
   };
   const conversationLabel = (peerPubkey: string) => {
@@ -171,7 +171,7 @@ export function DesktopShellColumnWorkspace({
       const author = knownAuthorsByPubkey[column.entityId];
       return authorDisplayLabel(column.entityId, author?.display_name, author?.name);
     }
-    if (column.kind === 'thread') return `Thread · ${scopeDestinationLabel(column)}`;
+    if (column.kind === 'thread') return `${titles.thread} · ${scopeDestinationLabel(column)}`;
     if (column.entityId) return shortPubkey(column.entityId);
     return scopeDestinationLabel(column);
   };
@@ -198,7 +198,7 @@ export function DesktopShellColumnWorkspace({
       return (
         <ColumnComposerFooter
           {...common}
-          destinationLabel={`Thread · ${scopeDestinationLabel(column)}`}
+          destinationLabel={`${titles.thread} · ${scopeDestinationLabel(column)}`}
           target={{
             columnId: column.id,
             action: 'reply',

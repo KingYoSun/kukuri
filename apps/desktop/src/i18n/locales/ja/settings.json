@@ -65,7 +65,7 @@
       }
     },
     "distanceOptout": {
-      "title": "Distance opt-out",
+      "title": "距離利用の停止",
       "notEligible": "このノードは距離利用停止を扱えません(認証・必須同意・接続、または索引/信頼評価の提供のいずれかが満たされていません)。",
       "description": "有効にすると、このノードが表示する proximity 境界より遠い相手との間で、相手自身と投稿を互いに表示対象から外し、距離のあるコミュニティ間で対立が大規模に増幅することを避けます。",
       "notPrivacy": "可逆な node-local 表示制御です。プライバシー機能、block、relation graph からの離脱、P2P 制限、ネットワーク全体での不可視化ではありません。",
@@ -204,7 +204,7 @@
     "peerTicket": "ピアチケット",
     "peerTicketPlaceholder": "nodeid@127.0.0.1:7777",
     "peerTickets": "ピアチケット",
-    "summary": "{{status}} / peers: {{count}}",
+    "summary": "{{status}} / ピア: {{count}}",
     "summaryDetailFallback": "トピック diagnostics はまだありません",
     "title": "同期状態",
     "topicConnectivity": "トピック接続詳細",

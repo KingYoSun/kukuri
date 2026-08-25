@@ -148,9 +148,9 @@ test('uses the appeal presentation, omits contact, and confirms the disputed sig
     />,
   );
 
-  expect(screen.getByText('リスク判定への異議申し立て')).toBeInTheDocument();
+  expect(screen.getByText('Appeal a risk assessment')).toBeInTheDocument();
   expect(screen.queryByLabelText(/contact|連絡先/i)).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: '異議を申し立てる' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Submit appeal' }));
 
   await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
   expect(onSubmit).toHaveBeenCalledWith(
@@ -160,11 +160,11 @@ test('uses the appeal presentation, omits contact, and confirms the disputed sig
       appeal: { risk_signal_id: 'signal-1' },
     }),
   );
-  expect(await screen.findByText(/受付対象のリスク判定: signal-1/)).toBeInTheDocument();
+  expect(await screen.findByText(/Appealed assessment: signal-1/)).toBeInTheDocument();
   expect(onSubmitted).toHaveBeenCalledTimes(1);
 });
 
-test('shows a stable Japanese message for an invalid appeal', async () => {
+test('shows a stable localized message for an invalid appeal', async () => {
   render(
     <ReportRoutingDialog
       open
@@ -176,9 +176,9 @@ test('shows a stable Japanese message for an invalid appeal', async () => {
     />,
   );
 
-  fireEvent.click(screen.getByRole('button', { name: '異議を申し立てる' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Submit appeal' }));
   expect(
-    await screen.findByText(/対象のリスク判定を確認できないか、すでに解決済みです/),
+    await screen.findByText(/The assessment could not be verified or has already been resolved/),
   ).toBeInTheDocument();
   expect(screen.queryByText('unknown')).not.toBeInTheDocument();
 });

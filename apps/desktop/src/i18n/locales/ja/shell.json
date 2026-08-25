@@ -33,10 +33,10 @@
     "noFilteredTopics": "条件に一致するトピックはありません。",
     "publicScope": "公開フィード",
     "removeTopic": "{{topic}} を削除",
-    "seededDht": "seeded dht",
-    "staticPeers": "static peers",
+    "seededDht": "シード済み DHT",
+    "staticPeers": "静的ピア",
     "title": "トピック",
-    "topicSummary": "{{status}} / peers: {{count}}",
+    "topicSummary": "{{status}} / ピア: {{count}}",
     "topicsButton": "トピック",
     "trackedTopics": "追跡中のトピック",
     "updateAvailable": "アップデートがあります"
@@ -94,6 +94,13 @@
     "release": "リリースと更新",
     "settings": "設定"
   },
+  "columnState": {
+    "active": "選択中",
+    "inactive": "非選択",
+    "pinned": "固定",
+    "temporary": "一時表示",
+    "accessibleLabel": "{{title}}カラム、{{total}}件中{{position}}番目、幅{{span}}列、{{activity}}、{{persistence}}"
+  },
   "columnMenu": {
     "open": "{{title}} メニューを開く",
     "close": "{{title}} メニューを閉じる",
@@ -108,10 +115,10 @@
     "exitFullscreen": "{{title}} の全画面表示を終了",
     "fullscreenFailed": "{{title}} の全画面表示を切り替えられませんでした。",
     "closeColumn": "{{title}} を閉じる",
-    "span_one": "{{count}} span",
-    "span_other": "{{count}} span",
-    "spanChanged_one": "{{title}} を {{count}} span に変更しました。",
-    "spanChanged_other": "{{title}} を {{count}} span に変更しました。"
+    "span_one": "{{count}} 列分",
+    "span_other": "{{count}} 列分",
+    "spanChanged_one": "{{title}} を {{count}} 列分の幅に変更しました。",
+    "spanChanged_other": "{{title}} を {{count}} 列分の幅に変更しました。"
   },
   "primarySections": {
     "explore": "見つける",
@@ -121,6 +128,22 @@
     "notifications": "通知",
     "profile": "プロフィール",
     "timeline": "タイムライン"
+  },
+  "messages": {
+    "all": "すべて",
+    "conversationCount": "{{count}}件の会話",
+    "delivered": "配信済み",
+    "empty": "ダイレクトメッセージはまだありません。",
+    "latest": "最新: {{preview}}",
+    "mutualRequired": "相互フォローでなくなったため、ダイレクトメッセージを送信できません。",
+    "noMessages": "メッセージはまだありません。",
+    "open": "開く",
+    "peerCount": "ピア {{count}}",
+    "pending": "送信待ち",
+    "pendingOutbox": "送信待ち: {{count}}件",
+    "sendDisabled": "送信不可",
+    "sending": "送信中…",
+    "title": "メッセージ"
   },
   "notifications": {
     "context": {
@@ -187,7 +210,7 @@
     },
     "reactions": {
       "description": "カスタムリアクションの作成と保存済みリアクションの管理。",
-      "label": "Reactions"
+      "label": "リアクション"
     },
     "release": {
       "description": "プレビュー更新、診断、OS 通知です。",
@@ -196,6 +219,11 @@
   },
   "workspace": {
     "bookmarks": "ブックマーク",
+    "columnCanvas": "カラムワークスペース",
+    "columnDrop": "{{position}}番目へカラムを移動",
+    "columnMoved": "カラムを{{position}}番目へ移動しました。",
+    "columnPage": "{{total}}件中{{position}}番目のカラムへ移動",
+    "columnPages": "カラムページ",
     "composeTarget": "投稿先",
     "feed": "フィード",
     "noBookmarks": "まだブックマークした投稿がありません。",
@@ -205,9 +233,11 @@
     "savedCount": "{{count}} 件保存済み",
     "tabs": "ワークスペース",
     "timelineViews": "タイムライン表示",
+    "primaryLabel": "メインワークスペース",
+    "skipToWorkspace": "ワークスペースへ移動",
     "communityNodeUnavailableAction": "Community Node 設定を開く",
     "communityNodeUnavailableBody": "設定済みの community node に現在接続できません。起動は継続し、direct P2P 接続は引き続き利用できます。",
-    "communityNodeUnavailableTitle": "Community node unavailable",
+    "communityNodeUnavailableTitle": "Community Node を利用できません",
     "viewScope": "表示範囲"
   },
   "indexingRequest": {

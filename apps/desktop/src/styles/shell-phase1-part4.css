@@ -209,6 +209,10 @@
   .shell-workspace-tabs {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  .shell-profile-connections-tabs {
+    grid-template-columns: repeat(auto-fit, minmax(min(7rem, 100%), 1fr));
+  }
 }
 
 @media (max-width: 759px) {
@@ -219,6 +223,19 @@
     width: calc(100vw - 1.5rem);
     grid-template-columns: 1fr;
     grid-template-rows: auto auto minmax(0, 1fr);
+  }
+
+  .shell-settings-nav-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .shell-settings-nav-item {
+    min-height: 3rem;
+    padding: var(--space-sm);
+    font-size: var(--text-body);
+    line-break: strict;
+    overflow-wrap: normal;
+    word-break: keep-all;
   }
 
   .shell-workspace-header {

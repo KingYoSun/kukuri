@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type {
   BookmarkedCustomReactionView,
@@ -85,6 +86,7 @@ export function ThreadTree({
   onFetchReportManifest,
   onMuteReportAuthor,
 }: ThreadTreeProps) {
+  const { t } = useTranslation('common');
   const nodes = useMemo(() => buildThreadTree(posts), [posts]);
   const { sentinelRef: loadMoreRef, canAutoLoad } = useInfiniteScrollSentinel({
     hasMore,
@@ -157,7 +159,9 @@ export function ThreadTree({
               {loadingMore ? 'Loading...' : 'Load more'}
             </Button>
           ) : null}
-          {canAutoLoad && loadingMore ? <p className='empty'>Loading more…</p> : null}
+          {canAutoLoad && loadingMore ? (
+            <p className='empty'>{t('fallbacks.loadingMore')}</p>
+          ) : null}
         </li>
       ) : null}
     </ul>

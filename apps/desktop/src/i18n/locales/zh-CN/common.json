@@ -41,7 +41,9 @@
     "report": "举报"
   },
   "composer": {
+    "actionTo": "向 {{destination}}{{action}}",
     "clearQuoteRepost": "清除引用转发",
+    "draftPreviewAlt": "草稿预览：{{name}}",
     "quoteReposting": "引用转发中",
     "clearReply": "清除回复",
     "replying": "回复中",
@@ -123,10 +125,11 @@
   "fallbacks": {
     "attachment": "附件",
     "authorDetail": "作者详情",
-    "blobPending": "[blob pending]",
+    "blobPending": "[正在等待 Blob]",
     "noBio": "尚未发布个人简介。",
     "noDescription": "无描述",
     "noEvents": "暂无事件",
+    "loadingMore": "正在加载更多…",
     "none": "无",
     "selectAuthor": "选择一位作者以查看资料和关系。",
     "unknown": "未知"
@@ -150,11 +153,14 @@
     "viewers": "观看者"
   },
   "media": {
+    "closeDialog": "关闭图片查看器",
     "imageAlt": "图片附件",
     "reportVideo": "举报视频附件",
     "imageReady": "图片已就绪",
+    "nextImage": "下一张图片",
     "playableVideo": "视频可播放",
     "posterReady": "海报已就绪",
+    "previousImage": "上一张图片",
     "syncingImage": "正在同步图片",
     "syncingPoster": "正在同步海报",
     "unsupportedOnClient": "此客户端不支持",

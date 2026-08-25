@@ -228,11 +228,11 @@ describe('CommunityNodeAdvisoryPanel', () => {
     await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
     await userEvent.click(await screen.findByText(/node-a/));
     await userEvent.click(
-      screen.getByRole('button', { name: 'このリスク判定に異議を申し立てる' })
+      screen.getByRole('button', { name: 'Appeal this risk assessment' })
     );
 
     expect(screen.queryByLabelText(/contact|連絡先/i)).not.toBeInTheDocument();
-    await userEvent.click(await screen.findByRole('button', { name: '異議を申し立てる' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Submit appeal' }));
 
     expect(client.submitCommunityNodeReport).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -245,9 +245,9 @@ describe('CommunityNodeAdvisoryPanel', () => {
         appeal: { risk_signal_id: 'signal-1' },
       })
     );
-    expect(await screen.findByText(/受付対象のリスク判定: signal-1/)).toBeInTheDocument();
+    expect(await screen.findByText(/Appealed assessment: signal-1/)).toBeInTheDocument();
     expect(client.readCommunityNodeTrustUser).toHaveBeenCalledTimes(2);
-    expect(screen.queryByRole('button', { name: '異議を申し立てる' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Submit appeal' })).not.toBeInTheDocument();
   });
 
   test('uses the original post target when appealing a post risk judgment', async () => {
@@ -263,9 +263,9 @@ describe('CommunityNodeAdvisoryPanel', () => {
     await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
     await userEvent.click(await screen.findByText(/node-a/));
     await userEvent.click(
-      screen.getByRole('button', { name: 'このリスク判定に異議を申し立てる' })
+      screen.getByRole('button', { name: 'Appeal this risk assessment' })
     );
-    await userEvent.click(await screen.findByRole('button', { name: '異議を申し立てる' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Submit appeal' }));
 
     expect(client.submitCommunityNodeReport).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -289,11 +289,11 @@ describe('CommunityNodeAdvisoryPanel', () => {
     await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
     await userEvent.click(await screen.findByText(/node-a/));
 
-    expect(screen.getByText('認容済み')).toBeInTheDocument();
-    expect(screen.getByText(/評価への寄与から除外されています/)).toBeInTheDocument();
-    expect(screen.getByText(/投稿 · post-cleared/)).toBeInTheDocument();
+    expect(screen.getByText('Cleared')).toBeInTheDocument();
+    expect(screen.getByText(/no longer contributes to the trust result/)).toBeInTheDocument();
+    expect(screen.getByText(/Post · post-cleared/)).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: 'このリスク判定に異議を申し立てる' })
+      screen.queryByRole('button', { name: 'Appeal this risk assessment' })
     ).not.toBeInTheDocument();
   });
 
@@ -310,7 +310,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
     await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
     await userEvent.click(await screen.findByText(/node-a/));
     await userEvent.click(
-      screen.getByRole('button', { name: 'このリスク判定に異議を申し立てる' })
+      screen.getByRole('button', { name: 'Appeal this risk assessment' })
     );
     expect(screen.getByRole('dialog')).toBeInTheDocument();
 
@@ -339,7 +339,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
     await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
     await userEvent.click(await screen.findByText(/node-a/));
     await userEvent.click(
-      screen.getByRole('button', { name: 'このリスク判定に異議を申し立てる' })
+      screen.getByRole('button', { name: 'Appeal this risk assessment' })
     );
     fireEvent.change(screen.getByRole('combobox', { hidden: true }), { target: { value: nodeB } });
 
@@ -445,16 +445,16 @@ describe('CommunityNodeAdvisoryPanel', () => {
     await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
     await userEvent.click(await screen.findByText(/node-a/));
     expect(client.fetchCommunityNodeManifest).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole('button', { name: 'このリスク判定に異議を申し立てる' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Appeal this risk assessment' }));
 
     await waitFor(() => expect(client.fetchCommunityNodeManifest).toHaveBeenCalledTimes(1));
     expect(client.fetchCommunityNodeManifest).toHaveBeenCalledWith(nodeA);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '異議を申し立てる' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Submit appeal' })).not.toBeInTheDocument();
     expect(client.submitCommunityNodeReport).not.toHaveBeenCalled();
 
     pending.resolve({ status: 'ok', manifest: communityNodeManifests[nodeA] });
-    await userEvent.click(await screen.findByRole('button', { name: '異議を申し立てる' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Submit appeal' }));
     expect(client.submitCommunityNodeReport).toHaveBeenCalledWith(
       expect.objectContaining({ node_base_url: nodeA, appeal: { risk_signal_id: 'signal-1' } })
     );
@@ -469,12 +469,12 @@ describe('CommunityNodeAdvisoryPanel', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
     await userEvent.click(await screen.findByText(/node-a/));
-    await userEvent.click(screen.getByRole('button', { name: 'このリスク判定に異議を申し立てる' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Appeal this risk assessment' }));
 
     await waitFor(() => expect(client.fetchCommunityNodeManifest).toHaveBeenCalledTimes(1));
     expect(await screen.findByText(/Could not refresh report targets/)).toBeInTheDocument();
-    expect(screen.getByText('発行元の送信先を確認できません')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '異議を申し立てる' })).not.toBeInTheDocument();
+    expect(screen.getByText("The issuer's destination could not be resolved")).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Submit appeal' })).not.toBeInTheDocument();
     expect(client.submitCommunityNodeReport).not.toHaveBeenCalled();
   });
 
@@ -490,11 +490,11 @@ describe('CommunityNodeAdvisoryPanel', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
     await userEvent.click(await screen.findByText(/node-a/));
-    await userEvent.click(screen.getByRole('button', { name: 'このリスク判定に異議を申し立てる' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Appeal this risk assessment' }));
 
     await waitFor(() => expect(client.fetchCommunityNodeManifest).toHaveBeenCalledTimes(1));
     await waitFor(() =>
-      expect(screen.queryByRole('button', { name: '異議を申し立てる' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Submit appeal' })).not.toBeInTheDocument()
     );
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(client.submitCommunityNodeReport).not.toHaveBeenCalled();
@@ -514,18 +514,18 @@ describe('CommunityNodeAdvisoryPanel', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
     await userEvent.click(await screen.findByText(/node-a/));
-    await userEvent.click(screen.getByRole('button', { name: 'このリスク判定に異議を申し立てる' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Appeal this risk assessment' }));
     await waitFor(() => expect(client.fetchCommunityNodeManifest).toHaveBeenCalledTimes(1));
     await userEvent.click(screen.getByRole('button', { name: /キャンセル|Cancel/ }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
-    await userEvent.click(screen.getByRole('button', { name: 'このリスク判定に異議を申し立てる' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Appeal this risk assessment' }));
     await waitFor(() => expect(client.fetchCommunityNodeManifest).toHaveBeenCalledTimes(2));
     first.resolve({ status: 'ok', manifest: communityNodeManifests[nodeA] });
     await new Promise((done) => setTimeout(done, 0));
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '異議を申し立てる' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Submit appeal' })).not.toBeInTheDocument();
   });
   // #707: 添付(blob_cid)由来の判定も対象著者の信頼評価に寄与するため、media として異議申し立てできる。
   test('appeals an attachment risk judgment as media with the blob hash', async () => {
@@ -534,9 +534,9 @@ describe('CommunityNodeAdvisoryPanel', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
     await userEvent.click(await screen.findByText(/node-a/));
-    await userEvent.click(screen.getByRole('button', { name: 'このリスク判定に異議を申し立てる' }));
-    expect(await screen.findByText('添付に関するリスク判定')).toBeInTheDocument();
-    await userEvent.click(await screen.findByRole('button', { name: '異議を申し立てる' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Appeal this risk assessment' }));
+    expect(await screen.findByText('Attachment risk assessment')).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'Submit appeal' }));
 
     expect(client.submitCommunityNodeReport).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -548,7 +548,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
         appeal: { risk_signal_id: 'signal-1' },
       })
     );
-    expect(await screen.findByText(/受付対象のリスク判定: signal-1/)).toBeInTheDocument();
+    expect(await screen.findByText(/Appealed assessment: signal-1/)).toBeInTheDocument();
     expect(client.readCommunityNodeTrustUser).toHaveBeenCalledTimes(2);
   });
 
@@ -559,10 +559,10 @@ describe('CommunityNodeAdvisoryPanel', () => {
     await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
     await userEvent.click(await screen.findByText(/node-a/));
     expect(
-      screen.queryByRole('button', { name: 'このリスク判定に異議を申し立てる' })
+      screen.queryByRole('button', { name: 'Appeal this risk assessment' })
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText('この種類のリスク判定は、現在の画面から異議申し立てできません。')
+      screen.getByText('This type of risk assessment cannot be appealed from the current screen.')
     ).toBeInTheDocument();
     expect(client.submitCommunityNodeReport).not.toHaveBeenCalled();
   });
@@ -592,7 +592,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
     await userEvent.click(await screen.findByText(/node-a/));
-    await userEvent.click(screen.getByRole('button', { name: 'このリスク判定に異議を申し立てる' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Appeal this risk assessment' }));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
 
     // A の同意が失効し、候補が B だけになる。
@@ -632,7 +632,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
 
     expect((await screen.findAllByText(/別の利用者を対象にしていた|answered for a different user/)).length).toBeGreaterThan(0);
     expect(screen.queryByText(/node-a/)).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'このリスク判定に異議を申し立てる' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Appeal this risk assessment' })).not.toBeInTheDocument();
   });
 
   // #699: 利用者対象の根拠が表示中の利用者と異なる場合は、この画面から申し立てできない。
@@ -642,9 +642,9 @@ describe('CommunityNodeAdvisoryPanel', () => {
     await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
     await userEvent.click(await screen.findByText(/node-a/));
 
-    expect(screen.queryByRole('button', { name: 'このリスク判定に異議を申し立てる' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Appeal this risk assessment' })).not.toBeInTheDocument();
     expect(
-      screen.getByText('この種類のリスク判定は、現在の画面から異議申し立てできません。')
+      screen.getByText('This type of risk assessment cannot be appealed from the current screen.')
     ).toBeInTheDocument();
     expect(client.submitCommunityNodeReport).not.toHaveBeenCalled();
   });

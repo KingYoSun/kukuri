@@ -18,6 +18,19 @@ const BASE_LOCALE = 'en';
 const NAMESPACES = Object.keys(resources[BASE_LOCALE]).sort();
 const OTHER_LOCALES = SUPPORTED_LOCALES.filter((locale) => locale !== BASE_LOCALE);
 
+// 固有名詞、言語名、入力例、プロトコル形式は翻訳せず、そのまま提示する。
+const INTENTIONALLY_SHARED_ENGLISH = new Set([
+  'game:fields.placeholders.participants',
+  'profile:communityNodeAdvisory.nodeLabel',
+  'settings:appearance.languageOptions.en',
+  'settings:communityNode.baseUrlsPlaceholder',
+  'settings:connectivity.peerTicketPlaceholder',
+  'settings:discovery.seedPeersPlaceholder',
+  'settings:reactions.searchKeyPlaceholder',
+  'shell:indexingRequest.nodeLabel',
+  'shell:navigation.placeholder',
+]);
+
 type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
 
 // オブジェクトは再帰、配列は index 付き([i])で再帰、それ以外は葉。
@@ -82,6 +95,40 @@ describe.each(OTHER_LOCALES)('locale %s', (locale) => {
       expect(placeholders(localeValue), `${namespace}:${key}`).toEqual(placeholders(enValue));
     }
   });
+});
+
+test.each(['en', 'zh-CN'] as const)('locale %s does not contain Japanese kana', (locale) => {
+  const kana = /[\u3040-\u30ff]/u;
+  const violations = NAMESPACES.flatMap((namespace) =>
+    flattenLeaves(resources[locale][namespace as keyof (typeof resources)['en']] as Json, '')
+      .filter(([, value]) => kana.test(value))
+      .map(([key, value]) => `${namespace}:${key}=${value}`)
+  );
+
+  expect(violations).toEqual([]);
+});
+
+test.each(OTHER_LOCALES)('locale %s does not leave English UI copy untranslated', (locale) => {
+  const violations = NAMESPACES.flatMap((namespace) => {
+    const enLeaves = new Map(
+      flattenLeaves(resources[BASE_LOCALE][namespace as keyof (typeof resources)['en']] as Json, '')
+    );
+    return flattenLeaves(
+      resources[locale][namespace as keyof (typeof resources)['en']] as Json,
+      ''
+    )
+      .filter(([key, value]) => {
+        const qualifiedKey = `${namespace}:${key}`;
+        return (
+          value === enLeaves.get(key) &&
+          /[A-Za-z]{3}/u.test(value) &&
+          !INTENTIONALLY_SHARED_ENGLISH.has(qualifiedKey)
+        );
+      })
+      .map(([key, value]) => `${namespace}:${key}=${value}`);
+  });
+
+  expect(violations).toEqual([]);
 });
 
 test('i18n init namespaces match the bundled resources', () => {

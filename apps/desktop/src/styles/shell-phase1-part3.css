@@ -186,6 +186,10 @@
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+.shell-profile-connections-tabs {
+  grid-template-columns: repeat(auto-fit, minmax(min(7rem, 100%), 1fr));
+}
+
 .shell-section {
   min-width: 0;
   display: grid;

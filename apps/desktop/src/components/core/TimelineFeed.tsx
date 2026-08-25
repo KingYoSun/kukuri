@@ -223,7 +223,9 @@ export function TimelineFeed({
               {loadingMore ? 'Loading...' : 'Load more'}
             </Button>
           ) : null}
-          {canAutoLoad && loadingMore ? <p className='empty'>Loading more…</p> : null}
+          {canAutoLoad && loadingMore ? (
+            <p className='empty'>{t('fallbacks.loadingMore')}</p>
+          ) : null}
         </li>
       ) : null}
     </ul>

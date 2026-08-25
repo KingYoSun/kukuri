@@ -33,10 +33,10 @@
     "noFilteredTopics": "没有符合条件的主题。",
     "publicScope": "公开动态",
     "removeTopic": "移除 {{topic}}",
-    "seededDht": "seeded dht",
-    "staticPeers": "static peers",
+    "seededDht": "种子 DHT",
+    "staticPeers": "静态对等节点",
     "title": "主题",
-    "topicSummary": "{{status}} / peers: {{count}}",
+    "topicSummary": "{{status}} / 对等节点: {{count}}",
     "topicsButton": "主题",
     "trackedTopics": "跟踪的主题",
     "updateAvailable": "有可用更新"
@@ -94,6 +94,13 @@
     "release": "版本与更新",
     "settings": "设置"
   },
+  "columnState": {
+    "active": "当前",
+    "inactive": "非当前",
+    "pinned": "已固定",
+    "temporary": "临时",
+    "accessibleLabel": "{{title}}栏目，第 {{position}} 项，共 {{total}} 项，宽度 {{span}} 列，{{activity}}，{{persistence}}"
+  },
   "columnMenu": {
     "open": "打开 {{title}} 菜单",
     "close": "关闭 {{title}} 菜单",
@@ -108,10 +115,10 @@
     "exitFullscreen": "退出 {{title}} 全屏显示",
     "fullscreenFailed": "无法切换 {{title}} 的全屏模式。",
     "closeColumn": "关闭 {{title}}",
-    "span_one": "{{count}} span",
-    "span_other": "{{count}} span",
-    "spanChanged_one": "已将 {{title}} 更改为 {{count}} span。",
-    "spanChanged_other": "已将 {{title}} 更改为 {{count}} span。"
+    "span_one": "{{count}} 列宽",
+    "span_other": "{{count}} 列宽",
+    "spanChanged_one": "已将 {{title}} 更改为 {{count}} 列宽。",
+    "spanChanged_other": "已将 {{title}} 更改为 {{count}} 列宽。"
   },
   "primarySections": {
     "explore": "发现",
@@ -121,6 +128,22 @@
     "notifications": "通知",
     "profile": "资料",
     "timeline": "时间线"
+  },
+  "messages": {
+    "all": "全部",
+    "conversationCount": "{{count}} 个会话",
+    "delivered": "已送达",
+    "empty": "还没有私信。",
+    "latest": "最新消息：{{preview}}",
+    "mutualRequired": "双方不再互相关注，暂时无法发送私信。",
+    "noMessages": "还没有消息。",
+    "open": "打开",
+    "peerCount": "{{count}} 个对等节点",
+    "pending": "等待发送",
+    "pendingOutbox": "待发箱：{{count}} 条",
+    "sendDisabled": "无法发送",
+    "sending": "正在发送…",
+    "title": "消息"
   },
   "notifications": {
     "context": {
@@ -187,15 +210,20 @@
     },
     "reactions": {
       "description": "创建自定义回应并管理已保存回应。",
-      "label": "Reactions"
+      "label": "回应"
     },
     "release": {
       "description": "预览更新、诊断和系统通知。",
-      "label": "Release"
+      "label": "发布"
     }
   },
   "workspace": {
     "bookmarks": "收藏",
+    "columnCanvas": "栏目工作区",
+    "columnDrop": "将栏目移动到第 {{position}} 位",
+    "columnMoved": "已将栏目移动到第 {{position}} 位。",
+    "columnPage": "转到第 {{position}} 个栏目，共 {{total}} 个",
+    "columnPages": "栏目页面",
     "composeTarget": "发布目标",
     "feed": "动态",
     "noBookmarks": "还没有收藏的帖子。",
@@ -205,9 +233,11 @@
     "savedCount": "已保存 {{count}} 条",
     "tabs": "工作区",
     "timelineViews": "时间线视图",
-    "communityNodeUnavailableAction": "打开 Community Node 设置",
-    "communityNodeUnavailableBody": "已配置的 community node 当前不可用。客户端会继续启动，direct P2P 连接仍然可用。",
-    "communityNodeUnavailableTitle": "Community node unavailable",
+    "primaryLabel": "主工作区",
+    "skipToWorkspace": "跳转到工作区",
+    "communityNodeUnavailableAction": "打开社区节点设置",
+    "communityNodeUnavailableBody": "已配置的社区节点当前不可用。客户端会继续启动，直接 P2P 连接仍然可用。",
+    "communityNodeUnavailableTitle": "社区节点不可用",
     "viewScope": "查看范围"
   },
   "indexingRequest": {
