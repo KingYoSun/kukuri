@@ -509,6 +509,7 @@ fn nonblank(value: Option<&str>) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Command;
 
     const HASH_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const HASH_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -599,6 +600,30 @@ mod tests {
             .iter()
             .map(|(path, hash)| ((*path).to_string(), (*hash).to_string()))
             .collect()
+    }
+
+    #[test]
+    fn manifest_xml_assets_pin_lf_checkout() {
+        let paths = [
+            "apps/desktop/src-tauri/icons/android/mipmap-anydpi-v26/ic_launcher.xml",
+            "apps/desktop/src-tauri/icons/android/values/ic_launcher_background.xml",
+        ];
+        let output = Command::new("git")
+            .current_dir(crate::exec::root_dir())
+            .args(["check-attr", "eol", "--"])
+            .args(paths)
+            .output()
+            .expect("git check-attr must run for release asset validation");
+        assert!(output.status.success());
+        let stdout = String::from_utf8(output.stdout).expect("git check-attr output must be UTF-8");
+        for path in paths {
+            assert!(
+                stdout
+                    .lines()
+                    .any(|line| line == format!("{path}: eol: lf")),
+                "release manifest XML asset must pin LF checkout: {path}; attributes: {stdout}"
+            );
+        }
     }
 
     #[test]
