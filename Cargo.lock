@@ -7734,8 +7734,11 @@ name = "xtask"
 version = "0.1.5"
 dependencies = [
  "anyhow",
+ "hex",
  "kukuri-harness",
+ "serde",
  "serde_json",
+ "sha2 0.11.0",
  "tokio",
 ]
 

@@ -1,0 +1,636 @@
+{
+  "schema_version": 1,
+  "assets": [
+    {
+      "id": "kukuri-app-icon",
+      "display_name": "kukuri application icon",
+      "origin": "authored",
+      "author": "KingYoSun",
+      "rights_holder": "KingYoSun",
+      "source": {
+        "created_on": "2026-03-26"
+      },
+      "license": {
+        "id": "MIT",
+        "text_path": "LICENSE",
+        "commercial_use": true,
+        "repository_redistribution": true,
+        "binary_redistribution": true,
+        "attribution_required": true,
+        "attribution": "Copyright (c) 2025 KingYoSun"
+      },
+      "modification": {
+        "modified": true,
+        "description": "The platform-specific sizes and formats are derived from apps/desktop/app-icon.png."
+      },
+      "generation": null,
+      "files": [
+        {
+          "path": "apps/desktop/app-icon.png",
+          "sha256": "e017fd5dac0704983984ce4c9483d826f53137dd692e789a4fb363b6ec5e6cc9",
+          "distribution": "source-only"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/128x128.png",
+          "sha256": "7d00ebf76882760fa730e08b747a3153d8b3c08c97e826e6c2751324f57eff55",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/128x128@2x.png",
+          "sha256": "2c05692d48888d6906d7662dd9dda54a8002ae5e90a99401d6dc1b008f99e55d",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/32x32.png",
+          "sha256": "998ddb22ca39bda6a4f025d6c48c4a85a87268610e2cd4c682ef40e75a97c49f",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/64x64.png",
+          "sha256": "fb3ae4c67d46231c288933d0d8ade24c0f413b01cecc81db6f9117ed1d2cb041",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/Square107x107Logo.png",
+          "sha256": "b41b4ad8df097222c24f377e9e2113fc7ee318aaac8d20be7affd0885013ff10",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/Square142x142Logo.png",
+          "sha256": "81a014f62837efe5c47961833861b57f8bc91a0d8ae71dc6dad5ca2d0b367515",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/Square150x150Logo.png",
+          "sha256": "32d01f5ebdebf7bae1a60a61861cb47b7c921f65ddd648bb30995d8afbfaf896",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/Square284x284Logo.png",
+          "sha256": "4d8eb8f4aaebcb2e87f91464a3b6966cad66f79a1b3f0eb17565920c9844b2ca",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/Square30x30Logo.png",
+          "sha256": "a0456dd5c87e4469b4990e59e297cf97fc792a6143cfe2da3a535797d4bd3d90",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/Square310x310Logo.png",
+          "sha256": "239f0c5dcfa7dcd9bd3014954f56af1f43bf181a3bd42492cd1791000d6af4c1",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/Square44x44Logo.png",
+          "sha256": "180fde18c9fb51c49f6467d46429592c2daa4bf66ad5a072676361a9995fde89",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/Square71x71Logo.png",
+          "sha256": "c26fd05b331cfef94070bb9db6f31c8d8b296651432f8f62707528716e913998",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/Square89x89Logo.png",
+          "sha256": "302a0cdf8f936913289674262a01190660cf4df32fbec6d927c37a34015ff44d",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/StoreLogo.png",
+          "sha256": "ae0bbf39ce125a6b9b5e45ec5ba0fc0a4a69723635f539cff3f94d847e25c6ed",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/android/mipmap-anydpi-v26/ic_launcher.xml",
+          "sha256": "760d4b8a06bf7163dd010c33ad2cac9e4a75fa0177afaba042f83e311eef0c3e",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/android/mipmap-hdpi/ic_launcher.png",
+          "sha256": "ab4944a6d4d5dacb440bd620368c589a9dd6d81fef7b88299ec1d157e17802b8",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/android/mipmap-hdpi/ic_launcher_foreground.png",
+          "sha256": "13f28e2e81a1a2be84e8c4693be16032f670e70d0346819a1140095d64100bb7",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/android/mipmap-hdpi/ic_launcher_round.png",
+          "sha256": "0e97badf41cd498bf3d94290a01ec6b33119607d2ec0709e4630c2a9d50b030e",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/android/mipmap-mdpi/ic_launcher.png",
+          "sha256": "73b97e966b79425b172d51ce9a674d33d1ff7c16f99a55d4bd31a3cd3f7edc14",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/android/mipmap-mdpi/ic_launcher_foreground.png",
+          "sha256": "e8cafcfd4bf43c16bb5a9d462f06e8e18784d02b5b90e3f2f1feeb5d15819ee0",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/android/mipmap-mdpi/ic_launcher_round.png",
+          "sha256": "d1089c84da8796db7411f6ee3c4e678bd73964627caddf30aba0ab1060380a9c",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/android/mipmap-xhdpi/ic_launcher.png",
+          "sha256": "6badd7c0e765b5ba3591160908ea610d939f95b7c777f84525fa617c5ade4947",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/android/mipmap-xhdpi/ic_launcher_foreground.png",
+          "sha256": "6fd2fec54e7376b07279c2ac53d2a884657e5888447de8059f07a2de1b933713",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/android/mipmap-xhdpi/ic_launcher_round.png",
+          "sha256": "0123bc8a06dff5b0bc3abfbd3dca8123781768daffc44a311ab465be449b030a",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/android/mipmap-xxhdpi/ic_launcher.png",
+          "sha256": "4fbea26cf906982fe7ed9b76b5114476515a52445a75bd57c243c04174a458df",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/android/mipmap-xxhdpi/ic_launcher_foreground.png",
+          "sha256": "bbe301287ffc99a3f4b1b4e46425bece00f4e3c288adc5577640fac6d6190f39",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/android/mipmap-xxhdpi/ic_launcher_round.png",
+          "sha256": "2d7ab758a4bc9c8b1b04539950ae8e5470d7247a6ad0f5350fbb3b6eee4fb61a",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/android/mipmap-xxxhdpi/ic_launcher.png",
+          "sha256": "276388deee22cb36ed0d73a776f4bf85d97a7208126ea001f2286ccbc03f7940",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/android/mipmap-xxxhdpi/ic_launcher_foreground.png",
+          "sha256": "98e6d6c456625ae0857543dad0c12e6488ec477f10c740a18fe0bcf21e54fe46",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/android/mipmap-xxxhdpi/ic_launcher_round.png",
+          "sha256": "256ae4fca82246411867e983b5d407bfd404cf13a245e018f2a6c2370cd8c793",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/android/values/ic_launcher_background.xml",
+          "sha256": "0687336f0ccc6f7ee09c7c95110667c63b75931238df779a21af401fb864cd34",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/icon.icns",
+          "sha256": "6d673541813dfea31c75d55cd012fd09fd85d30cb3095d7877513ad7616f19f2",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/icon.ico",
+          "sha256": "0f25f42d1499007ccc585d9012d05854cf91c5f852d693f24b61908388bbb7b7",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/icon.png",
+          "sha256": "ee1a0bba81298e00668ff6e31052cb16f73e1789471ddb79027dfdaf997e0592",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/ios/AppIcon-20x20@1x.png",
+          "sha256": "8837613af3d3ae216ea7173e8b2b32385aa60126921b7cab52983b2097037edc",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/ios/AppIcon-20x20@2x-1.png",
+          "sha256": "131fda20a74ec9d190e87b1df1571d91b9eb0c6aafffa2e9a25021b9134fff78",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/ios/AppIcon-20x20@2x.png",
+          "sha256": "131fda20a74ec9d190e87b1df1571d91b9eb0c6aafffa2e9a25021b9134fff78",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/ios/AppIcon-20x20@3x.png",
+          "sha256": "69a2b6fab40cc1a5bf4426d9ab0ceabec134c149deeb1dd1c6a3f245b7d05806",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/ios/AppIcon-29x29@1x.png",
+          "sha256": "4125cadca9714020b5dfce58d57377e81a015cb6b5e95a22a37a8be576ed02c4",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/ios/AppIcon-29x29@2x-1.png",
+          "sha256": "a2b38ec78250569ece791649e4e15025d325a93af0db522f5169335f217a7a6e",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/ios/AppIcon-29x29@2x.png",
+          "sha256": "a2b38ec78250569ece791649e4e15025d325a93af0db522f5169335f217a7a6e",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/ios/AppIcon-29x29@3x.png",
+          "sha256": "b7e7c07230ea7ee37566c4e378840b81c8a404c50a9e85024beb5cf11c9c7b04",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/ios/AppIcon-40x40@1x.png",
+          "sha256": "131fda20a74ec9d190e87b1df1571d91b9eb0c6aafffa2e9a25021b9134fff78",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/ios/AppIcon-40x40@2x-1.png",
+          "sha256": "19088ee4cd03e2f8c21094bd366ba836be5ed872b60924674b08f18297fba179",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/ios/AppIcon-40x40@2x.png",
+          "sha256": "19088ee4cd03e2f8c21094bd366ba836be5ed872b60924674b08f18297fba179",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/ios/AppIcon-40x40@3x.png",
+          "sha256": "e7db236d682d0a9d49b898022f7f5110a8b2d450f469bc22f191e39d2c7cb548",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/ios/AppIcon-512@2x.png",
+          "sha256": "94c92a1298742bedc704788a728380e711e3f8790bc559eb6c4c3a51c4325e20",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/ios/AppIcon-60x60@2x.png",
+          "sha256": "e7db236d682d0a9d49b898022f7f5110a8b2d450f469bc22f191e39d2c7cb548",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/ios/AppIcon-60x60@3x.png",
+          "sha256": "378f65122f00096a2a8b4db17afbb36a66b24a5bb023ca047288dd7a9bab1228",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/ios/AppIcon-76x76@1x.png",
+          "sha256": "eb2c60efcac1c40597f921c879a2d3fd658ee82ca9f5d1f22bffc5ab6136a703",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/ios/AppIcon-76x76@2x.png",
+          "sha256": "49fd16e3a82668aa5ad069474419a794166c3204ce279ee814d13c94dcf831f8",
+          "distribution": "bundled-binary"
+        },
+        {
+          "path": "apps/desktop/src-tauri/icons/ios/AppIcon-83.5x83.5@2x.png",
+          "sha256": "fcce9caf360fe5c5eafecd79a30735628bcfa182aaf944e27191e73ece11d3b9",
+          "distribution": "bundled-binary"
+        }
+      ]
+    },
+    {
+      "id": "blumochichi-vrm",
+      "display_name": "blumochichi VRM avatar",
+      "origin": "authored",
+      "author": "KingYoSun",
+      "rights_holder": "KingYoSun",
+      "source": {
+        "created_on": "2026-05-28"
+      },
+      "license": {
+        "id": "MIT",
+        "text_path": "LICENSE",
+        "commercial_use": true,
+        "repository_redistribution": true,
+        "binary_redistribution": true,
+        "attribution_required": true,
+        "attribution": "Copyright (c) 2025 KingYoSun"
+      },
+      "modification": {
+        "modified": false
+      },
+      "generation": null,
+      "files": [
+        {
+          "path": "apps/desktop/public/blumochichi.vrm",
+          "sha256": "92403742e24ec75268dd10c277f32d314994a1e8732b1f9818f681b6480f0770",
+          "distribution": "bundled-binary"
+        }
+      ]
+    },
+    {
+      "id": "universal-animation-idle-loop",
+      "display_name": "Idle Loop VRMA",
+      "origin": "third_party",
+      "author": "Quaternius",
+      "rights_holder": "Quaternius",
+      "source": {
+        "url": "https://quaternius.com/packs/universalanimationlibrary.html",
+        "acquired_on": "2026-05-29"
+      },
+      "license": {
+        "id": "CC0-1.0",
+        "text_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "commercial_use": true,
+        "repository_redistribution": true,
+        "binary_redistribution": true,
+        "attribution_required": false,
+        "attribution": "Universal Animation Library by Quaternius (courtesy credit)"
+      },
+      "modification": {
+        "modified": false
+      },
+      "generation": null,
+      "files": [
+        {
+          "path": "apps/desktop/public/animation/Idle_Loop.vrma",
+          "sha256": "6de22a6f851cb2d45a7b896ea3183a02db58e335d83c3ee14dc1e1a79d6f96ac",
+          "distribution": "bundled-binary"
+        }
+      ]
+    },
+    {
+      "id": "universal-animation-jump-land",
+      "display_name": "Jump Land VRMA",
+      "origin": "third_party",
+      "author": "Quaternius",
+      "rights_holder": "Quaternius",
+      "source": {
+        "url": "https://quaternius.com/packs/universalanimationlibrary.html",
+        "acquired_on": "2026-05-29"
+      },
+      "license": {
+        "id": "CC0-1.0",
+        "text_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "commercial_use": true,
+        "repository_redistribution": true,
+        "binary_redistribution": true,
+        "attribution_required": false,
+        "attribution": "Universal Animation Library by Quaternius (courtesy credit)"
+      },
+      "modification": {
+        "modified": false
+      },
+      "generation": null,
+      "files": [
+        {
+          "path": "apps/desktop/public/animation/Jump_Land.vrma",
+          "sha256": "6fb8f9b6afb4a7058e14b702fc942cfefcc15a0e6408ecd7518648133936076b",
+          "distribution": "bundled-binary"
+        }
+      ]
+    },
+    {
+      "id": "universal-animation-jump-loop",
+      "display_name": "Jump Loop VRMA",
+      "origin": "third_party",
+      "author": "Quaternius",
+      "rights_holder": "Quaternius",
+      "source": {
+        "url": "https://quaternius.com/packs/universalanimationlibrary.html",
+        "acquired_on": "2026-05-29"
+      },
+      "license": {
+        "id": "CC0-1.0",
+        "text_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "commercial_use": true,
+        "repository_redistribution": true,
+        "binary_redistribution": true,
+        "attribution_required": false,
+        "attribution": "Universal Animation Library by Quaternius (courtesy credit)"
+      },
+      "modification": {
+        "modified": false
+      },
+      "generation": null,
+      "files": [
+        {
+          "path": "apps/desktop/public/animation/Jump_Loop.vrma",
+          "sha256": "d4f2c733378ac6e0dc2c6fcc288423ec23e708b04bb53a2d6506bd2fdf55dd22",
+          "distribution": "bundled-binary"
+        }
+      ]
+    },
+    {
+      "id": "universal-animation-jump-start",
+      "display_name": "Jump Start VRMA",
+      "origin": "third_party",
+      "author": "Quaternius",
+      "rights_holder": "Quaternius",
+      "source": {
+        "url": "https://quaternius.com/packs/universalanimationlibrary.html",
+        "acquired_on": "2026-05-29"
+      },
+      "license": {
+        "id": "CC0-1.0",
+        "text_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "commercial_use": true,
+        "repository_redistribution": true,
+        "binary_redistribution": true,
+        "attribution_required": false,
+        "attribution": "Universal Animation Library by Quaternius (courtesy credit)"
+      },
+      "modification": {
+        "modified": false
+      },
+      "generation": null,
+      "files": [
+        {
+          "path": "apps/desktop/public/animation/Jump_Start.vrma",
+          "sha256": "5bfd5d91651483f5f464051c693d445baba4708d0c20b853646e3d9b14cd2aa5",
+          "distribution": "bundled-binary"
+        }
+      ]
+    },
+    {
+      "id": "universal-animation-sitting-enter",
+      "display_name": "Sitting Enter VRMA",
+      "origin": "third_party",
+      "author": "Quaternius",
+      "rights_holder": "Quaternius",
+      "source": {
+        "url": "https://quaternius.com/packs/universalanimationlibrary.html",
+        "acquired_on": "2026-05-29"
+      },
+      "license": {
+        "id": "CC0-1.0",
+        "text_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "commercial_use": true,
+        "repository_redistribution": true,
+        "binary_redistribution": true,
+        "attribution_required": false,
+        "attribution": "Universal Animation Library by Quaternius (courtesy credit)"
+      },
+      "modification": {
+        "modified": false
+      },
+      "generation": null,
+      "files": [
+        {
+          "path": "apps/desktop/public/animation/Sitting_Enter.vrma",
+          "sha256": "0f2a05716168abc8e0829fd512884a3c29481048cfaf78f4aa04d137bc66f9fa",
+          "distribution": "bundled-binary"
+        }
+      ]
+    },
+    {
+      "id": "universal-animation-sitting-exit",
+      "display_name": "Sitting Exit VRMA",
+      "origin": "third_party",
+      "author": "Quaternius",
+      "rights_holder": "Quaternius",
+      "source": {
+        "url": "https://quaternius.com/packs/universalanimationlibrary.html",
+        "acquired_on": "2026-05-29"
+      },
+      "license": {
+        "id": "CC0-1.0",
+        "text_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "commercial_use": true,
+        "repository_redistribution": true,
+        "binary_redistribution": true,
+        "attribution_required": false,
+        "attribution": "Universal Animation Library by Quaternius (courtesy credit)"
+      },
+      "modification": {
+        "modified": false
+      },
+      "generation": null,
+      "files": [
+        {
+          "path": "apps/desktop/public/animation/Sitting_Exit.vrma",
+          "sha256": "e6323d4e80d4229ada36c4769ef021b64f1dd6e619bc2843fb17bf40730e09f3",
+          "distribution": "bundled-binary"
+        }
+      ]
+    },
+    {
+      "id": "universal-animation-sitting-idle-loop",
+      "display_name": "Sitting Idle Loop VRMA",
+      "origin": "third_party",
+      "author": "Quaternius",
+      "rights_holder": "Quaternius",
+      "source": {
+        "url": "https://quaternius.com/packs/universalanimationlibrary.html",
+        "acquired_on": "2026-05-29"
+      },
+      "license": {
+        "id": "CC0-1.0",
+        "text_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "commercial_use": true,
+        "repository_redistribution": true,
+        "binary_redistribution": true,
+        "attribution_required": false,
+        "attribution": "Universal Animation Library by Quaternius (courtesy credit)"
+      },
+      "modification": {
+        "modified": false
+      },
+      "generation": null,
+      "files": [
+        {
+          "path": "apps/desktop/public/animation/Sitting_Idle_Loop.vrma",
+          "sha256": "883b23e97a68c25ad06b0cbda09b27feab9711c848eab174a6e41ba034ff38eb",
+          "distribution": "bundled-binary"
+        }
+      ]
+    },
+    {
+      "id": "universal-animation-sitting-talking-loop",
+      "display_name": "Sitting Talking Loop VRMA",
+      "origin": "third_party",
+      "author": "Quaternius",
+      "rights_holder": "Quaternius",
+      "source": {
+        "url": "https://quaternius.com/packs/universalanimationlibrary.html",
+        "acquired_on": "2026-05-29"
+      },
+      "license": {
+        "id": "CC0-1.0",
+        "text_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "commercial_use": true,
+        "repository_redistribution": true,
+        "binary_redistribution": true,
+        "attribution_required": false,
+        "attribution": "Universal Animation Library by Quaternius (courtesy credit)"
+      },
+      "modification": {
+        "modified": false
+      },
+      "generation": null,
+      "files": [
+        {
+          "path": "apps/desktop/public/animation/Sitting_Talking_Loop.vrma",
+          "sha256": "a3b143123d7ff0db23be197a2c0ebdc61f18c54232efc92b30704f7cce448729",
+          "distribution": "bundled-binary"
+        }
+      ]
+    },
+    {
+      "id": "universal-animation-sprint-loop",
+      "display_name": "Sprint Loop VRMA",
+      "origin": "third_party",
+      "author": "Quaternius",
+      "rights_holder": "Quaternius",
+      "source": {
+        "url": "https://quaternius.com/packs/universalanimationlibrary.html",
+        "acquired_on": "2026-05-29"
+      },
+      "license": {
+        "id": "CC0-1.0",
+        "text_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "commercial_use": true,
+        "repository_redistribution": true,
+        "binary_redistribution": true,
+        "attribution_required": false,
+        "attribution": "Universal Animation Library by Quaternius (courtesy credit)"
+      },
+      "modification": {
+        "modified": false
+      },
+      "generation": null,
+      "files": [
+        {
+          "path": "apps/desktop/public/animation/Sprint_Loop.vrma",
+          "sha256": "b8c15043028452be057fe8c3ead26bac08644cf90db2fa8e0f3f435dd8214a62",
+          "distribution": "bundled-binary"
+        }
+      ]
+    },
+    {
+      "id": "universal-animation-walk-loop",
+      "display_name": "Walk Loop VRMA",
+      "origin": "third_party",
+      "author": "Quaternius",
+      "rights_holder": "Quaternius",
+      "source": {
+        "url": "https://quaternius.com/packs/universalanimationlibrary.html",
+        "acquired_on": "2026-05-29"
+      },
+      "license": {
+        "id": "CC0-1.0",
+        "text_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "commercial_use": true,
+        "repository_redistribution": true,
+        "binary_redistribution": true,
+        "attribution_required": false,
+        "attribution": "Universal Animation Library by Quaternius (courtesy credit)"
+      },
+      "modification": {
+        "modified": false
+      },
+      "generation": null,
+      "files": [
+        {
+          "path": "apps/desktop/public/animation/Walk_Loop.vrma",
+          "sha256": "41f3b7791690a9d5d281338945072717a1358e6af3d93474dee020854287c841",
+          "distribution": "bundled-binary"
+        }
+      ]
+    }
+  ]
+}

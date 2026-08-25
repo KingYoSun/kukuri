@@ -154,7 +154,7 @@ jobs:
         working-directory: apps/desktop
         run: pnpm install --frozen-lockfile
 
-      - name: Third-party notices check
+      - name: Package and asset notices check
         shell: pwsh
         run: ./scripts/release/generate-third-party-notices.ps1 -Check
 
@@ -383,7 +383,7 @@ jobs:
         shell: pwsh
         run: ./scripts/release/test-create-preview-assets.ps1
 
-      - name: Third-party notice script smoke
+      - name: Package and asset notice script smoke
         shell: pwsh
         run: ./scripts/release/test-generate-third-party-notices.ps1
 

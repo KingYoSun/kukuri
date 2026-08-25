@@ -64,6 +64,7 @@ export function ColumnCanvas({
   } | null>(null);
   const swipeConsumedRef = useRef(false);
   const scrollSettleTimeoutRef = useRef<number | null>(null);
+  const programmaticScrollTargetRef = useRef<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{ index: number; left: number } | null>(null);
   const [announcement, setAnnouncement] = useState('');
 
@@ -120,6 +121,12 @@ export function ColumnCanvas({
     if (typeof column?.scrollIntoView === 'function') {
       const mobile = isMobileViewport();
       const reducedMotion = prefersReducedMotion();
+      if (mobile) {
+        if (scrollSettleTimeoutRef.current !== null) {
+          window.clearTimeout(scrollSettleTimeoutRef.current);
+          scrollSettleTimeoutRef.current = null;
+        }
+      }
       column.scrollIntoView({
         block: 'nearest',
         inline: mobile ? 'center' : 'nearest',
@@ -185,6 +192,11 @@ export function ColumnCanvas({
         return id ? [{ id, left: column.offsetLeft, width: column.offsetWidth }] : [];
       });
       const nearest = nearestColumnToViewportCenter(columns, canvas.scrollLeft, canvas.clientWidth);
+      const programmaticTarget = programmaticScrollTargetRef.current;
+      if (programmaticTarget) {
+        if (nearest === programmaticTarget) programmaticScrollTargetRef.current = null;
+        return;
+      }
       if (nearest && nearest !== activeColumnId) onActivateColumn(nearest, true);
     }, SCROLL_SETTLE_MS);
   };
@@ -247,6 +259,7 @@ export function ColumnCanvas({
         swipeConsumedRef.current = false;
       }}
       onPointerDownCapture={(event) => {
+        programmaticScrollTargetRef.current = null;
         if (!isMobileViewport() || columnIds.length < 2) return;
         if (swipeGestureRef.current) return;
         const canvas = canvasRef.current;
@@ -280,6 +293,7 @@ export function ColumnCanvas({
         window.setTimeout(() => {
           swipeConsumedRef.current = false;
         }, 0);
+        programmaticScrollTargetRef.current = columnIds[targetIndex];
         onActivateColumn(columnIds[targetIndex], true);
       }}
       onPointerCancelCapture={() => {
@@ -340,7 +354,14 @@ export function ColumnCanvas({
                 type='button'
                 aria-label={`Go to Column ${index + 1} of ${columnIds.length}`}
                 aria-current={columnId === activeColumnId ? 'page' : undefined}
-                onClick={() => onActivateColumn(columnId, true)}
+                onClick={() => {
+                  programmaticScrollTargetRef.current = columnId;
+                  if (scrollSettleTimeoutRef.current !== null) {
+                    window.clearTimeout(scrollSettleTimeoutRef.current);
+                    scrollSettleTimeoutRef.current = null;
+                  }
+                  onActivateColumn(columnId, true);
+                }}
               >
                 <span aria-hidden='true' />
               </button>

@@ -1,8 +1,8 @@
-﻿# Third-party notices
+# Third-party notices
 
-kukuri preview builds include Rust crates, npm packages, and Tauri runtime components from third-party authors.
+kukuri preview builds include Rust crates, npm packages, Tauri runtime components, and non-code assets.
 
-This file is generated from the locked Rust and desktop npm dependency inventories.
+This file is generated from the locked Rust and desktop npm dependency inventories plus docs/ASSET_MANIFEST.json.
 
 Regenerate it from the repository root with:
 
@@ -10,11 +10,45 @@ Regenerate it from the repository root with:
 ./scripts/release/generate-third-party-notices.ps1
 ```
 
-Release owners must review these inventories before publishing a preview build and update this generator if a dependency requires attribution text beyond the package-level license inventory.
+Release owners must review these inventories before publishing a preview build and update the manifest or generator if a package or asset requires additional license or attribution text.
 
 ## Current distribution note
 
 The first preview targets Windows installer distribution through GitHub Releases. Linux remains source-run only for this preview scope. If Windows code signing is not configured, the release notes must state that the preview is unsigned and that SmartScreen warnings are expected.
+
+## Non-code asset notices
+
+The asset manifest records exact repository paths, SHA-256 digests, provenance, and source-only versus bundled-binary scope. The entries below are the distribution-facing license and credit summary.
+
+### Bundled first-party assets
+
+| Asset | Author / rights holder | Source / date | License | Modification | Distribution | Conditions | Credit |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| blumochichi VRM avatar | KingYoSun / KingYoSun | created 2026-05-28 | MIT (LICENSE) | None | bundled-binary: apps/desktop/public/blumochichi.vrm | commercial=yes; repository redistribution=yes; binary redistribution=yes | Required: Copyright (c) 2025 KingYoSun |
+| kukuri application icon | KingYoSun / KingYoSun | created 2026-03-26 | MIT (LICENSE) | The platform-specific sizes and formats are derived from apps/desktop/app-icon.png. | source-only: apps/desktop/app-icon.png; bundled-binary: apps/desktop/src-tauri/icons/** (52 files) | commercial=yes; repository redistribution=yes; binary redistribution=yes | Required: Copyright (c) 2025 KingYoSun |
+
+### Bundled third-party assets
+
+| Asset | Author / rights holder | Source / date | License | Modification | Distribution | Conditions | Credit |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Idle Loop VRMA | Quaternius / Quaternius | https://quaternius.com/packs/universalanimationlibrary.html (acquired 2026-05-29) | CC0-1.0 (https://creativecommons.org/publicdomain/zero/1.0/) | None | bundled-binary: apps/desktop/public/animation/Idle_Loop.vrma | commercial=yes; repository redistribution=yes; binary redistribution=yes | Not required; Universal Animation Library by Quaternius (courtesy credit) |
+| Jump Land VRMA | Quaternius / Quaternius | https://quaternius.com/packs/universalanimationlibrary.html (acquired 2026-05-29) | CC0-1.0 (https://creativecommons.org/publicdomain/zero/1.0/) | None | bundled-binary: apps/desktop/public/animation/Jump_Land.vrma | commercial=yes; repository redistribution=yes; binary redistribution=yes | Not required; Universal Animation Library by Quaternius (courtesy credit) |
+| Jump Loop VRMA | Quaternius / Quaternius | https://quaternius.com/packs/universalanimationlibrary.html (acquired 2026-05-29) | CC0-1.0 (https://creativecommons.org/publicdomain/zero/1.0/) | None | bundled-binary: apps/desktop/public/animation/Jump_Loop.vrma | commercial=yes; repository redistribution=yes; binary redistribution=yes | Not required; Universal Animation Library by Quaternius (courtesy credit) |
+| Jump Start VRMA | Quaternius / Quaternius | https://quaternius.com/packs/universalanimationlibrary.html (acquired 2026-05-29) | CC0-1.0 (https://creativecommons.org/publicdomain/zero/1.0/) | None | bundled-binary: apps/desktop/public/animation/Jump_Start.vrma | commercial=yes; repository redistribution=yes; binary redistribution=yes | Not required; Universal Animation Library by Quaternius (courtesy credit) |
+| Sitting Enter VRMA | Quaternius / Quaternius | https://quaternius.com/packs/universalanimationlibrary.html (acquired 2026-05-29) | CC0-1.0 (https://creativecommons.org/publicdomain/zero/1.0/) | None | bundled-binary: apps/desktop/public/animation/Sitting_Enter.vrma | commercial=yes; repository redistribution=yes; binary redistribution=yes | Not required; Universal Animation Library by Quaternius (courtesy credit) |
+| Sitting Exit VRMA | Quaternius / Quaternius | https://quaternius.com/packs/universalanimationlibrary.html (acquired 2026-05-29) | CC0-1.0 (https://creativecommons.org/publicdomain/zero/1.0/) | None | bundled-binary: apps/desktop/public/animation/Sitting_Exit.vrma | commercial=yes; repository redistribution=yes; binary redistribution=yes | Not required; Universal Animation Library by Quaternius (courtesy credit) |
+| Sitting Idle Loop VRMA | Quaternius / Quaternius | https://quaternius.com/packs/universalanimationlibrary.html (acquired 2026-05-29) | CC0-1.0 (https://creativecommons.org/publicdomain/zero/1.0/) | None | bundled-binary: apps/desktop/public/animation/Sitting_Idle_Loop.vrma | commercial=yes; repository redistribution=yes; binary redistribution=yes | Not required; Universal Animation Library by Quaternius (courtesy credit) |
+| Sitting Talking Loop VRMA | Quaternius / Quaternius | https://quaternius.com/packs/universalanimationlibrary.html (acquired 2026-05-29) | CC0-1.0 (https://creativecommons.org/publicdomain/zero/1.0/) | None | bundled-binary: apps/desktop/public/animation/Sitting_Talking_Loop.vrma | commercial=yes; repository redistribution=yes; binary redistribution=yes | Not required; Universal Animation Library by Quaternius (courtesy credit) |
+| Sprint Loop VRMA | Quaternius / Quaternius | https://quaternius.com/packs/universalanimationlibrary.html (acquired 2026-05-29) | CC0-1.0 (https://creativecommons.org/publicdomain/zero/1.0/) | None | bundled-binary: apps/desktop/public/animation/Sprint_Loop.vrma | commercial=yes; repository redistribution=yes; binary redistribution=yes | Not required; Universal Animation Library by Quaternius (courtesy credit) |
+| Walk Loop VRMA | Quaternius / Quaternius | https://quaternius.com/packs/universalanimationlibrary.html (acquired 2026-05-29) | CC0-1.0 (https://creativecommons.org/publicdomain/zero/1.0/) | None | bundled-binary: apps/desktop/public/animation/Walk_Loop.vrma | commercial=yes; repository redistribution=yes; binary redistribution=yes | Not required; Universal Animation Library by Quaternius (courtesy credit) |
+
+### Bundled generated or generation-assisted assets
+
+None.
+
+### Source-only non-code assets
+
+None.
 
 ## Rust crates
 

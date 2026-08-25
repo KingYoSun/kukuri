@@ -8,6 +8,7 @@ use crate::*;
 
 pub(crate) fn release_check(tag: Option<&str>) -> Result<()> {
     let root = root_dir();
+    asset_check()?;
     let workspace_version = read_workspace_version(&root.join("Cargo.toml"))?;
     let tauri_version = read_package_version(&desktop_dir().join("src-tauri").join("Cargo.toml"))?;
     let desktop_package_version = read_json_version(&desktop_dir().join("package.json"))
