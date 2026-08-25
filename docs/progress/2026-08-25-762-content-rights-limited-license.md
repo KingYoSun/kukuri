@@ -23,5 +23,6 @@ protocol、データフロー、Community Node の能力、DB schema、UI layout
 - `cargo xtask desktop-ui-check`: 成功（Playwright browser 35 件、visual 14 件を含む）
 - `cargo xtask cn-check`: 成功
 - `cargo xtask cn-test`: 成功
+- `cargo xtask oversized-files`: 成功（`crates/cn-operator/src/docs.rs` 1096 行を ratchet baseline に記録）
 - Community Node 規約生成の能力別陽性／陰性試験と決定論的 golden: 成功
 - legal bundle version 1 から version 2 への更新同意、日本語・英語・中国語の Legal UI、canonical 文書 version 契約試験: 成功
