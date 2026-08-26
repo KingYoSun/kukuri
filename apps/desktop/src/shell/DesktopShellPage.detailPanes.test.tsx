@@ -176,7 +176,7 @@ test('timeline author detail opens as one Column, and thread author detail opens
   await waitFor(() => {
     expect(getDetailPane('Thread')).toBeInTheDocument();
   });
-  expect(screen.queryByRole('region', { name: /^Profile Column,/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('complementary', { name: 'Author' })).not.toBeInTheDocument();
 
   await user.click(within(getDetailPane('Thread')).getByRole('button', { name: 'alice' }));
   await waitFor(() => {
@@ -245,7 +245,7 @@ test('author avatar blob stays visible on the timeline after the author pane clo
   await user.click(within(authorPane).getByRole('button', { name: 'Close Profile' }));
 
   await waitFor(() => {
-    expect(screen.queryByRole('region', { name: /^Profile Column,/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('complementary', { name: 'Author' })).not.toBeInTheDocument();
     expect(
       screen
         .getAllByTestId('post-author-avatar-author-avatar')

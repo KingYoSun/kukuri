@@ -107,8 +107,12 @@ test('Thread opened from the private Column keeps the private scope for header a
   await page.goto('/');
   const { privateColumn, publicColumn } = await setUpPublicAndPrivateColumns(page);
 
-  // 非 active な private Column の投稿本文クリックで Thread を開く。
-  await privateColumn.getByText('private scoped post').click();
+  // 画面外のprivate Columnをactiveにしてから、投稿本文クリックでThreadを開く。
+  await privateColumn.locator('.shell-column-header h2').first().dispatchEvent('pointerdown');
+  await expect(privateColumn).toHaveAttribute('aria-current', 'true');
+  await privateColumn
+    .getByRole('button', { name: /^private scoped post/ })
+    .click();
   const threadColumn = activeColumn(page, 'Thread');
   await expect(threadColumn).toBeVisible();
   await expect(threadColumn.locator('.shell-column-header')).toContainText(
@@ -169,7 +173,7 @@ for (const viewport of [
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
 
-    // Timeline + Thread の 2 Column 状態を作る。
+    // fresh defaultの末尾にThreadを追加した6 Column状態を作る。
     const timelineColumn = activeColumn(page, 'Timeline');
     await publishFromTimelineColumn(page, timelineColumn, DEMO_PUBLIC_SCOPE, 'focus sync post');
     await page.getByText('focus sync post').click();
@@ -182,7 +186,7 @@ for (const viewport of [
     await expect(activeColumn(page, 'Timeline')).toBeVisible();
     await expect(page).toHaveURL(/#\/timeline\?topic=kukuri%3Atopic%3Ademo$/);
     if (viewport.label === 'mobile') {
-      await expect(page.getByText('1 / 2')).toBeVisible();
+      await expect(page.getByText('1 / 6')).toBeVisible();
       await expect
         .poll(() => canvas.evaluate((element) => Math.round(element.scrollLeft)))
         .toBeLessThanOrEqual(1);
@@ -193,7 +197,7 @@ for (const viewport of [
     await expect(activeColumn(page, 'Thread')).toBeVisible();
     await expect(page).toHaveURL(/context=thread&threadId=/);
     if (viewport.label === 'mobile') {
-      await expect(page.getByText('2 / 2')).toBeVisible();
+      await expect(page.getByText('2 / 6')).toBeVisible();
       await expect
         .poll(() => canvas.evaluate((element) => Math.round(element.scrollLeft)))
         .toBeGreaterThan(0);

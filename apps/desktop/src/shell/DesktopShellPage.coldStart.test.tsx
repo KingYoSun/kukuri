@@ -11,6 +11,24 @@ const SCOPE = { topicId: 'kukuri:topic:demo', channelId: null };
 const TIMELINE_ID = columnIdentityId('timeline', SCOPE);
 const THREAD_ID = columnIdentityId('thread', SCOPE, 'post-thread-open');
 
+test('fresh start exposes the default product Columns and keeps Timeline active', async () => {
+  window.history.replaceState(null, '', '/');
+
+  render(<App api={createApi()} />);
+
+  const columns = await screen.findAllByRole('region', { name: / Column,/ });
+  expect(columns.map((column) => column.getAttribute('data-column-id'))).toEqual([
+    columnIdentityId('timeline', SCOPE),
+    columnIdentityId('profile', SCOPE),
+    columnIdentityId('explore', SCOPE),
+    columnIdentityId('notifications', SCOPE),
+    columnIdentityId('messages', SCOPE),
+  ]);
+  expect(columns[0]).toHaveAttribute('aria-current', 'true');
+  expect(columns[0]).toHaveAccessibleName(/Column 1 of 5/);
+  expect(columns[4]).toHaveAccessibleName(/Column 5 of 5/);
+});
+
 function seedThreadLayout(activeColumnId: string, threadEntityId = 'post-thread-open') {
   window.localStorage.setItem(
     WORKSPACE_LAYOUT_STORAGE_KEY,

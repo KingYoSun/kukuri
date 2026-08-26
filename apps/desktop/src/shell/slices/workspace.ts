@@ -138,20 +138,26 @@ export const INITIAL_TIMELINE_COLUMN_ID = columnIdentityId('timeline', {
   channelId: null,
 });
 
+const INITIAL_WORKSPACE_COLUMN_KINDS = [
+  'timeline',
+  'profile',
+  'explore',
+  'notifications',
+  'messages',
+] as const satisfies readonly ColumnKind[];
+
 export function createInitialWorkspaceState(
   scope: ColumnScope = { topicId: STARTER_TOPICS[0], channelId: null }
 ): WorkspaceState {
   const initialTimelineColumnId = columnIdentityId('timeline', scope);
   return {
-    columns: [
-      {
-        id: initialTimelineColumnId,
-        kind: 'timeline',
-        scope,
-        pinned: true,
-        preferredDesktopSpan: defaultColumnSpan('timeline'),
-      },
-    ],
+    columns: INITIAL_WORKSPACE_COLUMN_KINDS.map((kind) => ({
+      id: columnIdentityId(kind, scope),
+      kind,
+      scope,
+      pinned: true,
+      preferredDesktopSpan: defaultColumnSpan(kind),
+    })),
     activeColumnId: initialTimelineColumnId,
     controlCenterOpen: false,
     activeLayoutId: null,

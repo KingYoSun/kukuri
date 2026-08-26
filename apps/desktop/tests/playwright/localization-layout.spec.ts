@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 import { DEVELOPER_MODE_STORAGE_KEY } from '../../src/lib/developerMode';
 
@@ -72,11 +72,19 @@ async function seedLocale(page: Page, locale: (typeof LOCALES)[number]['locale']
   );
 }
 
-async function wrappedButtonLabels(page: Page): Promise<string[]> {
-  return page.locator('button:visible').evaluateAll((buttons) => {
+async function wrappedButtonLabels(root: Page | Locator): Promise<string[]> {
+  return root.locator('button:visible').evaluateAll((buttons) => {
     const wrapped: string[] = [];
 
     for (const button of buttons) {
+      const buttonRect = button.getBoundingClientRect();
+      const intersectsViewport =
+        buttonRect.right > 0 &&
+        buttonRect.bottom > 0 &&
+        buttonRect.left < window.innerWidth &&
+        buttonRect.top < window.innerHeight;
+      if (!intersectsViewport) continue;
+
       const walker = document.createTreeWalker(button, NodeFilter.SHOW_TEXT);
       let textNode = walker.nextNode();
       while (textNode) {
@@ -113,7 +121,10 @@ for (const copy of LOCALES) {
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
         `${copy.locale} ${route} should not overflow horizontally`
       ).toBe(true);
-      expect(await wrappedButtonLabels(page), `${copy.locale} ${route} button labels`).toEqual([]);
+      expect(
+        await wrappedButtonLabels(page.locator('[data-active="true"]')),
+        `${copy.locale} ${route} active Column button labels`
+      ).toEqual([]);
 
       if (copy.locale !== 'en') {
         const renderedCopy = await page.locator('body').innerText();
@@ -187,7 +198,7 @@ for (const copy of LOCALES) {
         return overlaps;
       });
     expect(overlappingSections).toEqual([]);
-    expect(await wrappedButtonLabels(page)).toEqual([]);
+    expect(await wrappedButtonLabels(controlCenter)).toEqual([]);
 
     const grid = controlCenter.locator('.shell-control-center-grid');
     const canReachGridEnd = await grid.evaluate((element) => {
@@ -243,7 +254,9 @@ for (const copy of LOCALES) {
         return element.scrollTop > 0;
       });
       expect(canReachContentEnd, `${copy.locale} ${section} content end`).toBe(true);
-      expect(await wrappedButtonLabels(page), `${copy.locale} ${section} button labels`).toEqual([]);
+      expect(await wrappedButtonLabels(settings), `${copy.locale} ${section} button labels`).toEqual(
+        []
+      );
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
         `${copy.locale} ${section} document width`

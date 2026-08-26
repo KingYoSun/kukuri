@@ -10,19 +10,22 @@
 
 1. [最新の GitHub Release](https://github.com/KingYoSun/kukuri/releases/latest) から Windows installer を取得して起動する。
 2. 初回起動後、settings を開かずに数秒待ち、Community Node が `ready` になるのを待つ。
-3. starter topic のどれかを開く。
+3. 2番目のProfile Columnを開き、`Edit Profile`から表示名、名前、自己紹介、必要なら画像を設定する。
+4. 先頭のTimeline Columnへ戻り、starter topic のどれかを開く。
    - `kukuri:topic:demo`
    - `kukuri:topic:iroh`
    - `kukuri:topic:nostr`
    - `kukuri:topic:operators`
-4. public post か thread reply を 1 本試す。
-5. 同じ topic 配下で private channel を作るか参加する。
-6. settings の Community Node diagnostics を確認し、feedback を送る。
-7. `Settings -> Release` で更新状態を確認し、診断レポートをコピーまたは書き出す。
+5. public post か thread reply を 1 本試す。
+6. 同じ topic 配下で private channel を作るか参加する。
+7. Explore、Notifications、Messagesの各Columnを開き、主要機能の入口を確認する。
+8. settings の Community Node diagnostics を確認し、feedback を送る。
+9. `Settings -> Release` で更新状態を確認し、診断レポートをコピーまたは書き出す。
 
 ## What To Notice
 
 - topic が主軸で、channel は topic 配下の audience になっているか
+- 初期5 Columnからプロフィール設定、探索、通知、メッセージへ迷わず移動できるか
 - Community Node が relay ではなく bootstrap / auth / connectivity assist として見えるか
 - 自動認証と自動 consent accept の導線が前面に出過ぎず、それでも friction を減らせているか
 

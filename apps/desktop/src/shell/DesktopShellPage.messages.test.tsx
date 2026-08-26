@@ -386,7 +386,7 @@ test('messages workspace keeps the last successful DM state when status refresh 
 
   await waitFor(() => {
     expect(screen.getAllByText('hello dm').length).toBeGreaterThan(0);
-    expect(screen.getByText('temporary dm status failure')).toBeInTheDocument();
+    expect(screen.getAllByText('temporary dm status failure').length).toBeGreaterThan(0);
     expect(
       screen.queryByText('Direct message send is disabled until the relationship is mutual again.')
     ).not.toBeInTheDocument();

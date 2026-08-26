@@ -44,15 +44,21 @@ state も単一の active topic / channel と active primary section を全画�
 
 Thread、Profile、Conversation を Timeline より視覚的に下位の pane として扱わない。ただし `parentColumnId` により、どの Column から開いたかという意味上の親子関係を保持する。
 
-### 2. 初期体験は単一 Column にする
+### 2. 初期体験は主要5 Columnを提示する
 
-保存済み layout がない利用者には、中央寄せした Timeline Column 1本だけを表示する。初期 shell は次の3要素を正本とする。
+保存済み layout がない利用者には、主要機能とプロフィール設定の入口を最初から理解できるよう、次のpin済み1 span Columnを同じstarter topicのpublic scopeで表示する。
 
-- Timeline Column 1本
-- その Column に紐づく primary action
-- 画面下部の Control Center trigger
+1. Timeline
+2. 自分のProfile（`entityId`なし）
+3. Explore
+4. Notifications
+5. Messages
 
-常設 Sidebar、global workspace tab header、Timeline 上の常設 Community Index、detail pane の予約領域は表示しない。Column の追加、pin、並べ替え、span 変更、layout 保存は progressive disclosure とする。
+初期active ColumnはTimelineとし、topic-firstの閲覧・投稿導線とcanonical routeを維持する。Profileはoverview内のEditから設定できる。Stream / Metaverseはdeveloper向けまたは対象session / roomを選んで開くsurface、Thread / Conversationは投稿・相手から開く文脈Column、private channelはTimelineのscopeであるため、初期配置へ含めない。
+
+この既定値を使うのは、`kukuri:workspace-layout:v1`に妥当な保存データがないfresh installまたは安全側fallback時だけとする。既存の自動保存layoutと名前付きlayoutは補完・移行・上書きせず、そのColumn構成とactive targetを優先する。
+
+常設 Sidebar、global workspace tab header、Timeline 上の常設 Community Index、detail pane の予約領域は表示しない。画面下部のControl Center triggerと各Columnのprimary actionを維持し、追加Column、pin変更、並べ替え、span変更、layout保存は利用者が明示操作する。
 
 ### 3. 各 Column が独立 scope を持つ
 
@@ -257,7 +263,7 @@ mobile の明示的な追加導線は viewport 左右端と Column indicator か
 
 ## Consequences
 
-- 初期表示は単一 Column のまま、利用者が必要に応じて複数 scope と wide surface を並べられる。
+- 初期表示から主要5 Columnを横に並べ、利用者がProfile設定と主要機能の存在を確認したうえで、必要に応じて別scopeやwide surfaceを追加できる。
 - 常設 Sidebar と global section switch が primary shell の正本ではなくなる。
 - URL は共有 target、layout は local state という責務が明確になる。
 - active と visible を分離するため、focus、audio、media / render lifecycle の明示管理が必要になる。

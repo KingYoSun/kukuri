@@ -43,7 +43,12 @@ const REVIEW_CHANNEL: JoinedPrivateChannelView = {
 
 type ProductionColumnWorkspaceStoryProps = {
   initialControlCenterOpen?: boolean;
-  scenario?: 'scoped-drafts' | 'wide-surfaces' | 'activity-surfaces' | 'explore-status';
+  scenario?:
+    | 'default-overview'
+    | 'scoped-drafts'
+    | 'wide-surfaces'
+    | 'activity-surfaces'
+    | 'explore-status';
   metaverseSpan?: 1 | 3 | 4;
   streamSpan?: 1 | 2;
   communityNodeUnavailable?: boolean;
@@ -178,6 +183,8 @@ const REVIEW_DIRECT_MESSAGES: DirectMessageConversationView[] = [
 
 function scenarioHash(scenario: NonNullable<ProductionColumnWorkspaceStoryProps['scenario']>) {
   switch (scenario) {
+    case 'default-overview':
+      return '#/timeline?topic=kukuri%3Atopic%3Ademo';
     case 'wide-surfaces':
       return '#/game?topic=kukuri%3Atopic%3Ademo&roomId=metaverse-review';
     case 'activity-surfaces':
@@ -211,6 +218,7 @@ function createReviewStore({
   const notificationsColumnId = columnIdentityId('notifications', DEMO_SCOPE);
   const messagesColumnId = columnIdentityId('messages', DEMO_SCOPE);
   const exploreColumnId = columnIdentityId('explore', DEMO_SCOPE);
+  const profileColumnId = columnIdentityId('profile', DEMO_SCOPE);
   const publicTimelineColumn = {
     id: publicColumnId,
     kind: 'timeline' as const,
@@ -219,6 +227,37 @@ function createReviewStore({
     preferredDesktopSpan: defaultColumnSpan('timeline'),
   };
   const columnsByScenario = {
+    'default-overview': [
+      publicTimelineColumn,
+      {
+        id: profileColumnId,
+        kind: 'profile' as const,
+        scope: DEMO_SCOPE,
+        pinned: true,
+        preferredDesktopSpan: defaultColumnSpan('profile'),
+      },
+      {
+        id: exploreColumnId,
+        kind: 'explore' as const,
+        scope: DEMO_SCOPE,
+        pinned: true,
+        preferredDesktopSpan: defaultColumnSpan('explore'),
+      },
+      {
+        id: notificationsColumnId,
+        kind: 'notifications' as const,
+        scope: DEMO_SCOPE,
+        pinned: true,
+        preferredDesktopSpan: defaultColumnSpan('notifications'),
+      },
+      {
+        id: messagesColumnId,
+        kind: 'messages' as const,
+        scope: DEMO_SCOPE,
+        pinned: true,
+        preferredDesktopSpan: defaultColumnSpan('messages'),
+      },
+    ],
     'wide-surfaces': [
       publicTimelineColumn,
       {
@@ -284,6 +323,7 @@ function createReviewStore({
     ],
   };
   const activeColumnIdByScenario = {
+    'default-overview': publicColumnId,
     'wide-surfaces': metaverseColumnId,
     'activity-surfaces': notificationsColumnId,
     'explore-status': exploreColumnId,

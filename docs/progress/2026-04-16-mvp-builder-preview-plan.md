@@ -5,7 +5,7 @@
 - このマイルストーンは general launch ではなく `builder preview` の切り出しです。
 - capability baseline は [2026-03-10-foundation.md](./2026-03-10-foundation.md) を維持し、その上に `初回体験 / 配布 / 説明 / feedback loop` を載せます。
 - Community Node は最後まで単一の概念として扱います。preview 向けの自動導線は node ごとの `auto_approve` で制御します。
-- current preview surface は `launch -> auto-approved community node ready -> starter topic -> post/reply -> private channel -> feedback` です。
+- current preview surface は `launch -> default product Columns -> profile setup -> auto-approved community node ready -> starter topic -> post/reply -> private channel -> feedback` です。
 
 ## Current Snapshot
 
@@ -14,6 +14,7 @@
 - token は期限 5 分前から proactive refresh し、`401` は `re-authenticate -> retry`、`403 CONSENT_REQUIRED` は `auto_approve=true` node だけ `accept -> retry` します。
 - desktop settings は textarea editor をやめ、Community Node の単一 list 上で `base URL`, `auto_approve`, diagnostics, troubleshooting actions を扱います。
 - starter topic は `kukuri:topic:demo`, `kukuri:topic:iroh`, `kukuri:topic:nostr`, `kukuri:topic:operators` を default とします。
+- 保存済みlayoutがないfresh installでは、`demo Timeline -> 自分のProfile -> Explore -> Notifications -> Messages`のpin済みColumnを表示し、Timelineをactiveにします。既存layoutは補完・移行しません。
 
 ## Preview Surface
 
@@ -31,6 +32,7 @@
 | Token expiry auto re-auth | landed | repo change | proactive refresh, `401` retry, `403` conditional accept を追加 |
 | Community Node unified settings surface | landed | repo change | official/custom split を作らず row editor に置換 |
 | Starter topics default | landed | repo change | desktop shell default tracked topics を 4 件に変更 |
+| Default product Column layout | landed | repo change | fresh installだけ主要5 Columnを表示し、既存layoutを維持 |
 | Preview docs refresh | landed | repo change | README, docs index, user quickstart, troubleshooting を追加 |
 | Windows release workflow | landed | repo change | tag / manual dispatch で NSIS asset を Release に載せる |
 | Seed content on hosted preview node | planned | launch op | project-owned author で preview topics を事前投入する |
