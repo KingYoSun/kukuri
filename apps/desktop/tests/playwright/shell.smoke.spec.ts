@@ -544,6 +544,9 @@ for (const mobileViewport of [
     }
     element.addEventListener('scroll', scheduleFinish);
   }));
+  await expect
+    .poll(() => canvas.evaluate((element) => Math.round(element.scrollLeft)))
+    .toBeLessThanOrEqual(1);
   const canvasBox = (await canvas.boundingBox())!;
   await canvas.dispatchEvent('pointerdown', {
     pointerId: 93,
