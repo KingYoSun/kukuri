@@ -26,6 +26,13 @@ const REVIEW_VIEWPORT_OPTIONS = {
 };
 
 export const ScopedDraftsAndComposer: Story = {};
+/** 保存済みlayoutがないfresh installで表示する主要5 Columnのreview surface。 */
+export const DefaultProductOverview: Story = {
+  globals: { shellWidth: 'review1440' },
+  args: {
+    scenario: 'default-overview',
+  },
+};
 export const ControlCenterOpen: Story = {
   args: {
     initialControlCenterOpen: true,

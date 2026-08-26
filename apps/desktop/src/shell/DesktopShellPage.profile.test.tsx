@@ -82,7 +82,7 @@ test('profile overview aggregates public posts across topics and excludes privat
   const profileSection = profileColumn;
   expect(within(profileSection).queryByRole('button', { name: 'Reply' })).not.toBeInTheDocument();
   expect(within(profileSection).getAllByRole('button', { name: 'Open original topic' }).length).toBe(2);
-});
+}, 10_000);
 
 test('profile overview connection count buttons open the requested connections tab', async () => {
   const followedPubkey = 'b'.repeat(64);

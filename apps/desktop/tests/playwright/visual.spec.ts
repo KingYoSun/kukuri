@@ -79,8 +79,8 @@ function activeColumn(page: Page, title: string) {
 }
 
 test.describe('visual regression smoke', () => {
-  // 1: timeline wide dark（シェル全体の基準）
-  test('timeline wide dark', async ({ page }) => {
+  // 1: fresh default wide dark（5 Columnの初期構成とシェル全体の基準）
+  test('fresh default wide dark', async ({ page }) => {
     await seedAppearance(page, 'dark');
     await page.setViewportSize(WIDE);
     await page.goto('/');
@@ -89,8 +89,8 @@ test.describe('visual regression smoke', () => {
     await expect(page).toHaveScreenshot('timeline-wide-dark.png');
   });
 
-  // 2: timeline wide light（トークン退行）
-  test('timeline wide light', async ({ page }) => {
+  // 2: fresh default wide light（トークン退行）
+  test('fresh default wide light', async ({ page }) => {
     await seedAppearance(page, 'light');
     await page.setViewportSize(WIDE);
     await page.goto('/');
@@ -99,8 +99,8 @@ test.describe('visual regression smoke', () => {
     await expect(page).toHaveScreenshot('timeline-wide-light.png');
   });
 
-  // 3: timeline narrow dark（760px 未満 breakpoint、nav オフキャンバス）
-  test('timeline narrow dark', async ({ page }) => {
+  // 3: fresh default narrow dark（760px 未満 breakpoint、nav オフキャンバス）
+  test('fresh default narrow dark', async ({ page }) => {
     await seedAppearance(page, 'dark');
     await page.setViewportSize(NARROW);
     await page.goto('/');
@@ -110,8 +110,8 @@ test.describe('visual regression smoke', () => {
     await expect(page).toHaveScreenshot('timeline-narrow-dark.png');
   });
 
-  // 4: timeline narrow light（narrow × light）
-  test('timeline narrow light', async ({ page }) => {
+  // 4: fresh default narrow light（narrow × light）
+  test('fresh default narrow light', async ({ page }) => {
     await seedAppearance(page, 'light');
     await page.setViewportSize(NARROW);
     await page.goto('/');

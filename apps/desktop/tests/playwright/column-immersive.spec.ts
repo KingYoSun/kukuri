@@ -124,7 +124,7 @@ test.describe('mobile touch ownership', () => {
     await addColumn(page, 'Add Metaverse Column');
     const { metaverse, stage } = await createMetaverseRoom(page);
     await expect(activeColumn(page, 'Metaverse')).toBeVisible();
-    await expect(page.getByText('2 / 2')).toBeVisible();
+    await expect(page.getByText('6 / 6')).toBeVisible();
 
     const touchAction = await stage.evaluate((element) => getComputedStyle(element).touchAction);
     expect(touchAction).toBe('none');
@@ -141,10 +141,10 @@ test.describe('mobile touch ownership', () => {
     expect(await canvas.evaluate((element) => element.scrollLeft)).toBe(startScrollLeft);
     await expect(activeColumn(page, 'Metaverse')).toBeVisible();
 
-    // Column header 上の同じスワイプは Column paging を起こし Timeline が active になる。
+    // Column header 上の同じスワイプは Column paging を起こし、直前のMessagesがactiveになる。
     const headerBox = (await metaverse.locator('.shell-column-header').boundingBox())!;
     await swipe(client, headerBox.x + 40, headerBox.y + headerBox.height / 2, 300, 0);
-    await expect(activeColumn(page, 'Timeline')).toBeVisible();
+    await expect(activeColumn(page, 'Messages')).toBeVisible();
     expect(await canvas.evaluate((element) => element.scrollLeft)).toBeLessThan(startScrollLeft);
   });
 });
@@ -152,16 +152,18 @@ test.describe('mobile touch ownership', () => {
 test('offscreen Metaverse and Live Columns suspend rendering and resume without losing the session', async ({
   page,
 }) => {
-  // 1280px(Canvas 内幅 1232px)では Timeline(440) + Live(896) で Canvas が埋まり、
-  // 3 本目の Metaverse(1352)は Canvas 先頭では完全に画面外、末尾では Live が完全に画面外になる。
-  await page.setViewportSize({ width: 1280, height: 900 });
+  // fresh defaultの末尾にLive / Metaverseを追加し、各immersive Columnへ移動した際の
+  // runtime suspensionとsession維持を確認する。
+  // 900px幅ではCanvasがLiveの2 span幅より狭く、隣接するMetaverseと同時に
+  // 1%を超えて交差しないためsuspension境界を決定的に観測できる。
+  await page.setViewportSize({ width: 900, height: 900 });
   await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
   await addColumn(page, 'Add Live Column');
   await addColumn(page, 'Add Metaverse Column');
   const { metaverse, stage } = await createMetaverseRoom(page);
   const live = page.getByRole('region', { name: /^Live Column/ });
-  await expect(live).toHaveAccessibleName(/Column 2 of 3/);
-  await expect(metaverse).toHaveAccessibleName(/Column 3 of 3/);
+  await expect(live).toHaveAccessibleName(/Column 6 of 7/);
+  await expect(metaverse).toHaveAccessibleName(/Column 7 of 7/);
 
   // 追加直後は Metaverse が active で画面内にあり、縮退していない。
   await expect(metaverse).not.toHaveAttribute('data-runtime-suspended', 'true');
@@ -169,13 +171,9 @@ test('offscreen Metaverse and Live Columns suspend rendering and resume without 
   // この時点で Live は画面外(Canvas 末尾までスクロール済み)のため縮退している。
   await expect(live).toHaveAttribute('data-runtime-suspended', 'true');
 
-  // Timeline を active にして Canvas 先頭へ戻すと Metaverse は画面外になり縮退、Live は部分表示で復帰する。
-  const canvas = page.locator('.shell-column-canvas');
-  const timeline = page.getByRole('region', { name: /^Timeline Column/ });
-  await timeline.locator('.shell-column-header h2').first().dispatchEvent('pointerdown');
-  await canvas.evaluate((element) => {
-    element.scrollLeft = 0;
-  });
+  // Liveをactiveにして画面内へ戻すとMetaverseは画面外になり縮退し、Liveは復帰する。
+  await live.locator('.shell-column-header h2').first().dispatchEvent('pointerdown');
+  await expect(activeColumn(page, 'Live')).toBeVisible();
   await expect(metaverse).toHaveAttribute('data-runtime-suspended', 'true');
   await expect(stage.locator('[data-render-suspended="true"]')).toHaveCount(1);
   await expect(live).not.toHaveAttribute('data-runtime-suspended', 'true');
@@ -184,7 +182,8 @@ test('offscreen Metaverse and Live Columns suspend rendering and resume without 
   await expect(stage.locator('canvas')).toHaveCount(1);
 
   // 画面内へ戻すと縮退が解除され、代わりに画面外へ出た Live が縮退する。
-  await metaverse.scrollIntoViewIfNeeded();
+  await metaverse.locator('.shell-column-header h2').first().dispatchEvent('pointerdown');
+  await expect(activeColumn(page, 'Metaverse')).toBeVisible();
   await expect(metaverse).not.toHaveAttribute('data-runtime-suspended', 'true');
   await expect(stage.locator('[data-render-suspended="true"]')).toHaveCount(0);
   await expect(live).toHaveAttribute('data-runtime-suspended', 'true');

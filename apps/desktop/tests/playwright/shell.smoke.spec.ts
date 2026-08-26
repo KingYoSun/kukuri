@@ -77,7 +77,7 @@ test('browser mock wide shell keeps global navigation in the fixed Control Cente
   await expect(page.getByRole('complementary', { name: 'Control Center' })).toBeVisible();
 });
 
-test('browser mock starts with one accessible Timeline Column without legacy workspace chrome', async ({
+test('browser mock starts with the accessible product overview Columns without legacy workspace chrome', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1400, height: 980 });
@@ -85,13 +85,43 @@ test('browser mock starts with one accessible Timeline Column without legacy wor
 
   const layout = page.locator('.shell-phase1');
   const timelineColumn = page.getByRole('region', { name: /Timeline Column/ });
+  const profileColumn = page.getByRole('region', { name: /Profile Column/ });
+  const exploreColumn = page.getByRole('region', { name: /Explore Column/ });
+  const notificationsColumn = page.getByRole('region', { name: /Notifications Column/ });
+  const messagesColumn = page.getByRole('region', { name: /Messages Column/ });
 
   await expect(layout).toHaveAttribute('data-workspace-layout', 'column');
   await expect(timelineColumn).toHaveCount(1);
+  await expect(profileColumn).toHaveCount(1);
+  await expect(exploreColumn).toHaveCount(1);
+  await expect(notificationsColumn).toHaveCount(1);
+  await expect(messagesColumn).toHaveCount(1);
   await expect(timelineColumn).toHaveAttribute('aria-current', 'true');
   await expect(timelineColumn).toHaveAttribute('data-span', '1');
-  await expect(timelineColumn).toHaveAccessibleName(/Column 1 of 1/);
+  await expect(timelineColumn).toHaveAccessibleName(/Column 1 of 5/);
+  await expect(profileColumn).toHaveAccessibleName(/Column 2 of 5/);
+  await expect(exploreColumn).toHaveAccessibleName(/Column 3 of 5/);
+  await expect(notificationsColumn).toHaveAccessibleName(/Column 4 of 5/);
+  await expect(messagesColumn).toHaveAccessibleName(/Column 5 of 5/);
   await expect(timelineColumn).toHaveAccessibleName(/Pinned/);
+  await expect(page.locator('.shell-column-title-row h2')).toHaveText([
+    'Timeline',
+    'Profile',
+    'Explore',
+    'Notifications',
+    'Messages',
+  ]);
+  const overflowingExploreTabs = await exploreColumn
+    .getByRole('tablist', { name: 'Community Index surfaces' })
+    .getByRole('tab')
+    .evaluateAll((tabs) =>
+      tabs
+        .filter(
+          (tab) => tab.scrollWidth > tab.clientWidth + 1 || tab.scrollHeight > tab.clientHeight + 1
+        )
+        .map((tab) => (tab as HTMLElement).innerText)
+    );
+  expect(overflowingExploreTabs).toEqual([]);
   await expect(page.locator('main .shell-workspace-header-card')).toHaveCount(0);
   await expect(page.getByTestId('community-index-topic')).toHaveCount(0);
   await expect(page.getByRole('tablist', { name: 'Workspaces' })).toHaveCount(0);
@@ -132,13 +162,13 @@ test('browser mock starts with one accessible Timeline Column without legacy wor
   expect(overflow.documentOverflow).toBeLessThanOrEqual(0);
 });
 
-// ADR 0031 §2: 保存 layout が無い desktop 初期表示は Timeline Column 1本を中央寄せし、
-// 左下 Control Center trigger は Column footer の primary action / Composer と重ねない。
+// ADR 0031 §2: 保存 layout が無いdesktop初期表示は既定5 ColumnをCanvas内へ並べ、
+// 左下 Control Center trigger は先頭Timelineのfooter / primary action / Composerと重ねない。
 for (const viewport of [
   { width: 1400, height: 980 },
   { width: 900, height: 760 },
 ]) {
-  test(`browser mock centers the initial Timeline Column and keeps the Control Center trigger clear at ${viewport.width}x${viewport.height}`, async ({
+  test(`browser mock contains the default layout overflow and keeps the Control Center trigger clear at ${viewport.width}x${viewport.height}`, async ({
     page,
   }) => {
     await page.setViewportSize(viewport);
@@ -163,8 +193,13 @@ for (const viewport of [
     expect(actionBox).not.toBeNull();
     expect(triggerBox).not.toBeNull();
 
-    const columnCenter = columnBox!.x + columnBox!.width / 2;
-    expect(Math.abs(columnCenter - viewport.width / 2)).toBeLessThanOrEqual(2);
+    const canvasOverflow = await page.locator('.shell-column-canvas').evaluate((canvas) => ({
+      clientWidth: canvas.clientWidth,
+      overflowX: getComputedStyle(canvas).overflowX,
+      scrollWidth: canvas.scrollWidth,
+    }));
+    expect(canvasOverflow.overflowX).toBe('auto');
+    expect(canvasOverflow.scrollWidth).toBeGreaterThan(canvasOverflow.clientWidth);
     expect(intersects(footerBox!, triggerBox!)).toBe(false);
     expect(intersects(actionBox!, triggerBox!)).toBe(false);
 
@@ -333,24 +368,40 @@ test('desktop Columns use kind spans, keyboard reorder, drag reorder, and persis
   await page.keyboard.press('ArrowUp');
   await expect(moveLeftItem).toBeFocused();
   await page.keyboard.press('Enter');
-  await expect(metaverseColumn).toHaveAccessibleName(/Column 2 of 3/);
+  await expect(metaverseColumn).toHaveAccessibleName(/Column 6 of 7/);
 
   const canvas = page.locator('.shell-column-canvas');
   await canvas.evaluate((element) => { element.scrollLeft = 0; });
-  const metaverseGrip = metaverseColumn.getByRole('button', {
-    name: 'Move Metaverse Column',
+  const profileColumn = page.getByRole('region', { name: /^Profile Column/ });
+  const orderBeforeDrag = await page.locator('[data-column-id]').evaluateAll((columns) =>
+    columns.map((column) => (column as HTMLElement).dataset.columnId)
+  );
+  const profileGrip = profileColumn.getByRole('button', {
+    name: 'Move Profile Column',
   });
-  await metaverseGrip.dragTo(canvas, {
-    targetPosition: { x: 12, y: 160 },
+  await profileGrip.dragTo(canvas, {
+    targetPosition: { x: 1800, y: 160 },
   });
-  await expect(metaverseColumn).toHaveAccessibleName(/Column 1 of 3/);
-  await expect(liveColumn).toHaveAccessibleName(/Column 3 of 3/);
+  await expect.poll(async () =>
+    page.locator('[data-column-id]').evaluateAll((columns) =>
+      columns.map((column) => (column as HTMLElement).dataset.columnId)
+    )
+  ).not.toEqual(orderBeforeDrag);
+  const orderAfterDrag = await page.locator('[data-column-id]').evaluateAll((columns) =>
+    columns.map((column) => (column as HTMLElement).dataset.columnId)
+  );
+  const profileColumnId = await profileColumn.getAttribute('data-column-id');
+  expect(profileColumnId).not.toBeNull();
+  expect(orderAfterDrag.indexOf(profileColumnId!)).toBeGreaterThan(1);
 
   await page.reload();
   metaverseColumn = page.getByRole('region', { name: /^Metaverse Column/ });
-  await expect(page.getByRole('region', { name: /^Live Column/ })).toHaveAccessibleName(/Column 3 of 3/);
   await expect(metaverseColumn).toHaveAttribute('data-span', '4');
-  await expect(metaverseColumn).toHaveAccessibleName(/Column 1 of 3/);
+  await expect.poll(async () =>
+    page.locator('[data-column-id]').evaluateAll((columns) =>
+      columns.map((column) => (column as HTMLElement).dataset.columnId)
+    )
+  ).toEqual(orderAfterDrag);
   await expect(page).not.toHaveURL(/span|layout|column/i);
 });
 
@@ -448,11 +499,11 @@ for (const mobileViewport of [
   await page.goBack();
   await expect(activeColumn(page, 'Timeline')).toBeVisible();
 
-  await page.getByRole('button', { name: 'Go to Column 3 of 3' }).click();
+  await page.getByRole('button', { name: 'Go to Column 3 of 7' }).click();
   await expect(activeColumn(page, 'Profile')).toBeVisible();
-  await page.getByRole('button', { name: 'Go to Column 1 of 3' }).click();
+  await page.getByRole('button', { name: 'Go to Column 1 of 7' }).click();
   await expect(activeColumn(page, 'Timeline')).toBeVisible();
-  await expect(page.getByText('1 / 3')).toBeVisible();
+  await expect(page.getByText('1 / 7')).toBeVisible();
 
   const indicator = page.getByRole('navigation', { name: 'Column pages' });
   const indicatorBox = (await indicator.boundingBox())!;
@@ -493,6 +544,9 @@ for (const mobileViewport of [
     }
     element.addEventListener('scroll', scheduleFinish);
   }));
+  await expect
+    .poll(() => canvas.evaluate((element) => Math.round(element.scrollLeft)))
+    .toBeLessThanOrEqual(1);
   const canvasBox = (await canvas.boundingBox())!;
   await canvas.dispatchEvent('pointerdown', {
     pointerId: 93,
@@ -505,7 +559,7 @@ for (const mobileViewport of [
     clientY: canvasBox.y + canvasBox.height / 2 + 3,
   });
   await expect(activeColumn(page, 'Thread')).toBeVisible();
-  await page.getByRole('button', { name: 'Go to Column 1 of 3' }).click();
+  await page.getByRole('button', { name: 'Go to Column 1 of 7' }).click();
   await expect(activeColumn(page, 'Timeline')).toBeVisible();
 
   const primaryTargets = await page.locator('.shell-column-primary-action:visible').evaluateAll(
@@ -530,7 +584,9 @@ for (const mobileViewport of [
       return { width: rect.width, height: rect.height };
     }));
   expect(columnListTargets.length).toBeGreaterThan(0);
-  expect(columnListTargets.every((box) => box.width >= 44 && box.height >= 44)).toBe(true);
+  expect(
+    columnListTargets.filter((box) => box.width + 0.01 < 44 || box.height + 0.01 < 44)
+  ).toEqual([]);
   await mobileControlCenter.getByRole('button', { name: 'Close Control Center' }).click();
 
   await canvas.evaluate((element) => {
@@ -538,7 +594,7 @@ for (const mobileViewport of [
     element.dispatchEvent(new Event('scroll'));
   });
   await expect(activeColumn(page, 'Thread')).toBeVisible();
-  await page.getByRole('button', { name: 'Go to Column 1 of 3' }).click();
+  await page.getByRole('button', { name: 'Go to Column 1 of 7' }).click();
   await expect(activeColumn(page, 'Timeline')).toBeVisible();
   await expect(canvas).toBeVisible();
   });

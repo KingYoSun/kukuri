@@ -66,7 +66,10 @@ test('community-node failure marks the global trigger without warning an unaffec
   await waitFor(() => {
     expect(trigger).toHaveAccessibleName('Open Control Center · Community node needs attention');
   });
-  expect(screen.queryByTestId('community-node-unavailable-notice')).not.toBeInTheDocument();
+  const timelineColumn = screen.getByRole('region', { name: /^Timeline Column,/ });
+  expect(
+    within(timelineColumn).queryByTestId('community-node-unavailable-notice')
+  ).not.toBeInTheDocument();
 
   await user.click(trigger);
   const controlCenter = screen.getByRole('complementary', { name: 'Control Center' });

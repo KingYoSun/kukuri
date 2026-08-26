@@ -265,7 +265,9 @@ kukuri にはマーケティング的な First View / ブランドロックア�
 
 ### 5.2 Column Canvas と可変 span（ADR 0031）
 
-保存済み layout がない初期表示は、中央寄せした Timeline Column 1本、Column 下部の primary action、左下の Control Center trigger だけにする。常設 Sidebar、global workspace tab header、detail pane の予約領域を置かない。
+保存済み layout がない初期表示は、`Timeline -> 自分の Profile -> Explore -> Notifications -> Messages` の5 Columnをすべて pinned・1 spanで並べ、Timelineをactiveにする。Timelineはdemo public scopeを使い、自分のProfileは対象entityを固定しない。既存の保存済みlayoutには既定Columnを補充せず、そのまま復元する。常設 Sidebar、global workspace tab header、detail pane の予約領域を置かない。
+
+Stream / Metaverseはdeveloperまたは対象選択が必要なsurface、Thread / Conversationは文脈から開くsurface、private channelはTimelineのscopeとして扱うため、fresh defaultには含めない。
 
 desktop の Column unit は `--column-unit: 27.5rem`（440px）、Column 間 gap は `--column-gap: var(--space-md)`（16px）とする。表示幅は次で求める。
 

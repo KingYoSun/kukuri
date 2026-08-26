@@ -1,0 +1,32 @@
+# 2026-08-26 default-deck-layout
+
+- PR: 本記録を含むPR
+- Preview:
+  - [Desktop 1400px / dark](assets/2026-08-26-default-deck-layout/default-layout-desktop-dark.png)
+  - [Mobile 390px / dark](assets/2026-08-26-default-deck-layout/default-layout-mobile-dark.png)
+- Summary:
+  - 保存済みlayoutがないfresh installの初期構成を、demo public scopeの`Timeline -> 自分のProfile -> Explore -> Notifications -> Messages`へ変更した。全Columnはpin済み・1 spanで、Timelineをactiveに保つ。
+  - 自分のProfileは`entityId`なしの既存Column contractを使い、公開鍵取得前でもlayoutを同期生成できる。Profileをactiveにした時点で既存loaderがプロフィールとsocial connectionを取得し、overviewの`Edit Profile`から設定へ進む。
+  - Stream / Metaverseはdeveloperまたは対象選択が必要であり、Thread / Conversationは文脈から生成され、private channelはTimeline scopeであるため初期配置から除外した。
+  - `kukuri:workspace-layout:v1`に妥当な値がある場合は従来どおり保存値を優先し、新しい既定Columnを補充しない。明示deep linkも保存済みactive targetより優先する。
+- Review result:
+  - Shneiderman 1（一貫性）: 初期ColumnはControl Centerの非developer向け主要追加候補と同じkind・title・routeを使い、後から追加した場合と挙動が一致する。
+  - Shneiderman 2（熟練者向け近道）: fresh installでも主要Columnが作成済みなので、Control Centerを開いて追加する手順を省ける。既存利用者の保存layoutは変えない。
+  - Shneiderman 3（有益なフィードバック）: active / pinned / position / totalをColumn headerとaccessible nameで示し、mobileではpage indicatorにも現在位置を表示する。
+  - Shneiderman 4（完了の明示）: Profile overviewから編集・保存・overview復帰まで既存の完了導線を維持する。
+  - Shneiderman 5（エラー防止）: 対象entityがないThread / Conversationやdeveloper向けsurfaceを空の初期Columnとして作らず、既存layoutへ既定値を混入しない。
+  - Shneiderman 6（取り消し容易）: 各既定Columnは通常のclose / pin / move対象であり、変更後の作業状態は既存persistenceで復元できる。
+  - Shneiderman 7（主導権）: Timelineを初期activeに保ち、Profile編集や他Columnへの移動を強制しない。deep linkと保存済みactive targetを優先する。
+  - Shneiderman 8（記憶負荷）: Profile、Explore、Notifications、Messagesの存在と順序を初期Canvas上に提示し、機能名を覚えて追加画面を探す必要を減らす。
+  - desktop 1400 / 900 / 760pxでは横overflowがColumn Canvas内に閉じ、Control Center triggerとTimeline footer / Composerは重ならない。mobile 375 / 390 / 430pxでは1 Column = 1 viewport、page indicator、edge / indicator swipe、Control Center直接移動を維持する。
+  - keyboardでColumn header、menu、Profile編集、Control Centerへ到達でき、focus表示、44px target、screen reader向けtitle・position・total・active・pinned表現を維持する。reduced motionでも最終stateとfocusは省略しない。
+  - Timeline、Profile、Explore、Notifications、Messagesは既存のloading / empty / error表示をそのまま利用し、初期配置のためだけの重複surfaceや独自fallbackを追加しない。
+  - desktop previewでExploreの3 tabが1 span内で重なる問題を検出し、`Search / Discover`の2列と`Recommendations`の全幅行へ調整した。
+- Exceptions: なし。初回ツアー、プロフィール編集の強制表示、既存layout migrationは今回の対象外。
+- Validation:
+  - `workspaceState.test.ts`と`DesktopShellPage.coldStart.test.tsx`をfailing先行で追加し、既定順序・scope・pin・span・active targetを固定した。
+  - shell integration testで自分用Profileとremote author Profileの共存、immersive deep link、Messages error表示、Community Node noticeのColumn所有を確認した。
+  - Playwrightでfresh default、desktop overflow、Profile編集導線、主要Column切替、mobile paging、保存layout / deep link非回帰を確認した。
+  - Storybook `Review/ProductionColumnWorkspace/DefaultProductOverview`をreview surfaceとして追加した。
+  - `cargo xtask desktop-ui-check`（lint、typecheck、110 files / 869 tests、Storybook build、browser 44 tests、visual smoke 14 tests）を完走した。
+  - `cargo xtask check`、`cargo xtask test`（Rust 603 tests、harness 18 tests、frontend 869 tests）、`cargo xtask oversized-files`、`git diff --check`を完走した。

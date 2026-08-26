@@ -305,7 +305,11 @@ export function CommunityIndexWorkspace({
       </div>
 
       {mode === 'explore' ? (
-        <div className='shell-workspace-tabs' role='tablist' aria-label={t('shell:communityIndex.surfaces')}>
+        <div
+          className='shell-workspace-tabs shell-community-index-tabs'
+          role='tablist'
+          aria-label={t('shell:communityIndex.surfaces')}
+        >
           {(['search', 'discovery', 'recommendations'] as const).map((value) => (
             <button
               key={value}

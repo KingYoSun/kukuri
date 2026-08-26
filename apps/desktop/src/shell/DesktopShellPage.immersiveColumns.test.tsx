@@ -158,8 +158,8 @@ test('game room deep link keeps the unpinned Thread Column and opens an orphan G
   expect(persistedGame?.parentColumnId).toBeUndefined();
   // metaverse 残骸 Column は発生しない。
   expect(columns.some((column) => column.kind === 'metaverse')).toBe(false);
-  // Timeline + Thread + Game の 3 本。
-  expect(columns).toHaveLength(3);
+  // 既定5 Column + Thread + Game の 7 本。
+  expect(columns).toHaveLength(7);
 });
 
 test('live session deep link keeps the unpinned Thread Column and opens an orphan Live Column', async () => {
@@ -182,7 +182,7 @@ test('live session deep link keeps the unpinned Thread Column and opens an orpha
   const streamColumn = columns.find((column) => column.kind === 'stream');
   expect(streamColumn?.entityId).toBe('session-demo');
   expect(streamColumn?.parentColumnId).toBeUndefined();
-  expect(columns).toHaveLength(3);
+  expect(columns).toHaveLength(7);
 });
 
 test('game room deep link before rooms load ends with a single Game Column and no metaverse leftover', async () => {

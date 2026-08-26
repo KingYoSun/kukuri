@@ -190,6 +190,14 @@
   grid-template-columns: repeat(auto-fit, minmax(min(7rem, 100%), 1fr));
 }
 
+.shell-community-index-tabs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.shell-community-index-tabs .shell-tab:last-child {
+  grid-column: 1 / -1;
+}
+
 .shell-section {
   min-width: 0;
   display: grid;

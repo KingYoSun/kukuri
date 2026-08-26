@@ -96,7 +96,11 @@ test('Profile header 再アクティブ化後に別 author を開くと Profile 
   const timeline = await screen.findByRole('region', { name: /^Timeline Column,/ });
   await user.click(within(timeline).getByRole('button', { name: 'alice' }));
   await waitFor(() => {
-    expect(screen.getAllByRole('region', { name: /^Profile Column,/ })).toHaveLength(1);
+    expect(
+      readPersistedColumns().filter(
+        (column) => column.kind === 'profile' && column.entityId === ALICE
+      )
+    ).toHaveLength(1);
   });
   await settle();
 
@@ -127,7 +131,7 @@ test('Profile header 再アクティブ化後に別 author を開くと Profile 
   expect(aliceAfterReactivate?.parentColumnId).toBe(timelineColumnId);
   expect(aliceAfterReactivate?.parentColumnId).not.toBe(aliceAfterReactivate?.id);
 
-  // 4. Timeline から bob を開く → alice が bob に置き換わり Profile Column は 1 本
+  // 4. Timeline から bob を開く → alice が bob に置き換わり、自分用Profileは維持される
   await user.click(within(getColumn('Timeline')).getByRole('button', { name: 'bob' }));
   await waitFor(() => {
     expect(
@@ -139,7 +143,8 @@ test('Profile header 再アクティブ化後に別 author を開くと Profile 
   await settle();
 
   const profileColumns = readPersistedColumns().filter((column) => column.kind === 'profile');
-  expect(profileColumns.map((column) => column.entityId)).toEqual([BOB]);
+  expect(profileColumns.map((column) => column.entityId)).toEqual([BOB, undefined]);
   expect(profileColumns[0]?.parentColumnId).toBe(timelineColumnId);
-  expect(screen.getAllByRole('region', { name: /^Profile Column,/ })).toHaveLength(1);
+  expect(profileColumns[1]?.parentColumnId).toBeUndefined();
+  expect(screen.getAllByRole('region', { name: /^Profile Column,/ })).toHaveLength(2);
 });

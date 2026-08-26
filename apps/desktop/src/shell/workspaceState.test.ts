@@ -5,7 +5,7 @@ import {
   closeColumn,
   columnSpanPolicy,
   columnIdentityId,
-  createInitialWorkspaceState,
+  createInitialWorkspaceState as createDefaultWorkspaceState,
   defaultColumnSpan,
   INITIAL_TIMELINE_COLUMN_ID,
   moveColumn,
@@ -16,6 +16,12 @@ import {
   setColumnTimelineView,
   type ColumnState,
 } from '@/shell/slices/workspace';
+
+// 個別transitionの単体試験は、製品のfresh defaultとは独立した最小fixtureで行う。
+function createInitialWorkspaceState() {
+  const state = createDefaultWorkspaceState();
+  return { ...state, columns: [state.columns[0]] };
+}
 
 function transientColumn(overrides: Partial<ColumnState> = {}): ColumnState {
   return {
@@ -46,17 +52,48 @@ describe('workspace state transitions', () => {
     expect(defaultColumnSpan(kind)).toBe(defaultSpan);
   });
 
-  it('starts with one active Timeline Column', () => {
-    const state = createInitialWorkspaceState({
+  it('starts with the pinned product overview Columns and keeps Timeline active', () => {
+    const scope = {
       topicId: 'kukuri:topic:demo',
       channelId: null,
+    };
+    const state = createDefaultWorkspaceState({
+      ...scope,
     });
 
     expect(state.columns).toEqual([
       {
         id: INITIAL_TIMELINE_COLUMN_ID,
         kind: 'timeline',
-        scope: { topicId: 'kukuri:topic:demo', channelId: null },
+        scope,
+        pinned: true,
+        preferredDesktopSpan: 1,
+      },
+      {
+        id: columnIdentityId('profile', scope),
+        kind: 'profile',
+        scope,
+        pinned: true,
+        preferredDesktopSpan: 1,
+      },
+      {
+        id: columnIdentityId('explore', scope),
+        kind: 'explore',
+        scope,
+        pinned: true,
+        preferredDesktopSpan: 1,
+      },
+      {
+        id: columnIdentityId('notifications', scope),
+        kind: 'notifications',
+        scope,
+        pinned: true,
+        preferredDesktopSpan: 1,
+      },
+      {
+        id: columnIdentityId('messages', scope),
+        kind: 'messages',
+        scope,
         pinned: true,
         preferredDesktopSpan: 1,
       },
