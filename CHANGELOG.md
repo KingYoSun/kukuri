@@ -18,6 +18,22 @@ file; automated changelog entries start from the next preview release.
 
 ## [Unreleased]
 
+## [v0.1.7-preview.1] - 2026-08-26
+
+### Features
+
+- show key decks on fresh start ([#785](https://github.com/KingYoSun/kukuri/pull/785))
+
+### Fixes
+
+- harden multilingual UI layouts ([#783](https://github.com/KingYoSun/kukuri/pull/783))
+
+### Other
+
+- bump preview version to 0.1.7 ([#786](https://github.com/KingYoSun/kukuri/pull/786))
+- make README a user and contributor entry point ([#784](https://github.com/KingYoSun/kukuri/pull/784))
+- update CHANGELOG for v0.1.6-preview.1 ([#781](https://github.com/KingYoSun/kukuri/pull/781))
+
 ## [v0.1.6-preview.1] - 2026-08-25
 
 ### Features
