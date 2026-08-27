@@ -1,8 +1,8 @@
 use kukuri_app_api::{GameScoreView, SocialConnectionKind};
 
 use kukuri_core::{
-    ChannelAudienceKind, ChannelRef, GameRoomStatus, MetaverseAssetKind, MetaverseRoomEventV1,
-    TimelineScope,
+    ChannelAudienceKind, ChannelRef, DomeCustomizationV1, GameRoomStatus, MetaverseAssetKind,
+    MetaverseRoomEventV1, TimelineScope,
 };
 use kukuri_store::TimelineCursor;
 use serde::{Deserialize, Serialize};
@@ -534,7 +534,5 @@ pub struct UpdateMetaverseRoomRequest {
     pub topic: String,
     pub room_id: String,
     pub status: GameRoomStatus,
-    pub shared_object_position: [i64; 3],
-    pub shared_object_rotation: [i64; 3],
-    pub shared_object_scale: [i64; 3],
+    pub customization: DomeCustomizationV1,
 }

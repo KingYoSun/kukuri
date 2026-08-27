@@ -31,9 +31,9 @@ pub(crate) use anyhow::{Context, Result};
 pub(crate) use base64::Engine;
 pub(crate) use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 pub(crate) use kukuri_app_api::{
-    AppService, CreateGameRoomInput, CreateLiveSessionInput, DirectMessageConversationView,
-    DirectMessageMessageView, DirectMessageStatusView, GameScoreView, SyncStatus,
-    UpdateGameRoomInput,
+    AppService, CreateGameRoomInput, CreateLiveSessionInput, CreateMetaverseRoomInput,
+    DirectMessageConversationView, DirectMessageMessageView, DirectMessageStatusView,
+    GameScoreView, SyncStatus, UpdateGameRoomInput, UpdateMetaverseRoomInput,
 };
 pub(crate) use kukuri_cn_core::{JwtConfig, TestDatabase};
 pub(crate) use kukuri_cn_iroh_relay::{IrohRelayConfig, SpawnedIrohRelay};
@@ -41,8 +41,8 @@ pub(crate) use kukuri_cn_user_api::{
     UserApiConfig, app_router as user_api_app_router, build_state as build_user_api_state,
 };
 pub(crate) use kukuri_core::{
-    ChannelAudienceKind, ChannelId, ChannelRef, CreatePrivateChannelInput, GameRoomStatus,
-    KukuriKeys, TimelineScope, TopicId,
+    ChannelAudienceKind, ChannelId, ChannelRef, CreatePrivateChannelInput, DomeMaterialPreset,
+    GameRoomStatus, KukuriKeys, TimelineScope, TopicId,
 };
 pub(crate) use kukuri_desktop_runtime::{
     AcceptCommunityNodeConsentsRequest, AuthorRequest, CommunityNodeTargetRequest,

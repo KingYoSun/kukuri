@@ -1,10 +1,10 @@
 import type {
+  DomeCustomizationV1,
   GameRoomView,
   MetaverseAssetRef,
   MetaverseRoomEventView,
   MetaverseRoomEventV1,
 } from '@/lib/api';
-import type { MetaverseVec3 } from '../MetaverseSceneModel';
 
 export type CreateMetaverseRoomActionInput = {
   title: string;
@@ -27,7 +27,7 @@ export type MetaverseRoomActions = {
   ) => Promise<MetaverseRoomEventView[]>;
   importRoomAsset: (
     roomId: string,
-    kind: 'vrm',
+    kind: 'vrm' | 'glb' | 'texture',
     mime: string,
     name: string,
     dataBase64: string
@@ -36,9 +36,7 @@ export type MetaverseRoomActions = {
   updateRoom: (
     roomId: string,
     status: GameRoomView['status'],
-    position: MetaverseVec3,
-    rotation: MetaverseVec3,
-    scale: MetaverseVec3
+    customization: DomeCustomizationV1
   ) => Promise<void>;
   refresh: () => Promise<void>;
 };

@@ -10,6 +10,7 @@ import {
 } from '../MetaverseSceneModel';
 import { useMetaverseRoomSession } from './useMetaverseRoomSession';
 import { createMetaverseRoomActions } from '@/shell/actions/metaverse';
+import { createDefaultMetaverseRoomState } from './DomeSceneModel';
 
 const room: GameRoomView = {
   room_id: 'metaverse-room-1',
@@ -17,23 +18,10 @@ const room: GameRoomView = {
   title: 'Atrium',
   description: 'Small social space',
   status: 'Waiting',
-  phase_label: 'metaverse-mvp',
+  phase_label: 'fixed-dome-v1',
   scores: [],
   room_kind: 'metaverse_room',
-  metaverse: {
-    world_version: 1,
-    max_peers: 8,
-    scene: {
-      ground: 'default',
-      shared_object: DEFAULT_SHARED_OBJECT,
-    },
-    default_spawn: {
-      position: [0, 0, 260],
-      rotation: [0, 180, 0],
-    },
-    asset_refs: [],
-    chat_history: [],
-  },
+  metaverse: createDefaultMetaverseRoomState(8),
   manifest_blob_hash: 'manifest-1',
   updated_at: 1,
   channel_id: null,

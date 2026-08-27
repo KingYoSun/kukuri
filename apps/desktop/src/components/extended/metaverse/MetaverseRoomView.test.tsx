@@ -5,6 +5,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import type { GameRoomView, SharedRoomObjectV1 } from '@/lib/api';
 import { MetaverseRoomView } from './MetaverseRoomView';
+import { createDefaultMetaverseRoomState } from './DomeSceneModel';
 import { ColumnRuntimeProvider } from '@/shell/ColumnRuntimeContext';
 
 vi.mock('../MetaverseScene', () => ({
@@ -38,7 +39,7 @@ const room: GameRoomView = {
   phase_label: 'metaverse-mvp',
   scores: [],
   room_kind: 'metaverse_room',
-  metaverse: null,
+  metaverse: createDefaultMetaverseRoomState(8),
   manifest_blob_hash: 'manifest-1',
   updated_at: 1,
   channel_id: null,
@@ -67,6 +68,7 @@ function viewProps(
     peerPresence: {},
     sharedObject,
     avatarAssetUrl: null,
+    domeTextureUrls: { wall: null, floor: null },
     latestChatByPeer: {},
     connectionState: 'live',
     now: 1,
@@ -79,6 +81,7 @@ function viewProps(
     communityAssistAvailable: true,
     locale: 'en',
     pending: false,
+    isOwner: true,
     messages: [],
     messageDraft: '',
     onLocalTransform: vi.fn(),
@@ -86,7 +89,10 @@ function viewProps(
     onLeaveRoom: vi.fn(),
     onImportAvatar: vi.fn(),
     onImportDefaultAvatar: vi.fn(),
+    onSaveCustomization: vi.fn(),
+    onImportTexture: vi.fn(),
     onMoveSharedObject: vi.fn(),
+    onInteractWithProp: vi.fn(),
     onMessageDraftChange: vi.fn(),
     onSendMessage: vi.fn((event) => event.preventDefault()),
     ...overrides,

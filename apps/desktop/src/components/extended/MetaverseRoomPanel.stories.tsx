@@ -7,6 +7,7 @@ import { MetaverseRoomPanel } from './MetaverseRoomPanel';
 import { DEFAULT_SHARED_OBJECT } from './MetaverseSceneModel';
 import { MetaverseRoomDiscovery } from './metaverse/MetaverseRoomDiscovery';
 import { MetaverseRoomView } from './metaverse/MetaverseRoomView';
+import { createDefaultMetaverseRoomState } from './metaverse/DomeSceneModel';
 import { createMetaverseRoomActions } from '@/shell/actions/metaverse';
 
 const meta = {
@@ -29,23 +30,10 @@ const room: GameRoomView = {
   title: 'Atrium',
   description: 'Small social space',
   status: 'Waiting',
-  phase_label: 'metaverse-mvp',
+  phase_label: 'fixed-dome-v1',
   scores: [],
   room_kind: 'metaverse_room',
-  metaverse: {
-    world_version: 1,
-    max_peers: 8,
-    scene: {
-      ground: 'default',
-      shared_object: DEFAULT_SHARED_OBJECT,
-    },
-    default_spawn: {
-      position: [0, 0, 260],
-      rotation: [0, 180, 0],
-    },
-    asset_refs: [],
-    chat_history: [],
-  },
+  metaverse: createDefaultMetaverseRoomState(8),
   manifest_blob_hash: 'mock-metaverse-room-1',
   updated_at: STORY_TIMESTAMP,
   channel_id: null,
@@ -84,7 +72,7 @@ const syncStatus: SyncStatus = {
 
 function StoryFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ maxWidth: 1180, margin: '0 auto', padding: 24 }}>
+    <div style={{ width: '100%', maxWidth: 1180, margin: '0 auto', padding: 24 }}>
       <div className='shell-main-stack'>{children}</div>
     </div>
   );
@@ -130,6 +118,7 @@ function selectedRoom(initialHudOpen = true, initialChatOpen = true) {
         peerPresence={{}}
         sharedObject={DEFAULT_SHARED_OBJECT}
         avatarAssetUrl={null}
+        domeTextureUrls={{ wall: null, floor: null }}
         latestChatByPeer={{}}
         connectionState='live'
         now={STORY_TIMESTAMP}
@@ -142,6 +131,7 @@ function selectedRoom(initialHudOpen = true, initialChatOpen = true) {
         communityAssistAvailable={true}
         locale='en'
         pending={false}
+        isOwner={true}
         messages={[
           {
             roomId: room.room_id,
@@ -161,7 +151,16 @@ function selectedRoom(initialHudOpen = true, initialChatOpen = true) {
         onLeaveRoom={() => undefined}
         onImportAvatar={() => undefined}
         onImportDefaultAvatar={() => undefined}
+        onSaveCustomization={async () => undefined}
+        onImportTexture={async () => ({
+          kind: 'texture',
+          blob_hash: 'story-texture',
+          mime_type: 'image/png',
+          size_bytes: 1,
+          name: 'story-texture.png',
+        })}
         onMoveSharedObject={() => undefined}
+        onInteractWithProp={() => undefined}
         onMessageDraftChange={() => undefined}
         onSendMessage={(event) => event.preventDefault()}
       />

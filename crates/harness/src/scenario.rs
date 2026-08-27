@@ -105,6 +105,26 @@ pub enum ScenarioStep {
         label: String,
         score: i64,
     },
+    CreateMetaverseDome {
+        title: String,
+        description: String,
+        max_peers: Option<u32>,
+    },
+    CustomizeMetaverseDome {
+        title: String,
+        gravity_milli: u32,
+        wall_material: String,
+        prop_position: [i64; 3],
+    },
+    AssertMetaverseDome {
+        title: String,
+        gravity_milli: u32,
+        wall_material: String,
+        prop_position: [i64; 3],
+    },
+    AssertMetaverseDomeRejectsInvalid {
+        title: String,
+    },
     RestartDesktop,
     SearchCommunityIndex {
         query: String,

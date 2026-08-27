@@ -39,8 +39,8 @@ export function createMetaverseRoomActions({
         dataBase64
       ),
     getBlobPreviewUrl: (blobHash, mime) => api.getBlobPreviewUrl(blobHash, mime),
-    updateRoom: (roomId, status, position, rotation, scale) =>
-      api.updateMetaverseRoom(activeTopic, roomId, status, position, rotation, scale),
+    updateRoom: (roomId, status, customization) =>
+      api.updateMetaverseRoom(activeTopic, roomId, status, customization),
     refresh: onRefresh,
   };
 }

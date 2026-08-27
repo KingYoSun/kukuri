@@ -1,0 +1,36 @@
+name: desktop_smoke_metaverse_dome_persist
+fixtures:
+  seed: 791
+  topic: kukuri:topic:metaverse-dome
+steps:
+  - action: launch_desktop
+  - action: select_topic
+    topic: kukuri:topic:metaverse-dome
+  - action: create_metaverse_dome
+    title: fixed-dome
+    description: owner customization persists
+    max_peers: 8
+  - action: customize_metaverse_dome
+    title: fixed-dome
+    gravity_milli: 7500
+    wall_material: wood
+    prop_position: [150, 50, -90]
+  - action: assert_metaverse_dome
+    title: fixed-dome
+    gravity_milli: 7500
+    wall_material: wood
+    prop_position: [150, 50, -90]
+  - action: assert_metaverse_dome_rejects_invalid
+    title: fixed-dome
+  - action: restart_desktop
+  - action: assert_metaverse_dome
+    title: fixed-dome
+    gravity_milli: 7500
+    wall_material: wood
+    prop_position: [150, 50, -90]
+artifacts:
+  dump_logs: true
+  metrics_snapshot: true
+timeouts:
+  overall_ms: 120000
+  step_ms: 15000

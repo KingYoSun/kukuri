@@ -6,6 +6,7 @@ import {
   type MetaverseRoomEventView,
   type TimelineScope,
 } from '@/lib/api';
+import { createDefaultMetaverseRoomState } from '@/components/extended/metaverse/DomeSceneModel';
 
 import {
   filterChannelScopedItems,
@@ -150,32 +151,10 @@ export function createLiveGameMock(runtime: MockRuntime): LiveGameMock {
           title,
           description,
           status: 'Waiting',
-          phase_label: 'metaverse-mvp',
+          phase_label: 'fixed-dome-v1',
           scores: [],
           room_kind: 'metaverse_room',
-          metaverse: {
-            world_version: 1,
-            max_peers: maxPeers,
-            scene: {
-              ground: 'default',
-              shared_object: {
-                object_id: 'mvp-object-1',
-                asset_ref: null,
-                primitive_fallback: 'cube',
-                position: [0, 50, -240],
-                rotation: [0, 0, 0],
-                scale: [100, 100, 100],
-                updated_by: syncStatus.local_author_pubkey,
-                updated_at: now,
-              },
-            },
-            default_spawn: {
-              position: [0, 0, 260],
-              rotation: [0, 180, 0],
-            },
-            asset_refs: [],
-            chat_history: [],
-          },
+          metaverse: createDefaultMetaverseRoomState(maxPeers),
           manifest_blob_hash: `mock-${roomId}`,
           updated_at: now,
           channel_id: channelId,
@@ -202,9 +181,7 @@ export function createLiveGameMock(runtime: MockRuntime): LiveGameMock {
       topic,
       roomId,
       status,
-      sharedObjectPosition,
-      sharedObjectRotation,
-      sharedObjectScale
+      customization
     ) {
       const now = Date.now();
       gameRoomsByTopic[topic] = (gameRoomsByTopic[topic] ?? []).map((room) =>
@@ -214,17 +191,7 @@ export function createLiveGameMock(runtime: MockRuntime): LiveGameMock {
               status,
               metaverse: {
                 ...room.metaverse,
-                scene: {
-                  ...room.metaverse.scene,
-                  shared_object: {
-                    ...room.metaverse.scene.shared_object,
-                    position: sharedObjectPosition,
-                    rotation: sharedObjectRotation,
-                    scale: sharedObjectScale,
-                    updated_by: syncStatus.local_author_pubkey,
-                    updated_at: now,
-                  },
-                },
+                dome: { ...room.metaverse.dome, customization },
               },
               updated_at: now,
               manifest_blob_hash: `mock-${roomId}-${now}`,

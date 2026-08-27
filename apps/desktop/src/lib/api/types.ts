@@ -22,6 +22,7 @@ import type {
   DirectMessageStatusView,
   DirectMessageTimelineView,
   DiscoveryConfig,
+  DomeCustomizationV1,
   FriendOnlyGrantPreview,
   FriendPlusSharePreview,
   GameRoomStatus,
@@ -324,9 +325,7 @@ export interface DesktopApi {
     topic: string,
     roomId: string,
     status: GameRoomStatus,
-    sharedObjectPosition: [number, number, number],
-    sharedObjectRotation: [number, number, number],
-    sharedObjectScale: [number, number, number]
+    customization: DomeCustomizationV1
   ): Promise<void>;
   publishMetaverseRoomEvent(
     topic: string,

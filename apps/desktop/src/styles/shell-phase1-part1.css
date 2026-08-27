@@ -437,6 +437,96 @@
   word-break: break-word;
 }
 
+.metaverse-dome-customization {
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-input);
+  background: var(--surface-panel-muted);
+}
+
+.metaverse-dome-customization > strong {
+  color: var(--foreground-strong);
+  font-size: var(--text-body);
+}
+
+.metaverse-dome-customization > span,
+.metaverse-dome-customization > small {
+  color: var(--muted-foreground);
+  font-size: var(--text-caption);
+}
+
+.metaverse-customization-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-xs);
+}
+
+.metaverse-customization-grid label {
+  display: grid;
+  gap: var(--space-2xs);
+  min-width: 0;
+  color: var(--muted-foreground);
+  font-size: var(--text-caption);
+}
+
+.metaverse-customization-grid select,
+.metaverse-customization-grid input {
+  width: 100%;
+  min-height: 2.75rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-input);
+  background: var(--surface-input);
+  color: var(--foreground);
+}
+
+.metaverse-interaction-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-xs);
+  margin: 0;
+  padding: var(--space-xs) 0 0;
+  border: 0;
+}
+
+.metaverse-interaction-options legend {
+  grid-column: 1 / -1;
+  color: var(--muted-foreground);
+  font-size: var(--text-caption);
+}
+
+.metaverse-interaction-options label {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--foreground);
+  font-size: var(--text-caption);
+}
+
+.metaverse-customization-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.metaverse-customization-feedback[data-state='error'],
+.metaverse-customization-feedback[data-state='invalid'] {
+  color: var(--danger);
+}
+
+.metaverse-customization-feedback[data-state='saved'] {
+  color: var(--accent);
+}
+
+@container (max-width: 32rem) {
+  .metaverse-customization-grid,
+  .metaverse-interaction-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .metaverse-object-controls {
   display: grid;
   gap: var(--space-xs);
@@ -453,6 +543,12 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
+  gap: var(--space-xs);
+}
+
+.metaverse-prop-interaction-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-xs);
 }
 
@@ -483,6 +579,11 @@
   padding: var(--space-xs) var(--space-sm);
   border-radius: var(--radius-xs);
   font-size: var(--text-body);
+}
+
+.metaverse-room-hud .metaverse-customization-actions .button,
+.metaverse-room-hud .metaverse-prop-interaction-grid .button {
+  min-height: 2.75rem;
 }
 
 .metaverse-room-hud .button svg {

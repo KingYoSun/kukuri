@@ -22,13 +22,14 @@ import { Label } from '@/components/ui/label';
 import type { SupportedLocale } from '@/i18n';
 import { formatLocalizedTime } from '@/i18n/format';
 import { topicDisplayName } from '@/lib/topicId';
-import type { GameRoomView, MetaverseAssetRef } from '@/lib/api';
+import type { DomeCustomizationV1, GameRoomView, MetaverseAssetRef, MetaverseInteractionKind } from '@/lib/api';
 import type {
   AvatarAssetStatus,
   MetaverseRoomConnectionState,
   MetaverseVec3,
   RoomChatMessage,
 } from '../MetaverseSceneModel';
+import { DomeCustomizationControls } from './DomeCustomizationControls';
 
 type MetaverseRoomControlsProps = {
   room: GameRoomView;
@@ -44,6 +45,7 @@ type MetaverseRoomControlsProps = {
   connectionState: MetaverseRoomConnectionState;
   locale: SupportedLocale;
   pending: boolean;
+  isOwner: boolean;
   hudOpen: boolean;
   hudDebugOpen: boolean;
   chatOpen: boolean;
@@ -55,7 +57,10 @@ type MetaverseRoomControlsProps = {
   onToggleHudDebug: () => void;
   onImportAvatar: (file: File) => void;
   onImportDefaultAvatar: () => void;
+  onSaveCustomization: (customization: DomeCustomizationV1) => Promise<void>;
+  onImportTexture: (file: File) => Promise<MetaverseAssetRef>;
   onMoveSharedObject: (delta: MetaverseVec3) => void;
+  onInteractWithProp: (interaction: MetaverseInteractionKind) => void;
   onCloseChat: () => void;
   onOpenChat: () => void;
   onMessageDraftChange: (value: string) => void;
@@ -89,6 +94,7 @@ export function MetaverseRoomControls({
   connectionState,
   locale,
   pending,
+  isOwner,
   hudOpen,
   hudDebugOpen,
   chatOpen,
@@ -100,7 +106,10 @@ export function MetaverseRoomControls({
   onToggleHudDebug,
   onImportAvatar,
   onImportDefaultAvatar,
+  onSaveCustomization,
+  onImportTexture,
   onMoveSharedObject,
+  onInteractWithProp,
   onCloseChat,
   onOpenChat,
   onMessageDraftChange,
@@ -190,6 +199,14 @@ export function MetaverseRoomControls({
                 </div>
               ) : null}
             </section>
+            <DomeCustomizationControls
+              customization={room.metaverse!.dome.customization}
+              isOwner={isOwner}
+              pending={pending}
+              locale={locale}
+              onSave={onSaveCustomization}
+              onImportTexture={onImportTexture}
+            />
             <div className='metaverse-object-controls'>
               <strong>{t('avatar.title')}</strong>
               <div className='metaverse-avatar-asset-controls'>
@@ -243,6 +260,20 @@ export function MetaverseRoomControls({
                 <Button size='sm' variant='secondary' type='button' onClick={() => onMoveSharedObject([0, 0, 50])}>
                   {t('object.back')}
                 </Button>
+              </div>
+              <div className='metaverse-prop-interaction-grid'>
+                {(room.metaverse?.dome.customization.persistent_props[0]?.interactions ?? []).map((interaction) => (
+                  <Button
+                    key={interaction}
+                    size='sm'
+                    variant='secondary'
+                    type='button'
+                    disabled={pending}
+                    onClick={() => onInteractWithProp(interaction)}
+                  >
+                    {t(`customization.interactions.${interaction}`)}
+                  </Button>
+                ))}
               </div>
             </div>
           </aside>

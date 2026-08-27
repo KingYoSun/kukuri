@@ -1,4 +1,6 @@
-use anyhow::Result;
+use std::collections::HashSet;
+
+use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::{ChannelId, EnvelopeId, ManifestBlobRef, Pubkey, TopicId};
@@ -100,6 +102,279 @@ pub enum MetaversePrimitive {
     Sphere,
 }
 
+pub const METAVERSE_WORLD_VERSION: u64 = 2;
+pub const FIXED_DOME_SPEC_ID: &str = "fixed_dome_v1";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum DomeDirection {
+    North,
+    East,
+    South,
+    West,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FixedDomeEndpointV1 {
+    pub direction: DomeDirection,
+    pub wall_midpoint_cm: [i64; 3],
+    pub adjacent_dome_offset_cm: [i64; 3],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FixedDomeSpecV1 {
+    pub spec_id: &'static str,
+    pub inner_radius_cm: i64,
+    pub outer_radius_cm: i64,
+    pub apex_height_cm: i64,
+    pub wall_thickness_cm: i64,
+    pub opening_width_cm: i64,
+    pub opening_height_cm: i64,
+    pub opening_arch_radius_cm: i64,
+    pub opening_rect_height_cm: i64,
+    pub connection_zone_depth_cm: i64,
+    pub connection_boundary_offset_cm: i64,
+    pub adjacent_dome_center_distance_cm: i64,
+    pub endpoints: [FixedDomeEndpointV1; 4],
+    pub gravity_direction: [i64; 3],
+    pub physics_enabled: bool,
+}
+
+pub const fn fixed_dome_v1() -> FixedDomeSpecV1 {
+    const WALL_MIDPOINT_CM: i64 = 2_100;
+    const ADJACENT_OFFSET_CM: i64 = 5_700;
+    FixedDomeSpecV1 {
+        spec_id: FIXED_DOME_SPEC_ID,
+        inner_radius_cm: 2_000,
+        outer_radius_cm: 2_200,
+        apex_height_cm: 2_000,
+        wall_thickness_cm: 200,
+        opening_width_cm: 500,
+        opening_height_cm: 1_000,
+        opening_arch_radius_cm: 250,
+        opening_rect_height_cm: 750,
+        connection_zone_depth_cm: 1_500,
+        connection_boundary_offset_cm: 2_850,
+        adjacent_dome_center_distance_cm: ADJACENT_OFFSET_CM,
+        endpoints: [
+            FixedDomeEndpointV1 {
+                direction: DomeDirection::North,
+                wall_midpoint_cm: [0, 0, -WALL_MIDPOINT_CM],
+                adjacent_dome_offset_cm: [0, 0, -ADJACENT_OFFSET_CM],
+            },
+            FixedDomeEndpointV1 {
+                direction: DomeDirection::East,
+                wall_midpoint_cm: [WALL_MIDPOINT_CM, 0, 0],
+                adjacent_dome_offset_cm: [ADJACENT_OFFSET_CM, 0, 0],
+            },
+            FixedDomeEndpointV1 {
+                direction: DomeDirection::South,
+                wall_midpoint_cm: [0, 0, WALL_MIDPOINT_CM],
+                adjacent_dome_offset_cm: [0, 0, ADJACENT_OFFSET_CM],
+            },
+            FixedDomeEndpointV1 {
+                direction: DomeDirection::West,
+                wall_midpoint_cm: [-WALL_MIDPOINT_CM, 0, 0],
+                adjacent_dome_offset_cm: [-ADJACENT_OFFSET_CM, 0, 0],
+            },
+        ],
+        gravity_direction: [0, -1, 0],
+        physics_enabled: true,
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum DomeMaterialPreset {
+    Concrete,
+    Stone,
+    Metal,
+    Wood,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
+#[serde(deny_unknown_fields)]
+pub struct DomeSurfaceCustomizationV1 {
+    pub wall_material: DomeMaterialPreset,
+    pub floor_material: DomeMaterialPreset,
+    pub wall_texture: Option<MetaverseAssetRef>,
+    pub floor_texture: Option<MetaverseAssetRef>,
+}
+
+impl Default for DomeSurfaceCustomizationV1 {
+    fn default() -> Self {
+        Self {
+            wall_material: DomeMaterialPreset::Concrete,
+            floor_material: DomeMaterialPreset::Stone,
+            wall_texture: None,
+            floor_texture: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(deny_unknown_fields)]
+pub struct DomeEnvironmentV1 {
+    pub key_light_milli: u32,
+    pub ambient_light_milli: u32,
+    pub fog_density_micros: u32,
+    pub gravity_milli: u32,
+}
+
+impl Default for DomeEnvironmentV1 {
+    fn default() -> Self {
+        Self {
+            key_light_milli: 2_400,
+            ambient_light_milli: 400,
+            fog_density_micros: 8_000,
+            gravity_milli: 9_800,
+        }
+    }
+}
+
+pub fn interpolate_dome_environment(
+    from: &DomeEnvironmentV1,
+    to: &DomeEnvironmentV1,
+    progress_milli: u16,
+) -> DomeEnvironmentV1 {
+    let progress = u32::from(progress_milli.min(1_000));
+    let interpolate = |left: u32, right: u32| -> u32 {
+        let left = i64::from(left);
+        let delta = i64::from(right) - left;
+        (left + delta * i64::from(progress) / 1_000) as u32
+    };
+    DomeEnvironmentV1 {
+        key_light_milli: interpolate(from.key_light_milli, to.key_light_milli),
+        ambient_light_milli: interpolate(from.ambient_light_milli, to.ambient_light_milli),
+        fog_density_micros: interpolate(from.fog_density_micros, to.fog_density_micros),
+        gravity_milli: interpolate(from.gravity_milli, to.gravity_milli),
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum MetaverseInteractionKind {
+    Grab,
+    Throw,
+    Push,
+    Sit,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(tag = "shape", rename_all = "snake_case", deny_unknown_fields)]
+pub enum MetaverseColliderV1 {
+    Capsule {
+        center: [i64; 3],
+        radius: i64,
+        half_height: i64,
+    },
+    Cuboid {
+        center: [i64; 3],
+        half_extents: [i64; 3],
+    },
+}
+
+pub fn fallback_capsule_collider(
+    bounds_min: [i64; 3],
+    bounds_max: [i64; 3],
+) -> Result<MetaverseColliderV1> {
+    if bounds_min
+        .iter()
+        .zip(bounds_max)
+        .any(|(minimum, maximum)| *minimum >= maximum)
+    {
+        bail!("metaverse collider bounds must have positive volume");
+    }
+    let width = bounds_max[0] - bounds_min[0];
+    let height = bounds_max[1] - bounds_min[1];
+    let depth = bounds_max[2] - bounds_min[2];
+    let radius = (width.max(depth) + 1) / 2;
+    let half_height = ((height + 1) / 2 - radius).max(0);
+    Ok(MetaverseColliderV1::Capsule {
+        center: [
+            (bounds_min[0] + bounds_max[0]) / 2,
+            (bounds_min[1] + bounds_max[1]) / 2,
+            (bounds_min[2] + bounds_max[2]) / 2,
+        ],
+        radius,
+        half_height,
+    })
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
+#[serde(deny_unknown_fields)]
+pub struct MetaversePersistentPropV1 {
+    pub prop_id: String,
+    pub asset_ref: Option<MetaverseAssetRef>,
+    pub primitive_fallback: MetaversePrimitive,
+    pub position: [i64; 3],
+    pub rotation: [i64; 3],
+    pub scale: [i64; 3],
+    pub visual_only: bool,
+    pub interactions: Vec<MetaverseInteractionKind>,
+    pub collider: Option<MetaverseColliderV1>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(deny_unknown_fields)]
+pub struct DomeCustomizationV1 {
+    pub surface: DomeSurfaceCustomizationV1,
+    pub environment: DomeEnvironmentV1,
+    pub persistent_props: Vec<MetaversePersistentPropV1>,
+}
+
+impl Default for DomeCustomizationV1 {
+    fn default() -> Self {
+        Self {
+            surface: DomeSurfaceCustomizationV1::default(),
+            environment: DomeEnvironmentV1::default(),
+            persistent_props: vec![MetaversePersistentPropV1 {
+                prop_id: "dome-prop-1".to_string(),
+                asset_ref: None,
+                primitive_fallback: MetaversePrimitive::Cube,
+                position: [0, 50, -240],
+                rotation: [0, 0, 0],
+                scale: [100, 100, 100],
+                visual_only: false,
+                interactions: vec![
+                    MetaverseInteractionKind::Grab,
+                    MetaverseInteractionKind::Throw,
+                    MetaverseInteractionKind::Push,
+                    MetaverseInteractionKind::Sit,
+                ],
+                collider: None,
+            }],
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(deny_unknown_fields)]
+pub struct MetaverseDomeV1 {
+    pub spec_id: String,
+    pub customization: DomeCustomizationV1,
+}
+
+impl Default for MetaverseDomeV1 {
+    fn default() -> Self {
+        Self {
+            spec_id: FIXED_DOME_SPEC_ID.to_string(),
+            customization: DomeCustomizationV1::default(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
@@ -157,14 +432,6 @@ pub struct MetaverseRoomEventEnvelopeContentV1 {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
-pub struct MetaverseRoomSceneV1 {
-    pub ground: String,
-    pub shared_object: SharedRoomObjectV1,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct MetaverseRoomSpawnV1 {
     pub position: [i64; 3],
     pub rotation: [i64; 3],
@@ -173,15 +440,109 @@ pub struct MetaverseRoomSpawnV1 {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
+#[serde(deny_unknown_fields)]
 pub struct MetaverseRoomStateV1 {
     pub world_version: u64,
     pub max_peers: Option<u32>,
-    pub scene: MetaverseRoomSceneV1,
+    pub dome: MetaverseDomeV1,
     pub default_spawn: MetaverseRoomSpawnV1,
     pub asset_refs: Vec<MetaverseAssetRef>,
     #[serde(default)]
     #[cfg_attr(feature = "ts", ts(as = "Option<Vec<MetaverseRoomChatMessageV1>>"))]
     pub chat_history: Vec<MetaverseRoomChatMessageV1>,
+}
+
+pub fn validate_dome_customization(customization: &DomeCustomizationV1) -> Result<()> {
+    fn validate_texture(asset: &Option<MetaverseAssetRef>, field: &str) -> Result<()> {
+        if let Some(asset) = asset
+            && asset.kind != MetaverseAssetKind::Texture
+        {
+            bail!("{field} must reference a texture asset");
+        }
+        Ok(())
+    }
+
+    validate_texture(&customization.surface.wall_texture, "wall texture")?;
+    validate_texture(&customization.surface.floor_texture, "floor texture")?;
+    let environment = &customization.environment;
+    if environment.key_light_milli > 4_000 {
+        bail!("key light intensity is outside the supported range");
+    }
+    if environment.ambient_light_milli > 2_000 {
+        bail!("ambient light intensity is outside the supported range");
+    }
+    if environment.fog_density_micros > 200_000 {
+        bail!("fog density is outside the supported range");
+    }
+    if !(1_000..=30_000).contains(&environment.gravity_milli) {
+        bail!("gravity strength is outside the supported range");
+    }
+    if customization.persistent_props.len() > 64 {
+        bail!("a Dome supports at most 64 persistent props");
+    }
+    let mut prop_ids = HashSet::new();
+    for prop in &customization.persistent_props {
+        if prop.prop_id.trim().is_empty() || !prop_ids.insert(prop.prop_id.as_str()) {
+            bail!("persistent prop ids must be non-empty and unique");
+        }
+        if prop.scale.iter().any(|scale| !(1..=1_000).contains(scale)) {
+            bail!("persistent prop scale is outside the supported range");
+        }
+        let distance_squared = prop.position[0] * prop.position[0]
+            + prop.position[1] * prop.position[1]
+            + prop.position[2] * prop.position[2];
+        if prop.position[1] < 0
+            || prop.position[1] > fixed_dome_v1().apex_height_cm
+            || distance_squared > fixed_dome_v1().inner_radius_cm * fixed_dome_v1().inner_radius_cm
+        {
+            bail!("persistent prop position is outside the fixed Dome");
+        }
+        let mut interactions = HashSet::new();
+        if prop
+            .interactions
+            .iter()
+            .any(|interaction| !interactions.insert(*interaction))
+        {
+            bail!("persistent prop interactions must be unique");
+        }
+        if prop.visual_only && !prop.interactions.is_empty() {
+            bail!("visual-only props cannot expose interactions");
+        }
+        if let Some(collider) = &prop.collider {
+            match collider {
+                MetaverseColliderV1::Capsule {
+                    radius,
+                    half_height,
+                    ..
+                } if *radius <= 0 || *half_height < 0 => {
+                    bail!("capsule collider dimensions must be positive");
+                }
+                MetaverseColliderV1::Cuboid { half_extents, .. }
+                    if half_extents.iter().any(|extent| *extent <= 0) =>
+                {
+                    bail!("cuboid collider dimensions must be positive");
+                }
+                _ => {}
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn validate_metaverse_room_state(state: &MetaverseRoomStateV1) -> Result<()> {
+    if state.world_version != METAVERSE_WORLD_VERSION {
+        bail!("unsupported metaverse world version");
+    }
+    if state.dome.spec_id != FIXED_DOME_SPEC_ID {
+        bail!("unsupported Dome spec id");
+    }
+    if state
+        .max_peers
+        .is_some_and(|max_peers| !(1..=64).contains(&max_peers))
+    {
+        bail!("max peers is outside the supported range");
+    }
+    validate_dome_customization(&state.dome.customization)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

@@ -71,6 +71,26 @@
     "default": "默认",
     "remoteStale": "远程头像已停滞"
   },
+  "customization": {
+    "title": "Dome 自定义",
+    "readOnly": "只有 Dome 所有者可以保存这些设置。",
+    "gravitySummary": "重力：{{value}} m/s²（-Y）",
+    "wallMaterial": "内壁材质",
+    "floorMaterial": "地面材质",
+    "wallTexture": "内壁纹理",
+    "floorTexture": "地面纹理",
+    "keyLight": "主光（milli）",
+    "ambient": "环境光（milli）",
+    "fog": "雾密度（micro）",
+    "gravity": "重力（milli m/s²）",
+    "propInteractions": "持久道具交互",
+    "visualOnly": "仅显示",
+    "save": "保存 Dome",
+    "cancel": "取消",
+    "materials": { "concrete": "混凝土", "stone": "石材", "metal": "金属", "wood": "木材" },
+    "interactions": { "grab": "抓取", "throw": "投掷", "push": "推动", "sit": "坐下" },
+    "feedback": { "saving": "保存中…", "saved": "Dome 已保存", "error": "无法保存 Dome", "invalid": "请检查超出支持范围的数值" }
+  },
   "object": {
     "title": "共享对象",
     "forward": "向前",
@@ -95,6 +115,8 @@
     "importAvatarFailed": "无法导入 VRM 头像",
     "sampleFetchFailed": "获取示例 VRM 失败：{{status}}",
     "publishLeaveFailed": "无法发布离开房间事件",
-    "persistObjectFailed": "无法保存共享对象"
+    "persistObjectFailed": "无法保存共享对象",
+    "customizationFailed": "无法保存 Dome 自定义",
+    "roomRequired": "导入资源前请先加入 Dome"
   }
 }

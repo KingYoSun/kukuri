@@ -1,7 +1,9 @@
 # P2P Room Metaverse MVP
 
 ## 目的
-この MVP は、kukuri が中央集権的なゲームサーバーを前提にせず、トピック単位の小さな 3D ソーシャルルームを扱えることを検証するためのものです。VRChat クローン、MMO、音声、ワールドエディタ、大規模リアルタイムシミュレーションは対象外です。
+この MVP は、kukuri が中央集権的なゲームサーバーを前提にせず、トピック単位の固定規格Domeを扱えることを検証するためのものです。VRChat クローン、MMO、音声、ワールドエディタ、任意map、大規模リアルタイムシミュレーションは対象外です。
+
+固定geometry、変更可能なmanifest項目、Durable / Transient分類の正本は[ADR 0035](../adr/0035-fixed-dome-data-classification.md)とする。Metaverseは実験機能のため、旧`world_version = 1` roomとの後方互換やmigrationは提供せず、既存roomは再作成する。
 
 ## アーキテクチャ選択
 `docs/progress/2026-05-27-metaverse-mvp-plan.md` の Option A として、既存の game room model を拡張しています。
@@ -15,24 +17,24 @@
 
 ## 実装済み範囲
 - `GameRoomManifestBlobV1.room_kind`: `score_game` または `metaverse_room`。
-- `GameRoomManifestBlobV1.metaverse`: world version、spawn、asset refs、共有オブジェクト 1 個を持つ MVP state。
+- `GameRoomManifestBlobV1.metaverse`: world version、固定Dome spec id、owner customization、persistent prop初期定義、spawn、asset refsを持つstate。
 - `GameRoomView.manifest_blob_hash`: UI から確認できる永続化/debug 用のシグナル。
 - `create_metaverse_room` / `update_metaverse_room` Tauri command。
 - Desktop の game section で通常の score room と metaverse room を分離表示。
 - Metaverse discovery panel で、トピック単位の metaverse room 一覧と作成を提供。
-- Room view で three.js scene、camera、lights、ground、local avatar、remote avatar、共有オブジェクトを描画。
+- Room viewでthree.js scene、camera、固定半球、4方向endpoint、connection zone、local avatar、remote avatar、persistent propを描画。
 - `apps/desktop/public/blumochichi.vrm` を local avatar としてロードし、失敗時は primitive fallback を使用。
 - 任意の VRM file または sample VRM を blob storage に import し、`MetaverseAssetRef` として扱う。
 - avatar presence は `avatar_asset_ref` を signed room event に載せ、raw bytes を room event に埋め込まない。
 - avatar transform、chat、object update は署名済み `metaverse-room-event` envelope として hint transport で送受信する。
 - WASD / arrow key movement により avatar transform event を約 10 Hz で送出。
-- 共有オブジェクトの移動は `update_metaverse_room` 経由で manifest blob を更新する。
+- `update_metaverse_room`はownerだけがcustomizationとpersistent prop初期定義を更新できる。実行中interactionはmanifestを更新しない。
 
 ## Production MVP 完了条件
 この goal は、以下を満たす状態を production MVP として扱う。
 
 - metaverse room discovery は既存 game room list/projection を使い、複数 room を topic 単位で表示できる。
-- room metadata と shared object state は docs pointer + manifest blob で永続化され、restart 後に復元できる。
+- room metadata、owner customization、persistent prop初期定義はdocs pointer + manifest blobで永続化され、restart後に復元できる。実行中transformはTransient eventでありmanifestへ保存しない。
 - avatar transform、chat、object update は署名済み `metaverse-room-event` envelope として P2P hint transport で送受信できる。
 - avatar transform は high-frequency な ephemeral event として扱い、docs/blobs に 10 Hz で直接書き込まない。
 - VRM asset bytes は blob storage に入り、presence / room event には `MetaverseAssetRef` だけを載せる。
@@ -64,7 +66,7 @@ desktop app を開き、`Game` に切り替えて `Metaverse Rooms` panel を使
 6. WASD または arrow key で local avatar を移動する。
 7. room chat message を送信する。
 8. object controls で共有オブジェクトを移動する。
-9. refresh または再起動後、room list と共有オブジェクト state が manifest から復元されることを確認する。
+9. owner customizationを保存し、refreshまたは再起動後にmaterial、environment、persistent prop初期定義がmanifestから復元されることを確認する。
 
 ## 2 クライアント確認
 1. 通常の kukuri peer connectivity で desktop instance を 2 つ起動する。
@@ -74,7 +76,7 @@ desktop app を開き、`Game` に切り替えて `Metaverse Rooms` panel を使
 5. 両 client で room を開く。
 6. client A の avatar movement が client B の remote avatar に反映されることを確認する。
 7. chat message が相互に送受信されることを確認する。
-8. 共有オブジェクト更新が room event と manifest 経路で反映されることを確認する。
+8. persistent propの実行中interactionがroom eventで反映され、ownerによる初期定義の保存だけがmanifestを更新することを確認する。
 
 自動検証として、`metaverse_room_events_replicate_between_iroh_peers` は 2 つの Iroh peer 間で signed room event が配送されることを確認する。
 
@@ -84,10 +86,10 @@ desktop app を開き、`Game` に切り替えて `Metaverse Rooms` panel を使
 - 読み込み失敗時、debug panel は fallback 状態を表示し、primitive avatar を維持する。
 - asset bytes は blob storage に入り、room event / presence には `MetaverseAssetRef` だけを載せる。
 
-## 共有オブジェクト同期確認
-共有オブジェクトの移動は `update_metaverse_room` を呼び、manifest blob と projection state を更新する。MVP の conflict rule は update time による last-write-wins とする。
+## Persistent prop同期確認
+persistent propの初期定義はownerだけが`update_metaverse_room`でmanifestへ保存する。`grab` / `throw` / `push` / `sit`や実行中transformは`object_update` / avatar transform eventとして送信し、interactionだけではDurable manifestを更新しない。authoritative physicsとlayout commitはIssue #788/#793の範囲とする。
 
-自動検証として、`metaverse_room_manifest_restores_after_restart_from_docs_and_blobs` は restart 後に room list と shared object state が docs + blob から復元されることを確認する。
+自動検証として、`metaverse_room_manifest_restores_after_restart_from_docs_and_blobs`と`desktop_smoke_metaverse_dome_persist`はrestart後にroom list、customization、persistent prop初期定義がdocs + blobから復元されることを確認する。
 
 ## 既知の制約
 - 大規模同時接続、voice、WebRTC/SFU、ワールドエディタ、UGC scripting、asset safety scanning は goal の non-goal。

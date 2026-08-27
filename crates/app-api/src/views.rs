@@ -1,6 +1,6 @@
 use kukuri_core::{
-    AssetRole, ChannelAudienceKind, ChannelSharingState, GameRoomKind, GameRoomStatus,
-    KukuriEnvelope, LiveSessionStatus, MetaverseAssetKind, MetaverseAssetRef,
+    AssetRole, ChannelAudienceKind, ChannelSharingState, DomeCustomizationV1, GameRoomKind,
+    GameRoomStatus, KukuriEnvelope, LiveSessionStatus, MetaverseAssetKind, MetaverseAssetRef,
     MetaverseRoomEventEnvelopeContentV1, MetaverseRoomEventV1, MetaverseRoomStateV1,
 };
 use kukuri_store::{NotificationKind, TimelineCursor};
@@ -448,9 +448,7 @@ pub struct UpdateGameRoomInput {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UpdateMetaverseRoomInput {
     pub status: GameRoomStatus,
-    pub shared_object_position: [i64; 3],
-    pub shared_object_rotation: [i64; 3],
-    pub shared_object_scale: [i64; 3],
+    pub customization: DomeCustomizationV1,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

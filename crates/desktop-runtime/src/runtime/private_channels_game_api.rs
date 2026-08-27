@@ -189,9 +189,7 @@ impl DesktopRuntime {
                 request.room_id.as_str(),
                 UpdateMetaverseRoomInput {
                     status: request.status,
-                    shared_object_position: request.shared_object_position,
-                    shared_object_rotation: request.shared_object_rotation,
-                    shared_object_scale: request.shared_object_scale,
+                    customization: request.customization,
                 },
             )
             .await

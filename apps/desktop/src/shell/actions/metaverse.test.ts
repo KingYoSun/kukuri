@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from 'vitest';
 
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import { createMetaverseRoomActions } from './metaverse';
+import { createDefaultDomeCustomization } from '@/components/extended/metaverse/DomeSceneModel';
 
 describe('createMetaverseRoomActions', () => {
   test('binds topic/channel and preserves every API payload and refresh boundary', async () => {
@@ -38,13 +39,8 @@ describe('createMetaverseRoomActions', () => {
     await actions.listRoomEvents('room-1', 'event-6', 64);
     await actions.importRoomAsset('room-1', 'vrm', 'model/vrm', 'avatar.vrm', 'YXZhdGFy');
     await actions.getBlobPreviewUrl('blob-hash', 'model/vrm');
-    await actions.updateRoom(
-      'room-1',
-      'Waiting',
-      [1, 2, 3],
-      [4, 5, 6],
-      [100, 100, 100]
-    );
+    const customization = createDefaultDomeCustomization();
+    await actions.updateRoom('room-1', 'Waiting', customization);
 
     expect(api.createMetaverseRoom).toHaveBeenCalledWith(
       'kukuri:topic:demo',
@@ -79,9 +75,7 @@ describe('createMetaverseRoomActions', () => {
       'kukuri:topic:demo',
       'room-1',
       'Waiting',
-      [1, 2, 3],
-      [4, 5, 6],
-      [100, 100, 100]
+      customization
     );
     expect(onRefresh).not.toHaveBeenCalled();
 

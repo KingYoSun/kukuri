@@ -12,6 +12,7 @@ import type {
   SyncStatus,
 } from '@/lib/api';
 import { MetaverseRoomPanel } from './MetaverseRoomPanel';
+import { createDefaultMetaverseRoomState } from './metaverse/DomeSceneModel';
 import { createMetaverseRoomActions } from '@/shell/actions/metaverse';
 
 vi.mock('./MetaverseScene', () => ({
@@ -70,31 +71,10 @@ const room: GameRoomView = {
   title: 'Atrium',
   description: 'Small social space',
   status: 'Waiting',
-  phase_label: 'metaverse-mvp',
+  phase_label: 'fixed-dome-v1',
   scores: [],
   room_kind: 'metaverse_room',
-  metaverse: {
-    world_version: 1,
-    max_peers: 8,
-    scene: {
-      ground: 'default',
-      shared_object: {
-        object_id: 'mvp-object-1',
-        asset_ref: null,
-        primitive_fallback: 'cube',
-        position: [0, 50, -240],
-        rotation: [0, 0, 0],
-        scale: [100, 100, 100],
-        updated_by: 'f'.repeat(64),
-        updated_at: 1,
-      },
-    },
-    default_spawn: {
-      position: [0, 0, 260],
-      rotation: [0, 180, 0],
-    },
-    asset_refs: [],
-  },
+  metaverse: createDefaultMetaverseRoomState(8),
   manifest_blob_hash: 'mock-metaverse-room-1',
   updated_at: 1,
   channel_id: null,
@@ -762,13 +742,13 @@ describe('MetaverseRoomPanel animation sharing', () => {
     });
   });
 
-  test('shared object movement persists without closing the room viewport', async () => {
+  test('shared object movement is published as a transient event without closing the room viewport', async () => {
     const user = userEvent.setup();
     const baseApi = createDesktopMockApi();
-    const updateMetaverseRoom = vi.fn(baseApi.updateMetaverseRoom);
+    const publishMetaverseRoomEvent = vi.fn(baseApi.publishMetaverseRoomEvent);
     const api: DesktopApi = {
       ...baseApi,
-      updateMetaverseRoom,
+      publishMetaverseRoomEvent,
       listMetaverseRoomEvents: vi.fn().mockResolvedValue([]),
     };
 
@@ -777,7 +757,11 @@ describe('MetaverseRoomPanel animation sharing', () => {
     await user.click(screen.getByRole('button', { name: /Forward/ }));
 
     await waitFor(() => {
-      expect(updateMetaverseRoom).toHaveBeenCalled();
+      expect(
+        publishMetaverseRoomEvent.mock.calls.some(
+          ([, , , , event]) => event.type === 'object_update' && event.object.position[2] === -290
+        )
+      ).toBe(true);
     });
     expect(screen.getByLabelText('Metaverse room viewport')).toBeInTheDocument();
   });

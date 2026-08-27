@@ -16,7 +16,7 @@ import type {
   LiveSessionView,
   NotificationView,
 } from '@/lib/api';
-import { DEFAULT_SHARED_OBJECT } from '@/components/extended/MetaverseSceneModel';
+import { createDefaultMetaverseRoomState } from '@/components/extended/metaverse/DomeSceneModel';
 import { setColumnDraft } from '@/shell/slices/columnDrafts';
 import { columnIdentityId, defaultColumnSpan } from '@/shell/slices/workspace';
 import { captureSavedWorkspaceLayout } from '@/shell/savedWorkspaceLayouts';
@@ -75,17 +75,10 @@ const REVIEW_METAVERSE_ROOM: GameRoomView = {
   title: 'Wave 5 atrium',
   description: 'A production Metaverse Column with a container-aware HUD.',
   status: 'Waiting',
-  phase_label: 'metaverse-mvp',
+  phase_label: 'fixed-dome-v1',
   scores: [],
   room_kind: 'metaverse_room',
-  metaverse: {
-    world_version: 1,
-    max_peers: 8,
-    scene: { ground: 'default', shared_object: DEFAULT_SHARED_OBJECT },
-    default_spawn: { position: [0, 0, 260], rotation: [0, 180, 0] },
-    asset_refs: [],
-    chat_history: [],
-  },
+  metaverse: createDefaultMetaverseRoomState(8),
   manifest_blob_hash: 'mock-metaverse-review',
   updated_at: REVIEW_TIMESTAMP,
   channel_id: null,

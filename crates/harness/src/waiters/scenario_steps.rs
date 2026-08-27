@@ -20,6 +20,12 @@ pub(crate) fn step_name(step: &ScenarioStep) -> &'static str {
         ScenarioStep::CreateGameRoom { .. } => "create_game_room",
         ScenarioStep::UpdateGameRoom { .. } => "update_game_room",
         ScenarioStep::AssertGameScore { .. } => "assert_game_score",
+        ScenarioStep::CreateMetaverseDome { .. } => "create_metaverse_dome",
+        ScenarioStep::CustomizeMetaverseDome { .. } => "customize_metaverse_dome",
+        ScenarioStep::AssertMetaverseDome { .. } => "assert_metaverse_dome",
+        ScenarioStep::AssertMetaverseDomeRejectsInvalid { .. } => {
+            "assert_metaverse_dome_rejects_invalid"
+        }
         ScenarioStep::RestartDesktop => "restart_desktop",
         ScenarioStep::SearchCommunityIndex { .. } => "search_community_index",
         ScenarioStep::DiscoverCommunityIndex { .. } => "discover_community_index",
