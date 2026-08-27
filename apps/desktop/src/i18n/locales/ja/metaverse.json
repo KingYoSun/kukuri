@@ -47,6 +47,23 @@
       "offline": "ピア接続を利用できません"
     }
   },
+  "hosting": {
+    "title": "Domeホスティング",
+    "states": { "closed": "停止中", "owner_hosted": "Owner端末で稼働中", "community_node_hosted": "Community Nodeで稼働中", "grace_period": "Grace期間", "transferring": "移管中" },
+    "epoch": "リースepoch: {{value}}",
+    "session": "セッション: {{value}}",
+    "expiry": "有効期限: {{value}}",
+    "participants": "参加者: {{value}}",
+    "sleep": { "sleeping": "物理演算: スリープ", "awake": "物理演算: 稼働中" },
+    "none": "なし",
+    "ownerHost": "この端末でHostingを開始",
+    "nodeId": "コミュニティノードID",
+    "baseUrl": "コミュニティノードAPI URL",
+    "delegate": "Community Nodeへ明示移管",
+    "close": "Hostingを終了",
+    "ownerOnly": "Hosting先を変更できるのはDome ownerだけです。",
+    "error": "Dome Hostingを更新できませんでした"
+  },
   "connections": {
     "title": "Dome Connection",
     "summary_one": "{{count}}個のローカルcomponent",

@@ -9,6 +9,7 @@
 //! (REFACTORING.md の凍結境界)。変更は互換性の検討とセットで行うこと。
 
 pub mod auth;
+pub mod dome_hosting;
 pub mod error_codes;
 pub mod index;
 pub mod manifest;
@@ -22,6 +23,7 @@ pub mod rights_request;
 pub mod trust_relation;
 
 pub use auth::*;
+pub use dome_hosting::*;
 pub use error_codes::*;
 pub use index::*;
 pub use manifest::*;

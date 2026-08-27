@@ -21,6 +21,7 @@ kukuri-blob-service = { path = "../blob-service" }
 kukuri-docs-sync = { path = "../docs-sync" }
 kukuri-store = { path = "../store" }
 kukuri-transport = { path = "../transport" }
+kukuri-metaverse-host = { path = "../metaverse-host" }
 ts-rs = { workspace = true, optional = true }
 
 [features]

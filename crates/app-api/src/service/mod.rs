@@ -63,13 +63,14 @@ pub(crate) use kukuri_docs_sync::{
     author_replica_id, private_channel_epoch_replica_id, private_channel_hint_topic,
     private_channel_replica_id, stable_key, topic_replica_id,
 };
+pub(crate) use kukuri_metaverse_host::DomeSessionRuntime;
 pub(crate) use kukuri_store::{
     AuthorRelationshipProjectionRow, BlobCacheStatus, BlobCacheStore, BookmarkedCustomReactionRow,
     BookmarkedPostRow, DirectMessageConversationRow, DirectMessageMessageRow,
     DirectMessageOutboxRow, DirectMessageTombstoneRow, DomeConnectionProjectionRow,
-    GameRoomProjectionRow, LiveSessionProjectionRow, MutedAuthorRow, NotificationKind,
-    NotificationRow, ObjectProjectionRow, ObjectProjectionStore, Page, PostWithdrawalRow,
-    ProjectionStore, ReactionProjectionRow, Store, TimelineCursor,
+    DomeHostingProjectionRow, GameRoomProjectionRow, LiveSessionProjectionRow, MutedAuthorRow,
+    NotificationKind, NotificationRow, ObjectProjectionRow, ObjectProjectionStore, Page,
+    PostWithdrawalRow, ProjectionStore, ReactionProjectionRow, Store, TimelineCursor,
 };
 pub(crate) use kukuri_transport::{
     ConnectionPath, DiscoveryMode, DiscoverySnapshot, HintTransport, PeerSnapshot, SeedPeer,
@@ -367,6 +368,7 @@ pub struct AppService {
     pub(crate) subscription_registry: SubscriptionRegistry,
     pub(crate) joined_private_channels: Arc<Mutex<HashMap<String, JoinedPrivateChannelState>>>,
     pub(crate) metaverse_room_events: Arc<Mutex<HashMap<String, VecDeque<MetaverseRoomEventView>>>>,
+    pub(crate) dome_host_sessions: Arc<Mutex<HashMap<String, DomeSessionRuntime>>>,
     pub(crate) last_sync_ts: Arc<Mutex<Option<i64>>>,
     pub(crate) public_topic_delivery: Arc<Mutex<HashMap<String, PublicTopicDeliveryStatus>>>,
     pub(crate) empty_recovery_candidates: Arc<Mutex<HashSet<String>>>,
@@ -515,6 +517,7 @@ impl AppService {
             subscription_registry: SubscriptionRegistry::default(),
             joined_private_channels: Arc::new(Mutex::new(HashMap::new())),
             metaverse_room_events: Arc::new(Mutex::new(HashMap::new())),
+            dome_host_sessions: Arc::new(Mutex::new(HashMap::new())),
             last_sync_ts: Arc::new(Mutex::new(None)),
             public_topic_delivery: Arc::new(Mutex::new(HashMap::new())),
             empty_recovery_candidates: Arc::new(Mutex::new(HashSet::new())),

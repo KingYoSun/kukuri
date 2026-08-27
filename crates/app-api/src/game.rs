@@ -58,6 +58,18 @@ impl AppService {
         }
         let mut items = Vec::with_capacity(rows.len());
         for row in rows {
+            let dome_hosting = if let Some(metaverse) = row.metaverse.as_ref() {
+                Some(
+                    self.get_dome_hosting(
+                        metaverse.spatial_context.clone(),
+                        &metaverse.instance_id,
+                    )
+                    .await?
+                    .state,
+                )
+            } else {
+                None
+            };
             items.push(GameRoomView {
                 room_id: row.room_id,
                 host_pubkey: row.host_pubkey,
@@ -76,6 +88,7 @@ impl AppService {
                     .collect(),
                 room_kind: row.room_kind,
                 metaverse: row.metaverse,
+                dome_hosting,
                 manifest_blob_hash: row.manifest_blob_hash.as_str().to_string(),
                 updated_at: row.updated_at,
                 channel_id: channel_id_for_view(row.channel_id.as_str()),
@@ -874,19 +887,9 @@ fn validate_metaverse_room_event_identity(
                 anyhow::bail!("metaverse presence event identity does not match request");
             }
         }
-        MetaverseRoomEventV1::AvatarTransform { transform } => {
-            if transform.room_id != room_id || transform.peer_id != peer_id {
-                anyhow::bail!("metaverse transform event identity does not match request");
-            }
-        }
         MetaverseRoomEventV1::ChatMessage { message } => {
             if message.room_id != room_id || message.author_peer_id != peer_id {
                 anyhow::bail!("metaverse chat event identity does not match request");
-            }
-        }
-        MetaverseRoomEventV1::ObjectUpdate { object } => {
-            if object.updated_by.as_str() != peer_id {
-                anyhow::bail!("metaverse object event identity does not match request");
             }
         }
     }

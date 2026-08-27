@@ -47,6 +47,23 @@
       "offline": "对等连接不可用"
     }
   },
+  "hosting": {
+    "title": "Dome 托管",
+    "states": { "closed": "已停止", "owner_hosted": "由所有者设备托管", "community_node_hosted": "由社区节点托管", "grace_period": "宽限期", "transferring": "迁移中" },
+    "epoch": "租约 epoch：{{value}}",
+    "session": "会话：{{value}}",
+    "expiry": "到期：{{value}}",
+    "participants": "参与者：{{value}}",
+    "sleep": { "sleeping": "物理：休眠", "awake": "物理：活动" },
+    "none": "无",
+    "ownerHost": "在此设备上启动托管",
+    "nodeId": "社区节点 ID",
+    "baseUrl": "社区节点 API URL",
+    "delegate": "明确迁移到社区节点",
+    "close": "停止托管",
+    "ownerOnly": "只有 Dome 所有者可以更改托管方。",
+    "error": "无法更新 Dome 托管"
+  },
   "connections": {
     "title": "穹顶连接",
     "summary_one": "{{count}} 个本地组件",

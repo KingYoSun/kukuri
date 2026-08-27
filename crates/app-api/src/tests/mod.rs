@@ -35,6 +35,7 @@ use tokio_stream::wrappers::BroadcastStream;
 mod capability_registry_snapshot;
 mod direct_messages;
 mod dome_connections;
+mod dome_hosting;
 mod dome_move;
 mod game;
 mod live;

@@ -1,13 +1,14 @@
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { SupportedLocale } from '@/i18n';
 import type {
   GameRoomView,
+  DomePhysicsSnapshotV1,
+  DomeSessionInputKindV1,
   MetaverseAssetRef,
   MetaverseInteractionKind,
   MetaverseRoomEventView,
-  MetaverseRoomEventV1,
   SharedRoomObjectV1,
   SyncStatus,
 } from '@/lib/api';
@@ -110,6 +111,7 @@ export function useMetaverseRoomSession({
   const [clockNow, setClockNow] = useState(() => Date.now());
   const channelRef = useRef<BroadcastChannel | null>(null);
   const lastBackendEventEnvelopeIdRef = useRef<string | null>(null);
+  const lastPhysicsSnapshotSequenceRef = useRef(0);
   const lastRecoveryAtRef = useRef(0);
   const pendingCreatedRoomIdRef = useRef<string | null>(null);
   const sharedObjectRef = useRef<SharedRoomObjectV1>(DEFAULT_SHARED_OBJECT);
@@ -225,6 +227,7 @@ export function useMetaverseRoomSession({
     setPollErrorCount(0);
     setLastRoomActivityAt(Date.now());
     lastBackendEventEnvelopeIdRef.current = null;
+    lastPhysicsSnapshotSequenceRef.current = 0;
     if (typeof BroadcastChannel === 'undefined') {
       return;
     }
@@ -259,27 +262,12 @@ export function useMetaverseRoomSession({
           return next;
         });
       }
-      if (data.type === 'avatar.transform' && data.transform.peerId !== localPeerId) {
-        setRemoteTransforms((current) => ({
-          ...current,
-          [data.transform.peerId]: data.transform,
-        }));
-      }
       if (data.type === 'chat.message') {
         setMessages((current) => mergeRoomChatMessages(current, [data.message]));
         setLatestChatByPeer((current) => ({
           ...current,
           [data.message.authorPeerId]: latestChatBubbleFromMessage(data.message),
         }));
-      }
-      if (data.type === 'object.update' && data.object.updated_by !== localPeerId) {
-        setSharedObject((current) => {
-          if (!isNewerSharedObject(current, data.object)) {
-            return current;
-          }
-          sharedObjectRef.current = data.object;
-          return data.object;
-        });
       }
     };
     return () => {
@@ -307,6 +295,59 @@ export function useMetaverseRoomSession({
   function emit(event: MetaverseRoomEvent) {
     channelRef.current?.postMessage(event);
   }
+
+  const applyPhysicsSnapshot = useCallback((snapshot: DomePhysicsSnapshotV1) => {
+    if (snapshot.sequence <= lastPhysicsSnapshotSequenceRef.current) return;
+    lastPhysicsSnapshotSequenceRef.current = snapshot.sequence;
+    const remote: Record<string, AvatarTransform> = {};
+    for (const body of snapshot.bodies) {
+      if (body.kind === 'avatar' && body.entity_id !== syncStatus.local_author_pubkey) {
+        remote[body.entity_id] = {
+          roomId: snapshot.instance_id,
+          peerId: body.entity_id,
+          seq: snapshot.sequence,
+          position: body.position,
+          rotation: body.rotation,
+          animation: normalizeAvatarAnimationState(body.animation),
+          sentAt: snapshot.simulated_at,
+        };
+      }
+    }
+    setRemoteTransforms(remote);
+    const prop = snapshot.bodies.find(
+      (body) => body.kind === 'persistent_prop' || body.kind === 'guest_prop'
+    );
+    if (prop) {
+      setSharedObject((current) => {
+        const next = {
+          ...current,
+          object_id: prop.entity_id,
+          position: prop.position,
+          rotation: prop.rotation,
+          updated_by: snapshot.host_pubkey,
+          updated_at: snapshot.simulated_at,
+        };
+        sharedObjectRef.current = next;
+        return next;
+      });
+    }
+    setLastRoomActivityAt(Date.now());
+  }, [syncStatus.local_author_pubkey]);
+
+  const submitAuthoritativeInput = useCallback((input: DomeSessionInputKindV1, sequence = Date.now()) => {
+    if (!selectedRoom?.metaverse) return;
+    void actions
+      .submitSessionInput(
+        selectedRoom.metaverse.spatial_context,
+        selectedRoom.metaverse.instance_id,
+        sequence,
+        input
+      )
+      .then(applyPhysicsSnapshot)
+      .catch(() => {
+        // Hosting may not have been started yet; presence/chat remain available.
+      });
+  }, [actions, applyPhysicsSnapshot, selectedRoom]);
 
   useEffect(() => {
     if (!selectedRoom) {
@@ -337,6 +378,7 @@ export function useMetaverseRoomSession({
       }).catch(() => {
         // Browser-only fallback is handled by the local scene.
       });
+      submitAuthoritativeInput({ type: 'join' }, now);
     };
     publishPresence();
     const intervalId = window.setInterval(publishPresence, METAVERSE_ROOM_HEARTBEAT_MS);
@@ -351,6 +393,7 @@ export function useMetaverseRoomSession({
     localDisplayName,
     localPeerId,
     selectedRoom,
+    submitAuthoritativeInput,
   ]);
 
   useEffect(() => {
@@ -416,20 +459,6 @@ export function useMetaverseRoomSession({
           return next;
         });
       }
-      if (event.type === 'avatar_transform' && event.transform.peer_id !== localPeerId) {
-        setRemoteTransforms((current) => ({
-          ...current,
-          [event.transform.peer_id]: {
-            roomId: event.transform.room_id,
-            peerId: event.transform.peer_id,
-            seq: event.transform.seq,
-            position: event.transform.position,
-            rotation: event.transform.rotation,
-            animation: normalizeAvatarAnimationState(event.transform.animation),
-            sentAt: event.transform.sent_at,
-          },
-        }));
-      }
       if (event.type === 'chat_message') {
         const message = chatMessageFromApi(event.message);
         setMessages((current) => mergeRoomChatMessages(current, [message]));
@@ -437,15 +466,6 @@ export function useMetaverseRoomSession({
           ...current,
           [message.authorPeerId]: latestChatBubbleFromMessage(message),
         }));
-      }
-      if (event.type === 'object_update' && event.object.updated_by !== localPeerId) {
-        setSharedObject((current) => {
-          if (!isNewerSharedObject(current, event.object)) {
-            return current;
-          }
-          sharedObjectRef.current = event.object;
-          return event.object;
-        });
       }
     };
     const poll = async () => {
@@ -492,6 +512,7 @@ export function useMetaverseRoomSession({
     }
     lastRecoveryAtRef.current = now;
     lastBackendEventEnvelopeIdRef.current = null;
+    lastPhysicsSnapshotSequenceRef.current = 0;
     if (roomConnectionState === 'stale') {
       setRecoveringUntil(now + 3_000);
     }
@@ -537,6 +558,7 @@ export function useMetaverseRoomSession({
     }).catch((leaveError) => {
       onError(leaveError instanceof Error ? leaveError.message : t('errors.publishLeaveFailed'));
     });
+    submitAuthoritativeInput({ type: 'leave' }, leftAt);
     setJoinedRoomIds((current) => {
       const next = new Set(current);
       next.delete(roomId);
@@ -549,29 +571,12 @@ export function useMetaverseRoomSession({
   function handleLocalTransform(transform: AvatarTransform) {
     lastSentTransformRef.current = transform;
     setLastSentSeq(transform.seq);
-    emit({ type: 'avatar.transform', transform });
-    const event: MetaverseRoomEventV1 = {
-      type: 'avatar_transform',
-      transform: {
-        room_id: transform.roomId,
-        peer_id: transform.peerId,
-        seq: transform.seq,
-        position: transform.position,
-        rotation: transform.rotation,
-        animation: transform.animation,
-        sent_at: transform.sentAt,
-      },
-    };
-    void actions
-      .publishRoomEvent(
-        transform.roomId,
-        localPeerId,
-        transform.seq,
-        event
-      )
-      .catch(() => {
-        // Browser-only fallback is handled by BroadcastChannel.
-      });
+    submitAuthoritativeInput({
+      type: 'move',
+      position: transform.position,
+      rotation: transform.rotation,
+      animation: transform.animation,
+    }, transform.seq);
   }
 
   function handleSendMessage(event: FormEvent<HTMLFormElement>) {
@@ -611,23 +616,10 @@ export function useMetaverseRoomSession({
       });
   }
 
-  function publishSharedObjectInteraction(nextObject: SharedRoomObjectV1, room: GameRoomView) {
-    emit({ type: 'object.update', roomId: room.room_id, object: nextObject });
-    void actions
-      .publishRoomEvent(room.room_id, localPeerId, Date.now(), {
-        type: 'object_update',
-        object: nextObject,
-      })
-      .catch(() => {
-        // Browser-only fallback is handled by BroadcastChannel.
-      });
-  }
-
   function moveSharedObject(delta: MetaverseVec3) {
     if (!selectedRoom) {
       return;
     }
-    const room = selectedRoom;
     const current = sharedObjectRef.current;
     const nextObject: SharedRoomObjectV1 = {
       ...current,
@@ -641,7 +633,11 @@ export function useMetaverseRoomSession({
     };
     sharedObjectRef.current = nextObject;
     setSharedObject(nextObject);
-    publishSharedObjectInteraction(nextObject, room);
+    submitAuthoritativeInput({
+      type: 'push',
+      prop_id: current.object_id,
+      impulse: delta,
+    });
   }
 
   function interactWithProp(interaction: MetaverseInteractionKind) {
@@ -667,21 +663,12 @@ export function useMetaverseRoomSession({
       return;
     }
 
-    const actor = lastSentTransformRef.current;
-    const position: MetaverseVec3 = input.type === 'grab' && actor
-      ? [actor.position[0], actor.position[1] + 100, actor.position[2] - 100]
+    const authoritativeInput: DomeSessionInputKindV1 = input.type === 'grab'
+      ? { type: 'grab', prop_id: prop.prop_id }
       : input.type === 'throw'
-        ? [current.position[0], current.position[1] + 100, current.position[2] - 250]
-        : [current.position[0], current.position[1], current.position[2] - 50];
-    const nextObject: SharedRoomObjectV1 = {
-      ...current,
-      position,
-      updated_by: localPeerId,
-      updated_at: input.issuedAt,
-    };
-    sharedObjectRef.current = nextObject;
-    setSharedObject(nextObject);
-    publishSharedObjectInteraction(nextObject, selectedRoom);
+        ? { type: 'throw', prop_id: prop.prop_id, impulse: [0, 100, -250] }
+        : { type: 'push', prop_id: prop.prop_id, impulse: [0, 0, -50] };
+    submitAuthoritativeInput(authoritativeInput, input.issuedAt);
   }
 
   return {

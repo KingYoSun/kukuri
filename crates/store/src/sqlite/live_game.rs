@@ -217,6 +217,71 @@ impl LiveGameProjectionStore for SqliteStore {
         .transpose()
     }
 
+    async fn upsert_dome_hosting_projection(&self, row: DomeHostingProjectionRow) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO dome_hosting_projection_cache (
+              instance_id, context_id, topic_id, channel_id, state_json,
+              lease_epoch, session_id, derived_at, projection_version
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            ON CONFLICT(instance_id) DO UPDATE SET
+              context_id = excluded.context_id,
+              topic_id = excluded.topic_id,
+              channel_id = excluded.channel_id,
+              state_json = excluded.state_json,
+              lease_epoch = excluded.lease_epoch,
+              session_id = excluded.session_id,
+              derived_at = excluded.derived_at,
+              projection_version = excluded.projection_version
+            "#,
+        )
+        .bind(row.instance_id)
+        .bind(row.context_id)
+        .bind(row.topic_id)
+        .bind(row.channel_id)
+        .bind(row.state_json)
+        .bind(row.lease_epoch.map(|epoch| epoch as i64))
+        .bind(row.session_id)
+        .bind(row.derived_at)
+        .bind(row.projection_version)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn get_dome_hosting_projection(
+        &self,
+        instance_id: &str,
+    ) -> Result<Option<DomeHostingProjectionRow>> {
+        let row = sqlx::query(
+            r#"
+            SELECT instance_id, context_id, topic_id, channel_id, state_json,
+                   lease_epoch, session_id, derived_at, projection_version
+            FROM dome_hosting_projection_cache
+            WHERE instance_id = ?1
+            "#,
+        )
+        .bind(instance_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        row.map(|row| {
+            let lease_epoch: Option<i64> = row.try_get("lease_epoch")?;
+            Ok(DomeHostingProjectionRow {
+                instance_id: row.try_get("instance_id")?,
+                context_id: row.try_get("context_id")?,
+                topic_id: row.try_get("topic_id")?,
+                channel_id: row.try_get("channel_id")?,
+                state_json: row.try_get("state_json")?,
+                lease_epoch: lease_epoch.map(|epoch| epoch as u64),
+                session_id: row.try_get("session_id")?,
+                derived_at: row.try_get("derived_at")?,
+                projection_version: row.try_get("projection_version")?,
+            })
+        })
+        .transpose()
+    }
+
     async fn upsert_live_presence(
         &self,
         topic_id: &str,

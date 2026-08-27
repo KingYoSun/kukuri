@@ -18,6 +18,7 @@ import {
 } from './metaverse/MetaverseRoomDiscovery';
 import { MetaverseRoomView } from './metaverse/MetaverseRoomView';
 import { DomeConnectionPanel } from './metaverse/DomeConnectionPanel';
+import { DomeHostingPanel } from './metaverse/DomeHostingPanel';
 import { useMetaverseRoomSession } from './metaverse/useMetaverseRoomSession';
 import type { MetaverseRoomActions } from './metaverse/MetaverseRoomActions';
 import {
@@ -248,6 +249,13 @@ export function MetaverseRoomPanel({
         room={session.selectedRoom}
         rooms={rooms}
         localAuthorPubkey={syncStatus.local_author_pubkey}
+        locale={locale}
+      />
+      <DomeHostingPanel
+        actions={actions}
+        room={session.selectedRoom}
+        localAuthorPubkey={syncStatus.local_author_pubkey}
+        localEndpointId={syncStatus.discovery.local_endpoint_id}
         locale={locale}
       />
     </div>

@@ -63,11 +63,12 @@ pub enum Capability {
     CommunityLocalTrust,
     ReportEndpoint,
     RightsRequestEndpoint,
+    DomeHosting,
 }
 
 impl Capability {
     /// 決定論的な出力順序を与える全 capability。
-    pub const ALL: [Capability; 16] = [
+    pub const ALL: [Capability; 17] = [
         Capability::AuthConsent,
         Capability::BootstrapAssist,
         Capability::TopicRendezvous,
@@ -84,6 +85,7 @@ impl Capability {
         Capability::CommunityLocalTrust,
         Capability::ReportEndpoint,
         Capability::RightsRequestEndpoint,
+        Capability::DomeHosting,
     ];
 
     /// config / manifest の snake_case キー。
@@ -105,6 +107,7 @@ impl Capability {
             Capability::CommunityLocalTrust => "community_local_trust",
             Capability::ReportEndpoint => "report_endpoint",
             Capability::RightsRequestEndpoint => "rights_request_endpoint",
+            Capability::DomeHosting => "dome_hosting",
         }
     }
 
@@ -318,6 +321,17 @@ impl Capability {
                 telecom_note: "措置は本ノードの索引・moderation・cache 等の authority scope 内に限定される。",
                 privacy_note: "申出人情報と権利主張は local-only とし、公開 status へ PII や内部判断を出さない。",
                 terms_note: "申請前に可能・不可能な措置を提示し、版付きの明示同意を必須にする。",
+            },
+            Capability::DomeHosting => CapabilityMeta {
+                capability: self,
+                display_name: "Dome ホスティング (dome hosting)",
+                handled_data: "owner署名Hosting Lease、Dome manifest、participant input、ephemeral physics state",
+                purpose: "owner不在時も単一のauthoritative hostとしてDome sessionを継続する",
+                retention_impact: "leaseとmanifest bundleは期限・closeまで保持し、physics stateとraw inputはsession終了時に破棄",
+                external_transmission: None,
+                telecom_note: "Dome participantとのsession trafficを終端する。帯域と同時session数を制限する。",
+                privacy_note: "participant inputは処理後に破棄し、raw inputや認証tokenをlogへ出さない。",
+                terms_note: "Community NodeはDomeのcanonical ownerではなく、owner署名leaseの範囲だけをhostする。",
             },
         }
     }

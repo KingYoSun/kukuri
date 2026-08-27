@@ -6,6 +6,7 @@ import { useState, type ReactNode } from 'react';
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import type {
   DesktopApi,
+  DomePhysicsSnapshotV1,
   GameRoomView,
   MetaverseRoomEventView,
   SharedRoomObjectV1,
@@ -81,7 +82,7 @@ const room: GameRoomView = {
   audience_label: 'Public',
 };
 
-function avatarEvent(peerId: string, animation: string | null, seq: number): MetaverseRoomEventView {
+function presenceJoinEvent(peerId: string, seq: number): MetaverseRoomEventView {
   return {
     envelope_id: `event-${seq}`,
     content: {
@@ -96,21 +97,43 @@ function avatarEvent(peerId: string, animation: string | null, seq: number): Met
       seq,
       sent_at: seq,
       event: {
-        type: 'avatar_transform',
-        transform: {
+        type: 'presence_join',
+        presence: {
           room_id: room.room_id,
           peer_id: peerId,
-          seq,
-          position: [seq, 0, seq],
-          rotation: [0, 90, 0],
-          animation,
-          sent_at: seq,
+          display_name: null,
+          avatar_asset_ref: null,
+          joined_at: seq,
+          last_seen_at: seq,
         },
       },
     },
     envelope: {},
     received_at: seq,
     source_peer: peerId,
+  };
+}
+
+function physicsSnapshot(animations: Array<[string, string | null]>): DomePhysicsSnapshotV1 {
+  return {
+    instance_id: room.room_id,
+    instance_generation: 1,
+    lease_epoch: 1,
+    session_id: room.room_id,
+    host_pubkey: room.host_pubkey,
+    sequence: 7,
+    simulated_at: 7,
+    sleeping: false,
+    bodies: animations.map(([entityId, animation], index) => ({
+      entity_id: entityId,
+      kind: 'avatar',
+      position: [index, 0, index],
+      rotation: [0, 90, 0],
+      linear_velocity: [0, 0, 0],
+      animation,
+      grabbed_by: null,
+      expires_at: null,
+    })),
   };
 }
 
@@ -501,14 +524,15 @@ describe('MetaverseRoomPanel animation sharing', () => {
     const baseApi = createDesktopMockApi();
     const api: DesktopApi = {
       ...baseApi,
-      listMetaverseRoomEvents: vi.fn().mockResolvedValue([
-        avatarEvent('idle-remote', 'idle', 1),
-        avatarEvent('walk-remote', 'walk', 2),
-        avatarEvent('sprint-remote', 'sprint', 3),
-        avatarEvent('jump-remote', 'jump', 4),
-        avatarEvent('sitting-remote', 'sitting', 5),
-        avatarEvent('unknown-remote', 'dancing', 6),
-      ]),
+      listMetaverseRoomEvents: vi.fn().mockResolvedValue([]),
+      submitDomeSessionInput: vi.fn().mockResolvedValue(physicsSnapshot([
+        ['idle-remote', 'idle'],
+        ['walk-remote', 'walk'],
+        ['sprint-remote', 'sprint'],
+        ['jump-remote', 'jump'],
+        ['sitting-remote', 'sitting'],
+        ['unknown-remote', 'dancing'],
+      ])),
     };
 
     renderPanel(api);
@@ -531,7 +555,7 @@ describe('MetaverseRoomPanel animation sharing', () => {
     const api: DesktopApi = {
       ...baseApi,
       listMetaverseRoomEvents: vi.fn().mockResolvedValue([
-        avatarEvent('leaving-remote', 'walk', 1),
+        presenceJoinEvent('leaving-remote', 1),
         presenceLeaveEvent('leaving-remote', 2),
       ]),
     };
@@ -545,13 +569,13 @@ describe('MetaverseRoomPanel animation sharing', () => {
     });
   });
 
-  test('publishes local transform animation state', async () => {
+  test('submits local movement to the authoritative host', async () => {
     const user = userEvent.setup();
     const baseApi = createDesktopMockApi();
-    const publishMetaverseRoomEvent = vi.fn(baseApi.publishMetaverseRoomEvent);
+    const submitDomeSessionInput = vi.fn(baseApi.submitDomeSessionInput);
     const api: DesktopApi = {
       ...baseApi,
-      publishMetaverseRoomEvent,
+      submitDomeSessionInput,
       listMetaverseRoomEvents: vi.fn().mockResolvedValue([]),
     };
 
@@ -560,15 +584,17 @@ describe('MetaverseRoomPanel animation sharing', () => {
     await user.click(screen.getByRole('button', { name: 'Emit sprint transform' }));
 
     await waitFor(() => {
-      const transformCall = publishMetaverseRoomEvent.mock.calls.find(
-        ([, , , , event]) => event.type === 'avatar_transform'
-      );
-      expect(transformCall?.[4]).toMatchObject({
-        type: 'avatar_transform',
-        transform: {
+      expect(submitDomeSessionInput).toHaveBeenCalledWith(
+        room.metaverse!.spatial_context,
+        room.metaverse!.instance_id,
+        12,
+        {
+          type: 'move',
+          position: [10, 0, 20],
+          rotation: [0, 90, 0],
           animation: 'sprint',
-        },
-      });
+        }
+      );
     });
   });
 
@@ -629,7 +655,7 @@ describe('MetaverseRoomPanel animation sharing', () => {
     const user = userEvent.setup();
     const listMetaverseRoomEvents = vi
       .fn()
-      .mockResolvedValueOnce([avatarEvent('remote-peer', 'walk', 1)])
+      .mockResolvedValueOnce([presenceJoinEvent('remote-peer', 1)])
       .mockResolvedValue([]);
     const api: DesktopApi = {
       ...createDesktopMockApi(),
@@ -772,13 +798,13 @@ describe('MetaverseRoomPanel animation sharing', () => {
     });
   });
 
-  test('shared object movement is published as a transient event without closing the room viewport', async () => {
+  test('shared object movement is submitted as host-authoritative input', async () => {
     const user = userEvent.setup();
     const baseApi = createDesktopMockApi();
-    const publishMetaverseRoomEvent = vi.fn(baseApi.publishMetaverseRoomEvent);
+    const submitDomeSessionInput = vi.fn(baseApi.submitDomeSessionInput);
     const api: DesktopApi = {
       ...baseApi,
-      publishMetaverseRoomEvent,
+      submitDomeSessionInput,
       listMetaverseRoomEvents: vi.fn().mockResolvedValue([]),
     };
 
@@ -788,8 +814,8 @@ describe('MetaverseRoomPanel animation sharing', () => {
 
     await waitFor(() => {
       expect(
-        publishMetaverseRoomEvent.mock.calls.some(
-          ([, , , , event]) => event.type === 'object_update' && event.object.position[2] === -290
+        submitDomeSessionInput.mock.calls.some(
+          ([, , , input]) => input.type === 'push' && input.impulse[2] === -50
         )
       ).toBe(true);
     });

@@ -265,6 +265,22 @@ impl Capability {
                 small_scale_tips: "初回応答の現実的な運用目標を設定し、専用 CLI と公開 status で小さく運用できる。",
                 how_to_reduce: "`features.rights_request_endpoint: false`（既定）で無効化できる。無効時は専用 URL を公開しない。",
             },
+            Capability::DomeHosting => CapabilityRiskPractices {
+                user_expectation: "owner不在時もlease期限内はDome sessionが継続し、Nodeがphysics authorityになること。",
+                authority_scope: "owner署名Hosting Leaseが指すDome、epoch、manifest、期限の範囲のみ。",
+                responsibility_boundary: "Domeのcanonical ownerではなく、他Domeやlease外のworld definitionを変更しない。",
+                risks: &[
+                    "physics sessionのCPU・memory・帯域負荷。",
+                    "participant inputと一時的な行動状態を処理するプライバシー負荷。",
+                ],
+                recommended_practices: &[
+                    "Domeごとにactive assignmentを一件へ制限する。",
+                    "stale epochとsplit-brainをfail closedで拒否する。",
+                    "raw inputを永続化せず、lease expiryとcloseでsessionを停止する。",
+                ],
+                small_scale_tips: "既定無効のまま始め、同時host数とlease期間を小さく制限して有効化する。",
+                how_to_reduce: "`features.dome_hosting: false`（既定）で無効化できる。",
+            },
         }
     }
 }

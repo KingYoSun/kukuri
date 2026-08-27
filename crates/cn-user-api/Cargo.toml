@@ -35,10 +35,11 @@ kukuri-cn-safety = { path = "../cn-safety" }
 kukuri-cn-trust = { path = "../cn-trust" }
 kukuri-cn-runtime-support = { path = "../cn-runtime-support" }
 kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }
+kukuri-core = { path = "../core" }
+kukuri-metaverse-host = { path = "../metaverse-host" }
 
 [dev-dependencies]
 kukuri-test-support = { path = "../test-support" }
-kukuri-core = { path = "../core" }
 hex.workspace = true
 reqwest.workspace = true
 redis.workspace = true

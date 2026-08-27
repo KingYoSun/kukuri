@@ -13,9 +13,9 @@ pub use models::{
     AuthorRelationshipProjectionRow, BlobCacheStatus, BookmarkedCustomReactionRow,
     BookmarkedPostRow, ContentObservationRow, DirectMessageConversationRow,
     DirectMessageMessageRow, DirectMessageOutboxRow, DirectMessageTombstoneRow,
-    DomeConnectionProjectionRow, GameRoomProjectionRow, LiveSessionProjectionRow, MutedAuthorRow,
-    NotificationKind, NotificationRow, ObjectProjectionRow, Page, PostWithdrawalRow,
-    ReactionProjectionRow, TimelineCursor,
+    DomeConnectionProjectionRow, DomeHostingProjectionRow, GameRoomProjectionRow,
+    LiveSessionProjectionRow, MutedAuthorRow, NotificationKind, NotificationRow,
+    ObjectProjectionRow, Page, PostWithdrawalRow, ReactionProjectionRow, TimelineCursor,
 };
 pub use sqlite::{SqliteStore, StoreStartupError};
 pub use traits::{

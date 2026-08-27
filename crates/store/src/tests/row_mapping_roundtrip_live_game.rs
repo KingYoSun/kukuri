@@ -201,7 +201,7 @@ fn metaverse_state() -> MetaverseRoomStateV1 {
     customization.persistent_props[0].position = [1, 2, 3];
     customization.persistent_props[0].rotation = [0, 90, 0];
     MetaverseRoomStateV1 {
-        world_version: 3,
+        world_version: 4,
         instance_id: "room-max".into(),
         spatial_context: SpatialContextV1::Channel {
             topic_id: TopicId::new(GAME_TOPIC),

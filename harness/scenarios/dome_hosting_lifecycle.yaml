@@ -1,0 +1,12 @@
+name: dome_hosting_lifecycle
+kind: dome_hosting_lifecycle
+fixtures:
+  seed: 788
+  topic: kukuri:topic:dome-hosting-lifecycle
+steps: []
+artifacts:
+  dump_logs: false
+  metrics_snapshot: false
+timeouts:
+  overall_ms: 30000
+  step_ms: 10000

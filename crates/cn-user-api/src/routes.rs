@@ -14,17 +14,23 @@ use axum::{Json, Router};
 use kukuri_cn_operator::CommunityNodeManifest;
 use kukuri_cn_protocol::{
     AUTH_CHALLENGE_PATH, AUTH_VERIFY_PATH, BOOTSTRAP_HEARTBEAT_PATH, BOOTSTRAP_NODES_PATH,
-    CONSENTS_PATH, CONSENTS_STATUS_PATH, INDEX_DISCOVERY_PATH, INDEX_RECOMMENDATIONS_PATH,
-    INDEX_SEARCH_PATH, INDEXING_REQUESTS_PATH, NODE_MANIFEST_PATH, RELATION_NEIGHBORS_PATH,
-    RELATION_OPTOUT_PATH, RELATION_USERS_ROUTE, REPORT_PATH, RIGHTS_REQUEST_CREATE_PATH,
-    RIGHTS_REQUEST_FORM_PATH, RIGHTS_REQUEST_SCOPE_PATH, RIGHTS_REQUEST_STATUS_PATH,
-    RIGHTS_REQUEST_WITHDRAW_PATH, TOPIC_RENDEZVOUS_HEARTBEAT_PATH, TRUST_USERS_ROUTE,
+    CONSENTS_PATH, CONSENTS_STATUS_PATH, DOME_HOSTING_ACTIVATE_PATH, DOME_HOSTING_ASSIGNMENTS_PATH,
+    DOME_HOSTING_RELEASE_PATH, DOME_HOSTING_SESSION_INPUT_PATH, DOME_HOSTING_SESSION_WS_PATH,
+    DOME_HOSTING_STATUS_ROUTE, INDEX_DISCOVERY_PATH, INDEX_RECOMMENDATIONS_PATH, INDEX_SEARCH_PATH,
+    INDEXING_REQUESTS_PATH, NODE_MANIFEST_PATH, RELATION_NEIGHBORS_PATH, RELATION_OPTOUT_PATH,
+    RELATION_USERS_ROUTE, REPORT_PATH, RIGHTS_REQUEST_CREATE_PATH, RIGHTS_REQUEST_FORM_PATH,
+    RIGHTS_REQUEST_SCOPE_PATH, RIGHTS_REQUEST_STATUS_PATH, RIGHTS_REQUEST_WITHDRAW_PATH,
+    TOPIC_RENDEZVOUS_HEARTBEAT_PATH, TRUST_USERS_ROUTE,
 };
 use serde_json::{Value, json};
 use tower_http::trace::TraceLayer;
 
 use crate::admin::admin_router;
 use crate::config::{RateLimitConfig, UserApiConfig};
+use crate::dome_hosting::{
+    activate_dome_hosting, assign_dome_hosting, dome_hosting_session_ws, dome_hosting_status,
+    release_dome_hosting, submit_dome_hosting_input,
+};
 use crate::handlers::auth::{auth_challenge, auth_verify};
 use crate::handlers::bootstrap::{
     bootstrap_heartbeat, bootstrap_nodes, topic_rendezvous_heartbeat,
@@ -59,6 +65,15 @@ pub fn app_router(state: UserApiState) -> Router {
         .route(AUTH_VERIFY_PATH, post(auth_verify))
         .route(CONSENTS_STATUS_PATH, get(consent_status))
         .route(CONSENTS_PATH, post(accept_consents_handler))
+        .route(DOME_HOSTING_ASSIGNMENTS_PATH, post(assign_dome_hosting))
+        .route(DOME_HOSTING_ACTIVATE_PATH, post(activate_dome_hosting))
+        .route(DOME_HOSTING_RELEASE_PATH, post(release_dome_hosting))
+        .route(DOME_HOSTING_STATUS_ROUTE, get(dome_hosting_status))
+        .route(
+            DOME_HOSTING_SESSION_INPUT_PATH,
+            post(submit_dome_hosting_input),
+        )
+        .route(DOME_HOSTING_SESSION_WS_PATH, get(dome_hosting_session_ws))
         .route(BOOTSTRAP_NODES_PATH, get(bootstrap_nodes))
         .route(BOOTSTRAP_HEARTBEAT_PATH, post(bootstrap_heartbeat))
         .route(

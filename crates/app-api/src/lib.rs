@@ -16,6 +16,7 @@
 
 mod direct_messages;
 mod dome_connections;
+mod dome_hosting;
 mod dome_move;
 mod game;
 mod live;

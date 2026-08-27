@@ -17,6 +17,7 @@ mod admin_appeal_render;
 mod admin_rights_requests;
 mod admin_shell;
 mod config;
+mod dome_hosting;
 mod errors;
 mod handlers;
 mod rate_limit;

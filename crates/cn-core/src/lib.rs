@@ -19,6 +19,7 @@ mod co_participation;
 mod config;
 mod consents;
 mod database;
+mod dome_hosting;
 mod env;
 mod errors;
 mod index_entries;
@@ -78,6 +79,11 @@ pub use consents::{accept_consents, get_consent_status, require_consents};
 pub use database::{
     TestDatabase, connect_postgres, ensure_database_ready, initialize_database,
     initialize_database_for_runtime, migrate_postgres, seed_default_policies,
+};
+pub use dome_hosting::{
+    DomeHostingAssignment, NewDomeHostingAssignment, activate_dome_hosting_assignment,
+    close_dome_hosting_assignment, get_dome_hosting_assignment,
+    list_recoverable_dome_hosting_assignments, upsert_pending_dome_hosting_assignment,
 };
 pub use env::{parse_bool_env, parse_csv_env, parse_u32_env, parse_u64_env};
 pub use errors::{ApiError, ApiResult, auth_required_error, consent_required_error};

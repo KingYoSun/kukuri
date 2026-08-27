@@ -1,7 +1,7 @@
 use super::*;
 use kukuri_core::{
     DomeCustomizationV1, FIXED_DOME_SPEC_ID, METAVERSE_WORLD_VERSION, MetaverseAssetKind,
-    MetaverseAvatarTransformV1, MetaverseRoomChatMessageV1, MetaverseRoomEventV1,
+    MetaverseRoomChatMessageV1, MetaverseRoomEventV1, MetaverseRoomPresenceV1,
 };
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -377,15 +377,14 @@ async fn metaverse_room_events_are_signed_and_delivered_over_hint_transport() {
                 room_id: room_id.clone(),
                 peer_id: "peer-a".into(),
                 seq: 7,
-                event: MetaverseRoomEventV1::AvatarTransform {
-                    transform: MetaverseAvatarTransformV1 {
+                event: MetaverseRoomEventV1::PresenceJoin {
+                    presence: MetaverseRoomPresenceV1 {
                         room_id: room_id.clone(),
                         peer_id: "peer-a".into(),
-                        seq: 7,
-                        position: [100, 0, -50],
-                        rotation: [0, 90, 0],
-                        animation: Some("walk".into()),
-                        sent_at: Utc::now().timestamp_millis(),
+                        display_name: None,
+                        avatar_asset_ref: None,
+                        joined_at: Utc::now().timestamp_millis(),
+                        last_seen_at: Utc::now().timestamp_millis(),
                     },
                 },
             },
@@ -414,7 +413,7 @@ async fn metaverse_room_events_are_signed_and_delivered_over_hint_transport() {
     assert_eq!(received.content.peer_id, "peer-a");
     assert!(matches!(
         received.content.event,
-        MetaverseRoomEventV1::AvatarTransform { .. }
+        MetaverseRoomEventV1::PresenceJoin { .. }
     ));
 }
 
@@ -468,71 +467,6 @@ async fn metaverse_chat_messages_persist_to_recent_room_history() {
     assert_eq!(history.len(), 1);
     assert_eq!(history[0].message_id, "chat-1");
     assert_eq!(history[0].body, "persistent hello");
-}
-
-#[tokio::test]
-async fn metaverse_avatar_transforms_do_not_mutate_room_history() {
-    let store = Arc::new(MemoryStore::default());
-    let transport = Arc::new(FakeTransport::new("self", FakeNetwork::default()));
-    let app = AppService::new(store, transport);
-    let topic = "kukuri:topic:metaverse-transform-ephemeral";
-    let room_id = app
-        .create_metaverse_room(
-            topic,
-            CreateMetaverseRoomInput {
-                title: "ephemeral transforms".into(),
-                description: "no durable writes".into(),
-                max_peers: Some(4),
-            },
-        )
-        .await
-        .expect("create metaverse room");
-    let before = app
-        .list_game_rooms(topic)
-        .await
-        .expect("list rooms before")
-        .into_iter()
-        .find(|room| room.room_id == room_id)
-        .expect("room before");
-
-    app.publish_metaverse_room_event(
-        topic,
-        PublishMetaverseRoomEventInput {
-            room_id: room_id.clone(),
-            peer_id: "peer-a".into(),
-            seq: 1,
-            event: MetaverseRoomEventV1::AvatarTransform {
-                transform: MetaverseAvatarTransformV1 {
-                    room_id: room_id.clone(),
-                    peer_id: "peer-a".into(),
-                    seq: 1,
-                    position: [100, 0, -50],
-                    rotation: [0, 90, 0],
-                    animation: Some("walk".into()),
-                    sent_at: Utc::now().timestamp_millis(),
-                },
-            },
-        },
-    )
-    .await
-    .expect("publish transform");
-
-    let after = app
-        .list_game_rooms(topic)
-        .await
-        .expect("list rooms after")
-        .into_iter()
-        .find(|room| room.room_id == room_id)
-        .expect("room after");
-    assert_eq!(after.manifest_blob_hash, before.manifest_blob_hash);
-    assert!(
-        after
-            .metaverse
-            .as_ref()
-            .expect("metaverse")
-            .chat_history
-            .is_empty()
-    );
 }
 
 #[tokio::test]
@@ -621,15 +555,14 @@ async fn metaverse_room_event_rejects_mismatched_payload_identity() {
                 room_id: room_id.clone(),
                 peer_id: "peer-a".into(),
                 seq: 1,
-                event: MetaverseRoomEventV1::AvatarTransform {
-                    transform: MetaverseAvatarTransformV1 {
+                event: MetaverseRoomEventV1::PresenceJoin {
+                    presence: MetaverseRoomPresenceV1 {
                         room_id,
                         peer_id: "peer-b".into(),
-                        seq: 1,
-                        position: [0, 0, 0],
-                        rotation: [0, 0, 0],
-                        animation: Some("idle".into()),
-                        sent_at: Utc::now().timestamp_millis(),
+                        display_name: None,
+                        avatar_asset_ref: None,
+                        joined_at: Utc::now().timestamp_millis(),
+                        last_seen_at: Utc::now().timestamp_millis(),
                     },
                 },
             },
@@ -640,7 +573,7 @@ async fn metaverse_room_event_rejects_mismatched_payload_identity() {
     assert!(
         error
             .to_string()
-            .contains("metaverse transform event identity")
+            .contains("metaverse presence event identity")
     );
 }
 

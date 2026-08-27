@@ -32,11 +32,13 @@ pub(crate) use anyhow::{Context, Result};
 pub(crate) use base64::Engine;
 pub(crate) use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 pub(crate) use kukuri_app_api::{
-    AcceptDomeConnectionProposalInput, AppService, CreateDomeConnectionProposalInput,
-    CreateGameRoomInput, CreateLiveSessionInput, CreateMetaverseRoomInput,
-    DirectMessageConversationView, DirectMessageMessageView, DirectMessageStatusView,
-    GameScoreView, MoveDomeInput, PrivateChannelCapability, RevokeDomeConnectionInput,
-    ServiceHandles, SyncStatus, UpdateGameRoomInput, UpdateMetaverseRoomInput,
+    AcceptDomeConnectionProposalInput, ActivateCommunityNodeDomeHostingInput, AppService,
+    CloseDomeHostingInput, CreateDomeConnectionProposalInput, CreateGameRoomInput,
+    CreateLiveSessionInput, CreateMetaverseRoomInput, DirectMessageConversationView,
+    DirectMessageMessageView, DirectMessageStatusView, GameScoreView, MoveDomeInput,
+    PrepareCommunityNodeDomeHostingInput, PrivateChannelCapability, RevokeDomeConnectionInput,
+    ServiceHandles, StartOwnerDomeHostingInput, SyncStatus, UpdateGameRoomInput,
+    UpdateMetaverseRoomInput,
 };
 pub(crate) use kukuri_blob_service::MemoryBlobService;
 pub(crate) use kukuri_cn_core::{JwtConfig, TestDatabase};
@@ -46,7 +48,8 @@ pub(crate) use kukuri_cn_user_api::{
 };
 pub(crate) use kukuri_core::{
     ChannelAudienceKind, ChannelId, ChannelRef, CreatePrivateChannelInput, DomeDirection,
-    DomeMaterialPreset, GameRoomStatus, KukuriKeys, SpatialContextV1, TimelineScope, TopicId,
+    DomeHostingStateKindV1, DomeMaterialPreset, GameRoomStatus, KukuriKeys,
+    SignedDomeHostingLeaseV1, SpatialContextV1, TimelineScope, TopicId, accept_dome_hosting_lease,
     generate_keys,
 };
 pub(crate) use kukuri_desktop_runtime::{
@@ -61,7 +64,7 @@ pub(crate) use kukuri_desktop_runtime::{
     SubmitCommunityNodeReportRequest, ToggleReactionRequest,
 };
 pub(crate) use kukuri_docs_sync::MemoryDocsSync;
-pub(crate) use kukuri_store::SqliteStore;
+pub(crate) use kukuri_store::{MemoryStore, SqliteStore};
 pub(crate) use kukuri_transport::{
     ConnectMode, FakeNetwork, FakeTransport, TransportNetworkConfig,
 };

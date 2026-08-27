@@ -35,6 +35,7 @@
 - 新 feature 着手前に `docs/adr/0002-feature-data-classification-template.md` を埋める。
 
 ## Ops
+- Dome Hosting の有効化・割当・終了・split-brain復旧: `docs/runbooks/dome-hosting.md`
 - community node production rollout / live media verification / recovery: `docs/runbooks/community-node-production-rollout.md`
 - community node GCP Terraform デプロイ（deployment profile: low-cost / managed-db / ha）: `docs/runbooks/community-node-gcp-terraform.md`（実装は `infra/terraform/`）
 - community node 権利侵害申出の受付・審査・送信防止: `docs/runbooks/community-node-rights-infringement-requests.md`

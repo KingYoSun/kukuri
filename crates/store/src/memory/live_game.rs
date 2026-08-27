@@ -99,6 +99,26 @@ impl LiveGameProjectionStore for MemoryStore {
             .cloned())
     }
 
+    async fn upsert_dome_hosting_projection(&self, row: DomeHostingProjectionRow) -> Result<()> {
+        self.dome_hosting_rows
+            .write()
+            .await
+            .insert(row.instance_id.clone(), row);
+        Ok(())
+    }
+
+    async fn get_dome_hosting_projection(
+        &self,
+        instance_id: &str,
+    ) -> Result<Option<DomeHostingProjectionRow>> {
+        Ok(self
+            .dome_hosting_rows
+            .read()
+            .await
+            .get(instance_id)
+            .cloned())
+    }
+
     async fn upsert_live_presence(
         &self,
         topic_id: &str,

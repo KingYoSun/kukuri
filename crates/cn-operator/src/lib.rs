@@ -76,6 +76,7 @@ features:
   analytics: false
   crash_report: false
   cloudflare_proxy: true
+  dome_hosting: false
 
 retention:
   connection_logs_days: 30

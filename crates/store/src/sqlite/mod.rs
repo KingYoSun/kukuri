@@ -14,9 +14,9 @@ use crate::models::{
     AuthorRelationshipProjectionRow, BlobCacheStatus, BookmarkedCustomReactionRow,
     BookmarkedPostRow, ContentObservationRow, DirectMessageConversationRow,
     DirectMessageMessageRow, DirectMessageOutboxRow, DirectMessageTombstoneRow,
-    DomeConnectionProjectionRow, GameRoomProjectionRow, LiveSessionProjectionRow, MutedAuthorRow,
-    NotificationRow, ObjectProjectionRow, Page, PostWithdrawalRow, ReactionProjectionRow,
-    TimelineCursor,
+    DomeConnectionProjectionRow, DomeHostingProjectionRow, GameRoomProjectionRow,
+    LiveSessionProjectionRow, MutedAuthorRow, NotificationRow, ObjectProjectionRow, Page,
+    PostWithdrawalRow, ReactionProjectionRow, TimelineCursor,
 };
 use crate::pagination::{
     direct_message_page_from_rows, envelope_page_from_rows, object_projection_page_from_rows,
