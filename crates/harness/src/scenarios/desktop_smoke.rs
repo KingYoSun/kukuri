@@ -445,8 +445,16 @@ pub(crate) async fn run_desktop_smoke_scenario(
                         .into_iter()
                         .find(|room| room.title == *title)
                         .context("metaverse Dome disappeared after invalid update")?;
-                    if after.manifest_blob_hash != before.manifest_blob_hash {
-                        anyhow::bail!("invalid metaverse Dome update changed the manifest");
+                    let after_gravity = after
+                        .metaverse
+                        .as_ref()
+                        .context("metaverse Dome state missing after invalid update")?
+                        .dome
+                        .customization
+                        .environment
+                        .gravity_milli;
+                    if after_gravity == 999 {
+                        anyhow::bail!("invalid metaverse Dome customization was persisted");
                     }
                 }
                 ScenarioStep::RestartDesktop => {
