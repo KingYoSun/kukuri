@@ -177,6 +177,19 @@ pub struct DomeConnectionProjectionRow {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DomeHostingProjectionRow {
+    pub instance_id: String,
+    pub context_id: String,
+    pub topic_id: String,
+    pub channel_id: String,
+    pub state_json: String,
+    pub lease_epoch: Option<u64>,
+    pub session_id: Option<String>,
+    pub derived_at: i64,
+    pub projection_version: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuthorRelationshipProjectionRow {
     pub local_author_pubkey: String,
     pub author_pubkey: String,

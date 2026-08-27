@@ -195,6 +195,190 @@ impl DesktopRuntime {
             .await
     }
 
+    pub async fn get_dome_hosting(
+        &self,
+        request: GetDomeHostingRequest,
+    ) -> Result<DomeHostingView> {
+        let mut view = self
+            .app_service
+            .get_dome_hosting(request.spatial_context, &request.instance_id)
+            .await?;
+        if let Some(DomeHostTargetV1::CommunityNode { api_base_url, .. }) =
+            view.lease.as_ref().map(|lease| &lease.host)
+        {
+            let status = self
+                .get_dome_hosting_status_from_community_node(api_base_url, &request.instance_id)
+                .await?;
+            view.state.kind = status.state;
+            view.state.session_id = status.session_id;
+            view.participants = status.participants;
+            view.sleeping = status.sleeping;
+        }
+        Ok(view)
+    }
+
+    pub async fn start_owner_dome_hosting(
+        &self,
+        request: StartOwnerDomeHostingRequest,
+    ) -> Result<DomeHostingView> {
+        self.app_service
+            .start_owner_dome_hosting(StartOwnerDomeHostingInput {
+                spatial_context: request.spatial_context,
+                instance_id: request.instance_id,
+                endpoint_id: request.endpoint_id,
+                lease_duration_millis: request.lease_duration_millis,
+            })
+            .await
+    }
+
+    pub async fn delegate_dome_hosting(
+        &self,
+        request: DelegateDomeHostingRequest,
+    ) -> Result<DomeHostingView> {
+        let prepared = self
+            .app_service
+            .prepare_community_node_dome_hosting(PrepareCommunityNodeDomeHostingInput {
+                spatial_context: request.spatial_context.clone(),
+                instance_id: request.instance_id.clone(),
+                node_id: request.node_id,
+                api_base_url: request.base_url.clone(),
+                lease_duration_millis: request.lease_duration_millis,
+            })
+            .await?;
+        let signed_lease: SignedDomeHostingLeaseV1 = serde_json::from_str(
+            prepared
+                .signed_lease_json
+                .as_deref()
+                .context("prepared Dome hosting view has no signed lease")?,
+        )?;
+        let assignment = self
+            .assign_dome_hosting_to_community_node(
+                &request.base_url,
+                &DomeHostingAssignmentRequest {
+                    signed_lease,
+                    instance_manifest: serde_json::from_str(&prepared.instance_manifest_json)?,
+                    preset_manifest: serde_json::from_str(&prepared.preset_manifest_json)?,
+                },
+            )
+            .await?;
+        let activated = self
+            .app_service
+            .activate_community_node_dome_hosting(ActivateCommunityNodeDomeHostingInput {
+                spatial_context: request.spatial_context,
+                instance_id: request.instance_id.clone(),
+                signed_acceptance_json: serde_json::to_string(&assignment.signed_acceptance)?,
+            })
+            .await?;
+        let signed_activation: SignedDomeHostingActivationV1 = serde_json::from_str(
+            activated
+                .signed_activation_json
+                .as_deref()
+                .context("activated Dome hosting view has no signed activation")?,
+        )?;
+        self.activate_dome_hosting_on_community_node(
+            &request.base_url,
+            &DomeHostingActivationRequest {
+                instance_id: request.instance_id,
+                signed_activation,
+            },
+        )
+        .await?;
+        Ok(activated)
+    }
+
+    pub async fn close_dome_hosting(
+        &self,
+        request: CloseDomeHostingRequest,
+    ) -> Result<DomeHostingView> {
+        let previous = self
+            .app_service
+            .get_dome_hosting(request.spatial_context.clone(), &request.instance_id)
+            .await?;
+        let closed = self
+            .app_service
+            .close_dome_hosting(CloseDomeHostingInput {
+                spatial_context: request.spatial_context,
+                instance_id: request.instance_id.clone(),
+            })
+            .await?;
+        if let Some(DomeHostTargetV1::CommunityNode { api_base_url, .. }) =
+            previous.lease.map(|lease| lease.host)
+        {
+            let signed_close: SignedDomeHostingCloseV1 = serde_json::from_str(
+                closed
+                    .signed_close_json
+                    .as_deref()
+                    .context("closed Dome hosting view has no signed close record")?,
+            )?;
+            self.release_dome_hosting_on_community_node(
+                &api_base_url,
+                &DomeHostingReleaseRequest {
+                    instance_id: request.instance_id,
+                    signed_close,
+                },
+            )
+            .await?;
+        }
+        Ok(closed)
+    }
+
+    pub async fn submit_dome_session_input(
+        &self,
+        request: SubmitDomeSessionInputRequest,
+    ) -> Result<kukuri_core::DomePhysicsSnapshotV1> {
+        let hosting = self
+            .get_dome_hosting(GetDomeHostingRequest {
+                spatial_context: request.spatial_context.clone(),
+                instance_id: request.instance_id.clone(),
+            })
+            .await?;
+        let lease = hosting.lease.context("Dome is not currently hosted")?;
+        let session_id = hosting
+            .state
+            .session_id
+            .clone()
+            .context("Dome session is not active")?;
+        let signed_snapshot = match &lease.host {
+            DomeHostTargetV1::OwnerDevice { host_pubkey, .. }
+                if host_pubkey == &self.author_keys.public_key() =>
+            {
+                self.app_service
+                    .submit_dome_session_input(SubmitDomeSessionInput {
+                        spatial_context: request.spatial_context,
+                        instance_id: request.instance_id,
+                        sequence: request.sequence,
+                        input: request.input,
+                    })
+                    .await?
+            }
+            DomeHostTargetV1::CommunityNode { api_base_url, .. } => {
+                let signed_input = build_signed_dome_session_input(
+                    self.author_keys.as_ref(),
+                    kukuri_core::DomeSessionInputV1 {
+                        input_id: format!("input-{}-{}", request.instance_id, request.sequence),
+                        instance_id: request.instance_id,
+                        instance_generation: lease.instance_generation,
+                        lease_epoch: lease.epoch,
+                        session_id: session_id.clone(),
+                        participant_pubkey: self.author_keys.public_key(),
+                        sequence: request.sequence,
+                        sent_at: chrono::Utc::now().timestamp_millis(),
+                        input: request.input,
+                    },
+                )?;
+                self.submit_dome_hosting_input_to_community_node(
+                    api_base_url,
+                    &DomeHostingSessionInputRequest { signed_input },
+                )
+                .await?
+                .signed_snapshot
+            }
+            _ => anyhow::bail!("the active Dome host is not reachable from this device"),
+        };
+        verify_signed_dome_physics_snapshot(&signed_snapshot, &lease, &session_id)?;
+        Ok(signed_snapshot.snapshot)
+    }
+
     pub async fn move_dome(
         &self,
         request: MoveDomeRequest,

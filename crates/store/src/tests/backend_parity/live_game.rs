@@ -282,7 +282,7 @@ async fn game_rooms_match_between_backends() {
         .metaverse
         .as_ref()
         .expect("metaverse state");
-    assert_eq!(metaverse.world_version, 3);
+    assert_eq!(metaverse.world_version, 4);
     assert_eq!(
         metaverse.dome.customization.persistent_props[0].prop_id,
         "shared-cube"
@@ -346,5 +346,53 @@ async fn dome_connection_projection_matches_between_backends() {
     assert_eq!(from_sqlite, from_memory);
     let projection = from_sqlite.expect("Dome Connection projection");
     assert_eq!(projection.topology_digest, "digest-2");
+    assert_eq!(projection.derived_at, 20);
+}
+
+async fn dome_hosting_projection_scenario<S: Store + ProjectionStore>(
+    store: &S,
+) -> Option<DomeHostingProjectionRow> {
+    let first = DomeHostingProjectionRow {
+        instance_id: "dome-hosting-parity".into(),
+        context_id: "topic:kukuri:topic:dome-hosting-parity".into(),
+        topic_id: "kukuri:topic:dome-hosting-parity".into(),
+        channel_id: String::new(),
+        state_json: r#"{"kind":"transferring"}"#.into(),
+        lease_epoch: Some(1),
+        session_id: None,
+        derived_at: 10,
+        projection_version: 1,
+    };
+    LiveGameProjectionStore::upsert_dome_hosting_projection(store, first)
+        .await
+        .expect("upsert initial Dome Hosting projection");
+    let updated = DomeHostingProjectionRow {
+        state_json: r#"{"kind":"community_node_hosted"}"#.into(),
+        lease_epoch: Some(2),
+        session_id: Some("cn-session-2".into()),
+        derived_at: 20,
+        ..LiveGameProjectionStore::get_dome_hosting_projection(store, "dome-hosting-parity")
+            .await
+            .expect("get initial Dome Hosting projection")
+            .expect("initial Dome Hosting projection")
+    };
+    LiveGameProjectionStore::upsert_dome_hosting_projection(store, updated)
+        .await
+        .expect("upsert updated Dome Hosting projection");
+    LiveGameProjectionStore::get_dome_hosting_projection(store, "dome-hosting-parity")
+        .await
+        .expect("get updated Dome Hosting projection")
+}
+
+#[tokio::test]
+async fn dome_hosting_projection_matches_between_backends() {
+    let sqlite = SqliteStore::connect_memory().await.expect("sqlite store");
+    let memory = MemoryStore::default();
+    let from_sqlite = dome_hosting_projection_scenario(&sqlite).await;
+    let from_memory = dome_hosting_projection_scenario(&memory).await;
+    assert_eq!(from_sqlite, from_memory);
+    let projection = from_sqlite.expect("Dome Hosting projection");
+    assert_eq!(projection.lease_epoch, Some(2));
+    assert_eq!(projection.session_id.as_deref(), Some("cn-session-2"));
     assert_eq!(projection.derived_at, 20);
 }

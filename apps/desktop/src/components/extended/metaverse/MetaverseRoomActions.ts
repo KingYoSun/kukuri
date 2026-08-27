@@ -4,6 +4,9 @@ import type {
   DomeConnectionTopologyView,
   DomeConnectionView,
   DomeDirection,
+  DomeHostingView,
+  DomePhysicsSnapshotV1,
+  DomeSessionInputKindV1,
   GameRoomView,
   MetaverseAssetRef,
   MetaverseRoomEventView,
@@ -43,6 +46,25 @@ export type MetaverseRoomActions = {
     status: GameRoomView['status'],
     customization: DomeCustomizationV1
   ) => Promise<void>;
+  getHosting: (context: SpatialContextV1, instanceId: string) => Promise<DomeHostingView>;
+  startOwnerHosting: (
+    context: SpatialContextV1,
+    instanceId: string,
+    endpointId: string
+  ) => Promise<DomeHostingView>;
+  delegateHosting: (
+    context: SpatialContextV1,
+    instanceId: string,
+    nodeId: string,
+    baseUrl: string
+  ) => Promise<DomeHostingView>;
+  closeHosting: (context: SpatialContextV1, instanceId: string) => Promise<DomeHostingView>;
+  submitSessionInput: (
+    context: SpatialContextV1,
+    instanceId: string,
+    sequence: number,
+    input: DomeSessionInputKindV1
+  ) => Promise<DomePhysicsSnapshotV1>;
   moveRoom: (
     moveId: string,
     roomId: string,

@@ -72,19 +72,6 @@ pub struct MetaverseRoomPresenceV1 {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
-pub struct MetaverseAvatarTransformV1 {
-    pub room_id: String,
-    pub peer_id: String,
-    pub seq: u64,
-    pub position: [i64; 3],
-    pub rotation: [i64; 3],
-    pub animation: Option<String>,
-    pub sent_at: i64,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct MetaverseRoomChatMessageV1 {
     pub room_id: String,
     pub message_id: String,
@@ -102,7 +89,7 @@ pub enum MetaversePrimitive {
     Sphere,
 }
 
-pub const METAVERSE_WORLD_VERSION: u64 = 3;
+pub const METAVERSE_WORLD_VERSION: u64 = 4;
 pub const FIXED_DOME_SPEC_ID: &str = "fixed_dome_v1";
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -569,14 +556,8 @@ pub enum MetaverseRoomEventV1 {
         peer_id: String,
         left_at: i64,
     },
-    AvatarTransform {
-        transform: MetaverseAvatarTransformV1,
-    },
     ChatMessage {
         message: MetaverseRoomChatMessageV1,
-    },
-    ObjectUpdate {
-        object: SharedRoomObjectV1,
     },
 }
 

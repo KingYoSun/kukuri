@@ -22,7 +22,10 @@ import type {
   DomeConnectionTopologyView,
   DomeConnectionView,
   DomeDirection,
+  DomeHostingView,
   DomeMoveRecordV1,
+  DomePhysicsSnapshotV1,
+  DomeSessionInputKindV1,
   FriendOnlyGrantPreview,
   FriendPlusSharePreview,
   GameRoomView,
@@ -58,6 +61,7 @@ import type {
   BookmarkCustomReactionRequest,
   BookmarkPostRequest,
   CommunityNodeTargetRequest,
+  CloseDomeHostingRequest,
   CreateCustomReactionAssetRequest,
   CreateDomeConnectionProposalRequest,
   CreateGameRoomRequest,
@@ -66,6 +70,7 @@ import type {
   CreatePostRequest,
   CreatePrivateChannelRequest,
   CreateRepostRequest,
+  DelegateDomeHostingRequest,
   DeleteDirectMessageMessageRequest,
   DirectMessageRequest,
   ExportChannelAccessTokenRequest,
@@ -75,6 +80,7 @@ import type {
   FreezePrivateChannelRequest,
   GetBlobMediaRequest,
   GetBlobPreviewRequest,
+  GetDomeHostingRequest,
   ImportChannelAccessTokenRequest,
   ImportFriendOnlyGrantRequest,
   ImportFriendPlusShareRequest,
@@ -108,6 +114,8 @@ import type {
   SetCommunityNodeInviteCodeRequest,
   SetDiscoverySeedsRequest,
   SetTopicGossipEnabledRequest,
+  StartOwnerDomeHostingRequest,
+  SubmitDomeSessionInputRequest,
   ToggleReactionRequest,
   UnsubscribeTopicRequest,
   UpdateGameRoomRequest,
@@ -578,6 +586,69 @@ export const runtimeApi: DesktopApi = {
         status,
         customization,
       } satisfies UpdateMetaverseRoomRequest,
+    });
+  }),
+  getDomeHosting: command('getDomeHosting', async (spatialContext, instanceId) => {
+    return invokeDesktop<DomeHostingView>('get_dome_hosting', {
+      request: {
+        spatial_context: spatialContext,
+        instance_id: instanceId,
+      } satisfies GetDomeHostingRequest,
+    });
+  }),
+  startOwnerDomeHosting: command('startOwnerDomeHosting', async (
+    spatialContext,
+    instanceId,
+    endpointId,
+    leaseDurationMillis
+  ) => {
+    return invokeDesktop<DomeHostingView>('start_owner_dome_hosting', {
+      request: {
+        spatial_context: spatialContext,
+        instance_id: instanceId,
+        endpoint_id: endpointId,
+        lease_duration_millis: leaseDurationMillis,
+      } satisfies StartOwnerDomeHostingRequest,
+    });
+  }),
+  delegateDomeHosting: command('delegateDomeHosting', async (
+    spatialContext,
+    instanceId,
+    nodeId,
+    baseUrl,
+    leaseDurationMillis
+  ) => {
+    return invokeDesktop<DomeHostingView>('delegate_dome_hosting', {
+      request: {
+        spatial_context: spatialContext,
+        instance_id: instanceId,
+        node_id: nodeId,
+        base_url: baseUrl,
+        lease_duration_millis: leaseDurationMillis,
+      } satisfies DelegateDomeHostingRequest,
+    });
+  }),
+  closeDomeHosting: command('closeDomeHosting', async (spatialContext, instanceId) => {
+    return invokeDesktop<DomeHostingView>('close_dome_hosting', {
+      request: {
+        spatial_context: spatialContext,
+        instance_id: instanceId,
+      } satisfies CloseDomeHostingRequest,
+    });
+  }),
+  submitDomeSessionInput: command('submitDomeSessionInput', async (
+    spatialContext,
+    instanceId,
+    sequence,
+    input: DomeSessionInputKindV1
+  ) => {
+    return invokeDesktop<DomePhysicsSnapshotV1>('submit_dome_session_input', {
+      request: {
+        spatial_context: spatialContext,
+        instance_id: instanceId,
+        sequence,
+        input,
+      } satisfies SubmitDomeSessionInputRequest,
     });
   }),
   moveDome: command('moveDome', async (

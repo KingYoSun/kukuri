@@ -47,6 +47,23 @@
       "offline": "Peer connectivity is unavailable"
     }
   },
+  "hosting": {
+    "title": "Dome Hosting",
+    "states": { "closed": "Closed", "owner_hosted": "Hosted on owner device", "community_node_hosted": "Hosted on Community Node", "grace_period": "Grace period", "transferring": "Transferring" },
+    "epoch": "Lease epoch: {{value}}",
+    "session": "Session: {{value}}",
+    "expiry": "Expires: {{value}}",
+    "participants": "Participants: {{value}}",
+    "sleep": { "sleeping": "Physics: sleeping", "awake": "Physics: active" },
+    "none": "none",
+    "ownerHost": "Host on this device",
+    "nodeId": "Community Node ID",
+    "baseUrl": "Community Node API URL",
+    "delegate": "Explicitly delegate to Community Node",
+    "close": "Close hosting",
+    "ownerOnly": "Only the Dome owner can change its host.",
+    "error": "Could not update Dome Hosting"
+  },
   "connections": {
     "title": "Dome Connections",
     "summary_one": "{{count}} local component",

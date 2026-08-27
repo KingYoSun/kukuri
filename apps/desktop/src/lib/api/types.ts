@@ -27,7 +27,10 @@ import type {
   DomeConnectionView,
   DomeCustomizationV1,
   DomeDirection,
+  DomeHostingView,
   DomeMoveRecordV1,
+  DomePhysicsSnapshotV1,
+  DomeSessionInputKindV1,
   FriendOnlyGrantPreview,
   FriendPlusSharePreview,
   GameRoomStatus,
@@ -333,6 +336,27 @@ export interface DesktopApi {
     status: GameRoomStatus,
     customization: DomeCustomizationV1
   ): Promise<void>;
+  getDomeHosting(spatialContext: SpatialContextV1, instanceId: string): Promise<DomeHostingView>;
+  startOwnerDomeHosting(
+    spatialContext: SpatialContextV1,
+    instanceId: string,
+    endpointId: string,
+    leaseDurationMillis: number
+  ): Promise<DomeHostingView>;
+  delegateDomeHosting(
+    spatialContext: SpatialContextV1,
+    instanceId: string,
+    nodeId: string,
+    baseUrl: string,
+    leaseDurationMillis: number
+  ): Promise<DomeHostingView>;
+  closeDomeHosting(spatialContext: SpatialContextV1, instanceId: string): Promise<DomeHostingView>;
+  submitDomeSessionInput(
+    spatialContext: SpatialContextV1,
+    instanceId: string,
+    sequence: number,
+    input: DomeSessionInputKindV1
+  ): Promise<DomePhysicsSnapshotV1>;
   moveDome(
     sourceTopic: string,
     moveId: string,

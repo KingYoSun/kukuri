@@ -1,10 +1,11 @@
 use kukuri_core::{
     AssetRole, ChannelAudienceKind, ChannelSharingState, DomeConnectionProposalV1,
     DomeConnectionRecordV1, DomeConnectionTerminalReasonV1, DomeCustomizationV1, DomeDirection,
-    DomeMoveRecordV1, DomeProposalDerivedStatusV1, DomeProposalSelectionV1,
-    DomeTopologyResolutionV1, GameRoomKind, GameRoomStatus, KukuriEnvelope, LiveSessionStatus,
-    MetaverseAssetKind, MetaverseAssetRef, MetaverseRoomEventEnvelopeContentV1,
-    MetaverseRoomEventV1, MetaverseRoomStateV1, SpatialContextV1,
+    DomeHostingLeaseV1, DomeHostingStateV1, DomeMoveRecordV1, DomeProposalDerivedStatusV1,
+    DomeProposalSelectionV1, DomeTopologyResolutionV1, GameRoomKind, GameRoomStatus,
+    KukuriEnvelope, LiveSessionStatus, MetaverseAssetKind, MetaverseAssetRef,
+    MetaverseRoomEventEnvelopeContentV1, MetaverseRoomEventV1, MetaverseRoomStateV1,
+    SpatialContextV1,
 };
 use kukuri_store::{NotificationKind, TimelineCursor};
 use kukuri_transport::{ConnectMode, ConnectionPath, DiscoveryMode};
@@ -406,6 +407,7 @@ pub struct GameRoomView {
     pub scores: Vec<GameScoreView>,
     pub room_kind: GameRoomKind,
     pub metaverse: Option<MetaverseRoomStateV1>,
+    pub dome_hosting: Option<DomeHostingStateV1>,
     pub manifest_blob_hash: String,
     pub updated_at: i64,
     pub channel_id: Option<String>,
@@ -459,6 +461,60 @@ pub struct MoveDomeInput {
     pub move_id: String,
     pub source_instance_id: String,
     pub target_context: SpatialContextV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StartOwnerDomeHostingInput {
+    pub spatial_context: SpatialContextV1,
+    pub instance_id: String,
+    pub endpoint_id: String,
+    pub lease_duration_millis: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrepareCommunityNodeDomeHostingInput {
+    pub spatial_context: SpatialContextV1,
+    pub instance_id: String,
+    pub node_id: String,
+    pub api_base_url: String,
+    pub lease_duration_millis: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ActivateCommunityNodeDomeHostingInput {
+    pub spatial_context: SpatialContextV1,
+    pub instance_id: String,
+    pub signed_acceptance_json: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CloseDomeHostingInput {
+    pub spatial_context: SpatialContextV1,
+    pub instance_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
+pub struct DomeHostingView {
+    pub instance_id: String,
+    pub state: DomeHostingStateV1,
+    pub lease: Option<DomeHostingLeaseV1>,
+    pub signed_lease_json: Option<String>,
+    pub signed_activation_json: Option<String>,
+    pub signed_close_json: Option<String>,
+    pub instance_manifest_json: String,
+    pub preset_manifest_json: String,
+    pub participants: u32,
+    pub sleeping: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SubmitDomeSessionInput {
+    pub spatial_context: SpatialContextV1,
+    pub instance_id: String,
+    pub sequence: u64,
+    pub input: kukuri_core::DomeSessionInputKindV1,
 }
 
 pub type DomeMoveView = DomeMoveRecordV1;

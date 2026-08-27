@@ -21,6 +21,12 @@ pub const RELATION_USERS_PATH_PREFIX: &str = "/v1/relation/users/";
 pub const RELATION_USERS_ROUTE: &str = "/v1/relation/users/{target}";
 pub const RELATION_NEIGHBORS_PATH: &str = "/v1/relation/neighbors";
 pub const RELATION_OPTOUT_PATH: &str = "/v1/relation/optout";
+pub const DOME_HOSTING_ASSIGNMENTS_PATH: &str = "/v1/dome-hosting/assignments";
+pub const DOME_HOSTING_ACTIVATE_PATH: &str = "/v1/dome-hosting/activate";
+pub const DOME_HOSTING_RELEASE_PATH: &str = "/v1/dome-hosting/release";
+pub const DOME_HOSTING_STATUS_ROUTE: &str = "/v1/dome-hosting/status/{instance_id}";
+pub const DOME_HOSTING_SESSION_INPUT_PATH: &str = "/v1/dome-hosting/session/input";
+pub const DOME_HOSTING_SESSION_WS_PATH: &str = "/v1/dome-hosting/session/ws";
 /// 通報受付。client は manifest の `report_endpoint` から動的に解決するため
 /// 直接この定数で URL を組み立てるのはサーバ側(route 定義)のみ。
 pub const REPORT_PATH: &str = "/v1/report";

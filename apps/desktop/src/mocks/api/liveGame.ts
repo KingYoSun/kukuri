@@ -3,6 +3,7 @@ import {
   type DomeConnectionProposalView,
   type DomeConnectionTopologyView,
   type DomeConnectionView,
+  type DomeHostingView,
   type GameScoreView,
   type MetaverseAssetRef,
   type MetaverseRoomEventV1,
@@ -30,6 +31,11 @@ type LiveGameMock = Pick<
   | 'createMetaverseRoom'
   | 'updateGameRoom'
   | 'updateMetaverseRoom'
+  | 'getDomeHosting'
+  | 'startOwnerDomeHosting'
+  | 'delegateDomeHosting'
+  | 'closeDomeHosting'
+  | 'submitDomeSessionInput'
   | 'moveDome'
   | 'listDomeConnectionTopology'
   | 'createDomeConnectionProposal'
@@ -53,6 +59,7 @@ export function createLiveGameMock(runtime: MockRuntime): LiveGameMock {
   } = runtime;
   const connectionProposals = new Map<string, DomeConnectionProposalView>();
   const connectionViews = new Map<string, DomeConnectionView>();
+  const hostingViews = new Map<string, DomeHostingView>();
 
   const contextKey = (context: Parameters<DesktopApi['listDomeConnectionTopology']>[0]) =>
     context.kind === 'topic'
@@ -302,6 +309,104 @@ export function createLiveGameMock(runtime: MockRuntime): LiveGameMock {
             })
           : room
       );
+    },
+    async getDomeHosting(spatialContext, instanceId) {
+      const existing = hostingViews.get(instanceId);
+      if (existing) return existing;
+      return {
+        instance_id: instanceId,
+        state: {
+          kind: 'closed',
+          host: null,
+          lease_id: null,
+          lease_epoch: null,
+          lease_expires_at: null,
+          session_id: null,
+          reason: 'not_hosted',
+          last_heartbeat_at: null,
+        },
+        lease: null,
+        signed_lease_json: null,
+        signed_activation_json: null,
+        signed_close_json: null,
+        instance_manifest_json: JSON.stringify({ instance_id: instanceId, spatial_context: spatialContext }),
+        preset_manifest_json: '{}',
+        participants: 0,
+        sleeping: true,
+      };
+    },
+    async startOwnerDomeHosting(spatialContext, instanceId, endpointId, leaseDurationMillis) {
+      const now = Date.now();
+      const view: DomeHostingView = {
+        ...(await this.getDomeHosting(spatialContext, instanceId)),
+        state: {
+          kind: 'owner_hosted',
+          host: { kind: 'owner_device', endpoint_id: endpointId, host_pubkey: syncStatus.local_author_pubkey },
+          lease_id: `mock-lease-${instanceId}`,
+          lease_epoch: 1,
+          lease_expires_at: now + leaseDurationMillis,
+          session_id: `mock-session-${instanceId}`,
+          reason: null,
+          last_heartbeat_at: now,
+        },
+        participants: 0,
+        sleeping: true,
+      };
+      hostingViews.set(instanceId, view);
+      return view;
+    },
+    async delegateDomeHosting(spatialContext, instanceId, nodeId, baseUrl, leaseDurationMillis) {
+      const now = Date.now();
+      const view: DomeHostingView = {
+        ...(await this.getDomeHosting(spatialContext, instanceId)),
+        state: {
+          kind: 'community_node_hosted',
+          host: { kind: 'community_node', node_id: nodeId, api_base_url: baseUrl },
+          lease_id: `mock-lease-${instanceId}`,
+          lease_epoch: 2,
+          lease_expires_at: now + leaseDurationMillis,
+          session_id: `mock-cn-session-${instanceId}`,
+          reason: null,
+          last_heartbeat_at: now,
+        },
+        participants: 0,
+        sleeping: true,
+      };
+      hostingViews.set(instanceId, view);
+      return view;
+    },
+    async closeDomeHosting(spatialContext, instanceId) {
+      const view = await this.getDomeHosting(spatialContext, instanceId);
+      const closed: DomeHostingView = {
+        ...view,
+        state: { ...view.state, kind: 'closed', session_id: null, reason: 'owner_closed' },
+      };
+      hostingViews.set(instanceId, closed);
+      return closed;
+    },
+    async submitDomeSessionInput(_spatialContext, instanceId, sequence, input) {
+      const position = input.type === 'move' ? input.position : [0, 0, 0] as [number, number, number];
+      const rotation = input.type === 'move' ? input.rotation : [0, 0, 0] as [number, number, number];
+      return {
+        instance_id: instanceId,
+        instance_generation: 1,
+        lease_epoch: 1,
+        session_id: `mock-session-${instanceId}`,
+        host_pubkey: syncStatus.local_author_pubkey,
+        sequence,
+        simulated_at: Date.now(),
+        sleeping: false,
+        bodies: [{
+          entity_id: syncStatus.local_author_pubkey,
+          kind: 'avatar',
+          position,
+          rotation,
+          linear_velocity: [0, 0, 0],
+          animation: input.type === 'move' ? input.animation : 'idle',
+          grabbed_by: null,
+          expires_at: null,
+        }],
+      };
     },
     async moveDome(sourceTopic, moveId, sourceInstanceId, targetContext) {
       const source = (gameRoomsByTopic[sourceTopic] ?? []).find(

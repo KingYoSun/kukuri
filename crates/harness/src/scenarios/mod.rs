@@ -5,6 +5,7 @@ mod community_node_index;
 mod community_node_trust_relation;
 mod desktop_smoke;
 mod direct_message;
+mod dome_hosting;
 mod private_channel;
 
 pub async fn run_named_scenario(
@@ -77,6 +78,9 @@ pub async fn run_scenario(
                 artifacts_dir,
             )
             .await
+        }
+        ScenarioKind::DomeHostingLifecycle => {
+            dome_hosting::run_dome_hosting_lifecycle(root, scenario, artifacts_dir).await
         }
     }
 }

@@ -41,6 +41,14 @@ export function createMetaverseRoomActions({
     getBlobPreviewUrl: (blobHash, mime) => api.getBlobPreviewUrl(blobHash, mime),
     updateRoom: (roomId, status, customization) =>
       api.updateMetaverseRoom(activeTopic, roomId, status, customization),
+    getHosting: (context, instanceId) => api.getDomeHosting(context, instanceId),
+    startOwnerHosting: (context, instanceId, endpointId) =>
+      api.startOwnerDomeHosting(context, instanceId, endpointId, 86_400_000),
+    delegateHosting: (context, instanceId, nodeId, baseUrl) =>
+      api.delegateDomeHosting(context, instanceId, nodeId, baseUrl, 86_400_000),
+    closeHosting: (context, instanceId) => api.closeDomeHosting(context, instanceId),
+    submitSessionInput: (context, instanceId, sequence, input) =>
+      api.submitDomeSessionInput(context, instanceId, sequence, input),
     moveRoom: (moveId, roomId, targetContext) =>
       api.moveDome(activeTopic, moveId, roomId, targetContext).then(() => undefined),
     listConnections: (context) => api.listDomeConnectionTopology(context),

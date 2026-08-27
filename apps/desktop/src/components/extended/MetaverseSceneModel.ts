@@ -84,9 +84,7 @@ export type MetaverseRoomConnectionState = 'live' | 'stale' | 'recovering' | 'of
 export type MetaverseRoomEvent =
   | { type: 'presence.join'; presence: PeerPresence }
   | { type: 'presence.leave'; roomId: string; peerId: string; leftAt: number }
-  | { type: 'avatar.transform'; transform: AvatarTransform }
-  | { type: 'chat.message'; message: RoomChatMessage }
-  | { type: 'object.update'; roomId: string; object: SharedRoomObjectV1 };
+  | { type: 'chat.message'; message: RoomChatMessage };
 
 export type AvatarAssetStatus = 'loading' | 'sample-vrm' | 'blob-vrm' | 'fallback-primitive';
 

@@ -535,6 +535,7 @@ export const gameRoomViewScore = {
   ],
   "room_kind": "score_game",
   "metaverse": null,
+  "dome_hosting": null,
   "manifest_blob_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
   "updated_at": 1700000400,
   "channel_id": null,
@@ -552,7 +553,7 @@ export const gameRoomViewMetaverse = {
   "scores": [],
   "room_kind": "metaverse_room",
   "metaverse": {
-    "world_version": 3,
+    "world_version": 4,
     "instance_id": "room-2",
     "spatial_context": {
       "kind": "channel",
@@ -647,6 +648,7 @@ export const gameRoomViewMetaverse = {
       }
     ]
   },
+  "dome_hosting": null,
   "manifest_blob_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
   "updated_at": 1700000430,
   "channel_id": "chan-1",

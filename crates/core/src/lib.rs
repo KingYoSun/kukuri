@@ -2,6 +2,7 @@ mod crypto;
 mod direct_messages;
 mod dome_connections;
 mod dome_envelopes;
+mod dome_hosting;
 mod envelope;
 mod game;
 mod ids;
@@ -43,6 +44,20 @@ pub use dome_connections::{
 pub use dome_envelopes::{
     build_dome_instance_envelope, build_dome_move_envelope, build_dome_preset_envelope,
 };
+pub use dome_hosting::{
+    DOME_HOSTING_HEARTBEAT_GRACE_MILLIS, DOME_HOSTING_MAX_LEASE_MILLIS, DomeHostHeartbeatV1,
+    DomeHostTargetV1, DomeHostingAcceptanceV1, DomeHostingActivationV1, DomeHostingCloseV1,
+    DomeHostingLeaseV1, DomeHostingRecordV1, DomeHostingStateKindV1, DomeHostingStateV1,
+    DomePhysicsBodyKindV1, DomePhysicsBodyV1, DomePhysicsSnapshotV1, DomeSessionInputKindV1,
+    DomeSessionInputV1, SignedDomeHostHeartbeatV1, SignedDomeHostingAcceptanceV1,
+    SignedDomeHostingActivationV1, SignedDomeHostingCloseV1, SignedDomeHostingLeaseV1,
+    SignedDomePhysicsSnapshotV1, SignedDomeSessionInputV1, accept_dome_hosting_lease,
+    activate_dome_hosting_lease, build_signed_dome_host_heartbeat, build_signed_dome_hosting_lease,
+    build_signed_dome_physics_snapshot, build_signed_dome_session_input, close_dome_hosting_lease,
+    dome_hosting_lease_digest, resolve_dome_hosting_state, validate_dome_hosting_lease,
+    verify_signed_dome_host_heartbeat, verify_signed_dome_hosting_lease,
+    verify_signed_dome_physics_snapshot, verify_signed_dome_session_input,
+};
 pub(crate) use envelope::sign_envelope_at;
 pub use envelope::{
     GossipHint, HintObjectRef, KukuriAuthEnvelopeContentV1, KukuriEnvelope, sign_envelope_json,
@@ -54,8 +69,8 @@ pub use game::{
     DomePresetStateDocV1, DomeRelationshipDetachV1, DomeSurfaceCustomizationV1, FIXED_DOME_SPEC_ID,
     FixedDomeEndpointV1, FixedDomeSpecV1, GameParticipant, GameRoomKind, GameRoomManifestBlobV1,
     GameRoomStateDocV1, GameRoomStatus, GameScoreEntry, METAVERSE_WORLD_VERSION,
-    MetaverseAssetKind, MetaverseAssetRef, MetaverseAvatarTransformV1, MetaverseColliderV1,
-    MetaverseDomeV1, MetaverseInteractionKind, MetaversePersistentPropV1, MetaversePrimitive,
+    MetaverseAssetKind, MetaverseAssetRef, MetaverseColliderV1, MetaverseDomeV1,
+    MetaverseInteractionKind, MetaversePersistentPropV1, MetaversePrimitive,
     MetaverseRoomChatMessageV1, MetaverseRoomEventEnvelopeContentV1, MetaverseRoomEventV1,
     MetaverseRoomPresenceV1, MetaverseRoomSpawnV1, MetaverseRoomStateV1, SharedRoomObjectV1,
     SpatialContextV1, build_game_session_envelope, build_metaverse_room_event_envelope,

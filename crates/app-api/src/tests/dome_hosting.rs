@@ -1,0 +1,115 @@
+use super::*;
+use crate::{
+    ActivateCommunityNodeDomeHostingInput, CloseDomeHostingInput,
+    PrepareCommunityNodeDomeHostingInput, StartOwnerDomeHostingInput,
+};
+use kukuri_core::{
+    DomeHostingStateKindV1, KukuriKeys, SignedDomeHostingLeaseV1, SpatialContextV1,
+    accept_dome_hosting_lease,
+};
+
+#[tokio::test]
+async fn owner_explicitly_transfers_hosting_to_one_community_node() {
+    let store = Arc::new(MemoryStore::default());
+    let transport = Arc::new(FakeTransport::new("self", FakeNetwork::default()));
+    let app = AppService::new(store, transport);
+    let topic = "kukuri:topic:dome-hosting";
+    let room_id = app
+        .create_metaverse_room(
+            topic,
+            CreateMetaverseRoomInput {
+                title: "Hosted Dome".into(),
+                description: String::new(),
+                max_peers: Some(8),
+            },
+        )
+        .await
+        .expect("create Dome");
+    let context = SpatialContextV1::Topic {
+        topic_id: kukuri_core::TopicId::new(topic),
+    };
+
+    let initial = app
+        .get_dome_hosting(context.clone(), &room_id)
+        .await
+        .expect("initial hosting");
+    assert_eq!(initial.state.kind, DomeHostingStateKindV1::Closed);
+
+    let owner_hosted = app
+        .start_owner_dome_hosting(StartOwnerDomeHostingInput {
+            spatial_context: context.clone(),
+            instance_id: room_id.clone(),
+            endpoint_id: "owner-endpoint".into(),
+            lease_duration_millis: 60_000,
+        })
+        .await
+        .expect("start owner hosting");
+    assert_eq!(owner_hosted.state.kind, DomeHostingStateKindV1::OwnerHosted);
+    assert_eq!(owner_hosted.state.lease_epoch, Some(1));
+
+    let node_keys = KukuriKeys::generate();
+    let transferring = app
+        .prepare_community_node_dome_hosting(PrepareCommunityNodeDomeHostingInput {
+            spatial_context: context.clone(),
+            instance_id: room_id.clone(),
+            node_id: node_keys.public_key_hex(),
+            api_base_url: "https://node.example".into(),
+            lease_duration_millis: 60_000,
+        })
+        .await
+        .expect("prepare Community Node hosting");
+    assert_eq!(
+        transferring.state.kind,
+        DomeHostingStateKindV1::Transferring
+    );
+    assert_eq!(transferring.state.lease_epoch, Some(2));
+
+    let still_transferring = app
+        .get_dome_hosting(context.clone(), &room_id)
+        .await
+        .expect("owner online must not reclaim");
+    assert_eq!(
+        still_transferring.state.kind,
+        DomeHostingStateKindV1::Transferring
+    );
+
+    let signed_lease: SignedDomeHostingLeaseV1 = serde_json::from_str(
+        transferring
+            .signed_lease_json
+            .as_deref()
+            .expect("signed lease JSON"),
+    )
+    .expect("decode signed lease");
+    let acceptance = accept_dome_hosting_lease(
+        &node_keys,
+        &signed_lease,
+        "community-session-1",
+        signed_lease.lease.issued_at,
+    )
+    .expect("node acceptance");
+    let active = app
+        .activate_community_node_dome_hosting(ActivateCommunityNodeDomeHostingInput {
+            spatial_context: context.clone(),
+            instance_id: room_id.clone(),
+            signed_acceptance_json: serde_json::to_string(&acceptance).unwrap(),
+        })
+        .await
+        .expect("activate Community Node");
+    assert_eq!(
+        active.state.kind,
+        DomeHostingStateKindV1::CommunityNodeHosted
+    );
+    assert_eq!(
+        active.state.session_id.as_deref(),
+        Some("community-session-1")
+    );
+
+    let closed = app
+        .close_dome_hosting(CloseDomeHostingInput {
+            spatial_context: context,
+            instance_id: room_id,
+        })
+        .await
+        .expect("close hosting");
+    assert_eq!(closed.state.kind, DomeHostingStateKindV1::Closed);
+}

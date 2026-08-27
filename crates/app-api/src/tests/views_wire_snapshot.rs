@@ -479,6 +479,7 @@ fn views_wire_game_room_view() {
             }],
             room_kind: GameRoomKind::ScoreGame,
             metaverse: None,
+            dome_hosting: None,
             manifest_blob_hash: "d".repeat(64),
             updated_at: 1_700_000_400,
             channel_id: None,
@@ -497,7 +498,7 @@ fn views_wire_game_room_view() {
             scores: vec![],
             room_kind: GameRoomKind::MetaverseRoom,
             metaverse: Some(MetaverseRoomStateV1 {
-                world_version: 3,
+                world_version: 4,
                 instance_id: "room-2".to_string(),
                 spatial_context: SpatialContextV1::Channel {
                     topic_id: TopicId::new("kukuri:topic:wire"),
@@ -557,6 +558,7 @@ fn views_wire_game_room_view() {
                     created_at: 1_700_000_420,
                 }],
             }),
+            dome_hosting: None,
             manifest_blob_hash: "f".repeat(64),
             updated_at: 1_700_000_430,
             channel_id: Some("chan-1".to_string()),

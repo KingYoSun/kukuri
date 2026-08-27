@@ -113,6 +113,8 @@ pub struct Capabilities {
     pub report_endpoint: bool,
     #[serde(default)]
     pub rights_request_endpoint: bool,
+    #[serde(default)]
+    pub dome_hosting: bool,
 }
 
 impl Capabilities {
@@ -134,6 +136,7 @@ impl Capabilities {
             community_local_trust: config.enabled(Capability::CommunityLocalTrust),
             report_endpoint: config.enabled(Capability::ReportEndpoint),
             rights_request_endpoint: config.enabled(Capability::RightsRequestEndpoint),
+            dome_hosting: config.enabled(Capability::DomeHosting),
         }
     }
 }
@@ -263,6 +266,9 @@ fn build_authority_scope(config: &ResolvedConfig) -> AuthorityScope {
     }
     if config.enabled(Capability::BlobCache) {
         applies_to.push("media_cached_by_this_node".to_string());
+    }
+    if config.enabled(Capability::DomeHosting) {
+        applies_to.push("dome_sessions_leased_to_this_node".to_string());
     }
 
     // operator が明示した追加項目を重複なく足す。

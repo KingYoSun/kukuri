@@ -1,9 +1,11 @@
 use kukuri_desktop_runtime::{
     AcceptDomeConnectionProposalRequest, CreateDomeConnectionProposalRequest,
-    CreateGameRoomRequest, CreateLiveSessionRequest, CreateMetaverseRoomRequest,
+    CloseDomeHostingRequest, CreateGameRoomRequest, CreateLiveSessionRequest,
+    CreateMetaverseRoomRequest, DelegateDomeHostingRequest, GetDomeHostingRequest,
     ImportMetaverseRoomAssetRequest, ListDomeConnectionTopologyRequest, ListGameRoomsRequest,
     ListLiveSessionsRequest, ListMetaverseRoomEventsRequest, LiveSessionCommandRequest,
     MoveDomeRequest, PublishMetaverseRoomEventRequest, RevokeDomeConnectionRequest,
+    StartOwnerDomeHostingRequest, SubmitDomeSessionInputRequest,
     UpdateGameRoomRequest, UpdateMetaverseRoomRequest, WithdrawDomeConnectionProposalRequest,
 };
 
@@ -125,6 +127,58 @@ pub async fn update_metaverse_room(
     state
         .runtime
         .update_metaverse_room(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn get_dome_hosting(
+    state: tauri::State<'_, DesktopState>,
+    request: GetDomeHostingRequest,
+) -> Result<kukuri_app_api::DomeHostingView, CommandError> {
+    state.runtime.get_dome_hosting(request).await.map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn start_owner_dome_hosting(
+    state: tauri::State<'_, DesktopState>,
+    request: StartOwnerDomeHostingRequest,
+) -> Result<kukuri_app_api::DomeHostingView, CommandError> {
+    state
+        .runtime
+        .start_owner_dome_hosting(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn delegate_dome_hosting(
+    state: tauri::State<'_, DesktopState>,
+    request: DelegateDomeHostingRequest,
+) -> Result<kukuri_app_api::DomeHostingView, CommandError> {
+    state
+        .runtime
+        .delegate_dome_hosting(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn close_dome_hosting(
+    state: tauri::State<'_, DesktopState>,
+    request: CloseDomeHostingRequest,
+) -> Result<kukuri_app_api::DomeHostingView, CommandError> {
+    state.runtime.close_dome_hosting(request).await.map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn submit_dome_session_input(
+    state: tauri::State<'_, DesktopState>,
+    request: SubmitDomeSessionInputRequest,
+) -> Result<kukuri_core::DomePhysicsSnapshotV1, CommandError> {
+    state
+        .runtime
+        .submit_dome_session_input(request)
         .await
         .map_err(map_error)
 }

@@ -1,8 +1,8 @@
 use kukuri_app_api::{GameScoreView, SocialConnectionKind};
 
 use kukuri_core::{
-    ChannelAudienceKind, ChannelRef, DomeCustomizationV1, GameRoomStatus, MetaverseAssetKind,
-    MetaverseRoomEventV1, SpatialContextV1, TimelineScope,
+    ChannelAudienceKind, ChannelRef, DomeCustomizationV1, DomeSessionInputKindV1, GameRoomStatus,
+    MetaverseAssetKind, MetaverseRoomEventV1, SpatialContextV1, TimelineScope,
 };
 use kukuri_store::TimelineCursor;
 use serde::{Deserialize, Serialize};
@@ -402,6 +402,48 @@ pub struct ImportMetaverseRoomAssetRequest {
     pub mime_type: String,
     pub name: Option<String>,
     pub data_base64: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct GetDomeHostingRequest {
+    pub spatial_context: SpatialContextV1,
+    pub instance_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct StartOwnerDomeHostingRequest {
+    pub spatial_context: SpatialContextV1,
+    pub instance_id: String,
+    pub endpoint_id: String,
+    pub lease_duration_millis: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct DelegateDomeHostingRequest {
+    pub spatial_context: SpatialContextV1,
+    pub instance_id: String,
+    pub node_id: String,
+    pub base_url: String,
+    pub lease_duration_millis: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct CloseDomeHostingRequest {
+    pub spatial_context: SpatialContextV1,
+    pub instance_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct SubmitDomeSessionInputRequest {
+    pub spatial_context: SpatialContextV1,
+    pub instance_id: String,
+    pub sequence: u64,
+    pub input: DomeSessionInputKindV1,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

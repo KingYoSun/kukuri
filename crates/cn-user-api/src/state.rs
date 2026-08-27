@@ -22,6 +22,7 @@ use kukuri_cn_trust::{RelationStore, TrustParams};
 use sqlx::postgres::PgPool;
 
 use crate::config::UserApiConfig;
+use crate::dome_hosting::DomeHostingNodeState;
 
 #[derive(Clone)]
 pub struct UserApiState {
@@ -48,6 +49,7 @@ pub struct UserApiState {
     pub(crate) trust_read: Option<Arc<TrustReadState>>,
     /// user / post surfacing に適用する node-local distance opt-out 判定依存。
     pub(crate) relation_visibility: Option<Arc<RelationVisibilityState>>,
+    pub(crate) dome_hosting: Option<Arc<DomeHostingNodeState>>,
     readiness_activation_requirement: Option<ReadinessActivationRequirement>,
 }
 
@@ -318,6 +320,28 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
     } else {
         None
     };
+    let dome_hosting = if manifest
+        .as_ref()
+        .is_some_and(|manifest| manifest.capabilities.dome_hosting)
+    {
+        let secret = std::env::var("COMMUNITY_NODE_DOME_HOST_SIGNING_KEY").context(
+            "COMMUNITY_NODE_DOME_HOST_SIGNING_KEY is required when dome_hosting is enabled",
+        )?;
+        let keys = kukuri_core::KukuriKeys::parse(&secret)
+            .context("invalid COMMUNITY_NODE_DOME_HOST_SIGNING_KEY")?;
+        let manifest_node_id = manifest
+            .as_ref()
+            .map(|manifest| manifest.node_id.as_str())
+            .unwrap_or_default();
+        if keys.public_key_hex() != manifest_node_id {
+            anyhow::bail!("Dome host signing key does not match manifest node_id");
+        }
+        Some(Arc::new(
+            DomeHostingNodeState::restore(pool.clone(), keys).await?,
+        ))
+    } else {
+        None
+    };
     Ok(UserApiState {
         pool,
         rendezvous_store,
@@ -338,6 +362,7 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
         index_query,
         trust_read,
         relation_visibility,
+        dome_hosting,
         readiness_activation_requirement,
     })
 }

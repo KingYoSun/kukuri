@@ -1,13 +1,9 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-import type { DesktopApi, GameRoomView, SyncStatus } from '@/lib/api';
+import type { DesktopApi, DomePhysicsSnapshotV1, GameRoomView, SyncStatus } from '@/lib/api';
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
-import {
-  DEFAULT_SHARED_OBJECT,
-  METAVERSE_ROOM_RECOVERY_MS,
-  type MetaverseRoomEvent,
-} from '../MetaverseSceneModel';
+import { METAVERSE_ROOM_RECOVERY_MS, type MetaverseRoomEvent } from '../MetaverseSceneModel';
 import { useMetaverseRoomSession } from './useMetaverseRoomSession';
 import { createMetaverseRoomActions } from '@/shell/actions/metaverse';
 import { createDefaultMetaverseRoomState } from './DomeSceneModel';
@@ -57,6 +53,31 @@ function syncStatus(connected = true): SyncStatus {
     },
     gossip_disabled_topics: [],
     gossip_disabled_channels: [],
+  };
+}
+
+function physicsSnapshot(sequence: number, x: number): DomePhysicsSnapshotV1 {
+  return {
+    instance_id: room.metaverse!.instance_id,
+    instance_generation: room.metaverse!.instance_generation,
+    lease_epoch: 1,
+    session_id: 'session-1',
+    host_pubkey: 'e'.repeat(64),
+    sequence,
+    simulated_at: sequence,
+    sleeping: false,
+    bodies: [
+      {
+        entity_id: 'remote-peer',
+        kind: 'avatar',
+        position: [x, 0, 0],
+        rotation: [0, 0, 0],
+        linear_velocity: [0, 0, 0],
+        animation: 'idle',
+        grabbed_by: null,
+        expires_at: null,
+      },
+    ],
   };
 }
 
@@ -157,36 +178,54 @@ describe('useMetaverseRoomSession', () => {
     await waitFor(() => expect(session.result.current.selectedRoomId).toBeNull());
   });
 
-  test('merges newer BroadcastChannel object updates, rejects stale updates, and closes on cleanup', async () => {
+  test('closes the room BroadcastChannel on cleanup', async () => {
     const session = renderSession();
     act(() => session.result.current.joinRoom(room.room_id));
     await waitFor(() => expect(MockBroadcastChannel.instances).toHaveLength(1));
     const channel = MockBroadcastChannel.instances[0];
-    const newerObject = {
-      ...DEFAULT_SHARED_OBJECT,
-      position: [100, 0, 0] as [number, number, number],
-      updated_by: 'remote-peer',
-      updated_at: 10,
-    };
-    const staleObject = {
-      ...DEFAULT_SHARED_OBJECT,
-      position: [-100, 0, 0] as [number, number, number],
-      updated_by: 'remote-peer',
-      updated_at: 5,
-    };
-
-    act(() => {
-      channel.onmessage?.({
-        data: { type: 'object.update', roomId: room.room_id, object: newerObject },
-      } as MessageEvent<MetaverseRoomEvent>);
-      channel.onmessage?.({
-        data: { type: 'object.update', roomId: room.room_id, object: staleObject },
-      } as MessageEvent<MetaverseRoomEvent>);
-    });
-
-    expect(session.result.current.sharedObject).toEqual(newerObject);
     session.unmount();
     expect(channel.close).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not let an out-of-order authoritative snapshot roll back the scene', async () => {
+    const api: DesktopApi = {
+      ...createDesktopMockApi(),
+      submitDomeSessionInput: vi
+        .fn()
+        .mockResolvedValueOnce(physicsSnapshot(1, 1))
+        .mockResolvedValueOnce(physicsSnapshot(3, 3))
+        .mockResolvedValueOnce(physicsSnapshot(2, 2)),
+    };
+    const session = renderSession({ api });
+    act(() => session.result.current.joinRoom(room.room_id));
+    await waitFor(() =>
+      expect(session.result.current.remoteTransforms['remote-peer']?.position[0]).toBe(1)
+    );
+
+    act(() => {
+      session.result.current.handleLocalTransform({
+        roomId: room.room_id,
+        peerId: 'local-peer',
+        seq: 2,
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        animation: 'idle',
+        sentAt: 2,
+      });
+      session.result.current.handleLocalTransform({
+        roomId: room.room_id,
+        peerId: 'local-peer',
+        seq: 3,
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        animation: 'idle',
+        sentAt: 3,
+      });
+    });
+
+    await waitFor(() =>
+      expect(session.result.current.remoteTransforms['remote-peer']?.position[0]).toBe(3)
+    );
   });
 
   test('marks the room offline after three consecutive backend poll failures', async () => {

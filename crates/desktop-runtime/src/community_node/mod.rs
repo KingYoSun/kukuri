@@ -27,6 +27,7 @@ use crate::paths::community_node_config_path;
 use crate::runtime::DesktopRuntime;
 
 mod config_support;
+mod dome_hosting_support;
 mod http_client_support;
 mod index_query_support;
 mod indexing_request_support;
