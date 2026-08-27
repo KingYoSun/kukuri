@@ -1,4 +1,4 @@
-﻿use crate::*;
+use crate::*;
 
 pub(crate) fn step_name(step: &ScenarioStep) -> &'static str {
     match step {
@@ -30,6 +30,9 @@ pub(crate) fn step_name(step: &ScenarioStep) -> &'static str {
             "assert_metaverse_dome_create_rejected"
         }
         ScenarioStep::MoveMetaverseDome { .. } => "move_metaverse_dome",
+        ScenarioStep::ExerciseDomeConnections { .. } => "exercise_dome_connections",
+        ScenarioStep::AssertDomeConnectionTopology { .. } => "assert_dome_connection_topology",
+        ScenarioStep::RevokeLocalDomeConnection => "revoke_local_dome_connection",
         ScenarioStep::AssertMetaverseDomeMissing { .. } => "assert_metaverse_dome_missing",
         ScenarioStep::RestartDesktop => "restart_desktop",
         ScenarioStep::SearchCommunityIndex { .. } => "search_community_index",

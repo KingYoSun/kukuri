@@ -3,7 +3,7 @@
 ## 目的
 この MVP は、kukuri が中央集権的なゲームサーバーを前提にせず、トピック単位の固定規格Domeを扱えることを検証するためのものです。VRChat クローン、MMO、音声、ワールドエディタ、任意map、大規模リアルタイムシミュレーションは対象外です。
 
-固定geometryと変更可能範囲の正本は[ADR 0035](../adr/0035-fixed-dome-data-classification.md)、Spatial Context、Preset / Instance分離、引っ越しlifecycleの正本は[ADR 0036](../adr/0036-spatial-context-dome-instance-move.md)とする。Metaverseは実験機能のため、旧`world_version = 1` / `2` roomとの後方互換やmigrationは提供せず、既存roomは再作成する。
+固定geometryと変更可能範囲の正本は[ADR 0035](../adr/0035-fixed-dome-data-classification.md)、Spatial Context、Preset / Instance分離、引っ越しlifecycleの正本は[ADR 0036](../adr/0036-spatial-context-dome-instance-move.md)、Dome間Connectionとcomponent-local topologyの正本は[ADR 0037](../adr/0037-dome-connection-topology.md)とする。Metaverseは実験機能のため、旧`world_version = 1` / `2` roomとの後方互換やmigrationは提供せず、既存roomは再作成する。
 
 ## アーキテクチャ選択
 `docs/progress/2026-05-27-metaverse-mvp-plan.md` の Option A として、既存の game room model を拡張しています。
@@ -31,6 +31,9 @@
 - avatar transform、chat、object update は署名済み `metaverse-room-event` envelope として hint transport で送受信する。
 - WASD / arrow key movement により avatar transform event を約 10 Hz で送出。
 - `update_metaverse_room`はownerだけがcustomizationとpersistent prop初期定義を更新できる。実行中interactionはmanifestを更新しない。
+- 同一Spatial Contextのowner間で、4方向slotごとのConnection proposal、receiver accept、proposer withdraw、双方ownerからのrevokeを行える。
+- proposal / selection / agreement / lifecycle envelopeをContext docsへ保存し、active Connection集合からcomponent root、5,700cm単位の相対座標、topology digestを決定論的に導出する。
+- DesktopのConnection panelで4方向slot、待機proposal、active / draining状態、導出topologyを確認する。隣接sceneの描画と境界通過はIssue #790の範囲であり、まだ有効化しない。
 
 ## Production MVP 完了条件
 この goal は、以下を満たす状態を production MVP として扱う。
@@ -47,6 +50,7 @@
 - Docs: author replicaにPreset pointerとmove record、topic/private-channel replicaにowner slotとInstance pointerを保存。
 - Blobs: manifest JSON、VRM/GLB などの asset bytes を保存。
 - SQLite projection: `game_room_cache` に room discovery fields、room kind、manifest hash、metaverse JSON を保存。
+- Dome Connection projection: proposal / selection / agreement / lifecycleの正本はContext docs。`dome_connection_projection_cache`は削除・再構築可能なlocal read modelであり、component entityやglobal座標を正本として保存しない。
 - Connectivity/community node: optional facilitator として扱い、canonical authority にはしない。
 - Avatar transforms: high-frequency な ephemeral event として扱い、docs/blobs に直接 10 Hz で書き込まない。
 
@@ -69,6 +73,8 @@ desktop app を開き、`Game` に切り替えて `Metaverse Rooms` panel を使
 7. room chat message を送信する。
 8. object controls で共有オブジェクトを移動する。
 9. owner customizationを保存し、refreshまたは再起動後にmaterial、environment、persistent prop初期定義がmanifestから復元されることを確認する。
+10. 同じContextに別ownerのDomeがある場合、空いている方向slotからproposalを送り、receiver側でacceptする。双方の画面にactive Connectionと同じtopology digestが表示されることを確認する。
+11. どちらかのownerからConnectionをrevokeし、残ったedgeだけでcomponentが再構築されることを確認する。
 
 ## 2 クライアント確認
 1. 通常の kukuri peer connectivity で desktop instance を 2 つ起動する。
@@ -93,8 +99,12 @@ persistent propの初期定義はownerだけが`update_metaverse_room`でmanifes
 
 自動検証として、`metaverse_room_manifest_restores_after_restart_from_docs_and_blobs`と`desktop_smoke_metaverse_dome_persist`はrestart後にroom list、customization、persistent prop初期定義がdocs + blobから復元されることを確認する。
 
+`desktop_smoke_metaverse_dome_connections`は3 ownerでA–B / B–Cを接続し、cycleとなるA–Cを拒否し、restart後の同一topologyとrevoke後のcomponent分割を確認する。
+
 ## 既知の制約
 - 大規模同時接続、voice、WebRTC/SFU、ワールドエディタ、UGC scripting、asset safety scanning は goal の non-goal。
+- Connection proposalは1 Domeあたりopen outbound 32件、同一peer slot 4件、receiver slot queue 32件、local createは10分間に8件を上限とする。
+- owner blockをConnection失効へ結線する入力元はIssue #795、隣接Dome sceneのprefetchとtransitionはIssue #790で実装する。
 - chat は room-scoped signed event として扱う。topic timeline post として永続表示しないため、長期履歴 UI はこの MVP の対象外。
 
 ## Fallback / Mock と MVP 対象外

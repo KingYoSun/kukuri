@@ -43,6 +43,27 @@ export function createMetaverseRoomActions({
       api.updateMetaverseRoom(activeTopic, roomId, status, customization),
     moveRoom: (moveId, roomId, targetContext) =>
       api.moveDome(activeTopic, moveId, roomId, targetContext).then(() => undefined),
+    listConnections: (context) => api.listDomeConnectionTopology(context),
+    createConnectionProposal: (
+      proposalId,
+      context,
+      proposerInstanceId,
+      receiverInstanceId,
+      direction
+    ) =>
+      api.createDomeConnectionProposal(
+        proposalId,
+        context,
+        proposerInstanceId,
+        receiverInstanceId,
+        direction
+      ),
+    acceptConnectionProposal: (context, proposalId) =>
+      api.acceptDomeConnectionProposal(context, proposalId),
+    withdrawConnectionProposal: (context, proposalId) =>
+      api.withdrawDomeConnectionProposal(context, proposalId),
+    revokeConnection: (context, connectionId) =>
+      api.revokeDomeConnection(context, connectionId),
     refresh: onRefresh,
   };
 }

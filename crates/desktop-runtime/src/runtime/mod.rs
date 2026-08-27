@@ -7,16 +7,17 @@ use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use kukuri_app_api::{
-    AppService, AuthorSocialView, BlobMediaPayload, BookmarkedCustomReactionView,
-    BookmarkedPostView, ChannelAccessTokenExport, ChannelAccessTokenPreview,
-    CreateCustomReactionAssetInput, CreateGameRoomInput, CreateLiveSessionInput,
-    CreateMetaverseRoomInput, CustomReactionAssetView, DirectMessageConversationView,
-    DirectMessageStatusView, DirectMessageTimelineView, DirectMessageTopicStatusView, GameRoomView,
-    ImportMetaverseRoomAssetInput, JoinedPrivateChannelView, LiveSessionView,
-    MetaverseAssetRefView, MetaverseRoomEventView, MoveDomeInput, NotificationStatusView,
-    NotificationView, PrivateChannelCapability, ProfileInput, PublishMetaverseRoomEventInput,
-    ReactionStateView, RecentReactionView, ServiceHandles, SyncStatus, TimelineView,
-    UpdateGameRoomInput, UpdateMetaverseRoomInput,
+    AcceptDomeConnectionProposalInput, AppService, AuthorSocialView, BlobMediaPayload,
+    BookmarkedCustomReactionView, BookmarkedPostView, ChannelAccessTokenExport,
+    ChannelAccessTokenPreview, CreateCustomReactionAssetInput, CreateDomeConnectionProposalInput,
+    CreateGameRoomInput, CreateLiveSessionInput, CreateMetaverseRoomInput, CustomReactionAssetView,
+    DirectMessageConversationView, DirectMessageStatusView, DirectMessageTimelineView,
+    DirectMessageTopicStatusView, GameRoomView, ImportMetaverseRoomAssetInput,
+    JoinedPrivateChannelView, LiveSessionView, MetaverseAssetRefView, MetaverseRoomEventView,
+    MoveDomeInput, NotificationStatusView, NotificationView, PrivateChannelCapability,
+    ProfileInput, PublishMetaverseRoomEventInput, ReactionStateView, RecentReactionView,
+    RevokeDomeConnectionInput, ServiceHandles, SyncStatus, TimelineView, UpdateGameRoomInput,
+    UpdateMetaverseRoomInput, WithdrawDomeConnectionProposalInput,
 };
 use kukuri_cn_protocol::normalize_http_url;
 use kukuri_core::{

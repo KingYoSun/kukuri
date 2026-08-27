@@ -17,6 +17,7 @@ import {
   type CreateMetaverseRoomInput,
 } from './metaverse/MetaverseRoomDiscovery';
 import { MetaverseRoomView } from './metaverse/MetaverseRoomView';
+import { DomeConnectionPanel } from './metaverse/DomeConnectionPanel';
 import { useMetaverseRoomSession } from './metaverse/useMetaverseRoomSession';
 import type { MetaverseRoomActions } from './metaverse/MetaverseRoomActions';
 import {
@@ -241,6 +242,13 @@ export function MetaverseRoomPanel({
         onInteractWithProp={session.interactWithProp}
         onMessageDraftChange={session.setMessageDraft}
         onSendMessage={session.handleSendMessage}
+      />
+      <DomeConnectionPanel
+        actions={actions}
+        room={session.selectedRoom}
+        rooms={rooms}
+        localAuthorPubkey={syncStatus.local_author_pubkey}
+        locale={locale}
       />
     </div>
   );

@@ -32,10 +32,11 @@ pub(crate) use anyhow::{Context, Result};
 pub(crate) use base64::Engine;
 pub(crate) use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 pub(crate) use kukuri_app_api::{
-    AppService, CreateGameRoomInput, CreateLiveSessionInput, CreateMetaverseRoomInput,
+    AcceptDomeConnectionProposalInput, AppService, CreateDomeConnectionProposalInput,
+    CreateGameRoomInput, CreateLiveSessionInput, CreateMetaverseRoomInput,
     DirectMessageConversationView, DirectMessageMessageView, DirectMessageStatusView,
-    GameScoreView, MoveDomeInput, PrivateChannelCapability, ServiceHandles, SyncStatus,
-    UpdateGameRoomInput, UpdateMetaverseRoomInput,
+    GameScoreView, MoveDomeInput, PrivateChannelCapability, RevokeDomeConnectionInput,
+    ServiceHandles, SyncStatus, UpdateGameRoomInput, UpdateMetaverseRoomInput,
 };
 pub(crate) use kukuri_blob_service::MemoryBlobService;
 pub(crate) use kukuri_cn_core::{JwtConfig, TestDatabase};
@@ -44,8 +45,9 @@ pub(crate) use kukuri_cn_user_api::{
     UserApiConfig, app_router as user_api_app_router, build_state as build_user_api_state,
 };
 pub(crate) use kukuri_core::{
-    ChannelAudienceKind, ChannelId, ChannelRef, CreatePrivateChannelInput, DomeMaterialPreset,
-    GameRoomStatus, KukuriKeys, SpatialContextV1, TimelineScope, TopicId, generate_keys,
+    ChannelAudienceKind, ChannelId, ChannelRef, CreatePrivateChannelInput, DomeDirection,
+    DomeMaterialPreset, GameRoomStatus, KukuriKeys, SpatialContextV1, TimelineScope, TopicId,
+    generate_keys,
 };
 pub(crate) use kukuri_desktop_runtime::{
     AcceptCommunityNodeConsentsRequest, AuthorRequest, CommunityNodeTargetRequest,

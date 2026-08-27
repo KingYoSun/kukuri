@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS idx_dome_connection_projection_topic_channel;
+DROP TABLE IF EXISTS dome_connection_projection_cache;

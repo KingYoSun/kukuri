@@ -545,3 +545,40 @@ pub struct MoveDomeRequest {
     pub source_instance_id: String,
     pub target_context: SpatialContextV1,
 }
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ListDomeConnectionTopologyRequest {
+    pub spatial_context: SpatialContextV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct CreateDomeConnectionProposalRequest {
+    pub proposal_id: String,
+    pub spatial_context: SpatialContextV1,
+    pub proposer_instance_id: String,
+    pub receiver_instance_id: String,
+    pub proposer_direction: kukuri_core::DomeDirection,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct AcceptDomeConnectionProposalRequest {
+    pub spatial_context: SpatialContextV1,
+    pub proposal_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct WithdrawDomeConnectionProposalRequest {
+    pub spatial_context: SpatialContextV1,
+    pub proposal_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct RevokeDomeConnectionRequest {
+    pub spatial_context: SpatialContextV1,
+    pub connection_id: String,
+}

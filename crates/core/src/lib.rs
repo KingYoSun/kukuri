@@ -1,5 +1,6 @@
 mod crypto;
 mod direct_messages;
+mod dome_connections;
 mod dome_envelopes;
 mod envelope;
 mod game;
@@ -25,6 +26,19 @@ pub use direct_messages::{
     DirectMessagePayloadV1, build_direct_message_ack, decrypt_direct_message_attachment,
     decrypt_direct_message_frame, derive_direct_message_topic, direct_message_id_for_participants,
     encrypt_direct_message_attachment, encrypt_direct_message_frame,
+};
+pub use dome_connections::{
+    DOME_CONNECTION_MAX_OPEN_OUTBOUND, DOME_CONNECTION_MAX_PER_PEER_SLOT,
+    DOME_CONNECTION_MAX_RECEIVER_QUEUE, DomeComponentTopologyV1, DomeConnectionAgreementV1,
+    DomeConnectionEndpointV1, DomeConnectionProposalV1, DomeConnectionRecordV1,
+    DomeConnectionStatusV1, DomeConnectionTerminalReasonV1, DomeProposalDerivedStatusV1,
+    DomeProposalSelectionV1, DomeRejectedConnectionV1, DomeTopologyResolutionV1, DomeTopologyV1,
+    SignedDomeConnectionAgreementV1, build_dome_connection_agreement_envelope,
+    build_dome_connection_proposal_envelope, build_dome_connection_selection_envelope,
+    build_signed_dome_connection_agreement, derive_dome_proposal_status, opposite_dome_direction,
+    resolve_dome_topology, resolve_dome_topology_candidates, validate_dome_connection_agreement,
+    validate_dome_connection_proposal, validate_dome_connection_record,
+    validate_dome_connection_selection, verify_signed_dome_connection_agreement,
 };
 pub use dome_envelopes::{
     build_dome_instance_envelope, build_dome_move_envelope, build_dome_preset_envelope,

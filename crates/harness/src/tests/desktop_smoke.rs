@@ -97,6 +97,26 @@ async fn desktop_smoke_metaverse_dome_move() {
     assert_eq!(result.status, HarnessStatus::Pass);
     assert!(artifacts.join("result.json").exists());
 }
+
+#[tokio::test]
+async fn desktop_smoke_metaverse_dome_connections() {
+    disable_keyring_for_tests();
+    let _serial = acquire_scenario_test_lock().await;
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(2)
+        .expect("workspace root");
+    let artifacts = root
+        .join("test-results")
+        .join("kukuri")
+        .join("desktop-smoke-metaverse-dome-connections");
+    let result = run_named_scenario(root, "desktop_smoke_metaverse_dome_connections", &artifacts)
+        .await
+        .expect("scenario");
+
+    assert_eq!(result.status, HarnessStatus::Pass);
+    assert!(artifacts.join("result.json").exists());
+}
 #[tokio::test]
 async fn desktop_smoke_bookmark_workflow() {
     disable_keyring_for_tests();

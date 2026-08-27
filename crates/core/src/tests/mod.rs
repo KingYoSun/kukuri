@@ -1,5 +1,6 @@
 mod derivation_golden;
 mod direct_messages;
+mod dome_connections;
 mod envelope;
 mod media_live_game;
 mod posts;

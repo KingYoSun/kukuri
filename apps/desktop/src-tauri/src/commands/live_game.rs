@@ -1,8 +1,10 @@
 use kukuri_desktop_runtime::{
+    AcceptDomeConnectionProposalRequest, CreateDomeConnectionProposalRequest,
     CreateGameRoomRequest, CreateLiveSessionRequest, CreateMetaverseRoomRequest,
-    ImportMetaverseRoomAssetRequest, ListGameRoomsRequest, ListLiveSessionsRequest,
-    ListMetaverseRoomEventsRequest, LiveSessionCommandRequest, PublishMetaverseRoomEventRequest,
-    MoveDomeRequest, UpdateGameRoomRequest, UpdateMetaverseRoomRequest,
+    ImportMetaverseRoomAssetRequest, ListDomeConnectionTopologyRequest, ListGameRoomsRequest,
+    ListLiveSessionsRequest, ListMetaverseRoomEventsRequest, LiveSessionCommandRequest,
+    MoveDomeRequest, PublishMetaverseRoomEventRequest, RevokeDomeConnectionRequest,
+    UpdateGameRoomRequest, UpdateMetaverseRoomRequest, WithdrawDomeConnectionProposalRequest,
 };
 
 use crate::state::{CommandError, DesktopState, map_error};
@@ -133,6 +135,66 @@ pub async fn move_dome(
     request: MoveDomeRequest,
 ) -> Result<kukuri_app_api::DomeMoveView, CommandError> {
     state.runtime.move_dome(request).await.map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn list_dome_connection_topology(
+    state: tauri::State<'_, DesktopState>,
+    request: ListDomeConnectionTopologyRequest,
+) -> Result<kukuri_app_api::DomeConnectionTopologyView, CommandError> {
+    state
+        .runtime
+        .list_dome_connection_topology(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn create_dome_connection_proposal(
+    state: tauri::State<'_, DesktopState>,
+    request: CreateDomeConnectionProposalRequest,
+) -> Result<kukuri_app_api::DomeConnectionProposalView, CommandError> {
+    state
+        .runtime
+        .create_dome_connection_proposal(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn accept_dome_connection_proposal(
+    state: tauri::State<'_, DesktopState>,
+    request: AcceptDomeConnectionProposalRequest,
+) -> Result<kukuri_app_api::DomeConnectionView, CommandError> {
+    state
+        .runtime
+        .accept_dome_connection_proposal(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn withdraw_dome_connection_proposal(
+    state: tauri::State<'_, DesktopState>,
+    request: WithdrawDomeConnectionProposalRequest,
+) -> Result<kukuri_app_api::DomeConnectionProposalView, CommandError> {
+    state
+        .runtime
+        .withdraw_dome_connection_proposal(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn revoke_dome_connection(
+    state: tauri::State<'_, DesktopState>,
+    request: RevokeDomeConnectionRequest,
+) -> Result<kukuri_app_api::DomeConnectionView, CommandError> {
+    state
+        .runtime
+        .revoke_dome_connection(request)
+        .await
+        .map_err(map_error)
 }
 
 #[tauri::command]

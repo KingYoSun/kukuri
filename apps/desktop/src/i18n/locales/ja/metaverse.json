@@ -47,6 +47,33 @@
       "offline": "ピア接続を利用できません"
     }
   },
+  "connections": {
+    "title": "Dome Connection",
+    "summary_one": "{{count}}個のローカルcomponent",
+    "summary_other": "{{count}}個のローカルcomponent",
+    "refresh": "Dome Connectionを更新",
+    "target": "接続先",
+    "chooseTarget": "Domeを選択",
+    "propose": "Connectionを提案",
+    "accept": "採用",
+    "withdraw": "取り下げ",
+    "revoke": "接続解除",
+    "connectedTo": "{{name}}に接続中",
+    "topology": "Topology {{digest}}・active Connection {{count}}件",
+    "directions": { "north": "北", "east": "東", "south": "南", "west": "西" },
+    "status": {
+      "open": "空き",
+      "proposed": "提案中",
+      "reserved": "選択済み",
+      "accepted": "合意済み",
+      "waiting_for_slot": "slot待機中",
+      "discarded": "破棄済み",
+      "active": "接続中",
+      "draining": "解除中",
+      "revoked": "解除済み"
+    },
+    "errors": { "load": "Dome Connectionを取得できませんでした", "action": "Connectionを更新できませんでした" }
+  },
   "hud": {
     "leave": "ルームから退出",
     "hide": "ルームHUDを閉じる",

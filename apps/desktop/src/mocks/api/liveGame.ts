@@ -1,5 +1,8 @@
 import {
   type DesktopApi,
+  type DomeConnectionProposalView,
+  type DomeConnectionTopologyView,
+  type DomeConnectionView,
   type GameScoreView,
   type MetaverseAssetRef,
   type MetaverseRoomEventV1,
@@ -28,6 +31,11 @@ type LiveGameMock = Pick<
   | 'updateGameRoom'
   | 'updateMetaverseRoom'
   | 'moveDome'
+  | 'listDomeConnectionTopology'
+  | 'createDomeConnectionProposal'
+  | 'acceptDomeConnectionProposal'
+  | 'withdrawDomeConnectionProposal'
+  | 'revokeDomeConnection'
   | 'publishMetaverseRoomEvent'
   | 'listMetaverseRoomEvents'
   | 'importMetaverseRoomAsset'
@@ -43,6 +51,96 @@ export function createLiveGameMock(runtime: MockRuntime): LiveGameMock {
     metaverseAssetPayloads,
     mutedAuthorPubkeys,
   } = runtime;
+  const connectionProposals = new Map<string, DomeConnectionProposalView>();
+  const connectionViews = new Map<string, DomeConnectionView>();
+
+  const contextKey = (context: Parameters<DesktopApi['listDomeConnectionTopology']>[0]) =>
+    context.kind === 'topic'
+      ? `topic:${context.topic_id}`
+      : `channel:${context.topic_id}:${context.channel_id}`;
+
+  const topologyView = (
+    context: Parameters<DesktopApi['listDomeConnectionTopology']>[0]
+  ): DomeConnectionTopologyView => {
+    const rooms = (gameRoomsByTopic[context.topic_id] ?? []).filter(
+      (room) =>
+        room.metaverse?.spatial_context.kind === context.kind &&
+        (context.kind === 'topic' ||
+          (room.metaverse.spatial_context.kind === 'channel' &&
+            room.metaverse.spatial_context.channel_id === context.channel_id))
+    );
+    const connections = [...connectionViews.values()].filter(
+      (connection) => contextKey(connection.record.agreement.spatial_context) === contextKey(context)
+    );
+    const active = connections.filter((connection) => connection.record.status === 'active');
+    const connectedIds = new Set(
+      active.flatMap((connection) => [
+        connection.record.agreement.proposer.instance_id,
+        connection.record.agreement.receiver.instance_id,
+      ])
+    );
+    const components = rooms.map((room) => ({
+      root_instance_id: room.room_id,
+      instance_ids: [room.room_id],
+      connection_ids: [] as string[],
+      coordinates_cm: { [room.room_id]: [0, 0, 0] as [number, number, number] },
+    }));
+    if (active.length === 1) {
+      const agreement = active[0].record.agreement;
+      const proposerRoom = rooms.find((room) => room.room_id === agreement.proposer.instance_id);
+      const receiverRoom = rooms.find((room) => room.room_id === agreement.receiver.instance_id);
+      if (proposerRoom && receiverRoom) {
+        const offset: Record<string, [number, number, number]> = {
+          north: [0, 0, -5700],
+          east: [5700, 0, 0],
+          south: [0, 0, 5700],
+          west: [-5700, 0, 0],
+        };
+        const root = [proposerRoom.room_id, receiverRoom.room_id].sort()[0];
+        const proposerAtRoot = root === proposerRoom.room_id;
+        const direction = proposerAtRoot
+          ? agreement.proposer.direction
+          : agreement.receiver.direction;
+        const neighbor = proposerAtRoot ? receiverRoom.room_id : proposerRoom.room_id;
+        components.splice(
+          0,
+          components.length,
+          {
+            root_instance_id: root,
+            instance_ids: [root, neighbor].sort(),
+            connection_ids: [agreement.connection_id],
+            coordinates_cm: {
+              [root]: [0, 0, 0],
+              [neighbor]: offset[direction],
+            },
+          },
+          ...rooms
+            .filter((room) => !connectedIds.has(room.room_id))
+            .map((room) => ({
+              root_instance_id: room.room_id,
+              instance_ids: [room.room_id],
+              connection_ids: [] as string[],
+              coordinates_cm: { [room.room_id]: [0, 0, 0] as [number, number, number] },
+            }))
+        );
+      }
+    }
+    return {
+      proposals: [...connectionProposals.values()].filter(
+        (proposal) => contextKey(proposal.proposal.spatial_context) === contextKey(context)
+      ),
+      connections,
+      resolution: {
+        topology: {
+          spatial_context: context,
+          components: components.sort((a, b) => a.root_instance_id.localeCompare(b.root_instance_id)),
+          active_connection_ids: active.map((connection) => connection.record.agreement.connection_id),
+          topology_digest: `mock-${contextKey(context)}-${active.length}`,
+        },
+        rejected_connections: [],
+      },
+    };
+  };
 
   return {
     async listLiveSessions(topic, scope: TimelineScope = { kind: 'public' }) {
@@ -245,6 +343,119 @@ export function createLiveGameMock(runtime: MockRuntime): LiveGameMock {
         failure_reason: null,
         updated_at: Date.now(),
       };
+    },
+    async listDomeConnectionTopology(spatialContext) {
+      return topologyView(spatialContext);
+    },
+    async createDomeConnectionProposal(
+      proposalId,
+      spatialContext,
+      proposerInstanceId,
+      receiverInstanceId,
+      proposerDirection
+    ) {
+      const rooms = gameRoomsByTopic[spatialContext.topic_id] ?? [];
+      const proposerRoom = rooms.find((room) => room.room_id === proposerInstanceId);
+      const receiverRoom = rooms.find((room) => room.room_id === receiverInstanceId);
+      if (!proposerRoom?.metaverse || !receiverRoom?.metaverse) {
+        throw new Error('Dome Connection endpoint not found');
+      }
+      const opposite = { north: 'south', east: 'west', south: 'north', west: 'east' } as const;
+      const proposal: DomeConnectionProposalView = {
+        proposal: {
+          proposal_id: proposalId,
+          spatial_context: spatialContext,
+          proposer: {
+            instance_id: proposerInstanceId,
+            instance_generation: proposerRoom.metaverse.instance_generation,
+            owner_pubkey: proposerRoom.host_pubkey,
+            direction: proposerDirection,
+          },
+          receiver: {
+            instance_id: receiverInstanceId,
+            instance_generation: receiverRoom.metaverse.instance_generation,
+            owner_pubkey: receiverRoom.host_pubkey,
+            direction: opposite[proposerDirection],
+          },
+          sequence: connectionProposals.size + 1,
+          created_at: Date.now(),
+        },
+        selection: null,
+        status: 'proposed',
+        terminal_reason: null,
+        connection_id: `connection-${proposalId}`,
+      };
+      connectionProposals.set(proposalId, proposal);
+      return proposal;
+    },
+    async acceptDomeConnectionProposal(spatialContext, proposalId) {
+      const proposal = connectionProposals.get(proposalId);
+      if (!proposal || contextKey(proposal.proposal.spatial_context) !== contextKey(spatialContext)) {
+        throw new Error('Dome Connection proposal not found');
+      }
+      const connection: DomeConnectionView = {
+        record: {
+          agreement: {
+            connection_id: proposal.connection_id,
+            proposal_id: proposalId,
+            spatial_context: spatialContext,
+            proposer: proposal.proposal.proposer,
+            receiver: proposal.proposal.receiver,
+            activation_generation: proposal.proposal.sequence,
+          },
+          receiver_slot_generation: 1,
+          observed_active_connection_ids: [],
+          status: 'active',
+          lifecycle_generation: 1,
+          lifecycle_actor: null,
+          lifecycle_reason: null,
+        },
+      };
+      connectionViews.set(proposal.connection_id, connection);
+      connectionProposals.set(proposalId, {
+        ...proposal,
+        selection: {
+          selection_id: `selection-${proposalId}-1`,
+          proposal_id: proposalId,
+          spatial_context: spatialContext,
+          receiver: proposal.proposal.receiver,
+          slot_generation: 1,
+          observed_active_connection_ids: [],
+          selected_at: Date.now(),
+        },
+        status: 'accepted',
+      });
+      return connection;
+    },
+    async withdrawDomeConnectionProposal(spatialContext, proposalId) {
+      const proposal = connectionProposals.get(proposalId);
+      if (!proposal || contextKey(proposal.proposal.spatial_context) !== contextKey(spatialContext)) {
+        throw new Error('Dome Connection proposal not found');
+      }
+      const withdrawn: DomeConnectionProposalView = {
+        ...proposal,
+        status: 'discarded',
+        terminal_reason: 'proposer_withdrew',
+      };
+      connectionProposals.set(proposalId, withdrawn);
+      return withdrawn;
+    },
+    async revokeDomeConnection(spatialContext, connectionId) {
+      const connection = connectionViews.get(connectionId);
+      if (!connection || contextKey(connection.record.agreement.spatial_context) !== contextKey(spatialContext)) {
+        throw new Error('Dome Connection not found');
+      }
+      const revoked: DomeConnectionView = {
+        record: {
+          ...connection.record,
+          status: 'revoked',
+          lifecycle_generation: connection.record.lifecycle_generation + 2,
+          lifecycle_actor: syncStatus.local_author_pubkey,
+          lifecycle_reason: 'owner_revoked',
+        },
+      };
+      connectionViews.set(connectionId, revoked);
+      return revoked;
     },
     async publishMetaverseRoomEvent(topic, roomId, peerId, seq, event) {
       const now = Date.now();

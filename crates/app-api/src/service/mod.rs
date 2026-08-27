@@ -14,8 +14,10 @@ pub(crate) use kukuri_core::{
     DOME_INSTANCE_MANIFEST_MIME, DOME_PRESET_MANIFEST_MIME, DirectMessageAttachmentKind,
     DirectMessageAttachmentManifestV1, DirectMessageEncryptedAttachmentV1,
     DirectMessageEncryptedBlobRefV1, DirectMessageFrameV1, DirectMessagePayloadV1,
-    DomeInstanceManifestV1, DomeInstanceStateDocV1, DomeMoveRecordV1, DomeMoveStateDocV1,
-    DomePresetManifestV1, DomePresetRefV1, DomePresetStateDocV1, EnvelopeId, FollowEdge,
+    DomeConnectionEndpointV1, DomeConnectionProposalV1, DomeConnectionRecordV1,
+    DomeConnectionStatusV1, DomeConnectionTerminalReasonV1, DomeInstanceManifestV1,
+    DomeInstanceStateDocV1, DomeMoveRecordV1, DomeMoveStateDocV1, DomePresetManifestV1,
+    DomePresetRefV1, DomePresetStateDocV1, DomeProposalSelectionV1, EnvelopeId, FollowEdge,
     FollowEdgeDocV1, FollowEdgeStatus, FriendOnlyGrantPreview, FriendPlusSharePreview,
     GAME_MANIFEST_MIME, GameParticipant, GameRoomKind, GameRoomManifestBlobV1, GameRoomStateDocV1,
     GameRoomStatus, GameScoreEntry, GossipHint, HintObjectRef, KukuriEnvelope, KukuriKeys,
@@ -30,7 +32,9 @@ pub(crate) use kukuri_core::{
     PrivateChannelParticipantDocV1, PrivateChannelPolicyDocV1, Profile, ProfilePost, ProfileRepost,
     Pubkey, ReactionDocV1, ReactionKeyKind, ReactionKeyV1, ReplicaId, RepostSourceSnapshotV1,
     TimelineScope, TopicId, WithdrawalReasonVisibility, author_profile_topic_id,
-    build_custom_reaction_asset_envelope, build_direct_message_ack, build_dome_instance_envelope,
+    build_custom_reaction_asset_envelope, build_direct_message_ack,
+    build_dome_connection_agreement_envelope, build_dome_connection_proposal_envelope,
+    build_dome_connection_selection_envelope, build_dome_instance_envelope,
     build_dome_move_envelope, build_dome_preset_envelope, build_follow_edge_envelope,
     build_friend_only_grant_token, build_friend_plus_share_token, build_game_session_envelope,
     build_live_session_envelope, build_media_manifest_envelope,
@@ -48,6 +52,8 @@ pub(crate) use kukuri_core::{
     parse_private_channel_epoch_handoff_grant, parse_private_channel_invite_token,
     parse_private_channel_participant, parse_private_channel_policy, parse_profile,
     parse_profile_post, parse_profile_repost, parse_reaction, timeline_sort_key,
+    validate_dome_connection_agreement, validate_dome_connection_proposal,
+    validate_dome_connection_record, validate_dome_connection_selection,
     validate_dome_customization, validate_dome_preset_manifest,
     validate_metaverse_room_event_content, validate_metaverse_room_event_for_instance,
     validate_metaverse_room_state, verify_post_withdrawal,
@@ -60,10 +66,10 @@ pub(crate) use kukuri_docs_sync::{
 pub(crate) use kukuri_store::{
     AuthorRelationshipProjectionRow, BlobCacheStatus, BlobCacheStore, BookmarkedCustomReactionRow,
     BookmarkedPostRow, DirectMessageConversationRow, DirectMessageMessageRow,
-    DirectMessageOutboxRow, DirectMessageTombstoneRow, GameRoomProjectionRow,
-    LiveSessionProjectionRow, MutedAuthorRow, NotificationKind, NotificationRow,
-    ObjectProjectionRow, ObjectProjectionStore, Page, PostWithdrawalRow, ProjectionStore,
-    ReactionProjectionRow, Store, TimelineCursor,
+    DirectMessageOutboxRow, DirectMessageTombstoneRow, DomeConnectionProjectionRow,
+    GameRoomProjectionRow, LiveSessionProjectionRow, MutedAuthorRow, NotificationKind,
+    NotificationRow, ObjectProjectionRow, ObjectProjectionStore, Page, PostWithdrawalRow,
+    ProjectionStore, ReactionProjectionRow, Store, TimelineCursor,
 };
 pub(crate) use kukuri_transport::{
     ConnectionPath, DiscoveryMode, DiscoverySnapshot, HintTransport, PeerSnapshot, SeedPeer,
@@ -87,29 +93,34 @@ pub(crate) const DIRECT_MESSAGE_RETRY_INTERVAL_MS: u64 = 2_000;
 pub(crate) const NOTIFICATION_PREVIEW_LIMIT: usize = 80;
 
 pub(crate) use crate::views::{
-    AttachmentView, AuthorSocialView, BlobMediaPayload, BlobViewStatus,
-    BookmarkedCustomReactionView, BookmarkedPostView, ChannelAccessTokenExport,
+    AcceptDomeConnectionProposalInput, AttachmentView, AuthorSocialView, BlobMediaPayload,
+    BlobViewStatus, BookmarkedCustomReactionView, BookmarkedPostView, ChannelAccessTokenExport,
     ChannelAccessTokenKind, ChannelAccessTokenPreview, CreateCustomReactionAssetInput,
-    CreateGameRoomInput, CreateLiveSessionInput, CreateMetaverseRoomInput, CustomReactionAssetView,
-    DeliveryState, DirectMessageConversationView, DirectMessageMessageView,
-    DirectMessageStatusView, DirectMessageTimelineView, DirectMessageTopicStatusView,
-    DiscoveryStatus, DomeMoveView, GameRoomView, GameScoreView, ImportMetaverseRoomAssetInput,
-    JoinedPrivateChannelView, LiveSessionView, MetaverseAssetRefView, MetaverseRoomEventView,
-    MoveDomeInput, NotificationStatusView, NotificationView, PendingAttachment, PostView,
-    PostWithdrawalView, PrivateChannelCapability, PrivateChannelEpochCapability, ProfileAssetView,
-    ProfileInput, PublishMetaverseRoomEventInput, ReactionKeyView, ReactionStateView,
-    ReactionSummaryView, RecentReactionView, ReplyPreviewAuthorView, ReplyPreviewView,
-    RepostSourceView, SocialConnectionKind, SyncStatus, TimelineView, TopicSyncStatus,
-    UpdateGameRoomInput, UpdateMetaverseRoomInput,
+    CreateDomeConnectionProposalInput, CreateGameRoomInput, CreateLiveSessionInput,
+    CreateMetaverseRoomInput, CustomReactionAssetView, DeliveryState,
+    DirectMessageConversationView, DirectMessageMessageView, DirectMessageStatusView,
+    DirectMessageTimelineView, DirectMessageTopicStatusView, DiscoveryStatus,
+    DomeConnectionProposalView, DomeConnectionTopologyView, DomeConnectionView, DomeMoveView,
+    GameRoomView, GameScoreView, ImportMetaverseRoomAssetInput, JoinedPrivateChannelView,
+    LiveSessionView, MetaverseAssetRefView, MetaverseRoomEventView, MoveDomeInput,
+    NotificationStatusView, NotificationView, PendingAttachment, PostView, PostWithdrawalView,
+    PrivateChannelCapability, PrivateChannelEpochCapability, ProfileAssetView, ProfileInput,
+    PublishMetaverseRoomEventInput, ReactionKeyView, ReactionStateView, ReactionSummaryView,
+    RecentReactionView, ReplyPreviewAuthorView, ReplyPreviewView, RepostSourceView,
+    RevokeDomeConnectionInput, SocialConnectionKind, SyncStatus, TimelineView, TopicSyncStatus,
+    UpdateGameRoomInput, UpdateMetaverseRoomInput, WithdrawDomeConnectionProposalInput,
 };
 
 mod attachment_support;
 mod direct_messages_delivery_support;
 mod direct_messages_subscription_support;
+mod dome_connection_support;
+pub(crate) use dome_connection_support::*;
 mod errors;
 mod gossip_subscription_support;
 mod hydration_support;
 mod live_game_support;
+pub(crate) use live_game_support::fetch_verified_dome_envelope;
 mod metaverse_room_event_support;
 mod notifications_support;
 mod object_persistence_support;

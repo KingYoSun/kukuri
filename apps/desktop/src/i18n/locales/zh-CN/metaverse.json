@@ -47,6 +47,33 @@
       "offline": "对等连接不可用"
     }
   },
+  "connections": {
+    "title": "穹顶连接",
+    "summary_one": "{{count}} 个本地组件",
+    "summary_other": "{{count}} 个本地组件",
+    "refresh": "刷新穹顶连接",
+    "target": "连接到",
+    "chooseTarget": "选择穹顶",
+    "propose": "发起连接提案",
+    "accept": "接受",
+    "withdraw": "撤回",
+    "revoke": "断开连接",
+    "connectedTo": "已连接到 {{name}}",
+    "topology": "拓扑 {{digest}} · {{count}} 个活动连接",
+    "directions": { "north": "北", "east": "东", "south": "南", "west": "西" },
+    "status": {
+      "open": "空闲",
+      "proposed": "已提案",
+      "reserved": "已选择",
+      "accepted": "已同意",
+      "waiting_for_slot": "等待方向槽",
+      "discarded": "已丢弃",
+      "active": "活动",
+      "draining": "正在断开",
+      "revoked": "已撤销"
+    },
+    "errors": { "load": "无法加载穹顶连接", "action": "无法更新连接" }
+  },
   "hud": {
     "leave": "离开房间",
     "hide": "隐藏房间 HUD",

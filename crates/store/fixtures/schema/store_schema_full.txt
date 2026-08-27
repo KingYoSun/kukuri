@@ -71,6 +71,14 @@ table dm_outbox
   column cid=3 name=frame_blob_hash type=TEXT notnull=1 default=None pk=0
   column cid=4 name=created_at type=INTEGER notnull=1 default=None pk=0
   column cid=5 name=last_attempt_at type=INTEGER notnull=0 default=None pk=0
+table dome_connection_projection_cache
+  column cid=0 name=context_id type=TEXT notnull=0 default=None pk=1
+  column cid=1 name=topic_id type=TEXT notnull=1 default=None pk=0
+  column cid=2 name=channel_id type=TEXT notnull=1 default=Some("''") pk=0
+  column cid=3 name=snapshot_json type=TEXT notnull=1 default=None pk=0
+  column cid=4 name=topology_digest type=TEXT notnull=1 default=None pk=0
+  column cid=5 name=derived_at type=INTEGER notnull=1 default=None pk=0
+  column cid=6 name=projection_version type=INTEGER notnull=1 default=None pk=0
 table download_jobs
   column cid=0 name=blob_hash type=TEXT notnull=0 default=None pk=1
   column cid=1 name=status type=TEXT notnull=1 default=None pk=0
@@ -276,6 +284,10 @@ index idx_dm_tombstones_dm_id table=dm_message_tombstones unique=0 origin=c part
   key seqno=1 cid=2 name=Some("deleted_at")
   key seqno=2 cid=1 name=Some("message_id")
   sql=Some("CREATE INDEX idx_dm_tombstones_dm_id ON dm_message_tombstones(dm_id, deleted_at DESC, message_id DESC)")
+index idx_dome_connection_projection_topic_channel table=dome_connection_projection_cache unique=0 origin=c partial=0
+  key seqno=0 cid=1 name=Some("topic_id")
+  key seqno=1 cid=2 name=Some("channel_id")
+  sql=Some("CREATE INDEX idx_dome_connection_projection_topic_channel ON dome_connection_projection_cache(topic_id, channel_id)")
 index idx_follow_edges_subject table=follow_edges unique=0 origin=c partial=0
   key seqno=0 cid=0 name=Some("subject_pubkey")
   key seqno=1 cid=3 name=Some("updated_at")
@@ -432,6 +444,9 @@ index sqlite_autoindex_dm_messages_1 table=dm_messages unique=1 origin=pk partia
 index sqlite_autoindex_dm_outbox_1 table=dm_outbox unique=1 origin=pk partial=0
   key seqno=0 cid=0 name=Some("dm_id")
   key seqno=1 cid=1 name=Some("message_id")
+  sql=None
+index sqlite_autoindex_dome_connection_projection_cache_1 table=dome_connection_projection_cache unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("context_id")
   sql=None
 index sqlite_autoindex_download_jobs_1 table=download_jobs unique=1 origin=pk partial=0
   key seqno=0 cid=0 name=Some("blob_hash")

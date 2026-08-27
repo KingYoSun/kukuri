@@ -505,7 +505,7 @@ impl AppService {
     }
 }
 
-async fn fetch_verified_dome_envelope<T: DeserializeOwned>(
+pub(crate) async fn fetch_verified_dome_envelope<T: DeserializeOwned>(
     docs_sync: &dyn DocsSync,
     replica: &ReplicaId,
     envelope_id: &EnvelopeId,

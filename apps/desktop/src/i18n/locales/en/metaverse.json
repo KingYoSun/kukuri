@@ -47,6 +47,33 @@
       "offline": "Peer connectivity is unavailable"
     }
   },
+  "connections": {
+    "title": "Dome Connections",
+    "summary_one": "{{count}} local component",
+    "summary_other": "{{count}} local components",
+    "refresh": "Refresh Dome Connections",
+    "target": "Connect to",
+    "chooseTarget": "Choose a Dome",
+    "propose": "Propose Connection",
+    "accept": "Accept",
+    "withdraw": "Withdraw",
+    "revoke": "Disconnect",
+    "connectedTo": "Connected to {{name}}",
+    "topology": "Topology {{digest}} · {{count}} active Connections",
+    "directions": { "north": "North", "east": "East", "south": "South", "west": "West" },
+    "status": {
+      "open": "Open",
+      "proposed": "Proposed",
+      "reserved": "Selected",
+      "accepted": "Accepted",
+      "waiting_for_slot": "Waiting for slot",
+      "discarded": "Discarded",
+      "active": "Active",
+      "draining": "Disconnecting",
+      "revoked": "Revoked"
+    },
+    "errors": { "load": "Could not load Dome Connections", "action": "Could not update the Connection" }
+  },
   "hud": {
     "leave": "Leave room",
     "hide": "Hide room HUD",
