@@ -8,7 +8,7 @@ Accepted
 
 Metaverse roomを任意mapやWorld Editorへ拡張せず、全ユーザー共通の固定空間「Dome」を基礎単位にする。Domeの形状、接続口、基本collision、physics契約はクライアント実装が所有し、ownerが署名付きmanifestで変更できる範囲をsurface、environment、gravity強度、persistent propの初期定義に限定する。
 
-Metaverseは実験機能であるため、既存の`world_version = 1`形式とのdecode、migration、表示互換は提供しない。既存roomは再作成を前提とする。
+Metaverseは実験機能であるため、既存の`world_version = 1` / `2`形式とのdecode、migration、表示互換は提供しない。既存roomは再作成を前提とする。Spatial Context、owner-owned Preset、Context-owned Instance、引っ越しの正本は[ADR 0036](0036-spatial-context-dome-instance-move.md)で定義する。
 
 ## Feature Data Classification
 
@@ -16,10 +16,10 @@ Metaverseは実験機能であるため、既存の`world_version = 1`形式と�
 - Durable / Transient:
   - Durable: owner customization、persistent prop初期定義、room metadata、current manifest pointer
   - Transient: avatar transform、interaction入力、実行中prop transform、seat state、physics simulation state
-- Canonical Source: topicまたはprivate-channel docsのcurrent state pointerと、owner署名manifest blob
+- Canonical Source: owner author replica上のPreset current pointer、対象Context replica上のInstance owner slot、それぞれが指すowner署名manifest blob
 - Replicated?: Yes
 - Rebuildable From: `docs + blobs`
-- Public Replica / Private Replica / Local Only: roomのchannel scopeに従うreplica、SQLiteはlocal projection
+- Public Replica / Private Replica / Local Only: Presetはauthor replica、Instanceはroomのchannel scopeに従うreplica、SQLiteはlocal projection
 - Gossip Hint 必要有無: `SessionChanged`は同期開始のhintとして使用し、canonical sourceにはしない
 - Blob 必要有無: Yes。manifest、surface texture、VRM / GLB prop assetを保存する
 - SQLite projection 必要有無: Yes。`game_room_cache`はdocsとblobから再構築可能とする
@@ -53,7 +53,7 @@ Metaverseは実験機能であるため、既存の`world_version = 1`形式と�
 
 ## Authority
 
-- owner署名identityだけがDurable customizationを更新できる。peer idや一時session idは認可に使用しない。
+- owner署名identityだけがDurable customizationを持つPresetとInstance refを更新できる。peer idや一時session idは認可に使用しない。
 - interaction入力はmanifestを更新しない。authoritative physicsとpeer同期はIssue #788で定義する。
 - Connection recordとtopologyはIssue #792、guest propとlayout commitはIssue #793の責務とし、本ADRのmanifestへ先取りしない。
 
@@ -61,4 +61,4 @@ Metaverseは実験機能であるため、既存の`world_version = 1`形式と�
 
 - fixed geometryは`fixed_dome_v1` resolverから再構築し、manifestへmeshや寸法を複製しない。
 - 既存の実験用Metaverse roomは読み込み対象外となり、再作成が必要になる。
-- room一覧projection、restart復元、private channel scopeは既存のgame room経路を継続利用する。
+- room一覧projectionは既存のgame room read modelを継続利用するが、Preset / Instance authorityとowner slot一意性はADR 0036の専用stateで判定する。

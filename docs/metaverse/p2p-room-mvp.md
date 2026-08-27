@@ -3,7 +3,7 @@
 ## 目的
 この MVP は、kukuri が中央集権的なゲームサーバーを前提にせず、トピック単位の固定規格Domeを扱えることを検証するためのものです。VRChat クローン、MMO、音声、ワールドエディタ、任意map、大規模リアルタイムシミュレーションは対象外です。
 
-固定geometry、変更可能なmanifest項目、Durable / Transient分類の正本は[ADR 0035](../adr/0035-fixed-dome-data-classification.md)とする。Metaverseは実験機能のため、旧`world_version = 1` roomとの後方互換やmigrationは提供せず、既存roomは再作成する。
+固定geometryと変更可能範囲の正本は[ADR 0035](../adr/0035-fixed-dome-data-classification.md)、Spatial Context、Preset / Instance分離、引っ越しlifecycleの正本は[ADR 0036](../adr/0036-spatial-context-dome-instance-move.md)とする。Metaverseは実験機能のため、旧`world_version = 1` / `2` roomとの後方互換やmigrationは提供せず、既存roomは再作成する。
 
 ## アーキテクチャ選択
 `docs/progress/2026-05-27-metaverse-mvp-plan.md` の Option A として、既存の game room model を拡張しています。
@@ -17,11 +17,13 @@
 
 ## 実装済み範囲
 - `GameRoomManifestBlobV1.room_kind`: `score_game` または `metaverse_room`。
-- `GameRoomManifestBlobV1.metaverse`: world version、固定Dome spec id、owner customization、persistent prop初期定義、spawn、asset refsを持つstate。
+- `DomePresetManifestV1`: owner assetとして固定Dome customization、persistent prop初期定義、asset refsを保持。
+- `DomeInstanceManifestV1`: topicまたはchannelのSpatial Context上でowner、Preset ref、generation、status、session境界を保持。
+- `GameRoomManifestBlobV1.metaverse`: PresetとInstanceを解決してdesktopへ返すread model。
 - `GameRoomView.manifest_blob_hash`: UI から確認できる永続化/debug 用のシグナル。
 - `create_metaverse_room` / `update_metaverse_room` Tauri command。
 - Desktop の game section で通常の score room と metaverse room を分離表示。
-- Metaverse discovery panel で、トピック単位の metaverse room 一覧と作成を提供。
+- Metaverse discovery panel で、現在のtopic / channel Contextにあるactive Dome一覧、owner slotが空の場合の作成、owner Domeの別Contextへの移動を提供。
 - Room viewでthree.js scene、camera、固定半球、4方向endpoint、connection zone、local avatar、remote avatar、persistent propを描画。
 - `apps/desktop/public/blumochichi.vrm` を local avatar としてロードし、失敗時は primitive fallback を使用。
 - 任意の VRM file または sample VRM を blob storage に import し、`MetaverseAssetRef` として扱う。
@@ -33,7 +35,7 @@
 ## Production MVP 完了条件
 この goal は、以下を満たす状態を production MVP として扱う。
 
-- metaverse room discovery は既存 game room list/projection を使い、複数 room を topic 単位で表示できる。
+- metaverse room discovery は既存 game room list/projectionをread modelとして使い、ownerごとにContext内最大1つのactive Domeだけを表示する。staging / tombstoned Instanceは表示しない。
 - room metadata、owner customization、persistent prop初期定義はdocs pointer + manifest blobで永続化され、restart後に復元できる。実行中transformはTransient eventでありmanifestへ保存しない。
 - avatar transform、chat、object update は署名済み `metaverse-room-event` envelope として P2P hint transport で送受信できる。
 - avatar transform は high-frequency な ephemeral event として扱い、docs/blobs に 10 Hz で直接書き込まない。
@@ -42,7 +44,7 @@
 
 ## Kukuri Primitive との対応
 - Hints: `SessionChanged` は room metadata の通知と同期トリガー。`MetaverseRoomEvent` は署名済み room event envelope の軽量 transport。
-- Docs: topic/private-channel replica に game/metaverse room state pointer を保存。
+- Docs: author replicaにPreset pointerとmove record、topic/private-channel replicaにowner slotとInstance pointerを保存。
 - Blobs: manifest JSON、VRM/GLB などの asset bytes を保存。
 - SQLite projection: `game_room_cache` に room discovery fields、room kind、manifest hash、metaverse JSON を保存。
 - Connectivity/community node: optional facilitator として扱い、canonical authority にはしない。

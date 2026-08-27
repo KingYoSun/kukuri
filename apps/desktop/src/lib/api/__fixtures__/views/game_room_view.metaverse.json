@@ -8,7 +8,25 @@
   "scores": [],
   "room_kind": "metaverse_room",
   "metaverse": {
-    "world_version": 2,
+    "world_version": 3,
+    "instance_id": "room-2",
+    "spatial_context": {
+      "kind": "channel",
+      "topic_id": "kukuri:topic:wire",
+      "channel_id": "chan-1"
+    },
+    "instance_generation": 1,
+    "instance_status": "active",
+    "relationship_detach": null,
+    "replacement_instance_id": null,
+    "preset_ref": {
+      "preset_id": "preset-2",
+      "owner_pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+      "manifest_blob_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "manifest_mime": "application/vnd.kukuri.dome-preset+json",
+      "manifest_bytes": 2048
+    },
+    "session_id": "room-2",
     "max_peers": 8,
     "dome": {
       "spec_id": "fixed_dome_v1",

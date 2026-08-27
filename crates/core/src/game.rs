@@ -102,8 +102,49 @@ pub enum MetaversePrimitive {
     Sphere,
 }
 
-pub const METAVERSE_WORLD_VERSION: u64 = 2;
+pub const METAVERSE_WORLD_VERSION: u64 = 3;
 pub const FIXED_DOME_SPEC_ID: &str = "fixed_dome_v1";
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum SpatialContextV1 {
+    Topic {
+        #[cfg_attr(feature = "ts", ts(type = "string"))]
+        topic_id: TopicId,
+    },
+    Channel {
+        #[cfg_attr(feature = "ts", ts(type = "string"))]
+        topic_id: TopicId,
+        #[cfg_attr(feature = "ts", ts(type = "string"))]
+        channel_id: ChannelId,
+    },
+}
+
+impl SpatialContextV1 {
+    pub fn topic_id(&self) -> &TopicId {
+        match self {
+            Self::Topic { topic_id } | Self::Channel { topic_id, .. } => topic_id,
+        }
+    }
+
+    pub fn channel_id(&self) -> Option<&ChannelId> {
+        match self {
+            Self::Topic { .. } => None,
+            Self::Channel { channel_id, .. } => Some(channel_id),
+        }
+    }
+
+    pub fn canonical_id(&self) -> String {
+        match self {
+            Self::Topic { topic_id } => format!("topic:{}", topic_id.as_str()),
+            Self::Channel {
+                topic_id,
+                channel_id,
+            } => format!("channel:{}:{}", topic_id.as_str(), channel_id.as_str()),
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -366,6 +407,132 @@ pub struct MetaverseDomeV1 {
     pub customization: DomeCustomizationV1,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(deny_unknown_fields)]
+pub struct DomePresetManifestV1 {
+    pub preset_id: String,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub owner_pubkey: Pubkey,
+    pub dome: MetaverseDomeV1,
+    pub asset_refs: Vec<MetaverseAssetRef>,
+    pub updated_at: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct DomePresetRefV1 {
+    pub preset_id: String,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub owner_pubkey: Pubkey,
+    pub manifest_blob_hash: String,
+    pub manifest_mime: String,
+    pub manifest_bytes: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DomePresetStateDocV1 {
+    pub preset_id: String,
+    pub owner_pubkey: Pubkey,
+    pub current_manifest: ManifestBlobRef,
+    pub updated_at: i64,
+    pub last_envelope_id: EnvelopeId,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum DomeInstanceStatusV1 {
+    Staging,
+    Active,
+    Tombstoned,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
+#[serde(deny_unknown_fields)]
+pub struct DomeRelationshipDetachV1 {
+    pub move_id: String,
+    pub instance_generation: u64,
+    pub detached_at: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
+#[serde(deny_unknown_fields)]
+pub struct DomeInstanceManifestV1 {
+    pub instance_id: String,
+    pub spatial_context: SpatialContextV1,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub owner_pubkey: Pubkey,
+    pub preset_ref: DomePresetRefV1,
+    pub title: String,
+    pub description: String,
+    pub max_peers: Option<u32>,
+    pub default_spawn: MetaverseRoomSpawnV1,
+    pub generation: u64,
+    pub status: DomeInstanceStatusV1,
+    pub relationship_detach: Option<DomeRelationshipDetachV1>,
+    pub replacement_instance_id: Option<String>,
+    #[serde(default)]
+    pub chat_history: Vec<MetaverseRoomChatMessageV1>,
+    pub updated_at: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DomeInstanceStateDocV1 {
+    pub instance_id: String,
+    pub spatial_context: SpatialContextV1,
+    pub owner_pubkey: Pubkey,
+    pub generation: u64,
+    pub status: DomeInstanceStatusV1,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub current_manifest: ManifestBlobRef,
+    pub last_envelope_id: EnvelopeId,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum DomeMovePhaseV1 {
+    Preparing,
+    TargetStaged,
+    SourceDetached,
+    TargetActive,
+    SourceTombstoned,
+    Completed,
+    Failed,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
+#[serde(deny_unknown_fields)]
+pub struct DomeMoveRecordV1 {
+    pub move_id: String,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub owner_pubkey: Pubkey,
+    pub source_instance_id: String,
+    pub source_context: SpatialContextV1,
+    pub source_generation: u64,
+    pub target_instance_id: String,
+    pub target_context: SpatialContextV1,
+    pub target_generation: u64,
+    pub preset_ref: DomePresetRefV1,
+    pub phase: DomeMovePhaseV1,
+    pub failure_reason: Option<String>,
+    pub updated_at: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DomeMoveStateDocV1 {
+    pub record: DomeMoveRecordV1,
+    pub last_envelope_id: EnvelopeId,
+}
+
 impl Default for MetaverseDomeV1 {
     fn default() -> Self {
         Self {
@@ -416,6 +583,7 @@ pub enum MetaverseRoomEventV1 {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
+#[serde(deny_unknown_fields)]
 pub struct MetaverseRoomEventEnvelopeContentV1 {
     pub event_id: String,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
@@ -423,6 +591,9 @@ pub struct MetaverseRoomEventEnvelopeContentV1 {
     #[cfg_attr(feature = "ts", ts(as = "Option<String>"))]
     pub channel_id: Option<ChannelId>,
     pub room_id: String,
+    pub spatial_context: SpatialContextV1,
+    pub instance_generation: u64,
+    pub session_id: String,
     pub peer_id: String,
     pub seq: u64,
     pub sent_at: i64,
@@ -443,6 +614,14 @@ pub struct MetaverseRoomSpawnV1 {
 #[serde(deny_unknown_fields)]
 pub struct MetaverseRoomStateV1 {
     pub world_version: u64,
+    pub instance_id: String,
+    pub spatial_context: SpatialContextV1,
+    pub instance_generation: u64,
+    pub instance_status: DomeInstanceStatusV1,
+    pub relationship_detach: Option<DomeRelationshipDetachV1>,
+    pub replacement_instance_id: Option<String>,
+    pub preset_ref: DomePresetRefV1,
+    pub session_id: String,
     pub max_peers: Option<u32>,
     pub dome: MetaverseDomeV1,
     pub default_spawn: MetaverseRoomSpawnV1,
@@ -536,6 +715,17 @@ pub fn validate_metaverse_room_state(state: &MetaverseRoomStateV1) -> Result<()>
     if state.dome.spec_id != FIXED_DOME_SPEC_ID {
         bail!("unsupported Dome spec id");
     }
+    if state.instance_id.trim().is_empty()
+        || state.preset_ref.preset_id.trim().is_empty()
+        || state.preset_ref.manifest_blob_hash.trim().is_empty()
+        || state.session_id.trim().is_empty()
+        || state.instance_generation == 0
+    {
+        bail!("metaverse instance identity is incomplete");
+    }
+    if state.instance_status == DomeInstanceStatusV1::Tombstoned {
+        bail!("tombstoned Dome instance cannot be resolved as an active room");
+    }
     if state
         .max_peers
         .is_some_and(|max_peers| !(1..=64).contains(&max_peers))
@@ -543,6 +733,178 @@ pub fn validate_metaverse_room_state(state: &MetaverseRoomStateV1) -> Result<()>
         bail!("max peers is outside the supported range");
     }
     validate_dome_customization(&state.dome.customization)
+}
+
+pub fn validate_metaverse_room_event_content(
+    content: &MetaverseRoomEventEnvelopeContentV1,
+) -> Result<()> {
+    if content.event_id.trim().is_empty()
+        || content.room_id.trim().is_empty()
+        || content.session_id.trim().is_empty()
+        || content.peer_id.trim().is_empty()
+        || content.instance_generation == 0
+    {
+        bail!("metaverse room event identity is incomplete");
+    }
+    if content.session_id != content.room_id {
+        bail!("metaverse room event session does not match its Dome instance");
+    }
+    let expected_context = match &content.channel_id {
+        Some(channel_id) => SpatialContextV1::Channel {
+            topic_id: content.topic_id.clone(),
+            channel_id: channel_id.clone(),
+        },
+        None => SpatialContextV1::Topic {
+            topic_id: content.topic_id.clone(),
+        },
+    };
+    if content.spatial_context != expected_context {
+        bail!("metaverse room event Spatial Context does not match topic/channel identity");
+    }
+    Ok(())
+}
+
+pub fn validate_metaverse_room_event_for_instance(
+    content: &MetaverseRoomEventEnvelopeContentV1,
+    instance: &DomeInstanceManifestV1,
+) -> Result<()> {
+    validate_metaverse_room_event_content(content)?;
+    validate_dome_instance_manifest(instance)?;
+    if instance.status != DomeInstanceStatusV1::Active || instance.relationship_detach.is_some() {
+        bail!("metaverse room events require an active attached Dome instance");
+    }
+    if content.room_id != instance.instance_id
+        || content.session_id != instance.instance_id
+        || content.spatial_context != instance.spatial_context
+        || content.instance_generation != instance.generation
+    {
+        bail!("metaverse room event does not match the current Dome instance generation");
+    }
+    Ok(())
+}
+
+pub fn validate_dome_preset_manifest(manifest: &DomePresetManifestV1) -> Result<()> {
+    if manifest.preset_id.trim().is_empty() {
+        bail!("Dome preset id is required");
+    }
+    if manifest.owner_pubkey.as_str().trim().is_empty() {
+        bail!("Dome preset owner is required");
+    }
+    if manifest.dome.spec_id != FIXED_DOME_SPEC_ID {
+        bail!("unsupported Dome spec id");
+    }
+    validate_dome_customization(&manifest.dome.customization)?;
+    let mut hashes = HashSet::new();
+    for asset in &manifest.asset_refs {
+        if asset.blob_hash.trim().is_empty() || !hashes.insert(asset.blob_hash.as_str()) {
+            bail!("Dome preset asset hashes must be non-empty and unique");
+        }
+    }
+    Ok(())
+}
+
+pub fn validate_dome_instance_manifest(manifest: &DomeInstanceManifestV1) -> Result<()> {
+    if manifest.instance_id.trim().is_empty()
+        || manifest.preset_ref.preset_id.trim().is_empty()
+        || manifest.preset_ref.manifest_blob_hash.trim().is_empty()
+        || manifest.preset_ref.manifest_mime.trim().is_empty()
+        || manifest.generation == 0
+    {
+        bail!("Dome instance identity is incomplete");
+    }
+    if manifest.owner_pubkey != manifest.preset_ref.owner_pubkey {
+        bail!("Dome instance owner must match Dome preset owner");
+    }
+    if manifest.title.trim().is_empty() {
+        bail!("Dome instance title is required");
+    }
+    if manifest
+        .max_peers
+        .is_some_and(|max_peers| !(1..=64).contains(&max_peers))
+    {
+        bail!("max peers is outside the supported range");
+    }
+    if manifest.status == DomeInstanceStatusV1::Staging && manifest.relationship_detach.is_some() {
+        bail!("staging Dome instance cannot detach relationships");
+    }
+    if let Some(detach) = &manifest.relationship_detach
+        && (detach.move_id.trim().is_empty() || detach.instance_generation != manifest.generation)
+    {
+        bail!("Dome relationship detach does not match instance generation");
+    }
+    Ok(())
+}
+
+pub fn validate_dome_relationship_scope(
+    left: &DomeInstanceManifestV1,
+    right: &DomeInstanceManifestV1,
+) -> Result<()> {
+    if left.spatial_context != right.spatial_context {
+        bail!("Dome Connection endpoints must share one Spatial Context");
+    }
+    if left.status != DomeInstanceStatusV1::Active
+        || right.status != DomeInstanceStatusV1::Active
+        || left.relationship_detach.is_some()
+        || right.relationship_detach.is_some()
+    {
+        bail!("Dome Connection endpoints must be active and attached");
+    }
+    Ok(())
+}
+
+pub fn validate_dome_move_record(record: &DomeMoveRecordV1) -> Result<()> {
+    if record.move_id.trim().is_empty()
+        || record.source_instance_id.trim().is_empty()
+        || record.target_instance_id.trim().is_empty()
+        || record.source_generation == 0
+        || record.target_generation == 0
+    {
+        bail!("Dome move identity is incomplete");
+    }
+    if record.source_context == record.target_context {
+        bail!("Dome move target must be a different Spatial Context");
+    }
+    if record.owner_pubkey != record.preset_ref.owner_pubkey {
+        bail!("Dome move owner must match Dome preset owner");
+    }
+    if record.phase != DomeMovePhaseV1::Failed && record.failure_reason.is_some() {
+        bail!("only a failed Dome move can contain a failure reason");
+    }
+    Ok(())
+}
+
+pub fn resolve_metaverse_room_state(
+    instance: &DomeInstanceManifestV1,
+    preset: &DomePresetManifestV1,
+) -> Result<MetaverseRoomStateV1> {
+    validate_dome_instance_manifest(instance)?;
+    validate_dome_preset_manifest(preset)?;
+    if instance.preset_ref.preset_id != preset.preset_id
+        || instance.preset_ref.owner_pubkey != preset.owner_pubkey
+    {
+        bail!("Dome instance preset reference does not match preset manifest");
+    }
+    if instance.status == DomeInstanceStatusV1::Tombstoned {
+        bail!("cannot resolve a tombstoned Dome instance");
+    }
+    let state = MetaverseRoomStateV1 {
+        world_version: METAVERSE_WORLD_VERSION,
+        instance_id: instance.instance_id.clone(),
+        spatial_context: instance.spatial_context.clone(),
+        instance_generation: instance.generation,
+        instance_status: instance.status,
+        preset_ref: instance.preset_ref.clone(),
+        relationship_detach: instance.relationship_detach.clone(),
+        replacement_instance_id: instance.replacement_instance_id.clone(),
+        session_id: instance.instance_id.clone(),
+        max_peers: instance.max_peers,
+        dome: preset.dome.clone(),
+        default_spawn: instance.default_spawn.clone(),
+        asset_refs: preset.asset_refs.clone(),
+        chat_history: instance.chat_history.clone(),
+    };
+    validate_metaverse_room_state(&state)?;
+    Ok(state)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -603,6 +965,10 @@ pub fn build_metaverse_room_event_envelope(
     room_id: &str,
     content: &MetaverseRoomEventEnvelopeContentV1,
 ) -> Result<crate::KukuriEnvelope> {
+    validate_metaverse_room_event_content(content)?;
+    if &content.topic_id != topic || content.room_id != room_id {
+        bail!("metaverse room event envelope identity does not match content");
+    }
     crate::sign_envelope_json(
         keys,
         "metaverse-room-event",

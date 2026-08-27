@@ -25,6 +25,7 @@ pub(crate) use std::collections::BTreeMap;
 pub(crate) use std::net::SocketAddr;
 pub(crate) use std::path::{Path, PathBuf};
 pub(crate) use std::sync::Arc;
+pub(crate) use std::sync::Mutex as StdMutex;
 pub(crate) use std::time::{Duration, Instant};
 
 pub(crate) use anyhow::{Context, Result};
@@ -33,8 +34,10 @@ pub(crate) use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 pub(crate) use kukuri_app_api::{
     AppService, CreateGameRoomInput, CreateLiveSessionInput, CreateMetaverseRoomInput,
     DirectMessageConversationView, DirectMessageMessageView, DirectMessageStatusView,
-    GameScoreView, SyncStatus, UpdateGameRoomInput, UpdateMetaverseRoomInput,
+    GameScoreView, MoveDomeInput, PrivateChannelCapability, ServiceHandles, SyncStatus,
+    UpdateGameRoomInput, UpdateMetaverseRoomInput,
 };
+pub(crate) use kukuri_blob_service::MemoryBlobService;
 pub(crate) use kukuri_cn_core::{JwtConfig, TestDatabase};
 pub(crate) use kukuri_cn_iroh_relay::{IrohRelayConfig, SpawnedIrohRelay};
 pub(crate) use kukuri_cn_user_api::{
@@ -42,7 +45,7 @@ pub(crate) use kukuri_cn_user_api::{
 };
 pub(crate) use kukuri_core::{
     ChannelAudienceKind, ChannelId, ChannelRef, CreatePrivateChannelInput, DomeMaterialPreset,
-    GameRoomStatus, KukuriKeys, TimelineScope, TopicId,
+    GameRoomStatus, KukuriKeys, SpatialContextV1, TimelineScope, TopicId, generate_keys,
 };
 pub(crate) use kukuri_desktop_runtime::{
     AcceptCommunityNodeConsentsRequest, AuthorRequest, CommunityNodeTargetRequest,
@@ -55,6 +58,7 @@ pub(crate) use kukuri_desktop_runtime::{
     SendDirectMessageRequest, SetCommunityNodeConfigRequest, SetMyProfileRequest,
     SubmitCommunityNodeReportRequest, ToggleReactionRequest,
 };
+pub(crate) use kukuri_docs_sync::MemoryDocsSync;
 pub(crate) use kukuri_store::SqliteStore;
 pub(crate) use kukuri_transport::{
     ConnectMode, FakeNetwork, FakeTransport, TransportNetworkConfig,

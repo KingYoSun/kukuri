@@ -4,6 +4,7 @@ import type {
   MetaverseAssetRef,
   MetaverseRoomEventView,
   MetaverseRoomEventV1,
+  SpatialContextV1,
 } from '@/lib/api';
 
 export type CreateMetaverseRoomActionInput = {
@@ -37,6 +38,11 @@ export type MetaverseRoomActions = {
     roomId: string,
     status: GameRoomView['status'],
     customization: DomeCustomizationV1
+  ) => Promise<void>;
+  moveRoom: (
+    moveId: string,
+    roomId: string,
+    targetContext: SpatialContextV1
   ) => Promise<void>;
   refresh: () => Promise<void>;
 };

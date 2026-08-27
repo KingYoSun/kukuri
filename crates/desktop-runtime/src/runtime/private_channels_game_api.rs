@@ -195,6 +195,22 @@ impl DesktopRuntime {
             .await
     }
 
+    pub async fn move_dome(
+        &self,
+        request: MoveDomeRequest,
+    ) -> Result<kukuri_app_api::DomeMoveView> {
+        self.app_service
+            .move_dome(
+                request.source_topic.as_str(),
+                MoveDomeInput {
+                    move_id: request.move_id,
+                    source_instance_id: request.source_instance_id,
+                    target_context: request.target_context,
+                },
+            )
+            .await
+    }
+
     pub async fn publish_metaverse_room_event(
         &self,
         request: PublishMetaverseRoomEventRequest,

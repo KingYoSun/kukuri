@@ -10,7 +10,7 @@ import type {
 } from '@/lib/api';
 
 export const FIXED_DOME_SPEC_ID = 'fixed_dome_v1';
-export const METAVERSE_WORLD_VERSION = 2;
+export const METAVERSE_WORLD_VERSION = 3;
 export const DOME_INNER_RADIUS_CM = 2_000;
 export const DOME_OUTER_RADIUS_CM = 2_200;
 export const DOME_APEX_HEIGHT_CM = 2_000;
@@ -68,9 +68,31 @@ export function createDefaultDomeCustomization(): DomeCustomizationV1 {
   };
 }
 
-export function createDefaultMetaverseRoomState(maxPeers: number | null = null): MetaverseRoomStateV1 {
+export function createDefaultMetaverseRoomState(
+  maxPeers: number | null = null,
+  identity: { roomId?: string; topicId?: string; channelId?: string | null; ownerPubkey?: string } = {}
+): MetaverseRoomStateV1 {
+  const roomId = identity.roomId ?? 'dome-local';
+  const topicId = identity.topicId ?? 'kukuri:topic:metaverse';
+  const ownerPubkey = identity.ownerPubkey ?? 'local-owner';
   return {
     world_version: METAVERSE_WORLD_VERSION,
+    instance_id: roomId,
+    spatial_context: identity.channelId
+      ? { kind: 'channel', topic_id: topicId, channel_id: identity.channelId }
+      : { kind: 'topic', topic_id: topicId },
+    instance_generation: 1,
+    instance_status: 'active',
+    relationship_detach: null,
+    replacement_instance_id: null,
+    preset_ref: {
+      preset_id: `preset-${roomId}`,
+      owner_pubkey: ownerPubkey,
+      manifest_blob_hash: `mock-preset-${roomId}`,
+      manifest_mime: 'application/vnd.kukuri.dome-preset+json',
+      manifest_bytes: 1,
+    },
+    session_id: roomId,
     max_peers: maxPeers,
     dome: {
       spec_id: FIXED_DOME_SPEC_ID,

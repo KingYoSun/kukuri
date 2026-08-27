@@ -49,7 +49,9 @@ cargo xtask desktop-visual-test
 - `cargo xtask cn-test` は `docker-compose.community-node.yml` の `cn-postgres` を自動起動し、`KUKURI_CN_RUN_INTEGRATION_TESTS=1` を付けて contract/integration test を流す。
 - `cargo xtask scenario community_node_public_connectivity` も `cn-postgres` を自動起動し、in-process の `cn-user-api` / `cn-iroh-relay` を立てて 2 desktop scenario を流す。
 - `cargo xtask scenario community_node_multi_device_connectivity` は same-author 2 desktop の endpoint-bound bootstrap で `post -> reply/thread -> reconnect` を確認する。
-- `cargo xtask scenario desktop_smoke_metaverse_dome_persist`は固定Domeの作成、owner customization、規格外値の拒否、restart後のdocs + blob復元を確認する。Metaverseは実験機能のため、`world_version = 1`の既存roomは再作成する。
+- `cargo xtask scenario desktop_smoke_metaverse_dome_persist`は固定Domeの作成、owner customization、規格外値の拒否、restart後のdocs + blob復元を確認する。
+- `cargo xtask scenario desktop_smoke_metaverse_dome_move`はpublic topicのowner Domeをprivate channelへ移し、同一Preset customization、owner slot重複拒否、source非表示、restart後のtarget復元を確認する。move失敗時は同じmove idでretryする。target staging前の失敗では旧Domeが残り、完了後は旧Contextへ戻らない。
+- Metaverseは実験機能のため、`world_version = 1` / `2`の既存roomは再作成する。
 
 ### 推奨フロー
 - 通常変更: `cargo xtask check` + `cargo xtask test`

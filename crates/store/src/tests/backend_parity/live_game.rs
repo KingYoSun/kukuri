@@ -282,7 +282,7 @@ async fn game_rooms_match_between_backends() {
         .metaverse
         .as_ref()
         .expect("metaverse state");
-    assert_eq!(metaverse.world_version, 2);
+    assert_eq!(metaverse.world_version, 3);
     assert_eq!(
         metaverse.dome.customization.persistent_props[0].prop_id,
         "shared-cube"

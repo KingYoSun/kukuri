@@ -16,10 +16,12 @@
 use std::path::PathBuf;
 
 use kukuri_core::{
-    ChannelAudienceKind, ChannelSharingState, DomeCustomizationV1, DomeEnvironmentV1,
-    DomeSurfaceCustomizationV1, GameRoomKind, GameRoomStatus, MetaverseAssetKind,
-    MetaverseAssetRef, MetaverseDomeV1, MetaverseInteractionKind, MetaversePersistentPropV1,
-    MetaversePrimitive, MetaverseRoomChatMessageV1, MetaverseRoomSpawnV1, MetaverseRoomStateV1,
+    ChannelAudienceKind, ChannelId, ChannelSharingState, DomeCustomizationV1, DomeEnvironmentV1,
+    DomeInstanceStatusV1, DomePresetRefV1, DomeSurfaceCustomizationV1, GameRoomKind,
+    GameRoomStatus, MetaverseAssetKind, MetaverseAssetRef, MetaverseDomeV1,
+    MetaverseInteractionKind, MetaversePersistentPropV1, MetaversePrimitive,
+    MetaverseRoomChatMessageV1, MetaverseRoomSpawnV1, MetaverseRoomStateV1, SpatialContextV1,
+    TopicId,
 };
 use kukuri_store::{NotificationKind, TimelineCursor};
 use kukuri_transport::{ConnectMode, ConnectionPath, DiscoveryMode};
@@ -495,7 +497,24 @@ fn views_wire_game_room_view() {
             scores: vec![],
             room_kind: GameRoomKind::MetaverseRoom,
             metaverse: Some(MetaverseRoomStateV1 {
-                world_version: 2,
+                world_version: 3,
+                instance_id: "room-2".to_string(),
+                spatial_context: SpatialContextV1::Channel {
+                    topic_id: TopicId::new("kukuri:topic:wire"),
+                    channel_id: ChannelId::new("chan-1"),
+                },
+                instance_generation: 1,
+                instance_status: DomeInstanceStatusV1::Active,
+                relationship_detach: None,
+                replacement_instance_id: None,
+                preset_ref: DomePresetRefV1 {
+                    preset_id: "preset-2".to_string(),
+                    owner_pubkey: PUBKEY_A.into(),
+                    manifest_blob_hash: "a".repeat(64),
+                    manifest_mime: "application/vnd.kukuri.dome-preset+json".to_string(),
+                    manifest_bytes: 2048,
+                },
+                session_id: "room-2".to_string(),
                 max_peers: Some(8),
                 dome: MetaverseDomeV1 {
                     spec_id: "fixed_dome_v1".to_string(),

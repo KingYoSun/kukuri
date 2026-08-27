@@ -136,3 +136,162 @@ fn fixed_dome_environment_interpolation_is_numeric_and_bounded() {
     );
     assert_eq!(interpolate_dome_environment(&from, &to, u16::MAX), to);
 }
+
+fn dome_preset_ref(owner: &Pubkey) -> DomePresetRefV1 {
+    DomePresetRefV1 {
+        preset_id: "preset-1".into(),
+        owner_pubkey: owner.clone(),
+        manifest_blob_hash: "a".repeat(64),
+        manifest_mime: DOME_PRESET_MANIFEST_MIME.into(),
+        manifest_bytes: 512,
+    }
+}
+
+fn dome_instance(
+    owner: &Pubkey,
+    instance_id: &str,
+    context: SpatialContextV1,
+) -> DomeInstanceManifestV1 {
+    DomeInstanceManifestV1 {
+        instance_id: instance_id.into(),
+        spatial_context: context,
+        owner_pubkey: owner.clone(),
+        preset_ref: dome_preset_ref(owner),
+        title: "Dome".into(),
+        description: String::new(),
+        max_peers: Some(8),
+        default_spawn: MetaverseRoomSpawnV1 {
+            position: [0, 0, 260],
+            rotation: [0, 180, 0],
+        },
+        generation: 1,
+        status: DomeInstanceStatusV1::Active,
+        relationship_detach: None,
+        replacement_instance_id: None,
+        chat_history: Vec::new(),
+        updated_at: 1,
+    }
+}
+
+#[test]
+fn spatial_context_distinguishes_topic_and_channel() {
+    let topic = SpatialContextV1::Topic {
+        topic_id: TopicId::new("kukuri:topic:context"),
+    };
+    let channel = SpatialContextV1::Channel {
+        topic_id: TopicId::new("kukuri:topic:context"),
+        channel_id: ChannelId::new("channel-1"),
+    };
+
+    assert_eq!(topic.canonical_id(), "topic:kukuri:topic:context");
+    assert_eq!(
+        channel.canonical_id(),
+        "channel:kukuri:topic:context:channel-1"
+    );
+    assert_ne!(topic, channel);
+}
+
+#[test]
+fn dome_relationships_require_active_attached_instances_in_one_context() {
+    let owner = generate_keys().public_key();
+    let context = SpatialContextV1::Topic {
+        topic_id: TopicId::new("kukuri:topic:context"),
+    };
+    let left = dome_instance(&owner, "left", context.clone());
+    let mut right = dome_instance(&owner, "right", context);
+    assert!(validate_dome_relationship_scope(&left, &right).is_ok());
+
+    right.spatial_context = SpatialContextV1::Topic {
+        topic_id: TopicId::new("kukuri:topic:other"),
+    };
+    assert!(validate_dome_relationship_scope(&left, &right).is_err());
+
+    right.spatial_context = left.spatial_context.clone();
+    right.relationship_detach = Some(DomeRelationshipDetachV1 {
+        move_id: "move-1".into(),
+        instance_generation: 1,
+        detached_at: 2,
+    });
+    assert!(validate_dome_relationship_scope(&left, &right).is_err());
+}
+
+#[test]
+fn dome_preset_instance_and_move_envelopes_bind_owner_and_context() {
+    let keys = generate_keys();
+    let owner = keys.public_key();
+    let preset = DomePresetManifestV1 {
+        preset_id: "preset-1".into(),
+        owner_pubkey: owner.clone(),
+        dome: MetaverseDomeV1::default(),
+        asset_refs: Vec::new(),
+        updated_at: 1,
+    };
+    let instance = dome_instance(
+        &owner,
+        "source",
+        SpatialContextV1::Topic {
+            topic_id: TopicId::new("kukuri:topic:source"),
+        },
+    );
+    let move_record = DomeMoveRecordV1 {
+        move_id: "move-1".into(),
+        owner_pubkey: owner,
+        source_instance_id: "source".into(),
+        source_context: instance.spatial_context.clone(),
+        source_generation: 1,
+        target_instance_id: "target".into(),
+        target_context: SpatialContextV1::Channel {
+            topic_id: TopicId::new("kukuri:topic:target"),
+            channel_id: ChannelId::new("channel-1"),
+        },
+        target_generation: 1,
+        preset_ref: instance.preset_ref.clone(),
+        phase: DomeMovePhaseV1::Preparing,
+        failure_reason: None,
+        updated_at: 2,
+    };
+
+    for envelope in [
+        build_dome_preset_envelope(&keys, &preset).expect("preset envelope"),
+        build_dome_instance_envelope(&keys, &instance).expect("instance envelope"),
+        build_dome_move_envelope(&keys, &move_record).expect("move envelope"),
+    ] {
+        envelope.verify().expect("signature");
+    }
+    assert!(validate_dome_move_record(&move_record).is_ok());
+}
+
+#[test]
+fn metaverse_events_are_bound_to_context_generation_and_active_instance() {
+    let owner = generate_keys().public_key();
+    let context = SpatialContextV1::Topic {
+        topic_id: TopicId::new("kukuri:topic:event-context"),
+    };
+    let mut instance = dome_instance(&owner, "instance-1", context.clone());
+    let content = MetaverseRoomEventEnvelopeContentV1 {
+        event_id: "event-1".into(),
+        topic_id: TopicId::new("kukuri:topic:event-context"),
+        channel_id: None,
+        room_id: instance.instance_id.clone(),
+        spatial_context: context,
+        instance_generation: instance.generation,
+        session_id: instance.instance_id.clone(),
+        peer_id: "peer-1".into(),
+        seq: 1,
+        sent_at: 1,
+        event: MetaverseRoomEventV1::PresenceLeave {
+            room_id: instance.instance_id.clone(),
+            peer_id: "peer-1".into(),
+            left_at: 1,
+        },
+    };
+
+    assert!(validate_metaverse_room_event_for_instance(&content, &instance).is_ok());
+
+    let mut stale = content.clone();
+    stale.instance_generation += 1;
+    assert!(validate_metaverse_room_event_for_instance(&stale, &instance).is_err());
+
+    instance.status = DomeInstanceStatusV1::Tombstoned;
+    assert!(validate_metaverse_room_event_for_instance(&content, &instance).is_err());
+}

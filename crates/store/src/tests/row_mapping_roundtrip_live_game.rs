@@ -11,9 +11,10 @@
 
 use super::*;
 use kukuri_core::{
-    DomeCustomizationV1, GameRoomKind, GameRoomStatus, GameScoreEntry, LiveSessionStatus,
-    MetaverseAssetKind, MetaverseAssetRef, MetaverseDomeV1, MetaversePrimitive,
-    MetaverseRoomChatMessageV1, MetaverseRoomSpawnV1, MetaverseRoomStateV1,
+    DomeCustomizationV1, DomeInstanceStatusV1, DomePresetRefV1, GameRoomKind, GameRoomStatus,
+    GameScoreEntry, LiveSessionStatus, MetaverseAssetKind, MetaverseAssetRef, MetaverseDomeV1,
+    MetaversePrimitive, MetaverseRoomChatMessageV1, MetaverseRoomSpawnV1, MetaverseRoomStateV1,
+    SpatialContextV1, TopicId,
 };
 
 // ---------------------------------------------------------------------------
@@ -200,7 +201,24 @@ fn metaverse_state() -> MetaverseRoomStateV1 {
     customization.persistent_props[0].position = [1, 2, 3];
     customization.persistent_props[0].rotation = [0, 90, 0];
     MetaverseRoomStateV1 {
-        world_version: 2,
+        world_version: 3,
+        instance_id: "room-max".into(),
+        spatial_context: SpatialContextV1::Channel {
+            topic_id: TopicId::new(GAME_TOPIC),
+            channel_id: kukuri_core::ChannelId::new("ch:game"),
+        },
+        instance_generation: 1,
+        instance_status: DomeInstanceStatusV1::Active,
+        relationship_detach: None,
+        replacement_instance_id: None,
+        preset_ref: DomePresetRefV1 {
+            preset_id: "preset-max".into(),
+            owner_pubkey: "b".repeat(64).into(),
+            manifest_blob_hash: "f".repeat(64),
+            manifest_mime: "application/vnd.kukuri.dome-preset+json".into(),
+            manifest_bytes: 4096,
+        },
+        session_id: "room-max".into(),
         max_peers: Some(16),
         dome: MetaverseDomeV1 {
             spec_id: "fixed_dome_v1".into(),

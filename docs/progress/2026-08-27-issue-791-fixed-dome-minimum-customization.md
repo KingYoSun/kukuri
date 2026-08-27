@@ -2,7 +2,7 @@
 
 ## 実装した境界
 
-- Metaverse room payloadを後方互換なしで`world_version = 2` / `fixed_dome_v1`へ置き換えた。
+- Metaverse room payloadを後方互換なしで`fixed_dome_v1`へ置き換えた。当時の`world_version = 2`はIssue #789でPreset / Instance分離を含む`world_version = 3`へ更新済み。
 - code-owned geometryとして、内半径20m・外半径22m・頂点高20mの真半球、4方向の幅5m／高さ10mのarch opening、奥行き15mのconnection zone、中央境界、隣接中心間57mを固定した。
 - owner署名manifestへsurface material / texture、lighting、ambient、fog、-Y固定gravityの強度、persistent prop初期定義だけを保存する。
 - 任意world mesh、script、geometry変更、gravity方向変更、physics disableをwire schemaから除外し、未知fieldと範囲外値を拒否する。

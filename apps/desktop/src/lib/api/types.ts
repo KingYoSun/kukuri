@@ -23,6 +23,7 @@ import type {
   DirectMessageTimelineView,
   DiscoveryConfig,
   DomeCustomizationV1,
+  DomeMoveRecordV1,
   FriendOnlyGrantPreview,
   FriendPlusSharePreview,
   GameRoomStatus,
@@ -33,6 +34,7 @@ import type {
   MetaverseAssetKind,
   MetaverseAssetRef,
   MetaverseRoomEventV1,
+  SpatialContextV1,
   MetaverseRoomEventView,
   NotificationStatusView,
   NotificationView,
@@ -327,6 +329,12 @@ export interface DesktopApi {
     status: GameRoomStatus,
     customization: DomeCustomizationV1
   ): Promise<void>;
+  moveDome(
+    sourceTopic: string,
+    moveId: string,
+    sourceInstanceId: string,
+    targetContext: SpatialContextV1
+  ): Promise<DomeMoveRecordV1>;
   publishMetaverseRoomEvent(
     topic: string,
     roomId: string,

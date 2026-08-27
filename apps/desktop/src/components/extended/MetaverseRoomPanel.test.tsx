@@ -89,6 +89,9 @@ function avatarEvent(peerId: string, animation: string | null, seq: number): Met
       topic_id: 'kukuri:topic:demo',
       channel_id: null,
       room_id: room.room_id,
+      spatial_context: { kind: 'topic', topic_id: 'kukuri:topic:demo' },
+      instance_generation: 1,
+      session_id: room.room_id,
       peer_id: peerId,
       seq,
       sent_at: seq,
@@ -119,6 +122,9 @@ function presenceLeaveEvent(peerId: string, seq: number): MetaverseRoomEventView
       topic_id: 'kukuri:topic:demo',
       channel_id: null,
       room_id: room.room_id,
+      spatial_context: { kind: 'topic', topic_id: 'kukuri:topic:demo' },
+      instance_generation: 1,
+      session_id: room.room_id,
       peer_id: peerId,
       seq,
       sent_at: seq,
@@ -346,7 +352,9 @@ describe('MetaverseRoomPanel animation sharing', () => {
       listMetaverseRoomEvents: vi.fn().mockResolvedValue([]),
     };
 
-    renderPanel(api);
+    renderPanel(api, {
+      syncStatus: { ...createSyncStatus(), local_author_pubkey: 'e'.repeat(64) },
+    });
     await user.click(screen.getByRole('button', { name: 'Join Room' }));
     await user.click(screen.getByRole('button', { name: 'Hide room chat' }));
     await user.click(screen.getByRole('button', { name: 'Create metaverse room' }));
@@ -360,12 +368,34 @@ describe('MetaverseRoomPanel animation sharing', () => {
     const user = userEvent.setup();
     const api = createDesktopMockApi();
 
-    renderPanel(api);
+    renderPanel(api, { rooms: [] });
 
     expect(screen.queryByPlaceholderText('Atrium')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Create metaverse room' }));
     expect(screen.getByPlaceholderText('Atrium')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Small social space')).toBeInTheDocument();
+  });
+
+  test('moves the owner Dome and refreshes discovery after completion', async () => {
+    const user = userEvent.setup();
+    const baseApi = createDesktopMockApi();
+    const moveDome = vi.fn().mockResolvedValue(null as never);
+    const onRefresh = vi.fn().mockResolvedValue(undefined);
+
+    renderPanel({ ...baseApi, moveDome }, { onRefresh });
+    await user.click(screen.getByRole('button', { name: 'Move Dome' }));
+    await user.type(screen.getByPlaceholderText('kukuri:topic:...'), 'kukuri:topic:target');
+    await user.click(screen.getByRole('button', { name: 'Start move' }));
+
+    await waitFor(() => {
+      expect(moveDome).toHaveBeenCalledWith(
+        'kukuri:topic:demo',
+        expect.stringMatching(/^dome-move-/),
+        room.room_id,
+        { kind: 'topic', topic_id: 'kukuri:topic:target' }
+      );
+      expect(onRefresh).toHaveBeenCalledTimes(1);
+    });
   });
 
   test('validates and submits the normalized create-room payload', async () => {

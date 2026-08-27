@@ -1,0 +1,50 @@
+name: desktop_smoke_metaverse_dome_move
+fixtures:
+  seed: 789
+  topic: kukuri:topic:metaverse-dome-move
+steps:
+  - action: launch_desktop
+  - action: select_topic
+    topic: kukuri:topic:metaverse-dome-move
+  - action: create_metaverse_dome
+    title: movable-dome
+    description: owner Preset survives a Context move
+    max_peers: 8
+  - action: customize_metaverse_dome
+    title: movable-dome
+    gravity_milli: 7500
+    wall_material: wood
+    prop_position: [150, 50, -90]
+  - action: assert_metaverse_dome_create_rejected
+    title: duplicate-public-dome
+  - action: create_private_channel
+    label: destination
+  - action: select_public_timeline
+  - action: move_metaverse_dome
+    title: movable-dome
+    move_id: move-public-to-private
+    target_topic: kukuri:topic:metaverse-dome-move
+    target_channel_label: destination
+  - action: assert_metaverse_dome_missing
+    title: movable-dome
+  - action: select_private_channel
+    label: destination
+  - action: assert_metaverse_dome
+    title: movable-dome
+    gravity_milli: 7500
+    wall_material: wood
+    prop_position: [150, 50, -90]
+  - action: assert_metaverse_dome_create_rejected
+    title: duplicate-private-dome
+  - action: restart_desktop
+  - action: assert_metaverse_dome
+    title: movable-dome
+    gravity_milli: 7500
+    wall_material: wood
+    prop_position: [150, 50, -90]
+artifacts:
+  dump_logs: true
+  metrics_snapshot: true
+timeouts:
+  overall_ms: 120000
+  step_ms: 15000

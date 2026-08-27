@@ -7,6 +7,7 @@ import type {
   GameRoomView,
   MetaverseAssetRef,
   Profile,
+  SpatialContextV1,
   SyncStatus,
 } from '@/lib/api';
 import type { SupportedLocale } from '@/i18n';
@@ -106,6 +107,22 @@ export function MetaverseRoomPanel({
     }
   }
 
+  async function handleMoveRoom(roomId: string, targetContext: SpatialContextV1) {
+    setPending(true);
+    try {
+      const suffix = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`;
+      await actions.moveRoom(`dome-move-${suffix}`, roomId, targetContext);
+      await actions.refresh();
+      setError(null);
+      return true;
+    } catch (moveError) {
+      setError(moveError instanceof Error ? moveError.message : t('errors.moveFailed'));
+      return false;
+    } finally {
+      setPending(false);
+    }
+  }
+
   async function importAvatarBlob(blob: Blob, name: string) {
     if (!session.selectedRoom) {
       return;
@@ -186,6 +203,7 @@ export function MetaverseRoomPanel({
         mediaObjectUrls={mediaObjectUrls}
         onCreateRoom={handleCreateRoom}
         onJoinRoom={session.joinRoom}
+        onMoveRoom={handleMoveRoom}
       />
 
       <MetaverseRoomView

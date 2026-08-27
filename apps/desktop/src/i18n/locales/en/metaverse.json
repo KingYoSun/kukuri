@@ -15,6 +15,14 @@
     "descriptionPlaceholder": "Small social space",
     "titleRequired": "Room title is required"
   },
+  "move": {
+    "action": "Move Dome",
+    "topicLabel": "Destination topic",
+    "channelLabel": "Destination channel ID",
+    "channelPlaceholder": "Leave empty for the public topic",
+    "confirm": "Start move",
+    "moving": "Moving…"
+  },
   "room": {
     "host": "Host: {{host}}",
     "updated": "Updated: {{time}}",
@@ -117,6 +125,7 @@
     "publishLeaveFailed": "Failed to publish room leave",
     "persistObjectFailed": "Failed to persist shared object",
     "customizationFailed": "Failed to save Dome customization",
+    "moveFailed": "Failed to move the Dome. The source Dome is still available",
     "roomRequired": "Join a Dome before importing an asset"
   }
 }

@@ -15,6 +15,14 @@
     "descriptionPlaceholder": "小さな交流スペース",
     "titleRequired": "ルーム名は必須です"
   },
+  "move": {
+    "action": "Domeを引っ越す",
+    "topicLabel": "移動先トピック",
+    "channelLabel": "移動先チャンネルID",
+    "channelPlaceholder": "公開トピックの場合は空欄",
+    "confirm": "引っ越しを開始",
+    "moving": "引っ越し中…"
+  },
   "room": {
     "host": "ホスト: {{host}}",
     "updated": "更新: {{time}}",
@@ -117,6 +125,7 @@
     "publishLeaveFailed": "ルーム退出を配信できませんでした",
     "persistObjectFailed": "共有オブジェクトを保存できませんでした",
     "customizationFailed": "Domeカスタマイズを保存できませんでした",
+    "moveFailed": "Domeを引っ越せませんでした。元のDomeは維持されています",
     "roomRequired": "アセットを読み込む前にDomeへ参加してください"
   }
 }

@@ -58,7 +58,7 @@ describe('MetaverseRoomDiscovery', () => {
     async (locale, title, createAction, titlePlaceholder, joinAction) => {
       await i18n.changeLanguage(locale);
       const user = userEvent.setup();
-      renderDiscovery({ locale });
+      renderDiscovery({ locale, localAuthorPubkey: 'e'.repeat(64) });
 
       expect(screen.getByRole('heading', { name: title })).toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: createAction }));
@@ -135,5 +135,23 @@ describe('MetaverseRoomDiscovery', () => {
     expect(screen.getByLabelText('Max peers')).toBeDisabled();
     expect(screen.getByPlaceholderText('Small social space')).toBeDisabled();
     expect(screen.getAllByRole('button', { name: 'Create metaverse room' })[1]).toBeDisabled();
+  });
+
+  test('replaces create controls with an owner-only move action for an existing Dome', async () => {
+    const user = userEvent.setup();
+    const onMoveRoom = vi.fn().mockResolvedValue(true);
+    renderDiscovery({ onMoveRoom });
+
+    expect(screen.queryByRole('button', { name: 'Create metaverse room' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Move Dome' }));
+    await user.type(screen.getByPlaceholderText('kukuri:topic:...'), ' kukuri:topic:target ');
+    await user.type(screen.getByPlaceholderText('Leave empty for the public topic'), ' target-channel ');
+    await user.click(screen.getByRole('button', { name: 'Start move' }));
+
+    expect(onMoveRoom).toHaveBeenCalledWith(room.room_id, {
+      kind: 'channel',
+      topic_id: 'kukuri:topic:target',
+      channel_id: 'target-channel',
+    });
   });
 });

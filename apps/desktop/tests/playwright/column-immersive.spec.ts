@@ -125,6 +125,8 @@ test.describe('mobile touch ownership', () => {
     const { metaverse, stage } = await createMetaverseRoom(page);
     await expect(activeColumn(page, 'Metaverse')).toBeVisible();
     await expect(page.getByText('6 / 6')).toBeVisible();
+    await stage.scrollIntoViewIfNeeded();
+    await expect(stage).toBeInViewport();
 
     const touchAction = await stage.evaluate((element) => getComputedStyle(element).touchAction);
     expect(touchAction).toBe('none');

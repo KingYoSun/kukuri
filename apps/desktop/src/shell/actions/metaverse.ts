@@ -41,6 +41,8 @@ export function createMetaverseRoomActions({
     getBlobPreviewUrl: (blobHash, mime) => api.getBlobPreviewUrl(blobHash, mime),
     updateRoom: (roomId, status, customization) =>
       api.updateMetaverseRoom(activeTopic, roomId, status, customization),
+    moveRoom: (moveId, roomId, targetContext) =>
+      api.moveDome(activeTopic, moveId, roomId, targetContext).then(() => undefined),
     refresh: onRefresh,
   };
 }
