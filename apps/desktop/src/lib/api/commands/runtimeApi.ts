@@ -18,6 +18,10 @@ import type {
   DirectMessageStatusView,
   DirectMessageTimelineView,
   DiscoveryConfig,
+  DomeConnectionProposalView,
+  DomeConnectionTopologyView,
+  DomeConnectionView,
+  DomeDirection,
   DomeMoveRecordV1,
   FriendOnlyGrantPreview,
   FriendPlusSharePreview,
@@ -49,11 +53,13 @@ import type {
 // types.generated から直接 import する。
 import type {
   AcceptCommunityNodeConsentsRequest,
+  AcceptDomeConnectionProposalRequest,
   AuthorRequest,
   BookmarkCustomReactionRequest,
   BookmarkPostRequest,
   CommunityNodeTargetRequest,
   CreateCustomReactionAssetRequest,
+  CreateDomeConnectionProposalRequest,
   CreateGameRoomRequest,
   CreateLiveSessionRequest,
   CreateMetaverseRoomRequest,
@@ -77,6 +83,7 @@ import type {
   ImportPrivateChannelInviteRequest,
   LeavePrivateChannelRequest,
   ListDirectMessageMessagesRequest,
+  ListDomeConnectionTopologyRequest,
   ListGameRoomsRequest,
   ListJoinedPrivateChannelsRequest,
   ListLiveSessionsRequest,
@@ -93,6 +100,7 @@ import type {
   PublishMetaverseRoomEventRequest,
   RemoveBookmarkedCustomReactionRequest,
   RemoveBookmarkedPostRequest,
+  RevokeDomeConnectionRequest,
   RotatePrivateChannelRequest,
   SendDirectMessageRequest,
   SetChannelGossipEnabledRequest,
@@ -104,6 +112,7 @@ import type {
   UnsubscribeTopicRequest,
   UpdateGameRoomRequest,
   UpdateMetaverseRoomRequest,
+  WithdrawDomeConnectionProposalRequest,
   WithdrawPostRequest,
 } from '../types.generated';
 
@@ -584,6 +593,65 @@ export const runtimeApi: DesktopApi = {
         source_instance_id: sourceInstanceId,
         target_context: targetContext,
       } satisfies MoveDomeRequest,
+    });
+  }),
+  listDomeConnectionTopology: command('listDomeConnectionTopology', async (
+    spatialContext: SpatialContextV1
+  ) => {
+    return invokeDesktop<DomeConnectionTopologyView>('list_dome_connection_topology', {
+      request: {
+        spatial_context: spatialContext,
+      } satisfies ListDomeConnectionTopologyRequest,
+    });
+  }),
+  createDomeConnectionProposal: command('createDomeConnectionProposal', async (
+    proposalId: string,
+    spatialContext: SpatialContextV1,
+    proposerInstanceId: string,
+    receiverInstanceId: string,
+    proposerDirection: DomeDirection
+  ) => {
+    return invokeDesktop<DomeConnectionProposalView>('create_dome_connection_proposal', {
+      request: {
+        proposal_id: proposalId,
+        spatial_context: spatialContext,
+        proposer_instance_id: proposerInstanceId,
+        receiver_instance_id: receiverInstanceId,
+        proposer_direction: proposerDirection,
+      } satisfies CreateDomeConnectionProposalRequest,
+    });
+  }),
+  acceptDomeConnectionProposal: command('acceptDomeConnectionProposal', async (
+    spatialContext: SpatialContextV1,
+    proposalId: string
+  ) => {
+    return invokeDesktop<DomeConnectionView>('accept_dome_connection_proposal', {
+      request: {
+        spatial_context: spatialContext,
+        proposal_id: proposalId,
+      } satisfies AcceptDomeConnectionProposalRequest,
+    });
+  }),
+  withdrawDomeConnectionProposal: command('withdrawDomeConnectionProposal', async (
+    spatialContext: SpatialContextV1,
+    proposalId: string
+  ) => {
+    return invokeDesktop<DomeConnectionProposalView>('withdraw_dome_connection_proposal', {
+      request: {
+        spatial_context: spatialContext,
+        proposal_id: proposalId,
+      } satisfies WithdrawDomeConnectionProposalRequest,
+    });
+  }),
+  revokeDomeConnection: command('revokeDomeConnection', async (
+    spatialContext: SpatialContextV1,
+    connectionId: string
+  ) => {
+    return invokeDesktop<DomeConnectionView>('revoke_dome_connection', {
+      request: {
+        spatial_context: spatialContext,
+        connection_id: connectionId,
+      } satisfies RevokeDomeConnectionRequest,
     });
   }),
   publishMetaverseRoomEvent: command('publishMetaverseRoomEvent', async (topic, roomId, peerId, seq, event) => {

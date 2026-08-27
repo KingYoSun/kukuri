@@ -22,7 +22,11 @@ import type {
   DirectMessageStatusView,
   DirectMessageTimelineView,
   DiscoveryConfig,
+  DomeConnectionProposalView,
+  DomeConnectionTopologyView,
+  DomeConnectionView,
   DomeCustomizationV1,
+  DomeDirection,
   DomeMoveRecordV1,
   FriendOnlyGrantPreview,
   FriendPlusSharePreview,
@@ -335,6 +339,28 @@ export interface DesktopApi {
     sourceInstanceId: string,
     targetContext: SpatialContextV1
   ): Promise<DomeMoveRecordV1>;
+  listDomeConnectionTopology(
+    spatialContext: SpatialContextV1
+  ): Promise<DomeConnectionTopologyView>;
+  createDomeConnectionProposal(
+    proposalId: string,
+    spatialContext: SpatialContextV1,
+    proposerInstanceId: string,
+    receiverInstanceId: string,
+    proposerDirection: DomeDirection
+  ): Promise<DomeConnectionProposalView>;
+  acceptDomeConnectionProposal(
+    spatialContext: SpatialContextV1,
+    proposalId: string
+  ): Promise<DomeConnectionView>;
+  withdrawDomeConnectionProposal(
+    spatialContext: SpatialContextV1,
+    proposalId: string
+  ): Promise<DomeConnectionProposalView>;
+  revokeDomeConnection(
+    spatialContext: SpatialContextV1,
+    connectionId: string
+  ): Promise<DomeConnectionView>;
   publishMetaverseRoomEvent(
     topic: string,
     roomId: string,

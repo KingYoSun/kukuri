@@ -1,8 +1,10 @@
 use kukuri_core::{
-    AssetRole, ChannelAudienceKind, ChannelSharingState, DomeCustomizationV1, DomeMoveRecordV1,
-    GameRoomKind, GameRoomStatus, KukuriEnvelope, LiveSessionStatus, MetaverseAssetKind,
-    MetaverseAssetRef, MetaverseRoomEventEnvelopeContentV1, MetaverseRoomEventV1,
-    MetaverseRoomStateV1, SpatialContextV1,
+    AssetRole, ChannelAudienceKind, ChannelSharingState, DomeConnectionProposalV1,
+    DomeConnectionRecordV1, DomeConnectionTerminalReasonV1, DomeCustomizationV1, DomeDirection,
+    DomeMoveRecordV1, DomeProposalDerivedStatusV1, DomeProposalSelectionV1,
+    DomeTopologyResolutionV1, GameRoomKind, GameRoomStatus, KukuriEnvelope, LiveSessionStatus,
+    MetaverseAssetKind, MetaverseAssetRef, MetaverseRoomEventEnvelopeContentV1,
+    MetaverseRoomEventV1, MetaverseRoomStateV1, SpatialContextV1,
 };
 use kukuri_store::{NotificationKind, TimelineCursor};
 use kukuri_transport::{ConnectMode, ConnectionPath, DiscoveryMode};
@@ -460,6 +462,58 @@ pub struct MoveDomeInput {
 }
 
 pub type DomeMoveView = DomeMoveRecordV1;
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
+pub struct DomeConnectionProposalView {
+    pub proposal: DomeConnectionProposalV1,
+    pub selection: Option<DomeProposalSelectionV1>,
+    pub status: DomeProposalDerivedStatusV1,
+    pub terminal_reason: Option<DomeConnectionTerminalReasonV1>,
+    pub connection_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct DomeConnectionView {
+    pub record: DomeConnectionRecordV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct DomeConnectionTopologyView {
+    pub proposals: Vec<DomeConnectionProposalView>,
+    pub connections: Vec<DomeConnectionView>,
+    pub resolution: DomeTopologyResolutionV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CreateDomeConnectionProposalInput {
+    pub proposal_id: String,
+    pub spatial_context: SpatialContextV1,
+    pub proposer_instance_id: String,
+    pub receiver_instance_id: String,
+    pub proposer_direction: DomeDirection,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AcceptDomeConnectionProposalInput {
+    pub spatial_context: SpatialContextV1,
+    pub proposal_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WithdrawDomeConnectionProposalInput {
+    pub spatial_context: SpatialContextV1,
+    pub proposal_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RevokeDomeConnectionInput {
+    pub spatial_context: SpatialContextV1,
+    pub connection_id: String,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PublishMetaverseRoomEventInput {

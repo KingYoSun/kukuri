@@ -211,6 +211,66 @@ impl DesktopRuntime {
             .await
     }
 
+    pub async fn list_dome_connection_topology(
+        &self,
+        request: ListDomeConnectionTopologyRequest,
+    ) -> Result<kukuri_app_api::DomeConnectionTopologyView> {
+        self.app_service
+            .list_dome_connection_topology(request.spatial_context)
+            .await
+    }
+
+    pub async fn create_dome_connection_proposal(
+        &self,
+        request: CreateDomeConnectionProposalRequest,
+    ) -> Result<kukuri_app_api::DomeConnectionProposalView> {
+        self.app_service
+            .create_dome_connection_proposal(CreateDomeConnectionProposalInput {
+                proposal_id: request.proposal_id,
+                spatial_context: request.spatial_context,
+                proposer_instance_id: request.proposer_instance_id,
+                receiver_instance_id: request.receiver_instance_id,
+                proposer_direction: request.proposer_direction,
+            })
+            .await
+    }
+
+    pub async fn accept_dome_connection_proposal(
+        &self,
+        request: AcceptDomeConnectionProposalRequest,
+    ) -> Result<kukuri_app_api::DomeConnectionView> {
+        self.app_service
+            .accept_dome_connection_proposal(AcceptDomeConnectionProposalInput {
+                spatial_context: request.spatial_context,
+                proposal_id: request.proposal_id,
+            })
+            .await
+    }
+
+    pub async fn withdraw_dome_connection_proposal(
+        &self,
+        request: WithdrawDomeConnectionProposalRequest,
+    ) -> Result<kukuri_app_api::DomeConnectionProposalView> {
+        self.app_service
+            .withdraw_dome_connection_proposal(WithdrawDomeConnectionProposalInput {
+                spatial_context: request.spatial_context,
+                proposal_id: request.proposal_id,
+            })
+            .await
+    }
+
+    pub async fn revoke_dome_connection(
+        &self,
+        request: RevokeDomeConnectionRequest,
+    ) -> Result<kukuri_app_api::DomeConnectionView> {
+        self.app_service
+            .revoke_dome_connection(RevokeDomeConnectionInput {
+                spatial_context: request.spatial_context,
+                connection_id: request.connection_id,
+            })
+            .await
+    }
+
     pub async fn publish_metaverse_room_event(
         &self,
         request: PublishMetaverseRoomEventRequest,

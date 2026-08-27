@@ -1,0 +1,31 @@
+name: desktop_smoke_metaverse_dome_connections
+fixtures:
+  seed: 792
+  topic: kukuri:topic:metaverse-dome-connections
+steps:
+  - action: launch_desktop
+  - action: select_topic
+    topic: kukuri:topic:metaverse-dome-connections
+  - action: create_metaverse_dome
+    title: local-dome
+    description: Dome Connection topology scenario root
+    max_peers: 8
+  - action: exercise_dome_connections
+    local_title: local-dome
+  - action: assert_dome_connection_topology
+    component_count: 1
+    active_connection_count: 2
+  - action: restart_desktop
+  - action: assert_dome_connection_topology
+    component_count: 1
+    active_connection_count: 2
+  - action: revoke_local_dome_connection
+  - action: assert_dome_connection_topology
+    component_count: 2
+    active_connection_count: 1
+artifacts:
+  dump_logs: true
+  metrics_snapshot: true
+timeouts:
+  overall_ms: 120000
+  step_ms: 15000

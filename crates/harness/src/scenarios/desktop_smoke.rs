@@ -543,6 +543,177 @@ pub(crate) async fn run_desktop_smoke_scenario(
                         )
                         .await?;
                 }
+                ScenarioStep::ExerciseDomeConnections { local_title } => {
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
+                    if runtime.current_channel_id.is_some() {
+                        anyhow::bail!("Dome Connection smoke currently requires a topic Context");
+                    }
+                    let context = SpatialContextV1::Topic {
+                        topic_id: TopicId::new(topic.clone()),
+                    };
+                    let local_instance_id = runtime
+                        .app()?
+                        .list_game_rooms_scoped(&topic, TimelineScope::Public)
+                        .await?
+                        .into_iter()
+                        .find(|room| room.title == *local_title)
+                        .with_context(|| format!("local metaverse Dome not found: {local_title}"))?
+                        .room_id;
+                    let peer_b = dome_connection_peer(&runtime, "dome-peer-b").await?;
+                    let peer_c = dome_connection_peer(&runtime, "dome-peer-c").await?;
+                    let peer_b_instance_id = peer_b
+                        .create_metaverse_room(
+                            &topic,
+                            CreateMetaverseRoomInput {
+                                title: "peer-b-dome".into(),
+                                description: "Dome Connection scenario peer B".into(),
+                                max_peers: Some(8),
+                            },
+                        )
+                        .await?;
+                    let peer_c_instance_id = peer_c
+                        .create_metaverse_room(
+                            &topic,
+                            CreateMetaverseRoomInput {
+                                title: "peer-c-dome".into(),
+                                description: "Dome Connection scenario peer C".into(),
+                                max_peers: Some(8),
+                            },
+                        )
+                        .await?;
+
+                    runtime
+                        .app()?
+                        .create_dome_connection_proposal(CreateDomeConnectionProposalInput {
+                            proposal_id: "scenario-a-b".into(),
+                            spatial_context: context.clone(),
+                            proposer_instance_id: local_instance_id.clone(),
+                            receiver_instance_id: peer_b_instance_id.clone(),
+                            proposer_direction: DomeDirection::East,
+                        })
+                        .await?;
+                    peer_b
+                        .accept_dome_connection_proposal(AcceptDomeConnectionProposalInput {
+                            spatial_context: context.clone(),
+                            proposal_id: "scenario-a-b".into(),
+                        })
+                        .await?;
+                    peer_c
+                        .create_dome_connection_proposal(CreateDomeConnectionProposalInput {
+                            proposal_id: "scenario-c-b".into(),
+                            spatial_context: context.clone(),
+                            proposer_instance_id: peer_c_instance_id.clone(),
+                            receiver_instance_id: peer_b_instance_id,
+                            proposer_direction: DomeDirection::South,
+                        })
+                        .await?;
+                    peer_b
+                        .accept_dome_connection_proposal(AcceptDomeConnectionProposalInput {
+                            spatial_context: context.clone(),
+                            proposal_id: "scenario-c-b".into(),
+                        })
+                        .await?;
+
+                    // A-C はすでに同じ component に属する。空いている slot でも cycle になるため、
+                    // proposal は保持したまま activation だけを拒否する。
+                    runtime
+                        .app()?
+                        .create_dome_connection_proposal(CreateDomeConnectionProposalInput {
+                            proposal_id: "scenario-cycle".into(),
+                            spatial_context: context.clone(),
+                            proposer_instance_id: local_instance_id,
+                            receiver_instance_id: peer_c_instance_id,
+                            proposer_direction: DomeDirection::South,
+                        })
+                        .await?;
+                    if peer_c
+                        .accept_dome_connection_proposal(AcceptDomeConnectionProposalInput {
+                            spatial_context: context,
+                            proposal_id: "scenario-cycle".into(),
+                        })
+                        .await
+                        .is_ok()
+                    {
+                        anyhow::bail!("cycle-forming Dome Connection was accepted");
+                    }
+                }
+                ScenarioStep::AssertDomeConnectionTopology {
+                    component_count,
+                    active_connection_count,
+                } => {
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
+                    let context = match runtime.current_channel_id.clone() {
+                        Some(channel_id) => SpatialContextV1::Channel {
+                            topic_id: TopicId::new(topic),
+                            channel_id: ChannelId::new(channel_id),
+                        },
+                        None => SpatialContextV1::Topic {
+                            topic_id: TopicId::new(topic),
+                        },
+                    };
+                    let topology = runtime.app()?.list_dome_connection_topology(context).await?;
+                    if topology.resolution.topology.components.len() != *component_count
+                        || topology.resolution.topology.active_connection_ids.len()
+                            != *active_connection_count
+                    {
+                        anyhow::bail!(
+                            "Dome Connection topology mismatch: expected components={} active={} observed components={} active={}",
+                            component_count,
+                            active_connection_count,
+                            topology.resolution.topology.components.len(),
+                            topology.resolution.topology.active_connection_ids.len()
+                        );
+                    }
+                }
+                ScenarioStep::RevokeLocalDomeConnection => {
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
+                    let context = match runtime.current_channel_id.clone() {
+                        Some(channel_id) => SpatialContextV1::Channel {
+                            topic_id: TopicId::new(topic),
+                            channel_id: ChannelId::new(channel_id),
+                        },
+                        None => SpatialContextV1::Topic {
+                            topic_id: TopicId::new(topic),
+                        },
+                    };
+                    let rooms = runtime
+                        .app()?
+                        .list_game_rooms_scoped(context.topic_id().as_str(), runtime.current_scope())
+                        .await?;
+                    let local_pubkey = runtime.keys.public_key_hex();
+                    let local_instance_id = rooms
+                        .into_iter()
+                        .find(|room| {
+                            room.metaverse.is_some() && room.host_pubkey == local_pubkey
+                        })
+                        .context("local metaverse Dome not found")?
+                        .room_id;
+                    let topology = runtime
+                        .app()?
+                        .list_dome_connection_topology(context.clone())
+                        .await?;
+                    let connection_id = topology
+                        .connections
+                        .into_iter()
+                        .find(|connection| {
+                            connection.record.status == kukuri_core::DomeConnectionStatusV1::Active
+                                && (connection.record.agreement.proposer.instance_id
+                                    == local_instance_id
+                                    || connection.record.agreement.receiver.instance_id
+                                        == local_instance_id)
+                        })
+                        .context("active local Dome Connection not found")?
+                        .record
+                        .agreement
+                        .connection_id;
+                    runtime
+                        .app()?
+                        .revoke_dome_connection(RevokeDomeConnectionInput {
+                            spatial_context: context,
+                            connection_id,
+                        })
+                        .await?;
+                }
                 ScenarioStep::AssertMetaverseDomeMissing { title } => {
                     let topic = runtime.topic_or_default(&scenario.fixtures.topic);
                     let rooms = runtime
@@ -597,6 +768,20 @@ pub(crate) async fn run_desktop_smoke_scenario(
     })
     .await
     .context("scenario exceeded overall timeout")?
+}
+
+async fn dome_connection_peer(runtime: &ScenarioRuntime, label: &str) -> Result<AppService> {
+    let store = Arc::new(SqliteStore::connect_memory().await?);
+    let transport = Arc::new(FakeTransport::new(label, runtime.network.clone()));
+    Ok(AppService::from_handles(ServiceHandles::new(
+        store.clone(),
+        store,
+        transport.clone(),
+        transport,
+        runtime.docs_sync.clone(),
+        runtime.blob_service.clone(),
+        generate_keys(),
+    )))
 }
 
 fn parse_dome_material(value: &str) -> Result<DomeMaterialPreset> {

@@ -134,6 +134,14 @@ pub enum ScenarioStep {
         target_topic: String,
         target_channel_label: Option<String>,
     },
+    ExerciseDomeConnections {
+        local_title: String,
+    },
+    AssertDomeConnectionTopology {
+        component_count: usize,
+        active_connection_count: usize,
+    },
+    RevokeLocalDomeConnection,
     AssertMetaverseDomeMissing {
         title: String,
     },

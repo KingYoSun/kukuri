@@ -156,6 +156,67 @@ impl LiveGameProjectionStore for SqliteStore {
         rows.into_iter().map(row_to_game_room_projection).collect()
     }
 
+    async fn upsert_dome_connection_projection(
+        &self,
+        row: DomeConnectionProjectionRow,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO dome_connection_projection_cache (
+              context_id, topic_id, channel_id, snapshot_json, topology_digest,
+              derived_at, projection_version
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            ON CONFLICT(context_id) DO UPDATE SET
+              topic_id = excluded.topic_id,
+              channel_id = excluded.channel_id,
+              snapshot_json = excluded.snapshot_json,
+              topology_digest = excluded.topology_digest,
+              derived_at = excluded.derived_at,
+              projection_version = excluded.projection_version
+            "#,
+        )
+        .bind(row.context_id)
+        .bind(row.topic_id)
+        .bind(row.channel_id)
+        .bind(row.snapshot_json)
+        .bind(row.topology_digest)
+        .bind(row.derived_at)
+        .bind(row.projection_version)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn get_dome_connection_projection(
+        &self,
+        context_id: &str,
+    ) -> Result<Option<DomeConnectionProjectionRow>> {
+        let row = sqlx::query(
+            r#"
+            SELECT context_id, topic_id, channel_id, snapshot_json, topology_digest,
+                   derived_at, projection_version
+            FROM dome_connection_projection_cache
+            WHERE context_id = ?1
+            "#,
+        )
+        .bind(context_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        row.map(|row| {
+            Ok(DomeConnectionProjectionRow {
+                context_id: row.try_get("context_id")?,
+                topic_id: row.try_get("topic_id")?,
+                channel_id: row.try_get("channel_id")?,
+                snapshot_json: row.try_get("snapshot_json")?,
+                topology_digest: row.try_get("topology_digest")?,
+                derived_at: row.try_get("derived_at")?,
+                projection_version: row.try_get("projection_version")?,
+            })
+        })
+        .transpose()
+    }
+
     async fn upsert_live_presence(
         &self,
         topic_id: &str,

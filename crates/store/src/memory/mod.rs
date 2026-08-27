@@ -13,8 +13,9 @@ use crate::models::{
     AuthorRelationshipProjectionRow, BlobCacheStatus, BookmarkedCustomReactionRow,
     BookmarkedPostRow, ContentObservationRow, DirectMessageConversationRow,
     DirectMessageMessageRow, DirectMessageOutboxRow, DirectMessageTombstoneRow,
-    GameRoomProjectionRow, LiveSessionProjectionRow, MutedAuthorRow, NotificationRow,
-    ObjectProjectionRow, Page, PostWithdrawalRow, ReactionProjectionRow, TimelineCursor,
+    DomeConnectionProjectionRow, GameRoomProjectionRow, LiveSessionProjectionRow, MutedAuthorRow,
+    NotificationRow, ObjectProjectionRow, Page, PostWithdrawalRow, ReactionProjectionRow,
+    TimelineCursor,
 };
 use crate::pagination::{
     apply_asc_cursor, apply_asc_projection_cursor, apply_desc_cursor,
@@ -49,6 +50,7 @@ pub struct MemoryStore {
     object_projection_rows: Arc<RwLock<HashMap<EnvelopeId, ObjectProjectionRow>>>,
     live_session_rows: Arc<RwLock<HashMap<String, LiveSessionProjectionRow>>>,
     game_room_rows: Arc<RwLock<HashMap<String, GameRoomProjectionRow>>>,
+    dome_connection_rows: Arc<RwLock<HashMap<String, DomeConnectionProjectionRow>>>,
     author_relationship_rows:
         Arc<RwLock<HashMap<(String, String), AuthorRelationshipProjectionRow>>>,
     muted_authors: Arc<RwLock<HashMap<String, MutedAuthorRow>>>,

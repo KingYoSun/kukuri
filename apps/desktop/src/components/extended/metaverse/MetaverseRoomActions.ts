@@ -1,5 +1,9 @@
 import type {
   DomeCustomizationV1,
+  DomeConnectionProposalView,
+  DomeConnectionTopologyView,
+  DomeConnectionView,
+  DomeDirection,
   GameRoomView,
   MetaverseAssetRef,
   MetaverseRoomEventView,
@@ -44,5 +48,25 @@ export type MetaverseRoomActions = {
     roomId: string,
     targetContext: SpatialContextV1
   ) => Promise<void>;
+  listConnections: (context: SpatialContextV1) => Promise<DomeConnectionTopologyView>;
+  createConnectionProposal: (
+    proposalId: string,
+    context: SpatialContextV1,
+    proposerInstanceId: string,
+    receiverInstanceId: string,
+    direction: DomeDirection
+  ) => Promise<DomeConnectionProposalView>;
+  acceptConnectionProposal: (
+    context: SpatialContextV1,
+    proposalId: string
+  ) => Promise<DomeConnectionView>;
+  withdrawConnectionProposal: (
+    context: SpatialContextV1,
+    proposalId: string
+  ) => Promise<DomeConnectionProposalView>;
+  revokeConnection: (
+    context: SpatialContextV1,
+    connectionId: string
+  ) => Promise<DomeConnectionView>;
   refresh: () => Promise<void>;
 };

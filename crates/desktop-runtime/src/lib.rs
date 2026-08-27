@@ -33,8 +33,9 @@ pub use discovery::{DiscoveryConfig, SetDiscoverySeedsRequest};
 pub use kukuri_store::StoreStartupError;
 pub use paths::resolve_db_path_from_env;
 pub use requests::{
-    AuthorRequest, BookmarkCustomReactionRequest, BookmarkPostRequest, CreateAttachmentRequest,
-    CreateCustomReactionAssetRequest, CreateGameRoomRequest, CreateLiveSessionRequest,
+    AcceptDomeConnectionProposalRequest, AuthorRequest, BookmarkCustomReactionRequest,
+    BookmarkPostRequest, CreateAttachmentRequest, CreateCustomReactionAssetRequest,
+    CreateDomeConnectionProposalRequest, CreateGameRoomRequest, CreateLiveSessionRequest,
     CreateMetaverseRoomRequest, CreatePostRequest, CreatePrivateChannelRequest,
     CreateRepostRequest, CustomReactionCropRect, DeleteDirectMessageMessageRequest,
     DirectMessageRequest, ExportChannelAccessTokenRequest, ExportFriendOnlyGrantRequest,
@@ -42,15 +43,16 @@ pub use requests::{
     GetBlobMediaRequest, GetBlobPreviewRequest, ImportChannelAccessTokenRequest,
     ImportFriendOnlyGrantRequest, ImportFriendPlusShareRequest, ImportMetaverseRoomAssetRequest,
     ImportPeerTicketRequest, ImportPrivateChannelInviteRequest, LeavePrivateChannelRequest,
-    ListDirectMessageMessagesRequest, ListGameRoomsRequest, ListJoinedPrivateChannelsRequest,
-    ListLiveSessionsRequest, ListMetaverseRoomEventsRequest, ListProfileTimelineRequest,
-    ListRecentReactionsRequest, ListSocialConnectionsRequest, ListThreadRequest,
-    ListTimelineRequest, LiveSessionCommandRequest, MoveDomeRequest, NotificationIdRequest,
-    PostWithdrawalReasonRequest, PreviewChannelAccessTokenRequest,
+    ListDirectMessageMessagesRequest, ListDomeConnectionTopologyRequest, ListGameRoomsRequest,
+    ListJoinedPrivateChannelsRequest, ListLiveSessionsRequest, ListMetaverseRoomEventsRequest,
+    ListProfileTimelineRequest, ListRecentReactionsRequest, ListSocialConnectionsRequest,
+    ListThreadRequest, ListTimelineRequest, LiveSessionCommandRequest, MoveDomeRequest,
+    NotificationIdRequest, PostWithdrawalReasonRequest, PreviewChannelAccessTokenRequest,
     PublishMetaverseRoomEventRequest, ReactionKeyRequest, RemoveBookmarkedCustomReactionRequest,
-    RemoveBookmarkedPostRequest, RotatePrivateChannelRequest, SendDirectMessageRequest,
-    SetChannelGossipEnabledRequest, SetMyProfileRequest, SetTopicGossipEnabledRequest,
-    ToggleReactionRequest, UnsubscribeTopicRequest, UpdateGameRoomRequest,
-    UpdateMetaverseRoomRequest, WithdrawPostRequest, WithdrawalReasonVisibilityRequest,
+    RemoveBookmarkedPostRequest, RevokeDomeConnectionRequest, RotatePrivateChannelRequest,
+    SendDirectMessageRequest, SetChannelGossipEnabledRequest, SetMyProfileRequest,
+    SetTopicGossipEnabledRequest, ToggleReactionRequest, UnsubscribeTopicRequest,
+    UpdateGameRoomRequest, UpdateMetaverseRoomRequest, WithdrawDomeConnectionProposalRequest,
+    WithdrawPostRequest, WithdrawalReasonVisibilityRequest,
 };
 pub use runtime::{DesktopRuntime, RuntimeEvent};

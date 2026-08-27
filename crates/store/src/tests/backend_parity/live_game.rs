@@ -301,3 +301,50 @@ async fn game_rooms_match_between_backends() {
         vec!["room-other".to_string()],
     );
 }
+
+async fn dome_connection_projection_scenario<S: Store + ProjectionStore>(
+    store: &S,
+) -> Option<DomeConnectionProjectionRow> {
+    let first = DomeConnectionProjectionRow {
+        context_id: "topic:kukuri:topic:dome-parity".into(),
+        topic_id: "kukuri:topic:dome-parity".into(),
+        channel_id: String::new(),
+        snapshot_json: r#"{"components":[]}"#.into(),
+        topology_digest: "digest-1".into(),
+        derived_at: 10,
+        projection_version: 1,
+    };
+    LiveGameProjectionStore::upsert_dome_connection_projection(store, first)
+        .await
+        .expect("upsert initial Dome Connection projection");
+    let updated = DomeConnectionProjectionRow {
+        snapshot_json: r#"{"components":["dome-a"]}"#.into(),
+        topology_digest: "digest-2".into(),
+        derived_at: 20,
+        ..LiveGameProjectionStore::get_dome_connection_projection(
+            store,
+            "topic:kukuri:topic:dome-parity",
+        )
+        .await
+        .expect("get initial Dome Connection projection")
+        .expect("initial Dome Connection projection")
+    };
+    LiveGameProjectionStore::upsert_dome_connection_projection(store, updated)
+        .await
+        .expect("upsert updated Dome Connection projection");
+    LiveGameProjectionStore::get_dome_connection_projection(store, "topic:kukuri:topic:dome-parity")
+        .await
+        .expect("get updated Dome Connection projection")
+}
+
+#[tokio::test]
+async fn dome_connection_projection_matches_between_backends() {
+    let sqlite = SqliteStore::connect_memory().await.expect("sqlite store");
+    let memory = MemoryStore::default();
+    let from_sqlite = dome_connection_projection_scenario(&sqlite).await;
+    let from_memory = dome_connection_projection_scenario(&memory).await;
+    assert_eq!(from_sqlite, from_memory);
+    let projection = from_sqlite.expect("Dome Connection projection");
+    assert_eq!(projection.topology_digest, "digest-2");
+    assert_eq!(projection.derived_at, 20);
+}

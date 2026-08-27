@@ -135,6 +135,36 @@ export type DomeMovePhaseV1 = "preparing" | "target_staged" | "source_detached" 
 
 export type DomeMoveRecordV1 = { move_id: string, owner_pubkey: string, source_instance_id: string, source_context: SpatialContextV1, source_generation: number, target_instance_id: string, target_context: SpatialContextV1, target_generation: number, preset_ref: DomePresetRefV1, phase: DomeMovePhaseV1, failure_reason?: string | null, updated_at: number, };
 
+export type DomeConnectionEndpointV1 = { instance_id: string, instance_generation: number, owner_pubkey: Pubkey, direction: DomeDirection, };
+
+export type DomeConnectionProposalV1 = { proposal_id: string, spatial_context: SpatialContextV1, proposer: DomeConnectionEndpointV1, receiver: DomeConnectionEndpointV1, sequence: number, created_at: number, };
+
+export type DomeProposalSelectionV1 = { selection_id: string, proposal_id: string, spatial_context: SpatialContextV1, receiver: DomeConnectionEndpointV1, slot_generation: number, observed_active_connection_ids: Array<string>, selected_at: number, };
+
+export type DomeConnectionAgreementV1 = { connection_id: string, proposal_id: string, spatial_context: SpatialContextV1, proposer: DomeConnectionEndpointV1, receiver: DomeConnectionEndpointV1, activation_generation: number, };
+
+export type DomeConnectionStatusV1 = "accepted" | "active" | "draining" | "revoked";
+
+export type DomeConnectionTerminalReasonV1 = "owner_revoked" | "proposer_withdrew" | "proposer_slot_occupied" | "instance_detached" | "instance_deleted" | "owners_blocked";
+
+export type DomeConnectionRecordV1 = { agreement: DomeConnectionAgreementV1, receiver_slot_generation: number, observed_active_connection_ids: Array<string>, status: DomeConnectionStatusV1, lifecycle_generation: number, lifecycle_actor: Pubkey | null, lifecycle_reason: DomeConnectionTerminalReasonV1 | null, };
+
+export type DomeProposalDerivedStatusV1 = "proposed" | "reserved" | "accepted" | "waiting_for_slot" | "discarded";
+
+export type DomeComponentTopologyV1 = { root_instance_id: string, instance_ids: Array<string>, connection_ids: Array<string>, coordinates_cm: { [key in string]: [number, number, number] }, };
+
+export type DomeTopologyV1 = { spatial_context: SpatialContextV1, components: Array<DomeComponentTopologyV1>, active_connection_ids: Array<string>, topology_digest: string, };
+
+export type DomeRejectedConnectionV1 = { connection_id: string, reason: string, };
+
+export type DomeTopologyResolutionV1 = { topology: DomeTopologyV1, rejected_connections: Array<DomeRejectedConnectionV1>, };
+
+export type DomeConnectionProposalView = { proposal: DomeConnectionProposalV1, selection?: DomeProposalSelectionV1 | null, status: DomeProposalDerivedStatusV1, terminal_reason?: DomeConnectionTerminalReasonV1 | null, connection_id: string, };
+
+export type DomeConnectionView = { record: DomeConnectionRecordV1, };
+
+export type DomeConnectionTopologyView = { proposals: Array<DomeConnectionProposalView>, connections: Array<DomeConnectionView>, resolution: DomeTopologyResolutionV1, };
+
 export type MetaverseRoomPresenceV1 = { room_id: string, peer_id: string, display_name?: string | null, avatar_asset_ref?: MetaverseAssetRef | null, joined_at: number, last_seen_at: number, };
 
 export type MetaverseAvatarTransformV1 = { room_id: string, peer_id: string, seq: number, position: [number, number, number], rotation: [number, number, number], animation?: string | null, sent_at: number, };
@@ -468,6 +498,16 @@ export type UpdateGameRoomRequest = { topic: string, room_id: string, status: Ga
 export type UpdateMetaverseRoomRequest = { topic: string, room_id: string, status: GameRoomStatus, customization: DomeCustomizationV1, };
 
 export type MoveDomeRequest = { source_topic: string, move_id: string, source_instance_id: string, target_context: SpatialContextV1, };
+
+export type ListDomeConnectionTopologyRequest = { spatial_context: SpatialContextV1, };
+
+export type CreateDomeConnectionProposalRequest = { proposal_id: string, spatial_context: SpatialContextV1, proposer_instance_id: string, receiver_instance_id: string, proposer_direction: DomeDirection, };
+
+export type AcceptDomeConnectionProposalRequest = { spatial_context: SpatialContextV1, proposal_id: string, };
+
+export type WithdrawDomeConnectionProposalRequest = { spatial_context: SpatialContextV1, proposal_id: string, };
+
+export type RevokeDomeConnectionRequest = { spatial_context: SpatialContextV1, connection_id: string, };
 
 export type SetCommunityNodeConfigNode = { base_url: string, auto_approve: boolean, };
 

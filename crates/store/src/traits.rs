@@ -9,8 +9,9 @@ use crate::models::{
     AuthorRelationshipProjectionRow, BlobCacheStatus, BookmarkedCustomReactionRow,
     BookmarkedPostRow, ContentObservationRow, DirectMessageConversationRow,
     DirectMessageMessageRow, DirectMessageOutboxRow, DirectMessageTombstoneRow,
-    GameRoomProjectionRow, LiveSessionProjectionRow, MutedAuthorRow, NotificationRow,
-    ObjectProjectionRow, Page, PostWithdrawalRow, ReactionProjectionRow, TimelineCursor,
+    DomeConnectionProjectionRow, GameRoomProjectionRow, LiveSessionProjectionRow, MutedAuthorRow,
+    NotificationRow, ObjectProjectionRow, Page, PostWithdrawalRow, ReactionProjectionRow,
+    TimelineCursor,
 };
 
 pub(crate) const CONTENT_OBSERVATION_RETENTION_MS: i64 = 90 * 24 * 60 * 60 * 1000;
@@ -211,6 +212,14 @@ pub trait LiveGameProjectionStore: Send + Sync {
     ) -> Result<Vec<LiveSessionProjectionRow>>;
     async fn upsert_game_room_cache(&self, row: GameRoomProjectionRow) -> Result<()>;
     async fn list_topic_game_rooms(&self, topic_id: &str) -> Result<Vec<GameRoomProjectionRow>>;
+    async fn upsert_dome_connection_projection(
+        &self,
+        row: DomeConnectionProjectionRow,
+    ) -> Result<()>;
+    async fn get_dome_connection_projection(
+        &self,
+        context_id: &str,
+    ) -> Result<Option<DomeConnectionProjectionRow>>;
     async fn upsert_live_presence(
         &self,
         topic_id: &str,

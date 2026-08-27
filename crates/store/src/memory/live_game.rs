@@ -76,6 +76,29 @@ impl LiveGameProjectionStore for MemoryStore {
         Ok(items)
     }
 
+    async fn upsert_dome_connection_projection(
+        &self,
+        row: DomeConnectionProjectionRow,
+    ) -> Result<()> {
+        self.dome_connection_rows
+            .write()
+            .await
+            .insert(row.context_id.clone(), row);
+        Ok(())
+    }
+
+    async fn get_dome_connection_projection(
+        &self,
+        context_id: &str,
+    ) -> Result<Option<DomeConnectionProjectionRow>> {
+        Ok(self
+            .dome_connection_rows
+            .read()
+            .await
+            .get(context_id)
+            .cloned())
+    }
+
     async fn upsert_live_presence(
         &self,
         topic_id: &str,
