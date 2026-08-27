@@ -27,6 +27,7 @@ type LiveGameMock = Pick<
   | 'createMetaverseRoom'
   | 'updateGameRoom'
   | 'updateMetaverseRoom'
+  | 'moveDome'
   | 'publishMetaverseRoomEvent'
   | 'listMetaverseRoomEvents'
   | 'importMetaverseRoomAsset'
@@ -154,7 +155,12 @@ export function createLiveGameMock(runtime: MockRuntime): LiveGameMock {
           phase_label: 'fixed-dome-v1',
           scores: [],
           room_kind: 'metaverse_room',
-          metaverse: createDefaultMetaverseRoomState(maxPeers),
+          metaverse: createDefaultMetaverseRoomState(maxPeers, {
+            roomId,
+            topicId: topic,
+            channelId,
+            ownerPubkey: syncStatus.local_author_pubkey,
+          }),
           manifest_blob_hash: `mock-${roomId}`,
           updated_at: now,
           channel_id: channelId,
@@ -199,6 +205,47 @@ export function createLiveGameMock(runtime: MockRuntime): LiveGameMock {
           : room
       );
     },
+    async moveDome(sourceTopic, moveId, sourceInstanceId, targetContext) {
+      const source = (gameRoomsByTopic[sourceTopic] ?? []).find(
+        (room) => room.room_id === sourceInstanceId && room.metaverse
+      );
+      if (!source?.metaverse) throw new Error('source Dome instance not found');
+      const targetTopic = targetContext.topic_id;
+      const targetRoomId = `moved-${sourceInstanceId}`;
+      gameRoomsByTopic[sourceTopic] = (gameRoomsByTopic[sourceTopic] ?? []).filter(
+        (room) => room.room_id !== sourceInstanceId
+      );
+      gameRoomsByTopic[targetTopic] = [
+        withGameRoomDefaults({
+          ...source,
+          room_id: targetRoomId,
+          channel_id: targetContext.kind === 'channel' ? targetContext.channel_id : null,
+          metaverse: {
+            ...source.metaverse,
+            instance_id: targetRoomId,
+            spatial_context: targetContext,
+            session_id: targetRoomId,
+            relationship_detach: null,
+            replacement_instance_id: null,
+          },
+        }),
+        ...(gameRoomsByTopic[targetTopic] ?? []),
+      ];
+      return {
+        move_id: moveId,
+        owner_pubkey: syncStatus.local_author_pubkey,
+        source_instance_id: sourceInstanceId,
+        source_context: source.metaverse.spatial_context,
+        source_generation: source.metaverse.instance_generation,
+        target_instance_id: targetRoomId,
+        target_context: targetContext,
+        target_generation: 1,
+        preset_ref: source.metaverse.preset_ref,
+        phase: 'completed',
+        failure_reason: null,
+        updated_at: Date.now(),
+      };
+    },
     async publishMetaverseRoomEvent(topic, roomId, peerId, seq, event) {
       const now = Date.now();
       const envelopeId = `mock-metaverse-event-${now}-${seq}`;
@@ -209,6 +256,9 @@ export function createLiveGameMock(runtime: MockRuntime): LiveGameMock {
           topic_id: topic,
           channel_id: null,
           room_id: roomId,
+          spatial_context: (gameRoomsByTopic[topic] ?? []).find((room) => room.room_id === roomId)?.metaverse?.spatial_context ?? { kind: 'topic', topic_id: topic },
+          instance_generation: (gameRoomsByTopic[topic] ?? []).find((room) => room.room_id === roomId)?.metaverse?.instance_generation ?? 1,
+          session_id: roomId,
           peer_id: peerId,
           seq,
           sent_at: now,

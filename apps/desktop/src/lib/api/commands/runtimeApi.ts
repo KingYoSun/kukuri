@@ -18,6 +18,7 @@ import type {
   DirectMessageStatusView,
   DirectMessageTimelineView,
   DiscoveryConfig,
+  DomeMoveRecordV1,
   FriendOnlyGrantPreview,
   FriendPlusSharePreview,
   GameRoomView,
@@ -29,6 +30,7 @@ import type {
   LiveSessionView,
   MetaverseAssetRef,
   MetaverseRoomEventView,
+  SpatialContextV1,
   NotificationStatusView,
   NotificationView,
   PrivateChannelInvitePreview,
@@ -85,6 +87,7 @@ import type {
   ListThreadRequest,
   ListTimelineRequest,
   LiveSessionCommandRequest,
+  MoveDomeRequest,
   NotificationIdRequest,
   PreviewChannelAccessTokenRequest,
   PublishMetaverseRoomEventRequest,
@@ -566,6 +569,21 @@ export const runtimeApi: DesktopApi = {
         status,
         customization,
       } satisfies UpdateMetaverseRoomRequest,
+    });
+  }),
+  moveDome: command('moveDome', async (
+    sourceTopic: string,
+    moveId: string,
+    sourceInstanceId: string,
+    targetContext: SpatialContextV1
+  ) => {
+    return invokeDesktop<DomeMoveRecordV1>('move_dome', {
+      request: {
+        source_topic: sourceTopic,
+        move_id: moveId,
+        source_instance_id: sourceInstanceId,
+        target_context: targetContext,
+      } satisfies MoveDomeRequest,
     });
   }),
   publishMetaverseRoomEvent: command('publishMetaverseRoomEvent', async (topic, roomId, peerId, seq, event) => {

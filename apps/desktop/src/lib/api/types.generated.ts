@@ -123,6 +123,18 @@ export type DomeCustomizationV1 = { surface: DomeSurfaceCustomizationV1, environ
 
 export type MetaverseDomeV1 = { spec_id: string, customization: DomeCustomizationV1, };
 
+export type SpatialContextV1 = { "kind": "topic", topic_id: string, } | { "kind": "channel", topic_id: string, channel_id: string, };
+
+export type DomePresetRefV1 = { preset_id: string, owner_pubkey: string, manifest_blob_hash: string, manifest_mime: string, manifest_bytes: number, };
+
+export type DomeInstanceStatusV1 = "staging" | "active" | "tombstoned";
+
+export type DomeRelationshipDetachV1 = { move_id: string, instance_generation: number, detached_at: number, };
+
+export type DomeMovePhaseV1 = "preparing" | "target_staged" | "source_detached" | "target_active" | "source_tombstoned" | "completed" | "failed";
+
+export type DomeMoveRecordV1 = { move_id: string, owner_pubkey: string, source_instance_id: string, source_context: SpatialContextV1, source_generation: number, target_instance_id: string, target_context: SpatialContextV1, target_generation: number, preset_ref: DomePresetRefV1, phase: DomeMovePhaseV1, failure_reason?: string | null, updated_at: number, };
+
 export type MetaverseRoomPresenceV1 = { room_id: string, peer_id: string, display_name?: string | null, avatar_asset_ref?: MetaverseAssetRef | null, joined_at: number, last_seen_at: number, };
 
 export type MetaverseAvatarTransformV1 = { room_id: string, peer_id: string, seq: number, position: [number, number, number], rotation: [number, number, number], animation?: string | null, sent_at: number, };
@@ -133,11 +145,11 @@ export type SharedRoomObjectV1 = { object_id: string, asset_ref?: MetaverseAsset
 
 export type MetaverseRoomEventV1 = { "type": "presence_join", presence: MetaverseRoomPresenceV1, } | { "type": "presence_leave", room_id: string, peer_id: string, left_at: number, } | { "type": "avatar_transform", transform: MetaverseAvatarTransformV1, } | { "type": "chat_message", message: MetaverseRoomChatMessageV1, } | { "type": "object_update", object: SharedRoomObjectV1, };
 
-export type MetaverseRoomEventEnvelopeContentV1 = { event_id: string, topic_id: string, channel_id?: string | null, room_id: string, peer_id: string, seq: number, sent_at: number, event: MetaverseRoomEventV1, };
+export type MetaverseRoomEventEnvelopeContentV1 = { event_id: string, topic_id: string, channel_id?: string | null, room_id: string, spatial_context: SpatialContextV1, instance_generation: number, session_id: string, peer_id: string, seq: number, sent_at: number, event: MetaverseRoomEventV1, };
 
 export type MetaverseRoomSpawnV1 = { position: [number, number, number], rotation: [number, number, number], };
 
-export type MetaverseRoomStateV1 = { world_version: number, max_peers?: number | null, dome: MetaverseDomeV1, default_spawn: MetaverseRoomSpawnV1, asset_refs: Array<MetaverseAssetRef>, chat_history?: Array<MetaverseRoomChatMessageV1> | null, };
+export type MetaverseRoomStateV1 = { world_version: number, instance_id: string, spatial_context: SpatialContextV1, instance_generation: number, instance_status: DomeInstanceStatusV1, relationship_detach?: DomeRelationshipDetachV1 | null, replacement_instance_id?: string | null, preset_ref: DomePresetRefV1, session_id: string, max_peers?: number | null, dome: MetaverseDomeV1, default_spawn: MetaverseRoomSpawnV1, asset_refs: Array<MetaverseAssetRef>, chat_history?: Array<MetaverseRoomChatMessageV1> | null, };
 
 export type GameRoomView = { room_id: string, host_pubkey: string, title: string, description: string, status: GameRoomStatus, phase_label?: string | null, scores: Array<GameScoreView>, room_kind: GameRoomKind, metaverse?: MetaverseRoomStateV1 | null, manifest_blob_hash: string, updated_at: number, channel_id?: string | null, audience_label: string, };
 
@@ -454,6 +466,8 @@ export type ListJoinedPrivateChannelsRequest = { topic: string, };
 export type UpdateGameRoomRequest = { topic: string, room_id: string, status: GameRoomStatus, phase_label?: string | null, scores: Array<GameScoreView>, };
 
 export type UpdateMetaverseRoomRequest = { topic: string, room_id: string, status: GameRoomStatus, customization: DomeCustomizationV1, };
+
+export type MoveDomeRequest = { source_topic: string, move_id: string, source_instance_id: string, target_context: SpatialContextV1, };
 
 export type SetCommunityNodeConfigNode = { base_url: string, auto_approve: boolean, };
 

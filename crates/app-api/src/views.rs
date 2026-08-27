@@ -1,7 +1,8 @@
 use kukuri_core::{
-    AssetRole, ChannelAudienceKind, ChannelSharingState, DomeCustomizationV1, GameRoomKind,
-    GameRoomStatus, KukuriEnvelope, LiveSessionStatus, MetaverseAssetKind, MetaverseAssetRef,
-    MetaverseRoomEventEnvelopeContentV1, MetaverseRoomEventV1, MetaverseRoomStateV1,
+    AssetRole, ChannelAudienceKind, ChannelSharingState, DomeCustomizationV1, DomeMoveRecordV1,
+    GameRoomKind, GameRoomStatus, KukuriEnvelope, LiveSessionStatus, MetaverseAssetKind,
+    MetaverseAssetRef, MetaverseRoomEventEnvelopeContentV1, MetaverseRoomEventV1,
+    MetaverseRoomStateV1, SpatialContextV1,
 };
 use kukuri_store::{NotificationKind, TimelineCursor};
 use kukuri_transport::{ConnectMode, ConnectionPath, DiscoveryMode};
@@ -450,6 +451,15 @@ pub struct UpdateMetaverseRoomInput {
     pub status: GameRoomStatus,
     pub customization: DomeCustomizationV1,
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MoveDomeInput {
+    pub move_id: String,
+    pub source_instance_id: String,
+    pub target_context: SpatialContextV1,
+}
+
+pub type DomeMoveView = DomeMoveRecordV1;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PublishMetaverseRoomEventInput {

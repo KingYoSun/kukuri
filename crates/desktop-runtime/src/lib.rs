@@ -45,7 +45,7 @@ pub use requests::{
     ListDirectMessageMessagesRequest, ListGameRoomsRequest, ListJoinedPrivateChannelsRequest,
     ListLiveSessionsRequest, ListMetaverseRoomEventsRequest, ListProfileTimelineRequest,
     ListRecentReactionsRequest, ListSocialConnectionsRequest, ListThreadRequest,
-    ListTimelineRequest, LiveSessionCommandRequest, NotificationIdRequest,
+    ListTimelineRequest, LiveSessionCommandRequest, MoveDomeRequest, NotificationIdRequest,
     PostWithdrawalReasonRequest, PreviewChannelAccessTokenRequest,
     PublishMetaverseRoomEventRequest, ReactionKeyRequest, RemoveBookmarkedCustomReactionRequest,
     RemoveBookmarkedPostRequest, RotatePrivateChannelRequest, SendDirectMessageRequest,

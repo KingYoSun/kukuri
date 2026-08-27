@@ -18,6 +18,10 @@ pub(crate) async fn run_desktop_smoke_scenario(
         current_topic: None,
         current_channel_id: None,
         private_channels: BTreeMap::new(),
+        docs_sync: Arc::new(MemoryDocsSync::default()),
+        blob_service: Arc::new(MemoryBlobService::default()),
+        keys: generate_keys(),
+        private_channel_capabilities: Arc::new(StdMutex::new(Vec::new())),
     };
     let overall_timeout = Duration::from_millis(scenario.timeouts.overall_ms);
     let step_timeout = Duration::from_millis(scenario.timeouts.step_ms);
@@ -25,9 +29,10 @@ pub(crate) async fn run_desktop_smoke_scenario(
     timeout(overall_timeout, async {
         let mut steps = Vec::new();
 
-        for step in &scenario.steps {
+        for (step_index, step) in scenario.steps.iter().enumerate() {
             let started_at = Instant::now();
-            match step {
+            let step_result = async {
+                match step {
                 ScenarioStep::LaunchDesktop => runtime.launch().await?,
                 ScenarioStep::SelectTopic { topic } => {
                     runtime.current_topic = Some(topic.clone());
@@ -330,17 +335,28 @@ pub(crate) async fn run_desktop_smoke_scenario(
                     max_peers,
                 } => {
                     let topic = runtime.topic_or_default(&scenario.fixtures.topic);
-                    runtime
-                        .app()?
-                        .create_metaverse_room(
-                            &topic,
-                            CreateMetaverseRoomInput {
-                                title: title.clone(),
-                                description: description.clone(),
-                                max_peers: *max_peers,
-                            },
-                        )
-                        .await?;
+                    let input = CreateMetaverseRoomInput {
+                        title: title.clone(),
+                        description: description.clone(),
+                        max_peers: *max_peers,
+                    };
+                    match runtime.current_channel_id.clone() {
+                        Some(channel_id) => {
+                            runtime
+                                .app()?
+                                .create_metaverse_room_in_channel(
+                                    &topic,
+                                    ChannelRef::PrivateChannel {
+                                        channel_id: ChannelId::new(channel_id),
+                                    },
+                                    input,
+                                )
+                                .await?;
+                        }
+                        None => {
+                            runtime.app()?.create_metaverse_room(&topic, input).await?;
+                        }
+                    }
                 }
                 ScenarioStep::CustomizeMetaverseDome {
                     title,
@@ -351,7 +367,7 @@ pub(crate) async fn run_desktop_smoke_scenario(
                     let topic = runtime.topic_or_default(&scenario.fixtures.topic);
                     let room = runtime
                         .app()?
-                        .list_game_rooms(&topic)
+                        .list_game_rooms_scoped(&topic, runtime.current_scope())
                         .await?
                         .into_iter()
                         .find(|room| room.title == *title)
@@ -388,7 +404,7 @@ pub(crate) async fn run_desktop_smoke_scenario(
                     let expected_material = parse_dome_material(wall_material)?;
                     let room = runtime
                         .app()?
-                        .list_game_rooms(&topic)
+                        .list_game_rooms_scoped(&topic, runtime.current_scope())
                         .await?
                         .into_iter()
                         .find(|room| room.title == *title)
@@ -410,7 +426,7 @@ pub(crate) async fn run_desktop_smoke_scenario(
                     let topic = runtime.topic_or_default(&scenario.fixtures.topic);
                     let before = runtime
                         .app()?
-                        .list_game_rooms(&topic)
+                        .list_game_rooms_scoped(&topic, runtime.current_scope())
                         .await?
                         .into_iter()
                         .find(|room| room.title == *title)
@@ -440,7 +456,7 @@ pub(crate) async fn run_desktop_smoke_scenario(
                     }
                     let after = runtime
                         .app()?
-                        .list_game_rooms(&topic)
+                        .list_game_rooms_scoped(&topic, runtime.current_scope())
                         .await?
                         .into_iter()
                         .find(|room| room.title == *title)
@@ -457,15 +473,105 @@ pub(crate) async fn run_desktop_smoke_scenario(
                         anyhow::bail!("invalid metaverse Dome customization was persisted");
                     }
                 }
+                ScenarioStep::AssertMetaverseDomeCreateRejected { title } => {
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
+                    let input = CreateMetaverseRoomInput {
+                        title: title.clone(),
+                        description: "duplicate owner slot".into(),
+                        max_peers: Some(8),
+                    };
+                    let result = match runtime.current_channel_id.clone() {
+                        Some(channel_id) => {
+                            runtime
+                                .app()?
+                                .create_metaverse_room_in_channel(
+                                    &topic,
+                                    ChannelRef::PrivateChannel {
+                                        channel_id: ChannelId::new(channel_id),
+                                    },
+                                    input,
+                                )
+                                .await
+                        }
+                        None => runtime.app()?.create_metaverse_room(&topic, input).await,
+                    };
+                    if result.is_ok() {
+                        anyhow::bail!("duplicate owner Dome was accepted in current Context");
+                    }
+                }
+                ScenarioStep::MoveMetaverseDome {
+                    title,
+                    move_id,
+                    target_topic,
+                    target_channel_label,
+                } => {
+                    let source_topic = runtime.topic_or_default(&scenario.fixtures.topic);
+                    let room = runtime
+                        .app()?
+                        .list_game_rooms_scoped(&source_topic, runtime.current_scope())
+                        .await?
+                        .into_iter()
+                        .find(|room| room.title == *title)
+                        .with_context(|| format!("metaverse Dome not found: {title}"))?;
+                    let target_context = match target_channel_label {
+                        Some(label) => {
+                            let channel_id = runtime
+                                .private_channels
+                                .get(label.as_str())
+                                .cloned()
+                                .with_context(|| {
+                                    format!("private channel not found for label: {label}")
+                                })?;
+                            SpatialContextV1::Channel {
+                                topic_id: TopicId::new(target_topic.clone()),
+                                channel_id: ChannelId::new(channel_id),
+                            }
+                        }
+                        None => SpatialContextV1::Topic {
+                            topic_id: TopicId::new(target_topic.clone()),
+                        },
+                    };
+                    runtime
+                        .app()?
+                        .move_dome(
+                            &source_topic,
+                            MoveDomeInput {
+                                move_id: move_id.clone(),
+                                source_instance_id: room.room_id,
+                                target_context,
+                            },
+                        )
+                        .await?;
+                }
+                ScenarioStep::AssertMetaverseDomeMissing { title } => {
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
+                    let rooms = runtime
+                        .app()?
+                        .list_game_rooms_scoped(&topic, runtime.current_scope())
+                        .await?;
+                    if rooms.iter().any(|room| room.title == *title) {
+                        anyhow::bail!("metaverse Dome is still visible: {title}");
+                    }
+                }
                 ScenarioStep::RestartDesktop => {
                     runtime.app.take();
                     runtime.launch().await?;
                 }
-                other => anyhow::bail!(
-                    "unsupported step for desktop smoke scenario: {}",
-                    step_name(other)
-                ),
+                    other => anyhow::bail!(
+                        "unsupported step for desktop smoke scenario: {}",
+                        step_name(other)
+                    ),
+                }
+                Ok::<(), anyhow::Error>(())
             }
+            .await;
+            step_result.with_context(|| {
+                format!(
+                    "scenario step {} ({}) failed: {step:?}",
+                    step_index + 1,
+                    step_name(step)
+                )
+            })?;
 
             steps.push(StepResult {
                 action: step_name(step).to_string(),

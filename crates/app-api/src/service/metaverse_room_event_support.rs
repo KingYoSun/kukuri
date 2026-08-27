@@ -40,12 +40,7 @@ pub(crate) fn parse_metaverse_room_event_envelope(
     let content: MetaverseRoomEventEnvelopeContentV1 =
         serde_json::from_str(envelope.content.as_str())
             .context("failed to decode metaverse room event content")?;
-    if content.event_id.trim().is_empty()
-        || content.room_id.trim().is_empty()
-        || content.peer_id.trim().is_empty()
-    {
-        return Ok(None);
-    }
+    validate_metaverse_room_event_content(&content)?;
     Ok(Some(MetaverseRoomEventView {
         envelope_id: envelope.id.0.clone(),
         content,

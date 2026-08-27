@@ -50,6 +50,8 @@ pub struct KukuriMediaManifestV1 {
 
 pub const LIVE_MANIFEST_MIME: &str = "application/vnd.kukuri.live-manifest+json";
 pub const GAME_MANIFEST_MIME: &str = "application/vnd.kukuri.game-manifest+json";
+pub const DOME_PRESET_MANIFEST_MIME: &str = "application/vnd.kukuri.dome-preset+json";
+pub const DOME_INSTANCE_MANIFEST_MIME: &str = "application/vnd.kukuri.dome-instance+json";
 
 pub fn blob_hash(data: impl AsRef<[u8]>) -> BlobHash {
     BlobHash::new(blake3::hash(data.as_ref()).to_hex().to_string())

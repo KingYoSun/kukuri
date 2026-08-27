@@ -15,6 +15,7 @@ describe('createMetaverseRoomActions', () => {
       importMetaverseRoomAsset: vi.fn(baseApi.importMetaverseRoomAsset),
       getBlobPreviewUrl: vi.fn(baseApi.getBlobPreviewUrl),
       updateMetaverseRoom: vi.fn(baseApi.updateMetaverseRoom),
+      moveDome: vi.fn().mockResolvedValue(null as never),
     };
     const onRefresh = vi.fn().mockResolvedValue(undefined);
     const actions = createMetaverseRoomActions({
@@ -41,6 +42,11 @@ describe('createMetaverseRoomActions', () => {
     await actions.getBlobPreviewUrl('blob-hash', 'model/vrm');
     const customization = createDefaultDomeCustomization();
     await actions.updateRoom('room-1', 'Waiting', customization);
+    await actions.moveRoom('move-1', 'room-1', {
+      kind: 'channel',
+      topic_id: 'kukuri:topic:target',
+      channel_id: 'channel-2',
+    });
 
     expect(api.createMetaverseRoom).toHaveBeenCalledWith(
       'kukuri:topic:demo',
@@ -76,6 +82,16 @@ describe('createMetaverseRoomActions', () => {
       'room-1',
       'Waiting',
       customization
+    );
+    expect(api.moveDome).toHaveBeenCalledWith(
+      'kukuri:topic:demo',
+      'move-1',
+      'room-1',
+      {
+        kind: 'channel',
+        topic_id: 'kukuri:topic:target',
+        channel_id: 'channel-2',
+      }
     );
     expect(onRefresh).not.toHaveBeenCalled();
 

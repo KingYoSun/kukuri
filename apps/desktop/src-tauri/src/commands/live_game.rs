@@ -2,7 +2,7 @@ use kukuri_desktop_runtime::{
     CreateGameRoomRequest, CreateLiveSessionRequest, CreateMetaverseRoomRequest,
     ImportMetaverseRoomAssetRequest, ListGameRoomsRequest, ListLiveSessionsRequest,
     ListMetaverseRoomEventsRequest, LiveSessionCommandRequest, PublishMetaverseRoomEventRequest,
-    UpdateGameRoomRequest, UpdateMetaverseRoomRequest,
+    MoveDomeRequest, UpdateGameRoomRequest, UpdateMetaverseRoomRequest,
 };
 
 use crate::state::{CommandError, DesktopState, map_error};
@@ -125,6 +125,14 @@ pub async fn update_metaverse_room(
         .update_metaverse_room(request)
         .await
         .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn move_dome(
+    state: tauri::State<'_, DesktopState>,
+    request: MoveDomeRequest,
+) -> Result<kukuri_app_api::DomeMoveView, CommandError> {
+    state.runtime.move_dome(request).await.map_err(map_error)
 }
 
 #[tauri::command]

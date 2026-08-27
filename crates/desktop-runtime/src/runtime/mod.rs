@@ -13,10 +13,10 @@ use kukuri_app_api::{
     CreateMetaverseRoomInput, CustomReactionAssetView, DirectMessageConversationView,
     DirectMessageStatusView, DirectMessageTimelineView, DirectMessageTopicStatusView, GameRoomView,
     ImportMetaverseRoomAssetInput, JoinedPrivateChannelView, LiveSessionView,
-    MetaverseAssetRefView, MetaverseRoomEventView, NotificationStatusView, NotificationView,
-    PrivateChannelCapability, ProfileInput, PublishMetaverseRoomEventInput, ReactionStateView,
-    RecentReactionView, ServiceHandles, SyncStatus, TimelineView, UpdateGameRoomInput,
-    UpdateMetaverseRoomInput,
+    MetaverseAssetRefView, MetaverseRoomEventView, MoveDomeInput, NotificationStatusView,
+    NotificationView, PrivateChannelCapability, ProfileInput, PublishMetaverseRoomEventInput,
+    ReactionStateView, RecentReactionView, ServiceHandles, SyncStatus, TimelineView,
+    UpdateGameRoomInput, UpdateMetaverseRoomInput,
 };
 use kukuri_cn_protocol::normalize_http_url;
 use kukuri_core::{

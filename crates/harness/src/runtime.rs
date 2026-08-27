@@ -12,6 +12,10 @@ pub(crate) struct ScenarioRuntime {
     pub(crate) current_topic: Option<String>,
     pub(crate) current_channel_id: Option<String>,
     pub(crate) private_channels: BTreeMap<String, String>,
+    pub(crate) docs_sync: Arc<MemoryDocsSync>,
+    pub(crate) blob_service: Arc<MemoryBlobService>,
+    pub(crate) keys: KukuriKeys,
+    pub(crate) private_channel_capabilities: Arc<StdMutex<Vec<PrivateChannelCapability>>>,
 }
 
 impl ScenarioRuntime {
@@ -24,7 +28,32 @@ impl ScenarioRuntime {
                 })?,
         );
         let transport = Arc::new(FakeTransport::new("desktop", self.network.clone()));
-        self.app = Some(AppService::new(store, transport));
+        let app = AppService::from_handles(ServiceHandles::new(
+            store.clone(),
+            store,
+            transport.clone(),
+            transport,
+            self.docs_sync.clone(),
+            self.blob_service.clone(),
+            self.keys.clone(),
+        ));
+        let capabilities = self
+            .private_channel_capabilities
+            .lock()
+            .map_err(|_| anyhow::anyhow!("private channel capability lock is poisoned"))?
+            .clone();
+        for capability in capabilities {
+            app.restore_private_channel_capability(capability).await?;
+        }
+        let persisted_capabilities = self.private_channel_capabilities.clone();
+        app.set_private_channel_capability_persist(Arc::new(move |capabilities| {
+            *persisted_capabilities
+                .lock()
+                .map_err(|_| anyhow::anyhow!("private channel capability lock is poisoned"))? =
+                capabilities.to_vec();
+            Ok(())
+        }));
+        self.app = Some(app);
         Ok(())
     }
 

@@ -1,5 +1,5 @@
 use crate::service::*;
-use kukuri_core::MetaverseRoomEventV1;
+use kukuri_core::{DomeInstanceStatusV1, MetaverseRoomEventV1, SpatialContextV1};
 
 const METAVERSE_CHAT_HISTORY_LIMIT: usize = 100;
 
@@ -27,6 +27,13 @@ impl AppService {
         )
         .into_iter()
         .filter(|row| !muted_author_pubkeys.contains(row.host_pubkey.as_str()))
+        .filter(|row| {
+            row.room_kind != GameRoomKind::MetaverseRoom
+                || row
+                    .metaverse
+                    .as_ref()
+                    .is_some_and(|state| state.instance_status == DomeInstanceStatusV1::Active)
+        })
         .collect::<Vec<_>>();
         if rows.is_empty() {
             self.hydrate_scope_projection(topic_id, &scope).await?;
@@ -40,6 +47,13 @@ impl AppService {
             )
             .into_iter()
             .filter(|row| !muted_author_pubkeys.contains(row.host_pubkey.as_str()))
+            .filter(|row| {
+                row.room_kind != GameRoomKind::MetaverseRoom
+                    || row
+                        .metaverse
+                        .as_ref()
+                        .is_some_and(|state| state.instance_status == DomeInstanceStatusV1::Active)
+            })
             .collect();
         }
         let mut items = Vec::with_capacity(rows.len());
@@ -210,6 +224,15 @@ impl AppService {
             ),
         };
         let channel_id = private_state.as_ref().map(|state| state.channel_id.clone());
+        let spatial_context = match &channel_id {
+            Some(channel_id) => SpatialContextV1::Channel {
+                topic_id: TopicId::new(topic_id),
+                channel_id: channel_id.clone(),
+            },
+            None => SpatialContextV1::Topic {
+                topic_id: TopicId::new(topic_id),
+            },
+        };
         let source_replica_id = private_state
             .as_ref()
             .map(current_private_channel_replica_id)
@@ -220,11 +243,48 @@ impl AppService {
             anyhow::bail!("metaverse room title is required");
         }
         let owner_pubkey = Pubkey::from(self.current_author_pubkey());
-        let room_id = format!("meta-{}-{}", now, short_id_suffix(owner_pubkey.as_str()));
+        let instance_hash = kukuri_core::blob_hash(format!(
+            "dome-instance:{}:{}",
+            spatial_context.canonical_id(),
+            owner_pubkey.as_str()
+        ));
+        let room_id = format!("dome-{}", &instance_hash.as_str()[..24]);
+        let instance_generation = match self
+            .fetch_dome_instance_manifest(&source_replica_id, &owner_pubkey)
+            .await?
+        {
+            Some((_, existing)) if existing.status != DomeInstanceStatusV1::Tombstoned => {
+                anyhow::bail!("the owner already has a Dome in this Spatial Context");
+            }
+            Some((_, existing)) => existing.generation.saturating_add(1),
+            None => 1,
+        };
+        let preset_id = format!(
+            "dome-preset-{}-{now}",
+            short_id_suffix(owner_pubkey.as_str())
+        );
+        let dome = MetaverseDomeV1::default();
+        let preset_ref = self
+            .persist_dome_preset_manifest(DomePresetManifestV1 {
+                preset_id,
+                owner_pubkey: owner_pubkey.clone(),
+                dome: dome.clone(),
+                asset_refs: Vec::new(),
+                updated_at: now,
+            })
+            .await?;
         let metaverse = MetaverseRoomStateV1 {
             world_version: METAVERSE_WORLD_VERSION,
+            instance_id: room_id.clone(),
+            spatial_context,
+            instance_generation,
+            instance_status: DomeInstanceStatusV1::Active,
+            relationship_detach: None,
+            replacement_instance_id: None,
+            preset_ref,
+            session_id: room_id.clone(),
             max_peers: input.max_peers,
-            dome: MetaverseDomeV1::default(),
+            dome,
             default_spawn: MetaverseRoomSpawnV1 {
                 position: [0, 0, 260],
                 rotation: [0, 180, 0],
@@ -248,6 +308,9 @@ impl AppService {
             metaverse: Some(metaverse),
             updated_at: now,
         };
+        let instance_manifest = dome_instance_manifest_from_game_manifest(&manifest)?;
+        self.persist_dome_instance_manifest(&source_replica_id, &instance_manifest, now)
+            .await?;
         let envelope = build_game_session_envelope(
             self.services.keys.as_ref(),
             &TopicId::new(topic_id),
@@ -391,13 +454,43 @@ impl AppService {
         validate_game_room_transition(&manifest.status, &input.status)?;
         validate_dome_customization(&input.customization)?;
         let now = Utc::now().timestamp_millis();
+        let current_metaverse = manifest
+            .metaverse
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("metaverse room state is missing"))?;
+        if current_metaverse.instance_status != DomeInstanceStatusV1::Active
+            || current_metaverse.relationship_detach.is_some()
+        {
+            anyhow::bail!("only an active attached Dome instance can be customized");
+        }
+        let preset_ref = self
+            .persist_dome_preset_manifest(DomePresetManifestV1 {
+                preset_id: current_metaverse.preset_ref.preset_id.clone(),
+                owner_pubkey: Pubkey::from(actor),
+                dome: MetaverseDomeV1 {
+                    spec_id: current_metaverse.dome.spec_id.clone(),
+                    customization: input.customization.clone(),
+                },
+                asset_refs: current_metaverse.asset_refs.clone(),
+                updated_at: now,
+            })
+            .await?;
         let Some(metaverse) = manifest.metaverse.as_mut() else {
             anyhow::bail!("metaverse room state is missing");
         };
         metaverse.dome.customization = input.customization;
+        metaverse.preset_ref = preset_ref;
         validate_metaverse_room_state(metaverse)?;
+        let world_version = metaverse.world_version;
         manifest.status = input.status;
         manifest.updated_at = now;
+        let instance_manifest = dome_instance_manifest_from_game_manifest(&manifest)?;
+        self.persist_dome_instance_manifest(
+            &source_replica_id,
+            &instance_manifest,
+            state.created_at,
+        )
+        .await?;
         let envelope = build_game_session_envelope(
             self.services.keys.as_ref(),
             &TopicId::new(topic_id),
@@ -408,7 +501,7 @@ impl AppService {
                 "channel_id": state.channel_id.as_ref().map(|value| value.as_str()),
                 "status": format!("{:?}", manifest.status).to_lowercase(),
                 "room_kind": "metaverse_room",
-                "world_version": metaverse.world_version,
+                "world_version": world_version,
             }),
         )?;
         let state = self
@@ -457,6 +550,13 @@ impl AppService {
         if manifest.room_kind != GameRoomKind::MetaverseRoom {
             anyhow::bail!("game room is not a metaverse room");
         }
+        let metaverse_state = manifest
+            .metaverse
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("metaverse room state is missing"))?;
+        if metaverse_state.instance_status != DomeInstanceStatusV1::Active {
+            anyhow::bail!("cannot publish events to a non-active Dome instance");
+        }
         if manifest.status == GameRoomStatus::Ended {
             anyhow::bail!("cannot publish events to an ended metaverse room");
         }
@@ -477,11 +577,30 @@ impl AppService {
             topic_id: TopicId::new(topic_id),
             channel_id: state.channel_id.clone(),
             room_id: input.room_id,
+            spatial_context: manifest
+                .metaverse
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("metaverse room state is missing"))?
+                .spatial_context
+                .clone(),
+            instance_generation: manifest
+                .metaverse
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("metaverse room state is missing"))?
+                .instance_generation,
+            session_id: manifest
+                .metaverse
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("metaverse room state is missing"))?
+                .session_id
+                .clone(),
             peer_id: input.peer_id,
             seq: input.seq,
             sent_at: now,
             event: input.event,
         };
+        let instance_manifest = dome_instance_manifest_from_game_manifest(&manifest)?;
+        validate_metaverse_room_event_for_instance(&content, &instance_manifest)?;
         let envelope = build_metaverse_room_event_envelope(
             self.services.keys.as_ref(),
             &TopicId::new(topic_id),
@@ -550,12 +669,16 @@ impl AppService {
         input: ImportMetaverseRoomAssetInput,
     ) -> Result<MetaverseAssetRefView> {
         self.ensure_topic_subscription(topic_id).await?;
-        let (_, _, manifest) = self
+        let (source_replica_id, state, mut manifest) = self
             .fetch_game_room_state_and_manifest(topic_id, input.room_id.as_str())
             .await?
             .ok_or_else(|| anyhow::anyhow!("metaverse room not found"))?;
         if manifest.room_kind != GameRoomKind::MetaverseRoom {
             anyhow::bail!("game room is not a metaverse room");
+        }
+        let actor = self.current_author_pubkey();
+        if state.owner_pubkey.as_str() != actor {
+            anyhow::bail!("only the Dome owner can import assets into its Preset");
         }
         if input.bytes.is_empty() {
             anyhow::bail!("metaverse asset bytes are required");
@@ -569,13 +692,85 @@ impl AppService {
             .projection_store
             .mark_blob_status(&stored.hash, BlobCacheStatus::Available)
             .await?;
-        Ok(MetaverseAssetRef {
+        let asset = MetaverseAssetRef {
             kind: input.kind,
             blob_hash: stored.hash.as_str().to_string(),
             mime_type: Some(stored.mime),
             size_bytes: Some(stored.bytes),
             name: input.name,
-        })
+        };
+        let now = Utc::now().timestamp_millis();
+        let current = manifest
+            .metaverse
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("metaverse room state is missing"))?;
+        if current.instance_status != DomeInstanceStatusV1::Active
+            || current.relationship_detach.is_some()
+        {
+            anyhow::bail!("only an active attached Dome instance can import Preset assets");
+        }
+        let mut asset_refs = current.asset_refs.clone();
+        if !asset_refs
+            .iter()
+            .any(|existing| existing.blob_hash == asset.blob_hash)
+        {
+            asset_refs.push(asset.clone());
+        }
+        let preset_ref = self
+            .persist_dome_preset_manifest(DomePresetManifestV1 {
+                preset_id: current.preset_ref.preset_id.clone(),
+                owner_pubkey: Pubkey::from(actor),
+                dome: current.dome.clone(),
+                asset_refs: asset_refs.clone(),
+                updated_at: now,
+            })
+            .await?;
+        let metaverse = manifest
+            .metaverse
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("metaverse room state is missing"))?;
+        metaverse.preset_ref = preset_ref;
+        metaverse.asset_refs = asset_refs;
+        let preset_manifest_hash = metaverse.preset_ref.manifest_blob_hash.clone();
+        manifest.updated_at = now;
+        let instance_manifest = dome_instance_manifest_from_game_manifest(&manifest)?;
+        self.persist_dome_instance_manifest(
+            &source_replica_id,
+            &instance_manifest,
+            state.created_at,
+        )
+        .await?;
+        let envelope = build_game_session_envelope(
+            self.services.keys.as_ref(),
+            &TopicId::new(topic_id),
+            input.room_id.as_str(),
+            &serde_json::json!({
+                "room_id": input.room_id,
+                "topic_id": topic_id,
+                "channel_id": state.channel_id.as_ref().map(|value| value.as_str()),
+                "room_kind": "metaverse_room",
+                "preset_manifest_hash": preset_manifest_hash,
+            }),
+        )?;
+        let persisted = self
+            .persist_game_room_manifest(
+                &source_replica_id,
+                topic_id,
+                manifest.clone(),
+                state.created_at,
+                envelope.id,
+            )
+            .await?;
+        self.services
+            .projection_store
+            .upsert_game_room_cache(game_projection_row_from_state(
+                &persisted,
+                &manifest,
+                topic_id,
+                &source_replica_id,
+            ))
+            .await?;
+        Ok(asset)
     }
 
     pub async fn list_metaverse_room_events(
@@ -585,6 +780,23 @@ impl AppService {
         after_envelope_id: Option<&str>,
         limit: Option<usize>,
     ) -> Result<Vec<MetaverseRoomEventView>> {
+        let manifest = self
+            .fetch_game_room_state_and_manifest(topic_id, room_id)
+            .await?
+            .map(|(_, _, manifest)| manifest);
+        let instance_manifest = if let Some(manifest) = manifest {
+            let Some(instance) = manifest.metaverse.as_ref() else {
+                return Ok(Vec::new());
+            };
+            if instance.instance_status != DomeInstanceStatusV1::Active
+                || manifest.status == GameRoomStatus::Ended
+            {
+                return Ok(Vec::new());
+            }
+            Some(dome_instance_manifest_from_game_manifest(&manifest)?)
+        } else {
+            None
+        };
         let key = metaverse_room_event_buffer_key(topic_id, room_id);
         let guard = self.metaverse_room_events.lock().await;
         let Some(queue) = guard.get(key.as_str()) else {
@@ -597,7 +809,14 @@ impl AppService {
                 include = after_envelope_id == Some(event.envelope_id.as_str());
                 continue;
             }
-            items.push(event.clone());
+            if instance_manifest.as_ref().map_or_else(
+                || validate_metaverse_room_event_content(&event.content).is_ok(),
+                |instance| {
+                    validate_metaverse_room_event_for_instance(&event.content, instance).is_ok()
+                },
+            ) {
+                items.push(event.clone());
+            }
         }
         if let Some(limit) = limit
             && items.len() > limit
@@ -606,6 +825,33 @@ impl AppService {
         }
         Ok(items)
     }
+}
+
+pub(crate) fn dome_instance_manifest_from_game_manifest(
+    manifest: &GameRoomManifestBlobV1,
+) -> Result<DomeInstanceManifestV1> {
+    let metaverse = manifest
+        .metaverse
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("metaverse room state is missing"))?;
+    let instance = DomeInstanceManifestV1 {
+        instance_id: metaverse.instance_id.clone(),
+        spatial_context: metaverse.spatial_context.clone(),
+        owner_pubkey: manifest.owner_pubkey.clone(),
+        preset_ref: metaverse.preset_ref.clone(),
+        title: manifest.title.clone(),
+        description: manifest.description.clone(),
+        max_peers: metaverse.max_peers,
+        default_spawn: metaverse.default_spawn.clone(),
+        generation: metaverse.instance_generation,
+        status: metaverse.instance_status,
+        relationship_detach: metaverse.relationship_detach.clone(),
+        replacement_instance_id: metaverse.replacement_instance_id.clone(),
+        chat_history: metaverse.chat_history.clone(),
+        updated_at: manifest.updated_at,
+    };
+    kukuri_core::validate_dome_instance_manifest(&instance)?;
+    Ok(instance)
 }
 
 fn validate_metaverse_room_event_identity(

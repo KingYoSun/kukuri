@@ -26,6 +26,11 @@ pub(crate) fn step_name(step: &ScenarioStep) -> &'static str {
         ScenarioStep::AssertMetaverseDomeRejectsInvalid { .. } => {
             "assert_metaverse_dome_rejects_invalid"
         }
+        ScenarioStep::AssertMetaverseDomeCreateRejected { .. } => {
+            "assert_metaverse_dome_create_rejected"
+        }
+        ScenarioStep::MoveMetaverseDome { .. } => "move_metaverse_dome",
+        ScenarioStep::AssertMetaverseDomeMissing { .. } => "assert_metaverse_dome_missing",
         ScenarioStep::RestartDesktop => "restart_desktop",
         ScenarioStep::SearchCommunityIndex { .. } => "search_community_index",
         ScenarioStep::DiscoverCommunityIndex { .. } => "discover_community_index",

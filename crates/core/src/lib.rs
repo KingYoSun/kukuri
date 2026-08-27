@@ -1,5 +1,6 @@
 mod crypto;
 mod direct_messages;
+mod dome_envelopes;
 mod envelope;
 mod game;
 mod ids;
@@ -25,21 +26,30 @@ pub use direct_messages::{
     decrypt_direct_message_frame, derive_direct_message_topic, direct_message_id_for_participants,
     encrypt_direct_message_attachment, encrypt_direct_message_frame,
 };
+pub use dome_envelopes::{
+    build_dome_instance_envelope, build_dome_move_envelope, build_dome_preset_envelope,
+};
 pub(crate) use envelope::sign_envelope_at;
 pub use envelope::{
     GossipHint, HintObjectRef, KukuriAuthEnvelopeContentV1, KukuriEnvelope, sign_envelope_json,
 };
 pub use game::{
-    DomeCustomizationV1, DomeDirection, DomeEnvironmentV1, DomeMaterialPreset,
-    DomeSurfaceCustomizationV1, FIXED_DOME_SPEC_ID, FixedDomeEndpointV1, FixedDomeSpecV1,
-    GameParticipant, GameRoomKind, GameRoomManifestBlobV1, GameRoomStateDocV1, GameRoomStatus,
-    GameScoreEntry, METAVERSE_WORLD_VERSION, MetaverseAssetKind, MetaverseAssetRef,
-    MetaverseAvatarTransformV1, MetaverseColliderV1, MetaverseDomeV1, MetaverseInteractionKind,
-    MetaversePersistentPropV1, MetaversePrimitive, MetaverseRoomChatMessageV1,
-    MetaverseRoomEventEnvelopeContentV1, MetaverseRoomEventV1, MetaverseRoomPresenceV1,
-    MetaverseRoomSpawnV1, MetaverseRoomStateV1, SharedRoomObjectV1, build_game_session_envelope,
-    build_metaverse_room_event_envelope, fallback_capsule_collider, fixed_dome_v1,
-    interpolate_dome_environment, validate_dome_customization, validate_metaverse_room_state,
+    DomeCustomizationV1, DomeDirection, DomeEnvironmentV1, DomeInstanceManifestV1,
+    DomeInstanceStateDocV1, DomeInstanceStatusV1, DomeMaterialPreset, DomeMovePhaseV1,
+    DomeMoveRecordV1, DomeMoveStateDocV1, DomePresetManifestV1, DomePresetRefV1,
+    DomePresetStateDocV1, DomeRelationshipDetachV1, DomeSurfaceCustomizationV1, FIXED_DOME_SPEC_ID,
+    FixedDomeEndpointV1, FixedDomeSpecV1, GameParticipant, GameRoomKind, GameRoomManifestBlobV1,
+    GameRoomStateDocV1, GameRoomStatus, GameScoreEntry, METAVERSE_WORLD_VERSION,
+    MetaverseAssetKind, MetaverseAssetRef, MetaverseAvatarTransformV1, MetaverseColliderV1,
+    MetaverseDomeV1, MetaverseInteractionKind, MetaversePersistentPropV1, MetaversePrimitive,
+    MetaverseRoomChatMessageV1, MetaverseRoomEventEnvelopeContentV1, MetaverseRoomEventV1,
+    MetaverseRoomPresenceV1, MetaverseRoomSpawnV1, MetaverseRoomStateV1, SharedRoomObjectV1,
+    SpatialContextV1, build_game_session_envelope, build_metaverse_room_event_envelope,
+    fallback_capsule_collider, fixed_dome_v1, interpolate_dome_environment,
+    resolve_metaverse_room_state, validate_dome_customization, validate_dome_instance_manifest,
+    validate_dome_move_record, validate_dome_preset_manifest, validate_dome_relationship_scope,
+    validate_metaverse_room_event_content, validate_metaverse_room_event_for_instance,
+    validate_metaverse_room_state,
 };
 pub use ids::{
     BlobHash, ChannelId, EnvelopeId, Pubkey, ReplicaId, TopicId, author_profile_topic_id,
@@ -49,8 +59,9 @@ pub use live::{
     build_live_session_envelope,
 };
 pub use media::{
-    AssetRef, AssetRole, GAME_MANIFEST_MIME, KukuriMediaManifestV1, LIVE_MANIFEST_MIME,
-    ManifestBlobRef, MediaManifestItem, blob_hash, build_media_manifest_envelope,
+    AssetRef, AssetRole, DOME_INSTANCE_MANIFEST_MIME, DOME_PRESET_MANIFEST_MIME,
+    GAME_MANIFEST_MIME, KukuriMediaManifestV1, LIVE_MANIFEST_MIME, ManifestBlobRef,
+    MediaManifestItem, blob_hash, build_media_manifest_envelope,
 };
 pub use posts::{
     CanonicalPostHeader, ChannelRef, KukuriPostEnvelopeContentV1, KukuriPostObjectV1,

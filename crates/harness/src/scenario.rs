@@ -125,6 +125,18 @@ pub enum ScenarioStep {
     AssertMetaverseDomeRejectsInvalid {
         title: String,
     },
+    AssertMetaverseDomeCreateRejected {
+        title: String,
+    },
+    MoveMetaverseDome {
+        title: String,
+        move_id: String,
+        target_topic: String,
+        target_channel_label: Option<String>,
+    },
+    AssertMetaverseDomeMissing {
+        title: String,
+    },
     RestartDesktop,
     SearchCommunityIndex {
         query: String,

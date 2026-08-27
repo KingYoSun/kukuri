@@ -31,10 +31,11 @@
 use super::*;
 
 use kukuri_core::{
-    AssetRef, AssetRole, CustomReactionAssetSnapshotV1, DomeCustomizationV1, GameRoomKind,
-    GameRoomStatus, GameScoreEntry, KukuriEnvelope, LiveSessionStatus, MetaverseAssetKind,
-    MetaverseAssetRef, MetaverseDomeV1, MetaversePrimitive, MetaverseRoomChatMessageV1,
-    MetaverseRoomSpawnV1, MetaverseRoomStateV1, RepostSourceSnapshotV1,
+    AssetRef, AssetRole, CustomReactionAssetSnapshotV1, DomeCustomizationV1, DomeInstanceStatusV1,
+    DomePresetRefV1, GameRoomKind, GameRoomStatus, GameScoreEntry, KukuriEnvelope,
+    LiveSessionStatus, MetaverseAssetKind, MetaverseAssetRef, MetaverseDomeV1, MetaversePrimitive,
+    MetaverseRoomChatMessageV1, MetaverseRoomSpawnV1, MetaverseRoomStateV1, RepostSourceSnapshotV1,
+    SpatialContextV1, TopicId,
 };
 
 mod lists;
@@ -226,7 +227,23 @@ fn parity_metaverse_state() -> MetaverseRoomStateV1 {
     customization.persistent_props[0].position = [1, 2, 3];
     customization.persistent_props[0].rotation = [0, 90, 0];
     MetaverseRoomStateV1 {
-        world_version: 2,
+        world_version: 3,
+        instance_id: "room-meta".into(),
+        spatial_context: SpatialContextV1::Topic {
+            topic_id: TopicId::new("kukuri:topic:parity"),
+        },
+        instance_generation: 1,
+        instance_status: DomeInstanceStatusV1::Active,
+        relationship_detach: None,
+        replacement_instance_id: None,
+        preset_ref: DomePresetRefV1 {
+            preset_id: "preset-meta".into(),
+            owner_pubkey: "a".repeat(64).into(),
+            manifest_blob_hash: "9".repeat(64),
+            manifest_mime: "application/vnd.kukuri.dome-preset+json".into(),
+            manifest_bytes: 1024,
+        },
+        session_id: "room-meta".into(),
         max_peers: Some(8),
         dome: MetaverseDomeV1 {
             spec_id: "fixed_dome_v1".into(),

@@ -14,12 +14,14 @@ serde_yaml.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
 kukuri-app-api = { path = "../app-api" }
+kukuri-blob-service = { path = "../blob-service" }
 kukuri-cn-core = { path = "../cn-core" }
 kukuri-cn-protocol = { path = "../cn-protocol" }
 kukuri-cn-iroh-relay = { path = "../cn-iroh-relay" }
 kukuri-cn-user-api = { path = "../cn-user-api" }
 kukuri-core = { path = "../core" }
 kukuri-desktop-runtime = { path = "../desktop-runtime" }
+kukuri-docs-sync = { path = "../docs-sync" }
 kukuri-store = { path = "../store" }
 kukuri-transport = { path = "../transport" }
 kukuri-test-support = { path = "../test-support" }

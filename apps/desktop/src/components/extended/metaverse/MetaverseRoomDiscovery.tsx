@@ -11,7 +11,7 @@ import { Notice } from '@/components/ui/notice';
 import { Textarea } from '@/components/ui/textarea';
 import type { SupportedLocale } from '@/i18n';
 import { formatLocalizedTime } from '@/i18n/format';
-import type { AuthorSocialView, GameRoomView, Profile } from '@/lib/api';
+import type { AuthorSocialView, GameRoomView, Profile, SpatialContextV1 } from '@/lib/api';
 
 export type CreateMetaverseRoomInput = {
   title: string;
@@ -32,6 +32,7 @@ type MetaverseRoomDiscoveryProps = {
   mediaObjectUrls: Record<string, string | null>;
   onCreateRoom: (input: CreateMetaverseRoomInput) => Promise<boolean>;
   onJoinRoom: (roomId: string) => void;
+  onMoveRoom?: (roomId: string, targetContext: SpatialContextV1) => Promise<boolean>;
 };
 
 export function MetaverseRoomDiscovery({
@@ -47,6 +48,7 @@ export function MetaverseRoomDiscovery({
   mediaObjectUrls,
   onCreateRoom,
   onJoinRoom,
+  onMoveRoom,
 }: MetaverseRoomDiscoveryProps) {
   const [createOpen, setCreateOpen] = useState(false);
   const [title, setTitle] = useState('');
@@ -54,6 +56,9 @@ export function MetaverseRoomDiscovery({
   const [maxPeers, setMaxPeers] = useState('8');
   const { t } = useTranslation('metaverse', { lng: locale });
   const [validationError, setValidationError] = useState(false);
+  const [movingRoomId, setMovingRoomId] = useState<string | null>(null);
+  const [targetTopic, setTargetTopic] = useState('');
+  const [targetChannel, setTargetChannel] = useState('');
 
   function hostAuthor(room: GameRoomView): Profile | AuthorSocialView | null {
     return room.host_pubkey === localAuthorPubkey
@@ -97,6 +102,22 @@ export function MetaverseRoomDiscovery({
     setValidationError(false);
   }
 
+  async function handleMoveSubmit(event: FormEvent<HTMLFormElement>, roomId: string) {
+    event.preventDefault();
+    const topicId = targetTopic.trim();
+    if (!topicId || !onMoveRoom) return;
+    const channelId = targetChannel.trim();
+    const targetContext: SpatialContextV1 = channelId
+      ? { kind: 'channel', topic_id: topicId, channel_id: channelId }
+      : { kind: 'topic', topic_id: topicId };
+    const moved = await onMoveRoom(roomId, targetContext);
+    if (moved) {
+      setMovingRoomId(null);
+      setTargetTopic('');
+      setTargetChannel('');
+    }
+  }
+
   return (
     <Card className='shell-workspace-card metaverse-discovery-card'>
       <div className='panel-header'>
@@ -108,6 +129,7 @@ export function MetaverseRoomDiscovery({
       {validationError || error ? (
         <Notice tone='destructive'>{validationError ? t('create.titleRequired') : error}</Notice>
       ) : null}
+      {!rooms.some((room) => room.host_pubkey === localAuthorPubkey) ? (
       <section className='shell-nav-accordion metaverse-create-accordion' data-open={createOpen}>
         <button
           className='shell-nav-accordion-trigger'
@@ -144,6 +166,7 @@ export function MetaverseRoomDiscovery({
           </form>
         ) : null}
       </section>
+      ) : null}
       {rooms.length === 0 ? <p className='empty-state'>{t('rooms.empty')}</p> : null}
       <ul className='metaverse-room-grid'>
         {rooms.map((room) => (
@@ -171,6 +194,44 @@ export function MetaverseRoomDiscovery({
                 <Play className='size-4' aria-hidden='true' />
                 {t('room.join')}
               </Button>
+              {onMoveRoom && room.host_pubkey === localAuthorPubkey ? (
+                <>
+                  <Button
+                    variant='secondary'
+                    type='button'
+                    aria-expanded={movingRoomId === room.room_id}
+                    onClick={() => setMovingRoomId((current) => current === room.room_id ? null : room.room_id)}
+                  >
+                    {t('move.action')}
+                  </Button>
+                  {movingRoomId === room.room_id ? (
+                    <form className='composer composer-compact' onSubmit={(event) => void handleMoveSubmit(event, room.room_id)}>
+                      <Label>
+                        <span>{t('move.topicLabel')}</span>
+                        <Input
+                          value={targetTopic}
+                          required
+                          disabled={pending}
+                          placeholder='kukuri:topic:...'
+                          onChange={(event) => setTargetTopic(event.target.value)}
+                        />
+                      </Label>
+                      <Label>
+                        <span>{t('move.channelLabel')}</span>
+                        <Input
+                          value={targetChannel}
+                          disabled={pending}
+                          placeholder={t('move.channelPlaceholder')}
+                          onChange={(event) => setTargetChannel(event.target.value)}
+                        />
+                      </Label>
+                      <Button type='submit' disabled={pending || !targetTopic.trim()}>
+                        {pending ? t('move.moving') : t('move.confirm')}
+                      </Button>
+                    </form>
+                  ) : null}
+                </>
+              ) : null}
             </article>
           </li>
         ))}

@@ -191,6 +191,7 @@ pub fn run() {
             commands::live_game::update_game_room,
             commands::live_game::create_metaverse_room,
             commands::live_game::update_metaverse_room,
+            commands::live_game::move_dome,
             commands::live_game::publish_metaverse_room_event,
             commands::live_game::list_metaverse_room_events,
             commands::live_game::import_metaverse_room_asset,

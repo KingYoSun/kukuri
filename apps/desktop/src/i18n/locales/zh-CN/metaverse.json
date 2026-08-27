@@ -15,6 +15,14 @@
     "descriptionPlaceholder": "小型社交空间",
     "titleRequired": "房间标题为必填项"
   },
+  "move": {
+    "action": "迁移 Dome",
+    "topicLabel": "目标话题",
+    "channelLabel": "目标频道 ID",
+    "channelPlaceholder": "公开话题请留空",
+    "confirm": "开始迁移",
+    "moving": "迁移中…"
+  },
   "room": {
     "host": "主持人：{{host}}",
     "updated": "更新时间：{{time}}",
@@ -117,6 +125,7 @@
     "publishLeaveFailed": "无法发布离开房间事件",
     "persistObjectFailed": "无法保存共享对象",
     "customizationFailed": "无法保存 Dome 自定义",
+    "moveFailed": "无法迁移 Dome。原 Dome 仍然保留",
     "roomRequired": "导入资源前请先加入 Dome"
   }
 }
