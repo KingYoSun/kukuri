@@ -7,7 +7,7 @@ import {
 
 import { Card } from '@/components/ui/card';
 import type { SupportedLocale } from '@/i18n';
-import type { GameRoomView, MetaverseAssetRef, SharedRoomObjectV1 } from '@/lib/api';
+import type { DomeCustomizationV1, GameRoomView, MetaverseAssetRef, MetaverseInteractionKind, SharedRoomObjectV1 } from '@/lib/api';
 import { MetaverseScene } from '../MetaverseScene';
 import type {
   AvatarAssetStatus,
@@ -29,6 +29,7 @@ export type MetaverseRoomViewProps = {
   peerPresence: Record<string, PeerPresence>;
   sharedObject: SharedRoomObjectV1;
   avatarAssetUrl: string | null;
+  domeTextureUrls: { wall: string | null; floor: string | null };
   latestChatByPeer: Record<string, LatestChatBubble>;
   connectionState: MetaverseRoomConnectionState;
   now: number;
@@ -41,6 +42,7 @@ export type MetaverseRoomViewProps = {
   communityAssistAvailable: boolean;
   locale: SupportedLocale;
   pending: boolean;
+  isOwner: boolean;
   messages: RoomChatMessage[];
   messageDraft: string;
   initialHudOpen?: boolean;
@@ -51,7 +53,10 @@ export type MetaverseRoomViewProps = {
   onLeaveRoom: () => void;
   onImportAvatar: (file: File) => void;
   onImportDefaultAvatar: () => void;
+  onSaveCustomization: (customization: DomeCustomizationV1) => Promise<void>;
+  onImportTexture: (file: File) => Promise<MetaverseAssetRef>;
   onMoveSharedObject: (delta: MetaverseVec3) => void;
+  onInteractWithProp: (interaction: MetaverseInteractionKind) => void;
   onMessageDraftChange: (value: string) => void;
   onSendMessage: FormEventHandler<HTMLFormElement>;
 };
@@ -72,6 +77,7 @@ export function MetaverseRoomView({
   peerPresence,
   sharedObject,
   avatarAssetUrl,
+  domeTextureUrls,
   latestChatByPeer,
   connectionState,
   now,
@@ -84,6 +90,7 @@ export function MetaverseRoomView({
   communityAssistAvailable,
   locale,
   pending,
+  isOwner,
   messages,
   messageDraft,
   initialHudOpen = true,
@@ -94,7 +101,10 @@ export function MetaverseRoomView({
   onLeaveRoom,
   onImportAvatar,
   onImportDefaultAvatar,
+  onSaveCustomization,
+  onImportTexture,
   onMoveSharedObject,
+  onInteractWithProp,
   onMessageDraftChange,
   onSendMessage,
 }: MetaverseRoomViewProps) {
@@ -163,6 +173,7 @@ export function MetaverseRoomView({
           peerPresence={peerPresence}
           sharedObject={sharedObject}
           avatarAssetUrl={avatarAssetUrl}
+          domeTextureUrls={domeTextureUrls}
           latestChatByPeer={latestChatByPeer}
           connectionState={connectionState}
           now={now}
@@ -186,6 +197,7 @@ export function MetaverseRoomView({
               connectionState={connectionState}
               locale={locale}
               pending={pending}
+              isOwner={isOwner}
               hudOpen={hudOpen}
               hudDebugOpen={hudDebugOpen}
               chatOpen={chatOpen}
@@ -197,7 +209,10 @@ export function MetaverseRoomView({
               onToggleHudDebug={() => setHudDebugOpen((open) => !open)}
               onImportAvatar={onImportAvatar}
               onImportDefaultAvatar={onImportDefaultAvatar}
+              onSaveCustomization={onSaveCustomization}
+              onImportTexture={onImportTexture}
               onMoveSharedObject={onMoveSharedObject}
+              onInteractWithProp={onInteractWithProp}
               onCloseChat={() => setChatOpen(false)}
               onOpenChat={() => setChatOpen(true)}
               onMessageDraftChange={onMessageDraftChange}

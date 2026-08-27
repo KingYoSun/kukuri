@@ -4,6 +4,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import i18n from '@/i18n';
 import type { GameRoomView } from '@/lib/api';
+import { createDefaultMetaverseRoomState } from './DomeSceneModel';
 import { MetaverseRoomDiscovery } from './MetaverseRoomDiscovery';
 
 afterEach(async () => {
@@ -16,31 +17,10 @@ const room: GameRoomView = {
   title: 'Atrium',
   description: 'Small social space',
   status: 'Waiting',
-  phase_label: 'metaverse-mvp',
+  phase_label: 'fixed-dome-v1',
   scores: [],
   room_kind: 'metaverse_room',
-  metaverse: {
-    world_version: 1,
-    max_peers: 8,
-    scene: {
-      ground: 'default',
-      shared_object: {
-        object_id: 'mvp-object-1',
-        asset_ref: null,
-        primitive_fallback: 'cube',
-        position: [0, 50, -240],
-        rotation: [0, 0, 0],
-        scale: [100, 100, 100],
-        updated_by: 'f'.repeat(64),
-        updated_at: 1,
-      },
-    },
-    default_spawn: {
-      position: [0, 0, 260],
-      rotation: [0, 180, 0],
-    },
-    asset_refs: [],
-  },
+  metaverse: createDefaultMetaverseRoomState(8),
   manifest_blob_hash: 'mock-metaverse-room-1',
   updated_at: 1,
   channel_id: null,

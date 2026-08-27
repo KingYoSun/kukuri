@@ -105,6 +105,24 @@ export type MetaverseAssetRef = { kind: MetaverseAssetKind, blob_hash: string, m
 
 export type MetaversePrimitive = "cube" | "sphere";
 
+export type DomeDirection = "north" | "east" | "south" | "west";
+
+export type DomeMaterialPreset = "concrete" | "stone" | "metal" | "wood";
+
+export type DomeSurfaceCustomizationV1 = { wall_material: DomeMaterialPreset, floor_material: DomeMaterialPreset, wall_texture?: MetaverseAssetRef | null, floor_texture?: MetaverseAssetRef | null, };
+
+export type DomeEnvironmentV1 = { key_light_milli: number, ambient_light_milli: number, fog_density_micros: number, gravity_milli: number, };
+
+export type MetaverseInteractionKind = "grab" | "throw" | "push" | "sit";
+
+export type MetaverseColliderV1 = { "shape": "capsule", center: [number, number, number], radius: number, half_height: number, } | { "shape": "cuboid", center: [number, number, number], half_extents: [number, number, number], };
+
+export type MetaversePersistentPropV1 = { prop_id: string, asset_ref?: MetaverseAssetRef | null, primitive_fallback: MetaversePrimitive, position: [number, number, number], rotation: [number, number, number], scale: [number, number, number], visual_only: boolean, interactions: Array<MetaverseInteractionKind>, collider?: MetaverseColliderV1 | null, };
+
+export type DomeCustomizationV1 = { surface: DomeSurfaceCustomizationV1, environment: DomeEnvironmentV1, persistent_props: Array<MetaversePersistentPropV1>, };
+
+export type MetaverseDomeV1 = { spec_id: string, customization: DomeCustomizationV1, };
+
 export type MetaverseRoomPresenceV1 = { room_id: string, peer_id: string, display_name?: string | null, avatar_asset_ref?: MetaverseAssetRef | null, joined_at: number, last_seen_at: number, };
 
 export type MetaverseAvatarTransformV1 = { room_id: string, peer_id: string, seq: number, position: [number, number, number], rotation: [number, number, number], animation?: string | null, sent_at: number, };
@@ -117,11 +135,9 @@ export type MetaverseRoomEventV1 = { "type": "presence_join", presence: Metavers
 
 export type MetaverseRoomEventEnvelopeContentV1 = { event_id: string, topic_id: string, channel_id?: string | null, room_id: string, peer_id: string, seq: number, sent_at: number, event: MetaverseRoomEventV1, };
 
-export type MetaverseRoomSceneV1 = { ground: string, shared_object: SharedRoomObjectV1, };
-
 export type MetaverseRoomSpawnV1 = { position: [number, number, number], rotation: [number, number, number], };
 
-export type MetaverseRoomStateV1 = { world_version: number, max_peers?: number | null, scene: MetaverseRoomSceneV1, default_spawn: MetaverseRoomSpawnV1, asset_refs: Array<MetaverseAssetRef>, chat_history?: Array<MetaverseRoomChatMessageV1> | null, };
+export type MetaverseRoomStateV1 = { world_version: number, max_peers?: number | null, dome: MetaverseDomeV1, default_spawn: MetaverseRoomSpawnV1, asset_refs: Array<MetaverseAssetRef>, chat_history?: Array<MetaverseRoomChatMessageV1> | null, };
 
 export type GameRoomView = { room_id: string, host_pubkey: string, title: string, description: string, status: GameRoomStatus, phase_label?: string | null, scores: Array<GameScoreView>, room_kind: GameRoomKind, metaverse?: MetaverseRoomStateV1 | null, manifest_blob_hash: string, updated_at: number, channel_id?: string | null, audience_label: string, };
 
@@ -437,7 +453,7 @@ export type ListJoinedPrivateChannelsRequest = { topic: string, };
 
 export type UpdateGameRoomRequest = { topic: string, room_id: string, status: GameRoomStatus, phase_label?: string | null, scores: Array<GameScoreView>, };
 
-export type UpdateMetaverseRoomRequest = { topic: string, room_id: string, status: GameRoomStatus, shared_object_position: [number, number, number], shared_object_rotation: [number, number, number], shared_object_scale: [number, number, number], };
+export type UpdateMetaverseRoomRequest = { topic: string, room_id: string, status: GameRoomStatus, customization: DomeCustomizationV1, };
 
 export type SetCommunityNodeConfigNode = { base_url: string, auto_approve: boolean, };
 

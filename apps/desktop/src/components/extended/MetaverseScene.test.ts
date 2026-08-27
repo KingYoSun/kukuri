@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import * as THREE from 'three';
 
 import {
   METAVERSE_AVATAR_IDLE_SEND_INTERVAL_MS,
@@ -16,6 +17,33 @@ import {
   stepAvatarJump,
   type AvatarTransform,
 } from './MetaverseSceneModel';
+import { createDomeHemisphereGeometry } from './metaverse/DomeGeometry';
+
+describe('fixed Dome geometry', () => {
+  test('builds a 20m true hemisphere and removes triangles for four arch openings', () => {
+    const source = new THREE.SphereGeometry(20, 96, 48, 0, Math.PI * 2, 0, Math.PI / 2).toNonIndexed();
+    const dome = createDomeHemisphereGeometry(2_000);
+    const positions = dome.getAttribute('position');
+    expect(positions.count).toBeLessThan(source.getAttribute('position').count);
+    dome.computeBoundingBox();
+    expect(dome.boundingBox?.min.y).toBeCloseTo(0, 4);
+    expect(dome.boundingBox?.max.y).toBeCloseTo(20, 4);
+    expect(dome.boundingSphere?.center.y).toBeCloseTo(10, 2);
+    expect(dome.boundingSphere?.radius).toBeCloseTo(Math.sqrt(500), 2);
+
+    let cardinalOpeningTriangleCount = 0;
+    for (let index = 0; index < positions.count; index += 3) {
+      const x = (positions.getX(index) + positions.getX(index + 1) + positions.getX(index + 2)) / 3;
+      const y = (positions.getY(index) + positions.getY(index + 1) + positions.getY(index + 2)) / 3;
+      const z = (positions.getZ(index) + positions.getZ(index + 1) + positions.getZ(index + 2)) / 3;
+      const tangent = Math.abs(z) >= Math.abs(x) ? x : z;
+      if (y <= 7.5 && Math.abs(tangent) <= 2.5) cardinalOpeningTriangleCount += 1;
+    }
+    expect(cardinalOpeningTriangleCount).toBe(0);
+    source.dispose();
+    dome.dispose();
+  });
+});
 
 describe('metaverse avatar animation state', () => {
   test('uses low-latency transform intervals and a longer stale threshold', () => {

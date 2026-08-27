@@ -71,6 +71,26 @@
     "default": "Default",
     "remoteStale": "Remote avatar stale"
   },
+  "customization": {
+    "title": "Dome customization",
+    "readOnly": "Only the Dome owner can save these settings.",
+    "gravitySummary": "Gravity: {{value}} m/s² (-Y)",
+    "wallMaterial": "Wall material",
+    "floorMaterial": "Floor material",
+    "wallTexture": "Wall texture",
+    "floorTexture": "Floor texture",
+    "keyLight": "Key light (milli)",
+    "ambient": "Ambient light (milli)",
+    "fog": "Fog density (micro)",
+    "gravity": "Gravity (milli m/s²)",
+    "propInteractions": "Persistent prop interactions",
+    "visualOnly": "Visual only",
+    "save": "Save Dome",
+    "cancel": "Cancel",
+    "materials": { "concrete": "Concrete", "stone": "Stone", "metal": "Metal", "wood": "Wood" },
+    "interactions": { "grab": "Grab", "throw": "Throw", "push": "Push", "sit": "Sit" },
+    "feedback": { "saving": "Saving…", "saved": "Dome saved", "error": "Could not save Dome", "invalid": "Review values outside the supported range" }
+  },
   "object": {
     "title": "Shared object",
     "forward": "Forward",
@@ -95,6 +115,8 @@
     "importAvatarFailed": "Failed to import VRM avatar",
     "sampleFetchFailed": "sample VRM fetch failed: {{status}}",
     "publishLeaveFailed": "Failed to publish room leave",
-    "persistObjectFailed": "Failed to persist shared object"
+    "persistObjectFailed": "Failed to persist shared object",
+    "customizationFailed": "Failed to save Dome customization",
+    "roomRequired": "Join a Dome before importing an asset"
   }
 }

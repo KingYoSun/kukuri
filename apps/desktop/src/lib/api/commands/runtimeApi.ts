@@ -557,18 +557,14 @@ export const runtimeApi: DesktopApi = {
     topic,
     roomId,
     status,
-    sharedObjectPosition,
-    sharedObjectRotation,
-    sharedObjectScale
+    customization
   ) => {
     return invokeDesktop<void>('update_metaverse_room', {
       request: {
         topic,
         room_id: roomId,
         status,
-        shared_object_position: sharedObjectPosition,
-        shared_object_rotation: sharedObjectRotation,
-        shared_object_scale: sharedObjectScale,
+        customization,
       } satisfies UpdateMetaverseRoomRequest,
     });
   }),

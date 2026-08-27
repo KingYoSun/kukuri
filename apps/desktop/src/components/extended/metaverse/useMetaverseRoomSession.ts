@@ -5,12 +5,14 @@ import type { SupportedLocale } from '@/i18n';
 import type {
   GameRoomView,
   MetaverseAssetRef,
+  MetaverseInteractionKind,
   MetaverseRoomEventView,
   MetaverseRoomEventV1,
   SharedRoomObjectV1,
   SyncStatus,
 } from '@/lib/api';
 import type { MetaverseRoomActions } from './MetaverseRoomActions';
+import { createDomeInteractionInput, persistentPropAsSharedObject } from './DomeSceneModel';
 import {
   DEFAULT_SHARED_OBJECT,
   METAVERSE_CHAT_BUBBLE_TTL_MS,
@@ -130,7 +132,13 @@ export function useMetaverseRoomSession({
     ? rooms.find((room) => room.room_id === selectedRoomId) ?? null
     : null;
   const selectedRoomRoomId = selectedRoom?.room_id ?? null;
-  const selectedRoomSharedObject = selectedRoom?.metaverse?.scene.shared_object ?? null;
+  const selectedRoomSharedObject = selectedRoom?.metaverse
+    ? persistentPropAsSharedObject(
+        selectedRoom.metaverse.dome.customization.persistent_props[0],
+        selectedRoom.host_pubkey,
+        selectedRoom.updated_at
+      )
+    : null;
   const selectedRoomChatHistory = selectedRoom?.metaverse?.chat_history ?? EMPTY_ROOM_CHAT_HISTORY;
   const activeTopicDiagnostic = useMemo(
     () => topicDiagnosticFor(syncStatus, activeTopic),
@@ -603,7 +611,7 @@ export function useMetaverseRoomSession({
       });
   }
 
-  function persistSharedObject(nextObject: SharedRoomObjectV1, room: GameRoomView) {
+  function publishSharedObjectInteraction(nextObject: SharedRoomObjectV1, room: GameRoomView) {
     emit({ type: 'object.update', roomId: room.room_id, object: nextObject });
     void actions
       .publishRoomEvent(room.room_id, localPeerId, Date.now(), {
@@ -612,18 +620,6 @@ export function useMetaverseRoomSession({
       })
       .catch(() => {
         // Browser-only fallback is handled by BroadcastChannel.
-      });
-    void actions
-      .updateRoom(
-        room.room_id,
-        room.status,
-        nextObject.position,
-        nextObject.rotation,
-        nextObject.scale
-      )
-      .then(() => actions.refresh())
-      .catch((updateError) => {
-        onError(updateError instanceof Error ? updateError.message : t('errors.persistObjectFailed'));
       });
   }
 
@@ -645,7 +641,47 @@ export function useMetaverseRoomSession({
     };
     sharedObjectRef.current = nextObject;
     setSharedObject(nextObject);
-    persistSharedObject(nextObject, room);
+    publishSharedObjectInteraction(nextObject, room);
+  }
+
+  function interactWithProp(interaction: MetaverseInteractionKind) {
+    if (!selectedRoom?.metaverse) return;
+    const prop = selectedRoom.metaverse.dome.customization.persistent_props.find(
+      (candidate) => candidate.prop_id === sharedObjectRef.current.object_id
+    );
+    if (!prop || prop.visual_only || !prop.interactions.includes(interaction)) return;
+
+    const input = createDomeInteractionInput(interaction, prop.prop_id, localPeerId);
+    const current = sharedObjectRef.current;
+    if (input.type === 'sit') {
+      const previous = lastSentTransformRef.current;
+      handleLocalTransform({
+        roomId: selectedRoom.room_id,
+        peerId: localPeerId,
+        seq: (previous?.seq ?? lastSentSeq) + 1,
+        position: [current.position[0], current.position[1] + Math.ceil(current.scale[1] / 2), current.position[2]],
+        rotation: previous?.rotation ?? [0, 0, 0],
+        animation: 'idle',
+        sentAt: input.issuedAt,
+      });
+      return;
+    }
+
+    const actor = lastSentTransformRef.current;
+    const position: MetaverseVec3 = input.type === 'grab' && actor
+      ? [actor.position[0], actor.position[1] + 100, actor.position[2] - 100]
+      : input.type === 'throw'
+        ? [current.position[0], current.position[1] + 100, current.position[2] - 250]
+        : [current.position[0], current.position[1], current.position[2] - 50];
+    const nextObject: SharedRoomObjectV1 = {
+      ...current,
+      position,
+      updated_by: localPeerId,
+      updated_at: input.issuedAt,
+    };
+    sharedObjectRef.current = nextObject;
+    setSharedObject(nextObject);
+    publishSharedObjectInteraction(nextObject, selectedRoom);
   }
 
   return {
@@ -672,5 +708,6 @@ export function useMetaverseRoomSession({
     handleLocalTransform,
     handleSendMessage,
     moveSharedObject,
+    interactWithProp,
   };
 }

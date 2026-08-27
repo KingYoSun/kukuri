@@ -30,12 +30,16 @@ pub use envelope::{
     GossipHint, HintObjectRef, KukuriAuthEnvelopeContentV1, KukuriEnvelope, sign_envelope_json,
 };
 pub use game::{
+    DomeCustomizationV1, DomeDirection, DomeEnvironmentV1, DomeMaterialPreset,
+    DomeSurfaceCustomizationV1, FIXED_DOME_SPEC_ID, FixedDomeEndpointV1, FixedDomeSpecV1,
     GameParticipant, GameRoomKind, GameRoomManifestBlobV1, GameRoomStateDocV1, GameRoomStatus,
-    GameScoreEntry, MetaverseAssetKind, MetaverseAssetRef, MetaverseAvatarTransformV1,
-    MetaversePrimitive, MetaverseRoomChatMessageV1, MetaverseRoomEventEnvelopeContentV1,
-    MetaverseRoomEventV1, MetaverseRoomPresenceV1, MetaverseRoomSceneV1, MetaverseRoomSpawnV1,
-    MetaverseRoomStateV1, SharedRoomObjectV1, build_game_session_envelope,
-    build_metaverse_room_event_envelope,
+    GameScoreEntry, METAVERSE_WORLD_VERSION, MetaverseAssetKind, MetaverseAssetRef,
+    MetaverseAvatarTransformV1, MetaverseColliderV1, MetaverseDomeV1, MetaverseInteractionKind,
+    MetaversePersistentPropV1, MetaversePrimitive, MetaverseRoomChatMessageV1,
+    MetaverseRoomEventEnvelopeContentV1, MetaverseRoomEventV1, MetaverseRoomPresenceV1,
+    MetaverseRoomSpawnV1, MetaverseRoomStateV1, SharedRoomObjectV1, build_game_session_envelope,
+    build_metaverse_room_event_envelope, fallback_capsule_collider, fixed_dome_v1,
+    interpolate_dome_environment, validate_dome_customization, validate_metaverse_room_state,
 };
 pub use ids::{
     BlobHash, ChannelId, EnvelopeId, Pubkey, ReplicaId, TopicId, author_profile_topic_id,

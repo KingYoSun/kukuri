@@ -16,9 +16,10 @@
 use std::path::PathBuf;
 
 use kukuri_core::{
-    ChannelAudienceKind, ChannelSharingState, GameRoomKind, GameRoomStatus, MetaverseAssetKind,
-    MetaverseAssetRef, MetaversePrimitive, MetaverseRoomChatMessageV1, MetaverseRoomSceneV1,
-    MetaverseRoomSpawnV1, MetaverseRoomStateV1, Pubkey, SharedRoomObjectV1,
+    ChannelAudienceKind, ChannelSharingState, DomeCustomizationV1, DomeEnvironmentV1,
+    DomeSurfaceCustomizationV1, GameRoomKind, GameRoomStatus, MetaverseAssetKind,
+    MetaverseAssetRef, MetaverseDomeV1, MetaverseInteractionKind, MetaversePersistentPropV1,
+    MetaversePrimitive, MetaverseRoomChatMessageV1, MetaverseRoomSpawnV1, MetaverseRoomStateV1,
 };
 use kukuri_store::{NotificationKind, TimelineCursor};
 use kukuri_transport::{ConnectMode, ConnectionPath, DiscoveryMode};
@@ -494,25 +495,33 @@ fn views_wire_game_room_view() {
             scores: vec![],
             room_kind: GameRoomKind::MetaverseRoom,
             metaverse: Some(MetaverseRoomStateV1 {
-                world_version: 3,
+                world_version: 2,
                 max_peers: Some(8),
-                scene: MetaverseRoomSceneV1 {
-                    ground: "grid".to_string(),
-                    shared_object: SharedRoomObjectV1 {
-                        object_id: "shared-1".to_string(),
-                        asset_ref: Some(MetaverseAssetRef {
-                            kind: MetaverseAssetKind::Glb,
-                            blob_hash: "e".repeat(64),
-                            mime_type: Some("model/gltf-binary".to_string()),
-                            size_bytes: Some(65536),
-                            name: Some("statue".to_string()),
-                        }),
-                        primitive_fallback: MetaversePrimitive::Cube,
-                        position: [1, 2, 3],
-                        rotation: [0, 90, 0],
-                        scale: [1, 1, 1],
-                        updated_by: Pubkey::from(PUBKEY_A),
-                        updated_at: 1_700_000_410,
+                dome: MetaverseDomeV1 {
+                    spec_id: "fixed_dome_v1".to_string(),
+                    customization: DomeCustomizationV1 {
+                        surface: DomeSurfaceCustomizationV1::default(),
+                        environment: DomeEnvironmentV1::default(),
+                        persistent_props: vec![MetaversePersistentPropV1 {
+                            prop_id: "shared-1".to_string(),
+                            asset_ref: Some(MetaverseAssetRef {
+                                kind: MetaverseAssetKind::Glb,
+                                blob_hash: "e".repeat(64),
+                                mime_type: Some("model/gltf-binary".to_string()),
+                                size_bytes: Some(65536),
+                                name: Some("statue".to_string()),
+                            }),
+                            primitive_fallback: MetaversePrimitive::Cube,
+                            position: [1, 2, 3],
+                            rotation: [0, 90, 0],
+                            scale: [100, 100, 100],
+                            visual_only: false,
+                            interactions: vec![
+                                MetaverseInteractionKind::Grab,
+                                MetaverseInteractionKind::Push,
+                            ],
+                            collider: None,
+                        }],
                     },
                 },
                 default_spawn: MetaverseRoomSpawnV1 {

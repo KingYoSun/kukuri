@@ -142,12 +142,13 @@ export function stepAvatarJump(
   position: MetaverseVec3,
   physics: AvatarPhysicsState,
   deltaSeconds: number,
-  jumpRequested: boolean
+  jumpRequested: boolean,
+  gravity = AVATAR_GRAVITY
 ): AvatarMovementStep {
   let verticalVelocity =
     jumpRequested && physics.grounded ? AVATAR_JUMP_VELOCITY : physics.verticalVelocity;
   let nextY = position[1] + verticalVelocity * deltaSeconds;
-  verticalVelocity -= AVATAR_GRAVITY * deltaSeconds;
+  verticalVelocity -= gravity * deltaSeconds;
 
   if (nextY <= AVATAR_GROUND_Y) {
     nextY = AVATAR_GROUND_Y;

@@ -1,7 +1,7 @@
 use super::*;
 use kukuri_core::{
-    MetaverseAssetKind, MetaverseAvatarTransformV1, MetaverseRoomChatMessageV1,
-    MetaverseRoomEventV1,
+    DomeCustomizationV1, FIXED_DOME_SPEC_ID, METAVERSE_WORLD_VERSION, MetaverseAssetKind,
+    MetaverseAvatarTransformV1, MetaverseRoomChatMessageV1, MetaverseRoomEventV1,
 };
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -288,16 +288,34 @@ async fn metaverse_room_uses_game_room_projection_without_scores() {
         room.metaverse.as_ref().and_then(|state| state.max_peers),
         Some(8)
     );
+    let mut customization = room
+        .metaverse
+        .as_ref()
+        .expect("metaverse state")
+        .dome
+        .customization
+        .clone();
+    assert_eq!(
+        room.metaverse.as_ref().map(|state| state.world_version),
+        Some(METAVERSE_WORLD_VERSION)
+    );
+    assert_eq!(
+        room.metaverse
+            .as_ref()
+            .map(|state| state.dome.spec_id.as_str()),
+        Some(FIXED_DOME_SPEC_ID)
+    );
     assert!(!room.manifest_blob_hash.trim().is_empty());
+
+    customization.environment.gravity_milli = 7_500;
+    customization.persistent_props[0].position = [50, 50, -240];
 
     app.update_metaverse_room(
         topic,
         room_id.as_str(),
         UpdateMetaverseRoomInput {
             status: GameRoomStatus::Running,
-            shared_object_position: [50, 50, -240],
-            shared_object_rotation: [0, 15, 0],
-            shared_object_scale: [100, 100, 100],
+            customization,
         },
     )
     .await
@@ -315,8 +333,15 @@ async fn metaverse_room_uses_game_room_projection_without_scores() {
         updated
             .metaverse
             .as_ref()
-            .map(|state| state.scene.shared_object.position),
+            .map(|state| state.dome.customization.persistent_props[0].position),
         Some([50, 50, -240])
+    );
+    assert_eq!(
+        updated
+            .metaverse
+            .as_ref()
+            .map(|state| state.dome.customization.environment.gravity_milli),
+        Some(7_500)
     );
 }
 
@@ -620,7 +645,7 @@ async fn metaverse_room_event_rejects_mismatched_payload_identity() {
 }
 
 #[tokio::test]
-async fn metaverse_room_shared_object_update_allows_non_owner_without_status_change() {
+async fn metaverse_room_customization_rejects_non_owner() {
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
     let docs_sync = Arc::new(MemoryDocsSync::default());
     let blob_service = Arc::new(MemoryBlobService::default());
@@ -658,49 +683,73 @@ async fn metaverse_room_shared_object_update_allows_non_owner_without_status_cha
         .await
         .expect("create metaverse room");
 
-    app_peer
-        .update_metaverse_room(
-            topic,
-            room_id.as_str(),
-            UpdateMetaverseRoomInput {
-                status: GameRoomStatus::Waiting,
-                shared_object_position: [75, 50, -120],
-                shared_object_rotation: [0, 45, 0],
-                shared_object_scale: [100, 100, 100],
-            },
-        )
-        .await
-        .expect("non-owner should update shared object");
-
-    let updated = app_peer
-        .list_game_rooms(topic)
-        .await
-        .expect("list updated rooms")
-        .into_iter()
-        .find(|room| room.room_id == room_id)
-        .expect("updated metaverse room");
-    assert_eq!(
-        updated
-            .metaverse
-            .as_ref()
-            .map(|state| state.scene.shared_object.position),
-        Some([75, 50, -120])
-    );
-
     let error = app_peer
         .update_metaverse_room(
             topic,
             room_id.as_str(),
             UpdateMetaverseRoomInput {
-                status: GameRoomStatus::Running,
-                shared_object_position: [100, 50, -120],
-                shared_object_rotation: [0, 45, 0],
-                shared_object_scale: [100, 100, 100],
+                status: GameRoomStatus::Waiting,
+                customization: DomeCustomizationV1::default(),
             },
         )
         .await
-        .expect_err("non-owner status change should fail");
-    assert!(error.to_string().contains("owner can change"));
+        .expect_err("non-owner customization should fail");
+    assert!(error.to_string().contains("owner can update Dome"));
+}
+
+#[tokio::test]
+async fn metaverse_room_invalid_customization_keeps_current_manifest() {
+    let store = Arc::new(MemoryStore::default());
+    let transport = Arc::new(FakeTransport::new("self", FakeNetwork::default()));
+    let app = AppService::new(store, transport);
+    let topic = "kukuri:topic:metaverse-invalid-customization";
+    let room_id = app
+        .create_metaverse_room(
+            topic,
+            CreateMetaverseRoomInput {
+                title: "fixed Dome".into(),
+                description: "invalid update".into(),
+                max_peers: Some(4),
+            },
+        )
+        .await
+        .expect("create room");
+    let before = app
+        .list_game_rooms(topic)
+        .await
+        .expect("list before")
+        .into_iter()
+        .find(|room| room.room_id == room_id)
+        .expect("room before");
+    let mut invalid = before
+        .metaverse
+        .as_ref()
+        .expect("Dome state")
+        .dome
+        .customization
+        .clone();
+    invalid.environment.gravity_milli = 999;
+
+    app.update_metaverse_room(
+        topic,
+        room_id.as_str(),
+        UpdateMetaverseRoomInput {
+            status: GameRoomStatus::Running,
+            customization: invalid,
+        },
+    )
+    .await
+    .expect_err("invalid customization must fail");
+
+    let after = app
+        .list_game_rooms(topic)
+        .await
+        .expect("list after")
+        .into_iter()
+        .find(|room| room.room_id == room_id)
+        .expect("room after");
+    assert_eq!(after.manifest_blob_hash, before.manifest_blob_hash);
+    assert_eq!(after.status, before.status);
 }
 
 #[tokio::test]
@@ -777,14 +826,17 @@ async fn metaverse_room_manifest_restores_after_restart_from_docs_and_blobs() {
         )
         .await
         .expect("create room");
+    let mut customization = DomeCustomizationV1::default();
+    customization.environment.ambient_light_milli = 900;
+    customization.persistent_props[0].position = [150, 50, -90];
+    customization.persistent_props[0].rotation = [0, 30, 0];
+    customization.persistent_props[0].scale = [120, 100, 80];
     app.update_metaverse_room(
         topic,
         room_id.as_str(),
         UpdateMetaverseRoomInput {
             status: GameRoomStatus::Running,
-            shared_object_position: [150, 50, -90],
-            shared_object_rotation: [0, 30, 0],
-            shared_object_scale: [120, 100, 80],
+            customization,
         },
     )
     .await
@@ -834,8 +886,16 @@ async fn metaverse_room_manifest_restores_after_restart_from_docs_and_blobs() {
         restored
             .metaverse
             .as_ref()
-            .map(|state| state.scene.shared_object.position),
+            .map(|state| state.dome.customization.persistent_props[0].position),
         Some([150, 50, -90])
+    );
+    assert_eq!(
+        restored.metaverse.as_ref().map(|state| state
+            .dome
+            .customization
+            .environment
+            .ambient_light_milli),
+        Some(900)
     );
     assert_eq!(
         restored

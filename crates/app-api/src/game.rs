@@ -222,21 +222,9 @@ impl AppService {
         let owner_pubkey = Pubkey::from(self.current_author_pubkey());
         let room_id = format!("meta-{}-{}", now, short_id_suffix(owner_pubkey.as_str()));
         let metaverse = MetaverseRoomStateV1 {
-            world_version: 1,
+            world_version: METAVERSE_WORLD_VERSION,
             max_peers: input.max_peers,
-            scene: MetaverseRoomSceneV1 {
-                ground: "default".to_string(),
-                shared_object: SharedRoomObjectV1 {
-                    object_id: "mvp-object-1".to_string(),
-                    asset_ref: None,
-                    primitive_fallback: MetaversePrimitive::Cube,
-                    position: [0, 50, -240],
-                    rotation: [0, 0, 0],
-                    scale: [100, 100, 100],
-                    updated_by: owner_pubkey.clone(),
-                    updated_at: now,
-                },
-            },
+            dome: MetaverseDomeV1::default(),
             default_spawn: MetaverseRoomSpawnV1 {
                 position: [0, 0, 260],
                 rotation: [0, 180, 0],
@@ -244,6 +232,7 @@ impl AppService {
             asset_refs: Vec::new(),
             chat_history: Vec::new(),
         };
+        validate_metaverse_room_state(&metaverse)?;
         let manifest = GameRoomManifestBlobV1 {
             room_id: room_id.clone(),
             topic_id: TopicId::new(topic_id),
@@ -252,7 +241,7 @@ impl AppService {
             title: title.to_string(),
             description: input.description.trim().to_string(),
             status: GameRoomStatus::Waiting,
-            phase_label: Some("metaverse-mvp".to_string()),
+            phase_label: Some("fixed-dome-v1".to_string()),
             participants: Vec::new(),
             scores: Vec::new(),
             room_kind: GameRoomKind::MetaverseRoom,
@@ -396,20 +385,17 @@ impl AppService {
             anyhow::bail!("game room is not a metaverse room");
         }
         let actor = self.current_author_pubkey();
-        let is_owner = state.owner_pubkey.as_str() == actor;
-        if !is_owner && input.status != manifest.status {
-            anyhow::bail!("only the metaverse room owner can change the room status");
+        if state.owner_pubkey.as_str() != actor {
+            anyhow::bail!("only the metaverse room owner can update Dome customization");
         }
         validate_game_room_transition(&manifest.status, &input.status)?;
+        validate_dome_customization(&input.customization)?;
         let now = Utc::now().timestamp_millis();
         let Some(metaverse) = manifest.metaverse.as_mut() else {
             anyhow::bail!("metaverse room state is missing");
         };
-        metaverse.scene.shared_object.position = input.shared_object_position;
-        metaverse.scene.shared_object.rotation = input.shared_object_rotation;
-        metaverse.scene.shared_object.scale = input.shared_object_scale;
-        metaverse.scene.shared_object.updated_by = Pubkey::from(actor);
-        metaverse.scene.shared_object.updated_at = now;
+        metaverse.dome.customization = input.customization;
+        validate_metaverse_room_state(metaverse)?;
         manifest.status = input.status;
         manifest.updated_at = now;
         let envelope = build_game_session_envelope(

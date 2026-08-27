@@ -13,7 +13,9 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import type { SupportedLocale } from '@/i18n';
-import type { GameRoomView, SharedRoomObjectV1 } from '@/lib/api';
+import type { GameRoomView, MetaverseColliderV1, SharedRoomObjectV1 } from '@/lib/api';
+import { FixedDome } from './metaverse/FixedDome';
+import { clampAvatarToDome, resolveDomeCollider } from './metaverse/DomeSceneModel';
 import {
   AVATAR_GROUND_Y,
   DEFAULT_AVATAR_ASSET_URL,
@@ -44,6 +46,7 @@ type SceneProps = {
   peerPresence: Record<string, PeerPresence>;
   sharedObject: SharedRoomObjectV1;
   avatarAssetUrl: string | null;
+  domeTextureUrls: { wall: string | null; floor: string | null };
   latestChatByPeer: Record<string, LatestChatBubble>;
   connectionState: MetaverseRoomConnectionState;
   now: number;
@@ -303,6 +306,22 @@ function AvatarModel({
           avatarVrmVisualRootYawDegrees(THREE.MathUtils.radToDeg(vrmRoot.rotation.y))
         );
         vrmRoot.position.y = 0;
+        const bounds = new THREE.Box3().setFromObject(vrmRoot);
+        const explicitCollider = (gltf.userData.collider ?? vrmRoot.userData.collider) as
+          | MetaverseColliderV1
+          | undefined;
+        group.userData.collider = resolveDomeCollider(explicitCollider, {
+          min: [
+            Math.round(bounds.min.x * 100),
+            Math.round(bounds.min.y * 100),
+            Math.round(bounds.min.z * 100),
+          ],
+          max: [
+            Math.round(bounds.max.x * 100),
+            Math.round(bounds.max.y * 100),
+            Math.round(bounds.max.z * 100),
+          ],
+        });
         group.add(vrmRoot);
         setVisiblePrimitive(false);
         vrmRuntimeRef.current = { vrm, loadedRoot: vrmRoot };
@@ -521,7 +540,14 @@ function LocalAvatar({
     const { x, z, moving } = movementVectorFromKeys(keys);
     const baseAnimation = avatarAnimationForInput(keys, sittingRequestedRef.current);
     const current = transformRef.current;
-    const jumpStep = stepAvatarJump(current.position, physicsRef.current, delta, jumpRequestedRef.current);
+    const gravity = (room.metaverse?.dome.customization.environment.gravity_milli ?? 9_800) / 10;
+    const jumpStep = stepAvatarJump(
+      current.position,
+      physicsRef.current,
+      delta,
+      jumpRequestedRef.current,
+      gravity
+    );
     jumpRequestedRef.current = false;
     physicsRef.current = jumpStep.physics;
 
@@ -538,6 +564,7 @@ function LocalAvatar({
       nextRotation = [0, Math.round(THREE.MathUtils.radToDeg(Math.atan2(x, z))), 0];
     }
 
+    nextPosition = clampAvatarToDome(nextPosition);
     const animation = !physicsRef.current.grounded ? 'jump' : baseAnimation;
     animationRef.current = animation;
     transformRef.current = {
@@ -650,7 +677,13 @@ function RemoteAvatar({
   );
 }
 
-function SharedObject({ object }: { object: SharedRoomObjectV1 }) {
+function SharedObject({
+  object,
+  collider,
+}: {
+  object: SharedRoomObjectV1;
+  collider?: MetaverseColliderV1 | null;
+}) {
   const position = scenePosition(object.position);
   const rotation: [number, number, number] = [
     THREE.MathUtils.degToRad(object.rotation[0]),
@@ -662,9 +695,13 @@ function SharedObject({ object }: { object: SharedRoomObjectV1 }) {
     Math.max(0.1, toSceneUnit(object.scale[1])),
     Math.max(0.1, toSceneUnit(object.scale[2])),
   ];
+  const resolvedCollider = resolveDomeCollider(collider, {
+    min: [-object.scale[0] / 2, 0, -object.scale[2] / 2],
+    max: [object.scale[0] / 2, object.scale[1], object.scale[2] / 2],
+  });
 
   return (
-    <mesh position={position} rotation={rotation} scale={scale}>
+    <mesh position={position} rotation={rotation} scale={scale} userData={{ collider: resolvedCollider }}>
       <boxGeometry args={[1, 1, 1]} />
       <meshStandardMaterial color={0xf3b35d} roughness={0.55} />
     </mesh>
@@ -678,6 +715,7 @@ function SceneContents({
   peerPresence,
   sharedObject,
   avatarAssetUrl,
+  domeTextureUrls,
   latestChatByPeer,
   connectionState,
   now,
@@ -688,6 +726,8 @@ function SceneContents({
 }: Omit<SceneProps, 'hud' | 'suspended'>) {
   const remoteEntries = useMemo(() => Object.entries(remoteTransforms), [remoteTransforms]);
   const { camera } = useThree();
+  const customization = room.metaverse?.dome.customization;
+  const environment = customization?.environment;
 
   useEffect(() => {
     camera.lookAt(0, 0.9, 0);
@@ -696,14 +736,15 @@ function SceneContents({
   return (
     <>
       <color attach='background' args={[0x101318]} />
-      <ambientLight intensity={0.4} />
-      <hemisphereLight args={[0xb7d7ff, 0x29351f, 2.2]} />
-      <directionalLight position={[4, 8, 3]} intensity={2.4} />
-      <gridHelper args={[12, 12, 0x4f9f78, 0x30423a]} />
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]}>
-        <planeGeometry args={[12, 12]} />
-        <meshStandardMaterial color={0x1c2a25} roughness={0.9} />
-      </mesh>
+      <fogExp2 attach='fog' args={[0x101318, (environment?.fog_density_micros ?? 8_000) / 1_000_000]} />
+      <ambientLight intensity={(environment?.ambient_light_milli ?? 400) / 1_000} />
+      <hemisphereLight args={[0xb7d7ff, 0x29351f, 1.2]} />
+      <directionalLight
+        position={[4, 12, 3]}
+        intensity={(environment?.key_light_milli ?? 2_400) / 1_000}
+        castShadow
+      />
+      {customization ? <FixedDome customization={customization} textureUrls={domeTextureUrls} /> : null}
       <LocalAvatar
         room={room}
         localPeerId={localPeerId}
@@ -724,7 +765,10 @@ function SceneContents({
           locale={locale}
         />
       ))}
-      <SharedObject object={sharedObject} />
+      <SharedObject
+        object={sharedObject}
+        collider={customization?.persistent_props[0]?.collider}
+      />
     </>
   );
 }
@@ -736,6 +780,7 @@ export function MetaverseScene({
   peerPresence,
   sharedObject,
   avatarAssetUrl,
+  domeTextureUrls,
   latestChatByPeer,
   connectionState,
   now,
@@ -755,7 +800,7 @@ export function MetaverseScene({
     >
       <Canvas
         className='metaverse-viewport-canvas'
-        camera={{ position: [0, 3.2, 5.2], fov: 54 }}
+        camera={{ position: [0, 3.2, 5.2], fov: 54, far: 160 }}
         gl={{ antialias: true }}
         dpr={[1, 2]}
         frameloop={suspended ? 'never' : 'always'}
@@ -767,6 +812,7 @@ export function MetaverseScene({
           peerPresence={peerPresence}
           sharedObject={sharedObject}
           avatarAssetUrl={avatarAssetUrl}
+          domeTextureUrls={domeTextureUrls}
           latestChatByPeer={latestChatByPeer}
           connectionState={connectionState}
           now={now}

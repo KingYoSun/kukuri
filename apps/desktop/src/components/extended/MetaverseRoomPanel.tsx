@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type {
   AuthorSocialView,
+  DomeCustomizationV1,
   GameRoomView,
   MetaverseAssetRef,
   Profile,
@@ -52,6 +53,10 @@ export function MetaverseRoomPanel({
   const [avatarAssetStatus, setAvatarAssetStatus] = useState<AvatarAssetStatus>('loading');
   const [localAvatarAssetRef, setLocalAvatarAssetRef] = useState<MetaverseAssetRef | null>(null);
   const [localAvatarAssetUrl, setLocalAvatarAssetUrl] = useState<string | null>(null);
+  const [domeTextureUrls, setDomeTextureUrls] = useState<{ wall: string | null; floor: string | null }>({
+    wall: null,
+    floor: null,
+  });
   const localDisplayName = localProfile?.display_name?.trim() || localProfile?.name?.trim() || null;
   const session = useMetaverseRoomSession({
     actions,
@@ -65,6 +70,25 @@ export function MetaverseRoomPanel({
     initialSelectedRoomId,
     onError: setError,
   });
+
+  useEffect(() => {
+    let cancelled = false;
+    const surface = session.selectedRoom?.metaverse?.dome.customization.surface;
+    const resolve = async (asset: MetaverseAssetRef | null | undefined) => {
+      if (!asset) return null;
+      return actions.getBlobPreviewUrl(asset.blob_hash, asset.mime_type ?? 'image/png');
+    };
+    void Promise.all([resolve(surface?.wall_texture), resolve(surface?.floor_texture)])
+      .then(([wall, floor]) => {
+        if (!cancelled) setDomeTextureUrls({ wall, floor });
+      })
+      .catch(() => {
+        if (!cancelled) setDomeTextureUrls({ wall: null, floor: null });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [actions, session.selectedRoom]);
 
   async function handleCreateRoom(input: CreateMetaverseRoomInput) {
     setPending(true);
@@ -118,6 +142,35 @@ export function MetaverseRoomPanel({
     await importAvatarBlob(await response.blob(), DEFAULT_AVATAR_ASSET_NAME);
   }
 
+  async function importTexture(file: File): Promise<MetaverseAssetRef> {
+    if (!session.selectedRoom) {
+      throw new Error(t('errors.roomRequired'));
+    }
+    const mime = file.type || 'image/png';
+    return actions.importRoomAsset(
+      session.selectedRoom.room_id,
+      'texture',
+      mime,
+      file.name,
+      await blobToBase64(file)
+    );
+  }
+
+  async function saveCustomization(customization: DomeCustomizationV1) {
+    if (!session.selectedRoom) return;
+    setPending(true);
+    try {
+      await actions.updateRoom(session.selectedRoom.room_id, session.selectedRoom.status, customization);
+      await actions.refresh();
+      setError(null);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : t('errors.customizationFailed'));
+      throw saveError;
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <div className='metaverse-panel'>
       <MetaverseRoomDiscovery
@@ -143,6 +196,7 @@ export function MetaverseRoomPanel({
         peerPresence={session.peerPresence}
         sharedObject={session.sharedObject}
         avatarAssetUrl={localAvatarAssetUrl}
+        domeTextureUrls={domeTextureUrls}
         latestChatByPeer={session.latestChatByPeer}
         connectionState={session.roomConnectionState}
         now={session.clockNow}
@@ -155,6 +209,7 @@ export function MetaverseRoomPanel({
         communityAssistAvailable={syncStatus.discovery.bootstrap_seed_peer_ids.length > 0}
         locale={locale}
         pending={pending}
+        isOwner={session.selectedRoom?.host_pubkey === syncStatus.local_author_pubkey}
         messages={session.messages}
         messageDraft={session.messageDraft}
         onLocalTransform={session.handleLocalTransform}
@@ -162,7 +217,10 @@ export function MetaverseRoomPanel({
         onLeaveRoom={session.leaveRoom}
         onImportAvatar={(file) => void importAvatarBlob(file, file.name)}
         onImportDefaultAvatar={() => void handleSampleAvatarImport()}
+        onSaveCustomization={saveCustomization}
+        onImportTexture={importTexture}
         onMoveSharedObject={session.moveSharedObject}
+        onInteractWithProp={session.interactWithProp}
         onMessageDraftChange={session.setMessageDraft}
         onSendMessage={session.handleSendMessage}
       />

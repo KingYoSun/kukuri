@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import i18n from '@/i18n';
 import type { GameRoomView } from '@/lib/api';
 import { MetaverseRoomControls } from './MetaverseRoomControls';
+import { createDefaultMetaverseRoomState } from './DomeSceneModel';
 
 afterEach(async () => {
   await i18n.changeLanguage('en');
@@ -20,7 +21,7 @@ const room: GameRoomView = {
   phase_label: 'metaverse-mvp',
   scores: [],
   room_kind: 'metaverse_room',
-  metaverse: null,
+  metaverse: createDefaultMetaverseRoomState(8),
   manifest_blob_hash: 'manifest-1',
   updated_at: 1,
   channel_id: null,
@@ -44,6 +45,7 @@ function renderControls(
     connectionState: 'live',
     locale: 'en',
     pending: false,
+    isOwner: true,
     hudOpen: true,
     hudDebugOpen: false,
     chatOpen: true,
@@ -55,7 +57,10 @@ function renderControls(
     onToggleHudDebug: vi.fn(),
     onImportAvatar: vi.fn(),
     onImportDefaultAvatar: vi.fn(),
+    onSaveCustomization: vi.fn(),
+    onImportTexture: vi.fn(),
     onMoveSharedObject: vi.fn(),
+    onInteractWithProp: vi.fn(),
     onCloseChat: vi.fn(),
     onOpenChat: vi.fn(),
     onMessageDraftChange: vi.fn(),
@@ -101,6 +106,7 @@ describe('MetaverseRoomControls', () => {
     const onImportAvatar = vi.fn();
     const onImportDefaultAvatar = vi.fn();
     const onMoveSharedObject = vi.fn();
+    const onInteractWithProp = vi.fn();
     renderControls({
       hudDebugOpen: true,
       onLeaveRoom,
@@ -109,6 +115,7 @@ describe('MetaverseRoomControls', () => {
       onImportAvatar,
       onImportDefaultAvatar,
       onMoveSharedObject,
+      onInteractWithProp,
     });
 
     expect(screen.getByText('Topic: demo')).toBeInTheDocument();
@@ -124,6 +131,9 @@ describe('MetaverseRoomControls', () => {
     for (const name of ['Forward', 'Left', 'Right', 'Back']) {
       await user.click(screen.getByRole('button', { name }));
     }
+    for (const name of ['Grab', 'Throw', 'Push', 'Sit']) {
+      await user.click(screen.getByRole('button', { name }));
+    }
 
     expect(onLeaveRoom).toHaveBeenCalledTimes(1);
     expect(onToggleHud).toHaveBeenCalledTimes(1);
@@ -136,6 +146,7 @@ describe('MetaverseRoomControls', () => {
       [[50, 0, 0]],
       [[0, 0, 50]],
     ]);
+    expect(onInteractWithProp.mock.calls).toEqual([['grab'], ['throw'], ['push'], ['sit']]);
   });
 
   test('renders chat authors and routes draft, submit, and close actions', async () => {

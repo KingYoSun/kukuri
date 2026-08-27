@@ -11,9 +11,9 @@
 
 use super::*;
 use kukuri_core::{
-    GameRoomKind, GameRoomStatus, GameScoreEntry, LiveSessionStatus, MetaverseAssetKind,
-    MetaverseAssetRef, MetaversePrimitive, MetaverseRoomChatMessageV1, MetaverseRoomSceneV1,
-    MetaverseRoomSpawnV1, MetaverseRoomStateV1, SharedRoomObjectV1,
+    DomeCustomizationV1, GameRoomKind, GameRoomStatus, GameScoreEntry, LiveSessionStatus,
+    MetaverseAssetKind, MetaverseAssetRef, MetaverseDomeV1, MetaversePrimitive,
+    MetaverseRoomChatMessageV1, MetaverseRoomSpawnV1, MetaverseRoomStateV1,
 };
 
 // ---------------------------------------------------------------------------
@@ -187,27 +187,24 @@ const GAME_TOPIC: &str = "kukuri:topic:game-rt";
 
 /// metaverse_json に入る非自明な入れ子 fixture(全 Option=Some・全 Vec 非空)。
 fn metaverse_state() -> MetaverseRoomStateV1 {
+    let mut customization = DomeCustomizationV1::default();
+    customization.persistent_props[0].prop_id = "shared-1".into();
+    customization.persistent_props[0].asset_ref = Some(MetaverseAssetRef {
+        kind: MetaverseAssetKind::Glb,
+        blob_hash: "c".repeat(64),
+        mime_type: Some("model/gltf-binary".into()),
+        size_bytes: Some(2_048),
+        name: Some("チェア".into()),
+    });
+    customization.persistent_props[0].primitive_fallback = MetaversePrimitive::Cube;
+    customization.persistent_props[0].position = [1, 2, 3];
+    customization.persistent_props[0].rotation = [0, 90, 0];
     MetaverseRoomStateV1 {
-        world_version: 7,
+        world_version: 2,
         max_peers: Some(16),
-        scene: MetaverseRoomSceneV1 {
-            ground: "grid".into(),
-            shared_object: SharedRoomObjectV1 {
-                object_id: "shared-1".into(),
-                asset_ref: Some(MetaverseAssetRef {
-                    kind: MetaverseAssetKind::Glb,
-                    blob_hash: "c".repeat(64),
-                    mime_type: Some("model/gltf-binary".into()),
-                    size_bytes: Some(2_048),
-                    name: Some("チェア".into()),
-                }),
-                primitive_fallback: MetaversePrimitive::Cube,
-                position: [1, 2, 3],
-                rotation: [0, 90, 0],
-                scale: [1, 1, 1],
-                updated_by: "d".repeat(64).into(),
-                updated_at: 1_700_000_000_400,
-            },
+        dome: MetaverseDomeV1 {
+            spec_id: "fixed_dome_v1".into(),
+            customization,
         },
         default_spawn: MetaverseRoomSpawnV1 {
             position: [0, 0, 5],

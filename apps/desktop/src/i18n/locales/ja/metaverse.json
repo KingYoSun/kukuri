@@ -71,6 +71,26 @@
     "default": "既定",
     "remoteStale": "リモートアバターが停滞しています"
   },
+  "customization": {
+    "title": "Domeカスタマイズ",
+    "readOnly": "この設定を保存できるのはDome ownerだけです。",
+    "gravitySummary": "重力: {{value}} m/s²（-Y）",
+    "wallMaterial": "内壁マテリアル",
+    "floorMaterial": "床マテリアル",
+    "wallTexture": "内壁テクスチャ",
+    "floorTexture": "床テクスチャ",
+    "keyLight": "キーライト（milli）",
+    "ambient": "環境光（milli）",
+    "fog": "Fog密度（micro）",
+    "gravity": "重力（milli m/s²）",
+    "propInteractions": "Persistent propのinteraction",
+    "visualOnly": "表示のみ",
+    "save": "Domeを保存",
+    "cancel": "キャンセル",
+    "materials": { "concrete": "コンクリート", "stone": "石", "metal": "金属", "wood": "木" },
+    "interactions": { "grab": "掴む", "throw": "投げる", "push": "押す", "sit": "座る" },
+    "feedback": { "saving": "保存中…", "saved": "Domeを保存しました", "error": "Domeを保存できませんでした", "invalid": "対応範囲外の値を確認してください" }
+  },
   "object": {
     "title": "共有オブジェクト",
     "forward": "前へ",
@@ -95,6 +115,8 @@
     "importAvatarFailed": "VRMアバターを読み込めませんでした",
     "sampleFetchFailed": "サンプルVRMの取得に失敗しました: {{status}}",
     "publishLeaveFailed": "ルーム退出を配信できませんでした",
-    "persistObjectFailed": "共有オブジェクトを保存できませんでした"
+    "persistObjectFailed": "共有オブジェクトを保存できませんでした",
+    "customizationFailed": "Domeカスタマイズを保存できませんでした",
+    "roomRequired": "アセットを読み込む前にDomeへ参加してください"
   }
 }

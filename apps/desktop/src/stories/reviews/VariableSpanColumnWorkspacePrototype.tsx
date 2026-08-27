@@ -28,6 +28,7 @@ import {
 import { LiveSessionPanel } from '@/components/extended/LiveSessionPanel';
 import { MetaverseRoomView } from '@/components/extended/metaverse/MetaverseRoomView';
 import { DEFAULT_SHARED_OBJECT } from '@/components/extended/MetaverseSceneModel';
+import { createDefaultMetaverseRoomState } from '@/components/extended/metaverse/DomeSceneModel';
 import { Button } from '@/components/ui/button';
 import type { GameRoomView } from '@/lib/api';
 
@@ -92,23 +93,10 @@ const metaverseRoom: GameRoomView = {
   title: 'Atrium',
   description: 'A shared space for the launch review.',
   status: 'Waiting',
-  phase_label: 'metaverse-mvp',
+  phase_label: 'fixed-dome-v1',
   scores: [],
   room_kind: 'metaverse_room',
-  metaverse: {
-    world_version: 1,
-    max_peers: 8,
-    scene: {
-      ground: 'default',
-      shared_object: DEFAULT_SHARED_OBJECT,
-    },
-    default_spawn: {
-      position: [0, 0, 260],
-      rotation: [0, 180, 0],
-    },
-    asset_refs: [],
-    chat_history: [],
-  },
+  metaverse: createDefaultMetaverseRoomState(8),
   manifest_blob_hash: 'mock-metaverse-room-1',
   updated_at: STORY_TIMESTAMP,
   channel_id: null,
@@ -309,6 +297,7 @@ function MetaversePreview() {
       peerPresence={{}}
       sharedObject={DEFAULT_SHARED_OBJECT}
       avatarAssetUrl={null}
+      domeTextureUrls={{ wall: null, floor: null }}
       latestChatByPeer={{}}
       connectionState='live'
       now={STORY_TIMESTAMP}
@@ -321,6 +310,7 @@ function MetaversePreview() {
       communityAssistAvailable={true}
       locale='en'
       pending={false}
+      isOwner={true}
       messages={[
         {
           roomId: metaverseRoom.room_id,
@@ -340,7 +330,16 @@ function MetaversePreview() {
       onLeaveRoom={noop}
       onImportAvatar={noop}
       onImportDefaultAvatar={noop}
+      onSaveCustomization={async () => undefined}
+      onImportTexture={async () => ({
+        kind: 'texture',
+        blob_hash: 'review-texture',
+        mime_type: 'image/png',
+        size_bytes: 1,
+        name: 'review-texture.png',
+      })}
       onMoveSharedObject={noop}
+      onInteractWithProp={noop}
       onMessageDraftChange={noop}
       onSendMessage={(event) => event.preventDefault()}
     />

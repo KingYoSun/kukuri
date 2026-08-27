@@ -518,6 +518,7 @@ for (const mobileViewport of [
     clientY: indicatorBox.y + indicatorBox.height / 2 + 4,
   });
   await expect(activeColumn(page, 'Thread')).toBeVisible();
+  await expect(page.getByText('2 / 7')).toBeVisible();
   await indicator.dispatchEvent('pointerdown', {
     pointerId: 92,
     clientX: indicatorBox.x + indicatorBox.width / 2,
@@ -529,6 +530,7 @@ for (const mobileViewport of [
     clientY: indicatorBox.y + indicatorBox.height / 2 + 4,
   });
   await expect(activeColumn(page, 'Timeline')).toBeVisible();
+  await expect(page.getByText('1 / 7')).toBeVisible();
 
   // indicator 切替の smooth scroll / settle が完了してから独立した edge gesture を開始する。
   // 固定 wait では並列実行時の animation frame 遅延を吸収できないため、scroll の無通信期間を待つ。

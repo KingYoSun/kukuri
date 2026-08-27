@@ -282,9 +282,15 @@ async fn game_rooms_match_between_backends() {
         .metaverse
         .as_ref()
         .expect("metaverse state");
-    assert_eq!(metaverse.world_version, 3);
-    assert_eq!(metaverse.scene.shared_object.object_id, "shared-cube");
-    assert_eq!(metaverse.scene.shared_object.position, [1, 2, 3]);
+    assert_eq!(metaverse.world_version, 2);
+    assert_eq!(
+        metaverse.dome.customization.persistent_props[0].prop_id,
+        "shared-cube"
+    );
+    assert_eq!(
+        metaverse.dome.customization.persistent_props[0].position,
+        [1, 2, 3]
+    );
     assert_eq!(metaverse.chat_history[0].body, "hello");
     assert_eq!(
         from_sqlite

@@ -8,37 +8,57 @@
   "scores": [],
   "room_kind": "metaverse_room",
   "metaverse": {
-    "world_version": 3,
+    "world_version": 2,
     "max_peers": 8,
-    "scene": {
-      "ground": "grid",
-      "shared_object": {
-        "object_id": "shared-1",
-        "asset_ref": {
-          "kind": "glb",
-          "blob_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-          "mime_type": "model/gltf-binary",
-          "size_bytes": 65536,
-          "name": "statue"
+    "dome": {
+      "spec_id": "fixed_dome_v1",
+      "customization": {
+        "surface": {
+          "wall_material": "concrete",
+          "floor_material": "stone",
+          "wall_texture": null,
+          "floor_texture": null
         },
-        "primitive_fallback": "cube",
-        "position": [
-          1,
-          2,
-          3
-        ],
-        "rotation": [
-          0,
-          90,
-          0
-        ],
-        "scale": [
-          1,
-          1,
-          1
-        ],
-        "updated_by": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
-        "updated_at": 1700000410
+        "environment": {
+          "key_light_milli": 2400,
+          "ambient_light_milli": 400,
+          "fog_density_micros": 8000,
+          "gravity_milli": 9800
+        },
+        "persistent_props": [
+          {
+            "prop_id": "shared-1",
+            "asset_ref": {
+              "kind": "glb",
+              "blob_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+              "mime_type": "model/gltf-binary",
+              "size_bytes": 65536,
+              "name": "statue"
+            },
+            "primitive_fallback": "cube",
+            "position": [
+              1,
+              2,
+              3
+            ],
+            "rotation": [
+              0,
+              90,
+              0
+            ],
+            "scale": [
+              100,
+              100,
+              100
+            ],
+            "visual_only": false,
+            "interactions": [
+              "grab",
+              "push"
+            ],
+            "collider": null
+          }
+        ]
       }
     },
     "default_spawn": {

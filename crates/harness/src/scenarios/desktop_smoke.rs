@@ -324,6 +324,139 @@ pub(crate) async fn run_desktop_smoke_scenario(
                     });
                     assertion.await.context("assertion timeout")??;
                 }
+                ScenarioStep::CreateMetaverseDome {
+                    title,
+                    description,
+                    max_peers,
+                } => {
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
+                    runtime
+                        .app()?
+                        .create_metaverse_room(
+                            &topic,
+                            CreateMetaverseRoomInput {
+                                title: title.clone(),
+                                description: description.clone(),
+                                max_peers: *max_peers,
+                            },
+                        )
+                        .await?;
+                }
+                ScenarioStep::CustomizeMetaverseDome {
+                    title,
+                    gravity_milli,
+                    wall_material,
+                    prop_position,
+                } => {
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
+                    let room = runtime
+                        .app()?
+                        .list_game_rooms(&topic)
+                        .await?
+                        .into_iter()
+                        .find(|room| room.title == *title)
+                        .with_context(|| format!("metaverse Dome not found: {title}"))?;
+                    let mut customization = room
+                        .metaverse
+                        .as_ref()
+                        .context("metaverse Dome state missing")?
+                        .dome
+                        .customization
+                        .clone();
+                    customization.environment.gravity_milli = *gravity_milli;
+                    customization.surface.wall_material = parse_dome_material(wall_material)?;
+                    customization.persistent_props[0].position = *prop_position;
+                    runtime
+                        .app()?
+                        .update_metaverse_room(
+                            &topic,
+                            room.room_id.as_str(),
+                            UpdateMetaverseRoomInput {
+                                status: GameRoomStatus::Running,
+                                customization,
+                            },
+                        )
+                        .await?;
+                }
+                ScenarioStep::AssertMetaverseDome {
+                    title,
+                    gravity_milli,
+                    wall_material,
+                    prop_position,
+                } => {
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
+                    let expected_material = parse_dome_material(wall_material)?;
+                    let room = runtime
+                        .app()?
+                        .list_game_rooms(&topic)
+                        .await?
+                        .into_iter()
+                        .find(|room| room.title == *title)
+                        .with_context(|| format!("metaverse Dome not found: {title}"))?;
+                    let dome = &room
+                        .metaverse
+                        .as_ref()
+                        .context("metaverse Dome state missing")?
+                        .dome;
+                    if dome.spec_id != "fixed_dome_v1"
+                        || dome.customization.environment.gravity_milli != *gravity_milli
+                        || dome.customization.surface.wall_material != expected_material
+                        || dome.customization.persistent_props[0].position != *prop_position
+                    {
+                        anyhow::bail!("metaverse Dome customization mismatch for {title}");
+                    }
+                }
+                ScenarioStep::AssertMetaverseDomeRejectsInvalid { title } => {
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
+                    let before = runtime
+                        .app()?
+                        .list_game_rooms(&topic)
+                        .await?
+                        .into_iter()
+                        .find(|room| room.title == *title)
+                        .with_context(|| format!("metaverse Dome not found: {title}"))?;
+                    let mut customization = before
+                        .metaverse
+                        .as_ref()
+                        .context("metaverse Dome state missing")?
+                        .dome
+                        .customization
+                        .clone();
+                    customization.environment.gravity_milli = 999;
+                    if runtime
+                        .app()?
+                        .update_metaverse_room(
+                            &topic,
+                            before.room_id.as_str(),
+                            UpdateMetaverseRoomInput {
+                                status: GameRoomStatus::Running,
+                                customization,
+                            },
+                        )
+                        .await
+                        .is_ok()
+                    {
+                        anyhow::bail!("invalid metaverse Dome customization was accepted");
+                    }
+                    let after = runtime
+                        .app()?
+                        .list_game_rooms(&topic)
+                        .await?
+                        .into_iter()
+                        .find(|room| room.title == *title)
+                        .context("metaverse Dome disappeared after invalid update")?;
+                    let after_gravity = after
+                        .metaverse
+                        .as_ref()
+                        .context("metaverse Dome state missing after invalid update")?
+                        .dome
+                        .customization
+                        .environment
+                        .gravity_milli;
+                    if after_gravity == 999 {
+                        anyhow::bail!("invalid metaverse Dome customization was persisted");
+                    }
+                }
                 ScenarioStep::RestartDesktop => {
                     runtime.app.take();
                     runtime.launch().await?;
@@ -358,4 +491,14 @@ pub(crate) async fn run_desktop_smoke_scenario(
     })
     .await
     .context("scenario exceeded overall timeout")?
+}
+
+fn parse_dome_material(value: &str) -> Result<DomeMaterialPreset> {
+    match value {
+        "concrete" => Ok(DomeMaterialPreset::Concrete),
+        "stone" => Ok(DomeMaterialPreset::Stone),
+        "metal" => Ok(DomeMaterialPreset::Metal),
+        "wood" => Ok(DomeMaterialPreset::Wood),
+        _ => anyhow::bail!("unsupported Dome material: {value}"),
+    }
 }
