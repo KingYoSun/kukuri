@@ -72,7 +72,9 @@ test('browser mock wide shell keeps global navigation in the fixed Control Cente
   await expect(page.getByRole('complementary', { name: 'Primary navigation' })).toHaveCount(0);
   const trigger = page.getByTestId('control-center-trigger');
   await expect(trigger).toBeVisible();
-  await expect(trigger).toHaveCSS('position', 'fixed');
+  // #802: トリガーはテスターフィードバックボタンと共有する固定クラスタ内に置かれる。
+  await expect(page.locator('.shell-control-cluster')).toHaveCSS('position', 'fixed');
+  await expect(page.getByTestId('tester-feedback-trigger')).toBeVisible();
   await trigger.click();
   await expect(page.getByRole('complementary', { name: 'Control Center' })).toBeVisible();
 });
