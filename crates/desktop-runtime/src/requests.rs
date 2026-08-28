@@ -231,6 +231,8 @@ pub struct SetChannelGossipEnabledRequest {
 pub struct GetBlobPreviewRequest {
     pub hash: String,
     pub mime: String,
+    #[serde(default)]
+    pub metaverse_kind: Option<MetaverseAssetKind>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

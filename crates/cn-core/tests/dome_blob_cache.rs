@@ -2,9 +2,10 @@
 
 use anyhow::Result;
 use kukuri_cn_core::{
-    DOME_BLOB_CACHE_GC_GRACE_MILLIS, StagedDomeBlob, TestDatabase, activate_dome_hosting_blob_pins,
-    collect_dome_blob_cache_garbage, connect_postgres, initialize_database,
-    release_dome_hosting_blob_pins, stage_dome_hosting_blobs,
+    COMMUNITY_NODE_DOME_BLOB_CACHE_CAPACITY_BYTES, DOME_BLOB_CACHE_GC_GRACE_MILLIS, StagedDomeBlob,
+    TestDatabase, activate_dome_hosting_blob_pins, collect_dome_blob_cache_garbage,
+    connect_postgres, initialize_database, release_dome_hosting_blob_pins,
+    stage_dome_hosting_blobs,
 };
 
 const DEFAULT_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:15432/cn";
@@ -41,6 +42,7 @@ async fn dome_blob_cache_activation_is_idempotent_and_keeps_shared_rollback_asse
         "dome-1:1",
         &[manifest_v1.clone(), shared_asset.clone()],
         1_000,
+        COMMUNITY_NODE_DOME_BLOB_CACHE_CAPACITY_BYTES,
     )
     .await?;
     activate_dome_hosting_blob_pins(&pool, "dome-1", "dome-1:1", 1_100).await?;
@@ -52,6 +54,7 @@ async fn dome_blob_cache_activation_is_idempotent_and_keeps_shared_rollback_asse
         "dome-1:2",
         &[manifest_v2.clone(), shared_asset.clone()],
         2_000,
+        COMMUNITY_NODE_DOME_BLOB_CACHE_CAPACITY_BYTES,
     )
     .await?;
     activate_dome_hosting_blob_pins(&pool, "dome-1", "dome-1:2", 2_100).await?;
@@ -85,5 +88,57 @@ async fn dome_blob_cache_activation_is_idempotent_and_keeps_shared_rollback_asse
         0,
         "current and rollback pins must prevent collection"
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn dome_blob_cache_evicts_oldest_grace_eligible_blob_for_configured_capacity() -> Result<()> {
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping Dome blob cache test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_dome_blob_cache_lru").await?;
+    let pool = connect_postgres(database.database_url.as_str()).await?;
+    initialize_database(&pool).await?;
+
+    let oldest = blob(b"old1");
+    let newer = blob(b"newer");
+    stage_dome_hosting_blobs(
+        &pool,
+        "dome-1:1",
+        &[oldest.clone(), newer.clone()],
+        1_000,
+        100,
+    )
+    .await?;
+    sqlx::query("DELETE FROM cn_metaverse.dome_blob_pins")
+        .execute(&pool)
+        .await?;
+    sqlx::query(
+        "UPDATE cn_metaverse.dome_blob_cache
+         SET unreferenced_at = 1,
+             last_accessed_at = CASE WHEN blob_hash = $1 THEN 1 ELSE 2 END",
+    )
+    .bind(&oldest.blob_hash)
+    .execute(&pool)
+    .await?;
+
+    let incoming = blob(b"latest");
+    stage_dome_hosting_blobs(
+        &pool,
+        "dome-1:2",
+        std::slice::from_ref(&incoming),
+        DOME_BLOB_CACHE_GC_GRACE_MILLIS + 2_000,
+        11,
+    )
+    .await?;
+
+    let hashes: Vec<String> =
+        sqlx::query_scalar("SELECT blob_hash FROM cn_metaverse.dome_blob_cache ORDER BY blob_hash")
+            .fetch_all(&pool)
+            .await?;
+    assert!(!hashes.contains(&oldest.blob_hash));
+    assert!(hashes.contains(&newer.blob_hash));
+    assert!(hashes.contains(&incoming.blob_hash));
     Ok(())
 }

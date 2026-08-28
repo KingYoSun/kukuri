@@ -99,7 +99,7 @@ async fn dome_is_unique_per_owner_context_and_moves_with_the_same_preset_blob() 
                 kind: MetaverseAssetKind::Glb,
                 mime_type: "model/gltf-binary".into(),
                 name: Some("table.glb".into()),
-                bytes: b"same-content-addressed-asset".to_vec(),
+                bytes: minimal_metaverse_glb_bytes(),
             },
         )
         .await
@@ -112,7 +112,7 @@ async fn dome_is_unique_per_owner_context_and_moves_with_the_same_preset_blob() 
                 kind: MetaverseAssetKind::Glb,
                 mime_type: "model/gltf-binary".into(),
                 name: Some("table-copy.glb".into()),
-                bytes: b"same-content-addressed-asset".to_vec(),
+                bytes: minimal_metaverse_glb_bytes(),
             },
         )
         .await
@@ -357,7 +357,7 @@ async fn dome_move_asset_validation_failure_keeps_source_active_and_retries_safe
                 kind: MetaverseAssetKind::Texture,
                 mime_type: "image/png".into(),
                 name: Some("wall.png".into()),
-                bytes: b"move-failure-asset".to_vec(),
+                bytes: minimal_metaverse_png_bytes(),
             },
         )
         .await

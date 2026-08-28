@@ -76,7 +76,7 @@ describe('createMetaverseRoomActions', () => {
       'avatar.vrm',
       'YXZhdGFy'
     );
-    expect(api.getBlobPreviewUrl).toHaveBeenCalledWith('blob-hash', 'model/vrm');
+    expect(api.getBlobPreviewUrl).toHaveBeenCalledWith('blob-hash', 'model/vrm', undefined);
     expect(api.updateMetaverseRoom).toHaveBeenCalledWith(
       'kukuri:topic:general',
       'room-1',

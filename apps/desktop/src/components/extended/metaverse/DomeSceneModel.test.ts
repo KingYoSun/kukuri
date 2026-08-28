@@ -17,7 +17,7 @@ import {
 describe('DomeSceneModel', () => {
   it('固定Domeと4方向の57m offsetを定義する', () => {
     const state = createDefaultMetaverseRoomState(8);
-    expect(state.world_version).toBe(5);
+    expect(state.world_version).toBe(6);
     expect(state.preset_ref.revision).toBe(1);
     expect(state.dome.spec_id).toBe('fixed_dome_v1');
     expect(DOME_DIRECTIONS.map(domeDirectionOffset)).toEqual([

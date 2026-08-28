@@ -373,6 +373,7 @@ pub struct AppService {
     pub(crate) metaverse_room_events: Arc<Mutex<HashMap<String, VecDeque<MetaverseRoomEventView>>>>,
     pub(crate) dome_host_sessions: Arc<Mutex<HashMap<String, DomeSessionRuntime>>>,
     pub(crate) metaverse_blob_cache: Arc<Mutex<MetaverseBlobCacheIndex>>,
+    pub(crate) metaverse_resource_budget: kukuri_core::MetaverseResourceBudgetConfig,
     pub(crate) last_sync_ts: Arc<Mutex<Option<i64>>>,
     pub(crate) public_topic_delivery: Arc<Mutex<HashMap<String, PublicTopicDeliveryStatus>>>,
     pub(crate) empty_recovery_candidates: Arc<Mutex<HashSet<String>>>,
@@ -516,13 +517,27 @@ impl AppService {
     }
 
     pub fn from_handles(services: ServiceHandles) -> Self {
-        Self {
+        Self::from_handles_with_metaverse_budget(
+            services,
+            kukuri_core::MetaverseResourceBudgetConfig::default(),
+        )
+        .expect("default metaverse resource budget is valid")
+    }
+
+    pub fn from_handles_with_metaverse_budget(
+        services: ServiceHandles,
+        budget: kukuri_core::MetaverseResourceBudgetConfig,
+    ) -> Result<Self> {
+        budget.validate()?;
+        let cache = MetaverseBlobCacheIndex::new(budget.client.cache_capacity_bytes)?;
+        Ok(Self {
             services,
             subscription_registry: SubscriptionRegistry::default(),
             joined_private_channels: Arc::new(Mutex::new(HashMap::new())),
             metaverse_room_events: Arc::new(Mutex::new(HashMap::new())),
             dome_host_sessions: Arc::new(Mutex::new(HashMap::new())),
-            metaverse_blob_cache: Arc::new(Mutex::new(MetaverseBlobCacheIndex::desktop())),
+            metaverse_blob_cache: Arc::new(Mutex::new(cache)),
+            metaverse_resource_budget: budget,
             last_sync_ts: Arc::new(Mutex::new(None)),
             public_topic_delivery: Arc::new(Mutex::new(HashMap::new())),
             empty_recovery_candidates: Arc::new(Mutex::new(HashSet::new())),
@@ -531,7 +546,7 @@ impl AppService {
             private_channel_capability_persist: std::sync::OnceLock::new(),
             private_channel_capability_persist_guard: Arc::new(Mutex::new(())),
             notification_inserted_notify: Arc::new(tokio::sync::Notify::new()),
-        }
+        })
     }
 
     /// capability registry の write-through 永続化 callback を接続する。
@@ -545,6 +560,10 @@ impl AppService {
 
     pub fn notification_inserted_notify(&self) -> Arc<tokio::sync::Notify> {
         Arc::clone(&self.notification_inserted_notify)
+    }
+
+    pub fn metaverse_resource_budget(&self) -> &kukuri_core::MetaverseResourceBudgetConfig {
+        &self.metaverse_resource_budget
     }
 
     pub(crate) async fn resolve_repost_source(

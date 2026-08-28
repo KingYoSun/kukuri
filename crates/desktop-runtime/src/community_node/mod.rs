@@ -44,6 +44,7 @@ mod token_storage_support;
 mod trust_relation_support;
 
 pub(crate) use config_support::*;
+pub use dome_hosting_support::DomeHostingRequestError;
 pub(crate) use http_client_support::*;
 pub(crate) use index_query_support::IndexOperation;
 pub use index_query_support::{CommunityNodeIndexQueryError, CommunityNodeIndexQueryRequest};

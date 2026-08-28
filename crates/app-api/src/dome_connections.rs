@@ -181,11 +181,25 @@ impl AppService {
             .iter()
             .filter(|state| {
                 state.proposal.proposer.owner_pubkey == proposer.owner_pubkey
+                    && state.proposal.receiver.instance_id == receiver.instance_id
+                    && state.proposal.receiver.direction
+                        == opposite_dome_direction(input.proposer_direction)
                     && state.proposal.created_at >= now - LOCAL_PROPOSAL_RATE_WINDOW_MS
             })
             .count();
-        if recent >= LOCAL_PROPOSAL_RATE_LIMIT {
-            anyhow::bail!("Dome Connection proposal creation rate limit reached");
+        let proposal_limit = self
+            .metaverse_resource_budget
+            .player
+            .max_proposals_per_ten_minutes_per_slot as usize;
+        if recent >= proposal_limit {
+            return Err(kukuri_core::MetaverseResourceRejection::new(
+                kukuri_core::MetaverseBudgetScope::Player,
+                kukuri_core::MetaverseBudgetResource::ProposalRate,
+                kukuri_core::MetaverseResourceRejectionReason::RateExceeded,
+                (recent + 1) as u64,
+                proposal_limit as u64,
+            )
+            .into());
         }
         let sequence = existing
             .iter()

@@ -3801,6 +3801,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "base64 0.23.1",
+ "blake3",
  "chrono",
  "futures-util",
  "kukuri-blob-service",
@@ -3867,6 +3868,7 @@ dependencies = [
  "hex",
  "hkdf 0.13.0",
  "hmac 0.13.0",
+ "image",
  "secp256k1",
  "serde",
  "serde_json",
@@ -3972,6 +3974,7 @@ dependencies = [
  "anyhow",
  "kukuri-core",
  "rapier3d",
+ "serde_json",
  "uuid",
 ]
 

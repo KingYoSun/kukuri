@@ -101,7 +101,31 @@ export type GameScoreView = { participant_id: string, label: string, score: numb
 
 export type MetaverseAssetKind = "vrm" | "glb" | "texture" | "other";
 
-export type MetaverseAssetRef = { kind: MetaverseAssetKind, blob_hash: string, mime_type?: string | null, size_bytes?: number | null, name?: string | null, };
+export type MetaverseAssetBudgetMetadataV1 = { stored_bytes: number, texture_width?: number | null, texture_height?: number | null, decoded_texture_bytes: number, model_triangles: number, model_primitives: number, };
+
+export type MetaverseAssetRef = { kind: MetaverseAssetKind, blob_hash: string, mime_type?: string | null, size_bytes?: number | null, name?: string | null, budget_metadata?: MetaverseAssetBudgetMetadataV1 | null, };
+
+export type DomeResourceBudget = { max_persistent_props: number, max_texture_bytes: number, max_texture_dimension: number, max_model_bytes: number, max_model_triangles: number, max_colliders: number, max_rigid_bodies: number, max_snapshot_hz: number, };
+
+export type PlayerResourceBudget = { max_guest_props: number, max_guest_prop_bytes: number, max_avatar_asset_bytes: number, max_prop_spawns_per_minute: number, max_interactions_per_second: number, max_input_bytes_per_second: number, max_proposals_per_ten_minutes_per_slot: number, max_impulse_centimeters: number, };
+
+export type HostResourceBudget = { max_participants: number, max_simulated_rigid_bodies: number, max_snapshot_bytes_per_second: number, max_session_asset_bytes: number, };
+
+export type ClientResourceBudget = { max_rendered_avatars: number, max_texture_memory_bytes: number, max_rendered_triangles: number, max_interpolated_bodies: number, max_neighbor_domes: number, cache_capacity_bytes: number, };
+
+export type MetaverseResourceBudgetConfig = { dome: DomeResourceBudget, player: PlayerResourceBudget, host: HostResourceBudget, client: ClientResourceBudget, };
+
+export type MetaverseBudgetScope = "dome" | "player" | "host" | "client";
+
+export type MetaverseBudgetResource = "persistent_props" | "guest_props" | "texture_bytes" | "texture_dimension" | "model_bytes" | "model_triangles" | "colliders" | "rigid_bodies" | "participants" | "avatar_asset_bytes" | "prop_spawn_rate" | "interaction_rate" | "input_bandwidth" | "proposal_rate" | "impulse" | "snapshot_frequency" | "snapshot_bandwidth" | "session_asset_bytes" | "rendered_avatars" | "texture_memory" | "rendered_triangles" | "interpolated_bodies" | "neighbor_domes" | "cache_capacity" | "asset_format";
+
+export type MetaverseResourceRejectionReason = "limit_exceeded" | "rate_exceeded" | "invalid_value" | "unverified_asset";
+
+export type MetaverseResourceRejection = { scope: MetaverseBudgetScope, resource: MetaverseBudgetResource, reason: MetaverseResourceRejectionReason, observed: number, limit: number, };
+
+export type MetaverseResourceMetricCountV1 = { code: string, count: number, };
+
+export type MetaverseResourceMetricsV1 = { rejected_total: number, rejection_counts: Array<MetaverseResourceMetricCountV1>, participant_high_water: number, rigid_body_high_water: number, snapshot_bytes: number, snapshot_throttled: number, };
 
 export type MetaversePrimitive = "cube" | "sphere";
 
@@ -175,7 +199,7 @@ export type DomePhysicsBodyV1 = { entity_id: string, kind: DomePhysicsBodyKindV1
 
 export type DomePhysicsSnapshotV1 = { instance_id: string, instance_generation: number, lease_epoch: number, session_id: string, host_pubkey: string, sequence: number, simulated_at: number, sleeping: boolean, bodies: Array<DomePhysicsBodyV1>, };
 
-export type DomeHostingView = { instance_id: string, state: DomeHostingStateV1, lease?: DomeHostingLeaseV1 | null, signed_lease_json?: string | null, signed_activation_json?: string | null, signed_close_json?: string | null, instance_manifest_json: string, preset_manifest_json: string, participants: number, sleeping: boolean, };
+export type DomeHostingView = { instance_id: string, state: DomeHostingStateV1, lease?: DomeHostingLeaseV1 | null, signed_lease_json?: string | null, signed_activation_json?: string | null, signed_close_json?: string | null, instance_manifest_json: string, preset_manifest_json: string, participants: number, sleeping: boolean, resource_budget: MetaverseResourceBudgetConfig, resource_metrics: MetaverseResourceMetricsV1, };
 
 export type DomeLayoutCandidateV1 = { operation_id: string, instance_id: string, instance_generation: number, lease_epoch: number, session_id: string, host_pubkey: string, base_manifest_revision: number, snapshot_sequence: number, captured_at: number, persistent_props: Array<MetaversePersistentPropV1>, };
 
@@ -473,7 +497,7 @@ export type SetTopicGossipEnabledRequest = { topic: string, enabled: boolean, };
 
 export type SetChannelGossipEnabledRequest = { topic: string, channel: string, enabled: boolean, };
 
-export type GetBlobPreviewRequest = { hash: string, mime: string, };
+export type GetBlobPreviewRequest = { hash: string, mime: string, metaverse_kind?: MetaverseAssetKind | null, };
 
 export type GetBlobMediaRequest = { hash: string, mime: string, };
 

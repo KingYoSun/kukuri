@@ -144,6 +144,7 @@ async fn late_joiner_backfills_image_post_from_docs() {
         .get_blob_preview_url(GetBlobPreviewRequest {
             hash: received.attachments[0].hash.clone(),
             mime: received.attachments[0].mime.clone(),
+            metaverse_kind: None,
         })
         .await
         .expect("blob preview");
@@ -518,6 +519,7 @@ async fn restart_restores_image_post_preview() {
         .get_blob_preview_url(GetBlobPreviewRequest {
             hash: restored.attachments[0].hash.clone(),
             mime: restored.attachments[0].mime.clone(),
+            metaverse_kind: None,
         })
         .await
         .expect("preview after restart");

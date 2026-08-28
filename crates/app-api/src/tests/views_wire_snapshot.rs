@@ -498,7 +498,7 @@ fn views_wire_game_room_view() {
             scores: vec![],
             room_kind: GameRoomKind::MetaverseRoom,
             metaverse: Some(MetaverseRoomStateV1 {
-                world_version: 5,
+                world_version: kukuri_core::METAVERSE_WORLD_VERSION,
                 instance_id: "room-2".to_string(),
                 spatial_context: SpatialContextV1::Channel {
                     topic_id: TopicId::new("kukuri:topic:wire"),
@@ -531,6 +531,14 @@ fn views_wire_game_room_view() {
                                 mime_type: Some("model/gltf-binary".to_string()),
                                 size_bytes: Some(65536),
                                 name: Some("statue".to_string()),
+                                budget_metadata: Some(
+                                    kukuri_core::MetaverseAssetBudgetMetadataV1 {
+                                        stored_bytes: 65_536,
+                                        model_triangles: 120,
+                                        model_primitives: 1,
+                                        ..Default::default()
+                                    },
+                                ),
                             }),
                             primitive_fallback: MetaversePrimitive::Cube,
                             position: [1, 2, 3],

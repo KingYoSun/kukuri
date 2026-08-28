@@ -38,7 +38,8 @@ export function createMetaverseRoomActions({
         name,
         dataBase64
       ),
-    getBlobPreviewUrl: (blobHash, mime) => api.getBlobPreviewUrl(blobHash, mime),
+    getBlobPreviewUrl: (blobHash, mime, metaverseKind) =>
+      api.getBlobPreviewUrl(blobHash, mime, metaverseKind),
     updateRoom: (roomId, status, customization) =>
       api.updateMetaverseRoom(activeTopic, roomId, status, customization),
     getHosting: (context, instanceId) => api.getDomeHosting(context, instanceId),

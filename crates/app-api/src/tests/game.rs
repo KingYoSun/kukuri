@@ -711,7 +711,7 @@ async fn metaverse_avatar_asset_imports_to_blob_ref_without_event_bytes() {
                 kind: MetaverseAssetKind::Vrm,
                 mime_type: "model/vrm".into(),
                 name: Some("avatar.vrm".into()),
-                bytes: b"vrm-bytes".to_vec(),
+                bytes: minimal_metaverse_glb_bytes(),
             },
         )
         .await
@@ -719,7 +719,13 @@ async fn metaverse_avatar_asset_imports_to_blob_ref_without_event_bytes() {
 
     assert_eq!(asset.kind, MetaverseAssetKind::Vrm);
     assert_eq!(asset.mime_type.as_deref(), Some("model/vrm"));
-    assert_eq!(asset.size_bytes, Some(9));
+    assert_eq!(
+        asset.size_bytes,
+        asset
+            .budget_metadata
+            .as_ref()
+            .map(|metadata| metadata.stored_bytes)
+    );
     assert!(!asset.blob_hash.trim().is_empty());
 
     let payload = app

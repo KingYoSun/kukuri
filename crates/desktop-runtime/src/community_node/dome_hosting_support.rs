@@ -12,6 +12,21 @@ use reqwest::StatusCode;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
+#[derive(Debug)]
+pub struct DomeHostingRequestError {
+    pub code: String,
+    pub message: String,
+    pub status: u16,
+}
+
+impl std::fmt::Display for DomeHostingRequestError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}: {}", self.code, self.message)
+    }
+}
+
+impl std::error::Error for DomeHostingRequestError {}
+
 use super::{community_node_http_client, load_community_node_token};
 use crate::runtime::DesktopRuntime;
 
@@ -181,12 +196,25 @@ where
     if !response.status().is_success() {
         let status = response.status();
         let body = response.json::<ApiErrorBody>().await.ok();
-        let detail = body.map_or_else(
-            || status.to_string(),
-            |body| format!("{}: {}", body.code, body.message),
-        );
+        if let Some(body) = body {
+            let (code, message) = if body.code == "METAVERSE_RESOURCE_BUDGET_REJECTED" {
+                serde_json::from_str::<kukuri_core::MetaverseResourceRejection>(&body.message)
+                    .map(|rejection| (rejection.code(), rejection.to_string()))
+                    .unwrap_or((body.code, body.message))
+            } else {
+                (body.code, body.message)
+            };
+            return Err(DomeHostingHttpError::Other(
+                DomeHostingRequestError {
+                    code,
+                    message,
+                    status: status.as_u16(),
+                }
+                .into(),
+            ));
+        }
         return Err(DomeHostingHttpError::Other(anyhow!(
-            "Community Node Dome hosting request failed: {detail}"
+            "Community Node Dome hosting request failed: {status}"
         )));
     }
     response

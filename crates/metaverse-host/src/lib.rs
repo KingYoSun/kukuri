@@ -5,15 +5,25 @@ use kukuri_core::{
     DOME_SNAPSHOT_RING_CAPACITY, DomeHostHeartbeatV1, DomeHostingLeaseV1, DomeInstanceManifestV1,
     DomeLayoutCandidateV1, DomePhysicsBodyKindV1, DomePhysicsBodyV1, DomePhysicsSnapshotV1,
     DomePresetManifestV1, DomeSessionInputKindV1, DomeSessionInputV1, KukuriKeys,
-    MetaverseColliderV1, MetaversePersistentPropV1, SignedDomeHostHeartbeatV1,
+    MetaverseAssetRef, MetaverseBudgetResource, MetaverseBudgetScope, MetaversePersistentPropV1,
+    MetaverseResourceBudgetConfig, MetaverseResourceMetricCountV1, MetaverseResourceMetricsV1,
+    MetaverseResourceRejection, MetaverseResourceRejectionReason, SignedDomeHostHeartbeatV1,
     SignedDomeHostingLeaseV1, SignedDomeLayoutCandidateV1, SignedDomePhysicsSnapshotV1,
     SignedDomeSessionInputV1, build_signed_dome_host_heartbeat, build_signed_dome_layout_candidate,
-    build_signed_dome_physics_snapshot, fixed_dome_v1, validate_dome_instance_manifest,
-    validate_dome_preset_manifest, verify_signed_dome_hosting_lease,
+    build_signed_dome_physics_snapshot, fixed_dome_v1, validate_dome_asset_budget,
+    validate_dome_instance_manifest, validate_dome_preset_manifest,
+    validate_metaverse_asset_metadata, verify_signed_dome_hosting_lease,
     verify_signed_dome_session_input,
 };
 use rapier3d::prelude::*;
 use uuid::Uuid;
+
+mod support;
+
+use support::{
+    centimeters_to_meters, check_limit, collider_builder, meters_to_centimeters,
+    milliradians_to_radians, radians_to_milliradians, rejection, window_allows,
+};
 
 pub const DOME_SIMULATION_HZ: u32 = 30;
 pub const DOME_SNAPSHOT_HZ: u32 = 10;
@@ -33,6 +43,21 @@ struct RuntimeBody {
     grabbed_by: Option<String>,
     expires_at: Option<i64>,
     persistent_definition: Option<MetaversePersistentPropV1>,
+    created_by: Option<String>,
+    asset_bytes: u64,
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct RateWindow {
+    started_at: i64,
+    count: u64,
+}
+
+#[derive(Clone, Debug, Default)]
+struct PlayerBudgetState {
+    input_bytes: RateWindow,
+    spawns: RateWindow,
+    interactions: RateWindow,
 }
 
 pub struct DomeSessionRuntime {
@@ -56,6 +81,18 @@ pub struct DomeSessionRuntime {
     snapshot_sequence: u64,
     snapshot_ring: VecDeque<SignedDomePhysicsSnapshotV1>,
     last_simulated_at: i64,
+    budget: MetaverseResourceBudgetConfig,
+    verified_assets: BTreeMap<String, MetaverseAssetRef>,
+    participant_limit: u32,
+    player_budgets: BTreeMap<String, PlayerBudgetState>,
+    rejection_counts: BTreeMap<String, u64>,
+    rejected_total: u64,
+    participant_high_water: u32,
+    rigid_body_high_water: u32,
+    snapshot_bytes: u64,
+    snapshot_throttled: u64,
+    last_snapshot_at: Option<i64>,
+    snapshot_bandwidth: RateWindow,
 }
 
 impl DomeSessionRuntime {
@@ -84,8 +121,55 @@ impl DomeSessionRuntime {
         session_id: impl Into<String>,
         started_at: i64,
     ) -> Result<Self> {
+        Self::start_with_budget(
+            lease,
+            host_keys,
+            instance,
+            preset,
+            session_id,
+            started_at,
+            MetaverseResourceBudgetConfig::default(),
+        )
+    }
+
+    pub fn start_with_budget(
+        lease: SignedDomeHostingLeaseV1,
+        host_keys: KukuriKeys,
+        instance: &DomeInstanceManifestV1,
+        preset: &DomePresetManifestV1,
+        session_id: impl Into<String>,
+        started_at: i64,
+        budget: MetaverseResourceBudgetConfig,
+    ) -> Result<Self> {
+        budget.validate()?;
         validate_dome_instance_manifest(instance)?;
         validate_dome_preset_manifest(preset)?;
+        validate_dome_asset_budget(&preset.asset_refs, &budget)?;
+        let persistent_props = preset.dome.customization.persistent_props.len() as u64;
+        check_limit(
+            MetaverseBudgetScope::Dome,
+            MetaverseBudgetResource::PersistentProps,
+            persistent_props,
+            u64::from(budget.dome.max_persistent_props),
+        )?;
+        check_limit(
+            MetaverseBudgetScope::Dome,
+            MetaverseBudgetResource::Colliders,
+            persistent_props,
+            u64::from(budget.dome.max_colliders),
+        )?;
+        check_limit(
+            MetaverseBudgetScope::Dome,
+            MetaverseBudgetResource::RigidBodies,
+            persistent_props,
+            u64::from(budget.dome.max_rigid_bodies),
+        )?;
+        check_limit(
+            MetaverseBudgetScope::Host,
+            MetaverseBudgetResource::RigidBodies,
+            persistent_props,
+            u64::from(budget.host.max_simulated_rigid_bodies),
+        )?;
         verify_signed_dome_hosting_lease(&lease, instance)?;
         if lease.lease.host.signing_pubkey() != &host_keys.public_key() {
             bail!("Dome session host key does not match lease target");
@@ -102,6 +186,10 @@ impl DomeSessionRuntime {
             bail!("Dome session id is required");
         }
 
+        let participant_limit = instance
+            .max_peers
+            .unwrap_or(budget.host.max_participants)
+            .min(budget.host.max_participants);
         let mut runtime = Self {
             lease,
             host_keys,
@@ -126,10 +214,32 @@ impl DomeSessionRuntime {
             snapshot_sequence: 0,
             snapshot_ring: VecDeque::with_capacity(DOME_SNAPSHOT_RING_CAPACITY),
             last_simulated_at: started_at,
+            budget,
+            verified_assets: preset
+                .asset_refs
+                .iter()
+                .cloned()
+                .map(|asset| (asset.blob_hash.clone(), asset))
+                .collect(),
+            participant_limit,
+            player_budgets: BTreeMap::new(),
+            rejection_counts: BTreeMap::new(),
+            rejected_total: 0,
+            participant_high_water: 0,
+            rigid_body_high_water: 0,
+            snapshot_bytes: 0,
+            snapshot_throttled: 0,
+            last_snapshot_at: None,
+            snapshot_bandwidth: RateWindow::default(),
         };
         runtime.insert_dome_boundaries();
         for prop in &preset.dome.customization.persistent_props {
-            runtime.insert_prop(prop.clone(), DomePhysicsBodyKindV1::PersistentProp, None)?;
+            runtime.insert_prop(
+                prop.clone(),
+                DomePhysicsBodyKindV1::PersistentProp,
+                None,
+                None,
+            )?;
         }
         Ok(runtime)
     }
@@ -148,6 +258,28 @@ impl DomeSessionRuntime {
 
     pub fn is_sleeping(&self) -> bool {
         self.participants.is_empty()
+    }
+
+    pub fn budget(&self) -> &MetaverseResourceBudgetConfig {
+        &self.budget
+    }
+
+    pub fn resource_metrics(&self) -> MetaverseResourceMetricsV1 {
+        MetaverseResourceMetricsV1 {
+            rejected_total: self.rejected_total,
+            rejection_counts: self
+                .rejection_counts
+                .iter()
+                .map(|(code, count)| MetaverseResourceMetricCountV1 {
+                    code: code.clone(),
+                    count: *count,
+                })
+                .collect(),
+            participant_high_water: self.participant_high_water,
+            rigid_body_high_water: self.rigid_body_high_water,
+            snapshot_bytes: self.snapshot_bytes,
+            snapshot_throttled: self.snapshot_throttled,
+        }
     }
 
     pub fn add_guest_prop(&mut self, spec: GuestPropSpec) -> Result<()> {
@@ -171,11 +303,26 @@ impl DomeSessionRuntime {
             },
             DomePhysicsBodyKindV1::GuestProp,
             Some(spec.expires_at),
+            None,
         )
     }
 
     pub fn apply_signed_input(&mut self, signed: &SignedDomeSessionInputV1) -> Result<()> {
+        self.apply_signed_input_at(signed, signed.input.sent_at)
+    }
+
+    pub fn apply_signed_input_at(
+        &mut self,
+        signed: &SignedDomeSessionInputV1,
+        now_millis: i64,
+    ) -> Result<()> {
         verify_signed_dome_session_input(signed, &self.lease.lease, &self.session_id)?;
+        if let Err(error) = self.preflight_input(&signed.input, now_millis) {
+            if let Some(rejection) = error.downcast_ref::<MetaverseResourceRejection>() {
+                self.record_rejection(rejection.clone());
+            }
+            return Err(error);
+        }
         self.apply_input(&signed.input)
     }
 
@@ -216,7 +363,16 @@ impl DomeSessionRuntime {
 
     pub fn signed_snapshot(&mut self, now_millis: i64) -> Result<SignedDomePhysicsSnapshotV1> {
         self.advance_to(now_millis)?;
-        self.snapshot_sequence = self.snapshot_sequence.saturating_add(1);
+        let minimum_interval = 1_000 / i64::from(self.budget.dome.max_snapshot_hz);
+        if self
+            .last_snapshot_at
+            .is_some_and(|last| now_millis.saturating_sub(last) < minimum_interval)
+            && let Some(latest) = self.snapshot_ring.back()
+        {
+            self.snapshot_throttled = self.snapshot_throttled.saturating_add(1);
+            return Ok(latest.clone());
+        }
+        let next_sequence = self.snapshot_sequence.saturating_add(1);
         let bodies = self
             .bodies_by_id
             .iter()
@@ -246,12 +402,37 @@ impl DomeSessionRuntime {
                 lease_epoch: self.lease.lease.epoch,
                 session_id: self.session_id.clone(),
                 host_pubkey: self.host_keys.public_key(),
-                sequence: self.snapshot_sequence,
+                sequence: next_sequence,
                 simulated_at: now_millis,
                 sleeping: self.is_sleeping(),
                 bodies,
             },
         )?;
+        let snapshot_bytes = serde_json::to_vec(&signed)?.len() as u64;
+        if !window_allows(
+            &mut self.snapshot_bandwidth,
+            now_millis,
+            1_000,
+            snapshot_bytes,
+            self.budget.host.max_snapshot_bytes_per_second,
+        ) {
+            self.snapshot_throttled = self.snapshot_throttled.saturating_add(1);
+            if let Some(latest) = self.snapshot_ring.back() {
+                return Ok(latest.clone());
+            }
+            let rejection = MetaverseResourceRejection::new(
+                MetaverseBudgetScope::Host,
+                MetaverseBudgetResource::SnapshotBandwidth,
+                MetaverseResourceRejectionReason::LimitExceeded,
+                snapshot_bytes,
+                self.budget.host.max_snapshot_bytes_per_second,
+            );
+            self.record_rejection(rejection.clone());
+            return Err(rejection.into());
+        }
+        self.snapshot_sequence = next_sequence;
+        self.last_snapshot_at = Some(now_millis);
+        self.snapshot_bytes = self.snapshot_bytes.saturating_add(snapshot_bytes);
         self.snapshot_ring.push_back(signed.clone());
         while self.snapshot_ring.len() > DOME_SNAPSHOT_RING_CAPACITY {
             self.snapshot_ring.pop_front();
@@ -353,6 +534,9 @@ impl DomeSessionRuntime {
             DomeSessionInputKindV1::Join => {
                 self.participants.insert(participant_id.clone());
                 self.ensure_avatar(&participant_id)?;
+                self.participant_high_water = self
+                    .participant_high_water
+                    .max(self.participants.len().try_into().unwrap_or(u32::MAX));
             }
             DomeSessionInputKindV1::Leave => {
                 self.participants.remove(&participant_id);
@@ -429,12 +613,18 @@ impl DomeSessionRuntime {
                     prop.clone(),
                     DomePhysicsBodyKindV1::GuestProp,
                     Some(*expires_at),
+                    Some(participant_id.clone()),
                 )?;
             }
             DomeSessionInputKindV1::UpsertPersistentProp { prop } => {
                 self.require_owner(input)?;
                 self.remove_body(&prop.prop_id);
-                self.insert_prop(prop.clone(), DomePhysicsBodyKindV1::PersistentProp, None)?;
+                self.insert_prop(
+                    prop.clone(),
+                    DomePhysicsBodyKindV1::PersistentProp,
+                    None,
+                    None,
+                )?;
             }
             DomeSessionInputKindV1::DeletePersistentProp { prop_id } => {
                 self.require_owner(input)?;
@@ -467,6 +657,199 @@ impl DomeSessionRuntime {
         Ok(())
     }
 
+    fn preflight_input(&mut self, input: &DomeSessionInputV1, now_millis: i64) -> Result<()> {
+        let participant_id = input.participant_pubkey.as_str().to_string();
+        let input_bytes = serde_json::to_vec(input)?.len() as u64;
+        {
+            let player = self
+                .player_budgets
+                .entry(participant_id.clone())
+                .or_default();
+            if !window_allows(
+                &mut player.input_bytes,
+                now_millis,
+                1_000,
+                input_bytes,
+                self.budget.player.max_input_bytes_per_second,
+            ) {
+                return Err(rejection(
+                    MetaverseBudgetScope::Player,
+                    MetaverseBudgetResource::InputBandwidth,
+                    MetaverseResourceRejectionReason::RateExceeded,
+                    player.input_bytes.count,
+                    self.budget.player.max_input_bytes_per_second,
+                ));
+            }
+        }
+        match &input.input {
+            DomeSessionInputKindV1::Join if !self.participants.contains(&participant_id) => {
+                check_limit(
+                    MetaverseBudgetScope::Host,
+                    MetaverseBudgetResource::Participants,
+                    self.participants.len() as u64 + 1,
+                    u64::from(self.participant_limit),
+                )?;
+                self.check_body_capacity(1)?;
+            }
+            DomeSessionInputKindV1::SpawnGuestProp { prop, .. } => {
+                {
+                    let player = self
+                        .player_budgets
+                        .entry(participant_id.clone())
+                        .or_default();
+                    if !window_allows(
+                        &mut player.spawns,
+                        now_millis,
+                        60_000,
+                        1,
+                        u64::from(self.budget.player.max_prop_spawns_per_minute),
+                    ) {
+                        return Err(rejection(
+                            MetaverseBudgetScope::Player,
+                            MetaverseBudgetResource::PropSpawnRate,
+                            MetaverseResourceRejectionReason::RateExceeded,
+                            player.spawns.count,
+                            u64::from(self.budget.player.max_prop_spawns_per_minute),
+                        ));
+                    }
+                }
+                let guest_bodies = self.bodies_by_id.values().filter(|body| {
+                    body.kind == DomePhysicsBodyKindV1::GuestProp
+                        && body.created_by.as_deref() == Some(participant_id.as_str())
+                });
+                let (guest_count, guest_bytes) = guest_bodies
+                    .fold((0_u64, 0_u64), |state, body| {
+                        (state.0 + 1, state.1.saturating_add(body.asset_bytes))
+                    });
+                check_limit(
+                    MetaverseBudgetScope::Player,
+                    MetaverseBudgetResource::GuestProps,
+                    guest_count + 1,
+                    u64::from(self.budget.player.max_guest_props),
+                )?;
+                let asset_bytes = prop
+                    .asset_ref
+                    .as_ref()
+                    .and_then(|asset| asset.size_bytes)
+                    .unwrap_or_default();
+                self.check_verified_asset(prop.asset_ref.as_ref())?;
+                check_limit(
+                    MetaverseBudgetScope::Player,
+                    MetaverseBudgetResource::ModelBytes,
+                    guest_bytes.saturating_add(asset_bytes),
+                    self.budget.player.max_guest_prop_bytes,
+                )?;
+                self.check_body_capacity(1)?;
+            }
+            DomeSessionInputKindV1::UpsertPersistentProp { prop } => {
+                self.check_verified_asset(prop.asset_ref.as_ref())?;
+                let replacing = self.bodies_by_id.contains_key(&prop.prop_id);
+                let persistent = self
+                    .bodies_by_id
+                    .values()
+                    .filter(|body| body.kind == DomePhysicsBodyKindV1::PersistentProp)
+                    .count() as u64;
+                check_limit(
+                    MetaverseBudgetScope::Dome,
+                    MetaverseBudgetResource::PersistentProps,
+                    persistent + u64::from(!replacing),
+                    u64::from(self.budget.dome.max_persistent_props),
+                )?;
+                if !replacing {
+                    self.check_body_capacity(1)?;
+                }
+            }
+            DomeSessionInputKindV1::Grab { .. }
+            | DomeSessionInputKindV1::Throw { .. }
+            | DomeSessionInputKindV1::Push { .. }
+            | DomeSessionInputKindV1::Sit { .. } => {
+                {
+                    let player = self.player_budgets.entry(participant_id).or_default();
+                    if !window_allows(
+                        &mut player.interactions,
+                        now_millis,
+                        1_000,
+                        1,
+                        u64::from(self.budget.player.max_interactions_per_second),
+                    ) {
+                        return Err(rejection(
+                            MetaverseBudgetScope::Player,
+                            MetaverseBudgetResource::InteractionRate,
+                            MetaverseResourceRejectionReason::RateExceeded,
+                            player.interactions.count,
+                            u64::from(self.budget.player.max_interactions_per_second),
+                        ));
+                    }
+                }
+                if let DomeSessionInputKindV1::Throw { impulse, .. }
+                | DomeSessionInputKindV1::Push { impulse, .. } = &input.input
+                {
+                    let observed = impulse
+                        .iter()
+                        .map(|value| value.unsigned_abs())
+                        .max()
+                        .unwrap_or_default();
+                    check_limit(
+                        MetaverseBudgetScope::Player,
+                        MetaverseBudgetResource::Impulse,
+                        observed,
+                        self.budget.player.max_impulse_centimeters as u64,
+                    )?;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn check_body_capacity(&self, added: u64) -> Result<()> {
+        let observed = self.bodies_by_id.len() as u64 + added;
+        check_limit(
+            MetaverseBudgetScope::Dome,
+            MetaverseBudgetResource::RigidBodies,
+            observed,
+            u64::from(self.budget.dome.max_rigid_bodies),
+        )?;
+        check_limit(
+            MetaverseBudgetScope::Dome,
+            MetaverseBudgetResource::Colliders,
+            observed,
+            u64::from(self.budget.dome.max_colliders),
+        )?;
+        check_limit(
+            MetaverseBudgetScope::Host,
+            MetaverseBudgetResource::RigidBodies,
+            observed,
+            u64::from(self.budget.host.max_simulated_rigid_bodies),
+        )
+    }
+
+    fn check_verified_asset(&self, asset: Option<&MetaverseAssetRef>) -> Result<()> {
+        let Some(asset) = asset else {
+            return Ok(());
+        };
+        validate_metaverse_asset_metadata(
+            &asset.kind,
+            asset.size_bytes,
+            asset.budget_metadata.as_ref(),
+        )?;
+        if self.verified_assets.get(&asset.blob_hash) != Some(asset) {
+            return Err(rejection(
+                MetaverseBudgetScope::Host,
+                MetaverseBudgetResource::AssetFormat,
+                MetaverseResourceRejectionReason::UnverifiedAsset,
+                1,
+                0,
+            ));
+        }
+        Ok(())
+    }
+
+    fn record_rejection(&mut self, rejection: MetaverseResourceRejection) {
+        self.rejected_total = self.rejected_total.saturating_add(1);
+        *self.rejection_counts.entry(rejection.code()).or_default() += 1;
+    }
+
     fn insert_dome_boundaries(&mut self) {
         let floor = RigidBodyBuilder::fixed()
             .translation(Vector::new(0.0, -0.1, 0.0))
@@ -486,6 +869,7 @@ impl DomeSessionRuntime {
         prop: MetaversePersistentPropV1,
         kind: DomePhysicsBodyKindV1,
         expires_at: Option<i64>,
+        created_by: Option<String>,
     ) -> Result<()> {
         let prop_id = prop.prop_id.clone();
         if self.bodies_by_id.contains_key(&prop_id) {
@@ -514,9 +898,18 @@ impl DomeSessionRuntime {
                 grabbed_by: None,
                 expires_at,
                 persistent_definition: (kind == DomePhysicsBodyKindV1::PersistentProp)
-                    .then_some(prop),
+                    .then_some(prop.clone()),
+                created_by,
+                asset_bytes: prop
+                    .asset_ref
+                    .as_ref()
+                    .and_then(|asset| asset.size_bytes)
+                    .unwrap_or_default(),
             },
         );
+        self.rigid_body_high_water = self
+            .rigid_body_high_water
+            .max(self.bodies_by_id.len().try_into().unwrap_or(u32::MAX));
         Ok(())
     }
 
@@ -543,8 +936,13 @@ impl DomeSessionRuntime {
                 grabbed_by: None,
                 expires_at: None,
                 persistent_definition: None,
+                created_by: None,
+                asset_bytes: 0,
             },
         );
+        self.rigid_body_high_water = self
+            .rigid_body_high_water
+            .max(self.bodies_by_id.len().try_into().unwrap_or(u32::MAX));
         Ok(())
     }
 
@@ -595,355 +993,5 @@ impl DomeSessionRuntime {
     }
 }
 
-fn collider_builder(collider: Option<&MetaverseColliderV1>) -> ColliderBuilder {
-    match collider {
-        Some(MetaverseColliderV1::Capsule {
-            radius,
-            half_height,
-            ..
-        }) => ColliderBuilder::capsule_y(*half_height as f32 / 100.0, *radius as f32 / 100.0),
-        Some(MetaverseColliderV1::Cuboid { half_extents, .. }) => ColliderBuilder::cuboid(
-            half_extents[0] as f32 / 100.0,
-            half_extents[1] as f32 / 100.0,
-            half_extents[2] as f32 / 100.0,
-        ),
-        None => ColliderBuilder::capsule_y(0.5, 0.25),
-    }
-}
-
-fn centimeters_to_meters(value: [i64; 3]) -> [f32; 3] {
-    value.map(|component| component as f32 / 100.0)
-}
-
-fn meters_to_centimeters(value: [f32; 3]) -> [i64; 3] {
-    value.map(|component| (component * 100.0).round() as i64)
-}
-
-fn milliradians_to_radians(value: [i64; 3]) -> [f32; 3] {
-    value.map(|component| component as f32 / 1_000.0)
-}
-
-fn radians_to_milliradians(value: [f32; 3]) -> [i64; 3] {
-    value.map(|component| (component * 1_000.0).round() as i64)
-}
-
 #[cfg(test)]
-mod tests {
-    use kukuri_core::{
-        DomeHostTargetV1, DomeHostingLeaseV1, DomeInstanceStatusV1, DomePresetRefV1,
-        MetaverseDomeV1, MetaversePersistentPropV1, MetaversePrimitive, MetaverseRoomSpawnV1,
-        SpatialContextV1, TopicId, build_signed_dome_hosting_lease,
-    };
-
-    use super::*;
-
-    fn fixture() -> (
-        KukuriKeys,
-        SignedDomeHostingLeaseV1,
-        DomeInstanceManifestV1,
-        DomePresetManifestV1,
-    ) {
-        let owner = KukuriKeys::generate();
-        let context = SpatialContextV1::Topic {
-            topic_id: TopicId("kukuri:topic:runtime".into()),
-        };
-        let preset = DomePresetManifestV1 {
-            preset_id: "preset-1".into(),
-            owner_pubkey: owner.public_key(),
-            revision: 1,
-            dome: MetaverseDomeV1::default(),
-            asset_refs: Vec::new(),
-            updated_at: 1_000,
-        };
-        let preset_ref = DomePresetRefV1 {
-            preset_id: preset.preset_id.clone(),
-            owner_pubkey: owner.public_key(),
-            revision: preset.revision,
-            manifest_blob_hash: "manifest-hash".into(),
-            manifest_mime: "application/vnd.kukuri.dome-preset+json".into(),
-            manifest_bytes: 100,
-        };
-        let instance = DomeInstanceManifestV1 {
-            instance_id: "dome-1".into(),
-            spatial_context: context.clone(),
-            owner_pubkey: owner.public_key(),
-            preset_ref,
-            title: "Dome".into(),
-            description: String::new(),
-            max_peers: Some(8),
-            default_spawn: MetaverseRoomSpawnV1 {
-                position: [0, 0, 0],
-                rotation: [0, 0, 0],
-            },
-            generation: 1,
-            status: DomeInstanceStatusV1::Active,
-            relationship_detach: None,
-            replacement_instance_id: None,
-            chat_history: Vec::new(),
-            updated_at: 1_000,
-        };
-        let lease = build_signed_dome_hosting_lease(
-            &owner,
-            DomeHostingLeaseV1 {
-                lease_id: "lease-1".into(),
-                spatial_context: context,
-                instance_id: instance.instance_id.clone(),
-                instance_generation: 1,
-                owner_pubkey: owner.public_key(),
-                host: DomeHostTargetV1::OwnerDevice {
-                    endpoint_id: "endpoint-1".into(),
-                    host_pubkey: owner.public_key(),
-                },
-                manifest_blob_hash: "manifest-hash".into(),
-                manifest_version: 1,
-                epoch: 1,
-                issued_at: 1_000,
-                expires_at: 20_000,
-            },
-        )
-        .unwrap();
-        (owner, lease, instance, preset)
-    }
-
-    fn signed_input(
-        participant: &KukuriKeys,
-        sequence: u64,
-        input: DomeSessionInputKindV1,
-    ) -> SignedDomeSessionInputV1 {
-        kukuri_core::build_signed_dome_session_input(
-            participant,
-            DomeSessionInputV1 {
-                input_id: format!("input-{sequence}"),
-                instance_id: "dome-1".into(),
-                instance_generation: 1,
-                lease_epoch: 1,
-                session_id: "session-1".into(),
-                participant_pubkey: participant.public_key(),
-                sequence,
-                sent_at: 1_000 + sequence as i64,
-                input,
-            },
-        )
-        .unwrap()
-    }
-
-    #[test]
-    fn zero_participants_sleep_but_wall_clock_ttl_expires() {
-        let (owner, lease, instance, preset) = fixture();
-        let mut runtime = DomeSessionRuntime::start_with_session_id(
-            lease,
-            owner,
-            &instance,
-            &preset,
-            "session-1",
-            1_000,
-        )
-        .unwrap();
-        runtime
-            .add_guest_prop(GuestPropSpec {
-                prop_id: "guest-1".into(),
-                position: [0, 100, 0],
-                expires_at: 2_000,
-            })
-            .unwrap();
-        assert!(runtime.is_sleeping());
-        let snapshot = runtime.signed_snapshot(2_100).unwrap();
-        assert!(snapshot.snapshot.sleeping);
-        assert!(
-            snapshot
-                .snapshot
-                .bodies
-                .iter()
-                .all(|body| body.entity_id != "guest-1")
-        );
-    }
-
-    #[test]
-    fn joined_participant_wakes_physics_and_stale_input_is_rejected() {
-        let (owner, lease, instance, preset) = fixture();
-        let participant = KukuriKeys::generate();
-        let mut runtime = DomeSessionRuntime::start_with_session_id(
-            lease,
-            owner,
-            &instance,
-            &preset,
-            "session-1",
-            1_000,
-        )
-        .unwrap();
-        let join = signed_input(&participant, 1, DomeSessionInputKindV1::Join);
-        runtime.apply_signed_input(&join).unwrap();
-        assert!(!runtime.is_sleeping());
-        assert!(runtime.apply_signed_input(&join).is_err());
-        runtime.advance_to(1_100).unwrap();
-        assert!(runtime.signed_snapshot(1_200).unwrap().snapshot.sequence > 0);
-    }
-
-    #[test]
-    fn restart_uses_manifest_initial_state_and_new_session() {
-        let (owner, lease, instance, mut preset) = fixture();
-        preset.dome.customization.persistent_props = vec![MetaversePersistentPropV1 {
-            prop_id: "prop-1".into(),
-            asset_ref: None,
-            primitive_fallback: MetaversePrimitive::Cube,
-            position: [100, 200, 300],
-            rotation: [0, 0, 0],
-            scale: [100, 100, 100],
-            visual_only: false,
-            interactions: Vec::new(),
-            collider: None,
-        }];
-        let restarted = DomeSessionRuntime::start_with_session_id(
-            lease,
-            owner,
-            &instance,
-            &preset,
-            "session-after-restart",
-            2_000,
-        )
-        .unwrap();
-        assert_eq!(restarted.session_id(), "session-after-restart");
-        assert_eq!(restarted.participant_count(), 0);
-        let body = restarted.bodies_by_id.get("prop-1").unwrap();
-        let translation = restarted.rigid_bodies[body.handle].translation();
-        assert_eq!(
-            meters_to_centimeters([translation.x, translation.y, translation.z]),
-            [100, 200, 300]
-        );
-    }
-
-    #[test]
-    fn snapshot_ring_is_bounded_and_resync_falls_back_to_latest() {
-        let (owner, lease, instance, preset) = fixture();
-        let mut runtime = DomeSessionRuntime::start_with_session_id(
-            lease,
-            owner,
-            &instance,
-            &preset,
-            "session-1",
-            1_000,
-        )
-        .unwrap();
-        for index in 1..=DOME_SNAPSHOT_RING_CAPACITY + 5 {
-            runtime.signed_snapshot(1_000 + index as i64).unwrap();
-        }
-        assert_eq!(runtime.snapshot_ring_len(), DOME_SNAPSHOT_RING_CAPACITY);
-        let latest = runtime.snapshots_after(1);
-        assert_eq!(latest.len(), 1);
-        assert_eq!(
-            latest[0].snapshot.sequence,
-            (DOME_SNAPSHOT_RING_CAPACITY + 5) as u64
-        );
-    }
-
-    #[test]
-    fn layout_candidate_contains_only_owner_managed_persistent_props() {
-        let (owner, lease, instance, preset) = fixture();
-        let participant = KukuriKeys::generate();
-        let mut runtime = DomeSessionRuntime::start_with_session_id(
-            lease,
-            owner.clone(),
-            &instance,
-            &preset,
-            "session-1",
-            1_000,
-        )
-        .unwrap();
-        runtime
-            .apply_signed_input(&signed_input(&participant, 1, DomeSessionInputKindV1::Join))
-            .unwrap();
-        let guest = MetaversePersistentPropV1 {
-            prop_id: "guest-1".into(),
-            asset_ref: None,
-            primitive_fallback: MetaversePrimitive::Sphere,
-            position: [0, 100, 0],
-            rotation: [0, 0, 0],
-            scale: [100, 100, 100],
-            visual_only: false,
-            interactions: Vec::new(),
-            collider: None,
-        };
-        runtime
-            .apply_signed_input(&signed_input(
-                &participant,
-                2,
-                DomeSessionInputKindV1::SpawnGuestProp {
-                    prop: guest,
-                    expires_at: 10_000,
-                },
-            ))
-            .unwrap();
-        let persistent = MetaversePersistentPropV1 {
-            prop_id: "owner-prop".into(),
-            asset_ref: None,
-            primitive_fallback: MetaversePrimitive::Cube,
-            position: [100, 100, 100],
-            rotation: [0, 0, 0],
-            scale: [120, 120, 120],
-            visual_only: false,
-            interactions: Vec::new(),
-            collider: None,
-        };
-        runtime
-            .apply_signed_input(&signed_input(
-                &owner,
-                1,
-                DomeSessionInputKindV1::UpsertPersistentProp { prop: persistent },
-            ))
-            .unwrap();
-        let candidate = runtime.signed_layout_candidate("layout-1", 1_100).unwrap();
-        assert!(
-            candidate
-                .candidate
-                .persistent_props
-                .iter()
-                .any(|prop| prop.prop_id == "owner-prop")
-        );
-        assert!(
-            candidate
-                .candidate
-                .persistent_props
-                .iter()
-                .all(|prop| prop.prop_id != "guest-1")
-        );
-        assert!(
-            candidate
-                .candidate
-                .persistent_props
-                .iter()
-                .all(|prop| !prop.prop_id.starts_with("avatar:"))
-        );
-    }
-
-    #[test]
-    fn non_owner_cannot_mutate_persistent_props() {
-        let (owner, lease, instance, preset) = fixture();
-        let participant = KukuriKeys::generate();
-        let mut runtime = DomeSessionRuntime::start_with_session_id(
-            lease,
-            owner,
-            &instance,
-            &preset,
-            "session-1",
-            1_000,
-        )
-        .unwrap();
-        let prop = MetaversePersistentPropV1 {
-            prop_id: "unauthorized".into(),
-            asset_ref: None,
-            primitive_fallback: MetaversePrimitive::Cube,
-            position: [0, 100, 0],
-            rotation: [0, 0, 0],
-            scale: [100, 100, 100],
-            visual_only: false,
-            interactions: Vec::new(),
-            collider: None,
-        };
-        let input = signed_input(
-            &participant,
-            1,
-            DomeSessionInputKindV1::UpsertPersistentProp { prop },
-        );
-        assert!(runtime.apply_signed_input(&input).is_err());
-    }
-}
+mod tests;

@@ -55,6 +55,8 @@ pub struct MetaverseAssetRef {
     pub mime_type: Option<String>,
     pub size_bytes: Option<u64>,
     pub name: Option<String>,
+    #[serde(default)]
+    pub budget_metadata: Option<crate::MetaverseAssetBudgetMetadataV1>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -89,7 +91,7 @@ pub enum MetaversePrimitive {
     Sphere,
 }
 
-pub const METAVERSE_WORLD_VERSION: u64 = 5;
+pub const METAVERSE_WORLD_VERSION: u64 = 6;
 pub const FIXED_DOME_SPEC_ID: &str = "fixed_dome_v1";
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -641,8 +643,8 @@ pub fn validate_dome_customization(customization: &DomeCustomizationV1) -> Resul
     if !(1_000..=30_000).contains(&environment.gravity_milli) {
         bail!("gravity strength is outside the supported range");
     }
-    if customization.persistent_props.len() > 64 {
-        bail!("a Dome supports at most 64 persistent props");
+    if customization.persistent_props.len() > 1_024 {
+        bail!("a Dome supports at most 1024 persistent props");
     }
     let mut prop_ids = HashSet::new();
     for prop in &customization.persistent_props {
@@ -678,13 +680,19 @@ pub fn validate_dome_customization(customization: &DomeCustomizationV1) -> Resul
                     radius,
                     half_height,
                     ..
-                } if *radius <= 0 || *half_height < 0 => {
-                    bail!("capsule collider dimensions must be positive");
+                } if *radius <= 0
+                    || *half_height < 0
+                    || *radius > 2_000
+                    || *half_height > 2_000 =>
+                {
+                    bail!("capsule collider dimensions are outside the supported range");
                 }
                 MetaverseColliderV1::Cuboid { half_extents, .. }
-                    if half_extents.iter().any(|extent| *extent <= 0) =>
+                    if half_extents
+                        .iter()
+                        .any(|extent| !(1..=2_000).contains(extent)) =>
                 {
-                    bail!("cuboid collider dimensions must be positive");
+                    bail!("cuboid collider dimensions are outside the supported range");
                 }
                 _ => {}
             }
@@ -713,7 +721,7 @@ pub fn validate_metaverse_room_state(state: &MetaverseRoomStateV1) -> Result<()>
     }
     if state
         .max_peers
-        .is_some_and(|max_peers| !(1..=64).contains(&max_peers))
+        .is_some_and(|max_peers| !(1..=512).contains(&max_peers))
     {
         bail!("max peers is outside the supported range");
     }
@@ -788,6 +796,20 @@ pub fn validate_dome_preset_manifest(manifest: &DomePresetManifestV1) -> Result<
             bail!("Dome preset asset hashes must be non-empty and unique");
         }
     }
+    let referenced_hashes = manifest
+        .dome
+        .customization
+        .persistent_props
+        .iter()
+        .filter_map(|prop| prop.asset_ref.as_ref())
+        .chain(manifest.dome.customization.surface.wall_texture.as_ref())
+        .chain(manifest.dome.customization.surface.floor_texture.as_ref())
+        .map(|asset| asset.blob_hash.as_str())
+        .collect::<HashSet<_>>();
+    if !referenced_hashes.is_subset(&hashes) {
+        bail!("Dome customization references an asset outside the Preset asset list");
+    }
+    crate::metaverse_dome_resource_usage(&manifest.asset_refs)?;
     Ok(())
 }
 
@@ -809,7 +831,7 @@ pub fn validate_dome_instance_manifest(manifest: &DomeInstanceManifestV1) -> Res
     }
     if manifest
         .max_peers
-        .is_some_and(|max_peers| !(1..=64).contains(&max_peers))
+        .is_some_and(|max_peers| !(1..=512).contains(&max_peers))
     {
         bail!("max peers is outside the supported range");
     }

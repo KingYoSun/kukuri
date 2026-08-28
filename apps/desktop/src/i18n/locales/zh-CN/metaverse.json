@@ -56,6 +56,11 @@
     "participants": "参与者：{{value}}",
     "revision": "布局修订：{{value}}",
     "cacheLimit": "清单/资源缓存上限：{{value}}",
+    "participantBudget": "参与者预算：{{used}} / {{limit}}",
+    "rigidBodyBudget": "刚体峰值：{{used}} / {{limit}}",
+    "rejectedResources": "资源拒绝次数：{{value}}",
+    "snapshotBytes": "快照生成量：{{value}}",
+    "resourceRejected": "主机因资源安全限制拒绝了此操作（{{code}}）。",
     "sleep": { "sleeping": "物理：休眠", "awake": "物理：活动" },
     "none": "无",
     "ownerHost": "在此设备上启动托管",
@@ -170,6 +175,9 @@
   },
   "viewport": {
     "ariaLabel": "元宇宙房间视图"
+  },
+  "resources": {
+    "degraded": "资源安全模式：{{tier}}"
   },
   "errors": {
     "createFailed": "无法创建元宇宙房间",

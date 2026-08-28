@@ -402,25 +402,31 @@ pub(crate) async fn run_desktop_smoke_scenario(
                 } => {
                     let topic = runtime.topic_or_default(&scenario.fixtures.topic);
                     let expected_material = parse_dome_material(wall_material)?;
-                    let room = runtime
-                        .app()?
-                        .list_game_rooms_scoped(&topic, runtime.current_scope())
-                        .await?
-                        .into_iter()
-                        .find(|room| room.title == *title)
-                        .with_context(|| format!("metaverse Dome not found: {title}"))?;
-                    let dome = &room
-                        .metaverse
-                        .as_ref()
-                        .context("metaverse Dome state missing")?
-                        .dome;
-                    if dome.spec_id != "fixed_dome_v1"
-                        || dome.customization.environment.gravity_milli != *gravity_milli
-                        || dome.customization.surface.wall_material != expected_material
-                        || dome.customization.persistent_props[0].position != *prop_position
-                    {
-                        anyhow::bail!("metaverse Dome customization mismatch for {title}");
-                    }
+                    let assertion = timeout(step_timeout, async {
+                        loop {
+                            let room = runtime
+                                .app()?
+                                .list_game_rooms_scoped(&topic, runtime.current_scope())
+                                .await?
+                                .into_iter()
+                                .find(|room| room.title == *title)
+                                .with_context(|| format!("metaverse Dome not found: {title}"))?;
+                            let dome = &room
+                                .metaverse
+                                .as_ref()
+                                .context("metaverse Dome state missing")?
+                                .dome;
+                            if dome.spec_id == "fixed_dome_v1"
+                                && dome.customization.environment.gravity_milli == *gravity_milli
+                                && dome.customization.surface.wall_material == expected_material
+                                && dome.customization.persistent_props[0].position == *prop_position
+                            {
+                                return Ok::<(), anyhow::Error>(());
+                            }
+                            sleep(Duration::from_millis(50)).await;
+                        }
+                    });
+                    assertion.await.context("metaverse Dome assertion timeout")??;
                 }
                 ScenarioStep::AssertMetaverseDomeRejectsInvalid { title } => {
                     let topic = runtime.topic_or_default(&scenario.fixtures.topic);

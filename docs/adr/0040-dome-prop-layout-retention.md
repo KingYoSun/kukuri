@@ -40,11 +40,11 @@ Metaverseは実験機能のためworld schemaを5へ上げ、旧experimental sch
 - Dome Preset manifestと参照assetはBLAKE3 content hashで保存し、同一bytesを版ごとに複製しない。
 - pin理由は`current`、`active lease`、`staging`、`rollback`とし、manifestからassetへの参照グラフ単位で保持する。rollbackはcurrentを除く直近3revisionとする。
 - 参照が0になったmetaverse管理blobへ`unreferenced_at`を記録し、24時間のgrace後にだけunpin/local GC候補にする。
-- desktopのmetaverse manifest/asset blob cacheは1GiB、Community Nodeは10GiBを固定上限とする。physics snapshot、session state、DB metadata、GPU resource、metaverse以外のblobはこの容量に含めない。上限超過時はunpinned候補をlast-accessed順に削除する。
+- desktopのmetaverse manifest/asset blob cacheは1GiB、Community Nodeは10GiBを既定上限とする。設定可能範囲と運用policyは[ADR-0041](0041-metaverse-resource-budget.md)が上書きする。physics snapshot、session state、DB metadata、GPU resource、metaverse以外のblobはこの容量に含めない。上限超過時はunpinned候補をlast-accessed順に削除する。
 - Iroh GCは明示的なmetaverse候補だけを削除対象にし、それ以外の全hashをprotectedとしてone-shot実行する。一般blobへglobal automatic GCを適用しない。
 - P2P peerが既に取得したcopyの強制消去は保証しない。kukuriが制御するpin/再配布を停止し、各nodeでlocal GCする。
 
-固定上限の設定可能化、運用metrics、描画/physicsの段階的degrade、悪意あるassetに対する包括的budgetはIssue #794で扱う。
+設定可能な上限、運用metrics、描画/physicsの段階的degrade、悪意あるassetに対する包括的budgetは[ADR-0041](0041-metaverse-resource-budget.md)で定義する。
 
 ## Feature Data Classification
 

@@ -84,13 +84,14 @@ impl AppService {
             accept_dome_hosting_lease(self.services.keys.as_ref(), &lease, &session_id, now)?;
         let activation =
             activate_dome_hosting_lease(self.services.keys.as_ref(), &lease, &acceptance, now)?;
-        let runtime = DomeSessionRuntime::start_with_session_id(
+        let runtime = DomeSessionRuntime::start_with_budget(
             lease.clone(),
             self.services.keys.as_ref().clone(),
             &instance,
             &preset,
             &session_id,
             now,
+            self.metaverse_resource_budget.clone(),
         )?;
         let new_records = [
             DomeHostingRecordV1::LeaseIssued(lease),
@@ -266,7 +267,7 @@ impl AppService {
                 input: input.input,
             },
         )?;
-        runtime.apply_signed_input(&signed)?;
+        runtime.apply_signed_input_at(&signed, now)?;
         runtime.signed_snapshot(now)
     }
 
@@ -628,7 +629,7 @@ impl AppService {
         records: &[DomeHostingRecordV1],
         now: i64,
     ) -> Result<DomeHostingView> {
-        let (local_heartbeat, participants, sleeping) = {
+        let (local_heartbeat, participants, sleeping, resource_metrics) = {
             let mut sessions = self.dome_host_sessions.lock().await;
             match sessions.get_mut(&instance.instance_id) {
                 Some(runtime) => {
@@ -637,9 +638,10 @@ impl AppService {
                         Some(now),
                         runtime.participant_count().try_into().unwrap_or(u32::MAX),
                         runtime.is_sleeping(),
+                        runtime.resource_metrics(),
                     )
                 }
-                None => (None, 0, true),
+                None => (None, 0, true, Default::default()),
             }
         };
         let state = resolve_dome_hosting_state(instance, records, now, local_heartbeat)?;
@@ -696,6 +698,8 @@ impl AppService {
             preset_manifest_json: serde_json::to_string(&preset)?,
             participants,
             sleeping,
+            resource_budget: self.metaverse_resource_budget.clone(),
+            resource_metrics,
         })
     }
 

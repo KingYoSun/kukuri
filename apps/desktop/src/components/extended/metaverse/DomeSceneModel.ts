@@ -10,7 +10,7 @@ import type {
 } from '@/lib/api';
 
 export const FIXED_DOME_SPEC_ID = 'fixed_dome_v1';
-export const METAVERSE_WORLD_VERSION = 5;
+export const METAVERSE_WORLD_VERSION = 6;
 export const DOME_INNER_RADIUS_CM = 2_000;
 export const DOME_OUTER_RADIUS_CM = 2_200;
 export const DOME_APEX_HEIGHT_CM = 2_000;
