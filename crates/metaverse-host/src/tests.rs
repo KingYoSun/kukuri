@@ -1,5 +1,6 @@
 use kukuri_core::{
-    DomeHostTargetV1, DomeHostingLeaseV1, DomeInstanceStatusV1, DomePresetRefV1, MetaverseDomeV1,
+    DomeDirection, DomeHostTargetV1, DomeHostingLeaseV1, DomeInstanceStatusV1, DomePresetRefV1,
+    DomeTransitionAccessDecisionV1, DomeTransitionAdmissionRequestV1, MetaverseDomeV1,
     MetaversePersistentPropV1, MetaversePrimitive, MetaverseRoomSpawnV1, SpatialContextV1, TopicId,
     build_signed_dome_hosting_lease,
 };
@@ -94,6 +95,258 @@ fn signed_input(
         },
     )
     .unwrap()
+}
+
+fn transition_request(
+    participant: &KukuriKeys,
+    transition_id: &str,
+) -> DomeTransitionAdmissionRequestV1 {
+    DomeTransitionAdmissionRequestV1 {
+        transition_id: transition_id.into(),
+        connection_id: "connection-1".into(),
+        topology_digest: "topology-1".into(),
+        spatial_context: SpatialContextV1::Topic {
+            topic_id: TopicId("kukuri:topic:runtime".into()),
+        },
+        source_instance_id: "dome-0".into(),
+        source_instance_generation: 1,
+        target_instance_id: "dome-1".into(),
+        target_instance_generation: 1,
+        participant_pubkey: participant.public_key(),
+        direction: DomeDirection::North,
+        requested_at: 1_100,
+    }
+}
+
+#[test]
+fn transition_reservation_counts_capacity_and_commit_is_idempotent() {
+    let (owner, lease, instance, preset) = fixture();
+    let mut budget = kukuri_core::MetaverseResourceBudgetConfig::default();
+    budget.host.max_participants = 1;
+    let mut runtime = DomeSessionRuntime::start_with_budget(
+        lease,
+        owner,
+        &instance,
+        &preset,
+        "session-1",
+        1_000,
+        budget,
+    )
+    .unwrap();
+    let first = KukuriKeys::generate();
+    let second = KukuriKeys::generate();
+    let ticket = runtime
+        .prepare_transition_admission(
+            transition_request(&first, "transition-1"),
+            DomeTransitionAccessDecisionV1::Allowed,
+            1_100,
+        )
+        .unwrap();
+    assert_eq!(runtime.transition_reservation_count(), 1);
+    assert!(
+        runtime
+            .prepare_transition_admission(
+                transition_request(&second, "transition-2"),
+                DomeTransitionAccessDecisionV1::Allowed,
+                1_100,
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("DOME_TRANSITION_CAPACITY_FULL")
+    );
+    runtime
+        .commit_transition_admission(&ticket, [0, 90, 2_840], [0, 0, 0], 1_200)
+        .unwrap();
+    let avatar_id = format!("avatar:{}", first.public_key().as_str());
+    let avatar = runtime.rigid_bodies[runtime.bodies_by_id[&avatar_id].handle].translation();
+    assert_eq!(
+        meters_to_centimeters([avatar.x, avatar.y, avatar.z])[2],
+        2_840
+    );
+    runtime
+        .commit_transition_admission(&ticket, [0, 90, 2_840], [0, 0, 0], 30_000)
+        .unwrap();
+    assert_eq!(runtime.participant_count(), 1);
+    assert_eq!(runtime.transition_reservation_count(), 0);
+}
+
+#[test]
+fn transition_reservation_expires_and_access_denial_does_not_mutate_capacity() {
+    let (owner, lease, instance, preset) = fixture();
+    let mut runtime = DomeSessionRuntime::start_with_session_id(
+        lease,
+        owner,
+        &instance,
+        &preset,
+        "session-1",
+        1_000,
+    )
+    .unwrap();
+    let participant = KukuriKeys::generate();
+    let denied = runtime.prepare_transition_admission(
+        transition_request(&participant, "transition-denied"),
+        DomeTransitionAccessDecisionV1::Denied {
+            reason: kukuri_core::DomeTransitionDenialReasonV1::VisitorBlocked,
+        },
+        1_100,
+    );
+    assert!(denied.unwrap_err().to_string().contains("VISITOR_BLOCKED"));
+    assert_eq!(runtime.transition_reservation_count(), 0);
+
+    let ticket = runtime
+        .prepare_transition_admission(
+            transition_request(&participant, "transition-expired"),
+            DomeTransitionAccessDecisionV1::Allowed,
+            1_100,
+        )
+        .unwrap();
+    assert!(
+        runtime
+            .commit_transition_admission(&ticket, [0, 90, 0], [0, 0, 0], ticket.expires_at)
+            .is_err()
+    );
+    assert_eq!(runtime.transition_reservation_count(), 0);
+    assert_eq!(runtime.participant_count(), 0);
+}
+
+#[test]
+fn source_prepare_drops_grab_clears_seat_and_fences_interactions() {
+    let (owner, lease, instance, mut preset) = fixture();
+    preset.dome.customization.persistent_props = vec![MetaversePersistentPropV1 {
+        prop_id: "seat-1".into(),
+        asset_ref: None,
+        primitive_fallback: MetaversePrimitive::Cube,
+        position: [0, 100, 0],
+        rotation: [0, 0, 0],
+        scale: [100, 100, 100],
+        visual_only: false,
+        interactions: Vec::new(),
+        collider: None,
+    }];
+    let participant = KukuriKeys::generate();
+    let participant_id = participant.public_key().as_str().to_string();
+    let mut runtime = DomeSessionRuntime::start_with_session_id(
+        lease,
+        owner,
+        &instance,
+        &preset,
+        "session-1",
+        1_000,
+    )
+    .unwrap();
+    runtime
+        .apply_signed_input(&signed_input(&participant, 1, DomeSessionInputKindV1::Join))
+        .unwrap();
+    runtime
+        .apply_signed_input(&signed_input(
+            &participant,
+            2,
+            DomeSessionInputKindV1::Grab {
+                prop_id: "seat-1".into(),
+            },
+        ))
+        .unwrap();
+    runtime
+        .apply_signed_input(&signed_input(
+            &participant,
+            3,
+            DomeSessionInputKindV1::Sit {
+                prop_id: "seat-1".into(),
+            },
+        ))
+        .unwrap();
+    runtime
+        .apply_signed_input(&signed_input(
+            &participant,
+            4,
+            DomeSessionInputKindV1::PrepareTransition {
+                transition_id: "transition-1".into(),
+                direction: DomeDirection::North,
+            },
+        ))
+        .unwrap();
+    assert_eq!(runtime.bodies_by_id["seat-1"].grabbed_by, None);
+    assert!(!runtime.seated_on.contains_key(&participant_id));
+    assert!(runtime.prepared_exits.contains_key(&participant_id));
+    assert!(
+        runtime
+            .apply_signed_input(&signed_input(
+                &participant,
+                5,
+                DomeSessionInputKindV1::Grab {
+                    prop_id: "seat-1".into(),
+                },
+            ))
+            .unwrap_err()
+            .to_string()
+            .contains("SOURCE_INPUT_FENCED")
+    );
+    runtime
+        .apply_signed_input(&signed_input(
+            &participant,
+            5,
+            DomeSessionInputKindV1::CompleteTransition {
+                transition_id: "transition-1".into(),
+            },
+        ))
+        .unwrap();
+    assert_eq!(runtime.participant_count(), 0);
+}
+
+#[test]
+fn only_a_prepared_avatar_can_enter_the_connection_zone() {
+    let (owner, lease, instance, preset) = fixture();
+    let participant = KukuriKeys::generate();
+    let participant_id = participant.public_key().as_str().to_string();
+    let mut runtime = DomeSessionRuntime::start_with_session_id(
+        lease,
+        owner,
+        &instance,
+        &preset,
+        "session-1",
+        1_000,
+    )
+    .unwrap();
+    runtime
+        .add_guest_prop(GuestPropSpec {
+            prop_id: "blocked-prop".into(),
+            position: [0, 90, -3_000],
+            expires_at: 10_000,
+        })
+        .unwrap();
+    runtime
+        .apply_signed_input(&signed_input(&participant, 1, DomeSessionInputKindV1::Join))
+        .unwrap();
+    let prop = runtime.rigid_bodies[runtime.bodies_by_id["blocked-prop"].handle].translation();
+    assert!(prop.z > -20.0, "props must remain inside the hemisphere");
+
+    runtime
+        .apply_signed_input(&signed_input(
+            &participant,
+            2,
+            DomeSessionInputKindV1::PrepareTransition {
+                transition_id: "transition-corridor".into(),
+                direction: DomeDirection::North,
+            },
+        ))
+        .unwrap();
+    runtime
+        .apply_signed_input(&signed_input(
+            &participant,
+            3,
+            DomeSessionInputKindV1::Move {
+                position: [0, 90, -3_000],
+                rotation: [0, 0, 0],
+                animation: "walk".into(),
+            },
+        ))
+        .unwrap();
+    let avatar_id = format!("avatar:{participant_id}");
+    let avatar = runtime.rigid_bodies[runtime.bodies_by_id[&avatar_id].handle].translation();
+    assert_eq!(
+        meters_to_centimeters([avatar.x, avatar.y, avatar.z])[2],
+        -3_000
+    );
 }
 
 #[test]

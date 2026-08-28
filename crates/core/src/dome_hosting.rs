@@ -206,6 +206,16 @@ pub enum DomeSessionInputKindV1 {
     Sit {
         prop_id: String,
     },
+    PrepareTransition {
+        transition_id: String,
+        direction: crate::DomeDirection,
+    },
+    AbortTransition {
+        transition_id: String,
+    },
+    CompleteTransition {
+        transition_id: String,
+    },
     SpawnGuestProp {
         prop: MetaversePersistentPropV1,
         expires_at: i64,

@@ -31,6 +31,7 @@ pub(crate) fn step_name(step: &ScenarioStep) -> &'static str {
         }
         ScenarioStep::MoveMetaverseDome { .. } => "move_metaverse_dome",
         ScenarioStep::ExerciseDomeConnections { .. } => "exercise_dome_connections",
+        ScenarioStep::ExerciseDomeTransition { .. } => "exercise_dome_transition",
         ScenarioStep::AssertDomeConnectionTopology { .. } => "assert_dome_connection_topology",
         ScenarioStep::RevokeLocalDomeConnection => "revoke_local_dome_connection",
         ScenarioStep::AssertMetaverseDomeMissing { .. } => "assert_metaverse_dome_missing",

@@ -1,19 +1,20 @@
 use crate::service::*;
 use crate::views::{
-    ActivateCommunityNodeDomeHostingInput, CloseDomeHostingInput, CommitDomeLayoutInput,
-    DomeHostingView, DomeLayoutCommitOutcome, DomeLayoutCommitView,
-    PrepareCommunityNodeDomeHostingInput, ResyncDomeSnapshotsInput, StartOwnerDomeHostingInput,
-    SubmitDomeSessionInput, UpdateMetaverseRoomInput,
+    AbortDomeTransitionInput, ActivateCommunityNodeDomeHostingInput, CloseDomeHostingInput,
+    CommitDomeLayoutInput, CommitDomeTransitionInput, DomeHostingView, DomeLayoutCommitOutcome,
+    DomeLayoutCommitView, PrepareCommunityNodeDomeHostingInput, PrepareDomeTransitionInput,
+    ResyncDomeSnapshotsInput, StartOwnerDomeHostingInput, SubmitDomeSessionInput,
+    UpdateMetaverseRoomInput,
 };
 use kukuri_core::{
     DOME_HOSTING_MAX_LEASE_MILLIS, DOME_LAYOUT_COMMIT_MIN_INTERVAL_MILLIS, DomeHostTargetV1,
     DomeHostingLeaseV1, DomeHostingRecordV1, DomeHostingStateKindV1, DomeInstanceStatusV1,
-    DomeLayoutCommitV1, SignedDomeHostingAcceptanceV1, SignedDomeHostingLeaseV1,
-    SignedDomeLayoutCandidateV1, SignedDomeLayoutCommitV1, SignedDomePhysicsSnapshotV1,
-    SpatialContextV1, accept_dome_hosting_lease, activate_dome_hosting_lease,
-    build_signed_dome_hosting_lease, build_signed_dome_layout_commit,
-    build_signed_dome_session_input, close_dome_hosting_lease, dome_layout_candidate_digest,
-    resolve_dome_hosting_state, verify_signed_dome_layout_candidate,
+    DomeLayoutCommitV1, DomeTransitionAccessDecisionV1, DomeTransitionAdmissionTicketV1,
+    SignedDomeHostingAcceptanceV1, SignedDomeHostingLeaseV1, SignedDomeLayoutCandidateV1,
+    SignedDomeLayoutCommitV1, SignedDomePhysicsSnapshotV1, SpatialContextV1,
+    accept_dome_hosting_lease, activate_dome_hosting_lease, build_signed_dome_hosting_lease,
+    build_signed_dome_layout_commit, build_signed_dome_session_input, close_dome_hosting_lease,
+    dome_layout_candidate_digest, resolve_dome_hosting_state, verify_signed_dome_layout_candidate,
 };
 
 const HOSTING_RECORD_PREFIX: &str = "metaverse/dome-hosting";
@@ -269,6 +270,84 @@ impl AppService {
         )?;
         runtime.apply_signed_input_at(&signed, now)?;
         runtime.signed_snapshot(now)
+    }
+
+    pub async fn prepare_dome_transition(
+        &self,
+        input: PrepareDomeTransitionInput,
+    ) -> Result<DomeTransitionAdmissionTicketV1> {
+        input.request.validate()?;
+        let topology = self
+            .list_dome_connection_topology(input.request.spatial_context.clone())
+            .await?;
+        if topology.resolution.topology.topology_digest != input.request.topology_digest
+            || !topology
+                .resolution
+                .topology
+                .active_connection_ids
+                .contains(&input.request.connection_id)
+        {
+            anyhow::bail!("DOME_TRANSITION_STALE_TOPOLOGY");
+        }
+        let matches_connection = topology.connections.iter().any(|view| {
+            let agreement = &view.record.agreement;
+            agreement.connection_id == input.request.connection_id
+                && ((agreement.proposer.instance_id == input.request.source_instance_id
+                    && agreement.proposer.instance_generation
+                        == input.request.source_instance_generation
+                    && agreement.proposer.direction == input.request.direction
+                    && agreement.receiver.instance_id == input.request.target_instance_id
+                    && agreement.receiver.instance_generation
+                        == input.request.target_instance_generation)
+                    || (agreement.receiver.instance_id == input.request.source_instance_id
+                        && agreement.receiver.instance_generation
+                            == input.request.source_instance_generation
+                        && agreement.receiver.direction == input.request.direction
+                        && agreement.proposer.instance_id == input.request.target_instance_id
+                        && agreement.proposer.instance_generation
+                            == input.request.target_instance_generation))
+        });
+        if !matches_connection {
+            anyhow::bail!("DOME_TRANSITION_STALE_TOPOLOGY");
+        }
+        let now = Utc::now().timestamp_millis();
+        self.dome_host_sessions
+            .lock()
+            .await
+            .get_mut(&input.request.target_instance_id)
+            .context("this device is not the active destination Dome host")?
+            .prepare_transition_admission(
+                input.request,
+                DomeTransitionAccessDecisionV1::Allowed,
+                now,
+            )
+    }
+
+    pub async fn commit_dome_transition(&self, input: CommitDomeTransitionInput) -> Result<()> {
+        self.dome_host_sessions
+            .lock()
+            .await
+            .get_mut(&input.ticket.request.target_instance_id)
+            .context("this device is not the active destination Dome host")?
+            .commit_transition_admission(
+                &input.ticket,
+                input.position,
+                input.rotation,
+                Utc::now().timestamp_millis(),
+            )
+    }
+
+    pub async fn abort_dome_transition(&self, input: AbortDomeTransitionInput) -> Result<()> {
+        self.dome_host_sessions
+            .lock()
+            .await
+            .get_mut(&input.ticket.request.target_instance_id)
+            .context("this device is not the active destination Dome host")?
+            .abort_transition_admission(
+                &input.ticket.request.transition_id,
+                &input.ticket.request.participant_pubkey,
+                Utc::now().timestamp_millis(),
+            )
     }
 
     pub async fn resync_dome_snapshots(

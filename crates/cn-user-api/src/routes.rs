@@ -17,6 +17,7 @@ use kukuri_cn_protocol::{
     CONSENTS_PATH, CONSENTS_STATUS_PATH, DOME_HOSTING_ACTIVATE_PATH, DOME_HOSTING_ASSIGNMENTS_PATH,
     DOME_HOSTING_LAYOUT_CANDIDATE_PATH, DOME_HOSTING_RELEASE_PATH, DOME_HOSTING_SESSION_INPUT_PATH,
     DOME_HOSTING_SESSION_WS_PATH, DOME_HOSTING_SNAPSHOT_RESYNC_PATH, DOME_HOSTING_STATUS_ROUTE,
+    DOME_TRANSITION_ABORT_PATH, DOME_TRANSITION_COMMIT_PATH, DOME_TRANSITION_PREPARE_PATH,
     INDEX_DISCOVERY_PATH, INDEX_RECOMMENDATIONS_PATH, INDEX_SEARCH_PATH, INDEXING_REQUESTS_PATH,
     NODE_MANIFEST_PATH, RELATION_NEIGHBORS_PATH, RELATION_OPTOUT_PATH, RELATION_USERS_ROUTE,
     REPORT_PATH, RIGHTS_REQUEST_CREATE_PATH, RIGHTS_REQUEST_FORM_PATH, RIGHTS_REQUEST_SCOPE_PATH,
@@ -29,8 +30,9 @@ use tower_http::trace::TraceLayer;
 use crate::admin::admin_router;
 use crate::config::{RateLimitConfig, UserApiConfig};
 use crate::dome_hosting::{
-    activate_dome_hosting, assign_dome_hosting, capture_dome_layout_candidate,
-    dome_hosting_session_ws, dome_hosting_status, release_dome_hosting,
+    abort_dome_transition, activate_dome_hosting, assign_dome_hosting,
+    capture_dome_layout_candidate, commit_dome_transition, dome_hosting_session_ws,
+    dome_hosting_status, prepare_dome_transition, release_dome_hosting,
     resync_dome_hosting_snapshots, submit_dome_hosting_input,
 };
 use crate::handlers::auth::{auth_challenge, auth_verify};
@@ -77,6 +79,9 @@ pub fn app_router(state: UserApiState) -> Router {
             post(submit_dome_hosting_input),
         )
         .route(DOME_HOSTING_SESSION_WS_PATH, get(dome_hosting_session_ws))
+        .route(DOME_TRANSITION_PREPARE_PATH, post(prepare_dome_transition))
+        .route(DOME_TRANSITION_COMMIT_PATH, post(commit_dome_transition))
+        .route(DOME_TRANSITION_ABORT_PATH, post(abort_dome_transition))
         .route(
             DOME_HOSTING_LAYOUT_CANDIDATE_PATH,
             post(capture_dome_layout_candidate),

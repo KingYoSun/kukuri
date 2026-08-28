@@ -131,6 +131,18 @@ export type MetaversePrimitive = "cube" | "sphere";
 
 export type DomeDirection = "north" | "east" | "south" | "west";
 
+export type DomeBoundaryStateV1 = "closed" | "loading" | "ready" | "denied" | "full" | "unhosted" | "error" | "stale";
+
+export type DomeTransitionDenialReasonV1 = "host_unavailable" | "access_denied" | "owners_blocked" | "visitor_blocked" | "capacity_full" | "assets_unavailable" | "stale_topology" | "stale_session" | "invalid_ticket";
+
+export type DomeTransitionPhaseV1 = "closed" | "loading" | "ready" | "preparing" | "provisional" | "committing" | "committed" | "failed";
+
+export type DomeTransitionAdmissionRequestV1 = { transition_id: string, connection_id: string, topology_digest: string, spatial_context: SpatialContextV1, source_instance_id: string, source_instance_generation: number, target_instance_id: string, target_instance_generation: number, participant_pubkey: string, direction: DomeDirection, requested_at: number, };
+
+export type DomeTransitionAdmissionTicketV1 = { request: DomeTransitionAdmissionRequestV1, target_lease_epoch: number, target_session_id: string, expires_at: number, };
+
+export type DomeTransitionAccessDecisionV1 = { "status": "allowed" } | { "status": "denied", reason: DomeTransitionDenialReasonV1, };
+
 export type DomeMaterialPreset = "concrete" | "stone" | "metal" | "wood";
 
 export type DomeSurfaceCustomizationV1 = { wall_material: DomeMaterialPreset, floor_material: DomeMaterialPreset, wall_texture?: MetaverseAssetRef | null, floor_texture?: MetaverseAssetRef | null, };
@@ -191,7 +203,7 @@ export type DomeHostingStateKindV1 = "closed" | "owner_hosted" | "community_node
 
 export type DomeHostingStateV1 = { kind: DomeHostingStateKindV1, host?: DomeHostTargetV1 | null, lease_id?: string | null, lease_epoch?: number | null, lease_expires_at?: number | null, session_id?: string | null, reason?: string | null, last_heartbeat_at?: number | null, };
 
-export type DomeSessionInputKindV1 = { "type": "join" } | { "type": "leave" } | { "type": "move", position: [number, number, number], rotation: [number, number, number], animation: string, } | { "type": "grab", prop_id: string, } | { "type": "throw", prop_id: string, impulse: [number, number, number], } | { "type": "push", prop_id: string, impulse: [number, number, number], } | { "type": "sit", prop_id: string, } | { "type": "spawn_guest_prop", prop: MetaversePersistentPropV1, expires_at: number, } | { "type": "upsert_persistent_prop", prop: MetaversePersistentPropV1, } | { "type": "delete_persistent_prop", prop_id: string, };
+export type DomeSessionInputKindV1 = { "type": "join" } | { "type": "leave" } | { "type": "move", position: [number, number, number], rotation: [number, number, number], animation: string, } | { "type": "grab", prop_id: string, } | { "type": "throw", prop_id: string, impulse: [number, number, number], } | { "type": "push", prop_id: string, impulse: [number, number, number], } | { "type": "sit", prop_id: string, } | { "type": "prepare_transition", transition_id: string, direction: DomeDirection, } | { "type": "abort_transition", transition_id: string, } | { "type": "complete_transition", transition_id: string, } | { "type": "spawn_guest_prop", prop: MetaversePersistentPropV1, expires_at: number, } | { "type": "upsert_persistent_prop", prop: MetaversePersistentPropV1, } | { "type": "delete_persistent_prop", prop_id: string, };
 
 export type DomePhysicsBodyKindV1 = "avatar" | "persistent_prop" | "guest_prop";
 
@@ -576,6 +588,12 @@ export type DelegateDomeHostingRequest = { spatial_context: SpatialContextV1, in
 export type CloseDomeHostingRequest = { spatial_context: SpatialContextV1, instance_id: string, };
 
 export type SubmitDomeSessionInputRequest = { spatial_context: SpatialContextV1, instance_id: string, sequence: number, input: DomeSessionInputKindV1, };
+
+export type PrepareDomeTransitionRequest = { request: DomeTransitionAdmissionRequestV1, };
+
+export type CommitDomeTransitionRequest = { ticket: DomeTransitionAdmissionTicketV1, position: [number, number, number], rotation: [number, number, number], };
+
+export type AbortDomeTransitionRequest = { ticket: DomeTransitionAdmissionTicketV1, };
 
 export type CommitDomeLayoutRequest = { spatial_context: SpatialContextV1, instance_id: string, operation_id: string, };
 

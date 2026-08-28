@@ -34,6 +34,8 @@ import type {
   DomeMoveRecordV1,
   DomePhysicsSnapshotV1,
   DomeSessionInputKindV1,
+  DomeTransitionAdmissionRequestV1,
+  DomeTransitionAdmissionTicketV1,
   FriendOnlyGrantPreview,
   FriendPlusSharePreview,
   GameRoomStatus,
@@ -360,6 +362,15 @@ export interface DesktopApi {
     sequence: number,
     input: DomeSessionInputKindV1
   ): Promise<DomePhysicsSnapshotV1>;
+  prepareDomeTransition(
+    request: DomeTransitionAdmissionRequestV1
+  ): Promise<DomeTransitionAdmissionTicketV1>;
+  commitDomeTransition(
+    ticket: DomeTransitionAdmissionTicketV1,
+    position: [number, number, number],
+    rotation: [number, number, number]
+  ): Promise<void>;
+  abortDomeTransition(ticket: DomeTransitionAdmissionTicketV1): Promise<void>;
   commitDomeLayout(
     spatialContext: SpatialContextV1,
     instanceId: string,

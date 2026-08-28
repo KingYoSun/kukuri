@@ -643,6 +643,140 @@ pub(crate) async fn run_desktop_smoke_scenario(
                         anyhow::bail!("cycle-forming Dome Connection was accepted");
                     }
                 }
+                ScenarioStep::ExerciseDomeTransition { local_title } => {
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
+                    if runtime.current_channel_id.is_some() {
+                        anyhow::bail!("Dome transition smoke currently requires a topic Context");
+                    }
+                    let context = SpatialContextV1::Topic {
+                        topic_id: TopicId::new(topic.clone()),
+                    };
+                    let source = runtime
+                        .app()?
+                        .list_game_rooms_scoped(&topic, TimelineScope::Public)
+                        .await?
+                        .into_iter()
+                        .find(|room| room.title == *local_title)
+                        .with_context(|| format!("source metaverse Dome not found: {local_title}"))?;
+                    let source_metaverse = source.metaverse.context("source metaverse state")?;
+                    let target_host = dome_connection_peer(&runtime, "dome-transition-target").await?;
+                    let target_instance_id = target_host
+                        .create_metaverse_room(
+                            &topic,
+                            CreateMetaverseRoomInput {
+                                title: "transition-target".into(),
+                                description: "seamless transition target".into(),
+                                max_peers: Some(8),
+                            },
+                        )
+                        .await?;
+                    runtime
+                        .app()?
+                        .create_dome_connection_proposal(CreateDomeConnectionProposalInput {
+                            proposal_id: "scenario-transition".into(),
+                            spatial_context: context.clone(),
+                            proposer_instance_id: source.room_id.clone(),
+                            receiver_instance_id: target_instance_id.clone(),
+                            proposer_direction: DomeDirection::East,
+                        })
+                        .await?;
+                    target_host
+                        .accept_dome_connection_proposal(AcceptDomeConnectionProposalInput {
+                            spatial_context: context.clone(),
+                            proposal_id: "scenario-transition".into(),
+                        })
+                        .await?;
+                    runtime
+                        .app()?
+                        .start_owner_dome_hosting(StartOwnerDomeHostingInput {
+                            spatial_context: context.clone(),
+                            instance_id: source.room_id.clone(),
+                            endpoint_id: "harness-transition-source".into(),
+                            lease_duration_millis: 60_000,
+                        })
+                        .await?;
+                    target_host
+                        .start_owner_dome_hosting(StartOwnerDomeHostingInput {
+                            spatial_context: context.clone(),
+                            instance_id: target_instance_id.clone(),
+                            endpoint_id: "harness-transition-target".into(),
+                            lease_duration_millis: 60_000,
+                        })
+                        .await?;
+                    runtime
+                        .app()?
+                        .submit_dome_session_input(SubmitDomeSessionInput {
+                            spatial_context: context.clone(),
+                            instance_id: source.room_id.clone(),
+                            sequence: 1,
+                            input: DomeSessionInputKindV1::Join,
+                        })
+                        .await?;
+                    runtime
+                        .app()?
+                        .submit_dome_session_input(SubmitDomeSessionInput {
+                            spatial_context: context.clone(),
+                            instance_id: source.room_id.clone(),
+                            sequence: 2,
+                            input: DomeSessionInputKindV1::PrepareTransition {
+                                transition_id: "scenario-transition-handoff".into(),
+                                direction: DomeDirection::East,
+                            },
+                        })
+                        .await?;
+                    let topology = runtime
+                        .app()?
+                        .list_dome_connection_topology(context.clone())
+                        .await?;
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)?
+                        .as_millis()
+                        .try_into()?;
+                    let ticket = target_host
+                        .prepare_dome_transition(PrepareDomeTransitionInput {
+                            request: DomeTransitionAdmissionRequestV1 {
+                                transition_id: "scenario-transition-handoff".into(),
+                                connection_id: "connection-scenario-transition".into(),
+                                topology_digest: topology.resolution.topology.topology_digest,
+                                spatial_context: context.clone(),
+                                source_instance_id: source.room_id.clone(),
+                                source_instance_generation: source_metaverse.instance_generation,
+                                target_instance_id: target_instance_id.clone(),
+                                target_instance_generation: 1,
+                                participant_pubkey: runtime.keys.public_key(),
+                                direction: DomeDirection::East,
+                                requested_at: now,
+                            },
+                        })
+                        .await?;
+                    target_host
+                        .commit_dome_transition(CommitDomeTransitionInput {
+                            ticket,
+                            position: [-2_830, 90, 0],
+                            rotation: [0, 0, 0],
+                        })
+                        .await?;
+                    runtime
+                        .app()?
+                        .submit_dome_session_input(SubmitDomeSessionInput {
+                            spatial_context: context.clone(),
+                            instance_id: source.room_id.clone(),
+                            sequence: 3,
+                            input: DomeSessionInputKindV1::CompleteTransition {
+                                transition_id: "scenario-transition-handoff".into(),
+                            },
+                        })
+                        .await?;
+                    let source_hosting = runtime
+                        .app()?
+                        .get_dome_hosting(context.clone(), &source.room_id)
+                        .await?;
+                    let target_hosting = target_host
+                        .get_dome_hosting(context, &target_instance_id)
+                        .await?;
+                    anyhow::ensure!(source_hosting.participants == 0);
+                    anyhow::ensure!(target_hosting.participants == 1);
+                }
                 ScenarioStep::AssertDomeConnectionTopology {
                     component_count,
                     active_connection_count,

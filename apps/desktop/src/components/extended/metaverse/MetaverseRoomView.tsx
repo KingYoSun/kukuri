@@ -7,7 +7,15 @@ import {
 
 import { Card } from '@/components/ui/card';
 import type { SupportedLocale } from '@/i18n';
-import type { DomeCustomizationV1, GameRoomView, MetaverseAssetRef, MetaverseInteractionKind, SharedRoomObjectV1 } from '@/lib/api';
+import type {
+  DomeBoundaryStateV1,
+  DomeCustomizationV1,
+  DomeDirection,
+  GameRoomView,
+  MetaverseAssetRef,
+  MetaverseInteractionKind,
+  SharedRoomObjectV1,
+} from '@/lib/api';
 import { MetaverseScene, type SessionPropView } from '../MetaverseScene';
 import type {
   AvatarAssetStatus,
@@ -20,6 +28,7 @@ import type {
 } from '../MetaverseSceneModel';
 import { MetaverseRoomControls } from './MetaverseRoomControls';
 import { useColumnRuntime } from '@/shell/ColumnRuntimeContext';
+import type { DomeNeighborTransitionView } from './DomeTransitionModel';
 
 export type MetaverseRoomViewProps = {
   room: GameRoomView | null;
@@ -31,6 +40,9 @@ export type MetaverseRoomViewProps = {
   sessionProps?: SessionPropView[];
   avatarAssetUrl: string | null;
   domeTextureUrls: { wall: string | null; floor: string | null };
+  transitionNeighbors?: DomeNeighborTransitionView[];
+  transitionBoundaryStates?: Partial<Record<DomeDirection, DomeBoundaryStateV1>>;
+  handoffTransform?: AvatarTransform | null;
   latestChatByPeer: Record<string, LatestChatBubble>;
   connectionState: MetaverseRoomConnectionState;
   now: number;
@@ -80,6 +92,9 @@ export function MetaverseRoomView({
   sessionProps,
   avatarAssetUrl,
   domeTextureUrls,
+  transitionNeighbors,
+  transitionBoundaryStates,
+  handoffTransform,
   latestChatByPeer,
   connectionState,
   now,
@@ -177,6 +192,9 @@ export function MetaverseRoomView({
           sessionProps={sessionProps}
           avatarAssetUrl={avatarAssetUrl}
           domeTextureUrls={domeTextureUrls}
+          transitionNeighbors={transitionNeighbors}
+          transitionBoundaryStates={transitionBoundaryStates}
+          initialLocalTransform={handoffTransform}
           latestChatByPeer={latestChatByPeer}
           connectionState={connectionState}
           now={now}

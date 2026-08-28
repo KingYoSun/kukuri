@@ -1,18 +1,32 @@
 import * as THREE from 'three';
 
-import { openingContains } from './DomeSceneModel';
+import type { DomeDirection } from '@/lib/api';
+import { DOME_DIRECTIONS, openingContains } from './DomeSceneModel';
 
 const SCENE_UNITS_PER_CENTIMETER = 0.01;
 
-function pointFallsInsideOpening(x: number, y: number, z: number): boolean {
+function pointFallsInsideOpening(
+  x: number,
+  y: number,
+  z: number,
+  openingDirections: ReadonlySet<DomeDirection>
+): boolean {
   const xCm = x / SCENE_UNITS_PER_CENTIMETER;
   const yCm = y / SCENE_UNITS_PER_CENTIMETER;
   const zCm = z / SCENE_UNITS_PER_CENTIMETER;
-  const tangentCm = Math.abs(zCm) >= Math.abs(xCm) ? xCm : zCm;
-  return openingContains(tangentCm, yCm);
+  const northSouth = Math.abs(zCm) >= Math.abs(xCm);
+  const direction: DomeDirection = northSouth
+    ? (zCm < 0 ? 'north' : 'south')
+    : (xCm < 0 ? 'west' : 'east');
+  const tangentCm = northSouth ? xCm : zCm;
+  return openingDirections.has(direction) && openingContains(tangentCm, yCm);
 }
 
-export function createDomeHemisphereGeometry(radiusCm: number): THREE.BufferGeometry {
+export function createDomeHemisphereGeometry(
+  radiusCm: number,
+  openingDirections: readonly DomeDirection[] = DOME_DIRECTIONS
+): THREE.BufferGeometry {
+  const openings = new Set(openingDirections);
   const radius = radiusCm * SCENE_UNITS_PER_CENTIMETER;
   const source = new THREE.SphereGeometry(
     radius,
@@ -29,7 +43,7 @@ export function createDomeHemisphereGeometry(radiusCm: number): THREE.BufferGeom
     const centroidX = (positions.getX(index) + positions.getX(index + 1) + positions.getX(index + 2)) / 3;
     const centroidY = (positions.getY(index) + positions.getY(index + 1) + positions.getY(index + 2)) / 3;
     const centroidZ = (positions.getZ(index) + positions.getZ(index + 1) + positions.getZ(index + 2)) / 3;
-    if (pointFallsInsideOpening(centroidX, centroidY, centroidZ)) continue;
+    if (pointFallsInsideOpening(centroidX, centroidY, centroidZ, openings)) continue;
     for (let vertex = 0; vertex < 3; vertex += 1) {
       kept.push(
         positions.getX(index + vertex),

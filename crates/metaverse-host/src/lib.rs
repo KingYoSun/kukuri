@@ -2,15 +2,16 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use anyhow::{Context, Result, bail};
 use kukuri_core::{
-    DOME_SNAPSHOT_RING_CAPACITY, DomeHostHeartbeatV1, DomeHostingLeaseV1, DomeInstanceManifestV1,
-    DomeLayoutCandidateV1, DomePhysicsBodyKindV1, DomePhysicsBodyV1, DomePhysicsSnapshotV1,
-    DomePresetManifestV1, DomeSessionInputKindV1, DomeSessionInputV1, KukuriKeys,
-    MetaverseAssetRef, MetaverseBudgetResource, MetaverseBudgetScope, MetaversePersistentPropV1,
-    MetaverseResourceBudgetConfig, MetaverseResourceMetricCountV1, MetaverseResourceMetricsV1,
-    MetaverseResourceRejection, MetaverseResourceRejectionReason, SignedDomeHostHeartbeatV1,
-    SignedDomeHostingLeaseV1, SignedDomeLayoutCandidateV1, SignedDomePhysicsSnapshotV1,
-    SignedDomeSessionInputV1, build_signed_dome_host_heartbeat, build_signed_dome_layout_candidate,
-    build_signed_dome_physics_snapshot, fixed_dome_v1, validate_dome_asset_budget,
+    DOME_SNAPSHOT_RING_CAPACITY, DomeDirection, DomeHostHeartbeatV1, DomeHostingLeaseV1,
+    DomeInstanceManifestV1, DomeLayoutCandidateV1, DomePhysicsBodyKindV1, DomePhysicsBodyV1,
+    DomePhysicsSnapshotV1, DomePresetManifestV1, DomeSessionInputKindV1, DomeSessionInputV1,
+    DomeTransitionAdmissionTicketV1, KukuriKeys, MetaverseAssetRef, MetaverseBudgetResource,
+    MetaverseBudgetScope, MetaversePersistentPropV1, MetaverseResourceBudgetConfig,
+    MetaverseResourceMetricCountV1, MetaverseResourceMetricsV1, MetaverseResourceRejection,
+    MetaverseResourceRejectionReason, SignedDomeHostHeartbeatV1, SignedDomeHostingLeaseV1,
+    SignedDomeLayoutCandidateV1, SignedDomePhysicsSnapshotV1, SignedDomeSessionInputV1,
+    build_signed_dome_host_heartbeat, build_signed_dome_layout_candidate,
+    build_signed_dome_physics_snapshot, validate_dome_asset_budget,
     validate_dome_instance_manifest, validate_dome_preset_manifest,
     validate_metaverse_asset_metadata, verify_signed_dome_hosting_lease,
     verify_signed_dome_session_input,
@@ -19,6 +20,9 @@ use rapier3d::prelude::*;
 use uuid::Uuid;
 
 mod support;
+mod transition;
+
+use transition::PreparedExit;
 
 use support::{
     centimeters_to_meters, check_limit, collider_builder, meters_to_centimeters,
@@ -65,6 +69,11 @@ pub struct DomeSessionRuntime {
     host_keys: KukuriKeys,
     session_id: String,
     participants: BTreeSet<String>,
+    transition_reservations: BTreeMap<String, DomeTransitionAdmissionTicketV1>,
+    committed_transitions: BTreeMap<String, DomeTransitionAdmissionTicketV1>,
+    prepared_exits: BTreeMap<String, PreparedExit>,
+    transition_entries: BTreeMap<String, DomeDirection>,
+    seated_on: BTreeMap<String, String>,
     last_input_sequence: BTreeMap<String, u64>,
     bodies_by_id: BTreeMap<String, RuntimeBody>,
     pipeline: PhysicsPipeline,
@@ -195,6 +204,11 @@ impl DomeSessionRuntime {
             host_keys,
             session_id,
             participants: BTreeSet::new(),
+            transition_reservations: BTreeMap::new(),
+            committed_transitions: BTreeMap::new(),
+            prepared_exits: BTreeMap::new(),
+            transition_entries: BTreeMap::new(),
+            seated_on: BTreeMap::new(),
             last_input_sequence: BTreeMap::new(),
             bodies_by_id: BTreeMap::new(),
             pipeline: PhysicsPipeline::new(),
@@ -323,7 +337,9 @@ impl DomeSessionRuntime {
             }
             return Err(error);
         }
-        self.apply_input(&signed.input)
+        self.apply_input(&signed.input)?;
+        self.clamp_bodies_to_dome();
+        Ok(())
     }
 
     pub fn advance_to(&mut self, now_millis: i64) -> Result<()> {
@@ -540,6 +556,9 @@ impl DomeSessionRuntime {
             }
             DomeSessionInputKindV1::Leave => {
                 self.participants.remove(&participant_id);
+                self.prepared_exits.remove(&participant_id);
+                self.transition_entries.remove(&participant_id);
+                self.seated_on.remove(&participant_id);
                 self.remove_body(&format!("avatar:{participant_id}"));
                 for runtime_body in self.bodies_by_id.values_mut() {
                     if runtime_body.grabbed_by.as_deref() == Some(participant_id.as_str()) {
@@ -603,6 +622,20 @@ impl DomeSessionRuntime {
                 if !self.bodies_by_id.contains_key(prop_id) {
                     bail!("Dome seat prop does not exist");
                 }
+                self.seated_on
+                    .insert(participant_id.clone(), prop_id.clone());
+            }
+            DomeSessionInputKindV1::PrepareTransition {
+                transition_id,
+                direction,
+            } => {
+                self.prepare_transition_exit(&participant_id, transition_id, *direction)?;
+            }
+            DomeSessionInputKindV1::AbortTransition { transition_id } => {
+                self.abort_transition_exit(&participant_id, transition_id)?;
+            }
+            DomeSessionInputKindV1::CompleteTransition { transition_id } => {
+                self.complete_transition_exit(&participant_id, transition_id)?;
             }
             DomeSessionInputKindV1::SpawnGuestProp { prop, expires_at } => {
                 self.require_participant(&participant_id)?;
@@ -680,6 +713,18 @@ impl DomeSessionRuntime {
                     self.budget.player.max_input_bytes_per_second,
                 ));
             }
+        }
+        if self.prepared_exits.contains_key(&participant_id)
+            && matches!(
+                input.input,
+                DomeSessionInputKindV1::Join
+                    | DomeSessionInputKindV1::Grab { .. }
+                    | DomeSessionInputKindV1::Throw { .. }
+                    | DomeSessionInputKindV1::Push { .. }
+                    | DomeSessionInputKindV1::Sit { .. }
+            )
+        {
+            bail!("DOME_TRANSITION_SOURCE_INPUT_FENCED");
         }
         match &input.input {
             DomeSessionInputKindV1::Join if !self.participants.contains(&participant_id) => {
@@ -944,52 +989,6 @@ impl DomeSessionRuntime {
             .rigid_body_high_water
             .max(self.bodies_by_id.len().try_into().unwrap_or(u32::MAX));
         Ok(())
-    }
-
-    fn expire_guest_props(&mut self, now_millis: i64) {
-        let expired: Vec<String> = self
-            .bodies_by_id
-            .iter()
-            .filter(|(_, body)| {
-                body.kind == DomePhysicsBodyKindV1::GuestProp
-                    && body
-                        .expires_at
-                        .is_some_and(|expires_at| expires_at <= now_millis)
-            })
-            .map(|(id, _)| id.clone())
-            .collect();
-        for id in expired {
-            self.remove_body(&id);
-        }
-    }
-
-    fn remove_body(&mut self, entity_id: &str) {
-        if let Some(body) = self.bodies_by_id.remove(entity_id) {
-            self.rigid_bodies.remove(
-                body.handle,
-                &mut self.island_manager,
-                &mut self.colliders,
-                &mut self.impulse_joints,
-                &mut self.multibody_joints,
-                true,
-            );
-        }
-    }
-
-    fn clamp_bodies_to_dome(&mut self) {
-        let radius = fixed_dome_v1().inner_radius_cm as f32 / 100.0;
-        for runtime_body in self.bodies_by_id.values() {
-            let Some(body) = self.rigid_bodies.get_mut(runtime_body.handle) else {
-                continue;
-            };
-            let mut translation = body.translation();
-            translation.y = translation.y.max(0.0);
-            let distance = translation.length();
-            if distance > radius {
-                translation *= (radius - 0.05) / distance;
-            }
-            body.set_translation(translation, true);
-        }
     }
 }
 

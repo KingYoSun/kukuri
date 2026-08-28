@@ -4,6 +4,7 @@ mod dome_connections;
 mod dome_envelopes;
 mod dome_hosting;
 mod dome_layout;
+mod dome_transition;
 mod envelope;
 mod game;
 mod ids;
@@ -66,6 +67,14 @@ pub use dome_layout::{
     SignedDomeLayoutCandidateV1, SignedDomeLayoutCommitV1, build_signed_dome_layout_candidate,
     build_signed_dome_layout_commit, dome_layout_candidate_digest,
     verify_signed_dome_layout_candidate, verify_signed_dome_layout_commit,
+};
+pub use dome_transition::{
+    DOME_TRANSITION_CROSSING_HYSTERESIS_CM, DOME_TRANSITION_TICKET_TTL_MILLIS, DomeBoundaryStateV1,
+    DomeTransitionAccessDecisionV1, DomeTransitionAdmissionRequestV1,
+    DomeTransitionAdmissionTicketV1, DomeTransitionDenialReasonV1, DomeTransitionPhaseV1,
+    advance_dome_transition_phase, crossed_dome_transition_center, dome_transition_axis_cm,
+    dome_transition_component_position_cm, dome_transition_local_position_cm,
+    dome_transition_progress_millionths, transform_avatar_between_domes_cm,
 };
 pub(crate) use envelope::sign_envelope_at;
 pub use envelope::{

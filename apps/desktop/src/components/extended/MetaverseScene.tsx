@@ -13,9 +13,20 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import type { SupportedLocale } from '@/i18n';
-import type { GameRoomView, MetaverseColliderV1, SharedRoomObjectV1 } from '@/lib/api';
+import type {
+  DomeBoundaryStateV1,
+  DomeDirection,
+  GameRoomView,
+  MetaverseColliderV1,
+  SharedRoomObjectV1,
+} from '@/lib/api';
 import { FixedDome } from './metaverse/FixedDome';
-import { clampAvatarToDome, resolveDomeCollider } from './metaverse/DomeSceneModel';
+import { resolveDomeCollider } from './metaverse/DomeSceneModel';
+import {
+  clampAvatarToTransitionBoundaries,
+  transitionEnvironmentAtPosition,
+  type DomeNeighborTransitionView,
+} from './metaverse/DomeTransitionModel';
 import {
   createClientResourcePlan,
   readClientResourceBudget,
@@ -53,6 +64,9 @@ type SceneProps = {
   sessionProps?: SessionPropView[];
   avatarAssetUrl: string | null;
   domeTextureUrls: { wall: string | null; floor: string | null };
+  transitionNeighbors?: DomeNeighborTransitionView[];
+  transitionBoundaryStates?: Partial<Record<DomeDirection, DomeBoundaryStateV1>>;
+  initialLocalTransform?: AvatarTransform | null;
   latestChatByPeer: Record<string, LatestChatBubble>;
   connectionState: MetaverseRoomConnectionState;
   now: number;
@@ -468,15 +482,22 @@ function LocalAvatar({
   chatBubble,
   onLocalTransform,
   onAvatarAssetStatus,
+  transitionBoundaryStates = {},
+  initialLocalTransform = null,
+  gravityMilli,
   controlsEnabled = true,
-}: Pick<SceneProps, 'room' | 'localPeerId' | 'avatarAssetUrl' | 'onLocalTransform' | 'onAvatarAssetStatus' | 'controlsEnabled'> & {
+}: Pick<SceneProps, 'room' | 'localPeerId' | 'avatarAssetUrl' | 'onLocalTransform' | 'onAvatarAssetStatus' | 'controlsEnabled' | 'transitionBoundaryStates' | 'initialLocalTransform'> & {
   chatBubble?: LatestChatBubble;
+  gravityMilli: number;
 }) {
   const groupRef = useRef<THREE.Group | null>(null);
   const spawnPosition = room.metaverse?.default_spawn.position;
   const spawnRotation = room.metaverse?.default_spawn.rotation;
   const spawnPositionKey = spawnPosition?.join(',');
   const spawnRotationKey = spawnRotation?.join(',');
+  const initialTransformKey = initialLocalTransform?.roomId === room.room_id
+    ? `${initialLocalTransform.seq}:${initialLocalTransform.position.join(',')}:${initialLocalTransform.rotation.join(',')}`
+    : '';
   const transformRef = useRef(initialAvatarTransform(room.room_id, localPeerId, spawnPosition, spawnRotation));
   const physicsRef = useRef<AvatarPhysicsState>({ verticalVelocity: 0, grounded: true });
   const seqRef = useRef(0);
@@ -499,7 +520,9 @@ function LocalAvatar({
     const nextSpawnRotation = spawnRotationKey
       ? (spawnRotationKey.split(',').map(Number) as MetaverseVec3)
       : undefined;
-    const nextTransform = initialAvatarTransform(room.room_id, localPeerId, nextSpawnPosition, nextSpawnRotation);
+    const nextTransform = initialLocalTransform?.roomId === room.room_id
+      ? { ...initialLocalTransform, peerId: localPeerId }
+      : initialAvatarTransform(room.room_id, localPeerId, nextSpawnPosition, nextSpawnRotation);
     transformRef.current = nextTransform;
     physicsRef.current = { verticalVelocity: 0, grounded: nextTransform.position[1] <= AVATAR_GROUND_Y };
     seqRef.current = 0;
@@ -510,7 +533,7 @@ function LocalAvatar({
       groupRef.current.position.copy(scenePosition(nextTransform.position));
       groupRef.current.rotation.y = THREE.MathUtils.degToRad(nextTransform.rotation[1]);
     }
-  }, [localPeerId, room.room_id, spawnPositionKey, spawnRotationKey]);
+  }, [initialLocalTransform, initialTransformKey, localPeerId, room.room_id, spawnPositionKey, spawnRotationKey]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -559,7 +582,7 @@ function LocalAvatar({
     const { x, z, moving } = movementVectorFromKeys(keys);
     const baseAnimation = avatarAnimationForInput(keys, sittingRequestedRef.current);
     const current = transformRef.current;
-    const gravity = (room.metaverse?.dome.customization.environment.gravity_milli ?? 9_800) / 10;
+    const gravity = gravityMilli / 10;
     const jumpStep = stepAvatarJump(
       current.position,
       physicsRef.current,
@@ -583,7 +606,7 @@ function LocalAvatar({
       nextRotation = [0, Math.round(THREE.MathUtils.radToDeg(Math.atan2(x, z))), 0];
     }
 
-    nextPosition = clampAvatarToDome(nextPosition);
+    nextPosition = clampAvatarToTransitionBoundaries(nextPosition, transitionBoundaryStates);
     const animation = !physicsRef.current.grounded ? 'jump' : baseAnimation;
     animationRef.current = animation;
     transformRef.current = {
@@ -746,6 +769,9 @@ function SceneContents({
   sessionProps,
   avatarAssetUrl,
   domeTextureUrls,
+  transitionNeighbors = [],
+  transitionBoundaryStates = {},
+  initialLocalTransform,
   latestChatByPeer,
   connectionState,
   now,
@@ -758,7 +784,21 @@ function SceneContents({
   const remoteEntries = useMemo(() => Object.entries(remoteTransforms), [remoteTransforms]);
   const { camera } = useThree();
   const customization = room.metaverse?.dome.customization;
-  const environment = customization?.environment;
+  const baseEnvironment = customization?.environment;
+  const [environment, setEnvironment] = useState(baseEnvironment);
+
+  useEffect(() => {
+    setEnvironment(baseEnvironment);
+  }, [baseEnvironment, room.room_id]);
+
+  const handleLocalTransform = (transform: AvatarTransform) => {
+    if (baseEnvironment) {
+      setEnvironment(
+        transitionEnvironmentAtPosition(transform.position, baseEnvironment, transitionNeighbors).environment
+      );
+    }
+    onLocalTransform(transform);
+  };
 
   useEffect(() => {
     camera.lookAt(0, 0.9, 0);
@@ -775,15 +815,44 @@ function SceneContents({
         intensity={(environment?.key_light_milli ?? 2_400) / 1_000}
         castShadow
       />
-      {customization ? <FixedDome customization={customization} textureUrls={domeTextureUrls} /> : null}
+      {customization ? (
+        <FixedDome
+          customization={customization}
+          textureUrls={domeTextureUrls}
+          openingDirections={transitionNeighbors.map((neighbor) => neighbor.direction)}
+          connectionDirections={transitionNeighbors.map((neighbor) => neighbor.direction)}
+          boundaryStates={transitionBoundaryStates}
+        />
+      ) : null}
+      {transitionNeighbors.map((neighbor, index) => {
+        const quality = resourcePlan.neighborQuality[index] ?? 'hidden';
+        if (quality === 'hidden' || !neighbor.room.metaverse) return null;
+        return (
+          <group
+            key={neighbor.connectionId}
+            position={neighbor.relativeCoordinateCm.map(toSceneUnit) as [number, number, number]}
+            userData={{ neighborDome: neighbor.room.metaverse.instance_id, quality }}
+          >
+            <FixedDome
+              customization={neighbor.room.metaverse.dome.customization}
+              textureUrls={quality === 'reduced' ? neighbor.textureUrls : { wall: null, floor: null }}
+              openingDirections={[neighbor.targetDirection]}
+              connectionDirections={[]}
+            />
+          </group>
+        );
+      })}
       <LocalAvatar
         room={room}
         localPeerId={localPeerId}
         avatarAssetUrl={avatarAssetUrl}
         chatBubble={latestChatByPeer[localPeerId]}
-        onLocalTransform={onLocalTransform}
+        onLocalTransform={handleLocalTransform}
         onAvatarAssetStatus={onAvatarAssetStatus}
         controlsEnabled={controlsEnabled}
+        transitionBoundaryStates={transitionBoundaryStates}
+        initialLocalTransform={initialLocalTransform}
+        gravityMilli={environment?.gravity_milli ?? 9_800}
       />
       {remoteEntries
         .filter(([peerId]) => !resourcePlan.hiddenAvatarPeerIds.includes(peerId))
@@ -827,6 +896,9 @@ export function MetaverseScene({
   sessionProps,
   avatarAssetUrl,
   domeTextureUrls,
+  transitionNeighbors = [],
+  transitionBoundaryStates = {},
+  initialLocalTransform = null,
   latestChatByPeer,
   connectionState,
   now,
@@ -852,8 +924,15 @@ export function MetaverseScene({
         asset: peerPresence[peerId]?.avatarAssetRef ?? null,
       })),
       propIds: props.map((prop) => prop.object_id),
+      neighborDomes: transitionNeighbors.map((neighbor) => ({
+        textureBytes: (neighbor.room.metaverse?.asset_refs ?? [])
+          .filter((asset) => asset.kind === 'texture')
+          .reduce((total, asset) => total + (asset.size_bytes ?? 0), 0),
+        triangles: (neighbor.room.metaverse?.asset_refs ?? [])
+          .reduce((total, asset) => total + (asset.budget_metadata?.model_triangles ?? 0), 0),
+      })),
     });
-  }, [clientBudget, peerPresence, remoteTransforms, room.metaverse?.asset_refs, sessionProps, sharedObject]);
+  }, [clientBudget, peerPresence, remoteTransforms, room.metaverse?.asset_refs, sessionProps, sharedObject, transitionNeighbors]);
   const effectiveTextureUrls = resourcePlan.texturesEnabled
     ? domeTextureUrls
     : { wall: null, floor: null };
@@ -880,6 +959,9 @@ export function MetaverseScene({
           sessionProps={sessionProps}
           avatarAssetUrl={avatarAssetUrl}
           domeTextureUrls={effectiveTextureUrls}
+          transitionNeighbors={transitionNeighbors}
+          transitionBoundaryStates={transitionBoundaryStates}
+          initialLocalTransform={initialLocalTransform}
           latestChatByPeer={latestChatByPeer}
           connectionState={connectionState}
           now={now}

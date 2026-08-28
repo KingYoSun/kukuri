@@ -381,6 +381,164 @@ impl DesktopRuntime {
         Ok(signed_snapshot.snapshot)
     }
 
+    pub async fn prepare_dome_transition(
+        &self,
+        request: PrepareDomeTransitionRequest,
+    ) -> Result<kukuri_core::DomeTransitionAdmissionTicketV1> {
+        if request.request.participant_pubkey != self.author_keys.public_key() {
+            anyhow::bail!("Dome transition participant does not match local identity");
+        }
+        let topology = self
+            .list_dome_connection_topology(ListDomeConnectionTopologyRequest {
+                spatial_context: request.request.spatial_context.clone(),
+            })
+            .await?;
+        if topology.resolution.topology.topology_digest != request.request.topology_digest
+            || !topology
+                .resolution
+                .topology
+                .active_connection_ids
+                .contains(&request.request.connection_id)
+        {
+            anyhow::bail!("DOME_TRANSITION_STALE_TOPOLOGY");
+        }
+        let matches_connection = topology.connections.iter().any(|view| {
+            let agreement = &view.record.agreement;
+            agreement.connection_id == request.request.connection_id
+                && ((agreement.proposer.instance_id == request.request.source_instance_id
+                    && agreement.proposer.instance_generation
+                        == request.request.source_instance_generation
+                    && agreement.proposer.direction == request.request.direction
+                    && agreement.receiver.instance_id == request.request.target_instance_id
+                    && agreement.receiver.instance_generation
+                        == request.request.target_instance_generation)
+                    || (agreement.receiver.instance_id == request.request.source_instance_id
+                        && agreement.receiver.instance_generation
+                            == request.request.source_instance_generation
+                        && agreement.receiver.direction == request.request.direction
+                        && agreement.proposer.instance_id == request.request.target_instance_id
+                        && agreement.proposer.instance_generation
+                            == request.request.target_instance_generation))
+        });
+        if !matches_connection {
+            anyhow::bail!("DOME_TRANSITION_STALE_TOPOLOGY");
+        }
+        let hosting = self
+            .get_dome_hosting(GetDomeHostingRequest {
+                spatial_context: request.request.spatial_context.clone(),
+                instance_id: request.request.target_instance_id.clone(),
+            })
+            .await?;
+        let lease = hosting
+            .lease
+            .context("destination Dome is not currently hosted")?;
+        match &lease.host {
+            DomeHostTargetV1::OwnerDevice { host_pubkey, .. }
+                if host_pubkey == &self.author_keys.public_key() =>
+            {
+                self.app_service
+                    .prepare_dome_transition(PrepareDomeTransitionInput {
+                        request: request.request,
+                    })
+                    .await
+            }
+            DomeHostTargetV1::CommunityNode { api_base_url, .. } => Ok(self
+                .prepare_dome_transition_on_community_node(
+                    api_base_url,
+                    &DomeTransitionPrepareRequest {
+                        request: request.request,
+                    },
+                )
+                .await?
+                .ticket),
+            _ => {
+                anyhow::bail!("the active destination Dome host is not reachable from this device")
+            }
+        }
+    }
+
+    pub async fn commit_dome_transition(&self, request: CommitDomeTransitionRequest) -> Result<()> {
+        if request.ticket.request.participant_pubkey != self.author_keys.public_key() {
+            anyhow::bail!("Dome transition participant does not match local identity");
+        }
+        let hosting = self
+            .get_dome_hosting(GetDomeHostingRequest {
+                spatial_context: request.ticket.request.spatial_context.clone(),
+                instance_id: request.ticket.request.target_instance_id.clone(),
+            })
+            .await?;
+        let lease = hosting
+            .lease
+            .context("destination Dome is not currently hosted")?;
+        match &lease.host {
+            DomeHostTargetV1::OwnerDevice { host_pubkey, .. }
+                if host_pubkey == &self.author_keys.public_key() =>
+            {
+                self.app_service
+                    .commit_dome_transition(CommitDomeTransitionInput {
+                        ticket: request.ticket,
+                        position: request.position,
+                        rotation: request.rotation,
+                    })
+                    .await
+            }
+            DomeHostTargetV1::CommunityNode { api_base_url, .. } => {
+                self.commit_dome_transition_on_community_node(
+                    api_base_url,
+                    &DomeTransitionCommitRequest {
+                        ticket: request.ticket,
+                        position: request.position,
+                        rotation: request.rotation,
+                    },
+                )
+                .await?;
+                Ok(())
+            }
+            _ => {
+                anyhow::bail!("the active destination Dome host is not reachable from this device")
+            }
+        }
+    }
+
+    pub async fn abort_dome_transition(&self, request: AbortDomeTransitionRequest) -> Result<()> {
+        if request.ticket.request.participant_pubkey != self.author_keys.public_key() {
+            anyhow::bail!("Dome transition participant does not match local identity");
+        }
+        let hosting = self
+            .get_dome_hosting(GetDomeHostingRequest {
+                spatial_context: request.ticket.request.spatial_context.clone(),
+                instance_id: request.ticket.request.target_instance_id.clone(),
+            })
+            .await?;
+        let lease = hosting
+            .lease
+            .context("destination Dome is not currently hosted")?;
+        match &lease.host {
+            DomeHostTargetV1::OwnerDevice { host_pubkey, .. }
+                if host_pubkey == &self.author_keys.public_key() =>
+            {
+                self.app_service
+                    .abort_dome_transition(AbortDomeTransitionInput {
+                        ticket: request.ticket,
+                    })
+                    .await
+            }
+            DomeHostTargetV1::CommunityNode { api_base_url, .. } => {
+                self.abort_dome_transition_on_community_node(
+                    api_base_url,
+                    &DomeTransitionAbortRequest {
+                        ticket: request.ticket,
+                    },
+                )
+                .await?;
+                Ok(())
+            }
+            _ => {
+                anyhow::bail!("the active destination Dome host is not reachable from this device")
+            }
+        }
+    }
+
     pub async fn commit_dome_layout(
         &self,
         request: CommitDomeLayoutRequest,

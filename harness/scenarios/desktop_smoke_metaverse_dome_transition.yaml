@@ -1,0 +1,20 @@
+name: desktop_smoke_metaverse_dome_transition
+fixtures:
+  seed: 790
+  topic: kukuri:topic:metaverse-dome-transition
+steps:
+  - action: launch_desktop
+  - action: select_topic
+    topic: kukuri:topic:metaverse-dome-transition
+  - action: create_metaverse_dome
+    title: transition-source
+    description: Seamless Dome transition scenario source
+    max_peers: 8
+  - action: exercise_dome_transition
+    local_title: transition-source
+artifacts:
+  dump_logs: true
+  metrics_snapshot: true
+timeouts:
+  overall_ms: 120000
+  step_ms: 15000

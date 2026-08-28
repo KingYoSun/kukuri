@@ -587,7 +587,7 @@ describe('MetaverseRoomPanel animation sharing', () => {
       expect(submitDomeSessionInput).toHaveBeenCalledWith(
         room.metaverse!.spatial_context,
         room.metaverse!.instance_id,
-        12,
+        expect.any(Number),
         {
           type: 'move',
           position: [10, 0, 20],

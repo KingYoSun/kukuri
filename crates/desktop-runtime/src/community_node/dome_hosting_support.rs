@@ -2,11 +2,14 @@ use anyhow::{Context, Result, anyhow};
 use kukuri_cn_protocol::{
     ApiErrorBody, DOME_HOSTING_ACTIVATE_PATH, DOME_HOSTING_ASSIGNMENTS_PATH,
     DOME_HOSTING_LAYOUT_CANDIDATE_PATH, DOME_HOSTING_RELEASE_PATH, DOME_HOSTING_SESSION_INPUT_PATH,
-    DOME_HOSTING_SNAPSHOT_RESYNC_PATH, DOME_HOSTING_STATUS_ROUTE, DomeHostingActivationRequest,
+    DOME_HOSTING_SNAPSHOT_RESYNC_PATH, DOME_HOSTING_STATUS_ROUTE, DOME_TRANSITION_ABORT_PATH,
+    DOME_TRANSITION_COMMIT_PATH, DOME_TRANSITION_PREPARE_PATH, DomeHostingActivationRequest,
     DomeHostingAssignmentRequest, DomeHostingAssignmentResponse, DomeHostingLayoutCandidateRequest,
     DomeHostingLayoutCandidateResponse, DomeHostingReleaseRequest, DomeHostingSessionInputRequest,
     DomeHostingSessionSnapshotResponse, DomeHostingSnapshotResyncRequest,
-    DomeHostingSnapshotResyncResponse, DomeHostingStatusResponse, normalize_http_url,
+    DomeHostingSnapshotResyncResponse, DomeHostingStatusResponse, DomeTransitionAbortRequest,
+    DomeTransitionCommitRequest, DomeTransitionMutationResponse, DomeTransitionPrepareRequest,
+    DomeTransitionPrepareResponse, normalize_http_url,
 };
 use reqwest::StatusCode;
 use serde::Serialize;
@@ -64,6 +67,33 @@ impl DesktopRuntime {
         request: &DomeHostingSessionInputRequest,
     ) -> Result<DomeHostingSessionSnapshotResponse> {
         self.send_dome_hosting_request(base_url, DOME_HOSTING_SESSION_INPUT_PATH, request)
+            .await
+    }
+
+    pub(crate) async fn prepare_dome_transition_on_community_node(
+        &self,
+        base_url: &str,
+        request: &DomeTransitionPrepareRequest,
+    ) -> Result<DomeTransitionPrepareResponse> {
+        self.send_dome_hosting_request(base_url, DOME_TRANSITION_PREPARE_PATH, request)
+            .await
+    }
+
+    pub(crate) async fn commit_dome_transition_on_community_node(
+        &self,
+        base_url: &str,
+        request: &DomeTransitionCommitRequest,
+    ) -> Result<DomeTransitionMutationResponse> {
+        self.send_dome_hosting_request(base_url, DOME_TRANSITION_COMMIT_PATH, request)
+            .await
+    }
+
+    pub(crate) async fn abort_dome_transition_on_community_node(
+        &self,
+        base_url: &str,
+        request: &DomeTransitionAbortRequest,
+    ) -> Result<DomeTransitionMutationResponse> {
+        self.send_dome_hosting_request(base_url, DOME_TRANSITION_ABORT_PATH, request)
             .await
     }
 

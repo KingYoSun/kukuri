@@ -7,25 +7,27 @@ use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use kukuri_app_api::{
-    AcceptDomeConnectionProposalInput, ActivateCommunityNodeDomeHostingInput, AppService,
-    AuthorSocialView, BlobMediaPayload, BookmarkedCustomReactionView, BookmarkedPostView,
-    ChannelAccessTokenExport, ChannelAccessTokenPreview, CloseDomeHostingInput,
-    CommitDomeLayoutInput, CreateCustomReactionAssetInput, CreateDomeConnectionProposalInput,
+    AbortDomeTransitionInput, AcceptDomeConnectionProposalInput,
+    ActivateCommunityNodeDomeHostingInput, AppService, AuthorSocialView, BlobMediaPayload,
+    BookmarkedCustomReactionView, BookmarkedPostView, ChannelAccessTokenExport,
+    ChannelAccessTokenPreview, CloseDomeHostingInput, CommitDomeLayoutInput,
+    CommitDomeTransitionInput, CreateCustomReactionAssetInput, CreateDomeConnectionProposalInput,
     CreateGameRoomInput, CreateLiveSessionInput, CreateMetaverseRoomInput, CustomReactionAssetView,
     DirectMessageConversationView, DirectMessageStatusView, DirectMessageTimelineView,
     DirectMessageTopicStatusView, DomeHostingView, DomeLayoutCommitView, GameRoomView,
     ImportMetaverseRoomAssetInput, JoinedPrivateChannelView, LiveSessionView,
     MetaverseAssetRefView, MetaverseRoomEventView, MoveDomeInput, NotificationStatusView,
-    NotificationView, PrepareCommunityNodeDomeHostingInput, PrivateChannelCapability, ProfileInput,
-    PublishMetaverseRoomEventInput, ReactionStateView, RecentReactionView,
-    ResyncDomeSnapshotsInput, RevokeDomeConnectionInput, ServiceHandles,
+    NotificationView, PrepareCommunityNodeDomeHostingInput, PrepareDomeTransitionInput,
+    PrivateChannelCapability, ProfileInput, PublishMetaverseRoomEventInput, ReactionStateView,
+    RecentReactionView, ResyncDomeSnapshotsInput, RevokeDomeConnectionInput, ServiceHandles,
     StartOwnerDomeHostingInput, SubmitDomeSessionInput, SyncStatus, TimelineView,
     UpdateGameRoomInput, UpdateMetaverseRoomInput, WithdrawDomeConnectionProposalInput,
 };
 use kukuri_cn_protocol::{
     DomeHostingActivationRequest, DomeHostingAssetBlob, DomeHostingAssignmentRequest,
     DomeHostingLayoutCandidateRequest, DomeHostingReleaseRequest, DomeHostingSessionInputRequest,
-    DomeHostingSnapshotResyncRequest, normalize_http_url,
+    DomeHostingSnapshotResyncRequest, DomeTransitionAbortRequest, DomeTransitionCommitRequest,
+    DomeTransitionPrepareRequest, normalize_http_url,
 };
 use kukuri_core::{
     BlobHash, CreatePrivateChannelInput, CustomReactionAssetSnapshotV1, DomeHostTargetV1,
