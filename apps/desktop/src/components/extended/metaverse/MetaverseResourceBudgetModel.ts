@@ -13,6 +13,8 @@ export const DEFAULT_CLIENT_RESOURCE_BUDGET: ClientResourceBudget = {
   max_interpolated_bodies: 256,
   max_neighbor_domes: 4,
   cache_capacity_bytes: GIB,
+  max_concurrent_audio_streams: 16,
+  max_audio_jitter_frames: 8,
 };
 
 export const METAVERSE_CLIENT_BUDGET_STORAGE_KEY = 'kukuri.metaverse.client-budget.v1';
@@ -24,6 +26,8 @@ const CLIENT_SAFETY_CEILING: ClientResourceBudget = {
   max_interpolated_bodies: 4_096,
   max_neighbor_domes: 4,
   cache_capacity_bytes: 64 * GIB,
+  max_concurrent_audio_streams: 128,
+  max_audio_jitter_frames: 50,
 };
 
 export type ClientRenderTier = 'full' | 'reduced' | 'fallback' | 'minimal';

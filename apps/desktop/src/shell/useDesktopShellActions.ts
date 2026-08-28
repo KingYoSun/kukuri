@@ -426,6 +426,7 @@ export function useDesktopShellActions({
     handleWithdrawPost,
     handleRelationshipAction,
     handleMuteAction,
+    handleBlockAction,
   } = createMessageReactionSocialActions({
     api,
     translate,
@@ -890,6 +891,7 @@ export function useDesktopShellActions({
     handleRestoreLocalPost: restoreLocalPostToColumn,
     handleRelationshipAction,
     handleMuteAction,
+    handleBlockAction,
     handleSaveDiscoverySeeds,
     handleSaveCommunityNodes,
     handleClearCommunityNodes,

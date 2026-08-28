@@ -1,7 +1,7 @@
 use anyhow::Result;
 use kukuri_core::{
-    BlobHash, EnvelopeId, FollowEdge, FollowEdgeStatus, GameRoomKind, GameRoomStatus,
-    KukuriEnvelope, LiveSessionStatus, ObjectStatus, ReactionKeyKind, ReplicaId,
+    BlobHash, BlockEdge, BlockEdgeStatus, EnvelopeId, FollowEdge, FollowEdgeStatus, GameRoomKind,
+    GameRoomStatus, KukuriEnvelope, LiveSessionStatus, ObjectStatus, ReactionKeyKind, ReplicaId,
 };
 use sqlx::Row;
 
@@ -275,6 +275,16 @@ pub(crate) fn row_to_follow_edge(row: sqlx::sqlite::SqliteRow) -> Result<FollowE
     })
 }
 
+pub(crate) fn row_to_block_edge(row: sqlx::sqlite::SqliteRow) -> Result<BlockEdge> {
+    Ok(BlockEdge {
+        subject_pubkey: row.get::<String, _>("subject_pubkey").into(),
+        target_pubkey: row.get::<String, _>("target_pubkey").into(),
+        status: parse_block_edge_status(row.get::<String, _>("status").as_str())?,
+        updated_at: row.get("updated_at"),
+        envelope_id: row.get::<String, _>("source_envelope_id").into(),
+    })
+}
+
 pub(crate) fn row_to_live_session_projection(
     row: sqlx::sqlite::SqliteRow,
 ) -> Result<LiveSessionProjectionRow> {
@@ -370,6 +380,21 @@ pub(crate) fn parse_follow_edge_status(value: &str) -> Result<FollowEdgeStatus> 
         "active" => Ok(FollowEdgeStatus::Active),
         "revoked" => Ok(FollowEdgeStatus::Revoked),
         _ => anyhow::bail!("unknown follow edge status: {value}"),
+    }
+}
+
+pub(crate) fn block_edge_status_name(status: &BlockEdgeStatus) -> &'static str {
+    match status {
+        BlockEdgeStatus::Active => "active",
+        BlockEdgeStatus::Revoked => "revoked",
+    }
+}
+
+pub(crate) fn parse_block_edge_status(value: &str) -> Result<BlockEdgeStatus> {
+    match value {
+        "active" => Ok(BlockEdgeStatus::Active),
+        "revoked" => Ok(BlockEdgeStatus::Revoked),
+        _ => anyhow::bail!("unknown block edge status: {value}"),
     }
 }
 

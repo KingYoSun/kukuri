@@ -537,6 +537,16 @@ pub(crate) async fn prepare_dome_transition(
         ));
     }
     let now = chrono::Utc::now().timestamp_millis();
+    let assignment = get_dome_hosting_assignment(&state.pool, &request.request.target_instance_id)
+        .await
+        .map_err(hosting_internal_error)?
+        .ok_or_else(|| {
+            hosting_error(
+                StatusCode::NOT_FOUND,
+                "DOME_HOSTING_ASSIGNMENT_NOT_FOUND",
+                "destination Dome hosting assignment was not found",
+            )
+        })?;
     let mut sessions = hosting.sessions.lock().await;
     let runtime = sessions
         .get_mut(&request.request.target_instance_id)
@@ -554,12 +564,20 @@ pub(crate) async fn prepare_dome_transition(
             "Dome Hosting Lease has expired",
         ));
     }
+    let proof_valid = request.access_proof.statement.participant_pubkey
+        == request.request.participant_pubkey
+        && request.access_proof.statement.spatial_context == request.request.spatial_context
+        && request.access_proof.statement.target_owner_pubkey.as_str() == assignment.owner_pubkey
+        && request.access_proof.verify_at(now).is_ok();
+    let access = if proof_valid {
+        DomeTransitionAccessDecisionV1::Allowed
+    } else {
+        DomeTransitionAccessDecisionV1::Denied {
+            reason: kukuri_core::DomeTransitionDenialReasonV1::AccessDenied,
+        }
+    };
     let ticket = runtime
-        .prepare_transition_admission(
-            request.request,
-            DomeTransitionAccessDecisionV1::Allowed,
-            now,
-        )
+        .prepare_transition_admission(request.request, access, now)
         .map_err(hosting_contract_error)?;
     Ok(Json(DomeTransitionPrepareResponse { ticket }))
 }

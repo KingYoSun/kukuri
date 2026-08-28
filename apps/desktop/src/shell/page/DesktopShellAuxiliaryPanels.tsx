@@ -661,6 +661,7 @@ export type DesktopShellDetailSurfaceStackProps = {
   handleCopyPostLink: (link: string) => void;
   handleRelationshipAction: (authorPubkey: string, following: boolean) => Promise<void>;
   handleMuteAction: (authorPubkey: string, muted: boolean) => Promise<void>;
+  handleBlockAction: (authorPubkey: string, blocking: boolean) => Promise<void>;
   handleOpenOriginalTopic: (topicId: string) => Promise<void>;
   openCommunityNodeSettings: () => void;
   surfaceKind: 'thread' | 'profile';
@@ -689,6 +690,7 @@ export function DesktopShellDetailSurfaceStack({
   handleCopyPostLink,
   handleRelationshipAction,
   handleMuteAction,
+  handleBlockAction,
   handleOpenOriginalTopic,
   openCommunityNodeSettings,
   surfaceKind,
@@ -797,11 +799,14 @@ export function DesktopShellDetailSurfaceStack({
         mutual: effectiveAuthor.mutual,
         friendOfFriend: effectiveAuthor.friend_of_friend,
         muted: effectiveAuthor.muted,
+        blocking: effectiveAuthor.blocking,
+        blockedBy: effectiveAuthor.blocked_by,
         viaPubkeys: effectiveAuthor.friend_of_friend_via_pubkeys.map(shortPubkey),
         isSelf: effectiveAuthor.author_pubkey === syncStatus.local_author_pubkey,
         canFollow: effectiveAuthor.author_pubkey !== syncStatus.local_author_pubkey,
         followActionLabel: effectiveAuthor.following ? 'Unfollow' : 'Follow',
         muteActionLabel: effectiveAuthor.muted ? 'Unmute' : 'Mute',
+        blockActionLabel: effectiveAuthor.blocking ? 'Unblock' : 'Block',
       },
       canMessage:
         effectiveAuthor.author_pubkey !== syncStatus.local_author_pubkey &&
@@ -873,6 +878,7 @@ export function DesktopShellDetailSurfaceStack({
           void handleRelationshipAction(authorPubkey, following)
         }
         onToggleMute={(authorPubkey, muted) => void handleMuteAction(authorPubkey, muted)}
+        onToggleBlock={(authorPubkey, blocking) => void handleBlockAction(authorPubkey, blocking)}
         onOpenDirectMessage={(authorPubkey) => void openDirectMessagePane(authorPubkey)}
         onSubmitReport={submitReport}
         onCopyReportContact={(value) => void copyTextToClipboard(value)}

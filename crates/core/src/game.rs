@@ -3,7 +3,9 @@ use std::collections::HashSet;
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
-use crate::{ChannelId, EnvelopeId, ManifestBlobRef, Pubkey, TopicId};
+use crate::{
+    ChannelId, EnvelopeId, ManifestBlobRef, MetaverseSpatialAudioFrameV1, Pubkey, TopicId,
+};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -565,6 +567,9 @@ pub enum MetaverseRoomEventV1 {
     ChatMessage {
         message: MetaverseRoomChatMessageV1,
     },
+    SpatialAudioFrame {
+        frame: MetaverseSpatialAudioFrameV1,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -726,54 +731,6 @@ pub fn validate_metaverse_room_state(state: &MetaverseRoomStateV1) -> Result<()>
         bail!("max peers is outside the supported range");
     }
     validate_dome_customization(&state.dome.customization)
-}
-
-pub fn validate_metaverse_room_event_content(
-    content: &MetaverseRoomEventEnvelopeContentV1,
-) -> Result<()> {
-    if content.event_id.trim().is_empty()
-        || content.room_id.trim().is_empty()
-        || content.session_id.trim().is_empty()
-        || content.peer_id.trim().is_empty()
-        || content.instance_generation == 0
-    {
-        bail!("metaverse room event identity is incomplete");
-    }
-    if content.session_id != content.room_id {
-        bail!("metaverse room event session does not match its Dome instance");
-    }
-    let expected_context = match &content.channel_id {
-        Some(channel_id) => SpatialContextV1::Channel {
-            topic_id: content.topic_id.clone(),
-            channel_id: channel_id.clone(),
-        },
-        None => SpatialContextV1::Topic {
-            topic_id: content.topic_id.clone(),
-        },
-    };
-    if content.spatial_context != expected_context {
-        bail!("metaverse room event Spatial Context does not match topic/channel identity");
-    }
-    Ok(())
-}
-
-pub fn validate_metaverse_room_event_for_instance(
-    content: &MetaverseRoomEventEnvelopeContentV1,
-    instance: &DomeInstanceManifestV1,
-) -> Result<()> {
-    validate_metaverse_room_event_content(content)?;
-    validate_dome_instance_manifest(instance)?;
-    if instance.status != DomeInstanceStatusV1::Active || instance.relationship_detach.is_some() {
-        bail!("metaverse room events require an active attached Dome instance");
-    }
-    if content.room_id != instance.instance_id
-        || content.session_id != instance.instance_id
-        || content.spatial_context != instance.spatial_context
-        || content.instance_generation != instance.generation
-    {
-        bail!("metaverse room event does not match the current Dome instance generation");
-    }
-    Ok(())
 }
 
 pub fn validate_dome_preset_manifest(manifest: &DomePresetManifestV1) -> Result<()> {
@@ -977,7 +934,7 @@ pub fn build_metaverse_room_event_envelope(
     room_id: &str,
     content: &MetaverseRoomEventEnvelopeContentV1,
 ) -> Result<crate::KukuriEnvelope> {
-    validate_metaverse_room_event_content(content)?;
+    crate::metaverse_audio::validate_metaverse_room_event_content(content)?;
     if &content.topic_id != topic || content.room_id != room_id {
         bail!("metaverse room event envelope identity does not match content");
     }

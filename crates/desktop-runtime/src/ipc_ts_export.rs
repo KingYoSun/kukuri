@@ -103,9 +103,9 @@ fn export_ipc_types() {
         MetaverseResourceBudgetConfig, MetaverseResourceMetricCountV1, MetaverseResourceMetricsV1,
         MetaverseResourceRejection, MetaverseResourceRejectionReason, MetaverseRoomChatMessageV1,
         MetaverseRoomEventEnvelopeContentV1, MetaverseRoomEventV1, MetaverseRoomPresenceV1,
-        MetaverseRoomSpawnV1, MetaverseRoomStateV1, PlayerResourceBudget,
-        PrivateChannelInvitePreview, Profile, Pubkey, SharedRoomObjectV1, SpatialContextV1,
-        TimelineScope, TopicId,
+        MetaverseRoomSpawnV1, MetaverseRoomStateV1, MetaverseSpatialAudioFrameV1,
+        PlayerResourceBudget, PrivateChannelInvitePreview, Profile, Pubkey, SharedRoomObjectV1,
+        SpatialContextV1, TimelineScope, TopicId,
     };
     use kukuri_store::TimelineCursor;
     use kukuri_transport::{ConnectMode, ConnectionPath, DiscoveryMode, SeedPeer};
@@ -233,6 +233,7 @@ fn export_ipc_types() {
         DomeConnectionView,
         DomeConnectionTopologyView,
         MetaverseRoomPresenceV1,
+        MetaverseSpatialAudioFrameV1,
         MetaverseRoomChatMessageV1,
         SharedRoomObjectV1,
         MetaverseRoomEventV1,

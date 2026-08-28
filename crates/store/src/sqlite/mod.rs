@@ -4,8 +4,8 @@ use std::str::FromStr;
 use anyhow::Result;
 use async_trait::async_trait;
 use kukuri_core::{
-    BlobHash, EnvelopeId, FollowEdge, KukuriEnvelope, Profile, ReplicaId, ThreadRef,
-    parse_follow_edge, parse_profile,
+    BlobHash, BlockEdge, EnvelopeId, FollowEdge, KukuriEnvelope, Profile, ReplicaId, ThreadRef,
+    parse_block_edge, parse_follow_edge, parse_profile,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Pool, QueryBuilder, Row, Sqlite};
@@ -22,9 +22,9 @@ use crate::pagination::{
     direct_message_page_from_rows, envelope_page_from_rows, object_projection_page_from_rows,
 };
 use crate::row_mapping::{
-    follow_edge_status_name, game_room_kind_name, game_status_name, live_status_name,
-    notification_kind_name, object_status_name, reaction_key_kind_name,
-    row_to_author_relationship_projection, row_to_bookmarked_custom_reaction,
+    block_edge_status_name, follow_edge_status_name, game_room_kind_name, game_status_name,
+    live_status_name, notification_kind_name, object_status_name, reaction_key_kind_name,
+    row_to_author_relationship_projection, row_to_block_edge, row_to_bookmarked_custom_reaction,
     row_to_bookmarked_post, row_to_direct_message_conversation, row_to_direct_message_message,
     row_to_direct_message_outbox, row_to_direct_message_tombstone, row_to_envelope,
     row_to_follow_edge, row_to_game_room_projection, row_to_live_session_projection,
@@ -114,6 +114,20 @@ impl Store for SqliteStore {
 
     async fn list_follow_edges_by_target(&self, target_pubkey: &str) -> Result<Vec<FollowEdge>> {
         self.store_list_follow_edges_by_target_impl(target_pubkey)
+            .await
+    }
+
+    async fn upsert_block_edge(&self, edge: BlockEdge) -> Result<()> {
+        self.store_upsert_block_edge_impl(edge).await
+    }
+
+    async fn list_block_edges_by_subject(&self, subject_pubkey: &str) -> Result<Vec<BlockEdge>> {
+        self.store_list_block_edges_by_subject_impl(subject_pubkey)
+            .await
+    }
+
+    async fn list_block_edges_by_target(&self, target_pubkey: &str) -> Result<Vec<BlockEdge>> {
+        self.store_list_block_edges_by_target_impl(target_pubkey)
             .await
     }
 }

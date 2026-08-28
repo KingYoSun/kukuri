@@ -17,11 +17,34 @@ impl AppService {
             .get_muted_author(author_pubkey)
             .await?
             .is_some();
+        let local_author = self.current_author_pubkey();
+        let blocking = self
+            .services
+            .store
+            .list_block_edges_by_subject(local_author.as_str())
+            .await?
+            .into_iter()
+            .any(|edge| {
+                edge.target_pubkey.as_str() == author_pubkey
+                    && edge.status == BlockEdgeStatus::Active
+            });
+        let blocked_by = self
+            .services
+            .store
+            .list_block_edges_by_target(local_author.as_str())
+            .await?
+            .into_iter()
+            .any(|edge| {
+                edge.subject_pubkey.as_str() == author_pubkey
+                    && edge.status == BlockEdgeStatus::Active
+            });
         let mut view = author_social_view_from_parts(
             author_pubkey,
             profile.as_ref(),
             relationship.as_ref(),
             muted,
+            blocking,
+            blocked_by,
         );
         view.provenance = self
             .content_provenance_view("profile", author_pubkey, "author_docs")
@@ -70,6 +93,52 @@ impl AppService {
             .into_iter()
             .map(|row| row.author_pubkey)
             .collect())
+    }
+
+    pub(crate) async fn authors_blocked_either_direction(
+        &self,
+        left_pubkey: &str,
+        right_pubkey: &str,
+    ) -> Result<bool> {
+        let left_blocks_right = self
+            .services
+            .store
+            .list_block_edges_by_subject(left_pubkey)
+            .await?
+            .into_iter()
+            .any(|edge| {
+                edge.target_pubkey.as_str() == right_pubkey
+                    && edge.status == BlockEdgeStatus::Active
+            });
+        if left_blocks_right {
+            return Ok(true);
+        }
+        Ok(self
+            .services
+            .store
+            .list_block_edges_by_subject(right_pubkey)
+            .await?
+            .into_iter()
+            .any(|edge| {
+                edge.target_pubkey.as_str() == left_pubkey && edge.status == BlockEdgeStatus::Active
+            }))
+    }
+
+    pub(crate) async fn owner_blocks_visitor(
+        &self,
+        owner_pubkey: &str,
+        visitor_pubkey: &str,
+    ) -> Result<bool> {
+        Ok(self
+            .services
+            .store
+            .list_block_edges_by_subject(owner_pubkey)
+            .await?
+            .into_iter()
+            .any(|edge| {
+                edge.target_pubkey.as_str() == visitor_pubkey
+                    && edge.status == BlockEdgeStatus::Active
+            }))
     }
 
     pub(crate) async fn ensure_author_subscriptions_for_rows(

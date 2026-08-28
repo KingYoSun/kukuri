@@ -434,42 +434,15 @@ impl AppService {
         if !is_valid_dome_operation_id(&input.connection_id, 160) {
             anyhow::bail!("invalid Dome Connection id");
         }
-        let replica = self
-            .dome_connection_context_replica(&input.spatial_context)
-            .await?;
-        let mut state = self
-            .fetch_dome_connection_state(&replica, input.connection_id.as_str())
-            .await?
-            .context("Dome Connection was not found")?;
-        let actor = Pubkey::from(self.current_author_pubkey());
-        if actor != state.record.agreement.proposer.owner_pubkey
-            && actor != state.record.agreement.receiver.owner_pubkey
-        {
-            anyhow::bail!("only an endpoint owner can revoke a Dome Connection");
-        }
-        if state.record.status != DomeConnectionStatusV1::Revoked {
-            state.record.status = DomeConnectionStatusV1::Draining;
-            state.record.lifecycle_generation += 1;
-            state.record.lifecycle_actor = Some(actor.clone());
-            state.record.lifecycle_reason = Some(DomeConnectionTerminalReasonV1::OwnerRevoked);
-            self.persist_connection_lifecycle(&replica, &mut state)
-                .await?;
-            state.record.status = DomeConnectionStatusV1::Revoked;
-            state.record.lifecycle_generation += 1;
-            self.persist_connection_lifecycle(&replica, &mut state)
-                .await?;
-        }
-        self.publish_dome_topology_hint(
-            &state.record.agreement.spatial_context,
-            &state.record.agreement.connection_id,
+        self.terminate_dome_connection_with_reason(
+            &input.spatial_context,
+            input.connection_id.as_str(),
+            DomeConnectionTerminalReasonV1::OwnerRevoked,
         )
-        .await?;
-        Ok(DomeConnectionView {
-            record: state.record,
-        })
+        .await
     }
 
-    async fn dome_connection_context_replica(
+    pub(crate) async fn dome_connection_context_replica(
         &self,
         context: &SpatialContextV1,
     ) -> Result<ReplicaId> {
@@ -755,7 +728,7 @@ impl AppService {
             .await
     }
 
-    async fn fetch_dome_connection_state(
+    pub(crate) async fn fetch_dome_connection_state(
         &self,
         replica: &ReplicaId,
         connection_id: &str,
@@ -841,7 +814,7 @@ impl AppService {
         Ok(())
     }
 
-    async fn persist_connection_lifecycle(
+    pub(crate) async fn persist_connection_lifecycle(
         &self,
         replica: &ReplicaId,
         state: &mut DomeConnectionStateDocV1,
@@ -885,7 +858,7 @@ impl AppService {
         })
     }
 
-    async fn publish_dome_topology_hint(
+    pub(crate) async fn publish_dome_topology_hint(
         &self,
         context: &SpatialContextV1,
         connection_id: &str,

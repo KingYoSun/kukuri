@@ -1,10 +1,15 @@
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
-use crate::{DomeDirection, Pubkey, SpatialContextV1, fixed_dome_v1};
+use crate::{
+    DomeDirection, KukuriEnvelope, KukuriKeys, PrivateChannelParticipantDocV1,
+    PrivateChannelPolicyDocV1, Pubkey, SpatialContextV1, fixed_dome_v1,
+    parse_private_channel_participant, parse_private_channel_policy,
+};
 
 pub const DOME_TRANSITION_TICKET_TTL_MILLIS: i64 = 15_000;
 pub const DOME_TRANSITION_CROSSING_HYSTERESIS_CM: i64 = 10;
+pub const DOME_ACCESS_PROOF_TTL_MILLIS: i64 = 10_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -101,6 +106,148 @@ pub enum DomeTransitionAccessDecisionV1 {
     Denied {
         reason: DomeTransitionDenialReasonV1,
     },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DomeSpatialAccessStatementV1 {
+    pub spatial_context: SpatialContextV1,
+    pub participant_pubkey: Pubkey,
+    pub target_owner_pubkey: Pubkey,
+    pub issued_at: i64,
+    pub expires_at: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DomeSpatialAccessProofV1 {
+    pub statement: DomeSpatialAccessStatementV1,
+    pub participant_signature: KukuriEnvelope,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel_policy_signature: Option<KukuriEnvelope>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel_participant_signature: Option<KukuriEnvelope>,
+}
+
+pub fn build_dome_spatial_access_proof(
+    participant_keys: &KukuriKeys,
+    spatial_context: SpatialContextV1,
+    target_owner_pubkey: Pubkey,
+    issued_at: i64,
+    channel_policy_signature: Option<KukuriEnvelope>,
+    channel_participant_signature: Option<KukuriEnvelope>,
+) -> Result<DomeSpatialAccessProofV1> {
+    let statement = DomeSpatialAccessStatementV1 {
+        spatial_context,
+        participant_pubkey: participant_keys.public_key(),
+        target_owner_pubkey,
+        issued_at,
+        expires_at: issued_at.saturating_add(DOME_ACCESS_PROOF_TTL_MILLIS),
+    };
+    let participant_signature = crate::sign_envelope_json(
+        participant_keys,
+        "dome-access-proof",
+        vec![
+            vec![
+                "participant".into(),
+                statement.participant_pubkey.as_str().to_string(),
+            ],
+            vec!["context".into(), statement.spatial_context.canonical_id()],
+            vec![
+                "target_owner".into(),
+                statement.target_owner_pubkey.as_str().to_string(),
+            ],
+        ],
+        &statement,
+    )?;
+    let proof = DomeSpatialAccessProofV1 {
+        statement,
+        participant_signature,
+        channel_policy_signature,
+        channel_participant_signature,
+    };
+    proof.verify_at(issued_at)?;
+    Ok(proof)
+}
+
+impl DomeSpatialAccessProofV1 {
+    pub fn verify_at(&self, now_millis: i64) -> Result<()> {
+        self.participant_signature.verify()?;
+        if self.participant_signature.kind != "dome-access-proof"
+            || self.participant_signature.pubkey != self.statement.participant_pubkey
+        {
+            bail!("Dome access proof participant signature is invalid");
+        }
+        let signed_statement: DomeSpatialAccessStatementV1 =
+            serde_json::from_str(&self.participant_signature.content)?;
+        if signed_statement != self.statement
+            || self.statement.issued_at <= 0
+            || self.statement.expires_at <= now_millis
+            || self.statement.expires_at
+                > self
+                    .statement
+                    .issued_at
+                    .saturating_add(DOME_ACCESS_PROOF_TTL_MILLIS)
+        {
+            bail!("Dome access proof is invalid or expired");
+        }
+
+        match &self.statement.spatial_context {
+            SpatialContextV1::Topic { .. } => {
+                if self.channel_policy_signature.is_some()
+                    || self.channel_participant_signature.is_some()
+                {
+                    bail!("public topic Dome access proof must not include channel evidence");
+                }
+            }
+            SpatialContextV1::Channel {
+                topic_id,
+                channel_id,
+            } => {
+                let policy =
+                    verify_channel_policy_evidence(self.channel_policy_signature.as_ref())?;
+                let participant = verify_channel_participant_evidence(
+                    self.channel_participant_signature.as_ref(),
+                    &self.statement.participant_pubkey,
+                )?;
+                if policy.topic_id != *topic_id
+                    || policy.channel_id != *channel_id
+                    || participant.topic_id != *topic_id
+                    || participant.channel_id != *channel_id
+                    || participant.epoch_id != policy.epoch_id
+                    || participant.left_at.is_some()
+                {
+                    bail!("private channel Dome access evidence is stale or mismatched");
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+fn verify_channel_policy_evidence(
+    envelope: Option<&KukuriEnvelope>,
+) -> Result<PrivateChannelPolicyDocV1> {
+    let envelope = envelope.ok_or_else(|| anyhow::anyhow!("channel policy proof is required"))?;
+    envelope.verify()?;
+    let policy = parse_private_channel_policy(envelope)?
+        .ok_or_else(|| anyhow::anyhow!("channel policy proof is invalid"))?;
+    Ok(policy)
+}
+
+fn verify_channel_participant_evidence(
+    envelope: Option<&KukuriEnvelope>,
+    participant_pubkey: &Pubkey,
+) -> Result<PrivateChannelParticipantDocV1> {
+    let envelope =
+        envelope.ok_or_else(|| anyhow::anyhow!("channel participant proof is required"))?;
+    envelope.verify()?;
+    let participant = parse_private_channel_participant(envelope)?
+        .ok_or_else(|| anyhow::anyhow!("channel participant proof is invalid"))?;
+    if participant.participant_pubkey != *participant_pubkey {
+        bail!("channel participant proof does not match transition participant");
+    }
+    Ok(participant)
 }
 
 impl DomeTransitionAdmissionRequestV1 {
@@ -306,5 +453,85 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn public_topic_access_proof_is_bound_and_expires() {
+        let participant = crate::generate_keys();
+        let owner = crate::generate_keys().public_key();
+        let context = SpatialContextV1::Topic {
+            topic_id: crate::TopicId::new("kukuri:topic:access-proof"),
+        };
+        let proof = build_dome_spatial_access_proof(
+            &participant,
+            context.clone(),
+            owner.clone(),
+            1_000,
+            None,
+            None,
+        )
+        .expect("public proof");
+        proof.verify_at(1_001).expect("valid proof");
+        assert_eq!(proof.statement.spatial_context, context);
+        assert_eq!(proof.statement.target_owner_pubkey, owner);
+        assert!(proof.verify_at(11_000).is_err());
+    }
+
+    #[test]
+    fn private_channel_access_proof_requires_current_active_participant() {
+        let owner = crate::generate_keys();
+        let participant = crate::generate_keys();
+        let topic_id = crate::TopicId::new("kukuri:topic:private-access-proof");
+        let channel_id = crate::ChannelId::new("channel-1");
+        let policy = PrivateChannelPolicyDocV1 {
+            channel_id: channel_id.clone(),
+            topic_id: topic_id.clone(),
+            audience_kind: crate::ChannelAudienceKind::InviteOnly,
+            owner_pubkey: owner.public_key(),
+            epoch_id: "epoch-2".into(),
+            sharing_state: crate::ChannelSharingState::Open,
+            rotated_at: None,
+            previous_epoch_id: Some("epoch-1".into()),
+        };
+        let participant_doc = PrivateChannelParticipantDocV1 {
+            channel_id: channel_id.clone(),
+            topic_id: topic_id.clone(),
+            epoch_id: "epoch-2".into(),
+            participant_pubkey: participant.public_key(),
+            joined_at: 900,
+            is_owner: false,
+            join_mode: Some(crate::PrivateChannelJoinMode::InviteToken),
+            sponsor_pubkey: Some(owner.public_key()),
+            share_token_id: None,
+            left_at: None,
+        };
+        let proof = build_dome_spatial_access_proof(
+            &participant,
+            SpatialContextV1::Channel {
+                topic_id,
+                channel_id,
+            },
+            owner.public_key(),
+            1_000,
+            Some(
+                crate::build_private_channel_policy_envelope(&owner, &policy)
+                    .expect("policy envelope"),
+            ),
+            Some(
+                crate::build_private_channel_participant_envelope(&participant, &participant_doc)
+                    .expect("participant envelope"),
+            ),
+        )
+        .expect("private proof");
+        proof.verify_at(1_001).expect("valid private proof");
+
+        let mut stale = proof;
+        let mut stale_doc = participant_doc;
+        stale_doc.epoch_id = "epoch-1".into();
+        stale.channel_participant_signature = Some(
+            crate::build_private_channel_participant_envelope(&participant, &stale_doc)
+                .expect("stale participant envelope"),
+        );
+        assert!(stale.verify_at(1_001).is_err());
     }
 }

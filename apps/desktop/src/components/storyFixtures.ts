@@ -351,6 +351,8 @@ export function createStoryAuthorDetailView(): AuthorDetailView {
       friend_of_friend: false,
       friend_of_friend_via_pubkeys: [],
       muted: false,
+      blocking: false,
+      blocked_by: false,
     },
     displayLabel: 'bob',
     summary: {
@@ -365,6 +367,7 @@ export function createStoryAuthorDetailView(): AuthorDetailView {
       canFollow: true,
       followActionLabel: 'Unfollow',
       muteActionLabel: 'Mute',
+      blockActionLabel: 'Block',
     },
     authorError: null,
   };

@@ -3,7 +3,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
 use async_trait::async_trait;
-use kukuri_core::{BlobHash, EnvelopeId, FollowEdge, KukuriEnvelope, Profile, ReplicaId};
+use kukuri_core::{
+    BlobHash, BlockEdge, EnvelopeId, FollowEdge, KukuriEnvelope, Profile, ReplicaId,
+};
 
 use crate::models::{
     AuthorRelationshipProjectionRow, BlobCacheStatus, BookmarkedCustomReactionRow,
@@ -47,6 +49,9 @@ pub trait Store: Send + Sync {
     async fn upsert_follow_edge(&self, edge: FollowEdge) -> Result<()>;
     async fn list_follow_edges_by_subject(&self, subject_pubkey: &str) -> Result<Vec<FollowEdge>>;
     async fn list_follow_edges_by_target(&self, target_pubkey: &str) -> Result<Vec<FollowEdge>>;
+    async fn upsert_block_edge(&self, edge: BlockEdge) -> Result<()>;
+    async fn list_block_edges_by_subject(&self, subject_pubkey: &str) -> Result<Vec<BlockEdge>>;
+    async fn list_block_edges_by_target(&self, target_pubkey: &str) -> Result<Vec<BlockEdge>>;
 }
 
 // ProjectionStore はドメイン別 sub-trait の supertrait 合成(WP-H1)。

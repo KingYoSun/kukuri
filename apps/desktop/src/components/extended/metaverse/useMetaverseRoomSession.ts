@@ -12,7 +12,6 @@ import type {
   MetaverseAssetRef,
   MetaverseInteractionKind,
   MetaversePersistentPropV1,
-  MetaverseRoomEventView,
   SharedRoomObjectV1,
   SyncStatus,
 } from '@/lib/api';
@@ -36,7 +35,6 @@ import {
   mergeRoomChatMessages,
   normalizeAvatarAnimationState,
   type AvatarTransform,
-  type LatestChatBubble,
   type MetaverseRoomConnectionState,
   type MetaverseRoomEvent,
   type MetaverseVec3,
@@ -48,6 +46,8 @@ import {
   latestChatBubbleFromMessage,
   topicDiagnosticFor,
 } from './MetaverseRoomSessionSupport';
+import { useSpatialAudio } from './useSpatialAudio';
+import { useMetaverseBackendEvents } from './useMetaverseBackendEvents';
 
 type UseMetaverseRoomSessionArgs = {
   actions: MetaverseRoomActions;
@@ -58,6 +58,7 @@ type UseMetaverseRoomSessionArgs = {
   localDisplayName: string | null;
   localAvatarAssetRef: MetaverseAssetRef | null;
   localAvatarAssetUrl: string | null;
+  mutedAuthorPubkeys?: ReadonlySet<string>;
   initialSelectedRoomId?: string | null;
   onError: (message: string | null) => void;
 };
@@ -70,6 +71,8 @@ type TransitionAttempt = {
   ticket: DomeTransitionAdmissionTicketV1 | null;
   cancelled: boolean;
 };
+
+const EMPTY_MUTED_AUTHOR_PUBKEYS = new Set<string>();
 
 const EMPTY_ROOM_CHAT_HISTORY: NonNullable<
   NonNullable<GameRoomView['metaverse']>['chat_history']
@@ -84,6 +87,7 @@ export function useMetaverseRoomSession({
   localDisplayName,
   localAvatarAssetRef,
   localAvatarAssetUrl,
+  mutedAuthorPubkeys = EMPTY_MUTED_AUTHOR_PUBKEYS,
   initialSelectedRoomId = null,
   onError,
 }: UseMetaverseRoomSessionArgs) {
@@ -91,9 +95,6 @@ export function useMetaverseRoomSession({
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(initialSelectedRoomId);
   const [joinedRoomIds, setJoinedRoomIds] = useState<Set<string>>(() => new Set());
   const [remoteTransforms, setRemoteTransforms] = useState<Record<string, AvatarTransform>>({});
-  const [peerPresence, setPeerPresence] = useState<Record<string, PeerPresence>>({});
-  const [messages, setMessages] = useState<RoomChatMessage[]>([]);
-  const [latestChatByPeer, setLatestChatByPeer] = useState<Record<string, LatestChatBubble>>({});
   const [messageDraft, setMessageDraft] = useState('');
   const [sharedObject, setSharedObject] = useState<SharedRoomObjectV1>(DEFAULT_SHARED_OBJECT);
   const [sessionProps, setSessionProps] = useState<SessionPropView[]>([]);
@@ -102,12 +103,9 @@ export function useMetaverseRoomSession({
   );
   const [handoffTransform, setHandoffTransform] = useState<AvatarTransform | null>(null);
   const [lastSentSeq, setLastSentSeq] = useState(0);
-  const [pollErrorCount, setPollErrorCount] = useState(0);
-  const [lastRoomActivityAt, setLastRoomActivityAt] = useState(() => Date.now());
   const [recoveringUntil, setRecoveringUntil] = useState(0);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const channelRef = useRef<BroadcastChannel | null>(null);
-  const lastBackendEventEnvelopeIdRef = useRef<string | null>(null);
   const lastPhysicsSnapshotSequenceRef = useRef(0);
   const lastRecoveryAtRef = useRef(0);
   const pendingCreatedRoomIdRef = useRef<string | null>(null);
@@ -135,8 +133,44 @@ export function useMetaverseRoomSession({
   const [transitionNeighbors, setTransitionNeighbors] = useDomeTransitionNeighbors(
     actions,
     selectedRoom,
-    rooms
+    rooms,
+    syncStatus.local_author_pubkey
   );
+
+  const {
+    microphoneEnabled,
+    toggleMicrophone,
+    disableMicrophone,
+    playSpatialAudioFrame,
+    stopSpatialAudio,
+  } = useSpatialAudio({
+    actions,
+    selectedRoom,
+    localPeerId,
+    listenerTransformRef: lastSentTransformRef,
+    mutedAuthorPubkeys,
+    transitionNeighbors,
+  });
+  const {
+    peerPresence,
+    setPeerPresence,
+    messages,
+    setMessages,
+    latestChatByPeer,
+    setLatestChatByPeer,
+    pollErrorCount,
+    setPollErrorCount,
+    lastRoomActivityAt,
+    setLastRoomActivityAt,
+    resetBackendEventCursor,
+  } = useMetaverseBackendEvents({
+    actions,
+    selectedRoom,
+    transitionNeighbors,
+    localPeerId,
+    playSpatialAudioFrame,
+    setRemoteTransforms,
+  });
   const selectedRoomRoomId = selectedRoom?.room_id ?? null;
   const selectedRoomSharedObject = selectedRoom?.metaverse
     ? persistentPropAsSharedObject(
@@ -245,7 +279,7 @@ export function useMetaverseRoomSession({
     return () => {
       window.clearInterval(intervalId);
     };
-  }, []);
+  }, [setLatestChatByPeer]);
 
   useEffect(() => {
     if (!selectedRoomRoomId) {
@@ -260,7 +294,7 @@ export function useMetaverseRoomSession({
     setLatestChatByPeer({});
     setPollErrorCount(0);
     setLastRoomActivityAt(Date.now());
-    lastBackendEventEnvelopeIdRef.current = null;
+    resetBackendEventCursor();
     lastPhysicsSnapshotSequenceRef.current = 0;
     if (typeof BroadcastChannel === 'undefined') {
       return;
@@ -308,7 +342,16 @@ export function useMetaverseRoomSession({
       channel.close();
       channelRef.current = null;
     };
-  }, [localPeerId, selectedRoomRoomId]);
+  }, [
+    localPeerId,
+    resetBackendEventCursor,
+    selectedRoomRoomId,
+    setLastRoomActivityAt,
+    setLatestChatByPeer,
+    setMessages,
+    setPeerPresence,
+    setPollErrorCount,
+  ]);
 
   useEffect(() => {
     const nextObject = selectedRoomSharedObject ?? DEFAULT_SHARED_OBJECT;
@@ -324,7 +367,7 @@ export function useMetaverseRoomSession({
   useEffect(() => {
     const durableMessages = selectedRoomChatHistory.map(chatMessageFromApi);
     setMessages((current) => mergeRoomChatMessages(current, durableMessages));
-  }, [selectedRoomChatHistory, selectedRoomRoomId]);
+  }, [selectedRoomChatHistory, selectedRoomRoomId, setMessages]);
 
   function emit(event: MetaverseRoomEvent) {
     channelRef.current?.postMessage(event);
@@ -386,7 +429,7 @@ export function useMetaverseRoomSession({
       });
     }
     setLastRoomActivityAt(Date.now());
-  }, [selectedRoom, syncStatus.local_author_pubkey]);
+  }, [selectedRoom, setLastRoomActivityAt, syncStatus.local_author_pubkey]);
 
   const submitAuthoritativeInput = useCallback((input: DomeSessionInputKindV1, sequence = Date.now()) => {
     if (!selectedRoom?.metaverse) return;
@@ -444,112 +487,7 @@ export function useMetaverseRoomSession({
     submitAuthoritativeInput,
   ]);
 
-  useEffect(() => {
-    if (!selectedRoom) {
-      return;
-    }
-    let cancelled = false;
-    let timeoutId = 0;
-    const applyBackendEvent = (view: MetaverseRoomEventView) => {
-      const event = view.content.event;
-      setLastRoomActivityAt(Date.now());
-      if (event.type === 'presence_join' && event.presence.peer_id !== localPeerId) {
-        const presence: PeerPresence = {
-          peerId: event.presence.peer_id,
-          displayName: event.presence.display_name ?? null,
-          avatarAssetRef: event.presence.avatar_asset_ref ?? null,
-          joinedAt: event.presence.joined_at,
-          lastSeenAt: event.presence.last_seen_at,
-        };
-        setPeerPresence((current) => ({
-          ...current,
-          [presence.peerId]: {
-            ...current[presence.peerId],
-            ...presence,
-          },
-        }));
-        if (presence.avatarAssetRef) {
-          void actions
-            .getBlobPreviewUrl(
-              presence.avatarAssetRef.blob_hash,
-              presence.avatarAssetRef.mime_type ?? 'model/vrm',
-              presence.avatarAssetRef.kind
-            )
-            .then((avatarAssetUrl) => {
-              if (!cancelled && avatarAssetUrl) {
-                setPeerPresence((current) => ({
-                  ...current,
-                  [presence.peerId]: {
-                    ...current[presence.peerId],
-                    avatarAssetUrl,
-                  },
-                }));
-              }
-            })
-            .catch(() => {
-              // Missing remote avatar blobs fall back to the bundled default VRM.
-            });
-        }
-      }
-      if (event.type === 'presence_leave' && event.peer_id !== localPeerId) {
-        setPeerPresence((current) => {
-          const next = { ...current };
-          delete next[event.peer_id];
-          return next;
-        });
-        setRemoteTransforms((current) => {
-          const next = { ...current };
-          delete next[event.peer_id];
-          return next;
-        });
-        setLatestChatByPeer((current) => {
-          const next = { ...current };
-          delete next[event.peer_id];
-          return next;
-        });
-      }
-      if (event.type === 'chat_message') {
-        const message = chatMessageFromApi(event.message);
-        setMessages((current) => mergeRoomChatMessages(current, [message]));
-        setLatestChatByPeer((current) => ({
-          ...current,
-          [message.authorPeerId]: latestChatBubbleFromMessage(message),
-        }));
-      }
-    };
-    const poll = async () => {
-      try {
-        const events = await actions.listRoomEvents(
-          selectedRoom.room_id,
-          lastBackendEventEnvelopeIdRef.current,
-          64
-        );
-        if (!cancelled && events.length > 0) {
-          for (const event of events) {
-            applyBackendEvent(event);
-          }
-          lastBackendEventEnvelopeIdRef.current = events[events.length - 1].envelope_id;
-        }
-        if (!cancelled) {
-          setPollErrorCount(0);
-        }
-      } catch {
-        if (!cancelled) {
-          setPollErrorCount((current) => current + 1);
-        }
-        // The browser-only dev shell has no Tauri backend. BroadcastChannel remains the local fallback.
-      } finally {
-        if (!cancelled) {
-          timeoutId = window.setTimeout(() => void poll(), 180);
-        }
-      }
-    };
-    void poll();
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timeoutId);
-    };
-  }, [actions, localPeerId, selectedRoom]);
+  useEffect(() => stopSpatialAudio(), [selectedRoom?.room_id, stopSpatialAudio, transitionNeighbors]);
 
   useEffect(() => {
     if (!selectedRoom || (roomConnectionState !== 'stale' && roomConnectionState !== 'offline')) {
@@ -560,7 +498,7 @@ export function useMetaverseRoomSession({
       return;
     }
     lastRecoveryAtRef.current = now;
-    lastBackendEventEnvelopeIdRef.current = null;
+    resetBackendEventCursor();
     lastPhysicsSnapshotSequenceRef.current = 0;
     if (roomConnectionState === 'stale') {
       setRecoveringUntil(now + 3_000);
@@ -568,7 +506,7 @@ export function useMetaverseRoomSession({
     void Promise.resolve(actions.refresh()).catch(() => {
       setPollErrorCount((current) => current + 1);
     });
-  }, [actions, roomConnectionState, selectedRoom]);
+  }, [actions, resetBackendEventCursor, roomConnectionState, selectedRoom, setPollErrorCount]);
 
   function resetRoomRuntimeState() {
     setRemoteTransforms({});
@@ -579,7 +517,7 @@ export function useMetaverseRoomSession({
     setRecoveringUntil(0);
     setLastSentSeq(0);
     lastSentTransformRef.current = null;
-    lastBackendEventEnvelopeIdRef.current = null;
+    resetBackendEventCursor();
   }
 
   function setTransitionPreparing(direction: DomeDirection, preparing: boolean) {
@@ -774,6 +712,8 @@ export function useMetaverseRoomSession({
       return next;
     });
     setSelectedRoomId(null);
+    disableMicrophone();
+    stopSpatialAudio();
     resetRoomRuntimeState();
   }
 
@@ -989,5 +929,7 @@ export function useMetaverseRoomSession({
     spawnGuestProp,
     addPersistentProp,
     deletePersistentProp,
+    microphoneEnabled,
+    toggleMicrophone,
   };
 }

@@ -37,6 +37,7 @@ Metaverse は実験機能であり、asset inspection metadata の追加に伴�
 | Player | input bandwidth | 256 KiB/s | signed input JSON bytes | rate reject |
 | Player | connection proposal | 8 | proposer owner × receiver instance/slot per 10 min | rate reject |
 | Player | impulse | 5000 | maximum absolute component, cm | mutation reject |
+| Player | spatial audio | 50 frames/s, 32 KiB/s | signed PCM16 frame | frame reject |
 | Host | participants | 64 | active participant count | join reject |
 | Host | simulated rigid bodies | 512 | active host physics bodies | mutation reject |
 | Host | snapshot bandwidth | 4 MiB/s | signed snapshot JSON bytes | reuse latest snapshot |
@@ -47,6 +48,7 @@ Metaverse は実験機能であり、asset inspection metadata の追加に伴�
 | Client | interpolated bodies | 256 | sorted visible body count | stop low-priority interpolation |
 | Client | neighbor Domes | 4 | adjacent Dome count | reduce, fallback, then hide |
 | Client | metaverse cache | 1 GiB desktop / 10 GiB CN | content-addressed manifest/asset bytes | unpinned LRU GC or stage reject |
+| Client | spatial audio | 16 streams, 8 jitter frames | active decoded stream/frame count | mute/drop oldest |
 
 ### Asset and physics validation
 

@@ -10,6 +10,7 @@ mod game;
 mod ids;
 mod live;
 mod media;
+mod metaverse_audio;
 mod metaverse_resource_budget;
 mod posts;
 mod private_channels;
@@ -69,12 +70,14 @@ pub use dome_layout::{
     verify_signed_dome_layout_candidate, verify_signed_dome_layout_commit,
 };
 pub use dome_transition::{
-    DOME_TRANSITION_CROSSING_HYSTERESIS_CM, DOME_TRANSITION_TICKET_TTL_MILLIS, DomeBoundaryStateV1,
-    DomeTransitionAccessDecisionV1, DomeTransitionAdmissionRequestV1,
+    DOME_ACCESS_PROOF_TTL_MILLIS, DOME_TRANSITION_CROSSING_HYSTERESIS_CM,
+    DOME_TRANSITION_TICKET_TTL_MILLIS, DomeBoundaryStateV1, DomeSpatialAccessProofV1,
+    DomeSpatialAccessStatementV1, DomeTransitionAccessDecisionV1, DomeTransitionAdmissionRequestV1,
     DomeTransitionAdmissionTicketV1, DomeTransitionDenialReasonV1, DomeTransitionPhaseV1,
-    advance_dome_transition_phase, crossed_dome_transition_center, dome_transition_axis_cm,
-    dome_transition_component_position_cm, dome_transition_local_position_cm,
-    dome_transition_progress_millionths, transform_avatar_between_domes_cm,
+    advance_dome_transition_phase, build_dome_spatial_access_proof, crossed_dome_transition_center,
+    dome_transition_axis_cm, dome_transition_component_position_cm,
+    dome_transition_local_position_cm, dome_transition_progress_millionths,
+    transform_avatar_between_domes_cm,
 };
 pub(crate) use envelope::sign_envelope_at;
 pub use envelope::{
@@ -95,7 +98,6 @@ pub use game::{
     fallback_capsule_collider, fixed_dome_v1, interpolate_dome_environment,
     resolve_metaverse_room_state, validate_dome_customization, validate_dome_instance_manifest,
     validate_dome_move_record, validate_dome_preset_manifest, validate_dome_relationship_scope,
-    validate_metaverse_room_event_content, validate_metaverse_room_event_for_instance,
     validate_metaverse_room_state,
 };
 pub use ids::{
@@ -109,6 +111,12 @@ pub use media::{
     AssetRef, AssetRole, DOME_INSTANCE_MANIFEST_MIME, DOME_PRESET_MANIFEST_MIME,
     GAME_MANIFEST_MIME, KukuriMediaManifestV1, LIVE_MANIFEST_MIME, ManifestBlobRef,
     MediaManifestItem, blob_hash, build_media_manifest_envelope,
+};
+pub use metaverse_audio::{
+    METAVERSE_AUDIO_MAX_SAMPLES_PER_FRAME, METAVERSE_AUDIO_SAMPLE_RATE_HZ,
+    METAVERSE_MEDIA_TTL_MILLIS, MetaverseSpatialAudioFrameV1, connection_opening_audio_distance_cm,
+    metaverse_room_event_is_live, spatial_audio_gain_milli, validate_metaverse_room_event_content,
+    validate_metaverse_room_event_for_instance,
 };
 pub use metaverse_resource_budget::{
     ClientResourceBudget, DomeResourceBudget, HostResourceBudget, MetaverseAssetBudgetMetadataV1,
@@ -143,13 +151,14 @@ pub use private_channels::{
     parse_private_channel_participant, parse_private_channel_policy,
 };
 pub use profile::{
-    AuthorProfileDocV1, AuthorProfilePostDocV1, AuthorProfileRepostDocV1, FollowEdge,
-    FollowEdgeDocV1, FollowEdgeStatus, KukuriFollowEdgeEnvelopeContentV1,
+    AuthorProfileDocV1, AuthorProfilePostDocV1, AuthorProfileRepostDocV1, BlockEdge,
+    BlockEdgeDocV1, BlockEdgeStatus, FollowEdge, FollowEdgeDocV1, FollowEdgeStatus,
+    KukuriBlockEdgeEnvelopeContentV1, KukuriFollowEdgeEnvelopeContentV1,
     KukuriProfileEnvelopeContentV1, KukuriProfilePostEnvelopeContentV1,
     KukuriProfileRepostEnvelopeContentV1, Profile, ProfilePost, ProfileRepost,
-    build_follow_edge_envelope, build_profile_envelope, build_profile_post_envelope,
-    build_profile_repost_envelope, parse_follow_edge, parse_profile, parse_profile_post,
-    parse_profile_repost,
+    build_block_edge_envelope, build_follow_edge_envelope, build_profile_envelope,
+    build_profile_post_envelope, build_profile_repost_envelope, parse_block_edge,
+    parse_follow_edge, parse_profile, parse_profile_post, parse_profile_repost,
 };
 pub use reactions::{
     CustomReactionAssetDocV1, CustomReactionAssetSnapshotV1,

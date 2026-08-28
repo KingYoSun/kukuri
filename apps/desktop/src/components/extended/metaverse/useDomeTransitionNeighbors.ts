@@ -10,7 +10,8 @@ import {
 export function useDomeTransitionNeighbors(
   actions: MetaverseRoomActions,
   selectedRoom: GameRoomView | null,
-  rooms: GameRoomView[]
+  rooms: GameRoomView[],
+  participantPubkey: string
 ) {
   const state = useState<DomeNeighborTransitionView[]>([]);
   const [, setNeighbors] = state;
@@ -39,6 +40,27 @@ export function useDomeTransitionNeighbors(
           }
         }));
         const hosting = Object.fromEntries(hostingEntries);
+        const accessEntries = await Promise.all(loading.map(async (neighbor) => {
+          try {
+            const decision = await actions.previewTransitionAccess({
+              transition_id: `preview-${neighbor.connectionId}`,
+              connection_id: neighbor.connectionId,
+              topology_digest: neighbor.topologyDigest,
+              spatial_context: selectedRoom.metaverse!.spatial_context,
+              source_instance_id: selectedRoom.metaverse!.instance_id,
+              source_instance_generation: selectedRoom.metaverse!.instance_generation,
+              target_instance_id: neighbor.room.metaverse!.instance_id,
+              target_instance_generation: neighbor.room.metaverse!.instance_generation,
+              participant_pubkey: participantPubkey,
+              direction: neighbor.direction,
+              requested_at: Date.now(),
+            });
+            return [neighbor.connectionId, decision.status === 'allowed'] as const;
+          } catch {
+            return [neighbor.connectionId, false] as const;
+          }
+        }));
+        const accessByConnection = Object.fromEntries(accessEntries);
         const assetStates: Record<string, 'loading' | 'ready' | 'error'> = {};
         const textureUrls: Record<string, { wall: string | null; floor: string | null }> = {};
         await Promise.all(loading.map(async (neighbor) => {
@@ -83,7 +105,9 @@ export function useDomeTransitionNeighbors(
             hosting,
             assetStates,
             textureUrls
-          ));
+          ).map((neighbor) => accessByConnection[neighbor.connectionId]
+            ? neighbor
+            : { ...neighbor, boundaryState: 'closed' }));
         }
       } catch {
         if (!cancelled) {
@@ -100,7 +124,7 @@ export function useDomeTransitionNeighbors(
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [actions, rooms, selectedRoom, setNeighbors]);
+  }, [actions, participantPubkey, rooms, selectedRoom, setNeighbors]);
 
   return state;
 }

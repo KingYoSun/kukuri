@@ -3,6 +3,20 @@ use super::*;
 // capability registry の永続化はラッパー側の手動 persist ではなく、AppService へ注入した
 // write-through callback(registry 変異時に発火)が担う(WP-C2 boundary)。
 impl DesktopRuntime {
+    pub async fn preview_dome_transition_access(
+        &self,
+        request: PrepareDomeTransitionRequest,
+    ) -> Result<kukuri_core::DomeTransitionAccessDecisionV1> {
+        if request.request.participant_pubkey != self.author_keys.public_key() {
+            anyhow::bail!("Dome transition participant does not match local identity");
+        }
+        self.app_service
+            .preview_dome_transition_access(PrepareDomeTransitionInput {
+                request: request.request,
+            })
+            .await
+    }
+
     pub async fn create_private_channel(
         &self,
         request: CreatePrivateChannelRequest,
@@ -402,7 +416,7 @@ impl DesktopRuntime {
         {
             anyhow::bail!("DOME_TRANSITION_STALE_TOPOLOGY");
         }
-        let matches_connection = topology.connections.iter().any(|view| {
+        let connection = topology.connections.iter().find(|view| {
             let agreement = &view.record.agreement;
             agreement.connection_id == request.request.connection_id
                 && ((agreement.proposer.instance_id == request.request.source_instance_id
@@ -420,9 +434,16 @@ impl DesktopRuntime {
                         && agreement.proposer.instance_generation
                             == request.request.target_instance_generation))
         });
-        if !matches_connection {
+        let Some(connection) = connection else {
             anyhow::bail!("DOME_TRANSITION_STALE_TOPOLOGY");
-        }
+        };
+        let agreement = &connection.record.agreement;
+        let target_owner_pubkey =
+            if agreement.proposer.instance_id == request.request.target_instance_id {
+                agreement.proposer.owner_pubkey.clone()
+            } else {
+                agreement.receiver.owner_pubkey.clone()
+            };
         let hosting = self
             .get_dome_hosting(GetDomeHostingRequest {
                 spatial_context: request.request.spatial_context.clone(),
@@ -446,6 +467,13 @@ impl DesktopRuntime {
                 .prepare_dome_transition_on_community_node(
                     api_base_url,
                     &DomeTransitionPrepareRequest {
+                        access_proof: self
+                            .app_service
+                            .build_dome_access_proof(
+                                request.request.spatial_context.clone(),
+                                target_owner_pubkey,
+                            )
+                            .await?,
                         request: request.request,
                     },
                 )

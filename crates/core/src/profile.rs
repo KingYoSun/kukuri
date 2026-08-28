@@ -225,6 +225,39 @@ pub struct FollowEdgeDocV1 {
     pub envelope_id: EnvelopeId,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum BlockEdgeStatus {
+    Active,
+    Revoked,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KukuriBlockEdgeEnvelopeContentV1 {
+    pub subject_pubkey: Pubkey,
+    pub target_pubkey: Pubkey,
+    pub status: BlockEdgeStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BlockEdge {
+    pub subject_pubkey: Pubkey,
+    pub target_pubkey: Pubkey,
+    pub status: BlockEdgeStatus,
+    pub updated_at: i64,
+    pub envelope_id: EnvelopeId,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BlockEdgeDocV1 {
+    pub subject_pubkey: Pubkey,
+    pub target_pubkey: Pubkey,
+    pub status: BlockEdgeStatus,
+    pub updated_at: i64,
+    pub envelope_id: EnvelopeId,
+}
+
 pub fn build_profile_envelope(
     keys: &KukuriKeys,
     content: &KukuriProfileEnvelopeContentV1,
@@ -354,6 +387,35 @@ pub fn build_follow_edge_envelope(
     )
 }
 
+pub fn build_block_edge_envelope(
+    keys: &KukuriKeys,
+    target_pubkey: &Pubkey,
+    status: BlockEdgeStatus,
+) -> Result<KukuriEnvelope> {
+    let subject_pubkey = keys.public_key();
+    if subject_pubkey == *target_pubkey {
+        bail!("self block is not allowed");
+    }
+    let content = KukuriBlockEdgeEnvelopeContentV1 {
+        subject_pubkey: subject_pubkey.clone(),
+        target_pubkey: target_pubkey.clone(),
+        status,
+    };
+    let created_at = now_timestamp_millis()?;
+    let encoded = serde_json::to_string(&content).context("failed to encode envelope content")?;
+    crate::sign_envelope_at(
+        keys,
+        "block-edge",
+        vec![
+            vec!["subject".into(), subject_pubkey.as_str().to_string()],
+            vec!["target".into(), target_pubkey.as_str().to_string()],
+            vec!["object".into(), "block-edge".into()],
+        ],
+        encoded,
+        created_at,
+    )
+}
+
 pub fn parse_profile(envelope: &KukuriEnvelope) -> Result<Option<Profile>> {
     if envelope.kind != "identity-profile" {
         return Ok(None);
@@ -464,6 +526,31 @@ pub fn parse_follow_edge(envelope: &KukuriEnvelope) -> Result<Option<FollowEdge>
     }
 
     Ok(Some(FollowEdge {
+        subject_pubkey: content.subject_pubkey,
+        target_pubkey: content.target_pubkey,
+        status: content.status,
+        updated_at: envelope.created_at,
+        envelope_id: envelope.id.clone(),
+    }))
+}
+
+pub fn parse_block_edge(envelope: &KukuriEnvelope) -> Result<Option<BlockEdge>> {
+    if envelope.kind != "block-edge" {
+        return Ok(None);
+    }
+
+    let content: KukuriBlockEdgeEnvelopeContentV1 =
+        serde_json::from_str(&envelope.content).context("failed to parse block edge envelope")?;
+    validate_pubkey(content.subject_pubkey.as_str()).context("invalid block subject pubkey")?;
+    validate_pubkey(content.target_pubkey.as_str()).context("invalid block target pubkey")?;
+    if content.subject_pubkey != envelope.pubkey {
+        bail!("block subject pubkey must match envelope signer");
+    }
+    if content.subject_pubkey == content.target_pubkey {
+        bail!("self block is not allowed");
+    }
+
+    Ok(Some(BlockEdge {
         subject_pubkey: content.subject_pubkey,
         target_pubkey: content.target_pubkey,
         status: content.status,

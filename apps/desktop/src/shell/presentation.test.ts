@@ -143,6 +143,8 @@ function buildAuthor(
     friend_of_friend: false,
     friend_of_friend_via_pubkeys: [],
     muted: false,
+    blocking: false,
+    blocked_by: false,
     ...overrides,
   };
 }
@@ -229,6 +231,8 @@ describe('mergeAuthorView', () => {
       friend_of_friend: false,
       friend_of_friend_via_pubkeys: [],
       muted: false,
+      blocking: false,
+      blocked_by: false,
     });
   });
 

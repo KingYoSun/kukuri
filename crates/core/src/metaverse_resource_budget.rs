@@ -40,6 +40,8 @@ pub struct PlayerResourceBudget {
     pub max_input_bytes_per_second: u64,
     pub max_proposals_per_ten_minutes_per_slot: u32,
     pub max_impulse_centimeters: i64,
+    pub max_audio_frames_per_second: u32,
+    pub max_audio_bytes_per_second: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -62,6 +64,8 @@ pub struct ClientResourceBudget {
     pub max_interpolated_bodies: u32,
     pub max_neighbor_domes: u32,
     pub cache_capacity_bytes: u64,
+    pub max_concurrent_audio_streams: u32,
+    pub max_audio_jitter_frames: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -96,6 +100,8 @@ impl Default for MetaverseResourceBudgetConfig {
                 max_input_bytes_per_second: 256 * 1024,
                 max_proposals_per_ten_minutes_per_slot: 8,
                 max_impulse_centimeters: 5_000,
+                max_audio_frames_per_second: 50,
+                max_audio_bytes_per_second: 32 * 1024,
             },
             host: HostResourceBudget {
                 max_participants: 64,
@@ -110,6 +116,8 @@ impl Default for MetaverseResourceBudgetConfig {
                 max_interpolated_bodies: 256,
                 max_neighbor_domes: 4,
                 cache_capacity_bytes: GIB,
+                max_concurrent_audio_streams: 16,
+                max_audio_jitter_frames: 8,
             },
         }
     }
@@ -160,6 +168,8 @@ impl MetaverseResourceBudgetConfig {
             self.player.max_interactions_per_second as u64,
             self.player.max_input_bytes_per_second,
             self.player.max_proposals_per_ten_minutes_per_slot as u64,
+            self.player.max_audio_frames_per_second as u64,
+            self.player.max_audio_bytes_per_second,
             self.host.max_participants as u64,
             self.host.max_simulated_rigid_bodies as u64,
             self.host.max_snapshot_bytes_per_second,
@@ -169,6 +179,8 @@ impl MetaverseResourceBudgetConfig {
             self.client.max_rendered_triangles,
             self.client.max_interpolated_bodies as u64,
             self.client.cache_capacity_bytes,
+            self.client.max_concurrent_audio_streams as u64,
+            self.client.max_audio_jitter_frames as u64,
         ];
         if positive.contains(&0) || self.player.max_impulse_centimeters <= 0 {
             bail!("metaverse resource budget values must be positive");
@@ -191,6 +203,10 @@ impl MetaverseResourceBudgetConfig {
             || self.host.max_simulated_rigid_bodies > 8_192
             || self.client.max_rendered_avatars > 512
             || self.client.max_interpolated_bodies > 4_096
+            || self.player.max_audio_frames_per_second > 100
+            || self.player.max_audio_bytes_per_second > MIB
+            || self.client.max_concurrent_audio_streams > 128
+            || self.client.max_audio_jitter_frames > 50
         {
             bail!("metaverse resource budget exceeds the safety ceiling");
         }
@@ -240,6 +256,10 @@ pub enum MetaverseBudgetResource {
     NeighborDomes,
     CacheCapacity,
     AssetFormat,
+    AudioFrameRate,
+    AudioBandwidth,
+    ConcurrentAudioStreams,
+    AudioJitterFrames,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

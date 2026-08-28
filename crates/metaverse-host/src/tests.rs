@@ -210,6 +210,56 @@ fn transition_reservation_expires_and_access_denial_does_not_mutate_capacity() {
 }
 
 #[test]
+fn access_revocation_cancels_reservation_and_evicts_only_target_participant() {
+    let (owner, lease, instance, preset) = fixture();
+    let mut runtime = DomeSessionRuntime::start_with_session_id(
+        lease,
+        owner,
+        &instance,
+        &preset,
+        "session-1",
+        1_000,
+    )
+    .unwrap();
+    let blocked = KukuriKeys::generate();
+    let allowed = KukuriKeys::generate();
+    let blocked_ticket = runtime
+        .prepare_transition_admission(
+            transition_request(&blocked, "transition-blocked"),
+            DomeTransitionAccessDecisionV1::Allowed,
+            1_100,
+        )
+        .unwrap();
+    assert_eq!(runtime.transition_reservation_count(), 1);
+    assert_eq!(
+        runtime.revoke_transition_access(&blocked.public_key(), Some("connection-1")),
+        1
+    );
+    assert!(
+        runtime
+            .commit_transition_admission(&blocked_ticket, [0, 90, 0], [0, 0, 0], 1_200)
+            .is_err()
+    );
+
+    runtime
+        .apply_signed_input_at(
+            &signed_input(&blocked, 1, DomeSessionInputKindV1::Join),
+            1_101,
+        )
+        .unwrap();
+    runtime
+        .apply_signed_input_at(
+            &signed_input(&allowed, 1, DomeSessionInputKindV1::Join),
+            1_101,
+        )
+        .unwrap();
+    assert_eq!(runtime.participant_count(), 2);
+    assert!(runtime.evict_participant(&blocked.public_key()));
+    assert_eq!(runtime.participant_count(), 1);
+    assert!(!runtime.evict_participant(&blocked.public_key()));
+}
+
+#[test]
 fn source_prepare_drops_grab_clears_seat_and_fences_interactions() {
     let (owner, lease, instance, mut preset) = fixture();
     preset.dome.customization.persistent_props = vec![MetaversePersistentPropV1 {

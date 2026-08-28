@@ -281,6 +281,8 @@ pub(crate) fn author_social_view_from_parts(
     profile: Option<&Profile>,
     relationship: Option<&AuthorRelationshipProjectionRow>,
     muted: bool,
+    blocking: bool,
+    blocked_by: bool,
 ) -> AuthorSocialView {
     AuthorSocialView {
         author_pubkey: author_pubkey.to_string(),
@@ -301,6 +303,8 @@ pub(crate) fn author_social_view_from_parts(
             .unwrap_or_default(),
         provenance: None,
         muted,
+        blocking,
+        blocked_by,
     }
 }
 

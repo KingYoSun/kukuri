@@ -665,7 +665,12 @@ describe('MetaverseRoomPanel animation sharing', () => {
     renderPanel(api);
     await user.click(screen.getByRole('button', { name: 'Join Room' }));
 
-    await waitFor(() => expect(listMetaverseRoomEvents).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(listMetaverseRoomEvents).toHaveBeenCalledWith(
+      'kukuri:topic:demo',
+      room.room_id,
+      'event-1',
+      64
+    ));
     expect(listMetaverseRoomEvents).toHaveBeenNthCalledWith(
       1,
       'kukuri:topic:demo',

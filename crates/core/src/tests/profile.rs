@@ -183,3 +183,45 @@ fn follow_edge_parser_rejects_subject_mismatch() {
     let error = parse_follow_edge(&envelope).expect_err("subject mismatch must fail");
     assert!(error.to_string().contains("subject pubkey must match"));
 }
+
+#[test]
+fn block_edge_roundtrip_and_self_block_rejected() {
+    let keys = generate_keys();
+    let target = generate_keys().public_key();
+    let envelope =
+        build_block_edge_envelope(&keys, &target, BlockEdgeStatus::Active).expect("envelope");
+
+    envelope.verify().expect("signature verification");
+    let edge = parse_block_edge(&envelope)
+        .expect("parse block edge")
+        .expect("block edge");
+    assert_eq!(edge.subject_pubkey, keys.public_key());
+    assert_eq!(edge.target_pubkey, target);
+    assert_eq!(edge.status, BlockEdgeStatus::Active);
+
+    let self_block_error =
+        build_block_edge_envelope(&keys, &keys.public_key(), BlockEdgeStatus::Active)
+            .expect_err("self block should be rejected");
+    assert!(self_block_error.to_string().contains("self block"));
+}
+
+#[test]
+fn block_edge_parser_rejects_subject_mismatch() {
+    let signer = generate_keys();
+    let subject = generate_keys().public_key();
+    let target = generate_keys().public_key();
+    let envelope = sign_envelope_json(
+        &signer,
+        "block-edge",
+        vec![vec!["object".into(), "block-edge".into()]],
+        &KukuriBlockEdgeEnvelopeContentV1 {
+            subject_pubkey: subject,
+            target_pubkey: target,
+            status: BlockEdgeStatus::Active,
+        },
+    )
+    .expect("envelope");
+
+    let error = parse_block_edge(&envelope).expect_err("subject mismatch must fail");
+    assert!(error.to_string().contains("subject pubkey must match"));
+}

@@ -35,6 +35,9 @@ impl MemoryStore {
         if let Some(edge) = parse_follow_edge(&envelope)? {
             self.upsert_follow_edge(edge).await?;
         }
+        if let Some(edge) = parse_block_edge(&envelope)? {
+            self.upsert_block_edge(edge).await?;
+        }
 
         Ok(())
     }

@@ -72,6 +72,8 @@ export type MetaverseRoomViewProps = {
   onInteractWithProp: (interaction: MetaverseInteractionKind) => void;
   onMessageDraftChange: (value: string) => void;
   onSendMessage: FormEventHandler<HTMLFormElement>;
+  microphoneEnabled?: boolean;
+  onToggleMicrophone?: () => void;
 };
 
 function isEditableTarget(target: EventTarget | null) {
@@ -124,6 +126,8 @@ export function MetaverseRoomView({
   onInteractWithProp,
   onMessageDraftChange,
   onSendMessage,
+  microphoneEnabled = false,
+  onToggleMicrophone,
 }: MetaverseRoomViewProps) {
   const [hudOpen, setHudOpen] = useState(initialHudOpen);
   const [hudDebugOpen, setHudDebugOpen] = useState(initialHudDebugOpen);
@@ -238,6 +242,8 @@ export function MetaverseRoomView({
               onOpenChat={() => setChatOpen(true)}
               onMessageDraftChange={onMessageDraftChange}
               onSendMessage={onSendMessage}
+              microphoneEnabled={microphoneEnabled}
+              onToggleMicrophone={onToggleMicrophone}
             />
           )}
         />

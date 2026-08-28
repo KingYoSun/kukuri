@@ -38,6 +38,7 @@ type LiveGameMock = Pick<
   | 'closeDomeHosting'
   | 'submitDomeSessionInput'
   | 'prepareDomeTransition'
+  | 'previewDomeTransitionAccess'
   | 'commitDomeTransition'
   | 'abortDomeTransition'
   | 'commitDomeLayout'
@@ -360,6 +361,8 @@ export function createLiveGameMock(runtime: MockRuntime): LiveGameMock {
             max_input_bytes_per_second: 262144,
             max_proposals_per_ten_minutes_per_slot: 8,
             max_impulse_centimeters: 5000,
+            max_audio_frames_per_second: 50,
+            max_audio_bytes_per_second: 32768,
           },
           host: {
             max_participants: 64,
@@ -374,6 +377,8 @@ export function createLiveGameMock(runtime: MockRuntime): LiveGameMock {
             max_interpolated_bodies: 256,
             max_neighbor_domes: 4,
             cache_capacity_bytes: 1073741824,
+            max_concurrent_audio_streams: 16,
+            max_audio_jitter_frames: 8,
           },
         },
         resource_metrics: {
@@ -458,6 +463,9 @@ export function createLiveGameMock(runtime: MockRuntime): LiveGameMock {
           expires_at: null,
         }],
       };
+    },
+    async previewDomeTransitionAccess() {
+      return { status: 'allowed' };
     },
     async prepareDomeTransition(request) {
       const hosting = await this.getDomeHosting(request.spatial_context, request.target_instance_id);

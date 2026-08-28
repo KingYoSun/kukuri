@@ -17,6 +17,32 @@ impl AppService {
                     .await?;
             }
         }
+        for edge in self
+            .services
+            .store
+            .list_block_edges_by_subject(local_author.as_str())
+            .await?
+        {
+            if edge.status == BlockEdgeStatus::Active {
+                self.ensure_author_subscription(edge.target_pubkey.as_str())
+                    .await?;
+                self.reconcile_blocked_dome_connections(&edge.target_pubkey)
+                    .await?;
+            }
+        }
+        for edge in self
+            .services
+            .store
+            .list_block_edges_by_target(local_author.as_str())
+            .await?
+        {
+            if edge.status == BlockEdgeStatus::Active {
+                self.ensure_author_subscription(edge.subject_pubkey.as_str())
+                    .await?;
+                self.reconcile_blocked_dome_connections(&edge.subject_pubkey)
+                    .await?;
+            }
+        }
         Ok(())
     }
 
@@ -143,6 +169,16 @@ impl AppService {
         self.maybe_restart_author_subscription(author_pubkey.as_str())
             .await;
         self.rebuild_author_relationships().await?;
+        if self
+            .authors_blocked_either_direction(
+                self.current_author_pubkey().as_str(),
+                author_pubkey.as_str(),
+            )
+            .await?
+        {
+            self.reconcile_blocked_dome_connections(&Pubkey::from(author_pubkey.clone()))
+                .await?;
+        }
         self.build_author_social_view(author_pubkey.as_str()).await
     }
 
@@ -169,6 +205,36 @@ impl AppService {
             .remove_muted_author(author_pubkey.as_str())
             .await?;
         self.build_author_social_view(author_pubkey.as_str()).await
+    }
+
+    pub async fn block_author(&self, pubkey: &str) -> Result<AuthorSocialView> {
+        self.set_block_edge(pubkey, BlockEdgeStatus::Active).await
+    }
+
+    pub async fn unblock_author(&self, pubkey: &str) -> Result<AuthorSocialView> {
+        self.set_block_edge(pubkey, BlockEdgeStatus::Revoked).await
+    }
+
+    async fn set_block_edge(
+        &self,
+        pubkey: &str,
+        status: BlockEdgeStatus,
+    ) -> Result<AuthorSocialView> {
+        let target_pubkey = Pubkey::from(normalize_author_pubkey(pubkey)?);
+        let envelope =
+            build_block_edge_envelope(self.services.keys.as_ref(), &target_pubkey, status)?;
+        let edge = parse_block_edge(&envelope)?
+            .ok_or_else(|| anyhow::anyhow!("failed to parse block edge"))?;
+        self.services.store.put_envelope(envelope.clone()).await?;
+        persist_block_edge_doc(self.services.docs_sync.as_ref(), &edge, &envelope).await?;
+        self.ensure_author_subscription(target_pubkey.as_str())
+            .await?;
+        *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
+        if edge.status == BlockEdgeStatus::Active {
+            self.reconcile_blocked_dome_connections(&target_pubkey)
+                .await?;
+        }
+        self.build_author_social_view(target_pubkey.as_str()).await
     }
 
     pub async fn list_social_connections(
@@ -202,6 +268,24 @@ impl AppService {
                 .await?
                 .into_iter()
                 .map(|row| row.author_pubkey)
+                .collect::<BTreeSet<_>>(),
+            SocialConnectionKind::Blocking => self
+                .services
+                .store
+                .list_block_edges_by_subject(local_author_pubkey.as_str())
+                .await?
+                .into_iter()
+                .filter(|edge| edge.status == BlockEdgeStatus::Active)
+                .map(|edge| edge.target_pubkey.as_str().to_string())
+                .collect::<BTreeSet<_>>(),
+            SocialConnectionKind::BlockedBy => self
+                .services
+                .store
+                .list_block_edges_by_target(local_author_pubkey.as_str())
+                .await?
+                .into_iter()
+                .filter(|edge| edge.status == BlockEdgeStatus::Active)
+                .map(|edge| edge.subject_pubkey.as_str().to_string())
                 .collect::<BTreeSet<_>>(),
         };
         let mut items = Vec::with_capacity(pubkeys.len());

@@ -78,4 +78,4 @@ Postgres は Dome ごとに active assignment を最大一件に制限する。N
 - ownerの明示操作なしにavailabilityを優先する自動failoverは行わない。
 - transfer中またはsplit-brain検出時は一時的にDomeへ入れなくても、二重authorityより安全側を選ぶ。
 - metaverseは実験機能のため、旧peer-authoritative wire contractとの互換decodeやmigrationは提供しない。
-- snapshot retention、resource budget、access / block、transition、entry / evacuationは後続Issueでこのcontractを利用する。
+- snapshot retentionとresource budgetはADR-0041、transitionはADR-0042、access / block / presence / audioはADR-0043がこのcontractを利用する。

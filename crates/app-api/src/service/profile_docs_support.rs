@@ -144,6 +144,39 @@ pub(crate) async fn persist_follow_edge_doc(
         .await
 }
 
+pub(crate) async fn persist_block_edge_doc(
+    docs_sync: &dyn DocsSync,
+    edge: &BlockEdge,
+    envelope: &KukuriEnvelope,
+) -> Result<()> {
+    let replica = author_replica_id(edge.subject_pubkey.as_str());
+    docs_sync.open_replica(&replica).await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("graph/blocks", edge.target_pubkey.as_str()),
+                value: serde_json::to_value(BlockEdgeDocV1 {
+                    subject_pubkey: edge.subject_pubkey.clone(),
+                    target_pubkey: edge.target_pubkey.clone(),
+                    status: edge.status,
+                    updated_at: edge.updated_at,
+                    envelope_id: edge.envelope_id.clone(),
+                })?,
+            },
+        )
+        .await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("envelopes", envelope.id.as_str()),
+                value: serde_json::to_value(envelope)?,
+            },
+        )
+        .await
+}
+
 pub(crate) async fn persist_custom_reaction_asset_doc(
     docs_sync: &dyn DocsSync,
     asset: &CustomReactionAssetDocV1,
@@ -316,6 +349,45 @@ pub(crate) async fn hydrate_author_state(
                     key = %record.key,
                     error = %error,
                     "failed to decode follow edge doc"
+                );
+            }
+        }
+    }
+
+    for record in query_replica_with_fetch_policy(
+        docs_sync,
+        &replica,
+        DocQuery::Prefix("graph/blocks/".into()),
+        policy,
+    )
+    .await?
+    {
+        match serde_json::from_slice::<BlockEdgeDocV1>(record.value.as_slice()) {
+            Ok(doc) if doc.subject_pubkey.as_str() == author_pubkey => {
+                if let Some(envelope) =
+                    fetch_author_envelope_by_id(docs_sync, &replica, &doc.envelope_id, policy)
+                        .await?
+                    && let Some(edge) = parse_block_edge(&envelope)?
+                    && edge.target_pubkey == doc.target_pubkey
+                    && edge.status == doc.status
+                {
+                    store.put_envelope(envelope).await?;
+                    count += 1;
+                }
+            }
+            Ok(_) => {
+                warn!(
+                    author_pubkey = %author_pubkey,
+                    key = %record.key,
+                    "ignoring block doc with mismatched subject"
+                );
+            }
+            Err(error) => {
+                warn!(
+                    author_pubkey = %author_pubkey,
+                    key = %record.key,
+                    error = %error,
+                    "failed to decode block edge doc"
                 );
             }
         }

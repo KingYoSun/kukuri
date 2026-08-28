@@ -28,5 +28,7 @@
       }
     ]
   },
-  "muted": true
+  "muted": true,
+  "blocking": true,
+  "blocked_by": false
 }

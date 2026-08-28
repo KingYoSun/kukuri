@@ -10,6 +10,7 @@ import type {
   DomeSessionInputKindV1,
   DomeTransitionAdmissionRequestV1,
   DomeTransitionAdmissionTicketV1,
+  DomeTransitionAccessDecisionV1,
   GameRoomView,
   MetaverseAssetRef,
   MetaverseRoomEventView,
@@ -75,6 +76,9 @@ export type MetaverseRoomActions = {
   prepareTransition: (
     request: DomeTransitionAdmissionRequestV1
   ) => Promise<DomeTransitionAdmissionTicketV1>;
+  previewTransitionAccess: (
+    request: DomeTransitionAdmissionRequestV1
+  ) => Promise<DomeTransitionAccessDecisionV1>;
   commitTransition: (
     ticket: DomeTransitionAdmissionTicketV1,
     position: [number, number, number],

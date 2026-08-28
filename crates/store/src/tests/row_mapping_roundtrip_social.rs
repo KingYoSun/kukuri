@@ -8,7 +8,7 @@
 //! 分割元の全体説明は row_mapping_roundtrip.rs の冒頭を参照。
 
 use super::*;
-use kukuri_core::{AssetRef, AssetRole, FollowEdge};
+use kukuri_core::{AssetRef, AssetRole, BlockEdge, BlockEdgeStatus, FollowEdge};
 
 // ---------------------------------------------------------------------------
 // profiles(sqlite/social.rs のインライン写像。picture_* 3 列を含む)
@@ -293,6 +293,47 @@ async fn follow_edge_upsert_latest_wins_and_tie_overwrites() {
             .await
             .expect("list after newer"),
         vec![newer]
+    );
+}
+
+#[tokio::test]
+async fn block_edge_roundtrip_and_latest_wins() {
+    let store = SqliteStore::connect_memory().await.expect("sqlite store");
+    let subject = "1".repeat(64);
+    let target = "2".repeat(64);
+    let active = BlockEdge {
+        subject_pubkey: subject.as_str().into(),
+        target_pubkey: target.as_str().into(),
+        status: BlockEdgeStatus::Active,
+        updated_at: 300,
+        envelope_id: EnvelopeId::from("env-block-active"),
+    };
+    Store::upsert_block_edge(&store, active.clone())
+        .await
+        .expect("upsert active block");
+    Store::upsert_block_edge(
+        &store,
+        BlockEdge {
+            status: BlockEdgeStatus::Revoked,
+            updated_at: 299,
+            envelope_id: EnvelopeId::from("env-block-stale"),
+            ..active.clone()
+        },
+    )
+    .await
+    .expect("ignore stale unblock");
+
+    assert_eq!(
+        Store::list_block_edges_by_subject(&store, subject.as_str())
+            .await
+            .expect("list by subject"),
+        vec![active.clone()]
+    );
+    assert_eq!(
+        Store::list_block_edges_by_target(&store, target.as_str())
+            .await
+            .expect("list by target"),
+        vec![active]
     );
 }
 
