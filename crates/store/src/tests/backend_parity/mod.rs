@@ -239,6 +239,7 @@ fn parity_metaverse_state() -> MetaverseRoomStateV1 {
         preset_ref: DomePresetRefV1 {
             preset_id: "preset-meta".into(),
             owner_pubkey: "a".repeat(64).into(),
+            revision: 1,
             manifest_blob_hash: "9".repeat(64),
             manifest_mime: "application/vnd.kukuri.dome-preset+json".into(),
             manifest_bytes: 1024,

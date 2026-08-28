@@ -75,6 +75,8 @@ function actions(topology = emptyTopology()) {
     delegateHosting: vi.fn(),
     closeHosting: vi.fn(),
     submitSessionInput: vi.fn(),
+    commitLayout: vi.fn(),
+    resyncSnapshots: vi.fn(),
     moveRoom: vi.fn(),
     listConnections: vi.fn().mockResolvedValue(topology),
     createConnectionProposal: vi.fn().mockResolvedValue(topology.proposals[0]),

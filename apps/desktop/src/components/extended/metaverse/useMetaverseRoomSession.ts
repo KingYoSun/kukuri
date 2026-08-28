@@ -8,11 +8,13 @@ import type {
   DomeSessionInputKindV1,
   MetaverseAssetRef,
   MetaverseInteractionKind,
+  MetaversePersistentPropV1,
   MetaverseRoomEventView,
   SharedRoomObjectV1,
   SyncStatus,
 } from '@/lib/api';
 import type { MetaverseRoomActions } from './MetaverseRoomActions';
+import type { SessionPropView } from '../MetaverseScene';
 import { createDomeInteractionInput, persistentPropAsSharedObject } from './DomeSceneModel';
 import {
   DEFAULT_SHARED_OBJECT,
@@ -104,6 +106,7 @@ export function useMetaverseRoomSession({
   const [latestChatByPeer, setLatestChatByPeer] = useState<Record<string, LatestChatBubble>>({});
   const [messageDraft, setMessageDraft] = useState('');
   const [sharedObject, setSharedObject] = useState<SharedRoomObjectV1>(DEFAULT_SHARED_OBJECT);
+  const [sessionProps, setSessionProps] = useState<SessionPropView[]>([]);
   const [lastSentSeq, setLastSentSeq] = useState(0);
   const [pollErrorCount, setPollErrorCount] = useState(0);
   const [lastRoomActivityAt, setLastRoomActivityAt] = useState(() => Date.now());
@@ -220,6 +223,7 @@ export function useMetaverseRoomSession({
     }
     sharedObjectRef.current = DEFAULT_SHARED_OBJECT;
     setSharedObject(DEFAULT_SHARED_OBJECT);
+    setSessionProps([]);
     setRemoteTransforms({});
     setPeerPresence({});
     setMessages([]);
@@ -314,9 +318,29 @@ export function useMetaverseRoomSession({
       }
     }
     setRemoteTransforms(remote);
-    const prop = snapshot.bodies.find(
+    const propBodies = snapshot.bodies.filter(
       (body) => body.kind === 'persistent_prop' || body.kind === 'guest_prop'
     );
+    setSessionProps(propBodies.map((body) => {
+      const definition = selectedRoom?.metaverse?.dome.customization.persistent_props.find(
+        (candidate) => candidate.prop_id === body.entity_id
+      );
+      return {
+        kind: body.kind as SessionPropView['kind'],
+        object: {
+          object_id: body.entity_id,
+          asset_ref: definition?.asset_ref ?? null,
+          primitive_fallback: definition?.primitive_fallback ?? 'cube',
+          position: body.position,
+          rotation: body.rotation,
+          scale: definition?.scale ?? [100, 100, 100],
+          updated_by: snapshot.host_pubkey,
+          updated_at: snapshot.simulated_at,
+        },
+        collider: definition?.collider ?? null,
+      };
+    }));
+    const prop = propBodies.find((body) => body.kind === 'persistent_prop');
     if (prop) {
       setSharedObject((current) => {
         const next = {
@@ -332,7 +356,7 @@ export function useMetaverseRoomSession({
       });
     }
     setLastRoomActivityAt(Date.now());
-  }, [syncStatus.local_author_pubkey]);
+  }, [selectedRoom, syncStatus.local_author_pubkey]);
 
   const submitAuthoritativeInput = useCallback((input: DomeSessionInputKindV1, sequence = Date.now()) => {
     if (!selectedRoom?.metaverse) return;
@@ -671,6 +695,62 @@ export function useMetaverseRoomSession({
     submitAuthoritativeInput(authoritativeInput, input.issuedAt);
   }
 
+  const submitPropMutation = useCallback(async (input: DomeSessionInputKindV1) => {
+    if (!selectedRoom?.metaverse) {
+      throw new Error(t('errors.roomRequired'));
+    }
+    const snapshot = await actions.submitSessionInput(
+      selectedRoom.metaverse.spatial_context,
+      selectedRoom.metaverse.instance_id,
+      Date.now(),
+      input
+    );
+    applyPhysicsSnapshot(snapshot);
+  }, [actions, applyPhysicsSnapshot, selectedRoom, t]);
+
+  const newSessionProp = useCallback((kind: 'guest' | 'persistent'): MetaversePersistentPropV1 => ({
+    prop_id: `${kind}-${localPeerId}-${Date.now()}`,
+    asset_ref: null,
+    primitive_fallback: 'cube',
+    position: [0, 150, -250],
+    rotation: [0, 0, 0],
+    scale: [100, 100, 100],
+    visual_only: false,
+    interactions: ['grab', 'throw', 'push'],
+    collider: {
+      shape: 'cuboid',
+      center: [0, 0, 0],
+      half_extents: [50, 50, 50],
+    },
+  }), [localPeerId]);
+
+  const spawnGuestProp = useCallback(
+    () => submitPropMutation({
+      type: 'spawn_guest_prop',
+      prop: newSessionProp('guest'),
+      expires_at: Date.now() + 5 * 60 * 1000,
+    }),
+    [newSessionProp, submitPropMutation]
+  );
+
+  const addPersistentProp = useCallback(
+    () => submitPropMutation({
+      type: 'upsert_persistent_prop',
+      prop: newSessionProp('persistent'),
+    }),
+    [newSessionProp, submitPropMutation]
+  );
+
+  const deletePersistentProp = useCallback(() => {
+    const propId = [...sessionProps]
+      .reverse()
+      .find((prop) => prop.kind === 'persistent_prop')?.object.object_id;
+    if (!propId) {
+      return Promise.resolve();
+    }
+    return submitPropMutation({ type: 'delete_persistent_prop', prop_id: propId });
+  }, [sessionProps, submitPropMutation]);
+
   return {
     selectedRoomId,
     joinedRoomIds,
@@ -683,6 +763,7 @@ export function useMetaverseRoomSession({
     messageDraft,
     setMessageDraft,
     sharedObject,
+    sessionProps,
     lastSentSeq,
     lastReceivedAt,
     remoteAnimationSummary,
@@ -696,5 +777,8 @@ export function useMetaverseRoomSession({
     handleSendMessage,
     moveSharedObject,
     interactWithProp,
+    spawnGuestProp,
+    addPersistentProp,
+    deletePersistentProp,
   };
 }

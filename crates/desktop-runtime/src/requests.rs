@@ -448,6 +448,22 @@ pub struct SubmitDomeSessionInputRequest {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct CommitDomeLayoutRequest {
+    pub spatial_context: SpatialContextV1,
+    pub instance_id: String,
+    pub operation_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ResyncDomeSnapshotsRequest {
+    pub spatial_context: SpatialContextV1,
+    pub instance_id: String,
+    pub after_sequence: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CreatePrivateChannelRequest {
     pub topic: String,

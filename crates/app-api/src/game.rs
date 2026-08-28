@@ -281,6 +281,7 @@ impl AppService {
             .persist_dome_preset_manifest(DomePresetManifestV1 {
                 preset_id,
                 owner_pubkey: owner_pubkey.clone(),
+                revision: 1,
                 dome: dome.clone(),
                 asset_refs: Vec::new(),
                 updated_at: now,
@@ -476,10 +477,16 @@ impl AppService {
         {
             anyhow::bail!("only an active attached Dome instance can be customized");
         }
+        if current_metaverse.dome.customization == input.customization
+            && manifest.status == input.status
+        {
+            return Ok(());
+        }
         let preset_ref = self
             .persist_dome_preset_manifest(DomePresetManifestV1 {
                 preset_id: current_metaverse.preset_ref.preset_id.clone(),
                 owner_pubkey: Pubkey::from(actor),
+                revision: current_metaverse.preset_ref.revision.saturating_add(1),
                 dome: MetaverseDomeV1 {
                     spec_id: current_metaverse.dome.spec_id.clone(),
                     customization: input.customization.clone(),
@@ -723,16 +730,18 @@ impl AppService {
             anyhow::bail!("only an active attached Dome instance can import Preset assets");
         }
         let mut asset_refs = current.asset_refs.clone();
-        if !asset_refs
+        if asset_refs
             .iter()
             .any(|existing| existing.blob_hash == asset.blob_hash)
         {
-            asset_refs.push(asset.clone());
+            return Ok(asset);
         }
+        asset_refs.push(asset.clone());
         let preset_ref = self
             .persist_dome_preset_manifest(DomePresetManifestV1 {
                 preset_id: current.preset_ref.preset_id.clone(),
                 owner_pubkey: Pubkey::from(actor),
+                revision: current.preset_ref.revision.saturating_add(1),
                 dome: current.dome.clone(),
                 asset_refs: asset_refs.clone(),
                 updated_at: now,

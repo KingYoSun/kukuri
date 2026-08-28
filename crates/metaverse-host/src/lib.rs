@@ -1,14 +1,16 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use anyhow::{Context, Result, bail};
 use kukuri_core::{
-    DomeHostHeartbeatV1, DomeHostingLeaseV1, DomeInstanceManifestV1, DomePhysicsBodyKindV1,
-    DomePhysicsBodyV1, DomePhysicsSnapshotV1, DomePresetManifestV1, DomeSessionInputKindV1,
-    DomeSessionInputV1, KukuriKeys, MetaverseColliderV1, SignedDomeHostHeartbeatV1,
-    SignedDomeHostingLeaseV1, SignedDomePhysicsSnapshotV1, SignedDomeSessionInputV1,
-    build_signed_dome_host_heartbeat, build_signed_dome_physics_snapshot, fixed_dome_v1,
-    validate_dome_instance_manifest, validate_dome_preset_manifest,
-    verify_signed_dome_hosting_lease, verify_signed_dome_session_input,
+    DOME_SNAPSHOT_RING_CAPACITY, DomeHostHeartbeatV1, DomeHostingLeaseV1, DomeInstanceManifestV1,
+    DomeLayoutCandidateV1, DomePhysicsBodyKindV1, DomePhysicsBodyV1, DomePhysicsSnapshotV1,
+    DomePresetManifestV1, DomeSessionInputKindV1, DomeSessionInputV1, KukuriKeys,
+    MetaverseColliderV1, MetaversePersistentPropV1, SignedDomeHostHeartbeatV1,
+    SignedDomeHostingLeaseV1, SignedDomeLayoutCandidateV1, SignedDomePhysicsSnapshotV1,
+    SignedDomeSessionInputV1, build_signed_dome_host_heartbeat, build_signed_dome_layout_candidate,
+    build_signed_dome_physics_snapshot, fixed_dome_v1, validate_dome_instance_manifest,
+    validate_dome_preset_manifest, verify_signed_dome_hosting_lease,
+    verify_signed_dome_session_input,
 };
 use rapier3d::prelude::*;
 use uuid::Uuid;
@@ -30,6 +32,7 @@ struct RuntimeBody {
     animation: Option<String>,
     grabbed_by: Option<String>,
     expires_at: Option<i64>,
+    persistent_definition: Option<MetaversePersistentPropV1>,
 }
 
 pub struct DomeSessionRuntime {
@@ -51,6 +54,7 @@ pub struct DomeSessionRuntime {
     ccd_solver: CCDSolver,
     tick: u64,
     snapshot_sequence: u64,
+    snapshot_ring: VecDeque<SignedDomePhysicsSnapshotV1>,
     last_simulated_at: i64,
 }
 
@@ -120,17 +124,12 @@ impl DomeSessionRuntime {
             ccd_solver: CCDSolver::new(),
             tick: 0,
             snapshot_sequence: 0,
+            snapshot_ring: VecDeque::with_capacity(DOME_SNAPSHOT_RING_CAPACITY),
             last_simulated_at: started_at,
         };
         runtime.insert_dome_boundaries();
         for prop in &preset.dome.customization.persistent_props {
-            runtime.insert_prop(
-                prop.prop_id.clone(),
-                DomePhysicsBodyKindV1::PersistentProp,
-                prop.position,
-                prop.collider.as_ref(),
-                None,
-            )?;
+            runtime.insert_prop(prop.clone(), DomePhysicsBodyKindV1::PersistentProp, None)?;
         }
         Ok(runtime)
     }
@@ -159,10 +158,18 @@ impl DomeSessionRuntime {
             bail!("guest prop specification is invalid");
         }
         self.insert_prop(
-            spec.prop_id,
+            MetaversePersistentPropV1 {
+                prop_id: spec.prop_id,
+                asset_ref: None,
+                primitive_fallback: kukuri_core::MetaversePrimitive::Cube,
+                position: spec.position,
+                rotation: [0, 0, 0],
+                scale: [100, 100, 100],
+                visual_only: false,
+                interactions: Vec::new(),
+                collider: None,
+            },
             DomePhysicsBodyKindV1::GuestProp,
-            spec.position,
-            None,
             Some(spec.expires_at),
         )
     }
@@ -230,7 +237,7 @@ impl DomeSessionRuntime {
                 })
             })
             .collect();
-        build_signed_dome_physics_snapshot(
+        let signed = build_signed_dome_physics_snapshot(
             &self.host_keys,
             &self.lease.lease,
             DomePhysicsSnapshotV1 {
@@ -243,6 +250,74 @@ impl DomeSessionRuntime {
                 simulated_at: now_millis,
                 sleeping: self.is_sleeping(),
                 bodies,
+            },
+        )?;
+        self.snapshot_ring.push_back(signed.clone());
+        while self.snapshot_ring.len() > DOME_SNAPSHOT_RING_CAPACITY {
+            self.snapshot_ring.pop_front();
+        }
+        Ok(signed)
+    }
+
+    pub fn snapshots_after(&self, after_sequence: u64) -> Vec<SignedDomePhysicsSnapshotV1> {
+        let Some(first) = self.snapshot_ring.front() else {
+            return Vec::new();
+        };
+        if after_sequence != 0 && after_sequence < first.snapshot.sequence {
+            return self.snapshot_ring.back().cloned().into_iter().collect();
+        }
+        let snapshots = self
+            .snapshot_ring
+            .iter()
+            .filter(|snapshot| snapshot.snapshot.sequence > after_sequence)
+            .cloned()
+            .collect::<Vec<_>>();
+        if !snapshots.is_empty() {
+            return snapshots;
+        }
+        Vec::new()
+    }
+
+    pub fn snapshot_ring_len(&self) -> usize {
+        self.snapshot_ring.len()
+    }
+
+    pub fn signed_layout_candidate(
+        &mut self,
+        operation_id: impl Into<String>,
+        now_millis: i64,
+    ) -> Result<SignedDomeLayoutCandidateV1> {
+        let snapshot = self.signed_snapshot(now_millis)?;
+        let mut persistent_props = Vec::new();
+        for runtime_body in self.bodies_by_id.values() {
+            let Some(mut prop) = runtime_body.persistent_definition.clone() else {
+                continue;
+            };
+            let body = self
+                .rigid_bodies
+                .get(runtime_body.handle)
+                .context("persistent prop rigid body is missing")?;
+            let translation = body.translation();
+            let rotation = body.rotation().to_scaled_axis();
+            prop.position = meters_to_centimeters([translation.x, translation.y, translation.z]);
+            prop.rotation = radians_to_milliradians([rotation.x, rotation.y, rotation.z]);
+            persistent_props.push(prop);
+        }
+        persistent_props.sort_by(|left, right| left.prop_id.cmp(&right.prop_id));
+        build_signed_dome_layout_candidate(
+            &self.host_keys,
+            &self.lease.lease,
+            DomeLayoutCandidateV1 {
+                operation_id: operation_id.into(),
+                instance_id: self.lease.lease.instance_id.clone(),
+                instance_generation: self.lease.lease.instance_generation,
+                lease_epoch: self.lease.lease.epoch,
+                session_id: self.session_id.clone(),
+                host_pubkey: self.host_keys.public_key(),
+                base_manifest_revision: self.lease.lease.manifest_version,
+                snapshot_sequence: snapshot.snapshot.sequence,
+                captured_at: now_millis,
+                persistent_props,
             },
         )
     }
@@ -345,6 +420,33 @@ impl DomeSessionRuntime {
                     bail!("Dome seat prop does not exist");
                 }
             }
+            DomeSessionInputKindV1::SpawnGuestProp { prop, expires_at } => {
+                self.require_participant(&participant_id)?;
+                if *expires_at <= self.last_simulated_at {
+                    bail!("Dome guest prop is already expired");
+                }
+                self.insert_prop(
+                    prop.clone(),
+                    DomePhysicsBodyKindV1::GuestProp,
+                    Some(*expires_at),
+                )?;
+            }
+            DomeSessionInputKindV1::UpsertPersistentProp { prop } => {
+                self.require_owner(input)?;
+                self.remove_body(&prop.prop_id);
+                self.insert_prop(prop.clone(), DomePhysicsBodyKindV1::PersistentProp, None)?;
+            }
+            DomeSessionInputKindV1::DeletePersistentProp { prop_id } => {
+                self.require_owner(input)?;
+                if self
+                    .bodies_by_id
+                    .get(prop_id)
+                    .is_none_or(|body| body.kind != DomePhysicsBodyKindV1::PersistentProp)
+                {
+                    bail!("Dome persistent prop does not exist");
+                }
+                self.remove_body(prop_id);
+            }
         }
         self.last_input_sequence
             .insert(participant_id, input.sequence);
@@ -354,6 +456,13 @@ impl DomeSessionRuntime {
     fn require_participant(&self, participant_id: &str) -> Result<()> {
         if !self.participants.contains(participant_id) {
             bail!("Dome session input requires a joined participant");
+        }
+        Ok(())
+    }
+
+    fn require_owner(&self, input: &DomeSessionInputV1) -> Result<()> {
+        if input.participant_pubkey != self.lease.lease.owner_pubkey {
+            bail!("only the Dome owner can change persistent props");
         }
         Ok(())
     }
@@ -374,22 +483,23 @@ impl DomeSessionRuntime {
 
     fn insert_prop(
         &mut self,
-        prop_id: String,
+        prop: MetaversePersistentPropV1,
         kind: DomePhysicsBodyKindV1,
-        position_cm: [i64; 3],
-        collider: Option<&MetaverseColliderV1>,
         expires_at: Option<i64>,
     ) -> Result<()> {
+        let prop_id = prop.prop_id.clone();
         if self.bodies_by_id.contains_key(&prop_id) {
             bail!("Dome physics entity id already exists");
         }
-        let position = centimeters_to_meters(position_cm);
+        let position = centimeters_to_meters(prop.position);
+        let rotation = milliradians_to_radians(prop.rotation);
         let rigid_body = RigidBodyBuilder::dynamic()
             .translation(Vector::new(position[0], position[1], position[2]))
+            .rotation(Vector::new(rotation[0], rotation[1], rotation[2]))
             .ccd_enabled(true)
             .build();
         let handle = self.rigid_bodies.insert(rigid_body);
-        let collider = collider_builder(collider)
+        let collider = collider_builder(prop.collider.as_ref())
             .friction(0.7)
             .restitution(0.15)
             .build();
@@ -403,6 +513,8 @@ impl DomeSessionRuntime {
                 animation: None,
                 grabbed_by: None,
                 expires_at,
+                persistent_definition: (kind == DomePhysicsBodyKindV1::PersistentProp)
+                    .then_some(prop),
             },
         );
         Ok(())
@@ -430,6 +542,7 @@ impl DomeSessionRuntime {
                 animation: Some("idle".into()),
                 grabbed_by: None,
                 expires_at: None,
+                persistent_definition: None,
             },
         );
         Ok(())
@@ -537,6 +650,7 @@ mod tests {
         let preset = DomePresetManifestV1 {
             preset_id: "preset-1".into(),
             owner_pubkey: owner.public_key(),
+            revision: 1,
             dome: MetaverseDomeV1::default(),
             asset_refs: Vec::new(),
             updated_at: 1_000,
@@ -544,6 +658,7 @@ mod tests {
         let preset_ref = DomePresetRefV1 {
             preset_id: preset.preset_id.clone(),
             owner_pubkey: owner.public_key(),
+            revision: preset.revision,
             manifest_blob_hash: "manifest-hash".into(),
             manifest_mime: "application/vnd.kukuri.dome-preset+json".into(),
             manifest_bytes: 100,
@@ -695,5 +810,140 @@ mod tests {
             meters_to_centimeters([translation.x, translation.y, translation.z]),
             [100, 200, 300]
         );
+    }
+
+    #[test]
+    fn snapshot_ring_is_bounded_and_resync_falls_back_to_latest() {
+        let (owner, lease, instance, preset) = fixture();
+        let mut runtime = DomeSessionRuntime::start_with_session_id(
+            lease,
+            owner,
+            &instance,
+            &preset,
+            "session-1",
+            1_000,
+        )
+        .unwrap();
+        for index in 1..=DOME_SNAPSHOT_RING_CAPACITY + 5 {
+            runtime.signed_snapshot(1_000 + index as i64).unwrap();
+        }
+        assert_eq!(runtime.snapshot_ring_len(), DOME_SNAPSHOT_RING_CAPACITY);
+        let latest = runtime.snapshots_after(1);
+        assert_eq!(latest.len(), 1);
+        assert_eq!(
+            latest[0].snapshot.sequence,
+            (DOME_SNAPSHOT_RING_CAPACITY + 5) as u64
+        );
+    }
+
+    #[test]
+    fn layout_candidate_contains_only_owner_managed_persistent_props() {
+        let (owner, lease, instance, preset) = fixture();
+        let participant = KukuriKeys::generate();
+        let mut runtime = DomeSessionRuntime::start_with_session_id(
+            lease,
+            owner.clone(),
+            &instance,
+            &preset,
+            "session-1",
+            1_000,
+        )
+        .unwrap();
+        runtime
+            .apply_signed_input(&signed_input(&participant, 1, DomeSessionInputKindV1::Join))
+            .unwrap();
+        let guest = MetaversePersistentPropV1 {
+            prop_id: "guest-1".into(),
+            asset_ref: None,
+            primitive_fallback: MetaversePrimitive::Sphere,
+            position: [0, 100, 0],
+            rotation: [0, 0, 0],
+            scale: [100, 100, 100],
+            visual_only: false,
+            interactions: Vec::new(),
+            collider: None,
+        };
+        runtime
+            .apply_signed_input(&signed_input(
+                &participant,
+                2,
+                DomeSessionInputKindV1::SpawnGuestProp {
+                    prop: guest,
+                    expires_at: 10_000,
+                },
+            ))
+            .unwrap();
+        let persistent = MetaversePersistentPropV1 {
+            prop_id: "owner-prop".into(),
+            asset_ref: None,
+            primitive_fallback: MetaversePrimitive::Cube,
+            position: [100, 100, 100],
+            rotation: [0, 0, 0],
+            scale: [120, 120, 120],
+            visual_only: false,
+            interactions: Vec::new(),
+            collider: None,
+        };
+        runtime
+            .apply_signed_input(&signed_input(
+                &owner,
+                1,
+                DomeSessionInputKindV1::UpsertPersistentProp { prop: persistent },
+            ))
+            .unwrap();
+        let candidate = runtime.signed_layout_candidate("layout-1", 1_100).unwrap();
+        assert!(
+            candidate
+                .candidate
+                .persistent_props
+                .iter()
+                .any(|prop| prop.prop_id == "owner-prop")
+        );
+        assert!(
+            candidate
+                .candidate
+                .persistent_props
+                .iter()
+                .all(|prop| prop.prop_id != "guest-1")
+        );
+        assert!(
+            candidate
+                .candidate
+                .persistent_props
+                .iter()
+                .all(|prop| !prop.prop_id.starts_with("avatar:"))
+        );
+    }
+
+    #[test]
+    fn non_owner_cannot_mutate_persistent_props() {
+        let (owner, lease, instance, preset) = fixture();
+        let participant = KukuriKeys::generate();
+        let mut runtime = DomeSessionRuntime::start_with_session_id(
+            lease,
+            owner,
+            &instance,
+            &preset,
+            "session-1",
+            1_000,
+        )
+        .unwrap();
+        let prop = MetaversePersistentPropV1 {
+            prop_id: "unauthorized".into(),
+            asset_ref: None,
+            primitive_fallback: MetaversePrimitive::Cube,
+            position: [0, 100, 0],
+            rotation: [0, 0, 0],
+            scale: [100, 100, 100],
+            visual_only: false,
+            interactions: Vec::new(),
+            collider: None,
+        };
+        let input = signed_input(
+            &participant,
+            1,
+            DomeSessionInputKindV1::UpsertPersistentProp { prop },
+        );
+        assert!(runtime.apply_signed_input(&input).is_err());
     }
 }

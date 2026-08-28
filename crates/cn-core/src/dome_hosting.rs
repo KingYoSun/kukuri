@@ -3,6 +3,229 @@ use serde_json::Value;
 use sqlx::postgres::PgPool;
 use sqlx::{Postgres, Row, Transaction};
 
+pub const COMMUNITY_NODE_DOME_BLOB_CACHE_CAPACITY_BYTES: u64 = 10 * 1024 * 1024 * 1024;
+pub const DOME_BLOB_CACHE_GC_GRACE_MILLIS: i64 = 24 * 60 * 60 * 1_000;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StagedDomeBlob {
+    pub blob_hash: String,
+    pub data: Vec<u8>,
+}
+
+pub async fn stage_dome_hosting_blobs(
+    pool: &PgPool,
+    reference_id: &str,
+    blobs: &[StagedDomeBlob],
+    now_millis: i64,
+) -> Result<()> {
+    if reference_id.trim().is_empty() {
+        bail!("Dome blob staging reference is required");
+    }
+    let mut unique = std::collections::BTreeMap::new();
+    for blob in blobs {
+        if blob.blob_hash != blake3::hash(&blob.data).to_hex().to_string() {
+            bail!("Dome staged blob content hash mismatch");
+        }
+        unique.entry(blob.blob_hash.clone()).or_insert(&blob.data);
+    }
+    let mut tx = pool.begin().await?;
+    let current_bytes: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(bytes), 0)::BIGINT FROM cn_metaverse.dome_blob_cache",
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    let mut additional = 0_u64;
+    for (hash, data) in &unique {
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM cn_metaverse.dome_blob_cache WHERE blob_hash = $1)",
+        )
+        .bind(hash)
+        .fetch_one(&mut *tx)
+        .await?;
+        if !exists {
+            additional = additional.saturating_add(data.len() as u64);
+        }
+    }
+    if (current_bytes.max(0) as u64).saturating_add(additional)
+        > COMMUNITY_NODE_DOME_BLOB_CACHE_CAPACITY_BYTES
+    {
+        bail!("Community Node metaverse manifest/asset blob cache capacity exceeded");
+    }
+    for (hash, data) in unique {
+        sqlx::query(
+            "INSERT INTO cn_metaverse.dome_blob_cache
+                (blob_hash, bytes, data, last_accessed_at, unreferenced_at)
+             VALUES ($1, $2, $3, $4, NULL)
+             ON CONFLICT (blob_hash) DO UPDATE SET
+                last_accessed_at = EXCLUDED.last_accessed_at,
+                unreferenced_at = NULL",
+        )
+        .bind(&hash)
+        .bind(data.len() as i64)
+        .bind(data)
+        .bind(now_millis)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(
+            "INSERT INTO cn_metaverse.dome_blob_pins
+                (blob_hash, reason, reference_id, created_at)
+             VALUES ($1, 'staging', $2, $3)
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(hash)
+        .bind(reference_id)
+        .bind(now_millis)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+pub async fn activate_dome_hosting_blob_pins(
+    pool: &PgPool,
+    instance_id: &str,
+    reference_id: &str,
+    now_millis: i64,
+) -> Result<()> {
+    let prefix = format!("{instance_id}:%");
+    let mut tx = pool.begin().await?;
+    sqlx::query(
+        "INSERT INTO cn_metaverse.dome_blob_pins
+            (blob_hash, reason, reference_id, created_at)
+         SELECT blob_hash, 'rollback', reference_id, created_at
+         FROM cn_metaverse.dome_blob_pins
+         WHERE reason = 'current' AND reference_id LIKE $1 AND reference_id <> $2
+         ON CONFLICT DO NOTHING",
+    )
+    .bind(&prefix)
+    .bind(reference_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "DELETE FROM cn_metaverse.dome_blob_pins
+         WHERE reason = 'current' AND reference_id LIKE $1 AND reference_id <> $2",
+    )
+    .bind(&prefix)
+    .bind(reference_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "DELETE FROM cn_metaverse.dome_blob_pins
+         WHERE reason = 'active_lease' AND reference_id LIKE $1",
+    )
+    .bind(&prefix)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "INSERT INTO cn_metaverse.dome_blob_pins
+            (blob_hash, reason, reference_id, created_at)
+         SELECT blob_hash, 'current', reference_id, $2
+         FROM cn_metaverse.dome_blob_pins
+         WHERE reason = 'staging' AND reference_id = $1
+         ON CONFLICT (blob_hash, reason, reference_id)
+         DO UPDATE SET created_at = EXCLUDED.created_at",
+    )
+    .bind(reference_id)
+    .bind(now_millis)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "DELETE FROM cn_metaverse.dome_blob_pins
+         WHERE reason = 'staging' AND reference_id = $1",
+    )
+    .bind(reference_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "INSERT INTO cn_metaverse.dome_blob_pins
+            (blob_hash, reason, reference_id, created_at)
+         SELECT blob_hash, 'active_lease', reference_id, $2
+         FROM cn_metaverse.dome_blob_pins
+         WHERE reason = 'current' AND reference_id = $1
+         ON CONFLICT DO NOTHING",
+    )
+    .bind(reference_id)
+    .bind(now_millis)
+    .execute(&mut *tx)
+    .await?;
+    let stale_references = sqlx::query_scalar::<_, String>(
+        "SELECT reference_id
+         FROM cn_metaverse.dome_blob_pins
+         WHERE reason = 'rollback' AND reference_id LIKE $1
+         GROUP BY reference_id
+         ORDER BY MAX(created_at) DESC, reference_id DESC
+         OFFSET 3",
+    )
+    .bind(&prefix)
+    .fetch_all(&mut *tx)
+    .await?;
+    for stale in stale_references {
+        sqlx::query(
+            "DELETE FROM cn_metaverse.dome_blob_pins
+             WHERE reason = 'rollback' AND reference_id = $1",
+        )
+        .bind(stale)
+        .execute(&mut *tx)
+        .await?;
+    }
+    mark_unreferenced_dome_blobs(&mut tx, now_millis).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+pub async fn release_dome_hosting_blob_pins(
+    pool: &PgPool,
+    reference_id: &str,
+    now_millis: i64,
+) -> Result<()> {
+    let mut tx = pool.begin().await?;
+    sqlx::query(
+        "DELETE FROM cn_metaverse.dome_blob_pins
+         WHERE reason = 'active_lease' AND reference_id = $1",
+    )
+    .bind(reference_id)
+    .execute(&mut *tx)
+    .await?;
+    mark_unreferenced_dome_blobs(&mut tx, now_millis).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+pub async fn collect_dome_blob_cache_garbage(pool: &PgPool, now_millis: i64) -> Result<u64> {
+    let cutoff = now_millis.saturating_sub(DOME_BLOB_CACHE_GC_GRACE_MILLIS);
+    let result = sqlx::query(
+        "DELETE FROM cn_metaverse.dome_blob_cache
+         WHERE unreferenced_at IS NOT NULL AND unreferenced_at <= $1
+           AND NOT EXISTS (
+             SELECT 1 FROM cn_metaverse.dome_blob_pins pins
+             WHERE pins.blob_hash = cn_metaverse.dome_blob_cache.blob_hash
+           )",
+    )
+    .bind(cutoff)
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected())
+}
+
+async fn mark_unreferenced_dome_blobs(
+    tx: &mut Transaction<'_, Postgres>,
+    now_millis: i64,
+) -> Result<()> {
+    sqlx::query(
+        "UPDATE cn_metaverse.dome_blob_cache cache
+         SET unreferenced_at = COALESCE(unreferenced_at, $1)
+         WHERE NOT EXISTS (
+            SELECT 1 FROM cn_metaverse.dome_blob_pins pins
+            WHERE pins.blob_hash = cache.blob_hash
+         )",
+    )
+    .bind(now_millis)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct DomeHostingAssignment {
     pub instance_id: String,

@@ -196,6 +196,8 @@ pub fn run() {
             commands::live_game::delegate_dome_hosting,
             commands::live_game::close_dome_hosting,
             commands::live_game::submit_dome_session_input,
+            commands::live_game::commit_dome_layout,
+            commands::live_game::resync_dome_snapshots,
             commands::live_game::move_dome,
             commands::live_game::list_dome_connection_topology,
             commands::live_game::create_dome_connection_proposal,

@@ -1,6 +1,28 @@
 use super::*;
 
 impl AppService {
+    pub async fn fetch_metaverse_blob_bytes(&self, hash: &str) -> Result<Option<Vec<u8>>> {
+        self.services
+            .blob_service
+            .fetch_blob(&kukuri_core::BlobHash::new(hash))
+            .await
+    }
+
+    pub async fn collect_metaverse_blob_garbage(&self, now_millis: i64) -> Result<Vec<String>> {
+        let hashes = self
+            .metaverse_blob_cache
+            .lock()
+            .await
+            .collect_garbage(now_millis);
+        for hash in &hashes {
+            self.services.blob_service.unpin_blob(hash).await?;
+        }
+        Ok(hashes
+            .into_iter()
+            .map(|hash| hash.as_str().to_string())
+            .collect())
+    }
+
     pub(crate) async fn persist_dome_preset_manifest(
         &self,
         manifest: DomePresetManifestV1,
@@ -12,9 +34,58 @@ impl AppService {
             DOME_PRESET_MANIFEST_MIME,
         )
         .await?;
+        let current_reference = MetaverseBlobPin {
+            reason: MetaverseBlobPinReason::Current,
+            reference_id: format!("{}:{}", manifest.preset_id, manifest.revision),
+        };
+        let mut required = vec![(stored.hash.clone(), stored.bytes)];
+        required.extend(manifest.asset_refs.iter().map(|asset| {
+            (
+                kukuri_core::BlobHash::new(asset.blob_hash.clone()),
+                asset.size_bytes.unwrap_or(0),
+            )
+        }));
+        {
+            let mut cache = self.metaverse_blob_cache.lock().await;
+            cache.ensure_staging_capacity(&required)?;
+            if manifest.revision > 1 {
+                let previous = MetaverseBlobPin {
+                    reason: MetaverseBlobPinReason::Current,
+                    reference_id: format!("{}:{}", manifest.preset_id, manifest.revision - 1),
+                };
+                cache.replace_reference(
+                    &previous,
+                    MetaverseBlobPin {
+                        reason: MetaverseBlobPinReason::Rollback,
+                        reference_id: previous.reference_id.clone(),
+                    },
+                    manifest.updated_at,
+                );
+            }
+            if manifest.revision > METAVERSE_ROLLBACK_REVISION_LIMIT as u64 + 1 {
+                cache.unpin_reference(
+                    &MetaverseBlobPin {
+                        reason: MetaverseBlobPinReason::Rollback,
+                        reference_id: format!(
+                            "{}:{}",
+                            manifest.preset_id,
+                            manifest.revision - METAVERSE_ROLLBACK_REVISION_LIMIT as u64 - 1
+                        ),
+                    },
+                    manifest.updated_at,
+                );
+            }
+            for (hash, bytes) in &required {
+                cache.pin(hash, *bytes, current_reference.clone(), manifest.updated_at);
+            }
+        }
+        for (hash, _) in &required {
+            self.services.blob_service.pin_blob(hash).await?;
+        }
         let state = DomePresetStateDocV1 {
             preset_id: manifest.preset_id.clone(),
             owner_pubkey: manifest.owner_pubkey.clone(),
+            revision: manifest.revision,
             current_manifest: ManifestBlobRef {
                 hash: stored.hash.clone(),
                 mime: stored.mime.clone(),
@@ -42,6 +113,19 @@ impl AppService {
                 DocOp::SetJson {
                     key: stable_key(
                         "metaverse/dome-presets",
+                        &format!("{}/revisions/{:020}", manifest.preset_id, manifest.revision),
+                    ),
+                    value: serde_json::to_value(&state)?,
+                },
+            )
+            .await?;
+        self.services
+            .docs_sync
+            .apply_doc_op(
+                &replica,
+                DocOp::SetJson {
+                    key: stable_key(
+                        "metaverse/dome-presets",
                         &format!("{}/state", manifest.preset_id),
                     ),
                     value: serde_json::to_value(&state)?,
@@ -52,9 +136,12 @@ impl AppService {
             .projection_store
             .mark_blob_status(&stored.hash, BlobCacheStatus::Available)
             .await?;
+        self.collect_metaverse_blob_garbage(manifest.updated_at)
+            .await?;
         Ok(DomePresetRefV1 {
             preset_id: manifest.preset_id,
             owner_pubkey: manifest.owner_pubkey,
+            revision: manifest.revision,
             manifest_blob_hash: stored.hash.as_str().to_string(),
             manifest_mime: stored.mime,
             manifest_bytes: stored.bytes,
@@ -73,7 +160,10 @@ impl AppService {
                 &replica,
                 DocQuery::Exact(stable_key(
                     "metaverse/dome-presets",
-                    &format!("{}/state", preset_ref.preset_id),
+                    &format!(
+                        "{}/revisions/{:020}",
+                        preset_ref.preset_id, preset_ref.revision
+                    ),
                 )),
             )
             .await?;
@@ -83,6 +173,7 @@ impl AppService {
         let state: DomePresetStateDocV1 = serde_json::from_slice(&state_record.value)?;
         if state.preset_id != preset_ref.preset_id
             || state.owner_pubkey != preset_ref.owner_pubkey
+            || state.revision != preset_ref.revision
             || state.current_manifest.hash.as_str() != preset_ref.manifest_blob_hash
             || state.current_manifest.mime != preset_ref.manifest_mime
             || state.current_manifest.bytes != preset_ref.manifest_bytes
@@ -104,6 +195,7 @@ impl AppService {
         validate_dome_preset_manifest(&manifest)?;
         if manifest.preset_id != preset_ref.preset_id
             || manifest.owner_pubkey != preset_ref.owner_pubkey
+            || manifest.revision != preset_ref.revision
         {
             anyhow::bail!("Dome Preset reference does not match its manifest");
         }

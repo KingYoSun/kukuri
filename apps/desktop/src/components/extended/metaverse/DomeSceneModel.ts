@@ -10,7 +10,7 @@ import type {
 } from '@/lib/api';
 
 export const FIXED_DOME_SPEC_ID = 'fixed_dome_v1';
-export const METAVERSE_WORLD_VERSION = 3;
+export const METAVERSE_WORLD_VERSION = 5;
 export const DOME_INNER_RADIUS_CM = 2_000;
 export const DOME_OUTER_RADIUS_CM = 2_200;
 export const DOME_APEX_HEIGHT_CM = 2_000;
@@ -88,6 +88,7 @@ export function createDefaultMetaverseRoomState(
     preset_ref: {
       preset_id: `preset-${roomId}`,
       owner_pubkey: ownerPubkey,
+      revision: 1,
       manifest_blob_hash: `mock-preset-${roomId}`,
       manifest_mime: 'application/vnd.kukuri.dome-preset+json',
       manifest_bytes: 1,

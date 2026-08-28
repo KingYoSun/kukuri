@@ -49,6 +49,10 @@ export function createMetaverseRoomActions({
     closeHosting: (context, instanceId) => api.closeDomeHosting(context, instanceId),
     submitSessionInput: (context, instanceId, sequence, input) =>
       api.submitDomeSessionInput(context, instanceId, sequence, input),
+    commitLayout: (context, instanceId, operationId) =>
+      api.commitDomeLayout(context, instanceId, operationId),
+    resyncSnapshots: (context, instanceId, afterSequence) =>
+      api.resyncDomeSnapshots(context, instanceId, afterSequence),
     moveRoom: (moveId, roomId, targetContext) =>
       api.moveDome(activeTopic, moveId, roomId, targetContext).then(() => undefined),
     listConnections: (context) => api.listDomeConnectionTopology(context),

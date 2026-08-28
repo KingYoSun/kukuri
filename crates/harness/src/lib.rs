@@ -33,11 +33,12 @@ pub(crate) use base64::Engine;
 pub(crate) use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 pub(crate) use kukuri_app_api::{
     AcceptDomeConnectionProposalInput, ActivateCommunityNodeDomeHostingInput, AppService,
-    CloseDomeHostingInput, CreateDomeConnectionProposalInput, CreateGameRoomInput,
-    CreateLiveSessionInput, CreateMetaverseRoomInput, DirectMessageConversationView,
-    DirectMessageMessageView, DirectMessageStatusView, GameScoreView, MoveDomeInput,
-    PrepareCommunityNodeDomeHostingInput, PrivateChannelCapability, RevokeDomeConnectionInput,
-    ServiceHandles, StartOwnerDomeHostingInput, SyncStatus, UpdateGameRoomInput,
+    CloseDomeHostingInput, CommitDomeLayoutInput, CreateDomeConnectionProposalInput,
+    CreateGameRoomInput, CreateLiveSessionInput, CreateMetaverseRoomInput,
+    DirectMessageConversationView, DirectMessageMessageView, DirectMessageStatusView,
+    DomeLayoutCommitOutcome, GameScoreView, MoveDomeInput, PrepareCommunityNodeDomeHostingInput,
+    PrivateChannelCapability, RevokeDomeConnectionInput, ServiceHandles,
+    StartOwnerDomeHostingInput, SubmitDomeSessionInput, SyncStatus, UpdateGameRoomInput,
     UpdateMetaverseRoomInput,
 };
 pub(crate) use kukuri_blob_service::MemoryBlobService;
@@ -48,7 +49,7 @@ pub(crate) use kukuri_cn_user_api::{
 };
 pub(crate) use kukuri_core::{
     ChannelAudienceKind, ChannelId, ChannelRef, CreatePrivateChannelInput, DomeDirection,
-    DomeHostingStateKindV1, DomeMaterialPreset, GameRoomStatus, KukuriKeys,
+    DomeHostingStateKindV1, DomeMaterialPreset, DomeSessionInputKindV1, GameRoomStatus, KukuriKeys,
     SignedDomeHostingLeaseV1, SpatialContextV1, TimelineScope, TopicId, accept_dome_hosting_lease,
     generate_keys,
 };

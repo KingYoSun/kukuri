@@ -6,7 +6,10 @@ pub(crate) use base64::Engine;
 pub(crate) use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 pub(crate) use chrono::Utc;
 pub(crate) use futures_util::StreamExt;
-pub(crate) use kukuri_blob_service::{BlobService, BlobStatus, MemoryBlobService, StoredBlob};
+pub(crate) use kukuri_blob_service::{
+    BlobService, BlobStatus, METAVERSE_ROLLBACK_REVISION_LIMIT, MemoryBlobService,
+    MetaverseBlobCacheIndex, MetaverseBlobPin, MetaverseBlobPinReason, StoredBlob,
+};
 pub(crate) use kukuri_core::{
     AssetRole, AuthorProfileDocV1, AuthorProfilePostDocV1, AuthorProfileRepostDocV1,
     CanonicalPostHeader, ChannelAudienceKind, ChannelId, ChannelRef, ChannelSharingState,
@@ -369,6 +372,7 @@ pub struct AppService {
     pub(crate) joined_private_channels: Arc<Mutex<HashMap<String, JoinedPrivateChannelState>>>,
     pub(crate) metaverse_room_events: Arc<Mutex<HashMap<String, VecDeque<MetaverseRoomEventView>>>>,
     pub(crate) dome_host_sessions: Arc<Mutex<HashMap<String, DomeSessionRuntime>>>,
+    pub(crate) metaverse_blob_cache: Arc<Mutex<MetaverseBlobCacheIndex>>,
     pub(crate) last_sync_ts: Arc<Mutex<Option<i64>>>,
     pub(crate) public_topic_delivery: Arc<Mutex<HashMap<String, PublicTopicDeliveryStatus>>>,
     pub(crate) empty_recovery_candidates: Arc<Mutex<HashSet<String>>>,
@@ -518,6 +522,7 @@ impl AppService {
             joined_private_channels: Arc::new(Mutex::new(HashMap::new())),
             metaverse_room_events: Arc::new(Mutex::new(HashMap::new())),
             dome_host_sessions: Arc::new(Mutex::new(HashMap::new())),
+            metaverse_blob_cache: Arc::new(Mutex::new(MetaverseBlobCacheIndex::desktop())),
             last_sync_ts: Arc::new(Mutex::new(None)),
             public_topic_delivery: Arc::new(Mutex::new(HashMap::new())),
             empty_recovery_candidates: Arc::new(Mutex::new(HashSet::new())),

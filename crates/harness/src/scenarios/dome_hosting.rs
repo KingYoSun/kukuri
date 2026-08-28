@@ -39,6 +39,50 @@ pub(crate) async fn run_dome_hosting_lifecycle(
     push_named_step(&mut steps, "owner_hosted", started);
 
     let started = Instant::now();
+    app.submit_dome_session_input(SubmitDomeSessionInput {
+        spatial_context: context.clone(),
+        instance_id: instance_id.clone(),
+        sequence: 1,
+        input: DomeSessionInputKindV1::Join,
+    })
+    .await?;
+    let room = app
+        .list_game_rooms(&scenario.fixtures.topic)
+        .await?
+        .into_iter()
+        .find(|room| room.room_id == instance_id)
+        .context("created Dome room")?;
+    let mut prop = room
+        .metaverse
+        .context("metaverse state")?
+        .dome
+        .customization
+        .persistent_props
+        .into_iter()
+        .next()
+        .context("default persistent prop")?;
+    prop.position[0] += 250;
+    app.submit_dome_session_input(SubmitDomeSessionInput {
+        spatial_context: context.clone(),
+        instance_id: instance_id.clone(),
+        sequence: 2,
+        input: DomeSessionInputKindV1::UpsertPersistentProp { prop },
+    })
+    .await?;
+    let committed = app
+        .commit_dome_layout(CommitDomeLayoutInput {
+            spatial_context: context.clone(),
+            instance_id: instance_id.clone(),
+            operation_id: "harness-layout-commit-1".into(),
+            signed_candidate_json: None,
+        })
+        .await?;
+    anyhow::ensure!(committed.outcome == DomeLayoutCommitOutcome::Committed);
+    anyhow::ensure!(committed.revision == 2);
+    anyhow::ensure!(committed.hosting.state.kind == DomeHostingStateKindV1::OwnerHosted);
+    push_named_step(&mut steps, "owner_layout_committed", started);
+
+    let started = Instant::now();
     let node = KukuriKeys::generate();
     let transferring = app
         .prepare_community_node_dome_hosting(PrepareCommunityNodeDomeHostingInput {

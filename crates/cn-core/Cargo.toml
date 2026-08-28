@@ -20,6 +20,7 @@ safety-vlm-provider = ["dep:kukuri-cn-safety-vlm"]
 
 [dependencies]
 anyhow.workspace = true
+blake3.workspace = true
 async-trait.workspace = true
 axum.workspace = true
 chacha20poly1305.workspace = true

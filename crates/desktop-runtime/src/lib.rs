@@ -35,7 +35,7 @@ pub use kukuri_store::StoreStartupError;
 pub use paths::resolve_db_path_from_env;
 pub use requests::{
     AcceptDomeConnectionProposalRequest, AuthorRequest, BookmarkCustomReactionRequest,
-    BookmarkPostRequest, CloseDomeHostingRequest, CreateAttachmentRequest,
+    BookmarkPostRequest, CloseDomeHostingRequest, CommitDomeLayoutRequest, CreateAttachmentRequest,
     CreateCustomReactionAssetRequest, CreateDomeConnectionProposalRequest, CreateGameRoomRequest,
     CreateLiveSessionRequest, CreateMetaverseRoomRequest, CreatePostRequest,
     CreatePrivateChannelRequest, CreateRepostRequest, CustomReactionCropRect,
@@ -51,11 +51,11 @@ pub use requests::{
     ListThreadRequest, ListTimelineRequest, LiveSessionCommandRequest, MoveDomeRequest,
     NotificationIdRequest, PostWithdrawalReasonRequest, PreviewChannelAccessTokenRequest,
     PublishMetaverseRoomEventRequest, ReactionKeyRequest, RemoveBookmarkedCustomReactionRequest,
-    RemoveBookmarkedPostRequest, RevokeDomeConnectionRequest, RotatePrivateChannelRequest,
-    SendDirectMessageRequest, SetChannelGossipEnabledRequest, SetMyProfileRequest,
-    SetTopicGossipEnabledRequest, StartOwnerDomeHostingRequest, SubmitDomeSessionInputRequest,
-    ToggleReactionRequest, UnsubscribeTopicRequest, UpdateGameRoomRequest,
-    UpdateMetaverseRoomRequest, WithdrawDomeConnectionProposalRequest, WithdrawPostRequest,
-    WithdrawalReasonVisibilityRequest,
+    RemoveBookmarkedPostRequest, ResyncDomeSnapshotsRequest, RevokeDomeConnectionRequest,
+    RotatePrivateChannelRequest, SendDirectMessageRequest, SetChannelGossipEnabledRequest,
+    SetMyProfileRequest, SetTopicGossipEnabledRequest, StartOwnerDomeHostingRequest,
+    SubmitDomeSessionInputRequest, ToggleReactionRequest, UnsubscribeTopicRequest,
+    UpdateGameRoomRequest, UpdateMetaverseRoomRequest, WithdrawDomeConnectionProposalRequest,
+    WithdrawPostRequest, WithdrawalReasonVisibilityRequest,
 };
 pub use runtime::{DesktopRuntime, RuntimeEvent};

@@ -141,6 +141,7 @@ fn dome_preset_ref(owner: &Pubkey) -> DomePresetRefV1 {
     DomePresetRefV1 {
         preset_id: "preset-1".into(),
         owner_pubkey: owner.clone(),
+        revision: 1,
         manifest_blob_hash: "a".repeat(64),
         manifest_mime: DOME_PRESET_MANIFEST_MIME.into(),
         manifest_bytes: 512,
@@ -222,6 +223,7 @@ fn dome_preset_instance_and_move_envelopes_bind_owner_and_context() {
     let preset = DomePresetManifestV1 {
         preset_id: "preset-1".into(),
         owner_pubkey: owner.clone(),
+        revision: 1,
         dome: MetaverseDomeV1::default(),
         asset_refs: Vec::new(),
         updated_at: 1,

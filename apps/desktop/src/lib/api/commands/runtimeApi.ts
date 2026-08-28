@@ -25,6 +25,7 @@ import type {
   DomeConnectionView,
   DomeDirection,
   DomeHostingView,
+  DomeLayoutCommitView,
   DomeMoveRecordV1,
   DomePhysicsSnapshotV1,
   DomeSessionInputKindV1,
@@ -128,6 +129,7 @@ import type {
 
 import { invokeDesktop } from '../invoke/desktop';
 import { command } from '../invoke/dispatch';
+import { commitDomeLayoutRequest, resyncDomeSnapshotsRequest } from './domeHostingRequests';
 
 export const runtimeApi: DesktopApi = {
   createPost: command('createPost', async (topic, content, replyTo, attachments = [], channelRef = { kind: 'public' }) => {
@@ -651,6 +653,24 @@ export const runtimeApi: DesktopApi = {
         sequence,
         input,
       } satisfies SubmitDomeSessionInputRequest,
+    });
+  }),
+  commitDomeLayout: command('commitDomeLayout', async (
+    spatialContext,
+    instanceId,
+    operationId
+  ) => {
+    return invokeDesktop<DomeLayoutCommitView>('commit_dome_layout', {
+      request: commitDomeLayoutRequest(spatialContext, instanceId, operationId),
+    });
+  }),
+  resyncDomeSnapshots: command('resyncDomeSnapshots', async (
+    spatialContext,
+    instanceId,
+    afterSequence
+  ) => {
+    return invokeDesktop<DomePhysicsSnapshotV1[]>('resync_dome_snapshots', {
+      request: resyncDomeSnapshotsRequest(spatialContext, instanceId, afterSequence),
     });
   }),
   moveDome: command('moveDome', async (

@@ -1,9 +1,11 @@
 use crate::{
     DomeHostTargetV1, DomeHostingLeaseV1, DomeHostingRecordV1, DomeHostingStateKindV1,
-    DomeInstanceManifestV1, DomeInstanceStatusV1, DomePhysicsSnapshotV1, DomePresetRefV1,
-    KukuriKeys, MetaverseRoomSpawnV1, SpatialContextV1, TopicId, accept_dome_hosting_lease,
-    activate_dome_hosting_lease, build_signed_dome_hosting_lease,
-    build_signed_dome_physics_snapshot, close_dome_hosting_lease, resolve_dome_hosting_state,
+    DomeInstanceManifestV1, DomeInstanceStatusV1, DomeLayoutCandidateV1, DomeLayoutCommitV1,
+    DomePhysicsSnapshotV1, DomePresetRefV1, KukuriKeys, MetaverseRoomSpawnV1, SpatialContextV1,
+    TopicId, accept_dome_hosting_lease, activate_dome_hosting_lease,
+    build_signed_dome_hosting_lease, build_signed_dome_layout_candidate,
+    build_signed_dome_layout_commit, build_signed_dome_physics_snapshot, close_dome_hosting_lease,
+    dome_layout_candidate_digest, resolve_dome_hosting_state, verify_signed_dome_layout_commit,
     verify_signed_dome_physics_snapshot,
 };
 
@@ -17,6 +19,7 @@ fn instance(owner: &KukuriKeys) -> DomeInstanceManifestV1 {
         preset_ref: DomePresetRefV1 {
             preset_id: "preset-1".into(),
             owner_pubkey: owner.public_key(),
+            revision: 1,
             manifest_blob_hash: "manifest-hash-1".into(),
             manifest_mime: "application/vnd.kukuri.dome-preset+json".into(),
             manifest_bytes: 64,
@@ -50,7 +53,7 @@ fn lease(owner: &KukuriKeys, host: &KukuriKeys, epoch: u64) -> DomeHostingLeaseV
             host_pubkey: host.public_key(),
         },
         manifest_blob_hash: instance.preset_ref.manifest_blob_hash,
-        manifest_version: 4,
+        manifest_version: instance.preset_ref.revision,
         epoch,
         issued_at: 1_000,
         expires_at: 10_000,
@@ -188,4 +191,42 @@ fn higher_epoch_rejects_old_host_snapshot() {
     .unwrap();
     verify_signed_dome_physics_snapshot(&snapshot, &old_lease, "old-session").unwrap();
     assert!(verify_signed_dome_physics_snapshot(&snapshot, &new_lease, "new-session").is_err());
+}
+
+#[test]
+fn layout_candidate_requires_active_host_and_commit_requires_owner() {
+    let owner = KukuriKeys::generate();
+    let host = KukuriKeys::generate();
+    let attacker = KukuriKeys::generate();
+    let lease = lease(&owner, &host, 1);
+    let candidate = DomeLayoutCandidateV1 {
+        operation_id: "layout-1".into(),
+        instance_id: lease.instance_id.clone(),
+        instance_generation: lease.instance_generation,
+        lease_epoch: lease.epoch,
+        session_id: "session-1".into(),
+        host_pubkey: host.public_key(),
+        base_manifest_revision: lease.manifest_version,
+        snapshot_sequence: 1,
+        captured_at: 2_000,
+        persistent_props: Vec::new(),
+    };
+    assert!(build_signed_dome_layout_candidate(&attacker, &lease, candidate.clone()).is_err());
+    let candidate = build_signed_dome_layout_candidate(&host, &lease, candidate).unwrap();
+    let commit = DomeLayoutCommitV1 {
+        operation_id: candidate.candidate.operation_id.clone(),
+        instance_id: lease.instance_id.clone(),
+        instance_generation: lease.instance_generation,
+        owner_pubkey: owner.public_key(),
+        base_manifest_revision: lease.manifest_version,
+        next_manifest_revision: lease.manifest_version + 1,
+        candidate_digest: dome_layout_candidate_digest(&candidate.candidate).unwrap(),
+        manifest_blob_hash: "next-manifest-hash".into(),
+        committed_at: 2_100,
+    };
+    assert!(
+        build_signed_dome_layout_commit(&attacker, &lease, &candidate, commit.clone()).is_err()
+    );
+    let signed = build_signed_dome_layout_commit(&owner, &lease, &candidate, commit).unwrap();
+    verify_signed_dome_layout_commit(&signed, &lease, &candidate).unwrap();
 }

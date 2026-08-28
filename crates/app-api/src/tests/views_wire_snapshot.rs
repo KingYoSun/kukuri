@@ -498,7 +498,7 @@ fn views_wire_game_room_view() {
             scores: vec![],
             room_kind: GameRoomKind::MetaverseRoom,
             metaverse: Some(MetaverseRoomStateV1 {
-                world_version: 4,
+                world_version: 5,
                 instance_id: "room-2".to_string(),
                 spatial_context: SpatialContextV1::Channel {
                     topic_id: TopicId::new("kukuri:topic:wire"),
@@ -511,6 +511,7 @@ fn views_wire_game_room_view() {
                 preset_ref: DomePresetRefV1 {
                     preset_id: "preset-2".to_string(),
                     owner_pubkey: PUBKEY_A.into(),
+                    revision: 1,
                     manifest_blob_hash: "a".repeat(64),
                     manifest_mime: "application/vnd.kukuri.dome-preset+json".to_string(),
                     manifest_bytes: 2048,

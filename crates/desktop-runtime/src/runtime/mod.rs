@@ -10,26 +10,29 @@ use kukuri_app_api::{
     AcceptDomeConnectionProposalInput, ActivateCommunityNodeDomeHostingInput, AppService,
     AuthorSocialView, BlobMediaPayload, BookmarkedCustomReactionView, BookmarkedPostView,
     ChannelAccessTokenExport, ChannelAccessTokenPreview, CloseDomeHostingInput,
-    CreateCustomReactionAssetInput, CreateDomeConnectionProposalInput, CreateGameRoomInput,
-    CreateLiveSessionInput, CreateMetaverseRoomInput, CustomReactionAssetView,
+    CommitDomeLayoutInput, CreateCustomReactionAssetInput, CreateDomeConnectionProposalInput,
+    CreateGameRoomInput, CreateLiveSessionInput, CreateMetaverseRoomInput, CustomReactionAssetView,
     DirectMessageConversationView, DirectMessageStatusView, DirectMessageTimelineView,
-    DirectMessageTopicStatusView, DomeHostingView, GameRoomView, ImportMetaverseRoomAssetInput,
-    JoinedPrivateChannelView, LiveSessionView, MetaverseAssetRefView, MetaverseRoomEventView,
-    MoveDomeInput, NotificationStatusView, NotificationView, PrepareCommunityNodeDomeHostingInput,
-    PrivateChannelCapability, ProfileInput, PublishMetaverseRoomEventInput, ReactionStateView,
-    RecentReactionView, RevokeDomeConnectionInput, ServiceHandles, StartOwnerDomeHostingInput,
-    SubmitDomeSessionInput, SyncStatus, TimelineView, UpdateGameRoomInput,
-    UpdateMetaverseRoomInput, WithdrawDomeConnectionProposalInput,
+    DirectMessageTopicStatusView, DomeHostingView, DomeLayoutCommitView, GameRoomView,
+    ImportMetaverseRoomAssetInput, JoinedPrivateChannelView, LiveSessionView,
+    MetaverseAssetRefView, MetaverseRoomEventView, MoveDomeInput, NotificationStatusView,
+    NotificationView, PrepareCommunityNodeDomeHostingInput, PrivateChannelCapability, ProfileInput,
+    PublishMetaverseRoomEventInput, ReactionStateView, RecentReactionView,
+    ResyncDomeSnapshotsInput, RevokeDomeConnectionInput, ServiceHandles,
+    StartOwnerDomeHostingInput, SubmitDomeSessionInput, SyncStatus, TimelineView,
+    UpdateGameRoomInput, UpdateMetaverseRoomInput, WithdrawDomeConnectionProposalInput,
 };
 use kukuri_cn_protocol::{
-    DomeHostingActivationRequest, DomeHostingAssignmentRequest, DomeHostingReleaseRequest,
-    DomeHostingSessionInputRequest, normalize_http_url,
+    DomeHostingActivationRequest, DomeHostingAssetBlob, DomeHostingAssignmentRequest,
+    DomeHostingLayoutCandidateRequest, DomeHostingReleaseRequest, DomeHostingSessionInputRequest,
+    DomeHostingSnapshotResyncRequest, normalize_http_url,
 };
 use kukuri_core::{
     BlobHash, CreatePrivateChannelInput, CustomReactionAssetSnapshotV1, DomeHostTargetV1,
-    FriendOnlyGrantPreview, FriendPlusSharePreview, KukuriKeys, PrivateChannelInvitePreview,
-    Profile, SignedDomeHostingActivationV1, SignedDomeHostingCloseV1, SignedDomeHostingLeaseV1,
-    TopicId, build_signed_dome_session_input, verify_signed_dome_physics_snapshot,
+    DomeInstanceManifestV1, DomePresetManifestV1, FriendOnlyGrantPreview, FriendPlusSharePreview,
+    KukuriKeys, PrivateChannelInvitePreview, Profile, SignedDomeHostingActivationV1,
+    SignedDomeHostingCloseV1, SignedDomeHostingLeaseV1, TopicId, build_signed_dome_session_input,
+    verify_signed_dome_physics_snapshot,
 };
 use kukuri_docs_sync::{DocQuery, DocsSync};
 use kukuri_store::SqliteStore;

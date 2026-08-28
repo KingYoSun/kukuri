@@ -517,6 +517,43 @@ pub struct SubmitDomeSessionInput {
     pub input: kukuri_core::DomeSessionInputKindV1,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommitDomeLayoutInput {
+    pub spatial_context: SpatialContextV1,
+    pub instance_id: String,
+    pub operation_id: String,
+    /// Community Node hosted Dome supplies the host-signed candidate as JSON.
+    /// Owner-hosted Dome captures it from the local runtime when omitted.
+    pub signed_candidate_json: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum DomeLayoutCommitOutcome {
+    NoOp,
+    Committed,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
+pub struct DomeLayoutCommitView {
+    pub outcome: DomeLayoutCommitOutcome,
+    pub operation_id: String,
+    pub revision: u64,
+    pub manifest_blob_hash: String,
+    pub signed_commit_json: Option<String>,
+    pub hosting: DomeHostingView,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResyncDomeSnapshotsInput {
+    pub spatial_context: SpatialContextV1,
+    pub instance_id: String,
+    pub after_sequence: u64,
+}
+
 pub type DomeMoveView = DomeMoveRecordV1;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

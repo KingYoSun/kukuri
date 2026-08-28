@@ -254,11 +254,13 @@ impl DesktopRuntime {
         let assignment = self
             .assign_dome_hosting_to_community_node(
                 &request.base_url,
-                &DomeHostingAssignmentRequest {
-                    signed_lease,
-                    instance_manifest: serde_json::from_str(&prepared.instance_manifest_json)?,
-                    preset_manifest: serde_json::from_str(&prepared.preset_manifest_json)?,
-                },
+                &self
+                    .build_dome_hosting_assignment_request(
+                        signed_lease,
+                        &prepared.instance_manifest_json,
+                        &prepared.preset_manifest_json,
+                    )
+                    .await?,
             )
             .await?;
         let activated = self
@@ -377,6 +379,169 @@ impl DesktopRuntime {
         };
         verify_signed_dome_physics_snapshot(&signed_snapshot, &lease, &session_id)?;
         Ok(signed_snapshot.snapshot)
+    }
+
+    pub async fn commit_dome_layout(
+        &self,
+        request: CommitDomeLayoutRequest,
+    ) -> Result<DomeLayoutCommitView> {
+        let hosting = self
+            .get_dome_hosting(GetDomeHostingRequest {
+                spatial_context: request.spatial_context.clone(),
+                instance_id: request.instance_id.clone(),
+            })
+            .await?;
+        let candidate_json = match hosting.lease.as_ref().map(|lease| &lease.host) {
+            Some(DomeHostTargetV1::CommunityNode { api_base_url, .. }) => {
+                let response = self
+                    .capture_dome_layout_candidate_from_community_node(
+                        api_base_url,
+                        &DomeHostingLayoutCandidateRequest {
+                            instance_id: request.instance_id.clone(),
+                            operation_id: request.operation_id.clone(),
+                        },
+                    )
+                    .await?;
+                Some(serde_json::to_string(&response.signed_candidate)?)
+            }
+            _ => None,
+        };
+        let mut committed = self
+            .app_service
+            .commit_dome_layout(CommitDomeLayoutInput {
+                spatial_context: request.spatial_context.clone(),
+                instance_id: request.instance_id.clone(),
+                operation_id: request.operation_id,
+                signed_candidate_json: candidate_json,
+            })
+            .await?;
+        let Some(DomeHostTargetV1::CommunityNode { api_base_url, .. }) =
+            committed.hosting.lease.as_ref().map(|lease| &lease.host)
+        else {
+            return Ok(committed);
+        };
+        if committed.hosting.state.kind != kukuri_core::DomeHostingStateKindV1::Transferring {
+            return Ok(committed);
+        }
+        let api_base_url = api_base_url.clone();
+        let signed_lease: SignedDomeHostingLeaseV1 = serde_json::from_str(
+            committed
+                .hosting
+                .signed_lease_json
+                .as_deref()
+                .context("prepared layout commit has no signed lease")?,
+        )?;
+        let assignment = self
+            .assign_dome_hosting_to_community_node(
+                &api_base_url,
+                &self
+                    .build_dome_hosting_assignment_request(
+                        signed_lease,
+                        &committed.hosting.instance_manifest_json,
+                        &committed.hosting.preset_manifest_json,
+                    )
+                    .await?,
+            )
+            .await?;
+        let activated = self
+            .app_service
+            .activate_community_node_dome_hosting(ActivateCommunityNodeDomeHostingInput {
+                spatial_context: request.spatial_context,
+                instance_id: request.instance_id.clone(),
+                signed_acceptance_json: serde_json::to_string(&assignment.signed_acceptance)?,
+            })
+            .await?;
+        let signed_activation: SignedDomeHostingActivationV1 = serde_json::from_str(
+            activated
+                .signed_activation_json
+                .as_deref()
+                .context("activated layout commit has no signed activation")?,
+        )?;
+        self.activate_dome_hosting_on_community_node(
+            &api_base_url,
+            &DomeHostingActivationRequest {
+                instance_id: request.instance_id,
+                signed_activation,
+            },
+        )
+        .await?;
+        committed.hosting = activated;
+        Ok(committed)
+    }
+
+    pub async fn resync_dome_snapshots(
+        &self,
+        request: ResyncDomeSnapshotsRequest,
+    ) -> Result<Vec<kukuri_core::DomePhysicsSnapshotV1>> {
+        let hosting = self
+            .get_dome_hosting(GetDomeHostingRequest {
+                spatial_context: request.spatial_context.clone(),
+                instance_id: request.instance_id.clone(),
+            })
+            .await?;
+        let lease = hosting.lease.context("Dome is not currently hosted")?;
+        let session_id = hosting
+            .state
+            .session_id
+            .context("Dome session is not active")?;
+        let signed = match &lease.host {
+            DomeHostTargetV1::OwnerDevice { .. } => {
+                self.app_service
+                    .resync_dome_snapshots(ResyncDomeSnapshotsInput {
+                        spatial_context: request.spatial_context,
+                        instance_id: request.instance_id,
+                        after_sequence: request.after_sequence,
+                    })
+                    .await?
+            }
+            DomeHostTargetV1::CommunityNode { api_base_url, .. } => {
+                self.resync_dome_snapshots_from_community_node(
+                    api_base_url,
+                    &DomeHostingSnapshotResyncRequest {
+                        instance_id: request.instance_id,
+                        after_sequence: request.after_sequence,
+                    },
+                )
+                .await?
+                .snapshots
+            }
+        };
+        signed
+            .into_iter()
+            .map(|snapshot| {
+                verify_signed_dome_physics_snapshot(&snapshot, &lease, &session_id)?;
+                Ok(snapshot.snapshot)
+            })
+            .collect()
+    }
+
+    async fn build_dome_hosting_assignment_request(
+        &self,
+        signed_lease: SignedDomeHostingLeaseV1,
+        instance_manifest_json: &str,
+        preset_manifest_json: &str,
+    ) -> Result<DomeHostingAssignmentRequest> {
+        let instance_manifest: DomeInstanceManifestV1 =
+            serde_json::from_str(instance_manifest_json)?;
+        let preset_manifest: DomePresetManifestV1 = serde_json::from_str(preset_manifest_json)?;
+        let mut asset_blobs = Vec::with_capacity(preset_manifest.asset_refs.len());
+        for asset in &preset_manifest.asset_refs {
+            let bytes = self
+                .app_service
+                .fetch_metaverse_blob_bytes(&asset.blob_hash)
+                .await?
+                .with_context(|| format!("Dome asset {} is unavailable", asset.blob_hash))?;
+            asset_blobs.push(DomeHostingAssetBlob {
+                blob_hash: asset.blob_hash.clone(),
+                bytes,
+            });
+        }
+        Ok(DomeHostingAssignmentRequest {
+            signed_lease,
+            instance_manifest,
+            preset_manifest,
+            asset_blobs,
+        })
     }
 
     pub async fn move_dome(

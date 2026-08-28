@@ -1,7 +1,8 @@
 use kukuri_core::{
     DomeHostingStateKindV1, DomeInstanceManifestV1, DomePresetManifestV1,
     SignedDomeHostingAcceptanceV1, SignedDomeHostingActivationV1, SignedDomeHostingCloseV1,
-    SignedDomeHostingLeaseV1, SignedDomePhysicsSnapshotV1, SignedDomeSessionInputV1,
+    SignedDomeHostingLeaseV1, SignedDomeLayoutCandidateV1, SignedDomePhysicsSnapshotV1,
+    SignedDomeSessionInputV1,
 };
 use serde::{Deserialize, Serialize};
 
@@ -11,6 +12,14 @@ pub struct DomeHostingAssignmentRequest {
     pub signed_lease: SignedDomeHostingLeaseV1,
     pub instance_manifest: DomeInstanceManifestV1,
     pub preset_manifest: DomePresetManifestV1,
+    pub asset_blobs: Vec<DomeHostingAssetBlob>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DomeHostingAssetBlob {
+    pub blob_hash: String,
+    pub bytes: Vec<u8>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -45,6 +54,32 @@ pub struct DomeHostingSessionInputRequest {
 #[serde(deny_unknown_fields)]
 pub struct DomeHostingSessionSnapshotResponse {
     pub signed_snapshot: SignedDomePhysicsSnapshotV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DomeHostingLayoutCandidateRequest {
+    pub instance_id: String,
+    pub operation_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DomeHostingLayoutCandidateResponse {
+    pub signed_candidate: SignedDomeLayoutCandidateV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DomeHostingSnapshotResyncRequest {
+    pub instance_id: String,
+    pub after_sequence: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DomeHostingSnapshotResyncResponse {
+    pub snapshots: Vec<SignedDomePhysicsSnapshotV1>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
