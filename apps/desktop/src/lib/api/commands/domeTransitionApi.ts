@@ -2,6 +2,7 @@ import type {
   DesktopApi,
   DomeTransitionAdmissionRequestV1,
   DomeTransitionAdmissionTicketV1,
+  DomeTransitionAccessDecisionV1,
 } from '../types';
 import type {
   AbortDomeTransitionRequest,
@@ -13,8 +14,13 @@ import { command } from '../invoke/dispatch';
 
 export const domeTransitionApi: Pick<
   DesktopApi,
-  'prepareDomeTransition' | 'commitDomeTransition' | 'abortDomeTransition'
+  'previewDomeTransitionAccess' | 'prepareDomeTransition' | 'commitDomeTransition' | 'abortDomeTransition'
 > = {
+  previewDomeTransitionAccess: command('previewDomeTransitionAccess', async (
+    admissionRequest: DomeTransitionAdmissionRequestV1
+  ) => invokeDesktop<DomeTransitionAccessDecisionV1>('preview_dome_transition_access', {
+    request: { request: admissionRequest } satisfies PrepareDomeTransitionRequest,
+  })),
   prepareDomeTransition: command('prepareDomeTransition', async (
     admissionRequest: DomeTransitionAdmissionRequestV1
   ) => invokeDesktop<DomeTransitionAdmissionTicketV1>('prepare_dome_transition', {

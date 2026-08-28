@@ -23,6 +23,7 @@ type AuthorDetailCardProps = {
   localAuthorPubkey: string;
   onToggleRelationship: (authorPubkey: string, following: boolean) => void;
   onToggleMute: (authorPubkey: string, muted: boolean) => void;
+  onToggleBlock?: (authorPubkey: string, blocking: boolean) => void;
   onOpenDirectMessage?: (authorPubkey: string) => void;
   communityNodeAdvisory?: ReactNode;
   onSubmitReport?: (
@@ -37,6 +38,7 @@ export function AuthorDetailCard({
   localAuthorPubkey,
   onToggleRelationship,
   onToggleMute,
+  onToggleBlock,
   onOpenDirectMessage,
   communityNodeAdvisory,
   onSubmitReport,
@@ -161,6 +163,15 @@ export function AuthorDetailCard({
                     {view.summary?.muteActionLabel === 'Unmute'
                       ? t('actions.unmute', { defaultValue: 'Unmute' })
                       : t('actions.mute', { defaultValue: 'Mute' })}
+                  </button>
+                ) : null}
+                {showMuteAction && onToggleBlock ? (
+                  <button
+                    className='button button-secondary'
+                    type='button'
+                    onClick={() => onToggleBlock(author.author_pubkey, author.blocking)}
+                  >
+                    {t(author.blocking ? 'actions.unblock' : 'actions.block')}
                   </button>
                 ) : null}
                 {author && onSubmitReport ? (

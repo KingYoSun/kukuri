@@ -176,6 +176,8 @@ export function mergeAuthorView(
     friend_of_friend_via_pubkeys:
       incoming.friend_of_friend_via_pubkeys ?? current?.friend_of_friend_via_pubkeys ?? [],
     muted: incoming.muted ?? current?.muted ?? false,
+    blocking: incoming.blocking ?? current?.blocking ?? false,
+    blocked_by: incoming.blocked_by ?? current?.blocked_by ?? false,
   };
 }
 
@@ -214,6 +216,8 @@ export function authorViewFromDirectMessageConversation(
     friend_of_friend: false,
     friend_of_friend_via_pubkeys: [],
     muted: false,
+    blocking: false,
+    blocked_by: false,
   };
 }
 

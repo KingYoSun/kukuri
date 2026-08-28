@@ -80,6 +80,22 @@ pub async fn unmute_author(
 }
 
 #[tauri::command]
+pub async fn block_author(
+    state: tauri::State<'_, DesktopState>,
+    request: AuthorRequest,
+) -> Result<kukuri_app_api::AuthorSocialView, CommandError> {
+    state.runtime.block_author(request).await.map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn unblock_author(
+    state: tauri::State<'_, DesktopState>,
+    request: AuthorRequest,
+) -> Result<kukuri_app_api::AuthorSocialView, CommandError> {
+    state.runtime.unblock_author(request).await.map_err(map_error)
+}
+
+#[tauri::command]
 pub async fn list_social_connections(
     state: tauri::State<'_, DesktopState>,
     request: ListSocialConnectionsRequest,

@@ -9,12 +9,12 @@ use crate::views::{
 use kukuri_core::{
     DOME_HOSTING_MAX_LEASE_MILLIS, DOME_LAYOUT_COMMIT_MIN_INTERVAL_MILLIS, DomeHostTargetV1,
     DomeHostingLeaseV1, DomeHostingRecordV1, DomeHostingStateKindV1, DomeInstanceStatusV1,
-    DomeLayoutCommitV1, DomeTransitionAccessDecisionV1, DomeTransitionAdmissionTicketV1,
-    SignedDomeHostingAcceptanceV1, SignedDomeHostingLeaseV1, SignedDomeLayoutCandidateV1,
-    SignedDomeLayoutCommitV1, SignedDomePhysicsSnapshotV1, SpatialContextV1,
-    accept_dome_hosting_lease, activate_dome_hosting_lease, build_signed_dome_hosting_lease,
-    build_signed_dome_layout_commit, build_signed_dome_session_input, close_dome_hosting_lease,
-    dome_layout_candidate_digest, resolve_dome_hosting_state, verify_signed_dome_layout_candidate,
+    DomeLayoutCommitV1, DomeTransitionAdmissionTicketV1, SignedDomeHostingAcceptanceV1,
+    SignedDomeHostingLeaseV1, SignedDomeLayoutCandidateV1, SignedDomeLayoutCommitV1,
+    SignedDomePhysicsSnapshotV1, SpatialContextV1, accept_dome_hosting_lease,
+    activate_dome_hosting_lease, build_signed_dome_hosting_lease, build_signed_dome_layout_commit,
+    build_signed_dome_session_input, close_dome_hosting_lease, dome_layout_candidate_digest,
+    resolve_dome_hosting_state, verify_signed_dome_layout_candidate,
 };
 
 const HOSTING_RECORD_PREFIX: &str = "metaverse/dome-hosting";
@@ -289,7 +289,7 @@ impl AppService {
         {
             anyhow::bail!("DOME_TRANSITION_STALE_TOPOLOGY");
         }
-        let matches_connection = topology.connections.iter().any(|view| {
+        let connection = topology.connections.iter().find(|view| {
             let agreement = &view.record.agreement;
             agreement.connection_id == input.request.connection_id
                 && ((agreement.proposer.instance_id == input.request.source_instance_id
@@ -307,20 +307,81 @@ impl AppService {
                         && agreement.proposer.instance_generation
                             == input.request.target_instance_generation))
         });
-        if !matches_connection {
+        let Some(connection) = connection else {
             anyhow::bail!("DOME_TRANSITION_STALE_TOPOLOGY");
-        }
+        };
+        let agreement = &connection.record.agreement;
+        let (source_owner, target_owner) =
+            if agreement.proposer.instance_id == input.request.source_instance_id {
+                (
+                    &agreement.proposer.owner_pubkey,
+                    &agreement.receiver.owner_pubkey,
+                )
+            } else {
+                (
+                    &agreement.receiver.owner_pubkey,
+                    &agreement.proposer.owner_pubkey,
+                )
+            };
+        let access = self
+            .evaluate_dome_transition_access(&input.request, source_owner, target_owner)
+            .await?;
         let now = Utc::now().timestamp_millis();
         self.dome_host_sessions
             .lock()
             .await
             .get_mut(&input.request.target_instance_id)
             .context("this device is not the active destination Dome host")?
-            .prepare_transition_admission(
-                input.request,
-                DomeTransitionAccessDecisionV1::Allowed,
-                now,
-            )
+            .prepare_transition_admission(input.request, access, now)
+    }
+
+    pub async fn preview_dome_transition_access(
+        &self,
+        input: PrepareDomeTransitionInput,
+    ) -> Result<kukuri_core::DomeTransitionAccessDecisionV1> {
+        input.request.validate()?;
+        let topology = self
+            .list_dome_connection_topology(input.request.spatial_context.clone())
+            .await?;
+        if topology.resolution.topology.topology_digest != input.request.topology_digest
+            || !topology
+                .resolution
+                .topology
+                .active_connection_ids
+                .contains(&input.request.connection_id)
+        {
+            return Ok(kukuri_core::DomeTransitionAccessDecisionV1::Denied {
+                reason: kukuri_core::DomeTransitionDenialReasonV1::StaleTopology,
+            });
+        }
+        let connection = topology.connections.iter().find(|view| {
+            let agreement = &view.record.agreement;
+            agreement.connection_id == input.request.connection_id
+                && ((agreement.proposer.instance_id == input.request.source_instance_id
+                    && agreement.receiver.instance_id == input.request.target_instance_id)
+                    || (agreement.receiver.instance_id == input.request.source_instance_id
+                        && agreement.proposer.instance_id == input.request.target_instance_id))
+        });
+        let Some(connection) = connection else {
+            return Ok(kukuri_core::DomeTransitionAccessDecisionV1::Denied {
+                reason: kukuri_core::DomeTransitionDenialReasonV1::StaleTopology,
+            });
+        };
+        let agreement = &connection.record.agreement;
+        let (source_owner, target_owner) =
+            if agreement.proposer.instance_id == input.request.source_instance_id {
+                (
+                    &agreement.proposer.owner_pubkey,
+                    &agreement.receiver.owner_pubkey,
+                )
+            } else {
+                (
+                    &agreement.receiver.owner_pubkey,
+                    &agreement.proposer.owner_pubkey,
+                )
+            };
+        self.evaluate_dome_transition_access(&input.request, source_owner, target_owner)
+            .await
     }
 
     pub async fn commit_dome_transition(&self, input: CommitDomeTransitionInput) -> Result<()> {

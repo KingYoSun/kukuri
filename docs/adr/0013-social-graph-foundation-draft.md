@@ -68,7 +68,7 @@ v1 に含めないもの:
 - `friend_of_friend` を policy truth に使う gating
 - recommendation / ranking
 - server-managed social graph
-- private note / local alias / mute / block の同期
+- private note / local alias / mute の同期（blockはADR-0043でauthor replicaへ同期する）
 - community-node 上の follow registry
 
 ### 2.2 author replica を social graph の正本にする
@@ -209,7 +209,7 @@ social-graph v1 は current `main` に次の UX として入っている。
 
 - `friend_of_friend` ベースの gating
 - social graph ベースの recommendation / ranking
-- synced block / mute / alias / private note
+- synced mute / alias / private note（signed directional blockはADR-0043で追加済み）
 
 `friend_only` と `friend_plus` の product semantics は `0012` に従う。特に `friend_plus` は owner の `friend_of_friend` snapshot ではなく participant-scoped `mutual` chain を正本とする。
 

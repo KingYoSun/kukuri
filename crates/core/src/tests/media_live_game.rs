@@ -298,3 +298,47 @@ fn metaverse_events_are_bound_to_context_generation_and_active_instance() {
     instance.status = DomeInstanceStatusV1::Tombstoned;
     assert!(validate_metaverse_room_event_for_instance(&content, &instance).is_err());
 }
+
+#[test]
+fn dome_audio_frames_are_bounded_ephemeral_and_use_opening_distance() {
+    let owner = generate_keys().public_key();
+    let context = SpatialContextV1::Topic {
+        topic_id: TopicId::new("kukuri:topic:audio-context"),
+    };
+    let instance = dome_instance(&owner, "instance-audio", context.clone());
+    let mut content = MetaverseRoomEventEnvelopeContentV1 {
+        event_id: "audio-1".into(),
+        topic_id: TopicId::new("kukuri:topic:audio-context"),
+        channel_id: None,
+        room_id: instance.instance_id.clone(),
+        spatial_context: context,
+        instance_generation: instance.generation,
+        session_id: instance.instance_id.clone(),
+        peer_id: "peer-1".into(),
+        seq: 1,
+        sent_at: 1_000,
+        event: MetaverseRoomEventV1::SpatialAudioFrame {
+            frame: MetaverseSpatialAudioFrameV1 {
+                room_id: instance.instance_id.clone(),
+                peer_id: "peer-1".into(),
+                position: [0, 100, 0],
+                sample_rate_hz: METAVERSE_AUDIO_SAMPLE_RATE_HZ,
+                samples: vec![0; METAVERSE_AUDIO_MAX_SAMPLES_PER_FRAME],
+                captured_at: 1_000,
+            },
+        },
+    };
+    assert!(validate_metaverse_room_event_for_instance(&content, &instance).is_ok());
+    assert!(metaverse_room_event_is_live(&content, 11_000));
+    assert!(!metaverse_room_event_is_live(&content, 11_001));
+    assert_eq!(spatial_audio_gain_milli(50), 1_000);
+    assert_eq!(spatial_audio_gain_milli(400), 250);
+    assert_eq!(
+        connection_opening_audio_distance_cm([0, 0, 0], [300, 0, 400], [0, 0, 0], [0, 0, 200]),
+        700
+    );
+    if let MetaverseRoomEventV1::SpatialAudioFrame { frame } = &mut content.event {
+        frame.samples.push(0);
+    }
+    assert!(validate_metaverse_room_event_content(&content).is_err());
+}

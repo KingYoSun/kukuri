@@ -134,6 +134,95 @@ async fn dome_connection_proposal_accept_and_revoke_round_trip() {
 }
 
 #[tokio::test]
+async fn owner_block_revokes_connection_and_unblock_does_not_restore_it() {
+    let docs_sync = Arc::new(MemoryDocsSync::default());
+    let blob_service = Arc::new(MemoryBlobService::default());
+    let proposer_keys = generate_keys();
+    let receiver_keys = generate_keys();
+    let receiver_pubkey = receiver_keys.public_key_hex();
+    let proposer =
+        app_with_shared_dome_services(docs_sync.clone(), blob_service.clone(), proposer_keys);
+    let receiver = app_with_shared_dome_services(docs_sync, blob_service, receiver_keys);
+    let topic = "kukuri:topic:dome-connection-owner-block";
+    let context = SpatialContextV1::Topic {
+        topic_id: TopicId::new(topic),
+    };
+    let proposer_instance = proposer
+        .create_metaverse_room(
+            topic,
+            CreateMetaverseRoomInput {
+                title: "Proposer Dome".into(),
+                description: String::new(),
+                max_peers: Some(8),
+            },
+        )
+        .await
+        .expect("create proposer Dome");
+    let receiver_instance = receiver
+        .create_metaverse_room(
+            topic,
+            CreateMetaverseRoomInput {
+                title: "Receiver Dome".into(),
+                description: String::new(),
+                max_peers: Some(8),
+            },
+        )
+        .await
+        .expect("create receiver Dome");
+    proposer
+        .create_dome_connection_proposal(CreateDomeConnectionProposalInput {
+            proposal_id: "proposal-owner-block".into(),
+            spatial_context: context.clone(),
+            proposer_instance_id: proposer_instance,
+            receiver_instance_id: receiver_instance,
+            proposer_direction: DomeDirection::East,
+        })
+        .await
+        .expect("create proposal");
+    receiver
+        .accept_dome_connection_proposal(AcceptDomeConnectionProposalInput {
+            spatial_context: context.clone(),
+            proposal_id: "proposal-owner-block".into(),
+        })
+        .await
+        .expect("accept proposal");
+
+    proposer
+        .block_author(receiver_pubkey.as_str())
+        .await
+        .expect("block endpoint owner");
+    let blocked = proposer
+        .list_dome_connection_topology(context.clone())
+        .await
+        .expect("blocked topology");
+    assert!(blocked.resolution.topology.active_connection_ids.is_empty());
+    assert_eq!(
+        blocked.connections[0].record.lifecycle_reason,
+        Some(kukuri_core::DomeConnectionTerminalReasonV1::OwnersBlocked)
+    );
+
+    proposer
+        .unblock_author(receiver_pubkey.as_str())
+        .await
+        .expect("unblock endpoint owner");
+    let unblocked = proposer
+        .list_dome_connection_topology(context)
+        .await
+        .expect("topology after unblock");
+    assert!(
+        unblocked
+            .resolution
+            .topology
+            .active_connection_ids
+            .is_empty()
+    );
+    assert_eq!(
+        unblocked.connections[0].record.status,
+        kukuri_core::DomeConnectionStatusV1::Revoked
+    );
+}
+
+#[tokio::test]
 async fn only_proposer_can_withdraw_and_only_receiver_can_accept() {
     let docs_sync = Arc::new(MemoryDocsSync::default());
     let blob_service = Arc::new(MemoryBlobService::default());

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type {
@@ -39,6 +39,8 @@ type MetaverseRoomPanelProps = {
   initialSelectedRoomId?: string | null;
 };
 
+const EMPTY_KNOWN_AUTHORS_BY_PUBKEY: Record<string, AuthorSocialView> = {};
+
 export function MetaverseRoomPanel({
   actions,
   activeTopic,
@@ -46,7 +48,7 @@ export function MetaverseRoomPanel({
   syncStatus,
   locale,
   localProfile = null,
-  knownAuthorsByPubkey = {},
+  knownAuthorsByPubkey = EMPTY_KNOWN_AUTHORS_BY_PUBKEY,
   mediaObjectUrls = {},
   initialSelectedRoomId = null,
 }: MetaverseRoomPanelProps) {
@@ -61,6 +63,11 @@ export function MetaverseRoomPanel({
     floor: null,
   });
   const localDisplayName = localProfile?.display_name?.trim() || localProfile?.name?.trim() || null;
+  const mutedAuthorPubkeys = useMemo(() => new Set(
+    Object.values(knownAuthorsByPubkey)
+      .filter((author) => author.muted)
+      .map((author) => author.author_pubkey)
+  ), [knownAuthorsByPubkey]);
   const session = useMetaverseRoomSession({
     actions,
     activeTopic,
@@ -70,6 +77,7 @@ export function MetaverseRoomPanel({
     localDisplayName,
     localAvatarAssetRef,
     localAvatarAssetUrl,
+    mutedAuthorPubkeys,
     initialSelectedRoomId,
     onError: setError,
   });
@@ -255,6 +263,8 @@ export function MetaverseRoomPanel({
         onInteractWithProp={session.interactWithProp}
         onMessageDraftChange={session.setMessageDraft}
         onSendMessage={session.handleSendMessage}
+        microphoneEnabled={session.microphoneEnabled}
+        onToggleMicrophone={session.toggleMicrophone}
       />
       <DomeConnectionPanel
         actions={actions}

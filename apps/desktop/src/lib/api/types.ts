@@ -36,6 +36,7 @@ import type {
   DomeSessionInputKindV1,
   DomeTransitionAdmissionRequestV1,
   DomeTransitionAdmissionTicketV1,
+  DomeTransitionAccessDecisionV1,
   FriendOnlyGrantPreview,
   FriendPlusSharePreview,
   GameRoomStatus,
@@ -248,6 +249,8 @@ export interface DesktopApi {
   getAuthorSocialView(pubkey: string): Promise<AuthorSocialView>;
   muteAuthor(pubkey: string): Promise<AuthorSocialView>;
   unmuteAuthor(pubkey: string): Promise<AuthorSocialView>;
+  blockAuthor(pubkey: string): Promise<AuthorSocialView>;
+  unblockAuthor(pubkey: string): Promise<AuthorSocialView>;
   listSocialConnections(kind: SocialConnectionKind): Promise<AuthorSocialView[]>;
   listNotifications(): Promise<NotificationView[]>;
   markNotificationRead(notificationId: string): Promise<NotificationStatusView>;
@@ -365,6 +368,9 @@ export interface DesktopApi {
   prepareDomeTransition(
     request: DomeTransitionAdmissionRequestV1
   ): Promise<DomeTransitionAdmissionTicketV1>;
+  previewDomeTransitionAccess(
+    request: DomeTransitionAdmissionRequestV1
+  ): Promise<DomeTransitionAccessDecisionV1>;
   commitDomeTransition(
     ticket: DomeTransitionAdmissionTicketV1,
     position: [number, number, number],

@@ -20,6 +20,40 @@ impl DomeSessionRuntime {
         self.transition_reservations.len()
     }
 
+    pub fn revoke_transition_access(
+        &mut self,
+        participant_pubkey: &kukuri_core::Pubkey,
+        connection_id: Option<&str>,
+    ) -> usize {
+        let before = self.transition_reservations.len();
+        self.transition_reservations.retain(|_, ticket| {
+            ticket.request.participant_pubkey != *participant_pubkey
+                && connection_id.is_none_or(|id| ticket.request.connection_id != id)
+        });
+        self.committed_transitions.retain(|_, ticket| {
+            ticket.request.participant_pubkey != *participant_pubkey
+                && connection_id.is_none_or(|id| ticket.request.connection_id != id)
+        });
+        self.prepared_exits.remove(participant_pubkey.as_str());
+        before.saturating_sub(self.transition_reservations.len())
+    }
+
+    pub fn evict_participant(&mut self, participant_pubkey: &kukuri_core::Pubkey) -> bool {
+        let participant_id = participant_pubkey.as_str();
+        self.revoke_transition_access(participant_pubkey, None);
+        self.transition_entries.remove(participant_id);
+        self.seated_on.remove(participant_id);
+        self.last_input_sequence.remove(participant_id);
+        self.player_budgets.remove(participant_id);
+        self.remove_body(&format!("avatar:{participant_id}"));
+        for runtime_body in self.bodies_by_id.values_mut() {
+            if runtime_body.grabbed_by.as_deref() == Some(participant_id) {
+                runtime_body.grabbed_by = None;
+            }
+        }
+        self.participants.remove(participant_id)
+    }
+
     pub fn prepare_transition_admission(
         &mut self,
         request: DomeTransitionAdmissionRequestV1,

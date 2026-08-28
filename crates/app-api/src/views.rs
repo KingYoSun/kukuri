@@ -270,6 +270,10 @@ pub struct AuthorSocialView {
     pub provenance: Option<ContentProvenanceView>,
     #[serde(default)]
     pub muted: bool,
+    #[serde(default)]
+    pub blocking: bool,
+    #[serde(default)]
+    pub blocked_by: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -279,6 +283,8 @@ pub enum SocialConnectionKind {
     Following,
     Followed,
     Muted,
+    Blocking,
+    BlockedBy,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

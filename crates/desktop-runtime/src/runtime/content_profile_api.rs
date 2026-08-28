@@ -240,6 +240,16 @@ impl DesktopRuntime {
             .await
     }
 
+    pub async fn block_author(&self, request: AuthorRequest) -> Result<AuthorSocialView> {
+        self.app_service.block_author(request.pubkey.as_str()).await
+    }
+
+    pub async fn unblock_author(&self, request: AuthorRequest) -> Result<AuthorSocialView> {
+        self.app_service
+            .unblock_author(request.pubkey.as_str())
+            .await
+    }
+
     pub async fn list_social_connections(
         &self,
         request: ListSocialConnectionsRequest,

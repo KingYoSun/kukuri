@@ -6,6 +6,8 @@ import {
   MessageSquare,
   MonitorPause,
   Move3D,
+  Mic,
+  MicOff,
   PanelRightClose,
   PanelRightOpen,
   RefreshCw,
@@ -65,6 +67,8 @@ type MetaverseRoomControlsProps = {
   onOpenChat: () => void;
   onMessageDraftChange: (value: string) => void;
   onSendMessage: FormEventHandler<HTMLFormElement>;
+  microphoneEnabled?: boolean;
+  onToggleMicrophone?: () => void;
 };
 
 function ConnectionStateIcon({ state }: { state: MetaverseRoomConnectionState }) {
@@ -114,6 +118,8 @@ export function MetaverseRoomControls({
   onOpenChat,
   onMessageDraftChange,
   onSendMessage,
+  microphoneEnabled = false,
+  onToggleMicrophone,
 }: MetaverseRoomControlsProps) {
   const { t } = useTranslation('metaverse', { lng: locale });
   const avatarStatusLabel = t(`hud.avatarStatuses.${avatarAssetStatus}`);
@@ -138,6 +144,21 @@ export function MetaverseRoomControls({
         >
           <LogOut className='size-4' aria-hidden='true' />
         </Button>
+        {onToggleMicrophone ? (
+          <Button
+            variant={microphoneEnabled ? 'primary' : 'ghost'}
+            size='icon'
+            className='metaverse-hud-icon-button'
+            type='button'
+            aria-label={t(microphoneEnabled ? 'hud.disableMicrophone' : 'hud.enableMicrophone')}
+            aria-pressed={microphoneEnabled}
+            onClick={onToggleMicrophone}
+          >
+            {microphoneEnabled
+              ? <Mic className='size-4' aria-hidden='true' />
+              : <MicOff className='size-4' aria-hidden='true' />}
+          </Button>
+        ) : null}
         <Button
           variant='ghost'
           size='icon'

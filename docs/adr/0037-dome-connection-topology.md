@@ -41,7 +41,7 @@ ConnectionはDome Preset / Instance manifestへ埋め込まない。引っ越し
 - `waiting_for_slot`: 未選択、またはreceiver slotだけが別のactive Connectionで占有されている導出状態。
 - `draining` / `revoked`: いずれかのendpoint ownerが署名できるterminal lifecycle。途中失敗は同じoperation id / generationで再開する。
 
-proposerの指定slotに別Connectionが成立、proposerが同じslotで別proposalからConnectionを成立、どちらかのInstanceがdetach / tombstone / delete、owner間block入力、proposer withdrawではproposalをterminal discardとする。receiver slotが別Connectionで占有されたことだけではdiscardせず、待機リストに残す。blockの検出とactive Connection即時revokeの呼び出し元はIssue #795が所有し、本ADRは`owners_blocked` invalidation入力を定義する。
+proposerの指定slotに別Connectionが成立、proposerが同じslotで別proposalからConnectionを成立、どちらかのInstanceがdetach / tombstone / delete、owner間block入力、proposer withdrawではproposalをterminal discardとする。receiver slotが別Connectionで占有されたことだけではdiscardせず、待機リストに残す。ADR-0043がsigned blockを検出してactive Connectionを`owners_blocked`で即時revokeする。
 
 ### Concurrencyと上限
 

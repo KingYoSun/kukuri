@@ -602,6 +602,8 @@ fn views_wire_author_social_view() {
                 }],
             }),
             muted: true,
+            blocking: true,
+            blocked_by: false,
         },
     );
 }

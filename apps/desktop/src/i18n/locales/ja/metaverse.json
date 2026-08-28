@@ -109,6 +109,8 @@
     "leave": "ルームから退出",
     "hide": "ルームHUDを閉じる",
     "open": "ルームHUDを開く",
+    "enableMicrophone": "マイクを有効にする",
+    "disableMicrophone": "マイクを無効にする",
     "debug": "デバッグ詳細",
     "topic": "トピック: {{topic}}",
     "localPeer": "ローカルピア: {{peer}}",

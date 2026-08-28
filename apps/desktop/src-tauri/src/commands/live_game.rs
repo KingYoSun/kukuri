@@ -187,6 +187,18 @@ pub async fn submit_dome_session_input(
 }
 
 #[tauri::command]
+pub async fn preview_dome_transition_access(
+    state: tauri::State<'_, DesktopState>,
+    request: PrepareDomeTransitionRequest,
+) -> Result<kukuri_core::DomeTransitionAccessDecisionV1, CommandError> {
+    state
+        .runtime
+        .preview_dome_transition_access(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
 pub async fn prepare_dome_transition(
     state: tauri::State<'_, DesktopState>,
     request: PrepareDomeTransitionRequest,

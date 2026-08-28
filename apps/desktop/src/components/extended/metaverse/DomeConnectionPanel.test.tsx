@@ -76,6 +76,7 @@ function actions(topology = emptyTopology()) {
     closeHosting: vi.fn(),
     submitSessionInput: vi.fn(),
     prepareTransition: vi.fn(),
+    previewTransitionAccess: vi.fn().mockResolvedValue({ status: 'allowed' }),
     commitTransition: vi.fn(),
     abortTransition: vi.fn(),
     commitLayout: vi.fn(),

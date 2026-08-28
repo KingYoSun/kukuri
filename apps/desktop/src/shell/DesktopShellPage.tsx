@@ -551,6 +551,7 @@ export function DesktopShellPage({
       handleCopyPostLink={handleCopyInternalLink}
       handleRelationshipAction={shellActions.handleRelationshipAction}
       handleMuteAction={shellActions.handleMuteAction}
+      handleBlockAction={shellActions.handleBlockAction}
       handleOpenOriginalTopic={shellActions.handleOpenOriginalTopic}
       openCommunityNodeSettings={handleOpenCommunityNodeSettings}
       surfaceKind={surfaceKind}

@@ -131,6 +131,7 @@ import { invokeDesktop } from '../invoke/desktop';
 import { command } from '../invoke/dispatch';
 import { commitDomeLayoutRequest, resyncDomeSnapshotsRequest } from './domeHostingRequests';
 import { domeTransitionApi } from './domeTransitionApi';
+import { socialBlockApi } from './socialBlockApi';
 
 export const runtimeApi: DesktopApi = {
   createPost: command('createPost', async (topic, content, replyTo, attachments = [], channelRef = { kind: 'public' }) => {
@@ -657,6 +658,7 @@ export const runtimeApi: DesktopApi = {
     });
   }),
   ...domeTransitionApi,
+  ...socialBlockApi,
   commitDomeLayout: command('commitDomeLayout', async (
     spatialContext,
     instanceId,

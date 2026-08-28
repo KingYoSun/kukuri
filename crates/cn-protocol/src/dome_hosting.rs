@@ -1,5 +1,5 @@
 use kukuri_core::{
-    DomeHostingStateKindV1, DomeInstanceManifestV1, DomePresetManifestV1,
+    DomeHostingStateKindV1, DomeInstanceManifestV1, DomePresetManifestV1, DomeSpatialAccessProofV1,
     DomeTransitionAdmissionRequestV1, DomeTransitionAdmissionTicketV1,
     MetaverseResourceBudgetConfig, MetaverseResourceMetricsV1, SignedDomeHostingAcceptanceV1,
     SignedDomeHostingActivationV1, SignedDomeHostingCloseV1, SignedDomeHostingLeaseV1,
@@ -61,6 +61,7 @@ pub struct DomeHostingSessionSnapshotResponse {
 #[serde(deny_unknown_fields)]
 pub struct DomeTransitionPrepareRequest {
     pub request: DomeTransitionAdmissionRequestV1,
+    pub access_proof: DomeSpatialAccessProofV1,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

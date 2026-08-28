@@ -229,6 +229,86 @@ impl SqliteStore {
 
         rows.into_iter().map(row_to_follow_edge).collect()
     }
+
+    pub(super) async fn store_upsert_block_edge_impl(&self, edge: BlockEdge) -> Result<()> {
+        let existing_updated_at = sqlx::query_scalar::<_, i64>(
+            r#"
+            SELECT updated_at
+            FROM block_edges
+            WHERE subject_pubkey = ?1 AND target_pubkey = ?2
+            "#,
+        )
+        .bind(edge.subject_pubkey.as_str())
+        .bind(edge.target_pubkey.as_str())
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(updated_at) = existing_updated_at
+            && updated_at > edge.updated_at
+        {
+            return Ok(());
+        }
+
+        sqlx::query(
+            r#"
+            INSERT INTO block_edges (
+              subject_pubkey, target_pubkey, status, updated_at, source_envelope_id
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5)
+            ON CONFLICT(subject_pubkey, target_pubkey) DO UPDATE SET
+              status = excluded.status,
+              updated_at = excluded.updated_at,
+              source_envelope_id = excluded.source_envelope_id
+            "#,
+        )
+        .bind(edge.subject_pubkey.as_str())
+        .bind(edge.target_pubkey.as_str())
+        .bind(block_edge_status_name(&edge.status))
+        .bind(edge.updated_at)
+        .bind(edge.envelope_id.as_str())
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub(super) async fn store_list_block_edges_by_subject_impl(
+        &self,
+        subject_pubkey: &str,
+    ) -> Result<Vec<BlockEdge>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT subject_pubkey, target_pubkey, status, updated_at, source_envelope_id
+            FROM block_edges
+            WHERE subject_pubkey = ?1
+            ORDER BY updated_at DESC, target_pubkey ASC
+            "#,
+        )
+        .bind(subject_pubkey)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter().map(row_to_block_edge).collect()
+    }
+
+    pub(super) async fn store_list_block_edges_by_target_impl(
+        &self,
+        target_pubkey: &str,
+    ) -> Result<Vec<BlockEdge>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT subject_pubkey, target_pubkey, status, updated_at, source_envelope_id
+            FROM block_edges
+            WHERE target_pubkey = ?1
+            ORDER BY updated_at DESC, subject_pubkey ASC
+            "#,
+        )
+        .bind(target_pubkey)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter().map(row_to_block_edge).collect()
+    }
 }
 
 #[async_trait]

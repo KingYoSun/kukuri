@@ -10,6 +10,12 @@ table author_relationship_cache
 table blob_objects
   column cid=0 name=blob_hash type=TEXT notnull=0 default=None pk=1
   column cid=1 name=status type=TEXT notnull=1 default=None pk=0
+table block_edges
+  column cid=0 name=subject_pubkey type=TEXT notnull=1 default=None pk=1
+  column cid=1 name=target_pubkey type=TEXT notnull=1 default=None pk=2
+  column cid=2 name=status type=TEXT notnull=1 default=None pk=0
+  column cid=3 name=updated_at type=INTEGER notnull=1 default=None pk=0
+  column cid=4 name=source_envelope_id type=TEXT notnull=1 default=None pk=0
 table bookmarked_custom_reactions
   column cid=0 name=asset_id type=TEXT notnull=0 default=None pk=1
   column cid=1 name=owner_pubkey type=TEXT notnull=1 default=None pk=0
@@ -260,6 +266,16 @@ index idx_author_relationship_cache_local_author table=author_relationship_cache
   key seqno=0 cid=0 name=Some("local_author_pubkey")
   key seqno=1 cid=1 name=Some("author_pubkey")
   sql=Some("CREATE INDEX idx_author_relationship_cache_local_author ON author_relationship_cache(local_author_pubkey, author_pubkey)")
+index idx_block_edges_subject table=block_edges unique=0 origin=c partial=0
+  key seqno=0 cid=0 name=Some("subject_pubkey")
+  key seqno=1 cid=3 name=Some("updated_at")
+  key seqno=2 cid=1 name=Some("target_pubkey")
+  sql=Some("CREATE INDEX idx_block_edges_subject ON block_edges(subject_pubkey, updated_at DESC, target_pubkey ASC)")
+index idx_block_edges_target table=block_edges unique=0 origin=c partial=0
+  key seqno=0 cid=1 name=Some("target_pubkey")
+  key seqno=1 cid=3 name=Some("updated_at")
+  key seqno=2 cid=0 name=Some("subject_pubkey")
+  sql=Some("CREATE INDEX idx_block_edges_target ON block_edges(target_pubkey, updated_at DESC, subject_pubkey ASC)")
 index idx_bookmarked_custom_reactions_bookmarked_at table=bookmarked_custom_reactions unique=0 origin=c partial=0
   key seqno=0 cid=7 name=Some("bookmarked_at")
   key seqno=1 cid=0 name=Some("asset_id")
@@ -431,6 +447,10 @@ index sqlite_autoindex_author_relationship_cache_1 table=author_relationship_cac
   sql=None
 index sqlite_autoindex_blob_objects_1 table=blob_objects unique=1 origin=pk partial=0
   key seqno=0 cid=0 name=Some("blob_hash")
+  sql=None
+index sqlite_autoindex_block_edges_1 table=block_edges unique=1 origin=pk partial=0
+  key seqno=0 cid=0 name=Some("subject_pubkey")
+  key seqno=1 cid=1 name=Some("target_pubkey")
   sql=None
 index sqlite_autoindex_bookmarked_custom_reactions_1 table=bookmarked_custom_reactions unique=1 origin=pk partial=0
   key seqno=0 cid=0 name=Some("asset_id")

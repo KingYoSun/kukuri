@@ -10,6 +10,8 @@ fn default_budget_preserves_existing_metaverse_limits() {
     assert_eq!(budget.host.max_participants, 64);
     assert_eq!(budget.dome.max_snapshot_hz, 10);
     assert_eq!(budget.client.cache_capacity_bytes, 1024 * 1024 * 1024);
+    assert_eq!(budget.player.max_audio_frames_per_second, 50);
+    assert_eq!(budget.client.max_concurrent_audio_streams, 16);
     budget.validate().expect("default budget is valid");
 }
 

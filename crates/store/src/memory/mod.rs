@@ -4,8 +4,8 @@ use std::sync::Arc;
 use anyhow::Result;
 use async_trait::async_trait;
 use kukuri_core::{
-    BlobHash, EnvelopeId, FollowEdge, KukuriEnvelope, LiveSessionStatus, Profile, ReplicaId,
-    parse_follow_edge, parse_profile,
+    BlobHash, BlockEdge, EnvelopeId, FollowEdge, KukuriEnvelope, LiveSessionStatus, Profile,
+    ReplicaId, parse_block_edge, parse_follow_edge, parse_profile,
 };
 use tokio::sync::RwLock;
 
@@ -47,6 +47,7 @@ pub struct MemoryStore {
     object_threads: Arc<RwLock<HashMap<String, BTreeMap<String, EnvelopeId>>>>,
     profiles: Arc<RwLock<HashMap<String, Profile>>>,
     follow_edges: Arc<RwLock<HashMap<(String, String), FollowEdge>>>,
+    block_edges: Arc<RwLock<HashMap<(String, String), BlockEdge>>>,
     object_projection_rows: Arc<RwLock<HashMap<EnvelopeId, ObjectProjectionRow>>>,
     live_session_rows: Arc<RwLock<HashMap<String, LiveSessionProjectionRow>>>,
     game_room_rows: Arc<RwLock<HashMap<String, GameRoomProjectionRow>>>,
@@ -133,6 +134,20 @@ impl Store for MemoryStore {
 
     async fn list_follow_edges_by_target(&self, target_pubkey: &str) -> Result<Vec<FollowEdge>> {
         self.store_list_follow_edges_by_target_impl(target_pubkey)
+            .await
+    }
+
+    async fn upsert_block_edge(&self, edge: BlockEdge) -> Result<()> {
+        self.store_upsert_block_edge_impl(edge).await
+    }
+
+    async fn list_block_edges_by_subject(&self, subject_pubkey: &str) -> Result<Vec<BlockEdge>> {
+        self.store_list_block_edges_by_subject_impl(subject_pubkey)
+            .await
+    }
+
+    async fn list_block_edges_by_target(&self, target_pubkey: &str) -> Result<Vec<BlockEdge>> {
+        self.store_list_block_edges_by_target_impl(target_pubkey)
             .await
     }
 }

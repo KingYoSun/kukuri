@@ -88,6 +88,63 @@ impl MemoryStore {
         });
         Ok(items)
     }
+
+    pub(super) async fn store_upsert_block_edge_impl(&self, edge: BlockEdge) -> Result<()> {
+        let key = (
+            edge.subject_pubkey.as_str().to_string(),
+            edge.target_pubkey.as_str().to_string(),
+        );
+        let mut block_edges = self.block_edges.write().await;
+        match block_edges.get(&key) {
+            Some(existing) if existing.updated_at > edge.updated_at => {}
+            _ => {
+                block_edges.insert(key, edge);
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) async fn store_list_block_edges_by_subject_impl(
+        &self,
+        subject_pubkey: &str,
+    ) -> Result<Vec<BlockEdge>> {
+        let mut items = self
+            .block_edges
+            .read()
+            .await
+            .values()
+            .filter(|edge| edge.subject_pubkey.as_str() == subject_pubkey)
+            .cloned()
+            .collect::<Vec<_>>();
+        items.sort_by(|left, right| {
+            right
+                .updated_at
+                .cmp(&left.updated_at)
+                .then_with(|| left.target_pubkey.cmp(&right.target_pubkey))
+        });
+        Ok(items)
+    }
+
+    pub(super) async fn store_list_block_edges_by_target_impl(
+        &self,
+        target_pubkey: &str,
+    ) -> Result<Vec<BlockEdge>> {
+        let mut items = self
+            .block_edges
+            .read()
+            .await
+            .values()
+            .filter(|edge| edge.target_pubkey.as_str() == target_pubkey)
+            .cloned()
+            .collect::<Vec<_>>();
+        items.sort_by(|left, right| {
+            right
+                .updated_at
+                .cmp(&left.updated_at)
+                .then_with(|| left.subject_pubkey.cmp(&right.subject_pubkey))
+        });
+        Ok(items)
+    }
 }
 
 #[async_trait]

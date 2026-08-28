@@ -363,6 +363,51 @@ async fn mute_does_not_change_follow_mutual_or_friend_gating() {
     assert_eq!(preview.channel_id.as_str(), channel.channel_id);
 }
 
+#[tokio::test]
+async fn signed_block_is_directional_durable_and_independent_from_mute() {
+    let (local_app, _local_keys, remote_app, remote_keys, _store, _docs_sync, _blob_service) =
+        shared_apps_with_memory_services();
+    let remote_pubkey = remote_keys.public_key_hex();
+
+    let blocked = local_app
+        .block_author(remote_pubkey.as_str())
+        .await
+        .expect("block remote author");
+    assert!(blocked.blocking);
+    assert!(!blocked.blocked_by);
+    assert!(!blocked.muted);
+
+    let blocking = local_app
+        .list_social_connections(SocialConnectionKind::Blocking)
+        .await
+        .expect("list blocking");
+    assert_eq!(blocking.len(), 1);
+    assert_eq!(blocking[0].author_pubkey, remote_pubkey);
+
+    local_app
+        .mute_author(remote_pubkey.as_str())
+        .await
+        .expect("mute remains separate");
+    let unblocked = local_app
+        .unblock_author(remote_pubkey.as_str())
+        .await
+        .expect("unblock remote author");
+    assert!(!unblocked.blocking);
+    assert!(unblocked.muted);
+    assert!(
+        local_app
+            .list_social_connections(SocialConnectionKind::Blocking)
+            .await
+            .expect("list after unblock")
+            .is_empty()
+    );
+
+    remote_app
+        .get_author_social_view(local_app.current_author_pubkey().as_str())
+        .await
+        .expect("hydrate block history");
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "iroh-integration-tests")]
 async fn social_graph_derives_friend_of_friend_and_clears_after_unfollow() {

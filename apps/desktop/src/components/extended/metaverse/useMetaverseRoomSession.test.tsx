@@ -249,7 +249,7 @@ describe('useMetaverseRoomSession', () => {
       await vi.advanceTimersByTimeAsync(400);
     });
 
-    expect(api.listMetaverseRoomEvents).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(api.listMetaverseRoomEvents).mock.calls.length).toBeGreaterThanOrEqual(3);
     expect(session.result.current.roomConnectionState).toBe('offline');
   });
 

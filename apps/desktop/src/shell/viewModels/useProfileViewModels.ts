@@ -76,11 +76,14 @@ export function useProfileViewModels({
             mutual: resolvedSelectedAuthor.mutual,
             friendOfFriend: resolvedSelectedAuthor.friend_of_friend,
             muted: resolvedSelectedAuthor.muted,
+            blocking: resolvedSelectedAuthor.blocking,
+            blockedBy: resolvedSelectedAuthor.blocked_by,
             viaPubkeys: resolvedSelectedAuthor.friend_of_friend_via_pubkeys.map(shortPubkey),
             isSelf: resolvedSelectedAuthor.author_pubkey === localAuthorPubkey,
             canFollow: resolvedSelectedAuthor.author_pubkey !== localAuthorPubkey,
             followActionLabel: resolvedSelectedAuthor.following ? 'Unfollow' : 'Follow',
             muteActionLabel: resolvedSelectedAuthor.muted ? 'Unmute' : 'Mute',
+            blockActionLabel: resolvedSelectedAuthor.blocking ? 'Unblock' : 'Block',
           }
         : null,
       canMessage: Boolean(

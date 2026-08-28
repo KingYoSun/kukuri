@@ -109,6 +109,8 @@
     "leave": "Leave room",
     "hide": "Hide room HUD",
     "open": "Open room HUD",
+    "enableMicrophone": "Enable microphone",
+    "disableMicrophone": "Disable microphone",
     "debug": "Debug details",
     "topic": "Topic: {{topic}}",
     "localPeer": "Local peer: {{peer}}",

@@ -695,7 +695,9 @@ export const authorSocialView = {
       }
     ]
   },
-  "muted": true
+  "muted": true,
+  "blocking": true,
+  "blocked_by": false
 } satisfies AuthorSocialView;
 
 // channel_access_token_export.json

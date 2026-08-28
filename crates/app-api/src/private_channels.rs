@@ -954,7 +954,7 @@ impl AppService {
                 }
             }
         }
-        self.remove_joined_private_channel(topic_id, channel_id)
+        self.remove_joined_private_channel_and_evict_dome_participant(topic_id, &state.channel_id)
             .await?;
         Ok(())
     }

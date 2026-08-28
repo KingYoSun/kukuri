@@ -43,6 +43,7 @@ Proposed
 - author mute v1 は特定 author の `post / live / game` を current device だけで非表示にする local visibility preference とする。
 - mute の canonical source は `ProjectionStore` の `muted_authors` で、docs sync、gossip、community-node、他 device には複製しない。
 - mute は social graph 本体には入れず、follow edge、mutual、friend-only / friend-plus gating、DM 可否、private channel access を変更しない。
+- ADR-0043のsigned blockとは独立する。Dome音声ではmuteはlocal playbackだけを抑止し、blockだけがConnection/accessを失効させる。
 - Following / Followed / Muted の管理 UI は新しい primary section を増やさず、`#/profile` 配下の `profileMode=connections` として持つ。
 - `connectionsView` は `following | followed | muted` を持ち、invalid 値は `following` に normalize する。
 - `Followed` 一覧は full follower inventory ではなく、この端末で hydrate 済みの incoming follow だけを表示する local-known list とする。

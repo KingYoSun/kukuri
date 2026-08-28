@@ -109,6 +109,8 @@
     "leave": "离开房间",
     "hide": "隐藏房间 HUD",
     "open": "打开房间 HUD",
+    "enableMicrophone": "启用麦克风",
+    "disableMicrophone": "禁用麦克风",
     "debug": "调试详情",
     "topic": "话题：{{topic}}",
     "localPeer": "本地节点：{{peer}}",

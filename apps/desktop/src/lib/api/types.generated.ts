@@ -13,7 +13,7 @@ export type ConnectMode = "direct_only" | "direct_or_relay";
 
 export type ConnectionPath = "direct_p2p" | "relay_supported_p2p" | "relay_fallback";
 
-export type SocialConnectionKind = "following" | "followed" | "muted";
+export type SocialConnectionKind = "following" | "followed" | "muted" | "blocking" | "blocked_by";
 
 export type BlobViewStatus = "Missing" | "Available" | "Pinned";
 
@@ -55,7 +55,7 @@ export type PostView = { object_id: string, envelope_id: string, author_pubkey: 
 
 export type BookmarkedPostView = { bookmarked_at: number, post: PostView, };
 
-export type AuthorSocialView = { author_pubkey: string, name?: string | null, display_name?: string | null, about?: string | null, picture?: string | null, picture_asset?: ProfileAssetView | null, updated_at?: number | null, following: boolean, followed_by: boolean, mutual: boolean, friend_of_friend: boolean, friend_of_friend_via_pubkeys: Array<string>, provenance?: ContentProvenanceView | null, muted: boolean, };
+export type AuthorSocialView = { author_pubkey: string, name?: string | null, display_name?: string | null, about?: string | null, picture?: string | null, picture_asset?: ProfileAssetView | null, updated_at?: number | null, following: boolean, followed_by: boolean, mutual: boolean, friend_of_friend: boolean, friend_of_friend_via_pubkeys: Array<string>, provenance?: ContentProvenanceView | null, muted: boolean, blocking: boolean, blocked_by: boolean, };
 
 export type DirectMessageStatusView = { peer_pubkey: string, dm_id: string, mutual: boolean, send_enabled: boolean, peer_count: number, pending_outbox_count: number, };
 
@@ -107,17 +107,17 @@ export type MetaverseAssetRef = { kind: MetaverseAssetKind, blob_hash: string, m
 
 export type DomeResourceBudget = { max_persistent_props: number, max_texture_bytes: number, max_texture_dimension: number, max_model_bytes: number, max_model_triangles: number, max_colliders: number, max_rigid_bodies: number, max_snapshot_hz: number, };
 
-export type PlayerResourceBudget = { max_guest_props: number, max_guest_prop_bytes: number, max_avatar_asset_bytes: number, max_prop_spawns_per_minute: number, max_interactions_per_second: number, max_input_bytes_per_second: number, max_proposals_per_ten_minutes_per_slot: number, max_impulse_centimeters: number, };
+export type PlayerResourceBudget = { max_guest_props: number, max_guest_prop_bytes: number, max_avatar_asset_bytes: number, max_prop_spawns_per_minute: number, max_interactions_per_second: number, max_input_bytes_per_second: number, max_proposals_per_ten_minutes_per_slot: number, max_impulse_centimeters: number, max_audio_frames_per_second: number, max_audio_bytes_per_second: number, };
 
 export type HostResourceBudget = { max_participants: number, max_simulated_rigid_bodies: number, max_snapshot_bytes_per_second: number, max_session_asset_bytes: number, };
 
-export type ClientResourceBudget = { max_rendered_avatars: number, max_texture_memory_bytes: number, max_rendered_triangles: number, max_interpolated_bodies: number, max_neighbor_domes: number, cache_capacity_bytes: number, };
+export type ClientResourceBudget = { max_rendered_avatars: number, max_texture_memory_bytes: number, max_rendered_triangles: number, max_interpolated_bodies: number, max_neighbor_domes: number, cache_capacity_bytes: number, max_concurrent_audio_streams: number, max_audio_jitter_frames: number, };
 
 export type MetaverseResourceBudgetConfig = { dome: DomeResourceBudget, player: PlayerResourceBudget, host: HostResourceBudget, client: ClientResourceBudget, };
 
 export type MetaverseBudgetScope = "dome" | "player" | "host" | "client";
 
-export type MetaverseBudgetResource = "persistent_props" | "guest_props" | "texture_bytes" | "texture_dimension" | "model_bytes" | "model_triangles" | "colliders" | "rigid_bodies" | "participants" | "avatar_asset_bytes" | "prop_spawn_rate" | "interaction_rate" | "input_bandwidth" | "proposal_rate" | "impulse" | "snapshot_frequency" | "snapshot_bandwidth" | "session_asset_bytes" | "rendered_avatars" | "texture_memory" | "rendered_triangles" | "interpolated_bodies" | "neighbor_domes" | "cache_capacity" | "asset_format";
+export type MetaverseBudgetResource = "persistent_props" | "guest_props" | "texture_bytes" | "texture_dimension" | "model_bytes" | "model_triangles" | "colliders" | "rigid_bodies" | "participants" | "avatar_asset_bytes" | "prop_spawn_rate" | "interaction_rate" | "input_bandwidth" | "proposal_rate" | "impulse" | "snapshot_frequency" | "snapshot_bandwidth" | "session_asset_bytes" | "rendered_avatars" | "texture_memory" | "rendered_triangles" | "interpolated_bodies" | "neighbor_domes" | "cache_capacity" | "asset_format" | "audio_frame_rate" | "audio_bandwidth" | "concurrent_audio_streams" | "audio_jitter_frames";
 
 export type MetaverseResourceRejectionReason = "limit_exceeded" | "rate_exceeded" | "invalid_value" | "unverified_asset";
 
@@ -229,11 +229,13 @@ export type DomeConnectionTopologyView = { proposals: Array<DomeConnectionPropos
 
 export type MetaverseRoomPresenceV1 = { room_id: string, peer_id: string, display_name?: string | null, avatar_asset_ref?: MetaverseAssetRef | null, joined_at: number, last_seen_at: number, };
 
+export type MetaverseSpatialAudioFrameV1 = { room_id: string, peer_id: string, position: [number, number, number], sample_rate_hz: number, samples: Array<number>, captured_at: number, };
+
 export type MetaverseRoomChatMessageV1 = { room_id: string, message_id: string, author_peer_id: string, display_name?: string | null, body: string, created_at: number, };
 
 export type SharedRoomObjectV1 = { object_id: string, asset_ref?: MetaverseAssetRef | null, primitive_fallback: MetaversePrimitive, position: [number, number, number], rotation: [number, number, number], scale: [number, number, number], updated_by: string, updated_at: number, };
 
-export type MetaverseRoomEventV1 = { "type": "presence_join", presence: MetaverseRoomPresenceV1, } | { "type": "presence_leave", room_id: string, peer_id: string, left_at: number, } | { "type": "chat_message", message: MetaverseRoomChatMessageV1, };
+export type MetaverseRoomEventV1 = { "type": "presence_join", presence: MetaverseRoomPresenceV1, } | { "type": "presence_leave", room_id: string, peer_id: string, left_at: number, } | { "type": "chat_message", message: MetaverseRoomChatMessageV1, } | { "type": "spatial_audio_frame", frame: MetaverseSpatialAudioFrameV1, };
 
 export type MetaverseRoomEventEnvelopeContentV1 = { event_id: string, topic_id: string, channel_id?: string | null, room_id: string, spatial_context: SpatialContextV1, instance_generation: number, session_id: string, peer_id: string, seq: number, sent_at: number, event: MetaverseRoomEventV1, };
 

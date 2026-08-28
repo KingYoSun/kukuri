@@ -132,11 +132,14 @@ export type AuthorRelationshipSummary = {
   mutual: boolean;
   friendOfFriend: boolean;
   muted: boolean;
+  blocking?: boolean;
+  blockedBy?: boolean;
   viaPubkeys: string[];
   isSelf: boolean;
   canFollow: boolean;
   followActionLabel: 'Follow' | 'Unfollow';
   muteActionLabel: 'Mute' | 'Unmute';
+  blockActionLabel?: 'Block' | 'Unblock';
 };
 
 export type AuthorDetailView = {

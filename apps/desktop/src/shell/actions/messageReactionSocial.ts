@@ -372,6 +372,26 @@ export function createMessageReactionSocialActions({
     }
   }
 
+  async function handleBlockAction(authorPubkey: string, blocking: boolean) {
+    try {
+      const nextView = blocking
+        ? await api.unblockAuthor(authorPubkey)
+        : await api.blockAuthor(authorPubkey);
+      setKnownAuthorsByPubkey((current) => mergeKnownAuthors(current, [nextView]));
+      if (selectedAuthorPubkey === authorPubkey) {
+        setSelectedAuthor(nextView);
+        setAuthorError(null);
+      }
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (blockError) {
+      setAuthorError(
+        blockError instanceof Error
+          ? blockError.message
+          : translate('common:errors.failedToUpdateBlockState', { defaultValue: 'Failed to update block state' })
+      );
+    }
+  }
+
   return {
     handleDeleteDirectMessageMessage,
     handleClearDirectMessage,
@@ -384,5 +404,6 @@ export function createMessageReactionSocialActions({
     handleWithdrawPost,
     handleRelationshipAction,
     handleMuteAction,
+    handleBlockAction,
   };
 }

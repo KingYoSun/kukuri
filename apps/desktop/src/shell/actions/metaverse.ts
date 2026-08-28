@@ -51,6 +51,7 @@ export function createMetaverseRoomActions({
     submitSessionInput: (context, instanceId, sequence, input) =>
       api.submitDomeSessionInput(context, instanceId, sequence, input),
     prepareTransition: (request) => api.prepareDomeTransition(request),
+    previewTransitionAccess: (request) => api.previewDomeTransitionAccess(request),
     commitTransition: (ticket, position, rotation) =>
       api.commitDomeTransition(ticket, position, rotation),
     abortTransition: (ticket) => api.abortDomeTransition(ticket),

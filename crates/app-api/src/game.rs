@@ -574,6 +574,17 @@ impl AppService {
             .metaverse
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("metaverse room state is missing"))?;
+        if !matches!(
+            self.evaluate_dome_room_access(
+                &metaverse_state.spatial_context,
+                &state.owner_pubkey,
+                &self.services.keys.public_key(),
+            )
+            .await?,
+            kukuri_core::DomeTransitionAccessDecisionV1::Allowed
+        ) {
+            anyhow::bail!(kukuri_core::DomeTransitionDenialReasonV1::AccessDenied.code());
+        }
         if metaverse_state.instance_status != DomeInstanceStatusV1::Active {
             anyhow::bail!("cannot publish events to a non-active Dome instance");
         }
@@ -619,6 +630,7 @@ impl AppService {
             sent_at: now,
             event: input.event,
         };
+        self.preflight_spatial_audio_event(&content, now).await?;
         let instance_manifest = dome_instance_manifest_from_game_manifest(&manifest)?;
         validate_metaverse_room_event_for_instance(&content, &instance_manifest)?;
         let envelope = build_metaverse_room_event_envelope(
@@ -846,17 +858,28 @@ impl AppService {
         after_envelope_id: Option<&str>,
         limit: Option<usize>,
     ) -> Result<Vec<MetaverseRoomEventView>> {
-        let manifest = self
+        self.ensure_topic_subscription(topic_id).await?;
+        let room_state = self
             .fetch_game_room_state_and_manifest(topic_id, room_id)
-            .await?
-            .map(|(_, _, manifest)| manifest);
-        let instance_manifest = if let Some(manifest) = manifest {
+            .await?;
+        let instance_manifest = if let Some((_, state, manifest)) = room_state {
             let Some(instance) = manifest.metaverse.as_ref() else {
                 return Ok(Vec::new());
             };
             if instance.instance_status != DomeInstanceStatusV1::Active
                 || manifest.status == GameRoomStatus::Ended
             {
+                return Ok(Vec::new());
+            }
+            if !matches!(
+                self.evaluate_dome_room_access(
+                    &instance.spatial_context,
+                    &state.owner_pubkey,
+                    &self.services.keys.public_key(),
+                )
+                .await?,
+                kukuri_core::DomeTransitionAccessDecisionV1::Allowed
+            ) {
                 return Ok(Vec::new());
             }
             Some(dome_instance_manifest_from_game_manifest(&manifest)?)
@@ -875,12 +898,14 @@ impl AppService {
                 include = after_envelope_id == Some(event.envelope_id.as_str());
                 continue;
             }
-            if instance_manifest.as_ref().map_or_else(
-                || validate_metaverse_room_event_content(&event.content).is_ok(),
-                |instance| {
-                    validate_metaverse_room_event_for_instance(&event.content, instance).is_ok()
-                },
-            ) {
+            if metaverse_room_event_is_live(&event.content, Utc::now().timestamp_millis())
+                && instance_manifest.as_ref().map_or_else(
+                    || validate_metaverse_room_event_content(&event.content).is_ok(),
+                    |instance| {
+                        validate_metaverse_room_event_for_instance(&event.content, instance).is_ok()
+                    },
+                )
+            {
                 items.push(event.clone());
             }
         }
@@ -943,6 +968,11 @@ fn validate_metaverse_room_event_identity(
         MetaverseRoomEventV1::ChatMessage { message } => {
             if message.room_id != room_id || message.author_peer_id != peer_id {
                 anyhow::bail!("metaverse chat event identity does not match request");
+            }
+        }
+        MetaverseRoomEventV1::SpatialAudioFrame { frame } => {
+            if frame.room_id != room_id || frame.peer_id != peer_id {
+                anyhow::bail!("metaverse audio event identity does not match request");
             }
         }
     }

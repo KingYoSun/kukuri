@@ -12,6 +12,8 @@ type ProfileSocialMock = Pick<
   | 'getAuthorSocialView'
   | 'muteAuthor'
   | 'unmuteAuthor'
+  | 'blockAuthor'
+  | 'unblockAuthor'
   | 'listSocialConnections'
 >;
 
@@ -90,6 +92,18 @@ export function createProfileSocialMock(runtime: MockRuntime): ProfileSocialMock
       const next = { ...existing, muted: false };
       authorSocialViews[pubkey] = next;
       return cloneAuthorView(next);
+    },
+    async blockAuthor(pubkey) {
+      const view = withDefaultAuthorView(pubkey, authorSocialViews[pubkey]);
+      view.blocking = true;
+      authorSocialViews[pubkey] = view;
+      return cloneAuthorView(view);
+    },
+    async unblockAuthor(pubkey) {
+      const view = withDefaultAuthorView(pubkey, authorSocialViews[pubkey]);
+      view.blocking = false;
+      authorSocialViews[pubkey] = view;
+      return cloneAuthorView(view);
     },
     async listSocialConnections(kind) {
       return listConnections(kind);
