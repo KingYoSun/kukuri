@@ -226,6 +226,9 @@ export function MetaverseRoomPanel({
         sessionProps={session.sessionProps}
         avatarAssetUrl={localAvatarAssetUrl}
         domeTextureUrls={domeTextureUrls}
+        transitionNeighbors={session.transitionNeighbors}
+        transitionBoundaryStates={session.transitionBoundaryStates}
+        handoffTransform={session.handoffTransform}
         latestChatByPeer={session.latestChatByPeer}
         connectionState={session.roomConnectionState}
         now={session.clockNow}

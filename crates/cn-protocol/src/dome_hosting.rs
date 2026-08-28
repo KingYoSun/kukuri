@@ -1,5 +1,6 @@
 use kukuri_core::{
     DomeHostingStateKindV1, DomeInstanceManifestV1, DomePresetManifestV1,
+    DomeTransitionAdmissionRequestV1, DomeTransitionAdmissionTicketV1,
     MetaverseResourceBudgetConfig, MetaverseResourceMetricsV1, SignedDomeHostingAcceptanceV1,
     SignedDomeHostingActivationV1, SignedDomeHostingCloseV1, SignedDomeHostingLeaseV1,
     SignedDomeLayoutCandidateV1, SignedDomePhysicsSnapshotV1, SignedDomeSessionInputV1,
@@ -54,6 +55,39 @@ pub struct DomeHostingSessionInputRequest {
 #[serde(deny_unknown_fields)]
 pub struct DomeHostingSessionSnapshotResponse {
     pub signed_snapshot: SignedDomePhysicsSnapshotV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DomeTransitionPrepareRequest {
+    pub request: DomeTransitionAdmissionRequestV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DomeTransitionPrepareResponse {
+    pub ticket: DomeTransitionAdmissionTicketV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DomeTransitionCommitRequest {
+    pub ticket: DomeTransitionAdmissionTicketV1,
+    pub position: [i64; 3],
+    pub rotation: [i64; 3],
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DomeTransitionAbortRequest {
+    pub ticket: DomeTransitionAdmissionTicketV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DomeTransitionMutationResponse {
+    pub transition_id: String,
+    pub state: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

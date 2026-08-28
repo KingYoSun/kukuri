@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
 
-import type { DomeCustomizationV1, DomeDirection, DomeMaterialPreset } from '@/lib/api';
+import type {
+  DomeBoundaryStateV1,
+  DomeCustomizationV1,
+  DomeDirection,
+  DomeMaterialPreset,
+} from '@/lib/api';
 import {
   DOME_CONNECTION_BOUNDARY_OFFSET_CM,
   DOME_CONNECTION_ZONE_DEPTH_CM,
@@ -64,7 +69,24 @@ function directionTransform(direction: DomeDirection): {
   return { position: [-boundary, 0, 0], rotationY: Math.PI / 2 };
 }
 
-function ConnectionZone({ direction, color }: { direction: DomeDirection; color: number }) {
+function boundaryColor(state: DomeBoundaryStateV1): number {
+  if (state === 'loading') return 0xd69e2e;
+  if (state === 'full') return 0xc47f17;
+  if (state === 'denied') return 0xb43b47;
+  if (state === 'stale') return 0x7256a8;
+  if (state === 'error') return 0xa7323e;
+  return 0x59626f;
+}
+
+function ConnectionZone({
+  direction,
+  color,
+  boundaryState,
+}: {
+  direction: DomeDirection;
+  color: number;
+  boundaryState: DomeBoundaryStateV1;
+}) {
   const { position, rotationY } = directionTransform(direction);
   const width = DOME_OPENING_WIDTH_CM * SCENE_UNITS_PER_CENTIMETER;
   const wallHeight = DOME_OPENING_RECT_HEIGHT_CM * SCENE_UNITS_PER_CENTIMETER;
@@ -112,6 +134,20 @@ function ConnectionZone({ direction, color }: { direction: DomeDirection; color:
           <meshBasicMaterial color={0x00b3a4} />
         </mesh>
       </group>
+      {boundaryState !== 'ready' ? (
+        <mesh
+          position={[0, (wallHeight + roofRadius) / 2, -0.02]}
+          userData={{ domeBoundaryState: boundaryState, avatarBarrier: true }}
+        >
+          <planeGeometry args={[width, wallHeight + roofRadius]} />
+          <meshStandardMaterial
+            color={boundaryColor(boundaryState)}
+            opacity={0.78}
+            transparent
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      ) : null}
     </group>
   );
 }
@@ -119,12 +155,29 @@ function ConnectionZone({ direction, color }: { direction: DomeDirection; color:
 export function FixedDome({
   customization,
   textureUrls,
+  openingDirections = DOME_DIRECTIONS,
+  connectionDirections = openingDirections,
+  boundaryStates = {},
 }: {
   customization: DomeCustomizationV1;
   textureUrls: { wall: string | null; floor: string | null };
+  openingDirections?: readonly DomeDirection[];
+  connectionDirections?: readonly DomeDirection[];
+  boundaryStates?: Partial<Record<DomeDirection, DomeBoundaryStateV1>>;
 }) {
-  const innerGeometry = useMemo(() => createDomeHemisphereGeometry(DOME_INNER_RADIUS_CM), []);
-  const outerGeometry = useMemo(() => createDomeHemisphereGeometry(DOME_OUTER_RADIUS_CM), []);
+  const openingKey = openingDirections.join(',');
+  const normalizedOpeningDirections = useMemo(
+    () => openingKey ? openingKey.split(',') as DomeDirection[] : [],
+    [openingKey]
+  );
+  const innerGeometry = useMemo(
+    () => createDomeHemisphereGeometry(DOME_INNER_RADIUS_CM, normalizedOpeningDirections),
+    [normalizedOpeningDirections]
+  );
+  const outerGeometry = useMemo(
+    () => createDomeHemisphereGeometry(DOME_OUTER_RADIUS_CM, normalizedOpeningDirections),
+    [normalizedOpeningDirections]
+  );
   const wallColor = materialColor(customization.surface.wall_material);
   const floorColor = materialColor(customization.surface.floor_material);
   const wallTexture = useDomeTexture(textureUrls.wall);
@@ -143,8 +196,13 @@ export function FixedDome({
         <circleGeometry args={[floorRadius, 96]} />
         <meshStandardMaterial color={floorTexture ? 0xffffff : floorColor} map={floorTexture} roughness={0.9} side={THREE.DoubleSide} />
       </mesh>
-      {DOME_DIRECTIONS.map((direction) => (
-        <ConnectionZone key={direction} direction={direction} color={floorColor} />
+      {connectionDirections.map((direction) => (
+        <ConnectionZone
+          key={direction}
+          direction={direction}
+          color={floorColor}
+          boundaryState={boundaryStates[direction] ?? 'closed'}
+        />
       ))}
     </group>
   );

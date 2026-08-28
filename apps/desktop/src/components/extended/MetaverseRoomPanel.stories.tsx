@@ -8,6 +8,7 @@ import { DEFAULT_SHARED_OBJECT } from './MetaverseSceneModel';
 import { MetaverseRoomDiscovery } from './metaverse/MetaverseRoomDiscovery';
 import { MetaverseRoomView } from './metaverse/MetaverseRoomView';
 import { createDefaultMetaverseRoomState } from './metaverse/DomeSceneModel';
+import type { DomeNeighborTransitionView } from './metaverse/DomeTransitionModel';
 import { createMetaverseRoomActions } from '@/shell/actions/metaverse';
 
 const meta = {
@@ -38,6 +39,25 @@ const room: GameRoomView = {
   updated_at: STORY_TIMESTAMP,
   channel_id: null,
   audience_label: 'Public',
+};
+
+const neighborRoom: GameRoomView = {
+  ...room,
+  room_id: 'metaverse-room-north',
+  title: 'Northern Garden',
+  metaverse: createDefaultMetaverseRoomState(8, { roomId: 'metaverse-room-north' }),
+  manifest_blob_hash: 'mock-metaverse-room-north',
+};
+
+const readyNorthNeighbor: DomeNeighborTransitionView = {
+  connectionId: 'story-connection-north',
+  topologyDigest: 'story-topology',
+  direction: 'north',
+  targetDirection: 'south',
+  room: neighborRoom,
+  relativeCoordinateCm: [0, 0, -5_700],
+  boundaryState: 'ready',
+  textureUrls: { wall: null, floor: null },
 };
 
 const syncStatus: SyncStatus = {
@@ -107,7 +127,11 @@ function panel(rooms: GameRoomView[]) {
   );
 }
 
-function selectedRoom(initialHudOpen = true, initialChatOpen = true) {
+function selectedRoom(
+  initialHudOpen = true,
+  initialChatOpen = true,
+  transitionNeighbors: DomeNeighborTransitionView[] = []
+) {
   return (
     <StoryFrame>
       <MetaverseRoomView
@@ -119,6 +143,10 @@ function selectedRoom(initialHudOpen = true, initialChatOpen = true) {
         sharedObject={DEFAULT_SHARED_OBJECT}
         avatarAssetUrl={null}
         domeTextureUrls={{ wall: null, floor: null }}
+        transitionNeighbors={transitionNeighbors}
+        transitionBoundaryStates={Object.fromEntries(
+          transitionNeighbors.map((neighbor) => [neighbor.direction, neighbor.boundaryState])
+        )}
         latestChatByPeer={{}}
         connectionState='live'
         now={STORY_TIMESTAMP}
@@ -203,4 +231,8 @@ export const SelectedHudAndChat: Story = {
 
 export const SelectedCollapsed: Story = {
   render: () => selectedRoom(false, false),
+};
+
+export const ReadyNorthTransition: Story = {
+  render: () => selectedRoom(false, false, [readyNorthNeighbor]),
 };

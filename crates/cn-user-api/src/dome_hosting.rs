@@ -20,12 +20,15 @@ use kukuri_cn_protocol::{
     DomeHostingLayoutCandidateRequest, DomeHostingLayoutCandidateResponse,
     DomeHostingReleaseRequest, DomeHostingSessionInputRequest, DomeHostingSessionSnapshotResponse,
     DomeHostingSnapshotResyncRequest, DomeHostingSnapshotResyncResponse, DomeHostingStatusResponse,
+    DomeTransitionAbortRequest, DomeTransitionCommitRequest, DomeTransitionMutationResponse,
+    DomeTransitionPrepareRequest, DomeTransitionPrepareResponse,
 };
 use kukuri_core::{
     DomeHostTargetV1, DomeHostingRecordV1, DomeHostingStateKindV1, DomeInstanceManifestV1,
-    DomePresetManifestV1, KukuriKeys, SignedDomeHostingAcceptanceV1, SignedDomeHostingActivationV1,
-    SignedDomeHostingLeaseV1, accept_dome_hosting_lease, resolve_dome_hosting_state,
-    validate_dome_preset_manifest, verify_signed_dome_hosting_lease,
+    DomePresetManifestV1, DomeTransitionAccessDecisionV1, KukuriKeys,
+    SignedDomeHostingAcceptanceV1, SignedDomeHostingActivationV1, SignedDomeHostingLeaseV1,
+    accept_dome_hosting_lease, resolve_dome_hosting_state, validate_dome_preset_manifest,
+    verify_signed_dome_hosting_lease,
 };
 use kukuri_metaverse_host::DomeSessionRuntime;
 use sqlx::postgres::PgPool;
@@ -515,6 +518,128 @@ pub(crate) async fn submit_dome_hosting_input(
         .map_err(hosting_contract_error)?;
     Ok(Json(DomeHostingSessionSnapshotResponse {
         signed_snapshot: snapshot,
+    }))
+}
+
+pub(crate) async fn prepare_dome_transition(
+    State(state): State<UserApiState>,
+    headers: HeaderMap,
+    Json(request): Json<DomeTransitionPrepareRequest>,
+) -> ApiResult<Json<DomeTransitionPrepareResponse>> {
+    let hosting = require_hosting(&state)?;
+    let identity = require_bearer_identity(&state.pool, &state.jwt_config, &headers).await?;
+    let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
+    if request.request.participant_pubkey.as_str() != identity.pubkey {
+        return Err(hosting_error(
+            StatusCode::FORBIDDEN,
+            "DOME_HOSTING_PARTICIPANT_MISMATCH",
+            "bearer identity does not match Dome transition participant",
+        ));
+    }
+    let now = chrono::Utc::now().timestamp_millis();
+    let mut sessions = hosting.sessions.lock().await;
+    let runtime = sessions
+        .get_mut(&request.request.target_instance_id)
+        .ok_or_else(|| {
+            hosting_error(
+                StatusCode::CONFLICT,
+                "DOME_HOSTING_SESSION_INACTIVE",
+                "destination Dome session is not active on this Community Node",
+            )
+        })?;
+    if runtime.lease().expires_at <= now {
+        return Err(hosting_error(
+            StatusCode::CONFLICT,
+            "DOME_HOSTING_LEASE_EXPIRED",
+            "Dome Hosting Lease has expired",
+        ));
+    }
+    let ticket = runtime
+        .prepare_transition_admission(
+            request.request,
+            DomeTransitionAccessDecisionV1::Allowed,
+            now,
+        )
+        .map_err(hosting_contract_error)?;
+    Ok(Json(DomeTransitionPrepareResponse { ticket }))
+}
+
+pub(crate) async fn commit_dome_transition(
+    State(state): State<UserApiState>,
+    headers: HeaderMap,
+    Json(request): Json<DomeTransitionCommitRequest>,
+) -> ApiResult<Json<DomeTransitionMutationResponse>> {
+    let hosting = require_hosting(&state)?;
+    let identity = require_bearer_identity(&state.pool, &state.jwt_config, &headers).await?;
+    let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
+    if request.ticket.request.participant_pubkey.as_str() != identity.pubkey {
+        return Err(hosting_error(
+            StatusCode::FORBIDDEN,
+            "DOME_HOSTING_PARTICIPANT_MISMATCH",
+            "bearer identity does not match Dome transition participant",
+        ));
+    }
+    hosting
+        .sessions
+        .lock()
+        .await
+        .get_mut(&request.ticket.request.target_instance_id)
+        .ok_or_else(|| {
+            hosting_error(
+                StatusCode::CONFLICT,
+                "DOME_HOSTING_SESSION_INACTIVE",
+                "destination Dome session is not active on this Community Node",
+            )
+        })?
+        .commit_transition_admission(
+            &request.ticket,
+            request.position,
+            request.rotation,
+            chrono::Utc::now().timestamp_millis(),
+        )
+        .map_err(hosting_contract_error)?;
+    Ok(Json(DomeTransitionMutationResponse {
+        transition_id: request.ticket.request.transition_id,
+        state: "committed".into(),
+    }))
+}
+
+pub(crate) async fn abort_dome_transition(
+    State(state): State<UserApiState>,
+    headers: HeaderMap,
+    Json(request): Json<DomeTransitionAbortRequest>,
+) -> ApiResult<Json<DomeTransitionMutationResponse>> {
+    let hosting = require_hosting(&state)?;
+    let identity = require_bearer_identity(&state.pool, &state.jwt_config, &headers).await?;
+    let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
+    if request.ticket.request.participant_pubkey.as_str() != identity.pubkey {
+        return Err(hosting_error(
+            StatusCode::FORBIDDEN,
+            "DOME_HOSTING_PARTICIPANT_MISMATCH",
+            "bearer identity does not match Dome transition participant",
+        ));
+    }
+    hosting
+        .sessions
+        .lock()
+        .await
+        .get_mut(&request.ticket.request.target_instance_id)
+        .ok_or_else(|| {
+            hosting_error(
+                StatusCode::CONFLICT,
+                "DOME_HOSTING_SESSION_INACTIVE",
+                "destination Dome session is not active on this Community Node",
+            )
+        })?
+        .abort_transition_admission(
+            &request.ticket.request.transition_id,
+            &request.ticket.request.participant_pubkey,
+            chrono::Utc::now().timestamp_millis(),
+        )
+        .map_err(hosting_contract_error)?;
+    Ok(Json(DomeTransitionMutationResponse {
+        transition_id: request.ticket.request.transition_id,
+        state: "aborted".into(),
     }))
 }
 

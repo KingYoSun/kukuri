@@ -520,6 +520,23 @@ pub struct SubmitDomeSessionInput {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrepareDomeTransitionInput {
+    pub request: kukuri_core::DomeTransitionAdmissionRequestV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommitDomeTransitionInput {
+    pub ticket: kukuri_core::DomeTransitionAdmissionTicketV1,
+    pub position: [i64; 3],
+    pub rotation: [i64; 3],
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AbortDomeTransitionInput {
+    pub ticket: kukuri_core::DomeTransitionAdmissionTicketV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CommitDomeLayoutInput {
     pub spatial_context: SpatialContextV1,
     pub instance_id: String,

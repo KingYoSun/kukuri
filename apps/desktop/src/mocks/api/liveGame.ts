@@ -4,6 +4,7 @@ import {
   type DomeConnectionTopologyView,
   type DomeConnectionView,
   type DomeHostingView,
+  type DomeTransitionAdmissionTicketV1,
   type GameScoreView,
   type MetaverseAssetRef,
   type MetaverseRoomEventV1,
@@ -36,6 +37,9 @@ type LiveGameMock = Pick<
   | 'delegateDomeHosting'
   | 'closeDomeHosting'
   | 'submitDomeSessionInput'
+  | 'prepareDomeTransition'
+  | 'commitDomeTransition'
+  | 'abortDomeTransition'
   | 'commitDomeLayout'
   | 'resyncDomeSnapshots'
   | 'moveDome'
@@ -62,6 +66,7 @@ export function createLiveGameMock(runtime: MockRuntime): LiveGameMock {
   const connectionProposals = new Map<string, DomeConnectionProposalView>();
   const connectionViews = new Map<string, DomeConnectionView>();
   const hostingViews = new Map<string, DomeHostingView>();
+  const transitionTickets = new Map<string, DomeTransitionAdmissionTicketV1>();
 
   const contextKey = (context: Parameters<DesktopApi['listDomeConnectionTopology']>[0]) =>
     context.kind === 'topic'
@@ -453,6 +458,29 @@ export function createLiveGameMock(runtime: MockRuntime): LiveGameMock {
           expires_at: null,
         }],
       };
+    },
+    async prepareDomeTransition(request) {
+      const hosting = await this.getDomeHosting(request.spatial_context, request.target_instance_id);
+      if (!hosting.state.session_id || hosting.state.lease_epoch == null) {
+        throw new Error('target Dome is not hosted');
+      }
+      const ticket: DomeTransitionAdmissionTicketV1 = {
+        request,
+        target_lease_epoch: hosting.state.lease_epoch,
+        target_session_id: hosting.state.session_id,
+        expires_at: Date.now() + 15_000,
+      };
+      transitionTickets.set(request.transition_id, ticket);
+      return ticket;
+    },
+    async commitDomeTransition(ticket) {
+      if (!transitionTickets.has(ticket.request.transition_id)) {
+        throw new Error('transition ticket is not reserved');
+      }
+      transitionTickets.delete(ticket.request.transition_id);
+    },
+    async abortDomeTransition(ticket) {
+      transitionTickets.delete(ticket.request.transition_id);
     },
     async commitDomeLayout(spatialContext, instanceId, operationId) {
       const rooms = gameRoomsByTopic[spatialContext.topic_id] ?? [];

@@ -130,6 +130,7 @@ import type {
 import { invokeDesktop } from '../invoke/desktop';
 import { command } from '../invoke/dispatch';
 import { commitDomeLayoutRequest, resyncDomeSnapshotsRequest } from './domeHostingRequests';
+import { domeTransitionApi } from './domeTransitionApi';
 
 export const runtimeApi: DesktopApi = {
   createPost: command('createPost', async (topic, content, replyTo, attachments = [], channelRef = { kind: 'public' }) => {
@@ -655,6 +656,7 @@ export const runtimeApi: DesktopApi = {
       } satisfies SubmitDomeSessionInputRequest,
     });
   }),
+  ...domeTransitionApi,
   commitDomeLayout: command('commitDomeLayout', async (
     spatialContext,
     instanceId,

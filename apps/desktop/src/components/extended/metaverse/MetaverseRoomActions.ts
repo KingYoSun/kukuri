@@ -8,6 +8,8 @@ import type {
   DomeLayoutCommitView,
   DomePhysicsSnapshotV1,
   DomeSessionInputKindV1,
+  DomeTransitionAdmissionRequestV1,
+  DomeTransitionAdmissionTicketV1,
   GameRoomView,
   MetaverseAssetRef,
   MetaverseRoomEventView,
@@ -70,6 +72,15 @@ export type MetaverseRoomActions = {
     sequence: number,
     input: DomeSessionInputKindV1
   ) => Promise<DomePhysicsSnapshotV1>;
+  prepareTransition: (
+    request: DomeTransitionAdmissionRequestV1
+  ) => Promise<DomeTransitionAdmissionTicketV1>;
+  commitTransition: (
+    ticket: DomeTransitionAdmissionTicketV1,
+    position: [number, number, number],
+    rotation: [number, number, number]
+  ) => Promise<void>;
+  abortTransition: (ticket: DomeTransitionAdmissionTicketV1) => Promise<void>;
   commitLayout: (
     context: SpatialContextV1,
     instanceId: string,

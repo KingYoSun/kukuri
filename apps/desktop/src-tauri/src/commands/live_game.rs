@@ -1,11 +1,13 @@
 use kukuri_desktop_runtime::{
     AcceptDomeConnectionProposalRequest, CreateDomeConnectionProposalRequest,
-    CloseDomeHostingRequest, CommitDomeLayoutRequest, CreateGameRoomRequest,
+    AbortDomeTransitionRequest, CloseDomeHostingRequest, CommitDomeLayoutRequest,
+    CommitDomeTransitionRequest, CreateGameRoomRequest,
     CreateLiveSessionRequest,
     CreateMetaverseRoomRequest, DelegateDomeHostingRequest, GetDomeHostingRequest,
     ImportMetaverseRoomAssetRequest, ListDomeConnectionTopologyRequest, ListGameRoomsRequest,
     ListLiveSessionsRequest, ListMetaverseRoomEventsRequest, LiveSessionCommandRequest,
-    MoveDomeRequest, PublishMetaverseRoomEventRequest, ResyncDomeSnapshotsRequest,
+    MoveDomeRequest, PrepareDomeTransitionRequest, PublishMetaverseRoomEventRequest,
+    ResyncDomeSnapshotsRequest,
     RevokeDomeConnectionRequest, StartOwnerDomeHostingRequest, SubmitDomeSessionInputRequest,
     UpdateGameRoomRequest, UpdateMetaverseRoomRequest, WithdrawDomeConnectionProposalRequest,
 };
@@ -180,6 +182,42 @@ pub async fn submit_dome_session_input(
     state
         .runtime
         .submit_dome_session_input(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn prepare_dome_transition(
+    state: tauri::State<'_, DesktopState>,
+    request: PrepareDomeTransitionRequest,
+) -> Result<kukuri_core::DomeTransitionAdmissionTicketV1, CommandError> {
+    state
+        .runtime
+        .prepare_dome_transition(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn commit_dome_transition(
+    state: tauri::State<'_, DesktopState>,
+    request: CommitDomeTransitionRequest,
+) -> Result<(), CommandError> {
+    state
+        .runtime
+        .commit_dome_transition(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn abort_dome_transition(
+    state: tauri::State<'_, DesktopState>,
+    request: AbortDomeTransitionRequest,
+) -> Result<(), CommandError> {
+    state
+        .runtime
+        .abort_dome_transition(request)
         .await
         .map_err(map_error)
 }

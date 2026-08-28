@@ -138,6 +138,9 @@ pub enum ScenarioStep {
     ExerciseDomeConnections {
         local_title: String,
     },
+    ExerciseDomeTransition {
+        local_title: String,
+    },
     AssertDomeConnectionTopology {
         component_count: usize,
         active_connection_count: usize,

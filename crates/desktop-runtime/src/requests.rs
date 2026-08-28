@@ -1,7 +1,8 @@
 use kukuri_app_api::{GameScoreView, SocialConnectionKind};
 
 use kukuri_core::{
-    ChannelAudienceKind, ChannelRef, DomeCustomizationV1, DomeSessionInputKindV1, GameRoomStatus,
+    ChannelAudienceKind, ChannelRef, DomeCustomizationV1, DomeSessionInputKindV1,
+    DomeTransitionAdmissionRequestV1, DomeTransitionAdmissionTicketV1, GameRoomStatus,
     MetaverseAssetKind, MetaverseRoomEventV1, SpatialContextV1, TimelineScope,
 };
 use kukuri_store::TimelineCursor;
@@ -446,6 +447,26 @@ pub struct SubmitDomeSessionInputRequest {
     pub instance_id: String,
     pub sequence: u64,
     pub input: DomeSessionInputKindV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct PrepareDomeTransitionRequest {
+    pub request: DomeTransitionAdmissionRequestV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct CommitDomeTransitionRequest {
+    pub ticket: DomeTransitionAdmissionTicketV1,
+    pub position: [i64; 3],
+    pub rotation: [i64; 3],
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct AbortDomeTransitionRequest {
+    pub ticket: DomeTransitionAdmissionTicketV1,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

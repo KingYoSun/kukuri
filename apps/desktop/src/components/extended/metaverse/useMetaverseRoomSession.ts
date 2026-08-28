@@ -3,9 +3,12 @@ import { useTranslation } from 'react-i18next';
 
 import type { SupportedLocale } from '@/i18n';
 import type {
+  DomeBoundaryStateV1,
+  DomeDirection,
   GameRoomView,
   DomePhysicsSnapshotV1,
   DomeSessionInputKindV1,
+  DomeTransitionAdmissionTicketV1,
   MetaverseAssetRef,
   MetaverseInteractionKind,
   MetaversePersistentPropV1,
@@ -17,8 +20,15 @@ import type { MetaverseRoomActions } from './MetaverseRoomActions';
 import type { SessionPropView } from '../MetaverseScene';
 import { createDomeInteractionInput, persistentPropAsSharedObject } from './DomeSceneModel';
 import {
+  domeTransitionProgress,
+  transitionNeighborAtPosition,
+  transitionNeighborInZone,
+  transformAvatarBetweenDomes,
+  type DomeNeighborTransitionView,
+} from './DomeTransitionModel';
+import { useDomeTransitionNeighbors } from './useDomeTransitionNeighbors';
+import {
   DEFAULT_SHARED_OBJECT,
-  METAVERSE_CHAT_BUBBLE_TTL_MS,
   METAVERSE_ROOM_HEARTBEAT_MS,
   METAVERSE_ROOM_RECOVERY_MS,
   METAVERSE_ROOM_STALE_MS,
@@ -33,6 +43,11 @@ import {
   type PeerPresence,
   type RoomChatMessage,
 } from '../MetaverseSceneModel';
+import {
+  chatMessageFromApi,
+  latestChatBubbleFromMessage,
+  topicDiagnosticFor,
+} from './MetaverseRoomSessionSupport';
 
 type UseMetaverseRoomSessionArgs = {
   actions: MetaverseRoomActions;
@@ -47,43 +62,18 @@ type UseMetaverseRoomSessionArgs = {
   onError: (message: string | null) => void;
 };
 
+type TransitionAttempt = {
+  id: string;
+  sourceRoom: GameRoomView;
+  neighbor: DomeNeighborTransitionView;
+  phase: 'preparing' | 'provisional' | 'committing' | 'target_committed';
+  ticket: DomeTransitionAdmissionTicketV1 | null;
+  cancelled: boolean;
+};
+
 const EMPTY_ROOM_CHAT_HISTORY: NonNullable<
   NonNullable<GameRoomView['metaverse']>['chat_history']
 > = [];
-
-function chatMessageFromApi(message: {
-  room_id: string;
-  message_id: string;
-  author_peer_id: string;
-  display_name?: string | null;
-  body: string;
-  created_at: number;
-}): RoomChatMessage {
-  return {
-    roomId: message.room_id,
-    messageId: message.message_id,
-    authorPeerId: message.author_peer_id,
-    displayName: message.display_name ?? null,
-    body: message.body,
-    createdAt: message.created_at,
-  };
-}
-
-function topicDiagnosticFor(syncStatus: SyncStatus, topic: string) {
-  return syncStatus.topic_diagnostics.find(
-    (diagnostic) => diagnostic.topic === topic || diagnostic.topic === `hint/${topic}`
-  );
-}
-
-function latestChatBubbleFromMessage(message: RoomChatMessage, now = Date.now()): LatestChatBubble {
-  return {
-    peerId: message.authorPeerId,
-    displayName: message.displayName ?? null,
-    body: message.body,
-    createdAt: message.createdAt,
-    expiresAt: now + METAVERSE_CHAT_BUBBLE_TTL_MS,
-  };
-}
 
 export function useMetaverseRoomSession({
   actions,
@@ -107,6 +97,10 @@ export function useMetaverseRoomSession({
   const [messageDraft, setMessageDraft] = useState('');
   const [sharedObject, setSharedObject] = useState<SharedRoomObjectV1>(DEFAULT_SHARED_OBJECT);
   const [sessionProps, setSessionProps] = useState<SessionPropView[]>([]);
+  const [transitionPreparingDirections, setTransitionPreparingDirections] = useState<Set<DomeDirection>>(
+    () => new Set()
+  );
+  const [handoffTransform, setHandoffTransform] = useState<AvatarTransform | null>(null);
   const [lastSentSeq, setLastSentSeq] = useState(0);
   const [pollErrorCount, setPollErrorCount] = useState(0);
   const [lastRoomActivityAt, setLastRoomActivityAt] = useState(() => Date.now());
@@ -121,6 +115,8 @@ export function useMetaverseRoomSession({
   const localPeerSeed = useId().replaceAll(':', '');
   const localPeerId = `${syncStatus.discovery.local_endpoint_id || syncStatus.local_author_pubkey || 'local'}:${localPeerSeed}`;
   const lastSentTransformRef = useRef<AvatarTransform | null>(null);
+  const transitionAttemptRef = useRef<TransitionAttempt | null>(null);
+  const sessionSequenceByInstanceRef = useRef(new Map<string, number>());
   const lastReceivedAt = useMemo(() => {
     const values = Object.values(remoteTransforms).map((transform) => transform.sentAt);
     return values.length ? Math.max(...values) : null;
@@ -136,6 +132,11 @@ export function useMetaverseRoomSession({
   const selectedRoom = selectedRoomId
     ? rooms.find((room) => room.room_id === selectedRoomId) ?? null
     : null;
+  const [transitionNeighbors, setTransitionNeighbors] = useDomeTransitionNeighbors(
+    actions,
+    selectedRoom,
+    rooms
+  );
   const selectedRoomRoomId = selectedRoom?.room_id ?? null;
   const selectedRoomSharedObject = selectedRoom?.metaverse
     ? persistentPropAsSharedObject(
@@ -181,6 +182,35 @@ export function useMetaverseRoomSession({
     syncStatus,
   ]);
   const knownPeerCount = Object.keys(remoteTransforms).length;
+  const transitionBoundaryStates = useMemo(() => {
+    const states: Partial<Record<DomeDirection, DomeBoundaryStateV1>> = {};
+    for (const neighbor of transitionNeighbors) {
+      states[neighbor.direction] = transitionPreparingDirections.has(neighbor.direction)
+        ? 'loading'
+        : neighbor.boundaryState;
+    }
+    return states;
+  }, [transitionNeighbors, transitionPreparingDirections]);
+
+  const nextSessionSequence = useCallback((instanceId: string, suggested = Date.now()) => {
+    const next = Math.max(suggested, (sessionSequenceByInstanceRef.current.get(instanceId) ?? 0) + 1);
+    sessionSequenceByInstanceRef.current.set(instanceId, next);
+    return next;
+  }, []);
+
+  const submitInputForRoom = useCallback((
+    room: GameRoomView,
+    input: DomeSessionInputKindV1,
+    suggestedSequence = Date.now()
+  ) => {
+    if (!room.metaverse) return Promise.reject(new Error('Dome room state is unavailable'));
+    return actions.submitSessionInput(
+      room.metaverse.spatial_context,
+      room.metaverse.instance_id,
+      nextSessionSequence(room.metaverse.instance_id, suggestedSequence),
+      input
+    );
+  }, [actions, nextSessionSequence]);
 
   useEffect(() => {
     sharedObjectRef.current = sharedObject;
@@ -360,18 +390,12 @@ export function useMetaverseRoomSession({
 
   const submitAuthoritativeInput = useCallback((input: DomeSessionInputKindV1, sequence = Date.now()) => {
     if (!selectedRoom?.metaverse) return;
-    void actions
-      .submitSessionInput(
-        selectedRoom.metaverse.spatial_context,
-        selectedRoom.metaverse.instance_id,
-        sequence,
-        input
-      )
+    void submitInputForRoom(selectedRoom, input, sequence)
       .then(applyPhysicsSnapshot)
       .catch(() => {
         // Hosting may not have been started yet; presence/chat remain available.
       });
-  }, [actions, applyPhysicsSnapshot, selectedRoom]);
+  }, [applyPhysicsSnapshot, selectedRoom, submitInputForRoom]);
 
   useEffect(() => {
     if (!selectedRoom) {
@@ -558,7 +582,165 @@ export function useMetaverseRoomSession({
     lastBackendEventEnvelopeIdRef.current = null;
   }
 
+  function setTransitionPreparing(direction: DomeDirection, preparing: boolean) {
+    setTransitionPreparingDirections((current) => {
+      const next = new Set(current);
+      if (preparing) next.add(direction);
+      else next.delete(direction);
+      return next;
+    });
+  }
+
+  async function abortTransitionAttempt(attempt: TransitionAttempt) {
+    if (attempt.phase === 'target_committed') return;
+    attempt.cancelled = true;
+    if (attempt.ticket) {
+      await actions.abortTransition(attempt.ticket).catch(() => undefined);
+    }
+    await submitInputForRoom(attempt.sourceRoom, {
+      type: 'abort_transition',
+      transition_id: attempt.id,
+    }).catch(() => undefined);
+    if (transitionAttemptRef.current === attempt) {
+      transitionAttemptRef.current = null;
+    }
+    setTransitionPreparing(attempt.neighbor.direction, false);
+  }
+
+  function beginTransitionAttempt(neighbor: DomeNeighborTransitionView) {
+    if (!selectedRoom?.metaverse || transitionAttemptRef.current) return;
+    const transitionId = `dome-transition-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`;
+    const attempt: TransitionAttempt = {
+      id: transitionId,
+      sourceRoom: selectedRoom,
+      neighbor,
+      phase: 'preparing',
+      ticket: null,
+      cancelled: false,
+    };
+    transitionAttemptRef.current = attempt;
+    setTransitionPreparing(neighbor.direction, true);
+    void (async () => {
+      try {
+        await submitInputForRoom(attempt.sourceRoom, {
+          type: 'prepare_transition',
+          transition_id: attempt.id,
+          direction: neighbor.direction,
+        });
+        if (attempt.cancelled) return;
+        attempt.ticket = await actions.prepareTransition({
+          transition_id: attempt.id,
+          connection_id: neighbor.connectionId,
+          topology_digest: neighbor.topologyDigest,
+          spatial_context: attempt.sourceRoom.metaverse!.spatial_context,
+          source_instance_id: attempt.sourceRoom.metaverse!.instance_id,
+          source_instance_generation: attempt.sourceRoom.metaverse!.instance_generation,
+          target_instance_id: neighbor.room.metaverse!.instance_id,
+          target_instance_generation: neighbor.room.metaverse!.instance_generation,
+          participant_pubkey: syncStatus.local_author_pubkey,
+          direction: neighbor.direction,
+          requested_at: Date.now(),
+        });
+        if (attempt.cancelled) {
+          await abortTransitionAttempt(attempt);
+          return;
+        }
+        attempt.phase = 'provisional';
+        setTransitionPreparing(neighbor.direction, false);
+      } catch (transitionError) {
+        await abortTransitionAttempt(attempt);
+        setTransitionNeighbors((current) => current.map((candidate) =>
+          candidate.connectionId === neighbor.connectionId
+            ? { ...candidate, boundaryState: 'error' }
+            : candidate
+        ));
+        onError(
+          transitionError instanceof Error
+            ? transitionError.message
+            : 'Dome transition preparation failed'
+        );
+      }
+    })();
+  }
+
+  function commitTransitionAttempt(attempt: TransitionAttempt, transform: AvatarTransform) {
+    if (attempt.phase !== 'provisional' || attempt.cancelled || !attempt.ticket) return;
+    attempt.phase = 'committing';
+    const targetPosition = transformAvatarBetweenDomes(
+      transform.position,
+      attempt.neighbor.relativeCoordinateCm
+    );
+    const targetTransform: AvatarTransform = {
+      ...transform,
+      roomId: attempt.neighbor.room.room_id,
+      seq: 0,
+      position: targetPosition,
+      sentAt: Date.now(),
+    };
+    void (async () => {
+      try {
+        await actions.commitTransition(attempt.ticket!, targetPosition, transform.rotation);
+        attempt.phase = 'target_committed';
+        transitionAttemptRef.current = null;
+        setTransitionPreparing(attempt.neighbor.direction, false);
+        setHandoffTransform(targetTransform);
+        lastSentTransformRef.current = targetTransform;
+        setLastSentSeq(0);
+        setJoinedRoomIds((current) => {
+          const next = new Set(current);
+          next.delete(attempt.sourceRoom.room_id);
+          next.add(attempt.neighbor.room.room_id);
+          return next;
+        });
+        setSelectedRoomId(attempt.neighbor.room.room_id);
+        onError(null);
+        let sourceCompleted = false;
+        for (const retryDelay of [0, 250, 1_000]) {
+          if (retryDelay > 0) {
+            await new Promise((resolve) => window.setTimeout(resolve, retryDelay));
+          }
+          try {
+            await submitInputForRoom(attempt.sourceRoom, {
+              type: 'complete_transition',
+              transition_id: attempt.id,
+            });
+            sourceCompleted = true;
+            break;
+          } catch {
+            // The destination remains authoritative; retry only source cleanup.
+          }
+        }
+        if (sourceCompleted) {
+          const leftAt = Date.now();
+          await actions.publishRoomEvent(attempt.sourceRoom.room_id, localPeerId, leftAt, {
+            type: 'presence_leave',
+            room_id: attempt.sourceRoom.room_id,
+            peer_id: localPeerId,
+            left_at: leftAt,
+          }).catch(() => undefined);
+        } else {
+          onError('Destination committed; source Dome cleanup will require resynchronization');
+        }
+      } catch (transitionError) {
+        await abortTransitionAttempt(attempt);
+        setTransitionNeighbors((current) => current.map((candidate) =>
+          candidate.connectionId === attempt.neighbor.connectionId
+            ? { ...candidate, boundaryState: 'error' }
+            : candidate
+        ));
+        onError(
+          transitionError instanceof Error
+            ? transitionError.message
+            : 'Dome transition commit failed'
+        );
+      }
+    })();
+  }
+
   function joinRoom(roomId: string) {
+    const attempt = transitionAttemptRef.current;
+    if (attempt) void abortTransitionAttempt(attempt);
+    setHandoffTransform(null);
     setJoinedRoomIds((current) => new Set(current).add(roomId));
     setSelectedRoomId(roomId);
   }
@@ -572,6 +754,8 @@ export function useMetaverseRoomSession({
     if (!selectedRoom) {
       return;
     }
+    const attempt = transitionAttemptRef.current;
+    if (attempt) void abortTransitionAttempt(attempt);
     const roomId = selectedRoom.room_id;
     const leftAt = Date.now();
     emit({ type: 'presence.leave', roomId, peerId: localPeerId, leftAt });
@@ -594,6 +778,7 @@ export function useMetaverseRoomSession({
   }
 
   function handleLocalTransform(transform: AvatarTransform) {
+    const previous = lastSentTransformRef.current;
     lastSentTransformRef.current = transform;
     setLastSentSeq(transform.seq);
     submitAuthoritativeInput({
@@ -602,6 +787,26 @@ export function useMetaverseRoomSession({
       rotation: transform.rotation,
       animation: transform.animation,
     }, transform.seq);
+    const attempt = transitionAttemptRef.current;
+    const inZone = transitionNeighborInZone(transform.position, transitionNeighbors);
+    if (!attempt && inZone) {
+      beginTransitionAttempt(inZone);
+      return;
+    }
+    if (!attempt) return;
+    if (
+      attempt.phase !== 'committing' &&
+      domeTransitionProgress(transform.position, attempt.neighbor.direction) <= 0
+    ) {
+      void abortTransitionAttempt(attempt);
+      return;
+    }
+    const crossed = transitionNeighborAtPosition(previous?.position ?? null, transform.position, [
+      attempt.neighbor,
+    ]);
+    if (crossed && attempt.phase === 'provisional') {
+      commitTransitionAttempt(attempt, transform);
+    }
   }
 
   function handleSendMessage(event: FormEvent<HTMLFormElement>) {
@@ -765,6 +970,9 @@ export function useMetaverseRoomSession({
     setMessageDraft,
     sharedObject,
     sessionProps,
+    transitionNeighbors,
+    transitionBoundaryStates,
+    handoffTransform,
     lastSentSeq,
     lastReceivedAt,
     remoteAnimationSummary,

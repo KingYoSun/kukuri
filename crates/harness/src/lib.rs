@@ -33,13 +33,13 @@ pub(crate) use base64::Engine;
 pub(crate) use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 pub(crate) use kukuri_app_api::{
     AcceptDomeConnectionProposalInput, ActivateCommunityNodeDomeHostingInput, AppService,
-    CloseDomeHostingInput, CommitDomeLayoutInput, CreateDomeConnectionProposalInput,
-    CreateGameRoomInput, CreateLiveSessionInput, CreateMetaverseRoomInput,
-    DirectMessageConversationView, DirectMessageMessageView, DirectMessageStatusView,
-    DomeLayoutCommitOutcome, GameScoreView, MoveDomeInput, PrepareCommunityNodeDomeHostingInput,
-    PrivateChannelCapability, RevokeDomeConnectionInput, ServiceHandles,
-    StartOwnerDomeHostingInput, SubmitDomeSessionInput, SyncStatus, UpdateGameRoomInput,
-    UpdateMetaverseRoomInput,
+    CloseDomeHostingInput, CommitDomeLayoutInput, CommitDomeTransitionInput,
+    CreateDomeConnectionProposalInput, CreateGameRoomInput, CreateLiveSessionInput,
+    CreateMetaverseRoomInput, DirectMessageConversationView, DirectMessageMessageView,
+    DirectMessageStatusView, DomeLayoutCommitOutcome, GameScoreView, MoveDomeInput,
+    PrepareCommunityNodeDomeHostingInput, PrepareDomeTransitionInput, PrivateChannelCapability,
+    RevokeDomeConnectionInput, ServiceHandles, StartOwnerDomeHostingInput, SubmitDomeSessionInput,
+    SyncStatus, UpdateGameRoomInput, UpdateMetaverseRoomInput,
 };
 pub(crate) use kukuri_blob_service::MemoryBlobService;
 pub(crate) use kukuri_cn_core::{JwtConfig, TestDatabase};
@@ -49,9 +49,9 @@ pub(crate) use kukuri_cn_user_api::{
 };
 pub(crate) use kukuri_core::{
     ChannelAudienceKind, ChannelId, ChannelRef, CreatePrivateChannelInput, DomeDirection,
-    DomeHostingStateKindV1, DomeMaterialPreset, DomeSessionInputKindV1, GameRoomStatus, KukuriKeys,
-    SignedDomeHostingLeaseV1, SpatialContextV1, TimelineScope, TopicId, accept_dome_hosting_lease,
-    generate_keys,
+    DomeHostingStateKindV1, DomeMaterialPreset, DomeSessionInputKindV1,
+    DomeTransitionAdmissionRequestV1, GameRoomStatus, KukuriKeys, SignedDomeHostingLeaseV1,
+    SpatialContextV1, TimelineScope, TopicId, accept_dome_hosting_lease, generate_keys,
 };
 pub(crate) use kukuri_desktop_runtime::{
     AcceptCommunityNodeConsentsRequest, AuthorRequest, CommunityNodeTargetRequest,
