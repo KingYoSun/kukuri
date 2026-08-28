@@ -62,11 +62,11 @@ describe('useSyncRoute', () => {
         workspaceState: openTransientColumn(storeApi.getState().workspaceState, {
           id: columnIdentityId(
             'thread',
-            { topicId: 'kukuri:topic:demo', channelId: null },
+            { topicId: 'kukuri:topic:general', channelId: null },
             'post-1'
           ),
           kind: 'thread',
-          scope: { topicId: 'kukuri:topic:demo', channelId: null },
+          scope: { topicId: 'kukuri:topic:general', channelId: null },
           entityId: 'post-1',
           pinned: false,
         }),
@@ -78,11 +78,11 @@ describe('useSyncRoute', () => {
 
       expect(args.navigate).toHaveBeenCalledTimes(1);
       expect(args.navigate).toHaveBeenCalledWith(
-        '/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-1&focusObjectId=obj-1',
+        '/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=post-1&focusObjectId=obj-1',
         { replace: false }
       );
       expect(args.pendingRouteUrlRef.current).toBe(
-        '/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-1&focusObjectId=obj-1'
+        '/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=post-1&focusObjectId=obj-1'
       );
       view.unmount();
     });
@@ -96,7 +96,7 @@ describe('useSyncRoute', () => {
       view.result.current('replace', { focusedObjectId: null, selectedThread: null });
 
       expect(args.navigate).toHaveBeenCalledTimes(1);
-      expect(args.navigate).toHaveBeenCalledWith('/timeline?topic=kukuri%3Atopic%3Ademo', {
+      expect(args.navigate).toHaveBeenCalledWith('/timeline?topic=kukuri%3Atopic%3Ageneral', {
         replace: true,
       });
       view.unmount();
@@ -112,7 +112,7 @@ describe('useSyncRoute', () => {
       view.result.current('replace', { selectedThread: undefined });
 
       expect(args.navigate).toHaveBeenCalledTimes(1);
-      expect(args.navigate).toHaveBeenCalledWith('/timeline?topic=kukuri%3Atopic%3Ademo', {
+      expect(args.navigate).toHaveBeenCalledWith('/timeline?topic=kukuri%3Atopic%3Ageneral', {
         replace: true,
       });
       view.unmount();
@@ -124,7 +124,7 @@ describe('useSyncRoute', () => {
       const storeApi = createDesktopShellStore();
       const args = createHookArgs(storeApi, {
         pendingRouteUrlRef: { current: '/timeline?topic=stale' },
-        resolvedRouteLocation: { pathname: '/timeline', search: '?topic=kukuri%3Atopic%3Ademo' },
+        resolvedRouteLocation: { pathname: '/timeline', search: '?topic=kukuri%3Atopic%3Ageneral' },
       });
       const view = renderHook(() => useSyncRoute(args));
 
@@ -143,9 +143,9 @@ describe('useSyncRoute', () => {
       // mode 省略時は 'replace'
       view.result.current();
 
-      expect(args.pendingRouteUrlRef.current).toBe('/timeline?topic=kukuri%3Atopic%3Ademo');
+      expect(args.pendingRouteUrlRef.current).toBe('/timeline?topic=kukuri%3Atopic%3Ageneral');
       expect(args.navigate).toHaveBeenCalledTimes(1);
-      expect(args.navigate).toHaveBeenCalledWith('/timeline?topic=kukuri%3Atopic%3Ademo', {
+      expect(args.navigate).toHaveBeenCalledWith('/timeline?topic=kukuri%3Atopic%3Ageneral', {
         replace: true,
       });
       view.unmount();
@@ -158,7 +158,7 @@ describe('useSyncRoute', () => {
 
       view.result.current('push');
 
-      expect(args.navigate).toHaveBeenCalledWith('/timeline?topic=kukuri%3Atopic%3Ademo', {
+      expect(args.navigate).toHaveBeenCalledWith('/timeline?topic=kukuri%3Atopic%3Ageneral', {
         replace: false,
       });
       view.unmount();
@@ -176,7 +176,7 @@ describe('useSyncRoute', () => {
       });
 
       expect(args.navigate).toHaveBeenCalledWith(
-        '/timeline?topic=kukuri%3Atopic%3Ademo&channel=chan-9',
+        '/timeline?topic=kukuri%3Atopic%3Ageneral&channel=chan-9',
         { replace: true }
       );
       view.unmount();
@@ -192,7 +192,7 @@ describe('useSyncRoute', () => {
       });
 
       expect(args.navigate).toHaveBeenCalledWith(
-        '/timeline?topic=kukuri%3Atopic%3Ademo&channel=chan-7',
+        '/timeline?topic=kukuri%3Atopic%3Ageneral&channel=chan-7',
         { replace: true }
       );
       view.unmount();
@@ -203,11 +203,11 @@ describe('useSyncRoute', () => {
       storeApi.getState().patchState({
         workspaceState: openTransientColumn(storeApi.getState().workspaceState, {
           id: columnIdentityId('timeline', {
-            topicId: 'kukuri:topic:demo',
+            topicId: 'kukuri:topic:general',
             channelId: 'chan-1',
           }),
           kind: 'timeline',
-          scope: { topicId: 'kukuri:topic:demo', channelId: 'chan-1' },
+          scope: { topicId: 'kukuri:topic:general', channelId: 'chan-1' },
           pinned: false,
         }),
       });
@@ -218,13 +218,13 @@ describe('useSyncRoute', () => {
       view.result.current('push');
       expect(args.navigate).toHaveBeenNthCalledWith(
         1,
-        '/timeline?topic=kukuri%3Atopic%3Ademo&channel=chan-1',
+        '/timeline?topic=kukuri%3Atopic%3Ageneral&channel=chan-1',
         { replace: false }
       );
 
       // public composeTarget を明示すると channel が落ちる
       view.result.current('replace', { composeTarget: { kind: 'public' } });
-      expect(args.navigate).toHaveBeenNthCalledWith(2, '/timeline?topic=kukuri%3Atopic%3Ademo', {
+      expect(args.navigate).toHaveBeenNthCalledWith(2, '/timeline?topic=kukuri%3Atopic%3Ageneral', {
         replace: true,
       });
       view.unmount();

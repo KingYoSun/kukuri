@@ -52,7 +52,7 @@ test('Control Center notifications action shows unread count and opening inbox a
   await openNotificationsInbox(user);
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/notifications?topic=kukuri%3Atopic%3Ademo');
+    expect(window.location.hash).toBe('#/notifications?topic=kukuri%3Atopic%3Ageneral');
   });
   controlCenter = await openControlCenter(user);
   expect(within(controlCenter).getByRole('button', { name: /^Notifications/ })).toHaveTextContent('0');
@@ -74,7 +74,7 @@ test('desktop shell loads unread notification rows outside the inbox for OS noti
   api.listNotifications = listNotifications;
   api.markAllNotificationsRead = markAllNotificationsRead;
 
-  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo', api);
+  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ageneral', api);
 
   await waitFor(() => {
     expect(screen.getByTestId('control-center-trigger')).toHaveTextContent('1');
@@ -86,14 +86,14 @@ test('desktop shell loads unread notification rows outside the inbox for OS noti
 test('clicking the active notifications action focuses the existing inbox', async () => {
   const user = userEvent.setup();
 
-  renderAtHash('#/profile?topic=kukuri%3Atopic%3Ademo');
+  renderAtHash('#/profile?topic=kukuri%3Atopic%3Ageneral');
 
   expect(await screen.findByRole('button', { name: 'Edit Profile' })).toBeInTheDocument();
 
   await openNotificationsInbox(user);
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/notifications?topic=kukuri%3Atopic%3Ademo');
+    expect(window.location.hash).toBe('#/notifications?topic=kukuri%3Atopic%3Ageneral');
   });
   expect(screen.getAllByRole('heading', { name: 'Notifications' }).length).toBeGreaterThan(0);
 
@@ -101,7 +101,7 @@ test('clicking the active notifications action focuses the existing inbox', asyn
   await user.click(within(controlCenter).getByRole('button', { name: /^Notifications/ }));
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/notifications?topic=kukuri%3Atopic%3Ademo');
+    expect(window.location.hash).toBe('#/notifications?topic=kukuri%3Atopic%3Ageneral');
   });
   expect(screen.getAllByRole('region', { name: /^Notifications Column/ })).toHaveLength(1);
 });
@@ -118,7 +118,7 @@ test('notifications route renders inbox and marks unread notifications as read o
   const markAllNotificationsRead = vi.fn(api.markAllNotificationsRead);
   api.markAllNotificationsRead = markAllNotificationsRead;
 
-  renderAtHash('#/notifications?topic=kukuri%3Atopic%3Ademo', api);
+  renderAtHash('#/notifications?topic=kukuri%3Atopic%3Ageneral', api);
 
   expect((await screen.findAllByRole('heading', { name: 'Notifications' })).length).toBeGreaterThan(0);
   await waitFor(() => {
@@ -129,7 +129,7 @@ test('notifications route renders inbox and marks unread notifications as read o
 });
 
 test('notifications route renders an empty state when the inbox has no items', async () => {
-  renderAtHash('#/notifications?topic=kukuri%3Atopic%3Ademo', createDesktopMockApi());
+  renderAtHash('#/notifications?topic=kukuri%3Atopic%3Ageneral', createDesktopMockApi());
 
   expect((await screen.findAllByRole('heading', { name: 'Notifications' })).length).toBeGreaterThan(0);
   expect(await screen.findByText('No notifications yet.')).toBeInTheDocument();
@@ -139,7 +139,7 @@ test('notifications route surfaces a load error when the inbox request fails', a
   const api = createDesktopMockApi();
   api.listNotifications = vi.fn().mockRejectedValue(new Error('load notifications exploded'));
 
-  renderAtHash('#/notifications?topic=kukuri%3Atopic%3Ademo', api);
+  renderAtHash('#/notifications?topic=kukuri%3Atopic%3Ageneral', api);
 
   expect((await screen.findAllByRole('heading', { name: 'Notifications' })).length).toBeGreaterThan(0);
   expect(await screen.findByText('load notifications exploded')).toBeInTheDocument();
@@ -156,7 +156,7 @@ test('notifications route surfaces auto-read errors and keeps unread state visib
   });
   api.markAllNotificationsRead = vi.fn().mockRejectedValue(new Error('mark read failed'));
 
-  renderAtHash('#/notifications?topic=kukuri%3Atopic%3Ademo', api);
+  renderAtHash('#/notifications?topic=kukuri%3Atopic%3Ageneral', api);
 
   expect((await screen.findAllByRole('heading', { name: 'Notifications' })).length).toBeGreaterThan(0);
   expect(await screen.findByText('mark read failed')).toBeInTheDocument();
@@ -170,7 +170,7 @@ test('notifications route surfaces auto-read errors and keeps unread state visib
 test('reply notification click-through opens the source thread in timeline', async () => {
   const user = userEvent.setup();
   renderAtHash(
-    '#/notifications?topic=kukuri%3Atopic%3Ademo',
+    '#/notifications?topic=kukuri%3Atopic%3Ageneral',
     createDesktopMockApi({
       notifications: [
         buildNotification({
@@ -181,7 +181,7 @@ test('reply notification click-through opens the source thread in timeline', asy
         }),
       ],
       seedPosts: {
-        'kukuri:topic:demo': [
+        'kukuri:topic:general': [
           {
             object_id: 'post-thread-open',
             envelope_id: 'envelope-thread-open',
@@ -232,7 +232,7 @@ test('reply notification click-through opens the source thread in timeline', asy
 
   await waitFor(() => {
     expect(window.location.hash).toBe(
-      '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-thread-open'
+      '#/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=post-thread-open'
     );
   });
   expect(getDetailPane('Thread')).toBeInTheDocument();
@@ -242,7 +242,7 @@ test('direct message notification click-through opens the messages pane', async 
   const user = userEvent.setup();
   const actorPubkey = 'd'.repeat(64);
   renderAtHash(
-    '#/notifications?topic=kukuri%3Atopic%3Ademo',
+    '#/notifications?topic=kukuri%3Atopic%3Ageneral',
     createDesktopMockApi({
       notifications: [
         buildNotification({
@@ -273,7 +273,7 @@ test('direct message notification click-through opens the messages pane', async 
   await user.click(screen.getByText('hello from dm notification'));
 
   await waitFor(() => {
-    expect(window.location.hash).toContain('#/messages?topic=kukuri%3Atopic%3Ademo&peerPubkey=');
+    expect(window.location.hash).toContain('#/messages?topic=kukuri%3Atopic%3Ageneral&peerPubkey=');
   });
   const conversationColumn = await screen.findByRole('region', { name: /Conversation Column/ });
   await user.click(within(conversationColumn).getByRole('button', { name: /Message to / }));
@@ -284,7 +284,7 @@ test('follow notification click-through opens the author pane from timeline', as
   const user = userEvent.setup();
   const actorPubkey = 'e'.repeat(64);
   renderAtHash(
-    '#/notifications?topic=kukuri%3Atopic%3Ademo',
+    '#/notifications?topic=kukuri%3Atopic%3Ageneral',
     createDesktopMockApi({
       notifications: [
         buildNotification({
@@ -312,7 +312,7 @@ test('follow notification click-through opens the author pane from timeline', as
 
   await waitFor(() => {
     expect(window.location.hash).toBe(
-      `#/timeline?topic=kukuri%3Atopic%3Ademo&context=author&authorPubkey=${actorPubkey}`
+      `#/timeline?topic=kukuri%3Atopic%3Ageneral&context=author&authorPubkey=${actorPubkey}`
     );
   });
   expect(getDetailPane('Author')).toBeInTheDocument();

@@ -29,13 +29,13 @@ const LOCALES = [
 ] as const;
 
 const MAJOR_ROUTES = [
-  '/#/timeline?topic=kukuri%3Atopic%3Ademo',
-  '/#/messages?topic=kukuri%3Atopic%3Ademo',
-  '/#/notifications?topic=kukuri%3Atopic%3Ademo',
-  '/#/profile?topic=kukuri%3Atopic%3Ademo',
-  '/#/profile?topic=kukuri%3Atopic%3Ademo&profileMode=connections&connectionsView=muted',
-  '/#/live?topic=kukuri%3Atopic%3Ademo',
-  '/#/game?topic=kukuri%3Atopic%3Ademo',
+  '/#/timeline?topic=kukuri%3Atopic%3Ageneral',
+  '/#/messages?topic=kukuri%3Atopic%3Ageneral',
+  '/#/notifications?topic=kukuri%3Atopic%3Ageneral',
+  '/#/profile?topic=kukuri%3Atopic%3Ageneral',
+  '/#/profile?topic=kukuri%3Atopic%3Ageneral&profileMode=connections&connectionsView=muted',
+  '/#/live?topic=kukuri%3Atopic%3Ageneral',
+  '/#/game?topic=kukuri%3Atopic%3Ageneral',
 ] as const;
 
 const SETTINGS_SECTIONS = [
@@ -148,7 +148,7 @@ for (const copy of LOCALES) {
   }) => {
     await seedLocale(page, copy.locale);
     await page.setViewportSize({ width: 900, height: 760 });
-    await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
+    await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
 
     const title = page.getByRole('heading', { name: copy.timeline, exact: true });
     await expect(title).toBeVisible();
@@ -216,7 +216,7 @@ for (const copy of LOCALES) {
     await page.setViewportSize({ width: 390, height: 844 });
 
     for (const section of SETTINGS_SECTIONS) {
-      await page.goto(`/#/timeline?topic=kukuri%3Atopic%3Ademo&settings=${section}`);
+      await page.goto(`/#/timeline?topic=kukuri%3Atopic%3Ageneral&settings=${section}`);
 
       const settings = page.getByRole('dialog', { name: copy.settings, exact: true });
       await expect(settings).toBeVisible();

@@ -47,7 +47,7 @@ const DM_PEER_PUBKEY = 'd'.repeat(64);
 const OTHER_PEER_PUBKEY = 'b'.repeat(64);
 const STRANGER_PUBKEY = 'e'.repeat(64);
 // buildShellUrl(URLSearchParams)が生成する正規形。':' は %3A にエンコードされる。
-const BASE_TIMELINE_HASH = '#/timeline?topic=kukuri%3Atopic%3Ademo';
+const BASE_TIMELINE_HASH = '#/timeline?topic=kukuri%3Atopic%3Ageneral';
 
 // key をそのまま返す stub。文言 assert を locale リソースから切り離す。
 const stubTranslate = (key: string) => key;
@@ -121,7 +121,7 @@ function buildConversation(peerPubkey: string): DirectMessageConversationView {
 
 function buildJoinedChannel(channelId: string): JoinedPrivateChannelView {
   return {
-    topic_id: 'kukuri:topic:demo',
+    topic_id: 'kukuri:topic:general',
     channel_id: channelId,
     label: 'core',
     creator_pubkey: 'c'.repeat(64),
@@ -191,7 +191,7 @@ describe('useDesktopShellRouting', () => {
   test('openThread success loads thread state, clears author/DM panes, and pushes a thread URL', async () => {
     const baseApi = createDesktopMockApi({
       seedPosts: {
-        'kukuri:topic:demo': [
+        'kukuri:topic:general': [
           buildPost({ object_id: 'post-1', root_id: 'post-1' }),
           buildPost({
             object_id: 'comment-1',
@@ -207,7 +207,7 @@ describe('useDesktopShellRouting', () => {
     // URL と整合する author ペイン(+DM ペイン)が開いた状態から始めて
     // 「openThread が他ペインを閉じる」ことを観測する。nav も開いておき、
     const { harness, loadTopics, view } = renderRoutingHook({
-      hash: `#/timeline?topic=kukuri%3Atopic%3Ademo&context=author&authorPubkey=${AUTHOR_PUBKEY}`,
+      hash: `#/timeline?topic=kukuri%3Atopic%3Ageneral&context=author&authorPubkey=${AUTHOR_PUBKEY}`,
       api,
       preset: (store) => {
         store.getState().patchState({
@@ -226,7 +226,7 @@ describe('useDesktopShellRouting', () => {
 
     // THREAD_TIMELINE_LIMIT(=30)・cursor null で 1 回だけ取得する。
     expect(api.listThread).toHaveBeenCalledTimes(1);
-    expect(api.listThread).toHaveBeenCalledWith('kukuri:topic:demo', 'post-1', null, 30);
+    expect(api.listThread).toHaveBeenCalledWith('kukuri:topic:general', 'post-1', null, 30);
 
     await waitFor(() => {
       expect(harness.store.getState().selectedThread).toBe('post-1');
@@ -248,7 +248,7 @@ describe('useDesktopShellRouting', () => {
     expect(state.error).toBeNull();
     await waitFor(() => {
       expect(window.location.hash).toBe(
-        '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-1'
+        '#/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=post-1'
       );
     });
     // historyMode 既定は push(履歴が 1 つ積まれる)。
@@ -260,7 +260,7 @@ describe('useDesktopShellRouting', () => {
   test('openThread with normalizeOnEmpty clears all panes and replaces to a thread-less URL', async () => {
     const baseApi = createDesktopMockApi({
       seedPosts: {
-        'kukuri:topic:demo': [buildPost({ object_id: 'post-1', root_id: 'post-1' })],
+        'kukuri:topic:general': [buildPost({ object_id: 'post-1', root_id: 'post-1' })],
       },
     });
     const api = { ...baseApi, listThread: vi.fn(baseApi.listThread) };
@@ -268,7 +268,7 @@ describe('useDesktopShellRouting', () => {
     // live/game の選択も持たせ、normalizeOnEmpty がクリアすることを観測する
     // (timeline+thread route の mount 同期は live/game 選択を触らないため preset が残る)。
     const { harness, view } = renderRoutingHook({
-      hash: '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-1',
+      hash: '#/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=post-1',
       api,
       preset: (store) => {
         store.getState().patchState({
@@ -287,7 +287,7 @@ describe('useDesktopShellRouting', () => {
       await view.result.current.openThread('post-gone', { normalizeOnEmpty: true });
     });
 
-    expect(api.listThread).toHaveBeenCalledWith('kukuri:topic:demo', 'post-gone', null, 30);
+    expect(api.listThread).toHaveBeenCalledWith('kukuri:topic:general', 'post-gone', null, 30);
     await waitFor(() => {
       expect(harness.store.getState().selectedThread).toBeNull();
     });
@@ -314,7 +314,7 @@ describe('useDesktopShellRouting', () => {
   test('openThread with channelId pins the topic channel selection and puts channel on the thread URL', async () => {
     const baseApi = createDesktopMockApi({
       seedPosts: {
-        'kukuri:topic:demo': [
+        'kukuri:topic:general': [
           buildPost({ object_id: 'post-1', root_id: 'post-1', channel_id: 'channel-1' }),
         ],
       },
@@ -327,9 +327,9 @@ describe('useDesktopShellRouting', () => {
       api,
       preset: (store) => {
         store.getState().patchState({
-          joinedChannelsByTopic: { 'kukuri:topic:demo': [buildJoinedChannel('channel-1')] },
+          joinedChannelsByTopic: { 'kukuri:topic:general': [buildJoinedChannel('channel-1')] },
           channelPanelStateByTopic: {
-            'kukuri:topic:demo': { status: 'ready', error: null },
+            'kukuri:topic:general': { status: 'ready', error: null },
           },
         });
       },
@@ -337,29 +337,29 @@ describe('useDesktopShellRouting', () => {
 
     await act(async () => {
       await view.result.current.openThread('post-1', {
-        topic: 'kukuri:topic:demo',
+        topic: 'kukuri:topic:general',
         channelId: 'channel-1',
       });
     });
 
-    expect(api.listThread).toHaveBeenCalledWith('kukuri:topic:demo', 'post-1', null, 30);
+    expect(api.listThread).toHaveBeenCalledWith('kukuri:topic:general', 'post-1', null, 30);
     await waitFor(() => {
       expect(harness.store.getState().selectedThread).toBe('post-1');
     });
     const state = harness.store.getState();
     // handleSelectPrivateChannel と同じ 3 つの状態が channel-1 に揃う。
     expect(activeWorkspaceScope(state.workspaceState).channelId).toBe('channel-1');
-    expect(state.timelineScopeByTopic['kukuri:topic:demo']).toEqual({
+    expect(state.timelineScopeByTopic['kukuri:topic:general']).toEqual({
       kind: 'channel',
       channel_id: 'channel-1',
     });
-    expect(state.composeChannelByTopic['kukuri:topic:demo']).toEqual({
+    expect(state.composeChannelByTopic['kukuri:topic:general']).toEqual({
       kind: 'private_channel',
       channel_id: 'channel-1',
     });
     await waitFor(() => {
       expect(window.location.hash).toBe(
-        '#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1&context=thread&threadId=post-1'
+        '#/timeline?topic=kukuri%3Atopic%3Ageneral&channel=channel-1&context=thread&threadId=post-1'
       );
     });
     view.unmount();
@@ -368,33 +368,33 @@ describe('useDesktopShellRouting', () => {
   test('openThread with channelId null resets the topic channel selection to public', async () => {
     const baseApi = createDesktopMockApi({
       seedPosts: {
-        'kukuri:topic:demo': [buildPost({ object_id: 'post-1', root_id: 'post-1' })],
+        'kukuri:topic:general': [buildPost({ object_id: 'post-1', root_id: 'post-1' })],
       },
     });
     const api = { ...baseApi, listThread: vi.fn(baseApi.listThread) };
     const { harness, view } = renderRoutingHook({
-      hash: '#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1',
+      hash: '#/timeline?topic=kukuri%3Atopic%3Ageneral&channel=channel-1',
       api,
       preset: (store) => {
         store.getState().patchState({
-          joinedChannelsByTopic: { 'kukuri:topic:demo': [buildJoinedChannel('channel-1')] },
+          joinedChannelsByTopic: { 'kukuri:topic:general': [buildJoinedChannel('channel-1')] },
           channelPanelStateByTopic: {
-            'kukuri:topic:demo': { status: 'ready', error: null },
+            'kukuri:topic:general': { status: 'ready', error: null },
           },
           workspaceState: openTransientColumn(store.getState().workspaceState, {
             id: columnIdentityId('timeline', {
-              topicId: 'kukuri:topic:demo',
+              topicId: 'kukuri:topic:general',
               channelId: 'channel-1',
             }),
             kind: 'timeline',
-            scope: { topicId: 'kukuri:topic:demo', channelId: 'channel-1' },
+            scope: { topicId: 'kukuri:topic:general', channelId: 'channel-1' },
             pinned: false,
           }),
           timelineScopeByTopic: {
-            'kukuri:topic:demo': { kind: 'channel', channel_id: 'channel-1' },
+            'kukuri:topic:general': { kind: 'channel', channel_id: 'channel-1' },
           },
           composeChannelByTopic: {
-            'kukuri:topic:demo': { kind: 'private_channel', channel_id: 'channel-1' },
+            'kukuri:topic:general': { kind: 'private_channel', channel_id: 'channel-1' },
           },
         });
       },
@@ -402,7 +402,7 @@ describe('useDesktopShellRouting', () => {
 
     await act(async () => {
       await view.result.current.openThread('post-1', {
-        topic: 'kukuri:topic:demo',
+        topic: 'kukuri:topic:general',
         channelId: null,
       });
     });
@@ -412,11 +412,11 @@ describe('useDesktopShellRouting', () => {
     });
     const state = harness.store.getState();
     expect(activeWorkspaceScope(state.workspaceState).channelId).toBeNull();
-    expect(state.timelineScopeByTopic['kukuri:topic:demo']).toEqual({ kind: 'public' });
-    expect(state.composeChannelByTopic['kukuri:topic:demo']).toEqual({ kind: 'public' });
+    expect(state.timelineScopeByTopic['kukuri:topic:general']).toEqual({ kind: 'public' });
+    expect(state.composeChannelByTopic['kukuri:topic:general']).toEqual({ kind: 'public' });
     await waitFor(() => {
       expect(window.location.hash).toBe(
-        '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-1'
+        '#/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=post-1'
       );
     });
     view.unmount();
@@ -485,7 +485,7 @@ describe('useDesktopShellRouting', () => {
     expect(state.selectedGameRoomId).toBeNull();
     await waitFor(() => {
       expect(window.location.hash).toBe(
-        `#/messages?topic=kukuri%3Atopic%3Ademo&peerPubkey=${DM_PEER_PUBKEY}`
+        `#/messages?topic=kukuri%3Atopic%3Ageneral&peerPubkey=${DM_PEER_PUBKEY}`
       );
     });
     view.unmount();
@@ -517,7 +517,7 @@ describe('useDesktopShellRouting', () => {
     });
     await waitFor(() => {
       // peerPubkey param が消えた messages URL へ normalize(replace)される。
-      expect(window.location.hash).toBe('#/messages?topic=kukuri%3Atopic%3Ademo');
+      expect(window.location.hash).toBe('#/messages?topic=kukuri%3Atopic%3Ageneral');
     });
     const state = harness.store.getState();
     expect(state.directMessagePaneOpen).toBe(true);
@@ -547,7 +547,7 @@ describe('useDesktopShellRouting', () => {
   test('focusPrimarySection updates chrome, clears thread/author/DM panes, and pushes the section URL', async () => {
     const { harness, view } = renderRoutingHook({
       hash:
-        '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-1' +
+        '#/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=post-1' +
         `&authorPubkey=${AUTHOR_PUBKEY}`,
       preset: (store) => {
         store.getState().patchState({
@@ -581,7 +581,7 @@ describe('useDesktopShellRouting', () => {
     });
 
     await waitFor(() => {
-      expect(window.location.hash).toBe('#/live?topic=kukuri%3Atopic%3Ademo');
+      expect(window.location.hash).toBe('#/live?topic=kukuri%3Atopic%3Ageneral');
     });
     await waitFor(() => {
       expect(
@@ -614,7 +614,7 @@ describe('useDesktopShellRouting', () => {
     // mount 時の route 同期が現 URL を lastNonNotificationsRoute に保存している。
     await waitFor(() => {
       expect(harness.store.getState().lastNonNotificationsRoute).toBe(
-        '/timeline?topic=kukuri%3Atopic%3Ademo'
+        '/timeline?topic=kukuri%3Atopic%3Ageneral'
       );
     });
 
@@ -623,14 +623,14 @@ describe('useDesktopShellRouting', () => {
       view.result.current.toggleNotificationsSection();
     });
     await waitFor(() => {
-      expect(window.location.hash).toBe('#/notifications?topic=kukuri%3Atopic%3Ademo');
+      expect(window.location.hash).toBe('#/notifications?topic=kukuri%3Atopic%3Ageneral');
     });
     expect(
       primarySectionForColumn(activeWorkspaceColumn(harness.store.getState().workspaceState))
     ).toBe('notifications');
     // notifications 滞在中も直前の非 notifications ルートを保持し続ける。
     expect(harness.store.getState().lastNonNotificationsRoute).toBe(
-      '/timeline?topic=kukuri%3Atopic%3Ademo'
+      '/timeline?topic=kukuri%3Atopic%3Ageneral'
     );
 
     // 2 回目: notifications にいる → 保存済みルートへ戻る。
@@ -650,10 +650,10 @@ describe('useDesktopShellRouting', () => {
     // settings drawer + author pane + thread paneを全て開いた状態から始める。
     const { harness, view } = renderRoutingHook({
       hash:
-        '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-1' +
+        '#/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=post-1' +
         `&authorPubkey=${AUTHOR_PUBKEY}&settings=connectivity`,
       preset: (store) => {
-        const scope = { topicId: 'kukuri:topic:demo', channelId: null };
+        const scope = { topicId: 'kukuri:topic:general', channelId: null };
         const threadColumnId = columnIdentityId('thread', scope, 'post-1');
         store.getState().patchState({
           selectedThread: 'post-1',
@@ -691,7 +691,7 @@ describe('useDesktopShellRouting', () => {
     });
     await waitFor(() => {
       expect(window.location.hash).toBe(
-        '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-1' +
+        '#/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=post-1' +
           `&authorPubkey=${AUTHOR_PUBKEY}`
       );
     });
@@ -706,7 +706,7 @@ describe('useDesktopShellRouting', () => {
     });
     await waitFor(() => {
       expect(window.location.hash).toBe(
-        '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-1'
+        '#/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=post-1'
       );
     });
     expect(harness.store.getState().selectedAuthor).toBeNull();
@@ -733,7 +733,7 @@ describe('useDesktopShellRouting', () => {
     // preventDefault する)や Composer の textarea からの Escape では
     // selection cascade を発火しないことを固定する。
     const { harness, view } = renderRoutingHook({
-      hash: '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-1',
+      hash: '#/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=post-1',
       preset: (store) => {
         store.getState().patchState({
           selectedThread: 'post-1',

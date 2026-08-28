@@ -164,7 +164,7 @@ test.describe('visual regression smoke', () => {
   test('notifications wide dark', async ({ page }) => {
     await seedAppearance(page, 'dark');
     await page.setViewportSize(WIDE);
-    await page.goto('/#/notifications?topic=kukuri%3Atopic%3Ademo');
+    await page.goto('/#/notifications?topic=kukuri%3Atopic%3Ageneral');
     await expect(activeColumn(page, 'Notifications')).toBeVisible();
     await expect(page.getByText('browser mock reply notification')).toBeVisible();
     await settleForShot(page, 'dark');
@@ -175,7 +175,7 @@ test.describe('visual regression smoke', () => {
   test('settings appearance wide dark', async ({ page }) => {
     await seedAppearance(page, 'dark');
     await page.setViewportSize(WIDE);
-    await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo&settings=appearance');
+    await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral&settings=appearance');
     const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
     await expect(settingsDialog).toBeVisible();
     await expect(settingsDialog.getByTestId('settings-section-appearance')).toHaveAttribute(
@@ -190,7 +190,7 @@ test.describe('visual regression smoke', () => {
   test('settings appearance wide light', async ({ page }) => {
     await seedAppearance(page, 'light');
     await page.setViewportSize(WIDE);
-    await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo&settings=appearance');
+    await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral&settings=appearance');
     const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
     await expect(settingsDialog).toBeVisible();
     await expect(settingsDialog.getByTestId('settings-section-appearance')).toHaveAttribute(
@@ -205,7 +205,7 @@ test.describe('visual regression smoke', () => {
   test('settings connectivity wide dark', async ({ page }) => {
     await seedAppearance(page, 'dark');
     await page.setViewportSize(WIDE);
-    await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo&settings=connectivity');
+    await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral&settings=connectivity');
     const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
     await expect(settingsDialog).toBeVisible();
     await expect(settingsDialog.getByTestId('settings-section-connectivity')).toHaveAttribute(

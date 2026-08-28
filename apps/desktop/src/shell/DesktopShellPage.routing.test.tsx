@@ -62,8 +62,8 @@ test.each([
       expect(getActiveColumn(workspaceLabel)).toHaveAttribute('aria-current', 'true');
       expect(window.location.hash).toBe(
         path === '#/channels'
-          ? '#/timeline?topic=kukuri%3Atopic%3Ademo'
-          : `${path}?topic=kukuri%3Atopic%3Ademo`
+          ? '#/timeline?topic=kukuri%3Atopic%3Ageneral'
+          : `${path}?topic=kukuri%3Atopic%3Ageneral`
       );
     });
   }
@@ -75,17 +75,17 @@ test('invalid hash routes fall back to the active public timeline and normalize 
   );
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral');
   });
-  expectActiveTopic('kukuri:topic:demo');
+  expectActiveTopic('kukuri:topic:general');
   expect(screen.queryByRole('dialog', { name: 'Settings' })).not.toBeInTheDocument();
 });
 
 test('invalid timelineView normalizes to the feed route', async () => {
-  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo&timelineView=invalid');
+  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ageneral&timelineView=invalid');
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral');
   });
   expect(within(getTimelineViewTabs()).getByRole('tab', { name: 'Feed' })).toHaveAttribute(
     'aria-selected',
@@ -95,10 +95,10 @@ test('invalid timelineView normalizes to the feed route', async () => {
 
 test('thread context restores from the hash route and loads the requested thread for the active topic', async () => {
   renderAtHash(
-    '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-thread-open',
+    '#/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=post-thread-open',
     createDesktopMockApi({
       seedPosts: {
-        'kukuri:topic:demo': [
+        'kukuri:topic:general': [
           {
             object_id: 'post-thread-open',
             envelope_id: 'envelope-thread-open',
@@ -133,7 +133,7 @@ test('thread context restores from the hash route and loads the requested thread
 test('author context restores from the hash route when a valid author pubkey is supplied', async () => {
   const authorPubkey = 'b'.repeat(64);
   renderAtHash(
-    `#/timeline?topic=kukuri%3Atopic%3Ademo&context=author&authorPubkey=${authorPubkey}`,
+    `#/timeline?topic=kukuri%3Atopic%3Ageneral&context=author&authorPubkey=${authorPubkey}`,
     createDesktopMockApi({
       authorSocialViews: {
         [authorPubkey]: {
@@ -157,7 +157,7 @@ test('author context restores from the hash route when a valid author pubkey is 
 });
 
 test('profile edit route restores the editor and keeps overview as the default profile mode', async () => {
-  renderAtHash('#/profile?topic=kukuri%3Atopic%3Ademo&profileMode=edit');
+  renderAtHash('#/profile?topic=kukuri%3Atopic%3Ageneral&profileMode=edit');
 
   expect(screen.getByPlaceholderText('Visible label')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Back to profile' })).toBeInTheDocument();
@@ -166,7 +166,7 @@ test('profile edit route restores the editor and keeps overview as the default p
 test('profile connections route restores the requested view', async () => {
   const authorPubkey = 'b'.repeat(64);
   renderAtHash(
-    '#/profile?topic=kukuri%3Atopic%3Ademo&profileMode=connections&connectionsView=muted',
+    '#/profile?topic=kukuri%3Atopic%3Ageneral&profileMode=connections&connectionsView=muted',
     createDesktopMockApi({
       authorSocialViews: {
         [authorPubkey]: {
@@ -184,7 +184,7 @@ test('profile connections route restores the requested view', async () => {
       'true'
     );
     expect(window.location.hash).toBe(
-      '#/profile?topic=kukuri%3Atopic%3Ademo&profileMode=connections&connectionsView=muted'
+      '#/profile?topic=kukuri%3Atopic%3Ageneral&profileMode=connections&connectionsView=muted'
     );
   });
   expect(
@@ -196,7 +196,7 @@ test('profile connections route restores the requested view', async () => {
 test('invalid profile connections view normalizes to following', async () => {
   const authorPubkey = 'b'.repeat(64);
   renderAtHash(
-    '#/profile?topic=kukuri%3Atopic%3Ademo&profileMode=connections&connectionsView=invalid',
+    '#/profile?topic=kukuri%3Atopic%3Ageneral&profileMode=connections&connectionsView=invalid',
     createDesktopMockApi({
       authorSocialViews: {
         [authorPubkey]: {
@@ -214,7 +214,7 @@ test('invalid profile connections view normalizes to following', async () => {
       'true'
     );
     expect(window.location.hash).toBe(
-      '#/profile?topic=kukuri%3Atopic%3Ademo&profileMode=connections&connectionsView=following'
+      '#/profile?topic=kukuri%3Atopic%3Ageneral&profileMode=connections&connectionsView=following'
     );
   });
   expect(screen.getByText(authorPubkey)).toBeInTheDocument();
@@ -222,10 +222,10 @@ test('invalid profile connections view normalizes to following', async () => {
 
 test('invalid nested author route keeps the thread pane and normalizes only the author param', async () => {
   renderAtHash(
-    '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-thread-open&authorPubkey=bad',
+    '#/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=post-thread-open&authorPubkey=bad',
     createDesktopMockApi({
       seedPosts: {
-        'kukuri:topic:demo': [
+        'kukuri:topic:general': [
           {
             object_id: 'post-thread-open',
             envelope_id: 'envelope-thread-open',
@@ -254,7 +254,7 @@ test('invalid nested author route keeps the thread pane and normalizes only the 
   await waitFor(() => {
     expect(getDetailPane('Thread')).toBeInTheDocument();
     expect(window.location.hash).toBe(
-      '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-thread-open'
+      '#/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=post-thread-open'
     );
   });
   expect(screen.queryByRole('complementary', { name: 'Author' })).not.toBeInTheDocument();
@@ -262,7 +262,7 @@ test('invalid nested author route keeps the thread pane and normalizes only the 
 
 test('invalid thread route closes the entire detail stack and normalizes the URL', async () => {
   renderAtHash(
-    `#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=missing-thread&authorPubkey=${'b'.repeat(64)}`,
+    `#/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=missing-thread&authorPubkey=${'b'.repeat(64)}`,
     createDesktopMockApi({
       authorSocialViews: {
         ['b'.repeat(64)]: {
@@ -273,7 +273,7 @@ test('invalid thread route closes the entire detail stack and normalizes the URL
   );
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral');
   });
   expect(screen.queryByRole('complementary', { name: 'Thread' })).not.toBeInTheDocument();
   expect(screen.queryByRole('complementary', { name: 'Author' })).not.toBeInTheDocument();

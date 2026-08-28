@@ -28,8 +28,8 @@ async function selectTopic(user: ReturnType<typeof userEvent.setup>, label: stri
 
 async function addTopic(user: ReturnType<typeof userEvent.setup>, topic: string) {
   const controlCenter = await openControlCenter(user);
-  await user.clear(within(controlCenter).getByPlaceholderText('demo'));
-  await user.type(within(controlCenter).getByPlaceholderText('demo'), topic);
+  await user.clear(within(controlCenter).getByPlaceholderText('general'));
+  await user.type(within(controlCenter).getByPlaceholderText('general'), topic);
   await user.click(within(controlCenter).getByRole('button', { name: 'Add' }));
 }
 
@@ -44,10 +44,10 @@ afterEach(() => {
 
 test('bookmark page route closes detail context and normalizes timeline-specific params', async () => {
   renderAtHash(
-    '#/timeline?topic=kukuri%3Atopic%3Ademo&timelineView=bookmarks&channel=channel-1&context=thread&threadId=post-thread-open',
+    '#/timeline?topic=kukuri%3Atopic%3Ageneral&timelineView=bookmarks&channel=channel-1&context=thread&threadId=post-thread-open',
     createDesktopMockApi({
       seedPosts: {
-        'kukuri:topic:demo': [
+        'kukuri:topic:general': [
           {
             object_id: 'post-thread-open',
             envelope_id: 'envelope-thread-open',
@@ -74,7 +74,7 @@ test('bookmark page route closes detail context and normalizes timeline-specific
   );
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&timelineView=bookmarks');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral&timelineView=bookmarks');
   });
   expect(screen.queryByRole('complementary', { name: 'Thread' })).not.toBeInTheDocument();
   expect(screen.getByText('No bookmarked posts yet.')).toBeInTheDocument();
@@ -86,7 +86,7 @@ test('bookmarking from the timeline syncs with the bookmark page and remove upda
     <App
       api={createDesktopMockApi({
         seedPosts: {
-          'kukuri:topic:demo': [
+          'kukuri:topic:general': [
             {
               object_id: 'bookmark-me',
               envelope_id: 'envelope-bookmark-me',
@@ -125,7 +125,7 @@ test('bookmarking from the timeline syncs with the bookmark page and remove upda
 
   await selectTimelineView(user, 'Bookmarks');
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&timelineView=bookmarks');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral&timelineView=bookmarks');
   });
   expect(await screen.findByText('save this post')).toBeInTheDocument();
 
@@ -141,7 +141,7 @@ test('bookmarking from the timeline syncs with the bookmark page and remove upda
 
   await selectTimelineView(user, 'Feed');
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral');
   });
   const restoredTimelinePost = await screen.findByText('save this post');
   const restoredTimelineCard = restoredTimelinePost.closest('article');
@@ -161,14 +161,14 @@ test('topic and private channel selection sync into the hash route', async () =>
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Asecond');
   });
 
-  await selectTopic(user, 'demo');
+  await selectTopic(user, 'general');
   const channelDialog = await openChannelManager(user);
   await user.type(within(channelDialog).getByPlaceholderText('Channel name'), 'core');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {
     expect(window.location.hash).toBe(
-      '#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1'
+      '#/timeline?topic=kukuri%3Atopic%3Ageneral&channel=channel-1'
     );
   });
 });
@@ -182,7 +182,7 @@ test('tracked topics show public and channel scope separately in the sidebar', a
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
   await waitFor(() => {
     expect(window.location.hash).toMatch(
-      /^#\/timeline\?topic=kukuri%3Atopic%3Ademo&channel=channel-\d+$/
+      /^#\/timeline\?topic=kukuri%3Atopic%3Ageneral&channel=channel-\d+$/
     );
   });
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
@@ -190,7 +190,7 @@ test('tracked topics show public and channel scope separately in the sidebar', a
     expect(screen.queryByRole('dialog', { name: 'Create / Join Private Channel' })).not.toBeInTheDocument();
   });
 
-  const topicItem = await getTopicItem(user, 'demo');
+  const topicItem = await getTopicItem(user, 'general');
   expect(within(topicItem).getByRole('button', { name: 'Open core channel settings' })).toBeInTheDocument();
 
   expect(within(topicItem).getByText('Channels')).toBeInTheDocument();
@@ -211,9 +211,9 @@ test('tracked topics show public and channel scope separately in the sidebar', a
   await user.click(publicButton);
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral');
   });
-  const publicTopicItem = await getTopicItem(user, 'demo');
+  const publicTopicItem = await getTopicItem(user, 'general');
   expect(within(publicTopicItem).getByText('Public').closest('button')).toHaveAttribute('aria-pressed', 'true');
 });
 
@@ -226,12 +226,12 @@ test('sidebar can reselect the same private channel after switching back to publ
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
   await waitFor(() => {
     expect(window.location.hash).toMatch(
-      /^#\/timeline\?topic=kukuri%3Atopic%3Ademo&channel=channel-\d+$/
+      /^#\/timeline\?topic=kukuri%3Atopic%3Ageneral&channel=channel-\d+$/
     );
   });
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
 
-  const topicItem = await getTopicItem(user, 'demo');
+  const topicItem = await getTopicItem(user, 'general');
 
   const publicButton = within(topicItem).getByText('Public').closest('button');
   const channelButton = within(topicItem).getByText('core').closest('button');
@@ -241,15 +241,15 @@ test('sidebar can reselect the same private channel after switching back to publ
 
   await user.click(publicButton);
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral');
   });
 
-  const refreshedTopicItem = await getTopicItem(user, 'demo');
+  const refreshedTopicItem = await getTopicItem(user, 'general');
   const refreshedChannelButton = within(refreshedTopicItem).getByText('core').closest('button');
   if (!(refreshedChannelButton instanceof HTMLButtonElement)) throw new Error('channel button not found');
   await user.click(refreshedChannelButton);
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral&channel=channel-1');
   });
 });
 
@@ -271,10 +271,10 @@ test('sidebar can switch from one topic public scope to another topic private ch
   });
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
 
-  await selectTopic(user, 'demo');
+  await selectTopic(user, 'general');
   await waitFor(() => {
-    expectActiveTopic('kukuri:topic:demo');
-    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
+    expectActiveTopic('kukuri:topic:general');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral');
   });
 
   const secondTopicItem = await getTopicItem(user, 'second');
@@ -298,7 +298,7 @@ test('desktop shell can track multiple topics at once', async () => {
   await addTopic(user, 'kukuri:topic:second');
   expect(await getTopicItem(user, 'second')).toBeInTheDocument();
 
-  await selectTopic(user, 'demo');
+  await selectTopic(user, 'general');
   await publishPost(user, 'demo post');
   await waitFor(() => {
     expect(screen.getByText('demo post')).toBeInTheDocument();
@@ -310,13 +310,13 @@ test('desktop shell can track multiple topics at once', async () => {
     expect(screen.getByText('second post')).toBeInTheDocument();
   });
 
-  await selectTopic(user, 'demo');
-  const demoTopic = await getTopicItem(user, 'demo');
-  expect(demoTopic).not.toBeNull();
+  await selectTopic(user, 'general');
+  const generalTopic = await getTopicItem(user, 'general');
+  expect(generalTopic).not.toBeNull();
   expect(screen.getByText('demo post')).toBeInTheDocument();
-  expect(demoTopic).toHaveTextContent(/\/ peers: \d/);
-  expect(demoTopic).not.toHaveTextContent('expected:');
-  expect(demoTopic).not.toHaveTextContent('Connected to all configured peers for this topic');
+  expect(generalTopic).toHaveTextContent(/\/ peers: \d/);
+  expect(generalTopic).not.toHaveTextContent('expected:');
+  expect(generalTopic).not.toHaveTextContent('Connected to all configured peers for this topic');
 });
 
 test('removing the active topic falls back to the remaining tracked topic', async () => {
@@ -333,7 +333,7 @@ test('removing the active topic falls back to the remaining tracked topic', asyn
   await user.click(within(secondTopic).getByRole('button', { name: 'Remove second' }));
 
   await waitFor(() => {
-    expectActiveTopic('kukuri:topic:demo');
+    expectActiveTopic('kukuri:topic:general');
   });
   const controlCenter = await openControlCenter(user);
   expect(within(controlCenter).queryByRole('button', { name: 'second' })).not.toBeInTheDocument();

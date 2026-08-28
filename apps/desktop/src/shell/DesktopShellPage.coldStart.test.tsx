@@ -7,7 +7,7 @@ import { WORKSPACE_LAYOUT_STORAGE_KEY } from '@/shell/workspacePersistence';
 import { columnIdentityId } from '@/shell/slices/workspace';
 import { buildPaginatedPost, setViewportWidth } from './DesktopShellPage.testHelpers';
 
-const SCOPE = { topicId: 'kukuri:topic:demo', channelId: null };
+const SCOPE = { topicId: 'kukuri:topic:general', channelId: null };
 const TIMELINE_ID = columnIdentityId('timeline', SCOPE);
 const THREAD_ID = columnIdentityId('thread', SCOPE, 'post-thread-open');
 
@@ -101,7 +101,7 @@ test('cold start without a hash restores the persisted active Thread Column', as
 test('an explicit deep link wins over the persisted active Column', async () => {
   seedThreadLayout(THREAD_ID);
   window.history.replaceState(null, '', '/');
-  window.location.hash = '#/notifications?topic=kukuri%3Atopic%3Ademo';
+  window.location.hash = '#/notifications?topic=kukuri%3Atopic%3Ageneral';
 
   render(<App api={createApi()} />);
 

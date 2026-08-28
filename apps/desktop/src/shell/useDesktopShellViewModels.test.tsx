@@ -93,7 +93,7 @@ function buildJoinedChannel(
   overrides: Partial<JoinedPrivateChannelView> = {}
 ): JoinedPrivateChannelView {
   return {
-    topic_id: 'kukuri:topic:demo',
+    topic_id: 'kukuri:topic:general',
     channel_id: channelId,
     label,
     creator_pubkey: 'c'.repeat(64),
@@ -232,8 +232,8 @@ describe('useDesktopShellViewModels', () => {
       ],
     });
     const view = renderViewModels(() => ({
-      // 既定の activeTopic='kukuri:topic:demo' + public scope の storage key
-      timelinesByKey: { 'kukuri:topic:demo::public': [post] },
+      // 既定の activeTopic='kukuri:topic:general' + public scope の storage key
+      timelinesByKey: { 'kukuri:topic:general::public': [post] },
     }));
 
     const card = view.result.current.activeTimelinePostViews[0];
@@ -341,7 +341,7 @@ describe('useDesktopShellViewModels', () => {
     });
     const view = renderViewModels(() => ({
       timelinesByKey: {
-        'kukuri:topic:demo::public': [repostWithRoot, repostWithoutRoot, quoteRepost],
+        'kukuri:topic:general::public': [repostWithRoot, repostWithoutRoot, quoteRepost],
       },
       // repost_of に picture が無い場合は knownAuthors から解決される
       knownAuthorsByPubkey: {
@@ -380,58 +380,57 @@ describe('useDesktopShellViewModels', () => {
       syncStatus: {
         ...current.syncStatus,
         topic_diagnostics: [
-          buildTopicDiagnostic('kukuri:topic:demo', {
+          buildTopicDiagnostic('kukuri:topic:general', {
             peer_count: 3,
             connected_peers: ['peer-1', 'peer-2', 'peer-3'],
           }),
         ],
-        gossip_disabled_topics: ['kukuri:topic:iroh'],
-        gossip_disabled_channels: ['kukuri:topic:demo::channel-alpha'],
+        gossip_disabled_topics: ['kukuri:topic:dev'],
+        gossip_disabled_channels: ['kukuri:topic:general::channel-alpha'],
       },
       joinedChannelsByTopic: {
         ...current.joinedChannelsByTopic,
-        'kukuri:topic:demo': [
+        'kukuri:topic:general': [
           buildJoinedChannel('channel-alpha', 'Alpha Channel'),
           buildJoinedChannel('channel-beta', 'Beta Channel'),
         ],
-        'kukuri:topic:iroh': [
-          buildJoinedChannel('channel-iroh', 'Iroh Channel', {
-            topic_id: 'kukuri:topic:iroh',
+        'kukuri:topic:dev': [
+          buildJoinedChannel('channel-dev', 'Dev Channel', {
+            topic_id: 'kukuri:topic:dev',
           }),
         ],
       },
       workspaceState: openTransientColumn(current.workspaceState, {
         id: columnIdentityId('timeline', {
-          topicId: 'kukuri:topic:demo',
+          topicId: 'kukuri:topic:general',
           channelId: 'channel-alpha',
         }),
         kind: 'timeline',
-        scope: { topicId: 'kukuri:topic:demo', channelId: 'channel-alpha' },
+        scope: { topicId: 'kukuri:topic:general', channelId: 'channel-alpha' },
         pinned: false,
       }),
     }));
 
     const items = view.result.current.topicNavItems;
-    // starter topics 4 件がそのまま nav item になる
+    // starter topics 3 件がそのまま nav item になる
     expect(items.map((item) => item.topic)).toEqual([
-      'kukuri:topic:demo',
-      'kukuri:topic:iroh',
-      'kukuri:topic:nostr',
-      'kukuri:topic:operators',
+      'kukuri:topic:general',
+      'kukuri:topic:dev',
+      'kukuri:topic:test',
     ]);
 
-    const demoItem = items[0];
-    expect(demoItem.active).toBe(true);
+    const generalItem = items[0];
+    expect(generalItem.active).toBe(true);
     // channel 選択中は public 行は非アクティブ
-    expect(demoItem.publicActive).toBe(false);
-    expect(demoItem.removable).toBe(true);
+    expect(generalItem.publicActive).toBe(false);
+    expect(generalItem.removable).toBe(true);
     // delivery_state='Live' + direct_p2p → 'joined'
-    expect(demoItem.connectionLabel).toBe('joined');
-    expect(demoItem.peerCount).toBe(3);
-    expect(demoItem.gossipJoined).toBe(true);
+    expect(generalItem.connectionLabel).toBe('joined');
+    expect(generalItem.peerCount).toBe(3);
+    expect(generalItem.gossipJoined).toBe(true);
     // `topic::channel_id` が gossip_disabled_channels にあれば
     // channel 単位で gossipJoined=false
-    expect(demoItem.channels).toEqual([
+    expect(generalItem.channels).toEqual([
       {
         channelId: 'channel-alpha',
         label: 'Alpha Channel',
@@ -448,18 +447,18 @@ describe('useDesktopShellViewModels', () => {
       },
     ]);
 
-    const irohItem = items[1];
-    expect(irohItem.active).toBe(false);
+    const devItem = items[1];
+    expect(devItem.active).toBe(false);
     // diagnostic が無い topic は 'idle' / peerCount 0
-    expect(irohItem.connectionLabel).toBe('idle');
-    expect(irohItem.peerCount).toBe(0);
+    expect(devItem.connectionLabel).toBe('idle');
+    expect(devItem.peerCount).toBe(0);
     // gossip_disabled_topics に載っている topic は gossipJoined=false
-    expect(irohItem.gossipJoined).toBe(false);
+    expect(devItem.gossipJoined).toBe(false);
     // Control Center の検索と直接選択のため、inactive topic の joined channel も公開する。
-    expect(irohItem.channels).toEqual([
+    expect(devItem.channels).toEqual([
       {
-        channelId: 'channel-iroh',
-        label: 'Iroh Channel',
+        channelId: 'channel-dev',
+        label: 'Dev Channel',
         audienceKind: 'invite_only',
         active: false,
         gossipJoined: false,
@@ -473,14 +472,14 @@ describe('useDesktopShellViewModels', () => {
     const view = renderViewModels((current) => ({
       composeChannelByTopic: {
         ...current.composeChannelByTopic,
-        'kukuri:topic:demo': {
+        'kukuri:topic:general': {
           kind: 'private_channel',
           channel_id: 'channel-alpha',
         },
       },
       joinedChannelsByTopic: {
         ...current.joinedChannelsByTopic,
-        'kukuri:topic:demo': [buildJoinedChannel('channel-alpha', 'Alpha Channel')],
+        'kukuri:topic:general': [buildJoinedChannel('channel-alpha', 'Alpha Channel')],
       },
     }));
 
@@ -594,11 +593,11 @@ describe('createShellHookHarness', () => {
   // (createInitialShellState が window.location.hash を直読するため)。
   test('applies the hash option before creating the store so initial state is seeded from it', () => {
     const harness = createShellHookHarness({
-      hash: '#/timeline?topic=kukuri%3Atopic%3Ademo&settings=appearance',
+      hash: '#/timeline?topic=kukuri%3Atopic%3Ageneral&settings=appearance',
     });
 
     expect(window.location.hash).toBe(
-      '#/timeline?topic=kukuri%3Atopic%3Ademo&settings=appearance'
+      '#/timeline?topic=kukuri%3Atopic%3Ageneral&settings=appearance'
     );
     const state = harness.store.getState();
     expect(state.shellChromeState.activeSettingsSection).toBe('appearance');

@@ -102,10 +102,10 @@ describe('parseHashRouteLocation', () => {
     },
     {
       name: 'splits pathname and query at the first "?"',
-      hash: '#/timeline?topic=kukuri%3Atopic%3Ademo&settings=about',
+      hash: '#/timeline?topic=kukuri%3Atopic%3Ageneral&settings=about',
       expected: {
         pathname: '/timeline',
-        search: '?topic=kukuri%3Atopic%3Ademo&settings=about',
+        search: '?topic=kukuri%3Atopic%3Ageneral&settings=about',
       },
     },
     {
@@ -238,7 +238,7 @@ describe('buildShellUrl', () => {
   // 全フィールド必須のため fixture でデフォルトを埋め、期待 URL は生リテラルで固定する。
   function buildOptions(overrides: Partial<RouteState> = {}): RouteState {
     return {
-      activeTopic: 'kukuri:topic:demo',
+      activeTopic: 'kukuri:topic:general',
       primarySection: 'timeline',
       timelineView: 'feed',
       profileMode: 'overview',
@@ -264,22 +264,22 @@ describe('buildShellUrl', () => {
     {
       name: 'builds the timeline url with only the encoded topic by default',
       overrides: {},
-      expected: '/timeline?topic=kukuri%3Atopic%3Ademo',
+      expected: '/timeline?topic=kukuri%3Atopic%3Ageneral',
     },
     {
       name: 'includes the channel on the timeline feed view',
       overrides: { selectedChannelId: 'channel-1' },
-      expected: '/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1',
+      expected: '/timeline?topic=kukuri%3Atopic%3Ageneral&channel=channel-1',
     },
     {
       name: 'drops the channel and adds timelineView on the bookmarks view',
       overrides: { timelineView: 'bookmarks', selectedChannelId: 'channel-1' },
-      expected: '/timeline?topic=kukuri%3Atopic%3Ademo&timelineView=bookmarks',
+      expected: '/timeline?topic=kukuri%3Atopic%3Ageneral&timelineView=bookmarks',
     },
     {
       name: 'includes the channel on non-timeline sections such as game',
       overrides: { primarySection: 'game', selectedChannelId: 'channel-1' },
-      expected: '/game?topic=kukuri%3Atopic%3Ademo&channel=channel-1',
+      expected: '/game?topic=kukuri%3Atopic%3Ageneral&channel=channel-1',
     },
     {
       name: 'drops the channel and emits peer and author pubkeys on messages',
@@ -289,12 +289,12 @@ describe('buildShellUrl', () => {
         selectedDirectMessagePeerPubkey: 'peer-1',
         selectedAuthorPubkey: 'author-1',
       },
-      expected: '/messages?topic=kukuri%3Atopic%3Ademo&peerPubkey=peer-1&authorPubkey=author-1',
+      expected: '/messages?topic=kukuri%3Atopic%3Ageneral&peerPubkey=peer-1&authorPubkey=author-1',
     },
     {
       name: 'suppresses the thread context on messages',
       overrides: { primarySection: 'messages', selectedThread: 'thread-1' },
-      expected: '/messages?topic=kukuri%3Atopic%3Ademo',
+      expected: '/messages?topic=kukuri%3Atopic%3Ageneral',
     },
     {
       name: 'drops channel, thread, author, and peer on notifications',
@@ -305,7 +305,7 @@ describe('buildShellUrl', () => {
         selectedAuthorPubkey: 'author-1',
         selectedDirectMessagePeerPubkey: 'peer-1',
       },
-      expected: '/notifications?topic=kukuri%3Atopic%3Ademo',
+      expected: '/notifications?topic=kukuri%3Atopic%3Ageneral',
     },
     {
       name: 'emits the thread context with focus and author on the timeline',
@@ -315,23 +315,23 @@ describe('buildShellUrl', () => {
         selectedAuthorPubkey: 'author-1',
       },
       expected:
-        '/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=thread-1&focusObjectId=focus-1&authorPubkey=author-1',
+        '/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=thread-1&focusObjectId=focus-1&authorPubkey=author-1',
     },
     {
       name: 'emits the author context when only an author is selected',
       overrides: { selectedAuthorPubkey: 'author-1' },
-      expected: '/timeline?topic=kukuri%3Atopic%3Ademo&context=author&authorPubkey=author-1',
+      expected: '/timeline?topic=kukuri%3Atopic%3Ageneral&context=author&authorPubkey=author-1',
     },
     {
       name: 'combines channel and thread context on the timeline feed view',
       overrides: { selectedChannelId: 'channel-1', selectedThread: 'thread-1' },
       expected:
-        '/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1&context=thread&threadId=thread-1',
+        '/timeline?topic=kukuri%3Atopic%3Ageneral&channel=channel-1&context=thread&threadId=thread-1',
     },
     {
       name: 'emits profileMode=edit on the profile section',
       overrides: { primarySection: 'profile', profileMode: 'edit' },
-      expected: '/profile?topic=kukuri%3Atopic%3Ademo&profileMode=edit',
+      expected: '/profile?topic=kukuri%3Atopic%3Ageneral&profileMode=edit',
     },
     {
       name: 'emits profileMode=connections with the connections view on the profile section',
@@ -340,47 +340,47 @@ describe('buildShellUrl', () => {
         profileMode: 'connections',
         profileConnectionsView: 'muted',
       },
-      expected: '/profile?topic=kukuri%3Atopic%3Ademo&profileMode=connections&connectionsView=muted',
+      expected: '/profile?topic=kukuri%3Atopic%3Ageneral&profileMode=connections&connectionsView=muted',
     },
     {
       name: 'omits profileMode for the profile overview mode',
       overrides: { primarySection: 'profile' },
-      expected: '/profile?topic=kukuri%3Atopic%3Ademo',
+      expected: '/profile?topic=kukuri%3Atopic%3Ageneral',
     },
     {
       name: 'omits profileMode outside the profile section',
       overrides: { primarySection: 'game', profileMode: 'edit' },
-      expected: '/game?topic=kukuri%3Atopic%3Ademo',
+      expected: '/game?topic=kukuri%3Atopic%3Ageneral',
     },
     {
       name: 'emits the settings section while the settings drawer is open',
       overrides: { settingsOpen: true, settingsSection: 'appearance' },
-      expected: '/timeline?topic=kukuri%3Atopic%3Ademo&settings=appearance',
+      expected: '/timeline?topic=kukuri%3Atopic%3Ageneral&settings=appearance',
     },
     {
       name: 'omits the settings section while the settings drawer is closed',
       overrides: { settingsOpen: false, settingsSection: 'appearance' },
-      expected: '/timeline?topic=kukuri%3Atopic%3Ademo',
+      expected: '/timeline?topic=kukuri%3Atopic%3Ageneral',
     },
     {
       name: 'emits sessionId only on the live section',
       overrides: { primarySection: 'live', selectedLiveSessionId: 'session-1' },
-      expected: '/live?topic=kukuri%3Atopic%3Ademo&sessionId=session-1',
+      expected: '/live?topic=kukuri%3Atopic%3Ageneral&sessionId=session-1',
     },
     {
       name: 'omits roomId on the live section',
       overrides: { primarySection: 'live', selectedGameRoomId: 'room-1' },
-      expected: '/live?topic=kukuri%3Atopic%3Ademo',
+      expected: '/live?topic=kukuri%3Atopic%3Ageneral',
     },
     {
       name: 'emits roomId only on the game section',
       overrides: { primarySection: 'game', selectedGameRoomId: 'room-1' },
-      expected: '/game?topic=kukuri%3Atopic%3Ademo&roomId=room-1',
+      expected: '/game?topic=kukuri%3Atopic%3Ageneral&roomId=room-1',
     },
     {
       name: 'omits sessionId on the game section',
       overrides: { primarySection: 'game', selectedLiveSessionId: 'session-1' },
-      expected: '/game?topic=kukuri%3Atopic%3Ademo',
+      expected: '/game?topic=kukuri%3Atopic%3Ageneral',
     },
   ];
 

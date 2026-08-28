@@ -62,9 +62,9 @@ test('invalid hash routes fall back to the active public timeline and normalize 
   );
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral');
   });
-  expectActiveTopic('kukuri:topic:demo');
+  expectActiveTopic('kukuri:topic:general');
   expect(screen.queryByRole('dialog', { name: 'Settings' })).not.toBeInTheDocument();
 });
 
@@ -72,20 +72,20 @@ test('hash-backed route resolution preserves hash query during router hydration 
   window.history.replaceState(
     null,
     '',
-    '/#/timeline?topic=kukuri%3Atopic%3Ademo&settings=appearance'
+    '/#/timeline?topic=kukuri%3Atopic%3Ageneral&settings=appearance'
   );
 
   expect(resolveHashBackedRouteLocation('/', '', window.location.hash)).toEqual({
     pathname: '/timeline',
-    search: '?topic=kukuri%3Atopic%3Ademo&settings=appearance',
+    search: '?topic=kukuri%3Atopic%3Ageneral&settings=appearance',
   });
 });
 
 test('invalid timelineView normalizes to the feed route', async () => {
-  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo&timelineView=invalid');
+  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ageneral&timelineView=invalid');
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral');
   });
   expect(within(getTimelineViewTabs()).getByRole('tab', { name: 'Feed' })).toHaveAttribute(
     'aria-selected',
@@ -95,10 +95,10 @@ test('invalid timelineView normalizes to the feed route', async () => {
 
 test('bookmark page route closes detail context and normalizes timeline-specific params', async () => {
   renderAtHash(
-    '#/timeline?topic=kukuri%3Atopic%3Ademo&timelineView=bookmarks&channel=channel-1&context=thread&threadId=post-thread-open',
+    '#/timeline?topic=kukuri%3Atopic%3Ageneral&timelineView=bookmarks&channel=channel-1&context=thread&threadId=post-thread-open',
     createDesktopMockApi({
       seedPosts: {
-        'kukuri:topic:demo': [
+        'kukuri:topic:general': [
           {
             object_id: 'post-thread-open',
             envelope_id: 'envelope-thread-open',
@@ -125,7 +125,7 @@ test('bookmark page route closes detail context and normalizes timeline-specific
   );
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&timelineView=bookmarks');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral&timelineView=bookmarks');
   });
   expect(screen.queryByRole('complementary', { name: 'Thread' })).not.toBeInTheDocument();
   expect(screen.getByText('No bookmarked posts yet.')).toBeInTheDocument();
@@ -133,11 +133,11 @@ test('bookmark page route closes detail context and normalizes timeline-specific
 
 test('notifications route keeps topic context and strips unrelated nested params', async () => {
   renderAtHash(
-    '#/notifications?topic=kukuri%3Atopic%3Ademo&channel=channel-1&timelineView=bookmarks&context=thread&threadId=post-thread-open&authorPubkey=bad&peerPubkey=bad'
+    '#/notifications?topic=kukuri%3Atopic%3Ageneral&channel=channel-1&timelineView=bookmarks&context=thread&threadId=post-thread-open&authorPubkey=bad&peerPubkey=bad'
   );
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/notifications?topic=kukuri%3Atopic%3Ademo');
+    expect(window.location.hash).toBe('#/notifications?topic=kukuri%3Atopic%3Ageneral');
   });
   expect(within(getActiveColumn('Notifications')).getAllByRole('heading', { name: 'Notifications' })[0]).toBeInTheDocument();
   expect(screen.queryByRole('complementary', { name: 'Thread' })).not.toBeInTheDocument();
@@ -145,10 +145,10 @@ test('notifications route keeps topic context and strips unrelated nested params
 
 test('thread context restores from the hash route and loads the requested thread for the active topic', async () => {
   renderAtHash(
-    '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-thread-open',
+    '#/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=post-thread-open',
     createDesktopMockApi({
       seedPosts: {
-        'kukuri:topic:demo': [
+        'kukuri:topic:general': [
           {
             object_id: 'post-thread-open',
             envelope_id: 'envelope-thread-open',
@@ -182,10 +182,10 @@ test('thread context restores from the hash route and loads the requested thread
 
 test('thread focusObjectId restores and highlights the requested post', async () => {
   renderAtHash(
-    '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-thread-open&focusObjectId=post-thread-reply',
+    '#/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=post-thread-open&focusObjectId=post-thread-reply',
     createDesktopMockApi({
       seedPosts: {
-        'kukuri:topic:demo': [
+        'kukuri:topic:general': [
           {
             object_id: 'post-thread-open',
             envelope_id: 'envelope-thread-open',
@@ -241,10 +241,10 @@ test('thread focusObjectId restores and highlights the requested post', async ()
 
 test('invalid thread focusObjectId normalizes only the target param', async () => {
   renderAtHash(
-    '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-thread-open&focusObjectId=missing-post',
+    '#/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=post-thread-open&focusObjectId=missing-post',
     createDesktopMockApi({
       seedPosts: {
-        'kukuri:topic:demo': [
+        'kukuri:topic:general': [
           {
             object_id: 'post-thread-open',
             envelope_id: 'envelope-thread-open',
@@ -272,7 +272,7 @@ test('invalid thread focusObjectId normalizes only the target param', async () =
 
   await waitFor(() => {
     expect(window.location.hash).toBe(
-      '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-thread-open'
+      '#/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=post-thread-open'
     );
   });
   expect(getDetailPane('Thread')).toBeInTheDocument();
@@ -281,7 +281,7 @@ test('invalid thread focusObjectId normalizes only the target param', async () =
 test('author context restores from the hash route when a valid author pubkey is supplied', async () => {
   const authorPubkey = 'b'.repeat(64);
   renderAtHash(
-    `#/timeline?topic=kukuri%3Atopic%3Ademo&context=author&authorPubkey=${authorPubkey}`,
+    `#/timeline?topic=kukuri%3Atopic%3Ageneral&context=author&authorPubkey=${authorPubkey}`,
     createDesktopMockApi({
       authorSocialViews: {
         [authorPubkey]: {
@@ -306,10 +306,10 @@ test('author context restores from the hash route when a valid author pubkey is 
 
 test('live session route restores and normalizes invalid session targets without leaving live', async () => {
   const firstRender = renderAtHash(
-    '#/live?topic=kukuri%3Atopic%3Ademo&sessionId=session-demo',
+    '#/live?topic=kukuri%3Atopic%3Ageneral&sessionId=session-demo',
     createDesktopMockApi({
       seedLiveSessions: {
-        'kukuri:topic:demo': [
+        'kukuri:topic:general': [
           {
             session_id: 'session-demo',
             host_pubkey: 'b'.repeat(64),
@@ -328,17 +328,17 @@ test('live session route restores and normalizes invalid session targets without
   );
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/live?topic=kukuri%3Atopic%3Ademo&sessionId=session-demo');
+    expect(window.location.hash).toBe('#/live?topic=kukuri%3Atopic%3Ageneral&sessionId=session-demo');
   });
   expect(within(getActiveColumn('Live')).getByText('Live Demo').closest('article')).toHaveClass('post-card-targeted');
 
   firstRender.unmount();
 
   renderAtHash(
-    '#/live?topic=kukuri%3Atopic%3Ademo&sessionId=missing-session',
+    '#/live?topic=kukuri%3Atopic%3Ageneral&sessionId=missing-session',
     createDesktopMockApi({
       seedLiveSessions: {
-        'kukuri:topic:demo': [
+        'kukuri:topic:general': [
           {
             session_id: 'session-demo',
             host_pubkey: 'b'.repeat(64),
@@ -357,17 +357,17 @@ test('live session route restores and normalizes invalid session targets without
   );
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/live?topic=kukuri%3Atopic%3Ademo');
+    expect(window.location.hash).toBe('#/live?topic=kukuri%3Atopic%3Ageneral');
   });
   expect(within(getActiveColumn('Live')).getAllByRole('heading', { name: 'Live Sessions' })[0]).toBeInTheDocument();
 });
 
 test('game route restores score rooms in Game Columns and normalizes invalid targets', async () => {
   const firstRender = renderAtHash(
-    '#/game?topic=kukuri%3Atopic%3Ademo&roomId=room-demo',
+    '#/game?topic=kukuri%3Atopic%3Ageneral&roomId=room-demo',
     createDesktopMockApi({
       seedGameRooms: {
-        'kukuri:topic:demo': [
+        'kukuri:topic:general': [
           {
             room_id: 'room-demo',
             host_pubkey: 'b'.repeat(64),
@@ -386,7 +386,7 @@ test('game route restores score rooms in Game Columns and normalizes invalid tar
   );
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/game?topic=kukuri%3Atopic%3Ademo&roomId=room-demo');
+    expect(window.location.hash).toBe('#/game?topic=kukuri%3Atopic%3Ageneral&roomId=room-demo');
   });
   expect(within(getActiveColumn('Game')).getAllByRole('heading', { name: 'Game Rooms' })[0]).toBeInTheDocument();
   expect(within(getActiveColumn('Game')).getByText('Room Demo')).toBeInTheDocument();
@@ -394,10 +394,10 @@ test('game route restores score rooms in Game Columns and normalizes invalid tar
   firstRender.unmount();
 
   renderAtHash(
-    '#/game?topic=kukuri%3Atopic%3Ademo&roomId=missing-room',
+    '#/game?topic=kukuri%3Atopic%3Ageneral&roomId=missing-room',
     createDesktopMockApi({
       seedGameRooms: {
-        'kukuri:topic:demo': [
+        'kukuri:topic:general': [
           {
             room_id: 'room-demo',
             host_pubkey: 'b'.repeat(64),
@@ -416,7 +416,7 @@ test('game route restores score rooms in Game Columns and normalizes invalid tar
   );
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/game?topic=kukuri%3Atopic%3Ademo');
+    expect(window.location.hash).toBe('#/game?topic=kukuri%3Atopic%3Ageneral');
   });
   expect(within(getActiveColumn('Metaverse')).getByRole('heading', { name: 'Metaverse Rooms' })).toBeInTheDocument();
 });
@@ -424,7 +424,7 @@ test('game route restores score rooms in Game Columns and normalizes invalid tar
 test('profile connections route restores the requested view', async () => {
   const authorPubkey = 'b'.repeat(64);
   renderAtHash(
-    '#/profile?topic=kukuri%3Atopic%3Ademo&profileMode=connections&connectionsView=muted',
+    '#/profile?topic=kukuri%3Atopic%3Ageneral&profileMode=connections&connectionsView=muted',
     createDesktopMockApi({
       authorSocialViews: {
         [authorPubkey]: {
@@ -442,7 +442,7 @@ test('profile connections route restores the requested view', async () => {
       'true'
     );
     expect(window.location.hash).toBe(
-      '#/profile?topic=kukuri%3Atopic%3Ademo&profileMode=connections&connectionsView=muted'
+      '#/profile?topic=kukuri%3Atopic%3Ageneral&profileMode=connections&connectionsView=muted'
     );
   });
   expect(screen.getByText(authorPubkey)).toBeInTheDocument();
@@ -450,7 +450,7 @@ test('profile connections route restores the requested view', async () => {
 
 test('settings hash route opens the drawer and keeps the selected section in sync', async () => {
   const user = userEvent.setup();
-  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo&settings=discovery');
+  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ageneral&settings=discovery');
 
   const drawer = await screen.findByRole('dialog', { name: 'Settings' });
   await waitFor(() => {
@@ -472,7 +472,7 @@ test('topic and private channel selection sync into the hash route', async () =>
   render(<App api={createDesktopMockApi()} />);
 
   let controlCenter = await openControlCenter(user);
-  await user.type(within(controlCenter).getByPlaceholderText('demo'), 'kukuri:topic:second');
+  await user.type(within(controlCenter).getByPlaceholderText('general'), 'kukuri:topic:second');
   await user.click(within(controlCenter).getByRole('button', { name: 'Add' }));
 
   await waitFor(() => {
@@ -480,13 +480,13 @@ test('topic and private channel selection sync into the hash route', async () =>
   });
 
   controlCenter = await openControlCenter(user);
-  await user.click(within(controlCenter).getByRole('button', { name: 'demo' }));
+  await user.click(within(controlCenter).getByRole('button', { name: 'general' }));
   const channelDialog = await openChannelManager(user);
   await user.type(within(channelDialog).getByPlaceholderText('Channel name'), 'core');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral&channel=channel-1');
   });
 });
 
@@ -505,7 +505,7 @@ test('messages hash route restores the direct message and author pane together',
   });
 
   renderAtHash(
-    `#/messages?topic=kukuri%3Atopic%3Ademo&peerPubkey=${authorPubkey}&authorPubkey=${authorPubkey}`,
+    `#/messages?topic=kukuri%3Atopic%3Ageneral&peerPubkey=${authorPubkey}&authorPubkey=${authorPubkey}`,
     api
   );
 
@@ -517,6 +517,6 @@ test('messages hash route restores the direct message and author pane together',
   await user.click(within(conversationColumn).getByRole('button', { name: /Message to / }));
   expect(within(conversationColumn).getByPlaceholderText('Write a message')).toBeInTheDocument();
   expect(window.location.hash).toBe(
-    `#/messages?topic=kukuri%3Atopic%3Ademo&peerPubkey=${authorPubkey}&authorPubkey=${authorPubkey}`
+    `#/messages?topic=kukuri%3Atopic%3Ageneral&peerPubkey=${authorPubkey}&authorPubkey=${authorPubkey}`
   );
 });

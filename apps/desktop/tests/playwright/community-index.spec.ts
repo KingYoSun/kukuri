@@ -11,7 +11,7 @@ async function openControlCenter(page: import('@playwright/test').Page) {
 
 test('Timeline keeps Community Index out of the primary surface and Explore keeps reporting behavior visible', async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 980 });
-  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
 
   const topicIndex = page.getByTestId('community-index-topic');
   await expect(topicIndex).toHaveCount(0);
@@ -20,9 +20,9 @@ test('Timeline keeps Community Index out of the primary surface and Explore keep
   await controlCenter.getByRole('button', { name: 'Add Explore Column' }).click();
   await expect(page).toHaveURL(/#\/explore\?topic=/);
   const explore = page.getByTestId('community-index-explore');
-  await explore.getByLabel('Search query').fill('iroh topic');
+  await explore.getByLabel('Search query').fill('dev topic');
   await explore.getByRole('button', { name: 'Run' }).click();
-  await expect(explore.getByText('iroh topic seed for builder preview')).toBeVisible();
+  await expect(explore.getByText('dev topic seed for builder preview')).toBeVisible();
 
   await explore.getByRole('tab', { name: 'Discover' }).click();
   await explore.getByRole('button', { name: 'Run' }).click();
@@ -42,10 +42,10 @@ test('public and private indexing requests expose status and require private dis
   page,
 }) => {
   await page.setViewportSize({ width: 1400, height: 980 });
-  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
 
   let controlCenter = await openControlCenter(page);
-  await controlCenter.getByRole('button', { name: 'Request indexing for demo' }).click();
+  await controlCenter.getByRole('button', { name: 'Request indexing for general' }).click();
   let requestDialog = page.getByRole('dialog', { name: 'Request Community Node indexing' });
   await requestDialog.getByRole('button', { name: 'Submit request' }).click();
   await expect(requestDialog.getByText('The request is pending review.')).toBeVisible();
@@ -89,7 +89,7 @@ test('advanced Community Node settings persist manual and automatic index prefer
   page,
 }) => {
   await page.setViewportSize({ width: 1400, height: 980 });
-  await page.goto('/#/explore?topic=kukuri%3Atopic%3Ademo');
+  await page.goto('/#/explore?topic=kukuri%3Atopic%3Ageneral');
 
   let controlCenter = await openControlCenter(page);
   await controlCenter.getByRole('button', { name: 'Settings', exact: true }).click();

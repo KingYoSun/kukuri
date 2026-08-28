@@ -12,14 +12,14 @@ test.beforeEach(async ({ page }) => {
   }, DEVELOPER_MODE_STORAGE_KEY);
 });
 
-const DEMO_PUBLIC_SCOPE = 'Public · demo';
-const DEMO_PRIVATE_SCOPE = 'core · demo';
+const GENERAL_PUBLIC_SCOPE = 'Public · general';
+const GENERAL_PRIVATE_SCOPE = 'core · general';
 
 function activeColumn(page: Page, title: string) {
   return page.getByRole('region', { name: new RegExp(`^${title} Column,.*Active,`) });
 }
 
-// Timeline Column を header の scope label(Public · demo / core · demo)で特定する。
+// Timeline Column を header の scope label(Public · general / core · general)で特定する。
 // accessible name は scope を含まないため header テキストで絞り込む。
 function timelineColumnByScope(page: Page, scopeLabel: string) {
   return page
@@ -61,22 +61,22 @@ async function setUpPublicAndPrivateColumns(page: Page) {
   await expect(channelDialog).toBeVisible();
   await channelDialog.getByPlaceholder('Channel name').fill('core');
   await channelDialog.getByRole('button', { name: 'Create Channel' }).click();
-  await expect(page).toHaveURL(/#\/timeline\?topic=kukuri%3Atopic%3Ademo&channel=channel-1/);
+  await expect(page).toHaveURL(/#\/timeline\?topic=kukuri%3Atopic%3Ageneral&channel=channel-1/);
   await page.keyboard.press('Escape');
 
-  const privateColumn = timelineColumnByScope(page, DEMO_PRIVATE_SCOPE);
+  const privateColumn = timelineColumnByScope(page, GENERAL_PRIVATE_SCOPE);
   await expect(privateColumn).toBeVisible();
-  await publishFromTimelineColumn(page, privateColumn, DEMO_PRIVATE_SCOPE, 'private scoped post');
+  await publishFromTimelineColumn(page, privateColumn, GENERAL_PRIVATE_SCOPE, 'private scoped post');
 
-  // Control Center の demo topic 行で「Public」を選び、global 選択を public に戻す。
+  // Control Center の general topic 行で「Public」を選び、global 選択を public に戻す。
   const reopened = await openControlCenter(page);
-  const demoTopicRow = reopened
-    .getByRole('button', { name: 'demo', exact: true })
+  const generalTopicRow = reopened
+    .getByRole('button', { name: 'general', exact: true })
     .locator('xpath=ancestor::li[1]');
-  await demoTopicRow.getByRole('button', { name: /^Public/ }).click();
-  await expect(page).toHaveURL(/#\/timeline\?topic=kukuri%3Atopic%3Ademo$/);
+  await generalTopicRow.getByRole('button', { name: /^Public/ }).click();
+  await expect(page).toHaveURL(/#\/timeline\?topic=kukuri%3Atopic%3Ageneral$/);
 
-  const publicColumn = timelineColumnByScope(page, DEMO_PUBLIC_SCOPE);
+  const publicColumn = timelineColumnByScope(page, GENERAL_PUBLIC_SCOPE);
   await expect(publicColumn).toHaveAttribute('aria-current', 'true');
   await expect(privateColumn).toBeVisible();
   return { privateColumn, publicColumn };
@@ -96,7 +96,7 @@ test('Public and private Timeline Columns coexist and keep posts within their ow
   await expect(publicColumn.getByText('private scoped post')).toHaveCount(0);
 
   // Public Column から投稿しても private Column には現れない。
-  await publishFromTimelineColumn(page, publicColumn, DEMO_PUBLIC_SCOPE, 'public scoped post');
+  await publishFromTimelineColumn(page, publicColumn, GENERAL_PUBLIC_SCOPE, 'public scoped post');
   await expect(privateColumn.getByText('public scoped post')).toHaveCount(0);
 });
 
@@ -116,14 +116,14 @@ test('Thread opened from the private Column keeps the private scope for header a
   const threadColumn = activeColumn(page, 'Thread');
   await expect(threadColumn).toBeVisible();
   await expect(threadColumn.locator('.shell-column-header')).toContainText(
-    `Thread · ${DEMO_PRIVATE_SCOPE}`
+    `Thread · ${GENERAL_PRIVATE_SCOPE}`
   );
   await expect(page).toHaveURL(/channel=channel-1/);
   await expect(page).toHaveURL(/context=thread/);
 
   // footer 返信は private channel scope のラベルのまま送信できる。
   await threadColumn
-    .getByRole('button', { name: `Reply to Thread · ${DEMO_PRIVATE_SCOPE}` })
+    .getByRole('button', { name: `Reply to Thread · ${GENERAL_PRIVATE_SCOPE}` })
     .click();
   await threadColumn.getByPlaceholder('Write a reply').fill('private scoped reply');
   await threadColumn
@@ -171,11 +171,11 @@ for (const viewport of [
     page,
   }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
-    await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
+    await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
 
     // fresh defaultの末尾にThreadを追加した6 Column状態を作る。
     const timelineColumn = activeColumn(page, 'Timeline');
-    await publishFromTimelineColumn(page, timelineColumn, DEMO_PUBLIC_SCOPE, 'focus sync post');
+    await publishFromTimelineColumn(page, timelineColumn, GENERAL_PUBLIC_SCOPE, 'focus sync post');
     await page.getByText('focus sync post').click();
     await expect(activeColumn(page, 'Thread')).toBeVisible();
 
@@ -184,7 +184,7 @@ for (const viewport of [
     let controlCenter = await openControlCenter(page);
     await controlCenter.getByRole('button', { name: 'Focus Timeline' }).click();
     await expect(activeColumn(page, 'Timeline')).toBeVisible();
-    await expect(page).toHaveURL(/#\/timeline\?topic=kukuri%3Atopic%3Ademo$/);
+    await expect(page).toHaveURL(/#\/timeline\?topic=kukuri%3Atopic%3Ageneral$/);
     if (viewport.label === 'mobile') {
       await expect(page.getByText('1 / 6')).toBeVisible();
       await expect

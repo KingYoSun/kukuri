@@ -25,7 +25,7 @@ afterEach(() => {
 test('timeline image post shows media skeleton when attachment is missing', async () => {
   const api = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': [buildImagePost()],
+      'kukuri:topic:general': [buildImagePost()],
     },
   });
   api.getBlobMediaPayload = async () => null;
@@ -45,7 +45,7 @@ test('timeline image post switches to ready state when attachment becomes availa
     <App
       api={createDesktopMockApi({
         seedPosts: {
-          'kukuri:topic:demo': [missingPost],
+          'kukuri:topic:general': [missingPost],
         },
       })}
     />
@@ -59,7 +59,7 @@ test('timeline image post switches to ready state when attachment becomes availa
     <App
       api={createDesktopMockApi({
         seedPosts: {
-          'kukuri:topic:demo': [
+          'kukuri:topic:general': [
             buildImagePost({
               content: 'caption ready',
               content_status: 'Available' satisfies BlobViewStatus,
@@ -86,7 +86,7 @@ test('timeline image post renders actual preview when object-url payload is avai
   installObjectUrlMocks();
   const api = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': [
+      'kukuri:topic:general': [
         buildImagePost({
           content: 'caption ready',
           content_status: 'Available',
@@ -119,7 +119,7 @@ test('thread pane reuses the same image placeholder renderer', async () => {
   const user = userEvent.setup();
   const api = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': [
+      'kukuri:topic:general': [
         buildImagePost(),
         {
           ...buildImagePost({
@@ -160,7 +160,7 @@ test('text body pending uses text skeleton without hiding image metadata', async
     <App
       api={createDesktopMockApi({
         seedPosts: {
-          'kukuri:topic:demo': [buildImagePost()],
+          'kukuri:topic:general': [buildImagePost()],
         },
       })}
     />
@@ -176,7 +176,7 @@ test('text body pending uses text skeleton without hiding image metadata', async
 test('timeline video post shows poster skeleton when poster is missing', async () => {
   const api = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': [buildVideoPost()],
+      'kukuri:topic:general': [buildVideoPost()],
     },
   });
   api.getBlobMediaPayload = async () => null;
@@ -194,7 +194,7 @@ test('poster-only video card renders poster preview without video element', asyn
   installObjectUrlMocks();
   const api = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': [
+      'kukuri:topic:general': [
         buildVideoPost({
           attachments: [
             {
@@ -236,7 +236,7 @@ test('video card fetches manifest payload even when attachment status is missing
   installObjectUrlMocks();
   const api = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': [
+      'kukuri:topic:general': [
         buildVideoPost({
           attachments: [
             {
@@ -286,7 +286,7 @@ test('video card retries after stalled manifest fetch after rerender', async () 
   const manifestHash = 'retry-manifest'.repeat(4);
   const posterHash = 'retry-poster'.repeat(4);
   const seedPosts = {
-    'kukuri:topic:demo': [
+    'kukuri:topic:general': [
       buildVideoPost({
         attachments: [
           {
@@ -360,7 +360,7 @@ test('video card renders object-url playback source when manifest payload is ava
   installObjectUrlMocks();
   const api = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': [
+      'kukuri:topic:general': [
         buildVideoPost({
           attachments: [
             {
@@ -409,7 +409,7 @@ test('video card falls back to poster preview when playback is unsupported on th
   installObjectUrlMocks();
   const api = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': [
+      'kukuri:topic:general': [
         buildVideoPost({
           attachments: [
             {

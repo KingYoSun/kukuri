@@ -34,12 +34,12 @@ test('desktop shell can publish and render a post', async () => {
   await waitFor(() => {
     expect(screen.getByText('hello desktop')).toBeInTheDocument();
   });
-  expectActiveTopic('kukuri:topic:demo');
+  expectActiveTopic('kukuri:topic:general');
   expect(screen.queryByTestId('shell-nav-trigger')).not.toBeInTheDocument();
   const controlCenter = await openControlCenter(user);
-  const demoTopic = within(controlCenter).getByRole('button', { name: 'demo' }).closest('li');
-  expect(demoTopic).not.toBeNull();
-  expect(demoTopic).toHaveTextContent('joined / peers: 1');
+  const generalTopic = within(controlCenter).getByRole('button', { name: 'general' }).closest('li');
+  expect(generalTopic).not.toBeNull();
+  expect(generalTopic).toHaveTextContent('joined / peers: 1');
 
   const drawer = await openSettingsSection(user, 'connectivity');
   expect(within(drawer).getByDisplayValue('peer1@127.0.0.1:7777')).toBeInTheDocument();

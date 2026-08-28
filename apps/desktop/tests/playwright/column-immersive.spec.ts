@@ -34,7 +34,7 @@ test('Stream and Metaverse fullscreen return to the same Column workspace state'
   page,
 }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
-  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
   await addColumn(page, 'Add Live Column');
   await addColumn(page, 'Add Metaverse Column');
   const { metaverse, stage } = await createMetaverseRoom(page);
@@ -90,7 +90,7 @@ test('desktop Metaverse stage keeps pointer ownership and does not steal Column 
   page,
 }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
-  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
   await addColumn(page, 'Add Metaverse Column');
   const { metaverse, stage } = await createMetaverseRoom(page);
   await expect(metaverse).toHaveAttribute('aria-current', 'true');
@@ -120,7 +120,7 @@ test.describe('mobile touch ownership', () => {
   test('mobile Metaverse stage owns horizontal touch while Column header swipe still pages', async ({
     page,
   }) => {
-    await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
+    await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
     await addColumn(page, 'Add Metaverse Column');
     const { metaverse, stage } = await createMetaverseRoom(page);
     await expect(activeColumn(page, 'Metaverse')).toBeVisible();
@@ -159,7 +159,7 @@ test('offscreen Metaverse and Live Columns suspend rendering and resume without 
   // 900px幅ではCanvasがLiveの2 span幅より狭く、隣接するMetaverseと同時に
   // 1%を超えて交差しないためsuspension境界を決定的に観測できる。
   await page.setViewportSize({ width: 900, height: 900 });
-  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
   await addColumn(page, 'Add Live Column');
   await addColumn(page, 'Add Metaverse Column');
   const { metaverse, stage } = await createMetaverseRoom(page);

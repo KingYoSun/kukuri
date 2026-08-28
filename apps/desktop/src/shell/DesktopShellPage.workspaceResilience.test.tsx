@@ -159,7 +159,7 @@ test('timeline keeps the last successful workspace state when joined channels re
   let failNextJoinedChannelsRefresh = false;
   const baseApi = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': [
+      'kukuri:topic:general': [
         {
           object_id: 'post-refresh-joined-channels',
           envelope_id: 'envelope-refresh-joined-channels',
@@ -203,7 +203,7 @@ test('timeline keeps the last successful workspace state when joined channels re
   await waitFor(() => {
     expect(screen.getByText('joined channel refresh fallback')).toBeInTheDocument();
     expect(screen.getByText('temporary joined channel failure')).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: /Timeline Column/ })).toHaveTextContent('demo');
+    expect(screen.getByRole('region', { name: /Timeline Column/ })).toHaveTextContent('general');
   });
 });
 
@@ -211,7 +211,7 @@ test('timeline keeps the last successful workspace state when community-node sta
   let failNextCommunityNodeRefresh = false;
   const baseApi = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': [
+      'kukuri:topic:general': [
         {
           object_id: 'post-refresh-community-node-status',
           envelope_id: 'envelope-refresh-community-node-status',
@@ -257,7 +257,7 @@ test('timeline keeps the last successful workspace state when community-node sta
     expect(
       screen.queryByText('temporary community node status failure')
     ).not.toBeInTheDocument();
-    expect(screen.getByRole('region', { name: /Timeline Column/ })).toHaveTextContent('demo');
+    expect(screen.getByRole('region', { name: /Timeline Column/ })).toHaveTextContent('general');
   });
 });
 

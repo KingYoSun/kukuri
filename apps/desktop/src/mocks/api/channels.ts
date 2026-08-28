@@ -64,7 +64,7 @@ export function createChannelsMock(runtime: MockRuntime): ChannelsMock {
     async importPrivateChannelInvite() {
       const preview: PrivateChannelInvitePreview = options?.invitePreview ?? {
         channel_id: 'channel-imported',
-        topic_id: 'kukuri:topic:demo',
+        topic_id: 'kukuri:topic:general',
         channel_label: 'Imported',
         inviter_pubkey: syncStatus.local_author_pubkey,
         owner_pubkey: syncStatus.local_author_pubkey,
@@ -159,7 +159,7 @@ export function createChannelsMock(runtime: MockRuntime): ChannelsMock {
     async importFriendOnlyGrant() {
       const preview: FriendOnlyGrantPreview = {
         channel_id: 'channel-friends',
-        topic_id: 'kukuri:topic:demo',
+        topic_id: 'kukuri:topic:general',
         channel_label: 'Friends',
         owner_pubkey: syncStatus.local_author_pubkey,
         epoch_id: 'epoch-1',
@@ -192,7 +192,7 @@ export function createChannelsMock(runtime: MockRuntime): ChannelsMock {
     async importFriendPlusShare() {
       const preview: FriendPlusSharePreview = {
         channel_id: 'channel-friends-plus',
-        topic_id: 'kukuri:topic:demo',
+        topic_id: 'kukuri:topic:general',
         channel_label: 'Friends+',
         owner_pubkey: syncStatus.local_author_pubkey,
         sponsor_pubkey: 'sponsor-pubkey-1234',

@@ -53,8 +53,8 @@ test('browser mock hash routes deep link profile, notifications, timeline normal
   await expect(page.getByTestId('control-center-trigger')).toBeVisible();
   await expect(page).toHaveURL(/#\/timeline\?topic=/);
 
-  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo&settings=appearance');
-  await expect(page).toHaveURL(/#\/timeline\?topic=kukuri%3Atopic%3Ademo&settings=appearance/);
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral&settings=appearance');
+  await expect(page).toHaveURL(/#\/timeline\?topic=kukuri%3Atopic%3Ageneral&settings=appearance/);
   const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
   await expect(settingsDialog).toBeVisible({ timeout: 10000 });
   await expect(settingsDialog.getByTestId('settings-section-appearance')).toHaveAttribute(
@@ -68,13 +68,13 @@ test('browser mock hash routes deep link profile, notifications, timeline normal
   await page.keyboard.press('Escape');
   await expect(settingsDialog).not.toBeVisible();
 
-  await page.goto('/#/notifications?topic=kukuri%3Atopic%3Ademo');
+  await page.goto('/#/notifications?topic=kukuri%3Atopic%3Ageneral');
   await expect(activeColumn(page, 'Notifications')).toBeVisible();
   await expect(page.getByText('browser mock reply notification')).toBeVisible();
 
   await page.getByText('browser mock reply notification').click();
   await expect(page).toHaveURL(
-    /#\/timeline\?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=browser-seed-post/
+    /#\/timeline\?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=browser-seed-post/
   );
   await expect(activeColumn(page, 'Thread')).toBeVisible();
 });

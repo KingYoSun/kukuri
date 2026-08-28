@@ -22,7 +22,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const DEMO_TOPIC_HASH = '#/timeline?topic=kukuri%3Atopic%3Ademo';
+const DEMO_TOPIC_HASH = '#/timeline?topic=kukuri%3Atopic%3Ageneral';
 const CHANNEL_HASH = `${DEMO_TOPIC_HASH}&channel=channel-1`;
 
 function findTimelineColumnByScope(scopeLabel: string) {
@@ -59,24 +59,24 @@ async function setUpPublicAndPrivateColumns(user: ReturnType<typeof userEvent.se
   await publishPost(user, 'channel post');
   await waitFor(() => {
     expect(
-      within(findTimelineColumnByScope('core · demo')).getByText('channel post')
+      within(findTimelineColumnByScope('core · general')).getByText('channel post')
     ).toBeInTheDocument();
   });
 
   // Control Center の topic 行で「Public」を押して global 選択を public に戻す。
   const controlCenter = await openControlCenter(user);
-  const demoTopicRow = within(controlCenter).getByRole('button', { name: 'demo' }).closest('li');
-  if (!(demoTopicRow instanceof HTMLElement)) {
-    throw new Error('demo topic row not found');
+  const generalTopicRow = within(controlCenter).getByRole('button', { name: 'general' }).closest('li');
+  if (!(generalTopicRow instanceof HTMLElement)) {
+    throw new Error('general topic row not found');
   }
-  await user.click(within(demoTopicRow).getByRole('button', { name: /^Public/ }));
+  await user.click(within(generalTopicRow).getByRole('button', { name: /^Public/ }));
   await waitFor(() => {
     expect(window.location.hash).toBe(DEMO_TOPIC_HASH);
   });
   await waitFor(() => {
-    expect(findTimelineColumnByScope('Public · demo')).toHaveAttribute('aria-current', 'true');
+    expect(findTimelineColumnByScope('Public · general')).toHaveAttribute('aria-current', 'true');
   });
-  return findTimelineColumnByScope('core · demo');
+  return findTimelineColumnByScope('core · general');
 }
 
 test('非 active な Timeline Column の Bookmarks 切替は他の Column と URL に波及しない', async () => {
@@ -88,14 +88,14 @@ test('非 active な Timeline Column の Bookmarks 切替は他の Column と UR
   await user.click(within(columnViewTabs(privateColumn)).getByRole('tab', { name: 'Bookmarks' }));
   await waitFor(() => {
     expect(
-      within(columnViewTabs(findTimelineColumnByScope('core · demo'))).getByRole('tab', {
+      within(columnViewTabs(findTimelineColumnByScope('core · general'))).getByRole('tab', {
         name: 'Bookmarks',
       })
     ).toHaveAttribute('aria-selected', 'true');
   });
 
   // 他の Timeline Column は Feed のまま。
-  const publicColumn = findTimelineColumnByScope('Public · demo');
+  const publicColumn = findTimelineColumnByScope('Public · general');
   expect(
     within(columnViewTabs(publicColumn)).getByRole('tab', { name: 'Feed' })
   ).toHaveAttribute('aria-selected', 'true');
@@ -104,7 +104,7 @@ test('非 active な Timeline Column の Bookmarks 切替は他の Column と UR
   ).toHaveAttribute('aria-selected', 'false');
 
   // 切り替えた Column の body は bookmarks 一覧(空)になり、feed の投稿は出ない。
-  const switchedColumn = findTimelineColumnByScope('core · demo');
+  const switchedColumn = findTimelineColumnByScope('core · general');
   expect(within(switchedColumn).getByText('No bookmarked posts yet.')).toBeInTheDocument();
   expect(within(switchedColumn).queryByText('channel post')).not.toBeInTheDocument();
 
@@ -151,7 +151,7 @@ test('reload 後に各 Column の view が復元され、非 active の Bookmark
 
   // active(Public)Column に投稿して bookmark する。
   await publishPost(user, 'public post');
-  const publicColumn = findTimelineColumnByScope('Public · demo');
+  const publicColumn = findTimelineColumnByScope('Public · general');
   await waitFor(() => {
     expect(within(publicColumn).getByText('public post')).toBeInTheDocument();
   });
@@ -166,7 +166,7 @@ test('reload 後に各 Column の view が復元され、非 active の Bookmark
   await user.click(within(columnViewTabs(privateColumn)).getByRole('tab', { name: 'Bookmarks' }));
   await waitFor(() => {
     expect(
-      within(columnViewTabs(findTimelineColumnByScope('core · demo'))).getByRole('tab', {
+      within(columnViewTabs(findTimelineColumnByScope('core · general'))).getByRole('tab', {
         name: 'Bookmarks',
       })
     ).toHaveAttribute('aria-selected', 'true');
@@ -180,13 +180,13 @@ test('reload 後に各 Column の view が復元され、非 active の Bookmark
   // 各 Column の view が復元される。
   await waitFor(() => {
     expect(
-      within(columnViewTabs(findTimelineColumnByScope('core · demo'))).getByRole('tab', {
+      within(columnViewTabs(findTimelineColumnByScope('core · general'))).getByRole('tab', {
         name: 'Bookmarks',
       })
     ).toHaveAttribute('aria-selected', 'true');
   });
   expect(
-    within(columnViewTabs(findTimelineColumnByScope('Public · demo'))).getByRole('tab', {
+    within(columnViewTabs(findTimelineColumnByScope('Public · general'))).getByRole('tab', {
       name: 'Feed',
     })
   ).toHaveAttribute('aria-selected', 'true');
@@ -194,7 +194,7 @@ test('reload 後に各 Column の view が復元され、非 active の Bookmark
   // 非 active の Bookmarks Column でも bookmarks データがロードされ、bookmark 済み投稿が表示される。
   await waitFor(() => {
     expect(
-      within(findTimelineColumnByScope('core · demo')).getByText('public post')
+      within(findTimelineColumnByScope('core · general')).getByText('public post')
     ).toBeInTheDocument();
   });
 });

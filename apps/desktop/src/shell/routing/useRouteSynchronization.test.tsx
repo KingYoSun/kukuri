@@ -47,7 +47,7 @@ function createHookArgs(
     openDirectMessagePane: vi.fn(() => Promise.resolve()),
     openThread: vi.fn(() => Promise.resolve()),
     pendingRouteUrlRef: { current: null },
-    resolvedRouteLocation: { pathname: '/timeline', search: '?topic=kukuri%3Atopic%3Ademo' },
+    resolvedRouteLocation: { pathname: '/timeline', search: '?topic=kukuri%3Atopic%3Ageneral' },
     routeSection: 'timeline',
     scheduleAnimationFrame: (callback: () => void) => callback(),
     state: selectShellRoutingSlice(storeApi.getState()),
@@ -88,7 +88,7 @@ function buildJoinedChannel(
   overrides: Partial<JoinedPrivateChannelView> = {}
 ): JoinedPrivateChannelView {
   return {
-    topic_id: 'kukuri:topic:demo',
+    topic_id: 'kukuri:topic:general',
     channel_id: channelId,
     label,
     creator_pubkey: 'c'.repeat(64),
@@ -115,18 +115,18 @@ describe('useRouteSynchronization', () => {
     test('redirects to /timeline preserving the search via replace navigation', () => {
       const storeApi = createDesktopShellStore();
       const args = createHookArgs(storeApi, {
-        resolvedRouteLocation: { pathname: '/channels', search: '?topic=kukuri%3Atopic%3Ademo' },
+        resolvedRouteLocation: { pathname: '/channels', search: '?topic=kukuri%3Atopic%3Ageneral' },
       });
 
       const view = renderHook(() => useRouteSynchronization(args));
 
       expect(args.navigate).toHaveBeenCalledTimes(1);
-      expect(args.navigate).toHaveBeenCalledWith('/timeline?topic=kukuri%3Atopic%3Ademo', {
+      expect(args.navigate).toHaveBeenCalledWith('/timeline?topic=kukuri%3Atopic%3Ageneral', {
         replace: true,
       });
       // リダイレクト判定より前に lastNonNotificationsRoute へ現 URL が記録される(観測挙動)
       expect(storeApi.getState().lastNonNotificationsRoute).toBe(
-        '/channels?topic=kukuri%3Atopic%3Ademo'
+        '/channels?topic=kukuri%3Atopic%3Ageneral'
       );
       expect(args.syncRoute).not.toHaveBeenCalled();
       expect(args.loadTopics).not.toHaveBeenCalled();
@@ -138,16 +138,16 @@ describe('useRouteSynchronization', () => {
     test('switches activeTopic and reloads when the topic param is a tracked topic', () => {
       const storeApi = createDesktopShellStore();
       const args = createHookArgs(storeApi, {
-        resolvedRouteLocation: { pathname: '/timeline', search: '?topic=kukuri%3Atopic%3Airoh' },
+        resolvedRouteLocation: { pathname: '/timeline', search: '?topic=kukuri%3Atopic%3Adev' },
       });
 
       const view = renderHook(() => useRouteSynchronization(args));
 
-      expect(activeWorkspaceScope(storeApi.getState().workspaceState).topicId).toBe('kukuri:topic:iroh');
+      expect(activeWorkspaceScope(storeApi.getState().workspaceState).topicId).toBe('kukuri:topic:dev');
       expect(args.loadTopics).toHaveBeenCalledTimes(1);
       expect(args.loadTopics).toHaveBeenCalledWith(
-        ['kukuri:topic:demo', 'kukuri:topic:iroh', 'kukuri:topic:nostr', 'kukuri:topic:operators'],
-        'kukuri:topic:iroh',
+        ['kukuri:topic:general', 'kukuri:topic:dev', 'kukuri:topic:test'],
+        'kukuri:topic:dev',
         null
       );
       expect(args.syncRoute).not.toHaveBeenCalled();
@@ -160,19 +160,19 @@ describe('useRouteSynchronization', () => {
       const args = createHookArgs(storeApi, {
         resolvedRouteLocation: {
           pathname: '/timeline',
-          search: '?topic=kukuri%3Atopic%3Airoh&context=thread&threadId=post-9',
+          search: '?topic=kukuri%3Atopic%3Adev&context=thread&threadId=post-9',
         },
       });
 
       const view = renderHook(() => useRouteSynchronization(args));
 
-      expect(activeWorkspaceScope(storeApi.getState().workspaceState).topicId).toBe('kukuri:topic:iroh');
+      expect(activeWorkspaceScope(storeApi.getState().workspaceState).topicId).toBe('kukuri:topic:dev');
       // topic 切替(shouldReload)× context=thread の複合では loadTopics の第 3 引数に
       // requestedThreadId がそのまま渡る(useRouteSynchronization.ts L827-833)。
       expect(args.loadTopics).toHaveBeenCalledTimes(1);
       expect(args.loadTopics).toHaveBeenCalledWith(
-        ['kukuri:topic:demo', 'kukuri:topic:iroh', 'kukuri:topic:nostr', 'kukuri:topic:operators'],
-        'kukuri:topic:iroh',
+        ['kukuri:topic:general', 'kukuri:topic:dev', 'kukuri:topic:test'],
+        'kukuri:topic:dev',
         'post-9'
       );
       // thread のオープン自体は openThread 側へ配線される(threadId が selectedThread と異なるため)。
@@ -181,7 +181,7 @@ describe('useRouteSynchronization', () => {
         focusObjectId: null,
         historyMode: 'replace',
         normalizeOnEmpty: true,
-        topic: 'kukuri:topic:iroh',
+        topic: 'kukuri:topic:dev',
       });
       expect(args.syncRoute).not.toHaveBeenCalled();
       view.unmount();
@@ -199,12 +199,12 @@ describe('useRouteSynchronization', () => {
       const view = renderHook(() => useRouteSynchronization(args));
 
       // activeTopic は現状維持のまま、URL 側だけを replace で正規化する
-      expect(activeWorkspaceScope(storeApi.getState().workspaceState).topicId).toBe('kukuri:topic:demo');
+      expect(activeWorkspaceScope(storeApi.getState().workspaceState).topicId).toBe('kukuri:topic:general');
       expect(args.loadTopics).not.toHaveBeenCalled();
       expect(args.navigate).not.toHaveBeenCalled();
       expect(args.syncRoute).toHaveBeenCalledTimes(1);
       expect(args.syncRoute).toHaveBeenCalledWith('replace', {
-        activeTopic: 'kukuri:topic:demo',
+        activeTopic: 'kukuri:topic:general',
         composeTarget: { kind: 'public' },
         focusedObjectId: null,
         primarySection: 'timeline',
@@ -231,13 +231,13 @@ describe('useRouteSynchronization', () => {
       storeApi.getState().patchState({
         channelPanelStateByTopic: {
           ...initial.channelPanelStateByTopic,
-          'kukuri:topic:demo': { status: 'ready', error: null },
+          'kukuri:topic:general': { status: 'ready', error: null },
         },
       });
       const args = createHookArgs(storeApi, {
         resolvedRouteLocation: {
           pathname: '/timeline',
-          search: '?topic=kukuri%3Atopic%3Ademo&channel=chan-1',
+          search: '?topic=kukuri%3Atopic%3Ageneral&channel=chan-1',
         },
       });
 
@@ -252,7 +252,7 @@ describe('useRouteSynchronization', () => {
       expect(args.syncRoute).toHaveBeenCalledTimes(1);
       // channel は落とされ public scope / public compose target へ正規化される
       expect(args.syncRoute).toHaveBeenCalledWith('replace', {
-        activeTopic: 'kukuri:topic:demo',
+        activeTopic: 'kukuri:topic:general',
         composeTarget: { kind: 'public' },
         focusedObjectId: null,
         primarySection: 'timeline',
@@ -277,7 +277,7 @@ describe('useRouteSynchronization', () => {
       const args = createHookArgs(storeApi, {
         resolvedRouteLocation: {
           pathname: '/timeline',
-          search: '?topic=kukuri%3Atopic%3Ademo&channel=chan-1',
+          search: '?topic=kukuri%3Atopic%3Ageneral&channel=chan-1',
         },
       });
 
@@ -288,7 +288,7 @@ describe('useRouteSynchronization', () => {
       expect(args.navigate).not.toHaveBeenCalled();
       expect(args.loadTopics).not.toHaveBeenCalled();
       expect(activeWorkspaceScope(storeApi.getState().workspaceState).channelId).toBeNull();
-      expect(storeApi.getState().timelineScopeByTopic['kukuri:topic:demo']).toEqual({
+      expect(storeApi.getState().timelineScopeByTopic['kukuri:topic:general']).toEqual({
         kind: 'public',
       });
       view.unmount();
@@ -300,17 +300,17 @@ describe('useRouteSynchronization', () => {
       storeApi.getState().patchState({
         channelPanelStateByTopic: {
           ...initial.channelPanelStateByTopic,
-          'kukuri:topic:demo': { status: 'ready', error: null },
+          'kukuri:topic:general': { status: 'ready', error: null },
         },
         joinedChannelsByTopic: {
           ...initial.joinedChannelsByTopic,
-          'kukuri:topic:demo': [buildJoinedChannel('chan-1', 'General')],
+          'kukuri:topic:general': [buildJoinedChannel('chan-1', 'General')],
         },
       });
       const args = createHookArgs(storeApi, {
         resolvedRouteLocation: {
           pathname: '/timeline',
-          search: '?topic=kukuri%3Atopic%3Ademo&channel=chan-1',
+          search: '?topic=kukuri%3Atopic%3Ageneral&channel=chan-1',
         },
       });
 
@@ -318,18 +318,18 @@ describe('useRouteSynchronization', () => {
 
       const state = storeApi.getState();
       expect(activeWorkspaceScope(state.workspaceState).channelId).toBe('chan-1');
-      expect(state.timelineScopeByTopic['kukuri:topic:demo']).toEqual({
+      expect(state.timelineScopeByTopic['kukuri:topic:general']).toEqual({
         kind: 'channel',
         channel_id: 'chan-1',
       });
-      expect(state.composeChannelByTopic['kukuri:topic:demo']).toEqual({
+      expect(state.composeChannelByTopic['kukuri:topic:general']).toEqual({
         kind: 'private_channel',
         channel_id: 'chan-1',
       });
       expect(args.loadTopics).toHaveBeenCalledTimes(1);
       expect(args.loadTopics).toHaveBeenCalledWith(
-        ['kukuri:topic:demo', 'kukuri:topic:iroh', 'kukuri:topic:nostr', 'kukuri:topic:operators'],
-        'kukuri:topic:demo',
+        ['kukuri:topic:general', 'kukuri:topic:dev', 'kukuri:topic:test'],
+        'kukuri:topic:general',
         null
       );
       expect(args.syncRoute).not.toHaveBeenCalled();
@@ -343,7 +343,7 @@ describe('useRouteSynchronization', () => {
       const args = createHookArgs(storeApi, {
         resolvedRouteLocation: {
           pathname: '/timeline',
-          search: '?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-1',
+          search: '?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=post-1',
         },
       });
 
@@ -357,7 +357,7 @@ describe('useRouteSynchronization', () => {
         focusObjectId: null,
         historyMode: 'replace',
         normalizeOnEmpty: true,
-        topic: 'kukuri:topic:demo',
+        topic: 'kukuri:topic:general',
       });
       expect(args.syncRoute).not.toHaveBeenCalled();
 
@@ -383,7 +383,7 @@ describe('useRouteSynchronization', () => {
       const args = createHookArgs(storeApi, {
         resolvedRouteLocation: {
           pathname: '/messages',
-          search: `?topic=kukuri%3Atopic%3Ademo&peerPubkey=${DM_PEER_PUBKEY}`,
+          search: `?topic=kukuri%3Atopic%3Ageneral&peerPubkey=${DM_PEER_PUBKEY}`,
         },
         routeSection: 'messages',
       });
@@ -408,7 +408,7 @@ describe('useRouteSynchronization', () => {
       const args = createHookArgs(storeApi, {
         resolvedRouteLocation: {
           pathname: '/messages',
-          search: '?topic=kukuri%3Atopic%3Ademo&peerPubkey=not-a-key',
+          search: '?topic=kukuri%3Atopic%3Ageneral&peerPubkey=not-a-key',
         },
         routeSection: 'messages',
       });
@@ -420,7 +420,7 @@ describe('useRouteSynchronization', () => {
       expect(storeApi.getState().directMessagePaneOpen).toBe(true);
       expect(args.syncRoute).toHaveBeenCalledTimes(1);
       expect(args.syncRoute).toHaveBeenCalledWith('replace', {
-        activeTopic: 'kukuri:topic:demo',
+        activeTopic: 'kukuri:topic:general',
         composeTarget: { kind: 'public' },
         focusedObjectId: null,
         primarySection: 'messages',
@@ -446,7 +446,7 @@ describe('useRouteSynchronization', () => {
       // 未追跡 topic(本来なら normalize される URL)でも、pending 未観測なら何もしない
       const args = createHookArgs(storeApi, {
         lastObservedRouteUrlRef: { current: '/timeline?topic=kukuri%3Atopic%3Aunknown' },
-        pendingRouteUrlRef: { current: '/timeline?topic=kukuri%3Atopic%3Ademo' },
+        pendingRouteUrlRef: { current: '/timeline?topic=kukuri%3Atopic%3Ageneral' },
         resolvedRouteLocation: {
           pathname: '/timeline',
           search: '?topic=kukuri%3Atopic%3Aunknown',
@@ -458,7 +458,7 @@ describe('useRouteSynchronization', () => {
       expect(args.syncRoute).not.toHaveBeenCalled();
       expect(args.navigate).not.toHaveBeenCalled();
       expect(args.loadTopics).not.toHaveBeenCalled();
-      expect(args.pendingRouteUrlRef.current).toBe('/timeline?topic=kukuri%3Atopic%3Ademo');
+      expect(args.pendingRouteUrlRef.current).toBe('/timeline?topic=kukuri%3Atopic%3Ageneral');
       expect(storeApi.getState().lastNonNotificationsRoute).toBeNull();
       view.unmount();
     });
@@ -466,8 +466,8 @@ describe('useRouteSynchronization', () => {
     test('clears the pending route url and resumes processing when the route changed', () => {
       const storeApi = createDesktopShellStore();
       const args = createHookArgs(storeApi, {
-        lastObservedRouteUrlRef: { current: '/timeline?topic=kukuri%3Atopic%3Ademo' },
-        pendingRouteUrlRef: { current: '/timeline?topic=kukuri%3Atopic%3Ademo' },
+        lastObservedRouteUrlRef: { current: '/timeline?topic=kukuri%3Atopic%3Ageneral' },
+        pendingRouteUrlRef: { current: '/timeline?topic=kukuri%3Atopic%3Ageneral' },
         resolvedRouteLocation: {
           pathname: '/timeline',
           search: '?topic=kukuri%3Atopic%3Aunknown',

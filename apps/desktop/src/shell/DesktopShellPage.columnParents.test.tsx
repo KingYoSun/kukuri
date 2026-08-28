@@ -79,7 +79,7 @@ test('Profile header 再アクティブ化後に別 author を開くと Profile 
   const user = userEvent.setup();
   const api = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': [
+      'kukuri:topic:general': [
         buildAuthorPost('post-alice', ALICE, 'alice', 'alice says hello', 2),
         buildAuthorPost('post-bob', BOB, 'bob', 'bob says hello', 1),
       ],
@@ -90,7 +90,7 @@ test('Profile header 再アクティブ化後に別 author を開くと Profile 
     },
   });
 
-  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo', api);
+  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ageneral', api);
 
   // 1. Timeline の alice を開く → Profile Column(parent = timeline)
   const timeline = await screen.findByRole('region', { name: /^Timeline Column,/ });

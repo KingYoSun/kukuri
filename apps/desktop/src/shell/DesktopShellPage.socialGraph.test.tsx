@@ -26,7 +26,7 @@ test('post card shows friend of friend badge and author name fallback', async ()
     <App
       api={createDesktopMockApi({
         seedPosts: {
-          'kukuri:topic:demo': [
+          'kukuri:topic:general': [
             {
               object_id: 'post-fof',
               envelope_id: 'envelope-fof',
@@ -65,7 +65,7 @@ test('profile social management updates follow and mute lists and muted authors 
     <App
       api={createDesktopMockApi({
         seedPosts: {
-          'kukuri:topic:demo': [
+          'kukuri:topic:general': [
             {
               object_id: 'post-muted-author',
               envelope_id: 'envelope-muted-author',
@@ -107,7 +107,7 @@ test('profile social management updates follow and mute lists and muted authors 
           ],
         },
         seedLiveSessions: {
-          'kukuri:topic:demo': [
+          'kukuri:topic:general': [
             {
               session_id: 'live-muted',
               host_pubkey: mutedAuthorPubkey,
@@ -137,7 +137,7 @@ test('profile social management updates follow and mute lists and muted authors 
           ],
         },
         seedGameRooms: {
-          'kukuri:topic:demo': [
+          'kukuri:topic:general': [
             {
               room_id: 'room-muted',
               host_pubkey: mutedAuthorPubkey,
@@ -316,7 +316,7 @@ test('author detail shows via authors and follow action updates relationship', a
   const viaB = 'd'.repeat(64);
   const api = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': [
+      'kukuri:topic:general': [
         {
           object_id: 'post-author',
           envelope_id: 'envelope-author',
@@ -371,7 +371,7 @@ test('author detail mute toggle updates the selected author state', async () => 
     <App
       api={createDesktopMockApi({
         seedPosts: {
-          'kukuri:topic:demo': [
+          'kukuri:topic:general': [
             {
               object_id: 'post-author-mute',
               envelope_id: 'envelope-author-mute',

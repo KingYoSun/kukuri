@@ -114,7 +114,7 @@ export function buildNotification(overrides?: Partial<NotificationView>): Notifi
     actor_picture_asset: null,
     source_envelope_id: 'notification-envelope-1',
     source_replica_id: 'replica:notification',
-    topic_id: 'kukuri:topic:demo',
+    topic_id: 'kukuri:topic:general',
     channel_id: null,
     object_id: 'reply-1',
     thread_root_object_id: 'post-thread-open',

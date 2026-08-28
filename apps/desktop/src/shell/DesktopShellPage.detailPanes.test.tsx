@@ -29,7 +29,7 @@ test('clicking a timeline post opens thread and author detail flows in the conte
     <App
       api={createDesktopMockApi({
         seedPosts: {
-          'kukuri:topic:demo': [
+          'kukuri:topic:general': [
             {
               object_id: 'post-thread-open',
               envelope_id: 'envelope-thread-open',
@@ -95,7 +95,7 @@ test('thread focus auto-scroll runs only once even when the thread loads additio
   );
   const api = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': threadPosts,
+      'kukuri:topic:general': threadPosts,
     },
   });
   api.listThread = vi.fn(async (_topic: string, threadId: string, cursor: TimelineCursor | null, limit = 30) => {
@@ -106,7 +106,7 @@ test('thread focus auto-scroll runs only once even when the thread loads additio
   });
 
   renderAtHash(
-    '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=paginated-post-1&focusObjectId=paginated-post-11',
+    '#/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=paginated-post-1&focusObjectId=paginated-post-11',
     api
   );
 
@@ -132,7 +132,7 @@ test('timeline author detail opens as one Column, and thread author detail opens
   const createApi = () =>
     createDesktopMockApi({
       seedPosts: {
-        'kukuri:topic:demo': [
+        'kukuri:topic:general': [
           {
             object_id: 'context-post',
             envelope_id: 'envelope-context-post',
@@ -161,7 +161,7 @@ test('timeline author detail opens as one Column, and thread author detail opens
       },
     });
 
-  const { unmount } = renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo', createApi());
+  const { unmount } = renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ageneral', createApi());
 
   await user.click(await screen.findByRole('button', { name: 'alice' }));
   await waitFor(() => {
@@ -170,7 +170,7 @@ test('timeline author detail opens as one Column, and thread author detail opens
   expect(screen.queryByRole('region', { name: /^Thread Column,/ })).not.toBeInTheDocument();
 
   unmount();
-  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo', createApi());
+  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ageneral', createApi());
 
   await user.click(await screen.findByRole('button', { name: /context body/i }));
   await waitFor(() => {
@@ -195,7 +195,7 @@ test('author avatar blob stays visible on the timeline after the author pane clo
     <App
       api={createDesktopMockApi({
         seedPosts: {
-          'kukuri:topic:demo': [
+          'kukuri:topic:general': [
             {
               object_id: 'post-author-avatar',
               envelope_id: 'envelope-author-avatar',
@@ -263,7 +263,7 @@ test('remote author avatar appears on the timeline without opening the author pa
     <App
       api={createDesktopMockApi({
         seedPosts: {
-          'kukuri:topic:demo': [
+          'kukuri:topic:general': [
             {
               object_id: 'post-inline-avatar',
               envelope_id: 'envelope-inline-avatar',
