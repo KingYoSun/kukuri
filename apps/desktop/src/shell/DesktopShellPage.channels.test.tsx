@@ -79,12 +79,12 @@ test('desktop shell can create a private channel and export an invite', async ()
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral&channel=channel-1');
     expect(within(channelDialog).getByText('Copy share link')).toBeInTheDocument();
   });
   await user.click(within(channelDialog).getByRole('button', { name: 'Copy link' }));
   expect(writeText).toHaveBeenLastCalledWith(
-    buildChannelAccessPreviewDeepLink('invite:kukuri:topic:demo:channel-1')
+    buildChannelAccessPreviewDeepLink('invite:kukuri:topic:general:channel-1')
   );
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
 
@@ -93,7 +93,7 @@ test('desktop shell can create a private channel and export an invite', async ()
 
   await waitFor(() => {
     expect(within(settingsDialog).getByText('Copy share link')).toBeInTheDocument();
-    expect(within(settingsDialog).queryByText(/invite:kukuri:topic:demo:channel-1/)).not.toBeInTheDocument();
+    expect(within(settingsDialog).queryByText(/invite:kukuri:topic:general:channel-1/)).not.toBeInTheDocument();
   });
 });
 
@@ -108,7 +108,7 @@ test('desktop shell confirms and leaves a private channel', async () => {
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral&channel=channel-1');
   });
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
 
@@ -131,8 +131,8 @@ test('desktop shell confirms and leaves a private channel', async () => {
   await user.click(within(leaveDialog).getByRole('button', { name: 'Yes' }));
 
   await waitFor(() => {
-    expect(leavePrivateChannel).toHaveBeenCalledWith('kukuri:topic:demo', 'channel-1');
-    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
+    expect(leavePrivateChannel).toHaveBeenCalledWith('kukuri:topic:general', 'channel-1');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral');
     expect(screen.queryByRole('button', { name: /core.*Invite only/ })).not.toBeInTheDocument();
   });
 });
@@ -175,24 +175,24 @@ test('channel route restore waits for joined channel list before normalizing', a
   const listJoinedPrivateChannels = vi
     .spyOn(api, 'listJoinedPrivateChannels')
     .mockImplementation(async (topic) => {
-      if (topic !== 'kukuri:topic:demo') {
+      if (topic !== 'kukuri:topic:general') {
         return [];
       }
       return joinedChannels.promise;
     });
 
-  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-restored', api);
+  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ageneral&channel=channel-restored', api);
 
   await waitFor(() => {
-    expect(listJoinedPrivateChannels).toHaveBeenCalledWith('kukuri:topic:demo');
+    expect(listJoinedPrivateChannels).toHaveBeenCalledWith('kukuri:topic:general');
   });
   expect(window.location.hash).toBe(
-    '#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-restored'
+    '#/timeline?topic=kukuri%3Atopic%3Ageneral&channel=channel-restored'
   );
 
   joinedChannels.resolve([
     {
-      topic_id: 'kukuri:topic:demo',
+      topic_id: 'kukuri:topic:general',
       channel_id: 'channel-restored',
       label: 'restored',
       creator_pubkey: 'f'.repeat(64),
@@ -211,7 +211,7 @@ test('channel route restore waits for joined channel list before normalizing', a
 
   await waitFor(() => {
     expect(window.location.hash).toBe(
-      '#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-restored'
+      '#/timeline?topic=kukuri%3Atopic%3Ageneral&channel=channel-restored'
     );
   });
   const controlCenter = await openControlCenter(user);
@@ -229,7 +229,7 @@ test('desktop shell shows friend-only controls and can create a grant', async ()
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral&channel=channel-1');
     expect(screen.queryByRole('button', { name: 'Rotate' })).not.toBeInTheDocument();
   });
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
@@ -239,7 +239,7 @@ test('desktop shell shows friend-only controls and can create a grant', async ()
 
   await waitFor(() => {
     expect(within(settingsDialog).getByText('Copy share link')).toBeInTheDocument();
-    expect(within(settingsDialog).queryByText(/grant:kukuri:topic:demo:channel-1/)).not.toBeInTheDocument();
+    expect(within(settingsDialog).queryByText(/grant:kukuri:topic:general:channel-1/)).not.toBeInTheDocument();
   });
 });
 
@@ -259,7 +259,7 @@ test('desktop shell shows friend-plus controls and can create a share', async ()
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral&channel=channel-1');
     expect(screen.queryByRole('button', { name: 'Freeze' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Rotate' })).not.toBeInTheDocument();
   });
@@ -270,12 +270,12 @@ test('desktop shell shows friend-plus controls and can create a share', async ()
 
   await waitFor(() => {
     expect(within(settingsDialog).getByText('Copy share link')).toBeInTheDocument();
-    expect(within(settingsDialog).queryByText(/share:kukuri:topic:demo:channel-1/)).not.toBeInTheDocument();
+    expect(within(settingsDialog).queryByText(/share:kukuri:topic:general:channel-1/)).not.toBeInTheDocument();
   });
 
   await user.click(within(settingsDialog).getByRole('button', { name: 'Copy link' }));
   expect(writeText).toHaveBeenLastCalledWith(
-    buildChannelAccessPreviewDeepLink('share:kukuri:topic:demo:channel-1')
+    buildChannelAccessPreviewDeepLink('share:kukuri:topic:general:channel-1')
   );
 });
 
@@ -299,7 +299,7 @@ test('share token smart link previews before import and joins only after confirm
   });
   const api = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': [
+      'kukuri:topic:general': [
         {
           object_id: 'share-post',
           envelope_id: 'envelope-share-post',
@@ -391,7 +391,7 @@ test('copy link actions write canonical hash routes for topic, post, and live', 
     <App
       api={createDesktopMockApi({
         seedPosts: {
-          'kukuri:topic:demo': [
+          'kukuri:topic:general': [
             {
               object_id: 'copy-post',
               envelope_id: 'envelope-copy-post',
@@ -415,7 +415,7 @@ test('copy link actions write canonical hash routes for topic, post, and live', 
           ],
         },
         seedLiveSessions: {
-          'kukuri:topic:demo': [
+          'kukuri:topic:general': [
             {
               session_id: 'session-demo',
               host_pubkey: 'a'.repeat(64),
@@ -431,7 +431,7 @@ test('copy link actions write canonical hash routes for topic, post, and live', 
           ],
         },
         seedGameRooms: {
-          'kukuri:topic:demo': [
+          'kukuri:topic:general': [
             {
               room_id: 'room-demo',
               host_pubkey: 'a'.repeat(64),
@@ -451,12 +451,12 @@ test('copy link actions write canonical hash routes for topic, post, and live', 
   );
 
   const controlCenter = await openControlCenter(user);
-  const topicItem = within(controlCenter).getByRole('button', { name: 'demo' }).closest('li');
+  const topicItem = within(controlCenter).getByRole('button', { name: 'general' }).closest('li');
   if (!(topicItem instanceof HTMLElement)) {
     throw new Error('expected topic item');
   }
   await user.click(within(topicItem).getByRole('button', { name: 'Copy link' }));
-  expect(writeText).toHaveBeenLastCalledWith('#/timeline?topic=kukuri%3Atopic%3Ademo');
+  expect(writeText).toHaveBeenLastCalledWith('#/timeline?topic=kukuri%3Atopic%3Ageneral');
   await waitFor(() => {
     expect(screen.getByRole('status')).toHaveTextContent('Copied to clipboard.');
     expect(screen.getAllByRole('status')).toHaveLength(1);
@@ -468,7 +468,7 @@ test('copy link actions write canonical hash routes for topic, post, and live', 
   }
   await user.click(within(postArticle).getByRole('button', { name: 'Copy link' }));
   expect(writeText).toHaveBeenLastCalledWith(
-    '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=copy-post&focusObjectId=copy-post'
+    '#/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=copy-post&focusObjectId=copy-post'
   );
   await waitFor(() => {
     expect(screen.getAllByRole('status')).toHaveLength(1);
@@ -481,7 +481,7 @@ test('copy link actions write canonical hash routes for topic, post, and live', 
   }
   await user.click(within(liveArticle).getByRole('button', { name: 'Copy link' }));
   expect(writeText).toHaveBeenLastCalledWith(
-    '#/live?topic=kukuri%3Atopic%3Ademo&sessionId=session-demo'
+    '#/live?topic=kukuri%3Atopic%3Ageneral&sessionId=session-demo'
   );
   await waitFor(() => {
     expect(screen.getAllByRole('status')).toHaveLength(1);
@@ -502,7 +502,7 @@ test('channel settings copy removes duplicate summary and share button icon', as
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral&channel=channel-1');
   });
   expect(
     within(channelDialog).queryByRole('button', { name: 'Create share link' })

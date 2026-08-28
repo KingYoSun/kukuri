@@ -35,7 +35,7 @@ test('author detail mutual action opens the messages workspace and sends a local
   const authorPubkey = 'b'.repeat(64);
   const api = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': [
+      'kukuri:topic:general': [
         {
           object_id: 'post-author-dm',
           envelope_id: 'envelope-author-dm',
@@ -83,7 +83,7 @@ test('author detail mutual action opens the messages workspace and sends a local
       'true'
     );
     expect(window.location.hash).toBe(
-      `#/messages?topic=kukuri%3Atopic%3Ademo&peerPubkey=${authorPubkey}`
+      `#/messages?topic=kukuri%3Atopic%3Ageneral&peerPubkey=${authorPubkey}`
     );
   });
 
@@ -125,7 +125,7 @@ test('messages conversation list rows render avatars', async () => {
   });
   await api.openDirectMessage(authorPubkey);
 
-  renderAtHash('#/messages?topic=kukuri%3Atopic%3Ademo', api);
+  renderAtHash('#/messages?topic=kukuri%3Atopic%3Ageneral', api);
 
   const avatar = await screen.findByTestId(`dm-conversation-avatar-${authorPubkey}`);
   await waitFor(() => {
@@ -149,14 +149,14 @@ test('messages author click opens the author pane without leaving the selected d
   const user = userEvent.setup();
 
   renderAtHash(
-    `#/messages?topic=kukuri%3Atopic%3Ademo&peerPubkey=${authorPubkey}`,
+    `#/messages?topic=kukuri%3Atopic%3Ageneral&peerPubkey=${authorPubkey}`,
     api
   );
 
   const conversationAvatar = await screen.findByTestId(`dm-conversation-avatar-${authorPubkey}`);
   await waitFor(() => {
     expect(window.location.hash).toBe(
-      `#/messages?topic=kukuri%3Atopic%3Ademo&peerPubkey=${authorPubkey}`
+      `#/messages?topic=kukuri%3Atopic%3Ageneral&peerPubkey=${authorPubkey}`
     );
   });
   const conversationIdentity = conversationAvatar.closest('.post-meta-author');
@@ -169,7 +169,7 @@ test('messages author click opens the author pane without leaving the selected d
     expect(getDetailPane('Author')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: /^Conversation Column,/ })).toBeInTheDocument();
     expect(window.location.hash).toBe(
-      `#/messages?topic=kukuri%3Atopic%3Ademo&peerPubkey=${authorPubkey}&authorPubkey=${authorPubkey}`
+      `#/messages?topic=kukuri%3Atopic%3Ageneral&peerPubkey=${authorPubkey}&authorPubkey=${authorPubkey}`
     );
   });
 });
@@ -216,7 +216,7 @@ test('messages dm headers use resolved author labels instead of You and Peer', a
   };
 
   renderAtHash(
-    `#/messages?topic=kukuri%3Atopic%3Ademo&peerPubkey=${authorPubkey}`,
+    `#/messages?topic=kukuri%3Atopic%3Ageneral&peerPubkey=${authorPubkey}`,
     api
   );
 
@@ -243,7 +243,7 @@ test('messages hash route restores the direct message and author pane together',
   });
 
   renderAtHash(
-    `#/messages?topic=kukuri%3Atopic%3Ademo&peerPubkey=${authorPubkey}&authorPubkey=${authorPubkey}`,
+    `#/messages?topic=kukuri%3Atopic%3Ageneral&peerPubkey=${authorPubkey}&authorPubkey=${authorPubkey}`,
     api
   );
   const user = userEvent.setup();
@@ -255,7 +255,7 @@ test('messages hash route restores the direct message and author pane together',
   const conversationColumn = await expandConversationComposer(user);
   expect(within(conversationColumn).getByPlaceholderText('Write a message')).toBeInTheDocument();
   expect(window.location.hash).toBe(
-    `#/messages?topic=kukuri%3Atopic%3Ademo&peerPubkey=${authorPubkey}&authorPubkey=${authorPubkey}`
+    `#/messages?topic=kukuri%3Atopic%3Ageneral&peerPubkey=${authorPubkey}&authorPubkey=${authorPubkey}`
   );
 });
 
@@ -283,7 +283,7 @@ test('switching messages peer closes a stale author pane', async () => {
   const user = userEvent.setup();
 
   renderAtHash(
-    `#/messages?topic=kukuri%3Atopic%3Ademo&peerPubkey=${firstAuthorPubkey}&authorPubkey=${firstAuthorPubkey}`,
+    `#/messages?topic=kukuri%3Atopic%3Ageneral&peerPubkey=${firstAuthorPubkey}&authorPubkey=${firstAuthorPubkey}`,
     api
   );
 
@@ -300,7 +300,7 @@ test('switching messages peer closes a stale author pane', async () => {
   await waitFor(() => {
     expect(screen.queryByRole('complementary', { name: 'Author' })).not.toBeInTheDocument();
     expect(window.location.hash).toBe(
-      `#/messages?topic=kukuri%3Atopic%3Ademo&peerPubkey=${secondAuthorPubkey}`
+      `#/messages?topic=kukuri%3Atopic%3Ageneral&peerPubkey=${secondAuthorPubkey}`
     );
   });
 });
@@ -310,7 +310,7 @@ test('messages workspace keeps the last successful DM state when status refresh 
   let failNextStatusRefresh = false;
   const baseApi = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': [
+      'kukuri:topic:general': [
         {
           object_id: 'post-author-dm-refresh',
           envelope_id: 'envelope-author-dm-refresh',

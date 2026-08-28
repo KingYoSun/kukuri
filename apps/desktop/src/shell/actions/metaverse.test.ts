@@ -20,7 +20,7 @@ describe('createMetaverseRoomActions', () => {
     const onRefresh = vi.fn().mockResolvedValue(undefined);
     const actions = createMetaverseRoomActions({
       api,
-      activeTopic: 'kukuri:topic:demo',
+      activeTopic: 'kukuri:topic:general',
       activeComposeChannel: { kind: 'private_channel', channel_id: 'channel-1' },
       onRefresh,
     });
@@ -49,27 +49,27 @@ describe('createMetaverseRoomActions', () => {
     });
 
     expect(api.createMetaverseRoom).toHaveBeenCalledWith(
-      'kukuri:topic:demo',
+      'kukuri:topic:general',
       'Atrium',
       'Small social space',
       8,
       { kind: 'private_channel', channel_id: 'channel-1' }
     );
     expect(api.publishMetaverseRoomEvent).toHaveBeenCalledWith(
-      'kukuri:topic:demo',
+      'kukuri:topic:general',
       'room-1',
       'peer-1',
       7,
       event
     );
     expect(api.listMetaverseRoomEvents).toHaveBeenCalledWith(
-      'kukuri:topic:demo',
+      'kukuri:topic:general',
       'room-1',
       'event-6',
       64
     );
     expect(api.importMetaverseRoomAsset).toHaveBeenCalledWith(
-      'kukuri:topic:demo',
+      'kukuri:topic:general',
       'room-1',
       'vrm',
       'model/vrm',
@@ -78,13 +78,13 @@ describe('createMetaverseRoomActions', () => {
     );
     expect(api.getBlobPreviewUrl).toHaveBeenCalledWith('blob-hash', 'model/vrm');
     expect(api.updateMetaverseRoom).toHaveBeenCalledWith(
-      'kukuri:topic:demo',
+      'kukuri:topic:general',
       'room-1',
       'Waiting',
       customization
     );
     expect(api.moveDome).toHaveBeenCalledWith(
-      'kukuri:topic:demo',
+      'kukuri:topic:general',
       'move-1',
       'room-1',
       {

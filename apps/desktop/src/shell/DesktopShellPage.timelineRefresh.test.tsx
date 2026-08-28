@@ -98,13 +98,13 @@ test('timeline buffers remote posts until the pending banner is applied', async 
   let timelineItems = [olderPost];
   const baseApi = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': timelineItems,
+      'kukuri:topic:general': timelineItems,
     },
   });
   const api: DesktopApi = {
     ...baseApi,
     async listTimeline(topic, cursor, limit, scope) {
-      if (topic !== 'kukuri:topic:demo') {
+      if (topic !== 'kukuri:topic:general') {
         return baseApi.listTimeline(topic, cursor, limit, scope);
       }
       return {
@@ -173,13 +173,13 @@ test('pending timeline snapshots apply all unseen posts from the latest first pa
   let timelineItems = [olderPost];
   const baseApi = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': timelineItems,
+      'kukuri:topic:general': timelineItems,
     },
   });
   const api: DesktopApi = {
     ...baseApi,
     async listTimeline(topic, cursor, limit, scope) {
-      if (topic !== 'kukuri:topic:demo') {
+      if (topic !== 'kukuri:topic:general') {
         return baseApi.listTimeline(topic, cursor, limit, scope);
       }
       return {
@@ -243,7 +243,7 @@ test('applying a pending timeline does not re-count the same post when a stale r
   };
   const baseApi = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': [olderPost],
+      'kukuri:topic:general': [olderPost],
     },
   });
   const inFlightRefresh = createDeferred<TimelineView>();
@@ -252,7 +252,7 @@ test('applying a pending timeline does not re-count the same post when a stale r
   const api: DesktopApi = {
     ...baseApi,
     async listTimeline(topic, cursor, limit, scope) {
-      if (topic !== 'kukuri:topic:demo') {
+      if (topic !== 'kukuri:topic:general') {
         return baseApi.listTimeline(topic, cursor, limit, scope);
       }
       if (refreshPhase === 'stale-in-flight') {
@@ -350,13 +350,13 @@ test('authoritative replacements for syncing posts do not increment the pending 
   let timelineItems = [syncingPost, olderPost];
   const baseApi = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': timelineItems,
+      'kukuri:topic:general': timelineItems,
     },
   });
   const api: DesktopApi = {
     ...baseApi,
     async listTimeline(topic, cursor, limit, scope) {
-      if (topic !== 'kukuri:topic:demo') {
+      if (topic !== 'kukuri:topic:general') {
         return baseApi.listTimeline(topic, cursor, limit, scope);
       }
       return {
@@ -428,13 +428,13 @@ test('private channel timeline keeps scope-separated posts and pending counts fr
   let channelTimelineItems = [channelPost];
   const baseApi = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': [publicPost, channelPost],
+      'kukuri:topic:general': [publicPost, channelPost],
     },
   });
   const api: DesktopApi = {
     ...baseApi,
     async listTimeline(topic, cursor, limit, scope) {
-      if (topic !== 'kukuri:topic:demo') {
+      if (topic !== 'kukuri:topic:general') {
         return baseApi.listTimeline(topic, cursor, limit, scope);
       }
       if (scope?.kind === 'channel') {
@@ -460,7 +460,7 @@ test('private channel timeline keeps scope-separated posts and pending counts fr
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral&channel=channel-1');
   });
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
   await waitFor(() => {
@@ -486,7 +486,7 @@ test('private channel timeline keeps scope-separated posts and pending counts fr
   expect(screen.getByText('public post')).toBeInTheDocument();
 
   const controlCenter = await openControlCenter(user);
-  const topicItem = within(controlCenter).getByRole('button', { name: 'demo' }).closest('li');
+  const topicItem = within(controlCenter).getByRole('button', { name: 'general' }).closest('li');
   if (!(topicItem instanceof HTMLElement)) {
     throw new Error('active topic item not found');
   }
@@ -498,7 +498,7 @@ test('private channel timeline keeps scope-separated posts and pending counts fr
   await user.click(publicButton);
 
   await waitFor(() => {
-    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral');
     expect(screen.getByText('public post')).toBeInTheDocument();
   });
   expect(screen.getByText('channel post')).toBeInTheDocument();
@@ -518,13 +518,13 @@ test('background refresh preserves loaded timeline pages and does not restore a 
   );
   const api = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': paginatedPosts,
+      'kukuri:topic:general': paginatedPosts,
     },
   });
   api.listTimeline = vi.fn(
     async (topic: string, cursor: TimelineCursor | null, limit = 20) => {
       return paginatePosts(
-        topic === 'kukuri:topic:demo' ? paginatedPosts : [],
+        topic === 'kukuri:topic:general' ? paginatedPosts : [],
         cursor,
         limit
       );
@@ -557,25 +557,25 @@ test('periodic refresh also fetches visible background Timeline Column scopes', 
   vi.useFakeTimers();
   const { WORKSPACE_LAYOUT_STORAGE_KEY } = await import('@/shell/workspacePersistence');
   const { columnIdentityId } = await import('@/shell/slices/workspace');
-  const demoScope = { topicId: 'kukuri:topic:demo', channelId: null };
-  const irohScope = { topicId: 'kukuri:topic:iroh', channelId: null };
+  const generalScope = { topicId: 'kukuri:topic:general', channelId: null };
+  const devScope = { topicId: 'kukuri:topic:dev', channelId: null };
   window.localStorage.setItem(
     WORKSPACE_LAYOUT_STORAGE_KEY,
     JSON.stringify({
       version: 1,
-      activeColumnId: columnIdentityId('timeline', demoScope),
+      activeColumnId: columnIdentityId('timeline', generalScope),
       columns: [
         {
-          id: columnIdentityId('timeline', demoScope),
+          id: columnIdentityId('timeline', generalScope),
           kind: 'timeline',
-          scope: demoScope,
+          scope: generalScope,
           pinned: true,
           preferredDesktopSpan: 1,
         },
         {
-          id: columnIdentityId('timeline', irohScope),
+          id: columnIdentityId('timeline', devScope),
           kind: 'timeline',
-          scope: irohScope,
+          scope: devScope,
           pinned: true,
           preferredDesktopSpan: 1,
         },
@@ -590,7 +590,7 @@ test('periodic refresh also fetches visible background Timeline Column scopes', 
   await vi.advanceTimersByTimeAsync(REFRESH_INTERVAL_MS + 50);
 
   const refreshedTopics = new Set(listTimelineSpy.mock.calls.map(([topic]) => topic));
-  expect(refreshedTopics.has('kukuri:topic:demo')).toBe(true);
-  // 背景の iroh Timeline Column も定期 refresh の対象になる。
-  expect(refreshedTopics.has('kukuri:topic:iroh')).toBe(true);
+  expect(refreshedTopics.has('kukuri:topic:general')).toBe(true);
+  // 背景の dev Timeline Column も定期 refresh の対象になる。
+  expect(refreshedTopics.has('kukuri:topic:dev')).toBe(true);
 });

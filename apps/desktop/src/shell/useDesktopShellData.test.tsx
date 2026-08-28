@@ -87,7 +87,7 @@ function buildJoinedChannel(
   overrides: Partial<JoinedPrivateChannelView> = {}
 ): JoinedPrivateChannelView {
   return {
-    topic_id: 'kukuri:topic:demo',
+    topic_id: 'kukuri:topic:general',
     channel_id: channelId,
     label: 'core',
     creator_pubkey: 'c'.repeat(64),
@@ -116,7 +116,7 @@ function buildNotification(overrides: Partial<NotificationView> = {}): Notificat
     actor_picture_asset: null,
     source_envelope_id: 'notification-envelope-1',
     source_replica_id: 'replica:notification',
-    topic_id: 'kukuri:topic:demo',
+    topic_id: 'kukuri:topic:general',
     channel_id: null,
     object_id: 'reply-1',
     thread_root_object_id: 'post-1',
@@ -231,15 +231,15 @@ describe('useDesktopShellData characterization', () => {
     harness.store.getState().patchState({
       joinedChannelsByTopic: {
         ...harness.store.getState().joinedChannelsByTopic,
-        'kukuri:topic:demo': [joinedChannel],
+        'kukuri:topic:general': [joinedChannel],
       },
       workspaceState: openTransientColumn(harness.store.getState().workspaceState, {
         id: columnIdentityId('timeline', {
-          topicId: 'kukuri:topic:demo',
+          topicId: 'kukuri:topic:general',
           channelId: 'channel-1',
         }),
         kind: 'timeline',
-        scope: { topicId: 'kukuri:topic:demo', channelId: 'channel-1' },
+        scope: { topicId: 'kukuri:topic:general', channelId: 'channel-1' },
         pinned: false,
       }),
     });
@@ -249,24 +249,24 @@ describe('useDesktopShellData characterization', () => {
 
     // mount 直後の refresh 1 回分: アクティブ scope + public scope の 2 呼び出しのみ。
     expect(listTimeline).toHaveBeenCalledTimes(2);
-    expect(listTimeline).toHaveBeenNthCalledWith(1, 'kukuri:topic:demo', null, 20, {
+    expect(listTimeline).toHaveBeenNthCalledWith(1, 'kukuri:topic:general', null, 20, {
       kind: 'channel',
       channel_id: 'channel-1',
     });
-    expect(listTimeline).toHaveBeenNthCalledWith(2, 'kukuri:topic:demo', null, 20, {
+    expect(listTimeline).toHaveBeenNthCalledWith(2, 'kukuri:topic:general', null, 20, {
       kind: 'public',
     });
 
     const state = harness.store.getState();
     expect(
-      state.timelinesByKey['kukuri:topic:demo::channel::channel-1']?.map(
+      state.timelinesByKey['kukuri:topic:general::channel::channel-1']?.map(
         (post) => post.object_id
       )
     ).toEqual(['post-channel']);
     expect(
-      state.timelinesByKey['kukuri:topic:demo::public']?.map((post) => post.object_id)
+      state.timelinesByKey['kukuri:topic:general::public']?.map((post) => post.object_id)
     ).toEqual(['post-public']);
-    expect(state.timelineNextCursorByKey['kukuri:topic:demo::channel::channel-1']).toBeNull();
+    expect(state.timelineNextCursorByKey['kukuri:topic:general::channel::channel-1']).toBeNull();
 
     view.unmount();
   });
@@ -296,7 +296,7 @@ describe('useDesktopShellData characterization', () => {
 
     // 前提: 初回 refresh は baseline が空(authoritative 無し)のため直接反映される。
     expect(
-      harness.store.getState().timelinesByKey['kukuri:topic:demo::public']?.map(
+      harness.store.getState().timelinesByKey['kukuri:topic:general::public']?.map(
         (post) => post.object_id
       )
     ).toEqual(['post-old']);
@@ -308,17 +308,17 @@ describe('useDesktopShellData characterization', () => {
     const state = harness.store.getState();
     // 可視タイムラインは不変。
     expect(
-      state.timelinesByKey['kukuri:topic:demo::public']?.map((post) => post.object_id)
+      state.timelinesByKey['kukuri:topic:general::public']?.map((post) => post.object_id)
     ).toEqual(['post-old']);
     // 新着は pending 3 フィールドへ退避される(snapshot は最新ページ全量)。
-    expect(state.pendingTimelineCountsByKey['kukuri:topic:demo::public']).toBe(1);
+    expect(state.pendingTimelineCountsByKey['kukuri:topic:general::public']).toBe(1);
     expect(
-      state.pendingTimelineSnapshotsByKey['kukuri:topic:demo::public']?.map(
+      state.pendingTimelineSnapshotsByKey['kukuri:topic:general::public']?.map(
         (post) => post.object_id
       )
     ).toEqual(['post-new', 'post-old']);
-    expect('kukuri:topic:demo::public' in state.pendingTimelineNextCursorByKey).toBe(true);
-    expect(state.pendingTimelineNextCursorByKey['kukuri:topic:demo::public']).toBeNull();
+    expect('kukuri:topic:general::public' in state.pendingTimelineNextCursorByKey).toBe(true);
+    expect(state.pendingTimelineNextCursorByKey['kukuri:topic:general::public']).toBeNull();
     view.unmount();
   });
 
@@ -432,11 +432,11 @@ describe('useDesktopShellData characterization', () => {
     // pending 3 フィールドをプリセット(buffer 済み状態を直接再現する)。
     actPatchState(harness.store, {
       pendingTimelineSnapshotsByKey: {
-        'kukuri:topic:demo::public': [newerPost, olderPost],
+        'kukuri:topic:general::public': [newerPost, olderPost],
       },
-      pendingTimelineCountsByKey: { 'kukuri:topic:demo::public': 1 },
+      pendingTimelineCountsByKey: { 'kukuri:topic:general::public': 1 },
       pendingTimelineNextCursorByKey: {
-        'kukuri:topic:demo::public': { created_at: 1, object_id: 'post-old' },
+        'kukuri:topic:general::public': { created_at: 1, object_id: 'post-old' },
       },
     });
 
@@ -444,7 +444,7 @@ describe('useDesktopShellData characterization', () => {
     getSyncStatus.mockClear();
 
     await act(async () => {
-      await view.result.current.refreshTimelineFeed('kukuri:topic:demo', null);
+      await view.result.current.refreshTimelineFeed('kukuri:topic:general', null);
     });
 
     // pending がある場合は api を一切呼ばずローカル merge のみで完結する。
@@ -453,17 +453,17 @@ describe('useDesktopShellData characterization', () => {
 
     const state = harness.store.getState();
     expect(
-      state.timelinesByKey['kukuri:topic:demo::public']?.map((post) => post.object_id)
+      state.timelinesByKey['kukuri:topic:general::public']?.map((post) => post.object_id)
     ).toEqual(['post-new', 'post-old']);
     // cursor は pendingTimelineNextCursorByKey の値へ差し替わる。
-    expect(state.timelineNextCursorByKey['kukuri:topic:demo::public']).toEqual({
+    expect(state.timelineNextCursorByKey['kukuri:topic:general::public']).toEqual({
       created_at: 1,
       object_id: 'post-old',
     });
     // pending 3 フィールドはキーごと削除される。
-    expect('kukuri:topic:demo::public' in state.pendingTimelineSnapshotsByKey).toBe(false);
-    expect('kukuri:topic:demo::public' in state.pendingTimelineCountsByKey).toBe(false);
-    expect('kukuri:topic:demo::public' in state.pendingTimelineNextCursorByKey).toBe(false);
+    expect('kukuri:topic:general::public' in state.pendingTimelineSnapshotsByKey).toBe(false);
+    expect('kukuri:topic:general::public' in state.pendingTimelineCountsByKey).toBe(false);
+    expect('kukuri:topic:general::public' in state.pendingTimelineNextCursorByKey).toBe(false);
 
     view.unmount();
   });
@@ -498,23 +498,23 @@ describe('useDesktopShellData characterization', () => {
     await flushAsyncWork();
 
     // 前提: 初回 refresh で 1 ページ目と next_cursor が入っている。
-    expect(harness.store.getState().timelineNextCursorByKey['kukuri:topic:demo::public']).toEqual(
+    expect(harness.store.getState().timelineNextCursorByKey['kukuri:topic:general::public']).toEqual(
       { created_at: 10, object_id: 'post-page-1' }
     );
 
     let loadMorePromise: Promise<void> | undefined;
     act(() => {
-      loadMorePromise = view.result.current.loadMoreTimeline('kukuri:topic:demo');
+      loadMorePromise = view.result.current.loadMoreTimeline('kukuri:topic:general');
     });
 
     // 取得中は loading フラグが true になる。
     expect(
-      harness.store.getState().timelineLoadingMoreByKey['kukuri:topic:demo::public']
+      harness.store.getState().timelineLoadingMoreByKey['kukuri:topic:general::public']
     ).toBe(true);
     // cursor 付きで同じ scope に対して追加ページを要求する。
     expect(listTimeline).toHaveBeenCalledTimes(2);
     expect(listTimeline).toHaveBeenLastCalledWith(
-      'kukuri:topic:demo',
+      'kukuri:topic:general',
       { created_at: 10, object_id: 'post-page-1' },
       20,
       { kind: 'public' }
@@ -528,18 +528,18 @@ describe('useDesktopShellData characterization', () => {
     const state = harness.store.getState();
     // 2 ページ目は末尾へ追記される。
     expect(
-      state.timelinesByKey['kukuri:topic:demo::public']?.map((post) => post.object_id)
+      state.timelinesByKey['kukuri:topic:general::public']?.map((post) => post.object_id)
     ).toEqual(['post-page-1', 'post-page-2']);
-    expect(state.timelineNextCursorByKey['kukuri:topic:demo::public']).toBeNull();
-    expect(state.timelineLoadingMoreByKey['kukuri:topic:demo::public']).toBe(false);
+    expect(state.timelineNextCursorByKey['kukuri:topic:general::public']).toBeNull();
+    expect(state.timelineLoadingMoreByKey['kukuri:topic:general::public']).toBe(false);
 
     // cursor が無い(null)場合は api を呼ばない no-op。
     await act(async () => {
-      await view.result.current.loadMoreTimeline('kukuri:topic:demo');
+      await view.result.current.loadMoreTimeline('kukuri:topic:general');
     });
     expect(listTimeline).toHaveBeenCalledTimes(2);
     expect(
-      harness.store.getState().timelineLoadingMoreByKey['kukuri:topic:demo::public']
+      harness.store.getState().timelineLoadingMoreByKey['kukuri:topic:general::public']
     ).toBe(false);
 
     view.unmount();
@@ -566,11 +566,11 @@ describe('useDesktopShellData characterization', () => {
     harness.store.getState().patchState({
       workspaceState: openTransientColumn(harness.store.getState().workspaceState, {
         id: columnIdentityId('notifications', {
-          topicId: 'kukuri:topic:demo',
+          topicId: 'kukuri:topic:general',
           channelId: null,
         }),
         kind: 'notifications',
-        scope: { topicId: 'kukuri:topic:demo', channelId: null },
+        scope: { topicId: 'kukuri:topic:general', channelId: null },
         pinned: false,
       }),
     });
@@ -597,7 +597,7 @@ describe('useDesktopShellData characterization', () => {
     // loadTopics 経由(runLoadTopics の notifications 分岐)でも一覧を再取得するが、
     // 全件既読なら markAllNotificationsRead は追加で呼ばれない。
     await act(async () => {
-      await view.result.current.loadTopics(['kukuri:topic:demo'], 'kukuri:topic:demo', null);
+      await view.result.current.loadTopics(['kukuri:topic:general'], 'kukuri:topic:general', null);
     });
     expect(listNotifications).toHaveBeenCalledTimes(2);
     expect(markAllNotificationsRead).toHaveBeenCalledTimes(1);

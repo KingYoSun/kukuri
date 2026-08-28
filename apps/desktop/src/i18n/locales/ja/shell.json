@@ -15,7 +15,7 @@
     "close": "ナビゲーションを閉じる",
     "notificationsButton": "通知",
     "open": "ナビゲーションを開く",
-    "placeholder": "demo",
+    "placeholder": "general",
     "primaryNavigation": "メインナビゲーション",
     "connectTopic": "{{topic}} を Gossip ネットワークに接続",
     "disconnectTopic": "{{topic}} を Gossip ネットワークから切断",

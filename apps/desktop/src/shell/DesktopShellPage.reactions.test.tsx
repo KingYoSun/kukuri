@@ -44,8 +44,8 @@ test('desktop shell can create a simple repost from timeline', async () => {
 
   await waitFor(() => {
     expect(createRepostSpy).toHaveBeenCalledWith(
-      'kukuri:topic:demo',
-      'kukuri:topic:demo',
+      'kukuri:topic:general',
+      'kukuri:topic:general',
       expect.any(String),
       null
     );
@@ -91,8 +91,8 @@ test('desktop shell can create a quote repost from the Column composer', async (
 
   await waitFor(() => {
     expect(createRepostSpy).toHaveBeenCalledWith(
-      'kukuri:topic:demo',
-      'kukuri:topic:demo',
+      'kukuri:topic:general',
+      'kukuri:topic:general',
       expect.any(String),
       'quoted take'
     );
@@ -178,7 +178,7 @@ test('visible custom reactions auto-fetch media before save, and saved reactions
   };
   const api = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': [
+      'kukuri:topic:general': [
         {
           object_id: 'post-remote-reaction',
           envelope_id: 'envelope-post-remote-reaction',
@@ -198,8 +198,8 @@ test('visible custom reactions auto-fetch media before save, and saved reactions
           root_id: 'post-remote-reaction',
           channel_id: null,
           audience_label: 'Public',
-          published_topic_id: 'kukuri:topic:demo',
-          origin_topic_id: 'kukuri:topic:demo',
+          published_topic_id: 'kukuri:topic:general',
+          origin_topic_id: 'kukuri:topic:general',
           reaction_summary: [
             {
               reaction_key_kind: 'custom_asset',

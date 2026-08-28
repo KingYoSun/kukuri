@@ -76,7 +76,7 @@ test('browser mock shell can run profile, private channel, live, and game flows'
     .fill('invite-token');
   await joinDialog.getByRole('button', { name: 'Join' }).click();
   await expect(page).toHaveURL(
-    /#\/timeline\?topic=kukuri%3Atopic%3Ademo&channel=channel-imported/
+    /#\/timeline\?topic=kukuri%3Atopic%3Ageneral&channel=channel-imported/
   );
   await page.keyboard.press('Escape');
 

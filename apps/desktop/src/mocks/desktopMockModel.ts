@@ -71,7 +71,7 @@ export function parseMockChannelAccessTokenPreview(
     if (parsed.envelope.kind === 'channel-invite') {
       return {
         kind: 'invite',
-        topic_id: String(content.topic_id ?? 'kukuri:topic:demo'),
+        topic_id: String(content.topic_id ?? 'kukuri:topic:general'),
         channel_id: String(content.channel_id ?? 'channel-imported'),
         channel_label: String(content.channel_label ?? 'Imported'),
         owner_pubkey: String(content.owner_pubkey ?? localAuthorPubkey),
@@ -84,7 +84,7 @@ export function parseMockChannelAccessTokenPreview(
       const ownerPubkey = String(content.owner_pubkey ?? localAuthorPubkey);
       return {
         kind: 'grant',
-        topic_id: String(content.topic_id ?? 'kukuri:topic:demo'),
+        topic_id: String(content.topic_id ?? 'kukuri:topic:general'),
         channel_id: String(content.channel_id ?? 'channel-friends'),
         channel_label: String(content.channel_label ?? 'Friends'),
         owner_pubkey: ownerPubkey,
@@ -96,7 +96,7 @@ export function parseMockChannelAccessTokenPreview(
     if (parsed.envelope.kind === 'channel-share') {
       return {
         kind: 'share',
-        topic_id: String(content.topic_id ?? 'kukuri:topic:demo'),
+        topic_id: String(content.topic_id ?? 'kukuri:topic:general'),
         channel_id: String(content.channel_id ?? 'channel-friends-plus'),
         channel_label: String(content.channel_label ?? 'Friends+'),
         owner_pubkey: String(content.owner_pubkey ?? localAuthorPubkey),
@@ -111,7 +111,7 @@ export function parseMockChannelAccessTokenPreview(
   if (token.startsWith('grant:')) {
     return {
       kind: 'grant',
-      topic_id: 'kukuri:topic:demo',
+      topic_id: 'kukuri:topic:general',
       channel_id: 'channel-friends',
       channel_label: 'Friends',
       owner_pubkey: localAuthorPubkey,
@@ -123,7 +123,7 @@ export function parseMockChannelAccessTokenPreview(
   if (token.startsWith('share:')) {
     return {
       kind: 'share',
-      topic_id: 'kukuri:topic:demo',
+      topic_id: 'kukuri:topic:general',
       channel_id: 'channel-friends-plus',
       channel_label: 'Friends+',
       owner_pubkey: localAuthorPubkey,
@@ -135,7 +135,7 @@ export function parseMockChannelAccessTokenPreview(
 
   const invitePreview = options.invitePreview ?? {
     channel_id: 'channel-imported',
-    topic_id: 'kukuri:topic:demo',
+    topic_id: 'kukuri:topic:general',
     channel_label: 'Imported',
     inviter_pubkey: localAuthorPubkey,
     owner_pubkey: localAuthorPubkey,

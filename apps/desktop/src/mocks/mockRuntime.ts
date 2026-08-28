@@ -81,10 +81,9 @@ export interface MockRuntime {
 export function createMockRuntime(options?: DesktopMockApiOptions): MockRuntime {
   const assistPeerIds = options?.assistPeerIds ?? [];
   const starterTopics = [
-    'kukuri:topic:demo',
-    'kukuri:topic:iroh',
-    'kukuri:topic:nostr',
-    'kukuri:topic:operators',
+    'kukuri:topic:general',
+    'kukuri:topic:dev',
+    'kukuri:topic:test',
   ];
   const effectivePeerIds = Array.from(new Set(['peer-a', ...assistPeerIds]));
   const postsByTopic: Record<string, TimelineView['items']> = Object.fromEntries(
@@ -178,10 +177,10 @@ export function createMockRuntime(options?: DesktopMockApiOptions): MockRuntime 
       active_path: 'direct_p2p',
       rendezvous_peer_ids: [],
       fallback_peer_ids: [],
-      last_received_at: topic === 'kukuri:topic:demo' ? 1 : null,
-      last_docs_activity_at: topic === 'kukuri:topic:demo' ? 1 : null,
+      last_received_at: topic === 'kukuri:topic:general' ? 1 : null,
+      last_docs_activity_at: topic === 'kukuri:topic:general' ? 1 : null,
       status_detail: 'Connected to all configured peers for this topic',
-      last_error: topic === 'kukuri:topic:demo' ? options?.topicLastError ?? null : null,
+      last_error: topic === 'kukuri:topic:general' ? options?.topicLastError ?? null : null,
     })),
     local_author_pubkey: 'f'.repeat(64),
     discovery: {

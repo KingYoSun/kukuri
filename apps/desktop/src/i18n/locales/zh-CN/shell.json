@@ -15,7 +15,7 @@
     "close": "关闭导航",
     "notificationsButton": "通知",
     "open": "打开导航",
-    "placeholder": "demo",
+    "placeholder": "general",
     "primaryNavigation": "主导航",
     "connectTopic": "将 {{topic}} 连接到 Gossip 网络",
     "disconnectTopic": "将 {{topic}} 从 Gossip 网络断开",

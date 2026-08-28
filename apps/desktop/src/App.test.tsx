@@ -35,7 +35,7 @@ test('desktop app bootstraps the shell with the default timeline workspace', asy
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
   });
   const timelineColumn = screen.getByRole('region', { name: /^Timeline Column/ });
-  expect(timelineColumn).toHaveTextContent('demo');
+  expect(timelineColumn).toHaveTextContent('general');
   expect(within(timelineColumn).getByRole('button', { name: /^Publish to / })).toBeInTheDocument();
   expect(screen.getByTestId('control-center-trigger')).toBeInTheDocument();
   expect(window.localStorage.getItem(DESKTOP_THEME_STORAGE_KEY)).toBe('dark');

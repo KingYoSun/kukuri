@@ -262,13 +262,13 @@ describe('useDesktopShellActions', () => {
   test('handleToggleBookmarkedPost bookmarks then removes the post through the api', async () => {
     const post = buildPost({
       object_id: 'bookmark-post-1',
-      origin_topic_id: 'kukuri:topic:demo',
+      origin_topic_id: 'kukuri:topic:general',
     });
     const bookmarkedView: BookmarkedPostView = {
       bookmarked_at: 1111,
       post: buildPost({
         object_id: 'bookmark-post-1',
-        origin_topic_id: 'kukuri:topic:demo',
+        origin_topic_id: 'kukuri:topic:general',
       }),
     };
     const bookmarkPost = vi.fn(async () => bookmarkedView);
@@ -283,7 +283,7 @@ describe('useDesktopShellActions', () => {
     });
 
     expect(bookmarkPost).toHaveBeenCalledTimes(1);
-    expect(bookmarkPost).toHaveBeenCalledWith('kukuri:topic:demo', 'bookmark-post-1');
+    expect(bookmarkPost).toHaveBeenCalledWith('kukuri:topic:general', 'bookmark-post-1');
     expect(removeBookmarkedPost).not.toHaveBeenCalled();
     expect(view.store.getState().bookmarkedPosts).toHaveLength(1);
     expect(view.store.getState().bookmarkedPosts[0]?.bookmarked_at).toBe(1111);
@@ -306,7 +306,7 @@ describe('useDesktopShellActions', () => {
   test('handleToggleReaction patches reaction state into timelines and refreshes recent reactions', async () => {
     const post = buildPost({
       object_id: 'reaction-post-1',
-      origin_topic_id: 'kukuri:topic:demo',
+      origin_topic_id: 'kukuri:topic:general',
     });
     const reactionState: ReactionStateView = {
       target_object_id: 'reaction-post-1',
@@ -345,7 +345,7 @@ describe('useDesktopShellActions', () => {
       preset: (current) => ({
         timelinesByKey: {
           ...current.timelinesByKey,
-          'kukuri:topic:demo::public': [post],
+          'kukuri:topic:general::public': [post],
         },
         error: 'previous error',
       }),
@@ -358,13 +358,13 @@ describe('useDesktopShellActions', () => {
     // channel_id 無しの post は public channel ref で toggle される
     expect(toggleReaction).toHaveBeenCalledTimes(1);
     expect(toggleReaction).toHaveBeenCalledWith(
-      'kukuri:topic:demo',
+      'kukuri:topic:general',
       'reaction-post-1',
       { kind: 'emoji', emoji: '👍' },
       { kind: 'public' }
     );
     const state = view.store.getState();
-    expect(state.timelinesByKey['kukuri:topic:demo::public'][0]?.reaction_summary).toEqual([
+    expect(state.timelinesByKey['kukuri:topic:general::public'][0]?.reaction_summary).toEqual([
       {
         reaction_key_kind: 'emoji',
         normalized_reaction_key: 'emoji:👍',
@@ -373,7 +373,7 @@ describe('useDesktopShellActions', () => {
         count: 1,
       },
     ]);
-    expect(state.timelinesByKey['kukuri:topic:demo::public'][0]?.my_reactions).toEqual([
+    expect(state.timelinesByKey['kukuri:topic:general::public'][0]?.my_reactions).toEqual([
       {
         reaction_key_kind: 'emoji',
         normalized_reaction_key: 'emoji:👍',
@@ -381,7 +381,7 @@ describe('useDesktopShellActions', () => {
         custom_asset: null,
       },
     ]);
-    expect(state.timelinesByKey['kukuri:topic:demo::public'][0]?.reaction_summary).toEqual([
+    expect(state.timelinesByKey['kukuri:topic:general::public'][0]?.reaction_summary).toEqual([
       {
         reaction_key_kind: 'emoji',
         normalized_reaction_key: 'emoji:👍',
@@ -418,11 +418,11 @@ describe('useDesktopShellActions', () => {
         // 選択し直した topic の channel 選択と scope は public にリセットされる
         timelineScopeByTopic: {
           ...current.timelineScopeByTopic,
-          'kukuri:topic:iroh': { kind: 'channel', channel_id: 'channel-x' },
+          'kukuri:topic:dev': { kind: 'channel', channel_id: 'channel-x' },
         },
         composeChannelByTopic: {
           ...current.composeChannelByTopic,
-          'kukuri:topic:iroh': { kind: 'private_channel', channel_id: 'channel-x' },
+          'kukuri:topic:dev': { kind: 'private_channel', channel_id: 'channel-x' },
         },
         shellChromeState: {
           ...current.shellChromeState,
@@ -431,14 +431,14 @@ describe('useDesktopShellActions', () => {
     });
 
     await act(async () => {
-      await view.result.current.handleSelectTopic('kukuri:topic:iroh');
+      await view.result.current.handleSelectTopic('kukuri:topic:dev');
     });
 
     const state = view.store.getState();
-    expect(activeWorkspaceScope(state.workspaceState).topicId).toBe('kukuri:topic:iroh');
+    expect(activeWorkspaceScope(state.workspaceState).topicId).toBe('kukuri:topic:dev');
     expect(activeWorkspaceScope(state.workspaceState).channelId).toBeNull();
-    expect(state.timelineScopeByTopic['kukuri:topic:iroh']).toEqual({ kind: 'public' });
-    expect(state.composeChannelByTopic['kukuri:topic:iroh']).toEqual({ kind: 'public' });
+    expect(state.timelineScopeByTopic['kukuri:topic:dev']).toEqual({ kind: 'public' });
+    expect(state.composeChannelByTopic['kukuri:topic:dev']).toEqual({ kind: 'public' });
     expect(primarySectionForColumn(activeWorkspaceColumn(state.workspaceState))).toBe('timeline');
     // clearThreadContext 相当のリセット
     expect(state.selectedThread).toBeNull();
@@ -449,15 +449,15 @@ describe('useDesktopShellActions', () => {
     expect(state.authorError).toBeNull();
     expect(view.mocks.syncRoute).toHaveBeenCalledTimes(1);
     expect(view.mocks.syncRoute).toHaveBeenCalledWith('replace', {
-      activeTopic: 'kukuri:topic:iroh',
+      activeTopic: 'kukuri:topic:dev',
       primarySection: 'timeline',
       timelineScope: { kind: 'public' },
       composeTarget: { kind: 'public' },
     });
     expect(view.mocks.loadTopics).toHaveBeenCalledTimes(1);
     expect(view.mocks.loadTopics).toHaveBeenCalledWith(
-      ['kukuri:topic:demo', 'kukuri:topic:iroh', 'kukuri:topic:nostr', 'kukuri:topic:operators'],
-      'kukuri:topic:iroh',
+      ['kukuri:topic:general', 'kukuri:topic:dev', 'kukuri:topic:test'],
+      'kukuri:topic:dev',
       null
     );
 
@@ -524,16 +524,16 @@ describe('useDesktopShellActions', () => {
     const createRepost = vi.fn(async () => 'repost-1');
     const source = buildPost({
       object_id: 'source-post-1',
-      published_topic_id: 'kukuri:topic:iroh',
-      origin_topic_id: 'kukuri:topic:iroh',
+      published_topic_id: 'kukuri:topic:dev',
+      origin_topic_id: 'kukuri:topic:dev',
     });
     const view = renderActionsHook({ api: { createRepost } });
 
     act(() => view.result.current.beginColumnQuoteRepost(source));
 
-    const scope = { topicId: 'kukuri:topic:iroh', channelId: null };
+    const scope = { topicId: 'kukuri:topic:dev', channelId: null };
     const target = {
-      columnId: 'column:timeline:kukuri%3Atopic%3Airoh:-:-',
+      columnId: 'column:timeline:kukuri%3Atopic%3Adev:-:-',
       action: 'post' as const,
       scope,
     };
@@ -548,8 +548,8 @@ describe('useDesktopShellActions', () => {
       await view.result.current.handleSubmitColumnDraft(target, publishFormEvent().event);
     });
     expect(createRepost).toHaveBeenCalledWith(
-      'kukuri:topic:iroh',
-      'kukuri:topic:iroh',
+      'kukuri:topic:dev',
+      'kukuri:topic:dev',
       'source-post-1',
       null
     );
@@ -566,15 +566,15 @@ describe('useDesktopShellActions', () => {
       local_error: 'offline',
       local_draft: {
         kind: 'repost',
-        topic: 'kukuri:topic:demo',
+        topic: 'kukuri:topic:general',
         content: 'quote me',
-        source_topic: 'kukuri:topic:iroh',
+        source_topic: 'kukuri:topic:dev',
         source_object_id: 'source-evicted-1',
         attachments: [],
       },
       repost_of: {
         source_object_id: 'source-evicted-1',
-        source_topic_id: 'kukuri:topic:iroh',
+        source_topic_id: 'kukuri:topic:dev',
         source_author_pubkey: AUTHOR_A_PUBKEY,
         source_author_name: 'source-author',
         source_object_kind: 'post',
@@ -590,9 +590,9 @@ describe('useDesktopShellActions', () => {
     act(() => view.result.current.handleRestoreLocalPost(failed));
 
     const target = {
-      columnId: 'column:timeline:kukuri%3Atopic%3Ademo:-:-',
+      columnId: 'column:timeline:kukuri%3Atopic%3Ageneral:-:-',
       action: 'post' as const,
-      scope: { topicId: 'kukuri:topic:demo', channelId: null },
+      scope: { topicId: 'kukuri:topic:general', channelId: null },
     };
     expect(view.store.getState().columnDraftsByKey[columnDraftKey(target)]).toMatchObject({
       content: 'quote me',
@@ -600,7 +600,7 @@ describe('useDesktopShellActions', () => {
       error: 'offline',
       repostTarget: {
         object_id: 'source-evicted-1',
-        published_topic_id: 'kukuri:topic:iroh',
+        published_topic_id: 'kukuri:topic:dev',
         author_name: 'source-author',
         content: 'source snapshot',
       },
@@ -610,8 +610,8 @@ describe('useDesktopShellActions', () => {
       await view.result.current.handleSubmitColumnDraft(target, publishFormEvent().event);
     });
     expect(createRepost).toHaveBeenCalledWith(
-      'kukuri:topic:demo',
-      'kukuri:topic:iroh',
+      'kukuri:topic:general',
+      'kukuri:topic:dev',
       'source-evicted-1',
       'quote me'
     );
@@ -627,7 +627,7 @@ describe('useDesktopShellActions', () => {
       local_error: 'offline',
       local_draft: {
         kind: 'post',
-        topic: 'kukuri:topic:demo',
+        topic: 'kukuri:topic:general',
         content: 'restore me',
         reply_to: 'parent-1',
         channel_ref: { kind: 'public' },
@@ -653,7 +653,7 @@ describe('useDesktopShellActions', () => {
       preset: (current) => ({
         timelinesByKey: {
           ...current.timelinesByKey,
-          'kukuri:topic:demo::public': [parent],
+          'kukuri:topic:general::public': [parent],
         },
       }),
     });
@@ -661,9 +661,9 @@ describe('useDesktopShellActions', () => {
     act(() => view.result.current.handleRestoreLocalPost(failed));
 
     const target = {
-      columnId: 'column:thread:kukuri%3Atopic%3Ademo:-:root-1',
+      columnId: 'column:thread:kukuri%3Atopic%3Ageneral:-:root-1',
       action: 'reply' as const,
-      scope: { topicId: 'kukuri:topic:demo', channelId: null },
+      scope: { topicId: 'kukuri:topic:general', channelId: null },
       threadId: 'root-1',
     };
     expect(view.store.getState().columnDraftsByKey[columnDraftKey(target)]).toMatchObject({

@@ -21,12 +21,11 @@ export const DEFAULT_ASYNC_PANEL_STATE: AsyncPanelState = {
   error: null,
 };
 
-export const DEFAULT_TOPIC = 'kukuri:topic:demo';
+export const DEFAULT_TOPIC = 'kukuri:topic:general';
 export const STARTER_TOPICS = [
   DEFAULT_TOPIC,
-  'kukuri:topic:iroh',
-  'kukuri:topic:nostr',
-  'kukuri:topic:operators',
+  'kukuri:topic:dev',
+  'kukuri:topic:test',
 ] as const;
 export const PUBLIC_CHANNEL_REF: ChannelRef = { kind: 'public' };
 export const PUBLIC_TIMELINE_SCOPE: TimelineScope = { kind: 'public' };

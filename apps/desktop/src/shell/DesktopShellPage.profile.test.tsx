@@ -41,7 +41,7 @@ test('profile overview aggregates public posts across topics and excludes privat
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
   await waitFor(() => {
     expect(window.location.hash).toMatch(
-      /^#\/timeline\?topic=kukuri%3Atopic%3Ademo&channel=channel-\d+$/
+      /^#\/timeline\?topic=kukuri%3Atopic%3Ageneral&channel=channel-\d+$/
     );
   });
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
@@ -59,10 +59,10 @@ test('profile overview aggregates public posts across topics and excludes privat
   let profileColumn = getActiveColumn('Profile');
   expect(within(profileColumn).getByText('demo public post')).toBeInTheDocument();
   expect(within(profileColumn).queryByText('demo private post')).not.toBeInTheDocument();
-  expect(screen.getAllByText('demo').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('general').length).toBeGreaterThan(0);
 
   const controlCenter = await openControlCenter(user);
-  await user.type(within(controlCenter).getByPlaceholderText('demo'), 'kukuri:topic:second');
+  await user.type(within(controlCenter).getByPlaceholderText('general'), 'kukuri:topic:second');
   await user.click(within(controlCenter).getByRole('button', { name: 'Add' }));
   await waitFor(() => {
     expectActiveTopic('kukuri:topic:second');
@@ -138,7 +138,7 @@ test('author detail shows profile topic posts and can open an untracked origin t
     <App
       api={createDesktopMockApi({
         seedPosts: {
-          'kukuri:topic:demo': [
+          'kukuri:topic:general': [
             {
               object_id: 'post-author-demo',
               envelope_id: 'envelope-author-demo',
@@ -231,7 +231,7 @@ test('local profile editor saves profile draft from primary navigation and setti
   await waitFor(() => {
     expect(screen.getByText('Local Author')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Edit Profile' })).toBeInTheDocument();
-    expect(window.location.hash).toBe('#/profile?topic=kukuri%3Atopic%3Ademo');
+    expect(window.location.hash).toBe('#/profile?topic=kukuri%3Atopic%3Ageneral');
   });
 
   const drawer = await openSettingsDrawer(user);

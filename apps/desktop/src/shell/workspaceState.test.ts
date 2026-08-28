@@ -54,7 +54,7 @@ describe('workspace state transitions', () => {
 
   it('starts with the pinned product overview Columns and keeps Timeline active', () => {
     const scope = {
-      topicId: 'kukuri:topic:demo',
+      topicId: 'kukuri:topic:general',
       channelId: null,
     };
     const state = createDefaultWorkspaceState({
@@ -104,27 +104,27 @@ describe('workspace state transitions', () => {
   it('builds stable identity from kind, scope, and entity', () => {
     expect(
       columnIdentityId('timeline', {
-        topicId: 'kukuri:topic:demo',
+        topicId: 'kukuri:topic:general',
         channelId: null,
       })
-    ).toBe('column:timeline:kukuri%3Atopic%3Ademo:-:-');
+    ).toBe('column:timeline:kukuri%3Atopic%3Ageneral:-:-');
     expect(
       columnIdentityId(
         'conversation',
-        { topicId: 'kukuri:topic:demo', channelId: 'friends/plus' },
+        { topicId: 'kukuri:topic:general', channelId: 'friends/plus' },
         'peer:alice'
       )
     ).toBe(
-      'column:conversation:kukuri%3Atopic%3Ademo:friends%2Fplus:peer%3Aalice'
+      'column:conversation:kukuri%3Atopic%3Ageneral:friends%2Fplus:peer%3Aalice'
     );
     expect(
       columnIdentityId('timeline', {
-        topicId: 'kukuri:topic:demo',
+        topicId: 'kukuri:topic:general',
         channelId: 'friends',
       })
     ).not.toBe(
       columnIdentityId('timeline', {
-        topicId: 'kukuri:topic:demo',
+        topicId: 'kukuri:topic:general',
         channelId: null,
       })
     );

@@ -43,7 +43,7 @@ function renderShell() {
   return render(
     <App
       api={createDesktopMockApi({
-        seedPosts: { 'kukuri:topic:demo': [seedPost] },
+        seedPosts: { 'kukuri:topic:general': [seedPost] },
       })}
     />
   );

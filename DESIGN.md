@@ -213,7 +213,7 @@ font-size は `--text-*` トークンに集約済み（#325）。kukuri は dark
 kukuri にはマーケティング的な First View / ブランドロックアップは無い。代わりに **シェル入口**と**空・読込・エラー状態**を整える。
 
 - 中央寄せ状態の参考: `.startup-error-screen`（`base.css`）= `min-height:100vh; display:grid; place-items:center` + `.panel` 風カード。
-- オンボーディングは starter topics（`kukuri:topic:demo` 他）を提示する初回体験を前提にする。
+- オンボーディングは starter topics（`kukuri:topic:general` 他）を提示する初回体験を前提にする。
 - 意味のある面には loading / empty / error / success 状態を必ず定義する（ガードレールは [ADR 0014](docs/adr/0014-uiux-dev-flow.md)）。
 
 ### 4.7 スタイリング層とファイル構成（WP-H8）

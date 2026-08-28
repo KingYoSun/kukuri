@@ -90,20 +90,20 @@ test('column actions replace the legacy global floating action button', async ()
   expect(screen.getByRole('button', { name: /^Publish to / })).toBeInTheDocument();
 
   initial.unmount();
-  const live = renderAtHash('#/live?topic=kukuri%3Atopic%3Ademo');
+  const live = renderAtHash('#/live?topic=kukuri%3Atopic%3Ageneral');
   expect(screen.getByRole('button', { name: 'Start Live' })).toBeInTheDocument();
 
   live.unmount();
-  const game = renderAtHash('#/game?topic=kukuri%3Atopic%3Ademo');
+  const game = renderAtHash('#/game?topic=kukuri%3Atopic%3Ageneral');
   expect(screen.getByRole('button', { name: 'Create metaverse room' })).toBeInTheDocument();
 
   game.unmount();
-  const timeline = renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo');
+  const timeline = renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ageneral');
   await selectTimelineView(user, 'Bookmarks');
   expect(screen.queryByTestId('shell-fab')).not.toBeInTheDocument();
 
   timeline.unmount();
-  renderAtHash('#/profile?topic=kukuri%3Atopic%3Ademo');
+  renderAtHash('#/profile?topic=kukuri%3Atopic%3Ageneral');
   expect(screen.queryByTestId('shell-fab')).not.toBeInTheDocument();
 });
 
@@ -134,7 +134,7 @@ test('channel manager opens as a modal from Control Center', async () => {
 
 test('settings hash route opens the drawer and keeps the selected section in sync', async () => {
   const user = userEvent.setup();
-  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo&settings=discovery');
+  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ageneral&settings=discovery');
 
   const drawer = await screen.findByRole('dialog', { name: 'Settings' });
   await waitFor(() => {
@@ -172,7 +172,7 @@ test('desktop shell restores a persisted light theme on boot', async () => {
 
 test('appearance settings deep link updates the document theme and storage immediately', async () => {
   const user = userEvent.setup();
-  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo&settings=appearance');
+  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ageneral&settings=appearance');
 
   const drawer = await screen.findByRole('dialog', { name: 'Settings' });
   await waitFor(() => {
@@ -229,7 +229,7 @@ test('desktop shell surfaces docs-assisted topic recovery in diagnostics', async
   render(<App api={createDesktopMockApi({ assistPeerIds: ['relay-peer'] })} />);
 
   const controlCenter = await openControlCenter(user);
-  await user.type(within(controlCenter).getByPlaceholderText('demo'), 'kukuri:topic:relay');
+  await user.type(within(controlCenter).getByPlaceholderText('general'), 'kukuri:topic:relay');
   await user.click(within(controlCenter).getByRole('button', { name: 'Add' }));
 
   const drawer = await openSettingsSection(user, 'discovery');
@@ -266,7 +266,7 @@ test('desktop shell renders diagnostics error reasons', async () => {
     ).toBeInTheDocument();
   });
 
-  const topicHeading = await within(drawer).findByRole('heading', { name: 'demo' });
+  const topicHeading = await within(drawer).findByRole('heading', { name: 'general' });
   const topicSection = closestSection(topicHeading);
   expect(within(topicSection).getByText('timed out waiting for gossip topic join')).toBeInTheDocument();
 });

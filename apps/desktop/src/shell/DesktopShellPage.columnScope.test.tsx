@@ -20,7 +20,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const DEMO_TOPIC_HASH = '#/timeline?topic=kukuri%3Atopic%3Ademo';
+const DEMO_TOPIC_HASH = '#/timeline?topic=kukuri%3Atopic%3Ageneral';
 const CHANNEL_HASH = `${DEMO_TOPIC_HASH}&channel=channel-1`;
 
 function findTimelineColumnByScope(scopeLabel: string) {
@@ -46,23 +46,23 @@ async function setUpPublicAndPrivateColumns(user: ReturnType<typeof userEvent.se
   // private channel 側に投稿を 1 件入れる。
   await publishPost(user, 'channel post');
   await waitFor(() => {
-    expect(within(findTimelineColumnByScope('core · demo')).getByText('channel post')).toBeInTheDocument();
+    expect(within(findTimelineColumnByScope('core · general')).getByText('channel post')).toBeInTheDocument();
   });
 
   // Control Center の topic 行で「Public」を押して global 選択を public に戻す。
   const controlCenter = await openControlCenter(user);
-  const demoTopicRow = within(controlCenter).getByRole('button', { name: 'demo' }).closest('li');
-  if (!(demoTopicRow instanceof HTMLElement)) {
-    throw new Error('demo topic row not found');
+  const generalTopicRow = within(controlCenter).getByRole('button', { name: 'general' }).closest('li');
+  if (!(generalTopicRow instanceof HTMLElement)) {
+    throw new Error('general topic row not found');
   }
-  await user.click(within(demoTopicRow).getByRole('button', { name: /^Public/ }));
+  await user.click(within(generalTopicRow).getByRole('button', { name: /^Public/ }));
   await waitFor(() => {
     expect(window.location.hash).toBe(DEMO_TOPIC_HASH);
   });
   await waitFor(() => {
-    expect(findTimelineColumnByScope('Public · demo')).toHaveAttribute('aria-current', 'true');
+    expect(findTimelineColumnByScope('Public · general')).toHaveAttribute('aria-current', 'true');
   });
-  const privateColumn = findTimelineColumnByScope('core · demo');
+  const privateColumn = findTimelineColumnByScope('core · general');
   expect(privateColumn).not.toHaveAttribute('aria-current');
   return privateColumn;
 }
@@ -72,7 +72,7 @@ async function submitThreadReply(
   threadColumn: HTMLElement,
   content: string
 ) {
-  await user.click(within(threadColumn).getByRole('button', { name: /^Reply to Thread · core · demo/ }));
+  await user.click(within(threadColumn).getByRole('button', { name: /^Reply to Thread · core · general/ }));
   const replyInput = await within(threadColumn).findByPlaceholderText('Write a reply');
   await user.type(replyInput, content);
   const composer = replyInput.closest('form');
@@ -99,15 +99,15 @@ test('non-active な private Column の投稿本文クリックで開いた Thre
 
   const threadColumn = await screen.findByRole('region', { name: /^Thread Column,/ });
   await waitFor(() => {
-    expect(threadColumn.querySelector('.shell-column-header')).toHaveTextContent('Thread · core · demo');
+    expect(threadColumn.querySelector('.shell-column-header')).toHaveTextContent('Thread · core · general');
     expect(window.location.hash).toContain('channel=channel-1');
   });
-  expect(threadColumn.querySelector('.shell-column-header')).not.toHaveTextContent('Thread · Public · demo');
+  expect(threadColumn.querySelector('.shell-column-header')).not.toHaveTextContent('Thread · Public · general');
 
   await submitThreadReply(user, threadColumn, 'private reply');
   await waitFor(() => {
     expect(createPost).toHaveBeenLastCalledWith(
-      'kukuri:topic:demo',
+      'kukuri:topic:general',
       'private reply',
       expect.any(String),
       expect.any(Array),
@@ -130,7 +130,7 @@ test('non-active な private Column の Reply ボタンで開いた Thread も p
 
   const threadColumn = await screen.findByRole('region', { name: /^Thread Column,/ });
   await waitFor(() => {
-    expect(threadColumn.querySelector('.shell-column-header')).toHaveTextContent('Thread · core · demo');
+    expect(threadColumn.querySelector('.shell-column-header')).toHaveTextContent('Thread · core · general');
     expect(window.location.hash).toContain('channel=channel-1');
   });
 
@@ -143,7 +143,7 @@ test('non-active な private Column の Reply ボタンで開いた Thread も p
   await user.click(within(composer).getByRole('button', { name: 'Reply' }));
   await waitFor(() => {
     expect(createPost).toHaveBeenLastCalledWith(
-      'kukuri:topic:demo',
+      'kukuri:topic:general',
       'private reply via button',
       expect.any(String),
       expect.any(Array),

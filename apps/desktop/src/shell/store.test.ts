@@ -17,7 +17,7 @@ test('shell store seeds settings drawer state from the initial hash route', () =
   window.history.replaceState(
     null,
     '',
-    '/#/timeline?topic=kukuri%3Atopic%3Ademo&settings=appearance'
+    '/#/timeline?topic=kukuri%3Atopic%3Ageneral&settings=appearance'
   );
 
   const state = createInitialShellState();

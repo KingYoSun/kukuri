@@ -286,7 +286,7 @@ test('timeline image post renders actual preview when object-url payload is avai
   installObjectUrlMocks();
   const api = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': [
+      'kukuri:topic:general': [
         buildImagePost({
           content: 'caption ready',
           content_status: 'Available',
@@ -319,7 +319,7 @@ test('video card renders object-url playback source when manifest payload is ava
   installObjectUrlMocks();
   const api = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': [
+      'kukuri:topic:general': [
         buildVideoPost({
           attachments: [
             {
@@ -368,7 +368,7 @@ test('video card falls back to poster preview when playback is unsupported on th
   installObjectUrlMocks();
   const api = createDesktopMockApi({
     seedPosts: {
-      'kukuri:topic:demo': [
+      'kukuri:topic:general': [
         buildVideoPost({
           attachments: [
             {
@@ -428,7 +428,7 @@ test('timeline image post switches to ready state when attachment becomes availa
     <App
       api={createDesktopMockApi({
         seedPosts: {
-          'kukuri:topic:demo': [missingPost],
+          'kukuri:topic:general': [missingPost],
         },
       })}
     />
@@ -442,7 +442,7 @@ test('timeline image post switches to ready state when attachment becomes availa
     <App
       api={createDesktopMockApi({
         seedPosts: {
-          'kukuri:topic:demo': [
+          'kukuri:topic:general': [
             buildImagePost({
               content: 'caption ready',
               content_status: 'Available' satisfies BlobViewStatus,

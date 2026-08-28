@@ -83,7 +83,7 @@ test('browser mock starts with the accessible product overview Columns without l
   page,
 }) => {
   await page.setViewportSize({ width: 1400, height: 980 });
-  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
 
   const layout = page.locator('.shell-phase1');
   const timelineColumn = page.getByRole('region', { name: /Timeline Column/ });
@@ -174,7 +174,7 @@ for (const viewport of [
     page,
   }) => {
     await page.setViewportSize(viewport);
-    await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
+    await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
 
     const timelineColumn = page.getByRole('region', { name: /Timeline Column/ });
     const footer = timelineColumn.locator('.shell-column-footer');
@@ -229,10 +229,10 @@ test('browser mock shell can switch topics, publish, open thread, open author, a
   await page.setViewportSize({ width: 1400, height: 980 });
   await page.goto('/');
 
-  await expectActiveTopic(page, 'kukuri:topic:demo');
+  await expectActiveTopic(page, 'kukuri:topic:general');
 
   const controlCenter = await openControlCenter(page);
-  await controlCenter.getByPlaceholder('demo').fill('kukuri:topic:browser');
+  await controlCenter.getByPlaceholder('general').fill('kukuri:topic:browser');
   await controlCenter.getByRole('button', { name: 'Add', exact: true }).click();
   await controlCenter.getByRole('button', { name: /^browser$/ }).click();
   await expectActiveTopic(page, 'kukuri:topic:browser');
@@ -330,7 +330,7 @@ test('desktop Columns use kind spans, keyboard reorder, drag reorder, and persis
   page,
 }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
-  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
 
   let controlCenter = await openControlCenter(page);
   await controlCenter.getByRole('button', { name: 'Add Live Column' }).click();
@@ -409,7 +409,7 @@ test('desktop Columns use kind spans, keyboard reorder, drag reorder, and persis
 
 test('named layouts save, restore, rename, survive reload, and delete', async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 980 });
-  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
 
   let controlCenter = await openControlCenter(page);
   await controlCenter.getByRole('textbox', { name: 'Layout name' }).fill('Research');
@@ -453,7 +453,7 @@ for (const mobileViewport of [
     page,
   }) => {
   await page.setViewportSize(mobileViewport);
-  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
 
   await openComposerDialog(page);
   await page.getByPlaceholder('Write a post').fill('mobile paging thread');
@@ -608,7 +608,7 @@ test('mobile restart restores text Draft and active Column focus without unsafe 
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
   await openComposerDialog(page);
   const composer = page.getByPlaceholder('Write a post');
   await composer.fill('restart-safe mobile Draft');
@@ -638,7 +638,7 @@ test('mobile restart restores text Draft and active Column focus without unsafe 
 // Issue #765 T4: hash を持たない cold start でも、保存 layout の active Column が復元される。
 test('cold start without a hash restores the persisted active Thread Column', async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 980 });
-  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo');
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
 
   // seed 済み投稿(reload 後も存在する)から Thread を開く。
   // 実行中に publish した投稿は browser mock のメモリにしか無く、reload 後は
@@ -773,7 +773,7 @@ test('browser mock connectivity settings keep long identifiers within the conten
   );
 
   await page.setViewportSize({ width: 1024, height: 870 });
-  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo&settings=connectivity');
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral&settings=connectivity');
 
   const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
   const scrollContainer = settingsDialog.locator('.shell-settings-content');
@@ -820,12 +820,12 @@ test('browser mock narrow shell keeps nav, context, and settings flows reachable
   await page.goto('/');
 
   let controlCenter = await openControlCenter(page);
-  await controlCenter.getByPlaceholder('demo').fill('kukuri:topic:narrow');
+  await controlCenter.getByPlaceholder('general').fill('kukuri:topic:narrow');
   await controlCenter.getByRole('button', { name: 'Add', exact: true }).click();
 
   controlCenter = await openControlCenter(page);
-  await controlCenter.getByRole('button', { name: /^demo$/ }).click();
-  await expectActiveTopic(page, 'kukuri:topic:demo');
+  await controlCenter.getByRole('button', { name: /^general$/ }).click();
+  await expectActiveTopic(page, 'kukuri:topic:general');
 
   await openComposerDialog(page);
   await page.getByPlaceholder('Write a post').fill('narrow browser mock');
@@ -863,7 +863,7 @@ test('browser mock narrow shell keeps nav, context, and settings flows reachable
   expect(settingsNoOverflow).toBeTruthy();
 
   await page.keyboard.press('Escape');
-  await page.goto('/#/profile?topic=kukuri%3Atopic%3Ademo');
+  await page.goto('/#/profile?topic=kukuri%3Atopic%3Ageneral');
   await expect(page.getByRole('button', { name: 'Edit Profile' })).toBeVisible();
 
   const noOverflow = await page.evaluate(

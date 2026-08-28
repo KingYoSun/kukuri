@@ -165,7 +165,7 @@ describe('workspace layout persistence', () => {
         {
           id: 'timeline-core',
           kind: 'timeline' as const,
-          scope: { topicId: 'kukuri:topic:demo', channelId: 'channel-1' },
+          scope: { topicId: 'kukuri:topic:general', channelId: 'channel-1' },
           pinned: false,
           preferredDesktopSpan: 1 as const,
         },

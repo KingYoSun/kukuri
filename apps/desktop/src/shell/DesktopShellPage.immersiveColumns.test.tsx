@@ -12,10 +12,10 @@ import { createDeferred, renderAtHash, setViewportWidth } from './DesktopShellPa
 // Timeline を親とする未固定 Thread Column を置換しないこと、および game rooms 未ロード時に
 // metaverse 残骸 Column が発生しないことの回帰テスト。
 
-const DEMO_TOPIC = 'kukuri:topic:demo';
-const TIMELINE_HASH = '#/timeline?topic=kukuri%3Atopic%3Ademo';
-const GAME_ROOM_HASH = '#/game?topic=kukuri%3Atopic%3Ademo&roomId=room-demo';
-const LIVE_SESSION_HASH = '#/live?topic=kukuri%3Atopic%3Ademo&sessionId=session-demo';
+const DEMO_TOPIC = 'kukuri:topic:general';
+const TIMELINE_HASH = '#/timeline?topic=kukuri%3Atopic%3Ageneral';
+const GAME_ROOM_HASH = '#/game?topic=kukuri%3Atopic%3Ageneral&roomId=room-demo';
+const LIVE_SESSION_HASH = '#/live?topic=kukuri%3Atopic%3Ageneral&sessionId=session-demo';
 const IMMERSIVE_KINDS: ColumnState['kind'][] = ['stream', 'game', 'metaverse'];
 
 function buildPost(objectId: string, content: string): PostView {

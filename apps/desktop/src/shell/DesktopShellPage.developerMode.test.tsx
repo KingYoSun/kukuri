@@ -36,7 +36,7 @@ test('developer mode off hides Live/Game tabs and shell status badges by default
 });
 
 test('developer mode off falls back to timeline for live and game hash routes', async () => {
-  renderAtHash('#/live?topic=kukuri%3Atopic%3Ademo');
+  renderAtHash('#/live?topic=kukuri%3Atopic%3Ageneral');
 
   await waitFor(() => {
     expect(window.location.hash).toMatch(/^#\/timeline/);

@@ -13,7 +13,7 @@
 - `auto_approve=true` の node は起動時に `authenticate -> consent accept -> metadata refresh` を自動で進めます。
 - token は期限 5 分前から proactive refresh し、`401` は `re-authenticate -> retry`、`403 CONSENT_REQUIRED` は `auto_approve=true` node だけ `accept -> retry` します。
 - desktop settings は textarea editor をやめ、Community Node の単一 list 上で `base URL`, `auto_approve`, diagnostics, troubleshooting actions を扱います。
-- starter topic は `kukuri:topic:demo`, `kukuri:topic:iroh`, `kukuri:topic:nostr`, `kukuri:topic:operators` を default とします。
+- starter topic は `kukuri:topic:general`, `kukuri:topic:dev`, `kukuri:topic:test` を default とします（#805 で `demo / iroh / nostr / operators` から変更）。
 - 保存済みlayoutがないfresh installでは、`demo Timeline -> 自分のProfile -> Explore -> Notifications -> Messages`のpin済みColumnを表示し、Timelineをactiveにします。既存layoutは補完・移行しません。
 
 ## Preview Surface
