@@ -1,4 +1,4 @@
-# ADR-0039: Dome prop、layout commit、manifest/asset保持
+# ADR-0040: Dome prop、layout commit、manifest/asset保持
 
 - Status: Accepted
 - Date: 2026-08-28
