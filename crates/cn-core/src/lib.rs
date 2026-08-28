@@ -41,6 +41,7 @@ mod safety_appeals;
 mod safety_events;
 mod safety_runtime;
 mod scan_verdicts;
+mod tester_feedback;
 #[cfg(test)]
 mod tests;
 mod transmission_preventions;
@@ -157,6 +158,10 @@ pub use safety_events::{
 };
 pub use safety_runtime::{PgSafetyArtifactStore, resolve_safety_providers};
 pub use scan_verdicts::{StoredScanVerdict, get_scan_verdict, upsert_scan_verdict};
+pub use tester_feedback::{
+    NewTesterFeedback, TesterFeedback, get_tester_feedback, insert_tester_feedback_with_retention,
+    list_tester_feedback,
+};
 pub use transmission_preventions::{
     NewTransmissionPrevention, TransmissionPrevention, TransmissionPreventionBasis,
     TransmissionPreventionCapability, TransmissionPreventionMutation,

@@ -83,6 +83,7 @@ pub(crate) enum SupportEndpointOperation {
     RefreshBootstrapPeer,
     RecordRendezvousHeartbeat,
     StoreReport,
+    StoreTesterFeedback,
 }
 
 #[derive(Debug, thiserror::Error)]

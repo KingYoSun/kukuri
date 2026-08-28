@@ -39,6 +39,7 @@ mod requests_support;
 mod scheduler_support;
 mod session_runtime_support;
 mod session_state_support;
+mod tester_feedback_support;
 mod token_storage_support;
 mod trust_relation_support;
 
@@ -51,9 +52,9 @@ pub use indexing_request_support::{
 };
 pub(crate) use invite_storage_support::*;
 pub use kukuri_cn_protocol::{
-    CommunityNodeReportAppeal, IndexEntryView, IndexQueryResponse, IndexScopeKind,
-    RelationNeighborsResponse, RelationOptoutResponse, RelationReadResponse,
-    SubmitIndexingRequestResponse, TrustUserReadResponse,
+    CommunityNodeReportAppeal, CommunityNodeTesterFeedbackResponse, IndexEntryView,
+    IndexQueryResponse, IndexScopeKind, RelationNeighborsResponse, RelationOptoutResponse,
+    RelationReadResponse, SubmitIndexingRequestResponse, TrustUserReadResponse,
 };
 pub use manifest_support::{
     CommunityNodeAuthorityScope, CommunityNodeCapabilityScope, CommunityNodeManifest,
@@ -62,6 +63,9 @@ pub use manifest_support::{
 pub use report_routing_support::{
     CommunityNodeReportError, SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
     SubmitCommunityNodeReportStatus,
+};
+pub use tester_feedback_support::{
+    CommunityNodeTesterFeedbackError, CommunityNodeTesterFeedbackSubmission,
 };
 pub(crate) use token_storage_support::*;
 pub use trust_relation_support::{

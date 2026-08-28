@@ -40,6 +40,11 @@ enum Command {
         #[command(subcommand)]
         action: ReportsAction,
     },
+    /// 受信したテスターフィードバック（#802）を確認する。
+    TesterFeedback {
+        #[command(subcommand)]
+        action: TesterFeedbackAction,
+    },
     /// 権利侵害申出を確認し、状態遷移または node-local 措置を実行する（#760）。
     RightsRequests {
         #[command(subcommand)]
@@ -514,6 +519,20 @@ impl From<AdmissionModeArg> for AdmissionMode {
 
 #[derive(Debug, Subcommand)]
 enum ReportsAction {
+    List {
+        #[arg(long, default_value_t = 50)]
+        limit: i64,
+        #[arg(long, default_value_t = 0)]
+        offset: i64,
+    },
+    Show {
+        #[arg(long)]
+        id: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum TesterFeedbackAction {
     List {
         #[arg(long, default_value_t = 50)]
         limit: i64,

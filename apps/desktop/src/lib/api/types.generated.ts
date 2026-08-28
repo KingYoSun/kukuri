@@ -316,6 +316,28 @@ export type CommunityNodeReportAppeal = { risk_signal_id: string, };
 
 export type CommunityNodeReportError = { code: string, message: string, status?: number | null, };
 
+export type CommunityNodeTesterFeedbackSubmission = { base_url: string, 
+/**
+ * やろうとしたこと。
+ */
+what_attempted: string, 
+/**
+ * 何が起きたか。
+ */
+what_happened: string, 
+/**
+ * 何が変だと思ったか。
+ */
+what_seemed_wrong: string, };
+
+export type CommunityNodeTesterFeedbackResponse = { 
+/**
+ * 保存されたレポートの ID。
+ */
+reference_id?: string | null, };
+
+export type CommunityNodeTesterFeedbackError = { code: string, message: string, status?: number | null, retry_after_seconds?: number | null, };
+
 export type TrustComponentKind = "absolute" | "relative";
 
 export type SafetyCategory = "csam" | "cse" | "grooming" | "nsfw" | "spam" | "malware" | "phishing" | "provider_test";

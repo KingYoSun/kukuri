@@ -20,6 +20,7 @@ pub mod rendezvous;
 pub mod report;
 pub mod requests;
 pub mod rights_request;
+pub mod tester_feedback;
 pub mod trust_relation;
 
 pub use auth::*;
@@ -34,4 +35,5 @@ pub use rendezvous::*;
 pub use report::*;
 pub use requests::*;
 pub use rights_request::*;
+pub use tester_feedback::*;
 pub use trust_relation::*;

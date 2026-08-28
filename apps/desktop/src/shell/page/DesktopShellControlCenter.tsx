@@ -16,6 +16,7 @@ import {
   Info,
   Menu,
   MessageCircle,
+  MessageSquarePlus,
   Pin,
   PinOff,
   Plus,
@@ -67,6 +68,7 @@ type DesktopShellControlCenterProps = TopicListProps & {
   onOpenChannelManager: () => void;
   onActivateColumn: (column: ColumnState) => void | Promise<void>;
   onOpenSettings: (section: SettingsSection) => void;
+  onOpenTesterFeedback: () => void;
 };
 
 const ADDABLE_COLUMN_KINDS: ColumnKind[] = [
@@ -96,6 +98,7 @@ export function DesktopShellControlCenter({
   onOpenChannelManager,
   onActivateColumn,
   onOpenSettings,
+  onOpenTesterFeedback,
   onSelectTopic,
   onSelectChannel,
   onOpenChannelSettings,
@@ -233,29 +236,44 @@ export function DesktopShellControlCenter({
 
   return (
     <>
-      <Button
-        ref={triggerRef}
-        className='shell-control-center-trigger'
-        variant='secondary'
-        type='button'
-        aria-label={triggerLabel}
-        aria-controls={CONTROL_CENTER_ID}
-        aria-expanded={workspaceState.controlCenterOpen}
-        data-status={statusKey}
-        data-testid='control-center-trigger'
-        onClick={() => setOpen(!workspaceState.controlCenterOpen)}
-      >
-        <Menu className='size-5' aria-hidden='true' />
-        <span>{t('shell:controlCenter.title')}</span>
-        <span className='shell-control-center-status-dot' aria-hidden='true' />
-        {notificationStatus.unread_count > 0 ? (
-          <Badge className='shell-control-center-trigger-badge' tone='accent'>
-            {notificationStatus.unread_count > 99
-              ? '99+'
-              : formatCount(notificationStatus.unread_count)}
-          </Badge>
-        ) : null}
-      </Button>
+      <div className='shell-control-cluster'>
+        <Button
+          ref={triggerRef}
+          className='shell-control-center-trigger'
+          variant='secondary'
+          type='button'
+          aria-label={triggerLabel}
+          aria-controls={CONTROL_CENTER_ID}
+          aria-expanded={workspaceState.controlCenterOpen}
+          data-status={statusKey}
+          data-testid='control-center-trigger'
+          onClick={() => setOpen(!workspaceState.controlCenterOpen)}
+        >
+          <Menu className='size-5' aria-hidden='true' />
+          <span>{t('shell:controlCenter.title')}</span>
+          <span className='shell-control-center-status-dot' aria-hidden='true' />
+          {notificationStatus.unread_count > 0 ? (
+            <Badge className='shell-control-center-trigger-badge' tone='accent'>
+              {notificationStatus.unread_count > 99
+                ? '99+'
+                : formatCount(notificationStatus.unread_count)}
+            </Badge>
+          ) : null}
+        </Button>
+        {workspaceState.controlCenterOpen ? null : (
+          <Button
+            className='shell-tester-feedback-trigger'
+            variant='secondary'
+            type='button'
+            aria-label={t('shell:testerFeedback.openButton')}
+            data-testid='tester-feedback-trigger'
+            onClick={onOpenTesterFeedback}
+          >
+            <MessageSquarePlus className='size-5' aria-hidden='true' />
+            <span>{t('shell:testerFeedback.openButton')}</span>
+          </Button>
+        )}
+      </div>
 
       {workspaceState.controlCenterOpen ? (
         <aside

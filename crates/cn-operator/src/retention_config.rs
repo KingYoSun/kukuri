@@ -14,6 +14,8 @@ pub struct RetentionConfig {
     pub report_days: u32,
     #[serde(default = "default_report_contact_days")]
     pub report_contact_days: u32,
+    #[serde(default = "default_tester_feedback_days")]
+    pub tester_feedback_days: u32,
     #[serde(default = "default_rights_request_active_days")]
     pub rights_request_active_days: u32,
     #[serde(default = "default_rights_request_resolved_days")]
@@ -43,6 +45,7 @@ impl Default for RetentionConfig {
             moderation_logs_days: default_moderation_logs_days(),
             report_days: default_report_days(),
             report_contact_days: default_report_contact_days(),
+            tester_feedback_days: default_tester_feedback_days(),
             rights_request_active_days: default_rights_request_active_days(),
             rights_request_resolved_days: default_rights_request_resolved_days(),
             rights_request_rejected_days: default_rights_request_rejected_days(),
@@ -68,6 +71,9 @@ fn default_report_days() -> u32 {
 }
 fn default_report_contact_days() -> u32 {
     90
+}
+fn default_tester_feedback_days() -> u32 {
+    180
 }
 fn default_rights_request_active_days() -> u32 {
     730
@@ -106,6 +112,7 @@ pub(crate) fn validate_retention(retention: &RetentionConfig) -> Result<()> {
         ("moderation_logs_days", retention.moderation_logs_days),
         ("report_days", retention.report_days),
         ("report_contact_days", retention.report_contact_days),
+        ("tester_feedback_days", retention.tester_feedback_days),
         (
             "rights_request_active_days",
             retention.rights_request_active_days,

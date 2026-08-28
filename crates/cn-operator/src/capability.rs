@@ -63,12 +63,13 @@ pub enum Capability {
     CommunityLocalTrust,
     ReportEndpoint,
     RightsRequestEndpoint,
+    TesterFeedback,
     DomeHosting,
 }
 
 impl Capability {
     /// 決定論的な出力順序を与える全 capability。
-    pub const ALL: [Capability; 17] = [
+    pub const ALL: [Capability; 18] = [
         Capability::AuthConsent,
         Capability::BootstrapAssist,
         Capability::TopicRendezvous,
@@ -85,6 +86,7 @@ impl Capability {
         Capability::CommunityLocalTrust,
         Capability::ReportEndpoint,
         Capability::RightsRequestEndpoint,
+        Capability::TesterFeedback,
         Capability::DomeHosting,
     ];
 
@@ -107,6 +109,7 @@ impl Capability {
             Capability::CommunityLocalTrust => "community_local_trust",
             Capability::ReportEndpoint => "report_endpoint",
             Capability::RightsRequestEndpoint => "rights_request_endpoint",
+            Capability::TesterFeedback => "tester_feedback",
             Capability::DomeHosting => "dome_hosting",
         }
     }
@@ -321,6 +324,17 @@ impl Capability {
                 telecom_note: "措置は本ノードの索引・moderation・cache 等の authority scope 内に限定される。",
                 privacy_note: "申出人情報と権利主張は local-only とし、公開 status へ PII や内部判断を出さない。",
                 terms_note: "申請前に可能・不可能な措置を提示し、版付きの明示同意を必須にする。",
+            },
+            Capability::TesterFeedback => CapabilityMeta {
+                capability: self,
+                display_name: "テスターフィードバック受付 (tester feedback)",
+                handled_data: "テスターの自由記述 3 項目(やろうとしたこと・何が起きたか・何が変だと思ったか)、client version、OS",
+                purpose: "テスターの利用経験レポートの受付・蓄積(POST /v1/tester-feedback)。品質観点の発見と自動テスト化の元データにする",
+                retention_impact: "フィードバックはテスターフィードバック保持期間に従って保持される",
+                external_transmission: None,
+                telecom_note: "フィードバック受付はノード内処理。回線設備の設置を伴わない。",
+                privacy_note: "送信者の identity / social graph は保持しない。自由記述と自動付与された client version / OS のみ保存する。",
+                terms_note: "テスターフィードバックが本ノードへ送信・保存され得る旨を記載する。",
             },
             Capability::DomeHosting => CapabilityMeta {
                 capability: self,

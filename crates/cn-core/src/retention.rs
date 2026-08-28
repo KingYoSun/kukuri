@@ -12,6 +12,7 @@ use kukuri_cn_protocol::RightsRequestStatus;
 pub struct RetentionPolicy {
     pub report_days: u32,
     pub report_contact_days: u32,
+    pub tester_feedback_days: u32,
     pub rights_request_active_days: u32,
     pub rights_request_resolved_days: u32,
     pub rights_request_rejected_days: u32,
@@ -29,6 +30,7 @@ impl Default for RetentionPolicy {
         Self {
             report_days: 180,
             report_contact_days: 90,
+            tester_feedback_days: 180,
             rights_request_active_days: 730,
             rights_request_resolved_days: 365,
             rights_request_rejected_days: 180,
@@ -67,6 +69,7 @@ pub struct CleanupCounts {
     pub sensitive_items: u64,
     pub rights_request_events: u64,
     pub reports: u64,
+    pub tester_feedback: u64,
     pub rights_requests: u64,
     pub operator_actions: u64,
     pub moderation_events: u64,
@@ -89,6 +92,13 @@ pub async fn apply_retention_policy(pool: &PgPool, policy: &RetentionPolicy) -> 
          SET expires_at = created_at + make_interval(days => $1)",
     )
     .bind(policy.report_days as i32)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE cn_admin.tester_feedback
+         SET expires_at = created_at + make_interval(days => $1)",
+    )
+    .bind(policy.tester_feedback_days as i32)
     .execute(&mut *tx)
     .await?;
     sqlx::query(
@@ -203,6 +213,12 @@ pub async fn cleanup_expired(pool: &PgPool, now: DateTime<Utc>) -> Result<Cleanu
     .execute(&mut *tx)
     .await?
     .rows_affected();
+    let tester_feedback =
+        sqlx::query("DELETE FROM cn_admin.tester_feedback WHERE expires_at <= $1")
+            .bind(now)
+            .execute(&mut *tx)
+            .await?
+            .rows_affected();
     let rights_requests = sqlx::query(
         "DELETE FROM cn_legal.rights_requests request
          WHERE request.expires_at <= $1
@@ -261,6 +277,7 @@ pub async fn cleanup_expired(pool: &PgPool, now: DateTime<Utc>) -> Result<Cleanu
         sensitive_items,
         rights_request_events,
         reports,
+        tester_feedback,
         rights_requests,
         operator_actions,
         moderation_events,
@@ -274,6 +291,7 @@ pub async fn retention_counts(pool: &PgPool) -> Result<CleanupCounts> {
            (SELECT COUNT(*) FROM cn_legal.sensitive_items) AS sensitive_items,
            (SELECT COUNT(*) FROM cn_legal.rights_request_events) AS rights_request_events,
            (SELECT COUNT(*) FROM cn_admin.reports) AS reports,
+           (SELECT COUNT(*) FROM cn_admin.tester_feedback) AS tester_feedback,
            (SELECT COUNT(*) FROM cn_legal.rights_requests) AS rights_requests,
            (SELECT COUNT(*) FROM cn_admin.operator_actions) AS operator_actions,
            (SELECT COUNT(*) FROM cn_safety.signed_moderation_events) AS moderation_events,
@@ -285,6 +303,7 @@ pub async fn retention_counts(pool: &PgPool) -> Result<CleanupCounts> {
         sensitive_items: row.try_get::<i64, _>("sensitive_items")? as u64,
         rights_request_events: row.try_get::<i64, _>("rights_request_events")? as u64,
         reports: row.try_get::<i64, _>("reports")? as u64,
+        tester_feedback: row.try_get::<i64, _>("tester_feedback")? as u64,
         rights_requests: row.try_get::<i64, _>("rights_requests")? as u64,
         operator_actions: row.try_get::<i64, _>("operator_actions")? as u64,
         moderation_events: row.try_get::<i64, _>("moderation_events")? as u64,

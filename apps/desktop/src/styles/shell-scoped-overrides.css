@@ -599,11 +599,19 @@
 }
 
 /* ADR 0031 Wave 4: non-modal bottom Control Center. */
-.shell-phase1 .shell-control-center-trigger {
+/* #802: Control Center トリガーとテスターフィードバックボタンを同じ左下クラスタに置く。 */
+.shell-phase1 .shell-control-cluster {
   position: fixed;
   left: max(var(--space-md), env(safe-area-inset-left));
   bottom: max(var(--space-md), env(safe-area-inset-bottom));
   z-index: 72;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.shell-phase1 .shell-control-center-trigger,
+.shell-phase1 .shell-tester-feedback-trigger {
   min-width: 2.75rem;
   min-height: 2.75rem;
   border-color: var(--border-accent);
@@ -910,12 +918,13 @@
 }
 
 @media (max-width: 759px) {
-  .shell-phase1 .shell-control-center-trigger {
+  .shell-phase1 .shell-control-cluster {
     right: max(var(--space-md), env(safe-area-inset-right));
     left: auto;
   }
 
-  .shell-phase1 .shell-control-center-trigger > span:not(.shell-control-center-status-dot) {
+  .shell-phase1 .shell-control-center-trigger > span:not(.shell-control-center-status-dot),
+  .shell-phase1 .shell-tester-feedback-trigger > span {
     display: none;
   }
 

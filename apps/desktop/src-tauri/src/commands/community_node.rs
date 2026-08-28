@@ -2,6 +2,7 @@ use kukuri_desktop_runtime::{
     AcceptCommunityNodeConsentsRequest, CommunityNodeConfig, CommunityNodeIndexQueryRequest,
     CommunityNodeIndexingRequest, CommunityNodeManifestFetch, CommunityNodeNodeStatus,
     CommunityNodeRelationNeighborsRequest, CommunityNodeTargetRequest,
+    CommunityNodeTesterFeedbackResponse, CommunityNodeTesterFeedbackSubmission,
     CommunityNodeUserAdvisoryRequest,
     CreatePrivateChannelRequest, DiscoveryConfig, ExportChannelAccessTokenRequest,
     ExportFriendOnlyGrantRequest, ExportFriendPlusShareRequest, ExportPrivateChannelInviteRequest,
@@ -408,6 +409,18 @@ pub async fn submit_community_node_report(
     state
         .runtime
         .submit_community_node_report(request)
+        .await
+        .map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub async fn submit_community_node_tester_feedback(
+    state: tauri::State<'_, DesktopState>,
+    request: CommunityNodeTesterFeedbackSubmission,
+) -> Result<CommunityNodeTesterFeedbackResponse, CommandError> {
+    state
+        .runtime
+        .submit_community_node_tester_feedback(request)
         .await
         .map_err(CommandError::from)
 }

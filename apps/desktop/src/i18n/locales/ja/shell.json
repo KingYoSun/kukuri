@@ -240,6 +240,30 @@
     "communityNodeUnavailableTitle": "Community Node を利用できません",
     "viewScope": "表示範囲"
   },
+  "testerFeedback": {
+    "openButton": "フィードバックを送る",
+    "title": "フィードバックを送る",
+    "description": "利用していて気づいたことを Community Node へ送信します。分類や重要度の入力は不要です。",
+    "nodeLabel": "送信先 Community Node",
+    "whatAttemptedLabel": "やろうとしたこと",
+    "whatHappenedLabel": "何が起きたか",
+    "whatSeemedWrongLabel": "何が変だと思ったか",
+    "charCount": "{{current}} / {{max}} 文字",
+    "overLimit": "各項目は {{max}} 文字以内で入力してください。",
+    "metadataNotice": "クライアントのバージョンと OS が自動で添付されます。送信者の識別情報は保存されません。",
+    "noEligibleNode": "認証と必須同意が完了し、フィードバックを受け付けている Community Node がありません。",
+    "openSettings": "Community Node 設定を開く",
+    "submit": "送信する",
+    "submitting": "送信中…",
+    "success": "フィードバックを送信しました。受付 ID: {{referenceId}}",
+    "errors": {
+      "notConfigured": "この Community Node はフィードバックを受け付けていません。",
+      "invalidFeedback": "入力内容を確認してください。3 項目すべてを 2000 文字以内で入力する必要があります。",
+      "authRequired": "選択した Community Node への認証が必要です。",
+      "consentRequired": "選択した Community Node の必須同意が必要です。",
+      "requestFailed": "フィードバックの送信に失敗しました。時間をおいて再度お試しください。"
+    }
+  },
   "indexingRequest": {
     "title": "Community Node への索引登録申請",
     "target": "対象: {{target}}",

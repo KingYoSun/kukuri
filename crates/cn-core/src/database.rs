@@ -50,6 +50,7 @@ pub async fn ensure_database_ready(pool: &PgPool) -> Result<()> {
         ("cn_admin", "invite_codes"),
         ("cn_admin", "admission_allowlist"),
         ("cn_admin", "operator_actions"),
+        ("cn_admin", "tester_feedback"),
         ("cn_legal", "rights_requests"),
         ("cn_legal", "rights_request_events"),
         ("cn_legal", "sensitive_items"),
