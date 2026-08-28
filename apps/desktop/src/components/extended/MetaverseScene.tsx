@@ -45,6 +45,7 @@ type SceneProps = {
   remoteTransforms: Record<string, AvatarTransform>;
   peerPresence: Record<string, PeerPresence>;
   sharedObject: SharedRoomObjectV1;
+  sessionProps?: SessionPropView[];
   avatarAssetUrl: string | null;
   domeTextureUrls: { wall: string | null; floor: string | null };
   latestChatByPeer: Record<string, LatestChatBubble>;
@@ -56,6 +57,12 @@ type SceneProps = {
   onAvatarAssetStatus: (status: AvatarAssetStatus) => void;
   controlsEnabled?: boolean;
   suspended?: boolean;
+};
+
+export type SessionPropView = {
+  kind: 'persistent_prop' | 'guest_prop';
+  object: SharedRoomObjectV1;
+  collider?: MetaverseColliderV1 | null;
 };
 
 const AVATAR_ANIMATION_ASSETS = {
@@ -680,9 +687,11 @@ function RemoteAvatar({
 function SharedObject({
   object,
   collider,
+  kind = 'persistent_prop',
 }: {
   object: SharedRoomObjectV1;
   collider?: MetaverseColliderV1 | null;
+  kind?: SessionPropView['kind'];
 }) {
   const position = scenePosition(object.position);
   const rotation: [number, number, number] = [
@@ -701,9 +710,14 @@ function SharedObject({
   });
 
   return (
-    <mesh position={position} rotation={rotation} scale={scale} userData={{ collider: resolvedCollider }}>
+    <mesh
+      position={position}
+      rotation={rotation}
+      scale={scale}
+      userData={{ collider: resolvedCollider, propKind: kind }}
+    >
       <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial color={0xf3b35d} roughness={0.55} />
+      <meshStandardMaterial color={kind === 'guest_prop' ? 0x6fc7ff : 0xf3b35d} roughness={0.55} />
     </mesh>
   );
 }
@@ -714,6 +728,7 @@ function SceneContents({
   remoteTransforms,
   peerPresence,
   sharedObject,
+  sessionProps,
   avatarAssetUrl,
   domeTextureUrls,
   latestChatByPeer,
@@ -765,10 +780,19 @@ function SceneContents({
           locale={locale}
         />
       ))}
-      <SharedObject
-        object={sharedObject}
-        collider={customization?.persistent_props[0]?.collider}
-      />
+      {sessionProps?.length ? sessionProps.map((prop) => (
+        <SharedObject
+          key={prop.object.object_id}
+          object={prop.object}
+          collider={prop.collider}
+          kind={prop.kind}
+        />
+      )) : (
+        <SharedObject
+          object={sharedObject}
+          collider={customization?.persistent_props[0]?.collider}
+        />
+      )}
     </>
   );
 }
@@ -779,6 +803,7 @@ export function MetaverseScene({
   remoteTransforms,
   peerPresence,
   sharedObject,
+  sessionProps,
   avatarAssetUrl,
   domeTextureUrls,
   latestChatByPeer,
@@ -811,6 +836,7 @@ export function MetaverseScene({
           remoteTransforms={remoteTransforms}
           peerPresence={peerPresence}
           sharedObject={sharedObject}
+          sessionProps={sessionProps}
           avatarAssetUrl={avatarAssetUrl}
           domeTextureUrls={domeTextureUrls}
           latestChatByPeer={latestChatByPeer}

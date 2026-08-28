@@ -125,7 +125,7 @@ export type MetaverseDomeV1 = { spec_id: string, customization: DomeCustomizatio
 
 export type SpatialContextV1 = { "kind": "topic", topic_id: string, } | { "kind": "channel", topic_id: string, channel_id: string, };
 
-export type DomePresetRefV1 = { preset_id: string, owner_pubkey: string, manifest_blob_hash: string, manifest_mime: string, manifest_bytes: number, };
+export type DomePresetRefV1 = { preset_id: string, owner_pubkey: string, revision: number, manifest_blob_hash: string, manifest_mime: string, manifest_bytes: number, };
 
 export type DomeInstanceStatusV1 = "staging" | "active" | "tombstoned";
 
@@ -167,7 +167,7 @@ export type DomeHostingStateKindV1 = "closed" | "owner_hosted" | "community_node
 
 export type DomeHostingStateV1 = { kind: DomeHostingStateKindV1, host?: DomeHostTargetV1 | null, lease_id?: string | null, lease_epoch?: number | null, lease_expires_at?: number | null, session_id?: string | null, reason?: string | null, last_heartbeat_at?: number | null, };
 
-export type DomeSessionInputKindV1 = { "type": "join" } | { "type": "leave" } | { "type": "move", position: [number, number, number], rotation: [number, number, number], animation: string, } | { "type": "grab", prop_id: string, } | { "type": "throw", prop_id: string, impulse: [number, number, number], } | { "type": "push", prop_id: string, impulse: [number, number, number], } | { "type": "sit", prop_id: string, };
+export type DomeSessionInputKindV1 = { "type": "join" } | { "type": "leave" } | { "type": "move", position: [number, number, number], rotation: [number, number, number], animation: string, } | { "type": "grab", prop_id: string, } | { "type": "throw", prop_id: string, impulse: [number, number, number], } | { "type": "push", prop_id: string, impulse: [number, number, number], } | { "type": "sit", prop_id: string, } | { "type": "spawn_guest_prop", prop: MetaversePersistentPropV1, expires_at: number, } | { "type": "upsert_persistent_prop", prop: MetaversePersistentPropV1, } | { "type": "delete_persistent_prop", prop_id: string, };
 
 export type DomePhysicsBodyKindV1 = "avatar" | "persistent_prop" | "guest_prop";
 
@@ -176,6 +176,14 @@ export type DomePhysicsBodyV1 = { entity_id: string, kind: DomePhysicsBodyKindV1
 export type DomePhysicsSnapshotV1 = { instance_id: string, instance_generation: number, lease_epoch: number, session_id: string, host_pubkey: string, sequence: number, simulated_at: number, sleeping: boolean, bodies: Array<DomePhysicsBodyV1>, };
 
 export type DomeHostingView = { instance_id: string, state: DomeHostingStateV1, lease?: DomeHostingLeaseV1 | null, signed_lease_json?: string | null, signed_activation_json?: string | null, signed_close_json?: string | null, instance_manifest_json: string, preset_manifest_json: string, participants: number, sleeping: boolean, };
+
+export type DomeLayoutCandidateV1 = { operation_id: string, instance_id: string, instance_generation: number, lease_epoch: number, session_id: string, host_pubkey: string, base_manifest_revision: number, snapshot_sequence: number, captured_at: number, persistent_props: Array<MetaversePersistentPropV1>, };
+
+export type DomeLayoutCommitV1 = { operation_id: string, instance_id: string, instance_generation: number, owner_pubkey: string, base_manifest_revision: number, next_manifest_revision: number, candidate_digest: string, manifest_blob_hash: string, committed_at: number, };
+
+export type DomeLayoutCommitOutcome = "no_op" | "committed";
+
+export type DomeLayoutCommitView = { outcome: DomeLayoutCommitOutcome, operation_id: string, revision: number, manifest_blob_hash: string, signed_commit_json?: string | null, hosting: DomeHostingView, };
 
 export type DomeConnectionProposalView = { proposal: DomeConnectionProposalV1, selection?: DomeProposalSelectionV1 | null, status: DomeProposalDerivedStatusV1, terminal_reason?: DomeConnectionTerminalReasonV1 | null, connection_id: string, };
 
@@ -544,6 +552,10 @@ export type DelegateDomeHostingRequest = { spatial_context: SpatialContextV1, in
 export type CloseDomeHostingRequest = { spatial_context: SpatialContextV1, instance_id: string, };
 
 export type SubmitDomeSessionInputRequest = { spatial_context: SpatialContextV1, instance_id: string, sequence: number, input: DomeSessionInputKindV1, };
+
+export type CommitDomeLayoutRequest = { spatial_context: SpatialContextV1, instance_id: string, operation_id: string, };
+
+export type ResyncDomeSnapshotsRequest = { spatial_context: SpatialContextV1, instance_id: string, after_sequence: number, };
 
 export type MoveDomeRequest = { source_topic: string, move_id: string, source_instance_id: string, target_context: SpatialContextV1, };
 

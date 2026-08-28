@@ -215,6 +215,7 @@ export function MetaverseRoomPanel({
         remoteTransforms={session.remoteTransforms}
         peerPresence={session.peerPresence}
         sharedObject={session.sharedObject}
+        sessionProps={session.sessionProps}
         avatarAssetUrl={localAvatarAssetUrl}
         domeTextureUrls={domeTextureUrls}
         latestChatByPeer={session.latestChatByPeer}
@@ -257,6 +258,9 @@ export function MetaverseRoomPanel({
         localAuthorPubkey={syncStatus.local_author_pubkey}
         localEndpointId={syncStatus.discovery.local_endpoint_id}
         locale={locale}
+        onSpawnGuestProp={session.spawnGuestProp}
+        onAddPersistentProp={session.addPersistentProp}
+        onDeletePersistentProp={session.deletePersistentProp}
       />
     </div>
   );

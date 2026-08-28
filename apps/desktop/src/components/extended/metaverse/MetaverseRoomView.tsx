@@ -8,7 +8,7 @@ import {
 import { Card } from '@/components/ui/card';
 import type { SupportedLocale } from '@/i18n';
 import type { DomeCustomizationV1, GameRoomView, MetaverseAssetRef, MetaverseInteractionKind, SharedRoomObjectV1 } from '@/lib/api';
-import { MetaverseScene } from '../MetaverseScene';
+import { MetaverseScene, type SessionPropView } from '../MetaverseScene';
 import type {
   AvatarAssetStatus,
   AvatarTransform,
@@ -28,6 +28,7 @@ export type MetaverseRoomViewProps = {
   remoteTransforms: Record<string, AvatarTransform>;
   peerPresence: Record<string, PeerPresence>;
   sharedObject: SharedRoomObjectV1;
+  sessionProps?: SessionPropView[];
   avatarAssetUrl: string | null;
   domeTextureUrls: { wall: string | null; floor: string | null };
   latestChatByPeer: Record<string, LatestChatBubble>;
@@ -76,6 +77,7 @@ export function MetaverseRoomView({
   remoteTransforms,
   peerPresence,
   sharedObject,
+  sessionProps,
   avatarAssetUrl,
   domeTextureUrls,
   latestChatByPeer,
@@ -172,6 +174,7 @@ export function MetaverseRoomView({
           remoteTransforms={remoteTransforms}
           peerPresence={peerPresence}
           sharedObject={sharedObject}
+          sessionProps={sessionProps}
           avatarAssetUrl={avatarAssetUrl}
           domeTextureUrls={domeTextureUrls}
           latestChatByPeer={latestChatByPeer}

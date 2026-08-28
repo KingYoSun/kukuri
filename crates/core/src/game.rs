@@ -89,7 +89,7 @@ pub enum MetaversePrimitive {
     Sphere,
 }
 
-pub const METAVERSE_WORLD_VERSION: u64 = 4;
+pub const METAVERSE_WORLD_VERSION: u64 = 5;
 pub const FIXED_DOME_SPEC_ID: &str = "fixed_dome_v1";
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -401,6 +401,8 @@ pub struct DomePresetManifestV1 {
     pub preset_id: String,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub owner_pubkey: Pubkey,
+    /// Owner-managed, monotonically increasing durable layout revision.
+    pub revision: u64,
     pub dome: MetaverseDomeV1,
     pub asset_refs: Vec<MetaverseAssetRef>,
     pub updated_at: i64,
@@ -412,6 +414,7 @@ pub struct DomePresetRefV1 {
     pub preset_id: String,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub owner_pubkey: Pubkey,
+    pub revision: u64,
     pub manifest_blob_hash: String,
     pub manifest_mime: String,
     pub manifest_bytes: u64,
@@ -421,6 +424,7 @@ pub struct DomePresetRefV1 {
 pub struct DomePresetStateDocV1 {
     pub preset_id: String,
     pub owner_pubkey: Pubkey,
+    pub revision: u64,
     pub current_manifest: ManifestBlobRef,
     pub updated_at: i64,
     pub last_envelope_id: EnvelopeId,
@@ -771,6 +775,9 @@ pub fn validate_dome_preset_manifest(manifest: &DomePresetManifestV1) -> Result<
     if manifest.owner_pubkey.as_str().trim().is_empty() {
         bail!("Dome preset owner is required");
     }
+    if manifest.revision == 0 {
+        bail!("Dome preset revision is required");
+    }
     if manifest.dome.spec_id != FIXED_DOME_SPEC_ID {
         bail!("unsupported Dome spec id");
     }
@@ -787,6 +794,7 @@ pub fn validate_dome_preset_manifest(manifest: &DomePresetManifestV1) -> Result<
 pub fn validate_dome_instance_manifest(manifest: &DomeInstanceManifestV1) -> Result<()> {
     if manifest.instance_id.trim().is_empty()
         || manifest.preset_ref.preset_id.trim().is_empty()
+        || manifest.preset_ref.revision == 0
         || manifest.preset_ref.manifest_blob_hash.trim().is_empty()
         || manifest.preset_ref.manifest_mime.trim().is_empty()
         || manifest.generation == 0
@@ -862,6 +870,7 @@ pub fn resolve_metaverse_room_state(
     validate_dome_preset_manifest(preset)?;
     if instance.preset_ref.preset_id != preset.preset_id
         || instance.preset_ref.owner_pubkey != preset.owner_pubkey
+        || instance.preset_ref.revision != preset.revision
     {
         bail!("Dome instance preset reference does not match preset manifest");
     }

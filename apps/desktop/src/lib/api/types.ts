@@ -30,6 +30,7 @@ import type {
   DomeCustomizationV1,
   DomeDirection,
   DomeHostingView,
+  DomeLayoutCommitView,
   DomeMoveRecordV1,
   DomePhysicsSnapshotV1,
   DomeSessionInputKindV1,
@@ -359,6 +360,16 @@ export interface DesktopApi {
     sequence: number,
     input: DomeSessionInputKindV1
   ): Promise<DomePhysicsSnapshotV1>;
+  commitDomeLayout(
+    spatialContext: SpatialContextV1,
+    instanceId: string,
+    operationId: string
+  ): Promise<DomeLayoutCommitView>;
+  resyncDomeSnapshots(
+    spatialContext: SpatialContextV1,
+    instanceId: string,
+    afterSequence: number
+  ): Promise<DomePhysicsSnapshotV1[]>;
   moveDome(
     sourceTopic: string,
     moveId: string,

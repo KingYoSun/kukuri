@@ -15,6 +15,7 @@ fn instance(keys: &KukuriKeys, id: &str) -> DomeInstanceManifestV1 {
         preset_ref: DomePresetRefV1 {
             preset_id: format!("preset-{id}"),
             owner_pubkey: owner,
+            revision: 1,
             manifest_blob_hash: "a".repeat(64),
             manifest_mime: DOME_PRESET_MANIFEST_MIME.into(),
             manifest_bytes: 1,

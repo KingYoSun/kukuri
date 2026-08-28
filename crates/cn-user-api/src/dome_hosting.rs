@@ -8,15 +8,18 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::Response;
 use kukuri_cn_core::{
-    ApiError, ApiResult, NewDomeHostingAssignment, activate_dome_hosting_assignment,
-    close_dome_hosting_assignment, get_dome_hosting_assignment,
-    list_recoverable_dome_hosting_assignments, require_bearer_identity, require_consents,
+    ApiError, ApiResult, NewDomeHostingAssignment, StagedDomeBlob,
+    activate_dome_hosting_assignment, activate_dome_hosting_blob_pins,
+    close_dome_hosting_assignment, collect_dome_blob_cache_garbage, get_dome_hosting_assignment,
+    list_recoverable_dome_hosting_assignments, release_dome_hosting_blob_pins,
+    require_bearer_identity, require_consents, stage_dome_hosting_blobs,
     upsert_pending_dome_hosting_assignment,
 };
 use kukuri_cn_protocol::{
     DomeHostingActivationRequest, DomeHostingAssignmentRequest, DomeHostingAssignmentResponse,
+    DomeHostingLayoutCandidateRequest, DomeHostingLayoutCandidateResponse,
     DomeHostingReleaseRequest, DomeHostingSessionInputRequest, DomeHostingSessionSnapshotResponse,
-    DomeHostingStatusResponse,
+    DomeHostingSnapshotResyncRequest, DomeHostingSnapshotResyncResponse, DomeHostingStatusResponse,
 };
 use kukuri_core::{
     DomeHostTargetV1, DomeHostingRecordV1, DomeHostingStateKindV1, DomeInstanceManifestV1,
@@ -106,6 +109,7 @@ pub(crate) async fn assign_dome_hosting(
     validate_dome_preset_manifest(&request.preset_manifest).map_err(hosting_contract_error)?;
     if request.instance_manifest.preset_ref.preset_id != request.preset_manifest.preset_id
         || request.instance_manifest.preset_ref.owner_pubkey != request.preset_manifest.owner_pubkey
+        || request.instance_manifest.preset_ref.revision != request.preset_manifest.revision
     {
         return Err(hosting_error(
             StatusCode::BAD_REQUEST,
@@ -121,6 +125,51 @@ pub(crate) async fn assign_dome_hosting(
             "Dome Hosting Lease has expired",
         ));
     }
+    let preset_bytes =
+        serde_json::to_vec(&request.preset_manifest).map_err(hosting_internal_error)?;
+    if blake3::hash(&preset_bytes).to_hex().to_string() != lease.lease.manifest_blob_hash {
+        return Err(hosting_error(
+            StatusCode::BAD_REQUEST,
+            "DOME_HOSTING_MANIFEST_HASH_MISMATCH",
+            "Dome Preset manifest bytes do not match the leased content hash",
+        ));
+    }
+    let required_hashes = request
+        .preset_manifest
+        .asset_refs
+        .iter()
+        .map(|asset| asset.blob_hash.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    let supplied_hashes = request
+        .asset_blobs
+        .iter()
+        .map(|asset| asset.blob_hash.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    if required_hashes != supplied_hashes {
+        return Err(hosting_error(
+            StatusCode::BAD_REQUEST,
+            "DOME_HOSTING_ASSET_SET_MISMATCH",
+            "Dome assignment must stage exactly the assets referenced by the Preset",
+        ));
+    }
+    let cache_reference = format!(
+        "{}:{}",
+        lease.lease.instance_id, request.preset_manifest.revision
+    );
+    let mut staged_blobs = vec![StagedDomeBlob {
+        blob_hash: lease.lease.manifest_blob_hash.clone(),
+        data: preset_bytes,
+    }];
+    staged_blobs.extend(request.asset_blobs.iter().map(|asset| StagedDomeBlob {
+        blob_hash: asset.blob_hash.clone(),
+        data: asset.bytes.clone(),
+    }));
+    collect_dome_blob_cache_garbage(&state.pool, now)
+        .await
+        .map_err(hosting_internal_error)?;
+    stage_dome_hosting_blobs(&state.pool, &cache_reference, &staged_blobs, now)
+        .await
+        .map_err(hosting_conflict_error)?;
     let session_id = format!(
         "cn-session-{}-{}-{}",
         lease.lease.instance_id, lease.lease.epoch, now
@@ -225,6 +274,14 @@ pub(crate) async fn activate_dome_hosting(
     )
     .await
     .map_err(hosting_conflict_error)?;
+    activate_dome_hosting_blob_pins(
+        &state.pool,
+        &request.instance_id,
+        &format!("{}:{}", request.instance_id, preset.revision),
+        now,
+    )
+    .await
+    .map_err(hosting_internal_error)?;
     hosting
         .sessions
         .lock()
@@ -305,6 +362,16 @@ pub(crate) async fn release_dome_hosting(
     )
     .await
     .map_err(hosting_conflict_error)?;
+    let preset: DomePresetManifestV1 =
+        serde_json::from_value(assignment.preset_manifest_json.clone())
+            .map_err(hosting_internal_error)?;
+    release_dome_hosting_blob_pins(
+        &state.pool,
+        &format!("{}:{}", request.instance_id, preset.revision),
+        now,
+    )
+    .await
+    .map_err(hosting_internal_error)?;
     hosting.sessions.lock().await.remove(&request.instance_id);
     Ok(Json(DomeHostingStatusResponse {
         instance_id: request.instance_id,
@@ -340,7 +407,10 @@ pub(crate) async fn dome_hosting_status(
     if assignment.expires_at <= now {
         sessions.remove(&instance_id);
     }
-    let runtime = sessions.get(&instance_id);
+    let mut runtime = sessions.get_mut(&instance_id);
+    if let Some(runtime) = runtime.as_deref_mut() {
+        runtime.advance_to(now).map_err(hosting_internal_error)?;
+    }
     let state_kind = if assignment.expires_at <= now {
         DomeHostingStateKindV1::Closed
     } else if assignment.status == "active" {
@@ -352,7 +422,7 @@ pub(crate) async fn dome_hosting_status(
     };
     Ok(Json(status_from_runtime(
         &instance_id,
-        runtime,
+        runtime.as_deref(),
         assignment.expires_at,
         state_kind,
         assignment.lease_epoch,
@@ -403,6 +473,68 @@ pub(crate) async fn submit_dome_hosting_input(
         .map_err(hosting_contract_error)?;
     Ok(Json(DomeHostingSessionSnapshotResponse {
         signed_snapshot: snapshot,
+    }))
+}
+
+pub(crate) async fn capture_dome_layout_candidate(
+    State(state): State<UserApiState>,
+    headers: HeaderMap,
+    Json(request): Json<DomeHostingLayoutCandidateRequest>,
+) -> ApiResult<Json<DomeHostingLayoutCandidateResponse>> {
+    let hosting = require_hosting(&state)?;
+    let identity = require_bearer_identity(&state.pool, &state.jwt_config, &headers).await?;
+    let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
+    let assignment = get_dome_hosting_assignment(&state.pool, &request.instance_id)
+        .await
+        .map_err(hosting_internal_error)?
+        .ok_or_else(|| {
+            hosting_error(
+                StatusCode::NOT_FOUND,
+                "DOME_HOSTING_ASSIGNMENT_NOT_FOUND",
+                "Dome hosting assignment was not found",
+            )
+        })?;
+    if assignment.owner_pubkey != identity.pubkey {
+        return Err(hosting_error(
+            StatusCode::FORBIDDEN,
+            "DOME_LAYOUT_OWNER_REQUIRED",
+            "only the Dome owner can capture a durable layout candidate",
+        ));
+    }
+    let mut sessions = hosting.sessions.lock().await;
+    let runtime = sessions.get_mut(&request.instance_id).ok_or_else(|| {
+        hosting_error(
+            StatusCode::CONFLICT,
+            "DOME_HOSTING_SESSION_INACTIVE",
+            "Dome session is not active on this Community Node",
+        )
+    })?;
+    let candidate = runtime
+        .signed_layout_candidate(&request.operation_id, chrono::Utc::now().timestamp_millis())
+        .map_err(hosting_contract_error)?;
+    Ok(Json(DomeHostingLayoutCandidateResponse {
+        signed_candidate: candidate,
+    }))
+}
+
+pub(crate) async fn resync_dome_hosting_snapshots(
+    State(state): State<UserApiState>,
+    headers: HeaderMap,
+    Json(request): Json<DomeHostingSnapshotResyncRequest>,
+) -> ApiResult<Json<DomeHostingSnapshotResyncResponse>> {
+    let hosting = require_hosting(&state)?;
+    let identity = require_bearer_identity(&state.pool, &state.jwt_config, &headers).await?;
+    let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
+    let sessions = hosting.sessions.lock().await;
+    let runtime = sessions.get(&request.instance_id).ok_or_else(|| {
+        hosting_error(
+            StatusCode::CONFLICT,
+            "DOME_HOSTING_SESSION_INACTIVE",
+            "Dome session is not active on this Community Node",
+        )
+    })?;
+    Ok(Json(DomeHostingSnapshotResyncResponse {
+        snapshots: runtime.snapshots_after(request.after_sequence),
     }))
 }
 

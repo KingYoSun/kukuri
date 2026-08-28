@@ -27,6 +27,8 @@ pub const DOME_HOSTING_RELEASE_PATH: &str = "/v1/dome-hosting/release";
 pub const DOME_HOSTING_STATUS_ROUTE: &str = "/v1/dome-hosting/status/{instance_id}";
 pub const DOME_HOSTING_SESSION_INPUT_PATH: &str = "/v1/dome-hosting/session/input";
 pub const DOME_HOSTING_SESSION_WS_PATH: &str = "/v1/dome-hosting/session/ws";
+pub const DOME_HOSTING_LAYOUT_CANDIDATE_PATH: &str = "/v1/dome-hosting/session/layout-candidate";
+pub const DOME_HOSTING_SNAPSHOT_RESYNC_PATH: &str = "/v1/dome-hosting/session/resync";
 /// 通報受付。client は manifest の `report_endpoint` から動的に解決するため
 /// 直接この定数で URL を組み立てるのはサーバ側(route 定義)のみ。
 pub const REPORT_PATH: &str = "/v1/report";

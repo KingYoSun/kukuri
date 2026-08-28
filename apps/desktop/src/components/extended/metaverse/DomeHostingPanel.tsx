@@ -16,6 +16,9 @@ type DomeHostingPanelProps = {
   localAuthorPubkey: string;
   localEndpointId: string;
   locale: SupportedLocale;
+  onSpawnGuestProp: () => Promise<void>;
+  onAddPersistentProp: () => Promise<void>;
+  onDeletePersistentProp: () => Promise<void>;
 };
 
 export function DomeHostingPanel({
@@ -24,12 +27,17 @@ export function DomeHostingPanel({
   localAuthorPubkey,
   localEndpointId,
   locale,
+  onSpawnGuestProp,
+  onAddPersistentProp,
+  onDeletePersistentProp,
 }: DomeHostingPanelProps) {
   const { t } = useTranslation('metaverse', { lng: locale });
   const [nodeId, setNodeId] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [layoutResult, setLayoutResult] = useState<string | null>(null);
+  const [resyncResult, setResyncResult] = useState<string | null>(null);
   const [hosting, setHosting] = useState<DomeHostingView | null>(null);
   useEffect(() => {
     if (!room?.metaverse) {
@@ -58,6 +66,41 @@ export function DomeHostingPanel({
       setPending(false);
     }
   };
+  const saveLayout = async () => {
+    setPending(true);
+    setError(null);
+    setLayoutResult(null);
+    try {
+      const result = await actions.commitLayout(
+        room.metaverse!.spatial_context,
+        room.metaverse!.instance_id,
+        globalThis.crypto?.randomUUID?.() ?? `layout-${Date.now()}`
+      );
+      setHosting(result.hosting);
+      setLayoutResult(t(`hosting.layout.${result.outcome}`, { revision: result.revision }));
+      await actions.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t('hosting.error'));
+    } finally {
+      setPending(false);
+    }
+  };
+  const resync = async () => {
+    setPending(true);
+    setError(null);
+    try {
+      const snapshots = await actions.resyncSnapshots(
+        room.metaverse!.spatial_context,
+        room.metaverse!.instance_id,
+        0
+      );
+      setResyncResult(t('hosting.resyncResult', { count: snapshots.length }));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t('hosting.error'));
+    } finally {
+      setPending(false);
+    }
+  };
 
   return (
     <Card className='panel-subsection' aria-busy={pending}>
@@ -71,8 +114,14 @@ export function DomeHostingPanel({
         <span>{t('hosting.expiry', { value: state?.lease_expires_at ? new Date(state.lease_expires_at).toLocaleString(locale) : t('hosting.none') })}</span>
         <span>{t('hosting.participants', { value: hosting?.participants ?? 0 })}</span>
         <span>{t(`hosting.sleep.${hosting?.sleeping === false ? 'awake' : 'sleeping'}`)}</span>
+        <span>{t('hosting.revision', { value: room.metaverse.preset_ref.revision })}</span>
+        <span>{t('hosting.cacheLimit', {
+          value: hosting?.lease?.host.kind === 'community_node' ? '10 GiB' : '1 GiB'
+        })}</span>
       </div>
       {error ? <Notice tone='destructive'>{error}</Notice> : null}
+      {layoutResult ? <Notice>{layoutResult}</Notice> : null}
+      {resyncResult ? <Notice>{resyncResult}</Notice> : null}
       {!isOwner ? <Notice>{t('hosting.ownerOnly')}</Notice> : null}
       {isOwner ? (
         <div className='composer composer-compact'>
@@ -118,6 +167,39 @@ export function DomeHostingPanel({
             ))}
           >
             {t('hosting.close')}
+          </Button>
+          <Button
+            type='button'
+            disabled={pending || !state || state.kind === 'closed' || state.kind === 'transferring'}
+            onClick={() => void saveLayout()}
+          >
+            {t('hosting.saveLayout')}
+          </Button>
+          <Button
+            type='button'
+            variant='secondary'
+            disabled={pending || !state || state.kind === 'closed' || state.kind === 'transferring'}
+            onClick={() => void run(onAddPersistentProp)}
+          >
+            {t('hosting.addPersistentProp')}
+          </Button>
+          <Button
+            type='button'
+            variant='secondary'
+            disabled={pending || !state || state.kind === 'closed' || state.kind === 'transferring'}
+            onClick={() => void run(onDeletePersistentProp)}
+          >
+            {t('hosting.deletePersistentProp')}
+          </Button>
+        </div>
+      ) : null}
+      {state && state.kind !== 'closed' ? (
+        <div className='composer composer-compact'>
+          <Button type='button' variant='secondary' disabled={pending} onClick={() => void run(onSpawnGuestProp)}>
+            {t('hosting.spawnGuestProp')}
+          </Button>
+          <Button type='button' variant='secondary' disabled={pending} onClick={() => void resync()}>
+            {t('hosting.resync')}
           </Button>
         </div>
       ) : null}

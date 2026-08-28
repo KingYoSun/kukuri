@@ -5,6 +5,7 @@ import type {
   DomeConnectionView,
   DomeDirection,
   DomeHostingView,
+  DomeLayoutCommitView,
   DomePhysicsSnapshotV1,
   DomeSessionInputKindV1,
   GameRoomView,
@@ -65,6 +66,16 @@ export type MetaverseRoomActions = {
     sequence: number,
     input: DomeSessionInputKindV1
   ) => Promise<DomePhysicsSnapshotV1>;
+  commitLayout: (
+    context: SpatialContextV1,
+    instanceId: string,
+    operationId: string
+  ) => Promise<DomeLayoutCommitView>;
+  resyncSnapshots: (
+    context: SpatialContextV1,
+    instanceId: string,
+    afterSequence: number
+  ) => Promise<DomePhysicsSnapshotV1[]>;
   moveRoom: (
     moveId: string,
     roomId: string,

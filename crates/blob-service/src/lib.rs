@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -36,6 +36,9 @@ pub trait BlobService: Send + Sync {
         self.fetch_blob(hash).await
     }
     async fn pin_blob(&self, hash: &BlobHash) -> Result<()>;
+    async fn unpin_blob(&self, _hash: &BlobHash) -> Result<()> {
+        Ok(())
+    }
     async fn blob_status(&self, hash: &BlobHash) -> Result<BlobStatus>;
     async fn import_peer_ticket(&self, ticket: &str) -> Result<()>;
     async fn learn_peer(&self, _endpoint_id: &str) -> Result<()> {
@@ -152,6 +155,11 @@ impl BlobService for MemoryBlobService {
         Ok(())
     }
 
+    async fn unpin_blob(&self, hash: &BlobHash) -> Result<()> {
+        self.pinned.write().await.remove(hash.as_str());
+        Ok(())
+    }
+
     async fn blob_status(&self, hash: &BlobHash) -> Result<BlobStatus> {
         if self.pinned.read().await.contains(hash.as_str()) {
             return Ok(BlobStatus::Pinned);
@@ -222,12 +230,36 @@ impl BlobService for IrohBlobService {
     }
 
     async fn pin_blob(&self, hash: &BlobHash) -> Result<()> {
+        let parsed = iroh_blobs::Hash::from_str(hash.as_str())?;
+        self.node
+            .blobs()
+            .tags()
+            .set(metaverse_pin_tag(hash), parsed)
+            .await?;
         self.pinned.write().await.insert(hash.as_str().to_string());
         Ok(())
     }
 
+    async fn unpin_blob(&self, hash: &BlobHash) -> Result<()> {
+        self.node
+            .blobs()
+            .tags()
+            .delete(metaverse_pin_tag(hash))
+            .await?;
+        self.pinned.write().await.remove(hash.as_str());
+        Ok(())
+    }
+
     async fn blob_status(&self, hash: &BlobHash) -> Result<BlobStatus> {
-        if self.pinned.read().await.contains(hash.as_str()) {
+        if self.pinned.read().await.contains(hash.as_str())
+            || self
+                .node
+                .blobs()
+                .tags()
+                .get(metaverse_pin_tag(hash))
+                .await?
+                .is_some()
+        {
             return Ok(BlobStatus::Pinned);
         }
         Ok(match self.fetch_blob(hash).await? {
@@ -253,6 +285,163 @@ impl BlobService for IrohBlobService {
 
     async fn assist_peer_ids(&self) -> Result<Vec<String>> {
         Ok(self.available_fetch_peer_ids().await)
+    }
+}
+
+fn metaverse_pin_tag(hash: &BlobHash) -> Vec<u8> {
+    format!("kukuri/metaverse/pin/{}", hash.as_str()).into_bytes()
+}
+
+pub const METAVERSE_BLOB_GC_GRACE_MILLIS: i64 = 24 * 60 * 60 * 1_000;
+pub const DESKTOP_METAVERSE_BLOB_CACHE_CAPACITY_BYTES: u64 = 1024 * 1024 * 1024;
+pub const COMMUNITY_NODE_METAVERSE_BLOB_CACHE_CAPACITY_BYTES: u64 = 10 * 1024 * 1024 * 1024;
+pub const METAVERSE_ROLLBACK_REVISION_LIMIT: usize = 3;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MetaverseBlobPinReason {
+    Current,
+    ActiveLease,
+    Staging,
+    Rollback,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct MetaverseBlobPin {
+    pub reason: MetaverseBlobPinReason,
+    pub reference_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MetaverseBlobCacheEntry {
+    pub hash: BlobHash,
+    pub bytes: u64,
+    pub last_accessed_at: i64,
+    pub unreferenced_at: Option<i64>,
+    pub pins: BTreeSet<MetaverseBlobPin>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MetaverseBlobCacheIndex {
+    capacity_bytes: u64,
+    entries: BTreeMap<BlobHash, MetaverseBlobCacheEntry>,
+}
+
+impl MetaverseBlobCacheIndex {
+    pub fn new(capacity_bytes: u64) -> Result<Self> {
+        if capacity_bytes == 0 {
+            anyhow::bail!("metaverse blob cache capacity must be positive");
+        }
+        Ok(Self {
+            capacity_bytes,
+            entries: BTreeMap::new(),
+        })
+    }
+
+    pub fn desktop() -> Self {
+        Self::new(DESKTOP_METAVERSE_BLOB_CACHE_CAPACITY_BYTES)
+            .expect("desktop metaverse blob cache capacity is positive")
+    }
+
+    pub fn community_node() -> Self {
+        Self::new(COMMUNITY_NODE_METAVERSE_BLOB_CACHE_CAPACITY_BYTES)
+            .expect("Community Node metaverse blob cache capacity is positive")
+    }
+
+    pub fn entries(&self) -> impl Iterator<Item = &MetaverseBlobCacheEntry> {
+        self.entries.values()
+    }
+
+    pub fn total_bytes(&self) -> u64 {
+        self.entries.values().map(|entry| entry.bytes).sum()
+    }
+
+    pub fn ensure_staging_capacity(&self, hashes: &[(BlobHash, u64)]) -> Result<()> {
+        let additional = hashes
+            .iter()
+            .filter(|(hash, _)| !self.entries.contains_key(hash))
+            .map(|(_, bytes)| *bytes)
+            .sum::<u64>();
+        if self.total_bytes().saturating_add(additional) > self.capacity_bytes {
+            anyhow::bail!("metaverse manifest/asset blob cache capacity exceeded");
+        }
+        Ok(())
+    }
+
+    pub fn track_blob(&mut self, hash: BlobHash, bytes: u64, now_millis: i64) {
+        self.entries
+            .entry(hash.clone())
+            .and_modify(|entry| {
+                entry.bytes = entry.bytes.max(bytes);
+                entry.last_accessed_at = now_millis;
+            })
+            .or_insert_with(|| MetaverseBlobCacheEntry {
+                hash,
+                bytes,
+                last_accessed_at: now_millis,
+                unreferenced_at: Some(now_millis),
+                pins: BTreeSet::new(),
+            });
+    }
+
+    pub fn pin(&mut self, hash: &BlobHash, bytes: u64, pin: MetaverseBlobPin, now_millis: i64) {
+        self.track_blob(hash.clone(), bytes, now_millis);
+        let entry = self.entries.get_mut(hash).expect("tracked above");
+        entry.pins.insert(pin);
+        entry.unreferenced_at = None;
+        entry.last_accessed_at = now_millis;
+    }
+
+    pub fn unpin_reference(&mut self, pin: &MetaverseBlobPin, now_millis: i64) {
+        for entry in self.entries.values_mut() {
+            if entry.pins.remove(pin) && entry.pins.is_empty() {
+                entry.unreferenced_at = Some(now_millis);
+            }
+        }
+    }
+
+    pub fn replace_reference(
+        &mut self,
+        from: &MetaverseBlobPin,
+        to: MetaverseBlobPin,
+        now_millis: i64,
+    ) {
+        for entry in self.entries.values_mut() {
+            if entry.pins.remove(from) {
+                entry.pins.insert(to.clone());
+                entry.unreferenced_at = None;
+                entry.last_accessed_at = now_millis;
+            }
+        }
+    }
+
+    pub fn touch(&mut self, hash: &BlobHash, now_millis: i64) {
+        if let Some(entry) = self.entries.get_mut(hash) {
+            entry.last_accessed_at = now_millis;
+        }
+    }
+
+    pub fn collect_garbage(&mut self, now_millis: i64) -> Vec<BlobHash> {
+        let mut candidates = self
+            .entries
+            .values()
+            .filter(|entry| {
+                entry.pins.is_empty()
+                    && entry.unreferenced_at.is_some_and(|unreferenced_at| {
+                        now_millis.saturating_sub(unreferenced_at) >= METAVERSE_BLOB_GC_GRACE_MILLIS
+                    })
+            })
+            .map(|entry| (entry.last_accessed_at, entry.hash.clone()))
+            .collect::<Vec<_>>();
+        candidates.sort_by(|left, right| left.0.cmp(&right.0).then(left.1.cmp(&right.1)));
+        let hashes = candidates
+            .into_iter()
+            .map(|(_, hash)| hash)
+            .collect::<Vec<_>>();
+        for hash in &hashes {
+            self.entries.remove(hash);
+        }
+        hashes
     }
 }
 
@@ -322,6 +511,71 @@ mod tests {
         assert_eq!(
             blobs.blob_status(&stored.hash).await.expect("blob status"),
             BlobStatus::Pinned
+        );
+        blobs.unpin_blob(&stored.hash).await.expect("unpin blob");
+        assert_eq!(
+            blobs.blob_status(&stored.hash).await.expect("blob status"),
+            BlobStatus::Available
+        );
+    }
+
+    #[test]
+    fn metaverse_cache_deduplicates_pins_and_only_collects_unreferenced_grace_candidates() {
+        let mut cache = MetaverseBlobCacheIndex::new(1_000).unwrap();
+        let hash = BlobHash::new("asset-hash");
+        let current = MetaverseBlobPin {
+            reason: MetaverseBlobPinReason::Current,
+            reference_id: "preset:2".into(),
+        };
+        let active = MetaverseBlobPin {
+            reason: MetaverseBlobPinReason::ActiveLease,
+            reference_id: "dome:1".into(),
+        };
+        cache.pin(&hash, 400, current.clone(), 1_000);
+        cache.pin(&hash, 400, active.clone(), 1_100);
+        assert_eq!(cache.total_bytes(), 400);
+        assert!(
+            cache
+                .collect_garbage(1_000 + METAVERSE_BLOB_GC_GRACE_MILLIS)
+                .is_empty()
+        );
+
+        cache.unpin_reference(&current, 2_000);
+        assert!(
+            cache
+                .collect_garbage(2_000 + METAVERSE_BLOB_GC_GRACE_MILLIS)
+                .is_empty()
+        );
+        cache.unpin_reference(&active, 3_000);
+        assert!(
+            cache
+                .collect_garbage(3_000 + METAVERSE_BLOB_GC_GRACE_MILLIS - 1)
+                .is_empty()
+        );
+        assert_eq!(
+            cache.collect_garbage(3_000 + METAVERSE_BLOB_GC_GRACE_MILLIS),
+            vec![hash]
+        );
+        assert_eq!(cache.total_bytes(), 0);
+    }
+
+    #[test]
+    fn metaverse_cache_fails_staging_before_exceeding_hard_capacity() {
+        let mut cache = MetaverseBlobCacheIndex::new(500).unwrap();
+        let current = MetaverseBlobPin {
+            reason: MetaverseBlobPinReason::Current,
+            reference_id: "preset:1".into(),
+        };
+        cache.pin(&BlobHash::new("manifest"), 400, current, 1_000);
+        assert!(
+            cache
+                .ensure_staging_capacity(&[(BlobHash::new("asset"), 101)])
+                .is_err()
+        );
+        assert!(
+            cache
+                .ensure_staging_capacity(&[(BlobHash::new("manifest"), 400)])
+                .is_ok()
         );
     }
 

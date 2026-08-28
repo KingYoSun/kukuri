@@ -36,6 +36,8 @@ type LiveGameMock = Pick<
   | 'delegateDomeHosting'
   | 'closeDomeHosting'
   | 'submitDomeSessionInput'
+  | 'commitDomeLayout'
+  | 'resyncDomeSnapshots'
   | 'moveDome'
   | 'listDomeConnectionTopology'
   | 'createDomeConnectionProposal'
@@ -407,6 +409,28 @@ export function createLiveGameMock(runtime: MockRuntime): LiveGameMock {
           expires_at: null,
         }],
       };
+    },
+    async commitDomeLayout(spatialContext, instanceId, operationId) {
+      const rooms = gameRoomsByTopic[spatialContext.topic_id] ?? [];
+      const room = rooms.find((candidate) => candidate.room_id === instanceId);
+      if (!room?.metaverse) throw new Error('Dome instance not found');
+      room.metaverse.preset_ref = {
+        ...room.metaverse.preset_ref,
+        revision: room.metaverse.preset_ref.revision + 1,
+        manifest_blob_hash: `mock-layout-${operationId}`,
+      };
+      const hosting = await this.getDomeHosting(spatialContext, instanceId);
+      return {
+        outcome: 'committed',
+        operation_id: operationId,
+        revision: room.metaverse.preset_ref.revision,
+        manifest_blob_hash: room.metaverse.preset_ref.manifest_blob_hash,
+        signed_commit_json: '{}',
+        hosting,
+      };
+    },
+    async resyncDomeSnapshots() {
+      return [];
     },
     async moveDome(sourceTopic, moveId, sourceInstanceId, targetContext) {
       const source = (gameRoomsByTopic[sourceTopic] ?? []).find(

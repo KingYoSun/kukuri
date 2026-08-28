@@ -1,11 +1,12 @@
 use kukuri_desktop_runtime::{
     AcceptDomeConnectionProposalRequest, CreateDomeConnectionProposalRequest,
-    CloseDomeHostingRequest, CreateGameRoomRequest, CreateLiveSessionRequest,
+    CloseDomeHostingRequest, CommitDomeLayoutRequest, CreateGameRoomRequest,
+    CreateLiveSessionRequest,
     CreateMetaverseRoomRequest, DelegateDomeHostingRequest, GetDomeHostingRequest,
     ImportMetaverseRoomAssetRequest, ListDomeConnectionTopologyRequest, ListGameRoomsRequest,
     ListLiveSessionsRequest, ListMetaverseRoomEventsRequest, LiveSessionCommandRequest,
-    MoveDomeRequest, PublishMetaverseRoomEventRequest, RevokeDomeConnectionRequest,
-    StartOwnerDomeHostingRequest, SubmitDomeSessionInputRequest,
+    MoveDomeRequest, PublishMetaverseRoomEventRequest, ResyncDomeSnapshotsRequest,
+    RevokeDomeConnectionRequest, StartOwnerDomeHostingRequest, SubmitDomeSessionInputRequest,
     UpdateGameRoomRequest, UpdateMetaverseRoomRequest, WithdrawDomeConnectionProposalRequest,
 };
 
@@ -179,6 +180,30 @@ pub async fn submit_dome_session_input(
     state
         .runtime
         .submit_dome_session_input(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn commit_dome_layout(
+    state: tauri::State<'_, DesktopState>,
+    request: CommitDomeLayoutRequest,
+) -> Result<kukuri_app_api::DomeLayoutCommitView, CommandError> {
+    state
+        .runtime
+        .commit_dome_layout(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn resync_dome_snapshots(
+    state: tauri::State<'_, DesktopState>,
+    request: ResyncDomeSnapshotsRequest,
+) -> Result<Vec<kukuri_core::DomePhysicsSnapshotV1>, CommandError> {
+    state
+        .runtime
+        .resync_dome_snapshots(request)
         .await
         .map_err(map_error)
 }

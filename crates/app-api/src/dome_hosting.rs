@@ -1,17 +1,23 @@
 use crate::service::*;
 use crate::views::{
-    ActivateCommunityNodeDomeHostingInput, CloseDomeHostingInput, DomeHostingView,
-    PrepareCommunityNodeDomeHostingInput, StartOwnerDomeHostingInput, SubmitDomeSessionInput,
+    ActivateCommunityNodeDomeHostingInput, CloseDomeHostingInput, CommitDomeLayoutInput,
+    DomeHostingView, DomeLayoutCommitOutcome, DomeLayoutCommitView,
+    PrepareCommunityNodeDomeHostingInput, ResyncDomeSnapshotsInput, StartOwnerDomeHostingInput,
+    SubmitDomeSessionInput, UpdateMetaverseRoomInput,
 };
 use kukuri_core::{
-    DOME_HOSTING_MAX_LEASE_MILLIS, DomeHostTargetV1, DomeHostingLeaseV1, DomeHostingRecordV1,
-    DomeInstanceStatusV1, SignedDomeHostingAcceptanceV1, SignedDomeHostingLeaseV1,
-    SignedDomePhysicsSnapshotV1, SpatialContextV1, accept_dome_hosting_lease,
-    activate_dome_hosting_lease, build_signed_dome_hosting_lease, build_signed_dome_session_input,
-    close_dome_hosting_lease, resolve_dome_hosting_state,
+    DOME_HOSTING_MAX_LEASE_MILLIS, DOME_LAYOUT_COMMIT_MIN_INTERVAL_MILLIS, DomeHostTargetV1,
+    DomeHostingLeaseV1, DomeHostingRecordV1, DomeHostingStateKindV1, DomeInstanceStatusV1,
+    DomeLayoutCommitV1, SignedDomeHostingAcceptanceV1, SignedDomeHostingLeaseV1,
+    SignedDomeLayoutCandidateV1, SignedDomeLayoutCommitV1, SignedDomePhysicsSnapshotV1,
+    SpatialContextV1, accept_dome_hosting_lease, activate_dome_hosting_lease,
+    build_signed_dome_hosting_lease, build_signed_dome_layout_commit,
+    build_signed_dome_session_input, close_dome_hosting_lease, dome_layout_candidate_digest,
+    resolve_dome_hosting_state, verify_signed_dome_layout_candidate,
 };
 
 const HOSTING_RECORD_PREFIX: &str = "metaverse/dome-hosting";
+const LAYOUT_COMMIT_PREFIX: &str = "metaverse/dome-layout-commits";
 const DEFAULT_LEASE_MILLIS: i64 = 24 * 60 * 60 * 1_000;
 
 impl AppService {
@@ -67,7 +73,7 @@ impl AppService {
                     host_pubkey: self.services.keys.public_key(),
                 },
                 manifest_blob_hash: instance.preset_ref.manifest_blob_hash.clone(),
-                manifest_version: METAVERSE_WORLD_VERSION,
+                manifest_version: instance.preset_ref.revision,
                 epoch,
                 issued_at: now,
                 expires_at: lease_expiry(now, input.lease_duration_millis)?,
@@ -138,7 +144,7 @@ impl AppService {
                     api_base_url: input.api_base_url,
                 },
                 manifest_blob_hash: instance.preset_ref.manifest_blob_hash.clone(),
-                manifest_version: METAVERSE_WORLD_VERSION,
+                manifest_version: instance.preset_ref.revision,
                 epoch,
                 issued_at: now,
                 expires_at: lease_expiry(now, input.lease_duration_millis)?,
@@ -264,6 +270,196 @@ impl AppService {
         runtime.signed_snapshot(now)
     }
 
+    pub async fn resync_dome_snapshots(
+        &self,
+        input: ResyncDomeSnapshotsInput,
+    ) -> Result<Vec<SignedDomePhysicsSnapshotV1>> {
+        let sessions = self.dome_host_sessions.lock().await;
+        let runtime = sessions
+            .get(&input.instance_id)
+            .context("this device is not the active Dome host")?;
+        if runtime.lease().spatial_context != input.spatial_context {
+            anyhow::bail!("Dome snapshot resync SpatialContext mismatch");
+        }
+        Ok(runtime.snapshots_after(input.after_sequence))
+    }
+
+    pub async fn commit_dome_layout(
+        &self,
+        input: CommitDomeLayoutInput,
+    ) -> Result<DomeLayoutCommitView> {
+        if input.operation_id.trim().is_empty() {
+            anyhow::bail!("Dome layout commit operation id is required");
+        }
+        let replica = self.hosting_context_replica(&input.spatial_context).await?;
+        let instance = self
+            .hosting_instance(&replica, &input.instance_id)
+            .await?
+            .context("Dome instance was not found")?;
+        self.ensure_dome_hosting_owner(&instance)?;
+
+        if let Some(existing) = self
+            .find_dome_layout_commit(&replica, &input.instance_id, &input.operation_id)
+            .await?
+        {
+            let hosting = self
+                .get_dome_hosting(input.spatial_context, &input.instance_id)
+                .await?;
+            return Ok(DomeLayoutCommitView {
+                outcome: DomeLayoutCommitOutcome::Committed,
+                operation_id: existing.commit.operation_id.clone(),
+                revision: existing.commit.next_manifest_revision,
+                manifest_blob_hash: existing.commit.manifest_blob_hash.clone(),
+                signed_commit_json: Some(serde_json::to_string(&existing)?),
+                hosting,
+            });
+        }
+
+        let records = self
+            .list_dome_hosting_records(&replica, &input.instance_id)
+            .await?;
+        let lease = current_unique_lease(&records)?.context("no active Dome Hosting Lease")?;
+        let now = Utc::now().timestamp_millis();
+        let resolved = resolve_dome_hosting_state(&instance, &records, now, Some(now))?;
+        if !matches!(
+            resolved.kind,
+            DomeHostingStateKindV1::OwnerHosted | DomeHostingStateKindV1::CommunityNodeHosted
+        ) {
+            anyhow::bail!("Dome layout commit requires an active host");
+        }
+        let candidate = match input.signed_candidate_json {
+            Some(json) => serde_json::from_str::<SignedDomeLayoutCandidateV1>(&json)
+                .context("invalid host-signed Dome layout candidate")?,
+            None => {
+                let mut sessions = self.dome_host_sessions.lock().await;
+                let runtime = sessions
+                    .get_mut(&input.instance_id)
+                    .context("active Community Node layout candidate is required")?;
+                runtime.signed_layout_candidate(&input.operation_id, now)?
+            }
+        };
+        verify_signed_dome_layout_candidate(
+            &candidate,
+            &lease.lease,
+            candidate.candidate.session_id.as_str(),
+        )?;
+        if candidate.candidate.operation_id != input.operation_id {
+            anyhow::bail!("Dome layout candidate operation id mismatch");
+        }
+
+        let topic_id = input.spatial_context.topic_id().as_str().to_string();
+        let (_, _, manifest) = self
+            .fetch_game_room_state_and_manifest(&topic_id, &input.instance_id)
+            .await?
+            .context("metaverse room was not found")?;
+        let current = manifest
+            .metaverse
+            .as_ref()
+            .context("metaverse room state is missing")?;
+        if current.spatial_context != input.spatial_context
+            || current.preset_ref.revision != candidate.candidate.base_manifest_revision
+            || current.preset_ref.manifest_blob_hash != lease.lease.manifest_blob_hash
+        {
+            anyhow::bail!("Dome layout candidate is stale");
+        }
+
+        if normalized_persistent_props(&current.dome.customization.persistent_props)
+            == normalized_persistent_props(&candidate.candidate.persistent_props)
+        {
+            let hosting = self
+                .get_dome_hosting(input.spatial_context, &input.instance_id)
+                .await?;
+            return Ok(DomeLayoutCommitView {
+                outcome: DomeLayoutCommitOutcome::NoOp,
+                operation_id: input.operation_id,
+                revision: current.preset_ref.revision,
+                manifest_blob_hash: current.preset_ref.manifest_blob_hash.clone(),
+                signed_commit_json: None,
+                hosting,
+            });
+        }
+
+        if let Some(last_committed_at) = self
+            .last_dome_layout_commit_at(&replica, &input.instance_id)
+            .await?
+            && now.saturating_sub(last_committed_at) < DOME_LAYOUT_COMMIT_MIN_INTERVAL_MILLIS
+        {
+            anyhow::bail!("Dome layout commit rate limit is active");
+        }
+
+        let mut customization = current.dome.customization.clone();
+        customization.persistent_props = candidate.candidate.persistent_props.clone();
+        self.update_metaverse_room(
+            &topic_id,
+            &input.instance_id,
+            UpdateMetaverseRoomInput {
+                status: manifest.status,
+                customization,
+            },
+        )
+        .await?;
+        let (_, _, updated_manifest) = self
+            .fetch_game_room_state_and_manifest(&topic_id, &input.instance_id)
+            .await?
+            .context("updated metaverse room was not found")?;
+        let updated = updated_manifest
+            .metaverse
+            .as_ref()
+            .context("updated metaverse room state is missing")?;
+        let signed_commit = build_signed_dome_layout_commit(
+            self.services.keys.as_ref(),
+            &lease.lease,
+            &candidate,
+            DomeLayoutCommitV1 {
+                operation_id: input.operation_id.clone(),
+                instance_id: input.instance_id.clone(),
+                instance_generation: lease.lease.instance_generation,
+                owner_pubkey: lease.lease.owner_pubkey.clone(),
+                base_manifest_revision: candidate.candidate.base_manifest_revision,
+                next_manifest_revision: updated.preset_ref.revision,
+                candidate_digest: dome_layout_candidate_digest(&candidate.candidate)?,
+                manifest_blob_hash: updated.preset_ref.manifest_blob_hash.clone(),
+                committed_at: now,
+            },
+        )?;
+        self.persist_dome_layout_commit(&replica, &signed_commit)
+            .await?;
+
+        let remaining_lease_millis = lease.lease.expires_at.saturating_sub(now).max(1);
+        let hosting = match lease.lease.host.clone() {
+            DomeHostTargetV1::OwnerDevice { endpoint_id, .. } => {
+                self.start_owner_dome_hosting(StartOwnerDomeHostingInput {
+                    spatial_context: input.spatial_context,
+                    instance_id: input.instance_id.clone(),
+                    endpoint_id,
+                    lease_duration_millis: remaining_lease_millis,
+                })
+                .await?
+            }
+            DomeHostTargetV1::CommunityNode {
+                node_id,
+                api_base_url,
+            } => {
+                self.prepare_community_node_dome_hosting(PrepareCommunityNodeDomeHostingInput {
+                    spatial_context: input.spatial_context,
+                    instance_id: input.instance_id.clone(),
+                    node_id: node_id.as_str().to_string(),
+                    api_base_url,
+                    lease_duration_millis: remaining_lease_millis,
+                })
+                .await?
+            }
+        };
+        Ok(DomeLayoutCommitView {
+            outcome: DomeLayoutCommitOutcome::Committed,
+            operation_id: input.operation_id,
+            revision: updated.preset_ref.revision,
+            manifest_blob_hash: updated.preset_ref.manifest_blob_hash.clone(),
+            signed_commit_json: Some(serde_json::to_string(&signed_commit)?),
+            hosting,
+        })
+    }
+
     async fn hosting_context_replica(&self, context: &SpatialContextV1) -> Result<ReplicaId> {
         self.ensure_topic_subscription(context.topic_id().as_str())
             .await?;
@@ -354,6 +550,78 @@ impl AppService {
             .await
     }
 
+    async fn find_dome_layout_commit(
+        &self,
+        replica: &ReplicaId,
+        instance_id: &str,
+        operation_id: &str,
+    ) -> Result<Option<SignedDomeLayoutCommitV1>> {
+        let records = self
+            .services
+            .docs_sync
+            .query_replica(
+                replica,
+                DocQuery::Exact(stable_key(
+                    LAYOUT_COMMIT_PREFIX,
+                    &format!("{instance_id}/{operation_id}"),
+                )),
+            )
+            .await?;
+        records
+            .into_iter()
+            .next()
+            .map(|record| serde_json::from_slice(&record.value).map_err(Into::into))
+            .transpose()
+    }
+
+    async fn last_dome_layout_commit_at(
+        &self,
+        replica: &ReplicaId,
+        instance_id: &str,
+    ) -> Result<Option<i64>> {
+        let records = self
+            .services
+            .docs_sync
+            .query_replica(
+                replica,
+                DocQuery::Prefix(stable_key(LAYOUT_COMMIT_PREFIX, &format!("{instance_id}/"))),
+            )
+            .await?;
+        let mut latest: Option<i64> = None;
+        for record in records {
+            let commit: SignedDomeLayoutCommitV1 = serde_json::from_slice(&record.value)?;
+            latest = Some(
+                latest
+                    .unwrap_or(commit.commit.committed_at)
+                    .max(commit.commit.committed_at),
+            );
+        }
+        Ok(latest)
+    }
+
+    async fn persist_dome_layout_commit(
+        &self,
+        replica: &ReplicaId,
+        signed: &SignedDomeLayoutCommitV1,
+    ) -> Result<()> {
+        self.services
+            .docs_sync
+            .apply_doc_op(
+                replica,
+                DocOp::SetJson {
+                    key: stable_key(
+                        LAYOUT_COMMIT_PREFIX,
+                        &format!(
+                            "{}/{}",
+                            signed.commit.instance_id, signed.commit.operation_id
+                        ),
+                    ),
+                    value: serde_json::to_value(signed)?,
+                },
+            )
+            .await
+    }
+
     async fn hosting_view(
         &self,
         instance: &DomeInstanceManifestV1,
@@ -361,13 +629,16 @@ impl AppService {
         now: i64,
     ) -> Result<DomeHostingView> {
         let (local_heartbeat, participants, sleeping) = {
-            let sessions = self.dome_host_sessions.lock().await;
-            match sessions.get(&instance.instance_id) {
-                Some(runtime) => (
-                    Some(now),
-                    runtime.participant_count().try_into().unwrap_or(u32::MAX),
-                    runtime.is_sleeping(),
-                ),
+            let mut sessions = self.dome_host_sessions.lock().await;
+            match sessions.get_mut(&instance.instance_id) {
+                Some(runtime) => {
+                    runtime.advance_to(now)?;
+                    (
+                        Some(now),
+                        runtime.participant_count().try_into().unwrap_or(u32::MAX),
+                        runtime.is_sleeping(),
+                    )
+                }
                 None => (None, 0, true),
             }
         };
@@ -469,6 +740,14 @@ fn lease_expiry(now: i64, requested_duration: i64) -> Result<i64> {
     }
     now.checked_add(duration)
         .context("Dome Hosting Lease expiry overflow")
+}
+
+fn normalized_persistent_props(
+    props: &[kukuri_core::MetaversePersistentPropV1],
+) -> Vec<kukuri_core::MetaversePersistentPropV1> {
+    let mut props = props.to_vec();
+    props.sort_by(|left, right| left.prop_id.cmp(&right.prop_id));
+    props
 }
 
 fn next_hosting_epoch(records: &[DomeHostingRecordV1]) -> u64 {

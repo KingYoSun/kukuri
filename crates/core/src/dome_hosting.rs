@@ -5,12 +5,14 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    DomeInstanceManifestV1, DomeInstanceStatusV1, KukuriEnvelope, KukuriKeys, Pubkey,
-    SpatialContextV1, sign_envelope_json, validate_dome_instance_manifest,
+    DomeCustomizationV1, DomeInstanceManifestV1, DomeInstanceStatusV1, KukuriEnvelope, KukuriKeys,
+    MetaversePersistentPropV1, Pubkey, SpatialContextV1, sign_envelope_json,
+    validate_dome_customization, validate_dome_instance_manifest,
 };
 
 pub const DOME_HOSTING_MAX_LEASE_MILLIS: i64 = 30 * 24 * 60 * 60 * 1_000;
 pub const DOME_HOSTING_HEARTBEAT_GRACE_MILLIS: i64 = 15_000;
+pub const DOME_SNAPSHOT_RING_CAPACITY: usize = 100;
 
 const LEASE_KIND: &str = "dome-hosting-lease";
 const ACCEPTANCE_KIND: &str = "dome-hosting-acceptance";
@@ -204,6 +206,16 @@ pub enum DomeSessionInputKindV1 {
     Sit {
         prop_id: String,
     },
+    SpawnGuestProp {
+        prop: MetaversePersistentPropV1,
+        expires_at: i64,
+    },
+    UpsertPersistentProp {
+        prop: MetaversePersistentPropV1,
+    },
+    DeletePersistentProp {
+        prop_id: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -331,6 +343,7 @@ pub fn validate_dome_hosting_lease(
         || lease.instance_id != instance.instance_id
         || lease.instance_generation != instance.generation
         || lease.manifest_blob_hash != instance.preset_ref.manifest_blob_hash
+        || lease.manifest_version != instance.preset_ref.revision
     {
         bail!("Dome Hosting Lease does not match the current instance");
     }
@@ -504,6 +517,22 @@ pub fn resolve_dome_hosting_state(
         BTreeMap::new();
     for record in records {
         if let DomeHostingRecordV1::LeaseIssued(signed) = record {
+            if signed.lease.manifest_version < instance.preset_ref.revision {
+                if signed.lease.instance_id != instance.instance_id
+                    || signed.lease.instance_generation != instance.generation
+                    || signed.lease.owner_pubkey != instance.owner_pubkey
+                    || signed.lease.spatial_context != instance.spatial_context
+                {
+                    bail!("stale Dome Hosting Lease identity does not match the instance");
+                }
+                verify_envelope_content(
+                    &signed.envelope,
+                    LEASE_KIND,
+                    &signed.lease.owner_pubkey,
+                    &signed.lease,
+                )?;
+                continue;
+            }
             verify_signed_dome_hosting_lease(signed, instance)?;
             leases_by_epoch
                 .entry(signed.lease.epoch)
@@ -752,9 +781,27 @@ fn validate_dome_session_input(input: &DomeSessionInputV1) -> Result<()> {
         {
             bail!("Dome impulse input is incomplete");
         }
+        DomeSessionInputKindV1::SpawnGuestProp { prop, expires_at } => {
+            validate_session_prop(prop)?;
+            if *expires_at <= input.sent_at {
+                bail!("Dome guest prop expiry must be in the future");
+            }
+        }
+        DomeSessionInputKindV1::UpsertPersistentProp { prop } => validate_session_prop(prop)?,
+        DomeSessionInputKindV1::DeletePersistentProp { prop_id } if prop_id.trim().is_empty() => {
+            bail!("Dome persistent prop id is required");
+        }
         _ => {}
     }
     Ok(())
+}
+
+fn validate_session_prop(prop: &MetaversePersistentPropV1) -> Result<()> {
+    let customization = DomeCustomizationV1 {
+        persistent_props: vec![prop.clone()],
+        ..DomeCustomizationV1::default()
+    };
+    validate_dome_customization(&customization)
 }
 
 fn validate_dome_physics_snapshot(
@@ -859,7 +906,7 @@ fn verify_close(signed: &SignedDomeHostingLeaseV1, close: &SignedDomeHostingClos
     )
 }
 
-fn verify_envelope_content<T>(
+pub(crate) fn verify_envelope_content<T>(
     envelope: &KukuriEnvelope,
     expected_kind: &str,
     expected_signer: &Pubkey,
@@ -880,7 +927,7 @@ where
     Ok(())
 }
 
-fn hosting_tags(instance_id: &str, epoch: u64, lease_id: &str) -> Vec<Vec<String>> {
+pub(crate) fn hosting_tags(instance_id: &str, epoch: u64, lease_id: &str) -> Vec<Vec<String>> {
     vec![
         vec!["object".into(), "dome-hosting".into()],
         vec!["instance_id".into(), instance_id.into()],
@@ -889,7 +936,7 @@ fn hosting_tags(instance_id: &str, epoch: u64, lease_id: &str) -> Vec<Vec<String
     ]
 }
 
-fn session_tags(instance_id: &str, epoch: u64, session_id: &str) -> Vec<Vec<String>> {
+pub(crate) fn session_tags(instance_id: &str, epoch: u64, session_id: &str) -> Vec<Vec<String>> {
     vec![
         vec!["object".into(), "dome-session".into()],
         vec!["instance_id".into(), instance_id.into()],

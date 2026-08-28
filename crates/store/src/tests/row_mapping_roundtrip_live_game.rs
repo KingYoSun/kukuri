@@ -214,6 +214,7 @@ fn metaverse_state() -> MetaverseRoomStateV1 {
         preset_ref: DomePresetRefV1 {
             preset_id: "preset-max".into(),
             owner_pubkey: "b".repeat(64).into(),
+            revision: 1,
             manifest_blob_hash: "f".repeat(64),
             manifest_mime: "application/vnd.kukuri.dome-preset+json".into(),
             manifest_bytes: 4096,

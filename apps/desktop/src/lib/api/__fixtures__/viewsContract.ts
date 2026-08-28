@@ -553,7 +553,7 @@ export const gameRoomViewMetaverse = {
   "scores": [],
   "room_kind": "metaverse_room",
   "metaverse": {
-    "world_version": 4,
+    "world_version": 5,
     "instance_id": "room-2",
     "spatial_context": {
       "kind": "channel",
@@ -567,6 +567,7 @@ export const gameRoomViewMetaverse = {
     "preset_ref": {
       "preset_id": "preset-2",
       "owner_pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+      "revision": 1,
       "manifest_blob_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "manifest_mime": "application/vnd.kukuri.dome-preset+json",
       "manifest_bytes": 2048
