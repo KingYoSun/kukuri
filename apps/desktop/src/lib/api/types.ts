@@ -16,6 +16,8 @@ import type {
   CommunityNodeManifestFetch,
   CommunityNodeNodeStatus,
   CommunityNodeRelationNeighborsRequest,
+  CommunityNodeTesterFeedbackResponse,
+  CommunityNodeTesterFeedbackSubmission,
   CommunityNodeUserAdvisoryRequest,
   CustomReactionAssetView,
   DirectMessageConversationView,
@@ -452,6 +454,9 @@ export interface DesktopApi {
   submitCommunityNodeReport(
     request: SubmitCommunityNodeReportRequest
   ): Promise<SubmitCommunityNodeReportResult>;
+  submitCommunityNodeTesterFeedback(
+    request: CommunityNodeTesterFeedbackSubmission
+  ): Promise<CommunityNodeTesterFeedbackResponse>;
   importPeerTicket(ticket: string): Promise<void>;
   setDiscoverySeeds(seedEntries: string[]): Promise<DiscoveryConfig>;
   unsubscribeTopic(topic: string): Promise<void>;

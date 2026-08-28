@@ -28,6 +28,7 @@ use crate::admin_rights_requests::{
     rights_requests_page,
 };
 use crate::admin_shell::render_admin_page;
+use crate::admin_tester_feedback::tester_feedback_page;
 use crate::state::UserApiState;
 
 pub(crate) fn admin_router(state: UserApiState) -> Router {
@@ -53,6 +54,7 @@ pub(crate) fn admin_router(state: UserApiState) -> Router {
         .route("/actions/preview", post(preview_action))
         .route("/actions/apply", post(apply_action))
         .route("/rights-requests", get(rights_requests_page))
+        .route("/tester-feedback", get(tester_feedback_page))
         .route("/rights-requests/{id}", get(rights_request_detail))
         .route(
             "/rights-requests/actions/preview",
@@ -553,6 +555,7 @@ fn render_dashboard(view: &DashboardView) -> String {
         r#"<section><h2>稼働状態と受け入れ方式</h2><div class="metrics"><div class="metric"><strong>利用者向け接続先</strong><br>稼働中</div><div class="metric"><strong>受け入れ方式</strong><br>{}</div><div class="metric"><strong>直近の準備確認</strong><br>{}</div></div>{}</section>
 <section><h2>対応トピック</h2><p>この画面で変更できるのは公開トピックだけです。非公開チャンネルの権限は変更できません。</p>{}<table><thead><tr><th>種類</th><th>識別子</th><th>作成時刻</th><th>操作</th></tr></thead><tbody>{}</tbody></table></section>
 <section><h2>権利侵害申出</h2><p>専用 schema の申出、scope 判定、追跡状態を確認します。申出人情報は一覧・監査記録へ表示しません。</p><a class="button secondary" href="/rights-requests">権利侵害申出を確認</a></section>
+<section><h2>テスターフィードバック</h2><p>テスターの利用経験レポートを確認します。送信者の識別情報は保存していません。</p><a class="button secondary" href="/tester-feedback">テスターフィードバックを確認</a></section>
 <section><h2>最近の通報</h2><p>新しい順に 50 件を表示します。補足説明と連絡先は、この一覧と操作記録には表示しません。</p><table><thead><tr><th>受信時刻</th><th>識別子</th><th>対象</th><th>機能</th><th>理由</th><th>状態</th><th>操作</th></tr></thead><tbody>{}</tbody></table></section>
 <section><h2>異議申し立ての審査</h2>{}</section>
 <section><h2>運営操作の記録</h2><p>画面から行った直近 50 件の操作です。データベースで追記専用に保護されています。</p><table><thead><tr><th>実行時刻</th><th>識別子</th><th>運営者</th><th>操作</th><th>対象</th><th>変更</th></tr></thead><tbody>{}</tbody></table></section>

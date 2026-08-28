@@ -30,3 +30,5 @@ pub const DOME_HOSTING_SESSION_WS_PATH: &str = "/v1/dome-hosting/session/ws";
 /// 通報受付。client は manifest の `report_endpoint` から動的に解決するため
 /// 直接この定数で URL を組み立てるのはサーバ側(route 定義)のみ。
 pub const REPORT_PATH: &str = "/v1/report";
+/// テスターフィードバック受付(#802 / ADR 0039)。
+pub const TESTER_FEEDBACK_PATH: &str = "/v1/tester-feedback";

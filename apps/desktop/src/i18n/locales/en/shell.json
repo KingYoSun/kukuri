@@ -240,6 +240,30 @@
     "communityNodeUnavailableTitle": "Community node unavailable",
     "viewScope": "View Scope"
   },
+  "testerFeedback": {
+    "openButton": "Send feedback",
+    "title": "Send feedback",
+    "description": "Send anything you noticed while using kukuri to a Community Node. No category or severity input is needed.",
+    "nodeLabel": "Community Node",
+    "whatAttemptedLabel": "What you were trying to do",
+    "whatHappenedLabel": "What happened",
+    "whatSeemedWrongLabel": "What felt wrong",
+    "charCount": "{{current}} / {{max}} characters",
+    "overLimit": "Each field must be at most {{max}} characters.",
+    "metadataNotice": "The client version and OS are attached automatically. No sender identity is stored.",
+    "noEligibleNode": "No authenticated and consented Community Node currently accepts tester feedback.",
+    "openSettings": "Open Community Node settings",
+    "submit": "Send",
+    "submitting": "Sending…",
+    "success": "Feedback sent. Reference ID: {{referenceId}}",
+    "errors": {
+      "notConfigured": "This Community Node does not accept tester feedback.",
+      "invalidFeedback": "Please review your input. All three fields are required, each at most 2000 characters.",
+      "authRequired": "Authentication is required for the selected Community Node.",
+      "consentRequired": "Required consent is missing for the selected Community Node.",
+      "requestFailed": "Sending feedback failed. Please try again later."
+    }
+  },
   "indexingRequest": {
     "title": "Request Community Node indexing",
     "target": "Target: {{target}}",

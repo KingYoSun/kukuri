@@ -446,6 +446,7 @@ fn load_manifest(path: Option<&std::path::Path>) -> Result<LoadedManifest> {
     let retention = RetentionPolicy {
         report_days: r.report_days,
         report_contact_days: r.report_contact_days,
+        tester_feedback_days: r.tester_feedback_days,
         rights_request_active_days: r.rights_request_active_days,
         rights_request_resolved_days: r.rights_request_resolved_days,
         rights_request_rejected_days: r.rights_request_rejected_days,

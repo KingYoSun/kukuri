@@ -45,6 +45,15 @@ export function eligibleCommunityNodes(
     });
 }
 
+/// テスターフィードバックの送信先は `tester_feedback` を提供中のノードに限る(#802 / ADR 0039)。
+export function eligibleTesterFeedbackNodes(
+  config: CommunityNodeConfig,
+  statuses: readonly CommunityNodeNodeStatus[],
+  manifests: Readonly<Record<string, CommunityIndexManifestEntry>>
+): string[] {
+  return eligibleCommunityNodes(config, statuses, manifests, ['tester_feedback']);
+}
+
 export function eligibleCommunityIndexNodes(
   config: CommunityNodeConfig,
   statuses: readonly CommunityNodeNodeStatus[],

@@ -20,7 +20,7 @@ use kukuri_cn_protocol::{
     INDEXING_REQUESTS_PATH, NODE_MANIFEST_PATH, RELATION_NEIGHBORS_PATH, RELATION_OPTOUT_PATH,
     RELATION_USERS_ROUTE, REPORT_PATH, RIGHTS_REQUEST_CREATE_PATH, RIGHTS_REQUEST_FORM_PATH,
     RIGHTS_REQUEST_SCOPE_PATH, RIGHTS_REQUEST_STATUS_PATH, RIGHTS_REQUEST_WITHDRAW_PATH,
-    TOPIC_RENDEZVOUS_HEARTBEAT_PATH, TRUST_USERS_ROUTE,
+    TESTER_FEEDBACK_PATH, TOPIC_RENDEZVOUS_HEARTBEAT_PATH, TRUST_USERS_ROUTE,
 };
 use serde_json::{Value, json};
 use tower_http::trace::TraceLayer;
@@ -45,6 +45,7 @@ use crate::handlers::rights_requests::{
     rights_request_status_form_submit, submit_rights_request, submit_rights_request_form,
     withdraw_rights_request_form_submit, withdraw_rights_request_handler,
 };
+use crate::handlers::tester_feedback::submit_tester_feedback;
 use crate::handlers::transmission_prevention::transmission_prevention_status;
 use crate::handlers::trust_relation::{
     relation_neighbors, relation_optout_clear, relation_optout_get, relation_optout_set,
@@ -81,6 +82,7 @@ pub fn app_router(state: UserApiState) -> Router {
             post(topic_rendezvous_heartbeat),
         )
         .route(REPORT_PATH, post(submit_report))
+        .route(TESTER_FEEDBACK_PATH, post(submit_tester_feedback))
         .route(RIGHTS_REQUEST_SCOPE_PATH, get(rights_request_scope))
         .route(RIGHTS_REQUEST_CREATE_PATH, post(submit_rights_request))
         .route(RIGHTS_REQUEST_STATUS_PATH, post(rights_request_status))

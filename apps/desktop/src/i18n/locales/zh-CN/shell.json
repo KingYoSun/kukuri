@@ -240,6 +240,30 @@
     "communityNodeUnavailableTitle": "社区节点不可用",
     "viewScope": "查看范围"
   },
+  "testerFeedback": {
+    "openButton": "发送反馈",
+    "title": "发送反馈",
+    "description": "把使用 kukuri 时注意到的问题发送给 Community Node。无需填写分类或严重程度。",
+    "nodeLabel": "目标 Community Node",
+    "whatAttemptedLabel": "你想做什么",
+    "whatHappenedLabel": "发生了什么",
+    "whatSeemedWrongLabel": "哪里让你觉得不对",
+    "charCount": "{{current}} / {{max}} 字",
+    "overLimit": "每项内容不能超过 {{max}} 字。",
+    "metadataNotice": "客户端版本和操作系统会自动附加。不会保存发送者的身份信息。",
+    "noEligibleNode": "没有已认证、已完成必需同意且接受测试反馈的 Community Node。",
+    "openSettings": "打开 Community Node 设置",
+    "submit": "发送",
+    "submitting": "发送中…",
+    "success": "反馈已发送。受理 ID:{{referenceId}}",
+    "errors": {
+      "notConfigured": "该 Community Node 不接受测试反馈。",
+      "invalidFeedback": "请检查输入内容。三项均为必填,且每项不超过 2000 字。",
+      "authRequired": "需要对所选 Community Node 进行认证。",
+      "consentRequired": "所选 Community Node 的必需同意尚未完成。",
+      "requestFailed": "反馈发送失败,请稍后再试。"
+    }
+  },
   "indexingRequest": {
     "title": "申请 Community Node 索引",
     "target": "对象：{{target}}",

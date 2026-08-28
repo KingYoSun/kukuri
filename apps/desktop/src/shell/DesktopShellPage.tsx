@@ -11,10 +11,14 @@ import {
   CommunityIndexingRequestDialog,
   type CommunityIndexingTarget,
 } from '@/components/core/CommunityIndexingRequestDialog';
+import { TesterFeedbackDialog } from '@/components/core/TesterFeedbackDialog';
 import { type SettingsSection } from '@/components/shell/types';
 
 import { runtimeApi } from '@/lib/api';
-import { eligibleCommunityIndexNodes } from '@/lib/api/communityIndex';
+import {
+  eligibleCommunityIndexNodes,
+  eligibleTesterFeedbackNodes,
+} from '@/lib/api/communityIndex';
 import i18n from '@/i18n';
 import { getResolvedLocale } from '@/i18n/format';
 import {
@@ -107,6 +111,7 @@ export function DesktopShellPage({
   const [profileAvatarPreviewUrl, setProfileAvatarPreviewUrl] = useState<string | null>(null);
   const [clipboardToastId, setClipboardToastId] = useState(0);
   const [indexingTarget, setIndexingTarget] = useState<CommunityIndexingTarget | null>(null);
+  const [testerFeedbackOpen, setTesterFeedbackOpen] = useState(false);
   const clipboardToastTimeoutRef = useRef<number | null>(null);
   const dialogs = useShellDialogs({
     activePrimarySection: shellChromeState.activePrimarySection,
@@ -434,6 +439,15 @@ export function DesktopShellPage({
       ),
     [communityNodeConfig, communityNodeManifests, communityNodeStatuses]
   );
+  const eligibleFeedbackNodes = useMemo(
+    () =>
+      eligibleTesterFeedbackNodes(
+        communityNodeConfig,
+        communityNodeStatuses,
+        communityNodeManifests
+      ),
+    [communityNodeConfig, communityNodeManifests, communityNodeStatuses]
+  );
   const handleOpenSettingsSection = useCallback((section: SettingsSection) => {
     if (section === 'community-node') setIndexingTarget(null);
     setSettingsOpen(true, false);
@@ -726,6 +740,7 @@ export function DesktopShellPage({
           onOpenChannelManager={() => dialogs.setChannelDialogOpen(true)}
           onActivateColumn={activateWorkspaceColumn}
           onOpenSettings={handleOpenSettingsSection}
+          onOpenTesterFeedback={() => setTesterFeedbackOpen(true)}
           onSelectTopic={(topic) => void shellActions.handleSelectTopic(topic)}
           onSelectChannel={(topic, channelId) => {
             shellActions.handleSelectPrivateChannel(topic, channelId);
@@ -770,6 +785,17 @@ export function DesktopShellPage({
           if (!open) setIndexingTarget(null);
         }}
         onOpenCommunityNodeSettings={handleOpenCommunityNodeSettings}
+      />
+
+      <TesterFeedbackDialog
+        api={api}
+        open={testerFeedbackOpen}
+        eligibleNodeBaseUrls={eligibleFeedbackNodes}
+        onOpenChange={setTesterFeedbackOpen}
+        onOpenCommunityNodeSettings={() => {
+          setTesterFeedbackOpen(false);
+          handleOpenCommunityNodeSettings();
+        }}
       />
 
       <DesktopShellSettingsDrawer

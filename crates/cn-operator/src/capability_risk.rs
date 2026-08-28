@@ -265,6 +265,22 @@ impl Capability {
                 small_scale_tips: "初回応答の現実的な運用目標を設定し、専用 CLI と公開 status で小さく運用できる。",
                 how_to_reduce: "`features.rights_request_endpoint: false`（既定）で無効化できる。無効時は専用 URL を公開しない。",
             },
+            Capability::TesterFeedback => CapabilityRiskPractices {
+                user_expectation: "本ノードへテスターとして利用経験のフィードバックを送れること。",
+                authority_scope: "本ノードが受信・保存したフィードバックの範囲のみ（中央収集窓口ではない）。",
+                responsibility_boundary: "フィードバック内容への対応・修正を保証しない。通報・権利侵害申出の窓口ではない。",
+                risks: &[
+                    "自由記述に意図せず個人情報・機微情報が書き込まれ得る。",
+                    "蓄積した本文の保持期間・閲覧範囲の管理が必要になる。",
+                ],
+                recommended_practices: &[
+                    "送信者の identity / social graph を保持しない（#802 実装）。",
+                    "保持期間（tester_feedback_days）を設定し、期限後に削除する。",
+                    "閲覧は admin dashboard / `cn-cli tester-feedback` に限定する。",
+                ],
+                small_scale_tips: "テスト運用時のみ有効化し、収集が不要になったら無効へ戻す運用で十分。",
+                how_to_reduce: "`features.tester_feedback: false`（既定）で無効化できる。",
+            },
             Capability::DomeHosting => CapabilityRiskPractices {
                 user_expectation: "owner不在時もlease期限内はDome sessionが継続し、Nodeがphysics authorityになること。",
                 authority_scope: "owner署名Hosting Leaseが指すDome、epoch、manifest、期限の範囲のみ。",

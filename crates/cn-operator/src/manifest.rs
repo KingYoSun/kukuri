@@ -114,6 +114,8 @@ pub struct Capabilities {
     #[serde(default)]
     pub rights_request_endpoint: bool,
     #[serde(default)]
+    pub tester_feedback: bool,
+    #[serde(default)]
     pub dome_hosting: bool,
 }
 
@@ -136,6 +138,7 @@ impl Capabilities {
             community_local_trust: config.enabled(Capability::CommunityLocalTrust),
             report_endpoint: config.enabled(Capability::ReportEndpoint),
             rights_request_endpoint: config.enabled(Capability::RightsRequestEndpoint),
+            tester_feedback: config.enabled(Capability::TesterFeedback),
             dome_hosting: config.enabled(Capability::DomeHosting),
         }
     }

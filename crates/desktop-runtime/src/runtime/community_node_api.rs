@@ -57,6 +57,14 @@ impl DesktopRuntime {
         self.request_community_node_indexing(request).await
     }
 
+    pub async fn submit_community_node_tester_feedback(
+        &self,
+        request: CommunityNodeTesterFeedbackSubmission,
+    ) -> std::result::Result<CommunityNodeTesterFeedbackResponse, CommunityNodeTesterFeedbackError>
+    {
+        self.submit_tester_feedback(request).await
+    }
+
     pub async fn search_community_node_index(
         &self,
         request: CommunityNodeIndexQueryRequest,

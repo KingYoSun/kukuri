@@ -16,6 +16,7 @@ mod admin_action_render;
 mod admin_appeal_render;
 mod admin_rights_requests;
 mod admin_shell;
+mod admin_tester_feedback;
 mod config;
 mod dome_hosting;
 mod errors;

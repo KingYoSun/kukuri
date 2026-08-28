@@ -42,6 +42,7 @@ pub(super) fn retention_policy() -> Result<RetentionPolicy> {
     Ok(RetentionPolicy {
         report_days: value.report_days,
         report_contact_days: value.report_contact_days,
+        tester_feedback_days: value.tester_feedback_days,
         rights_request_active_days: value.rights_request_active_days,
         rights_request_resolved_days: value.rights_request_resolved_days,
         rights_request_rejected_days: value.rights_request_rejected_days,

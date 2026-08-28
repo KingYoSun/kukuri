@@ -35,6 +35,7 @@ type ConnectivityMock = Pick<
   | 'recommendCommunityNodeIndex'
   | 'submitCommunityNodeIndexingRequest'
   | 'submitCommunityNodeReport'
+  | 'submitCommunityNodeTesterFeedback'
   | 'importPeerTicket'
   | 'setDiscoverySeeds'
   | 'unsubscribeTopic'
@@ -336,6 +337,11 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
         status: 'submitted',
         reference_id: `mock-${request.subject_kind}-${request.subject_id}`,
         disputed_risk_signal_id: request.appeal?.risk_signal_id ?? null,
+      };
+    },
+    async submitCommunityNodeTesterFeedback() {
+      return {
+        reference_id: `mock-tester-feedback-${Date.now()}`,
       };
     },
     async importPeerTicket() {},

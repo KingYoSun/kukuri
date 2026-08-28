@@ -39,6 +39,19 @@ test('Control Center is the global navigation entry on desktop and narrow viewpo
   expect(screen.queryByTestId('shell-nav-trigger')).not.toBeInTheDocument();
 });
 
+test('tester feedback trigger sits next to the Control Center trigger and opens the dialog', async () => {
+  render(<App api={createDesktopMockApi()} />);
+
+  const trigger = await screen.findByTestId('tester-feedback-trigger');
+  expect(trigger).toBeVisible();
+  expect(trigger.parentElement).toBe(
+    screen.getByTestId('control-center-trigger').parentElement
+  );
+
+  fireEvent.click(trigger);
+  expect(await screen.findByRole('dialog', { name: 'Send feedback' })).toBeInTheDocument();
+});
+
 test('Control Center exposes Columns, Places, Activity, and System and restores trigger focus', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);

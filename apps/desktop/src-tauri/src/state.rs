@@ -195,6 +195,17 @@ impl From<kukuri_desktop_runtime::CommunityNodeIndexingRequestError> for Command
     }
 }
 
+impl From<kukuri_desktop_runtime::CommunityNodeTesterFeedbackError> for CommandError {
+    fn from(error: kukuri_desktop_runtime::CommunityNodeTesterFeedbackError) -> Self {
+        Self {
+            code: error.code,
+            message: error.message,
+            status: error.status,
+            retry_after_seconds: error.retry_after_seconds,
+        }
+    }
+}
+
 impl From<kukuri_desktop_runtime::CommunityNodeTrustRelationError> for CommandError {
     fn from(error: kukuri_desktop_runtime::CommunityNodeTrustRelationError) -> Self {
         Self {

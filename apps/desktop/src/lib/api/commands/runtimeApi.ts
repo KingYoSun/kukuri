@@ -11,6 +11,8 @@ import type {
   CommunityNodeManifestFetch,
   CommunityNodeNodeStatus,
   CommunityNodeRelationNeighborsRequest,
+  CommunityNodeTesterFeedbackResponse,
+  CommunityNodeTesterFeedbackSubmission,
   CommunityNodeUserAdvisoryRequest,
   CustomReactionAssetView,
   DesktopApi,
@@ -898,6 +900,17 @@ export const runtimeApi: DesktopApi = {
       request,
     });
   }),
+  submitCommunityNodeTesterFeedback: command(
+    'submitCommunityNodeTesterFeedback',
+    async (request) => {
+      return invokeDesktop<CommunityNodeTesterFeedbackResponse>(
+        'submit_community_node_tester_feedback',
+        {
+          request: request satisfies CommunityNodeTesterFeedbackSubmission,
+        }
+      );
+    }
+  ),
   importPeerTicket: command('importPeerTicket', async (ticket) => {
     return invokeDesktop<void>('import_peer_ticket', {
       request: {
