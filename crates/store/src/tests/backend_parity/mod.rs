@@ -222,6 +222,12 @@ fn parity_metaverse_state() -> MetaverseRoomStateV1 {
         mime_type: Some("model/gltf-binary".into()),
         size_bytes: Some(2048),
         name: Some("cube".into()),
+        budget_metadata: Some(kukuri_core::MetaverseAssetBudgetMetadataV1 {
+            stored_bytes: 2_048,
+            model_triangles: 12,
+            model_primitives: 1,
+            ..Default::default()
+        }),
     });
     customization.persistent_props[0].primitive_fallback = MetaversePrimitive::Cube;
     customization.persistent_props[0].position = [1, 2, 3];

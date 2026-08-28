@@ -32,6 +32,28 @@ use tokio::sync::{Mutex as TokioMutex, broadcast};
 use tokio::time::{Duration, sleep, timeout};
 use tokio_stream::wrappers::BroadcastStream;
 
+fn minimal_metaverse_glb_bytes() -> Vec<u8> {
+    let json = br#"{"asset":{"version":"2.0"},"accessors":[{"count":3}],"meshes":[{"primitives":[{"indices":0}]}]}"#;
+    let padded_len = (json.len() + 3) & !3;
+    let total_len = 12 + 8 + padded_len;
+    let mut glb = Vec::with_capacity(total_len);
+    glb.extend_from_slice(b"glTF");
+    glb.extend_from_slice(&2_u32.to_le_bytes());
+    glb.extend_from_slice(&(total_len as u32).to_le_bytes());
+    glb.extend_from_slice(&(padded_len as u32).to_le_bytes());
+    glb.extend_from_slice(&0x4e4f534a_u32.to_le_bytes());
+    glb.extend_from_slice(json);
+    glb.resize(total_len, b' ');
+    glb
+}
+
+fn minimal_metaverse_png_bytes() -> Vec<u8> {
+    vec![
+        0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, b'I', b'H', b'D', b'R', 0, 0,
+        0, 1, 0, 0, 0, 1,
+    ]
+}
+
 mod capability_registry_snapshot;
 mod direct_messages;
 mod dome_connections;

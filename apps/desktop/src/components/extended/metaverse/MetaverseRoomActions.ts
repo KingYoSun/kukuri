@@ -41,7 +41,11 @@ export type MetaverseRoomActions = {
     name: string,
     dataBase64: string
   ) => Promise<MetaverseAssetRef>;
-  getBlobPreviewUrl: (blobHash: string, mime: string) => Promise<string | null>;
+  getBlobPreviewUrl: (
+    blobHash: string,
+    mime: string,
+    metaverseKind?: MetaverseAssetRef['kind'] | null
+  ) => Promise<string | null>;
   updateRoom: (
     roomId: string,
     status: GameRoomView['status'],

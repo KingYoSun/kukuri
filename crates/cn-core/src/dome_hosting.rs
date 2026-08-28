@@ -17,6 +17,7 @@ pub async fn stage_dome_hosting_blobs(
     reference_id: &str,
     blobs: &[StagedDomeBlob],
     now_millis: i64,
+    capacity_bytes: u64,
 ) -> Result<()> {
     if reference_id.trim().is_empty() {
         bail!("Dome blob staging reference is required");
@@ -46,9 +47,40 @@ pub async fn stage_dome_hosting_blobs(
             additional = additional.saturating_add(data.len() as u64);
         }
     }
-    if (current_bytes.max(0) as u64).saturating_add(additional)
-        > COMMUNITY_NODE_DOME_BLOB_CACHE_CAPACITY_BYTES
-    {
+    if capacity_bytes == 0 {
+        bail!("Community Node metaverse manifest/asset blob cache capacity exceeded");
+    }
+    let mut retained_bytes = current_bytes.max(0) as u64;
+    if retained_bytes.saturating_add(additional) > capacity_bytes {
+        let cutoff = now_millis.saturating_sub(DOME_BLOB_CACHE_GC_GRACE_MILLIS);
+        let candidates = sqlx::query_as::<_, (String, i64)>(
+            "SELECT cache.blob_hash, cache.bytes
+             FROM cn_metaverse.dome_blob_cache cache
+             WHERE cache.unreferenced_at IS NOT NULL AND cache.unreferenced_at <= $1
+               AND NOT EXISTS (
+                 SELECT 1 FROM cn_metaverse.dome_blob_pins pins
+                 WHERE pins.blob_hash = cache.blob_hash
+               )
+             ORDER BY cache.last_accessed_at ASC, cache.blob_hash ASC",
+        )
+        .bind(cutoff)
+        .fetch_all(&mut *tx)
+        .await?;
+        for (hash, bytes) in candidates {
+            if unique.contains_key(&hash) {
+                continue;
+            }
+            sqlx::query("DELETE FROM cn_metaverse.dome_blob_cache WHERE blob_hash = $1")
+                .bind(hash)
+                .execute(&mut *tx)
+                .await?;
+            retained_bytes = retained_bytes.saturating_sub(bytes.max(0) as u64);
+            if retained_bytes.saturating_add(additional) <= capacity_bytes {
+                break;
+            }
+        }
+    }
+    if retained_bytes.saturating_add(additional) > capacity_bytes {
         bail!("Community Node metaverse manifest/asset blob cache capacity exceeded");
     }
     for (hash, data) in unique {

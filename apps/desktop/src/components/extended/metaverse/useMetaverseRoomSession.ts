@@ -448,7 +448,8 @@ export function useMetaverseRoomSession({
           void actions
             .getBlobPreviewUrl(
               presence.avatarAssetRef.blob_hash,
-              presence.avatarAssetRef.mime_type ?? 'model/vrm'
+              presence.avatarAssetRef.mime_type ?? 'model/vrm',
+              presence.avatarAssetRef.kind
             )
             .then((avatarAssetUrl) => {
               if (!cancelled && avatarAssetUrl) {

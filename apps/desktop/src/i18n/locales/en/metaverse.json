@@ -56,6 +56,11 @@
     "participants": "Participants: {{value}}",
     "revision": "Layout revision: {{value}}",
     "cacheLimit": "Manifest/asset cache limit: {{value}}",
+    "participantBudget": "Participant budget: {{used}} / {{limit}}",
+    "rigidBodyBudget": "Rigid body high-water: {{used}} / {{limit}}",
+    "rejectedResources": "Resource rejections: {{value}}",
+    "snapshotBytes": "Snapshot bytes generated: {{value}}",
+    "resourceRejected": "The host rejected this operation for resource safety ({{code}}).",
     "sleep": { "sleeping": "Physics: sleeping", "awake": "Physics: active" },
     "none": "none",
     "ownerHost": "Host on this device",
@@ -170,6 +175,9 @@
   },
   "viewport": {
     "ariaLabel": "Metaverse room viewport"
+  },
+  "resources": {
+    "degraded": "Resource safety mode: {{tier}}"
   },
   "errors": {
     "createFailed": "Failed to create metaverse room",

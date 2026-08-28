@@ -79,7 +79,11 @@ export function MetaverseRoomPanel({
     const surface = session.selectedRoom?.metaverse?.dome.customization.surface;
     const resolve = async (asset: MetaverseAssetRef | null | undefined) => {
       if (!asset) return null;
-      return actions.getBlobPreviewUrl(asset.blob_hash, asset.mime_type ?? 'image/png');
+      return actions.getBlobPreviewUrl(
+        asset.blob_hash,
+        asset.mime_type ?? 'image/png',
+        asset.kind
+      );
     };
     void Promise.all([resolve(surface?.wall_texture), resolve(surface?.floor_texture)])
       .then(([wall, floor]) => {
@@ -141,7 +145,11 @@ export function MetaverseRoomPanel({
         dataBase64
       );
       const resolvedUrl =
-        (await actions.getBlobPreviewUrl(assetRef.blob_hash, assetRef.mime_type ?? mime)) ??
+        (await actions.getBlobPreviewUrl(
+          assetRef.blob_hash,
+          assetRef.mime_type ?? mime,
+          assetRef.kind
+        )) ??
         `data:${mime};base64,${dataBase64}`;
       setLocalAvatarAssetRef(assetRef);
       setLocalAvatarAssetUrl(resolvedUrl);

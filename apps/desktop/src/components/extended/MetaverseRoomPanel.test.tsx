@@ -645,7 +645,7 @@ describe('MetaverseRoomPanel animation sharing', () => {
         'avatar.vrm',
         expect.any(String)
       );
-      expect(getBlobPreviewUrl).toHaveBeenCalledWith('avatar-blob-hash', 'model/vrm');
+      expect(getBlobPreviewUrl).toHaveBeenCalledWith('avatar-blob-hash', 'model/vrm', 'vrm');
     });
     await user.click(screen.getByRole('button', { name: 'Debug details' }));
     expect(screen.getByText('Blob asset resolve: avatar-blob-hash')).toBeInTheDocument();

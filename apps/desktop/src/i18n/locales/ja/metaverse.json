@@ -56,6 +56,11 @@
     "participants": "参加者: {{value}}",
     "revision": "レイアウトrevision: {{value}}",
     "cacheLimit": "manifest/asset cache上限: {{value}}",
+    "participantBudget": "参加者budget: {{used}} / {{limit}}",
+    "rigidBodyBudget": "rigid body最大使用数: {{used}} / {{limit}}",
+    "rejectedResources": "resource拒否回数: {{value}}",
+    "snapshotBytes": "snapshot生成量: {{value}}",
+    "resourceRejected": "リソース安全上限によりhostが操作を拒否しました（{{code}}）。",
     "sleep": { "sleeping": "物理演算: スリープ", "awake": "物理演算: 稼働中" },
     "none": "なし",
     "ownerHost": "この端末でHostingを開始",
@@ -170,6 +175,9 @@
   },
   "viewport": {
     "ariaLabel": "メタバースルーム表示"
+  },
+  "resources": {
+    "degraded": "リソース安全モード: {{tier}}"
   },
   "errors": {
     "createFailed": "メタバースルームを作成できませんでした",

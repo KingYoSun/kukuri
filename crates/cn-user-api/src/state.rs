@@ -336,8 +336,13 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
         if keys.public_key_hex() != manifest_node_id {
             anyhow::bail!("Dome host signing key does not match manifest node_id");
         }
+        let budget = kukuri_core::MetaverseResourceBudgetConfig::community_node_from_json_override(
+            std::env::var("COMMUNITY_NODE_METAVERSE_RESOURCE_BUDGET_JSON")
+                .ok()
+                .as_deref(),
+        )?;
         Some(Arc::new(
-            DomeHostingNodeState::restore(pool.clone(), keys).await?,
+            DomeHostingNodeState::restore(pool.clone(), keys, budget).await?,
         ))
     } else {
         None

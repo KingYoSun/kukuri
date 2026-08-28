@@ -287,7 +287,13 @@ impl DesktopRuntime {
             iroh_stack.blob_service.clone(),
             keys,
         );
-        let app_service = AppService::from_handles(services);
+        let metaverse_budget = kukuri_core::MetaverseResourceBudgetConfig::from_json_override(
+            std::env::var("KUKURI_METAVERSE_RESOURCE_BUDGET_JSON")
+                .ok()
+                .as_deref(),
+        )?;
+        let app_service =
+            AppService::from_handles_with_metaverse_budget(services, metaverse_budget)?;
         for capability in load_private_channel_capabilities(&db_path, identity_mode)? {
             app_service
                 .restore_private_channel_capability(capability)

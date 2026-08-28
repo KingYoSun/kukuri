@@ -731,6 +731,64 @@ impl DesktopRuntime {
         &self,
         request: GetBlobPreviewRequest,
     ) -> Result<Option<String>> {
+        if let Some(kind) = request.metaverse_kind.clone() {
+            let Some(bytes) = self
+                .app_service
+                .fetch_metaverse_blob_bytes(request.hash.as_str())
+                .await?
+            else {
+                return Ok(None);
+            };
+            let metadata = kukuri_core::inspect_metaverse_asset(kind.clone(), &bytes)?;
+            let budget = self.app_service.metaverse_resource_budget();
+            let (scope, resource, byte_limit) = match kind {
+                kukuri_core::MetaverseAssetKind::Vrm => (
+                    kukuri_core::MetaverseBudgetScope::Player,
+                    kukuri_core::MetaverseBudgetResource::AvatarAssetBytes,
+                    budget.player.max_avatar_asset_bytes,
+                ),
+                kukuri_core::MetaverseAssetKind::Texture => (
+                    kukuri_core::MetaverseBudgetScope::Client,
+                    kukuri_core::MetaverseBudgetResource::TextureBytes,
+                    budget.dome.max_texture_bytes,
+                ),
+                _ => (
+                    kukuri_core::MetaverseBudgetScope::Client,
+                    kukuri_core::MetaverseBudgetResource::ModelBytes,
+                    budget.dome.max_model_bytes,
+                ),
+            };
+            if metadata.stored_bytes > byte_limit {
+                return Err(kukuri_core::MetaverseResourceRejection::new(
+                    scope,
+                    resource,
+                    kukuri_core::MetaverseResourceRejectionReason::LimitExceeded,
+                    metadata.stored_bytes,
+                    byte_limit,
+                )
+                .into());
+            }
+            if metadata.model_triangles > budget.client.max_rendered_triangles {
+                return Err(kukuri_core::MetaverseResourceRejection::new(
+                    kukuri_core::MetaverseBudgetScope::Client,
+                    kukuri_core::MetaverseBudgetResource::RenderedTriangles,
+                    kukuri_core::MetaverseResourceRejectionReason::LimitExceeded,
+                    metadata.model_triangles,
+                    budget.client.max_rendered_triangles,
+                )
+                .into());
+            }
+            if metadata.decoded_texture_bytes > budget.client.max_texture_memory_bytes {
+                return Err(kukuri_core::MetaverseResourceRejection::new(
+                    kukuri_core::MetaverseBudgetScope::Client,
+                    kukuri_core::MetaverseBudgetResource::TextureMemory,
+                    kukuri_core::MetaverseResourceRejectionReason::LimitExceeded,
+                    metadata.decoded_texture_bytes,
+                    budget.client.max_texture_memory_bytes,
+                )
+                .into());
+            }
+        }
         self.app_service
             .blob_preview_data_url(request.hash.as_str(), request.mime.as_str())
             .await

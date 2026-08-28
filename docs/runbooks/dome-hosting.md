@@ -32,9 +32,16 @@ owner が online に戻っても自動 reclaim はしない。「この端末で
 ## Manifest/asset cache
 
 - 管理対象はmetaverse manifestとそこから参照されるasset blobだけ。physics snapshot、session state、DB metadata、GPU resource、metaverse以外のblobは容量計算に含めない。
-- 固定上限はdesktop 1 GiB、Community Node 10 GiB。content hashで重複排除し、`staging`、`current`、`active_lease`、直近3版の`rollback`参照をpinする。
+- 既定上限はdesktop 1 GiB、Community Node 10 GiB。content hashで重複排除し、`staging`、`current`、`active_lease`、直近3版の`rollback`参照をpinする。
 - pinが一つでもあるblobは削除しない。全参照解除から24時間のgrace後にだけlocal GC対象とする。容量不足時もcurrent/active/stagingを退避せず、新規stagingを失敗させる。
 - P2Pで既に取得された他peer上のコピーは強制消去できない。保証範囲は新規配布の停止と各nodeのlocal unpin/GCまで。
+
+## Resource budget
+
+- owner desktopは`KUKURI_METAVERSE_RESOURCE_BUDGET_JSON`、Community Nodeは`COMMUNITY_NODE_METAVERSE_RESOURCE_BUDGET_JSON`へ[ADR-0041](../adr/0041-metaverse-resource-budget.md)の完全なJSON objectを設定する。部分object、不正値、安全上限超過は起動失敗になる。
+- `GET /v1/dome-hosting/status/{instance_id}`の`resource_budget`で適用値、`resource_metrics`で拒否総数/code別件数、participant/rigid-body high-water、snapshot bytes/throttleを確認する。metricにplayerやassetの識別子は含まれない。
+- `METAVERSE_*_RATE_EXCEEDED`はwindow経過後に再試行できる。`LIMIT_EXCEEDED`または`UNVERIFIED_ASSET`はasset/config/scene構成を修正してから再割当する。上限引上げはADRのhard ceiling内に限定する。
+- Clientの`reduced` / `fallback` / `minimal`表示はlocal描画budgetによる段階的劣化で、host session停止を意味しない。current Domeの基本操作を確認し、optional texture/avatar/propを減らすかlocal budgetを安全範囲内で調整する。
 
 ## 再起動と障害復旧
 

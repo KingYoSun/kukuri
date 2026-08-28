@@ -553,7 +553,7 @@ export const gameRoomViewMetaverse = {
   "scores": [],
   "room_kind": "metaverse_room",
   "metaverse": {
-    "world_version": 5,
+    "world_version": 6,
     "instance_id": "room-2",
     "spatial_context": {
       "kind": "channel",
@@ -597,7 +597,15 @@ export const gameRoomViewMetaverse = {
               "blob_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
               "mime_type": "model/gltf-binary",
               "size_bytes": 65536,
-              "name": "statue"
+              "name": "statue",
+              "budget_metadata": {
+                "stored_bytes": 65536,
+                "texture_width": null,
+                "texture_height": null,
+                "decoded_texture_bytes": 0,
+                "model_triangles": 120,
+                "model_primitives": 1
+              }
             },
             "primitive_fallback": "cube",
             "position": [

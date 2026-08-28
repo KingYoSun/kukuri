@@ -9,6 +9,7 @@ mod game;
 mod ids;
 mod live;
 mod media;
+mod metaverse_resource_budget;
 mod posts;
 mod private_channels;
 mod profile;
@@ -99,6 +100,14 @@ pub use media::{
     AssetRef, AssetRole, DOME_INSTANCE_MANIFEST_MIME, DOME_PRESET_MANIFEST_MIME,
     GAME_MANIFEST_MIME, KukuriMediaManifestV1, LIVE_MANIFEST_MIME, ManifestBlobRef,
     MediaManifestItem, blob_hash, build_media_manifest_envelope,
+};
+pub use metaverse_resource_budget::{
+    ClientResourceBudget, DomeResourceBudget, HostResourceBudget, MetaverseAssetBudgetMetadataV1,
+    MetaverseBudgetResource, MetaverseBudgetScope, MetaverseDomeResourceUsage,
+    MetaverseResourceBudgetConfig, MetaverseResourceMetricCountV1, MetaverseResourceMetricsV1,
+    MetaverseResourceRejection, MetaverseResourceRejectionReason, PlayerResourceBudget,
+    inspect_metaverse_asset, metaverse_dome_resource_usage, validate_dome_asset_budget,
+    validate_metaverse_asset_metadata,
 };
 pub use posts::{
     CanonicalPostHeader, ChannelRef, KukuriPostEnvelopeContentV1, KukuriPostObjectV1,

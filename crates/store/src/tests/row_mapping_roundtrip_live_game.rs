@@ -196,6 +196,12 @@ fn metaverse_state() -> MetaverseRoomStateV1 {
         mime_type: Some("model/gltf-binary".into()),
         size_bytes: Some(2_048),
         name: Some("チェア".into()),
+        budget_metadata: Some(kukuri_core::MetaverseAssetBudgetMetadataV1 {
+            stored_bytes: 2_048,
+            model_triangles: 12,
+            model_primitives: 1,
+            ..Default::default()
+        }),
     });
     customization.persistent_props[0].primitive_fallback = MetaversePrimitive::Cube;
     customization.persistent_props[0].position = [1, 2, 3];
@@ -233,8 +239,14 @@ fn metaverse_state() -> MetaverseRoomStateV1 {
             kind: MetaverseAssetKind::Vrm,
             blob_hash: "e".repeat(64),
             mime_type: None,
-            size_bytes: None,
+            size_bytes: Some(4_096),
             name: None,
+            budget_metadata: Some(kukuri_core::MetaverseAssetBudgetMetadataV1 {
+                stored_bytes: 4_096,
+                model_triangles: 24,
+                model_primitives: 1,
+                ..Default::default()
+            }),
         }],
         chat_history: vec![MetaverseRoomChatMessageV1 {
             room_id: "room-max".into(),

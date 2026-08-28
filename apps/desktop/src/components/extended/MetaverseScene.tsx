@@ -17,6 +17,11 @@ import type { GameRoomView, MetaverseColliderV1, SharedRoomObjectV1 } from '@/li
 import { FixedDome } from './metaverse/FixedDome';
 import { clampAvatarToDome, resolveDomeCollider } from './metaverse/DomeSceneModel';
 import {
+  createClientResourcePlan,
+  readClientResourceBudget,
+  type ClientResourcePlan,
+} from './metaverse/MetaverseResourceBudgetModel';
+import {
   AVATAR_GROUND_Y,
   DEFAULT_AVATAR_ASSET_URL,
   METAVERSE_AVATAR_IDLE_SEND_INTERVAL_MS,
@@ -271,11 +276,13 @@ function AvatarModel({
   color,
   animationRef,
   statusTarget,
+  forcePrimitive = false,
 }: {
   assetUrl: string;
   color: number;
   animationRef?: RefObject<AvatarAnimationState>;
   statusTarget?: (status: AvatarAssetStatus) => void;
+  forcePrimitive?: boolean;
 }) {
   const groupRef = useRef<THREE.Group | null>(null);
   const vrmRuntimeRef = useRef<{ vrm: VRM | null; loadedRoot: THREE.Object3D | null }>({
@@ -288,6 +295,11 @@ function AvatarModel({
   useEffect(() => {
     const group = groupRef.current;
     if (!group) {
+      return;
+    }
+    if (forcePrimitive) {
+      setVisiblePrimitive(true);
+      statusTarget?.('fallback-primitive');
       return;
     }
     let disposed = false;
@@ -422,7 +434,7 @@ function AvatarModel({
       animationRuntimeRef.current = null;
       vrmRuntimeRef.current = { vrm: null, loadedRoot: null };
     };
-  }, [assetUrl, statusTarget]);
+  }, [assetUrl, forcePrimitive, statusTarget]);
 
   useFrame((_, delta) => {
     const runtime = animationRuntimeRef.current;
@@ -628,6 +640,7 @@ function RemoteAvatar({
   connectionState,
   now,
   locale,
+  forcePrimitive,
 }: {
   transform: AvatarTransform;
   presence: PeerPresence | null;
@@ -635,6 +648,7 @@ function RemoteAvatar({
   connectionState: MetaverseRoomConnectionState;
   now: number;
   locale: SupportedLocale;
+  forcePrimitive: boolean;
 }) {
   const groupRef = useRef<THREE.Group | null>(null);
   const targetRef = useRef(transform);
@@ -677,6 +691,7 @@ function RemoteAvatar({
         assetUrl={presence?.avatarAssetUrl || DEFAULT_AVATAR_ASSET_URL}
         color={0xe37070}
         animationRef={animationRef}
+        forcePrimitive={forcePrimitive}
       />
       <AvatarChatBubble bubble={chatBubble} />
       <AvatarStaleIndicator stale={stale} locale={locale} />
@@ -738,7 +753,8 @@ function SceneContents({
   onLocalTransform,
   onAvatarAssetStatus,
   controlsEnabled,
-}: Omit<SceneProps, 'hud' | 'suspended'>) {
+  resourcePlan,
+}: Omit<SceneProps, 'hud' | 'suspended'> & { resourcePlan: ClientResourcePlan }) {
   const remoteEntries = useMemo(() => Object.entries(remoteTransforms), [remoteTransforms]);
   const { camera } = useThree();
   const customization = room.metaverse?.dome.customization;
@@ -769,7 +785,9 @@ function SceneContents({
         onAvatarAssetStatus={onAvatarAssetStatus}
         controlsEnabled={controlsEnabled}
       />
-      {remoteEntries.map(([peerId, transform]) => (
+      {remoteEntries
+        .filter(([peerId]) => !resourcePlan.hiddenAvatarPeerIds.includes(peerId))
+        .map(([peerId, transform]) => (
         <RemoteAvatar
           key={peerId}
           transform={transform}
@@ -778,9 +796,12 @@ function SceneContents({
           connectionState={connectionState}
           now={now}
           locale={locale}
+          forcePrimitive={resourcePlan.fallbackAvatarPeerIds.includes(peerId)}
         />
       ))}
-      {sessionProps?.length ? sessionProps.map((prop) => (
+      {sessionProps?.length ? sessionProps
+        .filter((prop) => resourcePlan.renderedPropIds.includes(prop.object.object_id))
+        .map((prop) => (
         <SharedObject
           key={prop.object.object_id}
           object={prop.object}
@@ -817,17 +838,37 @@ export function MetaverseScene({
   suspended = false,
 }: SceneProps) {
   const { t } = useTranslation('metaverse', { lng: locale });
+  const clientBudget = useMemo(
+    () => readClientResourceBudget(typeof window === 'undefined' ? null : window.localStorage),
+    []
+  );
+  const resourcePlan = useMemo<ClientResourcePlan>(() => {
+    const props = sessionProps?.length ? sessionProps.map((prop) => prop.object) : [sharedObject];
+    return createClientResourcePlan({
+      budget: clientBudget,
+      currentDomeAssets: room.metaverse?.asset_refs ?? [],
+      remoteAvatars: Object.keys(remoteTransforms).map((peerId) => ({
+        peerId,
+        asset: peerPresence[peerId]?.avatarAssetRef ?? null,
+      })),
+      propIds: props.map((prop) => prop.object_id),
+    });
+  }, [clientBudget, peerPresence, remoteTransforms, room.metaverse?.asset_refs, sessionProps, sharedObject]);
+  const effectiveTextureUrls = resourcePlan.texturesEnabled
+    ? domeTextureUrls
+    : { wall: null, floor: null };
   return (
     <div
       className='metaverse-viewport-shell'
       aria-label={t('viewport.ariaLabel')}
       data-render-suspended={suspended || undefined}
+      data-resource-tier={resourcePlan.tier}
     >
       <Canvas
         className='metaverse-viewport-canvas'
         camera={{ position: [0, 3.2, 5.2], fov: 54, far: 160 }}
         gl={{ antialias: true }}
-        dpr={[1, 2]}
+        dpr={resourcePlan.dpr}
         frameloop={suspended ? 'never' : 'always'}
       >
         <SceneContents
@@ -838,7 +879,7 @@ export function MetaverseScene({
           sharedObject={sharedObject}
           sessionProps={sessionProps}
           avatarAssetUrl={avatarAssetUrl}
-          domeTextureUrls={domeTextureUrls}
+          domeTextureUrls={effectiveTextureUrls}
           latestChatByPeer={latestChatByPeer}
           connectionState={connectionState}
           now={now}
@@ -846,8 +887,14 @@ export function MetaverseScene({
           onLocalTransform={onLocalTransform}
           onAvatarAssetStatus={onAvatarAssetStatus}
           controlsEnabled={controlsEnabled && !suspended}
+          resourcePlan={resourcePlan}
         />
       </Canvas>
+      {resourcePlan.tier !== 'full' ? (
+        <div className='metaverse-resource-tier' role='status'>
+          {t('resources.degraded', { tier: resourcePlan.tier })}
+        </div>
+      ) : null}
       {hud}
     </div>
   );

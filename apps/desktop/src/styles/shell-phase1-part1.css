@@ -252,6 +252,19 @@
   background: var(--surface-metaverse);
 }
 
+.metaverse-resource-tier {
+  position: absolute;
+  inset-block-start: var(--space-sm);
+  inset-inline-end: var(--space-sm);
+  z-index: 3;
+  border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
+  color: var(--muted-foreground);
+  padding: 0.25rem 0.55rem;
+  font-size: 0.75rem;
+}
+
 .metaverse-viewport-canvas {
   position: absolute !important;
   inset: 0;

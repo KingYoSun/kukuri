@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 pub(crate) const PROPOSAL_PREFIX: &str = "metaverse/dome-connections/proposals";
 pub(crate) const SELECTION_PREFIX: &str = "metaverse/dome-connections/selections";
 pub(crate) const CONNECTION_PREFIX: &str = "metaverse/dome-connections/agreements";
-pub(crate) const LOCAL_PROPOSAL_RATE_LIMIT: usize = 8;
 pub(crate) const LOCAL_PROPOSAL_RATE_WINDOW_MS: i64 = 10 * 60 * 1_000;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

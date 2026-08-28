@@ -109,6 +109,7 @@ fn fixed_dome_customization_validator_rejects_unsupported_values() {
         mime_type: Some("model/gltf-binary".to_string()),
         size_bytes: Some(1),
         name: Some("mesh.glb".to_string()),
+        budget_metadata: None,
     });
     assert!(validate_dome_customization(&customization).is_err());
 }

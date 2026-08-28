@@ -980,11 +980,12 @@ export const runtimeApi: DesktopApi = {
       } satisfies GetBlobMediaRequest,
     });
   }),
-  getBlobPreviewUrl: command('getBlobPreviewUrl', async (hash, mime) => {
+  getBlobPreviewUrl: command('getBlobPreviewUrl', async (hash, mime, metaverseKind) => {
     return invokeDesktop<string | null>('get_blob_preview_url', {
       request: {
         hash,
         mime,
+        metaverse_kind: metaverseKind ?? null,
       } satisfies GetBlobPreviewRequest,
     });
   }),

@@ -8,6 +8,8 @@ import { Card, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Notice } from '@/components/ui/notice';
+import { InvokeError } from '@/lib/api/invoke/error';
+import { formatBytes } from '@/shell/presentation';
 import type { MetaverseRoomActions } from './MetaverseRoomActions';
 
 type DomeHostingPanelProps = {
@@ -61,7 +63,11 @@ export function DomeHostingPanel({
       setHosting(await actions.getHosting(room.metaverse!.spatial_context, room.metaverse!.instance_id));
       await actions.refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('hosting.error'));
+      setError(
+        cause instanceof InvokeError && cause.code.startsWith('METAVERSE_')
+          ? t('hosting.resourceRejected', { code: cause.code })
+          : cause instanceof Error ? cause.message : t('hosting.error')
+      );
     } finally {
       setPending(false);
     }
@@ -116,7 +122,21 @@ export function DomeHostingPanel({
         <span>{t(`hosting.sleep.${hosting?.sleeping === false ? 'awake' : 'sleeping'}`)}</span>
         <span>{t('hosting.revision', { value: room.metaverse.preset_ref.revision })}</span>
         <span>{t('hosting.cacheLimit', {
-          value: hosting?.lease?.host.kind === 'community_node' ? '10 GiB' : '1 GiB'
+          value: formatBytes(hosting?.resource_budget.client.cache_capacity_bytes ?? 0, locale)
+        })}</span>
+        <span>{t('hosting.participantBudget', {
+          used: hosting?.participants ?? 0,
+          limit: hosting?.resource_budget.host.max_participants ?? 0
+        })}</span>
+        <span>{t('hosting.rigidBodyBudget', {
+          used: hosting?.resource_metrics.rigid_body_high_water ?? 0,
+          limit: hosting?.resource_budget.host.max_simulated_rigid_bodies ?? 0
+        })}</span>
+        <span>{t('hosting.rejectedResources', {
+          value: hosting?.resource_metrics.rejected_total ?? 0
+        })}</span>
+        <span>{t('hosting.snapshotBytes', {
+          value: formatBytes(hosting?.resource_metrics.snapshot_bytes ?? 0, locale)
         })}</span>
       </div>
       {error ? <Notice tone='destructive'>{error}</Notice> : null}

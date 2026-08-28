@@ -10,7 +10,7 @@ use axum::response::Response;
 use kukuri_cn_core::{
     ApiError, ApiResult, NewDomeHostingAssignment, StagedDomeBlob,
     activate_dome_hosting_assignment, activate_dome_hosting_blob_pins,
-    close_dome_hosting_assignment, collect_dome_blob_cache_garbage, get_dome_hosting_assignment,
+    close_dome_hosting_assignment, get_dome_hosting_assignment,
     list_recoverable_dome_hosting_assignments, release_dome_hosting_blob_pins,
     require_bearer_identity, require_consents, stage_dome_hosting_blobs,
     upsert_pending_dome_hosting_assignment,
@@ -36,13 +36,20 @@ use crate::state::UserApiState;
 pub(crate) struct DomeHostingNodeState {
     keys: KukuriKeys,
     sessions: Arc<Mutex<HashMap<String, DomeSessionRuntime>>>,
+    budget: kukuri_core::MetaverseResourceBudgetConfig,
 }
 
 impl DomeHostingNodeState {
-    pub(crate) async fn restore(pool: PgPool, keys: KukuriKeys) -> Result<Self> {
+    pub(crate) async fn restore(
+        pool: PgPool,
+        keys: KukuriKeys,
+        budget: kukuri_core::MetaverseResourceBudgetConfig,
+    ) -> Result<Self> {
+        budget.validate()?;
         let state = Self {
             keys,
             sessions: Arc::new(Mutex::new(HashMap::new())),
+            budget,
         };
         let now = chrono::Utc::now().timestamp_millis();
         for assignment in list_recoverable_dome_hosting_assignments(&pool, now).await? {
@@ -53,8 +60,15 @@ impl DomeHostingNodeState {
             let preset: DomePresetManifestV1 =
                 serde_json::from_value(assignment.preset_manifest_json)?;
             verify_signed_dome_hosting_lease(&lease, &instance)?;
-            let runtime =
-                DomeSessionRuntime::start(lease, state.keys.clone(), &instance, &preset, now)?;
+            let runtime = DomeSessionRuntime::start_with_budget(
+                lease,
+                state.keys.clone(),
+                &instance,
+                &preset,
+                &assignment.session_id,
+                now,
+                state.budget.clone(),
+            )?;
             state
                 .sessions
                 .lock()
@@ -107,6 +121,8 @@ pub(crate) async fn assign_dome_hosting(
     verify_signed_dome_hosting_lease(lease, &request.instance_manifest)
         .map_err(hosting_contract_error)?;
     validate_dome_preset_manifest(&request.preset_manifest).map_err(hosting_contract_error)?;
+    kukuri_core::validate_dome_asset_budget(&request.preset_manifest.asset_refs, &hosting.budget)
+        .map_err(hosting_contract_error)?;
     if request.instance_manifest.preset_ref.preset_id != request.preset_manifest.preset_id
         || request.instance_manifest.preset_ref.owner_pubkey != request.preset_manifest.owner_pubkey
         || request.instance_manifest.preset_ref.revision != request.preset_manifest.revision
@@ -152,6 +168,24 @@ pub(crate) async fn assign_dome_hosting(
             "Dome assignment must stage exactly the assets referenced by the Preset",
         ));
     }
+    for asset in &request.preset_manifest.asset_refs {
+        let supplied = request
+            .asset_blobs
+            .iter()
+            .find(|blob| blob.blob_hash == asset.blob_hash)
+            .expect("asset hash sets matched above");
+        let inspected = kukuri_core::inspect_metaverse_asset(asset.kind.clone(), &supplied.bytes)
+            .map_err(hosting_contract_error)?;
+        if asset.budget_metadata.as_ref() != Some(&inspected)
+            || asset.size_bytes != Some(supplied.bytes.len() as u64)
+        {
+            return Err(hosting_error(
+                StatusCode::BAD_REQUEST,
+                "METAVERSE_ASSET_METADATA_MISMATCH",
+                "Dome asset bytes do not match inspected resource metadata",
+            ));
+        }
+    }
     let cache_reference = format!(
         "{}:{}",
         lease.lease.instance_id, request.preset_manifest.revision
@@ -164,12 +198,15 @@ pub(crate) async fn assign_dome_hosting(
         blob_hash: asset.blob_hash.clone(),
         data: asset.bytes.clone(),
     }));
-    collect_dome_blob_cache_garbage(&state.pool, now)
-        .await
-        .map_err(hosting_internal_error)?;
-    stage_dome_hosting_blobs(&state.pool, &cache_reference, &staged_blobs, now)
-        .await
-        .map_err(hosting_conflict_error)?;
+    stage_dome_hosting_blobs(
+        &state.pool,
+        &cache_reference,
+        &staged_blobs,
+        now,
+        hosting.budget.client.cache_capacity_bytes,
+    )
+    .await
+    .map_err(hosting_conflict_error)?;
     let session_id = format!(
         "cn-session-{}-{}-{}",
         lease.lease.instance_id, lease.lease.epoch, now
@@ -257,13 +294,14 @@ pub(crate) async fn activate_dome_hosting(
             "owner activation did not produce an active Community Node lease",
         ));
     }
-    let runtime = DomeSessionRuntime::start_with_session_id(
+    let runtime = DomeSessionRuntime::start_with_budget(
         lease,
         hosting.keys.clone(),
         &instance,
         &preset,
         &assignment.session_id,
         now,
+        hosting.budget.clone(),
     )
     .map_err(hosting_contract_error)?;
     activate_dome_hosting_assignment(
@@ -293,6 +331,7 @@ pub(crate) async fn activate_dome_hosting(
         assignment.expires_at,
         DomeHostingStateKindV1::CommunityNodeHosted,
         assignment.lease_epoch,
+        &hosting.budget,
     )))
 }
 
@@ -381,6 +420,8 @@ pub(crate) async fn release_dome_hosting(
         participants: 0,
         sleeping: true,
         expires_at: assignment.expires_at,
+        resource_budget: hosting.budget.clone(),
+        resource_metrics: Default::default(),
     }))
 }
 
@@ -426,6 +467,7 @@ pub(crate) async fn dome_hosting_status(
         assignment.expires_at,
         state_kind,
         assignment.lease_epoch,
+        &hosting.budget,
     )))
 }
 
@@ -466,7 +508,7 @@ pub(crate) async fn submit_dome_hosting_input(
         )
     })?;
     runtime
-        .apply_signed_input(&request.signed_input)
+        .apply_signed_input_at(&request.signed_input, now)
         .map_err(hosting_contract_error)?;
     let snapshot = runtime
         .signed_snapshot(now)
@@ -601,6 +643,7 @@ fn status_from_runtime(
     expires_at: i64,
     state: DomeHostingStateKindV1,
     lease_epoch: u64,
+    configured_budget: &kukuri_core::MetaverseResourceBudgetConfig,
 ) -> DomeHostingStatusResponse {
     DomeHostingStatusResponse {
         instance_id: instance_id.to_string(),
@@ -612,6 +655,12 @@ fn status_from_runtime(
             .unwrap_or(0),
         sleeping: runtime.is_none_or(DomeSessionRuntime::is_sleeping),
         expires_at,
+        resource_budget: runtime
+            .map(|runtime| runtime.budget().clone())
+            .unwrap_or_else(|| configured_budget.clone()),
+        resource_metrics: runtime
+            .map(DomeSessionRuntime::resource_metrics)
+            .unwrap_or_default(),
     }
 }
 
@@ -620,6 +669,19 @@ fn hosting_error(status: StatusCode, code: &'static str, message: &'static str) 
 }
 
 fn hosting_contract_error(error: anyhow::Error) -> ApiError {
+    if let Some(rejection) = error.downcast_ref::<kukuri_core::MetaverseResourceRejection>() {
+        let status =
+            if rejection.reason == kukuri_core::MetaverseResourceRejectionReason::RateExceeded {
+                StatusCode::TOO_MANY_REQUESTS
+            } else {
+                StatusCode::UNPROCESSABLE_ENTITY
+            };
+        return ApiError::new(
+            status,
+            "METAVERSE_RESOURCE_BUDGET_REJECTED",
+            serde_json::to_string(rejection).unwrap_or_else(|_| rejection.to_string()),
+        );
+    }
     ApiError::new(
         StatusCode::BAD_REQUEST,
         "DOME_HOSTING_CONTRACT_INVALID",

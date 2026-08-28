@@ -475,7 +475,11 @@ export interface DesktopApi {
   setChannelGossipEnabled(topic: string, channelId: string, enabled: boolean): Promise<void>;
   getLocalPeerTicket(): Promise<string | null>;
   getBlobMediaPayload(hash: string, mime: string): Promise<BlobMediaPayload | null>;
-  getBlobPreviewUrl(hash: string, mime: string): Promise<string | null>;
+  getBlobPreviewUrl(
+    hash: string,
+    mime: string,
+    metaverseKind?: MetaverseAssetKind | null
+  ): Promise<string | null>;
 }
 
 declare global {

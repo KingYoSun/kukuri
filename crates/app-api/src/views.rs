@@ -4,8 +4,8 @@ use kukuri_core::{
     DomeHostingLeaseV1, DomeHostingStateV1, DomeMoveRecordV1, DomeProposalDerivedStatusV1,
     DomeProposalSelectionV1, DomeTopologyResolutionV1, GameRoomKind, GameRoomStatus,
     KukuriEnvelope, LiveSessionStatus, MetaverseAssetKind, MetaverseAssetRef,
-    MetaverseRoomEventEnvelopeContentV1, MetaverseRoomEventV1, MetaverseRoomStateV1,
-    SpatialContextV1,
+    MetaverseResourceBudgetConfig, MetaverseResourceMetricsV1, MetaverseRoomEventEnvelopeContentV1,
+    MetaverseRoomEventV1, MetaverseRoomStateV1, SpatialContextV1,
 };
 use kukuri_store::{NotificationKind, TimelineCursor};
 use kukuri_transport::{ConnectMode, ConnectionPath, DiscoveryMode};
@@ -507,6 +507,8 @@ pub struct DomeHostingView {
     pub preset_manifest_json: String,
     pub participants: u32,
     pub sleeping: bool,
+    pub resource_budget: MetaverseResourceBudgetConfig,
+    pub resource_metrics: MetaverseResourceMetricsV1,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

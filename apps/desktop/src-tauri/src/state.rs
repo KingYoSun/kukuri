@@ -229,6 +229,30 @@ impl From<kukuri_desktop_runtime::CommunityNodeReportError> for CommandError {
 }
 
 pub(crate) fn map_error(error: anyhow::Error) -> CommandError {
+    if let Some(rejection) = error.downcast_ref::<kukuri_core::MetaverseResourceRejection>() {
+        return CommandError {
+            code: rejection.code(),
+            message: rejection.to_string(),
+            status: Some(if rejection.reason
+                == kukuri_core::MetaverseResourceRejectionReason::RateExceeded
+            {
+                429
+            } else {
+                422
+            }),
+            retry_after_seconds: None,
+        };
+    }
+    if let Some(request_error) =
+        error.downcast_ref::<kukuri_desktop_runtime::DomeHostingRequestError>()
+    {
+        return CommandError {
+            code: request_error.code.clone(),
+            message: request_error.message.clone(),
+            status: Some(request_error.status),
+            retry_after_seconds: None,
+        };
+    }
     CommandError::from(error)
 }
 

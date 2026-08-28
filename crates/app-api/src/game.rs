@@ -703,22 +703,33 @@ impl AppService {
         if input.bytes.is_empty() {
             anyhow::bail!("metaverse asset bytes are required");
         }
-        let stored = self
-            .services
-            .blob_service
-            .put_blob(input.bytes, input.mime_type.as_str())
-            .await?;
-        self.services
-            .projection_store
-            .mark_blob_status(&stored.hash, BlobCacheStatus::Available)
-            .await?;
-        let asset = MetaverseAssetRef {
-            kind: input.kind,
-            blob_hash: stored.hash.as_str().to_string(),
-            mime_type: Some(stored.mime),
-            size_bytes: Some(stored.bytes),
-            name: input.name,
-        };
+        let budget_metadata =
+            kukuri_core::inspect_metaverse_asset(input.kind.clone(), &input.bytes)?;
+        if budget_metadata.stored_bytes
+            > self.metaverse_resource_budget.host.max_session_asset_bytes
+        {
+            return Err(kukuri_core::MetaverseResourceRejection::new(
+                kukuri_core::MetaverseBudgetScope::Host,
+                kukuri_core::MetaverseBudgetResource::SessionAssetBytes,
+                kukuri_core::MetaverseResourceRejectionReason::LimitExceeded,
+                budget_metadata.stored_bytes,
+                self.metaverse_resource_budget.host.max_session_asset_bytes,
+            )
+            .into());
+        }
+        if input.kind == kukuri_core::MetaverseAssetKind::Vrm
+            && budget_metadata.stored_bytes
+                > self.metaverse_resource_budget.player.max_avatar_asset_bytes
+        {
+            return Err(kukuri_core::MetaverseResourceRejection::new(
+                kukuri_core::MetaverseBudgetScope::Player,
+                kukuri_core::MetaverseBudgetResource::AvatarAssetBytes,
+                kukuri_core::MetaverseResourceRejectionReason::LimitExceeded,
+                budget_metadata.stored_bytes,
+                self.metaverse_resource_budget.player.max_avatar_asset_bytes,
+            )
+            .into());
+        }
         let now = Utc::now().timestamp_millis();
         let current = manifest
             .metaverse
@@ -729,14 +740,47 @@ impl AppService {
         {
             anyhow::bail!("only an active attached Dome instance can import Preset assets");
         }
-        let mut asset_refs = current.asset_refs.clone();
-        if asset_refs
+        let prospective_hash = blake3::hash(&input.bytes).to_hex().to_string();
+        if let Some(existing) = current
+            .asset_refs
             .iter()
-            .any(|existing| existing.blob_hash == asset.blob_hash)
+            .find(|existing| existing.blob_hash == prospective_hash)
         {
-            return Ok(asset);
+            return Ok(existing.clone());
         }
-        asset_refs.push(asset.clone());
+        let mut asset_refs = current.asset_refs.clone();
+        asset_refs.push(MetaverseAssetRef {
+            kind: input.kind.clone(),
+            blob_hash: prospective_hash.clone(),
+            mime_type: Some(input.mime_type.clone()),
+            size_bytes: Some(budget_metadata.stored_bytes),
+            name: input.name.clone(),
+            budget_metadata: Some(budget_metadata.clone()),
+        });
+        kukuri_core::validate_dome_asset_budget(&asset_refs, &self.metaverse_resource_budget)?;
+        let stored = self
+            .services
+            .blob_service
+            .put_blob(input.bytes, input.mime_type.as_str())
+            .await?;
+        self.services
+            .projection_store
+            .mark_blob_status(&stored.hash, BlobCacheStatus::Available)
+            .await?;
+        if stored.hash.as_str() != prospective_hash {
+            anyhow::bail!("metaverse blob service returned an unexpected content hash");
+        }
+        let asset = MetaverseAssetRef {
+            kind: input.kind,
+            blob_hash: stored.hash.as_str().to_string(),
+            mime_type: Some(stored.mime),
+            size_bytes: Some(stored.bytes),
+            name: input.name,
+            budget_metadata: Some(budget_metadata),
+        };
+        *asset_refs
+            .last_mut()
+            .expect("prospective asset was appended") = asset.clone();
         let preset_ref = self
             .persist_dome_preset_manifest(DomePresetManifestV1 {
                 preset_id: current.preset_ref.preset_id.clone(),
