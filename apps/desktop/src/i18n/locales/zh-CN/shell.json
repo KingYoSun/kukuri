@@ -233,6 +233,7 @@
     "savedCount": "已保存 {{count}} 条",
     "tabs": "工作区",
     "timelineViews": "时间线视图",
+    "timelineTopicSwitch": "时间线主题",
     "primaryLabel": "主工作区",
     "skipToWorkspace": "跳转到工作区",
     "communityNodeUnavailableAction": "打开社区节点设置",
@@ -290,6 +291,9 @@
     }
   },
   "communityIndex": {
+    "automaticNode": "自动",
+    "nodeSwitch": "探索社区节点",
+    "unavailableNodeOption": "不可用 · {{baseUrl}}",
     "selectedNodeUnavailable": "明确选择的 Community Node 不可用，查询已暂停。",
     "title": "社区索引",
     "topicSummary": "通过可用的 Community Node 搜索当前主题或私密频道。",

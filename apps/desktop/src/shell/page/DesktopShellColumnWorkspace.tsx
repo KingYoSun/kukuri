@@ -7,16 +7,27 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { ColumnComposerFooter } from '@/components/shell/ColumnComposerFooter';
 import { ColumnDomainActionFooter } from '@/components/shell/ColumnDomainActionFooter';
 import { ColumnCanvas } from '@/components/shell/ColumnCanvas';
+import {
+  ColumnContextSelect,
+  type ColumnContextSelectOption,
+} from '@/components/shell/ColumnContextSelect';
 import { ColumnSurface } from '@/components/shell/ColumnSurface';
 import {
   TimelineViewIconTabs,
   type TimelineViewId,
 } from '@/components/shell/TimelineViewIconTabs';
 import type { MentionCandidate } from '@/components/core/types';
+import {
+  communityIndexNodeLabel,
+  eligibleCommunityIndexNodes,
+  resolveCommunityIndexNodePreference,
+} from '@/lib/api/communityIndex';
+import { topicDisplayName } from '@/lib/topicId';
 import { authorDisplayLabel, localizeAudienceLabel } from '@/shell/presentation';
 import type { ColumnDraftTarget } from '@/shell/slices/columnDrafts';
 import {
@@ -60,6 +71,7 @@ type DesktopShellColumnWorkspaceProps = {
   renderMessagesSurface: (column: ColumnState) => ReactNode;
   renderNotificationsSurface: (column: ColumnState) => ReactNode;
   onActivateColumn: (column: ColumnState, preserveAuthorPane?: boolean) => void;
+  onSelectTimelineTopic: (column: ColumnState, topicId: string) => void;
   onSelectTimelineView: (column: ColumnState, view: TimelineViewId) => void;
   renderProfileSurface: (column: ColumnState) => ReactNode;
   renderPrimarySurface: (column: ColumnState) => ReactNode;
@@ -85,6 +97,7 @@ export function DesktopShellColumnWorkspace({
   renderMessagesSurface,
   renderNotificationsSurface,
   onActivateColumn,
+  onSelectTimelineTopic,
   onSelectTimelineView,
   renderProfileSurface,
   renderPrimarySurface,
@@ -93,10 +106,19 @@ export function DesktopShellColumnWorkspace({
   timelineViewItems,
   titles,
 }: DesktopShellColumnWorkspaceProps) {
+  const { t } = useTranslation('shell');
   const workspaceState = useDesktopShellStore((state) => state.workspaceState);
+  const trackedTopics = useDesktopShellStore((state) => state.trackedTopics);
   const joinedChannelsByTopic = useDesktopShellStore((state) => state.joinedChannelsByTopic);
   const directMessages = useDesktopShellStore((state) => state.directMessages);
   const knownAuthorsByPubkey = useDesktopShellStore((state) => state.knownAuthorsByPubkey);
+  const communityNodeConfig = useDesktopShellStore((state) => state.communityNodeConfig);
+  const communityNodeStatuses = useDesktopShellStore((state) => state.communityNodeStatuses);
+  const communityNodeManifests = useDesktopShellStore((state) => state.communityNodeManifests);
+  const communityIndexNodePreference = useDesktopShellStore(
+    (state) => state.communityIndexNodePreference
+  );
+  const patchState = useDesktopShellStore((state) => state.patchState);
   const setWorkspaceState = useDesktopShellFieldSetter('workspaceState');
   const [visibleColumnIds, setVisibleColumnIds] = useState<string[]>([
     workspaceState.activeColumnId,
@@ -122,6 +144,102 @@ export function DesktopShellColumnWorkspace({
   }, [workspaceState.columns]);
 
   const visibleColumnIdSet = useMemo(() => new Set(visibleColumnIds), [visibleColumnIds]);
+  const eligibleIndexNodeBaseUrls = useMemo(
+    () =>
+      eligibleCommunityIndexNodes(
+        communityNodeConfig,
+        communityNodeStatuses,
+        communityNodeManifests
+      ),
+    [communityNodeConfig, communityNodeManifests, communityNodeStatuses]
+  );
+  const communityIndexNodeOptions = useMemo(() => {
+    const labels = eligibleIndexNodeBaseUrls.map((baseUrl) => ({
+      baseUrl,
+      label: communityIndexNodeLabel(baseUrl, communityNodeManifests[baseUrl]),
+    }));
+    const labelCounts = new Map<string, number>();
+    labels.forEach(({ label }) => labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1));
+    const options: ColumnContextSelectOption[] = [
+      { value: 'automatic', label: t('communityIndex.automaticNode') },
+      ...labels.map(({ baseUrl, label }) => ({
+        value: baseUrl,
+        label: labelCounts.get(label) === 1 ? label : `${label} · ${new URL(baseUrl).host}`,
+      })),
+    ];
+    if (
+      communityIndexNodePreference.mode === 'manual' &&
+      !eligibleIndexNodeBaseUrls.includes(communityIndexNodePreference.baseUrl)
+    ) {
+      options.push({
+        value: communityIndexNodePreference.baseUrl,
+        label: t('communityIndex.unavailableNodeOption', {
+          baseUrl: communityIndexNodePreference.baseUrl,
+        }),
+        disabled: true,
+      });
+    }
+    return options;
+  }, [
+    communityNodeManifests,
+    communityIndexNodePreference,
+    eligibleIndexNodeBaseUrls,
+    t,
+  ]);
+
+  const renderScopeControl = (column: ColumnState) => {
+    if (column.kind === 'timeline' && column.scope?.channelId === null) {
+      const topics = trackedTopics.includes(column.scope.topicId)
+        ? trackedTopics
+        : [column.scope.topicId, ...trackedTopics];
+      return (
+        <ColumnContextSelect
+          label={t('workspace.timelineTopicSwitch')}
+          value={column.scope.topicId}
+          title={column.scope.topicId}
+          options={topics.map((topicId) => ({
+            value: topicId,
+            label: topicDisplayName(topicId),
+          }))}
+          onChange={(topicId) => onSelectTimelineTopic(column, topicId)}
+        />
+      );
+    }
+    if (column.kind === 'explore') {
+      const selectedValue =
+        communityIndexNodePreference.mode === 'auto'
+          ? 'automatic'
+          : communityIndexNodePreference.baseUrl;
+      return (
+        <ColumnContextSelect
+          label={t('communityIndex.nodeSwitch')}
+          value={selectedValue}
+          title={
+            communityIndexNodePreference.mode === 'auto'
+              ? t('communityIndex.automaticNode')
+              : communityIndexNodePreference.baseUrl
+          }
+          options={communityIndexNodeOptions}
+          onChange={(value) => {
+            const preference =
+              value === 'automatic'
+                ? ({ mode: 'auto' } as const)
+                : ({ mode: 'manual', baseUrl: value } as const);
+            const resolution = resolveCommunityIndexNodePreference(
+              preference,
+              communityNodeConfig.nodes.map((node) => node.base_url),
+              eligibleIndexNodeBaseUrls
+            );
+            patchState({
+              communityIndexNodePreference: resolution.preference,
+              communityIndexNodeBaseUrl: resolution.selectedBaseUrl,
+            });
+          }}
+        />
+      );
+    }
+    return undefined;
+  };
 
   const activate = (columnId: string, syncRoute: boolean) => {
     const column = workspaceState.columns.find((candidate) => candidate.id === columnId);
@@ -286,6 +404,7 @@ export function DesktopShellColumnWorkspace({
               fullscreenable={column.kind === 'stream' || column.kind === 'metaverse'}
               resourceManaged={column.kind === 'stream' || column.kind === 'metaverse'}
               footer={renderFooter(column, runtime.active)}
+              scopeControl={renderScopeControl(column)}
               headerActions={
                 column.kind === 'timeline' ? (
                   <TimelineViewIconTabs

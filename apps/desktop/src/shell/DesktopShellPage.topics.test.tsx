@@ -10,6 +10,7 @@ import {
   openControlCenter,
   publishPost,
   renderAtHash,
+  selectWorkspace,
   selectTimelineView,
   setViewportWidth,
 } from './DesktopShellPage.testHelpers';
@@ -171,6 +172,57 @@ test('topic and private channel selection sync into the hash route', async () =>
       '#/timeline?topic=kukuri%3Atopic%3Ageneral&channel=channel-1'
     );
   });
+});
+
+test('Timeline header replaces the active Column topic without adding a Column and keeps scoped drafts', async () => {
+  const user = userEvent.setup();
+  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ageneral');
+
+  const timeline = await screen.findByRole('region', { name: /^Timeline Column,/ });
+  const columnId = timeline.dataset.columnId;
+  const topicSelect = within(timeline).getByRole('combobox', { name: 'Timeline topic' });
+
+  await user.click(within(timeline).getByRole('button', { name: /^Publish to / }));
+  const composer = within(timeline).getByPlaceholderText('Write a post');
+  await user.type(composer, 'general draft');
+
+  await user.selectOptions(topicSelect, 'kukuri:topic:dev');
+  await waitFor(() => {
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Adev');
+    expect(topicSelect).toHaveValue('kukuri:topic:dev');
+  });
+  expect(screen.getAllByRole('region', { name: /^Timeline Column,/ })).toHaveLength(1);
+  expect(timeline.dataset.columnId).toBe(columnId);
+  await user.click(within(timeline).getByRole('button', { name: /^Publish to Public · dev$/ }));
+  expect(within(timeline).getByPlaceholderText('Write a post')).toHaveValue('');
+
+  await user.type(within(timeline).getByPlaceholderText('Write a post'), 'dev draft');
+  await user.selectOptions(topicSelect, 'kukuri:topic:general');
+  await waitFor(() => {
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral');
+  });
+  expect(within(timeline).getByPlaceholderText('Write a post')).toHaveValue('general draft');
+});
+
+test('Timeline header can switch an inactive Column without stealing focus or the route', async () => {
+  const user = userEvent.setup();
+  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ageneral');
+
+  await selectWorkspace(user, 'Profile');
+  await waitFor(() => {
+    expect(window.location.hash).toBe('#/profile?topic=kukuri%3Atopic%3Ageneral');
+  });
+  const timeline = screen.getByRole('region', { name: /^Timeline Column,/ });
+  const topicSelect = within(timeline).getByRole('combobox', { name: 'Timeline topic' });
+
+  await user.selectOptions(topicSelect, 'kukuri:topic:dev');
+  await waitFor(() => expect(topicSelect).toHaveValue('kukuri:topic:dev'));
+  expect(window.location.hash).toBe('#/profile?topic=kukuri%3Atopic%3Ageneral');
+  expect(screen.getByRole('region', { name: /^Profile Column,/ })).toHaveAttribute(
+    'aria-current',
+    'true'
+  );
+  expect(timeline).not.toHaveAttribute('aria-current', 'true');
 });
 
 test('tracked topics show public and channel scope separately in the sidebar', async () => {

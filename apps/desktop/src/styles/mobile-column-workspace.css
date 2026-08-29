@@ -54,7 +54,8 @@
   }
 
   .shell-phase1 .shell-column-header-actions button,
-  .shell-phase1 .shell-column-view-tab {
+  .shell-phase1 .shell-column-view-tab,
+  .shell-phase1 .shell-column-context-select {
     min-width: 44px;
     min-height: 44px;
   }

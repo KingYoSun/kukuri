@@ -233,6 +233,7 @@
     "savedCount": "{{count}} saved",
     "tabs": "Workspaces",
     "timelineViews": "Timeline views",
+    "timelineTopicSwitch": "Timeline topic",
     "primaryLabel": "Primary workspace",
     "skipToWorkspace": "Skip to workspace",
     "communityNodeUnavailableAction": "Open Community Node Settings",
@@ -290,6 +291,9 @@
     }
   },
   "communityIndex": {
+    "automaticNode": "Automatic",
+    "nodeSwitch": "Explore Community Node",
+    "unavailableNodeOption": "Unavailable · {{baseUrl}}",
     "selectedNodeUnavailable": "The explicitly selected Community Node is unavailable. Queries are paused.",
     "title": "Community Index",
     "topicSummary": "Search the active topic or private channel through an eligible Community Node.",

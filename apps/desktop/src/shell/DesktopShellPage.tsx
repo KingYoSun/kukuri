@@ -65,6 +65,7 @@ import {
   columnIdentityId,
   openTransientColumn,
   setColumnTimelineView,
+  setTimelineColumnTopic,
   type ColumnKind,
   type ColumnState,
   type ColumnTimelineView,
@@ -715,6 +716,20 @@ export function DesktopShellPage({
       column.id === workspaceState.activeColumnId;
     if (routeFocusedTimelineColumn) focusTimelineView(view);
   };
+  const selectColumnTimelineTopic = async (column: ColumnState, topicId: string) => {
+    const scope = { topicId, channelId: null };
+    const nextColumn = { ...column, scope };
+    setWorkspaceState((current) => setTimelineColumnTopic(current, column.id, topicId));
+    setTimelineScopeByTopic(setRecordEntry(topicId, privateTimelineScope(null)));
+    setComposeChannelByTopic(setRecordEntry(topicId, privateComposeTarget(null)));
+    const routeFocusedTimelineColumn =
+      routeSection === 'timeline' && column.id === workspaceState.activeColumnId;
+    if (routeFocusedTimelineColumn) {
+      await activateWorkspaceColumn(nextColumn);
+      return;
+    }
+    await loadTopics(trackedTopics, topicId, null);
+  };
   const columnTitles: Record<ColumnKind, string> = {
     timeline: t('shell:primarySections.timeline'),
     notifications: t('shell:primarySections.notifications'),
@@ -744,6 +759,9 @@ export function DesktopShellPage({
       onOpenGameCreate={() => dialogs.setGameCreateDialogOpen(true)}
       onOpenLiveCreate={() => dialogs.setLiveCreateDialogOpen(true)}
       timelineViewItems={viewModels.timelineViewItems}
+      onSelectTimelineTopic={(column, topicId) =>
+        void selectColumnTimelineTopic(column, topicId)
+      }
       onSelectTimelineView={selectColumnTimelineView}
       onActivateColumn={(column, preserveAuthorPane) =>
         void activateWorkspaceColumn(column, preserveAuthorPane)

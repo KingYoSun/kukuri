@@ -233,6 +233,7 @@
     "savedCount": "{{count}} 件保存済み",
     "tabs": "ワークスペース",
     "timelineViews": "タイムライン表示",
+    "timelineTopicSwitch": "Timeline のトピック",
     "primaryLabel": "メインワークスペース",
     "skipToWorkspace": "ワークスペースへ移動",
     "communityNodeUnavailableAction": "Community Node 設定を開く",
@@ -294,6 +295,9 @@
     }
   },
   "communityIndex": {
+    "automaticNode": "自動",
+    "nodeSwitch": "Explore の Community Node",
+    "unavailableNodeOption": "利用不可 · {{baseUrl}}",
     "selectedNodeUnavailable": "明示選択した Community Node は利用できません。問い合わせを停止しています。",
     "title": "コミュニティインデックス",
     "topicSummary": "利用可能な Community Node を使い、現在のトピックまたはプライベートチャンネルを検索します。",

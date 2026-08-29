@@ -6,6 +6,7 @@ import type {
   CommunityNodeNodeStatus,
 } from './types';
 import {
+  communityIndexNodeLabel,
   eligibleCommunityIndexNodes,
   eligibleDistanceOptoutNodes,
   eligibleTrustRelationNodes,
@@ -137,5 +138,23 @@ describe('community index node eligibility', () => {
         ['https://b']
       )
     ).toEqual({ preference: { mode: 'auto' }, selectedBaseUrl: 'https://b' });
+  });
+
+  it('uses the manifest node name before falling back to the base URL', () => {
+    expect(
+      communityIndexNodeLabel('https://index.example', {
+        status: 'ok',
+        manifest: { ...manifest(['community_index']), node_name: '  Friendly Index  ' },
+      })
+    ).toBe('Friendly Index');
+    expect(
+      communityIndexNodeLabel('https://fallback.example', {
+        status: 'ok',
+        manifest: { ...manifest(['community_index']), node_name: '   ' },
+      })
+    ).toBe('https://fallback.example');
+    expect(communityIndexNodeLabel('https://loading.example', { status: 'loading' })).toBe(
+      'https://loading.example'
+    );
   });
 });

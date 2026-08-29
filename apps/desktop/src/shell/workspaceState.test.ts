@@ -14,6 +14,7 @@ import {
   setColumnSpan,
   setColumnPinned,
   setColumnTimelineView,
+  setTimelineColumnTopic,
   type ColumnState,
 } from '@/shell/slices/workspace';
 
@@ -514,5 +515,45 @@ describe('workspace state transitions', () => {
     expect(setColumnTimelineView(bookmarks, INITIAL_TIMELINE_COLUMN_ID, 'bookmarks')).toBe(
       bookmarks
     );
+  });
+
+  it('replaces only the target Timeline topic while preserving Column identity and state', () => {
+    const initial = createInitialWorkspaceState();
+    const timeline = {
+      ...initial.columns[0],
+      parentColumnId: 'source-column',
+      pinned: true,
+      timelineView: 'bookmarks' as const,
+    };
+    const thread = transientColumn();
+    const state = {
+      ...initial,
+      columns: [timeline, thread],
+      activeColumnId: thread.id,
+    };
+
+    const next = setTimelineColumnTopic(state, timeline.id, 'kukuri:topic:next');
+
+    expect(next).not.toBe(state);
+    expect(next.columns).toHaveLength(2);
+    expect(next.activeColumnId).toBe(thread.id);
+    expect(next.columns[0]).toEqual({
+      ...timeline,
+      scope: { topicId: 'kukuri:topic:next', channelId: null },
+    });
+    expect(next.columns[1]).toBe(thread);
+  });
+
+  it('ignores Timeline topic replacement for invalid targets and unchanged topics', () => {
+    const initial = createInitialWorkspaceState();
+    const withThread = openTransientColumn(initial, transientColumn());
+    const currentTopic = initial.columns[0].scope?.topicId ?? '';
+
+    expect(setTimelineColumnTopic(withThread, 'missing', 'kukuri:topic:next')).toBe(withThread);
+    expect(setTimelineColumnTopic(withThread, 'thread-1', 'kukuri:topic:next')).toBe(withThread);
+    expect(setTimelineColumnTopic(withThread, INITIAL_TIMELINE_COLUMN_ID, currentTopic)).toBe(
+      withThread
+    );
+    expect(setTimelineColumnTopic(withThread, INITIAL_TIMELINE_COLUMN_ID, '')).toBe(withThread);
   });
 });
