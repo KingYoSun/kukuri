@@ -381,9 +381,22 @@ test('desktop Columns use kind spans, keyboard reorder, drag reorder, and persis
   const profileGrip = profileColumn.getByRole('button', {
     name: 'Move Profile Column',
   });
-  await profileGrip.dragTo(canvas, {
-    targetPosition: { x: 1800, y: 160 },
-  });
+  const profileGripBox = await profileGrip.boundingBox();
+  const canvasBox = await canvas.boundingBox();
+  expect(profileGripBox).not.toBeNull();
+  expect(canvasBox).not.toBeNull();
+  await page.mouse.move(
+    profileGripBox!.x + profileGripBox!.width / 2,
+    profileGripBox!.y + profileGripBox!.height / 2
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    canvasBox!.x + Math.min(canvasBox!.width - 24, 1800),
+    profileGripBox!.y + profileGripBox!.height / 2,
+    { steps: 12 }
+  );
+  await expect(page.getByRole('separator', { name: /Drop Column at position/ })).toBeVisible();
+  await page.mouse.up();
   await expect.poll(async () =>
     page.locator('[data-column-id]').evaluateAll((columns) =>
       columns.map((column) => (column as HTMLElement).dataset.columnId)

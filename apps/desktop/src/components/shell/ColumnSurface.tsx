@@ -1,5 +1,5 @@
 import { GripVertical, Pin, PinOff, X } from 'lucide-react';
-import { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
@@ -53,7 +53,6 @@ export function ColumnSurface({
   const { t } = useTranslation('shell');
   const runtime = useColumnRuntime();
   const surfaceRef = useRef<HTMLElement | null>(null);
-  const [dragging, setDragging] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [announcement, setAnnouncement] = useState('');
   const wasFullscreenRef = useRef(false);
@@ -122,7 +121,6 @@ export function ColumnSurface({
       className='shell-column-surface'
       data-active={active || undefined}
       data-column-id={columnId}
-      data-dragging={dragging || undefined}
       data-pinned={pinned || undefined}
       data-span={span}
       data-transient={!pinned || undefined}
@@ -150,23 +148,7 @@ export function ColumnSurface({
           type='button'
           className='shell-column-drag-grip'
           data-column-drag-grip
-          draggable
           aria-label={t('columnMenu.drag', { title })}
-          onDragStart={(event: DragEvent<HTMLButtonElement>) => {
-            setDragging(true);
-            event.dataTransfer.effectAllowed = 'move';
-            event.dataTransfer.setData('text/x-kukuri-column-id', columnId);
-            const surface = event.currentTarget.closest<HTMLElement>('[data-column-id]');
-            if (surface) {
-              const rect = surface.getBoundingClientRect();
-              event.dataTransfer.setDragImage(
-                surface,
-                Math.max(0, event.clientX - rect.left),
-                Math.max(0, event.clientY - rect.top)
-              );
-            }
-          }}
-          onDragEnd={() => setDragging(false)}
         >
           <GripVertical className='size-4' aria-hidden='true' />
         </Button>
