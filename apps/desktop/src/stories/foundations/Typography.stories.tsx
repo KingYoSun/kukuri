@@ -29,7 +29,8 @@ function TypographyPreview() {
           <p className='eyebrow'>foundations</p>
           <h1 className='text-3xl font-semibold tracking-[-0.03em]'>Type scale</h1>
           <p className='max-w-[60ch] text-sm text-[var(--muted-foreground)]'>
-            shell の font-size は <code>--text-*</code> トークンへ集約している。和文は{' '}
+            <code>tokens.css</code> の実行値を描画する確認面。製品契約は <code>DESIGN.md</code>。
+            shell の font-size は <code>--text-*</code> トークンへ集約し、和文は{' '}
             <code>--font-sans</code> のフォールバックチェーン、ID / ハッシュは <code>--font-mono</code>{' '}
             を使う。
           </p>

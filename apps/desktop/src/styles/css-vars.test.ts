@@ -2,20 +2,6 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// Shell stylesheets that ship together (see index.css). Any `var(--token)` they
-// reference must resolve to a custom property defined in the same bundle,
-// otherwise the value silently falls back to nothing at runtime.
-const CSS_FILES = [
-  'tokens.css',
-  'base.css',
-  'shell-phase1-part1.css',
-  'shell-phase1-part2.css',
-  'shell-phase1-part3.css',
-  'shell-phase1-part4.css',
-  'shell-scoped-overrides.css',
-  'column-span-workspace.css',
-] as const;
-
 // Custom properties intentionally injected at runtime (inline style / JS) rather
 // than declared in the static stylesheets. Tailwind owns the `--tw-*` space.
 const RUNTIME_VARS = new Set(['--thread-depth']);
@@ -26,6 +12,12 @@ const STYLES_DIR = resolve(process.cwd(), 'src/styles');
 
 function readCss(name: string): string {
   return readFileSync(resolve(STYLES_DIR, name), 'utf8');
+}
+
+function importedCssFiles(): string[] {
+  return [...readCss('index.css').matchAll(/@import\s+["']\.\/([^"']+\.css)["']/g)].map(
+    (match) => match[1]
+  );
 }
 
 function collectDefinitions(css: string): Set<string> {
@@ -49,9 +41,14 @@ function collectReferences(css: string): Set<string> {
 }
 
 describe('shell CSS custom properties', () => {
-  const bundle = CSS_FILES.map(readCss).join('\n');
+  const cssFiles = importedCssFiles();
+  const bundle = cssFiles.map(readCss).join('\n');
   const defined = collectDefinitions(bundle);
   const referenced = collectReferences(bundle);
+
+  it('includes the mobile workspace layer in the shipped bundle', () => {
+    expect(cssFiles).toContain('mobile-column-workspace.css');
+  });
 
   it('defines every custom property referenced via var()', () => {
     const undefinedRefs = [...referenced]

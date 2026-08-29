@@ -16,10 +16,29 @@ const swatches = [
   { name: 'Panel', value: 'var(--surface-panel)' },
   { name: 'Panel Accent', value: 'var(--surface-panel-accent)' },
   { name: 'Panel Muted', value: 'var(--surface-panel-muted)' },
+  { name: 'Panel Soft', value: 'var(--surface-panel-soft)' },
   { name: 'Input', value: 'var(--surface-input)' },
   { name: 'Primary Surface', value: 'var(--surface-button-primary)' },
   { name: 'Accent', value: 'var(--accent)' },
   { name: 'Destructive', value: 'var(--destructive)' },
+];
+
+const semanticPairs = [
+  {
+    name: 'Primary action',
+    background: 'var(--surface-button-primary)',
+    foreground: 'var(--primary-foreground)',
+  },
+  {
+    name: 'Accent state',
+    background: 'var(--surface-accent-soft)',
+    foreground: 'var(--accent-foreground)',
+  },
+  {
+    name: 'Destructive notice',
+    background: 'var(--surface-destructive-soft)',
+    foreground: 'var(--destructive)',
+  },
 ];
 
 function TokensPreview({ width }: { width: number }) {
@@ -30,11 +49,11 @@ function TokensPreview({ width }: { width: number }) {
         style={{ width }}
       >
         <div className='flex flex-col gap-2'>
-          <p className='eyebrow'>design tokens</p>
-          <h1 className='text-3xl font-semibold tracking-[-0.03em]'>kukuri shell foundation</h1>
+          <p className='eyebrow'>runtime tokens</p>
+          <h1 className='text-3xl font-semibold tracking-[-0.03em]'>Token confirmation surface</h1>
           <p className='max-w-[60ch] text-sm text-[var(--muted-foreground)]'>
-            Phase 0 keeps the existing shell intact while standardizing color, spacing, radius,
-            and primitive styling around shared CSS variables for both light and dark themes.
+            This story renders the values from tokens.css. DESIGN.md is the product contract;
+            switch the Storybook theme to inspect the executed dark and light values.
           </p>
         </div>
         <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
@@ -54,18 +73,32 @@ function TokensPreview({ width }: { width: number }) {
             </div>
           ))}
         </div>
+        <div className='grid gap-3 md:grid-cols-3'>
+          {semanticPairs.map((pair) => (
+            <div
+              key={pair.name}
+              className='rounded-[var(--radius-input)] border border-[var(--border-subtle)] p-4'
+              style={{ background: pair.background, color: pair.foreground }}
+            >
+              <strong className='block'>{pair.name}</strong>
+              <code className='text-xs'>{pair.foreground}</code>
+              <span aria-hidden='true'> / </span>
+              <code className='text-xs'>{pair.background}</code>
+            </div>
+          ))}
+        </div>
         <div className='grid gap-3 text-sm text-[var(--muted-foreground)] md:grid-cols-3'>
           <div className='rounded-[var(--radius-input)] border border-[var(--border-subtle)] bg-[var(--surface-panel-muted)] p-4'>
             <strong className='block text-foreground'>Typography</strong>
-            <p>IBM Plex Sans is the shared shell font, with muted copy and strong headline states.</p>
+            <p>Runtime font and type roles are shown in Foundations / Typography.</p>
           </div>
           <div className='rounded-[var(--radius-input)] border border-[var(--border-subtle)] bg-[var(--surface-panel-muted)] p-4'>
             <strong className='block text-foreground'>Radius</strong>
-            <p>Panels keep a 22px frame radius. Inputs and field surfaces use a 14px inner radius.</p>
+            <p>Runtime spacing and radius are shown in Foundations / Spacing &amp; Radius.</p>
           </div>
           <div className='rounded-[var(--radius-input)] border border-[var(--border-subtle)] bg-[var(--surface-panel-muted)] p-4'>
             <strong className='block text-foreground'>Theme + focus</strong>
-            <p>Solid surfaces, persistent light/dark themes, and visible focus rings stay consistent.</p>
+            <p>Use the toolbar to compare themes, locale, width, and reduced motion.</p>
           </div>
         </div>
       </div>
