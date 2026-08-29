@@ -97,6 +97,7 @@
     "unsupportedAttachmentType": "unsupported attachment type: {{name}}"
   },
   "feed": {
+    "contentUnavailable": "Content unavailable.",
     "localFailed": "Publish failed",
     "localPosting": "Posting…",
     "localSyncing": "Syncing…",
@@ -155,6 +156,7 @@
     "viewers": "viewers"
   },
   "media": {
+    "unavailable": "Media unavailable.",
     "closeDialog": "Close image viewer",
     "imageAlt": "image attachment",
     "reportVideo": "Report video attachment",

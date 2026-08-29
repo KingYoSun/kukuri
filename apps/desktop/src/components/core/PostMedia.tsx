@@ -8,17 +8,30 @@ import { type PostMediaView } from './types';
 
 type PostMediaProps = {
   media: PostMediaView;
+  showUnavailableDiagnostic?: boolean;
   onOpenImage?: (index: number) => void;
   /// 動画添付そのものを media として通報する(#697)。未指定なら操作を出さない。
   onReportVideo?: (hash: string) => void;
 };
 
-export function PostMedia({ media, onOpenImage, onReportVideo }: PostMediaProps) {
+export function PostMedia({
+  media,
+  showUnavailableDiagnostic = false,
+  onOpenImage,
+  onReportVideo,
+}: PostMediaProps) {
   const { t } = useTranslation(['common', 'shell']);
   const videoReportHash = media.kind === 'video' ? media.videoReportHash : null;
 
   if (!media.kind) {
     return null;
+  }
+  if (media.state === 'unavailable') {
+    return showUnavailableDiagnostic ? (
+      <p className='topic-diagnostic topic-diagnostic-secondary' role='status'>
+        {t('media.unavailable')}
+      </p>
+    ) : null;
   }
 
   return (

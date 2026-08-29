@@ -47,6 +47,75 @@ test('post card renders the author image when one is available', () => {
   );
 });
 
+test('post card omits unavailable body and media from normal UI', () => {
+  const base = createView();
+  render(
+    <PostCard
+      view={createView({
+        post: {
+          ...base.post,
+          content: '[blob pending]',
+          content_status: 'Missing',
+          attachments: [
+            {
+              hash: 'b'.repeat(64),
+              mime: 'image/png',
+              bytes: 2048,
+              role: 'image_original',
+              status: 'Missing',
+            },
+          ],
+        },
+        media: {
+          ...base.media,
+          kind: 'image',
+          state: 'unavailable',
+          metaMime: 'image/png',
+          metaBytesLabel: '2.0 KB',
+        },
+        showUnavailableDiagnostics: false,
+      })}
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+    />
+  );
+
+  expect(screen.queryByText('[blob pending]')).not.toBeInTheDocument();
+  expect(screen.queryByText('Content unavailable.')).not.toBeInTheDocument();
+  expect(screen.queryByText('Media unavailable.')).not.toBeInTheDocument();
+  expect(screen.queryByText('image/png')).not.toBeInTheDocument();
+  expect(screen.queryByText('2.0 KB')).not.toBeInTheDocument();
+});
+
+test('post card exposes concise unavailable diagnostics in developer mode', () => {
+  const base = createView();
+  render(
+    <PostCard
+      view={createView({
+        post: {
+          ...base.post,
+          content: '[blob pending]',
+          content_status: 'Missing',
+        },
+        media: {
+          ...base.media,
+          kind: 'image',
+          state: 'unavailable',
+        },
+        showUnavailableDiagnostics: true,
+      })}
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+    />
+  );
+
+  expect(screen.getByText('Content unavailable.')).toHaveAttribute('role', 'status');
+  expect(screen.getByText('Media unavailable.')).toHaveAttribute('role', 'status');
+  expect(screen.queryByText('[blob pending]')).not.toBeInTheDocument();
+});
+
 test('clicking the author avatar triggers the same author action as the name', async () => {
   const user = userEvent.setup();
   const onOpenAuthor = vi.fn();

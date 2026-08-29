@@ -5,7 +5,7 @@ import type {
   PostCardView,
   ReferencedAuthorMeta,
 } from '@/components/core/types';
-import type { PostView, ProfileAssetView } from '@/lib/api';
+import type { AttachmentView, PostView, ProfileAssetView } from '@/lib/api';
 import { contentProvenanceFromView } from '@/lib/api/provenance';
 import type { SupportedLocale } from '@/i18n';
 import { extractMentions } from '@/lib/internalLinks';
@@ -36,6 +36,7 @@ type UseTimelineViewModelsArgs = {
   activeJoinedChannels: DesktopShellState['joinedChannelsByTopic'][string];
   activeTimeline: PostView[];
   bookmarkedPosts: DesktopShellState['bookmarkedPosts'];
+  developerModeEnabled: boolean;
   knownAuthorsByPubkey: DesktopShellState['knownAuthorsByPubkey'];
   localAuthorPubkey: string;
   locale: SupportedLocale;
@@ -51,6 +52,7 @@ export function useTimelineViewModels({
   activeJoinedChannels,
   activeTimeline,
   bookmarkedPosts,
+  developerModeEnabled,
   knownAuthorsByPubkey,
   localAuthorPubkey,
   locale,
@@ -109,6 +111,17 @@ export function useTimelineViewModels({
         videoManifest && typeof mediaObjectUrls[videoManifest.hash] === 'string'
           ? mediaObjectUrls[videoManifest.hash]
           : null;
+      const hasSettledUnavailable = (hash: string) =>
+        Object.prototype.hasOwnProperty.call(mediaObjectUrls, hash) &&
+        mediaObjectUrls[hash] === null;
+      const mediaUnavailable =
+        mediaKind === 'image'
+          ? Boolean(primaryImage && hasSettledUnavailable(primaryImage.hash))
+          : mediaKind === 'video'
+            ? [videoManifest, videoPoster]
+                .filter((attachment): attachment is AttachmentView => attachment !== null)
+                .every((attachment) => hasSettledUnavailable(attachment.hash))
+            : false;
       const videoUnsupportedOnClient = Boolean(
         videoManifest && unsupportedVideoManifests[videoManifest.hash]
       );
@@ -244,6 +257,7 @@ export function useTimelineViewModels({
         replyParentAuthor,
         mentionAuthors,
         suppressReplyPreview: context === 'thread',
+        showUnavailableDiagnostics: developerModeEnabled,
         media: {
           objectId: post.object_id,
           kind: mediaKind,
@@ -252,12 +266,16 @@ export function useTimelineViewModels({
             mediaKind === 'video'
               ? videoPlaybackSrc || videoPosterPreviewSrc
                 ? 'ready'
-                : 'loading'
+                : mediaUnavailable
+                  ? 'unavailable'
+                  : 'loading'
               : mediaKind === 'image'
                 ? imagePreviewSrc
                   ? 'ready'
-                  : 'loading'
-                : 'loading',
+                  : mediaUnavailable
+                    ? 'unavailable'
+                    : 'loading'
+                : 'ready',
           metaMime: mediaMetaAttachment?.mime ?? null,
           metaBytesLabel: mediaMetaAttachment
             ? formatBytes(mediaMetaAttachment.bytes, locale)
@@ -293,6 +311,7 @@ export function useTimelineViewModels({
     },
     [
       activeJoinedChannels,
+      developerModeEnabled,
       knownAuthorsByPubkey,
       localAuthorPubkey,
       localProfile,

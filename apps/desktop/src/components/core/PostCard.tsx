@@ -149,7 +149,7 @@ export function PostCard({
     null
   );
   const [reactionMenuAsset, setReactionMenuAsset] = useState<CustomReactionAssetView | null>(null);
-  const isPendingText = post.content_status === 'Missing' && post.content === '[blob pending]';
+  const isUnavailableText = post.content_status === 'Missing' && post.content === '[blob pending]';
   const localState = post.local_state ?? null;
   const isWithdrawn = post.withdrawal != null;
   const interactionDisabled = localState !== null || isWithdrawn;
@@ -182,7 +182,7 @@ export function PostCard({
           ? t('feed.localFailed')
           : null;
   const primaryContent = showRepostAsPrimary && repostSource ? repostSource.content : post.content;
-  const hasPrimaryContent = isPendingText || primaryContent.trim().length > 0;
+  const hasPrimaryContent = !isUnavailableText && primaryContent.trim().length > 0;
   const reactionSummary = post.reaction_summary ?? [];
   const myReactionKeys = useMemo(
     () => new Set((post.my_reactions ?? []).map((reaction) => reaction.normalized_reaction_key)),
@@ -383,15 +383,12 @@ export function PostCard({
           <p className='topic-diagnostic topic-diagnostic-secondary' role='status'>
             {t('feed.withdrawnPost')}
           </p>
-        ) : isPendingText ? (
-          <div
-            className='text-skeleton-group'
-            data-testid={`text-skeleton-${post.object_id}`}
-            aria-hidden='true'
-          >
-            <span className='text-skeleton text-skeleton-line' />
-            <span className='text-skeleton text-skeleton-line text-skeleton-line-short' />
-          </div>
+        ) : isUnavailableText ? (
+          view.showUnavailableDiagnostics ? (
+            <p className='topic-diagnostic topic-diagnostic-secondary' role='status'>
+              {t('feed.contentUnavailable')}
+            </p>
+          ) : null
         ) : hasPrimaryContent ? (
           <strong className='post-title post-copy-wrap'>
             <SmartReferenceText
@@ -490,6 +487,7 @@ export function PostCard({
       {!isWithdrawn && view.media.kind ? (
         <PostMedia
           media={view.media}
+          showUnavailableDiagnostic={view.showUnavailableDiagnostics}
           onOpenImage={(index) => {
             setMediaViewerIndex(index);
             setMediaViewerOpen(true);

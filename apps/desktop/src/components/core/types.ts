@@ -48,7 +48,7 @@ export type PostMediaView = {
   kind: 'image' | 'video' | null;
   statusLabel?: string | null;
   extraAttachmentCount: number;
-  state: 'loading' | 'ready';
+  state: 'loading' | 'ready' | 'unavailable';
   metaMime?: string | null;
   metaBytesLabel?: string | null;
   imagePreviewSrc?: string | null;
@@ -113,6 +113,7 @@ export type PostCardView = {
   repostSourceAuthor?: ReferencedAuthorMeta | null;
   replyParentAuthor?: ReferencedAuthorMeta | null;
   suppressReplyPreview?: boolean;
+  showUnavailableDiagnostics?: boolean;
   mentionAuthors?: Record<string, MentionAuthorView>;
   // 正本（通常は author_docs）と、index / moderation / cache 等の観測経路を分離して保持する。
   // 通報ルーティング（#310）・content details・default node boundary 説明に使う。

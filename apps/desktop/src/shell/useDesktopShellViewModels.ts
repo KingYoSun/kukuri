@@ -153,6 +153,7 @@ export function useDesktopShellViewModels({
     activeJoinedChannels,
     activeTimeline,
     bookmarkedPosts,
+    developerModeEnabled: state.developerModeEnabled,
     knownAuthorsByPubkey,
     localAuthorPubkey: syncStatus.local_author_pubkey,
     locale,

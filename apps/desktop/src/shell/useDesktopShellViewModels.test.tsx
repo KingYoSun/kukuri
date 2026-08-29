@@ -268,6 +268,13 @@ describe('useDesktopShellViewModels', () => {
     expect(card.media.currentImageIndex).toBe(0);
 
     actPatchState(view.store, {
+      mediaObjectUrls: { [imageHash]: null },
+    });
+
+    const unavailableCard = view.result.current.activeTimelinePostViews[0];
+    expect(unavailableCard.media.state).toBe('unavailable');
+
+    actPatchState(view.store, {
       mediaObjectUrls: { [imageHash]: 'blob:image-preview-1' },
     });
 

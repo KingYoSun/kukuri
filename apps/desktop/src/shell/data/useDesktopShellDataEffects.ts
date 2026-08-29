@@ -2,6 +2,7 @@ import {
   startTransition,
   useCallback,
   useEffect,
+  useRef,
   type MutableRefObject,
 } from 'react';
 
@@ -138,6 +139,7 @@ export function useDesktopShellDataEffects({
   setTimelineScopeByTopic,
   setMediaObjectUrls,
 }: UseDesktopShellDataEffectsArgs) {
+  const mediaFetchInputRef = useRef(new Map<string, AttachmentView>());
   // 非 active な Timeline Column が Bookmarks を表示しているか(bookmarks ロード gate 用、Issue #765)。
   const hasBookmarksTimelineColumn = useDesktopShellStore((state) =>
     state.workspaceState.columns.some((column) => column.timelineView === 'bookmarks')
@@ -507,11 +509,21 @@ export function useDesktopShellDataEffects({
 
   useEffect(() => {
     let disposed = false;
+    const currentHashes = new Set(previewableMediaAttachments.map((attachment) => attachment.hash));
+    for (const hash of mediaFetchInputRef.current.keys()) {
+      if (!currentHashes.has(hash)) {
+        mediaFetchInputRef.current.delete(hash);
+      }
+    }
 
     for (const attachment of previewableMediaAttachments) {
       if (typeof mediaObjectUrls[attachment.hash] === 'string') {
         continue;
       }
+      if (mediaFetchInputRef.current.get(attachment.hash) === attachment) {
+        continue;
+      }
+      mediaFetchInputRef.current.set(attachment.hash, attachment);
 
       const nextAttempt = (mediaFetchAttemptRef.current.get(attachment.hash) ?? 0) + 1;
       mediaFetchAttemptRef.current.set(attachment.hash, nextAttempt);
@@ -541,6 +553,11 @@ export function useDesktopShellDataEffects({
               role: attachment.role,
               status: attachment.status,
             });
+            setMediaObjectUrls((current) =>
+              typeof current[attachment.hash] === 'string' || current[attachment.hash] === null
+                ? current
+                : { ...current, [attachment.hash]: null }
+            );
             return;
           }
 
@@ -555,7 +572,7 @@ export function useDesktopShellDataEffects({
           });
 
           setMediaObjectUrls((current) => {
-            if (current[attachment.hash] !== undefined) {
+            if (typeof current[attachment.hash] === 'string') {
               URL.revokeObjectURL(nextUrl);
               return current;
             }
@@ -578,6 +595,11 @@ export function useDesktopShellDataEffects({
             role: attachment.role,
             status: attachment.status,
           });
+          setMediaObjectUrls((current) =>
+            typeof current[attachment.hash] === 'string' || current[attachment.hash] === null
+              ? current
+              : { ...current, [attachment.hash]: null }
+          );
         });
     }
 
@@ -587,6 +609,7 @@ export function useDesktopShellDataEffects({
   }, [
     api,
     mediaFetchAttemptRef,
+    mediaFetchInputRef,
     mediaObjectUrls,
     previewableMediaAttachments,
     remoteObjectUrlRef,
