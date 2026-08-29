@@ -1,0 +1,21 @@
+# 2026-08-29 Issue #824 UI/UX quality contracts
+
+- Status: current
+- Supersedes: None
+- Superseded by: None
+- PR: Issue #824の実装PR（作成後にlinkへ更新）
+- Preview: [dark theme](assets/issue-824/tokens-dark.png) / [light theme](assets/issue-824/tokens-light.png)
+- Surface / user / purpose: Storybook FoundationsとUI開発flow / contributor・reviewer / runtime tokenと設計契約の差分を実描画と自動検証で検出する
+- Summary: `DESIGN.md`を製品固有のUI/UX契約に再構成し、実装配置をarchitecture document、変更分類と証跡要件をADR 0014へ分離した。Storybook Foundationsをruntime tokenの確認面へ揃え、CSS importとtoken contractをVitestで検証する。
+- Conditions:
+  - Platform: Windows 11、Chromium headless、built Storybook
+  - Viewport: 1100 × 1400、device scale factor 1
+  - Theme: dark / light
+  - Locale: en（Foundation storyの説明文）
+  - State: `Foundations/Tokens`の`NarrowWidth` story、runtime token適用済み
+- Accessibility / interaction: Storybook toolbarでthemeを切り替え、dark／lightの描画差分を確認した。`cargo xtask desktop-ui-check`でStorybook build、Playwright browser 44件、visual 14件が成功した。既知のlight theme contrast不足は#828で追跡する。
+- Performance: production componentとruntime bundleは変更していない。追加した処理はVitest contract testとStorybook確認面だけであり、production性能計測は対象外とした。
+- Validation: targeted Vitest 3件、`cargo xtask check`、`cargo xtask test`（Rust 694、harness 22、frontend 917）、`cargo xtask desktop-ui-check`（frontend 917、Playwright browser 44、visual 14）、Storybook dark／light実描画、`git diff --check`が成功した。
+- Not verified: production UIの挙動を変更していないためTauri／WebView実機確認は行っていない。light theme contrast修正後の実描画は#828のscopeとする。
+- Review result: 設計契約、実装配置、validation flow、review証跡の責務を分離し、Storybook previewと自動contract testを採用する。
+- Exceptions: None

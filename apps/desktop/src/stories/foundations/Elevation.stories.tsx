@@ -25,8 +25,8 @@ function Preview() {
           <p className='eyebrow'>foundations</p>
           <h1 className='text-3xl font-semibold tracking-[-0.03em]'>Elevation</h1>
           <p className='max-w-[60ch] text-sm text-[var(--muted-foreground)]'>
-            実装済みの elevation トークン。<code>--shadow-modal</code> / <code>--shadow-overlay</code>{' '}
-            は将来定義（consumer 追加時）。
+            <code>tokens.css</code> で実行される現行elevationを描画する確認面。製品契約は{' '}
+            <code>DESIGN.md</code>。
           </p>
         </div>
         <div className='grid gap-10 sm:grid-cols-3'>

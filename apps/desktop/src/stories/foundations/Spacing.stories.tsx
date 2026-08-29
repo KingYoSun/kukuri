@@ -38,8 +38,8 @@ function Preview() {
           <p className='eyebrow'>foundations</p>
           <h1 className='text-3xl font-semibold tracking-[-0.03em]'>Spacing &amp; Radius</h1>
           <p className='max-w-[60ch] text-sm text-[var(--muted-foreground)]'>
-            gap / padding / margin は <code>--space-*</code>（4px ベース）、角丸は <code>--radius-*</code>{' '}
-            に集約している。
+            <code>tokens.css</code> の実行値を描画する確認面。製品契約は <code>DESIGN.md</code>。gap /
+            padding / margin は <code>--space-*</code>、角丸は <code>--radius-*</code> に集約している。
           </p>
         </div>
         <div className='flex flex-col gap-3'>
