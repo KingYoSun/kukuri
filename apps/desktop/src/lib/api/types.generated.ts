@@ -73,7 +73,7 @@ export type TimelineView = { items: Array<PostView>, next_cursor?: TimelineCurso
 
 export type DirectMessageTimelineView = { items: Array<DirectMessageMessageView>, next_cursor?: TimelineCursor | null, };
 
-export type JoinedPrivateChannelView = { topic_id: string, channel_id: string, label: string, creator_pubkey: string, owner_pubkey: string, joined_via_pubkey?: string | null, audience_kind: ChannelAudienceKind, is_owner: boolean, current_epoch_id: string, archived_epoch_ids: Array<string>, sharing_state: ChannelSharingState, rotation_required: boolean, participant_count: number, stale_participant_count: number, };
+export type JoinedPrivateChannelView = { topic_id: string, channel_id: string, label: string, creator_pubkey: string, owner_pubkey: string, joined_via_pubkey?: string | null, audience_kind: ChannelAudienceKind, is_owner: boolean, current_epoch_id: string, archived_epoch_ids: Array<string>, sharing_state: ChannelSharingState, rotation_required: boolean, participant_count: number, stale_participant_count: number, entry_dome_instance_id?: string | null, };
 
 export type PrivateChannelEpochCapability = { epoch_id: string, namespace_secret_hex: string, };
 
@@ -203,7 +203,7 @@ export type DomeHostingStateKindV1 = "closed" | "owner_hosted" | "community_node
 
 export type DomeHostingStateV1 = { kind: DomeHostingStateKindV1, host?: DomeHostTargetV1 | null, lease_id?: string | null, lease_epoch?: number | null, lease_expires_at?: number | null, session_id?: string | null, reason?: string | null, last_heartbeat_at?: number | null, };
 
-export type DomeSessionInputKindV1 = { "type": "join" } | { "type": "leave" } | { "type": "move", position: [number, number, number], rotation: [number, number, number], animation: string, } | { "type": "grab", prop_id: string, } | { "type": "throw", prop_id: string, impulse: [number, number, number], } | { "type": "push", prop_id: string, impulse: [number, number, number], } | { "type": "sit", prop_id: string, } | { "type": "prepare_transition", transition_id: string, direction: DomeDirection, } | { "type": "abort_transition", transition_id: string, } | { "type": "complete_transition", transition_id: string, } | { "type": "spawn_guest_prop", prop: MetaversePersistentPropV1, expires_at: number, } | { "type": "upsert_persistent_prop", prop: MetaversePersistentPropV1, } | { "type": "delete_persistent_prop", prop_id: string, };
+export type DomeSessionInputKindV1 = { "type": "join", avatar_collider?: MetaverseColliderV1 | null, } | { "type": "leave" } | { "type": "move", position: [number, number, number], rotation: [number, number, number], animation: string, } | { "type": "grab", prop_id: string, } | { "type": "throw", prop_id: string, impulse: [number, number, number], } | { "type": "push", prop_id: string, impulse: [number, number, number], } | { "type": "sit", prop_id: string, } | { "type": "prepare_transition", transition_id: string, direction: DomeDirection, } | { "type": "abort_transition", transition_id: string, } | { "type": "complete_transition", transition_id: string, } | { "type": "spawn_guest_prop", prop: MetaversePersistentPropV1, expires_at: number, } | { "type": "upsert_persistent_prop", prop: MetaversePersistentPropV1, } | { "type": "delete_persistent_prop", prop_id: string, };
 
 export type DomePhysicsBodyKindV1 = "avatar" | "persistent_prop" | "guest_prop";
 
@@ -572,6 +572,8 @@ export type ImportFriendPlusShareRequest = { token: string, };
 export type FreezePrivateChannelRequest = { topic: string, channel_id: string, };
 
 export type RotatePrivateChannelRequest = { topic: string, channel_id: string, };
+
+export type SetPrivateChannelEntryDomeRequest = { topic: string, channel_id: string, entry_dome_instance_id?: string | null, };
 
 export type LeavePrivateChannelRequest = { topic: string, channel_id: string, };
 

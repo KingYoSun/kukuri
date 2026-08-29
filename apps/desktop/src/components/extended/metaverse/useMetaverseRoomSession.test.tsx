@@ -6,6 +6,7 @@ import type {
   DomeHostingView,
   DomePhysicsSnapshotV1,
   GameRoomView,
+  SpatialContextV1,
   SyncStatus,
 } from '@/lib/api';
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
@@ -24,6 +25,7 @@ const room: GameRoomView = {
   scores: [],
   room_kind: 'metaverse_room',
   metaverse: createDefaultMetaverseRoomState(8),
+  dome_hosting: { kind: 'owner_hosted' },
   manifest_blob_hash: 'manifest-1',
   updated_at: 1,
   channel_id: null,
@@ -73,6 +75,16 @@ function physicsSnapshot(sequence: number, x: number): DomePhysicsSnapshotV1 {
     simulated_at: sequence,
     sleeping: false,
     bodies: [
+      {
+        entity_id: `avatar:${'f'.repeat(64)}`,
+        kind: 'avatar',
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        linear_velocity: [0, 0, 0],
+        animation: 'idle',
+        grabbed_by: null,
+        expires_at: null,
+      },
       {
         entity_id: 'remote-peer',
         kind: 'avatar',
@@ -158,16 +170,36 @@ afterEach(() => {
 });
 
 describe('useMetaverseRoomSession', () => {
-  test('opens the room addressed by the column entity on first render', () => {
+  test('does not expose the Dome scene before authoritative admission confirms a safe spawn', async () => {
+    let resolveAdmission!: (snapshot: DomePhysicsSnapshotV1) => void;
+    const api: DesktopApi = {
+      ...createDesktopMockApi(),
+      submitDomeSessionInput: vi.fn(() => new Promise<DomePhysicsSnapshotV1>((resolve) => {
+        resolveAdmission = resolve;
+      })),
+    };
+    const session = renderSession({ api });
+
+    await waitFor(() => expect(api.submitDomeSessionInput).toHaveBeenCalled());
+    expect(session.result.current.admissionStatus).toBe('admitting');
+    expect(session.result.current.admittedRoom).toBeNull();
+
+    await act(async () => resolveAdmission(physicsSnapshot(1, 0)));
+    await waitFor(() => expect(session.result.current.admittedRoom?.room_id).toBe(room.room_id));
+  });
+
+  test('admits the best available room on first render', async () => {
     const session = renderSession({ initialSelectedRoomId: room.room_id });
 
-    expect(session.result.current.selectedRoom?.room_id).toBe(room.room_id);
+    await waitFor(() => expect(session.result.current.admittedRoom?.room_id).toBe(room.room_id));
   });
 
   test('clears a missing selected room but preserves a pending created-room selection', async () => {
     const session = renderSession();
-    act(() => session.result.current.joinRoom(room.room_id));
-    expect(session.result.current.selectedRoom?.room_id).toBe(room.room_id);
+    await act(async () => {
+      await session.result.current.joinRoom(room.room_id);
+    });
+    expect(session.result.current.admittedRoom?.room_id).toBe(room.room_id);
 
     session.rerender({ rooms: [], sync: syncStatus() });
     await waitFor(() => expect(session.result.current.selectedRoomId).toBeNull());
@@ -186,7 +218,7 @@ describe('useMetaverseRoomSession', () => {
 
   test('closes the room BroadcastChannel on cleanup', async () => {
     const session = renderSession();
-    act(() => session.result.current.joinRoom(room.room_id));
+    await waitFor(() => expect(session.result.current.admittedRoom?.room_id).toBe(room.room_id));
     await waitFor(() => expect(MockBroadcastChannel.instances).toHaveLength(1));
     const channel = MockBroadcastChannel.instances[0];
     session.unmount();
@@ -203,7 +235,11 @@ describe('useMetaverseRoomSession', () => {
         .mockResolvedValueOnce(physicsSnapshot(2, 2)),
     };
     const session = renderSession({ api });
-    act(() => session.result.current.joinRoom(room.room_id));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(session.result.current.admittedRoom?.room_id).toBe(room.room_id);
     await waitFor(() =>
       expect(session.result.current.remoteTransforms['remote-peer']?.position[0]).toBe(1)
     );
@@ -242,7 +278,11 @@ describe('useMetaverseRoomSession', () => {
       listMetaverseRoomEvents: vi.fn().mockRejectedValue(new Error('poll failed')),
     };
     const session = renderSession({ api });
-    act(() => session.result.current.joinRoom(room.room_id));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(session.result.current.admittedRoom?.room_id).toBe(room.room_id);
 
     await act(async () => {
       await Promise.resolve();
@@ -260,8 +300,11 @@ describe('useMetaverseRoomSession', () => {
     const clearInterval = vi.spyOn(window, 'clearInterval');
     const clearTimeout = vi.spyOn(window, 'clearTimeout');
     const session = renderSession({ onRefresh });
-    act(() => session.result.current.joinRoom(room.room_id));
-    await act(async () => Promise.resolve());
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(session.result.current.admittedRoom?.room_id).toBe(room.room_id);
 
     session.rerender({ rooms: [room], sync: syncStatus(false) });
     await act(async () => Promise.resolve());
@@ -380,7 +423,11 @@ describe('useMetaverseRoomSession', () => {
         },
       }),
       getDomeHosting: vi.fn(async (_context, instanceId) => hosted(instanceId)),
-      submitDomeSessionInput: vi.fn(async (_context, instanceId, sequence) => ({
+      submitDomeSessionInput: vi.fn(async (
+        _context: SpatialContextV1,
+        instanceId: string,
+        sequence: number
+      ): Promise<DomePhysicsSnapshotV1> => ({
         instance_id: instanceId,
         instance_generation: 1,
         lease_epoch: 1,
@@ -389,7 +436,16 @@ describe('useMetaverseRoomSession', () => {
         sequence,
         simulated_at: Date.now(),
         sleeping: false,
-        bodies: [],
+        bodies: [{
+          entity_id: `avatar:${'f'.repeat(64)}`,
+          kind: 'avatar',
+          position: [0, 0, 260],
+          rotation: [0, 180, 0],
+          linear_velocity: [0, 0, 0],
+          animation: 'idle',
+          grabbed_by: null,
+          expires_at: null,
+        }],
       })),
       prepareDomeTransition,
       commitDomeTransition,

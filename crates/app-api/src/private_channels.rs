@@ -1,5 +1,6 @@
 use crate::service::*;
 use DocFetchPolicy::LocalThenRemote;
+use kukuri_core::{DomeInstanceStatusV1, SpatialContextV1};
 impl AppService {
     pub async fn create_private_channel(
         &self,
@@ -61,6 +62,7 @@ impl AppService {
                 sharing_state: ChannelSharingState::Open,
                 rotated_at: None,
                 previous_epoch_id: None,
+                entry_dome_instance_id: None,
             },
             &current_private_channel_replica_id(&state),
         )
@@ -583,6 +585,57 @@ impl AppService {
         .await?;
         self.joined_private_channel_view_for_state(&state).await
     }
+
+    pub async fn set_private_channel_entry_dome(
+        &self,
+        topic_id: &str,
+        channel_id: &str,
+        entry_dome_instance_id: Option<String>,
+    ) -> Result<JoinedPrivateChannelView> {
+        let Some(state) = self
+            .joined_private_channel_state(topic_id, channel_id)
+            .await
+        else {
+            anyhow::bail!("private channel is not joined");
+        };
+        if state.owner_pubkey != self.current_author_pubkey() {
+            anyhow::bail!("only the channel owner can set the entry Dome");
+        }
+        let context = SpatialContextV1::Channel {
+            topic_id: TopicId::new(topic_id),
+            channel_id: state.channel_id.clone(),
+        };
+        let replica = self.hosting_context_replica(&context).await?;
+        let entry_dome_instance_id = entry_dome_instance_id
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        if let Some(instance_id) = entry_dome_instance_id.as_deref() {
+            let instance = self
+                .hosting_instance(&replica, instance_id)
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("entry Dome is not in this Spatial Context"))?;
+            if instance.spatial_context != context
+                || instance.status != DomeInstanceStatusV1::Active
+            {
+                anyhow::bail!("entry Dome is not active in this Spatial Context");
+            }
+        }
+        let current_policy =
+            fetch_private_channel_policy_from_replica(self.docs_sync(), &replica, LocalThenRemote)
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("private channel policy is missing"))?;
+        persist_private_channel_policy(
+            self.docs_sync(),
+            self.keys(),
+            &PrivateChannelPolicyDocV1 {
+                entry_dome_instance_id,
+                ..current_policy
+            },
+            &replica,
+        )
+        .await?;
+        self.joined_private_channel_view_for_state(&state).await
+    }
     /// private channel の epoch rotate(所有者のみ)。
     ///
     /// フェーズ分割(WP-H5 PR4)。順序と失敗時挙動は分割前と同一:
@@ -599,7 +652,11 @@ impl AppService {
             .await?;
         self.freeze_rotated_epoch_policy(&prep).await?;
         let next = self
-            .seed_next_private_channel_epoch(topic_id, &prep.state)
+            .seed_next_private_channel_epoch(
+                topic_id,
+                &prep.state,
+                prep.current_policy.entry_dome_instance_id.clone(),
+            )
             .await?;
         self.distribute_epoch_handoff_grants(topic_id, &prep, &next)
             .await?;
@@ -642,6 +699,7 @@ impl AppService {
             sharing_state: ChannelSharingState::Open,
             rotated_at: None,
             previous_epoch_id: None,
+            entry_dome_instance_id: None,
         });
         let current_participants = fetch_private_channel_participants_from_replica(
             self.docs_sync(),
@@ -709,6 +767,7 @@ impl AppService {
         &self,
         topic_id: &str,
         state: &JoinedPrivateChannelState,
+        entry_dome_instance_id: Option<String>,
     ) -> Result<PrivateChannelNextEpoch> {
         let epoch_id = next_private_channel_epoch_id(self.current_author_pubkey().as_str());
         let secret_hex = generate_keys().export_secret_hex();
@@ -739,6 +798,7 @@ impl AppService {
                 sharing_state: ChannelSharingState::Open,
                 rotated_at: None,
                 previous_epoch_id: Some(state.current_epoch_id.clone()),
+                entry_dome_instance_id,
             },
             &replica,
         )

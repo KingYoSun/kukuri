@@ -1,8 +1,8 @@
 use kukuri_core::{
     DomeDirection, DomeHostTargetV1, DomeHostingLeaseV1, DomeInstanceStatusV1, DomePresetRefV1,
-    DomeTransitionAccessDecisionV1, DomeTransitionAdmissionRequestV1, MetaverseDomeV1,
-    MetaversePersistentPropV1, MetaversePrimitive, MetaverseRoomSpawnV1, SpatialContextV1, TopicId,
-    build_signed_dome_hosting_lease,
+    DomeTransitionAccessDecisionV1, DomeTransitionAdmissionRequestV1, MetaverseColliderV1,
+    MetaverseDomeV1, MetaversePersistentPropV1, MetaversePrimitive, MetaverseRoomSpawnV1,
+    SpatialContextV1, TopicId, build_signed_dome_hosting_lease,
 };
 
 use super::*;
@@ -95,6 +95,152 @@ fn signed_input(
         },
     )
     .unwrap()
+}
+
+#[test]
+fn join_uses_default_spawn_then_deterministically_evacuates_from_overlap() {
+    let (owner, lease, instance, mut preset) = fixture();
+    preset.dome.customization.persistent_props = vec![MetaversePersistentPropV1 {
+        prop_id: "spawn-blocker".into(),
+        asset_ref: None,
+        primitive_fallback: MetaversePrimitive::Cube,
+        position: instance.default_spawn.position,
+        rotation: [0, 0, 0],
+        scale: [100, 180, 100],
+        visual_only: false,
+        interactions: Vec::new(),
+        collider: Some(MetaverseColliderV1::Cuboid {
+            center: [0, 90, 0],
+            half_extents: [50, 90, 50],
+        }),
+    }];
+    let mut runtime = DomeSessionRuntime::start_with_session_id(
+        lease,
+        owner,
+        &instance,
+        &preset,
+        "session-1",
+        1_000,
+    )
+    .unwrap();
+    let participant = KukuriKeys::generate();
+    runtime
+        .apply_signed_input(&signed_input(
+            &participant,
+            1,
+            DomeSessionInputKindV1::Join {
+                avatar_collider: None,
+            },
+        ))
+        .unwrap();
+    let snapshot = runtime.signed_snapshot(1_100).unwrap();
+    let avatar = snapshot
+        .snapshot
+        .bodies
+        .iter()
+        .find(|body| body.entity_id == format!("avatar:{}", participant.public_key().as_str()))
+        .expect("admitted avatar");
+    assert_eq!(avatar.position, [150, 0, 0]);
+}
+
+#[test]
+fn admission_snapshot_never_reuses_a_throttled_pre_join_snapshot() {
+    let (owner, lease, instance, preset) = fixture();
+    let mut runtime = DomeSessionRuntime::start_with_session_id(
+        lease,
+        owner,
+        &instance,
+        &preset,
+        "session-1",
+        1_000,
+    )
+    .unwrap();
+    let participant = KukuriKeys::generate();
+    runtime
+        .apply_signed_input(&signed_input(
+            &participant,
+            1,
+            DomeSessionInputKindV1::Join {
+                avatar_collider: None,
+            },
+        ))
+        .unwrap();
+    let first = runtime.signed_snapshot(1_001).unwrap();
+    runtime
+        .apply_signed_input(&signed_input(
+            &participant,
+            2,
+            DomeSessionInputKindV1::Leave,
+        ))
+        .unwrap();
+    runtime
+        .apply_signed_input(&signed_input(
+            &participant,
+            3,
+            DomeSessionInputKindV1::Join {
+                avatar_collider: Some(MetaverseColliderV1::Capsule {
+                    center: [1_950, 90, 0],
+                    radius: 25,
+                    half_height: 65,
+                }),
+            },
+        ))
+        .unwrap();
+
+    let admission = runtime.signed_admission_snapshot(1_003).unwrap();
+    assert!(admission.snapshot.sequence > first.snapshot.sequence);
+    let avatar = admission
+        .snapshot
+        .bodies
+        .iter()
+        .find(|body| body.entity_id == format!("avatar:{}", participant.public_key().as_str()))
+        .expect("fresh admission avatar");
+    assert_ne!(avatar.position, instance.default_spawn.position);
+}
+
+#[test]
+fn join_with_no_safe_spawn_is_atomic() {
+    let (owner, lease, instance, mut preset) = fixture();
+    preset.dome.customization.persistent_props = vec![MetaversePersistentPropV1 {
+        prop_id: "spawn-area-blocker".into(),
+        asset_ref: None,
+        primitive_fallback: MetaversePrimitive::Cube,
+        position: instance.default_spawn.position,
+        rotation: [0, 0, 0],
+        scale: [500, 400, 500],
+        visual_only: false,
+        interactions: Vec::new(),
+        collider: Some(MetaverseColliderV1::Cuboid {
+            center: [0, 200, 0],
+            half_extents: [1_000, 200, 1_000],
+        }),
+    }];
+    let mut runtime = DomeSessionRuntime::start_with_session_id(
+        lease,
+        owner,
+        &instance,
+        &preset,
+        "session-1",
+        1_000,
+    )
+    .unwrap();
+    let participant = KukuriKeys::generate();
+    let error = runtime
+        .apply_signed_input(&signed_input(
+            &participant,
+            1,
+            DomeSessionInputKindV1::Join {
+                avatar_collider: None,
+            },
+        ))
+        .expect_err("blocked spawn must reject entry");
+    assert!(error.to_string().contains("DOME_ENTRY_NO_SAFE_SPAWN"));
+    assert_eq!(runtime.participant_count(), 0);
+    assert!(
+        !runtime
+            .bodies_by_id
+            .contains_key(&format!("avatar:{}", participant.public_key().as_str()))
+    );
 }
 
 fn transition_request(
@@ -243,13 +389,25 @@ fn access_revocation_cancels_reservation_and_evicts_only_target_participant() {
 
     runtime
         .apply_signed_input_at(
-            &signed_input(&blocked, 1, DomeSessionInputKindV1::Join),
+            &signed_input(
+                &blocked,
+                1,
+                DomeSessionInputKindV1::Join {
+                    avatar_collider: None,
+                },
+            ),
             1_101,
         )
         .unwrap();
     runtime
         .apply_signed_input_at(
-            &signed_input(&allowed, 1, DomeSessionInputKindV1::Join),
+            &signed_input(
+                &allowed,
+                1,
+                DomeSessionInputKindV1::Join {
+                    avatar_collider: None,
+                },
+            ),
             1_101,
         )
         .unwrap();
@@ -285,7 +443,13 @@ fn source_prepare_drops_grab_clears_seat_and_fences_interactions() {
     )
     .unwrap();
     runtime
-        .apply_signed_input(&signed_input(&participant, 1, DomeSessionInputKindV1::Join))
+        .apply_signed_input(&signed_input(
+            &participant,
+            1,
+            DomeSessionInputKindV1::Join {
+                avatar_collider: None,
+            },
+        ))
         .unwrap();
     runtime
         .apply_signed_input(&signed_input(
@@ -365,7 +529,13 @@ fn only_a_prepared_avatar_can_enter_the_connection_zone() {
         })
         .unwrap();
     runtime
-        .apply_signed_input(&signed_input(&participant, 1, DomeSessionInputKindV1::Join))
+        .apply_signed_input(&signed_input(
+            &participant,
+            1,
+            DomeSessionInputKindV1::Join {
+                avatar_collider: None,
+            },
+        ))
         .unwrap();
     let prop = runtime.rigid_bodies[runtime.bodies_by_id["blocked-prop"].handle].translation();
     assert!(prop.z > -20.0, "props must remain inside the hemisphere");
@@ -443,7 +613,13 @@ fn joined_participant_wakes_physics_and_stale_input_is_rejected() {
         1_000,
     )
     .unwrap();
-    let join = signed_input(&participant, 1, DomeSessionInputKindV1::Join);
+    let join = signed_input(
+        &participant,
+        1,
+        DomeSessionInputKindV1::Join {
+            avatar_collider: None,
+        },
+    );
     runtime.apply_signed_input(&join).unwrap();
     assert!(!runtime.is_sleeping());
     assert!(runtime.apply_signed_input(&join).is_err());
@@ -522,7 +698,13 @@ fn layout_candidate_contains_only_owner_managed_persistent_props() {
     )
     .unwrap();
     runtime
-        .apply_signed_input(&signed_input(&participant, 1, DomeSessionInputKindV1::Join))
+        .apply_signed_input(&signed_input(
+            &participant,
+            1,
+            DomeSessionInputKindV1::Join {
+                avatar_collider: None,
+            },
+        ))
         .unwrap();
     let guest = MetaversePersistentPropV1 {
         prop_id: "guest-1".into(),
@@ -637,10 +819,22 @@ fn participant_budget_is_enforced_before_join_mutates_state() {
     let first = KukuriKeys::generate();
     let second = KukuriKeys::generate();
     runtime
-        .apply_signed_input(&signed_input(&first, 1, DomeSessionInputKindV1::Join))
+        .apply_signed_input(&signed_input(
+            &first,
+            1,
+            DomeSessionInputKindV1::Join {
+                avatar_collider: None,
+            },
+        ))
         .unwrap();
     let error = runtime
-        .apply_signed_input(&signed_input(&second, 1, DomeSessionInputKindV1::Join))
+        .apply_signed_input(&signed_input(
+            &second,
+            1,
+            DomeSessionInputKindV1::Join {
+                avatar_collider: None,
+            },
+        ))
         .unwrap_err();
     assert!(
         error
@@ -664,7 +858,13 @@ fn extreme_impulse_is_rejected_without_changing_sequence() {
     )
     .unwrap();
     runtime
-        .apply_signed_input(&signed_input(&participant, 1, DomeSessionInputKindV1::Join))
+        .apply_signed_input(&signed_input(
+            &participant,
+            1,
+            DomeSessionInputKindV1::Join {
+                avatar_collider: None,
+            },
+        ))
         .unwrap();
     let excessive = signed_input(
         &participant,
@@ -700,7 +900,13 @@ fn interaction_rate_is_enforced_at_the_boundary_without_partial_mutation() {
     )
     .unwrap();
     runtime
-        .apply_signed_input(&signed_input(&participant, 1, DomeSessionInputKindV1::Join))
+        .apply_signed_input(&signed_input(
+            &participant,
+            1,
+            DomeSessionInputKindV1::Join {
+                avatar_collider: None,
+            },
+        ))
         .unwrap();
     let avatar_id = format!("avatar:{}", participant.public_key().as_str());
     runtime

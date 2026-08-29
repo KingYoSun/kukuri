@@ -698,6 +698,7 @@ pub struct JoinedPrivateChannelView {
     pub rotation_required: bool,
     pub participant_count: usize,
     pub stale_participant_count: usize,
+    pub entry_dome_instance_id: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

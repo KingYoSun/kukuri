@@ -585,6 +585,15 @@ pub struct RotatePrivateChannelRequest {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
+pub struct SetPrivateChannelEntryDomeRequest {
+    pub topic: String,
+    pub channel_id: String,
+    pub entry_dome_instance_id: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct LeavePrivateChannelRequest {
     pub topic: String,
     pub channel_id: String,

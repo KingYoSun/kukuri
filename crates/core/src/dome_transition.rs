@@ -492,6 +492,7 @@ mod tests {
             sharing_state: crate::ChannelSharingState::Open,
             rotated_at: None,
             previous_epoch_id: Some("epoch-1".into()),
+            entry_dome_instance_id: None,
         };
         let participant_doc = PrivateChannelParticipantDocV1 {
             channel_id: channel_id.clone(),

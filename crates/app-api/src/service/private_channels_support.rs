@@ -175,14 +175,16 @@ impl AppService {
         state: &JoinedPrivateChannelState,
     ) -> Result<PrivateChannelDiagnostics> {
         let replica = current_private_channel_replica_id(state);
-        let sharing_state = fetch_private_channel_policy_from_replica(
+        let policy = fetch_private_channel_policy_from_replica(
             self.docs_sync(),
             &replica,
             DocFetchPolicy::LocalOnly,
         )
-        .await?
-        .map(|policy| policy.sharing_state)
-        .unwrap_or(ChannelSharingState::Open);
+        .await?;
+        let sharing_state = policy
+            .as_ref()
+            .map(|policy| policy.sharing_state.clone())
+            .unwrap_or(ChannelSharingState::Open);
         let participants = fetch_private_channel_participants_from_replica(
             self.docs_sync(),
             &replica,
@@ -221,6 +223,7 @@ impl AppService {
             stale_participant_count,
             rotation_required: state.audience_kind == ChannelAudienceKind::FriendOnly
                 && stale_participant_count > 0,
+            entry_dome_instance_id: policy.and_then(|policy| policy.entry_dome_instance_id),
         })
     }
     pub(crate) async fn joined_private_channel_view_for_state(
@@ -247,6 +250,7 @@ impl AppService {
             rotation_required: diagnostics.rotation_required,
             participant_count: diagnostics.participant_count,
             stale_participant_count: diagnostics.stale_participant_count,
+            entry_dome_instance_id: diagnostics.entry_dome_instance_id,
         })
     }
     /// テスト専用: 唯一の呼び出し元が cfg(test) の get_private_channel_capability。

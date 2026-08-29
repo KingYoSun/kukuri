@@ -93,6 +93,7 @@ pub struct DomeSessionRuntime {
     budget: MetaverseResourceBudgetConfig,
     verified_assets: BTreeMap<String, MetaverseAssetRef>,
     participant_limit: u32,
+    default_spawn: kukuri_core::MetaverseRoomSpawnV1,
     player_budgets: BTreeMap<String, PlayerBudgetState>,
     rejection_counts: BTreeMap<String, u64>,
     rejected_total: u64,
@@ -236,6 +237,7 @@ impl DomeSessionRuntime {
                 .map(|asset| (asset.blob_hash.clone(), asset))
                 .collect(),
             participant_limit,
+            default_spawn: instance.default_spawn.clone(),
             player_budgets: BTreeMap::new(),
             rejection_counts: BTreeMap::new(),
             rejected_total: 0,
@@ -378,11 +380,29 @@ impl DomeSessionRuntime {
     }
 
     pub fn signed_snapshot(&mut self, now_millis: i64) -> Result<SignedDomePhysicsSnapshotV1> {
+        self.signed_snapshot_inner(now_millis, true)
+    }
+
+    /// Admission confirmation is a control-plane receipt. It must contain the Join that was just
+    /// committed, so it cannot reuse a rate-throttled older streaming snapshot.
+    pub fn signed_admission_snapshot(
+        &mut self,
+        now_millis: i64,
+    ) -> Result<SignedDomePhysicsSnapshotV1> {
+        self.signed_snapshot_inner(now_millis, false)
+    }
+
+    fn signed_snapshot_inner(
+        &mut self,
+        now_millis: i64,
+        apply_stream_throttle: bool,
+    ) -> Result<SignedDomePhysicsSnapshotV1> {
         self.advance_to(now_millis)?;
         let minimum_interval = 1_000 / i64::from(self.budget.dome.max_snapshot_hz);
-        if self
-            .last_snapshot_at
-            .is_some_and(|last| now_millis.saturating_sub(last) < minimum_interval)
+        if apply_stream_throttle
+            && self
+                .last_snapshot_at
+                .is_some_and(|last| now_millis.saturating_sub(last) < minimum_interval)
             && let Some(latest) = self.snapshot_ring.back()
         {
             self.snapshot_throttled = self.snapshot_throttled.saturating_add(1);
@@ -425,13 +445,15 @@ impl DomeSessionRuntime {
             },
         )?;
         let snapshot_bytes = serde_json::to_vec(&signed)?.len() as u64;
-        if !window_allows(
-            &mut self.snapshot_bandwidth,
-            now_millis,
-            1_000,
-            snapshot_bytes,
-            self.budget.host.max_snapshot_bytes_per_second,
-        ) {
+        if apply_stream_throttle
+            && !window_allows(
+                &mut self.snapshot_bandwidth,
+                now_millis,
+                1_000,
+                snapshot_bytes,
+                self.budget.host.max_snapshot_bytes_per_second,
+            )
+        {
             self.snapshot_throttled = self.snapshot_throttled.saturating_add(1);
             if let Some(latest) = self.snapshot_ring.back() {
                 return Ok(latest.clone());
@@ -547,9 +569,9 @@ impl DomeSessionRuntime {
             bail!("stale Dome session input sequence");
         }
         match &input.input {
-            DomeSessionInputKindV1::Join => {
+            DomeSessionInputKindV1::Join { avatar_collider } => {
+                self.ensure_avatar(&participant_id, avatar_collider.as_ref())?;
                 self.participants.insert(participant_id.clone());
-                self.ensure_avatar(&participant_id)?;
                 self.participant_high_water = self
                     .participant_high_water
                     .max(self.participants.len().try_into().unwrap_or(u32::MAX));
@@ -717,7 +739,7 @@ impl DomeSessionRuntime {
         if self.prepared_exits.contains_key(&participant_id)
             && matches!(
                 input.input,
-                DomeSessionInputKindV1::Join
+                DomeSessionInputKindV1::Join { .. }
                     | DomeSessionInputKindV1::Grab { .. }
                     | DomeSessionInputKindV1::Throw { .. }
                     | DomeSessionInputKindV1::Push { .. }
@@ -727,7 +749,7 @@ impl DomeSessionRuntime {
             bail!("DOME_TRANSITION_SOURCE_INPUT_FENCED");
         }
         match &input.input {
-            DomeSessionInputKindV1::Join if !self.participants.contains(&participant_id) => {
+            DomeSessionInputKindV1::Join { .. } if !self.participants.contains(&participant_id) => {
                 check_limit(
                     MetaverseBudgetScope::Host,
                     MetaverseBudgetResource::Participants,
@@ -958,17 +980,25 @@ impl DomeSessionRuntime {
         Ok(())
     }
 
-    fn ensure_avatar(&mut self, participant_id: &str) -> Result<()> {
+    fn ensure_avatar(
+        &mut self,
+        participant_id: &str,
+        collider: Option<&kukuri_core::MetaverseColliderV1>,
+    ) -> Result<()> {
         let entity_id = format!("avatar:{participant_id}");
         if self.bodies_by_id.contains_key(&entity_id) {
             return Ok(());
         }
+        let fallback = kukuri_core::fallback_capsule_collider([-25, 0, -25], [25, 180, 25])?;
+        let collider = collider.unwrap_or(&fallback);
+        let spawn = self.safe_avatar_spawn(collider)?;
+        let position = centimeters_to_meters(spawn.position);
         let body = RigidBodyBuilder::kinematic_position_based()
-            .translation(Vector::new(0.0, 0.9, 0.0))
+            .translation(Vector::new(position[0], position[1], position[2]))
             .build();
         let handle = self.rigid_bodies.insert(body);
         self.colliders.insert_with_parent(
-            ColliderBuilder::capsule_y(0.65, 0.25).build(),
+            collider_builder(Some(collider)).build(),
             handle,
             &mut self.rigid_bodies,
         );
@@ -990,6 +1020,135 @@ impl DomeSessionRuntime {
             .max(self.bodies_by_id.len().try_into().unwrap_or(u32::MAX));
         Ok(())
     }
+
+    fn safe_avatar_spawn(
+        &self,
+        collider: &kukuri_core::MetaverseColliderV1,
+    ) -> Result<kukuri_core::MetaverseRoomSpawnV1> {
+        const STEP_CM: i64 = 150;
+        const SAFETY_MARGIN_CM: i64 = 25;
+        const OFFSETS: [[i64; 2]; 25] = [
+            [0, 0],
+            [1, 0],
+            [0, 1],
+            [-1, 0],
+            [0, -1],
+            [1, 1],
+            [-1, 1],
+            [-1, -1],
+            [1, -1],
+            [2, 0],
+            [0, 2],
+            [-2, 0],
+            [0, -2],
+            [2, 1],
+            [1, 2],
+            [-1, 2],
+            [-2, 1],
+            [-2, -1],
+            [-1, -2],
+            [1, -2],
+            [2, -1],
+            [2, 2],
+            [-2, 2],
+            [-2, -2],
+            [2, -2],
+        ];
+        for [offset_x, offset_z] in OFFSETS {
+            let candidate = kukuri_core::MetaverseRoomSpawnV1 {
+                position: [
+                    self.default_spawn.position[0] + offset_x * STEP_CM,
+                    self.default_spawn.position[1],
+                    self.default_spawn.position[2] + offset_z * STEP_CM,
+                ],
+                rotation: self.default_spawn.rotation,
+            };
+            let bounds = collider_bounds_cm(collider, candidate.position, SAFETY_MARGIN_CM);
+            if !spawn_bounds_inside_dome(bounds) || self.spawn_bounds_overlap_body(bounds) {
+                continue;
+            }
+            return Ok(candidate);
+        }
+        bail!("DOME_ENTRY_NO_SAFE_SPAWN")
+    }
+
+    fn spawn_bounds_overlap_body(&self, candidate: ([i64; 3], [i64; 3])) -> bool {
+        self.bodies_by_id.values().any(|runtime_body| {
+            let Some(body) = self.rigid_bodies.get(runtime_body.handle) else {
+                return true;
+            };
+            body.colliders().iter().any(|handle| {
+                let Some(collider) = self.colliders.get(*handle) else {
+                    return true;
+                };
+                let aabb = collider.compute_aabb();
+                let minimum = meters_to_centimeters([aabb.mins.x, aabb.mins.y, aabb.mins.z]);
+                let maximum = meters_to_centimeters([aabb.maxs.x, aabb.maxs.y, aabb.maxs.z]);
+                aabb_overlaps(candidate, (minimum, maximum))
+            })
+        })
+    }
+}
+
+fn collider_bounds_cm(
+    collider: &kukuri_core::MetaverseColliderV1,
+    origin: [i64; 3],
+    margin: i64,
+) -> ([i64; 3], [i64; 3]) {
+    let (center, extents) = match collider {
+        kukuri_core::MetaverseColliderV1::Capsule {
+            center,
+            radius,
+            half_height,
+        } => (*center, [*radius, half_height + radius, *radius]),
+        kukuri_core::MetaverseColliderV1::Cuboid {
+            center,
+            half_extents,
+        } => (*center, *half_extents),
+    };
+    let center = [
+        origin[0] + center[0],
+        origin[1] + center[1],
+        origin[2] + center[2],
+    ];
+    (
+        [
+            center[0] - extents[0] - margin,
+            center[1] - extents[1],
+            center[2] - extents[2] - margin,
+        ],
+        [
+            center[0] + extents[0] + margin,
+            center[1] + extents[1],
+            center[2] + extents[2] + margin,
+        ],
+    )
+}
+
+fn spawn_bounds_inside_dome(bounds: ([i64; 3], [i64; 3])) -> bool {
+    let spec = kukuri_core::fixed_dome_v1();
+    if bounds.0[1] < 0 {
+        return false;
+    }
+    for x in [bounds.0[0], bounds.1[0]] {
+        for z in [bounds.0[2], bounds.1[2]] {
+            let horizontal_squared = i128::from(x) * i128::from(x) + i128::from(z) * i128::from(z);
+            let radius_squared =
+                i128::from(spec.inner_radius_cm) * i128::from(spec.inner_radius_cm);
+            if horizontal_squared >= radius_squared {
+                return false;
+            }
+            let ceiling_squared = radius_squared - horizontal_squared;
+            if i128::from(bounds.1[1]) * i128::from(bounds.1[1]) > ceiling_squared {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+fn aabb_overlaps(left: ([i64; 3], [i64; 3]), right: ([i64; 3], [i64; 3])) -> bool {
+    (0..3).all(|axis| left.0[axis] < right.1[axis] && left.1[axis] > right.0[axis])
 }
 
 #[cfg(test)]

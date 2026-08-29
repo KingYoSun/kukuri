@@ -10,9 +10,11 @@ import type {
   DomeSessionInputKindV1,
   DomeTransitionAdmissionTicketV1,
   MetaverseAssetRef,
+  MetaverseColliderV1,
   MetaverseInteractionKind,
   MetaversePersistentPropV1,
   SharedRoomObjectV1,
+  SpatialContextV1,
   SyncStatus,
 } from '@/lib/api';
 import type { MetaverseRoomActions } from './MetaverseRoomActions';
@@ -48,6 +50,13 @@ import {
 } from './MetaverseRoomSessionSupport';
 import { useSpatialAudio } from './useSpatialAudio';
 import { useMetaverseBackendEvents } from './useMetaverseBackendEvents';
+import {
+  readLastVisitedDome,
+  resolveDomeEntryOrder,
+  spatialContextKey,
+  writeLastVisitedDome,
+} from './DomeEntryModel';
+import { loadAvatarCollider } from './AvatarColliderModel';
 
 type UseMetaverseRoomSessionArgs = {
   actions: MetaverseRoomActions;
@@ -60,6 +69,8 @@ type UseMetaverseRoomSessionArgs = {
   localAvatarAssetUrl: string | null;
   mutedAuthorPubkeys?: ReadonlySet<string>;
   initialSelectedRoomId?: string | null;
+  activeChannelId?: string | null;
+  configuredEntryInstanceId?: string | null;
   onError: (message: string | null) => void;
 };
 
@@ -89,10 +100,14 @@ export function useMetaverseRoomSession({
   localAvatarAssetUrl,
   mutedAuthorPubkeys = EMPTY_MUTED_AUTHOR_PUBKEYS,
   initialSelectedRoomId = null,
+  activeChannelId = null,
+  configuredEntryInstanceId = null,
   onError,
 }: UseMetaverseRoomSessionArgs) {
   const { t } = useTranslation('metaverse', { lng: locale });
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(initialSelectedRoomId);
+  const [admissionConfirmed, setAdmissionConfirmed] = useState(false);
+  const [admissionStatus, setAdmissionStatus] = useState<'resolving' | 'admitting' | 'joined' | 'selection'>('resolving');
   const [joinedRoomIds, setJoinedRoomIds] = useState<Set<string>>(() => new Set());
   const [remoteTransforms, setRemoteTransforms] = useState<Record<string, AvatarTransform>>({});
   const [messageDraft, setMessageDraft] = useState('');
@@ -114,6 +129,13 @@ export function useMetaverseRoomSession({
   const localPeerId = `${syncStatus.discovery.local_endpoint_id || syncStatus.local_author_pubkey || 'local'}:${localPeerSeed}`;
   const lastSentTransformRef = useRef<AvatarTransform | null>(null);
   const transitionAttemptRef = useRef<TransitionAttempt | null>(null);
+  const entryAttemptKeyRef = useRef<string | null>(null);
+  const entryContextKeyRef = useRef<string | null>(null);
+  const entryAutoDisabledRef = useRef(false);
+  const avatarColliderPromiseRef = useRef<{
+    assetUrl: string | null;
+    promise: Promise<MetaverseColliderV1 | null>;
+  } | null>(null);
   const sessionSequenceByInstanceRef = useRef(new Map<string, number>());
   const lastReceivedAt = useMemo(() => {
     const values = Object.values(remoteTransforms).map((transform) => transform.sentAt);
@@ -130,9 +152,19 @@ export function useMetaverseRoomSession({
   const selectedRoom = selectedRoomId
     ? rooms.find((room) => room.room_id === selectedRoomId) ?? null
     : null;
+  const admittedRoom = admissionConfirmed ? selectedRoom : null;
+  const entryContext = useMemo<SpatialContextV1>(() => activeChannelId
+    ? { kind: 'channel', topic_id: activeTopic, channel_id: activeChannelId }
+    : { kind: 'topic', topic_id: activeTopic }, [activeChannelId, activeTopic]);
+  const entryCandidates = useMemo(() => resolveDomeEntryOrder({
+    rooms,
+    localAuthorPubkey: syncStatus.local_author_pubkey,
+    lastVisitedInstanceId: readLastVisitedDome(syncStatus.local_author_pubkey, entryContext),
+    configuredEntryInstanceId,
+  }), [configuredEntryInstanceId, entryContext, rooms, syncStatus.local_author_pubkey]);
   const [transitionNeighbors, setTransitionNeighbors] = useDomeTransitionNeighbors(
     actions,
-    selectedRoom,
+    admittedRoom,
     rooms,
     syncStatus.local_author_pubkey
   );
@@ -145,7 +177,7 @@ export function useMetaverseRoomSession({
     stopSpatialAudio,
   } = useSpatialAudio({
     actions,
-    selectedRoom,
+    selectedRoom: admittedRoom,
     localPeerId,
     listenerTransformRef: lastSentTransformRef,
     mutedAuthorPubkeys,
@@ -165,27 +197,27 @@ export function useMetaverseRoomSession({
     resetBackendEventCursor,
   } = useMetaverseBackendEvents({
     actions,
-    selectedRoom,
+    selectedRoom: admittedRoom,
     transitionNeighbors,
     localPeerId,
     playSpatialAudioFrame,
     setRemoteTransforms,
   });
-  const selectedRoomRoomId = selectedRoom?.room_id ?? null;
-  const selectedRoomSharedObject = selectedRoom?.metaverse
+  const selectedRoomRoomId = admittedRoom?.room_id ?? null;
+  const selectedRoomSharedObject = admittedRoom?.metaverse
     ? persistentPropAsSharedObject(
-        selectedRoom.metaverse.dome.customization.persistent_props[0],
-        selectedRoom.host_pubkey,
-        selectedRoom.updated_at
+        admittedRoom.metaverse.dome.customization.persistent_props[0],
+        admittedRoom.host_pubkey,
+        admittedRoom.updated_at
       )
     : null;
-  const selectedRoomChatHistory = selectedRoom?.metaverse?.chat_history ?? EMPTY_ROOM_CHAT_HISTORY;
+  const selectedRoomChatHistory = admittedRoom?.metaverse?.chat_history ?? EMPTY_ROOM_CHAT_HISTORY;
   const activeTopicDiagnostic = useMemo(
     () => topicDiagnosticFor(syncStatus, activeTopic),
     [activeTopic, syncStatus]
   );
   const roomConnectionState: MetaverseRoomConnectionState = useMemo(() => {
-    if (!selectedRoom) {
+    if (!admittedRoom) {
       return 'offline';
     }
     if (recoveringUntil > clockNow) {
@@ -212,7 +244,7 @@ export function useMetaverseRoomSession({
     lastRoomActivityAt,
     pollErrorCount,
     recoveringUntil,
-    selectedRoom,
+    admittedRoom,
     syncStatus,
   ]);
   const knownPeerCount = Object.keys(remoteTransforms).length;
@@ -246,6 +278,16 @@ export function useMetaverseRoomSession({
     );
   }, [actions, nextSessionSequence]);
 
+  const resolveLocalAvatarCollider = useCallback(() => {
+    if (avatarColliderPromiseRef.current?.assetUrl !== localAvatarAssetUrl) {
+      avatarColliderPromiseRef.current = {
+        assetUrl: localAvatarAssetUrl,
+        promise: loadAvatarCollider(localAvatarAssetUrl).catch(() => null),
+      };
+    }
+    return avatarColliderPromiseRef.current.promise;
+  }, [localAvatarAssetUrl]);
+
   useEffect(() => {
     sharedObjectRef.current = sharedObject;
   }, [sharedObject]);
@@ -262,6 +304,8 @@ export function useMetaverseRoomSession({
     }
     if (pendingCreatedRoomIdRef.current !== selectedRoomId) {
       setSelectedRoomId(null);
+      setAdmissionConfirmed(false);
+      setAdmissionStatus('selection');
     }
   }, [rooms, selectedRoomId]);
 
@@ -282,9 +326,6 @@ export function useMetaverseRoomSession({
   }, [setLatestChatByPeer]);
 
   useEffect(() => {
-    if (!selectedRoomRoomId) {
-      return;
-    }
     sharedObjectRef.current = DEFAULT_SHARED_OBJECT;
     setSharedObject(DEFAULT_SHARED_OBJECT);
     setSessionProps([]);
@@ -293,9 +334,22 @@ export function useMetaverseRoomSession({
     setMessages([]);
     setLatestChatByPeer({});
     setPollErrorCount(0);
-    setLastRoomActivityAt(Date.now());
     resetBackendEventCursor();
     lastPhysicsSnapshotSequenceRef.current = 0;
+  }, [
+    resetBackendEventCursor,
+    selectedRoom?.room_id,
+    setLatestChatByPeer,
+    setMessages,
+    setPeerPresence,
+    setPollErrorCount,
+  ]);
+
+  useEffect(() => {
+    if (!selectedRoomRoomId) {
+      return;
+    }
+    setLastRoomActivityAt(Date.now());
     if (typeof BroadcastChannel === 'undefined') {
       return;
     }
@@ -378,7 +432,10 @@ export function useMetaverseRoomSession({
     lastPhysicsSnapshotSequenceRef.current = snapshot.sequence;
     const remote: Record<string, AvatarTransform> = {};
     for (const body of snapshot.bodies) {
-      if (body.kind === 'avatar' && body.entity_id !== syncStatus.local_author_pubkey) {
+      if (
+        body.kind === 'avatar'
+        && body.entity_id !== `avatar:${syncStatus.local_author_pubkey}`
+      ) {
         remote[body.entity_id] = {
           roomId: snapshot.instance_id,
           peerId: body.entity_id,
@@ -395,7 +452,7 @@ export function useMetaverseRoomSession({
       (body) => body.kind === 'persistent_prop' || body.kind === 'guest_prop'
     );
     setSessionProps(propBodies.map((body) => {
-      const definition = selectedRoom?.metaverse?.dome.customization.persistent_props.find(
+      const definition = admittedRoom?.metaverse?.dome.customization.persistent_props.find(
         (candidate) => candidate.prop_id === body.entity_id
       );
       return {
@@ -429,19 +486,19 @@ export function useMetaverseRoomSession({
       });
     }
     setLastRoomActivityAt(Date.now());
-  }, [selectedRoom, setLastRoomActivityAt, syncStatus.local_author_pubkey]);
+  }, [admittedRoom, setLastRoomActivityAt, syncStatus.local_author_pubkey]);
 
   const submitAuthoritativeInput = useCallback((input: DomeSessionInputKindV1, sequence = Date.now()) => {
-    if (!selectedRoom?.metaverse) return;
-    void submitInputForRoom(selectedRoom, input, sequence)
+    if (!admittedRoom?.metaverse) return;
+    void submitInputForRoom(admittedRoom, input, sequence)
       .then(applyPhysicsSnapshot)
       .catch(() => {
         // Hosting may not have been started yet; presence/chat remain available.
       });
-  }, [applyPhysicsSnapshot, selectedRoom, submitInputForRoom]);
+  }, [admittedRoom, applyPhysicsSnapshot, submitInputForRoom]);
 
   useEffect(() => {
-    if (!selectedRoom) {
+    if (!admittedRoom) {
       return;
     }
     const joinedAt = Date.now();
@@ -456,10 +513,10 @@ export function useMetaverseRoomSession({
         lastSeenAt: now,
       };
       emit({ type: 'presence.join', presence });
-      void actions.publishRoomEvent(selectedRoom.room_id, localPeerId, now, {
+      void actions.publishRoomEvent(admittedRoom.room_id, localPeerId, now, {
         type: 'presence_join',
         presence: {
-          room_id: selectedRoom.room_id,
+          room_id: admittedRoom.room_id,
           peer_id: localPeerId,
           display_name: localDisplayName,
           avatar_asset_ref: localAvatarAssetRef,
@@ -469,7 +526,6 @@ export function useMetaverseRoomSession({
       }).catch(() => {
         // Browser-only fallback is handled by the local scene.
       });
-      submitAuthoritativeInput({ type: 'join' }, now);
     };
     publishPresence();
     const intervalId = window.setInterval(publishPresence, METAVERSE_ROOM_HEARTBEAT_MS);
@@ -483,14 +539,14 @@ export function useMetaverseRoomSession({
     localAvatarAssetUrl,
     localDisplayName,
     localPeerId,
-    selectedRoom,
+    admittedRoom,
     submitAuthoritativeInput,
   ]);
 
-  useEffect(() => stopSpatialAudio(), [selectedRoom?.room_id, stopSpatialAudio, transitionNeighbors]);
+  useEffect(() => stopSpatialAudio(), [admittedRoom?.room_id, stopSpatialAudio, transitionNeighbors]);
 
   useEffect(() => {
-    if (!selectedRoom || (roomConnectionState !== 'stale' && roomConnectionState !== 'offline')) {
+    if (!admittedRoom || (roomConnectionState !== 'stale' && roomConnectionState !== 'offline')) {
       return;
     }
     const now = Date.now();
@@ -506,7 +562,7 @@ export function useMetaverseRoomSession({
     void Promise.resolve(actions.refresh()).catch(() => {
       setPollErrorCount((current) => current + 1);
     });
-  }, [actions, resetBackendEventCursor, roomConnectionState, selectedRoom, setPollErrorCount]);
+  }, [actions, admittedRoom, resetBackendEventCursor, roomConnectionState, setPollErrorCount]);
 
   function resetRoomRuntimeState() {
     setRemoteTransforms({});
@@ -529,7 +585,7 @@ export function useMetaverseRoomSession({
     });
   }
 
-  async function abortTransitionAttempt(attempt: TransitionAttempt) {
+  const abortTransitionAttempt = useCallback(async (attempt: TransitionAttempt) => {
     if (attempt.phase === 'target_committed') return;
     attempt.cancelled = true;
     if (attempt.ticket) {
@@ -542,15 +598,19 @@ export function useMetaverseRoomSession({
     if (transitionAttemptRef.current === attempt) {
       transitionAttemptRef.current = null;
     }
-    setTransitionPreparing(attempt.neighbor.direction, false);
-  }
+    setTransitionPreparingDirections((current) => {
+      const next = new Set(current);
+      next.delete(attempt.neighbor.direction);
+      return next;
+    });
+  }, [actions, submitInputForRoom]);
 
   function beginTransitionAttempt(neighbor: DomeNeighborTransitionView) {
-    if (!selectedRoom?.metaverse || transitionAttemptRef.current) return;
+    if (!admittedRoom?.metaverse || transitionAttemptRef.current) return;
     const transitionId = `dome-transition-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`;
     const attempt: TransitionAttempt = {
       id: transitionId,
-      sourceRoom: selectedRoom,
+      sourceRoom: admittedRoom,
       neighbor,
       phase: 'preparing',
       ticket: null,
@@ -631,6 +691,13 @@ export function useMetaverseRoomSession({
           return next;
         });
         setSelectedRoomId(attempt.neighbor.room.room_id);
+        if (attempt.neighbor.room.metaverse) {
+          writeLastVisitedDome(
+            syncStatus.local_author_pubkey,
+            attempt.neighbor.room.metaverse.spatial_context,
+            attempt.neighbor.room.metaverse.instance_id
+          );
+        }
         onError(null);
         let sourceCompleted = false;
         for (const retryDelay of [0, 250, 1_000]) {
@@ -675,26 +742,118 @@ export function useMetaverseRoomSession({
     })();
   }
 
-  function joinRoom(roomId: string) {
+  const joinRoom = useCallback(async (roomId: string, reportError = true): Promise<boolean> => {
+    const room = rooms.find((candidate) => candidate.room_id === roomId);
+    if (!room?.metaverse) return false;
     const attempt = transitionAttemptRef.current;
     if (attempt) void abortTransitionAttempt(attempt);
     setHandoffTransform(null);
-    setJoinedRoomIds((current) => new Set(current).add(roomId));
     setSelectedRoomId(roomId);
-  }
+    setAdmissionConfirmed(false);
+    setAdmissionStatus('admitting');
+    try {
+      const avatarCollider = await resolveLocalAvatarCollider();
+      const snapshot = await submitInputForRoom(room, {
+        type: 'join',
+        avatar_collider: avatarCollider,
+      });
+      const body = snapshot.bodies.find(
+        (candidate) => candidate.entity_id === `avatar:${syncStatus.local_author_pubkey}`
+      );
+      if (!body) throw new Error('DOME_ENTRY_CONFIRMATION_MISSING_AVATAR');
+      const initialTransform: AvatarTransform = {
+        roomId: room.room_id,
+        peerId: localPeerId,
+        seq: snapshot.sequence,
+        position: body.position,
+        rotation: body.rotation,
+        animation: normalizeAvatarAnimationState(body.animation),
+        sentAt: snapshot.simulated_at,
+      };
+      lastSentTransformRef.current = initialTransform;
+      setHandoffTransform(initialTransform);
+      applyPhysicsSnapshot(snapshot);
+      setJoinedRoomIds((current) => new Set(current).add(roomId));
+      setAdmissionConfirmed(true);
+      setAdmissionStatus('joined');
+      writeLastVisitedDome(
+        syncStatus.local_author_pubkey,
+        room.metaverse.spatial_context,
+        room.metaverse.instance_id
+      );
+      onError(null);
+      return true;
+    } catch (entryError) {
+      setAdmissionConfirmed(false);
+      setAdmissionStatus('selection');
+      if (reportError) {
+        onError(entryError instanceof Error ? entryError.message : 'Dome entry failed');
+      }
+      return false;
+    }
+  }, [
+    abortTransitionAttempt,
+    applyPhysicsSnapshot,
+    localPeerId,
+    onError,
+    resolveLocalAvatarCollider,
+    rooms,
+    submitInputForRoom,
+    syncStatus.local_author_pubkey,
+  ]);
+
+  useEffect(() => {
+    const contextKey = spatialContextKey(entryContext);
+    if (entryContextKeyRef.current !== contextKey) {
+      entryContextKeyRef.current = contextKey;
+      entryAttemptKeyRef.current = null;
+      entryAutoDisabledRef.current = false;
+      setAdmissionConfirmed(false);
+      setSelectedRoomId(null);
+    }
+    if (admissionConfirmed || entryAutoDisabledRef.current) return;
+    const attemptKey = `${contextKey}:${entryCandidates.map((room) => room.room_id).join(',')}`;
+    if (entryAttemptKeyRef.current === attemptKey) return;
+    entryAttemptKeyRef.current = attemptKey;
+    if (entryCandidates.length === 0) {
+      setAdmissionStatus('selection');
+      return;
+    }
+    setAdmissionStatus('resolving');
+    let cancelled = false;
+    void (async () => {
+      for (const candidate of entryCandidates) {
+        if (cancelled) return;
+        if (await joinRoom(candidate.room_id, false)) return;
+      }
+      if (!cancelled) {
+        setAdmissionStatus('selection');
+        onError(t('entry.noAvailable'));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [admissionConfirmed, entryCandidates, entryContext, joinRoom, onError, t]);
 
   function selectCreatedRoom(roomId: string) {
     pendingCreatedRoomIdRef.current = roomId;
-    joinRoom(roomId);
+    setSelectedRoomId(roomId);
+    setAdmissionConfirmed(false);
+    setAdmissionStatus('selection');
+    if (rooms.some((room) => room.room_id === roomId)) {
+      void joinRoom(roomId);
+    }
   }
 
   function leaveRoom() {
-    if (!selectedRoom) {
+    if (!admittedRoom) {
+      setSelectedRoomId(null);
       return;
     }
     const attempt = transitionAttemptRef.current;
     if (attempt) void abortTransitionAttempt(attempt);
-    const roomId = selectedRoom.room_id;
+    const roomId = admittedRoom.room_id;
     const leftAt = Date.now();
     emit({ type: 'presence.leave', roomId, peerId: localPeerId, leftAt });
     void actions.publishRoomEvent(roomId, localPeerId, leftAt, {
@@ -712,6 +871,9 @@ export function useMetaverseRoomSession({
       return next;
     });
     setSelectedRoomId(null);
+    setAdmissionConfirmed(false);
+    setAdmissionStatus('selection');
+    entryAutoDisabledRef.current = true;
     disableMicrophone();
     stopSpatialAudio();
     resetRoomRuntimeState();
@@ -751,11 +913,11 @@ export function useMetaverseRoomSession({
 
   function handleSendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedRoom || !messageDraft.trim()) {
+    if (!admittedRoom || !messageDraft.trim()) {
       return;
     }
     const message: RoomChatMessage = {
-      roomId: selectedRoom.room_id,
+      roomId: admittedRoom.room_id,
       messageId: `${localPeerId}-${Date.now()}`,
       authorPeerId: localPeerId,
       displayName: localDisplayName,
@@ -770,7 +932,7 @@ export function useMetaverseRoomSession({
     setMessageDraft('');
     emit({ type: 'chat.message', message });
     void actions
-      .publishRoomEvent(selectedRoom.room_id, localPeerId, Date.now(), {
+      .publishRoomEvent(admittedRoom.room_id, localPeerId, Date.now(), {
         type: 'chat_message',
         message: {
           room_id: message.roomId,
@@ -787,7 +949,7 @@ export function useMetaverseRoomSession({
   }
 
   function moveSharedObject(delta: MetaverseVec3) {
-    if (!selectedRoom) {
+    if (!admittedRoom) {
       return;
     }
     const current = sharedObjectRef.current;
@@ -811,8 +973,8 @@ export function useMetaverseRoomSession({
   }
 
   function interactWithProp(interaction: MetaverseInteractionKind) {
-    if (!selectedRoom?.metaverse) return;
-    const prop = selectedRoom.metaverse.dome.customization.persistent_props.find(
+    if (!admittedRoom?.metaverse) return;
+    const prop = admittedRoom.metaverse.dome.customization.persistent_props.find(
       (candidate) => candidate.prop_id === sharedObjectRef.current.object_id
     );
     if (!prop || prop.visual_only || !prop.interactions.includes(interaction)) return;
@@ -822,7 +984,7 @@ export function useMetaverseRoomSession({
     if (input.type === 'sit') {
       const previous = lastSentTransformRef.current;
       handleLocalTransform({
-        roomId: selectedRoom.room_id,
+        roomId: admittedRoom.room_id,
         peerId: localPeerId,
         seq: (previous?.seq ?? lastSentSeq) + 1,
         position: [current.position[0], current.position[1] + Math.ceil(current.scale[1] / 2), current.position[2]],
@@ -842,17 +1004,17 @@ export function useMetaverseRoomSession({
   }
 
   const submitPropMutation = useCallback(async (input: DomeSessionInputKindV1) => {
-    if (!selectedRoom?.metaverse) {
+    if (!admittedRoom?.metaverse) {
       throw new Error(t('errors.roomRequired'));
     }
     const snapshot = await actions.submitSessionInput(
-      selectedRoom.metaverse.spatial_context,
-      selectedRoom.metaverse.instance_id,
+      admittedRoom.metaverse.spatial_context,
+      admittedRoom.metaverse.instance_id,
       Date.now(),
       input
     );
     applyPhysicsSnapshot(snapshot);
-  }, [actions, applyPhysicsSnapshot, selectedRoom, t]);
+  }, [actions, admittedRoom, applyPhysicsSnapshot, t]);
 
   const newSessionProp = useCallback((kind: 'guest' | 'persistent'): MetaversePersistentPropV1 => ({
     prop_id: `${kind}-${localPeerId}-${Date.now()}`,
@@ -901,6 +1063,8 @@ export function useMetaverseRoomSession({
     selectedRoomId,
     joinedRoomIds,
     selectedRoom,
+    admittedRoom,
+    admissionStatus,
     localPeerId,
     remoteTransforms,
     peerPresence,

@@ -1,4 +1,5 @@
 use crate::*;
+use kukuri_core::MetaverseColliderV1;
 
 pub(crate) async fn run_desktop_smoke_scenario(
     root: &Path,
@@ -549,6 +550,86 @@ pub(crate) async fn run_desktop_smoke_scenario(
                         )
                         .await?;
                 }
+                ScenarioStep::ExerciseDomeEntry { local_title } => {
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
+                    if runtime.current_channel_id.is_some() {
+                        anyhow::bail!("Dome entry smoke currently requires a topic Context");
+                    }
+                    let context = SpatialContextV1::Topic {
+                        topic_id: TopicId::new(topic.clone()),
+                    };
+                    let room = runtime
+                        .app()?
+                        .list_game_rooms_scoped(&topic, TimelineScope::Public)
+                        .await?
+                        .into_iter()
+                        .find(|room| room.title == *local_title)
+                        .with_context(|| format!("entry Dome not found: {local_title}"))?;
+                    let metaverse = room.metaverse.context("entry Dome metaverse state")?;
+                    runtime
+                        .app()?
+                        .start_owner_dome_hosting(StartOwnerDomeHostingInput {
+                            spatial_context: context.clone(),
+                            instance_id: room.room_id.clone(),
+                            endpoint_id: "harness-entry-owner".into(),
+                            lease_duration_millis: 60_000,
+                        })
+                        .await?;
+                    let first = runtime
+                        .app()?
+                        .submit_dome_session_input(SubmitDomeSessionInput {
+                            spatial_context: context.clone(),
+                            instance_id: room.room_id.clone(),
+                            sequence: 1,
+                            input: DomeSessionInputKindV1::Join { avatar_collider: None },
+                        })
+                        .await?;
+                    let avatar_id = format!("avatar:{}", runtime.keys.public_key().as_str());
+                    let first_position = first
+                        .snapshot
+                        .bodies
+                        .iter()
+                        .find(|body| body.entity_id == avatar_id)
+                        .context("authoritative entry avatar missing")?
+                        .position;
+                    anyhow::ensure!(first_position == metaverse.default_spawn.position);
+
+                    runtime
+                        .app()?
+                        .submit_dome_session_input(SubmitDomeSessionInput {
+                            spatial_context: context.clone(),
+                            instance_id: room.room_id.clone(),
+                            sequence: 2,
+                            input: DomeSessionInputKindV1::Leave,
+                        })
+                        .await?;
+                    let evacuated = runtime
+                        .app()?
+                        .submit_dome_session_input(SubmitDomeSessionInput {
+                            spatial_context: context,
+                            instance_id: room.room_id,
+                            sequence: 3,
+                            input: DomeSessionInputKindV1::Join {
+                                avatar_collider: Some(MetaverseColliderV1::Capsule {
+                                    center: [1_950, 90, 0],
+                                    radius: 25,
+                                    half_height: 65,
+                                }),
+                            },
+                        })
+                        .await?;
+                    let evacuated_position = evacuated
+                        .snapshot
+                        .bodies
+                        .iter()
+                        .find(|body| body.entity_id == avatar_id)
+                        .context("evacuated entry avatar missing")?
+                        .position;
+                    anyhow::ensure!(
+                        evacuated_position != first_position,
+                        "safe spawn did not evacuate: first={first_position:?}, evacuated={evacuated_position:?}"
+                    );
+                }
                 ScenarioStep::ExerciseDomeConnections { local_title } => {
                     let topic = runtime.topic_or_default(&scenario.fixtures.topic);
                     if runtime.current_channel_id.is_some() {
@@ -709,7 +790,7 @@ pub(crate) async fn run_desktop_smoke_scenario(
                             spatial_context: context.clone(),
                             instance_id: source.room_id.clone(),
                             sequence: 1,
-                            input: DomeSessionInputKindV1::Join,
+                            input: DomeSessionInputKindV1::Join { avatar_collider: None },
                         })
                         .await?;
                     runtime

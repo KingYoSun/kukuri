@@ -3,6 +3,7 @@ import {
   type DomeConnectionProposalView,
   type DomeConnectionTopologyView,
   type DomeConnectionView,
+  type DomeHostingStateV1,
   type DomeHostingView,
   type DomeTransitionAdmissionTicketV1,
   type GameScoreView,
@@ -68,6 +69,16 @@ export function createLiveGameMock(runtime: MockRuntime): LiveGameMock {
   const connectionViews = new Map<string, DomeConnectionView>();
   const hostingViews = new Map<string, DomeHostingView>();
   const transitionTickets = new Map<string, DomeTransitionAdmissionTicketV1>();
+
+  const updateRoomHostingState = (instanceId: string, state: DomeHostingStateV1) => {
+    for (const topic of Object.keys(gameRoomsByTopic)) {
+      gameRoomsByTopic[topic] = (gameRoomsByTopic[topic] ?? []).map((room) =>
+        room.metaverse?.instance_id === instanceId
+          ? { ...room, dome_hosting: state, updated_at: Date.now() }
+          : room
+      );
+    }
+  };
 
   const contextKey = (context: Parameters<DesktopApi['listDomeConnectionTopology']>[0]) =>
     context.kind === 'topic'
@@ -409,6 +420,7 @@ export function createLiveGameMock(runtime: MockRuntime): LiveGameMock {
         sleeping: true,
       };
       hostingViews.set(instanceId, view);
+      updateRoomHostingState(instanceId, view.state);
       return view;
     },
     async delegateDomeHosting(spatialContext, instanceId, nodeId, baseUrl, leaseDurationMillis) {
@@ -429,6 +441,7 @@ export function createLiveGameMock(runtime: MockRuntime): LiveGameMock {
         sleeping: true,
       };
       hostingViews.set(instanceId, view);
+      updateRoomHostingState(instanceId, view.state);
       return view;
     },
     async closeDomeHosting(spatialContext, instanceId) {
@@ -438,6 +451,7 @@ export function createLiveGameMock(runtime: MockRuntime): LiveGameMock {
         state: { ...view.state, kind: 'closed', session_id: null, reason: 'owner_closed' },
       };
       hostingViews.set(instanceId, closed);
+      updateRoomHostingState(instanceId, closed.state);
       return closed;
     },
     async submitDomeSessionInput(_spatialContext, instanceId, sequence, input) {
@@ -453,7 +467,7 @@ export function createLiveGameMock(runtime: MockRuntime): LiveGameMock {
         simulated_at: Date.now(),
         sleeping: false,
         bodies: [{
-          entity_id: syncStatus.local_author_pubkey,
+          entity_id: `avatar:${syncStatus.local_author_pubkey}`,
           kind: 'avatar',
           position,
           rotation,

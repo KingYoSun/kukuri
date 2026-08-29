@@ -9,10 +9,11 @@ use crate::views::{
 use kukuri_core::{
     DOME_HOSTING_MAX_LEASE_MILLIS, DOME_LAYOUT_COMMIT_MIN_INTERVAL_MILLIS, DomeHostTargetV1,
     DomeHostingLeaseV1, DomeHostingRecordV1, DomeHostingStateKindV1, DomeInstanceStatusV1,
-    DomeLayoutCommitV1, DomeTransitionAdmissionTicketV1, SignedDomeHostingAcceptanceV1,
-    SignedDomeHostingLeaseV1, SignedDomeLayoutCandidateV1, SignedDomeLayoutCommitV1,
-    SignedDomePhysicsSnapshotV1, SpatialContextV1, accept_dome_hosting_lease,
-    activate_dome_hosting_lease, build_signed_dome_hosting_lease, build_signed_dome_layout_commit,
+    DomeLayoutCommitV1, DomeSessionInputKindV1, DomeTransitionAccessDecisionV1,
+    DomeTransitionAdmissionTicketV1, SignedDomeHostingAcceptanceV1, SignedDomeHostingLeaseV1,
+    SignedDomeLayoutCandidateV1, SignedDomeLayoutCommitV1, SignedDomePhysicsSnapshotV1,
+    SpatialContextV1, accept_dome_hosting_lease, activate_dome_hosting_lease,
+    build_signed_dome_hosting_lease, build_signed_dome_layout_commit,
     build_signed_dome_session_input, close_dome_hosting_lease, dome_layout_candidate_digest,
     resolve_dome_hosting_state, verify_signed_dome_layout_candidate,
 };
@@ -246,6 +247,26 @@ impl AppService {
         &self,
         input: SubmitDomeSessionInput,
     ) -> Result<SignedDomePhysicsSnapshotV1> {
+        if matches!(&input.input, DomeSessionInputKindV1::Join { .. }) {
+            let replica = self.hosting_context_replica(&input.spatial_context).await?;
+            let instance = self
+                .hosting_instance(&replica, &input.instance_id)
+                .await?
+                .context("Dome instance was not found")?;
+            match self
+                .evaluate_dome_room_access(
+                    &input.spatial_context,
+                    &instance.owner_pubkey,
+                    &self.services.keys.public_key(),
+                )
+                .await?
+            {
+                DomeTransitionAccessDecisionV1::Allowed => {}
+                DomeTransitionAccessDecisionV1::Denied { reason } => {
+                    anyhow::bail!(reason.code())
+                }
+            }
+        }
         let now = Utc::now().timestamp_millis();
         let mut sessions = self.dome_host_sessions.lock().await;
         let runtime = sessions
@@ -268,8 +289,13 @@ impl AppService {
                 input: input.input,
             },
         )?;
+        let admission = matches!(&signed.input.input, DomeSessionInputKindV1::Join { .. });
         runtime.apply_signed_input_at(&signed, now)?;
-        runtime.signed_snapshot(now)
+        if admission {
+            runtime.signed_admission_snapshot(now)
+        } else {
+            runtime.signed_snapshot(now)
+        }
     }
 
     pub async fn prepare_dome_transition(
@@ -601,7 +627,10 @@ impl AppService {
         })
     }
 
-    async fn hosting_context_replica(&self, context: &SpatialContextV1) -> Result<ReplicaId> {
+    pub(crate) async fn hosting_context_replica(
+        &self,
+        context: &SpatialContextV1,
+    ) -> Result<ReplicaId> {
         self.ensure_topic_subscription(context.topic_id().as_str())
             .await?;
         let replica = match context {
@@ -620,7 +649,7 @@ impl AppService {
         Ok(replica)
     }
 
-    async fn hosting_instance(
+    pub(crate) async fn hosting_instance(
         &self,
         replica: &ReplicaId,
         instance_id: &str,

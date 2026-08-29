@@ -5,6 +5,7 @@ import type {
   AuthorSocialView,
   DomeCustomizationV1,
   GameRoomView,
+  JoinedPrivateChannelView,
   MetaverseAssetRef,
   Profile,
   SpatialContextV1,
@@ -37,6 +38,7 @@ type MetaverseRoomPanelProps = {
   knownAuthorsByPubkey?: Record<string, AuthorSocialView>;
   mediaObjectUrls?: Record<string, string | null>;
   initialSelectedRoomId?: string | null;
+  activeChannel?: JoinedPrivateChannelView | null;
 };
 
 const EMPTY_KNOWN_AUTHORS_BY_PUBKEY: Record<string, AuthorSocialView> = {};
@@ -51,6 +53,7 @@ export function MetaverseRoomPanel({
   knownAuthorsByPubkey = EMPTY_KNOWN_AUTHORS_BY_PUBKEY,
   mediaObjectUrls = {},
   initialSelectedRoomId = null,
+  activeChannel = null,
 }: MetaverseRoomPanelProps) {
   const { t } = useTranslation('metaverse', { lng: locale });
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +82,8 @@ export function MetaverseRoomPanel({
     localAvatarAssetUrl,
     mutedAuthorPubkeys,
     initialSelectedRoomId,
+    activeChannelId: activeChannel?.channel_id ?? null,
+    configuredEntryInstanceId: activeChannel?.entry_dome_instance_id ?? null,
     onError: setError,
   });
 
@@ -221,11 +226,27 @@ export function MetaverseRoomPanel({
         mediaObjectUrls={mediaObjectUrls}
         onCreateRoom={handleCreateRoom}
         onJoinRoom={session.joinRoom}
+        admissionStatus={session.admissionStatus}
+        activeChannelId={activeChannel?.channel_id ?? null}
+        configuredEntryInstanceId={activeChannel?.entry_dome_instance_id ?? null}
+        canSetEntryDome={Boolean(activeChannel?.is_owner)}
+        onSetEntryDome={activeChannel && actions.setChannelEntryDome ? async (instanceId) => {
+          setPending(true);
+          try {
+            await actions.setChannelEntryDome!(activeTopic, activeChannel.channel_id, instanceId);
+            await actions.refresh();
+            setError(null);
+          } catch (settingError) {
+            setError(settingError instanceof Error ? settingError.message : t('entry.settingFailed'));
+          } finally {
+            setPending(false);
+          }
+        } : undefined}
         onMoveRoom={handleMoveRoom}
       />
 
       <MetaverseRoomView
-        room={session.selectedRoom}
+        room={session.admittedRoom}
         activeTopic={activeTopic}
         localPeerId={session.localPeerId}
         remoteTransforms={session.remoteTransforms}

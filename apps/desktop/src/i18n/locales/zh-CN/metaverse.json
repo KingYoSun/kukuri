@@ -23,6 +23,17 @@
     "confirm": "开始迁移",
     "moving": "迁移中…"
   },
+  "entry": {
+    "resolving": "正在查找可用的 Dome…",
+    "admitting": "正在检查访问权限并寻找安全出生点…",
+    "noAvailable": "当前没有可进入的 Dome。请在 Hosting 启动后选择 Dome。",
+    "hostUnavailable": "Host 不可用",
+    "settingTitle": "频道入口 Dome",
+    "none": "未指定",
+    "save": "保存入口 Dome",
+    "ownerOnly": "只有频道所有者可以更改此设置。",
+    "settingFailed": "无法保存入口 Dome"
+  },
   "room": {
     "host": "主持人：{{host}}",
     "updated": "更新时间：{{time}}",

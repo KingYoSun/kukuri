@@ -49,6 +49,8 @@ pub struct DomeHostingReleaseRequest {
 #[serde(deny_unknown_fields)]
 pub struct DomeHostingSessionInputRequest {
     pub signed_input: SignedDomeSessionInputV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub access_proof: Option<DomeSpatialAccessProofV1>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

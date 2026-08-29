@@ -113,6 +113,7 @@ import type {
   RotatePrivateChannelRequest,
   SendDirectMessageRequest,
   SetChannelGossipEnabledRequest,
+  SetPrivateChannelEntryDomeRequest,
   SetCommunityNodeConfigRequest,
   SetCommunityNodeInviteCodeRequest,
   SetDiscoverySeedsRequest,
@@ -553,6 +554,19 @@ export const runtimeApi: DesktopApi = {
         topic,
         channel_id: channelId,
       } satisfies RotatePrivateChannelRequest,
+    });
+  }),
+  setPrivateChannelEntryDome: command('setPrivateChannelEntryDome', async (
+    topic,
+    channelId,
+    entryDomeInstanceId
+  ) => {
+    return invokeDesktop<JoinedPrivateChannelView>('set_private_channel_entry_dome', {
+      request: {
+        topic,
+        channel_id: channelId,
+        entry_dome_instance_id: entryDomeInstanceId,
+      } satisfies SetPrivateChannelEntryDomeRequest,
     });
   }),
   leavePrivateChannel: command('leavePrivateChannel', async (topic, channelId) => {

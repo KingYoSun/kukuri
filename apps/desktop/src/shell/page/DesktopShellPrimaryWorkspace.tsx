@@ -629,6 +629,9 @@ export function DesktopShellPrimarySurface({
             knownAuthorsByPubkey={knownAuthorsByPubkey}
             mediaObjectUrls={mediaObjectUrls}
             initialSelectedRoomId={column.entityId}
+            activeChannel={surfaceChannelId
+              ? surfaceJoinedChannels.find((channel) => channel.channel_id === surfaceChannelId) ?? null
+              : null}
           />
         ) : null}
 

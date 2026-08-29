@@ -22,6 +22,7 @@ import type {
 } from '@/lib/api';
 import { FixedDome } from './metaverse/FixedDome';
 import { resolveDomeCollider } from './metaverse/DomeSceneModel';
+import { avatarColliderFromLoadedVrm } from './metaverse/AvatarColliderModel';
 import {
   clampAvatarToTransitionBoundaries,
   transitionEnvironmentAtPosition,
@@ -339,22 +340,7 @@ function AvatarModel({
           avatarVrmVisualRootYawDegrees(THREE.MathUtils.radToDeg(vrmRoot.rotation.y))
         );
         vrmRoot.position.y = 0;
-        const bounds = new THREE.Box3().setFromObject(vrmRoot);
-        const explicitCollider = (gltf.userData.collider ?? vrmRoot.userData.collider) as
-          | MetaverseColliderV1
-          | undefined;
-        group.userData.collider = resolveDomeCollider(explicitCollider, {
-          min: [
-            Math.round(bounds.min.x * 100),
-            Math.round(bounds.min.y * 100),
-            Math.round(bounds.min.z * 100),
-          ],
-          max: [
-            Math.round(bounds.max.x * 100),
-            Math.round(bounds.max.y * 100),
-            Math.round(bounds.max.z * 100),
-          ],
-        });
+        group.userData.collider = avatarColliderFromLoadedVrm(gltf, vrmRoot);
         group.add(vrmRoot);
         setVisiblePrimitive(false);
         vrmRuntimeRef.current = { vrm, loadedRoot: vrmRoot };

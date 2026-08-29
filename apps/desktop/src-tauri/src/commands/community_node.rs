@@ -10,6 +10,7 @@ use kukuri_desktop_runtime::{
     ImportFriendPlusShareRequest, ImportPeerTicketRequest, ImportPrivateChannelInviteRequest,
     IndexQueryResponse, LeavePrivateChannelRequest, ListJoinedPrivateChannelsRequest,
     PreviewChannelAccessTokenRequest, RotatePrivateChannelRequest, SetChannelGossipEnabledRequest,
+    SetPrivateChannelEntryDomeRequest,
     SetCommunityNodeConfigRequest, SetCommunityNodeInviteCodeRequest, SetDiscoverySeedsRequest,
     SetTopicGossipEnabledRequest,
     SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
@@ -159,6 +160,18 @@ pub async fn rotate_private_channel(
     state
         .runtime
         .rotate_private_channel(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn set_private_channel_entry_dome(
+    state: tauri::State<'_, DesktopState>,
+    request: SetPrivateChannelEntryDomeRequest,
+) -> Result<kukuri_app_api::JoinedPrivateChannelView, CommandError> {
+    state
+        .runtime
+        .set_private_channel_entry_dome(request)
         .await
         .map_err(map_error)
 }

@@ -185,7 +185,10 @@ pub struct DomeHostingStateV1 {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DomeSessionInputKindV1 {
-    Join,
+    Join {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        avatar_collider: Option<crate::MetaverseColliderV1>,
+    },
     Leave,
     Move {
         position: [i64; 3],
@@ -777,6 +780,9 @@ fn validate_dome_session_input(input: &DomeSessionInputV1) -> Result<()> {
         bail!("Dome session input identity is incomplete");
     }
     match &input.input {
+        DomeSessionInputKindV1::Join {
+            avatar_collider: Some(collider),
+        } => crate::validate_metaverse_collider(collider)?,
         DomeSessionInputKindV1::Move { animation, .. } if animation.trim().is_empty() => {
             bail!("Dome avatar animation is required");
         }

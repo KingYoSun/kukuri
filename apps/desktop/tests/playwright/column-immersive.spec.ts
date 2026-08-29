@@ -81,6 +81,7 @@ async function createMetaverseRoom(page: Page) {
   await metaverse.getByRole('button', { name: 'Create metaverse room' }).first().click();
   await metaverse.getByPlaceholder('Atrium').fill('Gesture lab');
   await metaverse.getByRole('button', { name: 'Create metaverse room' }).last().click();
+  await metaverse.getByRole('button', { name: 'Host on this device' }).click();
   const stage = metaverse.locator('[data-column-gesture-owner="metaverse"]');
   await expect(stage).toBeVisible();
   return { metaverse, stage };

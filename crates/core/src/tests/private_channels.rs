@@ -72,6 +72,7 @@ fn channel_policy_and_participant_roundtrip() {
         sharing_state: ChannelSharingState::Open,
         rotated_at: None,
         previous_epoch_id: None,
+        entry_dome_instance_id: None,
     };
     let policy_envelope =
         build_private_channel_policy_envelope(&owner, &policy).expect("policy envelope");

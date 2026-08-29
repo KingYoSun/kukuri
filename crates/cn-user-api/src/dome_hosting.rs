@@ -25,7 +25,7 @@ use kukuri_cn_protocol::{
 };
 use kukuri_core::{
     DomeHostTargetV1, DomeHostingRecordV1, DomeHostingStateKindV1, DomeInstanceManifestV1,
-    DomePresetManifestV1, DomeTransitionAccessDecisionV1, KukuriKeys,
+    DomePresetManifestV1, DomeSpatialAccessProofV1, DomeTransitionAccessDecisionV1, KukuriKeys,
     SignedDomeHostingAcceptanceV1, SignedDomeHostingActivationV1, SignedDomeHostingLeaseV1,
     accept_dome_hosting_lease, resolve_dome_hosting_state, validate_dome_preset_manifest,
     verify_signed_dome_hosting_lease,
@@ -510,15 +510,56 @@ pub(crate) async fn submit_dome_hosting_input(
             "Dome session is not active on this Community Node",
         )
     })?;
+    if matches!(
+        &request.signed_input.input.input,
+        kukuri_core::DomeSessionInputKindV1::Join { .. }
+    ) {
+        let proof_valid = dome_entry_access_proof_is_valid(
+            request.access_proof.as_ref(),
+            &request.signed_input.input.participant_pubkey,
+            &runtime.lease().spatial_context,
+            &runtime.lease().owner_pubkey,
+            now,
+        );
+        if !proof_valid {
+            return Err(hosting_error(
+                StatusCode::FORBIDDEN,
+                "DOME_ENTRY_ACCESS_DENIED",
+                "Dome entry access proof is missing or invalid",
+            ));
+        }
+    }
+    let admission = matches!(
+        &request.signed_input.input.input,
+        kukuri_core::DomeSessionInputKindV1::Join { .. }
+    );
     runtime
         .apply_signed_input_at(&request.signed_input, now)
         .map_err(hosting_contract_error)?;
-    let snapshot = runtime
-        .signed_snapshot(now)
-        .map_err(hosting_contract_error)?;
+    let snapshot = if admission {
+        runtime.signed_admission_snapshot(now)
+    } else {
+        runtime.signed_snapshot(now)
+    }
+    .map_err(hosting_contract_error)?;
     Ok(Json(DomeHostingSessionSnapshotResponse {
         signed_snapshot: snapshot,
     }))
+}
+
+fn dome_entry_access_proof_is_valid(
+    proof: Option<&DomeSpatialAccessProofV1>,
+    participant_pubkey: &kukuri_core::Pubkey,
+    spatial_context: &kukuri_core::SpatialContextV1,
+    target_owner_pubkey: &kukuri_core::Pubkey,
+    now: i64,
+) -> bool {
+    proof.is_some_and(|proof| {
+        proof.statement.participant_pubkey == *participant_pubkey
+            && proof.statement.spatial_context == *spatial_context
+            && proof.statement.target_owner_pubkey == *target_owner_pubkey
+            && proof.verify_at(now).is_ok()
+    })
 }
 
 pub(crate) async fn prepare_dome_transition(
@@ -846,4 +887,59 @@ fn hosting_internal_error(error: impl std::fmt::Display) -> ApiError {
         "DOME_HOSTING_INTERNAL",
         error.to_string(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use kukuri_core::{SpatialContextV1, TopicId, build_dome_spatial_access_proof, generate_keys};
+
+    use super::dome_entry_access_proof_is_valid;
+
+    #[test]
+    fn entry_access_proof_is_required_bound_and_current() {
+        let participant = generate_keys();
+        let owner = generate_keys().public_key();
+        let other_owner = generate_keys().public_key();
+        let context = SpatialContextV1::Topic {
+            topic_id: TopicId::new("kukuri:topic:cn-entry-proof"),
+        };
+        let proof = build_dome_spatial_access_proof(
+            &participant,
+            context.clone(),
+            owner.clone(),
+            1_000,
+            None,
+            None,
+        )
+        .expect("access proof");
+
+        assert!(dome_entry_access_proof_is_valid(
+            Some(&proof),
+            &participant.public_key(),
+            &context,
+            &owner,
+            1_001,
+        ));
+        assert!(!dome_entry_access_proof_is_valid(
+            None,
+            &participant.public_key(),
+            &context,
+            &owner,
+            1_001,
+        ));
+        assert!(!dome_entry_access_proof_is_valid(
+            Some(&proof),
+            &participant.public_key(),
+            &context,
+            &other_owner,
+            1_001,
+        ));
+        assert!(!dome_entry_access_proof_is_valid(
+            Some(&proof),
+            &participant.public_key(),
+            &context,
+            &owner,
+            11_000,
+        ));
+    }
 }
