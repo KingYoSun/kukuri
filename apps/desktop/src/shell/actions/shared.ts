@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 
 import type { DesktopApi } from '@/lib/api';
-import type { OpenThreadOptions } from '@/shell/routes';
+import type { OpenAuthorOptions, OpenThreadOptions } from '@/shell/routes';
 import type { DesktopShellState, DesktopShellStateValue } from '@/shell/store';
 
 export type Setter<K extends keyof DesktopShellState> = (
@@ -20,6 +20,7 @@ export type OpenDirectMessagePane = (
   options?: {
     historyMode?: 'push' | 'replace';
     normalizeOnError?: boolean;
+    parentColumnId?: string;
     preserveAuthorPane?: boolean;
     preservedAuthorPubkey?: string | null;
   }
@@ -27,14 +28,7 @@ export type OpenDirectMessagePane = (
 
 export type OpenAuthorDetail = (
   authorPubkey: string,
-  options?: {
-    fromThread?: boolean;
-    historyMode?: 'push' | 'replace';
-    normalizeOnError?: boolean;
-    threadId?: string | null;
-    preserveDirectMessageContext?: boolean;
-    directMessagePeerPubkey?: string | null;
-  }
+  options?: OpenAuthorOptions
 ) => Promise<void>;
 
 export type OpenThread = (

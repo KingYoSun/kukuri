@@ -237,6 +237,7 @@ export function useDesktopShellRouting({
       options?: {
         historyMode?: 'push' | 'replace';
         normalizeOnError?: boolean;
+        parentColumnId?: string;
         preserveAuthorPane?: boolean;
         preservedAuthorPubkey?: string | null;
       }
@@ -270,12 +271,16 @@ export function useDesktopShellRouting({
         setKnownAuthorsByPubkey((current) =>
           mergeKnownAuthors(current, [authorViewFromDirectMessageConversation(conversation)])
         );
-        const scope = activeWorkspaceScope(storeApi.getState().workspaceState);
+        const currentWorkspaceState = storeApi.getState().workspaceState;
+        const parentColumn = options?.parentColumnId
+          ? currentWorkspaceState.columns.find((column) => column.id === options.parentColumnId)
+          : undefined;
+        const scope = parentColumn?.scope ?? activeWorkspaceScope(currentWorkspaceState);
         openWorkspaceColumn(
           'conversation',
           scope,
           peerPubkey,
-          storeApi.getState().workspaceState.activeColumnId
+          options?.parentColumnId ?? currentWorkspaceState.activeColumnId
         );
         setDirectMessagePaneOpen(true);
         setSelectedLiveSessionId(null);
@@ -404,7 +409,7 @@ export function useDesktopShellRouting({
           'thread',
           scope,
           threadId,
-          storeApi.getState().workspaceState.activeColumnId
+          options?.parentColumnId ?? storeApi.getState().workspaceState.activeColumnId
         );
         syncRoute(options?.historyMode ?? 'push', {
           activeTopic: topic,
@@ -513,8 +518,13 @@ export function useDesktopShellRouting({
             : undefined,
         });
         const currentState = storeApi.getState();
-        const scope = activeWorkspaceScope(currentState.workspaceState);
-        const parentColumnId = options?.fromThread && nextThreadId
+        const explicitParentColumn = options?.parentColumnId
+          ? currentState.workspaceState.columns.find(
+              (column) => column.id === options.parentColumnId
+            )
+          : undefined;
+        const scope = explicitParentColumn?.scope ?? activeWorkspaceScope(currentState.workspaceState);
+        const parentColumnId = options?.parentColumnId ?? (options?.fromThread && nextThreadId
           ? columnIdentityId('thread', scope, nextThreadId)
           : options?.preserveDirectMessageContext && nextDirectMessagePeerPubkey
             ? columnIdentityId('conversation', scope, nextDirectMessagePeerPubkey)
@@ -523,7 +533,7 @@ export function useDesktopShellRouting({
                   column.kind === 'timeline' &&
                   column.scope?.topicId === scope.topicId &&
                   column.scope.channelId === scope.channelId
-              )?.id ?? currentState.workspaceState.activeColumnId;
+              )?.id ?? currentState.workspaceState.activeColumnId);
         openWorkspaceColumn('profile', scope, authorPubkey, parentColumnId);
       } catch (detailError) {
         const nextError =

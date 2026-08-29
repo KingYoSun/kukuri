@@ -491,15 +491,30 @@ export function DesktopShellPage({
   }, [checkForUpdate]);
   const renderMessagesSurface = (
     surfaceKind: 'messages' | 'conversation',
-    peerPubkey?: string
+    peerPubkey: string | undefined,
+    sourceColumnId: string
   ) => (
     <DesktopShellMessagesSurface
       t={t}
       locale={locale}
       viewModels={viewModels}
       openDirectMessageList={openDirectMessageList}
-      openDirectMessagePane={openDirectMessagePane}
-      openAuthorDetail={openAuthorDetail}
+      openDirectMessagePane={(nextPeerPubkey, options) =>
+        openDirectMessagePane(nextPeerPubkey, {
+          ...options,
+          parentColumnId: options?.parentColumnId ?? sourceColumnId,
+        })
+      }
+      openAuthorDetail={(authorPubkey, options) =>
+        openAuthorDetail(authorPubkey, {
+          ...options,
+          // A selected DM can also be projected inside the Messages Column. Preserve
+          // its logical Conversation parent so opening the author does not replace it.
+          parentColumnId:
+            options?.parentColumnId ??
+            (options?.preserveDirectMessageContext ? undefined : sourceColumnId),
+        })
+      }
       handleClearDirectMessage={shellActions.handleClearDirectMessage}
       handleDeleteDirectMessageMessage={shellActions.handleDeleteDirectMessageMessage}
       handleDirectMessageAttachmentSelection={shellActions.handleDirectMessageAttachmentSelection}
@@ -510,7 +525,7 @@ export function DesktopShellPage({
       showComposer={false}
     />
   );
-  const notificationsSurface = (
+  const renderNotificationsSurface = (column: ColumnState) => (
     <DesktopShellNotificationsSurface
       t={t}
       locale={locale}
@@ -522,13 +537,17 @@ export function DesktopShellPage({
         });
         void loadTopics(trackedTopics, activeTopic, null).catch(() => undefined);
       }}
-      handleOpenNotification={shellActions.handleOpenNotification}
+      handleOpenNotification={(notification) =>
+        shellActions.handleOpenNotification(notification, column.id)
+      }
     />
   );
   const renderDetailSurface = (
     surfaceKind: 'thread' | 'profile',
     entityId?: string,
-    topicId?: string
+    topicId?: string,
+    sourceColumnId?: string,
+    channelId?: string | null
   ) => (
     <DesktopShellDetailSurfaceStack
       api={api}
@@ -536,9 +555,26 @@ export function DesktopShellPage({
       viewModels={viewModels}
       loadMoreThread={loadMoreThread}
       loadReactionCatalogData={loadReactionCatalogData}
-      openAuthorDetail={openAuthorDetail}
-      openDirectMessagePane={openDirectMessagePane}
-      openThread={openThread}
+      openAuthorDetail={(authorPubkey, options) =>
+        openAuthorDetail(authorPubkey, {
+          ...options,
+          parentColumnId: options?.parentColumnId ?? sourceColumnId,
+        })
+      }
+      openDirectMessagePane={(peerPubkey, options) =>
+        openDirectMessagePane(peerPubkey, {
+          ...options,
+          parentColumnId: options?.parentColumnId ?? sourceColumnId,
+        })
+      }
+      openThread={(threadId, options) =>
+        openThread(threadId, {
+          ...options,
+          channelId: options?.channelId ?? channelId,
+          parentColumnId: options?.parentColumnId ?? sourceColumnId,
+          topic: options?.topic ?? topicId,
+        })
+      }
       beginColumnReply={shellActions.beginColumnReply}
       handleSimpleRepost={shellActions.handleSimpleRepost}
       beginColumnQuoteRepost={shellActions.beginColumnQuoteRepost}
@@ -574,8 +610,20 @@ export function DesktopShellPage({
       loadReactionCatalogData={loadReactionCatalogData}
       refreshTimelineFeed={refreshTimelineFeed}
       loadMoreTimeline={loadMoreTimeline}
-      openAuthorDetail={openAuthorDetail}
-      openThread={openThread}
+      openAuthorDetail={(authorPubkey, options) =>
+        openAuthorDetail(authorPubkey, {
+          ...options,
+          parentColumnId: options?.parentColumnId ?? column.id,
+        })
+      }
+      openThread={(threadId, options) =>
+        openThread(threadId, {
+          ...options,
+          channelId: options?.channelId ?? column.scope?.channelId,
+          parentColumnId: options?.parentColumnId ?? column.id,
+          topic: options?.topic ?? column.scope?.topicId,
+        })
+      }
       beginColumnReply={shellActions.beginColumnReply}
       handleSimpleRepost={shellActions.handleSimpleRepost}
       beginColumnQuoteRepost={shellActions.beginColumnQuoteRepost}
@@ -701,16 +749,30 @@ export function DesktopShellPage({
         void activateWorkspaceColumn(column, preserveAuthorPane)
       }
       renderPrimarySurface={renderPrimarySurface}
-      messagesSurface={renderMessagesSurface('messages')}
-      renderConversationSurface={(column) =>
-        renderMessagesSurface('conversation', column.entityId)
+      renderMessagesSurface={(column) =>
+        renderMessagesSurface('messages', undefined, column.id)
       }
-      notificationsSurface={notificationsSurface}
+      renderConversationSurface={(column) =>
+        renderMessagesSurface('conversation', column.entityId, column.id)
+      }
+      renderNotificationsSurface={renderNotificationsSurface}
       renderThreadSurface={(column) =>
-        renderDetailSurface('thread', column.entityId, column.scope?.topicId)
+        renderDetailSurface(
+          'thread',
+          column.entityId,
+          column.scope?.topicId,
+          column.id,
+          column.scope?.channelId
+        )
       }
       renderProfileSurface={(column) =>
-        renderDetailSurface('profile', column.entityId, column.scope?.topicId)
+        renderDetailSurface(
+          'profile',
+          column.entityId,
+          column.scope?.topicId,
+          column.id,
+          column.scope?.channelId
+        )
       }
       titles={columnTitles}
     />

@@ -113,10 +113,14 @@ export function createMessageReactionSocialActions({
     }
   }
 
-  async function handleOpenNotification(notification: NotificationView) {
+  async function handleOpenNotification(
+    notification: NotificationView,
+    parentColumnId?: string
+  ) {
     if (notification.kind === 'direct_message') {
       await openDirectMessagePane(notification.actor_pubkey, {
         historyMode: 'push',
+        parentColumnId,
       });
       return;
     }
@@ -135,6 +139,7 @@ export function createMessageReactionSocialActions({
       });
       await openAuthorDetail(notification.actor_pubkey, {
         historyMode: 'replace',
+        parentColumnId,
       });
       return;
     }
@@ -160,7 +165,9 @@ export function createMessageReactionSocialActions({
 
     if (threadTargetId) {
       await openThread(threadTargetId, {
+        channelId: nextChannelId,
         historyMode: 'replace',
+        parentColumnId,
         topic: targetTopic,
       });
       return;

@@ -37,6 +37,7 @@ export type OpenThreadOptions = {
   focusObjectId?: string | null;
   historyMode?: 'push' | 'replace';
   normalizeOnEmpty?: boolean;
+  parentColumnId?: string;
   topic?: string;
 };
 
@@ -44,6 +45,7 @@ export type OpenAuthorOptions = {
   fromThread?: boolean;
   historyMode?: 'push' | 'replace';
   normalizeOnError?: boolean;
+  parentColumnId?: string;
   threadId?: string | null;
   preserveDirectMessageContext?: boolean;
   directMessagePeerPubkey?: string | null;
