@@ -54,9 +54,10 @@ pub use requests::{
     PreviewChannelAccessTokenRequest, PublishMetaverseRoomEventRequest, ReactionKeyRequest,
     RemoveBookmarkedCustomReactionRequest, RemoveBookmarkedPostRequest, ResyncDomeSnapshotsRequest,
     RevokeDomeConnectionRequest, RotatePrivateChannelRequest, SendDirectMessageRequest,
-    SetChannelGossipEnabledRequest, SetMyProfileRequest, SetTopicGossipEnabledRequest,
-    StartOwnerDomeHostingRequest, SubmitDomeSessionInputRequest, ToggleReactionRequest,
-    UnsubscribeTopicRequest, UpdateGameRoomRequest, UpdateMetaverseRoomRequest,
-    WithdrawDomeConnectionProposalRequest, WithdrawPostRequest, WithdrawalReasonVisibilityRequest,
+    SetChannelGossipEnabledRequest, SetMyProfileRequest, SetPrivateChannelEntryDomeRequest,
+    SetTopicGossipEnabledRequest, StartOwnerDomeHostingRequest, SubmitDomeSessionInputRequest,
+    ToggleReactionRequest, UnsubscribeTopicRequest, UpdateGameRoomRequest,
+    UpdateMetaverseRoomRequest, WithdrawDomeConnectionProposalRequest, WithdrawPostRequest,
+    WithdrawalReasonVisibilityRequest,
 };
 pub use runtime::{DesktopRuntime, RuntimeEvent};

@@ -23,6 +23,17 @@
     "confirm": "引っ越しを開始",
     "moving": "引っ越し中…"
   },
+  "entry": {
+    "resolving": "入場可能なDomeを探しています…",
+    "admitting": "参加条件を確認し、安全なspawn位置を探しています…",
+    "noAvailable": "現在入場できるDomeがありません。Hosting開始後にDomeを選択してください。",
+    "hostUnavailable": "Host停止中",
+    "settingTitle": "Channelのentry Dome",
+    "none": "指定なし",
+    "save": "entry Domeを保存",
+    "ownerOnly": "この設定を変更できるのはChannel ownerだけです。",
+    "settingFailed": "entry Domeを保存できませんでした"
+  },
   "room": {
     "host": "ホスト: {{host}}",
     "updated": "更新: {{time}}",

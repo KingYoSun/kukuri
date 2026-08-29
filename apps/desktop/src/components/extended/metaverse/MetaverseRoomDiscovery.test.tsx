@@ -21,6 +21,7 @@ const room: GameRoomView = {
   scores: [],
   room_kind: 'metaverse_room',
   metaverse: createDefaultMetaverseRoomState(8),
+  dome_hosting: { kind: 'owner_hosted' },
   manifest_blob_hash: 'mock-metaverse-room-1',
   updated_at: 1,
   channel_id: null,
@@ -135,6 +136,38 @@ describe('MetaverseRoomDiscovery', () => {
     expect(screen.getByLabelText('Max peers')).toBeDisabled();
     expect(screen.getByPlaceholderText('Small social space')).toBeDisabled();
     expect(screen.getAllByRole('button', { name: 'Create metaverse room' })[1]).toBeDisabled();
+  });
+
+  test('keeps an unavailable Dome visible but prevents admission', () => {
+    renderDiscovery({
+      rooms: [{ ...room, dome_hosting: { kind: 'closed' } }],
+      localAuthorPubkey: 'e'.repeat(64),
+    });
+
+    expect(screen.getByRole('button', { name: 'Host unavailable' })).toBeDisabled();
+  });
+
+  test('lets the channel owner configure at most one entry Dome', async () => {
+    const user = userEvent.setup();
+    const onSetEntryDome = vi.fn().mockResolvedValue(undefined);
+    renderDiscovery({
+      activeChannelId: 'channel-1',
+      canSetEntryDome: true,
+      configuredEntryInstanceId: null,
+      onSetEntryDome,
+    });
+
+    await user.selectOptions(screen.getByRole('combobox'), room.metaverse!.instance_id);
+    await user.click(screen.getByRole('button', { name: 'Save entry Dome' }));
+
+    expect(onSetEntryDome).toHaveBeenCalledWith(room.metaverse!.instance_id);
+  });
+
+  test('reports admission progress without rendering a joined state', () => {
+    renderDiscovery({ admissionStatus: 'admitting' });
+
+    expect(screen.getByText('Checking access and finding a safe spawn point…')).toBeInTheDocument();
+    expect(screen.queryByText('Joined')).not.toBeInTheDocument();
   });
 
   test('replaces create controls with an owner-only move action for an existing Dome', async () => {

@@ -30,6 +30,7 @@ pub(crate) fn step_name(step: &ScenarioStep) -> &'static str {
             "assert_metaverse_dome_create_rejected"
         }
         ScenarioStep::MoveMetaverseDome { .. } => "move_metaverse_dome",
+        ScenarioStep::ExerciseDomeEntry { .. } => "exercise_dome_entry",
         ScenarioStep::ExerciseDomeConnections { .. } => "exercise_dome_connections",
         ScenarioStep::ExerciseDomeTransition { .. } => "exercise_dome_transition",
         ScenarioStep::AssertDomeConnectionTopology { .. } => "assert_dome_connection_topology",

@@ -23,6 +23,17 @@
     "confirm": "Start move",
     "moving": "Moving…"
   },
+  "entry": {
+    "resolving": "Finding the best available Dome…",
+    "admitting": "Checking access and finding a safe spawn point…",
+    "noAvailable": "No Dome is currently available. Choose a hosted Dome when one becomes available.",
+    "hostUnavailable": "Host unavailable",
+    "settingTitle": "Channel entry Dome",
+    "none": "No configured Dome",
+    "save": "Save entry Dome",
+    "ownerOnly": "Only the channel owner can change this setting.",
+    "settingFailed": "Could not save the entry Dome"
+  },
   "room": {
     "host": "Host: {{host}}",
     "updated": "Updated: {{time}}",

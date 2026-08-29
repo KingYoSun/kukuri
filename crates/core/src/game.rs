@@ -313,6 +313,40 @@ pub enum MetaverseColliderV1 {
     },
 }
 
+pub fn validate_metaverse_collider(collider: &MetaverseColliderV1) -> Result<()> {
+    let center = match collider {
+        MetaverseColliderV1::Capsule {
+            center,
+            radius,
+            half_height,
+        } => {
+            if *radius <= 0 || *half_height < 0 || *radius > 2_000 || *half_height > 2_000 {
+                bail!("capsule collider dimensions are outside the supported range");
+            }
+            center
+        }
+        MetaverseColliderV1::Cuboid {
+            center,
+            half_extents,
+        } => {
+            if half_extents
+                .iter()
+                .any(|extent| !(1..=2_000).contains(extent))
+            {
+                bail!("cuboid collider dimensions are outside the supported range");
+            }
+            center
+        }
+    };
+    if center
+        .iter()
+        .any(|component| component.unsigned_abs() > 4_000)
+    {
+        bail!("collider center is outside the supported range");
+    }
+    Ok(())
+}
+
 pub fn fallback_capsule_collider(
     bounds_min: [i64; 3],
     bounds_max: [i64; 3],
@@ -680,27 +714,7 @@ pub fn validate_dome_customization(customization: &DomeCustomizationV1) -> Resul
             bail!("visual-only props cannot expose interactions");
         }
         if let Some(collider) = &prop.collider {
-            match collider {
-                MetaverseColliderV1::Capsule {
-                    radius,
-                    half_height,
-                    ..
-                } if *radius <= 0
-                    || *half_height < 0
-                    || *radius > 2_000
-                    || *half_height > 2_000 =>
-                {
-                    bail!("capsule collider dimensions are outside the supported range");
-                }
-                MetaverseColliderV1::Cuboid { half_extents, .. }
-                    if half_extents
-                        .iter()
-                        .any(|extent| !(1..=2_000).contains(extent)) =>
-                {
-                    bail!("cuboid collider dimensions are outside the supported range");
-                }
-                _ => {}
-            }
+            validate_metaverse_collider(collider)?;
         }
     }
     Ok(())

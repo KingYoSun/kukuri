@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { ChevronDown, Cuboid, Play } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -8,10 +8,12 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Notice } from '@/components/ui/notice';
+import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import type { SupportedLocale } from '@/i18n';
 import { formatLocalizedTime } from '@/i18n/format';
 import type { AuthorSocialView, GameRoomView, Profile, SpatialContextV1 } from '@/lib/api';
+import { domeHasActiveHost } from './DomeEntryModel';
 
 export type CreateMetaverseRoomInput = {
   title: string;
@@ -32,6 +34,11 @@ type MetaverseRoomDiscoveryProps = {
   mediaObjectUrls: Record<string, string | null>;
   onCreateRoom: (input: CreateMetaverseRoomInput) => Promise<boolean>;
   onJoinRoom: (roomId: string) => void;
+  admissionStatus?: 'resolving' | 'admitting' | 'joined' | 'selection';
+  activeChannelId?: string | null;
+  configuredEntryInstanceId?: string | null;
+  canSetEntryDome?: boolean;
+  onSetEntryDome?: (instanceId: string | null) => Promise<void>;
   onMoveRoom?: (roomId: string, targetContext: SpatialContextV1) => Promise<boolean>;
 };
 
@@ -48,6 +55,11 @@ export function MetaverseRoomDiscovery({
   mediaObjectUrls,
   onCreateRoom,
   onJoinRoom,
+  admissionStatus = 'selection',
+  activeChannelId = null,
+  configuredEntryInstanceId = null,
+  canSetEntryDome = false,
+  onSetEntryDome,
   onMoveRoom,
 }: MetaverseRoomDiscoveryProps) {
   const [createOpen, setCreateOpen] = useState(false);
@@ -59,6 +71,11 @@ export function MetaverseRoomDiscovery({
   const [movingRoomId, setMovingRoomId] = useState<string | null>(null);
   const [targetTopic, setTargetTopic] = useState('');
   const [targetChannel, setTargetChannel] = useState('');
+  const [entrySelection, setEntrySelection] = useState(configuredEntryInstanceId ?? '');
+
+  useEffect(() => {
+    setEntrySelection(configuredEntryInstanceId ?? '');
+  }, [configuredEntryInstanceId]);
 
   function hostAuthor(room: GameRoomView): Profile | AuthorSocialView | null {
     return room.host_pubkey === localAuthorPubkey
@@ -129,6 +146,36 @@ export function MetaverseRoomDiscovery({
       {validationError || error ? (
         <Notice tone='destructive'>{validationError ? t('create.titleRequired') : error}</Notice>
       ) : null}
+      {admissionStatus === 'resolving' || admissionStatus === 'admitting' ? (
+        <Notice>{t(`entry.${admissionStatus}`)}</Notice>
+      ) : null}
+      {activeChannelId ? (
+        <section className='composer composer-compact' aria-label={t('entry.settingTitle')}>
+          <Label>
+            <span>{t('entry.settingTitle')}</span>
+            <Select
+              value={entrySelection}
+              disabled={!canSetEntryDome || pending}
+              onChange={(event) => setEntrySelection(event.target.value)}
+            >
+              <option value=''>{t('entry.none')}</option>
+              {rooms.filter((room) => room.metaverse).map((room) => (
+                <option key={room.room_id} value={room.metaverse!.instance_id}>{room.title}</option>
+              ))}
+            </Select>
+          </Label>
+          {canSetEntryDome && onSetEntryDome ? (
+            <Button
+              variant='secondary'
+              type='button'
+              disabled={pending}
+              onClick={() => void onSetEntryDome(entrySelection || null)}
+            >
+              {t('entry.save')}
+            </Button>
+          ) : <small>{t('entry.ownerOnly')}</small>}
+        </section>
+      ) : null}
       {!rooms.some((room) => room.host_pubkey === localAuthorPubkey) ? (
       <section className='shell-nav-accordion metaverse-create-accordion' data-open={createOpen}>
         <button
@@ -190,9 +237,14 @@ export function MetaverseRoomDiscovery({
                 <span>{t('room.manifest', { value: room.manifest_blob_hash ?? t('room.pending') })}</span>
                 <span>{t('room.world', { version: room.metaverse?.world_version ?? 1 })}</span>
               </div>
-              <Button variant='secondary' type='button' onClick={() => onJoinRoom(room.room_id)}>
+              <Button
+                variant='secondary'
+                type='button'
+                disabled={pending || admissionStatus === 'admitting' || !domeHasActiveHost(room)}
+                onClick={() => onJoinRoom(room.room_id)}
+              >
                 <Play className='size-4' aria-hidden='true' />
-                {t('room.join')}
+                {t(domeHasActiveHost(room) ? 'room.join' : 'entry.hostUnavailable')}
               </Button>
               {onMoveRoom && room.host_pubkey === localAuthorPubkey ? (
                 <>

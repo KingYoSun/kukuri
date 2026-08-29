@@ -3,7 +3,7 @@ use kukuri_core::{
     MetaverseBudgetResource, MetaverseBudgetScope, MetaverseColliderV1, MetaverseResourceRejection,
     MetaverseResourceRejectionReason,
 };
-use rapier3d::prelude::ColliderBuilder;
+use rapier3d::prelude::{ColliderBuilder, Vector};
 
 use crate::RateWindow;
 
@@ -51,7 +51,7 @@ pub(crate) fn window_allows(
 }
 
 pub(crate) fn collider_builder(collider: Option<&MetaverseColliderV1>) -> ColliderBuilder {
-    match collider {
+    let builder = match collider {
         Some(MetaverseColliderV1::Capsule {
             radius,
             half_height,
@@ -63,6 +63,15 @@ pub(crate) fn collider_builder(collider: Option<&MetaverseColliderV1>) -> Collid
             half_extents[2] as f32 / 100.0,
         ),
         None => ColliderBuilder::capsule_y(0.5, 0.25),
+    };
+    match collider {
+        Some(MetaverseColliderV1::Capsule { center, .. })
+        | Some(MetaverseColliderV1::Cuboid { center, .. }) => builder.translation(Vector::new(
+            center[0] as f32 / 100.0,
+            center[1] as f32 / 100.0,
+            center[2] as f32 / 100.0,
+        )),
+        None => builder,
     }
 }
 

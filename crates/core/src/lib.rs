@@ -98,7 +98,7 @@ pub use game::{
     fallback_capsule_collider, fixed_dome_v1, interpolate_dome_environment,
     resolve_metaverse_room_state, validate_dome_customization, validate_dome_instance_manifest,
     validate_dome_move_record, validate_dome_preset_manifest, validate_dome_relationship_scope,
-    validate_metaverse_room_state,
+    validate_metaverse_collider, validate_metaverse_room_state,
 };
 pub use ids::{
     BlobHash, ChannelId, EnvelopeId, Pubkey, ReplicaId, TopicId, author_profile_topic_id,

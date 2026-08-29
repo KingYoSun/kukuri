@@ -50,8 +50,12 @@ impl AppService {
     ) -> Result<DomeSpatialAccessProofV1> {
         let participant_pubkey = self.services.keys.public_key();
         if !matches!(
-            self.evaluate_spatial_context_access(&spatial_context, &participant_pubkey)
-                .await?,
+            self.evaluate_dome_room_access(
+                &spatial_context,
+                &target_owner_pubkey,
+                &participant_pubkey,
+            )
+            .await?,
             DomeTransitionAccessDecisionV1::Allowed
         ) {
             anyhow::bail!(DomeTransitionDenialReasonV1::AccessDenied.code());

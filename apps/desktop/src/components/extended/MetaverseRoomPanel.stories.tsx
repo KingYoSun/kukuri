@@ -35,6 +35,7 @@ const room: GameRoomView = {
   scores: [],
   room_kind: 'metaverse_room',
   metaverse: createDefaultMetaverseRoomState(8),
+  dome_hosting: { kind: 'owner_hosted' },
   manifest_blob_hash: 'mock-metaverse-room-1',
   updated_at: STORY_TIMESTAMP,
   channel_id: null,
@@ -220,6 +221,32 @@ export const DiscoveryError: Story = {
         mediaObjectUrls={{}}
         onCreateRoom={async () => false}
         onJoinRoom={() => undefined}
+      />
+    </StoryFrame>
+  ),
+};
+
+export const ChannelEntrySelection: Story = {
+  render: () => (
+    <StoryFrame>
+      <MetaverseRoomDiscovery
+        rooms={[room, neighborRoom]}
+        selectedRoomId={null}
+        joinedRoomIds={new Set()}
+        pending={false}
+        error={null}
+        admissionStatus='selection'
+        activeChannelId='channel-garden'
+        configuredEntryInstanceId={neighborRoom.metaverse!.instance_id}
+        canSetEntryDome
+        locale='en'
+        localAuthorPubkey={LOCAL_PUBKEY}
+        localProfile={null}
+        knownAuthorsByPubkey={{}}
+        mediaObjectUrls={{}}
+        onCreateRoom={async () => false}
+        onJoinRoom={() => undefined}
+        onSetEntryDome={async () => undefined}
       />
     </StoryFrame>
   ),

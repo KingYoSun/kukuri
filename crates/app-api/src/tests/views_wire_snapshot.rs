@@ -396,6 +396,7 @@ fn views_wire_joined_private_channel_view() {
             rotation_required: true,
             participant_count: 4,
             stale_participant_count: 1,
+            entry_dome_instance_id: Some("dome-entry".to_string()),
         },
     );
 }

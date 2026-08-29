@@ -76,6 +76,7 @@ const room: GameRoomView = {
   scores: [],
   room_kind: 'metaverse_room',
   metaverse: createDefaultMetaverseRoomState(8),
+  dome_hosting: { kind: 'owner_hosted' },
   manifest_blob_hash: 'mock-metaverse-room-1',
   updated_at: 1,
   channel_id: null,
@@ -124,16 +125,28 @@ function physicsSnapshot(animations: Array<[string, string | null]>): DomePhysic
     sequence: 7,
     simulated_at: 7,
     sleeping: false,
-    bodies: animations.map(([entityId, animation], index) => ({
-      entity_id: entityId,
-      kind: 'avatar',
-      position: [index, 0, index],
-      rotation: [0, 90, 0],
-      linear_velocity: [0, 0, 0],
-      animation,
-      grabbed_by: null,
-      expires_at: null,
-    })),
+    bodies: [
+      {
+        entity_id: `avatar:${room.host_pubkey}`,
+        kind: 'avatar',
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        linear_velocity: [0, 0, 0],
+        animation: 'idle',
+        grabbed_by: null,
+        expires_at: null,
+      },
+      ...animations.map(([entityId, animation], index) => ({
+        entity_id: entityId,
+        kind: 'avatar' as const,
+        position: [index, 0, index] as [number, number, number],
+        rotation: [0, 90, 0] as [number, number, number],
+        linear_velocity: [0, 0, 0] as [number, number, number],
+        animation,
+        grabbed_by: null,
+        expires_at: null,
+      })),
+    ],
   };
 }
 
@@ -235,23 +248,34 @@ function renderPanel(api: DesktopApi, options: RenderPanelOptions = {}) {
 }
 
 describe('MetaverseRoomPanel animation sharing', () => {
-  test('does not join an existing room until Join Room is clicked', async () => {
+  test('does not render a room before authoritative admission completes', async () => {
     const baseApi = createDesktopMockApi();
     const publishMetaverseRoomEvent = vi.fn(baseApi.publishMetaverseRoomEvent);
+    let resolveAdmission!: (snapshot: DomePhysicsSnapshotV1) => void;
     const api: DesktopApi = {
       ...baseApi,
       publishMetaverseRoomEvent,
       listMetaverseRoomEvents: vi.fn().mockResolvedValue([]),
+      submitDomeSessionInput: vi.fn(() => new Promise<DomePhysicsSnapshotV1>((resolve) => {
+        resolveAdmission = resolve;
+      })),
     };
 
     renderPanel(api);
 
+    await waitFor(() => expect(api.submitDomeSessionInput).toHaveBeenCalled());
     expect(screen.queryByLabelText('Metaverse room viewport')).not.toBeInTheDocument();
     expect(publishMetaverseRoomEvent).not.toHaveBeenCalled();
+    resolveAdmission(await baseApi.submitDomeSessionInput(
+      room.metaverse!.spatial_context,
+      room.metaverse!.instance_id,
+      Date.now(),
+      { type: 'join', avatar_collider: null }
+    ));
+    await waitFor(() => expect(screen.getByLabelText('Metaverse room viewport')).toBeInTheDocument());
   });
 
-  test('joins a room from the explicit Join Room action', async () => {
-    const user = userEvent.setup();
+  test('automatically joins the preferred available room', async () => {
     const baseApi = createDesktopMockApi();
     const publishMetaverseRoomEvent = vi.fn(baseApi.publishMetaverseRoomEvent);
     const api: DesktopApi = {
@@ -261,9 +285,7 @@ describe('MetaverseRoomPanel animation sharing', () => {
     };
 
     renderPanel(api);
-    await user.click(screen.getByRole('button', { name: 'Join Room' }));
-
-    expect(screen.getByLabelText('Metaverse room viewport')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText('Metaverse room viewport')).toBeInTheDocument());
     await waitFor(() => {
       expect(
         publishMetaverseRoomEvent.mock.calls.some(([, , , , event]) => event.type === 'presence_join')
@@ -283,7 +305,9 @@ describe('MetaverseRoomPanel animation sharing', () => {
 
     renderPanel(api);
     await user.click(screen.getByRole('button', { name: 'Join Room' }));
-    expect(screen.getByLabelText('Metaverse room viewport')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByLabelText('Metaverse room viewport')).toBeInTheDocument();
+    });
 
     await user.click(screen.getByRole('button', { name: 'Leave room' }));
 
@@ -375,9 +399,7 @@ describe('MetaverseRoomPanel animation sharing', () => {
       listMetaverseRoomEvents: vi.fn().mockResolvedValue([]),
     };
 
-    renderPanel(api, {
-      syncStatus: { ...createSyncStatus(), local_author_pubkey: 'e'.repeat(64) },
-    });
+    renderPanel(api, { rooms: [{ ...room, host_pubkey: 'e'.repeat(64) }] });
     await user.click(screen.getByRole('button', { name: 'Join Room' }));
     await user.click(screen.getByRole('button', { name: 'Hide room chat' }));
     await user.click(screen.getByRole('button', { name: 'Create metaverse room' }));
@@ -501,7 +523,9 @@ describe('MetaverseRoomPanel animation sharing', () => {
     await user.type(screen.getByPlaceholderText('Atrium'), 'Created room');
     await user.click(screen.getAllByRole('button', { name: 'Create metaverse room' })[1]);
 
-    expect(screen.getByLabelText('Metaverse room viewport')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByLabelText('Metaverse room viewport')).toBeInTheDocument();
+    });
     await waitFor(() => {
       expect(api.publishMetaverseRoomEvent).toHaveBeenCalled();
     });
@@ -652,7 +676,6 @@ describe('MetaverseRoomPanel animation sharing', () => {
   });
 
   test('advances the backend poll cursor from the latest received envelope', async () => {
-    const user = userEvent.setup();
     const listMetaverseRoomEvents = vi
       .fn()
       .mockResolvedValueOnce([presenceJoinEvent('remote-peer', 1)])
@@ -663,7 +686,6 @@ describe('MetaverseRoomPanel animation sharing', () => {
     };
 
     renderPanel(api);
-    await user.click(screen.getByRole('button', { name: 'Join Room' }));
 
     await waitFor(() => expect(listMetaverseRoomEvents).toHaveBeenCalledWith(
       'kukuri:topic:demo',
@@ -688,7 +710,6 @@ describe('MetaverseRoomPanel animation sharing', () => {
   });
 
   test('closes the room BroadcastChannel when the panel unmounts', async () => {
-    const user = userEvent.setup();
     const close = vi.fn();
     const postMessage = vi.fn();
     class MockBroadcastChannel {
@@ -713,7 +734,6 @@ describe('MetaverseRoomPanel animation sharing', () => {
 
     try {
       const view = renderPanel(api);
-      await user.click(screen.getByRole('button', { name: 'Join Room' }));
       await waitFor(() => {
         expect(postMessage).toHaveBeenCalled();
       });

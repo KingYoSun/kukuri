@@ -306,7 +306,7 @@ async fn dome_moves_from_a_public_topic_into_a_private_channel_context() {
         .list_game_rooms_scoped(
             topic,
             TimelineScope::Channel {
-                channel_id: ChannelId::new(channel.channel_id),
+                channel_id: ChannelId::new(channel.channel_id.clone()),
             },
         )
         .await
@@ -319,6 +319,48 @@ async fn dome_moves_from_a_public_topic_into_a_private_channel_context() {
         target.metaverse.expect("target state").spatial_context,
         target_context
     );
+
+    let configured = app
+        .set_private_channel_entry_dome(
+            topic,
+            channel.channel_id.as_str(),
+            Some(moved.target_instance_id.clone()),
+        )
+        .await
+        .expect("set channel entry Dome");
+    assert_eq!(
+        configured.entry_dome_instance_id.as_deref(),
+        Some(moved.target_instance_id.as_str())
+    );
+    app.rotate_private_channel(topic, channel.channel_id.as_str())
+        .await
+        .expect("rotate channel with entry Dome");
+    let rotated = app
+        .list_joined_private_channels(topic)
+        .await
+        .expect("list rotated channel")
+        .into_iter()
+        .find(|candidate| candidate.channel_id == channel.channel_id)
+        .expect("rotated channel view");
+    assert_eq!(
+        rotated.entry_dome_instance_id.as_deref(),
+        Some(moved.target_instance_id.as_str())
+    );
+    let cleared = app
+        .set_private_channel_entry_dome(topic, channel.channel_id.as_str(), None)
+        .await
+        .expect("clear channel entry Dome");
+    assert_eq!(cleared.entry_dome_instance_id, None);
+
+    let invalid = app
+        .set_private_channel_entry_dome(
+            topic,
+            channel.channel_id.as_str(),
+            Some("dome-from-another-context".into()),
+        )
+        .await
+        .expect_err("cross-context entry Dome must fail");
+    assert!(invalid.to_string().contains("not in this Spatial Context"));
 }
 
 #[tokio::test]

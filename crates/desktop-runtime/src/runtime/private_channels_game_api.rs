@@ -156,6 +156,19 @@ impl DesktopRuntime {
             .await
     }
 
+    pub async fn set_private_channel_entry_dome(
+        &self,
+        request: SetPrivateChannelEntryDomeRequest,
+    ) -> Result<JoinedPrivateChannelView> {
+        self.app_service
+            .set_private_channel_entry_dome(
+                request.topic.as_str(),
+                request.channel_id.as_str(),
+                request.entry_dome_instance_id,
+            )
+            .await
+    }
+
     pub async fn list_joined_private_channels(
         &self,
         request: ListJoinedPrivateChannelsRequest,
@@ -368,6 +381,21 @@ impl DesktopRuntime {
                     .await?
             }
             DomeHostTargetV1::CommunityNode { api_base_url, .. } => {
+                let access_proof = if matches!(
+                    &request.input,
+                    kukuri_core::DomeSessionInputKindV1::Join { .. }
+                ) {
+                    Some(
+                        self.app_service
+                            .build_dome_access_proof(
+                                request.spatial_context.clone(),
+                                lease.owner_pubkey.clone(),
+                            )
+                            .await?,
+                    )
+                } else {
+                    None
+                };
                 let signed_input = build_signed_dome_session_input(
                     self.author_keys.as_ref(),
                     kukuri_core::DomeSessionInputV1 {
@@ -384,7 +412,10 @@ impl DesktopRuntime {
                 )?;
                 self.submit_dome_hosting_input_to_community_node(
                     api_base_url,
-                    &DomeHostingSessionInputRequest { signed_input },
+                    &DomeHostingSessionInputRequest {
+                        signed_input,
+                        access_proof,
+                    },
                 )
                 .await?
                 .signed_snapshot

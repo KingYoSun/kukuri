@@ -155,6 +155,7 @@ pub fn run() {
             commands::community_node::import_friend_plus_share,
             commands::community_node::freeze_private_channel,
             commands::community_node::rotate_private_channel,
+            commands::community_node::set_private_channel_entry_dome,
             commands::community_node::leave_private_channel,
             commands::community_node::list_joined_private_channels,
             commands::posts::list_timeline,

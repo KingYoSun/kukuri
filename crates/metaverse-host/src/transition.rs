@@ -147,8 +147,8 @@ impl DomeSessionRuntime {
             bail!("DOME_TRANSITION_INVALID_TICKET");
         }
         let participant_id = ticket.request.participant_pubkey.as_str().to_string();
+        self.ensure_avatar(&participant_id, None)?;
         self.participants.insert(participant_id.clone());
-        self.ensure_avatar(&participant_id)?;
         self.set_avatar_transform(&participant_id, position, rotation)?;
         self.transition_entries.insert(
             participant_id.clone(),

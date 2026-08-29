@@ -39,6 +39,13 @@ owner が online に戻っても自動 reclaim はしない。「この端末で
 
 調査時は、participant raw inputを記録せず、transition ID、connection ID、topology digest、source/target generation、target lease epoch/session、boundary state、denial codeだけを採取する。`DOME_TRANSITION_STALE_TOPOLOGY`はtopology再取得、`DOME_TRANSITION_CAPACITY_FULL`は退出待ち、`DOME_TRANSITION_INVALID_TICKET`は15秒以内の新規prepareで復旧する。宛先commit後に送信元cleanupだけが失敗した場合、宛先をcurrentとして維持し、送信元completeを再試行する。
 
+## Spatial Contextへの入場
+
+- Clientはactive hostを持つDomeを、own hosted、confirmed last visit、private channel設定entry、Instance ID安定順で試す。優先候補がoffline、満員、access失効、asset不備の場合は次候補または選択一覧へfallbackする。
+- Channel entry Domeはchannel ownerだけが同じContextのInstanceへ設定できる。設定変更は既存Connectionを作成、解除、変更しない。
+- Owner hostはcurrent access/blockを、Community Node hostは短命access proofを`Join`直前に確認する。Host snapshotにlocal avatarが現れるまでClientはscene、presence、音声を開始しない。
+- Hostはmanifest default spawnから固定順でavatar/prop colliderと25 cm安全余白を検査する。安全候補が無ければ`DOME_ENTRY_NO_SAFE_SPAWN`となり、participantとavatar bodyは追加されない。
+
 ## Manifest/asset cache
 
 - 管理対象はmetaverse manifestとそこから参照されるasset blobだけ。physics snapshot、session state、DB metadata、GPU resource、metaverse以外のblobは容量計算に含めない。

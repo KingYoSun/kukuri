@@ -63,6 +63,25 @@ fn fixed_dome_fallback_capsule_contains_the_bounding_box() {
 }
 
 #[test]
+fn fixed_dome_rejects_unbounded_avatar_collider_descriptors() {
+    assert!(
+        validate_metaverse_collider(&MetaverseColliderV1::Capsule {
+            center: [0, 90, 0],
+            radius: -1,
+            half_height: 90,
+        })
+        .is_err()
+    );
+    assert!(
+        validate_metaverse_collider(&MetaverseColliderV1::Cuboid {
+            center: [i64::MAX, 0, 0],
+            half_extents: [25, 90, 25],
+        })
+        .is_err()
+    );
+}
+
+#[test]
 fn fixed_dome_rejects_the_legacy_scene_payload() {
     let legacy = serde_json::json!({
         "world_version": 1,

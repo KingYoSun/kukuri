@@ -138,6 +138,9 @@ pub enum ScenarioStep {
     ExerciseDomeConnections {
         local_title: String,
     },
+    ExerciseDomeEntry {
+        local_title: String,
+    },
     ExerciseDomeTransition {
         local_title: String,
     },

@@ -441,6 +441,7 @@ pub(crate) struct PrivateChannelDiagnostics {
     pub(crate) participant_count: usize,
     pub(crate) stale_participant_count: usize,
     pub(crate) rotation_required: bool,
+    pub(crate) entry_dome_instance_id: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

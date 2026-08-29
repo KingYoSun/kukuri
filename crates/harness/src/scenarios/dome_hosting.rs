@@ -43,7 +43,9 @@ pub(crate) async fn run_dome_hosting_lifecycle(
         spatial_context: context.clone(),
         instance_id: instance_id.clone(),
         sequence: 1,
-        input: DomeSessionInputKindV1::Join,
+        input: DomeSessionInputKindV1::Join {
+            avatar_collider: None,
+        },
     })
     .await?;
     let room = app

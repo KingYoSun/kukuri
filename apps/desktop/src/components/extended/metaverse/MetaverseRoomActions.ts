@@ -67,6 +67,11 @@ export type MetaverseRoomActions = {
     baseUrl: string
   ) => Promise<DomeHostingView>;
   closeHosting: (context: SpatialContextV1, instanceId: string) => Promise<DomeHostingView>;
+  setChannelEntryDome?: (
+    topicId: string,
+    channelId: string,
+    instanceId: string | null
+  ) => Promise<void>;
   submitSessionInput: (
     context: SpatialContextV1,
     instanceId: string,
