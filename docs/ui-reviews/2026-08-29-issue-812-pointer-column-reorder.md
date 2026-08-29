@@ -1,0 +1,38 @@
+# 2026-08-29 Issue #812 pointer column reorder
+
+- Status: current
+- Supersedes: None
+- Superseded by: None
+- PR: https://github.com/KingYoSun/kukuri/pull/830
+- Preview:
+  - [ドラッグ操作前](assets/2026-08-29-issue-812/before-drag.png)
+  - [ドラッグ操作後](assets/2026-08-29-issue-812/after-drag.png)
+- Surface / user / purpose: desktop の複数列 workspace で、マウス等のポインタを使う利用者が列ヘッダーのグリップから列順を直接変更する。
+- Summary: HTML5 Drag and Drop を Pointer Events と pointer capture に置き換えた。6px の移動閾値を越えるまでクリックとして扱い、ドラッグ中は既存の挿入線と端スクロールを使う。pointer up で既存 `moveColumn` に一度だけ確定し、Escape、pointer cancel、lost capture では変更せず終了する。既存の列メニューによるキーボード移動は維持する。
+- Conditions:
+  - Platform: Windows 11、Tauri development build、WebView2
+  - Viewport: 2560×1440、最大化
+  - Theme: dark
+  - Locale: ja
+  - State: 固定済みの Timeline / Profile / Explore / Notifications / Messages の5列。Timeline が先頭の状態から Profile の後ろへ移動。
+- Accessibility / interaction: Computer Use による実ポインタ操作で、グリップのクリックだけでは順序不変、ドラッグ後は `プロフィール1、タイムライン2` へ変化し、live region が「カラムを2番目へ移動しました」と通知した。列メニューのキーボード操作で `タイムライン1、プロフィール2` へ戻せた。component test で pointer capture / release、クリック閾値、pointer cancel、Escape を確認し、Playwright では mouse down / move / up と挿入線を確認した。
+- Performance: 外部 drag library や新規 dependency は追加していない。pointer move ごとの処理は既存の挿入位置計算と requestAnimationFrame ベースの端スクロールに限定され、専用計測の対象外とした。
+- Validation:
+  - failing-first: Pointer Events 回帰テストが実装前に挿入線を表示できず失敗することを確認。
+  - targeted Vitest: 2 files / 40 tests passed。
+  - targeted Playwright: 1 test passed。
+  - `cargo xtask check` passed。
+  - `cargo xtask test`: Rust 694 passed / 3 skipped、harness 22 passed、frontend 121 files / 917 tests passed。
+  - `cargo xtask desktop-ui-check`: frontend 917 tests、Storybook build、browser Playwright 44 tests、visual smoke 14 tests passed。
+  - Windows 実機: 修正前のドラッグ失敗を再現後、修正後の click / drag / keyboard alternate を Computer Use で自動確認。
+- Not verified: 物理タッチパネルとペン入力。Pointer Events の共通経路として実装・component test では対象だが、実機操作はマウス相当のみ。
+- Review result:
+  - 一貫性: 既存のグリップ、挿入線、列メニュー、`moveColumn` を再利用した。
+  - ショートカット: 既存のキーボード左右移動を維持した。
+  - フィードバック: ドラッグ中の列状態と挿入位置、完了時の live announcement を提供した。
+  - 完結性: pointer up で一度だけ確定し、全ドラッグ状態を消去する。
+  - エラー防止: 主ポインタの左ボタンと専用グリップだけを受付け、6px 未満のクリックでは順序を変えない。
+  - 取り消し: Escape、pointer cancel、lost capture では変更せず終了する。
+  - 主導権: 利用者が任意の挿入位置を選べ、列メニューでも同じ目的を達成できる。
+  - 記憶負荷: 既存のグリップと挿入線を使い、新しい操作語彙を増やしていない。
+- Exceptions: None
