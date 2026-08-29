@@ -1,5 +1,6 @@
 import { type ComponentProps } from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 
 import i18n from '@/i18n';
@@ -117,6 +118,36 @@ test('topic search always sends the active public scope and labels preview text'
     })
   );
   expect(await screen.findByText(/Search preview; may include derived tags/)).toBeInTheDocument();
+});
+
+test('index results hide identifiers and copy their complete values from context actions', async () => {
+  const user = userEvent.setup();
+  const clipboardWriteText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: clipboardWriteText },
+  });
+  const entry = indexEntry('post-context', 'context result');
+  const api = {
+    searchCommunityNodeIndex: vi.fn().mockResolvedValue({ entries: [entry] }),
+  } as unknown as DesktopApi;
+  render(<CommunityIndexWorkspace {...workspaceProps(api)} />);
+
+  runSearch();
+  const resultText = await screen.findByText(entry.text);
+  expect(screen.queryByText(new RegExp(entry.author_pubkey))).not.toBeInTheDocument();
+  expect(screen.queryByText(new RegExp(entry.object_id))).not.toBeInTheDocument();
+
+  const target = resultText.closest('article');
+  if (!(target instanceof HTMLElement)) throw new Error('index result target not found');
+  fireEvent.contextMenu(target, { clientX: 40, clientY: 50 });
+  await user.click(screen.getByRole('menuitem', { name: 'Copy author ID' }));
+  expect(clipboardWriteText).toHaveBeenLastCalledWith(entry.author_pubkey);
+
+  target.focus();
+  fireEvent.keyDown(target, { key: 'F10', shiftKey: true });
+  await user.click(screen.getByRole('menuitem', { name: 'Copy post ID' }));
+  expect(clipboardWriteText).toHaveBeenLastCalledWith(entry.object_id);
 });
 
 test('all joined topic scope is disabled without sending a query', () => {

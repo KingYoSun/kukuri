@@ -17,6 +17,7 @@ import type {
 import {
   audienceLabelForChannelRef,
   audienceLabelForTimelineScope,
+  authorDisplayLabel,
   communityNodeAuthLabel,
   communityNodeConnectivityUrlsLabel,
   communityNodeConsentLabel,
@@ -806,6 +807,13 @@ describe('shortPubkey', () => {
   it('keeps the first 12 characters and returns short values as-is', () => {
     expect(shortPubkey('abcdef0123456789abcdef0123456789')).toBe('abcdef012345');
     expect(shortPubkey('abc')).toBe('abc');
+  });
+});
+
+describe('authorDisplayLabel', () => {
+  it('uses a localized anonymous label instead of exposing a public key', () => {
+    expect(authorDisplayLabel('abcdef0123456789')).toBe('Unknown author');
+    expect(authorDisplayLabel('abcdef0123456789', 'Alice', 'alice')).toBe('Alice');
   });
 });
 

@@ -1,9 +1,21 @@
-import { type ReactNode, useMemo, useState } from 'react';
+import {
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+  useMemo,
+  useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { Flag } from 'lucide-react';
 
 import { Card, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import {
+  ContextActionMenu,
+  contextActionMenuPositionFromKeyboard,
+  contextActionMenuPositionFromPointer,
+  type ContextActionMenuPosition,
+} from '@/components/ui/context-action-menu';
 import type {
   CommunityNodeManifestFetch,
   SubmitCommunityNodeReportRequest,
@@ -11,6 +23,7 @@ import type {
 } from '@/lib/api';
 import { contentProvenanceFromView } from '@/lib/api/provenance';
 import { planReportRouting } from '@/lib/api/reportRouting';
+import { copyTextToClipboard } from '@/lib/utils';
 
 import { AuthorAvatar } from './AuthorAvatar';
 import { RelationshipBadge } from './RelationshipBadge';
@@ -57,6 +70,8 @@ export function AuthorDetailCard({
   );
   const showMuteAction = Boolean(author && author.author_pubkey !== localAuthorPubkey);
   const [reportOpen, setReportOpen] = useState(false);
+  const [identifierMenuPosition, setIdentifierMenuPosition] =
+    useState<ContextActionMenuPosition | null>(null);
   const provenance = useMemo(
     () => contentProvenanceFromView(author?.provenance),
     [author?.provenance]
@@ -75,6 +90,21 @@ export function AuthorDetailCard({
     () => planReportRouting(provenance, reportManifests),
     [provenance, reportManifests]
   );
+  const identifierMenuItems = useMemo(
+    () =>
+      author
+        ? [
+            {
+              id: 'copy-author-id',
+              label: t('actions.copyAuthorId'),
+              onSelect: async () => {
+                await copyTextToClipboard(author.author_pubkey);
+              },
+            },
+          ]
+        : [],
+    [author, t]
+  );
 
   const submitReport = async (input: ReportSubmitInput) => {
     if (!author || !onSubmitReport) throw new Error('report submission is not available');
@@ -91,7 +121,25 @@ export function AuthorDetailCard({
   };
 
   return (
-    <Card className='author-detail'>
+    <Card
+      className='author-detail'
+      data-testid={author ? 'author-identifier-target' : undefined}
+      tabIndex={author ? 0 : undefined}
+      onContextMenu={
+        author
+          ? (event: MouseEvent<HTMLElement>) =>
+              setIdentifierMenuPosition(contextActionMenuPositionFromPointer(event))
+          : undefined
+      }
+      onKeyDown={
+        author
+          ? (event: KeyboardEvent<HTMLElement>) => {
+              const position = contextActionMenuPositionFromKeyboard(event);
+              if (position) setIdentifierMenuPosition(position);
+            }
+          : undefined
+      }
+    >
       {author ? (
         <>
           <CardHeader className='author-detail-toolbar'>
@@ -119,17 +167,9 @@ export function AuthorDetailCard({
                 <p className='author-detail-copy author-detail-break'>
                   {author.about?.trim() || t('fallbacks.noBio')}
                 </p>
-                <small className='author-detail-monotext'>{author.author_pubkey}</small>
               </div>
             </div>
           </CardHeader>
-
-          {view.summary && view.summary.viaPubkeys.length > 0 ? (
-            <div className='topic-diagnostic topic-diagnostic-secondary'>
-              <span>{t('relationships.via')}</span>
-              <p className='author-detail-break'>{view.summary.viaPubkeys.join(', ')}</p>
-            </div>
-          ) : null}
 
           {showFollowAction || showMuteAction || showMessageAction ? (
             <div className='author-detail-actions'>
@@ -218,6 +258,12 @@ export function AuthorDetailCard({
       )}
 
       {view.authorError ? <p className='error error-inline'>{view.authorError}</p> : null}
+      <ContextActionMenu
+        open={identifierMenuPosition !== null && identifierMenuItems.length > 0}
+        position={identifierMenuPosition}
+        items={identifierMenuItems}
+        onClose={() => setIdentifierMenuPosition(null)}
+      />
     </Card>
   );
 }

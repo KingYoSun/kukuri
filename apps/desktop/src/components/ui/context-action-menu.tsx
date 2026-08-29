@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 import { createPortal } from 'react-dom';
 
 import { cn } from '@/lib/utils';
@@ -14,7 +23,62 @@ export type ContextActionMenuItem = {
 export type ContextActionMenuPosition = {
   x: number;
   y: number;
+  returnFocusTo?: HTMLElement | null;
 };
+
+const INTERACTIVE_DESCENDANT_SELECTOR =
+  'button, a, input, select, textarea, [role="button"], [role="link"], [role="menuitem"]';
+
+function isFromInteractiveDescendant(
+  target: EventTarget | null,
+  currentTarget: HTMLElement
+): boolean {
+  if (!(target instanceof Element) || target === currentTarget) {
+    return false;
+  }
+  const closestInteractiveElement = target.closest(INTERACTIVE_DESCENDANT_SELECTOR);
+  return closestInteractiveElement !== null && closestInteractiveElement !== currentTarget;
+}
+
+export function contextActionMenuPositionFromPointer(
+  event: ReactMouseEvent<HTMLElement>
+): ContextActionMenuPosition | null {
+  if (isFromInteractiveDescendant(event.target, event.currentTarget)) {
+    return null;
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  return {
+    x: event.clientX,
+    y: event.clientY,
+    returnFocusTo:
+      event.target instanceof HTMLElement && event.target.tabIndex >= 0
+        ? event.target
+        : event.currentTarget,
+  };
+}
+
+export function contextActionMenuPositionFromKeyboard(
+  event: ReactKeyboardEvent<HTMLElement>
+): ContextActionMenuPosition | null {
+  if (event.key !== 'ContextMenu' && !(event.key === 'F10' && event.shiftKey)) {
+    return null;
+  }
+  if (isFromInteractiveDescendant(event.target, event.currentTarget)) {
+    return null;
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  const rect = event.currentTarget.getBoundingClientRect();
+  return {
+    x: rect.left + Math.min(24, Math.max(rect.width / 2, 0)),
+    y: rect.top + Math.min(24, Math.max(rect.height, 0)),
+    returnFocusTo:
+      event.target instanceof HTMLElement && event.target.tabIndex >= 0
+        ? event.target
+        : event.currentTarget,
+  };
+}
 
 type ContextActionMenuProps = {
   open: boolean;
@@ -34,10 +98,22 @@ export function ContextActionMenu({
   onClose,
 }: ContextActionMenuProps) {
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [menuSize, setMenuSize] = useState({
     width: FALLBACK_MENU_WIDTH_PX,
     height: FALLBACK_MENU_HEIGHT_PX,
   });
+
+  const closeMenu = useCallback(
+    (restoreFocus: boolean) => {
+      const returnFocusTo = position?.returnFocusTo;
+      if (restoreFocus && returnFocusTo?.isConnected) {
+        returnFocusTo.focus();
+      }
+      onClose();
+    },
+    [onClose, position?.returnFocusTo]
+  );
 
   useEffect(() => {
     if (!open) {
@@ -48,25 +124,19 @@ export function ContextActionMenu({
       if (menuRef.current?.contains(event.target as Node)) {
         return;
       }
-      onClose();
+      closeMenu(false);
     };
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
+    const handleResize = () => closeMenu(true);
 
     window.addEventListener('pointerdown', handlePointerDown);
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('resize', onClose);
+    window.addEventListener('resize', handleResize);
 
     return () => {
       window.removeEventListener('pointerdown', handlePointerDown);
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('resize', onClose);
+      window.removeEventListener('resize', handleResize);
     };
-  }, [onClose, open]);
+  }, [closeMenu, open]);
 
   useEffect(() => {
     if (!open || !menuRef.current) {
@@ -77,8 +147,13 @@ export function ContextActionMenu({
       width: rect.width || FALLBACK_MENU_WIDTH_PX,
       height: rect.height || FALLBACK_MENU_HEIGHT_PX,
     });
-    menuRef.current.focus();
-  }, [items.length, open, position?.x, position?.y]);
+    const firstEnabledIndex = items.findIndex((item) => !item.disabled);
+    if (firstEnabledIndex >= 0) {
+      itemRefs.current[firstEnabledIndex]?.focus();
+    } else {
+      menuRef.current.focus();
+    }
+  }, [items, open, position?.x, position?.y]);
 
   const menuStyle = useMemo(() => {
     if (!position || typeof window === 'undefined') {
@@ -110,10 +185,40 @@ export function ContextActionMenu({
       className='context-action-menu panel'
       style={menuStyle}
       onContextMenu={(event) => event.preventDefault()}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' || event.key === 'Tab') {
+          event.preventDefault();
+          closeMenu(true);
+          return;
+        }
+        const enabledIndexes = items.flatMap((item, index) => (item.disabled ? [] : [index]));
+        if (enabledIndexes.length === 0) return;
+        const currentIndex = itemRefs.current.findIndex((item) => item === document.activeElement);
+        const currentEnabledPosition = enabledIndexes.indexOf(currentIndex);
+        let nextIndex: number | null = null;
+        if (event.key === 'ArrowDown') {
+          nextIndex = enabledIndexes[(currentEnabledPosition + 1) % enabledIndexes.length];
+        } else if (event.key === 'ArrowUp') {
+          nextIndex = enabledIndexes[
+            (currentEnabledPosition - 1 + enabledIndexes.length) % enabledIndexes.length
+          ];
+        } else if (event.key === 'Home') {
+          nextIndex = enabledIndexes[0];
+        } else if (event.key === 'End') {
+          nextIndex = enabledIndexes.at(-1) ?? null;
+        }
+        if (nextIndex !== null) {
+          event.preventDefault();
+          itemRefs.current[nextIndex]?.focus();
+        }
+      }}
     >
-      {items.map((item) => (
+      {items.map((item, index) => (
         <button
           key={item.id}
+          ref={(element) => {
+            itemRefs.current[index] = element;
+          }}
           type='button'
           role='menuitem'
           disabled={item.disabled}
@@ -122,8 +227,11 @@ export function ContextActionMenu({
             item.tone === 'danger' && 'context-action-menu-item-danger'
           )}
           onClick={async () => {
-            await item.onSelect();
-            onClose();
+            try {
+              await item.onSelect();
+            } finally {
+              closeMenu(true);
+            }
           }}
         >
           {item.label}

@@ -17,7 +17,7 @@ import {
   type TimelineViewId,
 } from '@/components/shell/TimelineViewIconTabs';
 import type { MentionCandidate } from '@/components/core/types';
-import { authorDisplayLabel, localizeAudienceLabel, shortPubkey } from '@/shell/presentation';
+import { authorDisplayLabel, localizeAudienceLabel } from '@/shell/presentation';
 import type { ColumnDraftTarget } from '@/shell/slices/columnDrafts';
 import {
   activateColumn,
@@ -172,7 +172,7 @@ export function DesktopShellColumnWorkspace({
       return authorDisplayLabel(column.entityId, author?.display_name, author?.name);
     }
     if (column.kind === 'thread') return `${titles.thread} · ${scopeDestinationLabel(column)}`;
-    if (column.entityId) return shortPubkey(column.entityId);
+    if (column.entityId) return titles[column.kind];
     return scopeDestinationLabel(column);
   };
   const renderFooter = (column: ColumnState, active: boolean) => {

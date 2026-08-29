@@ -119,7 +119,9 @@ describe('MetaverseRoomDiscovery', () => {
     });
 
     expect(screen.getByText('1 room in this topic')).toBeInTheDocument();
-    expect(screen.getByText(`Host: ${room.host_pubkey.slice(0, 10)}`)).toBeInTheDocument();
+    expect(screen.getByText('Host: Unknown author')).toBeInTheDocument();
+    expect(screen.queryByText(room.host_pubkey.slice(0, 10), { exact: false })).not.toBeInTheDocument();
+    expect(screen.queryByText(room.manifest_blob_hash!, { exact: false })).not.toBeInTheDocument();
     expect(screen.getByText('Joined')).toBeInTheDocument();
     expect(screen.getByText(room.title).closest('article')).toHaveClass('metaverse-room-card-active');
 

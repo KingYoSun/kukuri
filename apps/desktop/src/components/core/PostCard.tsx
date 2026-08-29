@@ -25,6 +25,8 @@ import {
 import { Button } from '@/components/ui/button';
 import {
   ContextActionMenu,
+  contextActionMenuPositionFromKeyboard,
+  contextActionMenuPositionFromPointer,
   type ContextActionMenuPosition,
 } from '@/components/ui/context-action-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -40,14 +42,17 @@ import { RelationshipBadge } from './RelationshipBadge';
 import { SmartReferenceText } from './SmartReferenceText';
 import { type PostCardView } from './types';
 
-function sourceAuthorLabel(view: PostCardView['post']['repost_of']): string | null {
+function sourceAuthorLabel(
+  view: PostCardView['post']['repost_of'],
+  unknownAuthorLabel: string
+): string | null {
   if (!view) {
     return null;
   }
   return (
     view.source_author_display_name?.trim() ||
     view.source_author_name?.trim() ||
-    `${view.source_author_pubkey.slice(0, 8)}…`
+    unknownAuthorLabel
   );
 }
 
@@ -149,6 +154,7 @@ export function PostCard({
     null
   );
   const [reactionMenuAsset, setReactionMenuAsset] = useState<CustomReactionAssetView | null>(null);
+  const [postMenuPosition, setPostMenuPosition] = useState<ContextActionMenuPosition | null>(null);
   const isUnavailableText = post.content_status === 'Missing' && post.content === '[blob pending]';
   const localState = post.local_state ?? null;
   const isWithdrawn = post.withdrawal != null;
@@ -270,6 +276,32 @@ export function PostCard({
       },
     ];
   }, [localAuthorPubkey, onBookmarkCustomReaction, reactionMenuAsset, t]);
+  const postMenuItems = useMemo(
+    () => [
+      {
+        id: 'copy-post-id',
+        label: t('actions.copyPostId'),
+        onSelect: async () => {
+          await copyTextToClipboard(post.object_id);
+        },
+      },
+      {
+        id: 'copy-envelope-id',
+        label: t('actions.copyEnvelopeId'),
+        onSelect: async () => {
+          await copyTextToClipboard(post.envelope_id);
+        },
+      },
+      {
+        id: 'copy-author-id',
+        label: t('actions.copyAuthorId'),
+        onSelect: async () => {
+          await copyTextToClipboard(primaryAuthor.pubkey);
+        },
+      },
+    ],
+    [post.envelope_id, post.object_id, primaryAuthor.pubkey, t]
+  );
 
   const renderReferencedCard = (
     source:
@@ -416,7 +448,7 @@ export function PostCard({
         ) : repostSource ? (
           renderReferencedCard(
             {
-              authorLabel: sourceAuthorLabel(repostSource),
+              authorLabel: sourceAuthorLabel(repostSource, t('fallbacks.unknownAuthor')),
               content: repostSource.content,
               topic: repostSource.source_topic_id,
               attachments: repostSource.attachments,
@@ -427,8 +459,6 @@ export function PostCard({
           )
         ) : null}
       </div>
-
-      <small className='post-copy-wrap'>{post.envelope_id}</small>
       {readOnly && publishedTopicId ? (
         <div className='topic-diagnostic topic-diagnostic-secondary'>
           <span>{t('feed.originTopic', { ns: 'profile' })}</span>
@@ -507,14 +537,37 @@ export function PostCard({
       ) : null}
 
       {readOnly ? (
-        <div className='post-link post-layout-safe'>{contentBlock}</div>
+        <div
+          className='post-link post-layout-safe'
+          role='group'
+          tabIndex={0}
+          data-testid='post-identifier-target'
+          onContextMenu={(event) =>
+            setPostMenuPosition(contextActionMenuPositionFromPointer(event))
+          }
+          onKeyDown={(event) => {
+            const position = contextActionMenuPositionFromKeyboard(event);
+            if (position) setPostMenuPosition(position);
+          }}
+        >
+          {contentBlock}
+        </div>
       ) : (
         <div
           className='post-link post-layout-safe'
           role='button'
           tabIndex={0}
+          data-testid='post-identifier-target'
+          onContextMenu={(event) =>
+            setPostMenuPosition(contextActionMenuPositionFromPointer(event))
+          }
           onClick={openPrimaryTarget}
           onKeyDown={(event) => {
+            const position = contextActionMenuPositionFromKeyboard(event);
+            if (position) {
+              setPostMenuPosition(position);
+              return;
+            }
             if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault();
               openPrimaryTarget();
@@ -596,12 +649,16 @@ export function PostCard({
                           if (!reaction.custom_asset) {
                             return;
                           }
-                          event.preventDefault();
                           setReactionMenuAsset(reaction.custom_asset);
-                          setReactionMenuPosition({
-                            x: event.clientX,
-                            y: event.clientY,
-                          });
+                          setReactionMenuPosition(contextActionMenuPositionFromPointer(event));
+                        }}
+                        onKeyDown={(event) => {
+                          if (!reaction.custom_asset) return;
+                          const position = contextActionMenuPositionFromKeyboard(event);
+                          if (position) {
+                            setReactionMenuAsset(reaction.custom_asset);
+                            setReactionMenuPosition(position);
+                          }
                         }}
                       >
                         {previewUrl ? (
@@ -772,6 +829,12 @@ export function PostCard({
               }
             : undefined
         }
+      />
+      <ContextActionMenu
+        open={postMenuPosition !== null}
+        position={postMenuPosition}
+        items={postMenuItems}
+        onClose={() => setPostMenuPosition(null)}
       />
       <ContextActionMenu
         open={reactionMenuAsset !== null}

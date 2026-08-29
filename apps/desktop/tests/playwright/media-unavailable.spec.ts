@@ -86,7 +86,8 @@ test('normal mode removes unavailable content and media after a null response', 
   });
   await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
 
-  await expect(page.getByText('browser-unavailable-envelope')).toBeVisible();
+  await expect(page.locator('[data-post-object-id="browser-unavailable"]')).toBeVisible();
+  await expect(page.getByText('browser-unavailable-envelope')).toHaveCount(0);
   await expect(page.getByText('image/png')).toHaveCount(0);
   await expect(page.getByTestId('text-skeleton-browser-unavailable')).toHaveCount(0);
   await expect(page.getByTestId('media-skeleton-browser-unavailable')).toHaveCount(0);

@@ -1,7 +1,14 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
-import { shortPubkey } from '@/shell/presentation';
+import {
+  ContextActionMenu,
+  contextActionMenuPositionFromKeyboard,
+  contextActionMenuPositionFromPointer,
+  type ContextActionMenuPosition,
+} from '@/components/ui/context-action-menu';
+import { copyTextToClipboard } from '@/lib/utils';
 
 import { AuthorAvatar } from './AuthorAvatar';
 import { type MentionAuthorView } from './types';
@@ -14,26 +21,57 @@ type MentionHoverCardProps = {
 };
 
 export function MentionHoverCard({ pubkey, label, author, children }: MentionHoverCardProps) {
+  const { t } = useTranslation('common');
   const displayLabel = author?.label?.trim() || label;
+  const [identifierMenuPosition, setIdentifierMenuPosition] =
+    useState<ContextActionMenuPosition | null>(null);
 
   return (
-    <HoverCard openDelay={180} closeDelay={120}>
-      <HoverCardTrigger asChild>{children}</HoverCardTrigger>
-      <HoverCardContent className='mention-hover-card' align='start'>
-        <div className='mention-hover-card-header'>
-          <AuthorAvatar label={displayLabel} picture={author?.picture ?? null} size='lg' />
-          <div className='mention-hover-card-identity'>
-            <strong className='mention-hover-card-label'>{displayLabel}</strong>
-            {author?.name?.trim() ? (
-              <span className='mention-hover-card-name'>{author.name}</span>
-            ) : null}
-            <span className='mention-hover-card-pubkey'>{shortPubkey(pubkey)}</span>
+    <>
+      <HoverCard openDelay={180} closeDelay={120}>
+        <HoverCardTrigger asChild>
+          <span
+            className='mention-context-target'
+            onContextMenu={(event) =>
+              setIdentifierMenuPosition(contextActionMenuPositionFromPointer(event))
+            }
+            onKeyDown={(event) => {
+              const position = contextActionMenuPositionFromKeyboard(event);
+              if (position) setIdentifierMenuPosition(position);
+            }}
+          >
+            {children}
+          </span>
+        </HoverCardTrigger>
+        <HoverCardContent className='mention-hover-card' align='start'>
+          <div className='mention-hover-card-header'>
+            <AuthorAvatar label={displayLabel} picture={author?.picture ?? null} size='lg' />
+            <div className='mention-hover-card-identity'>
+              <strong className='mention-hover-card-label'>{displayLabel}</strong>
+              {author?.name?.trim() ? (
+                <span className='mention-hover-card-name'>{author.name}</span>
+              ) : null}
+            </div>
           </div>
-        </div>
-        {author?.aboutPreview?.trim() ? (
-          <p className='mention-hover-card-about'>{author.aboutPreview}</p>
-        ) : null}
-      </HoverCardContent>
-    </HoverCard>
+          {author?.aboutPreview?.trim() ? (
+            <p className='mention-hover-card-about'>{author.aboutPreview}</p>
+          ) : null}
+        </HoverCardContent>
+      </HoverCard>
+      <ContextActionMenu
+        open={identifierMenuPosition !== null}
+        position={identifierMenuPosition}
+        items={[
+          {
+            id: 'copy-author-id',
+            label: t('actions.copyAuthorId'),
+            onSelect: async () => {
+              await copyTextToClipboard(pubkey);
+            },
+          },
+        ]}
+        onClose={() => setIdentifierMenuPosition(null)}
+      />
+    </>
   );
 }

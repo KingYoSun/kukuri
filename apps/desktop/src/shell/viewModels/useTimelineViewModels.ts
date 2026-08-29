@@ -24,7 +24,6 @@ import {
   localizeAudienceLabel,
   publishedTopicIdForPost,
   resolveProfilePictureSrc,
-  shortPubkey,
   strongestRelationshipLabel,
 } from '@/shell/presentation';
 import {
@@ -226,7 +225,7 @@ export function useTimelineViewModels({
               known.display_name?.trim() ||
               known.name?.trim() ||
               label ||
-              shortPubkey(pubkey),
+              authorDisplayLabel(pubkey),
             displayName: known.display_name ?? null,
             name: known.name ?? null,
             aboutPreview: known.about?.slice(0, 50) ?? null,

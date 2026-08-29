@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { shortPubkey } from '@/shell/presentation';
 
 import { AuthorAvatar } from './AuthorAvatar';
 import { ComposerDraftPreviewList } from './ComposerDraftPreviewList';
@@ -202,9 +201,6 @@ export function ComposerPanel({
                     <AuthorAvatar label={candidate.label} picture={candidate.picture ?? null} size='sm' />
                     <span className='composer-mention-option-text'>
                       <span className='composer-mention-option-label'>{candidate.label}</span>
-                      <span className='composer-mention-option-pubkey'>
-                        {shortPubkey(candidate.pubkey)}
-                      </span>
                     </span>
                   </button>
                 </MentionHoverCard>

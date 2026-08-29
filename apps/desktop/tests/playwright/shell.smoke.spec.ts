@@ -79,6 +79,51 @@ test('browser mock wide shell keeps global navigation in the fixed Control Cente
   await expect(page.getByRole('complementary', { name: 'Control Center' })).toBeVisible();
 });
 
+test('technical identifiers stay hidden across developer modes and remain copyable by context actions', async ({
+  context,
+  page,
+}) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.setViewportSize({ width: 1400, height: 980 });
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
+
+  const objectId = 'browser-seed-post';
+  const envelopeId = 'browser-seed-envelope';
+  const authorId = 'b'.repeat(64);
+  const post = page.locator(`[data-post-object-id="${objectId}"]`);
+  const identifierTarget = post.getByTestId('post-identifier-target');
+
+  async function expectIdentifiersHidden() {
+    await expect(post).toBeVisible();
+    await expect(page.getByText(objectId, { exact: true })).toHaveCount(0);
+    await expect(page.getByText(envelopeId, { exact: true })).toHaveCount(0);
+    await expect(page.getByText(authorId, { exact: true })).toHaveCount(0);
+  }
+
+  await expectIdentifiersHidden();
+
+  await page.evaluate((key) => window.localStorage.setItem(key, 'false'), DEVELOPER_MODE_STORAGE_KEY);
+  await page.reload();
+  await expectIdentifiersHidden();
+
+  await post.locator('.post-body').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Copy post ID' }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(objectId);
+
+  await page.evaluate((key) => window.localStorage.setItem(key, 'true'), DEVELOPER_MODE_STORAGE_KEY);
+  await page.reload();
+  await expectIdentifiersHidden();
+
+  await identifierTarget.focus();
+  await page.keyboard.press('Shift+F10');
+  await page.getByRole('menuitem', { name: 'Copy envelope ID' }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(envelopeId);
+
+  await page.keyboard.press('Shift+F10');
+  await page.keyboard.press('Escape');
+  await expect(identifierTarget).toBeFocused();
+});
+
 test('browser mock starts with the accessible product overview Columns without legacy workspace chrome', async ({
   page,
 }) => {
@@ -246,7 +291,7 @@ test('browser mock shell can switch topics, publish, open thread, open author, a
   await page.getByText('hello browser mock').click();
   const threadPane = activeColumn(page, 'Thread');
   await expect(threadPane).toBeVisible();
-  await threadPane.getByRole('button', { name: 'ffffffffffff' }).first().click();
+  await threadPane.getByRole('button', { name: 'Unknown author' }).first().click();
   await expect(activeColumn(page, 'Profile')).toBeVisible();
 
   const settingsDialog = await openSettings(page);
@@ -474,7 +519,7 @@ for (const mobileViewport of [
   await page.getByText('mobile paging thread').click();
   const thread = activeColumn(page, 'Thread');
   await expect(thread).toBeVisible();
-  await thread.getByRole('button', { name: 'ffffffffffff' }).first().click();
+  await thread.getByRole('button', { name: 'Unknown author' }).first().click();
   await expect(activeColumn(page, 'Profile')).toBeVisible();
 
   const canvas = page.locator('.shell-column-canvas');
@@ -849,7 +894,7 @@ test('browser mock narrow shell keeps nav, context, and settings flows reachable
   const threadColumn = activeColumn(page, 'Thread');
   await expect(threadColumn).toBeVisible();
 
-  await threadColumn.getByRole('button', { name: 'ffffffffffff' }).first().click();
+  await threadColumn.getByRole('button', { name: 'Unknown author' }).first().click();
   await expect(activeColumn(page, 'Profile')).toBeVisible();
 
   await page.goto('/');

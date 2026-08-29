@@ -300,23 +300,9 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.shell-phase1 .author-detail-break,
-.shell-phase1 .author-detail-monotext {
+.shell-phase1 .author-detail-break {
   overflow-wrap: anywhere;
   word-break: break-word;
-}
-
-.shell-phase1 .author-detail-monotext {
-  display: block;
-  inline-size: 100%;
-  max-inline-size: 100%;
-  margin: 0;
-  font-size: var(--text-caption);
-  line-height: 1.45;
-  color: var(--muted-foreground-soft);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .shell-phase1 .shell-icon-button {

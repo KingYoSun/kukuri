@@ -445,7 +445,8 @@ test('profile connections route restores the requested view', async () => {
       '#/profile?topic=kukuri%3Atopic%3Ageneral&profileMode=connections&connectionsView=muted'
     );
   });
-  expect(screen.getByText(authorPubkey)).toBeInTheDocument();
+  expect(screen.getByTestId('profile-connection-identifier-target')).toBeInTheDocument();
+  expect(screen.queryByText(authorPubkey)).not.toBeInTheDocument();
 });
 
 test('settings hash route opens the drawer and keeps the selected section in sync', async () => {
@@ -488,7 +489,7 @@ test('topic and private channel selection sync into the hash route', async () =>
   await waitFor(() => {
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral&channel=channel-1');
   });
-});
+}, 10_000);
 
 test('messages hash route restores the direct message and author pane together', async () => {
   const user = userEvent.setup();

@@ -42,6 +42,7 @@ test('typing @ with a query shows matching mention candidates', async () => {
   expect(screen.getByRole('listbox', { name: 'Mention suggestions' })).toBeInTheDocument();
   expect(screen.getByRole('option', { name: /Alice/ })).toBeInTheDocument();
   expect(screen.queryByRole('option', { name: /Bob/ })).not.toBeInTheDocument();
+  expect(screen.queryByText(ALICE.slice(0, 12))).not.toBeInTheDocument();
 });
 
 test('selecting a candidate with the keyboard inserts the mention token', async () => {

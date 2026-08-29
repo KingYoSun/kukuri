@@ -110,7 +110,10 @@ export function DomeConnectionPanel({
       proposal.proposal.proposer.instance_id === roomId
         ? proposal.proposal.receiver
         : proposal.proposal.proposer;
-    return rooms.find((candidate) => candidate.room_id === endpoint.instance_id)?.title ?? endpoint.instance_id;
+    return (
+      rooms.find((candidate) => candidate.room_id === endpoint.instance_id)?.title ??
+      t('common:fallbacks.unknown')
+    );
   }
 
   return (
@@ -145,7 +148,7 @@ export function DomeConnectionPanel({
                           connection.record.agreement.proposer.instance_id,
                           connection.record.agreement.receiver.instance_id,
                         ].includes(candidate.room_id) && candidate.room_id !== room.room_id
-                      )?.title ?? connection.record.agreement.connection_id,
+                      )?.title ?? t('common:fallbacks.unknown'),
                   })}</span>
                   {isOwner ? (
                     <Button

@@ -55,11 +55,6 @@
   white-space: nowrap;
 }
 
-.composer-mention-option-pubkey {
-  font-size: var(--text-caption);
-  color: var(--muted-foreground-soft);
-}
-
 .ui-hover-card-content.mention-hover-card {
   z-index: 82;
   width: 18rem;
@@ -85,8 +80,7 @@
   font-weight: 600;
 }
 
-.mention-hover-card-name,
-.mention-hover-card-pubkey {
+.mention-hover-card-name {
   font-size: var(--text-caption);
   color: var(--muted-foreground-soft);
   overflow: hidden;

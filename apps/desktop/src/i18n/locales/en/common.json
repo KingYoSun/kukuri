@@ -9,6 +9,9 @@
     "clear": "Clear",
     "copyLink": "Copy link",
     "copyHash": "Copy hash",
+    "copyPostId": "Copy post ID",
+    "copyEnvelopeId": "Copy envelope ID",
+    "copyAuthorId": "Copy author ID",
     "consents": "Consents",
     "end": "End",
     "follow": "Follow",
@@ -135,6 +138,7 @@
     "loadingMore": "Loading more…",
     "none": "none",
     "selectAuthor": "Select an author to inspect profile and relationship.",
+    "unknownAuthor": "Unknown author",
     "unknown": "unknown"
   },
   "labels": {

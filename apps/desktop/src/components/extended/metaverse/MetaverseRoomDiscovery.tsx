@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { ChevronDown, Cuboid, Play } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -10,9 +10,16 @@ import { Label } from '@/components/ui/label';
 import { Notice } from '@/components/ui/notice';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  ContextActionMenu,
+  contextActionMenuPositionFromKeyboard,
+  contextActionMenuPositionFromPointer,
+  type ContextActionMenuPosition,
+} from '@/components/ui/context-action-menu';
 import type { SupportedLocale } from '@/i18n';
 import { formatLocalizedTime } from '@/i18n/format';
 import type { AuthorSocialView, GameRoomView, Profile, SpatialContextV1 } from '@/lib/api';
+import { copyTextToClipboard } from '@/lib/utils';
 import { domeHasActiveHost } from './DomeEntryModel';
 
 export type CreateMetaverseRoomInput = {
@@ -66,12 +73,41 @@ export function MetaverseRoomDiscovery({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [maxPeers, setMaxPeers] = useState('8');
-  const { t } = useTranslation('metaverse', { lng: locale });
+  const { t } = useTranslation(['metaverse', 'common'], { lng: locale });
   const [validationError, setValidationError] = useState(false);
   const [movingRoomId, setMovingRoomId] = useState<string | null>(null);
   const [targetTopic, setTargetTopic] = useState('');
   const [targetChannel, setTargetChannel] = useState('');
   const [entrySelection, setEntrySelection] = useState(configuredEntryInstanceId ?? '');
+  const [identifierMenuPosition, setIdentifierMenuPosition] =
+    useState<ContextActionMenuPosition | null>(null);
+  const [identifierRoom, setIdentifierRoom] = useState<GameRoomView | null>(null);
+  const identifierMenuItems = useMemo(
+    () =>
+      identifierRoom
+        ? [
+            {
+              id: 'copy-author-id',
+              label: t('common:actions.copyAuthorId'),
+              onSelect: async () => {
+                await copyTextToClipboard(identifierRoom.host_pubkey);
+              },
+            },
+            ...(identifierRoom.manifest_blob_hash
+              ? [
+                  {
+                    id: 'copy-hash',
+                    label: t('common:actions.copyHash'),
+                    onSelect: async () => {
+                      await copyTextToClipboard(identifierRoom.manifest_blob_hash!);
+                    },
+                  },
+                ]
+              : []),
+          ]
+        : [],
+    [identifierRoom, t]
+  );
 
   useEffect(() => {
     setEntrySelection(configuredEntryInstanceId ?? '');
@@ -85,7 +121,7 @@ export function MetaverseRoomDiscovery({
 
   function hostLabel(room: GameRoomView) {
     const host = hostAuthor(room);
-    return host?.display_name?.trim() || host?.name?.trim() || room.host_pubkey.slice(0, 10);
+    return host?.display_name?.trim() || host?.name?.trim() || t('common:fallbacks.unknownAuthor');
   }
 
   function hostPicture(room: GameRoomView) {
@@ -218,7 +254,21 @@ export function MetaverseRoomDiscovery({
       <ul className='metaverse-room-grid'>
         {rooms.map((room) => (
           <li key={room.room_id}>
-            <article className={`metaverse-room-card${selectedRoomId === room.room_id ? ' metaverse-room-card-active' : ''}`}>
+            <article
+              className={`metaverse-room-card${selectedRoomId === room.room_id ? ' metaverse-room-card-active' : ''}`}
+              tabIndex={0}
+              onContextMenu={(event) => {
+                setIdentifierRoom(room);
+                setIdentifierMenuPosition(contextActionMenuPositionFromPointer(event));
+              }}
+              onKeyDown={(event) => {
+                const position = contextActionMenuPositionFromKeyboard(event);
+                if (position) {
+                  setIdentifierRoom(room);
+                  setIdentifierMenuPosition(position);
+                }
+              }}
+            >
               <div className='post-meta'>
                 <span>{room.title}</span>
                 <span>{room.status}</span>
@@ -234,7 +284,6 @@ export function MetaverseRoomDiscovery({
                 <span>{t(joinedRoomIds.has(room.room_id) ? 'room.joined' : 'room.notJoined')}</span>
               </div>
               <div className='topic-diagnostic topic-diagnostic-secondary'>
-                <span>{t('room.manifest', { value: room.manifest_blob_hash ?? t('room.pending') })}</span>
                 <span>{t('room.world', { version: room.metaverse?.world_version ?? 1 })}</span>
               </div>
               <Button
@@ -288,6 +337,15 @@ export function MetaverseRoomDiscovery({
           </li>
         ))}
       </ul>
+      <ContextActionMenu
+        open={identifierMenuPosition !== null && identifierMenuItems.length > 0}
+        position={identifierMenuPosition}
+        items={identifierMenuItems}
+        onClose={() => {
+          setIdentifierMenuPosition(null);
+          setIdentifierRoom(null);
+        }}
+      />
     </Card>
   );
 }

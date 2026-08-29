@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 
@@ -6,7 +6,7 @@ import { STORY_AUTHOR_DETAIL_VIEW } from '@/components/storyFixtures';
 
 import { AuthorDetailCard } from './AuthorDetailCard';
 
-test('author detail marks long unbroken values as wrappable content', () => {
+test('author detail hides identifiers while keeping profile content usable', () => {
   const longPubkey = 'b'.repeat(96);
   const longViaPubkey = 'c'.repeat(96);
   const longAbout = `Maintains ${'connectivity'.repeat(12)}`;
@@ -38,8 +38,8 @@ test('author detail marks long unbroken values as wrappable content', () => {
   expect(screen.getByText('bob')).toHaveClass('author-detail-break');
   expect(screen.getByText(longAbout)).toHaveClass('author-detail-break');
   expect(screen.getByText(longAbout).parentElement).toHaveClass('author-detail-copy-stack');
-  expect(screen.getByText(longPubkey)).toHaveClass('author-detail-monotext');
-  expect(screen.getByText(longViaPubkey)).toHaveClass('author-detail-break');
+  expect(screen.queryByText(longPubkey)).not.toBeInTheDocument();
+  expect(screen.queryByText(longViaPubkey)).not.toBeInTheDocument();
   expect(screen.queryByText('following: yes')).not.toBeInTheDocument();
   expect(screen.queryByText('followed by: yes')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Unfollow' })).toBeInTheDocument();
@@ -48,6 +48,35 @@ test('author detail marks long unbroken values as wrappable content', () => {
     screen.getByText('bob')
   );
   expect(screen.getByText('mutual').closest('.author-detail-actions')).toBeNull();
+});
+
+test('author detail copies the hidden author ID from pointer and keyboard context menus', async () => {
+  const user = userEvent.setup();
+  const clipboardWriteText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: clipboardWriteText },
+  });
+  const authorId = STORY_AUTHOR_DETAIL_VIEW.author!.author_pubkey;
+
+  render(
+    <AuthorDetailCard
+      view={STORY_AUTHOR_DETAIL_VIEW}
+      localAuthorPubkey={'f'.repeat(64)}
+      onToggleRelationship={vi.fn()}
+      onToggleMute={vi.fn()}
+    />
+  );
+
+  const target = screen.getByTestId('author-identifier-target');
+  fireEvent.contextMenu(target, { clientX: 20, clientY: 20 });
+  await user.click(screen.getByRole('menuitem', { name: 'Copy author ID' }));
+  expect(clipboardWriteText).toHaveBeenLastCalledWith(authorId);
+
+  target.focus();
+  fireEvent.keyDown(target, { key: 'F10', shiftKey: true });
+  await user.click(screen.getByRole('menuitem', { name: 'Copy author ID' }));
+  expect(clipboardWriteText).toHaveBeenCalledTimes(2);
 });
 
 test('author report does not fetch a manifest or create a candidate without provenance', async () => {

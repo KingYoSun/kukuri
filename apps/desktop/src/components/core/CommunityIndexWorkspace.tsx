@@ -21,6 +21,12 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
+import {
+  ContextActionMenu,
+  contextActionMenuPositionFromKeyboard,
+  contextActionMenuPositionFromPointer,
+  type ContextActionMenuPosition,
+} from '@/components/ui/context-action-menu';
 import { ReportRoutingDialog } from './ReportRoutingDialog';
 
 type IndexOperation = 'search' | 'discovery' | 'recommendations';
@@ -161,6 +167,9 @@ export function CommunityIndexWorkspace({
   const [reportManifest, setReportManifest] = useState<CommunityNodeManifest | null>(null);
   const [reportResolving, setReportResolving] = useState(false);
   const [reportResolveError, setReportResolveError] = useState<string | null>(null);
+  const [identifierMenuPosition, setIdentifierMenuPosition] =
+    useState<ContextActionMenuPosition | null>(null);
+  const [identifierEntry, setIdentifierEntry] = useState<IndexEntryView | null>(null);
   const requestSequence = useRef(0);
 
   const effectiveOperation: IndexOperation = mode === 'topic' ? 'search' : operation;
@@ -247,6 +256,28 @@ export function CommunityIndexWorkspace({
       reportManifest ? { [sourceNodeBaseUrl]: reportManifest } : {}
     );
   }, [activeReportIdentity, activeReportSelection, reportManifest]);
+  const identifierMenuItems = useMemo(
+    () =>
+      identifierEntry
+        ? [
+            {
+              id: 'copy-author-id',
+              label: t('common:actions.copyAuthorId'),
+              onSelect: async () => {
+                await copyTextToClipboard(identifierEntry.author_pubkey);
+              },
+            },
+            {
+              id: 'copy-post-id',
+              label: t('common:actions.copyPostId'),
+              onSelect: async () => {
+                await copyTextToClipboard(identifierEntry.object_id);
+              },
+            },
+          ]
+        : [],
+    [identifierEntry, t]
+  );
 
   async function runQuery(event?: FormEvent) {
     event?.preventDefault();
@@ -379,7 +410,21 @@ export function CommunityIndexWorkspace({
         <ul className='space-y-3' aria-label={t('shell:communityIndex.results')}>
           {visibleResult.entries.map((entry) => (
             <li key={`${entry.scope_kind}:${entry.scope_id}:${entry.object_id}`}>
-              <article className='rounded-[18px] border border-[var(--border-subtle)] bg-[var(--surface-panel-soft)] p-4'>
+              <article
+                className='rounded-[18px] border border-[var(--border-subtle)] bg-[var(--surface-panel-soft)] p-4'
+                tabIndex={0}
+                onContextMenu={(event) => {
+                  setIdentifierEntry(entry);
+                  setIdentifierMenuPosition(contextActionMenuPositionFromPointer(event));
+                }}
+                onKeyDown={(event) => {
+                  const position = contextActionMenuPositionFromKeyboard(event);
+                  if (position) {
+                    setIdentifierEntry(entry);
+                    setIdentifierMenuPosition(position);
+                  }
+                }}
+              >
                 <div className='flex flex-wrap items-center gap-2 text-xs text-[var(--muted-foreground)]'>
                   <Badge tone='neutral'>{entry.scope_kind}</Badge>
                   <span>{entry.scope_id}</span>
@@ -389,8 +434,7 @@ export function CommunityIndexWorkspace({
                 <p className='mt-2 text-xs text-[var(--muted-foreground)]'>
                   {t('shell:communityIndex.previewNotice')}
                 </p>
-                <div className='mt-3 flex flex-wrap items-center justify-between gap-2 text-xs'>
-                  <span className='break-all font-mono'>{entry.author_pubkey} · {entry.object_id}</span>
+                <div className='mt-3 flex flex-wrap items-center justify-end gap-2 text-xs'>
                   <Button
                     variant='secondary'
                     type='button'
@@ -405,6 +449,16 @@ export function CommunityIndexWorkspace({
           ))}
         </ul>
       ) : null}
+
+      <ContextActionMenu
+        open={identifierMenuPosition !== null && identifierMenuItems.length > 0}
+        position={identifierMenuPosition}
+        items={identifierMenuItems}
+        onClose={() => {
+          setIdentifierMenuPosition(null);
+          setIdentifierEntry(null);
+        }}
+      />
 
       {activeReportSelection && activeReportIdentity ? (
         <ReportRoutingDialog
