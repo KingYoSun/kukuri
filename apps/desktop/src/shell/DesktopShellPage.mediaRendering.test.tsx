@@ -1,10 +1,11 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import { App } from '@/App';
 import {
+  createDeferred,
   getDetailPane,
   buildImagePost,
   buildVideoPost,
@@ -12,6 +13,7 @@ import {
   setViewportWidth,
 } from './DesktopShellPage.testHelpers';
 import type { BlobViewStatus } from '@/lib/api';
+import { DEVELOPER_MODE_STORAGE_KEY } from '@/lib/developerMode';
 
 beforeEach(() => {
   setViewportWidth(1024);
@@ -22,7 +24,73 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-test('timeline image post shows media skeleton when attachment is missing', async () => {
+test('timeline image stops loading and hides unavailable media after a null response in normal mode', async () => {
+  window.localStorage.setItem(DEVELOPER_MODE_STORAGE_KEY, 'false');
+  const payload = createDeferred<null>();
+  const api = createDesktopMockApi({
+    seedPosts: {
+      'kukuri:topic:general': [
+        buildImagePost({ content: 'available caption', content_status: 'Available' }),
+      ],
+    },
+  });
+  api.getBlobMediaPayload = async () => payload.promise;
+
+  render(<App api={api} />);
+
+  expect(await screen.findByTestId('media-skeleton-image-post')).toBeInTheDocument();
+  act(() => payload.resolve(null));
+
+  await waitFor(() => {
+    expect(screen.queryByTestId('media-skeleton-image-post')).not.toBeInTheDocument();
+  });
+  expect(screen.queryByText('image/png')).not.toBeInTheDocument();
+  expect(screen.queryByText('Media unavailable.')).not.toBeInTheDocument();
+});
+
+test('timeline image stops loading and hides unavailable media after a rejected response in normal mode', async () => {
+  window.localStorage.setItem(DEVELOPER_MODE_STORAGE_KEY, 'false');
+  const payload = createDeferred<null>();
+  const api = createDesktopMockApi({
+    seedPosts: {
+      'kukuri:topic:general': [
+        buildImagePost({ content: 'available caption', content_status: 'Available' }),
+      ],
+    },
+  });
+  api.getBlobMediaPayload = async () => payload.promise;
+
+  render(<App api={api} />);
+
+  expect(await screen.findByTestId('media-skeleton-image-post')).toBeInTheDocument();
+  act(() => payload.reject(new Error('blob unavailable')));
+
+  await waitFor(() => {
+    expect(screen.queryByTestId('media-skeleton-image-post')).not.toBeInTheDocument();
+  });
+  expect(screen.queryByText('image/png')).not.toBeInTheDocument();
+  expect(screen.queryByText('blob unavailable')).not.toBeInTheDocument();
+});
+
+test('missing text body does not occupy normal UI', async () => {
+  window.localStorage.setItem(DEVELOPER_MODE_STORAGE_KEY, 'false');
+  render(
+    <App
+      api={createDesktopMockApi({
+        seedPosts: {
+          'kukuri:topic:general': [buildImagePost({ attachments: [] })],
+        },
+      })}
+    />
+  );
+
+  expect(await screen.findByText('envelope-image-post')).toBeInTheDocument();
+  expect(screen.queryByTestId('text-skeleton-image-post')).not.toBeInTheDocument();
+  expect(screen.queryByText('[blob pending]')).not.toBeInTheDocument();
+  expect(screen.queryByText('Content unavailable.')).not.toBeInTheDocument();
+});
+
+test('developer mode shows concise diagnostics after body and media become unavailable', async () => {
   const api = createDesktopMockApi({
     seedPosts: {
       'kukuri:topic:general': [buildImagePost()],
@@ -32,11 +100,26 @@ test('timeline image post shows media skeleton when attachment is missing', asyn
 
   render(<App api={api} />);
 
-  await waitFor(() => {
-    expect(screen.getByTestId('media-skeleton-image-post')).toBeInTheDocument();
+  expect(await screen.findByText('Content unavailable.')).toBeInTheDocument();
+  expect(await screen.findByText('Media unavailable.')).toBeInTheDocument();
+  expect(screen.queryByTestId('text-skeleton-image-post')).not.toBeInTheDocument();
+  expect(screen.queryByTestId('media-skeleton-image-post')).not.toBeInTheDocument();
+  expect(screen.queryByText('[blob pending]')).not.toBeInTheDocument();
+});
+
+test('developer mode replaces a missing image skeleton with a diagnostic', async () => {
+  const api = createDesktopMockApi({
+    seedPosts: {
+      'kukuri:topic:general': [buildImagePost()],
+    },
   });
-  expect(screen.getByTestId('media-skeleton-image-post')).toBeInTheDocument();
-  expect(screen.getByText('image/png')).toBeInTheDocument();
+  api.getBlobMediaPayload = async () => null;
+
+  render(<App api={api} />);
+
+  expect(await screen.findByText('Media unavailable.')).toBeInTheDocument();
+  expect(screen.queryByTestId('media-skeleton-image-post')).not.toBeInTheDocument();
+  expect(screen.queryByText('image/png')).not.toBeInTheDocument();
 });
 
 test('timeline image post switches to ready state when attachment becomes available', async () => {
@@ -82,8 +165,45 @@ test('timeline image post switches to ready state when attachment becomes availa
   expect(screen.queryByTestId('media-skeleton-image-post')).not.toBeInTheDocument();
 });
 
-test('timeline image post renders actual preview when object-url payload is available', async () => {
+test('timeline image recovers when an existing refresh retries a previously unavailable hash', async () => {
+  window.localStorage.setItem(DEVELOPER_MODE_STORAGE_KEY, 'false');
   installObjectUrlMocks();
+  const missingPost = buildImagePost({ content: 'caption', content_status: 'Available' });
+  const unavailableApi = createDesktopMockApi({
+    seedPosts: { 'kukuri:topic:general': [missingPost] },
+  });
+  unavailableApi.getBlobMediaPayload = async () => null;
+  const recoveredApi = createDesktopMockApi({
+    seedPosts: {
+      'kukuri:topic:general': [
+        buildImagePost({
+          content: 'caption',
+          content_status: 'Available',
+          attachments: [{ ...missingPost.attachments[0], status: 'Available' }],
+        }),
+      ],
+    },
+  });
+  recoveredApi.getBlobMediaPayload = async (_hash, mime) => ({
+    bytes_base64: 'ZmFrZS1pbWFnZQ==',
+    mime,
+  });
+
+  const { rerender } = render(<App api={unavailableApi} />);
+  await waitFor(() => {
+    expect(screen.queryByTestId('media-skeleton-image-post')).not.toBeInTheDocument();
+  });
+
+  rerender(<App api={recoveredApi} />);
+
+  expect(await screen.findByTestId('media-preview-image-post')).toHaveAttribute(
+    'src',
+    expect.stringContaining('blob:mock-')
+  );
+});
+
+test('timeline image post renders actual preview when object-url payload is available', async () => {
+  const { revokeObjectUrl } = installObjectUrlMocks();
   const api = createDesktopMockApi({
     seedPosts: {
       'kukuri:topic:general': [
@@ -108,14 +228,19 @@ test('timeline image post renders actual preview when object-url payload is avai
     mime: 'image/png',
   });
 
-  render(<App api={api} />);
+  const { unmount } = render(<App api={api} />);
 
   const preview = await screen.findByTestId('media-preview-image-post');
   expect(preview).toBeInTheDocument();
   expect(preview.getAttribute('src')).toContain('blob:mock-');
+  expect(revokeObjectUrl).not.toHaveBeenCalled();
+
+  unmount();
+  expect(revokeObjectUrl).toHaveBeenCalledOnce();
+  expect(revokeObjectUrl).toHaveBeenCalledWith(preview.getAttribute('src'));
 });
 
-test('thread pane reuses the same image placeholder renderer', async () => {
+test('thread pane reuses the same unavailable media renderer', async () => {
   const user = userEvent.setup();
   const api = createDesktopMockApi({
     seedPosts: {
@@ -149,31 +274,27 @@ test('thread pane reuses the same image placeholder renderer', async () => {
   await waitFor(() => expect(getDetailPane('Thread')).toBeInTheDocument());
   const threadPanel = getDetailPane('Thread');
 
-  await waitFor(() => {
-    expect(within(threadPanel).getByTestId('media-skeleton-image-post')).toBeInTheDocument();
-  });
-  expect(within(threadPanel).getByTestId('media-skeleton-image-post')).toBeInTheDocument();
+  expect(await within(threadPanel).findByText('Media unavailable.')).toBeInTheDocument();
+  expect(within(threadPanel).queryByTestId('media-skeleton-image-post')).not.toBeInTheDocument();
 });
 
-test('text body pending uses text skeleton without hiding image metadata', async () => {
+test('developer mode reports an unavailable text body without rendering its placeholder', async () => {
   render(
     <App
       api={createDesktopMockApi({
         seedPosts: {
-          'kukuri:topic:general': [buildImagePost()],
+          'kukuri:topic:general': [buildImagePost({ attachments: [] })],
         },
       })}
     />
   );
 
-  await waitFor(() => {
-    expect(screen.getByTestId('text-skeleton-image-post')).toBeInTheDocument();
-  });
-  expect(screen.getByText('image/png')).toBeInTheDocument();
-  expect(screen.getByText('2.0 KB')).toBeInTheDocument();
+  expect(await screen.findByText('Content unavailable.')).toBeInTheDocument();
+  expect(screen.queryByTestId('text-skeleton-image-post')).not.toBeInTheDocument();
+  expect(screen.queryByText('[blob pending]')).not.toBeInTheDocument();
 });
 
-test('timeline video post shows poster skeleton when poster is missing', async () => {
+test('developer mode replaces an unavailable video skeleton with a diagnostic', async () => {
   const api = createDesktopMockApi({
     seedPosts: {
       'kukuri:topic:general': [buildVideoPost()],
@@ -183,11 +304,9 @@ test('timeline video post shows poster skeleton when poster is missing', async (
 
   render(<App api={api} />);
 
-  await waitFor(() => {
-    expect(screen.getByTestId('media-skeleton-video-post')).toBeInTheDocument();
-  });
-  expect(screen.getByTestId('media-skeleton-video-post')).toBeInTheDocument();
-  expect(screen.getByText('video/mp4')).toBeInTheDocument();
+  expect(await screen.findByText('Media unavailable.')).toBeInTheDocument();
+  expect(screen.queryByTestId('media-skeleton-video-post')).not.toBeInTheDocument();
+  expect(screen.queryByText('video/mp4')).not.toBeInTheDocument();
 });
 
 test('poster-only video card renders poster preview without video element', async () => {

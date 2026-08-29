@@ -184,27 +184,6 @@
   font-size: var(--text-caption);
 }
 
-.text-skeleton-group {
-  display: grid;
-  gap: var(--space-xs);
-}
-
-.text-skeleton {
-  display: block;
-  height: 0.95rem;
-  border-radius: var(--radius-pill);
-  background: var(--surface-skeleton);
-  animation: skeleton-pulse 1.8s ease-in-out infinite;
-}
-
-.text-skeleton-line {
-  width: 92%;
-}
-
-.text-skeleton-line-short {
-  width: 58%;
-}
-
 .post-actions {
   display: flex;
   justify-content: flex-end;

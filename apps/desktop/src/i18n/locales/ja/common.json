@@ -97,6 +97,7 @@
     "unsupportedAttachmentType": "未対応の添付タイプです: {{name}}"
   },
   "feed": {
+    "contentUnavailable": "本文を取得できません。",
     "localFailed": "投稿に失敗しました",
     "localPosting": "投稿中…",
     "localSyncing": "同期中…",
@@ -155,6 +156,7 @@
     "viewers": "視聴者"
   },
   "media": {
+    "unavailable": "メディアを取得できません。",
     "closeDialog": "画像ビューアーを閉じる",
     "imageAlt": "画像添付",
     "reportVideo": "動画添付を通報",

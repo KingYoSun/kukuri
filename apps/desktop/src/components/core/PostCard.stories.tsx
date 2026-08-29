@@ -137,6 +137,56 @@ export const ImageReady: Story = {
   },
 };
 
+export const UnavailableContentAndMedia: Story = {
+  args: {
+    view: createView({
+      post: {
+        ...basePost,
+        content: '[blob pending]',
+        content_status: 'Missing',
+      },
+      media: {
+        objectId: 'image-post',
+        kind: 'image',
+        extraAttachmentCount: 0,
+        state: 'unavailable',
+        metaMime: 'image/png',
+        metaBytesLabel: '2.0 KB',
+        imagePreviewSrc: null,
+        videoPosterPreviewSrc: null,
+        videoPlaybackSrc: null,
+        videoUnsupportedOnClient: false,
+      },
+      showUnavailableDiagnostics: false,
+    }),
+  },
+};
+
+export const DeveloperUnavailableDiagnostics: Story = {
+  args: {
+    view: createView({
+      post: {
+        ...basePost,
+        content: '[blob pending]',
+        content_status: 'Missing',
+      },
+      media: {
+        objectId: 'image-post',
+        kind: 'image',
+        extraAttachmentCount: 0,
+        state: 'unavailable',
+        metaMime: 'image/png',
+        metaBytesLabel: '2.0 KB',
+        imagePreviewSrc: null,
+        videoPosterPreviewSrc: null,
+        videoPlaybackSrc: null,
+        videoUnsupportedOnClient: false,
+      },
+      showUnavailableDiagnostics: true,
+    }),
+  },
+};
+
 export const VideoPosterOnly: Story = {
   args: {
     view: createView({

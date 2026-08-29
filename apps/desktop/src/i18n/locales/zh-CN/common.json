@@ -97,6 +97,7 @@
     "unsupportedAttachmentType": "不支持的附件类型: {{name}}"
   },
   "feed": {
+    "contentUnavailable": "无法获取正文。",
     "localFailed": "发布失败",
     "localPosting": "发布中…",
     "localSyncing": "同步中…",
@@ -155,6 +156,7 @@
     "viewers": "观看者"
   },
   "media": {
+    "unavailable": "无法获取媒体。",
     "closeDialog": "关闭图片查看器",
     "imageAlt": "图片附件",
     "reportVideo": "举报视频附件",
