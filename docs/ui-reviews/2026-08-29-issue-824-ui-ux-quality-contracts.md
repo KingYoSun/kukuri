@@ -3,7 +3,7 @@
 - Status: current
 - Supersedes: None
 - Superseded by: None
-- PR: Issue #824の実装PR（作成後にlinkへ更新）
+- PR: [#829](https://github.com/KingYoSun/kukuri/pull/829)
 - Preview: [dark theme](assets/issue-824/tokens-dark.png) / [light theme](assets/issue-824/tokens-light.png)
 - Surface / user / purpose: Storybook FoundationsとUI開発flow / contributor・reviewer / runtime tokenと設計契約の差分を実描画と自動検証で検出する
 - Summary: `DESIGN.md`を製品固有のUI/UX契約に再構成し、実装配置をarchitecture document、変更分類と証跡要件をADR 0014へ分離した。Storybook Foundationsをruntime tokenの確認面へ揃え、CSS importとtoken contractをVitestで検証する。
