@@ -98,6 +98,53 @@ fn signed_input(
 }
 
 #[test]
+fn keepalive_preserves_participant_and_timeout_evicts_all_session_state() {
+    let (owner, lease, instance, preset) = fixture();
+    let mut runtime = DomeSessionRuntime::start_with_session_id(
+        lease,
+        owner,
+        &instance,
+        &preset,
+        "session-1",
+        1_000,
+    )
+    .unwrap();
+    let participant = KukuriKeys::generate();
+    runtime
+        .apply_signed_input_at(
+            &signed_input(
+                &participant,
+                1,
+                DomeSessionInputKindV1::Join {
+                    avatar_collider: None,
+                },
+            ),
+            1_001,
+        )
+        .unwrap();
+    runtime
+        .apply_signed_input_at(
+            &signed_input(&participant, 2, DomeSessionInputKindV1::KeepAlive),
+            20_000,
+        )
+        .unwrap();
+
+    runtime.advance_to(50_000).unwrap();
+    assert_eq!(runtime.participant_count(), 1);
+    runtime.advance_to(50_001).unwrap();
+    assert_eq!(runtime.participant_count(), 0);
+    assert!(
+        runtime
+            .signed_snapshot(50_001)
+            .unwrap()
+            .snapshot
+            .bodies
+            .iter()
+            .all(|body| body.entity_id != format!("avatar:{}", participant.public_key().as_str()))
+    );
+}
+
+#[test]
 fn join_uses_default_spawn_then_deterministically_evacuates_from_overlap() {
     let (owner, lease, instance, mut preset) = fixture();
     preset.dome.customization.persistent_props = vec![MetaversePersistentPropV1 {
@@ -625,6 +672,27 @@ fn joined_participant_wakes_physics_and_stale_input_is_rejected() {
     assert!(runtime.apply_signed_input(&join).is_err());
     runtime.advance_to(1_100).unwrap();
     assert!(runtime.signed_snapshot(1_200).unwrap().snapshot.sequence > 0);
+}
+
+#[test]
+fn heartbeat_sequence_is_monotonic_even_when_the_clock_does_not_advance() {
+    let (owner, lease, instance, preset) = fixture();
+    let runtime = DomeSessionRuntime::start_with_session_id(
+        lease,
+        owner,
+        &instance,
+        &preset,
+        "session-1",
+        1_000,
+    )
+    .unwrap();
+
+    let first = runtime.signed_heartbeat(1_000).unwrap();
+    let second = runtime.signed_heartbeat(1_000).unwrap();
+
+    assert_eq!(first.heartbeat.sequence, 1);
+    assert_eq!(second.heartbeat.sequence, 2);
+    assert_eq!(second.heartbeat.sent_at, first.heartbeat.sent_at);
 }
 
 #[test]

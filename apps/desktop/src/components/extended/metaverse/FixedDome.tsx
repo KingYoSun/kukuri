@@ -70,6 +70,9 @@ function directionTransform(direction: DomeDirection): {
 }
 
 function boundaryColor(state: DomeBoundaryStateV1): number {
+  if (state === 'offline') return 0xd69e2e;
+  if (state === 'draining') return 0xcf6f2e;
+  if (state === 'blocked') return 0xb42335;
   if (state === 'loading') return 0xd69e2e;
   if (state === 'full') return 0xc47f17;
   if (state === 'denied') return 0xb43b47;
@@ -135,18 +138,24 @@ function ConnectionZone({
         </mesh>
       </group>
       {boundaryState !== 'ready' ? (
-        <mesh
-          position={[0, (wallHeight + roofRadius) / 2, -0.02]}
-          userData={{ domeBoundaryState: boundaryState, avatarBarrier: true }}
-        >
-          <planeGeometry args={[width, wallHeight + roofRadius]} />
-          <meshStandardMaterial
-            color={boundaryColor(boundaryState)}
-            opacity={0.78}
-            transparent
-            side={THREE.DoubleSide}
-          />
-        </mesh>
+        <group userData={{ domeBoundaryState: boundaryState, avatarBarrier: true }}>
+          <mesh position={[0, (wallHeight + roofRadius) / 2, -0.02]}>
+            <planeGeometry args={[width, wallHeight + roofRadius]} />
+            <meshStandardMaterial
+              color={boundaryColor(boundaryState)}
+              opacity={boundaryState === 'offline' ? 0.48 : 0.78}
+              transparent
+              wireframe={boundaryState === 'offline'}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+          {(boundaryState === 'draining' || boundaryState === 'blocked') ? [0.25, 0.5, 0.75].map((ratio) => (
+            <mesh key={ratio} position={[0, (wallHeight + roofRadius) * ratio, -0.04]}>
+              <boxGeometry args={[width, 0.1, 0.08]} />
+              <meshBasicMaterial color={boundaryColor(boundaryState)} />
+            </mesh>
+          )) : null}
+        </group>
       ) : null}
     </group>
   );

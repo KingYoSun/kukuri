@@ -38,12 +38,29 @@ impl DomeSessionRuntime {
         before.saturating_sub(self.transition_reservations.len())
     }
 
+    pub fn drain_connection(&mut self, connection_id: &str) -> usize {
+        let participants = self
+            .transition_reservations
+            .values()
+            .filter(|ticket| ticket.request.connection_id == connection_id)
+            .map(|ticket| ticket.request.participant_pubkey.as_str().to_string())
+            .collect::<Vec<_>>();
+        let before = self.transition_reservations.len();
+        self.transition_reservations
+            .retain(|_, ticket| ticket.request.connection_id != connection_id);
+        for participant in participants {
+            self.prepared_exits.remove(&participant);
+        }
+        before.saturating_sub(self.transition_reservations.len())
+    }
+
     pub fn evict_participant(&mut self, participant_pubkey: &kukuri_core::Pubkey) -> bool {
         let participant_id = participant_pubkey.as_str();
         self.revoke_transition_access(participant_pubkey, None);
         self.transition_entries.remove(participant_id);
         self.seated_on.remove(participant_id);
         self.last_input_sequence.remove(participant_id);
+        self.participant_last_seen_at.remove(participant_id);
         self.player_budgets.remove(participant_id);
         self.remove_body(&format!("avatar:{participant_id}"));
         for runtime_body in self.bodies_by_id.values_mut() {
@@ -149,6 +166,8 @@ impl DomeSessionRuntime {
         let participant_id = ticket.request.participant_pubkey.as_str().to_string();
         self.ensure_avatar(&participant_id, None)?;
         self.participants.insert(participant_id.clone());
+        self.participant_last_seen_at
+            .insert(participant_id.clone(), now_millis);
         self.set_avatar_transform(&participant_id, position, rotation)?;
         self.transition_entries.insert(
             participant_id.clone(),
@@ -244,6 +263,7 @@ impl DomeSessionRuntime {
             bail!("DOME_TRANSITION_INVALID_TICKET");
         }
         self.participants.remove(participant_id);
+        self.participant_last_seen_at.remove(participant_id);
         self.seated_on.remove(participant_id);
         self.remove_body(&format!("avatar:{participant_id}"));
         Ok(())

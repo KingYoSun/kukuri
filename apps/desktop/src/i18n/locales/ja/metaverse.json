@@ -58,6 +58,16 @@
       "offline": "ピア接続を利用できません"
     }
   },
+  "recovery": {
+    "returnHome": "ホームへ戻る",
+    "returnHomeDescription": "利用可能な最も安全なDomeへ退避します",
+    "offlineCountdown": "Host heartbeatが停止しました。安全退避まであと{{count}}秒待機します。",
+    "movingTo": "{{target}}の安全なspawn位置を確認しています…",
+    "moved": "{{target}}へ安全に移動しました。",
+    "noCandidate": "安全なDomeがありません。Dome選択へ戻りました。",
+    "states": { "offline": "ホストがオフライン", "evacuating": "退避中", "closed": "Dome停止", "no_candidate": "安全な移動先なし" },
+    "details": { "evacuating": "現在のsceneを保持したまま移動先を確認しています。", "closed": "Grace periodが終了しました。", "no_candidate": "Hosting中のDomeを選択してください。" }
+  },
   "hosting": {
     "title": "Domeホスティング",
     "states": { "closed": "停止中", "owner_hosted": "Owner端末で稼働中", "community_node_hosted": "Community Nodeで稼働中", "grace_period": "Grace期間", "transferring": "移管中" },

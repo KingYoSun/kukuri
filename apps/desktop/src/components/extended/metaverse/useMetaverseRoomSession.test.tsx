@@ -194,6 +194,40 @@ describe('useMetaverseRoomSession', () => {
     await waitFor(() => expect(session.result.current.admittedRoom?.room_id).toBe(room.room_id));
   });
 
+  test('Return Home keeps the source scene until the destination avatar is confirmed', async () => {
+    const target = {
+      ...room,
+      room_id: 'metaverse-room-2',
+      title: 'Safe Home',
+      metaverse: createDefaultMetaverseRoomState(8, { roomId: 'metaverse-room-2' }),
+    };
+    let resolveTarget!: (snapshot: DomePhysicsSnapshotV1) => void;
+    const submitDomeSessionInput = vi.fn((
+      _context: SpatialContextV1,
+      instanceId: string,
+      sequence: number
+    ) => {
+      if (instanceId === target.metaverse!.instance_id) {
+        return new Promise<DomePhysicsSnapshotV1>((resolve) => { resolveTarget = resolve; });
+      }
+      return Promise.resolve(physicsSnapshot(sequence, 0));
+    });
+    const api: DesktopApi = { ...createDesktopMockApi(), submitDomeSessionInput };
+    const session = renderSession({ api, rooms: [room, target], initialSelectedRoomId: room.room_id });
+    await waitFor(() => expect(session.result.current.admittedRoom?.room_id).toBe(room.room_id));
+
+    act(() => session.result.current.returnHome());
+    await waitFor(() => expect(session.result.current.domeRecovery.state).toBe('evacuating'));
+    expect(session.result.current.admittedRoom?.room_id).toBe(room.room_id);
+
+    await act(async () => resolveTarget({
+      ...physicsSnapshot(20, 0),
+      instance_id: target.metaverse!.instance_id,
+    }));
+    await waitFor(() => expect(session.result.current.admittedRoom?.room_id).toBe(target.room_id));
+    expect(session.result.current.domeRecovery.state).toBe('online');
+  });
+
   test('clears a missing selected room but preserves a pending created-room selection', async () => {
     const session = renderSession();
     await act(async () => {
@@ -405,6 +439,7 @@ describe('useMetaverseRoomSession', () => {
             lifecycle_generation: 1,
             lifecycle_actor: null,
             lifecycle_reason: null,
+            lifecycle_deadline_at: null,
           },
         }],
         resolution: {

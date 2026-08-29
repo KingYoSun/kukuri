@@ -69,6 +69,8 @@ active agreementを決定論的な因果順とdigest順で処理し、次だけ�
 
 ## Consequences
 
+Issue #797の通常解除、draining deadline、安全上の即時terminal化は[ADR-0045](0045-dome-offline-draining-return-home.md)で追加定義する。
+
 - proposalの待機とConnectionの事実をDome assetから独立して保持できる。
 - 全peerは同じ署名済みrecord集合から同じforestと相対座標を得られる。
 - seamless transitionはこのtopology viewを利用できるが、scene描画・prefetch・physics handoffはIssue #790以降の責務である。

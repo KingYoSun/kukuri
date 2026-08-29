@@ -45,3 +45,4 @@ Spatial Contextを開いた時点では、複数のDomeが存在し、直前ま�
 - 優先Domeが利用不能でも、access不能な詳細やparticipant identityを公開せずに次候補へ進める。
 - Avatarはhostが参加と初期transformを同時に確定した後だけ見えるため、拒否時の一瞬表示とghost participantを避けられる。
 - Dome固有のmembership、role、moderatorは追加しない。
+- Issue #797のautomatic evacuationとReturn Homeは、このauthoritative Joinとsafe-spawnを再利用する。候補順とsource scene保持は[ADR-0045](0045-dome-offline-draining-return-home.md)で定義する。

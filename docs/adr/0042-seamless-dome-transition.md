@@ -43,6 +43,8 @@ ActiveなDome Connectionは恒常的なportalではなく、avatarが隣のDome�
 
 ## Consequences
 
+Issue #797のdraining中の新規transition停止と退避時のsource/target確定順は[ADR-0045](0045-dome-offline-draining-return-home.md)で追加定義する。
+
 - Seamlessに見えてもphysics authorityは中心線で明示的に切り替わり、cross-Dome prop simulationを導入しない。
 - Host不在、access不明、block、満員、asset失敗、stale topologyではavailabilityより整合性を優先して境界を閉じる。
 - Texture／materialは完全補間せず、隣接Dome表示と数値environment補間を優先する。

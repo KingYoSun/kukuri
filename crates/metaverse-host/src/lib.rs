@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::{Context, Result, bail};
 use kukuri_core::{
@@ -75,6 +76,7 @@ pub struct DomeSessionRuntime {
     transition_entries: BTreeMap<String, DomeDirection>,
     seated_on: BTreeMap<String, String>,
     last_input_sequence: BTreeMap<String, u64>,
+    participant_last_seen_at: BTreeMap<String, i64>,
     bodies_by_id: BTreeMap<String, RuntimeBody>,
     pipeline: PhysicsPipeline,
     integration_parameters: IntegrationParameters,
@@ -88,6 +90,7 @@ pub struct DomeSessionRuntime {
     ccd_solver: CCDSolver,
     tick: u64,
     snapshot_sequence: u64,
+    heartbeat_sequence: AtomicU64,
     snapshot_ring: VecDeque<SignedDomePhysicsSnapshotV1>,
     last_simulated_at: i64,
     budget: MetaverseResourceBudgetConfig,
@@ -211,6 +214,7 @@ impl DomeSessionRuntime {
             transition_entries: BTreeMap::new(),
             seated_on: BTreeMap::new(),
             last_input_sequence: BTreeMap::new(),
+            participant_last_seen_at: BTreeMap::new(),
             bodies_by_id: BTreeMap::new(),
             pipeline: PhysicsPipeline::new(),
             integration_parameters: IntegrationParameters {
@@ -227,6 +231,7 @@ impl DomeSessionRuntime {
             ccd_solver: CCDSolver::new(),
             tick: 0,
             snapshot_sequence: 0,
+            heartbeat_sequence: AtomicU64::new(0),
             snapshot_ring: VecDeque::with_capacity(DOME_SNAPSHOT_RING_CAPACITY),
             last_simulated_at: started_at,
             budget,
@@ -340,6 +345,13 @@ impl DomeSessionRuntime {
             return Err(error);
         }
         self.apply_input(&signed.input)?;
+        let participant_id = signed.input.participant_pubkey.as_str().to_string();
+        if matches!(signed.input.input, DomeSessionInputKindV1::Leave) {
+            self.participant_last_seen_at.remove(&participant_id);
+        } else if self.participants.contains(&participant_id) {
+            self.participant_last_seen_at
+                .insert(participant_id, now_millis);
+        }
         self.clamp_bodies_to_dome();
         Ok(())
     }
@@ -349,6 +361,7 @@ impl DomeSessionRuntime {
             bail!("Dome session clock cannot move backwards");
         }
         self.expire_guest_props(now_millis);
+        self.expire_stale_participants(now_millis);
         if self.participants.is_empty() {
             self.last_simulated_at = now_millis;
             return Ok(());
@@ -542,6 +555,10 @@ impl DomeSessionRuntime {
     }
 
     pub fn signed_heartbeat(&self, now_millis: i64) -> Result<SignedDomeHostHeartbeatV1> {
+        let sequence = self
+            .heartbeat_sequence
+            .fetch_add(1, Ordering::Relaxed)
+            .saturating_add(1);
         build_signed_dome_host_heartbeat(
             &self.host_keys,
             &self.lease.lease,
@@ -553,6 +570,7 @@ impl DomeSessionRuntime {
                 host_pubkey: self.host_keys.public_key(),
                 participants: self.participant_count().try_into().unwrap_or(u32::MAX),
                 sleeping: self.is_sleeping(),
+                sequence,
                 sent_at: now_millis,
             },
         )
@@ -587,6 +605,9 @@ impl DomeSessionRuntime {
                         runtime_body.grabbed_by = None;
                     }
                 }
+            }
+            DomeSessionInputKindV1::KeepAlive => {
+                self.require_participant(&participant_id)?;
             }
             DomeSessionInputKindV1::Move {
                 position,
@@ -703,6 +724,21 @@ impl DomeSessionRuntime {
             bail!("Dome session input requires a joined participant");
         }
         Ok(())
+    }
+
+    fn expire_stale_participants(&mut self, now_millis: i64) {
+        let stale = self
+            .participant_last_seen_at
+            .iter()
+            .filter(|(_, last_seen)| {
+                now_millis.saturating_sub(**last_seen)
+                    > kukuri_core::DOME_PARTICIPANT_TIMEOUT_MILLIS
+            })
+            .map(|(participant_id, _)| participant_id.clone())
+            .collect::<Vec<_>>();
+        for participant_id in stale {
+            self.evict_participant(&kukuri_core::Pubkey::from(participant_id));
+        }
     }
 
     fn require_owner(&self, input: &DomeSessionInputV1) -> Result<()> {

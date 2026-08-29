@@ -47,6 +47,9 @@ impl DomeTransitionDenialReasonV1 {
 #[serde(rename_all = "snake_case")]
 pub enum DomeBoundaryStateV1 {
     Closed,
+    Offline,
+    Draining,
+    Blocked,
     Loading,
     Ready,
     Denied,

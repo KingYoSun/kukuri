@@ -1,12 +1,13 @@
 use crate::{
-    DomeHostTargetV1, DomeHostingLeaseV1, DomeHostingRecordV1, DomeHostingStateKindV1,
-    DomeInstanceManifestV1, DomeInstanceStatusV1, DomeLayoutCandidateV1, DomeLayoutCommitV1,
-    DomePhysicsSnapshotV1, DomePresetRefV1, KukuriKeys, MetaverseRoomSpawnV1, SpatialContextV1,
-    TopicId, accept_dome_hosting_lease, activate_dome_hosting_lease,
-    build_signed_dome_hosting_lease, build_signed_dome_layout_candidate,
-    build_signed_dome_layout_commit, build_signed_dome_physics_snapshot, close_dome_hosting_lease,
-    dome_layout_candidate_digest, resolve_dome_hosting_state, verify_signed_dome_layout_commit,
-    verify_signed_dome_physics_snapshot,
+    DomeHostHeartbeatV1, DomeHostTargetV1, DomeHostingLeaseV1, DomeHostingRecordV1,
+    DomeHostingStateKindV1, DomeInstanceManifestV1, DomeInstanceStatusV1, DomeLayoutCandidateV1,
+    DomeLayoutCommitV1, DomePhysicsSnapshotV1, DomePresetRefV1, KukuriKeys, MetaverseRoomSpawnV1,
+    SpatialContextV1, TopicId, accept_dome_hosting_lease, activate_dome_hosting_lease,
+    build_signed_dome_host_heartbeat, build_signed_dome_hosting_lease,
+    build_signed_dome_layout_candidate, build_signed_dome_layout_commit,
+    build_signed_dome_physics_snapshot, close_dome_hosting_lease, dome_layout_candidate_digest,
+    resolve_dome_hosting_state, verify_signed_dome_host_heartbeat,
+    verify_signed_dome_layout_commit, verify_signed_dome_physics_snapshot,
 };
 
 fn instance(owner: &KukuriKeys) -> DomeInstanceManifestV1 {
@@ -38,6 +39,34 @@ fn instance(owner: &KukuriKeys) -> DomeInstanceManifestV1 {
         chat_history: Vec::new(),
         updated_at: 100,
     }
+}
+
+#[test]
+fn heartbeat_signature_is_bound_to_host_lease_epoch_session_and_sequence() {
+    let owner = KukuriKeys::generate();
+    let host = KukuriKeys::generate();
+    let lease = lease(&owner, &host, 1);
+    let signed = build_signed_dome_host_heartbeat(
+        &host,
+        &lease,
+        DomeHostHeartbeatV1 {
+            instance_id: lease.instance_id.clone(),
+            instance_generation: lease.instance_generation,
+            lease_epoch: lease.epoch,
+            session_id: "session-1".into(),
+            host_pubkey: host.public_key(),
+            participants: 2,
+            sleeping: false,
+            sequence: 7,
+            sent_at: 2_500,
+        },
+    )
+    .unwrap();
+    verify_signed_dome_host_heartbeat(&signed, &lease, "session-1").unwrap();
+
+    let mut tampered = signed;
+    tampered.heartbeat.sequence += 1;
+    assert!(verify_signed_dome_host_heartbeat(&tampered, &lease, "session-1").is_err());
 }
 
 fn lease(owner: &KukuriKeys, host: &KukuriKeys, epoch: u64) -> DomeHostingLeaseV1 {

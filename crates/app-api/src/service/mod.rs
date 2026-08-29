@@ -374,6 +374,8 @@ pub struct AppService {
     pub(crate) subscription_registry: SubscriptionRegistry,
     pub(crate) joined_private_channels: Arc<Mutex<HashMap<String, JoinedPrivateChannelState>>>,
     pub(crate) metaverse_room_events: Arc<Mutex<HashMap<String, VecDeque<MetaverseRoomEventView>>>>,
+    pub(crate) dome_host_heartbeats:
+        Arc<Mutex<HashMap<String, kukuri_core::SignedDomeHostHeartbeatV1>>>,
     pub(crate) dome_host_sessions: Arc<Mutex<HashMap<String, DomeSessionRuntime>>>,
     pub(crate) metaverse_blob_cache: Arc<Mutex<MetaverseBlobCacheIndex>>,
     pub(crate) metaverse_resource_budget: kukuri_core::MetaverseResourceBudgetConfig,
@@ -539,6 +541,7 @@ impl AppService {
             subscription_registry: SubscriptionRegistry::default(),
             joined_private_channels: Arc::new(Mutex::new(HashMap::new())),
             metaverse_room_events: Arc::new(Mutex::new(HashMap::new())),
+            dome_host_heartbeats: Arc::new(Mutex::new(HashMap::new())),
             dome_host_sessions: Arc::new(Mutex::new(HashMap::new())),
             metaverse_blob_cache: Arc::new(Mutex::new(cache)),
             metaverse_resource_budget: budget,

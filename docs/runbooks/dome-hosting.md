@@ -65,3 +65,14 @@ owner が online に戻っても自動 reclaim はしない。「この端末で
 Node 再起動時は有効な lease と保存済み manifest bundle を再検証し、新しい session id、manifest initial transform、velocity 0、grab/seatなし、guest propなしで開始する。
 
 `GracePeriod` または split-brain を観測した場合は、秘密情報を採取せず Context/Instance、lease epoch/digest、target host、session、last heartbeat、rejection reason を確認する。owner が同一 host を再開するか、より高い epoch で明示切替する。DB 行や replica record の手動書換えは行わない。
+
+## Offline、draining、Return Home
+
+- Hostは5秒ごとに署名済みheartbeatを発行する。5秒超の欠落では境界が`offline`となり、15秒まで同じsessionの復帰を待つ。期限後は`closed`となり、Clientはready隣接Domeからentry候補の順に安全退避する。
+- Grace中は最後のsceneを表示したままinput、presence/audio、新規transitionを停止する。同じlease epoch/sessionが復帰すれば再Joinは不要。
+- Participant keepaliveは5秒、host cleanupは30秒。Community Nodeでkeepaliveがaccess deniedになった場合は対象participantだけを退避させる。
+- 通常のConnection解除は3秒`draining`となる。新規通過は止まるが、terminal revokeまではcomponent座標を保持し、revoke後も既存participantを分裂だけで退去させない。
+- owner間block、Instance失効は即時`blocked/closed`。unblock後にConnectionは自動復元されない。
+- Return HomeはHUDの家アイコンから実行する。target admission確認前にsource sceneが消えないこと、候補なしではDome選択へ戻ることを確認する。
+
+診断ではContext/Instance、Connection ID、lease epoch/session、heartbeat age、recovery phase/reason、denial codeだけを採取し、heartbeat/access proof/raw input本文を保存しない。

@@ -10,6 +10,7 @@ import { MetaverseRoomView } from './metaverse/MetaverseRoomView';
 import { createDefaultMetaverseRoomState } from './metaverse/DomeSceneModel';
 import type { DomeNeighborTransitionView } from './metaverse/DomeTransitionModel';
 import { createMetaverseRoomActions } from '@/shell/actions/metaverse';
+import { ONLINE_DOME_RECOVERY, type DomeRecoveryStatus } from './metaverse/useMetaverseRoomSession';
 
 const meta = {
   title: 'Extended/MetaverseRoomPanel',
@@ -131,7 +132,8 @@ function panel(rooms: GameRoomView[]) {
 function selectedRoom(
   initialHudOpen = true,
   initialChatOpen = true,
-  transitionNeighbors: DomeNeighborTransitionView[] = []
+  transitionNeighbors: DomeNeighborTransitionView[] = [],
+  domeRecovery: DomeRecoveryStatus = ONLINE_DOME_RECOVERY
 ) {
   return (
     <StoryFrame>
@@ -150,6 +152,7 @@ function selectedRoom(
         )}
         latestChatByPeer={{}}
         connectionState='live'
+        domeRecovery={domeRecovery}
         now={STORY_TIMESTAMP}
         knownPeerCount={2}
         lastSentSeq={12}
@@ -178,6 +181,7 @@ function selectedRoom(
         onLocalTransform={() => undefined}
         onAvatarAssetStatus={() => undefined}
         onLeaveRoom={() => undefined}
+        onReturnHome={() => undefined}
         onImportAvatar={() => undefined}
         onImportDefaultAvatar={() => undefined}
         onSaveCustomization={async () => undefined}
@@ -262,4 +266,24 @@ export const SelectedCollapsed: Story = {
 
 export const ReadyNorthTransition: Story = {
   render: () => selectedRoom(false, false, [readyNorthNeighbor]),
+};
+
+export const OfflineGraceBoundary: Story = {
+  render: () => selectedRoom(false, false, [{ ...readyNorthNeighbor, boundaryState: 'offline' }], {
+    state: 'offline', secondsRemaining: 9, reason: 'host_offline', targetTitle: null,
+  }),
+};
+
+export const DrainingBoundary: Story = {
+  render: () => selectedRoom(false, false, [{ ...readyNorthNeighbor, boundaryState: 'draining' }]),
+};
+
+export const BlockedBoundary: Story = {
+  render: () => selectedRoom(false, false, [{ ...readyNorthNeighbor, boundaryState: 'blocked' }]),
+};
+
+export const ClosedBoundary: Story = {
+  render: () => selectedRoom(false, false, [{ ...readyNorthNeighbor, boundaryState: 'closed' }], {
+    state: 'closed', secondsRemaining: 0, reason: 'host_offline', targetTitle: null,
+  }),
 };

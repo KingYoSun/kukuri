@@ -27,6 +27,7 @@ import type {
   RoomChatMessage,
 } from '../MetaverseSceneModel';
 import { MetaverseRoomControls } from './MetaverseRoomControls';
+import { ONLINE_DOME_RECOVERY, type DomeRecoveryStatus } from './useMetaverseRoomSession';
 import { useColumnRuntime } from '@/shell/ColumnRuntimeContext';
 import type { DomeNeighborTransitionView } from './DomeTransitionModel';
 
@@ -45,6 +46,7 @@ export type MetaverseRoomViewProps = {
   handoffTransform?: AvatarTransform | null;
   latestChatByPeer: Record<string, LatestChatBubble>;
   connectionState: MetaverseRoomConnectionState;
+  domeRecovery?: DomeRecoveryStatus;
   now: number;
   knownPeerCount: number;
   lastSentSeq: number;
@@ -64,6 +66,7 @@ export type MetaverseRoomViewProps = {
   onLocalTransform: (transform: AvatarTransform) => void;
   onAvatarAssetStatus: (status: AvatarAssetStatus) => void;
   onLeaveRoom: () => void;
+  onReturnHome?: () => void;
   onImportAvatar: (file: File) => void;
   onImportDefaultAvatar: () => void;
   onSaveCustomization: (customization: DomeCustomizationV1) => Promise<void>;
@@ -99,6 +102,7 @@ export function MetaverseRoomView({
   handoffTransform,
   latestChatByPeer,
   connectionState,
+  domeRecovery = ONLINE_DOME_RECOVERY,
   now,
   knownPeerCount,
   lastSentSeq,
@@ -118,6 +122,7 @@ export function MetaverseRoomView({
   onLocalTransform,
   onAvatarAssetStatus,
   onLeaveRoom,
+  onReturnHome,
   onImportAvatar,
   onImportDefaultAvatar,
   onSaveCustomization,
@@ -220,6 +225,7 @@ export function MetaverseRoomView({
               localAvatarAssetRef={localAvatarAssetRef}
               communityAssistAvailable={communityAssistAvailable}
               connectionState={connectionState}
+              domeRecovery={domeRecovery}
               locale={locale}
               pending={pending}
               isOwner={isOwner}
@@ -230,6 +236,7 @@ export function MetaverseRoomView({
               messageDraft={messageDraft}
               messageInputRef={messageInputRef}
               onLeaveRoom={onLeaveRoom}
+              onReturnHome={onReturnHome}
               onToggleHud={() => setHudOpen((open) => !open)}
               onToggleHudDebug={() => setHudDebugOpen((open) => !open)}
               onImportAvatar={onImportAvatar}

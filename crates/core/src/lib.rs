@@ -4,6 +4,7 @@ mod dome_connections;
 mod dome_envelopes;
 mod dome_hosting;
 mod dome_layout;
+mod dome_recovery;
 mod dome_transition;
 mod envelope;
 mod game;
@@ -33,15 +34,16 @@ pub use direct_messages::{
     encrypt_direct_message_attachment, encrypt_direct_message_frame,
 };
 pub use dome_connections::{
-    DOME_CONNECTION_MAX_OPEN_OUTBOUND, DOME_CONNECTION_MAX_PER_PEER_SLOT,
-    DOME_CONNECTION_MAX_RECEIVER_QUEUE, DomeComponentTopologyV1, DomeConnectionAgreementV1,
-    DomeConnectionEndpointV1, DomeConnectionProposalV1, DomeConnectionRecordV1,
-    DomeConnectionStatusV1, DomeConnectionTerminalReasonV1, DomeProposalDerivedStatusV1,
-    DomeProposalSelectionV1, DomeRejectedConnectionV1, DomeTopologyResolutionV1, DomeTopologyV1,
-    SignedDomeConnectionAgreementV1, build_dome_connection_agreement_envelope,
-    build_dome_connection_proposal_envelope, build_dome_connection_selection_envelope,
-    build_signed_dome_connection_agreement, derive_dome_proposal_status, opposite_dome_direction,
-    resolve_dome_topology, resolve_dome_topology_candidates, validate_dome_connection_agreement,
+    DOME_CONNECTION_DRAIN_MILLIS, DOME_CONNECTION_MAX_OPEN_OUTBOUND,
+    DOME_CONNECTION_MAX_PER_PEER_SLOT, DOME_CONNECTION_MAX_RECEIVER_QUEUE, DomeComponentTopologyV1,
+    DomeConnectionAgreementV1, DomeConnectionEndpointV1, DomeConnectionProposalV1,
+    DomeConnectionRecordV1, DomeConnectionStatusV1, DomeConnectionTerminalReasonV1,
+    DomeProposalDerivedStatusV1, DomeProposalSelectionV1, DomeRejectedConnectionV1,
+    DomeTopologyResolutionV1, DomeTopologyV1, SignedDomeConnectionAgreementV1,
+    build_dome_connection_agreement_envelope, build_dome_connection_proposal_envelope,
+    build_dome_connection_selection_envelope, build_signed_dome_connection_agreement,
+    derive_dome_proposal_status, opposite_dome_direction, resolve_dome_topology,
+    resolve_dome_topology_candidates, validate_dome_connection_agreement,
     validate_dome_connection_proposal, validate_dome_connection_record,
     validate_dome_connection_selection, verify_signed_dome_connection_agreement,
 };
@@ -49,25 +51,31 @@ pub use dome_envelopes::{
     build_dome_instance_envelope, build_dome_move_envelope, build_dome_preset_envelope,
 };
 pub use dome_hosting::{
-    DOME_HOSTING_HEARTBEAT_GRACE_MILLIS, DOME_HOSTING_MAX_LEASE_MILLIS,
-    DOME_SNAPSHOT_RING_CAPACITY, DomeHostHeartbeatV1, DomeHostTargetV1, DomeHostingAcceptanceV1,
-    DomeHostingActivationV1, DomeHostingCloseV1, DomeHostingLeaseV1, DomeHostingRecordV1,
-    DomeHostingStateKindV1, DomeHostingStateV1, DomePhysicsBodyKindV1, DomePhysicsBodyV1,
-    DomePhysicsSnapshotV1, DomeSessionInputKindV1, DomeSessionInputV1, SignedDomeHostHeartbeatV1,
-    SignedDomeHostingAcceptanceV1, SignedDomeHostingActivationV1, SignedDomeHostingCloseV1,
-    SignedDomeHostingLeaseV1, SignedDomePhysicsSnapshotV1, SignedDomeSessionInputV1,
-    accept_dome_hosting_lease, activate_dome_hosting_lease, build_signed_dome_host_heartbeat,
-    build_signed_dome_hosting_lease, build_signed_dome_physics_snapshot,
-    build_signed_dome_session_input, close_dome_hosting_lease, dome_hosting_lease_digest,
-    resolve_dome_hosting_state, validate_dome_hosting_lease, verify_signed_dome_host_heartbeat,
-    verify_signed_dome_hosting_lease, verify_signed_dome_physics_snapshot,
-    verify_signed_dome_session_input,
+    DOME_HOST_HEARTBEAT_INTERVAL_MILLIS, DOME_HOSTING_HEARTBEAT_GRACE_MILLIS,
+    DOME_HOSTING_MAX_LEASE_MILLIS, DOME_PARTICIPANT_KEEPALIVE_INTERVAL_MILLIS,
+    DOME_PARTICIPANT_TIMEOUT_MILLIS, DOME_SNAPSHOT_RING_CAPACITY, DomeHostHeartbeatV1,
+    DomeHostTargetV1, DomeHostingAcceptanceV1, DomeHostingActivationV1, DomeHostingCloseV1,
+    DomeHostingLeaseV1, DomeHostingRecordV1, DomeHostingStateKindV1, DomeHostingStateV1,
+    DomePhysicsBodyKindV1, DomePhysicsBodyV1, DomePhysicsSnapshotV1, DomeSessionInputKindV1,
+    DomeSessionInputV1, SignedDomeHostHeartbeatV1, SignedDomeHostingAcceptanceV1,
+    SignedDomeHostingActivationV1, SignedDomeHostingCloseV1, SignedDomeHostingLeaseV1,
+    SignedDomePhysicsSnapshotV1, SignedDomeSessionInputV1, accept_dome_hosting_lease,
+    activate_dome_hosting_lease, build_signed_dome_host_heartbeat, build_signed_dome_hosting_lease,
+    build_signed_dome_physics_snapshot, build_signed_dome_session_input, close_dome_hosting_lease,
+    dome_hosting_lease_digest, resolve_dome_hosting_state, validate_dome_hosting_lease,
+    verify_signed_dome_host_heartbeat, verify_signed_dome_hosting_lease,
+    verify_signed_dome_physics_snapshot, verify_signed_dome_session_input,
 };
 pub use dome_layout::{
     DOME_LAYOUT_COMMIT_MIN_INTERVAL_MILLIS, DomeLayoutCandidateV1, DomeLayoutCommitV1,
     SignedDomeLayoutCandidateV1, SignedDomeLayoutCommitV1, build_signed_dome_layout_candidate,
     build_signed_dome_layout_commit, dome_layout_candidate_digest,
     verify_signed_dome_layout_candidate, verify_signed_dome_layout_commit,
+};
+pub use dome_recovery::{
+    DomeEvacuationCandidateKindV1, DomeEvacuationCandidateV1, DomeEvacuationPhaseV1,
+    DomeEvacuationReasonV1, DomeHostLivenessV1, order_dome_evacuation_candidates,
+    resolve_dome_host_liveness,
 };
 pub use dome_transition::{
     DOME_ACCESS_PROOF_TTL_MILLIS, DOME_TRANSITION_CROSSING_HYSTERESIS_CM,

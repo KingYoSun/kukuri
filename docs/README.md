@@ -39,6 +39,7 @@
 - Dome prop、layout commit、manifest/asset保持: `docs/adr/0040-dome-prop-layout-retention.md`
 - Metaverse resource budget: `docs/adr/0041-metaverse-resource-budget.md`
 - Spatial Context entryとauthoritative safe spawn: `docs/adr/0044-spatial-context-entry-safe-spawn.md`
+- Dome offline、Connection draining、Return Home: `docs/adr/0045-dome-offline-draining-return-home.md`
 - community node production rollout / live media verification / recovery: `docs/runbooks/community-node-production-rollout.md`
 - community node GCP Terraform デプロイ（deployment profile: low-cost / managed-db / ha）: `docs/runbooks/community-node-gcp-terraform.md`（実装は `infra/terraform/`）
 - community node 権利侵害申出の受付・審査・送信防止: `docs/runbooks/community-node-rights-infringement-requests.md`

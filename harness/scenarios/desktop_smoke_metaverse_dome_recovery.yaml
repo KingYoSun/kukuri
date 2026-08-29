@@ -1,0 +1,24 @@
+name: desktop_smoke_metaverse_dome_recovery
+fixtures:
+  seed: 797
+  topic: kukuri:topic:metaverse-dome-recovery
+steps:
+  - action: launch_desktop
+  - action: select_topic
+    topic: kukuri:topic:metaverse-dome-recovery
+  - action: create_metaverse_dome
+    title: recovery-source
+    description: Offline, draining, and Return Home recovery scenario
+    max_peers: 8
+  - action: exercise_dome_connections
+    local_title: recovery-source
+  - action: revoke_local_dome_connection
+  - action: assert_dome_connection_topology
+    component_count: 2
+    active_connection_count: 1
+artifacts:
+  dump_logs: true
+  metrics_snapshot: true
+timeouts:
+  overall_ms: 120000
+  step_ms: 15000

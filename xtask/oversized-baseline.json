@@ -1,7 +1,11 @@
 {
   "files": [
     {
-      "lines": 1155,
+      "lines": 1272,
+      "path": "apps/desktop/src/components/extended/metaverse/useMetaverseRoomSession.ts"
+    },
+    {
+      "lines": 1191,
       "path": "crates/metaverse-host/src/lib.rs"
     },
     {
@@ -9,8 +13,16 @@
       "path": "crates/app-api/src/private_channels.rs"
     },
     {
-      "lines": 1099,
-      "path": "apps/desktop/src/components/extended/metaverse/useMetaverseRoomSession.ts"
+      "lines": 1100,
+      "path": "crates/desktop-runtime/src/runtime/private_channels_game_api.rs"
+    },
+    {
+      "lines": 1097,
+      "path": "crates/app-api/src/service/private_channels_support.rs"
+    },
+    {
+      "lines": 1096,
+      "path": "crates/app-api/src/dome_hosting.rs"
     },
     {
       "lines": 1096,
@@ -21,12 +33,8 @@
       "path": "crates/harness/src/scenarios/community_node.rs"
     },
     {
-      "lines": 1082,
-      "path": "crates/app-api/src/service/private_channels_support.rs"
-    },
-    {
-      "lines": 1026,
-      "path": "crates/desktop-runtime/src/runtime/private_channels_game_api.rs"
+      "lines": 1056,
+      "path": "crates/metaverse-host/src/tests.rs"
     },
     {
       "lines": 1016,
