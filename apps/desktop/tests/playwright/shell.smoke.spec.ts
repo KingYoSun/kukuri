@@ -209,6 +209,60 @@ test('browser mock starts with the accessible product overview Columns without l
   expect(overflow.documentOverflow).toBeLessThanOrEqual(0);
 });
 
+test('Column header switches replace Timeline scope in place and preserve inactive focus', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 900, height: 760 });
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
+
+  const timeline = page.getByRole('region', { name: /^Timeline Column,/ });
+  const topicSelect = timeline.getByRole('combobox', { name: 'Timeline topic' });
+  const initialColumnId = await timeline.getAttribute('data-column-id');
+  await expect(topicSelect).toHaveValue('kukuri:topic:general');
+
+  await timeline.getByRole('button', { name: /^Publish to / }).click();
+  await timeline.getByPlaceholder('Write a post').fill('general browser draft');
+  await topicSelect.selectOption('kukuri:topic:dev');
+
+  await expect(page).toHaveURL(/#\/timeline\?topic=kukuri%3Atopic%3Adev$/);
+  await expect(page.getByRole('region', { name: /^Timeline Column,/ })).toHaveCount(1);
+  await expect(timeline).toHaveAttribute('data-column-id', initialColumnId!);
+  await timeline.getByRole('button', { name: /^Publish to Public · dev$/ }).click();
+  await expect(timeline.getByPlaceholder('Write a post')).toHaveValue('');
+  await timeline.getByPlaceholder('Write a post').fill('dev browser draft');
+
+  await topicSelect.selectOption('kukuri:topic:general');
+  await expect(timeline.getByPlaceholder('Write a post')).toHaveValue('general browser draft');
+
+  await page
+    .getByRole('region', { name: /^Profile Column,/ })
+    .getByRole('heading', { level: 2, name: 'Profile' })
+    .click();
+  const profile = activeColumn(page, 'Profile');
+  await expect(profile).toBeVisible();
+  await expect(page).toHaveURL(/#\/profile\?topic=kukuri%3Atopic%3Ageneral$/);
+  await topicSelect.selectOption('kukuri:topic:test');
+  await expect(topicSelect).toHaveValue('kukuri:topic:test');
+  await expect(profile).toHaveAttribute('aria-current', 'true');
+  await expect(page).toHaveURL(/#\/profile\?topic=kukuri%3Atopic%3Ageneral$/);
+
+  const overflow = await page.evaluate(() => ({
+    documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    selectOverflow: Array.from(
+      document.querySelectorAll<HTMLElement>('.shell-column-context-select')
+    ).some((select) => {
+      const selectBox = select.getBoundingClientRect();
+      const columnBox = select.closest<HTMLElement>('[data-column-id]')?.getBoundingClientRect();
+      return Boolean(
+        columnBox &&
+          (selectBox.left < columnBox.left - 1 || selectBox.right > columnBox.right + 1)
+      );
+    }),
+  }));
+  expect(overflow.documentOverflow).toBeLessThanOrEqual(0);
+  expect(overflow.selectOverflow).toBe(false);
+});
+
 // ADR 0031 §2: 保存 layout が無いdesktop初期表示は既定5 ColumnをCanvas内へ並べ、
 // 左下 Control Center trigger は先頭Timelineのfooter / primary action / Composerと重ねない。
 for (const viewport of [

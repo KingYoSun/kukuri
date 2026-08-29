@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ColumnCanvas } from './ColumnCanvas';
+import { ColumnContextSelect } from './ColumnContextSelect';
 import { columnCanvasEdgeScrollDirection } from './columnCanvasGeometry';
 import { ColumnSurface } from './ColumnSurface';
 
@@ -136,6 +137,53 @@ describe('ColumnCanvas', () => {
     await user.click(screen.getByRole('button', { name: 'Close Thread' }));
     expect(onPinnedChange).toHaveBeenCalledWith(true);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not activate an inactive Column when its context selector is used', async () => {
+    const user = userEvent.setup();
+    const onActivateColumn = vi.fn();
+    render(
+      <ColumnCanvas activeColumnId='profile-1' onActivateColumn={onActivateColumn}>
+        <ColumnSurface
+          columnId='timeline-1'
+          title='Timeline'
+          scopeLabel='general'
+          scopeControl={
+            <ColumnContextSelect
+              label='Timeline topic'
+              value='general'
+              options={[
+                { value: 'general', label: 'general' },
+                { value: 'dev', label: 'dev' },
+              ]}
+              onChange={() => undefined}
+            />
+          }
+          position={1}
+          total={2}
+          span={1}
+          active={false}
+          pinned
+        >
+          Timeline body
+        </ColumnSurface>
+        <ColumnSurface
+          columnId='profile-1'
+          title='Profile'
+          scopeLabel='general'
+          position={2}
+          total={2}
+          span={1}
+          active
+          pinned
+        >
+          Profile body
+        </ColumnSurface>
+      </ColumnCanvas>
+    );
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Timeline topic' }), 'dev');
+    expect(onActivateColumn).not.toHaveBeenCalled();
   });
 
   it('offers keyboard reorder and allowed span choices from the Column menu', async () => {

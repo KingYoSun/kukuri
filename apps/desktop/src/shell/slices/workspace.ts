@@ -371,6 +371,22 @@ export function setColumnTimelineView(
   return changed ? { ...state, columns } : state;
 }
 
+export function setTimelineColumnTopic(
+  state: WorkspaceState,
+  columnId: string,
+  topicId: string
+): WorkspaceState {
+  if (!topicId) return state;
+  let changed = false;
+  const columns = state.columns.map((column) => {
+    if (column.id !== columnId || column.kind !== 'timeline') return column;
+    if (column.scope?.topicId === topicId && column.scope.channelId === null) return column;
+    changed = true;
+    return { ...column, scope: { topicId, channelId: null } };
+  });
+  return changed ? { ...state, columns } : state;
+}
+
 export function closeColumn(state: WorkspaceState, columnId: string): WorkspaceState {
   if (state.columns.length <= 1) return state;
 

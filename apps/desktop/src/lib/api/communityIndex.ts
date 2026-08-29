@@ -18,6 +18,17 @@ export type CommunityIndexNodeResolution = {
   selectedBaseUrl: string | null;
 };
 
+export function communityIndexNodeLabel(
+  baseUrl: string,
+  manifestEntry: CommunityIndexManifestEntry | undefined
+): string {
+  if (manifestEntry?.status === 'ok') {
+    const nodeName = manifestEntry.manifest.node_name.trim();
+    if (nodeName) return nodeName;
+  }
+  return baseUrl;
+}
+
 /// 索引・信頼関係・距離利用停止で共通の利用可否境界(#663 / #698 / #705)。
 /// 認証済み・必須同意承認済み・通信エラーなし・公開ノード情報が取得済みで、`capabilities` の
 /// いずれかが提供中(`available_enabled`)のノードだけを返す。

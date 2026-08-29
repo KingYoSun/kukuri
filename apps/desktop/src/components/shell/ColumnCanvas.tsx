@@ -238,7 +238,12 @@ export function ColumnCanvas({
   };
 
   const activateFromEvent = (target: EventTarget | null) => {
-    if (target instanceof Element && target.closest('[data-column-gesture-owner]')) return;
+    if (
+      target instanceof Element &&
+      target.closest('[data-column-gesture-owner], [data-column-preserve-activation]')
+    ) {
+      return;
+    }
     const columnId = findColumnId(target);
     if (columnId && columnId !== activeColumnId) {
       onActivateColumn(columnId, !isInteractiveTarget(target));

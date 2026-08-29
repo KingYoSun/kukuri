@@ -445,6 +445,23 @@
   flex: 1;
 }
 
+.shell-phase1 .shell-column-context-control {
+  display: block;
+  min-width: 0;
+  max-width: 12rem;
+}
+
+.shell-phase1 .shell-column-context-select {
+  width: 100%;
+  height: 1.75rem;
+  min-height: 1.75rem;
+  padding: 0 var(--space-xs);
+  overflow: hidden;
+  font-size: var(--text-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .shell-phase1 .shell-column-header-actions,
 .shell-phase1 .shell-column-view-tabs {
   display: flex;

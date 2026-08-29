@@ -14,6 +14,7 @@ type ColumnSurfaceProps = {
   footer?: ReactNode;
   fullscreenable?: boolean;
   headerActions?: ReactNode;
+  scopeControl?: ReactNode;
   onPinnedChange?: (pinned: boolean) => void;
   onClose?: () => void;
   onMoveLeft?: () => void;
@@ -36,6 +37,7 @@ export function ColumnSurface({
   footer,
   fullscreenable = false,
   headerActions,
+  scopeControl,
   onPinnedChange,
   onClose,
   onMoveLeft,
@@ -158,7 +160,14 @@ export function ColumnSurface({
             {active ? <span className='shell-column-state-label'>{activityLabel}</span> : null}
             <span className='shell-column-state-label'>{stateLabel}</span>
           </div>
-          <p>{scopeLabel}</p>
+          {scopeControl ? (
+            <>
+              <span className='sr-only'>{scopeLabel}</span>
+              {scopeControl}
+            </>
+          ) : (
+            <p>{scopeLabel}</p>
+          )}
         </div>
         {headerActions || onPinnedChange || onClose ? (
           <div className='shell-column-header-actions'>
