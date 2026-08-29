@@ -4,7 +4,6 @@ import {
   useEffect,
   useRef,
   useState,
-  type DragEvent,
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -27,6 +26,16 @@ const EDGE_SCROLL_STEP_PX = 18;
 const MOBILE_QUERY = '(max-width: 759px)';
 const SCROLL_SETTLE_MS = 120;
 const MOBILE_SWIPE_EDGE_PX = 24;
+const POINTER_DRAG_THRESHOLD_PX = 6;
+
+type PointerDragState = {
+  columnId: string;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  surface: HTMLElement;
+  dragging: boolean;
+};
 
 function isMobileViewport() {
   return window.matchMedia?.(MOBILE_QUERY).matches ?? false;
@@ -59,7 +68,7 @@ export function ColumnCanvas({
   const previousActiveColumnIdRef = useRef<string | null>(null);
   const autoScrollFrameRef = useRef<number | null>(null);
   const autoScrollDirectionRef = useRef<-1 | 0 | 1>(0);
-  const draggingColumnIdRef = useRef<string | null>(null);
+  const pointerDragRef = useRef<PointerDragState | null>(null);
   const swipeGestureRef = useRef<{
     pointerId: number;
     startX: number;
@@ -69,6 +78,7 @@ export function ColumnCanvas({
   const scrollSettleTimeoutRef = useRef<number | null>(null);
   const programmaticScrollTargetRef = useRef<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{ index: number; left: number } | null>(null);
+  const dropTargetRef = useRef<{ index: number; left: number } | null>(null);
   const [announcement, setAnnouncement] = useState('');
 
   const stopAutoScroll = useCallback(() => {
@@ -101,9 +111,22 @@ export function ColumnCanvas({
     autoScrollFrameRef.current = window.requestAnimationFrame(tick);
   }, []);
 
-  const resetDrag = useCallback(() => {
+  const resetDrag = useCallback((releaseCapture = true) => {
     stopAutoScroll();
-    draggingColumnIdRef.current = null;
+    const pointerDrag = pointerDragRef.current;
+    const canvas = canvasRef.current;
+    if (
+      releaseCapture &&
+      pointerDrag &&
+      canvas &&
+      typeof canvas.hasPointerCapture === 'function' &&
+      canvas.hasPointerCapture(pointerDrag.pointerId)
+    ) {
+      canvas.releasePointerCapture(pointerDrag.pointerId);
+    }
+    pointerDrag?.surface.removeAttribute('data-dragging');
+    pointerDragRef.current = null;
+    dropTargetRef.current = null;
     setDropTarget(null);
   }, [stopAutoScroll]);
 
@@ -114,6 +137,16 @@ export function ColumnCanvas({
       window.clearTimeout(scrollSettleTimeoutRef.current);
     }
   }, []);
+
+  useEffect(() => {
+    const cancelWithEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || !pointerDragRef.current) return;
+      event.preventDefault();
+      resetDrag();
+    };
+    window.addEventListener('keydown', cancelWithEscape);
+    return () => window.removeEventListener('keydown', cancelWithEscape);
+  }, [resetDrag]);
 
   useEffect(() => {
     if (previousActiveColumnIdRef.current === activeColumnId) return;
@@ -263,11 +296,36 @@ export function ColumnCanvas({
       }}
       onPointerDownCapture={(event) => {
         programmaticScrollTargetRef.current = null;
-        if (!isMobileViewport() || columnIds.length < 2) return;
+        const mobile = isMobileViewport();
+        const target = event.target instanceof Element ? event.target : null;
+        if (!mobile) {
+          const grip = target?.closest<HTMLElement>('[data-column-drag-grip]');
+          const surface = grip?.closest<HTMLElement>('[data-column-id]');
+          const columnId = surface?.dataset.columnId;
+          if (
+            grip &&
+            surface &&
+            columnId &&
+            event.isPrimary &&
+            event.button === 0 &&
+            onMoveColumn
+          ) {
+            pointerDragRef.current = {
+              columnId,
+              pointerId: event.pointerId,
+              startX: event.clientX,
+              startY: event.clientY,
+              surface,
+              dragging: false,
+            };
+            event.currentTarget.setPointerCapture(event.pointerId);
+          }
+          return;
+        }
+        if (columnIds.length < 2) return;
         if (swipeGestureRef.current) return;
         const canvas = canvasRef.current;
         if (!canvas) return;
-        const target = event.target instanceof Element ? event.target : null;
         const rect = canvas.getBoundingClientRect();
         const startsAtEdge =
           event.clientX - rect.left <= MOBILE_SWIPE_EDGE_PX ||
@@ -280,7 +338,37 @@ export function ColumnCanvas({
           startY: event.clientY,
         };
       }}
+      onPointerMove={(event) => {
+        const pointerDrag = pointerDragRef.current;
+        if (!pointerDrag || pointerDrag.pointerId !== event.pointerId) return;
+        if (!pointerDrag.dragging) {
+          const distance = Math.hypot(
+            event.clientX - pointerDrag.startX,
+            event.clientY - pointerDrag.startY
+          );
+          if (distance < POINTER_DRAG_THRESHOLD_PX) return;
+          pointerDrag.dragging = true;
+          pointerDrag.surface.setAttribute('data-dragging', 'true');
+        }
+        event.preventDefault();
+        const nextDropTarget = calculateDropTarget(event.clientX, pointerDrag.columnId);
+        dropTargetRef.current = nextDropTarget;
+        setDropTarget(nextDropTarget);
+        updateEdgeScroll(event.clientX);
+      }}
       onPointerUpCapture={(event) => {
+        const pointerDrag = pointerDragRef.current;
+        if (pointerDrag && pointerDrag.pointerId === event.pointerId) {
+          if (pointerDrag.dragging && dropTargetRef.current) {
+            onMoveColumn?.(pointerDrag.columnId, dropTargetRef.current.index);
+            setAnnouncement(
+              t('workspace.columnMoved', { position: dropTargetRef.current.index + 1 })
+            );
+            event.preventDefault();
+          }
+          resetDrag();
+          return;
+        }
         const gesture = swipeGestureRef.current;
         if (!gesture || gesture.pointerId !== event.pointerId) return;
         swipeGestureRef.current = null;
@@ -300,30 +388,12 @@ export function ColumnCanvas({
         onActivateColumn(columnIds[targetIndex], true);
       }}
       onPointerCancelCapture={() => {
+        if (pointerDragRef.current) resetDrag();
         swipeGestureRef.current = null;
       }}
-      onDragStartCapture={(event: DragEvent<HTMLDivElement>) => {
-        const columnId = findColumnId(event.target);
-        if (!columnId || !(event.target as Element).closest('[data-column-drag-grip]')) return;
-        draggingColumnIdRef.current = columnId;
+      onLostPointerCapture={(event) => {
+        if (pointerDragRef.current?.pointerId === event.pointerId) resetDrag(false);
       }}
-      onDragOver={(event: DragEvent<HTMLDivElement>) => {
-        const draggedColumnId = draggingColumnIdRef.current;
-        if (!draggedColumnId) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = 'move';
-        setDropTarget(calculateDropTarget(event.clientX, draggedColumnId));
-        updateEdgeScroll(event.clientX);
-      }}
-      onDrop={(event: DragEvent<HTMLDivElement>) => {
-        const draggedColumnId = draggingColumnIdRef.current;
-        if (!draggedColumnId || !dropTarget) return;
-        event.preventDefault();
-        onMoveColumn?.(draggedColumnId, dropTarget.index);
-        setAnnouncement(t('workspace.columnMoved', { position: dropTarget.index + 1 }));
-        resetDrag();
-      }}
-      onDragEndCapture={resetDrag}
       onFocusCapture={(event) => activateFromEvent(event.target)}
       onPointerDown={(event) => {
         if (!isMobileViewport()) activateFromEvent(event.target);

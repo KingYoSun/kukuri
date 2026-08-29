@@ -229,7 +229,7 @@ describe('ColumnCanvas', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 
-  it('uses only the dedicated grip as a draggable target', () => {
+  it('uses only the dedicated grip as a pointer reorder target', () => {
     render(
       <ColumnCanvas activeColumnId='metaverse-1' onActivateColumn={() => undefined}>
         <ColumnSurface
@@ -248,8 +248,7 @@ describe('ColumnCanvas', () => {
     );
 
     expect(screen.getByRole('button', { name: 'Move Metaverse Column' })).toHaveAttribute(
-      'draggable',
-      'true'
+      'data-column-drag-grip'
     );
     expect(screen.getByRole('region', { name: /Metaverse Column/ })).not.toHaveAttribute(
       'draggable'
@@ -257,7 +256,7 @@ describe('ColumnCanvas', () => {
     expect(screen.getByText('Selectable scene description')).not.toHaveAttribute('draggable');
   });
 
-  it('moves the full Column to the drop index', () => {
+  it('moves the full Column with pointer input and ignores a grip click', () => {
     const onMoveColumn = vi.fn();
     const { container } = render(
       <ColumnCanvas
@@ -289,6 +288,11 @@ describe('ColumnCanvas', () => {
     Object.defineProperty(canvas, 'getBoundingClientRect', {
       value: () => ({ left: 0, right: 900, top: 0, bottom: 500, width: 900, height: 500 }),
     });
+    const setPointerCapture = vi.fn();
+    const releasePointerCapture = vi.fn();
+    Object.defineProperty(canvas, 'setPointerCapture', { value: setPointerCapture });
+    Object.defineProperty(canvas, 'releasePointerCapture', { value: releasePointerCapture });
+    Object.defineProperty(canvas, 'hasPointerCapture', { value: vi.fn(() => true) });
     columns.forEach((column, index) => {
       Object.defineProperty(column, 'offsetLeft', { value: index * 300 });
       Object.defineProperty(column, 'offsetWidth', { value: 280 });
@@ -303,23 +307,62 @@ describe('ColumnCanvas', () => {
         }),
       });
     });
-    const dataTransfer = {
-      effectAllowed: '',
-      dropEffect: '',
-      setData: vi.fn(),
-      getData: vi.fn(() => 'stream'),
-      setDragImage: vi.fn(),
-    };
-
-    fireEvent.dragStart(screen.getByRole('button', { name: /Move stream Column/i }), {
-      dataTransfer,
+    const grip = screen.getByRole('button', { name: /Move stream Column/i });
+    fireEvent.pointerDown(grip, {
+      pointerId: 7,
+      button: 0,
+      isPrimary: true,
       clientX: 350,
+      clientY: 40,
     });
-    fireEvent.dragOver(canvas, { dataTransfer, clientX: 850 });
+    fireEvent.pointerUp(canvas, { pointerId: 7, clientX: 350, clientY: 40 });
+    expect(onMoveColumn).not.toHaveBeenCalled();
+
+    fireEvent.pointerDown(grip, {
+      pointerId: 8,
+      button: 0,
+      isPrimary: true,
+      clientX: 350,
+      clientY: 40,
+    });
+    fireEvent.pointerMove(canvas, { pointerId: 8, clientX: 850, clientY: 40 });
     expect(screen.getByRole('separator', { name: 'Drop Column at position 3' })).toBeVisible();
-    fireEvent.drop(canvas, { dataTransfer, clientX: 850 });
+    expect(columns[1]).toHaveAttribute('data-dragging', 'true');
+    fireEvent.pointerUp(canvas, { pointerId: 8, clientX: 850, clientY: 40 });
 
     expect(onMoveColumn).toHaveBeenCalledWith('stream', 2);
+    expect(onMoveColumn).toHaveBeenCalledTimes(1);
+    expect(columns[1]).not.toHaveAttribute('data-dragging');
+    expect(setPointerCapture).toHaveBeenCalledWith(7);
+    expect(setPointerCapture).toHaveBeenCalledWith(8);
+    expect(releasePointerCapture).toHaveBeenCalledWith(7);
+    expect(releasePointerCapture).toHaveBeenCalledWith(8);
+
+    fireEvent.pointerDown(grip, {
+      pointerId: 9,
+      button: 0,
+      isPrimary: true,
+      clientX: 350,
+      clientY: 40,
+    });
+    fireEvent.pointerMove(canvas, { pointerId: 9, clientX: 850, clientY: 40 });
+    fireEvent.pointerCancel(canvas, { pointerId: 9 });
+    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+    expect(columns[1]).not.toHaveAttribute('data-dragging');
+    expect(onMoveColumn).toHaveBeenCalledTimes(1);
+
+    fireEvent.pointerDown(grip, {
+      pointerId: 10,
+      button: 0,
+      isPrimary: true,
+      clientX: 350,
+      clientY: 40,
+    });
+    fireEvent.pointerMove(canvas, { pointerId: 10, clientX: 850, clientY: 40 });
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+    expect(columns[1]).not.toHaveAttribute('data-dragging');
+    expect(onMoveColumn).toHaveBeenCalledTimes(1);
   });
 
   it('starts edge auto-scroll only in a direction with remaining overflow', () => {
