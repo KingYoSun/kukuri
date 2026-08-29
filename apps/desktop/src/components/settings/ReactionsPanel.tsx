@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import {
   ContextActionMenu,
+  contextActionMenuPositionFromKeyboard,
+  contextActionMenuPositionFromPointer,
   type ContextActionMenuPosition,
 } from '@/components/ui/context-action-menu';
 import { ImageCropDialog } from '@/components/ui/ImageCropDialog';
@@ -280,13 +282,17 @@ export function ReactionsPanel({
                 key={asset.asset_id}
                 className={`reactions-saved-tile${isSelected ? ' reactions-saved-tile-selected' : ''}`}
                 aria-label={asset.search_key}
+                tabIndex={0}
                 onContextMenu={(event) => {
-                  event.preventDefault();
                   setSavedMenuAssetId(asset.asset_id);
-                  setSavedMenuPosition({
-                    x: event.clientX,
-                    y: event.clientY,
-                  });
+                  setSavedMenuPosition(contextActionMenuPositionFromPointer(event));
+                }}
+                onKeyDown={(event) => {
+                  const position = contextActionMenuPositionFromKeyboard(event);
+                  if (position) {
+                    setSavedMenuAssetId(asset.asset_id);
+                    setSavedMenuPosition(position);
+                  }
                 }}
               >
                 <label className='reactions-saved-checkbox'>

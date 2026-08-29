@@ -210,7 +210,6 @@ export function MetaverseRoomControls({
             <div className='panel-header metaverse-hud-header'>
               <div>
                 <h3>{room.title}</h3>
-                <small>{room.room_id}</small>
               </div>
             </div>
             <section className='metaverse-hud-accordion' data-open={hudDebugOpen}>

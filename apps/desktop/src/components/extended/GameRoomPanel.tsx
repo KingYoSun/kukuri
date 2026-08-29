@@ -123,7 +123,6 @@ export function GameRoomPanel({
                 <div className='post-body'>
                   <strong className='post-title'>{room.description || t('common:fallbacks.noDescription')}</strong>
                 </div>
-                <small>{room.room_id}</small>
                 <div className='topic-diagnostic topic-diagnostic-secondary'>
                   <span>{t('common:labels.phase')}: {room.phase_label ?? t('common:fallbacks.none')}</span>
                   <span>{t('common:labels.updated')}: {formatLocalizedTime(room.updated_at)}</span>
@@ -136,7 +135,7 @@ export function GameRoomPanel({
                       </div>
                       {isOwner ? (
                         <Input
-                          aria-label={`${room.room_id}-${score.label}-score`}
+                          aria-label={`${room.title}-${score.label}-score`}
                           value={draft?.scores[score.participant_id] ?? String(score.score)}
                           disabled={pending}
                           onChange={(event) =>
@@ -154,7 +153,7 @@ export function GameRoomPanel({
                     <Label>
                       <span>{t('game:fields.status')}</span>
                       <Select
-                        aria-label={`${room.room_id}-status`}
+                        aria-label={`${room.title}-status`}
                         value={draft.status}
                         disabled={pending}
                         onChange={(event) =>
@@ -170,7 +169,7 @@ export function GameRoomPanel({
                     <Label>
                       <span>{t('game:fields.phase')}</span>
                       <Input
-                        aria-label={`${room.room_id}-phase`}
+                        aria-label={`${room.title}-phase`}
                         value={draft.phaseLabel}
                         disabled={pending}
                         onChange={(event) => onDraftPhaseChange(room.room_id, event.target.value)}

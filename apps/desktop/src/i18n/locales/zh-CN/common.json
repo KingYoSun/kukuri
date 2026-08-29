@@ -9,6 +9,9 @@
     "clear": "清除",
     "copyLink": "复制链接",
     "copyHash": "复制哈希值",
+    "copyPostId": "复制帖子 ID",
+    "copyEnvelopeId": "复制信封 ID",
+    "copyAuthorId": "复制作者 ID",
     "consents": "同意",
     "end": "结束",
     "follow": "关注",
@@ -135,6 +138,7 @@
     "loadingMore": "正在加载更多…",
     "none": "无",
     "selectAuthor": "选择一位作者以查看资料和关系。",
+    "unknownAuthor": "未知作者",
     "unknown": "未知"
   },
   "labels": {

@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { AuthorAvatar } from '@/components/core/AuthorAvatar';
@@ -5,9 +6,16 @@ import { RelationshipBadge } from '@/components/core/RelationshipBadge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
 import { Notice } from '@/components/ui/notice';
+import {
+  ContextActionMenu,
+  contextActionMenuPositionFromKeyboard,
+  contextActionMenuPositionFromPointer,
+  type ContextActionMenuPosition,
+} from '@/components/ui/context-action-menu';
 import type { ProfileConnectionsView } from '@/components/shell/types';
 import type { ExtendedPanelStatus } from '@/components/extended/types';
 import type { AuthorSocialView } from '@/lib/api';
+import { copyTextToClipboard } from '@/lib/utils';
 
 type ProfileConnectionsPanelProps = {
   activeView: ProfileConnectionsView;
@@ -23,8 +31,8 @@ type ProfileConnectionsPanelProps = {
 
 const CONNECTION_VIEWS: ProfileConnectionsView[] = ['following', 'followed', 'muted'];
 
-function displayLabel(author: AuthorSocialView): string {
-  return author.display_name?.trim() || author.name?.trim() || author.author_pubkey;
+function displayLabel(author: AuthorSocialView, unknownAuthorLabel: string): string {
+  return author.display_name?.trim() || author.name?.trim() || unknownAuthorLabel;
 }
 
 function strongestRelationshipLabel(author: AuthorSocialView): string | null {
@@ -55,6 +63,24 @@ export function ProfileConnectionsPanel({
   onBack,
 }: ProfileConnectionsPanelProps) {
   const { t } = useTranslation(['profile', 'common']);
+  const [identifierMenuPosition, setIdentifierMenuPosition] =
+    useState<ContextActionMenuPosition | null>(null);
+  const [identifierAuthorPubkey, setIdentifierAuthorPubkey] = useState<string | null>(null);
+  const identifierMenuItems = useMemo(
+    () =>
+      identifierAuthorPubkey
+        ? [
+            {
+              id: 'copy-author-id',
+              label: t('common:actions.copyAuthorId'),
+              onSelect: async () => {
+                await copyTextToClipboard(identifierAuthorPubkey);
+              },
+            },
+          ]
+        : [],
+    [identifierAuthorPubkey, t]
+  );
 
   return (
     <Card className='panel-subsection'>
@@ -94,16 +120,30 @@ export function ProfileConnectionsPanel({
       {items.length > 0 ? (
         <ul className='post-list'>
           {items.map((author) => {
-            const label = displayLabel(author);
+            const label = displayLabel(author, t('common:fallbacks.unknownAuthor'));
             const relationshipLabel = strongestRelationshipLabel(author);
             const showActions = author.author_pubkey !== localAuthorPubkey;
 
             return (
               <li key={author.author_pubkey}>
-                <article className='post-card'>
+                <article
+                  className='post-card'
+                  tabIndex={0}
+                  data-testid='profile-connection-identifier-target'
+                  onContextMenu={(event) => {
+                    setIdentifierAuthorPubkey(author.author_pubkey);
+                    setIdentifierMenuPosition(contextActionMenuPositionFromPointer(event));
+                  }}
+                  onKeyDown={(event) => {
+                    const position = contextActionMenuPositionFromKeyboard(event);
+                    if (position) {
+                      setIdentifierAuthorPubkey(author.author_pubkey);
+                      setIdentifierMenuPosition(position);
+                    }
+                  }}
+                >
                   <div className='post-meta'>
                     <span>{label}</span>
-                    <span>{author.author_pubkey}</span>
                   </div>
                   <div className='post-body'>
                     <div className='author-detail-hero'>
@@ -150,6 +190,15 @@ export function ProfileConnectionsPanel({
           })}
         </ul>
       ) : null}
+      <ContextActionMenu
+        open={identifierMenuPosition !== null && identifierMenuItems.length > 0}
+        position={identifierMenuPosition}
+        items={identifierMenuItems}
+        onClose={() => {
+          setIdentifierMenuPosition(null);
+          setIdentifierAuthorPubkey(null);
+        }}
+      />
     </Card>
   );
 }

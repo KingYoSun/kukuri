@@ -327,7 +327,7 @@ test('post card promotes the original post for a pure repost', async () => {
   expect(onOpenAuthor).toHaveBeenCalledWith('b'.repeat(64));
 });
 
-test('post card marks long content fields as wrap-safe', () => {
+test('post card hides technical identifiers even when developer diagnostics are enabled', () => {
   const longContent = 'channel_payload_'.repeat(48);
   const longEnvelopeId = 'f'.repeat(192);
 
@@ -339,6 +339,7 @@ test('post card marks long content fields as wrap-safe', () => {
           content: longContent,
           envelope_id: longEnvelopeId,
         },
+        showUnavailableDiagnostics: true,
       })}
       onOpenAuthor={() => undefined}
       onOpenThread={() => undefined}
@@ -347,7 +348,37 @@ test('post card marks long content fields as wrap-safe', () => {
   );
 
   expect(screen.getByText(longContent)).toHaveClass('post-copy-wrap');
-  expect(screen.getByText(longEnvelopeId)).toHaveClass('post-copy-wrap');
+  expect(screen.queryByText(longEnvelopeId)).not.toBeInTheDocument();
+  expect(screen.queryByText('post-1')).not.toBeInTheDocument();
+});
+
+test('post card copies hidden post identifiers from pointer and keyboard context menus', async () => {
+  const user = userEvent.setup();
+  const clipboardWriteText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: clipboardWriteText },
+  });
+  const view = createView();
+
+  render(
+    <PostCard
+      view={view}
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+    />
+  );
+
+  const target = screen.getByTestId('post-identifier-target');
+  fireEvent.contextMenu(target, { clientX: 24, clientY: 36 });
+  await user.click(screen.getByRole('menuitem', { name: 'Copy post ID' }));
+  expect(clipboardWriteText).toHaveBeenLastCalledWith(view.post.object_id);
+
+  target.focus();
+  fireEvent.keyDown(target, { key: 'F10', shiftKey: true });
+  await user.click(screen.getByRole('menuitem', { name: 'Copy envelope ID' }));
+  expect(clipboardWriteText).toHaveBeenLastCalledWith(view.post.envelope_id);
 });
 
 test('post card opens a media dialog and navigates multi-image attachments', async () => {

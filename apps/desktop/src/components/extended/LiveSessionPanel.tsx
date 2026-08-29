@@ -97,7 +97,6 @@ export function LiveSessionPanel({
               <div className='post-body'>
                 <strong className='post-title'>{session.description || t('common:fallbacks.noDescription')}</strong>
               </div>
-              <small>{session.session_id}</small>
               <div className='topic-diagnostic topic-diagnostic-secondary'>
                 <span>{t('common:labels.viewers')}: {session.viewer_count}</span>
                 <span>{t('common:labels.started')}: {formatLocalizedTime(session.started_at)}</span>

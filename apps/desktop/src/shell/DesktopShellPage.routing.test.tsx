@@ -190,7 +190,8 @@ test('profile connections route restores the requested view', async () => {
   expect(
     screen.queryByText('Muted is local-only and is not shared with other devices.')
   ).not.toBeInTheDocument();
-  expect(screen.getByText(authorPubkey)).toBeInTheDocument();
+  expect(screen.getByTestId('profile-connection-identifier-target')).toBeInTheDocument();
+  expect(screen.queryByText(authorPubkey)).not.toBeInTheDocument();
 });
 
 test('invalid profile connections view normalizes to following', async () => {
@@ -217,7 +218,8 @@ test('invalid profile connections view normalizes to following', async () => {
       '#/profile?topic=kukuri%3Atopic%3Ageneral&profileMode=connections&connectionsView=following'
     );
   });
-  expect(screen.getByText(authorPubkey)).toBeInTheDocument();
+  expect(screen.getByTestId('profile-connection-identifier-target')).toBeInTheDocument();
+  expect(screen.queryByText(authorPubkey)).not.toBeInTheDocument();
 });
 
 test('invalid nested author route keeps the thread pane and normalizes only the author param', async () => {

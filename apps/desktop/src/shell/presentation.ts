@@ -85,11 +85,11 @@ export function resolveProfilePictureSrc(
 }
 
 export function authorDisplayLabel(
-  authorPubkey: string,
+  _authorPubkey: string,
   displayName?: string | null,
   name?: string | null
 ): string {
-  return displayName?.trim() || name?.trim() || shortPubkey(authorPubkey);
+  return displayName?.trim() || name?.trim() || translate('common:fallbacks.unknownAuthor');
 }
 
 export function publishedTopicIdForPost(

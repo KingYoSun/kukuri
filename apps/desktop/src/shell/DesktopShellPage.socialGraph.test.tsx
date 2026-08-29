@@ -231,30 +231,23 @@ test('profile social management updates follow and mute lists and muted authors 
     screen.queryByText('Followed shows only followers already observed on this device.')
   ).not.toBeInTheDocument();
 
-  let bobConnectionCard = screen.getByText(mutedAuthorPubkey).closest('article');
-  if (!(bobConnectionCard instanceof HTMLElement)) {
-    throw new Error('followed author card not found');
-  }
+  let bobConnectionCard = screen.getByTestId('profile-connection-identifier-target');
+  expect(screen.queryByText(mutedAuthorPubkey)).not.toBeInTheDocument();
   await user.click(within(bobConnectionCard).getByRole('button', { name: 'Follow' }));
   await waitFor(() => {
-    const refreshedCard = screen.getByText(mutedAuthorPubkey).closest('article');
-    expect(refreshedCard).toBeInstanceOf(HTMLElement);
+    const refreshedCard = screen.getByTestId('profile-connection-identifier-target');
     expect(
-      within(refreshedCard as HTMLElement).getByRole('button', { name: 'Unfollow' })
+      within(refreshedCard).getByRole('button', { name: 'Unfollow' })
     ).toBeInTheDocument();
   });
 
-  bobConnectionCard = screen.getByText(mutedAuthorPubkey).closest('article');
-  if (!(bobConnectionCard instanceof HTMLElement)) {
-    throw new Error('refreshed followed author card not found');
-  }
+  bobConnectionCard = screen.getByTestId('profile-connection-identifier-target');
   await user.click(within(bobConnectionCard).getByRole('button', { name: 'Mute' }));
   await waitFor(() => {
-    const refreshedCard = screen.getByText(mutedAuthorPubkey).closest('article');
-    expect(refreshedCard).toBeInstanceOf(HTMLElement);
-    expect(within(refreshedCard as HTMLElement).getByText('Muted')).toBeInTheDocument();
+    const refreshedCard = screen.getByTestId('profile-connection-identifier-target');
+    expect(within(refreshedCard).getByText('Muted')).toBeInTheDocument();
     expect(
-      within(refreshedCard as HTMLElement).getByRole('button', { name: 'Unmute' })
+      within(refreshedCard).getByRole('button', { name: 'Unmute' })
     ).toBeInTheDocument();
   });
 
@@ -265,10 +258,7 @@ test('profile social management updates follow and mute lists and muted authors 
       'true'
     );
   });
-  bobConnectionCard = screen.getByText(mutedAuthorPubkey).closest('article');
-  if (!(bobConnectionCard instanceof HTMLElement)) {
-    throw new Error('following author card not found');
-  }
+  bobConnectionCard = screen.getByTestId('profile-connection-identifier-target');
   expect(within(bobConnectionCard).getByRole('button', { name: 'Unfollow' })).toBeInTheDocument();
 
   await user.click(within(tabs).getByRole('tab', { name: 'Muted' }));
@@ -278,10 +268,7 @@ test('profile social management updates follow and mute lists and muted authors 
       'true'
     );
   });
-  bobConnectionCard = screen.getByText(mutedAuthorPubkey).closest('article');
-  if (!(bobConnectionCard instanceof HTMLElement)) {
-    throw new Error('muted author card not found');
-  }
+  bobConnectionCard = screen.getByTestId('profile-connection-identifier-target');
   expect(within(bobConnectionCard).getByRole('button', { name: 'Unmute' })).toBeInTheDocument();
   expect(within(bobConnectionCard).getByText('Muted')).toBeInTheDocument();
 
@@ -353,7 +340,8 @@ test('author detail shows via authors and follow action updates relationship', a
   await user.click(await screen.findByRole('button', { name: 'bob' }));
 
   expect(await screen.findByTestId('author-detail-avatar')).toBeInTheDocument();
-  expect(screen.getByText(`${viaA.slice(0, 12)}, ${viaB.slice(0, 12)}`)).toBeInTheDocument();
+  expect(screen.queryByText(viaA.slice(0, 12), { exact: false })).not.toBeInTheDocument();
+  expect(screen.queryByText(viaB.slice(0, 12), { exact: false })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Follow' })).toBeInTheDocument();
 
   await user.click(screen.getByRole('button', { name: 'Follow' }));

@@ -84,7 +84,10 @@ test('missing text body does not occupy normal UI', async () => {
     />
   );
 
-  expect(await screen.findByText('envelope-image-post')).toBeInTheDocument();
+  await waitFor(() => {
+    expect(document.querySelector('[data-post-object-id="image-post"]')).toBeInTheDocument();
+  });
+  expect(screen.queryByText('envelope-image-post')).not.toBeInTheDocument();
   expect(screen.queryByTestId('text-skeleton-image-post')).not.toBeInTheDocument();
   expect(screen.queryByText('[blob pending]')).not.toBeInTheDocument();
   expect(screen.queryByText('Content unavailable.')).not.toBeInTheDocument();
@@ -267,10 +270,15 @@ test('thread pane reuses the same unavailable media renderer', async () => {
     <App api={api} />
   );
 
+  let imagePost: HTMLElement | null = null;
   await waitFor(() => {
-    expect(screen.getByText('envelope-image-post')).toBeInTheDocument();
+    imagePost = document.querySelector(
+      '[data-post-object-id="image-post"] [data-testid="post-identifier-target"]'
+    );
+    expect(imagePost).toBeInTheDocument();
   });
-  await user.click(screen.getByText('envelope-image-post'));
+  expect(screen.queryByText('envelope-image-post')).not.toBeInTheDocument();
+  await user.click(imagePost!);
   await waitFor(() => expect(getDetailPane('Thread')).toBeInTheDocument());
   const threadPanel = getDetailPane('Thread');
 

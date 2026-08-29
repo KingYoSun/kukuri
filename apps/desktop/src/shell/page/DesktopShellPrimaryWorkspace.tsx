@@ -520,7 +520,6 @@ export function DesktopShellPrimarySurface({
                           />
                         </strong>
                       </div>
-                      <small>{session.session_id}</small>
                       <div className='topic-diagnostic topic-diagnostic-secondary'>
                         <span>{t('common:labels.viewers')}: {formatCount(session.viewer_count)}</span>
                         <span>
