@@ -524,4 +524,180 @@ describe('useMetaverseRoomSession', () => {
     );
     expect(abortDomeTransition).not.toHaveBeenCalled();
   });
+
+  test('retries the same destination commit when the first acknowledgement is lost', async () => {
+    const domeA = {
+      ...room,
+      room_id: 'dome-a',
+      metaverse: createDefaultMetaverseRoomState(8, {
+        roomId: 'dome-a',
+        topicId: 'kukuri:topic:demo',
+      }),
+    };
+    const domeB = {
+      ...room,
+      room_id: 'dome-b',
+      title: 'Neighbor',
+      metaverse: createDefaultMetaverseRoomState(8, {
+        roomId: 'dome-b',
+        topicId: 'kukuri:topic:demo',
+      }),
+    };
+    const hosted = (instanceId: string): DomeHostingView => ({
+      instance_id: instanceId,
+      state: {
+        kind: 'community_node_hosted',
+        host: { kind: 'community_node', node_id: 'cn-1', api_base_url: 'https://cn.example' },
+        lease_id: `lease-${instanceId}`,
+        lease_epoch: 1,
+        lease_expires_at: Date.now() + 60_000,
+        session_id: `session-${instanceId}`,
+        reason: null,
+        last_heartbeat_at: Date.now(),
+      },
+      lease: null,
+      signed_lease_json: null,
+      signed_activation_json: null,
+      signed_close_json: null,
+      instance_manifest_json: '{}',
+      preset_manifest_json: '{}',
+      participants: 0,
+      sleeping: false,
+      resource_budget: {} as DomeHostingView['resource_budget'],
+      resource_metrics: {} as DomeHostingView['resource_metrics'],
+    });
+    const prepareDomeTransition = vi.fn(async (request) => ({
+      request,
+      target_lease_epoch: 1,
+      target_session_id: 'session-dome-b',
+      expires_at: Date.now() + 15_000,
+    }));
+    const commitDomeTransition = vi.fn()
+      .mockRejectedValueOnce(new Error('response lost after commit'))
+      .mockResolvedValue(undefined);
+    const abortDomeTransition = vi.fn().mockResolvedValue(undefined);
+    const submitDomeSessionInput = vi.fn(async (
+      _context: SpatialContextV1,
+      instanceId: string,
+      sequence: number
+    ): Promise<DomePhysicsSnapshotV1> => ({
+      instance_id: instanceId,
+      instance_generation: 1,
+      lease_epoch: 1,
+      session_id: `session-${instanceId}`,
+      host_pubkey: 'e'.repeat(64),
+      sequence,
+      simulated_at: Date.now(),
+      sleeping: false,
+      bodies: [{
+        entity_id: `avatar:${'f'.repeat(64)}`,
+        kind: 'avatar',
+        position: [0, 0, 260],
+        rotation: [0, 180, 0],
+        linear_velocity: [0, 0, 0],
+        animation: 'idle',
+        grabbed_by: null,
+        expires_at: null,
+      }],
+    }));
+    const api: DesktopApi = {
+      ...createDesktopMockApi(),
+      listDomeConnectionTopology: vi.fn().mockResolvedValue({
+        proposals: [],
+        connections: [{
+          record: {
+            agreement: {
+              connection_id: 'connection-1',
+              proposal_id: 'proposal-1',
+              spatial_context: domeA.metaverse.spatial_context,
+              proposer: {
+                instance_id: 'dome-a',
+                instance_generation: 1,
+                owner_pubkey: domeA.host_pubkey,
+                direction: 'north',
+              },
+              receiver: {
+                instance_id: 'dome-b',
+                instance_generation: 1,
+                owner_pubkey: domeB.host_pubkey,
+                direction: 'south',
+              },
+              activation_generation: 1,
+            },
+            receiver_slot_generation: 1,
+            observed_active_connection_ids: [],
+            status: 'active',
+            lifecycle_generation: 1,
+            lifecycle_actor: null,
+            lifecycle_reason: null,
+            lifecycle_deadline_at: null,
+          },
+        }],
+        resolution: {
+          topology: {
+            spatial_context: domeA.metaverse.spatial_context,
+            components: [{
+              root_instance_id: 'dome-a',
+              instance_ids: ['dome-a', 'dome-b'],
+              connection_ids: ['connection-1'],
+              coordinates_cm: { 'dome-a': [0, 0, 0], 'dome-b': [0, 0, -5_700] },
+            }],
+            active_connection_ids: ['connection-1'],
+            topology_digest: 'topology-1',
+          },
+          rejected_connections: [],
+        },
+      }),
+      getDomeHosting: vi.fn(async (_context, instanceId) => hosted(instanceId)),
+      submitDomeSessionInput,
+      prepareDomeTransition,
+      commitDomeTransition,
+      abortDomeTransition,
+    };
+    const session = renderSession({
+      api,
+      rooms: [domeA, domeB],
+      initialSelectedRoomId: 'dome-a',
+    });
+    await waitFor(() =>
+      expect(session.result.current.transitionNeighbors[0]?.boundaryState).toBe('ready')
+    );
+
+    act(() => session.result.current.handleLocalTransform({
+      roomId: 'dome-a',
+      peerId: 'local-peer',
+      seq: 1,
+      position: [0, 90, -2_200],
+      rotation: [0, 0, 0],
+      animation: 'walk',
+      sentAt: Date.now(),
+    }));
+    await waitFor(() => expect(prepareDomeTransition).toHaveBeenCalledTimes(1));
+    act(() => session.result.current.handleLocalTransform({
+      roomId: 'dome-a',
+      peerId: 'local-peer',
+      seq: 2,
+      position: [0, 90, -2_870],
+      rotation: [0, 0, 0],
+      animation: 'walk',
+      sentAt: Date.now(),
+    }));
+
+    await waitFor(() => expect(commitDomeTransition).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(session.result.current.selectedRoomId).toBe('dome-b'));
+    expect(commitDomeTransition.mock.calls[1]).toEqual(commitDomeTransition.mock.calls[0]);
+    expect(abortDomeTransition).not.toHaveBeenCalled();
+    expect(submitDomeSessionInput).not.toHaveBeenCalledWith(
+      expect.anything(),
+      'dome-a',
+      expect.anything(),
+      expect.objectContaining({ type: 'abort_transition' })
+    );
+    expect(submitDomeSessionInput).toHaveBeenCalledWith(
+      expect.anything(),
+      'dome-a',
+      expect.anything(),
+      expect.objectContaining({ type: 'complete_transition' })
+    );
+  });
 });

@@ -29,7 +29,7 @@ ActiveなDome Connectionは恒常的なportalではなく、avatarが隣のDome�
 - Destination hostはtransition id、Connection id、topology digest、participant、両Instance／generation、target lease epoch／session、expiryへ束縛した短期admission ticketを発行する。
 - Provisional reservationは定員へ算入する。Prepare、refresh、commit、abortはtransition id単位で冪等とし、expiry、host restart、lease／session／generation／topology変更で無効化する。
 - Source `prepare_transition`はgrabを解除し、seat stateを解除し、base avatar identity／collider以外の追加装着assetをhandoff payloadから除外する。Propとseat bodyはsource側のcollisionに残し、destinationへ送らない。
-- Clientはdestination provisional reservationの完了後、hysteresis付きで中心線を進行方向へ越えた時だけcommitする。Destination commitのack後にcurrent Domeを切り替え、source leaveを冪等に完了する。
+- Clientはdestination provisional reservationの完了後、hysteresis付きで中心線を進行方向へ越えた時だけcommitする。Destination commitのack後にcurrent Domeを切り替え、source leaveを冪等に完了する。Commit要求を送信した後のtransport errorは適用結果不明として扱い、target lease epoch／sessionが同じ間は同一ticketとtransformでcommitを再送する。Ack取得前にdestination reservationまたはsource prepareをabortしてはならない。
 - Commit前の失敗はdestination reservationをabortしてsource側へ戻す。Commit後にsource leaveが失敗した場合はdestinationをcurrentのままsource leaveを再試行し、sourceはtransition idで旧inputをfenceする。これによりclient current Domeを一つ、authoritative参加先を最大一つへ収束させる。
 
 ## Feature Data Classification
