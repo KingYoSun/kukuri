@@ -55,6 +55,11 @@ pub enum GossipHint {
         room_id: String,
         event: Box<KukuriEnvelope>,
     },
+    DomeHostHeartbeat {
+        topic_id: TopicId,
+        instance_id: String,
+        heartbeat: Box<crate::SignedDomeHostHeartbeatV1>,
+    },
     DirectMessageFrame {
         topic_id: TopicId,
         dm_id: String,

@@ -66,6 +66,7 @@ fn active(agreement: DomeConnectionAgreementV1) -> DomeConnectionRecordV1 {
         lifecycle_generation: 1,
         lifecycle_actor: None,
         lifecycle_reason: None,
+        lifecycle_deadline_at: None,
     }
 }
 
@@ -86,6 +87,47 @@ fn dome_directions_have_fixed_opposites() {
     assert_eq!(
         opposite_dome_direction(DomeDirection::West),
         DomeDirection::East
+    );
+}
+
+#[test]
+fn draining_requires_deadline_and_keeps_topology_until_terminal_revoke() {
+    let proposer_keys = generate_keys();
+    let receiver_keys = generate_keys();
+    let proposer = instance(&proposer_keys, "dome-a");
+    let receiver = instance(&receiver_keys, "dome-b");
+    let mut connection = active(agreement(
+        "connection-ab",
+        "proposal-ab",
+        &proposer,
+        DomeDirection::East,
+        &receiver,
+        1,
+    ));
+    connection.status = DomeConnectionStatusV1::Draining;
+    connection.lifecycle_generation = 2;
+    connection.lifecycle_actor = Some(proposer.owner_pubkey.clone());
+    connection.lifecycle_reason = Some(DomeConnectionTerminalReasonV1::OwnerRevoked);
+    connection.lifecycle_deadline_at = Some(4_000);
+    validate_dome_connection_record(&connection).unwrap();
+    assert_eq!(
+        resolve_dome_topology(&[proposer.clone(), receiver.clone()], &[connection.clone()])
+            .unwrap()
+            .components
+            .len(),
+        1
+    );
+
+    connection.lifecycle_deadline_at = None;
+    assert!(validate_dome_connection_record(&connection).is_err());
+    connection.status = DomeConnectionStatusV1::Revoked;
+    validate_dome_connection_record(&connection).unwrap();
+    assert_eq!(
+        resolve_dome_topology(&[proposer, receiver], &[connection])
+            .unwrap()
+            .components
+            .len(),
+        2
     );
 }
 

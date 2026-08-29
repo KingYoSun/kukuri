@@ -58,6 +58,16 @@
       "offline": "对等连接不可用"
     }
   },
+  "recovery": {
+    "returnHome": "返回安全穹顶",
+    "returnHomeDescription": "撤离到当前最安全的可用 Dome",
+    "offlineCountdown": "Host heartbeat 已停止。将在 {{count}} 秒后安全撤离。",
+    "movingTo": "正在确认 {{target}} 的安全出生点…",
+    "moved": "已安全移动到 {{target}}。",
+    "noCandidate": "没有安全的 Dome。已返回 Dome 选择。",
+    "states": { "offline": "Host 离线", "evacuating": "撤离中", "closed": "Dome 已关闭", "no_candidate": "没有安全目的地" },
+    "details": { "evacuating": "保留当前场景并检查目的地。", "closed": "宽限期已结束。", "no_candidate": "请选择正在托管的 Dome。" }
+  },
   "hosting": {
     "title": "Dome 托管",
     "states": { "closed": "已停止", "owner_hosted": "由所有者设备托管", "community_node_hosted": "由社区节点托管", "grace_period": "宽限期", "transferring": "迁移中" },

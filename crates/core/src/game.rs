@@ -93,7 +93,7 @@ pub enum MetaversePrimitive {
     Sphere,
 }
 
-pub const METAVERSE_WORLD_VERSION: u64 = 6;
+pub const METAVERSE_WORLD_VERSION: u64 = 7;
 pub const FIXED_DOME_SPEC_ID: &str = "fixed_dome_v1";
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

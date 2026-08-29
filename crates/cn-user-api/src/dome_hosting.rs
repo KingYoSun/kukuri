@@ -422,6 +422,7 @@ pub(crate) async fn release_dome_hosting(
         session_id: None,
         participants: 0,
         sleeping: true,
+        signed_heartbeat: None,
         expires_at: assignment.expires_at,
         resource_budget: hosting.budget.clone(),
         resource_metrics: Default::default(),
@@ -513,6 +514,7 @@ pub(crate) async fn submit_dome_hosting_input(
     if matches!(
         &request.signed_input.input.input,
         kukuri_core::DomeSessionInputKindV1::Join { .. }
+            | kukuri_core::DomeSessionInputKindV1::KeepAlive
     ) {
         let proof_valid = dome_entry_access_proof_is_valid(
             request.access_proof.as_ref(),
@@ -838,6 +840,11 @@ fn status_from_runtime(
             .map(|runtime| runtime.participant_count().try_into().unwrap_or(u32::MAX))
             .unwrap_or(0),
         sleeping: runtime.is_none_or(DomeSessionRuntime::is_sleeping),
+        signed_heartbeat: runtime.and_then(|runtime| {
+            runtime
+                .signed_heartbeat(chrono::Utc::now().timestamp_millis())
+                .ok()
+        }),
         expires_at,
         resource_budget: runtime
             .map(|runtime| runtime.budget().clone())

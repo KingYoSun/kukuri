@@ -74,6 +74,7 @@ function topology(): DomeConnectionTopologyView {
         lifecycle_generation: 1,
         lifecycle_actor: null,
         lifecycle_reason: null,
+        lifecycle_deadline_at: null,
       },
     }],
     resolution: {
@@ -122,6 +123,38 @@ describe('DomeTransitionModel', () => {
     expect(resolveActiveDomeNeighbors(topology(), current, [current, target], {}, {
       'dome-b': 'ready',
     })[0].boundaryState).toBe('loading');
+  });
+
+  it('distinguishes offline, draining, blocked, and closed boundaries', () => {
+    const current = room('dome-a');
+    const target = room('dome-b');
+    const offline = hosting('dome-b');
+    offline.state.kind = 'grace_period';
+    expect(resolveActiveDomeNeighbors(topology(), current, [current, target], {
+      'dome-b': offline,
+    })[0].boundaryState).toBe('offline');
+
+    const draining = topology();
+    draining.connections[0].record.status = 'draining';
+    draining.connections[0].record.lifecycle_actor = 'a'.repeat(64);
+    draining.connections[0].record.lifecycle_reason = 'owner_revoked';
+    draining.connections[0].record.lifecycle_deadline_at = 4_000;
+    expect(resolveActiveDomeNeighbors(draining, current, [current, target], {
+      'dome-b': hosting('dome-b'),
+    })[0].boundaryState).toBe('draining');
+
+    const blocked = topology();
+    blocked.connections[0].record.status = 'revoked';
+    blocked.connections[0].record.lifecycle_actor = 'a'.repeat(64);
+    blocked.connections[0].record.lifecycle_reason = 'owners_blocked';
+    blocked.resolution.topology.active_connection_ids = [];
+    blocked.resolution.topology.components = [];
+    expect(resolveActiveDomeNeighbors(blocked, current, [current, target], {})[0].boundaryState)
+      .toBe('blocked');
+
+    blocked.connections[0].record.lifecycle_reason = 'owner_revoked';
+    expect(resolveActiveDomeNeighbors(blocked, current, [current, target], {})[0].boundaryState)
+      .toBe('closed');
   });
 
   it('loading boundary stops before center while ready boundary reaches the far end', () => {

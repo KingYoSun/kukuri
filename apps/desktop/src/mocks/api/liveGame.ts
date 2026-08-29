@@ -632,6 +632,7 @@ export function createLiveGameMock(runtime: MockRuntime): LiveGameMock {
           lifecycle_generation: 1,
           lifecycle_actor: null,
           lifecycle_reason: null,
+          lifecycle_deadline_at: null,
         },
       };
       connectionViews.set(proposal.connection_id, connection);
@@ -675,6 +676,7 @@ export function createLiveGameMock(runtime: MockRuntime): LiveGameMock {
           lifecycle_generation: connection.record.lifecycle_generation + 2,
           lifecycle_actor: syncStatus.local_author_pubkey,
           lifecycle_reason: 'owner_revoked',
+          lifecycle_deadline_at: null,
         },
       };
       connectionViews.set(connectionId, revoked);

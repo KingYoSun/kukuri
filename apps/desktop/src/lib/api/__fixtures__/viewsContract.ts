@@ -554,7 +554,7 @@ export const gameRoomViewMetaverse = {
   "scores": [],
   "room_kind": "metaverse_room",
   "metaverse": {
-    "world_version": 6,
+    "world_version": 7,
     "instance_id": "room-2",
     "spatial_context": {
       "kind": "channel",

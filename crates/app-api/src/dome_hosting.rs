@@ -15,7 +15,8 @@ use kukuri_core::{
     SpatialContextV1, accept_dome_hosting_lease, activate_dome_hosting_lease,
     build_signed_dome_hosting_lease, build_signed_dome_layout_commit,
     build_signed_dome_session_input, close_dome_hosting_lease, dome_layout_candidate_digest,
-    resolve_dome_hosting_state, verify_signed_dome_layout_candidate,
+    resolve_dome_hosting_state, verify_signed_dome_host_heartbeat,
+    verify_signed_dome_layout_candidate,
 };
 
 const HOSTING_RECORD_PREFIX: &str = "metaverse/dome-hosting";
@@ -108,6 +109,11 @@ impl AppService {
             .lock()
             .await
             .insert(instance.instance_id.clone(), runtime);
+        self.spawn_owner_dome_heartbeat_task(
+            instance.spatial_context.clone(),
+            instance.instance_id.clone(),
+            session_id.clone(),
+        );
         let mut all_records = records;
         all_records.extend(new_records);
         self.publish_dome_hosting_hint(
@@ -247,7 +253,10 @@ impl AppService {
         &self,
         input: SubmitDomeSessionInput,
     ) -> Result<SignedDomePhysicsSnapshotV1> {
-        if matches!(&input.input, DomeSessionInputKindV1::Join { .. }) {
+        if matches!(
+            &input.input,
+            DomeSessionInputKindV1::Join { .. } | DomeSessionInputKindV1::KeepAlive
+        ) {
             let replica = self.hosting_context_replica(&input.spatial_context).await?;
             let instance = self
                 .hosting_instance(&replica, &input.instance_id)
@@ -798,7 +807,7 @@ impl AppService {
         records: &[DomeHostingRecordV1],
         now: i64,
     ) -> Result<DomeHostingView> {
-        let (local_heartbeat, participants, sleeping, resource_metrics) = {
+        let (local_heartbeat, mut participants, mut sleeping, resource_metrics) = {
             let mut sessions = self.dome_host_sessions.lock().await;
             match sessions.get_mut(&instance.instance_id) {
                 Some(runtime) => {
@@ -813,7 +822,54 @@ impl AppService {
                 None => (None, 0, true, Default::default()),
             }
         };
-        let state = resolve_dome_hosting_state(instance, records, now, local_heartbeat)?;
+        let mut heartbeat_at = local_heartbeat;
+        if heartbeat_at.is_none() {
+            let preliminary = resolve_dome_hosting_state(instance, records, now, Some(now))?;
+            if let (Some(lease), Some(session_id), Some(signed)) = (
+                current_unique_lease(records)?,
+                preliminary.session_id.as_deref(),
+                self.dome_host_heartbeats
+                    .lock()
+                    .await
+                    .get(&instance.instance_id)
+                    .cloned(),
+            ) {
+                if signed.heartbeat.sent_at <= now.saturating_add(5_000)
+                    && verify_signed_dome_host_heartbeat(&signed, &lease.lease, session_id).is_ok()
+                {
+                    heartbeat_at = Some(signed.heartbeat.sent_at);
+                    participants = signed.heartbeat.participants;
+                    sleeping = signed.heartbeat.sleeping;
+                } else {
+                    let mut heartbeats = self.dome_host_heartbeats.lock().await;
+                    if heartbeats
+                        .get(&instance.instance_id)
+                        .is_some_and(|current| current.envelope.id == signed.envelope.id)
+                    {
+                        heartbeats.remove(&instance.instance_id);
+                    }
+                }
+            }
+            if heartbeat_at.is_none()
+                && matches!(
+                    preliminary.kind,
+                    DomeHostingStateKindV1::OwnerHosted
+                        | DomeHostingStateKindV1::CommunityNodeHosted
+                )
+            {
+                heartbeat_at = preliminary.lease_epoch.and_then(|epoch| {
+                    records.iter().rev().find_map(|record| match record {
+                        DomeHostingRecordV1::LeaseActivated(signed)
+                            if signed.activation.lease_epoch == epoch =>
+                        {
+                            Some(signed.activation.activated_at)
+                        }
+                        _ => None,
+                    })
+                });
+            }
+        }
+        let state = resolve_dome_hosting_state(instance, records, now, heartbeat_at)?;
         self.services
             .projection_store
             .upsert_dome_hosting_projection(DomeHostingProjectionRow {
@@ -899,6 +955,53 @@ impl AppService {
                 },
             )
             .await
+    }
+
+    fn spawn_owner_dome_heartbeat_task(
+        &self,
+        context: SpatialContextV1,
+        instance_id: String,
+        session_id: String,
+    ) {
+        let sessions = Arc::clone(&self.dome_host_sessions);
+        let hint_transport = Arc::clone(&self.services.hint_transport);
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_millis(
+                kukuri_core::DOME_HOST_HEARTBEAT_INTERVAL_MILLIS as u64,
+            ));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            loop {
+                interval.tick().await;
+                let signed = {
+                    let sessions = sessions.lock().await;
+                    let Some(runtime) = sessions.get(&instance_id) else {
+                        break;
+                    };
+                    if runtime.session_id() != session_id {
+                        break;
+                    }
+                    match runtime.signed_heartbeat(Utc::now().timestamp_millis()) {
+                        Ok(signed) => signed,
+                        Err(_) => break,
+                    }
+                };
+                let hint = GossipHint::DomeHostHeartbeat {
+                    topic_id: context.topic_id().clone(),
+                    instance_id: instance_id.clone(),
+                    heartbeat: Box::new(signed),
+                };
+                if hint_transport
+                    .publish_hint(
+                        &channel_hint_topic_for(context.topic_id().as_str(), context.channel_id()),
+                        hint,
+                    )
+                    .await
+                    .is_err()
+                {
+                    continue;
+                }
+            }
+        });
     }
 }
 

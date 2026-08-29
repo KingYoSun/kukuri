@@ -331,6 +331,33 @@
   color: var(--danger);
 }
 
+.metaverse-recovery-banner {
+  position: absolute;
+  top: 3.5rem;
+  left: 0.75rem;
+  z-index: 2;
+  display: grid;
+  gap: 0.15rem;
+  max-width: min(24rem, calc(100% - 1.5rem));
+  padding: var(--space-sm);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--surface-panel) 92%, transparent);
+  color: var(--foreground);
+  box-shadow: var(--shadow-panel);
+  backdrop-filter: blur(var(--blur-hud));
+}
+
+.metaverse-recovery-banner[data-state='closed'],
+.metaverse-recovery-banner[data-state='no_candidate'] {
+  border-color: var(--danger);
+}
+
+.metaverse-recovery-banner span {
+  color: var(--muted-foreground);
+  font-size: var(--text-caption);
+}
+
 .metaverse-room-hud {
   position: absolute;
   top: 4rem;

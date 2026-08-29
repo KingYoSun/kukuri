@@ -630,6 +630,7 @@ impl AppService {
     ) -> Result<()> {
         let services = self.services.clone();
         let metaverse_room_events = Arc::clone(&self.metaverse_room_events);
+        let dome_host_heartbeats = Arc::clone(&self.dome_host_heartbeats);
         let last_sync = Arc::clone(&self.last_sync_ts);
         let notification_inserted = Arc::clone(&self.notification_inserted_notify);
         let public_topic_delivery = Arc::clone(&self.public_topic_delivery);
@@ -854,6 +855,20 @@ impl AppService {
                                                 "failed to parse metaverse room event hint"
                                             );
                                         }
+                                    }
+                                }
+                                GossipHint::DomeHostHeartbeat { instance_id, heartbeat, .. } => {
+                                    let mut heartbeats = dome_host_heartbeats.lock().await;
+                                    let replace = heartbeats
+                                        .get(instance_id)
+                                        .is_none_or(|current| {
+                                            heartbeat.heartbeat.sequence > current.heartbeat.sequence
+                                                || (heartbeat.heartbeat.sequence == current.heartbeat.sequence
+                                                    && heartbeat.heartbeat.sent_at > current.heartbeat.sent_at)
+                                        });
+                                    if replace {
+                                        heartbeats.insert(instance_id.clone(), heartbeat.as_ref().clone());
+                                        *last_sync.lock().await = Some(Utc::now().timestamp_millis());
                                     }
                                 }
                                 GossipHint::LivePresence { session_id, author, ttl_ms, .. } => {

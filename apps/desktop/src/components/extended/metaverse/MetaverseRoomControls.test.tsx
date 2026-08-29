@@ -98,6 +98,25 @@ describe('MetaverseRoomControls', () => {
     );
   });
 
+  test('announces offline grace and exposes keyboard reachable Return Home', async () => {
+    const user = userEvent.setup();
+    const onReturnHome = vi.fn();
+    renderControls({
+      domeRecovery: {
+        state: 'offline',
+        secondsRemaining: 9,
+        reason: 'host_offline',
+        targetTitle: null,
+      },
+      onReturnHome,
+    });
+
+    expect(screen.getByRole('status')).toHaveTextContent('Host offline');
+    expect(screen.getByRole('status')).toHaveTextContent('9 seconds');
+    await user.click(screen.getByRole('button', { name: 'Return Home' }));
+    expect(onReturnHome).toHaveBeenCalledOnce();
+  });
+
   test('routes toolbar, avatar, and shared-object controls through callbacks', async () => {
     const user = userEvent.setup();
     const onLeaveRoom = vi.fn();

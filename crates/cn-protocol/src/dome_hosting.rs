@@ -1,9 +1,10 @@
 use kukuri_core::{
     DomeHostingStateKindV1, DomeInstanceManifestV1, DomePresetManifestV1, DomeSpatialAccessProofV1,
     DomeTransitionAdmissionRequestV1, DomeTransitionAdmissionTicketV1,
-    MetaverseResourceBudgetConfig, MetaverseResourceMetricsV1, SignedDomeHostingAcceptanceV1,
-    SignedDomeHostingActivationV1, SignedDomeHostingCloseV1, SignedDomeHostingLeaseV1,
-    SignedDomeLayoutCandidateV1, SignedDomePhysicsSnapshotV1, SignedDomeSessionInputV1,
+    MetaverseResourceBudgetConfig, MetaverseResourceMetricsV1, SignedDomeHostHeartbeatV1,
+    SignedDomeHostingAcceptanceV1, SignedDomeHostingActivationV1, SignedDomeHostingCloseV1,
+    SignedDomeHostingLeaseV1, SignedDomeLayoutCandidateV1, SignedDomePhysicsSnapshotV1,
+    SignedDomeSessionInputV1,
 };
 use serde::{Deserialize, Serialize};
 
@@ -128,6 +129,7 @@ pub struct DomeHostingStatusResponse {
     pub session_id: Option<String>,
     pub participants: u32,
     pub sleeping: bool,
+    pub signed_heartbeat: Option<SignedDomeHostHeartbeatV1>,
     pub expires_at: i64,
     pub resource_budget: MetaverseResourceBudgetConfig,
     pub resource_metrics: MetaverseResourceMetricsV1,

@@ -61,14 +61,49 @@ impl AppService {
             anyhow::bail!("only an endpoint owner can terminate a Dome Connection");
         }
         if state.record.status != DomeConnectionStatusV1::Revoked {
-            state.record.status = DomeConnectionStatusV1::Draining;
-            state.record.lifecycle_generation += 1;
-            state.record.lifecycle_actor = Some(actor.clone());
-            state.record.lifecycle_reason = Some(reason);
-            self.persist_connection_lifecycle(&replica, &mut state)
+            let immediate = reason != DomeConnectionTerminalReasonV1::OwnerRevoked;
+            if !immediate && state.record.status != DomeConnectionStatusV1::Draining {
+                state.record.status = DomeConnectionStatusV1::Draining;
+                state.record.lifecycle_generation += 1;
+                state.record.lifecycle_actor = Some(actor.clone());
+                state.record.lifecycle_reason = Some(reason);
+                state.record.lifecycle_deadline_at = Some(
+                    Utc::now()
+                        .timestamp_millis()
+                        .saturating_add(kukuri_core::DOME_CONNECTION_DRAIN_MILLIS),
+                );
+                self.persist_connection_lifecycle(&replica, &mut state)
+                    .await?;
+                self.publish_dome_topology_hint(
+                    &state.record.agreement.spatial_context,
+                    &state.record.agreement.connection_id,
+                )
                 .await?;
+                let mut sessions = self.dome_host_sessions.lock().await;
+                for runtime in sessions.values_mut() {
+                    runtime.drain_connection(connection_id);
+                }
+            }
+            if let Some(deadline) = state.record.lifecycle_deadline_at {
+                let remaining = deadline.saturating_sub(Utc::now().timestamp_millis());
+                if remaining > 0 {
+                    tokio::time::sleep(std::time::Duration::from_millis(remaining as u64)).await;
+                }
+                state = self
+                    .fetch_dome_connection_state(&replica, connection_id)
+                    .await?
+                    .context("Dome Connection was not found after draining")?;
+            }
+            if state.record.status == DomeConnectionStatusV1::Revoked {
+                return Ok(DomeConnectionView {
+                    record: state.record,
+                });
+            }
             state.record.status = DomeConnectionStatusV1::Revoked;
             state.record.lifecycle_generation += 1;
+            state.record.lifecycle_actor = Some(actor);
+            state.record.lifecycle_reason = Some(reason);
+            state.record.lifecycle_deadline_at = None;
             self.persist_connection_lifecycle(&replica, &mut state)
                 .await?;
         }

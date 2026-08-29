@@ -131,7 +131,7 @@ export type MetaversePrimitive = "cube" | "sphere";
 
 export type DomeDirection = "north" | "east" | "south" | "west";
 
-export type DomeBoundaryStateV1 = "closed" | "loading" | "ready" | "denied" | "full" | "unhosted" | "error" | "stale";
+export type DomeBoundaryStateV1 = "closed" | "offline" | "draining" | "blocked" | "loading" | "ready" | "denied" | "full" | "unhosted" | "error" | "stale";
 
 export type DomeTransitionDenialReasonV1 = "host_unavailable" | "access_denied" | "owners_blocked" | "visitor_blocked" | "capacity_full" | "assets_unavailable" | "stale_topology" | "stale_session" | "invalid_ticket";
 
@@ -183,7 +183,7 @@ export type DomeConnectionStatusV1 = "accepted" | "active" | "draining" | "revok
 
 export type DomeConnectionTerminalReasonV1 = "owner_revoked" | "proposer_withdrew" | "proposer_slot_occupied" | "instance_detached" | "instance_deleted" | "owners_blocked";
 
-export type DomeConnectionRecordV1 = { agreement: DomeConnectionAgreementV1, receiver_slot_generation: number, observed_active_connection_ids: Array<string>, status: DomeConnectionStatusV1, lifecycle_generation: number, lifecycle_actor: Pubkey | null, lifecycle_reason: DomeConnectionTerminalReasonV1 | null, };
+export type DomeConnectionRecordV1 = { agreement: DomeConnectionAgreementV1, receiver_slot_generation: number, observed_active_connection_ids: Array<string>, status: DomeConnectionStatusV1, lifecycle_generation: number, lifecycle_actor: Pubkey | null, lifecycle_reason: DomeConnectionTerminalReasonV1 | null, lifecycle_deadline_at: number | null, };
 
 export type DomeProposalDerivedStatusV1 = "proposed" | "reserved" | "accepted" | "waiting_for_slot" | "discarded";
 
@@ -203,7 +203,7 @@ export type DomeHostingStateKindV1 = "closed" | "owner_hosted" | "community_node
 
 export type DomeHostingStateV1 = { kind: DomeHostingStateKindV1, host?: DomeHostTargetV1 | null, lease_id?: string | null, lease_epoch?: number | null, lease_expires_at?: number | null, session_id?: string | null, reason?: string | null, last_heartbeat_at?: number | null, };
 
-export type DomeSessionInputKindV1 = { "type": "join", avatar_collider?: MetaverseColliderV1 | null, } | { "type": "leave" } | { "type": "move", position: [number, number, number], rotation: [number, number, number], animation: string, } | { "type": "grab", prop_id: string, } | { "type": "throw", prop_id: string, impulse: [number, number, number], } | { "type": "push", prop_id: string, impulse: [number, number, number], } | { "type": "sit", prop_id: string, } | { "type": "prepare_transition", transition_id: string, direction: DomeDirection, } | { "type": "abort_transition", transition_id: string, } | { "type": "complete_transition", transition_id: string, } | { "type": "spawn_guest_prop", prop: MetaversePersistentPropV1, expires_at: number, } | { "type": "upsert_persistent_prop", prop: MetaversePersistentPropV1, } | { "type": "delete_persistent_prop", prop_id: string, };
+export type DomeSessionInputKindV1 = { "type": "join", avatar_collider?: MetaverseColliderV1 | null, } | { "type": "leave" } | { "type": "keep_alive" } | { "type": "move", position: [number, number, number], rotation: [number, number, number], animation: string, } | { "type": "grab", prop_id: string, } | { "type": "throw", prop_id: string, impulse: [number, number, number], } | { "type": "push", prop_id: string, impulse: [number, number, number], } | { "type": "sit", prop_id: string, } | { "type": "prepare_transition", transition_id: string, direction: DomeDirection, } | { "type": "abort_transition", transition_id: string, } | { "type": "complete_transition", transition_id: string, } | { "type": "spawn_guest_prop", prop: MetaversePersistentPropV1, expires_at: number, } | { "type": "upsert_persistent_prop", prop: MetaversePersistentPropV1, } | { "type": "delete_persistent_prop", prop_id: string, };
 
 export type DomePhysicsBodyKindV1 = "avatar" | "persistent_prop" | "guest_prop";
 

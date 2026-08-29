@@ -11,7 +11,10 @@ use crate::{
 };
 
 pub const DOME_HOSTING_MAX_LEASE_MILLIS: i64 = 30 * 24 * 60 * 60 * 1_000;
+pub const DOME_HOST_HEARTBEAT_INTERVAL_MILLIS: i64 = 5_000;
 pub const DOME_HOSTING_HEARTBEAT_GRACE_MILLIS: i64 = 15_000;
+pub const DOME_PARTICIPANT_KEEPALIVE_INTERVAL_MILLIS: i64 = 5_000;
+pub const DOME_PARTICIPANT_TIMEOUT_MILLIS: i64 = 30_000;
 pub const DOME_SNAPSHOT_RING_CAPACITY: usize = 100;
 
 const LEASE_KIND: &str = "dome-hosting-lease";
@@ -190,6 +193,7 @@ pub enum DomeSessionInputKindV1 {
         avatar_collider: Option<crate::MetaverseColliderV1>,
     },
     Leave,
+    KeepAlive,
     Move {
         position: [i64; 3],
         rotation: [i64; 3],
@@ -310,6 +314,7 @@ pub struct DomeHostHeartbeatV1 {
     pub host_pubkey: Pubkey,
     pub participants: u32,
     pub sleeping: bool,
+    pub sequence: u64,
     pub sent_at: i64,
 }
 
@@ -622,10 +627,20 @@ pub fn resolve_dome_hosting_state(
         });
     };
 
-    let heartbeat_stale = last_heartbeat_at.is_some_and(|heartbeat| {
-        now_millis.saturating_sub(heartbeat) > DOME_HOSTING_HEARTBEAT_GRACE_MILLIS
-    });
-    let kind = if heartbeat_stale {
+    let liveness = crate::resolve_dome_host_liveness(last_heartbeat_at, now_millis);
+    if liveness == crate::DomeHostLivenessV1::Closed {
+        return Ok(DomeHostingStateV1 {
+            kind: DomeHostingStateKindV1::Closed,
+            host: Some(lease.host.clone()),
+            lease_id: Some(lease.lease_id.clone()),
+            lease_epoch: Some(lease.epoch),
+            lease_expires_at: Some(lease.expires_at),
+            session_id: Some(acceptance.acceptance.session_id.clone()),
+            reason: Some("heartbeat_timeout".into()),
+            last_heartbeat_at,
+        });
+    }
+    let kind = if liveness == crate::DomeHostLivenessV1::OfflineGrace {
         DomeHostingStateKindV1::GracePeriod
     } else {
         match lease.host {
@@ -640,7 +655,8 @@ pub fn resolve_dome_hosting_state(
         lease_epoch: Some(lease.epoch),
         lease_expires_at: Some(lease.expires_at),
         session_id: Some(acceptance.acceptance.session_id.clone()),
-        reason: heartbeat_stale.then(|| "heartbeat_timeout".into()),
+        reason: (liveness == crate::DomeHostLivenessV1::OfflineGrace)
+            .then(|| "heartbeat_missing".into()),
         last_heartbeat_at,
     })
 }
@@ -853,6 +869,9 @@ fn validate_dome_host_heartbeat(
         || heartbeat.lease_epoch != lease.epoch
         || heartbeat.session_id.trim().is_empty()
         || heartbeat.host_pubkey != *lease.host.signing_pubkey()
+        || heartbeat.sequence == 0
+        || heartbeat.sent_at < lease.issued_at
+        || heartbeat.sent_at >= lease.expires_at
     {
         bail!("Dome host heartbeat does not match active lease");
     }

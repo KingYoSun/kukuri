@@ -75,6 +75,8 @@ Postgres は Dome ごとに active assignment を最大一件に制限する。N
 
 ## Consequences
 
+Issue #797の5秒heartbeat、15秒offline grace、30秒participant timeoutは[ADR-0045](0045-dome-offline-draining-return-home.md)で追加定義する。
+
 - ownerの明示操作なしにavailabilityを優先する自動failoverは行わない。
 - transfer中またはsplit-brain検出時は一時的にDomeへ入れなくても、二重authorityより安全側を選ぶ。
 - metaverseは実験機能のため、旧peer-authoritative wire contractとの互換decodeやmigrationは提供しない。

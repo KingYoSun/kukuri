@@ -341,6 +341,7 @@ impl AppService {
             lifecycle_generation: 1,
             lifecycle_actor: None,
             lifecycle_reason: None,
+            lifecycle_deadline_at: None,
         };
         validate_dome_connection_record(&record)?;
         let mut prospective = current_connections

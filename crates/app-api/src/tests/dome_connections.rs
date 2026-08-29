@@ -118,13 +118,31 @@ async fn dome_connection_proposal_accept_and_revoke_round_trip() {
         DomeProposalDerivedStatusV1::Accepted
     );
 
-    receiver
-        .revoke_dome_connection(RevokeDomeConnectionInput {
-            spatial_context: context.clone(),
-            connection_id: connection.record.agreement.connection_id,
-        })
+    let revoke = receiver.revoke_dome_connection(RevokeDomeConnectionInput {
+        spatial_context: context.clone(),
+        connection_id: connection.record.agreement.connection_id,
+    });
+    tokio::pin!(revoke);
+    tokio::select! {
+        _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {}
+        _ = &mut revoke => panic!("normal revoke must expose the draining interval"),
+    }
+    let draining = proposer
+        .list_dome_connection_topology(context.clone())
         .await
-        .expect("revoke Connection");
+        .expect("draining topology");
+    assert_eq!(
+        draining.connections[0].record.status,
+        kukuri_core::DomeConnectionStatusV1::Draining
+    );
+    assert!(
+        draining.connections[0]
+            .record
+            .lifecycle_deadline_at
+            .is_some()
+    );
+    assert_eq!(draining.resolution.topology.components.len(), 1);
+    revoke.await.expect("revoke Connection");
     let split = proposer
         .list_dome_connection_topology(context)
         .await

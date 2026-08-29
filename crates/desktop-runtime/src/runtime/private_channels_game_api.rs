@@ -235,11 +235,84 @@ impl DesktopRuntime {
         {
             let status = self
                 .get_dome_hosting_status_from_community_node(api_base_url, &request.instance_id)
-                .await?;
-            view.state.kind = status.state;
-            view.state.session_id = status.session_id;
-            view.participants = status.participants;
-            view.sleeping = status.sleeping;
+                .await;
+            if let Ok(status) = status {
+                let now = chrono::Utc::now().timestamp_millis();
+                if let (Some(lease), Some(session_id), Some(heartbeat)) = (
+                    view.lease.as_ref(),
+                    status.session_id.as_deref(),
+                    status.signed_heartbeat.as_ref(),
+                ) {
+                    verify_signed_dome_host_heartbeat(heartbeat, lease, session_id)?;
+                    if heartbeat.heartbeat.sent_at > now.saturating_add(5_000) {
+                        anyhow::bail!("Community Node Dome heartbeat is from the future");
+                    }
+                    let mut heartbeats = self.community_node_dome_heartbeats.lock().await;
+                    let replace = heartbeats.get(&request.instance_id).is_none_or(|current| {
+                        heartbeat.heartbeat.sequence > current.heartbeat.sequence
+                    });
+                    if replace {
+                        heartbeats.insert(request.instance_id.clone(), heartbeat.clone());
+                    }
+                    view.state.last_heartbeat_at = Some(heartbeat.heartbeat.sent_at);
+                    view.state.reason = None;
+                    view.state.kind = match kukuri_core::resolve_dome_host_liveness(
+                        Some(heartbeat.heartbeat.sent_at),
+                        now,
+                    ) {
+                        kukuri_core::DomeHostLivenessV1::Online => status.state,
+                        kukuri_core::DomeHostLivenessV1::OfflineGrace => {
+                            kukuri_core::DomeHostingStateKindV1::GracePeriod
+                        }
+                        kukuri_core::DomeHostLivenessV1::Closed => {
+                            kukuri_core::DomeHostingStateKindV1::Closed
+                        }
+                    };
+                } else {
+                    view.state.kind = match status.state {
+                        kukuri_core::DomeHostingStateKindV1::OwnerHosted
+                        | kukuri_core::DomeHostingStateKindV1::CommunityNodeHosted => {
+                            view.state.reason = Some("heartbeat_missing".into());
+                            kukuri_core::DomeHostingStateKindV1::GracePeriod
+                        }
+                        state => state,
+                    };
+                }
+                view.state.session_id = status.session_id;
+                view.participants = status.participants;
+                view.sleeping = status.sleeping;
+            } else if let Some(heartbeat) = self
+                .community_node_dome_heartbeats
+                .lock()
+                .await
+                .get(&request.instance_id)
+                .cloned()
+            {
+                let liveness = kukuri_core::resolve_dome_host_liveness(
+                    Some(heartbeat.heartbeat.sent_at),
+                    chrono::Utc::now().timestamp_millis(),
+                );
+                view.state.kind = match liveness {
+                    kukuri_core::DomeHostLivenessV1::Online => view.state.kind,
+                    kukuri_core::DomeHostLivenessV1::OfflineGrace => {
+                        kukuri_core::DomeHostingStateKindV1::GracePeriod
+                    }
+                    kukuri_core::DomeHostLivenessV1::Closed => {
+                        kukuri_core::DomeHostingStateKindV1::Closed
+                    }
+                };
+                view.state.last_heartbeat_at = Some(heartbeat.heartbeat.sent_at);
+                view.state.reason = Some(if liveness == kukuri_core::DomeHostLivenessV1::Closed {
+                    "heartbeat_timeout".into()
+                } else {
+                    "heartbeat_missing".into()
+                });
+                view.participants = heartbeat.heartbeat.participants;
+                view.sleeping = heartbeat.heartbeat.sleeping;
+            } else {
+                view.state.kind = kukuri_core::DomeHostingStateKindV1::GracePeriod;
+                view.state.reason = Some("heartbeat_missing".into());
+            }
         }
         Ok(view)
     }
@@ -384,6 +457,7 @@ impl DesktopRuntime {
                 let access_proof = if matches!(
                     &request.input,
                     kukuri_core::DomeSessionInputKindV1::Join { .. }
+                        | kukuri_core::DomeSessionInputKindV1::KeepAlive
                 ) {
                     Some(
                         self.app_service

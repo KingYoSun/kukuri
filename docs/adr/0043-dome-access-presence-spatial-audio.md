@@ -41,6 +41,8 @@ Domeは独自のmember、role、moderatorを持たず、配置先のpublic topic
 
 ## Consequences
 
+Issue #797のparticipant keepalive access再検証、即時eviction、offline grace中のpresence/audio停止は[ADR-0045](0045-dome-offline-draining-return-home.md)で追加定義する。
+
 - Metaverse固有のmember/role/ban modelを追加せず、既存social graphとchannel policyの変更がDomeへ反映される。
 - Preview後のblock、leave、epoch rotationでもprepareが再判定するためTOCTOUで越境できない。
 - 実験機能のため旧Metaverse wire/configとの後方互換は提供しない。

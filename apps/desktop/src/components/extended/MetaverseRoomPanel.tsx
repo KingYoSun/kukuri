@@ -260,6 +260,7 @@ export function MetaverseRoomPanel({
         handoffTransform={session.handoffTransform}
         latestChatByPeer={session.latestChatByPeer}
         connectionState={session.roomConnectionState}
+        domeRecovery={session.domeRecovery}
         now={session.clockNow}
         knownPeerCount={session.knownPeerCount}
         lastSentSeq={session.lastSentSeq}
@@ -276,6 +277,7 @@ export function MetaverseRoomPanel({
         onLocalTransform={session.handleLocalTransform}
         onAvatarAssetStatus={setAvatarAssetStatus}
         onLeaveRoom={session.leaveRoom}
+        onReturnHome={session.returnHome}
         onImportAvatar={(file) => void importAvatarBlob(file, file.name)}
         onImportDefaultAvatar={() => void handleSampleAvatarImport()}
         onSaveCustomization={saveCustomization}

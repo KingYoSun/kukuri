@@ -83,6 +83,20 @@ type TransitionAttempt = {
   cancelled: boolean;
 };
 
+export type DomeRecoveryStatus = {
+  state: 'online' | 'offline' | 'evacuating' | 'closed' | 'no_candidate';
+  secondsRemaining: number | null;
+  reason: 'host_offline' | 'access_revoked' | 'blocked' | 'user_requested' | null;
+  targetTitle: string | null;
+};
+
+export const ONLINE_DOME_RECOVERY: DomeRecoveryStatus = {
+  state: 'online',
+  secondsRemaining: null,
+  reason: null,
+  targetTitle: null,
+};
+
 const EMPTY_MUTED_AUTHOR_PUBKEYS = new Set<string>();
 
 const EMPTY_ROOM_CHAT_HISTORY: NonNullable<
@@ -120,6 +134,10 @@ export function useMetaverseRoomSession({
   const [lastSentSeq, setLastSentSeq] = useState(0);
   const [recoveringUntil, setRecoveringUntil] = useState(0);
   const [clockNow, setClockNow] = useState(() => Date.now());
+  const [domeRecovery, setDomeRecovery] = useState<DomeRecoveryStatus>(ONLINE_DOME_RECOVERY);
+  const [pendingEvacuationReason, setPendingEvacuationReason] = useState<
+    'access_revoked' | 'blocked' | null
+  >(null);
   const channelRef = useRef<BroadcastChannel | null>(null);
   const lastPhysicsSnapshotSequenceRef = useRef(0);
   const lastRecoveryAtRef = useRef(0);
@@ -132,6 +150,7 @@ export function useMetaverseRoomSession({
   const entryAttemptKeyRef = useRef<string | null>(null);
   const entryContextKeyRef = useRef<string | null>(null);
   const entryAutoDisabledRef = useRef(false);
+  const evacuationRunningRef = useRef(false);
   const avatarColliderPromiseRef = useRef<{
     assetUrl: string | null;
     promise: Promise<MetaverseColliderV1 | null>;
@@ -251,12 +270,14 @@ export function useMetaverseRoomSession({
   const transitionBoundaryStates = useMemo(() => {
     const states: Partial<Record<DomeDirection, DomeBoundaryStateV1>> = {};
     for (const neighbor of transitionNeighbors) {
-      states[neighbor.direction] = transitionPreparingDirections.has(neighbor.direction)
+      states[neighbor.direction] = domeRecovery.state === 'offline'
+        ? 'offline'
+        : transitionPreparingDirections.has(neighbor.direction)
         ? 'loading'
         : neighbor.boundaryState;
     }
     return states;
-  }, [transitionNeighbors, transitionPreparingDirections]);
+  }, [domeRecovery.state, transitionNeighbors, transitionPreparingDirections]);
 
   const nextSessionSequence = useCallback((instanceId: string, suggested = Date.now()) => {
     const next = Math.max(suggested, (sessionSequenceByInstanceRef.current.get(instanceId) ?? 0) + 1);
@@ -489,16 +510,34 @@ export function useMetaverseRoomSession({
   }, [admittedRoom, setLastRoomActivityAt, syncStatus.local_author_pubkey]);
 
   const submitAuthoritativeInput = useCallback((input: DomeSessionInputKindV1, sequence = Date.now()) => {
-    if (!admittedRoom?.metaverse) return;
+    if (!admittedRoom?.metaverse || domeRecovery.state !== 'online') return;
     void submitInputForRoom(admittedRoom, input, sequence)
       .then(applyPhysicsSnapshot)
       .catch(() => {
         // Hosting may not have been started yet; presence/chat remain available.
       });
-  }, [admittedRoom, applyPhysicsSnapshot, submitInputForRoom]);
+  }, [admittedRoom, applyPhysicsSnapshot, domeRecovery.state, submitInputForRoom]);
 
   useEffect(() => {
-    if (!admittedRoom) {
+    if (!admittedRoom?.metaverse || domeRecovery.state !== 'online') return;
+    const keepAlive = () => {
+      void submitInputForRoom(admittedRoom, { type: 'keep_alive' })
+        .then(applyPhysicsSnapshot)
+        .catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          if (message.includes('BLOCKED') || message.includes('VISITOR_BLOCKED')) {
+            setPendingEvacuationReason('blocked');
+          } else if (message.includes('ACCESS_DENIED') || message.includes('ACCESS_REVOKED')) {
+            setPendingEvacuationReason('access_revoked');
+          }
+        });
+    };
+    const intervalId = window.setInterval(keepAlive, 5_000);
+    return () => window.clearInterval(intervalId);
+  }, [admittedRoom, applyPhysicsSnapshot, domeRecovery.state, submitInputForRoom]);
+
+  useEffect(() => {
+    if (!admittedRoom || domeRecovery.state !== 'online') {
       return;
     }
     const joinedAt = Date.now();
@@ -540,8 +579,15 @@ export function useMetaverseRoomSession({
     localDisplayName,
     localPeerId,
     admittedRoom,
+    domeRecovery.state,
     submitAuthoritativeInput,
   ]);
+
+  useEffect(() => {
+    if (domeRecovery.state === 'online') return;
+    disableMicrophone();
+    stopSpatialAudio();
+  }, [disableMicrophone, domeRecovery.state, stopSpatialAudio]);
 
   useEffect(() => stopSpatialAudio(), [admittedRoom?.room_id, stopSpatialAudio, transitionNeighbors]);
 
@@ -572,6 +618,7 @@ export function useMetaverseRoomSession({
     setLastRoomActivityAt(Date.now());
     setRecoveringUntil(0);
     setLastSentSeq(0);
+    setDomeRecovery(ONLINE_DOME_RECOVERY);
     lastSentTransformRef.current = null;
     resetBackendEventCursor();
   }
@@ -742,14 +789,20 @@ export function useMetaverseRoomSession({
     })();
   }
 
-  const joinRoom = useCallback(async (roomId: string, reportError = true): Promise<boolean> => {
+  const joinRoom = useCallback(async (
+    roomId: string,
+    reportError = true,
+    preserveCurrent = false
+  ): Promise<boolean> => {
     const room = rooms.find((candidate) => candidate.room_id === roomId);
     if (!room?.metaverse) return false;
     const attempt = transitionAttemptRef.current;
     if (attempt) void abortTransitionAttempt(attempt);
-    setHandoffTransform(null);
-    setSelectedRoomId(roomId);
-    setAdmissionConfirmed(false);
+    if (!preserveCurrent) {
+      setHandoffTransform(null);
+      setSelectedRoomId(roomId);
+      setAdmissionConfirmed(false);
+    }
     setAdmissionStatus('admitting');
     try {
       const avatarCollider = await resolveLocalAvatarCollider();
@@ -775,6 +828,7 @@ export function useMetaverseRoomSession({
       applyPhysicsSnapshot(snapshot);
       setJoinedRoomIds((current) => new Set(current).add(roomId));
       setAdmissionConfirmed(true);
+      setSelectedRoomId(roomId);
       setAdmissionStatus('joined');
       writeLastVisitedDome(
         syncStatus.local_author_pubkey,
@@ -784,8 +838,12 @@ export function useMetaverseRoomSession({
       onError(null);
       return true;
     } catch (entryError) {
-      setAdmissionConfirmed(false);
-      setAdmissionStatus('selection');
+      if (!preserveCurrent) {
+        setAdmissionConfirmed(false);
+        setAdmissionStatus('selection');
+      } else {
+        setAdmissionStatus('joined');
+      }
       if (reportError) {
         onError(entryError instanceof Error ? entryError.message : 'Dome entry failed');
       }
@@ -801,6 +859,118 @@ export function useMetaverseRoomSession({
     submitInputForRoom,
     syncStatus.local_author_pubkey,
   ]);
+
+  const evacuate = useCallback(async (
+    reason: 'host_offline' | 'access_revoked' | 'blocked' | 'user_requested'
+  ): Promise<boolean> => {
+    if (!admittedRoom || evacuationRunningRef.current) return false;
+    evacuationRunningRef.current = true;
+    const sourceRoom = admittedRoom;
+    setDomeRecovery({ state: 'evacuating', secondsRemaining: null, reason, targetTitle: null });
+    const adjacent = transitionNeighbors
+      .filter((neighbor) => neighbor.boundaryState === 'ready')
+      .map((neighbor) => neighbor.room);
+    const ordered = reason === 'user_requested'
+      ? [...entryCandidates, ...adjacent]
+      : [...adjacent, ...entryCandidates];
+    const seen = new Set<string>([sourceRoom.room_id]);
+    const candidates = ordered.filter((candidate) => {
+      if (seen.has(candidate.room_id)) return false;
+      seen.add(candidate.room_id);
+      return true;
+    });
+    try {
+      for (const candidate of candidates) {
+        setDomeRecovery({
+          state: 'evacuating',
+          secondsRemaining: null,
+          reason,
+          targetTitle: candidate.title,
+        });
+        if (!await joinRoom(candidate.room_id, false, true)) continue;
+        await submitInputForRoom(sourceRoom, { type: 'leave' }).catch(() => undefined);
+        setJoinedRoomIds((current) => {
+          const next = new Set(current);
+          next.delete(sourceRoom.room_id);
+          next.add(candidate.room_id);
+          return next;
+        });
+        setDomeRecovery({ state: 'online', secondsRemaining: null, reason: null, targetTitle: null });
+        onError(t('recovery.moved', { target: candidate.title }));
+        return true;
+      }
+      setSelectedRoomId(null);
+      setAdmissionConfirmed(false);
+      setAdmissionStatus('selection');
+      entryAutoDisabledRef.current = true;
+      disableMicrophone();
+      stopSpatialAudio();
+      setDomeRecovery({ state: 'no_candidate', secondsRemaining: null, reason, targetTitle: null });
+      onError(t('recovery.noCandidate'));
+      return false;
+    } finally {
+      evacuationRunningRef.current = false;
+    }
+  }, [
+    admittedRoom,
+    disableMicrophone,
+    entryCandidates,
+    joinRoom,
+    onError,
+    stopSpatialAudio,
+    submitInputForRoom,
+    t,
+    transitionNeighbors,
+  ]);
+
+  useEffect(() => {
+    if (!pendingEvacuationReason) return;
+    const reason = pendingEvacuationReason;
+    setPendingEvacuationReason(null);
+    setDomeRecovery({ state: 'closed', secondsRemaining: 0, reason, targetTitle: null });
+    void evacuate(reason);
+  }, [evacuate, pendingEvacuationReason]);
+
+  useEffect(() => {
+    if (!admittedRoom?.metaverse) return;
+    let cancelled = false;
+    const pollHosting = async () => {
+      try {
+        const hosting = await actions.getHosting(
+          admittedRoom.metaverse!.spatial_context,
+          admittedRoom.metaverse!.instance_id
+        );
+        if (cancelled) return;
+        if (hosting.state.kind === 'grace_period') {
+          const deadline = (hosting.state.last_heartbeat_at ?? Date.now()) + 15_000;
+          setDomeRecovery({
+            state: 'offline',
+            secondsRemaining: Math.max(0, Math.ceil((deadline - Date.now()) / 1_000)),
+            reason: 'host_offline',
+            targetTitle: null,
+          });
+        } else if (hosting.state.kind === 'closed' && hosting.state.reason === 'heartbeat_timeout') {
+          setDomeRecovery({ state: 'closed', secondsRemaining: 0, reason: 'host_offline', targetTitle: null });
+          void evacuate('host_offline');
+        } else if (hosting.state.kind === 'owner_hosted' || hosting.state.kind === 'community_node_hosted') {
+          setDomeRecovery({ state: 'online', secondsRemaining: null, reason: null, targetTitle: null });
+        }
+      } catch {
+        setDomeRecovery((current) => current.state === 'online' ? {
+          state: 'offline',
+          secondsRemaining: 15,
+          reason: 'host_offline',
+          targetTitle: null,
+        } : current);
+      }
+    };
+    void pollHosting();
+    const intervalId = window.setInterval(() => void pollHosting(), 1_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [actions, admittedRoom, evacuate]);
 
   useEffect(() => {
     const contextKey = spatialContextKey(entryContext);
@@ -880,6 +1050,7 @@ export function useMetaverseRoomSession({
   }
 
   function handleLocalTransform(transform: AvatarTransform) {
+    if (domeRecovery.state !== 'online') return;
     const previous = lastSentTransformRef.current;
     lastSentTransformRef.current = transform;
     setLastSentSeq(transform.seq);
@@ -913,7 +1084,7 @@ export function useMetaverseRoomSession({
 
   function handleSendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!admittedRoom || !messageDraft.trim()) {
+    if (!admittedRoom || domeRecovery.state !== 'online' || !messageDraft.trim()) {
       return;
     }
     const message: RoomChatMessage = {
@@ -1083,6 +1254,8 @@ export function useMetaverseRoomSession({
     roomConnectionState,
     knownPeerCount,
     clockNow,
+    domeRecovery,
+    returnHome: () => void evacuate('user_requested'),
     joinRoom,
     selectCreatedRoom,
     leaveRoom,

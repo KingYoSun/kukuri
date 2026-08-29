@@ -34,7 +34,7 @@ use kukuri_core::{
     DomeInstanceManifestV1, DomePresetManifestV1, FriendOnlyGrantPreview, FriendPlusSharePreview,
     KukuriKeys, PrivateChannelInvitePreview, Profile, SignedDomeHostingActivationV1,
     SignedDomeHostingCloseV1, SignedDomeHostingLeaseV1, TopicId, build_signed_dome_session_input,
-    verify_signed_dome_physics_snapshot,
+    verify_signed_dome_host_heartbeat, verify_signed_dome_physics_snapshot,
 };
 use kukuri_docs_sync::{DocQuery, DocsSync};
 use kukuri_store::SqliteStore;
@@ -109,6 +109,8 @@ pub struct DesktopRuntime {
     pub(crate) discovery_config: Arc<Mutex<DiscoveryConfig>>,
     pub(crate) community_node_config: Arc<Mutex<CommunityNodeConfig>>,
     pub(crate) community_node_sessions: Arc<Mutex<HashMap<String, CommunityNodeSessionState>>>,
+    pub(crate) community_node_dome_heartbeats:
+        Arc<Mutex<HashMap<String, kukuri_core::SignedDomeHostHeartbeatV1>>>,
     pub(crate) community_node_rendezvous_seed_peers: Arc<Mutex<Vec<kukuri_transport::SeedPeer>>>,
     pub(crate) community_node_session_guard: Arc<Mutex<()>>,
     pub(crate) community_node_reconnect_state: Arc<Mutex<CommunityNodeReconnectState>>,
@@ -343,6 +345,7 @@ impl DesktopRuntime {
             discovery_config: Arc::new(Mutex::new(discovery_config)),
             community_node_config: Arc::new(Mutex::new(community_node_config)),
             community_node_sessions: Arc::new(Mutex::new(HashMap::new())),
+            community_node_dome_heartbeats: Arc::new(Mutex::new(HashMap::new())),
             community_node_rendezvous_seed_peers: Arc::new(Mutex::new(Vec::new())),
             community_node_session_guard: Arc::new(Mutex::new(())),
             community_node_reconnect_state: Arc::new(Mutex::new(

@@ -2,6 +2,7 @@ import type { FormEventHandler, RefObject } from 'react';
 import {
   Box,
   ChevronDown,
+  House,
   LogOut,
   MessageSquare,
   MonitorPause,
@@ -32,6 +33,7 @@ import type {
   RoomChatMessage,
 } from '../MetaverseSceneModel';
 import { DomeCustomizationControls } from './DomeCustomizationControls';
+import { ONLINE_DOME_RECOVERY, type DomeRecoveryStatus } from './useMetaverseRoomSession';
 
 type MetaverseRoomControlsProps = {
   room: GameRoomView;
@@ -45,6 +47,7 @@ type MetaverseRoomControlsProps = {
   localAvatarAssetRef: MetaverseAssetRef | null;
   communityAssistAvailable: boolean;
   connectionState: MetaverseRoomConnectionState;
+  domeRecovery?: DomeRecoveryStatus;
   locale: SupportedLocale;
   pending: boolean;
   isOwner: boolean;
@@ -55,6 +58,7 @@ type MetaverseRoomControlsProps = {
   messageDraft: string;
   messageInputRef: RefObject<HTMLInputElement | null>;
   onLeaveRoom: () => void;
+  onReturnHome?: () => void;
   onToggleHud: () => void;
   onToggleHudDebug: () => void;
   onImportAvatar: (file: File) => void;
@@ -96,6 +100,7 @@ export function MetaverseRoomControls({
   localAvatarAssetRef,
   communityAssistAvailable,
   connectionState,
+  domeRecovery = ONLINE_DOME_RECOVERY,
   locale,
   pending,
   isOwner,
@@ -106,6 +111,7 @@ export function MetaverseRoomControls({
   messageDraft,
   messageInputRef,
   onLeaveRoom,
+  onReturnHome,
   onToggleHud,
   onToggleHudDebug,
   onImportAvatar,
@@ -133,6 +139,18 @@ export function MetaverseRoomControls({
         <ConnectionStateIcon state={connectionState} />
         <span>{t(`connection.states.${connectionState}`)}</span>
       </div>
+      {domeRecovery.state !== 'online' ? (
+        <div className='metaverse-recovery-banner' data-state={domeRecovery.state} role='status' aria-live='polite'>
+          <strong>{t(`recovery.states.${domeRecovery.state}`)}</strong>
+          <span>
+            {domeRecovery.state === 'offline'
+              ? t('recovery.offlineCountdown', { count: domeRecovery.secondsRemaining ?? 0 })
+              : domeRecovery.targetTitle
+                ? t('recovery.movingTo', { target: domeRecovery.targetTitle })
+                : t(`recovery.details.${domeRecovery.state}`)}
+          </span>
+        </div>
+      ) : null}
       <div className='metaverse-hud-toolbar' data-open={hudOpen}>
         <Button
           variant='ghost'
@@ -144,6 +162,18 @@ export function MetaverseRoomControls({
         >
           <LogOut className='size-4' aria-hidden='true' />
         </Button>
+        {onReturnHome ? <Button
+          variant='ghost'
+          size='icon'
+          className='metaverse-hud-icon-button'
+          type='button'
+          aria-label={t('recovery.returnHome')}
+          title={t('recovery.returnHomeDescription')}
+          disabled={domeRecovery.state === 'evacuating'}
+          onClick={onReturnHome}
+        >
+          <House className='size-4' aria-hidden='true' />
+        </Button> : null}
         {onToggleMicrophone ? (
           <Button
             variant={microphoneEnabled ? 'primary' : 'ghost'}

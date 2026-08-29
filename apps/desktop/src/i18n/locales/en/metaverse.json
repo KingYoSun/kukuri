@@ -58,6 +58,16 @@
       "offline": "Peer connectivity is unavailable"
     }
   },
+  "recovery": {
+    "returnHome": "Return Home",
+    "returnHomeDescription": "Leave for the safest available Dome",
+    "offlineCountdown": "Host heartbeat stopped. Waiting {{count}} seconds before safe evacuation.",
+    "movingTo": "Confirming a safe spawn in {{target}}…",
+    "moved": "Moved safely to {{target}}.",
+    "noCandidate": "No safe Dome is available. Returned to Dome selection.",
+    "states": { "offline": "Host offline", "evacuating": "Evacuating", "closed": "Dome closed", "no_candidate": "No safe destination" },
+    "details": { "evacuating": "Checking destinations without discarding the current scene.", "closed": "The grace period expired.", "no_candidate": "Choose a hosted Dome to continue." }
+  },
   "hosting": {
     "title": "Dome Hosting",
     "states": { "closed": "Closed", "owner_hosted": "Hosted on owner device", "community_node_hosted": "Hosted on Community Node", "grace_period": "Grace period", "transferring": "Transferring" },

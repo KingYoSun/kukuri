@@ -12,6 +12,7 @@ use crate::{
 pub const DOME_CONNECTION_MAX_OPEN_OUTBOUND: usize = 32;
 pub const DOME_CONNECTION_MAX_PER_PEER_SLOT: usize = 4;
 pub const DOME_CONNECTION_MAX_RECEIVER_QUEUE: usize = 32;
+pub const DOME_CONNECTION_DRAIN_MILLIS: i64 = 3_000;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -128,6 +129,7 @@ pub struct DomeConnectionRecordV1 {
     pub lifecycle_generation: u64,
     pub lifecycle_actor: Option<Pubkey>,
     pub lifecycle_reason: Option<DomeConnectionTerminalReasonV1>,
+    pub lifecycle_deadline_at: Option<i64>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -245,7 +247,7 @@ pub fn validate_dome_connection_record(record: &DomeConnectionRecordV1) -> Resul
     validate_unique_ids(&record.observed_active_connection_ids)?;
     match record.status {
         DomeConnectionStatusV1::Accepted | DomeConnectionStatusV1::Active => {
-            if record.lifecycle_reason.is_some() {
+            if record.lifecycle_reason.is_some() || record.lifecycle_deadline_at.is_some() {
                 bail!("non-terminal Dome Connection cannot have a terminal reason");
             }
         }
@@ -261,6 +263,16 @@ pub fn validate_dome_connection_record(record: &DomeConnectionRecordV1) -> Resul
             }
             if record.lifecycle_reason.is_none() {
                 bail!("Dome Connection terminal lifecycle requires a reason");
+            }
+            if record.status == DomeConnectionStatusV1::Draining
+                && record.lifecycle_deadline_at.is_none()
+            {
+                bail!("draining Dome Connection requires a deadline");
+            }
+            if record.status == DomeConnectionStatusV1::Revoked
+                && record.lifecycle_deadline_at.is_some()
+            {
+                bail!("revoked Dome Connection cannot retain a drain deadline");
             }
         }
     }

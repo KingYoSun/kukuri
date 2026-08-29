@@ -13,6 +13,7 @@ import {
   DOME_CONNECTION_ZONE_DEPTH_CM,
   DOME_DIRECTIONS,
   DOME_INNER_RADIUS_CM,
+  domeDirectionOffset,
   openingContains,
 } from './DomeSceneModel';
 
@@ -43,7 +44,9 @@ function hostingBoundaryState(
   hosting: DomeHostingView | undefined
 ): DomeBoundaryStateV1 {
   if (!hosting) return 'loading';
-  if (hosting.state.kind === 'grace_period' || hosting.state.kind === 'transferring') return 'stale';
+  if (hosting.state.kind === 'grace_period') return 'offline';
+  if (hosting.state.kind === 'transferring') return 'loading';
+  if (hosting.state.kind === 'closed') return 'closed';
   if (
     (hosting.state.kind !== 'owner_hosted' && hosting.state.kind !== 'community_node_hosted') ||
     !hosting.state.session_id
@@ -66,8 +69,7 @@ export function resolveActiveDomeNeighbors(
   const component = topology.resolution.topology.components.find((candidate) =>
     candidate.instance_ids.includes(currentId)
   );
-  const currentCoordinate = component?.coordinates_cm[currentId];
-  if (!component || !currentCoordinate) return [];
+  const currentCoordinate = component?.coordinates_cm[currentId] ?? [0, 0, 0];
   const activeIds = new Set(topology.resolution.topology.active_connection_ids);
   const byInstance = new Map(
     rooms
@@ -76,7 +78,11 @@ export function resolveActiveDomeNeighbors(
   );
 
   return topology.connections
-    .filter(({ record }) => record.status === 'active' && activeIds.has(record.agreement.connection_id))
+    .filter(({ record }) =>
+      record.status === 'active'
+        ? activeIds.has(record.agreement.connection_id)
+        : record.status === 'draining' || record.status === 'revoked'
+    )
     .flatMap(({ record }) => {
       const { proposer, receiver, connection_id: connectionId } = record.agreement;
       const source = proposer.instance_id === currentId
@@ -87,9 +93,13 @@ export function resolveActiveDomeNeighbors(
       if (!source) return [];
       const target = source === proposer ? receiver : proposer;
       const room = byInstance.get(target.instance_id);
-      const coordinate = component.coordinates_cm[target.instance_id];
-      if (!room || !coordinate) return [];
-      let boundaryState = hostingBoundaryState(room, hostingByInstance[target.instance_id]);
+      const coordinate = component?.coordinates_cm[target.instance_id];
+      if (!room) return [];
+      let boundaryState: DomeBoundaryStateV1 = record.status === 'draining'
+        ? 'draining'
+        : record.status === 'revoked'
+          ? record.lifecycle_reason === 'owners_blocked' ? 'blocked' : 'closed'
+          : hostingBoundaryState(room, hostingByInstance[target.instance_id]);
       const assetState = assetStateByInstance[target.instance_id];
       if (boundaryState === 'ready' && assetState === 'loading') boundaryState = 'loading';
       if (boundaryState === 'ready' && assetState === 'error') boundaryState = 'error';
@@ -99,11 +109,11 @@ export function resolveActiveDomeNeighbors(
         direction: source.direction,
         targetDirection: target.direction,
         room,
-        relativeCoordinateCm: [
+        relativeCoordinateCm: coordinate ? [
           coordinate[0] - currentCoordinate[0],
           coordinate[1] - currentCoordinate[1],
           coordinate[2] - currentCoordinate[2],
-        ],
+        ] : domeDirectionOffset(source.direction),
         boundaryState,
         textureUrls: textureUrlsByInstance[target.instance_id] ?? { wall: null, floor: null },
       } satisfies DomeNeighborTransitionView];
