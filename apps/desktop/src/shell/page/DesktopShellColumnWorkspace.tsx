@@ -57,8 +57,8 @@ type DesktopShellColumnWorkspaceProps = {
   onOpenGameCreate: () => void;
   onOpenLiveCreate: () => void;
   renderConversationSurface: (column: ColumnState) => ReactNode;
-  messagesSurface: ReactNode;
-  notificationsSurface: ReactNode;
+  renderMessagesSurface: (column: ColumnState) => ReactNode;
+  renderNotificationsSurface: (column: ColumnState) => ReactNode;
   onActivateColumn: (column: ColumnState, preserveAuthorPane?: boolean) => void;
   onSelectTimelineView: (column: ColumnState, view: TimelineViewId) => void;
   renderProfileSurface: (column: ColumnState) => ReactNode;
@@ -82,8 +82,8 @@ export function DesktopShellColumnWorkspace({
   onOpenGameCreate,
   onOpenLiveCreate,
   renderConversationSurface,
-  messagesSurface,
-  notificationsSurface,
+  renderMessagesSurface,
+  renderNotificationsSurface,
   onActivateColumn,
   onSelectTimelineView,
   renderProfileSurface,
@@ -140,8 +140,8 @@ export function DesktopShellColumnWorkspace({
     if (column.kind === 'thread') return renderThreadSurface(column);
     if (column.kind === 'profile' && column.entityId) return renderProfileSurface(column);
     if (column.kind === 'conversation') return renderConversationSurface(column);
-    if (column.kind === 'messages') return messagesSurface;
-    if (column.kind === 'notifications') return notificationsSurface;
+    if (column.kind === 'messages') return renderMessagesSurface(column);
+    if (column.kind === 'notifications') return renderNotificationsSurface(column);
     return renderPrimarySurface(column);
   };
   const scopeDestinationLabel = (column: ColumnState) => {

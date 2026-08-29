@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
@@ -6,6 +6,7 @@ import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import { App } from '@/App';
 import {
   closestSection,
+  createDeferred,
   openSettingsSection,
   setViewportWidth,
 } from './DesktopShellPage.testHelpers';
@@ -153,6 +154,60 @@ test('Explore owns the affected-column notice and hides the healthy primary node
   const notice = await screen.findByTestId('community-node-unavailable-notice');
   const exploreColumn = notice.closest('[data-column-id]');
   expect(exploreColumn).toHaveAccessibleName(/^Explore Column/);
+});
+
+test('Explore does not flash a false no-node warning while another Column triggers manifest refresh', async () => {
+  const baseApi = createDesktopMockApi();
+  const manifestResponse = await baseApi.fetchCommunityNodeManifest('https://api.kukuri.app');
+  const pendingManifest = createDeferred<typeof manifestResponse>();
+  let holdManifestRefresh = false;
+  const fetchCommunityNodeManifest = vi.fn((baseUrl: string) =>
+    holdManifestRefresh
+      ? pendingManifest.promise
+      : baseApi.fetchCommunityNodeManifest(baseUrl)
+  );
+  const api: DesktopApi = {
+    ...baseApi,
+    fetchCommunityNodeManifest,
+  };
+  const user = userEvent.setup();
+
+  render(<App api={api} />);
+  await user.click(await screen.findByTestId('control-center-trigger'));
+  const controlCenter = screen.getByRole('complementary', { name: 'Control Center' });
+  await user.click(within(controlCenter).getByRole('button', { name: 'Add Explore Column' }));
+
+  const explore = await screen.findByTestId('community-index-explore');
+  const noEligibleNode =
+    'No authenticated and consented Community Node currently advertises an available Community Index.';
+  await waitFor(() => {
+    expect(fetchCommunityNodeManifest).toHaveBeenCalled();
+    expect(within(explore).queryByText(noEligibleNode)).not.toBeInTheDocument();
+  });
+  const initialManifestCalls = fetchCommunityNodeManifest.mock.calls.length;
+  const transientWarnings: string[] = [];
+  const observer = new MutationObserver(() => {
+    if (explore.textContent?.includes(noEligibleNode)) transientWarnings.push(noEligibleNode);
+  });
+  observer.observe(explore, { childList: true, subtree: true, characterData: true });
+
+  holdManifestRefresh = true;
+  const timeline = screen.getByRole('region', { name: /^Timeline Column,/ });
+  fireEvent.pointerDown(within(timeline).getByRole('heading', { level: 2, name: 'Timeline' }));
+
+  await waitFor(() => {
+    expect(fetchCommunityNodeManifest.mock.calls.length).toBeGreaterThan(initialManifestCalls);
+  });
+  expect(within(explore).queryByText(noEligibleNode)).not.toBeInTheDocument();
+  expect(transientWarnings).toEqual([]);
+
+  await act(async () => {
+    pendingManifest.resolve(manifestResponse);
+    await pendingManifest.promise;
+  });
+  observer.disconnect();
+  expect(within(explore).queryByText(noEligibleNode)).not.toBeInTheDocument();
+  expect(transientWarnings).toEqual([]);
 });
 
 test('timeline keeps the last successful workspace state when joined channels refresh fails', async () => {

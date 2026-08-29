@@ -317,5 +317,15 @@ test('follow notification click-through opens the author pane from timeline', as
   });
   expect(getDetailPane('Author')).toBeInTheDocument();
   expect(screen.getByText('opened from follow notification')).toBeInTheDocument();
+  const columns = Array.from(document.querySelectorAll<HTMLElement>('.shell-column-surface'));
+  const notificationsIndex = columns.findIndex((column) =>
+    column.getAttribute('aria-label')?.startsWith('Notifications Column,')
+  );
+  const openedProfileIndex = columns.findIndex(
+    (column) =>
+      column.getAttribute('aria-label')?.startsWith('Profile Column,') &&
+      column.getAttribute('aria-current') === 'true'
+  );
+  expect(openedProfileIndex).toBe(notificationsIndex + 1);
 });
 

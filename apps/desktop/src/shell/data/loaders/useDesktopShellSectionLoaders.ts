@@ -393,7 +393,12 @@ export function useDesktopShellSectionLoaders({
       setCommunityNodeManifests((current) => {
         const next = { ...current };
         for (const baseUrl of baseUrls) {
-          next[baseUrl] = { status: 'loading' };
+          // A refresh is background work when a usable manifest is already on screen.
+          // Keep that successful value until the replacement settles so consumers do not
+          // briefly project an empty/no-node state while another Column is activated.
+          if (next[baseUrl]?.status !== 'ok') {
+            next[baseUrl] = { status: 'loading' };
+          }
         }
         return next;
       });
