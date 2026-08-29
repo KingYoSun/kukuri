@@ -6,6 +6,7 @@
 - neighborのHosting、capacity、assetを先読みし、`closed/loading/ready/denied/full/unhosted/error/stale`の境界状態を導入した。`ready`以外は中心線手前でavatarを停止する。
 - transition ID、Connection、topology digest、source/target Instance generation、participant、target lease epoch/sessionを固定する15秒のreservation ticketを追加した。owner-device hostとCommunity Node hostは同じhost runtimeでprepare/commit/abortする。
 - 中心線通過前はrollbackでき、通過時は宛先commitを先に確定する。宛先確定後はcurrent Domeを戻さず、送信元の退出だけを再試行して二重presenceを解消する。
+- 宛先commitの応答だけが失われた場合は、同じlease epoch／sessionを確認しながら同一ticketとtransformを再送する。結果不明のcommitをpre-commit失敗としてabortせず、ack取得後にだけcurrent Dome切替と送信元退出へ進む。
 - avatarのcomponent座標、環境光、ambient、fog、gravityをconnection zone内で補間する。propは移送せず、host physicsで半球内に拘束する。
 - Rust unit test、React hook/model test、異なるowner-device host間のdeterministic harness scenarioを追加した。
 

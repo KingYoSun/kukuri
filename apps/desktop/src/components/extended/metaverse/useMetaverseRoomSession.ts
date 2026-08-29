@@ -57,6 +57,7 @@ import {
   writeLastVisitedDome,
 } from './DomeEntryModel';
 import { loadAvatarCollider } from './AvatarColliderModel';
+import { recoverDomeTransitionCommit } from './DomeTransitionCommitRecovery';
 
 type UseMetaverseRoomSessionArgs = {
   actions: MetaverseRoomActions;
@@ -633,7 +634,7 @@ export function useMetaverseRoomSession({
   }
 
   const abortTransitionAttempt = useCallback(async (attempt: TransitionAttempt) => {
-    if (attempt.phase === 'target_committed') return;
+    if (attempt.phase === 'committing' || attempt.phase === 'target_committed') return;
     attempt.cancelled = true;
     if (attempt.ticket) {
       await actions.abortTransition(attempt.ticket).catch(() => undefined);
@@ -711,80 +712,79 @@ export function useMetaverseRoomSession({
   function commitTransitionAttempt(attempt: TransitionAttempt, transform: AvatarTransform) {
     if (attempt.phase !== 'provisional' || attempt.cancelled || !attempt.ticket) return;
     attempt.phase = 'committing';
-    const targetPosition = transformAvatarBetweenDomes(
-      transform.position,
-      attempt.neighbor.relativeCoordinateCm
-    );
+    const targetPosition = transformAvatarBetweenDomes(transform.position, attempt.neighbor.relativeCoordinateCm);
     const targetTransform: AvatarTransform = {
-      ...transform,
-      roomId: attempt.neighbor.room.room_id,
-      seq: 0,
-      position: targetPosition,
-      sentAt: Date.now(),
+      ...transform, roomId: attempt.neighbor.room.room_id, seq: 0,
+      position: targetPosition, sentAt: Date.now(),
     };
     void (async () => {
-      try {
-        await actions.commitTransition(attempt.ticket!, targetPosition, transform.rotation);
-        attempt.phase = 'target_committed';
-        transitionAttemptRef.current = null;
-        setTransitionPreparing(attempt.neighbor.direction, false);
-        setHandoffTransform(targetTransform);
-        lastSentTransformRef.current = targetTransform;
-        setLastSentSeq(0);
-        setJoinedRoomIds((current) => {
-          const next = new Set(current);
-          next.delete(attempt.sourceRoom.room_id);
-          next.add(attempt.neighbor.room.room_id);
-          return next;
-        });
-        setSelectedRoomId(attempt.neighbor.room.room_id);
-        if (attempt.neighbor.room.metaverse) {
-          writeLastVisitedDome(
-            syncStatus.local_author_pubkey,
-            attempt.neighbor.room.metaverse.spatial_context,
-            attempt.neighbor.room.metaverse.instance_id
-          );
-        }
-        onError(null);
-        let sourceCompleted = false;
-        for (const retryDelay of [0, 250, 1_000]) {
-          if (retryDelay > 0) {
-            await new Promise((resolve) => window.setTimeout(resolve, retryDelay));
-          }
-          try {
-            await submitInputForRoom(attempt.sourceRoom, {
-              type: 'complete_transition',
-              transition_id: attempt.id,
-            });
-            sourceCompleted = true;
-            break;
-          } catch {
-            // The destination remains authoritative; retry only source cleanup.
-          }
-        }
-        if (sourceCompleted) {
-          const leftAt = Date.now();
-          await actions.publishRoomEvent(attempt.sourceRoom.room_id, localPeerId, leftAt, {
-            type: 'presence_leave',
-            room_id: attempt.sourceRoom.room_id,
-            peer_id: localPeerId,
-            left_at: leftAt,
-          }).catch(() => undefined);
-        } else {
-          onError('Destination committed; source Dome cleanup will require resynchronization');
-        }
-      } catch (transitionError) {
+      const recovery = await recoverDomeTransitionCommit({
+        ticket: attempt.ticket!,
+        commit: () => actions.commitTransition(attempt.ticket!, targetPosition, transform.rotation),
+        getHosting: () => actions.getHosting(attempt.ticket!.request.spatial_context, attempt.ticket!.request.target_instance_id),
+        isCurrent: () => transitionAttemptRef.current === attempt && !attempt.cancelled,
+      });
+      if (recovery.status === 'cancelled') return;
+      if (recovery.status === 'rollback') {
+        attempt.phase = 'provisional';
         await abortTransitionAttempt(attempt);
         setTransitionNeighbors((current) => current.map((candidate) =>
           candidate.connectionId === attempt.neighbor.connectionId
             ? { ...candidate, boundaryState: 'error' }
             : candidate
         ));
-        onError(
-          transitionError instanceof Error
-            ? transitionError.message
-            : 'Dome transition commit failed'
+        onError(recovery.error instanceof Error
+          ? recovery.error.message
+          : 'Dome transition commit failed');
+        return;
+      }
+      attempt.phase = 'target_committed';
+      transitionAttemptRef.current = null;
+      setTransitionPreparing(attempt.neighbor.direction, false);
+      setHandoffTransform(targetTransform);
+      lastSentTransformRef.current = targetTransform;
+      setLastSentSeq(0);
+      setJoinedRoomIds((current) => {
+        const next = new Set(current);
+        next.delete(attempt.sourceRoom.room_id);
+        next.add(attempt.neighbor.room.room_id);
+        return next;
+      });
+      setSelectedRoomId(attempt.neighbor.room.room_id);
+      if (attempt.neighbor.room.metaverse) {
+        writeLastVisitedDome(
+          syncStatus.local_author_pubkey,
+          attempt.neighbor.room.metaverse.spatial_context,
+          attempt.neighbor.room.metaverse.instance_id
         );
+      }
+      onError(null);
+      let sourceCompleted = false;
+      for (const retryDelay of [0, 250, 1_000]) {
+        if (retryDelay > 0) {
+          await new Promise((resolve) => window.setTimeout(resolve, retryDelay));
+        }
+        try {
+          await submitInputForRoom(attempt.sourceRoom, {
+            type: 'complete_transition',
+            transition_id: attempt.id,
+          });
+          sourceCompleted = true;
+          break;
+        } catch {
+          // The destination remains authoritative; retry only source cleanup.
+        }
+      }
+      if (sourceCompleted) {
+        const leftAt = Date.now();
+        await actions.publishRoomEvent(attempt.sourceRoom.room_id, localPeerId, leftAt, {
+          type: 'presence_leave',
+          room_id: attempt.sourceRoom.room_id,
+          peer_id: localPeerId,
+          left_at: leftAt,
+        }).catch(() => undefined);
+      } else {
+        onError('Destination committed; source Dome cleanup will require resynchronization');
       }
     })();
   }
