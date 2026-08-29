@@ -12,6 +12,8 @@
 - SQLite / memory storeへ削除・再構築可能な`dome_connection_projection_cache`を追加した。
 - desktop runtime / Tauri IPC / generated TypeScript contractと、4方向Connection管理panelを追加した。
 - 3 ownerのA–B / B–C接続、A–C cycle拒否、restart復元、revoke分割を`desktop_smoke_metaverse_dome_connections`で固定した。
+- endpoint owner間のblock入力で未accept proposalを`owners_blocked`として自動破棄し、block解除後も復元しないreconciliationを追加した。
+- accept直前にも双方向blockを再検査し、競合するblockを観測した場合はConnection recordを保存せずproposalをterminal discardするようにした。
 
 ## 境界
 
@@ -30,5 +32,16 @@
 - `cargo xtask desktop-ui-check`: pass（Storybook build、browser 44、visual 14を含む）
 - `cargo xtask tauri-check`: pass
 - `cargo xtask e2e-smoke`: pass
+- `cargo xtask oversized-files`: pass（既存baseline warningのみ）
+- `git diff --check`: pass
+
+### 2026-08-29 block proposal follow-up
+
+- `cargo test -p kukuri-app-api dome_connections`: pass（6 tests）
+- `cargo test -p kukuri-core dome_connections`: pass（9 tests）
+- `cargo xtask rust-test`: pass（Rust workspace 694、harness 22、doc tests）
+- `cargo xtask check`: pass
+- `cargo xtask test`: pass（Rust workspace 694、harness 22、desktop 915）
+- `cargo xtask ipc-types --check`: pass
 - `cargo xtask oversized-files`: pass（既存baseline warningのみ）
 - `git diff --check`: pass

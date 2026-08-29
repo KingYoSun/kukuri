@@ -19,6 +19,63 @@ fn app_with_shared_dome_services(
     )
 }
 
+async fn open_proposal_fixture(
+    suffix: &str,
+) -> (AppService, AppService, SpatialContextV1, String, String) {
+    let docs_sync = Arc::new(MemoryDocsSync::default());
+    let blob_service = Arc::new(MemoryBlobService::default());
+    let proposer_keys = generate_keys();
+    let receiver_keys = generate_keys();
+    let proposer_pubkey = proposer_keys.public_key_hex();
+    let receiver_pubkey = receiver_keys.public_key_hex();
+    let proposer =
+        app_with_shared_dome_services(docs_sync.clone(), blob_service.clone(), proposer_keys);
+    let receiver = app_with_shared_dome_services(docs_sync, blob_service, receiver_keys);
+    let topic = format!("kukuri:topic:dome-open-proposal-{suffix}");
+    let context = SpatialContextV1::Topic {
+        topic_id: TopicId::new(topic.clone()),
+    };
+    let proposer_instance = proposer
+        .create_metaverse_room(
+            &topic,
+            CreateMetaverseRoomInput {
+                title: "Proposer Dome".into(),
+                description: String::new(),
+                max_peers: Some(8),
+            },
+        )
+        .await
+        .expect("create proposer Dome");
+    let receiver_instance = receiver
+        .create_metaverse_room(
+            &topic,
+            CreateMetaverseRoomInput {
+                title: "Receiver Dome".into(),
+                description: String::new(),
+                max_peers: Some(8),
+            },
+        )
+        .await
+        .expect("create receiver Dome");
+    proposer
+        .create_dome_connection_proposal(CreateDomeConnectionProposalInput {
+            proposal_id: format!("proposal-{suffix}"),
+            spatial_context: context.clone(),
+            proposer_instance_id: proposer_instance,
+            receiver_instance_id: receiver_instance,
+            proposer_direction: DomeDirection::East,
+        })
+        .await
+        .expect("create proposal");
+    (
+        proposer,
+        receiver,
+        context,
+        proposer_pubkey,
+        receiver_pubkey,
+    )
+}
+
 #[tokio::test]
 async fn dome_connection_proposal_accept_and_revoke_round_trip() {
     let docs_sync = Arc::new(MemoryDocsSync::default());
@@ -237,6 +294,129 @@ async fn owner_block_revokes_connection_and_unblock_does_not_restore_it() {
     assert_eq!(
         unblocked.connections[0].record.status,
         kukuri_core::DomeConnectionStatusV1::Revoked
+    );
+}
+
+#[tokio::test]
+async fn proposer_block_discards_open_proposal_and_unblock_does_not_restore_it() {
+    let (proposer, receiver, context, _, receiver_pubkey) =
+        open_proposal_fixture("proposer-block").await;
+
+    proposer
+        .block_author(&receiver_pubkey)
+        .await
+        .expect("block receiver owner");
+    let blocked = proposer
+        .list_dome_connection_topology(context.clone())
+        .await
+        .expect("blocked topology");
+    assert_eq!(
+        blocked.proposals[0].status,
+        DomeProposalDerivedStatusV1::Discarded
+    );
+    assert_eq!(
+        blocked.proposals[0].terminal_reason,
+        Some(kukuri_core::DomeConnectionTerminalReasonV1::OwnersBlocked)
+    );
+    assert!(blocked.connections.is_empty());
+    assert!(
+        receiver
+            .accept_dome_connection_proposal(AcceptDomeConnectionProposalInput {
+                spatial_context: context.clone(),
+                proposal_id: "proposal-proposer-block".into(),
+            })
+            .await
+            .is_err()
+    );
+
+    proposer
+        .unblock_author(&receiver_pubkey)
+        .await
+        .expect("unblock receiver owner");
+    let unblocked = proposer
+        .list_dome_connection_topology(context)
+        .await
+        .expect("topology after unblock");
+    assert_eq!(
+        unblocked.proposals[0].status,
+        DomeProposalDerivedStatusV1::Discarded
+    );
+}
+
+#[tokio::test]
+async fn receiver_block_discards_open_proposal_and_prevents_accept() {
+    let (proposer, receiver, context, proposer_pubkey, _) =
+        open_proposal_fixture("receiver-block").await;
+
+    receiver
+        .block_author(&proposer_pubkey)
+        .await
+        .expect("block proposer owner");
+    let blocked = receiver
+        .list_dome_connection_topology(context.clone())
+        .await
+        .expect("blocked topology");
+    assert_eq!(
+        blocked.proposals[0].status,
+        DomeProposalDerivedStatusV1::Discarded
+    );
+    assert_eq!(
+        blocked.proposals[0].terminal_reason,
+        Some(kukuri_core::DomeConnectionTerminalReasonV1::OwnersBlocked)
+    );
+    assert!(blocked.connections.is_empty());
+    assert!(
+        receiver
+            .accept_dome_connection_proposal(AcceptDomeConnectionProposalInput {
+                spatial_context: context.clone(),
+                proposal_id: "proposal-receiver-block".into(),
+            })
+            .await
+            .is_err()
+    );
+    assert!(
+        proposer
+            .list_dome_connection_topology(context)
+            .await
+            .expect("proposer topology")
+            .connections
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn accept_rechecks_owner_block_before_persisting_connection_records() {
+    let (_, receiver, context, proposer_pubkey, _) =
+        open_proposal_fixture("accept-block-recheck").await;
+    let block = build_block_edge_envelope(
+        receiver.services.keys.as_ref(),
+        &Pubkey::from(proposer_pubkey),
+        BlockEdgeStatus::Active,
+    )
+    .expect("build block edge");
+    receiver
+        .services
+        .store
+        .put_envelope(block)
+        .await
+        .expect("store block edge without reconciliation");
+
+    let error = receiver
+        .accept_dome_connection_proposal(AcceptDomeConnectionProposalInput {
+            spatial_context: context.clone(),
+            proposal_id: "proposal-accept-block-recheck".into(),
+        })
+        .await
+        .expect_err("block must be rechecked before accept persistence");
+    assert!(error.to_string().contains("DOME_CONNECTION_OWNERS_BLOCKED"));
+    let topology = receiver
+        .list_dome_connection_topology(context)
+        .await
+        .expect("topology after rejected accept");
+    assert!(topology.connections.is_empty());
+    assert_eq!(
+        topology.proposals[0].terminal_reason,
+        Some(kukuri_core::DomeConnectionTerminalReasonV1::OwnersBlocked)
     );
 }
 

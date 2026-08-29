@@ -265,6 +265,21 @@ impl AppService {
         if proposal_state.proposal.receiver.owner_pubkey.as_str() != self.current_author_pubkey() {
             anyhow::bail!("only the receiver Dome owner can accept this proposal");
         }
+        if self
+            .authors_blocked_either_direction(
+                proposal_state.proposal.proposer.owner_pubkey.as_str(),
+                proposal_state.proposal.receiver.owner_pubkey.as_str(),
+            )
+            .await?
+        {
+            self.terminate_dome_connection_proposal_with_reason(
+                &proposal_state.proposal.spatial_context,
+                proposal_state.proposal.proposal_id.as_str(),
+                DomeConnectionTerminalReasonV1::OwnersBlocked,
+            )
+            .await?;
+            anyhow::bail!("DOME_CONNECTION_OWNERS_BLOCKED");
+        }
         if let Some(existing) = self
             .fetch_dome_connection_state(&replica, &proposal_state.connection_id)
             .await?
@@ -398,33 +413,64 @@ impl AppService {
         let replica = self
             .dome_connection_context_replica(&input.spatial_context)
             .await?;
-        let mut state = self
+        let state = self
             .fetch_dome_proposal_state(&replica, input.proposal_id.as_str())
             .await?
             .context("Dome Connection proposal was not found")?;
         if state.proposal.proposer.owner_pubkey.as_str() != self.current_author_pubkey() {
             anyhow::bail!("only the proposer can withdraw this proposal");
         }
-        if state.terminal_reason.is_none() {
-            let event = DomeProposalTerminalEventV1 {
-                proposal_id: state.proposal.proposal_id.clone(),
-                spatial_context: state.proposal.spatial_context.clone(),
-                actor_pubkey: state.proposal.proposer.owner_pubkey.clone(),
-                reason: DomeConnectionTerminalReasonV1::ProposerWithdrew,
-                updated_at: Utc::now().timestamp_millis(),
-            };
-            let envelope = sign_envelope_json(
-                self.services.keys.as_ref(),
-                "dome-connection-proposal-terminal",
-                vec![vec!["proposal".into(), event.proposal_id.clone()]],
-                &event,
-            )?;
-            self.persist_connection_envelope(&replica, &envelope)
-                .await?;
-            state.terminal_reason = Some(event.reason);
-            state.terminal_event_envelope_id = Some(envelope.id);
-            self.persist_dome_proposal_state(&replica, &state).await?;
+        self.terminate_dome_connection_proposal_with_reason(
+            &input.spatial_context,
+            input.proposal_id.as_str(),
+            DomeConnectionTerminalReasonV1::ProposerWithdrew,
+        )
+        .await
+    }
+
+    pub(crate) async fn terminate_dome_connection_proposal_with_reason(
+        &self,
+        spatial_context: &SpatialContextV1,
+        proposal_id: &str,
+        reason: DomeConnectionTerminalReasonV1,
+    ) -> Result<DomeConnectionProposalView> {
+        let replica = self
+            .dome_connection_context_replica(spatial_context)
+            .await?;
+        let mut state = self
+            .fetch_dome_proposal_state(&replica, proposal_id)
+            .await?
+            .context("Dome Connection proposal was not found")?;
+        if state.terminal_reason.is_some()
+            || self
+                .fetch_dome_connection_state(&replica, &state.connection_id)
+                .await?
+                .is_some()
+        {
+            return self.proposal_view_from_state(&replica, state).await;
         }
+        let actor = Pubkey::from(self.current_author_pubkey());
+        validate_dome_proposal_terminal_actor(&state.proposal, &actor, reason)?;
+        let event = DomeProposalTerminalEventV1 {
+            proposal_id: state.proposal.proposal_id.clone(),
+            spatial_context: state.proposal.spatial_context.clone(),
+            actor_pubkey: actor,
+            reason,
+            updated_at: Utc::now().timestamp_millis(),
+        };
+        let envelope = sign_envelope_json(
+            self.services.keys.as_ref(),
+            "dome-connection-proposal-terminal",
+            vec![vec!["proposal".into(), event.proposal_id.clone()]],
+            &event,
+        )?;
+        self.persist_connection_envelope(&replica, &envelope)
+            .await?;
+        state.terminal_reason = Some(event.reason);
+        state.terminal_event_envelope_id = Some(envelope.id);
+        self.persist_dome_proposal_state(&replica, &state).await?;
+        self.publish_dome_topology_hint(&state.proposal.spatial_context, &state.connection_id)
+            .await?;
         self.proposal_view_from_state(&replica, state).await
     }
 
@@ -633,21 +679,8 @@ impl AppService {
             state.terminal_event_envelope_id.as_ref(),
         ) {
             (Some(reason), Some(envelope_id)) => {
-                let event: DomeProposalTerminalEventV1 = fetch_verified_dome_envelope(
-                    self.services.docs_sync.as_ref(),
-                    replica,
-                    envelope_id,
-                    "dome-connection-proposal-terminal",
-                    &state.proposal.proposer.owner_pubkey,
-                )
-                .await?;
-                if event.proposal_id != state.proposal.proposal_id
-                    || event.spatial_context != state.proposal.spatial_context
-                    || event.actor_pubkey != state.proposal.proposer.owner_pubkey
-                    || event.reason != reason
-                {
-                    anyhow::bail!("signed Dome Connection terminal event does not match state");
-                }
+                let envelope = self.fetch_connection_envelope(replica, envelope_id).await?;
+                verify_dome_proposal_terminal_event(state, envelope_id, reason, &envelope)?;
             }
             (None, None) => {}
             _ => anyhow::bail!("Dome Connection terminal state is incomplete"),

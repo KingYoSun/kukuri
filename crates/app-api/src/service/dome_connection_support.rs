@@ -1,5 +1,5 @@
 use crate::service::*;
-use kukuri_core::SpatialContextV1;
+use kukuri_core::{DomeProposalDerivedStatusV1, SpatialContextV1};
 use serde::{Deserialize, Serialize};
 
 pub(crate) const PROPOSAL_PREFIX: &str = "metaverse/dome-connections/proposals";
@@ -38,6 +38,48 @@ pub(crate) struct DomeProposalTerminalEventV1 {
     pub(crate) actor_pubkey: Pubkey,
     pub(crate) reason: DomeConnectionTerminalReasonV1,
     pub(crate) updated_at: i64,
+}
+
+pub(crate) fn validate_dome_proposal_terminal_actor(
+    proposal: &DomeConnectionProposalV1,
+    actor: &Pubkey,
+    reason: DomeConnectionTerminalReasonV1,
+) -> Result<()> {
+    let authorized = match reason {
+        DomeConnectionTerminalReasonV1::ProposerWithdrew => {
+            actor == &proposal.proposer.owner_pubkey
+        }
+        DomeConnectionTerminalReasonV1::OwnersBlocked => {
+            actor == &proposal.proposer.owner_pubkey || actor == &proposal.receiver.owner_pubkey
+        }
+        _ => false,
+    };
+    if !authorized {
+        anyhow::bail!("Dome Connection proposal terminal actor is not authorized");
+    }
+    Ok(())
+}
+
+pub(crate) fn verify_dome_proposal_terminal_event(
+    state: &DomeProposalStateDocV1,
+    envelope_id: &EnvelopeId,
+    reason: DomeConnectionTerminalReasonV1,
+    envelope: &KukuriEnvelope,
+) -> Result<()> {
+    let event: DomeProposalTerminalEventV1 = serde_json::from_str(envelope.content.as_str())?;
+    if envelope.id != *envelope_id
+        || envelope.kind != "dome-connection-proposal-terminal"
+        || envelope.pubkey != event.actor_pubkey
+    {
+        anyhow::bail!("signed Dome Connection terminal envelope identity mismatch");
+    }
+    if event.proposal_id != state.proposal.proposal_id
+        || event.spatial_context != state.proposal.spatial_context
+        || event.reason != reason
+    {
+        anyhow::bail!("signed Dome Connection terminal event does not match state");
+    }
+    validate_dome_proposal_terminal_actor(&state.proposal, &event.actor_pubkey, event.reason)
 }
 
 impl AppService {
@@ -150,6 +192,25 @@ impl AppService {
             let Ok(topology) = self.list_dome_connection_topology(context.clone()).await else {
                 continue;
             };
+            for proposal in topology.proposals.iter().filter(|proposal| {
+                !matches!(
+                    proposal.status,
+                    DomeProposalDerivedStatusV1::Accepted | DomeProposalDerivedStatusV1::Discarded
+                )
+            }) {
+                let owners_match = (proposal.proposal.proposer.owner_pubkey == local_owner
+                    && proposal.proposal.receiver.owner_pubkey == *target_pubkey)
+                    || (proposal.proposal.receiver.owner_pubkey == local_owner
+                        && proposal.proposal.proposer.owner_pubkey == *target_pubkey);
+                if owners_match {
+                    self.terminate_dome_connection_proposal_with_reason(
+                        &context,
+                        proposal.proposal.proposal_id.as_str(),
+                        DomeConnectionTerminalReasonV1::OwnersBlocked,
+                    )
+                    .await?;
+                }
+            }
             for connection in topology.connections {
                 let agreement = &connection.record.agreement;
                 let owners_match = (agreement.proposer.owner_pubkey == local_owner
