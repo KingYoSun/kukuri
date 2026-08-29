@@ -1,0 +1,39 @@
+# 2026-08-30 Issue #816 Timeline / Explore quick switch
+
+- Status: current
+- Supersedes: None
+- Superseded by: None
+- PR: https://github.com/KingYoSun/kukuri/pull/834
+- Preview:
+  - [wide dark](../../apps/desktop/tests/playwright/__screenshots__/visual.spec.ts/timeline-wide-dark.png)
+  - [narrow dark](../../apps/desktop/tests/playwright/__screenshots__/visual.spec.ts/timeline-narrow-dark.png)
+- Surface / user / purpose: desktop / mobile の Column workspace で、利用者が public Timeline の tracked topic と Explore の Community Node を列を増やさず素早く切り替える。
+- Summary: public Timeline と Explore の scope 表示部を compact な native select に置き換えた。Timeline は対象列の ID・並び・pin・span・view・親子関係を保ったまま public topic scope だけを更新し、active 列の場合だけ route と focus を同期する。Explore は既存の eligible node、manifest 名、manual / auto preference 解決を再利用する。private Timeline は従来の channel scope 表示を維持する。
+- Conditions:
+  - Platform: Windows 11、Tauri development build、WebView2。visual baseline は GitHub Actions の Linux / Chromium。
+  - Viewport: Windows 実機 1283×871。Playwright 1400×980、900×760、390×844、visual 1400×980 / 700×980。
+  - Theme: dark。visual baseline では light も確認。
+  - Locale: Windows 実機 ja。Playwright では en / ja / zh-CN の containment を確認。
+  - State: 固定5列と一時Timeline 2列の計7列。tracked topic は general / dev / test、eligible node は api.kukuri.app。
+- Accessibility / interaction: select は accessible name、title、native keyboard操作、focus ringを持つ。Computer Use でpointerによるメニュー展開とkeyboardによる選択を行い、active Timeline の dev / test 往復後も7件中7番目の同一列が選択中で列数は7のまま、Explore の manual / auto 往復後もactive列が移らないことをアクセシビリティtreeで確認した。mobileでは44px以上の操作高を維持する。
+- Performance: 新規dependencyは追加していない。選択時は既存のtopic loadまたはCommunity Node preference解決だけを実行し、列の再生成や新しいpollingは追加していないため専用計測の対象外とした。
+- Validation:
+  - failing-first: Timeline scope置換、非active列selectのactivation抑止、route projection再利用の各回帰テストが実装前に失敗することを確認。
+  - targeted Vitest: 8 files / 77 tests passed。追加回帰の再確認は3 files / 48 tests passed。
+  - targeted Playwright: quick switch 1 test passed。
+  - `cargo xtask check` passed。
+  - `cargo xtask test`: Rust 694 passed / 3 skipped、harness 22 passed、frontend 126 files / 943 tests passed。
+  - `cargo xtask desktop-ui-check`: frontend 943 tests、Storybook build、browser Playwright 48 tests、visual smoke 14 tests passed。
+  - Linux baseline workflow: https://github.com/KingYoSun/kukuri/actions/runs/33276761371 passed。wide / narrow、dark / lightの意図したheader差分を確認。
+  - Windows実機: Tauri / WebView2をComputer Useで自動操作し、pointer / keyboard、同一列置換、active維持、manual / auto復元、横overflowなしを確認。
+- Not verified: 物理タッチパネル、ペン入力、スクリーンリーダーの音声読み上げ。native selectと共通のkeyboard / pointer経路、mobile Playwright、accessibility treeでは確認済み。
+- Review result:
+  - 一貫性: 既存のscope位置、Select、tracked topic、eligible node、preference schemaを再利用した。
+  - ショートカット: 列管理画面を開かずheader内で切り替えられる。
+  - フィードバック: 現在値をselectへ常時表示し、長い値は列内へ収めてtitleで完全値を参照できる。
+  - 完結性: 選択と同時に対象文脈へ更新し、Exploreでは旧検索結果・error・report actionを残さない。
+  - エラー防止: private channelは候補に含めず、Exploreはeligible nodeだけを選択可能にし、利用不能になったmanual値はdisabled表示する。
+  - 取り消し: Timelineは元topicへ、Exploreは自動または元nodeへ同じcontrolから戻せる。topic別draftも元scopeへ戻ると復元される。
+  - 主導権: 非active列の操作はactive列、focus、URLを奪わない。
+  - 記憶負荷: topic/nodeの表示名を直接候補にし、設定内の既存解決規則と一致させた。
+- Exceptions: None
