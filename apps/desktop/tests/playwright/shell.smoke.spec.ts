@@ -639,6 +639,14 @@ for (const mobileViewport of [
   });
   await expect(activeColumn(page, 'Thread')).toBeVisible();
   await expect(page.getByText('2 / 7')).toBeVisible();
+  // 次の逆方向gestureを始める前に、最初のsmooth scrollが対象pageへ到達するまで待つ。
+  // active stateだけを待つと、低速CIでは2本のsmooth scrollが重なって前のpageへ戻り得る。
+  await expect
+    .poll(() => canvas.evaluate(
+      (element, pageWidth) => Math.abs(element.scrollLeft - pageWidth),
+      geometry.canvasWidth
+    ))
+    .toBeLessThanOrEqual(1);
   await indicator.dispatchEvent('pointerdown', {
     pointerId: 92,
     clientX: indicatorBox.x + indicatorBox.width / 2,
