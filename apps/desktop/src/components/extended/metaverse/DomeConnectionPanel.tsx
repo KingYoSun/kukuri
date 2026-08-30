@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { IconButton } from '@/components/ui/icon-button';
 import { Label } from '@/components/ui/label';
 import { Notice } from '@/components/ui/notice';
 import type { SupportedLocale } from '@/i18n';
@@ -123,9 +124,9 @@ export function DomeConnectionPanel({
           <h3>{t('connections.title')}</h3>
           <small>{t('connections.summary', { count: topology?.resolution.topology.components.length ?? 0 })}</small>
         </div>
-        <Button variant='ghost' size='icon' type='button' aria-label={t('connections.refresh')} onClick={() => void refresh()}>
+        <IconButton variant='ghost' type='button' label={t('connections.refresh')} onClick={() => void refresh()}>
           <RefreshCw className='size-4' aria-hidden='true' />
-        </Button>
+        </IconButton>
       </div>
       {error ? <Notice tone='destructive'>{error}</Notice> : null}
       <div className='metaverse-connection-slots'>

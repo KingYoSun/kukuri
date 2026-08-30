@@ -88,7 +88,7 @@ false empty、無期限skeleton、取得不能な補助面が主要面を占有�
 - 日本語localeでは、kukuri、固有名、技術識別子以外の未意図な英語を混ぜない。他localeも同一情報と操作結果を保持する。
 - ボタン、pending表示、成功通知、errorで同じ操作名を使う。曖昧な「実行」「失敗」だけで終わらせない。
 - emptyとerrorには、利用者が次に行える具体的な行動を示す。値が空であることと取得できなかったことを区別する。
-- icon-only操作はaccessible nameを持つ。補足説明が必要ならpointer hoverとkeyboard focusの両方で表示する。
+- icon-only操作はローカライズ済みの操作名をaccessible nameとtooltipの双方に使い、tooltipをpointer hoverとkeyboard focusの両方で表示する。
 
 ## 6. Accessibilityと入力
 

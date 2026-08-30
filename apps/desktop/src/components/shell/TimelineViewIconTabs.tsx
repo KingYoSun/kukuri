@@ -2,13 +2,7 @@ import { Bookmark, List } from 'lucide-react';
 import { useRef, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { Button } from '@/components/ui/button';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { IconButton } from '@/components/ui/icon-button';
 
 export type TimelineViewId = 'feed' | 'bookmarks';
 
@@ -45,44 +39,37 @@ export function TimelineViewIconTabs({
   };
 
   return (
-    <TooltipProvider delayDuration={180}>
-      <div
-        className='shell-column-view-tabs'
-        role='tablist'
-        aria-label={t('workspace.timelineViews')}
-      >
-        {items.map((item, index) => {
-          const active = activeView === item.id;
-          return (
-            <Tooltip key={item.id}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant={active ? 'secondary' : 'ghost'}
-                  size='icon'
-                  className='shell-column-view-tab'
-                  role='tab'
-                  type='button'
-                  aria-label={item.label}
-                  aria-selected={active}
-                  tabIndex={active ? 0 : -1}
-                  ref={(node) => {
-                    tabRefs.current[index] = node;
-                  }}
-                  onClick={() => onSelect(item.id)}
-                  onKeyDown={(event) => moveSelection(event, index)}
-                >
-                  {item.id === 'feed' ? (
-                    <List className='size-4' aria-hidden='true' />
-                  ) : (
-                    <Bookmark className='size-4' aria-hidden='true' />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{item.label}</TooltipContent>
-            </Tooltip>
-          );
-        })}
-      </div>
-    </TooltipProvider>
+    <div
+      className='shell-column-view-tabs'
+      role='tablist'
+      aria-label={t('workspace.timelineViews')}
+    >
+      {items.map((item, index) => {
+        const active = activeView === item.id;
+        return (
+          <IconButton
+            key={item.id}
+            variant={active ? 'secondary' : 'ghost'}
+            className='shell-column-view-tab'
+            role='tab'
+            type='button'
+            label={item.label}
+            aria-selected={active}
+            tabIndex={active ? 0 : -1}
+            ref={(node) => {
+              tabRefs.current[index] = node;
+            }}
+            onClick={() => onSelect(item.id)}
+            onKeyDown={(event) => moveSelection(event, index)}
+          >
+            {item.id === 'feed' ? (
+              <List className='size-4' aria-hidden='true' />
+            ) : (
+              <Bookmark className='size-4' aria-hidden='true' />
+            )}
+          </IconButton>
+        );
+      })}
+    </div>
   );
 }

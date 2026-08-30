@@ -78,7 +78,6 @@ export type DesktopShellMessagesSurfaceProps = {
   openDirectMessageList: (mode?: 'push' | 'replace') => void;
   openDirectMessagePane: OpenDirectMessagePane;
   openAuthorDetail: OpenAuthorDetail;
-  handleClearDirectMessage: (peerPubkey: string) => Promise<void>;
   handleDeleteDirectMessageMessage: (peerPubkey: string, messageId: string) => Promise<void>;
   handleDirectMessageAttachmentSelection: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
   handleRemoveDirectMessageDraftAttachment: (itemId: string) => void;
@@ -95,7 +94,6 @@ export function DesktopShellMessagesSurface({
   openDirectMessageList,
   openDirectMessagePane,
   openAuthorDetail,
-  handleClearDirectMessage,
   handleDeleteDirectMessageMessage,
   handleDirectMessageAttachmentSelection,
   handleRemoveDirectMessageDraftAttachment,
@@ -247,59 +245,6 @@ export function DesktopShellMessagesSurface({
           {activeConversation && directMessageError ? (
             <Notice tone='destructive'>{directMessageError}</Notice>
           ) : null}
-          <Card className='shell-workspace-card'>
-            <div className='shell-workspace-header'>
-              <div className='shell-workspace-summary'>
-                <AuthorIdentityButton
-                  label={
-                    conversationLabel ?? conversationPeerPubkey
-                  }
-                  picture={conversationPicture}
-                  avatarSize='lg'
-                  avatarTestId='dm-active-header-avatar'
-                  className='relationship-badge'
-                  onClick={() =>
-                    void openAuthorDetail(conversationPeerPubkey, {
-                      historyMode: 'push',
-                      preserveDirectMessageContext: true,
-                      directMessagePeerPubkey: conversationPeerPubkey,
-                    })
-                  }
-                />
-                {conversationStatus ? (
-                  <span className='relationship-badge relationship-badge-direct'>
-                    {conversationStatus.send_enabled
-                      ? t('shell:messages.peerCount', {
-                          count: formatCount(conversationStatus.peer_count),
-                        })
-                      : t('shell:messages.sendDisabled')}
-                  </span>
-                ) : null}
-              </div>
-              <div className='post-actions'>
-                <Button
-                  variant='secondary'
-                  type='button'
-                  onClick={() =>
-                    void openDirectMessagePane(conversationPeerPubkey, {
-                      historyMode: 'replace',
-                    })
-                  }
-                >
-                  {t('common:actions.refresh')}
-                </Button>
-                <Button
-                  variant='secondary'
-                  type='button'
-                  disabled={conversationTimeline.length === 0}
-                  onClick={() => void handleClearDirectMessage(conversationPeerPubkey)}
-                >
-                  {t('common:actions.clear')}
-                </Button>
-              </div>
-            </div>
-          </Card>
-
           <Card className='shell-workspace-card'>
             {conversationTimeline.length === 0 ? (
               <p className='empty'>{t('shell:messages.noMessages')}</p>
@@ -474,14 +419,12 @@ export function DesktopShellMessagesWorkspace(props: DesktopShellMessagesSurface
 export type DesktopShellNotificationsSurfaceProps = {
   t: Translate;
   locale: SupportedLocale;
-  onRefresh: () => void;
   handleOpenNotification: (notification: NotificationView) => Promise<void>;
 };
 
 export function DesktopShellNotificationsSurface({
   t,
   locale,
-  onRefresh,
   handleOpenNotification,
 }: DesktopShellNotificationsSurfaceProps) {
   const {
@@ -490,7 +433,6 @@ export function DesktopShellNotificationsSurface({
     notifications,
     notificationAutoReadError,
     notificationPanelState,
-    notificationStatus,
   } = useDesktopShellStore(
     useShallow((s) => ({
       knownAuthorsByPubkey: s.knownAuthorsByPubkey,
@@ -498,7 +440,6 @@ export function DesktopShellNotificationsSurface({
       notifications: s.notifications,
       notificationAutoReadError: s.notificationAutoReadError,
       notificationPanelState: s.notificationPanelState,
-      notificationStatus: s.notificationStatus,
     }))
   );
   const notificationItems = useMemo<NotificationItemView[]>(
@@ -552,29 +493,13 @@ export function DesktopShellNotificationsSurface({
 
   return (
     <>
-      <Card className='shell-workspace-card'>
-        <div className='shell-workspace-header'>
-          <div>
-            <h3>{t('shell:notifications.title')}</h3>
-            <small>
-              {t('shell:notifications.summary', {
-                count: notifications.length,
-                unread: notificationStatus.unread_count,
-              })}
-            </small>
-          </div>
-          <Button variant='secondary' type='button' onClick={onRefresh}>
-            {t('common:actions.refresh')}
-          </Button>
-        </div>
-        {notificationPanelState.status === 'loading' ? (
-          <Notice>{t('shell:notifications.loading')}</Notice>
-        ) : null}
-        {notificationPanelState.status === 'error' && notificationPanelState.error ? (
-          <Notice tone='destructive'>{notificationPanelState.error}</Notice>
-        ) : null}
-        {notificationAutoReadError ? <Notice tone='warning'>{notificationAutoReadError}</Notice> : null}
-      </Card>
+      {notificationPanelState.status === 'loading' ? (
+        <Notice>{t('shell:notifications.loading')}</Notice>
+      ) : null}
+      {notificationPanelState.status === 'error' && notificationPanelState.error ? (
+        <Notice tone='destructive'>{notificationPanelState.error}</Notice>
+      ) : null}
+      {notificationAutoReadError ? <Notice tone='warning'>{notificationAutoReadError}</Notice> : null}
 
       <Card className='shell-workspace-card'>
         {notificationPanelState.status === 'ready' && notificationItems.length === 0 ? (

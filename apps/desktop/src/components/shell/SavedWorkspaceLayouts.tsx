@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/icon-button';
 import {
   Dialog,
   DialogBody,
@@ -214,28 +215,26 @@ export function SavedWorkspaceLayouts({
                         {t('shell:controlCenter.layouts.unsaved')}
                       </Button>
                     ) : null}
-                    <Button
+                    <IconButton
                       variant='ghost'
-                      size='icon'
                       className='min-h-11 min-w-11'
-                      aria-label={t('shell:controlCenter.layouts.renameAction', {
+                      label={t('shell:controlCenter.layouts.renameAction', {
                         name: layout.name,
                       })}
                       onClick={() => beginRename(layout)}
                     >
                       <Pencil className='size-4' aria-hidden='true' />
-                    </Button>
-                    <Button
+                    </IconButton>
+                    <IconButton
                       variant='ghost'
-                      size='icon'
                       className='min-h-11 min-w-11'
-                      aria-label={t('shell:controlCenter.layouts.deleteAction', {
+                      label={t('shell:controlCenter.layouts.deleteAction', {
                         name: layout.name,
                       })}
                       onClick={() => setConfirmation({ kind: 'delete', layout })}
                     >
                       <Trash2 className='size-4' aria-hidden='true' />
-                    </Button>
+                    </IconButton>
                   </div>
                 )}
               </li>

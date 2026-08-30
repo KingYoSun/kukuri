@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { IconButtonTooltip } from '@/components/ui/icon-button';
 import { prefersReducedMotion } from '@/lib/reducedMotion';
 import { columnCanvasEdgeScrollDirection } from './columnCanvasGeometry';
 import { nearestColumnToViewportCenter } from './columnPagingGeometry';
@@ -425,25 +426,32 @@ export function ColumnCanvas({
           </span>
           <span className='shell-column-page-dots'>
             {columnIds.map((columnId, index) => (
-              <button
+              <IconButtonTooltip
                 key={columnId}
-                type='button'
-                aria-label={t('workspace.columnPage', {
+                label={t('workspace.columnPage', {
                   position: index + 1,
                   total: columnIds.length,
                 })}
-                aria-current={columnId === activeColumnId ? 'page' : undefined}
-                onClick={() => {
-                  programmaticScrollTargetRef.current = columnId;
-                  if (scrollSettleTimeoutRef.current !== null) {
-                    window.clearTimeout(scrollSettleTimeoutRef.current);
-                    scrollSettleTimeoutRef.current = null;
-                  }
-                  onActivateColumn(columnId, true);
-                }}
               >
-                <span aria-hidden='true' />
-              </button>
+                <button
+                  type='button'
+                  aria-label={t('workspace.columnPage', {
+                    position: index + 1,
+                    total: columnIds.length,
+                  })}
+                  aria-current={columnId === activeColumnId ? 'page' : undefined}
+                  onClick={() => {
+                    programmaticScrollTargetRef.current = columnId;
+                    if (scrollSettleTimeoutRef.current !== null) {
+                      window.clearTimeout(scrollSettleTimeoutRef.current);
+                      scrollSettleTimeoutRef.current = null;
+                    }
+                    onActivateColumn(columnId, true);
+                  }}
+                >
+                  <span aria-hidden='true' />
+                </button>
+              </IconButtonTooltip>
             ))}
           </span>
         </nav>

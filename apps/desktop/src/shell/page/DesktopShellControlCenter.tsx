@@ -31,6 +31,7 @@ import { FilterableTopicNavList } from '@/components/core/FilterableTopicNavList
 import type { TopicDiagnosticSummary } from '@/components/core/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
 import { topicDisplayName } from '@/lib/topicId';
 import type { SettingsSection } from '@/components/shell/types';
@@ -288,16 +289,15 @@ export function DesktopShellControlCenter({
               <h2>{t('shell:controlCenter.title')}</h2>
               <p className='shell-control-center-summary'>{statusLabel}</p>
             </div>
-            <Button
+            <IconButton
               ref={closeButtonRef}
               variant='ghost'
-              size='icon'
               type='button'
-              aria-label={t('shell:controlCenter.close')}
+              label={t('shell:controlCenter.close')}
               onClick={() => setOpen(false, true)}
             >
               <X className='size-5' aria-hidden='true' />
-            </Button>
+            </IconButton>
           </header>
 
           <div className='shell-control-center-grid'>
@@ -353,12 +353,11 @@ export function DesktopShellControlCenter({
                         </span>
                         {scopeLabel(column) ? <small>{scopeLabel(column)}</small> : null}
                       </button>
-                      <Button
+                      <IconButton
                         variant='ghost'
-                        size='icon'
                         className='min-h-11 min-w-11'
                         type='button'
-                        aria-label={t(
+                        label={t(
                           column.pinned
                             ? 'shell:controlCenter.unpinColumn'
                             : 'shell:controlCenter.pinColumn',
@@ -376,20 +375,19 @@ export function DesktopShellControlCenter({
                         ) : (
                           <Pin className='size-4' aria-hidden='true' />
                         )}
-                      </Button>
-                      <Button
+                      </IconButton>
+                      <IconButton
                         variant='ghost'
-                        size='icon'
                         className='min-h-11 min-w-11'
                         type='button'
                         disabled={workspaceState.columns.length <= 1}
-                        aria-label={t('shell:controlCenter.closeColumn', {
+                        label={t('shell:controlCenter.closeColumn', {
                           title: titles[column.kind],
                         })}
                         onClick={() => closeManagedColumn(column.id)}
                       >
                         <X className='size-4' aria-hidden='true' />
-                      </Button>
+                      </IconButton>
                     </li>
                   );
                 })}
@@ -408,15 +406,14 @@ export function DesktopShellControlCenter({
                   placeholder={t('shell:navigation.placeholder')}
                   aria-label={t('shell:navigation.addTopic')}
                 />
-                <Button
+                <IconButton
                   variant='secondary'
-                  size='icon'
                   type='button'
-                  aria-label={t('common:actions.add')}
+                  label={t('common:actions.add')}
                   onClick={() => void onAddTopic()}
                 >
                   <BookPlus className='size-4' aria-hidden='true' />
-                </Button>
+                </IconButton>
               </div>
               <div className='shell-control-center-place-actions'>
                 <Button

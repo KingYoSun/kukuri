@@ -463,11 +463,38 @@
 }
 
 .shell-phase1 .shell-column-header-actions,
-.shell-phase1 .shell-column-view-tabs {
+.shell-phase1 .shell-column-view-tabs,
+.shell-phase1 .shell-column-context-actions {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
   flex: none;
+}
+
+.shell-phase1 .shell-column-context-author {
+  width: fit-content;
+  max-width: 12rem;
+  color: var(--muted-foreground);
+  font-size: var(--text-caption);
+}
+
+.shell-phase1 .shell-column-context-author > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-phase1 .shell-column-context-actions {
+  min-width: 0;
+}
+
+.shell-phase1 .shell-column-header-summary {
+  max-width: 9rem;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: var(--text-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .shell-phase1 .shell-column-view-tab[aria-selected='true'] {

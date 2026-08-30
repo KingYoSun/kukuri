@@ -23,6 +23,7 @@ import {
 } from '@/lib/internalLinks';
 
 import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/icon-button';
 import {
   ContextActionMenu,
   contextActionMenuPositionFromKeyboard,
@@ -608,16 +609,15 @@ export function PostCard({
               </Button>
             ) : null}
             {canonicalPostLink && onCopyLink ? (
-              <Button
+              <IconButton
                 variant='secondary'
-                size='icon'
                 className='post-action-button'
                 type='button'
-                aria-label={t('actions.copyLink')}
+                label={t('actions.copyLink')}
                 onClick={() => onCopyLink(canonicalPostLink)}
               >
                 <Link2 className='size-4' aria-hidden='true' />
-              </Button>
+              </IconButton>
             ) : null}
           </>
         ) : (
@@ -695,15 +695,14 @@ export function PostCard({
             {!interactionDisabled && canRepost && (onRepost || onQuoteRepost) ? (
               <Popover open={repostMenuOpen} onOpenChange={setRepostMenuOpen}>
                 <PopoverTrigger asChild>
-                  <Button
+                  <IconButton
                     variant='secondary'
-                    size='icon'
                     className='post-action-button'
                     type='button'
-                    aria-label={t('actions.repost')}
+                    label={t('actions.repost')}
                   >
                     <Repeat2 className='size-4' aria-hidden='true' />
-                  </Button>
+                  </IconButton>
                 </PopoverTrigger>
                 <PopoverContent align='end' className='post-action-popover'>
                   <div className='post-action-popover-stack'>
@@ -736,36 +735,33 @@ export function PostCard({
               </Popover>
             ) : null}
             {canReply && !interactionDisabled ? (
-              <Button
+              <IconButton
                 variant='secondary'
-                size='icon'
                 className='post-action-button'
                 type='button'
-                aria-label={t('actions.reply')}
+                label={t('actions.reply')}
                 onClick={() => onReply(post)}
               >
                 <Reply className='size-4' aria-hidden='true' />
-              </Button>
+              </IconButton>
             ) : null}
             {canonicalPostLink && onCopyLink ? (
-              <Button
+              <IconButton
                 variant='secondary'
-                size='icon'
                 className='post-action-button'
                 type='button'
-                aria-label={t('actions.copyLink')}
+                label={t('actions.copyLink')}
                 onClick={() => onCopyLink(canonicalPostLink)}
               >
                 <Link2 className='size-4' aria-hidden='true' />
-              </Button>
+              </IconButton>
             ) : null}
             {showBookmarkAction && onToggleBookmark ? (
-              <Button
+              <IconButton
                 variant='secondary'
-                size='icon'
                 className={`post-action-button${isBookmarked ? ' post-action-button-active' : ''}`}
                 type='button'
-                aria-label={isBookmarked ? t('actions.removeBookmark') : t('actions.bookmark')}
+                label={isBookmarked ? t('actions.removeBookmark') : t('actions.bookmark')}
                 aria-pressed={isBookmarked}
                 onClick={() => onToggleBookmark(post)}
               >
@@ -774,15 +770,14 @@ export function PostCard({
                   fill={isBookmarked ? 'currentColor' : 'none'}
                   aria-hidden='true'
                 />
-              </Button>
+              </IconButton>
             ) : null}
             {!isWithdrawn && post.author_pubkey === localAuthorPubkey && onWithdraw ? (
-              <Button
+              <IconButton
                 variant='secondary'
-                size='icon'
                 className='post-action-button'
                 type='button'
-                aria-label={t('actions.withdrawPost')}
+                label={t('actions.withdrawPost')}
                 onClick={() => {
                   if (window.confirm(t('actions.confirmWithdrawPost'))) {
                     onWithdraw(post);
@@ -790,15 +785,14 @@ export function PostCard({
                 }}
               >
                 <Trash2 className='size-4' aria-hidden='true' />
-              </Button>
+              </IconButton>
             ) : null}
             {showReportAction ? (
-              <Button
+              <IconButton
                 variant='secondary'
-                size='icon'
                 className='post-action-button'
                 type='button'
-                aria-label={t('report.actionLabel', { ns: 'shell' })}
+                label={t('report.actionLabel', { ns: 'shell' })}
                 onClick={() => {
                   setReportSubject({ kind: 'post', id: post.object_id, label: view.authorLabel });
                   setReportProvenance(view.provenance);
@@ -806,7 +800,7 @@ export function PostCard({
                 }}
               >
                 <Flag className='size-4' aria-hidden='true' />
-              </Button>
+              </IconButton>
             ) : null}
           </>
         )}

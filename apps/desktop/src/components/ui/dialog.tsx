@@ -2,7 +2,9 @@
 import * as React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
+import { IconButtonTooltip } from '@/components/ui/icon-button';
 import { cn } from '@/lib/utils';
 
 export const Dialog = DialogPrimitive.Root;
@@ -29,23 +31,32 @@ export const DialogContent = React.forwardRef<
     hideClose?: boolean;
     closeLabel?: string;
   }
->(({ className, children, hideClose = false, closeLabel = 'Close dialog', ...props }, ref) => (
-  <DialogPortal>
-    <DialogOverlay />
-    <DialogPrimitive.Content
-      ref={ref}
-      className={cn('ui-dialog-content panel', className)}
-      {...props}
-    >
-      {children}
-      {!hideClose ? (
-        <DialogPrimitive.Close className='ui-dialog-close button-ghost' aria-label={closeLabel}>
-          <X className='size-5' aria-hidden='true' />
-        </DialogPrimitive.Close>
-      ) : null}
-    </DialogPrimitive.Content>
-  </DialogPortal>
-));
+>(({ className, children, hideClose = false, closeLabel, ...props }, ref) => {
+  const { t } = useTranslation('common');
+  const resolvedCloseLabel = closeLabel ?? t('actions.closeDialog');
+  return (
+    <DialogPortal>
+      <DialogOverlay />
+      <DialogPrimitive.Content
+        ref={ref}
+        className={cn('ui-dialog-content panel', className)}
+        {...props}
+      >
+        {children}
+        {!hideClose ? (
+          <IconButtonTooltip label={resolvedCloseLabel}>
+            <DialogPrimitive.Close
+              className='ui-dialog-close button-ghost'
+              aria-label={resolvedCloseLabel}
+            >
+              <X className='size-5' aria-hidden='true' />
+            </DialogPrimitive.Close>
+          </IconButtonTooltip>
+        ) : null}
+      </DialogPrimitive.Content>
+    </DialogPortal>
+  );
+});
 
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 

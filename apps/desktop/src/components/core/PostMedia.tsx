@@ -2,7 +2,7 @@ import type * as React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Flag } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/icon-button';
 
 import { type PostMediaView } from './types';
 
@@ -48,17 +48,16 @@ export function PostMedia({
           ) : null}
         </div>
         {onReportVideo && videoReportHash ? (
-          <Button
+          <IconButton
             variant='secondary'
-            size='icon'
             type='button'
             className='media-video-report'
             onClick={() => onReportVideo(videoReportHash)}
-            aria-label={t('media.reportVideo')}
+            label={t('media.reportVideo')}
             data-testid={`media-video-report-${media.objectId}`}
           >
             <Flag className='size-4' aria-hidden='true' />
-          </Button>
+          </IconButton>
         ) : null}
 
         {media.kind === 'video' && media.videoPlaybackSrc && !media.videoUnsupportedOnClient ? (

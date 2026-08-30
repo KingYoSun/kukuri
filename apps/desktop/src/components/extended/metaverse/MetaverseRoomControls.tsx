@@ -20,6 +20,7 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { SupportedLocale } from '@/i18n';
@@ -152,49 +153,45 @@ export function MetaverseRoomControls({
         </div>
       ) : null}
       <div className='metaverse-hud-toolbar' data-open={hudOpen}>
-        <Button
+        <IconButton
           variant='ghost'
-          size='icon'
           className='metaverse-hud-icon-button'
           type='button'
-          aria-label={t('hud.leave')}
+          label={t('hud.leave')}
           onClick={onLeaveRoom}
         >
           <LogOut className='size-4' aria-hidden='true' />
-        </Button>
-        {onReturnHome ? <Button
+        </IconButton>
+        {onReturnHome ? <IconButton
           variant='ghost'
-          size='icon'
           className='metaverse-hud-icon-button'
           type='button'
-          aria-label={t('recovery.returnHome')}
+          label={t('recovery.returnHome')}
           title={t('recovery.returnHomeDescription')}
           disabled={domeRecovery.state === 'evacuating'}
           onClick={onReturnHome}
         >
           <House className='size-4' aria-hidden='true' />
-        </Button> : null}
+        </IconButton> : null}
         {onToggleMicrophone ? (
-          <Button
+          <IconButton
             variant={microphoneEnabled ? 'primary' : 'ghost'}
-            size='icon'
             className='metaverse-hud-icon-button'
             type='button'
-            aria-label={t(microphoneEnabled ? 'hud.disableMicrophone' : 'hud.enableMicrophone')}
+            label={t(microphoneEnabled ? 'hud.disableMicrophone' : 'hud.enableMicrophone')}
             aria-pressed={microphoneEnabled}
             onClick={onToggleMicrophone}
           >
             {microphoneEnabled
               ? <Mic className='size-4' aria-hidden='true' />
               : <MicOff className='size-4' aria-hidden='true' />}
-          </Button>
+          </IconButton>
         ) : null}
-        <Button
+        <IconButton
           variant='ghost'
-          size='icon'
           className='metaverse-hud-icon-button'
           type='button'
-          aria-label={t(hudOpen ? 'hud.hide' : 'hud.open')}
+          label={t(hudOpen ? 'hud.hide' : 'hud.open')}
           onClick={onToggleHud}
         >
           {hudOpen ? (
@@ -202,7 +199,7 @@ export function MetaverseRoomControls({
           ) : (
             <PanelRightOpen className='size-4' aria-hidden='true' />
           )}
-        </Button>
+        </IconButton>
       </div>
       {hudOpen ? (
         <>
@@ -339,16 +336,15 @@ export function MetaverseRoomControls({
               <MessageSquare className='size-4' aria-hidden='true' />
               {t('chat.title')}
             </span>
-            <Button
+            <IconButton
               variant='ghost'
-              size='icon'
               className='metaverse-chat-close-button'
               type='button'
-              aria-label={t('chat.hide')}
+              label={t('chat.hide')}
               onClick={onCloseChat}
             >
               <X className='size-4' aria-hidden='true' />
-            </Button>
+            </IconButton>
           </div>
           <ul className='metaverse-chat-list'>
             {messages.map((message) => (
@@ -380,16 +376,15 @@ export function MetaverseRoomControls({
           </form>
         </section>
       ) : (
-        <Button
+        <IconButton
           variant='secondary'
-          size='icon'
           className='metaverse-chat-toggle'
           type='button'
-          aria-label={t('chat.open')}
+          label={t('chat.open')}
           onClick={onOpenChat}
         >
           <MessageSquare className='size-4' aria-hidden='true' />
-        </Button>
+        </IconButton>
       )}
     </>
   );
