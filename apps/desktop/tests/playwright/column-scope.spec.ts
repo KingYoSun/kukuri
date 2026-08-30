@@ -100,6 +100,60 @@ test('Public and private Timeline Columns coexist and keep posts within their ow
   await expect(privateColumn.getByText('public scoped post')).toHaveCount(0);
 });
 
+test('Timeline composer keeps line breaks and submits exactly once with Ctrl+Enter', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1400, height: 980 });
+  await page.goto('/');
+
+  const timeline = activeColumn(page, 'Timeline');
+  await timeline.getByRole('button', { name: `Publish to ${GENERAL_PUBLIC_SCOPE}` }).click();
+  const textarea = timeline.getByPlaceholder('Write a post');
+  await textarea.fill('shortcut line one');
+  await textarea.press('Enter');
+  await textarea.type('shortcut line two');
+  await expect(textarea).toHaveValue('shortcut line one\nshortcut line two');
+
+  await textarea.press('Control+Enter');
+
+  await expect(textarea).toHaveCount(0);
+  await expect(
+    timeline
+      .getByRole('article')
+      .filter({ hasText: 'shortcut line one' })
+      .filter({ hasText: 'shortcut line two' })
+  ).toHaveCount(1);
+});
+
+test('mention selection keeps priority over Ctrl+Enter in the Timeline composer', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1400, height: 980 });
+  await page.goto('/');
+
+  const timelineSurface = timelineColumnByScope(page, GENERAL_PUBLIC_SCOPE);
+  await timelineSurface.getByRole('button', { name: 'browser peer' }).first().click();
+  const profile = activeColumn(page, 'Profile');
+  await expect(profile.getByText('browser peer').first()).toBeVisible();
+  await timelineSurface.locator('.shell-column-header h2').dispatchEvent('pointerdown');
+  const timeline = activeColumn(page, 'Timeline');
+  await expect(timeline).toBeVisible();
+  await timeline.getByRole('button', { name: `Publish to ${GENERAL_PUBLIC_SCOPE}` }).click();
+  const textarea = timeline.getByPlaceholder('Write a post');
+  await textarea.pressSequentially('shortcut mention @bro', { delay: 25 });
+  await expect(timeline.getByRole('listbox', { name: 'Mention suggestions' })).toBeVisible();
+
+  await textarea.press('Control+Enter');
+
+  await expect(timeline.getByRole('listbox', { name: 'Mention suggestions' })).toHaveCount(0);
+  await expect(textarea).toBeVisible();
+  await expect(textarea).toHaveValue(/shortcut mention @\[browser peer\]\([a-f0-9]{64}\) /);
+
+  await textarea.press('Control+Enter');
+  await expect(textarea).toHaveCount(0);
+  await expect(timeline.getByRole('article').filter({ hasText: 'shortcut mention' })).toHaveCount(1);
+});
+
 test('Thread opened from the private Column keeps the private scope for header and footer reply', async ({
   page,
 }) => {

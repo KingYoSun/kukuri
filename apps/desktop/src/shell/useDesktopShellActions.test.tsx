@@ -520,6 +520,38 @@ describe('useDesktopShellActions', () => {
     );
   });
 
+  test('pending Column Draft rejects a repeated form submission', async () => {
+    const createPost = vi.fn(async () => 'duplicate-post');
+    const target = {
+      columnId: 'timeline-pending',
+      action: 'post' as const,
+      scope: { topicId: 'topic-a', channelId: null },
+    };
+    const view = renderActionsHook({
+      api: { createPost },
+      preset: (current) => ({
+        columnDraftsByKey: setColumnDraft(current.columnDraftsByKey, target, (draft) => ({
+          ...draft,
+          content: 'already sending',
+          expanded: true,
+          pending: true,
+        })),
+      }),
+    });
+    const form = publishFormEvent();
+
+    await act(async () => {
+      await view.result.current.handleSubmitColumnDraft(target, form.event);
+    });
+
+    expect(form.preventDefault).toHaveBeenCalledTimes(1);
+    expect(createPost).not.toHaveBeenCalled();
+    expect(view.store.getState().columnDraftsByKey[columnDraftKey(target)]).toMatchObject({
+      content: 'already sending',
+      pending: true,
+    });
+  });
+
   test('quote repost expands the source topic public Column Draft and submits through createRepost', async () => {
     const createRepost = vi.fn(async () => 'repost-1');
     const source = buildPost({
