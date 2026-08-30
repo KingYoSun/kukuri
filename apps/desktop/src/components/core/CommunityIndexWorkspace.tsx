@@ -5,12 +5,18 @@ import { useTranslation } from 'react-i18next';
 
 import type {
   AuthorSocialView,
+  BookmarkedCustomReactionView,
   CommunityNodeIndexQueryRequest,
+  CustomReactionAssetView,
   DesktopApi,
   IndexEntryView,
+  PostView,
+  ReactionKeyInput,
+  RecentReactionView,
   TimelineScope,
 } from '@/lib/api';
 import { InvokeError } from '@/lib/api/invoke/error';
+import type { InternalSmartReference } from '@/lib/internalLinks';
 import { copyTextToClipboard } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
@@ -33,6 +39,24 @@ type CommunityIndexWorkspaceProps = {
   knownAuthorsByPubkey?: Record<string, AuthorSocialView>;
   mediaObjectUrls?: Record<string, string | null>;
   onOpenAuthor: (pubkey: string) => void;
+  onOpenThread?: (threadId: string) => void;
+  onOpenThreadInTopic?: (threadId: string, topicId: string) => void;
+  onReply?: (post: PostView) => void;
+  onRepost?: (post: PostView) => void;
+  onQuoteRepost?: (post: PostView) => void;
+  localAuthorPubkey?: string;
+  ownedReactionAssets?: CustomReactionAssetView[];
+  bookmarkedReactionAssets?: BookmarkedCustomReactionView[];
+  recentReactions?: RecentReactionView[];
+  onToggleReaction?: (post: PostView, reactionKey: ReactionKeyInput) => void;
+  onBookmarkCustomReaction?: (asset: CustomReactionAssetView) => void;
+  onReactionPickerOpen?: () => void;
+  showBookmarkAction?: boolean;
+  bookmarkedPostIds?: Set<string>;
+  onToggleBookmark?: (post: PostView) => void;
+  onWithdraw?: (post: PostView) => void;
+  onActivateReference?: (reference: InternalSmartReference) => void;
+  onCopyPostLink?: (link: string) => void;
 };
 
 type IndexRequestContext = {
@@ -130,6 +154,24 @@ export function CommunityIndexWorkspace({
   knownAuthorsByPubkey = {},
   mediaObjectUrls = {},
   onOpenAuthor,
+  onOpenThread,
+  onOpenThreadInTopic,
+  onReply,
+  onRepost,
+  onQuoteRepost,
+  localAuthorPubkey,
+  ownedReactionAssets = [],
+  bookmarkedReactionAssets = [],
+  recentReactions = [],
+  onToggleReaction,
+  onBookmarkCustomReaction,
+  onReactionPickerOpen,
+  showBookmarkAction = false,
+  bookmarkedPostIds,
+  onToggleBookmark,
+  onWithdraw,
+  onActivateReference,
+  onCopyPostLink,
 }: CommunityIndexWorkspaceProps) {
   const { t } = useTranslation(['shell', 'common']);
   const [operation, setOperation] = useState<IndexOperation>('search');
@@ -163,6 +205,7 @@ export function CommunityIndexWorkspace({
         view: communityIndexPostCardView(entry, {
           nodeBaseUrl: visibleResult.context.nodeBaseUrl,
           operation: visibleResult.context.operation,
+          topicId: visibleResult.context.topicId ?? null,
           knownAuthor: knownAuthorsByPubkey[entry.author_pubkey] ?? null,
           mediaObjectUrls,
         }),
@@ -315,11 +358,27 @@ export function CommunityIndexWorkspace({
             <li key={key}>
               <PostCard
                 view={view}
-                readOnly
+                readOnly={!view.threadTopicId}
                 mediaObjectUrls={mediaObjectUrls}
                 onOpenAuthor={onOpenAuthor}
-                onOpenThread={() => undefined}
-                onReply={() => undefined}
+                onOpenThread={onOpenThread ?? (() => undefined)}
+                onOpenThreadInTopic={onOpenThreadInTopic}
+                onReply={onReply ?? (() => undefined)}
+                onRepost={onRepost}
+                onQuoteRepost={onQuoteRepost}
+                localAuthorPubkey={localAuthorPubkey}
+                ownedReactionAssets={ownedReactionAssets}
+                bookmarkedReactionAssets={bookmarkedReactionAssets}
+                recentReactions={recentReactions}
+                onToggleReaction={onToggleReaction}
+                onBookmarkCustomReaction={onBookmarkCustomReaction}
+                onReactionPickerOpen={onReactionPickerOpen}
+                showBookmarkAction={showBookmarkAction}
+                isBookmarked={bookmarkedPostIds?.has(view.post.object_id) ?? false}
+                onToggleBookmark={onToggleBookmark}
+                onWithdraw={onWithdraw}
+                onActivateReference={onActivateReference}
+                onCopyLink={onCopyPostLink}
                 onSubmitReport={(request) => api.submitCommunityNodeReport(request)}
                 onCopyReportContact={(value) => void copyTextToClipboard(value)}
                 onFetchReportManifest={(baseUrl) => api.fetchCommunityNodeManifest(baseUrl)}

@@ -95,6 +95,20 @@ function workspaceProps(
     selectedNodeBaseUrl: NODE_A,
     onOpenCommunityNodeSettings: vi.fn(),
     onOpenAuthor: vi.fn(),
+    onOpenThread: vi.fn(),
+    onOpenThreadInTopic: vi.fn(),
+    onReply: vi.fn(),
+    onRepost: vi.fn(),
+    onQuoteRepost: vi.fn(),
+    onToggleReaction: vi.fn(),
+    onBookmarkCustomReaction: vi.fn(),
+    onReactionPickerOpen: vi.fn(),
+    showBookmarkAction: true,
+    bookmarkedPostIds: new Set<string>(),
+    onToggleBookmark: vi.fn(),
+    onWithdraw: vi.fn(),
+    onActivateReference: vi.fn(),
+    onCopyPostLink: vi.fn(),
     ...overrides,
   };
 }
@@ -157,10 +171,71 @@ test('topic search sends the active public scope and renders results with the sh
   expect(screen.queryByText(/Search preview; may include derived tags/)).not.toBeInTheDocument();
   expect(screen.queryByText('rust')).not.toBeInTheDocument();
   expect(screen.queryByText('public_topic')).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'Reply' })).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'Repost' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Reply' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Repost' })).toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: 'Alice' }));
   expect(onOpenAuthor).toHaveBeenCalledWith('author-1');
+});
+
+test('Explore results expose the same post actions as the timeline', async () => {
+  const user = userEvent.setup();
+  const onReply = vi.fn();
+  const onRepost = vi.fn();
+  const onToggleBookmark = vi.fn();
+  const searchCommunityNodeIndex = vi.fn().mockResolvedValue({
+    entries: [indexEntry('explore-actions', 'actionable result')],
+  });
+  const api = { searchCommunityNodeIndex } as unknown as DesktopApi;
+  const interactiveActions = {
+    onOpenThread: vi.fn(),
+    onOpenThreadInTopic: vi.fn(),
+    onReply,
+    onRepost,
+    onQuoteRepost: vi.fn(),
+    onToggleReaction: vi.fn(),
+    showBookmarkAction: true,
+    onToggleBookmark,
+    onCopyPostLink: vi.fn(),
+  };
+  render(
+    <CommunityIndexWorkspace
+      {...workspaceProps(api, { mode: 'explore' })}
+      {...interactiveActions}
+    />
+  );
+
+  runSearch();
+
+  const result = await screen.findByText('actionable result');
+  const card = result.closest('article');
+  if (!(card instanceof HTMLElement)) throw new Error('Explore result card not found');
+
+  expect(within(card).getByRole('button', { name: 'React' })).toBeEnabled();
+  expect(within(card).getByRole('button', { name: 'Repost' })).toBeInTheDocument();
+  expect(within(card).getByRole('button', { name: 'Reply' })).toBeInTheDocument();
+  expect(within(card).getByRole('button', { name: 'Copy link' })).toBeInTheDocument();
+  expect(within(card).getByRole('button', { name: 'Bookmark' })).toBeInTheDocument();
+  expect(within(card).getByRole('button', { name: 'Report' })).toBeInTheDocument();
+
+  await user.click(within(card).getByRole('button', { name: 'Reply' }));
+  expect(onReply).toHaveBeenCalledWith(
+    expect.objectContaining({
+      object_id: 'explore-actions',
+      published_topic_id: 'rust',
+      is_threadable: true,
+    })
+  );
+
+  await user.click(within(card).getByRole('button', { name: 'Bookmark' }));
+  expect(onToggleBookmark).toHaveBeenCalledWith(
+    expect.objectContaining({ object_id: 'explore-actions', published_topic_id: 'rust' })
+  );
+
+  await user.click(within(card).getByRole('button', { name: 'Repost' }));
+  await user.click(screen.getAllByRole('button', { name: 'Repost' })[1]);
+  expect(onRepost).toHaveBeenCalledWith(
+    expect.objectContaining({ object_id: 'explore-actions', published_topic_id: 'rust' })
+  );
 });
 
 test('index results hide identifiers and copy their complete values from context actions', async () => {

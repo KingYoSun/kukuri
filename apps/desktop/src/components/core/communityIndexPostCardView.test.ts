@@ -42,6 +42,7 @@ describe('communityIndexPostCardView', () => {
     const view = communityIndexPostCardView(entry, {
       nodeBaseUrl: 'https://node.example',
       operation: 'search',
+      topicId: null,
       knownAuthor,
       mediaObjectUrls: {},
     });
@@ -57,14 +58,17 @@ describe('communityIndexPostCardView', () => {
       attachments: [],
       reaction_summary: [],
       my_reactions: [],
-      is_threadable: false,
+      is_threadable: true,
+      published_topic_id: entry.scope_id,
       reply_to: null,
       repost_of: null,
     });
     expect(view.authorLabel).toBe('Alice');
     expect(view.authorPicture).toBe('https://example.test/alice.png');
     expect(view.audienceChipLabel).toBe('Public');
-    expect(view.threadTopicId).toBeNull();
+    expect(view.threadTopicId).toBe(entry.scope_id);
+    expect(view.canReply).toBe(true);
+    expect(view.canRepost).toBe(true);
     expect(view.media).toMatchObject({ kind: null, state: 'ready', extraAttachmentCount: 0 });
     expect(view.identifierCopy).toEqual({
       postId: entry.object_id,
@@ -89,6 +93,7 @@ describe('communityIndexPostCardView', () => {
     const view = communityIndexPostCardView(entry, {
       nodeBaseUrl: 'https://node.example',
       operation,
+      topicId: null,
       knownAuthor: null,
       mediaObjectUrls: {},
     });
@@ -105,12 +110,37 @@ describe('communityIndexPostCardView', () => {
       {
         nodeBaseUrl: 'https://node.example',
         operation: 'search',
+        topicId: null,
         knownAuthor: null,
         mediaObjectUrls: {},
       }
     );
 
     expect(view.audienceChipLabel).toBe('Private channel');
+    expect(view.threadTopicId).toBeNull();
+    expect(view.post.channel_id).toBeNull();
     expect(JSON.stringify(view)).not.toContain('private-channel-secret-id');
+  });
+
+  test('restores a private channel interaction context only when its parent topic is known', () => {
+    const view = communityIndexPostCardView(
+      { ...entry, scope_kind: 'private_channel', scope_id: 'channel-1' },
+      {
+        nodeBaseUrl: 'https://node.example',
+        operation: 'search',
+        topicId: 'kukuri:topic:rust',
+        knownAuthor: null,
+        mediaObjectUrls: {},
+      }
+    );
+
+    expect(view.threadTopicId).toBe('kukuri:topic:rust');
+    expect(view.post).toMatchObject({
+      published_topic_id: 'kukuri:topic:rust',
+      channel_id: 'channel-1',
+      is_threadable: true,
+    });
+    expect(view.canReply).toBe(true);
+    expect(view.canRepost).toBe(false);
   });
 });

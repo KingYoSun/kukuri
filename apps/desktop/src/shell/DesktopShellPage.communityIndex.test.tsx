@@ -86,7 +86,15 @@ test('Explore header selects named eligible nodes, clears stale results, and ret
   });
   await user.type(within(explore).getByLabelText('Search query'), 'hello');
   await user.click(within(explore).getByRole('button', { name: 'Run' }));
-  expect(await within(explore).findByText(`result from ${NODE_B}`)).toBeInTheDocument();
+  const result = await within(explore).findByText(`result from ${NODE_B}`);
+  const resultCard = result.closest('article');
+  if (!(resultCard instanceof HTMLElement)) throw new Error('Explore result card not found');
+  expect(within(resultCard).getByRole('button', { name: 'React' })).toBeEnabled();
+  expect(within(resultCard).getByRole('button', { name: 'Repost' })).toBeInTheDocument();
+  expect(within(resultCard).getByRole('button', { name: 'Reply' })).toBeInTheDocument();
+  expect(within(resultCard).getByRole('button', { name: 'Copy link' })).toBeInTheDocument();
+  expect(within(resultCard).getByRole('button', { name: 'Bookmark' })).toBeInTheDocument();
+  expect(within(resultCard).getByRole('button', { name: 'Report' })).toBeInTheDocument();
 
   await user.selectOptions(nodeSelect, NODE_A);
   await waitFor(() => {
