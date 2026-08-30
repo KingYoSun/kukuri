@@ -1,7 +1,5 @@
 import { useTranslation } from 'react-i18next';
 
-import { Notice } from '@/components/ui/notice';
-
 export type LegalDocumentKind = 'terms' | 'privacy';
 
 type LegalDocumentSection = {
@@ -21,7 +19,6 @@ export function LegalDocumentView({ bundleVersion, compact = false }: LegalDocum
 
   return (
     <div className={compact ? 'space-y-5' : 'space-y-6'}>
-      <Notice>{t('documents.draftNotice')}</Notice>
       {bundleVersion ? (
         <p className='text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]'>
           v{bundleVersion}

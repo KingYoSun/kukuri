@@ -175,7 +175,11 @@ function buildConversation(
 // store プリセット → renderHook → 即 assert の型。preset は現在の state を受け取り
 // patch を返す(syncStatus 等ネストの深いフィールドを spread で部分更新するため)。
 function renderViewModels(
-  preset?: (current: DesktopShellState) => Partial<DesktopShellState>
+  preset?: (current: DesktopShellState) => Partial<DesktopShellState>,
+  options: {
+    locale?: 'en' | 'ja' | 'zh-CN';
+    t?: (key: string) => string;
+  } = {}
 ) {
   const harness = createShellHookHarness();
   if (preset) {
@@ -184,9 +188,9 @@ function renderViewModels(
   const rendered = renderHook(
     () =>
       useDesktopShellViewModels({
-        t: stubTranslate,
-        translate: stubTranslate,
-        locale: 'en',
+        t: options.t ?? stubTranslate,
+        translate: options.t ?? stubTranslate,
+        locale: options.locale ?? 'en',
         theme: 'dark',
         profileAvatarPreviewUrl: null,
       }),
@@ -200,6 +204,46 @@ beforeEach(() => {
 });
 
 describe('useDesktopShellViewModels', () => {
+  test('localizes transport status details and discovery assist-peer labels for Japanese UI', () => {
+    const translations: Record<string, string> = {
+      'settings:connectivity.diagnostics.connectionDetail': '接続詳細',
+      'settings:connectivity.statusDetails.noPeersConfigured': 'ピアが設定されていません',
+      'settings:connectivity.statusDetails.topicNoPeersConfigured':
+        'このトピックにはピアが設定されていません',
+      'settings:discovery.diagnostics.docsAssistPeers': 'ドキュメント補助ピア',
+      'settings:discovery.diagnostics.blobAssistPeers': '添付補助ピア',
+    };
+    const t = (key: string) => translations[key] ?? key;
+    const view = renderViewModels(
+      (current) => ({
+        syncStatus: {
+          ...current.syncStatus,
+          status_detail: 'No peers configured',
+          topic_diagnostics: [
+            buildTopicDiagnostic('kukuri:topic:general', {
+              status_detail: 'No peers configured for this topic',
+            }),
+          ],
+        },
+      }),
+      { locale: 'ja', t }
+    );
+
+    expect(
+      view.result.current.connectivityPanelView.diagnostics.find(
+        (item) => item.label === '接続詳細'
+      )?.value
+    ).toBe('ピアが設定されていません');
+    expect(view.result.current.connectivityPanelView.topics[0]?.statusDetail).toBe(
+      'このトピックにはピアが設定されていません'
+    );
+    expect(view.result.current.discoveryPanelView.diagnostics.map((item) => item.label)).toEqual(
+      expect.arrayContaining(['ドキュメント補助ピア', '添付補助ピア'])
+    );
+
+    view.unmount();
+  });
+
   test('builds an image post card whose media state follows mediaObjectUrls availability', () => {
     const imageHash = '1'.repeat(64);
     const post = buildPost({

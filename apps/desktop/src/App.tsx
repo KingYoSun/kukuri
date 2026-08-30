@@ -192,9 +192,7 @@ function ConsentGate({
               {t('legal:gate.intro')}
             </p>
           </div>
-          <Notice tone='warning'>
-            {updated ? t('legal:gate.updatedNotice') : t('legal:gate.draftNotice')}
-          </Notice>
+          {updated ? <Notice tone='warning'>{t('legal:gate.updatedNotice')}</Notice> : null}
           <LegalDocumentView bundleVersion={currentBundleVersion} compact />
           {error ? (
             <Notice tone='destructive'>

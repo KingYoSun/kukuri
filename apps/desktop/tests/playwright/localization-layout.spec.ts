@@ -30,6 +30,7 @@ const LOCALES = [
 
 const MAJOR_ROUTES = [
   '/#/timeline?topic=kukuri%3Atopic%3Ageneral',
+  '/#/explore?topic=kukuri%3Atopic%3Ageneral',
   '/#/messages?topic=kukuri%3Atopic%3Ageneral',
   '/#/notifications?topic=kukuri%3Atopic%3Ageneral',
   '/#/profile?topic=kukuri%3Atopic%3Ageneral',
@@ -56,6 +57,14 @@ const FORBIDDEN_ENGLISH_UI_COPY = [
   'No direct messages yet.',
   'No messages yet.',
   'Write a message',
+] as const;
+
+const FORBIDDEN_JAPANESE_UI_COPY = [
+  'Community Node',
+  'Timeline',
+  'Explore',
+  'Loading...',
+  'Load more',
 ] as const;
 
 async function seedLocale(page: Page, locale: (typeof LOCALES)[number]['locale']) {
@@ -138,6 +147,14 @@ for (const copy of LOCALES) {
             `${renderedCopy}\n${accessibleCopy}`,
             `${copy.locale} ${route} must localize ${forbidden}`
           ).not.toContain(forbidden);
+        }
+        if (copy.locale === 'ja') {
+          for (const forbidden of FORBIDDEN_JAPANESE_UI_COPY) {
+            expect(
+              `${renderedCopy}\n${accessibleCopy}`,
+              `ja ${route} must localize ${forbidden}`
+            ).not.toContain(forbidden);
+          }
         }
       }
     }
@@ -264,3 +281,40 @@ for (const copy of LOCALES) {
     }
   });
 }
+
+test('ja localizes Explore post actions and their tooltips', async ({ page }) => {
+  await seedLocale(page, 'ja');
+  await page.setViewportSize({ width: 900, height: 760 });
+  await page.goto('/#/explore?topic=kukuri%3Atopic%3Ageneral');
+
+  const explore = page.getByTestId('community-index-explore');
+  await explore.getByRole('textbox', { name: '検索語' }).fill('dev topic');
+  await explore.getByRole('button', { name: '実行' }).click();
+
+  const card = explore.locator('article.post-card').first();
+  await expect(card).toBeVisible();
+  for (const action of [
+    'リアクション',
+    'リポスト',
+    '返信',
+    'リンクをコピー',
+    'ブックマーク',
+    '通報',
+  ]) {
+    await expect(card.getByRole('button', { name: action })).toBeVisible();
+  }
+
+  const reply = card.getByRole('button', { name: '返信' });
+  await reply.hover();
+  await expect(page.getByRole('tooltip')).toHaveText('返信');
+
+  const visibleAndAccessibleCopy = `${await page.locator('body').innerText()}\n${await page
+    .locator('[aria-label]')
+    .evaluateAll((elements) =>
+      elements.map((element) => element.getAttribute('aria-label') ?? '').join('\n')
+    )}`;
+  for (const forbidden of FORBIDDEN_JAPANESE_UI_COPY) {
+    expect(visibleAndAccessibleCopy).not.toContain(forbidden);
+  }
+  expect(visibleAndAccessibleCopy).not.toMatch(/\+\d+ media/u);
+});

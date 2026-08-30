@@ -2,7 +2,6 @@
   "gate": {
     "title": "继续之前",
     "intro": "在使用 kukuri 之前，请阅读服务条款与隐私政策。在您同意之前，kukuri 不会开始任何网络连接（不会暴露您的 IP 地址）。",
-    "draftNotice": "本文档为草案，不构成法律意见。",
     "updatedNotice": "服务条款或隐私政策已更新。请重新阅读并同意以继续。",
     "accept": "同意并继续",
     "decline": "不同意",
@@ -21,7 +20,6 @@
     "documentsHeading": "文档"
   },
   "documents": {
-    "draftNotice": "这是草案，不构成法律意见。最终决定应咨询适当的专家或监管机构。",
     "terms": {
       "title": "服务条款",
       "sections": [

@@ -70,7 +70,7 @@
   },
   "hosting": {
     "title": "Domeホスティング",
-    "states": { "closed": "停止中", "owner_hosted": "Owner端末で稼働中", "community_node_hosted": "Community Nodeで稼働中", "grace_period": "Grace期間", "transferring": "移管中" },
+    "states": { "closed": "停止中", "owner_hosted": "Owner端末で稼働中", "community_node_hosted": "コミュニティノードで稼働中", "grace_period": "Grace期間", "transferring": "移管中" },
     "epoch": "リースepoch: {{value}}",
     "session": "セッション: {{value}}",
     "expiry": "有効期限: {{value}}",
@@ -87,7 +87,7 @@
     "ownerHost": "この端末でHostingを開始",
     "nodeId": "コミュニティノードID",
     "baseUrl": "コミュニティノードAPI URL",
-    "delegate": "Community Nodeへ明示移管",
+    "delegate": "コミュニティノードへ明示移管",
     "close": "Hostingを終了",
     "saveLayout": "現在のレイアウトを保存",
     "spawnGuestProp": "Guest propを5分間追加",

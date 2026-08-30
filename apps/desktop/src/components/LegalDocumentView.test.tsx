@@ -50,4 +50,11 @@ describe.each(EXPECTED_TERMS_HEADINGS)('legal document in $locale', ({ locale, h
       expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();
     }
   });
+
+  test('does not render a draft notice', async () => {
+    await i18n.changeLanguage(locale);
+    render(<LegalDocumentView bundleVersion={2} />);
+
+    expect(screen.queryByText(/draft|ドラフト|草案/i)).not.toBeInTheDocument();
+  });
 });

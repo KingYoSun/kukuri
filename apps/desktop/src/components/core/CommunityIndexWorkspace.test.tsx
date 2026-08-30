@@ -432,10 +432,10 @@ test('a failed latest manifest fetch does not fall back to a cached report targe
 });
 
 test.each([
-  [new InvokeError('AUTH_REQUIRED', 'server auth error', 401), '選択した Community Node への認証が必要です。'],
-  [new InvokeError('CONSENT_REQUIRED', 'server consent error', 403), '選択した Community Node の必須同意が必要です。'],
-  [new InvokeError('INDEX_QUERY_NOT_CONFIGURED', 'server config error'), '選択した Community Node ではコミュニティ索引が設定されていません。'],
-  [new InvokeError('INDEX_QUERY_NOT_ACTIVATED', 'server activation error'), '選択した Community Node のコミュニティ索引は一時的に利用できません。'],
+  [new InvokeError('AUTH_REQUIRED', 'server auth error', 401), '選択したコミュニティノードへの認証が必要です。'],
+  [new InvokeError('CONSENT_REQUIRED', 'server consent error', 403), '選択したコミュニティノードの必須同意が必要です。'],
+  [new InvokeError('INDEX_QUERY_NOT_CONFIGURED', 'server config error'), '選択したコミュニティノードではコミュニティ索引が設定されていません。'],
+  [new InvokeError('INDEX_QUERY_NOT_ACTIVATED', 'server activation error'), '選択したコミュニティノードのコミュニティ索引は一時的に利用できません。'],
   [new InvokeError('RATE_LIMITED', 'server rate error', 429, 12), '要求が多すぎます。12秒後にもう一度お試しください。'],
 ])('known query error is localized in Japanese: %s', async (cause, expected) => {
   await i18n.changeLanguage('ja');

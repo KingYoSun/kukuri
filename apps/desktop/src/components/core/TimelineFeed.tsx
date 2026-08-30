@@ -220,7 +220,7 @@ export function TimelineFeed({
           {canAutoLoad ? <div ref={loadMoreRef} aria-hidden='true' /> : null}
           {!canAutoLoad && onLoadMore ? (
             <Button variant='secondary' type='button' onClick={() => onLoadMore()}>
-              {loadingMore ? 'Loading...' : 'Load more'}
+              {loadingMore ? t('fallbacks.loadingMore') : t('fallbacks.loadMore')}
             </Button>
           ) : null}
           {canAutoLoad && loadingMore ? (

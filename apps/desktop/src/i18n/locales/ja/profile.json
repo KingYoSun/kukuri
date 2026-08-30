@@ -1,12 +1,12 @@
 {
   "communityNodeAdvisory": {
-    "title": "Community Node の情報提供",
-    "nodeLocalNotice": "選択した Community Node だけが提供する情報です。ネットワーク全体の判断ではなく、既定でこの著者を非表示にはしません。",
-    "noNodes": "情報を取得するには、認証・必須同意済みで信頼評価を提供中の Community Node が必要です。設定を確認してください。",
+    "title": "関係値と信頼度",
+    "nodeLocalNotice": "選択したコミュニティノードだけが提供する情報です。ネットワーク全体の判断ではなく、既定でこの著者を非表示にはしません。",
+    "noNodes": "関係値と信頼度を取得するには、認証・必須同意済みで信頼評価を提供中のコミュニティノードが必要です。設定を確認してください。",
     "openSettings": "ノード設定を開く",
-    "nodeLabel": "Community Node",
-    "load": "情報を読み込む",
-    "loading": "読み込み中…",
+    "nodeLabel": "コミュニティノード",
+    "load": "取得",
+    "loading": "取得中…",
     "basisLabels": {
       "basis": "判定根拠",
       "confidence": "確信度",
@@ -63,13 +63,13 @@
       }
     },
     "errors": {
-      "trust_not_configured": "この Community Node は trust 情報の読み取りを提供していません。",
-      "trust_not_activated": "現在のノードセッションでは trust 情報が有効になっていません。",
-      "relation_unavailable": "この Community Node では relation 情報を利用できません。理由は推測・開示しません。",
-      "relation_visibility_not_configured": "この Community Node は距離利用停止を提供していません。",
-      "relation_visibility_not_activated": "この Community Node の距離利用停止は一時的に利用できません。",
-      "auth_required": "選択した Community Node への認証が必要です。",
-      "consent_required": "選択した Community Node の必須同意が必要です。",
+      "trust_not_configured": "このコミュニティノードは信頼度情報の読み取りを提供していません。",
+      "trust_not_activated": "現在のノードセッションでは信頼度情報が有効になっていません。",
+      "relation_unavailable": "このコミュニティノードでは関係値情報を利用できません。理由は推測・開示しません。",
+      "relation_visibility_not_configured": "このコミュニティノードは距離利用停止を提供していません。",
+      "relation_visibility_not_activated": "このコミュニティノードの距離利用停止は一時的に利用できません。",
+      "auth_required": "選択したコミュニティノードへの認証が必要です。",
+      "consent_required": "選択したコミュニティノードの必須同意が必要です。",
       "response_mismatch": "ノードの応答が別の利用者を対象にしていたため、内容を採用しませんでした。"
     },
     "trust": {
