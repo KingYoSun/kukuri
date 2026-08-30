@@ -302,7 +302,7 @@ test('remote author avatar appears on the timeline without opening the author pa
         .getByTestId('post-inline-avatar-author-avatar')
         .querySelector('img')
         ?.getAttribute('src')
-    ).toBe('blob:mock-1');
+    ).toMatch(/^blob:mock-\d+$/);
   });
 });
 

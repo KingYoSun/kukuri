@@ -97,7 +97,6 @@ export function DesktopShellPage({
   const {
     workspaceState,
     trackedTopics,
-    activeTopic,
     topicInput,
     notifications,
     selectedAuthorPubkey,
@@ -197,6 +196,7 @@ export function DesktopShellPage({
     refreshVisibleTimelineAfterPublish,
     refreshTimelineFeed,
     loadReactionCatalogData,
+    loadNotificationsSection,
     loadMoreTimeline,
     loadMoreThread,
     rememberDraftPreview,
@@ -732,13 +732,14 @@ export function DesktopShellPage({
       status: 'loading',
       error: null,
     });
-    void loadTopics(trackedTopics, activeTopic, null).catch(() => undefined);
+    void loadNotificationsSection({
+      markAsRead: shellChromeState.activePrimarySection === 'notifications',
+    }).catch(() => undefined);
   }, [
-    activeTopic,
-    loadTopics,
+    loadNotificationsSection,
     setNotificationAutoReadError,
     setNotificationPanelState,
-    trackedTopics,
+    shellChromeState.activePrimarySection,
   ]);
   const refreshConversationColumn = useCallback(
     async (peerPubkey: string) => {

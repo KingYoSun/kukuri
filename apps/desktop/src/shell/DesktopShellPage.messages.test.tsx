@@ -129,7 +129,7 @@ test('messages conversation list rows render avatars', async () => {
 
   const avatar = await screen.findByTestId(`dm-conversation-avatar-${authorPubkey}`);
   await waitFor(() => {
-    expect(avatar.querySelector('img')?.getAttribute('src')).toBe('blob:mock-1');
+    expect(avatar.querySelector('img')?.getAttribute('src')).toMatch(/^blob:mock-\d+$/);
   });
 });
 

@@ -688,6 +688,7 @@ export function useDesktopShellData({
     refreshTimelineFeed,
     applyPendingTimeline,
     loadReactionCatalogData,
+    loadNotificationsSection,
     loadMoreTimeline,
     loadMoreThread,
     rememberDraftPreview,

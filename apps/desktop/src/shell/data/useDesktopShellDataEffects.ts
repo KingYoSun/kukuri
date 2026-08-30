@@ -72,7 +72,7 @@ type UseDesktopShellDataEffectsArgs = {
   loadProfileSection: () => Promise<void>;
   loadAuthorSection: (pubkey: string) => Promise<void>;
   loadMessagesSection: () => Promise<void>;
-  loadNotificationsSection: () => Promise<void>;
+  loadNotificationsSection: (options?: { markAsRead?: boolean }) => Promise<void>;
   loadCommunityIndexCapability: (
     refreshedStatuses?: readonly CommunityNodeNodeStatus[]
   ) => Promise<void>;
@@ -143,6 +143,12 @@ export function useDesktopShellDataEffects({
   // 非 active な Timeline Column が Bookmarks を表示しているか(bookmarks ロード gate 用、Issue #765)。
   const hasBookmarksTimelineColumn = useDesktopShellStore((state) =>
     state.workspaceState.columns.some((column) => column.timelineView === 'bookmarks')
+  );
+  const hasBackgroundNotificationsColumn = useDesktopShellStore((state) =>
+    state.workspaceState.columns.some(
+      (column) =>
+        column.kind === 'notifications' && column.id !== state.workspaceState.activeColumnId
+    )
   );
   useEffect(() => {
     let disposed = false;
@@ -428,11 +434,16 @@ export function useDesktopShellDataEffects({
   }, [loadMessagesSection, shellChromeState.activePrimarySection, storeApi]);
 
   useEffect(() => {
-    if (shellChromeState.activePrimarySection !== 'notifications') {
+    const active = shellChromeState.activePrimarySection === 'notifications';
+    if (!active && !hasBackgroundNotificationsColumn) {
       return;
     }
-    void loadNotificationsSection().catch(() => undefined);
-  }, [loadNotificationsSection, shellChromeState.activePrimarySection]);
+    void loadNotificationsSection({ markAsRead: active }).catch(() => undefined);
+  }, [
+    hasBackgroundNotificationsColumn,
+    loadNotificationsSection,
+    shellChromeState.activePrimarySection,
+  ]);
 
   useEffect(() => {
     const remoteObjectUrls = remoteObjectUrlRef.current;
