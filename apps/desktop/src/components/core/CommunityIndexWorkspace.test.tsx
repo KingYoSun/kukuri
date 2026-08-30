@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 
 import i18n from '@/i18n';
-import type { CommunityNodeManifest, DesktopApi } from '@/lib/api';
+import type { AuthorSocialView, CommunityNodeManifest, DesktopApi } from '@/lib/api';
 import { InvokeError } from '@/lib/api/invoke/error';
 
 import { CommunityIndexWorkspace } from './CommunityIndexWorkspace';
@@ -53,6 +53,27 @@ function indexEntry(objectId: string, text: string) {
   };
 }
 
+function knownAuthor(authorPubkey: string): AuthorSocialView {
+  return {
+    author_pubkey: authorPubkey,
+    name: 'alice',
+    display_name: 'Alice',
+    about: null,
+    picture: 'https://example.test/alice.png',
+    picture_asset: null,
+    updated_at: null,
+    following: false,
+    followed_by: false,
+    mutual: false,
+    friend_of_friend: false,
+    friend_of_friend_via_pubkeys: [],
+    provenance: null,
+    muted: false,
+    blocking: false,
+    blocked_by: false,
+  };
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => {
@@ -68,12 +89,12 @@ function workspaceProps(
   return {
     api,
     mode: 'topic',
-    locale: 'en',
     activeTopic: 'rust',
     activeTimelineScope: { kind: 'public' },
     eligibleNodeBaseUrls: [NODE_A, NODE_B],
     selectedNodeBaseUrl: NODE_A,
     onOpenCommunityNodeSettings: vi.fn(),
+    onOpenAuthor: vi.fn(),
     ...overrides,
   };
 }
@@ -91,7 +112,9 @@ test('healthy query node selection stays automatic and out of the primary surfac
   expect(screen.getByLabelText('Search query')).toBeInTheDocument();
 });
 
-test('topic search always sends the active public scope and labels preview text', async () => {
+test('topic search sends the active public scope and renders results with the shared post card', async () => {
+  const user = userEvent.setup();
+  const onOpenAuthor = vi.fn();
   const searchCommunityNodeIndex = vi.fn().mockResolvedValue({
     entries: [
       {
@@ -105,7 +128,14 @@ test('topic search always sends the active public scope and labels preview text'
     ],
   });
   const api = { searchCommunityNodeIndex } as unknown as DesktopApi;
-  render(<CommunityIndexWorkspace {...workspaceProps(api)} />);
+  render(
+    <CommunityIndexWorkspace
+      {...workspaceProps(api, {
+        knownAuthorsByPubkey: { 'author-1': knownAuthor('author-1') },
+        onOpenAuthor,
+      })}
+    />
+  );
 
   runSearch();
 
@@ -117,7 +147,20 @@ test('topic search always sends the active public scope and labels preview text'
       query: 'hello',
     })
   );
-  expect(await screen.findByText(/Search preview; may include derived tags/)).toBeInTheDocument();
+  const result = await screen.findByText('derived-tag');
+  expect(result.closest('article')).toHaveClass('post-card');
+  expect(screen.getByText('Alice')).toBeInTheDocument();
+  expect(screen.getByTestId('post-1-author-avatar').querySelector('img')).toHaveAttribute(
+    'src',
+    'https://example.test/alice.png'
+  );
+  expect(screen.queryByText(/Search preview; may include derived tags/)).not.toBeInTheDocument();
+  expect(screen.queryByText('rust')).not.toBeInTheDocument();
+  expect(screen.queryByText('public_topic')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Reply' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Repost' })).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Alice' }));
+  expect(onOpenAuthor).toHaveBeenCalledWith('author-1');
 });
 
 test('index results hide identifiers and copy their complete values from context actions', async () => {
@@ -138,7 +181,7 @@ test('index results hide identifiers and copy their complete values from context
   expect(screen.queryByText(new RegExp(entry.author_pubkey))).not.toBeInTheDocument();
   expect(screen.queryByText(new RegExp(entry.object_id))).not.toBeInTheDocument();
 
-  const target = resultText.closest('article');
+  const target = resultText.closest('article')?.querySelector('[data-testid="post-identifier-target"]');
   if (!(target instanceof HTMLElement)) throw new Error('index result target not found');
   fireEvent.contextMenu(target, { clientX: 40, clientY: 50 });
   await user.click(screen.getByRole('menuitem', { name: 'Copy author ID' }));
@@ -176,6 +219,22 @@ test('changing the selected node clears results and prevents reporting them to t
   rerender(<CommunityIndexWorkspace {...props} selectedNodeBaseUrl={NODE_B} />);
 
   await waitFor(() => expect(screen.queryByText('result from node A')).not.toBeInTheDocument());
+  expect(screen.queryByRole('button', { name: 'Report' })).not.toBeInTheDocument();
+});
+
+test('changing the Explore operation clears cards from the previous report context', async () => {
+  const api = {
+    searchCommunityNodeIndex: vi.fn().mockResolvedValue({
+      entries: [indexEntry('search-result', 'search result from node A')],
+    }),
+  } as unknown as DesktopApi;
+  render(<CommunityIndexWorkspace {...workspaceProps(api, { mode: 'explore' })} />);
+
+  runSearch();
+  expect(await screen.findByText('search result from node A')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab', { name: 'Discover' }));
+
+  expect(screen.queryByText('search result from node A')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Report' })).not.toBeInTheDocument();
 });
 
@@ -253,7 +312,7 @@ test('recommendation reports use the source node latest manifest and recommendat
 
   const dialog = await screen.findByRole('dialog', { name: 'Report content' });
   await waitFor(() => expect(fetchCommunityNodeManifest).toHaveBeenCalledWith(NODE_A));
-  expect(within(dialog).getByText(/^Recommendation · rust$/)).toBeInTheDocument();
+  expect(within(dialog).getByText(/^Recommendation · Unknown author$/)).toBeInTheDocument();
   expect(within(dialog).getByText('Recommendation')).toBeInTheDocument();
   fireEvent.click(await within(dialog).findByRole('button', { name: 'Send report' }));
 
@@ -308,7 +367,7 @@ test.each([
   const api = {
     searchCommunityNodeIndex: vi.fn().mockRejectedValue(cause),
   } as unknown as DesktopApi;
-  render(<CommunityIndexWorkspace {...workspaceProps(api, { locale: 'ja' })} />);
+  render(<CommunityIndexWorkspace {...workspaceProps(api)} />);
 
   fireEvent.change(screen.getByLabelText('検索語'), { target: { value: '検索' } });
   fireEvent.click(screen.getByRole('button', { name: '実行' }));

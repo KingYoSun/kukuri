@@ -316,7 +316,6 @@
     "loading": "読み込み中…",
     "empty": "一致するインデックス結果はありません。",
     "results": "コミュニティインデックスの結果",
-    "previewNotice": "派生タグを含むことがある検索プレビューです。投稿の正本文ではありません。",
     "noEligibleNode": "認証・同意済みで、利用可能な Community Index を公開している Community Node がありません。",
     "allJoinedDisabled": "公開トピックまたはプライベートチャンネルを1つずつ検索してください。全参加範囲は node に送信しません。",
     "errors": {

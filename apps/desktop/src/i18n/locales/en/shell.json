@@ -312,7 +312,6 @@
     "loading": "Loading…",
     "empty": "No indexed results matched.",
     "results": "Community Index results",
-    "previewNotice": "Search preview; may include derived tags. This is not canonical post text.",
     "noEligibleNode": "No authenticated and consented Community Node currently advertises an available Community Index.",
     "allJoinedDisabled": "Search one public topic or private channel at a time. All joined scopes are not sent to a node.",
     "errors": {
