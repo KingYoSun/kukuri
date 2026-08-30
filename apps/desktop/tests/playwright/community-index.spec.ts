@@ -9,7 +9,7 @@ async function openControlCenter(page: import('@playwright/test').Page) {
   return controlCenter;
 }
 
-test('Timeline keeps Community Index out of the primary surface and Explore keeps reporting behavior visible', async ({ page }) => {
+test('Timeline keeps Community Index out of the primary surface and Explore exposes timeline post actions', async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 980 });
   await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
 
@@ -25,8 +25,12 @@ test('Timeline keeps Community Index out of the primary surface and Explore keep
   await expect(explore.getByText('dev topic seed for builder preview')).toBeVisible();
   const searchCard = explore.locator('article.post-card').first();
   await expect(searchCard).toBeVisible();
+  await expect(searchCard.getByRole('button', { name: 'React' })).toBeVisible();
+  await expect(searchCard.getByRole('button', { name: 'Repost' })).toBeVisible();
+  await expect(searchCard.getByRole('button', { name: 'Reply' })).toBeVisible();
+  await expect(searchCard.getByRole('button', { name: 'Copy link' })).toBeVisible();
+  await expect(searchCard.getByRole('button', { name: 'Bookmark' })).toBeVisible();
   await expect(searchCard.getByRole('button', { name: 'Report' })).toBeVisible();
-  await expect(searchCard.getByRole('button', { name: 'Reply' })).toHaveCount(0);
   await expect(explore.getByText(/Search preview; may include derived tags/)).toHaveCount(0);
   await expect(explore.getByText('public_topic', { exact: true })).toHaveCount(0);
 

@@ -471,6 +471,24 @@ export function DesktopShellPrimarySurface({
             knownAuthorsByPubkey={knownAuthorsByPubkey}
             mediaObjectUrls={mediaObjectUrls}
             onOpenAuthor={(pubkey) => void openAuthorDetail(pubkey)}
+            onOpenThread={openThreadInSurfaceScope}
+            onOpenThreadInTopic={openThreadInTopicFromSurface}
+            onReply={beginColumnReply}
+            onRepost={(post) => void handleSimpleRepost(post)}
+            onQuoteRepost={beginColumnQuoteRepost}
+            localAuthorPubkey={syncStatus.local_author_pubkey}
+            ownedReactionAssets={ownedReactionAssets}
+            bookmarkedReactionAssets={bookmarkedReactionAssets}
+            recentReactions={recentReactions}
+            onToggleReaction={(post, reactionKey) => void handleToggleReaction(post, reactionKey)}
+            onBookmarkCustomReaction={(asset) => void handleBookmarkCustomReaction(asset)}
+            onReactionPickerOpen={() => void loadReactionCatalogData()}
+            showBookmarkAction={true}
+            bookmarkedPostIds={bookmarkedPostIds}
+            onToggleBookmark={(post) => void handleToggleBookmarkedPost(post)}
+            onWithdraw={(post) => void handleWithdrawPost(post)}
+            onActivateReference={(reference) => void handleActivateReference(reference)}
+            onCopyPostLink={handleCopyInternalLink}
           />
         ) : null}
 

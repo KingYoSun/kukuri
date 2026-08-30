@@ -9,6 +9,7 @@ export type CommunityIndexOperation = 'search' | 'discovery' | 'recommendations'
 type CommunityIndexPostCardViewOptions = {
   nodeBaseUrl: string;
   operation: CommunityIndexOperation;
+  topicId: string | null;
   knownAuthor: AuthorSocialView | null;
   mediaObjectUrls: Record<string, string | null>;
 };
@@ -26,6 +27,9 @@ export function communityIndexPostCardView(
   const recommendation = options.operation === 'recommendations';
   const capability = recommendation ? 'recommendation' : 'community_index';
   const knownAuthor = options.knownAuthor;
+  const topicId =
+    entry.scope_kind === 'public_topic' ? entry.scope_id : options.topicId?.trim() || null;
+  const channelId = topicId && entry.scope_kind === 'private_channel' ? entry.scope_id : null;
   const authorLabel = authorDisplayLabel(
     entry.author_pubkey,
     knownAuthor?.display_name,
@@ -57,12 +61,12 @@ export function communityIndexPostCardView(
       reply_preview: null,
       root_id: null,
       object_kind: 'post',
-      published_topic_id: null,
+      published_topic_id: topicId,
       origin_topic_id: null,
       repost_of: null,
       repost_commentary: null,
-      is_threadable: false,
-      channel_id: null,
+      is_threadable: topicId !== null,
+      channel_id: channelId,
       audience_label: audience,
       reaction_summary: [],
       my_reactions: [],
@@ -73,9 +77,9 @@ export function communityIndexPostCardView(
     relationshipLabel: null,
     audienceChipLabel: audience,
     threadTargetId: entry.object_id,
-    threadTopicId: null,
-    canReply: false,
-    canRepost: false,
+    threadTopicId: topicId,
+    canReply: topicId !== null,
+    canRepost: entry.scope_kind === 'public_topic',
     media: {
       objectId: entry.object_id,
       kind: null,
