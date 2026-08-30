@@ -381,6 +381,39 @@ test('post card copies hidden post identifiers from pointer and keyboard context
   expect(clipboardWriteText).toHaveBeenLastCalledWith(view.post.envelope_id);
 });
 
+test('post card context menu exposes only identifiers supplied by a read-only result', async () => {
+  const user = userEvent.setup();
+  const clipboardWriteText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: clipboardWriteText },
+  });
+
+  render(
+    <PostCard
+      view={createView({
+        identifierCopy: {
+          postId: 'indexed-object-1',
+          authorId: 'b'.repeat(64),
+        },
+      })}
+      readOnly
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+    />
+  );
+
+  const target = screen.getByTestId('post-identifier-target');
+  fireEvent.contextMenu(target, { clientX: 24, clientY: 36 });
+  expect(screen.getByRole('menuitem', { name: 'Copy post ID' })).toBeInTheDocument();
+  expect(screen.getByRole('menuitem', { name: 'Copy author ID' })).toBeInTheDocument();
+  expect(screen.queryByRole('menuitem', { name: 'Copy envelope ID' })).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole('menuitem', { name: 'Copy post ID' }));
+  expect(clipboardWriteText).toHaveBeenLastCalledWith('indexed-object-1');
+});
+
 test('post card opens a media dialog and navigates multi-image attachments', async () => {
   const user = userEvent.setup();
 

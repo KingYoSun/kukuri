@@ -13,12 +13,12 @@ const meta = {
   args: {
     api,
     mode: 'explore',
-    locale: 'en',
     activeTopic: 'kukuri:topic:demo',
     activeTimelineScope: { kind: 'public' },
     eligibleNodeBaseUrls: [node],
     selectedNodeBaseUrl: node,
     onOpenCommunityNodeSettings: () => {},
+    onOpenAuthor: () => {},
   },
 } satisfies Meta<typeof CommunityIndexWorkspace>;
 

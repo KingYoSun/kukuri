@@ -118,6 +118,16 @@ export type PostCardView = {
   // 正本（通常は author_docs）と、index / moderation / cache 等の観測経路を分離して保持する。
   // 通報ルーティング（#310）・content details・default node boundary 説明に使う。
   provenance?: ContentProvenance;
+  // 投影など完全な PostView を持たない表示元では、実在する識別子だけを明示する。
+  // 未指定は通常 PostView の post / envelope / author 識別子を使う。
+  identifierCopy?: {
+    postId?: string;
+    envelopeId?: string;
+    authorId?: string;
+  };
+  // 通常投稿以外の読み取り専用 surface が共通通報導線を使うための狭い上書き。
+  reportSubjectKind?: 'post' | 'search_result' | 'recommendation';
+  allowReadOnlyReport?: boolean;
 };
 
 export type ThreadPanelState = {

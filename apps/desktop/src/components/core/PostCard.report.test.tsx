@@ -453,3 +453,59 @@ test('the post-level report keeps the post subject even when the post carries a 
     expect.objectContaining({ subject_kind: 'post', subject_id: createView().post.object_id })
   );
 });
+
+test('an explicitly reportable read-only result submits its declared subject kind', async () => {
+  const user = userEvent.setup();
+  const onFetchReportManifest = vi
+    .fn()
+    .mockResolvedValue({ status: 'ok', manifest: reportManifest('node.example') });
+  const onSubmitReport = vi.fn().mockResolvedValue({ status: 'submitted', reference_id: 'r-2' });
+
+  render(
+    <PostCard
+      view={createView({
+        reportSubjectKind: 'search_result',
+        allowReadOnlyReport: true,
+        provenance: {
+          canonicalSource: 'unknown',
+          observedVia: [
+            { nodeBaseUrl: 'https://node.example', capability: 'community_index' },
+          ],
+          responsibleReportTargets: [],
+        },
+      })}
+      readOnly
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+      onSubmitReport={onSubmitReport}
+      onFetchReportManifest={onFetchReportManifest}
+    />
+  );
+
+  await user.click(screen.getByRole('button', { name: 'Report' }));
+  await user.click(await screen.findByRole('button', { name: 'Send report' }));
+  await waitFor(() => expect(onSubmitReport).toHaveBeenCalledTimes(1));
+  expect(onSubmitReport).toHaveBeenCalledWith(
+    expect.objectContaining({
+      subject_kind: 'search_result',
+      subject_id: createView().post.object_id,
+      capability: 'community_index',
+    })
+  );
+});
+
+test('read-only cards remain non-reportable unless the view opts in', () => {
+  render(
+    <PostCard
+      view={createView()}
+      readOnly
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+      onSubmitReport={vi.fn()}
+    />
+  );
+
+  expect(screen.queryByRole('button', { name: 'Report' })).not.toBeInTheDocument();
+});

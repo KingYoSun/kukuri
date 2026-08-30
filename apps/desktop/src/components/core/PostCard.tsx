@@ -28,6 +28,7 @@ import {
   ContextActionMenu,
   contextActionMenuPositionFromKeyboard,
   contextActionMenuPositionFromPointer,
+  type ContextActionMenuItem,
   type ContextActionMenuPosition,
 } from '@/components/ui/context-action-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -142,7 +143,7 @@ export function PostCard({
   const [repostMenuOpen, setRepostMenuOpen] = useState(false);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [reportSubject, setReportSubject] = useState<ReportRoutingSubject>({
-    kind: 'post',
+    kind: view.reportSubjectKind ?? 'post',
     id: post.object_id,
     label: view.authorLabel,
   });
@@ -228,7 +229,7 @@ export function PostCard({
     () => planReportRouting(reportProvenance, reportManifests),
     [reportProvenance, reportManifests]
   );
-  const showReportAction = Boolean(onSubmitReport);
+  const showReportAction = Boolean(onSubmitReport) && (!readOnly || view.allowReadOnlyReport === true);
 
   const handleSubmitReport = async (
     input: ReportSubmitInput
@@ -277,32 +278,43 @@ export function PostCard({
       },
     ];
   }, [localAuthorPubkey, onBookmarkCustomReaction, reactionMenuAsset, t]);
-  const postMenuItems = useMemo(
-    () => [
-      {
+  const postMenuItems = useMemo(() => {
+    const identifiers = view.identifierCopy ?? {
+      postId: post.object_id,
+      envelopeId: post.envelope_id,
+      authorId: primaryAuthor.pubkey,
+    };
+    const items: ContextActionMenuItem[] = [];
+    const { postId, envelopeId, authorId } = identifiers;
+    if (postId) {
+      items.push({
         id: 'copy-post-id',
         label: t('actions.copyPostId'),
         onSelect: async () => {
-          await copyTextToClipboard(post.object_id);
+          await copyTextToClipboard(postId);
         },
-      },
-      {
+      });
+    }
+    if (envelopeId) {
+      items.push({
         id: 'copy-envelope-id',
         label: t('actions.copyEnvelopeId'),
         onSelect: async () => {
-          await copyTextToClipboard(post.envelope_id);
+          await copyTextToClipboard(envelopeId);
         },
-      },
-      {
+      });
+    }
+    if (authorId) {
+      items.push({
         id: 'copy-author-id',
         label: t('actions.copyAuthorId'),
         onSelect: async () => {
-          await copyTextToClipboard(primaryAuthor.pubkey);
+          await copyTextToClipboard(authorId);
         },
-      },
-    ],
-    [post.envelope_id, post.object_id, primaryAuthor.pubkey, t]
-  );
+      });
+    }
+    return items;
+  }, [post.envelope_id, post.object_id, primaryAuthor.pubkey, t, view.identifierCopy]);
 
   const renderReferencedCard = (
     source:
@@ -619,6 +631,25 @@ export function PostCard({
                 <Link2 className='size-4' aria-hidden='true' />
               </IconButton>
             ) : null}
+            {showReportAction ? (
+              <IconButton
+                variant='secondary'
+                className='post-action-button'
+                type='button'
+                label={t('report.actionLabel', { ns: 'shell' })}
+                onClick={() => {
+                  setReportSubject({
+                    kind: view.reportSubjectKind ?? 'post',
+                    id: post.object_id,
+                    label: view.authorLabel,
+                  });
+                  setReportProvenance(view.provenance);
+                  setReportDialogOpen(true);
+                }}
+              >
+                <Flag className='size-4' aria-hidden='true' />
+              </IconButton>
+            ) : null}
           </>
         ) : (
           <>
@@ -794,7 +825,11 @@ export function PostCard({
                 type='button'
                 label={t('report.actionLabel', { ns: 'shell' })}
                 onClick={() => {
-                  setReportSubject({ kind: 'post', id: post.object_id, label: view.authorLabel });
+                  setReportSubject({
+                    kind: view.reportSubjectKind ?? 'post',
+                    id: post.object_id,
+                    label: view.authorLabel,
+                  });
                   setReportProvenance(view.provenance);
                   setReportDialogOpen(true);
                 }}

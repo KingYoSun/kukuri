@@ -312,7 +312,6 @@
     "loading": "加载中…",
     "empty": "没有匹配的索引结果。",
     "results": "社区索引结果",
-    "previewNotice": "这是可能包含派生标签的搜索预览，并非帖子的规范正文。",
     "noEligibleNode": "当前没有已认证、已同意且提供可用社区索引的 Community Node。",
     "allJoinedDisabled": "请一次搜索一个公开主题或私密频道。不会把全部已加入范围发送给节点。",
     "errors": {

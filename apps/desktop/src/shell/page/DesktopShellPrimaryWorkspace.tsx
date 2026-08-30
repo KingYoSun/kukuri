@@ -463,12 +463,14 @@ export function DesktopShellPrimarySurface({
           <CommunityIndexWorkspace
             api={api}
             mode='explore'
-            locale={locale}
             activeTopic={surfaceTopic}
             activeTimelineScope={surfaceTimelineScope}
             eligibleNodeBaseUrls={eligibleIndexNodeBaseUrls}
             selectedNodeBaseUrl={communityIndexNodeBaseUrl}
             onOpenCommunityNodeSettings={openCommunityNodeSettings}
+            knownAuthorsByPubkey={knownAuthorsByPubkey}
+            mediaObjectUrls={mediaObjectUrls}
+            onOpenAuthor={(pubkey) => void openAuthorDetail(pubkey)}
           />
         ) : null}
 

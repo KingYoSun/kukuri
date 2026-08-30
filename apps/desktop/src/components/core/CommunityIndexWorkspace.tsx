@@ -1,45 +1,38 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TFunction } from 'i18next';
-import { Search, ShieldAlert } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import type {
-  CommunityNodeManifest,
+  AuthorSocialView,
   CommunityNodeIndexQueryRequest,
   DesktopApi,
   IndexEntryView,
   TimelineScope,
 } from '@/lib/api';
-import { formatLocalizedTime } from '@/i18n/format';
-import type { SupportedLocale } from '@/i18n';
 import { InvokeError } from '@/lib/api/invoke/error';
-import { planReportRouting } from '@/lib/api/reportRouting';
 import { copyTextToClipboard } from '@/lib/utils';
 
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
-import {
-  ContextActionMenu,
-  contextActionMenuPositionFromKeyboard,
-  contextActionMenuPositionFromPointer,
-  type ContextActionMenuPosition,
-} from '@/components/ui/context-action-menu';
-import { ReportRoutingDialog } from './ReportRoutingDialog';
+import { communityIndexPostCardView } from './communityIndexPostCardView';
+import { PostCard } from './PostCard';
 
 type IndexOperation = 'search' | 'discovery' | 'recommendations';
 
 type CommunityIndexWorkspaceProps = {
   api: DesktopApi;
   mode: 'topic' | 'explore';
-  locale: SupportedLocale;
   activeTopic: string;
   activeTimelineScope: TimelineScope;
   eligibleNodeBaseUrls: readonly string[];
   selectedNodeBaseUrl: string | null;
   onOpenCommunityNodeSettings: () => void;
+  knownAuthorsByPubkey?: Record<string, AuthorSocialView>;
+  mediaObjectUrls?: Record<string, string | null>;
+  onOpenAuthor: (pubkey: string) => void;
 };
 
 type IndexRequestContext = {
@@ -55,21 +48,6 @@ type IndexResultState = {
   context: IndexRequestContext;
   entries: IndexEntryView[];
 };
-
-type ReportSelection = {
-  context: IndexRequestContext;
-  entry: IndexEntryView;
-};
-
-const INDEX_REPORT_IDENTITY = {
-  capability: 'community_index',
-  subjectKind: 'search_result',
-} as const;
-
-const RECOMMENDATION_REPORT_IDENTITY = {
-  capability: 'recommendation',
-  subjectKind: 'recommendation',
-} as const;
 
 function operationMethod(api: DesktopApi, operation: IndexOperation) {
   if (operation === 'search') return api.searchCommunityNodeIndex.bind(api);
@@ -141,21 +119,17 @@ function indexContext(
   };
 }
 
-function reportIdentity(operation: IndexOperation) {
-  return operation === 'recommendations'
-    ? RECOMMENDATION_REPORT_IDENTITY
-    : INDEX_REPORT_IDENTITY;
-}
-
 export function CommunityIndexWorkspace({
   api,
   mode,
-  locale,
   activeTopic,
   activeTimelineScope,
   eligibleNodeBaseUrls,
   selectedNodeBaseUrl,
   onOpenCommunityNodeSettings,
+  knownAuthorsByPubkey = {},
+  mediaObjectUrls = {},
+  onOpenAuthor,
 }: CommunityIndexWorkspaceProps) {
   const { t } = useTranslation(['shell', 'common']);
   const [operation, setOperation] = useState<IndexOperation>('search');
@@ -163,13 +137,6 @@ export function CommunityIndexWorkspace({
   const [resultState, setResultState] = useState<IndexResultState | null>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
-  const [reportSelection, setReportSelection] = useState<ReportSelection | null>(null);
-  const [reportManifest, setReportManifest] = useState<CommunityNodeManifest | null>(null);
-  const [reportResolving, setReportResolving] = useState(false);
-  const [reportResolveError, setReportResolveError] = useState<string | null>(null);
-  const [identifierMenuPosition, setIdentifierMenuPosition] =
-    useState<ContextActionMenuPosition | null>(null);
-  const [identifierEntry, setIdentifierEntry] = useState<IndexEntryView | null>(null);
   const requestSequence = useRef(0);
 
   const effectiveOperation: IndexOperation = mode === 'topic' ? 'search' : operation;
@@ -189,95 +156,31 @@ export function CommunityIndexWorkspace({
   const currentContextKeyRef = useRef(currentContextKey);
   const visibleResult =
     resultState && resultState.context.key === currentContextKey ? resultState : null;
-  const activeReportSelection =
-    reportSelection && reportSelection.context.key === currentContextKey ? reportSelection : null;
+  const visiblePostCards = useMemo(
+    () =>
+      visibleResult?.entries.map((entry) => ({
+        key: `${entry.scope_kind}:${entry.scope_id}:${entry.object_id}`,
+        view: communityIndexPostCardView(entry, {
+          nodeBaseUrl: visibleResult.context.nodeBaseUrl,
+          operation: visibleResult.context.operation,
+          knownAuthor: knownAuthorsByPubkey[entry.author_pubkey] ?? null,
+          mediaObjectUrls,
+        }),
+      })) ?? [],
+    [knownAuthorsByPubkey, mediaObjectUrls, visibleResult]
+  );
 
   const invalidateResults = useCallback(() => {
     requestSequence.current += 1;
     setStatus('idle');
     setResultState(null);
     setError(null);
-    setReportSelection(null);
   }, []);
 
   useEffect(() => {
     currentContextKeyRef.current = currentContextKey;
     invalidateResults();
   }, [currentContextKey, invalidateResults]);
-
-  useEffect(() => {
-    if (!activeReportSelection) {
-      setReportManifest(null);
-      setReportResolving(false);
-      setReportResolveError(null);
-      return;
-    }
-    let active = true;
-    setReportManifest(null);
-    setReportResolving(true);
-    setReportResolveError(null);
-    void api
-      .fetchCommunityNodeManifest(activeReportSelection.context.nodeBaseUrl)
-      .then((response) => {
-        if (!active) return;
-        if (response.status === 'ok' && response.manifest) {
-          setReportManifest(response.manifest);
-        } else {
-          setReportResolveError(t('shell:report.resolveFailed'));
-        }
-      })
-      .catch(() => {
-        if (active) setReportResolveError(t('shell:report.resolveFailed'));
-      })
-      .finally(() => {
-        if (active) setReportResolving(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [activeReportSelection, api, t]);
-
-  const activeReportIdentity = activeReportSelection
-    ? reportIdentity(activeReportSelection.context.operation)
-    : null;
-  const reportPlan = useMemo(() => {
-    if (!activeReportSelection || !activeReportIdentity) {
-      return planReportRouting(null, {});
-    }
-    const sourceNodeBaseUrl = activeReportSelection.context.nodeBaseUrl;
-    return planReportRouting(
-      {
-        canonicalSource: 'unknown',
-        observedVia: [
-          { nodeBaseUrl: sourceNodeBaseUrl, capability: activeReportIdentity.capability },
-        ],
-        responsibleReportTargets: [],
-      },
-      reportManifest ? { [sourceNodeBaseUrl]: reportManifest } : {}
-    );
-  }, [activeReportIdentity, activeReportSelection, reportManifest]);
-  const identifierMenuItems = useMemo(
-    () =>
-      identifierEntry
-        ? [
-            {
-              id: 'copy-author-id',
-              label: t('common:actions.copyAuthorId'),
-              onSelect: async () => {
-                await copyTextToClipboard(identifierEntry.author_pubkey);
-              },
-            },
-            {
-              id: 'copy-post-id',
-              label: t('common:actions.copyPostId'),
-              onSelect: async () => {
-                await copyTextToClipboard(identifierEntry.object_id);
-              },
-            },
-          ]
-        : [],
-    [identifierEntry, t]
-  );
 
   async function runQuery(event?: FormEvent) {
     event?.preventDefault();
@@ -406,89 +309,24 @@ export function CommunityIndexWorkspace({
       {status === 'success' && visibleResult && visibleResult.entries.length === 0 ? (
         <p className='empty-state'>{t('shell:communityIndex.empty')}</p>
       ) : null}
-      {visibleResult && visibleResult.entries.length > 0 ? (
-        <ul className='space-y-3' aria-label={t('shell:communityIndex.results')}>
-          {visibleResult.entries.map((entry) => (
-            <li key={`${entry.scope_kind}:${entry.scope_id}:${entry.object_id}`}>
-              <article
-                className='rounded-[18px] border border-[var(--border-subtle)] bg-[var(--surface-panel-soft)] p-4'
-                tabIndex={0}
-                onContextMenu={(event) => {
-                  setIdentifierEntry(entry);
-                  setIdentifierMenuPosition(contextActionMenuPositionFromPointer(event));
-                }}
-                onKeyDown={(event) => {
-                  const position = contextActionMenuPositionFromKeyboard(event);
-                  if (position) {
-                    setIdentifierEntry(entry);
-                    setIdentifierMenuPosition(position);
-                  }
-                }}
-              >
-                <div className='flex flex-wrap items-center gap-2 text-xs text-[var(--muted-foreground)]'>
-                  <Badge tone='neutral'>{entry.scope_kind}</Badge>
-                  <span>{entry.scope_id}</span>
-                  <span>{formatLocalizedTime(entry.created_at, locale)}</span>
-                </div>
-                <p className='mt-3 whitespace-pre-wrap break-words text-sm'>{entry.text}</p>
-                <p className='mt-2 text-xs text-[var(--muted-foreground)]'>
-                  {t('shell:communityIndex.previewNotice')}
-                </p>
-                <div className='mt-3 flex flex-wrap items-center justify-end gap-2 text-xs'>
-                  <Button
-                    variant='secondary'
-                    type='button'
-                    onClick={() => setReportSelection({ context: visibleResult.context, entry })}
-                  >
-                    <ShieldAlert className='size-4' aria-hidden='true' />
-                    {t('shell:report.actionLabel')}
-                  </Button>
-                </div>
-              </article>
+      {visiblePostCards.length > 0 ? (
+        <ul className='post-list' aria-label={t('shell:communityIndex.results')}>
+          {visiblePostCards.map(({ key, view }) => (
+            <li key={key}>
+              <PostCard
+                view={view}
+                readOnly
+                mediaObjectUrls={mediaObjectUrls}
+                onOpenAuthor={onOpenAuthor}
+                onOpenThread={() => undefined}
+                onReply={() => undefined}
+                onSubmitReport={(request) => api.submitCommunityNodeReport(request)}
+                onCopyReportContact={(value) => void copyTextToClipboard(value)}
+                onFetchReportManifest={(baseUrl) => api.fetchCommunityNodeManifest(baseUrl)}
+              />
             </li>
           ))}
         </ul>
-      ) : null}
-
-      <ContextActionMenu
-        open={identifierMenuPosition !== null && identifierMenuItems.length > 0}
-        position={identifierMenuPosition}
-        items={identifierMenuItems}
-        onClose={() => {
-          setIdentifierMenuPosition(null);
-          setIdentifierEntry(null);
-        }}
-      />
-
-      {activeReportSelection && activeReportIdentity ? (
-        <ReportRoutingDialog
-          open={true}
-          onOpenChange={(open) => { if (!open) setReportSelection(null); }}
-          subject={{
-            kind: activeReportIdentity.subjectKind,
-            id: activeReportSelection.entry.object_id,
-            label: activeReportSelection.entry.scope_id,
-          }}
-          plan={reportPlan}
-          resolving={reportResolving}
-          resolveError={reportResolveError}
-          onCopyContact={(value) => void copyTextToClipboard(value)}
-          onSubmit={async ({ candidate, reason, details, reporterContact }) => {
-            if (candidate.contact.kind !== 'endpoint') {
-              throw new Error(t('shell:report.resolveFailed'));
-            }
-            return api.submitCommunityNodeReport({
-              node_base_url: activeReportSelection.context.nodeBaseUrl,
-              report_endpoint: candidate.contact.value,
-              subject_kind: activeReportIdentity.subjectKind,
-              subject_id: activeReportSelection.entry.object_id,
-              capability: activeReportIdentity.capability,
-              reason,
-              details: details || null,
-              reporter_contact: reporterContact || null,
-            });
-          }}
-        />
       ) : null}
     </Card>
   );
