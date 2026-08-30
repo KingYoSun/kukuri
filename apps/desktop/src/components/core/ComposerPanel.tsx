@@ -1,4 +1,4 @@
-import type { ChangeEventHandler, FormEventHandler } from 'react';
+import type { ChangeEventHandler, FormEventHandler, KeyboardEventHandler } from 'react';
 
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -59,6 +59,7 @@ type ComposerPanelProps = {
   onClearReply: () => void;
   onClearRepost?: () => void;
   attachmentsDisabled?: boolean;
+  submitDisabled?: boolean;
   mentionCandidates?: MentionCandidate[];
   onValueChange?: (next: string) => void;
 };
@@ -82,6 +83,7 @@ export function ComposerPanel({
   onClearReply,
   onClearRepost,
   attachmentsDisabled = false,
+  submitDisabled = false,
   mentionCandidates = EMPTY_MENTION_CANDIDATES,
   onValueChange,
 }: ComposerPanelProps) {
@@ -102,6 +104,14 @@ export function ComposerPanel({
     candidates: mentionCandidates,
     onValueChange,
   });
+  const onComposerKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (event) => {
+    onMentionKeyDown(event);
+    if (event.defaultPrevented || submitDisabled || event.key !== 'Enter' || !event.ctrlKey) {
+      return;
+    }
+    event.preventDefault();
+    event.currentTarget.form?.requestSubmit();
+  };
 
   return (
     <form className='composer' onSubmit={onSubmit}>
@@ -153,7 +163,7 @@ export function ComposerPanel({
             onChange(event);
             onMentionSelectionChange();
           }}
-          onKeyDown={onMentionKeyDown}
+          onKeyDown={onComposerKeyDown}
           onKeyUp={onMentionSelectionChange}
           onClick={onMentionSelectionChange}
           onSelect={onMentionSelectionChange}
@@ -231,7 +241,7 @@ export function ComposerPanel({
         <span>{t('labels.audience')}: {audienceLabel}</span>
       </div>
 
-      <Button type='submit'>
+      <Button type='submit' disabled={submitDisabled}>
         {replyTarget || mode === 'reply'
           ? t('actions.reply')
           : repostTarget

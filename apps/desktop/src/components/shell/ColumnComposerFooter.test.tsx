@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -61,5 +61,26 @@ describe('ColumnComposerFooter', () => {
     const action = screen.getByRole('button', { name: /Publish to Friends/ });
     expect(action).toHaveClass('button-icon', 'size-10');
     expect(action.querySelector('span')).toBeNull();
+  });
+
+  it('disables button and Ctrl+Enter submission while its Draft is pending', async () => {
+    const user = userEvent.setup();
+    const view = renderFooter();
+
+    await user.click(screen.getByRole('button', { name: /Publish to Friends/ }));
+    await user.type(screen.getByPlaceholderText('Write a post'), 'pending draft');
+    act(() => {
+      const key = columnDraftKey(target);
+      view.store.getState().setField('columnDraftsByKey', {
+        [key]: {
+          ...view.store.getState().columnDraftsByKey[key],
+          pending: true,
+        },
+      });
+    });
+
+    expect(screen.getByRole('button', { name: 'Publish' })).toBeDisabled();
+    await user.keyboard('{Control>}{Enter}{/Control}');
+    expect(view.onSubmit).not.toHaveBeenCalled();
   });
 });

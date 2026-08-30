@@ -154,6 +154,7 @@ export function ColumnComposerFooter({
           updateDraft((current) => ({ ...current, repostTarget: null, error: null }))
         }
         attachmentsDisabled={draft.pending || Boolean(draft.repostTarget)}
+        submitDisabled={draft.pending}
         mentionCandidates={mentionCandidates}
       />
     </div>

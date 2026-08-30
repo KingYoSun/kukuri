@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { render, screen } from '@testing-library/react';
+import { useState, type FormEventHandler } from 'react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 
@@ -13,7 +13,15 @@ const MENTION_CANDIDATES: MentionCandidate[] = [
   { pubkey: BOB, label: 'Bob', displayName: 'Bob', name: 'bob', about: null, picture: null },
 ];
 
-function MentionHarness({ candidates = MENTION_CANDIDATES }: { candidates?: MentionCandidate[] }) {
+function MentionHarness({
+  candidates = MENTION_CANDIDATES,
+  onSubmit = (event) => event.preventDefault(),
+  submitDisabled = false,
+}: {
+  candidates?: MentionCandidate[];
+  onSubmit?: FormEventHandler<HTMLFormElement>;
+  submitDisabled?: boolean;
+}) {
   const [value, setValue] = useState('');
   return (
     <ComposerPanel
@@ -21,7 +29,8 @@ function MentionHarness({ candidates = MENTION_CANDIDATES }: { candidates?: Ment
       onChange={(event) => setValue(event.target.value)}
       onValueChange={setValue}
       mentionCandidates={candidates}
-      onSubmit={(event) => event.preventDefault()}
+      onSubmit={onSubmit}
+      submitDisabled={submitDisabled}
       attachmentInputKey={0}
       onAttachmentSelection={() => undefined}
       draftMediaItems={[]}
@@ -31,6 +40,51 @@ function MentionHarness({ candidates = MENTION_CANDIDATES }: { candidates?: Ment
     />
   );
 }
+
+test('Ctrl+Enter submits the composer form exactly once', async () => {
+  const user = userEvent.setup();
+  const onSubmit = vi.fn<FormEventHandler<HTMLFormElement>>((event) => event.preventDefault());
+  render(<MentionHarness onSubmit={onSubmit} />);
+
+  const textarea = screen.getByRole('textbox');
+  await user.click(textarea);
+  await user.type(textarea, 'keyboard post');
+  await user.keyboard('{Control>}{Enter}{/Control}');
+
+  expect(onSubmit).toHaveBeenCalledTimes(1);
+});
+
+test('Enter and Shift+Enter keep inserting line breaks while Alt+Enter keeps its default behavior', async () => {
+  const user = userEvent.setup();
+  const onSubmit = vi.fn<FormEventHandler<HTMLFormElement>>((event) => event.preventDefault());
+  render(<MentionHarness onSubmit={onSubmit} />);
+
+  const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+  await user.click(textarea);
+  await user.type(textarea, 'first');
+  await user.keyboard('{Enter}');
+  await user.type(textarea, 'second');
+  await user.keyboard('{Shift>}{Enter}{/Shift}');
+  await user.type(textarea, 'third');
+
+  expect(textarea.value).toBe('first\nsecond\nthird');
+  expect(fireEvent.keyDown(textarea, { key: 'Enter', altKey: true })).toBe(true);
+  expect(onSubmit).not.toHaveBeenCalled();
+});
+
+test('disabled submit blocks both Ctrl+Enter and the submit button', async () => {
+  const user = userEvent.setup();
+  const onSubmit = vi.fn<FormEventHandler<HTMLFormElement>>((event) => event.preventDefault());
+  render(<MentionHarness onSubmit={onSubmit} submitDisabled />);
+
+  const textarea = screen.getByRole('textbox');
+  await user.click(textarea);
+  await user.type(textarea, 'pending post');
+  await user.keyboard('{Control>}{Enter}{/Control}');
+
+  expect(screen.getByRole('button', { name: 'Publish' })).toBeDisabled();
+  expect(onSubmit).not.toHaveBeenCalled();
+});
 
 test('typing @ with a query shows matching mention candidates', async () => {
   const user = userEvent.setup();
@@ -56,6 +110,34 @@ test('selecting a candidate with the keyboard inserts the mention token', async 
 
   expect(textarea.value).toBe(`hi @[Alice](${ALICE}) `);
   expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+});
+
+test('mention selection keeps priority over Ctrl+Enter form submission', async () => {
+  const user = userEvent.setup();
+  const onSubmit = vi.fn<FormEventHandler<HTMLFormElement>>((event) => event.preventDefault());
+  render(<MentionHarness onSubmit={onSubmit} />);
+
+  const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+  await user.click(textarea);
+  await user.keyboard('hi @al');
+  await user.keyboard('{Control>}{Enter}{/Control}');
+
+  expect(textarea.value).toBe(`hi @[Alice](${ALICE}) `);
+  expect(onSubmit).not.toHaveBeenCalled();
+});
+
+test('Tab keeps selecting a mention candidate without submitting', async () => {
+  const user = userEvent.setup();
+  const onSubmit = vi.fn<FormEventHandler<HTMLFormElement>>((event) => event.preventDefault());
+  render(<MentionHarness onSubmit={onSubmit} />);
+
+  const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+  await user.click(textarea);
+  await user.keyboard('hi @al');
+  await user.keyboard('{Tab}');
+
+  expect(textarea.value).toBe(`hi @[Alice](${ALICE}) `);
+  expect(onSubmit).not.toHaveBeenCalled();
 });
 
 test('Escape closes the suggestion list', async () => {
