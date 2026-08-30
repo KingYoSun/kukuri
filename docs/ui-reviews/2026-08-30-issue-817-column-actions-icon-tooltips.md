@@ -24,7 +24,7 @@
   - `cargo xtask check` passed。
   - `cargo xtask test`: Rust 694 passed / 3 skipped、harness 22 passed、frontend 128 files / 950 tests passed。
   - `cargo xtask desktop-ui-check`: lint、typecheck、frontend 950 tests、Storybook build、browser Playwright 49 tests、visual smoke 14 tests passed。
-  - Linux baseline workflow: Pending。
+  - Linux baseline workflow: https://github.com/KingYoSun/kukuri/actions/runs/33293735214 passed。Notifications / Messagesの2枚だけに意図したheader差分があり、他12枚は同一hashであることを確認。
   - Windows実機: Tauri / WebView2をComputer Useで自動操作し、localized focus tooltip、Escape dismiss、Notificationsのheader表示と更新、非active維持、tooltipの切れ・残留・操作中のちらつきがないことを確認。
 - Not verified: 物理タッチパネル、ペン入力、スクリーンリーダーの音声読み上げ。Windows実データのConversation列は存在しなかったため、peer状態・更新・クリア・非active維持はVitest / Playwrightで確認した。Computer Use APIにはpointer hover専用操作がないため、Windows実機のtooltip表示はkeyboard focus、hoverはPlaywrightで確認した。
 - Review result:
