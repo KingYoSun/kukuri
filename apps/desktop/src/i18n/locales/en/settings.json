@@ -206,6 +206,17 @@
     "peerTickets": "Peer Tickets",
     "summary": "{{status}} / peers: {{count}}",
     "summaryDetailFallback": "No topic diagnostics yet",
+    "statusDetails": {
+      "connectedToAll": "Connected to all configured peers",
+      "connectedToSubset": "Connected to a subset of configured peers",
+      "noPeersConfigured": "No peers configured",
+      "noTopicsSubscribedLocally": "No topics subscribed locally",
+      "topicConnectedToAll": "Connected to all configured peers for this topic",
+      "topicConnectedToSubset": "Connected to a subset of configured peers for this topic",
+      "topicNoPeersConfigured": "No peers configured for this topic",
+      "topicWaitingForConfiguredPeers": "Waiting for configured peers to join this topic",
+      "waitingForConfiguredPeers": "Waiting for configured peers to connect"
+    },
     "title": "Sync Status",
     "topicConnectivity": "Topic Connectivity Detail",
     "tracked": "{{count}} tracked",
@@ -227,6 +238,8 @@
       "communityBootstrapPeers": "Community Bootstrap Peers",
       "configuredSeedIds": "Configured Seed IDs",
       "connectedPeers": "Connected Peers",
+      "docsAssistPeers": "Docs Assist Peers",
+      "blobAssistPeers": "Blob Assist Peers",
       "discoveryError": "Discovery Error",
       "localEndpointId": "Local Endpoint ID",
       "manualTicketPeers": "Manual Ticket Peers",
@@ -277,6 +290,15 @@
       "channel": "Channel",
       "manifest": "Manifest",
       "status": "Status",
+      "statuses": {
+        "available": "Update available",
+        "checking": "Checking",
+        "downloading": "Downloading",
+        "failed": "Failed",
+        "idle": "Idle",
+        "ready_to_restart": "Ready to restart",
+        "up_to_date": "Up to date"
+      },
       "check": "Check",
       "install": "Install",
       "available": "Update {{version}} is available.",
@@ -319,7 +341,14 @@
     },
     "osNotifications": {
       "title": "OS Notifications",
-      "permission": "Permission: {{osNotificationPermission}}",
+      "permission": "Permission: {{permission}}",
+      "permissions": {
+        "denied": "Denied",
+        "granted": "Granted",
+        "prompt": "Not requested",
+        "unavailable": "Unavailable",
+        "unknown": "Unknown"
+      },
       "enabled": "Enable OS notifications",
       "directMessages": "Direct messages",
       "mentionsAndReplies": "Mentions and replies",

@@ -268,7 +268,7 @@
   "indexingRequest": {
     "title": "申请 Community Node 索引",
     "target": "对象：{{target}}",
-    "nodeLabel": "Community Node",
+    "nodeLabel": "社区节点",
     "openPublic": "申请索引 {{topic}}",
     "openPrivate": "申请索引",
     "publicNotice": "申请由所选 Community Node 为此公开主题建立索引。",

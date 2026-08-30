@@ -21,13 +21,11 @@ const OTHER_LOCALES = SUPPORTED_LOCALES.filter((locale) => locale !== BASE_LOCAL
 // 固有名詞、言語名、入力例、プロトコル形式は翻訳せず、そのまま提示する。
 const INTENTIONALLY_SHARED_ENGLISH = new Set([
   'game:fields.placeholders.participants',
-  'profile:communityNodeAdvisory.nodeLabel',
   'settings:appearance.languageOptions.en',
   'settings:communityNode.baseUrlsPlaceholder',
   'settings:connectivity.peerTicketPlaceholder',
   'settings:discovery.seedPeersPlaceholder',
   'settings:reactions.searchKeyPlaceholder',
-  'shell:indexingRequest.nodeLabel',
   'shell:navigation.placeholder',
 ]);
 
@@ -102,6 +100,33 @@ test.each(['en', 'zh-CN'] as const)('locale %s does not contain Japanese kana', 
   const violations = NAMESPACES.flatMap((namespace) =>
     flattenLeaves(resources[locale][namespace as keyof (typeof resources)['en']] as Json, '')
       .filter(([, value]) => kana.test(value))
+      .map(([key, value]) => `${namespace}:${key}=${value}`)
+  );
+
+  expect(violations).toEqual([]);
+});
+
+test('Japanese product UI does not contain known untranslated product terms', () => {
+  const forbidden = [
+    /Community Node/u,
+    /Community Index/u,
+    /\bcommunity node\b/iu,
+    /\bTimeline\b/u,
+    /\bExplore\b/u,
+    /\bLive\b/u,
+    /\bGame\b/u,
+    /\bpeer ticket\b/iu,
+    /\bdiscovery diagnostics\b/iu,
+    /\bconsent\b/iu,
+    /\bcapability\b/iu,
+    /\bproximity\b/iu,
+    /\bnode-local\b/iu,
+    /\bidentity\b/iu,
+    /\bruntime contract\b/iu,
+  ];
+  const violations = NAMESPACES.filter((namespace) => namespace !== 'legal').flatMap((namespace) =>
+    flattenLeaves(resources.ja[namespace as keyof (typeof resources)['ja']] as Json, '')
+      .filter(([, value]) => forbidden.some((pattern) => pattern.test(value)))
       .map(([key, value]) => `${namespace}:${key}=${value}`)
   );
 

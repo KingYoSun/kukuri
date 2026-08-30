@@ -345,7 +345,9 @@ export function PostCard({
             />
           </span>
           {source.attachments.length > 0 ? (
-            <span className='repost-source-attachments'>{`+${source.attachments.length} media`}</span>
+            <span className='repost-source-attachments'>
+              {t('feed.moreMedia', { count: source.attachments.length })}
+            </span>
           ) : null}
         </div>
         <div className='post-body repost-source-body post-layout-safe'>
@@ -455,7 +457,9 @@ export function PostCard({
               onActivateReference={onActivateReference}
             />
             {repostSource.attachments.length > 0 ? (
-              <span className='repost-source-attachments'>{`+${repostSource.attachments.length} media`}</span>
+              <span className='repost-source-attachments'>
+                {t('feed.moreMedia', { count: repostSource.attachments.length })}
+              </span>
             ) : null}
           </div>
         ) : repostSource ? (

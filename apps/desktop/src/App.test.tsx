@@ -98,6 +98,19 @@ test('desktop app blocks startup until app-level legal consent is accepted', asy
   expect(await screen.findByRole('heading', { name: 'Before you continue' })).toBeInTheDocument();
   expect(screen.getByText('Terms of Service')).toBeInTheDocument();
   expect(screen.getByText('Privacy Policy')).toBeInTheDocument();
+  expect(
+    screen.queryByText('These documents are drafts and are not legal advice.')
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByText(
+      'This is a draft and is not legal advice. Final decisions should be made in consultation with appropriate experts or regulators.'
+    )
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByText(
+      'The terms of service or privacy policy have been updated. Please review and accept again to continue.'
+    )
+  ).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Publish' })).not.toBeInTheDocument();
 
   await user.click(screen.getByRole('button', { name: 'Accept and continue' }));
@@ -129,10 +142,18 @@ test('desktop app requires renewed consent for an older legal bundle', async () 
   render(<App />);
 
   expect(
-    await screen.findByText(
+    await screen.findAllByText(
       'The terms of service or privacy policy have been updated. Please review and accept again to continue.'
     )
-  ).toBeInTheDocument();
+  ).toHaveLength(1);
+  expect(
+    screen.queryByText('These documents are drafts and are not legal advice.')
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByText(
+      'This is a draft and is not legal advice. Final decisions should be made in consultation with appropriate experts or regulators.'
+    )
+  ).not.toBeInTheDocument();
   expect(screen.getByText('v2')).toBeInTheDocument();
   expect(screen.queryByTestId('control-center-trigger')).not.toBeInTheDocument();
 

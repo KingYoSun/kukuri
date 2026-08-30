@@ -2,7 +2,6 @@
   "gate": {
     "title": "Before you continue",
     "intro": "Please review the terms of service and privacy policy before using kukuri. kukuri does not start any network connection (which would expose your IP address) until you accept.",
-    "draftNotice": "These documents are drafts and are not legal advice.",
     "updatedNotice": "The terms of service or privacy policy have been updated. Please review and accept again to continue.",
     "accept": "Accept and continue",
     "decline": "Decline",
@@ -21,7 +20,6 @@
     "documentsHeading": "Documents"
   },
   "documents": {
-    "draftNotice": "This is a draft and is not legal advice. Final decisions should be made in consultation with appropriate experts or regulators.",
     "terms": {
       "title": "Terms of Service",
       "sections": [

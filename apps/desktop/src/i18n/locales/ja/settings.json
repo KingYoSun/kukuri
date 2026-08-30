@@ -25,7 +25,7 @@
   },
   "communityNode": {
     "indexNode": {
-      "label": "Community Index の問い合わせ先",
+      "label": "コミュニティインデックスの問い合わせ先",
       "hint": "自動では利用可能な設定済みノードを先頭から選びます。明示選択したノードが利用不能な場合は、別ノードへ切り替えず問い合わせを停止します。",
       "automatic": "自動",
       "unavailable": "明示選択したノードは現在利用できません。",
@@ -44,8 +44,8 @@
         "origin": "種別",
         "role": "ノードロール",
         "manifestVersion": "マニフェストバージョン",
-        "capabilityAvailable": "提供中の capability",
-        "capabilityPlanned": "計画中の capability",
+        "capabilityAvailable": "提供中の機能",
+        "capabilityPlanned": "計画中の機能",
         "authorityAppliesTo": "責任範囲",
         "authorityDoesNotApplyTo": "責任範囲外"
       },
@@ -60,29 +60,29 @@
         "error": "マニフェストを取得できませんでした"
       },
       "boundary": {
-        "identityNotOwned": "あなたの identity・プロフィール・ソーシャルグラフはこのノードに所有されません。ノードは P2P ネットワークの補助機能を提供するだけです。",
+        "identityNotOwned": "あなたの身元情報・プロフィール・ソーシャルグラフはこのノードに所有されません。ノードは P2P ネットワークの補助機能を提供するだけです。",
         "defaultNotAuthority": "デフォルトノードであっても、ネットワーク全体の運営者・権限者ではありません。"
       }
     },
     "distanceOptout": {
       "title": "距離利用の停止",
       "notEligible": "このノードは距離利用停止を扱えません(認証・必須同意・接続、または索引/信頼評価の提供のいずれかが満たされていません)。",
-      "description": "有効にすると、このノードが表示する proximity 境界より遠い相手との間で、相手自身と投稿を互いに表示対象から外し、距離のあるコミュニティ間で対立が大規模に増幅することを避けます。",
-      "notPrivacy": "可逆な node-local 表示制御です。プライバシー機能、block、relation graph からの離脱、P2P 制限、ネットワーク全体での不可視化ではありません。",
-      "notLoaded": "変更する前に、現在の設定と node-local 境界を読み込んでください。",
+      "description": "有効にすると、このノードが表示する関係距離の境界より遠い相手との間で、相手自身と投稿を互いに表示対象から外し、距離のあるコミュニティ間で対立が大規模に増幅することを避けます。",
+      "notPrivacy": "可逆なノード内表示制御です。プライバシー機能、ブロック、関係グラフからの離脱、P2P 制限、ネットワーク全体での不可視化ではありません。",
+      "notLoaded": "変更する前に、現在の設定とノード内の境界を読み込んでください。",
       "errors": {
-        "notConfigured": "この Community Node は距離利用停止を提供していません。",
-        "notActivated": "この Community Node の距離利用停止は一時的に利用できません。",
-        "authRequired": "選択した Community Node への認証が必要です。",
-        "consentRequired": "選択した Community Node の必須同意が必要です。"
+        "notConfigured": "このコミュニティノードは距離利用停止を提供していません。",
+        "notActivated": "このコミュニティノードの距離利用停止は一時的に利用できません。",
+        "authRequired": "選択したコミュニティノードへの認証が必要です。",
+        "consentRequired": "選択したコミュニティノードの必須同意が必要です。"
       },
       "load": "設定を読み込む",
       "enable": "有効にする",
       "clear": "解除する",
-      "enabled": "有効です。node-local の最小 proximity は {{distance}} です。",
-      "disabled": "無効です。有効時の node-local 最小 proximity は {{distance}} です。"
+      "enabled": "有効です。ノード内の最小関係距離は {{distance}} です。",
+      "disabled": "無効です。有効時のノード内最小関係距離は {{distance}} です。"
     },
-    "autoApproveLabel": "このノードの consent を自動承認する",
+    "autoApproveLabel": "このノードの同意を自動承認する",
     "admission": {
       "inviteCodeLabel": "招待コード",
       "inviteCodePlaceholder": "招待コードを入力",
@@ -145,7 +145,7 @@
     },
     "loading": "コミュニティノード診断を読み込み中…",
     "noNodes": "設定済みのコミュニティノードはありません。",
-    "nodesHint": "各 Community Node は base URL と自動承認ポリシーを持ちます。",
+    "nodesHint": "各コミュニティノードはベースURLと自動承認ポリシーを持ちます。",
     "nodesLabel": "設定済みノード",
     "nodeSummary": "このノードの認証、同意、接続状態です。",
     "sessionPhases": {
@@ -200,12 +200,23 @@
       "peers": "ピア数",
       "pending": "保留"
     },
-    "noTopicDiagnostics": "トピック diagnostics はまだありません。",
+    "noTopicDiagnostics": "トピックの診断情報はまだありません。",
     "peerTicket": "ピアチケット",
     "peerTicketPlaceholder": "nodeid@127.0.0.1:7777",
     "peerTickets": "ピアチケット",
     "summary": "{{status}} / ピア: {{count}}",
-    "summaryDetailFallback": "トピック diagnostics はまだありません",
+    "summaryDetailFallback": "トピックの診断情報はまだありません",
+    "statusDetails": {
+      "connectedToAll": "すべての設定済みピアに接続しています",
+      "connectedToSubset": "一部の設定済みピアに接続しています",
+      "noPeersConfigured": "ピアが設定されていません",
+      "noTopicsSubscribedLocally": "ローカルで購読しているトピックがありません",
+      "topicConnectedToAll": "すべての設定済みピアがこのトピックに接続しています",
+      "topicConnectedToSubset": "一部の設定済みピアがこのトピックに接続しています",
+      "topicNoPeersConfigured": "このトピックにはピアが設定されていません",
+      "topicWaitingForConfiguredPeers": "設定済みピアがこのトピックに参加するのを待っています",
+      "waitingForConfiguredPeers": "設定済みピアの接続を待っています"
+    },
     "title": "同期状態",
     "topicConnectivity": "トピック接続詳細",
     "tracked": "{{count}} 件追跡中",
@@ -213,7 +224,7 @@
   },
   "developer": {
     "mode": {
-      "description": "開発中の機能（Live・Game）と開発者向けの詳細な診断情報を表示します。",
+      "description": "開発中の機能（ライブ・ゲーム）と開発者向けの詳細な診断情報を表示します。",
       "label": "開発者モードを有効にする"
     },
     "summary": "開発中機能と診断情報",
@@ -227,6 +238,8 @@
       "communityBootstrapPeers": "コミュニティブートストラップピア",
       "configuredSeedIds": "設定済みシード ID",
       "connectedPeers": "接続中のピア",
+      "docsAssistPeers": "ドキュメント補助ピア",
+      "blobAssistPeers": "添付補助ピア",
       "discoveryError": "ディスカバリーエラー",
       "localEndpointId": "ローカルエンドポイント ID",
       "manualTicketPeers": "手動チケットピア",
@@ -234,7 +247,7 @@
     },
     "loading": "ディスカバリー診断を読み込み中…",
     "messages": {
-      "saved": "ディスカバリーシードの更新は runtime contract を変更しません。",
+      "saved": "ディスカバリーシードの更新は実行時の契約を変更しません。",
       "unsaved": "ディスカバリーシードの未保存変更があります。",
       "viewLocked": "環境変数が discovery seeds を上書きしているため編集できません。"
     },
@@ -277,6 +290,15 @@
       "channel": "チャンネル",
       "manifest": "マニフェスト",
       "status": "状態",
+      "statuses": {
+        "available": "更新あり",
+        "checking": "確認中",
+        "downloading": "ダウンロード中",
+        "failed": "失敗",
+        "idle": "待機中",
+        "ready_to_restart": "再起動待ち",
+        "up_to_date": "最新です"
+      },
       "check": "確認",
       "install": "インストール",
       "available": "更新 {{version}} を利用できます。",
@@ -305,12 +327,12 @@
     },
     "resources": {
       "title": "リリースと安全性の資料",
-      "summary": "インストール、更新時のデータ保護、各種通知、Community Node のポリシーは、以下の正式なリンクから確認できます。",
+      "summary": "インストール、更新時のデータ保護、各種通知、コミュニティノードのポリシーは、以下の正式なリンクから確認できます。",
       "latestRelease": "最新リリース",
       "quickstart": "クイックスタート",
       "releaseRunbook": "リリースとデータ保護",
       "thirdPartyNotices": "サードパーティ通知",
-      "communityNodeDisclosures": "既定 Community Node の開示",
+      "communityNodeDisclosures": "既定コミュニティノードの開示",
       "terms": "利用条件",
       "privacy": "プライバシーポリシー",
       "externalTransmission": "外部送信",
@@ -319,7 +341,14 @@
     },
     "osNotifications": {
       "title": "OS 通知",
-      "permission": "権限: {{osNotificationPermission}}",
+      "permission": "権限: {{permission}}",
+      "permissions": {
+        "denied": "拒否済み",
+        "granted": "許可済み",
+        "prompt": "未要求",
+        "unavailable": "利用不可",
+        "unknown": "不明"
+      },
       "enabled": "OS 通知を有効にする",
       "directMessages": "ダイレクトメッセージ",
       "mentionsAndReplies": "メンションと返信",

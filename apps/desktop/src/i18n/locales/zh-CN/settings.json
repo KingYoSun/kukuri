@@ -206,6 +206,17 @@
     "peerTickets": "Peer 票据",
     "summary": "{{status}} / 对等节点: {{count}}",
     "summaryDetailFallback": "尚无主题诊断",
+    "statusDetails": {
+      "connectedToAll": "已连接所有配置的 Peer",
+      "connectedToSubset": "已连接部分配置的 Peer",
+      "noPeersConfigured": "尚未配置 Peer",
+      "noTopicsSubscribedLocally": "本地尚未订阅主题",
+      "topicConnectedToAll": "已连接此主题的所有配置 Peer",
+      "topicConnectedToSubset": "已连接此主题的部分配置 Peer",
+      "topicNoPeersConfigured": "此主题尚未配置 Peer",
+      "topicWaitingForConfiguredPeers": "正在等待配置的 Peer 加入此主题",
+      "waitingForConfiguredPeers": "正在等待配置的 Peer 连接"
+    },
     "title": "同步状态",
     "topicConnectivity": "主题连接详情",
     "tracked": "已跟踪 {{count}} 个",
@@ -227,6 +238,8 @@
       "communityBootstrapPeers": "社区引导 Peer",
       "configuredSeedIds": "已配置种子 ID",
       "connectedPeers": "已连接 Peer",
+      "docsAssistPeers": "文档辅助 Peer",
+      "blobAssistPeers": "附件辅助 Peer",
       "discoveryError": "发现错误",
       "localEndpointId": "本地端点 ID",
       "manualTicketPeers": "手动票据 Peer",
@@ -277,6 +290,15 @@
       "channel": "频道",
       "manifest": "清单",
       "status": "状态",
+      "statuses": {
+        "available": "有可用更新",
+        "checking": "正在检查",
+        "downloading": "正在下载",
+        "failed": "失败",
+        "idle": "待机",
+        "ready_to_restart": "等待重启",
+        "up_to_date": "已是最新版本"
+      },
       "check": "检查",
       "install": "安装",
       "available": "可用更新 {{version}}。",
@@ -319,7 +341,14 @@
     },
     "osNotifications": {
       "title": "系统通知",
-      "permission": "权限: {{osNotificationPermission}}",
+      "permission": "权限: {{permission}}",
+      "permissions": {
+        "denied": "已拒绝",
+        "granted": "已允许",
+        "prompt": "尚未请求",
+        "unavailable": "不可用",
+        "unknown": "未知"
+      },
       "enabled": "启用系统通知",
       "directMessages": "私信",
       "mentionsAndReplies": "提及和回复",

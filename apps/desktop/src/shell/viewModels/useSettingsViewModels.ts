@@ -55,6 +55,35 @@ type UseSettingsViewModelsArgs = {
   trackedTopics: DesktopShellState['trackedTopics'];
 };
 
+const connectivityStatusDetailKeys: Record<string, string> = {
+  'No peers configured': 'settings:connectivity.statusDetails.noPeersConfigured',
+  'No topics subscribed locally': 'settings:connectivity.statusDetails.noTopicsSubscribedLocally',
+  'Waiting for configured peers to connect':
+    'settings:connectivity.statusDetails.waitingForConfiguredPeers',
+  'Connected to a subset of configured peers':
+    'settings:connectivity.statusDetails.connectedToSubset',
+  'Connected to all configured peers': 'settings:connectivity.statusDetails.connectedToAll',
+  'No peers configured for this topic':
+    'settings:connectivity.statusDetails.topicNoPeersConfigured',
+  'Waiting for configured peers to join this topic':
+    'settings:connectivity.statusDetails.topicWaitingForConfiguredPeers',
+  'Connected to a subset of configured peers for this topic':
+    'settings:connectivity.statusDetails.topicConnectedToSubset',
+  'Connected to all configured peers for this topic':
+    'settings:connectivity.statusDetails.topicConnectedToAll',
+};
+
+function localizeConnectivityStatusDetail(
+  detail: string | null | undefined,
+  t: UseSettingsViewModelsArgs['t']
+) {
+  if (!detail) {
+    return t('settings:connectivity.summaryDetailFallback');
+  }
+  const translationKey = connectivityStatusDetailKeys[detail];
+  return translationKey ? t(translationKey) : detail;
+}
+
 // settings section(connectivity / appearance / discovery / community-node /
 // reactions の 5 panel)の projection(Q3 T5 の分割先)。
 export function useSettingsViewModels({
@@ -135,7 +164,7 @@ export function useSettingsViewModels({
         },
         {
           label: t('settings:connectivity.diagnostics.connectionDetail'),
-          value: syncStatus.status_detail || t('settings:connectivity.summaryDetailFallback'),
+          value: localizeConnectivityStatusDetail(syncStatus.status_detail, t),
         },
         {
           label: t('settings:connectivity.diagnostics.effectivePeers'),
@@ -162,7 +191,7 @@ export function useSettingsViewModels({
           expectedPeerCount: diagnostic?.configured_peer_ids.length ?? 0,
           missingPeerCount: diagnostic?.missing_peer_ids.length ?? 0,
           statusDetail:
-            diagnostic?.status_detail ?? t('settings:connectivity.summaryDetailFallback'),
+            localizeConnectivityStatusDetail(diagnostic?.status_detail, t),
           connectedPeersLabel: formatListLabel(diagnostic?.connected_peers ?? []),
           relayAssistedPeersLabel: formatListLabel(diagnostic?.docs_assist_peer_ids ?? []),
           configuredPeersLabel: formatListLabel(diagnostic?.configured_peer_ids ?? []),
@@ -248,12 +277,12 @@ export function useSettingsViewModels({
           monospace: true,
         },
         {
-          label: 'Docs Assist Peers',
+          label: t('settings:discovery.diagnostics.docsAssistPeers'),
           value: formatListLabel(syncStatus.discovery.docs_assist_peer_ids),
           monospace: true,
         },
         {
-          label: 'Blob Assist Peers',
+          label: t('settings:discovery.diagnostics.blobAssistPeers'),
           value: formatListLabel(syncStatus.discovery.blob_assist_peer_ids),
           monospace: true,
         },

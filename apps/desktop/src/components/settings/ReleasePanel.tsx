@@ -26,17 +26,13 @@ import {
   saveOsNotificationSettings,
   THIRD_PARTY_NOTICES_URL,
   type OsNotificationSettings,
-  type UpdateState,
 } from '@/lib/releaseReadiness';
 import { useAppUpdateStore } from '@/shell/useAppUpdateStore';
 import { useDesktopShellStore } from '@/shell/store';
 
 import { SettingsActionRow } from './SettingsActionRow';
 import { SettingsDiagnosticList } from './SettingsDiagnosticList';
-
-function formatUpdateStatus(status: UpdateState['status']): string {
-  return status.replaceAll('_', ' ');
-}
+import { formatOsNotificationPermission, formatUpdateStatus } from './releasePanelCopy';
 
 function updateErrorTranslationKey(errorMessage?: string | null): string {
   return `settings:release.update.errors.${classifyUpdateError(errorMessage)}`;
@@ -200,7 +196,7 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
     },
     {
       label: t('settings:release.update.status'),
-      value: formatUpdateStatus(updateState.status),
+      value: formatUpdateStatus(updateState.status, t),
       tone: updateState.status === 'failed' ? ('danger' as const) : ('default' as const),
     },
   ];
@@ -391,7 +387,11 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
         <h4 className='text-base font-semibold text-foreground'>
           {t('settings:release.osNotifications.title')}
         </h4>
-        <Notice>{t('settings:release.osNotifications.permission', { osNotificationPermission })}</Notice>
+        <Notice>
+          {t('settings:release.osNotifications.permission', {
+            permission: formatOsNotificationPermission(osNotificationPermission, t),
+          })}
+        </Notice>
         <div className='grid gap-3 sm:grid-cols-2'>
           {[
             ['enabled', t('settings:release.osNotifications.enabled')],

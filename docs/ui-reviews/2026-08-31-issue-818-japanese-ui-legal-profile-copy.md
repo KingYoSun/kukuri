@@ -1,0 +1,33 @@
+# 2026-08-31 Issue #818 Japanese UI, legal notices, and profile copy
+
+- Status: current
+- Supersedes: None
+- Superseded by: None
+- Issue: https://github.com/KingYoSun/kukuri/issues/818
+- Preview: [Explore post actions on Windows](./2026-08-31-issue-818-japanese-ui-explore-windows.jpg), [profile relationship and trust result on Windows](./2026-08-31-issue-818-japanese-ui-profile-windows.jpg)
+- Surface / user / purpose: 日本語を選択した利用者が、主要な製品画面、法務表示、プロフィールの関係値・信頼度取得を、意図しない英語混在や重複する注意書きなしで利用する。
+- Summary: 常設されていたdraft noticeを削除し、updated noticeを旧bundleからの再同意時だけ表示するようにした。プロフィールの見出しを「関係値と信頼度」、操作を「取得」に統一した。製品UIの`Community Node`、`Timeline`、`Explore`、loading／pagination／media表示、接続・更新・通知権限status等をlocale resourceへ揃え、日本語localeの有限監査を追加した。
+- Conditions:
+  - Platform: Windows 11、Tauri development build、WebView2。隔離したapp dataによる実runtimeと、同じTauri/WebView2へrepositoryのdeterministic desktop mockを注入した状態の両方を使用した。
+  - Viewport: Windows実機は1283×871。Playwrightは900×760、390×844、200% zoomを含む。
+  - Theme / locale: dark / ja。component・browser testではen / ja / zh-CNのlocale parityを確認した。
+  - State: 初回同意、accepted bundle v1からcurrent bundle v2への再同意、通常workspace、全Settings section、deterministic Timeline／Explore投稿、他ユーザーprofileを確認した。
+- Accessibility / interaction: 初回同意にはdraft／updated noticeがなく、再同意にはupdated noticeだけが1件表示され、設定内の法的情報にはnoticeがない。Timeline、プロフィール、見つける、通知、メッセージの各列と全Settings sectionを巡回し、通知の一時的な読み込み表示が空状態へ解消することを確認した。TimelineとExploreの投稿でリアクション、リポスト、返信、リンクコピー、ブックマーク、通報の日本語accessible nameを確認し、返信画面、コピー完了、bookmark解除状態まで操作した。他ユーザーprofileでは「関係値と信頼度」「コミュニティノード」「取得」と取得結果の日本語表示を確認した。
+- Performance: 新規dependency、network request、polling、永続状態は追加していない。既存statusをlocale keyへ対応付け、既存componentの直書き文言を翻訳資源へ移しただけなので専用計測の対象外とした。
+- Validation:
+  - failing-first: 法務3経路、プロフィール完全一致、直書き英語、locale有限監査を追加し、実装前に10件が意図した理由で失敗することを確認した。
+  - targeted Vitest: 7 files / 88 tests passed。`CommunityIndexWorkspace` 18 tests passed。
+  - targeted Playwright: localization layout 10 tests passed。
+  - lint / typecheck passed。
+  - `cargo xtask check` passed。
+  - `cargo xtask test`: Rust 694 passed / 3 skipped、harness 22 passed、frontend 131 files / 973 tests passed。
+  - `cargo xtask desktop-ui-check`: lint、typecheck、frontend 973 tests、Storybook build、browser Playwright 50 tests、visual smoke 14 tests passed。
+  - Windows実機: 初回同意／再同意／設定内法務、主要列、全Settings section、接続・更新・通知権限status、Timeline／Explore投稿操作、プロフィール取得と結果をComputer Useで確認した。
+- Not verified: 物理タッチパネル、ペン入力、スクリーンリーダーの音声読み上げ。実runtimeの投稿・対象ノードは空だったため、投稿操作とプロフィール取得は同じTauri/WebView2のdeterministic desktop mockおよびVitest / Playwrightで確認した。
+- Review result:
+  - 一貫性: TimelineとExploreの共有PostCard操作名、主要製品用語、接続・更新statusを同じlocale契約へ揃えた。
+  - フィードバック: 読み込み、コピー完了、bookmark状態、プロフィール取得結果が日本語で表示される。
+  - エラー防止: 初回同意と設定内法務に更新注意を誤表示せず、再同意時だけ更新を通知する。
+  - 主導権: 関係値と信頼度は利用者が「取得」を実行したときだけ読み込み、TimelineやExploreを自動的に絞り込まない。
+  - 記憶負荷: 英語と日本語の混在を減らし、同じ対象を「コミュニティノード」「関係値と信頼度」で一貫して示す。
+- Exceptions: URL、ID、protocol、OS名、raw capability等の技術値と、deterministic seedの投稿本文・著者名は翻訳対象外。

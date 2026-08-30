@@ -50,7 +50,7 @@
     "status": {
       "connected": "接続済み",
       "connectionAttention": "接続の確認が必要です",
-      "communityNodeAttention": "Community Node の確認が必要です"
+      "communityNodeAttention": "コミュニティノードの確認が必要です"
     },
     "sections": {
       "columns": "カラム",
@@ -193,11 +193,11 @@
       "label": "表示"
     },
     "community-node": {
-      "description": "community node の設定、認証、同意、更新操作です。",
+      "description": "コミュニティノードの設定、認証、同意、更新操作です。",
       "label": "コミュニティノード"
     },
     "connectivity": {
-      "description": "同期概要、peer ticket、全体エラーの確認です。",
+      "description": "同期概要、ピアチケット、全体エラーの確認です。",
       "label": "接続"
     },
     "developer": {
@@ -205,7 +205,7 @@
       "label": "開発者"
     },
     "discovery": {
-      "description": "seeded DHT 設定と discovery diagnostics です。",
+      "description": "シード済み DHT 設定とディスカバリー診断です。",
       "label": "ディスカバリー"
     },
     "reactions": {
@@ -233,50 +233,50 @@
     "savedCount": "{{count}} 件保存済み",
     "tabs": "ワークスペース",
     "timelineViews": "タイムライン表示",
-    "timelineTopicSwitch": "Timeline のトピック",
+    "timelineTopicSwitch": "タイムラインのトピック",
     "primaryLabel": "メインワークスペース",
     "skipToWorkspace": "ワークスペースへ移動",
-    "communityNodeUnavailableAction": "Community Node 設定を開く",
-    "communityNodeUnavailableBody": "設定済みの community node に現在接続できません。起動は継続し、direct P2P 接続は引き続き利用できます。",
-    "communityNodeUnavailableTitle": "Community Node を利用できません",
+    "communityNodeUnavailableAction": "コミュニティノード設定を開く",
+    "communityNodeUnavailableBody": "設定済みのコミュニティノードに現在接続できません。起動は継続し、ダイレクト P2P 接続は引き続き利用できます。",
+    "communityNodeUnavailableTitle": "コミュニティノードを利用できません",
     "viewScope": "表示範囲"
   },
   "testerFeedback": {
     "openButton": "フィードバックを送る",
     "title": "フィードバックを送る",
-    "description": "利用していて気づいたことを Community Node へ送信します。分類や重要度の入力は不要です。",
-    "nodeLabel": "送信先 Community Node",
+    "description": "利用していて気づいたことをコミュニティノードへ送信します。分類や重要度の入力は不要です。",
+    "nodeLabel": "送信先コミュニティノード",
     "whatAttemptedLabel": "やろうとしたこと",
     "whatHappenedLabel": "何が起きたか",
     "whatSeemedWrongLabel": "何が変だと思ったか",
     "charCount": "{{current}} / {{max}} 文字",
     "overLimit": "各項目は {{max}} 文字以内で入力してください。",
     "metadataNotice": "クライアントのバージョンと OS が自動で添付されます。送信者の識別情報は保存されません。",
-    "noEligibleNode": "認証と必須同意が完了し、フィードバックを受け付けている Community Node がありません。",
-    "openSettings": "Community Node 設定を開く",
+    "noEligibleNode": "認証と必須同意が完了し、フィードバックを受け付けているコミュニティノードがありません。",
+    "openSettings": "コミュニティノード設定を開く",
     "submit": "送信する",
     "submitting": "送信中…",
     "success": "フィードバックを送信しました。受付 ID: {{referenceId}}",
     "errors": {
-      "notConfigured": "この Community Node はフィードバックを受け付けていません。",
+      "notConfigured": "このコミュニティノードはフィードバックを受け付けていません。",
       "invalidFeedback": "入力内容を確認してください。3 項目すべてを 2000 文字以内で入力する必要があります。",
-      "authRequired": "選択した Community Node への認証が必要です。",
-      "consentRequired": "選択した Community Node の必須同意が必要です。",
+      "authRequired": "選択したコミュニティノードへの認証が必要です。",
+      "consentRequired": "選択したコミュニティノードの必須同意が必要です。",
       "requestFailed": "フィードバックの送信に失敗しました。時間をおいて再度お試しください。"
     }
   },
   "indexingRequest": {
-    "title": "Community Node への索引登録申請",
+    "title": "コミュニティノードへの索引登録申請",
     "target": "対象: {{target}}",
-    "nodeLabel": "申請先 Community Node",
+    "nodeLabel": "申請先コミュニティノード",
     "openPublic": "{{topic}} の索引登録を申請",
     "openPrivate": "索引登録を申請",
-    "publicNotice": "公開トピックを選択した Community Node の索引対象として申請します。",
-    "gateNotice": "申請しても索引登録は保証されません。Community Node の operator 承認と safety 判定を通過した内容だけが索引されます。",
-    "privateConfirmation": "チャネルの閲覧 capability を Community Node に送信することに同意します",
-    "privateWarning": "同意すると、この Community Node はプライベートチャネルの内容を復号し、索引へ登録できるようになります。申請や状態確認のたびに、この確認が必要です。",
-    "noEligibleNode": "認証と必須同意が完了し、Community Index を利用できる Community Node がありません。",
-    "openSettings": "Community Node 設定を開く",
+    "publicNotice": "公開トピックを選択したコミュニティノードの索引対象として申請します。",
+    "gateNotice": "申請しても索引登録は保証されません。コミュニティノードの運営者による承認と安全性の判定を通過した内容だけが索引されます。",
+    "privateConfirmation": "チャネルの閲覧権限をコミュニティノードに送信することに同意します",
+    "privateWarning": "同意すると、このコミュニティノードはプライベートチャネルの内容を復号し、索引へ登録できるようになります。申請や状態確認のたびに、この確認が必要です。",
+    "noEligibleNode": "認証と必須同意が完了し、コミュニティインデックスを利用できるコミュニティノードがありません。",
+    "openSettings": "コミュニティノード設定を開く",
     "submit": "申請する",
     "submitting": "申請中…",
     "status": {
@@ -285,22 +285,22 @@
       "rejected": "索引登録は却下されています。"
     },
     "errors": {
-      "requestNotConfigured": "この Community Node は索引を提供していないため、申請を受け付けていません。",
-      "requestNotActivated": "この Community Node の索引は一時的に利用できないため、申請を受け付けていません。",
-      "notConfigured": "この Community Node ではチャネル索引登録が設定されていません。",
-      "secretConflict": "登録済みのチャネル capability と一致しません。管理者へ確認してください。",
-      "authRequired": "選択した Community Node への認証が必要です。",
-      "consentRequired": "選択した Community Node の必須同意が必要です。",
+      "requestNotConfigured": "このコミュニティノードは索引を提供していないため、申請を受け付けていません。",
+      "requestNotActivated": "このコミュニティノードの索引は一時的に利用できないため、申請を受け付けていません。",
+      "notConfigured": "このコミュニティノードではチャネル索引登録が設定されていません。",
+      "secretConflict": "登録済みのチャネル閲覧権限と一致しません。管理者へ確認してください。",
+      "authRequired": "選択したコミュニティノードへの認証が必要です。",
+      "consentRequired": "選択したコミュニティノードの必須同意が必要です。",
       "requestFailed": "索引登録申請に失敗しました。時間をおいて再度お試しください。"
     }
   },
   "communityIndex": {
     "automaticNode": "自動",
-    "nodeSwitch": "Explore の Community Node",
+    "nodeSwitch": "「見つける」のコミュニティノード",
     "unavailableNodeOption": "利用不可 · {{baseUrl}}",
-    "selectedNodeUnavailable": "明示選択した Community Node は利用できません。問い合わせを停止しています。",
+    "selectedNodeUnavailable": "明示選択したコミュニティノードは利用できません。問い合わせを停止しています。",
     "title": "コミュニティインデックス",
-    "topicSummary": "利用可能な Community Node を使い、現在のトピックまたはプライベートチャンネルを検索します。",
+    "topicSummary": "利用可能なコミュニティノードを使い、現在のトピックまたはプライベートチャンネルを検索します。",
     "exploreSummary": "インデックスされたトピックを横断して、検索・発見・おすすめを利用します。",
     "nodeLabel": "問い合わせ先 node",
     "surfaces": "コミュニティインデックスの機能",
@@ -316,22 +316,22 @@
     "loading": "読み込み中…",
     "empty": "一致するインデックス結果はありません。",
     "results": "コミュニティインデックスの結果",
-    "noEligibleNode": "認証・同意済みで、利用可能な Community Index を公開している Community Node がありません。",
+    "noEligibleNode": "認証・同意済みで、利用可能なコミュニティインデックスを公開しているコミュニティノードがありません。",
     "allJoinedDisabled": "公開トピックまたはプライベートチャンネルを1つずつ検索してください。全参加範囲は node に送信しません。",
     "errors": {
-      "authRequired": "選択した Community Node への認証が必要です。",
-      "consentRequired": "選択した Community Node の必須同意が必要です。",
-      "notConfigured": "選択した Community Node ではコミュニティ索引が設定されていません。",
-      "notActivated": "選択した Community Node のコミュニティ索引は一時的に利用できません。",
+      "authRequired": "選択したコミュニティノードへの認証が必要です。",
+      "consentRequired": "選択したコミュニティノードの必須同意が必要です。",
+      "notConfigured": "選択したコミュニティノードではコミュニティ索引が設定されていません。",
+      "notActivated": "選択したコミュニティノードのコミュニティ索引は一時的に利用できません。",
       "rateLimited": "要求が多すぎます。時間をおいてもう一度お試しください。",
       "rateLimitedWithRetry": "要求が多すぎます。{{seconds}}秒後にもう一度お試しください。"
     }
   },
   "report": {
     "title": "コンテンツを通報",
-    "boundaryNotice": "この通報は kukuri network 全体ではなく、特定の community node に送信されます。",
+    "boundaryNotice": "この通報は kukuri ネットワーク全体ではなく、特定のコミュニティノードに送信されます。",
     "boundaryDetail": "対象 node は、この content の表示・索引・モデレーション・キャッシュ等に実際に関与した node です。kukuri に中央通報窓口はありません。",
-    "identityBoundaryNote": "あなたの identity / profile / social graph はどの node にも属さず、この通報のために node へ預けられることはありません。",
+    "identityBoundaryNote": "あなたの身元情報・プロフィール・ソーシャルグラフはどのノードにも属さず、この通報のためにノードへ預けられることはありません。",
     "subject": {
       "post": "投稿",
       "profile": "プロフィール",
@@ -367,9 +367,9 @@
       "other": "その他"
     },
     "rightsRequest": {
-      "boundary": "権利侵害申出には氏名・連絡先・権利根拠などが必要です。一般通報には送信せず、Community Node が対応できる範囲と対応できない範囲を先に示す専用画面で確認してください。",
-      "openDedicated": "次の画面で node-local な措置の範囲を確認し、同意した場合だけ申出を送信できます。",
-      "unavailable": "選択した Community Node は専用の権利侵害申出受付を公開していません。一般通報へ権利主張や個人情報を送信しないでください。",
+      "boundary": "権利侵害申出には氏名・連絡先・権利根拠などが必要です。一般通報には送信せず、コミュニティノードが対応できる範囲と対応できない範囲を先に示す専用画面で確認してください。",
+      "openDedicated": "次の画面でノード内措置の範囲を確認し、同意した場合だけ申出を送信できます。",
+      "unavailable": "選択したコミュニティノードは専用の権利侵害申出受付を公開していません。一般通報へ権利主張や個人情報を送信しないでください。",
       "open": "対応範囲を確認して権利侵害を申し出る"
     },
     "criticalSafetyNote": "critical safety の通報は責任ある node へ route されます。対象物そのものを添付・再配布せず、内容を説明してください。",
@@ -381,12 +381,12 @@
     "submit": "通報を送信",
     "submitting": "送信中…",
     "copyContact": "通報連絡先をコピー",
-    "success": "community node へ通報を送信しました。",
+    "success": "コミュニティノードへ通報を送信しました。",
     "referenceId": "受付参照: {{id}}",
     "resolvingTargets": "通報先を確認しています…",
     "resolveFailed": "通報先の確認に失敗しました。既定の送信先へは代替しません。",
     "unknownTitle": "通報先を特定できません",
-    "unknownBody": "この content がどの node / source 経由で表示されたかが不明なため、通報すべき責任ある community node がありません。",
+    "unknownBody": "このコンテンツがどのノードや取得元を経由して表示されたか不明なため、通報すべき責任あるコミュニティノードがありません。",
     "observedUnresolvedTitle": "到達可能な通報先がありません",
     "observedUnresolvedBody": "node 経由で表示されましたが、その manifest / 通報連絡先が取得できないため、通報を route できません。",
     "localActionsHint": "ブロック・ミュート・ローカル非表示は引き続き可能です。",

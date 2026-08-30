@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, test, vi } from 'vitest';
 
+import i18n from '@/i18n';
 import { InvokeError } from '@/lib/api/invoke/error';
 
 import { CommunityNodeAdvisoryPanel } from './CommunityNodeAdvisoryPanel';
@@ -177,6 +178,23 @@ const communityNodeManifests = {
 };
 
 describe('CommunityNodeAdvisoryPanel', () => {
+  test('uses the approved Japanese profile heading and load action', async () => {
+    await i18n.changeLanguage('ja');
+
+    render(
+      <CommunityNodeAdvisoryPanel
+        api={api()}
+        targetPubkey={targetPubkey}
+        nodeBaseUrls={[nodeA]}
+      />
+    );
+
+    expect(screen.getByRole('heading', { name: '関係値と信頼度' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '取得' })).toBeInTheDocument();
+
+    await i18n.changeLanguage('en');
+  });
+
   test('loads continuous trust basis, relation, and neighbors only after user action', async () => {
     const client = api();
     render(
