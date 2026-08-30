@@ -3,7 +3,7 @@
 - Status: current
 - Supersedes: None
 - Superseded by: None
-- PR: Pending
+- PR: https://github.com/KingYoSun/kukuri/pull/836
 - Preview:
   - [Notifications wide dark](../../apps/desktop/tests/playwright/__screenshots__/visual.spec.ts/notifications-wide-dark.png)
   - [Messages wide dark](../../apps/desktop/tests/playwright/__screenshots__/visual.spec.ts/messages-wide-dark.png)
