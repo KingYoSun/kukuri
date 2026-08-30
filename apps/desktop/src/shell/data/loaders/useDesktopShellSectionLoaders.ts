@@ -311,53 +311,57 @@ export function useDesktopShellSectionLoaders({
     translate,
   ]);
 
-  const loadNotificationsSection = useCallback(async () => {
-    try {
-      const [status, notificationItems] = await Promise.all([
-        api.getNotificationStatus(),
-        api.listNotifications(),
-      ]);
-      let nextNotifications: NotificationView[] = notificationItems;
-      let nextStatus = status;
-      if (notificationItems.some((notification) => !notification.read_at)) {
-        try {
-          nextStatus = await api.markAllNotificationsRead();
-          const readAt = Date.now();
-          nextNotifications = notificationItems.map((notification) =>
-            notification.read_at ? notification : { ...notification, read_at: readAt }
-          );
-          setNotificationAutoReadError(null);
-        } catch (notificationReadError) {
-          setNotificationAutoReadError(
-            messageFromError(
-              notificationReadError,
-              translate('shell:notifications.errors.failedAutoRead')
-            )
-          );
+  const loadNotificationsSection = useCallback(
+    async (options: { markAsRead?: boolean } = {}) => {
+      const markAsRead = options.markAsRead ?? true;
+      try {
+        const [status, notificationItems] = await Promise.all([
+          api.getNotificationStatus(),
+          api.listNotifications(),
+        ]);
+        let nextNotifications: NotificationView[] = notificationItems;
+        let nextStatus = status;
+        if (markAsRead && notificationItems.some((notification) => !notification.read_at)) {
+          try {
+            nextStatus = await api.markAllNotificationsRead();
+            const readAt = Date.now();
+            nextNotifications = notificationItems.map((notification) =>
+              notification.read_at ? notification : { ...notification, read_at: readAt }
+            );
+            setNotificationAutoReadError(null);
+          } catch (notificationReadError) {
+            setNotificationAutoReadError(
+              messageFromError(
+                notificationReadError,
+                translate('shell:notifications.errors.failedAutoRead')
+              )
+            );
+          }
         }
+        startTransition(() => {
+          setNotificationStatus(nextStatus);
+          setNotifications(nextNotifications);
+          setNotificationPanelState({ status: 'ready', error: null });
+        });
+      } catch (error) {
+        setNotificationPanelState({
+          status: 'error',
+          error: messageFromError(
+            error,
+            translate('shell:notifications.errors.failedToLoad')
+          ),
+        });
       }
-      startTransition(() => {
-        setNotificationStatus(nextStatus);
-        setNotifications(nextNotifications);
-        setNotificationPanelState({ status: 'ready', error: null });
-      });
-    } catch (error) {
-      setNotificationPanelState({
-        status: 'error',
-        error: messageFromError(
-          error,
-          translate('shell:notifications.errors.failedToLoad')
-        ),
-      });
-    }
-  }, [
-    api,
-    setNotificationAutoReadError,
-    setNotificationPanelState,
-    setNotifications,
-    setNotificationStatus,
-    translate,
-  ]);
+    },
+    [
+      api,
+      setNotificationAutoReadError,
+      setNotificationPanelState,
+      setNotifications,
+      setNotificationStatus,
+      translate,
+    ]
+  );
 
   const loadBookmarksSection = useCallback(async () => {
     try {

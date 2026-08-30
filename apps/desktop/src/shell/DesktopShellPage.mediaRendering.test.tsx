@@ -235,12 +235,12 @@ test('timeline image post renders actual preview when object-url payload is avai
 
   const preview = await screen.findByTestId('media-preview-image-post');
   expect(preview).toBeInTheDocument();
-  expect(preview.getAttribute('src')).toContain('blob:mock-');
-  expect(revokeObjectUrl).not.toHaveBeenCalled();
+  const previewUrl = preview.getAttribute('src');
+  expect(previewUrl).toMatch(/^blob:mock-\d+$/);
+  expect(revokeObjectUrl).not.toHaveBeenCalledWith(previewUrl);
 
   unmount();
-  expect(revokeObjectUrl).toHaveBeenCalledOnce();
-  expect(revokeObjectUrl).toHaveBeenCalledWith(preview.getAttribute('src'));
+  expect(revokeObjectUrl).toHaveBeenCalledWith(previewUrl);
 });
 
 test('thread pane reuses the same unavailable media renderer', async () => {

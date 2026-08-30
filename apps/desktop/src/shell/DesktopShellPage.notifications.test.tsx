@@ -83,6 +83,63 @@ test('desktop shell loads unread notification rows outside the inbox for OS noti
   expect(markAllNotificationsRead).not.toHaveBeenCalled();
 });
 
+test('a visible background notifications column finishes loading without marking unread items read', async () => {
+  const api = createDesktopMockApi({
+    notifications: [
+      buildNotification({
+        notification_id: 'notification-background-column',
+        preview_text: 'background column notification',
+      }),
+    ],
+  });
+  const markAllNotificationsRead = vi.fn(api.markAllNotificationsRead);
+  api.markAllNotificationsRead = markAllNotificationsRead;
+
+  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ageneral', api);
+
+  const column = await screen.findByRole('region', { name: /^Notifications Column/ });
+  expect(await within(column).findByText('background column notification')).toBeInTheDocument();
+  await waitFor(() => {
+    expect(within(column).queryByText('Loading notifications...')).not.toBeInTheDocument();
+  });
+  expect(markAllNotificationsRead).not.toHaveBeenCalled();
+});
+
+test('refreshing a background notifications column refetches it and clears loading', async () => {
+  const api = createDesktopMockApi({
+    notifications: [
+      buildNotification({
+        notification_id: 'notification-background-refresh',
+        preview_text: 'background refresh notification',
+      }),
+    ],
+  });
+  const user = userEvent.setup();
+  const listNotifications = vi.fn(api.listNotifications);
+  const markAllNotificationsRead = vi.fn(api.markAllNotificationsRead);
+  api.listNotifications = listNotifications;
+  api.markAllNotificationsRead = markAllNotificationsRead;
+
+  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ageneral', api);
+
+  const column = await screen.findByRole('region', { name: /^Notifications Column/ });
+  expect(await within(column).findByText('background refresh notification')).toBeInTheDocument();
+  await waitFor(() => {
+    expect(within(column).queryByText('Loading notifications...')).not.toBeInTheDocument();
+  });
+  const header = column.querySelector('.shell-column-header');
+  if (!(header instanceof HTMLElement)) throw new Error('notifications column header not found');
+  const callsBeforeRefresh = listNotifications.mock.calls.length;
+
+  await user.click(within(header).getByRole('button', { name: 'Refresh' }));
+
+  await waitFor(() => {
+    expect(listNotifications.mock.calls.length).toBeGreaterThan(callsBeforeRefresh);
+    expect(within(column).queryByText('Loading notifications...')).not.toBeInTheDocument();
+  });
+  expect(markAllNotificationsRead).not.toHaveBeenCalled();
+});
+
 test('clicking the active notifications action focuses the existing inbox', async () => {
   const user = userEvent.setup();
 
