@@ -390,8 +390,14 @@ test('browser mock shell can open an author from messages without leaving the dm
   await expect(authorPane).toBeVisible();
 
   await authorPane.getByRole('button', { name: 'Message' }).click();
-  await expect(activeColumn(page, 'Conversation')).toBeVisible();
+  const conversation = activeColumn(page, 'Conversation');
+  await expect(conversation).toBeVisible();
   await expect(page).toHaveURL(/#\/messages\?topic=.*peerPubkey=/);
+  const conversationHeader = conversation.locator('.shell-column-header');
+  await expect(conversationHeader).toContainText(/peer/);
+  await expect(conversationHeader.getByRole('button', { name: 'Refresh' })).toBeVisible();
+  await expect(conversationHeader.getByRole('button', { name: 'Clear' })).toBeDisabled();
+  await expect(conversation.locator('.shell-column-body .shell-workspace-header')).toHaveCount(0);
 
   // Conversation Column 内の peer ボタンから author を開く(Timeline の author chip ではなく
   // dm workspace 起点の導線。開いた Profile の親は Conversation になる)。
@@ -633,6 +639,14 @@ for (const mobileViewport of [
   });
   await expect(activeColumn(page, 'Thread')).toBeVisible();
   await expect(page.getByText('2 / 7')).toBeVisible();
+  // 次の逆方向gestureを始める前に、最初のsmooth scrollが対象pageへ到達するまで待つ。
+  // active stateだけを待つと、低速CIでは2本のsmooth scrollが重なって前のpageへ戻り得る。
+  await expect
+    .poll(() => canvas.evaluate(
+      (element, pageWidth) => Math.abs(element.scrollLeft - pageWidth),
+      geometry.canvasWidth
+    ))
+    .toBeLessThanOrEqual(1);
   await indicator.dispatchEvent('pointerdown', {
     pointerId: 92,
     clientX: indicatorBox.x + indicatorBox.width / 2,

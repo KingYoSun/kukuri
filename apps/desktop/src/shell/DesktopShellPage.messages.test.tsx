@@ -229,6 +229,61 @@ test('messages dm headers use resolved author labels instead of You and Peer', a
   expect(screen.queryByText('Peer')).not.toBeInTheDocument();
 });
 
+test('conversation status and actions live in the column header without activating the column', async () => {
+  const authorPubkey = 'b'.repeat(64);
+  const api = createDesktopMockApi({
+    authorSocialViews: {
+      [authorPubkey]: {
+        display_name: 'Bob Display',
+        following: true,
+        followed_by: true,
+        mutual: true,
+      },
+    },
+  });
+  await api.sendDirectMessage(authorPubkey, 'message to clear');
+  const openDirectMessage = vi.fn(api.openDirectMessage);
+  const clearDirectMessage = vi.fn(api.clearDirectMessage);
+  api.openDirectMessage = openDirectMessage;
+  api.clearDirectMessage = clearDirectMessage;
+  const user = userEvent.setup();
+
+  renderAtHash(
+    `#/messages?topic=kukuri%3Atopic%3Ageneral&peerPubkey=${authorPubkey}`,
+    api
+  );
+
+  const conversationColumn = await screen.findByRole('region', { name: /^Conversation Column/ });
+  await screen.findByText('message to clear');
+  const header = conversationColumn.querySelector('.shell-column-header');
+  if (!(header instanceof HTMLElement)) throw new Error('conversation column header not found');
+
+  expect(within(header).getByText(/peer/)).toBeInTheDocument();
+  expect(within(header).getByRole('button', { name: 'Refresh' })).toBeInTheDocument();
+  expect(within(header).getByRole('button', { name: 'Clear' })).toBeInTheDocument();
+  expect(conversationColumn.querySelector('.shell-workspace-header')).not.toBeInTheDocument();
+
+  const messagesColumn = screen.getByRole('region', { name: /^Messages Column/ });
+  await user.click(messagesColumn);
+  expect(messagesColumn).toHaveAttribute('aria-current', 'true');
+  const hashBeforeActions = window.location.hash;
+  const opensBeforeRefresh = openDirectMessage.mock.calls.length;
+
+  await user.click(within(header).getByRole('button', { name: 'Refresh' }));
+  await waitFor(() => {
+    expect(openDirectMessage.mock.calls.length).toBeGreaterThan(opensBeforeRefresh);
+  });
+  expect(messagesColumn).toHaveAttribute('aria-current', 'true');
+  expect(window.location.hash).toBe(hashBeforeActions);
+
+  await user.click(within(header).getByRole('button', { name: 'Clear' }));
+  await waitFor(() => {
+    expect(clearDirectMessage).toHaveBeenCalledWith(authorPubkey);
+  });
+  expect(messagesColumn).toHaveAttribute('aria-current', 'true');
+  expect(window.location.hash).toBe(hashBeforeActions);
+});
+
 test('messages hash route restores the direct message and author pane together', async () => {
   const authorPubkey = 'b'.repeat(64);
   const api = createDesktopMockApi({

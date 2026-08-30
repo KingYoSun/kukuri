@@ -2,8 +2,8 @@ import { useMemo, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Flag, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import { IconButton } from '@/components/ui/icon-button';
 
 type MediaViewerDialogProps = {
   items: Array<{
@@ -76,39 +76,36 @@ export function MediaViewerDialog({
             }
           }}
         >
-          <Button
+          <IconButton
             variant='ghost'
-            size='icon'
             type='button'
             className='media-viewer-close'
             onClick={() => onOpenChange(false)}
-            aria-label={t('media.closeDialog')}
+            label={t('media.closeDialog')}
           >
             <X className='size-5' aria-hidden='true' />
-          </Button>
+          </IconButton>
           {currentItem && onReportCurrent ? (
-            <Button
+            <IconButton
               variant='secondary'
-              size='icon'
               type='button'
               className='media-viewer-report'
               onClick={() => onReportCurrent(currentItem.hash)}
-              aria-label={t('report.actionLabel', { ns: 'shell' })}
+              label={t('report.actionLabel', { ns: 'shell' })}
             >
               <Flag className='size-4' aria-hidden='true' />
-            </Button>
+            </IconButton>
           ) : null}
           {canNavigate ? (
-            <Button
+            <IconButton
               variant='secondary'
-              size='icon'
               type='button'
               className='media-viewer-nav media-viewer-nav-prev'
               onClick={() => moveBy(-1)}
-              aria-label={t('media.previousImage')}
+              label={t('media.previousImage')}
             >
               <ChevronLeft className='size-5' aria-hidden='true' />
-            </Button>
+            </IconButton>
           ) : null}
           <div
             className='media-viewer-stage'
@@ -139,16 +136,15 @@ export function MediaViewerDialog({
             )}
           </div>
           {canNavigate ? (
-            <Button
+            <IconButton
               variant='secondary'
-              size='icon'
               type='button'
               className='media-viewer-nav media-viewer-nav-next'
               onClick={() => moveBy(1)}
-              aria-label={t('media.nextImage')}
+              label={t('media.nextImage')}
             >
               <ChevronRight className='size-5' aria-hidden='true' />
-            </Button>
+            </IconButton>
           ) : null}
         </div>
       </DialogContent>

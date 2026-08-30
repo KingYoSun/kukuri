@@ -12,7 +12,7 @@ import {
   X,
 } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/icon-button';
 import type { ColumnSpan } from '@/shell/slices/workspace';
 
 type ColumnMenuProps = {
@@ -233,15 +233,14 @@ export function ColumnMenu({
 
   return (
     <div className='shell-column-menu-wrap'>
-      <Button
+      <IconButton
         ref={triggerRef}
         variant='ghost'
-        size='icon'
         type='button'
         aria-controls={menuId}
         aria-expanded={open}
         aria-haspopup='menu'
-        aria-label={t(open ? 'columnMenu.close' : 'columnMenu.open', { title })}
+        label={t(open ? 'columnMenu.close' : 'columnMenu.open', { title })}
         onKeyDown={onTriggerKeyDown}
         onClick={() => {
           if (open) {
@@ -253,7 +252,7 @@ export function ColumnMenu({
         }}
       >
         <MoreHorizontal className='size-4' aria-hidden='true' />
-      </Button>
+      </IconButton>
       {open && placement && typeof document !== 'undefined' ? createPortal((
         <div
           ref={menuRef}

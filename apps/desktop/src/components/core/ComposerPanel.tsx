@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -116,16 +117,15 @@ export function ComposerPanel({
               </span>
             ) : null}
           </span>
-          <Button
+          <IconButton
             className='shell-icon-button'
             variant='ghost'
-            size='icon'
             type='button'
-            aria-label={bannerAriaLabel}
+            label={bannerAriaLabel}
             onClick={() => clearActiveTarget?.()}
           >
             <X className='size-5' aria-hidden='true' />
-          </Button>
+          </IconButton>
         </div>
       ) : null}
 

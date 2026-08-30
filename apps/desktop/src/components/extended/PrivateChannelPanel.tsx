@@ -5,6 +5,7 @@ import { Copy } from 'lucide-react';
 import { buildChannelAccessPreviewDeepLink } from '@/lib/internalLinks';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
+import { IconButton } from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Notice } from '@/components/ui/notice';
@@ -163,16 +164,15 @@ export function PrivateChannelPanel({
           <div className='shell-inline-actions'>
             <strong>{t('channels:copyShareLink')}</strong>
             {onCopyInviteOutput ? (
-              <Button
+              <IconButton
                 variant='secondary'
-                size='icon'
                 className='post-action-button'
                 type='button'
-                aria-label={t('common:actions.copyLink')}
+                label={t('common:actions.copyLink')}
                 onClick={() => onCopyInviteOutput(channelAccessDeepLink)}
               >
                 <Copy className='size-4' aria-hidden='true' />
-              </Button>
+              </IconButton>
             ) : null}
           </div>
           <span className='sr-only'>{audienceSummaryLabel(inviteOutputLabel, t)}</span>
@@ -253,16 +253,15 @@ export function PrivateChannelSettingsPanel({
             <div className='shell-inline-actions'>
               <strong>{t('channels:copyShareLink')}</strong>
               {onCopyInviteOutput ? (
-                <Button
+                <IconButton
                   variant='secondary'
-                  size='icon'
                   className='post-action-button'
                   type='button'
-                  aria-label={t('common:actions.copyLink')}
+                  label={t('common:actions.copyLink')}
                   onClick={() => onCopyInviteOutput(channelAccessDeepLink)}
                 >
                   <Copy className='size-4' aria-hidden='true' />
-                </Button>
+                </IconButton>
               ) : null}
             </div>
             <span className='sr-only'>{audienceSummaryLabel(inviteOutputLabel, t)}</span>

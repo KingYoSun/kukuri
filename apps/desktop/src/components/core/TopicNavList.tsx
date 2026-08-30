@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { DatabaseZap, Link2, Plug, Settings, SquareArrowRightExit } from 'lucide-react';
 
 import { type TopicDiagnosticSummary } from './types';
+import { IconButtonTooltip } from '@/components/ui/icon-button';
 import { topicDisplayName } from '@/lib/topicId';
 import { cn } from '@/lib/utils';
 
@@ -55,52 +56,71 @@ export function TopicNavList({
 
             <div className='topic-actions'>
               {onRequestTopicIndexing ? (
-                <button
-                  className='topic-copy'
-                  type='button'
-                  aria-label={t('shell:indexingRequest.openPublic', { topic: topicName })}
-                  onClick={() => onRequestTopicIndexing(item.topic)}
+                <IconButtonTooltip
+                  label={t('shell:indexingRequest.openPublic', { topic: topicName })}
                 >
-                  <DatabaseZap className='size-4' aria-hidden='true' />
-                </button>
+                  <button
+                    className='topic-copy'
+                    type='button'
+                    aria-label={t('shell:indexingRequest.openPublic', { topic: topicName })}
+                    onClick={() => onRequestTopicIndexing(item.topic)}
+                  >
+                    <DatabaseZap className='size-4' aria-hidden='true' />
+                  </button>
+                </IconButtonTooltip>
               ) : null}
               {onToggleTopicGossip ? (
-                <button
-                  className={cn('topic-plug', topicGossipJoined && 'topic-plug-active')}
-                  type='button'
-                  aria-pressed={topicGossipJoined}
-                  aria-label={t(
+                <IconButtonTooltip
+                  label={t(
                     topicGossipJoined
                       ? 'shell:navigation.disconnectTopic'
                       : 'shell:navigation.connectTopic',
                     { topic: topicName }
                   )}
-                  onClick={() => onToggleTopicGossip(item.topic, !topicGossipJoined)}
                 >
-                  <Plug className='size-4' aria-hidden='true' />
-                </button>
+                  <button
+                    className={cn('topic-plug', topicGossipJoined && 'topic-plug-active')}
+                    type='button'
+                    aria-pressed={topicGossipJoined}
+                    aria-label={t(
+                      topicGossipJoined
+                        ? 'shell:navigation.disconnectTopic'
+                        : 'shell:navigation.connectTopic',
+                      { topic: topicName }
+                    )}
+                    onClick={() => onToggleTopicGossip(item.topic, !topicGossipJoined)}
+                  >
+                    <Plug className='size-4' aria-hidden='true' />
+                  </button>
+                </IconButtonTooltip>
               ) : null}
 
               {onCopyTopicLink ? (
-                <button
-                  className='topic-copy'
-                  type='button'
-                  aria-label={t('common:actions.copyLink')}
-                  onClick={() => onCopyTopicLink(item.topic)}
-                >
-                  <Link2 className='size-4' aria-hidden='true' />
-                </button>
+                <IconButtonTooltip label={t('common:actions.copyLink')}>
+                  <button
+                    className='topic-copy'
+                    type='button'
+                    aria-label={t('common:actions.copyLink')}
+                    onClick={() => onCopyTopicLink(item.topic)}
+                  >
+                    <Link2 className='size-4' aria-hidden='true' />
+                  </button>
+                </IconButtonTooltip>
               ) : null}
 
               {item.removable ? (
-                <button
-                  className='topic-remove'
-                  type='button'
-                  aria-label={t('shell:navigation.removeTopic', { topic: topicName })}
-                  onClick={() => onRemoveTopic(item.topic)}
+                <IconButtonTooltip
+                  label={t('shell:navigation.removeTopic', { topic: topicName })}
                 >
-                  x
-                </button>
+                  <button
+                    className='topic-remove'
+                    type='button'
+                    aria-label={t('shell:navigation.removeTopic', { topic: topicName })}
+                    onClick={() => onRemoveTopic(item.topic)}
+                  >
+                    x
+                  </button>
+                </IconButtonTooltip>
               ) : null}
             </div>
 
@@ -152,53 +172,74 @@ export function TopicNavList({
                             <small>{t(`channels:audienceOptions.${channel.audienceKind}`)}</small>
                           </button>
                           {onToggleChannelGossip ? (
-                            <button
-                              className={cn(
-                                'topic-channel-settings',
-                                channelGossipJoined && 'topic-plug-active'
-                              )}
-                              type='button'
-                              aria-pressed={channelGossipJoined}
-                              aria-label={t(
+                            <IconButtonTooltip
+                              label={t(
                                 channelGossipJoined
                                   ? 'shell:navigation.disconnectChannel'
                                   : 'shell:navigation.connectChannel',
                                 { channel: channel.label }
                               )}
-                              onClick={() =>
-                                onToggleChannelGossip(
-                                  item.topic,
-                                  channel.channelId,
-                                  !channelGossipJoined
-                                )
-                              }
                             >
-                              <Plug className='size-4' aria-hidden='true' />
-                            </button>
+                              <button
+                                className={cn(
+                                  'topic-channel-settings',
+                                  channelGossipJoined && 'topic-plug-active'
+                                )}
+                                type='button'
+                                aria-pressed={channelGossipJoined}
+                                aria-label={t(
+                                  channelGossipJoined
+                                    ? 'shell:navigation.disconnectChannel'
+                                    : 'shell:navigation.connectChannel',
+                                  { channel: channel.label }
+                                )}
+                                onClick={() =>
+                                  onToggleChannelGossip(
+                                    item.topic,
+                                    channel.channelId,
+                                    !channelGossipJoined
+                                  )
+                                }
+                              >
+                                <Plug className='size-4' aria-hidden='true' />
+                              </button>
+                            </IconButtonTooltip>
                           ) : null}
                           {onOpenChannelSettings ? (
-                            <button
-                              className='topic-channel-settings'
-                              type='button'
-                              aria-label={t('channels:actions.openSettings', {
+                            <IconButtonTooltip
+                              label={t('channels:actions.openSettings', {
                                 channel: channel.label,
                               })}
-                              onClick={() => onOpenChannelSettings(item.topic, channel.channelId)}
                             >
-                              <Settings className='size-4' aria-hidden='true' />
-                            </button>
+                              <button
+                                className='topic-channel-settings'
+                                type='button'
+                                aria-label={t('channels:actions.openSettings', {
+                                  channel: channel.label,
+                                })}
+                                onClick={() => onOpenChannelSettings(item.topic, channel.channelId)}
+                              >
+                                <Settings className='size-4' aria-hidden='true' />
+                              </button>
+                            </IconButtonTooltip>
                           ) : null}
                           {onLeaveChannel ? (
-                            <button
-                              className='topic-channel-settings'
-                              type='button'
-                              aria-label={t('channels:actions.leaveChannel', {
+                            <IconButtonTooltip
+                              label={t('channels:actions.leaveChannel', {
                                 channel: channel.label,
                               })}
-                              onClick={() => onLeaveChannel(item.topic, channel.channelId)}
                             >
-                              <SquareArrowRightExit className='size-4' aria-hidden='true' />
-                            </button>
+                              <button
+                                className='topic-channel-settings'
+                                type='button'
+                                aria-label={t('channels:actions.leaveChannel', {
+                                  channel: channel.label,
+                                })}
+                                onClick={() => onLeaveChannel(item.topic, channel.channelId)}
+                              >
+                                <SquareArrowRightExit className='size-4' aria-hidden='true' />
+                              </button>
+                            </IconButtonTooltip>
                           ) : null}
                         </li>
                         );

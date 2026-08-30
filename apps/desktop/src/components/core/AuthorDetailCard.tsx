@@ -10,6 +10,7 @@ import { Flag } from 'lucide-react';
 
 import { Card, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/icon-button';
 import {
   ContextActionMenu,
   contextActionMenuPositionFromKeyboard,
@@ -215,15 +216,14 @@ export function AuthorDetailCard({
                   </button>
                 ) : null}
                 {author && onSubmitReport ? (
-                  <Button
+                  <IconButton
                     variant='secondary'
-                    size='icon'
                     type='button'
-                    aria-label={t('report.actionLabel', { ns: 'shell' })}
+                    label={t('report.actionLabel', { ns: 'shell' })}
                     onClick={() => setReportOpen(true)}
                   >
                     <Flag className='size-4' aria-hidden='true' />
-                  </Button>
+                  </IconButton>
                 ) : null}
               </div>
             </div>

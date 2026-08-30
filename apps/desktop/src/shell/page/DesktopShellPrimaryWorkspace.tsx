@@ -11,6 +11,7 @@ import { ProfileEditorPanel } from '@/components/extended/ProfileEditorPanel';
 import { ProfileOverviewPanel } from '@/components/extended/ProfileOverviewPanel';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { IconButton } from '@/components/ui/icon-button';
 import { Notice } from '@/components/ui/notice';
 import { SmartReferenceText } from '@/components/core/SmartReferenceText';
 import type { ProfileConnectionsView } from '@/components/shell/types';
@@ -563,12 +564,11 @@ export function DesktopShellPrimarySurface({
                             {t('common:actions.end')}
                           </Button>
                         ) : null}
-                        <Button
+                        <IconButton
                           variant='secondary'
-                          size='icon'
                           className='post-action-button'
                           type='button'
-                          aria-label={t('common:actions.copyLink')}
+                          label={t('common:actions.copyLink')}
                           onClick={() =>
                             handleCopyInternalLink(
                               buildLiveLink(surfaceTopic, session.session_id, session.channel_id ?? null)
@@ -576,7 +576,7 @@ export function DesktopShellPrimarySurface({
                           }
                         >
                           <Link2 className='size-4' aria-hidden='true' />
-                        </Button>
+                        </IconButton>
                       </div>
                     </article>
                   </li>

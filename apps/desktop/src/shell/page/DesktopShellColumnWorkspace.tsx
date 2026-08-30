@@ -8,15 +8,18 @@ import {
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { RefreshCw, Trash2 } from 'lucide-react';
 
 import { ColumnComposerFooter } from '@/components/shell/ColumnComposerFooter';
 import { ColumnDomainActionFooter } from '@/components/shell/ColumnDomainActionFooter';
 import { ColumnCanvas } from '@/components/shell/ColumnCanvas';
+import { AuthorIdentityButton } from '@/components/core/AuthorIdentityButton';
 import {
   ColumnContextSelect,
   type ColumnContextSelectOption,
 } from '@/components/shell/ColumnContextSelect';
 import { ColumnSurface } from '@/components/shell/ColumnSurface';
+import { IconButton } from '@/components/ui/icon-button';
 import {
   TimelineViewIconTabs,
   type TimelineViewId,
@@ -28,7 +31,12 @@ import {
   resolveCommunityIndexNodePreference,
 } from '@/lib/api/communityIndex';
 import { topicDisplayName } from '@/lib/topicId';
-import { authorDisplayLabel, localizeAudienceLabel } from '@/shell/presentation';
+import {
+  authorDisplayLabel,
+  formatCount,
+  localizeAudienceLabel,
+  resolveProfilePictureSrc,
+} from '@/shell/presentation';
 import type { ColumnDraftTarget } from '@/shell/slices/columnDrafts';
 import {
   activateColumn,
@@ -70,6 +78,10 @@ type DesktopShellColumnWorkspaceProps = {
   renderConversationSurface: (column: ColumnState) => ReactNode;
   renderMessagesSurface: (column: ColumnState) => ReactNode;
   renderNotificationsSurface: (column: ColumnState) => ReactNode;
+  onRefreshNotifications: () => void;
+  onRefreshConversation: (peerPubkey: string) => void;
+  onClearConversation: (peerPubkey: string) => void;
+  onOpenConversationAuthor: (peerPubkey: string, parentColumnId: string) => void;
   onActivateColumn: (column: ColumnState, preserveAuthorPane?: boolean) => void;
   onSelectTimelineTopic: (column: ColumnState, topicId: string) => void;
   onSelectTimelineView: (column: ColumnState, view: TimelineViewId) => void;
@@ -96,6 +108,10 @@ export function DesktopShellColumnWorkspace({
   renderConversationSurface,
   renderMessagesSurface,
   renderNotificationsSurface,
+  onRefreshNotifications,
+  onRefreshConversation,
+  onClearConversation,
+  onOpenConversationAuthor,
   onActivateColumn,
   onSelectTimelineTopic,
   onSelectTimelineView,
@@ -111,7 +127,16 @@ export function DesktopShellColumnWorkspace({
   const trackedTopics = useDesktopShellStore((state) => state.trackedTopics);
   const joinedChannelsByTopic = useDesktopShellStore((state) => state.joinedChannelsByTopic);
   const directMessages = useDesktopShellStore((state) => state.directMessages);
+  const directMessageStatusByPeer = useDesktopShellStore(
+    (state) => state.directMessageStatusByPeer
+  );
+  const directMessageTimelineByPeer = useDesktopShellStore(
+    (state) => state.directMessageTimelineByPeer
+  );
+  const notifications = useDesktopShellStore((state) => state.notifications);
+  const notificationStatus = useDesktopShellStore((state) => state.notificationStatus);
   const knownAuthorsByPubkey = useDesktopShellStore((state) => state.knownAuthorsByPubkey);
+  const mediaObjectUrls = useDesktopShellStore((state) => state.mediaObjectUrls);
   const communityNodeConfig = useDesktopShellStore((state) => state.communityNodeConfig);
   const communityNodeStatuses = useDesktopShellStore((state) => state.communityNodeStatuses);
   const communityNodeManifests = useDesktopShellStore((state) => state.communityNodeManifests);
@@ -188,6 +213,17 @@ export function DesktopShellColumnWorkspace({
   ]);
 
   const renderScopeControl = (column: ColumnState) => {
+    if (column.kind === 'conversation' && column.entityId) {
+      const author = knownAuthorsByPubkey[column.entityId] ?? null;
+      return (
+        <AuthorIdentityButton
+          label={conversationLabel(column.entityId)}
+          picture={resolveProfilePictureSrc(author, mediaObjectUrls)}
+          buttonClassName='shell-column-context-author'
+          onClick={() => onOpenConversationAuthor(column.entityId!, column.id)}
+        />
+      );
+    }
     if (column.kind === 'timeline' && column.scope?.channelId === null) {
       const topics = trackedTopics.includes(column.scope.topicId)
         ? trackedTopics
@@ -272,7 +308,7 @@ export function DesktopShellColumnWorkspace({
       : localizeAudienceLabel('Public');
     return `${channel} · ${topicLabel}`;
   };
-  const conversationLabel = (peerPubkey: string) => {
+  function conversationLabel(peerPubkey: string) {
     const conversation = directMessages.find((item) => item.peer_pubkey === peerPubkey);
     const author = knownAuthorsByPubkey[peerPubkey];
     return authorDisplayLabel(
@@ -350,6 +386,73 @@ export function DesktopShellColumnWorkspace({
       );
     }
     return undefined;
+  }
+  const renderHeaderActions = (column: ColumnState) => {
+    if (column.kind === 'timeline') {
+      return (
+        <TimelineViewIconTabs
+          // 表示・切替の正本は Column 単位の timelineView(Issue #765)。
+          activeView={column.timelineView ?? 'feed'}
+          items={timelineViewItems}
+          onSelect={(view) => onSelectTimelineView(column, view)}
+        />
+      );
+    }
+    if (column.kind === 'notifications') {
+      return (
+        <div className='shell-column-context-actions' data-column-preserve-activation>
+          <span className='shell-column-header-summary'>
+            {t('notifications.summary', {
+              count: notifications.length,
+              unread: notificationStatus.unread_count,
+            })}
+          </span>
+          <IconButton
+            variant='ghost'
+            type='button'
+            label={t('common:actions.refresh')}
+            onClick={onRefreshNotifications}
+          >
+            <RefreshCw className='size-4' aria-hidden='true' />
+          </IconButton>
+        </div>
+      );
+    }
+    if (column.kind === 'conversation' && column.entityId) {
+      const peerPubkey = column.entityId;
+      const conversation = directMessages.find((item) => item.peer_pubkey === peerPubkey);
+      const status = directMessageStatusByPeer[peerPubkey] ?? conversation?.status ?? null;
+      const timeline = directMessageTimelineByPeer[peerPubkey] ?? [];
+      return (
+        <div className='shell-column-context-actions' data-column-preserve-activation>
+          {status ? (
+            <span className='shell-column-header-summary'>
+              {status.send_enabled
+                ? t('messages.peerCount', { count: formatCount(status.peer_count) })
+                : t('messages.sendDisabled')}
+            </span>
+          ) : null}
+          <IconButton
+            variant='ghost'
+            type='button'
+            label={t('common:actions.refresh')}
+            onClick={() => onRefreshConversation(peerPubkey)}
+          >
+            <RefreshCw className='size-4' aria-hidden='true' />
+          </IconButton>
+          <IconButton
+            variant='ghost'
+            type='button'
+            label={t('common:actions.clear')}
+            disabled={timeline.length === 0}
+            onClick={() => onClearConversation(peerPubkey)}
+          >
+            <Trash2 className='size-4' aria-hidden='true' />
+          </IconButton>
+        </div>
+      );
+    }
+    return undefined;
   };
 
   return (
@@ -405,16 +508,7 @@ export function DesktopShellColumnWorkspace({
               resourceManaged={column.kind === 'stream' || column.kind === 'metaverse'}
               footer={renderFooter(column, runtime.active)}
               scopeControl={renderScopeControl(column)}
-              headerActions={
-                column.kind === 'timeline' ? (
-                  <TimelineViewIconTabs
-                    // 表示・切替の正本は Column 単位の timelineView(Issue #765)。
-                    activeView={column.timelineView ?? 'feed'}
-                    items={timelineViewItems}
-                    onSelect={(view) => onSelectTimelineView(column, view)}
-                  />
-                ) : undefined
-              }
+              headerActions={renderHeaderActions(column)}
               onPinnedChange={(pinned) =>
                 setWorkspaceState((current) => setColumnPinned(current, column.id, pinned))
               }

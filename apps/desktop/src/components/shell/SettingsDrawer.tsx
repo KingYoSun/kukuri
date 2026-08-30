@@ -3,8 +3,8 @@ import * as React from 'react';
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { IconButton } from '@/components/ui/icon-button';
 import { cn } from '@/lib/utils';
 
 import { type SettingsSection } from './types';
@@ -58,16 +58,15 @@ export function SettingsDrawer({
           <h2 id={`${drawerId}-title`} className='shell-pane-heading'>
             {t('settingsDrawer.title')}
           </h2>
-          <Button
+          <IconButton
             className='shell-icon-button shell-settings-close'
             variant='ghost'
-            size='icon'
             type='button'
-            aria-label={t('settingsDrawer.close')}
+            label={t('settingsDrawer.close')}
             onClick={() => onOpenChange(false)}
           >
             <X className='size-5' aria-hidden='true' />
-          </Button>
+          </IconButton>
         </div>
 
         <div className='shell-settings-nav'>

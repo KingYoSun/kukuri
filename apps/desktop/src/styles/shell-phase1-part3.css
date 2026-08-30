@@ -174,12 +174,6 @@
   flex-wrap: wrap;
 }
 
-.shell-workspace-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-xs);
-}
-
 .shell-workspace-tabs {
   display: grid;
   gap: var(--space-sm);

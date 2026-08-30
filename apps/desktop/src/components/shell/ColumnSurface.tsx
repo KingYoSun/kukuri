@@ -2,7 +2,7 @@ import { GripVertical, Pin, PinOff, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/icon-button';
 import type { ColumnSpan } from '@/shell/slices/workspace';
 import { useColumnRuntime } from '@/shell/ColumnRuntimeContext';
 import { ColumnMenu } from './ColumnMenu';
@@ -144,16 +144,15 @@ export function ColumnSurface({
       }}
     >
       <header className='shell-column-header'>
-        <Button
+        <IconButton
           variant='ghost'
-          size='icon'
           type='button'
           className='shell-column-drag-grip'
           data-column-drag-grip
-          aria-label={t('columnMenu.drag', { title })}
+          label={t('columnMenu.drag', { title })}
         >
           <GripVertical className='size-4' aria-hidden='true' />
-        </Button>
+        </IconButton>
         <div className='shell-column-heading'>
           <div className='shell-column-title-row'>
             <h2>{title}</h2>
@@ -173,12 +172,11 @@ export function ColumnSurface({
           <div className='shell-column-header-actions'>
             {headerActions}
             {onPinnedChange ? (
-              <Button
+              <IconButton
                 variant='ghost'
-                size='icon'
                 type='button'
                 className='shell-column-pin-button'
-                aria-label={t(pinned ? 'columnMenu.unpin' : 'columnMenu.pin', { title })}
+                label={t(pinned ? 'columnMenu.unpin' : 'columnMenu.pin', { title })}
                 aria-pressed={pinned}
                 onClick={() => onPinnedChange(!pinned)}
               >
@@ -187,19 +185,18 @@ export function ColumnSurface({
                 ) : (
                   <Pin className='size-4' aria-hidden='true' />
                 )}
-              </Button>
+              </IconButton>
             ) : null}
             {onClose ? (
-              <Button
+              <IconButton
                 variant='ghost'
-                size='icon'
                 type='button'
                 className='shell-column-close-button'
-                aria-label={t('columnMenu.closeColumn', { title })}
+                label={t('columnMenu.closeColumn', { title })}
                 onClick={onClose}
               >
                 <X className='size-4' aria-hidden='true' />
-              </Button>
+              </IconButton>
             ) : null}
             <ColumnMenu
               title={title}

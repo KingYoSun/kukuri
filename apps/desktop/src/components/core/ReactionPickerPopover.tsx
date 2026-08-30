@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, type CSSProperties, type ReactElement } f
 import { Search, SmilePlus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
@@ -229,16 +229,15 @@ export function ReactionPickerPopover({
       }}
     >
       <PopoverTrigger asChild>
-        <Button
+        <IconButton
           variant='secondary'
-          size='icon'
           className='post-action-button'
           type='button'
-          aria-label={t('actions.react')}
+          label={t('actions.react')}
           disabled={!onToggleReaction}
         >
           <SmilePlus className='size-4' aria-hidden='true' />
-        </Button>
+        </IconButton>
       </PopoverTrigger>
       <PopoverContent
         align='end'

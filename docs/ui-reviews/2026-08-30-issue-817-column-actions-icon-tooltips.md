@@ -1,0 +1,39 @@
+# 2026-08-30 Issue #817 Column actions and icon tooltips
+
+- Status: current
+- Supersedes: None
+- Superseded by: None
+- PR: https://github.com/KingYoSun/kukuri/pull/836
+- Preview:
+  - [Notifications wide dark](../../apps/desktop/tests/playwright/__screenshots__/visual.spec.ts/notifications-wide-dark.png)
+  - [Messages wide dark](../../apps/desktop/tests/playwright/__screenshots__/visual.spec.ts/messages-wide-dark.png)
+- Surface / user / purpose: desktop / mobile の Column workspace と製品画面全体で、利用者が Notifications / Conversation の主要状態と操作を列ヘッダーで把握し、アイコンだけの操作名を pointer と keyboard のどちらでも確認できるようにする。
+- Summary: Notifications の総数・未読数・更新と、Conversation の相手・接続状態・更新・クリアを列ヘッダーへ集約し、本文先頭の重複要約Cardを削除した。製品実行経路のアイコン専用buttonは、ローカライズ済みlabelをaccessible nameとtooltipへ一貫して渡す共通componentへ移行した。非active列の更新・クリアはactive列とrouteを変更しない。
+- Conditions:
+  - Platform: Windows 11、Tauri development build、WebView2。visual baseline は GitHub Actions の Linux / Chromium。
+  - Viewport: Windows 実機は最大化したdesktop window。Playwrightは1400×980、900×760、390×844、visualは1400×980 / 700×980。
+  - Theme: Windows 実機はdark。visual baselineではdark / lightを確認。
+  - Locale: Windows 実機はja。component / browser testではen / ja / zh-CNの文言資源とlayoutを確認。
+  - State: 固定5列と一時Timeline 2列の計7列。Notificationsは0件 / 未読0件で非active、最後のTimeline列がactive。Conversationの実データ列は未作成。
+- Accessibility / interaction: 共通componentは同じローカライズ済み操作名をtooltipと独立したaccessible nameに使い、既存のrole、selected / pressed / expanded、disabled、ref、focus順を透過する。Computer UseでNotificationsヘッダーの「更新」をpointer操作し、通知列をactiveにせず最後のTimeline列とrouteが維持されることをaccessibility treeで確認した。Tab focusで「タイムライン カラムを移動」tooltipがWebView上に表示され、focus ringと画面内配置を目視し、Escapeでtooltipが消えることを確認した。hover、click後の残留なし、代表的なshell / core / extended操作はPlaywrightとcomponent testで確認した。
+- Performance: 新規dependency、polling、永続状態は追加していない。tooltipは既存Radix primitiveを短いdelayで必要時だけ描画し、Notifications / Conversationは既存API呼び出しを再利用するため専用計測の対象外とした。
+- Validation:
+  - failing-first: Notifications / Conversationのheader集約、body要約削除、非active Conversation操作のroute / active維持を表す回帰テストが実装前に失敗することを確認。
+  - targeted Vitest: 40 tests passed。失敗修正後の関連subsetは56 tests passed。
+  - targeted Playwright: icon tooltipとNotifications / Conversation headerの2 tests passed。
+  - `cargo xtask check` passed。
+  - `cargo xtask test`: Rust 694 passed / 3 skipped、harness 22 passed、frontend 128 files / 950 tests passed。
+  - `cargo xtask desktop-ui-check`: lint、typecheck、frontend 950 tests、Storybook build、browser Playwright 49 tests、visual smoke 14 tests passed。
+  - Linux baseline workflow: https://github.com/KingYoSun/kukuri/actions/runs/33293735214 passed。Notifications / Messagesの2枚だけに意図したheader差分があり、他12枚は同一hashであることを確認。
+  - Windows実機: Tauri / WebView2をComputer Useで自動操作し、localized focus tooltip、Escape dismiss、Notificationsのheader表示と更新、非active維持、tooltipの切れ・残留・操作中のちらつきがないことを確認。
+- Not verified: 物理タッチパネル、ペン入力、スクリーンリーダーの音声読み上げ。Windows実データのConversation列は存在しなかったため、peer状態・更新・クリア・非active維持はVitest / Playwrightで確認した。Computer Use APIにはpointer hover専用操作がないため、Windows実機のtooltip表示はkeyboard focus、hoverはPlaywrightで確認した。
+- Review result:
+  - 一貫性: 全アイコン専用buttonが共通のlabel / tooltip契約を使い、Notifications / Conversationは同じ列ヘッダー構造を使う。
+  - ショートカット: 件数・接続状態の近くから更新・クリアでき、本文の要約Cardを経由しない。
+  - フィードバック: hover / focusのtooltip、focus ring、disabled状態、更新後の件数・接続状態を既存表示で返す。
+  - 完結性: headerへ移した後もloading、error、自動既読error、一覧、会話内容、composerを維持する。
+  - エラー防止: 空会話のクリアはdisabledで、操作scopeは対象Notifications / peerに限定する。
+  - 取り消し: 会話クリアは既存仕様どおり不可逆のため新しいundoは追加せず、既存のdisabled条件と対象peer表示を維持する。
+  - 主導権: 非active列の更新・クリアはactive列、route、focusを奪わない。
+  - 記憶負荷: tooltipとaccessible nameに同一の利用者向け操作名を使い、アイコン名や内部識別子を覚える必要をなくす。
+- Exceptions: None

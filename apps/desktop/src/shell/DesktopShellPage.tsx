@@ -35,6 +35,7 @@ import {
   useDesktopShellStore,
 } from '@/shell/store';
 import {
+  messageFromError,
   privateComposeTarget,
   privateTimelineScope,
 } from '@/shell/presentation';
@@ -165,6 +166,10 @@ export function DesktopShellPage({
   const setTrackedTopics = useDesktopShellFieldSetter('trackedTopics');
   const setNotificationAutoReadError = useDesktopShellFieldSetter('notificationAutoReadError');
   const setNotificationPanelState = useDesktopShellFieldSetter('notificationPanelState');
+  const setDirectMessages = useDesktopShellFieldSetter('directMessages');
+  const setDirectMessageTimelineByPeer = useDesktopShellFieldSetter('directMessageTimelineByPeer');
+  const setDirectMessageStatusByPeer = useDesktopShellFieldSetter('directMessageStatusByPeer');
+  const setDirectMessageError = useDesktopShellFieldSetter('directMessageError');
   const setShellChromeState = useDesktopShellFieldSetter('shellChromeState');
   const updateAvailable = useAppUpdateStore(selectUpdateAvailable);
   const checkForUpdate = useAppUpdateStore((state) => state.checkForUpdate);
@@ -516,7 +521,6 @@ export function DesktopShellPage({
             (options?.preserveDirectMessageContext ? undefined : sourceColumnId),
         })
       }
-      handleClearDirectMessage={shellActions.handleClearDirectMessage}
       handleDeleteDirectMessageMessage={shellActions.handleDeleteDirectMessageMessage}
       handleDirectMessageAttachmentSelection={shellActions.handleDirectMessageAttachmentSelection}
       handleRemoveDirectMessageDraftAttachment={shellActions.handleRemoveDirectMessageDraftAttachment}
@@ -530,14 +534,6 @@ export function DesktopShellPage({
     <DesktopShellNotificationsSurface
       t={t}
       locale={locale}
-      onRefresh={() => {
-        setNotificationAutoReadError(null);
-        setNotificationPanelState({
-          status: 'loading',
-          error: null,
-        });
-        void loadTopics(trackedTopics, activeTopic, null).catch(() => undefined);
-      }}
       handleOpenNotification={(notification) =>
         shellActions.handleOpenNotification(notification, column.id)
       }
@@ -730,6 +726,63 @@ export function DesktopShellPage({
     }
     await loadTopics(trackedTopics, topicId, null);
   };
+  const refreshNotificationsColumn = useCallback(() => {
+    setNotificationAutoReadError(null);
+    setNotificationPanelState({
+      status: 'loading',
+      error: null,
+    });
+    void loadTopics(trackedTopics, activeTopic, null).catch(() => undefined);
+  }, [
+    activeTopic,
+    loadTopics,
+    setNotificationAutoReadError,
+    setNotificationPanelState,
+    trackedTopics,
+  ]);
+  const refreshConversationColumn = useCallback(
+    async (peerPubkey: string) => {
+      try {
+        const [conversation, timeline, status] = await Promise.all([
+          api.openDirectMessage(peerPubkey),
+          api.listDirectMessageMessages(peerPubkey, null, 100),
+          api.getDirectMessageStatus(peerPubkey),
+        ]);
+        setDirectMessages((current) => [
+          conversation,
+          ...current.filter((entry) => entry.peer_pubkey !== conversation.peer_pubkey),
+        ]);
+        setDirectMessageTimelineByPeer(setRecordEntry(peerPubkey, timeline.items));
+        setDirectMessageStatusByPeer(setRecordEntry(peerPubkey, status));
+        setDirectMessageError(null);
+      } catch (refreshError) {
+        setDirectMessageError(
+          messageFromError(refreshError, translate('common:errors.failedToOpenDirectMessage'))
+        );
+      }
+    },
+    [
+      api,
+      setDirectMessageError,
+      setDirectMessages,
+      setDirectMessageStatusByPeer,
+      setDirectMessageTimelineByPeer,
+      translate,
+    ]
+  );
+  const clearConversationColumn = useCallback(
+    async (peerPubkey: string) => {
+      try {
+        await api.clearDirectMessage(peerPubkey);
+        await refreshConversationColumn(peerPubkey);
+      } catch (clearError) {
+        setDirectMessageError(
+          messageFromError(clearError, translate('common:errors.failedToClearDirectMessages'))
+        );
+      }
+    },
+    [api, refreshConversationColumn, setDirectMessageError, translate]
+  );
   const columnTitles: Record<ColumnKind, string> = {
     timeline: t('shell:primarySections.timeline'),
     notifications: t('shell:primarySections.notifications'),
@@ -763,6 +816,17 @@ export function DesktopShellPage({
         void selectColumnTimelineTopic(column, topicId)
       }
       onSelectTimelineView={selectColumnTimelineView}
+      onRefreshNotifications={refreshNotificationsColumn}
+      onRefreshConversation={(peerPubkey) => void refreshConversationColumn(peerPubkey)}
+      onClearConversation={(peerPubkey) => void clearConversationColumn(peerPubkey)}
+      onOpenConversationAuthor={(peerPubkey, parentColumnId) =>
+        void openAuthorDetail(peerPubkey, {
+          historyMode: 'push',
+          parentColumnId,
+          preserveDirectMessageContext: true,
+          directMessagePeerPubkey: peerPubkey,
+        })
+      }
       onActivateColumn={(column, preserveAuthorPane) =>
         void activateWorkspaceColumn(column, preserveAuthorPane)
       }

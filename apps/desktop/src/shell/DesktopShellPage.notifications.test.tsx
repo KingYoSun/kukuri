@@ -128,6 +128,36 @@ test('notifications route renders inbox and marks unread notifications as read o
   expect(screen.getByText('open from route')).toBeInTheDocument();
 });
 
+test('notifications exposes summary and refresh in the column header', async () => {
+  const api = createDesktopMockApi({
+    notifications: [
+      buildNotification({
+        notification_id: 'notification-column-header',
+        preview_text: 'header action notification',
+      }),
+    ],
+  });
+  const user = userEvent.setup();
+  const listNotifications = vi.fn(api.listNotifications);
+  api.listNotifications = listNotifications;
+
+  renderAtHash('#/notifications?topic=kukuri%3Atopic%3Ageneral', api);
+
+  const column = await screen.findByRole('region', { name: /^Notifications Column/ });
+  await screen.findByText('header action notification');
+  const header = column.querySelector('.shell-column-header');
+  if (!(header instanceof HTMLElement)) throw new Error('notifications column header not found');
+
+  expect(within(header).getByText(/1 items/)).toBeInTheDocument();
+  const callsBeforeRefresh = listNotifications.mock.calls.length;
+  await user.click(within(header).getByRole('button', { name: 'Refresh' }));
+
+  await waitFor(() => {
+    expect(listNotifications.mock.calls.length).toBeGreaterThan(callsBeforeRefresh);
+  });
+  expect(column.querySelector('.shell-workspace-header')).not.toBeInTheDocument();
+});
+
 test('notifications route renders an empty state when the inbox has no items', async () => {
   renderAtHash('#/notifications?topic=kukuri%3Atopic%3Ageneral', createDesktopMockApi());
 
