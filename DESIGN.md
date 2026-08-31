@@ -254,7 +254,7 @@ WCAG 2.2 AAを基準とする。自動検査の満点だけを適合の証明に
 | light | `--foreground` | `#21303b` |
 | light | `--foreground-strong` | `#15202a` |
 | light | `--muted-foreground` | `#5f6c76` |
-| light | `--muted-foreground-soft` | `#74818a` |
+| light | `--muted-foreground-soft` | `#626d77` |
 | light | `--surface-panel` | `#ffffff` |
 | light | `--surface-panel-solid` | `#ffffff` |
 | light | `--surface-panel-accent` | `#f5ede2` |
@@ -282,18 +282,18 @@ WCAG 2.2 AAを基準とする。自動検査の満点だけを適合の証明に
 | light | `--surface-contrast` | `#dde5ec` |
 | light | `--border-subtle` | `#cad3db` |
 | light | `--border-subtle-strong` | `#b7c2cb` |
-| light | `--border-accent` | `#78a8a2` |
-| light | `--border-warning` | `#d1a06d` |
-| light | `--border-destructive` | `#d89b86` |
+| light | `--border-accent` | `#4f8b84` |
+| light | `--border-warning` | `#a67839` |
+| light | `--border-destructive` | `#b56a50` |
 | light | `--primary-start` | `#d77d45` |
 | light | `--primary-end` | `#d77d45` |
-| light | `--primary-foreground` | `#fff7ef` |
-| light | `--accent` | `#0f8c82` |
+| light | `--primary-foreground` | `#0e1b26` |
+| light | `--accent` | `#0c756c` |
 | light | `--accent-foreground` | `#143633` |
-| light | `--destructive` | `#b35f46` |
-| light | `--warning` | `#9a6e2a` |
-| light | `--danger` | `#b35f46` |
-| light | `--ring` | `rgba(15, 140, 130, 0.32)` |
+| light | `--destructive` | `#9d4d36` |
+| light | `--warning` | `#845e21` |
+| light | `--danger` | `#9d4d36` |
+| light | `--ring` | `rgba(12, 117, 108, 0.8)` |
 | light | `--shadow-panel` | `0 18px 48px rgba(33, 48, 59, 0.12)` |
 | light | `--shadow-dropdown` | `0 12px 32px rgba(33, 48, 59, 0.1)` |
 | light | `--shadow-button-primary` | `0 10px 24px rgba(215, 125, 69, 0.18)` |

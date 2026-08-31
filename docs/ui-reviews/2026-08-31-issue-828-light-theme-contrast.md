@@ -1,0 +1,21 @@
+# 2026-08-31 Issue #828 light theme contrast
+
+- Status: current
+- Supersedes: None
+- Superseded by: None
+- PR: [#844](https://github.com/KingYoSun/kukuri/pull/844)
+- Preview: [light theme tokens](assets/issue-828/tokens-light.png) / [dark theme tokens（無変更確認）](assets/issue-828/tokens-dark.png) / [light theme buttons](assets/issue-828/button-light.png)
+- Surface / user / purpose: light theme全surfaceのsemantic color / light theme利用者 / 実使用fg・bg pairをWCAG 2.2 AA（通常文字4.5:1、non-text 3:1）へ揃える
+- Summary: `:root[data-theme='light']`の10 tokenを色相維持のまま明度調整した。primary buttonはdark themeと同じ「brand orange面 + 濃色ink `#0e1b26`」へ統一し、destructive／warning／accentのtext・border、placeholder、focus ringをAAへ引き上げた。実使用ペアを列挙した`contrast.test.ts`を回帰ゲートとして新設した。
+- Conditions:
+  - Platform: Linux、Chromium headless、built Storybook
+  - Viewport: 1100 × 1400、device scale factor 1
+  - Theme: light（darkは無変更の確認のみ）
+  - Locale: en（Foundation storyの説明文）
+  - State: `Foundations/Tokens`の`NarrowWidth` story、`UI/Button`の`Default` story、runtime token適用済み
+- Accessibility / interaction: 実使用ペア39件（text 36、`--ring`合成3）をVitestで計算検証し、全件がAAを満たす。token変更前は同テストが23件failすることを確認した（failing-test-first）。disabled button（`opacity: 0.56`）はWCAG 1.4.3のdisabled除外として対象外。
+- Performance: CSS custom propertyの値変更のみで、component・bundle・描画経路は変更していないため計測対象外とした。
+- Validation: `pnpm lint`／`pnpm typecheck`、Vitest `src/styles/` 46件（contrast 39、design-contract、css-vars、unused-selectors、native-select）、`cargo xtask desktop-ui-check`（Playwright browser 52件を含む）、Storybook light／dark実描画。visual baselineはlight 3枚（timeline wide／narrow、settings appearance）を`kukuri-visual-baseline` workflowで再生成し、dark baselineは無変更を確認。
+- Not verified: Tauri／WebView実機は未確認（色値変更のみでDOM・挙動は不変のため、browser Chromium描画で代表確認とした）。`--muted-foreground`と`--muted-foreground-soft`の2段階muted階層は新値で視覚差が縮むが、階層再設計は対象外。
+- Review result: light themeのAA充足をtoken値と回帰テストの両方で採用する。primary buttonのink統一（`#0e1b26`）とbrand面`#d77d45`維持を採用する。
+- Exceptions: None
