@@ -4,8 +4,13 @@
 # baseline commit 後にこのfileは削除する。
 name: tmp-issue-828-baseline-commit
 
+# workflow_dispatchはdefault branch上のworkflowしか受け付けないため、
+# このbranchへのpushで起動する。GITHUB_TOKENによるbaseline commitのpushは
+# workflowを再起動しない(GitHubの再帰防止)。
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - claude/issue-828-plan-x5ull7
 
 permissions:
   contents: write
