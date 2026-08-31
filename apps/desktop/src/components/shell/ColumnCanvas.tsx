@@ -163,6 +163,10 @@ export function ColumnCanvas({
           window.clearTimeout(scrollSettleTimeoutRef.current);
           scrollSettleTimeoutRef.current = null;
         }
+        // route 起因の activate による smooth scroll が停滞しても、settle が途中位置の
+        // Column を user scroll と誤認して activate + route 同期しないよう対象を記録する
+        // (解除は目的地到達の settle か pointer / wheel のユーザー入力)。
+        programmaticScrollTargetRef.current = activeColumnId;
       }
       column.scrollIntoView({
         block: 'nearest',
@@ -294,6 +298,10 @@ export function ColumnCanvas({
       className='shell-column-canvas'
       aria-label={canvasLabel}
       onScroll={settleMobileScroll}
+      onWheelCapture={() => {
+        // wheel 入力はユーザーの scroll 引き継ぎ。programmatic scroll ガードを解除する。
+        programmaticScrollTargetRef.current = null;
+      }}
       onClickCapture={(event) => {
         if (!swipeConsumedRef.current) return;
         event.preventDefault();
