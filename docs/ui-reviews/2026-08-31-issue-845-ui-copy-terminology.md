@@ -4,12 +4,12 @@
 - Supersedes: None
 - Superseded by: None
 - Issue: https://github.com/KingYoSun/kukuri/issues/845
-- PR: pending
+- PR: https://github.com/KingYoSun/kukuri/pull/848
 - Preview: [notifications](../../apps/desktop/tests/playwright/__screenshots__/visual.spec.ts/notifications-wide-dark.png), [messages](../../apps/desktop/tests/playwright/__screenshots__/visual.spec.ts/messages-wide-dark.png), [user detail](../../apps/desktop/tests/playwright/__screenshots__/visual.spec.ts/author-pane-wide-dark.png)
 - Surface / user / purpose: 英語、日本語、簡体字中国語を選択したSNS利用者が、人物、アカウント、投稿、フォロー関係、投稿操作を実装用語に読み替えず理解できるようにする。
 - Summary: 人物を指す表示を`User / ユーザー / 用户`へ統一し、抽象的なidentity表現をアカウント、プロフィール、フォロー関係、自分の投稿、アカウントを識別する鍵のうち実際の対象へ置き換えた。投稿、引用、フォロー関係、プライベートチャンネルの共有範囲、通知、DM、見つける、通報、設定、Game、Metaverseの操作名と説明を利用者視点へ揃えた。5件の直書きaccessible nameを翻訳資源へ移し、複数形・省略記号・禁止語を有限なlocale契約で検査する。README、利用者向けrunbook、法務正本とアプリ内3言語ミラーも同じ語彙へ同期し、legal bundle version 2と機能挙動は変更していない。
 - Conditions:
-  - Platform: Windows 11 / Chromium Playwright。visual baselineはGitHub Actions上のLinux / Chromiumで更新する。
+  - Platform: Windows 11 / Chromium Playwright。visual baselineはGitHub Actions上のLinux / Chromiumで更新した。
   - Viewport: 900×760、390×844、450×380 CSS pixel（900×760の200%相当）。
   - Theme: dark / light。
   - Locale: en / ja / zh-CN。
@@ -27,7 +27,7 @@
   - `cargo xtask test`: Rust 700 passed / 3 skipped、harness 22 passed、frontend 133 files / 1012 tests passed。
   - `cargo xtask desktop-ui-check`: lint、typecheck、frontend 1012 tests、Storybook build、browser Playwright 58 tests、visual smoke 14 tests passed。
   - `git diff --check` passed。
-- Not verified: 物理タッチパネル、ペン入力、スクリーンリーダーによる音声読み上げ、実データを使用したTauri配布build。Linux / Chromiumの更新後baselineはPR作成後に標準workflowで生成して確認する。
+- Not verified: 物理タッチパネル、ペン入力、スクリーンリーダーによる音声読み上げ、実データを使用したTauri配布build。
 - Review result:
   - 一貫性: 3言語で人物、投稿、フォロー関係、共有範囲、法務上の保存対象を同じ概念へ対応付けた。
   - フィードバック: 投稿、コメント付きリポスト、通知、DM、検索・発見、プロフィール編集の操作結果を利用者の言葉で示す。
