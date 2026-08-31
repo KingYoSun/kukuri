@@ -7,6 +7,7 @@ import {
   PRIMARY_SECTION_PATHS,
   isProfileConnectionsView,
   isSettingsSection,
+  parseHashRouteLocation,
   parseLegacyRequestedChannel,
   parseShellRouteState,
   parsePrimarySectionPath,
@@ -173,8 +174,25 @@ export function useRouteSynchronization({
 
     const currentUrl = `${resolvedRouteLocation.pathname}${resolvedRouteLocation.search}`;
     const routeChanged = lastObservedRouteUrlRef.current !== currentUrl;
+    // 自分の navigate(pending)が router に commit される前に goBack 等の外部遷移へ
+    // 追い越されると、location 文字列は last observed と同一のまま routeChanged が
+    // 二度と立たず route 消費が止まる(React Router v7 は遷移レンダーを transition で
+    // 行うため、push のレンダーは後続遷移に破棄されうる)。hash は navigate / popstate と
+    // 同期して即時更新されるため、実 hash を pending と突き合わせて生死を判定する。
+    let pendingRouteSuperseded = false;
     if (pendingRouteUrlRef.current && pendingRouteUrlRef.current !== currentUrl) {
-      if (!routeChanged) {
+      const liveLocation =
+        typeof window === 'undefined' ? null : parseHashRouteLocation(window.location.hash);
+      const liveUrl = liveLocation ? `${liveLocation.pathname}${liveLocation.search}` : null;
+      if (liveUrl !== null && liveUrl !== pendingRouteUrlRef.current) {
+        // pending の push は追い越し済み。settle 先が現在の location なら投影をやり直し、
+        // 第三の URL なら破棄だけしてそのレンダーの到着に委ねる。
+        pendingRouteSuperseded = liveUrl === currentUrl;
+        if (!pendingRouteSuperseded && !routeChanged) {
+          pendingRouteUrlRef.current = null;
+          return;
+        }
+      } else if (!routeChanged) {
         return;
       }
       pendingRouteUrlRef.current = null;
@@ -863,6 +881,9 @@ export function useRouteSynchronization({
     if (
       !routeProjectionInitializedRef.current ||
       routeChanged ||
+      // 追い越された push の間に store は先行遷移している(thread Column が active 等)ため、
+      // location 文字列が不変でも現在 URL の投影をやり直して store を URL に揃える。
+      pendingRouteSuperseded ||
       resolvingCurrentGameColumn
     ) {
       routeProjectionInitializedRef.current = true;
@@ -927,8 +948,9 @@ export function useRouteSynchronization({
     openDirectMessagePane,
     openThread,
     pendingRouteUrlRef,
-    resolvedRouteLocation.pathname,
-    resolvedRouteLocation.search,
+    // オブジェクト依存が意図: 同一 URL 文字列でも history 遷移ごとに再評価し、
+    // 追い越された pending push の検出(上記)を働かせる。
+    resolvedRouteLocation,
     routeSection,
     scheduleAnimationFrame,
     selectedAuthor,
