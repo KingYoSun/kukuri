@@ -432,8 +432,7 @@ describe('ColumnCanvas', () => {
     ).toBe(0);
   });
 
-  it('syncs the nearest mobile snap page after settle and offers direct indicator jumps', async () => {
-    vi.useFakeTimers();
+  function stubMobileMatchMedia() {
     vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
       matches: query === '(max-width: 759px)',
       media: query,
@@ -444,6 +443,24 @@ describe('ColumnCanvas', () => {
       removeEventListener: vi.fn(),
       dispatchEvent: vi.fn(),
     })));
+  }
+
+  function stubMobilePageGeometry(container: HTMLElement, scrollLeft: number) {
+    const canvas = container.querySelector('.shell-column-canvas') as HTMLElement;
+    Object.defineProperty(canvas, 'clientWidth', { value: 390 });
+    Object.defineProperty(canvas, 'scrollLeft', { value: scrollLeft, writable: true });
+    Array.from(container.querySelectorAll<HTMLElement>('[data-column-id]')).forEach(
+      (column, index) => {
+        Object.defineProperty(column, 'offsetLeft', { value: index * 390 });
+        Object.defineProperty(column, 'offsetWidth', { value: 390 });
+      }
+    );
+    return canvas;
+  }
+
+  it('syncs the nearest mobile snap page after settle and offers direct indicator jumps', async () => {
+    vi.useFakeTimers();
+    stubMobileMatchMedia();
     const onActivateColumn = vi.fn();
     const { container } = render(
       <ColumnCanvas
@@ -468,16 +485,11 @@ describe('ColumnCanvas', () => {
         ))}
       </ColumnCanvas>
     );
-    const canvas = container.querySelector('.shell-column-canvas') as HTMLElement;
-    Object.defineProperty(canvas, 'clientWidth', { value: 390 });
-    Object.defineProperty(canvas, 'scrollLeft', { value: 390, writable: true });
-    Array.from(container.querySelectorAll<HTMLElement>('[data-column-id]')).forEach(
-      (column, index) => {
-        Object.defineProperty(column, 'offsetLeft', { value: index * 390 });
-        Object.defineProperty(column, 'offsetWidth', { value: 390 });
-      }
-    );
+    const canvas = stubMobilePageGeometry(container, 390);
 
+    // 実機の user scroll は wheel / touch 入力から始まる。mount 直後の programmatic
+    // scroll ガードを user 入力で解除してから settle を検証する。
+    fireEvent.wheel(canvas);
     fireEvent.scroll(canvas);
     await act(async () => vi.advanceTimersByTime(120));
     expect(onActivateColumn).toHaveBeenCalledWith('thread', true);
@@ -496,6 +508,121 @@ describe('ColumnCanvas', () => {
     fireEvent.scroll(canvas);
     await act(async () => vi.advanceTimersByTime(120));
     expect(onActivateColumn).toHaveBeenCalledTimes(2);
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it('ignores a mobile settle that fires while a route-driven activation is still scrolling', async () => {
+    // hash-routing narrow flake の再現: goBack の route 投影が Timeline を activate し
+    // smooth scroll が始まった直後、CI 負荷で scroll が 120ms 以上停滞すると settle が
+    // 移動元 Column を user scroll と誤認して再 activate + route 同期していた。
+    vi.useFakeTimers();
+    stubMobileMatchMedia();
+    const onActivateColumn = vi.fn();
+    const surfaces = (activeColumnId: string) =>
+      ['timeline', 'thread', 'profile'].map((id, index) => (
+        <ColumnSurface
+          key={id}
+          columnId={id}
+          title={id}
+          scopeLabel='Public'
+          position={index + 1}
+          total={3}
+          span={1}
+          active={id === activeColumnId}
+          pinned
+        >
+          {id}
+        </ColumnSurface>
+      ));
+    const { container, rerender } = render(
+      <ColumnCanvas
+        activeColumnId='thread'
+        columnIds={['timeline', 'thread', 'profile']}
+        onActivateColumn={onActivateColumn}
+      >
+        {surfaces('thread')}
+      </ColumnCanvas>
+    );
+    const canvas = stubMobilePageGeometry(container, 390);
+
+    // goBack 相当: route 投影が timeline を activate し programmatic scroll が始まる。
+    rerender(
+      <ColumnCanvas
+        activeColumnId='timeline'
+        columnIds={['timeline', 'thread', 'profile']}
+        onActivateColumn={onActivateColumn}
+      >
+        {surfaces('timeline')}
+      </ColumnCanvas>
+    );
+
+    // scroll 位置がまだ thread ページのまま settle が発火しても activate しない。
+    fireEvent.scroll(canvas);
+    await act(async () => vi.advanceTimersByTime(120));
+    expect(onActivateColumn).not.toHaveBeenCalled();
+
+    // 目的地到達の settle でガードが解除される(activate は不要)。
+    canvas.scrollLeft = 0;
+    fireEvent.scroll(canvas);
+    await act(async () => vi.advanceTimersByTime(120));
+    expect(onActivateColumn).not.toHaveBeenCalled();
+
+    // 解除後の user scroll paging は従来どおり動く。
+    canvas.scrollLeft = 780;
+    fireEvent.scroll(canvas);
+    await act(async () => vi.advanceTimersByTime(120));
+    expect(onActivateColumn).toHaveBeenCalledWith('profile', true);
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it('lets wheel input take paging over from a route-driven programmatic scroll', async () => {
+    vi.useFakeTimers();
+    stubMobileMatchMedia();
+    const onActivateColumn = vi.fn();
+    const surfaces = (activeColumnId: string) =>
+      ['timeline', 'thread', 'profile'].map((id, index) => (
+        <ColumnSurface
+          key={id}
+          columnId={id}
+          title={id}
+          scopeLabel='Public'
+          position={index + 1}
+          total={3}
+          span={1}
+          active={id === activeColumnId}
+          pinned
+        >
+          {id}
+        </ColumnSurface>
+      ));
+    const { container, rerender } = render(
+      <ColumnCanvas
+        activeColumnId='thread'
+        columnIds={['timeline', 'thread', 'profile']}
+        onActivateColumn={onActivateColumn}
+      >
+        {surfaces('thread')}
+      </ColumnCanvas>
+    );
+    const canvas = stubMobilePageGeometry(container, 390);
+    rerender(
+      <ColumnCanvas
+        activeColumnId='timeline'
+        columnIds={['timeline', 'thread', 'profile']}
+        onActivateColumn={onActivateColumn}
+      >
+        {surfaces('timeline')}
+      </ColumnCanvas>
+    );
+
+    // wheel 入力はユーザーの引き継ぎ。programmatic scroll ガードを解除し settle を有効化する。
+    fireEvent.wheel(canvas);
+    canvas.scrollLeft = 780;
+    fireEvent.scroll(canvas);
+    await act(async () => vi.advanceTimersByTime(120));
+    expect(onActivateColumn).toHaveBeenCalledWith('profile', true);
     vi.unstubAllGlobals();
     vi.useRealTimers();
   });
