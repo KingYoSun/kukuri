@@ -35,7 +35,7 @@ test('icon-only controls expose the same localized action on hover and focus', a
   await page.goto('/#/notifications?topic=kukuri%3Atopic%3Ageneral');
   const notifications = activeColumn(page, 'Notifications');
   const header = notifications.locator('.shell-column-header');
-  await expect(header).toContainText(/items.*unread/);
+  await expect(header).toContainText(/notification.*unread/);
   await expect(header.getByRole('button', { name: 'Refresh' })).toBeVisible();
   await expect(notifications.locator('.shell-column-body .shell-workspace-header')).toHaveCount(0);
 });

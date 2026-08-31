@@ -587,6 +587,6 @@ test('video card falls back to poster preview when playback is unsupported on th
     expect(screen.queryByTestId('media-video-video-post')).not.toBeInTheDocument();
   });
   expect(screen.getByTestId('media-preview-video-post')).toBeInTheDocument();
-  expect(screen.getByAltText('video poster')).toBeInTheDocument();
+  expect(screen.getByAltText('video preview')).toBeInTheDocument();
 });
 

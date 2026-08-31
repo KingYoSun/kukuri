@@ -206,7 +206,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
     );
 
     expect(client.readCommunityNodeTrustUser).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Load relationship and trust|取得/ }));
 
     expect((await screen.findAllByText('0.500')).length).toBeGreaterThan(0);
     expect(screen.getByText(/node-a/)).toBeInTheDocument();
@@ -227,7 +227,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
       />
     );
 
-    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Load relationship and trust|取得/ }));
 
     expect(await screen.findByText(/reason is intentionally not disclosed|理由は推測・開示しません/)).toBeInTheDocument();
     expect(screen.queryByText(/hidden by target opt-out/)).not.toBeInTheDocument();
@@ -243,7 +243,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
       />
     );
 
-    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Load relationship and trust|取得/ }));
     await userEvent.click(await screen.findByText(/node-a/));
     await userEvent.click(
       screen.getByRole('button', { name: 'Appeal this risk assessment' })
@@ -278,7 +278,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
       />
     );
 
-    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Load relationship and trust|取得/ }));
     await userEvent.click(await screen.findByText(/node-a/));
     await userEvent.click(
       screen.getByRole('button', { name: 'Appeal this risk assessment' })
@@ -304,10 +304,10 @@ describe('CommunityNodeAdvisoryPanel', () => {
       />
     );
 
-    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Load relationship and trust|取得/ }));
     await userEvent.click(await screen.findByText(/node-a/));
 
-    expect(screen.getByText('Cleared')).toBeInTheDocument();
+    expect(screen.getByText('Appeal accepted')).toBeInTheDocument();
     expect(screen.getByText(/no longer contributes to the trust result/)).toBeInTheDocument();
     expect(screen.getByText(/Post · post-cleared/)).toBeInTheDocument();
     expect(
@@ -325,7 +325,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
       />
     );
 
-    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Load relationship and trust|取得/ }));
     await userEvent.click(await screen.findByText(/node-a/));
     await userEvent.click(
       screen.getByRole('button', { name: 'Appeal this risk assessment' })
@@ -354,7 +354,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
       />
     );
 
-    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Load relationship and trust|取得/ }));
     await userEvent.click(await screen.findByText(/node-a/));
     await userEvent.click(
       screen.getByRole('button', { name: 'Appeal this risk assessment' })
@@ -384,7 +384,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
       />
     );
 
-    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Load relationship and trust|取得/ }));
     rerender(
       <CommunityNodeAdvisoryPanel
         api={client}
@@ -430,7 +430,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
       />
     );
 
-    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Load relationship and trust|取得/ }));
     rerender(
       <CommunityNodeAdvisoryPanel
         api={client}
@@ -438,7 +438,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
         nodeBaseUrls={[nodeA]}
       />
     );
-    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Load relationship and trust|取得/ }));
 
     trustB.resolve(trustResponse(otherTargetPubkey, 'current-node-b'));
     relationB.resolve(relationResponse(otherTargetPubkey, 0.73));
@@ -460,7 +460,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
     const client = { ...api(), fetchCommunityNodeManifest: vi.fn(() => pending.promise) };
     render(<CommunityNodeAdvisoryPanel api={client} targetPubkey={targetPubkey} nodeBaseUrls={[nodeA]} />);
 
-    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Load relationship and trust|取得/ }));
     await userEvent.click(await screen.findByText(/node-a/));
     expect(client.fetchCommunityNodeManifest).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: 'Appeal this risk assessment' }));
@@ -485,7 +485,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
     };
     render(<CommunityNodeAdvisoryPanel api={client} targetPubkey={targetPubkey} nodeBaseUrls={[nodeA]} />);
 
-    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Load relationship and trust|取得/ }));
     await userEvent.click(await screen.findByText(/node-a/));
     await userEvent.click(screen.getByRole('button', { name: 'Appeal this risk assessment' }));
 
@@ -506,7 +506,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
     };
     render(<CommunityNodeAdvisoryPanel api={client} targetPubkey={targetPubkey} nodeBaseUrls={[nodeA]} />);
 
-    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Load relationship and trust|取得/ }));
     await userEvent.click(await screen.findByText(/node-a/));
     await userEvent.click(screen.getByRole('button', { name: 'Appeal this risk assessment' }));
 
@@ -530,7 +530,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
     };
     render(<CommunityNodeAdvisoryPanel api={client} targetPubkey={targetPubkey} nodeBaseUrls={[nodeA]} />);
 
-    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Load relationship and trust|取得/ }));
     await userEvent.click(await screen.findByText(/node-a/));
     await userEvent.click(screen.getByRole('button', { name: 'Appeal this risk assessment' }));
     await waitFor(() => expect(client.fetchCommunityNodeManifest).toHaveBeenCalledTimes(1));
@@ -550,7 +550,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
     const client = api('blob_cid', 'blob-hash-1');
     render(<CommunityNodeAdvisoryPanel api={client} targetPubkey={targetPubkey} nodeBaseUrls={[nodeA]} />);
 
-    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Load relationship and trust|取得/ }));
     await userEvent.click(await screen.findByText(/node-a/));
     await userEvent.click(screen.getByRole('button', { name: 'Appeal this risk assessment' }));
     expect(await screen.findByText('Attachment risk assessment')).toBeInTheDocument();
@@ -574,7 +574,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
     const client = api('peer_node', 'peer-node-1');
     render(<CommunityNodeAdvisoryPanel api={client} targetPubkey={targetPubkey} nodeBaseUrls={[nodeA]} />);
 
-    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Load relationship and trust|取得/ }));
     await userEvent.click(await screen.findByText(/node-a/));
     expect(
       screen.queryByRole('button', { name: 'Appeal this risk assessment' })
@@ -596,7 +596,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
         onOpenCommunityNodeSettings={onOpenCommunityNodeSettings}
       />
     );
-    expect(screen.queryByRole('button', { name: /Load advisory|情報を読み込む/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Load relationship and trust|取得/ })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Open node settings|ノード設定を開く/ }));
     expect(onOpenCommunityNodeSettings).toHaveBeenCalledTimes(1);
     expect(client.readCommunityNodeTrustUser).not.toHaveBeenCalled();
@@ -608,7 +608,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
     const { rerender } = render(
       <CommunityNodeAdvisoryPanel api={client} targetPubkey={targetPubkey} nodeBaseUrls={[nodeA, nodeB]} />
     );
-    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Load relationship and trust|取得/ }));
     await userEvent.click(await screen.findByText(/node-a/));
     await userEvent.click(screen.getByRole('button', { name: 'Appeal this risk assessment' }));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -631,7 +631,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
       new InvokeError('AUTH_REQUIRED', 'community node authentication is required', 401)
     );
     render(<CommunityNodeAdvisoryPanel api={client} targetPubkey={targetPubkey} nodeBaseUrls={[nodeA]} />);
-    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Load relationship and trust|取得/ }));
     expect(await screen.findByText(/必須同意が必要です|Accept the required policies/)).toBeInTheDocument();
     expect(await screen.findByText(/認証が必要です|Authenticate with the selected/)).toBeInTheDocument();
     expect(screen.queryByText(/required policies must be accepted/)).not.toBeInTheDocument();
@@ -646,7 +646,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
       new InvokeError('TRUST_RELATION_RESPONSE_MISMATCH', 'response for another target')
     );
     render(<CommunityNodeAdvisoryPanel api={client} targetPubkey={targetPubkey} nodeBaseUrls={[nodeA]} />);
-    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Load relationship and trust|取得/ }));
 
     expect((await screen.findAllByText(/別の利用者を対象にしていた|answered for a different user/)).length).toBeGreaterThan(0);
     expect(screen.queryByText(/node-a/)).not.toBeInTheDocument();
@@ -657,7 +657,7 @@ describe('CommunityNodeAdvisoryPanel', () => {
   test('does not offer an appeal for a user judgment that targets another user', async () => {
     const client = api('user_pubkey', otherTargetPubkey);
     render(<CommunityNodeAdvisoryPanel api={client} targetPubkey={targetPubkey} nodeBaseUrls={[nodeA]} />);
-    await userEvent.click(screen.getByRole('button', { name: /Load advisory|情報を読み込む/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Load relationship and trust|取得/ }));
     await userEvent.click(await screen.findByText(/node-a/));
 
     expect(screen.queryByRole('button', { name: 'Appeal this risk assessment' })).not.toBeInTheDocument();

@@ -60,7 +60,7 @@
         "error": "マニフェストを取得できませんでした"
       },
       "boundary": {
-        "identityNotOwned": "あなたの身元情報・プロフィール・ソーシャルグラフはこのノードに所有されません。ノードは P2P ネットワークの補助機能を提供するだけです。",
+        "identityNotOwned": "あなたのアカウント・プロフィール・フォロー関係・投稿はこのノードに所有されません。ノードはP2Pネットワークの補助機能を提供するだけです。",
         "defaultNotAuthority": "デフォルトノードであっても、ネットワーク全体の運営者・権限者ではありません。"
       }
     },
@@ -162,7 +162,7 @@
     "title": "コミュニティノード",
     "unsavedNodeSummary": "未保存のノード変更があります。トラブルシューティング操作の前に保存してください。",
     "values": {
-      "acceptPolicies": "接続 URL を解決するには必須 policy に同意してください",
+      "acceptPolicies": "接続先URLを確認するには必須ポリシーに同意してください",
       "activeOnCurrentSession": "現在のセッションで有効",
       "connectivityUrlsActiveOnCurrentSession": "接続 URL は現在のセッションで有効です",
       "authenticateThisNode": "このノードを認証してください",
@@ -247,16 +247,16 @@
     },
     "loading": "ディスカバリー診断を読み込み中…",
     "messages": {
-      "saved": "ディスカバリーシードの更新は実行時の契約を変更しません。",
-      "unsaved": "ディスカバリーシードの未保存変更があります。",
-      "viewLocked": "環境変数が discovery seeds を上書きしているため編集できません。"
+      "saved": "接続先候補を更新しても、アプリの動作方法は変わりません。",
+      "unsaved": "接続先候補に未保存の変更があります。",
+      "viewLocked": "環境設定で接続先候補が指定されているため、ここでは編集できません。"
     },
     "metrics": {
       "connect": "接続方式",
       "envLock": "環境固定",
       "mode": "モード"
     },
-    "seedPeersHint": "endpoint id を 1 行に 1 つ入力します。addr hint は任意です。",
+    "seedPeersHint": "接続先IDを1行に1つ入力します。接続先アドレスの補足は任意です。",
     "seedPeersLabel": "シードピア",
     "seedPeersPlaceholder": "node_id or node_id@host:port",
     "title": "ディスカバリー"
@@ -268,9 +268,9 @@
     "uploadLabel": "画像をアップロード",
     "sourceSize": "元画像 {{width}} x {{height}}",
     "cropSize": "切り抜きサイズ",
-    "searchKeyLabel": "検索 key",
+    "searchKeyLabel": "検索キーワード",
     "searchKeyPlaceholder": "party",
-    "searchKeyRequired": "検索 key は必須です。",
+    "searchKeyRequired": "検索キーワードは必須です。",
     "preview": "プレビュー",
     "previewHint": "保存時に 128x128 に正規化されます。",
     "noOwnedAssets": "まだカスタムリアクションがありません。",

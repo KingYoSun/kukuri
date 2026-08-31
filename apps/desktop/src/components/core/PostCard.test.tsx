@@ -159,7 +159,7 @@ test('withdrawn post shows an author placeholder and disables content interactio
     />
   );
 
-  expect(screen.getByText('This post was withdrawn by its author.')).toBeInTheDocument();
+  expect(screen.getByText('This post was withdrawn by the user who posted it.')).toBeInTheDocument();
   expect(screen.queryByText('hello')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Reply' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Withdraw post' })).not.toBeInTheDocument();
@@ -216,7 +216,7 @@ test('post card renders repost source context for quote reposts', () => {
     />
   );
 
-  expect(screen.getByText('Quote repost')).toBeInTheDocument();
+  expect(screen.getByText('Repost with comment')).toBeInTheDocument();
   expect(screen.getByText('Source Author')).toBeInTheDocument();
   expect(screen.getByText('original body')).toBeInTheDocument();
 });
@@ -407,7 +407,7 @@ test('post card context menu exposes only identifiers supplied by a read-only re
   const target = screen.getByTestId('post-identifier-target');
   fireEvent.contextMenu(target, { clientX: 24, clientY: 36 });
   expect(screen.getByRole('menuitem', { name: 'Copy post ID' })).toBeInTheDocument();
-  expect(screen.getByRole('menuitem', { name: 'Copy author ID' })).toBeInTheDocument();
+  expect(screen.getByRole('menuitem', { name: 'Copy user ID' })).toBeInTheDocument();
   expect(screen.queryByRole('menuitem', { name: 'Copy envelope ID' })).not.toBeInTheDocument();
 
   await user.click(screen.getByRole('menuitem', { name: 'Copy post ID' }));

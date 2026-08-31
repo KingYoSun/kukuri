@@ -43,11 +43,11 @@ async function publishFromTimelineColumn(
   scopeLabel: string,
   content: string
 ) {
-  await column.getByRole('button', { name: `Publish to ${scopeLabel}` }).click();
+  await column.getByRole('button', { name: `Post to ${scopeLabel}` }).click();
   await column.getByPlaceholder('Write a post').fill(content);
   await column
     .locator('.shell-column-composer')
-    .getByRole('button', { name: 'Publish', exact: true })
+    .getByRole('button', { name: 'Post', exact: true })
     .click();
   await expect(column.getByText(content)).toBeVisible();
 }
@@ -107,7 +107,7 @@ test('Timeline composer keeps line breaks and submits exactly once with Ctrl+Ent
   await page.goto('/');
 
   const timeline = activeColumn(page, 'Timeline');
-  await timeline.getByRole('button', { name: `Publish to ${GENERAL_PUBLIC_SCOPE}` }).click();
+  await timeline.getByRole('button', { name: `Post to ${GENERAL_PUBLIC_SCOPE}` }).click();
   const textarea = timeline.getByPlaceholder('Write a post');
   await textarea.fill('shortcut line one');
   await textarea.press('Enter');
@@ -140,7 +140,7 @@ test('mention context actions preserve selection and Ctrl+Enter priority in the 
   await timelineSurface.locator('.shell-column-header h2').dispatchEvent('pointerdown');
   const timeline = activeColumn(page, 'Timeline');
   await expect(timeline).toBeVisible();
-  await timeline.getByRole('button', { name: `Publish to ${GENERAL_PUBLIC_SCOPE}` }).click();
+  await timeline.getByRole('button', { name: `Post to ${GENERAL_PUBLIC_SCOPE}` }).click();
   const textarea = timeline.getByPlaceholder('Write a post');
   await textarea.pressSequentially('shortcut mention @bro', { delay: 25 });
   await expect(timeline.getByRole('listbox', { name: 'Mention suggestions' })).toBeVisible();
@@ -148,7 +148,7 @@ test('mention context actions preserve selection and Ctrl+Enter priority in the 
   const browserPeerAuthorId = 'b'.repeat(64);
 
   await candidate.click({ button: 'right' });
-  await page.getByRole('menuitem', { name: 'Copy author ID' }).click();
+  await page.getByRole('menuitem', { name: 'Copy user ID' }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(
     browserPeerAuthorId
   );
@@ -157,7 +157,7 @@ test('mention context actions preserve selection and Ctrl+Enter priority in the 
 
   await candidate.focus();
   await page.keyboard.press('Shift+F10');
-  await page.getByRole('menuitem', { name: 'Copy author ID' }).click();
+  await page.getByRole('menuitem', { name: 'Copy user ID' }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(
     browserPeerAuthorId
   );

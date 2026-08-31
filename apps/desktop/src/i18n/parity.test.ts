@@ -60,6 +60,18 @@ function placeholders(text: string): string[] {
   return [...text.matchAll(/\{\{(\w+)\}\}/g)].map((match) => match[1]).sort();
 }
 
+function naturalLanguage(text: string): string {
+  return text.replace(/\{\{[^}]+\}\}/gu, '');
+}
+
+function qualifiedLeaves(locale: keyof typeof resources): Array<[string, string]> {
+  return NAMESPACES.flatMap((namespace) =>
+    flattenLeaves(resources[locale][namespace as keyof (typeof resources)['en']] as Json, '').map(
+      ([key, value]) => [`${namespace}:${key}`, value] as [string, string]
+    )
+  );
+}
+
 test('every locale exposes the same namespaces as en', () => {
   for (const locale of OTHER_LOCALES) {
     expect(Object.keys(resources[locale]).sort()).toEqual(NAMESPACES);
@@ -131,6 +143,124 @@ test('Japanese product UI does not contain known untranslated product terms', ()
   );
 
   expect(violations).toEqual([]);
+});
+
+test.each([
+  ['en', /\bauthors?\b/iu],
+  ['ja', /著者/u],
+  ['zh-CN', /作者/u],
+] as const)('locale %s calls people users instead of authors', (locale, forbidden) => {
+  const violations = qualifiedLeaves(locale)
+    .filter(([, value]) => forbidden.test(naturalLanguage(value)))
+    .map(([key, value]) => `${key}=${value}`);
+
+  expect(violations).toEqual([]);
+});
+
+test.each([
+  ['en', /\bidentity\b/iu],
+  ['ja', /(?:\bidentity\b|アイデンティティ|身元情報)/iu],
+  ['zh-CN', /\bidentity\b/iu],
+] as const)('locale %s explains accounts without abstract identity copy', (locale, forbidden) => {
+  const violations = qualifiedLeaves(locale)
+    .filter(([, value]) => forbidden.test(naturalLanguage(value)))
+    .map(([key, value]) => `${key}=${value}`);
+
+  expect(violations).toEqual([]);
+});
+
+test('Japanese user-facing explanations do not expose implementation words', () => {
+  const forbidden = [
+    /\bnode\b/iu,
+    /\bcontent\b/iu,
+    /\broute(?:d)?\b/iu,
+    /\bfollow-?up\b/iu,
+    /\bemail\b/iu,
+    /\bhandle\b/iu,
+    /\bfollower\b/iu,
+    /\bpolicy\b/iu,
+    /\bdiscovery seeds?\b/iu,
+    /\bendpoint id\b/iu,
+    /\baddr hints?\b/iu,
+    /\bsearch key\b/iu,
+    /\bHosting\b/u,
+    /\bspawn\b/iu,
+    /\bheartbeat\b/iu,
+    /\bowner\b/iu,
+    /\bbudget\b/iu,
+    /\bConnection(?:s)?\b/u,
+    /\bcomponent(?:s)?\b/iu,
+    /\brevision\b/iu,
+    /\bresource\b/iu,
+    /\bscene\b/iu,
+    /\bGrace period\b/iu,
+    /\bPersistent prop\b/iu,
+    /\binteraction\b/iu,
+    /\bFog\b/u,
+    /\bmilli\b/iu,
+    /\bmicro\b/iu,
+    /\bmanifest\b/iu,
+    /\bsnapshot\b/iu,
+    /\bhost\b/iu,
+    /\brigid body\b/iu,
+    /\bguest prop\b/iu,
+    /\bslot\b/iu,
+    /\bblob\b/iu,
+    /\bepoch\b/iu,
+    /\bHUD\b/u,
+    /\bGossip\b/iu,
+    /\bDB open\b/iu,
+    /\bkey\b/iu,
+  ];
+  const violations = qualifiedLeaves('ja')
+    .filter(([key, value]) => {
+      if (INTENTIONALLY_SHARED_ENGLISH.has(key)) return false;
+      return forbidden.some((pattern) => pattern.test(naturalLanguage(value)));
+    })
+    .map(([key, value]) => `${key}=${value}`);
+
+  expect(violations).toEqual([]);
+});
+
+test.each(SUPPORTED_LOCALES)('locale %s uses the typographic ellipsis', (locale) => {
+  const violations = qualifiedLeaves(locale)
+    .filter(([, value]) => value.includes('...'))
+    .map(([key, value]) => `${key}=${value}`);
+
+  expect(violations).toEqual([]);
+});
+
+test('English common errors use sentence case and terminal punctuation', () => {
+  const violations = flattenLeaves(resources.en.common.errors as Json, '')
+    .filter(([, value]) => !/^[A-Z]/u.test(value) || !/[.!?]$/u.test(value))
+    .map(([key, value]) => `common:errors.${key}=${value}`);
+
+  expect(violations).toEqual([]);
+});
+
+test.each(SUPPORTED_LOCALES)('locale %s keeps count-aware English noun keys pluralized', (locale) => {
+  const requiredPluralKeys = [
+    'common:feed.pendingPosts',
+    'shell:context.threadSummary',
+    'shell:messages.conversationCount',
+    'shell:messages.peerCount',
+    'shell:notifications.summary',
+    'profile:overview.followedCount',
+    'profile:overview.followingCount',
+    'profile:overview.mutedCount',
+    'metaverse:recovery.offlineCountdown',
+    'metaverse:hosting.resyncResult',
+    'metaverse:connections.topology',
+    'metaverse:hud.knownPeers',
+  ];
+  const keys = new Set(qualifiedLeaves(locale).map(([key]) => key));
+  const missing = requiredPluralKeys.flatMap((key) => {
+    const one = `${key}_one`;
+    const other = `${key}_other`;
+    return [one, other].filter((candidate) => !keys.has(candidate));
+  });
+
+  expect(missing).toEqual([]);
 });
 
 test.each(OTHER_LOCALES)('locale %s does not leave English UI copy untranslated', (locale) => {

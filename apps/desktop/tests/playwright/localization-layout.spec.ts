@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 import { DEVELOPER_MODE_STORAGE_KEY } from '../../src/lib/developerMode';
+import { DESKTOP_THEME_STORAGE_KEY, type DesktopTheme } from '../../src/lib/theme';
 
 const DESKTOP_LOCALE_STORAGE_KEY = 'kukuri.desktop.locale';
 
@@ -289,7 +290,7 @@ test('ja localizes Explore post actions and their tooltips', async ({ page }) =>
 
   const explore = page.getByTestId('community-index-explore');
   await explore.getByRole('textbox', { name: '検索語' }).fill('dev topic');
-  await explore.getByRole('button', { name: '実行' }).click();
+  await explore.getByRole('button', { name: '結果を表示' }).click();
 
   const card = explore.locator('article.post-card').first();
   await expect(card).toBeVisible();
@@ -318,3 +319,33 @@ test('ja localizes Explore post actions and their tooltips', async ({ page }) =>
   }
   expect(visibleAndAccessibleCopy).not.toMatch(/\+\d+ media/u);
 });
+
+for (const copy of LOCALES) {
+  for (const theme of ['dark', 'light'] satisfies DesktopTheme[]) {
+    test(`${copy.locale} stays contained at a 200% effective viewport in ${theme}`, async ({
+      page,
+    }) => {
+      await seedLocale(page, copy.locale);
+      await page.addInitScript(
+        ({ themeKey, themeValue }) => window.localStorage.setItem(themeKey, themeValue),
+        { themeKey: DESKTOP_THEME_STORAGE_KEY, themeValue: theme }
+      );
+      // Browser zoom halves the CSS viewport. 450×380 exercises the same reflow pressure as
+      // a 900×760 window at 200% without depending on browser-specific zoom shortcuts.
+      await page.setViewportSize({ width: 450, height: 380 });
+      await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
+
+      await expect(page.locator('html')).toHaveAttribute('lang', copy.locale);
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+      await expect(page.getByRole('heading', { name: copy.timeline, exact: true })).toBeVisible();
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+        `${copy.locale} ${theme} 200% document width`
+      ).toBe(true);
+      expect(
+        await wrappedButtonLabels(page.locator('[data-active="true"]')),
+        `${copy.locale} ${theme} 200% active Column button labels`
+      ).toEqual([]);
+    });
+  }
+}

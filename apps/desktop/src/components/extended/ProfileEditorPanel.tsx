@@ -107,7 +107,11 @@ export function ProfileEditorPanel({
           </Label>
           {picturePreviewSrc ? (
             <div className='profile-editor-picture-preview'>
-              <img src={picturePreviewSrc} alt={`${authorLabel} avatar`} className='profile-overview-image' />
+              <img
+                src={picturePreviewSrc}
+                alt={t('editor.picturePreviewAlt', { name: authorLabel })}
+                className='profile-overview-image'
+              />
             </div>
           ) : null}
           <Button

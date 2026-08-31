@@ -82,7 +82,7 @@ test('disabled submit blocks both Ctrl+Enter and the submit button', async () =>
   await user.type(textarea, 'pending post');
   await user.keyboard('{Control>}{Enter}{/Control}');
 
-  expect(screen.getByRole('button', { name: 'Publish' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Post' })).toBeDisabled();
   expect(onSubmit).not.toHaveBeenCalled();
 });
 
@@ -115,7 +115,7 @@ test('right-clicking a mention candidate copies its author ID without selecting 
 
   fireEvent.mouseDown(candidate, { button: 2 });
   fireEvent.contextMenu(candidate, { clientX: 20, clientY: 24 });
-  await user.click(screen.getByRole('menuitem', { name: 'Copy author ID' }));
+  await user.click(screen.getByRole('menuitem', { name: 'Copy user ID' }));
 
   expect(clipboardWriteText).toHaveBeenCalledWith(ALICE);
   expect(textarea).toHaveValue('@al');
@@ -123,7 +123,7 @@ test('right-clicking a mention candidate copies its author ID without selecting 
 
   candidate.focus();
   fireEvent.keyDown(candidate, { key: 'F10', shiftKey: true });
-  await user.click(screen.getByRole('menuitem', { name: 'Copy author ID' }));
+  await user.click(screen.getByRole('menuitem', { name: 'Copy user ID' }));
 
   expect(clipboardWriteText).toHaveBeenNthCalledWith(2, ALICE);
   expect(textarea).toHaveValue('@al');

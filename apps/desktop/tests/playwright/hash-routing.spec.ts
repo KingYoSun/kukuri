@@ -21,7 +21,7 @@ async function openChannelManager(page: Page) {
 }
 
 async function openComposerDialog(page: Page) {
-  await activeColumn(page, 'Timeline').getByRole('button', { name: /^Publish to / }).click();
+  await activeColumn(page, 'Timeline').getByRole('button', { name: /^Post to / }).click();
   await expect(page.getByPlaceholder('Write a post')).toBeVisible();
 }
 
@@ -96,7 +96,7 @@ test('browser mock hash history keeps route state stable without narrow-width ov
   await expect(page.getByPlaceholder('Write a post')).toBeVisible();
 
   await page.getByPlaceholder('Write a post').fill('route history post');
-  await page.getByRole('button', { name: 'Publish' }).click();
+  await page.getByRole('button', { name: 'Post', exact: true }).click();
   await expect(page.getByText('route history post')).toBeVisible();
 
   await page.getByText('route history post').click();

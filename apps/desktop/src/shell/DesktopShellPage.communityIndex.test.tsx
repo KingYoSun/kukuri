@@ -92,7 +92,7 @@ test('Explore header selects named eligible nodes, clears stale results, and ret
     );
   });
   await user.type(within(explore).getByLabelText('Search query'), 'hello');
-  await user.click(within(explore).getByRole('button', { name: 'Run' }));
+  await user.click(within(explore).getByRole('button', { name: 'Show results' }));
   const result = await within(explore).findByText(`result from ${NODE_B}`);
   const resultCard = result.closest('article');
   if (!(resultCard instanceof HTMLElement)) throw new Error('Explore result card not found');

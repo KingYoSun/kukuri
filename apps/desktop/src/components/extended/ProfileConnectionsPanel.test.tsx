@@ -52,11 +52,11 @@ test('connection rows hide author IDs and copy the complete value from context a
   expect(screen.queryByText(AUTHOR_ID)).not.toBeInTheDocument();
   const target = screen.getByTestId('profile-connection-identifier-target');
   fireEvent.contextMenu(target, { clientX: 32, clientY: 48 });
-  await user.click(screen.getByRole('menuitem', { name: 'Copy author ID' }));
+  await user.click(screen.getByRole('menuitem', { name: 'Copy user ID' }));
   expect(clipboardWriteText).toHaveBeenLastCalledWith(AUTHOR_ID);
 
   target.focus();
   fireEvent.keyDown(target, { key: 'F10', shiftKey: true });
-  await user.click(screen.getByRole('menuitem', { name: 'Copy author ID' }));
+  await user.click(screen.getByRole('menuitem', { name: 'Copy user ID' }));
   expect(clipboardWriteText).toHaveBeenCalledTimes(2);
 });

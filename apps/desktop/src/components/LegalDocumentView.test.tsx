@@ -7,6 +7,9 @@ import i18n, { type SupportedLocale } from '@/i18n';
 const EXPECTED_TERMS_HEADINGS: Array<{
   locale: SupportedLocale;
   headings: string[];
+  accountBoundary: RegExp;
+  accountKey: RegExp;
+  thirdPartyBoundary: RegExp;
 }> = [
   {
     locale: 'ja',
@@ -17,6 +20,9 @@ const EXPECTED_TERMS_HEADINGS: Array<{
       '投稿撤回後の取扱い',
       '許諾に含まれない利用',
     ],
+    accountBoundary: /アカウント・プロフィール・フォロー関係・投稿/u,
+    accountKey: /アカウントを識別する鍵/u,
+    thirdPartyBoundary: /一律には扱いません/u,
   },
   {
     locale: 'en',
@@ -27,6 +33,9 @@ const EXPECTED_TERMS_HEADINGS: Array<{
       'After withdrawal',
       'Uses not licensed',
     ],
+    accountBoundary: /account, profile, follows, and posts/u,
+    accountKey: /account-identifying key/u,
+    thirdPartyBoundary: /not characterized uniformly/u,
   },
   {
     locale: 'zh-CN',
@@ -37,6 +46,9 @@ const EXPECTED_TERMS_HEADINGS: Array<{
       '撤回投稿后的处理',
       '不在许可范围内的使用',
     ],
+    accountBoundary: /账号、资料、关注关系和帖子/u,
+    accountKey: /用于识别您账号的密钥/u,
+    thirdPartyBoundary: /不能一概而论/u,
   },
 ];
 
@@ -49,6 +61,16 @@ describe.each(EXPECTED_TERMS_HEADINGS)('legal document in $locale', ({ locale, h
     for (const heading of headings) {
       expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();
     }
+  });
+
+  test('uses concrete account terms and preserves the third-party disclosure boundary', async () => {
+    const expected = EXPECTED_TERMS_HEADINGS.find((item) => item.locale === locale)!;
+    await i18n.changeLanguage(locale);
+    render(<LegalDocumentView bundleVersion={2} />);
+
+    expect(screen.getByText(expected.accountBoundary)).toBeInTheDocument();
+    expect(screen.getByText(expected.accountKey)).toBeInTheDocument();
+    expect(screen.getByText(expected.thirdPartyBoundary)).toBeInTheDocument();
   });
 
   test('does not render a draft notice', async () => {

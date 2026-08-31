@@ -364,14 +364,14 @@ export function getPrimaryNavigation() {
 }
 
 export async function openPublishDialog(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(within(getActiveColumn('Timeline')).getByRole('button', { name: /^Publish to / }));
+  await user.click(within(getActiveColumn('Timeline')).getByRole('button', { name: /^Post to / }));
   return getActiveColumn('Timeline');
 }
 
 export async function publishPost(user: ReturnType<typeof userEvent.setup>, content: string) {
   const dialog = await openPublishDialog(user);
   await user.type(within(dialog).getByPlaceholderText('Write a post'), content);
-  await user.click(within(dialog).getByRole('button', { name: 'Publish' }));
+  await user.click(within(dialog).getByRole('button', { name: 'Post' }));
   await waitFor(() => {
     expect(within(dialog).queryByPlaceholderText('Write a post')).not.toBeInTheDocument();
   });

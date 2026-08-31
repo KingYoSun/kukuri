@@ -36,7 +36,7 @@ test('desktop app bootstraps the shell with the default timeline workspace', asy
   });
   const timelineColumn = screen.getByRole('region', { name: /^Timeline Column/ });
   expect(timelineColumn).toHaveTextContent('general');
-  expect(within(timelineColumn).getByRole('button', { name: /^Publish to / })).toBeInTheDocument();
+  expect(within(timelineColumn).getByRole('button', { name: /^Post to / })).toBeInTheDocument();
   expect(screen.getByTestId('control-center-trigger')).toBeInTheDocument();
   expect(window.localStorage.getItem(DESKTOP_THEME_STORAGE_KEY)).toBe('dark');
 });
@@ -111,7 +111,7 @@ test('desktop app blocks startup until app-level legal consent is accepted', asy
       'The terms of service or privacy policy have been updated. Please review and accept again to continue.'
     )
   ).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'Publish' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Post' })).not.toBeInTheDocument();
 
   await user.click(screen.getByRole('button', { name: 'Accept and continue' }));
 
@@ -181,5 +181,5 @@ test('desktop app renders a startup error when the local database cannot be open
   expect(await screen.findByText('kukuri could not open the local database.')).toBeInTheDocument();
   expect(screen.getByText('Migration failure')).toBeInTheDocument();
   expect(screen.getByDisplayValue(/migration checksum mismatch/)).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'Publish' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Post' })).not.toBeInTheDocument();
 });

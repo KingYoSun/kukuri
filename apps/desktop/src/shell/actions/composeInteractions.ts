@@ -2,11 +2,7 @@ import type { ChangeEvent } from 'react';
 import type { PostView } from '@/lib/api';
 
 import { PUBLIC_CHANNEL_REF, type DraftMediaItem } from '@/shell/store';
-import {
-  canCreateRepostFromPost,
-  messageFromError,
-  publishedTopicIdForPost,
-} from '@/shell/presentation';
+import { canCreateRepostFromPost, publishedTopicIdForPost } from '@/shell/presentation';
 
 import type {
   Setter,
@@ -77,10 +73,8 @@ export function createComposeInteractionsActions({
         setDirectMessageDraftMediaItems([nextItem]);
         setDirectMessageError(null);
       }
-    } catch (attachmentError) {
-      setDirectMessageError(
-        messageFromError(attachmentError, translate('common:errors.failedToGenerateVideoPoster'))
-      );
+    } catch {
+      setDirectMessageError(translate('common:errors.failedToGenerateVideoPoster'));
     } finally {
       setDirectMessageAttachmentInputKey((value) => value + 1);
     }

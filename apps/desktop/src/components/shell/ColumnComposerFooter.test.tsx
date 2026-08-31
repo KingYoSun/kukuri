@@ -21,7 +21,7 @@ function renderFooter(active = true) {
     <DesktopShellStoreContext.Provider value={store}>
       <ColumnComposerFooter
         active={active}
-        destinationLabel='Friends · topic-a'
+        destinationLabel='Mutuals · topic-a'
         locale='en'
         onActivate={onActivate}
         onAttachmentSelection={vi.fn(async () => undefined)}
@@ -39,8 +39,8 @@ describe('ColumnComposerFooter', () => {
     const user = userEvent.setup();
     const view = renderFooter();
 
-    const action = screen.getByRole('button', { name: /Publish to Friends/ });
-    expect(action).toHaveTextContent('Publish');
+    const action = screen.getByRole('button', { name: /Post to Mutuals/ });
+    expect(action).toHaveTextContent('Post');
     await user.click(action);
     expect(view.onActivate).toHaveBeenCalledTimes(1);
 
@@ -52,13 +52,13 @@ describe('ColumnComposerFooter', () => {
     });
 
     await user.click(screen.getByRole('button', { name: 'Close' }));
-    await user.click(screen.getByRole('button', { name: /Publish to Friends/ }));
+    await user.click(screen.getByRole('button', { name: /Post to Mutuals/ }));
     expect(screen.getByDisplayValue('scoped draft')).toBeVisible();
   });
 
   it('uses an icon-sized accessible action while its Column is inactive', () => {
     renderFooter(false);
-    const action = screen.getByRole('button', { name: /Publish to Friends/ });
+    const action = screen.getByRole('button', { name: /Post to Mutuals/ });
     expect(action).toHaveClass('button-icon', 'size-10');
     expect(action.querySelector('span')).toBeNull();
   });
@@ -67,7 +67,7 @@ describe('ColumnComposerFooter', () => {
     const user = userEvent.setup();
     const view = renderFooter();
 
-    await user.click(screen.getByRole('button', { name: /Publish to Friends/ }));
+    await user.click(screen.getByRole('button', { name: /Post to Mutuals/ }));
     await user.type(screen.getByPlaceholderText('Write a post'), 'pending draft');
     act(() => {
       const key = columnDraftKey(target);
@@ -79,7 +79,7 @@ describe('ColumnComposerFooter', () => {
       });
     });
 
-    expect(screen.getByRole('button', { name: 'Publish' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Post' })).toBeDisabled();
     await user.keyboard('{Control>}{Enter}{/Control}');
     expect(view.onSubmit).not.toHaveBeenCalled();
   });

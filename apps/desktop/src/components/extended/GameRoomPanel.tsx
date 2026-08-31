@@ -135,7 +135,10 @@ export function GameRoomPanel({
                       </div>
                       {isOwner ? (
                         <Input
-                          aria-label={`${room.title}-${score.label}-score`}
+                          aria-label={t('game:accessibility.score', {
+                            room: room.title,
+                            player: score.label,
+                          })}
                           value={draft?.scores[score.participant_id] ?? String(score.score)}
                           disabled={pending}
                           onChange={(event) =>
@@ -153,7 +156,7 @@ export function GameRoomPanel({
                     <Label>
                       <span>{t('game:fields.status')}</span>
                       <Select
-                        aria-label={`${room.title}-status`}
+                        aria-label={t('game:accessibility.status', { room: room.title })}
                         value={draft.status}
                         disabled={pending}
                         onChange={(event) =>
@@ -169,7 +172,7 @@ export function GameRoomPanel({
                     <Label>
                       <span>{t('game:fields.phase')}</span>
                       <Input
-                        aria-label={`${room.title}-phase`}
+                        aria-label={t('game:accessibility.phase', { room: room.title })}
                         value={draft.phaseLabel}
                         disabled={pending}
                         onChange={(event) => onDraftPhaseChange(room.room_id, event.target.value)}

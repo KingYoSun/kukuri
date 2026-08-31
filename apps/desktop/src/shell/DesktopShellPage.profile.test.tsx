@@ -107,10 +107,10 @@ test('profile overview connection count buttons open the requested connections t
   );
 
   await selectWorkspace(user, 'Profile');
-  await user.click(screen.getByRole('button', { name: '1 Followers' }));
+  await user.click(screen.getByRole('button', { name: '1 follower' }));
 
   await waitFor(() => {
-    expect(within(getSocialConnectionsTabs()).getByRole('tab', { name: 'Followed' })).toHaveAttribute(
+    expect(within(getSocialConnectionsTabs()).getByRole('tab', { name: 'Followers' })).toHaveAttribute(
       'aria-selected',
       'true'
     );
@@ -120,7 +120,7 @@ test('profile overview connection count buttons open the requested connections t
   ).not.toBeInTheDocument();
 
   await user.click(screen.getByRole('button', { name: 'Back to profile' }));
-  await user.click(screen.getByRole('button', { name: '1 Muted' }));
+  await user.click(screen.getByRole('button', { name: '1 muted user' }));
 
   await waitFor(() => {
     expect(within(getSocialConnectionsTabs()).getByRole('tab', { name: 'Muted' })).toHaveAttribute(

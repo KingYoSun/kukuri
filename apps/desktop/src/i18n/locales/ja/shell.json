@@ -1,9 +1,10 @@
 {
   "context": {
-    "author": "著者",
+    "author": "ユーザー",
     "close": "{{title}} を閉じる",
     "threadEmpty": "投稿を選択するとスレッドを確認できます。",
-    "threadSummary": "スレッド内 {{count}} 件の投稿",
+    "threadSummary_one": "スレッド内の投稿 {{count}}件",
+    "threadSummary_other": "スレッド内の投稿 {{count}}件",
     "thread": "スレッド"
   },
   "navigation": {
@@ -17,10 +18,10 @@
     "open": "ナビゲーションを開く",
     "placeholder": "general",
     "primaryNavigation": "メインナビゲーション",
-    "connectTopic": "{{topic}} を Gossip ネットワークに接続",
-    "disconnectTopic": "{{topic}} を Gossip ネットワークから切断",
-    "connectChannel": "{{channel}} を Gossip ネットワークに接続",
-    "disconnectChannel": "{{channel}} を Gossip ネットワークから切断",
+    "connectTopic": "{{topic}} をP2Pネットワークに接続",
+    "disconnectTopic": "{{topic}} をP2Pネットワークから切断",
+    "connectChannel": "{{channel}} をP2Pネットワークに接続",
+    "disconnectChannel": "{{channel}} をP2Pネットワークから切断",
     "searchPlaceholder": "トピックを検索",
     "filterLabel": "接続状態で絞り込み",
     "filterAll": "すべて",
@@ -131,14 +132,16 @@
   },
   "messages": {
     "all": "すべて",
-    "conversationCount": "{{count}}件の会話",
+    "conversationCount_one": "会話 {{count}}件",
+    "conversationCount_other": "会話 {{count}}件",
     "delivered": "配信済み",
     "empty": "ダイレクトメッセージはまだありません。",
     "latest": "最新: {{preview}}",
     "mutualRequired": "相互フォローでなくなったため、ダイレクトメッセージを送信できません。",
     "noMessages": "メッセージはまだありません。",
     "open": "開く",
-    "peerCount": "ピア {{count}}",
+    "peerCount_one": "接続中 {{count}}人",
+    "peerCount_other": "接続中 {{count}}人",
     "pending": "送信待ち",
     "pendingOutbox": "送信待ち: {{count}}件",
     "sendDisabled": "送信不可",
@@ -147,7 +150,7 @@
   },
   "notifications": {
     "context": {
-      "authorActivity": "著者アクティビティ",
+      "authorActivity": "ユーザーのアクティビティ",
       "directMessage": "ダイレクトメッセージ",
       "topic": "トピック: {{topic}}",
       "topicChannel": "トピック: {{topic}} / チャンネル: {{channel}}"
@@ -161,17 +164,18 @@
       "direct_message": "ダイレクトメッセージ",
       "followed": "フォロー",
       "mention": "メンション",
-      "quote_repost": "引用リポスト",
+      "quote_repost": "コメント付きリポスト",
       "reply": "返信",
       "repost": "リポスト"
     },
-    "loading": "通知を読み込み中です...",
+    "loading": "通知を読み込み中です…",
     "preview": {
       "followed": "あなたをフォローしました。",
       "noContent": "元のイベントを開きます。",
       "noMessage": "会話を開きます。"
     },
-    "summary": "{{count}} 件 / 未読 {{unread}} 件",
+    "summary_one": "通知 {{count}}件 / 未読 {{unread}}件",
+    "summary_other": "通知 {{count}}件 / 未読 {{unread}}件",
     "title": "通知",
     "unread": "未読"
   },
@@ -273,8 +277,8 @@
     "openPrivate": "索引登録を申請",
     "publicNotice": "公開トピックを選択したコミュニティノードの索引対象として申請します。",
     "gateNotice": "申請しても索引登録は保証されません。コミュニティノードの運営者による承認と安全性の判定を通過した内容だけが索引されます。",
-    "privateConfirmation": "チャネルの閲覧権限をコミュニティノードに送信することに同意します",
-    "privateWarning": "同意すると、このコミュニティノードはプライベートチャネルの内容を復号し、索引へ登録できるようになります。申請や状態確認のたびに、この確認が必要です。",
+    "privateConfirmation": "チャンネルの閲覧権限をコミュニティノードに送信することに同意します",
+    "privateWarning": "同意すると、このコミュニティノードはプライベートチャンネルの内容を復号し、索引へ登録できるようになります。申請や状態確認のたびに、この確認が必要です。",
     "noEligibleNode": "認証と必須同意が完了し、コミュニティインデックスを利用できるコミュニティノードがありません。",
     "openSettings": "コミュニティノード設定を開く",
     "submit": "申請する",
@@ -287,8 +291,8 @@
     "errors": {
       "requestNotConfigured": "このコミュニティノードは索引を提供していないため、申請を受け付けていません。",
       "requestNotActivated": "このコミュニティノードの索引は一時的に利用できないため、申請を受け付けていません。",
-      "notConfigured": "このコミュニティノードではチャネル索引登録が設定されていません。",
-      "secretConflict": "登録済みのチャネル閲覧権限と一致しません。管理者へ確認してください。",
+      "notConfigured": "このコミュニティノードではチャンネルの索引登録が設定されていません。",
+      "secretConflict": "登録済みのチャンネル閲覧権限と一致しません。管理者へ確認してください。",
       "authRequired": "選択したコミュニティノードへの認証が必要です。",
       "consentRequired": "選択したコミュニティノードの必須同意が必要です。",
       "requestFailed": "索引登録申請に失敗しました。時間をおいて再度お試しください。"
@@ -302,22 +306,22 @@
     "title": "コミュニティインデックス",
     "topicSummary": "利用可能なコミュニティノードを使い、現在のトピックまたはプライベートチャンネルを検索します。",
     "exploreSummary": "インデックスされたトピックを横断して、検索・発見・おすすめを利用します。",
-    "nodeLabel": "問い合わせ先 node",
+    "nodeLabel": "検索元",
     "surfaces": "コミュニティインデックスの機能",
     "operations": { "search": "検索", "discovery": "発見", "recommendations": "おすすめ" },
     "operationHints": {
       "discovery": "検索語を指定せず、最近インデックスされた公開結果を表示します。",
-      "recommendations": "選択した node からおすすめを取得します。"
+      "recommendations": "選択したコミュニティノードからおすすめを取得します。"
     },
     "queryLabel": "検索語",
     "queryPlaceholder": "インデックスを検索",
     "queryRequired": "検索語を入力してください。",
-    "run": "実行",
+    "run": "結果を表示",
     "loading": "読み込み中…",
-    "empty": "一致するインデックス結果はありません。",
+    "empty": "該当する投稿は見つかりませんでした。",
     "results": "コミュニティインデックスの結果",
     "noEligibleNode": "認証・同意済みで、利用可能なコミュニティインデックスを公開しているコミュニティノードがありません。",
-    "allJoinedDisabled": "公開トピックまたはプライベートチャンネルを1つずつ検索してください。全参加範囲は node に送信しません。",
+    "allJoinedDisabled": "公開トピックまたはプライベートチャンネルを1つずつ検索してください。参加中の全範囲はコミュニティノードへ送信しません。",
     "errors": {
       "authRequired": "選択したコミュニティノードへの認証が必要です。",
       "consentRequired": "選択したコミュニティノードの必須同意が必要です。",
@@ -330,8 +334,8 @@
   "report": {
     "title": "コンテンツを通報",
     "boundaryNotice": "この通報は kukuri ネットワーク全体ではなく、特定のコミュニティノードに送信されます。",
-    "boundaryDetail": "対象 node は、この content の表示・索引・モデレーション・キャッシュ等に実際に関与した node です。kukuri に中央通報窓口はありません。",
-    "identityBoundaryNote": "あなたの身元情報・プロフィール・ソーシャルグラフはどのノードにも属さず、この通報のためにノードへ預けられることはありません。",
+    "boundaryDetail": "送信先は、この投稿の表示・索引・モデレーション・一時保存などに実際に関与したコミュニティノードです。kukuriに中央通報窓口はありません。",
+    "identityBoundaryNote": "あなたのアカウント・プロフィール・フォロー関係・投稿はどのノードにも属さず、この通報のためにノードへ預けられることはありません。",
     "subject": {
       "post": "投稿",
       "profile": "プロフィール",
@@ -350,10 +354,10 @@
       "bootstrap_assist": "ブートストラップ補助"
     },
     "contact": {
-      "endpoint": "node の通報エンドポイントへ送信",
+      "endpoint": "コミュニティノードの通報受付先へ送信",
       "mailto": "通報連絡先: {{contact}}"
     },
-    "openPolicy": "node のポリシーを表示",
+    "openPolicy": "コミュニティノードの運用方針を表示",
     "reasonLabel": "理由",
     "reasons": {
       "spam": "スパム",
@@ -372,11 +376,11 @@
       "unavailable": "選択したコミュニティノードは専用の権利侵害申出受付を公開していません。一般通報へ権利主張や個人情報を送信しないでください。",
       "open": "対応範囲を確認して権利侵害を申し出る"
     },
-    "criticalSafetyNote": "critical safety の通報は責任ある node へ route されます。対象物そのものを添付・再配布せず、内容を説明してください。",
+    "criticalSafetyNote": "重大な安全上の通報は、責任を持つコミュニティノードへ送信されます。対象物そのものを添付・再配布せず、内容を説明してください。",
     "detailsLabel": "詳細（任意）",
     "detailsPlaceholder": "問題の内容を説明してください。対象物そのものは貼り付けないでください。",
     "reporterContactLabel": "あなたの連絡先（任意）",
-    "reporterContactPlaceholder": "node が follow-up に使える email / handle",
+    "reporterContactPlaceholder": "返信を受け取れるメールアドレスまたはユーザー名",
     "reporterContactHint": "入力した場合のみ共有されます。匿名で通報する場合は空欄のままにしてください。",
     "submit": "通報を送信",
     "submitting": "送信中…",
@@ -388,7 +392,7 @@
     "unknownTitle": "通報先を特定できません",
     "unknownBody": "このコンテンツがどのノードや取得元を経由して表示されたか不明なため、通報すべき責任あるコミュニティノードがありません。",
     "observedUnresolvedTitle": "到達可能な通報先がありません",
-    "observedUnresolvedBody": "node 経由で表示されましたが、その manifest / 通報連絡先が取得できないため、通報を route できません。",
+    "observedUnresolvedBody": "コミュニティノード経由で表示されましたが、そのノードの設定情報または通報連絡先を取得できないため、通報を送信できません。",
     "localActionsHint": "ブロック・ミュート・ローカル非表示は引き続き可能です。",
     "actionLabel": "通報"
   }

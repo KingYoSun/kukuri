@@ -44,10 +44,10 @@ test('author detail hides identifiers while keeping profile content usable', () 
   expect(screen.queryByText('followed by: yes')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Unfollow' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Mute' })).toBeInTheDocument();
-  expect(screen.getByText('mutual').closest('.author-detail-identity')).toContainElement(
+  expect(screen.getByText('mutual follow').closest('.author-detail-identity')).toContainElement(
     screen.getByText('bob')
   );
-  expect(screen.getByText('mutual').closest('.author-detail-actions')).toBeNull();
+  expect(screen.getByText('mutual follow').closest('.author-detail-actions')).toBeNull();
 });
 
 test('author detail copies the hidden author ID from pointer and keyboard context menus', async () => {
@@ -70,12 +70,12 @@ test('author detail copies the hidden author ID from pointer and keyboard contex
 
   const target = screen.getByTestId('author-identifier-target');
   fireEvent.contextMenu(target, { clientX: 20, clientY: 20 });
-  await user.click(screen.getByRole('menuitem', { name: 'Copy author ID' }));
+  await user.click(screen.getByRole('menuitem', { name: 'Copy user ID' }));
   expect(clipboardWriteText).toHaveBeenLastCalledWith(authorId);
 
   target.focus();
   fireEvent.keyDown(target, { key: 'F10', shiftKey: true });
-  await user.click(screen.getByRole('menuitem', { name: 'Copy author ID' }));
+  await user.click(screen.getByRole('menuitem', { name: 'Copy user ID' }));
   expect(clipboardWriteText).toHaveBeenCalledTimes(2);
 });
 

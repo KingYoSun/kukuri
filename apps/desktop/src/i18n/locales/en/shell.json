@@ -1,9 +1,10 @@
 {
   "context": {
-    "author": "Author",
+    "author": "User",
     "close": "Close {{title}}",
     "threadEmpty": "Select a post to inspect the thread.",
-    "threadSummary": "{{count}} posts in thread",
+    "threadSummary_one": "{{count}} post in thread",
+    "threadSummary_other": "{{count}} posts in thread",
     "thread": "Thread"
   },
   "navigation": {
@@ -131,14 +132,16 @@
   },
   "messages": {
     "all": "All",
-    "conversationCount": "{{count}} conversations",
+    "conversationCount_one": "{{count}} conversation",
+    "conversationCount_other": "{{count}} conversations",
     "delivered": "Delivered",
     "empty": "No direct messages yet.",
     "latest": "Latest: {{preview}}",
     "mutualRequired": "Direct message sending is disabled until the relationship is mutual again.",
     "noMessages": "No messages yet.",
     "open": "Open",
-    "peerCount": "{{count}} peers",
+    "peerCount_one": "{{count}} connected user",
+    "peerCount_other": "{{count}} connected users",
     "pending": "Pending",
     "pendingOutbox": "Pending outbox: {{count}}",
     "sendDisabled": "Sending disabled",
@@ -147,7 +150,7 @@
   },
   "notifications": {
     "context": {
-      "authorActivity": "Author activity",
+      "authorActivity": "User activity",
       "directMessage": "Direct message",
       "topic": "Topic: {{topic}}",
       "topicChannel": "Topic: {{topic}} / Channel: {{channel}}"
@@ -161,17 +164,18 @@
       "direct_message": "Direct message",
       "followed": "Followed",
       "mention": "Mention",
-      "quote_repost": "Quote repost",
+      "quote_repost": "Repost with comment",
       "reply": "Reply",
       "repost": "Repost"
     },
-    "loading": "Loading notifications...",
+    "loading": "Loading notifications…",
     "preview": {
       "followed": "Started following you.",
       "noContent": "Open the source event.",
       "noMessage": "Open the conversation."
     },
-    "summary": "{{count}} items / {{unread}} unread",
+    "summary_one": "{{count}} notification / {{unread}} unread",
+    "summary_other": "{{count}} notifications / {{unread}} unread",
     "title": "Notifications",
     "unread": "Unread"
   },
@@ -251,7 +255,7 @@
     "whatSeemedWrongLabel": "What felt wrong",
     "charCount": "{{current}} / {{max}} characters",
     "overLimit": "Each field must be at most {{max}} characters.",
-    "metadataNotice": "The client version and OS are attached automatically. No sender identity is stored.",
+    "metadataNotice": "The app version and OS are attached automatically. No information identifying the sender is stored.",
     "noEligibleNode": "No authenticated and consented Community Node currently accepts tester feedback.",
     "openSettings": "Open Community Node settings",
     "submit": "Send",
@@ -298,7 +302,7 @@
     "title": "Community Index",
     "topicSummary": "Search the active topic or private channel through an eligible Community Node.",
     "exploreSummary": "Search, discover, and view recommendations across indexed topics.",
-    "nodeLabel": "Query node",
+    "nodeLabel": "Search provider",
     "surfaces": "Community Index surfaces",
     "operations": { "search": "Search", "discovery": "Discover", "recommendations": "Recommendations" },
     "operationHints": {
@@ -308,9 +312,9 @@
     "queryLabel": "Search query",
     "queryPlaceholder": "Search the index",
     "queryRequired": "Enter a search query.",
-    "run": "Run",
+    "run": "Show results",
     "loading": "Loading…",
-    "empty": "No indexed results matched.",
+    "empty": "No matching posts found.",
     "results": "Community Index results",
     "noEligibleNode": "No authenticated and consented Community Node currently advertises an available Community Index.",
     "allJoinedDisabled": "Search one public topic or private channel at a time. All joined scopes are not sent to a node.",
@@ -327,7 +331,7 @@
     "title": "Report content",
     "boundaryNotice": "This report is sent to a specific community node, not to the kukuri network as a whole.",
     "boundaryDetail": "The target node is one that actually indexed, moderated, cached, or recommended this content. kukuri has no central abuse intake.",
-    "identityBoundaryNote": "Your identity, profile, and social graph are not owned by any node and are not handed over for this report.",
+    "identityBoundaryNote": "Your account, profile, follows, and posts are not owned by any node and are not handed over for this report.",
     "subject": {
       "post": "Post",
       "profile": "Profile",
@@ -363,7 +367,7 @@
       "other": "Other"
     },
     "rightsRequest": {
-      "boundary": "A rights-infringement request needs identity, contact, and rights-basis details. Do not send those through the general report endpoint. First review what this Community Node can and cannot do on its dedicated page.",
+      "boundary": "A rights-infringement request needs your name, contact details, and the basis of your rights claim. Do not send those through the general report form. First review what this Community Node can and cannot do on its dedicated page.",
       "openDedicated": "The next page explains the node-local scope and submits only after your explicit acknowledgement.",
       "unavailable": "The selected Community Node does not publish a dedicated rights-request intake. Do not put rights claims or personal information in the general report.",
       "open": "Review scope and submit a rights request"

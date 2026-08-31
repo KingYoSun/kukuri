@@ -60,7 +60,7 @@
         "error": "Could not fetch the manifest"
       },
       "boundary": {
-        "identityNotOwned": "Your identity, profile, and social graph are not owned by this node. The node only provides supporting capabilities for the P2P network.",
+        "identityNotOwned": "Your account, profile, follows, and posts are not owned by this node. The node only provides supporting features for the P2P network.",
         "defaultNotAuthority": "Even as a default node, it is not the operator or authority for the whole network."
       }
     },
@@ -247,9 +247,9 @@
     },
     "loading": "Loading discovery diagnostics…",
     "messages": {
-      "saved": "Discovery seeds update without changing runtime contracts.",
-      "unsaved": "Unsaved discovery seed edits.",
-      "viewLocked": "Environment overrides discovery seeds; editing is disabled."
+      "saved": "Connection source changes do not alter how the app works.",
+      "unsaved": "Connection sources have unsaved changes.",
+      "viewLocked": "An environment setting controls the connection sources, so they cannot be edited here."
     },
     "metrics": {
       "connect": "Connect",

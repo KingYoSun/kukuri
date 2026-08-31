@@ -185,7 +185,7 @@ function installFailedPosterGenerationMocks() {
 }
 
 async function openPublishDialog(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole('button', { name: /^Publish to / }));
+  await user.click(screen.getByRole('button', { name: /^Post to / }));
   return screen.getByRole('region', { name: /^Timeline Column/ });
 }
 
@@ -212,7 +212,7 @@ test('single attach button classifies mixed image and video files', async () => 
     expect(screen.getByText('flower.png')).toBeInTheDocument();
     expect(screen.getByText('clip.mp4')).toBeInTheDocument();
   });
-  await user.click(within(publishDialog).getByRole('button', { name: 'Publish' }));
+  await user.click(within(publishDialog).getByRole('button', { name: 'Post' }));
 
   await waitFor(() => {
     expect(attachmentsSeen).toHaveLength(3);
@@ -249,7 +249,7 @@ test('video upload generates poster attachment with metadata seek fallback', asy
   });
   expect(screen.getByText(/video_poster/)).toBeInTheDocument();
 
-  await user.click(within(publishDialog).getByRole('button', { name: 'Publish' }));
+  await user.click(within(publishDialog).getByRole('button', { name: 'Post' }));
 
   await waitFor(() => {
     expect(attachmentsSeen).toHaveLength(2);
@@ -274,10 +274,10 @@ test('video poster generation failure blocks publish', async () => {
   );
 
   await waitFor(() => {
-    expect(screen.getAllByText('failed to generate video poster').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Failed to generate the video preview.').length).toBeGreaterThan(0);
   });
 
-  await user.click(within(publishDialog).getByRole('button', { name: 'Publish' }));
+  await user.click(within(publishDialog).getByRole('button', { name: 'Post' }));
 
   expect(createPostSpy).not.toHaveBeenCalled();
 });
@@ -419,7 +419,7 @@ test('video card falls back to poster preview when playback is unsupported on th
     expect(screen.queryByTestId('media-video-video-post')).not.toBeInTheDocument();
   });
   expect(screen.getByTestId('media-preview-video-post')).toBeInTheDocument();
-  expect(screen.getByAltText('video poster')).toBeInTheDocument();
+  expect(screen.getByAltText('video preview')).toBeInTheDocument();
 });
 
 test('timeline image post switches to ready state when attachment becomes available', async () => {

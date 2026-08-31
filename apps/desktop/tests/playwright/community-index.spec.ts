@@ -21,7 +21,7 @@ test('Timeline keeps Community Index out of the primary surface and Explore expo
   await expect(page).toHaveURL(/#\/explore\?topic=/);
   const explore = page.getByTestId('community-index-explore');
   await explore.getByLabel('Search query').fill('dev topic');
-  await explore.getByRole('button', { name: 'Run' }).click();
+  await explore.getByRole('button', { name: 'Show results' }).click();
   await expect(explore.getByText('dev topic seed for builder preview')).toBeVisible();
   const searchCard = explore.locator('article.post-card').first();
   await expect(searchCard).toBeVisible();
@@ -35,12 +35,12 @@ test('Timeline keeps Community Index out of the primary surface and Explore expo
   await expect(explore.getByText('public_topic', { exact: true })).toHaveCount(0);
 
   await explore.getByRole('tab', { name: 'Discover' }).click();
-  await explore.getByRole('button', { name: 'Run' }).click();
+  await explore.getByRole('button', { name: 'Show results' }).click();
   await expect(explore.getByRole('list', { name: 'Community Index results' })).toBeVisible();
   await expect(explore.locator('article.post-card').first()).toBeVisible();
 
   await explore.getByRole('tab', { name: 'Recommendations' }).click();
-  await explore.getByRole('button', { name: 'Run' }).click();
+  await explore.getByRole('button', { name: 'Show results' }).click();
   await expect(explore.getByRole('list', { name: 'Community Index results' })).toBeVisible();
   await expect(explore.locator('article.post-card').first()).toBeVisible();
   await explore.getByRole('button', { name: 'Report' }).first().click();

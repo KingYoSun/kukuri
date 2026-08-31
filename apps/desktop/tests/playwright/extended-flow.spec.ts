@@ -72,7 +72,7 @@ test('browser mock shell can run profile, private channel, live, and game flows'
 
   const joinDialog = await openChannelManager(page);
   await joinDialog
-    .getByPlaceholder('paste private channel invite, friend grant, or friends+ share')
+    .getByPlaceholder('Paste a private channel invite, mutual grant, or mutuals+ share')
     .fill('invite-token');
   await joinDialog.getByRole('button', { name: 'Join' }).click();
   await expect(page).toHaveURL(

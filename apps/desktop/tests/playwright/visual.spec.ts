@@ -68,7 +68,7 @@ async function settleForShot(page: Page, theme: DesktopTheme): Promise<void> {
 }
 
 async function openComposerDialog(page: Page): Promise<void> {
-  await activeColumn(page, 'Timeline').getByRole('button', { name: /^Publish to / }).click();
+  await activeColumn(page, 'Timeline').getByRole('button', { name: /^Post to / }).click();
   await expect(page.getByPlaceholder('Write a post')).toBeVisible();
 }
 

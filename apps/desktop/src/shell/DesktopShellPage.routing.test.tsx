@@ -24,12 +24,12 @@ test.each([
   {
     path: '#/timeline',
     workspaceLabel: 'Timeline',
-    expectedControl: () => screen.getByRole('button', { name: /^Publish to / }),
+    expectedControl: () => screen.getByRole('button', { name: /^Post to / }),
   },
   {
     path: '#/channels',
     workspaceLabel: 'Timeline',
-    expectedControl: () => screen.getByRole('button', { name: /^Publish to / }),
+    expectedControl: () => screen.getByRole('button', { name: /^Post to / }),
   },
   {
     path: '#/live',
