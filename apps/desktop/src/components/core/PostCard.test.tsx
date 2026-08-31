@@ -599,10 +599,13 @@ test('post card opens a custom reaction context menu and keeps the reaction popo
   await user.click(screen.getAllByRole('button', { name: /👍/ })[0]);
   expect(onToggleReaction).toHaveBeenNthCalledWith(1, view.post, { kind: 'emoji', emoji: '👍' });
 
-  const customReactionChip = screen.getByAltText(customAsset.asset_id).closest('button');
+  const customReactionChip = screen.getByAltText(customAsset.search_key).closest('button');
   if (!(customReactionChip instanceof HTMLButtonElement)) {
     throw new Error('custom reaction chip not found');
   }
+  expect(customReactionChip).toHaveAccessibleName(/party-parrot/i);
+  expect(customReactionChip).not.toHaveAccessibleName(new RegExp(customAsset.asset_id, 'i'));
+  expect(screen.queryByText(customAsset.asset_id.slice(0, 6))).not.toBeInTheDocument();
 
   fireEvent.contextMenu(customReactionChip);
   await user.click(screen.getByRole('menuitem', { name: 'Copy hash' }));

@@ -125,9 +125,11 @@ test('Timeline composer keeps line breaks and submits exactly once with Ctrl+Ent
   ).toHaveCount(1);
 });
 
-test('mention selection keeps priority over Ctrl+Enter in the Timeline composer', async ({
+test('mention context actions preserve selection and Ctrl+Enter priority in the Timeline composer', async ({
+  context,
   page,
 }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.setViewportSize({ width: 1400, height: 980 });
   await page.goto('/');
 
@@ -142,6 +144,23 @@ test('mention selection keeps priority over Ctrl+Enter in the Timeline composer'
   const textarea = timeline.getByPlaceholder('Write a post');
   await textarea.pressSequentially('shortcut mention @bro', { delay: 25 });
   await expect(timeline.getByRole('listbox', { name: 'Mention suggestions' })).toBeVisible();
+  const candidate = timeline.getByRole('option', { name: 'browser peer' });
+  const browserPeerAuthorId = 'b'.repeat(64);
+
+  await candidate.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Copy author ID' }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(
+    browserPeerAuthorId
+  );
+  await expect(textarea).toHaveValue('shortcut mention @bro');
+  await expect(timeline.getByRole('listbox', { name: 'Mention suggestions' })).toBeVisible();
+
+  await candidate.focus();
+  await page.keyboard.press('Shift+F10');
+  await page.getByRole('menuitem', { name: 'Copy author ID' }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(
+    browserPeerAuthorId
+  );
 
   await textarea.press('Control+Enter');
 

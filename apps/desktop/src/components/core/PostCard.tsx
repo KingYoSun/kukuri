@@ -704,14 +704,14 @@ export function PostCard({
                             className='post-reaction-chip-image'
                             src={previewUrl}
                             alt={
-                              reaction.custom_asset?.asset_id ??
+                              reaction.custom_asset?.search_key ??
                               reaction.emoji ??
                               reaction.normalized_reaction_key
                             }
                           />
                         ) : null}
                         <span>
-                          {reaction.emoji ?? reaction.custom_asset?.asset_id.slice(0, 6) ?? '?'}
+                          {reaction.emoji ?? reaction.custom_asset?.search_key ?? '?'}
                         </span>
                         <span>{reaction.count}</span>
                       </button>

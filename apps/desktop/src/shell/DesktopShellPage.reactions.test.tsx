@@ -228,7 +228,7 @@ test('visible custom reactions auto-fetch media before save, and saved reactions
 
   render(<App api={api} />);
 
-  const remoteReactionImage = await screen.findByAltText(remoteReactionAsset.asset_id);
+  const remoteReactionImage = await screen.findByAltText(remoteReactionAsset.search_key);
   expect(remoteReactionImage.getAttribute('src')).toContain('blob:mock-');
   await waitFor(() => {
     expect(getBlobMediaPayload).toHaveBeenCalledWith(

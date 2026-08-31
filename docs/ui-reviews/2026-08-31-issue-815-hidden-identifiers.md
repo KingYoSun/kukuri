@@ -1,0 +1,37 @@
+# 2026-08-31 Issue #815 hidden identifiers and context actions
+
+- Status: current
+- Supersedes: None
+- Superseded by: None
+- Issue: https://github.com/KingYoSun/kukuri/issues/815
+- PR: https://github.com/KingYoSun/kukuri/pull/843
+- Previous PR: https://github.com/KingYoSun/kukuri/pull/833
+- Preview: [before context action](./assets/issue-815/mention-context-target.png), [after context action](./assets/issue-815/mention-context-menu.png), [Windows 11 / Tauri / Japanese](./assets/issue-815/mention-context-menu-tauri.png)
+- Surface / user / purpose: Timeline、Composer、メンション、リアクション、Metaverseで、利用者が技術識別子を通常閲覧から除外したまま、調査時だけ対象の完全な値を取得する。
+- Summary: PR #833で導入した共通context actionを、実際にfocusを持つメンション要素へ直接接続した。Composer候補の右クリックが候補選択を誤発火しないようにし、menuを候補listより前面へ表示した。カスタムリアクションの内部asset IDは画像の代替テキストと表示ラベルから除外し、人間向けsearch keyへ統一した。
+- Conditions:
+  - Platform: Windows 11 Tauri development build / WebView2、Playwright Chromium。
+  - Viewport: Windows実機はdesktop window、Previewは1400×980、既存visual smokeはwide / narrowを使用した。
+  - Theme: dark。既存visual smokeでdark / lightを確認した。
+  - Locale: Windows実機はja、Playwright Previewはen。翻訳resourceは変更していない。
+  - State: deterministic desktop mockでTimeline composerに`@bro`を入力し、`browser peer`候補のcontext actionを表示した。
+- Accessibility / interaction: focusableなbuttonへ`contextmenu`とkeyboard handlerを直接付与し、既存のclick / key handlerを維持する。右クリック、Shift+F10、Context Menuキーから完全な著者ID・投稿ID・hashをコピーできること、Escapeで起点へfocusが戻ること、通常clickが本来の操作を続けることをcomponent testとPlaywrightで確認した。
+- Performance: 新規dependency、通信、永続状態は追加していない。既存要素へのevent handlerと小規模な表示ラベル変更のみのため、専用計測の対象外とした。
+- Validation:
+  - failing-first: メンションtrigger、Composer候補、投稿reaction、保存reaction、Metaverse roomの不足契約を追加し、5件が意図した理由で失敗することを確認した。
+  - targeted Vitest: 6 files / 63 tests passed。
+  - `cargo xtask check` passed。
+  - `cargo xtask test`: Rust 700 passed / 3 skipped、harness 22 passed、frontend 132 files / 992 tests passed。
+  - `cargo xtask desktop-ui-check`: lint、typecheck、frontend 992 tests、Storybook build、browser Playwright 52 tests、visual smoke 14 tests passed。
+  - Windows実機: Tauri / WebView2へ直接接続し、右クリックとShift+F10の双方が64文字の著者pubkeyを完全一致でclipboardへ書き込むこと、Context Menuキーでmenuが開くこと、Escapeで起点へfocusが戻ること、右クリックでmention候補を選択しないことを確認した。
+- Not verified: 物理タッチパネル、ペン入力、スクリーンリーダーの音声読み上げ。
+- Review result:
+  - 一貫性: すべての対象で既存`ContextActionMenu`と共通のcopy labelを再利用する。
+  - ショートカット: pointerだけでなくShift+F10 / Context Menuキーから同じ操作へ到達できる。
+  - フィードバック: menu表示と既存copy完了通知を維持する。
+  - 完結性: pointer / keyboardの双方で完全値のclipboard書き込みまで検証する。
+  - エラー防止: 右クリックを左クリック選択として扱わず、内部asset IDを人間向けラベルとして表示しない。
+  - 取り消し: Escapeでmenuを閉じ、起点へfocusを戻す。
+  - 主導権: context actionは利用者が明示的に呼び出した場合だけ表示する。
+  - 記憶負荷: 技術識別子を常設せず、必要時の同じcontext actionへ集約する。
+- Exceptions: None

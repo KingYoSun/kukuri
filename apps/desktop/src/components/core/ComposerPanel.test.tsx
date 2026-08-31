@@ -99,6 +99,36 @@ test('typing @ with a query shows matching mention candidates', async () => {
   expect(screen.queryByText(ALICE.slice(0, 12))).not.toBeInTheDocument();
 });
 
+test('right-clicking a mention candidate copies its author ID without selecting it', async () => {
+  const user = userEvent.setup();
+  const clipboardWriteText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: clipboardWriteText },
+  });
+  render(<MentionHarness />);
+
+  const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+  await user.click(textarea);
+  await user.keyboard('@al');
+  const candidate = screen.getByRole('option', { name: /Alice/ });
+
+  fireEvent.mouseDown(candidate, { button: 2 });
+  fireEvent.contextMenu(candidate, { clientX: 20, clientY: 24 });
+  await user.click(screen.getByRole('menuitem', { name: 'Copy author ID' }));
+
+  expect(clipboardWriteText).toHaveBeenCalledWith(ALICE);
+  expect(textarea).toHaveValue('@al');
+  expect(screen.getByRole('listbox', { name: 'Mention suggestions' })).toBeInTheDocument();
+
+  candidate.focus();
+  fireEvent.keyDown(candidate, { key: 'F10', shiftKey: true });
+  await user.click(screen.getByRole('menuitem', { name: 'Copy author ID' }));
+
+  expect(clipboardWriteText).toHaveBeenNthCalledWith(2, ALICE);
+  expect(textarea).toHaveValue('@al');
+});
+
 test('selecting a candidate with the keyboard inserts the mention token', async () => {
   const user = userEvent.setup();
   render(<MentionHarness />);

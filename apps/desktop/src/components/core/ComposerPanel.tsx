@@ -203,6 +203,7 @@ export function ComposerPanel({
                         : 'composer-mention-option'
                     }
                     onMouseDown={(event) => {
+                      if (event.button !== 0) return;
                       event.preventDefault();
                       selectMention(candidate);
                     }}
