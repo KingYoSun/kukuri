@@ -18,7 +18,10 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 use tracing::{debug, warn};
 
-use crate::{commands::os_notification::show_platform_notification, state::DesktopState};
+use crate::{
+    commands::os_notification::show_platform_notification,
+    state::{DesktopStartupState, DesktopStartupStatus, DesktopState},
+};
 
 const FALLBACK_POLL_INTERVAL: Duration = Duration::from_secs(60);
 
@@ -126,22 +129,36 @@ pub fn set_os_notification_settings(
 /// Start the background notification dispatcher. Subscribes to runtime events
 /// for instant dispatch and falls back to a 60-second poll for resilience.
 pub fn spawn(app: AppHandle) {
-    if let Some(state) = app.try_state::<DesktopState>() {
+    let mut startup_status = app.state::<DesktopStartupState>().subscribe();
+    let event_app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            match startup_status.borrow().clone() {
+                DesktopStartupStatus::Ready => break,
+                DesktopStartupStatus::Failed { .. } => return,
+                DesktopStartupStatus::Initializing
+                | DesktopStartupStatus::ConsentRequired { .. } => {}
+            }
+            if startup_status.changed().await.is_err() {
+                return;
+            }
+        }
+        let Some(state) = event_app.try_state::<DesktopState>() else {
+            return;
+        };
         let mut rx = state.runtime.subscribe_events();
-        let event_app = app.clone();
-        tauri::async_runtime::spawn(async move {
-            while let Ok(event) = rx.recv().await {
-                if matches!(
-                    event,
-                    kukuri_desktop_runtime::RuntimeEvent::NotificationStatusChanged
-                ) {
-                    if let Err(error) = poll_once(&event_app).await {
-                        debug!(%error, "event-driven notification poll skipped");
-                    }
+        drop(state);
+        while let Ok(event) = rx.recv().await {
+            if matches!(
+                event,
+                kukuri_desktop_runtime::RuntimeEvent::NotificationStatusChanged
+            ) {
+                if let Err(error) = poll_once(&event_app).await {
+                    debug!(%error, "event-driven notification poll skipped");
                 }
             }
-        });
-    }
+        }
+    });
 
     tauri::async_runtime::spawn(async move {
         loop {

@@ -1,10 +1,11 @@
 use serde::Serialize;
 use tauri::Manager;
 
+use crate::spawn_desktop_initialization;
 use crate::state::{
     AppConsentRecord, CommandError, DesktopStartupState, DesktopStartupStatus, DesktopState,
-    LEGAL_BUNDLE_VERSION, build_desktop_state, consent_satisfied, current_unix_seconds,
-    failed_status, load_app_consent, resolve_db_path, save_app_consent,
+    LEGAL_BUNDLE_VERSION, consent_satisfied, current_unix_seconds, load_app_consent,
+    resolve_db_path, save_app_consent,
 };
 
 #[derive(Clone, Debug, Serialize)]
@@ -32,7 +33,7 @@ pub fn get_app_consent_status(
 }
 
 #[tauri::command]
-pub fn accept_app_consents(
+pub async fn accept_app_consents(
     app_handle: tauri::AppHandle,
     bundle_version: i32,
 ) -> Result<DesktopStartupStatus, CommandError> {
@@ -59,17 +60,8 @@ pub fn accept_app_consents(
         return Ok(DesktopStartupStatus::Ready);
     }
 
-    match build_desktop_state(&app_handle) {
-        Ok(state) => {
-            app_handle.manage(state);
-            startup_state.set_status(DesktopStartupStatus::Ready);
-            Ok(DesktopStartupStatus::Ready)
-        }
-        Err(error) => {
-            let db_path = resolve_db_path(&app_handle).ok();
-            let status = failed_status(error, db_path);
-            startup_state.set_status(status.clone());
-            Ok(status)
-        }
-    }
+    startup_state.set_status(DesktopStartupStatus::Initializing);
+    spawn_desktop_initialization(app_handle)
+        .await
+        .map_err(|error| error.to_string().into())
 }

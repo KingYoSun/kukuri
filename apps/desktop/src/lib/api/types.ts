@@ -106,6 +106,7 @@ export type DesktopStartupErrorView = {
 };
 
 export type DesktopStartupStatus =
+  | { status: 'initializing' }
   | { status: 'ready' }
   | {
       status: 'consent_required';

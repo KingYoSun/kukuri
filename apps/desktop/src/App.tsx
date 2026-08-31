@@ -95,39 +95,49 @@ export function App(props: AppProps) {
     }
 
     let active = true;
-    getDesktopStartupStatus()
-      .then((status: DesktopStartupStatus) => {
-        if (!active) {
-          return;
-        }
-        setStartupGate(status);
-      })
-      .catch((error: unknown) => {
-        if (!active) {
-          return;
-        }
-        if (isBridgeUnavailableError(error)) {
-          // Tauri ブリッジ不在(ブラウザ/mock モード)— 文言非依存の code 判定(WP-C3)。
-          setStartupGate({ status: 'ready' });
-          return;
-        }
-        setStartupGate({
-          status: 'failed',
-          error: {
-            kind: 'unknown',
-            message: 'kukuri could not finish desktop startup.',
-            detail: error instanceof Error ? error.message : String(error),
-            db_path: null,
-          },
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const loadStartupStatus = () => {
+      getDesktopStartupStatus()
+        .then((status: DesktopStartupStatus) => {
+          if (!active) {
+            return;
+          }
+          setStartupGate(status);
+          if (status.status === 'initializing') {
+            retryTimer = setTimeout(loadStartupStatus, 100);
+          }
+        })
+        .catch((error: unknown) => {
+          if (!active) {
+            return;
+          }
+          if (isBridgeUnavailableError(error)) {
+            // Tauri ブリッジ不在(ブラウザ/mock モード)— 文言非依存の code 判定(WP-C3)。
+            setStartupGate({ status: 'ready' });
+            return;
+          }
+          setStartupGate({
+            status: 'failed',
+            error: {
+              kind: 'unknown',
+              message: 'kukuri could not finish desktop startup.',
+              detail: error instanceof Error ? error.message : String(error),
+              db_path: null,
+            },
+          });
         });
-      });
+    };
+    loadStartupStatus();
 
     return () => {
       active = false;
+      if (retryTimer !== null) {
+        clearTimeout(retryTimer);
+      }
     };
   }, [props.api]);
 
-  if (startupGate.status === 'checking') {
+  if (startupGate.status === 'checking' || startupGate.status === 'initializing') {
     return <StartupStatusScreen status='checking' />;
   }
 
