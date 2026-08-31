@@ -23,9 +23,14 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { JoinedPrivateChannelView, PostView } from '@/lib/api';
 import { useRouteSynchronization } from '@/shell/routing/useRouteSynchronization';
 import { createDesktopShellStore, type DesktopShellStoreApi } from '@/shell/store';
-import { resetWindowHash } from '@/shell/testSupport/renderShellHook';
+import { resetWindowHash, setWindowHash } from '@/shell/testSupport/renderShellHook';
 import { selectShellRoutingSlice } from '@/shell/storeSelectors';
-import { activeWorkspaceScope } from '@/shell/slices/workspace';
+import {
+  activeWorkspaceColumn,
+  activeWorkspaceScope,
+  columnIdentityId,
+  openTransientColumn,
+} from '@/shell/slices/workspace';
 
 const DM_PEER_PUBKEY = 'd'.repeat(64);
 
@@ -443,6 +448,9 @@ describe('useRouteSynchronization', () => {
   describe('route observation gate', () => {
     test('skips processing while a pending route url has not been observed and the route did not change', () => {
       const storeApi = createDesktopShellStore();
+      // pending 未観測 = 自分の navigate で実 URL(hash)は pending へ更新済みだが
+      // router のレンダーがまだ追いついていない状態。
+      setWindowHash('#/timeline?topic=kukuri%3Atopic%3Ageneral');
       // 未追跡 topic(本来なら normalize される URL)でも、pending 未観測なら何もしない
       const args = createHookArgs(storeApi, {
         lastObservedRouteUrlRef: { current: '/timeline?topic=kukuri%3Atopic%3Aunknown' },
@@ -483,6 +491,46 @@ describe('useRouteSynchronization', () => {
       );
       // 未追跡 topic の normalize が通常どおり走る
       expect(args.syncRoute).toHaveBeenCalledTimes(1);
+      view.unmount();
+    });
+
+    test('discards a pending push superseded by history back and reprojects the observed url', () => {
+      // hash-routing narrow flake の再現(React Router v7 の transition レンダー):
+      // thread への push が router に commit される前に goBack が来ると、location 文字列は
+      // last observed と同一のまま二度と変化せず、pending ガードが route 消費を止めて
+      // thread Column が active のまま取り残されていた。実 URL(hash)が pending と一致
+      // しない場合は追い越し済みと判定し、pending を破棄して現在 URL を再投影する。
+      setWindowHash('#/timeline?topic=kukuri%3Atopic%3Ageneral');
+      const storeApi = createDesktopShellStore();
+      const args = createHookArgs(storeApi);
+      const view = renderHook((props: RouteSynchronizationArgs) => useRouteSynchronization(props), {
+        initialProps: args,
+      });
+      expect(activeWorkspaceColumn(storeApi.getState().workspaceState).kind).toBe('timeline');
+
+      // thread push 直後の状態を模す: store は thread Column が active、
+      // pending は push した URL のまま router には未観測。実 URL は goBack で timeline に settle 済み。
+      const scope = { topicId: 'kukuri:topic:general', channelId: null };
+      act(() => {
+        storeApi.getState().patchState({
+          selectedThread: 'post-1',
+          threadsById: { 'post-1': [buildPost()] },
+          workspaceState: openTransientColumn(storeApi.getState().workspaceState, {
+            id: columnIdentityId('thread', scope, 'post-1'),
+            kind: 'thread',
+            scope,
+            entityId: 'post-1',
+            pinned: false,
+          }),
+        });
+      });
+      args.pendingRouteUrlRef.current =
+        '/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=post-1';
+      view.rerender({ ...args, state: selectShellRoutingSlice(storeApi.getState()) });
+
+      expect(args.pendingRouteUrlRef.current).toBeNull();
+      expect(activeWorkspaceColumn(storeApi.getState().workspaceState).kind).toBe('timeline');
+      expect(storeApi.getState().selectedThread).toBeNull();
       view.unmount();
     });
   });

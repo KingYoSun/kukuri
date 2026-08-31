@@ -147,7 +147,10 @@ export function useDesktopShellRouting({
         location.search,
         typeof window === 'undefined' ? '' : window.location.hash
       ),
-    [location.pathname, location.search]
+    // 文字列 (pathname, search) ではなく location オブジェクトで再計算する。
+    // 同一 URL 文字列の history entry へ戻る遷移(push が transition で未 commit のまま
+    // goBack された場合)でも新しい location として route 消費 effect を再評価させるため。
+    [location]
   );
 
   const routeSection = useMemo(() => {
