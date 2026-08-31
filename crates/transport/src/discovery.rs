@@ -1,17 +1,12 @@
 use std::sync::Arc;
 #[cfg(test)]
 use std::sync::RwLock as StdRwLock;
-use std::time::Duration;
 
 use anyhow::Result;
 use iroh::Endpoint;
 use iroh::address_lookup::MemoryLookup;
-use tokio::time::timeout;
-use tracing::debug;
 
 use crate::config::{ConnectMode, TransportRelayConfig};
-
-const RELAY_ONLINE_STARTUP_TIMEOUT: Duration = Duration::from_secs(15);
 
 pub async fn prepare_endpoint_for_discovery(
     endpoint: &Endpoint,
@@ -22,23 +17,10 @@ pub async fn prepare_endpoint_for_discovery(
     if relay_backed {
         let endpoint = endpoint.clone();
         let discovery = Arc::clone(discovery);
-        let online_task = tokio::spawn(async move {
+        tokio::spawn(async move {
             endpoint.online().await;
             discovery.add_endpoint_info(endpoint.addr());
         });
-        match timeout(RELAY_ONLINE_STARTUP_TIMEOUT, async {
-            let _ = online_task.await;
-        })
-        .await
-        {
-            Ok(()) => {}
-            Err(error) => {
-                debug!(
-                    error = %error,
-                    "timed out waiting for relay-backed endpoint to come online; continuing startup in background"
-                );
-            }
-        }
     }
     discovery.add_endpoint_info(endpoint.addr());
 
@@ -54,9 +36,41 @@ mod tests {
     use iroh::address_lookup::{AddrFilter, AddressLookup};
     use iroh_mainline_address_lookup::DhtAddressLookup;
     use n0_mainline::{DhtBuilder, Testnet};
+    use std::time::Duration;
+    use tokio::time::timeout;
 
     use crate::config::DhtDiscoveryOptions;
     use crate::iroh::bind_endpoint_with_options;
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn transport_unreachable_relay_does_not_block_endpoint_bind() {
+        let relay_config = TransportRelayConfig {
+            iroh_relay_urls: vec!["https://127.0.0.1:9".to_string()],
+        }
+        .normalized();
+        let relay_urls = Arc::new(StdRwLock::new(
+            relay_config.parsed_relay_urls().expect("relay urls"),
+        ));
+
+        let (endpoint, _discovery) = timeout(
+            Duration::from_secs(3),
+            bind_endpoint_with_options(
+                std::net::SocketAddr::V4(std::net::SocketAddrV4::new(
+                    std::net::Ipv4Addr::LOCALHOST,
+                    0,
+                )),
+                &DhtDiscoveryOptions::disabled(),
+                &relay_config,
+                relay_urls,
+                None,
+            ),
+        )
+        .await
+        .expect("endpoint bind must not wait for relay connectivity")
+        .expect("bind endpoint");
+
+        endpoint.close().await;
+    }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn transport_relay_backed_dht_lookup_publishes_relay_info() {

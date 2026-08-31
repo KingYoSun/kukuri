@@ -183,3 +183,24 @@ test('desktop app renders a startup error when the local database cannot be open
   expect(screen.getByDisplayValue(/migration checksum mismatch/)).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Post' })).not.toBeInTheDocument();
 });
+
+test('desktop app keeps the startup screen visible while the native runtime initializes', async () => {
+  invokeMock.mockResolvedValueOnce({ status: 'initializing' });
+  invokeMock.mockResolvedValueOnce({
+    status: 'failed',
+    error: {
+      kind: 'unknown',
+      message: 'kukuri could not finish desktop startup.',
+      detail: 'background initialization completed with an error',
+      db_path: null,
+    },
+  });
+
+  render(<App />);
+
+  expect(await screen.findByText('Checking startup status…')).toBeInTheDocument();
+  expect(await screen.findByText('kukuri could not open the local database.')).toBeInTheDocument();
+  expect(invokeMock).toHaveBeenCalledTimes(2);
+  expect(invokeMock).toHaveBeenNthCalledWith(1, 'get_desktop_startup_status', undefined);
+  expect(invokeMock).toHaveBeenNthCalledWith(2, 'get_desktop_startup_status', undefined);
+});

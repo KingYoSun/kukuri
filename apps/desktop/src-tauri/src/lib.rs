@@ -13,11 +13,38 @@ use tauri_plugin_deep_link::DeepLinkExt;
 use crate::{
     commands::background_notifications::OsNotificationBackground,
     state::{
-        DesktopStartupState, build_desktop_state, consent_satisfied, load_app_consent,
-        resolve_db_path,
+        DesktopStartupState, DesktopStartupStatus, build_desktop_state, consent_satisfied,
+        failed_status, load_app_consent, resolve_db_path,
     },
     tracing::init_tracing,
 };
+
+pub(crate) async fn initialize_desktop_state(app_handle: AppHandle) -> DesktopStartupStatus {
+    let status = match build_desktop_state(&app_handle).await {
+        Ok(state) => {
+            info!("initialized kukuri desktop runtime");
+            app_handle.manage(state);
+            DesktopStartupStatus::Ready
+        }
+        Err(error) => {
+            error!(%error, "failed to initialize desktop runtime");
+            let db_path = resolve_db_path(&app_handle).ok();
+            failed_status(error, db_path)
+        }
+    };
+    app_handle
+        .state::<DesktopStartupState>()
+        .set_status(status.clone());
+    status
+}
+
+pub(crate) fn spawn_desktop_initialization(
+    app_handle: AppHandle,
+) -> tauri::async_runtime::JoinHandle<DesktopStartupStatus> {
+    tauri::async_runtime::spawn_blocking(move || {
+        tauri::async_runtime::block_on(initialize_desktop_state(app_handle))
+    })
+}
 
 /// Bring the main window back from the tray.
 fn show_main_window(app: &AppHandle) {
@@ -96,19 +123,9 @@ pub fn run() {
                 .and_then(|db_path| load_app_consent(&db_path))
                 .map(|record| record.accepted_bundle_version);
 
-            let startup_state = if consent_satisfied(accepted_bundle_version) {
-                match build_desktop_state(app.handle()) {
-                    Ok(state) => {
-                        info!("initialized kukuri desktop runtime");
-                        app.manage(state);
-                        DesktopStartupState::ready()
-                    }
-                    Err(error) => {
-                        error!(%error, "failed to initialize desktop runtime");
-                        let db_path = resolve_db_path(app.handle()).ok();
-                        DesktopStartupState::failed(error, db_path)
-                    }
-                }
+            let initialize_runtime = consent_satisfied(accepted_bundle_version);
+            let startup_state = if initialize_runtime {
+                DesktopStartupState::initializing()
             } else {
                 info!("app-level legal consent required; deferring runtime startup");
                 DesktopStartupState::consent_required(
@@ -124,6 +141,10 @@ pub fn run() {
             commands::background_notifications::spawn(app.handle().clone());
             #[cfg(any(windows, target_os = "linux"))]
             app.deep_link().register_all()?;
+            if initialize_runtime {
+                let app_handle = app.handle().clone();
+                spawn_desktop_initialization(app_handle);
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

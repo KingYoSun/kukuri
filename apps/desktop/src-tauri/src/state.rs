@@ -1,12 +1,13 @@
 use std::{
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use kukuri_desktop_runtime::{DesktopRuntime, StoreStartupError, resolve_db_path_from_env};
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager};
+use tokio::sync::watch;
 
 pub(crate) struct DesktopState {
     pub(crate) runtime: Arc<DesktopRuntime>,
@@ -25,6 +26,7 @@ pub(crate) struct AppConsentRecord {
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub(crate) enum DesktopStartupStatus {
+    Initializing,
     Ready,
     ConsentRequired {
         current_bundle_version: i32,
@@ -85,43 +87,39 @@ impl std::fmt::Display for StartupError {
 }
 
 pub(crate) struct DesktopStartupState {
-    status: Mutex<DesktopStartupStatus>,
+    status: watch::Sender<DesktopStartupStatus>,
 }
 
 impl DesktopStartupState {
-    pub(crate) fn ready() -> Self {
-        Self {
-            status: Mutex::new(DesktopStartupStatus::Ready),
-        }
+    pub(crate) fn initializing() -> Self {
+        Self::new(DesktopStartupStatus::Initializing)
     }
 
     pub(crate) fn consent_required(
         current_bundle_version: i32,
         accepted_bundle_version: Option<i32>,
     ) -> Self {
-        Self {
-            status: Mutex::new(DesktopStartupStatus::ConsentRequired {
-                current_bundle_version,
-                accepted_bundle_version,
-            }),
-        }
+        Self::new(DesktopStartupStatus::ConsentRequired {
+            current_bundle_version,
+            accepted_bundle_version,
+        })
     }
 
-    pub(crate) fn failed(error: StartupError, db_path: Option<PathBuf>) -> Self {
-        Self {
-            status: Mutex::new(failed_status(error, db_path)),
-        }
+    fn new(status: DesktopStartupStatus) -> Self {
+        let (status, _) = watch::channel(status);
+        Self { status }
     }
 
     pub(crate) fn status(&self) -> DesktopStartupStatus {
-        self.status
-            .lock()
-            .expect("startup status lock poisoned")
-            .clone()
+        self.status.borrow().clone()
     }
 
     pub(crate) fn set_status(&self, next: DesktopStartupStatus) {
-        *self.status.lock().expect("startup status lock poisoned") = next;
+        self.status.send_replace(next);
+    }
+
+    pub(crate) fn subscribe(&self) -> watch::Receiver<DesktopStartupStatus> {
+        self.status.subscribe()
     }
 }
 
@@ -233,13 +231,13 @@ pub(crate) fn map_error(error: anyhow::Error) -> CommandError {
         return CommandError {
             code: rejection.code(),
             message: rejection.to_string(),
-            status: Some(if rejection.reason
-                == kukuri_core::MetaverseResourceRejectionReason::RateExceeded
-            {
-                429
-            } else {
-                422
-            }),
+            status: Some(
+                if rejection.reason == kukuri_core::MetaverseResourceRejectionReason::RateExceeded {
+                    429
+                } else {
+                    422
+                },
+            ),
             retry_after_seconds: None,
         };
     }
@@ -268,19 +266,20 @@ pub(crate) fn resolve_db_path(app_handle: &tauri::AppHandle) -> Result<PathBuf, 
     resolve_db_path_from_env(&app_data_dir).map_err(error_message)
 }
 
-pub(crate) fn build_desktop_state(
+pub(crate) async fn build_desktop_state(
     app_handle: &tauri::AppHandle,
 ) -> Result<DesktopState, StartupError> {
     let db_path = resolve_db_path(app_handle).map_err(StartupError::unknown)?;
-    let runtime = tauri::async_runtime::block_on(DesktopRuntime::from_env(db_path))
+    let runtime = DesktopRuntime::from_env(db_path)
+        .await
         .map_err(StartupError::from_runtime_error)?;
     let runtime = Arc::new(runtime);
     // トレイ常駐中はフロントのポーリング(hidden で停止)が CN セッションを維持できないため、
     // runtime 常駐のセッション維持スケジューラをここで起動する(停止は shutdown / プロセス終了)。
-    tauri::async_runtime::block_on(runtime.start_community_node_session_scheduler());
+    runtime.start_community_node_session_scheduler().await;
 
     spawn_runtime_event_bridge(app_handle, &runtime);
-    tauri::async_runtime::block_on(runtime.start_sync_status_observer());
+    runtime.start_sync_status_observer().await;
 
     Ok(DesktopState { runtime })
 }
@@ -385,14 +384,12 @@ mod tests {
 
     #[test]
     fn community_indexing_request_error_preserves_stable_conflict_code() {
-        let error = CommandError::from(
-            kukuri_desktop_runtime::CommunityNodeIndexingRequestError {
-                code: "CHANNEL_SECRET_CONFLICT".to_string(),
-                message: "channel capability conflicts with the existing registration".to_string(),
-                status: Some(409),
-                retry_after_seconds: None,
-            },
-        );
+        let error = CommandError::from(kukuri_desktop_runtime::CommunityNodeIndexingRequestError {
+            code: "CHANNEL_SECRET_CONFLICT".to_string(),
+            message: "channel capability conflicts with the existing registration".to_string(),
+            status: Some(409),
+            retry_after_seconds: None,
+        });
         let json = serde_json::to_string(&error).expect("serialize indexing request error");
         assert_eq!(
             json,
@@ -402,13 +399,11 @@ mod tests {
 
     #[test]
     fn trust_relation_error_preserves_stable_unavailable_code() {
-        let error = CommandError::from(
-            kukuri_desktop_runtime::CommunityNodeTrustRelationError {
-                code: "RELATION_NOT_FOUND".to_string(),
-                message: "no relation observed for this pair".to_string(),
-                status: Some(404),
-            },
-        );
+        let error = CommandError::from(kukuri_desktop_runtime::CommunityNodeTrustRelationError {
+            code: "RELATION_NOT_FOUND".to_string(),
+            message: "no relation observed for this pair".to_string(),
+            status: Some(404),
+        });
         let json = serde_json::to_string(&error).expect("serialize trust relation error");
         assert_eq!(
             json,
@@ -472,7 +467,12 @@ mod tests {
 
     #[test]
     fn startup_state_status_can_be_updated() {
-        let state = DesktopStartupState::consent_required(LEGAL_BUNDLE_VERSION, None);
+        let state = DesktopStartupState::initializing();
+        assert!(matches!(state.status(), DesktopStartupStatus::Initializing));
+        state.set_status(DesktopStartupStatus::ConsentRequired {
+            current_bundle_version: LEGAL_BUNDLE_VERSION,
+            accepted_bundle_version: None,
+        });
         assert!(matches!(
             state.status(),
             DesktopStartupStatus::ConsentRequired { .. }
