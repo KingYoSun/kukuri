@@ -3,7 +3,8 @@
 - Status: current
 - Supersedes: None
 - Superseded by: None
-- PR: https://github.com/KingYoSun/kukuri/pull/837
+- PR: https://github.com/KingYoSun/kukuri/pull/842
+- Previous PRs: https://github.com/KingYoSun/kukuri/pull/837, https://github.com/KingYoSun/kukuri/pull/839
 - Preview: [Windows 11 / Tauri / dark](./2026-08-30-issue-820-explore-post-card-windows.png)
 - Surface / user / purpose: Explore の検索・発見・おすすめ結果で、利用者が Timeline と同じ投稿Cardの視覚・著者導線・ID操作・通報導線を使って索引結果を確認する。
 - Summary: Explore 固有の簡易結果Cardを共通 `PostCard` の読み取り専用表示へ置き換えた。索引レスポンスに存在する投稿ID、著者公開鍵、本文、時刻、公開範囲だけを表示し、不足するエンベロープ、添付、反応、返信、リポスト等は補完しない。preview注意書きと生のscope識別子は画面から削除した。
