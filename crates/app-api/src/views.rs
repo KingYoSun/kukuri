@@ -1,5 +1,5 @@
 use kukuri_core::{
-    AssetRole, ChannelAudienceKind, ChannelSharingState, DomeConnectionProposalV1,
+    AssetRole, ChannelAudienceKind, ChannelRef, ChannelSharingState, DomeConnectionProposalV1,
     DomeConnectionRecordV1, DomeConnectionTerminalReasonV1, DomeCustomizationV1, DomeDirection,
     DomeHostingLeaseV1, DomeHostingStateV1, DomeMoveRecordV1, DomeProposalDerivedStatusV1,
     DomeProposalSelectionV1, DomeTopologyResolutionV1, GameRoomKind, GameRoomStatus,
@@ -79,6 +79,44 @@ pub struct PostView {
     #[serde(default)]
     #[cfg_attr(feature = "ts", ts(as = "Option<Vec<ReactionKeyView>>"))]
     pub my_reactions: Vec<ReactionKeyView>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct CommunityIndexPostResolveInput {
+    pub key: String,
+    pub topic: String,
+    pub object_id: String,
+    pub author_pubkey: String,
+    pub channel_ref: ChannelRef,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct CommunityIndexPostActionCapabilitiesView {
+    pub open_thread: bool,
+    pub reply: bool,
+    pub repost: bool,
+    pub quote_repost: bool,
+    pub react: bool,
+    pub copy_link: bool,
+    pub bookmark: bool,
+    pub withdraw: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
+pub struct CommunityIndexResolvedPostView {
+    pub key: String,
+    pub post: Option<PostView>,
+    pub capabilities: CommunityIndexPostActionCapabilitiesView,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct CommunityIndexPostResolveResponse {
+    pub entries: Vec<CommunityIndexResolvedPostView>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

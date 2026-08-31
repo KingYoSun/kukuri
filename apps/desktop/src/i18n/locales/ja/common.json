@@ -142,6 +142,8 @@
     "none": "なし",
     "selectAuthor": "著者を選択するとプロフィールと関係を確認できます。",
     "unknownAuthor": "不明な著者",
+    "authorLoading": "著者を取得中…",
+    "authorUnavailable": "著者情報を取得できません",
     "unknown": "不明"
   },
   "labels": {

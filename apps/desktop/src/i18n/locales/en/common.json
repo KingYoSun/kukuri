@@ -142,6 +142,8 @@
     "none": "none",
     "selectAuthor": "Select an author to inspect profile and relationship.",
     "unknownAuthor": "Unknown author",
+    "authorLoading": "Loading author…",
+    "authorUnavailable": "Author unavailable",
     "unknown": "unknown"
   },
   "labels": {

@@ -58,17 +58,18 @@ describe('communityIndexPostCardView', () => {
       attachments: [],
       reaction_summary: [],
       my_reactions: [],
-      is_threadable: true,
-      published_topic_id: entry.scope_id,
+      is_threadable: false,
+      published_topic_id: null,
       reply_to: null,
       repost_of: null,
     });
     expect(view.authorLabel).toBe('Alice');
     expect(view.authorPicture).toBe('https://example.test/alice.png');
     expect(view.audienceChipLabel).toBe('Public');
-    expect(view.threadTopicId).toBe(entry.scope_id);
-    expect(view.canReply).toBe(true);
-    expect(view.canRepost).toBe(true);
+    expect(view.threadTopicId).toBeNull();
+    expect(view.canReply).toBe(false);
+    expect(view.canRepost).toBe(false);
+    expect(view.canReact).toBe(false);
     expect(view.media).toMatchObject({ kind: null, state: 'ready', extraAttachmentCount: 0 });
     expect(view.identifierCopy).toEqual({
       postId: entry.object_id,
@@ -122,7 +123,7 @@ describe('communityIndexPostCardView', () => {
     expect(JSON.stringify(view)).not.toContain('private-channel-secret-id');
   });
 
-  test('restores a private channel interaction context only when its parent topic is known', () => {
+  test('keeps a private channel result read-only until its canonical post is resolved', () => {
     const view = communityIndexPostCardView(
       { ...entry, scope_kind: 'private_channel', scope_id: 'channel-1' },
       {
@@ -134,13 +135,13 @@ describe('communityIndexPostCardView', () => {
       }
     );
 
-    expect(view.threadTopicId).toBe('kukuri:topic:rust');
+    expect(view.threadTopicId).toBeNull();
     expect(view.post).toMatchObject({
-      published_topic_id: 'kukuri:topic:rust',
-      channel_id: 'channel-1',
-      is_threadable: true,
+      published_topic_id: null,
+      channel_id: null,
+      is_threadable: false,
     });
-    expect(view.canReply).toBe(true);
+    expect(view.canReply).toBe(false);
     expect(view.canRepost).toBe(false);
   });
 });

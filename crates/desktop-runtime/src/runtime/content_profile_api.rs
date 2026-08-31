@@ -145,9 +145,22 @@ impl DesktopRuntime {
         self.app_service.list_bookmarked_posts().await
     }
 
+    pub async fn resolve_community_index_posts(
+        &self,
+        request: ResolveCommunityIndexPostsRequest,
+    ) -> Result<CommunityIndexPostResolveResponse> {
+        self.app_service
+            .resolve_community_index_posts(request.entries)
+            .await
+    }
+
     pub async fn bookmark_post(&self, request: BookmarkPostRequest) -> Result<BookmarkedPostView> {
         self.app_service
-            .bookmark_post(request.topic.as_str(), request.object_id.as_str())
+            .bookmark_post_in_channel(
+                request.topic.as_str(),
+                request.object_id.as_str(),
+                request.channel_ref,
+            )
             .await
     }
 

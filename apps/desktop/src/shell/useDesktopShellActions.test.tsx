@@ -283,7 +283,9 @@ describe('useDesktopShellActions', () => {
     });
 
     expect(bookmarkPost).toHaveBeenCalledTimes(1);
-    expect(bookmarkPost).toHaveBeenCalledWith('kukuri:topic:general', 'bookmark-post-1');
+    expect(bookmarkPost).toHaveBeenCalledWith('kukuri:topic:general', 'bookmark-post-1', {
+      kind: 'public',
+    });
     expect(removeBookmarkedPost).not.toHaveBeenCalled();
     expect(view.store.getState().bookmarkedPosts).toHaveLength(1);
     expect(view.store.getState().bookmarkedPosts[0]?.bookmarked_at).toBe(1111);

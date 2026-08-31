@@ -2,7 +2,7 @@ use ::tracing::{info, warn};
 use kukuri_desktop_runtime::{
     BookmarkPostRequest, CreatePostRequest, CreateRepostRequest, GetBlobMediaRequest,
     GetBlobPreviewRequest, ListProfileTimelineRequest, ListThreadRequest, ListTimelineRequest,
-    RemoveBookmarkedPostRequest, WithdrawPostRequest,
+    RemoveBookmarkedPostRequest, ResolveCommunityIndexPostsRequest, WithdrawPostRequest,
 };
 
 use crate::state::{CommandError, DesktopState, map_error};
@@ -42,6 +42,18 @@ pub async fn list_bookmarked_posts(
     state
         .runtime
         .list_bookmarked_posts()
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn resolve_community_index_posts(
+    state: tauri::State<'_, DesktopState>,
+    request: ResolveCommunityIndexPostsRequest,
+) -> Result<kukuri_app_api::CommunityIndexPostResolveResponse, CommandError> {
+    state
+        .runtime
+        .resolve_community_index_posts(request)
         .await
         .map_err(map_error)
 }

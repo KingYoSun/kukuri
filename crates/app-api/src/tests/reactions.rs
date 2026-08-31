@@ -1,6 +1,35 @@
 use super::*;
 
 #[tokio::test]
+async fn reaction_hydrates_a_missing_target_projection_before_toggling() {
+    let (app, store, _, _) = local_app_with_memory_services();
+    let topic = "kukuri:topic:reaction-hydration";
+    let object_id = app
+        .create_post(topic, "hydrate before reacting", None)
+        .await
+        .expect("create post");
+    ObjectProjectionStore::rebuild_object_projections(store.as_ref(), Vec::new())
+        .await
+        .expect("clear projections");
+
+    let state = app
+        .toggle_reaction(
+            topic,
+            object_id.as_str(),
+            ReactionKeyV1::Emoji {
+                emoji: "👍".into()
+            },
+            Some(ChannelRef::Public),
+        )
+        .await
+        .expect("toggle reaction after hydration");
+
+    assert_eq!(state.target_object_id, object_id);
+    assert_eq!(state.reaction_summary.len(), 1);
+    assert_eq!(state.my_reactions.len(), 1);
+}
+
+#[tokio::test]
 async fn public_post_reaction_persists_and_aggregates_emoji_and_custom_keys() {
     let (app, store, docs_sync, blob_service) = local_app_with_memory_services();
     let topic = "kukuri:topic:reaction-public";

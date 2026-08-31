@@ -101,7 +101,9 @@ pub(crate) const NOTIFICATION_PREVIEW_LIMIT: usize = 80;
 pub(crate) use crate::views::{
     AcceptDomeConnectionProposalInput, AttachmentView, AuthorSocialView, BlobMediaPayload,
     BlobViewStatus, BookmarkedCustomReactionView, BookmarkedPostView, ChannelAccessTokenExport,
-    ChannelAccessTokenKind, ChannelAccessTokenPreview, CreateCustomReactionAssetInput,
+    ChannelAccessTokenKind, ChannelAccessTokenPreview, CommunityIndexPostActionCapabilitiesView,
+    CommunityIndexPostResolveInput, CommunityIndexPostResolveResponse,
+    CommunityIndexResolvedPostView, CreateCustomReactionAssetInput,
     CreateDomeConnectionProposalInput, CreateGameRoomInput, CreateLiveSessionInput,
     CreateMetaverseRoomInput, CustomReactionAssetView, DeliveryState,
     DirectMessageConversationView, DirectMessageMessageView, DirectMessageStatusView,

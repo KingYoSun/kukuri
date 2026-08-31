@@ -3,7 +3,8 @@
 - Status: current
 - Supersedes: None
 - Superseded by: None
-- PR: https://github.com/KingYoSun/kukuri/pull/837
+- PR: https://github.com/KingYoSun/kukuri/pull/842
+- Previous PRs: https://github.com/KingYoSun/kukuri/pull/837, https://github.com/KingYoSun/kukuri/pull/839
 - Preview: [Windows 11 / Tauri / dark](./2026-08-30-issue-820-explore-post-card-windows.png)
 - Surface / user / purpose: Explore の検索・発見・おすすめ結果で、利用者が Timeline と同じ投稿Cardの視覚・著者導線・ID操作・通報導線を使って索引結果を確認する。
 - Summary: Explore 固有の簡易結果Cardを共通 `PostCard` の読み取り専用表示へ置き換えた。索引レスポンスに存在する投稿ID、著者公開鍵、本文、時刻、公開範囲だけを表示し、不足するエンベロープ、添付、反応、返信、リポスト等は補完しない。preview注意書きと生のscope識別子は画面から削除した。
@@ -35,3 +36,26 @@
   - 主導権: operation / node / scopeの変更で古い結果と古い通報対象を残さない。
   - 記憶負荷: Explore専用Cardの別ルールをなくし、既知のTimeline Card操作へ統一する。
 - Exceptions: None
+
+## 2026-08-31 仕様上書き
+
+- PR #839 を Issue #820 の操作仕様に対する正式な上書きとする。上記の読み取り専用表示は PR #837 時点のレビュー記録として保持する。
+- 「提供部分のみ有効化」は、索引レスポンスに含まれるデータだけを表示するという意味ではなく、「Community Index の結果から実処理を完了できる投稿アクションだけを表示し、有効化する」と定義する。
+- 表示・有効化の条件には、必要な識別子とtopic / channel文脈、権限・capability、対象objectの解決、backend処理の成功、成功後の表示状態への反映を含む。callbackやAPIが配線されているだけでは動作可能とみなさない。
+- 返信、リポスト、リアクション、リンクコピー、ブックマーク、通報、取り下げなど、共通 `PostCard` が提示し得るすべての投稿アクションをこの判定対象とする。
+- 条件を満たせないアクションは表示しない。処理中の一時的な無効化は許容するが、恒常的に実行不能なボタンを無効状態で表示することは提供に含めない。
+- 表示・有効化する各アクションは、Community Index の結果を起点として処理完了と画面反映までを自動テストまたは明記した手動確認で検証する。
+
+## 2026-08-31 仕様上書きの実装レビュー
+
+- Summary: remote Community Index 契約を変更せず、可視結果を desktop 内部で scope 単位に hydrate して正本 `PostView` と action capability を返す bounded batch 契約を追加した。解決中・対象欠落・scope 不一致・権限不足・親 topic 不明では fail-closed とし、実処理を完了できる action だけを `PostCard` へ渡す。
+- Author resolution: 自分自身は `localProfile`、既知著者は既存 cache、未取得著者は重複排除した `getAuthorSocialView` で解決する。取得中、取得失敗、取得済みだが名前未設定を分離し、「不明な著者」は最後の状態だけに使用する。node / scope / operation が変わった後の古い応答は反映しない。
+- Action safety: 返信対象が見つからない場合は通常投稿へ変化させず失敗する。リアクションとブックマークは操作時に scope と対象 projection を再 hydrate し、取り下げは durable docs の署名済み envelope を再解決して author / topic / channel を検証する。成功したリアクション、ブックマーク、取り下げ後は対象 Card を再解決する。
+- Windows / WebView2: Windows 11 の Tauri development build を隔離 app data と keyring 無効化で起動した。実 runtime はネットワーク開始前の利用規約同意 gate まで正常表示し、同意操作は行わなかった。同じ Tauri / WebView2 へ deterministic mock を注入した確認では、Explore 検索結果の著者が `kukuri builder` と解決され、「不明な著者」にならないこと、リアクション・リポスト・返信・リンクコピー・ブックマーク・通報だけが表示されること、返信が対象の公開 dev thread と composer まで到達することを Computer Use で確認した。
+- Validation:
+  - failing-first: 返信対象欠落が通常投稿を作成する backend 回帰、正本 resolver 未呼出し・未解決 action 表示・著者未取得の frontend 回帰を追加テストで再現してから修正した。
+  - `cargo xtask check`: formatting、workspace clippy、Tauri check、lint、typecheck passed。
+  - `cargo xtask test`: Rust 700 passed / 3 skipped、harness 22 passed、frontend 131 files / 988 tests passed。
+  - `cargo xtask desktop-ui-check`: lint、typecheck、frontend 988 tests、Storybook build、browser Playwright 52 tests、visual smoke 14 tests passed。
+  - `cargo xtask tauri-check`、`cargo xtask e2e-smoke`、`cargo xtask oversized-files`、`git diff --check` passed。oversized-files は既存 baseline warning のみ。
+- Not verified: 物理タッチパネル、ペン入力、スクリーンリーダーの音声読み上げ。Windows実 runtimeでは利用規約へ同意せずネットワーク通信を開始しなかったため、Community Index の処理完了経路は同じ Tauri / WebView2 の deterministic mock、Playwright、Vitest、Rust integration testsで確認した。

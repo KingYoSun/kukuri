@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 
 import i18n from '@/i18n';
-import type { AuthorSocialView, CommunityNodeManifest, DesktopApi } from '@/lib/api';
+import type { AuthorSocialView, CommunityNodeManifest, DesktopApi, PostView } from '@/lib/api';
 import { InvokeError } from '@/lib/api/invoke/error';
 
 import { CommunityIndexWorkspace } from './CommunityIndexWorkspace';
@@ -71,6 +71,58 @@ function knownAuthor(authorPubkey: string): AuthorSocialView {
     muted: false,
     blocking: false,
     blocked_by: false,
+  };
+}
+
+function resolvedPost(objectId: string): PostView {
+  return {
+    object_id: objectId,
+    envelope_id: `envelope-${objectId}`,
+    author_pubkey: `author-${objectId}`,
+    author_name: 'alice',
+    author_display_name: 'Alice',
+    author_picture: null,
+    author_picture_asset: null,
+    following: false,
+    followed_by: false,
+    mutual: false,
+    friend_of_friend: false,
+    provenance: null,
+    withdrawal: null,
+    content: 'canonical content',
+    content_status: 'Available',
+    attachments: [],
+    created_at: 42,
+    reply_to: null,
+    reply_preview: null,
+    root_id: objectId,
+    object_kind: 'post',
+    published_topic_id: 'rust',
+    origin_topic_id: 'rust',
+    repost_of: null,
+    repost_commentary: null,
+    is_threadable: true,
+    channel_id: null,
+    audience_label: 'Public',
+    reaction_summary: [],
+    my_reactions: [],
+  };
+}
+
+function resolvedIndexEntry(objectId: string) {
+  return {
+    key: `public_topic:rust:${objectId}`,
+    post: resolvedPost(objectId),
+    capabilities: {
+      open_thread: true,
+      reply: true,
+      repost: true,
+      quote_repost: true,
+      react: true,
+      copy_link: true,
+      bookmark: true,
+      withdraw: false,
+    },
   };
 }
 
@@ -171,8 +223,8 @@ test('topic search sends the active public scope and renders results with the sh
   expect(screen.queryByText(/Search preview; may include derived tags/)).not.toBeInTheDocument();
   expect(screen.queryByText('rust')).not.toBeInTheDocument();
   expect(screen.queryByText('public_topic')).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Reply' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Repost' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Reply' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Repost' })).not.toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: 'Alice' }));
   expect(onOpenAuthor).toHaveBeenCalledWith('author-1');
 });
@@ -185,7 +237,10 @@ test('Explore results expose the same post actions as the timeline', async () =>
   const searchCommunityNodeIndex = vi.fn().mockResolvedValue({
     entries: [indexEntry('explore-actions', 'actionable result')],
   });
-  const api = { searchCommunityNodeIndex } as unknown as DesktopApi;
+  const resolveCommunityIndexPosts = vi.fn().mockResolvedValue({
+    entries: [resolvedIndexEntry('explore-actions')],
+  });
+  const api = { searchCommunityNodeIndex, resolveCommunityIndexPosts } as unknown as DesktopApi;
   const interactiveActions = {
     onOpenThread: vi.fn(),
     onOpenThreadInTopic: vi.fn(),
@@ -210,6 +265,8 @@ test('Explore results expose the same post actions as the timeline', async () =>
   const card = result.closest('article');
   if (!(card instanceof HTMLElement)) throw new Error('Explore result card not found');
 
+  await waitFor(() => expect(resolveCommunityIndexPosts).toHaveBeenCalledTimes(1));
+
   expect(within(card).getByRole('button', { name: 'React' })).toBeEnabled();
   expect(within(card).getByRole('button', { name: 'Repost' })).toBeInTheDocument();
   expect(within(card).getByRole('button', { name: 'Reply' })).toBeInTheDocument();
@@ -223,6 +280,7 @@ test('Explore results expose the same post actions as the timeline', async () =>
       object_id: 'explore-actions',
       published_topic_id: 'rust',
       is_threadable: true,
+      content: 'canonical content',
     })
   );
 
@@ -234,8 +292,194 @@ test('Explore results expose the same post actions as the timeline', async () =>
   await user.click(within(card).getByRole('button', { name: 'Repost' }));
   await user.click(screen.getAllByRole('button', { name: 'Repost' })[1]);
   expect(onRepost).toHaveBeenCalledWith(
-    expect.objectContaining({ object_id: 'explore-actions', published_topic_id: 'rust' })
+    expect.objectContaining({
+      object_id: 'explore-actions',
+      published_topic_id: 'rust',
+      content: 'canonical content',
+    })
   );
+});
+
+test('reaction results are refreshed into the Community Index card', async () => {
+  const user = userEvent.setup();
+  const entry = indexEntry('reaction-result', 'reaction preview');
+  const first = resolvedIndexEntry(entry.object_id);
+  const initialPost = {
+    ...first.post,
+    reaction_summary: [
+      {
+        reaction_key_kind: 'emoji',
+        normalized_reaction_key: 'emoji:👍',
+        emoji: '👍',
+        custom_asset: null,
+        count: 1,
+      },
+    ],
+  };
+  const refreshedPost = {
+    ...initialPost,
+    reaction_summary: [{ ...initialPost.reaction_summary[0], count: 2 }],
+    my_reactions: [
+      {
+        reaction_key_kind: 'emoji',
+        normalized_reaction_key: 'emoji:👍',
+        emoji: '👍',
+        custom_asset: null,
+      },
+    ],
+  };
+  const resolveCommunityIndexPosts = vi
+    .fn()
+    .mockResolvedValueOnce({ entries: [{ ...first, post: initialPost }] })
+    .mockResolvedValueOnce({ entries: [{ ...first, post: refreshedPost }] });
+  const onToggleReaction = vi.fn().mockResolvedValue(undefined);
+  const api = {
+    searchCommunityNodeIndex: vi.fn().mockResolvedValue({ entries: [entry] }),
+    resolveCommunityIndexPosts,
+  } as unknown as DesktopApi;
+
+  render(
+    <CommunityIndexWorkspace
+      {...workspaceProps(api, {
+        onToggleReaction,
+        knownAuthorsByPubkey: { [entry.author_pubkey]: knownAuthor(entry.author_pubkey) },
+      })}
+    />
+  );
+  runSearch();
+
+  const firstChip = await screen.findByRole('button', { name: /👍\s*1/ });
+  await user.click(firstChip);
+
+  expect(onToggleReaction).toHaveBeenCalledWith(
+    expect.objectContaining({ object_id: entry.object_id, content: 'canonical content' }),
+    { kind: 'emoji', emoji: '👍' }
+  );
+  await waitFor(() => expect(resolveCommunityIndexPosts).toHaveBeenCalledTimes(2));
+  expect(await screen.findByRole('button', { name: /👍\s*2/ })).toBeInTheDocument();
+});
+
+test('unresolved results stay fail-closed and expose only reporting and identifier actions', async () => {
+  const entry = indexEntry('unresolved', 'read-only result');
+  const api = {
+    searchCommunityNodeIndex: vi.fn().mockResolvedValue({ entries: [entry] }),
+    resolveCommunityIndexPosts: vi.fn().mockResolvedValue({
+      entries: [
+        {
+          key: `public_topic:rust:${entry.object_id}`,
+          post: null,
+          capabilities: {
+            open_thread: false,
+            reply: false,
+            repost: false,
+            quote_repost: false,
+            react: false,
+            copy_link: false,
+            bookmark: false,
+            withdraw: false,
+          },
+        },
+      ],
+    }),
+  } as unknown as DesktopApi;
+
+  render(<CommunityIndexWorkspace {...workspaceProps(api)} />);
+  runSearch();
+
+  const result = await screen.findByText(entry.text);
+  const card = result.closest('article');
+  if (!(card instanceof HTMLElement)) throw new Error('Explore result card not found');
+  await waitFor(() => expect(api.resolveCommunityIndexPosts).toHaveBeenCalledTimes(1));
+
+  expect(within(card).queryByRole('button', { name: 'React' })).not.toBeInTheDocument();
+  expect(within(card).queryByRole('button', { name: 'Repost' })).not.toBeInTheDocument();
+  expect(within(card).queryByRole('button', { name: 'Reply' })).not.toBeInTheDocument();
+  expect(within(card).queryByRole('button', { name: 'Copy link' })).not.toBeInTheDocument();
+  expect(within(card).queryByRole('button', { name: 'Bookmark' })).not.toBeInTheDocument();
+  expect(within(card).getByRole('button', { name: 'Report' })).toBeInTheDocument();
+});
+
+test('missing author profiles are resolved instead of being labeled unknown', async () => {
+  const entry = indexEntry('remote-author', 'profile lookup result');
+  const getAuthorSocialView = vi.fn().mockResolvedValue(knownAuthor(entry.author_pubkey));
+  const api = {
+    searchCommunityNodeIndex: vi.fn().mockResolvedValue({ entries: [entry] }),
+    resolveCommunityIndexPosts: vi.fn().mockResolvedValue({ entries: [] }),
+    getAuthorSocialView,
+  } as unknown as DesktopApi;
+
+  render(<CommunityIndexWorkspace {...workspaceProps(api)} />);
+  runSearch();
+
+  expect(await screen.findByText('Alice')).toBeInTheDocument();
+  expect(getAuthorSocialView).toHaveBeenCalledTimes(1);
+  expect(getAuthorSocialView).toHaveBeenCalledWith(entry.author_pubkey);
+  expect(screen.queryByText('Unknown author')).not.toBeInTheDocument();
+});
+
+test('the local profile is used without a redundant author lookup', async () => {
+  const entry = indexEntry('local-author', 'local profile result');
+  const getAuthorSocialView = vi.fn();
+  const api = {
+    searchCommunityNodeIndex: vi.fn().mockResolvedValue({ entries: [entry] }),
+    resolveCommunityIndexPosts: vi.fn().mockResolvedValue({ entries: [] }),
+    getAuthorSocialView,
+  } as unknown as DesktopApi;
+
+  render(
+    <CommunityIndexWorkspace
+      {...workspaceProps(api, {
+        localAuthorPubkey: entry.author_pubkey,
+        localProfile: {
+          pubkey: entry.author_pubkey,
+          name: 'local-alice',
+          display_name: 'Local Alice',
+          about: null,
+          picture: null,
+          picture_asset: null,
+          updated_at: 42,
+        },
+      })}
+    />
+  );
+  runSearch();
+
+  expect(await screen.findByText('Local Alice')).toBeInTheDocument();
+  expect(getAuthorSocialView).not.toHaveBeenCalled();
+});
+
+test('unknown author is used only after a fetched profile has no configured name', async () => {
+  const entry = indexEntry('nameless-author', 'nameless profile result');
+  const api = {
+    searchCommunityNodeIndex: vi.fn().mockResolvedValue({ entries: [entry] }),
+    resolveCommunityIndexPosts: vi.fn().mockResolvedValue({ entries: [] }),
+    getAuthorSocialView: vi.fn().mockResolvedValue({
+      ...knownAuthor(entry.author_pubkey),
+      name: null,
+      display_name: null,
+    }),
+  } as unknown as DesktopApi;
+
+  render(<CommunityIndexWorkspace {...workspaceProps(api)} />);
+  runSearch();
+
+  expect(await screen.findByText('Unknown author')).toBeInTheDocument();
+  expect(screen.queryByText('Author unavailable')).not.toBeInTheDocument();
+});
+
+test('author lookup failures are distinct from fetched nameless profiles', async () => {
+  const entry = indexEntry('failed-author', 'failed profile result');
+  const api = {
+    searchCommunityNodeIndex: vi.fn().mockResolvedValue({ entries: [entry] }),
+    resolveCommunityIndexPosts: vi.fn().mockResolvedValue({ entries: [] }),
+    getAuthorSocialView: vi.fn().mockRejectedValue(new Error('offline')),
+  } as unknown as DesktopApi;
+
+  render(<CommunityIndexWorkspace {...workspaceProps(api)} />);
+  runSearch();
+
+  expect(await screen.findByText('Author unavailable')).toBeInTheDocument();
+  expect(screen.queryByText('Unknown author')).not.toBeInTheDocument();
 });
 
 test('index results hide identifiers and copy their complete values from context actions', async () => {
@@ -387,7 +631,7 @@ test('recommendation reports use the source node latest manifest and recommendat
 
   const dialog = await screen.findByRole('dialog', { name: 'Report content' });
   await waitFor(() => expect(fetchCommunityNodeManifest).toHaveBeenCalledWith(NODE_A));
-  expect(within(dialog).getByText(/^Recommendation · Unknown author$/)).toBeInTheDocument();
+  expect(within(dialog).getByText(/^Recommendation · Author unavailable$/)).toBeInTheDocument();
   expect(within(dialog).getByText('Recommendation')).toBeInTheDocument();
   fireEvent.click(await within(dialog).findByRole('button', { name: 'Send report' }));
 
