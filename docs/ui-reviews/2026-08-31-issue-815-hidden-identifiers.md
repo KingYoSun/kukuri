@@ -4,9 +4,9 @@
 - Supersedes: None
 - Superseded by: None
 - Issue: https://github.com/KingYoSun/kukuri/issues/815
-- PR: pending
+- PR: https://github.com/KingYoSun/kukuri/pull/843
 - Previous PR: https://github.com/KingYoSun/kukuri/pull/833
-- Preview: [Windows 11 / Tauri / Japanese](./assets/issue-815/mention-context-menu-tauri.png), [Playwright Chromium / English](./assets/issue-815/mention-context-menu.png)
+- Preview: [before context action](./assets/issue-815/mention-context-target.png), [after context action](./assets/issue-815/mention-context-menu.png), [Windows 11 / Tauri / Japanese](./assets/issue-815/mention-context-menu-tauri.png)
 - Surface / user / purpose: Timeline、Composer、メンション、リアクション、Metaverseで、利用者が技術識別子を通常閲覧から除外したまま、調査時だけ対象の完全な値を取得する。
 - Summary: PR #833で導入した共通context actionを、実際にfocusを持つメンション要素へ直接接続した。Composer候補の右クリックが候補選択を誤発火しないようにし、menuを候補listより前面へ表示した。カスタムリアクションの内部asset IDは画像の代替テキストと表示ラベルから除外し、人間向けsearch keyへ統一した。
 - Conditions:
