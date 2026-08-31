@@ -188,7 +188,32 @@ impl AppService {
         topic_id: &str,
         source_object_id: &str,
     ) -> Result<BookmarkedPostView> {
+        let channel_ref = self
+            .services
+            .projection_store
+            .get_object_projection(&EnvelopeId::from(source_object_id))
+            .await?
+            .and_then(|projection| channel_id_from_storage(projection.channel_id.as_str()))
+            .map(|channel_id| ChannelRef::PrivateChannel { channel_id })
+            .unwrap_or(ChannelRef::Public);
+        self.bookmark_post_in_channel(topic_id, source_object_id, channel_ref)
+            .await
+    }
+
+    pub async fn bookmark_post_in_channel(
+        &self,
+        topic_id: &str,
+        source_object_id: &str,
+        channel_ref: ChannelRef,
+    ) -> Result<BookmarkedPostView> {
         self.ensure_topic_subscription(topic_id).await?;
+        let scope = match &channel_ref {
+            ChannelRef::Public => TimelineScope::Public,
+            ChannelRef::PrivateChannel { channel_id } => TimelineScope::Channel {
+                channel_id: channel_id.clone(),
+            },
+        };
+        self.hydrate_scope_projection(topic_id, &scope).await?;
         let source_object_id = EnvelopeId::from(source_object_id);
         let projection = self
             .services
@@ -198,6 +223,15 @@ impl AppService {
             .ok_or_else(|| anyhow::anyhow!("bookmark target was not found"))?;
         if projection.topic_id != topic_id {
             anyhow::bail!("bookmark target topic does not match");
+        }
+        let channel_matches = match &channel_ref {
+            ChannelRef::Public => projection.channel_id == PUBLIC_CHANNEL_ID,
+            ChannelRef::PrivateChannel { channel_id } => {
+                projection.channel_id == channel_id.as_str()
+            }
+        };
+        if !channel_matches {
+            anyhow::bail!("bookmark target channel does not match");
         }
         if !matches!(
             projection.object_kind.as_str(),
@@ -305,11 +339,16 @@ impl AppService {
         reason: Option<PostWithdrawalReason>,
     ) -> Result<String> {
         self.ensure_topic_subscription(topic_id).await?;
+        let scope = match &channel_ref {
+            ChannelRef::Public => TimelineScope::Public,
+            ChannelRef::PrivateChannel { channel_id } => TimelineScope::Channel {
+                channel_id: channel_id.clone(),
+            },
+        };
+        self.hydrate_scope_projection(topic_id, &scope).await?;
         let target_object_id = EnvelopeId::from(object_id);
         let target = self
-            .services
-            .store
-            .get_envelope(&target_object_id)
+            .resolve_signed_post_envelope(&target_object_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("withdrawal target envelope was not found"))?;
         let target_content = target
@@ -412,8 +451,18 @@ impl AppService {
         self.ensure_topic_subscription(topic_id).await?;
         let topic = TopicId::new(topic_id);
         let parent = if let Some(reply_to) = reply_to {
-            self.resolve_parent_object(&EnvelopeId::from(reply_to))
-                .await?
+            let scope = match &channel_ref {
+                ChannelRef::Public => TimelineScope::Public,
+                ChannelRef::PrivateChannel { channel_id } => TimelineScope::Channel {
+                    channel_id: channel_id.clone(),
+                },
+            };
+            self.hydrate_scope_projection(topic_id, &scope).await?;
+            Some(
+                self.resolve_parent_object(&EnvelopeId::from(reply_to))
+                    .await?
+                    .ok_or_else(|| anyhow::anyhow!("reply target was not found"))?,
+            )
         } else {
             None
         };

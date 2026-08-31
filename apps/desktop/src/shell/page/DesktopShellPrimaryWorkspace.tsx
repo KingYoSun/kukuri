@@ -477,16 +477,17 @@ export function DesktopShellPrimarySurface({
             onRepost={(post) => void handleSimpleRepost(post)}
             onQuoteRepost={beginColumnQuoteRepost}
             localAuthorPubkey={syncStatus.local_author_pubkey}
+            localProfile={localProfile}
             ownedReactionAssets={ownedReactionAssets}
             bookmarkedReactionAssets={bookmarkedReactionAssets}
             recentReactions={recentReactions}
-            onToggleReaction={(post, reactionKey) => void handleToggleReaction(post, reactionKey)}
+            onToggleReaction={handleToggleReaction}
             onBookmarkCustomReaction={(asset) => void handleBookmarkCustomReaction(asset)}
             onReactionPickerOpen={() => void loadReactionCatalogData()}
             showBookmarkAction={true}
             bookmarkedPostIds={bookmarkedPostIds}
-            onToggleBookmark={(post) => void handleToggleBookmarkedPost(post)}
-            onWithdraw={(post) => void handleWithdrawPost(post)}
+            onToggleBookmark={handleToggleBookmarkedPost}
+            onWithdraw={handleWithdrawPost}
             onActivateReference={(reference) => void handleActivateReference(reference)}
             onCopyPostLink={handleCopyInternalLink}
           />

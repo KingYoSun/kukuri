@@ -100,6 +100,8 @@ export type MentionCandidate = {
 
 export type PostCardView = {
   post: PostView;
+  // index previewの表示用PostViewと、操作対象の正本PostViewを分離する。
+  actionPost?: PostView | null;
   context: 'timeline' | 'thread';
   authorLabel: string;
   authorPicture?: string | null;
@@ -107,8 +109,10 @@ export type PostCardView = {
   audienceChipLabel?: string | null;
   threadTargetId: string;
   threadTopicId?: string | null;
+  canOpenThread?: boolean;
   canReply?: boolean;
   canRepost?: boolean;
+  canReact?: boolean;
   media: PostMediaView;
   repostSourceAuthor?: ReferencedAuthorMeta | null;
   replyParentAuthor?: ReferencedAuthorMeta | null;

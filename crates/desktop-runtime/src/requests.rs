@@ -1,4 +1,4 @@
-use kukuri_app_api::{GameScoreView, SocialConnectionKind};
+use kukuri_app_api::{CommunityIndexPostResolveInput, GameScoreView, SocialConnectionKind};
 
 use kukuri_core::{
     ChannelAudienceKind, ChannelRef, DomeCustomizationV1, DomeSessionInputKindV1,
@@ -149,6 +149,14 @@ pub struct RemoveBookmarkedCustomReactionRequest {
 pub struct BookmarkPostRequest {
     pub topic: String,
     pub object_id: String,
+    #[serde(default)]
+    pub channel_ref: ChannelRef,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ResolveCommunityIndexPostsRequest {
+    pub entries: Vec<CommunityIndexPostResolveInput>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

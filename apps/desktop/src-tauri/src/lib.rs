@@ -159,6 +159,7 @@ pub fn run() {
             commands::community_node::leave_private_channel,
             commands::community_node::list_joined_private_channels,
             commands::posts::list_timeline,
+            commands::posts::resolve_community_index_posts,
             commands::posts::list_thread,
             commands::posts::list_profile_timeline,
             commands::profile::get_my_profile,

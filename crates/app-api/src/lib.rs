@@ -14,6 +14,7 @@
 //! ※ `private_channels.rs` ↔ `service/private_channels_support.rs` は公開 / 内部の
 //! 正当な分割であり、同名を理由に統合しない(REFACTORING.md 地雷リスト)。
 
+mod community_index;
 mod direct_messages;
 mod dome_connections;
 mod dome_hosting;

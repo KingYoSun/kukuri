@@ -42,6 +42,13 @@ beforeEach(() => {
 test('Explore header selects named eligible nodes, clears stale results, and returns to automatic', async () => {
   const user = userEvent.setup();
   const api = createDesktopMockApi();
+  const indexedObjectIds = new Map<string, string>();
+  for (const baseUrl of [NODE_A, NODE_B]) {
+    indexedObjectIds.set(
+      baseUrl,
+      await api.createPost('general', `canonical post from ${baseUrl}`, null, [])
+    );
+  }
   await api.setCommunityNodeConfig([
     { base_url: NODE_A, auto_approve: false },
     { base_url: NODE_B, auto_approve: false },
@@ -59,8 +66,8 @@ test('Explore header selects named eligible nodes, clears stale results, and ret
       {
         scope_kind: 'public_topic',
         scope_id: 'general',
-        object_id: `result-${new URL(request.base_url).host}`,
-        author_pubkey: 'a'.repeat(64),
+        object_id: indexedObjectIds.get(request.base_url) ?? 'missing-index-result',
+        author_pubkey: 'f'.repeat(64),
         text: `result from ${request.base_url}`,
         created_at: 1,
       },
@@ -89,7 +96,7 @@ test('Explore header selects named eligible nodes, clears stale results, and ret
   const result = await within(explore).findByText(`result from ${NODE_B}`);
   const resultCard = result.closest('article');
   if (!(resultCard instanceof HTMLElement)) throw new Error('Explore result card not found');
-  expect(within(resultCard).getByRole('button', { name: 'React' })).toBeEnabled();
+  expect(await within(resultCard).findByRole('button', { name: 'React' })).toBeEnabled();
   expect(within(resultCard).getByRole('button', { name: 'Repost' })).toBeInTheDocument();
   expect(within(resultCard).getByRole('button', { name: 'Reply' })).toBeInTheDocument();
   expect(within(resultCard).getByRole('button', { name: 'Copy link' })).toBeInTheDocument();

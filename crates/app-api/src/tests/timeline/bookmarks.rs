@@ -1,6 +1,27 @@
 use super::super::*;
 
 #[tokio::test]
+async fn bookmark_hydrates_a_missing_target_projection() {
+    let (app, store, _, _) = local_app_with_memory_services();
+    let topic = "kukuri:topic:bookmark-hydration";
+    let object_id = app
+        .create_post(topic, "hydrate before bookmarking", None)
+        .await
+        .expect("create post");
+    ObjectProjectionStore::rebuild_object_projections(store.as_ref(), Vec::new())
+        .await
+        .expect("clear projections");
+
+    let bookmarked = app
+        .bookmark_post_in_channel(topic, object_id.as_str(), ChannelRef::Public)
+        .await
+        .expect("bookmark after hydration");
+
+    assert_eq!(bookmarked.post.object_id, object_id);
+    assert_eq!(bookmarked.post.content, "hydrate before bookmarking");
+}
+
+#[tokio::test]
 async fn local_bookmarked_posts_restore_after_restart() {
     let dir = tempdir().expect("tempdir");
     let database_path = dir.path().join("bookmark-post-store.sqlite");

@@ -198,6 +198,42 @@ impl AppService {
         }))
     }
 
+    pub(crate) async fn resolve_signed_post_envelope(
+        &self,
+        object_id: &EnvelopeId,
+    ) -> Result<Option<KukuriEnvelope>> {
+        if let Some(envelope) = self.services.store.get_envelope(object_id).await? {
+            envelope.verify()?;
+            return Ok(Some(envelope));
+        }
+        let Some(projection) = ObjectProjectionStore::get_object_projection(
+            self.services.projection_store.as_ref(),
+            object_id,
+        )
+        .await?
+        else {
+            return Ok(None);
+        };
+        let key = stable_key("objects", &format!("{}/envelope", object_id.as_str()));
+        let Some(record) = self
+            .services
+            .docs_sync
+            .query_replica(&projection.source_replica_id, DocQuery::Exact(key))
+            .await?
+            .into_iter()
+            .next()
+        else {
+            return Ok(None);
+        };
+        let envelope: KukuriEnvelope = serde_json::from_slice(&record.value)?;
+        envelope.verify()?;
+        if envelope.id != *object_id {
+            anyhow::bail!("signed post envelope object id does not match");
+        }
+        self.services.store.put_envelope(envelope.clone()).await?;
+        Ok(Some(envelope))
+    }
+
     pub(crate) async fn ensure_scope_subscriptions(
         &self,
         topic_id: &str,

@@ -8,6 +8,7 @@ import type {
   CommunityNodeConfig,
   CommunityNodeIndexingRequest,
   CommunityNodeIndexQueryRequest,
+  CommunityIndexPostResolveResponse,
   CommunityNodeManifestFetch,
   CommunityNodeNodeStatus,
   CommunityNodeRelationNeighborsRequest,
@@ -109,6 +110,7 @@ import type {
   PublishMetaverseRoomEventRequest,
   RemoveBookmarkedCustomReactionRequest,
   RemoveBookmarkedPostRequest,
+  ResolveCommunityIndexPostsRequest,
   RevokeDomeConnectionRequest,
   RotatePrivateChannelRequest,
   SendDirectMessageRequest,
@@ -247,12 +249,9 @@ export const runtimeApi: DesktopApi = {
   listBookmarkedPosts: command('listBookmarkedPosts', async () => {
     return invokeDesktop<BookmarkedPostView[]>('list_bookmarked_posts');
   }),
-  bookmarkPost: command('bookmarkPost', async (topic, objectId) => {
+  bookmarkPost: command('bookmarkPost', async (topic, objectId, channelRef = { kind: 'public' }) => {
     return invokeDesktop<BookmarkedPostView>('bookmark_post', {
-      request: {
-        topic,
-        object_id: objectId,
-      } satisfies BookmarkPostRequest,
+      request: { topic, object_id: objectId, channel_ref: channelRef } satisfies BookmarkPostRequest,
     });
   }),
   removeBookmarkedPost: command('removeBookmarkedPost', async (objectId) => {
@@ -262,6 +261,10 @@ export const runtimeApi: DesktopApi = {
       } satisfies RemoveBookmarkedPostRequest,
     });
   }),
+  resolveCommunityIndexPosts: command('resolveCommunityIndexPosts', (entries) =>
+    invokeDesktop<CommunityIndexPostResolveResponse>('resolve_community_index_posts', {
+      request: { entries } satisfies ResolveCommunityIndexPostsRequest,
+    })),
   listTimeline: command('listTimeline', async (topic, cursor, limit, scope = { kind: 'public' }) => {
     return invokeDesktop<TimelineView>('list_timeline', {
       request: {
@@ -907,21 +910,18 @@ export const runtimeApi: DesktopApi = {
       request: { base_url: baseUrl } satisfies CommunityNodeTargetRequest,
     });
   }),
-  searchCommunityNodeIndex: command('searchCommunityNodeIndex', async (request) => {
-    return invokeDesktop<IndexQueryResponse>('search_community_node_index', {
+  searchCommunityNodeIndex: command('searchCommunityNodeIndex', (request) =>
+    invokeDesktop<IndexQueryResponse>('search_community_node_index', {
       request: request satisfies CommunityNodeIndexQueryRequest,
-    });
-  }),
-  discoverCommunityNodeIndex: command('discoverCommunityNodeIndex', async (request) => {
-    return invokeDesktop<IndexQueryResponse>('discover_community_node_index', {
+    })),
+  discoverCommunityNodeIndex: command('discoverCommunityNodeIndex', (request) =>
+    invokeDesktop<IndexQueryResponse>('discover_community_node_index', {
       request: request satisfies CommunityNodeIndexQueryRequest,
-    });
-  }),
-  recommendCommunityNodeIndex: command('recommendCommunityNodeIndex', async (request) => {
-    return invokeDesktop<IndexQueryResponse>('recommend_community_node_index', {
+    })),
+  recommendCommunityNodeIndex: command('recommendCommunityNodeIndex', (request) =>
+    invokeDesktop<IndexQueryResponse>('recommend_community_node_index', {
       request: request satisfies CommunityNodeIndexQueryRequest,
-    });
-  }),
+    })),
   submitCommunityNodeIndexingRequest: command(
     'submitCommunityNodeIndexingRequest',
     async (request) => {

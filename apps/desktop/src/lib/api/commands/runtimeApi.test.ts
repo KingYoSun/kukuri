@@ -48,6 +48,37 @@ test('searchCommunityNodeIndex invokes the typed index command', async () => {
   });
 });
 
+test('resolveCommunityIndexPosts invokes the local canonical resolver', async () => {
+  const entry = {
+    key: 'public_topic:rust:post-1',
+    topic: 'rust',
+    object_id: 'post-1',
+    author_pubkey: 'author-1',
+    channel_ref: { kind: 'public' } as const,
+  };
+
+  await runtimeApi.resolveCommunityIndexPosts([entry]);
+
+  expect(invokeMock).toHaveBeenCalledWith('resolve_community_index_posts', {
+    request: { entries: [entry] },
+  });
+});
+
+test('bookmarkPost preserves the target channel context', async () => {
+  await runtimeApi.bookmarkPost('rust', 'post-1', {
+    kind: 'private_channel',
+    channel_id: 'channel-1',
+  });
+
+  expect(invokeMock).toHaveBeenCalledWith('bookmark_post', {
+    request: {
+      topic: 'rust',
+      object_id: 'post-1',
+      channel_ref: { kind: 'private_channel', channel_id: 'channel-1' },
+    },
+  });
+});
+
 test('submitCommunityNodeIndexingRequest invokes the typed indexing request command', async () => {
   await runtimeApi.submitCommunityNodeIndexingRequest({
     base_url: 'https://node.example',

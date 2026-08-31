@@ -13,6 +13,8 @@ import type {
   CommunityNodeConfig,
   CommunityNodeIndexingRequest,
   CommunityNodeIndexQueryRequest,
+  CommunityIndexPostResolveInput,
+  CommunityIndexPostResolveResponse,
   CommunityNodeManifestFetch,
   CommunityNodeNodeStatus,
   CommunityNodeRelationNeighborsRequest,
@@ -223,8 +225,15 @@ export interface DesktopApi {
   bookmarkCustomReaction(asset: CustomReactionAssetView): Promise<BookmarkedCustomReactionView>;
   removeBookmarkedCustomReaction(assetId: string): Promise<void>;
   listBookmarkedPosts(): Promise<BookmarkedPostView[]>;
-  bookmarkPost(topic: string, objectId: string): Promise<BookmarkedPostView>;
+  bookmarkPost(
+    topic: string,
+    objectId: string,
+    channelRef?: ChannelRef
+  ): Promise<BookmarkedPostView>;
   removeBookmarkedPost(objectId: string): Promise<void>;
+  resolveCommunityIndexPosts(
+    entries: CommunityIndexPostResolveInput[]
+  ): Promise<CommunityIndexPostResolveResponse>;
   listTimeline(
     topic: string,
     cursor?: TimelineCursor | null,

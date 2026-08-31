@@ -350,6 +350,14 @@ export type IndexEntryView = { scope_kind: IndexScopeKind, scope_id: string, obj
 
 export type IndexQueryResponse = { entries: Array<IndexEntryView>, };
 
+export type CommunityIndexPostResolveInput = { key: string, topic: string, object_id: string, author_pubkey: string, channel_ref: ChannelRef, };
+
+export type CommunityIndexPostActionCapabilitiesView = { open_thread: boolean, reply: boolean, repost: boolean, quote_repost: boolean, react: boolean, copy_link: boolean, bookmark: boolean, withdraw: boolean, };
+
+export type CommunityIndexResolvedPostView = { key: string, post?: PostView | null, capabilities: CommunityIndexPostActionCapabilitiesView, };
+
+export type CommunityIndexPostResolveResponse = { entries: Array<CommunityIndexResolvedPostView>, };
+
 export type SubmitIndexingRequestResponse = { request_id: string, status: IndexingRequestStatus, };
 
 export type CommunityNodeUserAdvisoryRequest = { base_url: string, target_pubkey: string, };
@@ -491,7 +499,9 @@ export type BookmarkCustomReactionRequest = { asset_id: string, owner_pubkey: st
 
 export type RemoveBookmarkedCustomReactionRequest = { asset_id: string, };
 
-export type BookmarkPostRequest = { topic: string, object_id: string, };
+export type BookmarkPostRequest = { topic: string, object_id: string, channel_ref: ChannelRef, };
+
+export type ResolveCommunityIndexPostsRequest = { entries: Array<CommunityIndexPostResolveInput>, };
 
 export type RemoveBookmarkedPostRequest = { object_id: string, };
 

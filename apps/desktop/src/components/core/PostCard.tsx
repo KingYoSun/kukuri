@@ -140,6 +140,7 @@ export function PostCard({
 }: PostCardProps) {
   const { t } = useTranslation(['common', 'profile']);
   const { post, context } = view;
+  const actionPost = view.actionPost ?? post;
   const [repostMenuOpen, setRepostMenuOpen] = useState(false);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [reportSubject, setReportSubject] = useState<ReportRoutingSubject>({
@@ -181,6 +182,8 @@ export function PostCard({
       : { pubkey: post.author_pubkey, label: view.authorLabel, picture: view.authorPicture ?? null };
   const canReply = view.canReply ?? true;
   const canRepost = view.canRepost ?? false;
+  const canReact = view.canReact ?? true;
+  const canOpenThread = view.canOpenThread ?? !readOnly;
   const localStateLabel =
     localState === 'pending'
       ? t('feed.localPosting')
@@ -553,7 +556,7 @@ export function PostCard({
         />
       ) : null}
 
-      {readOnly ? (
+      {readOnly || !canOpenThread ? (
         <div
           className='post-link post-layout-safe'
           role='group'
@@ -657,7 +660,7 @@ export function PostCard({
           </>
         ) : (
           <>
-            {reactionSummary.length > 0 && !interactionDisabled ? (
+            {reactionSummary.length > 0 && canReact && !interactionDisabled ? (
               <div className='post-reaction-summary'>
                 {reactionSummary.map((reaction) => {
                   const reactionKey = reactionKeyInputFromView(reaction);
@@ -677,7 +680,7 @@ export function PostCard({
                         type='button'
                         onClick={() => {
                           if (reactionKey && onToggleReaction) {
-                            onToggleReaction(post, reactionKey);
+                            onToggleReaction(actionPost, reactionKey);
                           }
                         }}
                         onContextMenu={(event) => {
@@ -717,9 +720,9 @@ export function PostCard({
                 })}
               </div>
             ) : null}
-            {!interactionDisabled ? (
+            {canReact && !interactionDisabled ? (
               <ReactionPickerPopover
-                post={post}
+                post={actionPost}
                 recentReactions={recentReactions}
                 assets={pickerAssets}
                 mediaObjectUrls={mediaObjectUrls}
@@ -747,7 +750,7 @@ export function PostCard({
                         type='button'
                         onClick={() => {
                           setRepostMenuOpen(false);
-                          onRepost(post);
+                          onRepost(actionPost);
                         }}
                       >
                         {t('actions.repost')}
@@ -759,7 +762,7 @@ export function PostCard({
                         type='button'
                         onClick={() => {
                           setRepostMenuOpen(false);
-                          onQuoteRepost(post);
+                          onQuoteRepost(actionPost);
                         }}
                       >
                         {t('actions.quoteRepost')}
@@ -775,7 +778,7 @@ export function PostCard({
                 className='post-action-button'
                 type='button'
                 label={t('actions.reply')}
-                onClick={() => onReply(post)}
+                onClick={() => onReply(actionPost)}
               >
                 <Reply className='size-4' aria-hidden='true' />
               </IconButton>
@@ -798,7 +801,7 @@ export function PostCard({
                 type='button'
                 label={isBookmarked ? t('actions.removeBookmark') : t('actions.bookmark')}
                 aria-pressed={isBookmarked}
-                onClick={() => onToggleBookmark(post)}
+                onClick={() => onToggleBookmark(actionPost)}
               >
                 <Bookmark
                   className='size-4'
@@ -807,7 +810,7 @@ export function PostCard({
                 />
               </IconButton>
             ) : null}
-            {!isWithdrawn && post.author_pubkey === localAuthorPubkey && onWithdraw ? (
+            {!isWithdrawn && actionPost.author_pubkey === localAuthorPubkey && onWithdraw ? (
               <IconButton
                 variant='secondary'
                 className='post-action-button'
@@ -815,7 +818,7 @@ export function PostCard({
                 label={t('actions.withdrawPost')}
                 onClick={() => {
                   if (window.confirm(t('actions.confirmWithdrawPost'))) {
-                    onWithdraw(post);
+                    onWithdraw(actionPost);
                   }
                 }}
               >

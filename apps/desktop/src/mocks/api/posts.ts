@@ -23,6 +23,7 @@ type PostsMock = Pick<
   | 'listBookmarkedPosts'
   | 'bookmarkPost'
   | 'removeBookmarkedPost'
+  | 'resolveCommunityIndexPosts'
 >;
 
 export function createPostsMock(runtime: MockRuntime): PostsMock {
@@ -186,6 +187,53 @@ export function createPostsMock(runtime: MockRuntime): PostsMock {
         ),
       ];
       return objectId;
+    },
+    async resolveCommunityIndexPosts(entries) {
+      return {
+        entries: entries.map((entry) => {
+          const post = (postsByTopic[entry.topic] ?? []).find(
+            (candidate) =>
+              candidate.object_id === entry.object_id &&
+              candidate.author_pubkey === entry.author_pubkey &&
+              (entry.channel_ref.kind === 'public'
+                ? !candidate.channel_id
+                : candidate.channel_id === entry.channel_ref.channel_id)
+          );
+          if (!post) {
+            return {
+              key: entry.key,
+              post: null,
+              capabilities: {
+                open_thread: false,
+                reply: false,
+                repost: false,
+                quote_repost: false,
+                react: false,
+                copy_link: false,
+                bookmark: false,
+                withdraw: false,
+              },
+            };
+          }
+          const active = !post.withdrawal;
+          const postOrComment = post.object_kind === 'post' || post.object_kind === 'comment';
+          const isPublic = !post.channel_id;
+          return {
+            key: entry.key,
+            post: withSocialPostDefaults({ ...post }),
+            capabilities: {
+              open_thread: active && post.is_threadable,
+              reply: active && post.is_threadable,
+              repost: active && isPublic && postOrComment,
+              quote_repost: active && isPublic && postOrComment,
+              react: active && postOrComment,
+              copy_link: true,
+              bookmark: active,
+              withdraw: active && post.author_pubkey === syncStatus.local_author_pubkey,
+            },
+          };
+        }),
+      };
     },
     async withdrawPost(topic, objectId) {
       const withdrawal = {

@@ -1,6 +1,21 @@
 use super::super::*;
 
 #[tokio::test]
+async fn missing_reply_target_is_rejected_without_creating_a_root_post() {
+    let (app, _, _, _) = local_app_with_memory_services();
+    let topic = "kukuri:topic:missing-reply-target";
+
+    let error = app
+        .create_post(topic, "must remain a reply", Some("missing-parent"))
+        .await
+        .expect_err("missing reply target must be rejected");
+
+    assert!(error.to_string().contains("reply target was not found"));
+    let timeline = app.list_timeline(topic, None, 20).await.expect("timeline");
+    assert!(timeline.items.is_empty());
+}
+
+#[tokio::test]
 async fn reply_posts_include_parent_preview_in_timeline_views() {
     let (app, _, _, _) = local_app_with_memory_services();
     let topic = "kukuri:topic:reply-preview";

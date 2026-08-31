@@ -306,7 +306,13 @@ export function createMessageReactionSocialActions({
           current.filter((item) => item.post.object_id !== post.object_id)
         );
       } else {
-        const bookmarked = await api.bookmarkPost(topicId, post.object_id);
+        const bookmarked = await api.bookmarkPost(
+          topicId,
+          post.object_id,
+          post.channel_id
+            ? { kind: 'private_channel', channel_id: post.channel_id }
+            : { kind: 'public' }
+        );
         setBookmarkedPosts((current) => [
           bookmarked,
           ...current.filter((item) => item.post.object_id !== bookmarked.post.object_id),
