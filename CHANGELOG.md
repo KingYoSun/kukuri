@@ -18,6 +18,63 @@ file; automated changelog entries start from the next preview release.
 
 ## [Unreleased]
 
+## [v0.1.8-preview.1] - 2026-08-31
+
+### Features
+
+- submit composer with Ctrl+Enter ([#841](https://github.com/KingYoSun/kukuri/pull/841))
+- add Explore post actions
+- render community index results as post cards
+- add tooltips to all icon actions
+- add dome recovery and return home ([#825](https://github.com/KingYoSun/kukuri/pull/825))
+- add authoritative Dome entry and safe spawn ([#823](https://github.com/KingYoSun/kukuri/pull/823))
+- inherit Dome access, block, presence, and spatial audio ([#822](https://github.com/KingYoSun/kukuri/pull/822))
+- add seamless Dome transitions ([#821](https://github.com/KingYoSun/kukuri/pull/821))
+- enforce resource budgets
+- retain Dome prop layouts and metaverse assets
+- change default subscribed topics to general / dev / test ([#805](https://github.com/KingYoSun/kukuri/pull/805))
+- add tester feedback report collection ([#802](https://github.com/KingYoSun/kukuri/pull/802))
+- add Dome hosting lease lifecycle
+- implement Dome connection topology ([#792](https://github.com/KingYoSun/kukuri/pull/792))
+- add spatial context dome moves ([#800](https://github.com/KingYoSun/kukuri/pull/800))
+- 固定規格Domeと最小customizationを実装 ([#799](https://github.com/KingYoSun/kukuri/pull/799))
+
+### Fixes
+
+- clarify user-facing terminology ([#848](https://github.com/KingYoSun/kukuri/pull/848))
+- 追い越されたpending route pushを破棄して現在URLを再投影 ([#847](https://github.com/KingYoSun/kukuri/pull/847))
+- light themeのsemantic contrastをWCAG 2.2 AAへ調整 ([#844](https://github.com/KingYoSun/kukuri/pull/844))
+- route起因のColumn scroll中のmobile settle誤activateを防止 ([#846](https://github.com/KingYoSun/kukuri/pull/846))
+- 識別子コンテキスト操作の残課題を完了 ([#843](https://github.com/KingYoSun/kukuri/pull/843))
+- complete Japanese UI localization ([#840](https://github.com/KingYoSun/kukuri/pull/840))
+- settle background notification loading
+- hide technical identifiers
+- stop unavailable media loading
+- prevent column transition flicker
+- カラムをPointer Eventsで並び替えられるようにする ([#830](https://github.com/KingYoSun/kukuri/pull/830))
+- discard blocked Dome connection proposals ([#827](https://github.com/KingYoSun/kukuri/pull/827))
+- recover lost Dome transition commit acknowledgements ([#826](https://github.com/KingYoSun/kukuri/pull/826))
+- register tester feedback tests in lock contract and fixed cluster CSS assertions ([#802](https://github.com/KingYoSun/kukuri/pull/802))
+
+### Other
+
+- refresh third-party notices for v0.1.8-preview.1 ([#851](https://github.com/KingYoSun/kukuri/pull/851))
+- bump preview version to 0.1.8 ([#850](https://github.com/KingYoSun/kukuri/pull/850))
+- [codex][fix] relay接続でデスクトップ起動を止めない ([#849](https://github.com/KingYoSun/kukuri/pull/849))
+- Community Index投稿アクションを完了可能なものだけに限定 ([#842](https://github.com/KingYoSun/kukuri/pull/842))
+- record issue 820 review
+- wait for mobile page scroll settle
+- split icon tooltip smoke coverage
+- record issue 817 review
+- update icon tooltip visual baseline
+- TimelineとExploreに簡易切替を追加する ([#834](https://github.com/KingYoSun/kukuri/pull/834))
+- update hidden identifier visual baseline
+- [codex][docs] UI/UX品質基準を検証可能な契約へ整理 ([#829](https://github.com/KingYoSun/kukuri/pull/829))
+- resolve Dome ADR numbering
+- move tester feedback UI preview assets to docs/ui-reviews ([#802](https://github.com/KingYoSun/kukuri/pull/802))
+- add tester feedback UI preview assets ([#802](https://github.com/KingYoSun/kukuri/pull/802))
+- update CHANGELOG for v0.1.7-preview.1 ([#787](https://github.com/KingYoSun/kukuri/pull/787))
+
 ## [v0.1.7-preview.1] - 2026-08-26
 
 ### Features
