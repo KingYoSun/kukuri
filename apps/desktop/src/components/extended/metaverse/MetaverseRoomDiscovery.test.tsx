@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
@@ -127,6 +127,28 @@ describe('MetaverseRoomDiscovery', () => {
 
     await user.click(screen.getByRole('button', { name: 'Join Room' }));
     expect(onJoinRoom).toHaveBeenCalledWith(room.room_id);
+  });
+
+  test('copies complete room identifiers from pointer and keyboard context menus', async () => {
+    const user = userEvent.setup();
+    const clipboardWriteText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: clipboardWriteText },
+    });
+    renderDiscovery();
+
+    const target = screen.getByText(room.title).closest('article');
+    if (!(target instanceof HTMLElement)) throw new Error('room identifier target not found');
+
+    fireEvent.contextMenu(target, { clientX: 32, clientY: 40 });
+    await user.click(screen.getByRole('menuitem', { name: 'Copy author ID' }));
+    expect(clipboardWriteText).toHaveBeenLastCalledWith(room.host_pubkey);
+
+    target.focus();
+    fireEvent.keyDown(target, { key: 'ContextMenu' });
+    await user.click(screen.getByRole('menuitem', { name: 'Copy hash' }));
+    expect(clipboardWriteText).toHaveBeenLastCalledWith(room.manifest_blob_hash);
   });
 
   test('disables all create controls while an action is pending', async () => {

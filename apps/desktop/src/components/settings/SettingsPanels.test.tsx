@@ -372,6 +372,11 @@ test('settings panels avoid the legacy grid classname collision', () => {
 test('reactions panel renders icon-only saved assets and supports single or bulk clear', async () => {
   const user = userEvent.setup();
   const onRemoveBookmark = vi.fn().mockResolvedValue(undefined);
+  const clipboardWriteText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: clipboardWriteText },
+  });
 
   render(
     <ReactionsPanel
@@ -426,7 +431,11 @@ test('reactions panel renders icon-only saved assets and supports single or bulk
 
   expect(screen.getByText('My custom reactions')).toBeInTheDocument();
   expect(screen.getByText('party-parrot')).toBeInTheDocument();
-  expect(screen.getByAltText('asset-owned')).toHaveAttribute('src', 'https://example.com/owned.png');
+  expect(screen.getByAltText('party-parrot')).toHaveAttribute(
+    'src',
+    'https://example.com/owned.png'
+  );
+  expect(screen.queryByText('asset-owned')).not.toBeInTheDocument();
   expect(screen.getByRole('img', { name: 'saved-cat' })).toHaveAttribute(
     'src',
     'https://example.com/saved.gif'
@@ -440,6 +449,13 @@ test('reactions panel renders icon-only saved assets and supports single or bulk
   expect(screen.queryByText('saved-cat')).not.toBeInTheDocument();
 
   fireEvent.contextMenu(screen.getByRole('img', { name: 'saved-cat' }));
+  await user.click(screen.getByRole('menuitem', { name: 'Copy hash' }));
+  expect(clipboardWriteText).toHaveBeenLastCalledWith('blob-saved');
+
+  const savedTile = screen.getByRole('img', { name: 'saved-cat' }).closest('article');
+  if (!(savedTile instanceof HTMLElement)) throw new Error('saved reaction tile not found');
+  savedTile.focus();
+  fireEvent.keyDown(savedTile, { key: 'F10', shiftKey: true });
   await user.click(screen.getByRole('menuitem', { name: 'Clear' }));
   expect(onRemoveBookmark).toHaveBeenCalledWith('asset-saved');
 

@@ -233,7 +233,7 @@
 
 .context-action-menu {
   position: fixed;
-  z-index: 80;
+  z-index: 90;
   min-width: 11rem;
   padding: var(--space-2xs);
   display: grid;

@@ -219,12 +219,12 @@ export function ReactionsPanel({
                 <img
                   className='reactions-asset-thumb'
                   src={mediaObjectUrls[asset.blob_hash] ?? undefined}
-                  alt={asset.asset_id}
+                  alt={asset.search_key}
                   data-asset-id={asset.asset_id}
                 />
               ) : (
                 <div className='reactions-asset-thumb reactions-asset-placeholder'>
-                  {asset.asset_id.slice(0, 4)}
+                  {asset.search_key.slice(0, 2)}
                 </div>
               )}
               <strong>{asset.search_key}</strong>
