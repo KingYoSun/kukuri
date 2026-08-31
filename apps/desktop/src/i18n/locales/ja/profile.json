@@ -1,7 +1,7 @@
 {
   "communityNodeAdvisory": {
     "title": "関係値と信頼度",
-    "nodeLocalNotice": "選択したコミュニティノードだけが提供する情報です。ネットワーク全体の判断ではなく、既定でこの著者を非表示にはしません。",
+    "nodeLocalNotice": "選択したコミュニティノードだけが提供する情報です。ネットワーク全体の判断ではなく、既定でこのユーザーを非表示にはしません。",
     "noNodes": "関係値と信頼度を取得するには、認証・必須同意済みで信頼評価を提供中のコミュニティノードが必要です。設定を確認してください。",
     "openSettings": "ノード設定を開く",
     "nodeLabel": "コミュニティノード",
@@ -52,9 +52,9 @@
       "invalidAppeal": "対象のリスク判定を確認できないか、すでに解決済みです。情報を読み直して状態を確認してください。",
       "responseMismatch": "受付結果のリスク判定が送信対象と一致しません。状態は更新せず、情報を読み直してください。",
       "unresolvedTitle": "発行元の送信先を確認できません",
-      "unresolvedBody": "発行元と同じ node_id を持つ設定済みノードの report_endpoint が見つからないため送信できません。ノード設定を確認してください。",
+      "unresolvedBody": "発行元と一致する設定済みノードの通報受付先が見つからないため送信できません。ノード設定を確認してください。",
       "noneContribution": "このリスク判定は現在、評価に寄与しています。異議申し立て後も、運営者が認容するまでは寄与が続きます。",
-      "disputedContribution": "異議申し立てを審査中です。審査中も評価への寄与は続き、認容されて Cleared になった時点で除外されます。",
+      "disputedContribution": "異議申し立てを審査中です。審査中も評価への寄与は続き、認容された時点で除外されます。",
       "clearedContribution": "異議申し立てが認容されました。このリスク判定は評価への寄与から除外されています。",
       "status": {
         "none": "申し立て前",
@@ -86,9 +86,9 @@
       "score": "連続値の近さ: {{score}}"
     },
     "neighbors": {
-      "title": "近いユーザー",
+      "title": "関係の近いユーザー",
       "notice": "この操作をしたときだけ取得します。タイムライン・検索・推薦を自動的に絞り込みません。",
-      "empty": "近いユーザーは返されませんでした。"
+      "empty": "関係の近いユーザーは見つかりませんでした。"
     }
   },
   "editor": {
@@ -96,12 +96,13 @@
     "back": "プロフィールに戻る",
     "displayName": "表示名",
     "loading": "プロフィールを読み込み中…",
-    "name": "名前",
+    "name": "ユーザー名",
     "picture": "プロフィール画像",
+    "picturePreviewAlt": "{{name}}のプロフィール画像プレビュー",
     "placeholders": {
       "about": "短い自己紹介",
       "displayName": "表示名",
-      "name": "正規名"
+      "name": "ユーザー名"
     },
     "reset": "リセット",
     "save": "プロフィールを保存",
@@ -109,20 +110,24 @@
   },
   "overview": {
     "edit": "プロフィールを編集",
-    "followedCount": "{{count}} フォロワー",
-    "followingCount": "{{count}} フォロー中",
+    "avatarAlt": "{{name}}のプロフィール画像",
+    "followedCount_one": "フォロワー {{count}}人",
+    "followedCount_other": "フォロワー {{count}}人",
+    "followingCount_one": "フォロー中 {{count}}人",
+    "followingCount_other": "フォロー中 {{count}}人",
     "loading": "プロフィールを読み込み中…",
-    "mutedCount": "{{count}} ミュート中",
-    "noBio": "まだプロフィール文が公開されていません。",
+    "mutedCount_one": "ミュート中 {{count}}人",
+    "mutedCount_other": "ミュート中 {{count}}人",
+    "noBio": "自己紹介はまだありません。",
     "postCount": "公開投稿",
     "title": "プロフィール"
   },
   "connections": {
     "back": "プロフィールに戻る",
     "empty": {
-      "followed": "この端末で把握している follower はまだいません。",
+      "followed": "この端末で確認できるフォロワーはまだいません。",
       "following": "まだ誰もフォローしていません。",
-      "muted": "ミュート中の著者はいません。"
+      "muted": "ミュート中のユーザーはいません。"
     },
     "loading": "フォローとミュートを読み込み中…",
     "mutedBadge": "ミュート中",
@@ -135,7 +140,7 @@
     "title": "フォローとミュート"
   },
   "feed": {
-    "noAuthorPosts": "この著者にはまだ公開投稿がありません。",
+    "noAuthorPosts": "このユーザーにはまだ公開投稿がありません。",
     "noOwnPosts": "まだ公開投稿がありません。",
     "openOriginalTopic": "元のトピックを開く",
     "originTopic": "元のトピック"

@@ -33,7 +33,6 @@ import {
 import { topicDisplayName } from '@/lib/topicId';
 import {
   authorDisplayLabel,
-  formatCount,
   localizeAudienceLabel,
   resolveProfilePictureSrc,
 } from '@/shell/presentation';
@@ -428,7 +427,7 @@ export function DesktopShellColumnWorkspace({
           {status ? (
             <span className='shell-column-header-summary'>
               {status.send_enabled
-                ? t('messages.peerCount', { count: formatCount(status.peer_count) })
+                ? t('messages.peerCount', { count: status.peer_count })
                 : t('messages.sendDisabled')}
             </span>
           ) : null}

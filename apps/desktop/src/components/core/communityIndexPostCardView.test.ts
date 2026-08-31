@@ -101,7 +101,7 @@ describe('communityIndexPostCardView', () => {
 
     expect(view.reportSubjectKind).toBe(subjectKind);
     expect(view.provenance?.observedVia[0]?.capability).toBe(capability);
-    expect(view.authorLabel).toBe('Unknown author');
+    expect(view.authorLabel).toBe('Unknown user');
     expect(view.authorPicture).toBeNull();
   });
 

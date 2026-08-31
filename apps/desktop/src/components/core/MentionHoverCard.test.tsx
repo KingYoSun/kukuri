@@ -25,17 +25,17 @@ test('mention trigger copies the complete author ID from pointer and keyboard co
 
   const trigger = screen.getByRole('button', { name: '@Alice' });
   fireEvent.contextMenu(trigger, { clientX: 32, clientY: 48 });
-  await user.click(screen.getByRole('menuitem', { name: 'Copy author ID' }));
+  await user.click(screen.getByRole('menuitem', { name: 'Copy user ID' }));
   expect(clipboardWriteText).toHaveBeenLastCalledWith(PUBKEY);
 
   trigger.focus();
   fireEvent.keyDown(trigger, { key: 'F10', shiftKey: true });
-  await user.click(screen.getByRole('menuitem', { name: 'Copy author ID' }));
+  await user.click(screen.getByRole('menuitem', { name: 'Copy user ID' }));
   expect(clipboardWriteText).toHaveBeenCalledTimes(2);
 
   trigger.focus();
   fireEvent.keyDown(trigger, { key: 'ContextMenu' });
-  fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Copy author ID' }), { key: 'Escape' });
+  fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Copy user ID' }), { key: 'Escape' });
   expect(trigger).toHaveFocus();
 
   await user.click(trigger);

@@ -8,8 +8,8 @@
     "createShareLink": "Create share link"
   },
   "audienceOptions": {
-    "friend_only": "Friends",
-    "friend_plus": "Friends+",
+    "friend_only": "Mutuals",
+    "friend_plus": "Mutuals+",
     "invite_only": "Invite only"
   },
   "createDialogTitle": "Create / Join Private Channel",
@@ -22,7 +22,7 @@
     "joinBlockTitle": "Join",
     "placeholders": {
       "channelLabel": "Channel name",
-      "inviteToken": "paste private channel invite, friend grant, or friends+ share"
+      "inviteToken": "Paste a private channel invite, mutual grant, or mutuals+ share"
     }
   },
   "empty": "No joined private channels for this topic.",
@@ -32,14 +32,14 @@
     "selectChannelForShare": "select a private channel before creating a share",
     "failedCreateChannel": "failed to create channel",
     "failedPreviewToken": "failed to preview private channel token",
-    "failedCreateShare": "failed to create friends+ share",
+    "failedCreateShare": "failed to create mutuals+ share",
     "failedJoinChannel": "failed to join private channel",
     "failedLeaveChannel": "failed to leave private channel",
     "failedShareChannel": "failed to share private channel"
   },
-  "inspectHint": "Inspect policy and actions here.",
+  "inspectHint": "Review who can join and what you can do here.",
   "joined": "{{count}} joined",
-  "loading": "Loading private channels...",
+  "loading": "Loading private channels…",
   "latestInvite": "Latest invite",
   "latestShare": "Latest share",
   "leaveDialog": {
@@ -50,18 +50,18 @@
   },
   "copyShareLink": "Copy share link",
   "policies": {
-    "friend_only": "Friends: only mutual followers can join",
-    "friend_plus": "Friends+: participants can share to their mutuals",
+    "friend_only": "Mutuals: only users who follow each other can join",
+    "friend_plus": "Mutuals+: participants can share with users they mutually follow",
     "invite_only": "Invite only"
   },
   "previewDialog": {
-    "title": "Preview Access",
-    "import": "Import / Join",
+    "title": "Review access",
+    "import": "Join",
     "copyToken": "Copy token",
     "channel": "Channel",
     "channelId": "channel id",
     "inviter": "inviter",
-    "sponsor": "sponsor",
+    "sponsor": "sharer",
     "tokenLabelSuffix": "token",
     "tokenKinds": {
       "invite": "Invite",
@@ -69,12 +69,12 @@
       "share": "Share"
     }
   },
-  "rotationRequired": "rotation required: current participants include non-mutual followers",
+  "rotationRequired": "Access update required: current participants include users who no longer follow each other",
   "selectChannel": "Select a channel",
-  "selectChannelNotice": "Select a private channel to inspect policy and actions.",
+  "selectChannelNotice": "Select a private channel to review who can join and what you can do.",
   "settings": {
     "channelName": "Channel name: {{channel}}",
-    "policy": "Policy: {{policy}}",
+    "policy": "Who can join: {{policy}}",
     "title": "Channel Settings"
   },
   "title": "Private Channels"

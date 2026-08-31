@@ -3,6 +3,11 @@
     "createRoom": "创建房间",
     "saveRoom": "保存房间"
   },
+  "accessibility": {
+    "score": "{{player}}在{{room}}中的分数",
+    "status": "{{room}}的状态",
+    "phase": "{{room}}的阶段"
+  },
   "empty": "暂无游戏房间",
   "errors": {
     "failedCreate": "创建游戏房间失败",

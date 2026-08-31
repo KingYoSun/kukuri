@@ -1,11 +1,11 @@
 {
   "communityNodeAdvisory": {
-    "title": "社区节点信息提示",
-    "nodeLocalNotice": "仅来自所选社区节点；这不是全网判断，默认也不会隐藏该作者。",
+    "title": "关系与信任度",
+    "nodeLocalNotice": "仅来自所选社区节点；这不是全网判断，默认也不会隐藏该用户。",
     "noNodes": "需要一个已认证、已同意必需条款且提供信任提示的社区节点。请检查节点设置。",
     "openSettings": "打开节点设置",
     "nodeLabel": "社区节点",
-    "load": "加载提示",
+    "load": "获取关系与信任度",
     "loading": "加载中…",
     "basisLabels": {
       "basis": "评估依据",
@@ -52,14 +52,14 @@
       "invalidAppeal": "无法确认该风险评估，或评估已解决。请重新加载信息并确认状态。",
       "responseMismatch": "受理结果与提交的风险评估不一致。状态未更新，请重新加载信息。",
       "unresolvedTitle": "无法确认发布方的发送目标",
-      "unresolvedBody": "未找到 node_id 与发布方一致且提供 report_endpoint 的已配置节点。请检查节点设置。",
+      "unresolvedBody": "未找到与发布方匹配且设有申诉接收地址的节点。请检查节点设置。",
       "noneContribution": "此风险评估当前仍会影响评分。提交申诉后，在运营者确认申诉前仍会继续生效。",
       "disputedContribution": "申诉正在审核中。审核期间该评估仍会影响评分，确认清除后才会移除。",
       "clearedContribution": "申诉已获认可。此风险评估已不再影响评分。",
       "status": {
         "none": "尚未申诉",
         "disputed": "审核中",
-        "cleared": "已清除"
+        "cleared": "申诉已通过"
       }
     },
     "errors": {
@@ -86,9 +86,9 @@
       "score": "连续接近度：{{score}}"
     },
     "neighbors": {
-      "title": "邻近用户",
+      "title": "关系密切的用户",
       "notice": "仅在执行此操作时加载；不会自动筛选时间线、搜索或推荐。",
-      "empty": "节点未返回邻近用户。"
+      "empty": "未找到关系密切的用户。"
     }
   },
   "editor": {
@@ -96,12 +96,13 @@
     "back": "返回资料",
     "displayName": "显示名称",
     "loading": "正在加载资料…",
-    "name": "名称",
+    "name": "用户名",
     "picture": "头像",
+    "picturePreviewAlt": "{{name}}的头像预览",
     "placeholders": {
       "about": "简短介绍",
       "displayName": "显示名称",
-      "name": "规范名称"
+      "name": "用户名"
     },
     "reset": "重置",
     "save": "保存资料",
@@ -109,10 +110,14 @@
   },
   "overview": {
     "edit": "编辑资料",
-    "followedCount": "{{count}} 位关注者",
-    "followingCount": "已关注 {{count}} 位",
+    "avatarAlt": "{{name}}的头像",
+    "followedCount_one": "{{count}} 位关注者",
+    "followedCount_other": "{{count}} 位关注者",
+    "followingCount_one": "已关注 {{count}} 位用户",
+    "followingCount_other": "已关注 {{count}} 位用户",
     "loading": "正在加载资料…",
-    "mutedCount": "已静音 {{count}} 位",
+    "mutedCount_one": "已静音 {{count}} 位用户",
+    "mutedCount_other": "已静音 {{count}} 位用户",
     "noBio": "尚未发布个人简介。",
     "postCount": "公开帖子",
     "title": "资料"
@@ -122,7 +127,7 @@
     "empty": {
       "followed": "这个设备上还没有已知的关注者。",
       "following": "你还没有关注任何人。",
-      "muted": "还没有静音任何作者。"
+      "muted": "还没有静音任何用户。"
     },
     "loading": "正在加载关注与静音…",
     "mutedBadge": "已静音",
@@ -135,7 +140,7 @@
     "title": "关注与静音"
   },
   "feed": {
-    "noAuthorPosts": "这位作者还没有公开帖子。",
+    "noAuthorPosts": "这位用户还没有公开帖子。",
     "noOwnPosts": "还没有公开帖子。",
     "openOriginalTopic": "打开原始主题",
     "originTopic": "原始主题"

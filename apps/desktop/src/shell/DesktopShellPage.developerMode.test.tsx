@@ -82,8 +82,8 @@ test('disabling developer mode while on Live routes back to timeline', async () 
 
   await waitFor(() => {
     expect(window.location.hash).toMatch(/^#\/timeline/);
+    expect(getActiveColumn('Timeline')).toHaveAttribute('aria-current', 'true');
   });
-  expect(getActiveColumn('Timeline')).toHaveAttribute('aria-current', 'true');
   const controlCenter = await openControlCenter(user);
   expect(within(controlCenter).queryByRole('button', { name: 'Add Live Column' })).not.toBeInTheDocument();
 });

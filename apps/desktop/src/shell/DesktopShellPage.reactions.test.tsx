@@ -74,19 +74,19 @@ test('desktop shell can create a quote repost from the Column composer', async (
   }
 
   await user.click(within(card).getByRole('button', { name: 'Repost' }));
-  await user.click(await screen.findByRole('button', { name: 'Quote Repost' }));
+  await user.click(await screen.findByRole('button', { name: 'Add comment' }));
 
-  const quoteInput = await screen.findByPlaceholderText('Write a quote repost');
+  const quoteInput = await screen.findByPlaceholderText('Add a comment');
   const composer = quoteInput.closest('form');
   if (!composer) {
     throw new Error('quote repost composer form not found');
   }
-  expect(within(composer).getByText('Quote reposting')).toBeInTheDocument();
+  expect(within(composer).getByText('Adding a comment')).toBeInTheDocument();
   expect(within(composer).getByText(/Original post.*source post/)).toBeInTheDocument();
   expect(within(composer).getByLabelText(/attachment/i)).toBeDisabled();
 
   await user.type(quoteInput, 'quoted take');
-  const submitButton = within(composer).getByRole('button', { name: 'Quote Repost' });
+  const submitButton = within(composer).getByRole('button', { name: 'Add comment' });
   await user.click(submitButton);
 
   await waitFor(() => {

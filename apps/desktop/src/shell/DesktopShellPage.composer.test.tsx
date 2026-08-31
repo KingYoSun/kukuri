@@ -89,9 +89,9 @@ test('compose dialog stays width-safe when the source post contains a long token
   fireEvent.change(within(publishDialog).getByPlaceholderText('Write a post'), {
     target: { value: longContent },
   });
-  await user.click(within(publishDialog).getByRole('button', { name: 'Publish' }));
+  await user.click(within(publishDialog).getByRole('button', { name: 'Post' }));
   await waitFor(() => {
-    expect(screen.queryByRole('dialog', { name: 'Publish' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Post' })).not.toBeInTheDocument();
   });
   await waitFor(() => {
     expect(screen.getByText(longContent)).toBeInTheDocument();
@@ -151,10 +151,10 @@ test('publish dialog closes without waiting for a timeline refresh after submit'
 
   const publishDialog = await openPublishDialog(user);
   await user.type(within(publishDialog).getByPlaceholderText('Write a post'), 'publish without wait');
-  await user.click(within(publishDialog).getByRole('button', { name: 'Publish' }));
+  await user.click(within(publishDialog).getByRole('button', { name: 'Post' }));
 
   await waitFor(() => {
-    expect(screen.queryByRole('dialog', { name: 'Publish' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Post' })).not.toBeInTheDocument();
   });
 });
 
@@ -173,7 +173,7 @@ test('publish refreshes the active timeline without reloading full shell data', 
 
   const publishDialog = await openPublishDialog(user);
   await user.type(within(publishDialog).getByPlaceholderText('Write a post'), 'local refresh post');
-  await user.click(within(publishDialog).getByRole('button', { name: 'Publish' }));
+  await user.click(within(publishDialog).getByRole('button', { name: 'Post' }));
 
   await waitFor(() => {
     expect(screen.getByText('local refresh post')).toBeInTheDocument();

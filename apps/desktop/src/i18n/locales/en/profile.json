@@ -1,11 +1,11 @@
 {
   "communityNodeAdvisory": {
-    "title": "Community Node advisory",
-    "nodeLocalNotice": "Information from the selected Community Node only. It is not a network-wide judgment and does not hide this author by default.",
+    "title": "Relationship and trust",
+    "nodeLocalNotice": "Information from the selected Community Node only. It is not a network-wide judgment and does not hide this user by default.",
     "noNodes": "An authenticated, consented Community Node that provides trust advisories is required. Check your node settings.",
     "openSettings": "Open node settings",
     "nodeLabel": "Community Node",
-    "load": "Load advisory",
+    "load": "Load relationship and trust",
     "loading": "Loading…",
     "basisLabels": {
       "basis": "Basis",
@@ -52,14 +52,14 @@
       "invalidAppeal": "The assessment could not be verified or has already been resolved. Reload the information and check its status.",
       "responseMismatch": "The accepted appeal does not match the submitted assessment. The state was not changed; reload the information.",
       "unresolvedTitle": "The issuer's destination could not be resolved",
-      "unresolvedBody": "No configured node with the issuer's node_id and a report_endpoint was found. Check your node settings.",
+      "unresolvedBody": "No configured node matching the issuer has a destination for appeals. Check your node settings.",
       "noneContribution": "This assessment currently contributes to the trust result. It continues to contribute until the operator clears the appeal.",
       "disputedContribution": "This appeal is under review. The assessment continues to contribute until it is cleared.",
       "clearedContribution": "The appeal was accepted. This assessment no longer contributes to the trust result.",
       "status": {
         "none": "Not appealed",
         "disputed": "Under review",
-        "cleared": "Cleared"
+        "cleared": "Appeal accepted"
       }
     },
     "errors": {
@@ -86,9 +86,9 @@
       "score": "Continuous proximity: {{score}}"
     },
     "neighbors": {
-      "title": "Nearby users",
+      "title": "Closely connected users",
       "notice": "Loaded only by this action. This list does not automatically filter the timeline, search, or recommendations.",
-      "empty": "No nearby users were returned."
+      "empty": "No closely connected users were returned."
     }
   },
   "editor": {
@@ -96,12 +96,13 @@
     "back": "Back to profile",
     "displayName": "Display Name",
     "loading": "Loading profile…",
-    "name": "Name",
+    "name": "Username",
     "picture": "Picture",
+    "picturePreviewAlt": "{{name}}'s profile picture preview",
     "placeholders": {
       "about": "Short bio",
       "displayName": "Visible label",
-      "name": "Canonical name"
+      "name": "Username"
     },
     "reset": "Reset",
     "save": "Save Profile",
@@ -109,25 +110,29 @@
   },
   "overview": {
     "edit": "Edit Profile",
-    "followedCount": "{{count}} Followers",
-    "followingCount": "{{count}} Following",
+    "avatarAlt": "{{name}}'s profile picture",
+    "followedCount_one": "{{count}} follower",
+    "followedCount_other": "{{count}} followers",
+    "followingCount_one": "Following {{count}} user",
+    "followingCount_other": "Following {{count}} users",
     "loading": "Loading profile…",
-    "mutedCount": "{{count}} Muted",
-    "noBio": "No profile bio published yet.",
+    "mutedCount_one": "{{count}} muted user",
+    "mutedCount_other": "{{count}} muted users",
+    "noBio": "No bio yet.",
     "postCount": "Public posts",
     "title": "Profile"
   },
   "connections": {
     "back": "Back to profile",
     "empty": {
-      "followed": "No local-known followers yet.",
+      "followed": "No followers known to this device yet.",
       "following": "You are not following anyone yet.",
-      "muted": "No muted authors yet."
+      "muted": "No muted users yet."
     },
     "loading": "Loading follows and mutes…",
     "mutedBadge": "Muted",
     "tabs": {
-      "followed": "Followed",
+      "followed": "Followers",
       "following": "Following",
       "muted": "Muted"
     },
@@ -135,7 +140,7 @@
     "title": "Follow & Mute"
   },
   "feed": {
-    "noAuthorPosts": "No public posts from this author yet.",
+    "noAuthorPosts": "This user hasn't posted publicly yet.",
     "noOwnPosts": "No public posts published yet.",
     "openOriginalTopic": "Open original topic",
     "originTopic": "Origin topic"

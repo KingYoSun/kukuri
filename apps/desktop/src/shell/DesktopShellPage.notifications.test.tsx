@@ -205,7 +205,7 @@ test('notifications exposes summary and refresh in the column header', async () 
   const header = column.querySelector('.shell-column-header');
   if (!(header instanceof HTMLElement)) throw new Error('notifications column header not found');
 
-  expect(within(header).getByText(/1 items/)).toBeInTheDocument();
+  expect(within(header).getByText(/1 notification/)).toBeInTheDocument();
   const callsBeforeRefresh = listNotifications.mock.calls.length;
   await user.click(within(header).getByRole('button', { name: 'Refresh' }));
 

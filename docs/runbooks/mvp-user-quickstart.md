@@ -1,34 +1,34 @@
-# MVP User Quickstart
+# MVP利用者向けクイックスタート
 
-## Audience
+## 対象
 
-- builder preview を触る desktop user 向け
-- 現在の packaged target は Windows
-- Linux は source-run のみ
+- Builder Previewを試すデスクトップ利用者向け
+- 現在のパッケージ版はWindows向け
+- Linuxはソースからの起動のみ
 
-## 3 Minute Path
+## 3分で試す
 
-1. [最新の GitHub Release](https://github.com/KingYoSun/kukuri/releases/latest) から Windows installer を取得して起動する。
-2. 初回起動後、settings を開かずに数秒待ち、Community Node が `ready` になるのを待つ。
-3. 2番目のProfile Columnを開き、`Edit Profile`から表示名、名前、自己紹介、必要なら画像を設定する。
-4. 先頭のTimeline Columnへ戻り、starter topic のどれかを開く。
+1. [最新のGitHub Release](https://github.com/KingYoSun/kukuri/releases/latest)からWindowsインストーラーを取得して起動する。
+2. 初回起動後、設定を開かずに数秒待ち、コミュニティノードが「準備完了」になるのを待つ。
+3. 2番目のプロフィールカラムを開き、「プロフィールを編集」から表示名、ユーザー名、自己紹介、必要なら画像を設定する。
+4. 先頭のタイムラインカラムへ戻り、最初から用意されたトピックのどれかを開く。
    - `kukuri:topic:general`（雑談・分類のない一般的な投稿）
    - `kukuri:topic:dev`（kukuri の開発・技術・改善案・バグ）
    - `kukuri:topic:test`（投稿・同期・画像・P2P 挙動などのお試し）
-5. public post か thread reply を 1 本試す。
-6. 同じ topic 配下で private channel を作るか参加する。
-7. Explore、Notifications、Messagesの各Columnを開き、主要機能の入口を確認する。
-8. settings の Community Node diagnostics を確認し、feedback を送る。
-9. `Settings -> Release` で更新状態を確認し、診断レポートをコピーまたは書き出す。
+5. 公開投稿かスレッドへの返信を1件試す。
+6. 同じトピック内でプライベートチャンネルを作るか参加する。
+7. 「見つける」「通知」「メッセージ」の各カラムを開き、主要機能の入口を確認する。
+8. 設定でコミュニティノードの診断情報を確認し、フィードバックを送る。
+9. 「設定 → リリース」で更新状態を確認し、診断レポートをコピーまたは書き出す。
 
-## What To Notice
+## 確認するポイント
 
-- topic が主軸で、channel は topic 配下の audience になっているか
-- 初期5 Columnからプロフィール設定、探索、通知、メッセージへ迷わず移動できるか
-- Community Node が relay ではなく bootstrap / auth / connectivity assist として見えるか
-- 自動認証と自動 consent accept の導線が前面に出過ぎず、それでも friction を減らせているか
+- トピックが主軸で、チャンネルはトピック内の共有範囲として理解できるか
+- 初期5カラムからプロフィール設定、探索、通知、メッセージへ迷わず移動できるか
+- コミュニティノードが投稿の保管先ではなく、初期接続・認証・接続支援を担うものとして見えるか
+- 自動認証と必須同意の導線が前面に出過ぎず、初回利用の手間を減らせているか
 
-## Source Run On Linux
+## Linuxでソースから起動する
 
 ```bash
 cargo xtask doctor
@@ -38,26 +38,26 @@ npx pnpm@10.16.1 install
 npx pnpm@10.16.1 dev
 ```
 
-起動後の見るポイントは Windows preview と同じです。
+起動後の確認ポイントはWindowsプレビューと同じです。
 
-## Feedback
+## フィードバック
 
-- `Settings -> Release` の diagnostic report と一緒に GitHub へ feedback を送る
-- diagnostic report は secret key、auth token、private channel secret、invite/share token、DM 本文、ローカル DB path を既定で含まない
+- 「設定 → リリース」の診断レポートと一緒にGitHubへフィードバックを送る
+- 診断レポートは秘密鍵、認証トークン、プライベートチャンネルの秘密情報、招待・共有トークン、DM本文、端末内データベースの保存先を既定で含まない
 - 特に聞きたいのは次の 3 点です
-  - topic-first の感触が最初に伝わったか
-  - topic 配下の channel が自然に感じられたか
-  - Community Node の役割境界が理解しやすかったか
+  - トピック中心の使い方が最初に伝わったか
+  - トピック内のチャンネルが自然に感じられたか
+  - コミュニティノードの役割境界が理解しやすかったか
 
-## Updates
+## 更新
 
-- preview の更新確認は `Settings -> Release -> Check` で行う。
-- 更新が見つかったら `Install` を押し、インストール完了後にアプリを再起動する。
-- 更新後も identity、local DB、Iroh data、Community Node 設定、private channel capability、通知 inbox が残っていることを確認する。
+- プレビューの更新確認は「設定 → リリース → 更新を確認」で行う。
+- 更新が見つかったら「インストール」を押し、インストール完了後にアプリを再起動する。
+- 更新後もアカウントを識別する鍵、プロフィール、フォロー関係、自分の投稿、端末内データベース、Irohのデータ、コミュニティノード設定、プライベートチャンネルの閲覧権限、通知一覧が残っていることを確認する。
 
-## Data Safety
+## データの安全性
 
-- `Settings -> Release` links to the latest release, this quickstart, the release runbook, third-party notices, and the default Community Node disclosures.
-- Browser links: [release](https://github.com/KingYoSun/kukuri/releases/latest), [terms](https://api.kukuri.app/terms), [privacy](https://api.kukuri.app/privacy), [external transmission](https://api.kukuri.app/external-transmission), [abuse policy](https://api.kukuri.app/abuse-policy), and [data retention](https://api.kukuri.app/data-retention).
-- Preview update smoke must confirm identity, local DB, Iroh data, Community Node settings, private channel capability, and notification inbox state are preserved.
-- Before uninstall or reset, keep the app data directory if the user needs to retain local state.
+- 「設定 → リリース」には、最新リリース、このクイックスタート、リリース手順書、第三者ライセンス表示、既定のコミュニティノードの開示情報へのリンクがある。
+- ブラウザーで開くリンク: [リリース](https://github.com/KingYoSun/kukuri/releases/latest)、[利用規約](https://api.kukuri.app/terms)、[プライバシー](https://api.kukuri.app/privacy)、[外部送信](https://api.kukuri.app/external-transmission)、[通報方針](https://api.kukuri.app/abuse-policy)、[データ保持](https://api.kukuri.app/data-retention)。
+- プレビュー更新の動作確認では、アカウントを識別する鍵、プロフィール、フォロー関係、自分の投稿、端末内データベース、Irohのデータ、コミュニティノード設定、プライベートチャンネルの閲覧権限、通知一覧が保持されることを確認する。
+- アンインストールまたはリセットの前に、端末内の状態を残す必要がある場合はアプリのデータディレクトリを保管する。

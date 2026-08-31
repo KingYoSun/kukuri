@@ -119,7 +119,7 @@ describe('MetaverseRoomDiscovery', () => {
     });
 
     expect(screen.getByText('1 room in this topic')).toBeInTheDocument();
-    expect(screen.getByText('Host: Unknown author')).toBeInTheDocument();
+    expect(screen.getByText('Host: Unknown user')).toBeInTheDocument();
     expect(screen.queryByText(room.host_pubkey.slice(0, 10), { exact: false })).not.toBeInTheDocument();
     expect(screen.queryByText(room.manifest_blob_hash!, { exact: false })).not.toBeInTheDocument();
     expect(screen.getByText('Joined')).toBeInTheDocument();
@@ -142,7 +142,7 @@ describe('MetaverseRoomDiscovery', () => {
     if (!(target instanceof HTMLElement)) throw new Error('room identifier target not found');
 
     fireEvent.contextMenu(target, { clientX: 32, clientY: 40 });
-    await user.click(screen.getByRole('menuitem', { name: 'Copy author ID' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Copy user ID' }));
     expect(clipboardWriteText).toHaveBeenLastCalledWith(room.host_pubkey);
 
     target.focus();

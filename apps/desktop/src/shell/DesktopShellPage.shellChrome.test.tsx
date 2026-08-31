@@ -87,7 +87,7 @@ test('column actions replace the legacy global floating action button', async ()
   const initial = render(<App api={createDesktopMockApi()} />);
 
   expect(screen.queryByTestId('shell-fab')).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /^Publish to / })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /^Post to / })).toBeInTheDocument();
 
   initial.unmount();
   const live = renderAtHash('#/live?topic=kukuri%3Atopic%3Ageneral');

@@ -1,9 +1,10 @@
 {
   "context": {
-    "author": "作者",
+    "author": "用户",
     "close": "关闭 {{title}}",
     "threadEmpty": "选择一条帖子以查看线程。",
-    "threadSummary": "线程中有 {{count}} 条帖子",
+    "threadSummary_one": "帖子串中有 {{count}} 条帖子",
+    "threadSummary_other": "帖子串中有 {{count}} 条帖子",
     "thread": "线程"
   },
   "navigation": {
@@ -131,14 +132,16 @@
   },
   "messages": {
     "all": "全部",
-    "conversationCount": "{{count}} 个会话",
+    "conversationCount_one": "{{count}} 个会话",
+    "conversationCount_other": "{{count}} 个会话",
     "delivered": "已送达",
     "empty": "还没有私信。",
     "latest": "最新消息：{{preview}}",
     "mutualRequired": "双方不再互相关注，暂时无法发送私信。",
     "noMessages": "还没有消息。",
     "open": "打开",
-    "peerCount": "{{count}} 个对等节点",
+    "peerCount_one": "{{count}} 位已连接用户",
+    "peerCount_other": "{{count}} 位已连接用户",
     "pending": "等待发送",
     "pendingOutbox": "待发箱：{{count}} 条",
     "sendDisabled": "无法发送",
@@ -147,7 +150,7 @@
   },
   "notifications": {
     "context": {
-      "authorActivity": "作者动态",
+      "authorActivity": "用户动态",
       "directMessage": "私信",
       "topic": "主题：{{topic}}",
       "topicChannel": "主题：{{topic}} / 频道：{{channel}}"
@@ -161,17 +164,18 @@
       "direct_message": "私信",
       "followed": "关注",
       "mention": "提及",
-      "quote_repost": "引用转发",
+      "quote_repost": "带评论转发",
       "reply": "回复",
       "repost": "转发"
     },
-    "loading": "正在加载通知...",
+    "loading": "正在加载通知…",
     "preview": {
       "followed": "开始关注你了。",
       "noContent": "打开来源事件。",
       "noMessage": "打开会话。"
     },
-    "summary": "{{count}} 条 / 未读 {{unread}} 条",
+    "summary_one": "{{count}} 条通知 / {{unread}} 条未读",
+    "summary_other": "{{count}} 条通知 / {{unread}} 条未读",
     "title": "通知",
     "unread": "未读"
   },
@@ -193,7 +197,7 @@
       "label": "显示"
     },
     "community-node": {
-      "description": "community node 配置、认证、同意与刷新操作。",
+      "description": "社区节点配置、认证、同意与刷新操作。",
       "label": "社区节点"
     },
     "connectivity": {
@@ -244,49 +248,49 @@
   "testerFeedback": {
     "openButton": "发送反馈",
     "title": "发送反馈",
-    "description": "把使用 kukuri 时注意到的问题发送给 Community Node。无需填写分类或严重程度。",
-    "nodeLabel": "目标 Community Node",
+    "description": "把使用 kukuri 时注意到的问题发送给社区节点。无需填写分类或严重程度。",
+    "nodeLabel": "目标社区节点",
     "whatAttemptedLabel": "你想做什么",
     "whatHappenedLabel": "发生了什么",
     "whatSeemedWrongLabel": "哪里让你觉得不对",
     "charCount": "{{current}} / {{max}} 字",
     "overLimit": "每项内容不能超过 {{max}} 字。",
     "metadataNotice": "客户端版本和操作系统会自动附加。不会保存发送者的身份信息。",
-    "noEligibleNode": "没有已认证、已完成必需同意且接受测试反馈的 Community Node。",
-    "openSettings": "打开 Community Node 设置",
+    "noEligibleNode": "没有已认证、已完成必需同意且接受测试反馈的社区节点。",
+    "openSettings": "打开社区节点设置",
     "submit": "发送",
     "submitting": "发送中…",
     "success": "反馈已发送。受理 ID:{{referenceId}}",
     "errors": {
-      "notConfigured": "该 Community Node 不接受测试反馈。",
+      "notConfigured": "该社区节点不接受测试反馈。",
       "invalidFeedback": "请检查输入内容。三项均为必填,且每项不超过 2000 字。",
-      "authRequired": "需要对所选 Community Node 进行认证。",
-      "consentRequired": "所选 Community Node 的必需同意尚未完成。",
+      "authRequired": "需要对所选社区节点进行认证。",
+      "consentRequired": "所选社区节点的必需同意尚未完成。",
       "requestFailed": "反馈发送失败,请稍后再试。"
     }
   },
   "indexingRequest": {
-    "title": "申请 Community Node 索引",
+    "title": "申请社区节点索引",
     "target": "对象：{{target}}",
     "nodeLabel": "社区节点",
     "openPublic": "申请索引 {{topic}}",
     "openPrivate": "申请索引",
-    "publicNotice": "申请由所选 Community Node 为此公开主题建立索引。",
-    "gateNotice": "提交申请并不保证建立索引。只有通过 Community Node 运营者批准和安全检查的内容才会进入索引。",
-    "privateConfirmation": "我同意向 Community Node 披露此频道的读取 capability",
-    "privateWarning": "该 Community Node 将能够解密并索引此私密频道。每次申请或刷新状态都需要重新确认。",
-    "noEligibleNode": "没有已认证、已同意且支持 Community Index 的 Community Node。",
-    "openSettings": "打开 Community Node 设置",
+    "publicNotice": "申请由所选社区节点为此公开话题建立索引。",
+    "gateNotice": "提交申请并不保证建立索引。只有通过社区节点运营者批准和安全检查的内容才会进入索引。",
+    "privateConfirmation": "我同意向社区节点提供此频道的读取权限",
+    "privateWarning": "该社区节点将能够解密并索引此私密频道。每次申请或刷新状态都需要重新确认。",
+    "noEligibleNode": "没有已认证、已同意且支持社区索引的社区节点。",
+    "openSettings": "打开社区节点设置",
     "submit": "提交申请",
     "submitting": "提交中…",
     "status": { "pending": "申请正在等待审核。", "approved": "索引已获批准。", "rejected": "索引申请已被拒绝。" },
     "errors": {
       "requestNotConfigured": "该社区节点不提供索引，因此不接受申请。",
       "requestNotActivated": "该社区节点的索引暂时不可用，因此不接受申请。",
-      "notConfigured": "此 Community Node 未配置频道索引。",
-      "secretConflict": "频道 capability 与现有注册冲突，请联系节点运营者。",
-      "authRequired": "需要对所选 Community Node 进行认证。",
-      "consentRequired": "尚未完成所选 Community Node 的必要同意。",
+      "notConfigured": "此社区节点未配置频道索引。",
+      "secretConflict": "频道读取权限与现有注册冲突，请联系节点运营者。",
+      "authRequired": "需要对所选社区节点进行认证。",
+      "consentRequired": "尚未完成所选社区节点的必要同意。",
       "requestFailed": "索引申请失败，请稍后重试。"
     }
   },
@@ -294,11 +298,11 @@
     "automaticNode": "自动",
     "nodeSwitch": "探索社区节点",
     "unavailableNodeOption": "不可用 · {{baseUrl}}",
-    "selectedNodeUnavailable": "明确选择的 Community Node 不可用，查询已暂停。",
+    "selectedNodeUnavailable": "明确选择的社区节点不可用，查询已暂停。",
     "title": "社区索引",
-    "topicSummary": "通过可用的 Community Node 搜索当前主题或私密频道。",
+    "topicSummary": "通过可用的社区节点搜索当前话题或私密频道。",
     "exploreSummary": "跨索引主题进行搜索、发现并查看推荐。",
-    "nodeLabel": "查询节点",
+    "nodeLabel": "搜索来源",
     "surfaces": "社区索引功能",
     "operations": { "search": "搜索", "discovery": "发现", "recommendations": "推荐" },
     "operationHints": {
@@ -308,15 +312,15 @@
     "queryLabel": "搜索关键词",
     "queryPlaceholder": "搜索索引",
     "queryRequired": "请输入搜索关键词。",
-    "run": "运行",
+    "run": "显示结果",
     "loading": "加载中…",
-    "empty": "没有匹配的索引结果。",
+    "empty": "没有找到匹配的帖子。",
     "results": "社区索引结果",
-    "noEligibleNode": "当前没有已认证、已同意且提供可用社区索引的 Community Node。",
+    "noEligibleNode": "当前没有已认证、已同意且提供可用社区索引的社区节点。",
     "allJoinedDisabled": "请一次搜索一个公开主题或私密频道。不会把全部已加入范围发送给节点。",
     "errors": {
-      "authRequired": "需要对所选 Community Node 进行身份验证。",
-      "consentRequired": "需要同意所选 Community Node 的必选条款。",
+      "authRequired": "需要对所选社区节点进行身份验证。",
+      "consentRequired": "需要同意所选社区节点的必选条款。",
       "notConfigured": "所选节点未配置社区索引。",
       "notActivated": "所选节点的社区索引暂时不可用。",
       "rateLimited": "请求过多，请稍后重试。",
@@ -327,7 +331,7 @@
     "title": "举报内容",
     "boundaryNotice": "此举报将发送到特定的社区节点，而非整个 kukuri 网络。",
     "boundaryDetail": "目标节点是实际参与了该内容的索引、审核、缓存或推荐的节点。kukuri 没有中央举报入口。",
-    "identityBoundaryNote": "你的身份、资料与社交关系不属于任何节点，也不会因此举报而交给节点。",
+    "identityBoundaryNote": "你的账号、资料、关注关系和帖子不属于任何节点，也不会因此举报而交给节点。",
     "subject": {
       "post": "帖子",
       "profile": "资料",
@@ -384,7 +388,7 @@
     "unknownTitle": "无法确定举报对象",
     "unknownBody": "无法确定该内容是经由哪个节点或来源显示的，因此没有可举报的负责社区节点。",
     "observedUnresolvedTitle": "没有可达的举报对象",
-    "observedUnresolvedBody": "有节点显示了该内容，但其 manifest 或举报联系方式不可用，因此无法路由举报。",
+    "observedUnresolvedBody": "有节点显示了该内容，但无法获取其配置信息或举报联系方式，因此无法发送举报。",
     "localActionsHint": "你仍可在本地屏蔽、静音或隐藏。",
     "actionLabel": "举报"
   }

@@ -3,6 +3,11 @@
     "createRoom": "ルームを作成",
     "saveRoom": "ルームを保存"
   },
+  "accessibility": {
+    "score": "{{room}}での{{player}}のスコア",
+    "status": "{{room}}の状態",
+    "phase": "{{room}}のフェーズ"
+  },
   "empty": "ゲームルームはありません",
   "errors": {
     "failedCreate": "ゲームルームの作成に失敗しました",

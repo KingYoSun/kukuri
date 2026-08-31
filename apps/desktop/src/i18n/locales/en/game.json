@@ -3,6 +3,11 @@
     "createRoom": "Create Room",
     "saveRoom": "Save Room"
   },
+  "accessibility": {
+    "score": "{{player}}'s score in {{room}}",
+    "status": "Status for {{room}}",
+    "phase": "Phase for {{room}}"
+  },
   "empty": "No game rooms",
   "errors": {
     "failedCreate": "failed to create game room",

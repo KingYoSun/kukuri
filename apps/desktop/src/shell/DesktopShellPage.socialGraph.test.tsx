@@ -53,7 +53,7 @@ test('post card shows friend of friend badge and author name fallback', async ()
   );
 
   expect(await screen.findByRole('button', { name: 'alice' })).toBeInTheDocument();
-  expect(screen.getByText('friend of friend')).toBeInTheDocument();
+  expect(screen.getByText('followed by someone you follow')).toBeInTheDocument();
 });
 
 test('profile social management updates follow and mute lists and muted authors disappear from content surfaces', async () => {
@@ -209,7 +209,7 @@ test('profile social management updates follow and mute lists and muted authors 
   });
 
   await selectWorkspace(user, 'Profile');
-  await user.click(screen.getByRole('button', { name: '0 Following' }));
+  await user.click(screen.getByRole('button', { name: 'Following 0 users' }));
 
   const tabs = getSocialConnectionsTabs();
   await waitFor(() => {
@@ -220,9 +220,9 @@ test('profile social management updates follow and mute lists and muted authors 
   });
   expect(screen.getByText('You are not following anyone yet.')).toBeInTheDocument();
 
-  await user.click(within(tabs).getByRole('tab', { name: 'Followed' }));
+  await user.click(within(tabs).getByRole('tab', { name: 'Followers' }));
   await waitFor(() => {
-    expect(within(tabs).getByRole('tab', { name: 'Followed' })).toHaveAttribute(
+    expect(within(tabs).getByRole('tab', { name: 'Followers' })).toHaveAttribute(
       'aria-selected',
       'true'
     );

@@ -1,0 +1,37 @@
+# 2026-08-31 Issue #845 UI copy and terminology
+
+- Status: current
+- Supersedes: None
+- Superseded by: None
+- Issue: https://github.com/KingYoSun/kukuri/issues/845
+- PR: pending
+- Preview: [notifications](../../apps/desktop/tests/playwright/__screenshots__/visual.spec.ts/notifications-wide-dark.png), [messages](../../apps/desktop/tests/playwright/__screenshots__/visual.spec.ts/messages-wide-dark.png), [user detail](../../apps/desktop/tests/playwright/__screenshots__/visual.spec.ts/author-pane-wide-dark.png)
+- Surface / user / purpose: 英語、日本語、簡体字中国語を選択したSNS利用者が、人物、アカウント、投稿、フォロー関係、投稿操作を実装用語に読み替えず理解できるようにする。
+- Summary: 人物を指す表示を`User / ユーザー / 用户`へ統一し、抽象的なidentity表現をアカウント、プロフィール、フォロー関係、自分の投稿、アカウントを識別する鍵のうち実際の対象へ置き換えた。投稿、引用、フォロー関係、プライベートチャンネルの共有範囲、通知、DM、見つける、通報、設定、Game、Metaverseの操作名と説明を利用者視点へ揃えた。5件の直書きaccessible nameを翻訳資源へ移し、複数形・省略記号・禁止語を有限なlocale契約で検査する。README、利用者向けrunbook、法務正本とアプリ内3言語ミラーも同じ語彙へ同期し、legal bundle version 2と機能挙動は変更していない。
+- Conditions:
+  - Platform: Windows 11 / Chromium Playwright。visual baselineはGitHub Actions上のLinux / Chromiumで更新する。
+  - Viewport: 900×760、390×844、450×380 CSS pixel（900×760の200%相当）。
+  - Theme: dark / light。
+  - Locale: en / ja / zh-CN。
+  - State: Timeline、Thread、Profile、Notifications、Messages、Explore、Private Channel、全Settings section、Live、Game、Metaverseのdeterministic desktop mock。
+- Accessibility / interaction: プロフィール画像2件とGameのscore、status、phaseの3件を選択localeのaccessible nameへ変更した。keyboard focus時のtooltip、投稿操作、長い翻訳文言の折り返し、意図しない横overflowと主要ヘッダーの重なりをPlaywrightで確認した。
+- Performance: 新規dependency、network request、polling、永続状態は追加していない。locale resource、表示用count引数、accessible name、テストだけの変更であり、専用性能計測の対象外とした。
+- Validation:
+  - failing-first: locale監査とaccessible nameの計13件が、未修正の用語、複数形、句読点、直書き英語を理由に失敗することを確認した。
+  - targeted Vitest: 97 tests passed。
+  - frontend Vitest: 133 files / 1012 tests passed。
+  - targeted Playwright: localization layout 16 tests passed。
+  - browser Playwright: 58 tests passed。
+  - visual smoke: 14 tests passed（Windowsではsnapshot comparisonを行わない）。
+  - `cargo xtask check` passed。
+  - `cargo xtask test`: Rust 700 passed / 3 skipped、harness 22 passed、frontend 133 files / 1012 tests passed。
+  - `cargo xtask desktop-ui-check`: lint、typecheck、frontend 1012 tests、Storybook build、browser Playwright 58 tests、visual smoke 14 tests passed。
+  - `git diff --check` passed。
+- Not verified: 物理タッチパネル、ペン入力、スクリーンリーダーによる音声読み上げ、実データを使用したTauri配布build。Linux / Chromiumの更新後baselineはPR作成後に標準workflowで生成して確認する。
+- Review result:
+  - 一貫性: 3言語で人物、投稿、フォロー関係、共有範囲、法務上の保存対象を同じ概念へ対応付けた。
+  - フィードバック: 投稿、コメント付きリポスト、通知、DM、検索・発見、プロフィール編集の操作結果を利用者の言葉で示す。
+  - エラー防止: 内部エラーや生の翻訳keyを通常UIへ表示せず、取得中、取得失敗、名前未設定を区別する既存の状態契約を維持した。
+  - 主導権: 表示文言と読み上げ名だけを変更し、投稿、フォロー、チャンネル、通報のcallback、scope、capability、権限判定は変更していない。
+  - 記憶負荷: `identity`、`author`、`peer`、`discovery seed`等の実装語を、画面ごとの対象と操作が分かる具体語へ置き換えた。
+- Exceptions: `P2P`、`DM`、`VRM`、URL、ID、公開鍵、protocol形式、製品固有名`Dome`、Developer modeのraw診断値は対象を正確に表すため維持する。wire / schema / domain identifier、内部のlocale key・型・変数・コンポーネント名は表示されないため改名しない。

@@ -14,7 +14,7 @@ async function openComposerDialog(page: Page) {
   if (!(await composer.isVisible().catch(() => false))) {
     const englishTimeline = activeColumn(page, 'Timeline');
     if (await englishTimeline.isVisible().catch(() => false)) {
-      await englishTimeline.getByRole('button', { name: /^Publish to / }).click();
+      await englishTimeline.getByRole('button', { name: /^Post to / }).click();
     } else {
       await page
         .locator('[data-column-id][aria-current="true"] .shell-column-primary-action')
@@ -220,14 +220,14 @@ test('Column header switches replace Timeline scope in place and preserve inacti
   const initialColumnId = await timeline.getAttribute('data-column-id');
   await expect(topicSelect).toHaveValue('kukuri:topic:general');
 
-  await timeline.getByRole('button', { name: /^Publish to / }).click();
+  await timeline.getByRole('button', { name: /^Post to / }).click();
   await timeline.getByPlaceholder('Write a post').fill('general browser draft');
   await topicSelect.selectOption('kukuri:topic:dev');
 
   await expect(page).toHaveURL(/#\/timeline\?topic=kukuri%3Atopic%3Adev$/);
   await expect(page.getByRole('region', { name: /^Timeline Column,/ })).toHaveCount(1);
   await expect(timeline).toHaveAttribute('data-column-id', initialColumnId!);
-  await timeline.getByRole('button', { name: /^Publish to Public · dev$/ }).click();
+  await timeline.getByRole('button', { name: /^Post to Public · dev$/ }).click();
   await expect(timeline.getByPlaceholder('Write a post')).toHaveValue('');
   await timeline.getByPlaceholder('Write a post').fill('dev browser draft');
 
@@ -277,7 +277,7 @@ for (const viewport of [
 
     const timelineColumn = page.getByRole('region', { name: /Timeline Column/ });
     const footer = timelineColumn.locator('.shell-column-footer');
-    const primaryAction = timelineColumn.getByRole('button', { name: /^Publish to / });
+    const primaryAction = timelineColumn.getByRole('button', { name: /^Post to / });
     const trigger = page.getByTestId('control-center-trigger');
     await expect(timelineColumn).toHaveCount(1);
     await expect(primaryAction).toBeVisible();
@@ -305,7 +305,7 @@ for (const viewport of [
     expect(intersects(actionBox!, triggerBox!)).toBe(false);
 
     await primaryAction.click();
-    const submit = timelineColumn.getByRole('button', { name: /^Publish$/ });
+    const submit = timelineColumn.getByRole('button', { name: /^Post$/ });
     await expect(submit).toBeVisible();
     const [submitBox, expandedFooterBox] = await Promise.all([submit.boundingBox(), footer.boundingBox()]);
     expect(submitBox).not.toBeNull();
@@ -338,14 +338,14 @@ test('browser mock shell can switch topics, publish, open thread, open author, a
 
   await openComposerDialog(page);
   await page.getByPlaceholder('Write a post').fill('hello browser mock');
-  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await page.getByRole('button', { name: 'Post', exact: true }).click();
 
   await expect(page.getByText('hello browser mock')).toBeVisible();
 
   await page.getByText('hello browser mock').click();
   const threadPane = activeColumn(page, 'Thread');
   await expect(threadPane).toBeVisible();
-  await threadPane.getByRole('button', { name: 'Unknown author' }).first().click();
+  await threadPane.getByRole('button', { name: 'Unknown user' }).first().click();
   await expect(activeColumn(page, 'Profile')).toBeVisible();
 
   const settingsDialog = await openSettings(page);
@@ -575,11 +575,11 @@ for (const mobileViewport of [
 
   await openComposerDialog(page);
   await page.getByPlaceholder('Write a post').fill('mobile paging thread');
-  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await page.getByRole('button', { name: 'Post', exact: true }).click();
   await page.getByText('mobile paging thread').click();
   const thread = activeColumn(page, 'Thread');
   await expect(thread).toBeVisible();
-  await thread.getByRole('button', { name: 'Unknown author' }).first().click();
+  await thread.getByRole('button', { name: 'Unknown user' }).first().click();
   await expect(activeColumn(page, 'Profile')).toBeVisible();
 
   const canvas = page.locator('.shell-column-canvas');
@@ -955,14 +955,14 @@ test('browser mock narrow shell keeps nav, context, and settings flows reachable
 
   await openComposerDialog(page);
   await page.getByPlaceholder('Write a post').fill('narrow browser mock');
-  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await page.getByRole('button', { name: 'Post', exact: true }).click();
   await expect(page.getByText('narrow browser mock')).toBeVisible();
 
   await page.getByText('narrow browser mock').click();
   const threadColumn = activeColumn(page, 'Thread');
   await expect(threadColumn).toBeVisible();
 
-  await threadColumn.getByRole('button', { name: 'Unknown author' }).first().click();
+  await threadColumn.getByRole('button', { name: 'Unknown user' }).first().click();
   await expect(activeColumn(page, 'Profile')).toBeVisible();
 
   await page.goto('/');

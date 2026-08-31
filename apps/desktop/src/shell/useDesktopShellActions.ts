@@ -17,11 +17,7 @@ import {
   useDesktopShellStoreApi,
 } from '@/shell/store';
 import { setRecordEntry } from '@/shell/stateUpdates';
-import {
-  messageFromError,
-  privateTimelineScope,
-  publishedTopicIdForPost,
-} from '@/shell/presentation';
+import { privateTimelineScope, publishedTopicIdForPost } from '@/shell/presentation';
 import { selectShellActionsSlice } from '@/shell/storeSelectors';
 import {
   columnDraftKey,
@@ -568,13 +564,8 @@ export function useDesktopShellActions({
         } else {
           failures.push(translate('common:errors.unsupportedAttachmentType', { name: file.name }));
         }
-      } catch (attachmentError) {
-        failures.push(
-          messageFromError(
-            attachmentError,
-            translate('common:errors.failedToGenerateVideoPoster')
-          )
-        );
+      } catch {
+        failures.push(translate('common:errors.failedToGenerateVideoPoster'));
       }
     }
     nextItems.forEach(rememberDraftPreview);

@@ -27,7 +27,7 @@
           "heading": "What kukuri is",
           "paragraphs": [
             "kukuri is a decentralized application built on a P2P foundation. A central authority that governs the entire network does not exist; it is structurally impossible.",
-            "User identity, profile, and social graph are not owned by any particular community node and are not lost when a node stops or changes."
+            "Your account, profile, follows, and posts are not owned by any particular community node and are not lost when a node stops or changes."
           ]
         },
         {
@@ -64,7 +64,7 @@
         {
           "heading": "After withdrawal",
           "paragraphs": [
-            "A compatible client or node that recognizes a valid author withdrawal or node-local transmission prevention stops future display, indexing, search, discovery, recommendation, synchronization, retrieval, caching, or delivery within its applicable scope. Records may be retained only where required by law and with their subject, purpose, and duration limited.",
+            "A compatible client or node that recognizes a valid withdrawal by the user who posted it, or a node-local transmission block, stops future display, indexing, search, discovery, recommendation, synchronization, retrieval, caching, or delivery within its applicable scope. Records may be retained only where required by law and with their subject, purpose, and duration limited.",
             "Copies already obtained by receiving peers or third-party nodes before withdrawal cannot be guaranteed to be remotely recovered or erased. Withdrawal does not mean immediate, complete deletion from the entire network."
           ]
         },
@@ -97,7 +97,7 @@
         {
           "heading": "Information stored locally",
           "paragraphs": [
-            "Your identity (keys), profile, social graph, and local projections such as posts, as well as app settings (theme, language, discovery settings, community node settings, and your consent to this policy) are stored only locally on your device."
+            "Your account-identifying key, profile, follows, posts, and other locally reconstructed data, as well as app settings (theme, language, discovery settings, community node settings, and your consent to this policy), are stored only on your device."
           ]
         },
         {

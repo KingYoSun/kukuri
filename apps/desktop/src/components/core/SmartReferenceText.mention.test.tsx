@@ -52,13 +52,13 @@ test('resolved mention copies its hidden author ID without replacing the click a
 
   const chip = screen.getByRole('button', { name: '@Alice' });
   fireEvent.contextMenu(chip, { clientX: 24, clientY: 36 });
-  await user.click(screen.getByRole('menuitem', { name: 'Copy author ID' }));
+  await user.click(screen.getByRole('menuitem', { name: 'Copy user ID' }));
   expect(clipboardWriteText).toHaveBeenCalledWith(PUBKEY);
   expect(onOpenMention).not.toHaveBeenCalled();
 
   chip.focus();
   fireEvent.keyDown(chip, { key: 'ContextMenu' });
-  fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Copy author ID' }), { key: 'Escape' });
+  fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Copy user ID' }), { key: 'Escape' });
   expect(chip).toHaveFocus();
 
   await user.click(chip);

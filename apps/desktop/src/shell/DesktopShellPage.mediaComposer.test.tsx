@@ -46,7 +46,7 @@ test('single attach button classifies mixed image and video files', async () => 
     expect(screen.getByText('flower.png')).toBeInTheDocument();
     expect(screen.getByText('clip.mp4')).toBeInTheDocument();
   });
-  await user.click(within(publishDialog).getByRole('button', { name: 'Publish' }));
+  await user.click(within(publishDialog).getByRole('button', { name: 'Post' }));
 
   await waitFor(() => {
     expect(attachmentsSeen).toHaveLength(3);
@@ -83,7 +83,7 @@ test('video upload generates poster attachment before publish', async () => {
   });
   expect(screen.getByText(/video_poster/)).toBeInTheDocument();
 
-  await user.click(within(publishDialog).getByRole('button', { name: 'Publish' }));
+  await user.click(within(publishDialog).getByRole('button', { name: 'Post' }));
 
   await waitFor(() => {
     expect(attachmentsSeen).toHaveLength(2);
@@ -117,7 +117,7 @@ test('video upload generates poster attachment with metadata seek fallback', asy
   });
   expect(screen.getByText(/video_poster/)).toBeInTheDocument();
 
-  await user.click(within(publishDialog).getByRole('button', { name: 'Publish' }));
+  await user.click(within(publishDialog).getByRole('button', { name: 'Post' }));
 
   await waitFor(() => {
     expect(attachmentsSeen).toHaveLength(2);
@@ -142,10 +142,10 @@ test('video poster generation failure blocks publish', async () => {
   );
 
   await waitFor(() => {
-    expect(screen.getAllByText('failed to generate video poster').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Failed to generate the video preview.').length).toBeGreaterThan(0);
   });
 
-  await user.click(within(publishDialog).getByRole('button', { name: 'Publish' }));
+  await user.click(within(publishDialog).getByRole('button', { name: 'Post' }));
 
   expect(createPostSpy).not.toHaveBeenCalled();
 });

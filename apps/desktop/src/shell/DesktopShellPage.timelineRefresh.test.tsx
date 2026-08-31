@@ -195,11 +195,11 @@ test('pending timeline snapshots apply all unseen posts from the latest first pa
 
   timelineItems = [secondNewPost, firstNewPost, olderPost];
   window.dispatchEvent(new Event('focus'));
-  expect(await screen.findByRole('button', { name: 'Show 2 new post' })).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: 'Show 2 new posts' })).toBeInTheDocument();
   expect(screen.queryByText('first unseen post')).not.toBeInTheDocument();
   expect(screen.queryByText('second unseen post')).not.toBeInTheDocument();
 
-  await user.click(screen.getByRole('button', { name: 'Show 2 new post' }));
+  await user.click(screen.getByRole('button', { name: 'Show 2 new posts' }));
 
   await waitFor(() => {
     expect(screen.getByText('first unseen post')).toBeInTheDocument();

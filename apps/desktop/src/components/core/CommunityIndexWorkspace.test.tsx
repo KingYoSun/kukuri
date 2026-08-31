@@ -167,14 +167,14 @@ function workspaceProps(
 
 function runSearch(query = 'hello') {
   fireEvent.change(screen.getByLabelText('Search query'), { target: { value: query } });
-  fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Show results' }));
 }
 
 test('healthy query node selection stays automatic and out of the primary surface', () => {
   const api = {} as DesktopApi;
   render(<CommunityIndexWorkspace {...workspaceProps(api)} />);
 
-  expect(screen.queryByLabelText('Query node')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('Search provider')).not.toBeInTheDocument();
   expect(screen.getByLabelText('Search query')).toBeInTheDocument();
 });
 
@@ -414,7 +414,7 @@ test('missing author profiles are resolved instead of being labeled unknown', as
   expect(await screen.findByText('Alice')).toBeInTheDocument();
   expect(getAuthorSocialView).toHaveBeenCalledTimes(1);
   expect(getAuthorSocialView).toHaveBeenCalledWith(entry.author_pubkey);
-  expect(screen.queryByText('Unknown author')).not.toBeInTheDocument();
+  expect(screen.queryByText('Unknown user')).not.toBeInTheDocument();
 });
 
 test('the local profile is used without a redundant author lookup', async () => {
@@ -463,8 +463,8 @@ test('unknown author is used only after a fetched profile has no configured name
   render(<CommunityIndexWorkspace {...workspaceProps(api)} />);
   runSearch();
 
-  expect(await screen.findByText('Unknown author')).toBeInTheDocument();
-  expect(screen.queryByText('Author unavailable')).not.toBeInTheDocument();
+  expect(await screen.findByText('Unknown user')).toBeInTheDocument();
+  expect(screen.queryByText('User information unavailable')).not.toBeInTheDocument();
 });
 
 test('author lookup failures are distinct from fetched nameless profiles', async () => {
@@ -478,8 +478,8 @@ test('author lookup failures are distinct from fetched nameless profiles', async
   render(<CommunityIndexWorkspace {...workspaceProps(api)} />);
   runSearch();
 
-  expect(await screen.findByText('Author unavailable')).toBeInTheDocument();
-  expect(screen.queryByText('Unknown author')).not.toBeInTheDocument();
+  expect(await screen.findByText('User information unavailable')).toBeInTheDocument();
+  expect(screen.queryByText('Unknown user')).not.toBeInTheDocument();
 });
 
 test('index results hide identifiers and copy their complete values from context actions', async () => {
@@ -503,7 +503,7 @@ test('index results hide identifiers and copy their complete values from context
   const target = resultText.closest('article')?.querySelector('[data-testid="post-identifier-target"]');
   if (!(target instanceof HTMLElement)) throw new Error('index result target not found');
   fireEvent.contextMenu(target, { clientX: 40, clientY: 50 });
-  await user.click(screen.getByRole('menuitem', { name: 'Copy author ID' }));
+  await user.click(screen.getByRole('menuitem', { name: 'Copy user ID' }));
   expect(clipboardWriteText).toHaveBeenLastCalledWith(entry.author_pubkey);
 
   target.focus();
@@ -625,13 +625,13 @@ test('recommendation reports use the source node latest manifest and recommendat
   render(<CommunityIndexWorkspace {...workspaceProps(api, { mode: 'explore' })} />);
 
   fireEvent.click(screen.getByRole('tab', { name: 'Recommendations' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Show results' }));
   expect(await screen.findByText('recommended result')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Report' }));
 
   const dialog = await screen.findByRole('dialog', { name: 'Report content' });
   await waitFor(() => expect(fetchCommunityNodeManifest).toHaveBeenCalledWith(NODE_A));
-  expect(within(dialog).getByText(/^Recommendation · Author unavailable$/)).toBeInTheDocument();
+  expect(within(dialog).getByText(/^Recommendation · User information unavailable$/)).toBeInTheDocument();
   expect(within(dialog).getByText('Recommendation')).toBeInTheDocument();
   fireEvent.click(await within(dialog).findByRole('button', { name: 'Send report' }));
 
@@ -689,7 +689,7 @@ test.each([
   render(<CommunityIndexWorkspace {...workspaceProps(api)} />);
 
   fireEvent.change(screen.getByLabelText('検索語'), { target: { value: '検索' } });
-  fireEvent.click(screen.getByRole('button', { name: '実行' }));
+  fireEvent.click(screen.getByRole('button', { name: '結果を表示' }));
 
   expect(await screen.findByText(expected)).toBeInTheDocument();
 });
@@ -705,7 +705,7 @@ test('a selected node that is no longer eligible does not receive queries until 
   );
 
   // 適格一覧 [B] と古い選択値 A が同時に渡っても、A へ検索語を送らない。
-  const runButton = screen.queryByRole('button', { name: 'Run' });
+  const runButton = screen.queryByRole('button', { name: 'Show results' });
   if (runButton) fireEvent.click(runButton);
   await new Promise((done) => setTimeout(done, 0));
   expect(searchCommunityNodeIndex).not.toHaveBeenCalled();
@@ -734,5 +734,5 @@ test('an unavailable explicit node reports the stopped state instead of offering
   expect(
     screen.getByText('The explicitly selected Community Node is unavailable. Queries are paused.')
   ).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'Run' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Show results' })).not.toBeInTheDocument();
 });

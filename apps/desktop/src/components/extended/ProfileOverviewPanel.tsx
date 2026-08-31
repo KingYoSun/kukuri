@@ -43,7 +43,11 @@ export function ProfileOverviewPanel({
         <div className='profile-overview-summary'>
           <div className='profile-overview-avatar'>
             {picture ? (
-              <img src={picture} alt={`${authorLabel} avatar`} className='profile-overview-image' />
+              <img
+                src={picture}
+                alt={t('overview.avatarAlt', { name: authorLabel })}
+                className='profile-overview-image'
+              />
             ) : (
               <span>{authorLabel.slice(0, 1).toUpperCase()}</span>
             )}

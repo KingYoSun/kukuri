@@ -156,7 +156,7 @@ test('desktop shell joins an imported private channel and selects its topic scop
     />
   );
   const channelDialog = await openChannelManager(user);
-  await user.type(within(channelDialog).getByPlaceholderText(/paste private channel invite/i), 'invite-token');
+  await user.type(within(channelDialog).getByPlaceholderText(/paste a private channel invite/i), 'invite-token');
   await user.click(within(channelDialog).getByRole('button', { name: 'Join' }));
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
 
@@ -215,7 +215,7 @@ test('channel route restore waits for joined channel list before normalizing', a
     );
   });
   const controlCenter = await openControlCenter(user);
-  expect(within(controlCenter).getByRole('button', { name: /restored.*Friends\+/ })).toHaveClass(
+  expect(within(controlCenter).getByRole('button', { name: /restored.*Mutuals\+/ })).toHaveClass(
     'topic-subitem-active'
   );
 });
@@ -235,7 +235,7 @@ test('desktop shell shows friend-only controls and can create a grant', async ()
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
 
   const settingsDialog = await openChannelSettings(user, 'friends');
-  await user.click(getChannelShareButton(settingsDialog, 'friends', 'Friends'));
+  await user.click(getChannelShareButton(settingsDialog, 'friends', 'Mutuals'));
 
   await waitFor(() => {
     expect(within(settingsDialog).getByText('Copy share link')).toBeInTheDocument();
@@ -266,7 +266,7 @@ test('desktop shell shows friend-plus controls and can create a share', async ()
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
 
   const settingsDialog = await openChannelSettings(user, 'friends+');
-  await user.click(getChannelShareButton(settingsDialog, 'friends+', 'Friends+'));
+  await user.click(getChannelShareButton(settingsDialog, 'friends+', 'Mutuals+'));
 
   await waitFor(() => {
     expect(within(settingsDialog).getByText('Copy share link')).toBeInTheDocument();
@@ -350,7 +350,7 @@ test('share token smart link previews before import and joins only after confirm
 
   await user.click(tokenChip);
 
-  const dialog = await screen.findByRole('dialog', { name: 'Preview Access' });
+  const dialog = await screen.findByRole('dialog', { name: 'Review access' });
   await waitFor(() => {
     expect(previewSpy).toHaveBeenCalledTimes(1);
     expect(previewSpy).toHaveBeenCalledWith(inviteToken);
@@ -367,7 +367,7 @@ test('share token smart link previews before import and joins only after confirm
   await user.hover(channelPreviewItem);
   expect(await screen.findByRole('tooltip')).toHaveTextContent('channel-imported');
 
-  await user.click(within(dialog).getByRole('button', { name: 'Import / Join' }));
+  await user.click(within(dialog).getByRole('button', { name: 'Join' }));
 
   await waitFor(() => {
     expect(importSpy).toHaveBeenCalledTimes(1);
@@ -515,9 +515,11 @@ test('channel settings copy removes duplicate summary and share button icon', as
   });
   expect(within(settingsDialog).getByText('Channel name: friends+')).toBeInTheDocument();
   expect(
-    within(settingsDialog).getByText('Policy: Friends+: participants can share to their mutuals')
+    within(settingsDialog).getByText(
+      'Who can join: Mutuals+: participants can share with users they mutually follow'
+    )
   ).toBeInTheDocument();
-  expect(within(settingsDialog).queryByText('friends+ / Friends+')).not.toBeInTheDocument();
+  expect(within(settingsDialog).queryByText('friends+ / Mutuals+')).not.toBeInTheDocument();
   expect(shareButton).toHaveTextContent('Create share link');
   expect(shareButton.querySelector('svg')).not.toBeInTheDocument();
 });

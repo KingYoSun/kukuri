@@ -182,7 +182,7 @@ test('Timeline header replaces the active Column topic without adding a Column a
   const columnId = timeline.dataset.columnId;
   const topicSelect = within(timeline).getByRole('combobox', { name: 'Timeline topic' });
 
-  await user.click(within(timeline).getByRole('button', { name: /^Publish to / }));
+  await user.click(within(timeline).getByRole('button', { name: /^Post to / }));
   const composer = within(timeline).getByPlaceholderText('Write a post');
   await user.type(composer, 'general draft');
 
@@ -193,7 +193,7 @@ test('Timeline header replaces the active Column topic without adding a Column a
   });
   expect(screen.getAllByRole('region', { name: /^Timeline Column,/ })).toHaveLength(1);
   expect(timeline.dataset.columnId).toBe(columnId);
-  await user.click(within(timeline).getByRole('button', { name: /^Publish to Public · dev$/ }));
+  await user.click(within(timeline).getByRole('button', { name: /^Post to Public · dev$/ }));
   expect(within(timeline).getByPlaceholderText('Write a post')).toHaveValue('');
 
   await user.type(within(timeline).getByPlaceholderText('Write a post'), 'dev draft');

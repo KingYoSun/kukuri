@@ -40,7 +40,6 @@ import { activeWorkspaceScope } from '@/shell/slices/workspace';
 import {
   audienceLabelForChannelRef,
   authorDisplayLabel,
-  formatCount,
   formatLastReceivedLabel,
   resolveProfilePictureSrc,
   topicConnectionLabel,
@@ -319,7 +318,7 @@ export function useDesktopShellViewModels({
     () => ({
       selectedThreadId: selectedThread,
       summary: selectedThread
-        ? t('shell:context.threadSummary', { count: formatCount(thread.length) })
+        ? t('shell:context.threadSummary', { count: thread.length })
         : t('shell:context.threadEmpty'),
       emptyCopy: t('shell:context.threadEmpty'),
     }),

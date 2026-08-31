@@ -812,7 +812,7 @@ describe('shortPubkey', () => {
 
 describe('authorDisplayLabel', () => {
   it('uses a localized anonymous label instead of exposing a public key', () => {
-    expect(authorDisplayLabel('abcdef0123456789')).toBe('Unknown author');
+    expect(authorDisplayLabel('abcdef0123456789')).toBe('Unknown user');
     expect(authorDisplayLabel('abcdef0123456789', 'Alice', 'alice')).toBe('Alice');
   });
 });
