@@ -153,6 +153,8 @@ mod tests {
             title: slug.to_string(),
             body_markdown: "body".to_string(),
             required,
+            effective_date: Some("2026-09-02".to_string()),
+            language: Some("ja".to_string()),
         }
     }
 

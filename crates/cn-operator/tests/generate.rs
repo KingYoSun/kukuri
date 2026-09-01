@@ -803,6 +803,46 @@ fn generated_docs_reflect_authority_scope() {
     assert!(diagram.contains("network-wide authority: false"));
 }
 
+#[test]
+fn phase_a_legal_documents_publish_operator_and_versioned_identity() {
+    let yaml = r#"server:
+  domain: api.kukuri.app
+  operator_name: KingYoSun
+  country: JP
+  contact: ops@kukuri.app
+legal:
+  identity_disclosure_request: "運営主体の氏名・住所が必要な場合は ops@kukuri.app へ請求してください。"
+  documents:
+    - { kind: terms, slug: terms_of_service, version: 1, effective_date: 2026-09-02, language: ja, required: true }
+    - { kind: privacy, slug: privacy_policy, version: 1, effective_date: 2026-09-02, language: ja, required: true }
+    - { kind: external_transmission, slug: external_transmission, version: 1, effective_date: 2026-09-02, language: ja }
+    - { kind: moderation_policy, slug: moderation_policy, version: 1, effective_date: 2026-09-02, language: ja }
+    - { kind: abuse_policy, slug: abuse_policy, version: 1, effective_date: 2026-09-02, language: ja }
+    - { kind: data_retention, slug: data_retention, version: 1, effective_date: 2026-09-02, language: ja }
+    - { kind: rights_infringement, slug: rights_infringement, version: 1, effective_date: 2026-09-02, language: ja }
+manifest:
+  manifest_version: v1
+"#;
+    let resolved = load_and_validate(yaml).unwrap();
+    let files = generate_all(&resolved);
+    let terms = doc(&files, "terms.md");
+    let privacy = doc(&files, "privacy-policy.md");
+
+    for (document, slug) in [
+        (terms.as_str(), "terms_of_service"),
+        (privacy.as_str(), "privacy_policy"),
+    ] {
+        assert!(document.contains("運営者: KingYoSun"));
+        assert!(document.contains("連絡先: ops@kukuri.app"));
+        assert!(document.contains(&format!("文書 slug: {slug}")));
+        assert!(document.contains("文書版: 1"));
+        assert!(document.contains("施行日: 2026-09-02"));
+        assert!(document.contains("言語: ja"));
+        assert!(document.contains("氏名・住所"));
+        assert!(document.contains("ops@kukuri.app"));
+    }
+}
+
 // #706: モデレーションを提供する公開ノードでは、公開ノード情報の node_id を
 // リスク判定の issuer_node_id と一致させるために必須にする。
 #[test]

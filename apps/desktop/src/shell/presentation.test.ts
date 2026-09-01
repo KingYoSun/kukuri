@@ -737,6 +737,8 @@ describe('communityNodeConsentView', () => {
             title: 'Terms',
             body_markdown: 'Body text',
             required: true,
+            effective_date: '2026-09-02',
+            language: 'ja',
           },
         ],
       })
@@ -752,6 +754,8 @@ describe('communityNodeConsentView', () => {
     expect(policy.title).toBe('Terms');
     expect(policy.body).toBe('Body text');
     expect(policy.policyVersion).toBe(3);
+    expect(policy.effectiveDate).toBe('2026-09-02');
+    expect(policy.language).toBe('ja');
     expect(policy.required).toBe(true);
     expect(policy.updated).toBe(false);
     // accepted_at は「秒」で持ち、ミリ秒換算して日時整形される(1750000000 秒 = 2025 年)。

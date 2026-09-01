@@ -156,6 +156,8 @@
       "optional": "Optional",
       "updatedBadge": "Updated",
       "updatedDetail": "Updated from v{{previous}} to v{{current}}.",
+      "effectiveDate": "Effective {{date}}",
+      "language": "Language {{language}}",
       "acceptedAt": "Accepted at {{timestamp}}",
       "notAccepted": "Not accepted yet",
       "allAccepted": "All accepted",

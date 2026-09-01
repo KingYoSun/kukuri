@@ -98,6 +98,24 @@ export function CommunityNodeConsentDialog({
                   <p className='text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]'>
                     v{policy.policyVersion}
                   </p>
+                  {policy.effectiveDate || policy.language ? (
+                    <p className='text-xs text-[var(--muted-foreground)]'>
+                      {[
+                        policy.effectiveDate
+                          ? t('settings:communityNode.consent.effectiveDate', {
+                              date: policy.effectiveDate,
+                            })
+                          : null,
+                        policy.language
+                          ? t('settings:communityNode.consent.language', {
+                              language: policy.language,
+                            })
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' / ')}
+                    </p>
+                  ) : null}
                 </div>
                 <div className='flex flex-wrap items-center gap-2'>
                   {policy.required ? (

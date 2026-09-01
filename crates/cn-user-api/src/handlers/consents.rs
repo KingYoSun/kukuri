@@ -4,7 +4,7 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::HeaderMap;
 use kukuri_cn_core::{
-    ApiResult, accept_consents, get_consent_status, list_policies, require_bearer_pubkey,
+    ApiError, ApiResult, accept_consents, get_consent_status, require_bearer_pubkey,
 };
 use kukuri_cn_protocol::{
     AcceptConsentsRequest, CommunityNodeConsentStatus, CommunityNodePoliciesResponse,
@@ -19,12 +19,14 @@ use crate::state::UserApiState;
 pub(crate) async fn public_policies(
     State(state): State<UserApiState>,
 ) -> ApiResult<Json<CommunityNodePoliciesResponse>> {
-    let policies = list_policies(&state.pool)
-        .await
-        .map_err(|source| {
-            AccountLifecycleError::infrastructure(AccountLifecycleOperation::ListPolicies, source)
-        })
-        .map_err(account_lifecycle_error)?;
+    if state.public_policies.is_empty() {
+        return Err(ApiError::new(
+            axum::http::StatusCode::NOT_FOUND,
+            "POLICIES_NOT_CONFIGURED",
+            "this community node does not publish a versioned policy catalog",
+        ));
+    }
+    let policies = state.public_policies.as_ref().clone();
     Ok(Json(CommunityNodePoliciesResponse { policies }))
 }
 

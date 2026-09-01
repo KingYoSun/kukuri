@@ -244,12 +244,24 @@ pub struct CommunityNodeManifest {
     pub abuse_policy_url: String,
     pub data_retention_url: String,
     pub manifest_version: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub legal_documents: Vec<LegalDocumentManifestEntry>,
     pub capabilities: Capabilities,
     pub capability_scope: CapabilityScope,
     pub authority_scope: AuthorityScope,
     pub p2p_boundary: P2pBoundary,
     pub features: ManifestFeatures,
     pub retention: ManifestRetention,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub struct LegalDocumentManifestEntry {
+    pub slug: String,
+    pub version: i32,
+    pub effective_date: String,
+    pub language: String,
+    pub required: bool,
+    pub url: String,
 }
 
 fn capability_keys(caps: &[Capability]) -> Vec<String> {
@@ -353,6 +365,25 @@ pub fn build_manifest(config: &ResolvedConfig) -> CommunityNodeManifest {
         abuse_policy_url: config.policy_url("abuse-policy"),
         data_retention_url: config.policy_url("data-retention"),
         manifest_version: config.raw.manifest.manifest_version.clone(),
+        legal_documents: config
+            .raw
+            .legal
+            .as_ref()
+            .map(|legal| {
+                legal
+                    .documents
+                    .iter()
+                    .map(|document| LegalDocumentManifestEntry {
+                        slug: document.slug.clone(),
+                        version: document.version,
+                        effective_date: document.effective_date.clone(),
+                        language: document.language.clone(),
+                        required: document.required,
+                        url: config.policy_url(document.kind.public_path()),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
         capabilities: Capabilities::from_config(config),
         capability_scope: CapabilityScope {
             available_enabled: capability_keys(&available_enabled),

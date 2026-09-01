@@ -156,6 +156,8 @@
       "optional": "任意",
       "updatedBadge": "更新",
       "updatedDetail": "v{{previous}} から v{{current}} に更新されました。",
+      "effectiveDate": "施行日 {{date}}",
+      "language": "言語 {{language}}",
       "acceptedAt": "{{timestamp}} に同意済み",
       "notAccepted": "未同意",
       "allAccepted": "すべて同意済み",

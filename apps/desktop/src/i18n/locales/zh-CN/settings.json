@@ -156,6 +156,8 @@
       "optional": "可选",
       "updatedBadge": "已更新",
       "updatedDetail": "已从 v{{previous}} 更新至 v{{current}}。",
+      "effectiveDate": "生效日期 {{date}}",
+      "language": "语言 {{language}}",
       "acceptedAt": "已于 {{timestamp}} 接受",
       "notAccepted": "尚未接受",
       "allAccepted": "已全部接受",

@@ -266,6 +266,8 @@ pub(crate) async fn mock_managed_policies(
             title: "Builder Preview".to_string(),
             body_markdown: "Builder preview policy body.".to_string(),
             required: true,
+            effective_date: Some("2026-09-02".to_string()),
+            language: Some("ja".to_string()),
         }],
     })
 }
@@ -293,6 +295,8 @@ pub(crate) fn managed_community_node_consent_status_with_update(
             title: "Builder Preview".into(),
             body: "Builder preview policy body.".into(),
             required: true,
+            effective_date: Some("2026-09-02".to_string()),
+            language: Some("ja".to_string()),
             accepted_at: accepted.then(|| Utc::now().timestamp()),
             previously_accepted_version,
         }],

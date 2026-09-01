@@ -5,6 +5,7 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Result, anyhow, bail};
+use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 
 use crate::capability::{Availability, Capability};
@@ -30,6 +31,10 @@ pub struct OperatorConfig {
     pub safety: Option<SafetyConfig>,
     #[serde(default)]
     pub manifest: ManifestConfig,
+    /// 利用者へ公開する Node 固有法務文書。未指定の legacy config は生成互換だけを維持し、
+    /// versioned consent catalog としては公開しない。
+    #[serde(default)]
+    pub legal: Option<LegalConfig>,
     /// terraform デプロイ用の env 設定（#380）。
     ///
     /// 指定すると `cn-operator generate-tfvars` が operator-config を単一の入力元として
@@ -46,6 +51,86 @@ pub struct OperatorConfig {
     /// フィールド自体は受理し続ける。将来の Phase B 追加時に再び効く）。
     #[serde(default)]
     pub acknowledge_planned_capabilities: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LegalDocumentKind {
+    Terms,
+    Privacy,
+    ExternalTransmission,
+    ModerationPolicy,
+    AbusePolicy,
+    DataRetention,
+    RightsInfringement,
+}
+
+impl LegalDocumentKind {
+    pub const ALL: [Self; 7] = [
+        Self::Terms,
+        Self::Privacy,
+        Self::ExternalTransmission,
+        Self::ModerationPolicy,
+        Self::AbusePolicy,
+        Self::DataRetention,
+        Self::RightsInfringement,
+    ];
+
+    pub const fn filename(self) -> &'static str {
+        match self {
+            Self::Terms => "terms.md",
+            Self::Privacy => "privacy-policy.md",
+            Self::ExternalTransmission => "external-transmission-notice.md",
+            Self::ModerationPolicy => "moderation-policy.md",
+            Self::AbusePolicy => "abuse-policy.md",
+            Self::DataRetention => "data-retention-policy.md",
+            Self::RightsInfringement => "rights-infringement-policy.md",
+        }
+    }
+
+    pub const fn public_path(self) -> &'static str {
+        match self {
+            Self::Terms => "terms",
+            Self::Privacy => "privacy",
+            Self::ExternalTransmission => "external-transmission",
+            Self::ModerationPolicy => "moderation-policy",
+            Self::AbusePolicy => "abuse-policy",
+            Self::DataRetention => "data-retention",
+            Self::RightsInfringement => "rights-infringement-policy",
+        }
+    }
+
+    pub const fn title_ja(self) -> &'static str {
+        match self {
+            Self::Terms => "Community Node 利用規約",
+            Self::Privacy => "Community Node プライバシーポリシー",
+            Self::ExternalTransmission => "Community Node 外部送信表示",
+            Self::ModerationPolicy => "Community Node モデレーションポリシー",
+            Self::AbusePolicy => "Community Node Abuse ポリシー",
+            Self::DataRetention => "Community Node データ保持ポリシー",
+            Self::RightsInfringement => "Community Node 権利侵害申出ポリシー",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct LegalDocumentConfig {
+    pub kind: LegalDocumentKind,
+    pub slug: String,
+    pub version: i32,
+    pub effective_date: String,
+    pub language: String,
+    #[serde(default)]
+    pub required: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct LegalConfig {
+    /// 運営主体の氏名・住所が必要な場合の請求方法としてそのまま公開する日本語文。
+    pub identity_disclosure_request: String,
+    pub documents: Vec<LegalDocumentConfig>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -390,7 +475,16 @@ impl ResolvedConfig {
             .contact
             .clone()
             .filter(|c| !c.trim().is_empty())
-            .unwrap_or_else(|| format!("abuse@{}", self.raw.server.domain))
+            .unwrap_or_else(|| "未設定".to_string())
+    }
+
+    pub fn legal_document(&self, kind: LegalDocumentKind) -> Option<&LegalDocumentConfig> {
+        self.raw
+            .legal
+            .as_ref()?
+            .documents
+            .iter()
+            .find(|document| document.kind == kind)
     }
 
     pub fn policy_url(&self, path: &str) -> String {
@@ -452,6 +546,7 @@ pub fn resolve_and_validate(config: OperatorConfig) -> Result<ResolvedConfig> {
         bail!("server.country は ISO 3166-1 alpha-2（2文字、例: JP）で指定してください");
     }
     validate_retention(&config.retention)?;
+    validate_legal_config(&config)?;
 
     // 未知の feature キーを拒否する（typo によるサイレントな無効化を防ぐ）。
     let known: BTreeMap<&str, Capability> = Capability::ALL.iter().map(|c| (c.key(), *c)).collect();
@@ -538,6 +633,91 @@ pub fn resolve_and_validate(config: OperatorConfig) -> Result<ResolvedConfig> {
     }
 
     Ok(resolved)
+}
+
+fn validate_legal_config(config: &OperatorConfig) -> Result<()> {
+    let Some(legal) = config.legal.as_ref() else {
+        return Ok(());
+    };
+    if config
+        .server
+        .contact
+        .as_deref()
+        .is_none_or(|value| value.trim().is_empty())
+    {
+        bail!("legal を公開する場合は server.contact の明示設定が必須です");
+    }
+    if legal.identity_disclosure_request.trim().is_empty() {
+        bail!("legal.identity_disclosure_request は必須です");
+    }
+    let mut kinds = std::collections::BTreeSet::new();
+    let mut slugs = std::collections::BTreeSet::new();
+    for document in &legal.documents {
+        if !kinds.insert(document.kind) {
+            bail!(
+                "legal.documents に kind {:?} が重複しています",
+                document.kind
+            );
+        }
+        let slug = document.slug.trim();
+        if slug.is_empty()
+            || !slug
+                .chars()
+                .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_')
+        {
+            bail!("legal.documents.slug は snake_case の非空文字列で指定してください");
+        }
+        if !slugs.insert(slug.to_string()) {
+            bail!("legal.documents に slug `{slug}` が重複しています");
+        }
+        if document.version <= 0 {
+            bail!("legal document `{slug}` の version は正の整数で指定してください");
+        }
+        NaiveDate::parse_from_str(document.effective_date.trim(), "%Y-%m-%d").map_err(|_| {
+            anyhow!("legal document `{slug}` の effective_date は YYYY-MM-DD で指定してください")
+        })?;
+        if document.language.trim() != "ja" {
+            bail!("Phase A の legal document `{slug}` は language: ja が必須です");
+        }
+    }
+    for kind in LegalDocumentKind::ALL {
+        if !kinds.contains(&kind) {
+            bail!("legal.documents に kind {:?} が必要です", kind);
+        }
+    }
+    for required_kind in [LegalDocumentKind::Terms, LegalDocumentKind::Privacy] {
+        if config
+            .legal
+            .as_ref()
+            .and_then(|value| value.documents.iter().find(|doc| doc.kind == required_kind))
+            .is_none_or(|document| !document.required)
+        {
+            bail!(
+                "Phase A では {:?} を required: true にしてください",
+                required_kind
+            );
+        }
+    }
+    for optional_kind in [
+        LegalDocumentKind::ExternalTransmission,
+        LegalDocumentKind::ModerationPolicy,
+        LegalDocumentKind::AbusePolicy,
+        LegalDocumentKind::DataRetention,
+        LegalDocumentKind::RightsInfringement,
+    ] {
+        if config
+            .legal
+            .as_ref()
+            .and_then(|value| value.documents.iter().find(|doc| doc.kind == optional_kind))
+            .is_some_and(|document| document.required)
+        {
+            bail!(
+                "Phase A では {:?} を追加の必須同意にしません",
+                optional_kind
+            );
+        }
+    }
+    Ok(())
 }
 
 /// deploy セクションを検証する（#380）。

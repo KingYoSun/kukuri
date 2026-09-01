@@ -39,9 +39,19 @@ async fn public_policies_are_served_without_auth() -> Result<()> {
             .all(|policy| !policy.policy_slug.is_empty()
                 && policy.policy_version >= 1
                 && !policy.title.trim().is_empty()
-                && !policy.body_markdown.trim().is_empty())
+                && !policy.body_markdown.trim().is_empty()
+                && policy.effective_date.as_deref() == Some("2026-09-02")
+                && policy.language.as_deref() == Some("ja"))
     );
     assert!(catalog.policies.iter().any(|policy| policy.required));
+    assert!(catalog.policies.iter().all(|policy| {
+        !policy
+            .body_markdown
+            .contains("You must acknowledge the community node")
+            && !policy
+                .body_markdown
+                .contains("You must follow the community node")
+    }));
 
     Ok(())
 }
@@ -112,6 +122,10 @@ async fn bootstrap_requires_bearer_then_consents() -> Result<()> {
             .iter()
             .all(|item| !item.body.trim().is_empty())
     );
+    assert!(consent_status.items.iter().all(|item| {
+        item.effective_date.as_deref() == Some("2026-09-02")
+            && item.language.as_deref() == Some("ja")
+    }));
     // 初回（過去同意なし）は previously_accepted_version が None であること。
     assert!(
         consent_status

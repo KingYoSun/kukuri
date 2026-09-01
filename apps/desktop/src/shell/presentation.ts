@@ -480,6 +480,8 @@ export function communityNodeConsentView(
       title: policy.title,
       body: policy.body_markdown,
       policyVersion: policy.policy_version,
+      effectiveDate: policy.effective_date ?? null,
+      language: policy.language ?? null,
       required: policy.required,
       acceptedAtLabel: accepted ? formatConsentAcceptedAt(acceptedRecord?.accepted_at) : null,
       // 旧版だけ同意済み = 版が上がって再同意が必要な「更新」。
