@@ -162,7 +162,6 @@ pub(crate) async fn run_community_node_connectivity(
             .set_community_node_config(SetCommunityNodeConfigRequest {
                 nodes: vec![kukuri_desktop_runtime::SetCommunityNodeConfigNode {
                     base_url: stack.base_url.clone(),
-                    auto_approve: false,
                 }],
             })
             .await
@@ -171,7 +170,6 @@ pub(crate) async fn run_community_node_connectivity(
             .set_community_node_config(SetCommunityNodeConfigRequest {
                 nodes: vec![kukuri_desktop_runtime::SetCommunityNodeConfigNode {
                     base_url: stack.base_url.clone(),
-                    auto_approve: false,
                 }],
             })
             .await

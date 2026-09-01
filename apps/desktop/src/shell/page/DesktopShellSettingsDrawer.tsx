@@ -240,7 +240,6 @@ export function DesktopShellSettingsDrawer({
               {
                 id: createCommunityNodeDraftId(),
                 base_url: '',
-                auto_approve: false,
               },
             ]);
             setCommunityNodeEditorDirty(true);
@@ -248,12 +247,6 @@ export function DesktopShellSettingsDrawer({
           onNodeBaseUrlChange={(id, value) => {
             setCommunityNodeInput((current) =>
               current.map((node) => (node.id === id ? { ...node, base_url: value } : node))
-            );
-            setCommunityNodeEditorDirty(true);
-          }}
-          onNodeAutoApproveChange={(id, value) => {
-            setCommunityNodeInput((current) =>
-              current.map((node) => (node.id === id ? { ...node, auto_approve: value } : node))
             );
             setCommunityNodeEditorDirty(true);
           }}

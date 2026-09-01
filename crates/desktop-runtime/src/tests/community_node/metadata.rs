@@ -52,7 +52,6 @@ async fn community_node_status_refresh_updates_bootstrap_seed_peers() {
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.clone(),
-            auto_approve: false,
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
                     .expect("resolved urls"),
@@ -143,7 +142,6 @@ async fn community_node_session_maintenance_updates_bootstrap_seed_peers() {
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.clone(),
-            auto_approve: false,
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
                     .expect("resolved urls"),
@@ -229,7 +227,6 @@ async fn community_node_metadata_refresh_heartbeats_before_bootstrap_sync_even_w
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.clone(),
-            auto_approve: false,
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
                     .expect("resolved urls"),
@@ -361,7 +358,6 @@ async fn community_node_ready_transition_refreshes_bootstrap_metadata_before_nex
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.clone(),
-            auto_approve: false,
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
                     .expect("resolved urls"),
@@ -470,7 +466,6 @@ async fn community_node_ready_transition_refreshes_bootstrap_metadata_only_once_
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.clone(),
-            auto_approve: false,
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
                     .expect("resolved urls"),
@@ -546,7 +541,6 @@ async fn community_node_status_retries_bootstrap_metadata_when_seed_peers_are_em
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.clone(),
-            auto_approve: false,
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
                     .expect("resolved urls"),
@@ -663,7 +657,6 @@ async fn refresh_community_node_metadata_refreshes_registration_before_bootstrap
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.clone(),
-            auto_approve: false,
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
                     .expect("resolved urls"),
@@ -761,7 +754,6 @@ async fn refresh_community_node_metadata_requeues_heartbeat_when_runtime_connect
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.clone(),
-            auto_approve: false,
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
                     .expect("resolved urls"),

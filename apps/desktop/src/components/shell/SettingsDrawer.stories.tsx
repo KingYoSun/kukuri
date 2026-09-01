@@ -87,7 +87,6 @@ function SettingsDrawerStory({ initialSection = 'connectivity' }: { initialSecti
               {
                 id: `drawer-node-${current.length + 1}`,
                 baseUrl: '',
-                autoApprove: false,
                 saved: false,
                 diagnostics: [],
                 dependency: { diagnostics: [], boundaryNotes: [] },
@@ -111,11 +110,6 @@ function SettingsDrawerStory({ initialSection = 'connectivity' }: { initialSecti
           onNodeBaseUrlChange={(id, value) =>
             setCommunityNodes((current) =>
               current.map((node) => (node.id === id ? { ...node, baseUrl: value } : node))
-            )
-          }
-          onNodeAutoApproveChange={(id, value) =>
-            setCommunityNodes((current) =>
-              current.map((node) => (node.id === id ? { ...node, autoApprove: value } : node))
             )
           }
           onRemoveNode={(id) =>

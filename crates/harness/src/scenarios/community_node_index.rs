@@ -221,7 +221,6 @@ pub(crate) async fn run_community_node_index_query_client(
         .set_community_node_config(SetCommunityNodeConfigRequest {
             nodes: vec![SetCommunityNodeConfigNode {
                 base_url: base_url.clone(),
-                auto_approve: false,
             }],
         })
         .await?;

@@ -92,7 +92,6 @@ async fn sync_status_observer_emits_only_changed_snapshot_parts_and_stops_on_shu
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: "http://127.0.0.1:9".to_string(),
-            auto_approve: false,
             resolved_urls: None,
         }],
     };

@@ -89,13 +89,12 @@ describe('mergeCommunityNodeStatus', () => {
     expect(merged.last_error).toBe('new failure');
   });
 
-  it('preserves config-ish fallbacks from the previous status', () => {
+  it('preserves resolved URL fallbacks from the previous status', () => {
     const resolvedUrls = {
       public_base_url: 'https://node.example',
       connectivity_urls: ['https://node.example/connect'],
     };
     const previous = baseStatus({
-      auto_approve: true,
       resolved_urls: resolvedUrls,
       last_error: 'old failure',
     });
@@ -103,7 +102,6 @@ describe('mergeCommunityNodeStatus', () => {
 
     const merged = mergeCommunityNodeStatus(previous, next);
 
-    expect(merged.auto_approve).toBe(true);
     expect(merged.resolved_urls).toEqual(resolvedUrls);
     expect(merged.last_error).toBeNull();
   });
@@ -289,7 +287,7 @@ describe('mergeCommunityNodeStatuses', () => {
       connectivity_urls: ['https://a.example/connect'],
     };
     const previous = [
-      baseStatus({ base_url: 'https://a.example', auto_approve: true, resolved_urls: resolvedUrls }),
+      baseStatus({ base_url: 'https://a.example', resolved_urls: resolvedUrls }),
       baseStatus({ base_url: 'https://b.example' }),
     ];
     const next = [
@@ -303,10 +301,8 @@ describe('mergeCommunityNodeStatuses', () => {
       'https://c.example',
       'https://a.example',
     ]);
-    // previous があるものは config-ish フィールドを引き継ぎ、無いものは merge の defaults
-    expect(merged[1].auto_approve).toBe(true);
+    // previous があるものは resolved URL を引き継ぎ、無いものは merge の defaults
     expect(merged[1].resolved_urls).toEqual(resolvedUrls);
-    expect(merged[0].auto_approve).toBe(false);
     expect(merged[0].session_phase).toBe('idle');
     expect(merged[0].retry_after).toBeNull();
   });
@@ -316,7 +312,7 @@ describe('upsertCommunityNodeStatus', () => {
   it('inserts or replaces by base_url, keeping merge fallbacks and sorting by base_url', () => {
     const current = [
       baseStatus({ base_url: 'https://c.example' }),
-      baseStatus({ base_url: 'https://a.example', auto_approve: true }),
+      baseStatus({ base_url: 'https://a.example' }),
     ];
 
     const inserted = upsertCommunityNodeStatus(current, baseStatus({ base_url: 'https://b.example' }));
@@ -334,45 +330,41 @@ describe('upsertCommunityNodeStatus', () => {
       'https://a.example',
       'https://c.example',
     ]);
-    expect(replaced[0].auto_approve).toBe(true);
     expect(replaced[0].last_error).toBe('boom');
   });
 });
 
 describe('syncCommunityNodeConfigWithStatus', () => {
-  it('applies status resolved_urls to the matching node only, keeping node auto_approve', () => {
+  it('applies status resolved_urls to the matching node only', () => {
     const resolvedUrls = {
       public_base_url: 'https://a.example',
       connectivity_urls: ['https://a.example/connect'],
     };
     const config: CommunityNodeConfig = {
       nodes: [
-        { base_url: 'https://a.example', auto_approve: true },
-        { base_url: 'https://b.example', auto_approve: false },
+        { base_url: 'https://a.example' },
+        { base_url: 'https://b.example' },
       ],
     };
     const status = baseStatus({ base_url: 'https://a.example', resolved_urls: resolvedUrls });
 
     const synced = syncCommunityNodeConfigWithStatus(config, status);
 
-    // status.auto_approve 欠落時は node 側の値を維持、resolved_urls は status 側を採用
     expect(synced.nodes[0]).toEqual({
       base_url: 'https://a.example',
-      auto_approve: true,
       resolved_urls: resolvedUrls,
     });
     // base_url が一致しない node は変更されない
-    expect(synced.nodes[1]).toEqual({ base_url: 'https://b.example', auto_approve: false });
+    expect(synced.nodes[1]).toEqual({ base_url: 'https://b.example' });
   });
 
-  it('falls back to auto_approve=false and resolved_urls=null when both sides are missing', () => {
+  it('falls back to resolved_urls=null when both sides are missing', () => {
     const config: CommunityNodeConfig = { nodes: [{ base_url: 'https://a.example' }] };
 
     const synced = syncCommunityNodeConfigWithStatus(config, baseStatus({ base_url: 'https://a.example' }));
 
     expect(synced.nodes[0]).toEqual({
       base_url: 'https://a.example',
-      auto_approve: false,
       resolved_urls: null,
     });
   });

@@ -330,7 +330,6 @@ describe('useDesktopShellData characterization', () => {
     const baseApi = createDesktopMockApi();
     const nodeStatus = (baseUrl: string, lastError: string | null) => ({
       base_url: baseUrl,
-      auto_approve: true,
       auth_state: { authenticated: true, expires_at: null },
       consent_state: { all_required_accepted: true, items: [] },
       resolved_urls: null,
@@ -346,8 +345,8 @@ describe('useDesktopShellData characterization', () => {
       ...baseApi,
       getCommunityNodeConfig: async () => ({
         nodes: [
-          { base_url: NODE_A, auto_approve: true, resolved_urls: null },
-          { base_url: NODE_B, auto_approve: true, resolved_urls: null },
+          { base_url: NODE_A, resolved_urls: null },
+          { base_url: NODE_B, resolved_urls: null },
         ],
       }),
       getCommunityNodeStatuses: async () => statuses,

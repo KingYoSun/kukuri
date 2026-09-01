@@ -275,7 +275,7 @@ export type CommunityNodeSeedPeer = { endpoint_id: string, addr_hint?: string | 
 
 export type CommunityNodeResolvedUrls = { public_base_url: string, connectivity_urls: Array<string>, seed_peers?: Array<CommunityNodeSeedPeer> | null, };
 
-export type CommunityNodeNodeConfig = { base_url: string, auto_approve?: boolean | null, resolved_urls?: CommunityNodeResolvedUrls | null, };
+export type CommunityNodeNodeConfig = { base_url: string, resolved_urls?: CommunityNodeResolvedUrls | null, };
 
 export type CommunityNodeConfig = { nodes: Array<CommunityNodeNodeConfig>, };
 
@@ -306,7 +306,7 @@ export type CommunityNodeAdmissionRejection = { code: CommunityNodeAdmissionReje
 
 export type CommunityNodeSessionPhase = "idle" | "connecting" | "authenticating" | "accepting" | "refreshing" | "ready" | "retrying" | "awaiting_admission";
 
-export type CommunityNodeNodeStatus = { base_url: string, auto_approve?: boolean | null, auth_state: CommunityNodeAuthState, consent_state?: CommunityNodeConsentStatus | null, 
+export type CommunityNodeNodeStatus = { base_url: string, auth_state: CommunityNodeAuthState, consent_state?: CommunityNodeConsentStatus | null,
 /**
  * #857: Node 別ローカル同意記録。空 = 未同意(この node へは通信しない)。
  */
@@ -649,7 +649,7 @@ export type WithdrawDomeConnectionProposalRequest = { spatial_context: SpatialCo
 
 export type RevokeDomeConnectionRequest = { spatial_context: SpatialContextV1, connection_id: string, };
 
-export type SetCommunityNodeConfigNode = { base_url: string, auto_approve: boolean, };
+export type SetCommunityNodeConfigNode = { base_url: string, };
 
 export type SetCommunityNodeConfigRequest = { nodes: Array<SetCommunityNodeConfigNode>, };
 
@@ -676,4 +676,3 @@ export type AccountsSnapshot = { active_account_id: string, accounts: Array<Acco
 export type AccountKeyExport = { export: string, public_key: string, };
 
 export type AccountKeyImportPreview = { version: number, kdf: string, public_key: string, already_registered: boolean, };
-

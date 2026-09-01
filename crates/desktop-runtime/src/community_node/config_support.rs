@@ -36,7 +36,6 @@ pub(crate) fn normalize_community_node_config(
     let mut deduped = std::collections::BTreeMap::<String, CommunityNodeNodeConfig>::new();
     for node in config.nodes {
         let base_url = normalize_http_url(node.base_url.as_str())?;
-        let incoming_auto_approve = node.auto_approve;
         let incoming_resolved_urls = match node.resolved_urls {
             Some(resolved) => Some(CommunityNodeResolvedUrls::new(
                 resolved.public_base_url,
@@ -53,15 +52,10 @@ pub(crate) fn normalize_community_node_config(
         } else {
             incoming_resolved_urls
         };
-        let auto_approve = deduped
-            .get(&base_url)
-            .map(|existing| existing.auto_approve || incoming_auto_approve)
-            .unwrap_or(incoming_auto_approve);
         deduped.insert(
             base_url.clone(),
             CommunityNodeNodeConfig {
                 base_url,
-                auto_approve,
                 resolved_urls,
             },
         );
@@ -198,7 +192,6 @@ mod tests {
         let config = CommunityNodeConfig {
             nodes: vec![CommunityNodeNodeConfig {
                 base_url: "https://community.example.com".to_string(),
-                auto_approve: false,
                 resolved_urls: Some(
                     CommunityNodeResolvedUrls::new(
                         "https://community.example.com",
@@ -232,7 +225,6 @@ mod tests {
         let config = CommunityNodeConfig {
             nodes: vec![CommunityNodeNodeConfig {
                 base_url: "https://community.example.com".to_string(),
-                auto_approve: false,
                 resolved_urls: Some(
                     CommunityNodeResolvedUrls::new(
                         "https://community.example.com",

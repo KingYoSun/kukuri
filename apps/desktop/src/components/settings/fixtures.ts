@@ -145,10 +145,8 @@ export function createCommunityNodePanelFixture(): CommunityNodePanelView {
       {
         id: 'node-api',
         baseUrl: 'https://api.kukuri.app',
-        autoApprove: true,
         saved: true,
         diagnostics: [
-          { label: i18n.t('settings:communityNode.diagnostics.autoApprove'), value: i18n.t('common:states.yes') },
           { label: i18n.t('settings:communityNode.diagnostics.auth'), value: `${i18n.t('common:states.yes')} (1711324800000)` },
           { label: i18n.t('settings:communityNode.diagnostics.consent'), value: i18n.t('common:states.accepted') },
           {
@@ -244,10 +242,8 @@ export function createCommunityNodePanelFixture(): CommunityNodePanelView {
       {
         id: 'node-example',
         baseUrl: 'https://community.example.com',
-        autoApprove: false,
         saved: true,
         diagnostics: [
-          { label: i18n.t('settings:communityNode.diagnostics.autoApprove'), value: i18n.t('common:states.no') },
           { label: i18n.t('settings:communityNode.diagnostics.auth'), value: i18n.t('common:states.no') },
           { label: i18n.t('settings:communityNode.diagnostics.consent'), value: i18n.t('common:states.unknown') },
           {

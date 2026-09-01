@@ -99,7 +99,6 @@ export type CommunityNodeConsentView = {
 export type CommunityNodeEntryView = {
   id: string;
   baseUrl: string;
-  autoApprove: boolean;
   saved: boolean;
   diagnostics: SettingsDiagnosticItemView[];
   dependency: CommunityNodeDependencyView;

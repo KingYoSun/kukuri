@@ -181,7 +181,6 @@ async fn community_node_connectivity_assist_backfills_public_timeline_with_relay
     *runtime_a.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.to_string(),
-            auto_approve: false,
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(
                     base_url,
@@ -198,7 +197,6 @@ async fn community_node_connectivity_assist_backfills_public_timeline_with_relay
     *runtime_b.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.to_string(),
-            auto_approve: false,
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(
                     base_url,
@@ -343,7 +341,6 @@ async fn external_relay_endpoint_only_seed_peers_backfill_desktop_public_timelin
     *runtime_a.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.to_string(),
-            auto_approve: false,
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(
                     base_url,
@@ -360,7 +357,6 @@ async fn external_relay_endpoint_only_seed_peers_backfill_desktop_public_timelin
     *runtime_b.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.to_string(),
-            auto_approve: false,
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(
                     base_url,
@@ -691,7 +687,6 @@ async fn runtime_starts_with_unreachable_community_node_and_recovers_via_manual_
         &CommunityNodeConfig {
             nodes: vec![CommunityNodeNodeConfig {
                 base_url: community_base_url.to_string(),
-                auto_approve: true,
                 resolved_urls: Some(
                     CommunityNodeResolvedUrls::new(
                         community_base_url,

@@ -121,7 +121,6 @@
       "enabled": "有効です。ノード内の最小関係距離は {{distance}} です。",
       "disabled": "無効です。有効時のノード内最小関係距離は {{distance}} です。"
     },
-    "autoApproveLabel": "このノードの同意を自動承認する",
     "admission": {
       "inviteCodeLabel": "招待コード",
       "inviteCodePlaceholder": "招待コードを入力",
@@ -172,7 +171,6 @@
     "baseUrlsLabel": "ベース URL",
     "baseUrlsPlaceholder": "https://community.example.com",
     "diagnostics": {
-      "autoApprove": "自動承認",
       "auth": "認証",
       "connectivityUrls": "接続 URL",
       "consent": "同意",
@@ -188,7 +186,7 @@
     },
     "loading": "コミュニティノード診断を読み込み中…",
     "noNodes": "設定済みのコミュニティノードはありません。",
-    "nodesHint": "各コミュニティノードはベースURLと自動承認ポリシーを持ちます。",
+    "nodesHint": "各コミュニティノードはベースURLを持ち、利用前に個別の同意が必要です。",
     "nodesLabel": "設定済みノード",
     "nodeSummary": "このノードの認証、同意、接続状態です。",
     "sessionPhases": {

@@ -33,7 +33,6 @@ test('loads, enables, and clears reversible node-local distance opt-out', async 
       clearDisabled={false}
       onAddNode={() => undefined}
       onNodeBaseUrlChange={() => undefined}
-      onNodeAutoApproveChange={() => undefined}
       onRemoveNode={() => undefined}
       onSaveNodes={() => undefined}
       onReset={() => undefined}
@@ -79,7 +78,6 @@ test('disables distance opt-out actions for a node that is not eligible', async 
       clearDisabled={false}
       onAddNode={() => undefined}
       onNodeBaseUrlChange={() => undefined}
-      onNodeAutoApproveChange={() => undefined}
       onRemoveNode={() => undefined}
       onSaveNodes={() => undefined}
       onReset={() => undefined}
@@ -124,7 +122,6 @@ test('explains distance opt-out failures with stable codes instead of raw server
       clearDisabled={false}
       onAddNode={() => undefined}
       onNodeBaseUrlChange={() => undefined}
-      onNodeAutoApproveChange={() => undefined}
       onRemoveNode={() => undefined}
       onSaveNodes={() => undefined}
       onReset={() => undefined}

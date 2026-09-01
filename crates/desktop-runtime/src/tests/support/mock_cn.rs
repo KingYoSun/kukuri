@@ -9,7 +9,6 @@ pub(crate) async fn apply_relay_backed_community_node_seed_peers(
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.to_string(),
-            auto_approve: false,
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url, vec![relay_url.to_string()], seed_peers)
                     .expect("resolved urls"),

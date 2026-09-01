@@ -12,7 +12,6 @@ const baseProps = {
   clearDisabled: false,
   onAddNode: () => {},
   onNodeBaseUrlChange: () => {},
-  onNodeAutoApproveChange: () => {},
   onRemoveNode: () => {},
   onSaveNodes: () => {},
   onReset: () => {},

@@ -361,7 +361,7 @@ test('browser mock shell can switch topics, publish, open thread, open author, a
   await settingsDialog.getByTestId('settings-section-community-node').click();
   await expect(
     settingsDialog.getByRole('checkbox', { name: 'Auto-approve consent for this node' })
-  ).toBeChecked();
+  ).toHaveCount(0);
   await expect(settingsDialog.getByText('active on current session', { exact: true })).toBeVisible();
   await expect(settingsDialog.getByText('connectivity urls active on current session')).toBeVisible();
 

@@ -13,7 +13,6 @@ import type { CommunityIndexNodePreference } from '@/lib/api/communityIndex';
 export type CommunityNodeDraftNode = {
   id: string;
   base_url: string;
-  auto_approve: boolean;
 };
 
 // public manifest endpoint (#356) からの取得状態。base_url ごとに保持する。

@@ -538,10 +538,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn distribution_community_node_config_is_valid_and_auto_approved() {
+    fn distribution_community_node_config_is_valid() {
         let config = distribution_community_node_config().expect("distribution config");
         assert_eq!(config.nodes.len(), 1);
-        assert!(config.nodes[0].auto_approve);
+        assert!(config.nodes[0].base_url.starts_with("https://"));
     }
 
     // IPC エラー封筒の wire 形状(WP-C3)。TS 側 normalizeInvokeError と対になる

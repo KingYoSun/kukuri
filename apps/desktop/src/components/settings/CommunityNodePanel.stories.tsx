@@ -35,7 +35,6 @@ function CommunityNodePanelStory({
               {
                 id: `story-node-${current.length + 1}`,
                 baseUrl: '',
-                autoApprove: false,
                 saved: false,
                 diagnostics: [],
                 dependency: { diagnostics: [], boundaryNotes: [] },
@@ -59,11 +58,6 @@ function CommunityNodePanelStory({
           onNodeBaseUrlChange={(id, value) =>
             setNodes((current) =>
               current.map((node) => (node.id === id ? { ...node, baseUrl: value } : node))
-            )
-          }
-          onNodeAutoApproveChange={(id, value) =>
-            setNodes((current) =>
-              current.map((node) => (node.id === id ? { ...node, autoApprove: value } : node))
             )
           }
           onRemoveNode={(id) =>
@@ -96,7 +90,6 @@ const meta = {
     clearDisabled: false,
     onAddNode: () => {},
     onNodeBaseUrlChange: () => {},
-    onNodeAutoApproveChange: () => {},
     onRemoveNode: () => {},
     onSaveNodes: () => {},
     onReset: () => {},
