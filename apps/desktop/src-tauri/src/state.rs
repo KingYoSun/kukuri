@@ -383,6 +383,8 @@ pub(crate) async fn build_runtime(
     app_handle: &tauri::AppHandle,
     db_path: PathBuf,
 ) -> Result<Arc<DesktopRuntime>, StartupError> {
+    // 配布 Node はアカウントごとの runtime 初回構築時だけ候補として渡す。
+    // 保存済み設定(空・置換済みを含む)の優先判定は DesktopRuntime が担う。
     let initial_community_node_config = distribution_community_node_config()
         .map_err(|error| StartupError::unknown(error.to_string()))?;
     let runtime = DesktopRuntime::from_env(db_path, initial_community_node_config)
