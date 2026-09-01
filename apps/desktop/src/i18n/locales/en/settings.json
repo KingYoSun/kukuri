@@ -1,4 +1,43 @@
 {
+  "accountKey": {
+    "title": "Account",
+    "summary": "Export or import your account key and switch between accounts.",
+    "scopeNotice": "This covers only the account key that represents who you are. It does not include a full backup of your posts, settings, attachments, or private channel secrets — full device migration is planned separately.",
+    "accountsTitle": "Accounts on this device",
+    "unnamedAccount": "(unnamed)",
+    "activeBadge": "Active",
+    "switchButton": "Switch",
+    "switchPending": "Switching…",
+    "export": {
+      "title": "Export account key",
+      "warning": "Anyone who obtains this export and its passphrase can fully impersonate you. If you forget the passphrase, no one — including the operators — can recover it. Store it only in a safe place.",
+      "acknowledge": "I understand the risks",
+      "passphraseLabel": "Passphrase",
+      "passphraseHint": "Choose a strong passphrase of at least {{min}} characters.",
+      "tooShort": "The passphrase is too short.",
+      "confirmLabel": "Passphrase (confirm)",
+      "mismatch": "The passphrases do not match.",
+      "submit": "Encrypt and export",
+      "pending": "Exporting…",
+      "fingerprintLabel": "Public key fingerprint",
+      "resultLabel": "Encrypted export",
+      "copy": "Copy",
+      "copied": "Copied"
+    },
+    "import": {
+      "title": "Import account key",
+      "inputLabel": "Export string",
+      "previewButton": "Inspect",
+      "fingerprintLabel": "Public key fingerprint",
+      "alreadyRegistered": "This key is already registered on this device.",
+      "passphraseLabel": "Passphrase",
+      "labelLabel": "Label (optional)",
+      "submit": "Add as account",
+      "pending": "Importing…",
+      "success": "Account added. Switch to it to start using the imported account.",
+      "switchNow": "Switch now"
+    }
+  },
   "appearance": {
     "darkSelected": "dark theme selected",
     "languageHint": "Language changes apply immediately on this device and stay local to this desktop.",

@@ -192,13 +192,13 @@
       "description": "Terms, privacy, app version, and consent status.",
       "label": "About / Legal"
     },
+    "account": {
+      "label": "Account",
+      "description": "Account key export, import, and switching."
+    },
     "appearance": {
       "description": "Local light, dark, and language selection.",
       "label": "Appearance"
-    },
-    "safety": {
-      "label": "Safety",
-      "description": "Adult material display preference."
     },
     "community-node": {
       "description": "Configured community nodes, auth, consent, and refresh actions.",
@@ -223,6 +223,10 @@
     "release": {
       "description": "Preview updates, diagnostics, and OS notifications.",
       "label": "Release"
+    },
+    "safety": {
+      "label": "Safety",
+      "description": "Adult material display preference."
     }
   },
   "workspace": {

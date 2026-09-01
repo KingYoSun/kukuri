@@ -30,7 +30,8 @@ fn emit<T: TS>(cfg: &ts_rs::Config, out: &mut String) {
 fn export_ipc_types() {
     use crate::{
         AbortDomeTransitionRequest, AcceptCommunityNodeConsentsRequest,
-        AcceptDomeConnectionProposalRequest, AuthorRequest, BookmarkCustomReactionRequest,
+        AcceptDomeConnectionProposalRequest, AccountKeyExport, AccountKeyImportPreview,
+        AccountRecord, AccountsSnapshot, AuthorRequest, BookmarkCustomReactionRequest,
         BookmarkPostRequest, CloseDomeHostingRequest, CommitDomeLayoutRequest,
         CommitDomeTransitionRequest, CommunityNodeAdmissionRejection,
         CommunityNodeAdmissionRejectionCode, CommunityNodeAuthState, CommunityNodeAuthorityScope,
@@ -48,10 +49,11 @@ fn export_ipc_types() {
         CreateGameRoomRequest, CreateLiveSessionRequest, CreateMetaverseRoomRequest,
         CreatePostRequest, CreatePrivateChannelRequest, CreateRepostRequest,
         CustomReactionCropRect, DelegateDomeHostingRequest, DeleteDirectMessageMessageRequest,
-        DirectMessageRequest, DiscoveryConfig, ExportChannelAccessTokenRequest,
-        ExportFriendOnlyGrantRequest, ExportFriendPlusShareRequest,
-        ExportPrivateChannelInviteRequest, FreezePrivateChannelRequest, GetBlobMediaRequest,
-        GetBlobPreviewRequest, GetDomeHostingRequest, ImportChannelAccessTokenRequest,
+        DirectMessageRequest, DiscoveryConfig, ExportAccountKeyRequest,
+        ExportChannelAccessTokenRequest, ExportFriendOnlyGrantRequest,
+        ExportFriendPlusShareRequest, ExportPrivateChannelInviteRequest,
+        FreezePrivateChannelRequest, GetBlobMediaRequest, GetBlobPreviewRequest,
+        GetDomeHostingRequest, ImportAccountKeyRequest, ImportChannelAccessTokenRequest,
         ImportFriendOnlyGrantRequest, ImportFriendPlusShareRequest,
         ImportMetaverseRoomAssetRequest, ImportPeerTicketRequest,
         ImportPrivateChannelInviteRequest, IndexEntryView, IndexQueryResponse, IndexScopeKind,
@@ -60,7 +62,7 @@ fn export_ipc_types() {
         ListLiveSessionsRequest, ListMetaverseRoomEventsRequest, ListProfileTimelineRequest,
         ListRecentReactionsRequest, ListSocialConnectionsRequest, ListThreadRequest,
         ListTimelineRequest, LiveSessionCommandRequest, MoveDomeRequest, NotificationIdRequest,
-        PostWithdrawalReasonRequest, PrepareDomeTransitionRequest,
+        PostWithdrawalReasonRequest, PrepareDomeTransitionRequest, PreviewAccountKeyImportRequest,
         PreviewChannelAccessTokenRequest, PublishMetaverseRoomEventRequest, ReactionKeyRequest,
         RelationNeighborsResponse, RelationOptoutResponse, RelationReadResponse,
         RemoveBookmarkedCustomReactionRequest, RemoveBookmarkedPostRequest,
@@ -71,10 +73,10 @@ fn export_ipc_types() {
         SetPrivateChannelEntryDomeRequest, SetTopicGossipEnabledRequest,
         StartOwnerDomeHostingRequest, SubmitCommunityNodeReportRequest,
         SubmitCommunityNodeReportResult, SubmitCommunityNodeReportStatus,
-        SubmitDomeSessionInputRequest, SubmitIndexingRequestResponse, ToggleReactionRequest,
-        TrustUserReadResponse, UnsubscribeTopicRequest, UpdateGameRoomRequest,
-        UpdateMetaverseRoomRequest, WithdrawDomeConnectionProposalRequest, WithdrawPostRequest,
-        WithdrawalReasonVisibilityRequest,
+        SubmitDomeSessionInputRequest, SubmitIndexingRequestResponse, SwitchAccountRequest,
+        ToggleReactionRequest, TrustUserReadResponse, UnsubscribeTopicRequest,
+        UpdateGameRoomRequest, UpdateMetaverseRoomRequest, WithdrawDomeConnectionProposalRequest,
+        WithdrawPostRequest, WithdrawalReasonVisibilityRequest,
     };
     use kukuri_app_api::*;
     use kukuri_cn_protocol::{
@@ -403,6 +405,15 @@ fn export_ipc_types() {
         CommunityNodeTargetRequest,
         AcceptCommunityNodeConsentsRequest,
         SetDiscoverySeedsRequest,
+        // #859: アカウント鍵の export / import と複数アカウント管理
+        ExportAccountKeyRequest,
+        PreviewAccountKeyImportRequest,
+        ImportAccountKeyRequest,
+        SwitchAccountRequest,
+        AccountRecord,
+        AccountsSnapshot,
+        AccountKeyExport,
+        AccountKeyImportPreview,
     );
 
     let path = concat!(

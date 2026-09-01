@@ -4,13 +4,35 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use kukuri_desktop_runtime::{DesktopRuntime, StoreStartupError, resolve_db_path_from_env};
+use kukuri_desktop_runtime::{
+    DesktopRuntime, StoreStartupError, ensure_accounts_initialized_from_env,
+    resolve_app_data_dir_from_env, resolve_db_path_from_env,
+};
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager};
 use tokio::sync::watch;
 
+/// #859: アカウント切替で runtime を入れ替えられるよう、`manage` 済みの state の
+/// 中で `Arc<DesktopRuntime>` を差し替え可能にする。lock は Arc の clone / 差し替え
+/// だけの短い臨界区間に限定する(runtime の await を跨いで保持しない)。
 pub(crate) struct DesktopState {
-    pub(crate) runtime: Arc<DesktopRuntime>,
+    runtime: std::sync::RwLock<Arc<DesktopRuntime>>,
+    pub(crate) app_data_dir: PathBuf,
+    /// アカウント切替の直列化。並行 switch で runtime 差し替えが交錯しないようにする。
+    pub(crate) switch_guard: tokio::sync::Mutex<()>,
+}
+
+impl DesktopState {
+    pub(crate) fn runtime(&self) -> Arc<DesktopRuntime> {
+        self.runtime.read().expect("runtime lock poisoned").clone()
+    }
+
+    pub(crate) fn replace_runtime(&self, next: Arc<DesktopRuntime>) -> Arc<DesktopRuntime> {
+        std::mem::replace(
+            &mut *self.runtime.write().expect("runtime lock poisoned"),
+            next,
+        )
+    }
 }
 
 pub(crate) const LEGAL_BUNDLE_VERSION: i32 = 3;
@@ -127,6 +149,10 @@ impl StartupError {
             kind: DesktopStartupErrorKind::Unknown,
             message,
         }
+    }
+
+    fn unknown_from(error: anyhow::Error) -> Self {
+        Self::unknown(error_message(error))
     }
 
     /// runtime 構築時の anyhow エラーを typed 分類して包む。
@@ -316,6 +342,18 @@ fn error_message(error: anyhow::Error) -> String {
     format!("{error:#}")
 }
 
+pub(crate) fn resolve_app_data_dir(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("failed to resolve app data dir: {error}"))?;
+    resolve_app_data_dir_from_env(&app_data_dir).map_err(error_message)
+}
+
+/// アプリ同意など端末レベルのファイルの命名基準となる flat db path。
+/// #859 以降 runtime の db は `accounts/<id>/kukuri.db` に置かれるが、端末レベルの
+/// 状態(同意・年齢申告)はアカウントに紐づけないため、従来どおり
+/// `<app_data>/kukuri.db` を基準にした兄弟ファイル名を使い続ける。
 pub(crate) fn resolve_db_path(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
     let app_data_dir = app_handle
         .path()
@@ -327,7 +365,24 @@ pub(crate) fn resolve_db_path(app_handle: &tauri::AppHandle) -> Result<PathBuf, 
 pub(crate) async fn build_desktop_state(
     app_handle: &tauri::AppHandle,
 ) -> Result<DesktopState, StartupError> {
-    let db_path = resolve_db_path(app_handle).map_err(StartupError::unknown)?;
+    let app_data_dir = resolve_app_data_dir(app_handle).map_err(StartupError::unknown)?;
+    let db_path =
+        ensure_accounts_initialized_from_env(&app_data_dir).map_err(StartupError::unknown_from)?;
+    let runtime = build_runtime(app_handle, db_path).await?;
+
+    Ok(DesktopState {
+        runtime: std::sync::RwLock::new(runtime),
+        app_data_dir,
+        switch_guard: tokio::sync::Mutex::new(()),
+    })
+}
+
+/// runtime をひとつ構築し、常駐タスク(CN セッション維持・イベントブリッジ・
+/// sync 監視)まで起動して返す。初回起動とアカウント切替の両方で使う。
+pub(crate) async fn build_runtime(
+    app_handle: &tauri::AppHandle,
+    db_path: PathBuf,
+) -> Result<Arc<DesktopRuntime>, StartupError> {
     let runtime = DesktopRuntime::from_env(db_path)
         .await
         .map_err(StartupError::from_runtime_error)?;
@@ -338,8 +393,7 @@ pub(crate) async fn build_desktop_state(
 
     spawn_runtime_event_bridge(app_handle, &runtime);
     runtime.start_sync_status_observer().await;
-
-    Ok(DesktopState { runtime })
+    Ok(runtime)
 }
 
 fn spawn_runtime_event_bridge(app_handle: &tauri::AppHandle, runtime: &Arc<DesktopRuntime>) {
@@ -642,6 +696,7 @@ mod tests {
                 record("terms", LEGAL_BUNDLE_VERSION, 200),
                 record("privacy", 1, 150),
             ],
+            age_attestations: Vec::new(),
         };
         let status = app_consent_documents_status(&store);
         assert_eq!(status.len(), APP_LEGAL_DOCUMENTS.len());

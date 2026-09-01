@@ -18,7 +18,8 @@ export type SettingsSection =
   | 'community-node'
   | 'reactions'
   | 'release'
-  | 'developer';
+  | 'developer'
+  | 'account';
 
 export type ProfileWorkspaceMode = 'overview' | 'edit' | 'connections';
 

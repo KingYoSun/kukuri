@@ -35,6 +35,32 @@ pub(crate) fn load_or_create_keys(db_path: &Path, mode: IdentityStorageMode) -> 
     load_or_create_keys_with_keyring(db_path, mode, &SystemKeyringStore)
 }
 
+/// 既存の identity を「生成せずに」読み込む(accounts 移行の検出・再開用)。
+/// backend marker があるのに実体へ到達できない場合は fail-loud で Err を返す。
+pub(crate) fn load_existing_keys(
+    db_path: &Path,
+    mode: IdentityStorageMode,
+) -> Result<Option<KukuriKeys>> {
+    load_existing_keys_with_keyring(db_path, mode, &SystemKeyringStore)
+}
+
+/// 既知の鍵を db_path 配下の identity storage へ保存する(accounts 移行 / import 用)。
+/// `load_or_create_keys` の新規生成分岐と同じ backend 選択(Auto: keyring 優先、
+/// 失敗時 file)で永続化し、backend marker まで書き切る。
+pub(crate) fn persist_keys(
+    db_path: &Path,
+    mode: IdentityStorageMode,
+    keys: &KukuriKeys,
+) -> Result<()> {
+    persist_keys_with_keyring(db_path, mode, keys, &SystemKeyringStore)
+}
+
+/// db_path 配下の identity 実体(keyring entry / key file / legacy nsec / marker)を
+/// すべて削除する(accounts 移行完了後の旧 flat レイアウト掃除用)。
+pub(crate) fn delete_identity(db_path: &Path, mode: IdentityStorageMode) -> Result<()> {
+    delete_identity_with_keyring(db_path, mode, &SystemKeyringStore)
+}
+
 pub(crate) fn load_optional_secret(
     db_path: &Path,
     mode: IdentityStorageMode,
@@ -101,6 +127,63 @@ fn load_or_create_keys_with_keyring(
     }
 
     Ok(keys)
+}
+
+fn load_existing_keys_with_keyring(
+    db_path: &Path,
+    mode: IdentityStorageMode,
+    keyring: &dyn KeyringStore,
+) -> Result<Option<KukuriKeys>> {
+    if let Some(backend) = load_backend_marker(db_path)? {
+        return load_keys_with_backend(db_path, backend.as_str(), mode, keyring).map(Some);
+    }
+    if mode == IdentityStorageMode::Auto
+        && let Ok(Some(secret)) = load_secret_from_keyring(db_path, keyring)
+    {
+        return parse_keys(secret.as_str()).map(Some);
+    }
+    if let Some(secret) = load_secret_from_file(db_path)? {
+        return parse_keys(secret.as_str()).map(Some);
+    }
+    Ok(None)
+}
+
+fn persist_keys_with_keyring(
+    db_path: &Path,
+    mode: IdentityStorageMode,
+    keys: &KukuriKeys,
+    keyring: &dyn KeyringStore,
+) -> Result<()> {
+    let encoded = keys.export_secret_hex();
+    if mode == IdentityStorageMode::Auto
+        && persist_secret_to_keyring(db_path, encoded.as_str(), keyring).is_ok()
+    {
+        write_backend_marker(db_path, BACKEND_KEYRING)?;
+        // 旧 file 実体が残ると marker=keyring と実体が食い違うため掃除する。
+        let _ = delete_file_if_exists(key_file_path(db_path).as_path());
+        let _ = delete_file_if_exists(legacy_key_file_path(db_path).as_path());
+        return Ok(());
+    }
+    persist_secret_to_file(db_path, encoded.as_str())?;
+    write_backend_marker(db_path, BACKEND_FILE)?;
+    if mode == IdentityStorageMode::Auto {
+        let _ = keyring.delete_password(KEYRING_SERVICE, keyring_account(db_path).as_str());
+    }
+    Ok(())
+}
+
+fn delete_identity_with_keyring(
+    db_path: &Path,
+    mode: IdentityStorageMode,
+    keyring: &dyn KeyringStore,
+) -> Result<()> {
+    if mode == IdentityStorageMode::Auto {
+        keyring.delete_password(KEYRING_SERVICE, keyring_account(db_path).as_str())?;
+    }
+    delete_file_if_exists(key_file_path(db_path).as_path())?;
+    delete_file_if_exists(legacy_key_file_path(db_path).as_path())?;
+    delete_file_if_exists(backend_marker_path(db_path).as_path())?;
+    Ok(())
 }
 
 fn load_keys_with_backend(
@@ -282,7 +365,7 @@ fn write_backend_marker(db_path: &Path, backend: &str) -> Result<()> {
 
 // 途中クラッシュで既存内容が破損しないよう、同一ディレクトリの temp ファイルへ
 // write → fsync → rename で置換する(issue #574)。失敗は fail-loud で伝播させる。
-fn write_private_file_atomically(path: &Path, bytes: &[u8]) -> Result<()> {
+pub(crate) fn write_private_file_atomically(path: &Path, bytes: &[u8]) -> Result<()> {
     let file_name = path
         .file_name()
         .and_then(|name| name.to_str())

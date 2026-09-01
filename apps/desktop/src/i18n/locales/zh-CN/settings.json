@@ -1,4 +1,43 @@
 {
+  "accountKey": {
+    "title": "账户",
+    "summary": "导出或导入账户密钥,并在多个账户之间切换。",
+    "scopeNotice": "此处仅涉及代表你身份的账户密钥。不包含帖子数据、设置、附件、私密频道机密等完整备份(完整的设备迁移将作为单独功能提供)。",
+    "accountsTitle": "此设备上的账户",
+    "unnamedAccount": "(未命名)",
+    "activeBadge": "使用中",
+    "switchButton": "切换",
+    "switchPending": "切换中…",
+    "export": {
+      "title": "导出账户密钥",
+      "warning": "获得此导出内容和口令的第三方可以完全冒充你。如果忘记口令,包括运营者在内的任何人都无法恢复。请仅保存在安全的地方。",
+      "acknowledge": "我已了解风险",
+      "passphraseLabel": "口令",
+      "passphraseHint": "请设置至少 {{min}} 个字符的强口令。",
+      "tooShort": "口令太短。",
+      "confirmLabel": "口令(确认)",
+      "mismatch": "两次输入的口令不一致。",
+      "submit": "加密并导出",
+      "pending": "导出中…",
+      "fingerprintLabel": "公钥指纹",
+      "resultLabel": "加密后的导出内容",
+      "copy": "复制",
+      "copied": "已复制"
+    },
+    "import": {
+      "title": "导入账户密钥",
+      "inputLabel": "导出字符串",
+      "previewButton": "查看内容",
+      "fingerprintLabel": "公钥指纹",
+      "alreadyRegistered": "此密钥已在此设备上注册。",
+      "passphraseLabel": "口令",
+      "labelLabel": "标签(可选)",
+      "submit": "添加为账户",
+      "pending": "导入中…",
+      "success": "已添加账户。切换后即可使用导入的身份。",
+      "switchNow": "立即切换"
+    }
+  },
   "appearance": {
     "darkSelected": "已选择深色主题",
     "languageHint": "语言更改会立即在此设备生效，并仅保存在本地。",

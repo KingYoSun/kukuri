@@ -683,3 +683,51 @@ pub struct RevokeDomeConnectionRequest {
     pub spatial_context: SpatialContextV1,
     pub connection_id: String,
 }
+
+/// #859: アカウント鍵エクスポート要求。passphrase は秘密情報のため Debug で redact する。
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ExportAccountKeyRequest {
+    pub passphrase: String,
+}
+
+impl std::fmt::Debug for ExportAccountKeyRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ExportAccountKeyRequest")
+            .field("passphrase", &"<redacted>")
+            .finish()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct PreviewAccountKeyImportRequest {
+    pub export: String,
+}
+
+/// #859: アカウント鍵インポート要求。passphrase は秘密情報のため Debug で redact する。
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
+pub struct ImportAccountKeyRequest {
+    pub export: String,
+    pub passphrase: String,
+    #[serde(default)]
+    pub label: Option<String>,
+}
+
+impl std::fmt::Debug for ImportAccountKeyRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ImportAccountKeyRequest")
+            .field("export", &self.export)
+            .field("passphrase", &"<redacted>")
+            .field("label", &self.label)
+            .finish()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct SwitchAccountRequest {
+    pub account_id: String,
+}

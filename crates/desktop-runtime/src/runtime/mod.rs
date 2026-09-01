@@ -80,6 +80,7 @@ use crate::stack::SharedIrohStack;
 
 mod community_node_api;
 mod content_profile_api;
+mod identity_api;
 mod notifications_messages_api;
 mod private_channels_game_api;
 mod sync_live_api;

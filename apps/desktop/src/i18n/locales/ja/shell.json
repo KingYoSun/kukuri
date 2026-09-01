@@ -192,13 +192,13 @@
       "description": "利用規約、プライバシーポリシー、アプリと同意の状態です。",
       "label": "アプリ / 法的情報"
     },
+    "account": {
+      "label": "アカウント",
+      "description": "アカウント鍵のエクスポート・インポートと切り替えです。"
+    },
     "appearance": {
       "description": "ローカルのライト / ダーク / 言語設定です。",
       "label": "表示"
-    },
-    "safety": {
-      "label": "セーフティ",
-      "description": "成人向け表現の表示設定。"
     },
     "community-node": {
       "description": "コミュニティノードの設定、認証、同意、更新操作です。",
@@ -223,6 +223,10 @@
     "release": {
       "description": "プレビュー更新、診断、OS 通知です。",
       "label": "リリース"
+    },
+    "safety": {
+      "label": "セーフティ",
+      "description": "成人向け表現の表示設定。"
     }
   },
   "workspace": {

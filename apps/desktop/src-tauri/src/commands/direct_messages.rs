@@ -11,7 +11,7 @@ pub async fn open_direct_message(
     request: DirectMessageRequest,
 ) -> Result<kukuri_app_api::DirectMessageConversationView, CommandError> {
     state
-        .runtime
+        .runtime()
         .open_direct_message(request)
         .await
         .map_err(map_error)
@@ -22,7 +22,7 @@ pub async fn list_direct_messages(
     state: tauri::State<'_, DesktopState>,
 ) -> Result<Vec<kukuri_app_api::DirectMessageConversationView>, CommandError> {
     state
-        .runtime
+        .runtime()
         .list_direct_messages()
         .await
         .map_err(map_error)
@@ -34,7 +34,7 @@ pub async fn list_direct_message_messages(
     request: ListDirectMessageMessagesRequest,
 ) -> Result<kukuri_app_api::DirectMessageTimelineView, CommandError> {
     state
-        .runtime
+        .runtime()
         .list_direct_message_messages(request)
         .await
         .map_err(map_error)
@@ -46,7 +46,7 @@ pub async fn send_direct_message(
     request: SendDirectMessageRequest,
 ) -> Result<String, CommandError> {
     state
-        .runtime
+        .runtime()
         .send_direct_message(request)
         .await
         .map_err(map_error)
@@ -58,7 +58,7 @@ pub async fn delete_direct_message_message(
     request: DeleteDirectMessageMessageRequest,
 ) -> Result<(), CommandError> {
     state
-        .runtime
+        .runtime()
         .delete_direct_message_message(request)
         .await
         .map_err(map_error)
@@ -70,7 +70,7 @@ pub async fn clear_direct_message(
     request: DirectMessageRequest,
 ) -> Result<(), CommandError> {
     state
-        .runtime
+        .runtime()
         .clear_direct_message(request)
         .await
         .map_err(map_error)
@@ -82,7 +82,7 @@ pub async fn get_direct_message_status(
     request: DirectMessageRequest,
 ) -> Result<kukuri_app_api::DirectMessageStatusView, CommandError> {
     state
-        .runtime
+        .runtime()
         .get_direct_message_status(request)
         .await
         .map_err(map_error)

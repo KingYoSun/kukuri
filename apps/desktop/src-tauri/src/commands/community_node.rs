@@ -27,7 +27,7 @@ pub async fn create_private_channel(
     request: CreatePrivateChannelRequest,
 ) -> Result<kukuri_app_api::JoinedPrivateChannelView, CommandError> {
     state
-        .runtime
+        .runtime()
         .create_private_channel(request)
         .await
         .map_err(map_error)
@@ -39,7 +39,7 @@ pub async fn export_private_channel_invite(
     request: ExportPrivateChannelInviteRequest,
 ) -> Result<String, CommandError> {
     state
-        .runtime
+        .runtime()
         .export_private_channel_invite(request)
         .await
         .map_err(map_error)
@@ -51,7 +51,7 @@ pub async fn import_private_channel_invite(
     request: ImportPrivateChannelInviteRequest,
 ) -> Result<kukuri_core::PrivateChannelInvitePreview, CommandError> {
     state
-        .runtime
+        .runtime()
         .import_private_channel_invite(request)
         .await
         .map_err(map_error)
@@ -63,7 +63,7 @@ pub async fn export_channel_access_token(
     request: ExportChannelAccessTokenRequest,
 ) -> Result<kukuri_app_api::ChannelAccessTokenExport, CommandError> {
     state
-        .runtime
+        .runtime()
         .export_channel_access_token(request)
         .await
         .map_err(map_error)
@@ -75,7 +75,7 @@ pub async fn import_channel_access_token(
     request: ImportChannelAccessTokenRequest,
 ) -> Result<kukuri_app_api::ChannelAccessTokenPreview, CommandError> {
     state
-        .runtime
+        .runtime()
         .import_channel_access_token(request)
         .await
         .map_err(map_error)
@@ -87,7 +87,7 @@ pub async fn preview_channel_access_token(
     request: PreviewChannelAccessTokenRequest,
 ) -> Result<kukuri_app_api::ChannelAccessTokenPreview, CommandError> {
     state
-        .runtime
+        .runtime()
         .preview_channel_access_token(request)
         .await
         .map_err(map_error)
@@ -99,7 +99,7 @@ pub async fn export_friend_only_grant(
     request: ExportFriendOnlyGrantRequest,
 ) -> Result<String, CommandError> {
     state
-        .runtime
+        .runtime()
         .export_friend_only_grant(request)
         .await
         .map_err(map_error)
@@ -111,7 +111,7 @@ pub async fn import_friend_only_grant(
     request: ImportFriendOnlyGrantRequest,
 ) -> Result<kukuri_core::FriendOnlyGrantPreview, CommandError> {
     state
-        .runtime
+        .runtime()
         .import_friend_only_grant(request)
         .await
         .map_err(map_error)
@@ -123,7 +123,7 @@ pub async fn export_friend_plus_share(
     request: ExportFriendPlusShareRequest,
 ) -> Result<String, CommandError> {
     state
-        .runtime
+        .runtime()
         .export_friend_plus_share(request)
         .await
         .map_err(map_error)
@@ -135,7 +135,7 @@ pub async fn import_friend_plus_share(
     request: ImportFriendPlusShareRequest,
 ) -> Result<kukuri_core::FriendPlusSharePreview, CommandError> {
     state
-        .runtime
+        .runtime()
         .import_friend_plus_share(request)
         .await
         .map_err(map_error)
@@ -147,7 +147,7 @@ pub async fn freeze_private_channel(
     request: FreezePrivateChannelRequest,
 ) -> Result<kukuri_app_api::JoinedPrivateChannelView, CommandError> {
     state
-        .runtime
+        .runtime()
         .freeze_private_channel(request)
         .await
         .map_err(map_error)
@@ -159,7 +159,7 @@ pub async fn rotate_private_channel(
     request: RotatePrivateChannelRequest,
 ) -> Result<kukuri_app_api::JoinedPrivateChannelView, CommandError> {
     state
-        .runtime
+        .runtime()
         .rotate_private_channel(request)
         .await
         .map_err(map_error)
@@ -171,7 +171,7 @@ pub async fn set_private_channel_entry_dome(
     request: SetPrivateChannelEntryDomeRequest,
 ) -> Result<kukuri_app_api::JoinedPrivateChannelView, CommandError> {
     state
-        .runtime
+        .runtime()
         .set_private_channel_entry_dome(request)
         .await
         .map_err(map_error)
@@ -183,7 +183,7 @@ pub async fn leave_private_channel(
     request: LeavePrivateChannelRequest,
 ) -> Result<(), CommandError> {
     state
-        .runtime
+        .runtime()
         .leave_private_channel(request)
         .await
         .map_err(map_error)
@@ -195,7 +195,7 @@ pub async fn list_joined_private_channels(
     request: ListJoinedPrivateChannelsRequest,
 ) -> Result<Vec<kukuri_app_api::JoinedPrivateChannelView>, CommandError> {
     state
-        .runtime
+        .runtime()
         .list_joined_private_channels(request)
         .await
         .map_err(map_error)
@@ -205,7 +205,7 @@ pub async fn list_joined_private_channels(
 pub async fn get_sync_status(
     state: tauri::State<'_, DesktopState>,
 ) -> Result<kukuri_app_api::SyncStatus, CommandError> {
-    state.runtime.get_sync_status().await.map_err(map_error)
+    state.runtime().get_sync_status().await.map_err(map_error)
 }
 
 #[tauri::command]
@@ -213,7 +213,7 @@ pub async fn get_discovery_config(
     state: tauri::State<'_, DesktopState>,
 ) -> Result<DiscoveryConfig, CommandError> {
     state
-        .runtime
+        .runtime()
         .get_discovery_config()
         .await
         .map_err(map_error)
@@ -225,7 +225,7 @@ pub async fn import_peer_ticket(
     request: ImportPeerTicketRequest,
 ) -> Result<(), CommandError> {
     state
-        .runtime
+        .runtime()
         .import_peer_ticket(request)
         .await
         .map_err(map_error)
@@ -237,7 +237,7 @@ pub async fn set_discovery_seeds(
     request: SetDiscoverySeedsRequest,
 ) -> Result<DiscoveryConfig, CommandError> {
     state
-        .runtime
+        .runtime()
         .set_discovery_seeds(request)
         .await
         .map_err(map_error)
@@ -249,7 +249,7 @@ pub async fn unsubscribe_topic(
     request: UnsubscribeTopicRequest,
 ) -> Result<(), CommandError> {
     state
-        .runtime
+        .runtime()
         .unsubscribe_topic(request)
         .await
         .map_err(map_error)
@@ -261,7 +261,7 @@ pub async fn set_topic_gossip_enabled(
     request: SetTopicGossipEnabledRequest,
 ) -> Result<(), CommandError> {
     state
-        .runtime
+        .runtime()
         .set_topic_gossip_enabled(request)
         .await
         .map_err(map_error)
@@ -273,7 +273,7 @@ pub async fn set_channel_gossip_enabled(
     request: SetChannelGossipEnabledRequest,
 ) -> Result<(), CommandError> {
     state
-        .runtime
+        .runtime()
         .set_channel_gossip_enabled(request)
         .await
         .map_err(map_error)
@@ -283,7 +283,7 @@ pub async fn set_channel_gossip_enabled(
 pub async fn get_local_peer_ticket(
     state: tauri::State<'_, DesktopState>,
 ) -> Result<Option<String>, CommandError> {
-    state.runtime.local_peer_ticket().await.map_err(map_error)
+    state.runtime().local_peer_ticket().await.map_err(map_error)
 }
 
 #[tauri::command]
@@ -291,7 +291,7 @@ pub async fn get_community_node_config(
     state: tauri::State<'_, DesktopState>,
 ) -> Result<CommunityNodeConfig, CommandError> {
     state
-        .runtime
+        .runtime()
         .get_community_node_config()
         .await
         .map_err(map_error)
@@ -302,7 +302,7 @@ pub async fn get_community_node_statuses(
     state: tauri::State<'_, DesktopState>,
 ) -> Result<Vec<CommunityNodeNodeStatus>, CommandError> {
     state
-        .runtime
+        .runtime()
         .get_community_node_statuses()
         .await
         .map_err(map_error)
@@ -314,7 +314,7 @@ pub async fn set_community_node_config(
     request: SetCommunityNodeConfigRequest,
 ) -> Result<CommunityNodeConfig, CommandError> {
     state
-        .runtime
+        .runtime()
         .set_community_node_config(request)
         .await
         .map_err(map_error)
@@ -325,7 +325,7 @@ pub async fn clear_community_node_config(
     state: tauri::State<'_, DesktopState>,
 ) -> Result<(), CommandError> {
     state
-        .runtime
+        .runtime()
         .clear_community_node_config()
         .await
         .map_err(map_error)
@@ -337,7 +337,7 @@ pub async fn authenticate_community_node(
     request: CommunityNodeTargetRequest,
 ) -> Result<CommunityNodeNodeStatus, CommandError> {
     state
-        .runtime
+        .runtime()
         .authenticate_community_node(request)
         .await
         .map_err(map_error)
@@ -349,7 +349,7 @@ pub async fn set_community_node_invite_code(
     request: SetCommunityNodeInviteCodeRequest,
 ) -> Result<CommunityNodeNodeStatus, CommandError> {
     state
-        .runtime
+        .runtime()
         .set_community_node_invite_code(request)
         .await
         .map_err(map_error)
@@ -361,7 +361,7 @@ pub async fn clear_community_node_token(
     request: CommunityNodeTargetRequest,
 ) -> Result<CommunityNodeNodeStatus, CommandError> {
     state
-        .runtime
+        .runtime()
         .clear_community_node_token(request)
         .await
         .map_err(map_error)
@@ -373,7 +373,7 @@ pub async fn get_community_node_consent_status(
     request: CommunityNodeTargetRequest,
 ) -> Result<CommunityNodeNodeStatus, CommandError> {
     state
-        .runtime
+        .runtime()
         .get_community_node_consent_status(request)
         .await
         .map_err(map_error)
@@ -386,7 +386,7 @@ pub async fn fetch_community_node_policies(
     request: CommunityNodeTargetRequest,
 ) -> Result<CommunityNodePoliciesResponse, CommandError> {
     state
-        .runtime
+        .runtime()
         .fetch_community_node_policies(request)
         .await
         .map_err(map_error)
@@ -401,7 +401,7 @@ pub async fn accept_community_node_consents(
     // #857: 同意記録のアプリ版はフロントの申告ではなく実行中バイナリの版を使う。
     let app_version = app_handle.package_info().version.to_string();
     state
-        .runtime
+        .runtime()
         .accept_community_node_consents(request, app_version.as_str())
         .await
         .map_err(map_error)
@@ -414,7 +414,7 @@ pub async fn withdraw_community_node_consents(
     request: CommunityNodeTargetRequest,
 ) -> Result<CommunityNodeNodeStatus, CommandError> {
     state
-        .runtime
+        .runtime()
         .withdraw_community_node_consents(request)
         .await
         .map_err(map_error)
@@ -426,7 +426,7 @@ pub async fn refresh_community_node_metadata(
     request: CommunityNodeTargetRequest,
 ) -> Result<CommunityNodeNodeStatus, CommandError> {
     state
-        .runtime
+        .runtime()
         .refresh_community_node_metadata(request)
         .await
         .map_err(map_error)
@@ -438,7 +438,7 @@ pub async fn fetch_community_node_manifest(
     request: CommunityNodeTargetRequest,
 ) -> Result<CommunityNodeManifestFetch, CommandError> {
     state
-        .runtime
+        .runtime()
         .fetch_community_node_manifest(request)
         .await
         .map_err(map_error)
@@ -450,7 +450,7 @@ pub async fn submit_community_node_report(
     request: SubmitCommunityNodeReportRequest,
 ) -> Result<SubmitCommunityNodeReportResult, CommandError> {
     state
-        .runtime
+        .runtime()
         .submit_community_node_report(request)
         .await
         .map_err(CommandError::from)
@@ -462,7 +462,7 @@ pub async fn submit_community_node_tester_feedback(
     request: CommunityNodeTesterFeedbackSubmission,
 ) -> Result<CommunityNodeTesterFeedbackResponse, CommandError> {
     state
-        .runtime
+        .runtime()
         .submit_community_node_tester_feedback(request)
         .await
         .map_err(CommandError::from)
@@ -474,7 +474,7 @@ pub async fn submit_community_node_indexing_request(
     request: CommunityNodeIndexingRequest,
 ) -> Result<SubmitIndexingRequestResponse, CommandError> {
     state
-        .runtime
+        .runtime()
         .submit_community_node_indexing_request(request)
         .await
         .map_err(CommandError::from)
@@ -486,7 +486,7 @@ pub async fn search_community_node_index(
     request: CommunityNodeIndexQueryRequest,
 ) -> Result<IndexQueryResponse, CommandError> {
     state
-        .runtime
+        .runtime()
         .search_community_node_index(request)
         .await
         .map_err(CommandError::from)
@@ -498,7 +498,7 @@ pub async fn discover_community_node_index(
     request: CommunityNodeIndexQueryRequest,
 ) -> Result<IndexQueryResponse, CommandError> {
     state
-        .runtime
+        .runtime()
         .discover_community_node_index(request)
         .await
         .map_err(CommandError::from)
@@ -510,7 +510,7 @@ pub async fn recommend_community_node_index(
     request: CommunityNodeIndexQueryRequest,
 ) -> Result<IndexQueryResponse, CommandError> {
     state
-        .runtime
+        .runtime()
         .recommend_community_node_index(request)
         .await
         .map_err(CommandError::from)
@@ -522,7 +522,7 @@ pub async fn read_community_node_trust_user(
     request: CommunityNodeUserAdvisoryRequest,
 ) -> Result<TrustUserReadResponse, CommandError> {
     state
-        .runtime
+        .runtime()
         .read_community_node_trust_user(request)
         .await
         .map_err(CommandError::from)
@@ -534,7 +534,7 @@ pub async fn read_community_node_relation_user(
     request: CommunityNodeUserAdvisoryRequest,
 ) -> Result<RelationReadResponse, CommandError> {
     state
-        .runtime
+        .runtime()
         .read_community_node_relation_user(request)
         .await
         .map_err(CommandError::from)
@@ -546,7 +546,7 @@ pub async fn list_community_node_relation_neighbors(
     request: CommunityNodeRelationNeighborsRequest,
 ) -> Result<RelationNeighborsResponse, CommandError> {
     state
-        .runtime
+        .runtime()
         .list_community_node_relation_neighbors(request)
         .await
         .map_err(CommandError::from)
@@ -558,7 +558,7 @@ pub async fn get_community_node_relation_optout(
     request: CommunityNodeTargetRequest,
 ) -> Result<RelationOptoutResponse, CommandError> {
     state
-        .runtime
+        .runtime()
         .get_community_node_relation_optout(request)
         .await
         .map_err(CommandError::from)
@@ -570,7 +570,7 @@ pub async fn set_community_node_relation_optout(
     request: CommunityNodeTargetRequest,
 ) -> Result<RelationOptoutResponse, CommandError> {
     state
-        .runtime
+        .runtime()
         .set_community_node_relation_optout(request)
         .await
         .map_err(CommandError::from)
@@ -582,7 +582,7 @@ pub async fn clear_community_node_relation_optout(
     request: CommunityNodeTargetRequest,
 ) -> Result<RelationOptoutResponse, CommandError> {
     state
-        .runtime
+        .runtime()
         .clear_community_node_relation_optout(request)
         .await
         .map_err(CommandError::from)

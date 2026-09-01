@@ -4,6 +4,7 @@ mod dome_connections;
 mod dome_hosting;
 mod dome_recovery;
 mod envelope;
+mod identity_export;
 mod media_live_game;
 mod metaverse_resource_budget;
 mod posts;

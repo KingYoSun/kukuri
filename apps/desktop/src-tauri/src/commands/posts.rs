@@ -12,7 +12,11 @@ pub async fn create_post(
     state: tauri::State<'_, DesktopState>,
     request: CreatePostRequest,
 ) -> Result<String, CommandError> {
-    state.runtime.create_post(request).await.map_err(map_error)
+    state
+        .runtime()
+        .create_post(request)
+        .await
+        .map_err(map_error)
 }
 
 #[tauri::command]
@@ -20,7 +24,11 @@ pub async fn withdraw_post(
     state: tauri::State<'_, DesktopState>,
     request: WithdrawPostRequest,
 ) -> Result<String, CommandError> {
-    state.runtime.withdraw_post(request).await.map_err(map_error)
+    state
+        .runtime()
+        .withdraw_post(request)
+        .await
+        .map_err(map_error)
 }
 
 #[tauri::command]
@@ -29,7 +37,7 @@ pub async fn create_repost(
     request: CreateRepostRequest,
 ) -> Result<String, CommandError> {
     state
-        .runtime
+        .runtime()
         .create_repost(request)
         .await
         .map_err(map_error)
@@ -40,7 +48,7 @@ pub async fn list_bookmarked_posts(
     state: tauri::State<'_, DesktopState>,
 ) -> Result<Vec<kukuri_app_api::BookmarkedPostView>, CommandError> {
     state
-        .runtime
+        .runtime()
         .list_bookmarked_posts()
         .await
         .map_err(map_error)
@@ -52,7 +60,7 @@ pub async fn resolve_community_index_posts(
     request: ResolveCommunityIndexPostsRequest,
 ) -> Result<kukuri_app_api::CommunityIndexPostResolveResponse, CommandError> {
     state
-        .runtime
+        .runtime()
         .resolve_community_index_posts(request)
         .await
         .map_err(map_error)
@@ -64,7 +72,7 @@ pub async fn bookmark_post(
     request: BookmarkPostRequest,
 ) -> Result<kukuri_app_api::BookmarkedPostView, CommandError> {
     state
-        .runtime
+        .runtime()
         .bookmark_post(request)
         .await
         .map_err(map_error)
@@ -76,7 +84,7 @@ pub async fn remove_bookmarked_post(
     request: RemoveBookmarkedPostRequest,
 ) -> Result<(), CommandError> {
     state
-        .runtime
+        .runtime()
         .remove_bookmarked_post(request)
         .await
         .map_err(map_error)
@@ -88,7 +96,7 @@ pub async fn list_timeline(
     request: ListTimelineRequest,
 ) -> Result<kukuri_app_api::TimelineView, CommandError> {
     state
-        .runtime
+        .runtime()
         .list_timeline(request)
         .await
         .map_err(map_error)
@@ -99,7 +107,11 @@ pub async fn list_thread(
     state: tauri::State<'_, DesktopState>,
     request: ListThreadRequest,
 ) -> Result<kukuri_app_api::TimelineView, CommandError> {
-    state.runtime.list_thread(request).await.map_err(map_error)
+    state
+        .runtime()
+        .list_thread(request)
+        .await
+        .map_err(map_error)
 }
 
 #[tauri::command]
@@ -108,7 +120,7 @@ pub async fn list_profile_timeline(
     request: ListProfileTimelineRequest,
 ) -> Result<kukuri_app_api::TimelineView, CommandError> {
     state
-        .runtime
+        .runtime()
         .list_profile_timeline(request)
         .await
         .map_err(map_error)
@@ -120,7 +132,7 @@ pub async fn get_blob_preview_url(
     request: GetBlobPreviewRequest,
 ) -> Result<Option<String>, CommandError> {
     state
-        .runtime
+        .runtime()
         .get_blob_preview_url(request)
         .await
         .map_err(map_error)
@@ -134,7 +146,7 @@ pub async fn get_blob_media_payload(
     let hash = request.hash.clone();
     let mime = request.mime.clone();
     info!(hash = %hash, mime = %mime, "received get_blob_media_payload command");
-    match state.runtime.get_blob_media_payload(request).await {
+    match state.runtime().get_blob_media_payload(request).await {
         Ok(Some(payload)) => {
             info!(
                 hash = %hash,
@@ -166,7 +178,7 @@ pub async fn get_blob_media_payload(
 pub fn get_content_display_settings(
     state: tauri::State<'_, DesktopState>,
 ) -> Result<kukuri_app_api::ContentDisplaySettings, CommandError> {
-    Ok(state.runtime.get_content_display_settings())
+    Ok(state.runtime().get_content_display_settings())
 }
 
 #[tauri::command]
@@ -174,9 +186,12 @@ pub fn set_adult_content_display_enabled(
     state: tauri::State<'_, DesktopState>,
     enabled: bool,
 ) -> Result<kukuri_app_api::ContentDisplaySettings, CommandError> {
-    info!(enabled, "received set_adult_content_display_enabled command");
+    info!(
+        enabled,
+        "received set_adult_content_display_enabled command"
+    );
     state
-        .runtime
+        .runtime()
         .set_adult_content_display_enabled(enabled)
         .map_err(map_error)
 }
