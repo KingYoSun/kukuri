@@ -198,7 +198,7 @@
     },
     "safety": {
       "label": "安全",
-      "description": "成人内容显示设置(默认关闭)。"
+      "description": "成人内容显示设置。"
     },
     "community-node": {
       "description": "社区节点配置、认证、同意与刷新操作。",

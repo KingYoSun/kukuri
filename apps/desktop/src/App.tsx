@@ -228,22 +228,17 @@ function ConsentGate({
             compact
           />
           {attestationRequired ? (
-            <div className='space-y-1'>
-              <label className='flex items-start gap-2 text-sm leading-6 text-foreground'>
-                <input
-                  type='checkbox'
-                  className='mt-1'
-                  checked={ageAttested}
-                  disabled={accepting}
-                  onChange={(event) => setAgeAttested(event.target.checked)}
-                  data-testid='age-attestation-checkbox'
-                />
-                <span>{t('legal:gate.ageAttestationLabel')}</span>
-              </label>
-              <p className='text-xs leading-5 text-[var(--muted-foreground)]'>
-                {t('legal:gate.ageAttestationNote')}
-              </p>
-            </div>
+            <label className='flex items-start gap-2 text-sm leading-6 text-foreground'>
+              <input
+                type='checkbox'
+                className='mt-1'
+                checked={ageAttested}
+                disabled={accepting}
+                onChange={(event) => setAgeAttested(event.target.checked)}
+                data-testid='age-attestation-checkbox'
+              />
+              <span>{t('legal:gate.ageAttestationLabel')}</span>
+            </label>
           ) : null}
           {error ? (
             <Notice tone='destructive'>

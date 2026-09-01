@@ -81,7 +81,7 @@ export const SETTINGS_SECTION_COPY: Array<{
   {
     id: 'safety',
     label: 'Safety',
-    description: 'Adult material display preference (off by default).',
+    description: 'Adult material display preference.',
   },
   {
     id: 'connectivity',

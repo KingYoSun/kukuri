@@ -137,11 +137,7 @@ test('desktop app blocks startup until app-level legal consent is accepted', asy
   // #858: 年齢の自己申告チェックが無い間は同意ボタンが無効。
   const acceptButton = screen.getByRole('button', { name: 'Accept and continue' });
   expect(acceptButton).toBeDisabled();
-  expect(
-    screen.getByText(
-      'This is a self-attestation, not an official age verification. No date of birth or ID is required, and your attestation is stored only on this device.'
-    )
-  ).toBeInTheDocument();
+  expect(screen.getByText('I am 18 years of age or older.')).toBeInTheDocument();
   await user.click(screen.getByTestId('age-attestation-checkbox'));
   expect(acceptButton).toBeEnabled();
 

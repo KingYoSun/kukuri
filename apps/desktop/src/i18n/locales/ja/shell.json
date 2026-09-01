@@ -198,7 +198,7 @@
     },
     "safety": {
       "label": "セーフティ",
-      "description": "成人向け表現の表示設定(既定は非表示)。"
+      "description": "成人向け表現の表示設定。"
     },
     "community-node": {
       "description": "コミュニティノードの設定、認証、同意、更新操作です。",
