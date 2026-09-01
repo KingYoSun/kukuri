@@ -3556,6 +3556,7 @@ dependencies = [
  "kukuri-blob-service",
  "kukuri-cn-core",
  "kukuri-cn-iroh-relay",
+ "kukuri-cn-operator",
  "kukuri-cn-protocol",
  "kukuri-cn-user-api",
  "kukuri-core",
