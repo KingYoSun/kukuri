@@ -13,7 +13,6 @@ import { copyTextToClipboard } from '@/lib/utils';
 import {
   buildSafeDiagnosticReport,
   classifyUpdateError,
-  COMMUNITY_NODE_DISCLOSURE_URLS,
   DEFAULT_OS_NOTIFICATION_SETTINGS,
   isTauriRuntime,
   loadOsNotificationSettings,
@@ -27,6 +26,7 @@ import {
   THIRD_PARTY_NOTICES_URL,
   type OsNotificationSettings,
 } from '@/lib/releaseReadiness';
+import { buildCommunityNodeDisclosures } from '@/lib/communityNodeDisclosures';
 import { useAppUpdateStore } from '@/shell/useAppUpdateStore';
 import { useDesktopShellStore } from '@/shell/store';
 
@@ -47,6 +47,8 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
   const syncStatus = useDesktopShellStore((state) => state.syncStatus);
   const notificationStatus = useDesktopShellStore((state) => state.notificationStatus);
   const communityNodeStatuses = useDesktopShellStore((state) => state.communityNodeStatuses);
+  const communityNodeConfig = useDesktopShellStore((state) => state.communityNodeConfig);
+  const communityNodeManifests = useDesktopShellStore((state) => state.communityNodeManifests);
   const updateState = useAppUpdateStore((state) => state.updateState);
   const pendingUpdate = useAppUpdateStore((state) => state.pendingUpdate);
   const checkForUpdate = useAppUpdateStore((state) => state.checkForUpdate);
@@ -205,6 +207,10 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
     : null;
   const updateBusy = updateState.status === 'checking' || updateState.status === 'downloading';
   const updateReadyToRestart = updateState.status === 'ready_to_restart';
+  const communityNodeDisclosures = useMemo(
+    () => buildCommunityNodeDisclosures(communityNodeConfig, communityNodeManifests),
+    [communityNodeConfig, communityNodeManifests]
+  );
 
   return (
     <Card className='min-w-0 space-y-5'>
@@ -320,31 +326,43 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
         <p className='text-sm font-medium text-foreground'>
           {t('settings:release.resources.communityNodeDisclosures')}
         </p>
-        <SettingsActionRow>
-          {[
-            [t('settings:release.resources.terms'), COMMUNITY_NODE_DISCLOSURE_URLS.terms],
-            [t('settings:release.resources.privacy'), COMMUNITY_NODE_DISCLOSURE_URLS.privacy],
-            [
-              t('settings:release.resources.externalTransmission'),
-              COMMUNITY_NODE_DISCLOSURE_URLS.externalTransmission,
-            ],
-            [
-              t('settings:release.resources.abusePolicy'),
-              COMMUNITY_NODE_DISCLOSURE_URLS.abusePolicy,
-            ],
-            [
-              t('settings:release.resources.dataRetention'),
-              COMMUNITY_NODE_DISCLOSURE_URLS.dataRetention,
-            ],
-          ].map(([label, href]) => (
-            <Button key={href} asChild variant='secondary' size='sm'>
-              <a href={href} target='_blank' rel='noreferrer'>
-                {label}
-                <ExternalLink className='size-4' aria-hidden='true' />
-              </a>
-            </Button>
-          ))}
-        </SettingsActionRow>
+        {communityNodeDisclosures.length === 0 ? (
+          <p className='text-sm text-[var(--muted-foreground-soft)]'>
+            {t('settings:release.resources.noCommunityNodes')}
+          </p>
+        ) : (
+          <div className='space-y-3'>
+            {communityNodeDisclosures.map((disclosure) => (
+              <div
+                key={disclosure.baseUrl}
+                className='space-y-2 rounded-[var(--radius-input)] border border-[var(--border-subtle)] bg-[var(--surface-panel-soft)] p-3'
+              >
+                <div className='min-w-0'>
+                  <p className='font-medium text-foreground'>
+                    {disclosure.nodeName ?? disclosure.baseUrl}
+                  </p>
+                  {disclosure.nodeName ? (
+                    <small className='break-all font-mono'>{disclosure.baseUrl}</small>
+                  ) : null}
+                </div>
+                {disclosure.manifestAvailable && disclosure.links.length > 0 ? (
+                  <SettingsActionRow>
+                    {disclosure.links.map(({ key, href }) => (
+                      <Button key={`${key}:${href}`} asChild variant='secondary' size='sm'>
+                        <a href={href} target='_blank' rel='noreferrer'>
+                          {t(`settings:release.resources.${key}`)}
+                          <ExternalLink className='size-4' aria-hidden='true' />
+                        </a>
+                      </Button>
+                    ))}
+                  </SettingsActionRow>
+                ) : (
+                  <small>{t('settings:release.resources.manifestUnavailable')}</small>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {showDiagnostics ? (

@@ -7,15 +7,15 @@
 - community-node の公開経路を `WireGuard + Caddy` の VPS edge に一本化する。
 - `cn-user-api`, `cn-iroh-relay`, Postgres, Valkey は Home 側に置く。
 - VPS は public IP, DNS, TLS termination, UDP forward だけを担当する。
-- Public contract は `https://api.kukuri.app` と `https://iroh-relay.kukuri.app`
+- Public contract は operator が所有する `https://api.example.com` と `https://iroh-relay.example.com`
 
 ## 構成
 
 ```mermaid
 flowchart LR
-  Client["kukuri client"] --> ApiDns["api.kukuri.app:443"]
-  Client --> RelayHttps["iroh-relay.kukuri.app:443"]
-  Client --> RelayQuic["iroh-relay.kukuri.app:7842/udp"]
+  Client["kukuri client"] --> ApiDns["api.example.com:443"]
+  Client --> RelayHttps["iroh-relay.example.com:443"]
+  Client --> RelayQuic["iroh-relay.example.com:7842/udp"]
 
   ApiDns --> VPS["VPS<br/>Caddy + nftables + WireGuard"]
   RelayHttps --> VPS
@@ -25,13 +25,13 @@ flowchart LR
   Home --> PrivateState["Postgres + Valkey<br/>private bind only"]
 ```
 
-既定値:
+例示値（`example.com` domain は operator の実値への置換必須）:
 
 - WireGuard subnet: `192.0.2.0/24`
 - VPS tunnel IP: `192.0.2.1`
 - Home tunnel IP: `192.0.2.2`
-- Public API domain: `api.kukuri.app`
-- Public iroh relay domain: `iroh-relay.kukuri.app`
+- Public API domain: `api.example.com`（operator が所有する実 domain へ置換）
+- Public iroh relay domain: `iroh-relay.example.com`（operator が所有する実 domain へ置換）
 - Public WireGuard port: `51820/udp`
 - Public iroh relay QUIC port: `7842/udp`
 
@@ -39,7 +39,7 @@ flowchart LR
 
 DNS と firewall:
 
-- `api.kukuri.app` と `iroh-relay.kukuri.app` を VPS の public IP に向ける。
+- `api.example.com` と `iroh-relay.example.com`（いずれも実 domain へ置換）を VPS の public IP に向ける。
 - Cloudflare を使う場合は DNS only にする。
 - VPS / cloud firewall で `22/tcp`, `80/tcp`, `443/tcp`, `51820/udp`, `7842/udp` を許可する。
 
@@ -55,7 +55,7 @@ cp scripts/vps/community-node-edge.env.example scripts/vps/community-node-edge.e
 
 ```dotenv
 PUBLIC_IFACE=eth0
-WG_ENDPOINT_HOST=api.kukuri.app
+WG_ENDPOINT_HOST=api.example.com
 WG_VPS_ADDRESS=192.0.2.1/24
 WG_HOME_CLIENT_ADDRESS=192.0.2.2/24
 WG_HOME_ALLOWED_IPS=192.0.2.2/32
@@ -63,8 +63,8 @@ HOME_WG_IP=192.0.2.2
 WG_SERVER_PRIVATE_KEY=<vps-private-key>
 WG_HOME_PUBLIC_KEY=<home-public-key>
 WG_HOME_PRESHARED_KEY=<shared-psk>
-API_DOMAIN=api.kukuri.app
-IROH_RELAY_DOMAIN=iroh-relay.kukuri.app
+API_DOMAIN=api.example.com
+IROH_RELAY_DOMAIN=iroh-relay.example.com
 HOME_CN_USER_API_PORT=18080
 HOME_IROH_RELAY_HTTP_PORT=13340
 HOME_IROH_RELAY_QUIC_PORT=7842
@@ -83,7 +83,7 @@ sudo ./scripts/vps/setup-community-node-edge.sh scripts/vps/community-node-edge.
 - `/etc/nftables.conf`
 - `/root/wg0-home-client.conf`
 
-Caddy は `api.kukuri.app -> http://192.0.2.2:18080` と `iroh-relay.kukuri.app -> http://192.0.2.2:13340` を reverse proxy する。`7842/udp` は Caddy を通さず nftables で Home 側へ DNAT する。
+Caddy は `api.example.com -> http://192.0.2.2:18080` と `iroh-relay.example.com -> http://192.0.2.2:13340` を reverse proxy する。domain は operator の実値へ置換する。`7842/udp` は Caddy を通さず nftables で Home 側へ DNAT する。
 
 ## Home 側
 
@@ -99,7 +99,7 @@ PrivateKey = <home-private-key>
 [Peer]
 PublicKey = <server-public-key>
 PresharedKey = <same-as-WG_HOME_PRESHARED_KEY>
-Endpoint = api.kukuri.app:51820
+Endpoint = api.example.com:51820
 AllowedIPs = 192.0.2.1/32
 PersistentKeepalive = 25
 ```
@@ -113,9 +113,9 @@ sudo systemctl enable --now wg-quick@wg0
 `.env.community-node`:
 
 ```dotenv
-CN_BASE_URL=https://api.kukuri.app
-CN_PUBLIC_BASE_URL=https://api.kukuri.app
-COMMUNITY_NODE_CONNECTIVITY_URLS=https://iroh-relay.kukuri.app
+CN_BASE_URL=https://api.example.com
+CN_PUBLIC_BASE_URL=https://api.example.com
+COMMUNITY_NODE_CONNECTIVITY_URLS=https://iroh-relay.example.com
 
 CN_POSTGRES_HOST_BIND_IP=127.0.0.1
 CN_VALKEY_HOST_BIND_IP=127.0.0.1
@@ -135,20 +135,20 @@ CN_IROH_RELAY_CERTS_HOST_PATH=./docker/cn/certs
 
 ## iroh relay 証明書
 
-`cn-iroh-relay` の `7842/udp` は Home 側コンテナが直接応答するため、`iroh-relay.kukuri.app` 用の証明書と秘密鍵を Home 側へ置く。
+`cn-iroh-relay` の `7842/udp` は Home 側コンテナが直接応答するため、`iroh-relay.example.com`（実 domain）用の証明書と秘密鍵を Home 側へ置く。
 
 VPS 上で Caddy の証明書を探す:
 
 ```bash
-sudo find /var/lib/caddy/.local/share/caddy/certificates -path '*iroh-relay.kukuri.app*'
+sudo find /var/lib/caddy/.local/share/caddy/certificates -path '*iroh-relay.example.com*'
 ```
 
 Home 側へ配置:
 
 ```bash
 mkdir -p docker/cn/certs
-cp /path/to/iroh-relay.kukuri.app.crt docker/cn/certs/default.crt
-cp /path/to/iroh-relay.kukuri.app.key docker/cn/certs/default.key
+cp /path/to/iroh-relay.example.com.crt docker/cn/certs/default.crt
+cp /path/to/iroh-relay.example.com.key docker/cn/certs/default.key
 ```
 
 ## 起動
@@ -225,8 +225,8 @@ sudo wg show
 sudo systemctl status wg-quick@wg0
 sudo systemctl status caddy
 sudo nft list ruleset
-curl -fsS https://api.kukuri.app/healthz
-curl -fsS https://iroh-relay.kukuri.app/ping
+curl -fsS https://api.example.com/healthz
+curl -fsS https://iroh-relay.example.com/ping
 ```
 
 Home:
@@ -239,7 +239,7 @@ docker compose --env-file .env.community-node -f docker-compose.community-node.y
 
 期待値:
 
-- `https://api.kukuri.app/healthz` が成功する。
-- `https://iroh-relay.kukuri.app/ping` が成功する。
+- `https://api.example.com/healthz`（実 domain）が成功する。
+- `https://iroh-relay.example.com/ping`（実 domain）が成功する。
 - Home 側の `18080/tcp`, `13340/tcp`, `7842/udp` は `192.0.2.2` に bind される。
-- desktop client は `Save Nodes -> Authenticate -> Accept` 後、`connectivity_urls` として `https://iroh-relay.kukuri.app` を受け取る。
+- desktop client は `Save Nodes -> Authenticate -> Accept` 後、`connectivity_urls` として operator の relay URL（例: `https://iroh-relay.example.com`）を受け取る。

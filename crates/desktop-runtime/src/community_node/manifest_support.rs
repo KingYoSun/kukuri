@@ -269,7 +269,10 @@ acknowledge_planned_capabilities: true
             rights_request_initial_response_target_days: 7,
             terms_url: "https://golden.example/terms".to_string(),
             privacy_url: "https://golden.example/privacy".to_string(),
+            external_transmission_url: "https://golden.example/external-transmission".to_string(),
             moderation_policy_url: "https://golden.example/moderation-policy".to_string(),
+            abuse_policy_url: "https://golden.example/abuse-policy".to_string(),
+            data_retention_url: "https://golden.example/data-retention".to_string(),
         };
         assert_eq!(slim, expected);
 

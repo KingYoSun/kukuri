@@ -51,7 +51,7 @@ variable "acme_email" {
 variable "admin_actor" {
   description = "IAP 内部 admin browser write の監査 actor。空なら write 無効。"
   type        = string
-  default     = "ops@kukuri.app"
+  default     = ""
 
   validation {
     condition = (

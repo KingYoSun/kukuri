@@ -192,16 +192,8 @@ fn stored_community_node_config_restores_cached_connectivity_union() {
     );
 }
 
-#[test]
-fn default_preview_community_node_config_marks_preloaded_node_auto_approve() {
-    let config = default_preview_community_node_config();
-    assert_eq!(config.nodes.len(), 1);
-    assert_eq!(config.nodes[0].base_url, "https://api.kukuri.app");
-    assert!(config.nodes[0].auto_approve);
-}
-
 #[tokio::test]
-async fn runtime_preloads_preview_community_node_when_config_file_is_missing() {
+async fn runtime_preloads_distribution_community_node_only_when_config_file_is_missing() {
     let _resource = lock_test_resource(TestResource::ProcessEnvironment).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-preview-preload.db");
@@ -212,7 +204,13 @@ async fn runtime_preloads_preview_community_node_when_config_file_is_missing() {
         IdentityStorageMode::FileOnly,
         DiscoveryConfig::static_peer_default(),
         DhtDiscoveryOptions::disabled(),
-        true,
+        Some(CommunityNodeConfig {
+            nodes: vec![CommunityNodeNodeConfig {
+                base_url: "https://distribution.example.com".to_string(),
+                auto_approve: true,
+                resolved_urls: None,
+            }],
+        }),
     )
     .await
     .expect("runtime");
@@ -222,12 +220,91 @@ async fn runtime_preloads_preview_community_node_when_config_file_is_missing() {
         .await
         .expect("community node config");
     assert_eq!(config.nodes.len(), 1);
-    assert_eq!(config.nodes[0].base_url, "https://api.kukuri.app");
+    assert_eq!(config.nodes[0].base_url, "https://distribution.example.com");
     assert!(config.nodes[0].auto_approve);
     assert!(
         community_node_config_path(&db_path).exists(),
         "preloaded preview config should be persisted"
     );
 
+    runtime.shutdown().await;
+}
+
+#[tokio::test]
+async fn runtime_does_not_restore_distribution_node_after_user_clears_config() {
+    let _resource = lock_test_resource(TestResource::ProcessEnvironment).await;
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("community-distribution-cleared.db");
+    save_community_node_config(&db_path, &CommunityNodeConfig::default())
+        .expect("save cleared config");
+
+    let runtime = DesktopRuntime::new_with_config_and_identity_and_discovery(
+        &db_path,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+        DiscoveryConfig::static_peer_default(),
+        DhtDiscoveryOptions::disabled(),
+        Some(CommunityNodeConfig {
+            nodes: vec![CommunityNodeNodeConfig {
+                base_url: "https://distribution.example.com".to_string(),
+                auto_approve: true,
+                resolved_urls: None,
+            }],
+        }),
+    )
+    .await
+    .expect("runtime");
+
+    assert!(
+        runtime
+            .get_community_node_config()
+            .await
+            .unwrap()
+            .nodes
+            .is_empty()
+    );
+    runtime.shutdown().await;
+}
+
+#[tokio::test]
+async fn runtime_does_not_restore_distribution_node_after_user_replaces_config() {
+    let _resource = lock_test_resource(TestResource::ProcessEnvironment).await;
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("community-distribution-replaced.db");
+    save_community_node_config(
+        &db_path,
+        &CommunityNodeConfig {
+            nodes: vec![CommunityNodeNodeConfig {
+                base_url: "https://user-selected.example.com".to_string(),
+                auto_approve: false,
+                resolved_urls: None,
+            }],
+        },
+    )
+    .expect("save replacement config");
+
+    let runtime = DesktopRuntime::new_with_config_and_identity_and_discovery(
+        &db_path,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+        DiscoveryConfig::static_peer_default(),
+        DhtDiscoveryOptions::disabled(),
+        Some(CommunityNodeConfig {
+            nodes: vec![CommunityNodeNodeConfig {
+                base_url: "https://distribution.example.com".to_string(),
+                auto_approve: true,
+                resolved_urls: None,
+            }],
+        }),
+    )
+    .await
+    .expect("runtime");
+
+    let config = runtime.get_community_node_config().await.unwrap();
+    assert_eq!(config.nodes.len(), 1);
+    assert_eq!(
+        config.nodes[0].base_url,
+        "https://user-selected.example.com"
+    );
     runtime.shutdown().await;
 }

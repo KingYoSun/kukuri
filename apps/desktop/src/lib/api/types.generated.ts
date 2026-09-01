@@ -331,7 +331,7 @@ report_endpoint: string,
 /**
  * node が公開する権利侵害申出画面。未公開の場合は空文字。
  */
-rights_request_url?: string | null, rights_request_policy_url?: string | null, rights_request_initial_response_target_days?: number | null, terms_url: string, privacy_url: string, moderation_policy_url: string, };
+rights_request_url?: string | null, rights_request_policy_url?: string | null, rights_request_initial_response_target_days?: number | null, terms_url: string, privacy_url: string, external_transmission_url?: string | null, moderation_policy_url: string, abuse_policy_url?: string | null, data_retention_url?: string | null, };
 
 export type CommunityNodeManifestFetchStatus = "ok" | "absent";
 

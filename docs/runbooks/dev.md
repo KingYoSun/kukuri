@@ -113,16 +113,16 @@ docker compose --env-file .env.community-node -f docker-compose.community-node.y
 
 VPS 側:
 
-- `api.kukuri.app` と `iroh-relay.kukuri.app` は VPS の public IP へ向ける
-- Caddy は `api.kukuri.app -> http://192.0.2.2:18080`, `iroh-relay.kukuri.app -> http://192.0.2.2:13340` を reverse proxy する
+- operator が所有する `api.example.com` と `iroh-relay.example.com`（実 domain へ置換）を VPS の public IP へ向ける
+- Caddy は `api.example.com -> http://192.0.2.2:18080`, `iroh-relay.example.com -> http://192.0.2.2:13340` を reverse proxy する
 - nftables は `7842/udp` を Home 側 `192.0.2.2:7842` へ WireGuard 経由で forward する
 
 Home 側の `.env.community-node` には最低限この値を入れる。
 
 ```dotenv
-CN_BASE_URL=https://api.kukuri.app
-CN_PUBLIC_BASE_URL=https://api.kukuri.app
-COMMUNITY_NODE_CONNECTIVITY_URLS=https://iroh-relay.kukuri.app
+CN_BASE_URL=https://api.example.com
+CN_PUBLIC_BASE_URL=https://api.example.com
+COMMUNITY_NODE_CONNECTIVITY_URLS=https://iroh-relay.example.com
 
 CN_USER_API_HOST_BIND_IP=192.0.2.2
 CN_IROH_RELAY_HTTP_HOST_BIND_IP=192.0.2.2
@@ -134,10 +134,10 @@ CN_IROH_RELAY_TLS_KEY_PATH=/certs/default.key
 CN_IROH_RELAY_CERTS_HOST_PATH=./docker/cn/certs
 ```
 
-- `api.kukuri.app` は `cn-user-api` を向ける
-- `iroh-relay.kukuri.app` は `cn-iroh-relay` の HTTP/TCP と QUIC/UDP を向ける
+- `api.example.com`（実 domain）は `cn-user-api` を向ける
+- `iroh-relay.example.com`（実 domain）は `cn-iroh-relay` の HTTP/TCP と QUIC/UDP を向ける
 - desktop は `connectivity_urls` を server から受け取るので、websocket relay 前提は使わない
-- `docker/cn/certs/` には `iroh-relay.kukuri.app` 用の公開証明書と秘密鍵を `default.crt` / `default.key` として置く
+- `docker/cn/certs/` には relay の実 domain 用の公開証明書と秘密鍵を `default.crt` / `default.key` として置く
 - Postgres と Valkey は Home 側 private bind のままにし、VPS や public internet へ公開しない
 
 起動:
@@ -150,13 +150,13 @@ docker compose --env-file .env.community-node -f docker-compose.community-node.y
 公開確認:
 
 ```bash
-curl -fsS https://api.kukuri.app/healthz
-curl -fsS https://iroh-relay.kukuri.app/ping
+curl -fsS https://api.example.com/healthz
+curl -fsS https://iroh-relay.example.com/ping
 ```
 
 期待値:
 
-- `connectivity_urls` は `https://iroh-relay.kukuri.app`
+- `connectivity_urls` は operator が設定した relay URL（例: `https://iroh-relay.example.com`）
 - desktop client 側は `Save Nodes -> Authenticate -> Accept` の順で進め、その session のまま relay-assisted path を使える
 - 公開 community-node path では `Peer Ticket` import は不要
 - `Authenticate` 直後の `connectivity urls: pending consent acceptance` は正常で、`Accept` 後に resolved される

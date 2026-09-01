@@ -119,9 +119,9 @@ services:
       COMMUNITY_NODE_SAFETY_SIGNING_KEY: ${COMMUNITY_NODE_SAFETY_SIGNING_KEY:-}
       COMMUNITY_NODE_SAFETY_ISSUER_NODE_ID: ${COMMUNITY_NODE_SAFETY_ISSUER_NODE_ID:-}
       # Admin listener is loopback-published below. IAP / loopback 境界内の標準配備では
-      # browser write を有効にし、固定 actor を append-only audit に記録する。
+      # browser write を有効にする場合、operator が明示した actor を append-only audit に記録する。
       COMMUNITY_NODE_ADMIN_BIND_ADDR: ${COMMUNITY_NODE_ADMIN_BIND_ADDR:-0.0.0.0:9090}
-      COMMUNITY_NODE_ADMIN_ACTOR: ${COMMUNITY_NODE_ADMIN_ACTOR:-ops@kukuri.app}
+      COMMUNITY_NODE_ADMIN_ACTOR: ${COMMUNITY_NODE_ADMIN_ACTOR:-}
       # 異議申し立ての運営者審査(検知情報の調整・訂正再発行)。運用者設定
       # safety.moderation.operator_review から注入する(既定 true。#709)。
       COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW: ${COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW:-true}

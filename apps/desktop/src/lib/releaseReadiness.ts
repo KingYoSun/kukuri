@@ -9,14 +9,6 @@ export const RELEASE_RUNBOOK_URL =
   'https://github.com/KingYoSun/kukuri/blob/main/docs/runbooks/release.md';
 export const THIRD_PARTY_NOTICES_URL =
   'https://github.com/KingYoSun/kukuri/blob/main/docs/THIRD_PARTY_NOTICES.md';
-export const COMMUNITY_NODE_DISCLOSURE_URLS = {
-  terms: 'https://api.kukuri.app/terms',
-  privacy: 'https://api.kukuri.app/privacy',
-  externalTransmission: 'https://api.kukuri.app/external-transmission',
-  abusePolicy: 'https://api.kukuri.app/abuse-policy',
-  dataRetention: 'https://api.kukuri.app/data-retention',
-} as const;
-
 export const OS_NOTIFICATION_SETTINGS_STORAGE_KEY = 'kukuri:os-notification-settings:v1';
 
 export type UpdateStatus =

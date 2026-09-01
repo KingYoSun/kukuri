@@ -112,11 +112,9 @@ async fn preview_action(
     State(state): State<AdminState>,
     Form(form): Form<AdminActionForm>,
 ) -> Response {
-    let Some(actor) = state.actor.as_deref() else {
-        return render_action_error(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "COMMUNITY_NODE_ADMIN_ACTOR が未設定のため、変更操作は無効です。",
-        );
+    let actor = match require_admin_actor(state.actor.as_deref()) {
+        Ok(actor) => actor,
+        Err(error) => return error.into_response(),
     };
     if !csrf_matches(state.csrf_token.as_str(), form.csrf_token.as_str()) {
         return render_action_error(
@@ -143,11 +141,9 @@ async fn apply_action(
     State(state): State<AdminState>,
     Form(form): Form<AdminActionForm>,
 ) -> Response {
-    let Some(actor) = state.actor.as_deref() else {
-        return render_action_error(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "COMMUNITY_NODE_ADMIN_ACTOR が未設定のため、変更操作は無効です。",
-        );
+    let actor = match require_admin_actor(state.actor.as_deref()) {
+        Ok(actor) => actor,
+        Err(error) => return error.into_response(),
     };
     if !csrf_matches(state.csrf_token.as_str(), form.csrf_token.as_str()) {
         return render_action_error(
@@ -185,6 +181,22 @@ async fn apply_action(
             render_action_error(StatusCode::BAD_REQUEST, format!("{error:#}").as_str())
         }
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct AdminActorMissing;
+
+impl AdminActorMissing {
+    fn into_response(self) -> Response {
+        render_action_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "COMMUNITY_NODE_ADMIN_ACTOR が未設定のため、変更操作は無効です。",
+        )
+    }
+}
+
+fn require_admin_actor(actor: Option<&str>) -> Result<&str, AdminActorMissing> {
+    actor.ok_or(AdminActorMissing)
 }
 
 async fn preview_appeal_action(
@@ -677,6 +689,18 @@ pub(crate) fn escape_html(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn admin_mutations_fail_closed_without_deployment_actor() {
+        let response = require_admin_actor(None)
+            .expect_err("missing actor must reject writes")
+            .into_response();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(
+            require_admin_actor(Some("admin@node.example")).expect("explicit actor"),
+            "admin@node.example"
+        );
+    }
 
     #[test]
     fn dashboard_escapes_database_and_environment_values() {

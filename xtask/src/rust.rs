@@ -7,6 +7,7 @@ pub(crate) const SERIAL_RUST_PACKAGE: &str = "kukuri-harness";
 
 pub(crate) fn check() -> Result<()> {
     rust_check()?;
+    operator_neutrality_check()?;
     tauri_check()?;
     desktop_lint()
 }
