@@ -306,7 +306,7 @@ export type CommunityNodeAdmissionRejection = { code: CommunityNodeAdmissionReje
 
 export type CommunityNodeSessionPhase = "idle" | "connecting" | "authenticating" | "accepting" | "refreshing" | "ready" | "retrying" | "awaiting_admission";
 
-export type CommunityNodeNodeStatus = { base_url: string, auth_state: CommunityNodeAuthState, consent_state?: CommunityNodeConsentStatus | null,
+export type CommunityNodeNodeStatus = { base_url: string, auth_state: CommunityNodeAuthState, consent_state?: CommunityNodeConsentStatus | null, 
 /**
  * #857: Node 別ローカル同意記録。空 = 未同意(この node へは通信しない)。
  */
@@ -676,3 +676,4 @@ export type AccountsSnapshot = { active_account_id: string, accounts: Array<Acco
 export type AccountKeyExport = { export: string, public_key: string, };
 
 export type AccountKeyImportPreview = { version: number, kdf: string, public_key: string, already_registered: boolean, };
+
