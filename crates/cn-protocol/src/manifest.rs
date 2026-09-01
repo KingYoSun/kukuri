@@ -58,6 +58,28 @@ pub struct CommunityNodeManifest {
     #[serde(default)]
     #[cfg_attr(feature = "ts", ts(as = "Option<String>"))]
     pub data_retention_url: String,
+    // node が公開する法務文書の版・施行日・言語カタログ。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<Vec<CommunityNodeLegalDocument>>"))]
+    pub legal_documents: Vec<CommunityNodeLegalDocument>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
+pub struct CommunityNodeLegalDocument {
+    #[serde(default)]
+    pub slug: String,
+    #[serde(default)]
+    pub version: i32,
+    #[serde(default)]
+    pub effective_date: String,
+    #[serde(default)]
+    pub language: String,
+    #[serde(default)]
+    pub required: bool,
+    #[serde(default)]
+    pub url: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

@@ -23,7 +23,7 @@ pub use community_node::{
     CommunityNodeAdmissionRejectionCode, CommunityNodeAuthState, CommunityNodeAuthorityScope,
     CommunityNodeCapabilityScope, CommunityNodeConfig, CommunityNodeConsentDocumentRef,
     CommunityNodeIndexQueryError, CommunityNodeIndexQueryRequest, CommunityNodeIndexingRequest,
-    CommunityNodeIndexingRequestError, CommunityNodeLocalConsentRecord,
+    CommunityNodeIndexingRequestError, CommunityNodeLegalDocument, CommunityNodeLocalConsentRecord,
     CommunityNodeLocalConsentState, CommunityNodeManifest, CommunityNodeManifestFetch,
     CommunityNodeManifestFetchStatus, CommunityNodeNodeConfig, CommunityNodeNodeStatus,
     CommunityNodeP2pBoundary, CommunityNodePoliciesResponse, CommunityNodePolicyDocument,

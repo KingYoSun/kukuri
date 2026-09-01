@@ -27,16 +27,17 @@ pub mod safety_readiness;
 pub use capability::{Availability, Capability, CapabilityMeta, ExternalDestination};
 pub use capability_risk::CapabilityRiskPractices;
 pub use config::{
-    DeployConfig, DeployProfile, OperatorConfig, ResolvedConfig, ServerConfig, load_and_validate,
-    parse_config, resolve_and_validate,
+    DeployConfig, DeployProfile, LegalConfig, LegalDocumentConfig, LegalDocumentKind,
+    OperatorConfig, ResolvedConfig, ServerConfig, load_and_validate, parse_config,
+    resolve_and_validate,
 };
 pub use deploy::generate_tfvars;
-pub use docs::{GeneratedFile, generate_all};
+pub use docs::{GeneratedFile, GeneratedLegalDocument, generate_all, generate_legal_documents};
 pub use drift::{DriftReport, check_drift};
 pub use manifest::{
     AuthorityScope, AuthorityScopeOverride, Capabilities, CapabilityScope, CommunityNodeManifest,
-    ManifestFeatures, ManifestRetention, NodeRole, P2pBoundary, build_manifest, manifest_value,
-    render_manifest,
+    LegalDocumentManifestEntry, ManifestFeatures, ManifestRetention, NodeRole, P2pBoundary,
+    build_manifest, manifest_value, render_manifest,
 };
 pub use profile::Profile;
 pub use retention_config::RetentionConfig;
@@ -61,6 +62,47 @@ pub const SAMPLE_CONFIG: &str = r#"server:
   # (署名鍵の公開鍵 hex。`cn-cli moderation issuer-node-id` で導出)と同じ値を記入する。
   # 異議申し立ては node_id と risk signal の issuer_node_id が一致する場合だけ受理される。
   node_id: 0000000000000000000000000000000000000000000000000000000000000000
+
+legal:
+  identity_disclosure_request: "運営主体の氏名・住所が必要な場合は、利用目的を添えて abuse@example-kukuri.net へ請求してください。"
+  documents:
+    - kind: terms
+      slug: terms_of_service
+      version: 1
+      effective_date: 2026-09-02
+      language: ja
+      required: true
+    - kind: privacy
+      slug: privacy_policy
+      version: 1
+      effective_date: 2026-09-02
+      language: ja
+      required: true
+    - kind: external_transmission
+      slug: external_transmission
+      version: 1
+      effective_date: 2026-09-02
+      language: ja
+    - kind: moderation_policy
+      slug: moderation_policy
+      version: 1
+      effective_date: 2026-09-02
+      language: ja
+    - kind: abuse_policy
+      slug: abuse_policy
+      version: 1
+      effective_date: 2026-09-02
+      language: ja
+    - kind: data_retention
+      slug: data_retention
+      version: 1
+      effective_date: 2026-09-02
+      language: ja
+    - kind: rights_infringement
+      slug: rights_infringement
+      version: 1
+      effective_date: 2026-09-02
+      language: ja
 
 # profile が features の既定値を与える。個別の features キーで上書きできる。
 profile: relay-enabled

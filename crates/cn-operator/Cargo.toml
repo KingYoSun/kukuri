@@ -22,6 +22,7 @@ safety-arachnid = ["dep:kukuri-cn-safety-arachnid", "dep:tokio"]
 
 [dependencies]
 anyhow.workspace = true
+chrono.workspace = true
 clap.workspace = true
 kukuri-cn-safety = { path = "../cn-safety" }
 kukuri-cn-safety-arachnid = { path = "../cn-safety-arachnid", optional = true }

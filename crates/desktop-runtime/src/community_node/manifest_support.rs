@@ -3,8 +3,8 @@ use super::*;
 // slim manifest 型(CommunityNodeManifest ほか)は kukuri-cn-protocol へ移動(WP-H3)。
 // 取得ロジックと round-trip 契約テスト(サーバ実出力 → slim 型)はここに残す。
 pub use kukuri_cn_protocol::{
-    CommunityNodeAuthorityScope, CommunityNodeCapabilityScope, CommunityNodeManifest,
-    CommunityNodeP2pBoundary,
+    CommunityNodeAuthorityScope, CommunityNodeCapabilityScope, CommunityNodeLegalDocument,
+    CommunityNodeManifest, CommunityNodeP2pBoundary,
 };
 
 /// manifest fetch の結果状態。error は command の Err として返すため含めない。
@@ -273,6 +273,7 @@ acknowledge_planned_capabilities: true
             moderation_policy_url: "https://golden.example/moderation-policy".to_string(),
             abuse_policy_url: "https://golden.example/abuse-policy".to_string(),
             data_retention_url: "https://golden.example/data-retention".to_string(),
+            legal_documents: Vec::new(),
         };
         assert_eq!(slim, expected);
 

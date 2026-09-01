@@ -9,15 +9,18 @@ use kukuri_cn_core::{
     RetentionPolicy, TopicRendezvousStore, apply_retention_policy, cleanup_expired,
     connect_postgres, initialize_database, initialize_database_for_runtime,
     latest_readiness_activation, readiness_context_fingerprint, seal_legacy_report_contacts,
-    seal_legacy_rights_request_data, verify_sensitive_items,
+    seal_legacy_rights_request_data, sync_policies, verify_sensitive_items,
 };
 use kukuri_cn_indexer::{
     ArcadeDbConfig, ArcadeDbProjection, ArcadeDbRelationGraph, FailClosedIndexQuery, IndexQuery,
 };
 use kukuri_cn_operator::{
-    CommunityNodeManifest, READINESS_CHECK_IDS, build_manifest, generate_all, load_and_validate,
+    CommunityNodeManifest, READINESS_CHECK_IDS, build_manifest, generate_all,
+    generate_legal_documents, load_and_validate,
 };
-use kukuri_cn_protocol::{CommunityNodeBootstrapNode, CommunityNodeResolvedUrls};
+use kukuri_cn_protocol::{
+    CommunityNodeBootstrapNode, CommunityNodePolicyDocument, CommunityNodeResolvedUrls,
+};
 use kukuri_cn_trust::{RelationStore, TrustParams};
 use sqlx::postgres::PgPool;
 
@@ -34,6 +37,8 @@ pub struct UserApiState {
     pub(crate) manifest: Option<Arc<CommunityNodeManifest>>,
     /// manifest が指す公開開示文書。operator config と同じ入力から決定論的に生成する。
     pub(crate) public_disclosures: Arc<BTreeMap<String, String>>,
+    /// operator config の required 文書だけから構築した認証前公開カタログ。
+    pub(crate) public_policies: Arc<Vec<CommunityNodePolicyDocument>>,
     /// private channel の indexing request で受け取る channel secret を at-rest 暗号化する cipher。
     /// 鍵 material(`COMMUNITY_NODE_CHANNEL_SECRET_KEY`)が未設定なら None で、private channel の
     /// indexing request は受け付けない(secret を平文保存しないため)。
@@ -140,6 +145,7 @@ pub(crate) struct ManifestState {
 struct LoadedManifest {
     manifest: Option<Arc<CommunityNodeManifest>>,
     public_disclosures: Arc<BTreeMap<String, String>>,
+    public_policies: Arc<Vec<CommunityNodePolicyDocument>>,
     operator_config_yaml: Vec<u8>,
     retention: RetentionPolicy,
 }
@@ -164,9 +170,15 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
     let LoadedManifest {
         manifest,
         public_disclosures,
+        public_policies,
         operator_config_yaml,
         retention,
     } = load_manifest(config.operator_config_path.as_deref())?;
+    if !public_policies.is_empty() {
+        sync_policies(&pool, public_policies.as_ref())
+            .await
+            .context("failed to synchronize operator legal policies")?;
+    }
     if let (Some(manifest), Some(expected)) = (
         manifest.as_deref(),
         config.expected_issuer_node_id.as_deref(),
@@ -361,6 +373,7 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
         },
         manifest,
         public_disclosures,
+        public_policies,
         channel_secret_cipher,
         legal_data_cipher,
         retention,
@@ -422,6 +435,7 @@ fn load_manifest(path: Option<&std::path::Path>) -> Result<LoadedManifest> {
         return Ok(LoadedManifest {
             manifest: None,
             public_disclosures: Arc::new(BTreeMap::new()),
+            public_policies: Arc::new(Vec::new()),
             operator_config_yaml: Vec::new(),
             retention: RetentionPolicy::default(),
         });
@@ -447,6 +461,19 @@ fn load_manifest(path: Option<&std::path::Path>) -> Result<LoadedManifest> {
         })
         .map(|file| (file.filename, file.content))
         .collect();
+    let public_policies = generate_legal_documents(&resolved)
+        .into_iter()
+        .filter(|document| document.required)
+        .map(|document| CommunityNodePolicyDocument {
+            policy_slug: document.slug,
+            policy_version: document.version,
+            title: document.title,
+            body_markdown: document.content,
+            required: document.required,
+            effective_date: Some(document.effective_date),
+            language: Some(document.language),
+        })
+        .collect();
     let r = &resolved.raw.retention;
     let retention = RetentionPolicy {
         report_days: r.report_days,
@@ -466,6 +493,7 @@ fn load_manifest(path: Option<&std::path::Path>) -> Result<LoadedManifest> {
     Ok(LoadedManifest {
         manifest: Some(Arc::new(build_manifest(&resolved))),
         public_disclosures: Arc::new(public_disclosures),
+        public_policies: Arc::new(public_policies),
         operator_config_yaml: bytes,
         retention,
     })

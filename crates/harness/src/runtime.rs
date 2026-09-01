@@ -120,6 +120,18 @@ impl CommunityNodeStack {
         let user_api_addr = user_api_listener.local_addr()?;
         let base_url = format!("http://{user_api_addr}");
 
+        // The consent-first connectivity scenario must exercise the same versioned legal
+        // catalog as an operator-configured node. A missing config intentionally exposes no
+        // policies, so give the in-process harness node the canonical sample config.
+        let operator_config_dir = tempfile::tempdir()
+            .context("failed to create community-node operator config directory")?;
+        let operator_config_path = operator_config_dir.path().join("operator-config.yaml");
+        std::fs::write(
+            &operator_config_path,
+            kukuri_cn_operator::SAMPLE_CONFIG.as_bytes(),
+        )
+        .context("failed to write community-node operator config")?;
+
         let user_api_state = build_user_api_state(&UserApiConfig {
             bind_addr: user_api_addr,
             database_url: database.database_url.clone(),
@@ -129,7 +141,7 @@ impl CommunityNodeStack {
             public_base_url: base_url.clone(),
             connectivity_urls: vec![iroh_relay_url.clone()],
             jwt_config: JwtConfig::new("kukuri-cn-harness", "test-secret", 3600),
-            operator_config_path: None,
+            operator_config_path: Some(operator_config_path),
             channel_secret_key: None,
             legal_data_key: None,
             index_query_enabled: false,

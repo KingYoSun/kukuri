@@ -286,11 +286,11 @@ export type CommunityNodeConsentItem = { policy_slug: string, policy_version: nu
  * その policy_slug で過去に同意した最大 version（version 不問）。
  * `accepted_at` が None でこれが Some なら、版が上がって再同意が必要な「更新」を意味する。
  */
-previously_accepted_version?: number | null, };
+previously_accepted_version?: number | null, effective_date?: string | null, language?: string | null, };
 
 export type CommunityNodeConsentStatus = { all_required_accepted: boolean, items: Array<CommunityNodeConsentItem>, };
 
-export type CommunityNodePolicyDocument = { policy_slug: string, policy_version: number, title: string, body_markdown: string, required: boolean, };
+export type CommunityNodePolicyDocument = { policy_slug: string, policy_version: number, title: string, body_markdown: string, required: boolean, effective_date?: string | null, language?: string | null, };
 
 export type CommunityNodePoliciesResponse = { policies: Array<CommunityNodePolicyDocument>, };
 
@@ -322,6 +322,8 @@ export type CommunityNodeAuthorityScope = { applies_to: Array<string>, does_not_
 
 export type CommunityNodeP2pBoundary = { identity_authority: boolean, profile_canonical_store: boolean, social_graph_canonical_store: boolean, content_truth_source: boolean, network_wide_authority: boolean, };
 
+export type CommunityNodeLegalDocument = { slug: string, version: number, effective_date: string, language: string, required: boolean, url: string, };
+
 export type CommunityNodeManifest = { node_id: string, node_name: string, node_role: string, server_name: string, manifest_version: string, capability_scope: CommunityNodeCapabilityScope, authority_scope: CommunityNodeAuthorityScope, p2p_boundary: CommunityNodeP2pBoundary, abuse_contact: string, 
 /**
  * node が公開する通報受付 endpoint(#310)。未公開の場合は空文字。
@@ -331,7 +333,7 @@ report_endpoint: string,
 /**
  * node が公開する権利侵害申出画面。未公開の場合は空文字。
  */
-rights_request_url?: string | null, rights_request_policy_url?: string | null, rights_request_initial_response_target_days?: number | null, terms_url: string, privacy_url: string, external_transmission_url?: string | null, moderation_policy_url: string, abuse_policy_url?: string | null, data_retention_url?: string | null, };
+rights_request_url?: string | null, rights_request_policy_url?: string | null, rights_request_initial_response_target_days?: number | null, terms_url: string, privacy_url: string, external_transmission_url?: string | null, moderation_policy_url: string, abuse_policy_url?: string | null, data_retention_url?: string | null, legal_documents?: Array<CommunityNodeLegalDocument> | null, };
 
 export type CommunityNodeManifestFetchStatus = "ok" | "absent";
 

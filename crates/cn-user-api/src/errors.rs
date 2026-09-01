@@ -23,7 +23,6 @@ pub(crate) enum AccountLifecycleOperation {
     VerifyAuth,
     GetConsentStatus,
     AcceptConsents,
-    ListPolicies,
 }
 
 #[derive(Debug, thiserror::Error)]

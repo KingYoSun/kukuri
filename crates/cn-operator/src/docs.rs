@@ -10,7 +10,7 @@
 use std::fmt::Write as _;
 
 use crate::capability::{Availability, Capability, ExternalDestination};
-use crate::config::ResolvedConfig;
+use crate::config::{LegalDocumentKind, ResolvedConfig};
 use crate::manifest::{build_manifest, render_manifest};
 
 /// すべての生成文書に付す共通の注記。
@@ -23,6 +23,20 @@ const MANIFEST_FILE: &str = "server-manifest.json";
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GeneratedFile {
     pub filename: String,
+    pub content: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GeneratedLegalDocument {
+    pub kind: LegalDocumentKind,
+    pub slug: String,
+    pub version: i32,
+    pub effective_date: String,
+    pub language: String,
+    pub required: bool,
+    pub title: String,
+    pub filename: String,
+    pub public_path: String,
     pub content: String,
 }
 
@@ -118,22 +132,39 @@ fn safety_provider_destinations(config: &ResolvedConfig) -> Vec<SafetyProviderDe
 }
 
 /// 文書ヘッダ（タイトル + 運営者情報 + 注記）。
-fn header(config: &ResolvedConfig, title: &str) -> String {
+fn header(config: &ResolvedConfig, title: &str, kind: Option<LegalDocumentKind>) -> String {
     let s = &config.raw.server;
-    format!(
+    let mut header = format!(
         "# {title}\n\n\
          - 運営者: {operator}\n\
          - サーバー: {domain}\n\
          - 所在国: {country}\n\
+         - 連絡先: {contact}\n\
          - manifest version: {version}\n\n\
          {disclaimer}\n",
         title = title,
         operator = s.operator_name,
         domain = s.domain,
         country = s.country,
+        contact = config.contact(),
         version = config.raw.manifest.manifest_version,
         disclaimer = LEGAL_DISCLAIMER,
-    )
+    );
+    if let Some(document) = kind.and_then(|kind| config.legal_document(kind)) {
+        let _ = writeln!(header, "\n## 文書情報\n");
+        let _ = writeln!(header, "- 文書 slug: {}", document.slug);
+        let _ = writeln!(header, "- 文書版: {}", document.version);
+        let _ = writeln!(header, "- 施行日: {}", document.effective_date);
+        let _ = writeln!(header, "- 言語: {}", document.language);
+        if let Some(legal) = config.raw.legal.as_ref() {
+            let _ = writeln!(
+                header,
+                "- 氏名・住所の請求方法: {}",
+                legal.identity_disclosure_request
+            );
+        }
+    }
+    header
 }
 
 /// 計画中 capability があれば、それを明示する共通セクション。
@@ -170,7 +201,7 @@ fn planned_section(config: &ResolvedConfig) -> String {
 // ---------------------------------------------------------------------------
 
 fn gen_network_diagram(config: &ResolvedConfig) -> String {
-    let mut s = header(config, "ネットワーク構成説明");
+    let mut s = header(config, "ネットワーク構成説明", None);
     let _ = writeln!(s, "\n## 通信経路の基本優先度\n");
     let _ = writeln!(
         s,
@@ -329,7 +360,11 @@ fn gen_network_diagram(config: &ResolvedConfig) -> String {
 }
 
 fn gen_telecom_notification(config: &ResolvedConfig) -> String {
-    let mut s = header(config, "電気通信事業 届出補助資料（役務説明ドラフト）");
+    let mut s = header(
+        config,
+        "電気通信事業 届出補助資料（役務説明ドラフト）",
+        None,
+    );
     let _ = writeln!(s, "\n## 前提\n");
     let _ = writeln!(
         s,
@@ -394,7 +429,7 @@ fn gen_telecom_notification(config: &ResolvedConfig) -> String {
 }
 
 fn gen_service_description(config: &ResolvedConfig) -> String {
-    let mut s = header(config, "サービス説明ドラフト");
+    let mut s = header(config, "サービス説明ドラフト", None);
     let _ = writeln!(s, "\n## 提供する補助機能（運用中）\n");
     for cap in available_enabled(config) {
         let m = cap.meta();
@@ -476,7 +511,12 @@ fn render_node_content_license(scope: TermsContentScope) -> String {
 }
 
 fn gen_terms(config: &ResolvedConfig) -> String {
-    let mut s = header(config, "利用規約（ドラフト）");
+    let mut s = header(config, "利用規約", Some(LegalDocumentKind::Terms));
+    let _ = writeln!(s, "\n## 適用範囲\n");
+    let _ = writeln!(
+        s,
+        "本規約はこの community node の利用にだけ適用され、kukuri クライアント本体、他の community node、Direct P2P の利用条件を定めるものではありません。\n"
+    );
     let _ = writeln!(s, "\n## 第1条（本ノードの位置づけ）\n");
     let _ = writeln!(
         s,
@@ -533,7 +573,16 @@ fn gen_terms(config: &ResolvedConfig) -> String {
 }
 
 fn gen_privacy(config: &ResolvedConfig) -> String {
-    let mut s = header(config, "プライバシーポリシー（ドラフト）");
+    let mut s = header(
+        config,
+        "プライバシーポリシー",
+        Some(LegalDocumentKind::Privacy),
+    );
+    let _ = writeln!(s, "\n## 適用範囲\n");
+    let _ = writeln!(
+        s,
+        "本ポリシーはこの community node が取り扱うデータにだけ適用されます。kukuri クライアントのローカルデータ、他 node、Direct P2P で peer 間に流れるデータは、この node が実際に受信・保存する場合を除き対象外です。\n"
+    );
     let _ = writeln!(s, "\n## 取得・取扱いするデータ（運用中の capability）\n");
     for cap in available_enabled(config) {
         let m = cap.meta();
@@ -571,7 +620,11 @@ fn gen_privacy(config: &ResolvedConfig) -> String {
 }
 
 fn gen_external_transmission(config: &ResolvedConfig) -> String {
-    let mut s = header(config, "外部送信表示");
+    let mut s = header(
+        config,
+        "外部送信表示",
+        Some(LegalDocumentKind::ExternalTransmission),
+    );
     let _ = writeln!(s, "\n## 現在の外部送信先（有効な機能に基づく）\n");
     let _ = writeln!(
         s,
@@ -639,7 +692,11 @@ fn gen_external_transmission(config: &ResolvedConfig) -> String {
 }
 
 fn gen_abuse_policy(config: &ResolvedConfig) -> String {
-    let mut s = header(config, "Abuse ポリシー（ドラフト）");
+    let mut s = header(
+        config,
+        "Abuse ポリシー",
+        Some(LegalDocumentKind::AbusePolicy),
+    );
     let _ = writeln!(s, "\n## 連絡先\n");
     let _ = writeln!(s, "- abuse 連絡先: {}\n", config.contact());
     let _ = writeln!(s, "## 対応範囲\n");
@@ -666,7 +723,11 @@ fn gen_abuse_policy(config: &ResolvedConfig) -> String {
 }
 
 fn gen_rights_infringement_policy(config: &ResolvedConfig) -> String {
-    let mut s = header(config, "権利侵害申出ポリシー（ドラフト）");
+    let mut s = header(
+        config,
+        "権利侵害申出ポリシー",
+        Some(LegalDocumentKind::RightsInfringement),
+    );
     let _ = writeln!(s, "\n## 申出前に確認する対応範囲\n");
     let _ = writeln!(
         s,
@@ -730,7 +791,11 @@ fn gen_rights_infringement_policy(config: &ResolvedConfig) -> String {
 }
 
 fn gen_moderation_policy(config: &ResolvedConfig) -> String {
-    let mut s = header(config, "モデレーションポリシー（ドラフト）");
+    let mut s = header(
+        config,
+        "モデレーションポリシー",
+        Some(LegalDocumentKind::ModerationPolicy),
+    );
     let _ = writeln!(s, "\n## authority scope\n");
     let _ = writeln!(
         s,
@@ -784,7 +849,11 @@ fn gen_moderation_policy(config: &ResolvedConfig) -> String {
 }
 
 fn gen_data_retention(config: &ResolvedConfig) -> String {
-    let mut s = header(config, "データ保持ポリシー（ドラフト）");
+    let mut s = header(
+        config,
+        "データ保持ポリシー",
+        Some(LegalDocumentKind::DataRetention),
+    );
     let _ = writeln!(s, "\n## 保持期間\n");
     let _ = writeln!(
         s,
@@ -899,7 +968,7 @@ fn retention_rows(config: &ResolvedConfig) -> [(&'static str, u32); 12] {
 
 fn gen_prior_consultation_email(config: &ResolvedConfig) -> String {
     let s_cfg = &config.raw.server;
-    let mut s = header(config, "事前相談メールテンプレート");
+    let mut s = header(config, "事前相談メールテンプレート", None);
     let _ = writeln!(s, "\n## 件名\n");
     let _ = writeln!(
         s,
@@ -962,7 +1031,11 @@ fn gen_prior_consultation_email(config: &ResolvedConfig) -> String {
 /// 示し、限定された責任範囲で現実的に運用できるようにする。有効 capability を実践ガイドとして、
 /// 無効 capability を「引き受けていない責務」として記述する。
 fn gen_capability_risk_and_practices(config: &ResolvedConfig) -> String {
-    let mut s = header(config, "Capability 別リスクと推奨対応ガイド（ドラフト）");
+    let mut s = header(
+        config,
+        "Capability 別リスクと推奨対応ガイド（ドラフト）",
+        None,
+    );
 
     let _ = writeln!(
         s,
@@ -1093,4 +1166,33 @@ pub fn generate_all(config: &ResolvedConfig) -> Vec<GeneratedFile> {
     ];
     files.sort_by(|a, b| a.filename.cmp(&b.filename));
     files
+}
+
+/// 公開法務文書を config の版情報と生成本文を結合して返す。
+pub fn generate_legal_documents(config: &ResolvedConfig) -> Vec<GeneratedLegalDocument> {
+    let Some(legal) = config.raw.legal.as_ref() else {
+        return Vec::new();
+    };
+    let files = generate_all(config);
+    legal
+        .documents
+        .iter()
+        .filter_map(|document| {
+            let file = files
+                .iter()
+                .find(|file| file.filename == document.kind.filename())?;
+            Some(GeneratedLegalDocument {
+                kind: document.kind,
+                slug: document.slug.clone(),
+                version: document.version,
+                effective_date: document.effective_date.clone(),
+                language: document.language.clone(),
+                required: document.required,
+                title: document.kind.title_ja().to_string(),
+                filename: file.filename.clone(),
+                public_path: document.kind.public_path().to_string(),
+                content: file.content.clone(),
+            })
+        })
+        .collect()
 }

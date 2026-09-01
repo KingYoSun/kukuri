@@ -78,9 +78,20 @@ const SAMPLE_YAML: &str = r#"server:
   domain: example-kukuri.net
   operator_name: Example Operator
   country: JP
+  contact: ops@example-kukuri.net
 profile: relay-enabled
 features:
   cloudflare_proxy: true
+legal:
+  identity_disclosure_request: "運営主体の氏名・住所が必要な場合は ops@example-kukuri.net へ請求してください。"
+  documents:
+    - { kind: terms, slug: terms_of_service, version: 1, effective_date: 2026-09-02, language: ja, required: true }
+    - { kind: privacy, slug: privacy_policy, version: 1, effective_date: 2026-09-02, language: ja, required: true }
+    - { kind: external_transmission, slug: external_transmission, version: 1, effective_date: 2026-09-02, language: ja, required: false }
+    - { kind: moderation_policy, slug: moderation_policy, version: 1, effective_date: 2026-09-02, language: ja, required: false }
+    - { kind: abuse_policy, slug: abuse_policy, version: 1, effective_date: 2026-09-02, language: ja, required: false }
+    - { kind: data_retention, slug: data_retention, version: 1, effective_date: 2026-09-02, language: ja, required: false }
+    - { kind: rights_infringement, slug: rights_infringement_policy, version: 1, effective_date: 2026-09-02, language: ja, required: false }
 acknowledge_planned_capabilities: true
 "#;
 
@@ -131,6 +142,16 @@ async fn manifest_endpoint_serves_unauthenticated_json() -> Result<()> {
             "https://example-kukuri.net/data-retention"
         );
         assert!(body["abuse_contact"].as_str().unwrap().contains("@"));
+        let legal_documents = body["legal_documents"].as_array().unwrap();
+        assert_eq!(legal_documents.len(), 7);
+        assert!(legal_documents.iter().all(|document| {
+            document["version"] == 1
+                && document["effective_date"] == "2026-09-02"
+                && document["language"] == "ja"
+                && document["url"]
+                    .as_str()
+                    .is_some_and(|url| url.starts_with("https://"))
+        }));
         // private secret を含まない。
         assert!(body.get("jwt_secret").is_none());
         assert!(body.get("database_url").is_none());

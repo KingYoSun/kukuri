@@ -491,6 +491,8 @@ async fn community_node_status_does_not_require_restart_when_connectivity_is_act
                     title: "Community Basic".to_string(),
                     body: "Community basic policy body.".to_string(),
                     required: true,
+                    effective_date: Some("2026-09-02".to_string()),
+                    language: Some("ja".to_string()),
                     accepted_at: Some(Utc::now().timestamp()),
                     previously_accepted_version: Some(1),
                 }],

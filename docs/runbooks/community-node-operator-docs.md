@@ -1,6 +1,6 @@
 # Community Node Operator Docs Generator (`cn-operator`)
 
-最終更新日: 2026-08-25
+最終更新日: 2026-09-02
 
 ## 目的
 
@@ -172,11 +172,56 @@ dist/operator-docs/
   abuse-policy.md
   moderation-policy.md
   data-retention-policy.md
+  rights-infringement-policy.md
   prior-consultation-email.md
 ```
 
 各文書には「法的助言ではない」旨の注記が含まれる。最終判断は運営者自身および総合通信局・
 専門家への確認が必要。
+
+## 法務文書の版管理と公開
+
+Phase A の現行 KingYoSun Node は、`server.contact` と `legal` を明示する。`legal` を設定した場合、
+連絡先の推測や未設定値への fallback は許可せず、7文書すべての slug、正の整数 version、
+ISO 形式の施行日、言語 `ja`、required を検証する。利用規約とプライバシーポリシーだけを
+required とし、残りは公開開示文書として扱う。
+
+```yaml
+server:
+  operator_name: KingYoSun
+  contact: ops@kukuri.app
+
+legal:
+  identity_disclosure_request: "運営主体の氏名・住所が必要な場合は、利用目的を添えて ops@kukuri.app へ請求してください。遅滞なく回答します。"
+  documents:
+    - { kind: terms, slug: terms_of_service, version: 1, effective_date: 2026-09-02, language: ja, required: true }
+    - { kind: privacy, slug: privacy_policy, version: 1, effective_date: 2026-09-02, language: ja, required: true }
+    - { kind: external_transmission, slug: external_transmission, version: 1, effective_date: 2026-09-02, language: ja, required: false }
+    - { kind: moderation_policy, slug: moderation_policy, version: 1, effective_date: 2026-09-02, language: ja, required: false }
+    - { kind: abuse_policy, slug: abuse_policy, version: 1, effective_date: 2026-09-02, language: ja, required: false }
+    - { kind: data_retention, slug: data_retention, version: 1, effective_date: 2026-09-02, language: ja, required: false }
+    - { kind: rights_infringement, slug: rights_infringement_policy, version: 1, effective_date: 2026-09-02, language: ja, required: false }
+```
+
+`cn-user-api` は同じ config から、認証不要の `GET /v1/policies` で required 文書の全文と
+metadata を配信し、public manifest の `legal_documents` で7文書の URL と metadata を配信する。
+起動時に required 文書を `cn_admin.policies` へ同期する。既存 version より小さい値への rollback、
+または version を増やさない本文・metadata 変更は起動失敗となるため、重要変更時は文書ごとに
+version を増やす。過去の固定英語 placeholder だけは一度置換し、その placeholder に対する同意を
+現行文書へ引き継がない。
+
+公開確認:
+
+```bash
+curl https://api.kukuri.app/v1/policies
+curl https://api.kukuri.app/.well-known/kukuri/community-node.json
+curl https://api.kukuri.app/terms
+curl https://api.kukuri.app/privacy
+```
+
+desktop client は接続前に `/v1/policies` を取得し、slug / version / 施行日 / 言語 / 本文を表示する。
+同意済み version より現行 version が大きい場合だけ再同意を要求する。取得失敗や metadata 不備は
+fail-closed とし、当該 Node への認証・登録を開始しない。
 
 ## server-manifest.json
 

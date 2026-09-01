@@ -33,6 +33,12 @@ impl TestServer {
             .context("failed to bind test user-api listener")?;
         let addr = listener.local_addr()?;
         let base_url = format!("http://{addr}");
+        let operator_config_dir = tempfile::tempdir()?;
+        let operator_config_path = operator_config_dir.path().join("operator-config.yaml");
+        std::fs::write(
+            &operator_config_path,
+            kukuri_cn_operator::SAMPLE_CONFIG.as_bytes(),
+        )?;
         let state = build_state(&UserApiConfig {
             bind_addr: addr,
             database_url: database.database_url.clone(),
@@ -42,7 +48,7 @@ impl TestServer {
             public_base_url: base_url.clone(),
             connectivity_urls: vec!["http://127.0.0.1:13340".to_string()],
             jwt_config: JwtConfig::new("kukuri-cn-tests", "test-secret", 3600),
-            operator_config_path: None,
+            operator_config_path: Some(operator_config_path),
             channel_secret_key: None,
             legal_data_key: None,
             index_query_enabled: false,

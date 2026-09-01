@@ -3318,6 +3318,7 @@ name = "kukuri-cn-operator"
 version = "0.1.8"
 dependencies = [
  "anyhow",
+ "chrono",
  "clap",
  "kukuri-cn-safety",
  "kukuri-cn-safety-arachnid",
@@ -3555,6 +3556,7 @@ dependencies = [
  "kukuri-blob-service",
  "kukuri-cn-core",
  "kukuri-cn-iroh-relay",
+ "kukuri-cn-operator",
  "kukuri-cn-protocol",
  "kukuri-cn-user-api",
  "kukuri-core",

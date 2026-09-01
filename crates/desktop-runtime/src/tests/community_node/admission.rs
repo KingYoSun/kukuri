@@ -78,6 +78,8 @@ async fn admission_policies() -> Json<kukuri_cn_protocol::CommunityNodePoliciesR
             title: "Builder Preview".to_string(),
             body_markdown: "Builder preview policy body.".to_string(),
             required: true,
+            effective_date: Some("2026-09-02".to_string()),
+            language: Some("ja".to_string()),
         }],
     })
 }

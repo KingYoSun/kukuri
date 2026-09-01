@@ -68,8 +68,9 @@ pub use kukuri_cn_protocol::{
     SubmitIndexingRequestResponse, TrustUserReadResponse,
 };
 pub use manifest_support::{
-    CommunityNodeAuthorityScope, CommunityNodeCapabilityScope, CommunityNodeManifest,
-    CommunityNodeManifestFetch, CommunityNodeManifestFetchStatus, CommunityNodeP2pBoundary,
+    CommunityNodeAuthorityScope, CommunityNodeCapabilityScope, CommunityNodeLegalDocument,
+    CommunityNodeManifest, CommunityNodeManifestFetch, CommunityNodeManifestFetchStatus,
+    CommunityNodeP2pBoundary,
 };
 pub use report_routing_support::{
     CommunityNodeReportError, SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
