@@ -12,6 +12,7 @@ import {
   createDesktopShellStore,
 } from '@/shell/store';
 import {
+  type AppConsentDocumentStatus,
   type DesktopStartupErrorView,
   type DesktopStartupStatus,
   acceptAppConsents,
@@ -142,13 +143,7 @@ export function App(props: AppProps) {
   }
 
   if (startupGate.status === 'consent_required') {
-    return (
-      <ConsentGate
-        currentBundleVersion={startupGate.current_bundle_version}
-        acceptedBundleVersion={startupGate.accepted_bundle_version}
-        onAccepted={setStartupGate}
-      />
-    );
+    return <ConsentGate documents={startupGate.documents} onAccepted={setStartupGate} />;
   }
 
   if (startupGate.status === 'failed') {
@@ -165,25 +160,33 @@ export function App(props: AppProps) {
 }
 
 function ConsentGate({
-  currentBundleVersion,
-  acceptedBundleVersion,
+  documents,
   onAccepted,
 }: {
-  currentBundleVersion: number;
-  acceptedBundleVersion: number | null;
+  documents: AppConsentDocumentStatus[];
   onAccepted: (status: DesktopStartupStatus) => void;
 }) {
-  const { t } = useTranslation(['common', 'legal']);
+  const { t, i18n } = useTranslation(['common', 'legal']);
   const [accepting, setAccepting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [declined, setDeclined] = useState(false);
-  const updated = acceptedBundleVersion !== null && acceptedBundleVersion < currentBundleVersion;
+  // #857: 文書単位判定 — どれか 1 つでも旧版で同意済みなら「更新」通知を出す。
+  const updated = documents.some(
+    (document) =>
+      document.acceptedVersion !== null && document.acceptedVersion < document.currentVersion
+  );
 
   async function handleAccept() {
     setAccepting(true);
     setError(null);
     try {
-      const nextStatus = await acceptAppConsents(currentBundleVersion);
+      const nextStatus = await acceptAppConsents(
+        documents.map((document) => ({
+          slug: document.slug,
+          version: document.currentVersion,
+        })),
+        i18n.resolvedLanguage ?? i18n.language
+      );
       onAccepted(nextStatus);
     } catch (acceptError) {
       setError(acceptError instanceof Error ? acceptError.message : String(acceptError));
@@ -203,7 +206,12 @@ function ConsentGate({
             </p>
           </div>
           {updated ? <Notice tone='warning'>{t('legal:gate.updatedNotice')}</Notice> : null}
-          <LegalDocumentView bundleVersion={currentBundleVersion} compact />
+          <LegalDocumentView
+            documentVersions={Object.fromEntries(
+              documents.map((document) => [document.slug, document.currentVersion])
+            )}
+            compact
+          />
           {error ? (
             <Notice tone='destructive'>
               <div className='space-y-1'>

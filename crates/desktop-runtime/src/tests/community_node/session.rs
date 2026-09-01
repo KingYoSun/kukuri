@@ -22,24 +22,18 @@ async fn auto_approve_node_bootstraps_session_on_maintenance_tick() {
         Some("127.0.0.1:44001".into()),
     )
     .expect("seed peer");
-    let state = Arc::new(MockManagedCommunityNodeState {
-        base_url: base_url.clone(),
-        seed_peers: vec![seed_peer.clone()],
-        consent_accepted: Arc::new(AtomicBool::new(false)),
-        current_token: Arc::new(Mutex::new(String::new())),
-        challenge_hits: Arc::new(AtomicUsize::new(0)),
-        verify_hits: Arc::new(AtomicUsize::new(0)),
-        consent_status_hits: Arc::new(AtomicUsize::new(0)),
-        consent_accept_hits: Arc::new(AtomicUsize::new(0)),
-        heartbeat_hits: Arc::new(AtomicUsize::new(0)),
-        bootstrap_hits: Arc::new(AtomicUsize::new(0)),
-        simulate_pending_update: Arc::new(AtomicBool::new(false)),
-    });
+    let state = Arc::new(MockManagedCommunityNodeState::new(
+        base_url.clone(),
+        vec![seed_peer.clone()],
+        false,
+        Arc::new(Mutex::new(String::new())),
+    ));
     let app = Router::new()
         .route("/v1/auth/challenge", post(mock_managed_auth_challenge))
         .route("/v1/auth/verify", post(mock_managed_auth_verify))
         .route("/v1/consents/status", get(mock_managed_consent_status))
         .route("/v1/consents", post(mock_managed_accept_consents))
+        .route("/v1/policies", get(mock_managed_policies))
         .route(
             "/v1/bootstrap/heartbeat",
             post(mock_managed_bootstrap_heartbeat),
@@ -60,6 +54,9 @@ async fn auto_approve_node_bootstraps_session_on_maintenance_tick() {
             ),
         }],
     };
+    // #857: ユーザーが同意モーダルで受諾済み(ローカル同意記録あり)の node だけが
+    // スケジューラ tick でセッションを確立する。
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
 
     // WP-Q2: セッション確立はスケジューラ tick が駆動し、getter は読み取り専用。
     runtime.run_community_node_session_maintenance_once().await;
@@ -67,6 +64,8 @@ async fn auto_approve_node_bootstraps_session_on_maintenance_tick() {
         .get_community_node_statuses()
         .await
         .expect("community node statuses");
+    // #857: 認証(JWT 発行)前に公開カタログで現行版への同意を確認している。
+    assert_eq!(state.policies_hits.load(Ordering::SeqCst), 1);
     assert_eq!(state.challenge_hits.load(Ordering::SeqCst), 1);
     assert_eq!(state.verify_hits.load(Ordering::SeqCst), 1);
     assert_eq!(state.consent_status_hits.load(Ordering::SeqCst), 1);
@@ -121,24 +120,18 @@ async fn status_getter_is_read_only_and_does_not_bootstrap_session() {
         .await
         .expect("bind listener");
     let base_url = format!("http://{}", listener.local_addr().expect("local addr"));
-    let state = Arc::new(MockManagedCommunityNodeState {
-        base_url: base_url.clone(),
-        seed_peers: vec![],
-        consent_accepted: Arc::new(AtomicBool::new(false)),
-        current_token: Arc::new(Mutex::new(String::new())),
-        challenge_hits: Arc::new(AtomicUsize::new(0)),
-        verify_hits: Arc::new(AtomicUsize::new(0)),
-        consent_status_hits: Arc::new(AtomicUsize::new(0)),
-        consent_accept_hits: Arc::new(AtomicUsize::new(0)),
-        heartbeat_hits: Arc::new(AtomicUsize::new(0)),
-        bootstrap_hits: Arc::new(AtomicUsize::new(0)),
-        simulate_pending_update: Arc::new(AtomicBool::new(false)),
-    });
+    let state = Arc::new(MockManagedCommunityNodeState::new(
+        base_url.clone(),
+        vec![],
+        false,
+        Arc::new(Mutex::new(String::new())),
+    ));
     let app = Router::new()
         .route("/v1/auth/challenge", post(mock_managed_auth_challenge))
         .route("/v1/auth/verify", post(mock_managed_auth_verify))
         .route("/v1/consents/status", get(mock_managed_consent_status))
         .route("/v1/consents", post(mock_managed_accept_consents))
+        .route("/v1/policies", get(mock_managed_policies))
         .route(
             "/v1/bootstrap/heartbeat",
             post(mock_managed_bootstrap_heartbeat),
@@ -159,12 +152,14 @@ async fn status_getter_is_read_only_and_does_not_bootstrap_session() {
             ),
         }],
     };
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
 
-    // getter 単独では auto_approve でもセッションを bootstrap しない。
+    // getter 単独では同意済みノードでもセッションを bootstrap しない。
     let statuses = runtime
         .get_community_node_statuses()
         .await
         .expect("community node statuses");
+    assert_eq!(state.policies_hits.load(Ordering::SeqCst), 0);
     assert_eq!(state.challenge_hits.load(Ordering::SeqCst), 0);
     assert_eq!(state.verify_hits.load(Ordering::SeqCst), 0);
     assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 0);
@@ -216,24 +211,18 @@ async fn near_expiry_token_triggers_proactive_community_node_reauthentication() 
         None,
     )
     .expect("seed peer");
-    let state = Arc::new(MockManagedCommunityNodeState {
-        base_url: base_url.clone(),
-        seed_peers: vec![seed_peer.clone()],
-        consent_accepted: Arc::new(AtomicBool::new(true)),
-        current_token: Arc::new(Mutex::new("near-expiry-token".into())),
-        challenge_hits: Arc::new(AtomicUsize::new(0)),
-        verify_hits: Arc::new(AtomicUsize::new(0)),
-        consent_status_hits: Arc::new(AtomicUsize::new(0)),
-        consent_accept_hits: Arc::new(AtomicUsize::new(0)),
-        heartbeat_hits: Arc::new(AtomicUsize::new(0)),
-        bootstrap_hits: Arc::new(AtomicUsize::new(0)),
-        simulate_pending_update: Arc::new(AtomicBool::new(false)),
-    });
+    let state = Arc::new(MockManagedCommunityNodeState::new(
+        base_url.clone(),
+        vec![seed_peer.clone()],
+        true,
+        Arc::new(Mutex::new("near-expiry-token".into())),
+    ));
     let app = Router::new()
         .route("/v1/auth/challenge", post(mock_managed_auth_challenge))
         .route("/v1/auth/verify", post(mock_managed_auth_verify))
         .route("/v1/consents/status", get(mock_managed_consent_status))
         .route("/v1/consents", post(mock_managed_accept_consents))
+        .route("/v1/policies", get(mock_managed_policies))
         .route(
             "/v1/bootstrap/heartbeat",
             post(mock_managed_bootstrap_heartbeat),
@@ -264,6 +253,7 @@ async fn near_expiry_token_triggers_proactive_community_node_reauthentication() 
             ),
         }],
     };
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
 
     // WP-Q2: 近接失効トークンの proactive 再認証はスケジューラ tick が駆動する。
     runtime.run_community_node_session_maintenance_once().await;
@@ -271,6 +261,7 @@ async fn near_expiry_token_triggers_proactive_community_node_reauthentication() 
         .get_community_node_statuses()
         .await
         .expect("community node statuses");
+    assert_eq!(state.policies_hits.load(Ordering::SeqCst), 1);
     assert_eq!(state.challenge_hits.load(Ordering::SeqCst), 1);
     assert_eq!(state.verify_hits.load(Ordering::SeqCst), 1);
     assert_eq!(state.consent_status_hits.load(Ordering::SeqCst), 1);
@@ -296,11 +287,14 @@ async fn near_expiry_token_triggers_proactive_community_node_reauthentication() 
     server.abort();
 }
 
+// #857 受入条件: Node 同意前のネットワーク通信が許可リストどおりであること。
+// ローカル同意記録の無い node へは、スケジューラ tick を回しても一切の HTTP
+// (認証 challenge / verify、consent status、policies、heartbeat、bootstrap)が出ない。
 #[tokio::test]
-async fn consent_required_node_without_auto_approve_stays_pending() {
+async fn node_without_local_consent_is_never_contacted() {
     let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let dir = tempdir().expect("tempdir");
-    let db_path = dir.path().join("community-consent-pending.db");
+    let db_path = dir.path().join("community-consent-gate.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
         &db_path,
         TransportNetworkConfig::loopback(),
@@ -313,24 +307,18 @@ async fn consent_required_node_without_auto_approve_stays_pending() {
         .await
         .expect("bind listener");
     let base_url = format!("http://{}", listener.local_addr().expect("local addr"));
-    let state = Arc::new(MockManagedCommunityNodeState {
-        base_url: base_url.clone(),
-        seed_peers: vec![],
-        consent_accepted: Arc::new(AtomicBool::new(false)),
-        current_token: Arc::new(Mutex::new("manual-consent-token".into())),
-        challenge_hits: Arc::new(AtomicUsize::new(0)),
-        verify_hits: Arc::new(AtomicUsize::new(0)),
-        consent_status_hits: Arc::new(AtomicUsize::new(0)),
-        consent_accept_hits: Arc::new(AtomicUsize::new(0)),
-        heartbeat_hits: Arc::new(AtomicUsize::new(0)),
-        bootstrap_hits: Arc::new(AtomicUsize::new(0)),
-        simulate_pending_update: Arc::new(AtomicBool::new(false)),
-    });
+    let state = Arc::new(MockManagedCommunityNodeState::new(
+        base_url.clone(),
+        vec![],
+        false,
+        Arc::new(Mutex::new("legacy-token".into())),
+    ));
     let app = Router::new()
         .route("/v1/auth/challenge", post(mock_managed_auth_challenge))
         .route("/v1/auth/verify", post(mock_managed_auth_verify))
         .route("/v1/consents/status", get(mock_managed_consent_status))
         .route("/v1/consents", post(mock_managed_accept_consents))
+        .route("/v1/policies", get(mock_managed_policies))
         .route(
             "/v1/bootstrap/heartbeat",
             post(mock_managed_bootstrap_heartbeat),
@@ -341,12 +329,14 @@ async fn consent_required_node_without_auto_approve_stays_pending() {
         let _ = axum::serve(listener, app).await;
     });
 
+    // 旧クライアント由来の有効トークンが残っていても、ローカル同意記録が無ければ
+    // 通信しない(#857 の責任分界: 同意が SSoT)。
     persist_community_node_token(
         &db_path,
         IdentityStorageMode::FileOnly,
         base_url.as_str(),
         &StoredCommunityNodeToken {
-            access_token: "manual-consent-token".into(),
+            access_token: "legacy-token".into(),
             expires_at: Utc::now().timestamp() + 3600,
         },
     )
@@ -354,7 +344,8 @@ async fn consent_required_node_without_auto_approve_stays_pending() {
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.clone(),
-            auto_approve: false,
+            // auto_approve でもローカル同意が無ければ通信しない。
+            auto_approve: true,
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
                     .expect("resolved urls"),
@@ -362,15 +353,15 @@ async fn consent_required_node_without_auto_approve_stays_pending() {
         }],
     };
 
-    // WP-Q2: consent 確認を伴う registration refresh もスケジューラ tick が駆動する。
     runtime.run_community_node_session_maintenance_once().await;
     let statuses = runtime
         .get_community_node_statuses()
         .await
         .expect("community node statuses");
+    assert_eq!(state.policies_hits.load(Ordering::SeqCst), 0);
     assert_eq!(state.challenge_hits.load(Ordering::SeqCst), 0);
     assert_eq!(state.verify_hits.load(Ordering::SeqCst), 0);
-    assert_eq!(state.consent_status_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(state.consent_status_hits.load(Ordering::SeqCst), 0);
     assert_eq!(state.consent_accept_hits.load(Ordering::SeqCst), 0);
     assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 0);
     assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 0);
@@ -378,13 +369,76 @@ async fn consent_required_node_without_auto_approve_stays_pending() {
         statuses[0].session_phase,
         crate::CommunityNodeSessionPhase::Idle
     );
-    assert!(statuses[0].auth_state.authenticated);
-    assert!(
-        !statuses[0]
-            .consent_state
-            .as_ref()
-            .expect("consent state")
-            .all_required_accepted
+    assert!(!statuses[0].local_consent.has_active_consent());
+
+    // 同意判断のための公開カタログ取得(UI 操作起点)は許可リストに含まれる。
+    let catalog = runtime
+        .fetch_community_node_policies(crate::CommunityNodeTargetRequest {
+            base_url: base_url.clone(),
+        })
+        .await
+        .expect("fetch policies");
+    assert_eq!(state.policies_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(catalog.policies.len(), 1);
+
+    // 同意モーダルでの受諾 → ローカル記録 → セッション確立(認証・サーバ同期)。
+    let accepted = runtime
+        .accept_community_node_consents(
+            crate::AcceptCommunityNodeConsentsRequest {
+                base_url: base_url.clone(),
+                documents: catalog
+                    .policies
+                    .iter()
+                    .map(|policy| crate::CommunityNodeConsentDocumentRef {
+                        policy_slug: policy.policy_slug.clone(),
+                        policy_version: policy.policy_version,
+                    })
+                    .collect(),
+                language: "ja".into(),
+            },
+            "0.1.8-test",
+        )
+        .await
+        .expect("accept consents");
+    assert!(accepted.local_consent.has_active_consent());
+    let record = &accepted.local_consent.records[0];
+    assert_eq!(record.policy_slug, MOCK_MANAGED_POLICY_SLUG);
+    assert_eq!(record.policy_version, 1);
+    assert_eq!(record.language, "ja");
+    assert_eq!(record.app_version, "0.1.8-test");
+    assert!(record.accepted_at > 0);
+    assert_eq!(state.consent_accept_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        accepted.session_phase,
+        crate::CommunityNodeSessionPhase::Ready
+    );
+
+    // 撤回するとトークンが破棄され、以後の tick で通信が再発しない。
+    let withdrawn = runtime
+        .withdraw_community_node_consents(crate::CommunityNodeTargetRequest {
+            base_url: base_url.clone(),
+        })
+        .await
+        .expect("withdraw consents");
+    assert!(!withdrawn.local_consent.has_active_consent());
+    assert!(withdrawn.local_consent.withdrawn_at.is_some());
+    // 過去の同意記録は履歴として残る。
+    assert!(!withdrawn.local_consent.records.is_empty());
+    assert!(!withdrawn.auth_state.authenticated);
+    let hits_after_withdraw = (
+        state.policies_hits.load(Ordering::SeqCst),
+        state.challenge_hits.load(Ordering::SeqCst),
+        state.heartbeat_hits.load(Ordering::SeqCst),
+    );
+    runtime.run_community_node_session_maintenance_once().await;
+    assert_eq!(
+        (
+            state.policies_hits.load(Ordering::SeqCst),
+            state.challenge_hits.load(Ordering::SeqCst),
+            state.heartbeat_hits.load(Ordering::SeqCst),
+        ),
+        hits_after_withdraw
     );
 
     runtime.shutdown().await;
@@ -478,8 +532,9 @@ async fn community_node_status_does_not_require_restart_when_connectivity_is_act
 }
 
 #[tokio::test]
-async fn auto_approve_node_does_not_silently_reaccept_policy_update() {
-    // #384: auto_approve でも、版が上がった「更新」のときは黙って再受諾せず Idle に留める。
+async fn policy_update_is_not_silently_reaccepted() {
+    // #384 / #857: 版が上がった「更新」のときは、ローカル同意が旧版のままなら
+    // 黙って再受諾せず Idle に留め、ユーザーの再同意後にのみセッションを進める。
     let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-auto-approve-update.db");
@@ -495,24 +550,19 @@ async fn auto_approve_node_does_not_silently_reaccept_policy_update() {
         .await
         .expect("bind listener");
     let base_url = format!("http://{}", listener.local_addr().expect("local addr"));
-    let state = Arc::new(MockManagedCommunityNodeState {
-        base_url: base_url.clone(),
-        seed_peers: vec![],
-        consent_accepted: Arc::new(AtomicBool::new(false)),
-        current_token: Arc::new(Mutex::new("update-pending-token".into())),
-        challenge_hits: Arc::new(AtomicUsize::new(0)),
-        verify_hits: Arc::new(AtomicUsize::new(0)),
-        consent_status_hits: Arc::new(AtomicUsize::new(0)),
-        consent_accept_hits: Arc::new(AtomicUsize::new(0)),
-        heartbeat_hits: Arc::new(AtomicUsize::new(0)),
-        bootstrap_hits: Arc::new(AtomicUsize::new(0)),
-        simulate_pending_update: Arc::new(AtomicBool::new(true)),
-    });
+    let state = Arc::new(MockManagedCommunityNodeState::new(
+        base_url.clone(),
+        vec![],
+        false,
+        Arc::new(Mutex::new("update-pending-token".into())),
+    ));
+    state.simulate_pending_update.store(true, Ordering::SeqCst);
     let app = Router::new()
         .route("/v1/auth/challenge", post(mock_managed_auth_challenge))
         .route("/v1/auth/verify", post(mock_managed_auth_verify))
         .route("/v1/consents/status", get(mock_managed_consent_status))
         .route("/v1/consents", post(mock_managed_accept_consents))
+        .route("/v1/policies", get(mock_managed_policies))
         .route(
             "/v1/bootstrap/heartbeat",
             post(mock_managed_bootstrap_heartbeat),
@@ -543,8 +593,10 @@ async fn auto_approve_node_does_not_silently_reaccept_policy_update() {
             ),
         }],
     };
+    // ユーザーは旧版(1)に同意済み。サーバの現行版は 2(simulate_pending_update)。
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
 
-    // WP-Q2: auto_approve の consent 判定もスケジューラ tick が駆動する。
+    // WP-Q2: consent 判定もスケジューラ tick が駆動する。
     runtime.run_community_node_session_maintenance_once().await;
     let statuses = runtime
         .get_community_node_statuses()
@@ -559,6 +611,8 @@ async fn auto_approve_node_does_not_silently_reaccept_policy_update() {
         statuses[0].session_phase,
         crate::CommunityNodeSessionPhase::Idle
     );
+    // 再同意が必要なことが status で client に見えている(#857)。
+    assert!(statuses[0].consent_update_pending);
     let consent_state = statuses[0].consent_state.as_ref().expect("consent state");
     assert!(!consent_state.all_required_accepted);
     // 更新（旧版同意済み・現行版未同意）が client に見えている。
@@ -566,12 +620,19 @@ async fn auto_approve_node_does_not_silently_reaccept_policy_update() {
     assert!(item.accepted_at.is_none());
     assert_eq!(item.previously_accepted_version, Some(1));
 
-    // ユーザーが明示的に受諾すれば ready になる。
+    // ユーザーが新版(2)へ明示的に再同意すれば ready になる。
     let accepted = runtime
-        .accept_community_node_consents(crate::AcceptCommunityNodeConsentsRequest {
-            base_url: base_url.clone(),
-            policy_slugs: vec![],
-        })
+        .accept_community_node_consents(
+            crate::AcceptCommunityNodeConsentsRequest {
+                base_url: base_url.clone(),
+                documents: vec![crate::CommunityNodeConsentDocumentRef {
+                    policy_slug: MOCK_MANAGED_POLICY_SLUG.to_string(),
+                    policy_version: 2,
+                }],
+                language: "ja".into(),
+            },
+            "0.1.8-test",
+        )
         .await
         .expect("accept consents");
     assert!(
@@ -581,7 +642,10 @@ async fn auto_approve_node_does_not_silently_reaccept_policy_update() {
             .expect("consent state")
             .all_required_accepted
     );
+    assert!(!accepted.consent_update_pending);
     assert_eq!(state.consent_accept_hits.load(Ordering::SeqCst), 1);
+    // 旧版と新版の記録が両方履歴に残る。
+    assert_eq!(accepted.local_consent.records.len(), 2);
 
     runtime.shutdown().await;
     server.abort();

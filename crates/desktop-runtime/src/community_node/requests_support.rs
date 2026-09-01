@@ -91,6 +91,26 @@ impl DesktopRuntime {
         Ok(token)
     }
 
+    /// 認証不要の公開 policy カタログ取得(#857)。同意判断に必要な文書一覧・本文・版
+    /// のみで、Node 同意前に許可される通信(公開 manifest / 法務文書)に含まれる。
+    pub(crate) async fn request_community_node_policies(
+        &self,
+        base_url: &str,
+    ) -> Result<CommunityNodePoliciesResponse> {
+        let base_url = normalize_http_url(base_url)?;
+        let client = community_node_http_client()?;
+        client
+            .get(format!("{base_url}{POLICIES_PATH}"))
+            .send()
+            .await
+            .context("failed to fetch community node policies")?
+            .error_for_status()
+            .context("community node policies request failed")?
+            .json::<CommunityNodePoliciesResponse>()
+            .await
+            .context("failed to decode community node policies")
+    }
+
     async fn request_community_node_consent_status(
         &self,
         base_url: &str,
@@ -717,11 +737,43 @@ impl DesktopRuntime {
         }
     }
 
+    /// サーバ側の未承認同意をローカル同意記録と照合し、カバー済みなら POST /v1/consents で
+    /// 同期する(#857)。カバーしない(= 版が上がった再同意待ち)なら黙って再受諾せず
+    /// Idle に落として偽を返す。
+    async fn sync_covered_community_node_consents(
+        &self,
+        base_url: &str,
+        token: &mut StoredCommunityNodeToken,
+        consent_status: CommunityNodeConsentStatus,
+    ) -> Result<bool> {
+        self.set_community_node_cached_consent(base_url, Some(consent_status.clone()))
+            .await;
+        if consent_status.all_required_accepted {
+            return Ok(true);
+        }
+        let local_consent =
+            load_community_node_local_consents(&self.db_path, self.identity_mode, base_url)?;
+        if !community_node_local_consent_covers_status(&local_consent, &consent_status) {
+            self.set_community_node_local_consent_update_pending(base_url, true)
+                .await;
+            self.set_community_node_session_phase(base_url, CommunityNodeSessionPhase::Idle)
+                .await;
+            return Ok(false);
+        }
+        self.set_community_node_session_phase(base_url, CommunityNodeSessionPhase::Accepting)
+            .await;
+        let accepted = self
+            .accept_community_node_consents_with_retry(base_url, token, &[])
+            .await?;
+        self.set_community_node_cached_consent(base_url, Some(accepted))
+            .await;
+        Ok(true)
+    }
+
     pub(crate) async fn refresh_community_node_registration_with_token_if_due(
         &self,
         base_url: &str,
         token: &mut StoredCommunityNodeToken,
-        auto_approve: bool,
         force_heartbeat: bool,
     ) -> Result<()> {
         match self
@@ -745,27 +797,11 @@ impl DesktopRuntime {
                 let consent_status = self
                     .fetch_community_node_consent_status_with_retry(base_url, token, false)
                     .await?;
-                self.set_community_node_cached_consent(base_url, Some(consent_status.clone()))
-                    .await;
-                if !consent_status.all_required_accepted {
-                    if !auto_approve || community_node_consent_has_pending_update(&consent_status) {
-                        self.set_community_node_session_phase(
-                            base_url,
-                            CommunityNodeSessionPhase::Idle,
-                        )
-                        .await;
-                        return Ok(());
-                    }
-                    self.set_community_node_session_phase(
-                        base_url,
-                        CommunityNodeSessionPhase::Accepting,
-                    )
-                    .await;
-                    let accepted = self
-                        .accept_community_node_consents_with_retry(base_url, token, &[])
-                        .await?;
-                    self.set_community_node_cached_consent(base_url, Some(accepted))
-                        .await;
+                if !self
+                    .sync_covered_community_node_consents(base_url, token, consent_status)
+                    .await?
+                {
+                    return Ok(());
                 }
                 self.refresh_community_node_registration_with_token_if_due_once(
                     base_url,
@@ -775,32 +811,18 @@ impl DesktopRuntime {
                 .await
                 .map_err(CommunityNodeRequestError::into_anyhow)
             }
-            Err(CommunityNodeRequestError::ConsentRequired) if auto_approve => {
+            Err(CommunityNodeRequestError::ConsentRequired) => {
                 // 版が上がっての再同意（更新）かどうかを判定するため、現在の consent 状態を取得する。
-                // 更新が含まれる場合は auto_approve でも黙って再受諾せず、ユーザーへ本文を再提示する。
+                // ローカル同意がカバーする場合だけ同期し、更新はユーザーへ本文を再提示する。
                 let consent_status = self
                     .fetch_community_node_consent_status_with_retry(base_url, token, false)
                     .await?;
-                self.set_community_node_cached_consent(base_url, Some(consent_status.clone()))
-                    .await;
-                if community_node_consent_has_pending_update(&consent_status) {
-                    self.set_community_node_session_phase(
-                        base_url,
-                        CommunityNodeSessionPhase::Idle,
-                    )
-                    .await;
+                if !self
+                    .sync_covered_community_node_consents(base_url, token, consent_status)
+                    .await?
+                {
                     return Ok(());
                 }
-                self.set_community_node_session_phase(
-                    base_url,
-                    CommunityNodeSessionPhase::Accepting,
-                )
-                .await;
-                let accepted = self
-                    .accept_community_node_consents_with_retry(base_url, token, &[])
-                    .await?;
-                self.set_community_node_cached_consent(base_url, Some(accepted))
-                    .await;
                 self.refresh_community_node_registration_with_token_if_due_once(
                     base_url,
                     token.access_token.as_str(),
@@ -809,7 +831,6 @@ impl DesktopRuntime {
                 .await
                 .map_err(CommunityNodeRequestError::into_anyhow)
             }
-            Err(CommunityNodeRequestError::ConsentRequired) => Ok(()),
             Err(error) => Err(error.into_anyhow()),
         }
     }

@@ -48,34 +48,14 @@ impl DesktopRuntime {
             return Ok(());
         }
 
-        let was_ready = self
-            .community_node_session_was_ready(base_url.as_str())
-            .await;
-        self.set_community_node_session_phase(
+        // #857: 未同意 node へは一切通信しない(公開 manifest / 法務文書の取得は UI 操作
+        // 起点のみ)。scheduler tick もここで止まるため、同意前の登録・認証は発火しない。
+        let local_consent = load_community_node_local_consents(
+            &self.db_path,
+            self.identity_mode,
             base_url.as_str(),
-            CommunityNodeSessionPhase::Connecting,
-        )
-        .await;
-        let node = self.require_community_node(base_url.as_str()).await?;
-        let auto_approve = node.auto_approve;
-        let mut token =
-            load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())?;
-
-        if token
-            .as_ref()
-            .is_some_and(|token| Self::community_node_token_requires_refresh(token, now))
-            || (token.is_none() && auto_approve)
-        {
-            self.set_community_node_session_phase(
-                base_url.as_str(),
-                CommunityNodeSessionPhase::Authenticating,
-            )
-            .await;
-            token = Some(
-                self.request_community_node_authentication_token(base_url.as_str())
-                    .await?,
-            );
-        } else if token.is_none() {
+        )?;
+        if !local_consent.has_active_consent() {
             self.clear_community_node_retry_state(base_url.as_str())
                 .await;
             self.set_community_node_cached_consent(base_url.as_str(), None)
@@ -88,14 +68,31 @@ impl DesktopRuntime {
             return Ok(());
         }
 
-        let mut token = token.expect("token must exist after authentication");
-        let consent_status = self
-            .fetch_community_node_consent_status_with_retry(base_url.as_str(), &mut token, true)
-            .await?;
-        self.set_community_node_cached_consent(base_url.as_str(), Some(consent_status.clone()))
+        let was_ready = self
+            .community_node_session_was_ready(base_url.as_str())
             .await;
-        if !consent_status.all_required_accepted {
-            if !auto_approve || community_node_consent_has_pending_update(&consent_status) {
+        self.set_community_node_session_phase(
+            base_url.as_str(),
+            CommunityNodeSessionPhase::Connecting,
+        )
+        .await;
+        self.require_community_node(base_url.as_str()).await?;
+        let mut token =
+            load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())?;
+
+        if token
+            .as_ref()
+            .is_none_or(|token| Self::community_node_token_requires_refresh(token, now))
+        {
+            // #857: 認証(JWT 発行)前に、公開カタログの現行版への同意を確認する。
+            // 版が上がっていたら再同意待ちとして停止し、認証を開始しない。
+            let catalog = self
+                .request_community_node_policies(base_url.as_str())
+                .await?;
+            if !community_node_local_consent_satisfies_policies(&local_consent, &catalog.policies)
+            {
+                self.set_community_node_local_consent_update_pending(base_url.as_str(), true)
+                    .await;
                 self.clear_community_node_retry_state(base_url.as_str())
                     .await;
                 self.set_community_node_session_phase(
@@ -105,6 +102,41 @@ impl DesktopRuntime {
                 .await;
                 return Ok(());
             }
+            self.set_community_node_local_consent_update_pending(base_url.as_str(), false)
+                .await;
+            self.set_community_node_session_phase(
+                base_url.as_str(),
+                CommunityNodeSessionPhase::Authenticating,
+            )
+            .await;
+            token = Some(
+                self.request_community_node_authentication_token(base_url.as_str())
+                    .await?,
+            );
+        }
+
+        let mut token = token.expect("token must exist after authentication");
+        let consent_status = self
+            .fetch_community_node_consent_status_with_retry(base_url.as_str(), &mut token, true)
+            .await?;
+        self.set_community_node_cached_consent(base_url.as_str(), Some(consent_status.clone()))
+            .await;
+        if !consent_status.all_required_accepted {
+            if !community_node_local_consent_covers_status(&local_consent, &consent_status) {
+                // ローカル同意が現行版をカバーしない = 重要変更の再同意待ち。黙って
+                // 再受諾せず、UI が本文を再提示するまでセッションを進めない。
+                self.set_community_node_local_consent_update_pending(base_url.as_str(), true)
+                    .await;
+                self.clear_community_node_retry_state(base_url.as_str())
+                    .await;
+                self.set_community_node_session_phase(
+                    base_url.as_str(),
+                    CommunityNodeSessionPhase::Idle,
+                )
+                .await;
+                return Ok(());
+            }
+            // ローカル同意済みの内容をサーバ記録へ同期する(#857)。
             self.set_community_node_session_phase(
                 base_url.as_str(),
                 CommunityNodeSessionPhase::Accepting,
@@ -116,6 +148,8 @@ impl DesktopRuntime {
             self.set_community_node_cached_consent(base_url.as_str(), Some(accepted))
                 .await;
         }
+        self.set_community_node_local_consent_update_pending(base_url.as_str(), false)
+            .await;
 
         self.set_community_node_session_phase(
             base_url.as_str(),
@@ -125,7 +159,6 @@ impl DesktopRuntime {
         self.refresh_community_node_registration_with_token_if_due(
             base_url.as_str(),
             &mut token,
-            auto_approve,
             false,
         )
         .await?;
@@ -190,12 +223,20 @@ impl DesktopRuntime {
             },
             None => CommunityNodeAuthState::default(),
         };
+        let local_consent = load_community_node_local_consents(
+            &self.db_path,
+            self.identity_mode,
+            node.base_url.as_str(),
+        )?;
         let sessions = self.community_node_sessions.lock().await;
         let session = sessions.get(node.base_url.as_str());
         let consent_state =
             consent_state.or_else(|| session.and_then(|s| s.cached_consent.clone()));
         let last_error = last_error.or_else(|| session.and_then(|s| s.last_error.clone()));
         let admission_rejection = session.and_then(|session| session.admission_rejection.clone());
+        let consent_update_pending = session
+            .map(|session| session.local_consent_update_pending)
+            .unwrap_or(false);
         let retry_after = session
             .map(|s| s.session_retry_deadline)
             .filter(|deadline| *deadline > now);
@@ -227,6 +268,8 @@ impl DesktopRuntime {
             auto_approve: node.auto_approve,
             auth_state,
             consent_state,
+            local_consent,
+            consent_update_pending,
             resolved_urls: node.resolved_urls,
             last_error,
             invite_code_saved,

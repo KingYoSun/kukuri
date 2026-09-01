@@ -110,15 +110,22 @@ export type DesktopStartupStatus =
   | { status: 'ready' }
   | {
       status: 'consent_required';
-      current_bundle_version: number;
-      accepted_bundle_version: number | null;
+      documents: AppConsentDocumentStatus[];
     }
   | { status: 'failed'; error: DesktopStartupErrorView };
 
-export type AppConsentStatus = {
-  currentBundleVersion: number;
-  acceptedBundleVersion: number | null;
+// #857: アプリ同意は bundle 単一フラグではなく文書単位で記録・判定する。
+export type AppConsentDocumentStatus = {
+  slug: string;
+  currentVersion: number;
+  acceptedVersion: number | null;
   acceptedAt: number | null;
+  acceptedLanguage: string | null;
+  acceptedAppVersion: string | null;
+};
+
+export type AppConsentStatus = {
+  documents: AppConsentDocumentStatus[];
   satisfied: boolean;
 };
 

@@ -13,11 +13,9 @@
     "title": "About / Legal",
     "summary": "Terms of service, privacy policy, and app and consent status.",
     "appVersionLabel": "App version",
-    "bundleVersionLabel": "Legal version",
-    "acceptedVersionLabel": "Accepted version",
-    "acceptedAtLabel": "Accepted at",
     "notAccepted": "Not accepted",
-    "documentsHeading": "Documents"
+    "documentsHeading": "Documents",
+    "acceptedValue": "v{{version}} (accepted {{acceptedAt}})"
   },
   "documents": {
     "terms": {

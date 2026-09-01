@@ -76,12 +76,23 @@ test('settings drawer can open the release section', async () => {
   );
 });
 
+// #857: startup gate は文書単位の同意状態を受け取る。
+function consentDocuments(acceptedVersion: number | null) {
+  return ['terms', 'privacy'].map((slug) => ({
+    slug,
+    currentVersion: 2,
+    acceptedVersion,
+    acceptedAt: acceptedVersion === null ? null : 1_700_000_000,
+    acceptedLanguage: acceptedVersion === null ? null : 'en',
+    acceptedAppVersion: acceptedVersion === null ? null : '0.1.7',
+  }));
+}
+
 test('desktop app blocks startup until app-level legal consent is accepted', async () => {
   const user = userEvent.setup();
   invokeMock.mockResolvedValueOnce({
     status: 'consent_required',
-    current_bundle_version: 2,
-    accepted_bundle_version: null,
+    documents: consentDocuments(null),
   });
   invokeMock.mockResolvedValueOnce({
     status: 'failed',
@@ -116,7 +127,13 @@ test('desktop app blocks startup until app-level legal consent is accepted', asy
   await user.click(screen.getByRole('button', { name: 'Accept and continue' }));
 
   await waitFor(() => {
-    expect(invokeMock).toHaveBeenCalledWith('accept_app_consents', { bundleVersion: 2 });
+    expect(invokeMock).toHaveBeenCalledWith('accept_app_consents', {
+      documents: [
+        { slug: 'terms', version: 2 },
+        { slug: 'privacy', version: 2 },
+      ],
+      language: 'en',
+    });
   });
   expect(await screen.findByText('kukuri could not open the local database.')).toBeInTheDocument();
   expect(screen.getByDisplayValue(/runtime starts after consent/)).toBeInTheDocument();
@@ -126,8 +143,7 @@ test('desktop app requires renewed consent for an older legal bundle', async () 
   const user = userEvent.setup();
   invokeMock.mockResolvedValueOnce({
     status: 'consent_required',
-    current_bundle_version: 2,
-    accepted_bundle_version: 1,
+    documents: consentDocuments(1),
   });
   invokeMock.mockResolvedValueOnce({
     status: 'failed',
@@ -154,13 +170,19 @@ test('desktop app requires renewed consent for an older legal bundle', async () 
       'This is a draft and is not legal advice. Final decisions should be made in consultation with appropriate experts or regulators.'
     )
   ).not.toBeInTheDocument();
-  expect(screen.getByText('v2')).toBeInTheDocument();
+  expect(screen.getAllByText('v2')).toHaveLength(2);
   expect(screen.queryByTestId('control-center-trigger')).not.toBeInTheDocument();
 
   await user.click(screen.getByRole('button', { name: 'Accept and continue' }));
 
   await waitFor(() => {
-    expect(invokeMock).toHaveBeenCalledWith('accept_app_consents', { bundleVersion: 2 });
+    expect(invokeMock).toHaveBeenCalledWith('accept_app_consents', {
+      documents: [
+        { slug: 'terms', version: 2 },
+        { slug: 'privacy', version: 2 },
+      ],
+      language: 'en',
+    });
   });
   expect(await screen.findByText('kukuri could not open the local database.')).toBeInTheDocument();
 });

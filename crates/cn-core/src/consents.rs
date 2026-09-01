@@ -5,8 +5,32 @@ use sqlx::postgres::PgPool;
 
 use crate::database::ensure_active_subscriber;
 use crate::errors::{ApiError, ApiResult, consent_required_error};
-use kukuri_cn_protocol::models::{CommunityNodeConsentItem, CommunityNodeConsentStatus};
+use kukuri_cn_protocol::models::{
+    CommunityNodeConsentItem, CommunityNodeConsentStatus, CommunityNodePolicyDocument,
+};
 use kukuri_cn_protocol::normalize::normalize_pubkey;
+
+/// 公開 policy カタログ(#857)。認証不要の同意提示用で、ユーザー固有情報を含まない。
+pub async fn list_policies(pool: &PgPool) -> Result<Vec<CommunityNodePolicyDocument>> {
+    let rows = sqlx::query(
+        "SELECT policy_slug, policy_version, title, body_markdown, required
+         FROM cn_admin.policies
+         ORDER BY policy_slug ASC",
+    )
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter()
+        .map(|row| -> Result<CommunityNodePolicyDocument> {
+            Ok(CommunityNodePolicyDocument {
+                policy_slug: row.try_get("policy_slug")?,
+                policy_version: row.try_get("policy_version")?,
+                title: row.try_get("title")?,
+                body_markdown: row.try_get("body_markdown")?,
+                required: row.try_get("required")?,
+            })
+        })
+        .collect()
+}
 
 pub async fn get_consent_status(pool: &PgPool, pubkey: &str) -> Result<CommunityNodeConsentStatus> {
     let pubkey = normalize_pubkey(pubkey)?;

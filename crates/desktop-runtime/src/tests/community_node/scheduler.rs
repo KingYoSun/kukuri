@@ -83,6 +83,7 @@ async fn session_scheduler_keeps_bootstrap_registration_alive_without_getter_pol
             ),
         }],
     };
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
 
     // トレイ常駐相当: get_sync_status / get_community_node_statuses は一切呼ばない。
     runtime
@@ -204,6 +205,7 @@ async fn get_sync_status_is_read_only_for_community_node_session() {
             ),
         }],
     };
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
 
     // heartbeat deadline 未設定(= 常に due)の状態でも、getter は refresh を駆動しない。
     let _status = runtime.get_sync_status().await.expect("sync status");
@@ -242,24 +244,18 @@ async fn session_scheduler_reauthenticates_near_expiry_token_without_getter_poll
         None,
     )
     .expect("seed peer");
-    let state = Arc::new(MockManagedCommunityNodeState {
-        base_url: base_url.clone(),
-        seed_peers: vec![seed_peer],
-        consent_accepted: Arc::new(AtomicBool::new(true)),
-        current_token: Arc::new(Mutex::new("near-expiry-token".into())),
-        challenge_hits: Arc::new(AtomicUsize::new(0)),
-        verify_hits: Arc::new(AtomicUsize::new(0)),
-        consent_status_hits: Arc::new(AtomicUsize::new(0)),
-        consent_accept_hits: Arc::new(AtomicUsize::new(0)),
-        heartbeat_hits: Arc::new(AtomicUsize::new(0)),
-        bootstrap_hits: Arc::new(AtomicUsize::new(0)),
-        simulate_pending_update: Arc::new(AtomicBool::new(false)),
-    });
+    let state = Arc::new(MockManagedCommunityNodeState::new(
+        base_url.clone(),
+        vec![seed_peer],
+        true,
+        Arc::new(Mutex::new("near-expiry-token".into())),
+    ));
     let app = Router::new()
         .route("/v1/auth/challenge", post(mock_managed_auth_challenge))
         .route("/v1/auth/verify", post(mock_managed_auth_verify))
         .route("/v1/consents/status", get(mock_managed_consent_status))
         .route("/v1/consents", post(mock_managed_accept_consents))
+        .route("/v1/policies", get(mock_managed_policies))
         .route(
             "/v1/bootstrap/heartbeat",
             post(mock_managed_bootstrap_heartbeat),
@@ -290,6 +286,7 @@ async fn session_scheduler_reauthenticates_near_expiry_token_without_getter_poll
             ),
         }],
     };
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
 
     // トレイ常駐相当: getter を一切呼ばない。
     runtime
@@ -397,6 +394,7 @@ async fn topic_rendezvous_refresh_fires_between_bootstrap_heartbeats() {
             ),
         }],
     };
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
 
     // 1 回目: セッション確立(heartbeat 1 発 + 便乗 rendezvous refresh)。
     // 2 回目: ready 遷移で立った ready_refresh_pending の metadata refresh(便乗 refresh)を消化。
@@ -541,6 +539,7 @@ async fn private_channel_rendezvous_refresh_uses_only_the_current_epoch_secret()
             ),
         }],
     };
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
 
     runtime.run_community_node_session_maintenance_once().await;
     runtime.run_community_node_session_maintenance_once().await;

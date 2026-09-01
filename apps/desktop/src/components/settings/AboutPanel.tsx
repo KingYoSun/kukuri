@@ -45,7 +45,8 @@ export function AboutPanel() {
     };
   }, []);
 
-  const acceptedAt = formatAcceptedAt(consentStatus?.acceptedAt, i18n.resolvedLanguage ?? i18n.language);
+  const locale = i18n.resolvedLanguage ?? i18n.language;
+  // #857: 同意状態は文書単位で表示する(対象文書・版・日時)。
   const diagnostics = useMemo(
     () => [
       {
@@ -53,22 +54,21 @@ export function AboutPanel() {
         value: currentVersion,
         monospace: true,
       },
-      {
-        label: t('legal:about.bundleVersionLabel'),
-        value: String(consentStatus?.currentBundleVersion ?? 2),
-      },
-      {
-        label: t('legal:about.acceptedVersionLabel'),
-        value: consentStatus?.acceptedBundleVersion
-          ? String(consentStatus.acceptedBundleVersion)
-          : t('legal:about.notAccepted'),
-      },
-      {
-        label: t('legal:about.acceptedAtLabel'),
-        value: acceptedAt ?? t('legal:about.notAccepted'),
-      },
+      ...(consentStatus?.documents ?? []).map((document) => {
+        const acceptedAt = formatAcceptedAt(document.acceptedAt, locale);
+        return {
+          label: t(`legal:documents.${document.slug}.title`),
+          value:
+            document.acceptedVersion !== null && acceptedAt
+              ? t('legal:about.acceptedValue', {
+                  version: document.acceptedVersion,
+                  acceptedAt,
+                })
+              : t('legal:about.notAccepted'),
+        };
+      }),
     ],
-    [acceptedAt, consentStatus, currentVersion, t]
+    [consentStatus, currentVersion, locale, t]
   );
 
   return (
@@ -83,7 +83,15 @@ export function AboutPanel() {
         <h4 className='text-base font-semibold text-foreground'>
           {t('legal:about.documentsHeading')}
         </h4>
-        <LegalDocumentView bundleVersion={consentStatus?.currentBundleVersion ?? 2} compact />
+        <LegalDocumentView
+          documentVersions={Object.fromEntries(
+            (consentStatus?.documents ?? []).map((document) => [
+              document.slug,
+              document.currentVersion,
+            ])
+          )}
+          compact
+        />
       </section>
     </Card>
   );

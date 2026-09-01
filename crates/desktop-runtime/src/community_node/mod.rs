@@ -9,7 +9,7 @@ use kukuri_cn_protocol::{
     BOOTSTRAP_HEARTBEAT_PATH, BOOTSTRAP_NODES_PATH, BootstrapHeartbeatRequest,
     BootstrapHeartbeatResponse, CONSENTS_PATH, CONSENTS_STATUS_PATH, CommunityNodeConsentStatus,
     CommunityNodeReportRequest, CommunityNodeReportResponse, CommunityNodeResolvedUrls,
-    CommunityNodeSeedPeer, NODE_MANIFEST_PATH, TOPIC_RENDEZVOUS_HEARTBEAT_PATH,
+    CommunityNodeSeedPeer, NODE_MANIFEST_PATH, POLICIES_PATH, TOPIC_RENDEZVOUS_HEARTBEAT_PATH,
     TopicRendezvousHeartbeat, build_auth_envelope_json, normalize_http_url,
 };
 use kukuri_core::{
@@ -27,6 +27,7 @@ use crate::paths::community_node_config_path;
 use crate::runtime::DesktopRuntime;
 
 mod config_support;
+mod consent_storage_support;
 mod dome_hosting_support;
 mod http_client_support;
 mod index_query_support;
@@ -44,6 +45,14 @@ mod token_storage_support;
 mod trust_relation_support;
 
 pub(crate) use config_support::*;
+pub use consent_storage_support::{
+    CommunityNodeLocalConsentRecord, CommunityNodeLocalConsentState,
+};
+pub(crate) use consent_storage_support::{
+    community_node_local_consent_covers_status, community_node_local_consent_satisfies_policies,
+    load_community_node_local_consents, persist_community_node_local_consents,
+    record_community_node_local_consents,
+};
 pub use dome_hosting_support::DomeHostingRequestError;
 pub(crate) use http_client_support::*;
 pub(crate) use index_query_support::IndexOperation;
@@ -53,9 +62,10 @@ pub use indexing_request_support::{
 };
 pub(crate) use invite_storage_support::*;
 pub use kukuri_cn_protocol::{
-    CommunityNodeReportAppeal, CommunityNodeTesterFeedbackResponse, IndexEntryView,
-    IndexQueryResponse, IndexScopeKind, RelationNeighborsResponse, RelationOptoutResponse,
-    RelationReadResponse, SubmitIndexingRequestResponse, TrustUserReadResponse,
+    CommunityNodePoliciesResponse, CommunityNodePolicyDocument, CommunityNodeReportAppeal,
+    CommunityNodeTesterFeedbackResponse, IndexEntryView, IndexQueryResponse, IndexScopeKind,
+    RelationNeighborsResponse, RelationOptoutResponse, RelationReadResponse,
+    SubmitIndexingRequestResponse, TrustUserReadResponse,
 };
 pub use manifest_support::{
     CommunityNodeAuthorityScope, CommunityNodeCapabilityScope, CommunityNodeManifest,
@@ -74,21 +84,9 @@ pub use trust_relation_support::{
     CommunityNodeUserAdvisoryRequest,
 };
 
-/// 「版が上がって再同意が必要（更新）」な required ポリシーが存在するか。
-///
-/// `accepted_at` が None（現行版を未同意）かつ `previously_accepted_version` が Some
-/// （過去に別版を同意済み）の required ポリシーがあれば true。auto_approve の node でも、
-/// 更新時は黙って再受諾せずユーザーへ本文を再提示するための判定。
-pub(crate) fn community_node_consent_has_pending_update(
-    status: &CommunityNodeConsentStatus,
-) -> bool {
-    status.items.iter().any(|item| {
-        item.required && item.accepted_at.is_none() && item.previously_accepted_version.is_some()
-    })
-}
-
 pub(crate) const COMMUNITY_NODE_TOKEN_PURPOSE: &str = "community-node-token";
 pub(crate) const COMMUNITY_NODE_INVITE_CODE_PURPOSE: &str = "community-node-invite-code";
+pub(crate) const COMMUNITY_NODE_CONSENT_PURPOSE: &str = "community-node-consents";
 pub(crate) const COMMUNITY_NODE_PREVIEW_BASE_URL: &str = "https://api.kukuri.app";
 pub(crate) const COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_INTERVAL_SECONDS: i64 = 30;
 pub(crate) const COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_RETRY_SECONDS: i64 = 10;
@@ -206,13 +204,25 @@ impl std::fmt::Display for CommunityNodeAdmissionRejection {
 
 impl std::error::Error for CommunityNodeAdmissionRejection {}
 
+/// 同意モーダルで提示された文書 1 件への参照(#857)。
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct CommunityNodeConsentDocumentRef {
+    pub policy_slug: String,
+    pub policy_version: i32,
+}
+
+/// Node 同意の成立リクエスト(#857)。提示された文書と版をそのまま返してもらい、
+/// ローカル同意記録に保存してからセッション確立(認証・サーバ同期)を開始する。
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct AcceptCommunityNodeConsentsRequest {
     pub base_url: String,
     #[serde(default)]
-    pub policy_slugs: Vec<String>,
+    pub documents: Vec<CommunityNodeConsentDocumentRef>,
+    #[serde(default)]
+    pub language: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -274,6 +284,9 @@ pub(crate) struct CommunityNodeSessionState {
     pub(crate) last_error: Option<String>,
     pub(crate) admission_rejection: Option<CommunityNodeAdmissionRejection>,
     pub(crate) cached_consent: Option<CommunityNodeConsentStatus>,
+    /// #857: 公開カタログ照合でローカル同意が現行版をカバーしないと判明した状態。
+    /// 真の間は認証(JWT 発行)を開始せず、UI が再同意モーダルを提示する。
+    pub(crate) local_consent_update_pending: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -287,6 +300,14 @@ pub struct CommunityNodeNodeStatus {
     pub auto_approve: bool,
     pub auth_state: CommunityNodeAuthState,
     pub consent_state: Option<CommunityNodeConsentStatus>,
+    /// #857: Node 別ローカル同意記録。空 = 未同意(この node へは通信しない)。
+    #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<CommunityNodeLocalConsentState>"))]
+    pub local_consent: CommunityNodeLocalConsentState,
+    /// #857: 版が上がって再同意が必要な状態(公開カタログ照合で検出)。
+    #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>"))]
+    pub consent_update_pending: bool,
     pub resolved_urls: Option<CommunityNodeResolvedUrls>,
     pub last_error: Option<String>,
     #[serde(default)]
@@ -305,63 +326,3 @@ pub(crate) struct StoredCommunityNodeToken {
     pub(crate) expires_at: i64,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use kukuri_cn_protocol::CommunityNodeConsentItem;
-
-    fn consent_item(
-        accepted: bool,
-        previously_accepted_version: Option<i32>,
-        required: bool,
-    ) -> CommunityNodeConsentItem {
-        CommunityNodeConsentItem {
-            policy_slug: "terms_of_service".to_string(),
-            policy_version: 2,
-            title: "Terms of Service".to_string(),
-            body: "body".to_string(),
-            required,
-            accepted_at: accepted.then_some(1_700_000_000),
-            previously_accepted_version,
-        }
-    }
-
-    #[test]
-    fn pending_update_false_when_first_time_not_accepted() {
-        // 初回未同意（過去版の同意なし）は「更新」ではない。auto_approve の auto 受諾を許す。
-        let status = CommunityNodeConsentStatus {
-            all_required_accepted: false,
-            items: vec![consent_item(false, None, true)],
-        };
-        assert!(!community_node_consent_has_pending_update(&status));
-    }
-
-    #[test]
-    fn pending_update_true_when_previous_version_accepted_but_current_not() {
-        // 旧版を同意済みだが現行版を未同意 = 版が上がった「更新」。auto_approve でも再提示。
-        let status = CommunityNodeConsentStatus {
-            all_required_accepted: false,
-            items: vec![consent_item(false, Some(1), true)],
-        };
-        assert!(community_node_consent_has_pending_update(&status));
-    }
-
-    #[test]
-    fn pending_update_false_when_current_version_accepted() {
-        let status = CommunityNodeConsentStatus {
-            all_required_accepted: true,
-            items: vec![consent_item(true, Some(2), true)],
-        };
-        assert!(!community_node_consent_has_pending_update(&status));
-    }
-
-    #[test]
-    fn pending_update_ignores_optional_policies() {
-        // optional ポリシーの更新は接続 gate に影響しないため pending update としない。
-        let status = CommunityNodeConsentStatus {
-            all_required_accepted: true,
-            items: vec![consent_item(false, Some(1), false)],
-        };
-        assert!(!community_node_consent_has_pending_update(&status));
-    }
-}

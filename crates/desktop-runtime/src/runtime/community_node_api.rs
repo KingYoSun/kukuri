@@ -1,5 +1,8 @@
 use super::*;
 
+use chrono::Utc;
+use kukuri_cn_protocol::CommunityNodePoliciesResponse;
+
 impl DesktopRuntime {
     pub async fn read_community_node_trust_user(
         &self,
@@ -182,6 +185,33 @@ impl DesktopRuntime {
     ) -> Result<CommunityNodeNodeStatus> {
         let base_url = normalize_http_url(request.base_url.as_str())?;
         let node = self.require_community_node(base_url.as_str()).await?;
+        // #857: 同意前に認証(JWT 発行)を開始しない。ローカル同意が無ければ拒否し、
+        // 版が上がっていれば再同意待ちとして停止する。
+        let local_consent = load_community_node_local_consents(
+            &self.db_path,
+            self.identity_mode,
+            base_url.as_str(),
+        )?;
+        if !local_consent.has_active_consent() {
+            return Err(anyhow!(
+                "community node consent is required before authentication"
+            ));
+        }
+        let catalog = self
+            .request_community_node_policies(base_url.as_str())
+            .await?;
+        if !community_node_local_consent_satisfies_policies(&local_consent, &catalog.policies) {
+            self.set_community_node_local_consent_update_pending(base_url.as_str(), true)
+                .await;
+            self.set_community_node_session_phase(
+                base_url.as_str(),
+                CommunityNodeSessionPhase::Idle,
+            )
+            .await;
+            return self.community_node_status(node, None, None).await;
+        }
+        self.set_community_node_local_consent_update_pending(base_url.as_str(), false)
+            .await;
         self.set_community_node_session_phase(
             base_url.as_str(),
             CommunityNodeSessionPhase::Authenticating,
@@ -207,9 +237,9 @@ impl DesktopRuntime {
         self.set_community_node_cached_consent(base_url.as_str(), Some(consent_state.clone()))
             .await;
         if !consent_state.all_required_accepted
-            && node.auto_approve
-            && !community_node_consent_has_pending_update(&consent_state)
+            && community_node_local_consent_covers_status(&local_consent, &consent_state)
         {
+            // ローカル同意済みの内容をサーバ記録へ同期する(#857)。
             self.set_community_node_session_phase(
                 base_url.as_str(),
                 CommunityNodeSessionPhase::Accepting,
@@ -230,7 +260,6 @@ impl DesktopRuntime {
             self.refresh_community_node_registration_with_token_if_due(
                 base_url.as_str(),
                 &mut token,
-                node.auto_approve,
                 false,
             )
             .await?;
@@ -332,55 +361,82 @@ impl DesktopRuntime {
         self.community_node_status(node, Some(status), None).await
     }
 
+    /// 認証不要の公開 policy カタログ取得(#857)。同意モーダルの提示内容を組み立てる
+    /// ために UI 操作起点で呼ぶ。Node 同意前に許可される通信に含まれる。
+    pub async fn fetch_community_node_policies(
+        &self,
+        request: CommunityNodeTargetRequest,
+    ) -> Result<CommunityNodePoliciesResponse> {
+        self.request_community_node_policies(request.base_url.as_str())
+            .await
+    }
+
+    /// Node 同意の成立(#857)。提示済み文書をローカル記録へ保存してから、
+    /// セッション確立(認証 → サーバ同期 → 登録)を即時 1 tick 実行する。
+    /// ネットワーク失敗はセッション retry 状態として status に載る(同意記録は保存済み)。
     pub async fn accept_community_node_consents(
         &self,
         request: AcceptCommunityNodeConsentsRequest,
+        app_version: &str,
     ) -> Result<CommunityNodeNodeStatus> {
         let base_url = normalize_http_url(request.base_url.as_str())?;
-        let node = self.require_community_node(base_url.as_str()).await?;
-        let mut token =
-            load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())?
-                .ok_or_else(|| anyhow!("community node authentication is required"))?;
-        self.set_community_node_session_phase(
-            base_url.as_str(),
-            CommunityNodeSessionPhase::Accepting,
-        )
-        .await;
-        let status = self
-            .accept_community_node_consents_with_retry(
-                base_url.as_str(),
-                &mut token,
-                &request.policy_slugs,
-            )
-            .await
-            .context("failed to accept community node consents")?;
-        self.set_community_node_cached_consent(base_url.as_str(), Some(status.clone()))
-            .await;
-        if status.all_required_accepted {
-            self.set_community_node_session_phase(
-                base_url.as_str(),
-                CommunityNodeSessionPhase::Refreshing,
-            )
-            .await;
-            self.refresh_community_node_registration_with_token_if_due(
-                base_url.as_str(),
-                &mut token,
-                node.auto_approve,
-                false,
-            )
-            .await?;
-            self.clear_community_node_retry_state(base_url.as_str())
-                .await;
-            self.set_community_node_session_ready(base_url.as_str(), true)
-                .await;
-            let refreshed = self.require_community_node(base_url.as_str()).await?;
-            return self
-                .community_node_status(refreshed, Some(status), None)
-                .await;
+        self.require_community_node(base_url.as_str()).await?;
+        if request.documents.is_empty() {
+            return Err(anyhow!("consent documents must not be empty"));
         }
-        self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Idle)
+        let mut state = load_community_node_local_consents(
+            &self.db_path,
+            self.identity_mode,
+            base_url.as_str(),
+        )?;
+        record_community_node_local_consents(
+            &mut state,
+            &request.documents,
+            request.language.as_str(),
+            app_version,
+            Utc::now().timestamp(),
+        );
+        persist_community_node_local_consents(
+            &self.db_path,
+            self.identity_mode,
+            base_url.as_str(),
+            &state,
+        )?;
+        self.set_community_node_local_consent_update_pending(base_url.as_str(), false)
             .await;
-        self.community_node_status(node, Some(status), None).await
+        self.clear_community_node_retry_state(base_url.as_str())
+            .await;
+        self.refresh_community_node_registration_if_due(base_url.as_str())
+            .await?;
+        let refreshed = self.require_community_node(base_url.as_str()).await?;
+        self.community_node_status(refreshed, None, None).await
+    }
+
+    /// Node 同意の撤回(#857)。同意記録は履歴として残し `withdrawn_at` を立てる。
+    /// トークンを破棄しセッションを停止するが、node 設定自体は残す(非 Node 機能や
+    /// 直接 P2P はブロックしない)。
+    pub async fn withdraw_community_node_consents(
+        &self,
+        request: CommunityNodeTargetRequest,
+    ) -> Result<CommunityNodeNodeStatus> {
+        let base_url = normalize_http_url(request.base_url.as_str())?;
+        self.require_community_node(base_url.as_str()).await?;
+        let mut state = load_community_node_local_consents(
+            &self.db_path,
+            self.identity_mode,
+            base_url.as_str(),
+        )?;
+        state.withdrawn_at = Some(Utc::now().timestamp());
+        persist_community_node_local_consents(
+            &self.db_path,
+            self.identity_mode,
+            base_url.as_str(),
+            &state,
+        )?;
+        self.set_community_node_local_consent_update_pending(base_url.as_str(), false)
+            .await;
+        self.clear_community_node_token(CommunityNodeTargetRequest { base_url })
+            .await
     }
 
     pub async fn refresh_community_node_metadata(
@@ -388,7 +444,7 @@ impl DesktopRuntime {
         request: CommunityNodeTargetRequest,
     ) -> Result<CommunityNodeNodeStatus> {
         let base_url = normalize_http_url(request.base_url.as_str())?;
-        let node = self.require_community_node(base_url.as_str()).await?;
+        self.require_community_node(base_url.as_str()).await?;
         let mut token =
             load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())?
                 .ok_or_else(|| anyhow!("community node authentication is required"))?;
@@ -401,7 +457,6 @@ impl DesktopRuntime {
             .refresh_community_node_registration_with_token_if_due(
                 base_url.as_str(),
                 &mut token,
-                node.auto_approve,
                 true,
             )
             .await
