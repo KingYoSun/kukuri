@@ -111,7 +111,8 @@ test('non-active な private Column の投稿本文クリックで開いた Thre
       'private reply',
       expect.any(String),
       expect.any(Array),
-      { kind: 'private_channel', channel_id: 'channel-1' }
+      { kind: 'private_channel', channel_id: 'channel-1' },
+      []
     );
   });
 });
@@ -147,7 +148,8 @@ test('non-active な private Column の Reply ボタンで開いた Thread も p
       'private reply via button',
       expect.any(String),
       expect.any(Array),
-      { kind: 'private_channel', channel_id: 'channel-1' }
+      { kind: 'private_channel', channel_id: 'channel-1' },
+      []
     );
   });
 });

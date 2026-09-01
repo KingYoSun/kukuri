@@ -79,6 +79,11 @@ export const SETTINGS_SECTION_COPY: Array<{
     description: 'Local light and dark theme selection.',
   },
   {
+    id: 'safety',
+    label: 'Safety',
+    description: 'Adult material display preference (off by default).',
+  },
+  {
     id: 'connectivity',
     label: 'Connectivity',
     description: 'Sync summary, peer tickets, and global error visibility.',
@@ -124,6 +129,7 @@ export function isSettingsSection(value: string | null): value is SettingsSectio
   return (
     value === 'about' ||
     value === 'appearance' ||
+    value === 'safety' ||
     value === 'connectivity' ||
     value === 'discovery' ||
     value === 'community-node' ||

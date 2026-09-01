@@ -29,9 +29,11 @@ export type AttachmentView = { hash: string, mime: string, bytes: number, role: 
 
 export type BlobMediaPayload = { bytes_base64: string, mime: string, };
 
+export type ContentDisplaySettings = { adult_content_enabled: boolean, };
+
 export type ReplyPreviewAuthorView = { pubkey: string, name?: string | null, display_name?: string | null, picture?: string | null, picture_asset?: ProfileAssetView | null, };
 
-export type ReplyPreviewView = { object_id: string, topic: string, author: ReplyPreviewAuthorView, content: string, attachments: Array<AttachmentView>, root_id?: string | null, reply_to?: string | null, };
+export type ReplyPreviewView = { object_id: string, topic: string, author: ReplyPreviewAuthorView, content: string, attachments: Array<AttachmentView>, content_labels?: Array<string> | null, root_id?: string | null, reply_to?: string | null, };
 
 export type ReactionKeyView = { reaction_key_kind: string, normalized_reaction_key: string, emoji?: string | null, custom_asset?: CustomReactionAssetView | null, };
 
@@ -43,7 +45,7 @@ export type RecentReactionView = { reaction_key_kind: string, normalized_reactio
 
 export type CustomReactionAssetView = { asset_id: string, owner_pubkey: string, blob_hash: string, search_key: string, mime: string, bytes: number, width: number, height: number, };
 
-export type RepostSourceView = { source_object_id: string, source_topic_id: string, source_author_pubkey: string, source_author_name?: string | null, source_author_display_name?: string | null, source_author_picture?: string | null, source_author_picture_asset?: ProfileAssetView | null, source_object_kind: string, content: string, attachments: Array<AttachmentView>, reply_to?: string | null, root_id?: string | null, };
+export type RepostSourceView = { source_object_id: string, source_topic_id: string, source_author_pubkey: string, source_author_name?: string | null, source_author_display_name?: string | null, source_author_picture?: string | null, source_author_picture_asset?: ProfileAssetView | null, source_object_kind: string, content: string, attachments: Array<AttachmentView>, content_labels?: Array<string> | null, reply_to?: string | null, root_id?: string | null, };
 
 export type ContentObservationView = { node_base_url: string, capability: string, observed_at: number, };
 
@@ -51,7 +53,7 @@ export type ContentProvenanceView = { canonical_source: string, observed_via: Ar
 
 export type PostWithdrawalView = { withdrawn_at: number, replacement_object_id?: string | null, reason_visibility: string, reason?: string | null, };
 
-export type PostView = { object_id: string, envelope_id: string, author_pubkey: string, author_name?: string | null, author_display_name?: string | null, author_picture?: string | null, author_picture_asset?: ProfileAssetView | null, following: boolean, followed_by: boolean, mutual: boolean, friend_of_friend: boolean, provenance?: ContentProvenanceView | null, withdrawal?: PostWithdrawalView | null, content: string, content_status: BlobViewStatus, attachments: Array<AttachmentView>, created_at: number, reply_to?: string | null, reply_preview?: ReplyPreviewView | null, root_id?: string | null, object_kind: string, published_topic_id?: string | null, origin_topic_id?: string | null, repost_of?: RepostSourceView | null, repost_commentary?: string | null, is_threadable: boolean, channel_id?: string | null, audience_label: string, reaction_summary?: Array<ReactionSummaryView> | null, my_reactions?: Array<ReactionKeyView> | null, };
+export type PostView = { object_id: string, envelope_id: string, author_pubkey: string, author_name?: string | null, author_display_name?: string | null, author_picture?: string | null, author_picture_asset?: ProfileAssetView | null, following: boolean, followed_by: boolean, mutual: boolean, friend_of_friend: boolean, provenance?: ContentProvenanceView | null, withdrawal?: PostWithdrawalView | null, content: string, content_status: BlobViewStatus, attachments: Array<AttachmentView>, content_labels?: Array<string> | null, created_at: number, reply_to?: string | null, reply_preview?: ReplyPreviewView | null, root_id?: string | null, object_kind: string, published_topic_id?: string | null, origin_topic_id?: string | null, repost_of?: RepostSourceView | null, repost_commentary?: string | null, is_threadable: boolean, channel_id?: string | null, audience_label: string, reaction_summary?: Array<ReactionSummaryView> | null, my_reactions?: Array<ReactionKeyView> | null, };
 
 export type BookmarkedPostView = { bookmarked_at: number, post: PostView, };
 
@@ -493,7 +495,11 @@ disputed_risk_signal_id?: string | null, };
 
 export type RuntimeEvent = { "type": "notification_status_changed" } | { "type": "sync_status_changed", sync_status?: SyncStatus | null, community_node_statuses?: Array<CommunityNodeNodeStatus> | null, };
 
-export type CreatePostRequest = { topic: string, content: string, reply_to?: string | null, channel_ref: ChannelRef, attachments: Array<CreateAttachmentRequest>, };
+export type CreatePostRequest = { topic: string, content: string, reply_to?: string | null, channel_ref: ChannelRef, attachments: Array<CreateAttachmentRequest>, 
+/**
+ * #858: 投稿者自己申告のラベル(既知値は `adult` のみ)。
+ */
+content_labels: Array<string>, };
 
 export type WithdrawalReasonVisibilityRequest = "public" | "private";
 

@@ -362,5 +362,13 @@
       "previewBody": "Show preview text",
       "requestPermission": "Request Permission"
     }
+  },
+  "safety": {
+    "title": "Safety",
+    "summary": "Display preference for adult material (off by default).",
+    "adultContent": {
+      "label": "Show media and posts self-labeled as adult material",
+      "description": "Off by default. While this is off, kukuri does not download or decode media attached to posts that were self-labeled as adult material, and shows a placeholder instead. Labels are self-declared by the people who post; an unlabeled post is not guaranteed to be free of adult material. This preference is stored only on this device and is separate from the age self-attestation."
+    }
   }
 }

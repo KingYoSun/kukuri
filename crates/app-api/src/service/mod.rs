@@ -390,6 +390,9 @@ pub struct AppService {
         std::sync::OnceLock<PrivateChannelCapabilityPersist>,
     pub(crate) private_channel_capability_persist_guard: Arc<Mutex<()>>,
     pub(crate) notification_inserted_notify: Arc<tokio::sync::Notify>,
+    /// #858: 成人向け表現の表示設定(既定 OFF)。canonical source は desktop-runtime の
+    /// ローカル JSON で、ここは blob 取得ゲートが参照する in-memory ミラー。
+    pub(crate) adult_content_display_enabled: Arc<std::sync::atomic::AtomicBool>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -555,6 +558,7 @@ impl AppService {
             private_channel_capability_persist: std::sync::OnceLock::new(),
             private_channel_capability_persist_guard: Arc::new(Mutex::new(())),
             notification_inserted_notify: Arc::new(tokio::sync::Notify::new()),
+            adult_content_display_enabled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         })
     }
 
@@ -636,6 +640,7 @@ impl AppService {
                 attachments: header.attachments,
                 reply_to_object_id: header.reply_to,
                 root_id: header.root,
+                content_labels: header.content_labels,
             },
         })
     }

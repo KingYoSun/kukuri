@@ -76,6 +76,7 @@ export const selectShellActionsSlice = (s: DesktopShellStore) => ({
 /// useDesktopShellData.ts が読むフィールド(購読スライス。WP-H6 PR2)。
 export const selectShellDataSlice = (s: DesktopShellStore) => ({
   activeTopic: activeTopic(s),
+  adultContentEnabled: s.adultContentEnabled,
   bookmarkedReactionAssets: s.bookmarkedReactionAssets,
   directMessageTimelineByPeer: s.directMessageTimelineByPeer,
   gameRoomsByScopeKey: s.gameRoomsByScopeKey,
@@ -129,6 +130,7 @@ export const selectShellRoutingSlice = (s: DesktopShellStore) => ({
 /// useDesktopShellViewModels.ts が読むフィールド(購読スライス。WP-H6 PR2)。
 export const selectShellViewModelsSlice = (s: DesktopShellStore) => ({
   activeTopic: activeTopic(s),
+  adultContentEnabled: s.adultContentEnabled,
   authorError: s.authorError,
   bookmarkedPosts: s.bookmarkedPosts,
   bookmarkedReactionAssets: s.bookmarkedReactionAssets,

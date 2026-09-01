@@ -48,6 +48,7 @@ type CommunityIndexWorkspaceProps = {
   onOpenCommunityNodeSettings: () => void;
   knownAuthorsByPubkey?: Record<string, AuthorSocialView>;
   mediaObjectUrls?: Record<string, string | null>;
+  adultContentEnabled?: boolean;
   onOpenAuthor: (pubkey: string) => void;
   onOpenThread?: (threadId: string) => void;
   onOpenThreadInTopic?: (threadId: string, topicId: string) => void;
@@ -222,6 +223,7 @@ export function CommunityIndexWorkspace({
   onOpenCommunityNodeSettings,
   knownAuthorsByPubkey = EMPTY_KNOWN_AUTHORS,
   mediaObjectUrls = {},
+  adultContentEnabled = false,
   onOpenAuthor,
   onOpenThread,
   onOpenThreadInTopic,
@@ -317,10 +319,12 @@ export function CommunityIndexWorkspace({
             authorStatus: knownAuthor ? 'resolved' : authorResolution?.status ?? 'loading',
             resolvedEntry,
             mediaObjectUrls,
+            adultContentEnabled,
           }),
         };
       }) ?? [],
     [
+      adultContentEnabled,
       knownAuthorsByPubkey,
       localAuthorPubkey,
       localProfile,

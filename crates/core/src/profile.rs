@@ -120,6 +120,8 @@ pub struct KukuriProfilePostEnvelopeContentV1 {
     pub reply_to_object_id: Option<EnvelopeId>,
     #[serde(default)]
     pub root_id: Option<EnvelopeId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub content_labels: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -137,6 +139,8 @@ pub struct AuthorProfilePostDocV1 {
     pub reply_to_object_id: Option<EnvelopeId>,
     #[serde(default)]
     pub root_id: Option<EnvelopeId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub content_labels: Vec<String>,
     pub envelope_id: EnvelopeId,
 }
 
@@ -152,6 +156,8 @@ pub struct ProfilePost {
     pub attachments: Vec<AssetRef>,
     pub reply_to_object_id: Option<EnvelopeId>,
     pub root_id: Option<EnvelopeId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub content_labels: Vec<String>,
     pub envelope_id: EnvelopeId,
 }
 
@@ -469,6 +475,7 @@ pub fn parse_profile_post(envelope: &KukuriEnvelope) -> Result<Option<ProfilePos
         attachments: content.attachments,
         reply_to_object_id: content.reply_to_object_id,
         root_id: content.root_id,
+        content_labels: content.content_labels,
         envelope_id: envelope.id.clone(),
     }))
 }

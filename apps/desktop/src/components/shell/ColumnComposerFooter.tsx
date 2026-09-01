@@ -125,6 +125,13 @@ export function ColumnComposerFooter({
         onAttachmentSelection={(event) => void onAttachmentSelection(target, event)}
         draftMediaItems={draftMediaViews}
         onRemoveDraftAttachment={(itemId) => onRemoveAttachment(target, itemId)}
+        adultLabeled={draft.adultLabeled}
+        onAdultLabeledChange={
+          target.action === 'message'
+            ? undefined
+            : (labeled) =>
+                updateDraft((current) => ({ ...current, adultLabeled: labeled }))
+        }
         composerError={draft.error}
         audienceLabel={destinationLabel}
         replyTarget={

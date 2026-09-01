@@ -8,10 +8,26 @@ impl ObjectProjectionStore for MemoryStore {
 
     async fn put_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()> {
         let mut projections = self.object_projection_rows.write().await;
+        let mut adult_hashes = self.adult_media_hashes.write().await;
         for row in rows {
+            for hash in crate::models::adult_media_hashes_for_row(&row) {
+                adult_hashes.insert(hash.to_string());
+            }
             projections.insert(row.object_id.clone(), row);
         }
         Ok(())
+    }
+
+    async fn mark_adult_media_hashes(&self, hashes: &[BlobHash]) -> Result<()> {
+        let mut adult_hashes = self.adult_media_hashes.write().await;
+        for hash in hashes {
+            adult_hashes.insert(hash.as_str().to_string());
+        }
+        Ok(())
+    }
+
+    async fn is_adult_media_hash(&self, hash: &BlobHash) -> Result<bool> {
+        Ok(self.adult_media_hashes.read().await.contains(hash.as_str()))
     }
 
     async fn get_object_projection(
@@ -152,8 +168,15 @@ impl ObjectProjectionStore for MemoryStore {
             .collect::<HashSet<_>>();
         let mut guard = self.object_projection_rows.write().await;
         guard.clear();
-        for row in rows {
-            guard.insert(row.object_id.clone(), row);
+        self.adult_media_hashes.write().await.clear();
+        {
+            let mut adult_hashes = self.adult_media_hashes.write().await;
+            for row in rows {
+                for hash in crate::models::adult_media_hashes_for_row(&row) {
+                    adult_hashes.insert(hash.to_string());
+                }
+                guard.insert(row.object_id.clone(), row);
+            }
         }
         self.live_session_rows.write().await.clear();
         self.game_room_rows.write().await.clear();

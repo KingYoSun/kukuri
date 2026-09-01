@@ -182,6 +182,7 @@ export function DesktopShellPrimarySurface({
     gameTitle,
     liveError,
     localProfile,
+    adultContentEnabled,
     mediaObjectUrls,
     communityNodeManifests,
     communityNodeConfig,
@@ -223,6 +224,7 @@ export function DesktopShellPrimarySurface({
       gameTitle: s.gameTitle,
       liveError: s.liveError,
       localProfile: s.localProfile,
+      adultContentEnabled: s.adultContentEnabled,
       mediaObjectUrls: s.mediaObjectUrls,
       communityNodeManifests: s.communityNodeManifests,
       communityNodeConfig: s.communityNodeConfig,
@@ -476,6 +478,7 @@ export function DesktopShellPrimarySurface({
             onOpenCommunityNodeSettings={openCommunityNodeSettings}
             knownAuthorsByPubkey={knownAuthorsByPubkey}
             mediaObjectUrls={mediaObjectUrls}
+            adultContentEnabled={adultContentEnabled}
             onOpenAuthor={(pubkey) => void openAuthorDetail(pubkey)}
             onOpenThread={openThreadInSurfaceScope}
             onOpenThreadInTopic={openThreadInTopicFromSurface}

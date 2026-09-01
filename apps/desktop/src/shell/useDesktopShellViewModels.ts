@@ -152,6 +152,7 @@ export function useDesktopShellViewModels({
   } = useTimelineViewModels({
     activeJoinedChannels,
     activeTimeline,
+    adultContentEnabled: state.adultContentEnabled,
     bookmarkedPosts,
     developerModeEnabled: state.developerModeEnabled,
     knownAuthorsByPubkey,

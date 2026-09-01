@@ -2,6 +2,7 @@ import {
   startTransition,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   type MutableRefObject,
 } from 'react';
@@ -33,6 +34,7 @@ import {
   uniquePostsByIdentity,
 } from '@/shell/data/timelineMerge';
 import { usePreviewableMediaAttachments } from '@/shell/data/usePreviewableMediaAttachments';
+import { isAdultLabeledPost } from '@/shell/media';
 import {
   activeTimelineStorageKey,
   PUBLIC_TIMELINE_SCOPE,
@@ -84,6 +86,7 @@ export function useDesktopShellData({
   const {
     trackedTopics,
     activeTopic,
+    adultContentEnabled,
     selectedThread,
     gameRoomsByScopeKey,
     joinedChannelsByTopic,
@@ -229,7 +232,42 @@ export function useDesktopShellData({
     localProfile,
     knownAuthorsByPubkey,
     notifications,
+    adultContentEnabled,
   });
+
+  // #858: 表示設定 OFF の間にゲート対象となる添付 hash(引用 snapshot 含む)。
+  // effects 側で表示済み object URL の破棄と再取得抑止に使う。
+  const gatedAdultMediaHashes = useMemo(() => {
+    if (adultContentEnabled) {
+      return [] as string[];
+    }
+    const hashes = new Set<string>();
+    for (const post of [
+      ...activeTimeline,
+      ...activePublicTimeline,
+      ...profileTimeline,
+      ...selectedAuthorTimeline,
+      ...thread,
+    ]) {
+      if (!isAdultLabeledPost(post)) {
+        continue;
+      }
+      for (const attachment of post.attachments) {
+        hashes.add(attachment.hash);
+      }
+      for (const attachment of post.repost_of?.attachments ?? []) {
+        hashes.add(attachment.hash);
+      }
+    }
+    return [...hashes];
+  }, [
+    activePublicTimeline,
+    activeTimeline,
+    adultContentEnabled,
+    profileTimeline,
+    selectedAuthorTimeline,
+    thread,
+  ]);
 
   const clearPendingTimeline = useCallback(
     (key: string) => {
@@ -639,6 +677,7 @@ export function useDesktopShellData({
     shellChromeState,
     selectedAuthorPubkey,
     previewableMediaAttachments,
+    gatedAdultMediaHashes,
     remoteObjectUrlRef,
     draftPreviewUrlRef,
     directMessageDraftPreviewUrlRef,

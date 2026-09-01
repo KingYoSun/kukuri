@@ -196,6 +196,10 @@
       "description": "ローカルのライト / ダーク / 言語設定です。",
       "label": "表示"
     },
+    "safety": {
+      "label": "セーフティ",
+      "description": "成人向け表現の表示設定(既定は非表示)。"
+    },
     "community-node": {
       "description": "コミュニティノードの設定、認証、同意、更新操作です。",
       "label": "コミュニティノード"

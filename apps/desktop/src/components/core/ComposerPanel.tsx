@@ -62,6 +62,10 @@ type ComposerPanelProps = {
   submitDisabled?: boolean;
   mentionCandidates?: MentionCandidate[];
   onValueChange?: (next: string) => void;
+  // #858: 成人向けの自己申告トグル。onAdultLabeledChange 未指定なら出さない
+  // (メッセージ等ラベル非対応の surface)。
+  adultLabeled?: boolean;
+  onAdultLabeledChange?: (labeled: boolean) => void;
 };
 
 const EMPTY_MENTION_CANDIDATES: MentionCandidate[] = [];
@@ -86,6 +90,8 @@ export function ComposerPanel({
   submitDisabled = false,
   mentionCandidates = EMPTY_MENTION_CANDIDATES,
   onValueChange,
+  adultLabeled = false,
+  onAdultLabeledChange,
 }: ComposerPanelProps) {
   const { t } = useTranslation(['common']);
   const clearActiveTarget = replyTarget ? onClearReply : onClearRepost;
@@ -233,6 +239,18 @@ export function ComposerPanel({
           onChange={onAttachmentSelection}
         />
       </Label>
+
+      {onAdultLabeledChange && mode !== 'message' ? (
+        <label className='topic-diagnostic topic-diagnostic-secondary flex items-center gap-2'>
+          <input
+            type='checkbox'
+            checked={adultLabeled}
+            onChange={(event) => onAdultLabeledChange(event.currentTarget.checked)}
+            data-testid='composer-adult-label-toggle'
+          />
+          <span>{t('composer.adultLabel')}</span>
+        </label>
+      ) : null}
 
       {composerError ? <p className='error error-inline'>{composerError}</p> : null}
 

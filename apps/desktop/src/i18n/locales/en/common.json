@@ -58,7 +58,8 @@
     "writePost": "Write a post",
     "writeMessage": "Write a message",
     "writeQuoteRepost": "Add a comment",
-    "writeReply": "Write a reply"
+    "writeReply": "Write a reply",
+    "adultLabel": "Label this post as adult material (self-declared)"
   },
   "audience": {
     "allJoined": "All joined",
@@ -113,7 +114,8 @@
     "replyingTo": "Replying to {{author}}",
     "reposted": "Reposted",
     "repostedBy": "{{author}} reposted",
-    "withdrawnPost": "This post was withdrawn by the user who posted it."
+    "withdrawnPost": "This post was withdrawn by the user who posted it.",
+    "adultContentHidden": "This post is self-labeled as adult material. Enable adult material display in Settings to show it."
   },
   "feedback": {
     "copiedToClipboard": "Copied to clipboard."
@@ -180,7 +182,8 @@
     "syncingPoster": "syncing video preview",
     "unsupportedOnClient": "unsupported on this client",
     "video": "video",
-    "videoPosterAlt": "video preview"
+    "videoPosterAlt": "video preview",
+    "adultGated": "Adult material (self-labeled). Enable display in Settings to load it."
   },
   "reactions": {
     "custom": "Custom",

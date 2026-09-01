@@ -571,6 +571,7 @@ pub(crate) async fn run_community_node_connectivity(
                 reply_to: Some(post_id.clone()),
                 channel_ref: ChannelRef::Public,
                 attachments: Vec::new(),
+                content_labels: Vec::new(),
             })
             .await
             .context("failed to create scenario reply on desktop b")?;

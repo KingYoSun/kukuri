@@ -505,7 +505,8 @@ describe('useDesktopShellActions', () => {
       'private hello',
       null,
       [],
-      { kind: 'private_channel', channel_id: 'friends' }
+      { kind: 'private_channel', channel_id: 'friends' },
+      []
     );
     const state = view.store.getState();
     expect(state.columnDraftsByKey[columnDraftKey(privateTarget)]).toBeUndefined();

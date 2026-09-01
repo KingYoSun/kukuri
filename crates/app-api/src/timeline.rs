@@ -308,6 +308,7 @@ impl AppService {
             content,
             reply_to,
             attachments,
+            Vec::new(),
         )
         .await
     }
@@ -324,6 +325,7 @@ impl AppService {
             channel_ref,
             content,
             reply_to,
+            Vec::new(),
             Vec::new(),
         )
         .await
@@ -439,6 +441,7 @@ impl AppService {
         Ok(envelope.id.0)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_post_with_attachments_in_channel(
         &self,
         topic_id: &str,
@@ -446,8 +449,17 @@ impl AppService {
         content: &str,
         reply_to: Option<&str>,
         attachments: Vec<PendingAttachment>,
+        content_labels: Vec<String>,
     ) -> Result<String> {
         ensure_text_within_limit("post content", content, MAX_POST_CONTENT_CHARS)?;
+        // #858: self-label は既知値だけを受け付ける(現状 `adult` のみ)。
+        for label in &content_labels {
+            if label != kukuri_core::ADULT_CONTENT_LABEL {
+                anyhow::bail!("unknown content label `{label}`");
+            }
+        }
+        let mut content_labels = content_labels;
+        content_labels.dedup();
         self.ensure_topic_subscription(topic_id).await?;
         let topic = TopicId::new(topic_id);
         let parent = if let Some(reply_to) = reply_to {
@@ -583,6 +595,7 @@ impl AppService {
                 ObjectVisibility::Public
             },
             effective_channel_id.as_ref(),
+            content_labels,
         )?;
         let post_object = envelope
             .to_post_object()?
@@ -609,6 +622,7 @@ impl AppService {
                     attachments: post_object.attachments.clone(),
                     reply_to_object_id: post_object.reply_to.clone(),
                     root_id: post_object.root.clone(),
+                    content_labels: post_object.content_labels.clone(),
                 },
             )?;
             let profile_post = parse_profile_post(&profile_post_envelope)?

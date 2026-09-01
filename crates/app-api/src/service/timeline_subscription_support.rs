@@ -193,6 +193,7 @@ impl AppService {
                 reply_to: projection.reply_to_object_id.clone(),
                 root_id: projection.root_object_id.clone(),
                 repost_of: projection.repost_of.clone(),
+                content_labels: projection.content_labels.clone(),
             })?,
             sig: String::new(),
         }))

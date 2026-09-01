@@ -59,6 +59,7 @@ fn profile_post_envelope_roundtrip() {
             }],
             reply_to_object_id: Some(EnvelopeId::from("root-1")),
             root_id: Some(EnvelopeId::from("root-1")),
+            content_labels: Vec::new(),
         },
     )
     .expect("profile post envelope");
@@ -117,6 +118,7 @@ fn profile_repost_envelope_roundtrip() {
                 attachments: Vec::new(),
                 reply_to_object_id: None,
                 root_id: Some(EnvelopeId::from("source-1")),
+                content_labels: Vec::new(),
             },
         },
     )

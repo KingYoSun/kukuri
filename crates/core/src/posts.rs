@@ -76,6 +76,14 @@ pub enum TimelineScope {
     },
 }
 
+/// 投稿者自己申告の成人向けラベル(#858、ADR 0046)。署名対象 content に含まれるため
+/// 投稿者の署名で保護されるが、申告の真正性は検証できない。ラベルなしは安全を保証しない。
+pub const ADULT_CONTENT_LABEL: &str = "adult";
+
+pub fn has_adult_content_label(labels: &[String]) -> bool {
+    labels.iter().any(|label| label == ADULT_CONTENT_LABEL)
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KukuriPostEnvelopeContentV1 {
     pub object_kind: String,
@@ -93,6 +101,9 @@ pub struct KukuriPostEnvelopeContentV1 {
     pub root_id: Option<EnvelopeId>,
     #[serde(default)]
     pub repost_of: Option<RepostSourceSnapshotV1>,
+    /// 投稿者自己申告のラベル(既知値は `adult` のみ)。旧 envelope には無いため default。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub content_labels: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -163,6 +174,8 @@ pub struct KukuriPostObjectV1 {
     pub root: Option<EnvelopeId>,
     #[serde(default)]
     pub repost_of: Option<RepostSourceSnapshotV1>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub content_labels: Vec<String>,
     pub status: ObjectStatus,
     pub signature: String,
 }
@@ -180,6 +193,9 @@ pub struct RepostSourceSnapshotV1 {
     pub reply_to_object_id: Option<EnvelopeId>,
     #[serde(default)]
     pub root_id: Option<EnvelopeId>,
+    /// 引用/埋め込み表示でも元投稿のラベルを維持するため snapshot に含める(#858)。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub content_labels: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -277,6 +293,7 @@ impl KukuriEnvelope {
             reply_to: content.reply_to,
             root: content.root_id,
             repost_of: content.repost_of,
+            content_labels: content.content_labels,
             status: ObjectStatus::Active,
             signature: self.sig.clone(),
         }))
@@ -324,6 +341,7 @@ pub fn build_post_envelope_with_payload(
         reply_to,
         visibility,
         None,
+        Vec::new(),
     )
 }
 
@@ -337,6 +355,7 @@ pub fn build_post_envelope_with_payload_in_channel(
     reply_to: Option<&KukuriEnvelope>,
     visibility: ObjectVisibility,
     channel_id: Option<&ChannelId>,
+    content_labels: Vec<String>,
 ) -> Result<KukuriEnvelope> {
     let thread = reply_to
         .and_then(KukuriEnvelope::thread_ref)
@@ -369,6 +388,7 @@ pub fn build_post_envelope_with_payload_in_channel(
         reply_to: reply_id.clone(),
         root_id: root_id.clone(),
         repost_of: None,
+        content_labels,
     };
     let mut tags = vec![
         vec!["topic".into(), topic.as_str().into()],
@@ -411,6 +431,9 @@ pub fn build_repost_envelope(
         visibility: ObjectVisibility::Public,
         reply_to: None,
         root_id: None,
+        // 引用元のラベルは snapshot 側が保持する。repost 自身のラベルは
+        // 元投稿から引き継ぐ(引用表示のテキスト・メディア双方を覆う)。
+        content_labels: repost_of.content_labels.clone(),
         repost_of: Some(repost_of.clone()),
     };
     crate::sign_envelope_json(

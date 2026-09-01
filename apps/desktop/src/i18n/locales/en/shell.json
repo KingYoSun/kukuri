@@ -196,6 +196,10 @@
       "description": "Local light, dark, and language selection.",
       "label": "Appearance"
     },
+    "safety": {
+      "label": "Safety",
+      "description": "Adult material display preference (off by default)."
+    },
     "community-node": {
       "description": "Configured community nodes, auth, consent, and refresh actions.",
       "label": "Community Node"

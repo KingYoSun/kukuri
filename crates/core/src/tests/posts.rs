@@ -20,6 +20,7 @@ fn repost_envelope_roundtrip() {
             }],
             reply_to_object_id: Some(EnvelopeId::from("root-1")),
             root_id: Some(EnvelopeId::from("root-1")),
+            content_labels: Vec::new(),
         },
         Some("quote commentary"),
     )

@@ -35,6 +35,7 @@ function parseInitialSettingsSection(): {
   if (
     requestedSection !== 'about' &&
     requestedSection !== 'appearance' &&
+    requestedSection !== 'safety' &&
     requestedSection !== 'connectivity' &&
     requestedSection !== 'discovery' &&
     requestedSection !== 'community-node' &&

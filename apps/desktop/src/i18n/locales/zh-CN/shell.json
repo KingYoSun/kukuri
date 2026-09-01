@@ -196,6 +196,10 @@
       "description": "本地亮色、暗色与语言选择。",
       "label": "显示"
     },
+    "safety": {
+      "label": "安全",
+      "description": "成人内容显示设置(默认关闭)。"
+    },
     "community-node": {
       "description": "社区节点配置、认证、同意与刷新操作。",
       "label": "社区节点"

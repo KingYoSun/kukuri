@@ -59,6 +59,7 @@ pub(crate) async fn persist_profile_post_doc(
                     attachments: profile_post.attachments.clone(),
                     reply_to_object_id: profile_post.reply_to_object_id.clone(),
                     root_id: profile_post.root_id.clone(),
+                    content_labels: profile_post.content_labels.clone(),
                     envelope_id: envelope.id.clone(),
                 })?,
             },

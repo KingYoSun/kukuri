@@ -134,6 +134,7 @@ fn export_ipc_types() {
         ProfileAssetView,
         AttachmentView,
         BlobMediaPayload,
+        ContentDisplaySettings,
         ReplyPreviewAuthorView,
         ReplyPreviewView,
         ReactionKeyView,

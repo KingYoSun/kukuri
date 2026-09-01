@@ -70,6 +70,13 @@ pub trait ObjectProjectionStore: Send + Sync {
         &self,
         object_id: &EnvelopeId,
     ) -> Result<Option<ObjectProjectionRow>>;
+    /// #858: 成人向けラベル付き投稿の添付として観測済みの blob hash を記録する
+    /// (insert-only)。projection 書き込み時は実装側が自動で記録するが、projection を
+    /// 経由しない表示経路(profile timeline 等)からも明示的に記録できるようにする。
+    async fn mark_adult_media_hashes(&self, hashes: &[BlobHash]) -> Result<()>;
+    /// #858: 対象 hash が成人向けラベル付き投稿の添付として観測済みか。
+    /// blob 取得ゲート(`blob_media_payload`)の判定に使う。
+    async fn is_adult_media_hash(&self, hash: &BlobHash) -> Result<bool>;
     async fn list_topic_timeline(
         &self,
         topic_id: &str,

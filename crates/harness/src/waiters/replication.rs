@@ -126,6 +126,7 @@ pub(crate) async fn replicate_public_post_with_retry(
                     reply_to: None,
                     channel_ref: ChannelRef::Public,
                     attachments: Vec::new(),
+                    content_labels: Vec::new(),
                 })
                 .await
                 .with_context(|| format!("failed to create public post on {publisher_label}"))?;

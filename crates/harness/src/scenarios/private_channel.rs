@@ -287,6 +287,7 @@ pub(crate) async fn run_private_channel_invite_connectivity(
                 reply_to: None,
                 channel_ref: private_ref.clone(),
                 attachments: Vec::new(),
+                content_labels: Vec::new(),
             })
             .await
             .context("failed to create private post")?;
@@ -407,6 +408,7 @@ pub(crate) async fn run_private_channel_invite_connectivity(
                 reply_to: Some(private_post_id.clone()),
                 channel_ref: ChannelRef::Public,
                 attachments: Vec::new(),
+                content_labels: Vec::new(),
             })
             .await
             .context("failed to create private reply")?;

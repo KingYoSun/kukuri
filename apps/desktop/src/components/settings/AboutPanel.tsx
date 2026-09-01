@@ -67,6 +67,23 @@ export function AboutPanel() {
               : t('legal:about.notAccepted'),
         };
       }),
+      // #858: 年齢の自己申告は文書同意とは別状態として表示する。
+      ...(consentStatus
+        ? [
+            {
+              label: t('legal:about.ageAttestationHeading'),
+              value: (() => {
+                const attestedAt = formatAcceptedAt(
+                  consentStatus.ageAttestation.attestedAt,
+                  locale
+                );
+                return consentStatus.ageAttestation.attestedVersion !== null && attestedAt
+                  ? t('legal:about.ageAttestedValue', { attestedAt })
+                  : t('legal:about.notAttested');
+              })(),
+            },
+          ]
+        : []),
     ],
     [consentStatus, currentVersion, locale, t]
   );

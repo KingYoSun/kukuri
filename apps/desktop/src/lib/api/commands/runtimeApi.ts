@@ -72,6 +72,7 @@ import type {
   CreateGameRoomRequest,
   CreateLiveSessionRequest,
   CreateMetaverseRoomRequest,
+  ContentDisplaySettings,
   CreatePostRequest,
   CreatePrivateChannelRequest,
   CreateRepostRequest,
@@ -138,7 +139,7 @@ import { domeTransitionApi } from './domeTransitionApi';
 import { socialBlockApi } from './socialBlockApi';
 
 export const runtimeApi: DesktopApi = {
-  createPost: command('createPost', async (topic, content, replyTo, attachments = [], channelRef = { kind: 'public' }) => {
+  createPost: command('createPost', async (topic, content, replyTo, attachments = [], channelRef = { kind: 'public' }, contentLabels = []) => {
     return invokeDesktop<string>('create_post', {
       request: {
         topic,
@@ -146,6 +147,7 @@ export const runtimeApi: DesktopApi = {
         reply_to: replyTo,
         channel_ref: channelRef,
         attachments,
+        content_labels: contentLabels,
       } satisfies CreatePostRequest,
     });
   }),
@@ -1024,6 +1026,15 @@ export const runtimeApi: DesktopApi = {
         mime,
         metaverse_kind: metaverseKind ?? null,
       } satisfies GetBlobPreviewRequest,
+    });
+  }),
+  // #858: 成人向け表現の表示設定(既定 OFF、canonical は Rust 側ローカル JSON)。
+  getContentDisplaySettings: command('getContentDisplaySettings', async () => {
+    return invokeDesktop<ContentDisplaySettings>('get_content_display_settings');
+  }),
+  setAdultContentDisplayEnabled: command('setAdultContentDisplayEnabled', async (enabled) => {
+    return invokeDesktop<ContentDisplaySettings>('set_adult_content_display_enabled', {
+      enabled,
     });
   }),
 };

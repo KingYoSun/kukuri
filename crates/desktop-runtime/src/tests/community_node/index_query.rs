@@ -319,6 +319,7 @@ async fn community_node_index_records_and_restores_existing_local_subjects() {
                 "image/png",
                 b"observed attachment",
             )],
+            content_labels: Vec::new(),
         })
         .await
         .expect("create post");

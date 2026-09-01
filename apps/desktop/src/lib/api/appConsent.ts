@@ -30,6 +30,11 @@ export async function getAppConsentStatus(): Promise<AppConsentStatus> {
           acceptedAppVersion: null,
         },
       ],
+      ageAttestation: {
+        currentVersion: 1,
+        attestedVersion: 1,
+        attestedAt: null,
+      },
       satisfied: true,
     };
   }
@@ -43,7 +48,8 @@ export type AcceptedAppConsentDocument = {
 
 export async function acceptAppConsents(
   documents: AcceptedAppConsentDocument[],
-  language: string
+  language: string,
+  ageAttested: boolean
 ): Promise<DesktopStartupStatus> {
   if (isDesktopMockActive()) {
     return { status: 'ready' };
@@ -51,5 +57,6 @@ export async function acceptAppConsents(
   return invokeDesktop<DesktopStartupStatus>('accept_app_consents', {
     documents,
     language,
+    ageAttested,
   });
 }

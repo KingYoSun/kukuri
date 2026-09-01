@@ -209,6 +209,7 @@ impl AppService {
             },
             content_status,
             attachments,
+            content_labels: row.content_labels.clone(),
             created_at: row.created_at,
             reply_to: row.reply_to_object_id.clone().map(|id| id.0),
             reply_preview,
@@ -340,6 +341,7 @@ impl AppService {
                 row.content.unwrap_or_else(|| "[blob pending]".to_string())
             },
             attachments,
+            content_labels: row.content_labels.clone(),
             root_id: row.root_object_id.map(|id| id.0),
             reply_to: row.reply_to_object_id.map(|id| id.0),
         }))
@@ -376,6 +378,15 @@ impl AppService {
         &self,
         row: BookmarkedPostRow,
     ) -> Result<BookmarkedPostView> {
+        // #858: BookmarkedPostRow はラベル列を持たないため、object projection から
+        // 補完する(未投影なら空。blob 取得ゲートは hash 単位で別途 fail-closed)。
+        let content_labels = self
+            .services
+            .projection_store
+            .get_object_projection(&row.source_object_id)
+            .await?
+            .map(|projection| projection.content_labels)
+            .unwrap_or_default();
         let withdrawal = self
             .services
             .projection_store
@@ -470,6 +481,7 @@ impl AppService {
                 },
                 content_status,
                 attachments,
+                content_labels,
                 created_at: row.created_at,
                 reply_to: row.reply_to_object_id.map(|id| id.0),
                 reply_preview,
@@ -546,6 +558,19 @@ impl AppService {
         if is_withdrawn {
             attachments.clear();
         }
+        // #858: profile timeline は object projection を経由しないため、成人向け
+        // ラベル付き添付の hash をここで取得ゲート用に記録する。
+        if kukuri_core::has_adult_content_label(&profile_post.content_labels) {
+            let hashes = profile_post
+                .attachments
+                .iter()
+                .map(|attachment| attachment.hash.clone())
+                .collect::<Vec<_>>();
+            self.services
+                .projection_store
+                .mark_adult_media_hashes(&hashes)
+                .await?;
+        }
         inherit_post_observation_for_attachments(&mut attachments, provenance.as_ref());
         Ok(PostView {
             object_id: profile_post.object_id.0.clone(),
@@ -569,6 +594,7 @@ impl AppService {
             },
             content_status: BlobViewStatus::Available,
             attachments,
+            content_labels: profile_post.content_labels.clone(),
             created_at: profile_post.created_at,
             reply_to: profile_post.reply_to_object_id.map(|id| id.0),
             reply_preview,
@@ -652,6 +678,7 @@ impl AppService {
             },
             content_status: BlobViewStatus::Available,
             attachments: Vec::new(),
+            content_labels: profile_repost.repost_of.content_labels.clone(),
             created_at: profile_repost.created_at,
             reply_to: None,
             reply_preview: None,
@@ -710,6 +737,18 @@ impl AppService {
             .get_post_withdrawal(&snapshot.source_object_id)
             .await?
             .is_some();
+        // #858: 引用 snapshot も取得ゲート用の hash 記録の対象にする。
+        if kukuri_core::has_adult_content_label(&snapshot.content_labels) {
+            let hashes = snapshot
+                .attachments
+                .iter()
+                .map(|attachment| attachment.hash.clone())
+                .collect::<Vec<_>>();
+            self.services
+                .projection_store
+                .mark_adult_media_hashes(&hashes)
+                .await?;
+        }
         let source_profile = profiles.get(snapshot.source_author_pubkey.as_str());
         let author = AuthorViewParts::new(source_profile, None);
         Ok(RepostSourceView {
@@ -735,6 +774,7 @@ impl AppService {
                 )
                 .await?
             },
+            content_labels: snapshot.content_labels.clone(),
             reply_to: snapshot.reply_to_object_id.map(|id| id.0),
             root_id: snapshot.root_id.map(|id| id.0),
         })

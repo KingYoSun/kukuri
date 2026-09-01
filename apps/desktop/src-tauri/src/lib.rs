@@ -13,9 +13,9 @@ use tauri_plugin_deep_link::DeepLinkExt;
 use crate::{
     commands::background_notifications::OsNotificationBackground,
     state::{
-        AppConsentStore, DesktopStartupState, DesktopStartupStatus, app_consent_documents_status,
-        app_consent_satisfied, build_desktop_state, failed_status, load_app_consent_store,
-        resolve_db_path,
+        AppConsentStore, DesktopStartupState, DesktopStartupStatus, age_attestation_status,
+        app_consent_documents_status, app_consent_satisfied, build_desktop_state, failed_status,
+        load_app_consent_store, resolve_db_path,
     },
     tracing::init_tracing,
 };
@@ -129,7 +129,10 @@ pub fn run() {
                 DesktopStartupState::initializing()
             } else {
                 info!("app-level legal consent required; deferring runtime startup");
-                DesktopStartupState::consent_required(app_consent_documents_status(&consent_store))
+                DesktopStartupState::consent_required(
+                    app_consent_documents_status(&consent_store),
+                    age_attestation_status(&consent_store),
+                )
             };
             app.manage(startup_state);
             app.manage(OsNotificationBackground::new(app.handle()));
@@ -242,6 +245,8 @@ pub fn run() {
             commands::community_node::get_local_peer_ticket,
             commands::posts::get_blob_media_payload,
             commands::posts::get_blob_preview_url,
+            commands::posts::get_content_display_settings,
+            commands::posts::set_adult_content_display_enabled,
             commands::community_node::get_community_node_config,
             commands::community_node::get_community_node_statuses,
             commands::community_node::set_community_node_config,

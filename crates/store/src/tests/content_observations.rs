@@ -18,6 +18,7 @@ fn observation_projection_row(object_id: &str) -> ObjectProjectionRow {
         content: Some("body".to_string()),
         attachments: Vec::new(),
         repost_of: None,
+        content_labels: Vec::new(),
         source_replica_id: ReplicaId::new("topic::observations"),
         source_key: format!("objects/{object_id}/header"),
         source_envelope_id: EnvelopeId::from(object_id),

@@ -16,10 +16,11 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 use crate::{
-    BlobHash, ChannelId, ChannelRef, DirectMessageAckV1, EnvelopeId, GossipHint, HintObjectRef,
-    KukuriEnvelope, KukuriPostEnvelopeContentV1, KukuriPostWithdrawalEnvelopeContentV1,
-    ObjectStatus, ObjectVisibility, PayloadRef, PostWithdrawalReason, Pubkey, TimelineScope,
-    TopicId, WithdrawalReasonVisibility,
+    ADULT_CONTENT_LABEL, BlobHash, ChannelId, ChannelRef, DirectMessageAckV1, EnvelopeId,
+    GossipHint, HintObjectRef, KukuriEnvelope, KukuriPostEnvelopeContentV1,
+    KukuriPostWithdrawalEnvelopeContentV1, ObjectStatus, ObjectVisibility, PayloadRef,
+    PostWithdrawalReason, Pubkey, TimelineScope, TopicId, WithdrawalReasonVisibility,
+    has_adult_content_label,
 };
 
 const PUBKEY_A: &str = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
@@ -273,9 +274,37 @@ fn post_envelope_content_snapshot() {
             reply_to: None,
             root_id: None,
             repost_of: None,
+            content_labels: Vec::new(),
         },
         r#"{"object_kind":"post","topic_id":"kukuri:topic:demo","channel_id":null,"payload_ref":{"InlineText":{"text":"hello"}},"attachments":[],"media_manifest_refs":[],"visibility":"public","reply_to":null,"root_id":null,"repost_of":null}"#,
     );
+}
+
+// #858: 成人向け自己申告ラベルは content_labels として署名対象 content に載る。
+// ラベルなしは省略され(skip_serializing_if)、旧 wire 形状と一致し続ける。
+#[test]
+fn post_envelope_content_labels_snapshot() {
+    let labeled = KukuriPostEnvelopeContentV1 {
+        object_kind: "post".to_string(),
+        topic_id: demo_topic(),
+        channel_id: None,
+        payload_ref: PayloadRef::InlineText {
+            text: "hello".to_string(),
+        },
+        attachments: vec![],
+        media_manifest_refs: vec![],
+        visibility: ObjectVisibility::Public,
+        reply_to: None,
+        root_id: None,
+        repost_of: None,
+        content_labels: vec![ADULT_CONTENT_LABEL.to_string()],
+    };
+    assert_wire(
+        &labeled,
+        r#"{"object_kind":"post","topic_id":"kukuri:topic:demo","channel_id":null,"payload_ref":{"InlineText":{"text":"hello"}},"attachments":[],"media_manifest_refs":[],"visibility":"public","reply_to":null,"root_id":null,"repost_of":null,"content_labels":["adult"]}"#,
+    );
+    assert!(has_adult_content_label(&labeled.content_labels));
+    assert!(!has_adult_content_label(&[]));
 }
 
 #[test]

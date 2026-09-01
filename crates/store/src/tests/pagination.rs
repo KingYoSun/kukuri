@@ -87,6 +87,7 @@ fn projection_row(id: &str, created_at: i64) -> ObjectProjectionRow {
         content: Some(id.to_string()),
         attachments: Vec::new(),
         repost_of: None,
+        content_labels: Vec::new(),
         source_replica_id: ReplicaId::new("topic::pagination"),
         source_key: format!("objects/{id}/header"),
         source_envelope_id: EnvelopeId::from(id),

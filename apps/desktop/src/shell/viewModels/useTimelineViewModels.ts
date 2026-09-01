@@ -10,6 +10,7 @@ import { contentProvenanceFromView } from '@/lib/api/provenance';
 import type { SupportedLocale } from '@/i18n';
 import { extractMentions } from '@/lib/internalLinks';
 import {
+  isAdultLabeledPost,
   logMediaDebug,
   mediaElementDebugFields,
   selectPrimaryImage,
@@ -34,6 +35,7 @@ import {
 type UseTimelineViewModelsArgs = {
   activeJoinedChannels: DesktopShellState['joinedChannelsByTopic'][string];
   activeTimeline: PostView[];
+  adultContentEnabled: boolean;
   bookmarkedPosts: DesktopShellState['bookmarkedPosts'];
   developerModeEnabled: boolean;
   knownAuthorsByPubkey: DesktopShellState['knownAuthorsByPubkey'];
@@ -50,6 +52,7 @@ type UseTimelineViewModelsArgs = {
 export function useTimelineViewModels({
   activeJoinedChannels,
   activeTimeline,
+  adultContentEnabled,
   bookmarkedPosts,
   developerModeEnabled,
   knownAuthorsByPubkey,
@@ -71,6 +74,8 @@ export function useTimelineViewModels({
       context: 'timeline' | 'thread',
       joinedChannels = activeJoinedChannels
     ): PostCardView => {
+      // #858: 表示許可前は成人向けラベル付き投稿の本文・メディアを代替表示にする。
+      const adultContentGated = !adultContentEnabled && isAdultLabeledPost(post);
       const primaryImage = selectPrimaryImage(post);
       const videoPoster = selectVideoPoster(post);
       const videoManifest = selectVideoManifest(post);
@@ -99,15 +104,17 @@ export function useTimelineViewModels({
         (attachment) => !reservedHashes.has(attachment.hash)
       ).length;
       const imagePreviewSrc =
-        primaryImage && typeof mediaObjectUrls[primaryImage.hash] === 'string'
+        !adultContentGated && primaryImage && typeof mediaObjectUrls[primaryImage.hash] === 'string'
           ? mediaObjectUrls[primaryImage.hash]
           : null;
       const videoPosterPreviewSrc =
-        videoPoster && typeof mediaObjectUrls[videoPoster.hash] === 'string'
+        !adultContentGated && videoPoster && typeof mediaObjectUrls[videoPoster.hash] === 'string'
           ? mediaObjectUrls[videoPoster.hash]
           : null;
       const videoPlaybackSrc =
-        videoManifest && typeof mediaObjectUrls[videoManifest.hash] === 'string'
+        !adultContentGated &&
+        videoManifest &&
+        typeof mediaObjectUrls[videoManifest.hash] === 'string'
           ? mediaObjectUrls[videoManifest.hash]
           : null;
       const hasSettledUnavailable = (hash: string) =>
@@ -257,12 +264,14 @@ export function useTimelineViewModels({
         mentionAuthors,
         suppressReplyPreview: context === 'thread',
         showUnavailableDiagnostics: developerModeEnabled,
+        adultContentGated,
         media: {
           objectId: post.object_id,
           kind: mediaKind,
           extraAttachmentCount,
-          state:
-            mediaKind === 'video'
+          state: adultContentGated && mediaKind !== null
+            ? 'gated'
+            : mediaKind === 'video'
               ? videoPlaybackSrc || videoPosterPreviewSrc
                 ? 'ready'
                 : mediaUnavailable
@@ -280,7 +289,7 @@ export function useTimelineViewModels({
             ? formatBytes(mediaMetaAttachment.bytes, locale)
             : null,
           imagePreviewSrc,
-          imageGalleryItems,
+          imageGalleryItems: adultContentGated ? [] : imageGalleryItems,
           currentImageIndex: primaryImage
             ? Math.max(
                 0,
@@ -310,6 +319,7 @@ export function useTimelineViewModels({
     },
     [
       activeJoinedChannels,
+      adultContentEnabled,
       developerModeEnabled,
       knownAuthorsByPubkey,
       localAuthorPubkey,

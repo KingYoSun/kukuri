@@ -661,6 +661,7 @@ pub(crate) fn projection_row_from_header(
         content,
         attachments: header.attachments.clone(),
         repost_of: header.repost_of.clone(),
+        content_labels: header.content_labels.clone(),
         source_replica_id: source_replica_id.clone(),
         source_key: stable_key("objects", &format!("{}/state", header.object_id.as_str())),
         source_envelope_id: header.envelope_id.clone(),

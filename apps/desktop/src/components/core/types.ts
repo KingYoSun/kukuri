@@ -48,7 +48,7 @@ export type PostMediaView = {
   kind: 'image' | 'video' | null;
   statusLabel?: string | null;
   extraAttachmentCount: number;
-  state: 'loading' | 'ready' | 'unavailable';
+  state: 'loading' | 'ready' | 'unavailable' | 'gated';
   metaMime?: string | null;
   metaBytesLabel?: string | null;
   imagePreviewSrc?: string | null;
@@ -118,6 +118,8 @@ export type PostCardView = {
   replyParentAuthor?: ReferencedAuthorMeta | null;
   suppressReplyPreview?: boolean;
   showUnavailableDiagnostics?: boolean;
+  // #858: 成人向けラベル付き投稿で、表示設定 OFF のため本文・メディアを代替表示にする。
+  adultContentGated?: boolean;
   mentionAuthors?: Record<string, MentionAuthorView>;
   // 正本（通常は author_docs）と、index / moderation / cache 等の観測経路を分離して保持する。
   // 通報ルーティング（#310）・content details・default node boundary 説明に使う。

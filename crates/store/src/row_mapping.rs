@@ -70,6 +70,13 @@ pub(crate) fn row_to_object_projection(
             .filter(|value| !value.trim().is_empty())
             .map(|value| serde_json::from_str(value.as_str()))
             .transpose()?,
+        content_labels: row
+            .try_get::<String, _>("content_labels_json")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| serde_json::from_str(value.as_str()))
+            .transpose()?
+            .unwrap_or_default(),
         source_replica_id: ReplicaId::new(row.get::<String, _>("source_replica_id")),
         source_key: row.get("source_key"),
         source_envelope_id: row.get::<String, _>("source_envelope_id").into(),
