@@ -113,6 +113,11 @@ export const SETTINGS_SECTION_COPY: Array<{
     label: 'Developer',
     description: 'Developer mode and work-in-progress feature visibility.',
   },
+  {
+    id: 'account',
+    label: 'Account',
+    description: 'Account key export, import, and account switching.',
+  },
 ];
 
 export const PRIMARY_SECTION_PATHS: Record<PrimarySection, string> = {
@@ -135,7 +140,8 @@ export function isSettingsSection(value: string | null): value is SettingsSectio
     value === 'community-node' ||
     value === 'reactions' ||
     value === 'release' ||
-    value === 'developer'
+    value === 'developer' ||
+    value === 'account'
   );
 }
 

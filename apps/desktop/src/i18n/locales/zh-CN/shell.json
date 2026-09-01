@@ -192,13 +192,13 @@
       "description": "服务条款、隐私政策、应用版本与同意状态。",
       "label": "关于 / 法律信息"
     },
+    "account": {
+      "label": "账户",
+      "description": "账户密钥的导出、导入与切换。"
+    },
     "appearance": {
       "description": "本地亮色、暗色与语言选择。",
       "label": "显示"
-    },
-    "safety": {
-      "label": "安全",
-      "description": "成人内容显示设置。"
     },
     "community-node": {
       "description": "社区节点配置、认证、同意与刷新操作。",
@@ -223,6 +223,10 @@
     "release": {
       "description": "预览更新、诊断和系统通知。",
       "label": "发布"
+    },
+    "safety": {
+      "label": "安全",
+      "description": "成人内容显示设置。"
     }
   },
   "workspace": {

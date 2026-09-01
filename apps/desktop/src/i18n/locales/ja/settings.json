@@ -1,4 +1,43 @@
 {
+  "accountKey": {
+    "title": "アカウント",
+    "summary": "アカウント鍵のエクスポート・インポートと、複数アカウントの切り替え。",
+    "scopeNotice": "ここで扱うのは本人性を表すアカウント鍵のみです。投稿データ、設定、添付ファイル、非公開チャネルの秘密などの完全なバックアップは含まれません(端末の完全移行は別機能として計画されています)。",
+    "accountsTitle": "この端末のアカウント",
+    "unnamedAccount": "(名前なし)",
+    "activeBadge": "使用中",
+    "switchButton": "切り替え",
+    "switchPending": "切り替え中…",
+    "export": {
+      "title": "アカウント鍵のエクスポート",
+      "warning": "このエクスポートとパスフレーズを入手した第三者は、あなたに完全になりすませます。パスフレーズを忘れた場合、運営者を含む誰にも復元できません。安全な場所にのみ保管してください。",
+      "acknowledge": "リスクを理解しました",
+      "passphraseLabel": "パスフレーズ",
+      "passphraseHint": "{{min}}文字以上の強いパスフレーズを設定してください。",
+      "tooShort": "パスフレーズが短すぎます。",
+      "confirmLabel": "パスフレーズ(確認)",
+      "mismatch": "パスフレーズが一致しません。",
+      "submit": "暗号化してエクスポート",
+      "pending": "エクスポート中…",
+      "fingerprintLabel": "公開鍵フィンガープリント",
+      "resultLabel": "暗号化されたエクスポート",
+      "copy": "コピー",
+      "copied": "コピーしました"
+    },
+    "import": {
+      "title": "アカウント鍵のインポート",
+      "inputLabel": "エクスポート文字列",
+      "previewButton": "内容を確認",
+      "fingerprintLabel": "公開鍵フィンガープリント",
+      "alreadyRegistered": "この鍵はすでにこの端末に登録されています。",
+      "passphraseLabel": "パスフレーズ",
+      "labelLabel": "ラベル(任意)",
+      "submit": "アカウントとして追加",
+      "pending": "インポート中…",
+      "success": "アカウントを追加しました。切り替えるとインポートした本人性で利用を開始できます。",
+      "switchNow": "今すぐ切り替え"
+    }
+  },
   "appearance": {
     "darkSelected": "ダークテーマを選択中",
     "languageHint": "言語の変更はこの端末ですぐ反映され、ローカルに保存されます。",

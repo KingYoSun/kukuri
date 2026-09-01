@@ -115,6 +115,18 @@ impl OsNotificationBackground {
             warn!(%error, "failed to persist OS notification settings");
         }
     }
+
+    /// #859: アカウント切替後に旧アカウントの pubkey キャッシュと dispatch cursor を
+    /// 引き継がないようリセットする。baseline を張り直すことで、新アカウントの
+    /// 既存通知がトーストとして一斉に吹き出すのも防ぐ。
+    pub(crate) fn reset_for_account_switch(&self) {
+        if let Ok(mut pubkey) = self.local_pubkey.lock() {
+            pubkey.clear();
+        }
+        if let Ok(mut baseline) = self.baseline_pending.lock() {
+            *baseline = true;
+        }
+    }
 }
 
 /// Push the latest settings from the frontend down to the background dispatcher.
@@ -143,20 +155,25 @@ pub fn spawn(app: AppHandle) {
                 return;
             }
         }
-        let Some(state) = event_app.try_state::<DesktopState>() else {
-            return;
-        };
-        let mut rx = state.runtime.subscribe_events();
-        drop(state);
-        while let Ok(event) = rx.recv().await {
-            if matches!(
-                event,
-                kukuri_desktop_runtime::RuntimeEvent::NotificationStatusChanged
-            ) {
-                if let Err(error) = poll_once(&event_app).await {
-                    debug!(%error, "event-driven notification poll skipped");
+        // #859: アカウント切替で runtime が入れ替わると旧チャネルが閉じるため、
+        // recv 失敗時は現在の runtime へ再 subscribe する(60 秒ポーリングとは別枠)。
+        loop {
+            let Some(state) = event_app.try_state::<DesktopState>() else {
+                return;
+            };
+            let mut rx = state.runtime().subscribe_events();
+            drop(state);
+            while let Ok(event) = rx.recv().await {
+                if matches!(
+                    event,
+                    kukuri_desktop_runtime::RuntimeEvent::NotificationStatusChanged
+                ) {
+                    if let Err(error) = poll_once(&event_app).await {
+                        debug!(%error, "event-driven notification poll skipped");
+                    }
                 }
             }
+            tokio::time::sleep(Duration::from_millis(500)).await;
         }
     });
 
@@ -177,7 +194,7 @@ async fn poll_once(app: &AppHandle) -> anyhow::Result<()> {
     };
     let background = app.state::<OsNotificationBackground>();
 
-    let notifications = state.runtime.list_notifications().await?;
+    let notifications = state.runtime().list_notifications().await?;
     let local_pubkey = resolve_local_pubkey(&state, &background).await;
     let settings = background.settings_snapshot();
 
@@ -243,7 +260,7 @@ async fn resolve_local_pubkey(
         }
     }
     let resolved = state
-        .runtime
+        .runtime()
         .get_sync_status()
         .await
         .map(|status| status.local_author_pubkey)

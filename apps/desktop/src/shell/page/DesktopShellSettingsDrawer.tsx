@@ -1,4 +1,5 @@
 import { AboutPanel } from '@/components/settings/AboutPanel';
+import { AccountKeyPanel } from '@/components/settings/AccountKeyPanel';
 import { AppearancePanel } from '@/components/settings/AppearancePanel';
 import { CommunityNodePanel } from '@/components/settings/CommunityNodePanel';
 import { ConnectivityPanel } from '@/components/settings/ConnectivityPanel';
@@ -311,6 +312,10 @@ export function DesktopShellSettingsDrawer({
           }}
         />
       ),
+    },
+    {
+      ...settingsSectionCopy[9],
+      content: <AccountKeyPanel />,
     },
   ];
 

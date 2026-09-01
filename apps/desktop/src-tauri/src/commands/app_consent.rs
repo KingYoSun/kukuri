@@ -75,7 +75,9 @@ pub async fn accept_app_consents(
     // #858: 18歳以上の自己申告は文書同意とは別の必須行為。今回のリクエストで
     // 申告されたか、過去に現行版で申告済みのどちらかが必要(fail-closed)。
     if !age_attested && !age_attestation_satisfied(&store) {
-        return Err("age attestation is required to use kukuri".to_string().into());
+        return Err("age attestation is required to use kukuri"
+            .to_string()
+            .into());
     }
 
     let accepted_at = current_unix_seconds();

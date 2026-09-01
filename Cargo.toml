@@ -39,6 +39,7 @@ version = "0.1.8"
 
 [workspace.dependencies]
 anyhow = "1.0.104"
+argon2 = { version = "0.5.3", default-features = false, features = ["alloc"] }
 async-trait = "0.1.92"
 axum = { version = "0.8.9", features = ["ws"] }
 base64 = "0.23.1"

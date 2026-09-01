@@ -8,6 +8,7 @@ mod dome_recovery;
 mod dome_transition;
 mod envelope;
 mod game;
+mod identity_export;
 mod ids;
 mod live;
 mod media;
@@ -107,6 +108,11 @@ pub use game::{
     resolve_metaverse_room_state, validate_dome_customization, validate_dome_instance_manifest,
     validate_dome_move_record, validate_dome_preset_manifest, validate_dome_relationship_scope,
     validate_metaverse_collider, validate_metaverse_room_state,
+};
+pub use identity_export::{
+    ACCOUNT_KEY_EXPORT_KDF, ACCOUNT_KEY_EXPORT_MIN_PASSPHRASE_CHARS, ACCOUNT_KEY_EXPORT_PREFIX,
+    ACCOUNT_KEY_EXPORT_VERSION, AccountKeyExportPreview, decrypt_account_key_export,
+    encrypt_account_key_export, preview_account_key_export,
 };
 pub use ids::{
     BlobHash, ChannelId, EnvelopeId, Pubkey, ReplicaId, TopicId, author_profile_topic_id,

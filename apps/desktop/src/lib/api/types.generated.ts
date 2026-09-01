@@ -661,3 +661,19 @@ export type AcceptCommunityNodeConsentsRequest = { base_url: string, documents: 
 
 export type SetDiscoverySeedsRequest = { seed_entries: Array<string>, };
 
+export type ExportAccountKeyRequest = { passphrase: string, };
+
+export type PreviewAccountKeyImportRequest = { export: string, };
+
+export type ImportAccountKeyRequest = { export: string, passphrase: string, label?: string | null, };
+
+export type SwitchAccountRequest = { account_id: string, };
+
+export type AccountRecord = { id: string, pubkey: string, label?: string | null, created_at: number, last_used_at: number, };
+
+export type AccountsSnapshot = { active_account_id: string, accounts: Array<AccountRecord>, };
+
+export type AccountKeyExport = { export: string, public_key: string, };
+
+export type AccountKeyImportPreview = { version: number, kdf: string, public_key: string, already_registered: boolean, };
+

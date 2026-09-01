@@ -1,13 +1,11 @@
 use kukuri_desktop_runtime::{
-    AcceptDomeConnectionProposalRequest, CreateDomeConnectionProposalRequest,
-    AbortDomeTransitionRequest, CloseDomeHostingRequest, CommitDomeLayoutRequest,
-    CommitDomeTransitionRequest, CreateGameRoomRequest,
-    CreateLiveSessionRequest,
-    CreateMetaverseRoomRequest, DelegateDomeHostingRequest, GetDomeHostingRequest,
-    ImportMetaverseRoomAssetRequest, ListDomeConnectionTopologyRequest, ListGameRoomsRequest,
-    ListLiveSessionsRequest, ListMetaverseRoomEventsRequest, LiveSessionCommandRequest,
-    MoveDomeRequest, PrepareDomeTransitionRequest, PublishMetaverseRoomEventRequest,
-    ResyncDomeSnapshotsRequest,
+    AbortDomeTransitionRequest, AcceptDomeConnectionProposalRequest, CloseDomeHostingRequest,
+    CommitDomeLayoutRequest, CommitDomeTransitionRequest, CreateDomeConnectionProposalRequest,
+    CreateGameRoomRequest, CreateLiveSessionRequest, CreateMetaverseRoomRequest,
+    DelegateDomeHostingRequest, GetDomeHostingRequest, ImportMetaverseRoomAssetRequest,
+    ListDomeConnectionTopologyRequest, ListGameRoomsRequest, ListLiveSessionsRequest,
+    ListMetaverseRoomEventsRequest, LiveSessionCommandRequest, MoveDomeRequest,
+    PrepareDomeTransitionRequest, PublishMetaverseRoomEventRequest, ResyncDomeSnapshotsRequest,
     RevokeDomeConnectionRequest, StartOwnerDomeHostingRequest, SubmitDomeSessionInputRequest,
     UpdateGameRoomRequest, UpdateMetaverseRoomRequest, WithdrawDomeConnectionProposalRequest,
 };
@@ -20,7 +18,7 @@ pub async fn list_live_sessions(
     request: ListLiveSessionsRequest,
 ) -> Result<Vec<kukuri_app_api::LiveSessionView>, CommandError> {
     state
-        .runtime
+        .runtime()
         .list_live_sessions(request)
         .await
         .map_err(map_error)
@@ -32,7 +30,7 @@ pub async fn create_live_session(
     request: CreateLiveSessionRequest,
 ) -> Result<String, CommandError> {
     state
-        .runtime
+        .runtime()
         .create_live_session(request)
         .await
         .map_err(map_error)
@@ -44,7 +42,7 @@ pub async fn end_live_session(
     request: LiveSessionCommandRequest,
 ) -> Result<(), CommandError> {
     state
-        .runtime
+        .runtime()
         .end_live_session(request)
         .await
         .map_err(map_error)
@@ -56,7 +54,7 @@ pub async fn join_live_session(
     request: LiveSessionCommandRequest,
 ) -> Result<(), CommandError> {
     state
-        .runtime
+        .runtime()
         .join_live_session(request)
         .await
         .map_err(map_error)
@@ -68,7 +66,7 @@ pub async fn leave_live_session(
     request: LiveSessionCommandRequest,
 ) -> Result<(), CommandError> {
     state
-        .runtime
+        .runtime()
         .leave_live_session(request)
         .await
         .map_err(map_error)
@@ -80,7 +78,7 @@ pub async fn list_game_rooms(
     request: ListGameRoomsRequest,
 ) -> Result<Vec<kukuri_app_api::GameRoomView>, CommandError> {
     state
-        .runtime
+        .runtime()
         .list_game_rooms(request)
         .await
         .map_err(map_error)
@@ -92,7 +90,7 @@ pub async fn create_game_room(
     request: CreateGameRoomRequest,
 ) -> Result<String, CommandError> {
     state
-        .runtime
+        .runtime()
         .create_game_room(request)
         .await
         .map_err(map_error)
@@ -104,7 +102,7 @@ pub async fn update_game_room(
     request: UpdateGameRoomRequest,
 ) -> Result<(), CommandError> {
     state
-        .runtime
+        .runtime()
         .update_game_room(request)
         .await
         .map_err(map_error)
@@ -116,7 +114,7 @@ pub async fn create_metaverse_room(
     request: CreateMetaverseRoomRequest,
 ) -> Result<String, CommandError> {
     state
-        .runtime
+        .runtime()
         .create_metaverse_room(request)
         .await
         .map_err(map_error)
@@ -128,7 +126,7 @@ pub async fn update_metaverse_room(
     request: UpdateMetaverseRoomRequest,
 ) -> Result<(), CommandError> {
     state
-        .runtime
+        .runtime()
         .update_metaverse_room(request)
         .await
         .map_err(map_error)
@@ -139,7 +137,11 @@ pub async fn get_dome_hosting(
     state: tauri::State<'_, DesktopState>,
     request: GetDomeHostingRequest,
 ) -> Result<kukuri_app_api::DomeHostingView, CommandError> {
-    state.runtime.get_dome_hosting(request).await.map_err(map_error)
+    state
+        .runtime()
+        .get_dome_hosting(request)
+        .await
+        .map_err(map_error)
 }
 
 #[tauri::command]
@@ -148,7 +150,7 @@ pub async fn start_owner_dome_hosting(
     request: StartOwnerDomeHostingRequest,
 ) -> Result<kukuri_app_api::DomeHostingView, CommandError> {
     state
-        .runtime
+        .runtime()
         .start_owner_dome_hosting(request)
         .await
         .map_err(map_error)
@@ -160,7 +162,7 @@ pub async fn delegate_dome_hosting(
     request: DelegateDomeHostingRequest,
 ) -> Result<kukuri_app_api::DomeHostingView, CommandError> {
     state
-        .runtime
+        .runtime()
         .delegate_dome_hosting(request)
         .await
         .map_err(map_error)
@@ -171,7 +173,11 @@ pub async fn close_dome_hosting(
     state: tauri::State<'_, DesktopState>,
     request: CloseDomeHostingRequest,
 ) -> Result<kukuri_app_api::DomeHostingView, CommandError> {
-    state.runtime.close_dome_hosting(request).await.map_err(map_error)
+    state
+        .runtime()
+        .close_dome_hosting(request)
+        .await
+        .map_err(map_error)
 }
 
 #[tauri::command]
@@ -180,7 +186,7 @@ pub async fn submit_dome_session_input(
     request: SubmitDomeSessionInputRequest,
 ) -> Result<kukuri_core::DomePhysicsSnapshotV1, CommandError> {
     state
-        .runtime
+        .runtime()
         .submit_dome_session_input(request)
         .await
         .map_err(map_error)
@@ -192,7 +198,7 @@ pub async fn preview_dome_transition_access(
     request: PrepareDomeTransitionRequest,
 ) -> Result<kukuri_core::DomeTransitionAccessDecisionV1, CommandError> {
     state
-        .runtime
+        .runtime()
         .preview_dome_transition_access(request)
         .await
         .map_err(map_error)
@@ -204,7 +210,7 @@ pub async fn prepare_dome_transition(
     request: PrepareDomeTransitionRequest,
 ) -> Result<kukuri_core::DomeTransitionAdmissionTicketV1, CommandError> {
     state
-        .runtime
+        .runtime()
         .prepare_dome_transition(request)
         .await
         .map_err(map_error)
@@ -216,7 +222,7 @@ pub async fn commit_dome_transition(
     request: CommitDomeTransitionRequest,
 ) -> Result<(), CommandError> {
     state
-        .runtime
+        .runtime()
         .commit_dome_transition(request)
         .await
         .map_err(map_error)
@@ -228,7 +234,7 @@ pub async fn abort_dome_transition(
     request: AbortDomeTransitionRequest,
 ) -> Result<(), CommandError> {
     state
-        .runtime
+        .runtime()
         .abort_dome_transition(request)
         .await
         .map_err(map_error)
@@ -240,7 +246,7 @@ pub async fn commit_dome_layout(
     request: CommitDomeLayoutRequest,
 ) -> Result<kukuri_app_api::DomeLayoutCommitView, CommandError> {
     state
-        .runtime
+        .runtime()
         .commit_dome_layout(request)
         .await
         .map_err(map_error)
@@ -252,7 +258,7 @@ pub async fn resync_dome_snapshots(
     request: ResyncDomeSnapshotsRequest,
 ) -> Result<Vec<kukuri_core::DomePhysicsSnapshotV1>, CommandError> {
     state
-        .runtime
+        .runtime()
         .resync_dome_snapshots(request)
         .await
         .map_err(map_error)
@@ -263,7 +269,7 @@ pub async fn move_dome(
     state: tauri::State<'_, DesktopState>,
     request: MoveDomeRequest,
 ) -> Result<kukuri_app_api::DomeMoveView, CommandError> {
-    state.runtime.move_dome(request).await.map_err(map_error)
+    state.runtime().move_dome(request).await.map_err(map_error)
 }
 
 #[tauri::command]
@@ -272,7 +278,7 @@ pub async fn list_dome_connection_topology(
     request: ListDomeConnectionTopologyRequest,
 ) -> Result<kukuri_app_api::DomeConnectionTopologyView, CommandError> {
     state
-        .runtime
+        .runtime()
         .list_dome_connection_topology(request)
         .await
         .map_err(map_error)
@@ -284,7 +290,7 @@ pub async fn create_dome_connection_proposal(
     request: CreateDomeConnectionProposalRequest,
 ) -> Result<kukuri_app_api::DomeConnectionProposalView, CommandError> {
     state
-        .runtime
+        .runtime()
         .create_dome_connection_proposal(request)
         .await
         .map_err(map_error)
@@ -296,7 +302,7 @@ pub async fn accept_dome_connection_proposal(
     request: AcceptDomeConnectionProposalRequest,
 ) -> Result<kukuri_app_api::DomeConnectionView, CommandError> {
     state
-        .runtime
+        .runtime()
         .accept_dome_connection_proposal(request)
         .await
         .map_err(map_error)
@@ -308,7 +314,7 @@ pub async fn withdraw_dome_connection_proposal(
     request: WithdrawDomeConnectionProposalRequest,
 ) -> Result<kukuri_app_api::DomeConnectionProposalView, CommandError> {
     state
-        .runtime
+        .runtime()
         .withdraw_dome_connection_proposal(request)
         .await
         .map_err(map_error)
@@ -320,7 +326,7 @@ pub async fn revoke_dome_connection(
     request: RevokeDomeConnectionRequest,
 ) -> Result<kukuri_app_api::DomeConnectionView, CommandError> {
     state
-        .runtime
+        .runtime()
         .revoke_dome_connection(request)
         .await
         .map_err(map_error)
@@ -332,7 +338,7 @@ pub async fn publish_metaverse_room_event(
     request: PublishMetaverseRoomEventRequest,
 ) -> Result<kukuri_app_api::MetaverseRoomEventView, CommandError> {
     state
-        .runtime
+        .runtime()
         .publish_metaverse_room_event(request)
         .await
         .map_err(map_error)
@@ -344,7 +350,7 @@ pub async fn list_metaverse_room_events(
     request: ListMetaverseRoomEventsRequest,
 ) -> Result<Vec<kukuri_app_api::MetaverseRoomEventView>, CommandError> {
     state
-        .runtime
+        .runtime()
         .list_metaverse_room_events(request)
         .await
         .map_err(map_error)
@@ -356,7 +362,7 @@ pub async fn import_metaverse_room_asset(
     request: ImportMetaverseRoomAssetRequest,
 ) -> Result<kukuri_app_api::MetaverseAssetRefView, CommandError> {
     state
-        .runtime
+        .runtime()
         .import_metaverse_room_asset(request)
         .await
         .map_err(map_error)

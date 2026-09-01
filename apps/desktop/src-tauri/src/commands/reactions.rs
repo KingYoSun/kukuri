@@ -11,7 +11,7 @@ pub async fn toggle_reaction(
     request: ToggleReactionRequest,
 ) -> Result<kukuri_app_api::ReactionStateView, CommandError> {
     state
-        .runtime
+        .runtime()
         .toggle_reaction(request)
         .await
         .map_err(map_error)
@@ -22,7 +22,7 @@ pub async fn list_my_custom_reaction_assets(
     state: tauri::State<'_, DesktopState>,
 ) -> Result<Vec<kukuri_app_api::CustomReactionAssetView>, CommandError> {
     state
-        .runtime
+        .runtime()
         .list_my_custom_reaction_assets()
         .await
         .map_err(map_error)
@@ -34,7 +34,7 @@ pub async fn list_recent_reactions(
     request: ListRecentReactionsRequest,
 ) -> Result<Vec<kukuri_app_api::RecentReactionView>, CommandError> {
     state
-        .runtime
+        .runtime()
         .list_recent_reactions(request)
         .await
         .map_err(map_error)
@@ -46,7 +46,7 @@ pub async fn create_custom_reaction_asset(
     request: CreateCustomReactionAssetRequest,
 ) -> Result<kukuri_app_api::CustomReactionAssetView, CommandError> {
     state
-        .runtime
+        .runtime()
         .create_custom_reaction_asset(request)
         .await
         .map_err(map_error)
@@ -57,7 +57,7 @@ pub async fn list_bookmarked_custom_reactions(
     state: tauri::State<'_, DesktopState>,
 ) -> Result<Vec<kukuri_app_api::BookmarkedCustomReactionView>, CommandError> {
     state
-        .runtime
+        .runtime()
         .list_bookmarked_custom_reactions()
         .await
         .map_err(map_error)
@@ -69,7 +69,7 @@ pub async fn bookmark_custom_reaction(
     request: BookmarkCustomReactionRequest,
 ) -> Result<kukuri_app_api::BookmarkedCustomReactionView, CommandError> {
     state
-        .runtime
+        .runtime()
         .bookmark_custom_reaction(request)
         .await
         .map_err(map_error)
@@ -81,7 +81,7 @@ pub async fn remove_bookmarked_custom_reaction(
     request: RemoveBookmarkedCustomReactionRequest,
 ) -> Result<(), CommandError> {
     state
-        .runtime
+        .runtime()
         .remove_bookmarked_custom_reaction(request)
         .await
         .map_err(map_error)

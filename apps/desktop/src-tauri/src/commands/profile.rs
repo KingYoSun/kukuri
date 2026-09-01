@@ -8,7 +8,7 @@ use crate::state::{CommandError, DesktopState, map_error};
 pub async fn get_my_profile(
     state: tauri::State<'_, DesktopState>,
 ) -> Result<kukuri_core::Profile, CommandError> {
-    state.runtime.get_my_profile().await.map_err(map_error)
+    state.runtime().get_my_profile().await.map_err(map_error)
 }
 
 #[tauri::command]
@@ -17,7 +17,7 @@ pub async fn set_my_profile(
     request: SetMyProfileRequest,
 ) -> Result<kukuri_core::Profile, CommandError> {
     state
-        .runtime
+        .runtime()
         .set_my_profile(request)
         .await
         .map_err(map_error)
@@ -29,7 +29,7 @@ pub async fn follow_author(
     request: AuthorRequest,
 ) -> Result<kukuri_app_api::AuthorSocialView, CommandError> {
     state
-        .runtime
+        .runtime()
         .follow_author(request)
         .await
         .map_err(map_error)
@@ -41,7 +41,7 @@ pub async fn unfollow_author(
     request: AuthorRequest,
 ) -> Result<kukuri_app_api::AuthorSocialView, CommandError> {
     state
-        .runtime
+        .runtime()
         .unfollow_author(request)
         .await
         .map_err(map_error)
@@ -53,7 +53,7 @@ pub async fn get_author_social_view(
     request: AuthorRequest,
 ) -> Result<kukuri_app_api::AuthorSocialView, CommandError> {
     state
-        .runtime
+        .runtime()
         .get_author_social_view(request)
         .await
         .map_err(map_error)
@@ -64,7 +64,11 @@ pub async fn mute_author(
     state: tauri::State<'_, DesktopState>,
     request: AuthorRequest,
 ) -> Result<kukuri_app_api::AuthorSocialView, CommandError> {
-    state.runtime.mute_author(request).await.map_err(map_error)
+    state
+        .runtime()
+        .mute_author(request)
+        .await
+        .map_err(map_error)
 }
 
 #[tauri::command]
@@ -73,7 +77,7 @@ pub async fn unmute_author(
     request: AuthorRequest,
 ) -> Result<kukuri_app_api::AuthorSocialView, CommandError> {
     state
-        .runtime
+        .runtime()
         .unmute_author(request)
         .await
         .map_err(map_error)
@@ -84,7 +88,11 @@ pub async fn block_author(
     state: tauri::State<'_, DesktopState>,
     request: AuthorRequest,
 ) -> Result<kukuri_app_api::AuthorSocialView, CommandError> {
-    state.runtime.block_author(request).await.map_err(map_error)
+    state
+        .runtime()
+        .block_author(request)
+        .await
+        .map_err(map_error)
 }
 
 #[tauri::command]
@@ -92,7 +100,11 @@ pub async fn unblock_author(
     state: tauri::State<'_, DesktopState>,
     request: AuthorRequest,
 ) -> Result<kukuri_app_api::AuthorSocialView, CommandError> {
-    state.runtime.unblock_author(request).await.map_err(map_error)
+    state
+        .runtime()
+        .unblock_author(request)
+        .await
+        .map_err(map_error)
 }
 
 #[tauri::command]
@@ -101,7 +113,7 @@ pub async fn list_social_connections(
     request: ListSocialConnectionsRequest,
 ) -> Result<Vec<kukuri_app_api::AuthorSocialView>, CommandError> {
     state
-        .runtime
+        .runtime()
         .list_social_connections(request)
         .await
         .map_err(map_error)
@@ -111,7 +123,11 @@ pub async fn list_social_connections(
 pub async fn list_notifications(
     state: tauri::State<'_, DesktopState>,
 ) -> Result<Vec<kukuri_app_api::NotificationView>, CommandError> {
-    state.runtime.list_notifications().await.map_err(map_error)
+    state
+        .runtime()
+        .list_notifications()
+        .await
+        .map_err(map_error)
 }
 
 #[tauri::command]
@@ -120,7 +136,7 @@ pub async fn mark_notification_read(
     request: NotificationIdRequest,
 ) -> Result<kukuri_app_api::NotificationStatusView, CommandError> {
     state
-        .runtime
+        .runtime()
         .mark_notification_read(request)
         .await
         .map_err(map_error)
@@ -131,7 +147,7 @@ pub async fn mark_all_notifications_read(
     state: tauri::State<'_, DesktopState>,
 ) -> Result<kukuri_app_api::NotificationStatusView, CommandError> {
     state
-        .runtime
+        .runtime()
         .mark_all_notifications_read()
         .await
         .map_err(map_error)
@@ -142,7 +158,7 @@ pub async fn get_notification_status(
     state: tauri::State<'_, DesktopState>,
 ) -> Result<kukuri_app_api::NotificationStatusView, CommandError> {
     state
-        .runtime
+        .runtime()
         .get_notification_status()
         .await
         .map_err(map_error)
