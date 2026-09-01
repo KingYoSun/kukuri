@@ -92,8 +92,11 @@ function SettingsDrawerStory({ initialSection = 'connectivity' }: { initialSecti
                 diagnostics: [],
                 dependency: { diagnostics: [], boundaryNotes: [] },
                 consent: {
-                  authenticated: false,
                   loaded: false,
+                  loading: false,
+                  loadError: null,
+                  withdrawn: false,
+                  hasLocalConsent: false,
                   allRequiredAccepted: false,
                   hasPendingUpdate: false,
                   policies: [],
@@ -125,6 +128,7 @@ function SettingsDrawerStory({ initialSection = 'connectivity' }: { initialSecti
           onSubmitInviteCode={async () => undefined}
           onFetchConsents={() => undefined}
           onAcceptConsents={() => undefined}
+          onWithdrawConsents={() => {}}
           onRefresh={() => undefined}
           onClearToken={() => undefined}
         />

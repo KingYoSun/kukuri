@@ -11,12 +11,14 @@ import type {
   ChannelAudienceKind,
   ChannelRef,
   CommunityNodeConfig,
+  CommunityNodeConsentDocumentRef,
   CommunityNodeIndexingRequest,
   CommunityNodeIndexQueryRequest,
   CommunityIndexPostResolveInput,
   CommunityIndexPostResolveResponse,
   CommunityNodeManifestFetch,
   CommunityNodeNodeStatus,
+  CommunityNodePoliciesResponse,
   CommunityNodeRelationNeighborsRequest,
   CommunityNodeTesterFeedbackResponse,
   CommunityNodeTesterFeedbackSubmission,
@@ -471,10 +473,16 @@ export interface DesktopApi {
   ): Promise<CommunityNodeNodeStatus>;
   clearCommunityNodeToken(baseUrl: string): Promise<CommunityNodeNodeStatus>;
   getCommunityNodeConsentStatus(baseUrl: string): Promise<CommunityNodeNodeStatus>;
+  // #857: 認証不要の公開 policy カタログ。同意モーダルの提示内容を組み立てる。
+  fetchCommunityNodePolicies(baseUrl: string): Promise<CommunityNodePoliciesResponse>;
+  // #857: 提示済み文書への同意をローカル記録し、セッション確立(認証・同期)を開始する。
   acceptCommunityNodeConsents(
     baseUrl: string,
-    policySlugs: string[]
+    documents: CommunityNodeConsentDocumentRef[],
+    language: string
   ): Promise<CommunityNodeNodeStatus>;
+  // #857: Node 同意の撤回。記録は履歴として残し、トークンを破棄して接続を停止する。
+  withdrawCommunityNodeConsents(baseUrl: string): Promise<CommunityNodeNodeStatus>;
   refreshCommunityNodeMetadata(baseUrl: string): Promise<CommunityNodeNodeStatus>;
   fetchCommunityNodeManifest(baseUrl: string): Promise<CommunityNodeManifestFetch>;
   readCommunityNodeTrustUser(

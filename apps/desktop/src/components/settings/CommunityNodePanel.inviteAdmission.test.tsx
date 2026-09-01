@@ -49,6 +49,7 @@ test('submits a masked invite code only for the selected node', async () => {
       onSubmitInviteCode={onSubmitInviteCode}
       onFetchConsents={() => {}}
       onAcceptConsents={() => {}}
+      onWithdrawConsents={() => {}}
       onRefresh={() => {}}
       onClearToken={() => {}}
     />

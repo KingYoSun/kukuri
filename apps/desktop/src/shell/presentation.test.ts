@@ -51,6 +51,19 @@ function baseStatus(
   return {
     base_url: 'https://node.example',
     auth_state: { authenticated: true },
+    // #857: 既定はローカル同意済み。未同意ケースは overrides で明示する。
+    local_consent: {
+      records: [
+        {
+          policy_slug: 'terms',
+          policy_version: 1,
+          accepted_at: 1_700_000_000,
+          language: 'ja',
+          app_version: '0.1.8',
+        },
+      ],
+      withdrawn_at: null,
+    },
     invite_code_saved: false,
     restart_required: false,
     ...overrides,
@@ -550,15 +563,18 @@ describe('communityNodeRetryAfterLabel', () => {
 
 describe('communityNodeNextStepLabel', () => {
   it('walks the setup steps in priority order', () => {
-    // status 無し > 未認証(同意未受諾より優先) > 同意未受諾 > restart_required
+    // #857: status 無し > ローカル未同意(認証より優先) > 未認証 > サーバ同意未受諾 > restart_required
     expect(communityNodeNextStepLabel(undefined)).toBe('save nodes to begin authentication');
     expect(
       communityNodeNextStepLabel(
         baseStatus({
           auth_state: { authenticated: false },
-          consent_state: { all_required_accepted: false, items: [] },
+          local_consent: { records: [], withdrawn_at: null },
         })
       )
+    ).toBe('accept required policies to resolve connectivity urls');
+    expect(
+      communityNodeNextStepLabel(baseStatus({ auth_state: { authenticated: false } }))
     ).toBe('authenticate this node');
     expect(
       communityNodeNextStepLabel(
@@ -643,55 +659,99 @@ describe('communityNodeAuthLabel', () => {
 });
 
 describe('communityNodeConsentLabel', () => {
-  it('maps consent state to accepted / required / unknown', () => {
-    expect(communityNodeConsentLabel(undefined)).toBe('unknown');
-    expect(communityNodeConsentLabel(baseStatus())).toBe('unknown');
+  // #857: 同意状態はローカル同意記録が SSoT。
+  it('maps local consent records to accepted / required / withdrawn', () => {
+    expect(communityNodeConsentLabel(undefined)).toBe('required');
     expect(
       communityNodeConsentLabel(
-        baseStatus({ consent_state: { all_required_accepted: true, items: [] } })
+        baseStatus({ local_consent: { records: [], withdrawn_at: null } })
+      )
+    ).toBe('required');
+    expect(communityNodeConsentLabel(baseStatus())).toBe('accepted');
+    const record = {
+      policy_slug: 'terms',
+      policy_version: 1,
+      accepted_at: 1_750_000_000,
+      language: 'ja',
+      app_version: '0.1.8',
+    };
+    expect(
+      communityNodeConsentLabel(
+        baseStatus({ local_consent: { records: [record], withdrawn_at: null } })
       )
     ).toBe('accepted');
     expect(
       communityNodeConsentLabel(
-        baseStatus({ consent_state: { all_required_accepted: false, items: [] } })
+        baseStatus({
+          local_consent: { records: [record], withdrawn_at: null },
+          consent_update_pending: true,
+        })
       )
     ).toBe('required');
+    expect(
+      communityNodeConsentLabel(
+        baseStatus({ local_consent: { records: [record], withdrawn_at: 1_750_000_001 } })
+      )
+    ).toBe('Consent withdrawn');
   });
 });
 
 describe('communityNodeConsentView', () => {
-  it('returns an unloaded default view without a status', () => {
-    expect(communityNodeConsentView(undefined)).toEqual({
-      authenticated: false,
+  const catalogEntry = (policies: Parameters<typeof communityNodeConsentView>[1]) => policies;
+
+  it('returns an unloaded default view without a status or catalog', () => {
+    expect(communityNodeConsentView(undefined, undefined)).toEqual({
       loaded: false,
+      loading: false,
+      loadError: null,
+      withdrawn: false,
+      hasLocalConsent: false,
       allRequiredAccepted: false,
       hasPendingUpdate: false,
       policies: [],
     });
   });
 
+  it('surfaces catalog loading and load errors for retry', () => {
+    expect(communityNodeConsentView(undefined, { status: 'loading' }).loading).toBe(true);
+    const errored = communityNodeConsentView(undefined, { status: 'error', error: 'offline' });
+    expect(errored.loaded).toBe(false);
+    expect(errored.loadError).toBe('offline');
+  });
+
   it('maps an accepted policy with a formatted acceptance timestamp', () => {
     const status = baseStatus({
-      consent_state: {
-        all_required_accepted: true,
-        items: [
+      local_consent: {
+        records: [
+          {
+            policy_slug: 'terms',
+            policy_version: 3,
+            accepted_at: 1750000000,
+            language: 'ja',
+            app_version: '0.1.8',
+          },
+        ],
+        withdrawn_at: null,
+      },
+    });
+    const view = communityNodeConsentView(
+      status,
+      catalogEntry({
+        status: 'ok',
+        policies: [
           {
             policy_slug: 'terms',
             policy_version: 3,
             title: 'Terms',
-            body: 'Body text',
+            body_markdown: 'Body text',
             required: true,
-            accepted_at: 1750000000,
-            previously_accepted_version: 2,
           },
         ],
-      },
-    });
+      })
+    );
 
-    const view = communityNodeConsentView(status);
-
-    expect(view.authenticated).toBe(true);
     expect(view.loaded).toBe(true);
+    expect(view.hasLocalConsent).toBe(true);
     expect(view.allRequiredAccepted).toBe(true);
     expect(view.hasPendingUpdate).toBe(false);
     expect(view.policies).toHaveLength(1);
@@ -702,45 +762,92 @@ describe('communityNodeConsentView', () => {
     expect(policy.policyVersion).toBe(3);
     expect(policy.required).toBe(true);
     expect(policy.updated).toBe(false);
-    expect(policy.previouslyAcceptedVersion).toBe(2);
     // accepted_at は「秒」で持ち、ミリ秒換算して日時整形される(1750000000 秒 = 2025 年)。
     // TZ 依存の文言のため年のみ固定する(換算漏れなら 1970 年になる)。
     expect(policy.acceptedAtLabel).toMatch(/2025/);
   });
 
-  it('flags a required re-acceptance as a pending update', () => {
+  it('flags a required re-acceptance as a pending update and ignores optional policies', () => {
     const status = baseStatus({
-      consent_state: {
-        all_required_accepted: false,
-        items: [
+      local_consent: {
+        records: [
+          {
+            policy_slug: 'privacy',
+            policy_version: 1,
+            accepted_at: 1750000000,
+            language: 'ja',
+            app_version: '0.1.8',
+          },
+        ],
+        withdrawn_at: null,
+      },
+    });
+    const view = communityNodeConsentView(
+      status,
+      catalogEntry({
+        status: 'ok',
+        policies: [
           {
             policy_slug: 'privacy',
             policy_version: 2,
             title: 'Privacy',
+            body_markdown: 'Privacy body',
             required: true,
-            accepted_at: null,
-            previously_accepted_version: 1,
           },
           {
             policy_slug: 'optional',
             policy_version: 1,
             title: 'Optional',
+            body_markdown: '',
             required: false,
-            accepted_at: null,
-            previously_accepted_version: null,
           },
         ],
-      },
-    });
-
-    const view = communityNodeConsentView(status);
+      })
+    );
 
     expect(view.hasPendingUpdate).toBe(true);
-    // 未受諾 + 旧版受諾ありは「更新」、初回未受諾は更新ではない。body 欠落は空文字
+    expect(view.allRequiredAccepted).toBe(false);
+    // 旧版受諾ありの未受諾は「更新」、初回未受諾は更新ではない。
     expect(view.policies[0].updated).toBe(true);
+    expect(view.policies[0].previouslyAcceptedVersion).toBe(1);
     expect(view.policies[0].acceptedAtLabel).toBeNull();
     expect(view.policies[1].updated).toBe(false);
-    expect(view.policies[1].body).toBe('');
+  });
+
+  it('treats withdrawn consent as not accepted while keeping history visible', () => {
+    const status = baseStatus({
+      local_consent: {
+        records: [
+          {
+            policy_slug: 'terms',
+            policy_version: 1,
+            accepted_at: 1750000000,
+            language: 'ja',
+            app_version: '0.1.8',
+          },
+        ],
+        withdrawn_at: 1750000001,
+      },
+    });
+    const view = communityNodeConsentView(
+      status,
+      catalogEntry({
+        status: 'ok',
+        policies: [
+          {
+            policy_slug: 'terms',
+            policy_version: 1,
+            title: 'Terms',
+            body_markdown: 'Body',
+            required: true,
+          },
+        ],
+      })
+    );
+
+    expect(view.withdrawn).toBe(true);
+    expect(view.hasLocalConsent).toBe(false);
+    expect(view.allRequiredAccepted).toBe(false);
   });
 });
 

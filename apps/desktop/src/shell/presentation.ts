@@ -32,6 +32,7 @@ import {
 
 import {
   type CommunityNodeDraftNode,
+  type CommunityNodePoliciesEntry,
   type GameEditorDraft,
   type KnownAuthorsByPubkey,
   PUBLIC_CHANNEL_REF,
@@ -383,6 +384,14 @@ export function communityNodeNextStepLabel(status?: CommunityNodeNodeStatus): st
       `settings:communityNode.admission.nextSteps.${status.admission_rejection.code}`
     );
   }
+  // #857: 同意はローカル記録が SSoT。未同意/撤回/再同意待ちなら認証より先に同意を促す。
+  if (
+    !status.local_consent?.records.length ||
+    status.local_consent.withdrawn_at != null ||
+    status.consent_update_pending
+  ) {
+    return translate('settings:communityNode.values.acceptPolicies');
+  }
   if (!status.auth_state.authenticated) {
     return translate('settings:communityNode.values.authenticateThisNode');
   }
@@ -425,13 +434,19 @@ export function communityNodeAuthLabel(status?: CommunityNodeNodeStatus): string
     : translate('common:states.no');
 }
 
+// #857: 同意状態はローカル同意記録(local_consent)を SSoT として表示する。
 export function communityNodeConsentLabel(status?: CommunityNodeNodeStatus): string {
-  if (!status?.consent_state) {
-    return translate('common:states.unknown');
+  const localConsent = status?.local_consent;
+  if (!localConsent || localConsent.records.length === 0) {
+    return translate('common:states.required');
   }
-  return status.consent_state.all_required_accepted
-    ? translate('common:states.accepted')
-    : translate('common:states.required');
+  if (localConsent.withdrawn_at != null) {
+    return translate('settings:communityNode.values.consentWithdrawn');
+  }
+  if (status?.consent_update_pending) {
+    return translate('common:states.required');
+  }
+  return translate('common:states.accepted');
 }
 
 function formatConsentAcceptedAt(value: number | null | undefined): string | null {
@@ -441,32 +456,51 @@ function formatConsentAcceptedAt(value: number | null | undefined): string | nul
   return formatLocalizedDateTime(value * 1000);
 }
 
-// per-node consent ダイアログ（#384）用の view を組み立てる。
-// 認証状態・取得有無・各ポリシー（本文/版/必須/受諾日時/更新フラグ）をまとめる。
+// per-node consent ダイアログ（#384 / #857）用の view を組み立てる。
+// 提示内容は認証不要の公開 policy カタログ、受諾状態はローカル同意記録から導く。
 export function communityNodeConsentView(
-  status?: CommunityNodeNodeStatus
+  status: CommunityNodeNodeStatus | undefined,
+  policiesEntry: CommunityNodePoliciesEntry | undefined
 ): CommunityNodeConsentView {
-  const authenticated = status?.auth_state.authenticated ?? false;
-  const consentState = status?.consent_state ?? null;
-  const policies: CommunityNodeConsentPolicyView[] = (consentState?.items ?? []).map((item) => {
-    const previouslyAcceptedVersion = item.previously_accepted_version ?? null;
-    const updated = item.accepted_at == null && previouslyAcceptedVersion != null;
+  const localConsent = status?.local_consent ?? { records: [], withdrawn_at: null };
+  const withdrawn = localConsent.withdrawn_at != null;
+  const catalog = policiesEntry?.status === 'ok' ? policiesEntry.policies : [];
+  const policies: CommunityNodeConsentPolicyView[] = catalog.map((policy) => {
+    const recordVersions = localConsent.records
+      .filter((record) => record.policy_slug === policy.policy_slug)
+      .map((record) => record.policy_version);
+    const highestAccepted = recordVersions.length ? Math.max(...recordVersions) : null;
+    const accepted = !withdrawn && highestAccepted != null && highestAccepted >= policy.policy_version;
+    const acceptedRecord = localConsent.records.find(
+      (record) =>
+        record.policy_slug === policy.policy_slug && record.policy_version === highestAccepted
+    );
+    const previouslyAcceptedVersion =
+      highestAccepted != null && highestAccepted < policy.policy_version ? highestAccepted : null;
     return {
-      policySlug: item.policy_slug,
-      title: item.title,
-      body: item.body ?? '',
-      policyVersion: item.policy_version,
-      required: item.required,
-      acceptedAtLabel: formatConsentAcceptedAt(item.accepted_at),
-      updated,
+      policySlug: policy.policy_slug,
+      title: policy.title,
+      body: policy.body_markdown,
+      policyVersion: policy.policy_version,
+      required: policy.required,
+      acceptedAtLabel: accepted ? formatConsentAcceptedAt(acceptedRecord?.accepted_at) : null,
+      // 旧版だけ同意済み = 版が上がって再同意が必要な「更新」。
+      updated: !accepted && previouslyAcceptedVersion != null,
       previouslyAcceptedVersion,
     };
   });
+  const requiredPolicies = policies.filter((policy) => policy.required);
   return {
-    authenticated,
-    loaded: consentState != null,
-    allRequiredAccepted: consentState?.all_required_accepted ?? false,
-    hasPendingUpdate: policies.some((policy) => policy.required && policy.updated),
+    loaded: policiesEntry?.status === 'ok',
+    loading: policiesEntry?.status === 'loading',
+    loadError: policiesEntry?.status === 'error' ? policiesEntry.error : null,
+    withdrawn,
+    allRequiredAccepted:
+      !withdrawn &&
+      policiesEntry?.status === 'ok' &&
+      requiredPolicies.every((policy) => policy.acceptedAtLabel != null),
+    hasPendingUpdate: requiredPolicies.some((policy) => policy.updated),
+    hasLocalConsent: localConsent.records.length > 0 && !withdrawn,
     policies,
   };
 }

@@ -40,8 +40,11 @@ function CommunityNodePanelStory({
                 diagnostics: [],
                 dependency: { diagnostics: [], boundaryNotes: [] },
                 consent: {
-                  authenticated: false,
                   loaded: false,
+                  loading: false,
+                  loadError: null,
+                  withdrawn: false,
+                  hasLocalConsent: false,
                   allRequiredAccepted: false,
                   hasPendingUpdate: false,
                   policies: [],
@@ -72,6 +75,7 @@ function CommunityNodePanelStory({
           onAuthenticate={() => {}}
           onFetchConsents={() => {}}
           onAcceptConsents={() => {}}
+          onWithdrawConsents={() => {}}
           onRefresh={() => {}}
           onClearToken={() => {}}
           onSubmitInviteCode={args.onSubmitInviteCode}

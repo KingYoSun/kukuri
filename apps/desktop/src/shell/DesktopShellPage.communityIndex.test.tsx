@@ -55,7 +55,14 @@ test('Explore header selects named eligible nodes, clears stale results, and ret
   ]);
   for (const baseUrl of [NODE_A, NODE_B]) {
     await api.authenticateCommunityNode(baseUrl);
-    await api.acceptCommunityNodeConsents(baseUrl, []);
+    await api.acceptCommunityNodeConsents(
+      baseUrl,
+      [
+        { policy_slug: 'terms_of_service', policy_version: 1 },
+        { policy_slug: 'privacy_policy', policy_version: 1 },
+      ],
+      'en'
+    );
   }
   vi.spyOn(api, 'fetchCommunityNodeManifest').mockImplementation(async (baseUrl) => ({
     status: 'ok',

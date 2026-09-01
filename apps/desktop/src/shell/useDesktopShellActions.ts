@@ -198,6 +198,7 @@ export function useDesktopShellActions({
   const setDiscoveryError = useDesktopShellFieldSetter('discoveryError');
   const setCommunityNodeConfig = useDesktopShellFieldSetter('communityNodeConfig');
   const setCommunityNodeStatuses = useDesktopShellFieldSetter('communityNodeStatuses');
+  const setCommunityNodePolicies = useDesktopShellFieldSetter('communityNodePolicies');
   const setCommunityNodeInput = useDesktopShellFieldSetter('communityNodeInput');
   const setCommunityNodeEditorDirty = useDesktopShellFieldSetter('communityNodeEditorDirty');
   const setCommunityNodeError = useDesktopShellFieldSetter('communityNodeError');
@@ -356,6 +357,7 @@ export function useDesktopShellActions({
     handleRefreshCommunityNode,
     handleFetchCommunityNodeConsents,
     handleAcceptCommunityNodeConsents,
+    handleWithdrawCommunityNodeConsents,
   } = createProfileTopicChannelActions({
     api,
     translate,
@@ -401,6 +403,7 @@ export function useDesktopShellActions({
     setJoinedChannelsByTopic,
     setCommunityNodeConfig,
     setCommunityNodeStatuses,
+    setCommunityNodePolicies,
     setCommunityNodeInput,
     setCommunityNodeEditorDirty,
     setCommunityNodeError,
@@ -892,6 +895,7 @@ export function useDesktopShellActions({
     handleRefreshCommunityNode,
     handleFetchCommunityNodeConsents,
     handleAcceptCommunityNodeConsents,
+    handleWithdrawCommunityNodeConsents,
     handleImportPeer,
     handleCreateLiveSession,
     handleJoinLiveSession,

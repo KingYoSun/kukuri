@@ -29,7 +29,7 @@ import { formatLocalizedTime } from '@/i18n/format';
 import type { SupportedLocale } from '@/i18n';
 import { buildLiveLink, type InternalSmartReference } from '@/lib/internalLinks';
 import { copyTextToClipboard } from '@/lib/utils';
-import { eligibleCommunityIndexNodes } from '@/lib/api/communityIndex';
+import { consentPendingCommunityNodes, eligibleCommunityIndexNodes } from '@/lib/api/communityIndex';
 import type { SubmitCommunityNodeReportRequest } from '@/lib/api';
 import {
   timelineStorageKeyForChannel,
@@ -354,6 +354,11 @@ export function DesktopShellPrimarySurface({
       ),
     [communityNodeConfig, communityNodeManifests, communityNodeStatuses]
   );
+  // #857: 未同意・撤回・再同意待ちの node は、Node 機能の利用直前に同意モーダルを提示する。
+  const consentPendingNodeBaseUrls = useMemo(
+    () => consentPendingCommunityNodes(communityNodeConfig, communityNodeStatuses),
+    [communityNodeConfig, communityNodeStatuses]
+  );
   const showCommunityNodeUnavailableNotice =
     activeSurfaceSection === 'explore' &&
     communityNodeConfig.nodes.length > 0 &&
@@ -466,6 +471,7 @@ export function DesktopShellPrimarySurface({
             activeTopic={surfaceTopic}
             activeTimelineScope={surfaceTimelineScope}
             eligibleNodeBaseUrls={eligibleIndexNodeBaseUrls}
+            consentPendingNodeBaseUrls={consentPendingNodeBaseUrls}
             selectedNodeBaseUrl={communityIndexNodeBaseUrl}
             onOpenCommunityNodeSettings={openCommunityNodeSettings}
             knownAuthorsByPubkey={knownAuthorsByPubkey}

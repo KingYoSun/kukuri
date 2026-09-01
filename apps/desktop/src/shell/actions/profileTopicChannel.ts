@@ -2,11 +2,13 @@ import { setRecordEntry, updateRecordEntry } from '@/shell/stateUpdates';
 import type { FormEvent } from 'react';
 
 import type {
+  CommunityNodeConsentDocumentRef,
   JoinedPrivateChannelView,
   ProfileInput,
 } from '@/lib/api';
 import { fileToCreateAttachment } from '@/lib/attachments';
 import { normalizeTopicId } from '@/lib/topicId';
+import i18n from '@/i18n';
 
 import {
   DEFAULT_COMMUNITY_NODE_CONFIG,
@@ -84,6 +86,7 @@ type ProfileTopicChannelParams = ActionsBaseParams & {
   setJoinedChannelsByTopic: Setter<'joinedChannelsByTopic'>;
   setCommunityNodeConfig: Setter<'communityNodeConfig'>;
   setCommunityNodeStatuses: Setter<'communityNodeStatuses'>;
+  setCommunityNodePolicies: Setter<'communityNodePolicies'>;
   setCommunityNodeInput: Setter<'communityNodeInput'>;
   setCommunityNodeEditorDirty: Setter<'communityNodeEditorDirty'>;
   setCommunityNodeError: Setter<'communityNodeError'>;
@@ -138,6 +141,7 @@ export function createProfileTopicChannelActions({
   setJoinedChannelsByTopic,
   setCommunityNodeConfig,
   setCommunityNodeStatuses,
+  setCommunityNodePolicies,
   setCommunityNodeInput,
   setCommunityNodeEditorDirty,
   setCommunityNodeError,
@@ -693,26 +697,40 @@ export function createProfileTopicChannelActions({
     }
   }
 
+  // #857: 同意提示に必要な情報は認証不要の公開 policy カタログから取得する。
   async function handleFetchCommunityNodeConsents(baseUrl: string) {
+    setCommunityNodePolicies(setRecordEntry(baseUrl, { status: 'loading' as const }));
     try {
-      const nextStatus = await api.getCommunityNodeConsentStatus(baseUrl);
-      setCommunityNodeStatuses((current) => upsertCommunityNodeStatus(current, nextStatus));
-      setCommunityNodeConfig((current) => syncCommunityNodeConfigWithStatus(current, nextStatus));
+      const catalog = await api.fetchCommunityNodePolicies(baseUrl);
+      setCommunityNodePolicies(
+        setRecordEntry(baseUrl, { status: 'ok' as const, policies: catalog.policies })
+      );
       setCommunityNodeError(null);
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (consentError) {
-      setCommunityNodeError(
+      const message =
         consentError instanceof Error
           ? consentError.message
-          : translate('common:errors.failedToFetchConsentStatus')
+          : translate('common:errors.failedToFetchConsentStatus');
+      // 取得失敗(オフライン等)はダイアログ内で再試行できるよう entry に残す。
+      setCommunityNodePolicies(
+        setRecordEntry(baseUrl, { status: 'error' as const, error: message })
       );
+      setCommunityNodeError(message);
       throw consentError;
     }
   }
 
-  async function handleAcceptCommunityNodeConsents(baseUrl: string) {
+  // #857: 提示された文書と版をそのまま受諾し、ローカル記録 → セッション確立を開始する。
+  async function handleAcceptCommunityNodeConsents(
+    baseUrl: string,
+    documents: CommunityNodeConsentDocumentRef[]
+  ) {
     try {
-      const nextStatus = await api.acceptCommunityNodeConsents(baseUrl, []);
+      const nextStatus = await api.acceptCommunityNodeConsents(
+        baseUrl,
+        documents,
+        i18n.resolvedLanguage ?? i18n.language
+      );
       setCommunityNodeStatuses((current) => upsertCommunityNodeStatus(current, nextStatus));
       setCommunityNodeConfig((current) => syncCommunityNodeConfigWithStatus(current, nextStatus));
       setCommunityNodeError(null);
@@ -722,6 +740,23 @@ export function createProfileTopicChannelActions({
         consentError instanceof Error
           ? consentError.message
           : translate('common:errors.failedToAcceptConsents')
+      );
+      throw consentError;
+    }
+  }
+
+  // #857: 同意の撤回。記録は履歴として残り、トークン破棄で接続だけが止まる。
+  async function handleWithdrawCommunityNodeConsents(baseUrl: string) {
+    try {
+      const nextStatus = await api.withdrawCommunityNodeConsents(baseUrl);
+      setCommunityNodeStatuses((current) => upsertCommunityNodeStatus(current, nextStatus));
+      setCommunityNodeConfig((current) => syncCommunityNodeConfigWithStatus(current, nextStatus));
+      setCommunityNodeError(null);
+    } catch (consentError) {
+      setCommunityNodeError(
+        consentError instanceof Error
+          ? consentError.message
+          : translate('common:errors.failedToWithdrawConsents')
       );
       throw consentError;
     }
@@ -754,5 +789,6 @@ export function createProfileTopicChannelActions({
     handleRefreshCommunityNode,
     handleFetchCommunityNodeConsents,
     handleAcceptCommunityNodeConsents,
+    handleWithdrawCommunityNodeConsents,
   };
 }

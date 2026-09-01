@@ -111,8 +111,6 @@
     },
     "consent": {
       "title": "コミュニティノードのポリシー",
-      "authRequired": "ポリシーを確認・同意する前に、このノードで認証してください。",
-      "notLoaded": "このダイアログを開くと、ノードから最新のポリシーを取得します。",
       "updatedNotice": "このノードはポリシーを更新しました。変更内容を確認し、再度同意すると接続を継続できます。",
       "noPolicies": "このノードは同意が必要なポリシーを持っていません。",
       "noBody": "このポリシーには本文がありません。",
@@ -122,7 +120,13 @@
       "updatedDetail": "v{{previous}} から v{{current}} に更新されました。",
       "acceptedAt": "{{timestamp}} に同意済み",
       "notAccepted": "未同意",
-      "allAccepted": "すべて同意済み"
+      "allAccepted": "すべて同意済み",
+      "intro": "このノードに接続する前に、規約・ポリシーをご確認ください。kukuri は同意判断に必要な公開文書のみを取得し、認証・登録は同意後にのみ開始します。",
+      "loading": "ノードから最新のポリシーを取得しています…",
+      "loadFailed": "ポリシーを取得できませんでした(オフラインの可能性があります)。接続できる状態で再試行してください。",
+      "withdrawnNotice": "このノードへの同意は撤回済みです。ローカル機能と直接P2Pは引き続き利用できます。再接続するには再度同意してください。",
+      "withdraw": "同意を撤回",
+      "decline": "今は同意しない"
     },
     "baseUrlLabel": "ベース URL",
     "baseUrlsHint": "HTTPS の base URL を 1 行に 1 つ入力します。",
@@ -175,7 +179,8 @@
       "restartRequiredUnexpected": "再起動が必要です（想定外）",
       "restartUnexpected": "想定外の再起動要求です。まずはメタデータ更新を試し、最後の手段として再起動してください",
       "saveNodesToBegin": "認証を始めるにはノードを保存してください",
-      "waitingForConsent": "同意受諾を待機中"
+      "waitingForConsent": "同意受諾を待機中",
+      "consentWithdrawn": "同意撤回済み"
     }
   },
   "connectivity": {

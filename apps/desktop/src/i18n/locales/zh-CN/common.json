@@ -98,7 +98,8 @@
     "failedToUpdateFollowState": "更新关注状态失败",
     "failedToUpdateMuteState": "更新静音状态失败",
     "quoteRepostRequiresCommentary": "请先添加评论再转发",
-    "unsupportedAttachmentType": "不支持的附件类型: {{name}}"
+    "unsupportedAttachmentType": "不支持的附件类型: {{name}}",
+    "failedToWithdrawConsents": "撤回社区节点同意失败。"
   },
   "feed": {
     "contentUnavailable": "无法获取正文。",

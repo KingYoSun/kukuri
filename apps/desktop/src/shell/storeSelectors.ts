@@ -138,6 +138,7 @@ export const selectShellViewModelsSlice = (s: DesktopShellStore) => ({
   communityNodeError: s.communityNodeError,
   communityNodeInput: s.communityNodeInput,
   communityNodeManifests: s.communityNodeManifests,
+  communityNodePolicies: s.communityNodePolicies,
   communityNodeStatuses: s.communityNodeStatuses,
   composeChannelByTopic: s.composeChannelByTopic,
   developerModeEnabled: s.developerModeEnabled,

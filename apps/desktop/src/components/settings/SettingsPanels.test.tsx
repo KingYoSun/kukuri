@@ -172,6 +172,7 @@ test('community node panel renders ready and error states', async () => {
       onSubmitInviteCode={async () => {}}
       onFetchConsents={onFetchConsents}
       onAcceptConsents={onAcceptConsents}
+      onWithdrawConsents={() => {}}
       onRefresh={() => {}}
       onClearToken={() => {}}
     />
@@ -201,8 +202,11 @@ test('community node consent dialog shows policy body, version, and update notic
         ? {
             ...node,
             consent: {
-              authenticated: true,
               loaded: true,
+              loading: false,
+              loadError: null,
+              withdrawn: false,
+              hasLocalConsent: true,
               allRequiredAccepted: false,
               hasPendingUpdate: true,
               policies: [
@@ -240,6 +244,7 @@ test('community node consent dialog shows policy body, version, and update notic
       onSubmitInviteCode={async () => {}}
       onFetchConsents={onFetchConsents}
       onAcceptConsents={onAcceptConsents}
+      onWithdrawConsents={() => {}}
       onRefresh={() => {}}
       onClearToken={() => {}}
     />
@@ -258,7 +263,9 @@ test('community node consent dialog shows policy body, version, and update notic
   expect(within(consentDialog).getByText('Updated from v1 to v2.')).toBeInTheDocument();
 
   await user.click(within(consentDialog).getByRole('button', { name: 'Accept' }));
-  expect(onAcceptConsents).toHaveBeenCalledWith('https://api.kukuri.app');
+  expect(onAcceptConsents).toHaveBeenCalledWith('https://api.kukuri.app', [
+    { policy_slug: 'terms_of_service', policy_version: 2 },
+  ]);
 });
 
 test('community node consent dialog disables accept when latest policy fetch fails', async () => {
@@ -298,6 +305,7 @@ test('community node consent dialog disables accept when latest policy fetch fai
       onSubmitInviteCode={async () => {}}
       onFetchConsents={onFetchConsents}
       onAcceptConsents={onAcceptConsents}
+      onWithdrawConsents={() => {}}
       onRefresh={() => {}}
       onClearToken={() => {}}
     />
@@ -306,7 +314,13 @@ test('community node consent dialog disables accept when latest policy fetch fai
   await user.click(screen.getAllByRole('button', { name: 'Consents' })[0]);
 
   const consentDialog = await screen.findByRole('dialog');
-  expect(within(consentDialog).getByText('Open this dialog to load the latest policies from the node.')).toBeInTheDocument();
+  // #857: 取得失敗(オフライン等)は失敗通知と再試行ボタンを出し、受諾は無効化する。
+  expect(
+    within(consentDialog).getByText(
+      'Could not load the policies (you may be offline). Retry when the node is reachable.'
+    )
+  ).toBeInTheDocument();
+  expect(within(consentDialog).getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   expect(
     within(consentDialog).queryByText('You must follow the community node terms of service.')
   ).not.toBeInTheDocument();
@@ -355,6 +369,7 @@ test('settings panels avoid the legacy grid classname collision', () => {
         onSubmitInviteCode={async () => {}}
         onFetchConsents={() => {}}
         onAcceptConsents={() => {}}
+        onWithdrawConsents={() => {}}
         onRefresh={() => {}}
         onClearToken={() => {}}
       />
@@ -594,6 +609,7 @@ test('community node panel hides diagnostics but keeps node editing when showDia
       onSubmitInviteCode={async () => {}}
       onFetchConsents={() => {}}
       onAcceptConsents={() => {}}
+      onWithdrawConsents={() => {}}
       onRefresh={() => {}}
       onClearToken={() => {}}
       showDiagnostics={false}

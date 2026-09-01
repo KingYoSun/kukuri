@@ -961,6 +961,7 @@ export function DesktopShellPage({
         handleSetCommunityNodeInviteCode={shellActions.handleSetCommunityNodeInviteCode}
         handleFetchCommunityNodeConsents={shellActions.handleFetchCommunityNodeConsents}
         handleAcceptCommunityNodeConsents={shellActions.handleAcceptCommunityNodeConsents}
+        handleWithdrawCommunityNodeConsents={shellActions.handleWithdrawCommunityNodeConsents}
         handleRefreshCommunityNode={shellActions.handleRefreshCommunityNode}
         handleClearCommunityNodeToken={shellActions.handleClearCommunityNodeToken}
         handleCreateCustomReactionAsset={shellActions.handleCreateCustomReactionAsset}

@@ -98,7 +98,8 @@
     "failedToUpdateFollowState": "Failed to update the follow.",
     "failedToUpdateMuteState": "Failed to update the mute.",
     "quoteRepostRequiresCommentary": "Add a comment before reposting.",
-    "unsupportedAttachmentType": "Unsupported attachment type: {{name}}."
+    "unsupportedAttachmentType": "Unsupported attachment type: {{name}}.",
+    "failedToWithdrawConsents": "Failed to withdraw community node consents."
   },
   "feed": {
     "contentUnavailable": "Content unavailable.",

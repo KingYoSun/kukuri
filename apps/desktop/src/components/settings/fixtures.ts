@@ -216,8 +216,11 @@ export function createCommunityNodePanelFixture(): CommunityNodePanelView {
           fixtureTranslate
         ),
         consent: {
-          authenticated: true,
           loaded: true,
+          loading: false,
+          loadError: null,
+          withdrawn: false,
+          hasLocalConsent: true,
           allRequiredAccepted: true,
           hasPendingUpdate: false,
           policies: [
@@ -276,8 +279,11 @@ export function createCommunityNodePanelFixture(): CommunityNodePanelView {
         ],
         dependency: buildCommunityNodeDependencyView({ status: 'absent' }, fixtureTranslate),
         consent: {
-          authenticated: false,
           loaded: false,
+          loading: false,
+          loadError: null,
+          withdrawn: false,
+          hasLocalConsent: false,
           allRequiredAccepted: false,
           hasPendingUpdate: false,
           policies: [],
