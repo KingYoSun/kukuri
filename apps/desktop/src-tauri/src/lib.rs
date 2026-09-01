@@ -13,8 +13,9 @@ use tauri_plugin_deep_link::DeepLinkExt;
 use crate::{
     commands::background_notifications::OsNotificationBackground,
     state::{
-        DesktopStartupState, DesktopStartupStatus, build_desktop_state, consent_satisfied,
-        failed_status, load_app_consent, resolve_db_path,
+        AppConsentStore, DesktopStartupState, DesktopStartupStatus, app_consent_documents_status,
+        app_consent_satisfied, build_desktop_state, failed_status, load_app_consent_store,
+        resolve_db_path,
     },
     tracing::init_tracing,
 };
@@ -118,20 +119,17 @@ pub fn run() {
             }
         })
         .setup(|app| {
-            let accepted_bundle_version = resolve_db_path(app.handle())
+            let consent_store = resolve_db_path(app.handle())
                 .ok()
-                .and_then(|db_path| load_app_consent(&db_path))
-                .map(|record| record.accepted_bundle_version);
+                .map(|db_path| load_app_consent_store(&db_path))
+                .unwrap_or_else(AppConsentStore::default);
 
-            let initialize_runtime = consent_satisfied(accepted_bundle_version);
+            let initialize_runtime = app_consent_satisfied(&consent_store);
             let startup_state = if initialize_runtime {
                 DesktopStartupState::initializing()
             } else {
                 info!("app-level legal consent required; deferring runtime startup");
-                DesktopStartupState::consent_required(
-                    crate::state::LEGAL_BUNDLE_VERSION,
-                    accepted_bundle_version,
-                )
+                DesktopStartupState::consent_required(app_consent_documents_status(&consent_store))
             };
             app.manage(startup_state);
             app.manage(OsNotificationBackground::new(app.handle()));
@@ -252,7 +250,9 @@ pub fn run() {
             commands::community_node::set_community_node_invite_code,
             commands::community_node::clear_community_node_token,
             commands::community_node::get_community_node_consent_status,
+            commands::community_node::fetch_community_node_policies,
             commands::community_node::accept_community_node_consents,
+            commands::community_node::withdraw_community_node_consents,
             commands::community_node::refresh_community_node_metadata,
             commands::community_node::fetch_community_node_manifest,
             commands::community_node::submit_community_node_report,

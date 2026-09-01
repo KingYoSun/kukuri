@@ -178,54 +178,61 @@ pub(crate) async fn run_community_node_connectivity(
             .context("failed to configure community node for desktop b")?;
         push_named_step(&mut steps, "configure_community_node", started_at);
 
+        // #857: 同意モーダル相当のフロー — 認証(JWT 発行)前に公開カタログを取得し、
+        // 文書単位で同意してからセッション確立(認証・サーバ同期)を行う。
         let started_at = Instant::now();
-        let authenticated_a = runtime_a
-            .authenticate_community_node(CommunityNodeTargetRequest {
+        let catalog = runtime_a
+            .fetch_community_node_policies(CommunityNodeTargetRequest {
                 base_url: stack.base_url.clone(),
             })
             .await
-            .context("failed to authenticate desktop a with community node")?;
-        let authenticated_b = runtime_b
-            .authenticate_community_node(CommunityNodeTargetRequest {
-                base_url: stack.base_url.clone(),
-            })
-            .await
-            .context("failed to authenticate desktop b with community node")?;
-        assert!(authenticated_a.auth_state.authenticated);
-        assert!(authenticated_b.auth_state.authenticated);
-        assert!(authenticated_a.resolved_urls.is_none());
-        assert!(authenticated_b.resolved_urls.is_none());
-        assert!(
-            !authenticated_a
-                .consent_state
-                .as_ref()
-                .expect("consent state for desktop a")
-                .all_required_accepted
+            .context("failed to fetch community node policies before consent")?;
+        anyhow::ensure!(
+            catalog
+                .policies
+                .iter()
+                .any(|policy| policy.required && !policy.body_markdown.trim().is_empty()),
+            "community node policy catalog must contain required documents with bodies"
         );
-        assert!(
-            !authenticated_b
-                .consent_state
-                .as_ref()
-                .expect("consent state for desktop b")
-                .all_required_accepted
-        );
-        push_named_step(&mut steps, "authenticate", started_at);
+        let documents = catalog
+            .policies
+            .iter()
+            .map(
+                |policy| kukuri_desktop_runtime::CommunityNodeConsentDocumentRef {
+                    policy_slug: policy.policy_slug.clone(),
+                    policy_version: policy.policy_version,
+                },
+            )
+            .collect::<Vec<_>>();
+        push_named_step(&mut steps, "fetch_policies", started_at);
 
         let started_at = Instant::now();
         let accepted_a = runtime_a
-            .accept_community_node_consents(AcceptCommunityNodeConsentsRequest {
-                base_url: stack.base_url.clone(),
-                policy_slugs: Vec::new(),
-            })
+            .accept_community_node_consents(
+                AcceptCommunityNodeConsentsRequest {
+                    base_url: stack.base_url.clone(),
+                    documents: documents.clone(),
+                    language: "ja".to_string(),
+                },
+                "harness",
+            )
             .await
             .context("failed to accept community node consents for desktop a")?;
         let accepted_b = runtime_b
-            .accept_community_node_consents(AcceptCommunityNodeConsentsRequest {
-                base_url: stack.base_url.clone(),
-                policy_slugs: Vec::new(),
-            })
+            .accept_community_node_consents(
+                AcceptCommunityNodeConsentsRequest {
+                    base_url: stack.base_url.clone(),
+                    documents,
+                    language: "ja".to_string(),
+                },
+                "harness",
+            )
             .await
             .context("failed to accept community node consents for desktop b")?;
+        assert!(accepted_a.auth_state.authenticated);
+        assert!(accepted_b.auth_state.authenticated);
+        assert!(accepted_a.local_consent.has_active_consent());
+        assert!(accepted_b.local_consent.has_active_consent());
         assert!(
             accepted_a
                 .consent_state

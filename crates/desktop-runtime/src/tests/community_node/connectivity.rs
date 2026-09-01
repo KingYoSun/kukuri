@@ -194,6 +194,7 @@ async fn community_node_connectivity_assist_backfills_public_timeline_with_relay
             ),
         }],
     };
+    seed_local_community_node_consents(&runtime_a, base_url, 1);
     *runtime_b.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.to_string(),
@@ -210,6 +211,7 @@ async fn community_node_connectivity_assist_backfills_public_timeline_with_relay
             ),
         }],
     };
+    seed_local_community_node_consents(&runtime_b, base_url, 1);
 
     timeout(
         Duration::from_secs(30),
@@ -354,6 +356,7 @@ async fn external_relay_endpoint_only_seed_peers_backfill_desktop_public_timelin
             ),
         }],
     };
+    seed_local_community_node_consents(&runtime_a, base_url, 1);
     *runtime_b.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.to_string(),
@@ -370,6 +373,7 @@ async fn external_relay_endpoint_only_seed_peers_backfill_desktop_public_timelin
             ),
         }],
     };
+    seed_local_community_node_consents(&runtime_b, base_url, 1);
 
     timeout(
         Duration::from_secs(30),
@@ -734,6 +738,8 @@ async fn runtime_starts_with_unreachable_community_node_and_recovers_via_manual_
 
     // WP-Q2: 到達不能ノードへの registration refresh 試行(→ last_error 記録)は
     // スケジューラ tick が駆動し、getter は読み取り専用。
+    // #857: 同意済みでなければそもそも通信しないため、同意記録をシードしてから tick を回す。
+    seed_local_community_node_consents(&runtime_a, community_base_url, 1);
     runtime_a
         .run_community_node_session_maintenance_once()
         .await;

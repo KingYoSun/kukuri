@@ -12,6 +12,40 @@ use sqlx::postgres::PgPool;
 
 use support::*;
 
+// #857: Node 同意の提示は認証前に成立させる必要があるため、公開 policy カタログは
+// bearer なしで文書一覧・本文・版を返す。
+#[tokio::test]
+async fn public_policies_are_served_without_auth() -> Result<()> {
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let server = TestServer::spawn(admin_database_url.as_str(), "cn_public_policies").await?;
+    let client = Client::new();
+
+    let response = client
+        .get(format!("{}/v1/policies", server.base_url))
+        .send()
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    let catalog = response
+        .json::<kukuri_cn_protocol::CommunityNodePoliciesResponse>()
+        .await?;
+    assert!(!catalog.policies.is_empty());
+    assert!(
+        catalog
+            .policies
+            .iter()
+            .all(|policy| !policy.policy_slug.is_empty()
+                && policy.policy_version >= 1
+                && !policy.title.trim().is_empty()
+                && !policy.body_markdown.trim().is_empty())
+    );
+    assert!(catalog.policies.iter().any(|policy| policy.required));
+
+    Ok(())
+}
+
 #[tokio::test]
 async fn bootstrap_requires_bearer_then_consents() -> Result<()> {
     let Some(admin_database_url) = integration_test_admin_database_url() else {

@@ -78,12 +78,18 @@ export type CommunityNodeConsentPolicyView = {
   previouslyAcceptedVersion: number | null;
 };
 
-// per-node consent ダイアログ全体の表示状態。
+// per-node consent ダイアログ全体の表示状態(#857: 提示は認証不要の公開カタログ、
+// 受諾状態はローカル同意記録から導く)。
 export type CommunityNodeConsentView = {
-  // 認証済みでないと consent を取得・受諾できない。
-  authenticated: boolean;
-  // consent_state を一度でも取得できているか（未取得なら本文表示前に取得を促す）。
+  // 公開 policy カタログを取得できているか（未取得なら本文表示前に取得を促す）。
   loaded: boolean;
+  loading: boolean;
+  // 取得失敗（オフライン等）。ダイアログ内で再試行できる。
+  loadError: string | null;
+  // 同意が撤回済みか。
+  withdrawn: boolean;
+  // 過去に受諾したローカル同意記録があるか（撤回済みは除く）。
+  hasLocalConsent: boolean;
   allRequiredAccepted: boolean;
   // 更新による未同意（再同意要求）が 1 つでもあるか。
   hasPendingUpdate: boolean;

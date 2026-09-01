@@ -55,9 +55,9 @@ const EXPECTED_TERMS_HEADINGS: Array<{
 describe.each(EXPECTED_TERMS_HEADINGS)('legal document in $locale', ({ locale, headings }) => {
   test('shows bundle version 2 and every content-rights clause', async () => {
     await i18n.changeLanguage(locale);
-    render(<LegalDocumentView bundleVersion={2} />);
+    render(<LegalDocumentView documentVersions={{ terms: 2, privacy: 2 }} />);
 
-    expect(screen.getByText('v2')).toBeInTheDocument();
+    expect(screen.getAllByText('v2')).toHaveLength(2);
     for (const heading of headings) {
       expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();
     }
@@ -66,7 +66,7 @@ describe.each(EXPECTED_TERMS_HEADINGS)('legal document in $locale', ({ locale, h
   test('uses concrete account terms and preserves the third-party disclosure boundary', async () => {
     const expected = EXPECTED_TERMS_HEADINGS.find((item) => item.locale === locale)!;
     await i18n.changeLanguage(locale);
-    render(<LegalDocumentView bundleVersion={2} />);
+    render(<LegalDocumentView documentVersions={{ terms: 2, privacy: 2 }} />);
 
     expect(screen.getByText(expected.accountBoundary)).toBeInTheDocument();
     expect(screen.getByText(expected.accountKey)).toBeInTheDocument();
@@ -75,7 +75,7 @@ describe.each(EXPECTED_TERMS_HEADINGS)('legal document in $locale', ({ locale, h
 
   test('does not render a draft notice', async () => {
     await i18n.changeLanguage(locale);
-    render(<LegalDocumentView bundleVersion={2} />);
+    render(<LegalDocumentView documentVersions={{ terms: 2, privacy: 2 }} />);
 
     expect(screen.queryByText(/draft|ドラフト|草案/i)).not.toBeInTheDocument();
   });

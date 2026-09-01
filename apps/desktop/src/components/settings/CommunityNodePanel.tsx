@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
-import type { RelationOptoutResponse } from '@/lib/api';
+import type { CommunityNodeConsentDocumentRef, RelationOptoutResponse } from '@/lib/api';
 import type { CommunityIndexNodePreference } from '@/lib/api/communityIndex';
 import {
   trustRelationUnavailableReason,
@@ -33,7 +33,12 @@ type CommunityNodePanelProps = {
   onClearNodes: () => void;
   onAuthenticate: (baseUrl: string) => void;
   onFetchConsents: (baseUrl: string) => void | Promise<void>;
-  onAcceptConsents: (baseUrl: string) => void | Promise<void>;
+  // #857: 提示された文書と版をそのまま受諾する。
+  onAcceptConsents: (
+    baseUrl: string,
+    documents: CommunityNodeConsentDocumentRef[]
+  ) => void | Promise<void>;
+  onWithdrawConsents?: (baseUrl: string) => void | Promise<void>;
   onRefresh: (baseUrl: string) => void;
   onClearToken: (baseUrl: string) => void;
   onSubmitInviteCode: (baseUrl: string, inviteCode: string) => Promise<void>;
@@ -62,6 +67,7 @@ export function CommunityNodePanel({
   onAuthenticate,
   onFetchConsents,
   onAcceptConsents,
+  onWithdrawConsents = () => {},
   onRefresh,
   onClearToken,
   onSubmitInviteCode,
@@ -76,6 +82,7 @@ export function CommunityNodePanel({
   const { t } = useTranslation(['common', 'settings']);
   const [consentDialogNodeBaseUrl, setConsentDialogNodeBaseUrl] = useState<string | null>(null);
   const [consentDialogLoadedBaseUrl, setConsentDialogLoadedBaseUrl] = useState<string | null>(null);
+  const [consentDialogFetchError, setConsentDialogFetchError] = useState<string | null>(null);
   const [consentBusy, setConsentBusy] = useState(false);
   const [relationOptoutByNode, setRelationOptoutByNode] = useState<
     Record<string, { busy: boolean; value: RelationOptoutResponse | null; error: string | null }>
@@ -144,27 +151,52 @@ export function CommunityNodePanel({
         loaded:
           consentDialogNode.consent.loaded &&
           consentDialogLoadedBaseUrl === consentDialogNode.baseUrl,
+        // #857: 取得失敗(オフライン等)はダイアログ内で再試行できるよう明示する。
+        loadError: consentDialogFetchError ?? consentDialogNode.consent.loadError,
       }
     : null;
 
   async function openConsentDialog(baseUrl: string) {
     setConsentDialogNodeBaseUrl(baseUrl);
     setConsentDialogLoadedBaseUrl(null);
+    setConsentDialogFetchError(null);
     setConsentBusy(true);
     try {
       await onFetchConsents(baseUrl);
       setConsentDialogLoadedBaseUrl(baseUrl);
-    } catch {
+    } catch (fetchError) {
       setConsentDialogLoadedBaseUrl(null);
+      setConsentDialogFetchError(
+        fetchError instanceof Error ? fetchError.message : String(fetchError)
+      );
     } finally {
       setConsentBusy(false);
     }
   }
 
   async function acceptConsentFromDialog(baseUrl: string) {
+    // #857: 提示中の文書と版をそのまま受諾する(提示していない版を黙って受諾しない)。
+    const documents = (consentDialogView?.policies ?? []).map((policy) => ({
+      policy_slug: policy.policySlug,
+      policy_version: policy.policyVersion,
+    }));
+    if (documents.length === 0) {
+      return;
+    }
     setConsentBusy(true);
     try {
-      await onAcceptConsents(baseUrl);
+      await onAcceptConsents(baseUrl, documents);
+    } catch {
+      return;
+    } finally {
+      setConsentBusy(false);
+    }
+  }
+
+  async function withdrawConsentFromDialog(baseUrl: string) {
+    setConsentBusy(true);
+    try {
+      await onWithdrawConsents(baseUrl);
     } catch {
       return;
     } finally {
@@ -507,6 +539,8 @@ export function CommunityNodePanel({
           consent={consentDialogView}
           busy={consentBusy}
           onAccept={() => void acceptConsentFromDialog(consentDialogNode.baseUrl)}
+          onRetry={() => void openConsentDialog(consentDialogNode.baseUrl)}
+          onWithdraw={() => void withdrawConsentFromDialog(consentDialogNode.baseUrl)}
         />
       ) : null}
     </Card>

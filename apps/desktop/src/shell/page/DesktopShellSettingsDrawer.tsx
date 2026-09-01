@@ -9,7 +9,7 @@ import { ReactionsPanel } from '@/components/settings/ReactionsPanel';
 import { SettingsDrawer } from '@/components/shell/SettingsDrawer';
 
 import type { SupportedLocale } from '@/i18n';
-import type { CustomReactionCropRect, DesktopApi } from '@/lib/api';
+import type { CommunityNodeConsentDocumentRef, CustomReactionCropRect, DesktopApi } from '@/lib/api';
 import {
   eligibleCommunityIndexNodes,
   resolveCommunityIndexNodePreference,
@@ -50,7 +50,11 @@ type DesktopShellSettingsDrawerProps = {
   handleAuthenticateCommunityNode: (baseUrl: string) => Promise<void>;
   handleSetCommunityNodeInviteCode: (baseUrl: string, inviteCode: string) => Promise<void>;
   handleFetchCommunityNodeConsents: (baseUrl: string) => Promise<void>;
-  handleAcceptCommunityNodeConsents: (baseUrl: string) => Promise<void>;
+  handleAcceptCommunityNodeConsents: (
+    baseUrl: string,
+    documents: CommunityNodeConsentDocumentRef[]
+  ) => Promise<void>;
+  handleWithdrawCommunityNodeConsents: (baseUrl: string) => Promise<void>;
   handleRefreshCommunityNode: (baseUrl: string) => Promise<void>;
   handleClearCommunityNodeToken: (baseUrl: string) => Promise<void>;
   handleCreateCustomReactionAsset: (
@@ -80,6 +84,7 @@ export function DesktopShellSettingsDrawer({
   handleSetCommunityNodeInviteCode,
   handleFetchCommunityNodeConsents,
   handleAcceptCommunityNodeConsents,
+  handleWithdrawCommunityNodeConsents,
   handleRefreshCommunityNode,
   handleClearCommunityNodeToken,
   handleCreateCustomReactionAsset,
@@ -243,7 +248,10 @@ export function DesktopShellSettingsDrawer({
           onAuthenticate={(baseUrl) => void handleAuthenticateCommunityNode(baseUrl)}
           onSubmitInviteCode={handleSetCommunityNodeInviteCode}
           onFetchConsents={(baseUrl) => handleFetchCommunityNodeConsents(baseUrl)}
-          onAcceptConsents={(baseUrl) => handleAcceptCommunityNodeConsents(baseUrl)}
+          onAcceptConsents={(baseUrl, documents) =>
+            handleAcceptCommunityNodeConsents(baseUrl, documents)
+          }
+          onWithdrawConsents={(baseUrl) => handleWithdrawCommunityNodeConsents(baseUrl)}
           onRefresh={(baseUrl) => void handleRefreshCommunityNode(baseUrl)}
           onClearToken={(baseUrl) => void handleClearCommunityNodeToken(baseUrl)}
           onGetRelationOptout={(baseUrl) => api.getCommunityNodeRelationOptout(baseUrl)}

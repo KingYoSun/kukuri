@@ -1,20 +1,28 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
 use crate::spawn_desktop_initialization;
 use crate::state::{
-    AppConsentRecord, CommandError, DesktopStartupState, DesktopStartupStatus, DesktopState,
-    LEGAL_BUNDLE_VERSION, consent_satisfied, current_unix_seconds, load_app_consent,
-    resolve_db_path, save_app_consent,
+    APP_LEGAL_DOCUMENTS, AppConsentDocumentRecord, AppConsentDocumentStatus, CommandError,
+    DesktopStartupState, DesktopStartupStatus, DesktopState, app_consent_documents_status,
+    app_consent_satisfied, current_unix_seconds, load_app_consent_store, resolve_db_path,
+    save_app_consent_store,
 };
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppConsentStatus {
-    pub current_bundle_version: i32,
-    pub accepted_bundle_version: Option<i32>,
-    pub accepted_at: Option<i64>,
+    pub documents: Vec<AppConsentDocumentStatus>,
     pub satisfied: bool,
+}
+
+/// 同意リクエストの文書単位エントリ(#857)。ユーザーが実際に提示された slug と
+/// 版をそのまま返してもらい、サーバ側(=このコマンド)で現行版と照合する。
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcceptedAppConsentDocument {
+    pub slug: String,
+    pub version: i32,
 }
 
 #[tauri::command]
@@ -22,36 +30,66 @@ pub fn get_app_consent_status(
     app_handle: tauri::AppHandle,
 ) -> Result<AppConsentStatus, CommandError> {
     let db_path = resolve_db_path(&app_handle)?;
-    let record = load_app_consent(&db_path);
-    let accepted_bundle_version = record.as_ref().map(|record| record.accepted_bundle_version);
+    let store = load_app_consent_store(&db_path);
     Ok(AppConsentStatus {
-        current_bundle_version: LEGAL_BUNDLE_VERSION,
-        accepted_bundle_version,
-        accepted_at: record.map(|record| record.accepted_at),
-        satisfied: consent_satisfied(accepted_bundle_version),
+        satisfied: app_consent_satisfied(&store),
+        documents: app_consent_documents_status(&store),
     })
 }
 
 #[tauri::command]
 pub async fn accept_app_consents(
     app_handle: tauri::AppHandle,
-    bundle_version: i32,
+    documents: Vec<AcceptedAppConsentDocument>,
+    language: String,
 ) -> Result<DesktopStartupStatus, CommandError> {
-    if bundle_version < LEGAL_BUNDLE_VERSION {
-        return Err(format!(
-            "consent bundle version {bundle_version} is older than the current version {LEGAL_BUNDLE_VERSION}"
-        )
-        .into());
+    for (slug, current_version) in APP_LEGAL_DOCUMENTS {
+        let accepted = documents
+            .iter()
+            .find(|document| document.slug == *slug)
+            .ok_or_else(|| format!("consent for document `{slug}` is missing"))?;
+        if accepted.version < *current_version {
+            return Err(format!(
+                "consent version {} for document `{slug}` is older than the current version {current_version}",
+                accepted.version
+            )
+            .into());
+        }
+    }
+    for document in &documents {
+        if !APP_LEGAL_DOCUMENTS
+            .iter()
+            .any(|(slug, _)| *slug == document.slug)
+        {
+            return Err(format!("unknown consent document `{}`", document.slug).into());
+        }
     }
 
     let db_path = resolve_db_path(&app_handle)?;
-    save_app_consent(
-        &db_path,
-        &AppConsentRecord {
-            accepted_bundle_version: bundle_version,
-            accepted_at: current_unix_seconds(),
-        },
-    )?;
+    let mut store = load_app_consent_store(&db_path);
+    let accepted_at = current_unix_seconds();
+    let app_version = app_handle.package_info().version.to_string();
+    for document in &documents {
+        // 同一 slug+version の記録は日時等を更新し、それ以外は履歴として残す。
+        if let Some(existing) = store
+            .records
+            .iter_mut()
+            .find(|record| record.slug == document.slug && record.version == document.version)
+        {
+            existing.accepted_at = accepted_at;
+            existing.language = language.clone();
+            existing.app_version = app_version.clone();
+        } else {
+            store.records.push(AppConsentDocumentRecord {
+                slug: document.slug.clone(),
+                version: document.version,
+                accepted_at,
+                language: language.clone(),
+                app_version: app_version.clone(),
+            });
+        }
+    }
+    save_app_consent_store(&db_path, &store)?;
 
     let startup_state = app_handle.state::<DesktopStartupState>();
 

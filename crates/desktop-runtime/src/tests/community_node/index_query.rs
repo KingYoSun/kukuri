@@ -161,19 +161,12 @@ async fn index_runtime(
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("listener");
     let base_url = format!("http://{}", listener.local_addr().expect("local addr"));
     let expected_token = Arc::new(Mutex::new("index-token".to_string()));
-    let managed = Arc::new(MockManagedCommunityNodeState {
-        base_url: base_url.clone(),
-        seed_peers: Vec::new(),
-        consent_accepted: Arc::new(AtomicBool::new(true)),
-        current_token: Arc::clone(&expected_token),
-        challenge_hits: Arc::new(AtomicUsize::new(0)),
-        verify_hits: Arc::new(AtomicUsize::new(0)),
-        consent_status_hits: Arc::new(AtomicUsize::new(0)),
-        consent_accept_hits: Arc::new(AtomicUsize::new(0)),
-        heartbeat_hits: Arc::new(AtomicUsize::new(0)),
-        bootstrap_hits: Arc::new(AtomicUsize::new(0)),
-        simulate_pending_update: Arc::new(AtomicBool::new(false)),
-    });
+    let managed = Arc::new(MockManagedCommunityNodeState::new(
+        base_url.clone(),
+        Vec::new(),
+        true,
+        Arc::clone(&expected_token),
+    ));
     let index = MockIndexQueryState {
         expected_token,
         requests: Arc::new(Mutex::new(Vec::new())),
@@ -230,6 +223,7 @@ async fn index_runtime(
             ),
         }],
     };
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
     (runtime, base_url, managed, index, server, dir)
 }
 
@@ -618,6 +612,10 @@ async fn community_node_index_query_stops_before_http_when_consent_is_pending() 
     let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let (runtime, base_url, managed, state, server, _dir) = index_runtime(None).await;
     managed.consent_accepted.store(false, Ordering::SeqCst);
+    // #857: ローカル同意(v1)がカバーしない新版(v2)への更新 = 再同意待ち。
+    managed
+        .simulate_pending_update
+        .store(true, Ordering::SeqCst);
 
     let error = runtime
         .search_community_node_index(scoped_request(base_url.as_str()))
@@ -638,6 +636,10 @@ async fn community_node_private_indexing_stops_before_secret_when_consent_is_pen
     let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let (runtime, base_url, managed, state, server, _dir) = index_runtime(None).await;
     managed.consent_accepted.store(false, Ordering::SeqCst);
+    // #857: ローカル同意(v1)がカバーしない新版(v2)への更新 = 再同意待ち。
+    managed
+        .simulate_pending_update
+        .store(true, Ordering::SeqCst);
 
     let error = runtime
         .submit_community_node_indexing_request(CommunityNodeIndexingRequest {

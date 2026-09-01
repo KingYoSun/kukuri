@@ -345,6 +345,18 @@ export function createMockRuntime(options?: DesktopMockApiOptions): MockRuntime 
         auto_approve: true,
         auth_state: { authenticated: true, expires_at: Date.now() + 60_000 },
         consent_state: { all_required_accepted: true, items: mockConsentItems(true) },
+        // #857: mock の既定ノードはローカル同意済みとして扱う。
+        local_consent: {
+          records: mockConsentItems(true).map((item) => ({
+            policy_slug: item.policy_slug,
+            policy_version: item.policy_version,
+            accepted_at: Math.floor(Date.now() / 1000),
+            language: 'en',
+            app_version: 'mock',
+          })),
+          withdrawn_at: null,
+        },
+        consent_update_pending: false,
         resolved_urls: {
           public_base_url: 'https://api.kukuri.app',
           connectivity_urls: ['https://api.kukuri.app'],

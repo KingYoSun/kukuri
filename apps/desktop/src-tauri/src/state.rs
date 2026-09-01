@@ -15,12 +15,44 @@ pub(crate) struct DesktopState {
 
 pub(crate) const LEGAL_BUNDLE_VERSION: i32 = 2;
 
+/// アプリ同意の対象文書と現行版。同意は bundle 単一フラグではなく文書単位で
+/// 記録する(#857)。現状は全文書が legal bundle 版と同じ版番号を共有しているが、
+/// 記録・判定は slug ごとに独立している。
+pub(crate) const APP_LEGAL_DOCUMENTS: &[(&str, i32)] = &[
+    ("terms", LEGAL_BUNDLE_VERSION),
+    ("privacy", LEGAL_BUNDLE_VERSION),
+];
+
 const APP_CONSENT_FILE_EXTENSION: &str = "app-consent.json";
 
+/// 文書単位のアプリ同意記録(#857)。対象文書 slug・版・日時・同意時の表示言語・
+/// アプリ版を保存する。旧形式(`accepted_bundle_version` の単一フラグ)は
+/// 意図的に読み替えず、未同意として再同意を求める。
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct AppConsentRecord {
-    pub(crate) accepted_bundle_version: i32,
+pub(crate) struct AppConsentDocumentRecord {
+    pub(crate) slug: String,
+    pub(crate) version: i32,
     pub(crate) accepted_at: i64,
+    pub(crate) language: String,
+    pub(crate) app_version: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub(crate) struct AppConsentStore {
+    #[serde(default)]
+    pub(crate) records: Vec<AppConsentDocumentRecord>,
+}
+
+/// 文書単位の同意状態ビュー。startup gate と `get_app_consent_status` の両方で使う。
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AppConsentDocumentStatus {
+    pub(crate) slug: String,
+    pub(crate) current_version: i32,
+    pub(crate) accepted_version: Option<i32>,
+    pub(crate) accepted_at: Option<i64>,
+    pub(crate) accepted_language: Option<String>,
+    pub(crate) accepted_app_version: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -29,8 +61,7 @@ pub(crate) enum DesktopStartupStatus {
     Initializing,
     Ready,
     ConsentRequired {
-        current_bundle_version: i32,
-        accepted_bundle_version: Option<i32>,
+        documents: Vec<AppConsentDocumentStatus>,
     },
     Failed {
         error: DesktopStartupErrorView,
@@ -95,14 +126,8 @@ impl DesktopStartupState {
         Self::new(DesktopStartupStatus::Initializing)
     }
 
-    pub(crate) fn consent_required(
-        current_bundle_version: i32,
-        accepted_bundle_version: Option<i32>,
-    ) -> Self {
-        Self::new(DesktopStartupStatus::ConsentRequired {
-            current_bundle_version,
-            accepted_bundle_version,
-        })
+    pub(crate) fn consent_required(documents: Vec<AppConsentDocumentStatus>) -> Self {
+        Self::new(DesktopStartupStatus::ConsentRequired { documents })
     }
 
     fn new(status: DesktopStartupStatus) -> Self {
@@ -298,18 +323,25 @@ fn app_consent_path(db_path: &Path) -> PathBuf {
     db_path.with_extension(APP_CONSENT_FILE_EXTENSION)
 }
 
-pub(crate) fn load_app_consent(db_path: &Path) -> Option<AppConsentRecord> {
-    let bytes = std::fs::read(app_consent_path(db_path)).ok()?;
-    serde_json::from_slice(&bytes).ok()
+/// 同意記録ファイルを読む。ファイル欠落・破損・旧形式(bundle 単一フラグ)は
+/// いずれも空の store(= 全文書未同意)として扱う。
+pub(crate) fn load_app_consent_store(db_path: &Path) -> AppConsentStore {
+    let Ok(bytes) = std::fs::read(app_consent_path(db_path)) else {
+        return AppConsentStore::default();
+    };
+    serde_json::from_slice(&bytes).unwrap_or_default()
 }
 
-pub(crate) fn save_app_consent(db_path: &Path, record: &AppConsentRecord) -> Result<(), String> {
+pub(crate) fn save_app_consent_store(
+    db_path: &Path,
+    store: &AppConsentStore,
+) -> Result<(), String> {
     let path = app_consent_path(db_path);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|error| format!("failed to create consent dir: {error}"))?;
     }
-    let bytes = serde_json::to_vec_pretty(record)
+    let bytes = serde_json::to_vec_pretty(store)
         .map_err(|error| format!("failed to encode consent record: {error}"))?;
     std::fs::write(&path, bytes).map_err(|error| {
         format!(
@@ -319,10 +351,44 @@ pub(crate) fn save_app_consent(db_path: &Path, record: &AppConsentRecord) -> Res
     })
 }
 
-pub(crate) fn consent_satisfied(accepted_bundle_version: Option<i32>) -> bool {
-    accepted_bundle_version
-        .map(|version| version >= LEGAL_BUNDLE_VERSION)
-        .unwrap_or(false)
+/// slug ごとの最新同意記録(版が最大のもの。同版なら日時が新しいもの)。
+fn latest_app_consent_record<'a>(
+    store: &'a AppConsentStore,
+    slug: &str,
+) -> Option<&'a AppConsentDocumentRecord> {
+    store
+        .records
+        .iter()
+        .filter(|record| record.slug == slug)
+        .max_by_key(|record| (record.version, record.accepted_at))
+}
+
+pub(crate) fn app_consent_documents_status(
+    store: &AppConsentStore,
+) -> Vec<AppConsentDocumentStatus> {
+    APP_LEGAL_DOCUMENTS
+        .iter()
+        .map(|(slug, current_version)| {
+            let latest = latest_app_consent_record(store, slug);
+            AppConsentDocumentStatus {
+                slug: (*slug).to_string(),
+                current_version: *current_version,
+                accepted_version: latest.map(|record| record.version),
+                accepted_at: latest.map(|record| record.accepted_at),
+                accepted_language: latest.map(|record| record.language.clone()),
+                accepted_app_version: latest.map(|record| record.app_version.clone()),
+            }
+        })
+        .collect()
+}
+
+/// 全対象文書について現行版以上の同意記録があるか。
+pub(crate) fn app_consent_satisfied(store: &AppConsentStore) -> bool {
+    APP_LEGAL_DOCUMENTS.iter().all(|(slug, current_version)| {
+        latest_app_consent_record(store, slug)
+            .map(|record| record.version >= *current_version)
+            .unwrap_or(false)
+    })
 }
 
 pub(crate) fn current_unix_seconds() -> i64 {
@@ -411,13 +477,86 @@ mod tests {
         );
     }
 
+    fn record(slug: &str, version: i32, accepted_at: i64) -> AppConsentDocumentRecord {
+        AppConsentDocumentRecord {
+            slug: slug.to_string(),
+            version,
+            accepted_at,
+            language: "ja".to_string(),
+            app_version: "0.1.8".to_string(),
+        }
+    }
+
     #[test]
-    fn consent_satisfied_requires_current_or_newer_version() {
+    fn app_consent_satisfied_requires_every_document_at_current_or_newer_version() {
         assert_eq!(LEGAL_BUNDLE_VERSION, 2);
-        assert!(!consent_satisfied(None));
-        assert!(!consent_satisfied(Some(1)));
-        assert!(consent_satisfied(Some(LEGAL_BUNDLE_VERSION)));
-        assert!(consent_satisfied(Some(LEGAL_BUNDLE_VERSION + 1)));
+        assert!(!app_consent_satisfied(&AppConsentStore::default()));
+
+        // terms だけ同意しても不十分。
+        let partial = AppConsentStore {
+            records: vec![record("terms", LEGAL_BUNDLE_VERSION, 1)],
+        };
+        assert!(!app_consent_satisfied(&partial));
+
+        // 旧版の記録は再同意が必要。
+        let outdated = AppConsentStore {
+            records: vec![record("terms", 1, 1), record("privacy", 1, 1)],
+        };
+        assert!(!app_consent_satisfied(&outdated));
+
+        let satisfied = AppConsentStore {
+            records: vec![
+                record("terms", LEGAL_BUNDLE_VERSION, 1),
+                record("privacy", LEGAL_BUNDLE_VERSION + 1, 1),
+            ],
+        };
+        assert!(app_consent_satisfied(&satisfied));
+    }
+
+    #[test]
+    fn app_consent_status_reports_latest_record_per_document() {
+        let store = AppConsentStore {
+            records: vec![
+                record("terms", 1, 100),
+                record("terms", LEGAL_BUNDLE_VERSION, 200),
+                record("privacy", 1, 150),
+            ],
+        };
+        let status = app_consent_documents_status(&store);
+        assert_eq!(status.len(), APP_LEGAL_DOCUMENTS.len());
+
+        let terms = status.iter().find(|doc| doc.slug == "terms").unwrap();
+        assert_eq!(terms.current_version, LEGAL_BUNDLE_VERSION);
+        assert_eq!(terms.accepted_version, Some(LEGAL_BUNDLE_VERSION));
+        assert_eq!(terms.accepted_at, Some(200));
+        assert_eq!(terms.accepted_language.as_deref(), Some("ja"));
+        assert_eq!(terms.accepted_app_version.as_deref(), Some("0.1.8"));
+
+        let privacy = status.iter().find(|doc| doc.slug == "privacy").unwrap();
+        assert_eq!(privacy.accepted_version, Some(1));
+    }
+
+    // #857: 旧形式(bundle 単一フラグ)の記録は読み替えず、全文書未同意として
+    // 再同意を求める。
+    #[test]
+    fn legacy_bundle_consent_file_requires_reconsent() {
+        let dir = std::env::temp_dir().join(format!(
+            "kukuri-consent-legacy-test-{}",
+            current_unix_seconds()
+        ));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let db_path = dir.join("kukuri.db");
+        std::fs::write(
+            db_path.with_extension(APP_CONSENT_FILE_EXTENSION),
+            r#"{"accepted_bundle_version":2,"accepted_at":1700000000}"#,
+        )
+        .expect("write legacy consent file");
+
+        let store = load_app_consent_store(&db_path);
+        assert!(store.records.is_empty());
+        assert!(!app_consent_satisfied(&store));
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
@@ -449,18 +588,22 @@ mod tests {
         std::fs::create_dir_all(&dir).expect("create temp dir");
         let db_path = dir.join("kukuri.db");
 
-        assert!(load_app_consent(&db_path).is_none());
+        assert!(load_app_consent_store(&db_path).records.is_empty());
 
-        let record = AppConsentRecord {
-            accepted_bundle_version: LEGAL_BUNDLE_VERSION,
-            accepted_at: 1_700_000_000,
+        let store = AppConsentStore {
+            records: vec![
+                record("terms", LEGAL_BUNDLE_VERSION, 1_700_000_000),
+                record("privacy", LEGAL_BUNDLE_VERSION, 1_700_000_000),
+            ],
         };
-        save_app_consent(&db_path, &record).expect("save consent");
+        save_app_consent_store(&db_path, &store).expect("save consent");
 
-        let loaded = load_app_consent(&db_path).expect("load consent");
-        assert_eq!(loaded.accepted_bundle_version, LEGAL_BUNDLE_VERSION);
-        assert_eq!(loaded.accepted_at, 1_700_000_000);
-        assert!(consent_satisfied(Some(loaded.accepted_bundle_version)));
+        let loaded = load_app_consent_store(&db_path);
+        assert_eq!(loaded.records.len(), 2);
+        assert_eq!(loaded.records[0].slug, "terms");
+        assert_eq!(loaded.records[0].language, "ja");
+        assert_eq!(loaded.records[0].app_version, "0.1.8");
+        assert!(app_consent_satisfied(&loaded));
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -470,8 +613,7 @@ mod tests {
         let state = DesktopStartupState::initializing();
         assert!(matches!(state.status(), DesktopStartupStatus::Initializing));
         state.set_status(DesktopStartupStatus::ConsentRequired {
-            current_bundle_version: LEGAL_BUNDLE_VERSION,
-            accepted_bundle_version: None,
+            documents: app_consent_documents_status(&AppConsentStore::default()),
         });
         assert!(matches!(
             state.status(),

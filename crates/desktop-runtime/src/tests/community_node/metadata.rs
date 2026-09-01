@@ -59,6 +59,7 @@ async fn community_node_status_refresh_updates_bootstrap_seed_peers() {
             ),
         }],
     };
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
 
     // WP-Q2: registration refresh はスケジューラ tick が駆動し、getter は読み取り専用。
     runtime.run_community_node_session_maintenance_once().await;
@@ -149,6 +150,7 @@ async fn community_node_session_maintenance_updates_bootstrap_seed_peers() {
             ),
         }],
     };
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
 
     runtime.run_community_node_session_maintenance_once().await;
 
@@ -234,6 +236,7 @@ async fn community_node_metadata_refresh_heartbeats_before_bootstrap_sync_even_w
             ),
         }],
     };
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
 
     runtime.run_community_node_session_maintenance_once().await;
     assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
@@ -365,6 +368,7 @@ async fn community_node_ready_transition_refreshes_bootstrap_metadata_before_nex
             ),
         }],
     };
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
 
     runtime.run_community_node_session_maintenance_once().await;
     assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
@@ -473,6 +477,7 @@ async fn community_node_ready_transition_refreshes_bootstrap_metadata_only_once_
             ),
         }],
     };
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
 
     runtime.run_community_node_session_maintenance_once().await;
     assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
@@ -548,6 +553,7 @@ async fn community_node_status_retries_bootstrap_metadata_when_seed_peers_are_em
             ),
         }],
     };
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
 
     // WP-Q2: metadata refresh はスケジューラ tick が駆動し、getter は読み取り専用。
     runtime.run_community_node_session_maintenance_once().await;
@@ -664,6 +670,7 @@ async fn refresh_community_node_metadata_refreshes_registration_before_bootstrap
             ),
         }],
     };
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
 
     let status = runtime
         .refresh_community_node_metadata(CommunityNodeTargetRequest {
@@ -761,6 +768,7 @@ async fn refresh_community_node_metadata_requeues_heartbeat_when_runtime_connect
             ),
         }],
     };
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
 
     let initial_seed_peer = runtime
         .local_community_node_seed_peer("initial")

@@ -13,11 +13,9 @@
     "title": "关于 / 法律信息",
     "summary": "服务条款、隐私政策，以及应用与同意状态。",
     "appVersionLabel": "应用版本",
-    "bundleVersionLabel": "条款版本",
-    "acceptedVersionLabel": "已同意版本",
-    "acceptedAtLabel": "同意时间",
     "notAccepted": "尚未同意",
-    "documentsHeading": "文档"
+    "documentsHeading": "文档",
+    "acceptedValue": "v{{version}}(同意时间:{{acceptedAt}})"
   },
   "documents": {
     "terms": {

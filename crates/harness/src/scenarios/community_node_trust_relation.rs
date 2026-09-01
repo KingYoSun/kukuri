@@ -79,6 +79,19 @@ async fn consent_status() -> Json<serde_json::Value> {
     Json(serde_json::json!({ "all_required_accepted": true, "items": [] }))
 }
 
+// #857: 認証(JWT 発行)前の公開 policy カタログ。client はこれに同意してから認証する。
+async fn public_policies() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "policies": [{
+            "policy_slug": "harness-basic",
+            "policy_version": 1,
+            "title": "Harness Basic",
+            "body_markdown": "Harness policy body.",
+            "required": true
+        }]
+    }))
+}
+
 async fn heartbeat() -> Json<serde_json::Value> {
     Json(serde_json::json!({ "expires_at": 4_102_444_800_i64 }))
 }
@@ -309,6 +322,7 @@ pub(crate) async fn run_community_node_trust_relation_client(
         .route("/v1/auth/challenge", post(auth_challenge))
         .route("/v1/auth/verify", post(auth_verify))
         .route("/v1/consents/status", get(consent_status))
+        .route("/v1/policies", get(public_policies))
         .route("/v1/bootstrap/heartbeat", post(heartbeat))
         .route("/v1/bootstrap/nodes", get(bootstrap_nodes))
         .route("/v1/trust/users/{target}", get(trust_user))
@@ -335,6 +349,31 @@ pub(crate) async fn run_community_node_trust_relation_client(
                 auto_approve: false,
             }],
         })
+        .await?;
+    // #857: 同意成立(公開カタログ提示 → ローカル記録)後にのみ認証・接続が始まる。
+    let catalog = runtime
+        .fetch_community_node_policies(CommunityNodeTargetRequest {
+            base_url: base_url.clone(),
+        })
+        .await?;
+    runtime
+        .accept_community_node_consents(
+            AcceptCommunityNodeConsentsRequest {
+                base_url: base_url.clone(),
+                documents: catalog
+                    .policies
+                    .iter()
+                    .map(
+                        |policy| kukuri_desktop_runtime::CommunityNodeConsentDocumentRef {
+                            policy_slug: policy.policy_slug.clone(),
+                            policy_version: policy.policy_version,
+                        },
+                    )
+                    .collect(),
+                language: "ja".to_string(),
+            },
+            "harness",
+        )
         .await?;
     runtime
         .authenticate_community_node(CommunityNodeTargetRequest {

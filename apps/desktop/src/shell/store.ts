@@ -222,6 +222,7 @@ export { DEFAULT_COMMUNITY_NODE_CONFIG } from '@/shell/slices/connectivity';
 export type {
   CommunityNodeDraftNode,
   CommunityNodeManifestEntry,
+  CommunityNodePoliciesEntry,
 } from '@/shell/slices/connectivity';
 export type { KnownAuthorsByPubkey } from '@/shell/slices/profileSocial';
 export type { GameEditorDraft } from '@/shell/slices/liveGame';

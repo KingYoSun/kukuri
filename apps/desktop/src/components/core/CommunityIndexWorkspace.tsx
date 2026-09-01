@@ -26,6 +26,9 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
+import { CommunityNodeConsentDialog } from '@/components/settings/CommunityNodeConsentDialog';
+import { communityNodeConsentView } from '@/shell/presentation';
+import type { CommunityNodePoliciesEntry } from '@/shell/store';
 import { communityIndexPostCardView } from './communityIndexPostCardView';
 import { PostCard } from './PostCard';
 
@@ -38,6 +41,9 @@ type CommunityIndexWorkspaceProps = {
   activeTopic: string;
   activeTimelineScope: TimelineScope;
   eligibleNodeBaseUrls: readonly string[];
+  // #857: 設定済みだがローカル同意が成立していない(未同意・撤回・再同意待ち)node。
+  // Node 機能の利用直前に同意モーダルを提示するために使う。
+  consentPendingNodeBaseUrls?: readonly string[];
   selectedNodeBaseUrl: string | null;
   onOpenCommunityNodeSettings: () => void;
   knownAuthorsByPubkey?: Record<string, AuthorSocialView>;
@@ -211,6 +217,7 @@ export function CommunityIndexWorkspace({
   activeTopic,
   activeTimelineScope,
   eligibleNodeBaseUrls,
+  consentPendingNodeBaseUrls = [],
   selectedNodeBaseUrl,
   onOpenCommunityNodeSettings,
   knownAuthorsByPubkey = EMPTY_KNOWN_AUTHORS,
@@ -236,8 +243,13 @@ export function CommunityIndexWorkspace({
   onActivateReference,
   onCopyPostLink,
 }: CommunityIndexWorkspaceProps) {
-  const { t } = useTranslation(['shell', 'common']);
+  const { t, i18n } = useTranslation(['shell', 'common']);
   const [operation, setOperation] = useState<IndexOperation>('search');
+  // #857: Node 機能の利用直前に提示する同意モーダルの状態。提示内容は認証不要の
+  // 公開 policy カタログから取得し、同意成立後にのみ認証・接続が始まる。
+  const [consentGateBaseUrl, setConsentGateBaseUrl] = useState<string | null>(null);
+  const [consentGateEntry, setConsentGateEntry] = useState<CommunityNodePoliciesEntry | null>(null);
+  const [consentGateBusy, setConsentGateBusy] = useState(false);
   const [query, setQuery] = useState('');
   const [resultState, setResultState] = useState<IndexResultState | null>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -461,6 +473,48 @@ export function CommunityIndexWorkspace({
     [api, visibleResult]
   );
 
+  async function openConsentGate(baseUrl: string) {
+    setConsentGateBaseUrl(baseUrl);
+    setConsentGateEntry({ status: 'loading' });
+    try {
+      const catalog = await api.fetchCommunityNodePolicies(baseUrl);
+      setConsentGateEntry({ status: 'ok', policies: catalog.policies });
+    } catch (fetchError) {
+      // 取得失敗(オフライン等)はモーダル内で再試行できる。
+      setConsentGateEntry({
+        status: 'error',
+        error: fetchError instanceof Error ? fetchError.message : String(fetchError),
+      });
+    }
+  }
+
+  function closeConsentGate() {
+    setConsentGateBaseUrl(null);
+    setConsentGateEntry(null);
+  }
+
+  async function acceptConsentGate() {
+    if (consentGateBaseUrl === null || consentGateEntry?.status !== 'ok') {
+      return;
+    }
+    setConsentGateBusy(true);
+    try {
+      await api.acceptCommunityNodeConsents(
+        consentGateBaseUrl,
+        consentGateEntry.policies.map((policy) => ({
+          policy_slug: policy.policy_slug,
+          policy_version: policy.policy_version,
+        })),
+        i18n.resolvedLanguage ?? i18n.language
+      );
+      closeConsentGate();
+    } catch (acceptError) {
+      setError(communityIndexErrorMessage(acceptError, t));
+    } finally {
+      setConsentGateBusy(false);
+    }
+  }
+
   async function runQuery(event?: FormEvent) {
     event?.preventDefault();
     if (disabled || !currentContext) return;
@@ -541,7 +595,28 @@ export function CommunityIndexWorkspace({
         </div>
       ) : null}
 
+      {consentPendingNodeBaseUrls.length > 0 ? (
+        <Notice tone='warning'>
+          <div className='flex flex-wrap items-center justify-between gap-3'>
+            <span>{t('shell:communityIndex.consentRequiredNotice')}</span>
+            <div className='flex flex-wrap gap-2'>
+              {consentPendingNodeBaseUrls.map((baseUrl) => (
+                <Button
+                  key={baseUrl}
+                  variant='secondary'
+                  type='button'
+                  onClick={() => void openConsentGate(baseUrl)}
+                >
+                  {t('shell:communityIndex.reviewPolicies', { baseUrl })}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </Notice>
+      ) : null}
+
       {eligibleNodeBaseUrls.length === 0 ? (
+        consentPendingNodeBaseUrls.length > 0 ? null : (
         <Notice tone='warning'>
           <div className='flex flex-wrap items-center justify-between gap-3'>
             <span>{t('shell:communityIndex.noEligibleNode')}</span>
@@ -550,6 +625,7 @@ export function CommunityIndexWorkspace({
             </Button>
           </div>
         </Notice>
+        )
       ) : activeNodeBaseUrl === null ? (
         <Notice tone='warning'>
           <div className='flex flex-wrap items-center justify-between gap-3'>
@@ -646,6 +722,22 @@ export function CommunityIndexWorkspace({
             );
           })}
         </ul>
+      ) : null}
+
+      {consentGateBaseUrl !== null ? (
+        <CommunityNodeConsentDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              closeConsentGate();
+            }
+          }}
+          baseUrl={consentGateBaseUrl}
+          consent={communityNodeConsentView(undefined, consentGateEntry ?? undefined)}
+          busy={consentGateBusy}
+          onAccept={() => void acceptConsentGate()}
+          onRetry={() => void openConsentGate(consentGateBaseUrl)}
+        />
       ) : null}
     </Card>
   );

@@ -7,6 +7,9 @@ pub const AUTH_CHALLENGE_PATH: &str = "/v1/auth/challenge";
 pub const AUTH_VERIFY_PATH: &str = "/v1/auth/verify";
 pub const CONSENTS_PATH: &str = "/v1/consents";
 pub const CONSENTS_STATUS_PATH: &str = "/v1/consents/status";
+/// 認証不要の公開 policy カタログ(#857)。Node 同意はこのカタログの提示で成立させ、
+/// 認証後に POST /v1/consents で記録を同期する。
+pub const POLICIES_PATH: &str = "/v1/policies";
 pub const BOOTSTRAP_NODES_PATH: &str = "/v1/bootstrap/nodes";
 pub const BOOTSTRAP_HEARTBEAT_PATH: &str = "/v1/bootstrap/heartbeat";
 pub const NODE_MANIFEST_PATH: &str = "/v1/node/manifest";

@@ -283,7 +283,11 @@
     "openSettings": "打开社区节点设置",
     "submit": "提交申请",
     "submitting": "提交中…",
-    "status": { "pending": "申请正在等待审核。", "approved": "索引已获批准。", "rejected": "索引申请已被拒绝。" },
+    "status": {
+      "pending": "申请正在等待审核。",
+      "approved": "索引已获批准。",
+      "rejected": "索引申请已被拒绝。"
+    },
     "errors": {
       "requestNotConfigured": "该社区节点不提供索引，因此不接受申请。",
       "requestNotActivated": "该社区节点的索引暂时不可用，因此不接受申请。",
@@ -304,7 +308,11 @@
     "exploreSummary": "跨索引主题进行搜索、发现并查看推荐。",
     "nodeLabel": "搜索来源",
     "surfaces": "社区索引功能",
-    "operations": { "search": "搜索", "discovery": "发现", "recommendations": "推荐" },
+    "operations": {
+      "search": "搜索",
+      "discovery": "发现",
+      "recommendations": "推荐"
+    },
     "operationHints": {
       "discovery": "无需关键词，浏览最近索引的公开结果。",
       "recommendations": "查看所选节点提供的推荐。"
@@ -325,7 +333,9 @@
       "notActivated": "所选节点的社区索引暂时不可用。",
       "rateLimited": "请求过多，请稍后重试。",
       "rateLimitedWithRetry": "请求过多，请在 {{seconds}} 秒后重试。"
-    }
+    },
+    "consentRequiredNotice": "使用社区节点前需要您的同意。请确认其条款与政策后再连接。",
+    "reviewPolicies": "查看政策:{{baseUrl}}"
   },
   "report": {
     "title": "举报内容",

@@ -98,7 +98,8 @@
     "failedToUpdateFollowState": "フォロー状態の更新に失敗しました",
     "failedToUpdateMuteState": "ミュート状態の更新に失敗しました",
     "quoteRepostRequiresCommentary": "コメントを追加してからリポストしてください",
-    "unsupportedAttachmentType": "未対応の添付タイプです: {{name}}"
+    "unsupportedAttachmentType": "未対応の添付タイプです: {{name}}",
+    "failedToWithdrawConsents": "コミュニティノードの同意撤回に失敗しました。"
   },
   "feed": {
     "contentUnavailable": "本文を取得できません。",
@@ -126,7 +127,7 @@
     "dbPath": "DB パス",
     "detailLabel": "起動エラー詳細",
     "kinds": {
-    "database_open": "データベースを開けませんでした",
+      "database_open": "データベースを開けませんでした",
       "database_migration": "マイグレーション失敗",
       "unknown": "不明な起動エラー"
     }

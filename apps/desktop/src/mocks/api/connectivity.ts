@@ -21,7 +21,9 @@ type ConnectivityMock = Pick<
   | 'setCommunityNodeInviteCode'
   | 'clearCommunityNodeToken'
   | 'getCommunityNodeConsentStatus'
+  | 'fetchCommunityNodePolicies'
   | 'acceptCommunityNodeConsents'
+  | 'withdrawCommunityNodeConsents'
   | 'refreshCommunityNodeMetadata'
   | 'fetchCommunityNodeManifest'
   | 'readCommunityNodeTrustUser'
@@ -166,14 +168,39 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
     async getCommunityNodeConsentStatus(baseUrl) {
       return runtime.communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
     },
-    async acceptCommunityNodeConsents(baseUrl) {
+    // #857: 認証不要の公開 policy カタログ。consent items と同じ slug / 版を返す。
+    async fetchCommunityNodePolicies() {
+      return {
+        policies: mockConsentItems(false).map((item) => ({
+          policy_slug: item.policy_slug,
+          policy_version: item.policy_version,
+          title: item.title,
+          body_markdown: item.body ?? '',
+          required: item.required,
+        })),
+      };
+    },
+    async acceptCommunityNodeConsents(baseUrl, documents, language) {
       const resolvedUrls = { public_base_url: baseUrl, connectivity_urls: [baseUrl] };
       syncStatus.discovery.connect_mode = 'direct_or_relay';
+      const acceptedAt = Math.floor(Date.now() / 1000);
       runtime.communityNodeStatuses = runtime.communityNodeStatuses.map((status) =>
         status.base_url === baseUrl
           ? {
               ...status,
+              auth_state: { authenticated: true, expires_at: Date.now() },
               consent_state: { all_required_accepted: true, items: mockConsentItems(true) },
+              local_consent: {
+                records: documents.map((document) => ({
+                  policy_slug: document.policy_slug,
+                  policy_version: document.policy_version,
+                  accepted_at: acceptedAt,
+                  language,
+                  app_version: 'mock',
+                })),
+                withdrawn_at: null,
+              },
+              consent_update_pending: false,
               resolved_urls: resolvedUrls,
               session_phase: 'ready',
               retry_after: null,
@@ -186,6 +213,25 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
           node.base_url === baseUrl ? { ...node, resolved_urls: resolvedUrls } : node
         ),
       };
+      return runtime.communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
+    },
+    // #857: 撤回は記録を履歴として残しつつ接続を停止する。
+    async withdrawCommunityNodeConsents(baseUrl) {
+      runtime.communityNodeStatuses = runtime.communityNodeStatuses.map((status) =>
+        status.base_url === baseUrl
+          ? {
+              ...status,
+              auth_state: { authenticated: false, expires_at: null },
+              consent_state: null,
+              local_consent: {
+                records: status.local_consent?.records ?? [],
+                withdrawn_at: Math.floor(Date.now() / 1000),
+              },
+              consent_update_pending: false,
+              session_phase: 'idle',
+            }
+          : status
+      );
       return runtime.communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
     },
     async refreshCommunityNodeMetadata(baseUrl) {

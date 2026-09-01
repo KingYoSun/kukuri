@@ -108,6 +108,25 @@ pub struct BootstrapNodesResponse {
     pub nodes: Vec<CommunityNodeBootstrapNode>,
 }
 
+/// `GET /v1/policies` の公開 policy カタログ 1 件(#857)。同意判断の提示に必要な
+/// 文書メタデータと本文のみで、ユーザー固有情報を含まない(認証不要)。
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct CommunityNodePolicyDocument {
+    pub policy_slug: String,
+    pub policy_version: i32,
+    pub title: String,
+    pub body_markdown: String,
+    pub required: bool,
+}
+
+/// `GET /v1/policies` の response(#857)。
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct CommunityNodePoliciesResponse {
+    pub policies: Vec<CommunityNodePolicyDocument>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(optional_fields = nullable))]

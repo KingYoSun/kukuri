@@ -42,6 +42,7 @@ test('loads, enables, and clears reversible node-local distance opt-out', async 
       onSubmitInviteCode={async () => undefined}
       onFetchConsents={() => undefined}
       onAcceptConsents={() => undefined}
+      onWithdrawConsents={() => {}}
       onRefresh={() => undefined}
       onClearToken={() => undefined}
       onGetRelationOptout={getState}
@@ -87,6 +88,7 @@ test('disables distance opt-out actions for a node that is not eligible', async 
       onSubmitInviteCode={async () => undefined}
       onFetchConsents={() => undefined}
       onAcceptConsents={() => undefined}
+      onWithdrawConsents={() => {}}
       onRefresh={() => undefined}
       onClearToken={() => undefined}
       onGetRelationOptout={getState}
@@ -131,6 +133,7 @@ test('explains distance opt-out failures with stable codes instead of raw server
       onSubmitInviteCode={async () => undefined}
       onFetchConsents={() => undefined}
       onAcceptConsents={() => undefined}
+      onWithdrawConsents={() => {}}
       onRefresh={() => undefined}
       onClearToken={() => undefined}
       onGetRelationOptout={getState}

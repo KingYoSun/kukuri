@@ -19,10 +19,10 @@ use kukuri_cn_protocol::{
     DOME_HOSTING_SESSION_WS_PATH, DOME_HOSTING_SNAPSHOT_RESYNC_PATH, DOME_HOSTING_STATUS_ROUTE,
     DOME_TRANSITION_ABORT_PATH, DOME_TRANSITION_COMMIT_PATH, DOME_TRANSITION_PREPARE_PATH,
     INDEX_DISCOVERY_PATH, INDEX_RECOMMENDATIONS_PATH, INDEX_SEARCH_PATH, INDEXING_REQUESTS_PATH,
-    NODE_MANIFEST_PATH, RELATION_NEIGHBORS_PATH, RELATION_OPTOUT_PATH, RELATION_USERS_ROUTE,
-    REPORT_PATH, RIGHTS_REQUEST_CREATE_PATH, RIGHTS_REQUEST_FORM_PATH, RIGHTS_REQUEST_SCOPE_PATH,
-    RIGHTS_REQUEST_STATUS_PATH, RIGHTS_REQUEST_WITHDRAW_PATH, TESTER_FEEDBACK_PATH,
-    TOPIC_RENDEZVOUS_HEARTBEAT_PATH, TRUST_USERS_ROUTE,
+    NODE_MANIFEST_PATH, POLICIES_PATH, RELATION_NEIGHBORS_PATH, RELATION_OPTOUT_PATH,
+    RELATION_USERS_ROUTE, REPORT_PATH, RIGHTS_REQUEST_CREATE_PATH, RIGHTS_REQUEST_FORM_PATH,
+    RIGHTS_REQUEST_SCOPE_PATH, RIGHTS_REQUEST_STATUS_PATH, RIGHTS_REQUEST_WITHDRAW_PATH,
+    TESTER_FEEDBACK_PATH, TOPIC_RENDEZVOUS_HEARTBEAT_PATH, TRUST_USERS_ROUTE,
 };
 use serde_json::{Value, json};
 use tower_http::trace::TraceLayer;
@@ -39,7 +39,7 @@ use crate::handlers::auth::{auth_challenge, auth_verify};
 use crate::handlers::bootstrap::{
     bootstrap_heartbeat, bootstrap_nodes, topic_rendezvous_heartbeat,
 };
-use crate::handlers::consents::{accept_consents_handler, consent_status};
+use crate::handlers::consents::{accept_consents_handler, consent_status, public_policies};
 use crate::handlers::indexing::{
     index_discovery, index_recommendations, index_search, submit_indexing_request,
 };
@@ -70,6 +70,7 @@ pub fn app_router(state: UserApiState) -> Router {
         .route(AUTH_VERIFY_PATH, post(auth_verify))
         .route(CONSENTS_STATUS_PATH, get(consent_status))
         .route(CONSENTS_PATH, post(accept_consents_handler))
+        .route(POLICIES_PATH, get(public_policies))
         .route(DOME_HOSTING_ASSIGNMENTS_PATH, post(assign_dome_hosting))
         .route(DOME_HOSTING_ACTIVATE_PATH, post(activate_dome_hosting))
         .route(DOME_HOSTING_RELEASE_PATH, post(release_dome_hosting))

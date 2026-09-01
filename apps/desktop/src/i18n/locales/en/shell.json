@@ -283,7 +283,11 @@
     "openSettings": "Open Community Node settings",
     "submit": "Submit request",
     "submitting": "Submitting…",
-    "status": { "pending": "The request is pending review.", "approved": "Indexing is approved.", "rejected": "Indexing was rejected." },
+    "status": {
+      "pending": "The request is pending review.",
+      "approved": "Indexing is approved.",
+      "rejected": "Indexing was rejected."
+    },
     "errors": {
       "requestNotConfigured": "This Community Node does not provide indexing, so it does not accept requests.",
       "requestNotActivated": "Indexing on this Community Node is temporarily unavailable, so it does not accept requests.",
@@ -304,7 +308,11 @@
     "exploreSummary": "Search, discover, and view recommendations across indexed topics.",
     "nodeLabel": "Search provider",
     "surfaces": "Community Index surfaces",
-    "operations": { "search": "Search", "discovery": "Discover", "recommendations": "Recommendations" },
+    "operations": {
+      "search": "Search",
+      "discovery": "Discover",
+      "recommendations": "Recommendations"
+    },
     "operationHints": {
       "discovery": "Browse recently indexed public results without a query.",
       "recommendations": "View recommendations from the selected node."
@@ -325,7 +333,9 @@
       "notActivated": "Community Index is temporarily unavailable on the selected node.",
       "rateLimited": "Too many requests. Please try again later.",
       "rateLimitedWithRetry": "Too many requests. Try again in {{seconds}} seconds."
-    }
+    },
+    "consentRequiredNotice": "A community node requires your consent before it can be used. Review its terms and policies to connect.",
+    "reviewPolicies": "Review policies: {{baseUrl}}"
   },
   "report": {
     "title": "Report content",

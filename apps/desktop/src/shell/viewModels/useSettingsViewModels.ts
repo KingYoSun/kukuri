@@ -37,6 +37,7 @@ type UseSettingsViewModelsArgs = {
   communityNodeError: DesktopShellState['communityNodeError'];
   communityNodeInput: DesktopShellState['communityNodeInput'];
   communityNodeManifests: DesktopShellState['communityNodeManifests'];
+  communityNodePolicies: DesktopShellState['communityNodePolicies'];
   communityNodeStatuses: DesktopShellState['communityNodeStatuses'];
   discoveryConfig: DesktopShellState['discoveryConfig'];
   discoveryEditorDirty: DesktopShellState['discoveryEditorDirty'];
@@ -93,6 +94,7 @@ export function useSettingsViewModels({
   communityNodeError,
   communityNodeInput,
   communityNodeManifests,
+  communityNodePolicies,
   communityNodeStatuses,
   discoveryConfig,
   discoveryEditorDirty,
@@ -409,7 +411,7 @@ export function useSettingsViewModels({
             communityNodeManifests[node.base_url],
             t
           ),
-          consent: communityNodeConsentView(status),
+          consent: communityNodeConsentView(status, communityNodePolicies[node.base_url]),
           inviteCodeSaved: status?.invite_code_saved ?? false,
           admissionRejectionCode: status?.admission_rejection?.code ?? null,
           lastError: status?.last_error ?? null,
@@ -422,6 +424,7 @@ export function useSettingsViewModels({
       communityNodeError,
       communityNodeInput,
       communityNodeManifests,
+      communityNodePolicies,
       communityNodeStatusByBaseUrl,
       communityNodeStatuses,
       t,

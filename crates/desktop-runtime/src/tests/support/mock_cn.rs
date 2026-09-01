@@ -193,9 +193,82 @@ pub(crate) struct MockManagedCommunityNodeState {
     pub(crate) consent_accept_hits: Arc<AtomicUsize>,
     pub(crate) heartbeat_hits: Arc<AtomicUsize>,
     pub(crate) bootstrap_hits: Arc<AtomicUsize>,
+    // #857: 認証不要の公開 policy カタログ(GET /v1/policies)の観測カウンタ。
+    pub(crate) policies_hits: Arc<AtomicUsize>,
     // true の場合、未同意状態を「版が上がった更新（旧版は同意済み）」として返す。
-    // auto_approve でも黙って再受諾せずユーザーへ提示する挙動の検証に使う（#384）。
+    // ローカル同意が旧版のままの node で黙って再受諾しない挙動の検証に使う（#384 / #857）。
     pub(crate) simulate_pending_update: Arc<AtomicBool>,
+}
+
+impl MockManagedCommunityNodeState {
+    pub(crate) fn new(
+        base_url: String,
+        seed_peers: Vec<CommunityNodeSeedPeer>,
+        consent_accepted: bool,
+        current_token: Arc<Mutex<String>>,
+    ) -> Self {
+        Self {
+            base_url,
+            seed_peers,
+            consent_accepted: Arc::new(AtomicBool::new(consent_accepted)),
+            current_token,
+            challenge_hits: Arc::new(AtomicUsize::new(0)),
+            verify_hits: Arc::new(AtomicUsize::new(0)),
+            consent_status_hits: Arc::new(AtomicUsize::new(0)),
+            consent_accept_hits: Arc::new(AtomicUsize::new(0)),
+            heartbeat_hits: Arc::new(AtomicUsize::new(0)),
+            bootstrap_hits: Arc::new(AtomicUsize::new(0)),
+            policies_hits: Arc::new(AtomicUsize::new(0)),
+            simulate_pending_update: Arc::new(AtomicBool::new(false)),
+        }
+    }
+}
+
+/// #857: mock CN の policy カタログの現行版。simulate_pending_update 時は版が上がる。
+pub(crate) const MOCK_MANAGED_POLICY_SLUG: &str = "builder-preview";
+
+/// #857: ユーザーが同意モーダルで受諾した状態をローカル同意記録として直接シードする。
+/// version は同意した版(mock カタログの現行版は 1、pending update 時は 2)。
+pub(crate) fn seed_local_community_node_consents(
+    runtime: &DesktopRuntime,
+    base_url: &str,
+    version: i32,
+) {
+    let mut state = crate::CommunityNodeLocalConsentState::default();
+    crate::community_node::record_community_node_local_consents(
+        &mut state,
+        &[crate::CommunityNodeConsentDocumentRef {
+            policy_slug: MOCK_MANAGED_POLICY_SLUG.to_string(),
+            policy_version: version,
+        }],
+        "ja",
+        "test-app",
+        Utc::now().timestamp(),
+    );
+    crate::community_node::persist_community_node_local_consents(
+        &runtime.db_path,
+        runtime.identity_mode,
+        base_url,
+        &state,
+    )
+    .expect("persist local community-node consents");
+}
+
+/// #857: 認証不要の公開 policy カタログ。consent status と同じ slug / 版を返す。
+pub(crate) async fn mock_managed_policies(
+    State(state): State<Arc<MockManagedCommunityNodeState>>,
+) -> Json<kukuri_cn_protocol::CommunityNodePoliciesResponse> {
+    state.policies_hits.fetch_add(1, Ordering::SeqCst);
+    let pending_update = state.simulate_pending_update.load(Ordering::SeqCst);
+    Json(kukuri_cn_protocol::CommunityNodePoliciesResponse {
+        policies: vec![kukuri_cn_protocol::CommunityNodePolicyDocument {
+            policy_slug: MOCK_MANAGED_POLICY_SLUG.to_string(),
+            policy_version: if pending_update { 2 } else { 1 },
+            title: "Builder Preview".to_string(),
+            body_markdown: "Builder preview policy body.".to_string(),
+            required: true,
+        }],
+    })
 }
 
 pub(crate) fn managed_community_node_consent_status(accepted: bool) -> CommunityNodeConsentStatus {

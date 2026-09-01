@@ -3,20 +3,21 @@ use kukuri_desktop_runtime::{
     CommunityNodeIndexingRequest, CommunityNodeManifestFetch, CommunityNodeNodeStatus,
     CommunityNodeRelationNeighborsRequest, CommunityNodeTargetRequest,
     CommunityNodeTesterFeedbackResponse, CommunityNodeTesterFeedbackSubmission,
-    CommunityNodeUserAdvisoryRequest,
-    CreatePrivateChannelRequest, DiscoveryConfig, ExportChannelAccessTokenRequest,
-    ExportFriendOnlyGrantRequest, ExportFriendPlusShareRequest, ExportPrivateChannelInviteRequest,
-    FreezePrivateChannelRequest, ImportChannelAccessTokenRequest, ImportFriendOnlyGrantRequest,
-    ImportFriendPlusShareRequest, ImportPeerTicketRequest, ImportPrivateChannelInviteRequest,
-    IndexQueryResponse, LeavePrivateChannelRequest, ListJoinedPrivateChannelsRequest,
-    PreviewChannelAccessTokenRequest, RotatePrivateChannelRequest, SetChannelGossipEnabledRequest,
-    SetPrivateChannelEntryDomeRequest,
-    SetCommunityNodeConfigRequest, SetCommunityNodeInviteCodeRequest, SetDiscoverySeedsRequest,
-    SetTopicGossipEnabledRequest,
-    SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
-    SubmitIndexingRequestResponse, TrustUserReadResponse, RelationReadResponse,
-    RelationNeighborsResponse, RelationOptoutResponse, UnsubscribeTopicRequest,
+    CommunityNodeUserAdvisoryRequest, CreatePrivateChannelRequest, DiscoveryConfig,
+    ExportChannelAccessTokenRequest, ExportFriendOnlyGrantRequest, ExportFriendPlusShareRequest,
+    ExportPrivateChannelInviteRequest, FreezePrivateChannelRequest,
+    ImportChannelAccessTokenRequest, ImportFriendOnlyGrantRequest, ImportFriendPlusShareRequest,
+    ImportPeerTicketRequest, ImportPrivateChannelInviteRequest, IndexQueryResponse,
+    LeavePrivateChannelRequest, ListJoinedPrivateChannelsRequest, PreviewChannelAccessTokenRequest,
+    RelationNeighborsResponse, RelationOptoutResponse, RelationReadResponse,
+    RotatePrivateChannelRequest, SetChannelGossipEnabledRequest, SetCommunityNodeConfigRequest,
+    SetCommunityNodeInviteCodeRequest, SetDiscoverySeedsRequest, SetPrivateChannelEntryDomeRequest,
+    SetTopicGossipEnabledRequest, SubmitCommunityNodeReportRequest,
+    SubmitCommunityNodeReportResult, SubmitIndexingRequestResponse, TrustUserReadResponse,
+    UnsubscribeTopicRequest,
 };
+
+use kukuri_desktop_runtime::CommunityNodePoliciesResponse;
 
 use crate::state::{CommandError, DesktopState, map_error};
 
@@ -378,14 +379,43 @@ pub async fn get_community_node_consent_status(
         .map_err(map_error)
 }
 
+/// #857: 認証不要の公開 policy カタログ。同意モーダルの提示内容を組み立てるために呼ぶ。
+#[tauri::command]
+pub async fn fetch_community_node_policies(
+    state: tauri::State<'_, DesktopState>,
+    request: CommunityNodeTargetRequest,
+) -> Result<CommunityNodePoliciesResponse, CommandError> {
+    state
+        .runtime
+        .fetch_community_node_policies(request)
+        .await
+        .map_err(map_error)
+}
+
 #[tauri::command]
 pub async fn accept_community_node_consents(
+    app_handle: tauri::AppHandle,
     state: tauri::State<'_, DesktopState>,
     request: AcceptCommunityNodeConsentsRequest,
 ) -> Result<CommunityNodeNodeStatus, CommandError> {
+    // #857: 同意記録のアプリ版はフロントの申告ではなく実行中バイナリの版を使う。
+    let app_version = app_handle.package_info().version.to_string();
     state
         .runtime
-        .accept_community_node_consents(request)
+        .accept_community_node_consents(request, app_version.as_str())
+        .await
+        .map_err(map_error)
+}
+
+/// #857: Node 同意の撤回。記録は履歴として残し、トークンを破棄して接続を停止する。
+#[tauri::command]
+pub async fn withdraw_community_node_consents(
+    state: tauri::State<'_, DesktopState>,
+    request: CommunityNodeTargetRequest,
+) -> Result<CommunityNodeNodeStatus, CommandError> {
+    state
+        .runtime
+        .withdraw_community_node_consents(request)
         .await
         .map_err(map_error)
 }

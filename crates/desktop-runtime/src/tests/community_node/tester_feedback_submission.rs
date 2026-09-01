@@ -77,19 +77,12 @@ async fn tester_feedback_runtime(
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("listener");
     let base_url = format!("http://{}", listener.local_addr().expect("local addr"));
     let expected_token = Arc::new(Mutex::new("feedback-token".to_string()));
-    let managed = Arc::new(MockManagedCommunityNodeState {
-        base_url: base_url.clone(),
-        seed_peers: Vec::new(),
-        consent_accepted: Arc::new(AtomicBool::new(true)),
-        current_token: Arc::clone(&expected_token),
-        challenge_hits: Arc::new(AtomicUsize::new(0)),
-        verify_hits: Arc::new(AtomicUsize::new(0)),
-        consent_status_hits: Arc::new(AtomicUsize::new(0)),
-        consent_accept_hits: Arc::new(AtomicUsize::new(0)),
-        heartbeat_hits: Arc::new(AtomicUsize::new(0)),
-        bootstrap_hits: Arc::new(AtomicUsize::new(0)),
-        simulate_pending_update: Arc::new(AtomicBool::new(false)),
-    });
+    let managed = Arc::new(MockManagedCommunityNodeState::new(
+        base_url.clone(),
+        Vec::new(),
+        true,
+        Arc::clone(&expected_token),
+    ));
     let feedback = MockTesterFeedbackState {
         expected_token,
         received: Arc::new(Mutex::new(Vec::new())),
@@ -134,6 +127,7 @@ async fn tester_feedback_runtime(
             ),
         }],
     };
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
     (runtime, base_url, feedback, server, dir)
 }
 

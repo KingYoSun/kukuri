@@ -308,7 +308,11 @@
     "exploreSummary": "インデックスされたトピックを横断して、検索・発見・おすすめを利用します。",
     "nodeLabel": "検索元",
     "surfaces": "コミュニティインデックスの機能",
-    "operations": { "search": "検索", "discovery": "発見", "recommendations": "おすすめ" },
+    "operations": {
+      "search": "検索",
+      "discovery": "発見",
+      "recommendations": "おすすめ"
+    },
     "operationHints": {
       "discovery": "検索語を指定せず、最近インデックスされた公開結果を表示します。",
       "recommendations": "選択したコミュニティノードからおすすめを取得します。"
@@ -329,7 +333,9 @@
       "notActivated": "選択したコミュニティノードのコミュニティ索引は一時的に利用できません。",
       "rateLimited": "要求が多すぎます。時間をおいてもう一度お試しください。",
       "rateLimitedWithRetry": "要求が多すぎます。{{seconds}}秒後にもう一度お試しください。"
-    }
+    },
+    "consentRequiredNotice": "コミュニティノードの利用には同意が必要です。規約・ポリシーを確認して接続してください。",
+    "reviewPolicies": "規約を確認: {{baseUrl}}"
   },
   "report": {
     "title": "コンテンツを通報",

@@ -288,13 +288,31 @@ previously_accepted_version?: number | null, };
 
 export type CommunityNodeConsentStatus = { all_required_accepted: boolean, items: Array<CommunityNodeConsentItem>, };
 
+export type CommunityNodePolicyDocument = { policy_slug: string, policy_version: number, title: string, body_markdown: string, required: boolean, };
+
+export type CommunityNodePoliciesResponse = { policies: Array<CommunityNodePolicyDocument>, };
+
+export type CommunityNodeConsentDocumentRef = { policy_slug: string, policy_version: number, };
+
+export type CommunityNodeLocalConsentRecord = { policy_slug: string, policy_version: number, accepted_at: number, language: string, app_version: string, };
+
+export type CommunityNodeLocalConsentState = { records: Array<CommunityNodeLocalConsentRecord>, withdrawn_at?: number | null, };
+
 export type CommunityNodeAdmissionRejectionCode = "INVITE_REQUIRED" | "INVITE_INVALID" | "INVITE_EXPIRED" | "INVITE_EXHAUSTED" | "INVITE_REVOKED" | "NOT_ALLOWLISTED" | "BANNED";
 
 export type CommunityNodeAdmissionRejection = { code: CommunityNodeAdmissionRejectionCode, message: string, };
 
 export type CommunityNodeSessionPhase = "idle" | "connecting" | "authenticating" | "accepting" | "refreshing" | "ready" | "retrying" | "awaiting_admission";
 
-export type CommunityNodeNodeStatus = { base_url: string, auto_approve?: boolean | null, auth_state: CommunityNodeAuthState, consent_state?: CommunityNodeConsentStatus | null, resolved_urls?: CommunityNodeResolvedUrls | null, last_error?: string | null, invite_code_saved: boolean, admission_rejection?: CommunityNodeAdmissionRejection | null, session_phase?: CommunityNodeSessionPhase | null, retry_after?: number | null, restart_required: boolean, };
+export type CommunityNodeNodeStatus = { base_url: string, auto_approve?: boolean | null, auth_state: CommunityNodeAuthState, consent_state?: CommunityNodeConsentStatus | null, 
+/**
+ * #857: Node 別ローカル同意記録。空 = 未同意(この node へは通信しない)。
+ */
+local_consent?: CommunityNodeLocalConsentState | null, 
+/**
+ * #857: 版が上がって再同意が必要な状態(公開カタログ照合で検出)。
+ */
+consent_update_pending?: boolean | null, resolved_urls?: CommunityNodeResolvedUrls | null, last_error?: string | null, invite_code_saved: boolean, admission_rejection?: CommunityNodeAdmissionRejection | null, session_phase?: CommunityNodeSessionPhase | null, retry_after?: number | null, restart_required: boolean, };
 
 export type CommunityNodeCapabilityScope = { available_enabled: Array<string>, planned_enabled: Array<string>, };
 
@@ -633,7 +651,7 @@ export type SetCommunityNodeInviteCodeRequest = { base_url: string, invite_code?
 
 export type CommunityNodeTargetRequest = { base_url: string, };
 
-export type AcceptCommunityNodeConsentsRequest = { base_url: string, policy_slugs: Array<string>, };
+export type AcceptCommunityNodeConsentsRequest = { base_url: string, documents: Array<CommunityNodeConsentDocumentRef>, language: string, };
 
 export type SetDiscoverySeedsRequest = { seed_entries: Array<string>, };
 

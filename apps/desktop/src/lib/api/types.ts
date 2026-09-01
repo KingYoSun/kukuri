@@ -11,12 +11,14 @@ import type {
   ChannelAudienceKind,
   ChannelRef,
   CommunityNodeConfig,
+  CommunityNodeConsentDocumentRef,
   CommunityNodeIndexingRequest,
   CommunityNodeIndexQueryRequest,
   CommunityIndexPostResolveInput,
   CommunityIndexPostResolveResponse,
   CommunityNodeManifestFetch,
   CommunityNodeNodeStatus,
+  CommunityNodePoliciesResponse,
   CommunityNodeRelationNeighborsRequest,
   CommunityNodeTesterFeedbackResponse,
   CommunityNodeTesterFeedbackSubmission,
@@ -110,15 +112,22 @@ export type DesktopStartupStatus =
   | { status: 'ready' }
   | {
       status: 'consent_required';
-      current_bundle_version: number;
-      accepted_bundle_version: number | null;
+      documents: AppConsentDocumentStatus[];
     }
   | { status: 'failed'; error: DesktopStartupErrorView };
 
-export type AppConsentStatus = {
-  currentBundleVersion: number;
-  acceptedBundleVersion: number | null;
+// #857: アプリ同意は bundle 単一フラグではなく文書単位で記録・判定する。
+export type AppConsentDocumentStatus = {
+  slug: string;
+  currentVersion: number;
+  acceptedVersion: number | null;
   acceptedAt: number | null;
+  acceptedLanguage: string | null;
+  acceptedAppVersion: string | null;
+};
+
+export type AppConsentStatus = {
+  documents: AppConsentDocumentStatus[];
   satisfied: boolean;
 };
 
@@ -464,10 +473,16 @@ export interface DesktopApi {
   ): Promise<CommunityNodeNodeStatus>;
   clearCommunityNodeToken(baseUrl: string): Promise<CommunityNodeNodeStatus>;
   getCommunityNodeConsentStatus(baseUrl: string): Promise<CommunityNodeNodeStatus>;
+  // #857: 認証不要の公開 policy カタログ。同意モーダルの提示内容を組み立てる。
+  fetchCommunityNodePolicies(baseUrl: string): Promise<CommunityNodePoliciesResponse>;
+  // #857: 提示済み文書への同意をローカル記録し、セッション確立(認証・同期)を開始する。
   acceptCommunityNodeConsents(
     baseUrl: string,
-    policySlugs: string[]
+    documents: CommunityNodeConsentDocumentRef[],
+    language: string
   ): Promise<CommunityNodeNodeStatus>;
+  // #857: Node 同意の撤回。記録は履歴として残し、トークンを破棄して接続を停止する。
+  withdrawCommunityNodeConsents(baseUrl: string): Promise<CommunityNodeNodeStatus>;
   refreshCommunityNodeMetadata(baseUrl: string): Promise<CommunityNodeNodeStatus>;
   fetchCommunityNodeManifest(baseUrl: string): Promise<CommunityNodeManifestFetch>;
   readCommunityNodeTrustUser(

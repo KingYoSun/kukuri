@@ -21,8 +21,14 @@ type CommunityNodeConsentDialogProps = {
   consent: CommunityNodeConsentView;
   busy: boolean;
   onAccept: () => void;
+  // #857: 取得失敗（オフライン等）時の再試行。
+  onRetry: () => void;
+  // #857: 同意の撤回。同意済みのときだけ渡す。
+  onWithdraw?: () => void;
 };
 
+// #857: Node 同意モーダル。提示内容は認証不要の公開 policy カタログから組み立て、
+// 認証(JWT 発行)は同意成立後にのみ始まる。不同意(閉じる)でも非 Node 機能は使える。
 export function CommunityNodeConsentDialog({
   open,
   onOpenChange,
@@ -30,11 +36,12 @@ export function CommunityNodeConsentDialog({
   consent,
   busy,
   onAccept,
+  onRetry,
+  onWithdraw,
 }: CommunityNodeConsentDialogProps) {
   const { t } = useTranslation(['common', 'settings']);
 
-  const acceptDisabled =
-    busy || !consent.authenticated || !consent.loaded || consent.allRequiredAccepted;
+  const acceptDisabled = busy || !consent.loaded || consent.allRequiredAccepted;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -45,19 +52,35 @@ export function CommunityNodeConsentDialog({
         </DialogHeader>
 
         <DialogBody className='max-h-[60vh] space-y-4 overflow-y-auto'>
-          {!consent.authenticated ? (
-            <Notice tone='warning'>{t('settings:communityNode.consent.authRequired')}</Notice>
+          <p className='text-sm leading-6 text-[var(--muted-foreground)]'>
+            {t('settings:communityNode.consent.intro')}
+          </p>
+
+          {consent.loading ? (
+            <Notice aria-live='polite'>{t('settings:communityNode.consent.loading')}</Notice>
           ) : null}
 
-          {consent.authenticated && !consent.loaded ? (
-            <Notice>{t('settings:communityNode.consent.notLoaded')}</Notice>
+          {consent.loadError ? (
+            <Notice tone='destructive'>
+              <div className='flex flex-wrap items-center justify-between gap-3'>
+                <span>{t('settings:communityNode.consent.loadFailed')}</span>
+                <Button variant='secondary' type='button' disabled={busy} onClick={onRetry}>
+                  {t('common:actions.retry')}
+                </Button>
+              </div>
+              <small className='font-mono'>{consent.loadError}</small>
+            </Notice>
           ) : null}
 
-          {consent.authenticated && consent.loaded && consent.hasPendingUpdate ? (
+          {consent.withdrawn ? (
+            <Notice tone='warning'>{t('settings:communityNode.consent.withdrawnNotice')}</Notice>
+          ) : null}
+
+          {consent.loaded && consent.hasPendingUpdate ? (
             <Notice tone='warning'>{t('settings:communityNode.consent.updatedNotice')}</Notice>
           ) : null}
 
-          {consent.authenticated && consent.loaded && consent.policies.length === 0 ? (
+          {consent.loaded && consent.policies.length === 0 ? (
             <Notice>{t('settings:communityNode.consent.noPolicies')}</Notice>
           ) : null}
 
@@ -120,8 +143,15 @@ export function CommunityNodeConsentDialog({
         </DialogBody>
 
         <DialogFooter className='flex flex-wrap justify-end gap-2'>
+          {onWithdraw && consent.hasLocalConsent ? (
+            <Button variant='secondary' disabled={busy} onClick={onWithdraw}>
+              {t('settings:communityNode.consent.withdraw')}
+            </Button>
+          ) : null}
           <Button variant='secondary' onClick={() => onOpenChange(false)}>
-            {t('common:actions.close')}
+            {consent.allRequiredAccepted
+              ? t('common:actions.close')
+              : t('settings:communityNode.consent.decline')}
           </Button>
           <Button disabled={acceptDisabled} onClick={onAccept}>
             {consent.allRequiredAccepted

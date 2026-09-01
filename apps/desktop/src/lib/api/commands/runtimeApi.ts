@@ -11,6 +11,7 @@ import type {
   CommunityIndexPostResolveResponse,
   CommunityNodeManifestFetch,
   CommunityNodeNodeStatus,
+  CommunityNodePoliciesResponse,
   CommunityNodeRelationNeighborsRequest,
   CommunityNodeTesterFeedbackResponse,
   CommunityNodeTesterFeedbackSubmission,
@@ -855,12 +856,30 @@ export const runtimeApi: DesktopApi = {
       } satisfies CommunityNodeTargetRequest,
     });
   }),
-  acceptCommunityNodeConsents: command('acceptCommunityNodeConsents', async (baseUrl, policySlugs) => {
-    return invokeDesktop<CommunityNodeNodeStatus>('accept_community_node_consents', {
+  fetchCommunityNodePolicies: command('fetchCommunityNodePolicies', async (baseUrl) => {
+    return invokeDesktop<CommunityNodePoliciesResponse>('fetch_community_node_policies', {
       request: {
         base_url: baseUrl,
-        policy_slugs: policySlugs,
-      } satisfies AcceptCommunityNodeConsentsRequest,
+      } satisfies CommunityNodeTargetRequest,
+    });
+  }),
+  acceptCommunityNodeConsents: command(
+    'acceptCommunityNodeConsents',
+    async (baseUrl, documents, language) => {
+      return invokeDesktop<CommunityNodeNodeStatus>('accept_community_node_consents', {
+        request: {
+          base_url: baseUrl,
+          documents,
+          language,
+        } satisfies AcceptCommunityNodeConsentsRequest,
+      });
+    }
+  ),
+  withdrawCommunityNodeConsents: command('withdrawCommunityNodeConsents', async (baseUrl) => {
+    return invokeDesktop<CommunityNodeNodeStatus>('withdraw_community_node_consents', {
+      request: {
+        base_url: baseUrl,
+      } satisfies CommunityNodeTargetRequest,
     });
   }),
   refreshCommunityNodeMetadata: command('refreshCommunityNodeMetadata', async (baseUrl) => {

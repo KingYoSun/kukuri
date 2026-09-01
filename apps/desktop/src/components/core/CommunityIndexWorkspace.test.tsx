@@ -631,7 +631,10 @@ test('recommendation reports use the source node latest manifest and recommendat
 
   const dialog = await screen.findByRole('dialog', { name: 'Report content' });
   await waitFor(() => expect(fetchCommunityNodeManifest).toHaveBeenCalledWith(NODE_A));
-  expect(within(dialog).getByText(/^Recommendation · User information unavailable$/)).toBeInTheDocument();
+  // 著者情報の解決は非同期に settle する(Loading… → unavailable)ため、完了を待って検証する。
+  expect(
+    await within(dialog).findByText(/^Recommendation · User information unavailable$/)
+  ).toBeInTheDocument();
   expect(within(dialog).getByText('Recommendation')).toBeInTheDocument();
   fireEvent.click(await within(dialog).findByRole('button', { name: 'Send report' }));
 

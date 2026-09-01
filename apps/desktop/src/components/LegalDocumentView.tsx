@@ -8,30 +8,32 @@ type LegalDocumentSection = {
 };
 
 type LegalDocumentViewProps = {
-  bundleVersion?: number | null;
+  /** #857: 文書単位の版表示。slug -> 現行版。 */
+  documentVersions?: Partial<Record<LegalDocumentKind, number>> | null;
   compact?: boolean;
 };
 
 const DOCUMENT_KINDS: LegalDocumentKind[] = ['terms', 'privacy'];
 
-export function LegalDocumentView({ bundleVersion, compact = false }: LegalDocumentViewProps) {
+export function LegalDocumentView({ documentVersions, compact = false }: LegalDocumentViewProps) {
   const { t } = useTranslation('legal');
 
   return (
     <div className={compact ? 'space-y-5' : 'space-y-6'}>
-      {bundleVersion ? (
-        <p className='text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]'>
-          v{bundleVersion}
-        </p>
-      ) : null}
       {DOCUMENT_KINDS.map((kind) => {
         const sections = t(`documents.${kind}.sections`, {
           returnObjects: true,
         }) as LegalDocumentSection[];
+        const version = documentVersions?.[kind];
         return (
           <article key={kind} className={compact ? 'space-y-3' : 'space-y-4'}>
             <h3 className='text-lg font-semibold text-foreground'>
               {t(`documents.${kind}.title`)}
+              {version ? (
+                <span className='ml-2 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]'>
+                  v{version}
+                </span>
+              ) : null}
             </h3>
             <div className={compact ? 'space-y-3' : 'space-y-4'}>
               {sections.map((section) => (

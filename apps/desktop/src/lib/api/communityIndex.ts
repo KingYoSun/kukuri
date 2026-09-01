@@ -56,6 +56,30 @@ export function eligibleCommunityNodes(
     });
 }
 
+/// #857: 設定済みだがローカル同意が成立していない(未同意・撤回・再同意待ち)ノード。
+/// Node 機能の利用直前に同意モーダルを提示する対象を決める。状態未取得のノードは
+/// 判定できないため含めない。
+export function consentPendingCommunityNodes(
+  config: CommunityNodeConfig,
+  statuses: readonly CommunityNodeNodeStatus[]
+): string[] {
+  const statusByUrl = new Map(statuses.map((status) => [status.base_url, status]));
+  return config.nodes
+    .map((node) => node.base_url)
+    .filter((baseUrl) => {
+      const status = statusByUrl.get(baseUrl);
+      if (!status) {
+        return false;
+      }
+      const localConsent = status.local_consent;
+      return (
+        !localConsent?.records.length ||
+        localConsent.withdrawn_at != null ||
+        Boolean(status.consent_update_pending)
+      );
+    });
+}
+
 /// テスターフィードバックの送信先は `tester_feedback` を提供中のノードに限る(#802 / ADR 0039)。
 export function eligibleTesterFeedbackNodes(
   config: CommunityNodeConfig,

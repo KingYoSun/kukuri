@@ -68,6 +68,20 @@ async fn admission_consent_status() -> Json<CommunityNodeConsentStatus> {
     })
 }
 
+// #857: 認証前の公開カタログ照合に応答する。テスト側でシード済みのローカル同意
+// (builder-preview v1)と一致させる。
+async fn admission_policies() -> Json<kukuri_cn_protocol::CommunityNodePoliciesResponse> {
+    Json(kukuri_cn_protocol::CommunityNodePoliciesResponse {
+        policies: vec![kukuri_cn_protocol::CommunityNodePolicyDocument {
+            policy_slug: MOCK_MANAGED_POLICY_SLUG.to_string(),
+            policy_version: 1,
+            title: "Builder Preview".to_string(),
+            body_markdown: "Builder preview policy body.".to_string(),
+            required: true,
+        }],
+    })
+}
+
 async fn admission_heartbeat(State(state): State<Arc<AdmissionMockState>>) -> Response {
     if state.heartbeat_unauthorized.load(Ordering::SeqCst) {
         return (
@@ -120,6 +134,7 @@ async fn spawn_admission_mock(
         .route("/v1/auth/challenge", post(admission_challenge))
         .route("/v1/auth/verify", post(admission_verify))
         .route("/v1/consents/status", get(admission_consent_status))
+        .route("/v1/policies", get(admission_policies))
         .route("/v1/bootstrap/heartbeat", post(admission_heartbeat))
         .route("/v1/bootstrap/nodes", get(admission_bootstrap_nodes))
         .with_state(state.clone());
@@ -137,6 +152,9 @@ async fn admission_runtime(db_path: &Path, nodes: Vec<(String, bool)>) -> Deskto
     )
     .await
     .expect("runtime");
+    for (base_url, _) in &nodes {
+        seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
+    }
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: nodes
             .into_iter()
@@ -215,6 +233,7 @@ async fn removing_or_clearing_node_config_deletes_its_invite_code() {
             resolved_urls: None,
         }],
     };
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
     persist_community_node_invite_code(
         &db_path,
         IdentityStorageMode::FileOnly,

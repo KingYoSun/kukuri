@@ -2,6 +2,7 @@ import type {
   CommunityNodeConfig,
   CommunityNodeManifest,
   CommunityNodeNodeStatus,
+  CommunityNodePolicyDocument,
   DiscoveryConfig,
   SyncStatus,
 } from '@/lib/api';
@@ -22,6 +23,12 @@ export type CommunityNodeManifestEntry =
   | { status: 'absent' }
   | { status: 'error'; error: string };
 
+// #857: 認証不要の公開 policy カタログ(GET /v1/policies)の取得状態。base_url ごとに保持する。
+export type CommunityNodePoliciesEntry =
+  | { status: 'loading' }
+  | { status: 'ok'; policies: CommunityNodePolicyDocument[] }
+  | { status: 'error'; error: string };
+
 export type ConnectivitySliceState = {
   peerTicket: string;
   localPeerTicket: string | null;
@@ -32,6 +39,7 @@ export type ConnectivitySliceState = {
   communityNodeConfig: CommunityNodeConfig;
   communityNodeStatuses: CommunityNodeNodeStatus[];
   communityNodeManifests: Record<string, CommunityNodeManifestEntry>;
+  communityNodePolicies: Record<string, CommunityNodePoliciesEntry>;
   communityNodeInput: CommunityNodeDraftNode[];
   communityNodeEditorDirty: boolean;
   communityNodeError: string | null;
@@ -94,6 +102,7 @@ export function createInitialConnectivitySlice(): ConnectivitySliceState {
     communityNodeConfig: DEFAULT_COMMUNITY_NODE_CONFIG,
     communityNodeStatuses: [],
     communityNodeManifests: {},
+    communityNodePolicies: {},
     communityNodeInput: [],
     communityNodeEditorDirty: false,
     communityNodeError: null,

@@ -76,7 +76,7 @@ pub use config::{
     DEFAULT_TOKEN_TTL_SECONDS, DatabaseInitMode, JwtConfig, TOPIC_RENDEZVOUS_TTL_SECONDS,
     USER_API_BEARER_CHALLENGE,
 };
-pub use consents::{accept_consents, get_consent_status, require_consents};
+pub use consents::{accept_consents, get_consent_status, list_policies, require_consents};
 pub use database::{
     TestDatabase, connect_postgres, ensure_database_ready, initialize_database,
     initialize_database_for_runtime, migrate_postgres, seed_default_policies,

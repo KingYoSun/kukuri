@@ -13,11 +13,9 @@
     "title": "アプリについて / 法的情報",
     "summary": "利用規約・プライバシーポリシー、アプリと同意の状態。",
     "appVersionLabel": "アプリバージョン",
-    "bundleVersionLabel": "規約バージョン",
-    "acceptedVersionLabel": "同意済みバージョン",
-    "acceptedAtLabel": "同意日時",
     "notAccepted": "未同意",
-    "documentsHeading": "規約・ポリシー"
+    "documentsHeading": "規約・ポリシー",
+    "acceptedValue": "v{{version}}(同意日時: {{acceptedAt}})"
   },
   "documents": {
     "terms": {
