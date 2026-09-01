@@ -325,4 +325,3 @@ pub(crate) struct StoredCommunityNodeToken {
     pub(crate) access_token: String,
     pub(crate) expires_at: i64,
 }
-

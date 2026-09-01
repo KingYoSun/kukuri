@@ -39,8 +39,7 @@ pub(crate) fn load_community_node_local_consents(
     mode: IdentityStorageMode,
     base_url: &str,
 ) -> Result<CommunityNodeLocalConsentState> {
-    let Some(raw) =
-        load_optional_secret(db_path, mode, COMMUNITY_NODE_CONSENT_PURPOSE, base_url)?
+    let Some(raw) = load_optional_secret(db_path, mode, COMMUNITY_NODE_CONSENT_PURPOSE, base_url)?
     else {
         return Ok(CommunityNodeLocalConsentState::default());
     };
@@ -72,12 +71,15 @@ pub(crate) fn community_node_local_consent_satisfies_policies(
     policies: &[CommunityNodePolicyDocument],
 ) -> bool {
     state.withdrawn_at.is_none()
-        && policies.iter().filter(|policy| policy.required).all(|policy| {
-            state.records.iter().any(|record| {
-                record.policy_slug == policy.policy_slug
-                    && record.policy_version >= policy.policy_version
+        && policies
+            .iter()
+            .filter(|policy| policy.required)
+            .all(|policy| {
+                state.records.iter().any(|record| {
+                    record.policy_slug == policy.policy_slug
+                        && record.policy_version >= policy.policy_version
+                })
             })
-        })
 }
 
 /// サーバの consent status が示す required 文書すべてを現行版以上でローカル同意済みか。
@@ -88,12 +90,16 @@ pub(crate) fn community_node_local_consent_covers_status(
     status: &CommunityNodeConsentStatus,
 ) -> bool {
     state.withdrawn_at.is_none()
-        && status.items.iter().filter(|item| item.required).all(|item| {
-            state.records.iter().any(|record| {
-                record.policy_slug == item.policy_slug
-                    && record.policy_version >= item.policy_version
+        && status
+            .items
+            .iter()
+            .filter(|item| item.required)
+            .all(|item| {
+                state.records.iter().any(|record| {
+                    record.policy_slug == item.policy_slug
+                        && record.policy_version >= item.policy_version
+                })
             })
-        })
 }
 
 /// 同意記録を追記する。同一 slug + 版の既存記録は日時・言語・アプリ版を更新し、

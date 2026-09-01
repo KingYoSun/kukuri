@@ -79,10 +79,10 @@ fn export_ipc_types() {
     use kukuri_app_api::*;
     use kukuri_cn_protocol::{
         AppealStatus, Basis, CommunityNodeConsentItem, CommunityNodeConsentStatus,
-        CommunityNodePoliciesResponse, CommunityNodePolicyDocument,
-        CommunityNodeResolvedUrls, CommunityNodeSeedPeer, IndexingRequestStatus, Proximity,
-        ProximityBasisEntry, RiskSignalTarget, SafetyCategory, Severity, TrustBasisEntry,
-        TrustComponentKind, TrustReadView, Visibility,
+        CommunityNodePoliciesResponse, CommunityNodePolicyDocument, CommunityNodeResolvedUrls,
+        CommunityNodeSeedPeer, IndexingRequestStatus, Proximity, ProximityBasisEntry,
+        RiskSignalTarget, SafetyCategory, Severity, TrustBasisEntry, TrustComponentKind,
+        TrustReadView, Visibility,
     };
     use kukuri_core::{
         ChannelAudienceKind, ChannelId, ChannelRef, ChannelSharingState, ClientResourceBudget,

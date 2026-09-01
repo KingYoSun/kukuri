@@ -347,7 +347,9 @@ async fn community_node_trust_relation_client_stops_before_http_when_consent_is_
     let (runtime, base_url, state, managed, server, _dir) = trust_relation_runtime(None).await;
     managed.consent_accepted.store(false, Ordering::SeqCst);
     // #857: ローカル同意(v1)がカバーしない新版(v2)への更新 = 再同意待ち。
-    managed.simulate_pending_update.store(true, Ordering::SeqCst);
+    managed
+        .simulate_pending_update
+        .store(true, Ordering::SeqCst);
 
     let trust_error = runtime
         .read_community_node_trust_user(CommunityNodeUserAdvisoryRequest {

@@ -613,7 +613,9 @@ async fn community_node_index_query_stops_before_http_when_consent_is_pending() 
     let (runtime, base_url, managed, state, server, _dir) = index_runtime(None).await;
     managed.consent_accepted.store(false, Ordering::SeqCst);
     // #857: ローカル同意(v1)がカバーしない新版(v2)への更新 = 再同意待ち。
-    managed.simulate_pending_update.store(true, Ordering::SeqCst);
+    managed
+        .simulate_pending_update
+        .store(true, Ordering::SeqCst);
 
     let error = runtime
         .search_community_node_index(scoped_request(base_url.as_str()))
@@ -635,7 +637,9 @@ async fn community_node_private_indexing_stops_before_secret_when_consent_is_pen
     let (runtime, base_url, managed, state, server, _dir) = index_runtime(None).await;
     managed.consent_accepted.store(false, Ordering::SeqCst);
     // #857: ローカル同意(v1)がカバーしない新版(v2)への更新 = 再同意待ち。
-    managed.simulate_pending_update.store(true, Ordering::SeqCst);
+    managed
+        .simulate_pending_update
+        .store(true, Ordering::SeqCst);
 
     let error = runtime
         .submit_community_node_indexing_request(CommunityNodeIndexingRequest {

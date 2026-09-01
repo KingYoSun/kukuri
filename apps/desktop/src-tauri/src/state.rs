@@ -332,7 +332,10 @@ pub(crate) fn load_app_consent_store(db_path: &Path) -> AppConsentStore {
     serde_json::from_slice(&bytes).unwrap_or_default()
 }
 
-pub(crate) fn save_app_consent_store(db_path: &Path, store: &AppConsentStore) -> Result<(), String> {
+pub(crate) fn save_app_consent_store(
+    db_path: &Path,
+    store: &AppConsentStore,
+) -> Result<(), String> {
     let path = app_consent_path(db_path);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
@@ -360,7 +363,9 @@ fn latest_app_consent_record<'a>(
         .max_by_key(|record| (record.version, record.accepted_at))
 }
 
-pub(crate) fn app_consent_documents_status(store: &AppConsentStore) -> Vec<AppConsentDocumentStatus> {
+pub(crate) fn app_consent_documents_status(
+    store: &AppConsentStore,
+) -> Vec<AppConsentDocumentStatus> {
     APP_LEGAL_DOCUMENTS
         .iter()
         .map(|(slug, current_version)| {

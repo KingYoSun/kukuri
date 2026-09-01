@@ -62,10 +62,10 @@ use crate::community_node::{
     community_node_seed_peers, default_preview_community_node_config,
     delete_community_node_invite_code, effective_seed_peer_apply_state,
     load_community_node_config_from_file, load_community_node_local_consents,
-    load_community_node_token, normalize_community_node_config,
-    persist_community_node_invite_code, persist_community_node_local_consents,
-    record_community_node_local_consents, relay_config_from_community_node_config,
-    runtime_connectivity_assist_state, save_community_node_config,
+    load_community_node_token, normalize_community_node_config, persist_community_node_invite_code,
+    persist_community_node_local_consents, record_community_node_local_consents,
+    relay_config_from_community_node_config, runtime_connectivity_assist_state,
+    save_community_node_config,
 };
 use crate::discovery::{
     DiscoveryConfig, SetDiscoverySeedsRequest, parse_seed_entries,

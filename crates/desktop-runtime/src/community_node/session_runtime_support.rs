@@ -89,8 +89,7 @@ impl DesktopRuntime {
             let catalog = self
                 .request_community_node_policies(base_url.as_str())
                 .await?;
-            if !community_node_local_consent_satisfies_policies(&local_consent, &catalog.policies)
-            {
+            if !community_node_local_consent_satisfies_policies(&local_consent, &catalog.policies) {
                 self.set_community_node_local_consent_update_pending(base_url.as_str(), true)
                     .await;
                 self.clear_community_node_retry_state(base_url.as_str())
