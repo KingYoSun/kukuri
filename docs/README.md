@@ -55,6 +55,7 @@
 ## Legal
 - app-level 利用規約 / プライバシーポリシー（client 自体への同意。per-node consent とは別建て）: `docs/legal/terms-of-service.md` / `docs/legal/privacy-policy.md`（canonical SSoT。アプリ内表示は i18n `legal` namespace がミラー）
 - feature data classification: `docs/legal/app-consent-data-classification.md`
+- 18歳以上の自己申告と成人向け表現の既定非表示(#858): 仕様は `docs/adr/0046-age-attestation-adult-content-gating.md`、分類は `docs/legal/age-attestation-data-classification.md` / `docs/legal/adult-content-display-data-classification.md`
 
 ## UI/UX
 - flow: `docs/adr/0014-uiux-dev-flow.md`

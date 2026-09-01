@@ -4,6 +4,7 @@ import type {
   CommunityIndexResolvedPostView,
   IndexEntryView,
 } from '@/lib/api';
+import { hasAdultContentLabel } from '@/shell/media';
 import { authorDisplayLabel, resolveProfilePictureSrc } from '@/shell/presentation';
 
 import type { PostCardView } from './types';
@@ -18,6 +19,7 @@ type CommunityIndexPostCardViewOptions = {
   authorStatus?: 'loading' | 'resolved' | 'failed';
   resolvedEntry?: CommunityIndexResolvedPostView | null;
   mediaObjectUrls: Record<string, string | null>;
+  adultContentEnabled?: boolean;
 };
 
 function audienceLabel(entry: IndexEntryView): string {
@@ -121,6 +123,9 @@ export function communityIndexPostCardView(
     post: displayPost,
     actionPost: resolvedPost,
     context: 'timeline',
+    // #858: 解決済み投稿が成人向けラベル付きなら、検索/発見/推薦でも本文を代替表示にする。
+    adultContentGated:
+      !options.adultContentEnabled && hasAdultContentLabel(resolvedPost?.content_labels),
     authorLabel,
     authorPicture: knownAuthor
       ? resolveProfilePictureSrc(knownAuthor, options.mediaObjectUrls)

@@ -21,6 +21,7 @@ async fn late_joiner_backfills_timeline_from_docs() {
             reply_to: None,
             channel_ref: ChannelRef::Public,
             attachments: vec![],
+            content_labels: Vec::new(),
         })
         .await
         .expect("create post before join");
@@ -94,6 +95,7 @@ async fn late_joiner_backfills_image_post_from_docs() {
                 "image/png",
                 b"late-image-runtime",
             )],
+            content_labels: Vec::new(),
         })
         .await
         .expect("create image post before join");
@@ -185,6 +187,7 @@ async fn late_joiner_backfills_video_media_payload() {
                     "video_poster",
                 ),
             ],
+            content_labels: Vec::new(),
         })
         .await
         .expect("create video post before join");
@@ -282,6 +285,7 @@ async fn blob_media_payload_roundtrip() {
                 "image/png",
                 b"blob-media-roundtrip",
             )],
+            content_labels: Vec::new(),
         })
         .await
         .expect("create image post");
@@ -360,6 +364,7 @@ async fn sqlite_deletion_does_not_lose_shared_state() {
             reply_to: None,
             channel_ref: ChannelRef::Public,
             attachments: vec![],
+            content_labels: Vec::new(),
         })
         .await
         .expect("root post");
@@ -370,6 +375,7 @@ async fn sqlite_deletion_does_not_lose_shared_state() {
             reply_to: Some(root_id.clone()),
             channel_ref: ChannelRef::Public,
             attachments: vec![],
+            content_labels: Vec::new(),
         })
         .await
         .expect("reply post");
@@ -429,6 +435,7 @@ async fn restart_restores_from_docs_blobs_without_sqlite_seed() {
             reply_to: None,
             channel_ref: ChannelRef::Public,
             attachments: vec![],
+            content_labels: Vec::new(),
         })
         .await
         .expect("create post");
@@ -485,6 +492,7 @@ async fn restart_restores_image_post_preview() {
                 "image/png",
                 b"restart-image-preview",
             )],
+            content_labels: Vec::new(),
         })
         .await
         .expect("create image post");
@@ -559,6 +567,7 @@ async fn restart_restores_video_media_payload() {
                     "video_poster",
                 ),
             ],
+            content_labels: Vec::new(),
         })
         .await
         .expect("create video post");

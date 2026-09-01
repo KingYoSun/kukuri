@@ -7,7 +7,8 @@
     "decline": "Decline",
     "declineNotice": "If you do not accept, you cannot use kukuri. Please close the app.",
     "accepting": "Applying…",
-    "acceptError": "Failed to save your consent. Please try again."
+    "acceptError": "Failed to save your consent. Please try again.",
+    "ageAttestationLabel": "I am 18 years of age or older."
   },
   "about": {
     "title": "About / Legal",
@@ -15,7 +16,10 @@
     "appVersionLabel": "App version",
     "notAccepted": "Not accepted",
     "documentsHeading": "Documents",
-    "acceptedValue": "v{{version}} (accepted {{acceptedAt}})"
+    "acceptedValue": "v{{version}} (accepted {{acceptedAt}})",
+    "ageAttestationHeading": "Age self-attestation",
+    "ageAttestedValue": "Attested as 18 or older (attested {{attestedAt}})",
+    "notAttested": "Not attested"
   },
   "documents": {
     "terms": {
@@ -26,6 +30,13 @@
           "paragraphs": [
             "kukuri is a decentralized application built on a P2P foundation. A central authority that governs the entire network does not exist; it is structurally impossible.",
             "Your account, profile, follows, and posts are not owned by any particular community node and are not lost when a node stops or changes."
+          ]
+        },
+        {
+          "heading": "Eligibility and adult material",
+          "paragraphs": [
+            "kukuri may only be used by people who are 18 years of age or older. By starting to use kukuri, you represent that you are 18 or older.",
+            "Display of adult material is disabled by default. To display it, you must explicitly enable it yourself in the settings screen. Adult material is identified by labels self-declared by the person who posted it, and the absence of a label does not guarantee that a post is free of adult material."
           ]
         },
         {
@@ -95,7 +106,8 @@
         {
           "heading": "Information stored locally",
           "paragraphs": [
-            "Your account-identifying key, profile, follows, posts, and other locally reconstructed data, as well as app settings (theme, language, discovery settings, community node settings, and your consent to this policy), are stored only on your device."
+            "Your account-identifying key, profile, follows, posts, and other locally reconstructed data, as well as app settings (theme, language, discovery settings, community node settings, your consent to this policy, your age self-attestation record, and your adult-material display setting), are stored only on your device.",
+            "Your confirmation of being 18 or older is recorded only on this device as a self-attestation. kukuri does not collect your date of birth or any official ID and does not perform official age verification. This record is never sent off the device, and a new device requires a new attestation."
           ]
         },
         {

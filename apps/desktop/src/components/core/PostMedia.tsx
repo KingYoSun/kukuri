@@ -26,6 +26,21 @@ export function PostMedia({
   if (!media.kind) {
     return null;
   }
+  // #858: 成人向けラベル付きメディアは、表示設定 OFF の間は取得もデコードもせず
+  // 一貫したプレースホルダーだけを出す(全表示経路共通)。
+  if (media.state === 'gated') {
+    return (
+      <div
+        className='media-frame media-frame-loading'
+        data-testid={`media-adult-gated-${media.objectId}`}
+      >
+        <div className='media-skeleton' aria-hidden='true' />
+        <p className='topic-diagnostic topic-diagnostic-secondary' role='status'>
+          {t('media.adultGated')}
+        </p>
+      </div>
+    );
+  }
   if (media.state === 'unavailable') {
     return showUnavailableDiagnostic ? (
       <p className='topic-diagnostic topic-diagnostic-secondary' role='status'>

@@ -19,6 +19,9 @@ pub struct CreatePostRequest {
     pub channel_ref: ChannelRef,
     #[serde(default)]
     pub attachments: Vec<CreateAttachmentRequest>,
+    /// #858: 投稿者自己申告のラベル(既知値は `adult` のみ)。
+    #[serde(default)]
+    pub content_labels: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

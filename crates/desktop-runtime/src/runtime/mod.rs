@@ -162,6 +162,41 @@ fn persist_private_channel_capabilities(
     )
 }
 
+/// #858: 成人向け表現の表示設定の永続形。`<db_path>.content-display.json` に保存する
+/// (app-consent と同様、DB・identity storage から独立した平文ローカル設定)。
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub(crate) struct ContentDisplaySettingsState {
+    #[serde(default)]
+    pub(crate) adult_content_enabled: bool,
+}
+
+const CONTENT_DISPLAY_SETTINGS_FILE_EXTENSION: &str = "content-display.json";
+
+fn content_display_settings_path(db_path: &Path) -> PathBuf {
+    db_path.with_extension(CONTENT_DISPLAY_SETTINGS_FILE_EXTENSION)
+}
+
+/// 欠落・破損は既定値(表示 OFF)として扱う(fail-closed)。
+pub(crate) fn load_content_display_settings(db_path: &Path) -> ContentDisplaySettingsState {
+    let Ok(bytes) = std::fs::read(content_display_settings_path(db_path)) else {
+        return ContentDisplaySettingsState::default();
+    };
+    serde_json::from_slice(&bytes).unwrap_or_default()
+}
+
+pub(crate) fn save_content_display_settings(
+    db_path: &Path,
+    state: &ContentDisplaySettingsState,
+) -> Result<()> {
+    let path = content_display_settings_path(db_path);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).context("failed to create content display settings dir")?;
+    }
+    let bytes =
+        serde_json::to_vec_pretty(state).context("failed to encode content display settings")?;
+    std::fs::write(&path, bytes).context("failed to write content display settings")
+}
+
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 struct GossipSubscriptionState {
     #[serde(default)]
@@ -323,6 +358,11 @@ impl DesktopRuntime {
                 gossip_subscription_state.disabled_channels,
             )
             .await;
+        // #858: 成人向け表現の表示設定(既定 OFF)を起動時に反映する。設定が読めない
+        // 場合も OFF のまま(fail-closed)。
+        app_service.set_adult_content_display_enabled(
+            load_content_display_settings(&db_path).adult_content_enabled,
+        );
         app_service.warm_social_graph().await?;
         app_service.resume_direct_message_state().await?;
 

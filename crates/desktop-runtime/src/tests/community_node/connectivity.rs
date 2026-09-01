@@ -597,6 +597,7 @@ async fn community_node_connectivity_assist_backfills_three_client_public_timeli
             reply_to: None,
             channel_ref: ChannelRef::Public,
             attachments: vec![],
+            content_labels: Vec::new(),
         })
         .await
         .expect("create post a");
@@ -634,6 +635,7 @@ async fn community_node_connectivity_assist_backfills_three_client_public_timeli
             reply_to: None,
             channel_ref: ChannelRef::Public,
             attachments: vec![],
+            content_labels: Vec::new(),
         })
         .await
         .expect("create post c");
@@ -810,6 +812,7 @@ async fn runtime_starts_with_unreachable_community_node_and_recovers_via_manual_
             reply_to: None,
             channel_ref: ChannelRef::Public,
             attachments: vec![],
+            content_labels: Vec::new(),
         })
         .await
         .expect("create recovery post");

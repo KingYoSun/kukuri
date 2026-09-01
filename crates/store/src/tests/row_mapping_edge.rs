@@ -353,6 +353,7 @@ async fn object_projection_blank_root_and_reply_map_to_none() {
             content: Some("hello".into()),
             attachments: vec![],
             repost_of: None,
+            content_labels: Vec::new(),
             source_replica_id: ReplicaId::new("replica-object-edge"),
             source_key: "objects/obj-blank-refs/header".into(),
             source_envelope_id: EnvelopeId::from("env-obj-blank-refs"),

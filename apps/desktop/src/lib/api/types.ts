@@ -5,6 +5,7 @@ export * from './types.generated';
 import type {
   AuthorSocialView,
   BlobMediaPayload,
+  ContentDisplaySettings,
   BookmarkedPostView,
   ChannelAccessTokenExport,
   ChannelAccessTokenPreview,
@@ -113,8 +114,16 @@ export type DesktopStartupStatus =
   | {
       status: 'consent_required';
       documents: AppConsentDocumentStatus[];
+      age_attestation: AgeAttestationStatus;
     }
   | { status: 'failed'; error: DesktopStartupErrorView };
+
+// #858: 18歳以上の自己申告の状態。文書同意とは別レコード(ADR 0046)。
+export type AgeAttestationStatus = {
+  currentVersion: number;
+  attestedVersion: number | null;
+  attestedAt: number | null;
+};
 
 // #857: アプリ同意は bundle 単一フラグではなく文書単位で記録・判定する。
 export type AppConsentDocumentStatus = {
@@ -128,6 +137,7 @@ export type AppConsentDocumentStatus = {
 
 export type AppConsentStatus = {
   documents: AppConsentDocumentStatus[];
+  ageAttestation: AgeAttestationStatus;
   satisfied: boolean;
 };
 
@@ -140,6 +150,8 @@ export type LocalPostDraft = {
   source_object_id?: string | null;
   channel_ref?: ChannelRef | null;
   attachments?: CreateAttachmentInput[];
+  // #858: 投稿者自己申告のラベル(既知値は 'adult' のみ)。
+  content_labels?: string[];
 };
 
 export type LocalDraftMediaItem = {
@@ -202,7 +214,8 @@ export interface DesktopApi {
     content: string,
     replyTo?: string | null,
     attachments?: CreateAttachmentInput[],
-    channelRef?: ChannelRef
+    channelRef?: ChannelRef,
+    contentLabels?: string[]
   ): Promise<string>;
   createRepost(
     topic: string,
@@ -522,6 +535,9 @@ export interface DesktopApi {
   setChannelGossipEnabled(topic: string, channelId: string, enabled: boolean): Promise<void>;
   getLocalPeerTicket(): Promise<string | null>;
   getBlobMediaPayload(hash: string, mime: string): Promise<BlobMediaPayload | null>;
+  // #858: 成人向け表現の表示設定(既定 OFF)。
+  getContentDisplaySettings(): Promise<ContentDisplaySettings>;
+  setAdultContentDisplayEnabled(enabled: boolean): Promise<ContentDisplaySettings>;
   getBlobPreviewUrl(
     hash: string,
     mime: string,

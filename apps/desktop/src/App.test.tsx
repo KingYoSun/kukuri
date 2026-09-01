@@ -88,11 +88,21 @@ function consentDocuments(acceptedVersion: number | null) {
   }));
 }
 
+// #858: 年齢自己申告の状態。null は未申告。
+function ageAttestation(attestedVersion: number | null) {
+  return {
+    currentVersion: 1,
+    attestedVersion,
+    attestedAt: attestedVersion === null ? null : 1_700_000_000,
+  };
+}
+
 test('desktop app blocks startup until app-level legal consent is accepted', async () => {
   const user = userEvent.setup();
   invokeMock.mockResolvedValueOnce({
     status: 'consent_required',
     documents: consentDocuments(null),
+    age_attestation: ageAttestation(null),
   });
   invokeMock.mockResolvedValueOnce({
     status: 'failed',
@@ -124,7 +134,14 @@ test('desktop app blocks startup until app-level legal consent is accepted', asy
   ).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Post' })).not.toBeInTheDocument();
 
-  await user.click(screen.getByRole('button', { name: 'Accept and continue' }));
+  // #858: 年齢の自己申告チェックが無い間は同意ボタンが無効。
+  const acceptButton = screen.getByRole('button', { name: 'Accept and continue' });
+  expect(acceptButton).toBeDisabled();
+  expect(screen.getByText('I am 18 years of age or older.')).toBeInTheDocument();
+  await user.click(screen.getByTestId('age-attestation-checkbox'));
+  expect(acceptButton).toBeEnabled();
+
+  await user.click(acceptButton);
 
   await waitFor(() => {
     expect(invokeMock).toHaveBeenCalledWith('accept_app_consents', {
@@ -133,6 +150,7 @@ test('desktop app blocks startup until app-level legal consent is accepted', asy
         { slug: 'privacy', version: 2 },
       ],
       language: 'en',
+      ageAttested: true,
     });
   });
   expect(await screen.findByText('kukuri could not open the local database.')).toBeInTheDocument();
@@ -144,6 +162,7 @@ test('desktop app requires renewed consent for an older legal bundle', async () 
   invokeMock.mockResolvedValueOnce({
     status: 'consent_required',
     documents: consentDocuments(1),
+    age_attestation: ageAttestation(1),
   });
   invokeMock.mockResolvedValueOnce({
     status: 'failed',
@@ -173,6 +192,9 @@ test('desktop app requires renewed consent for an older legal bundle', async () 
   expect(screen.getAllByText('v2')).toHaveLength(2);
   expect(screen.queryByTestId('control-center-trigger')).not.toBeInTheDocument();
 
+  // #858: 現行版で申告済みならチェックボックスは再表示されず、ボタンは有効のまま。
+  expect(screen.queryByTestId('age-attestation-checkbox')).not.toBeInTheDocument();
+
   await user.click(screen.getByRole('button', { name: 'Accept and continue' }));
 
   await waitFor(() => {
@@ -182,6 +204,7 @@ test('desktop app requires renewed consent for an older legal bundle', async () 
         { slug: 'privacy', version: 2 },
       ],
       language: 'en',
+      ageAttested: false,
     });
   });
   expect(await screen.findByText('kukuri could not open the local database.')).toBeInTheDocument();

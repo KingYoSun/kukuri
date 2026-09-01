@@ -175,6 +175,7 @@ export function createOptimisticPostActions({
       object_kind: isRepost ? 'repost' : replyPost ? 'comment' : 'post',
       content: draft.content,
       content_status: 'Available',
+      content_labels: draft.kind === 'post' ? draft.content_labels ?? [] : [],
       attachments: attachmentViewsFromDraftMediaItems(localId, draftMedia),
       created_at: createdAt,
       reply_to: replyPost?.object_id ?? null,
@@ -288,7 +289,8 @@ export function createOptimisticPostActions({
               draft.content,
               draft.reply_to ?? null,
               draft.attachments ?? [],
-              draft.channel_ref ?? PUBLIC_CHANNEL_REF
+              draft.channel_ref ?? PUBLIC_CHANNEL_REF,
+              draft.content_labels ?? []
             );
       for (const item of draftMedia) {
         releaseDraftPreview(item.id);

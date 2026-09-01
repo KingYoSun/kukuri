@@ -342,6 +342,7 @@ async fn private_channel_invite_restores_after_restart_without_reimport() {
             reply_to: None,
             channel_ref: private_channel_ref.clone(),
             attachments: vec![],
+            content_labels: Vec::new(),
         })
         .await
         .expect("create private post");
@@ -407,6 +408,7 @@ async fn private_channel_invite_restores_after_restart_without_reimport() {
             reply_to: Some(private_post_id.clone()),
             channel_ref: ChannelRef::Public,
             attachments: vec![],
+            content_labels: Vec::new(),
         })
         .await
         .expect("create private reply");

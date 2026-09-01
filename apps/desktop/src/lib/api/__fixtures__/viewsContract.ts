@@ -74,6 +74,9 @@ export const postViewFull = {
       }
     }
   ],
+  "content_labels": [
+    "adult"
+  ],
   "created_at": 1700000000,
   "reply_to": "parent-1",
   "reply_preview": {
@@ -111,6 +114,7 @@ export const postViewFull = {
         }
       }
     ],
+    "content_labels": [],
     "root_id": "root-1",
     "reply_to": null
   },
@@ -129,6 +133,7 @@ export const postViewFull = {
     "source_object_kind": "post",
     "content": "original",
     "attachments": [],
+    "content_labels": [],
     "reply_to": null,
     "root_id": null
   },
@@ -182,6 +187,7 @@ export const postViewMinimal = {
   "content": "minimal",
   "content_status": "Missing",
   "attachments": [],
+  "content_labels": [],
   "created_at": 1700000001,
   "reply_to": null,
   "reply_preview": null,
@@ -218,6 +224,7 @@ export const timelineView = {
       "content": "minimal",
       "content_status": "Missing",
       "attachments": [],
+      "content_labels": [],
       "created_at": 1700000001,
       "reply_to": null,
       "reply_preview": null,
@@ -260,6 +267,7 @@ export const bookmarkedPostView = {
     "content": "minimal",
     "content_status": "Missing",
     "attachments": [],
+    "content_labels": [],
     "created_at": 1700000001,
     "reply_to": null,
     "reply_preview": null,

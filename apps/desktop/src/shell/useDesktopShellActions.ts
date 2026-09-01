@@ -690,6 +690,7 @@ export function useDesktopShellActions({
               ? { kind: 'private_channel', channel_id: target.scope.channelId }
               : PUBLIC_CHANNEL_REF,
             attachments,
+            content_labels: draft.adultLabeled ? ['adult'] : [],
           },
       draftMedia: draftMediaSnapshot,
       replyPost,

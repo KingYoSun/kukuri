@@ -226,6 +226,7 @@ async fn friend_only_rotate_requires_fresh_grant() {
             reply_to: None,
             channel_ref: private_ref,
             attachments: Vec::new(),
+            content_labels: Vec::new(),
         })
         .await
         .expect("create friend-only post");
@@ -638,6 +639,7 @@ async fn friend_plus_share_freeze_rotate_connectivity() {
             reply_to: None,
             channel_ref: private_ref.clone(),
             attachments: Vec::new(),
+            content_labels: Vec::new(),
         })
         .await
         .expect("create friend-plus post");
@@ -688,6 +690,7 @@ async fn friend_plus_share_freeze_rotate_connectivity() {
             reply_to: None,
             channel_ref: private_ref.clone(),
             attachments: Vec::new(),
+            content_labels: Vec::new(),
         })
         .await
         .expect("write should continue after freeze");
@@ -751,6 +754,7 @@ async fn friend_plus_share_freeze_rotate_connectivity() {
             reply_to: None,
             channel_ref: private_ref,
             attachments: Vec::new(),
+            content_labels: Vec::new(),
         })
         .await
         .expect("create new epoch post");

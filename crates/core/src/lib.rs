@@ -135,12 +135,13 @@ pub use metaverse_resource_budget::{
     validate_metaverse_asset_metadata,
 };
 pub use posts::{
-    CanonicalPostHeader, ChannelRef, KukuriPostEnvelopeContentV1, KukuriPostObjectV1,
-    KukuriPostWithdrawalEnvelopeContentV1, ObjectStatus, ObjectVisibility, PayloadRef,
-    PostWithdrawalReason, PostWithdrawalV1, RepostSourceSnapshotV1, ThreadRef, TimelineScope,
-    WithdrawalReasonVisibility, build_post_envelope, build_post_envelope_with_payload,
-    build_post_envelope_with_payload_in_channel, build_post_withdrawal_envelope,
-    build_repost_envelope, timeline_sort_key, verify_post_withdrawal,
+    ADULT_CONTENT_LABEL, CanonicalPostHeader, ChannelRef, KukuriPostEnvelopeContentV1,
+    KukuriPostObjectV1, KukuriPostWithdrawalEnvelopeContentV1, ObjectStatus, ObjectVisibility,
+    PayloadRef, PostWithdrawalReason, PostWithdrawalV1, RepostSourceSnapshotV1, ThreadRef,
+    TimelineScope, WithdrawalReasonVisibility, build_post_envelope,
+    build_post_envelope_with_payload, build_post_envelope_with_payload_in_channel,
+    build_post_withdrawal_envelope, build_repost_envelope, has_adult_content_label,
+    timeline_sort_key, verify_post_withdrawal,
 };
 pub use private_channels::{
     ChannelAudienceKind, ChannelSharingState, CreatePrivateChannelInput, FriendOnlyGrantPreview,

@@ -12,6 +12,7 @@ import {
   createDesktopShellStore,
 } from '@/shell/store';
 import {
+  type AgeAttestationStatus,
   type AppConsentDocumentStatus,
   type DesktopStartupErrorView,
   type DesktopStartupStatus,
@@ -143,7 +144,13 @@ export function App(props: AppProps) {
   }
 
   if (startupGate.status === 'consent_required') {
-    return <ConsentGate documents={startupGate.documents} onAccepted={setStartupGate} />;
+    return (
+      <ConsentGate
+        documents={startupGate.documents}
+        ageAttestation={startupGate.age_attestation}
+        onAccepted={setStartupGate}
+      />
+    );
   }
 
   if (startupGate.status === 'failed') {
@@ -161,20 +168,27 @@ export function App(props: AppProps) {
 
 function ConsentGate({
   documents,
+  ageAttestation,
   onAccepted,
 }: {
   documents: AppConsentDocumentStatus[];
+  ageAttestation: AgeAttestationStatus;
   onAccepted: (status: DesktopStartupStatus) => void;
 }) {
   const { t, i18n } = useTranslation(['common', 'legal']);
   const [accepting, setAccepting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [declined, setDeclined] = useState(false);
+  const [ageAttested, setAgeAttested] = useState(false);
   // #857: 文書単位判定 — どれか 1 つでも旧版で同意済みなら「更新」通知を出す。
   const updated = documents.some(
     (document) =>
       document.acceptedVersion !== null && document.acceptedVersion < document.currentVersion
   );
+  // #858: 現行版で申告済みなら(文書更新の再同意時)チェックを再要求しない。
+  const attestationRequired =
+    ageAttestation.attestedVersion === null ||
+    ageAttestation.attestedVersion < ageAttestation.currentVersion;
 
   async function handleAccept() {
     setAccepting(true);
@@ -185,7 +199,8 @@ function ConsentGate({
           slug: document.slug,
           version: document.currentVersion,
         })),
-        i18n.resolvedLanguage ?? i18n.language
+        i18n.resolvedLanguage ?? i18n.language,
+        attestationRequired && ageAttested
       );
       onAccepted(nextStatus);
     } catch (acceptError) {
@@ -212,6 +227,19 @@ function ConsentGate({
             )}
             compact
           />
+          {attestationRequired ? (
+            <label className='flex items-start gap-2 text-sm leading-6 text-foreground'>
+              <input
+                type='checkbox'
+                className='mt-1'
+                checked={ageAttested}
+                disabled={accepting}
+                onChange={(event) => setAgeAttested(event.target.checked)}
+                data-testid='age-attestation-checkbox'
+              />
+              <span>{t('legal:gate.ageAttestationLabel')}</span>
+            </label>
+          ) : null}
           {error ? (
             <Notice tone='destructive'>
               <div className='space-y-1'>
@@ -222,7 +250,11 @@ function ConsentGate({
           ) : null}
           {declined ? <Notice tone='destructive'>{t('legal:gate.declineNotice')}</Notice> : null}
           <div className='startup-error-actions'>
-            <Button type='button' disabled={accepting} onClick={() => void handleAccept()}>
+            <Button
+              type='button'
+              disabled={accepting || (attestationRequired && !ageAttested)}
+              onClick={() => void handleAccept()}
+            >
               {accepting ? t('legal:gate.accepting') : t('legal:gate.accept')}
             </Button>
             <Button

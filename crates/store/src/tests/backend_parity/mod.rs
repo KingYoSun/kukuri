@@ -96,6 +96,7 @@ fn parity_projection_row(
         content: Some(format!("content:{object_id}")),
         attachments: Vec::new(),
         repost_of: None,
+        content_labels: Vec::new(),
         source_replica_id: ReplicaId::new(format!("topic::{topic_id}")),
         source_key: format!("objects/{object_id}/header"),
         source_envelope_id: EnvelopeId::from(object_id),
@@ -379,6 +380,7 @@ fn parity_bookmarked_post_max(source_object_id: &str, bookmarked_at: i64) -> Boo
         attachments: Vec::new(),
         reply_to_object_id: None,
         root_id: Some(EnvelopeId::from("bp-origin-root")),
+        content_labels: Vec::new(),
     });
     row
 }

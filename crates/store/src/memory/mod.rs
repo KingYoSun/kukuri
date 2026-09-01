@@ -49,6 +49,7 @@ pub struct MemoryStore {
     follow_edges: Arc<RwLock<HashMap<(String, String), FollowEdge>>>,
     block_edges: Arc<RwLock<HashMap<(String, String), BlockEdge>>>,
     object_projection_rows: Arc<RwLock<HashMap<EnvelopeId, ObjectProjectionRow>>>,
+    adult_media_hashes: Arc<RwLock<HashSet<String>>>,
     live_session_rows: Arc<RwLock<HashMap<String, LiveSessionProjectionRow>>>,
     game_room_rows: Arc<RwLock<HashMap<String, GameRoomProjectionRow>>>,
     dome_connection_rows: Arc<RwLock<HashMap<String, DomeConnectionProjectionRow>>>,

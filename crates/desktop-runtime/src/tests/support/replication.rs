@@ -271,6 +271,7 @@ pub(crate) async fn replicate_public_post_with_retry_inner(
                     reply_to: None,
                     channel_ref: ChannelRef::Public,
                     attachments: Vec::new(),
+                    content_labels: Vec::new(),
                 })
                 .await
                 .context("failed to create public post")?;
@@ -429,6 +430,7 @@ pub(crate) async fn replicate_private_post_with_retry(
                     reply_to: None,
                     channel_ref: channel_ref.clone(),
                     attachments: Vec::new(),
+                    content_labels: Vec::new(),
                 })
                 .await
                 .context("failed to create private post")?;

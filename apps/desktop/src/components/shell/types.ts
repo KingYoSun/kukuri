@@ -12,6 +12,7 @@ export type ProfileConnectionsView = 'following' | 'followed' | 'muted';
 export type SettingsSection =
   | 'about'
   | 'appearance'
+  | 'safety'
   | 'connectivity'
   | 'discovery'
   | 'community-node'

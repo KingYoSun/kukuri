@@ -26,6 +26,7 @@ import {
   CONNECTIVITY_STATUS_FALLBACK_INTERVAL_MS,
   REFRESH_INTERVAL_MS,
   STATUS_REFRESH_INTERVAL_MS,
+  useDesktopShellFieldSetter,
   useDesktopShellStore,
   type DesktopShellState,
   type DesktopShellStateValue,
@@ -58,6 +59,8 @@ type UseDesktopShellDataEffectsArgs = {
   shellChromeState: ShellChromeProjection;
   selectedAuthorPubkey: string | null;
   previewableMediaAttachments: AttachmentView[];
+  /// #858: 表示設定 OFF の間にゲート対象となる成人向け添付 hash。
+  gatedAdultMediaHashes: string[];
   remoteObjectUrlRef: MutableRefObject<Map<string, string>>;
   draftPreviewUrlRef: MutableRefObject<Map<string, string>>;
   directMessageDraftPreviewUrlRef: MutableRefObject<Map<string, string>>;
@@ -113,6 +116,7 @@ export function useDesktopShellDataEffects({
   shellChromeState,
   selectedAuthorPubkey,
   previewableMediaAttachments,
+  gatedAdultMediaHashes,
   remoteObjectUrlRef,
   draftPreviewUrlRef,
   directMessageDraftPreviewUrlRef,
@@ -140,6 +144,53 @@ export function useDesktopShellDataEffects({
   setMediaObjectUrls,
 }: UseDesktopShellDataEffectsArgs) {
   const mediaFetchInputRef = useRef(new Map<string, AttachmentView>());
+  const setAdultContentEnabled = useDesktopShellFieldSetter('adultContentEnabled');
+
+  // #858: 成人向け表現の表示設定(canonical は Rust 側ローカル JSON)を起動時に mirror する。
+  useEffect(() => {
+    let disposed = false;
+    void api
+      .getContentDisplaySettings()
+      .then((settings) => {
+        if (!disposed) {
+          setAdultContentEnabled(settings.adult_content_enabled);
+        }
+      })
+      .catch(() => {
+        // 読めない場合は既定 OFF のまま(fail-closed)。
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [api, setAdultContentEnabled]);
+
+  // #858: 表示設定 OFF の間、ゲート対象 hash の表示済み object URL を破棄し、
+  // 取得試行の記録も消して以後の取得を停止する(ON へ戻せば再取得される)。
+  useEffect(() => {
+    if (gatedAdultMediaHashes.length === 0) {
+      return;
+    }
+    for (const hash of gatedAdultMediaHashes) {
+      const url = remoteObjectUrlRef.current.get(hash);
+      if (url) {
+        URL.revokeObjectURL(url);
+        remoteObjectUrlRef.current.delete(hash);
+      }
+      mediaFetchInputRef.current.delete(hash);
+      mediaFetchAttemptRef.current.delete(hash);
+    }
+    setMediaObjectUrls((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const hash of gatedAdultMediaHashes) {
+        if (hash in next) {
+          delete next[hash];
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [gatedAdultMediaHashes, mediaFetchAttemptRef, remoteObjectUrlRef, setMediaObjectUrls]);
   // 非 active な Timeline Column が Bookmarks を表示しているか(bookmarks ロード gate 用、Issue #765)。
   const hasBookmarksTimelineColumn = useDesktopShellStore((state) =>
     state.workspaceState.columns.some((column) => column.timelineView === 'bookmarks')

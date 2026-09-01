@@ -14,8 +14,32 @@ impl DesktopRuntime {
                 request.content.as_str(),
                 request.reply_to.as_deref(),
                 attachments,
+                request.content_labels,
             )
             .await
+    }
+
+    /// #858: 成人向け表現の表示設定(既定 OFF)。canonical source はローカル JSON。
+    pub fn get_content_display_settings(&self) -> kukuri_app_api::ContentDisplaySettings {
+        kukuri_app_api::ContentDisplaySettings {
+            adult_content_enabled: self.app_service.adult_content_display_enabled(),
+        }
+    }
+
+    pub fn set_adult_content_display_enabled(
+        &self,
+        enabled: bool,
+    ) -> Result<kukuri_app_api::ContentDisplaySettings> {
+        save_content_display_settings(
+            &self.db_path,
+            &ContentDisplaySettingsState {
+                adult_content_enabled: enabled,
+            },
+        )?;
+        self.app_service.set_adult_content_display_enabled(enabled);
+        Ok(kukuri_app_api::ContentDisplaySettings {
+            adult_content_enabled: enabled,
+        })
     }
 
     pub async fn withdraw_post(&self, request: WithdrawPostRequest) -> Result<String> {

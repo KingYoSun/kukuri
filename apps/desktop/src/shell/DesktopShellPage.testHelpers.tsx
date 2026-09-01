@@ -286,7 +286,14 @@ export async function openControlCenter(user: ReturnType<typeof userEvent.setup>
 
 export async function openSettingsSection(
   user: ReturnType<typeof userEvent.setup>,
-  section: 'appearance' | 'connectivity' | 'discovery' | 'community-node' | 'reactions' | 'developer'
+  section:
+    | 'appearance'
+    | 'safety'
+    | 'connectivity'
+    | 'discovery'
+    | 'community-node'
+    | 'reactions'
+    | 'developer'
 ) {
   const drawer = await openSettingsDrawer(user);
   await user.click(within(drawer).getByTestId(`settings-section-${section}`));

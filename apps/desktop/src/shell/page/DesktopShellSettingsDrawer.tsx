@@ -6,6 +6,7 @@ import { DeveloperPanel } from '@/components/settings/DeveloperPanel';
 import { DiscoveryPanel } from '@/components/settings/DiscoveryPanel';
 import { ReleasePanel } from '@/components/settings/ReleasePanel';
 import { ReactionsPanel } from '@/components/settings/ReactionsPanel';
+import { SafetyPanel } from '@/components/settings/SafetyPanel';
 import { SettingsDrawer } from '@/components/shell/SettingsDrawer';
 
 import type { SupportedLocale } from '@/i18n';
@@ -99,6 +100,7 @@ export function DesktopShellSettingsDrawer({
     reactionsPanelView,
   } = viewModels;
   const {
+    adultContentEnabled,
     communityNodeConfig,
     communityNodeEditorDirty,
     communityIndexNodePreference,
@@ -112,6 +114,7 @@ export function DesktopShellSettingsDrawer({
     shellChromeState,
   } = useDesktopShellStore(
     useShallow((s) => ({
+      adultContentEnabled: s.adultContentEnabled,
       communityNodeConfig: s.communityNodeConfig,
       communityNodeEditorDirty: s.communityNodeEditorDirty,
       communityIndexNodePreference: s.communityIndexNodePreference,
@@ -134,7 +137,17 @@ export function DesktopShellSettingsDrawer({
   const setCommunityNodeError = useDesktopShellFieldSetter('communityNodeError');
   const setShellChromeState = useDesktopShellFieldSetter('shellChromeState');
   const setDeveloperModeEnabled = useDesktopShellFieldSetter('developerModeEnabled');
+  const setAdultContentEnabled = useDesktopShellFieldSetter('adultContentEnabled');
   const patchState = useDesktopShellStore((s) => s.patchState);
+  // #858: canonical は Rust 側。コマンド成功後の値だけを mirror する(失敗時は既定 OFF 側に倒れる)。
+  const handleAdultContentEnabledChange = async (enabled: boolean) => {
+    try {
+      const settings = await api.setAdultContentDisplayEnabled(enabled);
+      setAdultContentEnabled(settings.adult_content_enabled);
+    } catch {
+      setAdultContentEnabled(false);
+    }
+  };
   const eligibleIndexNodeBaseUrls = eligibleCommunityIndexNodes(
     communityNodeConfig,
     communityNodeStatuses,
@@ -159,6 +172,15 @@ export function DesktopShellSettingsDrawer({
     {
       ...settingsSectionCopy[2],
       content: (
+        <SafetyPanel
+          adultContentEnabled={adultContentEnabled}
+          onAdultContentEnabledChange={(enabled) => void handleAdultContentEnabledChange(enabled)}
+        />
+      ),
+    },
+    {
+      ...settingsSectionCopy[3],
+      content: (
         <ConnectivityPanel
           view={connectivityPanelView}
           onPeerTicketInputChange={setPeerTicket}
@@ -168,7 +190,7 @@ export function DesktopShellSettingsDrawer({
       ),
     },
     {
-      ...settingsSectionCopy[3],
+      ...settingsSectionCopy[4],
       content: (
         <DiscoveryPanel
           view={discoveryPanelView}
@@ -189,7 +211,7 @@ export function DesktopShellSettingsDrawer({
       ),
     },
     {
-      ...settingsSectionCopy[4],
+      ...settingsSectionCopy[5],
       content: (
         <CommunityNodePanel
           view={communityNodePanelView}
@@ -261,7 +283,7 @@ export function DesktopShellSettingsDrawer({
       ),
     },
     {
-      ...settingsSectionCopy[5],
+      ...settingsSectionCopy[6],
       content: (
         <ReactionsPanel
           view={reactionsPanelView}
@@ -275,11 +297,11 @@ export function DesktopShellSettingsDrawer({
       ),
     },
     {
-      ...settingsSectionCopy[6],
+      ...settingsSectionCopy[7],
       content: <ReleasePanel showDiagnostics={developerModeEnabled} />,
     },
     {
-      ...settingsSectionCopy[7],
+      ...settingsSectionCopy[8],
       content: (
         <DeveloperPanel
           developerModeEnabled={developerModeEnabled}

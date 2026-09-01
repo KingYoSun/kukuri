@@ -58,6 +58,10 @@ pub struct PostView {
     pub content: String,
     pub content_status: BlobViewStatus,
     pub attachments: Vec<AttachmentView>,
+    // #858: 投稿者自己申告のラベル(ADR 0046、既知値は `adult` のみ)。
+    #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<Vec<String>>"))]
+    pub content_labels: Vec<String>,
     pub created_at: i64,
     pub reply_to: Option<String>,
     pub reply_preview: Option<ReplyPreviewView>,
@@ -139,6 +143,9 @@ pub struct ReplyPreviewView {
     pub author: ReplyPreviewAuthorView,
     pub content: String,
     pub attachments: Vec<AttachmentView>,
+    #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<Vec<String>>"))]
+    pub content_labels: Vec<String>,
     pub root_id: Option<String>,
     pub reply_to: Option<String>,
 }
@@ -232,6 +239,9 @@ pub struct RepostSourceView {
     pub source_object_kind: String,
     pub content: String,
     pub attachments: Vec<AttachmentView>,
+    #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<Vec<String>>"))]
+    pub content_labels: Vec<String>,
     pub reply_to: Option<String>,
     pub root_id: Option<String>,
 }
@@ -255,6 +265,14 @@ pub struct AttachmentView {
     pub status: BlobViewStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provenance: Option<ContentProvenanceView>,
+}
+
+/// #858: 成人向け表現の表示設定(ADR 0046)。canonical source は desktop-runtime の
+/// ローカル JSON(`<db_path>.content-display.json`)。既定 OFF。
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ContentDisplaySettings {
+    pub adult_content_enabled: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

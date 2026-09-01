@@ -16,6 +16,23 @@ import {
 export type MediaDebugValue = boolean | number | string | null | undefined;
 export type MediaDebugFields = Record<string, MediaDebugValue>;
 
+// #858: 投稿者自己申告の成人向けラベル(ADR 0046)。Rust 側 ADULT_CONTENT_LABEL と対。
+export const ADULT_CONTENT_LABEL = 'adult';
+
+export function hasAdultContentLabel(labels: string[] | null | undefined): boolean {
+  return (labels ?? []).includes(ADULT_CONTENT_LABEL);
+}
+
+export function isAdultLabeledPost(post: {
+  content_labels?: string[] | null;
+  repost_of?: { content_labels?: string[] | null } | null;
+}): boolean {
+  return (
+    hasAdultContentLabel(post.content_labels) ||
+    hasAdultContentLabel(post.repost_of?.content_labels)
+  );
+}
+
 export function selectPrimaryImage(post: { attachments: AttachmentView[] }): AttachmentView | null {
   return selectPrimaryImageAttachment(post.attachments);
 }

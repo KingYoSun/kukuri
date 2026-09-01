@@ -58,7 +58,8 @@
     "writePost": "投稿を書く",
     "writeMessage": "メッセージを書く",
     "writeQuoteRepost": "コメントを追加",
-    "writeReply": "返信を書く"
+    "writeReply": "返信を書く",
+    "adultLabel": "この投稿を成人向けとして申告する"
   },
   "audience": {
     "allJoined": "参加済みすべて",
@@ -113,7 +114,8 @@
     "replyingTo": "{{author}}さんへの返信",
     "reposted": "リポスト",
     "repostedBy": "{{author}}さんがリポスト",
-    "withdrawnPost": "この投稿は投稿者により撤回されました。"
+    "withdrawnPost": "この投稿は投稿者により撤回されました。",
+    "adultContentHidden": "この投稿は投稿者により成人向けとして申告されています。設定で成人向け表現の表示を有効にすると表示されます。"
   },
   "feedback": {
     "copiedToClipboard": "クリップボードにコピーしました。"
@@ -180,7 +182,8 @@
     "syncingPoster": "動画プレビューを同期中",
     "unsupportedOnClient": "このクライアントでは未対応です",
     "video": "動画",
-    "videoPosterAlt": "動画プレビュー"
+    "videoPosterAlt": "動画プレビュー",
+    "adultGated": "成人向けとして申告されたメディアです。設定で表示を有効にすると読み込まれます。"
   },
   "reactions": {
     "custom": "カスタム",

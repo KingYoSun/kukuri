@@ -682,6 +682,7 @@ async fn friend_plus_channel_restore_accepts_fresh_share_after_restart() {
             reply_to: None,
             channel_ref: private_ref.clone(),
             attachments: vec![],
+            content_labels: Vec::new(),
         })
         .await
         .expect("restarted c creates friend-plus rotated post");

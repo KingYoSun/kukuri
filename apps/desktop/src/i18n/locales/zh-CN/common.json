@@ -58,7 +58,8 @@
     "writePost": "写一条帖子",
     "writeMessage": "写一条消息",
     "writeQuoteRepost": "添加评论",
-    "writeReply": "写一条回复"
+    "writeReply": "写一条回复",
+    "adultLabel": "将此帖标记为成人内容(自我声明)"
   },
   "audience": {
     "allJoined": "全部已加入",
@@ -113,7 +114,8 @@
     "replyingTo": "回复 {{author}}",
     "reposted": "已转发",
     "repostedBy": "{{author}} 已转发",
-    "withdrawnPost": "此帖子已被发帖用户撤回。"
+    "withdrawnPost": "此帖子已被发帖用户撤回。",
+    "adultContentHidden": "该帖子被发布者标记为成人内容。在设置中启用成人内容显示后即可查看。"
   },
   "feedback": {
     "copiedToClipboard": "已复制到剪贴板。"
@@ -180,7 +182,8 @@
     "syncingPoster": "正在同步视频预览",
     "unsupportedOnClient": "此客户端不支持",
     "video": "视频",
-    "videoPosterAlt": "视频预览"
+    "videoPosterAlt": "视频预览",
+    "adultGated": "发布者标记为成人内容的媒体。在设置中启用显示后才会加载。"
   },
   "reactions": {
     "custom": "自定义",

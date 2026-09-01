@@ -75,6 +75,7 @@ async fn desktop_runtime_imports_peer_ticket_and_tracks_local_posts() {
             reply_to: None,
             channel_ref: ChannelRef::Public,
             attachments: vec![],
+            content_labels: Vec::new(),
         })
         .await
         .expect("create post");
@@ -223,6 +224,7 @@ async fn profile_timeline_reads_author_public_posts_across_untracked_topics() {
             reply_to: None,
             channel_ref: ChannelRef::Public,
             attachments: vec![],
+            content_labels: Vec::new(),
         })
         .await
         .expect("untracked public post");

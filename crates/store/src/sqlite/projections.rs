@@ -15,6 +15,7 @@ impl ObjectProjectionStore for SqliteStore {
         for row in rows {
             let payload_json = serde_json::to_string(&row.payload_ref)?;
             let attachments_json = serde_json::to_string(&row.attachments)?;
+            let content_labels_json = serde_json::to_string(&row.content_labels)?;
             let repost_json = row
                 .repost_of
                 .as_ref()
@@ -25,10 +26,10 @@ impl ObjectProjectionStore for SqliteStore {
                 INSERT INTO object_index_cache (
                   object_id, topic_id, channel_id, author_pubkey, created_at, object_kind,
                   root_object_id, reply_to_object_id, payload_ref_json, content, attachments_json,
-                  repost_of_json, source_replica_id, source_key, source_envelope_id,
-                  source_blob_hash, derived_at, projection_version
+                  repost_of_json, content_labels_json, source_replica_id, source_key,
+                  source_envelope_id, source_blob_hash, derived_at, projection_version
                 )
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
                 ON CONFLICT(object_id) DO UPDATE SET
                   topic_id = excluded.topic_id,
                   channel_id = excluded.channel_id,
@@ -41,6 +42,7 @@ impl ObjectProjectionStore for SqliteStore {
                   content = excluded.content,
                   attachments_json = excluded.attachments_json,
                   repost_of_json = excluded.repost_of_json,
+                  content_labels_json = excluded.content_labels_json,
                   source_replica_id = excluded.source_replica_id,
                   source_key = excluded.source_key,
                   source_envelope_id = excluded.source_envelope_id,
@@ -61,6 +63,7 @@ impl ObjectProjectionStore for SqliteStore {
             .bind(row.content.as_deref())
             .bind(attachments_json)
             .bind(repost_json.as_deref())
+            .bind(content_labels_json)
             .bind(row.source_replica_id.as_str())
             .bind(row.source_key.as_str())
             .bind(row.source_envelope_id.as_str())
@@ -69,6 +72,22 @@ impl ObjectProjectionStore for SqliteStore {
             .bind(row.projection_version)
             .execute(&mut *tx)
             .await?;
+
+            // #858: 成人向けラベル付き投稿(引用 snapshot 含む)の添付 hash を
+            // 逆引きテーブルへ記録する(insert-only)。blob 取得ゲートの判定に使う。
+            for hash in adult_media_hashes_for_row(&row) {
+                sqlx::query(
+                    r#"
+                    INSERT INTO adult_media_hashes (blob_hash, marked_at)
+                    VALUES (?1, ?2)
+                    ON CONFLICT(blob_hash) DO NOTHING
+                    "#,
+                )
+                .bind(hash)
+                .bind(row.derived_at)
+                .execute(&mut *tx)
+                .await?;
+            }
 
             sqlx::query(
                 r#"
@@ -108,8 +127,8 @@ impl ObjectProjectionStore for SqliteStore {
             r#"
             SELECT object_id, topic_id, author_pubkey, created_at, object_kind, root_object_id,
                    reply_to_object_id, channel_id, payload_ref_json, content, attachments_json,
-                   repost_of_json, source_replica_id, source_key, source_envelope_id,
-                   source_blob_hash, derived_at, projection_version
+                   repost_of_json, content_labels_json, source_replica_id, source_key,
+                   source_envelope_id, source_blob_hash, derived_at, projection_version
             FROM object_index_cache
             WHERE object_id = ?1
             "#,
@@ -119,6 +138,45 @@ impl ObjectProjectionStore for SqliteStore {
         .await?;
 
         row.map(row_to_object_projection).transpose()
+    }
+
+    async fn mark_adult_media_hashes(&self, hashes: &[BlobHash]) -> Result<()> {
+        if hashes.is_empty() {
+            return Ok(());
+        }
+        let marked_at = i64::try_from(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_millis(),
+        )?;
+        let mut tx = self.pool.begin().await?;
+        for hash in hashes {
+            sqlx::query(
+                r#"
+                INSERT INTO adult_media_hashes (blob_hash, marked_at)
+                VALUES (?1, ?2)
+                ON CONFLICT(blob_hash) DO NOTHING
+                "#,
+            )
+            .bind(hash.as_str())
+            .bind(marked_at)
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
+    async fn is_adult_media_hash(&self, hash: &BlobHash) -> Result<bool> {
+        let row = sqlx::query(
+            r#"
+            SELECT 1 AS marked FROM adult_media_hashes WHERE blob_hash = ?1
+            "#,
+        )
+        .bind(hash.as_str())
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.is_some())
     }
 
     async fn list_topic_timeline(
@@ -131,8 +189,8 @@ impl ObjectProjectionStore for SqliteStore {
             r#"
             SELECT object_id, topic_id, author_pubkey, created_at, object_kind, root_object_id,
                    reply_to_object_id, channel_id, payload_ref_json, content, attachments_json,
-                   repost_of_json, source_replica_id, source_key, source_envelope_id,
-                   source_blob_hash, derived_at, projection_version
+                   repost_of_json, content_labels_json, source_replica_id, source_key,
+                   source_envelope_id, source_blob_hash, derived_at, projection_version
             FROM object_index_cache
             WHERE topic_id = ?1
               AND (
@@ -172,8 +230,8 @@ impl ObjectProjectionStore for SqliteStore {
             r#"
             SELECT object_id, topic_id, author_pubkey, created_at, object_kind, root_object_id,
                    reply_to_object_id, channel_id, payload_ref_json, content, attachments_json,
-                   repost_of_json, source_replica_id, source_key, source_envelope_id,
-                   source_blob_hash, derived_at, projection_version
+                   repost_of_json, content_labels_json, source_replica_id, source_key,
+                   source_envelope_id, source_blob_hash, derived_at, projection_version
             FROM object_index_cache
             WHERE topic_id = "#,
         );
@@ -226,8 +284,9 @@ impl ObjectProjectionStore for SqliteStore {
             SELECT oic.object_id, oic.topic_id, oic.author_pubkey, oic.created_at, oic.object_kind,
                    oic.root_object_id, oic.reply_to_object_id, oic.channel_id,
                    oic.payload_ref_json, oic.content, oic.attachments_json, oic.repost_of_json,
-                   oic.source_replica_id, oic.source_key, oic.source_envelope_id,
-                   oic.source_blob_hash, oic.derived_at, oic.projection_version
+                   oic.content_labels_json, oic.source_replica_id, oic.source_key,
+                   oic.source_envelope_id, oic.source_blob_hash, oic.derived_at,
+                   oic.projection_version
             FROM object_thread_cache tc
             INNER JOIN object_index_cache oic ON oic.object_id = tc.object_id
             WHERE tc.topic_id = ?1
@@ -279,8 +338,9 @@ impl ObjectProjectionStore for SqliteStore {
             SELECT oic.object_id, oic.topic_id, oic.author_pubkey, oic.created_at, oic.object_kind,
                    oic.root_object_id, oic.reply_to_object_id, oic.channel_id,
                    oic.payload_ref_json, oic.content, oic.attachments_json, oic.repost_of_json,
-                   oic.source_replica_id, oic.source_key, oic.source_envelope_id,
-                   oic.source_blob_hash, oic.derived_at, oic.projection_version
+                   oic.content_labels_json, oic.source_replica_id, oic.source_key,
+                   oic.source_envelope_id, oic.source_blob_hash, oic.derived_at,
+                   oic.projection_version
             FROM object_thread_cache tc
             INNER JOIN object_index_cache oic ON oic.object_id = tc.object_id
             WHERE tc.topic_id = ?1
@@ -328,6 +388,9 @@ impl ObjectProjectionStore for SqliteStore {
             .execute(&mut *tx)
             .await?;
         sqlx::query("DELETE FROM reaction_cache")
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM adult_media_hashes")
             .execute(&mut *tx)
             .await?;
         tx.commit().await?;

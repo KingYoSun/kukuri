@@ -16,7 +16,8 @@ ADR 0002 (`docs/adr/0002-feature-data-classification-template.md`) に基づく�
 - 必須 scenario: 起動 gate（未同意 → runtime 非構築 = network 非開始 → 同意 → ready）。frontend は `App.test.tsx`、backend は `src-tauri` のユニットテストで担保。
 
 ## 補足
-- 同意は単一 legal bundle（TOS + PP）を `legal_bundle_version`（単調増加の整数、初期値 1、現在値 2）で管理し、一括同意する。
-- `accepted_bundle_version < current_bundle_version` の場合に再同意を要求する。
-- version 2 は、投稿コンテンツの権利帰属、権利保有の表明、共有範囲と Community Node capability に限定した技術的利用許諾を追加する重要変更である。version 1 の同意記録では再同意を要求する。
+- 同意は文書 slug 単位のレコード(#857)で管理する。現状は全文書が `LEGAL_BUNDLE_VERSION`（単調増加の整数、初期値 1、現在値 3）と同じ版番号を共有している。
+- 文書ごとに `accepted_version < current_version` の場合に再同意を要求する。
+- version 2 は、投稿コンテンツの権利帰属、権利保有の表明、共有範囲と Community Node capability に限定した技術的利用許諾を追加する重要変更である。
+- version 3 は、利用資格（18歳以上）と成人向け表現の既定非表示に関する記載を追加する重要変更である(#858、ADR 0046)。18歳以上の自己申告の分類は `docs/legal/age-attestation-data-classification.md` を参照。
 - 同意するまで `DesktopRuntime` を構築せず、iroh endpoint の bind / discovery を開始しない（fail-closed = IP 取得前に同意）。

@@ -42,6 +42,9 @@ pub struct ObjectProjectionRow {
     pub content: Option<String>,
     pub attachments: Vec<AssetRef>,
     pub repost_of: Option<RepostSourceSnapshotV1>,
+    /// 投稿者自己申告のラベル(#858、ADR 0046)。旧 projection 行には無いため default。
+    #[serde(default)]
+    pub content_labels: Vec<String>,
     pub source_replica_id: ReplicaId,
     pub source_key: String,
     pub source_envelope_id: EnvelopeId,
@@ -277,4 +280,28 @@ pub struct NotificationRow {
     pub created_at: i64,
     pub received_at: i64,
     pub read_at: Option<i64>,
+}
+
+/// #858: projection 行から、成人向けラベル付き投稿(引用 snapshot 含む)が参照する
+/// 添付 blob hash を列挙する。blob 取得ゲート(`is_adult_media_hash`)の記録元。
+pub fn adult_media_hashes_for_row(row: &ObjectProjectionRow) -> Vec<&str> {
+    let mut hashes = Vec::new();
+    if kukuri_core::has_adult_content_label(&row.content_labels) {
+        hashes.extend(
+            row.attachments
+                .iter()
+                .map(|attachment| attachment.hash.as_str()),
+        );
+    }
+    if let Some(snapshot) = row.repost_of.as_ref()
+        && kukuri_core::has_adult_content_label(&snapshot.content_labels)
+    {
+        hashes.extend(
+            snapshot
+                .attachments
+                .iter()
+                .map(|attachment| attachment.hash.as_str()),
+        );
+    }
+    hashes
 }

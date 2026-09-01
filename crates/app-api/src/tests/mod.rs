@@ -62,6 +62,7 @@ mod dome_move;
 mod game;
 mod live;
 mod media;
+mod media_adult_gating;
 mod notifications;
 mod private_channels;
 mod reactions;

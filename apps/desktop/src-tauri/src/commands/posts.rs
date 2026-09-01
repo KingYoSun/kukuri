@@ -160,3 +160,23 @@ pub async fn get_blob_media_payload(
         }
     }
 }
+
+/// #858: 成人向け表現の表示設定(既定 OFF)。runtime のローカル JSON が canonical。
+#[tauri::command]
+pub fn get_content_display_settings(
+    state: tauri::State<'_, DesktopState>,
+) -> Result<kukuri_app_api::ContentDisplaySettings, CommandError> {
+    Ok(state.runtime.get_content_display_settings())
+}
+
+#[tauri::command]
+pub fn set_adult_content_display_enabled(
+    state: tauri::State<'_, DesktopState>,
+    enabled: bool,
+) -> Result<kukuri_app_api::ContentDisplaySettings, CommandError> {
+    info!(enabled, "received set_adult_content_display_enabled command");
+    state
+        .runtime
+        .set_adult_content_display_enabled(enabled)
+        .map_err(map_error)
+}

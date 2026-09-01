@@ -17,6 +17,8 @@ export type ColumnDraftState = ColumnDraftTarget & {
   mediaItems: DraftMediaItem[];
   replyTarget: PostView | null;
   repostTarget: PostView | null;
+  // #858: 成人向けとして自己申告して投稿する(content_labels: ['adult'])。
+  adultLabeled: boolean;
   expanded: boolean;
   error: string | null;
   pending: boolean;
@@ -50,6 +52,7 @@ export function createColumnDraft(target: ColumnDraftTarget): ColumnDraftState {
     mediaItems: [],
     replyTarget: null,
     repostTarget: null,
+    adultLabeled: false,
     expanded: false,
     error: null,
     pending: false,

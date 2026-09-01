@@ -46,9 +46,12 @@ type ConnectivityMock = Pick<
   | 'getLocalPeerTicket'
   | 'getBlobMediaPayload'
   | 'getBlobPreviewUrl'
+  | 'getContentDisplaySettings'
+  | 'setAdultContentDisplayEnabled'
 >;
 
 export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
+  let adultContentDisplayEnabled = false;
   const {
     syncStatus,
     postsByTopic,
@@ -448,6 +451,14 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
     },
     async getBlobPreviewUrl() {
       return null;
+    },
+    // #858: mock は成人向け表示設定を in-memory で保持する(既定 OFF)。
+    async getContentDisplaySettings() {
+      return { adult_content_enabled: adultContentDisplayEnabled };
+    },
+    async setAdultContentDisplayEnabled(enabled) {
+      adultContentDisplayEnabled = enabled;
+      return { adult_content_enabled: adultContentDisplayEnabled };
     },
   };
 }

@@ -11,6 +11,7 @@ import type {
 } from '@/lib/api';
 
 import {
+  isAdultLabeledPost,
   logMediaDebug,
   selectPrimaryImage,
   selectPrimaryImageAttachment,
@@ -34,6 +35,7 @@ type UsePreviewableMediaAttachmentsArgs = {
   localProfile: Profile | null;
   knownAuthorsByPubkey: DesktopShellState['knownAuthorsByPubkey'];
   notifications: NotificationView[];
+  adultContentEnabled: boolean;
 };
 
 export function usePreviewableMediaAttachments({
@@ -49,6 +51,7 @@ export function usePreviewableMediaAttachments({
   localProfile,
   knownAuthorsByPubkey,
   notifications,
+  adultContentEnabled,
 }: UsePreviewableMediaAttachmentsArgs): AttachmentView[] {
   return useMemo(() => {
     const attachments = new Map<string, AttachmentView>();
@@ -91,12 +94,16 @@ export function usePreviewableMediaAttachments({
           status: 'Available',
         });
       }
-      for (const attachment of [
-        selectPrimaryImage(post),
-        selectVideoPoster(post),
-        selectVideoManifest(post),
-      ]) {
-        tryAddAttachment(attachment);
+      // #858: 表示許可前は成人向けラベル付き投稿の添付をプリフェッチ対象に入れない
+      // (author avatar とリアクションはラベル対象外)。
+      if (adultContentEnabled || !isAdultLabeledPost(post)) {
+        for (const attachment of [
+          selectPrimaryImage(post),
+          selectVideoPoster(post),
+          selectVideoManifest(post),
+        ]) {
+          tryAddAttachment(attachment);
+        }
       }
       for (const reaction of post.reaction_summary ?? []) {
         if (!reaction.custom_asset) {
@@ -167,6 +174,7 @@ export function usePreviewableMediaAttachments({
   }, [
     activePublicTimeline,
     activeTimeline,
+    adultContentEnabled,
     bookmarkedReactionAssets,
     knownAuthorsByPubkey,
     localProfile?.picture_asset,

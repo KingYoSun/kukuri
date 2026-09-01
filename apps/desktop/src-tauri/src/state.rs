@@ -13,7 +13,11 @@ pub(crate) struct DesktopState {
     pub(crate) runtime: Arc<DesktopRuntime>,
 }
 
-pub(crate) const LEGAL_BUNDLE_VERSION: i32 = 2;
+pub(crate) const LEGAL_BUNDLE_VERSION: i32 = 3;
+
+/// 18歳以上の自己申告(#858、ADR 0046)の現行版。文書同意とは独立に管理し、
+/// 申告文言の重要変更時のみ上げて再申告を求める。
+pub(crate) const AGE_ATTESTATION_VERSION: i32 = 1;
 
 /// アプリ同意の対象文書と現行版。同意は bundle 単一フラグではなく文書単位で
 /// 記録する(#857)。現状は全文書が legal bundle 版と同じ版番号を共有しているが、
@@ -37,10 +41,22 @@ pub(crate) struct AppConsentDocumentRecord {
     pub(crate) app_version: String,
 }
 
+/// 18歳以上の自己申告記録(#858)。文書同意とは別の行為として記録する。
+/// 生年月日等は収集せず、申告の事実・版・日時・表示言語・アプリ版のみ保存する。
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub(crate) struct AgeAttestationRecord {
+    pub(crate) version: i32,
+    pub(crate) attested_at: i64,
+    pub(crate) language: String,
+    pub(crate) app_version: String,
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub(crate) struct AppConsentStore {
     #[serde(default)]
     pub(crate) records: Vec<AppConsentDocumentRecord>,
+    #[serde(default)]
+    pub(crate) age_attestations: Vec<AgeAttestationRecord>,
 }
 
 /// 文書単位の同意状態ビュー。startup gate と `get_app_consent_status` の両方で使う。
@@ -55,6 +71,16 @@ pub(crate) struct AppConsentDocumentStatus {
     pub(crate) accepted_app_version: Option<String>,
 }
 
+/// 年齢自己申告の状態ビュー。文書同意とは別枠で startup gate と
+/// `get_app_consent_status` に載せる。
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AgeAttestationStatus {
+    pub(crate) current_version: i32,
+    pub(crate) attested_version: Option<i32>,
+    pub(crate) attested_at: Option<i64>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub(crate) enum DesktopStartupStatus {
@@ -62,6 +88,7 @@ pub(crate) enum DesktopStartupStatus {
     Ready,
     ConsentRequired {
         documents: Vec<AppConsentDocumentStatus>,
+        age_attestation: AgeAttestationStatus,
     },
     Failed {
         error: DesktopStartupErrorView,
@@ -126,8 +153,14 @@ impl DesktopStartupState {
         Self::new(DesktopStartupStatus::Initializing)
     }
 
-    pub(crate) fn consent_required(documents: Vec<AppConsentDocumentStatus>) -> Self {
-        Self::new(DesktopStartupStatus::ConsentRequired { documents })
+    pub(crate) fn consent_required(
+        documents: Vec<AppConsentDocumentStatus>,
+        age_attestation: AgeAttestationStatus,
+    ) -> Self {
+        Self::new(DesktopStartupStatus::ConsentRequired {
+            documents,
+            age_attestation,
+        })
     }
 
     fn new(status: DesktopStartupStatus) -> Self {
@@ -383,12 +416,40 @@ pub(crate) fn app_consent_documents_status(
 }
 
 /// 全対象文書について現行版以上の同意記録があるか。
-pub(crate) fn app_consent_satisfied(store: &AppConsentStore) -> bool {
+pub(crate) fn app_consent_documents_satisfied(store: &AppConsentStore) -> bool {
     APP_LEGAL_DOCUMENTS.iter().all(|(slug, current_version)| {
         latest_app_consent_record(store, slug)
             .map(|record| record.version >= *current_version)
             .unwrap_or(false)
     })
+}
+
+/// 現行版以上の年齢自己申告記録があるか(#858)。文書同意とは独立に判定する。
+pub(crate) fn age_attestation_satisfied(store: &AppConsentStore) -> bool {
+    latest_age_attestation_record(store)
+        .map(|record| record.version >= AGE_ATTESTATION_VERSION)
+        .unwrap_or(false)
+}
+
+fn latest_age_attestation_record(store: &AppConsentStore) -> Option<&AgeAttestationRecord> {
+    store
+        .age_attestations
+        .iter()
+        .max_by_key(|record| (record.version, record.attested_at))
+}
+
+pub(crate) fn age_attestation_status(store: &AppConsentStore) -> AgeAttestationStatus {
+    let latest = latest_age_attestation_record(store);
+    AgeAttestationStatus {
+        current_version: AGE_ATTESTATION_VERSION,
+        attested_version: latest.map(|record| record.version),
+        attested_at: latest.map(|record| record.attested_at),
+    }
+}
+
+/// 起動 gate の総合判定: 全文書同意 + 年齢自己申告が揃っているか。
+pub(crate) fn app_consent_satisfied(store: &AppConsentStore) -> bool {
+    app_consent_documents_satisfied(store) && age_attestation_satisfied(store)
 }
 
 pub(crate) fn current_unix_seconds() -> i64 {
@@ -487,30 +548,90 @@ mod tests {
         }
     }
 
+    fn attestation(version: i32, attested_at: i64) -> AgeAttestationRecord {
+        AgeAttestationRecord {
+            version,
+            attested_at,
+            language: "ja".to_string(),
+            app_version: "0.1.8".to_string(),
+        }
+    }
+
     #[test]
     fn app_consent_satisfied_requires_every_document_at_current_or_newer_version() {
-        assert_eq!(LEGAL_BUNDLE_VERSION, 2);
-        assert!(!app_consent_satisfied(&AppConsentStore::default()));
+        assert_eq!(LEGAL_BUNDLE_VERSION, 3);
+        assert!(!app_consent_documents_satisfied(&AppConsentStore::default()));
 
         // terms だけ同意しても不十分。
         let partial = AppConsentStore {
             records: vec![record("terms", LEGAL_BUNDLE_VERSION, 1)],
+            age_attestations: Vec::new(),
         };
-        assert!(!app_consent_satisfied(&partial));
+        assert!(!app_consent_documents_satisfied(&partial));
 
         // 旧版の記録は再同意が必要。
         let outdated = AppConsentStore {
             records: vec![record("terms", 1, 1), record("privacy", 1, 1)],
+            age_attestations: Vec::new(),
         };
-        assert!(!app_consent_satisfied(&outdated));
+        assert!(!app_consent_documents_satisfied(&outdated));
 
         let satisfied = AppConsentStore {
             records: vec![
                 record("terms", LEGAL_BUNDLE_VERSION, 1),
                 record("privacy", LEGAL_BUNDLE_VERSION + 1, 1),
             ],
+            age_attestations: Vec::new(),
         };
-        assert!(app_consent_satisfied(&satisfied));
+        assert!(app_consent_documents_satisfied(&satisfied));
+    }
+
+    // #858: 文書同意が揃っていても年齢自己申告が無ければ gate は開かない。
+    // 逆に、申告だけあって文書同意が無い場合も開かない(別状態の独立判定)。
+    #[test]
+    fn app_consent_satisfied_requires_age_attestation_in_addition_to_documents() {
+        let documents_only = AppConsentStore {
+            records: vec![
+                record("terms", LEGAL_BUNDLE_VERSION, 1),
+                record("privacy", LEGAL_BUNDLE_VERSION, 1),
+            ],
+            age_attestations: Vec::new(),
+        };
+        assert!(app_consent_documents_satisfied(&documents_only));
+        assert!(!age_attestation_satisfied(&documents_only));
+        assert!(!app_consent_satisfied(&documents_only));
+
+        let attestation_only = AppConsentStore {
+            records: Vec::new(),
+            age_attestations: vec![attestation(AGE_ATTESTATION_VERSION, 1)],
+        };
+        assert!(age_attestation_satisfied(&attestation_only));
+        assert!(!app_consent_satisfied(&attestation_only));
+
+        let both = AppConsentStore {
+            records: documents_only.records.clone(),
+            age_attestations: attestation_only.age_attestations.clone(),
+        };
+        assert!(app_consent_satisfied(&both));
+    }
+
+    #[test]
+    fn age_attestation_status_reports_latest_record() {
+        let empty_status = age_attestation_status(&AppConsentStore::default());
+        assert_eq!(empty_status.current_version, AGE_ATTESTATION_VERSION);
+        assert_eq!(empty_status.attested_version, None);
+        assert_eq!(empty_status.attested_at, None);
+
+        let store = AppConsentStore {
+            records: Vec::new(),
+            age_attestations: vec![
+                attestation(AGE_ATTESTATION_VERSION, 100),
+                attestation(AGE_ATTESTATION_VERSION, 200),
+            ],
+        };
+        let status = age_attestation_status(&store);
+        assert_eq!(status.attested_version, Some(AGE_ATTESTATION_VERSION));
+        assert_eq!(status.attested_at, Some(200));
     }
 
     #[test]
@@ -568,6 +689,9 @@ mod tests {
         assert!(TERMS.contains(&expected));
         assert!(PRIVACY.contains(&expected));
         for required_clause in [
+            "利用資格と成人向け表現",
+            "18歳以上",
+            "公的な年齢確認",
             "投稿コンテンツの権利帰属",
             "必要な権利または許諾",
             "限定的な利用許諾",
@@ -595,6 +719,7 @@ mod tests {
                 record("terms", LEGAL_BUNDLE_VERSION, 1_700_000_000),
                 record("privacy", LEGAL_BUNDLE_VERSION, 1_700_000_000),
             ],
+            age_attestations: vec![attestation(AGE_ATTESTATION_VERSION, 1_700_000_000)],
         };
         save_app_consent_store(&db_path, &store).expect("save consent");
 
@@ -603,6 +728,7 @@ mod tests {
         assert_eq!(loaded.records[0].slug, "terms");
         assert_eq!(loaded.records[0].language, "ja");
         assert_eq!(loaded.records[0].app_version, "0.1.8");
+        assert_eq!(loaded.age_attestations.len(), 1);
         assert!(app_consent_satisfied(&loaded));
 
         std::fs::remove_dir_all(&dir).ok();
@@ -614,6 +740,7 @@ mod tests {
         assert!(matches!(state.status(), DesktopStartupStatus::Initializing));
         state.set_status(DesktopStartupStatus::ConsentRequired {
             documents: app_consent_documents_status(&AppConsentStore::default()),
+            age_attestation: age_attestation_status(&AppConsentStore::default()),
         });
         assert!(matches!(
             state.status(),

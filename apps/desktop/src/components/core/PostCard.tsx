@@ -433,6 +433,15 @@ export function PostCard({
           <p className='topic-diagnostic topic-diagnostic-secondary' role='status'>
             {t('feed.withdrawnPost')}
           </p>
+        ) : view.adultContentGated ? (
+          // #858: 成人向けとして申告された投稿は、表示設定 OFF の間は本文も代替表示にする。
+          <p
+            className='topic-diagnostic topic-diagnostic-secondary'
+            role='status'
+            data-testid={`post-adult-gated-${post.object_id}`}
+          >
+            {t('feed.adultContentHidden')}
+          </p>
         ) : isUnavailableText ? (
           view.showUnavailableDiagnostics ? (
             <p className='topic-diagnostic topic-diagnostic-secondary' role='status'>
@@ -451,7 +460,7 @@ export function PostCard({
           </strong>
         ) : null}
 
-        {showRepostAsPrimary && repostSource ? (
+        {view.adultContentGated ? null : showRepostAsPrimary && repostSource ? (
           <div className='post-source-topic'>
             <span>{t('labels.sourceTopic')}</span>
             <SmartReferenceText

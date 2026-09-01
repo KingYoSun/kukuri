@@ -47,6 +47,9 @@
       }
     }
   ],
+  "content_labels": [
+    "adult"
+  ],
   "created_at": 1700000000,
   "reply_to": "parent-1",
   "reply_preview": {
@@ -84,6 +87,7 @@
         }
       }
     ],
+    "content_labels": [],
     "root_id": "root-1",
     "reply_to": null
   },
@@ -102,6 +106,7 @@
     "source_object_kind": "post",
     "content": "original",
     "attachments": [],
+    "content_labels": [],
     "reply_to": null,
     "root_id": null
   },

@@ -41,6 +41,7 @@ async fn desktop_runtime_persists_posts_and_author_identity_after_restart() {
             reply_to: None,
             channel_ref: ChannelRef::Public,
             attachments: vec![],
+            content_labels: Vec::new(),
         })
         .await
         .expect("create post");
@@ -67,6 +68,7 @@ async fn desktop_runtime_persists_posts_and_author_identity_after_restart() {
             reply_to: None,
             channel_ref: ChannelRef::Public,
             attachments: vec![],
+            content_labels: Vec::new(),
         })
         .await
         .expect("create post after restart");

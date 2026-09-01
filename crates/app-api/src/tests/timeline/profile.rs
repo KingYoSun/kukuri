@@ -537,6 +537,7 @@ async fn list_profile_timeline_ignores_profile_post_with_signer_mismatch() {
         attachments: Vec::new(),
         reply_to_object_id: None,
         root_id: None,
+        content_labels: Vec::new(),
     };
     let forged_envelope = kukuri_core::sign_envelope_json(
         &generate_keys(),
@@ -571,6 +572,7 @@ async fn list_profile_timeline_ignores_profile_post_with_signer_mismatch() {
                     attachments: forged_content.attachments.clone(),
                     reply_to_object_id: None,
                     root_id: None,
+                    content_labels: Vec::new(),
                     envelope_id: forged_envelope.id.clone(),
                 })
                 .expect("forged doc json"),

@@ -29,7 +29,7 @@
       "path": "crates/cn-operator/src/docs.rs"
     },
     {
-      "lines": 1094,
+      "lines": 1095,
       "path": "crates/harness/src/scenarios/community_node.rs"
     },
     {
@@ -37,7 +37,7 @@
       "path": "crates/metaverse-host/src/tests.rs"
     },
     {
-      "lines": 1029,
+      "lines": 1040,
       "path": "apps/desktop/src/lib/api/commands/runtimeApi.ts"
     },
     {
