@@ -48,7 +48,16 @@ pub struct CommunityNodeManifest {
     #[serde(default)]
     pub privacy_url: String,
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<String>"))]
+    pub external_transmission_url: String,
+    #[serde(default)]
     pub moderation_policy_url: String,
+    #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<String>"))]
+    pub abuse_policy_url: String,
+    #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<String>"))]
+    pub data_retention_url: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

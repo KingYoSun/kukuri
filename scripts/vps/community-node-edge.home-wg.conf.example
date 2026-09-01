@@ -5,6 +5,6 @@ PrivateKey = <home-private-key>
 [Peer]
 PublicKey = <server-public-key>
 PresharedKey = <same-as-WG_HOME_PRESHARED_KEY>
-Endpoint = api.kukuri.app:51820
+Endpoint = api.example.com:51820
 AllowedIPs = 192.0.2.1/32
 PersistentKeepalive = 25

@@ -9,7 +9,7 @@
 
 ## Current Snapshot
 
-- runtime は `community-node.json` を後方互換で読みつつ、fresh install では `https://api.kukuri.app` を `auto_approve=true` の Community Node として preload します。
+- runtime は `community-node.json` を後方互換で読みつつ、fresh install でだけ Tauri 配布設定の Community Node 一覧を preload します。preview 配布設定は `https://api.kukuri.app` を `auto_approve=true` で指定しますが、汎用 runtime はこの domain を知りません。保存済み一覧（空を含む）が常に優先されます。
 - `auto_approve=true` の node は起動時に `authenticate -> consent accept -> metadata refresh` を自動で進めます。
 - token は期限 5 分前から proactive refresh し、`401` は `re-authenticate -> retry`、`403 CONSENT_REQUIRED` は `auto_approve=true` node だけ `accept -> retry` します。
 - desktop settings は textarea editor をやめ、Community Node の単一 list 上で `base URL`, `auto_approve`, diagnostics, troubleshooting actions を扱います。
@@ -28,6 +28,7 @@
 | Workstream | Status | Type | Notes |
 | --- | --- | --- | --- |
 | Community Node config `auto_approve` | landed | repo change | runtime persistence, Tauri payload, frontend type を更新 |
+| Distribution Community Node config | landed | repo change | preview 候補を Tauri 配布設定へ隔離し、削除・置換後に復活しない契約を追加 |
 | Startup auto onboarding | landed | repo change | auto-approved node の auth / consent / metadata refresh を自動化 |
 | Token expiry auto re-auth | landed | repo change | proactive refresh, `401` retry, `403` conditional accept を追加 |
 | Community Node unified settings surface | landed | repo change | official/custom split を作らず row editor に置換 |

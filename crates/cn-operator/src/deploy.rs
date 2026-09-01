@@ -61,6 +61,7 @@ fn render_low_cost_tfvars(config: &ResolvedConfig, deploy: &DeployConfig) -> Str
     let api_domain = config.api_domain().trim();
     let relay_domain = deploy.relay_domain.as_deref().map(str::trim).unwrap_or("");
     let acme_email = deploy.acme_email.trim();
+    let admin_actor = deploy.admin_actor.as_str();
     let blob_cache_enabled = config.blob_cache_enabled();
     let dns_zone_name = deploy.dns_zone_name.as_deref().map(str::trim).unwrap_or("");
     let cn_user_api_image = deploy.cn_user_api_image.trim();
@@ -101,6 +102,7 @@ fn render_low_cost_tfvars(config: &ResolvedConfig, deploy: &DeployConfig) -> Str
     let _ = writeln!(out, "api_domain   = {}", hcl_string(api_domain));
     let _ = writeln!(out, "relay_domain = {}", hcl_string(relay_domain));
     let _ = writeln!(out, "acme_email   = {}", hcl_string(acme_email));
+    let _ = writeln!(out, "admin_actor  = {}", hcl_string(admin_actor));
     let _ = writeln!(out);
 
     let _ = writeln!(out, "manage_cloud_dns = {}", deploy.manage_cloud_dns);
@@ -122,12 +124,12 @@ fn render_low_cost_tfvars(config: &ResolvedConfig, deploy: &DeployConfig) -> Str
 
     let _ = writeln!(
         out,
-        "jwt_secret_id               = {}",
+        "jwt_secret_id                = {}",
         hcl_string(jwt_secret_id)
     );
     let _ = writeln!(
         out,
-        "postgres_password_secret_id = {}",
+        "postgres_password_secret_id  = {}",
         hcl_string(postgres_password_secret_id)
     );
     let _ = writeln!(
@@ -208,22 +210,22 @@ fn render_low_cost_tfvars(config: &ResolvedConfig, deploy: &DeployConfig) -> Str
     let _ = writeln!(out);
     let _ = writeln!(
         out,
-        "deploy_indexer_stack = {}",
+        "deploy_indexer_stack              = {}",
         deploy.deploy_indexer_stack
     );
     let _ = writeln!(
         out,
-        "cn_indexer_image     = {}",
+        "cn_indexer_image                  = {}",
         hcl_string(deploy.cn_indexer_image.trim())
     );
     let _ = writeln!(
         out,
-        "arcadedb_image       = {}",
+        "arcadedb_image                    = {}",
         hcl_string(deploy.arcadedb_image.trim())
     );
     let _ = writeln!(
         out,
-        "indexer_data_disk_gb = {}",
+        "indexer_data_disk_gb              = {}",
         deploy.indexer_data_disk_gb
     );
     let _ = writeln!(
@@ -233,12 +235,12 @@ fn render_low_cost_tfvars(config: &ResolvedConfig, deploy: &DeployConfig) -> Str
     );
     let _ = writeln!(
         out,
-        "indexer_own_relay           = {}",
+        "indexer_own_relay                 = {}",
         config.enabled(crate::Capability::IrohRelay)
     );
     let _ = writeln!(
         out,
-        "indexer_external_relay_urls = {}",
+        "indexer_external_relay_urls       = {}",
         hcl_string_list(&deploy.indexer_external_relay_urls)
     );
     let _ = writeln!(out);
@@ -320,13 +322,13 @@ fn render_low_cost_tfvars(config: &ResolvedConfig, deploy: &DeployConfig) -> Str
     );
     let _ = writeln!(
         out,
-        "safety_operator_review                 = {}",
+        "safety_operator_review                = {}",
         safety.moderation.operator_review
     );
     let _ = writeln!(out);
     let _ = writeln!(
         out,
-        "vlm_api_base_url     = {}",
+        "vlm_api_base_url         = {}",
         hcl_string(
             deploy
                 .vlm_api_base_url
@@ -337,12 +339,12 @@ fn render_low_cost_tfvars(config: &ResolvedConfig, deploy: &DeployConfig) -> Str
     );
     let _ = writeln!(
         out,
-        "vlm_model            = {}",
+        "vlm_model                = {}",
         hcl_string(deploy.vlm_model.as_deref().map(str::trim).unwrap_or(""))
     );
     let _ = writeln!(
         out,
-        "vlm_response_format  = {}",
+        "vlm_response_format      = {}",
         hcl_string(
             deploy
                 .vlm_response_format
@@ -353,7 +355,7 @@ fn render_low_cost_tfvars(config: &ResolvedConfig, deploy: &DeployConfig) -> Str
     );
     let _ = writeln!(
         out,
-        "vlm_api_timeout_secs = {}",
+        "vlm_api_timeout_secs     = {}",
         deploy.vlm_api_timeout_secs
     );
     let _ = writeln!(
@@ -373,12 +375,12 @@ fn render_low_cost_tfvars(config: &ResolvedConfig, deploy: &DeployConfig) -> Str
     let _ = writeln!(out);
     let _ = writeln!(
         out,
-        "index_query_enabled = {}",
+        "index_query_enabled                    = {}",
         config.enabled(crate::Capability::CommunityIndex)
     );
     let _ = writeln!(
         out,
-        "trust_read_enabled  = {}",
+        "trust_read_enabled                     = {}",
         config.enabled(crate::Capability::CommunityLocalTrust)
     );
     let relation_distance_optout_min_proximity = deploy

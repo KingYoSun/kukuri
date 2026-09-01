@@ -1,6 +1,6 @@
 # Default Community Node 依存低減ロードマップ
 
-最終更新日: 2026-08-06
+最終更新日: 2026-09-01
 
 ## この文書の位置づけ
 
@@ -29,7 +29,7 @@ kukuri には onboarding のための **default community node** が存在する
 | topic rendezvous（topic peer 合流） | 中 | 補助。別 rendezvous / 既存 peer で代替可能。 |
 | consent / auth | 中（補助機能利用時） | 補助。利用する capability にのみ必要。 |
 | index / moderation / trust signal | 低（実装済み。利用時だけ activation 付きで有効化） | 補助かつ node-local advisory / optional trust input（`docs/adr/0027-deterministic-moderation-critical-safety.md` §2.1）。canonical content・identity・social graph ではない。 |
-| generated policy / manifest display | 低（表示のみ） | 補助。manifest 取得失敗時は fallback 表示（client settings の node 依存度表示）。 |
+| generated policy / manifest display | 低（表示のみ） | 補助。開示 URL は各 node の manifest だけから解決し、取得失敗時は別 node へ fallback しない。 |
 
 重要: いずれも **補助 capability** であり、user identity / profile / social graph という canonical state は default node に依存しない。依存低減とは「補助経路を default node 以外でも自然に賄えるようにする」ことであり、「user の存在を default node から切り離す」ことではない（それは既に切り離されている）。
 
@@ -64,7 +64,8 @@ Phase 4: default node なしでも継続利用できることを検証する
 ### 現在地
 
 - Phase 1 の基盤（settings の node 依存度 / capability scope / authority scope 表示）は実装済み。identity / profile / social graph が node-owned ではないこと、default node が network-wide authority ではないこと（P2P 基盤上ではそもそも成立し得ないこと）を settings で明示している。
-- Phase 2 の前提（manifest authority scope / public manifest endpoint / content provenance / 分散通報ルーティング）が揃っており、user-added node を first-class に扱うための土台はある。
+- Phase 2 は実装済み。user-added node は default node と同じ設定・manifest・CSP 経路を使い、Node 固有の開示 URL も manifest から解決する。`default-onboarding-node` role は由来表示にだけ使い、capability や authority の特権判定には使わない。
+- fresh install の候補一覧は汎用 runtime ではなく配布版の版管理設定から一度だけ取り込む。user が空にした、または別 Node へ置換した保存済み `community-node.json` は再起動後も優先され、配布候補は暗黙に復活しない。
 - Phase 3 / Phase 4 は今後の実装対象。
 
 ## 4. Release criteria（各フェーズで何を壊すか）

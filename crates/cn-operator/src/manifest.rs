@@ -242,6 +242,7 @@ pub struct CommunityNodeManifest {
     pub external_transmission_url: String,
     pub moderation_policy_url: String,
     pub abuse_policy_url: String,
+    pub data_retention_url: String,
     pub manifest_version: String,
     pub capabilities: Capabilities,
     pub capability_scope: CapabilityScope,
@@ -350,6 +351,7 @@ pub fn build_manifest(config: &ResolvedConfig) -> CommunityNodeManifest {
         external_transmission_url: config.policy_url("external-transmission"),
         moderation_policy_url: config.policy_url("moderation-policy"),
         abuse_policy_url: config.policy_url("abuse-policy"),
+        data_retention_url: config.policy_url("data-retention"),
         manifest_version: config.raw.manifest.manifest_version.clone(),
         capabilities: Capabilities::from_config(config),
         capability_scope: CapabilityScope {

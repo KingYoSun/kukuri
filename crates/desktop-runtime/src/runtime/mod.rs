@@ -59,8 +59,7 @@ use crate::community_node::{
     SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
     SubmitIndexingRequestResponse, TrustUserReadResponse,
     community_node_local_consent_covers_status, community_node_local_consent_satisfies_policies,
-    community_node_seed_peers, default_preview_community_node_config,
-    delete_community_node_invite_code, effective_seed_peer_apply_state,
+    community_node_seed_peers, delete_community_node_invite_code, effective_seed_peer_apply_state,
     load_community_node_config_from_file, load_community_node_local_consents,
     load_community_node_token, normalize_community_node_config, persist_community_node_invite_code,
     persist_community_node_local_consents, record_community_node_local_consents,
@@ -246,7 +245,7 @@ impl DesktopRuntime {
             IdentityStorageMode::from_env(),
             DiscoveryConfig::static_peer_default(),
             DhtDiscoveryOptions::disabled(),
-            false,
+            None,
         )
         .await
     }
@@ -261,7 +260,7 @@ impl DesktopRuntime {
             IdentityStorageMode::from_env(),
             DiscoveryConfig::static_peer_default(),
             DhtDiscoveryOptions::disabled(),
-            false,
+            None,
         )
         .await
     }
@@ -278,7 +277,7 @@ impl DesktopRuntime {
             identity_mode,
             DiscoveryConfig::static_peer_default(),
             DhtDiscoveryOptions::disabled(),
-            false,
+            None,
         )
         .await
     }
@@ -289,13 +288,15 @@ impl DesktopRuntime {
         identity_mode: IdentityStorageMode,
         discovery_config: DiscoveryConfig,
         dht_options: DhtDiscoveryOptions,
-        preload_preview_community_node: bool,
+        initial_community_node_config: Option<CommunityNodeConfig>,
     ) -> Result<Self> {
         let db_path = db_path.as_ref().to_path_buf();
         let community_node_config = match load_community_node_config_from_file(&db_path)? {
             Some(config) => config,
-            None if preload_preview_community_node => {
-                let config = default_preview_community_node_config();
+            None if initial_community_node_config.is_some() => {
+                let config = normalize_community_node_config(
+                    initial_community_node_config.expect("checked as present"),
+                )?;
                 save_community_node_config(&db_path, &config)?;
                 config
             }
@@ -411,7 +412,10 @@ impl DesktopRuntime {
         })
     }
 
-    pub async fn from_env(db_path: impl AsRef<Path>) -> Result<Self> {
+    pub async fn from_env(
+        db_path: impl AsRef<Path>,
+        initial_community_node_config: CommunityNodeConfig,
+    ) -> Result<Self> {
         let db_path = db_path.as_ref().to_path_buf();
         let discovery_config = resolve_discovery_config_from_env(&db_path)?;
         let dht_options = match discovery_config.mode {
@@ -424,7 +428,7 @@ impl DesktopRuntime {
             IdentityStorageMode::from_env(),
             discovery_config,
             dht_options,
-            true,
+            Some(initial_community_node_config),
         )
         .await
     }

@@ -78,6 +78,73 @@ fn generate_tfvars_is_deterministic() {
 }
 
 #[test]
+fn generate_tfvars_emits_only_the_explicit_admin_actor() {
+    let yaml = config_with_deploy(
+        "  relay_domain: relay.example-kukuri.net\n  admin_actor: admin@node.example\n",
+        "",
+        false,
+    );
+    let resolved = load_and_validate(&yaml).expect("explicit admin actor should be accepted");
+    let tfvars = generate_tfvars(&resolved).expect("tfvars");
+
+    assert!(tfvars.contains("admin_actor  = \"admin@node.example\""));
+    assert!(!tfvars.contains("ops@kukuri.app"));
+}
+
+#[test]
+fn generate_tfvars_keeps_admin_writes_disabled_when_actor_is_omitted() {
+    let yaml = config_with_deploy("  relay_domain: relay.example-kukuri.net\n", "", false);
+    let resolved = load_and_validate(&yaml).unwrap();
+    let tfvars = generate_tfvars(&resolved).expect("tfvars");
+
+    assert!(tfvars.contains("admin_actor  = \"\""));
+    assert!(!tfvars.contains("ops@kukuri.app"));
+}
+
+#[test]
+fn example_operator_config_drives_tfvars_manifest_and_disclosures_end_to_end() {
+    let yaml = "server:\n  domain: node.third-party.example\n  operator_name: Third Party Operator\n  country: DE\n  contact: abuse@third-party.example\n\
+                deploy:\n  profile: low-cost\n  project_id: third-party-project\n\
+                \x20 relay_domain: relay.third-party.example\n  acme_email: acme@third-party.example\n\
+                \x20 admin_actor: admin@third-party.example\n  jwt_secret_id: third-party-jwt\n\
+                \x20 postgres_password_secret_id: third-party-postgres\n";
+    let resolved = load_and_validate(yaml).expect("example operator config");
+
+    let tfvars = generate_tfvars(&resolved).expect("tfvars");
+    assert!(tfvars.contains("api_domain   = \"node.third-party.example\""));
+    assert!(tfvars.contains("relay_domain = \"relay.third-party.example\""));
+    assert!(tfvars.contains("admin_actor  = \"admin@third-party.example\""));
+
+    let manifest = build_manifest(&resolved);
+    assert_eq!(manifest.operator_name, "Third Party Operator");
+    assert_eq!(manifest.abuse_contact, "abuse@third-party.example");
+    assert_eq!(
+        manifest.data_retention_url,
+        "https://node.third-party.example/data-retention"
+    );
+
+    let disclosures = generate_all(&resolved)
+        .into_iter()
+        .filter(|file| {
+            matches!(
+                file.filename.as_str(),
+                "terms.md"
+                    | "privacy-policy.md"
+                    | "external-transmission-notice.md"
+                    | "abuse-policy.md"
+                    | "data-retention-policy.md"
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(disclosures.len(), 5);
+    assert!(disclosures.iter().all(|file| {
+        file.content.contains("Third Party Operator")
+            || file.content.contains("abuse@third-party.example")
+    }));
+    assert!(!format!("{tfvars}{manifest:?}{disclosures:?}").contains("kukuri.app"));
+}
+
+#[test]
 fn blob_cache_enabled_derives_from_features_true() {
     let yaml = config_with_deploy(
         "  relay_domain: relay.example-kukuri.net\n  blob_cache_size_gb: 10\n",
@@ -116,8 +183,8 @@ fn read_surface_flags_derive_from_planned_capabilities() {
     assert!(resolved.enabled(Capability::CommunityIndex));
     assert!(resolved.enabled(Capability::CommunityLocalTrust));
     let tfvars = generate_tfvars(&resolved).unwrap();
-    assert!(tfvars.contains("index_query_enabled = true"));
-    assert!(tfvars.contains("trust_read_enabled  = true"));
+    assert!(tfvars.contains("index_query_enabled                    = true"));
+    assert!(tfvars.contains("trust_read_enabled                     = true"));
     assert!(tfvars.contains("relation_distance_optout_min_proximity = \"0.5\""));
 }
 
@@ -156,8 +223,8 @@ fn read_surface_flags_default_to_false() {
     let yaml = config_with_deploy("  relay_domain: relay.example-kukuri.net\n", "", false);
     let resolved = load_and_validate(&yaml).unwrap();
     let tfvars = generate_tfvars(&resolved).unwrap();
-    assert!(tfvars.contains("index_query_enabled = false"));
-    assert!(tfvars.contains("trust_read_enabled  = false"));
+    assert!(tfvars.contains("index_query_enabled                    = false"));
+    assert!(tfvars.contains("trust_read_enabled                     = false"));
     assert!(tfvars.contains("relation_distance_optout_min_proximity = \"\""));
 }
 
@@ -357,11 +424,11 @@ fn indexer_stack_defaults_to_disabled_with_images() {
     let yaml = config_with_deploy("  relay_domain: relay.example-kukuri.net\n", "", false);
     let resolved = load_and_validate(&yaml).unwrap();
     let tfvars = generate_tfvars(&resolved).unwrap();
-    assert!(tfvars.contains("deploy_indexer_stack = false"));
-    assert!(
-        tfvars.contains("cn_indexer_image     = \"ghcr.io/kingyosun/kukuri-cn-indexer:latest\"")
-    );
-    assert!(tfvars.contains("arcadedb_image       = \"arcadedata/arcadedb:26.8.1\""));
+    assert!(tfvars.contains("deploy_indexer_stack              = false"));
+    assert!(tfvars.contains(
+        "cn_indexer_image                  = \"ghcr.io/kingyosun/kukuri-cn-indexer:latest\""
+    ));
+    assert!(tfvars.contains("arcadedb_image                    = \"arcadedata/arcadedb:26.8.1\""));
     assert!(tfvars.contains("relation_analyze_interval_minutes = 60"));
     assert!(tfvars.contains("safety_provider_known_csam            = \"\""));
 }
@@ -374,10 +441,10 @@ fn indexer_stack_full_config_emits_expected_tfvars() {
     );
     let resolved = load_and_validate(&yaml).unwrap();
     let tfvars = generate_tfvars(&resolved).unwrap();
-    assert!(tfvars.contains("deploy_indexer_stack = true"));
-    assert!(tfvars.contains("indexer_data_disk_gb = 10"));
+    assert!(tfvars.contains("deploy_indexer_stack              = true"));
+    assert!(tfvars.contains("indexer_data_disk_gb              = 10"));
     assert!(tfvars.contains("relation_analyze_interval_minutes = 30"));
-    assert!(tfvars.contains("indexer_own_relay           = true"));
+    assert!(tfvars.contains("indexer_own_relay                 = true"));
     assert!(tfvars.contains("channel_secret_key_secret_id = \"kukuri-cn-channel-secret-key\""));
     assert!(tfvars.contains("arcadedb_password_secret_id  = \"kukuri-cn-arcadedb-password\""));
     assert!(tfvars.contains("arachnid_username_secret_id  = \"kukuri-cn-arachnid-username\""));
@@ -386,11 +453,11 @@ fn indexer_stack_full_config_emits_expected_tfvars() {
     assert!(tfvars.contains("safety_provider_known_csam_required   = true"));
     assert!(tfvars.contains("safety_provider_general               = \"openai-compatible-vlm\""));
     assert!(tfvars.contains("safety_emit_signed_events             = true"));
-    assert!(tfvars.contains("safety_operator_review                 = true"));
+    assert!(tfvars.contains("safety_operator_review                = true"));
     assert!(tfvars.contains("safety_signing_key_secret_id = \"kukuri-cn-safety-signing-key\""));
-    assert!(tfvars.contains("vlm_api_base_url     = \"http://192.0.2.10:8000\""));
-    assert!(tfvars.contains("vlm_model            = \"inclusionAI/SingGuard-2b\""));
-    assert!(tfvars.contains("vlm_response_format  = \"guard\""));
+    assert!(tfvars.contains("vlm_api_base_url         = \"http://192.0.2.10:8000\""));
+    assert!(tfvars.contains("vlm_model                = \"inclusionAI/SingGuard-2b\""));
+    assert!(tfvars.contains("vlm_response_format      = \"guard\""));
     // 任意 secret（VLM API key）未指定は空文字（Terraform 側で「fetch しない」の合図）。
     assert!(tfvars.contains("vlm_api_key_secret_id        = \"\""));
 }
@@ -434,9 +501,9 @@ fn indexer_stack_requires_relay() {
     .replace("  iroh_relay: true\n", "  iroh_relay: false\n");
     let resolved = load_and_validate(&yaml).unwrap();
     let tfvars = generate_tfvars(&resolved).unwrap();
-    assert!(tfvars.contains("indexer_own_relay           = false"));
+    assert!(tfvars.contains("indexer_own_relay                 = false"));
     assert!(
-        tfvars.contains("indexer_external_relay_urls = [\"https://relay.example.net\"]"),
+        tfvars.contains("indexer_external_relay_urls       = [\"https://relay.example.net\"]"),
         "tfvars:\n{tfvars}"
     );
 }
@@ -501,8 +568,8 @@ fn tfvars_never_contains_secret_values() {
     let yaml = config_with_deploy("  relay_domain: relay.example-kukuri.net\n", "", false);
     let resolved = load_and_validate(&yaml).unwrap();
     let tfvars = generate_tfvars(&resolved).unwrap();
-    assert!(tfvars.contains("jwt_secret_id               = \"kukuri-cn-jwt-secret\""));
-    assert!(tfvars.contains("postgres_password_secret_id = \"kukuri-cn-postgres-password\""));
+    assert!(tfvars.contains("jwt_secret_id                = \"kukuri-cn-jwt-secret\""));
+    assert!(tfvars.contains("postgres_password_secret_id  = \"kukuri-cn-postgres-password\""));
     // 値らしき文字列が無い（ID 以外の secret keyword を出さない）。
     assert!(!tfvars.contains("jwt_secret ="));
     assert!(!tfvars.contains("postgres_password ="));

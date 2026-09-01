@@ -21,7 +21,7 @@
     "security": {
       "csp": {
         "default-src": "'self'",
-        "connect-src": "'self' https://github.com https://api.github.com https://*.githubusercontent.com https://api.kukuri.app https://iroh-relay.kukuri.app",
+        "connect-src": "'self' https: https://github.com https://api.github.com https://*.githubusercontent.com",
         "img-src": "'self' asset: http://asset.localhost blob: data: https:",
         "media-src": "'self' asset: http://asset.localhost blob: data:",
         "style-src": "'self' 'unsafe-inline'",

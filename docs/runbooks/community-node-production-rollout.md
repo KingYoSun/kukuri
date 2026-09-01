@@ -6,7 +6,8 @@
 
 この runbook は、GCP `low-cost` Community Node の production image 更新から Terraform、
 startup、readiness、実クライアント投稿の追跡、公開境界の復旧までを一続きで実行するための
-日常運用手順である。Terraform の初期構築と各変数の説明は
+**KingYoSun が運営する default onboarding Node 専用**の日常運用手順である。ここに記載する
+domain、actor、image digest は汎用既定値ではない。Terraform の初期構築と各変数の説明は
 `docs/runbooks/community-node-gcp-terraform.md`、クライアント配布は
 `docs/runbooks/release.md` を参照する。
 
@@ -288,8 +289,8 @@ terraform output -raw admin_iap_tunnel_command
 この listener は Caddy / public DNS に接続せず、firewall は Google IAP TCP forwarding range のみを
 許可する。
 
-browser writeは `admin_actor` が非空のdeploymentだけで有効になる。本番low-cost環境では次の共有
-運用identityを既定値とする。IAP TCP forwardingはHTTP identity headerを注入しないため、
+browser writeは `admin_actor` が非空のdeploymentだけで有効になる。この default Node の
+非公開実設定では次の共有運用identityを明示する。IAP TCP forwardingはHTTP identity headerを注入しないため、
 formや任意headerではなくdeployment値だけをaudit actorとして信用する。
 
 ```hcl
@@ -332,8 +333,9 @@ write endpointは503でfail-closedする。
 - capability / authority scope / image revision
 - private channel secret、invite code、allowlist、ban
 
-standard Composeでは `http://127.0.0.1:19090` がadmin UIで、既定actorは `ops@kukuri.app`、
-operator reviewも既定有効である。`COMMUNITY_NODE_ADMIN_ACTOR` を空にすればread-onlyになる。
+汎用 Compose では `http://127.0.0.1:19090` がadmin UIで、actor の既定値は空（read-only）である。
+この default Node だけは `COMMUNITY_NODE_ADMIN_ACTOR=ops@kukuri.app` を実設定から注入し、
+operator reviewも有効にする。
 loopback以外へbindする場合は、先に同等の認証・firewall境界を用意する。
 
 異議申し立て審査の変更操作は、`COMMUNITY_NODE_ADMIN_ACTOR` に加えて運用者設定

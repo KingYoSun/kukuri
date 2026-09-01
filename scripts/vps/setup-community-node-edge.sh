@@ -15,7 +15,7 @@ Behavior:
   - installs wireguard-tools, nftables, and caddy
   - supports Debian/Ubuntu and Rocky/Alma/RHEL-like hosts
   - configures wg0 on the VPS
-  - configures Caddy for api.kukuri.app and iroh-relay.kukuri.app
+  - configures Caddy for the API_DOMAIN and IROH_RELAY_DOMAIN supplied in the env file
   - forwards UDP 7842 from the VPS to the home community node over WireGuard
 
 Prepare first:

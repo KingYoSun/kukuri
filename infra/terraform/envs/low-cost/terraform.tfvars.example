@@ -8,7 +8,8 @@ zone       = "asia-northeast1-a"
 api_domain   = "api.example.com"
 relay_domain = "iroh-relay.example.com"
 acme_email   = "ops@example.com"
-admin_actor  = "ops@kukuri.app"
+# 空なら admin UI は read-only。write を有効にする場合だけ operator 自身の actor を明示する。
+admin_actor  = "ops@example.com"
 safety_operator_review = true
 
 # Cloud DNS で A レコードを自動作成する場合は true + zone 名。

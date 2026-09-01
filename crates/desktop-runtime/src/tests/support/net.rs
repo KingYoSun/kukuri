@@ -82,7 +82,7 @@ pub(crate) async fn new_seeded_dht_runtime_with_config(
         IdentityStorageMode::FileOnly,
         discovery_config,
         DhtDiscoveryOptions::with_bootstrap(&testnet.bootstrap),
-        false,
+        None,
     )
     .await
     .expect("seeded dht runtime");

@@ -118,6 +118,18 @@ async fn manifest_endpoint_serves_unauthenticated_json() -> Result<()> {
         assert!(body["capability_scope"]["available_enabled"].is_array());
         // policy URLs / abuse contact を含む。
         assert_eq!(body["terms_url"], "https://example-kukuri.net/terms");
+        assert_eq!(
+            body["external_transmission_url"],
+            "https://example-kukuri.net/external-transmission"
+        );
+        assert_eq!(
+            body["abuse_policy_url"],
+            "https://example-kukuri.net/abuse-policy"
+        );
+        assert_eq!(
+            body["data_retention_url"],
+            "https://example-kukuri.net/data-retention"
+        );
         assert!(body["abuse_contact"].as_str().unwrap().contains("@"));
         // private secret を含まない。
         assert!(body.get("jwt_secret").is_none());

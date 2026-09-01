@@ -259,7 +259,7 @@ variable "rate_limit_burst" {
 variable "admin_actor" {
   description = "IAP 内部 admin browser write の append-only audit に記録する deployment-controlled actor。空なら write を fail-closed で無効化する。"
   type        = string
-  default     = "ops@kukuri.app"
+  default     = ""
 
   validation {
     condition = (

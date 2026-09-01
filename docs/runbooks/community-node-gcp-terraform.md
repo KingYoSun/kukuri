@@ -28,6 +28,12 @@ live確認は `docs/runbooks/community-node-production-rollout.md` を先に参�
 - `low-cost` は単一 VM 上で既存 community node スタックを GHCR image から動かし、
   Caddy が API/relay-HTTP の HTTPS を終端、QUIC は VM の `7842/udp` で直接公開する。
 
+GHCR の repository owner は software image の配布元を示すだけで、配備された Node の運営主体を
+示さない。Node の operator、domain、連絡先、監査 actor、公開文書は各 operator の
+`operator-config.yaml` / tfvars だけから決める。`region`、`machine_type`、deployment profile の
+初期値も KingYoSun 運営 Node の特権的な標準ではなく、operator が要件と法域に合わせて変更する
+配備用の開始値である。
+
 ```text
 client ──https://api_domain      ─▶ Caddy(:443) ─▶ cn-user-api(:8080)
 client ──https://relay_domain    ─▶ Caddy(:443) ─▶ cn-iroh-relay(:3340)
@@ -210,9 +216,10 @@ VM 内のサービスは `/var/lib/kukuri/community-node` の docker compose で
 `iap.tunnelInstances.accessViaIAP` を含む IAM role が必要で、Caddy / public DNS には載せない。
 
 admin UI は状態、最新 readiness activation、admission mode、supported topics、直近 50 件の通報、
-Cloud Logging 導線を表示する。low-cost標準配備では `admin_actor = "ops@kukuri.app"` と
-`safety_operator_review = true` を既定にし、append-only audit、差分 preview、CSRF 防御の内側で
-browser writeを有効にする。actorを空にすればwrite endpointはfail-closedし、read-onlyになる。
+Cloud Logging 導線を表示する。browser write を有効にする operator は、自身の監査 identity を
+`admin_actor` へ明示する。汎用既定値は空であり、空なら write endpoint は fail-closed して
+read-only になる。`safety_operator_review` も運用方針に合わせて明示し、append-only audit、
+差分 preview、CSRF 防御の内側で browser write を扱う。
 credentialや配備宣言は引き続き `operator-config.yaml` / Terraform / Secret Manager / `cn-cli` を
 SSoTとし、admin UIから変更しない。
 

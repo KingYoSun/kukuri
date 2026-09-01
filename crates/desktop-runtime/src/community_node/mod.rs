@@ -87,7 +87,6 @@ pub use trust_relation_support::{
 pub(crate) const COMMUNITY_NODE_TOKEN_PURPOSE: &str = "community-node-token";
 pub(crate) const COMMUNITY_NODE_INVITE_CODE_PURPOSE: &str = "community-node-invite-code";
 pub(crate) const COMMUNITY_NODE_CONSENT_PURPOSE: &str = "community-node-consents";
-pub(crate) const COMMUNITY_NODE_PREVIEW_BASE_URL: &str = "https://api.kukuri.app";
 pub(crate) const COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_INTERVAL_SECONDS: i64 = 30;
 pub(crate) const COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_RETRY_SECONDS: i64 = 10;
 pub(crate) const COMMUNITY_NODE_BOOTSTRAP_METADATA_RETRY_SECONDS: i64 = 5;

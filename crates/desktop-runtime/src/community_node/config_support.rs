@@ -14,16 +14,6 @@ pub(crate) fn load_community_node_config_from_file(
     Ok(Some(normalize_community_node_config(config)?))
 }
 
-pub(crate) fn default_preview_community_node_config() -> CommunityNodeConfig {
-    CommunityNodeConfig {
-        nodes: vec![CommunityNodeNodeConfig {
-            base_url: COMMUNITY_NODE_PREVIEW_BASE_URL.to_string(),
-            auto_approve: true,
-            resolved_urls: None,
-        }],
-    }
-}
-
 pub(crate) fn save_community_node_config(
     db_path: &Path,
     config: &CommunityNodeConfig,

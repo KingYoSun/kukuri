@@ -233,6 +233,10 @@ pub struct DeployConfig {
     pub relay_domain: Option<String>,
     /// ACME(Let's Encrypt) 登録 email（必須）。
     pub acme_email: String,
+    /// IAP 内部 admin browser write の append-only audit に記録する actor。
+    /// 空なら admin UI は read-only で、write endpoint は fail-closed する。
+    #[serde(default)]
+    pub admin_actor: String,
     /// true なら Cloud DNS の既存 zone に A レコードを作成する。
     #[serde(default)]
     pub manage_cloud_dns: bool,
@@ -548,6 +552,7 @@ fn validate_deploy(resolved: &ResolvedConfig, deploy: &DeployConfig) -> Result<(
 
     validate_deploy_string("deploy.region", &deploy.region)?;
     validate_deploy_string("deploy.zone", &deploy.zone)?;
+    validate_admin_actor(deploy.admin_actor.as_str())?;
     validate_deploy_string("deploy.cn_user_api_image", &deploy.cn_user_api_image)?;
     validate_deploy_string("deploy.cn_iroh_relay_image", &deploy.cn_iroh_relay_image)?;
     validate_deploy_string("deploy.cn_cli_image", &deploy.cn_cli_image)?;
@@ -852,6 +857,15 @@ fn require_deploy_string<'a>(field: &str, value: &'a str) -> Result<&'a str> {
 fn validate_deploy_string(field: &str, value: &str) -> Result<()> {
     if value.chars().any(char::is_control) {
         bail!("{field} に制御文字は指定できません");
+    }
+    Ok(())
+}
+
+fn validate_admin_actor(value: &str) -> Result<()> {
+    if value != value.trim() || value.len() > 254 || value.chars().any(char::is_control) {
+        bail!(
+            "deploy.admin_actor は前後空白と制御文字を含まない 254 文字以下の値、または空で指定してください"
+        );
     }
     Ok(())
 }

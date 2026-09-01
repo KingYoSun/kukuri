@@ -1,0 +1,8 @@
+{
+  "nodes": [
+    {
+      "base_url": "https://api.kukuri.app",
+      "auto_approve": true
+    }
+  ]
+}

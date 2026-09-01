@@ -5,7 +5,7 @@ use std::{
 };
 
 use kukuri_desktop_runtime::{
-    DesktopRuntime, StoreStartupError, ensure_accounts_initialized_from_env,
+    CommunityNodeConfig, DesktopRuntime, StoreStartupError, ensure_accounts_initialized_from_env,
     resolve_app_data_dir_from_env, resolve_db_path_from_env,
 };
 use serde::{Deserialize, Serialize};
@@ -383,7 +383,11 @@ pub(crate) async fn build_runtime(
     app_handle: &tauri::AppHandle,
     db_path: PathBuf,
 ) -> Result<Arc<DesktopRuntime>, StartupError> {
-    let runtime = DesktopRuntime::from_env(db_path)
+    // 配布 Node はアカウントごとの runtime 初回構築時だけ候補として渡す。
+    // 保存済み設定(空・置換済みを含む)の優先判定は DesktopRuntime が担う。
+    let initial_community_node_config = distribution_community_node_config()
+        .map_err(|error| StartupError::unknown(error.to_string()))?;
+    let runtime = DesktopRuntime::from_env(db_path, initial_community_node_config)
         .await
         .map_err(StartupError::from_runtime_error)?;
     let runtime = Arc::new(runtime);
@@ -394,6 +398,10 @@ pub(crate) async fn build_runtime(
     spawn_runtime_event_bridge(app_handle, &runtime);
     runtime.start_sync_status_observer().await;
     Ok(runtime)
+}
+
+fn distribution_community_node_config() -> Result<CommunityNodeConfig, serde_json::Error> {
+    serde_json::from_str(include_str!("../distribution/community-nodes.json"))
 }
 
 fn spawn_runtime_event_bridge(app_handle: &tauri::AppHandle, runtime: &Arc<DesktopRuntime>) {
@@ -528,6 +536,13 @@ fn classify_startup_error(error: &anyhow::Error) -> DesktopStartupErrorKind {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn distribution_community_node_config_is_valid_and_auto_approved() {
+        let config = distribution_community_node_config().expect("distribution config");
+        assert_eq!(config.nodes.len(), 1);
+        assert!(config.nodes[0].auto_approve);
+    }
 
     // IPC エラー封筒の wire 形状(WP-C3)。TS 側 normalizeInvokeError と対になる
     // 同一バイナリ内契約 — 形状を変える場合は両側同時に変更する。
