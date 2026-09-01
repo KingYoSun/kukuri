@@ -199,7 +199,6 @@ export type CreateRepostInput = {
 
 export type CommunityNodeConfigInput = {
   base_url: string;
-  auto_approve: boolean;
 };
 
 // community node manifest (#355/#356) の client 側表現。public manifest endpoint から取得し、

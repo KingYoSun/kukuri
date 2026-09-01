@@ -26,7 +26,6 @@ type CommunityNodePanelProps = {
   nodeActionsDisabled?: boolean;
   onAddNode: () => void;
   onNodeBaseUrlChange: (id: string, value: string) => void;
-  onNodeAutoApproveChange: (id: string, value: boolean) => void;
   onRemoveNode: (id: string) => void;
   onSaveNodes: () => void;
   onReset: () => void;
@@ -59,7 +58,6 @@ export function CommunityNodePanel({
   nodeActionsDisabled = false,
   onAddNode,
   onNodeBaseUrlChange,
-  onNodeAutoApproveChange,
   onRemoveNode,
   onSaveNodes,
   onReset,
@@ -319,16 +317,6 @@ export function CommunityNodePanel({
                     className='font-mono text-[0.8rem]'
                   />
                 </div>
-                <label className='flex items-center gap-3 text-sm text-foreground'>
-                  <input
-                    type='checkbox'
-                    checked={node.autoApprove}
-                    onChange={(event) =>
-                      onNodeAutoApproveChange(node.id, event.currentTarget.checked)
-                    }
-                  />
-                  <span>{t('settings:communityNode.autoApproveLabel')}</span>
-                </label>
                 <p className='text-sm text-[var(--muted-foreground)]'>
                   {node.saved
                     ? t('settings:communityNode.nodeSummary')

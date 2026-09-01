@@ -264,7 +264,6 @@ impl DesktopRuntime {
         .iroh_relay_urls;
         Ok(CommunityNodeNodeStatus {
             base_url: node.base_url,
-            auto_approve: node.auto_approve,
             auth_state,
             consent_state,
             local_consent,

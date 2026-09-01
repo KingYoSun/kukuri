@@ -40,7 +40,6 @@ test('submits a masked invite code only for the selected node', async () => {
       clearDisabled={false}
       onAddNode={() => {}}
       onNodeBaseUrlChange={() => {}}
-      onNodeAutoApproveChange={() => {}}
       onRemoveNode={() => {}}
       onSaveNodes={() => {}}
       onReset={() => {}}

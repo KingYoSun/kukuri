@@ -330,7 +330,6 @@ export function createMockRuntime(options?: DesktopMockApiOptions): MockRuntime 
       nodes: [
         {
           base_url: 'https://api.kukuri.app',
-          auto_approve: true,
           resolved_urls: {
             public_base_url: 'https://api.kukuri.app',
             connectivity_urls: ['https://api.kukuri.app'],
@@ -342,7 +341,6 @@ export function createMockRuntime(options?: DesktopMockApiOptions): MockRuntime 
     communityNodeStatuses: [
       {
         base_url: 'https://api.kukuri.app',
-        auto_approve: true,
         auth_state: { authenticated: true, expires_at: Date.now() + 60_000 },
         consent_state: { all_required_accepted: true, items: mockConsentItems(true) },
         // #857: mock の既定ノードはローカル同意済みとして扱う。

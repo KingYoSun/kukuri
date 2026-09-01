@@ -22,7 +22,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-test('community node panel keeps the auto-approve node active on the current session', async () => {
+test('community node panel keeps the configured node active on the current session', async () => {
   const api = createDesktopMockApi();
   const user = userEvent.setup();
 
@@ -31,11 +31,7 @@ test('community node panel keeps the auto-approve node active on the current ses
   const drawer = await openSettingsSection(user, 'community-node');
   const nodeHeading = await within(drawer).findByText('https://api.kukuri.app', { selector: 'h4' });
   const blockElement = closestSection(nodeHeading);
-  expect(
-    within(blockElement).getByRole('checkbox', {
-      name: 'Auto-approve consent for this node',
-    })
-  ).toBeChecked();
+  expect(within(blockElement).queryByRole('checkbox')).not.toBeInTheDocument();
 
   await waitFor(() => {
     expect(within(blockElement).getAllByText('https://api.kukuri.app').length).toBeGreaterThan(0);

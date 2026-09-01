@@ -38,7 +38,6 @@ const manifest = (available: string[]): CommunityNodeManifest => ({
 
 const status = (baseUrl: string, ready: boolean): CommunityNodeNodeStatus => ({
   base_url: baseUrl,
-  auto_approve: false,
   auth_state: { authenticated: ready, expires_at: null },
   consent_state: ready ? { all_required_accepted: true, items: [] } : null,
   resolved_urls: null,
@@ -53,7 +52,7 @@ const status = (baseUrl: string, ready: boolean): CommunityNodeNodeStatus => ({
 describe('community index node eligibility', () => {
   it('requires configured, authenticated, consented, available capability', () => {
     const config: CommunityNodeConfig = {
-      nodes: [{ base_url: 'https://a', auto_approve: false, resolved_urls: null }],
+      nodes: [{ base_url: 'https://a', resolved_urls: null }],
     };
     expect(
       eligibleCommunityIndexNodes(config, [status('https://a', true)], {
@@ -76,8 +75,8 @@ describe('community index node eligibility', () => {
   it('separates trust relation and distance opt-out eligibility by capability', () => {
     const config: CommunityNodeConfig = {
       nodes: [
-        { base_url: 'https://index-only', auto_approve: false, resolved_urls: null },
-        { base_url: 'https://trust', auto_approve: false, resolved_urls: null },
+        { base_url: 'https://index-only', resolved_urls: null },
+        { base_url: 'https://trust', resolved_urls: null },
       ],
     };
     const statuses = [status('https://index-only', true), status('https://trust', true)];

@@ -144,7 +144,7 @@ async fn spawn_admission_mock(
     (base_url, state, server)
 }
 
-async fn admission_runtime(db_path: &Path, nodes: Vec<(String, bool)>) -> DesktopRuntime {
+async fn admission_runtime(db_path: &Path, nodes: Vec<String>) -> DesktopRuntime {
     let runtime = DesktopRuntime::new_with_config_and_identity(
         db_path,
         TransportNetworkConfig::loopback(),
@@ -152,15 +152,14 @@ async fn admission_runtime(db_path: &Path, nodes: Vec<(String, bool)>) -> Deskto
     )
     .await
     .expect("runtime");
-    for (base_url, _) in &nodes {
+    for base_url in &nodes {
         seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
     }
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: nodes
             .into_iter()
-            .map(|(base_url, auto_approve)| CommunityNodeNodeConfig {
+            .map(|base_url| CommunityNodeNodeConfig {
                 base_url,
-                auto_approve,
                 resolved_urls: None,
             })
             .collect(),
@@ -207,7 +206,7 @@ async fn removing_or_clearing_node_config_deletes_its_invite_code() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("invite-config-cleanup.db");
     let base_url = "https://invite.example".to_string();
-    let runtime = admission_runtime(&db_path, vec![(base_url.clone(), false)]).await;
+    let runtime = admission_runtime(&db_path, vec![base_url.clone()]).await;
     persist_community_node_invite_code(
         &db_path,
         IdentityStorageMode::FileOnly,
@@ -229,7 +228,6 @@ async fn removing_or_clearing_node_config_deletes_its_invite_code() {
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.clone(),
-            auto_approve: false,
             resolved_urls: None,
         }],
     };
@@ -261,11 +259,7 @@ async fn authentication_sends_invite_only_to_its_node() {
     let db_path = dir.path().join("invite-node-scope.db");
     let (base_url_a, state_a, server_a) = spawn_admission_mock(None).await;
     let (base_url_b, state_b, server_b) = spawn_admission_mock(None).await;
-    let runtime = admission_runtime(
-        &db_path,
-        vec![(base_url_a.clone(), false), (base_url_b.clone(), false)],
-    )
-    .await;
+    let runtime = admission_runtime(&db_path, vec![base_url_a.clone(), base_url_b.clone()]).await;
     persist_community_node_invite_code(
         &db_path,
         IdentityStorageMode::FileOnly,
@@ -300,7 +294,7 @@ async fn auth_verify_preserves_all_stable_admission_rejection_codes() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("admission-codes.db");
     let (base_url, state, server) = spawn_admission_mock(None).await;
-    let runtime = admission_runtime(&db_path, vec![(base_url.clone(), false)]).await;
+    let runtime = admission_runtime(&db_path, vec![base_url.clone()]).await;
     let cases = [
         (
             "INVITE_REQUIRED",
@@ -355,7 +349,7 @@ async fn admission_rejection_waits_for_user_and_saved_invite_recovers_session() 
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("admission-session.db");
     let (base_url, state, server) = spawn_admission_mock(Some("join-code")).await;
-    let runtime = admission_runtime(&db_path, vec![(base_url.clone(), true)]).await;
+    let runtime = admission_runtime(&db_path, vec![base_url.clone()]).await;
 
     runtime.run_community_node_session_maintenance_once().await;
     runtime.run_community_node_session_maintenance_once().await;
@@ -415,7 +409,7 @@ async fn admission_rejection_waits_for_user_and_saved_invite_recovers_session() 
 }
 
 #[tokio::test]
-async fn banned_auto_approve_node_does_not_schedule_retries() {
+async fn banned_node_does_not_schedule_retries() {
     let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("admission-banned.db");
@@ -424,7 +418,7 @@ async fn banned_auto_approve_node_does_not_schedule_retries() {
         code: "BANNED".into(),
         message: "node-local support denied".into(),
     });
-    let runtime = admission_runtime(&db_path, vec![(base_url.clone(), true)]).await;
+    let runtime = admission_runtime(&db_path, vec![base_url.clone()]).await;
 
     runtime.run_community_node_session_maintenance_once().await;
     runtime.run_community_node_session_maintenance_once().await;
@@ -461,7 +455,7 @@ async fn banned_member_with_stored_token_stops_self_heal_reauthentication() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("admission-banned-member.db");
     let (base_url, state, server) = spawn_admission_mock(None).await;
-    let runtime = admission_runtime(&db_path, vec![(base_url.clone(), true)]).await;
+    let runtime = admission_runtime(&db_path, vec![base_url.clone()]).await;
 
     // まず正常に認証・接続する。
     let ready = runtime

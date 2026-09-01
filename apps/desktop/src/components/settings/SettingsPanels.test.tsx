@@ -163,7 +163,6 @@ test('community node panel renders ready and error states', async () => {
       clearDisabled={false}
       onAddNode={() => {}}
       onNodeBaseUrlChange={() => {}}
-      onNodeAutoApproveChange={() => {}}
       onRemoveNode={() => {}}
       onSaveNodes={() => {}}
       onReset={() => {}}
@@ -235,7 +234,6 @@ test('community node consent dialog shows policy body, version, and update notic
       clearDisabled={false}
       onAddNode={() => {}}
       onNodeBaseUrlChange={() => {}}
-      onNodeAutoApproveChange={() => {}}
       onRemoveNode={() => {}}
       onSaveNodes={() => {}}
       onReset={() => {}}
@@ -296,7 +294,6 @@ test('community node consent dialog disables accept when latest policy fetch fai
       clearDisabled={false}
       onAddNode={() => {}}
       onNodeBaseUrlChange={() => {}}
-      onNodeAutoApproveChange={() => {}}
       onRemoveNode={() => {}}
       onSaveNodes={() => {}}
       onReset={() => {}}
@@ -360,7 +357,6 @@ test('settings panels avoid the legacy grid classname collision', () => {
         clearDisabled={false}
         onAddNode={() => {}}
         onNodeBaseUrlChange={() => {}}
-        onNodeAutoApproveChange={() => {}}
         onRemoveNode={() => {}}
         onSaveNodes={() => {}}
         onReset={() => {}}
@@ -600,7 +596,6 @@ test('community node panel hides diagnostics but keeps node editing when showDia
       clearDisabled={false}
       onAddNode={() => {}}
       onNodeBaseUrlChange={() => {}}
-      onNodeAutoApproveChange={() => {}}
       onRemoveNode={() => {}}
       onSaveNodes={() => {}}
       onReset={() => {}}

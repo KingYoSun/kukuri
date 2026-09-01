@@ -105,20 +105,18 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
       runtime.communityNodeConfig = {
         nodes: nodes.map((node) => ({
           base_url: node.base_url,
-          auto_approve: node.auto_approve,
           resolved_urls: null,
         })),
       };
       runtime.communityNodeStatuses = nodes.map((node) => ({
         base_url: node.base_url,
-        auto_approve: node.auto_approve,
         auth_state: { authenticated: false, expires_at: null },
         consent_state: null,
         resolved_urls: null,
         last_error: null,
         invite_code_saved: false,
         admission_rejection: null,
-        session_phase: node.auto_approve ? 'connecting' : 'idle',
+        session_phase: 'idle',
         retry_after: null,
         restart_required: false,
       }));
@@ -135,7 +133,7 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
               ...status,
               auth_state: { authenticated: true, expires_at: Date.now() },
               consent_state: { all_required_accepted: false, items: mockConsentItems(false) },
-              session_phase: status.auto_approve ? 'accepting' : 'authenticating',
+              session_phase: 'authenticating',
             }
           : status
       );

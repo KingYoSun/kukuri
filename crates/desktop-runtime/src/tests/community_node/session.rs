@@ -1,10 +1,10 @@
 use super::super::*;
 
 #[tokio::test]
-async fn auto_approve_node_bootstraps_session_on_maintenance_tick() {
+async fn consented_node_bootstraps_session_on_maintenance_tick() {
     let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let dir = tempdir().expect("tempdir");
-    let db_path = dir.path().join("community-auto-approve-session.db");
+    let db_path = dir.path().join("community-consented-session.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
         &db_path,
         TransportNetworkConfig::loopback(),
@@ -47,7 +47,6 @@ async fn auto_approve_node_bootstraps_session_on_maintenance_tick() {
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.clone(),
-            auto_approve: true,
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
                     .expect("resolved urls"),
@@ -73,7 +72,6 @@ async fn auto_approve_node_bootstraps_session_on_maintenance_tick() {
     assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
     assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 1);
     assert_eq!(statuses.len(), 1);
-    assert!(statuses[0].auto_approve);
     assert!(statuses[0].auth_state.authenticated);
     assert_eq!(
         statuses[0].session_phase,
@@ -145,7 +143,6 @@ async fn status_getter_is_read_only_and_does_not_bootstrap_session() {
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.clone(),
-            auto_approve: true,
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
                     .expect("resolved urls"),
@@ -246,7 +243,6 @@ async fn near_expiry_token_triggers_proactive_community_node_reauthentication() 
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.clone(),
-            auto_approve: false,
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
                     .expect("resolved urls"),
@@ -344,8 +340,6 @@ async fn node_without_local_consent_is_never_contacted() {
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.clone(),
-            // auto_approve でもローカル同意が無ければ通信しない。
-            auto_approve: true,
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
                     .expect("resolved urls"),
@@ -468,7 +462,6 @@ async fn community_node_status_does_not_require_restart_when_connectivity_is_act
     .expect("resolved urls");
     let node = CommunityNodeNodeConfig {
         base_url: base_url.clone(),
-        auto_approve: false,
         resolved_urls: Some(resolved_urls.clone()),
     };
     persist_community_node_token(
@@ -537,7 +530,7 @@ async fn policy_update_is_not_silently_reaccepted() {
     // 黙って再受諾せず Idle に留め、ユーザーの再同意後にのみセッションを進める。
     let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let dir = tempdir().expect("tempdir");
-    let db_path = dir.path().join("community-auto-approve-update.db");
+    let db_path = dir.path().join("community-consent-update.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
         &db_path,
         TransportNetworkConfig::loopback(),
@@ -586,7 +579,6 @@ async fn policy_update_is_not_silently_reaccepted() {
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.clone(),
-            auto_approve: true,
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
                     .expect("resolved urls"),

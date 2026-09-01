@@ -216,7 +216,6 @@ async fn index_runtime(
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.clone(),
-            auto_approve: false,
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
                     .expect("resolved urls"),

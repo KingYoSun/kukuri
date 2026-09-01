@@ -281,7 +281,6 @@ export function communityNodesToDraftNodes(config: CommunityNodeConfig): Communi
   return config.nodes.map((node, index) => ({
     id: `community-node-${index}-${node.base_url}`,
     base_url: node.base_url,
-    auto_approve: node.auto_approve ?? false,
   }));
 }
 
@@ -291,7 +290,6 @@ export function communityNodeDraftNodesToConfigInput(
   return draftNodes
     .map((node) => ({
       base_url: node.base_url.trim(),
-      auto_approve: node.auto_approve,
     }))
     .filter((node) => node.base_url.length > 0);
 }
@@ -548,7 +546,6 @@ export function mergeCommunityNodeStatus(
 ): CommunityNodeNodeStatus {
   return {
     ...next,
-    auto_approve: next.auto_approve ?? previous?.auto_approve ?? false,
     consent_state: next.auth_state.authenticated
       ? next.consent_state ?? previous?.consent_state ?? null
       : next.consent_state ?? null,
@@ -592,7 +589,6 @@ export function syncCommunityNodeConfigWithStatus(
       node.base_url === status.base_url
         ? {
             ...node,
-            auto_approve: status.auto_approve ?? node.auto_approve ?? false,
             resolved_urls: status.resolved_urls ?? node.resolved_urls ?? null,
           }
         : node

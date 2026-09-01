@@ -42,7 +42,7 @@ type ProfileTopicChannelParams = ActionsBaseParams & {
   activeTopic: string;
   channelAudienceInput: 'invite_only' | 'friend_only' | 'friend_plus';
   channelLabelInput: string;
-  communityNodeInput: Array<{ id: string; base_url: string; auto_approve: boolean }>;
+  communityNodeInput: Array<{ id: string; base_url: string }>;
   discoverySeedInput: string;
   inviteTokenInput: string;
   localProfile: {

@@ -121,7 +121,6 @@
       "enabled": "已启用。节点本地最小接近度为 {{distance}}。",
       "disabled": "已停用。启用时的节点本地最小接近度为 {{distance}}。"
     },
-    "autoApproveLabel": "自动批准此节点的 consent",
     "admission": {
       "inviteCodeLabel": "邀请码",
       "inviteCodePlaceholder": "输入邀请码",
@@ -172,7 +171,6 @@
     "baseUrlsLabel": "基础 URL",
     "baseUrlsPlaceholder": "https://community.example.com",
     "diagnostics": {
-      "autoApprove": "自动批准",
       "auth": "认证",
       "connectivityUrls": "连接 URL",
       "consent": "同意",
@@ -188,7 +186,7 @@
     },
     "loading": "正在加载社区节点诊断…",
     "noNodes": "尚未配置社区节点。",
-    "nodesHint": "每个社区节点都保存基础 URL 和自动批准策略。",
+    "nodesHint": "每个社区节点都有基础 URL，并且在使用前需要单独同意。",
     "nodesLabel": "已配置的节点",
     "nodeSummary": "此节点的认证、同意和连接状态。",
     "sessionPhases": {

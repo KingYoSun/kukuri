@@ -42,7 +42,7 @@ Accepted
   3. それ以外（未登録 pubkey）のみ mode を適用する（`open`=admit / `whitelist`=allowlist 登録のみ / `invite`=有効コード必須、ただし allowlist 該当はコード不要 bypass）。
 - 拒否は `POST /v1/auth/verify` で HTTP 403 + 専用コード（`INVITE_REQUIRED` / `INVITE_INVALID` / `INVITE_EXPIRED` / `INVITE_EXHAUSTED` / `INVITE_REVOKED` / `NOT_ALLOWLISTED` / `BANNED`）として返す。
 - client は HTTP 403 の応答本文を破棄せず、上記の安定コードと message を保持する。招待コードは入力対象の node にだけ送信し、別 node へ転用しない。
-- client は admission 拒否を一時的な通信失敗と区別し、自動再試行を止めて利用者対応待ちにする。招待関連の拒否はコードの入力または再取得を案内し、`NOT_ALLOWLISTED` と `BANNED` は node 運営者への連絡を案内する。この扱いは `auto_approve` の有無で変えない。
+- client は admission 拒否を一時的な通信失敗と区別し、自動再試行を止めて利用者対応待ちにする。招待関連の拒否はコードの入力または再取得を案内し、`NOT_ALLOWLISTED` と `BANNED` は node 運営者への連絡を案内する。この扱いは配布候補か利用者追加 Node かで変えない。
 
 ## Consequences
 - admission は node-local な「補助機能提供の可否」判断である。`docs/architecture/p2p-first-community-node-responsibility-boundary.md` の責任境界に従い、ban は kukuri network 全体からのアカウント凍結ではなく、この node が提供する接続補助・auth/consent をこの pubkey へ提供しないという node-local な制限として扱う。user identity / profile / social graph は node-independent であり admission の対象にしない。

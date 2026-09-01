@@ -50,8 +50,8 @@ test('Explore header selects named eligible nodes, clears stale results, and ret
     );
   }
   await api.setCommunityNodeConfig([
-    { base_url: NODE_A, auto_approve: false },
-    { base_url: NODE_B, auto_approve: false },
+    { base_url: NODE_A },
+    { base_url: NODE_B },
   ]);
   for (const baseUrl of [NODE_A, NODE_B]) {
     await api.authenticateCommunityNode(baseUrl);

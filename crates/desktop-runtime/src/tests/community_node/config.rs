@@ -6,7 +6,6 @@ fn community_node_config_normalizes_base_urls_and_connectivity_urls() {
         nodes: vec![
             CommunityNodeNodeConfig {
                 base_url: "https://community.example.com/".into(),
-                auto_approve: false,
                 resolved_urls: Some(
                     CommunityNodeResolvedUrls::new(
                         "https://public.example.com/",
@@ -22,7 +21,6 @@ fn community_node_config_normalizes_base_urls_and_connectivity_urls() {
             },
             CommunityNodeNodeConfig {
                 base_url: "https://community.example.com".into(),
-                auto_approve: true,
                 resolved_urls: None,
             },
         ],
@@ -31,7 +29,6 @@ fn community_node_config_normalizes_base_urls_and_connectivity_urls() {
 
     assert_eq!(config.nodes.len(), 1);
     assert_eq!(config.nodes[0].base_url, "https://community.example.com");
-    assert!(config.nodes[0].auto_approve);
     assert_eq!(
         config.nodes[0]
             .resolved_urls
@@ -58,7 +55,6 @@ fn community_node_config_preserves_public_kukuri_urls() {
     let config = normalize_community_node_config(CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: "https://api.kukuri.app/".into(),
-            auto_approve: true,
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(
                     "https://api.kukuri.app/",
@@ -128,7 +124,6 @@ async fn local_community_node_seed_peer_keeps_addr_hint_when_relay_urls_exist() 
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: "https://api.example.com".to_string(),
-            auto_approve: false,
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(
                     "https://api.example.com",
@@ -159,7 +154,6 @@ fn stored_community_node_config_restores_cached_connectivity_union() {
         &CommunityNodeConfig {
             nodes: vec![CommunityNodeNodeConfig {
                 base_url: "https://community.example.com".into(),
-                auto_approve: false,
                 resolved_urls: Some(
                     CommunityNodeResolvedUrls::new(
                         "https://public.example.com",
@@ -192,6 +186,36 @@ fn stored_community_node_config_restores_cached_connectivity_union() {
     );
 }
 
+#[test]
+fn legacy_auto_approve_field_is_ignored_and_removed_on_save() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("community-legacy-auto-approve.db");
+    let config_path = community_node_config_path(&db_path);
+    std::fs::write(
+        &config_path,
+        r#"{
+  "nodes": [
+    {
+      "base_url": "https://community.example.com/",
+      "auto_approve": true,
+      "resolved_urls": null
+    }
+  ]
+}"#,
+    )
+    .expect("write legacy config");
+
+    let config = load_community_node_config_from_file(&db_path)
+        .expect("load legacy config")
+        .expect("stored config");
+    assert_eq!(config.nodes.len(), 1);
+    assert_eq!(config.nodes[0].base_url, "https://community.example.com");
+
+    save_community_node_config(&db_path, &config).expect("save normalized config");
+    let saved = std::fs::read_to_string(config_path).expect("read normalized config");
+    assert!(!saved.contains("auto_approve"));
+}
+
 #[tokio::test]
 async fn runtime_preloads_distribution_community_node_only_when_config_file_is_missing() {
     let _resource = lock_test_resource(TestResource::ProcessEnvironment).await;
@@ -207,7 +231,6 @@ async fn runtime_preloads_distribution_community_node_only_when_config_file_is_m
         Some(CommunityNodeConfig {
             nodes: vec![CommunityNodeNodeConfig {
                 base_url: "https://distribution.example.com".to_string(),
-                auto_approve: true,
                 resolved_urls: None,
             }],
         }),
@@ -221,7 +244,6 @@ async fn runtime_preloads_distribution_community_node_only_when_config_file_is_m
         .expect("community node config");
     assert_eq!(config.nodes.len(), 1);
     assert_eq!(config.nodes[0].base_url, "https://distribution.example.com");
-    assert!(config.nodes[0].auto_approve);
     assert!(
         community_node_config_path(&db_path).exists(),
         "preloaded preview config should be persisted"
@@ -247,7 +269,6 @@ async fn runtime_does_not_restore_distribution_node_after_user_clears_config() {
         Some(CommunityNodeConfig {
             nodes: vec![CommunityNodeNodeConfig {
                 base_url: "https://distribution.example.com".to_string(),
-                auto_approve: true,
                 resolved_urls: None,
             }],
         }),
@@ -276,7 +297,6 @@ async fn runtime_does_not_restore_distribution_node_after_user_replaces_config()
         &CommunityNodeConfig {
             nodes: vec![CommunityNodeNodeConfig {
                 base_url: "https://user-selected.example.com".to_string(),
-                auto_approve: false,
                 resolved_urls: None,
             }],
         },
@@ -292,7 +312,6 @@ async fn runtime_does_not_restore_distribution_node_after_user_replaces_config()
         Some(CommunityNodeConfig {
             nodes: vec![CommunityNodeNodeConfig {
                 base_url: "https://distribution.example.com".to_string(),
-                auto_approve: true,
                 resolved_urls: None,
             }],
         }),

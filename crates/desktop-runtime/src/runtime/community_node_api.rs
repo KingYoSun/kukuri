@@ -126,7 +126,6 @@ impl DesktopRuntime {
                     .and_then(|node| node.resolved_urls.clone());
                 Ok(CommunityNodeNodeConfig {
                     base_url: normalized_base_url,
-                    auto_approve: base_url.auto_approve,
                     resolved_urls,
                 })
             })
@@ -151,7 +150,7 @@ impl DesktopRuntime {
         self.apply_runtime_connectivity_assist().await?;
         self.apply_effective_seed_peers().await?;
         // getter を読取専用化した(WP-Q2)ため、config 変更直後の登録はここで 1 tick 即時実行する。
-        // これが無いと新規 auto_approve ノードの bootstrap がスケジューラ次 tick(最大 15 秒)まで
+        // これが無いと新規 Node の bootstrap がスケジューラ次 tick(最大 15 秒)まで
         // 遅延する。tick は deadline ゲート済みの冪等設計で、直後の scheduler tick と二重でも安全。
         self.run_community_node_session_maintenance_once().await;
         Ok(next_config)

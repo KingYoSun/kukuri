@@ -356,22 +356,15 @@ export function useSettingsViewModels({
         );
         const saved =
           communityNodeConfig.nodes.find(
-            (candidate) =>
-              candidate.base_url === node.base_url &&
-              (candidate.auto_approve ?? false) === node.auto_approve
+            (candidate) => candidate.base_url === node.base_url
           ) != null;
         const status = communityNodeStatusByBaseUrl[node.base_url];
         return {
           id: node.id,
           baseUrl: node.base_url,
-          autoApprove: node.auto_approve,
           saved,
           distanceOptoutEligible: distanceOptoutEligibleBaseUrls.includes(node.base_url),
           diagnostics: [
-            {
-              label: t('settings:communityNode.diagnostics.autoApprove'),
-              value: node.auto_approve ? t('common:states.yes') : t('common:states.no'),
-            },
             {
               label: t('settings:communityNode.diagnostics.auth'),
               value: communityNodeAuthLabel(status),

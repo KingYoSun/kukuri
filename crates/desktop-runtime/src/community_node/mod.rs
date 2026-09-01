@@ -110,9 +110,6 @@ pub(crate) const COMMUNITY_NODE_TOPIC_RENDEZVOUS_REFRESH_MARGIN_SECONDS: i64 = 2
 pub struct CommunityNodeNodeConfig {
     pub base_url: String,
     #[serde(default)]
-    #[cfg_attr(feature = "ts", ts(as = "Option<bool>"))]
-    pub auto_approve: bool,
-    #[serde(default)]
     pub resolved_urls: Option<CommunityNodeResolvedUrls>,
 }
 
@@ -134,8 +131,6 @@ pub(crate) use kukuri_cn_protocol::{BootstrapNodesResponse, TopicRendezvousHeart
 #[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct SetCommunityNodeConfigNode {
     pub base_url: String,
-    #[serde(default)]
-    pub auto_approve: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -293,10 +288,6 @@ pub(crate) struct CommunityNodeSessionState {
 #[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CommunityNodeNodeStatus {
     pub base_url: String,
-    // 現行 types.ts と同じく任意(#[serde(default)])。
-    #[serde(default)]
-    #[cfg_attr(feature = "ts", ts(as = "Option<bool>"))]
-    pub auto_approve: bool,
     pub auth_state: CommunityNodeAuthState,
     pub consent_state: Option<CommunityNodeConsentStatus>,
     /// #857: Node 別ローカル同意記録。空 = 未同意(この node へは通信しない)。
