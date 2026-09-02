@@ -21,9 +21,15 @@
     "ageAttestedValue": "Attested as 18 or older (attested {{attestedAt}})",
     "notAttested": "Not attested"
   },
+  "metadata": {
+    "effectiveDate": "Effective date: {{date}}",
+    "authoritativeLanguage": "The Japanese version is authoritative",
+    "referenceTranslation": "This is a reference translation of the authoritative Japanese version. The Japanese version controls if there is any discrepancy."
+  },
   "documents": {
     "terms": {
       "title": "Terms of Service",
+      "changeSummary": "Version 4 identifies the controller and effective date and explains that translations are for reference.",
       "sections": [
         {
           "heading": "What kukuri is",
@@ -102,39 +108,47 @@
     },
     "privacy": {
       "title": "Privacy Policy",
+      "changeSummary": "Version 4 identifies the controller and documents actual data flows, external transmissions, diagnostics, and P2P deletion limits.",
       "sections": [
         {
-          "heading": "Information stored locally",
+          "heading": "Controller and basic approach",
           "paragraphs": [
-            "Your account-identifying key, profile, follows, posts, and other locally reconstructed data, as well as app settings (theme, language, discovery settings, community node settings, your consent to this policy, your age self-attestation record, and your adult-material display setting), are stored only on your device.",
-            "Your confirmation of being 18 or older is recorded only on this device as a self-attestation. kukuri does not collect your date of birth or any official ID and does not perform official age verification. This record is never sent off the device, and a new device requires a new attestation."
+            "The controller is {{controllerName}} and the contact address is {{contact}}. The operator's name and address will be provided without delay when requested through that address.",
+            "Some information, such as your account-identifying secret key, settings, and consent records, remains local. Profiles, public follows, posts, reactions, and attachments are replicated to P2P participants according to the audience you select."
           ]
         },
         {
-          "heading": "Information handled during signaling and connection",
+          "heading": "Information shared over P2P",
           "paragraphs": [
-            "While establishing P2P connections (signaling) or communicating via relays, your source IP address can become visible to peers and to community nodes / relays. This is technically unavoidable in order to establish connections on a P2P network.",
-            "Connection metadata (connection logs) such as connection targets, timestamps, and endpoint identifiers can be temporarily handled by community nodes / relays on the path. The kukuri client itself does not centrally collect or store these."
+            "Public profiles, public follows, public posts, replies, reposts, reactions, and attachments are replicated to peers that obtain the relevant user's profile replica or topic.",
+            "Private channels are limited to participants holding the capability, and DMs are limited to the designated peer. You cannot completely erase a copy already obtained by another participant from your device alone."
           ]
         },
         {
-          "heading": "Retention",
+          "heading": "Connectivity and Community Nodes",
           "paragraphs": [
-            "Information stored locally is retained on your device until you delete the app's data.",
-            "The retention period of connection logs handled by community nodes / relays follows each operator's privacy policy. The kukuri client does not control this."
+            "Public keys, endpoint identifiers, IP addresses, and connection metadata can be observed by the Mainline DHT, peers, configured Community Nodes, iroh relays, and network providers. Routes are selected in the order Direct P2P, Relay Supported P2P, and Relay Fallback.",
+            "Depending on the capabilities you accept, a Community Node may receive authentication proofs, endpoint data, topic rendezvous keys, search queries, indexing requests, and report or feedback fields. A Node operator is not necessarily the kukuri operator; use the Node manifest to review its retention and external-transmission documents."
           ]
         },
         {
-          "heading": "Disclosure to third parties",
+          "heading": "Automatic update checks and diagnostic reports",
           "paragraphs": [
-            "The kukuri client does not centrally aggregate your personal information and disclose it to third parties.",
-            "Due to the nature of P2P, content and connection information you share may be visible, as needed for each function, to communicating peers, community nodes that assist connection establishment, and relays that carry traffic. Whether this is legally treated as third-party disclosure depends on the actor, purpose, and deployment and is not characterized uniformly."
+            "After consent, the app checks GitHub Releases automatically at startup and every 30 minutes, and when you request a check. GitHub and network providers can observe your IP address and HTTP/TLS request metadata.",
+            "A diagnostic report can include app version, platform/user agent, connectivity state, peer and topic counts, and Node URL/session/error information. Copying or exporting does not send it automatically. Secret keys, auth tokens, private capabilities, invitations, DM bodies, and local database paths are excluded by default."
           ]
         },
         {
-          "heading": "Consent",
+          "heading": "Age attestation, analytics, and deletion limits",
           "paragraphs": [
-            "On first launch, before starting any network connection, the app asks for your consent to this policy. kukuri does not start a network connection until you accept. When there is a significant update, it asks you to review and accept again."
+            "Your statement that you are 18 or older is stored locally as a self-attestation. kukuri does not collect your date of birth or official ID and does not perform official age verification. The current app does not enable behavioral analytics, advertising tracking, or automatic crash-report uploads by default.",
+            "Local deletion or withdrawal cannot guarantee complete deletion of copies or caches already held by peers or third-party Nodes, or logs held by the DHT, relays, or network providers."
+          ]
+        },
+        {
+          "heading": "Consent and change history",
+          "paragraphs": [
+            "The app asks you to accept the terms and this policy before starting network connections. A material update increments the document version and requires renewed consent before networking resumes. Version 4 adds the controller, actual data flows, external transmissions, diagnostics, and deletion limits."
           ]
         }
       ]

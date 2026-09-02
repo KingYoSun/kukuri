@@ -106,6 +106,7 @@ fn violations_in_text(text: &str) -> impl Iterator<Item = &'static str> + '_ {
 fn is_allowlisted(relative: &Path) -> bool {
     let normalized = relative.to_string_lossy().replace('\\', "/");
     normalized == "apps/desktop/src-tauri/distribution/community-nodes.json"
+        || normalized == "apps/desktop/src-tauri/distribution/legal.json"
         || normalized == "docs/runbooks/community-node-production-rollout.md"
         || normalized.ends_with("/.terraform")
         || normalized.contains("/.terraform/")
@@ -143,6 +144,9 @@ mod tests {
     fn allowlist_is_limited_to_distribution_and_non_product_evidence() {
         assert!(is_allowlisted(Path::new(
             "apps/desktop/src-tauri/distribution/community-nodes.json"
+        )));
+        assert!(is_allowlisted(Path::new(
+            "apps/desktop/src-tauri/distribution/legal.json"
         )));
         assert!(is_allowlisted(Path::new(
             "docs/runbooks/community-node-production-rollout.md"

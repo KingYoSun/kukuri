@@ -225,6 +225,18 @@ function ConsentGate({
             documentVersions={Object.fromEntries(
               documents.map((document) => [document.slug, document.currentVersion])
             )}
+            documentMetadata={Object.fromEntries(
+              documents.map((document) => [
+                document.slug,
+                {
+                  effectiveDate: document.effectiveDate,
+                  authoritativeLanguage: document.authoritativeLanguage,
+                  materialChange: document.materialChange,
+                  controllerName: document.controllerName,
+                  contact: document.contact,
+                },
+              ])
+            )}
             compact
           />
           {attestationRequired ? (

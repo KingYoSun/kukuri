@@ -20,9 +20,9 @@ const EXPECTED_TERMS_HEADINGS: Array<{
       '投稿撤回後の取扱い',
       '許諾に含まれない利用',
     ],
-    accountBoundary: /アカウント・プロフィール・フォロー関係・投稿/u,
-    accountKey: /アカウントを識別する鍵/u,
-    thirdPartyBoundary: /一律には扱いません/u,
+    accountBoundary: /プロフィール、公開フォロー関係、公開投稿/u,
+    accountKey: /アカウントを識別する秘密鍵/u,
+    thirdPartyBoundary: /完全に遠隔消去することはできません/u,
   },
   {
     locale: 'en',
@@ -33,9 +33,9 @@ const EXPECTED_TERMS_HEADINGS: Array<{
       'After withdrawal',
       'Uses not licensed',
     ],
-    accountBoundary: /account, profile, follows, and posts/u,
-    accountKey: /account-identifying key/u,
-    thirdPartyBoundary: /not characterized uniformly/u,
+    accountBoundary: /Public profiles, public follows, public posts/u,
+    accountKey: /account-identifying secret key/u,
+    thirdPartyBoundary: /cannot completely erase a copy/u,
   },
   {
     locale: 'zh-CN',
@@ -46,18 +46,54 @@ const EXPECTED_TERMS_HEADINGS: Array<{
       '撤回投稿后的处理',
       '不在许可范围内的使用',
     ],
-    accountBoundary: /账号、资料、关注关系和帖子/u,
-    accountKey: /用于识别您账号的密钥/u,
-    thirdPartyBoundary: /不能一概而论/u,
+    accountBoundary: /公开资料、公开关注关系、公开帖子/u,
+    accountKey: /用于识别账号的私密密钥/u,
+    thirdPartyBoundary: /无法彻底删除其他参与者已经取得的副本/u,
   },
 ];
 
 describe.each(EXPECTED_TERMS_HEADINGS)('legal document in $locale', ({ locale, headings }) => {
-  test('shows bundle version 2 and every content-rights clause', async () => {
+  test('shows bundle version 4, effective date, and every content-rights clause', async () => {
     await i18n.changeLanguage(locale);
-    render(<LegalDocumentView documentVersions={{ terms: 2, privacy: 2 }} />);
+    render(
+      <LegalDocumentView
+        documentVersions={{ terms: 4, privacy: 4 }}
+        documentMetadata={{
+          terms: {
+            effectiveDate: '2026-09-02',
+            authoritativeLanguage: 'ja',
+            materialChange: true,
+            controllerName: 'Preview Distributor',
+            contact: 'privacy@example.test',
+          },
+          privacy: {
+            effectiveDate: '2026-09-02',
+            authoritativeLanguage: 'ja',
+            materialChange: true,
+            controllerName: 'Preview Distributor',
+            contact: 'privacy@example.test',
+          },
+        }}
+      />
+    );
 
-    expect(screen.getAllByText('v2')).toHaveLength(2);
+    expect(screen.getAllByText('v4')).toHaveLength(2);
+    expect(screen.getAllByText(/2026-09-02/u)).toHaveLength(2);
+    expect(screen.getByText(/Preview Distributor/u)).toBeInTheDocument();
+    expect(screen.getByText(/privacy@example\.test/u)).toBeInTheDocument();
+    if (locale === 'ja') {
+      expect(
+        screen.queryByText(
+          "この表示は日本語正文に基づく参考訳です。差異がある場合は日本語正文を優先します。",
+        ),
+      ).not.toBeInTheDocument();
+    } else {
+      const referenceNotice =
+        locale === 'en'
+          ? 'This is a reference translation of the authoritative Japanese version. The Japanese version controls if there is any discrepancy.'
+          : '此内容为日文正式文本的参考译文。如有差异，以日文版为准。';
+      expect(screen.getAllByText(referenceNotice)).toHaveLength(2);
+    }
     for (const heading of headings) {
       expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();
     }
@@ -66,7 +102,7 @@ describe.each(EXPECTED_TERMS_HEADINGS)('legal document in $locale', ({ locale, h
   test('uses concrete account terms and preserves the third-party disclosure boundary', async () => {
     const expected = EXPECTED_TERMS_HEADINGS.find((item) => item.locale === locale)!;
     await i18n.changeLanguage(locale);
-    render(<LegalDocumentView documentVersions={{ terms: 2, privacy: 2 }} />);
+    render(<LegalDocumentView documentVersions={{ terms: 4, privacy: 4 }} />);
 
     expect(screen.getByText(expected.accountBoundary)).toBeInTheDocument();
     expect(screen.getByText(expected.accountKey)).toBeInTheDocument();
@@ -75,7 +111,7 @@ describe.each(EXPECTED_TERMS_HEADINGS)('legal document in $locale', ({ locale, h
 
   test('does not render a draft notice', async () => {
     await i18n.changeLanguage(locale);
-    render(<LegalDocumentView documentVersions={{ terms: 2, privacy: 2 }} />);
+    render(<LegalDocumentView documentVersions={{ terms: 4, privacy: 4 }} />);
 
     expect(screen.queryByText(/draft|ドラフト|草案/i)).not.toBeInTheDocument();
   });

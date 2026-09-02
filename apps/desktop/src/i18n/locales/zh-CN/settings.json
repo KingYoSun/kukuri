@@ -399,6 +399,23 @@
         "unknown": "更新失败。请稍后重试；如果持续失败，请附上诊断报告。"
       }
     },
+    "externalTransmission": {
+      "title": "外部传输",
+      "summary": "以下是应用与设备外部通信的主要场景。社区节点特有的处理方式，请查看下方各已配置节点的披露。",
+      "destination": "接收方",
+      "purpose": "目的",
+      "items": "可能发送或被观察到的数据",
+      "retention": "保存主体",
+      "updateDestination": "GitHub 版本发布服务",
+      "updatePurpose": "同意后在启动时、每30分钟以及手动请求时检查并获取已签名更新",
+      "updateItems": "IP地址、HTTP／TLS请求元数据，以及更新检查所需的应用或设备信息",
+      "updateRetention": "遵循GitHub及网络服务商的政策。",
+      "p2pDestination": "连接设备、Mainline DHT和已配置的中继服务",
+      "p2pPurpose": "发现连接对象、建立P2P连接、在所选共享范围内同步，以及必要时中继",
+      "p2pItems": "公钥、连接端标识符、IP地址、连接元数据，以及所选范围内的签名正文、元数据和附件",
+      "p2pRetention": "遵循接收设备、DHT参与者或中继运营者的政策；已取得的副本无法集中删除。",
+      "diagnosticNotice": "复制或导出诊断报告不会自动发送。只有您将报告附加到自己选择的接收方时，它才会离开设备。"
+    },
     "diagnostics": {
       "title": "诊断",
       "copy": "复制报告",

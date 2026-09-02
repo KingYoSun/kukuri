@@ -36,7 +36,9 @@ impl DesktopState {
     }
 }
 
-pub(crate) const LEGAL_BUNDLE_VERSION: i32 = 3;
+pub(crate) const LEGAL_BUNDLE_VERSION: i32 = 4;
+pub(crate) const APP_LEGAL_EFFECTIVE_DATE: &str = "2026-09-02";
+pub(crate) const APP_LEGAL_AUTHORITATIVE_LANGUAGE: &str = "ja";
 
 /// 18歳以上の自己申告(#858、ADR 0046)の現行版。文書同意とは独立に管理し、
 /// 申告文言の重要変更時のみ上げて再申告を求める。
@@ -88,10 +90,21 @@ pub(crate) struct AppConsentStore {
 pub(crate) struct AppConsentDocumentStatus {
     pub(crate) slug: String,
     pub(crate) current_version: i32,
+    pub(crate) effective_date: String,
+    pub(crate) authoritative_language: String,
+    pub(crate) material_change: bool,
+    pub(crate) controller_name: String,
+    pub(crate) contact: String,
     pub(crate) accepted_version: Option<i32>,
     pub(crate) accepted_at: Option<i64>,
     pub(crate) accepted_language: Option<String>,
     pub(crate) accepted_app_version: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct DistributionLegalMetadata {
+    controller_name: String,
+    contact: String,
 }
 
 /// 年齢自己申告の状態ビュー。文書同意とは別枠で startup gate と
@@ -406,6 +419,10 @@ fn distribution_community_node_config() -> Result<CommunityNodeConfig, serde_jso
     serde_json::from_str(include_str!("../distribution/community-nodes.json"))
 }
 
+fn distribution_legal_metadata() -> Result<DistributionLegalMetadata, serde_json::Error> {
+    serde_json::from_str(include_str!("../distribution/legal.json"))
+}
+
 fn spawn_runtime_event_bridge(app_handle: &tauri::AppHandle, runtime: &Arc<DesktopRuntime>) {
     let mut rx = runtime.subscribe_events();
     let app = app_handle.clone();
@@ -475,6 +492,7 @@ fn latest_app_consent_record<'a>(
 pub(crate) fn app_consent_documents_status(
     store: &AppConsentStore,
 ) -> Vec<AppConsentDocumentStatus> {
+    let legal = distribution_legal_metadata().expect("distribution legal metadata must be valid");
     APP_LEGAL_DOCUMENTS
         .iter()
         .map(|(slug, current_version)| {
@@ -482,6 +500,11 @@ pub(crate) fn app_consent_documents_status(
             AppConsentDocumentStatus {
                 slug: (*slug).to_string(),
                 current_version: *current_version,
+                effective_date: APP_LEGAL_EFFECTIVE_DATE.to_string(),
+                authoritative_language: APP_LEGAL_AUTHORITATIVE_LANGUAGE.to_string(),
+                material_change: true,
+                controller_name: legal.controller_name.clone(),
+                contact: legal.contact.clone(),
                 accepted_version: latest.map(|record| record.version),
                 accepted_at: latest.map(|record| record.accepted_at),
                 accepted_language: latest.map(|record| record.language.clone()),
@@ -642,7 +665,7 @@ mod tests {
 
     #[test]
     fn app_consent_satisfied_requires_every_document_at_current_or_newer_version() {
-        assert_eq!(LEGAL_BUNDLE_VERSION, 3);
+        assert_eq!(LEGAL_BUNDLE_VERSION, 4);
         assert!(!app_consent_documents_satisfied(&AppConsentStore::default()));
 
         // terms だけ同意しても不十分。
@@ -732,6 +755,15 @@ mod tests {
 
         let terms = status.iter().find(|doc| doc.slug == "terms").unwrap();
         assert_eq!(terms.current_version, LEGAL_BUNDLE_VERSION);
+        assert_eq!(terms.effective_date, APP_LEGAL_EFFECTIVE_DATE);
+        assert_eq!(
+            terms.authoritative_language,
+            APP_LEGAL_AUTHORITATIVE_LANGUAGE
+        );
+        assert!(terms.material_change);
+        let legal = distribution_legal_metadata().expect("distribution legal metadata");
+        assert_eq!(terms.controller_name, legal.controller_name);
+        assert_eq!(terms.contact, legal.contact);
         assert_eq!(terms.accepted_version, Some(LEGAL_BUNDLE_VERSION));
         assert_eq!(terms.accepted_at, Some(200));
         assert_eq!(terms.accepted_language.as_deref(), Some("ja"));
@@ -768,10 +800,13 @@ mod tests {
     fn canonical_legal_documents_match_the_runtime_bundle_version() {
         const TERMS: &str = include_str!("../../../../docs/legal/terms-of-service.md");
         const PRIVACY: &str = include_str!("../../../../docs/legal/privacy-policy.md");
+        const EXTERNAL_TRANSMISSION: &str =
+            include_str!("../../../../docs/legal/external-transmission-notice.md");
         let expected = format!("Legal bundle version: {LEGAL_BUNDLE_VERSION}");
 
         assert!(TERMS.contains(&expected));
         assert!(PRIVACY.contains(&expected));
+        assert!(EXTERNAL_TRANSMISSION.contains(&expected));
         for required_clause in [
             "利用資格と成人向け表現",
             "18歳以上",
@@ -785,6 +820,67 @@ mod tests {
             assert!(
                 TERMS.contains(required_clause),
                 "terms must contain `{required_clause}`"
+            );
+        }
+
+        for required_clause in [
+            "GitHub Releases",
+            "自動更新確認",
+            "公開鍵",
+            "リアクション",
+            "検索・索引",
+            "行動分析",
+            "日本語版を正文",
+            "変更履歴",
+        ] {
+            assert!(
+                PRIVACY.contains(required_clause),
+                "privacy policy must contain `{required_clause}`"
+            );
+        }
+        let legal = distribution_legal_metadata().expect("distribution legal metadata");
+        for disclosed_value in [&legal.controller_name, &legal.contact] {
+            assert!(PRIVACY.contains(disclosed_value));
+            assert!(EXTERNAL_TRANSMISSION.contains(disclosed_value));
+        }
+    }
+
+    #[test]
+    fn external_transmission_notice_matches_distribution_and_updater_config() {
+        const EXTERNAL_TRANSMISSION: &str =
+            include_str!("../../../../docs/legal/external-transmission-notice.md");
+        const PRIVACY: &str = include_str!("../../../../docs/legal/privacy-policy.md");
+        const TAURI_CONFIG: &str = include_str!("../tauri.conf.json");
+        const DESKTOP_SHELL: &str = include_str!("../../src/shell/DesktopShellPage.tsx");
+
+        let tauri_config: serde_json::Value =
+            serde_json::from_str(TAURI_CONFIG).expect("tauri config must be valid json");
+        let updater_endpoints = tauri_config
+            .pointer("/plugins/updater/endpoints")
+            .and_then(serde_json::Value::as_array)
+            .expect("updater endpoints");
+        assert!(!updater_endpoints.is_empty());
+        for endpoint in updater_endpoints {
+            let endpoint = endpoint.as_str().expect("updater endpoint string");
+            let host = endpoint
+                .strip_prefix("https://")
+                .and_then(|remainder| remainder.split('/').next())
+                .expect("https updater endpoint host");
+            assert!(
+                host == "github.com" || host.ends_with(".github.com"),
+                "new updater host `{host}` must be reviewed in the external-transmission notice"
+            );
+        }
+        assert!(EXTERNAL_TRANSMISSION.contains("GitHub Releases"));
+        assert!(PRIVACY.contains("GitHub Releases"));
+        assert!(DESKTOP_SHELL.contains("const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;"));
+
+        let distribution = distribution_community_node_config().expect("distribution config");
+        for node in distribution.nodes {
+            assert!(
+                EXTERNAL_TRANSMISSION.contains(node.base_url.as_str()),
+                "distribution node `{}` must be disclosed",
+                node.base_url
             );
         }
     }

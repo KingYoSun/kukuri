@@ -399,6 +399,23 @@
         "unknown": "The update failed. Try again later, and include a diagnostic report if it keeps failing."
       }
     },
+    "externalTransmission": {
+      "title": "External transmissions",
+      "summary": "These are the main situations in which the app communicates outside your device. Review each configured Community Node's disclosures below for Node-specific handling.",
+      "destination": "Destination",
+      "purpose": "Purpose",
+      "items": "Data sent or observable",
+      "retention": "Retention controller",
+      "updateDestination": "GitHub Releases",
+      "updatePurpose": "Check and retrieve signed updates after consent at startup, every 30 minutes, and on manual request",
+      "updateItems": "IP address, HTTP/TLS request metadata, and app or device data required for the update check",
+      "updateRetention": "Subject to GitHub's and network providers' policies.",
+      "p2pDestination": "Peers, the Mainline DHT, and configured relays",
+      "p2pPurpose": "Peer discovery, P2P connectivity, synchronization within the selected audience, and relay when needed",
+      "p2pItems": "Public key, endpoint identifier, IP address, connection metadata, and signed content, metadata, and attachments within the selected audience",
+      "p2pRetention": "Subject to the receiving peer, DHT participant, or relay operator; copies already obtained cannot be erased centrally.",
+      "diagnosticNotice": "Copying or exporting a diagnostic report does not send it automatically. It leaves the device only if you attach it to a destination you choose."
+    },
     "diagnostics": {
       "title": "Diagnostics",
       "copy": "Copy Report",

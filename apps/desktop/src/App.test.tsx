@@ -66,6 +66,13 @@ test('settings drawer can open the release section', async () => {
   await user.click(screen.getByRole('button', { name: 'Release' }));
 
   expect(screen.getByRole('heading', { name: 'Release' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'External transmissions' })).toBeInTheDocument();
+  expect(screen.getByText('Peers, the Mainline DHT, and configured relays')).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      'Copying or exporting a diagnostic report does not send it automatically. It leaves the device only if you attach it to a destination you choose.'
+    )
+  ).toBeInTheDocument();
   expect(screen.getByRole('link', { name: /Latest release/ })).toHaveAttribute(
     'href',
     'https://github.com/KingYoSun/kukuri/releases/latest'
@@ -80,7 +87,12 @@ test('settings drawer can open the release section', async () => {
 function consentDocuments(acceptedVersion: number | null) {
   return ['terms', 'privacy'].map((slug) => ({
     slug,
-    currentVersion: 2,
+    currentVersion: 4,
+    effectiveDate: '2026-09-02',
+    authoritativeLanguage: 'ja',
+    materialChange: true,
+    controllerName: 'Preview Distributor',
+    contact: 'privacy@example.test',
     acceptedVersion,
     acceptedAt: acceptedVersion === null ? null : 1_700_000_000,
     acceptedLanguage: acceptedVersion === null ? null : 'en',
@@ -119,6 +131,8 @@ test('desktop app blocks startup until app-level legal consent is accepted', asy
   expect(await screen.findByRole('heading', { name: 'Before you continue' })).toBeInTheDocument();
   expect(screen.getByText('Terms of Service')).toBeInTheDocument();
   expect(screen.getByText('Privacy Policy')).toBeInTheDocument();
+  expect(screen.getAllByText(/Effective date: 2026-09-02/)).toHaveLength(2);
+  expect(screen.getAllByText(/reference translation/i)).toHaveLength(2);
   expect(
     screen.queryByText('These documents are drafts and are not legal advice.')
   ).not.toBeInTheDocument();
@@ -146,8 +160,8 @@ test('desktop app blocks startup until app-level legal consent is accepted', asy
   await waitFor(() => {
     expect(invokeMock).toHaveBeenCalledWith('accept_app_consents', {
       documents: [
-        { slug: 'terms', version: 2 },
-        { slug: 'privacy', version: 2 },
+        { slug: 'terms', version: 4 },
+        { slug: 'privacy', version: 4 },
       ],
       language: 'en',
       ageAttested: true,
@@ -189,7 +203,7 @@ test('desktop app requires renewed consent for an older legal bundle', async () 
       'This is a draft and is not legal advice. Final decisions should be made in consultation with appropriate experts or regulators.'
     )
   ).not.toBeInTheDocument();
-  expect(screen.getAllByText('v2')).toHaveLength(2);
+  expect(screen.getAllByText('v4')).toHaveLength(2);
   expect(screen.queryByTestId('control-center-trigger')).not.toBeInTheDocument();
 
   // #858: 現行版で申告済みならチェックボックスは再表示されず、ボタンは有効のまま。
@@ -200,8 +214,8 @@ test('desktop app requires renewed consent for an older legal bundle', async () 
   await waitFor(() => {
     expect(invokeMock).toHaveBeenCalledWith('accept_app_consents', {
       documents: [
-        { slug: 'terms', version: 2 },
-        { slug: 'privacy', version: 2 },
+        { slug: 'terms', version: 4 },
+        { slug: 'privacy', version: 4 },
       ],
       language: 'en',
       ageAttested: false,
