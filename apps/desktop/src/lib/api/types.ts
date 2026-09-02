@@ -129,6 +129,11 @@ export type AgeAttestationStatus = {
 export type AppConsentDocumentStatus = {
   slug: string;
   currentVersion: number;
+  effectiveDate: string;
+  authoritativeLanguage: string;
+  materialChange: boolean;
+  controllerName: string;
+  contact: string;
   acceptedVersion: number | null;
   acceptedAt: number | null;
   acceptedLanguage: string | null;

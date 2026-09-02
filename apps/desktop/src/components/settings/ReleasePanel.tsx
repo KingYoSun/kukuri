@@ -303,6 +303,79 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
 
       <section className='min-w-0 space-y-3'>
         <h4 className='text-base font-semibold text-foreground'>
+          {t('settings:release.externalTransmission.title')}
+        </h4>
+        <p className='text-sm text-[var(--muted-foreground-soft)]'>
+          {t('settings:release.externalTransmission.summary')}
+        </p>
+        <div className='grid gap-3 lg:grid-cols-2'>
+          {[
+            {
+              key: 'update',
+              destination: t('settings:release.externalTransmission.updateDestination'),
+              purpose: t('settings:release.externalTransmission.updatePurpose'),
+              items: t('settings:release.externalTransmission.updateItems'),
+              retention: t('settings:release.externalTransmission.updateRetention'),
+              href: RELEASE_LATEST_URL,
+            },
+            {
+              key: 'p2p',
+              destination: t('settings:release.externalTransmission.p2pDestination'),
+              purpose: t('settings:release.externalTransmission.p2pPurpose'),
+              items: t('settings:release.externalTransmission.p2pItems'),
+              retention: t('settings:release.externalTransmission.p2pRetention'),
+              href: null,
+            },
+          ].map((entry) => (
+            <dl
+              key={entry.key}
+              className='grid min-w-0 gap-2 rounded-[var(--radius-input)] border border-[var(--border-subtle)] bg-[var(--surface-panel-soft)] p-3 text-sm'
+            >
+              <div className='min-w-0'>
+                <dt className='font-medium text-foreground'>
+                  {t('settings:release.externalTransmission.destination')}
+                </dt>
+                <dd className='break-words text-[var(--muted-foreground-soft)]'>
+                  {entry.href ? (
+                    <a
+                      className='underline underline-offset-2'
+                      href={entry.href}
+                      target='_blank'
+                      rel='noreferrer'
+                    >
+                      {entry.destination}
+                    </a>
+                  ) : (
+                    entry.destination
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt className='font-medium text-foreground'>
+                  {t('settings:release.externalTransmission.purpose')}
+                </dt>
+                <dd className='text-[var(--muted-foreground-soft)]'>{entry.purpose}</dd>
+              </div>
+              <div>
+                <dt className='font-medium text-foreground'>
+                  {t('settings:release.externalTransmission.items')}
+                </dt>
+                <dd className='text-[var(--muted-foreground-soft)]'>{entry.items}</dd>
+              </div>
+              <div>
+                <dt className='font-medium text-foreground'>
+                  {t('settings:release.externalTransmission.retention')}
+                </dt>
+                <dd className='text-[var(--muted-foreground-soft)]'>{entry.retention}</dd>
+              </div>
+            </dl>
+          ))}
+        </div>
+        <Notice>{t('settings:release.externalTransmission.diagnosticNotice')}</Notice>
+      </section>
+
+      <section className='min-w-0 space-y-3'>
+        <h4 className='text-base font-semibold text-foreground'>
           {t('settings:release.resources.title')}
         </h4>
         <p className='text-sm text-[var(--muted-foreground-soft)]'>

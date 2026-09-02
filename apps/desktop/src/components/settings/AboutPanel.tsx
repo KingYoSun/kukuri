@@ -100,15 +100,29 @@ export function AboutPanel() {
         <h4 className='text-base font-semibold text-foreground'>
           {t('legal:about.documentsHeading')}
         </h4>
-        <LegalDocumentView
-          documentVersions={Object.fromEntries(
-            (consentStatus?.documents ?? []).map((document) => [
-              document.slug,
-              document.currentVersion,
-            ])
-          )}
-          compact
-        />
+        {consentStatus ? (
+          <LegalDocumentView
+            documentVersions={Object.fromEntries(
+              consentStatus.documents.map((document) => [
+                document.slug,
+                document.currentVersion,
+              ])
+            )}
+            documentMetadata={Object.fromEntries(
+              consentStatus.documents.map((document) => [
+                document.slug,
+                {
+                  effectiveDate: document.effectiveDate,
+                  authoritativeLanguage: document.authoritativeLanguage,
+                  materialChange: document.materialChange,
+                  controllerName: document.controllerName,
+                  contact: document.contact,
+                },
+              ])
+            )}
+            compact
+          />
+        ) : null}
       </section>
     </Card>
   );

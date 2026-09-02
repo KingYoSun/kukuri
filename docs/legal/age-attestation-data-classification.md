@@ -17,5 +17,6 @@ ADR 0002 (`docs/adr/0002-feature-data-classification-template.md`) に基づく�
 
 ## 補足
 - 自己申告は文書同意(terms / privacy)とは別レコードとして記録し、文書の版更新では失効しない(申告文言の重要変更時のみ `AGE_ATTESTATION_VERSION` を上げて再申告を求める)。
+- legal bundle version 4 では privacy / terms の再同意だけを求め、自己申告の意味・保存範囲は変わらないため `AGE_ATTESTATION_VERSION` は据え置く。
 - 生年月日・公的身分証等は収集しない。自己申告は公的な年齢確認ではない。
 - 申告が完了するまで `DesktopRuntime` を構築せず、iroh endpoint の bind / discovery を開始しない(fail-closed)。
