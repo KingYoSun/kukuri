@@ -131,10 +131,7 @@ impl Capability {
             Capability::AuthConsent => CapabilityMeta {
                 capability: self,
                 display_name: "認証・同意 (auth / consent)",
-                handled_data: "ユーザー公開鍵、署名付き認証エンベロープ、同意ステータス、JWT 発行記録",
                 purpose: "community node の補助機能を利用する client の認証と、利用規約・ポリシーへの同意取得",
-                retention_impact: "認証チャレンジは短期 TTL、同意レコードは撤回まで保持",
-                external_transmission: None,
                 telecom_note: "認証はノード自身が処理する。回線設備の設置を伴わない。",
                 privacy_note: "公開鍵と同意状態を扱う。IP アドレス・接続ログの扱いは接続ログ保持期間に従う。",
                 terms_note: "本ノードの補助機能利用には認証と同意が必要である旨を記載する。",
@@ -142,10 +139,7 @@ impl Capability {
             Capability::BootstrapAssist => CapabilityMeta {
                 capability: self,
                 display_name: "ブートストラップ補助 (bootstrap assist)",
-                handled_data: "ピアの接続ヒント（node id / addr hint）、一時的な登録エントリ",
                 purpose: "新規 client が P2P network へ最初に到達するための seed peer 情報の提供",
-                retention_impact: "ピア登録は短期 TTL で失効する ephemeral state",
-                external_transmission: None,
                 telecom_note: "接続ヒントの中継のみ。実データの伝送経路を恒久的に保持しない。",
                 privacy_note: "一時的な接続情報を扱う。長期保存はしない。",
                 terms_note: "P2P 接続を補助する目的であり、通信内容を保持しない旨を記載する。",
@@ -153,10 +147,7 @@ impl Capability {
             Capability::TopicRendezvous => CapabilityMeta {
                 capability: self,
                 display_name: "トピックランデブー (topic rendezvous)",
-                handled_data: "topic ごとの presence 情報（node id / 接続ヒント）、TTL 付き ephemeral state",
                 purpose: "同一 topic を購読する client 同士の Relay Supported P2P 接続成立を補助する",
-                retention_impact: "presence は KV 上の TTL 付き ephemeral state で短期失効する",
-                external_transmission: None,
                 telecom_note: "presence の一時的な突き合わせのみ。実データ伝送の恒久経路を持たない。",
                 privacy_note: "どの topic に接続中かの一時情報を扱う。長期保存はしない。",
                 terms_note: "topic 接続の補助であり、投稿内容を保持しない旨を記載する。",
@@ -164,10 +155,7 @@ impl Capability {
             Capability::IrohRelay => CapabilityMeta {
                 capability: self,
                 display_name: "iroh relay 補助 (iroh relay assist)",
-                handled_data: "NAT traversal / hole punching のためのシグナリング、暗号化済みパケットの中継",
                 purpose: "Direct P2P が成立しない場合の hole punching / endpoint assist",
-                retention_impact: "中継は経路上の一時処理であり、内容を恒久保存しない",
-                external_transmission: Some(ExternalDestination::DedicatedIrohRelay),
                 telecom_note: "iroh relay は単なる signaling ではなく、NAT 越えのために暗号化済み traffic の中継が発生し得る。届出要否は構成と所在地に依存するため事前確認が必要。",
                 privacy_note: "中継時に接続元の IP アドレスを観測し得る。接続ログ保持期間に従って扱う。",
                 terms_note: "relay 経由の接続補助が行われ得る旨を記載する。",
@@ -175,10 +163,7 @@ impl Capability {
             Capability::TrafficRelayFallback => CapabilityMeta {
                 capability: self,
                 display_name: "トラフィック relay フォールバック (traffic relay fallback)",
-                handled_data: "Direct P2P / Relay Supported P2P が成立しない場合の暗号化済み実データ通信",
                 purpose: "他のすべての経路が成立しない場合に限り、暗号化済み traffic を relay 経由で疎通させる",
-                retention_impact: "中継のみで内容は恒久保存しない。接続メタデータは接続ログ保持期間に従う",
-                external_transmission: Some(ExternalDestination::PublicRelay),
                 telecom_note: "暗号化済みであっても traffic relay fallback は実データの伝送経路となり得る。signaling only と混同せず、届出要否を事前確認する。",
                 privacy_note: "fallback 時に接続元 IP アドレスやタイミングメタデータを観測し得る。",
                 terms_note: "最終手段として暗号化済み通信が relay 経由になり得る旨を記載する。",
@@ -186,10 +171,7 @@ impl Capability {
             Capability::BlobCache => CapabilityMeta {
                 capability: self,
                 display_name: "blob / 添付キャッシュ (blob cache)",
-                handled_data: "添付メディアの一時キャッシュ、blob の content address (CID)",
                 purpose: "添付メディアの配信補助・可用性向上のための一時キャッシュ",
-                retention_impact: "キャッシュは一時保持であり、community node は blob 本体を恒久保存しない方針",
-                external_transmission: Some(ExternalDestination::ObjectStorage),
                 telecom_note: "メディア配信補助。恒久保存を行わない方針を明記する。",
                 privacy_note: "添付メディアを一時的に扱う。保持期間と削除方針を明記する。",
                 terms_note: "添付メディアが一時的にキャッシュされ得る旨を記載する。",
@@ -197,10 +179,7 @@ impl Capability {
             Capability::PrivateMessageStorage => CapabilityMeta {
                 capability: self,
                 display_name: "プライベートメッセージ保管 (private message storage)",
-                handled_data: "暗号化されたプライベートメッセージの保管データ",
                 purpose: "オフライン配送のためのプライベートメッセージの一時保管",
-                retention_impact: "保管期間はノードの設定に従う。既定では無効。",
-                external_transmission: None,
                 telecom_note: "メッセージ保管はノード内処理。回線設備の設置を伴わない。",
                 privacy_note: "プライベートメッセージを扱うため、保持期間・暗号化・アクセス制御を明記する。",
                 terms_note: "プライベートメッセージが一時保管され得る旨と暗号化方針を記載する。",
@@ -208,10 +187,7 @@ impl Capability {
             Capability::Analytics => CapabilityMeta {
                 capability: self,
                 display_name: "アナリティクス (analytics)",
-                handled_data: "利用状況の統計データ、イベントログ",
                 purpose: "サービス改善のための利用状況分析",
-                retention_impact: "分析プロバイダのポリシーに従う。既定では無効。",
-                external_transmission: Some(ExternalDestination::AnalyticsProvider),
                 telecom_note: "分析目的のデータ送信が発生し得る。",
                 privacy_note: "利用状況データを第三者の分析プロバイダへ送信し得る旨を明記する。",
                 terms_note: "アナリティクス目的のデータ収集が行われ得る旨を記載する。",
@@ -219,10 +195,7 @@ impl Capability {
             Capability::CrashReport => CapabilityMeta {
                 capability: self,
                 display_name: "クラッシュレポート (crash reporting)",
-                handled_data: "クラッシュ時の診断データ、スタックトレース",
                 purpose: "不具合の検出と修正のためのクラッシュ情報収集",
-                retention_impact: "クラッシュレポートプロバイダのポリシーに従う。既定では無効。",
-                external_transmission: Some(ExternalDestination::CrashReportProvider),
                 telecom_note: "診断目的のデータ送信が発生し得る。",
                 privacy_note: "クラッシュ診断データを第三者プロバイダへ送信し得る旨を明記する。",
                 terms_note: "クラッシュレポートが送信され得る旨を記載する。",
@@ -230,10 +203,7 @@ impl Capability {
             Capability::CloudflareProxy => CapabilityMeta {
                 capability: self,
                 display_name: "Cloudflare プロキシ / CDN / WAF",
-                handled_data: "HTTP リクエスト・レスポンス、接続元 IP アドレス（Cloudflare 経由）",
                 purpose: "リバースプロキシ・CDN・WAF による配信補助と保護",
-                retention_impact: "Cloudflare のログ・キャッシュポリシーに従う",
-                external_transmission: Some(ExternalDestination::Cloudflare),
                 telecom_note: "通信が Cloudflare を経由する。所在地・データ越境の観点を確認する。",
                 privacy_note: "リクエストと接続元 IP が Cloudflare を経由する旨を外部送信として明記する。",
                 terms_note: "通信が Cloudflare を経由し得る旨を記載する。",
@@ -241,10 +211,7 @@ impl Capability {
             Capability::PushNotification => CapabilityMeta {
                 capability: self,
                 display_name: "プッシュ通知 (push notification)",
-                handled_data: "デバイストークン、通知ペイロード",
                 purpose: "OS プッシュ通知の配信",
-                retention_impact: "デバイストークンは登録解除まで保持。通知ペイロードは配送後保持しない方針",
-                external_transmission: Some(ExternalDestination::PushProvider),
                 telecom_note: "プッシュ通知プロバイダ経由の送信が発生する。",
                 privacy_note: "デバイストークンと通知内容をプッシュプロバイダへ送信する旨を明記する。",
                 terms_note: "プッシュ通知のためにデバイストークンを扱う旨を記載する。",
@@ -252,13 +219,7 @@ impl Capability {
             Capability::CommunityIndex => CapabilityMeta {
                 capability: self,
                 display_name: "コミュニティインデックス (community index)",
-                handled_data: "サポート対象の公開トピック（共有レプリカ）上の投稿の本文テキストとメタデータ。\
-                    索引の真実源は Postgres、検索投影は ArcadeDB（真実源から再構築可能）。\
-                    生メディアは索引にもデータベースにも保存しない",
                 purpose: "安全性走査を通過した許可 content のみを対象とする検索・発見・おすすめの補助",
-                retention_impact: "索引項目は、対象トピックから外れた時点・判定が許可以外へ変わった時点で\
-                    索引解除される。検索投影は派生データであり真実源から再構築できる",
-                external_transmission: None,
                 telecom_note: "索引と検索・発見・おすすめの権限は、本ノードのサポート対象（公開トピック）\
                     内に限定される。本ノードは content の真実源ではない。",
                 privacy_note: "公開トピックへ公開された投稿のみを対象とし、走査済みの許可 content のみを\
@@ -269,15 +230,9 @@ impl Capability {
             Capability::Moderation => CapabilityMeta {
                 capability: self,
                 display_name: "モデレーション (moderation)",
-                handled_data: "テキスト・メディアの安全性走査の判定（scan verdict）、署名付き moderation \
-                    event、根拠付き risk signal、申し立て状態。照合プロバイダの生の Match Data・生応答は\
-                    保存・配布せず、AI の入力にも使わない",
                 purpose: "既知一致照合（Project Arachnid Shield）と分類器（OpenAI 互換の視覚言語モデル）に\
                     よる走査で、critical safety risk を本ノードの索引・発見・おすすめから排除する。\
                     走査は fail-closed（走査失敗・プロバイダ不達・メディア不達は許可へ落とさず保留）",
-                retention_impact: "判定・moderation event はモデレーションログ保持期間に従う。risk signal \
-                    は失効・訂正再発行・申し立ての対象。走査のため一時取得したメディアは恒久保存しない",
-                external_transmission: None,
                 telecom_note: "moderation は node-local の判断であり、本ノードの authority scope 内に\
                     限定される。network 全体への命令ではない。",
                 privacy_note: "走査のためメディアを一時取得する（恒久保存しない）。プロバイダの Match Data \
@@ -288,14 +243,8 @@ impl Capability {
             Capability::CommunityLocalTrust => CapabilityMeta {
                 capability: self,
                 display_name: "コミュニティローカル信頼・関係 (community-local trust / relation)",
-                handled_data: "根拠付き risk signal と信頼合成値（絶対・相対成分）、公開トピックの共参加\
-                    由来の pairwise relation（近接度・近傍。ArcadeDB 上の再構築可能な派生グラフ）、\
-                    関係表示の離脱設定",
                 purpose: "閲覧者に固定された node-local advisory としての信頼・関係の読み取り提供\
                     （trust と relation の双方を含む）",
-                retention_impact: "risk signal は失効・半減期減衰・申し立てに従う。relation graph は\
-                    公開トピックの共参加から定期解析で再構築できる派生データ",
-                external_transmission: None,
                 telecom_note: "信頼・関係は node-local advisory であり、本ノードの authority scope 内に\
                     限定される。canonical な identity / social graph を変更しない。",
                 privacy_note: "関係の入力は公開トピックの共参加のみで、プライベートチャンネル由来の信号は\
@@ -306,10 +255,7 @@ impl Capability {
             Capability::ReportEndpoint => CapabilityMeta {
                 capability: self,
                 display_name: "通報エンドポイント (report endpoint)",
-                handled_data: "通報内容（対象・理由・任意の補足）、通報者の連絡先（任意）",
                 purpose: "本ノードが関与した対象に対する通報の受付（POST /v1/report）",
-                retention_impact: "通報データは通報保持ポリシーに従って保持される",
-                external_transmission: None,
                 telecom_note: "通報受付はノードの authority scope 内に限定される。",
                 privacy_note: "reporter の identity / social graph は保持せず、明示入力された連絡先のみ任意保存する。",
                 terms_note: "通報は本ノードが関与した対象に限定され、中央通報窓口ではない。",
@@ -317,10 +263,7 @@ impl Capability {
             Capability::RightsRequestEndpoint => CapabilityMeta {
                 capability: self,
                 display_name: "権利侵害申出エンドポイント (rights request endpoint)",
-                handled_data: "申出人の氏名・連絡先・代理権、権利根拠、対象、侵害態様、証拠参照",
                 purpose: "本ノードの対応範囲を事前確認した権利者等から、権利侵害申出を受け付けて追跡可能にする",
-                retention_impact: "申出 record と append-only event は権利侵害申出の保持方針に従って保持される",
-                external_transmission: None,
                 telecom_note: "措置は本ノードの索引・moderation・cache 等の authority scope 内に限定される。",
                 privacy_note: "申出人情報と権利主張は local-only とし、公開 status へ PII や内部判断を出さない。",
                 terms_note: "申請前に可能・不可能な措置を提示し、版付きの明示同意を必須にする。",
@@ -328,10 +271,7 @@ impl Capability {
             Capability::TesterFeedback => CapabilityMeta {
                 capability: self,
                 display_name: "テスターフィードバック受付 (tester feedback)",
-                handled_data: "テスターの自由記述 3 項目(やろうとしたこと・何が起きたか・何が変だと思ったか)、client version、OS",
                 purpose: "テスターの利用経験レポートの受付・蓄積(POST /v1/tester-feedback)。品質観点の発見と自動テスト化の元データにする",
-                retention_impact: "フィードバックはテスターフィードバック保持期間に従って保持される",
-                external_transmission: None,
                 telecom_note: "フィードバック受付はノード内処理。回線設備の設置を伴わない。",
                 privacy_note: "送信者の identity / social graph は保持しない。自由記述と自動付与された client version / OS のみ保存する。",
                 terms_note: "テスターフィードバックが本ノードへ送信・保存され得る旨を記載する。",
@@ -339,10 +279,7 @@ impl Capability {
             Capability::DomeHosting => CapabilityMeta {
                 capability: self,
                 display_name: "Dome ホスティング (dome hosting)",
-                handled_data: "owner署名Hosting Lease、Dome manifest、participant input、ephemeral physics state",
                 purpose: "owner不在時も単一のauthoritative hostとしてDome sessionを継続する",
-                retention_impact: "leaseとmanifest bundleは期限・closeまで保持し、physics stateとraw inputはsession終了時に破棄",
-                external_transmission: None,
                 telecom_note: "Dome participantとのsession trafficを終端する。帯域と同時session数を制限する。",
                 privacy_note: "participant inputは処理後に破棄し、raw inputや認証tokenをlogへ出さない。",
                 terms_note: "Community NodeはDomeのcanonical ownerではなく、owner署名leaseの範囲だけをhostする。",
@@ -362,17 +299,23 @@ impl fmt::Display for Capability {
 pub struct CapabilityMeta {
     pub capability: Capability,
     pub display_name: &'static str,
-    pub handled_data: &'static str,
     pub purpose: &'static str,
-    pub retention_impact: &'static str,
-    pub external_transmission: Option<ExternalDestination>,
     pub telecom_note: &'static str,
     pub privacy_note: &'static str,
     pub terms_note: &'static str,
 }
 
+impl CapabilityMeta {
+    /// データ分類・処理・保持等の法務上の事実は prose field ではなく、この型付き
+    /// descriptor を参照する。既存 note は各文書向けの説明文だけに利用する。
+    pub fn policy_descriptor(self) -> crate::policy_descriptor::CapabilityPolicyDescriptor {
+        self.capability.policy_descriptor()
+    }
+}
+
 /// 外部送信表示で列挙し得る送信先。
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ExternalDestination {
     CommunityServer,
     DedicatedIrohRelay,

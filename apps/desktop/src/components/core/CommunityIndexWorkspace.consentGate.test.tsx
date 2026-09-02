@@ -43,7 +43,7 @@ test('community index surfaces a consent prompt and per-node policy modal before
   await user.click(screen.getByRole('button', { name: `Review policies: ${NODE}` }));
 
   const dialog = await screen.findByRole('dialog');
-  expect(fetchPolicies).toHaveBeenCalledWith(NODE);
+  expect(fetchPolicies).toHaveBeenCalledWith(NODE, 'en');
   // 公開カタログ由来の文書本文と版が提示される。
   expect(
     await within(dialog).findByText('You must follow the community node terms of service.')
@@ -58,8 +58,16 @@ test('community index surfaces a consent prompt and per-node policy modal before
   expect(acceptConsents).toHaveBeenCalledWith(
     NODE,
     [
-      { policy_slug: 'terms_of_service', policy_version: 1 },
-      { policy_slug: 'privacy_policy', policy_version: 1 },
+      {
+        policy_slug: 'terms_of_service',
+        policy_version: 1,
+        policy_snapshot_revision: null,
+      },
+      {
+        policy_slug: 'privacy_policy',
+        policy_version: 1,
+        policy_snapshot_revision: null,
+      },
     ],
     expect.any(String)
   );

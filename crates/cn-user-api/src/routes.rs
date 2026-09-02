@@ -39,7 +39,10 @@ use crate::handlers::auth::{auth_challenge, auth_verify};
 use crate::handlers::bootstrap::{
     bootstrap_heartbeat, bootstrap_nodes, topic_rendezvous_heartbeat,
 };
-use crate::handlers::consents::{accept_consents_handler, consent_status, public_policies};
+use crate::handlers::consents::{
+    accept_consents_handler, consent_status, public_policies, public_policy_revision,
+    public_policy_revisions,
+};
 use crate::handlers::indexing::{
     index_discovery, index_recommendations, index_search, submit_indexing_request,
 };
@@ -71,6 +74,14 @@ pub fn app_router(state: UserApiState) -> Router {
         .route(CONSENTS_STATUS_PATH, get(consent_status))
         .route(CONSENTS_PATH, post(accept_consents_handler))
         .route(POLICIES_PATH, get(public_policies))
+        .route(
+            "/v1/policies/{policy_slug}/revisions",
+            get(public_policy_revisions),
+        )
+        .route(
+            "/v1/policies/{policy_slug}/revisions/{policy_version}",
+            get(public_policy_revision),
+        )
         .route(DOME_HOSTING_ASSIGNMENTS_PATH, post(assign_dome_hosting))
         .route(DOME_HOSTING_ACTIVATE_PATH, post(activate_dome_hosting))
         .route(DOME_HOSTING_RELEASE_PATH, post(release_dome_hosting))

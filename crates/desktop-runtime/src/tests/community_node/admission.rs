@@ -65,6 +65,7 @@ async fn admission_consent_status() -> Json<CommunityNodeConsentStatus> {
     Json(CommunityNodeConsentStatus {
         all_required_accepted: true,
         items: Vec::new(),
+        policy_snapshot_revision: None,
     })
 }
 
@@ -80,7 +81,17 @@ async fn admission_policies() -> Json<kukuri_cn_protocol::CommunityNodePoliciesR
             required: true,
             effective_date: Some("2026-09-02".to_string()),
             language: Some("ja".to_string()),
+            policy_snapshot_revision: None,
+            authoritative_language: Some("ja".to_string()),
+            reference_translation: false,
+            translation_revision: None,
+            translation_of_version: None,
+            fallback: false,
+            requested_language: None,
+            material_change: false,
+            requires_reconsent: false,
         }],
+        policy_snapshot_revision: None,
     })
 }
 

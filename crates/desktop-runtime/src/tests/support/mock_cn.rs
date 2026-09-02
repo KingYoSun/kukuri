@@ -239,6 +239,7 @@ pub(crate) fn seed_local_community_node_consents(
         &[crate::CommunityNodeConsentDocumentRef {
             policy_slug: MOCK_MANAGED_POLICY_SLUG.to_string(),
             policy_version: version,
+            policy_snapshot_revision: None,
         }],
         "ja",
         "test-app",
@@ -268,7 +269,17 @@ pub(crate) async fn mock_managed_policies(
             required: true,
             effective_date: Some("2026-09-02".to_string()),
             language: Some("ja".to_string()),
+            policy_snapshot_revision: None,
+            authoritative_language: Some("ja".to_string()),
+            reference_translation: false,
+            translation_revision: None,
+            translation_of_version: None,
+            fallback: false,
+            requested_language: None,
+            material_change: false,
+            requires_reconsent: false,
         }],
+        policy_snapshot_revision: None,
     })
 }
 
@@ -297,9 +308,11 @@ pub(crate) fn managed_community_node_consent_status_with_update(
             required: true,
             effective_date: Some("2026-09-02".to_string()),
             language: Some("ja".to_string()),
+            policy_snapshot_revision: None,
             accepted_at: accepted.then(|| Utc::now().timestamp()),
             previously_accepted_version,
         }],
+        policy_snapshot_revision: None,
     }
 }
 

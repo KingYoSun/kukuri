@@ -481,7 +481,7 @@ export function CommunityIndexWorkspace({
     setConsentGateBaseUrl(baseUrl);
     setConsentGateEntry({ status: 'loading' });
     try {
-      const catalog = await api.fetchCommunityNodePolicies(baseUrl);
+      const catalog = await api.fetchCommunityNodePolicies(baseUrl, i18n.resolvedLanguage);
       setConsentGateEntry({ status: 'ok', policies: catalog.policies });
     } catch (fetchError) {
       // 取得失敗(オフライン等)はモーダル内で再試行できる。
@@ -508,6 +508,7 @@ export function CommunityIndexWorkspace({
         consentGateEntry.policies.map((policy) => ({
           policy_slug: policy.policy_slug,
           policy_version: policy.policy_version,
+          policy_snapshot_revision: policy.policy_snapshot_revision ?? null,
         })),
         i18n.resolvedLanguage ?? i18n.language
       );

@@ -92,6 +92,22 @@ legal:
     - { kind: abuse_policy, slug: abuse_policy, version: 1, effective_date: 2026-09-02, language: ja, required: false }
     - { kind: data_retention, slug: data_retention, version: 1, effective_date: 2026-09-02, language: ja, required: false }
     - { kind: rights_infringement, slug: rights_infringement_policy, version: 1, effective_date: 2026-09-02, language: ja, required: false }
+retention:
+  connection_logs_days: 30
+  moderation_logs_days: 180
+  report_days: 180
+  report_contact_days: 90
+  tester_feedback_days: 180
+  rights_request_active_days: 730
+  rights_request_resolved_days: 365
+  rights_request_rejected_days: 180
+  rights_request_contact_days: 180
+  rights_request_identity_days: 180
+  rights_request_evidence_days: 180
+  rights_request_history_days: 365
+  operator_audit_days: 365
+  moderation_event_days: 180
+  risk_signal_days: 180
 acknowledge_planned_capabilities: true
 "#;
 

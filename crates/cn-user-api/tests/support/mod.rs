@@ -6,7 +6,9 @@ use std::net::SocketAddr;
 
 use anyhow::{Context, Result};
 use kukuri_cn_core::{JwtConfig, TestDatabase};
-use kukuri_cn_protocol::build_auth_envelope_json;
+use kukuri_cn_protocol::{
+    AcceptConsentsRequest, CommunityNodePoliciesResponse, build_auth_envelope_json,
+};
 use kukuri_cn_user_api::{UserApiConfig, app_router, build_state};
 use kukuri_core::KukuriKeys;
 use redis::AsyncCommands;
@@ -87,18 +89,28 @@ pub async fn accept_required_consents(
     client: &Client,
     base_url: &str,
     access_token: &str,
-) -> Result<()> {
+) -> Result<kukuri_cn_protocol::CommunityNodeConsentStatus> {
+    let policies = client
+        .get(format!("{base_url}/v1/policies"))
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<CommunityNodePoliciesResponse>()
+        .await?;
     let accepted = client
         .post(format!("{base_url}/v1/consents"))
         .bearer_auth(access_token)
-        .json(&serde_json::json!({ "policy_slugs": [] }))
+        .json(&AcceptConsentsRequest {
+            policy_slugs: Vec::new(),
+            policy_snapshot_revision: policies.policy_snapshot_revision,
+        })
         .send()
         .await?
         .error_for_status()?
         .json::<kukuri_cn_protocol::CommunityNodeConsentStatus>()
         .await?;
     assert!(accepted.all_required_accepted);
-    Ok(())
+    Ok(accepted)
 }
 
 pub async fn redis_keys(redis_url: &str, pattern: &str) -> Result<Vec<String>> {

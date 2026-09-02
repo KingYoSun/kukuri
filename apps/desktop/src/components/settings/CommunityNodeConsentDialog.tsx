@@ -116,6 +116,17 @@ export function CommunityNodeConsentDialog({
                         .join(' / ')}
                     </p>
                   ) : null}
+                  {policy.fallback ? (
+                    <p className='text-xs text-[var(--muted-foreground)]'>
+                      {t('settings:communityNode.consent.authoritativeFallback', {
+                        language: policy.authoritativeLanguage ?? policy.language ?? 'unknown',
+                      })}
+                    </p>
+                  ) : policy.referenceTranslation ? (
+                    <p className='text-xs text-[var(--muted-foreground)]'>
+                      {t('settings:communityNode.consent.referenceTranslation')}
+                    </p>
+                  ) : null}
                 </div>
                 <div className='flex flex-wrap items-center gap-2'>
                   {policy.required ? (

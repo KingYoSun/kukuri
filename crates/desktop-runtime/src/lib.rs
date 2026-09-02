@@ -31,9 +31,9 @@ pub use community_node::{
     CommunityNodeSessionPhase, CommunityNodeTargetRequest, CommunityNodeTesterFeedbackError,
     CommunityNodeTesterFeedbackResponse, CommunityNodeTesterFeedbackSubmission,
     CommunityNodeTrustRelationError, CommunityNodeUserAdvisoryRequest, DomeHostingRequestError,
-    IndexEntryView, IndexQueryResponse, IndexScopeKind, RelationNeighborsResponse,
-    RelationOptoutResponse, RelationReadResponse, SetCommunityNodeConfigNode,
-    SetCommunityNodeConfigRequest, SetCommunityNodeInviteCodeRequest,
+    FetchCommunityNodePoliciesRequest, IndexEntryView, IndexQueryResponse, IndexScopeKind,
+    RelationNeighborsResponse, RelationOptoutResponse, RelationReadResponse,
+    SetCommunityNodeConfigNode, SetCommunityNodeConfigRequest, SetCommunityNodeInviteCodeRequest,
     SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
     SubmitCommunityNodeReportStatus, SubmitIndexingRequestResponse, TrustUserReadResponse,
 };

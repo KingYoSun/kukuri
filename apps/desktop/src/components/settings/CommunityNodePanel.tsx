@@ -177,6 +177,7 @@ export function CommunityNodePanel({
     const documents = (consentDialogView?.policies ?? []).map((policy) => ({
       policy_slug: policy.policySlug,
       policy_version: policy.policyVersion,
+      policy_snapshot_revision: policy.policySnapshotRevision ?? null,
     }));
     if (documents.length === 0) {
       return;

@@ -286,17 +286,19 @@ export type CommunityNodeConsentItem = { policy_slug: string, policy_version: nu
  * その policy_slug で過去に同意した最大 version（version 不問）。
  * `accepted_at` が None でこれが Some なら、版が上がって再同意が必要な「更新」を意味する。
  */
-previously_accepted_version?: number | null, effective_date?: string | null, language?: string | null, };
+previously_accepted_version?: number | null, effective_date?: string | null, language?: string | null, policy_snapshot_revision?: string | null, };
 
-export type CommunityNodeConsentStatus = { all_required_accepted: boolean, items: Array<CommunityNodeConsentItem>, };
+export type CommunityNodeConsentStatus = { all_required_accepted: boolean, items: Array<CommunityNodeConsentItem>, policy_snapshot_revision?: string | null, };
 
-export type CommunityNodePolicyDocument = { policy_slug: string, policy_version: number, title: string, body_markdown: string, required: boolean, effective_date?: string | null, language?: string | null, };
+export type CommunityNodePolicyDocument = { policy_slug: string, policy_version: number, title: string, body_markdown: string, required: boolean, effective_date?: string | null, language?: string | null, policy_snapshot_revision?: string | null, authoritative_language?: string | null, reference_translation: boolean, translation_revision?: number | null, translation_of_version?: number | null, fallback: boolean, requested_language?: string | null, material_change: boolean, requires_reconsent: boolean, };
 
-export type CommunityNodePoliciesResponse = { policies: Array<CommunityNodePolicyDocument>, };
+export type CommunityNodePoliciesResponse = { policies: Array<CommunityNodePolicyDocument>, policy_snapshot_revision?: string | null, };
 
-export type CommunityNodeConsentDocumentRef = { policy_slug: string, policy_version: number, };
+export type FetchCommunityNodePoliciesRequest = { base_url: string, language?: string | null, };
 
-export type CommunityNodeLocalConsentRecord = { policy_slug: string, policy_version: number, accepted_at: number, language: string, app_version: string, };
+export type CommunityNodeConsentDocumentRef = { policy_slug: string, policy_version: number, policy_snapshot_revision?: string | null, };
+
+export type CommunityNodeLocalConsentRecord = { policy_slug: string, policy_version: number, policy_snapshot_revision?: string | null, accepted_at: number, language: string, app_version: string, };
 
 export type CommunityNodeLocalConsentState = { records: Array<CommunityNodeLocalConsentRecord>, withdrawn_at?: number | null, };
 
