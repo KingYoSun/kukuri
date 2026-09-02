@@ -5,8 +5,8 @@ use std::{
 };
 
 use kukuri_desktop_runtime::{
-    CommunityNodeConfig, DesktopRuntime, StoreStartupError, ensure_accounts_initialized_from_env,
-    resolve_app_data_dir_from_env, resolve_db_path_from_env,
+    CommunityNodeConfig, DesktopRuntime, DeviceBackupCancellation, StoreStartupError,
+    ensure_accounts_initialized_from_env, resolve_app_data_dir_from_env, resolve_db_path_from_env,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager};
@@ -20,6 +20,7 @@ pub(crate) struct DesktopState {
     pub(crate) app_data_dir: PathBuf,
     /// アカウント切替の直列化。並行 switch で runtime 差し替えが交錯しないようにする。
     pub(crate) switch_guard: tokio::sync::Mutex<()>,
+    pub(crate) device_backup_cancellation: DeviceBackupCancellation,
 }
 
 impl DesktopState {
@@ -144,7 +145,7 @@ pub(crate) struct StartupError {
 
 impl StartupError {
     /// 分類できない起動失敗(db パス解決失敗など)。
-    fn unknown(message: String) -> Self {
+    pub(crate) fn unknown(message: String) -> Self {
         Self {
             kind: DesktopStartupErrorKind::Unknown,
             message,
@@ -374,6 +375,7 @@ pub(crate) async fn build_desktop_state(
         runtime: std::sync::RwLock::new(runtime),
         app_data_dir,
         switch_guard: tokio::sync::Mutex::new(()),
+        device_backup_cancellation: DeviceBackupCancellation::default(),
     })
 }
 
@@ -443,6 +445,18 @@ pub(crate) fn save_app_consent_store(
             "failed to write consent record `{}`: {error}",
             path.display()
         )
+    })
+}
+
+pub(crate) fn reset_app_consent_after_device_restore(
+    app_handle: &tauri::AppHandle,
+) -> Result<DesktopStartupStatus, String> {
+    let store = AppConsentStore::default();
+    let db_path = resolve_db_path(app_handle)?;
+    save_app_consent_store(&db_path, &store)?;
+    Ok(DesktopStartupStatus::ConsentRequired {
+        documents: app_consent_documents_status(&store),
+        age_attestation: age_attestation_status(&store),
     })
 }
 

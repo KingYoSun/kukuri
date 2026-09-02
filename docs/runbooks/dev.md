@@ -55,6 +55,7 @@ cargo xtask desktop-visual-test
 - `cargo xtask scenario desktop_smoke_metaverse_dome_persist`は固定Domeの作成、owner customization、規格外値の拒否、restart後のdocs + blob復元を確認する。
 - `cargo xtask scenario desktop_smoke_metaverse_dome_move`はpublic topicのowner Domeをprivate channelへ移し、同一Preset customization、owner slot重複拒否、source非表示、restart後のtarget復元を確認する。move失敗時は同じmove idでretryする。target staging前の失敗では旧Domeが残り、完了後は旧Contextへ戻らない。
 - `cargo xtask scenario desktop_smoke_metaverse_dome_connections`は共有Contextの3 ownerで2本のConnectionを成立させ、cycle拒否、restart後のtopology復元、revoke後のcomponent再分割を確認する。proposalが拒否された場合はslot占有、component merge / cycle、Instance generationを確認する。queue上限はoutbound 32、同一peer slot 4、receiver slot 32、local create 8件 / 10分。signed blockはConnectionを`owners_blocked`で失効し、unblockだけでは再接続しない。
+- `cargo xtask scenario desktop_device_backup_restore` は使用中の1アカウントを1暗号化ファイルへ保存し、新しい app data 環境での preview / staging DB 検証 / 復元、誤パスフレーズ時の無変更、端末固有 iroh endpoint secret の除外を確認する。
 - `cargo xtask scenario desktop_smoke_metaverse_dome_entry`はowner-hosted Domeへのauthoritative entry、manifest default spawn、Dome境界に収まらないcolliderの決定的なsafe-spawn退避を確認する。Prop/avatar重複と全候補占有はhost unit testで固定する。入場拒否の調査ではraw inputやaccess proof本文を採取せず、Instance、lease epoch/session、denial codeだけを確認する。
 - `cargo xtask scenario desktop_smoke_metaverse_dome_transition`は異なるownerの隣接Domeをowner deviceでhostし、送信元prepare、宛先reservation/commit、送信元completeの順でavatar-only handoffを行い、同時在室が残らないことを確認する。
 - Metaverseは実験機能のため、`world_version = 1` / `2`の既存roomは再作成する。

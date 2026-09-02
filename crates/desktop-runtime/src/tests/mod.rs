@@ -55,6 +55,7 @@ pub(crate) use support::*;
 mod accounts_migration;
 mod attachments;
 mod community_node;
+mod device_backup;
 mod identity_restart;
 mod media_blob_restore;
 mod private_channels;

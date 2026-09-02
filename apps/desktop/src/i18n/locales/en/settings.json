@@ -2,7 +2,7 @@
   "accountKey": {
     "title": "Account",
     "summary": "Export or import your account key and switch between accounts.",
-    "scopeNotice": "This covers only the account key that represents who you are. It does not include a full backup of your posts, settings, attachments, or private channel secrets — full device migration is planned separately.",
+    "scopeNotice": "This covers only the account key that represents who you are. It does not include posts, settings, attachments, or private-channel secrets. Use Device backup above for device migration.",
     "accountsTitle": "Accounts on this device",
     "unnamedAccount": "(unnamed)",
     "activeBadge": "Active",
@@ -36,6 +36,44 @@
       "pending": "Importing…",
       "success": "Account added. Switch to it to start using the imported account.",
       "switchNow": "Switch now"
+    }
+  },
+  "deviceBackup": {
+    "title": "Device backup",
+    "summary": "Save and restore the active account as one encrypted file.",
+    "oneFileNotice": "One backup file contains one active account. Create a separate file for each account. Unlike key-only export, this also includes local posts, drafts, attachments, preferences, and private-channel secrets.",
+    "secretNotice": "Anyone with this file and passphrase may impersonate you and read private data. Store both safely. Restoring does not delete copies on the old device or the P2P network.",
+    "passphrase": "Passphrase",
+    "passphraseHint": "At least {{min}} characters. A forgotten passphrase cannot be recovered.",
+    "confirmPassphrase": "Confirm passphrase",
+    "passphraseMismatch": "Passphrases do not match.",
+    "cancel": "Cancel",
+    "create": {
+      "title": "Create backup",
+      "description": "After you choose a destination, kukuri briefly stops the runtime and encrypts a consistent snapshot.",
+      "acknowledge": "I understand this contains sensitive data and cannot be restored without the passphrase",
+      "submit": "Choose destination and create",
+      "pending": "Creating…",
+      "success": "Backup created ({{size}})."
+    },
+    "restore": {
+      "title": "Restore from backup",
+      "description": "kukuri decrypts and validates the backup in staging, then switches accounts only after validation succeeds.",
+      "choose": "Choose backup file",
+      "preview": "Review contents",
+      "fingerprint": "Account public key",
+      "contents": "Backup contents: {{size}} / app version {{version}}",
+      "reconsent": "App terms, age attestation, Community Node policies, and adult-content display settings are not inherited and must be confirmed again.",
+      "applyPreferences": "Apply drafts, workspace, theme, and language preferences",
+      "replaceExisting": "I understand that the existing account with this public key will be replaced",
+      "submit": "Validate and restore",
+      "pending": "Restoring…"
+    },
+    "phase": {
+      "scanning": "Scanning data…",
+      "encrypting": "Encrypting…",
+      "decrypting": "Decrypting and validating…",
+      "installing": "Switching account…"
     }
   },
   "appearance": {

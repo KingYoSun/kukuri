@@ -1,6 +1,7 @@
 pub mod app_consent;
 pub mod background_notifications;
 pub mod community_node;
+pub mod device_backup;
 pub mod direct_messages;
 pub mod identity;
 pub mod live_game;

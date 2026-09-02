@@ -34,7 +34,7 @@ use crate::runtime::{
 };
 
 pub(crate) const ACCOUNTS_DIR_NAME: &str = "accounts";
-const ACCOUNTS_REGISTRY_FILE_NAME: &str = "accounts.json";
+pub(crate) const ACCOUNTS_REGISTRY_FILE_NAME: &str = "accounts.json";
 const ACCOUNTS_REGISTRY_VERSION: u32 = 1;
 const ACCOUNT_ID_HEX_CHARS: usize = 16;
 
@@ -320,6 +320,43 @@ pub fn set_active_account(app_data_dir: &Path, account_id: &str) -> Result<Accou
     registry.active_account_id = snapshot.id.clone();
     save_registry(app_data_dir, &registry)?;
     Ok(snapshot)
+}
+
+/// 検証とstagingを完了した復元先をregistryへ登録し、active accountにする。
+/// directoryとidentityの設置はbackup moduleが先に完了させる。
+pub(crate) fn register_restored_account(
+    app_data_dir: &Path,
+    pubkey: &str,
+    label: Option<String>,
+) -> Result<AccountRecord> {
+    let mut registry = load_registry(app_data_dir)?
+        .ok_or_else(|| anyhow!("accounts registry is not initialized"))?;
+    let id = account_id_for_pubkey(pubkey)?;
+    let now = now_millis();
+    let record = if let Some(existing) = registry
+        .accounts
+        .iter_mut()
+        .find(|record| record.pubkey == pubkey)
+    {
+        if let Some(label) = label.filter(|value| !value.trim().is_empty()) {
+            existing.label = Some(label);
+        }
+        existing.last_used_at = now;
+        existing.clone()
+    } else {
+        let record = AccountRecord {
+            id: id.clone(),
+            pubkey: pubkey.to_string(),
+            label: label.filter(|value| !value.trim().is_empty()),
+            created_at: now,
+            last_used_at: now,
+        };
+        registry.accounts.push(record.clone());
+        record
+    };
+    registry.active_account_id = id;
+    save_registry(app_data_dir, &registry)?;
+    Ok(record)
 }
 
 fn create_account_dir(db_path: &Path) -> Result<()> {

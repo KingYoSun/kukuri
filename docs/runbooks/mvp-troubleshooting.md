@@ -55,6 +55,15 @@ preview の primary UX は明示同意後のセッション確立・維持を自
 - 署名検証に失敗した更新はインストールしない。release asset の差し替えや誤った signing key を疑う。
 - 更新後にデータが消えたように見える場合は、別の Windows user profile、別の app data dir、または keyring fallback の使用有無を確認する。
 
+## Device Backup / Restore
+
+- `wrong passphrase or corrupted data` の場合は、入力したパスフレーズとファイルの転送完了を確認する。部分ファイルや改変されたファイルは復元しない。
+- `unsupported ... version` の場合は、そのバックアップを作成した kukuri と同じか新しい対応版で復元する。未知版を強制的に展開しない。
+- 同じ公開鍵のアカウントがある場合、置換確認なしでは復元しない。置換を選ぶ前に現在の状態も別ファイルへバックアップする。
+- 容量不足・復号失敗・DB検証失敗・切替失敗では、現在のアカウントを残してエラーを表示する。再起動時に中断 journal があれば自動ロールバックする。
+- 復元後に規約同意と年齢申告が再表示されるのは仕様である。Community Node の文書同意と認証、成人向け表示設定も端末側で再設定する。
+- 端末バックアップは旧端末、relay、接続相手、P2Pネットワーク上のコピー削除を行わない。
+
 ## Diagnostics
 
 - `Settings -> Release -> Copy Report` で GitHub issue に貼れる診断レポートを作る。

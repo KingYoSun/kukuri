@@ -2,7 +2,7 @@
   "accountKey": {
     "title": "账户",
     "summary": "导出或导入账户密钥,并在多个账户之间切换。",
-    "scopeNotice": "此处仅涉及代表你身份的账户密钥。不包含帖子数据、设置、附件、私密频道机密等完整备份(完整的设备迁移将作为单独功能提供)。",
+    "scopeNotice": "此处仅涉及代表你身份的账户密钥，不包含帖子、设置、附件或私密频道密钥。设备迁移请使用上方的设备备份。",
     "accountsTitle": "此设备上的账户",
     "unnamedAccount": "(未命名)",
     "activeBadge": "使用中",
@@ -36,6 +36,44 @@
       "pending": "导入中…",
       "success": "已添加账户。切换后即可使用导入的身份。",
       "switchNow": "立即切换"
+    }
+  },
+  "deviceBackup": {
+    "title": "设备备份",
+    "summary": "将当前使用的一个账户保存为一个加密文件，并可从中恢复。",
+    "oneFileNotice": "一个备份文件只包含当前使用的一个账户。多个账户请分别创建备份。与仅导出账户密钥不同，此备份还包含本地帖子、草稿、附件、偏好设置和私密频道密钥。",
+    "secretNotice": "获得此文件和密码短语的人可能冒充您并读取私密数据。请安全保存。恢复不会删除旧设备或 P2P 网络上的副本。",
+    "passphrase": "密码短语",
+    "passphraseHint": "至少 {{min}} 个字符。忘记后无法恢复。",
+    "confirmPassphrase": "确认密码短语",
+    "passphraseMismatch": "密码短语不一致。",
+    "cancel": "取消",
+    "create": {
+      "title": "创建备份",
+      "description": "选择保存位置后，kukuri 会短暂停止运行时并加密一致的快照。",
+      "acknowledge": "我了解备份包含敏感数据，且没有密码短语就无法恢复",
+      "submit": "选择位置并创建",
+      "pending": "正在创建…",
+      "success": "备份已创建（{{size}}）。"
+    },
+    "restore": {
+      "title": "从备份恢复",
+      "description": "kukuri 会先在暂存区解密并验证，仅在验证成功后切换账户。",
+      "choose": "选择备份文件",
+      "preview": "检查内容",
+      "fingerprint": "账户公钥",
+      "contents": "备份内容：{{size}} / 创建应用版本 {{version}}",
+      "reconsent": "应用条款、年龄声明、Community Node 政策及成人内容显示设置不会继承，恢复后需要重新确认。",
+      "applyPreferences": "应用草稿、工作区、主题和语言设置",
+      "replaceExisting": "我了解将用此备份替换具有相同公钥的现有账户",
+      "submit": "验证并恢复",
+      "pending": "正在恢复…"
+    },
+    "phase": {
+      "scanning": "正在检查数据…",
+      "encrypting": "正在加密…",
+      "decrypting": "正在解密并验证…",
+      "installing": "正在切换账户…"
     }
   },
   "appearance": {

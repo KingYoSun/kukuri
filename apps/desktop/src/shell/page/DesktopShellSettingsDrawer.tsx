@@ -4,6 +4,7 @@ import { AppearancePanel } from '@/components/settings/AppearancePanel';
 import { CommunityNodePanel } from '@/components/settings/CommunityNodePanel';
 import { ConnectivityPanel } from '@/components/settings/ConnectivityPanel';
 import { DeveloperPanel } from '@/components/settings/DeveloperPanel';
+import { DeviceBackupPanel } from '@/components/settings/DeviceBackupPanel';
 import { DiscoveryPanel } from '@/components/settings/DiscoveryPanel';
 import { ReleasePanel } from '@/components/settings/ReleasePanel';
 import { ReactionsPanel } from '@/components/settings/ReactionsPanel';
@@ -308,7 +309,12 @@ export function DesktopShellSettingsDrawer({
     },
     {
       ...settingsSectionCopy[9],
-      content: <AccountKeyPanel />,
+      content: (
+        <div className='space-y-5'>
+          <DeviceBackupPanel />
+          <AccountKeyPanel />
+        </div>
+      ),
     },
   ];
 

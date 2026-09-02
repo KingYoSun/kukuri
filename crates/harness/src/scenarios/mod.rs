@@ -4,6 +4,7 @@ mod community_node;
 mod community_node_index;
 mod community_node_trust_relation;
 mod desktop_smoke;
+mod device_backup;
 mod direct_message;
 mod dome_hosting;
 mod private_channel;
@@ -81,6 +82,9 @@ pub async fn run_scenario(
         }
         ScenarioKind::DomeHostingLifecycle => {
             dome_hosting::run_dome_hosting_lifecycle(root, scenario, artifacts_dir).await
+        }
+        ScenarioKind::DeviceBackupRestore => {
+            device_backup::run_device_backup_restore(root, scenario, artifacts_dir).await
         }
     }
 }

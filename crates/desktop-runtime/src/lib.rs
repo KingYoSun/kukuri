@@ -1,5 +1,6 @@
 mod accounts;
 mod attachments;
+mod backup;
 mod community_node;
 mod discovery;
 mod identity;
@@ -17,6 +18,14 @@ pub use accounts::{
     AccountKeyExport, AccountKeyImportPreview, AccountRecord, AccountsSnapshot, account_db_path,
     add_account_from_env, ensure_accounts_initialized_from_env, import_account_key_from_env,
     list_accounts, preview_account_key_import, set_active_account,
+};
+pub use backup::{
+    CreateDeviceBackupRequest, DeviceBackupCancellation, DeviceBackupPhase, DeviceBackupPreview,
+    DeviceBackupProgress, DeviceBackupRestoreResult, DeviceBackupSummary, InstalledDeviceRestore,
+    PreparedDeviceRestore, PreviewDeviceBackupRequest, RestoreDeviceBackupRequest,
+    commit_device_restore, create_device_backup, finalize_device_restore,
+    install_prepared_device_restore, prepare_device_restore, preview_device_backup,
+    recover_interrupted_restore, rollback_device_restore,
 };
 pub use community_node::{
     AcceptCommunityNodeConsentsRequest, CommunityNodeAdmissionRejection,

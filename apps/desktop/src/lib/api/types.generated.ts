@@ -681,3 +681,19 @@ export type AccountKeyExport = { export: string, public_key: string, };
 
 export type AccountKeyImportPreview = { version: number, kdf: string, public_key: string, already_registered: boolean, };
 
+export type CreateDeviceBackupRequest = { path: string, passphrase: string, frontend_state: { [key in string]: string }, };
+
+export type PreviewDeviceBackupRequest = { path: string, passphrase: string, };
+
+export type RestoreDeviceBackupRequest = { path: string, passphrase: string, replace_existing: boolean, apply_frontend_state: boolean, };
+
+export type DeviceBackupSummary = { path: string, public_key: string, bytes: number, };
+
+export type DeviceBackupPreview = { public_key: string, account_label?: string | null, created_at: number, app_version: string, content_bytes: number, existing_account_id?: string | null, included: Array<string>, requires_reconsent: Array<string>, };
+
+export type DeviceBackupRestoreResult = { account: AccountRecord, frontend_state: { [key in string]: string }, };
+
+export type DeviceBackupPhase = "scanning" | "encrypting" | "decrypting" | "installing";
+
+export type DeviceBackupProgress = { phase: DeviceBackupPhase, completed_bytes: number, total_bytes: number, };
+

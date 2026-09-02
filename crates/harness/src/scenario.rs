@@ -13,6 +13,7 @@ pub enum ScenarioKind {
     CommunityNodeReportRouting,
     CommunityNodeTrustRelationClient,
     DomeHostingLifecycle,
+    DeviceBackupRestore,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
