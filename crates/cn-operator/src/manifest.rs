@@ -246,6 +246,8 @@ pub struct CommunityNodeManifest {
     pub manifest_version: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub legal_documents: Vec<LegalDocumentManifestEntry>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy_snapshot_revision: Option<String>,
     pub capabilities: Capabilities,
     pub capability_scope: CapabilityScope,
     pub authority_scope: AuthorityScope,
@@ -262,6 +264,10 @@ pub struct LegalDocumentManifestEntry {
     pub language: String,
     pub required: bool,
     pub url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authoritative_language: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reference_translation_languages: Vec<String>,
 }
 
 fn capability_keys(caps: &[Capability]) -> Vec<String> {
@@ -380,10 +386,17 @@ pub fn build_manifest(config: &ResolvedConfig) -> CommunityNodeManifest {
                         language: document.language.clone(),
                         required: document.required,
                         url: config.policy_url(document.kind.public_path()),
+                        authoritative_language: Some(document.language.clone()),
+                        reference_translation_languages: document
+                            .translations
+                            .iter()
+                            .map(|translation| translation.language.clone())
+                            .collect(),
                     })
                     .collect()
             })
             .unwrap_or_default(),
+        policy_snapshot_revision: crate::policy_snapshot_revision(config),
         capabilities: Capabilities::from_config(config),
         capability_scope: CapabilityScope {
             available_enabled: capability_keys(&available_enabled),

@@ -87,7 +87,7 @@ impl DesktopRuntime {
             // #857: 認証(JWT 発行)前に、公開カタログの現行版への同意を確認する。
             // 版が上がっていたら再同意待ちとして停止し、認証を開始しない。
             let catalog = self
-                .request_community_node_policies(base_url.as_str())
+                .request_community_node_policies(base_url.as_str(), None)
                 .await?;
             if !community_node_local_consent_satisfies_policies(&local_consent, &catalog.policies) {
                 self.set_community_node_local_consent_update_pending(base_url.as_str(), true)
@@ -142,7 +142,12 @@ impl DesktopRuntime {
             )
             .await;
             let accepted = self
-                .accept_community_node_consents_with_retry(base_url.as_str(), &mut token, &[])
+                .accept_community_node_consents_with_retry(
+                    base_url.as_str(),
+                    &mut token,
+                    &[],
+                    consent_status.policy_snapshot_revision.as_deref(),
+                )
                 .await?;
             self.set_community_node_cached_consent(base_url.as_str(), Some(accepted))
                 .await;

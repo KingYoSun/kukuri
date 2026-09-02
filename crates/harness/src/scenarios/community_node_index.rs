@@ -226,8 +226,9 @@ pub(crate) async fn run_community_node_index_query_client(
         .await?;
     // #857: 同意成立(公開カタログ提示 → ローカル記録)後にのみ認証・接続が始まる。
     let catalog = runtime
-        .fetch_community_node_policies(CommunityNodeTargetRequest {
+        .fetch_community_node_policies(kukuri_desktop_runtime::FetchCommunityNodePoliciesRequest {
             base_url: base_url.clone(),
+            language: Some("ja".to_string()),
         })
         .await?;
     runtime
@@ -241,6 +242,7 @@ pub(crate) async fn run_community_node_index_query_client(
                         |policy| kukuri_desktop_runtime::CommunityNodeConsentDocumentRef {
                             policy_slug: policy.policy_slug.clone(),
                             policy_version: policy.policy_version,
+                            policy_snapshot_revision: policy.policy_snapshot_revision.clone(),
                         },
                     )
                     .collect(),

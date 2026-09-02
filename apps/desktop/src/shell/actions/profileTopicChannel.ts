@@ -701,7 +701,7 @@ export function createProfileTopicChannelActions({
   async function handleFetchCommunityNodeConsents(baseUrl: string) {
     setCommunityNodePolicies(setRecordEntry(baseUrl, { status: 'loading' as const }));
     try {
-      const catalog = await api.fetchCommunityNodePolicies(baseUrl);
+      const catalog = await api.fetchCommunityNodePolicies(baseUrl, i18n.resolvedLanguage);
       setCommunityNodePolicies(
         setRecordEntry(baseUrl, { status: 'ok' as const, policies: catalog.policies })
       );

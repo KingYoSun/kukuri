@@ -131,7 +131,7 @@ pub async fn seed_default_policies(pool: &PgPool) -> Result<()> {
         sqlx::query(
             "INSERT INTO cn_admin.policies (policy_slug, policy_version, title, body_markdown, required)
              VALUES ($1, 1, $2, $3, TRUE)
-             ON CONFLICT (policy_slug) DO NOTHING",
+             ON CONFLICT (policy_slug, policy_version) DO NOTHING",
         )
         .bind(slug)
         .bind(title)

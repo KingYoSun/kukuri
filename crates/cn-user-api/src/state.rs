@@ -15,8 +15,8 @@ use kukuri_cn_indexer::{
     ArcadeDbConfig, ArcadeDbProjection, ArcadeDbRelationGraph, FailClosedIndexQuery, IndexQuery,
 };
 use kukuri_cn_operator::{
-    CommunityNodeManifest, READINESS_CHECK_IDS, build_manifest, generate_all,
-    generate_legal_documents, load_and_validate,
+    CommunityNodeManifest, LegalDocumentKind, READINESS_CHECK_IDS, build_manifest, generate_all,
+    generate_legal_documents_from_files, load_and_validate,
 };
 use kukuri_cn_protocol::{
     CommunityNodeBootstrapNode, CommunityNodePolicyDocument, CommunityNodeResolvedUrls,
@@ -37,8 +37,6 @@ pub struct UserApiState {
     pub(crate) manifest: Option<Arc<CommunityNodeManifest>>,
     /// manifest が指す公開開示文書。operator config と同じ入力から決定論的に生成する。
     pub(crate) public_disclosures: Arc<BTreeMap<String, String>>,
-    /// operator config の required 文書だけから構築した認証前公開カタログ。
-    pub(crate) public_policies: Arc<Vec<CommunityNodePolicyDocument>>,
     /// private channel の indexing request で受け取る channel secret を at-rest 暗号化する cipher。
     /// 鍵 material(`COMMUNITY_NODE_CHANNEL_SECRET_KEY`)が未設定なら None で、private channel の
     /// indexing request は受け付けない(secret を平文保存しないため)。
@@ -145,7 +143,7 @@ pub(crate) struct ManifestState {
 struct LoadedManifest {
     manifest: Option<Arc<CommunityNodeManifest>>,
     public_disclosures: Arc<BTreeMap<String, String>>,
-    public_policies: Arc<Vec<CommunityNodePolicyDocument>>,
+    policies_to_sync: Vec<CommunityNodePolicyDocument>,
     operator_config_yaml: Vec<u8>,
     retention: RetentionPolicy,
 }
@@ -170,12 +168,12 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
     let LoadedManifest {
         manifest,
         public_disclosures,
-        public_policies,
+        policies_to_sync,
         operator_config_yaml,
         retention,
     } = load_manifest(config.operator_config_path.as_deref())?;
-    if !public_policies.is_empty() {
-        sync_policies(&pool, public_policies.as_ref())
+    if !policies_to_sync.is_empty() {
+        sync_policies(&pool, &policies_to_sync)
             .await
             .context("failed to synchronize operator legal policies")?;
     }
@@ -373,7 +371,6 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
         },
         manifest,
         public_disclosures,
-        public_policies,
         channel_secret_cipher,
         legal_data_cipher,
         retention,
@@ -435,7 +432,7 @@ fn load_manifest(path: Option<&std::path::Path>) -> Result<LoadedManifest> {
         return Ok(LoadedManifest {
             manifest: None,
             public_disclosures: Arc::new(BTreeMap::new()),
-            public_policies: Arc::new(Vec::new()),
+            policies_to_sync: Vec::new(),
             operator_config_yaml: Vec::new(),
             retention: RetentionPolicy::default(),
         });
@@ -445,25 +442,19 @@ fn load_manifest(path: Option<&std::path::Path>) -> Result<LoadedManifest> {
     let resolved = load_and_validate(&yaml)
         .with_context(|| format!("invalid operator config at {}", path.display()))?;
     let bytes = yaml.as_bytes().to_vec();
-    let public_disclosures = generate_all(&resolved)
-        .into_iter()
+    let generated_files = generate_all(&resolved);
+    let generated_policies = generate_legal_documents_from_files(&resolved, &generated_files);
+    let public_disclosures = generated_files
+        .iter()
         .filter(|file| {
-            matches!(
-                file.filename.as_str(),
-                "terms.md"
-                    | "privacy-policy.md"
-                    | "external-transmission-notice.md"
-                    | "moderation-policy.md"
-                    | "abuse-policy.md"
-                    | "data-retention-policy.md"
-                    | "rights-infringement-policy.md"
-            )
+            LegalDocumentKind::ALL
+                .iter()
+                .any(|kind| kind.filename() == file.filename)
         })
-        .map(|file| (file.filename, file.content))
+        .map(|file| (file.filename.clone(), file.content.clone()))
         .collect();
-    let public_policies = generate_legal_documents(&resolved)
+    let policies_to_sync = generated_policies
         .into_iter()
-        .filter(|document| document.required)
         .map(|document| CommunityNodePolicyDocument {
             policy_slug: document.slug,
             policy_version: document.version,
@@ -472,6 +463,15 @@ fn load_manifest(path: Option<&std::path::Path>) -> Result<LoadedManifest> {
             required: document.required,
             effective_date: Some(document.effective_date),
             language: Some(document.language),
+            policy_snapshot_revision: Some(document.policy_snapshot_revision),
+            authoritative_language: Some(document.authoritative_language),
+            reference_translation: document.reference_translation,
+            translation_revision: document.translation_revision,
+            translation_of_version: document.translation_of_version,
+            fallback: false,
+            requested_language: None,
+            material_change: false,
+            requires_reconsent: false,
         })
         .collect();
     let r = &resolved.raw.retention;
@@ -493,7 +493,7 @@ fn load_manifest(path: Option<&std::path::Path>) -> Result<LoadedManifest> {
     Ok(LoadedManifest {
         manifest: Some(Arc::new(build_manifest(&resolved))),
         public_disclosures: Arc::new(public_disclosures),
-        public_policies: Arc::new(public_policies),
+        policies_to_sync,
         operator_config_yaml: bytes,
         retention,
     })

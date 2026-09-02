@@ -158,6 +158,8 @@
       "updatedDetail": "Updated from v{{previous}} to v{{current}}.",
       "effectiveDate": "Effective {{date}}",
       "language": "Language {{language}}",
+      "referenceTranslation": "This is a reference translation. The authoritative text prevails.",
+      "authoritativeFallback": "No matching reference translation is available. Showing the authoritative text ({{language}}).",
       "acceptedAt": "Accepted at {{timestamp}}",
       "notAccepted": "Not accepted yet",
       "allAccepted": "All accepted",

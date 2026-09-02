@@ -3,8 +3,8 @@
 //! この内容は「個人・小規模運営を discourage する」ためのものではない。各 capability の性質を
 //! 理解し、限定された責任範囲で現実的に運用するための実践的なガイドとして提供する。
 //!
-//! `capability.rs` の `meta()`（display_name / handled_data / purpose / retention_impact）を
-//! 補完する形で、user expectation / authority scope / responsibility boundary / risks /
+//! `capability.rs` の表示用 note と型付き `policy_descriptor()` を補完する形で、
+//! user expectation / authority scope / responsibility boundary / risks /
 //! recommended practices / small-scale tips / how to reduce を定義する。
 
 use crate::capability::Capability;

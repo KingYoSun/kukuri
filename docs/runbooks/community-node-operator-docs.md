@@ -181,9 +181,9 @@ dist/operator-docs/
 
 ## 法務文書の版管理と公開
 
-Phase A の現行 KingYoSun Node は、`server.contact` と `legal` を明示する。`legal` を設定した場合、
-連絡先の推測や未設定値への fallback は許可せず、7文書すべての slug、正の整数 version、
-ISO 形式の施行日、言語 `ja`、required を検証する。利用規約とプライバシーポリシーだけを
+`legal` を設定した Node は、`server.contact`、15個の `retention.*_days`、7文書すべての
+slug、正の整数 version、ISO 形式の施行日、正文言語 `ja`、required を明示する。法務文書を
+コード上の保持期間既定値で公開することはできない。利用規約とプライバシーポリシーだけを
 required とし、残りは公開開示文書として扱う。
 
 ```yaml
@@ -201,27 +201,77 @@ legal:
     - { kind: abuse_policy, slug: abuse_policy, version: 1, effective_date: 2026-09-02, language: ja, required: false }
     - { kind: data_retention, slug: data_retention, version: 1, effective_date: 2026-09-02, language: ja, required: false }
     - { kind: rights_infringement, slug: rights_infringement_policy, version: 1, effective_date: 2026-09-02, language: ja, required: false }
+
+retention:
+  connection_logs_days: 30
+  moderation_logs_days: 180
+  report_days: 180
+  report_contact_days: 90
+  tester_feedback_days: 180
+  rights_request_active_days: 730
+  rights_request_resolved_days: 365
+  rights_request_rejected_days: 180
+  rights_request_contact_days: 180
+  rights_request_identity_days: 180
+  rights_request_evidence_days: 180
+  rights_request_history_days: 365
+  operator_audit_days: 365
+  moderation_event_days: 180
+  risk_signal_days: 180
 ```
 
-`cn-user-api` は同じ config から、認証不要の `GET /v1/policies` で required 文書の全文と
-metadata を配信し、public manifest の `legal_documents` で7文書の URL と metadata を配信する。
-起動時に required 文書を `cn_admin.policies` へ同期する。既存 version より小さい値への rollback、
-または version を増やさない本文・metadata 変更は起動失敗となるため、重要変更時は文書ごとに
-version を増やす。過去の固定英語 placeholder だけは一度置換し、その placeholder に対する同意を
-現行文書へ引き継がない。
+Node 固有の事実で型付き設定にない説明は `supplemental_markdown` に記載できる。これは生成された
+typed descriptor の事実を上書きせず、「運営者による補足」として正文末尾へ追加される。
+
+参考訳は正文の同じ項目へ追加し、正文 version と `translation_of_version` を一致させる。訳本文だけを
+直す場合は正文 version ではなく翻訳自身の `revision` を増やす。
+
+```yaml
+    - kind: terms
+      slug: terms_of_service
+      version: 2
+      effective_date: 2026-10-01
+      language: ja
+      required: true
+      supplemental_markdown: "問い合わせ受付時間は平日10:00-17:00です。"
+      translations:
+        - language: en
+          revision: 1
+          translation_of_version: 2
+          title: Terms of Service
+          body_markdown: |-
+            This is a reference translation of the Japanese authoritative text.
+```
+
+`cn-user-api` は同じ config から全7正文と参考訳を Postgres へ同期し、認証不要の
+`GET /v1/policies?language=en` で現行文書を配信する。要求した同一正文 version の参考訳が無ければ
+正文を返し、`fallback` / `requested_language` / `authoritative_language` で明示する。公開済み正文は
+`GET /v1/policies/{slug}/revisions` と `GET /v1/policies/{slug}/revisions/{version}?language=en`
+から無期限に取得できる。本文・正文 metadata の同一版差し替えと version rollback は起動失敗となる。
+過去の固定英語 placeholder だけは一度置換し、その同意を現行文書へ引き継がない。
+
+法務上意味のある config と typed descriptor から catalog 共通の `policy_snapshot_revision` が自動生成
+される。operator が「再同意が必要か」を選ぶ項目はない。snapshot が変わると、本文 version が同じ
+文書を含め全 required 文書について旧 snapshot の同意は満たさず、client は再提示する。accept 中に
+current snapshot が変わった場合は `409 POLICY_SNAPSHOT_CHANGED` となり、再取得後にだけ受諾できる。
 
 公開確認:
 
 ```bash
 curl https://api.kukuri.app/v1/policies
+curl 'https://api.kukuri.app/v1/policies?language=en'
+curl https://api.kukuri.app/v1/policies/terms_of_service/revisions
+curl 'https://api.kukuri.app/v1/policies/terms_of_service/revisions/2?language=en'
 curl https://api.kukuri.app/.well-known/kukuri/community-node.json
 curl https://api.kukuri.app/terms
 curl https://api.kukuri.app/privacy
 ```
 
-desktop client は接続前に `/v1/policies` を取得し、slug / version / 施行日 / 言語 / 本文を表示する。
-同意済み version より現行 version が大きい場合だけ再同意を要求する。取得失敗や metadata 不備は
-fail-closed とし、当該 Node への認証・登録を開始しない。
+desktop client は接続前に locale 付きで `/v1/policies` を取得し、slug / version / 施行日 / 言語 /
+本文と正文 fallback を表示する。ローカル記録の snapshot が current と完全一致する場合だけ認証・
+server 同意同期・session 継続を許可する。snapshot なしの旧記録、変更、取得失敗、metadata 不備は
+fail-closed とし、当該 Node への認証・登録を開始しない。snapshot 未対応の旧 Node だけは従来の
+slug/version 判定を維持する。
 
 ## server-manifest.json
 

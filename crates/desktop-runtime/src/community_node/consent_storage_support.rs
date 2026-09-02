@@ -8,9 +8,12 @@ use super::*;
 /// 表現する(過去の同意記録は履歴として保持する)。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CommunityNodeLocalConsentRecord {
     pub policy_slug: String,
     pub policy_version: i32,
+    #[serde(default)]
+    pub policy_snapshot_revision: Option<String>,
     pub accepted_at: i64,
     pub language: String,
     pub app_version: String,
@@ -78,6 +81,12 @@ pub(crate) fn community_node_local_consent_satisfies_policies(
                 state.records.iter().any(|record| {
                     record.policy_slug == policy.policy_slug
                         && record.policy_version >= policy.policy_version
+                        && policy
+                            .policy_snapshot_revision
+                            .as_ref()
+                            .is_none_or(|revision| {
+                                record.policy_snapshot_revision.as_ref() == Some(revision)
+                            })
                 })
             })
 }
@@ -98,12 +107,18 @@ pub(crate) fn community_node_local_consent_covers_status(
                 state.records.iter().any(|record| {
                     record.policy_slug == item.policy_slug
                         && record.policy_version >= item.policy_version
+                        && item
+                            .policy_snapshot_revision
+                            .as_ref()
+                            .is_none_or(|revision| {
+                                record.policy_snapshot_revision.as_ref() == Some(revision)
+                            })
                 })
             })
 }
 
-/// 同意記録を追記する。同一 slug + 版の既存記録は日時・言語・アプリ版を更新し、
-/// 別版の記録は履歴として残す。撤回状態は解除される。
+/// 同意記録を追記する。同一 slug + 版 + snapshot の既存記録だけを更新し、
+/// 別版または別 snapshot の記録は履歴として残す。撤回状態は解除される。
 pub(crate) fn record_community_node_local_consents(
     state: &mut CommunityNodeLocalConsentState,
     documents: &[CommunityNodeConsentDocumentRef],
@@ -116,14 +131,17 @@ pub(crate) fn record_community_node_local_consents(
         if let Some(existing) = state.records.iter_mut().find(|record| {
             record.policy_slug == document.policy_slug
                 && record.policy_version == document.policy_version
+                && record.policy_snapshot_revision == document.policy_snapshot_revision
         }) {
             existing.accepted_at = accepted_at;
+            existing.policy_snapshot_revision = document.policy_snapshot_revision.clone();
             existing.language = language.to_string();
             existing.app_version = app_version.to_string();
         } else {
             state.records.push(CommunityNodeLocalConsentRecord {
                 policy_slug: document.policy_slug.clone(),
                 policy_version: document.policy_version,
+                policy_snapshot_revision: document.policy_snapshot_revision.clone(),
                 accepted_at,
                 language: language.to_string(),
                 app_version: app_version.to_string(),
@@ -140,6 +158,7 @@ mod tests {
         CommunityNodeLocalConsentRecord {
             policy_slug: slug.to_string(),
             policy_version: version,
+            policy_snapshot_revision: None,
             accepted_at: 1_700_000_000,
             language: "ja".to_string(),
             app_version: "0.1.8".to_string(),
@@ -155,6 +174,15 @@ mod tests {
             required,
             effective_date: Some("2026-09-02".to_string()),
             language: Some("ja".to_string()),
+            policy_snapshot_revision: None,
+            authoritative_language: Some("ja".to_string()),
+            reference_translation: false,
+            translation_revision: None,
+            translation_of_version: None,
+            fallback: false,
+            requested_language: None,
+            material_change: false,
+            requires_reconsent: false,
         }
     }
 
@@ -220,6 +248,7 @@ mod tests {
             &[CommunityNodeConsentDocumentRef {
                 policy_slug: "terms".to_string(),
                 policy_version: 2,
+                policy_snapshot_revision: Some("snapshot-2".to_string()),
             }],
             "en",
             "0.2.0",
@@ -236,5 +265,51 @@ mod tests {
         assert_eq!(latest.language, "en");
         assert_eq!(latest.app_version, "0.2.0");
         assert_eq!(latest.accepted_at, 1_700_000_100);
+        assert_eq!(
+            latest.policy_snapshot_revision.as_deref(),
+            Some("snapshot-2")
+        );
+
+        record_community_node_local_consents(
+            &mut state,
+            &[CommunityNodeConsentDocumentRef {
+                policy_slug: "terms".to_string(),
+                policy_version: 2,
+                policy_snapshot_revision: Some("snapshot-3".to_string()),
+            }],
+            "ja",
+            "0.2.1",
+            1_700_000_200,
+        );
+        // 同じ文書版でも生成根拠が変わった同意は、上書きせず履歴として残る。
+        assert_eq!(state.records.len(), 3);
+        let latest_snapshot = state
+            .records
+            .iter()
+            .find(|record| {
+                record.policy_version == 2
+                    && record.policy_snapshot_revision.as_deref() == Some("snapshot-3")
+            })
+            .expect("new snapshot record");
+        assert_eq!(latest_snapshot.language, "ja");
+        assert_eq!(latest_snapshot.app_version, "0.2.1");
+        assert_eq!(latest_snapshot.accepted_at, 1_700_000_200);
+    }
+
+    #[test]
+    fn snapshot_change_requires_reconsent_even_when_document_version_is_unchanged() {
+        let mut consent = record("terms", 2);
+        consent.policy_snapshot_revision = Some("snapshot-1".to_string());
+        let state = CommunityNodeLocalConsentState {
+            records: vec![consent],
+            withdrawn_at: None,
+        };
+        let mut current = policy("terms", 2, true);
+        current.policy_snapshot_revision = Some("snapshot-2".to_string());
+
+        assert!(!community_node_local_consent_satisfies_policies(
+            &state,
+            &[current]
+        ));
     }
 }

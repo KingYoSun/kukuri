@@ -151,6 +151,15 @@ pub struct CommunityNodeTargetRequest {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
+pub struct FetchCommunityNodePoliciesRequest {
+    pub base_url: String,
+    #[serde(default)]
+    pub language: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct SetCommunityNodeInviteCodeRequest {
     pub base_url: String,
     pub invite_code: Option<String>,
@@ -202,9 +211,12 @@ impl std::error::Error for CommunityNodeAdmissionRejection {}
 /// 同意モーダルで提示された文書 1 件への参照(#857)。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CommunityNodeConsentDocumentRef {
     pub policy_slug: String,
     pub policy_version: i32,
+    #[serde(default)]
+    pub policy_snapshot_revision: Option<String>,
 }
 
 /// Node 同意の成立リクエスト(#857)。提示された文書と版をそのまま返してもらい、

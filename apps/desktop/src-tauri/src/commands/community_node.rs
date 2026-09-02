@@ -5,7 +5,8 @@ use kukuri_desktop_runtime::{
     CommunityNodeTesterFeedbackResponse, CommunityNodeTesterFeedbackSubmission,
     CommunityNodeUserAdvisoryRequest, CreatePrivateChannelRequest, DiscoveryConfig,
     ExportChannelAccessTokenRequest, ExportFriendOnlyGrantRequest, ExportFriendPlusShareRequest,
-    ExportPrivateChannelInviteRequest, FreezePrivateChannelRequest,
+    ExportPrivateChannelInviteRequest, FetchCommunityNodePoliciesRequest,
+    FreezePrivateChannelRequest,
     ImportChannelAccessTokenRequest, ImportFriendOnlyGrantRequest, ImportFriendPlusShareRequest,
     ImportPeerTicketRequest, ImportPrivateChannelInviteRequest, IndexQueryResponse,
     LeavePrivateChannelRequest, ListJoinedPrivateChannelsRequest, PreviewChannelAccessTokenRequest,
@@ -383,7 +384,7 @@ pub async fn get_community_node_consent_status(
 #[tauri::command]
 pub async fn fetch_community_node_policies(
     state: tauri::State<'_, DesktopState>,
-    request: CommunityNodeTargetRequest,
+    request: FetchCommunityNodePoliciesRequest,
 ) -> Result<CommunityNodePoliciesResponse, CommandError> {
     state
         .runtime()

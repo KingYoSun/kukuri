@@ -739,6 +739,10 @@ describe('communityNodeConsentView', () => {
             required: true,
             effective_date: '2026-09-02',
             language: 'ja',
+            reference_translation: false,
+            fallback: false,
+            material_change: false,
+            requires_reconsent: false,
           },
         ],
       })
@@ -789,6 +793,10 @@ describe('communityNodeConsentView', () => {
             title: 'Privacy',
             body_markdown: 'Privacy body',
             required: true,
+            reference_translation: false,
+            fallback: false,
+            material_change: false,
+            requires_reconsent: false,
           },
           {
             policy_slug: 'optional',
@@ -796,6 +804,10 @@ describe('communityNodeConsentView', () => {
             title: 'Optional',
             body_markdown: '',
             required: false,
+            reference_translation: false,
+            fallback: false,
+            material_change: false,
+            requires_reconsent: false,
           },
         ],
       })
@@ -808,6 +820,48 @@ describe('communityNodeConsentView', () => {
     expect(view.policies[0].previouslyAcceptedVersion).toBe(1);
     expect(view.policies[0].acceptedAtLabel).toBeNull();
     expect(view.policies[1].updated).toBe(false);
+  });
+
+  it('requires re-acceptance when the catalog snapshot changes without a version bump', () => {
+    const status = baseStatus({
+      local_consent: {
+        records: [
+          {
+            policy_slug: 'terms',
+            policy_version: 1,
+            policy_snapshot_revision: 'snapshot-1',
+            accepted_at: 1750000000,
+            language: 'ja',
+            app_version: '0.1.8',
+          },
+        ],
+        withdrawn_at: null,
+      },
+    });
+    const view = communityNodeConsentView(
+      status,
+      catalogEntry({
+        status: 'ok',
+        policies: [
+          {
+            policy_slug: 'terms',
+            policy_version: 1,
+            policy_snapshot_revision: 'snapshot-2',
+            title: 'Terms',
+            body_markdown: 'Updated catalog facts',
+            required: true,
+            reference_translation: false,
+            fallback: false,
+            material_change: true,
+            requires_reconsent: true,
+          },
+        ],
+      })
+    );
+
+    expect(view.allRequiredAccepted).toBe(false);
+    expect(view.hasPendingUpdate).toBe(true);
+    expect(view.policies[0].previouslyAcceptedVersion).toBe(1);
   });
 
   it('treats withdrawn consent as not accepted while keeping history visible', () => {
@@ -836,6 +890,10 @@ describe('communityNodeConsentView', () => {
             title: 'Terms',
             body_markdown: 'Body',
             required: true,
+            reference_translation: false,
+            fallback: false,
+            material_change: false,
+            requires_reconsent: false,
           },
         ],
       })

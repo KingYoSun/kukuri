@@ -96,11 +96,15 @@ impl DesktopRuntime {
     pub(crate) async fn request_community_node_policies(
         &self,
         base_url: &str,
+        language: Option<&str>,
     ) -> Result<CommunityNodePoliciesResponse> {
         let base_url = normalize_http_url(base_url)?;
         let client = community_node_http_client()?;
-        client
-            .get(format!("{base_url}{POLICIES_PATH}"))
+        let mut request = client.get(format!("{base_url}{POLICIES_PATH}"));
+        if let Some(language) = language.filter(|value| !value.trim().is_empty()) {
+            request = request.query(&[("language", language)]);
+        }
+        request
             .send()
             .await
             .context("failed to fetch community node policies")?
@@ -150,6 +154,7 @@ impl DesktopRuntime {
         base_url: &str,
         access_token: &str,
         policy_slugs: &[String],
+        policy_snapshot_revision: Option<&str>,
     ) -> std::result::Result<CommunityNodeConsentStatus, CommunityNodeRequestError> {
         let client = community_node_http_client().map_err(CommunityNodeRequestError::Other)?;
         let response = client
@@ -157,6 +162,7 @@ impl DesktopRuntime {
             .bearer_auth(access_token)
             .json(&AcceptConsentsRequest {
                 policy_slugs: policy_slugs.to_vec(),
+                policy_snapshot_revision: policy_snapshot_revision.map(str::to_owned),
             })
             .send()
             .await
@@ -530,12 +536,14 @@ impl DesktopRuntime {
         base_url: &str,
         token: &mut StoredCommunityNodeToken,
         policy_slugs: &[String],
+        policy_snapshot_revision: Option<&str>,
     ) -> Result<CommunityNodeConsentStatus> {
         match self
             .request_accept_community_node_consents(
                 base_url,
                 token.access_token.as_str(),
                 policy_slugs,
+                policy_snapshot_revision,
             )
             .await
         {
@@ -553,6 +561,7 @@ impl DesktopRuntime {
                     base_url,
                     token.access_token.as_str(),
                     policy_slugs,
+                    policy_snapshot_revision,
                 )
                 .await
                 .map_err(CommunityNodeRequestError::into_anyhow)
@@ -763,7 +772,12 @@ impl DesktopRuntime {
         self.set_community_node_session_phase(base_url, CommunityNodeSessionPhase::Accepting)
             .await;
         let accepted = self
-            .accept_community_node_consents_with_retry(base_url, token, &[])
+            .accept_community_node_consents_with_retry(
+                base_url,
+                token,
+                &[],
+                consent_status.policy_snapshot_revision.as_deref(),
+            )
             .await?;
         self.set_community_node_cached_consent(base_url, Some(accepted))
             .await;

@@ -214,6 +214,8 @@ test('community node consent dialog shows policy body, version, and update notic
                   title: 'Terms of Service',
                   body: 'You must follow the community node terms of service.',
                   policyVersion: 2,
+                  referenceTranslation: false,
+                  fallback: false,
                   required: true,
                   acceptedAtLabel: null,
                   updated: true,
@@ -262,7 +264,11 @@ test('community node consent dialog shows policy body, version, and update notic
 
   await user.click(within(consentDialog).getByRole('button', { name: 'Accept' }));
   expect(onAcceptConsents).toHaveBeenCalledWith('https://api.kukuri.app', [
-    { policy_slug: 'terms_of_service', policy_version: 2 },
+    {
+      policy_slug: 'terms_of_service',
+      policy_version: 2,
+      policy_snapshot_revision: null,
+    },
   ]);
 });
 

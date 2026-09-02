@@ -33,3 +33,13 @@
 - `cargo xtask ipc-types`
 
 DB を使う `policy_sync` 契約は `KUKURI_CN_RUN_INTEGRATION_TESTS=1` の `cn-test` で実行し、旧 placeholder 同意の破棄、同一版変更拒否、version rollback 拒否を検証する。
+
+## Phase B
+
+- capability のデータ分類、処理、利用条件、保持参照、外部送信、請求経路、safety action、効果範囲を型付き descriptor に集約し、生成文書と法務 snapshot が同じ事実を参照するようにした。
+- `legal` を公開する構成では全保持期間の明示を必須にし、operator 固有補足と正文 version に固定された revision 付き参考訳を追加した。
+- 構造化入力由来の `policy_snapshot_revision` を導入し、operator の選択なしで snapshot 変更時の厳密な再同意と accept 競合拒否を行う。
+- `cn_admin.policies` を append-only 正文履歴へ発展させ、参考訳履歴を正文複合 key へ従属させた。現行 catalog のインメモリ複製は廃止し、current・history・consent が同じ DB catalog を参照する。
+- desktop の既存暗号化 per-node 同意履歴へ snapshot を後方互換に追加し、参考訳・正文 fallback metadata を同意画面へ渡した。
+
+Phase B でも生成物は法的助言・完全性保証ではない。法的評価や第三者確認を開発 Issue の完了条件にはしない。

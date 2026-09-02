@@ -26,20 +26,6 @@ pub struct GeneratedFile {
     pub content: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GeneratedLegalDocument {
-    pub kind: LegalDocumentKind,
-    pub slug: String,
-    pub version: i32,
-    pub effective_date: String,
-    pub language: String,
-    pub required: bool,
-    pub title: String,
-    pub filename: String,
-    pub public_path: String,
-    pub content: String,
-}
-
 /// 有効かつ Available な capability。
 fn available_enabled(config: &ResolvedConfig) -> Vec<Capability> {
     config
@@ -58,10 +44,10 @@ fn planned_enabled(config: &ResolvedConfig) -> Vec<Capability> {
 fn external_destinations(config: &ResolvedConfig) -> Vec<ExternalDestination> {
     let mut dests = vec![ExternalDestination::CommunityServer];
     for cap in available_enabled(config) {
-        if let Some(dest) = cap.meta().external_transmission
-            && !dests.contains(&dest)
-        {
-            dests.push(dest);
+        for destination in cap.policy_descriptor().external_destinations {
+            if !dests.contains(destination) {
+                dests.push(*destination);
+            }
         }
     }
     dests
@@ -433,10 +419,11 @@ fn gen_service_description(config: &ResolvedConfig) -> String {
     let _ = writeln!(s, "\n## 提供する補助機能（運用中）\n");
     for cap in available_enabled(config) {
         let m = cap.meta();
+        let descriptor = m.policy_descriptor();
         let _ = writeln!(s, "### {}\n", m.display_name);
         let _ = writeln!(s, "- 目的: {}", m.purpose);
-        let _ = writeln!(s, "- 取扱いデータ: {}", m.handled_data);
-        let _ = writeln!(s, "- 保持への影響: {}\n", m.retention_impact);
+        let _ = writeln!(s, "- 取扱いデータ: {}", descriptor.data_classes_text());
+        let _ = writeln!(s, "- 保持への影響: {}\n", descriptor.retention_text());
     }
     s.push_str(&planned_section(config));
     s
@@ -587,7 +574,11 @@ fn gen_privacy(config: &ResolvedConfig) -> String {
     for cap in available_enabled(config) {
         let m = cap.meta();
         let _ = writeln!(s, "### {}\n", m.display_name);
-        let _ = writeln!(s, "- 取扱いデータ: {}", m.handled_data);
+        let _ = writeln!(
+            s,
+            "- 取扱いデータ: {}",
+            m.policy_descriptor().data_classes_text()
+        );
         let _ = writeln!(s, "- 取扱いの説明: {}\n", m.privacy_note);
     }
     let _ = writeln!(s, "## 接続ログ・保持期間\n");
@@ -939,7 +930,12 @@ fn gen_data_retention(config: &ResolvedConfig) -> String {
     let _ = writeln!(s, "## capability 別の保持への影響（運用中）\n");
     for cap in available_enabled(config) {
         let m = cap.meta();
-        let _ = writeln!(s, "- {}: {}", m.display_name, m.retention_impact);
+        let _ = writeln!(
+            s,
+            "- {}: {}",
+            m.display_name,
+            m.policy_descriptor().retention_text()
+        );
     }
     s.push_str(&planned_section(config));
     s
@@ -1077,6 +1073,7 @@ fn gen_capability_risk_and_practices(config: &ResolvedConfig) -> String {
 /// 1 capability 分のリスク・推奨対応セクションを書き出す。
 fn write_capability_risk_section(s: &mut String, cap: Capability) {
     let m = cap.meta();
+    let descriptor = m.policy_descriptor();
     let rp = cap.risk_practices();
     let availability = match cap.availability() {
         Availability::Available => "提供中（Phase A）",
@@ -1085,11 +1082,11 @@ fn write_capability_risk_section(s: &mut String, cap: Capability) {
 
     let _ = writeln!(s, "### {}（{}）\n", m.display_name, availability);
     let _ = writeln!(s, "- 機能: {}", m.purpose);
-    let _ = writeln!(s, "- 取り扱うデータ: {}", m.handled_data);
+    let _ = writeln!(s, "- 取り扱うデータ: {}", descriptor.data_classes_text());
     let _ = writeln!(s, "- user の期待: {}", rp.user_expectation);
     let _ = writeln!(s, "- authority scope: {}", rp.authority_scope);
     let _ = writeln!(s, "- 引き受けない範囲: {}", rp.responsibility_boundary);
-    let _ = writeln!(s, "- 保持への影響: {}", m.retention_impact);
+    let _ = writeln!(s, "- 保持への影響: {}", descriptor.retention_text());
 
     let _ = writeln!(s, "- 想定リスク:");
     for risk in rp.risks {
@@ -1166,33 +1163,4 @@ pub fn generate_all(config: &ResolvedConfig) -> Vec<GeneratedFile> {
     ];
     files.sort_by(|a, b| a.filename.cmp(&b.filename));
     files
-}
-
-/// 公開法務文書を config の版情報と生成本文を結合して返す。
-pub fn generate_legal_documents(config: &ResolvedConfig) -> Vec<GeneratedLegalDocument> {
-    let Some(legal) = config.raw.legal.as_ref() else {
-        return Vec::new();
-    };
-    let files = generate_all(config);
-    legal
-        .documents
-        .iter()
-        .filter_map(|document| {
-            let file = files
-                .iter()
-                .find(|file| file.filename == document.kind.filename())?;
-            Some(GeneratedLegalDocument {
-                kind: document.kind,
-                slug: document.slug.clone(),
-                version: document.version,
-                effective_date: document.effective_date.clone(),
-                language: document.language.clone(),
-                required: document.required,
-                title: document.kind.title_ja().to_string(),
-                filename: file.filename.clone(),
-                public_path: document.kind.public_path().to_string(),
-                content: file.content.clone(),
-            })
-        })
-        .collect()
 }

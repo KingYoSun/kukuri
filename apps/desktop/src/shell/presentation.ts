@@ -464,17 +464,24 @@ export function communityNodeConsentView(
   const withdrawn = localConsent.withdrawn_at != null;
   const catalog = policiesEntry?.status === 'ok' ? policiesEntry.policies : [];
   const policies: CommunityNodeConsentPolicyView[] = catalog.map((policy) => {
-    const recordVersions = localConsent.records
-      .filter((record) => record.policy_slug === policy.policy_slug)
-      .map((record) => record.policy_version);
+    const slugRecords = localConsent.records.filter(
+      (record) => record.policy_slug === policy.policy_slug
+    );
+    const matchingRecords = slugRecords.filter(
+      (record) =>
+        policy.policy_snapshot_revision == null ||
+        record.policy_snapshot_revision === policy.policy_snapshot_revision
+    );
+    const recordVersions = matchingRecords.map((record) => record.policy_version);
     const highestAccepted = recordVersions.length ? Math.max(...recordVersions) : null;
     const accepted = !withdrawn && highestAccepted != null && highestAccepted >= policy.policy_version;
-    const acceptedRecord = localConsent.records.find(
+    const acceptedRecord = matchingRecords.find(
       (record) =>
         record.policy_slug === policy.policy_slug && record.policy_version === highestAccepted
     );
-    const previouslyAcceptedVersion =
-      highestAccepted != null && highestAccepted < policy.policy_version ? highestAccepted : null;
+    const previousVersions = slugRecords.map((record) => record.policy_version);
+    const previousVersion = previousVersions.length ? Math.max(...previousVersions) : null;
+    const previouslyAcceptedVersion = !accepted ? previousVersion : null;
     return {
       policySlug: policy.policy_slug,
       title: policy.title,
@@ -482,9 +489,13 @@ export function communityNodeConsentView(
       policyVersion: policy.policy_version,
       effectiveDate: policy.effective_date ?? null,
       language: policy.language ?? null,
+      policySnapshotRevision: policy.policy_snapshot_revision ?? null,
+      authoritativeLanguage: policy.authoritative_language ?? null,
+      referenceTranslation: policy.reference_translation ?? false,
+      fallback: policy.fallback ?? false,
       required: policy.required,
       acceptedAtLabel: accepted ? formatConsentAcceptedAt(acceptedRecord?.accepted_at) : null,
-      // 旧版だけ同意済み = 版が上がって再同意が必要な「更新」。
+      // 旧版または旧 snapshot だけ同意済み = 再同意が必要な「更新」。
       updated: !accepted && previouslyAcceptedVersion != null,
       previouslyAcceptedVersion,
     };

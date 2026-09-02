@@ -123,6 +123,22 @@ pub struct LegalDocumentConfig {
     pub language: String,
     #[serde(default)]
     pub required: bool,
+    /// 型付き事実を上書きしない、operator 固有の補足。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supplemental_markdown: Option<String>,
+    /// この正文 version に厳密に結び付く参考訳。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub translations: Vec<ReferenceTranslationConfig>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReferenceTranslationConfig {
+    pub language: String,
+    pub revision: i32,
+    pub translation_of_version: i32,
+    pub title: String,
+    pub body_markdown: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -679,6 +695,37 @@ fn validate_legal_config(config: &OperatorConfig) -> Result<()> {
         if document.language.trim() != "ja" {
             bail!("Phase A の legal document `{slug}` は language: ja が必須です");
         }
+        if document
+            .supplemental_markdown
+            .as_deref()
+            .is_some_and(|value| value.trim().is_empty())
+        {
+            bail!("legal document `{slug}` の supplemental_markdown は空にできません");
+        }
+        let mut translation_languages = std::collections::BTreeSet::new();
+        for translation in &document.translations {
+            let language = translation.language.trim();
+            if language.is_empty() || language == document.language.trim() {
+                bail!(
+                    "legal document `{slug}` の参考訳 language は正文と異なる非空値にしてください"
+                );
+            }
+            if !translation_languages.insert(language.to_string()) {
+                bail!("legal document `{slug}` の参考訳 language `{language}` が重複しています");
+            }
+            if translation.revision <= 0 {
+                bail!("legal document `{slug}` の参考訳 revision は正の整数で指定してください");
+            }
+            if translation.translation_of_version != document.version {
+                bail!(
+                    "legal document `{slug}` の参考訳は正文 version {} を参照してください",
+                    document.version
+                );
+            }
+            if translation.title.trim().is_empty() || translation.body_markdown.trim().is_empty() {
+                bail!("legal document `{slug}` の参考訳 title/body_markdown は必須です");
+            }
+        }
     }
     for kind in LegalDocumentKind::ALL {
         if !kinds.contains(&kind) {
@@ -1170,5 +1217,49 @@ fn validate_gcp_name(field: &str, value: &str) -> Result<()> {
 
 /// パースと解決・検証をまとめて行う。
 pub fn load_and_validate(yaml: &str) -> Result<ResolvedConfig> {
+    validate_explicit_legal_retention(yaml)?;
     resolve_and_validate(parse_config(yaml)?)
+}
+
+/// 法務カタログを公開する構成では、文書に表示される保持期間をコード既定値へ
+/// 暗黙にフォールバックさせない。legacy（`legal` なし）の config だけは従来の
+/// default を維持する。
+fn validate_explicit_legal_retention(yaml: &str) -> Result<()> {
+    let root: serde_yaml::Value = serde_yaml::from_str(yaml)
+        .map_err(|e| anyhow!("operator-config.yaml のパースに失敗しました: {e}"))?;
+    let Some(root) = root.as_mapping() else {
+        bail!("operator-config.yaml の root は mapping で指定してください");
+    };
+    let key = |value: &str| serde_yaml::Value::String(value.to_string());
+    if !root.contains_key(key("legal")) {
+        return Ok(());
+    }
+    let retention = root
+        .get(key("retention"))
+        .and_then(serde_yaml::Value::as_mapping)
+        .ok_or_else(|| {
+            anyhow!("legal を設定する場合は retention の全保持期間を明示してください")
+        })?;
+    for field in [
+        "connection_logs_days",
+        "moderation_logs_days",
+        "report_days",
+        "report_contact_days",
+        "tester_feedback_days",
+        "rights_request_active_days",
+        "rights_request_resolved_days",
+        "rights_request_rejected_days",
+        "rights_request_contact_days",
+        "rights_request_identity_days",
+        "rights_request_evidence_days",
+        "rights_request_history_days",
+        "operator_audit_days",
+        "moderation_event_days",
+        "risk_signal_days",
+    ] {
+        if !retention.contains_key(key(field)) {
+            bail!("legal を設定する場合は retention.{field} を明示してください");
+        }
+    }
+    Ok(())
 }

@@ -158,6 +158,8 @@
       "updatedDetail": "v{{previous}} から v{{current}} に更新されました。",
       "effectiveDate": "施行日 {{date}}",
       "language": "言語 {{language}}",
+      "referenceTranslation": "参考訳です。正文の内容が優先されます。",
+      "authoritativeFallback": "対応する参考訳がないため、正文（{{language}}）を表示しています。",
       "acceptedAt": "{{timestamp}} に同意済み",
       "notAccepted": "未同意",
       "allAccepted": "すべて同意済み",

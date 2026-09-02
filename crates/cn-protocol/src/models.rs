@@ -122,6 +122,24 @@ pub struct CommunityNodePolicyDocument {
     pub effective_date: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy_snapshot_revision: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authoritative_language: Option<String>,
+    #[serde(default)]
+    pub reference_translation: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub translation_revision: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub translation_of_version: Option<i32>,
+    #[serde(default)]
+    pub fallback: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_language: Option<String>,
+    #[serde(default)]
+    pub material_change: bool,
+    #[serde(default)]
+    pub requires_reconsent: bool,
 }
 
 /// `GET /v1/policies` の response(#857)。
@@ -129,6 +147,8 @@ pub struct CommunityNodePolicyDocument {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct CommunityNodePoliciesResponse {
     pub policies: Vec<CommunityNodePolicyDocument>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy_snapshot_revision: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -151,6 +171,8 @@ pub struct CommunityNodeConsentItem {
     pub effective_date: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy_snapshot_revision: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -159,6 +181,8 @@ pub struct CommunityNodeConsentItem {
 pub struct CommunityNodeConsentStatus {
     pub all_required_accepted: bool,
     pub items: Vec<CommunityNodeConsentItem>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy_snapshot_revision: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

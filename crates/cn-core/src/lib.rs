@@ -77,7 +77,8 @@ pub use config::{
     USER_API_BEARER_CHALLENGE,
 };
 pub use consents::{
-    accept_consents, get_consent_status, list_policies, require_consents, sync_policies,
+    accept_consents, get_consent_status, get_policy_revision, list_policies,
+    list_policies_for_language, list_policy_revisions, require_consents, sync_policies,
 };
 pub use database::{
     TestDatabase, connect_postgres, ensure_database_ready, initialize_database,

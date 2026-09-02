@@ -31,7 +31,10 @@ use kukuri_core::{KukuriKeys, generate_keys};
 use reqwest::{Client, StatusCode};
 
 mod support;
-use support::{integration_test_admin_database_url, integration_test_rendezvous_redis_url};
+use support::{
+    accept_required_consents, integration_test_admin_database_url,
+    integration_test_rendezvous_redis_url,
+};
 
 struct TestServer {
     task: tokio::task::JoinHandle<()>,
@@ -130,13 +133,7 @@ async fn authenticate_and_consent(
         .error_for_status()?
         .json::<kukuri_cn_protocol::AuthVerifyResponse>()
         .await?;
-    client
-        .post(format!("{base_url}/v1/consents"))
-        .bearer_auth(verify.access_token.as_str())
-        .json(&serde_json::json!({ "policy_slugs": [] }))
-        .send()
-        .await?
-        .error_for_status()?;
+    accept_required_consents(client, base_url, verify.access_token.as_str()).await?;
     Ok(verify.access_token)
 }
 

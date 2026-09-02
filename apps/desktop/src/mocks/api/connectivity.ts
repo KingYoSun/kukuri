@@ -178,6 +178,10 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
           title: item.title,
           body_markdown: item.body ?? '',
           required: item.required,
+          reference_translation: false,
+          fallback: false,
+          material_change: false,
+          requires_reconsent: false,
         })),
       };
     },

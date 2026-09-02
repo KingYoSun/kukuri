@@ -1,6 +1,7 @@
 use kukuri_cn_operator::{
     Capability, NodeRole, SAMPLE_CONFIG, build_manifest, check_drift, generate_all,
-    load_and_validate, manifest_value, parse_config, resolve_and_validate,
+    generate_legal_documents, load_and_validate, manifest_value, parse_config,
+    policy_snapshot_revision, resolve_and_validate,
 };
 
 fn base_config(extra_features: &str, ack: bool) -> String {
@@ -26,6 +27,52 @@ fn sample_config_is_valid() {
     assert!(
         resolved.enabled(Capability::AuthConsent),
         "auth_consent is baseline"
+    );
+}
+
+#[test]
+fn legal_catalog_requires_every_retention_value_to_be_explicit() {
+    let yaml = SAMPLE_CONFIG.replace("  tester_feedback_days: 180\n", "");
+    let error = load_and_validate(&yaml).expect_err("implicit legal retention must fail");
+    assert!(
+        error.to_string().contains("retention.tester_feedback_days"),
+        "got: {error}"
+    );
+}
+
+#[test]
+fn policy_snapshot_is_deterministic_and_ignores_reference_translation_edits() {
+    let baseline = load_and_validate(SAMPLE_CONFIG).unwrap();
+    let baseline_revision = policy_snapshot_revision(&baseline).unwrap();
+    assert_eq!(
+        policy_snapshot_revision(&baseline).as_deref(),
+        Some(baseline_revision.as_str())
+    );
+
+    let with_translation = SAMPLE_CONFIG.replace(
+        "      required: true\n    - kind: privacy",
+        "      required: true\n      translations:\n        - language: en\n          revision: 1\n          translation_of_version: 1\n          title: Terms\n          body_markdown: English reference text.\n    - kind: privacy",
+    );
+    let translated = load_and_validate(&with_translation).unwrap();
+    assert_eq!(
+        policy_snapshot_revision(&translated).as_deref(),
+        Some(baseline_revision.as_str()),
+        "参考訳は正文 snapshot を変更しない"
+    );
+    let documents = generate_legal_documents(&translated);
+    let translation = documents
+        .iter()
+        .find(|document| document.reference_translation)
+        .expect("reference translation");
+    assert_eq!(translation.translation_revision, Some(1));
+    assert_eq!(translation.translation_of_version, Some(1));
+
+    let changed_retention =
+        SAMPLE_CONFIG.replace("  connection_logs_days: 30", "  connection_logs_days: 31");
+    let changed = load_and_validate(&changed_retention).unwrap();
+    assert_ne!(
+        policy_snapshot_revision(&changed).as_deref(),
+        Some(baseline_revision.as_str())
     );
 }
 
@@ -568,9 +615,7 @@ fn promoted_capability_metadata_describes_implemented_behavior() {
     ] {
         let meta = cap.meta();
         for text in [
-            meta.handled_data,
             meta.purpose,
-            meta.retention_impact,
             meta.telecom_note,
             meta.privacy_note,
             meta.terms_note,
@@ -584,10 +629,10 @@ fn promoted_capability_metadata_describes_implemented_behavior() {
 
     // index: 許可 content のみ・真実源と投影の分離・生メディア非保存。
     let index = Capability::CommunityIndex.meta();
-    assert!(index.handled_data.contains("公開トピック"));
-    assert!(index.handled_data.contains("Postgres"));
-    assert!(index.handled_data.contains("ArcadeDB"));
-    assert!(index.handled_data.contains("生メディア"));
+    let index_descriptor = index.policy_descriptor();
+    assert_eq!(index_descriptor.data_classes.len(), 1);
+    assert!(index_descriptor.data_classes_text().contains("公開 topic"));
+    assert!(index_descriptor.retention_text().contains("対象 topic"));
     assert!(index.purpose.contains("走査を通過した許可"));
     assert!(index.telecom_note.contains("真実源ではない"));
 
@@ -596,7 +641,7 @@ fn promoted_capability_metadata_describes_implemented_behavior() {
     assert!(moderation.purpose.contains("Project Arachnid Shield"));
     assert!(moderation.purpose.contains("視覚言語モデル"));
     assert!(moderation.purpose.contains("fail-closed"));
-    assert!(moderation.handled_data.contains("Match Data"));
+    assert_eq!(moderation.policy_descriptor().safety_actions.len(), 4);
     assert!(moderation.telecom_note.contains("authority scope"));
     assert!(moderation.terms_note.contains("申し立て"));
 
@@ -822,6 +867,22 @@ legal:
     - { kind: rights_infringement, slug: rights_infringement, version: 1, effective_date: 2026-09-02, language: ja }
 manifest:
   manifest_version: v1
+retention:
+  connection_logs_days: 30
+  moderation_logs_days: 180
+  report_days: 180
+  report_contact_days: 90
+  tester_feedback_days: 180
+  rights_request_active_days: 730
+  rights_request_resolved_days: 365
+  rights_request_rejected_days: 180
+  rights_request_contact_days: 180
+  rights_request_identity_days: 180
+  rights_request_evidence_days: 180
+  rights_request_history_days: 365
+  operator_audit_days: 365
+  moderation_event_days: 180
+  risk_signal_days: 180
 "#;
     let resolved = load_and_validate(yaml).unwrap();
     let files = generate_all(&resolved);

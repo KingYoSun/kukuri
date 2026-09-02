@@ -180,9 +180,12 @@ pub(crate) async fn run_community_node_connectivity(
         // 文書単位で同意してからセッション確立(認証・サーバ同期)を行う。
         let started_at = Instant::now();
         let catalog = runtime_a
-            .fetch_community_node_policies(CommunityNodeTargetRequest {
+            .fetch_community_node_policies(
+                kukuri_desktop_runtime::FetchCommunityNodePoliciesRequest {
                 base_url: stack.base_url.clone(),
-            })
+                language: Some("ja".to_string()),
+            },
+            )
             .await
             .context("failed to fetch community node policies before consent")?;
         anyhow::ensure!(
@@ -199,6 +202,7 @@ pub(crate) async fn run_community_node_connectivity(
                 |policy| kukuri_desktop_runtime::CommunityNodeConsentDocumentRef {
                     policy_slug: policy.policy_slug.clone(),
                     policy_version: policy.policy_version,
+                    policy_snapshot_revision: policy.policy_snapshot_revision.clone(),
                 },
             )
             .collect::<Vec<_>>();

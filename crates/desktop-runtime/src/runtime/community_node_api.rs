@@ -197,7 +197,7 @@ impl DesktopRuntime {
             ));
         }
         let catalog = self
-            .request_community_node_policies(base_url.as_str())
+            .request_community_node_policies(base_url.as_str(), None)
             .await?;
         if !community_node_local_consent_satisfies_policies(&local_consent, &catalog.policies) {
             self.set_community_node_local_consent_update_pending(base_url.as_str(), true)
@@ -245,7 +245,12 @@ impl DesktopRuntime {
             )
             .await;
             consent_state = self
-                .accept_community_node_consents_with_retry(base_url.as_str(), &mut token, &[])
+                .accept_community_node_consents_with_retry(
+                    base_url.as_str(),
+                    &mut token,
+                    &[],
+                    consent_state.policy_snapshot_revision.as_deref(),
+                )
                 .await?;
             self.set_community_node_cached_consent(base_url.as_str(), Some(consent_state.clone()))
                 .await;
@@ -364,9 +369,9 @@ impl DesktopRuntime {
     /// ために UI 操作起点で呼ぶ。Node 同意前に許可される通信に含まれる。
     pub async fn fetch_community_node_policies(
         &self,
-        request: CommunityNodeTargetRequest,
+        request: FetchCommunityNodePoliciesRequest,
     ) -> Result<CommunityNodePoliciesResponse> {
-        self.request_community_node_policies(request.base_url.as_str())
+        self.request_community_node_policies(request.base_url.as_str(), request.language.as_deref())
             .await
     }
 

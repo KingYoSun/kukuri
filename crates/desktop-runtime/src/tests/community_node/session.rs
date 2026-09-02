@@ -367,8 +367,9 @@ async fn node_without_local_consent_is_never_contacted() {
 
     // 同意判断のための公開カタログ取得(UI 操作起点)は許可リストに含まれる。
     let catalog = runtime
-        .fetch_community_node_policies(crate::CommunityNodeTargetRequest {
+        .fetch_community_node_policies(crate::FetchCommunityNodePoliciesRequest {
             base_url: base_url.clone(),
+            language: Some("ja".to_string()),
         })
         .await
         .expect("fetch policies");
@@ -386,6 +387,7 @@ async fn node_without_local_consent_is_never_contacted() {
                     .map(|policy| crate::CommunityNodeConsentDocumentRef {
                         policy_slug: policy.policy_slug.clone(),
                         policy_version: policy.policy_version,
+                        policy_snapshot_revision: policy.policy_snapshot_revision.clone(),
                     })
                     .collect(),
                 language: "ja".into(),
@@ -493,9 +495,11 @@ async fn community_node_status_does_not_require_restart_when_connectivity_is_act
                     required: true,
                     effective_date: Some("2026-09-02".to_string()),
                     language: Some("ja".to_string()),
+                    policy_snapshot_revision: None,
                     accepted_at: Some(Utc::now().timestamp()),
                     previously_accepted_version: Some(1),
                 }],
+                policy_snapshot_revision: None,
             }),
             None,
         ),
@@ -622,6 +626,7 @@ async fn policy_update_is_not_silently_reaccepted() {
                 documents: vec![crate::CommunityNodeConsentDocumentRef {
                     policy_slug: MOCK_MANAGED_POLICY_SLUG.to_string(),
                     policy_version: 2,
+                    policy_snapshot_revision: None,
                 }],
                 language: "ja".into(),
             },

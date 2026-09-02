@@ -134,21 +134,15 @@ async fn bootstrap_requires_bearer_then_consents() -> Result<()> {
             .all(|item| item.previously_accepted_version.is_none())
     );
 
-    let accepted = client
-        .post(format!("{}/v1/consents", server.base_url))
-        .bearer_auth(access_token.as_str())
-        .json(&serde_json::json!({ "policy_slugs": [] }))
-        .send()
-        .await?
-        .error_for_status()?
-        .json::<kukuri_cn_protocol::CommunityNodeConsentStatus>()
-        .await?;
+    let accepted =
+        accept_required_consents(&client, &server.base_url, access_token.as_str()).await?;
     assert!(accepted.all_required_accepted);
-    // 受諾後は accepted_at と previously_accepted_version が設定されること。
+    // required 文書の受諾後は accepted_at と previously_accepted_version が設定されること。
     assert!(
         accepted
             .items
             .iter()
+            .filter(|item| item.required)
             .all(|item| item.accepted_at.is_some() && item.previously_accepted_version.is_some())
     );
 
@@ -204,15 +198,8 @@ async fn bootstrap_exposes_other_registered_seed_peers() -> Result<()> {
     .await?;
 
     for access_token in [&access_token_a, &access_token_b] {
-        let accepted = client
-            .post(format!("{}/v1/consents", server.base_url))
-            .bearer_auth(access_token.as_str())
-            .json(&serde_json::json!({ "policy_slugs": [] }))
-            .send()
-            .await?
-            .error_for_status()?
-            .json::<kukuri_cn_protocol::CommunityNodeConsentStatus>()
-            .await?;
+        let accepted =
+            accept_required_consents(&client, &server.base_url, access_token.as_str()).await?;
         assert!(accepted.all_required_accepted);
     }
 
@@ -269,15 +256,8 @@ async fn bootstrap_exposes_other_endpoints_for_same_subscriber() -> Result<()> {
     let (access_token_a2, _) =
         authenticate(&client, &server.base_url, &keys, "peer-a-2", None).await?;
 
-    let accepted = client
-        .post(format!("{}/v1/consents", server.base_url))
-        .bearer_auth(access_token_a1.as_str())
-        .json(&serde_json::json!({ "policy_slugs": [] }))
-        .send()
-        .await?
-        .error_for_status()?
-        .json::<kukuri_cn_protocol::CommunityNodeConsentStatus>()
-        .await?;
+    let accepted =
+        accept_required_consents(&client, &server.base_url, access_token_a1.as_str()).await?;
     assert!(accepted.all_required_accepted);
 
     let bootstrap_a1 = client
@@ -355,15 +335,8 @@ async fn bootstrap_filters_expired_peer_registrations_and_heartbeat_restores_the
     .await?;
 
     for access_token in [&token_a, &token_b] {
-        let accepted = client
-            .post(format!("{}/v1/consents", server.base_url))
-            .bearer_auth(access_token.as_str())
-            .json(&serde_json::json!({ "policy_slugs": [] }))
-            .send()
-            .await?
-            .error_for_status()?
-            .json::<kukuri_cn_protocol::CommunityNodeConsentStatus>()
-            .await?;
+        let accepted =
+            accept_required_consents(&client, &server.base_url, access_token.as_str()).await?;
         assert!(accepted.all_required_accepted);
     }
 

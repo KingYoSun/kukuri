@@ -3318,6 +3318,7 @@ name = "kukuri-cn-operator"
 version = "0.1.8"
 dependencies = [
  "anyhow",
+ "blake3",
  "chrono",
  "clap",
  "kukuri-cn-safety",

@@ -66,6 +66,7 @@ import type {
   BookmarkCustomReactionRequest,
   BookmarkPostRequest,
   CommunityNodeTargetRequest,
+  FetchCommunityNodePoliciesRequest,
   CloseDomeHostingRequest,
   CreateCustomReactionAssetRequest,
   CreateDomeConnectionProposalRequest,
@@ -858,11 +859,12 @@ export const runtimeApi: DesktopApi = {
       } satisfies CommunityNodeTargetRequest,
     });
   }),
-  fetchCommunityNodePolicies: command('fetchCommunityNodePolicies', async (baseUrl) => {
+  fetchCommunityNodePolicies: command('fetchCommunityNodePolicies', async (baseUrl, language) => {
     return invokeDesktop<CommunityNodePoliciesResponse>('fetch_community_node_policies', {
       request: {
         base_url: baseUrl,
-      } satisfies CommunityNodeTargetRequest,
+        language,
+      } satisfies FetchCommunityNodePoliciesRequest,
     });
   }),
   acceptCommunityNodeConsents: command(

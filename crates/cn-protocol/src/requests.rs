@@ -32,6 +32,9 @@ pub struct AuthVerifyRequest {
 pub struct AcceptConsentsRequest {
     #[serde(default)]
     pub policy_slugs: Vec<String>,
+    /// 利用者へ提示した catalog revision。current と不一致なら受諾しない。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy_snapshot_revision: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

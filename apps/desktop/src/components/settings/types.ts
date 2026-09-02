@@ -73,6 +73,10 @@ export type CommunityNodeConsentPolicyView = {
   policyVersion: number;
   effectiveDate?: string | null;
   language?: string | null;
+  policySnapshotRevision?: string | null;
+  authoritativeLanguage?: string | null;
+  referenceTranslation: boolean;
+  fallback: boolean;
   required: boolean;
   acceptedAtLabel: string | null;
   // 版が上がって再同意が必要な「更新」状態か。

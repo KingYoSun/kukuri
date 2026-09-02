@@ -19,6 +19,8 @@ pub mod deploy;
 pub mod docs;
 pub mod drift;
 pub mod manifest;
+pub mod policy_catalog;
+pub mod policy_descriptor;
 pub mod profile;
 pub mod retention_config;
 pub mod safety_config;
@@ -28,16 +30,24 @@ pub use capability::{Availability, Capability, CapabilityMeta, ExternalDestinati
 pub use capability_risk::CapabilityRiskPractices;
 pub use config::{
     DeployConfig, DeployProfile, LegalConfig, LegalDocumentConfig, LegalDocumentKind,
-    OperatorConfig, ResolvedConfig, ServerConfig, load_and_validate, parse_config,
-    resolve_and_validate,
+    OperatorConfig, ReferenceTranslationConfig, ResolvedConfig, ServerConfig, load_and_validate,
+    parse_config, resolve_and_validate,
 };
 pub use deploy::generate_tfvars;
-pub use docs::{GeneratedFile, GeneratedLegalDocument, generate_all, generate_legal_documents};
+pub use docs::{GeneratedFile, generate_all};
 pub use drift::{DriftReport, check_drift};
 pub use manifest::{
     AuthorityScope, AuthorityScopeOverride, Capabilities, CapabilityScope, CommunityNodeManifest,
     LegalDocumentManifestEntry, ManifestFeatures, ManifestRetention, NodeRole, P2pBoundary,
     build_manifest, manifest_value, render_manifest,
+};
+pub use policy_catalog::{
+    GeneratedLegalDocument, generate_legal_documents, generate_legal_documents_from_files,
+    policy_snapshot_revision,
+};
+pub use policy_descriptor::{
+    CapabilityPolicyDescriptor, PolicyBillingPath, PolicyDataClass, PolicyEffectScope,
+    PolicyProcessing, PolicyRetentionRef, PolicySafetyAction, PolicyUsageCondition,
 };
 pub use profile::Profile;
 pub use retention_config::RetentionConfig;
@@ -125,6 +135,7 @@ retention:
   moderation_logs_days: 180
   report_days: 180
   report_contact_days: 90
+  tester_feedback_days: 180
   rights_request_active_days: 730
   rights_request_resolved_days: 365
   rights_request_rejected_days: 180
