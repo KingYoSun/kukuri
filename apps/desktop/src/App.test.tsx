@@ -87,8 +87,8 @@ test('settings drawer can open the release section', async () => {
 function consentDocuments(acceptedVersion: number | null) {
   return ['terms', 'privacy'].map((slug) => ({
     slug,
-    currentVersion: 4,
-    effectiveDate: '2026-09-02',
+    currentVersion: 5,
+    effectiveDate: '2026-09-03',
     authoritativeLanguage: 'ja',
     materialChange: true,
     controllerName: 'Preview Distributor',
@@ -131,8 +131,12 @@ test('desktop app blocks startup until app-level legal consent is accepted', asy
   expect(await screen.findByRole('heading', { name: 'Before you continue' })).toBeInTheDocument();
   expect(screen.getByText('Terms of Service')).toBeInTheDocument();
   expect(screen.getByText('Privacy Policy')).toBeInTheDocument();
-  expect(screen.getAllByText(/Effective date: 2026-09-02/)).toHaveLength(2);
-  expect(screen.getAllByText(/reference translation/i)).toHaveLength(2);
+  expect(screen.getAllByText(/Effective date: 2026-09-03/)).toHaveLength(2);
+  expect(
+    screen.getAllByText(
+      'This is a reference translation of the authoritative Japanese version. The Japanese version controls if there is any discrepancy.'
+    )
+  ).toHaveLength(2);
   expect(
     screen.queryByText('These documents are drafts and are not legal advice.')
   ).not.toBeInTheDocument();
@@ -160,8 +164,8 @@ test('desktop app blocks startup until app-level legal consent is accepted', asy
   await waitFor(() => {
     expect(invokeMock).toHaveBeenCalledWith('accept_app_consents', {
       documents: [
-        { slug: 'terms', version: 4 },
-        { slug: 'privacy', version: 4 },
+        { slug: 'terms', version: 5 },
+        { slug: 'privacy', version: 5 },
       ],
       language: 'en',
       ageAttested: true,
@@ -171,11 +175,11 @@ test('desktop app blocks startup until app-level legal consent is accepted', asy
   expect(screen.getByDisplayValue(/runtime starts after consent/)).toBeInTheDocument();
 });
 
-test('desktop app requires renewed consent for an older legal bundle', async () => {
+test('desktop app requires renewed consent for legal bundle version 4', async () => {
   const user = userEvent.setup();
   invokeMock.mockResolvedValueOnce({
     status: 'consent_required',
-    documents: consentDocuments(1),
+    documents: consentDocuments(4),
     age_attestation: ageAttestation(1),
   });
   invokeMock.mockResolvedValueOnce({
@@ -203,7 +207,7 @@ test('desktop app requires renewed consent for an older legal bundle', async () 
       'This is a draft and is not legal advice. Final decisions should be made in consultation with appropriate experts or regulators.'
     )
   ).not.toBeInTheDocument();
-  expect(screen.getAllByText('v4')).toHaveLength(2);
+  expect(screen.getAllByText('v5')).toHaveLength(2);
   expect(screen.queryByTestId('control-center-trigger')).not.toBeInTheDocument();
 
   // #858: 現行版で申告済みならチェックボックスは再表示されず、ボタンは有効のまま。
@@ -214,8 +218,8 @@ test('desktop app requires renewed consent for an older legal bundle', async () 
   await waitFor(() => {
     expect(invokeMock).toHaveBeenCalledWith('accept_app_consents', {
       documents: [
-        { slug: 'terms', version: 4 },
-        { slug: 'privacy', version: 4 },
+        { slug: 'terms', version: 5 },
+        { slug: 'privacy', version: 5 },
       ],
       language: 'en',
       ageAttested: false,
