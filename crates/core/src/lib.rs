@@ -1,4 +1,5 @@
 mod crypto;
+mod device_backup;
 mod direct_messages;
 mod dome_connections;
 mod dome_envelopes;
@@ -26,6 +27,12 @@ mod tests;
 
 pub use crypto::{
     KukuriKeys, LEGACY_SECRET_HRP, encode_secret_key_bech32, generate_keys, is_placeholder_secret,
+};
+pub use device_backup::{
+    DEVICE_BACKUP_CHUNK_BYTES, DEVICE_BACKUP_COMPONENT_VERSION, DEVICE_BACKUP_FORMAT_VERSION,
+    DEVICE_BACKUP_MAX_ENTRY_BYTES, DEVICE_BACKUP_MAX_ENTRY_COUNT, DEVICE_BACKUP_MAX_TOTAL_BYTES,
+    DEVICE_BACKUP_MIN_PASSPHRASE_CHARS, DeviceBackupEntryV1, DeviceBackupManifestV1,
+    DeviceBackupReader, DeviceBackupWriter,
 };
 pub use direct_messages::{
     DirectMessageAckV1, DirectMessageAttachmentKind, DirectMessageAttachmentManifestV1,

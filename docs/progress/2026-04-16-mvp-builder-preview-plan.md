@@ -35,6 +35,7 @@
 | Starter topics default | landed | repo change | desktop shell default tracked topics を 4 件に変更 |
 | Default product Column layout | landed | repo change | fresh installだけ主要5 Columnを表示し、既存layoutを維持 |
 | Preview docs refresh | landed | repo change | README, docs index, user quickstart, troubleshooting を追加 |
+| Device backup / restore | landed | repo change | 使用中の1アカウントを1暗号化ファイルへ保存し、staging検証・rollback・再同意付きで復元 |
 | Windows release workflow | landed | repo change | tag / manual dispatch で NSIS asset を Release に載せる |
 | Seed content on hosted preview node | planned | launch op | project-owned author で preview topics を事前投入する |
 | GitHub feedback surface | planned | launch op | Discussions category か同等の GitHub feedback home を整備する |

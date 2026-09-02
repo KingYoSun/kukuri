@@ -57,6 +57,7 @@
 - feature data classification: `docs/legal/app-consent-data-classification.md`
 - Community Node 法務文書と per-node 同意: `docs/legal/community-node-legal-documents-data-classification.md`（運用手順は `docs/runbooks/community-node-operator-docs.md`）
 - 18歳以上の自己申告と成人向け表現の既定非表示(#858): 仕様は `docs/adr/0046-age-attestation-adult-content-gating.md`、分類は `docs/legal/age-attestation-data-classification.md` / `docs/legal/adult-content-display-data-classification.md`
+- 端末バックアップ / 復元(#855): 仕様・脅威モデルは `docs/adr/0048-device-backup-restore.md`、移行対象分類は `docs/legal/device-backup-data-classification.md`
 
 ## UI/UX
 - flow: `docs/adr/0014-uiux-dev-flow.md`

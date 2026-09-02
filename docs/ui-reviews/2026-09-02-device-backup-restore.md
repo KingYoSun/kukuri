@@ -1,0 +1,21 @@
+# 2026-09-02 device backup restore
+
+- Status: current
+- Supersedes: None
+- Superseded by: None
+- PR: Issue #855 / `codex/issue-855-device-backup`
+- Preview: [日本語・ライト・狭幅の初期状態](assets/2026-09-02-device-backup-ja-light-600x1000.png)
+- Surface / user / purpose: Desktop「設定 → アカウント」。端末故障への備えまたは端末移行を行う利用者が、鍵だけのexportと混同せず、使用中の1アカウントを1暗号化ファイルへ保存・復元する。
+- Summary: 既存Account Key panelの上にDevice Backup panelを追加。作成は警告確認と二重passphrase、復元は復号preview、任意設定適用、同一公開鍵の明示置換を経る。処理中はphase、進捗、cancelを表示する。
+- Conditions:
+  - Platform: Storybook Chromium相当、Tauri Windows compile
+  - Viewport: 600x1000 browser viewport内の480px settings panel、既定wide viewport
+  - Theme: light / dark
+  - Locale: ja / en（zh-CNは自動localization layout gate対象）
+  - State: initial、create ready、restore preview、existing-account replacement（Vitest）、pending progress（component contract）
+- Accessibility / interaction: heading階層、Field label、checkbox accessible name、button disabled stateをDOM snapshotで確認。pointer操作をVitestで確認し、native dialog以外はkeyboard到達可能な標準controlのみ使用。drag／hover必須操作なし。
+- Performance: 大容量データは64KiB chunkでRust側stream処理し、frontendへ本体を渡さない。UIはprogress event 1本のみで、長い一覧・animationなし。
+- Validation: DeviceBackupPanel Vitest 2件、frontend allowlist Vitest 2件、Storybook `Initial` / `CreateReady` / `RestorePreview`、Storybook DOM snapshotとlight/ja・dark/en描画確認、console warning/errorなし、`cargo xtask scenario desktop_device_backup_restore`。
+- Not verified: packaged Windows WebViewでのnative save/open dialog、screen reader実読み上げ、Windows High Contrast、200% zoomは未確認。CIのdesktop-ui-checkとTauri checkで自動範囲を確認する。
+- Review result: 狭幅でclipping・横overflow・重なりなし。鍵だけのexportとの差、秘密漏えい、再同意、remote copy非削除が主要操作前に読める。blocking issueなし。
+- Exceptions: before画像は新規surfaceのため対象外。Tauri native dialogはStorybookでmockし、packaged実機確認を未確認事項として明記する。

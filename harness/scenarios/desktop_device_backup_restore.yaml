@@ -1,0 +1,12 @@
+name: desktop_device_backup_restore
+kind: device_backup_restore
+fixtures:
+  seed: 855
+  topic: kukuri:topic:device-backup
+steps: []
+artifacts:
+  dump_logs: false
+  metrics_snapshot: false
+timeouts:
+  overall_ms: 60000
+  step_ms: 15000

@@ -108,6 +108,7 @@ pub fn run() {
 
     builder
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .on_window_event(|window, event| {
             // Issue #304: closing the window keeps kukuri running in the
@@ -157,6 +158,10 @@ pub fn run() {
             commands::identity::import_account_key,
             commands::identity::list_accounts,
             commands::identity::switch_account,
+            commands::device_backup::create_device_backup_command,
+            commands::device_backup::preview_device_backup_command,
+            commands::device_backup::restore_device_backup_command,
+            commands::device_backup::cancel_device_backup,
             commands::posts::create_post,
             commands::posts::withdraw_post,
             commands::posts::create_repost,

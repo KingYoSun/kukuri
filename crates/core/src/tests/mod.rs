@@ -1,4 +1,5 @@
 mod derivation_golden;
+mod device_backup;
 mod direct_messages;
 mod dome_connections;
 mod dome_hosting;

@@ -54,6 +54,7 @@ pub(crate) fn scenario_requires_cn_postgres(name: &str) -> bool {
 pub(crate) fn scenario_ci_lane(name: &str) -> Option<&'static str> {
     match name {
         "desktop_smoke_post_persist" => Some("fast+release+nightly"),
+        "desktop_device_backup_restore" => Some("fast+release+nightly"),
         "community_node_public_connectivity" => Some("fast+release+nightly"),
         "community_node_index_query_client" => Some("fast"),
         "community_node_report_routing" => Some("fast"),
@@ -96,7 +97,7 @@ mod tests {
                     .into_owned()
             })
             .collect::<BTreeSet<_>>();
-        assert_eq!(scenario_names.len(), 18, "scenario inventory changed");
+        assert_eq!(scenario_names.len(), 19, "scenario inventory changed");
         let orphaned = scenario_names
             .iter()
             .filter(|name| scenario_ci_lane(name).is_none())

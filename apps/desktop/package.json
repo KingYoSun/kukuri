@@ -29,6 +29,7 @@
     "@react-three/fiber": "^9.7.0",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-deep-link": "^2.4.9",
+    "@tauri-apps/plugin-dialog": "^2.7.3",
     "@tauri-apps/plugin-updater": "2.10.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

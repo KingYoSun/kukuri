@@ -223,18 +223,33 @@ fn load_optional_secret_with_keyring(
     key: &str,
     keyring: &dyn KeyringStore,
 ) -> Result<Option<String>> {
-    if mode == IdentityStorageMode::Auto
-        && let Some(secret) = keyring
-            .get_password(
-                KEYRING_SERVICE,
-                optional_secret_account(db_path, purpose, key).as_str(),
-            )
-            .context("failed to read optional secret from keyring")?
-    {
-        return Ok(Some(secret));
+    if mode == IdentityStorageMode::Auto {
+        match keyring.get_password(
+            KEYRING_SERVICE,
+            optional_secret_account(db_path, purpose, key).as_str(),
+        ) {
+            Ok(Some(secret)) => return Ok(Some(secret)),
+            Ok(None) => {}
+            // Headless Linux environments can have no default keyring provider at all.
+            // Such environments could only have persisted this optional value through
+            // the file fallback, so continue there without weakening other keyring errors.
+            Err(error) if is_missing_default_keyring(&error) => {}
+            Err(error) => {
+                return Err(error).context("failed to read optional secret from keyring");
+            }
+        }
     }
 
     load_secret_from_file_path(optional_secret_file_path(db_path, purpose, key).as_path())
+}
+
+fn is_missing_default_keyring(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| {
+        matches!(
+            cause.downcast_ref::<KeyringError>(),
+            Some(KeyringError::NoDefaultStore)
+        )
+    })
 }
 
 fn persist_optional_secret_with_keyring(
@@ -518,12 +533,16 @@ mod tests {
     struct FakeKeyringStore {
         entries: Arc<Mutex<HashMap<(String, String), String>>>,
         fail_get: Arc<Mutex<bool>>,
+        no_default_store: Arc<Mutex<bool>>,
         fail_set: Arc<Mutex<bool>>,
         fail_delete: Arc<Mutex<bool>>,
     }
 
     impl KeyringStore for FakeKeyringStore {
         fn get_password(&self, service: &str, account: &str) -> Result<Option<String>> {
+            if *self.no_default_store.lock().expect("keyring lock") {
+                return Err(anyhow!(KeyringError::NoDefaultStore));
+            }
             if *self.fail_get.lock().expect("keyring lock") {
                 anyhow::bail!("fake keyring get failure");
             }
@@ -719,6 +738,31 @@ mod tests {
             Some("new-value".to_string()),
             "stale keyring entry must not shadow the file fallback"
         );
+    }
+
+    #[test]
+    fn optional_secret_uses_file_fallback_without_a_default_keyring() {
+        clear_identity_env();
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("kukuri.db");
+        let keyring = FakeKeyringStore::default();
+        *keyring.no_default_store.lock().expect("keyring lock") = true;
+        persist_secret_to_file_path(
+            optional_secret_file_path(&db_path, "test-purpose", "registry").as_path(),
+            "file-value",
+        )
+        .expect("seed file fallback");
+
+        let loaded = load_optional_secret_with_keyring(
+            &db_path,
+            IdentityStorageMode::Auto,
+            "test-purpose",
+            "registry",
+            &keyring,
+        )
+        .expect("missing default keyring must use file fallback");
+
+        assert_eq!(loaded, Some("file-value".to_string()));
     }
 
     #[test]
