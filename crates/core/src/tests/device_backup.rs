@@ -1,4 +1,4 @@
-use std::io::Cursor;
+use std::io::{Cursor, Error, Result as IoResult, Write};
 
 use crate::{
     DEVICE_BACKUP_COMPONENT_VERSION, DEVICE_BACKUP_FORMAT_VERSION, DeviceBackupEntryV1,
@@ -41,6 +41,59 @@ fn archive_bytes(passphrase: &str) -> (DeviceBackupManifestV1, Vec<Vec<u8>>, Vec
     }
     let bytes = writer.finish().unwrap();
     (manifest, values, bytes)
+}
+
+#[derive(Debug)]
+struct FailingWriter {
+    remaining: Option<usize>,
+    fail_flush: bool,
+}
+
+impl FailingWriter {
+    fn after(bytes: usize) -> Self {
+        Self {
+            remaining: Some(bytes),
+            fail_flush: false,
+        }
+    }
+
+    fn on_flush() -> Self {
+        Self {
+            remaining: None,
+            fail_flush: true,
+        }
+    }
+}
+
+impl Write for FailingWriter {
+    fn write(&mut self, bytes: &[u8]) -> IoResult<usize> {
+        let Some(remaining) = self.remaining.as_mut() else {
+            return Ok(bytes.len());
+        };
+        if *remaining == 0 {
+            return Err(Error::other("simulated storage exhaustion"));
+        }
+        let written = bytes.len().min(*remaining);
+        *remaining -= written;
+        Ok(written)
+    }
+
+    fn flush(&mut self) -> IoResult<()> {
+        if self.fail_flush {
+            return Err(Error::other("simulated flush failure"));
+        }
+        Ok(())
+    }
+}
+
+fn archive_with_header_version(mut bytes: Vec<u8>, replacement: u8) -> Vec<u8> {
+    let needle = b"\"version\":1";
+    let index = bytes
+        .windows(needle.len())
+        .position(|window| window == needle)
+        .expect("backup header version");
+    bytes[index + needle.len() - 1] = replacement;
+    bytes
 }
 
 #[test]
@@ -147,4 +200,87 @@ fn weak_passphrase_and_invalid_manifest_are_rejected() {
         Err(error) => error,
     };
     assert!(err.to_string().contains("duplicate entry name"));
+}
+
+#[test]
+fn storage_exhaustion_and_flush_failures_are_propagated() {
+    let (manifest, values) = fixture();
+    let mut archive = DeviceBackupWriter::new(
+        FailingWriter::after(10_000),
+        "long enough passphrase",
+        manifest.clone(),
+    )
+    .expect("header and manifest fit before the simulated failure");
+    let mut error = None;
+    for value in &values {
+        if let Err(current) = archive.write_entry(Cursor::new(value), |_| Ok(())) {
+            error = Some(current);
+            break;
+        }
+    }
+    assert!(
+        error
+            .expect("entry write must hit the simulated capacity")
+            .to_string()
+            .contains("failed to write device backup frame")
+    );
+
+    let mut archive = DeviceBackupWriter::new(
+        FailingWriter::on_flush(),
+        "long enough passphrase",
+        manifest,
+    )
+    .expect("create writer");
+    for value in &values {
+        archive
+            .write_entry(Cursor::new(value), |_| Ok(()))
+            .expect("write entry before flush failure");
+    }
+    assert!(
+        archive
+            .finish()
+            .expect_err("flush failure must be returned")
+            .to_string()
+            .contains("failed to flush device backup")
+    );
+}
+
+#[test]
+fn unknown_format_and_component_versions_are_rejected() {
+    let (_, _, bytes) = archive_bytes("long enough passphrase");
+    let unknown_header = archive_with_header_version(bytes, b'9');
+    let error =
+        match DeviceBackupReader::open(Cursor::new(unknown_header), "long enough passphrase") {
+            Ok(_) => panic!("unknown header version unexpectedly succeeded"),
+            Err(error) => error,
+        };
+    assert!(
+        error
+            .to_string()
+            .contains("unsupported device backup version")
+    );
+
+    let (mut manifest, _) = fixture();
+    manifest.format_version += 1;
+    let error = match DeviceBackupWriter::new(Vec::new(), "long enough passphrase", manifest) {
+        Ok(_) => panic!("unknown manifest version unexpectedly succeeded"),
+        Err(error) => error,
+    };
+    assert!(
+        error
+            .to_string()
+            .contains("unsupported device backup manifest version")
+    );
+
+    let (mut manifest, _) = fixture();
+    manifest.component_version += 1;
+    let error = match DeviceBackupWriter::new(Vec::new(), "long enough passphrase", manifest) {
+        Ok(_) => panic!("unknown component version unexpectedly succeeded"),
+        Err(error) => error,
+    };
+    assert!(
+        error
+            .to_string()
+            .contains("unsupported device backup component version")
+    );
 }

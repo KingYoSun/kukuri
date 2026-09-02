@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
 use std::io::{Cursor, Read};
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -11,9 +11,9 @@ use kukuri_core::{
 };
 
 use super::{
-    CreateDeviceBackupRequest, DeviceBackupCancellation, DeviceBackupPhase, DeviceBackupProgress,
-    DeviceBackupSummary, FILE_ENTRY_PREFIX, FRONTEND_STATE_ENTRY, FRONTEND_STATE_MAX_BYTES,
-    SECRETS_ENTRY, active_account_for_db, collect_secret_bundle,
+    CreateDeviceBackupRequest, DeviceBackupCancellation, DeviceBackupOutputFile, DeviceBackupPhase,
+    DeviceBackupProgress, DeviceBackupSummary, FILE_ENTRY_PREFIX, FRONTEND_STATE_ENTRY,
+    FRONTEND_STATE_MAX_BYTES, SECRETS_ENTRY, active_account_for_db, collect_secret_bundle,
     ensure_backup_path_outside_app_data,
 };
 use crate::paths::DB_FILE_NAME;
@@ -128,10 +128,7 @@ where
 
     let temp_path = partial_path(&destination)?;
     let result = (|| -> Result<()> {
-        let file = OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(&temp_path)
+        let file = DeviceBackupOutputFile::create_new(&temp_path)
             .with_context(|| format!("failed to create `{}`", temp_path.display()))?;
         let mut archive = DeviceBackupWriter::new(file, &request.passphrase, manifest)?;
         let mut written = 0u64;

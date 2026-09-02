@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
+use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -32,6 +33,73 @@ const FRONTEND_STATE_ENTRY: &str = "frontend-state.json";
 const FILE_ENTRY_PREFIX: &str = "file/";
 const FRONTEND_STATE_MAX_BYTES: usize = 2 * 1024 * 1024;
 const RESTORE_JOURNAL_FILE: &str = "device-restore-journal.json";
+
+struct DeviceBackupOutputFile {
+    file: File,
+}
+
+impl DeviceBackupOutputFile {
+    fn create_new(path: &Path) -> std::io::Result<Self> {
+        let file = OpenOptions::new().create_new(true).write(true).open(path)?;
+        Ok(Self { file })
+    }
+
+    fn sync_all(&self) -> std::io::Result<()> {
+        self.file.sync_all()
+    }
+}
+
+impl Write for DeviceBackupOutputFile {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        #[cfg(test)]
+        {
+            let remaining = DEVICE_BACKUP_TEST_WRITE_BUDGET.load(Ordering::Acquire);
+            if remaining != u64::MAX {
+                if remaining == 0 {
+                    return Err(std::io::Error::other(
+                        "simulated device backup storage exhaustion",
+                    ));
+                }
+                let allowed = bytes
+                    .len()
+                    .min(usize::try_from(remaining).unwrap_or(usize::MAX));
+                let written = self.file.write(&bytes[..allowed])?;
+                DEVICE_BACKUP_TEST_WRITE_BUDGET.fetch_sub(written as u64, Ordering::AcqRel);
+                return Ok(written);
+            }
+        }
+        self.file.write(bytes)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.file.flush()
+    }
+}
+
+#[cfg(test)]
+static DEVICE_BACKUP_TEST_WRITE_BUDGET: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(u64::MAX);
+
+#[cfg(test)]
+pub(crate) struct DeviceBackupWriteFailureGuard;
+
+#[cfg(test)]
+impl Drop for DeviceBackupWriteFailureGuard {
+    fn drop(&mut self) {
+        DEVICE_BACKUP_TEST_WRITE_BUDGET.store(u64::MAX, Ordering::Release);
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn fail_device_backup_writes_after(bytes: u64) -> DeviceBackupWriteFailureGuard {
+    let previous = DEVICE_BACKUP_TEST_WRITE_BUDGET.swap(bytes, Ordering::AcqRel);
+    assert_eq!(
+        previous,
+        u64::MAX,
+        "device backup write failure is already active"
+    );
+    DeviceBackupWriteFailureGuard
+}
 
 mod create;
 
@@ -357,10 +425,7 @@ where
                         fs::create_dir_all(parent)
                             .context("failed to create device restore entry directory")?;
                     }
-                    let output = OpenOptions::new()
-                        .create_new(true)
-                        .write(true)
-                        .open(&target)
+                    let output = DeviceBackupOutputFile::create_new(&target)
                         .with_context(|| format!("failed to create `{}`", target.display()))?;
                     archive.read_entry(output, |delta| {
                         cancellation.check()?;
