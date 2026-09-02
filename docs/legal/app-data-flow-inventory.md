@@ -1,7 +1,7 @@
 # kukuri アプリ データフロー突合表
 
-最終更新日: 2026-09-02
-対象: kukuri デスクトップアプリ legal bundle version 4
+最終更新日: 2026-09-03
+対象: kukuri デスクトップアプリ legal bundle version 5
 
 この表は、`docs/legal/privacy-policy.md` と `docs/legal/external-transmission-notice.md` を現行実装へ照合するための記録である。各 Community Node が独自に処理する内容は、その Node の manifest と公開文書を正とする。
 

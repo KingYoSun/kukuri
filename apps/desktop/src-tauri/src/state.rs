@@ -36,8 +36,8 @@ impl DesktopState {
     }
 }
 
-pub(crate) const LEGAL_BUNDLE_VERSION: i32 = 4;
-pub(crate) const APP_LEGAL_EFFECTIVE_DATE: &str = "2026-09-02";
+pub(crate) const LEGAL_BUNDLE_VERSION: i32 = 5;
+pub(crate) const APP_LEGAL_EFFECTIVE_DATE: &str = "2026-09-03";
 pub(crate) const APP_LEGAL_AUTHORITATIVE_LANGUAGE: &str = "ja";
 
 /// 18歳以上の自己申告(#858、ADR 0046)の現行版。文書同意とは独立に管理し、
@@ -665,7 +665,7 @@ mod tests {
 
     #[test]
     fn app_consent_satisfied_requires_every_document_at_current_or_newer_version() {
-        assert_eq!(LEGAL_BUNDLE_VERSION, 4);
+        assert_eq!(LEGAL_BUNDLE_VERSION, 5);
         assert!(!app_consent_documents_satisfied(&AppConsentStore::default()));
 
         // terms だけ同意しても不十分。
@@ -808,14 +808,30 @@ mod tests {
         assert!(PRIVACY.contains(&expected));
         assert!(EXTERNAL_TRANSMISSION.contains(&expected));
         for required_clause in [
+            "KingYoSun",
+            "氏名・住所",
+            "定義",
             "利用資格と成人向け表現",
             "18歳以上",
             "公的な年齢確認",
             "投稿コンテンツの権利帰属",
             "必要な権利または許諾",
+            "投稿者の責任",
             "限定的な利用許諾",
             "投稿撤回後の取扱い",
             "広告、宣伝、生成 AI の学習",
+            "通報・利用制限",
+            "サービスの変更・中断・終了",
+            "アカウントを識別する鍵",
+            "中央から再発行",
+            "Community Node",
+            "オープンソースライセンス",
+            "消費者契約法",
+            "日本法",
+            "東京地方裁判所",
+            "東京簡易裁判所",
+            "規約の変更",
+            "変更履歴",
         ] {
             assert!(
                 TERMS.contains(required_clause),
@@ -840,6 +856,7 @@ mod tests {
         }
         let legal = distribution_legal_metadata().expect("distribution legal metadata");
         for disclosed_value in [&legal.controller_name, &legal.contact] {
+            assert!(TERMS.contains(disclosed_value));
             assert!(PRIVACY.contains(disclosed_value));
             assert!(EXTERNAL_TRANSMISSION.contains(disclosed_value));
         }

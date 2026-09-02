@@ -29,13 +29,20 @@
   "documents": {
     "terms": {
       "title": "Terms of Service",
-      "changeSummary": "Version 4 identifies the controller and effective date and explains that translations are for reference.",
+      "changeSummary": "Version 5 comprehensively revises the parties and their responsibilities, key management, reporting and restrictions, liability, Japanese law, and agreed jurisdiction.",
       "sections": [
         {
           "heading": "What kukuri is",
           "paragraphs": [
-            "kukuri is a decentralized application built on a P2P foundation. A central authority that governs the entire network does not exist; it is structurally impossible.",
-            "Your account, profile, follows, and posts are not owned by any particular community node and are not lost when a node stops or changes."
+            "kukuri is a decentralized application built on a P2P foundation. The operator is {{controllerName}} and the contact address is {{contact}}. The operator's legal name and address will be provided without delay on request to that address.",
+            "The operator controls only the distribution, updates, information, and Community Node capabilities it provides. A central authority that governs the entire network does not structurally exist."
+          ]
+        },
+        {
+          "heading": "Definitions and responsibility boundaries",
+          "paragraphs": [
+            "A user is a person who accepts these terms; a person who posts is a user who shares content; and a receiving user is a person who receives it within the selected audience. A Community Node is an optional support service and may be operated by a third party independent of the operator.",
+            "Third parties on P2P include receiving users, peers, third-party Nodes, relays, the DHT, and network providers. The operator and each Node operator control only services they provide and content or traffic in which they actually participate."
           ]
         },
         {
@@ -67,10 +74,17 @@
           ]
         },
         {
+          "heading": "Your responsibilities",
+          "paragraphs": [
+            "You are responsible for content you create or share and for selecting its audience. Public posts may be copied to unrestricted receiving users and participating Nodes; even in a private channel or DM, designated recipients may retain a copy after receiving it.",
+            "Providing the app does not mean that posts are pre-screened, that their legality, accuracy, or safety is guaranteed, or that all P2P traffic is monitored."
+          ]
+        },
+        {
           "heading": "Limited technical license",
           "paragraphs": [
-            "To make communication, display, and synchronization work within the audience you select, you grant the kukuri client and receiving peers in that audience a non-exclusive, royalty-free license only to receive, copy, store locally, display, and synchronize the content. This is not a transfer of ownership.",
-            "A public-topic post is shared with peers that obtain that topic. Private channels and DMs are limited to their designated recipients and may not be repurposed for a public topic or an unrestricted audience.",
+            "To make communication, display, and synchronization work within the audience you select, you grant receiving users in that audience a non-exclusive, royalty-free license only to receive, copy, store locally, display, and synchronize the content. This is not a transfer of ownership.",
+            "A public-topic post is shared with receiving users that obtain that topic. Private channels and DMs are limited to their designated receiving users and may not be repurposed for a public topic or an unrestricted audience.",
             "Docs handle text and metadata, and blobs handle attachments, within the selected audience. Hints only announce updates and do not expand the audience or license. Connectivity features only assist connections and do not grant rights to use content for another purpose.",
             "Any license to a Community Node is limited by that node's per-node terms, capabilities that are actually enabled, authority scope, and content in which that node is involved.",
             "No lasting or comprehensive network-wide rights are granted to disabled capabilities, uninvolved nodes, other nodes, the default node, or the kukuri project."
@@ -91,24 +105,66 @@
           ]
         },
         {
-          "heading": "Disclaimer for developers and node operators",
+          "heading": "Reports and restrictions",
           "paragraphs": [
-            "The kukuri developers provide software that runs on a P2P foundation and are not responsible for the network as a whole, other users, or the activities of any community node.",
-            "A community node operator is responsible only within the scope of the support features that operator actually participated in, and not for the kukuri network as a whole or other nodes.",
-            "kukuri is provided as-is, and to the maximum extent permitted by applicable law, no liability is accepted for any damages arising from its use or inability to use."
+            "You may report content to a Community Node that actually participated in its delivery, indexing, moderation, or caching. If no participating service can be identified, neither the operator nor the default Node is guaranteed to act as a central reporting desk for the entire network.",
+            "The operator and each Node operator may apply implemented restrictions within distribution, updates, or Node capabilities they control in response to prohibited conduct, security risks, or legal requirements. They cannot collectively disable third-party Nodes, receiving devices, or Direct P2P."
+          ]
+        },
+        {
+          "heading": "Account-identifying key",
+          "paragraphs": [
+            "You are responsible for your account-identifying key and backup passphrase. The operator does not normally obtain your secret key and cannot centrally reissue, reset, or recover a lost key.",
+            "kukuri provides key export/import and encrypted device backup/restore, but these do not erase third-party copies, remotely disable an existing device, or automatically synchronize all devices."
+          ]
+        },
+        {
+          "heading": "Community Nodes",
+          "paragraphs": [
+            "A Community Node is an optional support service. For each Node, review its operator, capabilities, responsibility scope, terms, privacy policy, external transmissions, and retention policy and accept them separately from the app-level documents.",
+            "A Node's license and responsibility are limited to its per-node terms, capabilities actually enabled, authority scope, and content in which it participates. Declining or losing a Node does not collectively disable local data or Direct P2P that remains technically available."
+          ]
+        },
+        {
+          "heading": "Changes, interruption, and termination",
+          "paragraphs": [
+            "The operator may change, interrupt, or terminate distribution, updates, information, or Node capabilities it provides for security, maintenance, failures, legal requirements, or another reasonable operational reason. Material planned changes will be announced in advance where reasonably possible.",
+            "Ending an operator service or a particular Node does not collectively terminate or erase third-party Nodes, receiving users' copies, local data, or Direct P2P that remains technically available."
+          ]
+        },
+        {
+          "heading": "Open-source license",
+          "paragraphs": [
+            "kukuri software is governed by the repository's MIT License and the licenses of third-party components. These terms govern services and posted content; where they conflict over software use, the applicable open-source license controls.",
+            "Content you post does not become subject to the MIT License or another open-source license merely because it is shared through kukuri."
+          ]
+        },
+        {
+          "heading": "Limitation of liability",
+          "paragraphs": [
+            "kukuri is provided as-is. The operator does not warrant continuous reachability, completeness, security, or freedom from data loss for peers, third-party Nodes, relays, the DHT, network paths, or other environments outside its control.",
+            "Except for intentional misconduct or gross negligence, liability is limited to ordinary and direct loss arising from services the operator itself provides. No exclusion or limitation applies where it is invalid under the Consumer Contract Act or another mandatory law.",
+            "Each Community Node operator's liability is governed by that Node's terms and applicable law."
+          ]
+        },
+        {
+          "heading": "Governing law and agreed jurisdiction",
+          "paragraphs": [
+            "These terms and the relationship between you and the operator are governed by Japanese law. Unless mandatory law provides otherwise, the Tokyo District Court or Tokyo Summary Court has exclusive agreed jurisdiction as the court of first instance."
           ]
         },
         {
           "heading": "Changes to these terms",
           "paragraphs": [
-            "These terms may be updated. When there is a significant update, the app re-displays the updated terms and asks you to accept them again."
+            "The operator may change these terms when the change benefits users generally or is reasonable in light of its necessity, appropriateness, and related circumstances. The change, updated terms, and effective date will be notified or published by an appropriate method.",
+            "For a significant update, the document version is increased and the updated terms are shown for renewed acceptance before network connections resume. Japanese is authoritative and controls over this reference translation if they differ."
           ]
         }
       ]
     },
     "privacy": {
       "title": "Privacy Policy",
-      "changeSummary": "Version 4 identifies the controller and documents actual data flows, external transmissions, diagnostics, and P2P deletion limits.",
+      "changeSummary": "Version 5 synchronizes the bundle version, effective date, and terminology for responsible parties with the revised terms. It does not materially change data flows.",
       "sections": [
         {
           "heading": "Controller and basic approach",
@@ -148,7 +204,7 @@
         {
           "heading": "Consent and change history",
           "paragraphs": [
-            "The app asks you to accept the terms and this policy before starting network connections. A material update increments the document version and requires renewed consent before networking resumes. Version 4 adds the controller, actual data flows, external transmissions, diagnostics, and deletion limits."
+            "The app asks you to accept the terms and this policy before starting network connections. A material update increments the document version and requires renewed consent before networking resumes. Version 5 synchronizes the bundle metadata and responsibility terminology with the comprehensively revised terms."
           ]
         }
       ]
