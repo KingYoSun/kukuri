@@ -243,6 +243,9 @@ pub(crate) fn row_to_notification(row: sqlx::sqlite::SqliteRow) -> Result<Notifi
             .try_get::<String, _>("preview_text")
             .ok()
             .filter(|value| !value.trim().is_empty()),
+        content_labels: opt_col::<String>(&row, "content_labels_json")
+            .map(|value| serde_json::from_str(value.as_str()))
+            .transpose()?,
         created_at: row.get("created_at"),
         received_at: row.get("received_at"),
         read_at: opt_col(&row, "read_at"),

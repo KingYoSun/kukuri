@@ -330,6 +330,8 @@
     "queryRequired": "请输入搜索关键词。",
     "run": "显示结果",
     "loading": "加载中…",
+    "contentResolving": "正在确认安全信息，确认后显示帖子…",
+    "contentUnavailable": "无法确认安全信息，因此无法显示帖子正文。",
     "empty": "没有找到匹配的帖子。",
     "results": "社区索引结果",
     "noEligibleNode": "当前没有已认证、已同意且提供可用社区索引的社区节点。",

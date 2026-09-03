@@ -330,6 +330,8 @@
     "queryRequired": "Enter a search query.",
     "run": "Show results",
     "loading": "Loading…",
+    "contentResolving": "Checking the post before showing its content…",
+    "contentUnavailable": "Post content is unavailable because its safety labels could not be verified.",
     "empty": "No matching posts found.",
     "results": "Community Index results",
     "noEligibleNode": "No authenticated and consented Community Node currently advertises an available Community Index.",

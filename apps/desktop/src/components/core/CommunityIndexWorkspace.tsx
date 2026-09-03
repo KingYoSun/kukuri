@@ -88,6 +88,7 @@ type IndexResultState = {
 type ResolvedPostState = {
   contextKey: string;
   entriesByKey: Record<string, CommunityIndexResolvedPostView>;
+  statusByKey: Record<string, 'loading' | 'resolved' | 'failed'>;
 };
 
 type ResolvedAuthorState = {
@@ -286,6 +287,13 @@ export function CommunityIndexWorkspace({
         : {},
     [resolvedPostState, visibleResult]
   );
+  const resolvedPostStatusByKey = useMemo(
+    () =>
+      visibleResult && resolvedPostState?.contextKey === visibleResult.context.key
+        ? resolvedPostState.statusByKey
+        : {},
+    [resolvedPostState, visibleResult]
+  );
   const resolvedAuthorsByPubkey = useMemo(
     () =>
       visibleResult && resolvedAuthorState?.contextKey === visibleResult.context.key
@@ -308,6 +316,7 @@ export function CommunityIndexWorkspace({
           authorResolution?.author ??
           null;
         const resolvedEntry = resolvedPostsByKey[key] ?? null;
+        const resolutionStatus = resolvedPostStatusByKey[key] ?? 'loading';
         return {
           key,
           resolvedEntry,
@@ -317,6 +326,7 @@ export function CommunityIndexWorkspace({
             topicId: visibleResult.context.topicId ?? null,
             knownAuthor,
             authorStatus: knownAuthor ? 'resolved' : authorResolution?.status ?? 'loading',
+            resolutionStatus,
             resolvedEntry,
             mediaObjectUrls,
             adultContentEnabled,
@@ -330,6 +340,7 @@ export function CommunityIndexWorkspace({
       localProfile,
       mediaObjectUrls,
       resolvedAuthorsByPubkey,
+      resolvedPostStatusByKey,
       resolvedPostsByKey,
       visibleResult,
     ]
@@ -362,8 +373,18 @@ export function CommunityIndexWorkspace({
       const input = resolveInputForEntry(entry, visibleResult.context);
       return input ? [input] : [];
     });
-    setResolvedPostState({ contextKey, entriesByKey: {} });
-    if (entries.length === 0 || typeof api.resolveCommunityIndexPosts !== 'function') return;
+    const canResolve = typeof api.resolveCommunityIndexPosts === 'function';
+    setResolvedPostState({
+      contextKey,
+      entriesByKey: {},
+      statusByKey: Object.fromEntries(
+        visibleResult.entries.map((entry) => {
+          const resolvable = resolveInputForEntry(entry, visibleResult.context) !== null;
+          return [indexEntryKey(entry), canResolve && resolvable ? 'loading' : 'failed'];
+        })
+      ),
+    });
+    if (entries.length === 0 || !canResolve) return;
 
     void api
       .resolveCommunityIndexPosts(entries)
@@ -374,9 +395,16 @@ export function CommunityIndexWorkspace({
         ) {
           return;
         }
+        const entriesByKey = Object.fromEntries(response.entries.map((entry) => [entry.key, entry]));
         setResolvedPostState({
           contextKey,
-          entriesByKey: Object.fromEntries(response.entries.map((entry) => [entry.key, entry])),
+          entriesByKey,
+          statusByKey: Object.fromEntries(
+            visibleResult.entries.map((entry) => {
+              const key = indexEntryKey(entry);
+              return [key, entriesByKey[key]?.post ? 'resolved' : 'failed'];
+            })
+          ),
         });
       })
       .catch(() => {
@@ -384,7 +412,13 @@ export function CommunityIndexWorkspace({
           sequence === detailSequence.current &&
           contextKey === currentContextKeyRef.current
         ) {
-          setResolvedPostState({ contextKey, entriesByKey: {} });
+          setResolvedPostState({
+            contextKey,
+            entriesByKey: {},
+            statusByKey: Object.fromEntries(
+              visibleResult.entries.map((entry) => [indexEntryKey(entry), 'failed'])
+            ),
+          });
         }
       });
   }, [api, visibleResult]);
@@ -457,21 +491,42 @@ export function CommunityIndexWorkspace({
       const input = resolveInputForEntry(entry, visibleResult.context);
       if (!input) return;
       const contextKey = visibleResult.context.key;
+      setResolvedPostState((current) =>
+        current?.contextKey === contextKey
+          ? {
+              ...current,
+              statusByKey: { ...current.statusByKey, [key]: 'loading' },
+            }
+          : current
+      );
       try {
         const response = await api.resolveCommunityIndexPosts([input]);
         if (contextKey !== currentContextKeyRef.current) return;
         const resolvedEntry = response.entries.find((candidate) => candidate.key === key);
-        if (!resolvedEntry) return;
         setResolvedPostState((current) =>
           current?.contextKey === contextKey
             ? {
                 contextKey,
-                entriesByKey: { ...current.entriesByKey, [key]: resolvedEntry },
+                entriesByKey: resolvedEntry
+                  ? { ...current.entriesByKey, [key]: resolvedEntry }
+                  : current.entriesByKey,
+                statusByKey: {
+                  ...current.statusByKey,
+                  [key]: resolvedEntry?.post ? 'resolved' : 'failed',
+                },
               }
             : current
         );
       } catch {
         // 操作側のエラー表示を維持し、直前の有効な解決結果は消さない。
+        setResolvedPostState((current) =>
+          current?.contextKey === contextKey
+            ? {
+                ...current,
+                statusByKey: { ...current.statusByKey, [key]: 'failed' },
+              }
+            : current
+        );
       }
     },
     [api, visibleResult]

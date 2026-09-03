@@ -277,6 +277,10 @@ pub struct NotificationRow {
     pub dm_id: Option<String>,
     pub message_id: Option<String>,
     pub preview_text: Option<String>,
+    /// Object-backed notification の署名済み content labels。`None` は旧 row または
+    /// safety metadata 未解決を表し、既知の空配列と区別する(#858)。
+    #[serde(default)]
+    pub content_labels: Option<Vec<String>>,
     pub created_at: i64,
     pub received_at: i64,
     pub read_at: Option<i64>,

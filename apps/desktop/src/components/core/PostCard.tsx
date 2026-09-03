@@ -386,7 +386,7 @@ export function PostCard({
   const contentBlock = (
     <>
       <div className='post-body post-layout-safe'>
-        {showReplyContext && view.replyParentAuthor && replyPreview ? (
+        {!view.adultContentGated && showReplyContext && view.replyParentAuthor && replyPreview ? (
           <div className='post-reply-context'>
             <button
               type='button'

@@ -118,6 +118,76 @@ async fn connect_file_migration_failure_is_typed_as_migration_error() {
 }
 
 #[tokio::test]
+async fn notification_content_labels_migration_backfills_known_objects_and_leaves_unknown_unresolved()
+ {
+    let tempdir = tempdir().expect("tempdir");
+    let db_path = tempdir.path().join("pre-notification-labels.db");
+    materialize_sqlite_fixture(&db_path, 20260901000000)
+        .await
+        .expect("materialize pre-notification-label schema");
+
+    let database_url = format!("sqlite://{}", db_path.display());
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect(&database_url)
+        .await
+        .expect("open pre-notification-label database");
+    sqlx::query(
+        r#"
+        INSERT INTO object_index_cache (
+          object_id, topic_id, author_pubkey, created_at, payload_ref_json,
+          source_replica_id, source_key, source_envelope_id, derived_at,
+          projection_version, content_labels_json
+        ) VALUES (
+          'adult-object', 'kukuri:topic:migration', 'author', 1, '{}',
+          'topic::migration', 'objects/adult-object/state', 'adult-object', 1,
+          1, '["adult"]'
+        )
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("insert labeled projection");
+    for (notification_id, object_id) in [
+        ("known-notification", "adult-object"),
+        ("unknown-notification", "missing-object"),
+    ] {
+        sqlx::query(
+            r#"
+            INSERT INTO notifications (
+              notification_id, recipient_pubkey, kind, actor_pubkey, object_id,
+              preview_text, created_at, received_at
+            ) VALUES (?1, 'recipient', 'mention', 'actor', ?2, 'preview', 1, 1)
+            "#,
+        )
+        .bind(notification_id)
+        .bind(object_id)
+        .execute(&pool)
+        .await
+        .expect("insert legacy notification");
+    }
+    pool.close().await;
+
+    let migrated = SqliteStore::connect_file(&db_path)
+        .await
+        .expect("apply notification labels migration");
+    let known = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT content_labels_json FROM notifications WHERE notification_id = 'known-notification'",
+    )
+    .fetch_one(migrated.pool())
+    .await
+    .expect("read known labels");
+    let unknown = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT content_labels_json FROM notifications WHERE notification_id = 'unknown-notification'",
+    )
+    .fetch_one(migrated.pool())
+    .await
+    .expect("read unresolved labels");
+    assert_eq!(known.as_deref(), Some("[\"adult\"]"));
+    assert_eq!(unknown, None);
+}
+
+#[tokio::test]
 async fn connect_file_open_failure_is_typed_as_open_error() {
     // 存在しない親ディレクトリ配下のパスは create_if_missing でも作成できず接続失敗する。
     use crate::StoreStartupError;
@@ -297,8 +367,8 @@ async fn all_generations_have_paired_down() {
 
     assert_eq!(
         generations.len(),
-        22,
-        "store migrations must cover exactly 22 generations, found versions: {:?}",
+        23,
+        "store migrations must cover exactly 23 generations, found versions: {:?}",
         generations.keys().collect::<Vec<_>>()
     );
 
@@ -390,8 +460,8 @@ async fn full_migration_round_trip() {
     expected_versions.dedup();
     assert_eq!(
         applied_versions.len(),
-        22,
-        "round trip must restore all 22 migration generations"
+        23,
+        "round trip must restore all 23 migration generations"
     );
     assert_eq!(applied_versions, expected_versions);
 }

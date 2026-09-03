@@ -1,4 +1,156 @@
 use super::*;
+use kukuri_store::NotificationStore;
+
+#[tokio::test]
+async fn adult_labeled_object_notification_preview_is_hidden_until_display_enabled() {
+    let (app, store, docs_sync, blob_service) = local_app_with_memory_services();
+    let topic = TopicId::new("notifications-adult-mention");
+    let remote_keys = generate_keys();
+    let adult_preview = format!("adult preview @{}", app.current_author_pubkey());
+    let remote_envelope = persist_test_post_with_labels(
+        docs_sync.as_ref(),
+        None,
+        &remote_keys,
+        &topic,
+        PayloadRef::InlineText {
+            text: adult_preview.clone(),
+        },
+        Vec::new(),
+        None,
+        vec![kukuri_core::ADULT_CONTENT_LABEL.to_string()],
+    )
+    .await;
+    let remote_object = remote_envelope
+        .to_post_object()
+        .expect("parse remote adult mention")
+        .expect("remote adult mention object");
+
+    assert!(
+        create_remote_object_notification(
+            &app,
+            store.as_ref(),
+            docs_sync.as_ref(),
+            blob_service.as_ref(),
+            remote_doc_event(
+                docs_sync.as_ref(),
+                &topic_replica_id(topic.as_str()),
+                stable_key(
+                    "objects",
+                    &format!("{}/state", remote_object.object_id.as_str()),
+                ),
+            )
+            .await,
+        )
+        .await
+    );
+
+    let rows = NotificationStore::list_notifications(store.as_ref())
+        .await
+        .expect("list notification rows");
+    assert_eq!(
+        rows[0].content_labels.as_deref(),
+        Some(&[kukuri_core::ADULT_CONTENT_LABEL.to_string()][..])
+    );
+
+    let hidden = app
+        .list_notifications()
+        .await
+        .expect("list hidden notification");
+    assert_eq!(hidden.len(), 1);
+    assert_eq!(hidden[0].kind, NotificationKind::Mention);
+    assert_eq!(hidden[0].preview_text, None);
+
+    app.set_adult_content_display_enabled(true);
+    let visible = app
+        .list_notifications()
+        .await
+        .expect("list visible notification");
+    assert_eq!(
+        visible[0].preview_text.as_deref(),
+        Some(adult_preview.as_str())
+    );
+}
+
+#[tokio::test]
+async fn adult_labeled_repost_source_notification_preview_is_hidden_until_display_enabled() {
+    let (app, store, docs_sync, blob_service) = local_app_with_memory_services();
+    let topic = TopicId::new("notifications-adult-repost-source");
+    let source_object_id = app
+        .create_post_with_attachments_in_channel(
+            topic.as_str(),
+            kukuri_core::ChannelRef::Public,
+            "adult repost source",
+            None,
+            Vec::new(),
+            vec![kukuri_core::ADULT_CONTENT_LABEL.to_string()],
+        )
+        .await
+        .expect("create adult repost source");
+    let repost_source = app
+        .resolve_repost_source(topic.as_str(), source_object_id.as_str())
+        .await
+        .expect("resolve adult repost source");
+    let remote_keys = generate_keys();
+    let remote_envelope =
+        build_repost_envelope(&remote_keys, &topic, repost_source.repost_of, None)
+            .expect("build simple repost");
+    let remote_object = remote_envelope
+        .to_post_object()
+        .expect("parse simple repost")
+        .expect("simple repost object");
+    persist_post_object(
+        docs_sync.as_ref(),
+        &topic_replica_id(topic.as_str()),
+        remote_object.clone(),
+        remote_envelope,
+    )
+    .await
+    .expect("persist simple repost");
+
+    assert!(
+        create_remote_object_notification(
+            &app,
+            store.as_ref(),
+            docs_sync.as_ref(),
+            blob_service.as_ref(),
+            remote_doc_event(
+                docs_sync.as_ref(),
+                &topic_replica_id(topic.as_str()),
+                stable_key(
+                    "objects",
+                    &format!("{}/state", remote_object.object_id.as_str()),
+                ),
+            )
+            .await,
+        )
+        .await
+    );
+
+    let rows = NotificationStore::list_notifications(store.as_ref())
+        .await
+        .expect("list notification rows");
+    assert_eq!(
+        rows[0].content_labels.as_deref(),
+        Some(&[kukuri_core::ADULT_CONTENT_LABEL.to_string()][..])
+    );
+
+    let hidden = app
+        .list_notifications()
+        .await
+        .expect("list hidden notification");
+    assert_eq!(hidden[0].kind, NotificationKind::Repost);
+    assert_eq!(hidden[0].preview_text, None);
+
+    app.set_adult_content_display_enabled(true);
+    let visible = app
+        .list_notifications()
+        .await
+        .expect("list visible notification");
+    assert_eq!(
+        visible[0].preview_text.as_deref(),
+        Some("adult repost source")
+    );
+}
 
 // #858 / ADR 0046: 成人向けラベル付き投稿の添付は、表示設定(既定 OFF)を有効化する
 // まで `blob_media_payload` がバイト列を返さない(fail-closed)。ローカル blob store に

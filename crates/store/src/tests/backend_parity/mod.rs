@@ -139,6 +139,7 @@ fn parity_notification(
         dm_id: None,
         message_id: None,
         preview_text: None,
+        content_labels: None,
         created_at: received_at - 5,
         received_at,
         read_at: None,

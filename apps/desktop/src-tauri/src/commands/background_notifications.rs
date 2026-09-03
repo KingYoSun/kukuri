@@ -197,6 +197,10 @@ async fn poll_once(app: &AppHandle) -> anyhow::Result<()> {
     let notifications = state.runtime().list_notifications().await?;
     let local_pubkey = resolve_local_pubkey(&state, &background).await;
     let settings = background.settings_snapshot();
+    let adult_content_enabled = state
+        .runtime()
+        .get_content_display_settings()
+        .adult_content_enabled;
 
     let next_cursor = compute_cursor(&notifications);
 
@@ -226,11 +230,7 @@ async fn poll_once(app: &AppHandle) -> anyhow::Result<()> {
 
     for notification in &to_dispatch {
         let title = notification_title(&notification.kind).to_string();
-        let body = notification_body(
-            &notification.kind,
-            notification.preview_text.as_deref(),
-            settings.preview_body,
-        );
+        let body = notification_body(notification, settings.preview_body, adult_content_enabled);
         if let Err(error) = show_platform_notification(
             app.clone(),
             notification.notification_id.clone(),
@@ -355,13 +355,22 @@ fn notification_title(kind: &NotificationKind) -> &'static str {
 /// OS toast body per notification kind (single implementation; the TS twin
 /// was deleted in WP-Q1 #517).
 fn notification_body(
-    kind: &NotificationKind,
-    preview_text: Option<&str>,
+    notification: &NotificationView,
     preview_body: bool,
+    adult_content_enabled: bool,
 ) -> Option<String> {
+    let object_preview_is_gated = notification.object_id.is_some()
+        && !adult_content_enabled
+        && notification
+            .content_labels
+            .as_ref()
+            .is_none_or(|labels| kukuri_core::has_adult_content_label(labels));
+    if object_preview_is_gated {
+        return None;
+    }
     if !preview_body {
         return Some(
-            if matches!(kind, NotificationKind::DirectMessage) {
+            if matches!(notification.kind, NotificationKind::DirectMessage) {
                 "Open kukuri to read this message."
             } else {
                 "Open kukuri to view this activity."
@@ -369,7 +378,7 @@ fn notification_body(
             .to_string(),
         );
     }
-    preview_text.map(|text| text.to_string())
+    notification.preview_text.clone()
 }
 
 fn read_json<T: for<'de> Deserialize<'de>>(path: &PathBuf) -> Option<T> {
@@ -415,6 +424,7 @@ mod tests {
             dm_id: None,
             message_id: None,
             preview_text: preview.map(|value| value.to_string()),
+            content_labels: None,
             created_at: received_at,
             received_at,
             read_at,
@@ -489,21 +499,65 @@ mod tests {
 
     #[test]
     fn body_uses_preview_only_when_enabled() {
+        let dm = notification(
+            "dm",
+            NotificationKind::DirectMessage,
+            1,
+            None,
+            "actor",
+            Some("hi"),
+        );
+        let mention = notification(
+            "mention",
+            NotificationKind::Mention,
+            1,
+            None,
+            "actor",
+            Some("hi"),
+        );
         assert_eq!(
-            notification_body(&NotificationKind::DirectMessage, Some("hi"), false).as_deref(),
+            notification_body(&dm, false, false).as_deref(),
             Some("Open kukuri to read this message.")
         );
         assert_eq!(
-            notification_body(&NotificationKind::Mention, Some("hi"), false).as_deref(),
+            notification_body(&mention, false, false).as_deref(),
             Some("Open kukuri to view this activity.")
         );
         assert_eq!(
-            notification_body(&NotificationKind::Mention, Some("hi"), true).as_deref(),
+            notification_body(&mention, true, false).as_deref(),
             Some("hi")
         );
+        let no_preview = notification("none", NotificationKind::Mention, 1, None, "actor", None);
+        assert_eq!(notification_body(&no_preview, true, false), None);
+    }
+
+    #[test]
+    fn body_suppresses_adult_and_unresolved_object_previews_while_display_is_off() {
+        let mut object_notification = notification(
+            "adult",
+            NotificationKind::Mention,
+            1,
+            None,
+            "actor",
+            Some("adult raw preview"),
+        );
+        object_notification.object_id = Some("adult-object".to_string());
+        object_notification.content_labels =
+            Some(vec![kukuri_core::ADULT_CONTENT_LABEL.to_string()]);
+        assert_eq!(notification_body(&object_notification, true, false), None);
+        assert_eq!(notification_body(&object_notification, false, false), None);
         assert_eq!(
-            notification_body(&NotificationKind::Mention, None, true),
-            None
+            notification_body(&object_notification, true, true).as_deref(),
+            Some("adult raw preview")
+        );
+
+        object_notification.content_labels = None;
+        assert_eq!(notification_body(&object_notification, true, false), None);
+
+        object_notification.content_labels = Some(Vec::new());
+        assert_eq!(
+            notification_body(&object_notification, true, false).as_deref(),
+            Some("adult raw preview")
         );
     }
 

@@ -18,11 +18,12 @@ impl NotificationStore for SqliteStore {
               dm_id,
               message_id,
               preview_text,
+              content_labels_json,
               created_at,
               received_at,
               read_at
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
             "#,
         )
         .bind(row.notification_id.as_str())
@@ -37,6 +38,12 @@ impl NotificationStore for SqliteStore {
         .bind(row.dm_id.as_deref())
         .bind(row.message_id.as_deref())
         .bind(row.preview_text.as_deref())
+        .bind(
+            row.content_labels
+                .as_ref()
+                .map(serde_json::to_string)
+                .transpose()?,
+        )
         .bind(row.created_at)
         .bind(row.received_at)
         .bind(row.read_at)
@@ -61,6 +68,7 @@ impl NotificationStore for SqliteStore {
               dm_id,
               message_id,
               preview_text,
+              content_labels_json,
               created_at,
               received_at,
               read_at

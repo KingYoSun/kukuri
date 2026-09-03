@@ -33,8 +33,9 @@ Accepted
 - 設定を OFF へ戻した場合、以後の取得を停止し、frontend の in-memory object URL(デコード済み表示)を破棄する。ephemeral fetch のためディスク上に成人向けメディアのキャッシュ残余は発生しない(ラベル付与前に通常経路で取得済みの blob は本 ADR の対象外)。
 
 ### 5. 表示
-- 成人向けラベル付き投稿は、タイムライン一覧・スレッド詳細・引用/埋め込み・検索結果解決・ブックマーク・プロフィールタイムラインの各表示経路で一貫して代替表示にする。メディアはプレースホルダー(取得もデコードもしない)、テキストは折りたたみの注意表示とする。
-- 通知(actor avatar)・DM は v1 ではラベル源を持たないため通常表示となるが、Rust 側取得ゲートは hash 単位で適用される。
+- 成人向けラベル付き投稿は、タイムライン一覧・スレッド詳細・引用/埋め込み・返信プレビュー・検索結果解決・ブックマーク・プロフィールタイムライン・object-backed 通知の各表示経路で一貫して代替表示にする。メディアはプレースホルダー(取得もデコードもしない)、テキストと通知 preview は安全な代替文言にする。
+- Community Index が返す `IndexEntryView.text` は canonical content / safety label の信頼元にしない。署名済み投稿をローカル解決してラベルを確認するまで本文を表示せず、解決待ち・失敗・欠落はいずれも安全な代替文言にする。
+- object-backed 通知は署名済み envelope 由来の `content_labels` を notification projection へ保存する。既存行などラベルを解決できない通知も設定 OFF では preview を表示しない。follow / DM 通知と actor avatar は v1 では object label の対象外だが、Rust 側取得ゲートは hash 単位で適用される。
 
 ## Consequences
 - 成人向けラベルの必須 contract / scenario は `docs/legal/age-attestation-data-classification.md` と `docs/legal/adult-content-display-data-classification.md` に定める。

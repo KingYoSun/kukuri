@@ -4,7 +4,7 @@ import type {
   CommunityIndexResolvedPostView,
   IndexEntryView,
 } from '@/lib/api';
-import { hasAdultContentLabel } from '@/shell/media';
+import { isAdultLabeledPost } from '@/shell/media';
 import { authorDisplayLabel, resolveProfilePictureSrc } from '@/shell/presentation';
 
 import type { PostCardView } from './types';
@@ -17,6 +17,7 @@ type CommunityIndexPostCardViewOptions = {
   topicId: string | null;
   knownAuthor: AuthorSocialView | null;
   authorStatus?: 'loading' | 'resolved' | 'failed';
+  resolutionStatus?: 'loading' | 'resolved' | 'failed';
   resolvedEntry?: CommunityIndexResolvedPostView | null;
   mediaObjectUrls: Record<string, string | null>;
   adultContentEnabled?: boolean;
@@ -36,6 +37,9 @@ export function communityIndexPostCardView(
   const capability = recommendation ? 'recommendation' : 'community_index';
   const knownAuthor = options.knownAuthor;
   const resolvedPost = options.resolvedEntry?.post ?? null;
+  const resolutionStatus = resolvedPost
+    ? 'resolved'
+    : options.resolutionStatus ?? 'loading';
   const capabilities = options.resolvedEntry?.capabilities ?? {
     open_thread: false,
     reply: false,
@@ -78,12 +82,12 @@ export function communityIndexPostCardView(
         author_picture: knownAuthor?.picture ?? resolvedPost.author_picture ?? null,
         author_picture_asset:
           knownAuthor?.picture_asset ?? resolvedPost.author_picture_asset ?? null,
-        content: entry.text,
+        // Node index text is never a canonical content source. Render only the
+        // locally resolved, signed post after its labels are available (#858).
+        content: resolvedPost.content,
         content_status: 'Available' as const,
         attachments: [],
-        created_at: entry.created_at,
-        repost_of: null,
-        repost_commentary: null,
+        created_at: resolvedPost.created_at,
       }
     : {
         object_id: entry.object_id,
@@ -100,7 +104,10 @@ export function communityIndexPostCardView(
         friend_of_friend: knownAuthor?.friend_of_friend ?? false,
         provenance: null,
         withdrawal: null,
-        content: entry.text,
+        content:
+          resolutionStatus === 'loading'
+            ? i18n.t('shell:communityIndex.contentResolving')
+            : i18n.t('shell:communityIndex.contentUnavailable'),
         content_status: 'Available' as const,
         attachments: [],
         created_at: entry.created_at,
@@ -123,9 +130,9 @@ export function communityIndexPostCardView(
     post: displayPost,
     actionPost: resolvedPost,
     context: 'timeline',
-    // #858: 解決済み投稿が成人向けラベル付きなら、検索/発見/推薦でも本文を代替表示にする。
+    // #858: canonical post の top-level / quote / reply-preview labels を検索でも共有する。
     adultContentGated:
-      !options.adultContentEnabled && hasAdultContentLabel(resolvedPost?.content_labels),
+      !options.adultContentEnabled && resolvedPost !== null && isAdultLabeledPost(resolvedPost),
     authorLabel,
     authorPicture: knownAuthor
       ? resolveProfilePictureSrc(knownAuthor, options.mediaObjectUrls)

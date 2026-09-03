@@ -427,6 +427,8 @@ pub struct NotificationView {
     pub dm_id: Option<String>,
     pub message_id: Option<String>,
     pub preview_text: Option<String>,
+    #[serde(default)]
+    pub content_labels: Option<Vec<String>>,
     pub created_at: i64,
     pub received_at: i64,
     pub read_at: Option<i64>,

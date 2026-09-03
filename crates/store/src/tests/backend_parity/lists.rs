@@ -30,6 +30,7 @@ async fn notification_scenario<S: Store + ProjectionStore>(
     n2.channel_id = Some("public".into());
     n2.object_id = Some(EnvelopeId::from("obj-1"));
     n2.preview_text = Some("reply preview".into());
+    n2.content_labels = Some(vec![kukuri_core::ADULT_CONTENT_LABEL.to_string()]);
     let mut n3 = parity_notification("notif-3", 90, NotificationKind::DirectMessage);
     n3.dm_id = Some("dm-parity".into());
     n3.message_id = Some("msg-9".into());

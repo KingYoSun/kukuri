@@ -26,10 +26,12 @@ export function hasAdultContentLabel(labels: string[] | null | undefined): boole
 export function isAdultLabeledPost(post: {
   content_labels?: string[] | null;
   repost_of?: { content_labels?: string[] | null } | null;
+  reply_preview?: { content_labels?: string[] | null } | null;
 }): boolean {
   return (
     hasAdultContentLabel(post.content_labels) ||
-    hasAdultContentLabel(post.repost_of?.content_labels)
+    hasAdultContentLabel(post.repost_of?.content_labels) ||
+    hasAdultContentLabel(post.reply_preview?.content_labels)
   );
 }
 

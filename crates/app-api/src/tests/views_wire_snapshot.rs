@@ -374,6 +374,7 @@ fn views_wire_notification_view() {
             dm_id: None,
             message_id: None,
             preview_text: Some("quoted you".to_string()),
+            content_labels: Some(vec![kukuri_core::ADULT_CONTENT_LABEL.to_string()]),
             created_at: 1_700_000_200,
             received_at: 1_700_000_201,
             read_at: Some(1_700_000_210),

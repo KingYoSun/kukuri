@@ -308,11 +308,11 @@ async fn direct_message_tombstone_roundtrip_preserves_all_columns() {
 }
 
 // ---------------------------------------------------------------------------
-// notifications 全 15 列(row_to_notification)
+// notifications 全 16 列(row_to_notification)
 // ---------------------------------------------------------------------------
 
 /// max fixture: 全 Option=Some(source_* / topic / channel / object / dm /
-/// message / preview / read_at)。
+/// message / preview / labels / read_at)。
 fn notification_max() -> NotificationRow {
     NotificationRow {
         notification_id: "notif-max".into(),
@@ -327,6 +327,7 @@ fn notification_max() -> NotificationRow {
         dm_id: Some("dm-notif".into()),
         message_id: Some("msg-notif".into()),
         preview_text: Some("通知プレビュー 🔔".into()),
+        content_labels: Some(vec![kukuri_core::ADULT_CONTENT_LABEL.to_string()]),
         created_at: 7_000,
         received_at: 7_100,
         read_at: Some(7_200),
@@ -348,6 +349,7 @@ fn notification_min() -> NotificationRow {
         dm_id: None,
         message_id: None,
         preview_text: None,
+        content_labels: None,
         created_at: 0,
         received_at: 0,
         read_at: None,
@@ -355,7 +357,7 @@ fn notification_min() -> NotificationRow {
 }
 
 #[tokio::test]
-async fn notification_roundtrip_preserves_all_15_columns() {
+async fn notification_roundtrip_preserves_all_16_columns() {
     let store = SqliteStore::connect_memory().await.expect("sqlite store");
     let max = notification_max();
     let min = notification_min();

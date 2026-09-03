@@ -57,6 +57,7 @@ pub(crate) async fn notification_candidate_from_object_event(
             dm_id: None,
             message_id: None,
             preview_text: notification_preview_text(reply_preview),
+            content_labels: Some(header.content_labels.clone()),
             created_at: header.created_at,
             received_at: Utc::now().timestamp_millis(),
         }));
@@ -84,6 +85,7 @@ pub(crate) async fn notification_candidate_from_object_event(
             dm_id: None,
             message_id: None,
             preview_text: notification_preview_text(preview_source),
+            content_labels: Some(header.content_labels.clone()),
             created_at: header.created_at,
             received_at: Utc::now().timestamp_millis(),
         }));
@@ -111,6 +113,7 @@ pub(crate) async fn notification_candidate_from_object_event(
             dm_id: None,
             message_id: None,
             preview_text: notification_preview_text(mention_source),
+            content_labels: Some(header.content_labels.clone()),
             created_at: header.created_at,
             received_at: Utc::now().timestamp_millis(),
         }));
@@ -170,6 +173,7 @@ pub(crate) async fn notification_candidate_from_follow_event(
         dm_id: None,
         message_id: None,
         preview_text: None,
+        content_labels: None,
         created_at: edge.updated_at,
         received_at: Utc::now().timestamp_millis(),
     }))

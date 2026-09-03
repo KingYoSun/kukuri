@@ -36,3 +36,10 @@
 - アクセシビリティ: プレースホルダー・代替表示は `role='status'`、チェックボックスは label 内でテキストと関連付け。既存の heading 構造・focus 順を変えていない。
 
 関連: #858、ADR 0046、`docs/progress/2026-09-01-issue-858-age-attestation-adult-content-gating.md`
+
+## 2026-09-03 再監査差分
+
+- 通知: object-backed notification preview は成人向けラベル付きなら共通の注意文言へ置換し、OS 通知では本文を送らない。migration 前などラベル未解決の object notification も既定 OFF では preview を出さない。actor identity と follow / DM 通知の扱いは変更しない。
+- Community Index: node 由来本文を canonical 解決前に描画しない。解決中は進行状況、欠落・失敗時は安全性ラベルを確認できない旨を表示し、報告以外の投稿操作を無効化する。canonical 解決後は通常の `PostCard` と同じ成人向けゲートを使う。
+- ネスト表示: ホストカードがゲート対象の場合は返信プレビューも含めて本文領域全体を置換する。引用元・返信元だけが成人向けの場合も共通 label 判定でカードをゲートする。
+- 既存のスクリーンショットで示したプレースホルダーの視覚仕様は維持している。今回の差分は raw text の描画可否と通知本文の抑止であり、追加の visual token / layout 変更はない。ja / en / zh-CN の Community Index 状態文言を locale parity 下で追加した。
