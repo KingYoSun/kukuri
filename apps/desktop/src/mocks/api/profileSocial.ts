@@ -42,7 +42,6 @@ export function createProfileSocialMock(runtime: MockRuntime): ProfileSocialMock
       runtime.myProfile = {
         ...runtime.myProfile,
         ...input,
-        picture: input.clear_picture ? null : (input.picture ?? runtime.myProfile.picture ?? null),
         picture_asset: nextPictureAsset,
         updated_at: runtime.myProfile.updated_at + 1,
       };
@@ -50,7 +49,6 @@ export function createProfileSocialMock(runtime: MockRuntime): ProfileSocialMock
         name: runtime.myProfile.name ?? null,
         display_name: runtime.myProfile.display_name ?? null,
         about: runtime.myProfile.about ?? null,
-        picture: runtime.myProfile.picture ?? null,
         picture_asset: runtime.myProfile.picture_asset ?? null,
         updated_at: runtime.myProfile.updated_at,
       });
@@ -74,7 +72,6 @@ export function createProfileSocialMock(runtime: MockRuntime): ProfileSocialMock
           name: runtime.myProfile.name ?? null,
           display_name: runtime.myProfile.display_name ?? null,
           about: runtime.myProfile.about ?? null,
-          picture: runtime.myProfile.picture ?? null,
           picture_asset: runtime.myProfile.picture_asset ?? null,
           updated_at: runtime.myProfile.updated_at,
         }));

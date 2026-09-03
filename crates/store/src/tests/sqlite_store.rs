@@ -73,7 +73,6 @@ async fn store_profile_upsert_latest_wins() {
             name: Some("older".into()),
             display_name: Some("older".into()),
             about: None,
-            picture: None,
             picture_asset: None,
             updated_at: 10,
         })
@@ -85,7 +84,6 @@ async fn store_profile_upsert_latest_wins() {
             name: Some("newer".into()),
             display_name: Some("newer".into()),
             about: None,
-            picture: None,
             picture_asset: Some(kukuri_core::AssetRef {
                 hash: kukuri_core::BlobHash::new("avatar-newer"),
                 mime: "image/png".into(),

@@ -413,7 +413,6 @@ mod tests {
             actor_pubkey: actor.to_string(),
             actor_name: None,
             actor_display_name: None,
-            actor_picture: None,
             actor_picture_asset: None,
             source_envelope_id: None,
             source_replica_id: None,

@@ -61,7 +61,6 @@ async fn expired_content_observations_do_not_reach_post_profile_or_attachment_vi
             name: Some("retention-owner".into()),
             display_name: Some("保持期限の確認用".into()),
             about: None,
-            picture: None,
             picture_upload: None,
             clear_picture: false,
         })
@@ -256,7 +255,6 @@ async fn set_my_profile_with_avatar_upload_persists_blob_backed_profile_and_auth
             name: Some("avatar-owner".into()),
             display_name: Some("Avatar Owner".into()),
             about: Some("blob avatar".into()),
-            picture: None,
             picture_upload: Some(PendingAttachment {
                 mime: "image/png".into(),
                 bytes: avatar_bytes.clone(),
@@ -287,14 +285,12 @@ async fn set_my_profile_with_avatar_upload_persists_blob_backed_profile_and_auth
         .await
         .expect("author social view");
 
-    assert_eq!(updated.picture, None);
     assert_eq!(asset.mime, "image/png");
     assert_eq!(asset.role, AssetRole::ProfileAvatar);
     assert_eq!(stored_blob, avatar_bytes);
     assert_eq!(stored_profile.picture_asset, updated.picture_asset);
     assert_eq!(profile_doc.picture_asset, updated.picture_asset);
     assert_eq!(local_profile.picture_asset, updated.picture_asset);
-    assert_eq!(author_social.picture, None);
     assert_eq!(
         author_social
             .picture_asset
@@ -319,16 +315,29 @@ async fn set_my_profile_with_avatar_upload_persists_blob_backed_profile_and_auth
 }
 
 #[tokio::test]
-async fn set_my_profile_keeps_legacy_picture_url_backward_compatible() {
+async fn set_my_profile_preserves_blob_avatar_when_only_text_changes() {
     let (app, store, docs_sync, _) = local_app_with_memory_services();
-    let legacy_picture = "https://example.com/avatar.png".to_string();
+    let initial = app
+        .set_my_profile(ProfileInput {
+            name: Some("asset-owner".into()),
+            display_name: Some("Asset Owner".into()),
+            about: Some("blob avatar".into()),
+            picture_upload: Some(PendingAttachment {
+                mime: "image/png".into(),
+                bytes: tiny_png_bytes(),
+                role: AssetRole::ProfileAvatar,
+            }),
+            clear_picture: false,
+        })
+        .await
+        .expect("set initial profile");
+    let initial_asset = initial.picture_asset.expect("initial avatar asset");
 
     let updated = app
         .set_my_profile(ProfileInput {
-            name: Some("legacy-owner".into()),
-            display_name: Some("Legacy Owner".into()),
-            about: Some("legacy avatar".into()),
-            picture: Some(legacy_picture.clone()),
+            name: Some("asset-owner".into()),
+            display_name: Some("Updated Asset Owner".into()),
+            about: Some("updated text".into()),
             picture_upload: None,
             clear_picture: false,
         })
@@ -349,28 +358,18 @@ async fn set_my_profile_keeps_legacy_picture_url_backward_compatible() {
         .await
         .expect("author social view");
 
-    assert_eq!(updated.picture.as_deref(), Some(legacy_picture.as_str()));
-    assert_eq!(updated.picture_asset, None);
+    assert_eq!(updated.display_name.as_deref(), Some("Updated Asset Owner"));
+    assert_eq!(updated.picture_asset.as_ref(), Some(&initial_asset));
+    assert_eq!(stored_profile.picture_asset.as_ref(), Some(&initial_asset));
+    assert_eq!(profile_doc.picture_asset.as_ref(), Some(&initial_asset));
+    assert_eq!(local_profile.picture_asset.as_ref(), Some(&initial_asset));
     assert_eq!(
-        stored_profile.picture.as_deref(),
-        Some(legacy_picture.as_str())
+        author_social
+            .picture_asset
+            .as_ref()
+            .map(|asset| asset.hash.as_str()),
+        Some(initial_asset.hash.as_str())
     );
-    assert_eq!(stored_profile.picture_asset, None);
-    assert_eq!(
-        profile_doc.picture.as_deref(),
-        Some(legacy_picture.as_str())
-    );
-    assert_eq!(profile_doc.picture_asset, None);
-    assert_eq!(
-        local_profile.picture.as_deref(),
-        Some(legacy_picture.as_str())
-    );
-    assert_eq!(local_profile.picture_asset, None);
-    assert_eq!(
-        author_social.picture.as_deref(),
-        Some(legacy_picture.as_str())
-    );
-    assert_eq!(author_social.picture_asset, None);
 }
 
 #[tokio::test]
@@ -476,7 +475,6 @@ async fn set_my_profile_rejects_text_fields_over_limit() {
             name: Some("a".repeat(crate::service::MAX_PROFILE_NAME_CHARS + 1)),
             display_name: None,
             about: None,
-            picture: None,
             picture_upload: None,
             clear_picture: false,
         })
@@ -492,7 +490,6 @@ async fn set_my_profile_rejects_text_fields_over_limit() {
             name: None,
             display_name: None,
             about: Some("a".repeat(crate::service::MAX_PROFILE_ABOUT_CHARS + 1)),
-            picture: None,
             picture_upload: None,
             clear_picture: false,
         })

@@ -50,7 +50,6 @@ type ProfileTopicChannelParams = ActionsBaseParams & {
     name?: string | null;
     display_name?: string | null;
     about?: string | null;
-    picture?: string | null;
     picture_asset?: { hash: string; mime: string; bytes: number; role: 'profile_avatar' } | null;
     updated_at: number;
   } | null;
@@ -168,7 +167,6 @@ export function createProfileTopicChannelActions({
     setProfileAvatarInputKey((value) => value + 1);
     setProfileDraft((current) => ({
       ...current,
-      picture: null,
       picture_upload: pictureUpload,
       clear_picture: false,
     }));
@@ -186,7 +184,6 @@ export function createProfileTopicChannelActions({
     setProfileAvatarInputKey((value) => value + 1);
     setProfileDraft((current) => ({
       ...current,
-      picture: null,
       picture_upload: null,
       clear_picture: true,
     }));

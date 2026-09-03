@@ -262,7 +262,6 @@ pub(crate) async fn run_community_node_index_query_client(
                 name: Some("harness-author".to_string()),
                 display_name: Some("Harness Author".to_string()),
                 about: Some("observed profile".to_string()),
-                picture: None,
                 picture_upload: None,
                 clear_picture: false,
             })

@@ -147,7 +147,7 @@ export function ProfileConnectionsPanel({
                   </div>
                   <div className='post-body'>
                     <div className='author-detail-hero'>
-                      <AuthorAvatar label={label} picture={author.picture_src ?? author.picture ?? null} size='sm' />
+                      <AuthorAvatar label={label} picture={author.picture_src ?? null} size='sm' />
                       <div className='author-detail-copy-stack'>
                         <strong className='post-title'>{label}</strong>
                         <p className='author-detail-copy author-detail-break'>

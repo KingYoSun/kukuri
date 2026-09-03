@@ -337,7 +337,6 @@ export const Reply: Story = {
             pubkey: 'b'.repeat(64),
             name: 'parent-author',
             display_name: 'Parent Author',
-            picture: null,
             picture_asset: null,
           },
           content: 'The original post being replied to.',

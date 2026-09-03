@@ -110,7 +110,6 @@ export function buildNotification(overrides?: Partial<NotificationView>): Notifi
     actor_pubkey: 'c'.repeat(64),
     actor_name: 'carol',
     actor_display_name: null,
-    actor_picture: null,
     actor_picture_asset: null,
     source_envelope_id: 'notification-envelope-1',
     source_replica_id: 'replica:notification',

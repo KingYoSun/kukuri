@@ -235,7 +235,6 @@ function panelElement(api: DesktopApi, options: RenderPanelOptions = {}) {
         name: 'host',
         display_name: 'Host Author',
         about: null,
-        picture: 'https://example.com/host.png',
         picture_asset: null,
         updated_at: 1,
       }}
@@ -537,9 +536,8 @@ describe('MetaverseRoomPanel animation sharing', () => {
     renderPanel(api);
 
     expect(screen.getByText('Host: Host Author')).toBeInTheDocument();
-    expect(screen.getByText('Host: Host Author').previousElementSibling).toHaveAttribute(
-      'data-avatar-src',
-      'https://example.com/host.png'
+    expect(screen.getByText('Host: Host Author').previousElementSibling).not.toHaveAttribute(
+      'data-avatar-src'
     );
   });
 

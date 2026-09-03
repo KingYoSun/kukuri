@@ -239,7 +239,6 @@ impl DesktopRuntime {
                 name: request.name,
                 display_name: request.display_name,
                 about: request.about,
-                picture: request.picture,
                 picture_upload: request
                     .picture_upload
                     .map(pending_attachment_from_request)

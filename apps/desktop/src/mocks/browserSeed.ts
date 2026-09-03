@@ -94,7 +94,6 @@ export const browserDesktopMockSeed: DesktopMockApiOptions = {
       actor_pubkey: 'b'.repeat(64),
       actor_name: 'browser peer',
       actor_display_name: null,
-      actor_picture: null,
       actor_picture_asset: null,
       source_envelope_id: 'browser-seed-reply-envelope',
       source_replica_id: 'replica:browser-mock',

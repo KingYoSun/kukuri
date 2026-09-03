@@ -80,11 +80,6 @@ impl AppService {
             MAX_PROFILE_ABOUT_CHARS,
         )?;
         let current_profile = self.get_my_profile().await?;
-        let picture = if input.clear_picture || input.picture_upload.is_some() {
-            normalize_optional_text(input.picture)
-        } else {
-            normalize_optional_text(input.picture).or(current_profile.picture.clone())
-        };
         let picture_asset = if input.clear_picture {
             None
         } else if let Some(upload) = input.picture_upload {
@@ -109,7 +104,6 @@ impl AppService {
                 name,
                 display_name,
                 about,
-                picture,
                 picture_asset,
             },
         )?;

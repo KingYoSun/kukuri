@@ -11,7 +11,7 @@ use super::*;
 use kukuri_core::{AssetRef, AssetRole, BlockEdge, BlockEdgeStatus, FollowEdge};
 
 // ---------------------------------------------------------------------------
-// profiles(sqlite/social.rs のインライン写像。picture_* 3 列を含む)
+// profiles(sqlite/social.rs のインライン写像。asset 3 列を含む)
 // ---------------------------------------------------------------------------
 
 /// max fixture: 全 Option=Some。picture_asset は picture_blob_hash /
@@ -22,7 +22,6 @@ fn profile_max() -> Profile {
         name: Some("name-max".into()),
         display_name: Some("表示名 ✨".into()),
         about: Some("自己紹介 text".into()),
-        picture: Some("https://example.invalid/avatar.png".into()),
         picture_asset: Some(AssetRef {
             hash: BlobHash::new("9".repeat(64)),
             mime: "image/webp".into(),
@@ -40,7 +39,6 @@ fn profile_min() -> Profile {
         name: None,
         display_name: None,
         about: None,
-        picture: None,
         picture_asset: None,
         updated_at: 5,
     }
@@ -67,7 +65,6 @@ async fn profile_roundtrip_preserves_all_columns_via_get_profile_and_get_profile
         name: Some(String::new()),
         display_name: Some(String::new()),
         about: Some(String::new()),
-        picture: Some(String::new()),
         picture_asset: Some(AssetRef {
             hash: BlobHash::new(""),
             mime: String::new(),

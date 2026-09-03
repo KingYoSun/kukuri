@@ -120,7 +120,6 @@ function panel(rooms: GameRoomView[]) {
           name: 'host',
           display_name: 'Host Author',
           about: null,
-          picture: null,
           picture_asset: null,
           updated_at: STORY_TIMESTAMP,
         }}

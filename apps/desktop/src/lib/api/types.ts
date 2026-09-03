@@ -182,7 +182,6 @@ export type ProfileInput = {
   name?: string | null;
   display_name?: string | null;
   about?: string | null;
-  picture?: string | null;
   picture_upload?: CreateAttachmentInput | null;
   clear_picture?: boolean;
 };

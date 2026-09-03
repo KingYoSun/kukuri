@@ -10,7 +10,6 @@ fn profile_envelope_roundtrip() {
             name: Some("alice".into()),
             display_name: Some("Alice".into()),
             about: Some("hello".into()),
-            picture: Some("https://example.com/alice.png".into()),
             picture_asset: Some(AssetRef {
                 hash: BlobHash::new("avatar-hash"),
                 mime: "image/png".into(),
@@ -35,6 +34,39 @@ fn profile_envelope_roundtrip() {
             .map(|asset| asset.role.clone()),
         Some(AssetRole::ProfileAvatar)
     );
+}
+
+#[test]
+fn profile_parser_ignores_removed_picture_url_field() {
+    let keys = generate_keys();
+    let author_pubkey = keys.public_key();
+    let content = serde_json::json!({
+        "author_pubkey": author_pubkey,
+        "name": "legacy-alice",
+        "display_name": "Legacy Alice",
+        "about": "old preview profile",
+        "picture": "https://tracker.example/avatar.png",
+        "picture_asset": null
+    });
+    let envelope = crate::sign_envelope_at(
+        &keys,
+        "identity-profile",
+        vec![
+            vec!["author".into(), keys.public_key_hex()],
+            vec!["object".into(), "identity-profile".into()],
+        ],
+        content.to_string(),
+        42,
+    )
+    .expect("legacy profile envelope");
+
+    let profile = parse_profile(&envelope)
+        .expect("parse legacy profile")
+        .expect("profile");
+    let serialized = serde_json::to_value(&profile).expect("serialize current profile");
+    assert_eq!(profile.display_name.as_deref(), Some("Legacy Alice"));
+    assert_eq!(profile.picture_asset, None);
+    assert!(serialized.get("picture").is_none());
 }
 
 #[test]

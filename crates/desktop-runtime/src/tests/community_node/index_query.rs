@@ -300,7 +300,6 @@ async fn community_node_index_records_and_restores_existing_local_subjects() {
             name: Some("observed-author".to_string()),
             display_name: Some("Observed Author".to_string()),
             about: Some("profile retained across restart".to_string()),
-            picture: None,
             picture_upload: None,
             clear_picture: false,
         })

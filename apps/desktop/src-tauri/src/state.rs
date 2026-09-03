@@ -903,6 +903,27 @@ mod tests {
     }
 
     #[test]
+    fn image_csp_allows_only_local_profile_asset_sources() {
+        const TAURI_CONFIG: &str = include_str!("../tauri.conf.json");
+        let tauri_config: serde_json::Value =
+            serde_json::from_str(TAURI_CONFIG).expect("tauri config must be valid json");
+        let image_sources = tauri_config
+            .pointer("/app/security/csp/img-src")
+            .and_then(serde_json::Value::as_str)
+            .expect("img-src must be a string")
+            .split_ascii_whitespace()
+            .collect::<Vec<_>>();
+
+        assert!(image_sources.contains(&"'self'"));
+        assert!(image_sources.contains(&"asset:"));
+        assert!(image_sources.contains(&"http://asset.localhost"));
+        assert!(image_sources.contains(&"blob:"));
+        assert!(image_sources.contains(&"data:"));
+        assert!(!image_sources.contains(&"http:"));
+        assert!(!image_sources.contains(&"https:"));
+    }
+
+    #[test]
     fn app_consent_round_trips_through_disk() {
         let dir =
             std::env::temp_dir().join(format!("kukuri-consent-test-{}", current_unix_seconds()));

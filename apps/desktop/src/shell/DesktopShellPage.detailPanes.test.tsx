@@ -270,7 +270,6 @@ test('remote author avatar appears on the timeline without opening the author pa
               author_pubkey: authorPubkey,
               author_name: 'carol',
               author_display_name: null,
-              author_picture: null,
               author_picture_asset: {
                 hash: 'inline-avatar-hash',
                 mime: 'image/png',

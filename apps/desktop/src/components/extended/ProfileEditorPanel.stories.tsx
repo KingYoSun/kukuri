@@ -25,7 +25,7 @@ const STORY_ARGS = {
     name: 'local-author',
     about: 'Maintains shell UI migration work.',
   },
-  picturePreviewSrc: 'https://example.com/avatar.png',
+  picturePreviewSrc: 'data:image/png;base64,AA==',
   hasPicture: true,
   pictureInputKey: 0,
   onFieldChange: () => undefined,
@@ -56,7 +56,7 @@ function ProfileStory({
       dirty={false}
       error={error}
       fields={fields}
-      picturePreviewSrc='https://example.com/avatar.png'
+      picturePreviewSrc='data:image/png;base64,AA=='
       hasPicture={true}
       pictureInputKey={0}
       onFieldChange={(field, value) => setFields((current) => ({ ...current, [field]: value }))}

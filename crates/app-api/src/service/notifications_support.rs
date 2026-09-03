@@ -293,7 +293,6 @@ pub(crate) fn author_social_view_from_parts(
         name: profile.and_then(|profile| profile.name.clone()),
         display_name: profile.and_then(|profile| profile.display_name.clone()),
         about: profile.and_then(|profile| profile.about.clone()),
-        picture: profile.and_then(|profile| profile.picture.clone()),
         picture_asset: profile_asset_view_from_ref(
             profile.and_then(|profile| profile.picture_asset.as_ref()),
         ),

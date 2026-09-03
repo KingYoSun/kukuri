@@ -64,7 +64,6 @@ export function profileInputFromProfile(profile: Profile): ProfileInput {
     name: profile.name ?? '',
     display_name: profile.display_name ?? '',
     about: profile.about ?? '',
-    picture: profile.picture ?? '',
     picture_upload: null,
     clear_picture: false,
   };
@@ -72,8 +71,8 @@ export function profileInputFromProfile(profile: Profile): ProfileInput {
 
 export function resolveProfilePictureSrc(
   profile:
-    | Pick<Profile, 'picture' | 'picture_asset'>
-    | Pick<AuthorSocialView, 'picture' | 'picture_asset'>
+    | Pick<Profile, 'picture_asset'>
+    | Pick<AuthorSocialView, 'picture_asset'>
     | null
     | undefined,
   mediaObjectUrls: Record<string, string | null>
@@ -82,7 +81,7 @@ export function resolveProfilePictureSrc(
   if (pictureAssetHash && typeof mediaObjectUrls[pictureAssetHash] === 'string') {
     return mediaObjectUrls[pictureAssetHash];
   }
-  return profile?.picture ?? null;
+  return null;
 }
 
 export function authorDisplayLabel(
@@ -167,7 +166,6 @@ export function mergeAuthorView(
     name: incoming.name ?? current?.name ?? null,
     display_name: incoming.display_name ?? current?.display_name ?? null,
     about: incoming.about ?? current?.about ?? null,
-    picture: incoming.picture ?? current?.picture ?? null,
     picture_asset: incoming.picture_asset ?? current?.picture_asset ?? null,
     updated_at: incoming.updated_at ?? current?.updated_at ?? null,
     following: incoming.following ?? current?.following ?? false,
@@ -208,7 +206,6 @@ export function authorViewFromDirectMessageConversation(
     name: conversation.peer_name ?? null,
     display_name: conversation.peer_display_name ?? null,
     about: null,
-    picture: conversation.peer_picture ?? null,
     picture_asset: conversation.peer_picture_asset ?? null,
     updated_at: null,
     following: false,

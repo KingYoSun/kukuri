@@ -457,8 +457,8 @@ export function DesktopShellNotificationsSurface({
         const actorPicture = knownAuthor
           ? resolveProfilePictureSrc(knownAuthor, mediaObjectUrls)
           : notification.actor_picture_asset
-            ? mediaObjectUrls[notification.actor_picture_asset.hash] ?? notification.actor_picture ?? null
-            : notification.actor_picture ?? null;
+            ? mediaObjectUrls[notification.actor_picture_asset.hash] ?? null
+            : null;
         const contextLabel =
           notification.kind === 'direct_message'
             ? t('shell:notifications.context.directMessage')

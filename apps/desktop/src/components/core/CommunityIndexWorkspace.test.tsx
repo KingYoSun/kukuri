@@ -59,8 +59,12 @@ function knownAuthor(authorPubkey: string): AuthorSocialView {
     name: 'alice',
     display_name: 'Alice',
     about: null,
-    picture: 'https://example.test/alice.png',
-    picture_asset: null,
+    picture_asset: {
+      hash: 'avatar-hash',
+      mime: 'image/png',
+      bytes: 42,
+      role: 'profile_avatar',
+    },
     updated_at: null,
     following: false,
     followed_by: false,
@@ -81,7 +85,6 @@ function resolvedPost(objectId: string, content = 'canonical content'): PostView
     author_pubkey: `author-${objectId}`,
     author_name: 'alice',
     author_display_name: 'Alice',
-    author_picture: null,
     author_picture_asset: null,
     following: false,
     followed_by: false,
@@ -250,6 +253,7 @@ test('topic search sends the active public scope and renders results with the sh
     <CommunityIndexWorkspace
       {...workspaceProps(api, {
         knownAuthorsByPubkey: { 'author-1': knownAuthor('author-1') },
+        mediaObjectUrls: { 'avatar-hash': 'blob:avatar-hash' },
         onOpenAuthor,
       })}
     />
@@ -270,7 +274,7 @@ test('topic search sends the active public scope and renders results with the sh
   expect(screen.getByText('Alice')).toBeInTheDocument();
   expect(screen.getByTestId('post-1-author-avatar').querySelector('img')).toHaveAttribute(
     'src',
-    'https://example.test/alice.png'
+    'blob:avatar-hash'
   );
   expect(screen.queryByText(/Search preview; may include derived tags/)).not.toBeInTheDocument();
   expect(screen.queryByText('rust')).not.toBeInTheDocument();
@@ -527,7 +531,6 @@ test('the local profile is used without a redundant author lookup', async () => 
           name: 'local-alice',
           display_name: 'Local Alice',
           about: null,
-          picture: null,
           picture_asset: null,
           updated_at: 42,
         },

@@ -16,7 +16,6 @@ function renderPanel() {
           name: 'alice',
           display_name: 'Alice',
           about: 'Maintains the desktop client.',
-          picture: null,
           picture_asset: null,
           following: true,
           followed_by: false,

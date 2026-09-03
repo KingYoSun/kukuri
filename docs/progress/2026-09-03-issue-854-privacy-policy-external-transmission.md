@@ -41,3 +41,42 @@
 - Phase A は確認できる現行挙動との整合を対象とし、専門家レビュー済みであることや将来の事業化要件の完成を Issue #854 の完了条件にしない。
 - 第三者 Community Node の保持・問い合わせ・外部送信は各 Node の manifest と公開文書に従い、kukuri 運営者と Node 運営者が同一であるとは限らない。
 - 年齢自己申告の意味・保存範囲は変えていないため `AGE_ATTESTATION_VERSION` は1のままとし、legal bundle v4 の文書だけを再同意対象とする。
+
+## 2026-09-03 実装監査の再実行
+
+- builder preview では旧プロフィール画像 URL の互換性を保証せず、画像 host を新たな外部送信先として開示するのではなく、raw URL contract 自体を撤去した。
+- core の `Profile`／署名 profile content／Docs JSON、app-api の profile input と派生 view、desktop IPC、frontend state／mock／fixture から `picture`、`author_picture`、`source_author_picture`、`actor_picture`、`peer_picture` を削除し、`picture_asset` に一本化した。
+- 旧 URL field を含む profile envelope は既知の name／display name／about を読める一方、URL を current profile、view、event へ再公開しない。URL migration、download、proxy、cache、backfill、互換 adapter は追加していない。
+- profile 画像 upload、既存 asset を保持したテキスト更新、clear、取得済み blob の表示、未取得時の placeholder を現行経路とした。
+- Tauri CSP の `img-src` から汎用 `https:` を削除し、`'self'`、`asset:`、`http://asset.localhost`、`blob:`、`data:` だけを許可した。CSP contract は任意の `http:`／`https:` 画像 source を拒否する。
+- `privacy-policy.md` と `external-transmission-notice.md` に外部プロフィール画像 host の送信先追加は不要となり、既存の送信先一覧と実装が一致する。外部送信の追加や利用目的の重要変更ではないため、legal bundle version 5、施行日、既存同意を維持した。
+
+### 再実行 contract
+
+- failing-first: `state::tests::image_csp_allows_only_local_profile_asset_sources` を追加し、現行の `img-src https:` で失敗することを確認してから CSP を更新した。
+- core contract: 旧 `picture` URL を含む profile envelope を parse しても、current `Profile` の serialization に URL field が現れないことを固定した。
+- app-api contract: URL 互換 test を、blob avatar upload と、テキストだけを更新した際の同一 `picture_asset` 保持 test に置き換えた。
+- shared IPC fixture: Rust serializer と TypeScript fixture の双方で、profile／post／reply／repost／social／notification／DM に raw URL field が存在せず asset reference だけが残ることを固定した。
+
+### 再実行 validation
+
+- `npx pnpm@10.16.1 typecheck`
+- `npx pnpm@10.16.1 test`（frontend 140 files / 1081 tests）
+- `cargo test -p kukuri-core profile -- --nocapture`
+- `cargo test -p kukuri-store profile -- --nocapture`
+- `cargo test -p kukuri-app-api set_my_profile -- --nocapture`
+- `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml state::tests::image_csp_allows_only_local_profile_asset_sources -- --nocapture`
+- `cargo xtask doctor`
+- `cargo xtask check`
+- `cargo xtask test`（workspace 759 tests、harness 22 tests、frontend 140 files / 1081 tests）
+- `cargo xtask rust-test`（workspace 759 tests、harness 22 tests、doc tests）
+- `cargo xtask tauri-check`
+- `cargo xtask ipc-types --check`
+- `cargo xtask desktop-ui-check`（Storybook build、browser 58 tests、visual 14 tests）
+- `cargo xtask e2e-smoke`（desktop_smoke_post_persist、6 steps）
+- `cargo xtask scenario community_node_public_connectivity`（15 steps）
+- `cargo xtask oversized-files`
+- `cargo xtask operator-neutrality-check`
+- `git diff --check`
+
+CI と merge の結果は Issue #854 と PR の検証記録へ追記する。

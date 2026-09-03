@@ -180,7 +180,6 @@ impl AppService {
         let AuthorViewParts {
             author_name,
             author_display_name,
-            author_picture,
             author_picture_asset,
             following,
             followed_by,
@@ -194,7 +193,6 @@ impl AppService {
             author_pubkey: row.author_pubkey.clone(),
             author_name,
             author_display_name,
-            author_picture,
             author_picture_asset,
             following,
             followed_by,
@@ -330,7 +328,6 @@ impl AppService {
                 display_name: profile
                     .as_ref()
                     .and_then(|value| value.display_name.clone()),
-                picture: profile.as_ref().and_then(|value| value.picture.clone()),
                 picture_asset: profile
                     .as_ref()
                     .and_then(|value| profile_asset_view_from_ref(value.picture_asset.as_ref())),
@@ -450,7 +447,6 @@ impl AppService {
         let AuthorViewParts {
             author_name,
             author_display_name,
-            author_picture,
             author_picture_asset,
             following,
             followed_by,
@@ -465,7 +461,6 @@ impl AppService {
                 author_pubkey: row.author_pubkey.clone(),
                 author_name,
                 author_display_name,
-                author_picture,
                 author_picture_asset,
                 following,
                 followed_by,
@@ -543,7 +538,6 @@ impl AppService {
         let AuthorViewParts {
             author_name,
             author_display_name,
-            author_picture,
             author_picture_asset,
             following,
             followed_by,
@@ -578,7 +572,6 @@ impl AppService {
             author_pubkey: profile_post.author_pubkey.as_str().to_string(),
             author_name,
             author_display_name,
-            author_picture,
             author_picture_asset,
             following,
             followed_by,
@@ -646,7 +639,6 @@ impl AppService {
         let AuthorViewParts {
             author_name,
             author_display_name,
-            author_picture,
             author_picture_asset,
             following,
             followed_by,
@@ -662,7 +654,6 @@ impl AppService {
             author_pubkey: profile_repost.author_pubkey.as_str().to_string(),
             author_name,
             author_display_name,
-            author_picture,
             author_picture_asset,
             following,
             followed_by,
@@ -757,7 +748,6 @@ impl AppService {
             source_author_pubkey: snapshot.source_author_pubkey.as_str().to_string(),
             source_author_name: author.author_name,
             source_author_display_name: author.author_display_name,
-            source_author_picture: author.author_picture,
             source_author_picture_asset: author.author_picture_asset,
             source_object_kind: snapshot.source_object_kind,
             content: if is_withdrawn {
@@ -796,7 +786,6 @@ pub(crate) const MAX_PROFILE_ABOUT_CHARS: usize = 2_000;
 pub(crate) struct AuthorViewParts {
     pub(crate) author_name: Option<String>,
     pub(crate) author_display_name: Option<String>,
-    pub(crate) author_picture: Option<String>,
     pub(crate) author_picture_asset: Option<ProfileAssetView>,
     pub(crate) following: bool,
     pub(crate) followed_by: bool,
@@ -812,7 +801,6 @@ impl AuthorViewParts {
         Self {
             author_name: profile.and_then(|value| value.name.clone()),
             author_display_name: profile.and_then(|value| value.display_name.clone()),
-            author_picture: profile.and_then(|value| value.picture.clone()),
             author_picture_asset: profile
                 .and_then(|value| profile_asset_view_from_ref(value.picture_asset.as_ref())),
             following: relationship.is_some_and(|value| value.following),
