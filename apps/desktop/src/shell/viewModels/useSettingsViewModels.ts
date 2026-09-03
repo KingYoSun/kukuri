@@ -359,9 +359,12 @@ export function useSettingsViewModels({
             (candidate) => candidate.base_url === node.base_url
           ) != null;
         const status = communityNodeStatusByBaseUrl[node.base_url];
+        const manifestEntry = communityNodeManifests[node.base_url];
         return {
           id: node.id,
           baseUrl: node.base_url,
+          nodeId: manifestEntry?.status === 'ok' ? manifestEntry.manifest.node_id : null,
+          nodeName: manifestEntry?.status === 'ok' ? manifestEntry.manifest.node_name : null,
           saved,
           distanceOptoutEligible: distanceOptoutEligibleBaseUrls.includes(node.base_url),
           diagnostics: [

@@ -31,3 +31,24 @@
 - `cargo xtask e2e-smoke`: 成功
 
 関連: #853（親）、#857
+
+## 2026-09-04 Dome hosting 再監査追補
+
+再監査で未充足だった Dome hosting の同意境界を実装した。Dome の status、health、delegate、rotate、revoke、resync は共通の GET / request helper を通り、保存済み Community Node、active local consent、公開 policy catalog の現行 required snapshot を順に確認してから token 読み込み、認証、Dome API 通信へ進む。同意なし、撤回後、policy 更新後、未設定 Node は typed error で fail-closed になり、認証および Dome API の request は 0 件となる。
+
+UI は自由入力の Node ID / base URL を廃止し、設定済み Community Node の公開情報から得た `node_id` と base URL を一体の対象として選択する。未同意または再同意待ちでは既存の Community Node consent dialog を表示し、表示した policy slug / version / snapshot への同意完了後だけ、同じ Node を対象に delegate を再開する。公開情報が取得できない Node は選択対象にせず、Community Node 設定への導線を表示する。
+
+追加 contract は次を固定する。
+
+- runtime 6 件: 未同意 GET / POST、撤回後、policy 更新後、未設定 Node、現行同意での GET / POST 成功、401 後の再認証を検証する。
+- UI 6 件: 現行同意での直接 delegate、未同意からの exact-policy accept、拒否、公開情報なし、policy 取得失敗、runtime race の `CONSENT_REQUIRED` を検証する。
+- lock classification は新しい Dome hosting request contract 6 件を `CommunityNodeServer` class として明示する。
+
+追補後の検証:
+
+- `cargo xtask doctor`: 成功
+- `cargo xtask check`: 成功
+- `cargo xtask oversized-files`: 成功
+- `cargo xtask test`: Rust 765 件、harness 22 件、frontend 1087 件すべて成功（Rust 3 件 skip）
+- `cargo xtask desktop-ui-check`: lint、typecheck、unit 1087 件、Storybook build、browser 58 件、visual 14 件すべて成功
+- `cargo xtask e2e-smoke`: `desktop_smoke_post_persist` 6 step 成功

@@ -1,6 +1,7 @@
 mod admission;
 mod config;
 mod connectivity;
+mod dome_hosting;
 mod index_query;
 mod metadata;
 mod report_submission;

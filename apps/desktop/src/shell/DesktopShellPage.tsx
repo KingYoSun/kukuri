@@ -604,6 +604,9 @@ export function DesktopShellPage({
       notificationsWorkspace={null}
       viewModels={viewModels}
       openCommunityNodeSettings={handleOpenCommunityNodeSettings}
+      communityNodePanelView={viewModels.communityNodePanelView}
+      onFetchCommunityNodeConsents={shellActions.handleFetchCommunityNodeConsents}
+      onAcceptCommunityNodeConsents={shellActions.handleAcceptCommunityNodeConsents}
       loadReactionCatalogData={loadReactionCatalogData}
       refreshTimelineFeed={refreshTimelineFeed}
       loadMoreTimeline={loadMoreTimeline}
