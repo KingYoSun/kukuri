@@ -130,7 +130,7 @@ export function MetaverseRoomDiscovery({
     if (pictureAssetHash && typeof mediaObjectUrls[pictureAssetHash] === 'string') {
       return mediaObjectUrls[pictureAssetHash];
     }
-    return host?.picture ?? null;
+    return null;
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {

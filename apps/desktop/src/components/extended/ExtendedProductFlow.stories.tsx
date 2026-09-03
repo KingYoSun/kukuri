@@ -170,7 +170,7 @@ function ExtendedProductFlowStory({ width }: { width: number }) {
         dirty={true}
         error={null}
         fields={profileFields}
-        picturePreviewSrc='https://example.com/avatar.png'
+        picturePreviewSrc='data:image/png;base64,AA=='
         hasPicture={true}
         pictureInputKey={0}
         onFieldChange={(field, value) =>

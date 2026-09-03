@@ -150,7 +150,6 @@ impl AppService {
             peer_display_name: profile
                 .as_ref()
                 .and_then(|value| value.display_name.clone()),
-            peer_picture: profile.as_ref().and_then(|value| value.picture.clone()),
             peer_picture_asset: profile_asset_view_from_ref(
                 profile
                     .as_ref()
@@ -239,7 +238,6 @@ impl AppService {
             actor_display_name: profile
                 .as_ref()
                 .and_then(|value| value.display_name.clone()),
-            actor_picture: profile.as_ref().and_then(|value| value.picture.clone()),
             actor_picture_asset: profile_asset_view_from_ref(
                 profile
                     .as_ref()

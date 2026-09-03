@@ -31,7 +31,6 @@ export const postViewFull = {
   "author_pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
   "author_name": "alice",
   "author_display_name": "Alice",
-  "author_picture": "https://example.com/alice.png",
   "author_picture_asset": {
     "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "mime": "image/png",
@@ -86,7 +85,6 @@ export const postViewFull = {
       "pubkey": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
       "name": "bob",
       "display_name": "Bob",
-      "picture": null,
       "picture_asset": {
         "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "mime": "image/png",
@@ -128,7 +126,6 @@ export const postViewFull = {
     "source_author_pubkey": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
     "source_author_name": "bob",
     "source_author_display_name": null,
-    "source_author_picture": null,
     "source_author_picture_asset": null,
     "source_object_kind": "post",
     "content": "original",
@@ -176,7 +173,6 @@ export const postViewMinimal = {
   "author_pubkey": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
   "author_name": null,
   "author_display_name": null,
-  "author_picture": null,
   "author_picture_asset": null,
   "following": false,
   "followed_by": false,
@@ -213,7 +209,6 @@ export const timelineView = {
       "author_pubkey": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
       "author_name": null,
       "author_display_name": null,
-      "author_picture": null,
       "author_picture_asset": null,
       "following": false,
       "followed_by": false,
@@ -256,7 +251,6 @@ export const bookmarkedPostView = {
     "author_pubkey": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
     "author_name": null,
     "author_display_name": null,
-    "author_picture": null,
     "author_picture_asset": null,
     "following": false,
     "followed_by": false,
@@ -406,7 +400,6 @@ export const notificationView = {
   "actor_pubkey": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
   "actor_name": "bob",
   "actor_display_name": "Bob",
-  "actor_picture": null,
   "actor_picture_asset": {
     "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "mime": "image/png",
@@ -457,7 +450,6 @@ export const dmConversationView = {
   "peer_pubkey": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
   "peer_name": "bob",
   "peer_display_name": "Bob",
-  "peer_picture": null,
   "peer_picture_asset": {
     "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "mime": "image/png",
@@ -682,7 +674,6 @@ export const authorSocialView = {
   "name": "bob",
   "display_name": "Bob",
   "about": "hi",
-  "picture": null,
   "picture_asset": {
     "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "mime": "image/png",

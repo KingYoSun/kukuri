@@ -148,7 +148,7 @@ export function AuthorDetailCard({
               <div className='author-detail-hero'>
                 <AuthorAvatar
                   label={view.displayLabel}
-                  picture={view.pictureSrc ?? author.picture ?? null}
+                  picture={view.pictureSrc ?? null}
                   size='sm'
                   testId='author-detail-avatar'
                 />

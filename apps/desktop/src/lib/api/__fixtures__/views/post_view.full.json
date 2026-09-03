@@ -4,7 +4,6 @@
   "author_pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
   "author_name": "alice",
   "author_display_name": "Alice",
-  "author_picture": "https://example.com/alice.png",
   "author_picture_asset": {
     "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "mime": "image/png",
@@ -59,7 +58,6 @@
       "pubkey": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
       "name": "bob",
       "display_name": "Bob",
-      "picture": null,
       "picture_asset": {
         "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "mime": "image/png",
@@ -101,7 +99,6 @@
     "source_author_pubkey": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
     "source_author_name": "bob",
     "source_author_display_name": null,
-    "source_author_picture": null,
     "source_author_picture_asset": null,
     "source_object_kind": "post",
     "content": "original",

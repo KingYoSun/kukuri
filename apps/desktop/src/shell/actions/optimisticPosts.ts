@@ -187,7 +187,6 @@ export function createOptimisticPostActions({
               pubkey: replyPost.author_pubkey,
               name: replyPost.author_name ?? null,
               display_name: replyPost.author_display_name ?? null,
-              picture: replyPost.author_picture ?? null,
               picture_asset: replyPost.author_picture_asset ?? null,
             },
             content: replyPost.content,

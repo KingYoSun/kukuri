@@ -79,7 +79,6 @@ export function communityIndexPostCardView(
         author_name: knownAuthor?.name ?? resolvedPost.author_name ?? null,
         author_display_name:
           knownAuthor?.display_name ?? resolvedPost.author_display_name ?? null,
-        author_picture: knownAuthor?.picture ?? resolvedPost.author_picture ?? null,
         author_picture_asset:
           knownAuthor?.picture_asset ?? resolvedPost.author_picture_asset ?? null,
         // Node index text is never a canonical content source. Render only the
@@ -96,7 +95,6 @@ export function communityIndexPostCardView(
         author_pubkey: entry.author_pubkey,
         author_name: knownAuthor?.name ?? null,
         author_display_name: knownAuthor?.display_name ?? null,
-        author_picture: knownAuthor?.picture ?? null,
         author_picture_asset: knownAuthor?.picture_asset ?? null,
         following: knownAuthor?.following ?? false,
         followed_by: knownAuthor?.followed_by ?? false,
@@ -139,7 +137,7 @@ export function communityIndexPostCardView(
       : resolvedPost?.author_picture_asset?.hash &&
           typeof options.mediaObjectUrls[resolvedPost.author_picture_asset.hash] === 'string'
         ? options.mediaObjectUrls[resolvedPost.author_picture_asset.hash]
-        : resolvedPost?.author_picture ?? null,
+        : null,
     relationshipLabel: null,
     audienceChipLabel: audience,
     threadTargetId: resolvedPost?.root_id ?? entry.object_id,

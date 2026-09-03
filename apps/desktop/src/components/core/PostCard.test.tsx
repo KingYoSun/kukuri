@@ -34,7 +34,7 @@ test('post card hides the object kind and shows a placeholder avatar when no pic
 test('post card renders the author image when one is available', () => {
   render(
     <PostCard
-      view={createView({ authorPicture: 'https://example.com/avatar.png' })}
+      view={createView({ authorPicture: 'blob:avatar' })}
       onOpenAuthor={() => undefined}
       onOpenThread={() => undefined}
       onReply={() => undefined}
@@ -43,7 +43,7 @@ test('post card renders the author image when one is available', () => {
 
   expect(screen.getByTestId('post-1-author-avatar').querySelector('img')).toHaveAttribute(
     'src',
-    'https://example.com/avatar.png'
+    'blob:avatar'
   );
 });
 
@@ -234,7 +234,6 @@ function createReplyView(overrides?: Partial<PostCardView>): PostCardView {
           pubkey: 'b'.repeat(64),
           name: 'parent-author',
           display_name: 'Parent Author',
-          picture: null,
           picture_asset: null,
         },
         content: 'parent body',

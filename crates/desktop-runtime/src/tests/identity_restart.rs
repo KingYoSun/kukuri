@@ -135,7 +135,6 @@ async fn desktop_runtime_restores_profile_avatar_blob_after_restart() {
             name: Some("runtime-avatar-owner".into()),
             display_name: Some("Runtime Avatar Owner".into()),
             about: Some("profile avatar restart".into()),
-            picture: None,
             picture_upload: Some(profile_avatar_attachment_request(
                 "avatar.png",
                 "image/png",

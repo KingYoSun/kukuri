@@ -3,7 +3,6 @@
   "peer_pubkey": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
   "peer_name": "bob",
   "peer_display_name": "Bob",
-  "peer_picture": null,
   "peer_picture_asset": {
     "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "mime": "image/png",

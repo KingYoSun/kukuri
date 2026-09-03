@@ -17,7 +17,6 @@ pub(crate) async fn persist_profile_doc(
                     name: profile.name.clone(),
                     display_name: profile.display_name.clone(),
                     about: profile.about.clone(),
-                    picture: profile.picture.clone(),
                     picture_asset: profile.picture_asset.clone(),
                     updated_at: profile.updated_at,
                     envelope_id: envelope.id.clone(),

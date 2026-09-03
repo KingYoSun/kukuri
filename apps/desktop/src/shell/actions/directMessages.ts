@@ -107,7 +107,6 @@ export function createDirectMessageActions({
         peer_name: knownPeerAuthor?.name ?? existingConversation?.peer_name ?? null,
         peer_display_name:
           knownPeerAuthor?.display_name ?? existingConversation?.peer_display_name ?? null,
-        peer_picture: knownPeerAuthor?.picture ?? existingConversation?.peer_picture ?? null,
         peer_picture_asset:
           knownPeerAuthor?.picture_asset ?? existingConversation?.peer_picture_asset ?? null,
         updated_at: createdAt,

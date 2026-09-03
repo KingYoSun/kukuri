@@ -318,7 +318,6 @@ pub struct SetMyProfileRequest {
     pub name: Option<String>,
     pub display_name: Option<String>,
     pub about: Option<String>,
-    pub picture: Option<String>,
     pub picture_upload: Option<CreateAttachmentRequest>,
     #[serde(default)]
     pub clear_picture: bool,

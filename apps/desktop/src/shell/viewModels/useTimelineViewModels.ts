@@ -167,7 +167,6 @@ export function useTimelineViewModels({
           : knownAuthorsByPubkey[post.author_pubkey] ?? null;
       const authorPicture = resolveProfilePictureSrc(
         {
-          picture: post.author_picture ?? knownAuthor?.picture ?? null,
           picture_asset: post.author_picture_asset ?? knownAuthor?.picture_asset ?? null,
         },
         mediaObjectUrls
@@ -175,7 +174,6 @@ export function useTimelineViewModels({
       const resolveRefAuthor = (
         pubkey: string,
         label: string,
-        picture?: string | null,
         pictureAsset?: ProfileAssetView | null
       ): ReferencedAuthorMeta => {
         const known =
@@ -185,7 +183,6 @@ export function useTimelineViewModels({
           label,
           picture: resolveProfilePictureSrc(
             {
-              picture: picture ?? known?.picture ?? null,
               picture_asset: pictureAsset ?? known?.picture_asset ?? null,
             },
             mediaObjectUrls
@@ -201,7 +198,6 @@ export function useTimelineViewModels({
               repostSource.source_author_display_name,
               repostSource.source_author_name
             ),
-            repostSource.source_author_picture,
             repostSource.source_author_picture_asset
           )
         : null;
@@ -214,7 +210,6 @@ export function useTimelineViewModels({
               replyPreview.author.display_name,
               replyPreview.author.name
             ),
-            replyPreview.author.picture,
             replyPreview.author.picture_asset
           )
         : null;

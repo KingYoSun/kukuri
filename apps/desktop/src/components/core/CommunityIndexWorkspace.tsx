@@ -128,7 +128,6 @@ function localAuthorView(profile: Profile, authorPubkey: string): AuthorSocialVi
     name: profile.name ?? null,
     display_name: profile.display_name ?? null,
     about: profile.about ?? null,
-    picture: profile.picture ?? null,
     picture_asset: profile.picture_asset ?? null,
     updated_at: profile.updated_at,
     following: false,

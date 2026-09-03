@@ -82,7 +82,6 @@ function repostTargetFromSnapshot(post: PostView): PostView | null {
     author_pubkey: source.source_author_pubkey,
     author_name: source.source_author_name ?? null,
     author_display_name: source.source_author_display_name ?? null,
-    author_picture: source.source_author_picture ?? null,
     author_picture_asset: source.source_author_picture_asset ?? null,
     following: false,
     followed_by: false,

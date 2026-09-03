@@ -48,7 +48,6 @@ export function useProfileViewModels({
     profileAvatarPreviewUrl ||
       profileDraft.clear_picture ||
       profileDraft.picture_upload ||
-      localProfile?.picture ||
       localProfile?.picture_asset
   ) && !profileDraft.clear_picture;
 

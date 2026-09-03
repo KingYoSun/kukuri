@@ -3,7 +3,6 @@
   "name": "bob",
   "display_name": "Bob",
   "about": "hi",
-  "picture": null,
   "picture_asset": {
     "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "mime": "image/png",

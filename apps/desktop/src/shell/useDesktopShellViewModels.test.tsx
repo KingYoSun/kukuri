@@ -74,7 +74,6 @@ function buildAuthor(
     name: null,
     display_name: null,
     about: null,
-    picture: null,
     picture_asset: null,
     updated_at: null,
     following: false,
@@ -161,7 +160,6 @@ function buildConversation(
     peer_pubkey: peerPubkey,
     peer_name: 'dave',
     peer_display_name: 'Dave',
-    peer_picture: null,
     peer_picture_asset: null,
     updated_at: 10,
     last_message_at: null,
@@ -354,7 +352,6 @@ describe('useDesktopShellViewModels', () => {
       source_author_pubkey: AUTHOR_B_PUBKEY,
       source_author_name: 'bob',
       source_author_display_name: 'Bob Display',
-      source_author_picture: null,
       source_author_picture_asset: null,
       source_object_kind: 'post',
       content: 'original content',
@@ -396,12 +393,18 @@ describe('useDesktopShellViewModels', () => {
       timelinesByKey: {
         'kukuri:topic:general::public': [repostWithRoot, repostWithoutRoot, quoteRepost],
       },
-      // repost_of に picture が無い場合は knownAuthors から解決される
+      // repost_of に asset が無い場合は knownAuthors から解決される
       knownAuthorsByPubkey: {
         [AUTHOR_B_PUBKEY]: buildAuthor(AUTHOR_B_PUBKEY, {
-          picture: 'https://example.com/bob.png',
+          picture_asset: {
+            hash: 'avatar-bob',
+            mime: 'image/png',
+            bytes: 42,
+            role: 'profile_avatar',
+          },
         }),
       },
+      mediaObjectUrls: { 'avatar-bob': 'blob:avatar-bob' },
     }));
 
     const [withRootCard, withoutRootCard, quoteCard] =
@@ -414,7 +417,7 @@ describe('useDesktopShellViewModels', () => {
     expect(withRootCard.repostSourceAuthor).toEqual({
       pubkey: AUTHOR_B_PUBKEY,
       label: 'Bob Display',
-      picture: 'https://example.com/bob.png',
+      picture: 'blob:avatar-bob',
     });
     // repost_of.root_id が無い場合は source_object_id に fallback
     expect(withoutRootCard.threadTargetId).toBe('source-post-1');
@@ -608,10 +611,16 @@ describe('useDesktopShellViewModels', () => {
         }),
         [AUTHOR_B_PUBKEY]: buildAuthor(AUTHOR_B_PUBKEY, {
           name: 'bob',
-          picture: 'https://example.com/bob.png',
+          picture_asset: {
+            hash: 'avatar-bob',
+            mime: 'image/png',
+            bytes: 42,
+            role: 'profile_avatar',
+          },
         }),
         [SELF_PUBKEY]: buildAuthor(SELF_PUBKEY, { display_name: 'Me' }),
       },
+      mediaObjectUrls: { 'avatar-bob': 'blob:avatar-bob' },
     }));
 
     const candidates = view.result.current.mentionCandidates;
@@ -634,7 +643,7 @@ describe('useDesktopShellViewModels', () => {
       displayName: null,
       name: 'bob',
       about: null,
-      picture: 'https://example.com/bob.png',
+      picture: 'blob:avatar-bob',
     });
 
     view.unmount();

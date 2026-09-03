@@ -31,7 +31,7 @@ export type BlobMediaPayload = { bytes_base64: string, mime: string, };
 
 export type ContentDisplaySettings = { adult_content_enabled: boolean, };
 
-export type ReplyPreviewAuthorView = { pubkey: string, name?: string | null, display_name?: string | null, picture?: string | null, picture_asset?: ProfileAssetView | null, };
+export type ReplyPreviewAuthorView = { pubkey: string, name?: string | null, display_name?: string | null, picture_asset?: ProfileAssetView | null, };
 
 export type ReplyPreviewView = { object_id: string, topic: string, author: ReplyPreviewAuthorView, content: string, attachments: Array<AttachmentView>, content_labels?: Array<string> | null, root_id?: string | null, reply_to?: string | null, };
 
@@ -45,7 +45,7 @@ export type RecentReactionView = { reaction_key_kind: string, normalized_reactio
 
 export type CustomReactionAssetView = { asset_id: string, owner_pubkey: string, blob_hash: string, search_key: string, mime: string, bytes: number, width: number, height: number, };
 
-export type RepostSourceView = { source_object_id: string, source_topic_id: string, source_author_pubkey: string, source_author_name?: string | null, source_author_display_name?: string | null, source_author_picture?: string | null, source_author_picture_asset?: ProfileAssetView | null, source_object_kind: string, content: string, attachments: Array<AttachmentView>, content_labels?: Array<string> | null, reply_to?: string | null, root_id?: string | null, };
+export type RepostSourceView = { source_object_id: string, source_topic_id: string, source_author_pubkey: string, source_author_name?: string | null, source_author_display_name?: string | null, source_author_picture_asset?: ProfileAssetView | null, source_object_kind: string, content: string, attachments: Array<AttachmentView>, content_labels?: Array<string> | null, reply_to?: string | null, root_id?: string | null, };
 
 export type ContentObservationView = { node_base_url: string, capability: string, observed_at: number, };
 
@@ -53,11 +53,11 @@ export type ContentProvenanceView = { canonical_source: string, observed_via: Ar
 
 export type PostWithdrawalView = { withdrawn_at: number, replacement_object_id?: string | null, reason_visibility: string, reason?: string | null, };
 
-export type PostView = { object_id: string, envelope_id: string, author_pubkey: string, author_name?: string | null, author_display_name?: string | null, author_picture?: string | null, author_picture_asset?: ProfileAssetView | null, following: boolean, followed_by: boolean, mutual: boolean, friend_of_friend: boolean, provenance?: ContentProvenanceView | null, withdrawal?: PostWithdrawalView | null, content: string, content_status: BlobViewStatus, attachments: Array<AttachmentView>, content_labels?: Array<string> | null, created_at: number, reply_to?: string | null, reply_preview?: ReplyPreviewView | null, root_id?: string | null, object_kind: string, published_topic_id?: string | null, origin_topic_id?: string | null, repost_of?: RepostSourceView | null, repost_commentary?: string | null, is_threadable: boolean, channel_id?: string | null, audience_label: string, reaction_summary?: Array<ReactionSummaryView> | null, my_reactions?: Array<ReactionKeyView> | null, };
+export type PostView = { object_id: string, envelope_id: string, author_pubkey: string, author_name?: string | null, author_display_name?: string | null, author_picture_asset?: ProfileAssetView | null, following: boolean, followed_by: boolean, mutual: boolean, friend_of_friend: boolean, provenance?: ContentProvenanceView | null, withdrawal?: PostWithdrawalView | null, content: string, content_status: BlobViewStatus, attachments: Array<AttachmentView>, content_labels?: Array<string> | null, created_at: number, reply_to?: string | null, reply_preview?: ReplyPreviewView | null, root_id?: string | null, object_kind: string, published_topic_id?: string | null, origin_topic_id?: string | null, repost_of?: RepostSourceView | null, repost_commentary?: string | null, is_threadable: boolean, channel_id?: string | null, audience_label: string, reaction_summary?: Array<ReactionSummaryView> | null, my_reactions?: Array<ReactionKeyView> | null, };
 
 export type BookmarkedPostView = { bookmarked_at: number, post: PostView, };
 
-export type AuthorSocialView = { author_pubkey: string, name?: string | null, display_name?: string | null, about?: string | null, picture?: string | null, picture_asset?: ProfileAssetView | null, updated_at?: number | null, following: boolean, followed_by: boolean, mutual: boolean, friend_of_friend: boolean, friend_of_friend_via_pubkeys: Array<string>, provenance?: ContentProvenanceView | null, muted: boolean, blocking: boolean, blocked_by: boolean, };
+export type AuthorSocialView = { author_pubkey: string, name?: string | null, display_name?: string | null, about?: string | null, picture_asset?: ProfileAssetView | null, updated_at?: number | null, following: boolean, followed_by: boolean, mutual: boolean, friend_of_friend: boolean, friend_of_friend_via_pubkeys: Array<string>, provenance?: ContentProvenanceView | null, muted: boolean, blocking: boolean, blocked_by: boolean, };
 
 export type DirectMessageStatusView = { peer_pubkey: string, dm_id: string, mutual: boolean, send_enabled: boolean, peer_count: number, pending_outbox_count: number, };
 
@@ -65,9 +65,9 @@ export type DirectMessageTopicStatusView = { topic: string, joined: boolean, pee
 
 export type DirectMessageMessageView = { dm_id: string, message_id: string, sender_pubkey: string, recipient_pubkey: string, created_at: number, text: string, reply_to_message_id?: string | null, attachments: Array<AttachmentView>, outgoing: boolean, delivered: boolean, };
 
-export type DirectMessageConversationView = { dm_id: string, peer_pubkey: string, peer_name?: string | null, peer_display_name?: string | null, peer_picture?: string | null, peer_picture_asset?: ProfileAssetView | null, updated_at: number, last_message_at?: number | null, last_message_id?: string | null, last_message_preview?: string | null, status: DirectMessageStatusView, };
+export type DirectMessageConversationView = { dm_id: string, peer_pubkey: string, peer_name?: string | null, peer_display_name?: string | null, peer_picture_asset?: ProfileAssetView | null, updated_at: number, last_message_at?: number | null, last_message_id?: string | null, last_message_preview?: string | null, status: DirectMessageStatusView, };
 
-export type NotificationView = { notification_id: string, kind: NotificationKind, actor_pubkey: string, actor_name?: string | null, actor_display_name?: string | null, actor_picture?: string | null, actor_picture_asset?: ProfileAssetView | null, source_envelope_id?: string | null, source_replica_id?: string | null, topic_id?: string | null, channel_id?: string | null, object_id?: string | null, thread_root_object_id?: string | null, dm_id?: string | null, message_id?: string | null, preview_text?: string | null, content_labels?: Array<string> | null, created_at: number, received_at: number, read_at?: number | null, };
+export type NotificationView = { notification_id: string, kind: NotificationKind, actor_pubkey: string, actor_name?: string | null, actor_display_name?: string | null, actor_picture_asset?: ProfileAssetView | null, source_envelope_id?: string | null, source_replica_id?: string | null, topic_id?: string | null, channel_id?: string | null, object_id?: string | null, thread_root_object_id?: string | null, dm_id?: string | null, message_id?: string | null, preview_text?: string | null, content_labels?: Array<string> | null, created_at: number, received_at: number, read_at?: number | null, };
 
 export type NotificationStatusView = { unread_count: number, };
 
@@ -261,7 +261,7 @@ export type TimelineScope = { "kind": "public" } | { "kind": "all_joined" } | { 
 
 export type SeedPeer = { endpoint_id: string, addr_hint?: string | null, };
 
-export type Profile = { pubkey: Pubkey, name?: string | null, display_name?: string | null, about?: string | null, picture?: string | null, picture_asset?: ProfileAssetView | null, updated_at: number, };
+export type Profile = { pubkey: Pubkey, name?: string | null, display_name?: string | null, about?: string | null, picture_asset?: ProfileAssetView | null, updated_at: number, };
 
 export type PrivateChannelInvitePreview = { channel_id: ChannelId, topic_id: TopicId, channel_label: string, inviter_pubkey: Pubkey, owner_pubkey: Pubkey, epoch_id: string, expires_at?: number | null, namespace_secret_hex: string, };
 
@@ -567,7 +567,7 @@ export type SendDirectMessageRequest = { pubkey: string, text?: string | null, r
 
 export type DeleteDirectMessageMessageRequest = { pubkey: string, message_id: string, };
 
-export type SetMyProfileRequest = { name?: string | null, display_name?: string | null, about?: string | null, picture?: string | null, picture_upload?: CreateAttachmentRequest | null, clear_picture: boolean, };
+export type SetMyProfileRequest = { name?: string | null, display_name?: string | null, about?: string | null, picture_upload?: CreateAttachmentRequest | null, clear_picture: boolean, };
 
 export type ListLiveSessionsRequest = { topic: string, scope: TimelineScope, };
 

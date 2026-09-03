@@ -140,7 +140,6 @@ function reviewDirectMessageConversation(
     peer_pubkey: peerPubkey,
     peer_name: peerName,
     peer_display_name: peerDisplayName,
-    peer_picture: null,
     peer_picture_asset: null,
     updated_at: lastMessageAt,
     last_message_at: lastMessageAt,

@@ -343,7 +343,6 @@ export function createStoryAuthorDetailView(): AuthorDetailView {
       name: 'bob',
       display_name: null,
       about: 'Maintains the topic-first shell and community-node connectivity reviews.',
-      picture: null,
       updated_at: 1,
       following: true,
       followed_by: true,

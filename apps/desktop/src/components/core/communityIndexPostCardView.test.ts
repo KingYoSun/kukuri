@@ -24,8 +24,12 @@ const knownAuthor: AuthorSocialView = {
   name: 'alice',
   display_name: 'Alice',
   about: null,
-  picture: 'https://example.test/alice.png',
-  picture_asset: null,
+  picture_asset: {
+    hash: 'avatar-hash',
+    mime: 'image/png',
+    bytes: 42,
+    role: 'profile_avatar',
+  },
   updated_at: null,
   following: true,
   followed_by: false,
@@ -45,7 +49,6 @@ function resolvedEntry(content: string): CommunityIndexResolvedPostView {
     author_pubkey: entry.author_pubkey,
     author_name: 'alice',
     author_display_name: 'Alice',
-    author_picture: null,
     author_picture_asset: null,
     following: false,
     followed_by: false,
@@ -99,7 +102,7 @@ describe('communityIndexPostCardView', () => {
       operation: 'search',
       topicId: null,
       knownAuthor,
-      mediaObjectUrls: {},
+      mediaObjectUrls: { 'avatar-hash': 'blob:avatar-hash' },
     });
 
     expect(view.post.content).not.toContain(entry.text);
@@ -114,7 +117,7 @@ describe('communityIndexPostCardView', () => {
       knownAuthor,
       resolutionStatus: 'resolved',
       resolvedEntry: resolvedEntry(canonicalContent),
-      mediaObjectUrls: {},
+      mediaObjectUrls: { 'avatar-hash': 'blob:avatar-hash' },
     });
 
     expect(view.post).toMatchObject({
@@ -134,7 +137,7 @@ describe('communityIndexPostCardView', () => {
       repost_of: null,
     });
     expect(view.authorLabel).toBe('Alice');
-    expect(view.authorPicture).toBe('https://example.test/alice.png');
+    expect(view.authorPicture).toBe('blob:avatar-hash');
     expect(view.audienceChipLabel).toBe('Public');
     expect(view.threadTopicId).toBe(entry.scope_id);
     expect(view.canReply).toBe(true);

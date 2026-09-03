@@ -15,7 +15,6 @@ pub struct Profile {
     pub name: Option<String>,
     pub display_name: Option<String>,
     pub about: Option<String>,
-    pub picture: Option<String>,
     // serialize_with で wire は ProfileAssetView 形状(views.rs で生成済み)。
     // AssetRef を直接生成せず、現行 types.ts と同じ `?: ProfileAssetView | null` にする。
     #[serde(
@@ -34,7 +33,6 @@ pub struct KukuriProfileEnvelopeContentV1 {
     pub name: Option<String>,
     pub display_name: Option<String>,
     pub about: Option<String>,
-    pub picture: Option<String>,
     #[serde(
         default,
         serialize_with = "serialize_profile_asset_ref",
@@ -49,7 +47,6 @@ pub struct AuthorProfileDocV1 {
     pub name: Option<String>,
     pub display_name: Option<String>,
     pub about: Option<String>,
-    pub picture: Option<String>,
     #[serde(
         default,
         serialize_with = "serialize_profile_asset_ref",
@@ -439,7 +436,6 @@ pub fn parse_profile(envelope: &KukuriEnvelope) -> Result<Option<Profile>> {
         name: metadata.name,
         display_name: metadata.display_name,
         about: metadata.about,
-        picture: metadata.picture,
         picture_asset: metadata.picture_asset,
         updated_at: envelope.created_at,
     }))

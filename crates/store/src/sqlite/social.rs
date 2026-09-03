@@ -12,15 +12,14 @@ impl SqliteStore {
         sqlx::query(
             r#"
             INSERT INTO profiles (
-              pubkey, name, display_name, about, picture,
+              pubkey, name, display_name, about,
               picture_blob_hash, picture_mime, picture_bytes, updated_at
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
             ON CONFLICT(pubkey) DO UPDATE SET
               name = excluded.name,
               display_name = excluded.display_name,
               about = excluded.about,
-              picture = excluded.picture,
               picture_blob_hash = excluded.picture_blob_hash,
               picture_mime = excluded.picture_mime,
               picture_bytes = excluded.picture_bytes,
@@ -31,7 +30,6 @@ impl SqliteStore {
         .bind(profile.name.clone())
         .bind(profile.display_name.clone())
         .bind(profile.about.clone())
-        .bind(profile.picture.clone())
         .bind(
             profile
                 .picture_asset
@@ -61,7 +59,7 @@ impl SqliteStore {
         let row = sqlx::query(
             r#"
             SELECT
-              pubkey, name, display_name, about, picture,
+              pubkey, name, display_name, about,
               picture_blob_hash, picture_mime, picture_bytes, updated_at
             FROM profiles
             WHERE pubkey = ?1
@@ -76,7 +74,6 @@ impl SqliteStore {
             name: row.try_get("name").ok(),
             display_name: row.try_get("display_name").ok(),
             about: row.try_get("about").ok(),
-            picture: row.try_get("picture").ok(),
             picture_asset: row
                 .try_get::<String, _>("picture_blob_hash")
                 .ok()
@@ -107,7 +104,7 @@ impl SqliteStore {
         let mut builder = QueryBuilder::<Sqlite>::new(
             r#"
             SELECT
-              pubkey, name, display_name, about, picture,
+              pubkey, name, display_name, about,
               picture_blob_hash, picture_mime, picture_bytes, updated_at
             FROM profiles
             WHERE pubkey IN (
@@ -127,7 +124,6 @@ impl SqliteStore {
                 name: row.try_get("name").ok(),
                 display_name: row.try_get("display_name").ok(),
                 about: row.try_get("about").ok(),
-                picture: row.try_get("picture").ok(),
                 picture_asset: row
                     .try_get::<String, _>("picture_blob_hash")
                     .ok()
@@ -317,15 +313,14 @@ impl SocialProjectionStore for SqliteStore {
         sqlx::query(
             r#"
             INSERT INTO profile_cache (
-              pubkey, name, display_name, about, picture,
+              pubkey, name, display_name, about,
               picture_blob_hash, picture_mime, picture_bytes, updated_at
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
             ON CONFLICT(pubkey) DO UPDATE SET
               name = excluded.name,
               display_name = excluded.display_name,
               about = excluded.about,
-              picture = excluded.picture,
               picture_blob_hash = excluded.picture_blob_hash,
               picture_mime = excluded.picture_mime,
               picture_bytes = excluded.picture_bytes,
@@ -336,7 +331,6 @@ impl SocialProjectionStore for SqliteStore {
         .bind(profile.name)
         .bind(profile.display_name)
         .bind(profile.about)
-        .bind(profile.picture)
         .bind(
             profile
                 .picture_asset
