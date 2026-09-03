@@ -143,7 +143,7 @@ impl CommunityNodeStack {
             jwt_config: JwtConfig::new("kukuri-cn-harness", "test-secret", 3600),
             operator_config_path: Some(operator_config_path),
             channel_secret_key: None,
-            legal_data_key: None,
+            legal_data_key: Some("harness-legal-data-key-0123456789abcdef".to_string()),
             index_query_enabled: false,
             trust_read_enabled: false,
             relation_distance_optout_min_proximity: None,

@@ -140,6 +140,23 @@ pub struct CommunityNodePolicyDocument {
     pub material_change: bool,
     #[serde(default)]
     pub requires_reconsent: bool,
+    // `true` はこの slug の現在正文。過去 revision は `false` のまま保持される。
+    #[serde(default)]
+    pub is_current: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub publication_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub published_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retired_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_policy_version: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_policy_snapshot_revision: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_policy_version: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_policy_snapshot_revision: Option<String>,
 }
 
 /// `GET /v1/policies` の response(#857)。

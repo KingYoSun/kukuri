@@ -1,7 +1,8 @@
 use anyhow::Result;
 use kukuri_cn_core::{
-    TestDatabase, accept_consents, connect_postgres, get_policy_revision, initialize_database,
-    list_policies, list_policy_revisions, sync_policies,
+    TestDatabase, accept_consents, connect_postgres, get_policy_revision,
+    get_policy_snapshot_revision, initialize_database, list_policies, list_policy_revisions,
+    sync_policies,
 };
 use kukuri_cn_protocol::CommunityNodePolicyDocument;
 
@@ -33,11 +34,19 @@ fn policy(version: i32, body: &str) -> CommunityNodePolicyDocument {
         requested_language: None,
         material_change: false,
         requires_reconsent: false,
+        is_current: true,
+        publication_status: Some("current".to_string()),
+        published_at: None,
+        retired_at: None,
+        previous_policy_version: None,
+        previous_policy_snapshot_revision: None,
+        next_policy_version: None,
+        next_policy_snapshot_revision: None,
     }
 }
 
 #[tokio::test]
-async fn operator_policy_sync_replaces_placeholder_and_requires_version_bump() -> Result<()> {
+async fn operator_policy_sync_appends_snapshot_history_and_preserves_exact_consent() -> Result<()> {
     let Some(admin_database_url) = integration_test_admin_database_url() else {
         eprintln!("skipping cn-core integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
         return Ok(());
@@ -50,12 +59,19 @@ async fn operator_policy_sync_replaces_placeholder_and_requires_version_bump() -
         .bind(&pubkey)
         .execute(&pool)
         .await?;
+    let legacy_snapshot = sqlx::query_scalar::<_, String>(
+        "SELECT policy_snapshot_revision FROM cn_admin.policies
+         WHERE policy_slug = 'terms_of_service' AND is_current = TRUE",
+    )
+    .fetch_one(&pool)
+    .await?;
     sqlx::query(
         "INSERT INTO cn_user.policy_consents
-            (subscriber_pubkey, policy_slug, policy_version)
-         VALUES ($1, 'terms_of_service', 1)",
+            (subscriber_pubkey, policy_slug, policy_version, policy_snapshot_revision)
+         VALUES ($1, 'terms_of_service', 1, $2)",
     )
     .bind(&pubkey)
+    .bind(legacy_snapshot)
     .execute(&pool)
     .await?;
 
@@ -79,7 +95,7 @@ async fn operator_policy_sync_replaces_placeholder_and_requires_version_bump() -
     .bind(&pubkey)
     .fetch_one(&pool)
     .await?;
-    assert_eq!(legacy_consent_count, 0);
+    assert_eq!(legacy_consent_count, 1, "過去同意は監査履歴として保持する");
 
     let mut snapshot_only_change = v1.clone();
     snapshot_only_change.policy_snapshot_revision = Some("snapshot-catalog-2".to_string());
@@ -87,26 +103,48 @@ async fn operator_policy_sync_replaces_placeholder_and_requires_version_bump() -
     let snapshot_revisions = list_policy_revisions(&pool, "terms_of_service").await?;
     assert_eq!(
         snapshot_revisions.len(),
-        1,
-        "正文が同じなら版を水増ししない"
+        3,
+        "legacy正文を含め同一表示版でも snapshot 履歴を残す"
     );
     assert!(snapshot_revisions[0].material_change);
     assert!(snapshot_revisions[0].requires_reconsent);
+    assert_eq!(
+        snapshot_revisions[0]
+            .previous_policy_snapshot_revision
+            .as_deref(),
+        Some("snapshot-1")
+    );
+    assert_eq!(
+        snapshot_revisions[0].publication_status.as_deref(),
+        Some("current")
+    );
+    assert_eq!(
+        snapshot_revisions[1].publication_status.as_deref(),
+        Some("retired")
+    );
+    assert!(snapshot_revisions[0].published_at.is_some());
+    assert!(snapshot_revisions[1].retired_at.is_some());
 
-    let changed_without_bump = policy(1, "本文だけを変更");
-    let same_version_error = sync_policies(&pool, &[changed_without_bump])
-        .await
-        .expect_err("same-version content replacement must fail");
-    assert!(
-        same_version_error
-            .to_string()
-            .contains("content changed without a version increase")
+    let historical = get_policy_snapshot_revision(&pool, "terms_of_service", "snapshot-1", None)
+        .await?
+        .expect("old snapshot remains retrievable");
+    assert_eq!(historical.body_markdown, v1.body_markdown);
+
+    let mut changed_without_bump = policy(1, "本文だけを変更");
+    changed_without_bump.policy_snapshot_revision = Some("snapshot-content-3".to_string());
+    sync_policies(&pool, &[changed_without_bump]).await?;
+    assert_eq!(
+        list_policy_revisions(&pool, "terms_of_service")
+            .await?
+            .len(),
+        4,
+        "同一表示版の法的変更も append-only revision にする"
     );
 
     let v2 = policy(2, "# KingYoSun Node 利用規約 v2");
     sync_policies(&pool, std::slice::from_ref(&v2)).await?;
     let revisions = list_policy_revisions(&pool, "terms_of_service").await?;
-    assert_eq!(revisions.len(), 2, "公開済み正文は削除しない");
+    assert_eq!(revisions.len(), 5, "公開済み正文は削除しない");
     assert_eq!(revisions[0].policy_version, 2);
     assert_eq!(revisions[1].policy_version, 1);
     assert!(revisions[0].material_change);

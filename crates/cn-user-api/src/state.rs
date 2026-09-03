@@ -15,7 +15,7 @@ use kukuri_cn_indexer::{
     ArcadeDbConfig, ArcadeDbProjection, ArcadeDbRelationGraph, FailClosedIndexQuery, IndexQuery,
 };
 use kukuri_cn_operator::{
-    CommunityNodeManifest, LegalDocumentKind, READINESS_CHECK_IDS, build_manifest, generate_all,
+    CommunityNodeManifest, READINESS_CHECK_IDS, build_manifest, generate_all,
     generate_legal_documents_from_files, load_and_validate,
 };
 use kukuri_cn_protocol::{
@@ -444,14 +444,10 @@ fn load_manifest(path: Option<&std::path::Path>) -> Result<LoadedManifest> {
     let bytes = yaml.as_bytes().to_vec();
     let generated_files = generate_all(&resolved);
     let generated_policies = generate_legal_documents_from_files(&resolved, &generated_files);
-    let public_disclosures = generated_files
+    let public_disclosures = generated_policies
         .iter()
-        .filter(|file| {
-            LegalDocumentKind::ALL
-                .iter()
-                .any(|kind| kind.filename() == file.filename)
-        })
-        .map(|file| (file.filename.clone(), file.content.clone()))
+        .filter(|document| !document.reference_translation)
+        .map(|document| (document.filename.clone(), document.content.clone()))
         .collect();
     let policies_to_sync = generated_policies
         .into_iter()
@@ -472,6 +468,14 @@ fn load_manifest(path: Option<&std::path::Path>) -> Result<LoadedManifest> {
             requested_language: None,
             material_change: false,
             requires_reconsent: false,
+            is_current: true,
+            publication_status: Some("current".to_string()),
+            published_at: None,
+            retired_at: None,
+            previous_policy_version: None,
+            previous_policy_snapshot_revision: None,
+            next_policy_version: None,
+            next_policy_snapshot_revision: None,
         })
         .collect();
     let r = &resolved.raw.retention;
@@ -521,10 +525,7 @@ mod tests {
     #[test]
     fn load_manifest_includes_every_http_disclosure() -> Result<()> {
         let mut config = NamedTempFile::new()?;
-        write!(
-            config,
-            "server:\n  domain: example-kukuri.net\n  operator_name: Example Operator\n  country: JP\nprofile: relay-enabled\nacknowledge_planned_capabilities: true\n"
-        )?;
+        write!(config, "{}", kukuri_cn_operator::SAMPLE_CONFIG)?;
 
         let loaded = load_manifest(Some(config.path()))?;
         for filename in [
@@ -541,6 +542,12 @@ mod tests {
                 "missing public disclosure: {filename}"
             );
         }
+        assert_eq!(loaded.policies_to_sync.len(), 7);
+        assert!(loaded.policies_to_sync.iter().all(|policy| {
+            policy.is_current
+                && policy.publication_status.as_deref() == Some("current")
+                && policy.policy_snapshot_revision.is_some()
+        }));
         Ok(())
     }
 }

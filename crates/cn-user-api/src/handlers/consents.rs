@@ -5,7 +5,8 @@ use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use kukuri_cn_core::{
     ApiError, ApiResult, accept_consents, get_consent_status, get_policy_revision,
-    list_policies_for_language, list_policy_revisions, require_bearer_pubkey,
+    get_policy_snapshot_revision, list_policies_for_language, list_policy_revisions,
+    require_bearer_pubkey,
 };
 use kukuri_cn_protocol::{
     AcceptConsentsRequest, CommunityNodeConsentStatus, CommunityNodePoliciesResponse,
@@ -105,6 +106,35 @@ pub(crate) async fn public_policy_revision(
             axum::http::StatusCode::NOT_FOUND,
             "POLICY_REVISION_NOT_FOUND",
             "the requested policy revision does not exist",
+        )
+    })?;
+    Ok(Json(policy))
+}
+
+pub(crate) async fn public_policy_snapshot_revision(
+    State(state): State<UserApiState>,
+    Path((policy_slug, policy_snapshot_revision)): Path<(String, String)>,
+    Query(query): Query<PolicyLanguageQuery>,
+) -> ApiResult<Json<CommunityNodePolicyDocument>> {
+    let policy = get_policy_snapshot_revision(
+        &state.pool,
+        &policy_slug,
+        &policy_snapshot_revision,
+        query.language.as_deref(),
+    )
+    .await
+    .map_err(|error| {
+        ApiError::new(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            error.to_string(),
+        )
+    })?
+    .ok_or_else(|| {
+        ApiError::new(
+            axum::http::StatusCode::NOT_FOUND,
+            "POLICY_REVISION_NOT_FOUND",
+            "the requested policy snapshot revision does not exist",
         )
     })?;
     Ok(Json(policy))

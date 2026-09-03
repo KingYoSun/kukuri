@@ -1,12 +1,12 @@
 {
   "files": [
     {
-      "lines": 1272,
-      "path": "apps/desktop/src/components/extended/metaverse/useMetaverseRoomSession.ts"
+      "lines": 1287,
+      "path": "crates/cn-operator/src/config.rs"
     },
     {
-      "lines": 1265,
-      "path": "crates/cn-operator/src/config.rs"
+      "lines": 1272,
+      "path": "apps/desktop/src/components/extended/metaverse/useMetaverseRoomSession.ts"
     },
     {
       "lines": 1228,
@@ -14,11 +14,11 @@
     },
     {
       "lines": 1191,
-      "path": "crates/metaverse-host/src/lib.rs"
+      "path": "crates/cn-operator/src/docs.rs"
     },
     {
-      "lines": 1166,
-      "path": "crates/cn-operator/src/docs.rs"
+      "lines": 1191,
+      "path": "crates/metaverse-host/src/lib.rs"
     },
     {
       "lines": 1129,
@@ -45,12 +45,16 @@
       "path": "apps/desktop/src/lib/api/commands/runtimeApi.ts"
     },
     {
-      "lines": 1016,
-      "path": "crates/harness/src/scenarios/desktop_smoke.rs"
+      "lines": 1027,
+      "path": "crates/cn-operator/tests/generate.rs"
     },
     {
-      "lines": 1015,
+      "lines": 1020,
       "path": "apps/desktop/src/shell/presentation.test.ts"
+    },
+    {
+      "lines": 1016,
+      "path": "crates/harness/src/scenarios/desktop_smoke.rs"
     }
   ]
 }

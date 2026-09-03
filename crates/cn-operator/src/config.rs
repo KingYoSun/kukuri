@@ -111,6 +111,18 @@ impl LegalDocumentKind {
             Self::RightsInfringement => "Community Node 権利侵害申出ポリシー",
         }
     }
+
+    pub const fn title_en(self) -> &'static str {
+        match self {
+            Self::Terms => "Community Node Terms of Service",
+            Self::Privacy => "Community Node Privacy Policy",
+            Self::ExternalTransmission => "Community Node External Transmission Notice",
+            Self::ModerationPolicy => "Community Node Moderation Policy",
+            Self::AbusePolicy => "Community Node Abuse Policy",
+            Self::DataRetention => "Community Node Data Retention Policy",
+            Self::RightsInfringement => "Community Node Rights Request Policy",
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -692,8 +704,18 @@ fn validate_legal_config(config: &OperatorConfig) -> Result<()> {
         NaiveDate::parse_from_str(document.effective_date.trim(), "%Y-%m-%d").map_err(|_| {
             anyhow!("legal document `{slug}` の effective_date は YYYY-MM-DD で指定してください")
         })?;
-        if document.language.trim() != "ja" {
-            bail!("Phase A の legal document `{slug}` は language: ja が必須です");
+        let authoritative_language = document.language.trim();
+        if authoritative_language.is_empty()
+            || !authoritative_language
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
+        {
+            bail!("legal document `{slug}` の language は BCP 47 形式の非空値で指定してください");
+        }
+        if !matches!(authoritative_language, "ja" | "en") {
+            bail!(
+                "legal document `{slug}` の正文 language `{authoritative_language}` に対応する renderer がありません"
+            );
         }
         if document
             .supplemental_markdown
@@ -705,7 +727,7 @@ fn validate_legal_config(config: &OperatorConfig) -> Result<()> {
         let mut translation_languages = std::collections::BTreeSet::new();
         for translation in &document.translations {
             let language = translation.language.trim();
-            if language.is_empty() || language == document.language.trim() {
+            if language.is_empty() || language == authoritative_language {
                 bail!(
                     "legal document `{slug}` の参考訳 language は正文と異なる非空値にしてください"
                 );

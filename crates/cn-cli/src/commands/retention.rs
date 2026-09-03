@@ -28,9 +28,8 @@ pub(super) async fn run(pool: &PgPool, action: RetentionAction) -> Result<()> {
 }
 
 pub(super) fn retention_policy() -> Result<RetentionPolicy> {
-    let Some(path) = std::env::var_os("COMMUNITY_NODE_OPERATOR_CONFIG") else {
-        return Ok(RetentionPolicy::default());
-    };
+    let path = std::env::var_os("COMMUNITY_NODE_OPERATOR_CONFIG")
+        .context("COMMUNITY_NODE_OPERATOR_CONFIG is required for retention operations")?;
     let yaml = std::fs::read_to_string(&path).with_context(|| {
         format!(
             "failed to read operator config `{}`",

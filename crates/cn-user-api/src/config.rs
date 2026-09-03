@@ -120,9 +120,11 @@ impl UserApiConfig {
         let connectivity_urls =
             normalize_http_url_list(parse_csv_env("COMMUNITY_NODE_CONNECTIVITY_URLS"))?;
         let operator_config_path = std::env::var("COMMUNITY_NODE_OPERATOR_CONFIG")
-            .ok()
-            .filter(|value| !value.trim().is_empty())
-            .map(PathBuf::from);
+            .context("COMMUNITY_NODE_OPERATOR_CONFIG is required")?;
+        if operator_config_path.trim().is_empty() {
+            anyhow::bail!("COMMUNITY_NODE_OPERATOR_CONFIG must not be empty");
+        }
+        let operator_config_path = Some(PathBuf::from(operator_config_path));
         let channel_secret_key = std::env::var("COMMUNITY_NODE_CHANNEL_SECRET_KEY")
             .ok()
             .filter(|value| !value.trim().is_empty());

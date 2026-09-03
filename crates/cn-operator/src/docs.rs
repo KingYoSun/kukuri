@@ -176,7 +176,7 @@ fn planned_section(config: &ResolvedConfig) -> String {
             "- **{}**（{}）: {}",
             m.display_name,
             Availability::Planned.label_ja(),
-            m.purpose
+            m.policy_descriptor().purpose.label()
         );
     }
     s
@@ -421,9 +421,14 @@ fn gen_service_description(config: &ResolvedConfig) -> String {
         let m = cap.meta();
         let descriptor = m.policy_descriptor();
         let _ = writeln!(s, "### {}\n", m.display_name);
-        let _ = writeln!(s, "- 目的: {}", m.purpose);
+        let _ = writeln!(s, "- 目的: {}", descriptor.purpose.label());
         let _ = writeln!(s, "- 取扱いデータ: {}", descriptor.data_classes_text());
-        let _ = writeln!(s, "- 保持への影響: {}\n", descriptor.retention_text());
+        let _ = writeln!(s, "- 保持への影響: {}", descriptor.retention_text());
+        let _ = writeln!(
+            s,
+            "- 削除・訂正・停止等の請求経路: {}\n",
+            descriptor.rights_request_paths_text()
+        );
     }
     s.push_str(&planned_section(config));
     s
@@ -553,7 +558,13 @@ fn gen_terms(config: &ResolvedConfig) -> String {
     let _ = writeln!(s, "## 第9条（その他の capability 別の取扱い）\n");
     for cap in available_enabled(config) {
         let m = cap.meta();
-        let _ = writeln!(s, "- {}: {}", m.display_name, m.terms_note);
+        let descriptor = m.policy_descriptor();
+        let _ = writeln!(
+            s,
+            "- {}: {}",
+            m.display_name,
+            descriptor.policy_summary_text()
+        );
     }
     s.push_str(&planned_section(config));
     s
@@ -579,7 +590,11 @@ fn gen_privacy(config: &ResolvedConfig) -> String {
             "- 取扱いデータ: {}",
             m.policy_descriptor().data_classes_text()
         );
-        let _ = writeln!(s, "- 取扱いの説明: {}\n", m.privacy_note);
+        let _ = writeln!(
+            s,
+            "- 取扱いの説明: {}\n",
+            m.policy_descriptor().policy_summary_text()
+        );
     }
     let _ = writeln!(s, "## 接続ログ・保持期間\n");
     let _ = writeln!(
@@ -1062,7 +1077,12 @@ fn gen_capability_risk_and_practices(config: &ResolvedConfig) -> String {
         );
         for cap in disabled {
             let m = cap.meta();
-            let _ = writeln!(s, "- **{}**: {}", m.display_name, m.purpose);
+            let _ = writeln!(
+                s,
+                "- **{}**: {}",
+                m.display_name,
+                m.policy_descriptor().purpose.label()
+            );
         }
         s.push('\n');
     }
@@ -1081,12 +1101,17 @@ fn write_capability_risk_section(s: &mut String, cap: Capability) {
     };
 
     let _ = writeln!(s, "### {}（{}）\n", m.display_name, availability);
-    let _ = writeln!(s, "- 機能: {}", m.purpose);
+    let _ = writeln!(s, "- 機能: {}", descriptor.purpose.label());
     let _ = writeln!(s, "- 取り扱うデータ: {}", descriptor.data_classes_text());
     let _ = writeln!(s, "- user の期待: {}", rp.user_expectation);
     let _ = writeln!(s, "- authority scope: {}", rp.authority_scope);
     let _ = writeln!(s, "- 引き受けない範囲: {}", rp.responsibility_boundary);
     let _ = writeln!(s, "- 保持への影響: {}", descriptor.retention_text());
+    let _ = writeln!(
+        s,
+        "- 削除・訂正・停止等の請求経路: {}",
+        descriptor.rights_request_paths_text()
+    );
 
     let _ = writeln!(s, "- 想定リスク:");
     for risk in rp.risks {

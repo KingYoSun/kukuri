@@ -290,7 +290,7 @@ previously_accepted_version?: number | null, effective_date?: string | null, lan
 
 export type CommunityNodeConsentStatus = { all_required_accepted: boolean, items: Array<CommunityNodeConsentItem>, policy_snapshot_revision?: string | null, };
 
-export type CommunityNodePolicyDocument = { policy_slug: string, policy_version: number, title: string, body_markdown: string, required: boolean, effective_date?: string | null, language?: string | null, policy_snapshot_revision?: string | null, authoritative_language?: string | null, reference_translation: boolean, translation_revision?: number | null, translation_of_version?: number | null, fallback: boolean, requested_language?: string | null, material_change: boolean, requires_reconsent: boolean, };
+export type CommunityNodePolicyDocument = { policy_slug: string, policy_version: number, title: string, body_markdown: string, required: boolean, effective_date?: string | null, language?: string | null, policy_snapshot_revision?: string | null, authoritative_language?: string | null, reference_translation: boolean, translation_revision?: number | null, translation_of_version?: number | null, fallback: boolean, requested_language?: string | null, material_change: boolean, requires_reconsent: boolean, is_current: boolean, publication_status?: string | null, published_at?: string | null, retired_at?: string | null, previous_policy_version?: number | null, previous_policy_snapshot_revision?: string | null, next_policy_version?: number | null, next_policy_snapshot_revision?: string | null, };
 
 export type CommunityNodePoliciesResponse = { policies: Array<CommunityNodePolicyDocument>, policy_snapshot_revision?: string | null, };
 

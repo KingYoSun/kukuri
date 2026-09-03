@@ -129,9 +129,15 @@ pub async fn seed_default_policies(pool: &PgPool) -> Result<()> {
         ),
     ] {
         sqlx::query(
-            "INSERT INTO cn_admin.policies (policy_slug, policy_version, title, body_markdown, required)
-             VALUES ($1, 1, $2, $3, TRUE)
-             ON CONFLICT (policy_slug, policy_version) DO NOTHING",
+            "INSERT INTO cn_admin.policies (
+                policy_slug, policy_version, title, body_markdown, required,
+                policy_snapshot_revision
+             )
+             SELECT $1, 1, $2, $3, TRUE, 'legacy:' || md5('default-policy-catalog-v1')
+             WHERE NOT EXISTS (
+                 SELECT 1 FROM cn_admin.policies WHERE policy_slug = $1
+             )
+             ON CONFLICT (policy_slug, policy_version, policy_snapshot_revision) DO NOTHING",
         )
         .bind(slug)
         .bind(title)
