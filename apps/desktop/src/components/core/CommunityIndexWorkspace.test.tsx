@@ -74,7 +74,7 @@ function knownAuthor(authorPubkey: string): AuthorSocialView {
   };
 }
 
-function resolvedPost(objectId: string): PostView {
+function resolvedPost(objectId: string, content = 'canonical content'): PostView {
   return {
     object_id: objectId,
     envelope_id: `envelope-${objectId}`,
@@ -89,7 +89,7 @@ function resolvedPost(objectId: string): PostView {
     friend_of_friend: false,
     provenance: null,
     withdrawal: null,
-    content: 'canonical content',
+    content,
     content_status: 'Available',
     attachments: [],
     created_at: 42,
@@ -109,10 +109,10 @@ function resolvedPost(objectId: string): PostView {
   };
 }
 
-function resolvedIndexEntry(objectId: string) {
+function resolvedIndexEntry(objectId: string, content = 'canonical content') {
   return {
     key: `public_topic:rust:${objectId}`,
-    post: resolvedPost(objectId),
+    post: resolvedPost(objectId, content),
     capabilities: {
       open_thread: true,
       reply: true,
@@ -121,6 +121,30 @@ function resolvedIndexEntry(objectId: string) {
       react: true,
       copy_link: true,
       bookmark: true,
+      withdraw: false,
+    },
+  };
+}
+
+function readOnlyResolvedIndexEntry(objectId: string, content: string) {
+  const resolved = resolvedIndexEntry(objectId, content);
+  return {
+    ...resolved,
+    post: resolved.post
+      ? {
+          ...resolved.post,
+          author_name: null,
+          author_display_name: null,
+        }
+      : null,
+    capabilities: {
+      open_thread: false,
+      reply: false,
+      repost: false,
+      quote_repost: false,
+      react: false,
+      copy_link: false,
+      bookmark: false,
       withdraw: false,
     },
   };
@@ -138,8 +162,36 @@ function workspaceProps(
   api: DesktopApi,
   overrides: Partial<ComponentProps<typeof CommunityIndexWorkspace>> = {}
 ): ComponentProps<typeof CommunityIndexWorkspace> {
+  const indexTextByObjectId = new Map<string, string>();
+  const captureIndexMethod = (
+    method: DesktopApi['searchCommunityNodeIndex'] | undefined
+  ): DesktopApi['searchCommunityNodeIndex'] | undefined =>
+    method
+      ? async (request) => {
+          const response = await method(request);
+          for (const entry of response.entries) {
+            indexTextByObjectId.set(entry.object_id, entry.text);
+          }
+          return response;
+        }
+      : undefined;
+  const defaultResolve: DesktopApi['resolveCommunityIndexPosts'] = async (entries) => ({
+    entries: entries.map((entry) =>
+      readOnlyResolvedIndexEntry(
+        entry.object_id,
+        indexTextByObjectId.get(entry.object_id) ?? 'canonical content'
+      )
+    ),
+  });
+  const effectiveApi = {
+    ...api,
+    searchCommunityNodeIndex: captureIndexMethod(api.searchCommunityNodeIndex),
+    discoverCommunityNodeIndex: captureIndexMethod(api.discoverCommunityNodeIndex),
+    recommendCommunityNodeIndex: captureIndexMethod(api.recommendCommunityNodeIndex),
+    resolveCommunityIndexPosts: api.resolveCommunityIndexPosts ?? vi.fn(defaultResolve),
+  } as DesktopApi;
   return {
-    api,
+    api: effectiveApi,
     mode: 'topic',
     activeTopic: 'rust',
     activeTimelineScope: { kind: 'public' },
@@ -261,7 +313,7 @@ test('Explore results expose the same post actions as the timeline', async () =>
 
   runSearch();
 
-  const result = await screen.findByText('actionable result');
+  const result = await screen.findByText('canonical content');
   const card = result.closest('article');
   if (!(card instanceof HTMLElement)) throw new Error('Explore result card not found');
 
@@ -386,10 +438,13 @@ test('unresolved results stay fail-closed and expose only reporting and identifi
   render(<CommunityIndexWorkspace {...workspaceProps(api)} />);
   runSearch();
 
-  const result = await screen.findByText(entry.text);
-  const card = result.closest('article');
-  if (!(card instanceof HTMLElement)) throw new Error('Explore result card not found');
   await waitFor(() => expect(api.resolveCommunityIndexPosts).toHaveBeenCalledTimes(1));
+  expect(screen.queryByText(entry.text)).not.toBeInTheDocument();
+  const safePlaceholder = await screen.findByText(
+    'Post content is unavailable because its safety labels could not be verified.'
+  );
+  const card = safePlaceholder.closest('article');
+  if (!(card instanceof HTMLElement)) throw new Error('Explore result card not found');
 
   expect(within(card).queryByRole('button', { name: 'React' })).not.toBeInTheDocument();
   expect(within(card).queryByRole('button', { name: 'Repost' })).not.toBeInTheDocument();
@@ -397,6 +452,43 @@ test('unresolved results stay fail-closed and expose only reporting and identifi
   expect(within(card).queryByRole('button', { name: 'Copy link' })).not.toBeInTheDocument();
   expect(within(card).queryByRole('button', { name: 'Bookmark' })).not.toBeInTheDocument();
   expect(within(card).getByRole('button', { name: 'Report' })).toBeInTheDocument();
+});
+
+test('node-provided result text stays hidden while canonical resolution is pending', async () => {
+  const entry = indexEntry('pending-resolution', 'untrusted pending result');
+  const pending = deferred<{ entries: ReturnType<typeof resolvedIndexEntry>[] }>();
+  const api = {
+    searchCommunityNodeIndex: vi.fn().mockResolvedValue({ entries: [entry] }),
+    resolveCommunityIndexPosts: vi.fn().mockReturnValue(pending.promise),
+  } as unknown as DesktopApi;
+
+  render(<CommunityIndexWorkspace {...workspaceProps(api)} />);
+  runSearch();
+
+  await waitFor(() => expect(api.resolveCommunityIndexPosts).toHaveBeenCalledTimes(1));
+  expect(screen.queryByText(entry.text)).not.toBeInTheDocument();
+  expect(
+    screen.getByText('Checking the post before showing its content…')
+  ).toBeInTheDocument();
+});
+
+test('node-provided result text stays hidden when canonical resolution fails', async () => {
+  const entry = indexEntry('failed-resolution', 'untrusted failed result');
+  const api = {
+    searchCommunityNodeIndex: vi.fn().mockResolvedValue({ entries: [entry] }),
+    resolveCommunityIndexPosts: vi.fn().mockRejectedValue(new Error('resolver unavailable')),
+  } as unknown as DesktopApi;
+
+  render(<CommunityIndexWorkspace {...workspaceProps(api)} />);
+  runSearch();
+
+  await waitFor(() => expect(api.resolveCommunityIndexPosts).toHaveBeenCalledTimes(1));
+  expect(screen.queryByText(entry.text)).not.toBeInTheDocument();
+  expect(
+    await screen.findByText(
+      'Post content is unavailable because its safety labels could not be verified.'
+    )
+  ).toBeInTheDocument();
 });
 
 test('missing author profiles are resolved instead of being labeled unknown', async () => {

@@ -422,6 +422,9 @@ export const notificationView = {
   "dm_id": null,
   "message_id": null,
   "preview_text": "quoted you",
+  "content_labels": [
+    "adult"
+  ],
   "created_at": 1700000200,
   "received_at": 1700000201,
   "read_at": 1700000210

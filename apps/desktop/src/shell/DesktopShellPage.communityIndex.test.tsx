@@ -42,6 +42,7 @@ beforeEach(() => {
 test('Explore header selects named eligible nodes, clears stale results, and returns to automatic', async () => {
   const user = userEvent.setup();
   const api = createDesktopMockApi();
+  const localAuthorPubkey = (await api.getSyncStatus()).local_author_pubkey;
   const indexedObjectIds = new Map<string, string>();
   for (const baseUrl of [NODE_A, NODE_B]) {
     indexedObjectIds.set(
@@ -74,7 +75,7 @@ test('Explore header selects named eligible nodes, clears stale results, and ret
         scope_kind: 'public_topic',
         scope_id: 'general',
         object_id: indexedObjectIds.get(request.base_url) ?? 'missing-index-result',
-        author_pubkey: 'f'.repeat(64),
+        author_pubkey: localAuthorPubkey,
         text: `result from ${request.base_url}`,
         created_at: 1,
       },
@@ -100,7 +101,8 @@ test('Explore header selects named eligible nodes, clears stale results, and ret
   });
   await user.type(within(explore).getByLabelText('Search query'), 'hello');
   await user.click(within(explore).getByRole('button', { name: 'Show results' }));
-  const result = await within(explore).findByText(`result from ${NODE_B}`);
+  const result = await within(explore).findByText(`canonical post from ${NODE_B}`);
+  expect(within(explore).queryByText(`result from ${NODE_B}`)).not.toBeInTheDocument();
   const resultCard = result.closest('article');
   if (!(resultCard instanceof HTMLElement)) throw new Error('Explore result card not found');
   expect(await within(resultCard).findByRole('button', { name: 'React' })).toBeEnabled();
@@ -112,7 +114,7 @@ test('Explore header selects named eligible nodes, clears stale results, and ret
 
   await user.selectOptions(nodeSelect, NODE_A);
   await waitFor(() => {
-    expect(within(explore).queryByText(`result from ${NODE_B}`)).not.toBeInTheDocument();
+    expect(within(explore).queryByText(`canonical post from ${NODE_B}`)).not.toBeInTheDocument();
     expect(within(explore).queryByRole('button', { name: 'Report' })).not.toBeInTheDocument();
   });
 

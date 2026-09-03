@@ -105,6 +105,7 @@ export const browserDesktopMockSeed: DesktopMockApiOptions = {
       dm_id: null,
       message_id: null,
       preview_text: 'browser mock reply notification',
+      content_labels: [],
       created_at: 2,
       received_at: 2,
       read_at: null,

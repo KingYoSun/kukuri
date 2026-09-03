@@ -78,6 +78,84 @@ test('adult-labeled text is hidden independently of media fetch control', async 
   expect(screen.queryByText('text only adult body')).not.toBeInTheDocument();
 });
 
+test('adult-labeled quote source gates the enclosing card and media fetch', async () => {
+  const post = buildImagePost({
+    object_id: 'adult-quote-source-host',
+    content: 'safe-looking quote commentary',
+    content_labels: [],
+    object_kind: 'repost',
+    repost_commentary: 'safe-looking quote commentary',
+    repost_of: {
+      source_object_id: 'adult-quote-source',
+      source_topic_id: 'kukuri:topic:general',
+      source_author_pubkey: 'b'.repeat(64),
+      source_author_name: 'source-author',
+      source_author_display_name: 'Source Author',
+      source_author_picture: null,
+      source_author_picture_asset: null,
+      source_object_kind: 'post',
+      content: 'adult quote source body',
+      attachments: [],
+      content_labels: ['adult'],
+      reply_to: null,
+      root_id: 'adult-quote-source',
+    },
+  });
+  const api = createDesktopMockApi({ seedPosts: { 'kukuri:topic:general': [post] } });
+  const getBlobMediaPayload = vi.fn(api.getBlobMediaPayload);
+  api.getBlobMediaPayload = getBlobMediaPayload;
+
+  render(<App api={api} />);
+
+  expect(
+    await screen.findByTestId('post-adult-gated-adult-quote-source-host')
+  ).toBeInTheDocument();
+  expect(screen.queryByText('safe-looking quote commentary')).not.toBeInTheDocument();
+  expect(screen.queryByText('adult quote source body')).not.toBeInTheDocument();
+  await waitFor(() => {
+    expect(getBlobMediaPayload.mock.calls.filter(([hash]) => hash === ADULT_HASH)).toHaveLength(0);
+  });
+});
+
+test('adult-labeled reply preview gates the enclosing card and media fetch', async () => {
+  const post = buildImagePost({
+    object_id: 'adult-reply-preview-host',
+    content: 'safe-looking reply body',
+    content_labels: [],
+    reply_to: 'adult-reply-parent',
+    reply_preview: {
+      object_id: 'adult-reply-parent',
+      topic: 'kukuri:topic:general',
+      author: {
+        pubkey: 'b'.repeat(64),
+        name: 'parent-author',
+        display_name: 'Parent Author',
+        picture: null,
+        picture_asset: null,
+      },
+      content: 'adult reply preview body',
+      attachments: [],
+      content_labels: ['adult'],
+      root_id: 'adult-reply-parent',
+      reply_to: null,
+    },
+  });
+  const api = createDesktopMockApi({ seedPosts: { 'kukuri:topic:general': [post] } });
+  const getBlobMediaPayload = vi.fn(api.getBlobMediaPayload);
+  api.getBlobMediaPayload = getBlobMediaPayload;
+
+  render(<App api={api} />);
+
+  expect(
+    await screen.findByTestId('post-adult-gated-adult-reply-preview-host')
+  ).toBeInTheDocument();
+  expect(screen.queryByText('safe-looking reply body')).not.toBeInTheDocument();
+  expect(screen.queryByText('adult reply preview body')).not.toBeInTheDocument();
+  await waitFor(() => {
+    expect(getBlobMediaPayload.mock.calls.filter(([hash]) => hash === ADULT_HASH)).toHaveLength(0);
+  });
+});
+
 test('unlabeled media keeps fetching while adult display is off', async () => {
   const api = createDesktopMockApi({
     seedPosts: {

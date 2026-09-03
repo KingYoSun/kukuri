@@ -38,6 +38,7 @@ import {
   strongestRelationshipLabel,
 } from '@/shell/presentation';
 import {
+  hasAdultContentLabel,
   selectPrimaryImageAttachment,
   selectVideoManifestAttachment,
   selectVideoPosterAttachment,
@@ -433,6 +434,7 @@ export function DesktopShellNotificationsSurface({
     notifications,
     notificationAutoReadError,
     notificationPanelState,
+    adultContentEnabled,
   } = useDesktopShellStore(
     useShallow((s) => ({
       knownAuthorsByPubkey: s.knownAuthorsByPubkey,
@@ -440,6 +442,7 @@ export function DesktopShellNotificationsSurface({
       notifications: s.notifications,
       notificationAutoReadError: s.notificationAutoReadError,
       notificationPanelState: s.notificationPanelState,
+      adultContentEnabled: s.adultContentEnabled,
     }))
   );
   const notificationItems = useMemo<NotificationItemView[]>(
@@ -469,13 +472,21 @@ export function DesktopShellNotificationsSurface({
                     topic: notification.topic_id,
                   })
                 : t('shell:notifications.context.authorActivity');
-        const previewText =
-          notification.preview_text ??
-          (notification.kind === 'followed'
-            ? t('shell:notifications.preview.followed')
-            : notification.kind === 'direct_message'
-              ? t('shell:notifications.preview.noMessage')
-              : t('shell:notifications.preview.noContent'));
+        const adultPreviewGated =
+          Boolean(notification.object_id) &&
+          !adultContentEnabled &&
+          (notification.content_labels == null ||
+            hasAdultContentLabel(notification.content_labels));
+        const previewText = adultPreviewGated
+          ? notification.content_labels == null
+            ? t('shell:notifications.preview.noContent')
+            : t('common:feed.adultContentHidden')
+          : notification.preview_text ??
+            (notification.kind === 'followed'
+              ? t('shell:notifications.preview.followed')
+              : notification.kind === 'direct_message'
+                ? t('shell:notifications.preview.noMessage')
+                : t('shell:notifications.preview.noContent'));
 
         return {
           ...notification,
@@ -488,7 +499,7 @@ export function DesktopShellNotificationsSurface({
           unread: !notification.read_at,
         };
       }),
-    [knownAuthorsByPubkey, locale, mediaObjectUrls, notifications, t]
+    [adultContentEnabled, knownAuthorsByPubkey, locale, mediaObjectUrls, notifications, t]
   );
 
   return (

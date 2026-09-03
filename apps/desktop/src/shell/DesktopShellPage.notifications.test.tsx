@@ -60,6 +60,23 @@ test('Control Center notifications action shows unread count and opening inbox a
   expect(screen.getByText('second unread notification')).toBeInTheDocument();
 });
 
+test('adult-labeled object notification hides its raw preview while display is off', async () => {
+  const api = createDesktopMockApi({
+    notifications: [
+      buildNotification({
+        notification_id: 'notification-adult-preview',
+        preview_text: 'adult notification raw preview',
+        content_labels: ['adult'],
+      }),
+    ],
+  });
+
+  renderAtHash('#/notifications?topic=kukuri%3Atopic%3Ageneral', api);
+
+  expect(await screen.findByText(/self-labeled as adult material/)).toBeInTheDocument();
+  expect(screen.queryByText('adult notification raw preview')).not.toBeInTheDocument();
+});
+
 test('desktop shell loads unread notification rows outside the inbox for OS notification bridge', async () => {
   const api = createDesktopMockApi({
     notifications: [

@@ -121,6 +121,7 @@ export function buildNotification(overrides?: Partial<NotificationView>): Notifi
     dm_id: null,
     message_id: null,
     preview_text: 'notification preview',
+    content_labels: [],
     created_at: 1,
     received_at: 1,
     read_at: null,

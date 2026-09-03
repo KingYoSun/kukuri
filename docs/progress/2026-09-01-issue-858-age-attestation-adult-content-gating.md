@@ -24,3 +24,12 @@
 - frontend: `npx pnpm@10.16.1 exec vitest run src/shell/DesktopShellPage.adultContentGating.test.tsx`(4 件: 対象 hash への `getBlobMediaPayload` 不発火とプレースホルダー、テキスト単独の代替表示、ラベルなし非影響、設定 ON/OFF の取得開始・停止と表示破棄)、`src/App.test.tsx`(申告チェック必須・再同意時の非表示・payload 形状)、`src/i18n/parity.test.ts`、`cargo xtask desktop-lint` / `desktop-test`
 
 関連: #853(親)、#857(文書単位同意)、#609(ephemeral fetch)、ADR 0046、`docs/ui-reviews/2026-09-01-issue-858-age-gate-safety.md`
+
+## 2026-09-03 再監査後の補完
+
+再監査で、object-backed 通知 preview、Community Index の canonical 解決前/失敗時、返信プレビューのホストカードに表示経路の抜けを確認した。以下を補完し、成人向け表示設定の既定 OFF は Rust の canonical setting と frontend mirror のまま維持した。
+
+- reply / repost / mention 通知に署名済み envelope 由来の `content_labels` を保存し、in-app 通知と OS 通知の双方で OFF 中の成人向け preview を代替表示または抑止する。migration 前の未解決 object notification も preview を表示しない。follow / DM は非 object 通知として従来どおり。
+- Community Index の node-provided `IndexEntryView.text` を表示データとして使わず、canonical post の解決と label 確認が完了するまで待機文言、欠落・失敗時は安全な unavailable 文言を表示する。解決済み投稿は top-level、引用元、返信プレビューの各 label を共通ゲートで評価する。
+- 共通 `PostCard` はホスト投稿がゲート対象なら返信コンテキストも描画しない。これにより引用/埋め込みと返信プレビューを含むカード全体から raw text が漏れない。
+- regression coverage として app-api notification projection/view、SQLite migration/backfill、Tauri OS notification、in-app notification、Community Index の pending/null/reject/adult OFF/ON、引用元・返信プレビューを追加した。

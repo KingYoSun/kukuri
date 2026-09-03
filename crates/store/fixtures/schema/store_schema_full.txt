@@ -175,6 +175,7 @@ table notifications
   column cid=12 name=created_at type=INTEGER notnull=1 default=None pk=0
   column cid=13 name=received_at type=INTEGER notnull=1 default=None pk=0
   column cid=14 name=read_at type=INTEGER notnull=0 default=None pk=0
+  column cid=15 name=content_labels_json type=TEXT notnull=0 default=None pk=0
 table object_index_cache
   column cid=0 name=object_id type=TEXT notnull=0 default=None pk=1
   column cid=1 name=topic_id type=TEXT notnull=1 default=None pk=0

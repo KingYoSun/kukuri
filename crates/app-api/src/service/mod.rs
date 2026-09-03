@@ -469,6 +469,8 @@ pub(crate) struct NotificationCandidate {
     pub(crate) dm_id: Option<String>,
     pub(crate) message_id: Option<String>,
     pub(crate) preview_text: Option<String>,
+    /// Object envelope 由来の署名済み labels。object を持たない通知は `None`。
+    pub(crate) content_labels: Option<Vec<String>>,
     pub(crate) created_at: i64,
     pub(crate) received_at: i64,
 }

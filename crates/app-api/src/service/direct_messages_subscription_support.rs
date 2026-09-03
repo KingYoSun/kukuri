@@ -200,21 +200,32 @@ impl AppService {
                 .is_some(),
             None => false,
         };
-        let thread_root_object_id = if let Some(object_id) = object_id.as_ref() {
+        let object_projection = if let Some(object_id) = object_id.as_ref() {
             self.services
                 .projection_store
                 .get_object_projection(object_id)
                 .await?
-                .map(|projection| {
-                    projection
-                        .root_object_id
-                        .unwrap_or(projection.object_id)
-                        .as_str()
-                        .to_string()
-                })
         } else {
             None
         };
+        let thread_root_object_id = object_projection.as_ref().map(|projection| {
+            projection
+                .root_object_id
+                .as_ref()
+                .unwrap_or(&projection.object_id)
+                .as_str()
+                .to_string()
+        });
+        let content_labels = row.content_labels.clone().or_else(|| {
+            object_projection
+                .as_ref()
+                .map(|projection| projection.content_labels.clone())
+        });
+        let preview_is_gated = object_id.is_some()
+            && !self.adult_content_display_enabled()
+            && content_labels
+                .as_ref()
+                .is_none_or(|labels| kukuri_core::has_adult_content_label(labels));
         let profile = self
             .services
             .store
@@ -246,7 +257,12 @@ impl AppService {
             thread_root_object_id,
             dm_id: row.dm_id,
             message_id: row.message_id,
-            preview_text: if is_withdrawn { None } else { row.preview_text },
+            preview_text: if is_withdrawn || preview_is_gated {
+                None
+            } else {
+                row.preview_text
+            },
+            content_labels,
             created_at: row.created_at,
             received_at: row.received_at,
             read_at: row.read_at,

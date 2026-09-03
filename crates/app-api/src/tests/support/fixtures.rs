@@ -29,7 +29,31 @@ pub(crate) async fn persist_test_post(
     attachments: Vec<kukuri_core::AssetRef>,
     reply_to: Option<&KukuriEnvelope>,
 ) -> KukuriEnvelope {
-    let envelope = build_post_envelope_with_payload(
+    persist_test_post_with_labels(
+        docs_sync,
+        projection_store,
+        keys,
+        topic,
+        payload_ref,
+        attachments,
+        reply_to,
+        Vec::new(),
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn persist_test_post_with_labels(
+    docs_sync: &dyn DocsSync,
+    projection_store: Option<&dyn ProjectionStore>,
+    keys: &KukuriKeys,
+    topic: &TopicId,
+    payload_ref: PayloadRef,
+    attachments: Vec<kukuri_core::AssetRef>,
+    reply_to: Option<&KukuriEnvelope>,
+    content_labels: Vec<String>,
+) -> KukuriEnvelope {
+    let envelope = build_post_envelope_with_payload_in_channel(
         keys,
         topic,
         payload_ref,
@@ -37,6 +61,8 @@ pub(crate) async fn persist_test_post(
         Vec::new(),
         reply_to,
         ObjectVisibility::Public,
+        None,
+        content_labels,
     )
     .expect("event");
     let object = envelope

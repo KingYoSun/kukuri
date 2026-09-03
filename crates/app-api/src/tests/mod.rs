@@ -9,7 +9,6 @@ use iroh::address_lookup::{AddrFilter, AddressLookup};
 use iroh_mainline_address_lookup::DhtAddressLookup;
 #[cfg(feature = "iroh-integration-tests")]
 use kukuri_blob_service::IrohBlobService;
-use kukuri_core::build_post_envelope_with_payload;
 #[cfg(feature = "iroh-integration-tests")]
 use kukuri_docs_sync::IrohDocsSync;
 #[cfg(feature = "iroh-integration-tests")]
