@@ -174,6 +174,33 @@ pub(crate) async fn run_community_node_connectivity(
             })
             .await
             .context("failed to configure community node for desktop b")?;
+        for (label, runtime) in [("desktop a", &runtime_a), ("desktop b", &runtime_b)] {
+            let status = runtime
+                .get_sync_status()
+                .await
+                .with_context(|| format!("failed to read {label} status before consent"))?;
+            anyhow::ensure!(
+                status.discovery.connect_mode == ConnectMode::DirectOnly,
+                "{label} enabled relay connectivity before community-node consent"
+            );
+            anyhow::ensure!(
+                status.discovery.bootstrap_seed_peer_ids.is_empty(),
+                "{label} applied community-node bootstrap seeds before consent: {:?}",
+                status.discovery.bootstrap_seed_peer_ids
+            );
+            let node_status = runtime
+                .get_community_node_statuses()
+                .await
+                .with_context(|| format!("failed to read {label} node status before consent"))?
+                .into_iter()
+                .next()
+                .with_context(|| format!("missing {label} node status before consent"))?;
+            anyhow::ensure!(
+                !node_status.local_consent.has_active_consent()
+                    && !node_status.auth_state.authenticated,
+                "{label} established a community-node session before consent"
+            );
+        }
         push_named_step(&mut steps, "configure_community_node", started_at);
 
         // #857: 同意モーダル相当のフロー — 認証(JWT 発行)前に公開カタログを取得し、
@@ -1050,6 +1077,110 @@ pub(crate) async fn run_community_node_connectivity(
         )
         .await
         .context("desktop a did not receive reconnect reaction summary")?;
+
+        if identity_mode == CommunityNodeIdentityMode::DistinctUsers {
+            let started_at = Instant::now();
+            let withdrawn_a = runtime_a
+                .withdraw_community_node_consents(CommunityNodeTargetRequest {
+                    base_url: stack.base_url.clone(),
+                })
+                .await
+                .context("failed to withdraw desktop a community-node consent")?;
+            let withdrawn_b = runtime_b
+                .withdraw_community_node_consents(CommunityNodeTargetRequest {
+                    base_url: stack.base_url.clone(),
+                })
+                .await
+                .context("failed to withdraw desktop b community-node consent")?;
+            anyhow::ensure!(
+                !withdrawn_a.local_consent.has_active_consent()
+                    && !withdrawn_b.local_consent.has_active_consent()
+                    && !withdrawn_a.auth_state.authenticated
+                    && !withdrawn_b.auth_state.authenticated,
+                "community-node consent withdrawal did not stop both sessions"
+            );
+            for (label, runtime) in [("desktop a", &runtime_a), ("desktop b", &runtime_b)] {
+                let status = runtime
+                    .get_sync_status()
+                    .await
+                    .with_context(|| format!("failed to read {label} status after withdrawal"))?;
+                anyhow::ensure!(
+                    status.discovery.connect_mode == ConnectMode::DirectOnly,
+                    "{label} retained relay connectivity after consent withdrawal"
+                );
+                anyhow::ensure!(
+                    status.discovery.bootstrap_seed_peer_ids.is_empty(),
+                    "{label} retained community-node bootstrap seeds after withdrawal: {:?}",
+                    status.discovery.bootstrap_seed_peer_ids
+                );
+                anyhow::ensure!(
+                    status
+                        .topic_diagnostics
+                        .iter()
+                        .all(|diagnostic| diagnostic.rendezvous_peer_ids.is_empty()),
+                    "{label} retained rendezvous peers after consent withdrawal"
+                );
+            }
+            // consent withdrawal は Node 由来 transport を再構築する。以後も利用者が
+            // 再構築後に発行した明示ticketを取り込めば、Nodeを経由せず直接P2Pを再確立できる。
+            let ticket_a = runtime_a
+                .local_peer_ticket()
+                .await
+                .context("failed to export desktop a ticket after consent withdrawal")?
+                .context("missing desktop a ticket after consent withdrawal")?;
+            let ticket_b = runtime_b
+                .local_peer_ticket()
+                .await
+                .context("failed to export desktop b ticket after consent withdrawal")?
+                .context("missing desktop b ticket after consent withdrawal")?;
+            runtime_a
+                .import_peer_ticket(ImportPeerTicketRequest {
+                    ticket: ticket_b.clone(),
+                })
+                .await
+                .context("failed to re-import desktop b ticket after consent withdrawal")?;
+            runtime_b
+                .import_peer_ticket(ImportPeerTicketRequest {
+                    ticket: ticket_a.clone(),
+                })
+                .await
+                .context("failed to re-import desktop a ticket after consent withdrawal")?;
+            for (label, runtime) in [("desktop a", &runtime_a), ("desktop b", &runtime_b)] {
+                runtime
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.to_string(),
+                        scope: TimelineScope::Public,
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .with_context(|| {
+                        format!("failed to resubscribe {label} after consent withdrawal")
+                    })?;
+            }
+            for (label, runtime) in [("desktop a", &runtime_a), ("desktop b", &runtime_b)] {
+                wait_for_topic_delivery(runtime, topic, 1, reconnect_timeout)
+                    .await
+                    .with_context(|| {
+                        format!("{label} did not restore direct P2P after consent withdrawal")
+                    })?;
+            }
+            let _direct_post = replicate_public_post_with_retry(
+                &runtime_a,
+                &runtime_b,
+                topic,
+                "direct p2p after community node consent withdrawal",
+                reconnect_timeout,
+                PublicReplicationDirection::PreferDirectConnectedSubscriber,
+                PublicReplicationLabels {
+                    failure: "direct post after community-node consent withdrawal",
+                    publisher: "desktop a",
+                    subscriber: "desktop b",
+                },
+            )
+            .await?;
+            push_named_step(&mut steps, "consent_withdrawal_direct_p2p", started_at);
+        }
         let metrics_snapshot = if scenario.artifacts.metrics_snapshot {
             Some(
                 runtime_b

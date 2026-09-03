@@ -125,6 +125,36 @@ pub(crate) fn community_node_seed_peers(
         })
 }
 
+/// 保存済みの Node 設定から、現在ローカル同意が有効な Node だけを transport 入力へ渡す。
+///
+/// `resolved_urls` 自体は再同意後の再接続に使う cache として保存し続ける。秘密領域の
+/// 同意記録が読めない場合は、Node 通信を開始しない側へ倒す。
+pub(crate) fn community_node_config_with_active_local_consents(
+    db_path: &Path,
+    identity_mode: IdentityStorageMode,
+    config: &CommunityNodeConfig,
+) -> CommunityNodeConfig {
+    let nodes = config
+        .nodes
+        .iter()
+        .filter(|node| {
+            match load_community_node_local_consents(db_path, identity_mode, &node.base_url) {
+                Ok(state) => state.has_active_consent(),
+                Err(error) => {
+                    warn!(
+                        base_url = %node.base_url,
+                        %error,
+                        "failed to load community-node consent; excluding node connectivity"
+                    );
+                    false
+                }
+            }
+        })
+        .cloned()
+        .collect();
+    CommunityNodeConfig { nodes }
+}
+
 pub(crate) fn seed_peer_from_community_node(seed_peer: &CommunityNodeSeedPeer) -> Option<SeedPeer> {
     let endpoint_id = seed_peer.endpoint_id.trim();
     if endpoint_id.is_empty() {

@@ -315,6 +315,7 @@ async fn node_without_local_consent_is_never_contacted() {
         .route("/v1/consents/status", get(mock_managed_consent_status))
         .route("/v1/consents", post(mock_managed_accept_consents))
         .route("/v1/policies", get(mock_managed_policies))
+        .route("/v1/node/manifest", get(mock_managed_manifest))
         .route(
             "/v1/bootstrap/heartbeat",
             post(mock_managed_bootstrap_heartbeat),
@@ -375,6 +376,19 @@ async fn node_without_local_consent_is_never_contacted() {
         .expect("fetch policies");
     assert_eq!(state.policies_hits.load(Ordering::SeqCst), 1);
     assert_eq!(catalog.policies.len(), 1);
+
+    // 公開manifestも同意判断に必要な明示取得として許可する。
+    let manifest = runtime
+        .fetch_community_node_manifest(crate::CommunityNodeTargetRequest {
+            base_url: base_url.clone(),
+        })
+        .await
+        .expect("fetch manifest");
+    assert_eq!(
+        manifest.status,
+        crate::CommunityNodeManifestFetchStatus::Absent
+    );
+    assert_eq!(state.manifest_hits.load(Ordering::SeqCst), 1);
 
     // 同意モーダルでの受諾 → ローカル記録 → セッション確立(認証・サーバ同期)。
     let accepted = runtime
@@ -476,6 +490,7 @@ async fn community_node_status_does_not_require_restart_when_connectivity_is_act
         },
     )
     .expect("persist community-node token");
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![node.clone()],
     };

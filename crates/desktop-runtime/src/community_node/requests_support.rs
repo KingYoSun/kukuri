@@ -493,7 +493,10 @@ impl DesktopRuntime {
             }
         }
         let rendezvous_peers = peers_by_endpoint.into_values().collect::<Vec<_>>();
-        *self.community_node_rendezvous_seed_peers.lock().await = rendezvous_peers;
+        self.community_node_rendezvous_seed_peers
+            .lock()
+            .await
+            .insert(base_url.to_string(), rendezvous_peers);
         self.apply_runtime_connectivity_assist()
             .await
             .map_err(CommunityNodeRequestError::Other)?;

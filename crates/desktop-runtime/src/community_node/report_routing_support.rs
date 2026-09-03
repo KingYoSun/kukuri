@@ -1,4 +1,5 @@
 use super::*;
+use kukuri_cn_protocol::CONSENT_REQUIRED_CODE;
 use std::fmt;
 
 /// 分散通報ルーティング（#310）の通報送信リクエスト。
@@ -172,6 +173,15 @@ impl DesktopRuntime {
         ensure_report_endpoint_origin(base_url.as_str(), endpoint).map_err(|error| {
             CommunityNodeReportError::new("REPORT_ENDPOINT_MISMATCH", error.to_string())
         })?;
+        if self
+            .community_node_required_consent_is_pending(base_url.as_str())
+            .await
+        {
+            return Err(CommunityNodeReportError::new(
+                CONSENT_REQUIRED_CODE,
+                "community node required policies must be accepted before report submission",
+            ));
+        }
         let client = community_node_report_http_client().map_err(|error| {
             CommunityNodeReportError::new("REPORT_CLIENT_UNAVAILABLE", error.to_string())
         })?;

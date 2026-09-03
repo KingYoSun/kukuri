@@ -242,7 +242,18 @@ pub(crate) async fn refresh_public_pair(
     }
 
     async fn force_public_runtime_connectivity(runtime: &DesktopRuntime) {
-        let _ = runtime.reapply_community_node_connectivity().await;
+        let has_active_node_consent =
+            runtime
+                .get_community_node_statuses()
+                .await
+                .is_ok_and(|statuses| {
+                    statuses
+                        .iter()
+                        .any(|status| status.local_consent.has_active_consent())
+                });
+        if has_active_node_consent {
+            let _ = runtime.reapply_community_node_connectivity().await;
+        }
     }
 
     let refresh_interval = Duration::from_secs(5);
