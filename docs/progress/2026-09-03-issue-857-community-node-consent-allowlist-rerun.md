@@ -26,6 +26,7 @@
 - `cargo xtask check`: 成功
 - `cargo xtask cn-check`: 成功
 - `cargo xtask cn-test`: Community Node 全crateの unit / contract / integration / doc test 成功
+- `cargo xtask oversized-files`: 成功（Community Node scenario の 15 step 化を baseline へ記録）
 - `cargo xtask test`: Rust 754 件、harness 22 件、frontend 1074 件すべて成功（Rust 3 件 skip）
 - `cargo xtask e2e-smoke`: 成功
 
