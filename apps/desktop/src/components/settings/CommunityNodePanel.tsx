@@ -38,7 +38,7 @@ type CommunityNodePanelProps = {
     documents: CommunityNodeConsentDocumentRef[]
   ) => void | Promise<void>;
   onWithdrawConsents?: (baseUrl: string) => void | Promise<void>;
-  onRefresh: (baseUrl: string) => void;
+  onRefresh: (baseUrl: string) => boolean | void | Promise<boolean | void>;
   onClearToken: (baseUrl: string) => void;
   onSubmitInviteCode: (baseUrl: string, inviteCode: string) => Promise<void>;
   onGetRelationOptout?: (baseUrl: string) => Promise<RelationOptoutResponse>;
@@ -169,6 +169,22 @@ export function CommunityNodePanel({
       );
     } finally {
       setConsentBusy(false);
+    }
+  }
+
+  async function refreshCommunityNode(node: CommunityNodePanelView['nodes'][number]) {
+    const knownConsentRequired =
+      !node.consent.hasLocalConsent ||
+      node.consent.withdrawn ||
+      node.consent.hasPendingUpdate ||
+      (node.consent.loaded && !node.consent.allRequiredAccepted);
+    if (knownConsentRequired) {
+      await openConsentDialog(node.baseUrl);
+      return;
+    }
+    const consentRequired = await onRefresh(node.baseUrl);
+    if (consentRequired) {
+      await openConsentDialog(node.baseUrl);
     }
   }
 
@@ -425,7 +441,7 @@ export function CommunityNodePanel({
                 <Button
                   variant='secondary'
                   disabled={nodeActionsDisabled || !node.saved || !node.baseUrl.trim()}
-                  onClick={() => onRefresh(node.baseUrl)}
+                  onClick={() => void refreshCommunityNode(node)}
                 >
                   {t('common:actions.refresh')}
                 </Button>

@@ -488,7 +488,6 @@ export interface DesktopApi {
     inviteCode: string | null
   ): Promise<CommunityNodeNodeStatus>;
   clearCommunityNodeToken(baseUrl: string): Promise<CommunityNodeNodeStatus>;
-  getCommunityNodeConsentStatus(baseUrl: string): Promise<CommunityNodeNodeStatus>;
   // #857: 認証不要の公開 policy カタログ。同意モーダルの提示内容を組み立てる。
   fetchCommunityNodePolicies(
     baseUrl: string,

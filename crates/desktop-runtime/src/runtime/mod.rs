@@ -47,11 +47,11 @@ use crate::attachments::{
 };
 use crate::community_node::{
     AcceptCommunityNodeConsentsRequest, COMMUNITY_NODE_TOKEN_PURPOSE, CommunityNodeConfig,
-    CommunityNodeIndexQueryError, CommunityNodeIndexQueryRequest, CommunityNodeIndexingRequest,
-    CommunityNodeIndexingRequestError, CommunityNodeManifestFetch, CommunityNodeNodeConfig,
-    CommunityNodeNodeStatus, CommunityNodeReconnectState, CommunityNodeRelationNeighborsRequest,
-    CommunityNodeReportError, CommunityNodeSessionPhase, CommunityNodeSessionState,
-    CommunityNodeTargetRequest, CommunityNodeTesterFeedbackError,
+    CommunityNodeConsentPreflight, CommunityNodeIndexQueryError, CommunityNodeIndexQueryRequest,
+    CommunityNodeIndexingRequest, CommunityNodeIndexingRequestError, CommunityNodeManifestFetch,
+    CommunityNodeNodeConfig, CommunityNodeNodeStatus, CommunityNodeReconnectState,
+    CommunityNodeRelationNeighborsRequest, CommunityNodeReportError, CommunityNodeSessionPhase,
+    CommunityNodeSessionState, CommunityNodeTargetRequest, CommunityNodeTesterFeedbackError,
     CommunityNodeTesterFeedbackResponse, CommunityNodeTesterFeedbackSubmission,
     CommunityNodeTrustRelationError, CommunityNodeUserAdvisoryRequest,
     FetchCommunityNodePoliciesRequest, IndexOperation, IndexQueryResponse,
@@ -59,11 +59,10 @@ use crate::community_node::{
     SetCommunityNodeConfigRequest, SetCommunityNodeInviteCodeRequest,
     SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
     SubmitIndexingRequestResponse, TrustUserReadResponse,
-    community_node_config_with_active_local_consents, community_node_local_consent_covers_status,
-    community_node_local_consent_satisfies_policies, community_node_seed_peers,
+    community_node_local_consent_covers_status, community_node_seed_peers,
     delete_community_node_invite_code, effective_seed_peer_apply_state,
     load_community_node_config_from_file, load_community_node_local_consents,
-    load_community_node_token, normalize_community_node_config, persist_community_node_invite_code,
+    normalize_community_node_config, persist_community_node_invite_code,
     persist_community_node_local_consents, record_community_node_local_consents,
     relay_config_from_community_node_config, runtime_connectivity_assist_state,
     save_community_node_config,
@@ -305,11 +304,9 @@ impl DesktopRuntime {
             }
             None => CommunityNodeConfig::default(),
         };
-        let active_community_node_config = community_node_config_with_active_local_consents(
-            &db_path,
-            identity_mode,
-            &community_node_config,
-        );
+        // 保存済みの Node relay / seed は、公開 policy とサーバ同意を確認する前の
+        // 起動入力へ渡さない。設定と resolved_urls は保持し、scheduler 成功後に再適用する。
+        let active_community_node_config = CommunityNodeConfig::default();
         let relay_config = relay_config_from_community_node_config(&active_community_node_config);
         let community_node_seed_peers =
             community_node_seed_peers(&active_community_node_config).collect::<Vec<_>>();

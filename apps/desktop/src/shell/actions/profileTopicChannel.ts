@@ -685,12 +685,21 @@ export function createProfileTopicChannelActions({
       setCommunityNodeConfig((current) => syncCommunityNodeConfigWithStatus(current, nextStatus));
       setCommunityNodeError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
+      const localConsent = nextStatus.local_consent;
+      return (
+        nextStatus.consent_update_pending === true ||
+        localConsent == null ||
+        localConsent.records.length === 0 ||
+        localConsent.withdrawn_at != null ||
+        nextStatus.consent_state?.all_required_accepted === false
+      );
     } catch (refreshError) {
       setCommunityNodeError(
         refreshError instanceof Error
           ? refreshError.message
           : translate('common:errors.failedToRefreshCommunityNode')
       );
+      return false;
     }
   }
 

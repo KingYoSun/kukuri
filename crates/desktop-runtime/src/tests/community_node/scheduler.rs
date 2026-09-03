@@ -55,6 +55,7 @@ async fn session_scheduler_keeps_bootstrap_registration_alive_without_getter_pol
         bootstrap_hits: Arc::new(AtomicUsize::new(0)),
     });
     let app = Router::new()
+        .route("/v1/policies", get(mock_current_policies))
         .route("/v1/consents/status", get(mock_bootstrap_consent_status))
         .route("/v1/bootstrap/heartbeat", post(mock_bootstrap_heartbeat))
         .route("/v1/bootstrap/nodes", get(mock_bootstrap_nodes))
@@ -176,6 +177,7 @@ async fn get_sync_status_is_read_only_for_community_node_session() {
         bootstrap_hits: Arc::new(AtomicUsize::new(0)),
     });
     let app = Router::new()
+        .route("/v1/policies", get(mock_current_policies))
         .route("/v1/consents/status", get(mock_bootstrap_consent_status))
         .route("/v1/bootstrap/heartbeat", post(mock_bootstrap_heartbeat))
         .route("/v1/bootstrap/nodes", get(mock_bootstrap_nodes))
@@ -356,6 +358,7 @@ async fn topic_rendezvous_refresh_fires_between_bootstrap_heartbeats() {
         rendezvous_requests: Arc::new(Mutex::new(Vec::new())),
     });
     let app = Router::new()
+        .route("/v1/policies", get(mock_current_policies))
         .route("/v1/consents/status", get(mock_bootstrap_consent_status))
         .route(
             "/v1/bootstrap/heartbeat",
@@ -501,6 +504,7 @@ async fn private_channel_rendezvous_refresh_uses_only_the_current_epoch_secret()
         rendezvous_requests: Arc::new(Mutex::new(Vec::new())),
     });
     let app = Router::new()
+        .route("/v1/policies", get(mock_current_policies))
         .route("/v1/consents/status", get(mock_bootstrap_consent_status))
         .route(
             "/v1/bootstrap/heartbeat",

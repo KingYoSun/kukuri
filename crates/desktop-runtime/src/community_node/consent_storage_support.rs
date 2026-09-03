@@ -67,7 +67,7 @@ pub(crate) fn persist_community_node_local_consents(
     )
 }
 
-/// 公開カタログ(`GET /v1/policies`)の required 文書すべてを、現行版以上で
+/// 公開カタログ(`GET /v1/policies`)の required 文書すべてを、現行版・snapshotで
 /// ローカル同意済みか。認証(JWT 発行)を開始してよいかの判定に使う。
 pub(crate) fn community_node_local_consent_satisfies_policies(
     state: &CommunityNodeLocalConsentState,
@@ -80,18 +80,13 @@ pub(crate) fn community_node_local_consent_satisfies_policies(
             .all(|policy| {
                 state.records.iter().any(|record| {
                     record.policy_slug == policy.policy_slug
-                        && record.policy_version >= policy.policy_version
-                        && policy
-                            .policy_snapshot_revision
-                            .as_ref()
-                            .is_none_or(|revision| {
-                                record.policy_snapshot_revision.as_ref() == Some(revision)
-                            })
+                        && record.policy_version == policy.policy_version
+                        && record.policy_snapshot_revision == policy.policy_snapshot_revision
                 })
             })
 }
 
-/// サーバの consent status が示す required 文書すべてを現行版以上でローカル同意済みか。
+/// サーバの consent status が示す required 文書すべてを現行版・snapshotでローカル同意済みか。
 /// 真なら POST /v1/consents での同期(auto 受諾)を許可し、偽なら再同意待ちとして
 /// セッションを進めない(#857: 重要変更時の再同意)。
 pub(crate) fn community_node_local_consent_covers_status(
@@ -106,13 +101,8 @@ pub(crate) fn community_node_local_consent_covers_status(
             .all(|item| {
                 state.records.iter().any(|record| {
                     record.policy_slug == item.policy_slug
-                        && record.policy_version >= item.policy_version
-                        && item
-                            .policy_snapshot_revision
-                            .as_ref()
-                            .is_none_or(|revision| {
-                                record.policy_snapshot_revision.as_ref() == Some(revision)
-                            })
+                        && record.policy_version == item.policy_version
+                        && record.policy_snapshot_revision == item.policy_snapshot_revision
                 })
             })
 }
@@ -210,7 +200,7 @@ mod tests {
     }
 
     #[test]
-    fn satisfies_policies_requires_current_or_newer_version_per_required_policy() {
+    fn satisfies_policies_requires_exact_current_version_per_required_policy() {
         let state = CommunityNodeLocalConsentState {
             records: vec![record("terms", 2)],
             withdrawn_at: None,
@@ -218,6 +208,11 @@ mod tests {
         assert!(community_node_local_consent_satisfies_policies(
             &state,
             &[policy("terms", 2, true)]
+        ));
+        // 未公開版の記録でも、現行版との完全一致でなければ成立しない。
+        assert!(!community_node_local_consent_satisfies_policies(
+            &state,
+            &[policy("terms", 1, true)]
         ));
         // 版が上がったら再同意が必要。
         assert!(!community_node_local_consent_satisfies_policies(

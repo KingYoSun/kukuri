@@ -7,6 +7,8 @@ use serde_json::{Value, json};
 struct MockReportState {
     received: Arc<Mutex<Vec<Value>>>,
     invalid_appeal: bool,
+    policies_hits: Arc<AtomicUsize>,
+    simulate_snapshot_update: Arc<AtomicBool>,
 }
 
 async fn mock_report(State(state): State<MockReportState>, Json(payload): Json<Value>) -> Response {
@@ -26,6 +28,45 @@ async fn mock_report(State(state): State<MockReportState>, Json(payload): Json<V
         "disputed_risk_signal_id": "signal-1"
     }))
     .into_response()
+}
+
+async fn mock_report_policies(
+    State(state): State<MockReportState>,
+) -> Json<kukuri_cn_protocol::CommunityNodePoliciesResponse> {
+    state.policies_hits.fetch_add(1, Ordering::SeqCst);
+    let snapshot_revision = state
+        .simulate_snapshot_update
+        .load(Ordering::SeqCst)
+        .then(|| "snapshot-2".to_string());
+    Json(kukuri_cn_protocol::CommunityNodePoliciesResponse {
+        policies: vec![kukuri_cn_protocol::CommunityNodePolicyDocument {
+            policy_slug: MOCK_MANAGED_POLICY_SLUG.to_string(),
+            policy_version: 1,
+            title: "Builder Preview".to_string(),
+            body_markdown: "Builder preview policy body.".to_string(),
+            required: true,
+            effective_date: Some("2026-09-02".to_string()),
+            language: Some("ja".to_string()),
+            policy_snapshot_revision: snapshot_revision.clone(),
+            authoritative_language: Some("ja".to_string()),
+            reference_translation: false,
+            translation_revision: None,
+            translation_of_version: None,
+            fallback: false,
+            requested_language: None,
+            material_change: false,
+            requires_reconsent: false,
+            is_current: true,
+            publication_status: Some("current".to_string()),
+            published_at: None,
+            retired_at: None,
+            previous_policy_version: None,
+            previous_policy_snapshot_revision: None,
+            next_policy_version: None,
+            next_policy_snapshot_revision: None,
+        }],
+        policy_snapshot_revision: snapshot_revision,
+    })
 }
 
 async fn report_runtime(
@@ -50,8 +91,11 @@ async fn report_runtime(
     let state = MockReportState {
         received: Arc::new(Mutex::new(Vec::new())),
         invalid_appeal,
+        policies_hits: Arc::new(AtomicUsize::new(0)),
+        simulate_snapshot_update: Arc::new(AtomicBool::new(false)),
     };
     let app = Router::new()
+        .route("/v1/policies", get(mock_report_policies))
         .route("/v1/report", post(mock_report))
         .route("/v1/report-moved", post(mock_report_redirect))
         .with_state(state.clone());
@@ -204,6 +248,7 @@ async fn community_node_report_client_stops_before_http_without_active_local_con
         .expect_err("report without local consent must be rejected");
 
     assert_eq!(error.code, CONSENT_REQUIRED_CODE);
+    assert_eq!(state.policies_hits.load(Ordering::SeqCst), 0);
     assert!(state.received.lock().await.is_empty());
 
     runtime.shutdown().await;
@@ -228,6 +273,32 @@ async fn community_node_report_client_stops_before_http_after_consent_withdrawal
         .expect_err("report after consent withdrawal must be rejected");
 
     assert_eq!(error.code, CONSENT_REQUIRED_CODE);
+    assert_eq!(state.policies_hits.load(Ordering::SeqCst), 0);
+    assert!(state.received.lock().await.is_empty());
+
+    runtime.shutdown().await;
+    server.abort();
+}
+
+#[tokio::test]
+async fn community_node_report_client_stops_before_body_post_on_snapshot_update() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let (runtime, base_url, state, server, _dir) = report_runtime(false).await;
+    seed_local_community_node_consents_with_snapshot(
+        &runtime,
+        base_url.as_str(),
+        1,
+        Some("snapshot-1"),
+    );
+    state.simulate_snapshot_update.store(true, Ordering::SeqCst);
+
+    let error = runtime
+        .submit_community_node_report(appeal_request(base_url.as_str()))
+        .await
+        .expect_err("report after policy snapshot update must be rejected");
+
+    assert_eq!(error.code, CONSENT_REQUIRED_CODE);
+    assert_eq!(state.policies_hits.load(Ordering::SeqCst), 1);
     assert!(state.received.lock().await.is_empty());
 
     runtime.shutdown().await;

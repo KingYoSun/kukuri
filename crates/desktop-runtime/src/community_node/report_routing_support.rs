@@ -173,6 +173,18 @@ impl DesktopRuntime {
         ensure_report_endpoint_origin(base_url.as_str(), endpoint).map_err(|error| {
             CommunityNodeReportError::new("REPORT_ENDPOINT_MISMATCH", error.to_string())
         })?;
+        let preflight = self
+            .preflight_community_node_consent(base_url.as_str())
+            .await
+            .map_err(|error| {
+                CommunityNodeReportError::new("REPORT_CONSENT_CHECK_FAILED", error.to_string())
+            })?;
+        if matches!(preflight, CommunityNodeConsentPreflight::Required { .. }) {
+            return Err(CommunityNodeReportError::new(
+                CONSENT_REQUIRED_CODE,
+                "current community node policies must be accepted before report submission",
+            ));
+        }
         if self
             .community_node_required_consent_is_pending(base_url.as_str())
             .await

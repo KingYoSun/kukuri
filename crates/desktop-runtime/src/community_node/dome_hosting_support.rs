@@ -30,10 +30,7 @@ impl std::fmt::Display for DomeHostingRequestError {
 
 impl std::error::Error for DomeHostingRequestError {}
 
-use super::{
-    community_node_http_client, community_node_local_consent_satisfies_policies,
-    load_community_node_local_consents, load_community_node_token,
-};
+use super::{CommunityNodeConsentPreflight, community_node_http_client, load_community_node_token};
 use crate::runtime::DesktopRuntime;
 
 impl DesktopRuntime {
@@ -51,32 +48,20 @@ impl DesktopRuntime {
                     status: 400,
                 })
             })?;
-        let local_consent = load_community_node_local_consents(
-            &self.db_path,
-            self.identity_mode,
-            base_url.as_str(),
-        )?;
-        if !local_consent.has_active_consent() {
-            return Err(DomeHostingRequestError {
-                code: CONSENT_REQUIRED_CODE.to_string(),
-                message: "community node consent is required before Dome hosting".to_string(),
-                status: 403,
-            }
-            .into());
-        }
-
-        // #857: Dome hostingも認証前に公開policyの現行版を照合する。policy取得は
-        // pre-consent allowlist内だが、token読込・JWT発行・Dome APIはこの判定後に限る。
-        let catalog = self
-            .request_community_node_policies(base_url.as_str(), None)
+        let preflight = self
+            .preflight_community_node_consent(base_url.as_str())
             .await?;
-        if !community_node_local_consent_satisfies_policies(&local_consent, &catalog.policies) {
-            self.set_community_node_local_consent_update_pending(base_url.as_str(), true)
+        if let CommunityNodeConsentPreflight::Required { policy_update, .. } = preflight {
+            self.set_community_node_local_consent_update_pending(base_url.as_str(), policy_update)
                 .await;
+            let message = if policy_update {
+                "current community node policies must be accepted before Dome hosting"
+            } else {
+                "community node consent is required before Dome hosting"
+            };
             return Err(DomeHostingRequestError {
                 code: CONSENT_REQUIRED_CODE.to_string(),
-                message: "current community node policies must be accepted before Dome hosting"
-                    .to_string(),
+                message: message.to_string(),
                 status: 403,
             }
             .into());

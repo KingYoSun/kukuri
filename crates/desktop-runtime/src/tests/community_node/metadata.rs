@@ -31,6 +31,7 @@ async fn community_node_status_refresh_updates_bootstrap_seed_peers() {
         bootstrap_hits: Arc::new(AtomicUsize::new(0)),
     });
     let app = Router::new()
+        .route("/v1/policies", get(mock_current_policies))
         .route("/v1/consents/status", get(mock_bootstrap_consent_status))
         .route("/v1/bootstrap/heartbeat", post(mock_bootstrap_heartbeat))
         .route("/v1/bootstrap/nodes", get(mock_bootstrap_nodes))
@@ -121,6 +122,7 @@ async fn community_node_session_maintenance_updates_bootstrap_seed_peers() {
         bootstrap_hits: Arc::new(AtomicUsize::new(0)),
     });
     let app = Router::new()
+        .route("/v1/policies", get(mock_current_policies))
         .route("/v1/consents/status", get(mock_bootstrap_consent_status))
         .route("/v1/bootstrap/heartbeat", post(mock_bootstrap_heartbeat))
         .route("/v1/bootstrap/nodes", get(mock_bootstrap_nodes))
@@ -206,6 +208,7 @@ async fn community_node_metadata_refresh_heartbeats_before_bootstrap_sync_even_w
         bootstrap_hits: Arc::new(AtomicUsize::new(0)),
     });
     let app = Router::new()
+        .route("/v1/policies", get(mock_current_policies))
         .route("/v1/consents/status", get(mock_bootstrap_consent_status))
         .route("/v1/bootstrap/heartbeat", post(mock_bootstrap_heartbeat))
         .route("/v1/bootstrap/nodes", get(mock_bootstrap_nodes))
@@ -337,6 +340,7 @@ async fn community_node_ready_transition_refreshes_bootstrap_metadata_before_nex
         bootstrap_hits: Arc::new(AtomicUsize::new(0)),
     });
     let app = Router::new()
+        .route("/v1/policies", get(mock_current_policies))
         .route("/v1/consents/status", get(mock_bootstrap_consent_status))
         .route("/v1/bootstrap/heartbeat", post(mock_bootstrap_heartbeat))
         .route("/v1/bootstrap/nodes", get(mock_bootstrap_nodes))
@@ -445,6 +449,7 @@ async fn community_node_ready_transition_refreshes_bootstrap_metadata_only_once_
         bootstrap_hits: Arc::new(AtomicUsize::new(0)),
     });
     let app = Router::new()
+        .route("/v1/policies", get(mock_current_policies))
         .route("/v1/consents/status", get(mock_bootstrap_consent_status))
         .route("/v1/bootstrap/heartbeat", post(mock_bootstrap_heartbeat))
         .route("/v1/bootstrap/nodes", get(mock_bootstrap_nodes))
@@ -520,6 +525,7 @@ async fn community_node_status_retries_bootstrap_metadata_when_seed_peers_are_em
         bootstrap_hits: Arc::new(AtomicUsize::new(0)),
     });
     let app = Router::new()
+        .route("/v1/policies", get(mock_current_policies))
         .route("/v1/consents/status", get(mock_bootstrap_consent_status))
         .route("/v1/bootstrap/heartbeat", post(mock_bootstrap_heartbeat))
         .route("/v1/bootstrap/nodes", get(mock_bootstrap_nodes))
@@ -636,6 +642,7 @@ async fn refresh_community_node_metadata_refreshes_registration_before_bootstrap
         bootstrap_hits: Arc::new(AtomicUsize::new(0)),
     });
     let app = Router::new()
+        .route("/v1/policies", get(mock_current_policies))
         .route("/v1/consents/status", get(mock_bootstrap_consent_status))
         .route("/v1/bootstrap/heartbeat", post(mock_bootstrap_heartbeat))
         .route("/v1/bootstrap/nodes", get(mock_bootstrap_nodes))
@@ -727,6 +734,7 @@ async fn refresh_community_node_metadata_requeues_heartbeat_when_runtime_connect
         bootstrap_hits: Arc::new(AtomicUsize::new(0)),
     });
     let app = Router::new()
+        .route("/v1/policies", get(mock_current_policies))
         .route("/v1/consents/status", get(mock_bootstrap_consent_status))
         .route(
             "/v1/bootstrap/heartbeat",
@@ -894,4 +902,90 @@ async fn reapply_community_node_connectivity_forces_unchanged_runtime_inputs() {
 
     runtime.shutdown().await;
     seed_peer_runtime.shutdown().await;
+}
+
+#[tokio::test]
+async fn manual_refresh_stops_before_protected_requests_on_snapshot_update() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("community-refresh-snapshot-update.db");
+    let runtime = DesktopRuntime::new_with_config_and_identity(
+        &db_path,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("runtime");
+
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind listener");
+    let base_url = format!("http://{}", listener.local_addr().expect("local addr"));
+    let state = Arc::new(MockManagedCommunityNodeState::new(
+        base_url.clone(),
+        vec![],
+        true,
+        Arc::new(Mutex::new("saved-token".into())),
+    ));
+    state.simulate_snapshot_update.store(true, Ordering::SeqCst);
+    let app = Router::new()
+        .route("/v1/auth/challenge", post(mock_managed_auth_challenge))
+        .route("/v1/auth/verify", post(mock_managed_auth_verify))
+        .route("/v1/consents/status", get(mock_managed_consent_status))
+        .route("/v1/consents", post(mock_managed_accept_consents))
+        .route("/v1/policies", get(mock_managed_policies))
+        .route(
+            "/v1/bootstrap/heartbeat",
+            post(mock_managed_bootstrap_heartbeat),
+        )
+        .route("/v1/bootstrap/nodes", get(mock_managed_bootstrap_nodes))
+        .with_state(state.clone());
+    let server = tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+
+    persist_community_node_token(
+        &db_path,
+        IdentityStorageMode::FileOnly,
+        base_url.as_str(),
+        &StoredCommunityNodeToken {
+            access_token: "saved-token".into(),
+            expires_at: Utc::now().timestamp() + 3600,
+        },
+    )
+    .expect("persist token");
+    *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        nodes: vec![CommunityNodeNodeConfig {
+            base_url: base_url.clone(),
+            resolved_urls: Some(
+                CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
+                    .expect("resolved urls"),
+            ),
+        }],
+    };
+    seed_local_community_node_consents_with_snapshot(
+        &runtime,
+        base_url.as_str(),
+        1,
+        Some("snapshot-1"),
+    );
+
+    let status = runtime
+        .refresh_community_node_metadata(crate::CommunityNodeTargetRequest {
+            base_url: base_url.clone(),
+        })
+        .await
+        .expect("refresh returns consent status");
+
+    assert_eq!(state.policies_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(state.challenge_hits.load(Ordering::SeqCst), 0);
+    assert_eq!(state.verify_hits.load(Ordering::SeqCst), 0);
+    assert_eq!(state.consent_status_hits.load(Ordering::SeqCst), 0);
+    assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 0);
+    assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 0);
+    assert_eq!(status.session_phase, crate::CommunityNodeSessionPhase::Idle);
+    assert!(status.consent_update_pending);
+
+    runtime.shutdown().await;
+    server.abort();
 }

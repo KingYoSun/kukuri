@@ -272,6 +272,91 @@ test('community node consent dialog shows policy body, version, and update notic
   ]);
 });
 
+test('community node refresh opens consent dialog without protected refresh when consent is missing', async () => {
+  const user = userEvent.setup();
+  const onFetchConsents = vi.fn().mockResolvedValue(undefined);
+  const onRefresh = vi.fn().mockResolvedValue(false);
+  const communityNodePanelFixture = createCommunityNodePanelFixture();
+  const view = {
+    ...communityNodePanelFixture,
+    nodes: communityNodePanelFixture.nodes.map((node, index) =>
+      index === 0
+        ? {
+            ...node,
+            consent: {
+              ...node.consent,
+              hasLocalConsent: false,
+              allRequiredAccepted: false,
+            },
+          }
+        : node
+    ),
+  };
+
+  render(
+    <CommunityNodePanel
+      view={view}
+      saveDisabled={false}
+      resetDisabled={false}
+      clearDisabled={false}
+      onAddNode={() => {}}
+      onNodeBaseUrlChange={() => {}}
+      onRemoveNode={() => {}}
+      onSaveNodes={() => {}}
+      onReset={() => {}}
+      onClearNodes={() => {}}
+      onAuthenticate={() => {}}
+      onSubmitInviteCode={async () => {}}
+      onFetchConsents={onFetchConsents}
+      onAcceptConsents={() => {}}
+      onWithdrawConsents={() => {}}
+      onRefresh={onRefresh}
+      onClearToken={() => {}}
+    />
+  );
+
+  await user.click(screen.getAllByRole('button', { name: 'Refresh' })[0]);
+
+  expect(onRefresh).not.toHaveBeenCalled();
+  expect(onFetchConsents).toHaveBeenCalledWith('https://api.kukuri.app');
+  expect(await screen.findByRole('dialog')).toBeInTheDocument();
+});
+
+test('community node refresh opens consent dialog when runtime detects a policy update', async () => {
+  const user = userEvent.setup();
+  const onFetchConsents = vi.fn().mockResolvedValue(undefined);
+  const onRefresh = vi.fn().mockResolvedValue(true);
+  const communityNodePanelFixture = createCommunityNodePanelFixture();
+
+  render(
+    <CommunityNodePanel
+      view={communityNodePanelFixture}
+      saveDisabled={false}
+      resetDisabled={false}
+      clearDisabled={false}
+      onAddNode={() => {}}
+      onNodeBaseUrlChange={() => {}}
+      onRemoveNode={() => {}}
+      onSaveNodes={() => {}}
+      onReset={() => {}}
+      onClearNodes={() => {}}
+      onAuthenticate={() => {}}
+      onSubmitInviteCode={async () => {}}
+      onFetchConsents={onFetchConsents}
+      onAcceptConsents={() => {}}
+      onWithdrawConsents={() => {}}
+      onRefresh={onRefresh}
+      onClearToken={() => {}}
+    />
+  );
+
+  await user.click(screen.getAllByRole('button', { name: 'Refresh' })[0]);
+
+  expect(onRefresh).toHaveBeenCalledWith('https://api.kukuri.app');
+  expect(onFetchConsents).toHaveBeenCalledWith('https://api.kukuri.app');
+  expect(await screen.findByRole('dialog')).toBeInTheDocument();
+});
+
 test('community node consent dialog disables accept when latest policy fetch fails', async () => {
   const user = userEvent.setup();
   const onFetchConsents = vi.fn().mockRejectedValue(new Error('offline'));
