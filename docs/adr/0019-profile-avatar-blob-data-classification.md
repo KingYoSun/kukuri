@@ -35,7 +35,7 @@ Accepted
 
 profile avatar は URL 文字列を primary source にしない。current `main` では、public author replica に保存された author-signed profile envelope/doc を header とし、画像本体は blob として同期する。
 
-legacy `picture` URL は read compatibility のため維持してよいが、新規 desktop UI の primary write path は blob-backed avatar に固定する。
+raw `picture` URL は data model と read / write path から除外し、互換読込を提供しない。desktop UI の avatar path は blob-backed `picture_asset` に固定する。
 
 ## Data Model
 
@@ -56,7 +56,7 @@ legacy `picture` URL は read compatibility のため維持してよいが、新
 
 1. profile / author detail は `picture_asset` があればそれを優先する
 2. client は既存の blob fetch path で avatar blob を lazy fetch する
-3. `picture_asset` がない場合だけ legacy `picture` URL を fallback として使う
+3. `picture_asset` がない場合は placeholder を表示し、外部 URL へ fallback しない
 
 ## Non-Goals
 
