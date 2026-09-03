@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, anyhow};
 use kukuri_cn_protocol::{
-    ApiErrorBody, DOME_HOSTING_ACTIVATE_PATH, DOME_HOSTING_ASSIGNMENTS_PATH,
+    ApiErrorBody, CONSENT_REQUIRED_CODE, DOME_HOSTING_ACTIVATE_PATH, DOME_HOSTING_ASSIGNMENTS_PATH,
     DOME_HOSTING_LAYOUT_CANDIDATE_PATH, DOME_HOSTING_RELEASE_PATH, DOME_HOSTING_SESSION_INPUT_PATH,
     DOME_HOSTING_SNAPSHOT_RESYNC_PATH, DOME_HOSTING_STATUS_ROUTE, DOME_TRANSITION_ABORT_PATH,
     DOME_TRANSITION_COMMIT_PATH, DOME_TRANSITION_PREPARE_PATH, DomeHostingActivationRequest,
@@ -30,10 +30,62 @@ impl std::fmt::Display for DomeHostingRequestError {
 
 impl std::error::Error for DomeHostingRequestError {}
 
-use super::{community_node_http_client, load_community_node_token};
+use super::{
+    community_node_http_client, community_node_local_consent_satisfies_policies,
+    load_community_node_local_consents, load_community_node_token,
+};
 use crate::runtime::DesktopRuntime;
 
 impl DesktopRuntime {
+    async fn require_dome_hosting_community_node_consent(
+        &self,
+        raw_base_url: &str,
+    ) -> Result<String> {
+        let base_url = normalize_http_url(raw_base_url)?;
+        self.require_community_node(base_url.as_str())
+            .await
+            .map_err(|error| {
+                anyhow::Error::new(DomeHostingRequestError {
+                    code: "DOME_HOSTING_TARGET_NOT_CONFIGURED".to_string(),
+                    message: error.to_string(),
+                    status: 400,
+                })
+            })?;
+        let local_consent = load_community_node_local_consents(
+            &self.db_path,
+            self.identity_mode,
+            base_url.as_str(),
+        )?;
+        if !local_consent.has_active_consent() {
+            return Err(DomeHostingRequestError {
+                code: CONSENT_REQUIRED_CODE.to_string(),
+                message: "community node consent is required before Dome hosting".to_string(),
+                status: 403,
+            }
+            .into());
+        }
+
+        // #857: Dome hostingも認証前に公開policyの現行版を照合する。policy取得は
+        // pre-consent allowlist内だが、token読込・JWT発行・Dome APIはこの判定後に限る。
+        let catalog = self
+            .request_community_node_policies(base_url.as_str(), None)
+            .await?;
+        if !community_node_local_consent_satisfies_policies(&local_consent, &catalog.policies) {
+            self.set_community_node_local_consent_update_pending(base_url.as_str(), true)
+                .await;
+            return Err(DomeHostingRequestError {
+                code: CONSENT_REQUIRED_CODE.to_string(),
+                message: "current community node policies must be accepted before Dome hosting"
+                    .to_string(),
+                status: 403,
+            }
+            .into());
+        }
+        self.set_community_node_local_consent_update_pending(base_url.as_str(), false)
+            .await;
+        Ok(base_url)
+    }
+
     pub(crate) async fn assign_dome_hosting_to_community_node(
         &self,
         base_url: &str,
@@ -132,7 +184,9 @@ impl DesktopRuntime {
     where
         Response: DeserializeOwned,
     {
-        let base_url = normalize_http_url(raw_base_url)?;
+        let base_url = self
+            .require_dome_hosting_community_node_consent(raw_base_url)
+            .await?;
         let token = match load_community_node_token(&self.db_path, self.identity_mode, &base_url)? {
             Some(token) => token,
             None => {
@@ -164,7 +218,9 @@ impl DesktopRuntime {
         Request: Serialize + ?Sized,
         Response: DeserializeOwned,
     {
-        let base_url = normalize_http_url(raw_base_url)?;
+        let base_url = self
+            .require_dome_hosting_community_node_consent(raw_base_url)
+            .await?;
         let token = match load_community_node_token(&self.db_path, self.identity_mode, &base_url)? {
             Some(token) => token,
             None => {

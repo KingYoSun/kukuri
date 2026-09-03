@@ -12,6 +12,8 @@ import type {
   SyncStatus,
 } from '@/lib/api';
 import type { SupportedLocale } from '@/i18n';
+import type { CommunityNodeConsentDocumentRef } from '@/lib/api';
+import type { CommunityNodePanelView } from '@/components/settings/types';
 import { blobToBase64 } from '@/lib/attachments';
 import {
   MetaverseRoomDiscovery,
@@ -39,6 +41,13 @@ type MetaverseRoomPanelProps = {
   mediaObjectUrls?: Record<string, string | null>;
   initialSelectedRoomId?: string | null;
   activeChannel?: JoinedPrivateChannelView | null;
+  communityNodePanelView?: CommunityNodePanelView;
+  onFetchCommunityNodeConsents?: (baseUrl: string) => Promise<void>;
+  onAcceptCommunityNodeConsents?: (
+    baseUrl: string,
+    documents: CommunityNodeConsentDocumentRef[]
+  ) => Promise<void>;
+  onOpenCommunityNodeSettings?: () => void;
 };
 
 const EMPTY_KNOWN_AUTHORS_BY_PUBKEY: Record<string, AuthorSocialView> = {};
@@ -54,6 +63,10 @@ export function MetaverseRoomPanel({
   mediaObjectUrls = {},
   initialSelectedRoomId = null,
   activeChannel = null,
+  communityNodePanelView,
+  onFetchCommunityNodeConsents,
+  onAcceptCommunityNodeConsents,
+  onOpenCommunityNodeSettings,
 }: MetaverseRoomPanelProps) {
   const { t } = useTranslation('metaverse', { lng: locale });
   const [error, setError] = useState<string | null>(null);
@@ -305,6 +318,10 @@ export function MetaverseRoomPanel({
         onSpawnGuestProp={session.spawnGuestProp}
         onAddPersistentProp={session.addPersistentProp}
         onDeletePersistentProp={session.deletePersistentProp}
+        communityNodes={communityNodePanelView?.nodes ?? []}
+        onFetchCommunityNodeConsents={onFetchCommunityNodeConsents}
+        onAcceptCommunityNodeConsents={onAcceptCommunityNodeConsents}
+        onOpenCommunityNodeSettings={onOpenCommunityNodeSettings}
       />
     </div>
   );

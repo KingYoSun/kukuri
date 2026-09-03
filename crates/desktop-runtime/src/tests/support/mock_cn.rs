@@ -196,6 +196,8 @@ pub(crate) struct MockManagedCommunityNodeState {
     // #857: 認証不要の公開 policy カタログ(GET /v1/policies)の観測カウンタ。
     pub(crate) policies_hits: Arc<AtomicUsize>,
     pub(crate) manifest_hits: Arc<AtomicUsize>,
+    pub(crate) dome_get_hits: Arc<AtomicUsize>,
+    pub(crate) dome_post_hits: Arc<AtomicUsize>,
     // true の場合、未同意状態を「版が上がった更新（旧版は同意済み）」として返す。
     // ローカル同意が旧版のままの node で黙って再受諾しない挙動の検証に使う（#384 / #857）。
     pub(crate) simulate_pending_update: Arc<AtomicBool>,
@@ -221,9 +223,46 @@ impl MockManagedCommunityNodeState {
             bootstrap_hits: Arc::new(AtomicUsize::new(0)),
             policies_hits: Arc::new(AtomicUsize::new(0)),
             manifest_hits: Arc::new(AtomicUsize::new(0)),
+            dome_get_hits: Arc::new(AtomicUsize::new(0)),
+            dome_post_hits: Arc::new(AtomicUsize::new(0)),
             simulate_pending_update: Arc::new(AtomicBool::new(false)),
         }
     }
+}
+
+pub(crate) async fn mock_managed_dome_status(
+    State(state): State<Arc<MockManagedCommunityNodeState>>,
+    axum::extract::Path(instance_id): axum::extract::Path<String>,
+    headers: HeaderMap,
+) -> std::result::Result<Json<kukuri_cn_protocol::DomeHostingStatusResponse>, StatusCode> {
+    authorize_managed_community_node_request(&headers, state.as_ref()).await?;
+    state.dome_get_hits.fetch_add(1, Ordering::SeqCst);
+    Ok(Json(kukuri_cn_protocol::DomeHostingStatusResponse {
+        instance_id,
+        state: kukuri_core::DomeHostingStateKindV1::CommunityNodeHosted,
+        lease_epoch: 1,
+        session_id: Some("mock-dome-session".to_string()),
+        participants: 1,
+        sleeping: false,
+        signed_heartbeat: None,
+        expires_at: Utc::now().timestamp_millis() + 60_000,
+        resource_budget: kukuri_core::MetaverseResourceBudgetConfig::default(),
+        resource_metrics: kukuri_core::MetaverseResourceMetricsV1::default(),
+    }))
+}
+
+pub(crate) async fn mock_managed_dome_resync(
+    State(state): State<Arc<MockManagedCommunityNodeState>>,
+    headers: HeaderMap,
+    Json(_request): Json<kukuri_cn_protocol::DomeHostingSnapshotResyncRequest>,
+) -> std::result::Result<Json<kukuri_cn_protocol::DomeHostingSnapshotResyncResponse>, StatusCode> {
+    authorize_managed_community_node_request(&headers, state.as_ref()).await?;
+    state.dome_post_hits.fetch_add(1, Ordering::SeqCst);
+    Ok(Json(
+        kukuri_cn_protocol::DomeHostingSnapshotResyncResponse {
+            snapshots: Vec::new(),
+        },
+    ))
 }
 
 /// #857: mock CN の policy カタログの現行版。simulate_pending_update 時は版が上がる。

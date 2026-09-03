@@ -105,6 +105,9 @@ export type CommunityNodeConsentView = {
 export type CommunityNodeEntryView = {
   id: string;
   baseUrl: string;
+  // 公開manifest由来。Dome hosting等、暗号学的Node IDが必要な機能で自由入力を避ける。
+  nodeId?: string | null;
+  nodeName?: string | null;
   saved: boolean;
   diagnostics: SettingsDiagnosticItemView[];
   dependency: CommunityNodeDependencyView;

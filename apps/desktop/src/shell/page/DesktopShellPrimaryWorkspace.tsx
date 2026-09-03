@@ -4,6 +4,7 @@ import { Link2 } from 'lucide-react';
 import { TimelineFeed } from '@/components/core/TimelineFeed';
 import { CommunityIndexWorkspace } from '@/components/core/CommunityIndexWorkspace';
 import { MetaverseRoomPanel } from '@/components/extended/MetaverseRoomPanel';
+import type { CommunityNodePanelView } from '@/components/settings/types';
 import { GameRoomPanel } from '@/components/extended/GameRoomPanel';
 import type { MetaverseRoomActions } from '@/components/extended/metaverse/MetaverseRoomActions';
 import { ProfileConnectionsPanel } from '@/components/extended/ProfileConnectionsPanel';
@@ -21,6 +22,7 @@ import {
 } from '@/shell/slices/workspace';
 
 import type {
+  CommunityNodeConsentDocumentRef,
   DesktopApi,
   PostView,
   ReactionKeyInput,
@@ -84,6 +86,12 @@ export type DesktopShellPrimarySurfaceProps = {
     | 'timelineViewItems'
   >;
   openCommunityNodeSettings: () => void;
+  communityNodePanelView?: CommunityNodePanelView;
+  onFetchCommunityNodeConsents?: (baseUrl: string) => Promise<void>;
+  onAcceptCommunityNodeConsents?: (
+    baseUrl: string,
+    documents: CommunityNodeConsentDocumentRef[]
+  ) => Promise<void>;
   loadReactionCatalogData: () => Promise<void>;
   refreshTimelineFeed: (
     topic: string,
@@ -136,6 +144,9 @@ export function DesktopShellPrimarySurface({
   notificationsWorkspace,
   viewModels,
   openCommunityNodeSettings,
+  communityNodePanelView,
+  onFetchCommunityNodeConsents,
+  onAcceptCommunityNodeConsents,
   loadReactionCatalogData,
   refreshTimelineFeed,
   loadMoreTimeline,
@@ -661,6 +672,10 @@ export function DesktopShellPrimarySurface({
             activeChannel={surfaceChannelId
               ? surfaceJoinedChannels.find((channel) => channel.channel_id === surfaceChannelId) ?? null
               : null}
+            communityNodePanelView={communityNodePanelView}
+            onFetchCommunityNodeConsents={onFetchCommunityNodeConsents}
+            onAcceptCommunityNodeConsents={onAcceptCommunityNodeConsents}
+            onOpenCommunityNodeSettings={openCommunityNodeSettings}
           />
         ) : null}
 
