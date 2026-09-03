@@ -10,16 +10,27 @@ use kukuri_cn_protocol::models::{
 };
 use kukuri_cn_protocol::normalize::normalize_pubkey;
 
+const POLICY_SELECT: &str =
+    "SELECT p.policy_slug, p.policy_version, p.title, p.body_markdown, p.required,
+            p.effective_date::text AS effective_date, p.language,
+            p.policy_snapshot_revision, p.material_change, p.requires_reconsent,
+            p.is_current,
+            CASE WHEN p.is_current THEN 'current' ELSE 'retired' END AS publication_status,
+            p.published_at::text AS published_at, p.retired_at::text AS retired_at,
+            p.predecessor_policy_version, p.predecessor_snapshot_revision,
+            successor.policy_version AS successor_policy_version,
+            successor.policy_snapshot_revision AS successor_snapshot_revision
+     FROM cn_admin.policies p
+     LEFT JOIN cn_admin.policies successor
+       ON successor.policy_slug = p.policy_slug
+      AND successor.predecessor_policy_version = p.policy_version
+      AND successor.predecessor_snapshot_revision = p.policy_snapshot_revision";
+
 /// 公開 policy カタログ(#857)。認証不要の同意提示用で、ユーザー固有情報を含まない。
 pub async fn list_policies(pool: &PgPool) -> Result<Vec<CommunityNodePolicyDocument>> {
-    let rows = sqlx::query(
-        "SELECT policy_slug, policy_version, title, body_markdown, required,
-                effective_date::text AS effective_date, language,
-                policy_snapshot_revision, material_change, requires_reconsent
-         FROM cn_admin.policies
-         WHERE is_current = TRUE
-         ORDER BY policy_slug ASC",
-    )
+    let rows = sqlx::query(&format!(
+        "{POLICY_SELECT} WHERE p.is_current = TRUE ORDER BY p.policy_slug ASC"
+    ))
     .fetch_all(pool)
     .await?;
     rows.into_iter().map(|row| policy_from_row(&row)).collect()
@@ -55,14 +66,11 @@ pub async fn list_policy_revisions(
     pool: &PgPool,
     policy_slug: &str,
 ) -> Result<Vec<CommunityNodePolicyDocument>> {
-    let rows = sqlx::query(
-        "SELECT policy_slug, policy_version, title, body_markdown, required,
-                effective_date::text AS effective_date, language,
-                policy_snapshot_revision, material_change, requires_reconsent
-         FROM cn_admin.policies
-         WHERE policy_slug = $1
-         ORDER BY policy_version DESC",
-    )
+    let rows = sqlx::query(&format!(
+        "{POLICY_SELECT}
+         WHERE p.policy_slug = $1
+         ORDER BY p.published_at DESC, p.policy_version DESC"
+    ))
     .bind(policy_slug)
     .fetch_all(pool)
     .await?;
@@ -75,13 +83,12 @@ pub async fn get_policy_revision(
     policy_version: i32,
     requested_language: Option<&str>,
 ) -> Result<Option<CommunityNodePolicyDocument>> {
-    let row = sqlx::query(
-        "SELECT policy_slug, policy_version, title, body_markdown, required,
-                effective_date::text AS effective_date, language,
-                policy_snapshot_revision, material_change, requires_reconsent
-         FROM cn_admin.policies
-         WHERE policy_slug = $1 AND policy_version = $2",
-    )
+    let row = sqlx::query(&format!(
+        "{POLICY_SELECT}
+         WHERE p.policy_slug = $1 AND p.policy_version = $2
+         ORDER BY p.is_current DESC, p.published_at DESC
+         LIMIT 1"
+    ))
     .bind(policy_slug)
     .bind(policy_version)
     .fetch_optional(pool)
@@ -90,6 +97,49 @@ pub async fn get_policy_revision(
         return Ok(None);
     };
     let mut policy = policy_from_row(&row)?;
+    let snapshot = policy
+        .policy_snapshot_revision
+        .clone()
+        .expect("persisted policy snapshot is non-null");
+    localize_policy(pool, &mut policy, requested_language, &snapshot).await?;
+    Ok(Some(policy))
+}
+
+/// 機械可読な snapshot revision で公開済み正文を厳密に取得する。
+pub async fn get_policy_snapshot_revision(
+    pool: &PgPool,
+    policy_slug: &str,
+    policy_snapshot_revision: &str,
+    requested_language: Option<&str>,
+) -> Result<Option<CommunityNodePolicyDocument>> {
+    let row = sqlx::query(&format!(
+        "{POLICY_SELECT}
+         WHERE p.policy_slug = $1 AND p.policy_snapshot_revision = $2"
+    ))
+    .bind(policy_slug)
+    .bind(policy_snapshot_revision)
+    .fetch_optional(pool)
+    .await?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let mut policy = policy_from_row(&row)?;
+    localize_policy(
+        pool,
+        &mut policy,
+        requested_language,
+        policy_snapshot_revision,
+    )
+    .await?;
+    Ok(Some(policy))
+}
+
+async fn localize_policy(
+    pool: &PgPool,
+    policy: &mut CommunityNodePolicyDocument,
+    requested_language: Option<&str>,
+    policy_snapshot_revision: &str,
+) -> Result<()> {
     let requested = requested_language
         .map(str::trim)
         .filter(|language| !language.is_empty());
@@ -102,10 +152,12 @@ pub async fn get_policy_revision(
             "SELECT title, body_markdown, language, translation_revision
              FROM cn_admin.policy_translations
              WHERE policy_slug = $1 AND policy_version = $2
-               AND language = $3 AND is_current = TRUE",
+               AND policy_snapshot_revision = $3
+               AND language = $4 AND is_current = TRUE",
         )
-        .bind(policy_slug)
-        .bind(policy_version)
+        .bind(&policy.policy_slug)
+        .bind(policy.policy_version)
+        .bind(policy_snapshot_revision)
         .bind(requested)
         .fetch_optional(pool)
         .await?;
@@ -115,12 +167,12 @@ pub async fn get_policy_revision(
             policy.language = Some(translation.try_get("language")?);
             policy.reference_translation = true;
             policy.translation_revision = Some(translation.try_get("translation_revision")?);
-            policy.translation_of_version = Some(policy_version);
+            policy.translation_of_version = Some(policy.policy_version);
         } else {
             policy.fallback = true;
         }
     }
-    Ok(Some(policy))
+    Ok(())
 }
 
 fn policy_from_row(row: &PgRow) -> Result<CommunityNodePolicyDocument> {
@@ -142,6 +194,14 @@ fn policy_from_row(row: &PgRow) -> Result<CommunityNodePolicyDocument> {
         requested_language: None,
         material_change: row.try_get("material_change")?,
         requires_reconsent: row.try_get("requires_reconsent")?,
+        is_current: row.try_get("is_current")?,
+        publication_status: row.try_get("publication_status")?,
+        published_at: row.try_get("published_at")?,
+        retired_at: row.try_get("retired_at")?,
+        previous_policy_version: row.try_get("predecessor_policy_version")?,
+        previous_policy_snapshot_revision: row.try_get("predecessor_snapshot_revision")?,
+        next_policy_version: row.try_get("successor_policy_version")?,
+        next_policy_snapshot_revision: row.try_get("successor_snapshot_revision")?,
     })
 }
 
@@ -205,9 +265,27 @@ pub async fn get_consent_status(pool: &PgPool, pubkey: &str) -> Result<Community
         .iter()
         .filter(|item| item.required)
         .all(|item| item.accepted_at.is_some());
+    let mut required_snapshots = items
+        .iter()
+        .filter(|item| item.required)
+        .filter_map(|item| item.policy_snapshot_revision.clone())
+        .collect::<Vec<_>>();
+    required_snapshots.sort();
+    required_snapshots.dedup();
+    if required_snapshots.len() > 1 {
+        bail!(
+            "policy snapshot changed: current required policies do not share one policy snapshot"
+        );
+    }
     let policy_snapshot_revision = items
         .iter()
-        .find_map(|item| item.policy_snapshot_revision.clone());
+        .find(|item| item.required)
+        .and_then(|item| item.policy_snapshot_revision.clone())
+        .or_else(|| {
+            items
+                .iter()
+                .find_map(|item| item.policy_snapshot_revision.clone())
+        });
     Ok(CommunityNodeConsentStatus {
         all_required_accepted,
         items,
@@ -217,8 +295,8 @@ pub async fn get_consent_status(pool: &PgPool, pubkey: &str) -> Result<Community
 
 /// operator config から生成した current policy を同期する。
 ///
-/// version は単調増加とし、同一 version の本文・metadata 差し替えを拒否する。旧英語
-/// placeholder だけは #860 の一回限りの移行対象として同意履歴を破棄して置換する。
+/// 表示用 version は単調非減少、snapshot revision は immutable とする。同じ表示用
+/// version でも snapshot が変われば旧正文を retire して新しい revision を append する。
 pub async fn sync_policies(pool: &PgPool, policies: &[CommunityNodePolicyDocument]) -> Result<()> {
     let mut tx = pool.begin().await?;
     for policy in policies
@@ -231,6 +309,10 @@ pub async fn sync_policies(pool: &PgPool, policies: &[CommunityNodePolicyDocumen
             || policy.body_markdown.trim().is_empty()
             || policy.effective_date.as_deref().is_none_or(str::is_empty)
             || policy.language.as_deref().is_none_or(str::is_empty)
+            || policy
+                .policy_snapshot_revision
+                .as_deref()
+                .is_none_or(|value| value.trim().is_empty())
         {
             bail!(
                 "operator policy metadata is incomplete for `{}`",
@@ -249,6 +331,14 @@ pub async fn sync_policies(pool: &PgPool, policies: &[CommunityNodePolicyDocumen
         .fetch_optional(&mut *tx)
         .await?;
         let had_existing = existing.is_some();
+        let predecessor_policy_version = existing
+            .as_ref()
+            .map(|row| row.try_get::<i32, _>("policy_version"))
+            .transpose()?;
+        let predecessor_snapshot_revision = existing
+            .as_ref()
+            .map(|row| row.try_get::<String, _>("policy_snapshot_revision"))
+            .transpose()?;
         if let Some(existing) = existing {
             let version: i32 = existing.try_get("policy_version")?;
             let title: String = existing.try_get("title")?;
@@ -256,94 +346,41 @@ pub async fn sync_policies(pool: &PgPool, policies: &[CommunityNodePolicyDocumen
             let required: bool = existing.try_get("required")?;
             let effective_date: Option<String> = existing.try_get("effective_date")?;
             let language: Option<String> = existing.try_get("language")?;
-            let snapshot_revision: Option<String> = existing.try_get("policy_snapshot_revision")?;
+            let snapshot_revision: String = existing.try_get("policy_snapshot_revision")?;
             let identical_document = version == policy.policy_version
                 && title == policy.title
                 && body == policy.body_markdown
                 && required == policy.required
                 && effective_date == policy.effective_date
                 && language == policy.language;
-            if identical_document && snapshot_revision == policy.policy_snapshot_revision {
+            if identical_document
+                && Some(snapshot_revision.as_str()) == policy.policy_snapshot_revision.as_deref()
+            {
                 continue;
             }
-            // catalog-wide の法務設定が変わっても、本文・正文 metadata が同一なら文書
-            // version の水増しは要求しない。正文は不変のまま current snapshot だけを
-            // 進め、旧 snapshot の同意を自動的に無効化する。
-            if identical_document {
-                sqlx::query(
-                    "UPDATE cn_admin.policies
-                     SET policy_snapshot_revision = $3,
-                         material_change = TRUE, requires_reconsent = TRUE,
-                         updated_at = NOW()
-                     WHERE policy_slug = $1 AND policy_version = $2",
-                )
-                .bind(&policy.policy_slug)
-                .bind(version)
-                .bind(&policy.policy_snapshot_revision)
-                .execute(&mut *tx)
-                .await?;
-                continue;
-            }
-            let legacy_placeholder = version == 1
-                && required
-                && effective_date.is_none()
-                && language.is_none()
-                && matches!(
-                    (policy.policy_slug.as_str(), title.as_str(), body.as_str()),
-                    (
-                        "terms_of_service",
-                        "Terms of Service",
-                        "You must follow the community node terms of service."
-                    ) | (
-                        "privacy_policy",
-                        "Privacy Policy",
-                        "You must acknowledge the community node privacy policy."
-                    )
-                );
-            if legacy_placeholder {
-                sqlx::query("DELETE FROM cn_user.policy_consents WHERE policy_slug = $1")
-                    .bind(&policy.policy_slug)
-                    .execute(&mut *tx)
-                    .await?;
-                sqlx::query(
-                    "UPDATE cn_admin.policies
-                     SET title = $2, body_markdown = $3, required = $4,
-                         effective_date = $5::date, language = $6,
-                         policy_snapshot_revision = $7,
-                         material_change = TRUE, requires_reconsent = TRUE,
-                         updated_at = NOW()
-                     WHERE policy_slug = $1 AND policy_version = 1",
-                )
-                .bind(&policy.policy_slug)
-                .bind(&policy.title)
-                .bind(&policy.body_markdown)
-                .bind(policy.required)
-                .bind(&policy.effective_date)
-                .bind(&policy.language)
-                .bind(&policy.policy_snapshot_revision)
-                .execute(&mut *tx)
-                .await?;
-                continue;
-            } else if policy.policy_version < version {
+            if policy.policy_version < version {
                 bail!(
                     "policy `{}` version rollback is not allowed: stored={}, configured={}",
                     policy.policy_slug,
                     version,
                     policy.policy_version
                 );
-            } else if policy.policy_version == version {
+            }
+            if Some(snapshot_revision.as_str()) == policy.policy_snapshot_revision.as_deref() {
                 bail!(
-                    "policy `{}` content changed without a version increase",
+                    "policy `{}` content changed without a snapshot revision change",
                     policy.policy_slug
                 );
             }
             sqlx::query(
                 "UPDATE cn_admin.policies
                  SET is_current = FALSE, retired_at = NOW(), updated_at = NOW()
-                 WHERE policy_slug = $1 AND policy_version = $2",
+                 WHERE policy_slug = $1 AND policy_version = $2
+                   AND policy_snapshot_revision = $3",
             )
             .bind(&policy.policy_slug)
             .bind(version)
+            .bind(&snapshot_revision)
             .execute(&mut *tx)
             .await?;
         }
@@ -351,8 +388,9 @@ pub async fn sync_policies(pool: &PgPool, policies: &[CommunityNodePolicyDocumen
             "INSERT INTO cn_admin.policies
                 (policy_slug, policy_version, title, body_markdown, required,
                  effective_date, language, is_current, policy_snapshot_revision,
-                 material_change, requires_reconsent)
-             VALUES ($1, $2, $3, $4, $5, $6::date, $7, TRUE, $8, $9, $9)",
+                 material_change, requires_reconsent,
+                 predecessor_policy_version, predecessor_snapshot_revision)
+             VALUES ($1, $2, $3, $4, $5, $6::date, $7, TRUE, $8, $9, $9, $10, $11)",
         )
         .bind(&policy.policy_slug)
         .bind(policy.policy_version)
@@ -363,6 +401,8 @@ pub async fn sync_policies(pool: &PgPool, policies: &[CommunityNodePolicyDocumen
         .bind(&policy.language)
         .bind(&policy.policy_snapshot_revision)
         .bind(had_existing)
+        .bind(predecessor_policy_version)
+        .bind(predecessor_snapshot_revision)
         .execute(&mut *tx)
         .await?;
     }
@@ -386,15 +426,42 @@ pub async fn sync_policies(pool: &PgPool, policies: &[CommunityNodePolicyDocumen
                 translation.policy_version
             );
         }
+        let snapshot_revision = translation
+            .policy_snapshot_revision
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| {
+                anyhow::anyhow!("reference translation snapshot revision is required")
+            })?;
+        let authoritative_exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(
+                SELECT 1 FROM cn_admin.policies
+                WHERE policy_slug = $1 AND policy_version = $2
+                  AND policy_snapshot_revision = $3
+            )",
+        )
+        .bind(&translation.policy_slug)
+        .bind(translation.policy_version)
+        .bind(snapshot_revision)
+        .fetch_one(&mut *tx)
+        .await?;
+        if !authoritative_exists {
+            bail!(
+                "reference translation `{}` targets an unknown authoritative snapshot",
+                translation.policy_slug
+            );
+        }
         let existing = sqlx::query(
             "SELECT translation_revision, title, body_markdown
              FROM cn_admin.policy_translations
              WHERE policy_slug = $1 AND policy_version = $2
-               AND language = $3 AND is_current = TRUE
+               AND policy_snapshot_revision = $3
+               AND language = $4 AND is_current = TRUE
              FOR UPDATE",
         )
         .bind(&translation.policy_slug)
         .bind(translation.policy_version)
+        .bind(snapshot_revision)
         .bind(language)
         .fetch_optional(&mut *tx)
         .await?;
@@ -419,10 +486,12 @@ pub async fn sync_policies(pool: &PgPool, policies: &[CommunityNodePolicyDocumen
                 "UPDATE cn_admin.policy_translations
                  SET is_current = FALSE, retired_at = NOW(), updated_at = NOW()
                  WHERE policy_slug = $1 AND policy_version = $2
-                   AND language = $3 AND translation_revision = $4",
+                   AND policy_snapshot_revision = $3
+                   AND language = $4 AND translation_revision = $5",
             )
             .bind(&translation.policy_slug)
             .bind(translation.policy_version)
+            .bind(snapshot_revision)
             .bind(language)
             .bind(stored_revision)
             .execute(&mut *tx)
@@ -430,12 +499,13 @@ pub async fn sync_policies(pool: &PgPool, policies: &[CommunityNodePolicyDocumen
         }
         sqlx::query(
             "INSERT INTO cn_admin.policy_translations
-                (policy_slug, policy_version, language, translation_revision,
-                 title, body_markdown)
-             VALUES ($1, $2, $3, $4, $5, $6)",
+                (policy_slug, policy_version, policy_snapshot_revision,
+                 language, translation_revision, title, body_markdown)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)",
         )
         .bind(&translation.policy_slug)
         .bind(translation.policy_version)
+        .bind(snapshot_revision)
         .bind(language)
         .bind(revision)
         .bind(&translation.title)
@@ -455,23 +525,28 @@ pub async fn accept_consents(
 ) -> Result<CommunityNodeConsentStatus> {
     let pubkey = normalize_pubkey(pubkey)?;
     let mut tx = pool.begin().await?;
-    let current_snapshot = sqlx::query_scalar::<_, String>(
-        "SELECT policy_snapshot_revision
+    let current_snapshots = sqlx::query_scalar::<_, String>(
+        "SELECT DISTINCT policy_snapshot_revision
          FROM cn_admin.policies
          WHERE is_current = TRUE AND required = TRUE
-           AND policy_snapshot_revision IS NOT NULL
-         LIMIT 1",
+           AND policy_snapshot_revision IS NOT NULL",
     )
-    .fetch_optional(&mut *tx)
+    .fetch_all(&mut *tx)
     .await?;
-    if let Some(current_snapshot) = current_snapshot.as_deref()
+    if current_snapshots.len() > 1 {
+        bail!(
+            "policy snapshot changed: current required policies do not share one policy snapshot"
+        );
+    }
+    let current_snapshot = current_snapshots.first().map(String::as_str);
+    if let Some(current_snapshot) = current_snapshot
         && policy_snapshot_revision != Some(current_snapshot)
     {
         bail!("policy snapshot changed; reload policies before accepting");
     }
     let desired = if policy_slugs.is_empty() {
         sqlx::query(
-            "SELECT policy_slug, policy_version
+            "SELECT policy_slug, policy_version, policy_snapshot_revision
              FROM cn_admin.policies
              WHERE required = TRUE AND is_current = TRUE",
         )
@@ -481,7 +556,7 @@ pub async fn accept_consents(
         let mut records = Vec::new();
         for slug in normalize_slug_list(policy_slugs) {
             let row = sqlx::query(
-                "SELECT policy_slug, policy_version
+                "SELECT policy_slug, policy_version, policy_snapshot_revision
                  FROM cn_admin.policies
                  WHERE policy_slug = $1 AND is_current = TRUE",
             )
@@ -500,19 +575,20 @@ pub async fn accept_consents(
     for row in desired {
         let slug: String = row.try_get("policy_slug")?;
         let version: i32 = row.try_get("policy_version")?;
+        let snapshot: String = row.try_get("policy_snapshot_revision")?;
         sqlx::query(
             "INSERT INTO cn_user.policy_consents
                 (subscriber_pubkey, policy_slug, policy_version,
                  policy_snapshot_revision, accepted_at)
              VALUES ($1, $2, $3, $4, NOW())
-             ON CONFLICT (subscriber_pubkey, policy_slug, policy_version) DO UPDATE
-             SET policy_snapshot_revision = EXCLUDED.policy_snapshot_revision,
-                 accepted_at = EXCLUDED.accepted_at",
+             ON CONFLICT (
+                subscriber_pubkey, policy_slug, policy_version, policy_snapshot_revision
+             ) DO UPDATE SET accepted_at = EXCLUDED.accepted_at",
         )
         .bind(&pubkey)
         .bind(slug)
         .bind(version)
-        .bind(policy_snapshot_revision)
+        .bind(snapshot)
         .execute(&mut *tx)
         .await?;
     }

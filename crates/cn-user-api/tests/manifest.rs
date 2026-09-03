@@ -92,6 +92,8 @@ legal:
     - { kind: abuse_policy, slug: abuse_policy, version: 1, effective_date: 2026-09-02, language: ja, required: false }
     - { kind: data_retention, slug: data_retention, version: 1, effective_date: 2026-09-02, language: ja, required: false }
     - { kind: rights_infringement, slug: rights_infringement_policy, version: 1, effective_date: 2026-09-02, language: ja, required: false }
+manifest:
+  rights_request_initial_response_target_days: 7
 retention:
   connection_logs_days: 30
   moderation_logs_days: 180

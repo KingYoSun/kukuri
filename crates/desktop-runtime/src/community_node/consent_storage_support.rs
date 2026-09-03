@@ -183,6 +183,14 @@ mod tests {
             requested_language: None,
             material_change: false,
             requires_reconsent: false,
+            is_current: true,
+            publication_status: Some("current".to_string()),
+            published_at: None,
+            retired_at: None,
+            previous_policy_version: None,
+            previous_policy_snapshot_revision: None,
+            next_policy_version: None,
+            next_policy_snapshot_revision: None,
         }
     }
 
@@ -310,6 +318,54 @@ mod tests {
         assert!(!community_node_local_consent_satisfies_policies(
             &state,
             &[current]
+        ));
+    }
+
+    #[test]
+    fn operator_matrix_keeps_language_and_snapshot_consents_separate() {
+        let mut ja_policy = policy("terms", 1, true);
+        ja_policy.language = Some("ja".to_string());
+        ja_policy.authoritative_language = Some("ja".to_string());
+        ja_policy.policy_snapshot_revision = Some("operator-ja-snapshot".to_string());
+        let mut en_policy = policy("terms", 1, true);
+        en_policy.language = Some("en".to_string());
+        en_policy.authoritative_language = Some("en".to_string());
+        en_policy.policy_snapshot_revision = Some("operator-en-snapshot".to_string());
+
+        let ja_state = CommunityNodeLocalConsentState {
+            records: vec![CommunityNodeLocalConsentRecord {
+                policy_slug: "terms".to_string(),
+                policy_version: 1,
+                policy_snapshot_revision: Some("operator-ja-snapshot".to_string()),
+                accepted_at: 1_700_000_000,
+                language: "ja".to_string(),
+                app_version: "0.1.8".to_string(),
+            }],
+            withdrawn_at: None,
+        };
+        let en_state = CommunityNodeLocalConsentState {
+            records: vec![CommunityNodeLocalConsentRecord {
+                policy_slug: "terms".to_string(),
+                policy_version: 1,
+                policy_snapshot_revision: Some("operator-en-snapshot".to_string()),
+                accepted_at: 1_700_000_001,
+                language: "en".to_string(),
+                app_version: "0.1.8".to_string(),
+            }],
+            withdrawn_at: None,
+        };
+
+        assert!(community_node_local_consent_satisfies_policies(
+            &ja_state,
+            std::slice::from_ref(&ja_policy)
+        ));
+        assert!(community_node_local_consent_satisfies_policies(
+            &en_state,
+            std::slice::from_ref(&en_policy)
+        ));
+        assert!(!community_node_local_consent_satisfies_policies(
+            &ja_state,
+            &[en_policy]
         ));
     }
 }

@@ -861,10 +861,20 @@ impl E2eStack {
             .error_for_status()?
             .json::<kukuri_cn_protocol::AuthVerifyResponse>()
             .await?;
+        let policies = client
+            .get(format!("{base_url}/v1/policies"))
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<kukuri_cn_protocol::CommunityNodePoliciesResponse>()
+            .await?;
         client
             .post(format!("{base_url}/v1/consents"))
             .bearer_auth(verify.access_token.as_str())
-            .json(&serde_json::json!({ "policy_slugs": [] }))
+            .json(&kukuri_cn_protocol::AcceptConsentsRequest {
+                policy_slugs: Vec::new(),
+                policy_snapshot_revision: policies.policy_snapshot_revision,
+            })
             .send()
             .await?
             .error_for_status()?;

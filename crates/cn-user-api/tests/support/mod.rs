@@ -27,6 +27,19 @@ pub struct TestServer {
 
 impl TestServer {
     pub async fn spawn(admin_database_url: &str, prefix: &str) -> Result<Self> {
+        Self::spawn_with_operator_config(
+            admin_database_url,
+            prefix,
+            kukuri_cn_operator::SAMPLE_CONFIG,
+        )
+        .await
+    }
+
+    pub async fn spawn_with_operator_config(
+        admin_database_url: &str,
+        prefix: &str,
+        operator_config: &str,
+    ) -> Result<Self> {
         let rendezvous_redis_url = integration_test_rendezvous_redis_url();
         let rendezvous_key_prefix = format!("cn:test:{prefix}");
         let database = TestDatabase::create(admin_database_url, prefix).await?;
@@ -37,10 +50,7 @@ impl TestServer {
         let base_url = format!("http://{addr}");
         let operator_config_dir = tempfile::tempdir()?;
         let operator_config_path = operator_config_dir.path().join("operator-config.yaml");
-        std::fs::write(
-            &operator_config_path,
-            kukuri_cn_operator::SAMPLE_CONFIG.as_bytes(),
-        )?;
+        std::fs::write(&operator_config_path, operator_config.as_bytes())?;
         let state = build_state(&UserApiConfig {
             bind_addr: addr,
             database_url: database.database_url.clone(),
@@ -52,7 +62,7 @@ impl TestServer {
             jwt_config: JwtConfig::new("kukuri-cn-tests", "test-secret", 3600),
             operator_config_path: Some(operator_config_path),
             channel_secret_key: None,
-            legal_data_key: None,
+            legal_data_key: Some("unit-test-legal-data-key-0123456789abcdef".to_string()),
             index_query_enabled: false,
             trust_read_enabled: false,
             relation_distance_optout_min_proximity: None,
@@ -97,7 +107,18 @@ pub async fn accept_required_consents(
         .error_for_status()?
         .json::<CommunityNodePoliciesResponse>()
         .await?;
-    let accepted = client
+    let policy_snapshot_revision = policies.policy_snapshot_revision.clone();
+    let policy_snapshots = policies
+        .policies
+        .iter()
+        .map(|policy| {
+            (
+                policy.policy_slug.clone(),
+                policy.policy_snapshot_revision.clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let response = client
         .post(format!("{base_url}/v1/consents"))
         .bearer_auth(access_token)
         .json(&AcceptConsentsRequest {
@@ -105,10 +126,15 @@ pub async fn accept_required_consents(
             policy_snapshot_revision: policies.policy_snapshot_revision,
         })
         .send()
-        .await?
-        .error_for_status()?
-        .json::<kukuri_cn_protocol::CommunityNodeConsentStatus>()
         .await?;
+    let status = response.status();
+    let body = response.text().await?;
+    if !status.is_success() {
+        anyhow::bail!(
+            "consent acceptance failed with {status}: {body}; catalog snapshot={policy_snapshot_revision:?}, policies={policy_snapshots:?}"
+        );
+    }
+    let accepted = serde_json::from_str::<kukuri_cn_protocol::CommunityNodeConsentStatus>(&body)?;
     assert!(accepted.all_required_accepted);
     Ok(accepted)
 }

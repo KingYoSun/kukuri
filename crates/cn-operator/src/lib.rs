@@ -4,13 +4,9 @@
 //! 利用規約・プライバシーポリシー・外部送信表示・電気通信届出補助資料・server manifest を
 //! 決定論的に生成する。
 //!
-//! Phase A / Phase B の分離:
-//! - Phase A (`Availability::Available`): 現行 community node 実装 / デプロイ構成として
-//!   提供できる capability。生成文書で「運用中」として開示してよい。
-//! - Phase B (`Availability::Planned`): 未実装の capability（index / moderation / trust /
-//!   report endpoint）。config で宣言できるが、生成文書では「計画中・未提供」として扱い、
-//!   運用中の外部送信・データ取扱い開示には含めない。`acknowledge_planned_capabilities`
-//!   による明示承認がなければ検証で失敗する。
+//! `Availability::Available` は現行実装で提供できる capability、`Planned` は将来追加される
+//! 未提供 capability の予約区分である。現時点の全 capability は提供中へ昇格済みで、生成文書は
+//! operator が実際に有効化したものだけを「運用中」として扱う。
 
 pub mod capability;
 pub mod capability_risk;
@@ -47,7 +43,8 @@ pub use policy_catalog::{
 };
 pub use policy_descriptor::{
     CapabilityPolicyDescriptor, PolicyBillingPath, PolicyDataClass, PolicyEffectScope,
-    PolicyProcessing, PolicyRetentionRef, PolicySafetyAction, PolicyUsageCondition,
+    PolicyProcessing, PolicyPurpose, PolicyRetentionRef, PolicyRightsRequestPath,
+    PolicySafetyAction, PolicyUsageCondition,
 };
 pub use profile::Profile;
 pub use retention_config::RetentionConfig;
@@ -121,6 +118,9 @@ features:
   community_index: true
   moderation: true
   community_local_trust: true
+  report_endpoint: true
+  rights_request_endpoint: true
+  tester_feedback: true
   iroh_relay: true
   traffic_relay_fallback: true
   private_message_storage: false
@@ -181,6 +181,8 @@ safety:
 
 manifest:
   manifest_version: v1
+  # 法務文書へ表示するため、コード既定値へ委ねず明示する。
+  rights_request_initial_response_target_days: 7
   # node_role 未指定なら有効 capability から推定する（既定: community-node）。
   # default onboarding node の場合は明示する:
   #   node_role: default-onboarding-node
@@ -225,7 +227,7 @@ manifest:
 #   vlm_response_format: guard
 #   vlm_api_key_secret_id: kukuri-cn-vlm-api-key   # 無認証 self-host endpoint なら省略
 
-# community_index / moderation / community_local_trust / report_endpoint は
-# 現行実装では未提供（計画中）。spec として記述することを明示的に承認する。
+# 将来 Planned capability が追加された場合に、spec としての記述を明示承認する互換項目。
+# 現時点で sample が有効にする capability はすべて提供中。
 acknowledge_planned_capabilities: true
 "#;

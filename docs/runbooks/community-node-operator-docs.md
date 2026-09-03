@@ -202,6 +202,9 @@ legal:
     - { kind: data_retention, slug: data_retention, version: 1, effective_date: 2026-09-02, language: ja, required: false }
     - { kind: rights_infringement, slug: rights_infringement_policy, version: 1, effective_date: 2026-09-02, language: ja, required: false }
 
+manifest:
+  rights_request_initial_response_target_days: 7
+
 retention:
   connection_logs_days: 30
   moderation_logs_days: 180
@@ -222,6 +225,10 @@ retention:
 
 Node 固有の事実で型付き設定にない説明は `supplemental_markdown` に記載できる。これは生成された
 typed descriptor の事実を上書きせず、「運営者による補足」として正文末尾へ追加される。
+
+正文言語は文書ごとに `language` で選ぶ。現行 renderer は `ja` と `en` を提供し、対応しない言語は
+別言語の本文を誤って正文として公開せず validation で停止する。`en` を選んだ場合も、capability の
+構造化事実と operator retention から正文を生成する。
 
 参考訳は正文の同じ項目へ追加し、正文 version と `translation_of_version` を一致させる。訳本文だけを
 直す場合は正文 version ではなく翻訳自身の `revision` を増やす。
@@ -247,8 +254,12 @@ typed descriptor の事実を上書きせず、「運営者による補足」と
 `GET /v1/policies?language=en` で現行文書を配信する。要求した同一正文 version の参考訳が無ければ
 正文を返し、`fallback` / `requested_language` / `authoritative_language` で明示する。公開済み正文は
 `GET /v1/policies/{slug}/revisions` と `GET /v1/policies/{slug}/revisions/{version}?language=en`
-から無期限に取得できる。本文・正文 metadata の同一版差し替えと version rollback は起動失敗となる。
-過去の固定英語 placeholder だけは一度置換し、その同意を現行文書へ引き継がない。
+から取得できる。表示用 version が同じでも snapshot が変われば新しい immutable revision として追記し、
+旧正文と旧同意を上書き・削除しない。厳密な過去版検証には
+`GET /v1/policies/{slug}/snapshots/{policy_snapshot_revision}?language=en` を使う。各 response は
+`publication_status`、`published_at`、`effective_date`、`retired_at`、前後の version／snapshotを返す。
+version rollback と、同じ snapshot identity のまま本文・正文 metadata を変更する構成は起動失敗となる。
+過去の固定英語 placeholder も legacy revision として保持し、その同意を現行正文へ引き継がない。
 
 法務上意味のある config と typed descriptor から catalog 共通の `policy_snapshot_revision` が自動生成
 される。operator が「再同意が必要か」を選ぶ項目はない。snapshot が変わると、本文 version が同じ
@@ -262,6 +273,7 @@ curl https://api.kukuri.app/v1/policies
 curl 'https://api.kukuri.app/v1/policies?language=en'
 curl https://api.kukuri.app/v1/policies/terms_of_service/revisions
 curl 'https://api.kukuri.app/v1/policies/terms_of_service/revisions/2?language=en'
+curl 'https://api.kukuri.app/v1/policies/terms_of_service/snapshots/<policy_snapshot_revision>?language=en'
 curl https://api.kukuri.app/.well-known/kukuri/community-node.json
 curl https://api.kukuri.app/terms
 curl https://api.kukuri.app/privacy
@@ -272,6 +284,10 @@ desktop client は接続前に locale 付きで `/v1/policies` を取得し、sl
 server 同意同期・session 継続を許可する。snapshot なしの旧記録、変更、取得失敗、metadata 不備は
 fail-closed とし、当該 Node への認証・登録を開始しない。snapshot 未対応の旧 Node だけは従来の
 slug/version 判定を維持する。
+
+`cn-user-api`、`cn-cli retention`、`cn-cli rights-requests` の実運用では
+`COMMUNITY_NODE_OPERATOR_CONFIG` を必須とし、法務表示と expiry／cleanup が同じ明示 retention を使う。
+rights-request 操作だけが `RetentionPolicy::default()` へ戻る経路は設けない。
 
 ## server-manifest.json
 

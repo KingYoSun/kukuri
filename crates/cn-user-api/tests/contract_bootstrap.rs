@@ -45,6 +45,12 @@ async fn public_policies_are_served_without_auth() -> Result<()> {
     );
     assert!(catalog.policies.iter().any(|policy| policy.required));
     assert!(catalog.policies.iter().all(|policy| {
+        policy.is_current
+            && policy.publication_status.as_deref() == Some("current")
+            && policy.published_at.is_some()
+            && policy.retired_at.is_none()
+    }));
+    assert!(catalog.policies.iter().all(|policy| {
         !policy
             .body_markdown
             .contains("You must acknowledge the community node")
@@ -53,7 +59,63 @@ async fn public_policies_are_served_without_auth() -> Result<()> {
                 .contains("You must follow the community node")
     }));
 
+    let current = catalog.policies.first().expect("current policy");
+    let snapshot = current
+        .policy_snapshot_revision
+        .as_deref()
+        .expect("snapshot revision");
+    let exact = client
+        .get(format!(
+            "{}/v1/policies/{}/snapshots/{}",
+            server.base_url, current.policy_slug, snapshot
+        ))
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<kukuri_cn_protocol::CommunityNodePolicyDocument>()
+        .await?;
+    assert_eq!(exact.policy_snapshot_revision.as_deref(), Some(snapshot));
+    assert_eq!(exact.publication_status.as_deref(), Some("current"));
+
     Ok(())
+}
+
+#[tokio::test]
+async fn public_policy_contract_is_operator_and_authoritative_language_independent() -> Result<()> {
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let config = kukuri_cn_operator::SAMPLE_CONFIG
+        .replace("example-kukuri.net", "community.example.org")
+        .replace("Example Operator", "Independent Operator")
+        .replace("country: JP", "country: IE")
+        .replace("cloud_provider: AWS", "cloud_provider: ExampleCloud")
+        .replace("region: ap-northeast-1", "region: eu-west-1")
+        .replace("language: ja", "language: en")
+        .replace("connection_logs_days: 30", "connection_logs_days: 14");
+    let server = TestServer::spawn_with_operator_config(
+        admin_database_url.as_str(),
+        "cn_public_policies_independent_operator",
+        &config,
+    )
+    .await?;
+    let catalog = Client::new()
+        .get(format!("{}/v1/policies", server.base_url))
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<kukuri_cn_protocol::CommunityNodePoliciesResponse>()
+        .await?;
+    assert_eq!(catalog.policies.len(), 7);
+    assert!(catalog.policies.iter().all(|policy| {
+        policy.authoritative_language.as_deref() == Some("en")
+            && policy.body_markdown.contains("Independent Operator")
+            && policy
+                .body_markdown
+                .contains("Capability-derived policy facts")
+    }));
+    server.shutdown().await
 }
 
 #[tokio::test]

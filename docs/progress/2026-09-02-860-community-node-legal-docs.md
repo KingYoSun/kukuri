@@ -1,7 +1,11 @@
-# Issue #860 Community Node 法務文書 Phase A
+# Issue #860 Community Node 法務文書
 
 参照: Issue #860（親: #853）  
 実施日: 2026-09-02
+
+冒頭の Phase A 記録は当時の実装履歴であり、現行仕様は後段の Phase B と
+「Phase B 再監査修正（2026-09-03）」を正とする。特に同一表示 version の変更拒否、
+旧 placeholder 同意の破棄、日本語正文限定は、再監査修正後の現行挙動ではない。
 
 ## 完了内容
 
@@ -43,3 +47,33 @@ DB を使う `policy_sync` 契約は `KUKURI_CN_RUN_INTEGRATION_TESTS=1` の `cn
 - desktop の既存暗号化 per-node 同意履歴へ snapshot を後方互換に追加し、参考訳・正文 fallback metadata を同意画面へ渡した。
 
 Phase B でも生成物は法的助言・完全性保証ではない。法的評価や第三者確認を開発 Issue の完了条件にはしない。
+
+## Phase B 再監査修正（2026-09-03）
+
+- `language: ja` 固定を除去し、日本語／英語の正文 renderer を operator が選択できるようにした。対応 renderer がない言語は本文と言語 metadata の不一致を避けるため公開前に拒否する。
+- capability descriptor に型付き purpose と削除・訂正・利用停止等の請求経路を追加し、生成規約・privacy・service description・risk guide は `purpose`／`privacy_note`／`terms_note` の自由記述ではなく descriptor を参照する。
+- cloud provider／region と manifest version を canonical snapshot に含め、生成文書が参照する hosting 情報の変更を自動再同意へ反映する。
+- `cn_admin.policies`、参考訳、server consent の identity を `(slug, 表示version, policy_snapshot_revision)` へ拡張した。同じ表示 version の新 snapshot も旧正文・旧同意を更新／削除せず追記し、前後関係、公開状態、公開・施行・廃止時点と厳密な snapshot 取得 API を公開する。
+- `cn-cli rights-requests` と retention command は `COMMUNITY_NODE_OPERATOR_CONFIG` の明示 retention を共有し、実運用の `cn-user-api` 起動でも operator config を必須にした。
+- `cn-operator init` sample を現行の report／rights-request／tester-feedback capability と明示応答目標へ同期した。
+- legacy seed は required 7文書で共通の安定 snapshot identity に backfill し、移行直後も required bundle を一括同意できるようにした。
+
+### 再監査の検証結果
+
+- failing-first: 非日本語正文 contract は従来の `language: ja` guard で失敗し、hosting 情報の snapshot contract は cloud provider／region が canonical input から欠落して失敗することを確認した。
+- `cargo test -p kukuri-cn-operator`（生成・descriptor・日本語／英語 operator matrix を含む）
+- `cargo xtask doctor`
+- `cargo xtask check`
+- `cargo xtask test`（Rust workspace 758 tests、harness 22 tests、frontend 140 files / 1081 tests）
+- `cargo xtask rust-test`（Rust workspace 758 tests、harness 22 tests、doc tests）
+- `cargo xtask cn-check`
+- `cargo xtask cn-test`（Postgres／Valkey、append-only snapshot 履歴、厳密同意を含む）
+- `cargo xtask cn-e2e`（Postgres／Valkey／ArcadeDB full-stack）
+- `cargo xtask desktop-ui-check`（Vitest 1081、Playwright browser 58、visual 14）
+- `cargo xtask scenario community_node_public_connectivity`（15 steps、`connected=true`）
+- `cargo xtask e2e-smoke`（6 steps）
+- `cargo xtask oversized-files`
+
+`xtask/oversized-baseline.json` は、今回触れた既存 oversized file に型付き policy renderer と
+回帰契約を追加した実測値へ更新した。機能・schema 変更と無関係なファイル分割を同じ PR に
+混ぜないための baseline 更新であり、上限を無効化するものではない。

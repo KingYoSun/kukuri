@@ -1,11 +1,12 @@
 use anyhow::{Context, Result};
 use kukuri_cn_core::{
-    LegalDataCipher, RetentionPolicy, action_rights_request, get_rights_request_with_sensitive,
-    initialize_database, list_rights_requests_with_sensitive, transition_rights_request,
+    LegalDataCipher, action_rights_request, get_rights_request_with_sensitive, initialize_database,
+    list_rights_requests_with_sensitive, transition_rights_request,
 };
 use kukuri_cn_protocol::RightsRequestStatus;
 use sqlx::PgPool;
 
+use super::retention::retention_policy;
 use crate::{RightsRequestStatusArg, RightsRequestsAction};
 
 pub(super) async fn run(pool: &PgPool, action: RightsRequestsAction) -> Result<()> {
@@ -14,7 +15,9 @@ pub(super) async fn run(pool: &PgPool, action: RightsRequestsAction) -> Result<(
         &std::env::var("COMMUNITY_NODE_LEGAL_DATA_KEY")
             .context("COMMUNITY_NODE_LEGAL_DATA_KEY is required")?,
     )?;
-    let retention = RetentionPolicy::default();
+    let retention = retention_policy().context(
+        "rights-request operations require explicit retention from COMMUNITY_NODE_OPERATOR_CONFIG",
+    )?;
     match action {
         RightsRequestsAction::List { limit, offset } => {
             let requests = list_rights_requests_with_sensitive(

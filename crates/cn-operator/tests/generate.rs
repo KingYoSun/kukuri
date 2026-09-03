@@ -74,6 +74,84 @@ fn policy_snapshot_is_deterministic_and_ignores_reference_translation_edits() {
         policy_snapshot_revision(&changed).as_deref(),
         Some(baseline_revision.as_str())
     );
+
+    for changed in [
+        SAMPLE_CONFIG.replace("  cloud_provider: AWS", "  cloud_provider: ExampleCloud"),
+        SAMPLE_CONFIG.replace("  region: ap-northeast-1", "  region: eu-west-1"),
+    ] {
+        let changed = load_and_validate(&changed).unwrap();
+        assert_ne!(
+            policy_snapshot_revision(&changed).as_deref(),
+            Some(baseline_revision.as_str()),
+            "法務文書に表示する hosting 情報は snapshot を変更する"
+        );
+    }
+}
+
+#[test]
+fn operator_can_select_a_non_japanese_authoritative_language() {
+    let yaml = SAMPLE_CONFIG.replace("language: ja", "language: en");
+    let resolved = load_and_validate(&yaml).expect("authoritative language is operator-selected");
+    let documents = generate_legal_documents(&resolved);
+    assert!(documents.iter().all(|document| {
+        document.reference_translation || document.authoritative_language == "en"
+    }));
+    assert!(
+        documents
+            .iter()
+            .filter(|document| !document.reference_translation)
+            .all(
+                |document| document.content.contains("Authoritative language: en")
+                    && document.content.contains("Capability-derived policy facts")
+                    && !document.content.contains("言語: en")
+            )
+    );
+}
+
+#[test]
+fn multiple_operator_matrix_preserves_the_same_policy_contract() {
+    let configs = [
+        SAMPLE_CONFIG.to_string(),
+        SAMPLE_CONFIG
+            .replace("example-kukuri.net", "community.example.org")
+            .replace("Example Operator", "Independent Operator")
+            .replace("country: JP", "country: IE")
+            .replace("cloud_provider: AWS", "cloud_provider: ExampleCloud")
+            .replace("region: ap-northeast-1", "region: eu-west-1")
+            .replace("language: ja", "language: en")
+            .replace("connection_logs_days: 30", "connection_logs_days: 14"),
+    ];
+    let mut snapshots = Vec::new();
+    for yaml in configs {
+        let resolved = load_and_validate(&yaml).expect("operator matrix config validates");
+        let documents = generate_legal_documents(&resolved);
+        assert_eq!(
+            documents
+                .iter()
+                .filter(|document| !document.reference_translation)
+                .count(),
+            7
+        );
+        assert!(documents.iter().all(|document| {
+            document.reference_translation
+                || (!document.content.trim().is_empty()
+                    && !document.policy_snapshot_revision.trim().is_empty())
+        }));
+        snapshots.push(policy_snapshot_revision(&resolved).unwrap());
+    }
+    assert_ne!(snapshots[0], snapshots[1]);
+}
+
+#[test]
+fn every_capability_descriptor_has_purpose_and_rights_request_paths() {
+    for capability in Capability::ALL {
+        let descriptor = capability.policy_descriptor();
+        assert!(!descriptor.purpose.label().is_empty(), "{capability}");
+        assert!(
+            !descriptor.rights_request_paths.is_empty(),
+            "{capability} must disclose deletion/correction/suspension routing"
+        );
+    }
 }
 
 #[test]
@@ -867,6 +945,7 @@ legal:
     - { kind: rights_infringement, slug: rights_infringement, version: 1, effective_date: 2026-09-02, language: ja }
 manifest:
   manifest_version: v1
+  rights_request_initial_response_target_days: 7
 retention:
   connection_logs_days: 30
   moderation_logs_days: 180

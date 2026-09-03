@@ -41,7 +41,7 @@ use crate::handlers::bootstrap::{
 };
 use crate::handlers::consents::{
     accept_consents_handler, consent_status, public_policies, public_policy_revision,
-    public_policy_revisions,
+    public_policy_revisions, public_policy_snapshot_revision,
 };
 use crate::handlers::indexing::{
     index_discovery, index_recommendations, index_search, submit_indexing_request,
@@ -81,6 +81,10 @@ pub fn app_router(state: UserApiState) -> Router {
         .route(
             "/v1/policies/{policy_slug}/revisions/{policy_version}",
             get(public_policy_revision),
+        )
+        .route(
+            "/v1/policies/{policy_slug}/snapshots/{policy_snapshot_revision}",
+            get(public_policy_snapshot_revision),
         )
         .route(DOME_HOSTING_ASSIGNMENTS_PATH, post(assign_dome_hosting))
         .route(DOME_HOSTING_ACTIVATE_PATH, post(activate_dome_hosting))
