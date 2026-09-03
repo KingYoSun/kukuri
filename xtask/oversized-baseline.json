@@ -9,6 +9,10 @@
       "path": "crates/cn-operator/src/config.rs"
     },
     {
+      "lines": 1228,
+      "path": "crates/harness/src/scenarios/community_node.rs"
+    },
+    {
       "lines": 1191,
       "path": "crates/metaverse-host/src/lib.rs"
     },
@@ -27,10 +31,6 @@
     {
       "lines": 1097,
       "path": "crates/app-api/src/service/private_channels_support.rs"
-    },
-    {
-      "lines": 1097,
-      "path": "crates/harness/src/scenarios/community_node.rs"
     },
     {
       "lines": 1096,

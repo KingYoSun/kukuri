@@ -1,6 +1,6 @@
 use super::super::*;
 use axum::response::{IntoResponse, Response};
-use kukuri_cn_protocol::ApiErrorBody;
+use kukuri_cn_protocol::{ApiErrorBody, CONSENT_REQUIRED_CODE};
 use serde_json::{Value, json};
 
 #[derive(Clone, Default)]
@@ -100,6 +100,7 @@ fn appeal_request(base_url: &str) -> SubmitCommunityNodeReportRequest {
 async fn community_node_report_client_sends_anonymous_appeal_and_reads_disputed_signal() {
     let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let (runtime, base_url, state, server, _dir) = report_runtime(false).await;
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
 
     let result = runtime
         .submit_community_node_report(appeal_request(base_url.as_str()))
@@ -120,6 +121,7 @@ async fn community_node_report_client_sends_anonymous_appeal_and_reads_disputed_
 async fn community_node_report_client_preserves_invalid_appeal_code() {
     let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let (runtime, base_url, _state, server, _dir) = report_runtime(true).await;
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
 
     let error = runtime
         .submit_community_node_report(appeal_request(base_url.as_str()))
@@ -172,6 +174,7 @@ async fn community_node_report_client_rejects_endpoint_on_another_origin() {
 async fn community_node_report_client_does_not_follow_redirects() {
     let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let (runtime, base_url, state, server, _dir) = report_runtime(false).await;
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
 
     let mut request = appeal_request(base_url.as_str());
     request.report_endpoint = format!("{base_url}/v1/report-moved");
@@ -185,6 +188,68 @@ async fn community_node_report_client_does_not_follow_redirects() {
         state.received.lock().await.is_empty(),
         "the report body must not reach the redirect target"
     );
+
+    runtime.shutdown().await;
+    server.abort();
+}
+
+#[tokio::test]
+async fn community_node_report_client_stops_before_http_without_active_local_consent() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let (runtime, base_url, state, server, _dir) = report_runtime(false).await;
+
+    let error = runtime
+        .submit_community_node_report(appeal_request(base_url.as_str()))
+        .await
+        .expect_err("report without local consent must be rejected");
+
+    assert_eq!(error.code, CONSENT_REQUIRED_CODE);
+    assert!(state.received.lock().await.is_empty());
+
+    runtime.shutdown().await;
+    server.abort();
+}
+
+#[tokio::test]
+async fn community_node_report_client_stops_before_http_after_consent_withdrawal() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let (runtime, base_url, state, server, _dir) = report_runtime(false).await;
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
+    runtime
+        .withdraw_community_node_consents(crate::CommunityNodeTargetRequest {
+            base_url: base_url.clone(),
+        })
+        .await
+        .expect("withdraw consents");
+
+    let error = runtime
+        .submit_community_node_report(appeal_request(base_url.as_str()))
+        .await
+        .expect_err("report after consent withdrawal must be rejected");
+
+    assert_eq!(error.code, CONSENT_REQUIRED_CODE);
+    assert!(state.received.lock().await.is_empty());
+
+    runtime.shutdown().await;
+    server.abort();
+}
+
+#[tokio::test]
+async fn community_node_report_client_stops_before_http_when_reconsent_is_pending() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let (runtime, base_url, state, server, _dir) = report_runtime(false).await;
+    seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
+    runtime
+        .set_community_node_local_consent_update_pending(base_url.as_str(), true)
+        .await;
+
+    let error = runtime
+        .submit_community_node_report(appeal_request(base_url.as_str()))
+        .await
+        .expect_err("report while reconsent is pending must be rejected");
+
+    assert_eq!(error.code, CONSENT_REQUIRED_CODE);
+    assert!(state.received.lock().await.is_empty());
 
     runtime.shutdown().await;
     server.abort();

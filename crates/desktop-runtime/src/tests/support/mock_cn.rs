@@ -6,6 +6,7 @@ pub(crate) async fn apply_relay_backed_community_node_seed_peers(
     relay_url: &str,
     seed_peers: Vec<CommunityNodeSeedPeer>,
 ) {
+    seed_local_community_node_consents(runtime, base_url, 1);
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.to_string(),
@@ -194,6 +195,7 @@ pub(crate) struct MockManagedCommunityNodeState {
     pub(crate) bootstrap_hits: Arc<AtomicUsize>,
     // #857: 認証不要の公開 policy カタログ(GET /v1/policies)の観測カウンタ。
     pub(crate) policies_hits: Arc<AtomicUsize>,
+    pub(crate) manifest_hits: Arc<AtomicUsize>,
     // true の場合、未同意状態を「版が上がった更新（旧版は同意済み）」として返す。
     // ローカル同意が旧版のままの node で黙って再受諾しない挙動の検証に使う（#384 / #857）。
     pub(crate) simulate_pending_update: Arc<AtomicBool>,
@@ -218,6 +220,7 @@ impl MockManagedCommunityNodeState {
             heartbeat_hits: Arc::new(AtomicUsize::new(0)),
             bootstrap_hits: Arc::new(AtomicUsize::new(0)),
             policies_hits: Arc::new(AtomicUsize::new(0)),
+            manifest_hits: Arc::new(AtomicUsize::new(0)),
             simulate_pending_update: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -281,6 +284,13 @@ pub(crate) async fn mock_managed_policies(
         }],
         policy_snapshot_revision: None,
     })
+}
+
+pub(crate) async fn mock_managed_manifest(
+    State(state): State<Arc<MockManagedCommunityNodeState>>,
+) -> StatusCode {
+    state.manifest_hits.fetch_add(1, Ordering::SeqCst);
+    StatusCode::NOT_FOUND
 }
 
 pub(crate) fn managed_community_node_consent_status(accepted: bool) -> CommunityNodeConsentStatus {

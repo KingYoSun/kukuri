@@ -65,6 +65,8 @@ impl DesktopRuntime {
                 CommunityNodeSessionPhase::Idle,
             )
             .await;
+            self.deactivate_community_node_connectivity(base_url.as_str())
+                .await?;
             return Ok(());
         }
 
@@ -99,6 +101,8 @@ impl DesktopRuntime {
                     CommunityNodeSessionPhase::Idle,
                 )
                 .await;
+                self.deactivate_community_node_connectivity(base_url.as_str())
+                    .await?;
                 return Ok(());
             }
             self.set_community_node_local_consent_update_pending(base_url.as_str(), false)
@@ -133,6 +137,8 @@ impl DesktopRuntime {
                     CommunityNodeSessionPhase::Idle,
                 )
                 .await;
+                self.deactivate_community_node_connectivity(base_url.as_str())
+                    .await?;
                 return Ok(());
             }
             // ローカル同意済みの内容をサーバ記録へ同期する(#857)。
@@ -207,6 +213,51 @@ impl DesktopRuntime {
             .ok_or_else(|| anyhow!("community node `{base_url}` is not configured"))
     }
 
+    async fn active_community_node_connectivity_config(&self) -> CommunityNodeConfig {
+        let config = self.community_node_config.lock().await.clone();
+        let mut active = community_node_config_with_active_local_consents(
+            &self.db_path,
+            self.identity_mode,
+            &config,
+        );
+        let sessions = self.community_node_sessions.lock().await;
+        active.nodes.retain(|node| {
+            !sessions
+                .get(node.base_url.as_str())
+                .is_some_and(|session| session.local_consent_update_pending)
+        });
+        active
+    }
+
+    async fn active_community_node_rendezvous_seed_peers(
+        &self,
+        active_config: &CommunityNodeConfig,
+    ) -> Vec<SeedPeer> {
+        let rendezvous_by_node = self.community_node_rendezvous_seed_peers.lock().await;
+        rendezvous_by_node
+            .iter()
+            .filter(|(base_url, _)| {
+                active_config
+                    .nodes
+                    .iter()
+                    .any(|node| node.base_url.as_str() == base_url.as_str())
+            })
+            .flat_map(|(_, peers)| peers.iter().cloned())
+            .collect()
+    }
+
+    pub(crate) async fn deactivate_community_node_connectivity(
+        &self,
+        base_url: &str,
+    ) -> Result<()> {
+        self.community_node_rendezvous_seed_peers
+            .lock()
+            .await
+            .remove(base_url);
+        self.apply_runtime_connectivity_assist().await?;
+        self.apply_effective_seed_peers().await
+    }
+
     pub(crate) async fn community_node_status(
         &self,
         node: CommunityNodeNodeConfig,
@@ -263,10 +314,9 @@ impl DesktopRuntime {
             node.base_url.as_str(),
         )?
         .is_some();
-        let current_connectivity_urls = relay_config_from_community_node_config(
-            &self.community_node_config.lock().await.clone(),
-        )
-        .iroh_relay_urls;
+        let active_config = self.active_community_node_connectivity_config().await;
+        let current_connectivity_urls =
+            relay_config_from_community_node_config(&active_config).iroh_relay_urls;
         Ok(CommunityNodeNodeStatus {
             base_url: node.base_url,
             auth_state,
@@ -286,14 +336,12 @@ impl DesktopRuntime {
 
     async fn apply_runtime_connectivity_assist_with_mode(&self, force: bool) -> Result<()> {
         let discovery_config = self.discovery_config.lock().await.clone();
-        let community_node_config = self.community_node_config.lock().await.clone();
+        let community_node_config = self.active_community_node_connectivity_config().await;
         let mut next_state =
             runtime_connectivity_assist_state(&discovery_config, &community_node_config);
         let rendezvous_seed_peers = self
-            .community_node_rendezvous_seed_peers
-            .lock()
-            .await
-            .clone();
+            .active_community_node_rendezvous_seed_peers(&community_node_config)
+            .await;
         next_state.bootstrap_seed_peers = normalize_seed_peers(
             next_state
                 .bootstrap_seed_peers
@@ -341,14 +389,12 @@ impl DesktopRuntime {
 
     pub(crate) async fn force_rebuild_runtime_connectivity_assist(&self) -> Result<()> {
         let discovery_config = self.discovery_config.lock().await.clone();
-        let community_node_config = self.community_node_config.lock().await.clone();
+        let community_node_config = self.active_community_node_connectivity_config().await;
         let mut next_state =
             runtime_connectivity_assist_state(&discovery_config, &community_node_config);
         let rendezvous_seed_peers = self
-            .community_node_rendezvous_seed_peers
-            .lock()
-            .await
-            .clone();
+            .active_community_node_rendezvous_seed_peers(&community_node_config)
+            .await;
         next_state.bootstrap_seed_peers = normalize_seed_peers(
             next_state
                 .bootstrap_seed_peers
@@ -380,14 +426,12 @@ impl DesktopRuntime {
 
     async fn apply_effective_seed_peers_with_mode(&self, force: bool) -> Result<()> {
         let discovery_config = self.discovery_config.lock().await.clone();
-        let community_node_config = self.community_node_config.lock().await.clone();
+        let community_node_config = self.active_community_node_connectivity_config().await;
         let mut next_state =
             effective_seed_peer_apply_state(&discovery_config, &community_node_config);
         let rendezvous_seed_peers = self
-            .community_node_rendezvous_seed_peers
-            .lock()
-            .await
-            .clone();
+            .active_community_node_rendezvous_seed_peers(&community_node_config)
+            .await;
         next_state.bootstrap_seed_peers = normalize_seed_peers(
             next_state
                 .bootstrap_seed_peers

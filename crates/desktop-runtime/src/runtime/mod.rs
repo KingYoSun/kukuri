@@ -59,8 +59,9 @@ use crate::community_node::{
     SetCommunityNodeConfigRequest, SetCommunityNodeInviteCodeRequest,
     SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
     SubmitIndexingRequestResponse, TrustUserReadResponse,
-    community_node_local_consent_covers_status, community_node_local_consent_satisfies_policies,
-    community_node_seed_peers, delete_community_node_invite_code, effective_seed_peer_apply_state,
+    community_node_config_with_active_local_consents, community_node_local_consent_covers_status,
+    community_node_local_consent_satisfies_policies, community_node_seed_peers,
+    delete_community_node_invite_code, effective_seed_peer_apply_state,
     load_community_node_config_from_file, load_community_node_local_consents,
     load_community_node_token, normalize_community_node_config, persist_community_node_invite_code,
     persist_community_node_local_consents, record_community_node_local_consents,
@@ -115,7 +116,8 @@ pub struct DesktopRuntime {
     pub(crate) community_node_sessions: Arc<Mutex<HashMap<String, CommunityNodeSessionState>>>,
     pub(crate) community_node_dome_heartbeats:
         Arc<Mutex<HashMap<String, kukuri_core::SignedDomeHostHeartbeatV1>>>,
-    pub(crate) community_node_rendezvous_seed_peers: Arc<Mutex<Vec<kukuri_transport::SeedPeer>>>,
+    pub(crate) community_node_rendezvous_seed_peers:
+        Arc<Mutex<HashMap<String, Vec<kukuri_transport::SeedPeer>>>>,
     pub(crate) community_node_session_guard: Arc<Mutex<()>>,
     pub(crate) community_node_reconnect_state: Arc<Mutex<CommunityNodeReconnectState>>,
     pub(crate) community_node_reconnect_guard: Arc<Mutex<()>>,
@@ -303,13 +305,18 @@ impl DesktopRuntime {
             }
             None => CommunityNodeConfig::default(),
         };
-        let relay_config = relay_config_from_community_node_config(&community_node_config);
+        let active_community_node_config = community_node_config_with_active_local_consents(
+            &db_path,
+            identity_mode,
+            &community_node_config,
+        );
+        let relay_config = relay_config_from_community_node_config(&active_community_node_config);
         let community_node_seed_peers =
-            community_node_seed_peers(&community_node_config).collect::<Vec<_>>();
+            community_node_seed_peers(&active_community_node_config).collect::<Vec<_>>();
         let initial_runtime_connectivity_state =
-            runtime_connectivity_assist_state(&discovery_config, &community_node_config);
+            runtime_connectivity_assist_state(&discovery_config, &active_community_node_config);
         let initial_effective_seed_peer_state =
-            effective_seed_peer_apply_state(&discovery_config, &community_node_config);
+            effective_seed_peer_apply_state(&discovery_config, &active_community_node_config);
         let docs_root = db_path.with_extension("iroh-data");
         let store = Arc::new(SqliteStore::connect_file(&db_path).await?);
         let iroh_stack = SharedIrohStack::new(
@@ -392,7 +399,7 @@ impl DesktopRuntime {
             community_node_config: Arc::new(Mutex::new(community_node_config)),
             community_node_sessions: Arc::new(Mutex::new(HashMap::new())),
             community_node_dome_heartbeats: Arc::new(Mutex::new(HashMap::new())),
-            community_node_rendezvous_seed_peers: Arc::new(Mutex::new(Vec::new())),
+            community_node_rendezvous_seed_peers: Arc::new(Mutex::new(HashMap::new())),
             community_node_session_guard: Arc::new(Mutex::new(())),
             community_node_reconnect_state: Arc::new(Mutex::new(
                 CommunityNodeReconnectState::default(),

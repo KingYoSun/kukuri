@@ -142,6 +142,10 @@ impl DesktopRuntime {
                 self.identity_mode,
                 removed_node.base_url.as_str(),
             )?;
+            self.community_node_rendezvous_seed_peers
+                .lock()
+                .await
+                .remove(removed_node.base_url.as_str());
         }
         save_community_node_config(&self.db_path, &next_config)?;
         *self.community_node_config.lock().await = next_config.clone();
@@ -171,6 +175,10 @@ impl DesktopRuntime {
         }
         save_community_node_config(&self.db_path, &CommunityNodeConfig::default())?;
         *self.community_node_config.lock().await = CommunityNodeConfig::default();
+        self.community_node_rendezvous_seed_peers
+            .lock()
+            .await
+            .clear();
         self.community_node_sessions.lock().await.clear();
         *self.community_node_reconnect_state.lock().await = Default::default();
         self.apply_runtime_connectivity_assist().await?;
@@ -410,6 +418,8 @@ impl DesktopRuntime {
             .await;
         self.clear_community_node_retry_state(base_url.as_str())
             .await;
+        self.apply_runtime_connectivity_assist().await?;
+        self.apply_effective_seed_peers().await?;
         self.refresh_community_node_registration_if_due(base_url.as_str())
             .await?;
         let refreshed = self.require_community_node(base_url.as_str()).await?;
@@ -439,8 +449,14 @@ impl DesktopRuntime {
         )?;
         self.set_community_node_local_consent_update_pending(base_url.as_str(), false)
             .await;
-        self.clear_community_node_token(CommunityNodeTargetRequest { base_url })
-            .await
+        self.clear_community_node_token(CommunityNodeTargetRequest {
+            base_url: base_url.clone(),
+        })
+        .await?;
+        self.deactivate_community_node_connectivity(base_url.as_str())
+            .await?;
+        let node = self.require_community_node(base_url.as_str()).await?;
+        self.community_node_status(node, None, None).await
     }
 
     pub async fn refresh_community_node_metadata(

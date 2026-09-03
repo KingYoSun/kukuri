@@ -725,7 +725,7 @@ async fn runtime_starts_with_unreachable_community_node_and_recovers_via_manual_
         .expect("sync status before recovery");
     assert_eq!(
         status_before.discovery.connect_mode,
-        ConnectMode::DirectOrRelay
+        ConnectMode::DirectOnly
     );
     assert!(!status_before.connected);
     assert!(matches!(
@@ -737,6 +737,23 @@ async fn runtime_starts_with_unreachable_community_node_and_recovers_via_manual_
     // スケジューラ tick が駆動し、getter は読み取り専用。
     // #857: 同意済みでなければそもそも通信しないため、同意記録をシードしてから tick を回す。
     seed_local_community_node_consents(&runtime_a, community_base_url, 1);
+    runtime_a
+        .apply_runtime_connectivity_assist()
+        .await
+        .expect("apply consented connectivity");
+    runtime_a
+        .apply_effective_seed_peers()
+        .await
+        .expect("apply consented seeds");
+    assert_eq!(
+        runtime_a
+            .get_sync_status()
+            .await
+            .expect("sync status after consent")
+            .discovery
+            .connect_mode,
+        ConnectMode::DirectOrRelay
+    );
     runtime_a
         .run_community_node_session_maintenance_once()
         .await;
