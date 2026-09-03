@@ -182,7 +182,8 @@ dist/operator-docs/
 ## 法務文書の版管理と公開
 
 `legal` を設定した Node は、`server.contact`、15個の `retention.*_days`、7文書すべての
-slug、正の整数 version、ISO 形式の施行日、正文言語 `ja`、required を明示する。法務文書を
+slug、正の整数 version、ISO 形式の施行日、対応 renderer である正文言語 `ja` または
+`en`、required を明示する。法務文書を
 コード上の保持期間既定値で公開することはできない。利用規約とプライバシーポリシーだけを
 required とし、残りは公開開示文書として扱う。
 
