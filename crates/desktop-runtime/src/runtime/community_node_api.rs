@@ -192,29 +192,25 @@ impl DesktopRuntime {
     ) -> Result<CommunityNodeNodeStatus> {
         let base_url = normalize_http_url(request.base_url.as_str())?;
         let node = self.require_community_node(base_url.as_str()).await?;
-        // #857: 同意前に認証(JWT 発行)を開始しない。ローカル同意が無ければ拒否し、
-        // 版が上がっていれば再同意待ちとして停止する。
-        let local_consent = load_community_node_local_consents(
-            &self.db_path,
-            self.identity_mode,
-            base_url.as_str(),
-        )?;
-        if !local_consent.has_active_consent() {
-            return Err(anyhow!(
-                "community node consent is required before authentication"
-            ));
-        }
-        let catalog = self
-            .request_community_node_policies(base_url.as_str(), None)
+        let preflight = self
+            .preflight_community_node_consent(base_url.as_str())
             .await?;
-        if !community_node_local_consent_satisfies_policies(&local_consent, &catalog.policies) {
-            self.set_community_node_local_consent_update_pending(base_url.as_str(), true)
+        let local_consent = preflight.local_consent().clone();
+        if let CommunityNodeConsentPreflight::Required { policy_update, .. } = preflight {
+            self.set_community_node_local_consent_update_pending(base_url.as_str(), policy_update)
                 .await;
             self.set_community_node_session_phase(
                 base_url.as_str(),
                 CommunityNodeSessionPhase::Idle,
             )
             .await;
+            self.deactivate_community_node_connectivity(base_url.as_str())
+                .await?;
+            if !policy_update {
+                return Err(anyhow!(
+                    "community node consent is required before authentication"
+                ));
+            }
             return self.community_node_status(node, None, None).await;
         }
         self.set_community_node_local_consent_update_pending(base_url.as_str(), false)
@@ -355,24 +351,6 @@ impl DesktopRuntime {
         self.community_node_status(node, None, None).await
     }
 
-    pub async fn get_community_node_consent_status(
-        &self,
-        request: CommunityNodeTargetRequest,
-    ) -> Result<CommunityNodeNodeStatus> {
-        let base_url = normalize_http_url(request.base_url.as_str())?;
-        let node = self.require_community_node(base_url.as_str()).await?;
-        let mut token =
-            load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())?
-                .ok_or_else(|| anyhow!("community node authentication is required"))?;
-        let status = self
-            .fetch_community_node_consent_status_with_retry(base_url.as_str(), &mut token, true)
-            .await
-            .context("failed to fetch community node consent status")?;
-        self.set_community_node_cached_consent(base_url.as_str(), Some(status.clone()))
-            .await;
-        self.community_node_status(node, Some(status), None).await
-    }
-
     /// 認証不要の公開 policy カタログ取得(#857)。同意モーダルの提示内容を組み立てる
     /// ために UI 操作起点で呼ぶ。Node 同意前に許可される通信に含まれる。
     pub async fn fetch_community_node_policies(
@@ -418,8 +396,6 @@ impl DesktopRuntime {
             .await;
         self.clear_community_node_retry_state(base_url.as_str())
             .await;
-        self.apply_runtime_connectivity_assist().await?;
-        self.apply_effective_seed_peers().await?;
         self.refresh_community_node_registration_if_due(base_url.as_str())
             .await?;
         let refreshed = self.require_community_node(base_url.as_str()).await?;
@@ -465,28 +441,11 @@ impl DesktopRuntime {
     ) -> Result<CommunityNodeNodeStatus> {
         let base_url = normalize_http_url(request.base_url.as_str())?;
         self.require_community_node(base_url.as_str()).await?;
-        let mut token =
-            load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())?
-                .ok_or_else(|| anyhow!("community node authentication is required"))?;
-        self.set_community_node_session_phase(
-            base_url.as_str(),
-            CommunityNodeSessionPhase::Refreshing,
-        )
-        .await;
         match self
-            .refresh_community_node_registration_with_token_if_due(
-                base_url.as_str(),
-                &mut token,
-                true,
-            )
+            .ensure_community_node_session_with_mode(base_url.as_str(), true)
             .await
         {
-            Ok(()) => {
-                self.clear_community_node_retry_state(base_url.as_str())
-                    .await;
-                self.set_community_node_session_ready(base_url.as_str(), false)
-                    .await;
-            }
+            Ok(()) => {}
             Err(error) => {
                 // 心拍 401 → 再認証 → 参加拒否(403)の経路は、定期処理と同じく AwaitingAdmission へ
                 // 落として利用者の操作待ちにする。それ以外の失敗は従来どおり呼び出し元へ返す(#708)。

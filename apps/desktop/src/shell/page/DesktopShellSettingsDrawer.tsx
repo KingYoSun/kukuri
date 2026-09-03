@@ -58,7 +58,7 @@ type DesktopShellSettingsDrawerProps = {
     documents: CommunityNodeConsentDocumentRef[]
   ) => Promise<void>;
   handleWithdrawCommunityNodeConsents: (baseUrl: string) => Promise<void>;
-  handleRefreshCommunityNode: (baseUrl: string) => Promise<void>;
+  handleRefreshCommunityNode: (baseUrl: string) => Promise<boolean>;
   handleClearCommunityNodeToken: (baseUrl: string) => Promise<void>;
   handleCreateCustomReactionAsset: (
     file: File,
@@ -269,7 +269,7 @@ export function DesktopShellSettingsDrawer({
             handleAcceptCommunityNodeConsents(baseUrl, documents)
           }
           onWithdrawConsents={(baseUrl) => handleWithdrawCommunityNodeConsents(baseUrl)}
-          onRefresh={(baseUrl) => void handleRefreshCommunityNode(baseUrl)}
+          onRefresh={handleRefreshCommunityNode}
           onClearToken={(baseUrl) => void handleClearCommunityNodeToken(baseUrl)}
           onGetRelationOptout={(baseUrl) => api.getCommunityNodeRelationOptout(baseUrl)}
           onSetRelationOptout={(baseUrl) => api.setCommunityNodeRelationOptout(baseUrl)}

@@ -27,6 +27,7 @@ use crate::paths::community_node_config_path;
 use crate::runtime::DesktopRuntime;
 
 mod config_support;
+mod consent_preflight_support;
 mod consent_storage_support;
 mod dome_hosting_support;
 mod http_client_support;
@@ -45,6 +46,7 @@ mod token_storage_support;
 mod trust_relation_support;
 
 pub(crate) use config_support::*;
+pub(crate) use consent_preflight_support::*;
 pub use consent_storage_support::{
     CommunityNodeLocalConsentRecord, CommunityNodeLocalConsentState,
 };

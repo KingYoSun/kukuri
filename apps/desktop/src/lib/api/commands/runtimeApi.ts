@@ -852,13 +852,6 @@ export const runtimeApi: DesktopApi = {
       } satisfies CommunityNodeTargetRequest,
     });
   }),
-  getCommunityNodeConsentStatus: command('getCommunityNodeConsentStatus', async (baseUrl) => {
-    return invokeDesktop<CommunityNodeNodeStatus>('get_community_node_consent_status', {
-      request: {
-        base_url: baseUrl,
-      } satisfies CommunityNodeTargetRequest,
-    });
-  }),
   fetchCommunityNodePolicies: command('fetchCommunityNodePolicies', async (baseUrl, language) => {
     return invokeDesktop<CommunityNodePoliciesResponse>('fetch_community_node_policies', {
       request: {

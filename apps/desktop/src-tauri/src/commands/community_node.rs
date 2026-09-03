@@ -368,18 +368,6 @@ pub async fn clear_community_node_token(
         .map_err(map_error)
 }
 
-#[tauri::command]
-pub async fn get_community_node_consent_status(
-    state: tauri::State<'_, DesktopState>,
-    request: CommunityNodeTargetRequest,
-) -> Result<CommunityNodeNodeStatus, CommandError> {
-    state
-        .runtime()
-        .get_community_node_consent_status(request)
-        .await
-        .map_err(map_error)
-}
-
 /// #857: 認証不要の公開 policy カタログ。同意モーダルの提示内容を組み立てるために呼ぶ。
 #[tauri::command]
 pub async fn fetch_community_node_policies(

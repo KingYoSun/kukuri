@@ -91,6 +91,7 @@ async fn tester_feedback_runtime(
     let managed_router = Router::new()
         .route("/v1/auth/challenge", post(mock_managed_auth_challenge))
         .route("/v1/auth/verify", post(mock_managed_auth_verify))
+        .route("/v1/policies", get(mock_managed_policies))
         .route("/v1/consents/status", get(mock_managed_consent_status))
         .route("/v1/consents", post(mock_managed_accept_consents))
         .route(

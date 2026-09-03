@@ -264,7 +264,6 @@ pub fn run() {
             commands::community_node::authenticate_community_node,
             commands::community_node::set_community_node_invite_code,
             commands::community_node::clear_community_node_token,
-            commands::community_node::get_community_node_consent_status,
             commands::community_node::fetch_community_node_policies,
             commands::community_node::accept_community_node_consents,
             commands::community_node::withdraw_community_node_consents,

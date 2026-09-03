@@ -20,7 +20,6 @@ type ConnectivityMock = Pick<
   | 'authenticateCommunityNode'
   | 'setCommunityNodeInviteCode'
   | 'clearCommunityNodeToken'
-  | 'getCommunityNodeConsentStatus'
   | 'fetchCommunityNodePolicies'
   | 'acceptCommunityNodeConsents'
   | 'withdrawCommunityNodeConsents'
@@ -164,9 +163,6 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
             }
           : status
       );
-      return runtime.communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
-    },
-    async getCommunityNodeConsentStatus(baseUrl) {
       return runtime.communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
     },
     // #857: 認証不要の公開 policy カタログ。consent items と同じ slug / 版を返す。

@@ -56,6 +56,84 @@ async fn persisted_community_node_connectivity_is_not_applied_without_local_cons
 }
 
 #[tokio::test]
+async fn startup_does_not_apply_persisted_community_node_connectivity_before_preflight() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("community-node-preflight-connectivity.db");
+    let base_url = "https://community.example.com";
+    let relay_url = "https://127.0.0.1:9";
+    let community_seed = CommunityNodeSeedPeer::new(
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        Some("127.0.0.1:9".to_string()),
+    )
+    .expect("community seed");
+    let configured_seed = SeedPeer {
+        endpoint_id: "1111111111111111111111111111111111111111111111111111111111111111".to_string(),
+        addr_hint: Some("127.0.0.1:11001".to_string()),
+    };
+    save_community_node_config(
+        &db_path,
+        &CommunityNodeConfig {
+            nodes: vec![CommunityNodeNodeConfig {
+                base_url: base_url.to_string(),
+                resolved_urls: Some(
+                    CommunityNodeResolvedUrls::new(
+                        base_url,
+                        vec![relay_url.to_string()],
+                        vec![community_seed],
+                    )
+                    .expect("resolved urls"),
+                ),
+            }],
+        },
+    )
+    .expect("save community-node config");
+    let mut local_consent = crate::CommunityNodeLocalConsentState::default();
+    crate::community_node::record_community_node_local_consents(
+        &mut local_consent,
+        &[crate::CommunityNodeConsentDocumentRef {
+            policy_slug: MOCK_MANAGED_POLICY_SLUG.to_string(),
+            policy_version: 1,
+            policy_snapshot_revision: None,
+        }],
+        "ja",
+        "test-app",
+        Utc::now().timestamp(),
+    );
+    crate::community_node::persist_community_node_local_consents(
+        &db_path,
+        IdentityStorageMode::FileOnly,
+        base_url,
+        &local_consent,
+    )
+    .expect("persist local consent");
+    let mut discovery_config = DiscoveryConfig::static_peer_default();
+    discovery_config.seed_peers = vec![configured_seed.clone()];
+
+    let runtime = DesktopRuntime::new_with_config_and_identity_and_discovery(
+        &db_path,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+        discovery_config,
+        DhtDiscoveryOptions::disabled(),
+        None,
+    )
+    .await
+    .expect("runtime");
+
+    assert!(runtime.active_connectivity_urls.lock().await.is_empty());
+    let applied = runtime
+        .last_effective_seed_peer_apply_state
+        .lock()
+        .await
+        .clone()
+        .expect("initial effective seed state");
+    assert_eq!(applied.configured_seed_peers, vec![configured_seed]);
+    assert!(applied.bootstrap_seed_peers.is_empty());
+
+    runtime.shutdown().await;
+}
+
+#[tokio::test]
 async fn withdrawing_community_node_consent_removes_transport_assist() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-node-withdraw-connectivity.db");

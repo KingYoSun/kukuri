@@ -84,6 +84,39 @@ pub(crate) async fn mock_bootstrap_consent_status() -> Json<CommunityNodeConsent
     Json(managed_community_node_consent_status(true))
 }
 
+pub(crate) async fn mock_current_policies()
+-> Json<kukuri_cn_protocol::CommunityNodePoliciesResponse> {
+    Json(kukuri_cn_protocol::CommunityNodePoliciesResponse {
+        policies: vec![kukuri_cn_protocol::CommunityNodePolicyDocument {
+            policy_slug: MOCK_MANAGED_POLICY_SLUG.to_string(),
+            policy_version: 1,
+            title: "Builder Preview".to_string(),
+            body_markdown: "Builder preview policy body.".to_string(),
+            required: true,
+            effective_date: Some("2026-09-02".to_string()),
+            language: Some("ja".to_string()),
+            policy_snapshot_revision: None,
+            authoritative_language: Some("ja".to_string()),
+            reference_translation: false,
+            translation_revision: None,
+            translation_of_version: None,
+            fallback: false,
+            requested_language: None,
+            material_change: false,
+            requires_reconsent: false,
+            is_current: true,
+            publication_status: Some("current".to_string()),
+            published_at: None,
+            retired_at: None,
+            previous_policy_version: None,
+            previous_policy_snapshot_revision: None,
+            next_policy_version: None,
+            next_policy_snapshot_revision: None,
+        }],
+        policy_snapshot_revision: None,
+    })
+}
+
 pub(crate) async fn mock_heartbeat_echo_bootstrap_heartbeat(
     State(state): State<Arc<MockHeartbeatEchoCommunityNodeState>>,
     Json(request): Json<serde_json::Value>,
@@ -201,6 +234,8 @@ pub(crate) struct MockManagedCommunityNodeState {
     // true の場合、未同意状態を「版が上がった更新（旧版は同意済み）」として返す。
     // ローカル同意が旧版のままの node で黙って再受諾しない挙動の検証に使う（#384 / #857）。
     pub(crate) simulate_pending_update: Arc<AtomicBool>,
+    // true の場合、文書版は据え置いたまま snapshot revision だけを更新する。
+    pub(crate) simulate_snapshot_update: Arc<AtomicBool>,
 }
 
 impl MockManagedCommunityNodeState {
@@ -226,6 +261,7 @@ impl MockManagedCommunityNodeState {
             dome_get_hits: Arc::new(AtomicUsize::new(0)),
             dome_post_hits: Arc::new(AtomicUsize::new(0)),
             simulate_pending_update: Arc::new(AtomicBool::new(false)),
+            simulate_snapshot_update: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -275,13 +311,22 @@ pub(crate) fn seed_local_community_node_consents(
     base_url: &str,
     version: i32,
 ) {
+    seed_local_community_node_consents_with_snapshot(runtime, base_url, version, None);
+}
+
+pub(crate) fn seed_local_community_node_consents_with_snapshot(
+    runtime: &DesktopRuntime,
+    base_url: &str,
+    version: i32,
+    policy_snapshot_revision: Option<&str>,
+) {
     let mut state = crate::CommunityNodeLocalConsentState::default();
     crate::community_node::record_community_node_local_consents(
         &mut state,
         &[crate::CommunityNodeConsentDocumentRef {
             policy_slug: MOCK_MANAGED_POLICY_SLUG.to_string(),
             policy_version: version,
-            policy_snapshot_revision: None,
+            policy_snapshot_revision: policy_snapshot_revision.map(str::to_string),
         }],
         "ja",
         "test-app",
@@ -302,6 +347,7 @@ pub(crate) async fn mock_managed_policies(
 ) -> Json<kukuri_cn_protocol::CommunityNodePoliciesResponse> {
     state.policies_hits.fetch_add(1, Ordering::SeqCst);
     let pending_update = state.simulate_pending_update.load(Ordering::SeqCst);
+    let snapshot_update = state.simulate_snapshot_update.load(Ordering::SeqCst);
     Json(kukuri_cn_protocol::CommunityNodePoliciesResponse {
         policies: vec![kukuri_cn_protocol::CommunityNodePolicyDocument {
             policy_slug: MOCK_MANAGED_POLICY_SLUG.to_string(),
@@ -311,7 +357,7 @@ pub(crate) async fn mock_managed_policies(
             required: true,
             effective_date: Some("2026-09-02".to_string()),
             language: Some("ja".to_string()),
-            policy_snapshot_revision: None,
+            policy_snapshot_revision: snapshot_update.then(|| "snapshot-2".to_string()),
             authoritative_language: Some("ja".to_string()),
             reference_translation: false,
             translation_revision: None,
@@ -329,7 +375,7 @@ pub(crate) async fn mock_managed_policies(
             next_policy_version: None,
             next_policy_snapshot_revision: None,
         }],
-        policy_snapshot_revision: None,
+        policy_snapshot_revision: snapshot_update.then(|| "snapshot-2".to_string()),
     })
 }
 
@@ -427,10 +473,17 @@ pub(crate) async fn mock_managed_consent_status(
     authorize_managed_community_node_request(&headers, state.as_ref()).await?;
     state.consent_status_hits.fetch_add(1, Ordering::SeqCst);
     let accepted = state.consent_accepted.load(Ordering::SeqCst);
-    Ok(Json(managed_community_node_consent_status_with_update(
+    let mut status = managed_community_node_consent_status_with_update(
         accepted,
         !accepted && state.simulate_pending_update.load(Ordering::SeqCst),
-    )))
+    );
+    if state.simulate_snapshot_update.load(Ordering::SeqCst) {
+        status.policy_snapshot_revision = Some("snapshot-2".to_string());
+        for item in &mut status.items {
+            item.policy_snapshot_revision = Some("snapshot-2".to_string());
+        }
+    }
+    Ok(Json(status))
 }
 
 pub(crate) async fn mock_managed_accept_consents(
