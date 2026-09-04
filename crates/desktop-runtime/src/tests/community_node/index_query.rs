@@ -726,6 +726,14 @@ async fn awaiting_admission_manual_refresh_rechecks_policy_and_blocks_protected_
             CommunityNodeSessionPhase::AwaitingAdmission,
         )
         .await;
+    crate::identity::persist_optional_secret(
+        &runtime.db_path,
+        runtime.identity_mode,
+        crate::community_node::COMMUNITY_NODE_TOKEN_PURPOSE,
+        base_url.as_str(),
+        "invalid persisted token",
+    )
+    .expect("persist invalid token sentinel");
 
     let status = runtime
         .refresh_community_node_metadata(CommunityNodeTargetRequest {

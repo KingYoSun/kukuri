@@ -88,3 +88,9 @@ reportは既存の直接preflightを維持する。残る12 commandはmanual ref
 ## merge gate
 
 区分Cのため、この記録だけでは完了にしない。固定したPR headを別コンテキストで独立監査し、`PASS`かつ必須CI成功となった場合だけmergeする。監査結果とmerge後tree比較はIssue commentへ記録する。
+
+## 初回独立監査の指摘と修正
+
+PR #892の初回head `a713169d1d9ebb0b1c58bac87bf48e2f958d20fb` は、独立監査で`FAIL`となった。`refresh_community_node_metadata`とmaintenanceが非`Ready` outcomeの後も`community_node_status`へ進み、保存tokenを読み得るExisting-gapが1件残っていた。
+
+この経路は固定`AC-2`／`INV-1`／`TR-1`／`TR-2`に該当するため、壊れた保存tokenを置いた`AwaitingAdmission`状態のmanual refreshがdecode errorになることをfailing-beforeで確認した。その後、statusの認証状態復元を「同じNodeのcurrent-policy検証済みevidenceと現在のlocal consentが一致する場合」だけに限定した。修正後は同testとCommunity Node 111件が成功した。新しいPR headは、このdeltaを含めて再監査する。

@@ -271,19 +271,6 @@ impl DesktopRuntime {
         last_error: Option<String>,
     ) -> Result<CommunityNodeNodeStatus> {
         let now = Utc::now().timestamp();
-        let token =
-            load_community_node_token(&self.db_path, self.identity_mode, node.base_url.as_str())?;
-        let auth_state = match token {
-            Some(token) if token.expires_at > now => CommunityNodeAuthState {
-                authenticated: true,
-                expires_at: Some(token.expires_at),
-            },
-            Some(token) => CommunityNodeAuthState {
-                authenticated: false,
-                expires_at: Some(token.expires_at),
-            },
-            None => CommunityNodeAuthState::default(),
-        };
         let local_consent = load_community_node_local_consents(
             &self.db_path,
             self.identity_mode,
@@ -304,7 +291,29 @@ impl DesktopRuntime {
         let session_phase = session
             .map(|s| s.session_phase)
             .unwrap_or(CommunityNodeSessionPhase::Idle);
+        let current_policy_verified = session.is_some_and(|session| {
+            !session.local_consent_update_pending
+                && session.current_policy_verified_for.as_ref() == Some(&local_consent)
+        });
         drop(sessions);
+        // status生成自体が、retry／参加承認待ちでpreflightを終えた後のtoken読込を
+        // 迂回させない。認証状態はcurrent policy照合済みevidenceがある場合だけ復元する。
+        let token = if current_policy_verified {
+            load_community_node_token(&self.db_path, self.identity_mode, node.base_url.as_str())?
+        } else {
+            None
+        };
+        let auth_state = match token {
+            Some(token) if token.expires_at > now => CommunityNodeAuthState {
+                authenticated: true,
+                expires_at: Some(token.expires_at),
+            },
+            Some(token) => CommunityNodeAuthState {
+                authenticated: false,
+                expires_at: Some(token.expires_at),
+            },
+            None => CommunityNodeAuthState::default(),
+        };
         let invite_code_saved = load_community_node_invite_code(
             &self.db_path,
             self.identity_mode,
