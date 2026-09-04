@@ -10,6 +10,7 @@ Scope revisionは`2026-09-04-issue-887-cli-protocol-v1`。#886の共通`ClientHo
 - `CommandRegistry`の一つのentryにhandler、input/output schema、read／write／destructive、secret input/output、idempotency、stream、guard metadataを保持する。`protocol.schema`と`protocol.commands`はdispatcherと同じ登録簿だけを参照する。
 - dispatcherはdecode／schema validation、profile／version、command lookup、product guard、secret frame受信、idempotency claim、handlerの順で処理する。未同意時の`events.watch`はsecretを含むbodyの受信前に拒否し、`client.status`とintrospectionはruntimeを開始せず利用できる。domain guard evaluatorは注入可能な境界を持つ。
 - CLIの`call`は通常入力をstdin／owner-only file／FDから上限付きで受け、成功・失敗ともstdoutへJSONを一つ出す。event streamだけをNDJSONとし、responseの`more`で継続を判定する。SIGINT時も`interrupted` envelopeと終了code 130を返す。daemon不在、protocol mismatch、usage、invalid input、timeoutも型付きerrorへ変換する。
+- daemonはSIGINT／SIGTERM receiverをreadiness通知前に登録し、通知直後の停止要求も取りこぼさずgraceful shutdownする。
 - secretは通常JSON payloadとは別の長さ付きframeを通し、headerのpreflightに成功した相関付き受信許可後だけ送信する。専用の`SecretInput`／`SecretOutput`は通常の`Serialize`を実装せず、`Debug`を常にredactする。sourceはstdin／FD／owner-only file、sinkは事前宣言した標準FD以外のFD／新規0600 fileに限定する。secret出力commandはread-onlyとし、secret-bearing handlerのerror detailを外部へ出さず、secret outputと同じbytesを通常JSONへ含めず、stdout／stderr／ledgerへ平文を出さない。
 - profile／account／command／UUIDv7 key／canonical payload digestを結ぶ専用SQLite ledgerを追加した。mutationを直列化してin-progressを先にcommitし、同一payloadはsanitized resultを再生、異payloadは`idempotency_conflict`、未完了は`operation_outcome_unknown`とし、自動再実行しない。
 - secretを含むpayload照合はledger固有saltのkeyed BLAKE3 digestだけを保存する。terminal recordは30日、profile／accountごとに最大10,000件とし、上限到達時は最古の完了済みrecordだけを整理する。未確定recordは自動削除しない。
@@ -41,6 +42,7 @@ Scope revisionは`2026-09-04-issue-887-cli-protocol-v1`。#886の共通`ClientHo
 - Windows: `cargo test -p kukuri-desktop-runtime host::idempotency --lib`（9件成功）
 - Windows: `cargo test -p kukuri-desktop-runtime encrypted_device_backup_restores_one_account_as_one_file --lib`（成功）
 - Linux: `cargo test -p kukuri-cli`（38件成功）
+- Linux: readiness直後のSIGTERM／再起動境界test（10回連続成功）
 - Windows／Linux: 対象crateの`cargo clippy --all-targets -- -D warnings`（成功）
 - `cargo xtask check`、`cargo xtask test`、`cargo xtask e2e-smoke`、`cargo xtask oversized-files`、`git diff --check`（成功）
 - Risk Cの独立監査は、secret、guard順序、schema／dispatcher整合、接続上限、冪等性、backup／restore、#888との責務境界を再確認し、PASSと判定した。

@@ -56,6 +56,11 @@ async fn run_foreground(profile: ClientProfile) -> Result<(), CliError> {
         ClientHostStart::Ready(host) => Some(host),
         ClientHostStart::ConsentRequired(_) => None,
     };
+    // readinessを通知する前にsignal handlerを登録し、直後の停止要求を取りこぼさない。
+    let interrupt = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
+        .map_err(|error| CliError::new("signal_setup_failed", error.to_string(), 1))?;
+    let terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        .map_err(|error| CliError::new("signal_setup_failed", error.to_string(), 1))?;
     eprintln!(
         "{}",
         if host.is_some() {
@@ -70,6 +75,8 @@ async fn run_foreground(profile: ClientProfile) -> Result<(), CliError> {
         lease.profile().name.clone(),
         host.clone(),
         Arc::new(Dispatcher::builtin()),
+        interrupt,
+        terminate,
     )
     .await?;
     if let Some(host) = host {
@@ -84,26 +91,17 @@ async fn wait_for_shutdown(
     profile: String,
     host: Option<Arc<ClientHost>>,
     dispatcher: Arc<Dispatcher>,
+    mut interrupt: tokio::signal::unix::Signal,
+    mut terminate: tokio::signal::unix::Signal,
 ) -> Result<(), CliError> {
-    let terminate = async {
-        let mut terminate =
-            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-                .map_err(|error| CliError::new("signal_setup_failed", error.to_string(), 1))?;
-        terminate.recv().await;
-        Ok::<(), CliError>(())
-    };
-    tokio::pin!(terminate);
-
     let mut connections = JoinSet::new();
     let connection_permits = Arc::new(Semaphore::new(MAX_CONNECTIONS));
     loop {
         tokio::select! {
-            result = tokio::signal::ctrl_c() => {
-                result.map_err(|error| CliError::new("signal_wait_failed", error.to_string(), 1))?;
+            _ = interrupt.recv() => {
                 break;
             }
-            result = &mut terminate => {
-                result?;
+            _ = terminate.recv() => {
                 break;
             },
             result = listener.accept() => {
