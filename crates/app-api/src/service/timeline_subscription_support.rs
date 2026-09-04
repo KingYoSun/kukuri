@@ -235,7 +235,7 @@ impl AppService {
         Ok(Some(envelope))
     }
 
-    pub(crate) async fn ensure_scope_subscriptions(
+    pub async fn ensure_scope_subscriptions(
         &self,
         topic_id: &str,
         scope: &TimelineScope,

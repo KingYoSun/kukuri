@@ -1,6 +1,41 @@
 use super::*;
 
 impl DesktopRuntime {
+    pub(crate) async fn ensure_desired_subscription(
+        &self,
+        subscription: &DesiredSubscription,
+    ) -> Result<()> {
+        let scope = match &subscription.scope {
+            DesiredSubscriptionScope::Public => TimelineScope::Public,
+            DesiredSubscriptionScope::Channel { channel_id } => TimelineScope::Channel {
+                channel_id: kukuri_core::ChannelId::new(channel_id),
+            },
+        };
+        self.app_service
+            .ensure_scope_subscriptions(subscription.topic.as_str(), &scope)
+            .await
+    }
+
+    pub(crate) async fn remove_desired_subscription(
+        &self,
+        subscription: &DesiredSubscription,
+        topic_still_desired: bool,
+    ) -> Result<()> {
+        match (&subscription.scope, topic_still_desired) {
+            (_, false) => {
+                self.app_service
+                    .unsubscribe_topic(subscription.topic.as_str())
+                    .await
+            }
+            (DesiredSubscriptionScope::Channel { channel_id }, true) => {
+                self.app_service
+                    .unsubscribe_private_channel(subscription.topic.as_str(), channel_id.as_str())
+                    .await
+            }
+            (DesiredSubscriptionScope::Public, true) => Ok(()),
+        }
+    }
+
     pub async fn create_post(&self, request: CreatePostRequest) -> Result<String> {
         let attachments = request
             .attachments

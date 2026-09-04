@@ -213,6 +213,9 @@ pub struct ClientStartupErrorView {
 pub enum ClientStartupErrorKind {
     DatabaseOpen,
     DatabaseMigration,
+    ProfileInUse,
+    ProfileInvalid,
+    SubscriptionState,
     Unknown,
 }
 

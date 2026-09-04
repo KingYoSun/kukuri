@@ -1,0 +1,23 @@
+[package]
+name = "kukuri-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+kukuri-desktop-runtime = { path = "../desktop-runtime" }
+serde.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+blake3.workspace = true
+libc.workspace = true
+tokio = { workspace = true, features = ["io-util", "net", "process", "signal"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

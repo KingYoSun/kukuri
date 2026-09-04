@@ -12,6 +12,7 @@ members = [
     "crates/harness",
     "crates/app-api",
     "crates/desktop-runtime",
+    "crates/kukuri-cli",
     "crates/test-support",
     "crates/cn-core",
     "crates/cn-user-api",
@@ -60,6 +61,7 @@ iroh-mainline-address-lookup = "0.4.0"
 iroh-relay = { version = "1.0.3", features = ["server"] }
 jsonwebtoken = { version = "11.0.0", features = ["aws_lc_rs"] }
 keyring = { version = "4.1.6", default-features = false }
+libc = "0.2.183"
 chacha20poly1305 = "0.11.0"
 n0-mainline = "0.5.0"
 reqwest = { version = "0.13.4", default-features = false, features = ["json", "query", "rustls"] }

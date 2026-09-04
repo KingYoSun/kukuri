@@ -44,6 +44,11 @@ fn flat_layout_migrates_identity_db_and_siblings() {
     persist_keys(&flat_db, MODE, &keys).expect("seed flat identity");
     fs::write(&flat_db, b"sqlite").expect("seed flat db");
     fs::write(flat_db.with_extension("discovery.json"), b"{}").expect("seed discovery config");
+    fs::write(
+        flat_db.with_extension("subscriptions.json"),
+        br#"{"version":1,"subscriptions":[]}"#,
+    )
+    .expect("seed desired subscriptions");
     fs::create_dir_all(flat_db.with_extension("iroh-data")).expect("seed iroh data dir");
     fs::write(
         flat_db.with_extension("iroh-data").join("blob.bin"),
@@ -66,6 +71,11 @@ fn flat_layout_migrates_identity_db_and_siblings() {
         b"{}"
     );
     assert_eq!(
+        fs::read(db_path.with_extension("subscriptions.json"))
+            .expect("migrated desired subscriptions"),
+        br#"{"version":1,"subscriptions":[]}"#
+    );
+    assert_eq!(
         fs::read(db_path.with_extension("iroh-data").join("blob.bin")).expect("migrated blob"),
         b"blob"
     );
@@ -80,6 +90,7 @@ fn flat_layout_migrates_identity_db_and_siblings() {
     assert!(!flat_db.exists());
     assert!(!flat_db.with_extension("identity-key").exists());
     assert!(!flat_db.with_extension("identity-store").exists());
+    assert!(!flat_db.with_extension("subscriptions.json").exists());
     assert!(!capability_file.exists());
 
     let snapshot = list_accounts(dir.path()).expect("list accounts");

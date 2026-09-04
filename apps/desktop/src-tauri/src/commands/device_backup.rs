@@ -29,7 +29,13 @@ async fn rebuild_runtime(
     let runtime = build_runtime(db_path).await.map_err(|error| {
         CommandError::from(format!("failed to restart desktop runtime: {error}"))
     })?;
-    let previous = state.host().replace_runtime(runtime).await;
+    let previous = state
+        .host()
+        .replace_runtime(runtime)
+        .await
+        .map_err(|error| {
+            CommandError::from(format!("failed to activate desktop runtime: {error}"))
+        })?;
     drop(previous);
     Ok(())
 }

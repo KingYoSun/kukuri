@@ -67,7 +67,7 @@ impl AppService {
     /// Tear down the gossip subscription for a single private channel without
     /// leaving the channel. Mirrors the abort path of
     /// [`restart_private_channel_subscription`].
-    pub(crate) async fn unsubscribe_private_channel(
+    pub async fn unsubscribe_private_channel(
         &self,
         topic_id: &str,
         channel_id: &str,
