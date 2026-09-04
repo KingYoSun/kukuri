@@ -10,7 +10,7 @@ use kukuri_store::{ContentObservationRow, ContentObservationStore};
 use reqwest::{StatusCode, header::RETRY_AFTER};
 use serde::{Deserialize, Serialize};
 
-use super::{community_node_http_client, load_community_node_token};
+use super::{CommunityNodeSessionOutcome, community_node_http_client, load_community_node_token};
 use crate::runtime::DesktopRuntime;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -143,7 +143,8 @@ impl DesktopRuntime {
             ));
         }
 
-        self.ensure_community_node_session(base_url.as_str())
+        let session_outcome = self
+            .ensure_community_node_session(base_url.as_str())
             .await
             .map_err(|error| {
                 CommunityNodeIndexQueryError::new(
@@ -151,15 +152,20 @@ impl DesktopRuntime {
                     error.to_string(),
                 )
             })?;
-        // 必須同意が未承認のノードへは検索語を送らない(#698)。
-        if self
-            .community_node_required_consent_is_pending(base_url.as_str())
-            .await
-        {
-            return Err(CommunityNodeIndexQueryError::new(
-                CONSENT_REQUIRED_CODE,
-                "community node required policies must be accepted before index queries",
-            ));
+        match session_outcome {
+            CommunityNodeSessionOutcome::Ready => {}
+            CommunityNodeSessionOutcome::ConsentRequired => {
+                return Err(CommunityNodeIndexQueryError::new(
+                    CONSENT_REQUIRED_CODE,
+                    "community node required policies must be accepted before index queries",
+                ));
+            }
+            CommunityNodeSessionOutcome::Deferred(phase) => {
+                return Err(CommunityNodeIndexQueryError::new(
+                    "COMMUNITY_NODE_SESSION_DEFERRED",
+                    format!("community node session is not ready ({phase:?})"),
+                ));
+            }
         }
         // 非公開チャンネルの範囲指定は所属証明(channel secret)を同伴する(#711)。
         // 参加中でない(capability が無い)チャンネルへは送信前に拒否する。

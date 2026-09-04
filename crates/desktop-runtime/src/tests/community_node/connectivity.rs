@@ -194,6 +194,7 @@ async fn community_node_connectivity_assist_backfills_public_timeline_with_relay
         }],
     };
     seed_local_community_node_consents(&runtime_a, base_url, 1);
+    mark_community_node_session_ready_for_test(&runtime_a, base_url).await;
     *runtime_b.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.to_string(),
@@ -210,7 +211,7 @@ async fn community_node_connectivity_assist_backfills_public_timeline_with_relay
         }],
     };
     seed_local_community_node_consents(&runtime_b, base_url, 1);
-
+    mark_community_node_session_ready_for_test(&runtime_b, base_url).await;
     timeout(
         Duration::from_secs(30),
         runtime_a.apply_runtime_connectivity_assist(),
@@ -733,9 +734,8 @@ async fn runtime_starts_with_unreachable_community_node_and_recovers_via_manual_
         kukuri_app_api::DeliveryState::Offline | kukuri_app_api::DeliveryState::DurableRecovering
     ));
 
-    // WP-Q2: 到達不能ノードへの registration refresh 試行(→ last_error 記録)は
-    // スケジューラ tick が駆動し、getter は読み取り専用。
-    // #857: 同意済みでなければそもそも通信しないため、同意記録をシードしてから tick を回す。
+    // WP-Q2: 到達不能ノードへのregistration refresh試行はscheduler tickが駆動し、getterは読み取り専用。
+    // #857: local consentだけでは保存済みrelayを有効化しない。到達不能Nodeはpreflightを完了できないためDirectOnlyを維持する。
     seed_local_community_node_consents(&runtime_a, community_base_url, 1);
     runtime_a
         .apply_runtime_connectivity_assist()
@@ -752,7 +752,7 @@ async fn runtime_starts_with_unreachable_community_node_and_recovers_via_manual_
             .expect("sync status after consent")
             .discovery
             .connect_mode,
-        ConnectMode::DirectOrRelay
+        ConnectMode::DirectOnly
     );
     runtime_a
         .run_community_node_session_maintenance_once()

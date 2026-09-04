@@ -660,6 +660,105 @@ async fn community_node_private_indexing_stops_before_secret_when_consent_is_pen
 }
 
 #[tokio::test]
+async fn retrying_session_stops_indexing_request_before_http() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let (runtime, base_url, managed, state, server, _dir) = index_runtime(None).await;
+    runtime
+        .set_community_node_retry_state(
+            base_url.as_str(),
+            anyhow::anyhow!("temporary session failure"),
+        )
+        .await;
+
+    let error = runtime
+        .submit_community_node_indexing_request(CommunityNodeIndexingRequest {
+            base_url,
+            scope_kind: IndexScopeKind::PublicTopic,
+            topic_id: "kukuri:topic:indexing-request".to_string(),
+            channel_id: None,
+            confirm_private_channel_secret_disclosure: false,
+        })
+        .await
+        .expect_err("retrying session must defer the indexing request");
+
+    assert_eq!(error.code, "COMMUNITY_NODE_SESSION_DEFERRED");
+    assert_eq!(managed.policies_hits.load(Ordering::SeqCst), 1);
+    assert!(state.indexing_requests.lock().await.is_empty());
+    runtime.shutdown().await;
+    server.abort();
+}
+
+#[tokio::test]
+async fn retrying_session_preflights_and_stops_index_query_before_http() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let (runtime, base_url, managed, state, server, _dir) = index_runtime(None).await;
+    runtime
+        .set_community_node_retry_state(
+            base_url.as_str(),
+            anyhow::anyhow!("temporary session failure"),
+        )
+        .await;
+
+    runtime
+        .search_community_node_index(scoped_request(base_url.as_str()))
+        .await
+        .expect_err("retrying session must defer the protected query");
+
+    assert_eq!(managed.policies_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(managed.challenge_hits.load(Ordering::SeqCst), 0);
+    assert_eq!(managed.verify_hits.load(Ordering::SeqCst), 0);
+    assert_eq!(managed.consent_status_hits.load(Ordering::SeqCst), 0);
+    assert!(state.requests.lock().await.is_empty());
+    runtime.shutdown().await;
+    server.abort();
+}
+
+#[tokio::test]
+async fn awaiting_admission_manual_refresh_rechecks_policy_and_blocks_protected_http() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let (runtime, base_url, managed, state, server, _dir) = index_runtime(None).await;
+    managed
+        .simulate_snapshot_update
+        .store(true, Ordering::SeqCst);
+    runtime
+        .set_community_node_session_phase(
+            base_url.as_str(),
+            CommunityNodeSessionPhase::AwaitingAdmission,
+        )
+        .await;
+    crate::identity::persist_optional_secret(
+        &runtime.db_path,
+        runtime.identity_mode,
+        crate::community_node::COMMUNITY_NODE_TOKEN_PURPOSE,
+        base_url.as_str(),
+        "invalid persisted token",
+    )
+    .expect("persist invalid token sentinel");
+
+    let status = runtime
+        .refresh_community_node_metadata(CommunityNodeTargetRequest {
+            base_url: base_url.clone(),
+        })
+        .await
+        .expect("manual refresh should return the consent-required status");
+    assert!(status.consent_update_pending);
+    assert_eq!(status.session_phase, CommunityNodeSessionPhase::Idle);
+
+    runtime
+        .search_community_node_index(scoped_request(base_url.as_str()))
+        .await
+        .expect_err("policy update must stop an awaiting-admission query");
+
+    assert_eq!(managed.policies_hits.load(Ordering::SeqCst), 2);
+    assert_eq!(managed.challenge_hits.load(Ordering::SeqCst), 0);
+    assert_eq!(managed.verify_hits.load(Ordering::SeqCst), 0);
+    assert_eq!(managed.consent_status_hits.load(Ordering::SeqCst), 0);
+    assert!(state.requests.lock().await.is_empty());
+    runtime.shutdown().await;
+    server.abort();
+}
+
+#[tokio::test]
 async fn community_node_private_scoped_query_attaches_membership_proof() {
     let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let (runtime, base_url, _managed, state, server, _dir) = index_runtime(None).await;

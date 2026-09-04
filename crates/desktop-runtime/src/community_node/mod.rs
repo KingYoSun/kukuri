@@ -281,6 +281,13 @@ pub enum CommunityNodeSessionPhase {
     AwaitingAdmission,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CommunityNodeSessionOutcome {
+    Ready,
+    Deferred(CommunityNodeSessionPhase),
+    ConsentRequired,
+}
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct CommunityNodeSessionState {
     pub(crate) heartbeat_deadline: i64,
@@ -296,6 +303,9 @@ pub(crate) struct CommunityNodeSessionState {
     /// #857: 公開カタログ照合でローカル同意が現行版をカバーしないと判明した状態。
     /// 真の間は認証(JWT 発行)を開始せず、UI が再同意モーダルを提示する。
     pub(crate) local_consent_update_pending: bool,
+    /// 公開current policyとの厳密一致を確認して`Ready`へ到達した時点のlocal consent。
+    /// runtime内だけのevidenceとし、restart後は再度preflightする。
+    pub(crate) current_policy_verified_for: Option<CommunityNodeLocalConsentState>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

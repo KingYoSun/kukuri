@@ -134,6 +134,116 @@ async fn startup_does_not_apply_persisted_community_node_connectivity_before_pre
 }
 
 #[tokio::test]
+async fn connectivity_apply_ignores_local_consent_without_verified_ready_session() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("community-node-unverified-connectivity.db");
+    let base_url = "https://community.example.com";
+    let relay_url = "https://127.0.0.1:9";
+    let community_seed = CommunityNodeSeedPeer::new(
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        Some("127.0.0.1:9".to_string()),
+    )
+    .expect("community seed");
+    let runtime = DesktopRuntime::new_with_config_and_identity(
+        &db_path,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("runtime");
+    seed_local_community_node_consents(&runtime, base_url, 1);
+    *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        nodes: vec![CommunityNodeNodeConfig {
+            base_url: base_url.to_string(),
+            resolved_urls: Some(
+                CommunityNodeResolvedUrls::new(
+                    base_url,
+                    vec![relay_url.to_string()],
+                    vec![community_seed],
+                )
+                .expect("resolved urls"),
+            ),
+        }],
+    };
+
+    runtime
+        .apply_runtime_connectivity_assist()
+        .await
+        .expect("apply runtime connectivity");
+    runtime
+        .apply_effective_seed_peers()
+        .await
+        .expect("apply effective seeds");
+
+    assert!(runtime.active_connectivity_urls.lock().await.is_empty());
+    let applied = runtime
+        .last_effective_seed_peer_apply_state
+        .lock()
+        .await
+        .clone()
+        .expect("effective seed state");
+    assert!(applied.bootstrap_seed_peers.is_empty());
+
+    runtime.shutdown().await;
+}
+
+#[tokio::test]
+async fn connectivity_apply_keeps_only_the_node_with_verified_ready_session() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("community-node-mixed-verification.db");
+    let runtime = DesktopRuntime::new_with_config_and_identity(
+        &db_path,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("runtime");
+    let verified_base_url = "https://verified.example.com";
+    let unverified_base_url = "https://unverified.example.com";
+    seed_local_community_node_consents(&runtime, verified_base_url, 1);
+    seed_local_community_node_consents(&runtime, unverified_base_url, 1);
+    mark_community_node_session_ready_for_test(&runtime, verified_base_url).await;
+    *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        nodes: vec![
+            CommunityNodeNodeConfig {
+                base_url: verified_base_url.to_string(),
+                resolved_urls: Some(
+                    CommunityNodeResolvedUrls::new(
+                        verified_base_url,
+                        vec!["https://relay-verified.example.com".to_string()],
+                        Vec::new(),
+                    )
+                    .expect("verified urls"),
+                ),
+            },
+            CommunityNodeNodeConfig {
+                base_url: unverified_base_url.to_string(),
+                resolved_urls: Some(
+                    CommunityNodeResolvedUrls::new(
+                        unverified_base_url,
+                        vec!["https://relay-unverified.example.com".to_string()],
+                        Vec::new(),
+                    )
+                    .expect("unverified urls"),
+                ),
+            },
+        ],
+    };
+
+    runtime
+        .apply_runtime_connectivity_assist()
+        .await
+        .expect("apply runtime connectivity");
+
+    assert_eq!(
+        *runtime.active_connectivity_urls.lock().await,
+        vec!["https://relay-verified.example.com".to_string()]
+    );
+
+    runtime.shutdown().await;
+}
+
+#[tokio::test]
 async fn withdrawing_community_node_consent_removes_transport_assist() {
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-node-withdraw-connectivity.db");
@@ -178,6 +288,7 @@ async fn withdrawing_community_node_consent_removes_transport_assist() {
             ),
         }],
     };
+    mark_community_node_session_ready_for_test(&runtime, base_url).await;
     runtime
         .community_node_rendezvous_seed_peers
         .lock()

@@ -9,7 +9,7 @@ use kukuri_cn_protocol::{
 use reqwest::{Method, StatusCode};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-use super::{community_node_http_client, load_community_node_token};
+use super::{CommunityNodeSessionOutcome, community_node_http_client, load_community_node_token};
 use crate::runtime::DesktopRuntime;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -172,7 +172,8 @@ impl DesktopRuntime {
                     error.to_string(),
                 )
             })?;
-        self.ensure_community_node_session(base_url.as_str())
+        let session_outcome = self
+            .ensure_community_node_session(base_url.as_str())
             .await
             .map_err(|error| {
                 CommunityNodeTrustRelationError::new(
@@ -180,15 +181,20 @@ impl DesktopRuntime {
                     error.to_string(),
                 )
             })?;
-        // 必須同意が未承認のノードへは、対象利用者の公開鍵を含む要求も距離利用停止の操作も送らない(#705)。
-        if self
-            .community_node_required_consent_is_pending(base_url.as_str())
-            .await
-        {
-            return Err(CommunityNodeTrustRelationError::new(
-                CONSENT_REQUIRED_CODE,
-                "community node required policies must be accepted before trust and relation requests",
-            ));
+        match session_outcome {
+            CommunityNodeSessionOutcome::Ready => {}
+            CommunityNodeSessionOutcome::ConsentRequired => {
+                return Err(CommunityNodeTrustRelationError::new(
+                    CONSENT_REQUIRED_CODE,
+                    "community node required policies must be accepted before trust and relation requests",
+                ));
+            }
+            CommunityNodeSessionOutcome::Deferred(phase) => {
+                return Err(CommunityNodeTrustRelationError::new(
+                    "COMMUNITY_NODE_SESSION_DEFERRED",
+                    format!("community node session is not ready ({phase:?})"),
+                ));
+            }
         }
         let token = load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())
             .map_err(|error| {

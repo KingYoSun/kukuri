@@ -201,6 +201,28 @@ async fn tester_feedback_client_rejects_invalid_input_without_network() {
 }
 
 #[tokio::test]
+async fn retrying_session_stops_tester_feedback_before_http() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let (runtime, base_url, state, server, _dir) = tester_feedback_runtime(false).await;
+    runtime
+        .set_community_node_retry_state(
+            base_url.as_str(),
+            anyhow::anyhow!("temporary session failure"),
+        )
+        .await;
+
+    let error = runtime
+        .submit_community_node_tester_feedback(submission(base_url.as_str()))
+        .await
+        .expect_err("retrying session must defer tester feedback");
+
+    assert_eq!(error.code, "COMMUNITY_NODE_SESSION_DEFERRED");
+    assert!(state.received.lock().await.is_empty());
+    runtime.shutdown().await;
+    server.abort();
+}
+
+#[tokio::test]
 async fn tester_feedback_client_reauthenticates_once_on_unauthorized() {
     let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let (runtime, base_url, state, server, _dir) = tester_feedback_runtime(true).await;

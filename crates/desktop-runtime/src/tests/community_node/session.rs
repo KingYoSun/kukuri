@@ -456,7 +456,7 @@ async fn node_without_local_consent_is_never_contacted() {
 }
 
 #[tokio::test]
-async fn community_node_status_does_not_require_restart_when_connectivity_is_active() {
+async fn community_node_status_does_not_require_restart_when_verified_connectivity_is_active() {
     let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-status.db");
@@ -494,6 +494,7 @@ async fn community_node_status_does_not_require_restart_when_connectivity_is_act
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![node.clone()],
     };
+    mark_community_node_session_ready_for_test(&runtime, base_url.as_str()).await;
     *runtime.active_connectivity_urls.lock().await = vec![connectivity_url.clone()];
 
     let status = timeout(
@@ -538,7 +539,10 @@ async fn community_node_status_does_not_require_restart_when_connectivity_is_act
             .connectivity_urls,
         vec![connectivity_url]
     );
-    assert_eq!(status.session_phase, crate::CommunityNodeSessionPhase::Idle);
+    assert_eq!(
+        status.session_phase,
+        crate::CommunityNodeSessionPhase::Ready
+    );
     assert!(!status.restart_required);
 
     timeout(test_timeout, runtime.shutdown())

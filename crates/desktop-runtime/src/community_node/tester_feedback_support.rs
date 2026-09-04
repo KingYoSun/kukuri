@@ -14,7 +14,7 @@ use kukuri_cn_protocol::{
 use reqwest::{StatusCode, header::RETRY_AFTER};
 use serde::{Deserialize, Serialize};
 
-use super::{community_node_http_client, load_community_node_token};
+use super::{CommunityNodeSessionOutcome, community_node_http_client, load_community_node_token};
 use crate::runtime::DesktopRuntime;
 
 /// UI / IPC から受けるテスターフィードバック送信。version / OS は含めない(自動付与)。
@@ -116,7 +116,8 @@ impl DesktopRuntime {
             }
         }
 
-        self.ensure_community_node_session(base_url.as_str())
+        let session_outcome = self
+            .ensure_community_node_session(base_url.as_str())
             .await
             .map_err(|error| {
                 CommunityNodeTesterFeedbackError::new(
@@ -124,14 +125,20 @@ impl DesktopRuntime {
                     error.to_string(),
                 )
             })?;
-        if self
-            .community_node_required_consent_is_pending(base_url.as_str())
-            .await
-        {
-            return Err(CommunityNodeTesterFeedbackError::new(
-                CONSENT_REQUIRED_CODE,
-                "community node required policies must be accepted before sending tester feedback",
-            ));
+        match session_outcome {
+            CommunityNodeSessionOutcome::Ready => {}
+            CommunityNodeSessionOutcome::ConsentRequired => {
+                return Err(CommunityNodeTesterFeedbackError::new(
+                    CONSENT_REQUIRED_CODE,
+                    "community node required policies must be accepted before sending tester feedback",
+                ));
+            }
+            CommunityNodeSessionOutcome::Deferred(phase) => {
+                return Err(CommunityNodeTesterFeedbackError::new(
+                    "COMMUNITY_NODE_SESSION_DEFERRED",
+                    format!("community node session is not ready ({phase:?})"),
+                ));
+            }
         }
 
         let token = load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())

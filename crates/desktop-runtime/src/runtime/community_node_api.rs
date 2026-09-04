@@ -273,8 +273,10 @@ impl DesktopRuntime {
             .await?;
             self.clear_community_node_retry_state(base_url.as_str())
                 .await;
-            self.set_community_node_session_ready(base_url.as_str(), true)
+            self.set_community_node_session_ready(base_url.as_str(), true, local_consent)
                 .await;
+            self.apply_ready_community_node_connectivity(base_url.as_str())
+                .await?;
             let refreshed = self.require_community_node(base_url.as_str()).await?;
             return self
                 .community_node_status(refreshed, Some(consent_state), None)
@@ -445,7 +447,7 @@ impl DesktopRuntime {
             .ensure_community_node_session_with_mode(base_url.as_str(), true)
             .await
         {
-            Ok(()) => {}
+            Ok(_) => {}
             Err(error) => {
                 // 心拍 401 → 再認証 → 参加拒否(403)の経路は、定期処理と同じく AwaitingAdmission へ
                 // 落として利用者の操作待ちにする。それ以外の失敗は従来どおり呼び出し元へ返す(#708)。
