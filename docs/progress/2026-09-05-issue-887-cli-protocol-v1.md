@@ -43,6 +43,7 @@ Scope revisionは`2026-09-04-issue-887-cli-protocol-v1`。#886の共通`ClientHo
 - Windows: `cargo test -p kukuri-desktop-runtime encrypted_device_backup_restores_one_account_as_one_file --lib`（成功）
 - Linux: `cargo test -p kukuri-cli`（38件成功）
 - Linux: readiness直後のSIGTERM／再起動境界test（10回連続成功）
+- Linux: 64接続の購読開始を確認した接続上限／backpressure境界test（5回連続成功）
 - Windows／Linux: 対象crateの`cargo clippy --all-targets -- -D warnings`（成功）
 - `cargo xtask check`、`cargo xtask test`、`cargo xtask e2e-smoke`、`cargo xtask oversized-files`、`git diff --check`（成功）
 - Risk Cの独立監査は、secret、guard順序、schema／dispatcher整合、接続上限、冪等性、backup／restore、#888との責務境界を再確認し、PASSと判定した。

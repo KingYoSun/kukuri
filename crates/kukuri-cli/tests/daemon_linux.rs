@@ -486,9 +486,36 @@ fn connection_limit_returns_correlated_backpressure() {
     wait_for_ready(&mut daemon, &socket);
 
     let stalled = (0..64)
-        .map(|_| UnixStream::connect(&socket).expect("stalled connection"))
+        .map(|index| {
+            let mut stream = UnixStream::connect(&socket).expect("stalled connection");
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .expect("stalled connection timeout");
+            writeln!(
+                stream,
+                "{}",
+                serde_json::json!({
+                    "protocol_version": 1,
+                    "request_id": format!("stalled-{index}"),
+                    "command": "events.watch",
+                    "profile": "alpha",
+                    "payload": {},
+                    "timeout_ms": 300_000,
+                    "accepts_secret_output": false
+                })
+            )
+            .expect("subscribe stalled connection");
+            let mut response = String::new();
+            BufReader::new(stream.try_clone().expect("clone stalled connection"))
+                .read_line(&mut response)
+                .expect("stalled subscription response");
+            let response: serde_json::Value =
+                serde_json::from_str(&response).expect("stalled subscription envelope");
+            assert_eq!(response["ok"], true);
+            assert_eq!(response["more"], true);
+            stream
+        })
         .collect::<Vec<_>>();
-    thread::sleep(Duration::from_millis(300));
     let output = call(
         root.path(),
         "alpha",
