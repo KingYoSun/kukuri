@@ -1,0 +1,122 @@
+name: 実装・不具合修正
+description: 有限な完了条件と監査面を固定して、機能追加または不具合修正を追跡します。
+title: ""
+labels: []
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        `docs/runbooks/issue-lifecycle.md` に従って記入してください。GitHub Issueは追跡面であり、仕様と振る舞いの正本はADR、実装、tests / contracts / scenariosです。
+
+  - type: textarea
+    id: current_status
+    attributes:
+      label: Current status
+      description: 現在判定を一か所に集約し、In scope、Non-goals、親子Issueの所有境界も固定してください。
+      placeholder: |
+        - 判定: Planned / In progress / Audit pending / Merge ready / Complete / Reopened / Blocked
+        - Scope revision:
+        - 基準commit: None
+        - Blocker: 0件
+        - In scope:
+        - Non-goals:
+        - Parent / child ownership:
+    validations:
+      required: true
+
+  - type: dropdown
+    id: risk_lane
+    attributes:
+      label: リスク区分
+      description: ファイル数ではなく、失敗時の利用者影響と責務境界で選びます。
+      options:
+        - "A: 軽微"
+        - "B: 挙動変更"
+        - "C: 境界重要"
+    validations:
+      required: true
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goalと現在の問題
+      description: 利用者に観測できる完了状態を一文で書き、不具合なら再現sequenceを続けてください。
+      placeholder: |
+        Goal:
+        現在の挙動:
+        再現sequence:
+    validations:
+      required: true
+
+  - type: textarea
+    id: canonical_refs
+    attributes:
+      label: 正本と根拠
+      description: 関連するADR、runbook、実装symbol、tests、scenariosを列挙してください。
+      placeholder: |
+        - ADR / contract:
+        - 現行実装:
+        - 既存test / scenario:
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteriaと対象invariant
+      description: Yes / Noで判定できる条件をAC-*、今回維持する既存契約をINVAR-*として固定してください。
+      placeholder: |
+        - [ ] AC-1:
+        - [ ] AC-2:
+        - [ ] INVAR-1:
+    validations:
+      required: true
+
+  - type: textarea
+    id: surface_inventory
+    attributes:
+      label: Fixed surface inventory
+      description: B/Cでは入口→helper→副作用と、副作用→全callerを記録します。Aでは対象外理由を書いてください。件数だけの記載は不可です。
+      placeholder: |
+        | ID | 入口・trigger | shared helper | 副作用sink | guard / invariant | transition | test |
+        | --- | --- | --- | --- | --- | --- | --- |
+        | INV-1 | | | | | TR-1 | |
+    validations:
+      required: true
+
+  - type: textarea
+    id: state_transitions
+    attributes:
+      label: State transition coverage
+      description: B/Cでは該当する通常、失敗、retry、restart、保存state、background、複数対象を有限に記録します。Aでは対象外理由を書いてください。
+      placeholder: |
+        | ID | 事前状態 | event / sequence | 期待状態 | 許可I/O | 禁止副作用 | test |
+        | --- | --- | --- | --- | --- | --- | --- |
+        | TR-1 | | | | | | |
+    validations:
+      required: true
+
+  - type: textarea
+    id: validation
+    attributes:
+      label: 検証とClose条件
+      description: AC / INVARごとのtest / evidence、path別validation、独立監査の要否を記入してください。
+      placeholder: |
+        - AC-1 -> test / evidence:
+        - INVAR-1 -> test / evidence:
+        - 必須validation:
+        - 独立監査: 必要 / 不要（理由）
+        - Close条件:
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: lifecycle_acknowledgement
+    attributes:
+      label: 起票前確認
+      options:
+        - label: 固定AC / INVARに含まれない将来要件やoptional hardeningを、このIssueのClose blockerへ追加しません。
+          required: true
+        - label: B/Cでは未分類surfaceを0にし、Cでは独立監査PASS後にCloseします。
+          required: true

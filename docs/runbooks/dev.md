@@ -1,5 +1,7 @@
 # Development Runbook
 
+Issueの起票からCloseまでのstage gate、固定surface inventory、状態遷移、独立監査は [Issue lifecycle runbook](./issue-lifecycle.md) に従う。本書は各validation commandの実行方法を規定する。
+
 ## 初回セットアップ
 ```bash
 npx pnpm@10.16.1 install --dir apps/desktop

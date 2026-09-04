@@ -1,5 +1,7 @@
 # PLANS.md — 実装計画の暴走防止ガイド
 
+Issueに紐づく計画は、先に `docs/runbooks/issue-lifecycle.md` でリスク区分、固定surface inventory、状態遷移、Scope revisionを確定する。本書は計画の大きさと形式を規定し、Issue lifecycle runbookは網羅性とCloseまでの追跡を規定する。
+
 ## 最重要指示
 
 実装プランを作成するとき、次のルールを必ず守ってください。
@@ -12,6 +14,8 @@
 6. **将来の仮定で設計しない。** いま要求されていない柔軟性、抽象化、設定、拡張ポイントを入れない。
 7. **曖昧さは制限付きで扱う。** 不明点は最大3件まで。可能なら明示的な仮定を置いて先に進める。
 8. **最後に次の一手を1つだけ提示する。** 複数の「次にやること」リストを作らない。
+9. **条件を追跡可能にする。** `AC-*`と対象`INVAR-*`をTask、inventory / transition、test / evidenceへ対応付け、孤立した条件と条件に紐づかない実装Taskを作らない。
+10. **件数だけで網羅としない。** リスク区分B/Cでは、入口から副作用への順方向と、副作用から全callerへの逆方向を固定inventoryへ含める。
 
 ---
 
@@ -112,22 +116,26 @@ AIは実装プランを作るとき、必ず次の順で考えます。
    - どの状態なら完了とみなすかを定義する。
    - 完了条件がないタスクは作らない。
 
-4. **最小経路を選ぶ**
+4. **リスクとCoverage Contractを確定する**
+   - `docs/runbooks/issue-lifecycle.md`のA/B/Cを選ぶ。
+   - 対象`INVAR-*`を固定し、B/Cでは固定surface inventory、sensitive sink、適用可能な状態遷移を記録する。
+
+5. **最小経路を選ぶ**
    - 目的達成に最短で必要な変更だけを採用する。
    - 便利そうな改善、一般化、将来対応は採用しない。
 
-5. **Taskに分解する**
+6. **Taskに分解する**
    - `Phase -> Task` の2階層まで。
    - Task数は最大8。
 
-6. **各Taskに検証を付ける**
+7. **各Taskに検証を付ける**
    - テスト、型チェック、lint、手動確認、ログ確認など。
 
-7. **Blockerだけを分離する**
+8. **Blockerだけを分離する**
    - 実行不能な不明点だけ `Decision Needed` に入れる。
    - 推測で進められるものはAssumptionにする。
 
-8. **停止する**
+9. **停止する**
    - 上記が揃ったら、追加のアイデアを出さずに計画を終了する。
 
 ---
@@ -151,10 +159,19 @@ AIが実装プランを出すときは、原則としてこの形式だけを使
 ## Definition of Done
 - <完了条件>
 
+## Risk and Coverage Contract
+- リスク区分: A / B / C
+- Scope revision: <Issueで固定した識別子。Issueなしなら計画作成日>
+- Relevant invariants: <Issueで固定したINVAR-*または対象外の理由>
+- Fixed surface inventory: <IssueのINV-*または対象外の理由>
+- State transitions: <IssueのTR-*または対象外の理由>
+- Sensitive sinks / shared callers: <区分Cの一覧または対象外の理由>
+- Independent audit: <要否と理由>
+
 ## Plan
-| ID | Task | Outcome | Files / Areas | Acceptance Criteria | Validation | Depends On |
-|---|---|---|---|---|---|---|
-| T1 | ... | ... | ... | ... | ... | ... |
+| ID | AC / INVAR IDs | Task | Outcome | Files / Areas | Acceptance Criteria | Validation | Depends On |
+|---|---|---|---|---|---|---|---|
+| T1 | AC-1 / INVAR-1 | ... | ... | ... | ... | ... | ... |
 
 ## Decision Needed / Blockers
 - <最大3件。なければ "None" と書く>
@@ -326,6 +343,9 @@ AIは、実装プラン内で次をしてはいけません。
 - ネストが2階層以下である
 - 各TaskにAcceptance Criteriaがある
 - 各TaskにValidationがある
+- Issueに紐づくACと対象invariantへ安定IDがあり、すべてTaskとtest / evidenceに対応している
+- リスク区分B/Cでは固定surface inventoryと適用可能な状態遷移がある
+- リスク区分Cではsensitive sinkから全callerを逆引きする方法がある
 - Blockerが最大3件に収まっている
 - Single Next Actionが1つだけである
 - Future WorkやFollow-up Tasksが大量に列挙されていない
@@ -339,6 +359,8 @@ AIは、実装プラン内で次をしてはいけません。
 実装完了時は、次を満たす必要があります。
 
 - すべてのTaskのAcceptance Criteriaを満たしている
+- すべての`AC-*` / `INVAR-*`に実装箇所とtest / evidenceが対応し、孤立条件と余剰実装Taskがない
+- inventoryの追加・削除・分類変更が記録され、未分類が0である
 - 指定されたValidationを実行し、結果を報告している
 - 新しい未承認TODOを作っていない
 - 不要な一時ファイル、helper script、調査メモを残していない
@@ -391,15 +413,24 @@ AIは、実装プラン内で次をしてはいけません。
 - 既存の認証状態判定関数を利用できる
 
 ## Definition of Done
-- 未ログインユーザーは /settings から /login にリダイレクトされる
-- ログイン済みユーザーは従来通り /settings を表示できる
-- 関連テストが成功する
+- AC-1: 未ログインユーザーは /settings から /login にリダイレクトされる
+- AC-2: ログイン済みユーザーは従来通り /settings を表示できる
+- INVAR-1: settings の内容は認証完了前に描画されない
+
+## Risk and Coverage Contract
+- リスク区分: C
+- Scope revision: settings-auth-v1
+- Relevant invariants: INVAR-1
+- Fixed surface inventory: INV-1 `/settings` route。route登録からsettings描画までの順方向と、settings描画からroute callerへの逆方向を確認する
+- State transitions: TR-1 未ログイン、TR-2 ログイン済み
+- Sensitive sinks / shared callers: settings loader / 描画。callerはINV-1のみ
+- Independent audit: 認証境界のためPR headで必要
 
 ## Plan
-| ID | Task | Outcome | Files / Areas | Acceptance Criteria | Validation | Depends On |
-|---|---|---|---|---|---|---|
-| T1 | settings routeに認証ガードを追加する | 未ログイン時に/loginへ遷移する | routes/settings, auth guard | 未ログイン時は/loginへリダイレクトされる | route test | None |
-| T2 | 既存挙動の回帰テストを追加する | ログイン済み表示が保たれる | settings route tests | ログイン済みユーザーは/settingsを表示できる | test suite | T1 |
+| ID | AC / INVAR IDs | Task | Outcome | Files / Areas | Acceptance Criteria | Validation | Depends On |
+|---|---|---|---|---|---|---|---|
+| T1 | AC-1, INVAR-1 | 未ログインsequenceのfailing testを追加してsettings routeに認証ガードを置く | 認証前は内容を描画せず/loginへ遷移する | routes/settings, auth guard, route tests | TR-1でリダイレクトされ、settings loader / 描画は0回 | targeted route testのfailing-before / passing-after | None |
+| T2 | AC-2, INVAR-1 | ログイン済み経路の回帰testを追加する | 認証済み表示が保たれる | settings route tests | TR-2で/settingsを表示できる | targeted route test suite | T1 |
 
 ## Decision Needed / Blockers
 None
@@ -424,6 +455,10 @@ AIが出した計画は、次のチェックリストでレビューします。
 - [ ] ネストは2階層以下か
 - [ ] 各TaskにAcceptance Criteriaがあるか
 - [ ] 各TaskにValidationがあるか
+- [ ] リスク区分とScope revisionが固定されているか
+- [ ] `AC-*` / `INVAR-*`が全Taskとtest / evidenceへ対応し、余剰Taskがないか
+- [ ] 区分B/Cで入口→sinkとsink→全callerの固定inventory、適用可能な`TR-*`があるか
+- [ ] 区分Cでsensitive sink、禁止副作用、独立監査の要否が明記されているか
 - [ ] 調査タスクに終了条件があるか
 - [ ] Future Work / Follow-up Tasks が乱発されていないか
 - [ ] Optional項目は最大3件か

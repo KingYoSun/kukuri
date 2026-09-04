@@ -34,6 +34,13 @@
 - targeted rerun は `cargo xtask rust-check|rust-test|tauri-check|desktop-lint|desktop-test|desktop-storybook|desktop-browser-test`
 - 新 feature 着手前に `docs/adr/0002-feature-data-classification-template.md` を埋める。
 
+## Development process
+
+- Issueの起票、scope固定、計画、実装、PR、独立監査、Close/Reopen: `docs/runbooks/issue-lifecycle.md`
+- 実装計画の有限化と必須形式: root `PLANS.md`
+- path別validationとリファクタリング境界: root `REFACTORING.md`
+- GitHub Issue / PRは追跡面であり、仕様・実装・tests / scenariosの代わりとなるSSoTではない。
+
 ## Ops
 - Dome Hosting の有効化・割当・終了・split-brain復旧: `docs/runbooks/dome-hosting.md`
 - Dome prop、layout commit、manifest/asset保持: `docs/adr/0040-dome-prop-layout-retention.md`
