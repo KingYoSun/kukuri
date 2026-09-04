@@ -3,6 +3,7 @@
 use std::{
     fs,
     io::{BufRead, BufReader},
+    os::unix::ffi::OsStrExt,
     os::unix::{fs::PermissionsExt, net::UnixStream},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
@@ -83,16 +84,25 @@ fn spawn_custom_daemon(root: &Path, app_data_dir: &Path) -> Child {
 }
 
 fn socket_path(root: &Path, profile: &str) -> PathBuf {
+    let app_data_dir = root
+        .join("data")
+        .join("kukuri")
+        .join("cli")
+        .join("profiles")
+        .join(profile);
+    socket_path_for_data_dir(root, &app_data_dir)
+}
+
+fn socket_path_for_data_dir(root: &Path, app_data_dir: &Path) -> PathBuf {
+    let canonical = fs::canonicalize(app_data_dir).expect("canonical profile path");
+    let digest = blake3::hash(canonical.as_os_str().as_bytes()).to_hex();
     root.join("runtime")
         .join("kukuri")
-        .join(format!("{profile}.sock"))
+        .join(format!("profile-{}.sock", &digest[..32]))
 }
 
 fn custom_socket_path(root: &Path, app_data_dir: &Path) -> PathBuf {
-    let app_data_dir = app_data_dir.to_str().expect("UTF-8 app data path");
-    let profile = resolve_cli_profile(None, None, Some(app_data_dir), None, None)
-        .expect("resolve custom profile");
-    socket_path(root, &profile.name)
+    socket_path_for_data_dir(root, app_data_dir)
 }
 
 fn wait_for_ready(child: &mut Child, path: &Path) {
@@ -250,4 +260,49 @@ fn custom_app_data_daemons_use_distinct_sockets() {
     terminate(second);
     assert!(!first_socket.exists());
     assert!(!second_socket.exists());
+}
+
+#[test]
+fn custom_and_same_named_profile_use_distinct_sockets() {
+    let root = tempfile::tempdir().expect("tempdir");
+    fs::create_dir_all(root.path().join("runtime")).expect("runtime root");
+    fs::create_dir_all(root.path().join("home")).expect("home");
+    let custom_data = root.path().join("custom");
+    accept_custom_consent(root.path(), &custom_data);
+    let custom_data_text = custom_data.to_str().expect("UTF-8 custom data path");
+    let custom_profile = resolve_cli_profile(None, None, Some(custom_data_text), None, None)
+        .expect("resolve custom profile");
+    accept_consent(root.path(), &custom_profile.name);
+
+    let custom_socket = custom_socket_path(root.path(), &custom_data);
+    let named_socket = socket_path(root.path(), &custom_profile.name);
+    assert_ne!(custom_socket, named_socket);
+
+    let mut custom = spawn_custom_daemon(root.path(), &custom_data);
+    wait_for_ready(&mut custom, &custom_socket);
+    let mut named = spawn_daemon(root.path(), &custom_profile.name);
+    wait_for_ready(&mut named, &named_socket);
+
+    terminate(custom);
+    assert!(named_socket.exists());
+    UnixStream::connect(&named_socket).expect("named daemon remains reachable");
+    terminate(named);
+    assert!(!custom_socket.exists());
+    assert!(!named_socket.exists());
+}
+
+#[test]
+fn custom_app_data_rejects_systemd_actions() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let output = custom_cli_command(root.path(), &root.path().join("custom"))
+        .args(["daemon", "status"])
+        .output()
+        .expect("custom daemon status");
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("custom_profile_systemd_unsupported"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }

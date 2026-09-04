@@ -3185,6 +3185,7 @@ name = "kukuri-cli"
 version = "0.1.8"
 dependencies = [
  "anyhow",
+ "blake3",
  "clap",
  "kukuri-desktop-runtime",
  "libc",

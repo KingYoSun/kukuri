@@ -94,6 +94,8 @@ async fn drain_connection(mut stream: UnixStream) {
 }
 
 fn daemon_socket_path(lease: &ProfileLease) -> Result<PathBuf, CliError> {
+    use std::os::unix::ffi::OsStrExt;
+
     let runtime_root = std::env::var_os("XDG_RUNTIME_DIR")
         .map(PathBuf::from)
         .ok_or_else(|| {
@@ -105,7 +107,18 @@ fn daemon_socket_path(lease: &ProfileLease) -> Result<PathBuf, CliError> {
         })?;
     let directory = runtime_root.join("kukuri");
     ensure_private_runtime_directory(&directory)?;
-    Ok(directory.join(format!("{}.sock", lease.profile().name)))
+    let profile_path = std::fs::canonicalize(&lease.profile().app_data_dir).map_err(|error| {
+        CliError::new(
+            "profile_path_unavailable",
+            format!(
+                "failed to resolve profile directory `{}`: {error}",
+                lease.profile().app_data_dir.display()
+            ),
+            1,
+        )
+    })?;
+    let digest = blake3::hash(profile_path.as_os_str().as_bytes()).to_hex();
+    Ok(directory.join(format!("profile-{}.sock", &digest[..32])))
 }
 
 fn ensure_private_runtime_directory(path: &Path) -> Result<(), CliError> {

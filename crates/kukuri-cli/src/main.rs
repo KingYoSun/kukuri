@@ -77,10 +77,13 @@ fn main() {
 
 fn run() -> Result<(), CliError> {
     let cli = Cli::parse();
+    let custom_app_data_selected = std::env::var("KUKURI_APP_DATA_DIR")
+        .ok()
+        .is_some_and(|value| !value.trim().is_empty());
     let profile = resolve_profile(cli.profile.as_deref()).map_err(CliError::from_profile)?;
     match cli.command {
         Command::Consent(args) => run_consent(profile, args.command),
-        Command::Daemon(args) => run_daemon(profile, args.command),
+        Command::Daemon(args) => run_daemon(profile, args.command, custom_app_data_selected),
     }
 }
 
@@ -169,7 +172,15 @@ fn accept_consents(path: &Path, args: ConsentAcceptArgs) -> Result<(), CliError>
 fn run_daemon(
     profile: kukuri_desktop_runtime::ClientProfile,
     command: DaemonCommand,
+    custom_app_data_selected: bool,
 ) -> Result<(), CliError> {
+    if custom_app_data_selected && !matches!(&command, DaemonCommand::Run) {
+        return Err(CliError::new(
+            "custom_profile_systemd_unsupported",
+            "KUKURI_APP_DATA_DIR can be used only with `daemon run`; systemd actions require a named profile",
+            2,
+        ));
+    }
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -181,6 +192,7 @@ fn run_daemon(
 fn run_daemon(
     _profile: kukuri_desktop_runtime::ClientProfile,
     _command: DaemonCommand,
+    _custom_app_data_selected: bool,
 ) -> Result<(), CliError> {
     Err(CliError::new(
         "unsupported_platform",

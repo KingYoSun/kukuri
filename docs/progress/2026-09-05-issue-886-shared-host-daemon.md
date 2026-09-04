@@ -7,7 +7,7 @@ Scope revisionは`2026-09-04-issue-886-shared-host-daemon-v1`。公開command pr
 ## 実装結果
 
 - `kukuri-desktop-runtime::ClientHost`をGUIと常駐プロセスのruntime ownerとし、同意／年齢gate、account初期化、既定Community Node、scheduler、observer、account switch、runtime event、shutdownを共通化した。
-- GUI／CLI kind markerとprofile leaseを永続state読取り前に取得する。CLI profile pathは`$XDG_DATA_HOME`または`$HOME/.local/share`配下へ分離し、同profileの二重owner、selector競合、kind不一致、未分類legacy directoryを型付きerrorで拒否する。`KUKURI_APP_DATA_DIR`単独指定ではpath digestからsocket用profile名を導出し、異なるdirectoryのlocal socketを分離する。
+- GUI／CLI kind markerとprofile leaseを永続state読取り前に取得する。CLI profile pathは`$XDG_DATA_HOME`または`$HOME/.local/share`配下へ分離し、同profileの二重owner、selector競合、kind不一致、未分類legacy directoryを型付きerrorで拒否する。local socket名はcanonicalなprofile directoryのdigestから導出し、named／customを含む異なるdirectory間で名前空間を分離する。
 - `kukuri-cli daemon run|start|stop|status`とsystemd user instance unitを追加した。foreground daemonは`$XDG_RUNTIME_DIR`だけを使用し、runtime directory 0700、socket 0600、peer UID一致を要求し、TCP listenerを作らない。
 - 同意未成立時はprofile leaseとlocal socket以外を開始しない。同意成立後だけ共通hostを構築する。Secret Serviceを利用できない新規profileは既存の0600 file fallbackを使用できる。
 - account別のversion付き`kukuri.subscriptions.json`をatomic writeし、topic／channelの購読期待状態をhost起動とaccount切替時に復元する。破損、未知version、永続化失敗、購読再開失敗は型付きerrorとする。
@@ -32,4 +32,4 @@ Scope revisionは`2026-09-04-issue-886-shared-host-daemon-v1`。公開command pr
 
 ## Validation
 
-ローカルでは`cargo xtask check`、`cargo xtask test`（`rust-test`を含む）、`cargo xtask tauri-check`、`cargo xtask e2e-smoke`、`community_node_public_connectivity`、`desktop_device_backup_restore`、`cargo xtask oversized-files`、`git diff --check`がPASSした。Linuxでは`cargo test -p kukuri-cli`を実行し、同意済みruntimeのprocess testを含む7件がPASSした。PR headでは独立監査により固定inventory、transition、sensitive sink callerを再構築し、GitHub CIと併せて最終判定する。
+ローカルでは`cargo xtask check`、`cargo xtask test`（`rust-test`を含む）、`cargo xtask tauri-check`、`cargo xtask e2e-smoke`、`community_node_public_connectivity`、`desktop_device_backup_restore`、`cargo xtask oversized-files`、`git diff --check`がPASSした。Linuxでは`cargo test -p kukuri-cli`を実行し、同意済みruntimeのprocess testを含む9件がPASSした。PR headでは独立監査により固定inventory、transition、sensitive sink callerを再構築し、GitHub CIと併せて最終判定する。
