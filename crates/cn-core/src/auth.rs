@@ -8,9 +8,6 @@ use sqlx::Row;
 use sqlx::postgres::PgPool;
 
 use crate::admission::{AdmissionMode, evaluate_admission};
-use crate::bootstrap::{
-    prune_expired_bootstrap_peer_registrations, upsert_bootstrap_peer_registration,
-};
 use crate::config::{
     AUTH_CHALLENGE_TTL_SECONDS, AUTH_EVENT_MAX_SKEW_SECONDS, JWT_CRYPTO_PROVIDER_INIT, JwtConfig,
 };
@@ -71,14 +68,12 @@ where
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 pub async fn verify_auth_envelope_and_issue_token(
     pool: &PgPool,
     jwt_config: &JwtConfig,
     public_base_url: &str,
     auth_envelope_json: &Value,
     endpoint_id: Option<&str>,
-    addr_hint: Option<&str>,
     admission_mode: AdmissionMode,
     invite_code: Option<&str>,
 ) -> Result<AuthVerifyResponse> {
@@ -120,12 +115,12 @@ pub async fn verify_auth_envelope_and_issue_token(
     if normalized_pubkey != stored_pubkey {
         bail!("pubkey mismatch");
     }
-    let registered_endpoint = endpoint_id
-        .map(|value| CommunityNodeSeedPeer::new(value, addr_hint.map(str::to_string)))
-        .transpose()?;
+    let bound_endpoint_id = endpoint_id
+        .map(|value| CommunityNodeSeedPeer::new(value, None))
+        .transpose()?
+        .map(|seed_peer| seed_peer.endpoint_id);
 
     let mut tx = pool.begin().await?;
-    prune_expired_bootstrap_peer_registrations(&mut *tx).await?;
     // admission を challenge / invite 消費の前に評価する。拒否時は tx を rollback し、
     // challenge も invite も消費しない（無効な試行で消費させない）。invite redeem が成功した
     // 場合は subscriber 作成・challenge 消費と同一 tx でコミットされ原子性を保つ。
@@ -145,18 +140,12 @@ pub async fn verify_auth_envelope_and_issue_token(
     .execute(&mut *tx)
     .await?;
     ensure_active_subscriber(&mut *tx, normalized_pubkey.as_str()).await?;
-    if let Some(seed_peer) = registered_endpoint.as_ref() {
-        upsert_bootstrap_peer_registration(&mut *tx, normalized_pubkey.as_str(), seed_peer, now)
-            .await?;
-    }
     tx.commit().await?;
 
     let (access_token, expires_at) = issue_access_token(
         jwt_config,
         normalized_pubkey.as_str(),
-        registered_endpoint
-            .as_ref()
-            .map(|seed_peer| seed_peer.endpoint_id.as_str()),
+        bound_endpoint_id.as_deref(),
     )?;
     Ok(AuthVerifyResponse {
         access_token,

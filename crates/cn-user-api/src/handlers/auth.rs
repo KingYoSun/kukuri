@@ -47,7 +47,6 @@ pub(crate) async fn auth_verify(
         state.self_node.resolved_urls.public_base_url.as_str(),
         &request.auth_envelope_json,
         request.endpoint_id.as_deref(),
-        request.addr_hint.as_deref(),
         admission_config.mode,
         request.invite_code.as_deref(),
     )

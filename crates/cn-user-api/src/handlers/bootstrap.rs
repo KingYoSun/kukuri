@@ -51,6 +51,7 @@ pub(crate) async fn bootstrap_heartbeat(
     Json(request): Json<BootstrapHeartbeatRequest>,
 ) -> ApiResult<Json<BootstrapHeartbeatResponse>> {
     let identity = require_bearer_identity(&state.pool, &state.jwt_config, &headers).await?;
+    let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
     if let Some(bound_endpoint_id) = identity.endpoint_id.as_deref()
         && bound_endpoint_id != request.endpoint_id
     {
