@@ -1,4 +1,4 @@
-use std::{io::Write, path::Path};
+use std::path::Path;
 
 use kukuri_desktop_runtime::{
     DeviceBackupCancellation, DeviceRestorePhase, finalize_pending_device_restore,
@@ -223,18 +223,18 @@ pub(crate) async fn publish_desktop_state(
     next: DesktopState,
 ) -> Result<(), String> {
     if let Some(existing) = app_handle.try_state::<DesktopState>() {
-        let previous = existing.replace_runtime(next.runtime());
+        let previous = existing.replace_host(next.host());
         drop(existing);
         drop(next);
         previous.shutdown().await;
         return Ok(());
     }
 
-    let runtime = next.runtime();
+    let host = next.host();
     if app_handle.manage(next) {
         Ok(())
     } else {
-        runtime.shutdown().await;
+        host.shutdown().await;
         Err("desktop runtime state was initialized concurrently".to_string())
     }
 }
@@ -253,13 +253,13 @@ pub(crate) async fn activate_pending_restore(
     app_data_dir: &Path,
     restored: DesktopState,
 ) -> Result<(), RestoreActivationFailure> {
-    let runtime = restored.runtime();
+    let host = restored.host();
     if let Err(failure) = persist_restore_activation_phase(app_data_dir) {
-        runtime.shutdown().await;
+        host.shutdown().await;
         return Err(failure);
     }
     if let Err(error) = finalize_pending_device_restore(app_data_dir) {
-        runtime.shutdown().await;
+        host.shutdown().await;
         return Err(RestoreActivationFailure::FinishForward(format!(
             "failed to finalize restored runtime activation: {error:#}"
         )));
@@ -291,34 +291,6 @@ pub(crate) async fn rollback_pending_restore_and_rebuild(
         .state::<OsNotificationBackground>()
         .reset_for_account_switch();
     Ok(())
-}
-
-/// 同意fileは破損時も未同意へfail-closedするため、同一fileへの同期writeで十分。
-/// journal phaseはこのfsyncが成功した後にだけ進める。
-pub(crate) fn write_file_durably(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    let mut file = std::fs::OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .open(path)
-        .map_err(|error| {
-            format!(
-                "failed to open consent record `{}`: {error}",
-                path.display()
-            )
-        })?;
-    file.write_all(bytes).map_err(|error| {
-        format!(
-            "failed to write consent record `{}`: {error}",
-            path.display()
-        )
-    })?;
-    file.sync_all().map_err(|error| {
-        format!(
-            "failed to sync consent record `{}`: {error}",
-            path.display()
-        )
-    })
 }
 
 #[cfg(test)]

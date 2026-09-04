@@ -1,221 +1,49 @@
 use std::{
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use kukuri_desktop_runtime::{
-    CommunityNodeConfig, DesktopRuntime, StoreStartupError, ensure_accounts_initialized_from_env,
-    resolve_app_data_dir_from_env, resolve_db_path_from_env,
+    ClientHost, DesktopRuntime, resolve_app_data_dir_from_env, resolve_db_path_from_env,
 };
-use serde::{Deserialize, Serialize};
+pub(crate) use kukuri_desktop_runtime::{
+    AGE_ATTESTATION_VERSION, APP_LEGAL_DOCUMENTS, AgeAttestationRecord, AgeAttestationStatus,
+    AppConsentDocumentRecord, AppConsentDocumentStatus, ClientStartupError as StartupError,
+    ClientStartupState as DesktopStartupState, ClientStartupStatus as DesktopStartupStatus,
+    age_attestation_satisfied, age_attestation_status, app_consent_documents_status,
+    app_consent_satisfied, consent_required_status, current_unix_seconds,
+    failed_startup_status as failed_status, load_app_consent_store, reset_app_consent_at_path,
+    save_app_consent_store,
+};
+#[cfg(test)]
+pub(crate) use kukuri_desktop_runtime::{
+    APP_LEGAL_AUTHORITATIVE_LANGUAGE, APP_LEGAL_EFFECTIVE_DATE, AppConsentStore,
+    ClientStartupErrorKind as DesktopStartupErrorKind, LEGAL_BUNDLE_VERSION,
+    app_consent_documents_satisfied, app_consent_path,
+};
+use serde::Serialize;
 use tauri::{Emitter, Manager};
-use tokio::sync::watch;
 
-/// #859: アカウント切替で runtime を入れ替えられるよう、`manage` 済みの state の
-/// 中で `Arc<DesktopRuntime>` を差し替え可能にする。lock は Arc の clone / 差し替え
-/// だけの短い臨界区間に限定する(runtime の await を跨いで保持しない)。
+/// `manage` 済みのTauri stateでは共有hostの参照だけを保持する。
+/// account runtimeの所有・差し替え・停止は`ClientHost`へ集約し、このlockは
+/// hostのclone / 差し替えだけの短い臨界区間に限定する(awaitを跨がない)。
 pub(crate) struct DesktopState {
-    runtime: std::sync::RwLock<Arc<DesktopRuntime>>,
+    host: std::sync::RwLock<Arc<ClientHost>>,
     pub(crate) app_data_dir: PathBuf,
 }
 
 impl DesktopState {
     pub(crate) fn runtime(&self) -> Arc<DesktopRuntime> {
-        self.runtime.read().expect("runtime lock poisoned").clone()
+        self.host()
+            .runtime()
     }
 
-    pub(crate) fn replace_runtime(&self, next: Arc<DesktopRuntime>) -> Arc<DesktopRuntime> {
-        std::mem::replace(
-            &mut *self.runtime.write().expect("runtime lock poisoned"),
-            next,
-        )
-    }
-}
-
-pub(crate) const LEGAL_BUNDLE_VERSION: i32 = 5;
-pub(crate) const APP_LEGAL_EFFECTIVE_DATE: &str = "2026-09-03";
-pub(crate) const APP_LEGAL_AUTHORITATIVE_LANGUAGE: &str = "ja";
-
-/// 18歳以上の自己申告(#858、ADR 0046)の現行版。文書同意とは独立に管理し、
-/// 申告文言の重要変更時のみ上げて再申告を求める。
-pub(crate) const AGE_ATTESTATION_VERSION: i32 = 1;
-
-/// アプリ同意の対象文書と現行版。同意は bundle 単一フラグではなく文書単位で
-/// 記録する(#857)。現状は全文書が legal bundle 版と同じ版番号を共有しているが、
-/// 記録・判定は slug ごとに独立している。
-pub(crate) const APP_LEGAL_DOCUMENTS: &[(&str, i32)] = &[
-    ("terms", LEGAL_BUNDLE_VERSION),
-    ("privacy", LEGAL_BUNDLE_VERSION),
-];
-
-const APP_CONSENT_FILE_EXTENSION: &str = "app-consent.json";
-
-/// 文書単位のアプリ同意記録(#857)。対象文書 slug・版・日時・同意時の表示言語・
-/// アプリ版を保存する。旧形式(`accepted_bundle_version` の単一フラグ)は
-/// 意図的に読み替えず、未同意として再同意を求める。
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct AppConsentDocumentRecord {
-    pub(crate) slug: String,
-    pub(crate) version: i32,
-    pub(crate) accepted_at: i64,
-    pub(crate) language: String,
-    pub(crate) app_version: String,
-}
-
-/// 18歳以上の自己申告記録(#858)。文書同意とは別の行為として記録する。
-/// 生年月日等は収集せず、申告の事実・版・日時・表示言語・アプリ版のみ保存する。
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct AgeAttestationRecord {
-    pub(crate) version: i32,
-    pub(crate) attested_at: i64,
-    pub(crate) language: String,
-    pub(crate) app_version: String,
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub(crate) struct AppConsentStore {
-    #[serde(default)]
-    pub(crate) records: Vec<AppConsentDocumentRecord>,
-    #[serde(default)]
-    pub(crate) age_attestations: Vec<AgeAttestationRecord>,
-}
-
-/// 文書単位の同意状態ビュー。startup gate と `get_app_consent_status` の両方で使う。
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct AppConsentDocumentStatus {
-    pub(crate) slug: String,
-    pub(crate) current_version: i32,
-    pub(crate) effective_date: String,
-    pub(crate) authoritative_language: String,
-    pub(crate) material_change: bool,
-    pub(crate) controller_name: String,
-    pub(crate) contact: String,
-    pub(crate) accepted_version: Option<i32>,
-    pub(crate) accepted_at: Option<i64>,
-    pub(crate) accepted_language: Option<String>,
-    pub(crate) accepted_app_version: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-struct DistributionLegalMetadata {
-    controller_name: String,
-    contact: String,
-}
-
-/// 年齢自己申告の状態ビュー。文書同意とは別枠で startup gate と
-/// `get_app_consent_status` に載せる。
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct AgeAttestationStatus {
-    pub(crate) current_version: i32,
-    pub(crate) attested_version: Option<i32>,
-    pub(crate) attested_at: Option<i64>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(tag = "status", rename_all = "snake_case")]
-pub(crate) enum DesktopStartupStatus {
-    Initializing,
-    Ready,
-    ConsentRequired {
-        documents: Vec<AppConsentDocumentStatus>,
-        age_attestation: AgeAttestationStatus,
-    },
-    Failed {
-        error: DesktopStartupErrorView,
-    },
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub(crate) struct DesktopStartupErrorView {
-    pub(crate) kind: DesktopStartupErrorKind,
-    pub(crate) message: String,
-    pub(crate) detail: String,
-    pub(crate) db_path: Option<String>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum DesktopStartupErrorKind {
-    DatabaseOpen,
-    DatabaseMigration,
-    Unknown,
-}
-
-/// 起動失敗の内部表現。分類済みの `kind` と表示用 `message` を持ち、`build_desktop_state`
-/// の Err として src-tauri 内を流れる。`kind` は anyhow エラーの typed downcast で
-/// 決まる(WP-Q2、従来の文字列 contains 判定を置換)。
-#[derive(Debug)]
-pub(crate) struct StartupError {
-    pub(crate) kind: DesktopStartupErrorKind,
-    pub(crate) message: String,
-}
-
-impl StartupError {
-    /// 分類できない起動失敗(db パス解決失敗など)。
-    pub(crate) fn unknown(message: String) -> Self {
-        Self {
-            kind: DesktopStartupErrorKind::Unknown,
-            message,
-        }
+    pub(crate) fn host(&self) -> Arc<ClientHost> {
+        self.host.read().expect("host lock poisoned").clone()
     }
 
-    fn unknown_from(error: anyhow::Error) -> Self {
-        Self::unknown(error_message(error))
-    }
-
-    /// runtime 構築時の anyhow エラーを typed 分類して包む。
-    fn from_runtime_error(error: anyhow::Error) -> Self {
-        Self {
-            kind: classify_startup_error(&error),
-            message: error_message(error),
-        }
-    }
-}
-
-impl std::fmt::Display for StartupError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.message)
-    }
-}
-
-pub(crate) struct DesktopStartupState {
-    status: watch::Sender<DesktopStartupStatus>,
-}
-
-impl DesktopStartupState {
-    pub(crate) fn initializing() -> Self {
-        Self::new(DesktopStartupStatus::Initializing)
-    }
-
-    fn new(status: DesktopStartupStatus) -> Self {
-        let (status, _) = watch::channel(status);
-        Self { status }
-    }
-
-    pub(crate) fn status(&self) -> DesktopStartupStatus {
-        self.status.borrow().clone()
-    }
-
-    pub(crate) fn set_status(&self, next: DesktopStartupStatus) {
-        self.status.send_replace(next);
-    }
-
-    pub(crate) fn subscribe(&self) -> watch::Receiver<DesktopStartupStatus> {
-        self.status.subscribe()
-    }
-}
-
-pub(crate) fn failed_status(error: StartupError, db_path: Option<PathBuf>) -> DesktopStartupStatus {
-    DesktopStartupStatus::Failed {
-        error: DesktopStartupErrorView {
-            kind: error.kind,
-            message: "kukuri could not open the local app database.".to_string(),
-            detail: error.message,
-            db_path: db_path.map(|path| path.display().to_string()),
-        },
+    pub(crate) fn replace_host(&self, next: Arc<ClientHost>) -> Arc<ClientHost> {
+        std::mem::replace(&mut *self.host.write().expect("host lock poisoned"), next)
     }
 }
 
@@ -367,49 +195,45 @@ pub(crate) async fn build_desktop_state(
     app_handle: &tauri::AppHandle,
 ) -> Result<DesktopState, StartupError> {
     let app_data_dir = resolve_app_data_dir(app_handle).map_err(StartupError::unknown)?;
-    let db_path =
-        ensure_accounts_initialized_from_env(&app_data_dir).map_err(StartupError::unknown_from)?;
-    let runtime = build_runtime(app_handle, db_path).await?;
+    let host = ClientHost::start(app_data_dir.clone())
+        .await?;
+    spawn_runtime_event_bridge(app_handle, &host);
 
     Ok(DesktopState {
-        runtime: std::sync::RwLock::new(runtime),
+        host: std::sync::RwLock::new(host),
         app_data_dir,
     })
 }
 
-/// runtime をひとつ構築し、常駐タスク(CN セッション維持・イベントブリッジ・
-/// sync 監視)まで起動して返す。初回起動とアカウント切替の両方で使う。
+/// backup／restore中に一時停止したruntimeの後継を構築する。
+/// 常駐タスクは`ClientHost::replace_runtime`がevent購読順序を保って開始する。
 pub(crate) async fn build_runtime(
-    app_handle: &tauri::AppHandle,
     db_path: PathBuf,
 ) -> Result<Arc<DesktopRuntime>, StartupError> {
-    // 配布 Node はアカウントごとの runtime 初回構築時だけ候補として渡す。
-    // 保存済み設定(空・置換済みを含む)の優先判定は DesktopRuntime が担う。
-    let initial_community_node_config = distribution_community_node_config()
-        .map_err(|error| StartupError::unknown(error.to_string()))?;
-    let runtime = DesktopRuntime::from_env(db_path, initial_community_node_config)
+    ClientHost::build_detached_runtime(db_path)
         .await
-        .map_err(StartupError::from_runtime_error)?;
-    let runtime = Arc::new(runtime);
-    // トレイ常駐中はフロントのポーリング(hidden で停止)が CN セッションを維持できないため、
-    // runtime 常駐のセッション維持スケジューラをここで起動する(停止は shutdown / プロセス終了)。
-    runtime.start_community_node_session_scheduler().await;
-
-    spawn_runtime_event_bridge(app_handle, &runtime);
-    runtime.start_sync_status_observer().await;
-    Ok(runtime)
 }
 
-fn distribution_community_node_config() -> Result<CommunityNodeConfig, serde_json::Error> {
-    serde_json::from_str(include_str!("../distribution/community-nodes.json"))
+#[cfg(test)]
+fn distribution_community_node_config(
+) -> Result<kukuri_desktop_runtime::CommunityNodeConfig, serde_json::Error> {
+    kukuri_desktop_runtime::distribution_community_node_config()
 }
 
+#[cfg(test)]
+#[derive(serde::Deserialize)]
+struct DistributionLegalMetadata {
+    controller_name: String,
+    contact: String,
+}
+
+#[cfg(test)]
 fn distribution_legal_metadata() -> Result<DistributionLegalMetadata, serde_json::Error> {
     serde_json::from_str(include_str!("../distribution/legal.json"))
 }
 
-fn spawn_runtime_event_bridge(app_handle: &tauri::AppHandle, runtime: &Arc<DesktopRuntime>) {
-    let mut rx = runtime.subscribe_events();
+fn spawn_runtime_event_bridge(app_handle: &tauri::AppHandle, host: &Arc<ClientHost>) {
+    let mut rx = host.subscribe_events();
     let app = app_handle.clone();
     tauri::async_runtime::spawn(async move {
         while let Ok(event) = rx.recv().await {
@@ -418,144 +242,11 @@ fn spawn_runtime_event_bridge(app_handle: &tauri::AppHandle, runtime: &Arc<Deskt
     });
 }
 
-fn app_consent_path(db_path: &Path) -> PathBuf {
-    db_path.with_extension(APP_CONSENT_FILE_EXTENSION)
-}
-
-/// 同意記録ファイルを読む。ファイル欠落・破損・旧形式(bundle 単一フラグ)は
-/// いずれも空の store(= 全文書未同意)として扱う。
-pub(crate) fn load_app_consent_store(db_path: &Path) -> AppConsentStore {
-    let Ok(bytes) = std::fs::read(app_consent_path(db_path)) else {
-        return AppConsentStore::default();
-    };
-    serde_json::from_slice(&bytes).unwrap_or_default()
-}
-
-pub(crate) fn save_app_consent_store(
-    db_path: &Path,
-    store: &AppConsentStore,
-) -> Result<(), String> {
-    let path = app_consent_path(db_path);
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|error| format!("failed to create consent dir: {error}"))?;
-    }
-    let bytes = serde_json::to_vec_pretty(store)
-        .map_err(|error| format!("failed to encode consent record: {error}"))?;
-    crate::restore_lifecycle::write_file_durably(&path, &bytes)
-}
-
 pub(crate) fn reset_app_consent_after_device_restore(
     app_handle: &tauri::AppHandle,
 ) -> Result<DesktopStartupStatus, String> {
     let db_path = resolve_db_path(app_handle)?;
     reset_app_consent_at_path(&db_path)
-}
-
-pub(crate) fn reset_app_consent_at_path(db_path: &Path) -> Result<DesktopStartupStatus, String> {
-    let store = AppConsentStore::default();
-    save_app_consent_store(db_path, &store)?;
-    Ok(consent_required_status(&store))
-}
-
-pub(crate) fn consent_required_status(store: &AppConsentStore) -> DesktopStartupStatus {
-    DesktopStartupStatus::ConsentRequired {
-        documents: app_consent_documents_status(store),
-        age_attestation: age_attestation_status(store),
-    }
-}
-
-/// slug ごとの最新同意記録(版が最大のもの。同版なら日時が新しいもの)。
-fn latest_app_consent_record<'a>(
-    store: &'a AppConsentStore,
-    slug: &str,
-) -> Option<&'a AppConsentDocumentRecord> {
-    store
-        .records
-        .iter()
-        .filter(|record| record.slug == slug)
-        .max_by_key(|record| (record.version, record.accepted_at))
-}
-
-pub(crate) fn app_consent_documents_status(
-    store: &AppConsentStore,
-) -> Vec<AppConsentDocumentStatus> {
-    let legal = distribution_legal_metadata().expect("distribution legal metadata must be valid");
-    APP_LEGAL_DOCUMENTS
-        .iter()
-        .map(|(slug, current_version)| {
-            let latest = latest_app_consent_record(store, slug);
-            AppConsentDocumentStatus {
-                slug: (*slug).to_string(),
-                current_version: *current_version,
-                effective_date: APP_LEGAL_EFFECTIVE_DATE.to_string(),
-                authoritative_language: APP_LEGAL_AUTHORITATIVE_LANGUAGE.to_string(),
-                material_change: true,
-                controller_name: legal.controller_name.clone(),
-                contact: legal.contact.clone(),
-                accepted_version: latest.map(|record| record.version),
-                accepted_at: latest.map(|record| record.accepted_at),
-                accepted_language: latest.map(|record| record.language.clone()),
-                accepted_app_version: latest.map(|record| record.app_version.clone()),
-            }
-        })
-        .collect()
-}
-
-/// 全対象文書について現行版以上の同意記録があるか。
-pub(crate) fn app_consent_documents_satisfied(store: &AppConsentStore) -> bool {
-    APP_LEGAL_DOCUMENTS.iter().all(|(slug, current_version)| {
-        latest_app_consent_record(store, slug)
-            .map(|record| record.version >= *current_version)
-            .unwrap_or(false)
-    })
-}
-
-/// 現行版以上の年齢自己申告記録があるか(#858)。文書同意とは独立に判定する。
-pub(crate) fn age_attestation_satisfied(store: &AppConsentStore) -> bool {
-    latest_age_attestation_record(store)
-        .map(|record| record.version >= AGE_ATTESTATION_VERSION)
-        .unwrap_or(false)
-}
-
-fn latest_age_attestation_record(store: &AppConsentStore) -> Option<&AgeAttestationRecord> {
-    store
-        .age_attestations
-        .iter()
-        .max_by_key(|record| (record.version, record.attested_at))
-}
-
-pub(crate) fn age_attestation_status(store: &AppConsentStore) -> AgeAttestationStatus {
-    let latest = latest_age_attestation_record(store);
-    AgeAttestationStatus {
-        current_version: AGE_ATTESTATION_VERSION,
-        attested_version: latest.map(|record| record.version),
-        attested_at: latest.map(|record| record.attested_at),
-    }
-}
-
-/// 起動 gate の総合判定: 全文書同意 + 年齢自己申告が揃っているか。
-pub(crate) fn app_consent_satisfied(store: &AppConsentStore) -> bool {
-    app_consent_documents_satisfied(store) && age_attestation_satisfied(store)
-}
-
-pub(crate) fn current_unix_seconds() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs() as i64)
-        .unwrap_or(0)
-}
-
-/// 起動時の anyhow エラーを typed に分類する(WP-Q2)。store が返す
-/// `StoreStartupError`(接続 / migration を区別)を downcast で判定する。
-/// anyhow の downcast は `.context()` を跨いでチェーンを辿るため、途中で文脈が
-/// 付与されても root の typed variant に到達する。store 由来でないエラーは Unknown。
-fn classify_startup_error(error: &anyhow::Error) -> DesktopStartupErrorKind {
-    match error.downcast_ref::<StoreStartupError>() {
-        Some(StoreStartupError::Migration(_)) => DesktopStartupErrorKind::DatabaseMigration,
-        Some(StoreStartupError::Open { .. }) => DesktopStartupErrorKind::DatabaseOpen,
-        None => DesktopStartupErrorKind::Unknown,
-    }
 }
 
 #[cfg(test)]
@@ -772,7 +463,7 @@ mod tests {
         std::fs::create_dir_all(&dir).expect("create temp dir");
         let db_path = dir.join("kukuri.db");
         std::fs::write(
-            db_path.with_extension(APP_CONSENT_FILE_EXTENSION),
+            app_consent_path(&db_path),
             r#"{"accepted_bundle_version":2,"accepted_at":1700000000}"#,
         )
         .expect("write legacy consent file");
@@ -966,12 +657,9 @@ mod tests {
             "migration-like wording in an unrelated failure",
             "failed to connect sqlite database (but not a StoreStartupError)",
         ] {
-            let error = anyhow::anyhow!(message);
+            let error = StartupError::from_error(anyhow::anyhow!(message));
             assert!(
-                matches!(
-                    classify_startup_error(&error),
-                    DesktopStartupErrorKind::Unknown
-                ),
+                matches!(error.kind, DesktopStartupErrorKind::Unknown),
                 "non-store error must classify as Unknown regardless of message: {message}"
             );
         }

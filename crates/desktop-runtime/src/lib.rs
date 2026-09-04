@@ -3,6 +3,7 @@ mod attachments;
 mod backup;
 mod community_node;
 mod discovery;
+mod host;
 mod identity;
 #[cfg(feature = "ts")]
 mod ipc_ts_export;
@@ -51,6 +52,17 @@ pub use community_node::{
     SubmitCommunityNodeReportStatus, SubmitIndexingRequestResponse, TrustUserReadResponse,
 };
 pub use discovery::{DiscoveryConfig, SetDiscoverySeedsRequest};
+pub use host::{
+    AGE_ATTESTATION_VERSION, APP_LEGAL_AUTHORITATIVE_LANGUAGE, APP_LEGAL_DOCUMENTS,
+    APP_LEGAL_EFFECTIVE_DATE, AgeAttestationRecord, AgeAttestationStatus, AppConsentDocumentRecord,
+    AppConsentDocumentStatus, AppConsentStore, ClientEventReceiver, ClientHost, ClientStartupError,
+    ClientStartupErrorKind, ClientStartupErrorView, ClientStartupState, ClientStartupStatus,
+    LEGAL_BUNDLE_VERSION, age_attestation_satisfied, age_attestation_status,
+    app_consent_documents_satisfied, app_consent_documents_status, app_consent_path,
+    app_consent_satisfied, consent_required_status, current_unix_seconds,
+    distribution_community_node_config, failed_startup_status, load_app_consent_store,
+    reset_app_consent_at_path, save_app_consent_store,
+};
 // 起動エラーの typed 分類(WP-Q2)。src-tauri は downcast で DatabaseOpen/Migration を判定する。
 pub use kukuri_store::StoreStartupError;
 pub use paths::{resolve_app_data_dir_from_env, resolve_db_path_from_env};
