@@ -16,7 +16,7 @@ use super::{
     FRONTEND_STATE_MAX_BYTES, SECRETS_ENTRY, active_account_for_db, collect_secret_bundle,
     ensure_backup_path_outside_app_data,
 };
-use crate::paths::DB_FILE_NAME;
+use crate::{IDEMPOTENCY_LEDGER_FILE_NAME, idempotency_ledger_path, paths::DB_FILE_NAME};
 
 const IROH_ENDPOINT_SECRET_FILE: &str = "endpoint-secret.json";
 
@@ -69,6 +69,9 @@ where
         FRONTEND_STATE_ENTRY.to_string(),
         EntrySource::Bytes(frontend_bytes),
     ));
+    let includes_idempotency_ledger = raw_sources
+        .iter()
+        .any(|(name, _)| name == "file/kukuri.idempotency.sqlite3");
     let total_bytes = raw_sources.iter().try_fold(0u64, |total, (_, source)| {
         let bytes = source_len(source)?;
         let total = total
@@ -102,6 +105,18 @@ where
         });
     }
 
+    let mut included = vec![
+        "account_key".to_string(),
+        "sqlite".to_string(),
+        "local_docs_and_blobs".to_string(),
+        "private_channel_state".to_string(),
+        "drafts_and_preferences".to_string(),
+        "community_node_configuration".to_string(),
+        "desired_subscriptions".to_string(),
+    ];
+    if includes_idempotency_ledger {
+        included.push("idempotency_ledger".to_string());
+    }
     let manifest = DeviceBackupManifestV1 {
         format_version: DEVICE_BACKUP_FORMAT_VERSION,
         component_version: DEVICE_BACKUP_COMPONENT_VERSION,
@@ -109,15 +124,7 @@ where
         app_version: env!("CARGO_PKG_VERSION").to_string(),
         public_key: account.pubkey.clone(),
         account_label: account.label.clone(),
-        included: vec![
-            "account_key".to_string(),
-            "sqlite".to_string(),
-            "local_docs_and_blobs".to_string(),
-            "private_channel_state".to_string(),
-            "drafts_and_preferences".to_string(),
-            "community_node_configuration".to_string(),
-            "desired_subscriptions".to_string(),
-        ],
+        included,
         requires_reconsent: vec![
             "app_legal_documents".to_string(),
             "age_attestation".to_string(),
@@ -214,6 +221,14 @@ fn account_file_sources(db_path: &Path) -> Result<Vec<(String, EntrySource)>> {
                 .ok_or_else(|| anyhow!("invalid account state filename"))?;
             add_file_source(&mut sources, &path, Path::new(name))?;
         }
+    }
+    let idempotency_path = idempotency_ledger_path(db_path);
+    if idempotency_path.is_file() {
+        add_file_source(
+            &mut sources,
+            &idempotency_path,
+            Path::new(IDEMPOTENCY_LEDGER_FILE_NAME),
+        )?;
     }
     let iroh_root = db_path.with_extension("iroh-data");
     if iroh_root.exists() {

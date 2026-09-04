@@ -308,6 +308,15 @@ pub async fn validate_prepared_device_restore(prepared: &PreparedDeviceRestore) 
     let _ = load_community_node_config_from_file(&db_path)?;
     let _ = load_discovery_config_from_file(&db_path)?;
     validate_persisted_runtime_state(&db_path, identity_mode)?;
+    // 古いbackupや台帳欠落backupでも、復元前に発行済みだったkeyは再実行しない。
+    let ledger = crate::IdempotencyLedger::open(&db_path)
+        .await
+        .context("restored idempotency ledger is invalid")?;
+    ledger
+        .mark_restored(chrono::Utc::now().timestamp_millis())
+        .await
+        .context("failed to mark restored idempotency history")?;
+    ledger.close().await;
     Ok(())
 }
 

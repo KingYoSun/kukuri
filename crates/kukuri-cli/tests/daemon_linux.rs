@@ -2,7 +2,7 @@
 
 use std::{
     fs,
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Write},
     os::unix::ffi::OsStrExt,
     os::unix::{fs::PermissionsExt, net::UnixStream},
     path::{Path, PathBuf},
@@ -106,10 +106,10 @@ fn custom_socket_path(root: &Path, app_data_dir: &Path) -> PathBuf {
 }
 
 fn wait_for_ready(child: &mut Child, path: &Path) {
-    let stdout = child.stdout.take().expect("daemon stdout");
+    let stderr = child.stderr.take().expect("daemon stderr");
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
-        let mut reader = BufReader::new(stdout);
+        let mut reader = BufReader::new(stderr);
         let mut line = String::new();
         let result = reader.read_line(&mut line).map(|_| line);
         let _ = sender.send(result);
@@ -128,6 +128,14 @@ fn wait_for_ready(child: &mut Child, path: &Path) {
         path.display()
     );
     UnixStream::connect(path).expect("connect daemon socket");
+}
+
+fn call(root: &Path, profile: &str, args: &[&str]) -> std::process::Output {
+    cli_command(root, profile)
+        .arg("call")
+        .args(args)
+        .output()
+        .expect("run CLI call")
 }
 
 fn terminate(mut child: Child) {
@@ -305,4 +313,308 @@ fn custom_app_data_rejects_systemd_actions() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
+}
+
+#[test]
+fn protocol_status_registry_and_errors_are_machine_readable() {
+    let root = tempfile::tempdir().expect("tempdir");
+    fs::create_dir_all(root.path().join("runtime")).expect("runtime root");
+    fs::create_dir_all(root.path().join("home")).expect("home");
+
+    let usage = call(root.path(), "alpha", &[]);
+    assert_eq!(usage.status.code(), Some(2));
+    let usage: serde_json::Value =
+        serde_json::from_slice(&usage.stdout).expect("usage error envelope");
+    assert_eq!(usage["error"]["code"], "invalid_request");
+
+    let unavailable = call(root.path(), "alpha", &["client.status"]);
+    assert_eq!(unavailable.status.code(), Some(3));
+    let unavailable: serde_json::Value =
+        serde_json::from_slice(&unavailable.stdout).expect("unavailable envelope");
+    assert_eq!(unavailable["error"]["code"], "daemon_unavailable");
+
+    accept_consent(root.path(), "alpha");
+    let socket = socket_path(root.path(), "alpha");
+    let mut daemon = spawn_daemon(root.path(), "alpha");
+    wait_for_ready(&mut daemon, &socket);
+
+    let status = call(root.path(), "alpha", &["client.status"]);
+    assert!(
+        status.status.success(),
+        "{}",
+        String::from_utf8_lossy(&status.stderr)
+    );
+    assert_eq!(
+        status.stdout.iter().filter(|byte| **byte == b'\n').count(),
+        1
+    );
+    let status: serde_json::Value =
+        serde_json::from_slice(&status.stdout).expect("status envelope");
+    assert_eq!(status["schema_version"], 1);
+    assert_eq!(status["ok"], true);
+    assert_eq!(status["data"]["ready"], true);
+
+    let commands = call(root.path(), "alpha", &["protocol.commands"]);
+    assert!(commands.status.success());
+    let commands: serde_json::Value =
+        serde_json::from_slice(&commands.stdout).expect("commands envelope");
+    assert_eq!(
+        commands["data"]["items"].as_array().expect("items").len(),
+        4
+    );
+
+    let schema = call(root.path(), "alpha", &["protocol.schema"]);
+    assert!(schema.status.success());
+    let schema: serde_json::Value =
+        serde_json::from_slice(&schema.stdout).expect("schema envelope");
+    assert_eq!(
+        schema["data"]["protocol"]["$defs"]["request"]["type"],
+        "object"
+    );
+
+    let invalid_timeout = call(
+        root.path(),
+        "alpha",
+        &["client.status", "--timeout-ms", "0"],
+    );
+    assert_eq!(invalid_timeout.status.code(), Some(2));
+    let invalid_timeout: serde_json::Value =
+        serde_json::from_slice(&invalid_timeout.stdout).expect("timeout envelope");
+    assert_eq!(invalid_timeout["error"]["code"], "validation_failed");
+
+    let mismatch = call(
+        root.path(),
+        "alpha",
+        &["client.status", "--protocol-version", "99"],
+    );
+    assert_eq!(mismatch.status.code(), Some(3));
+    let mismatch: serde_json::Value =
+        serde_json::from_slice(&mismatch.stdout).expect("mismatch envelope");
+    assert_eq!(mismatch["error"]["code"], "protocol_mismatch");
+
+    let timeout = call(
+        root.path(),
+        "alpha",
+        &["events.watch", "--timeout-ms", "200"],
+    );
+    assert_eq!(timeout.status.code(), Some(6));
+    let timeout_line = String::from_utf8_lossy(&timeout.stdout)
+        .lines()
+        .last()
+        .expect("timeout envelope")
+        .to_string();
+    let timeout: serde_json::Value =
+        serde_json::from_str(&timeout_line).expect("parse timeout envelope");
+    assert_eq!(timeout["error"]["code"], "timeout");
+
+    let mut raw = UnixStream::connect(&socket).expect("raw protocol connection");
+    raw.set_read_timeout(Some(Duration::from_secs(1)))
+        .expect("read timeout");
+    writeln!(
+        raw,
+        "{}",
+        serde_json::json!({
+            "protocol_version": 1,
+            "request_id": "preflight-secret",
+            "command": "events.watch",
+            "profile": "alpha",
+            "payload": {},
+            "timeout_ms": 2000,
+            "secret_bytes": 64,
+            "accepts_secret_output": false
+        })
+    )
+    .expect("request header");
+    let mut line = String::new();
+    BufReader::new(raw)
+        .read_line(&mut line)
+        .expect("preflight response before secret body");
+    let preflight: serde_json::Value = serde_json::from_str(&line).expect("preflight envelope");
+    assert_eq!(preflight["error"]["code"], "validation_failed");
+
+    let standard_fd = call(
+        root.path(),
+        "alpha",
+        &["client.status", "--secret-output-fd", "1"],
+    );
+    assert_eq!(standard_fd.status.code(), Some(2));
+    let standard_fd: serde_json::Value =
+        serde_json::from_slice(&standard_fd.stdout).expect("standard FD rejection envelope");
+    assert_eq!(standard_fd["error"]["code"], "validation_failed");
+
+    let input_path = root.path().join("request.json");
+    fs::write(&input_path, b"{}").expect("request file");
+    fs::set_permissions(&input_path, fs::Permissions::from_mode(0o644))
+        .expect("public request permissions");
+    let public_input = call(
+        root.path(),
+        "alpha",
+        &[
+            "client.status",
+            "--input",
+            input_path.to_str().expect("input path"),
+        ],
+    );
+    assert_eq!(public_input.status.code(), Some(2));
+    fs::set_permissions(&input_path, fs::Permissions::from_mode(0o600))
+        .expect("private request permissions");
+    assert!(
+        call(
+            root.path(),
+            "alpha",
+            &[
+                "client.status",
+                "--input",
+                input_path.to_str().expect("input path"),
+            ],
+        )
+        .status
+        .success()
+    );
+
+    terminate(daemon);
+}
+
+#[test]
+fn connection_limit_returns_correlated_backpressure() {
+    let root = tempfile::tempdir().expect("tempdir");
+    fs::create_dir_all(root.path().join("runtime")).expect("runtime root");
+    fs::create_dir_all(root.path().join("home")).expect("home");
+    accept_consent(root.path(), "alpha");
+    let socket = socket_path(root.path(), "alpha");
+    let mut daemon = spawn_daemon(root.path(), "alpha");
+    wait_for_ready(&mut daemon, &socket);
+
+    let stalled = (0..64)
+        .map(|index| {
+            let mut stream = UnixStream::connect(&socket).expect("stalled connection");
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .expect("stalled connection timeout");
+            writeln!(
+                stream,
+                "{}",
+                serde_json::json!({
+                    "protocol_version": 1,
+                    "request_id": format!("stalled-{index}"),
+                    "command": "events.watch",
+                    "profile": "alpha",
+                    "payload": {},
+                    "timeout_ms": 300_000,
+                    "accepts_secret_output": false
+                })
+            )
+            .expect("subscribe stalled connection");
+            let mut response = String::new();
+            BufReader::new(stream.try_clone().expect("clone stalled connection"))
+                .read_line(&mut response)
+                .expect("stalled subscription response");
+            let response: serde_json::Value =
+                serde_json::from_str(&response).expect("stalled subscription envelope");
+            assert_eq!(response["ok"], true);
+            assert_eq!(response["more"], true);
+            stream
+        })
+        .collect::<Vec<_>>();
+    let output = call(
+        root.path(),
+        "alpha",
+        &["client.status", "--timeout-ms", "2000"],
+    );
+    assert_eq!(output.status.code(), Some(6));
+    let response: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("backpressure envelope");
+    assert_eq!(response["error"]["code"], "backpressure");
+
+    drop(stalled);
+    terminate(daemon);
+}
+
+#[test]
+fn event_watch_sigint_returns_a_parseable_interrupted_error() {
+    let root = tempfile::tempdir().expect("tempdir");
+    fs::create_dir_all(root.path().join("runtime")).expect("runtime root");
+    fs::create_dir_all(root.path().join("home")).expect("home");
+    accept_consent(root.path(), "alpha");
+    let socket = socket_path(root.path(), "alpha");
+    let mut daemon = spawn_daemon(root.path(), "alpha");
+    wait_for_ready(&mut daemon, &socket);
+
+    let watcher = cli_command(root.path(), "alpha")
+        .args(["call", "events.watch"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn event watch");
+    thread::sleep(Duration::from_millis(500));
+    let result = unsafe { libc::kill(watcher.id() as i32, libc::SIGINT) };
+    assert_eq!(result, 0, "send SIGINT");
+    let output = watcher.wait_with_output().expect("wait event watch");
+    assert_eq!(output.status.code(), Some(130));
+    let last = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .last()
+        .expect("interrupted envelope")
+        .to_string();
+    let response: serde_json::Value = serde_json::from_str(&last).expect("parse interrupted error");
+    assert_eq!(response["error"]["code"], "interrupted");
+
+    terminate(daemon);
+}
+
+#[test]
+fn secret_input_is_owner_only_and_never_echoed() {
+    let root = tempfile::tempdir().expect("tempdir");
+    fs::create_dir_all(root.path().join("runtime")).expect("runtime root");
+    fs::create_dir_all(root.path().join("home")).expect("home");
+    accept_consent(root.path(), "alpha");
+    let socket = socket_path(root.path(), "alpha");
+    let mut daemon = spawn_daemon(root.path(), "alpha");
+    wait_for_ready(&mut daemon, &socket);
+
+    let sentinel = "do-not-echo-secret-sentinel";
+    let secret_path = root.path().join("secret.txt");
+    fs::write(&secret_path, sentinel).expect("write secret");
+    fs::set_permissions(&secret_path, fs::Permissions::from_mode(0o600)).expect("protect secret");
+    let output = call(
+        root.path(),
+        "alpha",
+        &[
+            "client.status",
+            "--secret-input",
+            secret_path.to_str().expect("secret path"),
+        ],
+    );
+    assert_eq!(output.status.code(), Some(2));
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(!combined.contains(sentinel));
+    let response: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("secret rejection envelope");
+    assert_eq!(response["error"]["code"], "validation_failed");
+
+    fs::set_permissions(&secret_path, fs::Permissions::from_mode(0o644))
+        .expect("relax secret permissions");
+    let permission_error = call(
+        root.path(),
+        "alpha",
+        &[
+            "client.status",
+            "--secret-input",
+            secret_path.to_str().expect("secret path"),
+        ],
+    );
+    assert_eq!(permission_error.status.code(), Some(2));
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&permission_error.stdout),
+        String::from_utf8_lossy(&permission_error.stderr)
+    );
+    assert!(!combined.contains(sentinel));
+
+    terminate(daemon);
 }
