@@ -164,12 +164,12 @@ pub fn resolve_cli_profile(
         ));
     }
 
-    let name = argument_profile
+    let selected_name = argument_profile
         .or(environment_instance)
         .unwrap_or("default");
-    validate_profile_name(name)?;
-    let app_data_dir = match environment_app_data_dir {
-        Some(path) => PathBuf::from(path),
+    validate_profile_name(selected_name)?;
+    let (name, app_data_dir) = match environment_app_data_dir {
+        Some(path) => (custom_profile_name(path), PathBuf::from(path)),
         None => {
             let base = match xdg_data_home {
                 Some(path) => path.to_path_buf(),
@@ -182,12 +182,18 @@ pub fn resolve_cli_profile(
                         )
                     })?,
             };
-            base.join("kukuri").join("cli").join("profiles").join(name)
+            (
+                selected_name.to_string(),
+                base.join("kukuri")
+                    .join("cli")
+                    .join("profiles")
+                    .join(selected_name),
+            )
         }
     };
 
     Ok(ClientProfile {
-        name: name.to_string(),
+        name,
         app_data_dir,
         kind: ClientProfileKind::Cli,
     })
@@ -203,6 +209,11 @@ pub fn gui_profile(name: impl Into<String>, app_data_dir: PathBuf) -> ClientProf
 
 fn normalized_selector(value: Option<&str>) -> Option<&str> {
     value.map(str::trim).filter(|value| !value.is_empty())
+}
+
+fn custom_profile_name(path: &str) -> String {
+    let digest = blake3::hash(path.as_bytes()).to_hex();
+    format!("custom-{}", &digest[..32])
 }
 
 fn validate_profile_name(name: &str) -> Result<(), ProfileError> {
@@ -382,6 +393,22 @@ mod tests {
         let error = resolve_cli_profile(Some("../gui"), None, None, Some(Path::new("/data")), None)
             .expect_err("path traversal");
         assert_eq!(error.kind, ProfileErrorKind::InvalidProfile);
+    }
+
+    #[test]
+    fn custom_app_data_directories_have_stable_distinct_profile_names() {
+        let first = resolve_cli_profile(None, None, Some("/custom/first"), None, None)
+            .expect("first custom profile");
+        let first_again = resolve_cli_profile(None, None, Some("/custom/first"), None, None)
+            .expect("same custom profile");
+        let second = resolve_cli_profile(None, None, Some("/custom/second"), None, None)
+            .expect("second custom profile");
+
+        assert_eq!(first.name, first_again.name);
+        assert_ne!(first.name, second.name);
+        assert!(first.name.starts_with("custom-"));
+        assert_eq!(first.app_data_dir, Path::new("/custom/first"));
+        assert_eq!(second.app_data_dir, Path::new("/custom/second"));
     }
 
     #[test]

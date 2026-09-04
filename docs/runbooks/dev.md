@@ -295,7 +295,7 @@ cargo run -p kukuri-cli -- --profile dev daemon run
 ```
 
 - profileは`$XDG_DATA_HOME/kukuri/cli/profiles/<profile>`、未設定時は`$HOME/.local/share/kukuri/cli/profiles/<profile>`へ置く。`--profile`と`KUKURI_INSTANCE`が異なる場合、またはprofile selectorと`KUKURI_APP_DATA_DIR`を併用した場合は起動しない。
-- 同一profileを別processが所有している場合は`profile_in_use`で終了する。local socketは`$XDG_RUNTIME_DIR/kukuri/<profile>.sock`で、`XDG_RUNTIME_DIR`が無い環境では起動しない。
+- 同一profileを別processが所有している場合は`profile_in_use`で終了する。local socketは`$XDG_RUNTIME_DIR/kukuri/<profile>.sock`で、`KUKURI_APP_DATA_DIR`を単独指定した場合はdata directoryのdigestから導出した`custom-<digest>.sock`を使う。`XDG_RUNTIME_DIR`が無い環境では起動しない。
 - `daemon start`、`daemon stop`、`daemon status`は`packaging/linux/systemd/kukuri@.service`をuser unitとして配置した環境で`systemctl --user`を操作する。
 - Secret Serviceを利用できない画面なし環境では、新規profileの起動前に`KUKURI_DISABLE_KEYRING=1`を設定する。identityはprofile内の0600 fileへ保存され、以後も同じ設定で起動する。既にkeyringへ保存済みのidentityへこの設定を後付けした場合は、別identityを生成せず型付きstartup errorで停止する。
 - 同意が未成立の場合、常駐プロセスはlocal socketだけを開き、account identity、network runtime、scheduler、observerを開始しない。`consent accept`はprofile leaseを取得するため、常駐プロセスを停止してから実行する。
