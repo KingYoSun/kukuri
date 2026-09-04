@@ -223,6 +223,41 @@ fn load_gossip_subscription_state(
     serde_json::from_str(&raw).context("failed to decode gossip subscription state")
 }
 
+pub(crate) fn validate_persisted_runtime_state(
+    db_path: &Path,
+    mode: IdentityStorageMode,
+) -> Result<()> {
+    for capability in load_private_channel_capabilities(db_path, mode)? {
+        let current_epoch_id = if capability.current_epoch_id.trim().is_empty() {
+            "legacy"
+        } else {
+            capability.current_epoch_id.as_str()
+        };
+        let current_secret = if capability.current_epoch_secret_hex.trim().is_empty() {
+            capability.namespace_secret_hex.as_str()
+        } else {
+            capability.current_epoch_secret_hex.as_str()
+        };
+        validate_private_channel_namespace_secret(current_secret)?;
+        let mut seen_epochs = std::collections::BTreeSet::from([current_epoch_id]);
+        for epoch in &capability.archived_epochs {
+            if seen_epochs.insert(epoch.epoch_id.as_str()) {
+                validate_private_channel_namespace_secret(&epoch.namespace_secret_hex)?;
+            }
+        }
+    }
+    load_gossip_subscription_state(db_path, mode)?;
+    Ok(())
+}
+
+fn validate_private_channel_namespace_secret(secret: &str) -> Result<()> {
+    let secret = secret.trim();
+    if secret.len() != 64 || !secret.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        bail!("private channel namespace secret must be 32-byte hex");
+    }
+    Ok(())
+}
+
 fn persist_gossip_subscription_state(
     db_path: &Path,
     mode: IdentityStorageMode,

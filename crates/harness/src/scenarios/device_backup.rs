@@ -7,7 +7,8 @@ use kukuri_desktop_runtime::{
     ListTimelineRequest, PreviewDeviceBackupRequest, RestoreDeviceBackupRequest,
     commit_device_restore, create_device_backup, ensure_accounts_initialized_from_env,
     finalize_device_restore, install_prepared_device_restore, list_accounts,
-    prepare_device_restore, preview_device_backup,
+    mark_device_restore_activated, mark_device_restore_awaiting_consent, prepare_device_restore,
+    preview_device_backup,
 };
 
 use crate::*;
@@ -187,6 +188,8 @@ pub(crate) async fn run_device_backup_restore(
     let installed = install_prepared_device_restore(&target_dir, prepared)?;
     let restored_db = installed.db_path();
     let result = commit_device_restore(&installed)?;
+    mark_device_restore_awaiting_consent(&target_dir)?;
+    mark_device_restore_activated(&target_dir)?;
     finalize_device_restore(installed)?;
     anyhow::ensure!(result.frontend_state == frontend_state);
     anyhow::ensure!(

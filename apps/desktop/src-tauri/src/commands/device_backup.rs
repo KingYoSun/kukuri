@@ -1,18 +1,23 @@
-use std::path::PathBuf;
+use std::{collections::BTreeMap, path::PathBuf};
 
 use kukuri_desktop_runtime::{
-    CreateDeviceBackupRequest, DeviceBackupPhase, DeviceBackupPreview, DeviceBackupProgress,
-    DeviceBackupRestoreResult, DeviceBackupSummary, PreviewDeviceBackupRequest,
-    RestoreDeviceBackupRequest, commit_device_restore, create_device_backup,
-    finalize_device_restore, install_prepared_device_restore, prepare_device_restore,
-    preview_device_backup, rollback_device_restore,
+    AccountsSnapshot, CreateDeviceBackupRequest, DeviceBackupPhase, DeviceBackupPreview,
+    DeviceBackupProgress, DeviceBackupRestoreResult, DeviceBackupSummary,
+    PreviewDeviceBackupRequest, RestoreDeviceBackupRequest,
+    acknowledge_pending_device_restore_frontend_state as acknowledge_restore_frontend_state,
+    commit_device_restore, create_device_backup, install_prepared_device_restore, list_accounts,
+    mark_device_restore_awaiting_consent,
+    pending_device_restore_frontend_state as read_pending_restore_frontend_state,
+    pending_device_restore_phase, prepare_device_restore, preview_device_backup,
+    rollback_pending_device_restore, validate_prepared_device_restore,
 };
 use tauri::{Emitter, Manager};
 
 use crate::commands::background_notifications::OsNotificationBackground;
+use crate::restore_lifecycle::{DesktopOperationState, require_runtime_operation_ready};
 use crate::state::{
-    CommandError, DesktopStartupState, DesktopStartupStatus, DesktopState, build_runtime, map_error,
-    failed_status, reset_app_consent_after_device_restore, StartupError,
+    CommandError, DesktopStartupState, DesktopStartupStatus, DesktopState, StartupError,
+    build_runtime, failed_status, map_error, reset_app_consent_after_device_restore,
 };
 
 const PROGRESS_EVENT: &str = "kukuri://device-backup-progress";
@@ -22,9 +27,9 @@ async fn rebuild_runtime(
     state: &DesktopState,
     db_path: PathBuf,
 ) -> Result<(), CommandError> {
-    let runtime = build_runtime(app_handle, db_path)
-        .await
-        .map_err(|error| CommandError::from(format!("failed to restart desktop runtime: {error}")))?;
+    let runtime = build_runtime(app_handle, db_path).await.map_err(|error| {
+        CommandError::from(format!("failed to restart desktop runtime: {error}"))
+    })?;
     let previous = state.replace_runtime(runtime);
     drop(previous);
     app_handle
@@ -60,15 +65,73 @@ async fn restore_previous_runtime(
     }
 }
 
+fn verify_previous_account_restored(
+    expected_accounts: &AccountsSnapshot,
+    pending_phase: Option<kukuri_desktop_runtime::DeviceRestorePhase>,
+    actual_accounts: &AccountsSnapshot,
+) -> Result<(), String> {
+    if let Some(phase) = pending_phase {
+        return Err(format!(
+            "device restore rollback left pending journal phase {phase:?}"
+        ));
+    }
+    if actual_accounts != expected_accounts {
+        return Err(
+            "device restore rollback did not restore the previous account registry".to_string(),
+        );
+    }
+    Ok(())
+}
+
+/// restoreの失敗経路はjournalとregistryの両方が旧状態へ戻ったことを確認できた場合だけ
+/// 旧runtimeを再構築する。確認不能・rollback失敗では停止済みのままFailedへ閉じる。
+async fn restore_previous_runtime_after_rollback(
+    app_handle: &tauri::AppHandle,
+    state: &DesktopState,
+    startup: &DesktopStartupState,
+    previous_db_path: PathBuf,
+    previous_accounts: &AccountsSnapshot,
+    operation_error: CommandError,
+) -> CommandError {
+    let rollback_result = rollback_pending_device_restore(&state.app_data_dir);
+    let verification = rollback_result
+        .map_err(|error| format!("failed to roll back pending device restore: {error:#}"))
+        .and_then(|()| {
+            let pending = pending_device_restore_phase(&state.app_data_dir)
+                .map_err(|error| format!("failed to verify restore journal cleanup: {error:#}"))?;
+            let snapshot = list_accounts(&state.app_data_dir).map_err(|error| {
+                format!("failed to verify restored account registry: {error:#}")
+            })?;
+            verify_previous_account_restored(previous_accounts, pending, &snapshot)
+        });
+
+    if let Err(rollback_error) = verification {
+        let message = format!("{}; additionally {rollback_error}", operation_error.message);
+        startup.set_status(failed_status(StartupError::unknown(message.clone()), None));
+        return CommandError::from(message);
+    }
+
+    restore_previous_runtime(
+        app_handle,
+        state,
+        startup,
+        previous_db_path,
+        operation_error,
+    )
+    .await
+}
+
 #[tauri::command]
 pub async fn create_device_backup_command(
     app_handle: tauri::AppHandle,
     state: tauri::State<'_, DesktopState>,
+    operation: tauri::State<'_, DesktopOperationState>,
     request: CreateDeviceBackupRequest,
 ) -> Result<DeviceBackupSummary, CommandError> {
-    let _guard = state.switch_guard.lock().await;
-    state.device_backup_cancellation.reset();
+    let _guard = operation.switch_guard.lock().await;
     let startup = app_handle.state::<DesktopStartupState>();
+    require_runtime_operation_ready(&startup.status()).map_err(CommandError::from)?;
+    operation.begin_cancellable_device_backup();
     startup.set_status(DesktopStartupStatus::Initializing);
 
     let current = state.runtime();
@@ -77,7 +140,7 @@ pub async fn create_device_backup_command(
 
     let restart_path = db_path.clone();
     let app_data_dir = state.app_data_dir.clone();
-    let cancellation = state.device_backup_cancellation.clone();
+    let cancellation = operation.device_backup_cancellation();
     let progress_app = app_handle.clone();
     let operation = tauri::async_runtime::spawn_blocking(move || {
         create_device_backup(
@@ -94,39 +157,33 @@ pub async fn create_device_backup_command(
     let operation = match operation {
         Ok(operation) => operation,
         Err(error) => {
-            return Err(
-                restore_previous_runtime(
-                    &app_handle,
-                    &state,
-                    &startup,
-                    restart_path,
-                    CommandError::from(format!("device backup task failed: {error}")),
-                )
-                .await,
-            );
+            return Err(restore_previous_runtime(
+                &app_handle,
+                &state,
+                &startup,
+                restart_path,
+                CommandError::from(format!("device backup task failed: {error}")),
+            )
+            .await);
         }
     };
 
     match operation.map_err(map_error) {
-        Ok(summary) => {
-            match rebuild_runtime(&app_handle, &state, restart_path.clone()).await {
-                Ok(()) => {
-                    startup.set_status(DesktopStartupStatus::Ready);
-                    Ok(summary)
-                }
-                Err(error) => Err(restore_previous_runtime(
-                    &app_handle,
-                    &state,
-                    &startup,
-                    restart_path,
-                    error,
-                )
-                .await),
+        Ok(summary) => match rebuild_runtime(&app_handle, &state, restart_path.clone()).await {
+            Ok(()) => {
+                startup.set_status(DesktopStartupStatus::Ready);
+                Ok(summary)
             }
+            Err(error) => {
+                Err(
+                    restore_previous_runtime(&app_handle, &state, &startup, restart_path, error)
+                        .await,
+                )
+            }
+        },
+        Err(error) => {
+            Err(restore_previous_runtime(&app_handle, &state, &startup, restart_path, error).await)
         }
-        Err(error) => Err(
-            restore_previous_runtime(&app_handle, &state, &startup, restart_path, error).await,
-        ),
     }
 }
 
@@ -146,11 +203,23 @@ pub async fn preview_device_backup_command(
 pub async fn restore_device_backup_command(
     app_handle: tauri::AppHandle,
     state: tauri::State<'_, DesktopState>,
+    operation: tauri::State<'_, DesktopOperationState>,
     request: RestoreDeviceBackupRequest,
 ) -> Result<DeviceBackupRestoreResult, CommandError> {
-    let _guard = state.switch_guard.lock().await;
-    state.device_backup_cancellation.reset();
+    let _guard = operation.switch_guard.lock().await;
     let startup = app_handle.state::<DesktopStartupState>();
+    require_runtime_operation_ready(&startup.status()).map_err(CommandError::from)?;
+    match pending_device_restore_phase(&state.app_data_dir).map_err(map_error)? {
+        None => {}
+        Some(phase) => {
+            return Err(CommandError::from(format!(
+                "device restore transaction is already pending in phase {phase:?}"
+            )));
+        }
+    }
+    operation.begin_cancellable_device_backup();
+
+    let previous_accounts = list_accounts(&state.app_data_dir).map_err(map_error)?;
     startup.set_status(DesktopStartupStatus::Initializing);
 
     let current = state.runtime();
@@ -158,68 +227,72 @@ pub async fn restore_device_backup_command(
     current.shutdown().await;
 
     let app_data_dir = state.app_data_dir.clone();
-    let cancellation = state.device_backup_cancellation.clone();
+    let cancellation = operation.device_backup_cancellation();
     let progress_app = app_handle.clone();
     let prepared = tauri::async_runtime::spawn_blocking(move || {
-        prepare_device_restore(
-            &app_data_dir,
-            &request,
-            &cancellation,
-            |progress| {
-                let _ = progress_app.emit(PROGRESS_EVENT, progress);
-            },
-        )
+        prepare_device_restore(&app_data_dir, &request, &cancellation, |progress| {
+            let _ = progress_app.emit(PROGRESS_EVENT, progress);
+        })
     })
     .await;
     let prepared = match prepared {
         Ok(prepared) => prepared,
         Err(error) => {
-            return Err(
-                restore_previous_runtime(
-                    &app_handle,
-                    &state,
-                    &startup,
-                    previous_db_path,
-                    CommandError::from(format!("device restore task failed: {error}")),
-                )
-                .await,
-            );
+            return Err(restore_previous_runtime_after_rollback(
+                &app_handle,
+                &state,
+                &startup,
+                previous_db_path,
+                &previous_accounts,
+                CommandError::from(format!("device restore task failed: {error}")),
+            )
+            .await);
         }
     };
     let prepared = match prepared {
         Ok(prepared) => prepared,
         Err(error) => {
-            return Err(
-                restore_previous_runtime(
-                    &app_handle,
-                    &state,
-                    &startup,
-                    previous_db_path,
-                    map_error(error),
-                )
-                .await,
-            );
+            return Err(restore_previous_runtime_after_rollback(
+                &app_handle,
+                &state,
+                &startup,
+                previous_db_path,
+                &previous_accounts,
+                map_error(error),
+            )
+            .await);
         }
     };
 
-    let validation_runtime = match build_runtime(&app_handle, prepared.staging_db_path()).await {
-        Ok(runtime) => runtime,
-        Err(error) => {
-            drop(prepared);
-            return Err(
-                restore_previous_runtime(
-                    &app_handle,
-                    &state,
-                    &startup,
-                    previous_db_path,
-                    CommandError::from(format!("restored account validation failed: {error}")),
-                )
-                .await,
-            );
-        }
-    };
-    validation_runtime.shutdown().await;
-    drop(validation_runtime);
+    // Staging検証はDBとarchive整合性だけを確認し、Iroh/runtime/taskを構築しない。
+    if let Err(error) = validate_prepared_device_restore(&prepared).await {
+        drop(prepared);
+        return Err(restore_previous_runtime_after_rollback(
+            &app_handle,
+            &state,
+            &startup,
+            previous_db_path,
+            &previous_accounts,
+            CommandError::from(format!("restored account validation failed: {error:#}")),
+        )
+        .await);
+    }
+
+    if let Err(error) = operation.close_device_backup_cancel_gate() {
+        drop(prepared);
+        return Err(restore_previous_runtime_after_rollback(
+            &app_handle,
+            &state,
+            &startup,
+            previous_db_path,
+            &previous_accounts,
+            CommandError::from(format!(
+                "device restore canceled before installation: {error:#}"
+            )),
+        )
+        .await);
+    }
+
     let _ = app_handle.emit(
         PROGRESS_EVENT,
         DeviceBackupProgress {
@@ -230,115 +303,100 @@ pub async fn restore_device_backup_command(
     );
 
     let install_app_data = state.app_data_dir.clone();
+    let install_cancellation = operation.device_backup_cancellation();
     let installed = tauri::async_runtime::spawn_blocking(move || {
+        // durable installへ入る最後の境界。ここより後に到着したcancelはinstall完了後に
+        // journalからrollbackし、部分適用を残さない。
+        install_cancellation.check()?;
         install_prepared_device_restore(&install_app_data, prepared)
     })
     .await;
     let installed = match installed {
         Ok(installed) => installed,
         Err(error) => {
-            return Err(
-                restore_previous_runtime(
-                    &app_handle,
-                    &state,
-                    &startup,
-                    previous_db_path,
-                    CommandError::from(format!("device restore install task failed: {error}")),
-                )
-                .await,
-            );
+            return Err(restore_previous_runtime_after_rollback(
+                &app_handle,
+                &state,
+                &startup,
+                previous_db_path,
+                &previous_accounts,
+                CommandError::from(format!("device restore install task failed: {error}")),
+            )
+            .await);
         }
     };
     let installed = match installed {
         Ok(installed) => installed,
         Err(error) => {
-            return Err(
-                restore_previous_runtime(
-                    &app_handle,
-                    &state,
-                    &startup,
-                    previous_db_path,
-                    map_error(error),
-                )
-                .await,
-            );
+            return Err(restore_previous_runtime_after_rollback(
+                &app_handle,
+                &state,
+                &startup,
+                previous_db_path,
+                &previous_accounts,
+                map_error(error),
+            )
+            .await);
         }
     };
 
-    let restored_runtime = match build_runtime(&app_handle, installed.db_path()).await {
-        Ok(runtime) => runtime,
-        Err(error) => {
-            let rollback_error = rollback_device_restore(&installed).err();
-            let mut message = format!("failed to start restored account: {error}");
-            if let Some(error) = rollback_error {
-                message.push_str(&format!("; rollback failed: {error:#}"));
-            }
-            return Err(
-                restore_previous_runtime(
-                    &app_handle,
-                    &state,
-                    &startup,
-                    previous_db_path,
-                    CommandError::from(message),
-                )
-                .await,
-            );
-        }
-    };
+    if let Err(error) = operation.device_backup_cancellation().check() {
+        return Err(restore_previous_runtime_after_rollback(
+            &app_handle,
+            &state,
+            &startup,
+            previous_db_path,
+            &previous_accounts,
+            CommandError::from(format!(
+                "device restore canceled after installation: {error:#}"
+            )),
+        )
+        .await);
+    }
 
     let result = match commit_device_restore(&installed) {
         Ok(result) => result,
         Err(error) => {
-            restored_runtime.shutdown().await;
-            let rollback_error = rollback_device_restore(&installed).err();
-            let mut message = format!("failed to commit restored account: {error:#}");
-            if let Some(error) = rollback_error {
-                message.push_str(&format!("; rollback failed: {error:#}"));
-            }
-            return Err(
-                restore_previous_runtime(
-                    &app_handle,
-                    &state,
-                    &startup,
-                    previous_db_path,
-                    CommandError::from(message),
-                )
-                .await,
-            );
+            return Err(restore_previous_runtime_after_rollback(
+                &app_handle,
+                &state,
+                &startup,
+                previous_db_path,
+                &previous_accounts,
+                CommandError::from(format!("failed to commit restored account: {error:#}")),
+            )
+            .await);
         }
     };
 
     let consent_status = match reset_app_consent_after_device_restore(&app_handle) {
         Ok(status) => status,
         Err(error) => {
-            restored_runtime.shutdown().await;
-            let rollback_error = rollback_device_restore(&installed).err();
-            let mut message = format!("failed to reset consent after device restore: {error}");
-            if let Some(error) = rollback_error {
-                message.push_str(&format!("; rollback failed: {error:#}"));
-            }
-            return Err(
-                restore_previous_runtime(
-                    &app_handle,
-                    &state,
-                    &startup,
-                    previous_db_path,
-                    CommandError::from(message),
-                )
-                .await,
-            );
+            // registry commit後は旧runtimeへ戻さない。Committed journalを残し、次回起動で
+            // consent resetを再試行するまでfail-closedにする。
+            let message = format!("failed to reset consent after device restore: {error}");
+            startup.set_status(failed_status(
+                StartupError::unknown(message.clone()),
+                Some(installed.db_path()),
+            ));
+            return Err(CommandError::from(message));
         }
     };
 
-    let previous = state.replace_runtime(restored_runtime);
-    drop(previous);
-    app_handle
-        .state::<OsNotificationBackground>()
-        .reset_for_account_switch();
-    startup.set_status(consent_status);
-    if let Err(error) = finalize_device_restore(installed) {
-        tracing::warn!(%error, "device restore committed but cleanup was deferred");
+    if let Err(error) = mark_device_restore_awaiting_consent(&state.app_data_dir) {
+        // consent resetは完了済みでもjournalがCommittedなら、startup recoveryが同じresetを
+        // 安全に再実行してAwaitingConsentへ進める。
+        let message = format!("failed to persist restore consent gate: {error:#}");
+        startup.set_status(failed_status(
+            StartupError::unknown(message.clone()),
+            Some(installed.db_path()),
+        ));
+        return Err(CommandError::from(message));
     }
+
+    // 復元runtimeはここでは構築・公開しない。明示的な再同意後のactivationだけが
+    // AwaitingConsentをReadyへ遷移させる。
+    startup.set_status(consent_status);
     let _ = app_handle.emit(
         PROGRESS_EVENT,
         DeviceBackupProgress {
@@ -351,6 +409,46 @@ pub async fn restore_device_backup_command(
 }
 
 #[tauri::command]
-pub fn cancel_device_backup(state: tauri::State<'_, DesktopState>) {
-    state.device_backup_cancellation.cancel();
+pub fn cancel_device_backup(operation: tauri::State<'_, DesktopOperationState>) {
+    operation.cancel_device_backup();
+}
+
+#[tauri::command]
+pub fn get_pending_device_restore_frontend_state(
+    app_handle: tauri::AppHandle,
+) -> Result<Option<BTreeMap<String, String>>, CommandError> {
+    let app_data_dir = crate::state::resolve_app_data_dir(&app_handle)?;
+    read_pending_restore_frontend_state(&app_data_dir).map_err(map_error)
+}
+
+#[tauri::command]
+pub fn acknowledge_pending_device_restore_frontend_state(
+    app_handle: tauri::AppHandle,
+) -> Result<(), CommandError> {
+    let app_data_dir = crate::state::resolve_app_data_dir(&app_handle)?;
+    acknowledge_restore_frontend_state(&app_data_dir).map_err(map_error)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kukuri_desktop_runtime::DeviceRestorePhase;
+
+    #[test]
+    fn previous_runtime_restart_requires_clean_journal_and_original_registry() {
+        let old = AccountsSnapshot {
+            active_account_id: "old".to_string(),
+            accounts: Vec::new(),
+        };
+        let restored = AccountsSnapshot {
+            active_account_id: "restored".to_string(),
+            accounts: Vec::new(),
+        };
+        assert!(verify_previous_account_restored(&old, None, &old).is_ok());
+        assert!(
+            verify_previous_account_restored(&old, Some(DeviceRestorePhase::Installed), &old)
+                .is_err()
+        );
+        assert!(verify_previous_account_restored(&old, None, &restored).is_err());
+    }
 }

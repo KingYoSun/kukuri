@@ -20,6 +20,7 @@ use tracing::{debug, warn};
 
 use crate::{
     commands::os_notification::show_platform_notification,
+    restore_lifecycle::{DesktopOperationState, runtime_access_allowed},
     state::{DesktopStartupState, DesktopStartupStatus, DesktopState},
 };
 
@@ -145,35 +146,61 @@ pub fn spawn(app: AppHandle) {
     let event_app = app.clone();
     tauri::async_runtime::spawn(async move {
         loop {
-            match startup_status.borrow().clone() {
-                DesktopStartupStatus::Ready => break,
-                DesktopStartupStatus::Failed { .. } => return,
-                DesktopStartupStatus::Initializing
-                | DesktopStartupStatus::ConsentRequired { .. } => {}
+            while !runtime_access_allowed(&startup_status.borrow()) {
+                if matches!(
+                    startup_status.borrow().clone(),
+                    DesktopStartupStatus::Failed { .. }
+                ) {
+                    return;
+                }
+                if startup_status.changed().await.is_err() {
+                    return;
+                }
             }
-            if startup_status.changed().await.is_err() {
-                return;
+
+            // status確認とsubscribeをaccount/restore切替と直列化し、停止済みruntimeへ
+            // ConsentRequired/Initializing中に再subscribeしない。
+            let operation = event_app.state::<DesktopOperationState>();
+            let _guard = operation.switch_guard.lock().await;
+            if !runtime_access_allowed(&event_app.state::<DesktopStartupState>().status()) {
+                continue;
             }
-        }
-        // #859: アカウント切替で runtime が入れ替わると旧チャネルが閉じるため、
-        // recv 失敗時は現在の runtime へ再 subscribe する(60 秒ポーリングとは別枠)。
-        loop {
             let Some(state) = event_app.try_state::<DesktopState>() else {
                 return;
             };
             let mut rx = state.runtime().subscribe_events();
             drop(state);
-            while let Ok(event) = rx.recv().await {
-                if matches!(
-                    event,
-                    kukuri_desktop_runtime::RuntimeEvent::NotificationStatusChanged
-                ) {
-                    if let Err(error) = poll_once(&event_app).await {
-                        debug!(%error, "event-driven notification poll skipped");
+            drop(_guard);
+            drop(operation);
+
+            // #859: アカウント切替でruntimeが入れ替わると旧channelが閉じる。
+            // startup statusがReadyを離れた場合も直ちに外側へ戻り、次のReadyまで待つ。
+            loop {
+                tokio::select! {
+                    changed = startup_status.changed() => {
+                        if changed.is_err() {
+                            return;
+                        }
+                        if !runtime_access_allowed(&startup_status.borrow()) {
+                            break;
+                        }
+                    }
+                    event = rx.recv() => {
+                        let Ok(event) = event else {
+                            break;
+                        };
+                        if matches!(
+                            event,
+                            kukuri_desktop_runtime::RuntimeEvent::NotificationStatusChanged
+                        ) && let Err(error) = poll_once(&event_app).await {
+                            debug!(%error, "event-driven notification poll skipped");
+                        }
                     }
                 }
             }
-            tokio::time::sleep(Duration::from_millis(500)).await;
+            if runtime_access_allowed(&startup_status.borrow()) {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
         }
     });
 
@@ -188,6 +215,11 @@ pub fn spawn(app: AppHandle) {
 }
 
 async fn poll_once(app: &AppHandle) -> anyhow::Result<()> {
+    let operation = app.state::<DesktopOperationState>();
+    let _guard = operation.switch_guard.lock().await;
+    if !runtime_access_allowed(&app.state::<DesktopStartupState>().status()) {
+        return Ok(());
+    }
     let Some(state) = app.try_state::<DesktopState>() else {
         // Runtime failed to initialize; nothing to dispatch.
         return Ok(());

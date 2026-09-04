@@ -1,13 +1,19 @@
+use kukuri_desktop_runtime::{DeviceRestorePhase, pending_device_restore_phase};
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
+use crate::restore_lifecycle::{
+    DesktopOperationState, RestoreActivationOrchestrationFailure, activate_pending_restore,
+    orchestrate_restore_activation, rollback_pending_restore_and_rebuild,
+};
 use crate::spawn_desktop_initialization;
 use crate::state::{
     AGE_ATTESTATION_VERSION, APP_LEGAL_DOCUMENTS, AgeAttestationRecord, AgeAttestationStatus,
     AppConsentDocumentRecord, AppConsentDocumentStatus, CommandError, DesktopStartupState,
-    DesktopStartupStatus, DesktopState, age_attestation_satisfied, age_attestation_status,
-    app_consent_documents_status, app_consent_satisfied, current_unix_seconds,
-    load_app_consent_store, resolve_db_path, save_app_consent_store,
+    DesktopStartupStatus, DesktopState, StartupError, age_attestation_satisfied,
+    age_attestation_status, app_consent_documents_status, app_consent_satisfied,
+    build_desktop_state, current_unix_seconds, failed_status, load_app_consent_store,
+    resolve_app_data_dir, resolve_db_path, save_app_consent_store,
 };
 
 #[derive(Clone, Debug, Serialize)]
@@ -25,6 +31,28 @@ pub struct AppConsentStatus {
 pub struct AcceptedAppConsentDocument {
     pub slug: String,
     pub version: i32,
+}
+
+fn set_activation_failed(
+    app_handle: &tauri::AppHandle,
+    startup: &DesktopStartupState,
+    message: String,
+) -> CommandError {
+    startup.set_status(failed_status(
+        StartupError::unknown(message.clone()),
+        resolve_db_path(app_handle).ok(),
+    ));
+    CommandError::from(message)
+}
+
+fn require_consent_acceptance_state(status: &DesktopStartupStatus) -> Result<(), String> {
+    if matches!(status, DesktopStartupStatus::ConsentRequired { .. }) {
+        Ok(())
+    } else {
+        Err(format!(
+            "app consent can only be accepted from ConsentRequired; current state is {status:?}"
+        ))
+    }
 }
 
 #[tauri::command]
@@ -67,6 +95,26 @@ pub async fn accept_app_consents(
         {
             return Err(format!("unknown consent document `{}`", document.slug).into());
         }
+    }
+
+    let operation = app_handle.state::<DesktopOperationState>();
+    let _guard = operation.switch_guard.lock().await;
+    let startup_state = app_handle.state::<DesktopStartupState>();
+    require_consent_acceptance_state(&startup_state.status()).map_err(CommandError::from)?;
+    let app_data_dir = resolve_app_data_dir(&app_handle)?;
+    let pending_restore = pending_device_restore_phase(&app_data_dir).map_err(|error| {
+        CommandError::from(format!(
+            "failed to inspect pending device restore: {error:#}"
+        ))
+    })?;
+    if let Some(phase) = pending_restore
+        && phase != DeviceRestorePhase::AwaitingConsent
+    {
+        return Err(set_activation_failed(
+            &app_handle,
+            &startup_state,
+            format!("device restore cannot accept consent from phase {phase:?}"),
+        ));
     }
 
     let db_path = resolve_db_path(&app_handle)?;
@@ -123,7 +171,35 @@ pub async fn accept_app_consents(
     }
     save_app_consent_store(&db_path, &store)?;
 
-    let startup_state = app_handle.state::<DesktopStartupState>();
+    if pending_restore == Some(DeviceRestorePhase::AwaitingConsent) {
+        startup_state.set_status(DesktopStartupStatus::Initializing);
+        let activation = orchestrate_restore_activation(
+            || async {
+                build_desktop_state(&app_handle).await.map_err(|error| {
+                    format!("failed to start restored account after consent: {error}")
+                })
+            },
+            |restored| activate_pending_restore(&app_handle, &app_data_dir, restored),
+            || rollback_pending_restore_and_rebuild(&app_handle, &app_data_dir),
+        )
+        .await;
+        match activation {
+            Ok(()) => {
+                startup_state.set_status(DesktopStartupStatus::Ready);
+                return Ok(DesktopStartupStatus::Ready);
+            }
+            Err(RestoreActivationOrchestrationFailure::RolledBack(message)) => {
+                startup_state.set_status(DesktopStartupStatus::Ready);
+                return Err(CommandError::from(message));
+            }
+            Err(
+                RestoreActivationOrchestrationFailure::RollbackFailed(message)
+                | RestoreActivationOrchestrationFailure::FinishForward(message),
+            ) => {
+                return Err(set_activation_failed(&app_handle, &startup_state, message));
+            }
+        }
+    }
 
     if app_handle.try_state::<DesktopState>().is_some() {
         startup_state.set_status(DesktopStartupStatus::Ready);
@@ -131,7 +207,27 @@ pub async fn accept_app_consents(
     }
 
     startup_state.set_status(DesktopStartupStatus::Initializing);
-    spawn_desktop_initialization(app_handle)
+    spawn_desktop_initialization(app_handle.clone())
         .await
         .map_err(|error| error.to_string().into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::{StartupError, consent_required_status, failed_status};
+
+    #[test]
+    fn consent_acceptance_is_only_allowed_from_consent_required() {
+        assert!(
+            require_consent_acceptance_state(&consent_required_status(&Default::default())).is_ok()
+        );
+        for status in [
+            DesktopStartupStatus::Initializing,
+            DesktopStartupStatus::Ready,
+            failed_status(StartupError::unknown("failed".to_string()), None),
+        ] {
+            assert!(require_consent_acceptance_state(&status).is_err());
+        }
+    }
 }

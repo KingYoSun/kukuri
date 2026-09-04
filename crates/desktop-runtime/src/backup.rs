@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
@@ -8,6 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, anyhow, bail};
 use kukuri_core::{DeviceBackupReader, KukuriKeys};
+use kukuri_store::SqliteStore;
 use serde::{Deserialize, Serialize};
 
 use crate::accounts::{
@@ -18,21 +19,25 @@ use crate::community_node::{
     COMMUNITY_NODE_CONSENT_PURPOSE, COMMUNITY_NODE_INVITE_CODE_PURPOSE,
     COMMUNITY_NODE_TOKEN_PURPOSE, load_community_node_config_from_file,
 };
+use crate::discovery::load_discovery_config_from_file;
 use crate::identity::{
-    IdentityStorageMode, delete_optional_secret, load_existing_keys, load_optional_secret,
-    persist_keys, persist_optional_secret, write_private_file_atomically,
+    IdentityStorageMode, KeyringStore, delete_optional_secret_keyring_entry_with_keyring,
+    load_existing_keys, load_existing_keys_with_keyring, load_optional_secret,
+    load_optional_secret_with_keyring, persist_keys, persist_keys_with_keyring,
+    persist_optional_secret, persist_optional_secret_with_keyring, write_private_file_atomically,
 };
 use crate::paths::DB_FILE_NAME;
 use crate::runtime::{
     GOSSIP_SUBSCRIPTION_STATE_KEY, GOSSIP_SUBSCRIPTION_STATE_PURPOSE,
     PRIVATE_CHANNEL_CAPABILITIES_KEY, PRIVATE_CHANNEL_CAPABILITIES_PURPOSE,
+    validate_persisted_runtime_state,
 };
 
 const SECRETS_ENTRY: &str = "secret-bundle.json";
 const FRONTEND_STATE_ENTRY: &str = "frontend-state.json";
 const FILE_ENTRY_PREFIX: &str = "file/";
 const FRONTEND_STATE_MAX_BYTES: usize = 2 * 1024 * 1024;
-const RESTORE_JOURNAL_FILE: &str = "device-restore-journal.json";
+const RESTORE_STAGING_WORK_PREFIX: &str = ".device-restore-staging";
 
 struct DeviceBackupOutputFile {
     file: File,
@@ -102,9 +107,23 @@ pub(crate) fn fail_device_backup_writes_after(bytes: u64) -> DeviceBackupWriteFa
 }
 
 mod create;
+mod restore_recovery;
 
 pub use create::create_device_backup;
 use create::validate_frontend_state;
+pub use restore_recovery::{
+    DeviceRestorePhase, InstalledDeviceRestore, acknowledge_pending_device_restore_frontend_state,
+    commit_device_restore, finalize_device_restore, finalize_pending_device_restore,
+    install_prepared_device_restore, mark_device_restore_activated,
+    mark_device_restore_awaiting_consent, pending_device_restore_frontend_state,
+    pending_device_restore_phase, recover_interrupted_restore, rollback_device_restore,
+    rollback_pending_device_restore,
+};
+#[cfg(test)]
+pub(crate) use restore_recovery::{
+    DeviceRestoreTestFailurePoint, fail_device_restore_at,
+    install_prepared_device_restore_with_keyring,
+};
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -224,7 +243,7 @@ impl DeviceBackupCancellation {
         self.0.store(true, Ordering::Release);
     }
 
-    fn check(&self) -> Result<()> {
+    pub fn check(&self) -> Result<()> {
         if self.0.load(Ordering::Acquire) {
             bail!("device backup operation canceled");
         }
@@ -248,6 +267,12 @@ struct OptionalSecretValue {
     value: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct OptionalSecretLocator {
+    purpose: String,
+    key: String,
+}
+
 pub struct PreparedDeviceRestore {
     staging_dir: PathBuf,
     public_key: String,
@@ -262,48 +287,36 @@ impl PreparedDeviceRestore {
     }
 }
 
+/// 復元stagingを、runtime・Iroh・background taskを構築せずに検証する。
+pub async fn validate_prepared_device_restore(prepared: &PreparedDeviceRestore) -> Result<()> {
+    let db_path = prepared.staging_db_path();
+    if !db_path.is_file() {
+        bail!("restored account database is missing");
+    }
+
+    let store = SqliteStore::connect_file(&db_path).await?;
+    store.close().await;
+
+    // stagingはprepare時にFileOnlyへ自己完結させる。Autoにすると同じpathへ残った
+    // keyring entryが復元fileをshadowし、端末環境によって検証結果が変わる。
+    let identity_mode = IdentityStorageMode::FileOnly;
+    let keys = load_existing_keys(&db_path, identity_mode)?
+        .ok_or_else(|| anyhow!("restored account identity is missing"))?;
+    if keys.public_key_hex() != prepared.public_key {
+        bail!("restored account identity does not match the backup manifest");
+    }
+    let _ = load_community_node_config_from_file(&db_path)?;
+    let _ = load_discovery_config_from_file(&db_path)?;
+    validate_persisted_runtime_state(&db_path, identity_mode)?;
+    Ok(())
+}
+
 impl Drop for PreparedDeviceRestore {
     fn drop(&mut self) {
         if self.staging_dir.exists() {
             let _ = fs::remove_dir_all(&self.staging_dir);
         }
     }
-}
-
-pub struct InstalledDeviceRestore {
-    app_data_dir: PathBuf,
-    public_key: String,
-    account_label: Option<String>,
-    frontend_state: BTreeMap<String, String>,
-    final_dir: PathBuf,
-}
-
-impl InstalledDeviceRestore {
-    pub fn db_path(&self) -> PathBuf {
-        self.final_dir.join(DB_FILE_NAME)
-    }
-
-    pub fn frontend_state(&self) -> &BTreeMap<String, String> {
-        &self.frontend_state
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct RestoreJournal {
-    version: u32,
-    phase: RestoreJournalPhase,
-    final_dir: PathBuf,
-    staging_dir: PathBuf,
-    rollback_dir: Option<PathBuf>,
-    registry_before: String,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum RestoreJournalPhase {
-    Installing,
-    Installed,
-    Committed,
 }
 
 pub fn preview_device_backup(
@@ -347,6 +360,12 @@ where
     F: FnMut(DeviceBackupProgress),
 {
     recover_interrupted_restore(app_data_dir)?;
+    if let Some(phase) = pending_device_restore_phase(app_data_dir)? {
+        bail!("device restore transaction is already pending in phase {phase:?}");
+    }
+    if pending_device_restore_frontend_state(app_data_dir)?.is_some() {
+        bail!("restored frontend state must be acknowledged before another restore");
+    }
     cancellation.check()?;
     let source = PathBuf::from(request.path.trim());
     ensure_backup_path_outside_app_data(app_data_dir, &source)?;
@@ -369,7 +388,7 @@ where
         );
     }
 
-    let staging_dir = unique_account_work_dir(app_data_dir, ".device-restore-staging")?;
+    let staging_dir = unique_account_work_dir(app_data_dir, RESTORE_STAGING_WORK_PREFIX)?;
     fs::create_dir_all(&staging_dir)
         .context("failed to create device restore staging directory")?;
     let extraction = (|| -> Result<(SecretBundleV1, BTreeMap<String, String>)> {
@@ -488,173 +507,6 @@ where
     })
 }
 
-pub fn install_prepared_device_restore(
-    app_data_dir: &Path,
-    prepared: PreparedDeviceRestore,
-) -> Result<InstalledDeviceRestore> {
-    recover_interrupted_restore(app_data_dir)?;
-    let id = account_id_for_pubkey(&prepared.public_key)?;
-    let final_db = account_db_path(app_data_dir, &id);
-    let final_dir = final_db
-        .parent()
-        .ok_or_else(|| anyhow!("invalid restored account path"))?
-        .to_path_buf();
-    let snapshot = list_accounts(app_data_dir)?;
-    let existing = snapshot
-        .accounts
-        .iter()
-        .find(|account| account.pubkey == prepared.public_key);
-    if existing.is_some() && !prepared.replace_existing {
-        bail!(
-            "device backup account already exists; explicit replacement confirmation is required"
-        );
-    }
-    if existing.is_none() && final_dir.exists() {
-        bail!("restored account directory already exists outside the registry");
-    }
-
-    let registry_path = app_data_dir.join(ACCOUNTS_REGISTRY_FILE_NAME);
-    let registry_before = fs::read_to_string(&registry_path)
-        .context("failed to snapshot accounts registry before restore")?;
-    let (rollback_dir, rollback_secrets) = if final_dir.exists() {
-        let secrets = make_account_file_self_contained(&final_db)?;
-        (
-            Some(unique_account_work_dir(
-                app_data_dir,
-                ".device-restore-rollback",
-            )?),
-            secrets,
-        )
-    } else {
-        (None, Vec::new())
-    };
-    let mut journal = RestoreJournal {
-        version: 1,
-        phase: RestoreJournalPhase::Installing,
-        final_dir: final_dir.clone(),
-        staging_dir: prepared.staging_dir.clone(),
-        rollback_dir: rollback_dir.clone(),
-        registry_before,
-    };
-    write_restore_journal(app_data_dir, &journal)?;
-
-    if let Some(rollback_dir) = &rollback_dir {
-        fs::rename(&final_dir, rollback_dir)
-            .context("failed to stage existing account rollback")?;
-        if let Err(error) = scrub_keyring_optional_secrets(&final_db, &rollback_secrets) {
-            let _ = rollback_from_journal(app_data_dir, &journal);
-            return Err(error).context("failed to clear previous account secrets before restore");
-        }
-    }
-    if let Err(error) = fs::rename(&prepared.staging_dir, &final_dir) {
-        let _ = rollback_from_journal(app_data_dir, &journal);
-        return Err(error).context("failed to install restored account directory");
-    }
-    journal.phase = RestoreJournalPhase::Installed;
-    write_restore_journal(app_data_dir, &journal)?;
-
-    Ok(InstalledDeviceRestore {
-        app_data_dir: app_data_dir.to_path_buf(),
-        public_key: prepared.public_key.clone(),
-        account_label: prepared.account_label.clone(),
-        frontend_state: prepared.frontend_state.clone(),
-        final_dir,
-    })
-}
-
-pub fn commit_device_restore(
-    installed: &InstalledDeviceRestore,
-) -> Result<DeviceBackupRestoreResult> {
-    let account = register_restored_account(
-        &installed.app_data_dir,
-        &installed.public_key,
-        installed.account_label.clone(),
-    )?;
-    let mut journal = load_restore_journal(&installed.app_data_dir)?
-        .ok_or_else(|| anyhow!("device restore journal is missing"))?;
-    journal.phase = RestoreJournalPhase::Committed;
-    write_restore_journal(&installed.app_data_dir, &journal)?;
-    Ok(DeviceBackupRestoreResult {
-        account,
-        frontend_state: installed.frontend_state.clone(),
-    })
-}
-
-pub fn finalize_device_restore(installed: InstalledDeviceRestore) -> Result<()> {
-    let journal = load_restore_journal(&installed.app_data_dir)?
-        .ok_or_else(|| anyhow!("device restore journal is missing"))?;
-    if journal.phase != RestoreJournalPhase::Committed {
-        bail!("device restore cannot be finalized before registry commit");
-    }
-    if let Some(rollback_dir) = journal.rollback_dir
-        && rollback_dir.exists()
-    {
-        fs::remove_dir_all(&rollback_dir)
-            .context("failed to remove completed device restore rollback")?;
-    }
-    let path = restore_journal_path(&installed.app_data_dir);
-    if path.exists() {
-        fs::remove_file(path).context("failed to remove completed device restore journal")?;
-    }
-    Ok(())
-}
-
-pub fn rollback_device_restore(installed: &InstalledDeviceRestore) -> Result<()> {
-    let journal = load_restore_journal(&installed.app_data_dir)?
-        .ok_or_else(|| anyhow!("device restore journal is missing"))?;
-    rollback_from_journal(&installed.app_data_dir, &journal)
-}
-
-pub fn recover_interrupted_restore(app_data_dir: &Path) -> Result<()> {
-    let Some(journal) = load_restore_journal(app_data_dir)? else {
-        return Ok(());
-    };
-    validate_journal_paths(app_data_dir, &journal)?;
-    if journal.phase == RestoreJournalPhase::Committed {
-        if let Some(rollback_dir) = &journal.rollback_dir
-            && rollback_dir.exists()
-        {
-            fs::remove_dir_all(rollback_dir)
-                .context("failed to finalize interrupted device restore")?;
-        }
-        if journal.staging_dir.exists() {
-            fs::remove_dir_all(&journal.staging_dir)
-                .context("failed to remove stale device restore staging")?;
-        }
-        fs::remove_file(restore_journal_path(app_data_dir))
-            .context("failed to clear device restore journal")?;
-        return Ok(());
-    }
-    rollback_from_journal(app_data_dir, &journal)
-}
-
-fn rollback_from_journal(app_data_dir: &Path, journal: &RestoreJournal) -> Result<()> {
-    validate_journal_paths(app_data_dir, journal)?;
-    if journal.final_dir.exists() {
-        fs::remove_dir_all(&journal.final_dir)
-            .context("failed to remove incomplete restored account")?;
-    }
-    if let Some(rollback_dir) = &journal.rollback_dir
-        && rollback_dir.exists()
-    {
-        fs::rename(rollback_dir, &journal.final_dir)
-            .context("failed to restore previous account directory")?;
-    }
-    if journal.staging_dir.exists() {
-        fs::remove_dir_all(&journal.staging_dir)
-            .context("failed to remove device restore staging")?;
-    }
-    write_private_file_atomically(
-        &app_data_dir.join(ACCOUNTS_REGISTRY_FILE_NAME),
-        journal.registry_before.as_bytes(),
-    )?;
-    let journal_path = restore_journal_path(app_data_dir);
-    if journal_path.exists() {
-        fs::remove_file(journal_path).context("failed to clear device restore journal")?;
-    }
-    Ok(())
-}
-
 fn active_account_for_db(app_data_dir: &Path, db_path: &Path) -> Result<AccountRecord> {
     let snapshot = list_accounts(app_data_dir)?;
     let active = snapshot
@@ -762,18 +614,17 @@ fn persist_restored_secrets(db_path: &Path, bundle: &SecretBundleV1) -> Result<(
     Ok(())
 }
 
-fn known_optional_secrets(db_path: &Path) -> Result<Vec<OptionalSecretValue>> {
-    let mode = IdentityStorageMode::from_env();
-    let mut pairs = vec![
-        (
-            PRIVATE_CHANNEL_CAPABILITIES_PURPOSE.to_string(),
-            PRIVATE_CHANNEL_CAPABILITIES_KEY.to_string(),
-        ),
-        (
-            GOSSIP_SUBSCRIPTION_STATE_PURPOSE.to_string(),
-            GOSSIP_SUBSCRIPTION_STATE_KEY.to_string(),
-        ),
-    ];
+fn known_optional_secret_locators(db_path: &Path) -> Result<BTreeSet<OptionalSecretLocator>> {
+    let mut locators = BTreeSet::from([
+        OptionalSecretLocator {
+            purpose: PRIVATE_CHANNEL_CAPABILITIES_PURPOSE.to_string(),
+            key: PRIVATE_CHANNEL_CAPABILITIES_KEY.to_string(),
+        },
+        OptionalSecretLocator {
+            purpose: GOSSIP_SUBSCRIPTION_STATE_PURPOSE.to_string(),
+            key: GOSSIP_SUBSCRIPTION_STATE_KEY.to_string(),
+        },
+    ]);
     if let Some(config) = load_community_node_config_from_file(db_path)? {
         for node in config.nodes {
             for purpose in [
@@ -781,16 +632,34 @@ fn known_optional_secrets(db_path: &Path) -> Result<Vec<OptionalSecretValue>> {
                 COMMUNITY_NODE_INVITE_CODE_PURPOSE,
                 COMMUNITY_NODE_CONSENT_PURPOSE,
             ] {
-                pairs.push((purpose.to_string(), node.base_url.clone()));
+                locators.insert(OptionalSecretLocator {
+                    purpose: purpose.to_string(),
+                    key: node.base_url.clone(),
+                });
             }
         }
     }
+    Ok(locators)
+}
+
+fn load_optional_secrets(
+    db_path: &Path,
+    mode: IdentityStorageMode,
+    keyring: &dyn KeyringStore,
+    locators: &BTreeSet<OptionalSecretLocator>,
+) -> Result<Vec<OptionalSecretValue>> {
     let mut values = Vec::new();
-    for (purpose, key) in pairs {
-        if let Some(value) = load_optional_secret(db_path, mode, &purpose, &key)? {
+    for locator in locators {
+        if let Some(value) = load_optional_secret_with_keyring(
+            db_path,
+            mode,
+            &locator.purpose,
+            &locator.key,
+            keyring,
+        )? {
             values.push(OptionalSecretValue {
-                purpose,
-                key,
+                purpose: locator.purpose.clone(),
+                key: locator.key.clone(),
                 value,
             });
         }
@@ -798,30 +667,40 @@ fn known_optional_secrets(db_path: &Path) -> Result<Vec<OptionalSecretValue>> {
     Ok(values)
 }
 
-fn make_account_file_self_contained(db_path: &Path) -> Result<Vec<OptionalSecretValue>> {
-    if let Some(keys) = load_existing_keys(db_path, IdentityStorageMode::from_env())? {
-        persist_keys(db_path, IdentityStorageMode::FileOnly, &keys)?;
+fn make_account_file_self_contained(
+    db_path: &Path,
+    mode: IdentityStorageMode,
+    keyring: &dyn KeyringStore,
+    locators: &BTreeSet<OptionalSecretLocator>,
+) -> Result<()> {
+    if let Some(keys) = load_existing_keys_with_keyring(db_path, mode, keyring)? {
+        persist_keys_with_keyring(db_path, IdentityStorageMode::FileOnly, &keys, keyring)?;
     }
-    let secrets = known_optional_secrets(db_path)?;
+    let secrets = load_optional_secrets(db_path, mode, keyring, locators)?;
     for secret in &secrets {
-        persist_optional_secret(
+        persist_optional_secret_with_keyring(
             db_path,
             IdentityStorageMode::FileOnly,
             &secret.purpose,
             &secret.key,
             &secret.value,
+            keyring,
         )?;
     }
-    Ok(secrets)
+    Ok(())
 }
 
-fn scrub_keyring_optional_secrets(db_path: &Path, secrets: &[OptionalSecretValue]) -> Result<()> {
-    for secret in secrets {
-        delete_optional_secret(
+fn scrub_keyring_optional_secrets(
+    db_path: &Path,
+    locators: &BTreeSet<OptionalSecretLocator>,
+    keyring: &dyn KeyringStore,
+) -> Result<()> {
+    for locator in locators {
+        delete_optional_secret_keyring_entry_with_keyring(
             db_path,
-            IdentityStorageMode::Auto,
-            &secret.purpose,
-            &secret.key,
+            &locator.purpose,
+            &locator.key,
+            keyring,
         )?;
     }
     Ok(())
@@ -859,45 +738,4 @@ fn unique_account_work_dir(app_data_dir: &Path, prefix: &str) -> Result<PathBuf>
         }
     }
     bail!("failed to allocate device restore work directory")
-}
-
-fn restore_journal_path(app_data_dir: &Path) -> PathBuf {
-    app_data_dir.join(RESTORE_JOURNAL_FILE)
-}
-
-fn write_restore_journal(app_data_dir: &Path, journal: &RestoreJournal) -> Result<()> {
-    validate_journal_paths(app_data_dir, journal)?;
-    let bytes = serde_json::to_vec(journal).context("failed to encode device restore journal")?;
-    write_private_file_atomically(&restore_journal_path(app_data_dir), &bytes)
-}
-
-fn load_restore_journal(app_data_dir: &Path) -> Result<Option<RestoreJournal>> {
-    let path = restore_journal_path(app_data_dir);
-    if !path.exists() {
-        return Ok(None);
-    }
-    let bytes = fs::read(&path).context("failed to read device restore journal")?;
-    let journal: RestoreJournal =
-        serde_json::from_slice(&bytes).context("invalid device restore journal")?;
-    if journal.version != 1 {
-        bail!("unsupported device restore journal version");
-    }
-    Ok(Some(journal))
-}
-
-fn validate_journal_paths(app_data_dir: &Path, journal: &RestoreJournal) -> Result<()> {
-    let accounts_root = app_data_dir.join(ACCOUNTS_DIR_NAME);
-    for path in [
-        Some(&journal.final_dir),
-        Some(&journal.staging_dir),
-        journal.rollback_dir.as_ref(),
-    ]
-    .into_iter()
-    .flatten()
-    {
-        if path.parent() != Some(accounts_root.as_path()) {
-            bail!("device restore journal contains a path outside the accounts directory");
-        }
-    }
-    Ok(())
 }

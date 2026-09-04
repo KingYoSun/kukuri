@@ -4,12 +4,18 @@ use std::collections::BTreeMap;
 
 use kukuri_store::SqliteStore;
 
-use crate::accounts::{ensure_accounts_initialized, list_accounts};
+use crate::accounts::{
+    account_db_path, account_id_for_pubkey, ensure_accounts_initialized, list_accounts,
+};
 use crate::backup::{
-    CreateDeviceBackupRequest, DeviceBackupCancellation, PreviewDeviceBackupRequest,
-    RestoreDeviceBackupRequest, commit_device_restore, create_device_backup,
-    fail_device_backup_writes_after, finalize_device_restore, install_prepared_device_restore,
-    prepare_device_restore, preview_device_backup, recover_interrupted_restore,
+    CreateDeviceBackupRequest, DeviceBackupCancellation, DeviceRestorePhase,
+    DeviceRestoreTestFailurePoint, PreviewDeviceBackupRequest, RestoreDeviceBackupRequest,
+    acknowledge_pending_device_restore_frontend_state, commit_device_restore, create_device_backup,
+    fail_device_backup_writes_after, fail_device_restore_at, finalize_device_restore,
+    install_prepared_device_restore, install_prepared_device_restore_with_keyring,
+    mark_device_restore_activated, mark_device_restore_awaiting_consent,
+    pending_device_restore_frontend_state, pending_device_restore_phase, prepare_device_restore,
+    preview_device_backup, recover_interrupted_restore, validate_prepared_device_restore,
 };
 use crate::community_node::{
     COMMUNITY_NODE_CONSENT_PURPOSE, COMMUNITY_NODE_INVITE_CODE_PURPOSE,
@@ -17,7 +23,9 @@ use crate::community_node::{
     load_community_node_config_from_file, save_community_node_config,
 };
 use crate::identity::{
-    IdentityStorageMode, load_existing_keys, load_optional_secret, persist_optional_secret,
+    IdentityStorageMode, KeyringStore, load_existing_keys, load_optional_secret,
+    load_optional_secret_with_keyring, persist_optional_secret,
+    persist_optional_secret_with_keyring,
 };
 use crate::runtime::{
     GOSSIP_SUBSCRIPTION_STATE_KEY, GOSSIP_SUBSCRIPTION_STATE_PURPOSE,
@@ -25,6 +33,38 @@ use crate::runtime::{
 };
 
 const PASSPHRASE: &str = "correct horse battery staple";
+
+#[derive(Default)]
+struct FakeDeviceBackupKeyring {
+    entries: std::sync::Mutex<BTreeMap<(String, String), String>>,
+}
+
+impl KeyringStore for FakeDeviceBackupKeyring {
+    fn get_password(&self, service: &str, account: &str) -> anyhow::Result<Option<String>> {
+        Ok(self
+            .entries
+            .lock()
+            .expect("fake keyring lock")
+            .get(&(service.to_string(), account.to_string()))
+            .cloned())
+    }
+
+    fn set_password(&self, service: &str, account: &str, secret: &str) -> anyhow::Result<()> {
+        self.entries.lock().expect("fake keyring lock").insert(
+            (service.to_string(), account.to_string()),
+            secret.to_string(),
+        );
+        Ok(())
+    }
+
+    fn delete_password(&self, service: &str, account: &str) -> anyhow::Result<()> {
+        self.entries
+            .lock()
+            .expect("fake keyring lock")
+            .remove(&(service.to_string(), account.to_string()));
+        Ok(())
+    }
+}
 
 async fn initialized_app_data() -> (tempfile::TempDir, std::path::PathBuf) {
     let dir = tempdir().expect("tempdir");
@@ -77,6 +117,44 @@ fn archive_with_header_version(mut bytes: Vec<u8>, replacement: u8) -> Vec<u8> {
         .expect("backup header version");
     bytes[index + needle.len() - 1] = replacement;
     bytes
+}
+
+fn create_restore_fixture(
+    app_data_dir: &std::path::Path,
+    db_path: &std::path::Path,
+    archive_path: &std::path::Path,
+) {
+    create_device_backup(
+        app_data_dir,
+        db_path,
+        &CreateDeviceBackupRequest {
+            path: archive_path.display().to_string(),
+            passphrase: PASSPHRASE.to_string(),
+            frontend_state: BTreeMap::new(),
+        },
+        &DeviceBackupCancellation::default(),
+        |_| {},
+    )
+    .expect("create restore fixture");
+}
+
+fn prepare_restore_fixture(
+    app_data_dir: &std::path::Path,
+    archive_path: &std::path::Path,
+    replace_existing: bool,
+) -> crate::backup::PreparedDeviceRestore {
+    prepare_device_restore(
+        app_data_dir,
+        &RestoreDeviceBackupRequest {
+            path: archive_path.display().to_string(),
+            passphrase: PASSPHRASE.to_string(),
+            replace_existing,
+            apply_frontend_state: false,
+        },
+        &DeviceBackupCancellation::default(),
+        |_| {},
+    )
+    .expect("prepare restore fixture")
 }
 
 #[tokio::test]
@@ -222,6 +300,8 @@ async fn encrypted_device_backup_restores_one_account_as_one_file() {
     let restored_db = installed.db_path();
     let result = commit_device_restore(&installed).expect("commit restored account");
     assert_eq!(result.frontend_state, frontend_state);
+    mark_device_restore_awaiting_consent(target.path()).expect("mark awaiting app consent");
+    mark_device_restore_activated(target.path()).expect("mark restored runtime activated");
     finalize_device_restore(installed).expect("finalize restored account");
 
     let restored_keys = load_existing_keys(&restored_db, IdentityStorageMode::FileOnly)
@@ -560,3 +640,5 @@ async fn interrupted_replacement_is_rolled_back_on_recovery() {
         .public_key_hex();
     assert_eq!(recovered_identity, original_identity);
 }
+
+mod recovery;

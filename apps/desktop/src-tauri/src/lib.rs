@@ -1,8 +1,11 @@
 mod commands;
+mod invoke_gate;
+mod restore_lifecycle;
 mod state;
 mod tracing;
 
 use ::tracing::{error, info};
+use kukuri_desktop_runtime::{DeviceRestorePhase, pending_device_restore_phase};
 use tauri::{
     AppHandle, Manager, WindowEvent,
     menu::{Menu, MenuItem},
@@ -12,25 +15,104 @@ use tauri_plugin_deep_link::DeepLinkExt;
 
 use crate::{
     commands::background_notifications::OsNotificationBackground,
+    restore_lifecycle::{
+        DesktopOperationState, RestoreActivationOrchestrationFailure, RestoreStartupAction,
+        activate_pending_restore, advance_committed_restore_to_consent,
+        orchestrate_restore_activation, publish_desktop_state,
+        recover_device_restore_before_startup, restore_startup_action,
+        rollback_pending_restore_and_rebuild,
+    },
     state::{
-        AppConsentStore, DesktopStartupState, DesktopStartupStatus, age_attestation_status,
-        app_consent_documents_status, app_consent_satisfied, build_desktop_state, failed_status,
-        load_app_consent_store, resolve_db_path,
+        DesktopStartupState, DesktopStartupStatus, StartupError, app_consent_satisfied,
+        build_desktop_state, consent_required_status, failed_status, load_app_consent_store,
+        resolve_app_data_dir, resolve_db_path,
     },
     tracing::init_tracing,
 };
 
 pub(crate) async fn initialize_desktop_state(app_handle: AppHandle) -> DesktopStartupStatus {
-    let status = match build_desktop_state(&app_handle).await {
-        Ok(state) => {
-            info!("initialized kukuri desktop runtime");
-            app_handle.manage(state);
-            DesktopStartupStatus::Ready
+    let app_data_dir = match resolve_app_data_dir(&app_handle) {
+        Ok(path) => path,
+        Err(message) => {
+            let status = failed_status(StartupError::unknown(message), None);
+            app_handle
+                .state::<DesktopStartupState>()
+                .set_status(status.clone());
+            return status;
+        }
+    };
+    let pending = match pending_device_restore_phase(&app_data_dir) {
+        Ok(None) => None,
+        Ok(Some(DeviceRestorePhase::AwaitingConsent)) => Some(DeviceRestorePhase::AwaitingConsent),
+        Ok(Some(unexpected)) => {
+            let error = StartupError::unknown(format!(
+                "desktop initialization found unexpected restore phase {unexpected:?}"
+            ));
+            let status = failed_status(error, resolve_db_path(&app_handle).ok());
+            app_handle
+                .state::<DesktopStartupState>()
+                .set_status(status.clone());
+            return status;
         }
         Err(error) => {
-            error!(%error, "failed to initialize desktop runtime");
-            let db_path = resolve_db_path(&app_handle).ok();
-            failed_status(error, db_path)
+            let error = StartupError::unknown(format!(
+                "failed to inspect pending restore before runtime initialization: {error:#}"
+            ));
+            let status = failed_status(error, resolve_db_path(&app_handle).ok());
+            app_handle
+                .state::<DesktopStartupState>()
+                .set_status(status.clone());
+            return status;
+        }
+    };
+
+    let status = if pending == Some(DeviceRestorePhase::AwaitingConsent) {
+        let activation = orchestrate_restore_activation(
+            || async {
+                build_desktop_state(&app_handle).await.map_err(|error| {
+                    format!("failed to start restored account after consent: {error}")
+                })
+            },
+            |state| activate_pending_restore(&app_handle, &app_data_dir, state),
+            || rollback_pending_restore_and_rebuild(&app_handle, &app_data_dir),
+        )
+        .await;
+        match activation {
+            Ok(()) => {
+                info!("finished pending restore activation during desktop startup");
+                DesktopStartupStatus::Ready
+            }
+            Err(RestoreActivationOrchestrationFailure::RolledBack(message)) => {
+                error!(%message, "pending restore activation failed and was rolled back");
+                DesktopStartupStatus::Ready
+            }
+            Err(
+                RestoreActivationOrchestrationFailure::RollbackFailed(message)
+                | RestoreActivationOrchestrationFailure::FinishForward(message),
+            ) => {
+                error!(%message, "pending restore activation failed closed");
+                failed_status(
+                    StartupError::unknown(message),
+                    resolve_db_path(&app_handle).ok(),
+                )
+            }
+        }
+    } else {
+        match build_desktop_state(&app_handle).await {
+            Ok(state) => match publish_desktop_state(&app_handle, state).await {
+                Ok(()) => {
+                    info!("initialized kukuri desktop runtime");
+                    DesktopStartupStatus::Ready
+                }
+                Err(message) => failed_status(
+                    StartupError::unknown(message),
+                    resolve_db_path(&app_handle).ok(),
+                ),
+            },
+            Err(error) => {
+                error!(%error, "failed to initialize desktop runtime");
+                failed_status(error, resolve_db_path(&app_handle).ok())
+            }
         }
     };
     app_handle
@@ -120,21 +202,87 @@ pub fn run() {
             }
         })
         .setup(|app| {
-            let consent_store = resolve_db_path(app.handle())
-                .ok()
-                .map(|db_path| load_app_consent_store(&db_path))
-                .unwrap_or_else(AppConsentStore::default);
+            // runtimeが無い同意待ちでもrestore activation/account switchと同じlockを使う。
+            app.manage(DesktopOperationState::default());
 
-            let initialize_runtime = app_consent_satisfied(&consent_store);
-            let startup_state = if initialize_runtime {
-                DesktopStartupState::initializing()
-            } else {
-                info!("app-level legal consent required; deferring runtime startup");
-                DesktopStartupState::consent_required(
-                    app_consent_documents_status(&consent_store),
-                    age_attestation_status(&consent_store),
-                )
+            // Restore journal recoveryは、同意fileの読取やruntime構築より必ず先に行う。
+            // 回復不能ならruntimeを開始せずFailedへ閉じる。
+            let startup = match resolve_app_data_dir(app.handle()) {
+                Err(error) => {
+                    let error = StartupError::unknown(error);
+                    error!(%error, "failed to resolve app data before restore recovery");
+                    (failed_status(error, None), false)
+                }
+                Ok(app_data_dir) => match recover_device_restore_before_startup(&app_data_dir) {
+                    Err(error) => {
+                        error!(%error, "failed to recover pending device restore");
+                        (failed_status(error, None), false)
+                    }
+                    Ok(pending_phase) => match resolve_db_path(app.handle()) {
+                        Err(error) => {
+                            let error = StartupError::unknown(error);
+                            error!(%error, "failed to resolve consent path after restore recovery");
+                            (failed_status(error, None), false)
+                        }
+                        Ok(db_path) => {
+                            // Committedは旧同意を読む前に必ずresetする。それ以外は回復後の
+                            // active registryから解決したpathだけを読む。
+                            let consent_store = if pending_phase
+                                == Some(DeviceRestorePhase::Committed)
+                            {
+                                None
+                            } else {
+                                Some(load_app_consent_store(&db_path))
+                            };
+                            let consent_satisfied = consent_store
+                                .as_ref()
+                                .map(app_consent_satisfied)
+                                .unwrap_or(false);
+                            let action =
+                                restore_startup_action(pending_phase, consent_satisfied);
+                            let initialize_runtime = action.initializes_runtime();
+                            let status = match action {
+                            RestoreStartupAction::ResetConsent => {
+                                match advance_committed_restore_to_consent(
+                                    &app_data_dir,
+                                    &db_path,
+                                ) {
+                                    Ok(status) => {
+                                        info!("device restore awaits explicit app consent; deferring runtime startup");
+                                        status
+                                    }
+                                    Err(error) => {
+                                        error!(%error, "failed to complete restore consent reset");
+                                        failed_status(error, Some(db_path))
+                                    }
+                                }
+                            }
+                            RestoreStartupAction::Activate | RestoreStartupAction::Normal => {
+                                // accept保存後〜activation完了前に停止した場合は、再同意を
+                                // 繰り返さずinitialize側でactivationをfinish-forwardする。
+                                DesktopStartupStatus::Initializing
+                            }
+                            RestoreStartupAction::AwaitConsent => {
+                                let consent_store = consent_store.unwrap_or_default();
+                                info!("app-level legal consent required; deferring runtime startup");
+                                consent_required_status(&consent_store)
+                            }
+                            RestoreStartupAction::Reject(unexpected) => {
+                                let error = StartupError::unknown(format!(
+                                    "device restore recovery left unexpected phase {unexpected:?}"
+                                ));
+                                error!(%error, "device restore recovery did not reach a startup-safe phase");
+                                failed_status(error, Some(db_path))
+                            }
+                            };
+                            (status, initialize_runtime)
+                        }
+                    },
+                }
             };
+            let (initial_status, initialize_runtime) = startup;
+            let startup_state = DesktopStartupState::initializing();
+            startup_state.set_status(initial_status);
             app.manage(startup_state);
             app.manage(OsNotificationBackground::new(app.handle()));
             if let Err(error) = build_tray(app.handle()) {
@@ -149,7 +297,8 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
+        .invoke_handler(invoke_gate::with_desktop_startup_gate(
+            tauri::generate_handler![
             commands::startup::get_desktop_startup_status,
             commands::app_consent::get_app_consent_status,
             commands::app_consent::accept_app_consents,
@@ -162,6 +311,8 @@ pub fn run() {
             commands::device_backup::preview_device_backup_command,
             commands::device_backup::restore_device_backup_command,
             commands::device_backup::cancel_device_backup,
+            commands::device_backup::get_pending_device_restore_frontend_state,
+            commands::device_backup::acknowledge_pending_device_restore_frontend_state,
             commands::posts::create_post,
             commands::posts::withdraw_post,
             commands::posts::create_repost,
@@ -285,7 +436,8 @@ pub fn run() {
             commands::os_notification::get_os_notification_permission,
             commands::os_notification::request_os_notification_permission,
             commands::background_notifications::set_os_notification_settings
-        ])
+            ],
+        ))
         .run(tauri::generate_context!())
         .expect("failed to run kukuri desktop tauri app");
 }

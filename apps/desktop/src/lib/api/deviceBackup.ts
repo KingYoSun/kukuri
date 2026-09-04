@@ -50,6 +50,56 @@ export function applyPortableFrontendState(
   }
 }
 
+type PortableFrontendSnapshot = Map<string, string | null>;
+
+function capturePortableFrontendSnapshot(storage: Storage): PortableFrontendSnapshot {
+  return new Map(PORTABLE_FRONTEND_STORAGE_KEYS.map((key) => [key, storage.getItem(key)]));
+}
+
+function restorePortableFrontendSnapshot(
+  snapshot: PortableFrontendSnapshot,
+  storage: Storage
+): void {
+  for (const [key, value] of snapshot) {
+    if (value === null) storage.removeItem(key);
+    else storage.setItem(key, value);
+  }
+}
+
+export async function getPendingDeviceRestoreFrontendState(): Promise<Record<string, string> | null> {
+  if (isDesktopMockActive()) return null;
+  return invokeDesktop<Record<string, string> | null>('get_pending_device_restore_frontend_state');
+}
+
+export async function acknowledgePendingDeviceRestoreFrontendState(): Promise<void> {
+  if (isDesktopMockActive()) return;
+  await invokeDesktop<void>('acknowledge_pending_device_restore_frontend_state');
+}
+
+/**
+ * activation済みの復元だけをlocalStorageへ反映する。
+ *
+ * backend markerをackするまでは再実行可能で、applyまたはackが失敗した場合は
+ * 今回触れたportable stateを呼出前へ戻す。process停止時はmarkerが残るため、
+ * 次回のReady startupで同じ値へfinish-forwardできる。
+ */
+export async function applyPendingDeviceRestoreFrontendState(
+  storage: Storage = window.localStorage
+): Promise<boolean> {
+  const pending = await getPendingDeviceRestoreFrontendState();
+  if (pending === null) return false;
+
+  const snapshot = capturePortableFrontendSnapshot(storage);
+  try {
+    applyPortableFrontendState(pending, storage);
+    await acknowledgePendingDeviceRestoreFrontendState();
+    return true;
+  } catch (error) {
+    restorePortableFrontendSnapshot(snapshot, storage);
+    throw error;
+  }
+}
+
 export async function chooseDeviceBackupDestination(): Promise<string | null> {
   if (isDesktopMockActive()) return 'C:\\mock\\kukuri-account.kukuri-backup';
   return save({

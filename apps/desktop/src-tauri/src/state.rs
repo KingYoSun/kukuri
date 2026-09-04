@@ -5,8 +5,8 @@ use std::{
 };
 
 use kukuri_desktop_runtime::{
-    CommunityNodeConfig, DesktopRuntime, DeviceBackupCancellation, StoreStartupError,
-    ensure_accounts_initialized_from_env, resolve_app_data_dir_from_env, resolve_db_path_from_env,
+    CommunityNodeConfig, DesktopRuntime, StoreStartupError, ensure_accounts_initialized_from_env,
+    resolve_app_data_dir_from_env, resolve_db_path_from_env,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager};
@@ -18,9 +18,6 @@ use tokio::sync::watch;
 pub(crate) struct DesktopState {
     runtime: std::sync::RwLock<Arc<DesktopRuntime>>,
     pub(crate) app_data_dir: PathBuf,
-    /// アカウント切替の直列化。並行 switch で runtime 差し替えが交錯しないようにする。
-    pub(crate) switch_guard: tokio::sync::Mutex<()>,
-    pub(crate) device_backup_cancellation: DeviceBackupCancellation,
 }
 
 impl DesktopState {
@@ -191,16 +188,6 @@ pub(crate) struct DesktopStartupState {
 impl DesktopStartupState {
     pub(crate) fn initializing() -> Self {
         Self::new(DesktopStartupStatus::Initializing)
-    }
-
-    pub(crate) fn consent_required(
-        documents: Vec<AppConsentDocumentStatus>,
-        age_attestation: AgeAttestationStatus,
-    ) -> Self {
-        Self::new(DesktopStartupStatus::ConsentRequired {
-            documents,
-            age_attestation,
-        })
     }
 
     fn new(status: DesktopStartupStatus) -> Self {
@@ -387,8 +374,6 @@ pub(crate) async fn build_desktop_state(
     Ok(DesktopState {
         runtime: std::sync::RwLock::new(runtime),
         app_data_dir,
-        switch_guard: tokio::sync::Mutex::new(()),
-        device_backup_cancellation: DeviceBackupCancellation::default(),
     })
 }
 
@@ -457,24 +442,27 @@ pub(crate) fn save_app_consent_store(
     }
     let bytes = serde_json::to_vec_pretty(store)
         .map_err(|error| format!("failed to encode consent record: {error}"))?;
-    std::fs::write(&path, bytes).map_err(|error| {
-        format!(
-            "failed to write consent record `{}`: {error}",
-            path.display()
-        )
-    })
+    crate::restore_lifecycle::write_file_durably(&path, &bytes)
 }
 
 pub(crate) fn reset_app_consent_after_device_restore(
     app_handle: &tauri::AppHandle,
 ) -> Result<DesktopStartupStatus, String> {
-    let store = AppConsentStore::default();
     let db_path = resolve_db_path(app_handle)?;
-    save_app_consent_store(&db_path, &store)?;
-    Ok(DesktopStartupStatus::ConsentRequired {
-        documents: app_consent_documents_status(&store),
-        age_attestation: age_attestation_status(&store),
-    })
+    reset_app_consent_at_path(&db_path)
+}
+
+pub(crate) fn reset_app_consent_at_path(db_path: &Path) -> Result<DesktopStartupStatus, String> {
+    let store = AppConsentStore::default();
+    save_app_consent_store(db_path, &store)?;
+    Ok(consent_required_status(&store))
+}
+
+pub(crate) fn consent_required_status(store: &AppConsentStore) -> DesktopStartupStatus {
+    DesktopStartupStatus::ConsentRequired {
+        documents: app_consent_documents_status(store),
+        age_attestation: age_attestation_status(store),
+    }
 }
 
 /// slug ごとの最新同意記録(版が最大のもの。同版なら日時が新しいもの)。

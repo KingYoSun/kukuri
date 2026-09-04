@@ -21,11 +21,15 @@ pub use accounts::{
 };
 pub use backup::{
     CreateDeviceBackupRequest, DeviceBackupCancellation, DeviceBackupPhase, DeviceBackupPreview,
-    DeviceBackupProgress, DeviceBackupRestoreResult, DeviceBackupSummary, InstalledDeviceRestore,
-    PreparedDeviceRestore, PreviewDeviceBackupRequest, RestoreDeviceBackupRequest,
+    DeviceBackupProgress, DeviceBackupRestoreResult, DeviceBackupSummary, DeviceRestorePhase,
+    InstalledDeviceRestore, PreparedDeviceRestore, PreviewDeviceBackupRequest,
+    RestoreDeviceBackupRequest, acknowledge_pending_device_restore_frontend_state,
     commit_device_restore, create_device_backup, finalize_device_restore,
-    install_prepared_device_restore, prepare_device_restore, preview_device_backup,
-    recover_interrupted_restore, rollback_device_restore,
+    finalize_pending_device_restore, install_prepared_device_restore,
+    mark_device_restore_activated, mark_device_restore_awaiting_consent,
+    pending_device_restore_frontend_state, pending_device_restore_phase, prepare_device_restore,
+    preview_device_backup, recover_interrupted_restore, rollback_device_restore,
+    rollback_pending_device_restore, validate_prepared_device_restore,
 };
 pub use community_node::{
     AcceptCommunityNodeConsentsRequest, CommunityNodeAdmissionRejection,

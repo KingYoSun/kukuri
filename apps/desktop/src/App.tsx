@@ -17,6 +17,7 @@ import {
   type DesktopStartupErrorView,
   type DesktopStartupStatus,
   acceptAppConsents,
+  applyPendingDeviceRestoreFrontendState,
   getDesktopStartupStatus,
 } from '@/lib/api';
 import { isBridgeUnavailableError } from '@/lib/api/invoke/error';
@@ -72,23 +73,23 @@ export function App(props: AppProps) {
   }, [theme]);
 
   useEffect(() => {
-    writeDesktopTheme(theme);
-  }, [theme]);
+    if (startupGate.status === 'ready') writeDesktopTheme(theme);
+  }, [startupGate.status, theme]);
 
-  useEffect(
-    () => startWorkspaceLayoutPersistence(store, window.localStorage),
-    [store]
-  );
+  useEffect(() => {
+    if (startupGate.status !== 'ready') return;
+    return startWorkspaceLayoutPersistence(store, window.localStorage);
+  }, [startupGate.status, store]);
 
-  useEffect(
-    () => startColumnDraftPersistence(store, window.localStorage),
-    [store]
-  );
+  useEffect(() => {
+    if (startupGate.status !== 'ready') return;
+    return startColumnDraftPersistence(store, window.localStorage);
+  }, [startupGate.status, store]);
 
-  useEffect(
-    () => startCommunityIndexNodePreferencePersistence(store, window.localStorage),
-    [store]
-  );
+  useEffect(() => {
+    if (startupGate.status !== 'ready') return;
+    return startCommunityIndexNodePreferencePersistence(store, window.localStorage);
+  }, [startupGate.status, store]);
 
   useEffect(() => {
     if (props.api) {
@@ -100,9 +101,17 @@ export function App(props: AppProps) {
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     const loadStartupStatus = () => {
       getDesktopStartupStatus()
-        .then((status: DesktopStartupStatus) => {
+        .then(async (status: DesktopStartupStatus) => {
           if (!active) {
             return;
+          }
+          if (status.status === 'ready') {
+            const applied = await applyPendingDeviceRestoreFrontendState();
+            if (!active) return;
+            if (applied) {
+              window.location.reload();
+              return;
+            }
           }
           setStartupGate(status);
           if (status.status === 'initializing') {
@@ -202,6 +211,13 @@ function ConsentGate({
         i18n.resolvedLanguage ?? i18n.language,
         attestationRequired && ageAttested
       );
+      if (
+        nextStatus.status === 'ready' &&
+        (await applyPendingDeviceRestoreFrontendState())
+      ) {
+        window.location.reload();
+        return;
+      }
       onAccepted(nextStatus);
     } catch (acceptError) {
       setError(acceptError instanceof Error ? acceptError.message : String(acceptError));
