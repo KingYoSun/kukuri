@@ -1,5 +1,7 @@
 # 2026-06-11 リリース準備 実行計画
 
+> 適用範囲の更新（2026-09-04）: 本文にあるWindows限定／Linux source実行限定の記述は、初回Preview Releaseを成立させた当時の実行基準である。現行のbuilder previewマイルストーンはIssue #885によりLinux x86_64 AppImageとx86_64／aarch64利用者向けCLIを追加する。現行計画は`docs/progress/2026-04-16-mvp-builder-preview-plan.md`、データ分類はADR 0049、実装は#886〜#890を正本とする。#890完了までは`docs/runbooks/release.md`のWindows限定手順が実行可能な現行runbookである。
+
 ## 概要
 
 - この計画は、ビルダープレビューを「配布できる」「更新できる」「問題報告を回収できる」状態にするためのリリース準備計画です。

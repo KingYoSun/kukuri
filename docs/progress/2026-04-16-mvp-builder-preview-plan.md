@@ -4,6 +4,7 @@
 
 - このマイルストーンは general launch ではなく `builder preview` の切り出しです。
 - capability baseline は [2026-03-10-foundation.md](./2026-03-10-foundation.md) を維持し、その上に `初回体験 / 配布 / 説明 / feedback loop` を載せます。
+- Issue #885を現行マイルストーンへ組み込み、Windows NSISに加えてLinux x86_64 AppImageとx86_64／aarch64利用者向けCLIをPreview Releaseへ載せます。実装順と境界は#886〜#890、データ分類はADR 0049を正本とします。
 - Community Node は最後まで単一の概念として扱います。配布候補と利用者追加 Node はどちらも、Node 固有文書への明示同意後にセッションを自動確立・維持します。
 - current preview surface は `launch -> default product Columns -> profile setup -> community node consent -> node ready -> starter topic -> post/reply -> private channel -> feedback` です。
 
@@ -19,7 +20,8 @@
 ## Preview Surface
 
 - packaged distribution: Windows NSIS installer via GitHub Releases
-- source-run fallback: Linux
+- 配布予定: Linux x86_64 AppImage、x86_64／aarch64 `kukuri-cli`をGitHub Preview Releaseで配布（#885）
+- source実行による代替導線: Linux（#885完了までは現行導線として維持）
 - docs: root README, `docs/runbooks/mvp-user-quickstart.md`, `docs/runbooks/mvp-troubleshooting.md`
 - feedback home: GitHub を canonical とし、preview announcement 前に Discussions か同等の feedback surface を有効化する
 
@@ -37,6 +39,8 @@
 | Preview docs refresh | landed | repo change | README, docs index, user quickstart, troubleshooting を追加 |
 | Device backup / restore | landed | repo change | 使用中の1アカウントを1暗号化ファイルへ保存し、staging検証・rollback・再同意付きで復元 |
 | Windows release workflow | landed | repo change | tag / manual dispatch で NSIS asset を Release に載せる |
+| Linux共通基盤／常駐プロセス／CLI通信規約 | planned | repo change | #886〜#888。GUIと分離したprofileを単一の常駐プロセスが所有し、版管理されたローカルprotocolで非OS固有backendとの同等性を提供する |
+| Linux AppImage／リリース統合 | planned | repo change | #889〜#890。Ubuntu 22.04でのbuild、Ubuntu 22.04／Debian 12での実環境smoke test、複数platform成果物の全件成功を要求するリリースを追加する |
 | Seed content on hosted preview node | planned | launch op | project-owned author で preview topics を事前投入する |
 | GitHub feedback surface | planned | launch op | Discussions category か同等の GitHub feedback home を整備する |
 
@@ -60,9 +64,10 @@
 - [ ] hosted preview node 上で starter topic seed content を確認
 - [ ] GitHub feedback surface を preview copy から辿れるようにする
 - [ ] packaged Windows app で `launch -> ready -> post -> reply -> private channel` を手動確認
+- [ ] #885の全親AC／INVARを満たし、Linux AppImageとx86_64／aarch64 CLIをWindows成果物と同じPreview Releaseへ完全に公開
 
 ## Assumptions
 
 - 配布候補と利用者追加 Node は同じ同意・セッション契約を使い、Node の種別差を作りません。
 - community-node server endpoint contract 自体は変更しません。
-- Linux binary packaging、hosted Storybook、general-public launch、moderation tooling はこの milestone の exit criteria に含めません。
+- Linuxのバイナリ配布と利用者向けCLIは#885としてこのマイルストーンの完了条件に含めます。hosted Storybook、一般公開、モデレーションツールは引き続き含めません。
