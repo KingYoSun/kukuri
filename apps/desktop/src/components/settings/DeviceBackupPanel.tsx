@@ -7,7 +7,6 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
 import {
-  applyPortableFrontendState,
   cancelDeviceBackup,
   capturePortableFrontendState,
   chooseDeviceBackupDestination,
@@ -87,6 +86,7 @@ export function DeviceBackupPanel() {
     progress && progress.total_bytes > 0
       ? Math.min(100, Math.round((progress.completed_bytes / progress.total_bytes) * 100))
       : null;
+  const cancellationAllowed = !(restorePending && progress?.phase === 'installing');
 
   const handleCreate = async () => {
     setCreateError(null);
@@ -141,13 +141,14 @@ export function DeviceBackupPanel() {
     setRestoreError(null);
     setProgress(null);
     try {
-      const result = await restoreDeviceBackup(
+      await restoreDeviceBackup(
         restorePath,
         restorePassphrase,
         existingAccount && replaceConfirmed,
         restorePreferences
       );
-      if (restorePreferences) applyPortableFrontendState(result.frontend_state);
+      // frontend stateはbackend activation完了後のdurable markerから適用する。
+      // この応答時点は再同意待ちなのでlocalStorageへ触れない。
       window.location.reload();
     } catch (error) {
       setRestoreError(errorMessage(error));
@@ -309,9 +310,11 @@ export function DeviceBackupPanel() {
             {progressPercent === null ? '' : ` ${progressPercent}%`}
           </p>
           <progress className='w-full' max={100} value={progressPercent ?? undefined} />
-          <Button variant='secondary' onClick={() => void cancelDeviceBackup()}>
-            {t('settings:deviceBackup.cancel')}
-          </Button>
+          {cancellationAllowed ? (
+            <Button variant='secondary' onClick={() => void cancelDeviceBackup()}>
+              {t('settings:deviceBackup.cancel')}
+            </Button>
+          ) : null}
         </div>
       ) : null}
     </Card>

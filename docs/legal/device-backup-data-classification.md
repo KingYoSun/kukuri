@@ -29,5 +29,6 @@ ADR 0002（`docs/adr/0002-feature-data-classification-template.md`）に基づ�
 - バックアップ漏えいは、アカウントのなりすまし、DM・非公開内容・下書きの漏えいにつながる。作成前に安全な保管を警告する。
 - 弱いパスフレーズによる総当たりを軽減するためArgon2idを使用し、最低文字数を要求する。運営者はパスフレーズを復旧できない。
 - 細工された入力によるKDF資源枯渇、巨大entry、過剰entry数、path traversal、chunk並べ替え、重複、欠落、切詰めを上限と認証検証で拒否する。
-- 容量不足、cancel、書込み失敗、migration失敗、runtime構築失敗では、stagingとrollbackを使い既存状態を変更しない。
+- 容量不足、cancel、書込み失敗、migration失敗、runtime構築失敗、process停止では、journal、staging、rollbackを使い、次回起動を含めて既存状態または再同意待ちの復元状態へ収束する。任意適用のfrontend stateは`Activated`後のdurable markerからだけ適用する。適用または確認応答がerrorを返した場合は旧localStorageへ戻し、process停止では残ったmarkerから同じ復元値を再適用する。
+- 復元したidentityの通常runtime、remote取得、scheduler、background通知は、app-level同意と18歳以上の自己申告をresetした後、利用者が明示的に再同意するまで開始しない。
 - バックアップ削除や復元はP2PまたはCommunity Node上の既存copyを削除しない。

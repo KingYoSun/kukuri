@@ -40,17 +40,19 @@ Accepted
 
 ### 5. 復元と競合
 
-- 復元は専用staging directoryで全entryの認証、長さ、hash、path、公開鍵、SQLite migrationを検証してから行う。
+- 復元は専用staging directoryで全entryの認証、長さ、hash、path、公開鍵を検証し、runtime、Iroh endpoint、remote取得taskを構築しないvalidation-only pathでSQLite migrationと永続設定を検証してから行う。
 - 公開鍵が未登録なら新規アカウントとして追加する。同じ公開鍵が登録済みなら対象を表示し、明示的な置換確認がある場合だけアカウントdirectory全体を置換する。内容単位のmergeは行わない。
-- 置換前directoryはrollback用に退避し、新runtimeの構築とregistry更新が成功した後に削除する。失敗時は旧directory、identity、optional secret、registryへ戻す。
-- 復元成功時は対象アカウントをactiveにする。frontend stateは明示したkeyだけを復元し、再読込後に適用する。
+- 置換前directoryはrollback用に退避し、`Installing`、`Installed`、`Committed`、`AwaitingConsent`、`Activated`のjournalでprocess停止をまたいで追跡する。起動時は同意判定や通常runtime構築より先にjournalを回収し、未commitなら旧directory、identity、optional secret、registryへrollbackする。
+- registry更新後はapp-level同意と18歳以上の自己申告をresetし、`AwaitingConsent`として停止する。復元対象の通常runtime、remote取得、scheduler、background通知は、利用者が明示的に再同意し、runtime構築が成功するまで開始しない。
+- 再同意後のruntime構築成功時に`Activated`へ進め、rollback用directoryとjournalを削除する。cleanup中に停止した場合は次回起動で完遂し、runtime構築または`Activated`の永続化に失敗した場合は旧状態へrollbackする。
+- 復元成功時は対象アカウントをactiveにする。frontend stateはjournalでactivationまで保持し、`Activated`後にdurable markerへ移してから、明示したkeyだけをlocalStorageへ適用する。適用またはmarker確認応答がerrorを返した場合は今回のlocalStorage変更を元へ戻し、markerを残す。process停止ではmarkerを残したまま、次回起動時に同じ復元値を再適用する。cancelはdurableなinstall開始前まで受け付け、`Installing`以後はcancel操作を表示しない。
 
 ### 6. 設定画面のフロー
 
 - 対象利用者は端末故障への備え、または別端末への移行を行うdesktop利用者とする。単一目的は、鍵だけの移行と端末全体の移行を混同せず、安全に1アカウントを持ち出すことである。
 - 作成は説明・秘密情報警告・確認checkbox・パスフレーズと確認入力・native保存先選択・進捗・cancel・成功／失敗を持つ。復元はnativeファイル選択・パスフレーズ・内容preview・任意設定の適用・既存アカウント置換確認・進捗・cancel・失敗回復を持つ。
 - 狭幅では1columnを維持し、長いpathと公開鍵は折り返す。pointerとkeyboardの同じcontrolを使い、native dialog以外の操作にdragやhoverを必須としない。
-- offlineでもローカルファイルの作成・preview・復元は可能とする。runtime停止中のネットワーク同期は再起動後に再開し、remote copyを削除したような表示はしない。
+- offlineでもローカルファイルの作成・preview・復元は可能とする。runtime停止中のネットワーク同期は復元後の明示的な再同意とruntime activation後に再開し、remote copyを削除したような表示はしない。
 - 非目標は複数アカウント一括選択、バックアップ内容の個別編集、クラウド同期、旧端末の遠隔削除である。
 
 ## Consequences

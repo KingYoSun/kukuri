@@ -34,6 +34,7 @@ const LOCK_CLASSIFICATION: &[(&str, &str, usize)] = &[
     ),
     ("community_node/trust_relation.rs", "CommunityNodeServer", 5),
     ("device_backup.rs", "IdentityStorage", 7),
+    ("device_backup/recovery.rs", "IdentityStorage", 11),
     ("identity_restart.rs", "IdentityStorage", 2),
     ("media_blob_restore.rs", "IrohNetwork", 11),
     ("private_channels/friend_only.rs", "IrohNetwork", 1),
@@ -107,10 +108,11 @@ fn lock_acquisitions_match_declared_classification() {
     );
     let total: usize = expected.values().sum();
     assert_eq!(
-        total, 110,
+        total, 121,
         "classification total drifted from the Q7 T6 baseline(#711 で index_query 試験を 1 件、\
          #802 で tester_feedback_submission 試験を 3 件、#862 で config 永続化試験を 2 件、\
-         #855 で device_backup 試験を 7 件へ拡充、#857 で report consent gate 試験を 3 件、\
+         #855 で device_backup 試験を 7 件、recovery 試験を 11 件へ拡充、\
+         #857 で report consent gate 試験を 3 件、\
          Dome hosting consent gate 試験を 6 件、固定面回帰で session・metadata・report を各 1 件追加、
          transition rerun で index_query 試験を 3 件、tester feedback・trust relation 試験を各 1 件追加)"
     );

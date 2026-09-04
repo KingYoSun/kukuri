@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
@@ -7,7 +7,6 @@ import { DESKTOP_THEME_STORAGE_KEY } from '@/lib/theme';
 import { DeviceBackupPanel } from './DeviceBackupPanel';
 
 const backupApi = vi.hoisted(() => ({
-  applyPortableFrontendState: vi.fn(),
   cancelDeviceBackup: vi.fn(),
   capturePortableFrontendState: vi.fn(),
   chooseDeviceBackupDestination: vi.fn(),
@@ -82,4 +81,40 @@ test('requires explicit confirmation before replacing the same account', async (
   expect(restore).toBeDisabled();
   await user.click(screen.getByTestId('device-restore-replace-confirm'));
   expect(restore).toBeEnabled();
+});
+
+test('hides cancellation once restore installation begins', async () => {
+  const user = userEvent.setup();
+  let reportProgress:
+    | ((progress: { phase: 'installing'; completed_bytes: number; total_bytes: number }) => void)
+    | undefined;
+  backupApi.listenDeviceBackupProgress.mockImplementation(async (handler) => {
+    reportProgress = handler;
+    return () => {};
+  });
+  backupApi.chooseDeviceBackupSource.mockResolvedValue('C:\\backup.kukuri-backup');
+  backupApi.previewDeviceBackup.mockResolvedValue({
+    public_key: 'aa'.repeat(32),
+    account_label: null,
+    created_at: 1,
+    app_version: '0.1.8',
+    content_bytes: 4096,
+    existing_account_id: null,
+    included: ['account_key'],
+    requires_reconsent: ['app_legal_documents'],
+  });
+  backupApi.restoreDeviceBackup.mockImplementation(() => new Promise(() => {}));
+  render(<DeviceBackupPanel />);
+
+  await user.click(screen.getByRole('button', { name: 'Choose backup file' }));
+  await user.type(screen.getByTestId('device-restore-passphrase'), 'long passphrase');
+  await user.click(screen.getByRole('button', { name: 'Review contents' }));
+  await user.click(await screen.findByRole('button', { name: 'Validate and restore' }));
+  expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+
+  act(() => {
+    reportProgress?.({ phase: 'installing', completed_bytes: 0, total_bytes: 0 });
+  });
+
+  expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
 });

@@ -11,6 +11,7 @@ use kukuri_desktop_runtime::{
 use tauri::Manager;
 
 use crate::commands::background_notifications::OsNotificationBackground;
+use crate::restore_lifecycle::{DesktopOperationState, require_runtime_operation_ready};
 use crate::state::{
     CommandError, DesktopStartupState, DesktopStartupStatus, DesktopState, build_runtime, map_error,
 };
@@ -68,9 +69,12 @@ pub async fn list_accounts(
 pub async fn switch_account(
     app_handle: tauri::AppHandle,
     state: tauri::State<'_, DesktopState>,
+    operation: tauri::State<'_, DesktopOperationState>,
     request: SwitchAccountRequest,
 ) -> Result<AccountRecord, CommandError> {
-    let _guard = state.switch_guard.lock().await;
+    let _guard = operation.switch_guard.lock().await;
+    let startup = app_handle.state::<DesktopStartupState>();
+    require_runtime_operation_ready(&startup.status()).map_err(CommandError::from)?;
 
     let snapshot = kukuri_desktop_runtime::list_accounts(&state.app_data_dir).map_err(map_error)?;
     let record = snapshot
@@ -83,7 +87,6 @@ pub async fn switch_account(
         return Ok(record);
     }
 
-    let startup = app_handle.state::<DesktopStartupState>();
     startup.set_status(DesktopStartupStatus::Initializing);
 
     let db_path = account_db_path(&state.app_data_dir, request.account_id.as_str());

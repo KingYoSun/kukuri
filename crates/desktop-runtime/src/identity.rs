@@ -766,6 +766,38 @@ mod tests {
     }
 
     #[test]
+    fn file_only_optional_secret_ignores_keyring_shadow_and_failure() {
+        clear_identity_env();
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("kukuri.db");
+        let keyring = FakeKeyringStore::default();
+        keyring
+            .set_password(
+                KEYRING_SERVICE,
+                optional_secret_account(&db_path, "test-purpose", "registry").as_str(),
+                "stale-keyring-value",
+            )
+            .expect("seed stale keyring value");
+        persist_secret_to_file_path(
+            optional_secret_file_path(&db_path, "test-purpose", "registry").as_path(),
+            "staged-file-value",
+        )
+        .expect("seed staged file value");
+        *keyring.fail_get.lock().expect("keyring lock") = true;
+
+        let loaded = load_optional_secret_with_keyring(
+            &db_path,
+            IdentityStorageMode::FileOnly,
+            "test-purpose",
+            "registry",
+            &keyring,
+        )
+        .expect("file-only load must not consult keyring");
+
+        assert_eq!(loaded, Some("staged-file-value".to_string()));
+    }
+
+    #[test]
     fn optional_secret_persists_to_file_even_when_keyring_delete_fails() {
         clear_identity_env();
         let dir = tempdir().expect("tempdir");
