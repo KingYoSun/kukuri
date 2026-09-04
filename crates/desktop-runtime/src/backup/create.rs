@@ -116,6 +116,7 @@ where
             "private_channel_state".to_string(),
             "drafts_and_preferences".to_string(),
             "community_node_configuration".to_string(),
+            "desired_subscriptions".to_string(),
         ],
         requires_reconsent: vec![
             "app_legal_documents".to_string(),
@@ -201,7 +202,11 @@ fn account_file_sources(db_path: &Path) -> Result<Vec<(String, EntrySource)>> {
             add_file_source(&mut sources, &path, Path::new(name))?;
         }
     }
-    for extension in ["discovery.json", "community-node.json"] {
+    for extension in [
+        "discovery.json",
+        "community-node.json",
+        "subscriptions.json",
+    ] {
         let path = db_path.with_extension(extension);
         if path.is_file() {
             let name = path

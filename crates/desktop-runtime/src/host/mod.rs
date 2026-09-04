@@ -1,4 +1,6 @@
 mod consent;
+mod profile;
+mod subscriptions;
 
 use std::{
     path::{Path, PathBuf},
@@ -24,6 +26,17 @@ pub use consent::{
     app_consent_satisfied, consent_required_status, current_unix_seconds, load_app_consent_store,
     reset_app_consent_at_path, save_app_consent_store,
 };
+pub use profile::{
+    ClientProfile, ClientProfileKind, ProfileError, ProfileErrorKind, ProfileLease, gui_profile,
+    resolve_cli_profile,
+};
+pub(crate) use subscriptions::load_desired_subscriptions;
+#[cfg(test)]
+pub(crate) use subscriptions::save_desired_subscriptions;
+pub use subscriptions::{
+    DesiredSubscription, DesiredSubscriptionScope, SubscriptionStateError,
+    SubscriptionStateErrorKind, desired_subscriptions_path,
+};
 
 #[derive(Debug)]
 pub struct ClientStartupError {
@@ -48,6 +61,24 @@ impl ClientStartupError {
         Self {
             kind,
             message: format!("{error:#}"),
+        }
+    }
+
+    pub fn from_profile_error(error: ProfileError) -> Self {
+        let kind = match error.kind {
+            ProfileErrorKind::ProfileInUse => ClientStartupErrorKind::ProfileInUse,
+            _ => ClientStartupErrorKind::ProfileInvalid,
+        };
+        Self {
+            kind,
+            message: format!("{}: {}", error.code(), error),
+        }
+    }
+
+    pub fn from_subscription_error(error: SubscriptionStateError) -> Self {
+        Self {
+            kind: ClientStartupErrorKind::SubscriptionState,
+            message: format!("{}: {}", error.code(), error),
         }
     }
 }
@@ -106,8 +137,14 @@ pub struct ClientHost {
     events: broadcast::Sender<RuntimeEvent>,
     event_state: Arc<std::sync::Mutex<ClientEventState>>,
     event_task: tokio::sync::Mutex<Option<JoinHandle<()>>>,
-    switch_guard: tokio::sync::Mutex<()>,
+    operation_guard: tokio::sync::Mutex<()>,
+    shutdown_guard: tokio::sync::Mutex<()>,
     shutdown_started: AtomicBool,
+}
+
+pub enum ClientHostStart {
+    Ready(Arc<ClientHost>),
+    ConsentRequired(ClientStartupStatus),
 }
 
 #[derive(Default)]
@@ -131,14 +168,36 @@ impl ClientEventReceiver {
 }
 
 impl ClientHost {
-    pub async fn start(app_data_dir: PathBuf) -> Result<Arc<Self>, ClientStartupError> {
+    pub async fn start_if_consented(
+        app_data_dir: PathBuf,
+    ) -> Result<ClientHostStart, ClientStartupError> {
+        let consent = load_app_consent_store(&app_data_dir.join(crate::paths::DB_FILE_NAME));
+        if !app_consent_satisfied(&consent) {
+            return Ok(ClientHostStart::ConsentRequired(consent_required_status(
+                &consent,
+            )));
+        }
+        Self::start(app_data_dir).await.map(ClientHostStart::Ready)
+    }
+
+    async fn start(app_data_dir: PathBuf) -> Result<Arc<Self>, ClientStartupError> {
         let db_path = ensure_accounts_initialized_from_env(&app_data_dir)
             .map_err(ClientStartupError::from_error)?;
         let runtime = Self::build_detached_runtime(db_path).await?;
-        Ok(Self::from_runtime(app_data_dir, runtime).await)
+        Self::from_runtime(app_data_dir, runtime).await
     }
 
-    pub async fn from_runtime(app_data_dir: PathBuf, runtime: Arc<DesktopRuntime>) -> Arc<Self> {
+    pub async fn from_runtime(
+        app_data_dir: PathBuf,
+        runtime: Arc<DesktopRuntime>,
+    ) -> Result<Arc<Self>, ClientStartupError> {
+        let desired = match subscriptions::load_desired_subscriptions(runtime.db_path()) {
+            Ok(desired) => desired,
+            Err(error) => {
+                runtime.shutdown().await;
+                return Err(ClientStartupError::from_subscription_error(error));
+            }
+        };
         let (events, _) = broadcast::channel(64);
         let host = Arc::new(Self {
             runtime: RwLock::new(runtime.clone()),
@@ -146,13 +205,18 @@ impl ClientHost {
             events,
             event_state: Arc::new(std::sync::Mutex::new(ClientEventState::default())),
             event_task: tokio::sync::Mutex::new(None),
-            switch_guard: tokio::sync::Mutex::new(()),
+            operation_guard: tokio::sync::Mutex::new(()),
+            shutdown_guard: tokio::sync::Mutex::new(()),
             shutdown_started: AtomicBool::new(false),
         });
         runtime.start_community_node_session_scheduler().await;
         host.replace_event_task(runtime).await;
+        if let Err(error) = host.restore_desired_subscriptions(&desired).await {
+            host.shutdown().await;
+            return Err(ClientStartupError::from_subscription_error(error));
+        }
         host.runtime().start_sync_status_observer().await;
-        host
+        Ok(host)
     }
 
     /// runtimeを構築するが、schedulerとobserverはまだ開始しない。
@@ -180,29 +244,70 @@ impl ClientHost {
         subscribe_host_events(&self.events, &self.event_state)
     }
 
-    pub async fn replace_runtime(&self, next: Arc<DesktopRuntime>) -> Arc<DesktopRuntime> {
+    pub async fn replace_runtime(
+        &self,
+        next: Arc<DesktopRuntime>,
+    ) -> Result<Arc<DesktopRuntime>, ClientStartupError> {
+        let _guard = self.operation_guard.lock().await;
+        if self.shutdown_started.load(Ordering::Acquire) {
+            return Err(ClientStartupError::unknown(
+                "client host is shutting down".to_string(),
+            ));
+        }
+        self.replace_runtime_locked(next).await
+    }
+
+    async fn replace_runtime_locked(
+        &self,
+        next: Arc<DesktopRuntime>,
+    ) -> Result<Arc<DesktopRuntime>, ClientStartupError> {
+        let desired = match subscriptions::load_desired_subscriptions(next.db_path()) {
+            Ok(desired) => desired,
+            Err(error) => {
+                next.shutdown().await;
+                return Err(ClientStartupError::from_subscription_error(error));
+            }
+        };
         next.start_community_node_session_scheduler().await;
         let previous = std::mem::replace(
             &mut *self.runtime.write().expect("runtime lock poisoned"),
             next.clone(),
         );
         self.replace_event_task(next.clone()).await;
+        if let Err(error) = self.restore_desired_subscriptions(&desired).await {
+            let failed = std::mem::replace(
+                &mut *self.runtime.write().expect("runtime lock poisoned"),
+                previous.clone(),
+            );
+            self.replace_event_task(previous).await;
+            failed.shutdown().await;
+            return Err(ClientStartupError::from_subscription_error(error));
+        }
         next.start_sync_status_observer().await;
-        previous
+        Ok(previous)
     }
 
     pub async fn restart_runtime(
         &self,
         db_path: impl AsRef<Path>,
     ) -> Result<(), ClientStartupError> {
+        let _guard = self.operation_guard.lock().await;
+        if self.shutdown_started.load(Ordering::Acquire) {
+            return Err(ClientStartupError::unknown(
+                "client host is shutting down".to_string(),
+            ));
+        }
         let next = Self::build_detached_runtime(db_path).await?;
-        let previous = self.replace_runtime(next).await;
+        let previous = self.replace_runtime_locked(next).await?;
         previous.shutdown().await;
         Ok(())
     }
 
     pub async fn switch_account(&self, account_id: &str) -> anyhow::Result<AccountRecord> {
-        let _guard = self.switch_guard.lock().await;
+        let _guard = self.operation_guard.lock().await;
+        if self.shutdown_started.load(Ordering::Acquire) {
+            anyhow::bail!("client host is shutting down");
+        }
         let snapshot = list_accounts(&self.app_data_dir)?;
         let record = snapshot
             .accounts
@@ -218,6 +323,7 @@ impl ClientHost {
         let next = Self::build_detached_runtime(db_path)
             .await
             .map_err(|error| anyhow::anyhow!("failed to start the account runtime: {error}"))?;
+        let previous_account_id = snapshot.active_account_id.clone();
         let record = match set_active_account(&self.app_data_dir, account_id) {
             Ok(record) => record,
             Err(error) => {
@@ -225,15 +331,116 @@ impl ClientHost {
                 return Err(error);
             }
         };
-        let previous = self.replace_runtime(next).await;
+        let previous = match self.replace_runtime_locked(next).await {
+            Ok(previous) => previous,
+            Err(error) => {
+                let rollback = set_active_account(&self.app_data_dir, &previous_account_id);
+                return match rollback {
+                    Ok(_) => Err(anyhow::anyhow!(
+                        "failed to activate account runtime: {error}"
+                    )),
+                    Err(rollback_error) => Err(anyhow::anyhow!(
+                        "failed to activate account runtime: {error}; failed to restore active account: {rollback_error:#}"
+                    )),
+                };
+            }
+        };
         previous.shutdown().await;
         Ok(record)
     }
 
+    pub fn desired_subscriptions(
+        &self,
+    ) -> Result<Vec<DesiredSubscription>, SubscriptionStateError> {
+        subscriptions::load_desired_subscriptions(self.runtime().db_path())
+    }
+
+    pub async fn add_desired_subscription(
+        &self,
+        subscription: DesiredSubscription,
+    ) -> Result<(), SubscriptionStateError> {
+        subscription.validate()?;
+        let _guard = self.operation_guard.lock().await;
+        if self.shutdown_started.load(Ordering::Acquire) {
+            return Err(SubscriptionStateError::new(
+                SubscriptionStateErrorKind::ActivationFailed,
+                "client host is shutting down",
+            ));
+        }
+        let runtime = self.runtime();
+        let mut desired = subscriptions::load_desired_subscriptions(runtime.db_path())?;
+        if desired.contains(&subscription) {
+            return runtime
+                .ensure_desired_subscription(&subscription)
+                .await
+                .map_err(|error| {
+                    SubscriptionStateError::new(
+                        SubscriptionStateErrorKind::ActivationFailed,
+                        format!("failed to activate desired subscription: {error:#}"),
+                    )
+                });
+        }
+        runtime
+            .ensure_desired_subscription(&subscription)
+            .await
+            .map_err(|error| {
+                SubscriptionStateError::new(
+                    SubscriptionStateErrorKind::ActivationFailed,
+                    format!("failed to activate desired subscription: {error:#}"),
+                )
+            })?;
+        let topic_was_desired = desired
+            .iter()
+            .any(|current| current.topic == subscription.topic);
+        desired.push(subscription.clone());
+        if let Err(error) = subscriptions::save_desired_subscriptions(runtime.db_path(), &desired) {
+            let _ = runtime
+                .remove_desired_subscription(&subscription, topic_was_desired)
+                .await;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    pub async fn remove_desired_subscription(
+        &self,
+        subscription: &DesiredSubscription,
+    ) -> Result<(), SubscriptionStateError> {
+        subscription.validate()?;
+        let _guard = self.operation_guard.lock().await;
+        if self.shutdown_started.load(Ordering::Acquire) {
+            return Err(SubscriptionStateError::new(
+                SubscriptionStateErrorKind::ActivationFailed,
+                "client host is shutting down",
+            ));
+        }
+        let runtime = self.runtime();
+        let mut desired = subscriptions::load_desired_subscriptions(runtime.db_path())?;
+        if !desired.iter().any(|current| current == subscription) {
+            return Ok(());
+        }
+        desired.retain(|current| current != subscription);
+        subscriptions::save_desired_subscriptions(runtime.db_path(), &desired)?;
+        let topic_still_desired = desired
+            .iter()
+            .any(|current| current.topic == subscription.topic);
+        runtime
+            .remove_desired_subscription(subscription, topic_still_desired)
+            .await
+            .map_err(|error| {
+                SubscriptionStateError::new(
+                    SubscriptionStateErrorKind::ActivationFailed,
+                    format!("failed to remove active subscription: {error:#}"),
+                )
+            })
+    }
+
     pub async fn shutdown(&self) {
+        let _shutdown_guard = self.shutdown_guard.lock().await;
         if self.shutdown_started.swap(true, Ordering::AcqRel) {
             return;
         }
+        let _guard = self.operation_guard.lock().await;
         if let Some(task) = self.event_task.lock().await.take() {
             task.abort();
             let _ = task.await;
@@ -255,6 +462,25 @@ impl ClientHost {
                 forward_host_event(&sender, &event_state, event);
             }
         }));
+    }
+
+    async fn restore_desired_subscriptions(
+        &self,
+        desired: &[DesiredSubscription],
+    ) -> Result<(), SubscriptionStateError> {
+        let runtime = self.runtime();
+        for subscription in desired {
+            runtime
+                .ensure_desired_subscription(subscription)
+                .await
+                .map_err(|error| {
+                    SubscriptionStateError::new(
+                        SubscriptionStateErrorKind::ActivationFailed,
+                        format!("failed to restore desired subscription: {error:#}"),
+                    )
+                })?;
+        }
+        Ok(())
     }
 }
 
@@ -317,5 +543,81 @@ mod tests {
                 .await
                 .is_err()
         );
+    }
+
+    #[tokio::test]
+    async fn consent_gate_does_not_initialize_account_or_runtime() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let app_data_dir = root.path().join("profile");
+        let result = ClientHost::start_if_consented(app_data_dir.clone())
+            .await
+            .expect("consent gate");
+        assert!(matches!(result, ClientHostStart::ConsentRequired(_)));
+        assert!(!app_data_dir.join("accounts.json").exists());
+    }
+
+    #[tokio::test]
+    async fn desired_subscription_and_identity_survive_host_restart() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let db_path = root.path().join("kukuri.db");
+        let desired = DesiredSubscription {
+            topic: "kukuri:topic:host-restart".to_string(),
+            scope: DesiredSubscriptionScope::Public,
+        };
+        let runtime = Arc::new(DesktopRuntime::new(&db_path).await.expect("first runtime"));
+        let first = ClientHost::from_runtime(root.path().to_path_buf(), runtime)
+            .await
+            .expect("first host");
+        first
+            .add_desired_subscription(desired.clone())
+            .await
+            .expect("add desired subscription");
+        assert_eq!(
+            first.desired_subscriptions().expect("list desired"),
+            vec![desired.clone()]
+        );
+        let first_status = first
+            .runtime()
+            .get_sync_status()
+            .await
+            .expect("first status");
+        assert!(first_status.subscribed_topics.contains(&desired.topic));
+        first.shutdown().await;
+        first.shutdown().await;
+
+        let runtime = Arc::new(DesktopRuntime::new(&db_path).await.expect("second runtime"));
+        let second = ClientHost::from_runtime(root.path().to_path_buf(), runtime)
+            .await
+            .expect("second host");
+        let second_status = second
+            .runtime()
+            .get_sync_status()
+            .await
+            .expect("second status");
+        assert_eq!(
+            second_status.local_author_pubkey,
+            first_status.local_author_pubkey
+        );
+        assert!(second_status.subscribed_topics.contains(&desired.topic));
+        second
+            .remove_desired_subscription(&desired)
+            .await
+            .expect("remove desired subscription");
+        assert!(
+            second
+                .desired_subscriptions()
+                .expect("list desired")
+                .is_empty()
+        );
+        assert!(
+            !second
+                .runtime()
+                .get_sync_status()
+                .await
+                .expect("status after removal")
+                .subscribed_topics
+                .contains(&desired.topic)
+        );
+        second.shutdown().await;
     }
 }

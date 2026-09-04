@@ -195,8 +195,14 @@ pub(crate) async fn build_desktop_state(
     app_handle: &tauri::AppHandle,
 ) -> Result<DesktopState, StartupError> {
     let app_data_dir = resolve_app_data_dir(app_handle).map_err(StartupError::unknown)?;
-    let host = ClientHost::start(app_data_dir.clone())
-        .await?;
+    let host = match ClientHost::start_if_consented(app_data_dir.clone()).await? {
+        kukuri_desktop_runtime::ClientHostStart::Ready(host) => host,
+        kukuri_desktop_runtime::ClientHostStart::ConsentRequired(_) => {
+            return Err(StartupError::unknown(
+                "app consent is required before starting the runtime".to_string(),
+            ));
+        }
+    };
     spawn_runtime_event_bridge(app_handle, &host);
 
     Ok(DesktopState {

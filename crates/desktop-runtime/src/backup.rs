@@ -486,6 +486,8 @@ where
         if !staging_db.is_file() {
             bail!("device backup does not contain its SQLite database");
         }
+        crate::host::load_desired_subscriptions(&staging_db)
+            .context("device backup desired subscription state is invalid")?;
         persist_keys(&staging_db, IdentityStorageMode::FileOnly, &keys)?;
         persist_restored_secrets(&staging_db, &secret_bundle)
     })();

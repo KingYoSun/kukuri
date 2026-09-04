@@ -1,0 +1,13 @@
+[Unit]
+Description=kukuri client daemon (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/kukuri-cli --profile %i daemon run
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

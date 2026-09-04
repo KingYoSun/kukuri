@@ -22,6 +22,10 @@ use crate::community_node::{
     COMMUNITY_NODE_TOKEN_PURPOSE, CommunityNodeConfig, CommunityNodeNodeConfig,
     load_community_node_config_from_file, save_community_node_config,
 };
+use crate::host::{
+    DesiredSubscription, DesiredSubscriptionScope, load_desired_subscriptions,
+    save_desired_subscriptions,
+};
 use crate::identity::{
     IdentityStorageMode, KeyringStore, load_existing_keys, load_optional_secret,
     load_optional_secret_with_keyring, persist_optional_secret,
@@ -181,6 +185,12 @@ async fn encrypted_device_backup_restores_one_account_as_one_file() {
         },
     )
     .expect("persist community node config");
+    let desired_subscription = DesiredSubscription {
+        topic: "kukuri:topic:backup-subscription".to_string(),
+        scope: DesiredSubscriptionScope::Public,
+    };
+    save_desired_subscriptions(&source_db, std::slice::from_ref(&desired_subscription))
+        .expect("persist desired subscription fixture");
     for (purpose, key, value) in [
         (
             PRIVATE_CHANNEL_CAPABILITIES_PURPOSE,
@@ -308,6 +318,10 @@ async fn encrypted_device_backup_restores_one_account_as_one_file() {
         .expect("load restored identity")
         .expect("restored identity");
     assert_eq!(restored_keys.public_key_hex(), source_keys.public_key_hex());
+    assert_eq!(
+        load_desired_subscriptions(&restored_db).expect("load restored desired subscriptions"),
+        vec![desired_subscription]
+    );
     let snapshot = list_accounts(target.path()).expect("list restored accounts");
     assert_eq!(snapshot.active_account_id, result.account.id);
     assert_eq!(snapshot.accounts.len(), 2);

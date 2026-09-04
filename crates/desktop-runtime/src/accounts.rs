@@ -41,12 +41,13 @@ const ACCOUNT_ID_HEX_CHARS: usize = 16;
 // 移行時に flat レイアウトからアカウントディレクトリへ移す db 兄弟ファイル。
 // harness の cleanup_runtime_artifacts と同じ per-account state の一覧に基づく。
 // `app-consent.json` は端末レベルの状態のため意図的に含めない。
-const FLAT_SIBLING_EXTENSIONS: [&str; 5] = [
+const FLAT_SIBLING_EXTENSIONS: [&str; 6] = [
     "db-shm",
     "db-wal",
     "discovery.json",
     "community-node.json",
     "content-display.json",
+    "subscriptions.json",
 ];
 const FLAT_SIBLING_DIR_EXTENSIONS: [&str; 1] = ["iroh-data"];
 // optional secret の file fallback(`kukuri.<purpose>-<hash>`)の prefix 一覧。

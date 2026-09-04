@@ -5,7 +5,9 @@ mod state;
 mod tracing;
 
 use ::tracing::{error, info};
-use kukuri_desktop_runtime::{DeviceRestorePhase, pending_device_restore_phase};
+use kukuri_desktop_runtime::{
+    DeviceRestorePhase, ProfileLease, gui_profile, pending_device_restore_phase,
+};
 use tauri::{
     AppHandle, Manager, WindowEvent,
     menu::{Menu, MenuItem},
@@ -23,7 +25,8 @@ use crate::{
         rollback_pending_restore_and_rebuild,
     },
     state::{
-        DesktopStartupState, DesktopStartupStatus, StartupError, app_consent_satisfied,
+        DesktopStartupState, DesktopStartupStatus, DesktopState, StartupError,
+        app_consent_satisfied,
         build_desktop_state, consent_required_status, failed_status, load_app_consent_store,
         resolve_app_data_dir, resolve_db_path,
     },
@@ -138,6 +141,16 @@ fn show_main_window(app: &AppHandle) {
     }
 }
 
+fn shutdown_and_exit(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Some(state) = app.try_state::<DesktopState>() {
+            state.host().shutdown().await;
+        }
+        app.exit(0);
+    });
+}
+
 /// Build the system tray so kukuri stays resident after the window is closed
 /// (issue #304). Closing the window hides it; the app keeps syncing in the
 /// background and only exits via the tray "Quit" entry.
@@ -152,7 +165,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "open" => show_main_window(app),
-            "quit" => app.exit(0),
+            "quit" => shutdown_and_exit(app),
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
@@ -207,18 +220,26 @@ pub fn run() {
 
             // Restore journal recoveryは、同意fileの読取やruntime構築より必ず先に行う。
             // 回復不能ならruntimeを開始せずFailedへ閉じる。
-            let startup = match resolve_app_data_dir(app.handle()) {
+            let resolved_profile = resolve_app_data_dir(app.handle())
+                .map_err(StartupError::unknown)
+                .and_then(|app_data_dir| {
+                    ProfileLease::acquire(gui_profile("desktop", app_data_dir.clone()))
+                        .map(|lease| (app_data_dir, lease))
+                        .map_err(StartupError::from_profile_error)
+                });
+            let startup = match resolved_profile {
                 Err(error) => {
-                    let error = StartupError::unknown(error);
-                    error!(%error, "failed to resolve app data before restore recovery");
+                    error!(%error, "failed to acquire desktop profile before restore recovery");
                     (failed_status(error, None), false)
                 }
-                Ok(app_data_dir) => match recover_device_restore_before_startup(&app_data_dir) {
-                    Err(error) => {
-                        error!(%error, "failed to recover pending device restore");
-                        (failed_status(error, None), false)
-                    }
-                    Ok(pending_phase) => match resolve_db_path(app.handle()) {
+                Ok((app_data_dir, profile_lease)) => {
+                    app.manage(profile_lease);
+                    match recover_device_restore_before_startup(&app_data_dir) {
+                        Err(error) => {
+                            error!(%error, "failed to recover pending device restore");
+                            (failed_status(error, None), false)
+                        }
+                        Ok(pending_phase) => match resolve_db_path(app.handle()) {
                         Err(error) => {
                             let error = StartupError::unknown(error);
                             error!(%error, "failed to resolve consent path after restore recovery");
@@ -277,7 +298,8 @@ pub fn run() {
                             };
                             (status, initialize_runtime)
                         }
-                    },
+                        },
+                    }
                 }
             };
             let (initial_status, initialize_runtime) = startup;

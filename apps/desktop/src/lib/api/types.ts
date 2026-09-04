@@ -99,7 +99,13 @@ export type CommandError = {
   retry_after_seconds?: number | null;
 };
 
-export type DesktopStartupErrorKind = 'database_open' | 'database_migration' | 'unknown';
+export type DesktopStartupErrorKind =
+  | 'database_open'
+  | 'database_migration'
+  | 'profile_in_use'
+  | 'profile_invalid'
+  | 'subscription_state'
+  | 'unknown';
 
 export type DesktopStartupErrorView = {
   kind: DesktopStartupErrorKind;

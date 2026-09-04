@@ -247,6 +247,7 @@ pub(crate) fn cleanup_runtime_artifacts(db_path: &Path) -> Result<()> {
         db_path.with_extension("db-wal"),
         db_path.with_extension("iroh-data"),
         db_path.with_extension("community-node.json"),
+        db_path.with_extension("subscriptions.json"),
         db_path.with_extension("identity-store"),
         db_path.with_extension("identity-key"),
         db_path.with_extension("nsec"),

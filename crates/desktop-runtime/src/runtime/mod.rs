@@ -34,8 +34,9 @@ use kukuri_core::{
     BlobHash, CreatePrivateChannelInput, CustomReactionAssetSnapshotV1, DomeHostTargetV1,
     DomeInstanceManifestV1, DomePresetManifestV1, FriendOnlyGrantPreview, FriendPlusSharePreview,
     KukuriKeys, PrivateChannelInvitePreview, Profile, SignedDomeHostingActivationV1,
-    SignedDomeHostingCloseV1, SignedDomeHostingLeaseV1, TopicId, build_signed_dome_session_input,
-    verify_signed_dome_host_heartbeat, verify_signed_dome_physics_snapshot,
+    SignedDomeHostingCloseV1, SignedDomeHostingLeaseV1, TimelineScope, TopicId,
+    build_signed_dome_session_input, verify_signed_dome_host_heartbeat,
+    verify_signed_dome_physics_snapshot,
 };
 use kukuri_docs_sync::{DocQuery, DocsSync};
 use kukuri_store::SqliteStore;
@@ -71,6 +72,7 @@ use crate::discovery::{
     DiscoveryConfig, SetDiscoverySeedsRequest, parse_seed_entries,
     resolve_discovery_config_from_env, save_discovery_config,
 };
+use crate::host::{DesiredSubscription, DesiredSubscriptionScope};
 use crate::identity::{
     IdentityStorageMode, delete_optional_secret, load_optional_secret, load_or_create_keys,
     persist_optional_secret,
