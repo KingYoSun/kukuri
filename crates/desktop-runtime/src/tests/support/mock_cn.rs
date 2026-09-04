@@ -7,6 +7,7 @@ pub(crate) async fn apply_relay_backed_community_node_seed_peers(
     seed_peers: Vec<CommunityNodeSeedPeer>,
 ) {
     seed_local_community_node_consents(runtime, base_url, 1);
+    mark_community_node_session_ready_for_test(runtime, base_url).await;
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
             base_url: base_url.to_string(),
@@ -30,6 +31,21 @@ pub(crate) async fn apply_relay_backed_community_node_seed_peers(
     .await
     .expect("apply seed peers timeout")
     .expect("apply seed peers");
+}
+
+pub(crate) async fn mark_community_node_session_ready_for_test(
+    runtime: &DesktopRuntime,
+    base_url: &str,
+) {
+    let local_consent = crate::community_node::load_community_node_local_consents(
+        &runtime.db_path,
+        runtime.identity_mode,
+        base_url,
+    )
+    .expect("load local consent");
+    runtime
+        .set_community_node_session_ready(base_url, false, local_consent)
+        .await;
 }
 #[derive(Clone)]
 pub(crate) struct MockCommunityNodeState {

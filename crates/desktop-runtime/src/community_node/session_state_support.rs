@@ -11,6 +11,14 @@ impl DesktopRuntime {
             .entry(base_url.to_string())
             .or_insert_with(CommunityNodeSessionState::default);
         entry.session_phase = phase;
+        if matches!(
+            phase,
+            CommunityNodeSessionPhase::Idle
+                | CommunityNodeSessionPhase::Retrying
+                | CommunityNodeSessionPhase::AwaitingAdmission
+        ) {
+            entry.current_policy_verified_for = None;
+        }
         if phase != CommunityNodeSessionPhase::Ready
             && matches!(
                 phase,
@@ -27,6 +35,7 @@ impl DesktopRuntime {
         &self,
         base_url: &str,
         schedule_immediate_refresh: bool,
+        verified_local_consent: CommunityNodeLocalConsentState,
     ) {
         let mut sessions = self.community_node_sessions.lock().await;
         let entry = sessions
@@ -34,6 +43,7 @@ impl DesktopRuntime {
             .or_insert_with(CommunityNodeSessionState::default);
         let previous = Some(entry.session_phase);
         entry.session_phase = CommunityNodeSessionPhase::Ready;
+        entry.current_policy_verified_for = Some(verified_local_consent);
         if schedule_immediate_refresh {
             entry.ready_refresh_pending = true;
             debug!(

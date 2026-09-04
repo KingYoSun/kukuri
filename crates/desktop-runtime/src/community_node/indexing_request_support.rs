@@ -8,7 +8,7 @@ use kukuri_cn_protocol::{
 use reqwest::{StatusCode, header::RETRY_AFTER};
 use serde::{Deserialize, Serialize};
 
-use super::{community_node_http_client, load_community_node_token};
+use super::{CommunityNodeSessionOutcome, community_node_http_client, load_community_node_token};
 use crate::runtime::DesktopRuntime;
 
 /// UI / IPC から受ける secret 非公開の indexing 申請。
@@ -104,7 +104,8 @@ impl DesktopRuntime {
         }
         // セッション確立と同意確認は秘密値を組み立てる前に行う。必須同意が未承認のノードへは
         // 非公開チャンネルの秘密値を含む申請を送らない(#698)。
-        self.ensure_community_node_session(base_url.as_str())
+        let session_outcome = self
+            .ensure_community_node_session(base_url.as_str())
             .await
             .map_err(|error| {
                 CommunityNodeIndexingRequestError::new(
@@ -112,14 +113,20 @@ impl DesktopRuntime {
                     error.to_string(),
                 )
             })?;
-        if self
-            .community_node_required_consent_is_pending(base_url.as_str())
-            .await
-        {
-            return Err(CommunityNodeIndexingRequestError::new(
-                CONSENT_REQUIRED_CODE,
-                "community node required policies must be accepted before indexing requests",
-            ));
+        match session_outcome {
+            CommunityNodeSessionOutcome::Ready => {}
+            CommunityNodeSessionOutcome::ConsentRequired => {
+                return Err(CommunityNodeIndexingRequestError::new(
+                    CONSENT_REQUIRED_CODE,
+                    "community node required policies must be accepted before indexing requests",
+                ));
+            }
+            CommunityNodeSessionOutcome::Deferred(phase) => {
+                return Err(CommunityNodeIndexingRequestError::new(
+                    "COMMUNITY_NODE_SESSION_DEFERRED",
+                    format!("community node session is not ready ({phase:?})"),
+                ));
+            }
         }
         let (target_id, channel_secret_hex) = match request.scope_kind {
             IndexScopeKind::PublicTopic => {

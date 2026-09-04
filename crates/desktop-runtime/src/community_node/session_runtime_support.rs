@@ -1,7 +1,10 @@
 use super::*;
 
 impl DesktopRuntime {
-    pub(crate) async fn ensure_community_node_session(&self, base_url: &str) -> Result<()> {
+    pub(crate) async fn ensure_community_node_session(
+        &self,
+        base_url: &str,
+    ) -> Result<CommunityNodeSessionOutcome> {
         self.ensure_community_node_session_with_mode(base_url, false)
             .await
     }
@@ -10,53 +13,9 @@ impl DesktopRuntime {
         &self,
         base_url: &str,
         force_refresh: bool,
-    ) -> Result<()> {
+    ) -> Result<CommunityNodeSessionOutcome> {
         let base_url = normalize_http_url(base_url)?;
-        let now = Utc::now().timestamp();
-        let session_gate = self
-            .community_node_sessions
-            .lock()
-            .await
-            .get(base_url.as_str())
-            .map(|s| (s.session_retry_deadline, s.session_phase));
-        if session_gate
-            .is_some_and(|(_, phase)| phase == CommunityNodeSessionPhase::AwaitingAdmission)
-        {
-            return Ok(());
-        }
-        let retry_after = session_gate.map(|(retry_after, _)| retry_after);
-        if !force_refresh && retry_after.is_some_and(|retry_after| retry_after > now) {
-            self.set_community_node_session_phase(
-                base_url.as_str(),
-                CommunityNodeSessionPhase::Retrying,
-            )
-            .await;
-            return Ok(());
-        }
-
         let _guard = self.community_node_session_guard.lock().await;
-        let now = Utc::now().timestamp();
-        let session_gate = self
-            .community_node_sessions
-            .lock()
-            .await
-            .get(base_url.as_str())
-            .map(|s| (s.session_retry_deadline, s.session_phase));
-        if session_gate
-            .is_some_and(|(_, phase)| phase == CommunityNodeSessionPhase::AwaitingAdmission)
-        {
-            return Ok(());
-        }
-        let retry_after = session_gate.map(|(retry_after, _)| retry_after);
-        if !force_refresh && retry_after.is_some_and(|retry_after| retry_after > now) {
-            self.set_community_node_session_phase(
-                base_url.as_str(),
-                CommunityNodeSessionPhase::Retrying,
-            )
-            .await;
-            return Ok(());
-        }
-
         let preflight = self
             .preflight_community_node_consent(base_url.as_str())
             .await?;
@@ -76,10 +35,36 @@ impl DesktopRuntime {
             .await;
             self.deactivate_community_node_connectivity(base_url.as_str())
                 .await?;
-            return Ok(());
+            return Ok(CommunityNodeSessionOutcome::ConsentRequired);
         }
         self.set_community_node_local_consent_update_pending(base_url.as_str(), false)
             .await;
+
+        let now = Utc::now().timestamp();
+        let session_gate = self
+            .community_node_sessions
+            .lock()
+            .await
+            .get(base_url.as_str())
+            .map(|s| (s.session_retry_deadline, s.session_phase));
+        if session_gate
+            .is_some_and(|(_, phase)| phase == CommunityNodeSessionPhase::AwaitingAdmission)
+        {
+            return Ok(CommunityNodeSessionOutcome::Deferred(
+                CommunityNodeSessionPhase::AwaitingAdmission,
+            ));
+        }
+        let retry_after = session_gate.map(|(retry_after, _)| retry_after);
+        if !force_refresh && retry_after.is_some_and(|retry_after| retry_after > now) {
+            self.set_community_node_session_phase(
+                base_url.as_str(),
+                CommunityNodeSessionPhase::Retrying,
+            )
+            .await;
+            return Ok(CommunityNodeSessionOutcome::Deferred(
+                CommunityNodeSessionPhase::Retrying,
+            ));
+        }
 
         let was_ready = self
             .community_node_session_was_ready(base_url.as_str())
@@ -128,7 +113,7 @@ impl DesktopRuntime {
                 .await;
                 self.deactivate_community_node_connectivity(base_url.as_str())
                     .await?;
-                return Ok(());
+                return Ok(CommunityNodeSessionOutcome::ConsentRequired);
             }
             // ローカル同意済みの内容をサーバ記録へ同期する(#857)。
             self.set_community_node_session_phase(
@@ -163,8 +148,32 @@ impl DesktopRuntime {
         .await?;
         self.clear_community_node_retry_state(base_url.as_str())
             .await;
-        self.set_community_node_session_ready(base_url.as_str(), !was_ready)
+        self.set_community_node_session_ready(base_url.as_str(), !was_ready, local_consent)
             .await;
+        self.apply_ready_community_node_connectivity(base_url.as_str())
+            .await?;
+        Ok(CommunityNodeSessionOutcome::Ready)
+    }
+
+    pub(crate) async fn apply_ready_community_node_connectivity(
+        &self,
+        base_url: &str,
+    ) -> Result<()> {
+        let local_seed_peer_before = self
+            .local_community_node_seed_peer("ready-connectivity-pre-apply")
+            .await
+            .ok();
+        self.apply_runtime_connectivity_assist().await?;
+        self.apply_effective_seed_peers().await?;
+        let local_seed_peer_after = self
+            .local_community_node_seed_peer("ready-connectivity-post-apply")
+            .await
+            .ok();
+        if local_seed_peer_before != local_seed_peer_after
+            && let Some(entry) = self.community_node_sessions.lock().await.get_mut(base_url)
+        {
+            entry.heartbeat_deadline = 0;
+        }
         Ok(())
     }
 
@@ -174,7 +183,7 @@ impl DesktopRuntime {
     ) -> Result<()> {
         let base_url = normalize_http_url(base_url)?;
         match self.ensure_community_node_session(base_url.as_str()).await {
-            Ok(()) => Ok(()),
+            Ok(_) => Ok(()),
             Err(error) => {
                 if let Some(rejection) = Self::community_node_admission_rejection(&error).cloned() {
                     self.set_community_node_admission_rejection(base_url.as_str(), rejection)
@@ -211,9 +220,17 @@ impl DesktopRuntime {
         );
         let sessions = self.community_node_sessions.lock().await;
         active.nodes.retain(|node| {
-            !sessions
-                .get(node.base_url.as_str())
-                .is_some_and(|session| session.local_consent_update_pending)
+            let Ok(local_consent) = load_community_node_local_consents(
+                &self.db_path,
+                self.identity_mode,
+                node.base_url.as_str(),
+            ) else {
+                return false;
+            };
+            sessions.get(node.base_url.as_str()).is_some_and(|session| {
+                !session.local_consent_update_pending
+                    && session.current_policy_verified_for.as_ref() == Some(&local_consent)
+            })
         });
         active
     }

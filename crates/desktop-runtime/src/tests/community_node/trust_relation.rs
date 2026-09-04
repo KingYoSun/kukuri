@@ -376,6 +376,32 @@ async fn community_node_trust_relation_client_stops_before_http_when_consent_is_
     server.abort();
 }
 
+#[tokio::test]
+async fn retrying_session_stops_trust_relation_request_before_http() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let (runtime, base_url, state, managed, server, _dir) = trust_relation_runtime(None).await;
+    runtime
+        .set_community_node_retry_state(
+            base_url.as_str(),
+            anyhow::anyhow!("temporary session failure"),
+        )
+        .await;
+
+    let error = runtime
+        .read_community_node_trust_user(CommunityNodeUserAdvisoryRequest {
+            base_url,
+            target_pubkey: "a".repeat(64),
+        })
+        .await
+        .expect_err("retrying session must defer the trust request");
+
+    assert_eq!(error.code, "COMMUNITY_NODE_SESSION_DEFERRED");
+    assert_eq!(managed.policies_hits.load(Ordering::SeqCst), 1);
+    assert!(state.requests.lock().await.is_empty());
+    runtime.shutdown().await;
+    server.abort();
+}
+
 // #699: 応答本文の対象識別子が要求対象と違う応答は採用しない。
 #[tokio::test]
 async fn community_node_trust_relation_client_rejects_responses_for_another_target() {
