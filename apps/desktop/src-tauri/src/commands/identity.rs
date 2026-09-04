@@ -6,14 +6,14 @@
 use kukuri_desktop_runtime::{
     AccountKeyExport, AccountKeyImportPreview, AccountRecord, AccountsSnapshot,
     ExportAccountKeyRequest, ImportAccountKeyRequest, PreviewAccountKeyImportRequest,
-    SwitchAccountRequest, account_db_path,
+    SwitchAccountRequest,
 };
 use tauri::Manager;
 
 use crate::commands::background_notifications::OsNotificationBackground;
 use crate::restore_lifecycle::{DesktopOperationState, require_runtime_operation_ready};
 use crate::state::{
-    CommandError, DesktopStartupState, DesktopStartupStatus, DesktopState, build_runtime, map_error,
+    CommandError, DesktopStartupState, DesktopStartupStatus, DesktopState, map_error,
 };
 
 #[tauri::command]
@@ -89,32 +89,15 @@ pub async fn switch_account(
 
     startup.set_status(DesktopStartupStatus::Initializing);
 
-    let db_path = account_db_path(&state.app_data_dir, request.account_id.as_str());
-    let new_runtime = match build_runtime(&app_handle, db_path).await {
-        Ok(runtime) => runtime,
-        Err(error) => {
-            // 旧 runtime は無傷のまま残っている。
-            startup.set_status(DesktopStartupStatus::Ready);
-            return Err(CommandError::from(format!(
-                "failed to start the account runtime: {error}"
-            )));
-        }
-    };
-
-    let record = match kukuri_desktop_runtime::set_active_account(
-        &state.app_data_dir,
-        request.account_id.as_str(),
-    ) {
+    let host = state.host();
+    let record = match host.switch_account(request.account_id.as_str()).await {
         Ok(record) => record,
         Err(error) => {
-            new_runtime.shutdown().await;
+            // 旧 runtime は無傷のまま残っている。
             startup.set_status(DesktopStartupStatus::Ready);
             return Err(map_error(error));
         }
     };
-
-    let previous = state.replace_runtime(new_runtime);
-    previous.shutdown().await;
     app_handle
         .state::<OsNotificationBackground>()
         .reset_for_account_switch();

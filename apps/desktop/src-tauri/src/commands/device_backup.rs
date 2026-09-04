@@ -23,18 +23,14 @@ use crate::state::{
 const PROGRESS_EVENT: &str = "kukuri://device-backup-progress";
 
 async fn rebuild_runtime(
-    app_handle: &tauri::AppHandle,
     state: &DesktopState,
     db_path: PathBuf,
 ) -> Result<(), CommandError> {
-    let runtime = build_runtime(app_handle, db_path).await.map_err(|error| {
+    let runtime = build_runtime(db_path).await.map_err(|error| {
         CommandError::from(format!("failed to restart desktop runtime: {error}"))
     })?;
-    let previous = state.replace_runtime(runtime);
+    let previous = state.host().replace_runtime(runtime).await;
     drop(previous);
-    app_handle
-        .state::<OsNotificationBackground>()
-        .reset_for_account_switch();
     Ok(())
 }
 
@@ -46,8 +42,11 @@ async fn restore_previous_runtime(
     operation_error: CommandError,
 ) -> CommandError {
     let failed_db_path = db_path.clone();
-    match rebuild_runtime(app_handle, state, db_path).await {
+    match rebuild_runtime(state, db_path).await {
         Ok(()) => {
+            app_handle
+                .state::<OsNotificationBackground>()
+                .reset_for_account_switch();
             startup.set_status(DesktopStartupStatus::Ready);
             operation_error
         }
@@ -169,8 +168,11 @@ pub async fn create_device_backup_command(
     };
 
     match operation.map_err(map_error) {
-        Ok(summary) => match rebuild_runtime(&app_handle, &state, restart_path.clone()).await {
+        Ok(summary) => match rebuild_runtime(&state, restart_path.clone()).await {
             Ok(()) => {
+                app_handle
+                    .state::<OsNotificationBackground>()
+                    .reset_for_account_switch();
                 startup.set_status(DesktopStartupStatus::Ready);
                 Ok(summary)
             }
