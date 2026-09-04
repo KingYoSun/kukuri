@@ -472,6 +472,10 @@ async fn validation_only_checks_all_restored_inputs_without_creating_runtime_art
         .await
         .expect("validate restored inputs without runtime");
     assert!(!iroh_root.exists());
+    assert!(
+        crate::idempotency_ledger_path(&staging_db).is_file(),
+        "validation creates a restore marker even when the backup had no ledger"
+    );
 
     let identity_path = staging_db.with_extension("identity-key");
     let identity_bytes = fs::read(&identity_path).expect("read staged identity");

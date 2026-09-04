@@ -3185,6 +3185,7 @@ name = "kukuri-cli"
 version = "0.1.8"
 dependencies = [
  "anyhow",
+ "async-trait",
  "blake3",
  "clap",
  "kukuri-desktop-runtime",
@@ -3193,6 +3194,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -3529,11 +3531,13 @@ dependencies = [
  "reqwest 0.13.4",
  "serde",
  "serde_json",
+ "sqlx",
  "tempfile",
  "tokio",
  "tracing",
  "ts-rs",
  "url",
+ "uuid",
 ]
 
 [[package]]

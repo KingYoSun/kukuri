@@ -55,7 +55,7 @@ canonical sourceを変更しない。一方で、CLI profileの購読期待状�
 - Gossip Hint 必要有無: 不要
 - Blob 必要有無: 不要。大容量mediaはprotocolへbase64で埋め込まず、明示したローカルfile／blob参照を返す
 - SQLite projection 必要有無: 不要
-- 必須 contract: Unix socketのみ、runtime directory 0700、socket 0600、接続元UID一致、TCP listen 0件、版管理されたJSON／NDJSON、stdout／stderr分離、型付きerror、容量／timeout／backpressure上限、remote contentと制御情報の分離
+- 必須 contract: Unix socketのみ、runtime directory 0700、socket 0600、接続元UID一致、TCP listen 0件、版管理されたJSON／NDJSON、stdout／stderr分離、型付きerror、容量／timeout／backpressure上限、remote contentと制御情報の分離。v1は通常frameとsecret frameを各1 MiB以下、既定timeoutを30秒、指定可能な上限を5分、同時接続を64件以下とする。timeoutは接続、frame入出力、dispatcher、event stream全体へ適用する。stream継続はresponseの`more`で示す。secret frameはrequest headerのschema／profile／version／guardと出力先宣言を検証した後、相関付きの受信許可を返してからだけ送受信する
 - 必須 scenario: 正常／不正なenvelope、protocol不一致、常駐プロセス不在、timeout／SIGINT、低速な購読側、上限超過入力、接続元UID不一致、secret／untrusted contentの漏えい検査
 
 ### command登録簿と操作安全情報
@@ -69,7 +69,7 @@ canonical sourceを変更しない。一方で、CLI profileの購読期待状�
 - Gossip Hint 必要有無: 不要
 - Blob 必要有無: 不要
 - SQLite projection 必要有無: 不要
-- 必須 contract: read／write／destructive／secret-bearing／idempotency-required metadataをdispatcherと同じ定義から生成する。操作可否は既存のaccount、同意、audience、credential、domain authorizationで判定する
+- 必須 contract: read／write／destructive／secret-bearing／idempotency-required metadataをdispatcherと同じ定義から生成する。操作可否は既存のaccount、同意、audience、credential、domain authorizationで判定する。command schemaのv1検証subsetは`type`、`properties`、`required`、`additionalProperties`、`items`、`enum`、`const`、数値／文字列／配列のmin/max制約とannotationに限定し、未対応keywordは登録時に拒否する。request payloadの契約に合わせ、input schemaのroot `type`は未指定または`object`に限定する
 - 必須 scenario: command登録簿とdispatcherの不一致、既存domain authorizationによる許可／拒否、argv／payload／remote contentを制御情報として誤解釈しないこと
 
 ### 永続的な冪等性台帳
@@ -83,7 +83,7 @@ canonical sourceを変更しない。一方で、CLI profileの購読期待状�
 - Gossip Hint 必要有無: 不要
 - Blob 必要有無: 不要
 - SQLite projection 必要有無: 必要。profile内のSQLite台帳をcanonicalなlocal stateとして使い、domain SQLite projectionや共有replicaへ混ぜない
-- 必須 contract: command、profile、request idempotency key、canonical payload digestを結び、同一payloadの再実行／異なるpayloadとの競合／実行中停止による結果不明／保持期限切れを区別する。secret-bearing request／resultの平文copyは保存せず、既存domain resultへの参照または秘密情報を含まないresultだけを保持する
+- 必須 contract: command、profile、request idempotency key、canonical payload digestを結び、同一payloadの再実行／異なるpayloadとの競合／実行中停止による結果不明／保持期限切れを区別する。v1のkeyはUUIDv7、許容clock skewは5分、terminal recordは30日、profile／accountあたり最大10,000件とする。上限到達時は最古の完了済みrecordだけを整理し、未確定recordは自動削除しない。secret-bearing request／resultの平文copyは保存せず、secretを含む照合には台帳固有saltによるkeyed digestを使い、既存domain resultへの参照または秘密情報を含まないresultだけを保持する。backup復元時刻から許容clock skewまでの欠落keyは新規実行せず`operation_outcome_unknown`とし、それより未来のkeyは拒否する
 - 必須 scenario: 初回実行、同一payloadの再実行、異なるpayloadとの競合、commit前後の停止、restart、backup／restore、保持期限切れ、同時重複、secret-bearing mutation
 
 ## Decision

@@ -23,8 +23,8 @@ use crate::community_node::{
     load_community_node_config_from_file, save_community_node_config,
 };
 use crate::host::{
-    DesiredSubscription, DesiredSubscriptionScope, load_desired_subscriptions,
-    save_desired_subscriptions,
+    DesiredSubscription, DesiredSubscriptionScope, IdempotencyClaim, IdempotencyLedger,
+    IdempotencyScope, load_desired_subscriptions, save_desired_subscriptions,
 };
 use crate::identity::{
     IdentityStorageMode, KeyringStore, load_existing_keys, load_optional_secret,
@@ -191,6 +191,39 @@ async fn encrypted_device_backup_restores_one_account_as_one_file() {
     };
     save_desired_subscriptions(&source_db, std::slice::from_ref(&desired_subscription))
         .expect("persist desired subscription fixture");
+    let idempotency_key = uuid::Uuid::now_v7().to_string();
+    let idempotency_scope = IdempotencyScope {
+        profile: "backup-test",
+        account: "source-account",
+        command: "fixture.write",
+    };
+    let idempotency_now = chrono::Utc::now().timestamp_millis();
+    let ledger = IdempotencyLedger::open(&source_db)
+        .await
+        .expect("open idempotency ledger");
+    assert_eq!(
+        ledger
+            .claim(
+                &idempotency_scope,
+                &idempotency_key,
+                "fixture-hash",
+                idempotency_now,
+            )
+            .await
+            .expect("claim fixture key"),
+        IdempotencyClaim::Execute
+    );
+    ledger
+        .complete(
+            &idempotency_scope,
+            &idempotency_key,
+            &serde_json::json!({"id": "fixture-result"}),
+            idempotency_now,
+        )
+        .await
+        .expect("complete fixture key");
+    ledger.close().await;
+    assert!(crate::idempotency_ledger_path(&source_db).is_file());
     for (purpose, key, value) in [
         (
             PRIVATE_CHANNEL_CAPABILITIES_PURPOSE,
@@ -264,6 +297,7 @@ async fn encrypted_device_backup_restores_one_account_as_one_file() {
     .expect("preview device backup");
     assert_eq!(preview.public_key, source_keys.public_key_hex());
     assert!(preview.existing_account_id.is_none());
+    assert!(preview.included.contains(&"idempotency_ledger".to_string()));
     assert!(
         preview
             .requires_reconsent
@@ -282,6 +316,7 @@ async fn encrypted_device_backup_restores_one_account_as_one_file() {
         |_| {},
     )
     .expect("prepare device restore");
+    assert!(crate::idempotency_ledger_path(&prepared.staging_db_path()).is_file());
     assert_eq!(
         fs::read(
             prepared
@@ -321,6 +356,21 @@ async fn encrypted_device_backup_restores_one_account_as_one_file() {
     assert_eq!(
         load_desired_subscriptions(&restored_db).expect("load restored desired subscriptions"),
         vec![desired_subscription]
+    );
+    let restored_ledger = IdempotencyLedger::open(&restored_db)
+        .await
+        .expect("open restored idempotency ledger");
+    assert_eq!(
+        restored_ledger
+            .claim(
+                &idempotency_scope,
+                &idempotency_key,
+                "fixture-hash",
+                chrono::Utc::now().timestamp_millis(),
+            )
+            .await
+            .expect("replay restored fixture key"),
+        IdempotencyClaim::Replay(serde_json::json!({"id": "fixture-result"}))
     );
     let snapshot = list_accounts(target.path()).expect("list restored accounts");
     assert_eq!(snapshot.active_account_id, result.account.id);
