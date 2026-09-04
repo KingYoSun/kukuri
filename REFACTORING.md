@@ -30,6 +30,117 @@
 - 大きな抽象化を導入する前に、現在の責務境界と呼び出し方向を調査する。
 - 便利な境界横断の共通化より、明確な境界を保つことを優先する。
 
+## リファクタリングで達成すること
+
+リファクタリングの目的は、単にコードを整形したり行数を減らしたりすることではなく、外部挙動を
+維持したまま、次の変更に必要な理解・変更箇所・波及範囲と回帰リスクを小さくすることである。
+候補ごとに、次のうち何を改善するかを具体的に示す。
+
+- 責務の所有者と依存方向を明確にする。
+- 同じ状態、判断、変換の正本を一つにする。
+- 必要以上に広い公開面、境界横断、暗黙の結合を縮小する。
+- 同一責務内で意味が同じ重複を統合する。
+- I/O、時刻、乱数、network、永続化などの副作用を、挙動を検証できる境界へ隔離する。
+- 到達不能な処理、未参照経路、sunset 条件を満たした互換経路を、入口・参照・契約を確認して除去する。
+- 名前、型、配置、文書を現在の責務とリポジトリの現行規約へ一致させる。
+
+次は候補発見の signal にはなり得るが、単独では着手理由にしない。
+
+- 見た目や記述様式が好みと異なること。
+- 行数、ファイル数、複雑度、coverage など一つの数値だけが閾値を超えたこと。
+- 一般的な best practice と異なっていても、kukuri で変更摩擦や回帰リスクが観測されていないこと。
+- 将来必要になるかもしれない抽象化を先回りして作ること。
+- 変更予定も圧力もない安定領域を、全体統一のためだけに書き換えること。
+
+監査の正当な結論として「現時点では変更しない」を認める。観測した問題、構造上の成果、挙動維持の
+証拠を具体化できない候補は着手しない。
+
+## 定期監査と個別実行
+
+定期監査は原則として product code を変更せず、有限の範囲で候補を収集し、根拠を確認して分類する。
+監査結果をそのまま一つの大型リファクタリング PR にしてはならない。実施する候補は、一つの構造上の
+成果を持ち、単独で検証・review・差し戻しできる個別 Issue / PR として扱う。
+
+### 監査を開始する trigger
+
+固定した週次・月次で repository 全体を掃除するのではなく、次のいずれかを観測したときに開始する。
+
+- 大規模な feature または milestone が完了した。
+- release の安定化へ入る前である。
+- 次の変更を現構造が明確に妨げている。
+- 同種の不具合、review 指摘、変更漏れ、変更時の摩擦が繰り返された。
+- 複数の実装が重なった領域で、局所的な別実装や二重 state が増えた。
+- `cargo xtask oversized-files` など既存 ratchet の基準値増加や、責務境界からの逸脱を観測した。
+- 互換経路、feature flag、一時実装の明示済み sunset 条件を満たした。
+
+### 監査の有限化と成果物
+
+開始前に、一つの subsystem、直近の変更領域、または具体的な責務境界へ scope を限定し、時間枠または
+確認する入口・symbol・path の集合を固定する。成果物は、根拠付き候補一覧、優先順位、各候補の分類と
+理由、今回着手する候補、必要な個別 Issue とする。
+
+各候補は次のいずれかへ分類する。
+
+- `実施`: 開始条件を満たし、個別 Issue / PR へ進める。
+- `延期`: 問題は観測できるが、変更圧力、検証網、時期の条件が未充足である。
+- `却下`: 構造上の成果を示せないか、変更コスト・回帰リスクが価値を上回る。
+- `別種別`: 挙動不良、新機能、依存更新、protocol / storage 変更、性能改善、文書だけの不一致として
+  `fix` / `feature` / `deps` / `migration` / `docs` などへ分離する。
+
+固定 scope の候補をすべて分類した時点、または事前に決めた時間枠を使い切った時点で監査を終了する。
+PR が一つも発生しなくても正常な完了とする。
+
+### 候補に必要な根拠
+
+| 観点 | 確認対象 | 着手判断に必要な根拠 |
+|---|---|---|
+| 不要物・互換経路 | dead code、未参照 export、古い flag、一時経路、古い comment | 参照検索、runtime の入口、sunset 条件、関連 test / contract。serde / IPC / macro / config / 動的登録 / generated code も確認する |
+| 重複・正本 | domain rule、validation、key 生成、state 更新、projection の二重実装 | 各実装の利用者と責務所有者、意味が同一である証拠、変更漏れや摩擦の実例 |
+| 責務・依存 | 複数責務を持つ module、境界横断、循環依存、広い公開面 | 現在と目標の責務・依存、変更波及の実例 |
+| 制御・副作用・検証可能性 | 深い分岐、隠れた state、順序依存、副作用との混在 | 維持する transaction / retry / cancel / lifecycle / concurrency / P2P 順序、error semantics、保護する test / scenario |
+| 現行規約とのずれ | 共通機構を使わない局所実装、古い実装様式、命名・型・配置のばらつき | repository 内の正本と現行の模範実装。一般論だけを根拠にしない |
+| 永続的な知識 | 実装と ADR / runbook / comment の不一致、検証手順の欠落 | 現行実装、test、repository 内文書。session-local な資料へ依存しない |
+
+### 選定、開始、停止
+
+優先順位は、変更頻度、今後の具体的な変更予定、開発・review の摩擦、不具合や互換性への波及、
+検証可能性、実施コスト、差し戻しやすさを合わせて判断する。数値は候補発見の signal として使い、
+数値だけで自動選定しない。
+
+個別作業は、次をすべて説明できる場合だけ開始する。
+
+- 観測した問題と、それを示す path、symbol、参照、履歴、test などがある。
+- 現在の責務、依存、外部挙動、凍結境界、互換パスを特定している。
+- 目標とする構造上の成果と、その before / after の成功判定がある。
+- 維持する挙動と、それを証明する最小の validation がある。
+- 対象と対象外が固定され、一つの意図として review・検証・差し戻しできる。
+
+次のいずれかが判明した場合は作業を止め、再調査または別種別へ再分類する。
+
+- 現在の挙動または正本を特定できない。
+- 凍結境界、protocol、storage、public API、利用者に見える挙動の変更が必要になった。
+- validation で挙動維持を十分に証明できない。
+- 目的が `fix` / `feature` / `deps` / `migration` / 性能最適化へ変わった、または required CI の変更が必要になった。
+- 当初の構造改善が不要と分かったか、具体的な成果を示せなくなった。
+- 一つの意図として review・差し戻しできる範囲を超えた。
+
+### 個別作業の成果物ベースの完了条件
+
+個別作業は次をすべて満たしたときに完了とする。
+
+- 観測した問題と、実施前後の構造上の変化が path、symbol、依存、責務などの証拠へ対応している。
+- 状態の正本数、重複経路、依存、公開 symbol、境界横断、未参照経路など、目的に合う指標が改善している。
+- public API、protocol、storage、config、event、UI など対象領域の外部挙動が維持されている。
+- 変更前後の必要な validation が記録され、既知の失敗を除いて新しい failure / warning がない。
+- test / contract / scenario の削除、skip、弱体化で成功させていない。
+- code の移動や分割だけでなく、定義した責務、依存、正本の問題が実際に改善している。
+- 必要な ADR、runbook、comment、本書が現行実装と一致している。
+- PR が一つの意図に限定され、単独で review・差し戻しできる。
+- 対象外と残存候補が分類され、必要な別種別の作業は混ぜずに別 Issue へ分離されている。
+
+「行数が減った」「ファイルを分割した」「coverage が上がった」「AI が成功と報告した」だけでは
+完了としない。
+
 ## PR種別
 
 PRタイトルまたはタスク概要では、以下のラベル / prefix のいずれかを使う。
@@ -68,13 +179,19 @@ PR を作成または説明するときは、タスク種別を明確にする�
 
 ## 種別
 
+## 観測した問題と根拠
+
+## 目標とする構造上の成果
+
 ## 挙動変更
+
+## 挙動維持の証拠
 
 ## 検証
 
 ## リスク
 
-## 後続対応
+## 見送った候補・別Issue
 ```
 
 ## 禁止する混在変更
@@ -94,7 +211,7 @@ PR を作成または説明するときは、タスク種別を明確にする�
 以下は「1 バイトの変更で既存データ・既存署名・ネットワーク互換・契約が壊れる」凍結対象である。
 明示的なタスク(migration 計画込み)なしに変更しない。多くは contract テストが検出装置として
 固定している(fail した場合、テストではなく変更側の互換影響を評価する)。
-詳細な調査記録は `.claude/plans/2026-07-02-refactoring_master_plan.md` §3.1。
+判断に必要な根拠と検出 test は本節へ集約し、repository 外や非追跡の計画を前提にしない。
 
 1. **署名 canonical 3 系統**: envelope の 6 要素配列(`crates/core/src/envelope.rs` の
    `canonical_envelope_payload`)、DM frame/ack の canonical 配列(`crates/core/src/direct_messages.rs`)、
@@ -136,7 +253,8 @@ PR を作成または説明するときは、タスク種別を明確にする�
 ## 地雷リスト(直したくなるが、してはいけない)
 
 凍結境界とは別に、「一見 dead code / 不整合 / 冗長に見えるが、消す・揃える・golden 化すると
-壊れる」ものを挙げる。詳細な調査記録は `.claude/plans/2026-07-02-refactoring_master_plan.md` §3.2。
+壊れる」ものを挙げる。判断に必要な理由と検出経路は各項目へ集約し、repository 外や非追跡の
+計画を前提にしない。
 
 1. **`ConnectionPath::RelayFallback` は削除禁止の第3経路**: `AGENTS.md`「通信経路」節が規定する
    `Direct P2P -> Relay Supported P2P -> Relay Fallback` の 3 番目。variant は
@@ -206,6 +324,7 @@ PR を作成または説明するときは、タスク種別を明確にする�
 | `apps/desktop/src-tauri/**` | `cargo xtask tauri-check` + `cargo xtask e2e-smoke` |
 | `docs/adr/**` | 対応する tests / contracts / scenarios を確認または更新する |
 | `docs/runbooks/**` | runbook 内の command と path を確認する |
+| `REFACTORING.md` | `git diff --check` + 記載した repository path / command の存在確認 + `cargo xtask oversized-files` |
 
 `cargo xtask e2e-smoke` は `desktop_smoke_post_persist`（`FakeNetwork`・in-process 単一 runtime）1 本を回す desktop 永続 smoke であり、post 作成 → timeline → restart → 再表示の永続往復のみを検証する。実 transport / docs-sync の peer 間経路・relay replication は通らない。peer / replication / CN 接続の検証は該当 crate の `cargo xtask rust-test`（実 iroh テストを含む）と `cargo xtask scenario <connectivity scenario>` が担う。CI 実配線の connectivity scenario は `community_node_public_connectivity`（fast / release）、加えて `community_node_multi_device_connectivity`（nightly）。connectivity scenario は cn-postgres 起動 + 実 iroh peer 複数で重いため、マトリクスでは「振る舞いが変わる場合」の条件付き要求とする。
 
@@ -236,18 +355,84 @@ PR 作成前または `main` merge 前は、可能なら `cargo xtask check` + `
 - formatting-only change と semantic change を混ぜない。
 - generated file、lock file、icon は明示的に対象化されない限り、この方針の対象外とする。
 
+## AI利用時の証拠規範
+
+- 「観測した事実」「そこからの推測」「未検証事項」を区別する。説明の詳しさや確信度を証拠にしない。
+- 「未使用」「重複」「全 test 成功」「互換性に影響しない」は仮説として扱い、参照、型検査、実行ログ、
+  test / contract / scenario で確認する。
+- 静的検索だけで dead code や意味が同じ重複と断定しない。候補には path、symbol、利用者、入口、
+  保護する test を可能な限り添える。
+- 新しい helper、wrapper、抽象化を作る前に、既存実装と全利用箇所を検索し、kukuri の現行様式を優先する。
+- 一般的な clean code 論や将来拡張だけを根拠に、新しい層、型、ファイルを増やさない。
+- 提案した API、command、dependency が実在することを確認する。リファクタリング PR で dependency を追加しない。
+- test は観測可能な挙動を固定する。実装順序や source 構造の変更検知だけを目的とする test は追加しない。
+  既存 wire / serialization / visual contract を固定する snapshot はこの限りではない。
+- 変更と同時に追加した test だけを挙動維持の証拠にせず、変更前の挙動、既存 contract、fixture、scenario と照合する。
+- test の削除・skip、assertion の弱体化、warning 抑制、hardcode によって validation を成功扱いにしない。
+- 高リスクな境界変更は人間または独立した別コンテキストでも review する。複数担当の合意だけを挙動維持の証拠にしない。
+
+## 記録テンプレート
+
+定期監査では次を記録する。
+
+```md
+## 対象と開始trigger
+
+## 有限scopeと終了条件
+
+## 変更前baseline
+
+## 候補一覧
+
+| 候補 | 観測した問題と根拠 | 目標成果 | 優先順位 | 分類 | 理由 / 個別Issue |
+|---|---|---|---|---|---|
+
+## 監査終了判定
+```
+
+個別作業では次を記録する。凍結境界、互換パス、validation の詳細は本書の既存節を参照し、
+テンプレート内へ複製しない。
+
+```md
+## 種別
+
+## 観測した問題と根拠
+
+## 現在の責務・依存・挙動
+
+## 目標とする構造上の成果
+
+## 維持する挙動
+
+## 対象 / 対象外
+
+## 凍結境界・互換パス
+
+## 変更前baselineと成功判定
+
+## Issue / 段階 / PR分割
+
+## Validation
+
+## 差し戻し手順
+
+## 見送った候補・別Issue
+```
+
 ## 必須AIワークフロー
 
-リファクタリングタスクでは、AIエージェントは以下の順序に従う。
+リファクタリング監査または個別作業では、AIエージェントは以下の順序に従う。
 
-1. `AGENTS.md` とこの文書を読む。
-2. リファクタリング種別を特定する。
-3. 影響pathと必須validationを特定する。
-4. 現在の tests / contracts / scenarios を確認する。
-5. 振る舞いの仕様が不足している場合は、先に characterization test を追加する。
-6. タスクを満たす最小の構造変更を行う。
-7. 必須validationを実行する。実行しない場合は理由を報告する。
-8. 完了報告を出す。
+1. `AGENTS.md`、この文書、対象の ADR / runbook / test / scenario を読む。
+2. 対象領域の構造を把握し、候補と観測根拠を収集する。
+3. 候補を分類・優先順位付けし、一つの意図を選ぶ。監査だけなら固定 scope の分類完了で終了する。
+4. 現在の挙動、構造上の問題、目標成果、対象外、凍結境界、互換パス、validation を記録する。
+5. 影響 path と必須 validation を特定し、変更前に実行して既知の失敗を今回の回帰と区別できるよう記録する。
+6. 挙動を固定する網が不足する場合は、先に contract / scenario / characterization test を別 PR で追加する。
+7. 一つの意図を小さく差し戻し可能な段階へ分け、各段階の後に最小の関連 validation を実行する。
+8. 停止条件を検出したら先へ進まず、再調査または別種別へ再分類する。
+9. 最後に path 別検証マトリクスの validation と、差分全体の review を行う。未実行項目は理由を報告する。
+10. before / after の構造上の成果、挙動維持の証拠、残存リスク、見送った候補を完了報告へ記録する。
 
 ## レビューチェックリスト
 
@@ -259,22 +444,31 @@ PR 作成前または `main` merge 前は、可能なら `cargo xtask check` + `
 - public API、protocol、storage、docs/blobs、community-node contract が維持されているか。
 - 新しい抽象化は、既存の重複または境界上の圧力によって正当化されているか。
 - 結合を減らしているか。それとも単に code を移動しただけか。
+- 観測した問題と目標成果が before / after の証拠へ対応しているか。
+- 行数、coverage、AIの判断だけを開始・完了根拠にしていないか。
+- 候補の全入口と利用者を確認し、事実・推測・未検証事項を区別しているか。
 - 触った振る舞いに対して tests / contracts / scenarios は十分か。
+- test の削除・skip・assertion の弱体化で green にしていないか。
 - 必須validationは実行され、報告されているか。
 - 大型ファイルを慎重に扱っているか。
 - diff 内の `#[serde` 属性・wire 文字列リテラル・canonical 実装の変更を目視したか(凍結境界の章を参照)。
+- 対象外、見送った候補、別種別へ再分類した事項と理由が明記されているか。
 
 ## 完了報告形式
 
 AIエージェントは、リファクタリング作業を以下の形式で終了する。
 
 - 変更種別:
+- 開始trigger:
 - 目的:
+- 観測した問題と根拠:
 - 変更path:
+- 実施前後の構造上の変化:
 - 挙動変更:
 - Public API / protocol / storage の変更:
 - 追加または更新した tests / contracts / scenarios:
+- 挙動維持の証拠:
 - 実行したvalidation:
 - 実行しなかったvalidation:
 - リスク:
-- 推奨後続対応:
+- 見送った候補・理由 / 別Issue:
