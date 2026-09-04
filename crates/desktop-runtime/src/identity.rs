@@ -129,7 +129,7 @@ fn load_or_create_keys_with_keyring(
     Ok(keys)
 }
 
-fn load_existing_keys_with_keyring(
+pub(crate) fn load_existing_keys_with_keyring(
     db_path: &Path,
     mode: IdentityStorageMode,
     keyring: &dyn KeyringStore,
@@ -148,7 +148,7 @@ fn load_existing_keys_with_keyring(
     Ok(None)
 }
 
-fn persist_keys_with_keyring(
+pub(crate) fn persist_keys_with_keyring(
     db_path: &Path,
     mode: IdentityStorageMode,
     keys: &KukuriKeys,
@@ -216,7 +216,7 @@ fn parse_keys(secret: &str) -> Result<KukuriKeys> {
     KukuriKeys::parse(secret).context("failed to parse persisted secret key")
 }
 
-fn load_optional_secret_with_keyring(
+pub(crate) fn load_optional_secret_with_keyring(
     db_path: &Path,
     mode: IdentityStorageMode,
     purpose: &str,
@@ -252,7 +252,7 @@ fn is_missing_default_keyring(error: &anyhow::Error) -> bool {
     })
 }
 
-fn persist_optional_secret_with_keyring(
+pub(crate) fn persist_optional_secret_with_keyring(
     db_path: &Path,
     mode: IdentityStorageMode,
     purpose: &str,
@@ -289,12 +289,25 @@ fn delete_optional_secret_with_keyring(
     key: &str,
     keyring: &dyn KeyringStore,
 ) -> Result<()> {
-    let account = optional_secret_account(db_path, purpose, key);
     if mode == IdentityStorageMode::Auto {
-        keyring.delete_password(KEYRING_SERVICE, account.as_str())?;
+        delete_optional_secret_keyring_entry_with_keyring(db_path, purpose, key, keyring)?;
     }
     delete_file_if_exists(optional_secret_file_path(db_path, purpose, key).as_path())?;
     Ok(())
+}
+
+pub(crate) fn delete_optional_secret_keyring_entry_with_keyring(
+    db_path: &Path,
+    purpose: &str,
+    key: &str,
+    keyring: &dyn KeyringStore,
+) -> Result<()> {
+    let account = optional_secret_account(db_path, purpose, key);
+    match keyring.delete_password(KEYRING_SERVICE, account.as_str()) {
+        Ok(()) => Ok(()),
+        Err(error) if is_missing_default_keyring(&error) => Ok(()),
+        Err(error) => Err(error).context("failed to delete optional secret from keyring"),
+    }
 }
 
 fn load_secret_from_keyring(db_path: &Path, keyring: &dyn KeyringStore) -> Result<Option<String>> {
@@ -488,13 +501,13 @@ fn delete_file_if_exists(path: &Path) -> Result<()> {
     Ok(())
 }
 
-trait KeyringStore: Send + Sync {
+pub(crate) trait KeyringStore: Send + Sync {
     fn get_password(&self, service: &str, account: &str) -> Result<Option<String>>;
     fn set_password(&self, service: &str, account: &str, secret: &str) -> Result<()>;
     fn delete_password(&self, service: &str, account: &str) -> Result<()>;
 }
 
-struct SystemKeyringStore;
+pub(crate) struct SystemKeyringStore;
 
 impl KeyringStore for SystemKeyringStore {
     fn get_password(&self, service: &str, account: &str) -> Result<Option<String>> {
@@ -566,6 +579,9 @@ mod tests {
         }
 
         fn delete_password(&self, service: &str, account: &str) -> Result<()> {
+            if *self.no_default_store.lock().expect("keyring lock") {
+                return Err(anyhow!(KeyringError::NoDefaultStore));
+            }
             if *self.fail_delete.lock().expect("keyring lock") {
                 anyhow::bail!("fake keyring delete failure");
             }
@@ -763,6 +779,23 @@ mod tests {
         .expect("missing default keyring must use file fallback");
 
         assert_eq!(loaded, Some("file-value".to_string()));
+    }
+
+    #[test]
+    fn optional_secret_keyring_delete_treats_missing_default_store_as_absent() {
+        clear_identity_env();
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("kukuri.db");
+        let keyring = FakeKeyringStore::default();
+        *keyring.no_default_store.lock().expect("keyring lock") = true;
+
+        delete_optional_secret_keyring_entry_with_keyring(
+            &db_path,
+            "test-purpose",
+            "registry",
+            &keyring,
+        )
+        .expect("missing default keyring is equivalent to an absent entry");
     }
 
     #[test]

@@ -1,5 +1,47 @@
 use super::*;
 
+fn save_single_node_config(db_path: &Path, base_url: &str) {
+    save_community_node_config(
+        db_path,
+        &CommunityNodeConfig {
+            nodes: vec![CommunityNodeNodeConfig {
+                base_url: base_url.to_string(),
+                resolved_urls: None,
+            }],
+        },
+    )
+    .expect("save single-node config");
+}
+
+fn persist_fake_keyring_secret(
+    db_path: &Path,
+    purpose: &str,
+    key: &str,
+    value: &str,
+    keyring: &FakeDeviceBackupKeyring,
+) {
+    persist_optional_secret_with_keyring(
+        db_path,
+        IdentityStorageMode::Auto,
+        purpose,
+        key,
+        value,
+        keyring,
+    )
+    .expect("persist fake keyring secret");
+}
+
+fn load_fake_keyring_secret(
+    db_path: &Path,
+    mode: IdentityStorageMode,
+    purpose: &str,
+    key: &str,
+    keyring: &FakeDeviceBackupKeyring,
+) -> Option<String> {
+    load_optional_secret_with_keyring(db_path, mode, purpose, key, keyring)
+        .expect("load fake keyring secret")
+}
+
 #[tokio::test]
 async fn committed_restore_remains_pending_until_consent_and_activation() {
     let _resource = lock_test_resource(TestResource::IdentityStorage).await;
@@ -541,6 +583,337 @@ async fn post_journal_move_error_and_installed_journal_error_rollback_immediatel
     assert_eq!(
         pending_device_restore_phase(target.path()).expect("new-account pending phase"),
         None
+    );
+}
+
+#[tokio::test]
+async fn replacement_restore_scrubs_stale_keyring_union_and_preserves_rollback_values() {
+    let _resource = lock_test_resource(TestResource::IdentityStorage).await;
+    let (app_data, db_path) = initialized_app_data().await;
+    let restored_node = "https://restored-node.example";
+    let existing_node = "https://existing-node.example";
+    save_single_node_config(&db_path, restored_node);
+    for (purpose, key, value) in [
+        (
+            PRIVATE_CHANNEL_CAPABILITIES_PURPOSE,
+            PRIVATE_CHANNEL_CAPABILITIES_KEY,
+            "restored-private-capabilities",
+        ),
+        (
+            GOSSIP_SUBSCRIPTION_STATE_PURPOSE,
+            GOSSIP_SUBSCRIPTION_STATE_KEY,
+            "restored-gossip-state",
+        ),
+        (
+            COMMUNITY_NODE_INVITE_CODE_PURPOSE,
+            restored_node,
+            "restored-invite",
+        ),
+    ] {
+        persist_optional_secret(&db_path, IdentityStorageMode::FileOnly, purpose, key, value)
+            .expect("persist portable restore fixture");
+    }
+    let archive_dir = tempdir().expect("archive tempdir");
+    let archive_path = archive_dir
+        .path()
+        .join("stale-keyring-replace.kukuri-backup");
+    create_restore_fixture(app_data.path(), &db_path, &archive_path);
+
+    save_single_node_config(&db_path, existing_node);
+    let keyring = FakeDeviceBackupKeyring::default();
+    for (purpose, key, value) in [
+        (
+            PRIVATE_CHANNEL_CAPABILITIES_PURPOSE,
+            PRIVATE_CHANNEL_CAPABILITIES_KEY,
+            "existing-private-capabilities",
+        ),
+        (
+            GOSSIP_SUBSCRIPTION_STATE_PURPOSE,
+            GOSSIP_SUBSCRIPTION_STATE_KEY,
+            "existing-gossip-state",
+        ),
+        (
+            COMMUNITY_NODE_INVITE_CODE_PURPOSE,
+            restored_node,
+            "stale-restored-node-invite",
+        ),
+        (
+            COMMUNITY_NODE_TOKEN_PURPOSE,
+            restored_node,
+            "stale-restored-node-token",
+        ),
+        (
+            COMMUNITY_NODE_CONSENT_PURPOSE,
+            restored_node,
+            "stale-restored-node-consent",
+        ),
+        (
+            COMMUNITY_NODE_TOKEN_PURPOSE,
+            existing_node,
+            "existing-node-token",
+        ),
+    ] {
+        persist_fake_keyring_secret(&db_path, purpose, key, value, &keyring);
+    }
+
+    let prepared = prepare_restore_fixture(app_data.path(), &archive_path, true);
+    let failure = fail_device_restore_at(DeviceRestoreTestFailurePoint::FailInstalledJournalWrite);
+    install_prepared_device_restore_with_keyring(
+        app_data.path(),
+        prepared,
+        IdentityStorageMode::Auto,
+        &keyring,
+    )
+    .err()
+    .expect("installed journal failure must roll replacement back");
+    drop(failure);
+
+    for (purpose, key, expected) in [
+        (
+            PRIVATE_CHANNEL_CAPABILITIES_PURPOSE,
+            PRIVATE_CHANNEL_CAPABILITIES_KEY,
+            "existing-private-capabilities",
+        ),
+        (
+            COMMUNITY_NODE_TOKEN_PURPOSE,
+            restored_node,
+            "stale-restored-node-token",
+        ),
+        (
+            COMMUNITY_NODE_TOKEN_PURPOSE,
+            existing_node,
+            "existing-node-token",
+        ),
+    ] {
+        assert_eq!(
+            load_fake_keyring_secret(
+                &db_path,
+                IdentityStorageMode::FileOnly,
+                purpose,
+                key,
+                &keyring,
+            ),
+            Some(expected.to_string()),
+            "rollback must restore the previous value without keyring"
+        );
+    }
+
+    persist_fake_keyring_secret(
+        &db_path,
+        COMMUNITY_NODE_TOKEN_PURPOSE,
+        existing_node,
+        "retry-existing-node-token",
+        &keyring,
+    );
+    let prepared = prepare_restore_fixture(app_data.path(), &archive_path, true);
+    let installed = install_prepared_device_restore_with_keyring(
+        app_data.path(),
+        prepared,
+        IdentityStorageMode::Auto,
+        &keyring,
+    )
+    .expect("install replacement without stale keyring shadow");
+    let restored_db = installed.db_path();
+
+    assert_eq!(
+        load_fake_keyring_secret(
+            &restored_db,
+            IdentityStorageMode::Auto,
+            COMMUNITY_NODE_TOKEN_PURPOSE,
+            restored_node,
+            &keyring,
+        ),
+        None
+    );
+    assert_eq!(
+        load_fake_keyring_secret(
+            &restored_db,
+            IdentityStorageMode::Auto,
+            COMMUNITY_NODE_CONSENT_PURPOSE,
+            restored_node,
+            &keyring,
+        ),
+        None
+    );
+    assert_eq!(
+        load_fake_keyring_secret(
+            &restored_db,
+            IdentityStorageMode::Auto,
+            COMMUNITY_NODE_TOKEN_PURPOSE,
+            existing_node,
+            &keyring,
+        ),
+        None
+    );
+    assert_eq!(
+        load_fake_keyring_secret(
+            &restored_db,
+            IdentityStorageMode::Auto,
+            COMMUNITY_NODE_INVITE_CODE_PURPOSE,
+            restored_node,
+            &keyring,
+        ),
+        Some("restored-invite".to_string())
+    );
+    assert_eq!(
+        load_fake_keyring_secret(
+            &restored_db,
+            IdentityStorageMode::Auto,
+            PRIVATE_CHANNEL_CAPABILITIES_PURPOSE,
+            PRIVATE_CHANNEL_CAPABILITIES_KEY,
+            &keyring,
+        ),
+        Some("restored-private-capabilities".to_string())
+    );
+    assert_eq!(
+        load_fake_keyring_secret(
+            &restored_db,
+            IdentityStorageMode::Auto,
+            GOSSIP_SUBSCRIPTION_STATE_PURPOSE,
+            GOSSIP_SUBSCRIPTION_STATE_KEY,
+            &keyring,
+        ),
+        Some("restored-gossip-state".to_string())
+    );
+}
+
+#[tokio::test]
+async fn new_account_restore_scrubs_stale_keyring_at_reused_canonical_path() {
+    let _resource = lock_test_resource(TestResource::IdentityStorage).await;
+    let (source, source_db) = initialized_app_data().await;
+    let restored_node = "https://new-account-node.example";
+    save_single_node_config(&source_db, restored_node);
+    for (purpose, key, value) in [
+        (
+            PRIVATE_CHANNEL_CAPABILITIES_PURPOSE,
+            PRIVATE_CHANNEL_CAPABILITIES_KEY,
+            "restored-new-account-private",
+        ),
+        (
+            GOSSIP_SUBSCRIPTION_STATE_PURPOSE,
+            GOSSIP_SUBSCRIPTION_STATE_KEY,
+            "restored-new-account-gossip",
+        ),
+        (
+            COMMUNITY_NODE_INVITE_CODE_PURPOSE,
+            restored_node,
+            "restored-new-account-invite",
+        ),
+    ] {
+        persist_optional_secret(
+            &source_db,
+            IdentityStorageMode::FileOnly,
+            purpose,
+            key,
+            value,
+        )
+        .expect("persist new-account backup fixture");
+    }
+    let source_public_key = load_existing_keys(&source_db, IdentityStorageMode::FileOnly)
+        .expect("load source identity")
+        .expect("source identity")
+        .public_key_hex();
+    let archive_dir = tempdir().expect("archive tempdir");
+    let archive_path = archive_dir.path().join("stale-keyring-new.kukuri-backup");
+    create_restore_fixture(source.path(), &source_db, &archive_path);
+
+    let (target, _target_db) = initialized_app_data().await;
+    let restored_id = account_id_for_pubkey(&source_public_key).expect("restored account id");
+    let restored_db = account_db_path(target.path(), &restored_id);
+    let restored_dir = restored_db.parent().expect("restored account directory");
+    fs::create_dir_all(restored_dir).expect("create prior canonical account path");
+    fs::write(&restored_db, b"prior account placeholder").expect("create prior canonical db path");
+    let keyring = FakeDeviceBackupKeyring::default();
+    for (purpose, key, value) in [
+        (
+            PRIVATE_CHANNEL_CAPABILITIES_PURPOSE,
+            PRIVATE_CHANNEL_CAPABILITIES_KEY,
+            "stale-new-account-private",
+        ),
+        (
+            GOSSIP_SUBSCRIPTION_STATE_PURPOSE,
+            GOSSIP_SUBSCRIPTION_STATE_KEY,
+            "stale-new-account-gossip",
+        ),
+        (
+            COMMUNITY_NODE_INVITE_CODE_PURPOSE,
+            restored_node,
+            "stale-new-account-invite",
+        ),
+        (
+            COMMUNITY_NODE_TOKEN_PURPOSE,
+            restored_node,
+            "stale-new-account-token",
+        ),
+        (
+            COMMUNITY_NODE_CONSENT_PURPOSE,
+            restored_node,
+            "stale-new-account-consent",
+        ),
+    ] {
+        persist_fake_keyring_secret(&restored_db, purpose, key, value, &keyring);
+    }
+    fs::remove_dir_all(restored_dir).expect("remove prior account directory");
+
+    let prepared = prepare_restore_fixture(target.path(), &archive_path, false);
+    let installed = install_prepared_device_restore_with_keyring(
+        target.path(),
+        prepared,
+        IdentityStorageMode::Auto,
+        &keyring,
+    )
+    .expect("install new account without stale keyring shadow");
+    let installed_db = installed.db_path();
+
+    assert_eq!(
+        load_fake_keyring_secret(
+            &installed_db,
+            IdentityStorageMode::Auto,
+            COMMUNITY_NODE_TOKEN_PURPOSE,
+            restored_node,
+            &keyring,
+        ),
+        None
+    );
+    assert_eq!(
+        load_fake_keyring_secret(
+            &installed_db,
+            IdentityStorageMode::Auto,
+            COMMUNITY_NODE_CONSENT_PURPOSE,
+            restored_node,
+            &keyring,
+        ),
+        None
+    );
+    assert_eq!(
+        load_fake_keyring_secret(
+            &installed_db,
+            IdentityStorageMode::Auto,
+            COMMUNITY_NODE_INVITE_CODE_PURPOSE,
+            restored_node,
+            &keyring,
+        ),
+        Some("restored-new-account-invite".to_string())
+    );
+    assert_eq!(
+        load_fake_keyring_secret(
+            &installed_db,
+            IdentityStorageMode::Auto,
+            PRIVATE_CHANNEL_CAPABILITIES_PURPOSE,
+            PRIVATE_CHANNEL_CAPABILITIES_KEY,
+            &keyring,
+        ),
+        Some("restored-new-account-private".to_string())
+    );
+    assert_eq!(
+        load_fake_keyring_secret(
+            &installed_db,
+            IdentityStorageMode::Auto,
+            GOSSIP_SUBSCRIPTION_STATE_PURPOSE,
+            GOSSIP_SUBSCRIPTION_STATE_KEY,
+            &keyring,
+        ),
+        Some("restored-new-account-gossip".to_string())
     );
 }
 

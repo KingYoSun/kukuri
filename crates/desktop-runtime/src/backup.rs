@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
@@ -21,8 +21,10 @@ use crate::community_node::{
 };
 use crate::discovery::load_discovery_config_from_file;
 use crate::identity::{
-    IdentityStorageMode, delete_optional_secret, load_existing_keys, load_optional_secret,
-    persist_keys, persist_optional_secret, write_private_file_atomically,
+    IdentityStorageMode, KeyringStore, delete_optional_secret_keyring_entry_with_keyring,
+    load_existing_keys, load_existing_keys_with_keyring, load_optional_secret,
+    load_optional_secret_with_keyring, persist_keys, persist_keys_with_keyring,
+    persist_optional_secret, persist_optional_secret_with_keyring, write_private_file_atomically,
 };
 use crate::paths::DB_FILE_NAME;
 use crate::runtime::{
@@ -118,7 +120,10 @@ pub use restore_recovery::{
     rollback_pending_device_restore,
 };
 #[cfg(test)]
-pub(crate) use restore_recovery::{DeviceRestoreTestFailurePoint, fail_device_restore_at};
+pub(crate) use restore_recovery::{
+    DeviceRestoreTestFailurePoint, fail_device_restore_at,
+    install_prepared_device_restore_with_keyring,
+};
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -260,6 +265,12 @@ struct OptionalSecretValue {
     purpose: String,
     key: String,
     value: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct OptionalSecretLocator {
+    purpose: String,
+    key: String,
 }
 
 pub struct PreparedDeviceRestore {
@@ -603,18 +614,17 @@ fn persist_restored_secrets(db_path: &Path, bundle: &SecretBundleV1) -> Result<(
     Ok(())
 }
 
-fn known_optional_secrets(db_path: &Path) -> Result<Vec<OptionalSecretValue>> {
-    let mode = IdentityStorageMode::from_env();
-    let mut pairs = vec![
-        (
-            PRIVATE_CHANNEL_CAPABILITIES_PURPOSE.to_string(),
-            PRIVATE_CHANNEL_CAPABILITIES_KEY.to_string(),
-        ),
-        (
-            GOSSIP_SUBSCRIPTION_STATE_PURPOSE.to_string(),
-            GOSSIP_SUBSCRIPTION_STATE_KEY.to_string(),
-        ),
-    ];
+fn known_optional_secret_locators(db_path: &Path) -> Result<BTreeSet<OptionalSecretLocator>> {
+    let mut locators = BTreeSet::from([
+        OptionalSecretLocator {
+            purpose: PRIVATE_CHANNEL_CAPABILITIES_PURPOSE.to_string(),
+            key: PRIVATE_CHANNEL_CAPABILITIES_KEY.to_string(),
+        },
+        OptionalSecretLocator {
+            purpose: GOSSIP_SUBSCRIPTION_STATE_PURPOSE.to_string(),
+            key: GOSSIP_SUBSCRIPTION_STATE_KEY.to_string(),
+        },
+    ]);
     if let Some(config) = load_community_node_config_from_file(db_path)? {
         for node in config.nodes {
             for purpose in [
@@ -622,16 +632,34 @@ fn known_optional_secrets(db_path: &Path) -> Result<Vec<OptionalSecretValue>> {
                 COMMUNITY_NODE_INVITE_CODE_PURPOSE,
                 COMMUNITY_NODE_CONSENT_PURPOSE,
             ] {
-                pairs.push((purpose.to_string(), node.base_url.clone()));
+                locators.insert(OptionalSecretLocator {
+                    purpose: purpose.to_string(),
+                    key: node.base_url.clone(),
+                });
             }
         }
     }
+    Ok(locators)
+}
+
+fn load_optional_secrets(
+    db_path: &Path,
+    mode: IdentityStorageMode,
+    keyring: &dyn KeyringStore,
+    locators: &BTreeSet<OptionalSecretLocator>,
+) -> Result<Vec<OptionalSecretValue>> {
     let mut values = Vec::new();
-    for (purpose, key) in pairs {
-        if let Some(value) = load_optional_secret(db_path, mode, &purpose, &key)? {
+    for locator in locators {
+        if let Some(value) = load_optional_secret_with_keyring(
+            db_path,
+            mode,
+            &locator.purpose,
+            &locator.key,
+            keyring,
+        )? {
             values.push(OptionalSecretValue {
-                purpose,
-                key,
+                purpose: locator.purpose.clone(),
+                key: locator.key.clone(),
                 value,
             });
         }
@@ -639,30 +667,40 @@ fn known_optional_secrets(db_path: &Path) -> Result<Vec<OptionalSecretValue>> {
     Ok(values)
 }
 
-fn make_account_file_self_contained(db_path: &Path) -> Result<Vec<OptionalSecretValue>> {
-    if let Some(keys) = load_existing_keys(db_path, IdentityStorageMode::from_env())? {
-        persist_keys(db_path, IdentityStorageMode::FileOnly, &keys)?;
+fn make_account_file_self_contained(
+    db_path: &Path,
+    mode: IdentityStorageMode,
+    keyring: &dyn KeyringStore,
+    locators: &BTreeSet<OptionalSecretLocator>,
+) -> Result<()> {
+    if let Some(keys) = load_existing_keys_with_keyring(db_path, mode, keyring)? {
+        persist_keys_with_keyring(db_path, IdentityStorageMode::FileOnly, &keys, keyring)?;
     }
-    let secrets = known_optional_secrets(db_path)?;
+    let secrets = load_optional_secrets(db_path, mode, keyring, locators)?;
     for secret in &secrets {
-        persist_optional_secret(
+        persist_optional_secret_with_keyring(
             db_path,
             IdentityStorageMode::FileOnly,
             &secret.purpose,
             &secret.key,
             &secret.value,
+            keyring,
         )?;
     }
-    Ok(secrets)
+    Ok(())
 }
 
-fn scrub_keyring_optional_secrets(db_path: &Path, secrets: &[OptionalSecretValue]) -> Result<()> {
-    for secret in secrets {
-        delete_optional_secret(
+fn scrub_keyring_optional_secrets(
+    db_path: &Path,
+    locators: &BTreeSet<OptionalSecretLocator>,
+    keyring: &dyn KeyringStore,
+) -> Result<()> {
+    for locator in locators {
+        delete_optional_secret_keyring_entry_with_keyring(
             db_path,
-            IdentityStorageMode::Auto,
-            &secret.purpose,
-            &secret.key,
+            &locator.purpose,
+            &locator.key,
+            keyring,
         )?;
     }
     Ok(())

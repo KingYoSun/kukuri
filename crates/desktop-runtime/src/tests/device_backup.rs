@@ -4,16 +4,18 @@ use std::collections::BTreeMap;
 
 use kukuri_store::SqliteStore;
 
-use crate::accounts::{ensure_accounts_initialized, list_accounts};
+use crate::accounts::{
+    account_db_path, account_id_for_pubkey, ensure_accounts_initialized, list_accounts,
+};
 use crate::backup::{
     CreateDeviceBackupRequest, DeviceBackupCancellation, DeviceRestorePhase,
     DeviceRestoreTestFailurePoint, PreviewDeviceBackupRequest, RestoreDeviceBackupRequest,
     acknowledge_pending_device_restore_frontend_state, commit_device_restore, create_device_backup,
     fail_device_backup_writes_after, fail_device_restore_at, finalize_device_restore,
-    install_prepared_device_restore, mark_device_restore_activated,
-    mark_device_restore_awaiting_consent, pending_device_restore_frontend_state,
-    pending_device_restore_phase, prepare_device_restore, preview_device_backup,
-    recover_interrupted_restore, validate_prepared_device_restore,
+    install_prepared_device_restore, install_prepared_device_restore_with_keyring,
+    mark_device_restore_activated, mark_device_restore_awaiting_consent,
+    pending_device_restore_frontend_state, pending_device_restore_phase, prepare_device_restore,
+    preview_device_backup, recover_interrupted_restore, validate_prepared_device_restore,
 };
 use crate::community_node::{
     COMMUNITY_NODE_CONSENT_PURPOSE, COMMUNITY_NODE_INVITE_CODE_PURPOSE,
@@ -21,7 +23,9 @@ use crate::community_node::{
     load_community_node_config_from_file, save_community_node_config,
 };
 use crate::identity::{
-    IdentityStorageMode, load_existing_keys, load_optional_secret, persist_optional_secret,
+    IdentityStorageMode, KeyringStore, load_existing_keys, load_optional_secret,
+    load_optional_secret_with_keyring, persist_optional_secret,
+    persist_optional_secret_with_keyring,
 };
 use crate::runtime::{
     GOSSIP_SUBSCRIPTION_STATE_KEY, GOSSIP_SUBSCRIPTION_STATE_PURPOSE,
@@ -29,6 +33,38 @@ use crate::runtime::{
 };
 
 const PASSPHRASE: &str = "correct horse battery staple";
+
+#[derive(Default)]
+struct FakeDeviceBackupKeyring {
+    entries: std::sync::Mutex<BTreeMap<(String, String), String>>,
+}
+
+impl KeyringStore for FakeDeviceBackupKeyring {
+    fn get_password(&self, service: &str, account: &str) -> anyhow::Result<Option<String>> {
+        Ok(self
+            .entries
+            .lock()
+            .expect("fake keyring lock")
+            .get(&(service.to_string(), account.to_string()))
+            .cloned())
+    }
+
+    fn set_password(&self, service: &str, account: &str, secret: &str) -> anyhow::Result<()> {
+        self.entries.lock().expect("fake keyring lock").insert(
+            (service.to_string(), account.to_string()),
+            secret.to_string(),
+        );
+        Ok(())
+    }
+
+    fn delete_password(&self, service: &str, account: &str) -> anyhow::Result<()> {
+        self.entries
+            .lock()
+            .expect("fake keyring lock")
+            .remove(&(service.to_string(), account.to_string()));
+        Ok(())
+    }
+}
 
 async fn initialized_app_data() -> (tempfile::TempDir, std::path::PathBuf) {
     let dir = tempdir().expect("tempdir");

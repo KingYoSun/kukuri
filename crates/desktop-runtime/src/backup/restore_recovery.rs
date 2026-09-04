@@ -9,10 +9,12 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     ACCOUNTS_DIR_NAME, ACCOUNTS_REGISTRY_FILE_NAME, DB_FILE_NAME, DeviceBackupRestoreResult,
-    PreparedDeviceRestore, account_db_path, account_id_for_pubkey, list_accounts,
-    make_account_file_self_contained, register_restored_account, scrub_keyring_optional_secrets,
-    unique_account_work_dir, validate_frontend_state, write_private_file_atomically,
+    PreparedDeviceRestore, account_db_path, account_id_for_pubkey, known_optional_secret_locators,
+    list_accounts, make_account_file_self_contained, register_restored_account,
+    scrub_keyring_optional_secrets, unique_account_work_dir, validate_frontend_state,
+    write_private_file_atomically,
 };
+use crate::identity::{IdentityStorageMode, KeyringStore, SystemKeyringStore};
 
 const RESTORE_JOURNAL_FILE: &str = "device-restore-journal.json";
 const RESTORE_FRONTEND_STATE_FILE: &str = "device-restore-frontend-state.json";
@@ -114,6 +116,20 @@ pub fn install_prepared_device_restore(
     app_data_dir: &Path,
     prepared: PreparedDeviceRestore,
 ) -> Result<InstalledDeviceRestore> {
+    install_prepared_device_restore_with_keyring(
+        app_data_dir,
+        prepared,
+        IdentityStorageMode::from_env(),
+        &SystemKeyringStore,
+    )
+}
+
+pub(crate) fn install_prepared_device_restore_with_keyring(
+    app_data_dir: &Path,
+    prepared: PreparedDeviceRestore,
+    identity_mode: IdentityStorageMode,
+    keyring: &dyn KeyringStore,
+) -> Result<InstalledDeviceRestore> {
     recover_interrupted_restore_inner(app_data_dir, Some(&prepared.staging_dir))?;
     if let Some(phase) = pending_device_restore_phase(app_data_dir)? {
         bail!("device restore transaction is already pending in phase {phase:?}");
@@ -141,17 +157,17 @@ pub fn install_prepared_device_restore(
     let registry_path = app_data_dir.join(ACCOUNTS_REGISTRY_FILE_NAME);
     let registry_before = fs::read_to_string(&registry_path)
         .context("failed to snapshot accounts registry before restore")?;
-    let (rollback_dir, rollback_secrets) = if final_dir.exists() {
-        let secrets = make_account_file_self_contained(&final_db)?;
-        (
-            Some(unique_account_work_dir(
-                app_data_dir,
-                RESTORE_ROLLBACK_WORK_PREFIX,
-            )?),
-            secrets,
-        )
+    let staging_db = prepared.staging_db_path();
+    let mut secret_locators = known_optional_secret_locators(&staging_db)?;
+    let rollback_dir = if final_dir.exists() {
+        secret_locators.extend(known_optional_secret_locators(&final_db)?);
+        make_account_file_self_contained(&final_db, identity_mode, keyring, &secret_locators)?;
+        Some(unique_account_work_dir(
+            app_data_dir,
+            RESTORE_ROLLBACK_WORK_PREFIX,
+        )?)
     } else {
-        (None, Vec::new())
+        None
     };
     let mut journal = RestoreJournal {
         version: 1,
@@ -197,15 +213,6 @@ pub fn install_prepared_device_restore(
             std::mem::forget(prepared);
             bail!("simulated process stop after existing account directory move");
         }
-
-        if let Err(error) = scrub_keyring_optional_secrets(&final_db, &rollback_secrets) {
-            return Err(error_with_restore_rollback(
-                app_data_dir,
-                &journal,
-                error,
-                "failed to clear previous account secrets before restore",
-            ));
-        }
     }
     if let Err(error) = fs::rename(&prepared.staging_dir, &final_dir) {
         return Err(error_with_restore_rollback(
@@ -220,6 +227,18 @@ pub fn install_prepared_device_restore(
     if take_device_restore_failure(DeviceRestoreTestFailurePoint::AfterStagingDirectoryMove) {
         std::mem::forget(prepared);
         bail!("simulated process stop after staging directory move");
+    }
+
+    // optional secretのkeyring accountはcanonical DB pathに紐づく。Windowsでも過去の
+    // entryと同じpathを解決でき、かつ復元fileを消さないよう、final DB配置後に
+    // keyring entryだけを削除する。runtimeはこのinstall完了前には構築されない。
+    if let Err(error) = scrub_keyring_optional_secrets(&final_db, &secret_locators, keyring) {
+        return Err(error_with_restore_rollback(
+            app_data_dir,
+            &journal,
+            error,
+            "failed to clear pre-existing account secrets before restore",
+        ));
     }
 
     journal.phase = DeviceRestorePhase::Installed;
