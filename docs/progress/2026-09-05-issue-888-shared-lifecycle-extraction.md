@@ -15,8 +15,8 @@
 
 | 共有処理 | 既存caller | 副作用・保護する境界 |
 | --- | --- | --- |
-| `ClientOperationState`（Tauriでは`DesktopOperationState`のalias） | Tauri起動時のstate登録、app consent、identity switch、device backup create／restore／cancel | 同一processの排他、install前の取消gate。cancelはswitch lockを取らない |
-| `runtime_access_allowed`／`require_runtime_operation_ready` | invoke gate、identity switch、backup create／restore | Ready以外ではruntime操作を許可しない |
+| `ClientOperationState`（Tauriでは`DesktopOperationState`のalias） | Tauri起動時のstate登録、app consent、identity switch、device backup create／restore／cancel、背景通知のevent／poll／action処理 | 同一processの排他、install前の取消gate。cancelはswitch lockを取らない。背景通知のruntime読取も同じswitch lockで直列化 |
+| `runtime_access_allowed`／`require_runtime_operation_ready` | invoke gate、identity switch、backup create／restore、背景通知のevent／poll／action処理 | Ready以外ではruntime操作を許可しない |
 | `recover_device_restore_before_startup`／`restore_startup_action` | Tauri startup | journal回復を同意読取より先に行う。Committedは同意reset、AwaitingConsentは明示同意後だけ起動 |
 | `advance_committed_restore_to_consent` | Tauri startup | 同意reset保存後にAwaitingConsentを保存。reset失敗時はCommittedを維持 |
 | `orchestrate_restore_activation`／`persist_restore_activation_phase` | Tauri startup、app consent、`activate_pending_restore` | 起動・activation・rollbackの順序を維持。Activated以降はfinish-forward |
