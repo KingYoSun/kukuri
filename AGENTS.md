@@ -6,6 +6,7 @@
 - `AGENTS.local.md`
 - `docs/README.md`
 - `docs/runbooks/dev.md`
+- `docs/runbooks/issue-lifecycle.md`（Issueの起票・計画・実装・監査・Close・Reopenを行う場合）
 - `PLANS.md` (プランモード・プラン作成時)
 - `DESIGN.md`（UI/UX 作業時のビジュアル仕様。フロー/ガードレールは `docs/adr/0014-uiux-dev-flow.md`）
 - `REFACTORING.md`（リファクタリング・構造整理・大きめの移動/抽出を行う場合）
@@ -37,6 +38,7 @@
 ## ガードレール
 - 既存コードの丸ごとコピーは禁止。contract または scenario を先に置いてから必要最小限だけ移植する。
 - 不具合修正は、必ず先に failing test / contract / scenario で再現してから行う。実機確認は test で表現できない最後の確認に限定する。
+- Issue作業は `docs/runbooks/issue-lifecycle.md` のリスク区分、固定surface inventory、状態遷移、独立監査、Close条件に従う。
 - リファクタリング、ファイル分割、責務境界変更、dead code 削除を行う場合は、先に `REFACTORING.md` を読む。
 - リファクタリングPRでは、機能追加・仕様変更・依存更新を混ぜない。
 - 変更pathごとの必須validationは `REFACTORING.md` の path別検証マトリクスに従う。
