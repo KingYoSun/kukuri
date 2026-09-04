@@ -1,6 +1,8 @@
 mod consent;
+mod consent_acceptance;
 mod idempotency;
 mod profile;
+mod restore_lifecycle;
 mod subscriptions;
 
 use std::{
@@ -27,6 +29,10 @@ pub use consent::{
     app_consent_satisfied, consent_required_status, current_unix_seconds, load_app_consent_store,
     reset_app_consent_at_path, save_app_consent_store,
 };
+pub use consent_acceptance::{
+    AcceptedAppConsentDocument, AppConsentStatus, app_consent_status, record_app_consents,
+    require_consent_acceptance_state, validate_app_consent_documents,
+};
 pub use idempotency::{
     IDEMPOTENCY_LEDGER_FILE_NAME, IdempotencyClaim, IdempotencyLedger, IdempotencyScope,
     idempotency_ledger_path,
@@ -34,6 +40,12 @@ pub use idempotency::{
 pub use profile::{
     ClientProfile, ClientProfileKind, ProfileError, ProfileErrorKind, ProfileLease, gui_profile,
     resolve_cli_profile,
+};
+pub use restore_lifecycle::{
+    ClientOperationState, RestoreActivationFailure, RestoreActivationOrchestrationFailure,
+    RestoreStartupAction, advance_committed_restore_to_consent, orchestrate_restore_activation,
+    persist_restore_activation_phase, recover_device_restore_before_startup,
+    require_runtime_operation_ready, restore_startup_action, runtime_access_allowed,
 };
 pub(crate) use subscriptions::load_desired_subscriptions;
 #[cfg(test)]

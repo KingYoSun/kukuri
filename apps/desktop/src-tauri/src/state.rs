@@ -7,16 +7,16 @@ use kukuri_desktop_runtime::{
     ClientHost, DesktopRuntime, resolve_app_data_dir_from_env, resolve_db_path_from_env,
 };
 pub(crate) use kukuri_desktop_runtime::{
-    AGE_ATTESTATION_VERSION, APP_LEGAL_DOCUMENTS, AgeAttestationRecord, AgeAttestationStatus,
-    AppConsentDocumentRecord, AppConsentDocumentStatus, ClientStartupError as StartupError,
+    ClientStartupError as StartupError,
     ClientStartupState as DesktopStartupState, ClientStartupStatus as DesktopStartupStatus,
-    age_attestation_satisfied, age_attestation_status, app_consent_documents_status,
-    app_consent_satisfied, consent_required_status, current_unix_seconds,
+    app_consent_satisfied, consent_required_status,
     failed_startup_status as failed_status, load_app_consent_store, reset_app_consent_at_path,
-    save_app_consent_store,
 };
 #[cfg(test)]
 pub(crate) use kukuri_desktop_runtime::{
+    AGE_ATTESTATION_VERSION, APP_LEGAL_DOCUMENTS, AgeAttestationRecord, AppConsentDocumentRecord,
+    age_attestation_satisfied, age_attestation_status, app_consent_documents_status,
+    current_unix_seconds, save_app_consent_store,
     APP_LEGAL_AUTHORITATIVE_LANGUAGE, APP_LEGAL_EFFECTIVE_DATE, AppConsentStore,
     ClientStartupErrorKind as DesktopStartupErrorKind, LEGAL_BUNDLE_VERSION,
     app_consent_documents_satisfied, app_consent_path,

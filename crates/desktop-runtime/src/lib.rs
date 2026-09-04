@@ -67,6 +67,16 @@ pub use host::{
     gui_profile, idempotency_ledger_path, load_app_consent_store, reset_app_consent_at_path,
     resolve_cli_profile, save_app_consent_store,
 };
+pub use host::{
+    AcceptedAppConsentDocument, AppConsentStatus, app_consent_status, record_app_consents,
+    require_consent_acceptance_state, validate_app_consent_documents,
+};
+pub use host::{
+    ClientOperationState, RestoreActivationFailure, RestoreActivationOrchestrationFailure,
+    RestoreStartupAction, advance_committed_restore_to_consent, orchestrate_restore_activation,
+    persist_restore_activation_phase, recover_device_restore_before_startup,
+    require_runtime_operation_ready, restore_startup_action, runtime_access_allowed,
+};
 // 起動エラーの typed 分類(WP-Q2)。src-tauri は downcast で DatabaseOpen/Migration を判定する。
 pub use kukuri_store::StoreStartupError;
 pub use paths::{resolve_app_data_dir_from_env, resolve_db_path_from_env};
