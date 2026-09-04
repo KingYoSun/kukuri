@@ -232,6 +232,92 @@ async fn bootstrap_requires_bearer_then_consents() -> Result<()> {
 }
 
 #[tokio::test]
+async fn bootstrap_heartbeat_requires_current_consents_before_mutation() -> Result<()> {
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let server = TestServer::spawn(
+        admin_database_url.as_str(),
+        "cn_bootstrap_heartbeat_consent",
+    )
+    .await?;
+    let client = Client::new();
+    let pool = PgPool::connect(server.database.database_url.as_str()).await?;
+    let keys = generate_keys();
+    let pubkey = keys.public_key_hex();
+    let (access_token, _) = authenticate(
+        &client,
+        &server.base_url,
+        &keys,
+        "peer-consent",
+        Some("127.0.0.1:47100"),
+    )
+    .await?;
+
+    let registration = || {
+        sqlx::query_as::<_, (Option<String>, chrono::DateTime<chrono::Utc>)>(
+            "SELECT addr_hint, expires_at FROM cn_bootstrap.peer_registrations
+             WHERE subscriber_pubkey = $1 AND endpoint_id = 'peer-consent'",
+        )
+        .bind(pubkey.clone())
+        .fetch_optional(&pool)
+    };
+    let before_no_consent = registration().await?;
+    let no_consent = client
+        .post(format!("{}/v1/bootstrap/heartbeat", server.base_url))
+        .bearer_auth(access_token.as_str())
+        .json(&serde_json::json!({
+            "endpoint_id": "peer-consent",
+            "addr_hint": "127.0.0.1:47101",
+        }))
+        .send()
+        .await?;
+    assert_eq!(no_consent.status(), StatusCode::FORBIDDEN);
+    assert_eq!(
+        no_consent.json::<serde_json::Value>().await?["code"],
+        "CONSENT_REQUIRED"
+    );
+    assert_eq!(registration().await?, before_no_consent, "拒否時はDB不変");
+
+    accept_required_consents(&client, &server.base_url, access_token.as_str()).await?;
+    send_bootstrap_heartbeat(
+        &client,
+        &server.base_url,
+        access_token.as_str(),
+        "peer-consent",
+        Some("127.0.0.1:47102"),
+    )
+    .await?;
+    let current_registration = registration().await?.context("peer registration missing")?;
+    assert_eq!(current_registration.0.as_deref(), Some("127.0.0.1:47102"));
+
+    advance_policy_snapshot(&pool, "issue-860-next-snapshot").await?;
+    let before_old_snapshot = registration().await?;
+    let old_snapshot = client
+        .post(format!("{}/v1/bootstrap/heartbeat", server.base_url))
+        .bearer_auth(access_token.as_str())
+        .json(&serde_json::json!({
+            "endpoint_id": "peer-consent",
+            "addr_hint": "127.0.0.1:47103",
+        }))
+        .send()
+        .await?;
+    assert_eq!(old_snapshot.status(), StatusCode::FORBIDDEN);
+    assert_eq!(
+        old_snapshot.json::<serde_json::Value>().await?["code"],
+        "CONSENT_REQUIRED"
+    );
+    assert_eq!(
+        registration().await?,
+        before_old_snapshot,
+        "旧snapshot拒否時はDB不変"
+    );
+
+    server.shutdown().await
+}
+
+#[tokio::test]
 async fn bootstrap_exposes_other_registered_seed_peers() -> Result<()> {
     let Some(admin_database_url) = integration_test_admin_database_url() else {
         eprintln!("skipping cn-user-api integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
@@ -264,6 +350,22 @@ async fn bootstrap_exposes_other_registered_seed_peers() -> Result<()> {
             accept_required_consents(&client, &server.base_url, access_token.as_str()).await?;
         assert!(accepted.all_required_accepted);
     }
+    send_bootstrap_heartbeat(
+        &client,
+        &server.base_url,
+        access_token_a.as_str(),
+        "peer-a",
+        Some("127.0.0.1:44001"),
+    )
+    .await?;
+    send_bootstrap_heartbeat(
+        &client,
+        &server.base_url,
+        access_token_b.as_str(),
+        "peer-b",
+        Some("127.0.0.1:44002"),
+    )
+    .await?;
 
     let bootstrap_a = client
         .get(format!("{}/v1/bootstrap/nodes", server.base_url))
@@ -321,6 +423,22 @@ async fn bootstrap_exposes_other_endpoints_for_same_subscriber() -> Result<()> {
     let accepted =
         accept_required_consents(&client, &server.base_url, access_token_a1.as_str()).await?;
     assert!(accepted.all_required_accepted);
+    send_bootstrap_heartbeat(
+        &client,
+        &server.base_url,
+        access_token_a1.as_str(),
+        "peer-a-1",
+        None,
+    )
+    .await?;
+    send_bootstrap_heartbeat(
+        &client,
+        &server.base_url,
+        access_token_a2.as_str(),
+        "peer-a-2",
+        None,
+    )
+    .await?;
 
     let bootstrap_a1 = client
         .get(format!("{}/v1/bootstrap/nodes", server.base_url))
@@ -401,6 +519,30 @@ async fn bootstrap_filters_expired_peer_registrations_and_heartbeat_restores_the
             accept_required_consents(&client, &server.base_url, access_token.as_str()).await?;
         assert!(accepted.all_required_accepted);
     }
+    send_bootstrap_heartbeat(
+        &client,
+        &server.base_url,
+        token_a_initial.as_str(),
+        "peer-a-1",
+        Some("127.0.0.1:45001"),
+    )
+    .await?;
+    send_bootstrap_heartbeat(
+        &client,
+        &server.base_url,
+        token_a.as_str(),
+        "peer-a-2",
+        Some("127.0.0.1:45002"),
+    )
+    .await?;
+    send_bootstrap_heartbeat(
+        &client,
+        &server.base_url,
+        token_b.as_str(),
+        "peer-b",
+        Some("127.0.0.1:45003"),
+    )
+    .await?;
 
     sqlx::query(
         "UPDATE cn_bootstrap.peer_registrations

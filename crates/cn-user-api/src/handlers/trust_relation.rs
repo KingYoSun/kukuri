@@ -153,9 +153,13 @@ pub(crate) async fn trust_pull(
             "this community node trust activation is not current",
         ));
     }
-    // bearer が有効な subscriber なら SubscribedNodes、無ければ匿名(Public visibility のみ)。
+    // bearer が有効なsubscriberはcurrent consent成立後だけSubscribedNodesへ昇格する。
+    // 認証できない要求は匿名としてPublic visibilityだけを維持する。
     let audience = match require_bearer_identity(&state.pool, &state.jwt_config, &headers).await {
-        Ok(_) => PullAudience::SubscribedNodes,
+        Ok(identity) => {
+            let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
+            PullAudience::SubscribedNodes
+        }
         Err(_) => PullAudience::Public,
     };
     let target = parse_target_pubkey(pubkey.as_str())?;

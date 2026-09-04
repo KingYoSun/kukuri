@@ -13,6 +13,7 @@ use kukuri_cn_user_api::{UserApiConfig, app_router, build_state};
 use kukuri_core::KukuriKeys;
 use redis::AsyncCommands;
 use reqwest::{Client, StatusCode};
+use sqlx::postgres::PgPool;
 
 pub const DEFAULT_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:15432/cn";
 pub const DEFAULT_RENDEZVOUS_REDIS_URL: &str = "redis://127.0.0.1:16379/";
@@ -137,6 +138,35 @@ pub async fn accept_required_consents(
     let accepted = serde_json::from_str::<kukuri_cn_protocol::CommunityNodeConsentStatus>(&body)?;
     assert!(accepted.all_required_accepted);
     Ok(accepted)
+}
+
+pub async fn send_bootstrap_heartbeat(
+    client: &Client,
+    base_url: &str,
+    access_token: &str,
+    endpoint_id: &str,
+    addr_hint: Option<&str>,
+) -> Result<kukuri_cn_protocol::BootstrapHeartbeatResponse> {
+    Ok(client
+        .post(format!("{base_url}/v1/bootstrap/heartbeat"))
+        .bearer_auth(access_token)
+        .json(&serde_json::json!({
+            "endpoint_id": endpoint_id,
+            "addr_hint": addr_hint,
+        }))
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<kukuri_cn_protocol::BootstrapHeartbeatResponse>()
+        .await?)
+}
+
+pub async fn advance_policy_snapshot(pool: &PgPool, revision: &str) -> Result<()> {
+    let mut policies = kukuri_cn_core::list_policies(pool).await?;
+    for policy in &mut policies {
+        policy.policy_snapshot_revision = Some(revision.to_string());
+    }
+    kukuri_cn_core::sync_policies(pool, policies.as_slice()).await
 }
 
 pub async fn redis_keys(redis_url: &str, pattern: &str) -> Result<Vec<String>> {

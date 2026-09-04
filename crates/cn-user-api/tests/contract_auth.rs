@@ -108,6 +108,97 @@ async fn auth_verify_rejects_capability_url_mismatch() -> Result<()> {
 }
 
 #[tokio::test]
+async fn auth_verify_defers_peer_registration_until_consented_heartbeat() -> Result<()> {
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let server = TestServer::spawn(
+        admin_database_url.as_str(),
+        "cn_auth_defers_peer_registration",
+    )
+    .await?;
+    let client = Client::new();
+    let pool = PgPool::connect(server.database.database_url.as_str()).await?;
+
+    let keys_a = generate_keys();
+    let (token_a, _) = authenticate(
+        &client,
+        &server.base_url,
+        &keys_a,
+        "peer-a",
+        Some("127.0.0.1:47001"),
+    )
+    .await?;
+    let registered_a: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM cn_bootstrap.peer_registrations
+         WHERE subscriber_pubkey = $1",
+    )
+    .bind(keys_a.public_key_hex())
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(registered_a, 0, "auth/verifyだけではpeerを登録しない");
+
+    let keys_b = generate_keys();
+    let (token_b, _) = authenticate(
+        &client,
+        &server.base_url,
+        &keys_b,
+        "peer-b",
+        Some("127.0.0.1:47002"),
+    )
+    .await?;
+    accept_required_consents(&client, &server.base_url, token_b.as_str()).await?;
+    send_bootstrap_heartbeat(
+        &client,
+        &server.base_url,
+        token_b.as_str(),
+        "peer-b",
+        Some("127.0.0.1:47002"),
+    )
+    .await?;
+    let before_a_heartbeat = client
+        .get(format!("{}/v1/bootstrap/nodes", server.base_url))
+        .bearer_auth(token_b.as_str())
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    assert_eq!(
+        before_a_heartbeat["nodes"][0]["resolved_urls"]["seed_peers"]
+            .as_array()
+            .map(Vec::len),
+        Some(0),
+        "auth/verify直後のpeerを他subscriberへ公開しない"
+    );
+
+    accept_required_consents(&client, &server.base_url, token_a.as_str()).await?;
+    send_bootstrap_heartbeat(
+        &client,
+        &server.base_url,
+        token_a.as_str(),
+        "peer-a",
+        Some("127.0.0.1:47001"),
+    )
+    .await?;
+    let after_a_heartbeat = client
+        .get(format!("{}/v1/bootstrap/nodes", server.base_url))
+        .bearer_auth(token_b.as_str())
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    assert_eq!(
+        after_a_heartbeat["nodes"][0]["resolved_urls"]["seed_peers"][0]["endpoint_id"],
+        "peer-a"
+    );
+
+    server.shutdown().await
+}
+
+#[tokio::test]
 async fn admission_open_mode_admits_new_subscriber() -> Result<()> {
     let Some(admin_database_url) = integration_test_admin_database_url() else {
         eprintln!("skipping cn-user-api integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");

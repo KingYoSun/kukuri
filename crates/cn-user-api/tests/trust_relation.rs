@@ -56,6 +56,12 @@ impl TestServer {
             .context("failed to bind test trust read listener")?;
         let addr = listener.local_addr()?;
         let base_url = format!("http://{addr}");
+        let operator_config_dir = tempfile::tempdir()?;
+        let operator_config_path = operator_config_dir.path().join("operator-config.yaml");
+        std::fs::write(
+            &operator_config_path,
+            kukuri_cn_operator::SAMPLE_CONFIG.as_bytes(),
+        )?;
         let mut state = build_state(&UserApiConfig {
             bind_addr: addr,
             database_url: database.database_url.clone(),
@@ -65,9 +71,9 @@ impl TestServer {
             public_base_url: base_url.clone(),
             connectivity_urls: vec!["http://127.0.0.1:13340".to_string()],
             jwt_config: JwtConfig::new("kukuri-cn-tests", "test-secret", 3600),
-            operator_config_path: None,
+            operator_config_path: Some(operator_config_path),
             channel_secret_key: None,
-            legal_data_key: None,
+            legal_data_key: Some("unit-test-legal-data-key-0123456789abcdef".to_string()),
             index_query_enabled: false,
             trust_read_enabled: false,
             relation_distance_optout_min_proximity: None,
@@ -105,12 +111,7 @@ impl TestServer {
     }
 }
 
-/// 認証 + consent を通し、bearer access token を返す。
-async fn authenticate_and_consent(
-    client: &Client,
-    base_url: &str,
-    keys: &KukuriKeys,
-) -> Result<String> {
+async fn authenticate_only(client: &Client, base_url: &str, keys: &KukuriKeys) -> Result<String> {
     let pubkey = keys.public_key_hex();
     let challenge = client
         .post(format!("{base_url}/v1/auth/challenge"))
@@ -133,8 +134,18 @@ async fn authenticate_and_consent(
         .error_for_status()?
         .json::<kukuri_cn_protocol::AuthVerifyResponse>()
         .await?;
-    accept_required_consents(client, base_url, verify.access_token.as_str()).await?;
     Ok(verify.access_token)
+}
+
+/// 認証 + consent を通し、bearer access token を返す。
+async fn authenticate_and_consent(
+    client: &Client,
+    base_url: &str,
+    keys: &KukuriKeys,
+) -> Result<String> {
+    let access_token = authenticate_only(client, base_url, keys).await?;
+    accept_required_consents(client, base_url, access_token.as_str()).await?;
+    Ok(access_token)
 }
 
 fn memory_trust_state() -> (Arc<TrustReadState>, Arc<MemoryRelationStore>) {
@@ -511,10 +522,22 @@ async fn cross_node_pull_discloses_only_confirmed_absolute_component() -> Result
     assert!(anonymous.get("relative").is_none(), "相対成分は返さない");
     assert!(anonymous.get("trust").is_none(), "合成値も返さない");
 
-    // subscriber 認証つき pull: SubscribedNodes visibility の confirmed も開示される。
+    // 有効なbearerでも同意前はSubscribedNodesへ昇格しない。
     let subscriber_keys = generate_keys();
-    let token =
-        authenticate_and_consent(&client, server.base_url.as_str(), &subscriber_keys).await?;
+    let token = authenticate_only(&client, server.base_url.as_str(), &subscriber_keys).await?;
+    let no_consent = client
+        .get(pull_url.as_str())
+        .bearer_auth(token.as_str())
+        .send()
+        .await?;
+    assert_eq!(no_consent.status(), StatusCode::FORBIDDEN);
+    assert_eq!(
+        no_consent.json::<serde_json::Value>().await?["code"],
+        "CONSENT_REQUIRED"
+    );
+
+    // current exact consent後だけSubscribedNodes visibilityのconfirmedも開示される。
+    accept_required_consents(&client, server.base_url.as_str(), token.as_str()).await?;
     let subscribed: serde_json::Value = client
         .get(pull_url.as_str())
         .bearer_auth(token.as_str())
@@ -525,9 +548,33 @@ async fn cross_node_pull_discloses_only_confirmed_absolute_component() -> Result
         .await?;
     let mut ids = signal_ids(&subscribed);
     ids.sort();
-    let mut expected = vec![public_confirmed.id, subscribed_confirmed.id];
+    let mut expected = vec![public_confirmed.id.clone(), subscribed_confirmed.id];
     expected.sort();
     assert_eq!(ids, expected);
+
+    // policy更新で同意が旧snapshotになったbearerは再び拒否する。
+    support::advance_policy_snapshot(&pool, "issue-860-trust-next-snapshot").await?;
+    let old_snapshot = client
+        .get(pull_url.as_str())
+        .bearer_auth(token.as_str())
+        .send()
+        .await?;
+    assert_eq!(old_snapshot.status(), StatusCode::FORBIDDEN);
+    assert_eq!(
+        old_snapshot.json::<serde_json::Value>().await?["code"],
+        "CONSENT_REQUIRED"
+    );
+    let anonymous_after_rotation: serde_json::Value = client
+        .get(pull_url.as_str())
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    assert_eq!(
+        signal_ids(&anonymous_after_rotation),
+        vec![public_confirmed.id]
+    );
 
     server.shutdown().await
 }
