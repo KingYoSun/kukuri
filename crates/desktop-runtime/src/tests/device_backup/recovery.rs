@@ -473,8 +473,10 @@ async fn validation_only_checks_all_restored_inputs_without_creating_runtime_art
         .expect("validate restored inputs without runtime");
     assert!(!iroh_root.exists());
     assert!(
-        crate::idempotency_ledger_path(&staging_db).is_file(),
-        "validation creates a restore marker even when the backup had no ledger"
+        !staging_db
+            .with_file_name("kukuri.idempotency.sqlite3")
+            .exists(),
+        "復元検証でCLIの操作履歴や待機期間を作らない"
     );
 
     let identity_path = staging_db.with_extension("identity-key");

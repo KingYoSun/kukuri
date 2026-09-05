@@ -22,8 +22,6 @@ pub mod error_code {
     pub const AUTHORIZATION_FAILED: &str = "authorization_failed";
     pub const NOT_FOUND: &str = "not_found";
     pub const CONFLICT: &str = "conflict";
-    pub const IDEMPOTENCY_CONFLICT: &str = "idempotency_conflict";
-    pub const IDEMPOTENCY_EXPIRED: &str = "idempotency_expired";
     pub const OPERATION_OUTCOME_UNKNOWN: &str = "operation_outcome_unknown";
     pub const NETWORK_UNAVAILABLE: &str = "network_unavailable";
     pub const TIMEOUT: &str = "timeout";
@@ -41,8 +39,6 @@ pub struct RequestEnvelope {
     pub profile: String,
     #[serde(default = "empty_object")]
     pub payload: Value,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub idempotency_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -252,7 +248,6 @@ pub struct CommandMetadata {
     pub effect: CommandEffect,
     pub secret_input: bool,
     pub secret_output: bool,
-    pub idempotency_required: bool,
     pub streaming: bool,
     pub guards: Vec<GuardRequirement>,
     pub input_schema: Value,
@@ -274,11 +269,7 @@ pub fn exit_code_for(error_code: &str) -> i32 {
         error_code::CONSENT_REQUIRED
         | error_code::ACTION_REQUIRED
         | error_code::AUTHORIZATION_FAILED => 4,
-        error_code::NOT_FOUND
-        | error_code::CONFLICT
-        | error_code::IDEMPOTENCY_CONFLICT
-        | error_code::IDEMPOTENCY_EXPIRED
-        | error_code::OPERATION_OUTCOME_UNKNOWN => 5,
+        error_code::NOT_FOUND | error_code::CONFLICT | error_code::OPERATION_OUTCOME_UNKNOWN => 5,
         error_code::NETWORK_UNAVAILABLE | error_code::TIMEOUT | error_code::BACKPRESSURE => 6,
         error_code::INTERRUPTED => 130,
         _ => 1,
@@ -304,7 +295,6 @@ pub fn protocol_schema() -> Value {
                     "command": {"type": "string", "minLength": 1},
                     "profile": {"type": "string", "minLength": 1},
                     "payload": {"type": "object"},
-                    "idempotency_key": {"type": "string", "format": "uuid"},
                     "timeout_ms": {"type": "integer", "minimum": 1, "maximum": MAX_TIMEOUT_MS},
                     "secret_bytes": {"type": "integer", "minimum": 0, "maximum": MAX_FRAME_BYTES}
                     ,"accepts_secret_output": {"type": "boolean"}
@@ -353,7 +343,6 @@ mod tests {
             command: "client.status".to_string(),
             profile: "default".to_string(),
             payload: json!({}),
-            idempotency_key: None,
             timeout_ms: None,
             secret_bytes: None,
             accepts_secret_output: false,
@@ -401,7 +390,7 @@ mod tests {
         assert_eq!(exit_code_for(error_code::VALIDATION_FAILED), 2);
         assert_eq!(exit_code_for(error_code::DAEMON_UNAVAILABLE), 3);
         assert_eq!(exit_code_for(error_code::CONSENT_REQUIRED), 4);
-        assert_eq!(exit_code_for(error_code::IDEMPOTENCY_CONFLICT), 5);
+        assert_eq!(exit_code_for(error_code::CONFLICT), 5);
         assert_eq!(exit_code_for(error_code::TIMEOUT), 6);
         assert_eq!(exit_code_for(error_code::INTERRUPTED), 130);
         assert_eq!(exit_code_for(error_code::INTERNAL_ERROR), 1);
@@ -412,8 +401,8 @@ mod tests {
         let encoded = serde_json::to_vec(&protocol_schema()).expect("schema JSON");
         assert_eq!(
             blake3::hash(&encoded).to_hex().as_str(),
-            "65554f6e72dd166cfdb2b8a0a0acd86233efdfff94ccfac89a1c67dac90cec0a",
-            "protocol v1 schema changed without an explicit version decision"
+            "7a3fc6455e4d26442e8ec56282fbaa26950037b94fff580b665202f0b31be517",
+            "protocol v1 schema changed without an approved contract decision"
         );
     }
 }

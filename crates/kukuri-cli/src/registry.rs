@@ -49,7 +49,11 @@ pub struct CommandRegistry {
 
 impl CommandRegistry {
     pub fn builtin() -> Self {
-        Self::new(vec![
+        Self::for_session(None)
+    }
+
+    pub(crate) fn for_session(session: Option<Arc<crate::session::ClientSession>>) -> Self {
+        let mut entries = vec![
             registration(
                 "protocol.schema",
                 false,
@@ -89,8 +93,9 @@ impl CommandRegistry {
                 empty_object_schema(),
                 json!({"type": "object"}),
             ),
-        ])
-        .expect("builtin command registry must be valid")
+        ];
+        entries.extend(crate::commands::registrations(session));
+        Self::new(entries).expect("builtin command registry must be valid")
     }
 
     pub fn new(mut entries: Vec<CommandRegistration>) -> Result<Self, ProtocolError> {
@@ -117,19 +122,6 @@ impl CommandRegistry {
                     "command registry contains an empty or duplicate name",
                 ));
             }
-            if matches!(
-                entry.metadata.effect,
-                CommandEffect::Write | CommandEffect::Destructive
-            ) && !entry.metadata.idempotency_required
-            {
-                return Err(ProtocolError::new(
-                    error_code::INTERNAL_ERROR,
-                    format!(
-                        "mutating command `{}` must require idempotency",
-                        entry.metadata.name
-                    ),
-                ));
-            }
             if entry.metadata.streaming
                 && (entry.metadata.secret_input || entry.metadata.secret_output)
             {
@@ -137,15 +129,6 @@ impl CommandRegistry {
                     error_code::INTERNAL_ERROR,
                     format!(
                         "streaming command `{}` cannot carry secret frames",
-                        entry.metadata.name
-                    ),
-                ));
-            }
-            if entry.metadata.secret_output && entry.metadata.effect != CommandEffect::Read {
-                return Err(ProtocolError::new(
-                    error_code::INTERNAL_ERROR,
-                    format!(
-                        "secret-output command `{}` must be read-only",
                         entry.metadata.name
                     ),
                 ));
@@ -361,7 +344,6 @@ fn registration(
             effect: CommandEffect::Read,
             secret_input: false,
             secret_output: false,
-            idempotency_required: false,
             streaming,
             guards,
             input_schema,
@@ -484,52 +466,66 @@ mod tests {
     #[test]
     fn builtin_registry_is_sorted_unique_and_introspectable() {
         let registry = CommandRegistry::builtin();
-        assert_eq!(registry.len(), 4);
-        let page = registry.page(None, 2).expect("first page");
-        assert_eq!(page.items.len(), 2);
-        let second = registry
-            .page(page.next_cursor.as_deref(), 2)
-            .expect("second page");
-        assert_eq!(second.items.len(), 2);
-        assert!(second.next_cursor.is_none());
+        let mut items = Vec::new();
+        let mut cursor = None;
+        loop {
+            let page = registry.page(cursor.as_deref(), 2).expect("page");
+            if page.next_cursor.is_some() {
+                assert_eq!(page.items.len(), 2);
+            } else {
+                assert!(!page.items.is_empty() && page.items.len() <= 2);
+            }
+            items.extend(page.items);
+            assert!(items.len() <= registry.len(), "pagination must advance");
+            cursor = page.next_cursor;
+            if cursor.is_none() {
+                break;
+            }
+        }
+        assert_eq!(items.len(), registry.len());
+        assert!(items.windows(2).all(|pair| pair[0].name < pair[1].name));
+        for name in [
+            "client.status",
+            "events.watch",
+            "protocol.commands",
+            "protocol.schema",
+        ] {
+            assert!(items.iter().any(|item| item.name == name));
+        }
+        let schema = registry.schema_document();
         assert_eq!(
-            page.items
-                .iter()
-                .chain(&second.items)
-                .map(|item| item.name.as_str())
-                .collect::<Vec<_>>(),
-            vec![
-                "client.status",
-                "events.watch",
-                "protocol.commands",
-                "protocol.schema"
-            ]
+            schema["commands"].as_object().expect("schemas").len(),
+            items.len()
         );
-        for item in page.items.into_iter().chain(second.items) {
-            assert!(registry.get(&item.name).is_some());
+        for item in items {
+            let registered = registry.get(&item.name).expect("registered handler");
+            assert_eq!(registered.metadata, item);
+            assert_eq!(schema["commands"][&item.name]["input"], item.input_schema);
+            assert_eq!(schema["commands"][&item.name]["output"], item.output_schema);
         }
     }
 
     #[test]
-    fn mutating_secret_output_is_rejected() {
+    fn mutating_secret_output_is_registered_without_persisting_a_result() {
         let metadata = CommandMetadata {
             name: "fixture.invalid".to_string(),
             effect: CommandEffect::Write,
             secret_input: false,
             secret_output: true,
-            idempotency_required: true,
             streaming: false,
             guards: Vec::new(),
             input_schema: empty_object_schema(),
             output_schema: json!({"type": "object"}),
         };
-        let error = CommandRegistry::new(vec![CommandRegistration::new(
+        let registry = CommandRegistry::new(vec![CommandRegistration::new(
             metadata,
             Arc::new(ProtocolSchemaHandler),
         )])
-        .err()
-        .expect("invalid registry");
-        assert!(error.message.contains("read-only"));
+        .expect("秘密情報を返す変更操作も登録できる");
+        assert_eq!(
+            registry.get("fixture.invalid").unwrap().metadata.effect,
+            CommandEffect::Write
+        );
     }
 
     #[test]
@@ -539,7 +535,6 @@ mod tests {
             effect: CommandEffect::Read,
             secret_input: false,
             secret_output: false,
-            idempotency_required: false,
             streaming: false,
             guards: Vec::new(),
             input_schema: json!({"type": "object", "oneOf": []}),
@@ -564,7 +559,6 @@ mod tests {
                 effect: CommandEffect::Read,
                 secret_input: false,
                 secret_output: false,
-                idempotency_required: false,
                 streaming: false,
                 guards: Vec::new(),
                 input_schema: schema,
@@ -587,7 +581,6 @@ mod tests {
             effect: CommandEffect::Read,
             secret_input: false,
             secret_output: false,
-            idempotency_required: false,
             streaming: false,
             guards: Vec::new(),
             input_schema: json!({"type": "string"}),

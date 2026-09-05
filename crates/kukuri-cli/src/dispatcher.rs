@@ -1,15 +1,16 @@
 use std::sync::Arc;
 
+mod operations;
 mod validation;
 
 use async_trait::async_trait;
-use kukuri_desktop_runtime::{ClientHost, IdempotencyClaim, IdempotencyLedger, IdempotencyScope};
+use kukuri_desktop_runtime::ClientHost;
 use serde_json::Value;
 
 use crate::{
     protocol::{
-        GuardRequirement, PROTOCOL_VERSION, ProtocolError, RequestEnvelope, ResponseEnvelope,
-        SecretInput, error_code,
+        CommandEffect, GuardRequirement, PROTOCOL_VERSION, ProtocolError, RequestEnvelope,
+        ResponseEnvelope, SecretInput, error_code,
     },
     registry::{CommandOutput, CommandRegistry, HandlerContext},
 };
@@ -23,10 +24,13 @@ pub enum DispatchReply {
     },
 }
 
+#[derive(Clone)]
 pub struct Dispatcher {
-    registry: CommandRegistry,
-    mutation_guard: tokio::sync::Mutex<()>,
+    registry: Arc<CommandRegistry>,
+    mutation_guard: Arc<tokio::sync::Mutex<()>>,
     guard_evaluator: Arc<dyn GuardEvaluator>,
+    operations: Arc<operations::OperationTasks>,
+    session: Option<Arc<crate::session::ClientSession>>,
 }
 
 pub struct GuardContext<'a> {
@@ -69,23 +73,40 @@ impl GuardEvaluator for HostGuardEvaluator {
 impl Dispatcher {
     pub fn builtin() -> Self {
         Self {
-            registry: CommandRegistry::builtin(),
-            mutation_guard: tokio::sync::Mutex::new(()),
+            registry: Arc::new(CommandRegistry::builtin()),
+            mutation_guard: Arc::new(tokio::sync::Mutex::new(())),
             guard_evaluator: Arc::new(HostGuardEvaluator),
+            operations: Arc::new(operations::OperationTasks::new()),
+            session: None,
         }
     }
 
     pub fn new(registry: CommandRegistry) -> Self {
         Self {
-            registry,
-            mutation_guard: tokio::sync::Mutex::new(()),
+            registry: Arc::new(registry),
+            mutation_guard: Arc::new(tokio::sync::Mutex::new(())),
             guard_evaluator: Arc::new(HostGuardEvaluator),
+            operations: Arc::new(operations::OperationTasks::new()),
+            session: None,
         }
     }
 
     pub fn with_guard_evaluator(mut self, evaluator: Arc<dyn GuardEvaluator>) -> Self {
         self.guard_evaluator = evaluator;
         self
+    }
+
+    pub fn for_session(session: Arc<crate::session::ClientSession>) -> Self {
+        let mut dispatcher = Self::new(CommandRegistry::for_session(Some(session.clone())));
+        dispatcher.session = Some(session);
+        dispatcher
+    }
+
+    fn resolve_host(&self, fallback: Option<&Arc<ClientHost>>) -> Option<Arc<ClientHost>> {
+        match &self.session {
+            Some(session) => session.host(),
+            None => fallback.cloned(),
+        }
     }
 
     pub fn registry(&self) -> &CommandRegistry {
@@ -105,7 +126,11 @@ impl Dispatcher {
                 "secret response requires an explicit output sink",
             ));
         }
-        let context = GuardContext { request, host };
+        let resolved = self.resolve_host(host);
+        let context = GuardContext {
+            request,
+            host: resolved.as_ref(),
+        };
         let secret_bearing =
             registration.metadata.secret_input || registration.metadata.secret_output;
         for requirement in &registration.metadata.guards {
@@ -117,30 +142,6 @@ impl Dispatcher {
         Ok(())
     }
 
-    pub async fn dispatch(
-        &self,
-        request: RequestEnvelope,
-        secret: Option<SecretInput>,
-        expected_profile: &str,
-        host: Option<&Arc<ClientHost>>,
-    ) -> DispatchReply {
-        match self
-            .dispatch_inner(&request, secret, expected_profile, host)
-            .await
-        {
-            Ok(CommandOutput::Unary(data)) => {
-                DispatchReply::Unary(ResponseEnvelope::success(&request, data), None)
-            }
-            Ok(CommandOutput::Secret { data, secret }) => {
-                let mut response = ResponseEnvelope::success(&request, data);
-                response.secret_bytes = Some(secret.expose().len() as u64);
-                DispatchReply::Unary(response, Some(secret))
-            }
-            Ok(CommandOutput::Events(receiver)) => DispatchReply::Events { request, receiver },
-            Err(error) => DispatchReply::Unary(ResponseEnvelope::failure(&request, error), None),
-        }
-    }
-
     async fn dispatch_inner(
         &self,
         request: &RequestEnvelope,
@@ -148,102 +149,38 @@ impl Dispatcher {
         expected_profile: &str,
         host: Option<&Arc<ClientHost>>,
     ) -> Result<CommandOutput, ProtocolError> {
-        self.preflight(request, expected_profile, host).await?;
-        let registration = self
-            .registry
-            .get(&request.command)
-            .expect("preflight resolved the command");
+        let registration = self.registration_for(request, expected_profile)?;
         if request.secret_bytes.is_some() != secret.is_some() {
             return Err(ProtocolError::new(
                 error_code::INVALID_REQUEST,
                 "secret frame is missing or unexpected",
             ));
         }
-        if !registration.metadata.idempotency_required {
-            let result = registration
-                .handler
-                .execute(
-                    HandlerContext {
-                        registry: &self.registry,
-                        host,
-                        profile: expected_profile,
-                    },
-                    request.payload.clone(),
-                    secret.as_ref(),
-                )
-                .await
-                .map_err(|error| {
-                    redact_protocol_error(
-                        error,
-                        registration.metadata.secret_input || registration.metadata.secret_output,
-                    )
-                })?;
-            validate_command_output(&registration.metadata, &result, secret.as_ref())?;
-            return Ok(result);
-        }
-
-        let _mutation_guard = self.mutation_guard.lock().await;
-        let host = host.ok_or_else(|| {
-            ProtocolError::new(
-                error_code::INTERNAL_ERROR,
-                "mutating command requires a ready client host",
-            )
-        })?;
-        let runtime = host.runtime();
-        let db_path = runtime.db_path();
-        let account = db_path
-            .parent()
-            .and_then(|path| path.file_name())
-            .and_then(|value| value.to_str())
-            .unwrap_or("active-account")
-            .to_string();
-        let ledger = IdempotencyLedger::open(db_path)
-            .await
-            .map_err(internal_ledger_error)?;
-        let canonical_payload = canonical_json(&request.payload)?;
-        let payload_hash =
-            ledger.digest_payload(&canonical_payload, secret.as_ref().map(SecretInput::expose));
-        let key = request
-            .idempotency_key
-            .as_deref()
-            .expect("idempotency requirement checked above");
-        let scope = IdempotencyScope {
-            profile: expected_profile,
-            account: &account,
-            command: &request.command,
+        // runtime利用中のreadも停止・切替と直列化する。取消だけは進行中のbackupへ届く。
+        let needs_lock = request.command != "cancel_device_backup"
+            && (matches!(
+                registration.metadata.effect,
+                CommandEffect::Write | CommandEffect::Destructive
+            ) || (self.session.is_some()
+                && registration
+                    .metadata
+                    .guards
+                    .contains(&GuardRequirement::HostReady)));
+        let _mutation_guard = if needs_lock {
+            Some(self.mutation_guard.lock().await)
+        } else {
+            None
         };
-        match ledger
-            .claim(&scope, key, &payload_hash, unix_millis())
-            .await
-            .map_err(map_claim_error)?
-        {
-            IdempotencyClaim::Replay(value) => return Ok(CommandOutput::Unary(value)),
-            IdempotencyClaim::Conflict => {
-                return Err(ProtocolError::new(
-                    error_code::IDEMPOTENCY_CONFLICT,
-                    "idempotency key was already used with a different payload",
-                ));
-            }
-            IdempotencyClaim::OutcomeUnknown => {
-                return Err(ProtocolError::new(
-                    error_code::OPERATION_OUTCOME_UNKNOWN,
-                    "the previous operation outcome cannot be determined",
-                ));
-            }
-            IdempotencyClaim::Expired => {
-                return Err(ProtocolError::new(
-                    error_code::IDEMPOTENCY_EXPIRED,
-                    "the idempotency key is outside the retained history",
-                ));
-            }
-            IdempotencyClaim::Execute => {}
-        }
+        // lock待機中の切替・復元を反映し、停止済みruntimeへ新しい要求を渡さない。
+        let resolved = self.resolve_host(host);
+        let host = resolved.as_ref();
+        self.preflight(request, expected_profile, host).await?;
         let result = registration
             .handler
             .execute(
                 HandlerContext {
                     registry: &self.registry,
-                    host: Some(host),
+                    host,
                     profile: expected_profile,
                 },
                 request.payload.clone(),
@@ -255,37 +192,9 @@ impl Dispatcher {
                     error,
                     registration.metadata.secret_input || registration.metadata.secret_output,
                 )
-            });
-        if let Ok(output) = &result
-            && let Err(error) =
-                validate_command_output(&registration.metadata, output, secret.as_ref())
-        {
-            ledger
-                .mark_unknown(&scope, key, unix_millis())
-                .await
-                .map_err(internal_ledger_error)?;
-            return Err(error);
-        }
-        match result {
-            Ok(CommandOutput::Unary(data)) => {
-                ledger
-                    .complete(&scope, key, &data, unix_millis())
-                    .await
-                    .map_err(internal_ledger_error)?;
-                Ok(CommandOutput::Unary(data))
-            }
-            Ok(CommandOutput::Secret { .. }) => {
-                unreachable!("registry rejects mutating secret output")
-            }
-            Ok(CommandOutput::Events(_)) => unreachable!("registry rejects streaming mutation"),
-            Err(error) => {
-                ledger
-                    .mark_unknown(&scope, key, unix_millis())
-                    .await
-                    .map_err(internal_ledger_error)?;
-                Err(error)
-            }
-        }
+            })?;
+        validate_command_output(&registration.metadata, &result, secret.as_ref())?;
+        Ok(result)
     }
 
     fn registration_for<'a>(
@@ -338,67 +247,7 @@ impl Dispatcher {
                 "secret input does not match command metadata",
             ));
         }
-        if registration.metadata.idempotency_required && request.idempotency_key.is_none() {
-            return Err(ProtocolError::new(
-                error_code::VALIDATION_FAILED,
-                "this command requires an idempotency_key",
-            ));
-        }
         Ok(registration)
-    }
-}
-
-fn canonical_json(value: &Value) -> Result<Vec<u8>, ProtocolError> {
-    fn canonicalize(value: &Value) -> Value {
-        match value {
-            Value::Array(items) => Value::Array(items.iter().map(canonicalize).collect()),
-            Value::Object(map) => {
-                let mut keys = map.keys().collect::<Vec<_>>();
-                keys.sort();
-                let mut output = serde_json::Map::new();
-                for key in keys {
-                    output.insert(key.clone(), canonicalize(&map[key]));
-                }
-                Value::Object(output)
-            }
-            scalar => scalar.clone(),
-        }
-    }
-    serde_json::to_vec(&canonicalize(value)).map_err(|_| {
-        ProtocolError::new(
-            error_code::INVALID_REQUEST,
-            "payload could not be canonicalized",
-        )
-    })
-}
-
-fn unix_millis() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
-        .try_into()
-        .unwrap_or(i64::MAX)
-}
-
-fn internal_ledger_error(error: anyhow::Error) -> ProtocolError {
-    ProtocolError::new(
-        error_code::INTERNAL_ERROR,
-        format!("idempotency ledger failure: {error:#}"),
-    )
-}
-
-fn map_claim_error(error: anyhow::Error) -> ProtocolError {
-    let message = error.to_string();
-    if message.contains("UUIDv7")
-        || message.contains("must be a UUID")
-        || message.contains("too far in the future")
-    {
-        ProtocolError::new(error_code::VALIDATION_FAILED, message)
-    } else if message.contains("capacity is exhausted") {
-        ProtocolError::new(error_code::ACTION_REQUIRED, message)
-    } else {
-        internal_ledger_error(error)
     }
 }
 
@@ -416,7 +265,6 @@ mod tests {
     use async_trait::async_trait;
     use kukuri_desktop_runtime::DesktopRuntime;
     use serde_json::json;
-    use uuid::Uuid;
 
     use super::*;
     use crate::{
@@ -431,7 +279,6 @@ mod tests {
             command: command.to_string(),
             profile: "test".to_string(),
             payload: json!({}),
-            idempotency_key: None,
             timeout_ms: None,
             secret_bytes: None,
             accepts_secret_output: false,
@@ -603,7 +450,6 @@ mod tests {
             effect: CommandEffect::Write,
             secret_input: false,
             secret_output: false,
-            idempotency_required: true,
             streaming: false,
             guards: vec![GuardRequirement::HostReady],
             input_schema: json!({"type": "object"}),
@@ -619,11 +465,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn guard_runs_before_ledger_and_mutation_sink() {
+    async fn guard_runs_before_mutation_sink() {
         let counter = Arc::new(AtomicUsize::new(0));
         let dispatcher = write_dispatcher(counter.clone());
-        let mut request = request("fixture.write");
-        request.idempotency_key = Some(Uuid::now_v7().to_string());
+        let request = request("fixture.write");
         let DispatchReply::Unary(response, _) =
             dispatcher.dispatch(request, None, "test", None).await
         else {
@@ -634,7 +479,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn successful_mutation_replays_and_payload_mismatch_conflicts() {
+    async fn each_explicit_mutation_executes_even_with_identical_request_id() {
         let root = tempfile::tempdir().expect("tempdir");
         let runtime = Arc::new(
             DesktopRuntime::new(root.path().join("kukuri.db"))
@@ -647,7 +492,6 @@ mod tests {
         let counter = Arc::new(AtomicUsize::new(0));
         let dispatcher = write_dispatcher(counter.clone());
         let mut first = request("fixture.write");
-        first.idempotency_key = Some(Uuid::now_v7().to_string());
         first.payload = json!({"value": 1});
         let DispatchReply::Unary(response, _) = dispatcher
             .dispatch(first.clone(), None, "test", Some(&host))
@@ -656,27 +500,23 @@ mod tests {
             panic!("expected first response")
         };
         assert!(response.ok);
-        let DispatchReply::Unary(replay, _) = dispatcher
+        let DispatchReply::Unary(second, _) = dispatcher
             .dispatch(first.clone(), None, "test", Some(&host))
             .await
         else {
-            panic!("expected replay")
+            panic!("expected second response")
         };
-        assert!(replay.ok);
-        assert_eq!(replay.data, response.data);
-        assert_eq!(counter.load(Ordering::SeqCst), 1);
+        assert!(second.ok);
+        assert_eq!(counter.load(Ordering::SeqCst), 2);
 
         first.payload = json!({"value": 2});
-        let DispatchReply::Unary(conflict, _) =
+        let DispatchReply::Unary(third, _) =
             dispatcher.dispatch(first, None, "test", Some(&host)).await
         else {
-            panic!("expected conflict")
+            panic!("expected third response")
         };
-        assert_eq!(
-            conflict.error_code(),
-            Some(error_code::IDEMPOTENCY_CONFLICT)
-        );
-        assert_eq!(counter.load(Ordering::SeqCst), 1);
+        assert!(third.ok);
+        assert_eq!(counter.load(Ordering::SeqCst), 3);
         host.shutdown().await;
     }
 
@@ -687,7 +527,6 @@ mod tests {
             effect: CommandEffect::Read,
             secret_input: true,
             secret_output: true,
-            idempotency_required: false,
             streaming: false,
             guards: Vec::new(),
             input_schema: json!({"type": "object", "additionalProperties": false}),
@@ -727,7 +566,6 @@ mod tests {
             effect: CommandEffect::Read,
             secret_input: true,
             secret_output: false,
-            idempotency_required: false,
             streaming: false,
             guards: vec![GuardRequirement::HostReady],
             input_schema: json!({"type": "object"}),
@@ -756,7 +594,6 @@ mod tests {
             effect: CommandEffect::Read,
             secret_input: false,
             secret_output: false,
-            idempotency_required: false,
             streaming: false,
             guards: vec![GuardRequirement::DomainAuthorization],
             input_schema: json!({"type": "object"}),
@@ -786,7 +623,6 @@ mod tests {
             effect: CommandEffect::Read,
             secret_input: true,
             secret_output: false,
-            idempotency_required: false,
             streaming: false,
             guards: Vec::new(),
             input_schema: json!({"type": "object"}),
@@ -825,7 +661,6 @@ mod tests {
             effect: CommandEffect::Read,
             secret_input: true,
             secret_output: false,
-            idempotency_required: false,
             streaming: false,
             guards: Vec::new(),
             input_schema: json!({"type": "object"}),
@@ -897,7 +732,6 @@ mod tests {
             effect: CommandEffect::Read,
             secret_input: false,
             secret_output: true,
-            idempotency_required: false,
             streaming: false,
             guards: Vec::new(),
             input_schema: json!({"type": "object"}),
@@ -933,7 +767,6 @@ mod tests {
             effect: CommandEffect::Read,
             secret_input: false,
             secret_output: true,
-            idempotency_required: false,
             streaming: false,
             guards: Vec::new(),
             input_schema: json!({"type": "object"}),
@@ -965,7 +798,6 @@ mod tests {
             effect: CommandEffect::Read,
             secret_input: true,
             secret_output: false,
-            idempotency_required: false,
             streaming: false,
             guards: vec![GuardRequirement::Credential],
             input_schema: json!({"type": "object"}),

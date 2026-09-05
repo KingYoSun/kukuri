@@ -300,6 +300,24 @@ cargo run -p kukuri-cli -- --profile dev daemon run
 - Secret Serviceを利用できない画面なし環境では、新規profileの起動前に`KUKURI_DISABLE_KEYRING=1`を設定する。identityはprofile内の0600 fileへ保存され、以後も同じ設定で起動する。既にkeyringへ保存済みのidentityへこの設定を後付けした場合は、別identityを生成せず型付きstartup errorで停止する。
 - 同意が未成立の場合、常駐プロセスはlocal socketだけを開き、account identity、network runtime、scheduler、observerを開始しない。`consent accept`はprofile leaseを取得するため、常駐プロセスを停止してから実行する。
 
+起動中のdaemonには `call get_app_consent_status` で現在の文書versionを確認し、`call accept_app_consents --input -` へ `documents`（`slug`／`version`）、`language`、`age_attested: true` をJSONで明示入力できる。復元後もこの経路で再同意する。
+
+```bash
+cargo run -p kukuri-cli -- --profile dev call protocol.commands
+cargo run -p kukuri-cli -- --profile dev call protocol.schema
+cargo run -p kukuri-cli -- --profile dev call get_desktop_startup_status
+cargo run -p kukuri-cli -- --profile dev call list_timeline --input -
+cargo test -p kukuri-cli --test command_parity
+cargo test -p kukuri-cli --test process_e2e
+```
+
+- `call` の通常入力はJSON object。`protocol.commands` の既定ページは100件で、`next_cursor` を次の入力の `cursor` に渡す。対象操作のschema、変更種別、秘密情報の入出力要否を登録簿で確認する。
+- `--input -` はstdinのJSON、`--input <path>` はowner-only fileを読む。DM本文は通常JSONで返す。画像・動画・Dome assetは入力のfile参照とhashで固定し、通常JSONへbase64本文を入れない。
+- 鍵export用passphrase、backup passphrase、招待tokenは `--secret-input <path>` 等の専用入力を使う。鍵・招待情報の出力先は `--secret-output <新規path>` 等で事前宣言する。既存fileは上書きしない。改行を含め、秘密入力のbytesをそのまま扱うため、passphrase fileへ不要な改行を追加しない。
+- 鍵importはsecret frameに `export`／`passphrase` のJSONを渡す。通常payloadは任意の `label` だけ。招待exportは既存仕様で鍵世代を更新するため、変更操作として実行される。
+- timeout・切断時にCLIは要求を再送しない。変更の成否が不明な場合は返されたIDや現在の状態を確認する。別入力をCLIが統合することはなく、既存domainの一意性規則は維持する。
+- `process_e2e` はLinux限定で、実daemon・実CLI・一時profileを使う。Community NodeのHTTP応答はテスト用mockであり、実node接続のscenarioとは区別する。
+
 PowerShell 例:
 ```powershell
 $env:KUKURI_BIND_ADDR="0.0.0.0:0"
