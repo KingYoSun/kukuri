@@ -10,8 +10,9 @@ use kukuri_cli::{
     dispatcher::{DispatchReply, Dispatcher, decode_request},
     framing::{read_json_frame, read_secret_frame, write_json_frame, write_secret_frame},
     protocol::{DEFAULT_TIMEOUT_MS, ProtocolError, ResponseEnvelope, SecretInput, error_code},
+    session::ClientSession,
 };
-use kukuri_desktop_runtime::{ClientHost, ClientHostStart, ClientProfile, ProfileLease};
+use kukuri_desktop_runtime::{ClientHost, ClientProfile, ProfileLease};
 use tokio::{
     io::BufReader,
     net::{UnixListener, UnixStream},
@@ -49,13 +50,9 @@ async fn run_foreground(profile: ClientProfile) -> Result<(), CliError> {
     let listener = bind_listener(&socket_path)?;
     let _socket_cleanup = SocketCleanup(socket_path);
 
-    let host = match ClientHost::start_if_consented(lease.profile().app_data_dir.clone())
+    let session = ClientSession::start(lease.profile().app_data_dir.clone())
         .await
-        .map_err(|error| CliError::new("host_start_failed", error.to_string(), 1))?
-    {
-        ClientHostStart::Ready(host) => Some(host),
-        ClientHostStart::ConsentRequired(_) => None,
-    };
+        .map_err(CliError::from_protocol)?;
     // readinessを通知する前にsignal handlerを登録し、直後の停止要求を取りこぼさない。
     let interrupt = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
         .map_err(|error| CliError::new("signal_setup_failed", error.to_string(), 1))?;
@@ -63,27 +60,25 @@ async fn run_foreground(profile: ClientProfile) -> Result<(), CliError> {
         .map_err(|error| CliError::new("signal_setup_failed", error.to_string(), 1))?;
     eprintln!(
         "{}",
-        if host.is_some() {
+        if session.host().is_some() {
             "ready"
         } else {
             "consent_required"
         }
     );
 
-    wait_for_shutdown(
+    let result = wait_for_shutdown(
         listener,
         lease.profile().name.clone(),
-        host.clone(),
-        Arc::new(Dispatcher::builtin()),
+        None,
+        Arc::new(Dispatcher::for_session(session.clone())),
         interrupt,
         terminate,
     )
-    .await?;
-    if let Some(host) = host {
-        host.shutdown().await;
-    }
+    .await;
+    session.shutdown().await;
     drop(lease);
-    Ok(())
+    result
 }
 
 async fn wait_for_shutdown(
@@ -96,18 +91,21 @@ async fn wait_for_shutdown(
 ) -> Result<(), CliError> {
     let mut connections = JoinSet::new();
     let connection_permits = Arc::new(Semaphore::new(MAX_CONNECTIONS));
-    loop {
+    let result = loop {
         tokio::select! {
             _ = interrupt.recv() => {
-                break;
+                break Ok(());
             }
             _ = terminate.recv() => {
-                break;
+                break Ok(());
             },
             result = listener.accept() => {
-                let (stream, _) = result.map_err(|error| {
-                    CliError::new("socket_accept_failed", error.to_string(), 1)
-                })?;
+                let (stream, _) = match result {
+                    Ok(connection) => connection,
+                    Err(error) => break Err(CliError::new(
+                        "socket_accept_failed", error.to_string(), 1,
+                    )),
+                };
                 match authorize_peer(&stream) {
                     Ok(()) => {
                         let Ok(permit) = connection_permits.clone().try_acquire_owned() else {
@@ -131,7 +129,7 @@ async fn wait_for_shutdown(
                 }
             }
         }
-    }
+    };
     drop(listener);
     let drain = async { while connections.join_next().await.is_some() {} };
     if tokio::time::timeout(Duration::from_secs(5), drain)
@@ -141,7 +139,8 @@ async fn wait_for_shutdown(
         connections.abort_all();
         while connections.join_next().await.is_some() {}
     }
-    Ok(())
+    dispatcher.finish_operations().await;
+    result
 }
 
 async fn reject_over_capacity(stream: UnixStream, profile: &str) {
@@ -488,6 +487,7 @@ impl Drop for SocketCleanup {
 #[cfg(test)]
 mod tests {
     use std::os::unix::fs::PermissionsExt;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use async_trait::async_trait;
     use kukuri_cli::{
@@ -556,7 +556,6 @@ mod tests {
             command: "events.watch".to_string(),
             profile: "test".to_string(),
             payload: serde_json::json!({}),
-            idempotency_key: None,
             timeout_ms: None,
             secret_bytes: None,
             accepts_secret_output: false,
@@ -588,7 +587,6 @@ mod tests {
             effect: CommandEffect::Read,
             secret_input: true,
             secret_output: true,
-            idempotency_required: false,
             streaming: false,
             guards: Vec::new(),
             input_schema: json!({"type": "object", "additionalProperties": false}),
@@ -610,11 +608,184 @@ mod tests {
             command: "fixture.secret-roundtrip".to_string(),
             profile: "test".to_string(),
             payload: json!({}),
-            idempotency_key: None,
             timeout_ms: Some(2_000),
             secret_bytes: Some(length as u64),
             accepts_secret_output: true,
         }
+    }
+
+    struct CountingMutation {
+        count: Arc<AtomicUsize>,
+        gate: Option<Arc<tokio::sync::Notify>>,
+    }
+
+    #[async_trait]
+    impl CommandHandler for CountingMutation {
+        async fn execute(
+            &self,
+            _: HandlerContext<'_>,
+            _: Value,
+            _: Option<&SecretInput>,
+        ) -> Result<CommandOutput, ProtocolError> {
+            let count = self.count.fetch_add(1, Ordering::SeqCst) + 1;
+            if let Some(gate) = &self.gate {
+                gate.notified().await;
+            }
+            Ok(CommandOutput::Unary(json!({"count": count})))
+        }
+    }
+
+    fn counting_dispatcher(
+        count: Arc<AtomicUsize>,
+        gate: Option<Arc<tokio::sync::Notify>>,
+    ) -> Arc<Dispatcher> {
+        Arc::new(Dispatcher::new(CommandRegistry::new(vec![CommandRegistration::new(
+            CommandMetadata {
+                name: "fixture.write".into(), effect: CommandEffect::Write,
+                secret_input: false, secret_output: false, streaming: false, guards: vec![],
+                input_schema: json!({"type": "object", "additionalProperties": false}),
+                output_schema: json!({"type": "object", "required": ["count"], "properties": {"count": {"type": "integer"}}, "additionalProperties": false}),
+            },
+            Arc::new(CountingMutation { count, gate }),
+        )]).expect("registry")))
+    }
+
+    #[tokio::test]
+    async fn accept_failure_waits_for_the_owned_mutation_before_shutdown() {
+        use std::os::fd::{FromRawFd, IntoRawFd};
+        use tokio::signal::unix::{SignalKind, signal};
+
+        // 非listen socketの所有権を移し、実accept syscallの失敗を発生させる。
+        let (socket, sender) = std::os::unix::net::UnixDatagram::pair().expect("socket");
+        sender.send(b"ready").expect("readable socket");
+        socket.set_nonblocking(true).expect("nonblocking");
+        let listener =
+            unsafe { std::os::unix::net::UnixListener::from_raw_fd(socket.into_raw_fd()) };
+        let listener = UnixListener::from_std(listener).expect("listener");
+        let count = Arc::new(AtomicUsize::new(0));
+        let gate = Arc::new(tokio::sync::Notify::new());
+        let dispatcher = counting_dispatcher(count.clone(), Some(gate.clone()));
+        let request = RequestEnvelope {
+            protocol_version: PROTOCOL_VERSION,
+            request_id: "accept-failure".into(),
+            command: "fixture.write".into(),
+            profile: "test".into(),
+            payload: json!({}),
+            timeout_ms: None,
+            secret_bytes: None,
+            accepts_secret_output: false,
+        };
+        let pending = tokio::spawn({
+            let dispatcher = dispatcher.clone();
+            async move { dispatcher.dispatch(request, None, "test", None).await }
+        });
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while count.load(Ordering::SeqCst) == 0 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("handler開始");
+        pending.abort();
+        let _ = pending.await;
+        let mut shutdown = tokio::spawn(wait_for_shutdown(
+            listener,
+            "test".into(),
+            None,
+            dispatcher.clone(),
+            signal(SignalKind::interrupt()).expect("interrupt"),
+            signal(SignalKind::terminate()).expect("terminate"),
+        ));
+        let exited_early = tokio::time::timeout(Duration::from_millis(100), &mut shutdown).await;
+        gate.notify_one();
+        // 失敗時もtest自身のtaskを残さない。
+        dispatcher.finish_operations().await;
+        assert!(
+            exited_early.is_err(),
+            "accept失敗でも実行中のmutationの完了を待つ"
+        );
+        let error = tokio::time::timeout(Duration::from_secs(2), shutdown)
+            .await
+            .expect("shutdown期限")
+            .expect("shutdown task")
+            .expect_err("accept失敗");
+        assert_eq!(error.code, "socket_accept_failed");
+        assert_eq!(count.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn socket_inputs_execute_once_each_and_timeout_never_reexecutes() {
+        let count = Arc::new(AtomicUsize::new(0));
+        let dispatcher = counting_dispatcher(count.clone(), None);
+        let request = RequestEnvelope {
+            protocol_version: PROTOCOL_VERSION,
+            request_id: "same-request-id".into(),
+            command: "fixture.write".into(),
+            profile: "test".into(),
+            payload: json!({}),
+            timeout_ms: Some(2_000),
+            secret_bytes: None,
+            accepts_secret_output: false,
+        };
+        for expected in 1..=2 {
+            let (client, server) = UnixStream::pair().expect("socket pair");
+            let task = tokio::spawn(handle_connection(
+                server,
+                dispatcher.clone(),
+                "test".into(),
+                None,
+            ));
+            let (read, mut write) = tokio::io::split(client);
+            let mut reader = BufReader::new(read);
+            write_json_frame(&mut write, &request)
+                .await
+                .expect("request");
+            write.shutdown().await.expect("finish request");
+            let bytes = read_json_frame(&mut reader)
+                .await
+                .expect("frame")
+                .expect("response");
+            let response: ResponseEnvelope = serde_json::from_slice(&bytes).expect("JSON");
+            assert!(response.ok, "{:?}", response.error);
+            assert_eq!(response.data, Some(json!({"count": expected})));
+            task.await.expect("server task").expect("server result");
+            assert_eq!(count.load(Ordering::SeqCst), expected);
+        }
+        dispatcher.finish_operations().await;
+
+        let gate = Arc::new(tokio::sync::Notify::new());
+        let dispatcher = counting_dispatcher(count.clone(), Some(gate.clone()));
+        let (client, server) = UnixStream::pair().expect("timeout socket");
+        let task = tokio::spawn(handle_connection(
+            server,
+            dispatcher.clone(),
+            "test".into(),
+            None,
+        ));
+        let (read, mut write) = tokio::io::split(client);
+        let mut reader = BufReader::new(read);
+        let mut request = request;
+        request.timeout_ms = Some(100);
+        write_json_frame(&mut write, &request)
+            .await
+            .expect("timeout request");
+        write.shutdown().await.expect("finish request");
+        let bytes = read_json_frame(&mut reader)
+            .await
+            .expect("timeout frame")
+            .expect("timeout response");
+        let response: ResponseEnvelope = serde_json::from_slice(&bytes).expect("timeout JSON");
+        assert_eq!(response.error_code(), Some(error_code::TIMEOUT));
+        task.await
+            .expect("timeout server task")
+            .expect("timeout result");
+        gate.notify_one();
+        dispatcher.finish_operations().await;
+        assert_eq!(
+            count.load(Ordering::SeqCst),
+            3,
+            "timeoutを理由にhandlerを再起動しない"
+        );
     }
 
     #[tokio::test]

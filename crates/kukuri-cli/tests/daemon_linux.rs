@@ -358,10 +358,30 @@ fn protocol_status_registry_and_errors_are_machine_readable() {
     assert!(commands.status.success());
     let commands: serde_json::Value =
         serde_json::from_slice(&commands.stdout).expect("commands envelope");
-    assert_eq!(
-        commands["data"]["items"].as_array().expect("items").len(),
-        4
+    let registry = kukuri_cli::registry::CommandRegistry::builtin();
+    let first_page = registry.page(None, 100).expect("first page");
+    assert_eq!(commands["data"], serde_json::to_value(&first_page).unwrap());
+    let cursor = first_page.next_cursor.as_deref().expect("second page");
+    let page_input = root.path().join("command-page.json");
+    fs::write(
+        &page_input,
+        serde_json::json!({"cursor": cursor}).to_string(),
+    )
+    .expect("page request");
+    fs::set_permissions(&page_input, fs::Permissions::from_mode(0o600))
+        .expect("private page request");
+    let second = call(
+        root.path(),
+        "alpha",
+        &["protocol.commands", "--input", page_input.to_str().unwrap()],
     );
+    assert!(second.status.success());
+    let second: serde_json::Value =
+        serde_json::from_slice(&second.stdout).expect("second page envelope");
+    let last_page = registry.page(Some(cursor), 100).expect("last page");
+    assert_eq!(second["data"], serde_json::to_value(&last_page).unwrap());
+    assert!(last_page.next_cursor.is_none());
+    assert_eq!(first_page.items.len() + last_page.items.len(), 135);
 
     let schema = call(root.path(), "alpha", &["protocol.schema"]);
     assert!(schema.status.success());

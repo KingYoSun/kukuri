@@ -1,0 +1,215 @@
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use kukuri_desktop_runtime::{
+    CreateGameRoomRequest, CreateLiveSessionRequest, ListGameRoomsRequest, ListLiveSessionsRequest,
+    LiveSessionCommandRequest, UpdateGameRoomRequest,
+};
+use serde_json::{Value, json};
+
+use super::{command, command_error, decode, encode, host_guards, runtime, schema};
+use crate::{
+    protocol::{CommandEffect, ProtocolError, SecretInput},
+    registry::{CommandHandler, CommandOutput, CommandRegistration, HandlerContext},
+};
+
+#[derive(Clone, Copy)]
+enum Operation {
+    ListLive,
+    CreateLive,
+    EndLive,
+    JoinLive,
+    LeaveLive,
+    ListGame,
+    CreateGame,
+    UpdateGame,
+}
+struct Handler(Operation);
+
+#[async_trait]
+impl CommandHandler for Handler {
+    async fn execute(
+        &self,
+        context: HandlerContext<'_>,
+        payload: Value,
+        _secret: Option<&SecretInput>,
+    ) -> Result<CommandOutput, ProtocolError> {
+        let runtime = runtime(&context)?;
+        match self.0 {
+            Operation::ListLive => encode(
+                runtime
+                    .list_live_sessions(decode::<ListLiveSessionsRequest>(payload)?)
+                    .await
+                    .map_err(command_error)?,
+            ),
+            Operation::CreateLive => encode(
+                runtime
+                    .create_live_session(decode::<CreateLiveSessionRequest>(payload)?)
+                    .await
+                    .map_err(command_error)?,
+            ),
+            Operation::EndLive => encode(
+                runtime
+                    .end_live_session(decode::<LiveSessionCommandRequest>(payload)?)
+                    .await
+                    .map_err(command_error)?,
+            ),
+            Operation::JoinLive => encode(
+                runtime
+                    .join_live_session(decode::<LiveSessionCommandRequest>(payload)?)
+                    .await
+                    .map_err(command_error)?,
+            ),
+            Operation::LeaveLive => encode(
+                runtime
+                    .leave_live_session(decode::<LiveSessionCommandRequest>(payload)?)
+                    .await
+                    .map_err(command_error)?,
+            ),
+            Operation::ListGame => encode(
+                runtime
+                    .list_game_rooms(decode::<ListGameRoomsRequest>(payload)?)
+                    .await
+                    .map_err(command_error)?,
+            ),
+            Operation::CreateGame => encode(
+                runtime
+                    .create_game_room(decode::<CreateGameRoomRequest>(payload)?)
+                    .await
+                    .map_err(command_error)?,
+            ),
+            Operation::UpdateGame => encode(
+                runtime
+                    .update_game_room(decode::<UpdateGameRoomRequest>(payload)?)
+                    .await
+                    .map_err(command_error)?,
+            ),
+        }
+    }
+}
+
+pub(super) fn registrations() -> Vec<CommandRegistration> {
+    use CommandEffect::{Read, Write};
+    use Operation::*;
+    let session = || {
+        schema::object(
+            json!({"topic": {"type": "string"}, "session_id": {"type": "string"}}),
+            &["topic", "session_id"],
+        )
+    };
+    [
+        (
+            "list_game_rooms",
+            Read,
+            ListGame,
+            schema::object(
+                json!({"topic": {"type": "string"}, "scope": schema::timeline_scope()}),
+                &["topic"],
+            ),
+            schema::array(super::game_views::game_room()),
+        ),
+        (
+            "create_game_room",
+            Write,
+            CreateGame,
+            schema::object(
+                json!({"topic": {"type": "string"}, "channel_ref": schema::channel_ref(),
+                "title": {"type": "string"}, "description": {"type": "string"},
+                "participants": schema::array(json!({"type": "string"}))}),
+                &["topic", "title", "description", "participants"],
+            ),
+            json!({"type": "string", "description": "room_id"}),
+        ),
+        (
+            "update_game_room",
+            Write,
+            UpdateGame,
+            schema::object(
+                json!({"topic": {"type": "string"}, "room_id": {"type": "string"},
+                "status": super::game_views::status(), "phase_label": {"type": "string"},
+                "scores": schema::array(super::game_views::score())}),
+                &["topic", "room_id", "status", "scores"],
+            ),
+            json!({"type": "null"}),
+        ),
+        (
+            "list_live_sessions",
+            Read,
+            ListLive,
+            schema::object(
+                json!({"topic": {"type": "string"}, "scope": schema::timeline_scope()}),
+                &["topic"],
+            ),
+            schema::array(live_schema()),
+        ),
+        (
+            "create_live_session",
+            Write,
+            CreateLive,
+            schema::object(
+                json!({"topic": {"type": "string"}, "channel_ref": schema::channel_ref(),
+            "title": {"type": "string"}, "description": {"type": "string"}}),
+                &["topic", "title", "description"],
+            ),
+            json!({"type": "string", "description": "session_id"}),
+        ),
+        (
+            "end_live_session",
+            Write,
+            EndLive,
+            session(),
+            json!({"type": "null"}),
+        ),
+        (
+            "join_live_session",
+            Write,
+            JoinLive,
+            session(),
+            json!({"type": "null"}),
+        ),
+        (
+            "leave_live_session",
+            Write,
+            LeaveLive,
+            session(),
+            json!({"type": "null"}),
+        ),
+    ]
+    .into_iter()
+    .map(|(name, effect, operation, input, output)| {
+        command(
+            name,
+            effect,
+            false,
+            false,
+            host_guards(),
+            (input, output),
+            Arc::new(Handler(operation)),
+        )
+    })
+    .collect()
+}
+
+fn live_schema() -> Value {
+    schema::object(
+        json!({"session_id": {"type": "string"}, "host_pubkey": {"type": "string"},
+        "title": {"type": "string"}, "description": {"type": "string"},
+        "status": {"enum": ["Scheduled", "Live", "Paused", "Ended"]},
+        "started_at": {"type": "integer"}, "ended_at": schema::nullable(json!({"type": "integer"})),
+        "viewer_count": {"type": "integer", "minimum": 0}, "joined_by_me": {"type": "boolean"},
+        "channel_id": schema::nullable(json!({"type": "string"})), "audience_label": {"type": "string"}}),
+        &[
+            "session_id",
+            "host_pubkey",
+            "title",
+            "description",
+            "status",
+            "started_at",
+            "ended_at",
+            "viewer_count",
+            "joined_by_me",
+            "channel_id",
+            "audience_label",
+        ],
+    )
+}

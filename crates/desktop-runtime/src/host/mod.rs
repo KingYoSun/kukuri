@@ -1,6 +1,5 @@
 mod consent;
 mod consent_acceptance;
-mod idempotency;
 mod profile;
 mod restore_lifecycle;
 mod subscriptions;
@@ -32,10 +31,6 @@ pub use consent::{
 pub use consent_acceptance::{
     AcceptedAppConsentDocument, AppConsentStatus, app_consent_status, record_app_consents,
     require_consent_acceptance_state, validate_app_consent_documents,
-};
-pub use idempotency::{
-    IDEMPOTENCY_LEDGER_FILE_NAME, IdempotencyClaim, IdempotencyLedger, IdempotencyScope,
-    idempotency_ledger_path,
 };
 pub use profile::{
     ClientProfile, ClientProfileKind, ProfileError, ProfileErrorKind, ProfileLease, gui_profile,

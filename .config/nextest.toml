@@ -7,5 +7,5 @@ filter = "package(kukuri-harness)"
 test-group = "harness-serial"
 
 [[profile.default.overrides]]
-filter = "package(kukuri-app-api) | package(kukuri-desktop-runtime)"
+filter = "package(kukuri-app-api) | package(kukuri-desktop-runtime) | package(kukuri-cli)"
 test-group = "iroh-integration-serial"

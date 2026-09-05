@@ -211,8 +211,6 @@ pub(super) fn redact_protocol_error(
             | error_code::AUTHORIZATION_FAILED
             | error_code::NOT_FOUND
             | error_code::CONFLICT
-            | error_code::IDEMPOTENCY_CONFLICT
-            | error_code::IDEMPOTENCY_EXPIRED
             | error_code::OPERATION_OUTCOME_UNKNOWN
             | error_code::NETWORK_UNAVAILABLE
             | error_code::TIMEOUT

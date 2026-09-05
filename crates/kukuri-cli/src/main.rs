@@ -57,8 +57,6 @@ struct CallArgs {
     #[arg(long)]
     secret_output_fd: Option<u32>,
     #[arg(long)]
-    idempotency_key: Option<String>,
-    #[arg(long)]
     timeout_ms: Option<u64>,
     #[arg(long, default_value_t = PROTOCOL_VERSION, hide = true)]
     protocol_version: u32,
@@ -402,7 +400,6 @@ async fn run_call_async(
         command: args.command.clone(),
         profile: profile.name.clone(),
         payload,
-        idempotency_key: args.idempotency_key.clone(),
         timeout_ms: args.timeout_ms,
         secret_bytes: secret.as_ref().map(|secret| secret.len() as u64),
         accepts_secret_output: args.secret_output.is_some() || args.secret_output_fd.is_some(),

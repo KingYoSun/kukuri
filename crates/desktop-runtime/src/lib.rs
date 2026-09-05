@@ -58,14 +58,13 @@ pub use host::{
     AppConsentDocumentStatus, AppConsentStore, ClientEventReceiver, ClientHost, ClientHostStart,
     ClientProfile, ClientProfileKind, ClientStartupError, ClientStartupErrorKind,
     ClientStartupErrorView, ClientStartupState, ClientStartupStatus, DesiredSubscription,
-    DesiredSubscriptionScope, IDEMPOTENCY_LEDGER_FILE_NAME, IdempotencyClaim, IdempotencyLedger,
-    IdempotencyScope, LEGAL_BUNDLE_VERSION, ProfileError, ProfileErrorKind, ProfileLease,
+    DesiredSubscriptionScope, LEGAL_BUNDLE_VERSION, ProfileError, ProfileErrorKind, ProfileLease,
     SubscriptionStateError, SubscriptionStateErrorKind, age_attestation_satisfied,
     age_attestation_status, app_consent_documents_satisfied, app_consent_documents_status,
     app_consent_path, app_consent_satisfied, consent_required_status, current_unix_seconds,
     desired_subscriptions_path, distribution_community_node_config, failed_startup_status,
-    gui_profile, idempotency_ledger_path, load_app_consent_store, reset_app_consent_at_path,
-    resolve_cli_profile, save_app_consent_store,
+    gui_profile, load_app_consent_store, reset_app_consent_at_path, resolve_cli_profile,
+    save_app_consent_store,
 };
 pub use host::{
     AcceptedAppConsentDocument, AppConsentStatus, app_consent_status, record_app_consents,

@@ -1,5 +1,12 @@
 # Issue #887 CLI protocol v1と安全なI/O
 
+## 後続の仕様改訂
+
+以下は #887 完了時の実装・検証記録である。2026-09-05のユーザー決定により、
+入力間の重複排除、操作キーの必須化、永続台帳、復元後の保護期間は撤回された。
+この部分の仕様は改訂後の [ADR 0049](../adr/0049-linux-gui-cli-control-plane.md) を正とし、
+実装移行と検証は #888 で行う。当時のPASSを改訂後の実装完了の証拠として流用しない。
+
 ## Scope
 
 Scope revisionは`2026-09-04-issue-887-cli-protocol-v1`。#886の共通`ClientHost`と認証済みUnix socketを利用し、版管理されたprotocol、command登録簿、dispatcher、安全なsecret I/O、durable idempotency ledgerを実装する。全domain commandのmappingは#888が所有するため、本Issueのproduction登録簿はprotocol introspection、client status、event streamに限定する。
@@ -11,7 +18,7 @@ Scope revisionは`2026-09-04-issue-887-cli-protocol-v1`。#886の共通`ClientHo
 - dispatcherはdecode／schema validation、profile／version、command lookup、product guard、secret frame受信、idempotency claim、handlerの順で処理する。未同意時の`events.watch`はsecretを含むbodyの受信前に拒否し、`client.status`とintrospectionはruntimeを開始せず利用できる。domain guard evaluatorは注入可能な境界を持つ。
 - CLIの`call`は通常入力をstdin／owner-only file／FDから上限付きで受け、成功・失敗ともstdoutへJSONを一つ出す。event streamだけをNDJSONとし、responseの`more`で継続を判定する。SIGINT時も`interrupted` envelopeと終了code 130を返す。daemon不在、protocol mismatch、usage、invalid input、timeoutも型付きerrorへ変換する。
 - daemonはSIGINT／SIGTERM receiverをreadiness通知前に登録し、通知直後の停止要求も取りこぼさずgraceful shutdownする。
-- secretは通常JSON payloadとは別の長さ付きframeを通し、headerのpreflightに成功した相関付き受信許可後だけ送信する。専用の`SecretInput`／`SecretOutput`は通常の`Serialize`を実装せず、`Debug`を常にredactする。sourceはstdin／FD／owner-only file、sinkは事前宣言した標準FD以外のFD／新規0600 fileに限定する。secret出力commandはread-onlyとし、secret-bearing handlerのerror detailを外部へ出さず、secret outputと同じbytesを通常JSONへ含めず、stdout／stderr／ledgerへ平文を出さない。
+- secretは通常JSON payloadとは別の長さ付きframeを通し、headerのpreflightに成功した相関付き受信許可後だけ送信する。専用の`SecretInput`／`SecretOutput`は通常の`Serialize`を実装せず、`Debug`を常にredactする。sourceはstdin／FD／owner-only file、sinkは事前宣言した標準FD以外のFD／新規0600 fileに限定する。#887当時のsecret出力のread-only制限は、#888で招待exportが鍵世代を更新する既存挙動に合わせて撤去する。secret-bearing handlerのerror detailを外部へ出さず、secret outputと同じbytesを通常JSONへ含めず、stdout／stderrへ平文を出さない。
 - profile／account／command／UUIDv7 key／canonical payload digestを結ぶ専用SQLite ledgerを追加した。mutationを直列化してin-progressを先にcommitし、同一payloadはsanitized resultを再生、異payloadは`idempotency_conflict`、未完了は`operation_outcome_unknown`とし、自動再実行しない。
 - secretを含むpayload照合はledger固有saltのkeyed BLAKE3 digestだけを保存する。terminal recordは30日、profile／accountごとに最大10,000件とし、上限到達時は最古の完了済みrecordだけを整理する。未確定recordは自動削除しない。
 - 存在するidempotency ledgerをdevice backupへ含め、台帳を含まない旧backupでもrestore validation時に台帳とrestore markerを生成する。復元時刻から5分のclock skewまでに作成された欠落keyは新規mutationとして扱わず、それより未来のkeyも拒否する。socket、lock、PID、session、token、endpoint secretは従来どおりbackup対象外である。

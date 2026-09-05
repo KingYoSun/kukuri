@@ -4,6 +4,11 @@
 
 Accepted
 
+2026-09-05改訂: CLIの責務を1入力からの重複実行防止に限定するユーザー決定により、
+入力間の重複排除、永続的な冪等性台帳、復元後の時刻による実行制限を撤回した。
+改訂前の実装・検証記録は `docs/progress/2026-09-05-issue-887-cli-protocol-v1.md` に保持する。
+この改訂の実装・検証は #888 で行う。仕様の改訂だけを実装完了とは扱わない。
+
 ## Context
 
 Issue #885は、Linux x86_64 GUIをAppImageとして配布し、GUIとは別profileを所有する
@@ -11,7 +16,7 @@ Issue #885は、Linux x86_64 GUIをAppImageとして配布し、GUIとは別prof
 
 この追加は既存の投稿、DM、private channel、Live、Game、Metaverse／Dome、Community Nodeの
 canonical sourceを変更しない。一方で、CLI profileの購読期待状態、ローカルIPC、command登録簿、
-冪等性台帳、複数platformの配布成果物という新しいデータ境界を持つため、ADR 0002に
+要求単位の実行状態、複数platformの配布成果物という新しいデータ境界を持つため、ADR 0002に
 従って実装前に分類する。
 
 ## Feature Data Classification
@@ -69,22 +74,29 @@ canonical sourceを変更しない。一方で、CLI profileの購読期待状�
 - Gossip Hint 必要有無: 不要
 - Blob 必要有無: 不要
 - SQLite projection 必要有無: 不要
-- 必須 contract: read／write／destructive／secret-bearing／idempotency-required metadataをdispatcherと同じ定義から生成する。操作可否は既存のaccount、同意、audience、credential、domain authorizationで判定する。command schemaのv1検証subsetは`type`、`properties`、`required`、`additionalProperties`、`items`、`enum`、`const`、数値／文字列／配列のmin/max制約とannotationに限定し、未対応keywordは登録時に拒否する。request payloadの契約に合わせ、input schemaのroot `type`は未指定または`object`に限定する
+- 必須 contract: read／write／destructive／secret-bearing metadataをdispatcherと同じ定義から生成する。操作可否は既存のaccount、同意、audience、credential、domain authorizationで判定する。command schemaの検証subsetは`type`、`properties`、`required`、`additionalProperties`、`items`、`enum`、`const`、数値／文字列／配列のmin/max制約とannotationに限定し、未対応keywordは登録時に拒否する。request payloadの契約に合わせ、input schemaのroot `type`は未指定または`object`に限定する
 - 必須 scenario: command登録簿とdispatcherの不一致、既存domain authorizationによる許可／拒否、argv／payload／remote contentを制御情報として誤解釈しないこと
 
-### 永続的な冪等性台帳
+### 要求単位の実行状態
 
-- Feature 名: CLI変更操作の冪等性台帳
-- Durable / Transient: Durable。ただし件数／期間の上限を持つ
-- Canonical Source: CLI profile内のローカル台帳。domain object自体のcanonical sourceにはしない
+- Feature 名: CLI要求の実行と終了処理
+- Durable / Transient: Transient。要求と実行中taskの対応はメモリ内だけで保持する
+- Canonical Source: 常駐プロセスが所有する要求単位のtask。製品データの正本は既存domainのstoreとする
 - Replicated?: No
-- Rebuildable From: No。期限内entryはrestartとprofile backup／restoreで維持し、失われた場合に変更操作を自動再実行しない
+- Rebuildable From: No。終了した要求をrestartやbackupから再生成・自動再実行しない
 - Public Replica / Private Replica / Local Only: Local Only
 - Gossip Hint 必要有無: 不要
 - Blob 必要有無: 不要
-- SQLite projection 必要有無: 必要。profile内のSQLite台帳をcanonicalなlocal stateとして使い、domain SQLite projectionや共有replicaへ混ぜない
-- 必須 contract: command、profile、request idempotency key、canonical payload digestを結び、同一payloadの再実行／異なるpayloadとの競合／実行中停止による結果不明／保持期限切れを区別する。v1のkeyはUUIDv7、許容clock skewは5分、terminal recordは30日、profile／accountあたり最大10,000件とする。上限到達時は最古の完了済みrecordだけを整理し、未確定recordは自動削除しない。secret-bearing request／resultの平文copyは保存せず、secretを含む照合には台帳固有saltによるkeyed digestを使い、既存domain resultへの参照または秘密情報を含まないresultだけを保持する。backup復元時刻から許容clock skewまでの欠落keyは新規実行せず`operation_outcome_unknown`とし、それより未来のkeyは拒否する
-- 必須 scenario: 初回実行、同一payloadの再実行、異なるpayloadとの競合、commit前後の停止、restart、backup／restore、保持期限切れ、同時重複、secret-bearing mutation
+- SQLite projection 必要有無: 不要。入力間の重複排除のための台帳・payload digest・結果cacheを作成しない
+- 必須 contract: 1回の入力から受け付けた1要求について、CLI／dispatcherはcommand handlerを最大1回だけ起動する。timeout、応答喪失、切断、再接続、restartを理由に同じ要求を自動再実行しない。別々に入力された要求は内容やrequest IDの一致でまとめず、それぞれ既存domainの規則に従って処理する。request IDは応答との対応付けにだけ使用する。変更操作の排他と容量制限を維持し、切断によって進行中のrollback／cleanupを破棄しない。成否不明は成否不明として返し、未実行や取消成功と断定しない
+- 必須 scenario: 1入力1回のhandler起動、同内容の2入力を別々に処理、拒否時handler起動0回、timeout／切断時の再起動0回と後処理完了、正常shutdown、restart後の自動再実行0回、復元直後の明示的な新規操作
+
+### CLI protocolの改訂境界
+
+- CLIは未リリースのため後方互換は不要とする。#888で現行protocol v1の定義を直接修正し、この変更のための版更新・旧版処理・移行層は追加しない。
+- Secret出力の有無と変更種別は独立に定義する。招待exportのように既存domainで鍵世代を更新する操作は変更操作とし、秘密値を永続的な結果cacheへ保存せず、専用frameでのみ返す。切断後も変更操作の後処理を完了する。
+- `--idempotency-key`、requestの `idempotency_key`、metadataの `idempotency_required` を定義・実装・schema・testsから撤去する。
+- 通常frame／secret frame、Unix socket、入力サイズ・timeout・接続数の上限、既存domainの署名／wire／認可規則はこの変更で拡張しない。
 
 ## Decision
 
@@ -98,10 +110,11 @@ canonical sourceを変更しない。一方で、CLI profileの購読期待状�
 
 ## バックアップ／復元境界
 
-- CLI profileのidentity、既存製品データ、購読期待状態、期限内の冪等性entryはprofile backup対象に含める。
+- CLI profileのidentity、既存製品データ、購読期待状態はprofile backup対象に含める。CLIの操作台帳は作成・更新・移行しない。
 - 所有lock、socket、PID、実行中session、bearer token、endpoint secretは移行しない。
 - app／Community Node同意とage attestationは既存のbackup／restore契約どおり移行せず、restore後に再設定を要求する。
-- restore後に冪等性resultを復元できないkeyは`operation_outcome_unknown`とし、domainの変更操作を自動再実行しない。
+- 復元は、移行対象のローカル状態をバックアップ生成時点へ戻す。既に他端末やCommunity Nodeへ伝わったデータは巻き戻さない。復元をまたぐ入力間の重複排除は行わず、復元後の経過時間によるCLI操作の保護期間を設けない。必要な明示的再同意等が成立した操作は、待機時間を追加せず実行できる。
+- 未リリースCLIの旧台帳・旧backupを救済する互換処理は追加しない。GUIの既存バックアップ契約はこの変更の対象外とする。
 
 ## セキュリティ境界
 
@@ -111,7 +124,7 @@ canonical sourceを変更しない。一方で、CLI profileの購読期待状�
 ## Consequences
 
 - CLI追加のために既存featureのdocs／blobs／gossip／SQLite、署名canonical、private audience、P2P三経路を変更してはならない。
-- 常駐プロセス、protocol、command登録簿、台帳はLocal Onlyの制御経路であり、Community Nodeやpeerへ制御指示を送信しない。
+- 常駐プロセス、protocol、command登録簿、要求単位の実行状態はLocal Onlyの制御経路であり、Community Nodeやpeerへ制御指示を送信しない。
 - untrustedなpost／DM本文をcommand、profile、file path、log指示として解釈しない。
 - E2Eで使う一時profileはtest harnessが作成・破棄する。
 - 共通host抽出では、#855／#857後のrestore／consent／background actionを含む全callerを現行基準から再生成する。
