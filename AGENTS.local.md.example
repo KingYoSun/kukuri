@@ -1,12 +1,9 @@
 # AGENTS.local.md（個人ローカル設定の雛形）
 
+必要な人だけ `AGENTS.local.md` へコピーし、個人の言語・環境設定を記載する。実ファイルはGit管理しない。
+共通規則と調査ツールの代替手順は `AGENTS.md` に従い、ここへ複製しない。
+承認範囲と製品契約の扱いは `docs/README.md` の「正本と変更要求」に従う。
+
 ## 言語
 
 - 思考・回答は日本語で行う。
-
-## コードベース調査
-
-- コードの理解・探索は grep / find / ファイル読みより codegraph を優先する。
-  - MCP: `codegraph_explore` / `codegraph_node`
-  - Shell: `codegraph explore "<質問や symbol 名>"` / `codegraph node <symbol-or-file>`
-- `.codegraph/` が無いリポジトリでは codegraph を使わない。

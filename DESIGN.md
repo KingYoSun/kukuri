@@ -146,7 +146,7 @@ WCAG 2.2 AAを基準とする。自動検査の満点だけを適合の証明に
 - boolean propの増殖で暗黙の組合せを作らず、product上の意味を持つ明示variantまたはcompound componentを使う。
 - shared componentはanatomy、variant、全状態、keyboard／pointer／touch、overflow、Storybook storyの契約を持つ。
 - data取得、domain state、actionsとpresentationの境界を保ち、見た目の都合でdomain契約を変更しない。
-- color、type、spacing、radius、border、shadow、motionは現行tokenから取る。1回しか使わないhelperや将来要件だけのadapterを増やさない。
+- color、type、spacing、radius、border、shadow、motionは現行tokenから取る。helperやadapterは現在の責務分離・可読性・検証に必要な場合に使い、将来要件だけの抽象化は増やさない。
 
 ## 9. Motion
 
@@ -176,6 +176,8 @@ WCAG 2.2 AAを基準とする。自動検査の満点だけを適合の証明に
 ### 11.1 現行token契約
 
 次の表は`tokens.css`のroot／dark／lightで実行されるcustom propertyをミラーする。機械検査のため、scope、token、値の3列とmarkerを変更しない。`@theme inline`のTailwind aliasとreduced-motion overrideは派生値であり、この表の対象外とする。
+
+同期は[`design-contract.test.ts`](apps/desktop/src/styles/design-contract.test.ts)が確認する。設計変更では本書・実行値・描画確認面を同じ変更で整合させ、表だけを独立した値の正本にしない。
 
 <!-- TOKEN_CONTRACT_START -->
 | Scope | Token | Value |

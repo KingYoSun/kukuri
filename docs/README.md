@@ -5,7 +5,10 @@
 - 仕様は ADR、実行手順は runbook、状態は progress に分ける。
 - `docs/progress/` は 2 種を置く: (a) named な current-state / 計画文書（最新のマイルストーン状態・ロードマップ）と (b) `YYYY-MM-DD-<issue# または WP 名>-<slug>.md` の per-issue / per-WP 作業報告（個別 issue・ワークパッケージの実装ログ。例: `2026-07-06-wp-c1-...`）。current-state は「今どうなっているか」、per-issue / per-WP は「その作業で何をしたか」を書き分ける。
 
-## 優先参照順
+## 現行スコープを把握する参照順
+
+次は現状を読む順番であり、異なる責務の規則を上書きする優先順位ではない。作業に関係する文書を選んで読む。
+
 1. `docs/progress/2026-04-16-mvp-builder-preview-plan.md`
 2. `docs/progress/2026-03-10-foundation.md`
 3. `docs/progress/2026-03-24-shell-ui-production-migration.md`
@@ -37,9 +40,32 @@
 ## Development process
 
 - Issueの起票、scope固定、計画、実装、PR、独立監査、Close/Reopen: `docs/runbooks/issue-lifecycle.md`
-- 実装計画の有限化と必須形式: root `PLANS.md`
+- 実装計画の要否、粒度と記録形式: root `PLANS.md`
 - path別validationとリファクタリング境界: root `REFACTORING.md`
-- GitHub Issue / PRは追跡面であり、仕様・実装・tests / scenariosの代わりとなるSSoTではない。
+- GitHub Issue / PRは追跡面。既存仕様と今回の変更要求の区別は次節に従う。
+
+## 正本と変更要求
+
+人間とAIの共通入口は root `AGENTS.md`。`CLAUDE.md` と `kilo.json` はその読み込み設定、`AGENTS.local.md` は任意の個人設定である。個人設定の欠落だけで停止せず、共通の品質条件や製品契約を個人設定で黙って変更しない。
+
+| 判断すること | 正本 |
+| --- | --- |
+| 製品・protocol・データ境界の仕様 | 関連する `docs/adr/`。UIの製品・視覚契約は root `DESIGN.md` |
+| 実装済みの挙動 | 現行実装と tests / contracts / `harness/scenarios/` |
+| Issue工程、承認、再現、リスク別記録、独立監査、Close | `docs/runbooks/issue-lifecycle.md` |
+| 計画の粒度と形式 | root `PLANS.md` |
+| リファクタリング境界、path別検証の選定・中断 | root `REFACTORING.md` |
+| コマンドの実行方法・環境差 | `docs/runbooks/dev.md` |
+| UI作業の事前成果物・確認・例外 | `docs/adr/0014-uiux-dev-flow.md` |
+| CSS・state・dataの実装配置 | `docs/architecture/desktop-ui-implementation.md` |
+| UI採用記録のschema・履歴管理 | `docs/ui-reviews/README.md` |
+| 現状と個別の作業証跡 | `docs/progress/`。過去の計画・監査・UI記録は当時の証拠であり、現行規則を上書きしない |
+
+Issue・PR・セッションの記述だけで「実装済み」「検証成功」と判断しない。一方、ユーザーが今回承認した変更要求は作業範囲と判断権限の根拠であり、既存仕様と異なることだけを理由に拒否・再承認しない。変更要求を対応する正本文書・実装・testsへ反映し、変更前の事実と区別する。
+
+規則が食い違う場合は、適用対象と上表の責務を確認する。読む順番、日付の新しさ、強い表現だけで優先順位を決めない。承認済み範囲内の参照漏れ・要約・雛形は担当者が同期し、製品契約や依頼範囲を変える未承認の判断だけをユーザーへ確認する。
+
+入口の短い要約は正本へのリンクとともに維持し、正本の変更時に参照元・雛形・例を同じ差分で確認する。機械検査されるミラーは同期検査を維持する。規則の見直しでは観測した効果・負担・環境変化を根拠に維持・強化・緩和・統合・撤廃を選び、理由を作業記録へ残す。過去の判断本文は書き換えず、再流入する経路に後継先や失効範囲を示す。
 
 ## Ops
 - Dome Hosting の有効化・割当・終了・split-brain復旧: `docs/runbooks/dome-hosting.md`

@@ -3,7 +3,7 @@
 このファイルは詳細仕様ではなく、現行の kukuri 実装で作業するための短いポインタです。
 
 ## まず読む
-- `AGENTS.local.md`
+- `AGENTS.local.md`（存在する場合だけ読む個人設定。欠落時は継続し、作成・変更しない）
 - `docs/README.md`
 - `docs/runbooks/dev.md`
 - `docs/runbooks/issue-lifecycle.md`（Issueの起票・計画・実装・監査・Close・Reopenを行う場合）
@@ -13,7 +13,7 @@
 
 ## 作業対象
 - 新規実装・修正は原則 root workspace の現行実装のみ。
-- 現行スコープの参照優先順位は `docs/README.md` に従う（現行アクティブマイルストーンは builder preview）。
+- 現行スコープの参照順と規則の正本は `docs/README.md` に従う（現行アクティブマイルストーンは builder preview）。
 - builder preview / 配布 / 初回体験は `docs/progress/2026-04-16-mvp-builder-preview-plan.md`。
 - その capability baseline は `docs/progress/2026-03-10-foundation.md`。
 - Windows desktop support、seeded DHT discovery、community-node connectivity/auth、social graph v1、private channel audience v1 は current scope に含まれる。
@@ -33,19 +33,20 @@
 - UI/UX フロー・ガードレール: `docs/adr/0014-uiux-dev-flow.md`
 - UI review record: `docs/ui-reviews/`
 - 振る舞い: `crates/*` のテストと `harness/scenarios/`
-- GitHub Issue / PR / 現在のセッション内容は SSoT として扱わない。根拠にするのは本リポジトリの実装・docs・tests・scenarios のみ。
+- 既存仕様・実装済みの事実は repository の実装・docs・tests・scenarios で確認する。今回承認された変更要求は作業範囲の根拠として扱い、変更時に対応する正本へ反映する。詳細は `docs/README.md` の「正本と変更要求」を参照する。
 
 ## ガードレール
 - 既存コードの丸ごとコピーは禁止。contract または scenario を先に置いてから必要最小限だけ移植する。
-- 不具合修正は、必ず先に failing test / contract / scenario で再現してから行う。実機確認は test で表現できない最後の確認に限定する。
-- Issue作業は `docs/runbooks/issue-lifecycle.md` のリスク区分、固定surface inventory、状態遷移、独立監査、Close条件に従う。
-- リファクタリング、ファイル分割、責務境界変更、dead code 削除を行う場合は、先に `REFACTORING.md` を読む。
-- リファクタリングPRでは、機能追加・仕様変更・依存更新を混ぜない。
-- 変更pathごとの必須validationは `REFACTORING.md` の path別検証マトリクスに従う。
-- テストでは workspace 全体の長時間の重い再リンクが走っても途中で止めず、原則として完走させて結果を確認する。
+- 不具合は修正前に再現する。自動化可能な挙動の失敗testと、実機・視覚でしか確認できない場合の扱いは `docs/runbooks/issue-lifecycle.md` の「修正前の再現」を参照する。
+- Issue作業の承認、リスク別の必須記録、独立監査、Close条件は `docs/runbooks/issue-lifecycle.md` に従う。
+- リファクタリングの変更境界、変更pathごとの必須validation、重い検証の選定・中断は `REFACTORING.md` に従う。
 - root に新しい長文ドキュメントを増やさない。必要なら `docs/` に置く（例外: ビジュアル仕様 `DESIGN.md` ）。
 - `console.error` は使わない。
-- コミットはユーザーが求めたときだけ行う。
+- コミットはユーザーの依頼範囲で行う。PR作成・マージの依頼には、そのために必要なコミットを含む。承認範囲の判断は `docs/runbooks/issue-lifecycle.md` に従う。
+
+## 調査ツール
+- `.codegraph/` がある場合、コード探索は CodeGraph の MCP または `codegraph explore` / `codegraph node` を優先する。利用不能ならその旨を記録し、`rg` とファイル読みへ切り替える。index の新規作成はユーザーの判断とする。
+- `.codegraph/` がなければ通常の検索を使う。文書・設定などindex対象外のファイルは直接読んでよい。
 
 ## 通信経路
 - 本プロジェクトの基本優先度は `Direct P2P -> Relay Supported P2P -> Relay Fallback`。

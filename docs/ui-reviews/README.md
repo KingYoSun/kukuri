@@ -4,12 +4,7 @@
 
 ## Recordを追加する条件
 
-- mergeされたPRがuser-facing behaviorまたはlayoutを大きく変える。
-- reusable design ruleを追加または変更する。
-- `docs/adr/0014-uiux-dev-flow.md`の例外付きで承認される。
-- UI構造またはdesign languageを再設計する。
-
-単一文言修正、既存契約内の局所修正、見た目に影響しない内部変更では追加不要とする。
+追加の要否は[ADR 0014のUI review record](../adr/0014-uiux-dev-flow.md#9-ui-review-record)に従う。本書は採用記録のschemaと履歴管理を所有する。単一文言や既存契約内の局所修正はPRの証跡で足りる。
 
 ## File naming
 
@@ -25,6 +20,8 @@
 既存recordの当時の判断、証跡、例外は書き換えない。置換時はstatusと`superseded-by`だけを追記し、新record側から`supersedes`で参照する。対象surfaceやdecisionが異なるrecordを、日付が古いという理由だけでsupersedeしない。
 
 ## 必須項目
+
+対象変更に適用される確認結果は、同条件のPR証跡へのリンクで示してよい。非該当項目は省略できるが、必要な確認の未実施・失敗・例外は理由付きで残す。
 
 - Status、Supersedes、Superseded by
 - PR linkまたはidentifier

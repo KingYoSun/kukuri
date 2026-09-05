@@ -4,6 +4,8 @@
 
 この文書は、`DESIGN.md`の製品・視覚契約をdesktop frontendへ実装するときの配置と依存方向を定義する。数値、利用者向け状態、品質基準の正本ではない。
 
+以下のstate・性能・検証の短い要約は[DESIGN.md](../../DESIGN.md)と[ADR 0014](../adr/0014-uiux-dev-flow.md)への配置上の案内であり、正本の変更時に同期する。
+
 ## Style bundle
 
 `apps/desktop/src/styles/index.css`がproductionとStorybookで共通の入口であり、local stylesheetを次の順で読み込む。この順序はcascade contractである。

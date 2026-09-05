@@ -1,5 +1,7 @@
 # kukuri AIリファクタリング環境改善 計画書
 
+> 規則案はSuperseded（2026-09-05、#900）。本書は当時の導入計画として保持する。現行の判断は[REFACTORING.md](../../REFACTORING.md)、[PLANS.md](../../PLANS.md)、[Issue運用手順](../runbooks/issue-lifecycle.md)に従い、以下の雛形・数値・配置指示を現行規則として再適用しない。
+
 ## 目的
 
 kukuri を「AIが安全にコードをきれいにできる環境」として強化する。

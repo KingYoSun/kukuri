@@ -4,7 +4,7 @@
 
 この文書は、AIエージェントと人間が kukuri でリファクタリング作業を行うときのルールを定義する。
 
-このリポジトリにおけるリファクタリングとは、タスクで明示されない限り、外部挙動、プロトコル契約、ストレージ意味論、ユーザーに見える挙動を維持したまま内部構造を改善する作業である。
+この文書の構造調査・凍結境界・成果物の規定はリファクタリングに適用する。「path別検証マトリクス」と「検証の選定・中断」は他種別の変更でも使う。文書だけの修正にコードの構造調査や分割計画を要求しない。
 
 ## リファクタリングモード
 
@@ -23,7 +23,7 @@
 ## 基本原則
 
 - 1 PR = 1意図。
-- rename / move / extraction / behavior change を同じ PR に混ぜない。
+- 挙動変更は構造整理と分離する。rename / move / extractionは一つの構造上の成果に必要な場合にまとめてよいが、差分上で機械的な移動と責務変更を追えるようにする。独立して検証・差し戻しすべき変更は別PRにする。
 - 明示指示なしに public API、protocol object、storage schema、docs/blobs canonical source、community-node endpoint contract を変更しない(具体的な対象は「凍結境界」の章)。
 - 既存テストを削除しない。削除が必要な場合は、削除理由と代替カバレッジを示す。
 - 振る舞いが変わる可能性がある場合は、先に characterization test / contract / scenario を追加する。
@@ -152,7 +152,7 @@ PRタイトルまたはタスク概要では、以下のラベル / prefix の�
 - `refactor:delete`: dead code 削除。参照経路調査を添える。
 - `contract`: 仕様固定テスト追加。実装変更禁止。
 - `scenario`: harness scenario 追加/更新。プロダクト実装変更は別PR。
-- `fix`: バグ修正。先に failing test / contract / scenario を置く。
+- `fix`: バグ修正。修正前の証拠は `docs/runbooks/issue-lifecycle.md` の「修正前の再現」に従う。
 - `deps`: 依存更新。リファクタリングと混ぜない。
 - `docs`: ドキュメント更新。実装変更と混ぜる場合は理由を書く。
 
@@ -172,27 +172,7 @@ PR を作成または説明するときは、タスク種別を明確にする�
 [codex][docs] ...
 ```
 
-推奨 PR 本文項目:
-
-```md
-## 概要
-
-## 種別
-
-## 観測した問題と根拠
-
-## 目標とする構造上の成果
-
-## 挙動変更
-
-## 挙動維持の証拠
-
-## 検証
-
-## リスク
-
-## 見送った候補・別Issue
-```
+PR共通欄は `.github/PULL_REQUEST_TEMPLATE.md` を使い、本書の「記録テンプレート」にある構造上の成果・挙動維持の証拠へリンクする。テンプレートを別々に複製しない。
 
 ## 禁止する混在変更
 
@@ -268,12 +248,10 @@ PR を作成または説明するときは、タスク種別を明確にする�
    relay-only テスト)。**variant は削除・改名しない**。serde 表現(`relay_fallback`)は
    IPC 契約であり、既存 2 経路(direct / relay_supported)の判定を変える変更は
    characterization テスト(`peer_state.rs` の unit test)を先に更新しない限り禁止。
-2. **`apps/desktop/src/styles/shell-scoped-overrides.css`(旧 shell-phase1-legacy.css。H8 PR2 で
-   改名)は現役の本番 CSS**: `.shell-phase1` スコープ付き上書き層で、shell 配下では
-   `shell-phase1-part*` を specificity で上書きする。portal と shell で意図的に値が異なるクラスの
-   shell 側の値を置く層であり(DESIGN.md 4.7)、「上書きの重複に見えるから削除・統合」は禁止。
-   統合を検討する場合も宣言単位・コンテキスト別の実効値判定 + 視覚回帰ネット(検証マトリクスの
-   `apps/desktop/**` = `test:e2e:visual`)を前提にする。
+2. **`apps/desktop/src/styles/shell-scoped-overrides.css`は現役の本番 CSS**:
+   portalとshellで意図した実効値差がある。重複という見た目だけで削除しない。
+   配置・cascadeと統合時の確認は[UI実装配置](docs/architecture/desktop-ui-implementation.md)の
+   「Portalとscoped override」、実行する検証は本書のマトリクスを参照する。
 3. **署名バイトは非決定的なので golden 化しない**: `KukuriKeys::sign_schnorr`
    (`crates/core/src/crypto.rs`)は毎回 aux_rand を生成するため署名バイトは実行毎に変わる。凍結対象は
    canonical バイト列と「過去 fixture の verify 継続」であり、署名バイトを snapshot golden にすると
@@ -300,14 +278,13 @@ PR を作成または説明するときは、タスク種別を明確にする�
 
 ## 真実の置き場所ルール
 
-- 現行ドキュメントの優先順位は `docs/README.md` に従う。
-- ADR は承認済みの protocol / product 方針を定義する。
-- runbook は実行手順と運用手順を定義する。
-- progress document は現在の milestone 状態を説明する。
-- テストと `harness/scenarios/` は実行可能な振る舞いを定義する。
-- 文書同士が矛盾する場合は、古い文書または古くなった文書を更新する。更新しない場合は、完了報告で矛盾を明示する。
+正本、読む順番と優先関係、承認済み変更要求、過去記録の扱いは[docs/README.md](docs/README.md)の「正本と変更要求」に従う。
 
 ## path別検証マトリクス
+
+まず変更の内容と影響pathを選ぶ。実行方法・環境差は[開発手順](docs/runbooks/dev.md)、UI固有の確認観点は[ADR 0014](docs/adr/0014-uiux-dev-flow.md)を参照する。
+文書・コメントの誤字など挙動・描画・機械契約に影響しない区分Aは、配置pathだけで製品suiteを要求せず、`git diff --check` と対象記述・参照の確認を行う。設定・雛形・機械検査用ミラーは構文と読み込み先、対応する既存検査も確認する。`REFACTORING.md` 自体の検証は下表の専用行に従う。
+挙動に影響する変更は該当する行を併用し、同じcommandの重複実行は不要。frontend行から `src-tauri` を除外するが、IPCやfrontendにも影響する場合は両方の行を適用する。凍結境界の個別検証とCIの必須設定はこの選定で免除しない。
 
 | 変更path | 必須validation |
 |---|---|
@@ -320,7 +297,7 @@ PR を作成または説明するときは、タスク種別を明確にする�
 | `crates/desktop-runtime/**` | `cargo xtask rust-test`（community_node / identity_restart / seeded_dht / media_blob_restore 等の実挙動テストを含む）+ 起動 / 永続往復が変わる場合は `cargo xtask e2e-smoke`、peer 間 connectivity・CN セッションが変わる場合は `cargo xtask scenario community_node_public_connectivity` |
 | `crates/cn-*` | `cargo xtask cn-check` + `cargo xtask cn-test` |
 | `harness/scenarios/**` | `cargo xtask scenario <changed-scenario>` |
-| `apps/desktop/**` | `cargo xtask desktop-ui-check`（視覚回帰 `test:e2e:visual` を含む。CSS/スタイル変更で見た目が変わると CI の視覚 step が赤くなる。意図的な変更時は baseline を再生成する — 手順は `docs/runbooks/dev.md` の「視覚回帰」を参照） |
+| `apps/desktop/**`（`src-tauri/**` を除く） | `cargo xtask desktop-ui-check`（視覚回帰 `test:e2e:visual` を含む。CSS/スタイル変更で見た目が変わると CI の視覚 step が赤くなる。意図的な変更時は baseline を再生成する — 手順は `docs/runbooks/dev.md` の「視覚回帰」を参照） |
 | `apps/desktop/src-tauri/**` | `cargo xtask tauri-check` + `cargo xtask e2e-smoke` |
 | `docs/adr/**` | 対応する tests / contracts / scenarios を確認または更新する |
 | `docs/runbooks/**` | runbook 内の command と path を確認する |
@@ -328,7 +305,11 @@ PR を作成または説明するときは、タスク種別を明確にする�
 
 `cargo xtask e2e-smoke` は `desktop_smoke_post_persist`（`FakeNetwork`・in-process 単一 runtime）1 本を回す desktop 永続 smoke であり、post 作成 → timeline → restart → 再表示の永続往復のみを検証する。実 transport / docs-sync の peer 間経路・relay replication は通らない。peer / replication / CN 接続の検証は該当 crate の `cargo xtask rust-test`（実 iroh テストを含む）と `cargo xtask scenario <connectivity scenario>` が担う。CI 実配線の connectivity scenario は `community_node_public_connectivity`（fast / release）、加えて `community_node_multi_device_connectivity`（nightly）。connectivity scenario は cn-postgres 起動 + 実 iroh peer 複数で重いため、マトリクスでは「振る舞いが変わる場合」の条件付き要求とする。
 
-必須validationの全実行がローカルで重すぎる場合は、最も狭い関連 command を実行し、実行しなかった内容と理由を明確に報告する。実行していない validation を passed と報告しない。
+### 検証の選定・中断
+
+- 実行前に、変更に必要な検証、利用可能なOS・依存、既存結果で確認済みの範囲を特定する。ローカルで重すぎる・実行不能な場合は最も狭い関連commandを先に使い、未実行の必須検証と理由、CIまたは別環境で補う方法を記録する。狭い検証の成功を全suiteの成功とはしない。
+- 開始済みのtestは、長い再リンクや一時的な無出力だけを理由に止めず原則完走する。ユーザーの停止指示、資源枯渇、明確なハング、実行前提の誤りで有効な結果を得られない場合は担当者が中断し、command、観測根拠、完了済み範囲、未確認範囲、再開条件を記録する。
+- 必須CI、適用される独立監査・境界検証を満たす前に完了・マージ可能と報告しない。実行不能や中断は未確認のまま残す。必要な検証が成功した後は、対象変更・新たな失敗・未解決の懸念がなければ同じ検証を繰り返さない。
 
 PR 作成前または `main` merge 前は、可能なら `cargo xtask check` + `cargo xtask test` を推奨する。
 
@@ -350,8 +331,7 @@ PR 作成前または `main` merge 前は、可能なら `cargo xtask check` + `
 
 - 明示的な正当化(= baseline 更新コミット)なしに、1000行以上の新規手書きファイルを追加しない。
 - 既存の大型ファイルを編集する場合は、差分を最小に保つ(行数を増やす変更は baseline 更新が必要になる)。
-- 大型ファイルの中で大きなロジック変更を行う場合は、先に分割計画を提案する。
-- 1500行を超えるファイルで、かつ複数責務に触る場合は、後続の分割計画を作成する。
+- 大型ファイルで複数責務に触る場合は、変更の理解・検証・差し戻しを妨げる具体的な構造問題を確認する。分割が必要なら別の構造整理として計画し、行数だけで分割を必須にしたり、依頼外の分割を混ぜたりしない。ratchetのCIゲートは維持する。
 - formatting-only change と semantic change を混ぜない。
 - generated file、lock file、icon は明示的に対象化されない限り、この方針の対象外とする。
 
@@ -428,7 +408,7 @@ PR 作成前または `main` merge 前は、可能なら `cargo xtask check` + `
 3. 候補を分類・優先順位付けし、一つの意図を選ぶ。監査だけなら固定 scope の分類完了で終了する。
 4. 現在の挙動、構造上の問題、目標成果、対象外、凍結境界、互換パス、validation を記録する。
 5. 影響 path と必須 validation を特定し、変更前に実行して既知の失敗を今回の回帰と区別できるよう記録する。
-6. 挙動を固定する網が不足する場合は、先に contract / scenario / characterization test を別 PR で追加する。
+6. 挙動を固定する網が不足する場合は、先に contract / scenario / characterization test を追加して変更前に確認する。原則は別PRとし、小さな同一責務の変更で変更前の実行証拠を残せる場合は同じPRでもよい。凍結境界で個別に要求する検証は省略しない。
 7. 一つの意図を小さく差し戻し可能な段階へ分け、各段階の後に最小の関連 validation を実行する。
 8. 停止条件を検出したら先へ進まず、再調査または別種別へ再分類する。
 9. 最後に path 別検証マトリクスの validation と、差分全体の review を行う。未実行項目は理由を報告する。
@@ -436,39 +416,10 @@ PR 作成前または `main` merge 前は、可能なら `cargo xtask check` + `
 
 ## レビューチェックリスト
 
-リファクタリングPRは、以下の観点でレビューする。
-
-- 本当に挙動維持になっているか。
-- PR は 1意図に限定されているか。
-- rename / move と logic change が分離されているか。
-- public API、protocol、storage、docs/blobs、community-node contract が維持されているか。
-- 新しい抽象化は、既存の重複または境界上の圧力によって正当化されているか。
-- 結合を減らしているか。それとも単に code を移動しただけか。
-- 観測した問題と目標成果が before / after の証拠へ対応しているか。
-- 行数、coverage、AIの判断だけを開始・完了根拠にしていないか。
-- 候補の全入口と利用者を確認し、事実・推測・未検証事項を区別しているか。
-- 触った振る舞いに対して tests / contracts / scenarios は十分か。
-- test の削除・skip・assertion の弱体化で green にしていないか。
-- 必須validationは実行され、報告されているか。
-- 大型ファイルを慎重に扱っているか。
-- diff 内の `#[serde` 属性・wire 文字列リテラル・canonical 実装の変更を目視したか(凍結境界の章を参照)。
-- 対象外、見送った候補、別種別へ再分類した事項と理由が明記されているか。
+本書の「個別作業の成果物ベースの完了条件」に証跡を対応付ける。特に凍結境界の見落としを防ぐため、
+diff内の `#[serde` 属性、wire文字列、canonical実装を確認する。共通の監査判定・停止条件はIssue運用手順に従う。
 
 ## 完了報告形式
 
-AIエージェントは、リファクタリング作業を以下の形式で終了する。
-
-- 変更種別:
-- 開始trigger:
-- 目的:
-- 観測した問題と根拠:
-- 変更path:
-- 実施前後の構造上の変化:
-- 挙動変更:
-- Public API / protocol / storage の変更:
-- 追加または更新した tests / contracts / scenarios:
-- 挙動維持の証拠:
-- 実行したvalidation:
-- 実行しなかったvalidation:
-- リスク:
-- 見送った候補・理由 / 別Issue:
+本書の「記録テンプレート」を更新し、結果・構造上の成果・挙動維持の証拠・検証結果・残存リスクを要約する。
+詳細へのリンクで足り、別形式へ全項目を転記する必要はない。非該当欄は省略できるが、必須検証の未実行・失敗・中断は理由と補完方法を残す。

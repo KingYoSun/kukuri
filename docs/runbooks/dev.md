@@ -2,6 +2,8 @@
 
 Issueの起票からCloseまでのstage gate、固定surface inventory、状態遷移、独立監査は [Issue lifecycle runbook](./issue-lifecycle.md) に従う。本書は各validation commandの実行方法を規定する。
 
+実行する検証の選定・重複path・重い検証の中断は [REFACTORING.md](../../REFACTORING.md) の「path別検証マトリクス」「検証の選定・中断」に従う。下の一覧は全変更で全commandを実行する指定ではない。
+
 ## 初回セットアップ
 ```bash
 npx pnpm@10.16.1 install --dir apps/desktop
@@ -62,12 +64,9 @@ cargo xtask desktop-visual-test
 - `cargo xtask scenario desktop_smoke_metaverse_dome_transition`は異なるownerの隣接Domeをowner deviceでhostし、送信元prepare、宛先reservation/commit、送信元completeの順でavatar-only handoffを行い、同時在室が残らないことを確認する。
 - Metaverseは実験機能のため、`world_version = 1` / `2`の既存roomは再作成する。
 
-### 推奨フロー
-- 通常変更: `cargo xtask check` + `cargo xtask test`
-- browser-level UI change: 追加で `cargo xtask desktop-ui-check`
-- community-node / Postgres 変更: 追加で `cargo xtask cn-check` + `cargo xtask cn-test`
-- runtime / end-to-end 変更: 追加で `cargo xtask e2e-smoke` または対象 `cargo xtask scenario ...`
-- CSS / スタイル変更: `cargo xtask desktop-ui-check`（視覚回帰を含む）。見た目が意図的に変わる場合は下記手順で baseline を更新する
+### 検証を選ぶ入口
+
+日常の製品変更は `cargo xtask check` + `cargo xtask test` を起点とし、変更pathと影響に応じた必須項目は [検証マトリクス](../../REFACTORING.md#path別検証マトリクス) で選ぶ。文書の誤字など区分Aは同節の対象確認を使う。UIの証跡は [ADR 0014](../adr/0014-uiux-dev-flow.md)、視覚baselineの更新方法は次節を参照する。
 
 ## 視覚回帰 (visual regression)
 

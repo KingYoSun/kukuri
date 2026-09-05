@@ -63,6 +63,9 @@
 - current scope には Windows desktop support、seeded DHT discovery、community-node connectivity/auth、social graph v1、private channel audience v1 が含まれており、UI 移行計画もこの全 shell を対象にする。
 
 ## Applicable Rules
+
+> この節の手順指定はSuperseded（2026-09-05、#900で明示）。以下は当時の移行計画として保持する。現行の作業・検証・review条件は[ADR 0014](../adr/0014-uiux-dev-flow.md)、実装配置は[desktop UI implementation](../architecture/desktop-ui-implementation.md)に従う。Figma必須指定は冒頭の2026-06-13追記どおり廃止済み。
+
 - workflow の正本は `docs/adr/0014-uiux-dev-flow.md` とし、Codex-assisted UI proposal では Figma を primary review artifact にする。
 - Codex-assisted UI proposal の既定 path は `local HTML / React draft -> generate_figma_design による HTML capture -> human review in Figma` とする。
 - design-system / review / exception policy の正本は `docs/adr/0014-uiux-dev-flow.md`、visual spec の正本は root `DESIGN.md` とする。
