@@ -7,7 +7,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        `docs/runbooks/issue-lifecycle.md` に従って記入してください。GitHub Issueは追跡面であり、仕様と振る舞いの正本はADR、実装、tests / contracts / scenariosです。
+        `docs/runbooks/issue-lifecycle.md` に従って記入してください。区分Aは対象・受入条件・確認方法を短く示し、B/C専用欄は省略できます。既存仕様と今回承認された変更要求の区別は `docs/README.md` を参照してください。
 
   - type: textarea
     id: current_status
@@ -53,7 +53,7 @@ body:
     id: canonical_refs
     attributes:
       label: 正本と根拠
-      description: 関連するADR、runbook、実装symbol、tests、scenariosを列挙してください。
+      description: 関連する正本を示してください。区分Aは対象文書・pathで十分です。既存の計画があれば参照し、同じ情報を作り直す必要はありません。
       placeholder: |
         - ADR / contract:
         - 現行実装:
@@ -77,31 +77,31 @@ body:
     id: surface_inventory
     attributes:
       label: Fixed surface inventory
-      description: B/Cでは入口→helper→副作用と、副作用→全callerを記録します。Aでは対象外理由を書いてください。件数だけの記載は不可です。
+      description: B/Cでは入口→helper→副作用と、副作用→全callerを記録します。Aは省略できます。B/Cの件数だけの記載は不可です。
       placeholder: |
         | ID | 入口・trigger | shared helper | 副作用sink | guard / invariant | transition | test |
         | --- | --- | --- | --- | --- | --- | --- |
         | INV-1 | | | | | TR-1 | |
     validations:
-      required: true
+      required: false
 
   - type: textarea
     id: state_transitions
     attributes:
       label: State transition coverage
-      description: B/Cでは該当する通常、失敗、retry、restart、保存state、background、複数対象を有限に記録します。Aでは対象外理由を書いてください。
+      description: B/Cでは該当する通常、失敗、retry、restart、保存state、background、複数対象を有限に記録します。Aは省略できます。Cはsensitive sinkと禁止副作用も記録してください。
       placeholder: |
         | ID | 事前状態 | event / sequence | 期待状態 | 許可I/O | 禁止副作用 | test |
         | --- | --- | --- | --- | --- | --- | --- |
         | TR-1 | | | | | | |
     validations:
-      required: true
+      required: false
 
   - type: textarea
     id: validation
     attributes:
       label: 検証とClose条件
-      description: AC / INVARごとのtest / evidence、path別validation、独立監査の要否を記入してください。
+      description: AC / INVARごとのtest / evidenceとpath別validationを記入してください。Aは対象確認でよく、監査不要欄は省略できます。B/Cの独立監査の要否はrunbookに従います。
       placeholder: |
         - AC-1 -> test / evidence:
         - INVAR-1 -> test / evidence:
@@ -118,5 +118,5 @@ body:
       options:
         - label: 固定AC / INVARに含まれない将来要件やoptional hardeningを、このIssueのClose blockerへ追加しません。
           required: true
-        - label: B/Cでは未分類surfaceを0にし、Cでは独立監査PASS後にCloseします。
+        - label: B/Cでは任意表示のinventory・状態遷移欄も記入して未分類surfaceを0にし、必要な独立監査（Cは必須）を省略しません。Aはこれらの欄を省略できます。
           required: true

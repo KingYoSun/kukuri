@@ -24,15 +24,31 @@ Issue の起票、計画、実装、監査、PR、Close、Reopen を一つの有
 
 法務文書や運用文書でも、実装上の同意・外部送信・削除手順を規定する変更は A ではなく C とする。
 
+本書は人間とAIのIssue作業に適用する。区分Aでは対象path、受入条件、確認方法・結果を短く記録すればよく、B/C用のinventory、transition、sensitive sink、独立監査の欄は省略できる。雛形の欄数によってリスク区分を引き上げない。必要な検証の未実行・失敗は省略しない。
+
+## 承認と作業範囲
+
+- 計画のみの依頼では計画を提示して終了し、ファイル変更は開始しない。実行までの依頼、または計画の承認があれば、必要な調査・再現・修正・検証・記録をその範囲で進める。別の承認文言を形式的に要求しない。
+- PR作成の依頼は必要なブランチ・コミット・pushを含む。マージはユーザーの依頼・承認がある場合に、必須CIと適用される独立監査を満たしてから行う。依頼されていない公開・マージを計画承認だけから推定しない。
+- 承認済み要件を満たす実装方法、参照の同期、適用対象の選定は担当者が判断する。範囲外の製品変更、要件の削除、必要な品質条件の免除など、新たな判断権限が必要な点だけをユーザーへまとめて確認する。返答に依存しない作業は継続できる。
+- 再開時は承認範囲と現在の差分・証跡を確認し、同じ承認を取り直さない。条件が変わった部分だけを再評価する。規則の正本と変更要求の区別は[docs/README.md](../README.md)に従う。
+
+## 修正前の再現
+
+不具合は修正前に、操作のsequenceと期待結果を固定する。自動化可能な挙動は失敗するtest / contract / scenarioで再現し、修正後に同じ条件で成功することを確認する。
+実機・視覚でしか再現できないUI不具合は、対象OS / WebView / 入力 / 表示条件、再現手順、変更前の観測、期待結果を先に記録し、変更後に同条件で確認する。自動化できない理由を短く示し、自動化できる周辺の挙動はtestで保護する。
+この扱いは認証・同意・外部送信等の境界testの代替ではない。区分Cの禁止I/O・永続mutation等は下記のtestで確認する。実機環境がない場合は未確認であり、browserの成功で置き換えない。
+文書だけの不一致は、矛盾する該当箇所と同じ依頼への適用結果を修正前の証拠にできる。
+
 ## Lifecycle state gate
 
 | 状態 | 入る条件 | 出る条件 |
 | --- | --- | --- |
-| Planned | Goal、Non-goals、固定 AC / INVAR、リスク区分がある。B / C は inventory と transition もある | 計画の各 Task が AC / INVAR と evidence に対応し、Scope revision が固定された |
-| In progress | 計画が承認され、failing-before の取得方法が決まった | 実装、targeted validation、inventory / transition 更新が完了した |
-| Audit pending | PR head commit と AC / INVAR evidence が固定された | 必要な独立監査が `PASS`。対象変更後は delta も `PASS` |
+| Planned | Goal、Non-goals、固定 AC / INVAR、リスク区分がある。B / C は inventory と transition もある | 作業が AC / INVAR と evidence に対応し、Scope revision が固定された。Aは短い作業記述でよい |
+| In progress | 実行範囲が承認され、不具合なら修正前の再現方法が決まった | 実装、targeted validation、適用される inventory / transition 更新が完了した |
+| Audit pending | 独立監査が必要な区分で、PR head commit と AC / INVAR evidence が固定された | 必要な独立監査が `PASS`。対象変更後は delta も `PASS`。監査不要ならこの工程を省略する |
 | Merge ready | 必須 CI と必要な独立監査がともに成功した | 承認された運用で merge された |
-| Complete | merge commit と監査対象の一致を確認し、Issue 本文の現在判定を更新した | concrete blocker が発見されない限り維持する |
+| Complete | merge commit と検証対象（監査が必要なら監査対象）の一致を確認し、Issue 本文の現在判定を更新した | concrete blocker が発見されない限り維持する |
 | Reopened | Blocker の四条件を満たす evidence がある | 最小の残タスクを同じ AC / INVAR / transition に結び直し、再び `In progress` へ進む |
 | Blocked | 承認が必要な scope 変更、外部依存、再現不能など、現在の工程を進められない具体的理由がある | blocker と解除条件を記録し、解除後に中断前の状態へ戻る |
 
@@ -55,7 +71,7 @@ Issue 本文の先頭に `Current status` とリスク区分を置き、現在�
 A / B / C
 ```
 
-本文には次を必須とする。
+実装Issueには次を記録する。区分Aは適用区分の短縮形でよい。Preview feedbackは利用者向けの報告入口であり、実装へ移す担当者が必要な区分・条件を補う。
 
 1. 利用者に観測できる Goal を一文で書く。
 2. 不具合なら、現在の挙動と再現 sequence を書く。
@@ -125,8 +141,8 @@ A / B / C
 
 計画は `PLANS.md` と本書を同時に満たす。
 
-- `AC / INVAR -> Task -> INV / TR -> test / evidence` の対応を記録し、孤立した条件と、条件に紐づかない実装 Task を 0 にする。
-- 不具合は、静的な状態だけでなく問題が発生する event sequence を修正前に失敗する test / contract / scenario へ落とす。
+- `AC / INVAR -> Task -> test / evidence` の対応を記録し、B/Cでは適用される `INV / TR` も結ぶ。孤立した条件と、条件に紐づかない実装 Task を 0 にする。
+- 不具合は「修正前の再現」に従い、問題が発生する event sequence を先に固定する。
 - shared helper を変更する場合は全 caller を、sensitive sink を変更する場合は全 caller の逆引きを Task に含める。
 - inventory の追加・削除・分類変更を予定する場合は、期待する差分を明記する。
 - 区分 C では、独立監査を実装 Task に混ぜず、PR head に対する別工程として置く。
@@ -135,7 +151,7 @@ A / B / C
 
 ## 3. 実装
 
-1. fix は failing test / contract / scenario を先に確認する。
+1. fix は「修正前の再現」に従い、失敗testまたは適用可能な再現証拠を先に確認する。
 2. guard は、その層が所有する sensitive sink より前に置く。server の拒否は client の外部送信禁止を満たす代替にならない。
 3. `Ok(())` や boolean が「利用可能」「延期」「同意待ち」「再試行中」を兼ねる場合は、呼出元が誤って続行できない型付き outcome を使う。
 4. global / aggregate 処理では、各対象の検証済み状態を失わず、ある対象の成功で未検証の別対象を有効化しない。
@@ -144,14 +160,14 @@ A / B / C
 
 ## 4. PR と検証
 
-PR 本文には次を記録する。
+PR 本文には次のうち適用される項目を記録する。区分Aは対象、AC / INVARへの対応、差分、確認結果を短くまとめ、非該当欄は省略してよい。詳細な記録がrepositoryにある場合はリンクし、独立に複製しない。
 
 - 対象 Issue、Scope revision、リスク区分
 - AC / INVAR ごとの実装箇所と test 名
 - inventory の基準、変更前後、追加・削除・分類変更、未分類件数
 - shared helper と sensitive sink の全 caller 確認方法
 - 状態遷移の positive / negative test
-- failing-before / passing-after の証跡
+- 「修正前の再現」に対応する変更前後の証跡
 - `REFACTORING.md` の path 別必須 validation と、未実行項目の理由
 
 全体 test 件数や CI green は必要条件だが、AC / INVAR の網羅性を単独では証明しない。

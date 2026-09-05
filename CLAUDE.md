@@ -1,3 +1,3 @@
-AGENTS.mdに従ってください
+@AGENTS.md
 
-@AGENTS.local.md
+共通規則は上記に従う。`AGENTS.local.md` は存在する場合だけ読む任意の個人設定であり、欠落していても作業を継続する。
