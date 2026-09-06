@@ -261,10 +261,18 @@ npx pnpm@10.16.1 tauri:dev
 cargo xtask desktop-package
 ```
 
-- 実行可能なのは Windows host のみ
+- Windows hostではNSISを生成する。Linux x86_64 hostではAppImageを生成する（次節）。
 - 生成物は `apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/` に出る
 - `cargo xtask desktop-package` は `src-tauri/tauri.windows.conf.json` を使った Windows bundle config を前提にする
 - release workflow / updater manifest / draft release の手順は `docs/runbooks/release.md` を参照する
+
+## Linux AppImage生成（#889実装中）
+
+Ubuntu 22.04のx86_64 hostで `cargo xtask desktop-package` を実行する。Linux設定は `apps/desktop/src-tauri/tauri.linux.conf.json`、署名はTauri updater署名のみとする。鍵なしのLinux生成は拒否し、生成後も設定公開鍵との署名一致を検査する。
+
+生成・実機準備・検証用署名の区別は [Linux AppImage手順](linux-appimage-smoke.md)、確認済み範囲は [#889作業記録](../progress/2026-09-05-issue-889-linux-appimage.md) に記載する。生成成功だけでは実機動作・更新成功・公開済みとは扱わない。Release全体のLinux統合は#890が担当する。
+
+#889のScope revision v5では、成功済みの代表実機証跡と変更影響に絞った自動検証を採用する。全OS連携の追加手動確認やComputer Useは必須にせず、自動検証では判定できない具体的な問題だけを最小限の手動補完へ回す。検証方法を変えても署名・identity・データ保護、必須CI・独立監査は維持する。
 
 ## remote-sync 用の環境変数
 ```bash
@@ -508,7 +516,7 @@ cd apps/desktop && npx pnpm@10.16.1 test
 - `kukuri-transport` の `transport_two_process_roundtrip_static_peer` は required に戻した。
 - deterministic な required lane は `FakeTransport` と `kukuri-harness` が担う。
 - Tauri wrapper の単体 compile は `cargo xtask check` に含めて確認する。
-- `cargo xtask desktop-package` は Windows host 専用で、current-user NSIS installer を生成する。
+- `cargo xtask desktop-package` はWindows hostでcurrent-user NSIS installer、Linux x86_64 hostで署名付きAppImageを生成する。Linuxの前提と検査は [AppImage手順](linux-appimage-smoke.md) を参照する。
 
 補足:
 - GitHub branch protection の required check 名は repo 外設定なので、`Next Fast/Nightly` から `Kukuri Fast/Nightly` への手動更新が必要。

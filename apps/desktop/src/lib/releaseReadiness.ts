@@ -18,9 +18,10 @@ export type UpdateStatus =
   | 'available'
   | 'downloading'
   | 'ready_to_restart'
+  | 'installing'
   | 'failed';
 
-export type UpdateErrorKind = 'network' | 'manifest' | 'signature' | 'install' | 'unknown';
+export type UpdateErrorKind = 'network' | 'manifest' | 'signature' | 'install' | 'missing' | 'unknown';
 
 export type UpdateState = {
   status: UpdateStatus;
@@ -112,6 +113,9 @@ export function classifyUpdateError(errorMessage?: string | null): UpdateErrorKi
     normalized.includes('apply update')
   ) {
     return 'install';
+  }
+  if (/download request failed with status:\s*404\b/.test(normalized)) {
+    return 'missing';
   }
   if (
     normalized.includes('network') ||

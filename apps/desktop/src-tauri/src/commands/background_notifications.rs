@@ -162,6 +162,9 @@ pub fn spawn(app: AppHandle) {
             // ConsentRequired/Initializing中に再subscribeしない。
             let operation = event_app.state::<DesktopOperationState>();
             let _guard = operation.switch_guard.lock().await;
+            if crate::desktop_lifecycle::require_running(&event_app).is_err() {
+                return;
+            }
             if !runtime_access_allowed(&event_app.state::<DesktopStartupState>().status()) {
                 continue;
             }
@@ -217,6 +220,9 @@ pub fn spawn(app: AppHandle) {
 async fn poll_once(app: &AppHandle) -> anyhow::Result<()> {
     let operation = app.state::<DesktopOperationState>();
     let _guard = operation.switch_guard.lock().await;
+    if crate::desktop_lifecycle::require_running(app).is_err() {
+        return Ok(());
+    }
     if !runtime_access_allowed(&app.state::<DesktopStartupState>().status()) {
         return Ok(());
     }

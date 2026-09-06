@@ -1,6 +1,7 @@
 import { useStore } from 'zustand';
 import { createStore } from 'zustand/vanilla';
 import type { DownloadEvent } from '@tauri-apps/plugin-updater';
+import { invoke } from '@tauri-apps/api/core';
 
 import packageJson from '../../package.json';
 
@@ -42,6 +43,7 @@ export const appUpdateStore = createStore<AppUpdateStore>((set, get) => ({
   updateState: INITIAL_UPDATE_STATE,
   pendingUpdate: null,
   checkForUpdate: async () => {
+    if (['checking', 'downloading', 'ready_to_restart', 'installing'].includes(get().updateState.status)) return;
     set((state) => ({
       updateState: {
         ...state.updateState,
@@ -84,6 +86,7 @@ export const appUpdateStore = createStore<AppUpdateStore>((set, get) => ({
     }
   },
   downloadUpdate: async () => {
+    if (['checking', 'downloading', 'ready_to_restart', 'installing'].includes(get().updateState.status)) return;
     const { pendingUpdate, checkForUpdate } = get();
     if (!pendingUpdate) {
       await checkForUpdate();
@@ -140,8 +143,11 @@ export const appUpdateStore = createStore<AppUpdateStore>((set, get) => ({
     if (!pendingUpdate || updateState.status !== 'ready_to_restart') {
       return;
     }
+    set((state) => ({ updateState: { ...state.updateState, status: 'installing' } }));
     try {
       await pendingUpdate.install();
+      // Linuxではinstallだけでは終了しない。backend側でruntimeを停止してから再起動する。
+      await invoke('restart_after_update');
     } catch (error) {
       set((state) => ({
         updateState: updateStateFromError(state.updateState.currentVersion, error),

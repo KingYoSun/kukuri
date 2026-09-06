@@ -1,5 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
+import * as desktopInvoke from '@/lib/api/invoke/desktop';
+import * as releaseReadiness from '@/lib/releaseReadiness';
 
 import { type ReportRoutingPlan } from '@/lib/api/reportRouting';
 import { InvokeError } from '@/lib/api/invoke/error';
@@ -7,6 +9,7 @@ import { InvokeError } from '@/lib/api/invoke/error';
 import { ReportRoutingDialog, type ReportRoutingSubject } from './ReportRoutingDialog';
 
 const subject: ReportRoutingSubject = { kind: 'post', id: 'post-1', label: 'alice' };
+afterEach(() => vi.restoreAllMocks());
 
 const endpointPlan: ReportRoutingPlan = {
   provenanceUnknown: false,
@@ -20,6 +23,7 @@ const endpointPlan: ReportRoutingPlan = {
         reportEndpoint: 'https://index.example/v1/report',
         rightsRequestUrl: 'https://index.example/rights-requests/new',
         rightsRequestPolicyUrl: 'https://index.example/rights-infringement-policy',
+        policyUrl: 'https://index.example/policy',
         abuseContact: 'abuse@index.example',
         authorityScope: ['this_node'],
       },
@@ -34,6 +38,23 @@ const unknownPlan: ReportRoutingPlan = {
   localActionsOnly: true,
   candidates: [],
 };
+
+test('native policy and rights links open externally without submitting report details', async () => {
+  vi.spyOn(releaseReadiness, 'isTauriRuntime').mockReturnValue(true);
+  const invoke = vi.spyOn(desktopInvoke, 'invokeDesktop').mockResolvedValue(undefined);
+  const onSubmit = vi.fn();
+  render(<ReportRoutingDialog open onOpenChange={vi.fn()} subject={subject} plan={endpointPlan} onSubmit={onSubmit} />);
+  const policy = screen.getAllByRole('link').find((link) => link.getAttribute('href') === 'https://index.example/policy')!;
+  fireEvent.click(policy);
+  await waitFor(() => expect(policy).not.toHaveAttribute('aria-disabled'));
+  expect(invoke).toHaveBeenLastCalledWith('open_external_url', { url: 'https://index.example/policy' });
+  fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'rights_infringement' } });
+  const rights = screen.getByRole('link', { name: /review scope and submit a rights request/i });
+  fireEvent.click(rights);
+  await waitFor(() => expect(rights).not.toHaveAttribute('aria-disabled'));
+  expect(invoke).toHaveBeenLastCalledWith('open_external_url', { url: 'https://index.example/rights-requests/new' });
+  expect(onSubmit).not.toHaveBeenCalled();
+});
 
 test('always shows the boundary notice and routes a report to the resolved node', async () => {
   const onSubmit = vi.fn().mockResolvedValue({ status: 'submitted', reference_id: 'ref-1' });

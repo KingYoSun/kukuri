@@ -1,4 +1,8 @@
 {
+  "externalLink": {
+    "opening": "正在浏览器中打开…",
+    "failed": "无法确认链接已打开。请检查默认浏览器，然后再次点击链接。"
+  },
   "actions": {
     "accept": "接受",
     "add": "添加",

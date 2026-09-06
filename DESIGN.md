@@ -52,6 +52,7 @@ kukuriの通常画面は、コンテンツを継続して閲覧・作成・操�
 - 戻る操作は親Columnまたは直前の文脈へ戻し、無関係な既定画面へ飛ばさない。focusは移動元または操作を開始したcontrolへ復元する。
 - canonical URLはfocus中Columnの共有targetだけを表す。Column配列、幅、順序、scroll位置、draftをURLへ載せない。
 - local layoutとcanonical URLの責務は[`docs/adr/0031-variable-span-column-workspace.md`](docs/adr/0031-variable-span-column-workspace.md)に従う。
+- 投稿通知をOS通知またはアプリ内通知から明示的に開くと、通知元の投稿を含むThreadを選択し、その投稿をColumnの表示範囲へ移す。取得待ちは解決後に一度移動し、通常refreshでは閲覧位置を奪わない。同じ通知の再クリックは新しい移動要求として扱い、欠落した投稿の代わりに別投稿をtargetにしない。
 
 ## 4. Componentと画面状態
 

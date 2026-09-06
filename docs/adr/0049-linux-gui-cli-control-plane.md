@@ -105,8 +105,43 @@ canonical sourceを変更しない。一方で、CLI profileの購読期待状�
 - app／Community Node同意、age gate、restore gateを共通hostで共有し、成立前はruntime、scheduler、remote取得、background通知を開始しない。
 - protocolの正本は常駐プロセスのcommand登録簿／dispatcherとし、schema／command metadataを同じ定義から生成する。
 - account、同意、private audience、credentialなど既存の製品側guardは、GUIと同じ意味で常駐プロセス側にも適用する。
-- Tauri updater署名は必須とする。AppImage埋込みGPG署名は別の配布契約として扱い、採否を#889の計画承認前に固定する。
+- Tauri updater署名は必須とする。2026-09-05の#889計画承認により、AppImage埋込みGPG署名は追加しない。Linux AppImageもTauri updaterの公開鍵による検証を行い、署名なし・不正署名の更新はインストールしない。
 - Ubuntu 22.04をLinux GUI build基盤とし、Ubuntu 22.04／Debian 12のX11／XWaylandを実環境smoke test対象にする。
+
+2026-09-06の#889検証範囲変更承認により、今回用意できない追加OS環境とXWaylandの実行は延期する。既存Ubuntu 24.04とWindowsでの確認範囲を記録し、延期環境の動作保証や検証済みという主張はしない。Ubuntu 22.04でのbuild基盤は維持する。詳細は [#889作業記録](../progress/2026-09-05-issue-889-linux-appimage.md) に置く。
+
+2026-09-07の#889 Scope revision v5では、ユーザー承認により追加の網羅的な手動実機確認を実行ゲートから外す。代表実機の成功証跡を再利用し、今回の変更と影響先の不足は自動tests・隔離サービス・実OS資源で検証する。署名・実行file置換・保存状態・process停止をmockだけで成功とせず、既存の安全契約、CI、独立監査を維持する。未変更の全device／GPU／codec・OS連携の手動確認やComputer Useを必須にしない。追加手動確認は、固定条件に関わる具体的な問題を既存証跡と自動検証では判定できない場合に限る。未確認機能・延期環境の動作保証は追加しない。以下の実desktop確認の記述も、成功済み代表証跡の採用とこの追加条件に従う。
+
+## Linux GUIの終了と更新
+
+- トレイのオブジェクト生成成功だけでclose-to-trayを有効にしない。Linuxでは表示先と当該processの登録を確認し、利用不能・確認不能なら正常終了へ進む。非表示中に表示先を失った場合はwindowへ復帰させる。
+- Quit、ウィンドウ終了、SIGTERM／SIGINT／SIGHUP、更新後の再起動はGUIの終了処理へ集約する。終了要求後は新しいアプリ操作を受け付けず、既存の起動・復元・アカウント切替の排他処理を待ってから現在のhostを停止する。進行中バックアップの取消入口は維持する。
+- Linux AppImageの更新は署名検証済みのdownload結果だけをinstallし、成功後にhost停止と再起動を要求する。install失敗時は再起動せず、失敗を表示する。GUIの再起動はCLI／daemonの操作として公開しない。
+- downloadと署名検証後の再起動待ちは、定期／手動checkや重複downloadで破棄しない。「あとで」は案内だけを閉じ、検証済み更新と明示適用の操作を維持する。asset取得の404はfile欠落として案内し、manifest取得失敗や接続障害と区別する。
+- 終了要求・終了完了・トレイ確認結果はprocess内だけのTransient／Local Only状態である。SQLite、backup、gossip、peerへの複製対象にしない。既存のprofile・同意・鍵の分類と保存形式は変更しない。
+- 二重起動の受付ログにargvやdeep-link本文を記録しない。
+
+## LinuxのOS通知利用可否
+
+- 通知の権限状態と通知サービスの稼働を混同しない。Linuxではsession D-Busの `org.freedesktop.Notifications.GetServerInformation` を期限付きで照会し、接続できた場合は `available`、サービス不在・接続拒否・不正応答・期限超過は `unavailable` とする。OS側の表示設定や拒否状態を、この照会だけで `granted`／`denied` と推定しない。
+- 利用可否の照会・再確認は通知本文を送信せず、OS設定・アプリの通知設定・本文previewを変更しない。Windowsの既存権限結果と明示操作での有効化経路は維持する。
+- 照会結果はprocess内のTransient／Local Only状態。新しい永続保存・peer送信は追加せず、既存診断への状態表示だけを許す。サービス情報の生の値やD-Busエラー本文を診断へ追加しない。
+- Linuxの通知表示には既存の本文保護・失敗通知を維持し、`silent` は標準の `suppress-sound` hintへ反映する。実表示・音・クリック動作は実desktopで別に確認する。
+
+## Windows OS通知からの復帰
+
+- #889の2026-09-06追加承認により、NSIS版の通知はWindowsのprotocol activationを使い、既存の `kukuri:` とsingle-instance／deep-link経路へ戻す。バナーと通知センターで同じ通知対象を開き、メモリ内のToast Activated callbackだけに依存しない。
+- activation URIはWindowsの正規化後と一致する `kukuri://notification/?id=<encoded notification ID>`。受信側はこの形式と以前に生成したroot slashなしの形式だけを許可し、他のpathへ一般化しない。そのIDは現在のアカウントの通知一覧に一致する場合だけ既存通知handlerへ渡す。profile／accountの指定や自動切替は許さず、不正URI・未知IDで別データを開かない。既存の同意・復元・停止gateを維持する。
+- notification IDはLocal Onlyの参照metadataとしてOSの通知XML／起動引数に渡る。通知本文、秘密鍵、招待token、保存先をURIに含めず、argv／URI本文をログへ出さない。新しいDB、backup項目、peer送信、COMサーバーは追加しない。
+- 最後に処理したnotification URIだけをWebViewのsessionStorageへ記録し、同じ起動URIが再mount／account切替時のreloadで再実行されることを防ぐ。この参照はsession内だけのLocal Only状態で、profile backupやpeerへ複製しない。新しいlive clickは同じURIでも処理する。
+- NSISは自アプリのStart menu shortcutへAUMIDと通知保持用stub CLSIDを設定する。通知UIの入力欄は提供せず、quiet／preview設定とLinuxの通知経路は変更しない。
+- #889のScope revision v4では、OS／アプリ内の共通投稿通知handlerから通知元object_idをThreadのfocusへ渡す。追加pageも同じtopic／threadの既存読取りAPIだけで取得し、実在する対象へ一度スクロールする。明示的な再クリックは新要求、通常refreshは移動要求ではない。要求識別子はsession内のLocal Only状態で、OS通知URI・永続化・外部送信の項目は増やさない。DM個別messageへのjumpや既読化の変更は含めない。
+
+## GUIの外部リンク起動
+
+- Releaseの公開資料・feedbackと通報画面の運用者policy／権利侵害受付リンクは、明示操作でGUI専用 `open_external_url` commandからOSの既定ブラウザーへ渡す。Ready／終了gateを維持し、HTTP(S)の絶対URL・hostあり・credentialなしだけを許可する。file、任意scheme、shell／program指定の起動権限は公開しない。
+- LinuxはOpenURI portalで起動し、AppImageのlibrary／GIO環境を外部processへ継承しない。WindowsはShellExecuteを使用する。サービス不在・拒否・期限超過は局所的な失敗表示とし、自動retryや成功の推定はしない。通常のbrowser版anchor、内部navigation、downloadは対象外。
+- URLとpending／errorは操作中だけのTransient状態であり、新しいDB／backup／peer送信やログ保存を追加しない。OSへ渡した公開URLの先では外部ブラウザーのcookie・network等の規則が適用される。通報本文、診断本文、identity等をURLへ付加しない。
 
 ## バックアップ／復元境界
 

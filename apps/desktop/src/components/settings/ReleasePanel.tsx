@@ -10,6 +10,7 @@ import {
   requestOsNotificationPermission as requestOsNotificationPermissionCommand,
 } from '@/lib/api/osNotificationPermission';
 import { copyTextToClipboard } from '@/lib/utils';
+import { useExternalLinkOpener } from '@/lib/useExternalLinkOpener';
 import {
   buildSafeDiagnosticReport,
   classifyUpdateError,
@@ -44,6 +45,7 @@ type ReleasePanelProps = {
 
 export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
   const { t } = useTranslation(['common', 'settings']);
+  const externalLink = useExternalLinkOpener();
   const syncStatus = useDesktopShellStore((state) => state.syncStatus);
   const notificationStatus = useDesktopShellStore((state) => state.notificationStatus);
   const communityNodeStatuses = useDesktopShellStore((state) => state.communityNodeStatuses);
@@ -60,6 +62,7 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
   const [osNotificationSettings, setOsNotificationSettings] =
     useState<OsNotificationSettings>(DEFAULT_OS_NOTIFICATION_SETTINGS);
   const [osNotificationPermission, setOsNotificationPermission] = useState('unknown');
+  const [osNotificationChecking, setOsNotificationChecking] = useState(isTauriRuntime);
 
   useEffect(() => {
     setOsNotificationSettings(loadOsNotificationSettings());
@@ -77,7 +80,12 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
       })
       .catch(() => {
         if (!cancelled) {
-          setOsNotificationPermission('prompt');
+          setOsNotificationPermission('unavailable');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setOsNotificationChecking(false);
         }
       });
     return () => {
@@ -104,17 +112,27 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
   );
 
   const requestOsNotificationPermission = useCallback(async () => {
+    if (osNotificationChecking) {
+      return;
+    }
     if (!isTauriRuntime()) {
       setOsNotificationPermission('unavailable');
       return;
     }
-    const permission = await requestOsNotificationPermissionCommand();
-    const normalized = permission.toLowerCase();
-    setOsNotificationPermission(normalized);
-    if (normalized === 'granted') {
-      updateOsNotificationSetting({ enabled: true });
+    setOsNotificationChecking(true);
+    try {
+      const permission = await requestOsNotificationPermissionCommand();
+      const normalized = permission.toLowerCase();
+      setOsNotificationPermission(normalized);
+      if (normalized === 'granted') {
+        updateOsNotificationSetting({ enabled: true });
+      }
+    } catch {
+      setOsNotificationPermission('unavailable');
+    } finally {
+      setOsNotificationChecking(false);
     }
-  }, [updateOsNotificationSetting]);
+  }, [osNotificationChecking, updateOsNotificationSetting]);
 
   const diagnosticReportText = useMemo(
     () =>
@@ -205,7 +223,7 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
   const updateErrorMessage = updateState.lastError
     ? t(updateErrorTranslationKey(updateState.lastError))
     : null;
-  const updateBusy = updateState.status === 'checking' || updateState.status === 'downloading';
+  const updateBusy = ['checking', 'downloading', 'installing'].includes(updateState.status);
   const updateReadyToRestart = updateState.status === 'ready_to_restart';
   const communityNodeDisclosures = useMemo(
     () => buildCommunityNodeDisclosures(communityNodeConfig, communityNodeManifests),
@@ -219,11 +237,17 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
         <small>{t('settings:release.summary')}</small>
       </CardHeader>
 
+      {externalLink.pending ? <Notice role='status'>{t('common:externalLink.opening')}</Notice> : null}
+      {externalLink.failed ? <Notice tone='destructive' role='alert'>{t('common:externalLink.failed')}</Notice> : null}
+
       <section className='min-w-0 space-y-3'>
         <h4 className='text-base font-semibold text-foreground'>
           {t('settings:release.update.title')}
         </h4>
         {showDiagnostics ? <SettingsDiagnosticList items={updateDiagnostics} columns={2} /> : null}
+        {updateState.status === 'installing' ? (
+          <Notice>{formatUpdateStatus(updateState.status, t)}</Notice>
+        ) : null}
         {updateState.lastError ? (
           <Notice tone='destructive'>
             <div className='space-y-1'>
@@ -242,8 +266,9 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
                 <p>{t('settings:release.update.readyDescription')}</p>
                 <small>{t('settings:release.update.restartWarning')}</small>
               </div>
-              <SettingsActionRow>
+              <SettingsActionRow className='flex-col sm:flex-row'>
                 <Button
+                  className='whitespace-normal [&>svg]:shrink-0'
                   type='button'
                   onClick={() => void restartAndInstall()}
                   disabled={!pendingUpdate}
@@ -262,16 +287,16 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
             </div>
           </Notice>
         ) : null}
-        {updateState.availableVersion && !updateReadyToRestart ? (
+        {updateState.availableVersion && !updateReadyToRestart && updateState.status !== 'installing' ? (
           <Notice tone='accent'>
             {t('settings:release.update.available', { version: updateState.availableVersion })}
           </Notice>
         ) : null}
-        <SettingsActionRow>
+        <SettingsActionRow className='flex-col sm:flex-row'>
           <Button
             variant='secondary'
             type='button'
-            disabled={updateBusy}
+            disabled={updateBusy || updateReadyToRestart}
             onClick={() => void checkForUpdate()}
           >
             <RefreshCw className='size-4' aria-hidden='true' />
@@ -279,6 +304,7 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
           </Button>
           {updateReadyToRestart ? (
             <Button
+              className='whitespace-normal [&>svg]:shrink-0'
               variant='secondary'
               type='button'
               disabled={!pendingUpdate}
@@ -340,6 +366,7 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
                     <a
                       className='underline underline-offset-2'
                       href={entry.href}
+                      {...externalLink.linkProps}
                       target='_blank'
                       rel='noreferrer'
                     >
@@ -389,7 +416,7 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
             [t('settings:release.resources.thirdPartyNotices'), THIRD_PARTY_NOTICES_URL],
           ].map(([label, href]) => (
             <Button key={href} asChild variant='secondary'>
-              <a href={href} target='_blank' rel='noreferrer'>
+              <a href={href} target='_blank' rel='noreferrer' {...externalLink.linkProps}>
                 {label}
                 <ExternalLink className='size-4' aria-hidden='true' />
               </a>
@@ -422,7 +449,7 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
                   <SettingsActionRow>
                     {disclosure.links.map(({ key, href }) => (
                       <Button key={`${key}:${href}`} asChild variant='secondary' size='sm'>
-                        <a href={href} target='_blank' rel='noreferrer'>
+                        <a href={href} target='_blank' rel='noreferrer' {...externalLink.linkProps}>
                           {t(`settings:release.resources.${key}`)}
                           <ExternalLink className='size-4' aria-hidden='true' />
                         </a>
@@ -452,14 +479,10 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
             <Download className='size-4' aria-hidden='true' />
             {t('settings:release.diagnostics.export')}
           </Button>
-          <Button
-            variant='secondary'
-            type='button'
-            onClick={() => {
-              window.open(RELEASE_FEEDBACK_URL, '_blank', 'noopener,noreferrer');
-            }}
-          >
-            {t('settings:release.diagnostics.feedback')}
+          <Button variant='secondary' asChild>
+            <a href={RELEASE_FEEDBACK_URL} target='_blank' rel='noreferrer' {...externalLink.linkProps}>
+              {t('settings:release.diagnostics.feedback')}
+            </a>
           </Button>
         </SettingsActionRow>
         {diagnosticMessage ? <Notice tone='accent'>{diagnosticMessage}</Notice> : null}
@@ -513,9 +536,15 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
           <Button
             variant='secondary'
             type='button'
+            disabled={osNotificationChecking}
+            aria-busy={osNotificationChecking}
             onClick={() => void requestOsNotificationPermission()}
           >
-            {t('settings:release.osNotifications.requestPermission')}
+            {t(
+              osNotificationChecking
+                ? 'settings:release.osNotifications.checking'
+                : 'settings:release.osNotifications.requestPermission'
+            )}
           </Button>
         </SettingsActionRow>
       </section>

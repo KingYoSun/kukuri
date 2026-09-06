@@ -173,6 +173,41 @@ function renderRoutingHook(options: RenderRoutingHookOptions) {
 }
 
 describe('useDesktopShellRouting', () => {
+  test('a newer thread focus request wins over a delayed older read', async () => {
+    const api = createDesktopMockApi();
+    let finish!: (value: Awaited<ReturnType<DesktopApi['listThread']>>) => void;
+    api.listThread = vi.fn(async (_topic, id) => id === 'slow'
+      ? new Promise<Awaited<ReturnType<DesktopApi['listThread']>>>((resolve) => { finish = resolve; })
+      : { items: [buildPost({ object_id: 'fast-post', root_id: 'fast' })], next_cursor: null });
+    const { view, harness } = renderRoutingHook({ hash: BASE_TIMELINE_HASH, api });
+    let pending!: Promise<void>;
+    act(() => { pending = view.result.current.openThread('slow', { focusObjectId: 'slow-post' }); });
+    await act(async () => { await view.result.current.openThread('fast', { focusObjectId: 'fast-post' }); });
+    await act(async () => {
+      finish({ items: [buildPost({ object_id: 'slow-post', root_id: 'slow' })], next_cursor: null });
+      await pending;
+    });
+    expect(harness.store.getState().selectedThread).toBe('fast');
+    expect(harness.store.getState().focusedObjectId).toBe('fast-post');
+    expect(window.location.hash).toContain('threadId=fast');
+  });
+
+  test('leaving the route while a focused thread loads cancels its later navigation', async () => {
+    const api = createDesktopMockApi();
+    let finish!: (value: Awaited<ReturnType<DesktopApi['listThread']>>) => void;
+    api.listThread = vi.fn<DesktopApi['listThread']>(() => new Promise((resolve) => { finish = resolve; }));
+    const { view, harness } = renderRoutingHook({ hash: BASE_TIMELINE_HASH, api });
+    let pending!: Promise<void>;
+    act(() => { pending = view.result.current.openThread('slow', { focusObjectId: 'slow-post' }); });
+    act(() => { window.location.hash = '#/notifications?topic=kukuri%3Atopic%3Ageneral'; });
+    await act(async () => {
+      finish({ items: [buildPost({ object_id: 'slow-post', root_id: 'slow' })], next_cursor: null });
+      await pending;
+    });
+    expect(harness.store.getState().selectedThread).toBeNull();
+    expect(window.location.hash).toContain('#/notifications');
+  });
+
   beforeEach(() => {
     // setup.ts は hash を掃除しないため、各テストで '/' に戻す。
     resetWindowHash();

@@ -13,6 +13,14 @@ fn command_allowed(command: &str, status: &DesktopStartupStatus) -> bool {
     matches!(status, DesktopStartupStatus::Ready) || NON_READY_COMMAND_ALLOWLIST.contains(&command)
 }
 
+fn command_allowed_during_exit(command: &str, stopping: bool) -> bool {
+    !stopping
+        || matches!(
+            command,
+            "cancel_device_backup" | "get_desktop_startup_status"
+        )
+}
+
 /// `generate_handler!`へ登録した全app commandを、引数解析やcommand本体より前に
 /// 同じstartup gateへ通す。
 pub(crate) fn with_desktop_startup_gate<R, F>(
@@ -24,6 +32,17 @@ where
 {
     move |invoke| {
         let command = invoke.message.command().to_string();
+        let stopping = invoke
+            .message
+            .state_ref()
+            .try_get::<crate::desktop_lifecycle::DesktopLifecycle>()
+            .is_some_and(|lifecycle| lifecycle.requested());
+        if !command_allowed_during_exit(&command, stopping) {
+            invoke
+                .resolver
+                .reject(CommandError::from("アプリを終了しています。".to_string()));
+            return true;
+        }
         let status = invoke
             .message
             .state_ref()
@@ -50,6 +69,25 @@ where
 mod tests {
     use super::*;
     use crate::state::consent_required_status;
+
+    #[test]
+    fn exit_rejects_new_operations_but_keeps_backup_cancellation_available() {
+        for command in [
+            "accept_app_consents",
+            "switch_account",
+            "restore_device_backup_command",
+            "create_post",
+            "restart_after_update",
+        ] {
+            assert!(!command_allowed_during_exit(command, true));
+            assert!(command_allowed_during_exit(command, false));
+        }
+        assert!(command_allowed_during_exit("cancel_device_backup", true));
+        assert!(command_allowed_during_exit(
+            "get_desktop_startup_status",
+            true
+        ));
+    }
 
     #[test]
     fn consent_required_rejects_network_sink_and_ready_allows_it() {

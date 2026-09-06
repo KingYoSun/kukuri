@@ -161,6 +161,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
 
 [[package]]
+name = "ashpd"
+version = "0.13.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb8421aaa9644a5faf26735f258b669b15f063313ef8f8e2bdb28912a1a6f111"
+dependencies = [
+ "enumflags2",
+ "futures-util",
+ "getrandom 0.4.3",
+ "serde",
+ "zbus",
+]
+
+[[package]]
 name = "asn1-rs"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3585,6 +3598,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "is-docker"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "928bae27f42bc99b60d9ac7334e3a21d10ad8f1835a4e12ec3ec0464765ed1b3"
+dependencies = [
+ "once_cell",
+]
+
+[[package]]
+name = "is-wsl"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "173609498df190136aa7dea1a91db051746d339e18476eed5ca40521f02d7aa5"
+dependencies = [
+ "is-docker",
+ "once_cell",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3932,12 +3964,14 @@ name = "kukuri-desktop-tauri"
 version = "0.1.8"
 dependencies = [
  "anyhow",
+ "ashpd",
  "base64 0.23.1",
  "kukuri-app-api",
  "kukuri-core",
  "kukuri-desktop-runtime",
  "minisign-verify",
  "notify-rust",
+ "open",
  "serde",
  "serde_json",
  "tauri",
@@ -3946,10 +3980,12 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
- "tauri-winrt-notification 0.8.1",
+ "tempfile",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "windows 0.62.2",
+ "zbus",
 ]
 
 [[package]]
@@ -4729,7 +4765,7 @@ dependencies = [
  "log",
  "mac-notification-sys",
  "serde",
- "tauri-winrt-notification 0.7.3",
+ "tauri-winrt-notification",
  "zbus",
 ]
 
@@ -5168,6 +5204,17 @@ name = "opaque-debug"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
+
+[[package]]
+name = "open"
+version = "5.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c603ab8300cf18bc3b14146b19fe3dfcc4843ae5a400cd0e7a30b95aa366634"
+dependencies = [
+ "dunce",
+ "is-wsl",
+ "libc",
+]
 
 [[package]]
 name = "openssl-probe"
@@ -8000,17 +8047,6 @@ checksum = "9ed071c670382e85fc2f48ae706492d8c338f4f89bf72520d32f8abfe880aade"
 dependencies = [
  "thiserror 2.0.20",
  "windows 0.61.3",
- "windows-version",
-]
-
-[[package]]
-name = "tauri-winrt-notification"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f37a6c354fd28fc9e322ed9bd47e3959576dad28c9d58ea1cf888cce1c7ccb36"
-dependencies = [
- "thiserror 2.0.20",
- "windows 0.62.2",
  "windows-version",
 ]
 

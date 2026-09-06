@@ -274,7 +274,16 @@ export function DesktopShellPage({
     activeGameRooms,
   } = viewModels;
   useOsNotificationBridge();
-  useOsNotificationActivation(notifications, shellActions.handleOpenNotification);
+  const { handleOpenNotification } = shellActions;
+  const handleActivateOsNotification = useCallback(
+    async (notification: Parameters<typeof handleOpenNotification>[0]) => {
+      setSettingsOpen(false);
+      setWorkspaceState((current) => ({ ...current, controlCenterOpen: false }));
+      await handleOpenNotification(notification);
+    },
+    [setSettingsOpen, setWorkspaceState, handleOpenNotification]
+  );
+  useOsNotificationActivation(notifications, handleActivateOsNotification);
   const syncTopicContext = useCallback(
     async (topic: string, channelId: string | null) => {
       const nextTopics = trackedTopics.includes(topic) ? trackedTopics : [...trackedTopics, topic];

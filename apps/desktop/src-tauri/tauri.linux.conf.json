@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "active": true,
+    "targets": "appimage",
+    "createUpdaterArtifacts": true,
+    "icon": ["icons/icon.png"],
+    "category": "SocialNetworking",
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    }
+  }
+}

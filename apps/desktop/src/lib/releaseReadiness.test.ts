@@ -83,4 +83,11 @@ describe('release readiness helpers', () => {
 
     expect(loadOsNotificationSettings()).toEqual(settings);
   });
+
+  test('a missing update asset is not a connection failure', () => {
+    expect(classifyUpdateError("'Download request failed with status: 404 Not Found'")).toBe('missing');
+    expect(classifyUpdateError('Download request failed with status: 500 Internal Server Error')).toBe('network');
+    expect(classifyUpdateError('manifest request failed with status: 404 Not Found')).toBe('manifest');
+    expect(classifyUpdateError('request timed out after 404ms')).toBe('network');
+  });
 });

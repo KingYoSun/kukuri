@@ -7,7 +7,7 @@ export function formatUpdateStatus(status: UpdateState['status'], t: Translate):
 }
 
 export function formatOsNotificationPermission(permission: string, t: Translate): string {
-  const knownPermission = ['granted', 'denied', 'prompt', 'unknown', 'unavailable'].includes(
+  const knownPermission = ['granted', 'denied', 'prompt', 'unknown', 'unavailable', 'available'].includes(
     permission
   )
     ? permission

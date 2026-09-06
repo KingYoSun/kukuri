@@ -1,4 +1,5 @@
 mod commands;
+mod desktop_lifecycle;
 mod invoke_gate;
 mod restore_lifecycle;
 mod state;
@@ -25,7 +26,7 @@ use crate::{
         rollback_pending_restore_and_rebuild,
     },
     state::{
-        DesktopStartupState, DesktopStartupStatus, DesktopState, StartupError,
+        DesktopStartupState, DesktopStartupStatus, StartupError,
         app_consent_satisfied,
         build_desktop_state, consent_required_status, failed_status, load_app_consent_store,
         resolve_app_data_dir, resolve_db_path,
@@ -142,18 +143,10 @@ fn show_main_window(app: &AppHandle) {
 }
 
 fn shutdown_and_exit(app: &AppHandle) {
-    let app = app.clone();
-    tauri::async_runtime::spawn(async move {
-        if let Some(state) = app.try_state::<DesktopState>() {
-            state.host().shutdown().await;
-        }
-        app.exit(0);
-    });
+    desktop_lifecycle::request_exit(app, desktop_lifecycle::ExitAction::Quit);
 }
 
-/// Build the system tray so kukuri stays resident after the window is closed
-/// (issue #304). Closing the window hides it; the app keeps syncing in the
-/// background and only exits via the tray "Quit" entry.
+/// トレイの登録を試みる。close時は表示先の利用可能性を別途確認する。
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let open_item = MenuItem::with_id(app, "open", "Open kukuri", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -193,8 +186,8 @@ pub fn run() {
 
     #[cfg(desktop)]
     {
-        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            info!(?argv, "received kukuri desktop single-instance activation");
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            info!("received kukuri desktop single-instance activation");
             // The app may be resident in the tray with its window hidden
             // (issue #304); a re-launch should bring it back to the front.
             show_main_window(app);
@@ -206,17 +199,18 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .on_window_event(|window, event| {
-            // Issue #304: closing the window keeps kukuri running in the
-            // background (tray) instead of exiting. Only the tray "Quit" entry
-            // terminates the process.
+            // 利用可能なトレイがある場合だけ隠す。それ以外は停止処理へ進む。
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
-                let _ = window.hide();
+                desktop_lifecycle::close_window(window.clone());
             }
         })
         .setup(|app| {
+            app.manage(desktop_lifecycle::DesktopLifecycle::default());
             // runtimeが無い同意待ちでもrestore activation/account switchと同じlockを使う。
             app.manage(DesktopOperationState::default());
+            #[cfg(unix)]
+            desktop_lifecycle::watch_signals(app.handle().clone())?;
 
             // Restore journal recoveryは、同意fileの読取やruntime構築より必ず先に行う。
             // 回復不能ならruntimeを開始せずFailedへ閉じる。
@@ -309,19 +303,31 @@ pub fn run() {
             app.manage(OsNotificationBackground::new(app.handle()));
             if let Err(error) = build_tray(app.handle()) {
                 error!(%error, "failed to build system tray");
+            } else {
+                app.state::<desktop_lifecycle::DesktopLifecycle>().set_tray_created(true);
             }
+            #[cfg(target_os = "linux")]
+            desktop_lifecycle::watch_hidden_tray(app.handle().clone());
             commands::background_notifications::spawn(app.handle().clone());
             #[cfg(any(windows, target_os = "linux"))]
             app.deep_link().register_all()?;
             if initialize_runtime {
                 let app_handle = app.handle().clone();
-                spawn_desktop_initialization(app_handle);
+                tauri::async_runtime::spawn(async move {
+                    let operations = app_handle.state::<DesktopOperationState>();
+                    let _guard = operations.switch_guard.lock().await;
+                    if desktop_lifecycle::require_running(&app_handle).is_ok() {
+                        let _ = spawn_desktop_initialization(app_handle.clone()).await;
+                    }
+                });
             }
             Ok(())
         })
         .invoke_handler(invoke_gate::with_desktop_startup_gate(
             tauri::generate_handler![
             commands::startup::get_desktop_startup_status,
+            desktop_lifecycle::restart_after_update,
+            commands::external_url::open_external_url,
             commands::app_consent::get_app_consent_status,
             commands::app_consent::accept_app_consents,
             commands::identity::export_account_key,
@@ -460,6 +466,14 @@ pub fn run() {
             commands::background_notifications::set_os_notification_settings
             ],
         ))
-        .run(tauri::generate_context!())
-        .expect("failed to run kukuri desktop tauri app");
+        .build(tauri::generate_context!())
+        .expect("failed to build kukuri desktop tauri app")
+        .run(|app, event| {
+            if let tauri::RunEvent::ExitRequested { api, .. } = event
+                && !app.state::<desktop_lifecycle::DesktopLifecycle>().completed()
+            {
+                api.prevent_exit();
+                shutdown_and_exit(app);
+            }
+        });
 }

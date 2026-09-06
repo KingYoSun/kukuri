@@ -49,6 +49,7 @@ import {
 } from '@/shell/slices/workspace';
 import { useDesktopShellFieldSetter, useDesktopShellStore } from '@/shell/store';
 import { ColumnRuntimeProvider } from '@/shell/ColumnRuntimeContext';
+import { useThreadFocusScroll } from '@/shell/page/useThreadFocusScroll';
 import {
   projectColumnRuntime,
   releaseColumnAudioFocus,
@@ -121,6 +122,7 @@ export function DesktopShellColumnWorkspace({
   timelineViewItems,
   titles,
 }: DesktopShellColumnWorkspaceProps) {
+  useThreadFocusScroll();
   const { t } = useTranslation('shell');
   const workspaceState = useDesktopShellStore((state) => state.workspaceState);
   const trackedTopics = useDesktopShellStore((state) => state.trackedTopics);
