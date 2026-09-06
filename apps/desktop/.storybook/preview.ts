@@ -2,11 +2,16 @@ import { createElement } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 
 import type { Preview } from '@storybook/react-vite';
+import { sb } from 'storybook/test';
 
 import i18n, { type SupportedLocale } from '@/i18n';
 import { installWindowDesktopMock } from '@/mocks/installWindowDesktopMock';
 
 import '@/styles/index.css';
+
+sb.mock('../src/lib/api/osNotificationPermission.ts', { spy: true });
+sb.mock('../src/lib/api/invoke/desktop.ts', { spy: true });
+sb.mock('../src/lib/releaseReadiness.ts', { spy: true });
 
 installWindowDesktopMock();
 

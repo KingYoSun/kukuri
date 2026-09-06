@@ -11,6 +11,7 @@ import {
 } from '@/lib/api/reportRouting';
 import { type SubmitCommunityNodeReportResult } from '@/lib/api';
 import { InvokeError } from '@/lib/api/invoke/error';
+import { useExternalLinkOpener } from '@/lib/useExternalLinkOpener';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -92,6 +93,7 @@ export function ReportRoutingDialog({
   onSubmitted,
 }: ReportRoutingDialogProps) {
   const { t } = useTranslation(['shell', 'common', 'profile']);
+  const externalLink = useExternalLinkOpener();
   const { candidates } = plan;
   const appealRiskSignalId = appeal?.riskSignalId ?? null;
   const isAppeal = appealRiskSignalId !== null;
@@ -198,6 +200,8 @@ export function ReportRoutingDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogBody className='report-routing-body'>
+          {externalLink.pending ? <Notice role='status'>{t('common:externalLink.opening')}</Notice> : null}
+          {externalLink.failed ? <Notice tone='destructive' role='alert'>{t('common:externalLink.failed')}</Notice> : null}
           <p className='report-subject'>
             {appeal
               ? t(`profile:communityNodeAdvisory.appeal.subject.${subject.kind}`)
@@ -288,7 +292,8 @@ export function ReportRoutingDialog({
                         {target.policyUrl ? (
                           <a
                             className='report-target-policy'
-                            href={target.policyUrl}
+                          href={target.policyUrl}
+                          {...externalLink.linkProps}
                             target='_blank'
                             rel='noreferrer'
                           >
@@ -419,7 +424,7 @@ export function ReportRoutingDialog({
           </Button>
           {!result && canRoute && selectedCandidate && isRightsInfringement && rightsRequestUrl ? (
             <Button asChild>
-              <a href={rightsRequestUrl} target='_blank' rel='noreferrer'>
+              <a href={rightsRequestUrl} target='_blank' rel='noreferrer' {...externalLink.linkProps}>
                 <ExternalLink className='size-4' aria-hidden='true' />
                 {t('report.rightsRequest.open')}
               </a>

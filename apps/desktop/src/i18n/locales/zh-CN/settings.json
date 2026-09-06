@@ -381,6 +381,7 @@
         "failed": "失败",
         "idle": "待机",
         "ready_to_restart": "等待重启",
+        "installing": "正在应用更新",
         "up_to_date": "已是最新版本"
       },
       "check": "检查",
@@ -393,6 +394,7 @@
       "restartWarning": "重启时可能会丢失未发送的草稿或正在编辑的文本。请先保存。",
       "errors": {
         "network": "无法连接到更新服务器。请检查网络连接后重试。",
+        "missing": "更新服务器上未找到更新文件。更新未安装。请稍后重新点击“检查”。",
         "manifest": "无法获取或读取更新信息。请确认 release 发布状态后重试。",
         "signature": "更新文件签名验证失败。此更新不会被安装。",
         "install": "更新安装失败。请重启应用后重试。",
@@ -444,12 +446,13 @@
     },
     "osNotifications": {
       "title": "系统通知",
-      "permission": "权限: {{permission}}",
+      "permission": "状态: {{permission}}",
       "permissions": {
         "denied": "已拒绝",
         "granted": "已允许",
         "prompt": "尚未请求",
-        "unavailable": "不可用",
+        "unavailable": "不可用。请检查桌面通知服务和系统设置",
+        "available": "已连接通知服务（显示取决于系统设置）",
         "unknown": "未知"
       },
       "enabled": "启用系统通知",
@@ -458,7 +461,8 @@
       "followsAndReposts": "关注和转发",
       "quietMode": "静音模式",
       "previewBody": "显示预览文本",
-      "requestPermission": "请求权限"
+      "checking": "正在检查通知可用性…",
+      "requestPermission": "检查通知可用性"
     }
   },
   "safety": {

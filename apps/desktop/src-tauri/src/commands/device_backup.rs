@@ -134,6 +134,7 @@ pub async fn create_device_backup_command(
     request: CreateDeviceBackupRequest,
 ) -> Result<DeviceBackupSummary, CommandError> {
     let _guard = operation.switch_guard.lock().await;
+    crate::desktop_lifecycle::require_running(&app_handle)?;
     let startup = app_handle.state::<DesktopStartupState>();
     require_runtime_operation_ready(&startup.status()).map_err(CommandError::from)?;
     operation.begin_cancellable_device_backup();
@@ -215,6 +216,7 @@ pub async fn restore_device_backup_command(
     request: RestoreDeviceBackupRequest,
 ) -> Result<DeviceBackupRestoreResult, CommandError> {
     let _guard = operation.switch_guard.lock().await;
+    crate::desktop_lifecycle::require_running(&app_handle)?;
     let startup = app_handle.state::<DesktopStartupState>();
     require_runtime_operation_ready(&startup.status()).map_err(CommandError::from)?;
     match pending_device_restore_phase(&state.app_data_dir).map_err(map_error)? {

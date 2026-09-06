@@ -73,6 +73,7 @@ pub async fn switch_account(
     request: SwitchAccountRequest,
 ) -> Result<AccountRecord, CommandError> {
     let _guard = operation.switch_guard.lock().await;
+    crate::desktop_lifecycle::require_running(&app_handle)?;
     let startup = app_handle.state::<DesktopStartupState>();
     require_runtime_operation_ready(&startup.status()).map_err(CommandError::from)?;
 

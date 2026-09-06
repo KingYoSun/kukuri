@@ -30,6 +30,8 @@ export type TimelineSliceState = {
   threadLoadingMoreById: Record<string, boolean>;
   selectedThread: string | null;
   focusedObjectId: string | null;
+  /** Session-only identity of an explicit post focus request, not a refresh. */
+  threadFocusRequestId: number;
 };
 
 export function createInitialTimelineSlice(): TimelineSliceState {
@@ -55,5 +57,6 @@ export function createInitialTimelineSlice(): TimelineSliceState {
     threadLoadingMoreById: {},
     selectedThread: null,
     focusedObjectId: null,
+    threadFocusRequestId: 0,
   };
 }

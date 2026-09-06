@@ -115,7 +115,8 @@ export function createMessageReactionSocialActions({
 
   async function handleOpenNotification(
     notification: NotificationView,
-    parentColumnId?: string
+    parentColumnId?: string,
+    isCurrent: () => boolean = () => true
   ) {
     if (notification.kind === 'direct_message') {
       await openDirectMessagePane(notification.actor_pubkey, {
@@ -161,10 +162,14 @@ export function createMessageReactionSocialActions({
       ...current,
     }));
 
+    const initialHash = window.location.hash;
     await loadTopics(nextTopics, targetTopic, threadTargetId);
+    if (!isCurrent() || initialHash !== window.location.hash) return;
 
     if (threadTargetId) {
       await openThread(threadTargetId, {
+        isCurrent,
+        focusObjectId: notification.object_id ?? null,
         channelId: nextChannelId,
         historyMode: 'replace',
         parentColumnId,

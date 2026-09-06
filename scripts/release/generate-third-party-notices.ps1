@@ -1,6 +1,6 @@
 param(
   [string]$OutputPath,
-  [string]$RustMetadataPath,
+  [string[]]$RustMetadataPath,
   [string]$NpmLicensesPath,
   [string]$AssetManifestPath,
   [switch]$Check
@@ -60,17 +60,24 @@ function Sort-Inventory {
 }
 
 function Get-CargoMetadata {
-  if (-not [string]::IsNullOrWhiteSpace($RustMetadataPath)) {
-    return Get-Content -LiteralPath $RustMetadataPath -Raw -Encoding UTF8 | ConvertFrom-Json
+  if ($RustMetadataPath.Count -gt 0) {
+    foreach ($metadataPath in $RustMetadataPath) {
+      Get-Content -LiteralPath $metadataPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    }
+    return
   }
 
   Push-Location $repoRoot
   try {
-    $metadataJson = (& cargo metadata --locked --format-version 1 | Out-String)
-    if ($LASTEXITCODE -ne 0) {
-      throw "cargo metadata failed with exit code $LASTEXITCODE"
+    # Tauri is an independent workspace; root metadata cannot see its GTK,
+    # portal, updater, or other desktop-only dependencies.
+    foreach ($manifest in @("Cargo.toml", "apps/desktop/src-tauri/Cargo.toml")) {
+      $metadataJson = (& cargo metadata --locked --format-version 1 --manifest-path $manifest | Out-String)
+      if ($LASTEXITCODE -ne 0) {
+        throw "cargo metadata failed for $manifest with exit code $LASTEXITCODE"
+      }
+      $metadataJson | ConvertFrom-Json
     }
-    return $metadataJson | ConvertFrom-Json
   } finally {
     Pop-Location
   }
@@ -326,7 +333,7 @@ $lines.Add("# Third-party notices") | Out-Null
 $lines.Add("") | Out-Null
 $lines.Add("kukuri preview builds include Rust crates, npm packages, Tauri runtime components, and non-code assets.") | Out-Null
 $lines.Add("") | Out-Null
-$lines.Add("This file is generated from the locked Rust and desktop npm dependency inventories plus docs/ASSET_MANIFEST.json.") | Out-Null
+$lines.Add("This file is generated from the locked root and Tauri Rust workspaces, desktop npm dependency inventories, and docs/ASSET_MANIFEST.json. It includes dependencies across platforms, not only packages linked into one binary. OS libraries and codecs bundled into an AppImage require a separate package-level inventory.") | Out-Null
 $lines.Add("") | Out-Null
 $lines.Add("Regenerate it from the repository root with:") | Out-Null
 $lines.Add("") | Out-Null
@@ -338,7 +345,7 @@ $lines.Add("Release owners must review these inventories before publishing a pre
 $lines.Add("") | Out-Null
 $lines.Add("## Current distribution note") | Out-Null
 $lines.Add("") | Out-Null
-$lines.Add("The first preview targets Windows installer distribution through GitHub Releases. Linux remains source-run only for this preview scope. If Windows code signing is not configured, the release notes must state that the preview is unsigned and that SmartScreen warnings are expected.") | Out-Null
+$lines.Add("Windows preview builds use installer distribution through GitHub Releases. Linux x86_64 AppImage generation and validation are tracked in #889; public release integration remains with #890. A locally validated AppImage does not establish public release readiness. If Windows code signing is not configured, the release notes must state that the preview is unsigned and that SmartScreen warnings are expected.") | Out-Null
 $lines.Add("") | Out-Null
 
 $lines.Add("## Non-code asset notices") | Out-Null

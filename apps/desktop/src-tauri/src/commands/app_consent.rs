@@ -47,6 +47,7 @@ pub async fn accept_app_consents(
 
     let operation = app_handle.state::<DesktopOperationState>();
     let _guard = operation.switch_guard.lock().await;
+    crate::desktop_lifecycle::require_running(&app_handle)?;
     let startup_state = app_handle.state::<DesktopStartupState>();
     require_consent_acceptance_state(&startup_state.status()).map_err(CommandError::from)?;
     let app_data_dir = resolve_app_data_dir(&app_handle)?;

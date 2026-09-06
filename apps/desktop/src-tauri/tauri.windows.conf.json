@@ -11,7 +11,8 @@
         "silent": true
       },
       "nsis": {
-        "installMode": "currentUser"
+        "installMode": "currentUser",
+        "installerHooks": "./windows/notification-hooks.nsh"
       }
     }
   }

@@ -673,6 +673,56 @@ mod tests {
     }
 
     #[test]
+    fn existing_keyring_identity_read_failures_preserve_storage_and_recover() {
+        for failure in ["get_failure", "no_default_store", "missing_entry"] {
+            let dir = tempdir().expect("tempdir");
+            let db_path = dir.path().join("kukuri.db");
+            let keyring = FakeKeyringStore::default();
+            let original =
+                load_or_create_keys_with_keyring(&db_path, IdentityStorageMode::Auto, &keyring)
+                    .expect("create keyring identity");
+            let marker = std::fs::read(backend_marker_path(&db_path)).expect("backend marker");
+            let original_entries = keyring.entries.lock().expect("keyring lock").clone();
+            match failure {
+                "get_failure" => *keyring.fail_get.lock().expect("keyring lock") = true,
+                "no_default_store" => {
+                    *keyring.no_default_store.lock().expect("keyring lock") = true;
+                }
+                "missing_entry" => keyring.entries.lock().expect("keyring lock").clear(),
+                _ => unreachable!(),
+            }
+            let inaccessible_entries = keyring.entries.lock().expect("keyring lock").clone();
+
+            assert!(
+                load_or_create_keys_with_keyring(&db_path, IdentityStorageMode::Auto, &keyring)
+                    .is_err(),
+                "{failure} must not create a replacement identity"
+            );
+            assert_eq!(
+                std::fs::read(backend_marker_path(&db_path)).expect("unchanged marker"),
+                marker,
+                "{failure}"
+            );
+            assert_eq!(
+                *keyring.entries.lock().expect("keyring lock"),
+                inaccessible_entries,
+                "{failure} must not mutate keyring entries"
+            );
+            assert!(!key_file_path(&db_path).exists(), "{failure}");
+            assert!(!legacy_key_file_path(&db_path).exists(), "{failure}");
+
+            *keyring.fail_get.lock().expect("keyring lock") = false;
+            *keyring.no_default_store.lock().expect("keyring lock") = false;
+            *keyring.entries.lock().expect("keyring lock") = original_entries;
+            let recovered =
+                load_or_create_keys_with_keyring(&db_path, IdentityStorageMode::Auto, &keyring)
+                    .expect("recover original keyring identity");
+            assert_eq!(recovered.public_key(), original.public_key(), "{failure}");
+            assert!(!key_file_path(&db_path).exists(), "{failure}");
+        }
+    }
+
+    #[test]
     fn file_only_mode_rejects_existing_keyring_backend_marker() {
         clear_identity_env();
         let dir = tempdir().expect("tempdir");

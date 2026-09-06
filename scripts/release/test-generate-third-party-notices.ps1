@@ -3,6 +3,7 @@ $ErrorActionPreference = "Stop"
 $scriptPath = Join-Path $PSScriptRoot "generate-third-party-notices.ps1"
 $workDir = Join-Path ([System.IO.Path]::GetTempPath()) ("kukuri-third-party-notices-test-" + [System.Guid]::NewGuid())
 $rustMetadataPath = Join-Path $workDir "cargo-metadata.json"
+$tauriMetadataPath = Join-Path $workDir "tauri-metadata.json"
 $npmLicensesPath = Join-Path $workDir "pnpm-licenses.json"
 $assetManifestPath = Join-Path $workDir "asset-manifest.json"
 $outputPath = Join-Path $workDir "THIRD_PARTY_NOTICES.md"
@@ -34,6 +35,14 @@ try {
   ]
 }
 "@ | Set-Content -LiteralPath $rustMetadataPath -Encoding UTF8
+
+  @"
+{"packages":[
+  {"name":"kukuri-desktop-tauri","version":"0.1.8","license":"MIT","source":null},
+  {"name":"serde","version":"1.0.228","license":"MIT OR Apache-2.0","source":"registry+https://github.com/rust-lang/crates.io-index"},
+  {"name":"ashpd","version":"0.13.8","license":"MIT","source":"registry+https://github.com/rust-lang/crates.io-index"}
+]}
+"@ | Set-Content -LiteralPath $tauriMetadataPath -Encoding UTF8
 
   @"
 {
@@ -149,8 +158,63 @@ try {
   }
 
   Write-Host "generate-third-party-notices smoke test passed"
+
+  & $scriptPath `
+    -RustMetadataPath @($rustMetadataPath, $tauriMetadataPath) `
+    -NpmLicensesPath $npmLicensesPath `
+    -AssetManifestPath $assetManifestPath `
+    -OutputPath $outputPath
+  $combined = Get-Content -LiteralPath $outputPath -Raw -Encoding UTF8
+  if (-not $combined.Contains("| ashpd | 0.13.8 | MIT | https://crates.io/crates/ashpd |")) {
+    throw "Generated notices omit the separate Tauri workspace"
+  }
+  if ([regex]::Matches($combined, '\| serde \| 1\.0\.228 \|').Count -ne 1) {
+    throw "Shared packages must appear exactly once"
+  }
+  if ($combined.Contains("kukuri-desktop-tauri")) {
+    throw "Generated notices should exclude the Tauri workspace package"
+  }
+  & $scriptPath `
+    -RustMetadataPath @($tauriMetadataPath, $rustMetadataPath) `
+    -NpmLicensesPath $npmLicensesPath `
+    -AssetManifestPath $assetManifestPath `
+    -OutputPath $outputPath `
+    -Check
+  Write-Host "Separate-workspace notice test passed"
+
+  # Missing metadata and desktop-only UNKNOWN licenses must fail closed.
+  $missingMetadataFailed = $false
+  try {
+    & $scriptPath -RustMetadataPath @($rustMetadataPath, (Join-Path $workDir "absent.json")) `
+      -NpmLicensesPath $npmLicensesPath -AssetManifestPath $assetManifestPath -OutputPath $outputPath
+  } catch {
+    $missingMetadataFailed = $true
+  }
+  if (-not $missingMetadataFailed) { throw "Missing workspace metadata was accepted" }
+  $unknownMetadata = Get-Content -LiteralPath $tauriMetadataPath -Raw -Encoding UTF8 | ConvertFrom-Json
+  $unknownMetadata.packages[2].license = $null
+  $unknownMetadata | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $tauriMetadataPath -Encoding UTF8
+  $unknownFailed = $false
+  try {
+    & $scriptPath -RustMetadataPath @($rustMetadataPath, $tauriMetadataPath) `
+      -NpmLicensesPath $npmLicensesPath -AssetManifestPath $assetManifestPath -OutputPath $outputPath
+  } catch {
+    if (-not $_.Exception.Message.Contains("UNKNOWN licenses: ashpd@0.13.8")) { throw }
+    $unknownFailed = $true
+  }
+  if (-not $unknownFailed) { throw "Desktop-only UNKNOWN license was accepted" }
+  if ((Get-Content -LiteralPath $outputPath -Raw -Encoding UTF8) -cne $combined) {
+    throw "Failed inventory generation changed the previous notice"
+  }
+  Write-Host "Invalid metadata and UNKNOWN license rejection tests passed"
 } finally {
   if (Test-Path -LiteralPath $workDir) {
+    $resolvedWorkDir = [System.IO.Path]::GetFullPath($workDir)
+    $temporaryRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $resolvedWorkDir.StartsWith($temporaryRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
+        -not ([System.IO.Path]::GetFileName($resolvedWorkDir)).StartsWith("kukuri-third-party-notices-test-")) {
+      throw "Refusing to remove an unexpected test directory: $resolvedWorkDir"
+    }
     Remove-Item -LiteralPath $workDir -Recurse -Force
   }
 }

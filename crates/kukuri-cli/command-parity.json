@@ -1,8 +1,10 @@
 {
-  "baseline": "6f89fae049170f5b77aa6ffb95da052f3fb05dfe",
-  "scope_revision": "2026-09-05-issue-888-single-request-execution",
+  "baseline": "d2414e5a58ca14a8920f588164df8efad8e7ffba",
+  "scope_revision": "2026-09-04-issue-889-linux-appimage-v1",
   "entries": [
     {"tauri":"commands::startup::get_desktop_startup_status","cli":"get_desktop_startup_status","inventory":"INV-1"},
+    {"tauri":"desktop_lifecycle::restart_after_update","excluded":"os","reason":"AppImage更新後にGUI runtimeを停止してアプリを再起動するOS連携。CLI／daemonの更新や再起動は行わない。"},
+    {"tauri":"commands::external_url::open_external_url","excluded":"os","reason":"GUIの明示的な外部リンクをOSの既定ブラウザーへ渡す。CLI／daemonからのOS起動は対象外。"},
     {"tauri":"commands::app_consent::get_app_consent_status","cli":"get_app_consent_status","inventory":"INV-1"},
     {"tauri":"commands::app_consent::accept_app_consents","cli":"accept_app_consents","inventory":"INV-1"},
     {"tauri":"commands::identity::export_account_key","cli":"export_account_key","inventory":"INV-1"},

@@ -336,10 +336,13 @@ test('reply notification click-through opens the source thread in timeline', asy
 
   await waitFor(() => {
     expect(window.location.hash).toBe(
-      '#/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=post-thread-open'
+      '#/timeline?topic=kukuri%3Atopic%3Ageneral&context=thread&threadId=post-thread-open&focusObjectId=reply-1'
     );
   });
   expect(getDetailPane('Thread')).toBeInTheDocument();
+  await waitFor(() => {
+    expect(getDetailPane('Thread').querySelector('[data-post-object-id="reply-1"]')).toHaveFocus();
+  });
 });
 
 test('direct message notification click-through opens the messages pane', async () => {

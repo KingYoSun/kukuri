@@ -23,7 +23,7 @@ import {
   resolveHashBackedRouteLocation,
 } from '@/shell/routes';
 import { setRecordEntry } from '@/shell/stateUpdates';
-import { THREAD_TIMELINE_LIMIT } from '@/shell/pagination';
+import { loadThreadForFocus } from '@/shell/data/loaders/threadFocus';
 import { useRouteSynchronization } from '@/shell/routing/useRouteSynchronization';
 import { useSyncRoute } from '@/shell/routing/useSyncRoute';
 import { useShallow } from 'zustand/react/shallow';
@@ -117,6 +117,9 @@ export function useDesktopShellRouting({
 
   const setSelectedThread = useDesktopShellFieldSetter('selectedThread');
   const setFocusedObjectId = useDesktopShellFieldSetter('focusedObjectId');
+  const setThreadFocusRequestId = useDesktopShellFieldSetter('threadFocusRequestId');
+  const threadNavigationRequestRef = useRef(0);
+  useEffect(() => () => { threadNavigationRequestRef.current += 1; }, []);
   const setThreadsById = useDesktopShellFieldSetter('threadsById');
   const setThreadNextCursorById = useDesktopShellFieldSetter('threadNextCursorById');
   const setSelectedAuthorPubkey = useDesktopShellFieldSetter('selectedAuthorPubkey');
@@ -343,6 +346,15 @@ export function useDesktopShellRouting({
 
   const openThread = useCallback(
     async (threadId: string, options?: OpenThreadOptions) => {
+      const request = ++threadNavigationRequestRef.current;
+      const initialColumn = storeApi.getState().workspaceState.activeColumnId;
+      const initialHash = window.location.hash;
+      const isCurrent = () => request === threadNavigationRequestRef.current &&
+        (options?.isCurrent?.() ?? true) &&
+        (!options?.focusObjectId || (
+          initialColumn === storeApi.getState().workspaceState.activeColumnId &&
+          initialHash === window.location.hash
+        ));
       const topic = options?.topic ?? activeTopic;
       // 非 active Column など、global の選択 channel と異なる scope から Thread を開く場合は
       // 呼び出し元が channelId を明示する。その場合は handleSelectPrivateChannel / handleSelectTopic と
@@ -356,7 +368,10 @@ export function useDesktopShellRouting({
           }
         : {};
       try {
-        const threadView = await api.listThread(topic, threadId, null, THREAD_TIMELINE_LIMIT);
+        const threadView = await loadThreadForFocus(
+          api, topic, threadId, options?.focusObjectId ?? null, isCurrent
+        );
+        if (!threadView) return;
         const nextFocusedObjectId =
           options?.focusObjectId &&
           threadView.items.some((item) => item.object_id === options.focusObjectId)
@@ -395,6 +410,7 @@ export function useDesktopShellRouting({
           }
           setSelectedThread(threadId);
           setFocusedObjectId(nextFocusedObjectId);
+          if (nextFocusedObjectId) setThreadFocusRequestId((current) => current + 1);
           setThreadsById(setRecordEntry(threadId, threadView.items));
           setThreadNextCursorById(setRecordEntry(threadId, threadView.next_cursor ?? null));
           setSelectedAuthorPubkey(null);
@@ -427,6 +443,7 @@ export function useDesktopShellRouting({
           ...channelRouteOverrides,
         });
       } catch (threadError) {
+        if (!isCurrent()) return;
         const nextError =
           threadError instanceof Error
             ? threadError.message
@@ -468,6 +485,7 @@ export function useDesktopShellRouting({
       setDirectMessagePaneOpen,
       setError,
       setFocusedObjectId,
+      setThreadFocusRequestId,
       setSelectedAuthor,
       setSelectedAuthorPubkey,
       setSelectedDirectMessagePeerPubkey,

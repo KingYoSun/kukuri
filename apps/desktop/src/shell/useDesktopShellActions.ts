@@ -1,5 +1,7 @@
 import {
+  useEffect,
   useMemo,
+  useRef,
   type ChangeEvent,
   type Dispatch,
   type FormEvent,
@@ -412,10 +414,12 @@ export function useDesktopShellActions({
     setDiscoveryError,
   });
 
+  const notificationNavigationRef = useRef(0);
+  useEffect(() => () => { notificationNavigationRef.current += 1; }, []);
   const {
     handleDeleteDirectMessageMessage,
     handleClearDirectMessage,
-    handleOpenNotification,
+    handleOpenNotification: openNotification,
     handleToggleReaction,
     handleCreateCustomReactionAsset,
     handleBookmarkCustomReaction,
@@ -461,6 +465,13 @@ export function useDesktopShellActions({
     setShellChromeState,
     setError,
   });
+
+  const handleOpenNotification = (
+    notification: Parameters<typeof openNotification>[0], parentColumnId?: string
+  ) => {
+    const request = ++notificationNavigationRef.current;
+    return openNotification(notification, parentColumnId, () => request === notificationNavigationRef.current);
+  };
 
   const {
     handleImportPeer,

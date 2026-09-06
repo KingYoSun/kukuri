@@ -1,6 +1,19 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { DownloadEvent } from '@tauri-apps/plugin-updater';
 
+const { invoke, updaterCheck, getVersion } = vi.hoisted(() => ({
+  invoke: vi.fn(async () => undefined),
+  updaterCheck: vi.fn(),
+  getVersion: vi.fn(async () => '0.1.8'),
+}));
+vi.mock('@tauri-apps/api/core', () => ({ invoke }));
+vi.mock('@tauri-apps/api/app', () => ({ getVersion }));
+vi.mock('@tauri-apps/plugin-updater', () => ({ check: updaterCheck }));
+vi.mock('@/lib/releaseReadiness', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/releaseReadiness')>()),
+  isTauriRuntime: () => true,
+}));
+
 import {
   appUpdateStore,
   INITIAL_UPDATE_STATE,
@@ -27,6 +40,7 @@ describe('app update store', () => {
   beforeEach(() => {
     resetUpdateStore();
     vi.clearAllMocks();
+    updaterCheck.mockReset().mockResolvedValue(null);
   });
 
   test('downloadUpdate downloads the pending update and waits for restart', async () => {
@@ -71,6 +85,80 @@ describe('app update store', () => {
     await appUpdateStore.getState().restartAndInstall();
 
     expect(install).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledWith('restart_after_update');
+    expect(install.mock.invocationCallOrder[0]).toBeLessThan(invoke.mock.invocationCallOrder[0]);
+  });
+
+  test.each(['available', 'up_to_date', 'unreachable'])(
+    'rechecks preserve the verified update even when the server would be %s',
+    async (response) => {
+      const update = pendingUpdate();
+      if (response === 'available') updaterCheck.mockResolvedValue(pendingUpdate({ version: '0.1.9' }));
+      if (response === 'unreachable') updaterCheck.mockRejectedValue(new Error('network unavailable'));
+      appUpdateStore.setState({
+        pendingUpdate: update,
+        updateState: { ...INITIAL_UPDATE_STATE, status: 'available', availableVersion: update.version },
+      });
+      await appUpdateStore.getState().downloadUpdate();
+      const verifiedState = appUpdateStore.getState().updateState;
+
+      await appUpdateStore.getState().checkForUpdate();
+      await appUpdateStore.getState().checkForUpdate();
+
+      expect(updaterCheck).not.toHaveBeenCalled();
+      expect(getVersion).not.toHaveBeenCalled();
+      expect(appUpdateStore.getState().pendingUpdate).toBe(update);
+      expect(appUpdateStore.getState().updateState).toEqual(verifiedState);
+      expect(update.download).toHaveBeenCalledTimes(1);
+      expect(update.install).not.toHaveBeenCalled();
+      expect(invoke).not.toHaveBeenCalled();
+      await appUpdateStore.getState().restartAndInstall();
+      expect(update.install).toHaveBeenCalledTimes(1);
+      expect(invoke).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  test('a repeated download cannot discard a verified update', async () => {
+    const update = pendingUpdate();
+    appUpdateStore.setState({
+      pendingUpdate: update,
+      updateState: { ...INITIAL_UPDATE_STATE, status: 'available', availableVersion: update.version },
+    });
+    await appUpdateStore.getState().downloadUpdate();
+    const verifiedState = appUpdateStore.getState().updateState;
+    await appUpdateStore.getState().downloadUpdate();
+    expect(update.download).toHaveBeenCalledTimes(1);
+    expect(appUpdateStore.getState().updateState).toEqual(verifiedState);
+    expect(update.install).not.toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  test('failed install never requests a restart', async () => {
+    const install = vi.fn(async () => { throw new Error('replace failed'); });
+    appUpdateStore.setState({
+      pendingUpdate: pendingUpdate({ install }),
+      updateState: { ...INITIAL_UPDATE_STATE, status: 'ready_to_restart' },
+    });
+    await appUpdateStore.getState().restartAndInstall();
+    expect(invoke).not.toHaveBeenCalled();
+    expect(appUpdateStore.getState().updateState.lastError).toBe('replace failed');
+  });
+
+  test('concurrent activation only installs and restarts once', async () => {
+    let finish!: () => void;
+    const install = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    appUpdateStore.setState({
+      pendingUpdate: pendingUpdate({ install }),
+      updateState: { ...INITIAL_UPDATE_STATE, status: 'ready_to_restart' },
+    });
+    const first = appUpdateStore.getState().restartAndInstall();
+    expect(appUpdateStore.getState().updateState.status).toBe('installing');
+    await appUpdateStore.getState().restartAndInstall();
+    expect(install).toHaveBeenCalledTimes(1);
+    expect(invoke).not.toHaveBeenCalled();
+    finish();
+    await first;
+    expect(invoke).toHaveBeenCalledTimes(1);
   });
 
   test('downloadUpdate records download failures', async () => {
@@ -119,6 +207,7 @@ describe('app update store', () => {
       lastError: 'signature verification failed for updater bundle',
     });
     expect(install).not.toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalled();
   });
 
   test('restartAndInstall is ignored before an update is ready to restart', async () => {
@@ -136,5 +225,6 @@ describe('app update store', () => {
     await appUpdateStore.getState().restartAndInstall();
 
     expect(install).not.toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalled();
   });
 });

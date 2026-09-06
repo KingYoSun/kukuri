@@ -1,5 +1,6 @@
 use anyhow::{Context, Result, bail};
 
+mod appimage;
 mod assets;
 mod cn;
 mod desktop;

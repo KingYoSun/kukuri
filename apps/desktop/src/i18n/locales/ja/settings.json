@@ -381,6 +381,7 @@
         "failed": "失敗",
         "idle": "待機中",
         "ready_to_restart": "再起動待ち",
+        "installing": "更新を適用中",
         "up_to_date": "最新です"
       },
       "check": "確認",
@@ -393,6 +394,7 @@
       "restartWarning": "未送信の下書きや編集中のテキストは、再起動時に失われる可能性があります。先に保存してください。",
       "errors": {
         "network": "更新サーバーに接続できませんでした。ネットワーク接続を確認してから再試行してください。",
+        "missing": "配布先に更新ファイルが見つかりません。更新は適用されていません。時間を置いて「確認」からやり直してください。",
         "manifest": "更新情報を取得または読み取りできませんでした。リリースの公開状態を確認してから再試行してください。",
         "signature": "更新ファイルの署名検証に失敗しました。この更新はインストールされません。",
         "install": "更新のインストールに失敗しました。アプリを再起動してから再試行してください。",
@@ -444,12 +446,13 @@
     },
     "osNotifications": {
       "title": "OS 通知",
-      "permission": "権限: {{permission}}",
+      "permission": "状態: {{permission}}",
       "permissions": {
         "denied": "拒否済み",
         "granted": "許可済み",
         "prompt": "未要求",
-        "unavailable": "利用不可",
+        "unavailable": "利用不可。デスクトップの通知サービスとOS設定を確認してください",
+        "available": "通知サービスに接続済み（表示はOS設定に依存します）",
         "unknown": "不明"
       },
       "enabled": "OS 通知を有効にする",
@@ -458,7 +461,8 @@
       "followsAndReposts": "フォローとリポスト",
       "quietMode": "静音モード",
       "previewBody": "本文プレビューを表示",
-      "requestPermission": "権限を要求"
+      "checking": "通知の利用可否を確認中…",
+      "requestPermission": "通知の利用可否を確認"
     }
   },
   "safety": {

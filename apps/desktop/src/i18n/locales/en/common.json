@@ -1,4 +1,8 @@
 {
+  "externalLink": {
+    "opening": "Opening in your browser…",
+    "failed": "Could not confirm that the link opened. Check your default browser and try the link again."
+  },
   "actions": {
     "accept": "Accept",
     "add": "Add",

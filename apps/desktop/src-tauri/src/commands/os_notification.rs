@@ -1,9 +1,16 @@
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::AppHandle;
+#[cfg(not(windows))]
+use tauri::{Emitter, Manager};
+
+#[cfg(windows)]
+#[path = "os_notification_windows.rs"]
+mod windows;
 
 use crate::state::CommandError;
 
 /// Event payload emitted to the frontend when an OS toast is clicked.
 #[derive(Clone, serde::Serialize)]
+#[cfg(not(windows))]
 struct ActivationPayload {
     notification_id: String,
 }
@@ -11,6 +18,7 @@ struct ActivationPayload {
 /// Bring the main window forward and tell the frontend which notification was
 /// activated. The frontend resolves the id back to a notification and opens the
 /// target post via the existing in-app handler.
+#[cfg(not(windows))]
 fn activate_main_window(app: &AppHandle, notification_id: String) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
@@ -23,31 +31,43 @@ fn activate_main_window(app: &AppHandle, notification_id: String) {
     );
 }
 
-/// Permission value reported to the settings release panel. Desktop OS toasts
-/// need no runtime permission (visibility is governed by OS-level settings),
-/// and the former `tauri-plugin-notification` desktop backend unconditionally
-/// returned `PermissionState::Granted` as well.
-const OS_NOTIFICATION_PERMISSION_GRANTED: &str = "granted";
-
-/// Report the OS notification permission state for the settings release panel.
-///
-/// Replaces the raw `plugin:notification|is_permission_granted` invocation.
-/// The frontend branches on the lowercase permission string
-/// (granted / prompt / unavailable), so this pins the same contract the
-/// plugin's always-granted desktop backend provided.
+/// Linuxでは通知サービスへの接続だけを確認する。OS側の表示許可は保証しない。
 #[tauri::command]
-pub fn get_os_notification_permission() -> &'static str {
-    OS_NOTIFICATION_PERMISSION_GRANTED
+pub async fn get_os_notification_permission() -> &'static str {
+    platform_notification_permission().await
 }
 
-/// Request OS notification permission for the settings release panel.
-///
-/// Replaces the raw `plugin:notification|request_permission` invocation; no
-/// desktop platform we ship on has a runtime permission prompt, so this
-/// resolves to `granted` exactly like the plugin did.
+/// Linuxにはこのprotocolの権限要求がないため、設定変更や通知送信なしで再確認する。
 #[tauri::command]
-pub fn request_os_notification_permission() -> &'static str {
-    OS_NOTIFICATION_PERMISSION_GRANTED
+pub async fn request_os_notification_permission() -> &'static str {
+    platform_notification_permission().await
+}
+
+#[cfg(not(target_os = "linux"))]
+async fn platform_notification_permission() -> &'static str {
+    // 既存Windows desktop backendの結果は維持する。
+    "granted"
+}
+
+#[cfg(target_os = "linux")]
+async fn platform_notification_permission() -> &'static str {
+    let probe = async {
+        let connection = zbus::Connection::session().await?;
+        let service = zbus::Proxy::new(
+            &connection,
+            "org.freedesktop.Notifications",
+            "/org/freedesktop/Notifications",
+            "org.freedesktop.Notifications",
+        )
+        .await?;
+        let _: (String, String, String, String) = service.call("GetServerInformation", &()).await?;
+        Ok::<(), zbus::Error>(())
+    };
+    match tokio::time::timeout(std::time::Duration::from_secs(2), probe).await {
+        Ok(Ok(())) => "available",
+        // サービス欠落・接続拒否・不正応答・timeoutを許可済みとは表示しない。
+        _ => "unavailable",
+    }
 }
 
 /// Show an OS toast for an incoming notification. On platforms that support it,
@@ -77,26 +97,28 @@ pub(crate) fn show_platform_notification(
     body: Option<String>,
     silent: bool,
 ) -> Result<(), String> {
-    use tauri_winrt_notification::{Sound, Toast};
+    // NSIS apps use protocol activation (including Notification Center clicks).
+    // The existing single-instance handler shows the resident window, and the
+    // frontend resolves this ID against the current account's notifications.
+    windows::show(
+        &app.config().identifier,
+        &id,
+        &title,
+        body.as_deref(),
+        silent,
+    )
+}
 
-    // Use the same AUMID as the existing plugin path (the bundle identifier) so
-    // the toast renders under the registered app identity.
-    let app_id = app.config().identifier.clone();
-    let mut toast = Toast::new(&app_id).title(&title);
-    if let Some(body) = body.as_deref() {
-        toast = toast.text1(body);
+#[cfg(target_os = "linux")]
+fn linux_notification(title: &str, body: Option<&str>, silent: bool) -> notify_rust::Notification {
+    let mut notification = notify_rust::Notification::new();
+    notification.summary(title);
+    if let Some(body) = body {
+        notification.body(body);
     }
-    toast = toast.sound(if silent { None } else { Some(Sound::Default) });
-
-    // The activation closure must be `Send + 'static`, so it owns a cloned
-    // `AppHandle` and the notification id captured for this single toast.
-    let activate_app = app.clone();
-    toast = toast.on_activated(move |_action| {
-        activate_main_window(&activate_app, id.clone());
-        Ok(())
-    });
-
-    toast.show().map_err(|error| error.to_string())
+    notification.hint(notify_rust::Hint::SuppressSound(silent));
+    notification.action("default", "Open");
+    notification
 }
 
 #[cfg(target_os = "linux")]
@@ -105,18 +127,9 @@ pub(crate) fn show_platform_notification(
     id: String,
     title: String,
     body: Option<String>,
-    _silent: bool,
+    silent: bool,
 ) -> Result<(), String> {
-    use notify_rust::Notification;
-
-    let mut notification = Notification::new();
-    notification.summary(&title);
-    if let Some(body) = body.as_deref() {
-        notification.body(body);
-    }
-    // "default" fires when the notification body itself is clicked.
-    notification.action("default", "Open");
-
+    let notification = linux_notification(&title, body.as_deref(), silent);
     let handle = notification.show().map_err(|error| error.to_string())?;
 
     // `wait_for_action` blocks until the notification is actioned or closed, so
@@ -161,9 +174,178 @@ mod tests {
 
     // Pins the permission contract inherited from tauri-plugin-notification's
     // always-granted desktop backend; ReleasePanel branches on this string.
+    #[cfg(not(target_os = "linux"))]
+    #[tokio::test]
+    async fn permission_commands_report_granted() {
+        assert_eq!(get_os_notification_permission().await, "granted");
+        assert_eq!(request_os_notification_permission().await, "granted");
+    }
+
+    #[cfg(target_os = "linux")]
     #[test]
-    fn permission_commands_report_granted() {
-        assert_eq!(get_os_notification_permission(), "granted");
-        assert_eq!(request_os_notification_permission(), "granted");
+    fn permission_commands_require_notification_service() {
+        // 子processだけを無効なbusへ向け、他のtestやホストsessionを変更しない。
+        run_permission_probe("unix:path=/dev/null", "unavailable");
+    }
+
+    #[cfg(target_os = "linux")]
+    fn run_permission_probe(address: &str, expected: &str) {
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "commands::os_notification::tests::permission_probe_child",
+                "--nocapture",
+            ])
+            .env("KUKURI_889_PERMISSION_EXPECTED", expected)
+            .env("DBUS_SESSION_BUS_ADDRESS", address)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn permission_probe_child() {
+        let Ok(expected) = std::env::var("KUKURI_889_PERMISSION_EXPECTED") else {
+            return;
+        };
+        assert_eq!(get_os_notification_permission().await, expected);
+        assert_eq!(request_os_notification_permission().await, expected);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_notification_honors_silent_without_changing_body() {
+        for silent in [true, false] {
+            let notification = linux_notification("test", Some("preview"), silent);
+            assert_eq!(notification.summary, "test");
+            assert_eq!(notification.body, "preview");
+            assert!(
+                notification
+                    .hints
+                    .contains(&notify_rust::Hint::SuppressSound(silent))
+            );
+        }
+        assert!(linux_notification("test", None, true).body.is_empty());
+    }
+
+    #[cfg(target_os = "linux")]
+    mod isolated_service {
+        use super::*;
+        use std::{
+            io::{BufRead, BufReader},
+            process::{Child, Command, Stdio},
+            sync::{
+                Arc,
+                atomic::{AtomicU8, AtomicUsize, Ordering},
+            },
+        };
+
+        struct TestBus(Child);
+
+        impl Drop for TestBus {
+            fn drop(&mut self) {
+                // このtestが起動した隔離busだけを終了する。
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+
+        struct TestNotifications {
+            mode: Arc<AtomicU8>,
+            probes: Arc<AtomicUsize>,
+            notifications: Arc<AtomicUsize>,
+        }
+
+        #[zbus::interface(name = "org.freedesktop.Notifications")]
+        impl TestNotifications {
+            async fn get_server_information(
+                &self,
+            ) -> zbus::fdo::Result<(String, String, String, String)> {
+                self.probes.fetch_add(1, Ordering::SeqCst);
+                match self.mode.load(Ordering::SeqCst) {
+                    1 => return Err(zbus::fdo::Error::AccessDenied("fixture".into())),
+                    2 => std::future::pending::<()>().await,
+                    _ => {}
+                }
+                Ok((
+                    "fixture".into(),
+                    "kukuri-test".into(),
+                    "1".into(),
+                    "1.3".into(),
+                ))
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            fn notify(
+                &self,
+                _app_name: &str,
+                _replaces_id: u32,
+                _app_icon: &str,
+                _summary: &str,
+                _body: &str,
+                _actions: Vec<String>,
+                _hints: std::collections::HashMap<String, zbus::zvariant::OwnedValue>,
+                _expire_timeout: i32,
+            ) -> u32 {
+                self.notifications.fetch_add(1, Ordering::SeqCst);
+                1
+            }
+        }
+
+        #[tokio::test]
+        async fn permission_probe_handles_service_failure_timeout_and_recovery_without_toasts() {
+            let mut bus = TestBus(
+                Command::new("dbus-daemon")
+                    .args(["--session", "--nofork", "--print-address=1"])
+                    .stdout(Stdio::piped())
+                    .spawn()
+                    .expect("Linux notification contract requires dbus-daemon"),
+            );
+            let mut address = String::new();
+            BufReader::new(bus.0.stdout.take().unwrap())
+                .read_line(&mut address)
+                .unwrap();
+            let address = address.trim().to_owned();
+            let mode = Arc::new(AtomicU8::new(0));
+            let probes = Arc::new(AtomicUsize::new(0));
+            let notifications = Arc::new(AtomicUsize::new(0));
+            let _service = zbus::connection::Builder::address(address.as_str())
+                .unwrap()
+                .name("org.freedesktop.Notifications")
+                .unwrap()
+                .serve_at(
+                    "/org/freedesktop/Notifications",
+                    TestNotifications {
+                        mode: mode.clone(),
+                        probes: probes.clone(),
+                        notifications: notifications.clone(),
+                    },
+                )
+                .unwrap()
+                .build()
+                .await
+                .unwrap();
+
+            for (state, expected) in [
+                (0, "available"),
+                (1, "unavailable"),
+                (2, "unavailable"),
+                (0, "available"),
+            ] {
+                mode.store(state, Ordering::SeqCst);
+                let address = address.clone();
+                tokio::task::spawn_blocking(move || run_permission_probe(&address, expected))
+                    .await
+                    .unwrap();
+            }
+            assert_eq!(probes.load(Ordering::SeqCst), 8);
+            assert_eq!(notifications.load(Ordering::SeqCst), 0);
+        }
     }
 }

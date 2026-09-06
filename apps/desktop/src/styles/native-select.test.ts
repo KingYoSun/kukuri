@@ -12,6 +12,13 @@ describe('native select theme contract', () => {
   const tokens = readCss('tokens.css');
   const base = readCss('base.css');
 
+  it('keeps vertical space for WebKitGTK native select text at a fixed height', () => {
+    const select = readFileSync(resolve(process.cwd(), 'src/components/ui/select.tsx'), 'utf8');
+    expect(select).toMatch(/\bh-11\b/);
+    expect(select).toMatch(/\bpy-0\b/);
+    expect(select).not.toMatch(/\bpy-3\b/);
+  });
+
   it('advertises the active app theme to native controls', () => {
     expect(tokens).toMatch(
       /:root,\s*:root\[data-theme='dark'\]\s*\{[^}]*color-scheme:\s*dark;/s

@@ -5,6 +5,10 @@
       "path": "crates/cn-operator/src/config.rs"
     },
     {
+      "lines": 1276,
+      "path": "docs/THIRD_PARTY_NOTICES.md"
+    },
+    {
       "lines": 1272,
       "path": "apps/desktop/src/components/extended/metaverse/useMetaverseRoomSession.ts"
     },
@@ -55,6 +59,10 @@
     {
       "lines": 1016,
       "path": "crates/harness/src/scenarios/desktop_smoke.rs"
+    },
+    {
+      "lines": 1004,
+      "path": "crates/desktop-runtime/src/identity.rs"
     }
   ]
 }

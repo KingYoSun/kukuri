@@ -381,6 +381,7 @@
         "failed": "Failed",
         "idle": "Idle",
         "ready_to_restart": "Ready to restart",
+        "installing": "Applying update",
         "up_to_date": "Up to date"
       },
       "check": "Check",
@@ -393,6 +394,7 @@
       "restartWarning": "Unsent drafts or text you're editing may be lost on restart. Save them first.",
       "errors": {
         "network": "Could not connect to the update server. Check your network connection and try again.",
+        "missing": "The update file was not found on the server. No update was installed. Try Check again later.",
         "manifest": "Could not fetch or read the update information. Check the release publication state and try again.",
         "signature": "The update signature verification failed. This update will not be installed.",
         "install": "The update failed to install. Restart the app and try again.",
@@ -444,12 +446,13 @@
     },
     "osNotifications": {
       "title": "OS Notifications",
-      "permission": "Permission: {{permission}}",
+      "permission": "Status: {{permission}}",
       "permissions": {
         "denied": "Denied",
         "granted": "Granted",
         "prompt": "Not requested",
-        "unavailable": "Unavailable",
+        "unavailable": "Unavailable. Check the desktop notification service and OS settings",
+        "available": "Notification service connected (display depends on OS settings)",
         "unknown": "Unknown"
       },
       "enabled": "Enable OS notifications",
@@ -458,7 +461,8 @@
       "followsAndReposts": "Follows and reposts",
       "quietMode": "Quiet mode",
       "previewBody": "Show preview text",
-      "requestPermission": "Request Permission"
+      "checking": "Checking notification availability…",
+      "requestPermission": "Check notification availability"
     }
   },
   "safety": {

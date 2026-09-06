@@ -196,6 +196,26 @@ beforeEach(() => {
 });
 
 describe('useDesktopShellActions', () => {
+  test('only the latest notification navigates after delayed topic loading', async () => {
+    const { result, mocks } = renderActionsHook();
+    let finish!: () => void;
+    mocks.loadTopics.mockImplementationOnce(() => new Promise<undefined>((resolve) => {
+      finish = () => resolve(undefined);
+    }));
+    const notification = (id: string) => ({
+      notification_id: `notif-${id}`, kind: 'reply', actor_pubkey: AUTHOR_A_PUBKEY,
+      topic_id: 'kukuri:topic:general', channel_id: null,
+      object_id: id, thread_root_object_id: 'root', created_at: 1, received_at: 1,
+    }) as Parameters<typeof result.current.handleOpenNotification>[0];
+    let pending!: Promise<void>;
+    act(() => { pending = result.current.handleOpenNotification(notification('old')); });
+    await act(async () => { await result.current.handleOpenNotification(notification('new')); });
+    await act(async () => { finish(); await pending; });
+    expect(mocks.openThread).toHaveBeenCalledExactlyOnceWith('root', expect.objectContaining({
+      topic: 'kukuri:topic:general', channelId: null, focusObjectId: 'new',
+    }));
+  });
+
   test('DM mutations use localized fallbacks for non-Error failures', async () => {
     const peerPubkey = 'd'.repeat(64);
     const sendDirectMessage = vi.fn().mockRejectedValue(null);
