@@ -119,7 +119,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bundle_dir=apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage
+          bundle_dir="$PWD/apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage"
           bundles=("$bundle_dir"/*.AppImage)
           test "${#bundles[@]}" -eq 1
           export KUKURI_UPDATER_BUNDLE="${bundles[0]}"
