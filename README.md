@@ -16,7 +16,7 @@ kukuri is a topic-first P2P social app. Find a topic you care about, join a publ
 | Platform | Current support |
 | --- | --- |
 | Windows 10 / 11 | NSIS installer from the latest GitHub Release |
-| Linux | Run from source; no packaged installer yet |
+| Linux | AppImage (x86_64) / CLI (x86_64, aarch64): check the selected Release's assets; use source-run if not yet published |
 | macOS | No package is currently provided |
 
 Preview installers may be unsigned. Windows SmartScreen can therefore show a warning; check the release notes before running the installer.
@@ -34,7 +34,7 @@ For detailed setup and recovery help, see the [user quickstart](./docs/runbooks/
 
 ## Try It in 3 Minutes
 
-1. Install and launch the Windows Preview, or [run it from source on Linux](#development-quickstart).
+1. Install and launch the Windows Preview, use a published [Linux AppImage](docs/runbooks/linux-appimage-smoke.md), or [run from source](#development-quickstart). See [Linux CLI usage](docs/runbooks/linux-cli.md) for the separate CLI profile.
 2. Wait a few seconds for the preloaded Community Node to become `ready`, then open a starter topic.
 3. Publish a public post and reply to an existing post.
 4. Create or join a private channel under the same topic.
@@ -44,7 +44,7 @@ The default diagnostic report omits secret keys, authentication tokens, private-
 
 ## Preview Status and Limits
 
-- The packaged Preview currently targets Windows 10 and 11 only. Linux remains source-run, and macOS has no package.
+- Preview targets are Windows NSIS, Linux x86_64 AppImage, and Linux x86_64/aarch64 CLI. Availability follows the published Release asset list; generation alone is not publication. macOS has no package.
 - A direct message needs another test peer and a mutual relationship. P2P behavior is easiest to evaluate with two devices or two isolated app instances.
 - Live, Metaverse, and game-room surfaces are still evolving. Some extended features remain staged behind developer mode, and the Stream surface does not yet include a media player.
 - Preview updates are expected to preserve your account-identifying key, profile, follows, posts, local database state, Iroh data, Community Node settings, private-channel access, and the notification inbox. Keep the app data directory before uninstalling or resetting if you need to retain local state.

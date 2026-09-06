@@ -19,17 +19,25 @@ fn published_bundle_accepts_only_its_valid_signature() {
     let signature_path = PathBuf::from(
         std::env::var("KUKURI_UPDATER_SIGNATURE").expect("KUKURI_UPDATER_SIGNATURE is required"),
     );
-    let config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tauri.conf.json");
-    let config: serde_json::Value = serde_json::from_slice(
-        &std::fs::read(config_path).expect("tauri.conf.json must be readable"),
-    )
-    .expect("tauri.conf.json must be valid JSON");
-    let encoded_public_key = config["plugins"]["updater"]["pubkey"]
-        .as_str()
-        .expect("plugins.updater.pubkey must be configured");
+    // Release assembly can reuse this exact verifier binary across jobs.
+    // Only a public key is supplied; the product updater config is not changed.
+    let encoded_public_key = if let Some(path) = std::env::var_os("KUKURI_UPDATER_PUBLIC_KEY_FILE")
+    {
+        std::fs::read_to_string(path).expect("public key fixture must be readable")
+    } else {
+        let config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tauri.conf.json");
+        let config: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(config_path).expect("tauri.conf.json must be readable"),
+        )
+        .expect("tauri.conf.json must be valid JSON");
+        config["plugins"]["updater"]["pubkey"]
+            .as_str()
+            .expect("plugins.updater.pubkey must be configured")
+            .to_owned()
+    };
     let encoded_signature = std::fs::read_to_string(signature_path)
         .expect("updater signature fixture must be readable");
-    let public_key = PublicKey::decode(&decode_base64_text(encoded_public_key))
+    let public_key = PublicKey::decode(&decode_base64_text(&encoded_public_key))
         .expect("updater public key must decode");
     let signature = Signature::decode(&decode_base64_text(&encoded_signature))
         .expect("updater signature must decode");

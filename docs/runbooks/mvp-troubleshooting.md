@@ -55,6 +55,14 @@ preview の primary UX は明示同意後のセッション確立・維持を自
 - 署名検証に失敗した更新はインストールしない。release asset の差し替えや誤った signing key を疑う。
 - 更新後にデータが消えたように見える場合は、別の Windows user profile、別の app data dir、または keyring fallback の使用有無を確認する。
 
+## Linux配布・CLI
+
+- 公開済みLinux成果物の有無はRelease asset一覧で確認する。AppImageはx86_64、CLIはx86_64／aarch64で、別architectureのbinaryを実行しない。
+- AppImageの実行権限、FUSE／展開実行、X11の前提は[quickstart](./mvp-user-quickstart.md)を確認する。追加Ubuntu／Debianやnative Wayland-onlyは確認済みとしない。
+- CLIの接続失敗は、同じ`--profile`のdaemonが動いているか、同意状態、XDG runtime directoryを確認する。[foreground例](./linux-cli.md)はsystemdの導入を要求しない。
+- timeout／切断で変更結果が不明ならstatusを確認し、変更要求を無条件に再送しない。GUIのdata directoryをCLIへ共有したり、鍵取得失敗時にidentityを削除したりしない。
+- 配布担当者: native source取得／hash検証やasset集約が失敗した候補は公開しない。同一候補の再開とCDN確認は[release runbook](./release.md)に従い、既存assetの上書きで修復しない。
+
 ## Device Backup / Restore
 
 - `wrong passphrase or corrupted data` の場合は、入力したパスフレーズとファイルの転送完了を確認する。部分ファイルや改変されたファイルは復元しない。

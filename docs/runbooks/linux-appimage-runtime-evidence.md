@@ -59,3 +59,31 @@ musl／mimallocの厳密なバイナリ版は未確定で、ビルド記述か�
 #889は構成検証・生成入口・引渡し条件の明示まで、#890は公開する最終成果物への
 notice／source添付とRelease集約を所有する。公開準備の未実施を隠さず、
 `redistribution_approved: false`を自動的な承認へ変更しない。
+
+## #890で解消した由来と最終候補の検査（2026-09-07）
+
+上記の「musl／mimallocの実版未確定」は#889引渡し時点の記録。#890では上流build run
+`28063784345`、aports commit `9ba44d139997adf2fc29046f578ab596d05b7fc5`、
+公式runtime binaryの944632 bytesを照合し、musl `1.2.5-r11`、mimalloc2 `2.1.7-r0`、
+zlib `1.3.2-r0`、zstd `1.5.6-r2`を対応付けた。libfuse `3.15.0`とsquashfuse `0.5.2`も含め、
+取得URL・source／patch／APKBUILD・licenseとhashを
+`scripts/release/native-runtime-sources.json`に固定した。推定版ではなくこのbuild provenanceを採用する。
+
+`native_compliance.py`はAppImageの先頭runtimeを検査し、Tauri生成時に変わる
+`.digest_md5`の16 bytes（offset 932096）だけをzero正規化する。それ以外を含むSHA-256
+`1cc49bcf1e2ccd593c379adb17c9f85a36d619088296504de95b1d06215aebbf`の一致を必須とする。
+異なるruntimeを無条件に承認せず、その場合は対応source／noticeを更新して再検証する。
+
+最終配布jobはAppDirのruntime evidenceからUbuntu source package／versionを取得し、
+DSC checksum／sizeを検証する。static source 27件＋notice 4件と、Ubuntu対応source、
+AppRunのMIT本文、既存collectorのcopyright／非ELF evidence、build／再リンク説明を
+native source／notice archiveへ添付する。確認済み旧AppImageでは94 source packages、
+304 files、約455 MBのUbuntu source取得・照合が成功した。これは最終公開artifactの検査代替ではない。
+
+AppRun.wrappedの厳密なupstream commitは未確定のまま、公式mirrorの配布binary hashと
+実際のMIT著作権本文を対応させる。MIT対象のため、この点をLGPL runtimeのsource義務と混同しない。
+runtime自体の再生成は不要と判断したが、公開候補ごとのhash照合・実source添付は省略しない。
+
+`native-compliance` JSONは最終AppImage hash、固定runtime source、取得source件数と完了状態を記録し、
+Release集約時に再検査する。部品検査modeは完了状態を出さない。source／notice欠落や取得失敗時は
+配布署名jobを失敗させ、公開へ進めない。公開手順は[release runbook](./release.md)。

@@ -11,6 +11,24 @@ on:
       - 'crates/**'
       - 'apps/desktop/**'
       - 'scripts/release/*appimage_runtime_inventory.py'
+      - 'scripts/release/release_assets.py'
+      - 'scripts/release/native*'
+      - 'scripts/release/test_native_compliance.py'
+  workflow_call:
+    inputs:
+      source_ref:
+        type: string
+        required: true
+      signing:
+        type: string
+        default: distribution
+    secrets:
+      TAURI_SIGNING_PRIVATE_KEY:
+        required: true
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD:
+        required: false
+      TAURI_UPDATER_PUBLIC_KEY:
+        required: true
   workflow_dispatch:
     inputs:
       signing:
@@ -28,6 +46,16 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+          persist-credentials: false
+      - name: Verify requested source
+        env:
+          REQUESTED_SOURCE: ${{ inputs.source_ref }}
+        run: |
+          if [ -n "$REQUESTED_SOURCE" ]; then
+            [[ "$REQUESTED_SOURCE" =~ ^[0-9a-f]{40}$ ]] && test "$(git rev-parse HEAD)" = "$REQUESTED_SOURCE"
+          fi
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.92.0
@@ -59,13 +87,14 @@ jobs:
         run: |
           cargo test --locked -p xtask
           python3 scripts/release/test_appimage_runtime_inventory.py
+          python3 scripts/release/test_native_compliance.py
       - name: Build and verify AppImage
         env:
           # PRでは本番secretを環境へ渡さない。
-          TAURI_SIGNING_PRIVATE_KEY: ${{ github.event_name == 'workflow_dispatch' && inputs.signing == 'distribution' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ github.event_name == 'workflow_dispatch' && inputs.signing == 'distribution' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
-          TAURI_UPDATER_PUBLIC_KEY: ${{ github.event_name == 'workflow_dispatch' && inputs.signing == 'distribution' && secrets.TAURI_UPDATER_PUBLIC_KEY || '' }}
-          SIGNING_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.signing == 'distribution' && 'distribution' || 'test' }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))) && inputs.signing == 'distribution' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))) && inputs.signing == 'distribution' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+          TAURI_UPDATER_PUBLIC_KEY: ${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))) && inputs.signing == 'distribution' && secrets.TAURI_UPDATER_PUBLIC_KEY || '' }}
+          SIGNING_MODE: ${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))) && inputs.signing == 'distribution' && 'distribution' || 'test' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -95,7 +124,7 @@ jobs:
           KUKURI_APPIMAGE_TEST_DIR="$PWD/$bundle" cargo test --locked -p xtask \
             appimage::tests::signed_appimage_accepts_only_matching_bundle_and_key -- --ignored
           printf '%s\n' "$SIGNING_MODE" > "$bundle/signing-mode.txt"
-          printf '%s\n' "$GITHUB_SHA" > "$bundle/source-commit.txt"
+          git rev-parse HEAD > "$bundle/source-commit.txt"
           desktop-file-validate "$bundle/kukuri.AppDir/usr/share/applications/kukuri.desktop"
           export KUKURI_PACKAGE_BUNDLE_DIR="$bundle"
           node --input-type=module -e '
@@ -111,6 +140,25 @@ jobs:
           '
           python3 scripts/release/appimage_runtime_inventory.py \
             "$bundle/kukuri.AppDir" "$RUNNER_TEMP/kukuri-linux-package/runtime-evidence"
+          output="$RUNNER_TEMP/kukuri-linux-package"
+          version=$(python3 -c 'import json,os; print(json.load(open(os.environ["KUKURI_PACKAGE_BUNDLE_DIR"]+"/appimage-artifacts.json"))["version"])')
+          filename=$(python3 -c 'import json,os; print(json.load(open(os.environ["KUKURI_PACKAGE_BUNDLE_DIR"]+"/appimage-artifacts.json"))["file"])')
+          cp "$output/test-updater-key.pub" "$output/linux-x86_64-updater-key.pub"
+          notices="kukuri_${version}_linux-native-notices.tar.gz"
+          tar -czf "$output/$notices" -C "$output" runtime-evidence
+          python3 scripts/release/release_assets.py package --directory "$output" --target linux-x86_64 \
+            --version "$version" --source "$(git rev-parse HEAD)" --signing "$SIGNING_MODE" \
+            --updater "$filename" --public-key-file linux-x86_64-updater-key.pub \
+            --file "$filename" --file "$filename.sig" --file linux-x86_64-updater-key.pub --file "$notices"
+      - name: Collect corresponding native sources for distribution
+        if: ${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))) && inputs.signing == 'distribution' }}
+        run: |
+          set -euo pipefail
+          # This changes only the disposable build runner, never a user's OS.
+          sed -n 's/^deb /deb-src /p' /etc/apt/sources.list | sudo tee /etc/apt/sources.list.d/kukuri-source.list >/dev/null
+          sudo apt-get update
+          python3 scripts/release/native_compliance.py --package "$RUNNER_TEMP/kukuri-linux-package" \
+            --appdir apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/kukuri.AppDir
       - name: Linux desktop contracts (isolated notification bus)
         run: >-
           cargo test --locked --release --target x86_64-unknown-linux-gnu
@@ -130,6 +178,6 @@ jobs:
       - name: Keep verified artifacts (no Release publication)
         uses: actions/upload-artifact@v4
         with:
-          name: kukuri-linux-x86_64-${{ github.event_name == 'workflow_dispatch' && inputs.signing == 'distribution' && 'distribution' || 'test' }}
+          name: kukuri-linux-x86_64-${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))) && inputs.signing == 'distribution' && 'distribution' || 'test' }}
           if-no-files-found: error
           path: ${{ runner.temp }}/kukuri-linux-package/

@@ -39,8 +39,8 @@
 | Preview docs refresh | landed | repo change | README, docs index, user quickstart, troubleshooting を追加 |
 | Device backup / restore | landed | repo change | 使用中の1アカウントを1暗号化ファイルへ保存し、staging検証・rollback・再同意付きで復元 |
 | Windows release workflow | landed | repo change | tag / manual dispatch で NSIS asset を Release に載せる |
-| Linux共通基盤／常駐プロセス／CLI通信規約 | planned | repo change | #886〜#888。GUIと分離したprofileを単一の常駐プロセスが所有し、版管理されたローカルprotocolで非OS固有backendとの同等性を提供する |
-| Linux AppImage／リリース統合 | planned | repo change | #889〜#890。Ubuntu 22.04でのbuild、Ubuntu 22.04／Debian 12での実環境smoke test、複数platform成果物の全件成功を要求するリリースを追加する |
+| Linux共通基盤／常駐プロセス／CLI通信規約 | implemented | repo change | #886〜#888完了。GUIと分離したprofile・単一所有・版管理protocol・1入力1実行を維持 |
+| Linux AppImage／リリース統合 | in progress | repo change | #889完了、#890で公開統合中。Ubuntu 22.04 buildと代表実機証跡を採用し、追加OS／XWayland全件検証は延期。公開物の全件整合とCLI arch smokeを確認する |
 | Seed content on hosted preview node | planned | launch op | project-owned author で preview topics を事前投入する |
 | GitHub feedback surface | planned | launch op | Discussions category か同等の GitHub feedback home を整備する |
 

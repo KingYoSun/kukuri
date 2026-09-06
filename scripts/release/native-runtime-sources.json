@@ -1,0 +1,231 @@
+{
+  "schema_version": 1,
+  "runtime": {
+    "runtime_size": 944632,
+    "digest_md5_offset": 932096,
+    "digest_md5_size": 16,
+    "normalized_prefix_sha256": "1cc49bcf1e2ccd593c379adb17c9f85a36d619088296504de95b1d06215aebbf",
+    "source_commit": "75849dce7cc37e4319b633df1f116ca895c71a12"
+  },
+  "aports_commit": "9ba44d139997adf2fc29046f578ab596d05b7fc5",
+  "build_run_url": "https://github.com/AppImage/type2-runtime/actions/runs/28063784345",
+  "sources": [
+    {
+      "package": "type2-runtime",
+      "name": "type2-runtime-75849dce7cc37e4319b633df1f116ca895c71a12.tar.gz",
+      "url": "https://codeload.github.com/AppImage/type2-runtime/tar.gz/75849dce7cc37e4319b633df1f116ca895c71a12",
+      "sha256": "b7af4960da4b90364e935a3281d04fad6560da4813c012414fa2f738291ad443",
+      "kind": "source"
+    },
+    {
+      "package": "libfuse",
+      "name": "fuse-3.15.0.tar.xz",
+      "url": "https://github.com/libfuse/libfuse/releases/download/fuse-3.15.0/fuse-3.15.0.tar.xz",
+      "sha256": "70589cfd5e1cff7ccd6ac91c86c01be340b227285c5e200baa284e401eea2ca0",
+      "kind": "source"
+    },
+    {
+      "package": "squashfuse",
+      "name": "squashfuse-0.5.2.tar.gz",
+      "url": "https://github.com/vasi/squashfuse/archive/0.5.2.tar.gz",
+      "sha256": "db0238c5981dabbd80ee09ae15387f390091668ca060a7bc38047912491443d3",
+      "kind": "source"
+    },
+    {
+      "package": "musl",
+      "name": "musl-1.2.5.tar.gz",
+      "url": "https://musl.libc.org/releases/musl-1.2.5.tar.gz",
+      "sha512": "7bb7f7833923cd69c7a1a9b8a5f1784bfd5289663eb6061dcd43d583e45987df8a68a1be05d75cc1c88a3f5b610653d1a70f4a9cff4d8f7fd41ae73ee058c17c",
+      "kind": "source"
+    },
+    {
+      "package": "musl",
+      "name": "handle-aux-at_base.patch",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/9ba44d139997adf2fc29046f578ab596d05b7fc5/main/musl/handle-aux-at_base.patch",
+      "sha512": "a76f79b801497ad994746cf82bb6eaf86f9e1ae646e6819fbae8532a7f4eee53a96ac1d4e789ec8f66aea2a68027b0597f7a579b3369e01258da8accfce41370",
+      "kind": "source"
+    },
+    {
+      "package": "musl",
+      "name": "isatty-glibc-align.patch",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/9ba44d139997adf2fc29046f578ab596d05b7fc5/main/musl/isatty-glibc-align.patch",
+      "sha512": "4fe4309d9e5eb12f3aaf9dac300c7bf1a9e104d9b0e7754353314f4b6507de68d8d5bf0ac45164d7e2ab4d71728b5ef8b302f8ee7a6b548f54e022218031e2cf",
+      "kind": "source"
+    },
+    {
+      "package": "musl",
+      "name": "ldso-fix-non-functional-fix-to-early-dynamic-PAGE_SI.patch",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/9ba44d139997adf2fc29046f578ab596d05b7fc5/main/musl/ldso-fix-non-functional-fix-to-early-dynamic-PAGE_SI.patch",
+      "sha512": "1b85079c706b017106ecbf4afbc65b4a2171297a673035645e4c3ddb7e2aae0549b04932df83778323b7329ae8d32160a89e0c1b2534c278708c61b1f40a1ed8",
+      "kind": "source"
+    },
+    {
+      "package": "musl",
+      "name": "loongarch64-Add-lsx-and-lasx-vector-structure-defini.patch",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/9ba44d139997adf2fc29046f578ab596d05b7fc5/main/musl/loongarch64-Add-lsx-and-lasx-vector-structure-defini.patch",
+      "sha512": "b4d95231944fd236827a62343bbce74b20a56739e2b8937bda69bfc7b53f2ce5bd709459ee61615bd10d2839f43311eced9344ee8185701fd38ec0de0d43c6ae",
+      "kind": "source"
+    },
+    {
+      "package": "musl",
+      "name": "loongarch64-add-TLSDESC-support.patch",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/9ba44d139997adf2fc29046f578ab596d05b7fc5/main/musl/loongarch64-add-TLSDESC-support.patch",
+      "sha512": "363d0cbfe11f024b120b6d54e909c038cd5b37f1f195048ddb29591191a1288ff50842ccd14e0cab80359e5b46c0e02d2b5af3016bd1507c1d269e590690a3fe",
+      "kind": "source"
+    },
+    {
+      "package": "musl",
+      "name": "loongarch64-add-fpu-and-simd-context-to-signal.h.patch",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/9ba44d139997adf2fc29046f578ab596d05b7fc5/main/musl/loongarch64-add-fpu-and-simd-context-to-signal.h.patch",
+      "sha512": "b0f93f8868caf15d436ebe81088f4914cac3e21cc5b86cb0d5f40092edc6e29909188a14cde0c69ab86b51631aa34a4b8136a515f2a1b53c424c8b251c5ea689",
+      "kind": "source"
+    },
+    {
+      "package": "musl",
+      "name": "loongarch64-add-bits-hwcap.h.patch",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/9ba44d139997adf2fc29046f578ab596d05b7fc5/main/musl/loongarch64-add-bits-hwcap.h.patch",
+      "sha512": "70003d89e31b1c83274d1e850f86d8a54f30c1d5e22f769ae229d30d2bbdc095dbf4c262fb55079aaf8bfdf9a213f9468150b50c000b6596b051729a0d25f913",
+      "kind": "source"
+    },
+    {
+      "package": "musl",
+      "name": "CVE-2025-26519.patch",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/9ba44d139997adf2fc29046f578ab596d05b7fc5/main/musl/CVE-2025-26519.patch",
+      "sha512": "7a6a9836d2de91afc1115868e68f347bd2365fa48188e65938cfa654ae9bafdbb3a56bf12d3185a96800a85198378c8dbf9c25d977ca0e318220529fa4458123",
+      "kind": "source"
+    },
+    {
+      "package": "musl",
+      "name": "CVE-2026-6042.patch",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/9ba44d139997adf2fc29046f578ab596d05b7fc5/main/musl/CVE-2026-6042.patch",
+      "sha512": "f7849abeab0e4eab992a80464afa07b9c8aae5cee76040523b9dbc0931435f28ea8f5792b8a4a0cd6d608ac2f37e3225e89afcb3171a0a6df44450ed57cee83b",
+      "kind": "source"
+    },
+    {
+      "package": "musl",
+      "name": "CVE-2026-40200.patch",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/9ba44d139997adf2fc29046f578ab596d05b7fc5/main/musl/CVE-2026-40200.patch",
+      "sha512": "a64ab7688d1a85e560b5687783df482d2467a79a74400da5a1601382847d6b4e6a79b7529a8dc80c46ddda8dc2a812f2261557fc8ee98dc3bdf7322761bd6d9c",
+      "kind": "source"
+    },
+    {
+      "package": "musl",
+      "name": "ldconfig",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/9ba44d139997adf2fc29046f578ab596d05b7fc5/main/musl/ldconfig",
+      "sha512": "8d3a2d5315fc56fee7da9abb8b89bb38c6046c33d154c10d168fb35bfde6b0cf9f13042a3bceee34daf091bc409d699223735dcf19f382eeee1f6be34154f26f",
+      "kind": "source"
+    },
+    {
+      "package": "musl",
+      "name": "__stack_chk_fail_local.c",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/9ba44d139997adf2fc29046f578ab596d05b7fc5/main/musl/__stack_chk_fail_local.c",
+      "sha512": "062bb49fa54839010acd4af113e20f7263dde1c8a2ca359b5fb2661ef9ed9d84a0f7c3bc10c25dcfa10bb3c5a4874588dff636ac43d5dbb3d748d75400756d0b",
+      "kind": "source"
+    },
+    {
+      "package": "musl",
+      "name": "getconf.c",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/9ba44d139997adf2fc29046f578ab596d05b7fc5/main/musl/getconf.c",
+      "sha512": "0d80f37b34a35e3d14b012257c50862dfeb9d2c81139ea2dfa101d981d093b009b9fa450ba27a708ac59377a48626971dfc58e20a3799084a65777a0c32cbc7d",
+      "kind": "source"
+    },
+    {
+      "package": "musl",
+      "name": "getent.c",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/9ba44d139997adf2fc29046f578ab596d05b7fc5/main/musl/getent.c",
+      "sha512": "27fa820dc847b1e4a89a45ab7c7ffb8b6436b6b7f1089004b12561d939b227617797d5fc81696658da3f07daab6cc71ea171eb6afb6f5082336b57e2d0ac8463",
+      "kind": "source"
+    },
+    {
+      "package": "musl",
+      "name": "iconv.c",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/9ba44d139997adf2fc29046f578ab596d05b7fc5/main/musl/iconv.c",
+      "sha512": "9d42d66fb1facce2b85dad919be5be819ee290bd26ca2db00982b2f8e055a0196290a008711cbe2b18ec9eee8d2270e3b3a4692c5a1b807013baa5c2b70a2bbf",
+      "kind": "source"
+    },
+    {
+      "package": "mimalloc2",
+      "name": "mimalloc-2.1.7.tar.gz",
+      "url": "https://github.com/microsoft/mimalloc/archive/v2.1.7/mimalloc-2.1.7.tar.gz",
+      "sha512": "4e30976758015c76a146acc1bfc8501e2e5c61b81db77d253de0d58a8edef987669243f232210667b32ef8da3a33286642acb56ba526fd24c4ba925b44403730",
+      "kind": "source"
+    },
+    {
+      "package": "mimalloc2",
+      "name": "cmake-add-insecure-suffix.patch",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/9ba44d139997adf2fc29046f578ab596d05b7fc5/community/mimalloc2/cmake-add-insecure-suffix.patch",
+      "sha512": "99a7777e310f4a585e482ad9dc44fce62e88b65f4f8f51545c9e6b1fd8a17583614cc853e65dade9dd083936de90c3a6f23aa52eb84697020f2a44868e6d4c93",
+      "kind": "source"
+    },
+    {
+      "package": "zlib",
+      "name": "zlib-1.3.2.tar.gz",
+      "url": "https://zlib.net/fossils/zlib-1.3.2.tar.gz",
+      "sha512": "70963771ea5d763614278a69b474f09b7d237ef8f53b675a10fe31d9923aeef601504b35d7ebd1b1e7f347e9ebb048e6b3b47fffdf137e7bdc7e8d5eb4ec4692",
+      "kind": "source"
+    },
+    {
+      "package": "zstd",
+      "name": "zstd-1.5.6.tar.gz",
+      "url": "https://github.com/facebook/zstd/archive/v1.5.6.tar.gz",
+      "sha512": "ca12dffd86618ca008e1ecc79056c1129cb4e61668bf13a3cd5b2fa5c93bc9c92c80f64c1870c68b9c20009d9b3a834eac70db72242d5106125a1c53cccf8de8",
+      "kind": "source"
+    },
+    {
+      "package": "musl",
+      "name": "APKBUILD",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/9ba44d139997adf2fc29046f578ab596d05b7fc5/main/musl/APKBUILD",
+      "sha512": "a6c0ed0357f0452f7a54de81bf8cdf5f9c744a322915b1efb66d81ccb1db78b2fea3ad0c9449be48d4d49e963be54b258ee09b1b98d1577e944223c40ead28d6",
+      "kind": "source"
+    },
+    {
+      "package": "mimalloc2",
+      "name": "APKBUILD",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/9ba44d139997adf2fc29046f578ab596d05b7fc5/community/mimalloc2/APKBUILD",
+      "sha512": "0a3e365583c65d45cea7028b4b0a517c34757a88e3f233f0d6211f26415f6d6a7b10febb5497b558ed2b96ee8a7529eda5ab0e9ad8ea3780985e29003ff7b701",
+      "kind": "source"
+    },
+    {
+      "package": "zlib",
+      "name": "APKBUILD",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/9ba44d139997adf2fc29046f578ab596d05b7fc5/main/zlib/APKBUILD",
+      "sha512": "056333150006abc2a800310022ce22e8a126bae7cf867f4441ec775a0a2d63d8f036adb6bb693bbe7b777c25a51d8f0a9aafc6517817d2df82413ee6558b40b3",
+      "kind": "source"
+    },
+    {
+      "package": "zstd",
+      "name": "APKBUILD",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/9ba44d139997adf2fc29046f578ab596d05b7fc5/main/zstd/APKBUILD",
+      "sha512": "941d306259e657ef799d36ab2a77fd6cc03dcaed6c0b6e532cc5d6977982d1dc6f5a0d2d28949abd055e7b62d22314bc64afe3bf380d68b75a6bc057890c539f",
+      "kind": "source"
+    },
+    {
+      "package": "notices",
+      "name": "type2-runtime-LICENSE",
+      "url": "https://raw.githubusercontent.com/AppImage/type2-runtime/75849dce7cc37e4319b633df1f116ca895c71a12/LICENSE",
+      "sha512": "6b1328bb6befffc7be5f820969c47fc025ed5df0169f5ebe43b884c265b2b2f6f77d8de4518236437dd6f2498a1798f1cf2a7c961c30333f615c31c5a08218bc",
+      "kind": "notice"
+    },
+    {
+      "package": "notices",
+      "name": "linuxdeploy-plugin-gtk-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/tauri-apps/linuxdeploy-plugin-gtk/b5eb8d05b4c0ed40107fe2158c5d8527f94568ef/LICENSE.txt",
+      "sha512": "c513c57643be349944b4f9b96b9e647633ce27a9ee3db6d55a60e1ea53b1eb938ad387f8f157c6d8f380c3e529e0c3027d0a4a69a42578286233767bd536666d",
+      "kind": "notice"
+    },
+    {
+      "package": "notices",
+      "name": "AppImageKit-AppRun-LICENSE",
+      "url": "https://raw.githubusercontent.com/AppImage/AppImageKit/2b8f5b39c41d3895e6b6b88a45b1905f4ffce4ef/LICENSE",
+      "sha512": "5f13ed853e3093c7c608f498c569d39f23f175c1584a0183b962955b23e394ce236d89bf3d718e8aa300a02aa882ffa7bd52bf12beb32e8f0e0de09b4b09b419",
+      "kind": "notice"
+    },
+    {
+      "package": "notices",
+      "name": "linuxdeploy-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/linuxdeploy/linuxdeploy/07333c6e942c7d71782b66be924c5d867f9dfdfc/LICENSE.txt",
+      "sha512": "4853cd4f4944fc11e835a67defe476b82d4e50a2fc0f563e97ff66219f1db1b8b2d4c31f027c501111551765297a83b6073ff7cbdc15c273f17e316bb69ebe92",
+      "kind": "notice"
+    }
+  ]
+}

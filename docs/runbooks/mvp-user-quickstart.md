@@ -4,7 +4,7 @@
 
 - Builder Previewを試すデスクトップ利用者向け
 - 現在のパッケージ版はWindows向け
-- Linuxはソースからの起動のみ
+- Linuxは対象ReleaseにAppImageがあれば利用可能。未掲載の場合はソース起動を使用する。CLIは[専用手順](linux-cli.md)を参照
 
 ## 3分で試す
 
@@ -29,6 +29,8 @@
 - 自動認証と必須同意の導線が前面に出過ぎず、初回利用の手間を減らせているか
 
 ## Linuxでソースから起動する
+
+公開済みAppImageを使う場合は[AppImage手順](linux-appimage-smoke.md)を参照する。チェックサムと署名・公開元を確認してから実行し、追加Ubuntu／Debian・XWayland等の未確認条件を動作保証として扱わない。以下のソース実行は配布物がない場合にも使える。
 
 ```bash
 cargo xtask doctor

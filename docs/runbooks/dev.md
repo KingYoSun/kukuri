@@ -266,7 +266,7 @@ cargo xtask desktop-package
 - `cargo xtask desktop-package` は `src-tauri/tauri.windows.conf.json` を使った Windows bundle config を前提にする
 - release workflow / updater manifest / draft release の手順は `docs/runbooks/release.md` を参照する
 
-## Linux AppImage生成（#889実装中）
+## Linux AppImage生成
 
 Ubuntu 22.04のx86_64 hostで `cargo xtask desktop-package` を実行する。Linux設定は `apps/desktop/src-tauri/tauri.linux.conf.json`、署名はTauri updater署名のみとする。鍵なしのLinux生成は拒否し、生成後も設定公開鍵との署名一致を検査する。
 
@@ -292,6 +292,8 @@ export KUKURI_DISCOVERY_SEEDS=<node_id または node_id@host:port をカンマ�
 - `KUKURI_DISCOVERY_MODE` / `KUKURI_DISCOVERY_SEEDS` を設定すると discovery panel は read-only になり、env が local file より優先される。
 
 ## Linux client daemon
+
+配布archiveとforeground起動・状態/schema取得の例は[Linux CLI手順](linux-cli.md)を参照する。Release CIのarch smokeはその同じcommandを一時profileで実行し、別の人手walkthroughを重複させない。
 
 開発buildでは、CLI専用profileを選んで同意を記録した後、foregroundの常駐プロセスを起動する。
 
