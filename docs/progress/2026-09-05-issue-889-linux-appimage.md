@@ -687,3 +687,11 @@ T1の残る詳細棚卸し、T2のCI実行・残るbundle依存／codec／licens
 - 上記実updater testをLinux package CIへ追加。Tauriのmock runtime featureとtempfileはdev-dependencyだけに追加し、本番の署名・endpoint・keyring・保存形式は変更していない。
 - 同梱物の独立照合でschema／xdg-mimeのcopyright収集不足を検出。追加2 testsが失敗した後、内容hashがbuild hostと一致する場合だけownerを対応付ける最小補完を行い、Windows／WSLの全11 testsが成功。既存AppDirの再収集は175 ELF／121 packages／copyright欠落0。非ELF 67・symlink33の分類、AppRunと外側runtimeのstatic依存、#890公開時のsource／notice提供条件は[同梱物の証跡](../runbooks/linux-appimage-runtime-evidence.md)に集約した。`redistribution_approved: false`を維持する。
 - 現時点はPR準備。差分全体の必須CIと固定headの独立監査が残り、前段の「具体的blocker未発見」や対象test成功だけでClose可能とは判断しない。
+
+### PR #903の独立監査で見つかった通知競合（2026-09-07）
+
+- `93a3dee7`でPRを作成。package監査がCIのfixture相対pathとCargo testのcwdの不一致を指摘し、`10d6a09b`で`$PWD`起点の絶対pathへ修正した。旧headの重複CIは対象更新と既知のfixture不備を理由に停止し、最新headへ集約した。
+- native担当はINV-3／4／5の12群（適合11、変更影響なし・追加実機対象外1、不適合0、未分類0）、package担当はINV-1／2／6の3群（適合3、不適合0、未分類0）でコード監査PASS。package担当はcollector11件、notice fixture、package5件、実署名1件、実Linux updater install1件を独立実行して成功した。CI成功やPR全体PASSとは別に扱う。
+- frontend担当がAC-NS-3／AC-WN-2の段階を跨ぐ競合を検出。通知Aのtopic読取り完了→AのThread読取り待機→通知Bのtopic読取り待機→A完了→B完了の順序で、Aが先にhashを変更しBが破棄される。実shell統合testは期待`focus-reply-2`に対し実際`focus-reply-40`となり失敗した。既存の同一段階同士の競合testsだけでは検出できていなかった。
+- `OpenThreadOptions.isCurrent`という任意のsession内callbackで、通知操作の世代判定を共通handlerからrouting／既存focus loaderまで引き継ぐ最小修正を行った。callbackを渡さない既存導線の挙動、OS引数、永続state、外部送信、Column構造は変更しない。追加手動実機・テスト投稿は行っていない。
+- 修正後の通知focus／actions／routing／loader／実schedulerの5 files・40 testsが成功（41.07秒）。独立担当が追加したkeyring／実hostの2 characterization testsも別frontend監査担当が読み直し、有効な実証であることを確認した。最終headでのfrontend delta監査と必須CI成功を待つ。

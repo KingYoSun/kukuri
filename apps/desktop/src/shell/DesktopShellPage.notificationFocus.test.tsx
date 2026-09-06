@@ -131,6 +131,43 @@ test('a missing notification target opens its thread without focusing a differen
   expect(window.location.hash).not.toContain('focusObjectId');
 });
 
+test('the latest notification wins when an older thread read finishes during its topic refresh', async () => {
+  const { target: older, api } = fixture('focus-reply-40');
+  const latest = { ...older, notification_id: 'latest-notification', object_id: 'focus-reply-2' };
+  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ageneral', api);
+  await screen.findByText('Open the exact reply');
+  const originalListThread = api.listThread;
+  let finishOlderThread!: () => void;
+  let finishLatestTopics!: () => void;
+  let reads = 0;
+  api.listThread = vi.fn(async (...args: Parameters<typeof api.listThread>) => {
+    const page = await originalListThread(...args);
+    reads += 1;
+    if (reads === 2) {
+      return new Promise<typeof page>((resolve) => { finishOlderThread = () => resolve(page); });
+    }
+    if (reads === 3) {
+      return new Promise<typeof page>((resolve) => { finishLatestTopics = () => resolve(page); });
+    }
+    return page;
+  });
+
+  let pendingOlder: void | Promise<void>;
+  act(() => { pendingOlder = activation.open?.(older); });
+  // First read is loadTopics; the second is the older request's real openThread.
+  await waitFor(() => expect(finishOlderThread).toBeDefined());
+  let pendingLatest: void | Promise<void>;
+  act(() => { pendingLatest = activation.open?.(latest); });
+  await waitFor(() => expect(finishLatestTopics).toBeDefined());
+  await act(async () => { finishOlderThread(); await pendingOlder; });
+  await act(async () => { finishLatestTopics(); await pendingLatest; });
+
+  await waitFor(() => {
+    expect(window.location.hash).toContain('focusObjectId=focus-reply-2');
+    expect(getDetailPane('Thread').querySelector('[data-post-object-id="focus-reply-2"]')).toHaveFocus();
+  });
+}, 15_000);
+
 test.each(['os', 'in-app'])('%s notification keeps its private channel while focusing the post', async (origin) => {
   const api = createDesktopMockApi();
   const channel = await api.createPrivateChannel('kukuri:topic:general', 'private focus', 'invite_only');

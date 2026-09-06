@@ -168,6 +168,7 @@ export function createMessageReactionSocialActions({
 
     if (threadTargetId) {
       await openThread(threadTargetId, {
+        isCurrent,
         focusObjectId: notification.object_id ?? null,
         channelId: nextChannelId,
         historyMode: 'replace',

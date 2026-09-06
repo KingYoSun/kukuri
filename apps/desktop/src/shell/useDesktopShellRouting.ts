@@ -350,6 +350,7 @@ export function useDesktopShellRouting({
       const initialColumn = storeApi.getState().workspaceState.activeColumnId;
       const initialHash = window.location.hash;
       const isCurrent = () => request === threadNavigationRequestRef.current &&
+        (options?.isCurrent?.() ?? true) &&
         (!options?.focusObjectId || (
           initialColumn === storeApi.getState().workspaceState.activeColumnId &&
           initialHash === window.location.hash

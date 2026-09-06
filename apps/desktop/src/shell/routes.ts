@@ -28,6 +28,8 @@ export type DesktopShellRouteOverrides = {
 };
 
 export type OpenThreadOptions = {
+  /** 明示的な通知操作の世代を取得・navigation完了まで引き継ぐ。永続化しない。 */
+  isCurrent?: () => boolean;
   /**
    * Thread を開く時点で topic の選択 channel として固定する channel。
    * 指定(null 含む)があれば global の選択 channel ではなくこの値で scope / route を同期する。
