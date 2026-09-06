@@ -6,7 +6,7 @@ Preview tagは`vX.Y.Z-preview.N`。Windows NSIS／updater、Linux AppImage x86_6
 
 version／tag／source SHAと公開の依頼範囲を先に確定する。実装PRの承認はRelease公開の承認と区別する。既存tag／公開assetの上書き、検証用一時鍵の転用はしない。
 
-GUIは既存`cargo xtask desktop-package`／`desktop-package-linux`を使う。Ubuntu 22.04はLinux build基盤で、全Linux環境の保証ではない。確認済み範囲と延期環境は[AppImage作業記録](../progress/2026-09-05-issue-889-linux-appimage.md)、利用方法は[quickstart](./mvp-user-quickstart.md)と[Linux CLI](./linux-cli.md)を参照する。
+GUIはWindows／Linuxとも既存`cargo xtask desktop-package`を使う。Ubuntu 22.04はLinux build基盤で、全Linux環境の保証ではない。確認済み範囲と延期環境は[AppImage作業記録](../progress/2026-09-05-issue-889-linux-appimage.md)、利用方法は[quickstart](./mvp-user-quickstart.md)と[Linux CLI](./linux-cli.md)を参照する。
 
 ## 配布用Secrets
 
