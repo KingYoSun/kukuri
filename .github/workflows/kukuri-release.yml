@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag to create or update (example: v0.1.0-preview.1)'
+        description: 'Release tag for the verified candidate (existing assets are never replaced)'
         required: true
         type: string
       draft:
@@ -31,35 +31,36 @@ jobs:
       release_tag: ${{ steps.release.outputs.release_tag }}
       release_draft: ${{ steps.release.outputs.release_draft }}
       release_version: ${{ steps.release.outputs.release_version }}
+      release_source: ${{ steps.source.outputs.release_source }}
     steps:
+      - name: Checkout workflow scripts
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Resolve release input
         id: release
         shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          RELEASE_DRAFT: ${{ github.event_name != 'workflow_dispatch' || inputs.draft }}
         run: |
           set -euo pipefail
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            tag="${{ github.event.inputs.tag }}"
-            draft="${{ github.event.inputs.draft }}"
-          else
-            tag="${GITHUB_REF_NAME}"
-            draft="true"
-          fi
-          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-preview\.[0-9]+$ ]]; then
-            echo "Release tag must match vX.Y.Z-preview.N: $tag" >&2
-            exit 1
-          fi
-          version="${tag#v}"
-          version="${version%%-preview.*}"
-          {
-            echo "release_tag=$tag"
-            echo "release_draft=$draft"
-            echo "release_version=$version"
-          } >> "$GITHUB_OUTPUT"
+          python3 scripts/release/release_assets.py resolve-input --event "$GITHUB_EVENT_NAME" \
+            --tag "$RELEASE_TAG" --ref "$GITHUB_REF" --draft "$RELEASE_DRAFT" >> "$GITHUB_OUTPUT"
 
       - name: Checkout release tag
         uses: actions/checkout@v4
         with:
           ref: refs/tags/${{ steps.release.outputs.release_tag }}
+
+      - name: Pin source once
+        id: source
+        env:
+          WORKFLOW_SOURCE: ${{ github.workflow_sha }}
+        run: |
+          source=$(git rev-parse HEAD)
+          test "$source" = "$WORKFLOW_SOURCE" || { echo 'Select the same workflow ref as the release tag' >&2; exit 1; }
+          echo "release_source=$source" >> "$GITHUB_OUTPUT"
 
       - name: Install Rust 1.92
         uses: dtolnay/rust-toolchain@stable
@@ -93,7 +94,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@v4
         with:
-          ref: refs/tags/${{ needs.validate-release-inputs.outputs.release_tag }}
+          ref: ${{ needs.validate-release-inputs.outputs.release_source }}
 
       - name: Install Rust 1.92
         uses: dtolnay/rust-toolchain@stable
@@ -197,6 +198,23 @@ jobs:
           path: test-results/kukuri/
           if-no-files-found: warn
 
+  linux-package:
+    needs: [validate-release-inputs, linux-verify]
+    uses: ./.github/workflows/kukuri-linux-package.yml
+    with:
+      source_ref: ${{ needs.validate-release-inputs.outputs.release_source }}
+      signing: distribution
+    secrets:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+
+  cli-package:
+    needs: validate-release-inputs
+    uses: ./.github/workflows/kukuri-cli-package.yml
+    with:
+      source_ref: ${{ needs.validate-release-inputs.outputs.release_source }}
+
   windows-package:
     needs: [validate-release-inputs, linux-verify]
     runs-on: windows-latest
@@ -213,7 +231,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@v4
         with:
-          ref: refs/tags/${{ needs.validate-release-inputs.outputs.release_tag }}
+          ref: ${{ needs.validate-release-inputs.outputs.release_source }}
 
       - name: Install Rust 1.92
         uses: dtolnay/rust-toolchain@stable
@@ -291,6 +309,46 @@ jobs:
             --ignored `
             --nocapture
 
+      - name: Record Windows package source and hashes
+        shell: pwsh
+        env:
+          RELEASE_SOURCE: ${{ needs.validate-release-inputs.outputs.release_source }}
+          RELEASE_VERSION: ${{ needs.validate-release-inputs.outputs.release_version }}
+        run: |
+          $bundleDir = 'apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis'
+          $files = @(Get-ChildItem -LiteralPath $bundleDir -File | Where-Object { $_.Extension -in '.exe', '.msi', '.zip', '.sig' })
+          $updater = $files | Where-Object Extension -eq '.zip' | Select-Object -First 1
+          if (-not $updater) { $updater = $files | Where-Object Extension -eq '.exe' | Select-Object -First 1 }
+          if (-not $updater) { throw 'Missing Windows updater' }
+          $keyName = 'windows-x86_64-updater-key.pub'
+          [IO.File]::WriteAllText((Join-Path $bundleDir $keyName), $env:TAURI_UPDATER_PUBLIC_KEY.Trim(), [Text.UTF8Encoding]::new($false))
+          $arguments = @('scripts/release/release_assets.py', 'package', '--directory', $bundleDir,
+            '--target', 'windows-x86_64', '--version', $env:RELEASE_VERSION, '--source', $env:RELEASE_SOURCE,
+            '--signing', 'distribution', '--updater', $updater.Name, '--public-key-file', $keyName, '--file', $keyName)
+          foreach ($file in $files) { $arguments += @('--file', $file.Name) }
+          & python @arguments
+          if ($LASTEXITCODE -ne 0) { throw 'Windows package metadata failed' }
+
+      - name: Export the already-built signature verifier
+        shell: pwsh
+        env:
+          RELEASE_SOURCE: ${{ needs.validate-release-inputs.outputs.release_source }}
+        run: |
+          $messages = cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --test updater_signature --no-run --message-format=json
+          if ($LASTEXITCODE -ne 0) { throw 'Signature verifier build failed' }
+          $binary = $messages | ForEach-Object { try { $_ | ConvertFrom-Json } catch {} } |
+            Where-Object { $_.reason -eq 'compiler-artifact' -and $_.target.name -eq 'updater_signature' -and $_.executable } |
+            Select-Object -Last 1 -ExpandProperty executable
+          if (-not $binary) { throw 'Signature verifier binary is missing' }
+          New-Item -ItemType Directory -Path dist/updater-verifier | Out-Null
+          Copy-Item -LiteralPath $binary -Destination dist/updater-verifier/updater-verifier.exe
+          [IO.File]::WriteAllText('dist/updater-verifier/source-commit.txt', $env:RELEASE_SOURCE, [Text.UTF8Encoding]::new($false))
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kukuri-updater-verifier
+          if-no-files-found: error
+          path: dist/updater-verifier/
+
       - name: Upload Windows bundle artifact
         uses: actions/upload-artifact@v4
         with:
@@ -304,22 +362,28 @@ jobs:
           subject-path: apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*
 
   changelog:
-    needs: [validate-release-inputs, linux-verify, windows-package]
+    needs: [validate-release-inputs, linux-verify, windows-package, linux-package, cli-package]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: write
       pull-requests: write
     steps:
-      - name: Checkout default branch
+      - name: Checkout validated source for changelog generation
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          ref: ${{ needs.validate-release-inputs.outputs.release_source }}
           fetch-depth: 0
 
       - name: Changelog script smoke
         shell: pwsh
         run: ./scripts/release/test-update-changelog.ps1
+
+      - name: Check changelog tag still matches validated source
+        env:
+          RELEASE_TAG: ${{ needs.validate-release-inputs.outputs.release_tag }}
+          RELEASE_SOURCE: ${{ needs.validate-release-inputs.outputs.release_source }}
+        run: test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$RELEASE_SOURCE"
 
       - name: Generate changelog section
         shell: pwsh
@@ -360,7 +424,7 @@ jobs:
           git checkout -b "${branch}"
           git add CHANGELOG.md
           git commit -m "docs: update CHANGELOG for ${tag}"
-          git push --force origin "${branch}"
+          git push origin "${branch}"
           if gh pr view "${branch}" --json number >/dev/null 2>&1; then
             echo "Pull request already exists for ${branch}."
           else
@@ -370,18 +434,20 @@ jobs:
           fi
 
   release-assets:
-    needs: [validate-release-inputs, windows-package, changelog]
+    needs: [validate-release-inputs, windows-package, linux-package, cli-package, changelog]
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
       - name: Checkout release tag
         uses: actions/checkout@v4
         with:
-          ref: refs/tags/${{ needs.validate-release-inputs.outputs.release_tag }}
+          ref: ${{ needs.validate-release-inputs.outputs.release_source }}
 
       - name: Release asset script smoke
         shell: pwsh
-        run: ./scripts/release/test-create-preview-assets.ps1
+        run: |
+          ./scripts/release/test-create-preview-assets.ps1
+          ./scripts/release/test-create-preview-assets-linux.ps1
 
       - name: Package and asset notice script smoke
         shell: pwsh
@@ -391,13 +457,31 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: kukuri-windows-preview-bundle
-          path: dist/windows-input
+          path: dist/package-input/windows
+
+      - name: Download Linux GUI bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: kukuri-linux-x86_64-distribution
+          path: dist/package-input/linux
+
+      - name: Download CLI bundles
+        uses: actions/download-artifact@v4
+        with:
+          pattern: kukuri-cli-linux-*
+          path: dist/package-input/cli
 
       - name: Download changelog section artifact
         uses: actions/download-artifact@v4
         with:
           name: kukuri-changelog-section
           path: dist/changelog
+
+      - name: Download signature verifier from the same build
+        uses: actions/download-artifact@v4
+        with:
+          name: kukuri-updater-verifier
+          path: dist/updater-verifier
 
       - name: Generate release assets
         shell: pwsh
@@ -406,9 +490,23 @@ jobs:
           -Tag '${{ needs.validate-release-inputs.outputs.release_tag }}'
           -Repository '${{ github.repository }}'
           -Version '${{ needs.validate-release-inputs.outputs.release_version }}'
-          -InputDir 'dist/windows-input'
+          -InputDir 'dist/package-input'
           -OutputDir 'dist/release-assets'
           -ChangelogSectionPath 'dist/changelog/CHANGELOG_SECTION.md'
+          -IncludeLinux
+          -SourceCommit '${{ needs.validate-release-inputs.outputs.release_source }}'
+
+      - name: Verify final manifest bundles with the real verifier
+        shell: pwsh
+        env:
+          RELEASE_SOURCE: ${{ needs.validate-release-inputs.outputs.release_source }}
+          RELEASE_TAG: ${{ needs.validate-release-inputs.outputs.release_tag }}
+        run: |
+          if ((Get-Content -Raw dist/updater-verifier/source-commit.txt).Trim() -ne $env:RELEASE_SOURCE) { throw 'Verifier source mismatch' }
+          ./scripts/release/test-published-updater-signature.ps1 -Tag $env:RELEASE_TAG `
+            -Repository $env:GITHUB_REPOSITORY -Platforms 'windows-x86_64','linux-x86_64' `
+            -InputDir dist/release-assets -PublicKeyFile dist/release-assets/windows-x86_64-updater-key.pub `
+            -VerifierExecutable (Resolve-Path dist/updater-verifier/updater-verifier.exe).Path
 
       - name: Upload release assets
         uses: actions/upload-artifact@v4
@@ -424,18 +522,46 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate-release-inputs.outputs.release_source }}
+          persist-credentials: false
       - name: Download release assets
         uses: actions/download-artifact@v4
         with:
           name: kukuri-release-assets
           path: dist/release-assets
 
-      - name: Publish draft GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Create new draft and publish only a complete upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate-release-inputs.outputs.release_tag }}
+          RELEASE_SOURCE: ${{ needs.validate-release-inputs.outputs.release_source }}
+          RELEASE_DRAFT: ${{ needs.validate-release-inputs.outputs.release_draft }}
+        run: |
+          python3 scripts/release/publish_preview.py --input dist/release-assets \
+            --tag "$RELEASE_TAG" --repository "$GITHUB_REPOSITORY" --source "$RELEASE_SOURCE" --draft "$RELEASE_DRAFT"
+
+  verify-published:
+    needs: [validate-release-inputs, publish-draft]
+    if: ${{ needs.validate-release-inputs.outputs.release_draft == 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
         with:
-          tag_name: ${{ needs.validate-release-inputs.outputs.release_tag }}
-          draft: ${{ needs.validate-release-inputs.outputs.release_draft == 'true' }}
-          fail_on_unmatched_files: true
-          body_path: dist/release-assets/RELEASE_NOTES_DRAFT.md
-          files: |
-            dist/release-assets/*
+          ref: ${{ needs.validate-release-inputs.outputs.release_source }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: kukuri-release-assets
+          path: dist/release-assets
+      - name: Verify stable updater URL and public binaries
+        env:
+          RELEASE_TAG: ${{ needs.validate-release-inputs.outputs.release_tag }}
+          RELEASE_SOURCE: ${{ needs.validate-release-inputs.outputs.release_source }}
+        run: |
+          python3 scripts/release/verify_public_preview.py --input dist/release-assets \
+            --tag "$RELEASE_TAG" --repository "$GITHUB_REPOSITORY" --source "$RELEASE_SOURCE"

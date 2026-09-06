@@ -1,0 +1,35 @@
+name: Kukuri Release Contracts
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/kukuri-release*.yml'
+      - '.github/workflows/kukuri-linux-package.yml'
+      - '.github/workflows/kukuri-cli-package.yml'
+      - 'scripts/release/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Workflow parser
+        run: python3 -m pip install PyYAML==6.0.3
+      - name: No-publish contracts
+        run: |
+          python3 scripts/release/test_release_assets.py
+          python3 scripts/release/test_cli_archive.py
+          python3 scripts/release/test_release_workflow.py
+          python3 scripts/release/test_publish_preview.py
+          python3 scripts/release/test_native_compliance.py
+          python3 scripts/release/test_verify_public_preview.py
+      - name: Windows-compatible asset script contracts
+        shell: pwsh
+        run: |
+          ./scripts/release/test-create-preview-assets.ps1
+          ./scripts/release/test-create-preview-assets-linux.ps1
+          ./scripts/release/test-updater-signature-wrapper.ps1
