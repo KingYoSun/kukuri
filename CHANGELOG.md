@@ -18,6 +18,12 @@ file; automated changelog entries start from the next preview release.
 
 ## [Unreleased]
 
+## [v0.2.0-preview.2] - 2026-09-07
+
+### Fixes
+
+- refresh libgcrypt before native source collection ([#909](https://github.com/KingYoSun/kukuri/pull/909))
+
 ## [v0.1.8-preview.1] - 2026-08-31
 
 ### Features
