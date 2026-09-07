@@ -2,8 +2,8 @@
 
 ## 現在の判定
 
-- 実装中。Scope revision `2026-09-07-issue-890-linux-release-integration-v2`、区分C。
-- 基準commit `fe156251e400ea6d0bc83384683bdd0b343b5e57`。承認済みのコミット・PR・CI／独立監査後マージまで進める。実Releaseのversion／tag／公開範囲は未確定で、公開済みとはしない。
+- 実装・公開の検証完了。現Scope revision `2026-09-07-issue-890-linux-release-integration-v4`、区分C。以下の実装時の記録は当時の結果として保持する。
+- 実装merge `c4616fc706b94150ac6c2ac06aec68bc1c2b0f5a`（PR #904）、Deb追加`016b91588a1a82eb86f19b63397e9d6fedd94b62`（PR #906）。公開source `af2cf56b52e1d2802ac92af6b99090e260dfc48d`から[v0.2.0-preview.2](https://github.com/KingYoSun/kukuri/releases/tag/v0.2.0-preview.2)をlatest公開し、WindowsとLinux4本体を含む全21資材を確認した。
 - 条件・INV-1〜8／TR-1〜7は[Issue #890](https://github.com/KingYoSun/kukuri/issues/890)。#889の実機・CI・監査を再利用し、全OS連携の再検証はしない。
 
 ## 変更境界と修正前の事実
@@ -53,3 +53,32 @@
 - 公開／署名／集約: PR実装PASS。担当7 groupは適合7・不適合0・未分類0。Python13 tests、PowerShell集約／wrapperに加え、upload digest不一致・upload中tag移動・公開済み不完全Releaseでも公開PATCH 0回を確認。blocker 0。
 - native source／CLI／文書: 実装コードPASS。static31件、Ubuntu94 source packages／303構成filesを独立再照合し、runtime inventoryとの差集合0。x86_64実archive smoke成功。固定headのrelease runbookに非実在command名1件があり、文書を含む判定はFAIL（6 group中適合5・不適合1・未分類0）。両OS共通の`cargo xtask desktop-package`へ統一する1行deltaを独立確認しPASS、修正後は適合6・不適合0・未分類0。
 - 監査後の変更は上記文書1行と本記録のみ。コードsurfaceは固定headと同じ。後続headの差分一致をPR commentへ記録する。CI未完了・aarch64実行未確認・実配布署名／公開未実施は留保し、Issue完了PASSとは区別する。
+
+## 最終公開証拠（v0.2.0-preview.2）
+
+詳細は[全体公開・VM記録](2026-09-07-v0.2.0-preview.1-release-rollout.md)。旧留保のうち、最終署名・native source・aarch64実行・公開は次で解消した。
+
+| 条件／inventory／transition | 最終証拠 |
+| --- | --- |
+| AC-1・6、INVAR-1・2、INV-2/5/6/7、TR-1/6 | Release `384062770`、全21files、5本体、Windows／AppImage／Debの3manifest entries。source・version・hash・鍵一致、公開後stable manifestと5本体／checksum／provenanceの実download照合PASS |
+| AC-2〜4、INVAR-4、INV-2/4/8、TR-1/3/7 | Release run `34109294504`のLinux製品検証、Windows／Linux package、CLI x86_64／aarch64の実archive・schema／専用daemon smoke成功。AppImage／Deb更新・保持は#889/#905の不変surface証拠を採用 |
+| AC-1・5・6、INV-5/7、TR-5/6 | 同runの実verifierで3形式の正常bytes受理と1byte改変拒否。Ubuntu92 exact sourcesの297files、static31filesの実archiveとhashを独立照合。Deb payloadと外側runtimeの対応もPASS |
+| AC-4・8、全INVAR、INV-1/3/5/6、TR-2/4/5 | 既存入力／secret／欠落・改変／禁止publish tests維持。Fast `34109293103`全9jobs PASS、PR #909と#911はCI・独立監査PASS。集約smokeの終了値誤判定だけを同source／同runで再実行し、全検証成功前に公開していない。元Release CIのFAILは保持 |
+| AC-7、INV-8、TR-7 | README en／ja・quickstart・Linux CLIを実公開状態へ同期。CLI専用profile／foreground開始・status・schema・終了の例と未確認OS条件は維持 |
+
+最終候補の独立監査は6群すべて適合、不適合0／未分類0／blocker0。親#885の条件はこの公開だけで自動完了とせず、子の実装・監査・承認済みsupport範囲を別途対応付ける。
+
+## 親 #885 の統合証拠
+
+親条件を子のCloseだけで判定せず、別担当が各最終headとmergeのtree一致、公開sourceの祖先であること、以下の契約・検証を独立確認した。親INV-1〜5／TR-1〜7は未分類0、具体的な製品・公開blocker0。
+
+| 親条件 | 子・実装・採用証拠 |
+| --- | --- |
+| AC-1 | #886／PR #897、merge `41e97089`。共通host、profile単一owner、同意前非起動、restart／shutdown境界 |
+| AC-2 | #887／PR #898、merge `6f89fae0`のprotocol／安全なI/Oと、#888／PR #901、merge `a1c2696b`の承認済み台帳撤去・1入力1実行。旧idempotency台帳を現条件へ戻さない |
+| AC-3 | #888／PR #901。131対象と理由付き除外、78tests、実CLI／複数daemon／public・private・DM・Live・Game・Domeの独立監査 |
+| AC-4 | #889／PR #903、merge `fe156251`。Ubuntu22.04 build、Ubuntu24.04代表実機、自動境界tests。追加Ubuntu22.04／Debian12実機・XWaylandは2026-09-06利用者回答と#889 AC-2の延期を維持。Debは追加承認された#905／PR #906を採用 |
+| AC-5 | #890／PR #904、Deb PR #906、配布修正PR #909と公開source af2、今回の全21assetsと公開後検査 |
+| INVAR-1〜3 | #886〜888のconsent／secret／profile／audience／P2P監査、#889／905の更新保持、#890のWindows・公開境界 |
+
+親本文の旧未完了表示・全追加OS実機条件・Deb対象外表記は、既承認の子条件と追加依頼に同期する。support保証の追加や品質条件の免除ではない。最終docsと本文同期のdelta監査後にCloseを判定する。

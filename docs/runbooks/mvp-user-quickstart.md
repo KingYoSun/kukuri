@@ -3,12 +3,12 @@
 ## 対象
 
 - Builder Previewを試すデスクトップ利用者向け
-- 現在のパッケージ版はWindows向け
-- Linuxは対象ReleaseにAppImage／Debがあれば利用可能。Debの導入・署名付き更新・削除は[Deb手順](linux-deb.md)を参照。未掲載の場合はソース起動を使用する。CLIは[専用手順](linux-cli.md)を参照
+- Windows NSIS、Linux x86_64 AppImage／Debを[v0.2.0-preview.2](https://github.com/KingYoSun/kukuri/releases/tag/v0.2.0-preview.2)で公開済み
+- Linuxは[AppImage手順](linux-appimage-smoke.md)または[Debの導入・署名付き更新・削除手順](linux-deb.md)を参照。CLI x86_64／aarch64も同Releaseで配布し、[専用手順](linux-cli.md)を参照
 
 ## 3分で試す
 
-1. [最新のGitHub Release](https://github.com/KingYoSun/kukuri/releases/latest)からWindowsインストーラーを取得して起動する。
+1. [最新のGitHub Release](https://github.com/KingYoSun/kukuri/releases/latest)から自分の環境向けのWindowsインストーラーまたはLinux AppImage／Debを取得し、上記の形式別手順に従って起動する。
 2. 初回起動後、設定を開かずに数秒待ち、コミュニティノードが「準備完了」になるのを待つ。
 3. 2番目のプロフィールカラムを開き、「プロフィールを編集」から表示名、ユーザー名、自己紹介、必要なら画像を設定する。
 4. 先頭のタイムラインカラムへ戻り、最初から用意されたトピックのどれかを開く。

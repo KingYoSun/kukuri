@@ -11,12 +11,12 @@ kukuri は、興味のある話題から人やコミュニティにつながる�
 > [!IMPORTANT]
 > 現在の kukuri は、テスター向けの **Builder Preview** です。一般公開の安定版ではありません。
 
-**[最新の Windows プレビューをダウンロード](https://github.com/KingYoSun/kukuri/releases/latest)**
+**[最新の Windows／Linux プレビューをダウンロード](https://github.com/KingYoSun/kukuri/releases/latest)**
 
 | 環境 | 現在の対応状況 |
 | --- | --- |
 | Windows 10 / 11 | 最新の GitHub Release から NSIS インストーラーを配布 |
-| Linux | AppImage／Deb（x86_64）、CLI（x86_64・aarch64）は対象Releaseの成果物一覧を確認。未公開の場合はソースから起動 |
+| Linux | AppImage／Deb（x86_64）、CLI（x86_64・aarch64）を[v0.2.0-preview.2](https://github.com/KingYoSun/kukuri/releases/tag/v0.2.0-preview.2)で同時公開 |
 | macOS | 現在パッケージは未提供 |
 
 プレビューのインストーラーは未署名の場合があります。その場合は Windows SmartScreen の警告が表示されることがあるため、実行前にリリースノートを確認してください。
