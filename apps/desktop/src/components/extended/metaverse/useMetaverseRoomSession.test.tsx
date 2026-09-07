@@ -14,6 +14,7 @@ import { METAVERSE_ROOM_RECOVERY_MS, type MetaverseRoomEvent } from '../Metavers
 import { useMetaverseRoomSession } from './useMetaverseRoomSession';
 import { createMetaverseRoomActions } from '@/shell/actions/metaverse';
 import { createDefaultMetaverseRoomState } from './DomeSceneModel';
+import { readLastVisitedDome } from './DomeEntryModel';
 
 const room: GameRoomView = {
   room_id: 'metaverse-room-1',
@@ -167,6 +168,164 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+describe('Dome transition boundaries (#923)', () => {
+  async function setupTransition() {
+    vi.useFakeTimers();
+    const rooms = ['source', 'target'].map((id, index) => ({
+      ...room, room_id: id, host_pubkey: (index ? 'e' : 'f').repeat(64),
+      metaverse: createDefaultMetaverseRoomState(8, {
+        roomId: id, topicId: 'kukuri:topic:demo', ownerPubkey: (index ? 'e' : 'f').repeat(64),
+      }),
+    }));
+    const context = rooms[0].metaverse.spatial_context;
+    const api = createDesktopMockApi();
+    const topology = await api.listDomeConnectionTopology(context);
+    topology.connections = [{ record: {
+      agreement: { connection_id: 'boundary', proposal_id: 'proposal', spatial_context: context,
+        proposer: { instance_id: 'source', instance_generation: 1, owner_pubkey: rooms[0].host_pubkey, direction: 'north' },
+        receiver: { instance_id: 'target', instance_generation: 1, owner_pubkey: rooms[1].host_pubkey, direction: 'south' },
+        activation_generation: 1 },
+      receiver_slot_generation: 1, observed_active_connection_ids: [], status: 'active',
+      lifecycle_generation: 1, lifecycle_actor: null, lifecycle_reason: null, lifecycle_deadline_at: null,
+    } }];
+    topology.resolution.topology = { spatial_context: context,
+      components: [{ root_instance_id: 'source', instance_ids: ['source', 'target'], connection_ids: ['boundary'],
+        coordinates_cm: { source: [0, 0, 0], target: [0, 0, -5700] } }],
+      active_connection_ids: ['boundary'], topology_digest: 'boundary-digest' };
+    vi.spyOn(api, 'listDomeConnectionTopology').mockResolvedValue(topology);
+    const hosting = vi.spyOn(api, 'getDomeHosting').mockImplementation(async (_context, instanceId) => ({
+      instance_id: instanceId, state: { kind: 'community_node_hosted', lease_epoch: 1,
+        session_id: `session-${instanceId}`, lease_expires_at: Date.now() + 60_000,
+        host: { kind: 'community_node', node_id: 'node', api_base_url: 'https://node.example' } },
+      lease: null, signed_lease_json: null, signed_activation_json: null, signed_close_json: null,
+      instance_manifest_json: '{}', preset_manifest_json: '{}', participants: 1, sleeping: false,
+      resource_budget: {} as DomeHostingView['resource_budget'], resource_metrics: {} as DomeHostingView['resource_metrics'],
+    }));
+    const snapshot = (instance: string, sequence: number): DomePhysicsSnapshotV1 => ({
+      ...physicsSnapshot(sequence, 0), instance_id: instance, session_id: `session-${instance}`,
+    });
+    const submit = vi.spyOn(api, 'submitDomeSessionInput').mockImplementation(async (_c, id, sequence) => snapshot(id, sequence));
+    const prepare = vi.spyOn(api, 'prepareDomeTransition').mockImplementation(async request => ({
+      request, target_lease_epoch: 1, target_session_id: 'session-target', expires_at: Date.now() + 15_000,
+    }));
+    const commit = vi.spyOn(api, 'commitDomeTransition').mockResolvedValue(undefined);
+    const abort = vi.spyOn(api, 'abortDomeTransition').mockResolvedValue(undefined);
+    const publish = vi.spyOn(api, 'publishMetaverseRoomEvent');
+    const session = renderSession({ api, rooms, initialSelectedRoomId: 'source' });
+    const flush = async (ms = 0) => { await act(async () => { await vi.advanceTimersByTimeAsync(ms); }); };
+    await flush();
+    expect(session.result.current.admittedRoom?.room_id).toBe('source');
+    expect(session.result.current.transitionNeighbors[0]?.boundaryState).toBe('ready');
+    const move = (z: number) => act(() => session.result.current.handleLocalTransform({
+      roomId: 'source', peerId: 'local-peer', seq: 1, position: [0, 90, z],
+      rotation: [0, 0, 0], animation: 'walk', sentAt: Date.now(),
+    }));
+    const entered = async () => { move(-2200); await flush(); expect(prepare).toHaveBeenCalledTimes(1); };
+    const lastVisited = () => readLastVisitedDome('f'.repeat(64), context);
+    const sourceInputs = (type: string) => submit.mock.calls.filter(call => call[1] === 'source' && call[3].type === type);
+    return { session, submit, prepare, commit, abort, hosting, publish, snapshot, flush, move, entered, lastVisited, sourceInputs };
+  }
+
+  test('cancelling prepare aborts a late ticket without committing or handing off', async () => {
+    const f = await setupTransition();
+    let deliver!: () => void;
+    f.prepare.mockImplementationOnce(request => new Promise(resolve => { deliver = () => resolve({
+      request, target_lease_epoch: 1, target_session_id: 'session-target', expires_at: Date.now() + 15_000,
+    }); }));
+    await f.entered();
+    f.move(0);
+    await f.flush();
+    expect(f.sourceInputs('abort_transition')).toHaveLength(1);
+    expect(f.abort).not.toHaveBeenCalled();
+    await act(async () => deliver());
+    expect(f.abort).toHaveBeenCalledTimes(1);
+    expect(f.sourceInputs('abort_transition')).toHaveLength(2);
+    expect(f.commit).not.toHaveBeenCalled();
+    expect(f.sourceInputs('complete_transition')).toHaveLength(0);
+    expect(f.session.result.current.selectedRoomId).toBe('source');
+    expect(f.lastVisited()).toBe('source');
+    f.session.unmount();
+  });
+
+  test('lost ack and hosting lookup failure keep the same commit pending until confirmation', async () => {
+    const f = await setupTransition();
+    let confirm!: () => void;
+    f.commit.mockRejectedValueOnce(new Error('ack lost')).mockImplementationOnce(() => new Promise(resolve => { confirm = resolve; }));
+    await f.entered();
+    f.hosting.mockRejectedValueOnce(new Error('lookup unavailable'));
+    f.move(-2870);
+    await f.flush();
+    expect(f.commit).toHaveBeenCalledTimes(2);
+    expect(f.commit.mock.calls[1]).toEqual(f.commit.mock.calls[0]);
+    f.move(0);
+    await f.flush();
+    expect(f.abort).not.toHaveBeenCalled();
+    expect(f.sourceInputs('abort_transition')).toHaveLength(0);
+    expect(f.sourceInputs('complete_transition')).toHaveLength(0);
+    expect(f.session.result.current.selectedRoomId).toBe('source');
+    expect(f.lastVisited()).toBe('source');
+    await act(async () => confirm());
+    expect(f.session.result.current.selectedRoomId).toBe('target');
+    expect(f.lastVisited()).toBe('target');
+    expect(f.sourceInputs('complete_transition')).toHaveLength(1);
+    f.session.unmount();
+  });
+
+  test.each(['definitive rejection', 'replaced session'])('%s rolls back without a successful handoff', async failure => {
+    const f = await setupTransition();
+    await f.entered();
+    f.commit.mockRejectedValue(new Error(failure === 'definitive rejection' ? 'DOME_TRANSITION_INVALID_TICKET' : 'ack lost'));
+    if (failure === 'replaced session') {
+      const current = await f.hosting.mock.results.find((_result, index) => f.hosting.mock.calls[index][1] === 'target')!.value;
+      f.hosting.mockResolvedValueOnce({ ...current, state: { ...current.state, lease_epoch: 2, session_id: 'replacement' } });
+    }
+    f.move(-2870);
+    await f.flush();
+    expect(f.commit).toHaveBeenCalledTimes(1);
+    expect(f.abort).toHaveBeenCalledTimes(1);
+    expect(f.sourceInputs('abort_transition')).toHaveLength(1);
+    expect(f.sourceInputs('complete_transition')).toHaveLength(0);
+    expect(f.session.result.current.selectedRoomId).toBe('source');
+    expect(f.lastVisited()).toBe('source');
+    expect(f.session.onError).toHaveBeenCalledWith(expect.any(String));
+    f.session.unmount();
+  });
+
+  test.each([false, true])('source cleanup retries without rolling back target (all attempts fail: %s)', async allFail => {
+    const f = await setupTransition();
+    let attempts = 0;
+    f.submit.mockImplementation(async (_context, id, sequence, input) => {
+      if (id === 'source' && input.type === 'complete_transition') {
+        attempts += 1;
+        if (allFail || attempts === 1) throw new Error('source unavailable');
+      }
+      return f.snapshot(id, sequence);
+    });
+    await f.entered();
+    f.move(-2870);
+    await f.flush();
+    expect(attempts).toBe(1);
+    expect(f.session.result.current.selectedRoomId).toBe('target');
+    expect(f.lastVisited()).toBe('target');
+    await f.flush(249);
+    expect(attempts).toBe(1);
+    await f.flush(1);
+    expect(attempts).toBe(2);
+    await f.flush(1000);
+    expect(attempts).toBe(allFail ? 3 : 2);
+    expect(f.session.result.current.selectedRoomId).toBe('target');
+    expect(f.lastVisited()).toBe('target');
+    expect(f.abort).not.toHaveBeenCalled();
+    expect(f.sourceInputs('abort_transition')).toHaveLength(0);
+    const complete = f.sourceInputs('complete_transition');
+    expect(new Set(complete.map(call => call[3].type === 'complete_transition' ? call[3].transition_id : null)).size).toBe(1);
+    expect(new Set(complete.map(call => call[2])).size).toBe(complete.length);
+    expect(f.publish.mock.calls.filter(call => call[1] === 'source' && call[4].type === 'presence_leave')).toHaveLength(allFail ? 0 : 1);
+    if (allFail) expect(f.session.onError).toHaveBeenCalledWith('Destination committed; source Dome cleanup will require resynchronization');
+    f.session.unmount();
+  });
 });
 
 describe('useMetaverseRoomSession', () => {
