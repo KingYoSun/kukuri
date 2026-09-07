@@ -1,5 +1,6 @@
 """Check the actual workflow DAG and secret/source boundaries; no GitHub writes."""
 import pathlib
+import shlex
 import unittest
 
 import yaml
@@ -13,6 +14,16 @@ def workflow(name):
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_linux_refreshes_preinstalled_libgcrypt_before_bundling(self):
+        steps = workflow("kukuri-linux-package.yml")["jobs"]["linux-appimage"]["steps"]
+        dependencies = next(step for step in steps if step.get("name") == "Linux build dependencies")
+        bundle = next(step for step in steps if step.get("name") == "Build and verify AppImage and Deb")
+        self.assertLess(steps.index(dependencies), steps.index(bundle))
+        commands = dependencies["run"].replace("\\\n", " ").splitlines()
+        installs = [shlex.split(command) for command in commands if command.strip().startswith("sudo apt-get install ")]
+        self.assertTrue(any("libgcrypt20" in command and "--no-upgrade" not in command for command in installs),
+                        "refresh the runner's preinstalled libgcrypt20 before collecting exact matching source")
+
     def test_publish_requires_every_platform_and_validation(self):
         jobs = workflow("kukuri-release.yml")["jobs"]
 
