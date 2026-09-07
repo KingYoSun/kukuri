@@ -69,13 +69,14 @@ type UseDesktopShellDataEffectsArgs = {
   /// 表示中の Column id 列(DesktopShellColumnWorkspace の IntersectionObserver 由来)。
   visibleColumnIdsRef?: MutableRefObject<string[]>;
   loadTopics: (topics: string[], activeTopic: string, currentThread: string | null) => Promise<void>;
-  // section 取得ロジックの SSoT は data/loaders/useDesktopShellSectionLoaders.ts。
+  // section/通知の取得と結果反映は data/loaders/ の各loaderが所有する。
   // この hook は「いつ読むか」(section 遷移・interval)だけを持ち、
   // 「何をどう読むか」は loader を呼ぶ。
   loadProfileSection: () => Promise<void>;
   loadAuthorSection: (pubkey: string) => Promise<void>;
   loadMessagesSection: () => Promise<void>;
   loadNotificationsSection: (options?: { markAsRead?: boolean }) => Promise<void>;
+  refreshNotificationStatus: () => Promise<void>;
   loadCommunityIndexCapability: (
     refreshedStatuses?: readonly CommunityNodeNodeStatus[]
   ) => Promise<void>;
@@ -86,12 +87,10 @@ type UseDesktopShellDataEffectsArgs = {
     scopeChannelId?: string | null
   ) => Promise<void>;
   refreshConnectivityStatus: () => Promise<CommunityNodeNodeStatus[] | null>;
-  setNotificationStatus: Setter<'notificationStatus'>;
   setCommunityNodeStatuses: Setter<'communityNodeStatuses'>;
   setSyncStatus: Setter<'syncStatus'>;
   setLocalProfile: Setter<'localProfile'>;
   setProfileDraft: Setter<'profileDraft'>;
-  setNotifications: Setter<'notifications'>;
   setGameDrafts: Setter<'gameDrafts'>;
   setSelectedChannelIdByTopic: (
     value:
@@ -128,15 +127,14 @@ export function useDesktopShellDataEffects({
   loadAuthorSection,
   loadMessagesSection,
   loadNotificationsSection,
+  refreshNotificationStatus,
   loadCommunityIndexCapability,
   refreshVisibleShellData,
   refreshConnectivityStatus,
-  setNotificationStatus,
   setCommunityNodeStatuses,
   setSyncStatus,
   setLocalProfile,
   setProfileDraft,
-  setNotifications,
   setGameDrafts,
   setSelectedChannelIdByTopic,
   setComposeChannelByTopic,
@@ -274,27 +272,6 @@ export function useDesktopShellDataEffects({
     visibleColumnIdsRef,
     visibleRefreshInFlightRef,
   ]);
-
-  const refreshNotificationStatus = useCallback(async () => {
-    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-      return;
-    }
-    try {
-      const status = await api.getNotificationStatus();
-      setNotificationStatus(status);
-      if (
-        status.unread_count > 0 &&
-        shellChromeState.activePrimarySection !== 'notifications'
-      ) {
-        const notificationItems = await api.listNotifications();
-        startTransition(() => {
-          setNotifications(notificationItems);
-        });
-      }
-    } catch {
-      // best effort badge refresh
-    }
-  }, [api, setNotificationStatus, setNotifications, shellChromeState.activePrimarySection]);
 
   const applySyncStatusChange = useCallback(
     (
