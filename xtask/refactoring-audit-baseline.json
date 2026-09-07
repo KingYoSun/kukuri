@@ -775,6 +775,12 @@
       "status": "recorded",
       "description": "縮小note3件は実測と許容上限を別々に保存。既存ratchetの値を変更せず、未使用容量を今回の構造成果と混同しない。",
       "evidence": "docs/progress/2026-09-08-872-refactoring-campaign-phase-4.md"
+    },
+    {
+      "id": "score-game-projection-ci-failure",
+      "status": "recorded",
+      "description": "Phase4 CIで無効roster拒否後のreadが古いprojectionへ戻る1失敗を観測。該当writer/validator/CLIはac9946から同一。実行順は未確定、local1+20回はPASS。製品差分によるRegressionの根拠はなく、元20候補の外の別fix #942へ追跡する。",
+      "evidence": "docs/progress/2026-09-08-872-refactoring-campaign-phase-4.md"
     }
   ],
   "activation_policy": "reviewed baselineがmainに存在し、tracking_issueのCurrent statusがCompleteになって初めて後続checkの確定入力として採用する。未mergeのbranch上の内容は候補である。"

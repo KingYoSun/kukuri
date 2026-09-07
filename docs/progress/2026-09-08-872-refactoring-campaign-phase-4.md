@@ -92,6 +92,8 @@ groupは重複を含む全tracked集合で、合計を重複なしfile数にし�
 - Git commit/祖先、10 code OID、6group count/digest、1,556候補、16実測/上限、6metric、20候補、10子のhead/merge/CIを独立照合した。JSON Schemaだけでgit/counterの真実性まで証明したとはしない。
 - Rust/CNは#926 head `cedfad64`と完了基点の`crates` tree `9dd9733d9155fa022b77310399ecebfee73f792c`、Cargo/Tauri/harness/xtask実装が一致しFast34156245820を再利用できる。UIは#924 Fast34153376771、full UI152 files1209 tests/browser64/visual smoke14と対象treeを対応。slow199 PASSは#927、個別before/after/独立再実行はPhase3に対応する。
 - Phase4差分でローカル全Rust/CN/UI/実機suiteを再実行していない。製品変更0で不変の既存PASSを再利用する。起動する最終PR CIは成功後に親evidenceへ記録する。
+- 初回Fast34164485657のRust testsはCLIの`game_lifecycle_rejects_invalid_roster_without_mutation`で1失敗（651 PASS、652/910で停止）。Running/score7から、無効roster拒否後のreadが古いWaiting/score0/manifestへ戻った。[元job](https://github.com/KingYoSun/kukuri/actions/runs/34164485657/job/101872714365)と[別fix #942](https://github.com/KingYoSun/kukuri/issues/942)へ観測と未確定の実行順を保存した。local同test1回＋上限20回は全PASSで、CI failureを再現済みとはしていない。
+- ScoreGame create/update/validator、CLI、hydration、cache writerは開始SHAから同一。旧recordをblob await後に無条件upsertできる既存経路を確認したが、当該実行のwriter順は未確定。Phase4の製品差分0、#927のMetaverse分岐もこのrowは通らず、今回のRegressionを示す証拠はない。元20候補を拡張せず、既存問題の観測として引き継ぐ。製品/testを変更・弱体化してgreenにせず、最終headの必須CIが成功するまでは親完了を保留する。
 - nativeの未測定範囲と既存fullscreen停止状態は[実機record](../ui-reviews/2026-09-08-issue-924-transition-owner.md)を保持し、全native動作PASSや既存UI不具合の修正済みへ拡大しない。
 - 現行architecture/runbook/ADR/root規範に旧ownerの現役扱いは見つからなかった。docs/READMEへ完了記録の導線を追加する。#927のCurrentに残った「原因診断未着手」は追跡同期で除去する。
 
