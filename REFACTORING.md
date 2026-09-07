@@ -220,8 +220,13 @@ PR共通欄は `.github/PULL_REQUEST_TEMPLATE.md` を使い、本書の「記録
    `crates/desktop-runtime/src/community_node/manifest_support.rs` +
    `crates/cn-operator/tests/manifest_golden.rs`(**この 2 ファイルを触る PR は
    `cargo xtask rust-test` の round-trip テストと `cn-test` の golden の両方を実行する**)。
-8. **cn-operator の `Availability::Planned` 3 capability**: 昇格は ADR 0027 §2.9 の条件付き
-   decision であり、リファクタで表明を変えない。
+8. **cn-operator の capability 提供状態と公開条件**: `community_index` / `moderation` /
+   `community_local_trust` は #616 の readiness / fail-closed gate を経て #617 で
+   `Availability::Available` へ移行済み（[ADR 0025](docs/adr/0025-community-node-indexing-foundation.md)
+   2026-08-16改訂、`crates/cn-operator/src/capability.rs::availability`）。提供可能であることと
+   個々の配備で有効・公開であることは区別し、設定と有効な readiness 記録の条件を維持する。
+   ADR 0027 §2.9 の昇格条件は当時の判断として保持する。将来向けの `Planned` 区分を削除せず、
+   リファクタで availability、manifest の表明、operator の有効化条件を変えない。
 9. **Tauri IPC 契約**(`crates/app-api/src/views.rs` ⇔ `apps/desktop/src/lib/api/types.ts`):
    同一バイナリ内契約のため両側同時変更なら改名可能だが、片側変更は silent break。
    固定: 高頻度 8 型グループは共有 fixture(apps/desktop/src/lib/api/__fixtures__/views/)を
