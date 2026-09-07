@@ -45,6 +45,8 @@ python scripts/release/test_verify_public_preview.py
 
 `Kukuri Release Contracts`は上記にworkflowの構文・guard検査を加える（PyYAML 6.0.3）。ラッパーfixtureはroutingの検査で、実署名検証の代替ではない。
 
+期待するnative commandの失敗を捕捉するPowerShell smokeは、全assertionとcleanupの後に成功終了を明示する。GitHubの`pwsh` wrapperは残った`LASTEXITCODE`を終了値に使うため、成功メッセージだけで合格とせず、同じ呼出しとfooterを回帰testで検査する。
+
 ## Workflowとsource固定
 
 1. 承認したsourceに新しいtagを作成・pushする。tag pushは既定でdraftまで。
@@ -106,6 +108,8 @@ python scripts/release/publish_preview.py --input <same-run-assets> --tag v0.1.8
 ```
 
 公開承認後に同じcommandの`--draft false`で公開する。`GH_TOKEN`は環境変数で供給し、引数や記録へ値を書かない。公開前に同一候補の実署名検証成功が必要。build／smoke／署名／完全性の失敗を手動公開で迂回しない。
+
+全platform buildが成功し資材が揃っていても、集約前の呼出しwrapperで停止した場合は原因を切り分ける。wrapperだけの終了値誤判定と独立確認できた場合、未変更smokeを独立した`pwsh -NoProfile -File <script>`で再実行し、全assertionと終了値0を要求する。その後、未実行工程を固定sourceの未変更scriptと同一runの全platform／changelog／verifier資材だけで完遂する。verifierのsource一致、3entryの実署名・改変拒否、完全性・upload digest・公開後検証は省略しない。元CIのFAILは保持し、ローカル再実行の結果を工程別に記録する。実buildや検証assertionの失敗にはこの扱いを適用しない。
 
 ```powershell
 ./scripts/release/test-published-updater-signature.ps1 -Tag v0.1.8-preview.2 -Platforms windows-x86_64,linux-x86_64,linux-x86_64-deb -InputDir <same-run-assets> -PublicKeyFile <same-run-assets>/windows-x86_64-updater-key.pub

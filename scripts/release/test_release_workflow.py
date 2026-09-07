@@ -1,6 +1,7 @@
 """Check the actual workflow DAG and secret/source boundaries; no GitHub writes."""
 import pathlib
 import shlex
+import subprocess
 import unittest
 
 import yaml
@@ -14,6 +15,17 @@ def workflow(name):
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_asset_smoke_reports_success_to_the_ci_pwsh_wrapper(self):
+        result = subprocess.run([
+            "pwsh", "-NoProfile", "-Command",
+            "$ErrorActionPreference = 'Stop'; "
+            "& ./scripts/release/test-create-preview-assets.ps1; "
+            "& ./scripts/release/test-create-preview-assets-linux.ps1; "
+            "if (Test-Path variable:\\LASTEXITCODE) { exit $LASTEXITCODE }",
+        ], cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+        self.assertIn("Linux + Windows assembly contracts passed", result.stdout)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_linux_refreshes_preinstalled_libgcrypt_before_bundling(self):
         steps = workflow("kukuri-linux-package.yml")["jobs"]["linux-appimage"]["steps"]
         dependencies = next(step for step in steps if step.get("name") == "Linux build dependencies")

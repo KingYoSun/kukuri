@@ -94,3 +94,7 @@ try {
   if (-not $resolved.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe cleanup path' }
   if (Test-Path -LiteralPath $resolved) { Remove-Item -LiteralPath $resolved -Recurse -Force }
 }
+
+# The expected native-command rejection leaves LASTEXITCODE=1. Report success
+# only after every assertion and cleanup completed, including when called by CI.
+exit 0
