@@ -128,7 +128,7 @@ mod errors;
 mod gossip_subscription_support;
 mod hydration_support;
 mod live_game_support;
-pub(crate) use live_game_support::fetch_verified_dome_envelope;
+pub(crate) use live_game_support::{DomeReadUnavailable, fetch_verified_dome_envelope};
 mod metaverse_room_event_support;
 mod notifications_support;
 mod object_persistence_support;

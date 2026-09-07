@@ -59,14 +59,23 @@ impl AppService {
         let mut items = Vec::with_capacity(rows.len());
         for row in rows {
             let dome_hosting = if let Some(metaverse) = row.metaverse.as_ref() {
-                Some(
-                    self.get_dome_hosting(
-                        metaverse.spatial_context.clone(),
-                        &metaverse.instance_id,
-                    )
-                    .await?
-                    .state,
-                )
+                // Resolve readiness from the canonical Instance, not the cached ref.
+                // A pending Preset keeps its row for refresh; invalid data still fails.
+                match self
+                    .get_dome_hosting(metaverse.spatial_context.clone(), &metaverse.instance_id)
+                    .await
+                {
+                    Ok(hosting) => Some(hosting.state),
+                    Err(error)
+                        if matches!(
+                            error.downcast_ref::<DomeReadUnavailable>(),
+                            Some(DomeReadUnavailable::Preset)
+                        ) =>
+                    {
+                        continue;
+                    }
+                    Err(error) => return Err(error),
+                }
             } else {
                 None
             };
