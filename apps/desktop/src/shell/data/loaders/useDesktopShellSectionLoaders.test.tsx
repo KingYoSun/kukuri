@@ -4,6 +4,7 @@ import { describe, expect, test, vi } from 'vitest';
 
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import { useDesktopShellSectionLoaders } from '@/shell/data/loaders/useDesktopShellSectionLoaders';
+import { useNotificationLoaders } from '@/shell/data/loaders/useNotificationLoaders';
 import { privateTimelineScope } from '@/shell/presentation';
 import {
   createDesktopShellStore,
@@ -15,17 +16,23 @@ function setup() {
   const api = createDesktopMockApi();
   const store = createDesktopShellStore();
   const loadReactionCatalogData = vi.fn().mockResolvedValue(undefined);
+  const translate = (key: string) => key;
   const wrapper = ({ children }: { children: ReactNode }) => (
     <DesktopShellStoreContext.Provider value={store}>{children}</DesktopShellStoreContext.Provider>
   );
   const hook = renderHook(
-    () =>
-      useDesktopShellSectionLoaders({
+    () => {
+      const { loadNotificationsSection } = useNotificationLoaders({
+        api, translate, activePrimarySection: 'notifications',
+      });
+      return useDesktopShellSectionLoaders({
         api,
         loadReactionCatalogData,
+        loadNotificationsSection,
         storeApi: store,
-        translate: (key) => key,
-      }),
+        translate,
+      });
+    },
     { wrapper }
   );
   return { api, hook, store };

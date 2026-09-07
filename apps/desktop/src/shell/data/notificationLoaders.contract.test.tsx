@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { DesktopApi, NotificationView, RuntimeEvent } from '@/lib/api';
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import { useDesktopShellSectionLoaders } from '@/shell/data/loaders/useDesktopShellSectionLoaders';
+import { useNotificationLoaders } from '@/shell/data/loaders/useNotificationLoaders';
 import { columnIdentityId, openTransientColumn } from '@/shell/slices/workspace';
 import { createShellHookHarness, resetWindowHash } from '@/shell/testSupport/renderShellHook';
 import { useDesktopShellData } from '@/shell/useDesktopShellData';
@@ -72,9 +73,14 @@ function mountInbox() {
     notificationAutoReadError: 'previous read failure',
   });
   const loadReactionCatalogData = vi.fn().mockResolvedValue(undefined);
-  const hook = renderHook(() => useDesktopShellSectionLoaders({
-    api, storeApi: harness.store, translate, loadReactionCatalogData,
-  }), { wrapper: harness.wrapper });
+  const hook = renderHook(() => {
+    const { loadNotificationsSection } = useNotificationLoaders({
+      api, translate, activePrimarySection: 'notifications',
+    });
+    return useDesktopShellSectionLoaders({
+      api, storeApi: harness.store, translate, loadReactionCatalogData, loadNotificationsSection,
+    });
+  }, { wrapper: harness.wrapper });
   return { api, ...harness, hook };
 }
 

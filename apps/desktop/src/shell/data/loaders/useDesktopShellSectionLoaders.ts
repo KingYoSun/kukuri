@@ -1,10 +1,11 @@
 import { startTransition, useCallback } from 'react';
 
-import type { CommunityNodeNodeStatus, DesktopApi, NotificationView } from '@/lib/api';
+import type { CommunityNodeNodeStatus, DesktopApi } from '@/lib/api';
 import {
   eligibleCommunityIndexNodes,
   resolveCommunityIndexNodePreference,
 } from '@/lib/api/communityIndex';
+import type { LoadNotificationsSection } from '@/shell/data/loaders/useNotificationLoaders';
 import { VISIBLE_TIMELINE_LIMIT } from '@/shell/pagination';
 import {
   authorViewFromDirectMessageConversation,
@@ -30,6 +31,7 @@ import {
 type UseDesktopShellSectionLoadersArgs = {
   api: DesktopApi;
   loadReactionCatalogData: () => Promise<void>;
+  loadNotificationsSection: LoadNotificationsSection;
   storeApi: DesktopShellStoreApi;
   translate: (key: string, options?: Record<string, unknown>) => string;
 };
@@ -37,6 +39,7 @@ type UseDesktopShellSectionLoadersArgs = {
 export function useDesktopShellSectionLoaders({
   api,
   loadReactionCatalogData,
+  loadNotificationsSection,
   storeApi,
   translate,
 }: UseDesktopShellSectionLoadersArgs) {
@@ -70,12 +73,6 @@ export function useDesktopShellSectionLoaders({
   const setLiveSessionsByScopeKey = useDesktopShellFieldSetter('liveSessionsByScopeKey');
   const setLocalPeerTicket = useDesktopShellFieldSetter('localPeerTicket');
   const setLocalProfile = useDesktopShellFieldSetter('localProfile');
-  const setNotificationAutoReadError = useDesktopShellFieldSetter(
-    'notificationAutoReadError'
-  );
-  const setNotificationPanelState = useDesktopShellFieldSetter('notificationPanelState');
-  const setNotifications = useDesktopShellFieldSetter('notifications');
-  const setNotificationStatus = useDesktopShellFieldSetter('notificationStatus');
   const setProfileDraft = useDesktopShellFieldSetter('profileDraft');
   const setProfileError = useDesktopShellFieldSetter('profileError');
   const setProfilePanelState = useDesktopShellFieldSetter('profilePanelState');
@@ -310,58 +307,6 @@ export function useDesktopShellSectionLoaders({
     storeApi,
     translate,
   ]);
-
-  const loadNotificationsSection = useCallback(
-    async (options: { markAsRead?: boolean } = {}) => {
-      const markAsRead = options.markAsRead ?? true;
-      try {
-        const [status, notificationItems] = await Promise.all([
-          api.getNotificationStatus(),
-          api.listNotifications(),
-        ]);
-        let nextNotifications: NotificationView[] = notificationItems;
-        let nextStatus = status;
-        if (markAsRead && notificationItems.some((notification) => !notification.read_at)) {
-          try {
-            nextStatus = await api.markAllNotificationsRead();
-            const readAt = Date.now();
-            nextNotifications = notificationItems.map((notification) =>
-              notification.read_at ? notification : { ...notification, read_at: readAt }
-            );
-            setNotificationAutoReadError(null);
-          } catch (notificationReadError) {
-            setNotificationAutoReadError(
-              messageFromError(
-                notificationReadError,
-                translate('shell:notifications.errors.failedAutoRead')
-              )
-            );
-          }
-        }
-        startTransition(() => {
-          setNotificationStatus(nextStatus);
-          setNotifications(nextNotifications);
-          setNotificationPanelState({ status: 'ready', error: null });
-        });
-      } catch (error) {
-        setNotificationPanelState({
-          status: 'error',
-          error: messageFromError(
-            error,
-            translate('shell:notifications.errors.failedToLoad')
-          ),
-        });
-      }
-    },
-    [
-      api,
-      setNotificationAutoReadError,
-      setNotificationPanelState,
-      setNotifications,
-      setNotificationStatus,
-      translate,
-    ]
-  );
 
   const loadBookmarksSection = useCallback(async () => {
     try {

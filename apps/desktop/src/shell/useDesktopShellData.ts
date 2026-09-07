@@ -24,6 +24,7 @@ import {
   openTransientColumn,
 } from '@/shell/slices/workspace';
 import { useDraftMediaHelpers } from '@/shell/data/useDraftMediaHelpers';
+import { useNotificationLoaders } from '@/shell/data/loaders/useNotificationLoaders';
 import { useDesktopShellSectionLoaders } from '@/shell/data/loaders/useDesktopShellSectionLoaders';
 import { useQueuedLoadTopics } from '@/shell/data/useQueuedLoadTopics';
 import {
@@ -168,8 +169,6 @@ export function useDesktopShellData({
   const setBookmarkedReactionAssets = useDesktopShellFieldSetter('bookmarkedReactionAssets');
   const setRecentReactions = useDesktopShellFieldSetter('recentReactions');
   const setProfileDraft = useDesktopShellFieldSetter('profileDraft');
-  const setNotifications = useDesktopShellFieldSetter('notifications');
-  const setNotificationStatus = useDesktopShellFieldSetter('notificationStatus');
   const setGameDrafts = useDesktopShellFieldSetter('gameDrafts');
   const setReactionPanelState = useDesktopShellFieldSetter('reactionPanelState');
   const setError = useDesktopShellFieldSetter('error');
@@ -604,16 +603,19 @@ export function useDesktopShellData({
     translate,
   ]);
 
+  const { refreshNotificationStatus, loadNotificationsSection } = useNotificationLoaders({
+    api, activePrimarySection: shellChromeState.activePrimarySection, translate,
+  });
   const {
     loadShellSections,
     loadProfileSection,
     loadAuthorSection,
     loadMessagesSection,
-    loadNotificationsSection,
     loadCommunityIndexCapability,
   } = useDesktopShellSectionLoaders({
     api,
     loadReactionCatalogData,
+    loadNotificationsSection,
     storeApi,
     translate,
   });
@@ -692,12 +694,11 @@ export function useDesktopShellData({
     loadCommunityIndexCapability,
     refreshVisibleShellData,
     refreshConnectivityStatus,
-    setNotificationStatus,
+    refreshNotificationStatus,
     setCommunityNodeStatuses,
     setSyncStatus,
     setLocalProfile,
     setProfileDraft,
-    setNotifications,
     setGameDrafts,
     setSelectedChannelIdByTopic,
     setComposeChannelByTopic,
