@@ -15,12 +15,13 @@
 
 | INV / TR | 新規testと観測 |
 | --- | --- |
-| INV-1/4、TR-1 | `cancelling prepare aborts a late ticket ...`: 準備中に中心線から戻る→source abort、ticket遅着後target abort/同id source abort。commit/completeなし、source選択・last-visited維持。既存join/leave自身の副作用を禁止する新仕様は置かない |
+| INV-1、TR-1 | `cancelling prepare aborts a late ticket ...`: 準備中に中心線から戻る→source abort、ticket遅着後target abort/同id source abort。commit/completeなし、source選択・last-visited維持。既存join/leave自身の副作用を禁止する新仕様は置かない |
 | INV-2、TR-2 | `lost ack and hosting lookup failure ...`: 最初commit失敗+hosting取得失敗→同一ticket/transformで次commit待機。ack前に中心線から戻ってもabort/completeなし。ack後にtarget選択・last-visited・source complete |
 | INV-2、TR-3 | `... rolls back without a successful handoff`: invalid-ticket確定拒否とtarget session置換の2case。commit1、target/source abort、error、source選択・last-visited維持、completeなし |
 | INV-3、TR-4 | `source cleanup retries ...`: 1回目失敗→250ms後成功、または250/1000ms後も失敗。2/3回で停止しtarget/last-visited維持、abort0、同transition id・重複しないinput sequence。成功時のみsource presence_leave、全失敗時はerror表示 |
+| INV-4、TR-1/2 | `... keeps its own effects and respects the attempt guard ...`: join/leave × provisional/committingの4case。前者は同ticket/idでabort、後者はabort禁止。独立joinのadmission/target選択/last-visited、leaveのinput/presence/選択解除/非admittedを観測し、それらを禁止する新仕様を置かない |
 
-元のsession10 testsとrecovery4 testsを維持。特に既存Return Homeは別joinのauthoritative admission後の選択・last-visitedを保護する。TR-1は取消対象attemptの副作用だけを禁止する。
+元のsession10 testsとrecovery4 testsを維持。既存Return Homeはauthoritative admission後の選択を保護し、last-visitedは今回のjoin/leave caseで直接確認する。audio停止の既存実装は変更せず、実音声streamの確認をこのAPI/state contractで実施済みとはしない。TR-1は取消対象attemptの副作用だけを禁止する。
 
 ## 全caller・凍結境界
 
@@ -32,6 +33,8 @@ CodeGraphのroot sourceとworktree（indexなし）の同一sourceを確認。�
 
 - before: `npx pnpm@10.16.1 --dir apps/desktop test src/components/extended/metaverse/useMetaverseRoomSession.test.tsx src/components/extended/metaverse/DomeTransitionCommitRecovery.test.ts` →2 files/14 tests PASS。
 - 追加後同command: 2 files/20 tests PASS（4.83秒）。fake timer/deferred responseで非同期の観測点を固定する。製品private helperをmockせずAPIとstateを観測。
+- 初回独立監査`0ef7bee7`はINV-4のjoin/leave入口の観測不足とid対応の不足でFAIL。4caseを追加し、abort ticket/transition idとprepareの一致、cleanup idとprepareの一致を明示。最終targetedは2 files/24 tests PASS（4.00秒）。製品/既存assertionは不変。
+- local desktop-ui-checkは初回headの20 testsを含む151 files/1192 tests、Storybook、browser64、Windows visual smoke14でPASS。deltaの新4caseはtargetedと最終headのCI full suiteで検証し、初回結果を最終head全体の再実行とは扱わない。
 - 初回のpresence_leave検査はAPI引数のtopic位置を取り違えて失敗したため、実際の5引数契約（topic/room/peer/sequence/event）に訂正。publish mockの戻り値も既存mock実装を使い、型契約を維持する。
 - 必須 `cargo xtask desktop-ui-check` は対象worktreeで実行。最終結果/CI/独立監査headはPR/Issueへ保存。Windowsのvisualはsmoke、Linuxのpixel比較はCIで確認する。
 - test-onlyのためOS/WebView動作を変更していない。#924の製品抽出時に必要な実機確認を本結果で代替しない。

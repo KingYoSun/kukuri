@@ -241,7 +241,10 @@ describe('Dome transition boundaries (#923)', () => {
     expect(f.abort).not.toHaveBeenCalled();
     await act(async () => deliver());
     expect(f.abort).toHaveBeenCalledTimes(1);
+    expect(f.abort).toHaveBeenCalledWith(await f.prepare.mock.results[0].value);
     expect(f.sourceInputs('abort_transition')).toHaveLength(2);
+    expect(f.sourceInputs('abort_transition').every(call => call[3].type === 'abort_transition'
+      && call[3].transition_id === f.prepare.mock.calls[0][0].transition_id)).toBe(true);
     expect(f.commit).not.toHaveBeenCalled();
     expect(f.sourceInputs('complete_transition')).toHaveLength(0);
     expect(f.session.result.current.selectedRoomId).toBe('source');
@@ -285,11 +288,58 @@ describe('Dome transition boundaries (#923)', () => {
     await f.flush();
     expect(f.commit).toHaveBeenCalledTimes(1);
     expect(f.abort).toHaveBeenCalledTimes(1);
+    expect(f.abort).toHaveBeenCalledWith(await f.prepare.mock.results[0].value);
     expect(f.sourceInputs('abort_transition')).toHaveLength(1);
+    expect(f.sourceInputs('abort_transition')[0][3]).toEqual({ type: 'abort_transition', transition_id: f.prepare.mock.calls[0][0].transition_id });
     expect(f.sourceInputs('complete_transition')).toHaveLength(0);
     expect(f.session.result.current.selectedRoomId).toBe('source');
     expect(f.lastVisited()).toBe('source');
     expect(f.session.onError).toHaveBeenCalledWith(expect.any(String));
+    f.session.unmount();
+  });
+
+  test.each([
+    ['join', false], ['leave', false], ['join', true], ['leave', true],
+  ] as const)('%s keeps its own effects and respects the attempt guard (committing: %s)', async (action, committing) => {
+    const f = await setupTransition();
+    await f.entered();
+    let confirm!: () => void;
+    if (committing) {
+      f.commit.mockImplementationOnce(() => new Promise(resolve => { confirm = resolve; }));
+      f.move(-2870);
+      await f.flush();
+      expect(f.commit).toHaveBeenCalledTimes(1);
+    }
+    if (action === 'join') {
+      await act(async () => { expect(await f.session.result.current.joinRoom('target')).toBe(true); });
+    } else {
+      act(() => f.session.result.current.leaveRoom());
+    }
+    await f.flush();
+    expect(f.abort).toHaveBeenCalledTimes(committing ? 0 : 1);
+    const aborted = f.sourceInputs('abort_transition');
+    expect(aborted).toHaveLength(committing ? 0 : 1);
+    if (!committing) {
+      expect(f.abort).toHaveBeenCalledWith(await f.prepare.mock.results[0].value);
+      expect(aborted[0][3]).toEqual({ type: 'abort_transition', transition_id: f.prepare.mock.calls[0][0].transition_id });
+      expect(f.commit).not.toHaveBeenCalled();
+    }
+    expect(f.sourceInputs('complete_transition')).toHaveLength(0);
+    expect(f.session.result.current.selectedRoomId).toBe(action === 'join' ? 'target' : null);
+    expect(f.session.result.current.admissionStatus).toBe(action === 'join' ? 'joined' : 'selection');
+    expect(f.lastVisited()).toBe(action === 'join' ? 'target' : 'source');
+    if (action === 'join') {
+      expect(f.submit.mock.calls.some(call => call[1] === 'target' && call[3].type === 'join')).toBe(true);
+    } else {
+      expect(f.sourceInputs('leave')).toHaveLength(1);
+      expect(f.publish.mock.calls.filter(call => call[1] === 'source' && call[4].type === 'presence_leave')).toHaveLength(1);
+      expect(f.session.result.current.admittedRoom).toBeNull();
+    }
+    if (committing) {
+      await act(async () => confirm());
+      expect(f.abort).not.toHaveBeenCalled();
+      expect(f.sourceInputs('abort_transition')).toHaveLength(0);
+    }
     f.session.unmount();
   });
 
@@ -320,6 +370,8 @@ describe('Dome transition boundaries (#923)', () => {
     expect(f.abort).not.toHaveBeenCalled();
     expect(f.sourceInputs('abort_transition')).toHaveLength(0);
     const complete = f.sourceInputs('complete_transition');
+    expect(complete.every(call => call[3].type === 'complete_transition'
+      && call[3].transition_id === f.prepare.mock.calls[0][0].transition_id)).toBe(true);
     expect(new Set(complete.map(call => call[3].type === 'complete_transition' ? call[3].transition_id : null)).size).toBe(1);
     expect(new Set(complete.map(call => call[2])).size).toBe(complete.length);
     expect(f.publish.mock.calls.filter(call => call[1] === 'source' && call[4].type === 'presence_leave')).toHaveLength(allFail ? 0 : 1);
