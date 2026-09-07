@@ -58,14 +58,14 @@ impl ObservedBlobs {
     pub fn respond(&self, hash: &BlobHash, reply: Reply) {
         self.replies
             .lock()
-            .unwrap()
+            .expect("source contract fixture mutex poisoned")
             .insert(hash.as_str().into(), reply);
     }
     fn read(&self, hash: &BlobHash) -> Result<Option<Vec<u8>>> {
         match self
             .replies
             .lock()
-            .unwrap()
+            .expect("source contract fixture mutex poisoned")
             .get(hash.as_str())
             .cloned()
             .unwrap_or(Reply::Missing)
@@ -79,7 +79,10 @@ impl ObservedBlobs {
 #[async_trait]
 impl BlobService for ObservedBlobs {
     async fn put_blob(&self, data: Vec<u8>, mime: &str) -> Result<StoredBlob> {
-        self.trace.lock().unwrap().puts += 1;
+        self.trace
+            .lock()
+            .expect("source contract fixture mutex poisoned")
+            .puts += 1;
         let hash = blob_hash(&data);
         let bytes = data.len() as u64;
         self.respond(&hash, Reply::Bytes(data));
@@ -90,19 +93,25 @@ impl BlobService for ObservedBlobs {
         })
     }
     async fn fetch_blob(&self, hash: &BlobHash) -> Result<Option<Vec<u8>>> {
-        self.trace.lock().unwrap().durable += 1;
+        self.trace
+            .lock()
+            .expect("source contract fixture mutex poisoned")
+            .durable += 1;
         self.read(hash)
     }
     async fn fetch_blob_ephemeral(&self, hash: &BlobHash) -> Result<Option<Vec<u8>>> {
         self.trace
             .lock()
-            .unwrap()
+            .expect("source contract fixture mutex poisoned")
             .ephemeral
             .push(hash.as_str().into());
         self.read(hash)
     }
     async fn pin_blob(&self, _hash: &BlobHash) -> Result<()> {
-        self.trace.lock().unwrap().pins += 1;
+        self.trace
+            .lock()
+            .expect("source contract fixture mutex poisoned")
+            .pins += 1;
         Ok(())
     }
     async fn blob_status(&self, _hash: &BlobHash) -> Result<BlobStatus> {
@@ -126,7 +135,11 @@ impl SafetyProvider for ObservedProvider {
         self.inner.capabilities()
     }
     async fn scan(&self, request: &ProviderScanRequest) -> Result<ProviderScanResult, ScanError> {
-        self.trace.lock().unwrap().scans.push(request.clone());
+        self.trace
+            .lock()
+            .expect("source contract fixture mutex poisoned")
+            .scans
+            .push(request.clone());
         self.inner.scan(request).await
     }
 }
@@ -140,17 +153,24 @@ impl IndexEntryStore for ObservedEntries {
     async fn upsert_entry(&self, entry: &NewIndexEntry) -> Result<()> {
         self.trace
             .lock()
-            .unwrap()
+            .expect("source contract fixture mutex poisoned")
             .entry_upserts
             .push(entry.object_id.clone());
         self.inner.upsert_entry(entry).await
     }
     async fn remove_entry(&self, kind: IndexScopeKind, scope: &str, id: &str) -> Result<()> {
-        self.trace.lock().unwrap().entry_removes.push(id.into());
+        self.trace
+            .lock()
+            .expect("source contract fixture mutex poisoned")
+            .entry_removes
+            .push(id.into());
         self.inner.remove_entry(kind, scope, id).await
     }
     async fn remove_scope(&self, kind: IndexScopeKind, scope: &str) -> Result<()> {
-        self.trace.lock().unwrap().scope_removes += 1;
+        self.trace
+            .lock()
+            .expect("source contract fixture mutex poisoned")
+            .scope_removes += 1;
         self.inner.remove_scope(kind, scope).await
     }
     async fn filter_surfaceable(
@@ -177,7 +197,7 @@ impl IndexProjection for ObservedProjection {
     async fn upsert_entry(&self, entry: &IndexedEntry) -> Result<()> {
         self.trace
             .lock()
-            .unwrap()
+            .expect("source contract fixture mutex poisoned")
             .projection_upserts
             .push(entry.object_id.clone());
         self.inner.upsert_entry(entry).await
@@ -189,13 +209,16 @@ impl IndexProjection for ObservedProjection {
         self.inner.count_scope(kind, scope).await
     }
     async fn remove_scope(&self, kind: IndexScopeKind, scope: &str) -> Result<()> {
-        self.trace.lock().unwrap().scope_removes += 1;
+        self.trace
+            .lock()
+            .expect("source contract fixture mutex poisoned")
+            .scope_removes += 1;
         self.inner.remove_scope(kind, scope).await
     }
     async fn remove_object(&self, kind: IndexScopeKind, scope: &str, id: &str) -> Result<()> {
         self.trace
             .lock()
-            .unwrap()
+            .expect("source contract fixture mutex poisoned")
             .projection_removes
             .push(id.into());
         self.inner.remove_object(kind, scope, id).await
@@ -264,10 +287,16 @@ impl Fixture {
         })
     }
     pub fn observed(&self) -> Observed {
-        self.trace.lock().unwrap().clone()
+        self.trace
+            .lock()
+            .expect("source contract fixture mutex poisoned")
+            .clone()
     }
     pub fn clear_io(&self) {
-        *self.trace.lock().unwrap() = Observed::default();
+        *self
+            .trace
+            .lock()
+            .expect("source contract fixture mutex poisoned") = Observed::default();
     }
     pub async fn ingest(&self) -> Result<IngestSummary> {
         // Reconstruct the pipeline to model a later pass/restart with the same durable inputs.

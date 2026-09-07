@@ -318,7 +318,7 @@ async fn duplicate_media_hashes_preserve_first_mime_including_a_thumbnail_withou
         .filter(|request| request.subject_kind == Some(SubjectKind::Blob))
         .map(|request| {
             (
-                request.subject_id.clone().unwrap(),
+                request.subject_id.clone().expect("media scan subject id"),
                 request.media_mime.clone(),
             )
         })
