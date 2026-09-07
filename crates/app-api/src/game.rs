@@ -59,6 +59,16 @@ impl AppService {
         let mut items = Vec::with_capacity(rows.len());
         for row in rows {
             let dome_hosting = if let Some(metaverse) = row.metaverse.as_ref() {
+                // Context rows and owner Presets arrive on different replicas. Keep
+                // the row for a later refresh, but do not expose an unverified Dome.
+                // Invalid references/signatures still propagate through `?`.
+                if self
+                    .fetch_dome_preset_manifest(&metaverse.preset_ref)
+                    .await?
+                    .is_none()
+                {
+                    continue;
+                }
                 Some(
                     self.get_dome_hosting(
                         metaverse.spatial_context.clone(),
