@@ -5,7 +5,6 @@
   "permissions": [
     "core:default",
     "deep-link:default",
-    "dialog:default",
-    "updater:default"
+    "dialog:default"
   ]
 }

@@ -123,14 +123,17 @@ mod package_tests {
     }
 
     #[test]
-    fn linux_bundle_config_enables_only_signed_appimage() {
+    fn linux_bundle_config_enables_signed_appimage_and_deb() {
         let config: serde_json::Value = serde_json::from_slice(
             &std::fs::read(root_dir().join("apps/desktop/src-tauri/tauri.linux.conf.json"))
                 .expect("Linux bundle config exists"),
         )
         .unwrap();
         assert_eq!(config["bundle"]["active"], true);
-        assert_eq!(config["bundle"]["targets"], "appimage");
+        assert_eq!(
+            config["bundle"]["targets"],
+            serde_json::json!(["appimage", "deb"])
+        );
         assert_eq!(config["bundle"]["createUpdaterArtifacts"], true);
         assert!(
             config["bundle"]["icon"]

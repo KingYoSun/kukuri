@@ -2,13 +2,23 @@
   "$schema": "https://schema.tauri.app/config/2",
   "bundle": {
     "active": true,
-    "targets": "appimage",
+    "targets": ["appimage", "deb"],
     "createUpdaterArtifacts": true,
     "icon": ["icons/icon.png"],
     "category": "SocialNetworking",
     "linux": {
       "appimage": {
         "bundleMediaFramework": false
+      },
+      "deb": {
+        "desktopTemplate": "linux/kukuri.desktop",
+        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0", "libayatana-appindicator3-1", "libssl3", "policykit-1"],
+        "section": "net",
+        "files": {
+          "/usr/share/doc/kukuri/copyright": "../../../LICENSE",
+          "/usr/share/doc/kukuri/THIRD_PARTY_NOTICES.md": "../../../docs/THIRD_PARTY_NOTICES.md",
+          "/usr/share/doc/kukuri/native-licenses/": "../../../scripts/release/native-licenses/"
+        }
       }
     }
   }

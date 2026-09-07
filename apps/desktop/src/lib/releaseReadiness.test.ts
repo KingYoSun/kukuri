@@ -61,6 +61,10 @@ describe('release readiness helpers', () => {
   });
 
   test('update errors are classified for user-facing guidance', () => {
+    expect(classifyUpdateError('deb_update_auth_cancelled')).toBe('debCancelled');
+    expect(classifyUpdateError('deb_update_auth_unavailable')).toBe('debAuthorization');
+    expect(classifyUpdateError('deb_update_install_failed')).toBe('debInstall');
+    expect(classifyUpdateError('deb_update_format_mismatch')).toBe('manifest');
     expect(classifyUpdateError('Could not fetch a valid release JSON from the remote')).toBe(
       'manifest'
     );

@@ -106,6 +106,9 @@ fn exclusion_allowed(tauri: &str, kind: &str) -> bool {
                 | "commands::os_notification::request_os_notification_permission"
                 | "commands::background_notifications::set_os_notification_settings"
                 | "desktop_lifecycle::restart_after_update"
+                | "app_update::check_app_update"
+                | "app_update::download_app_update"
+                | "app_update::install_app_update"
                 | "commands::external_url::open_external_url"
         ),
         "frontend_state" => matches!(
@@ -151,13 +154,13 @@ fn baseline_inventory_is_classified_once() {
     let manifest = manifest();
     assert_eq!(
         manifest.baseline,
-        "d2414e5a58ca14a8920f588164df8efad8e7ffba"
+        "c4616fc706b94150ac6c2ac06aec68bc1c2b0f5a"
     );
     assert_eq!(
         manifest.scope_revision,
-        "2026-09-04-issue-889-linux-appimage-v1"
+        "2026-09-07-linux-deb-release-addition-v2"
     );
-    assert_eq!(manifest.entries.len(), 139);
+    assert_eq!(manifest.entries.len(), 142);
     check_inventory(&registrations(TAURI_SOURCE), &manifest.entries).expect("全入口の分類");
 }
 

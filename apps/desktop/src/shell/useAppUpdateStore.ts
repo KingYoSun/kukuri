@@ -54,7 +54,7 @@ export const appUpdateStore = createStore<AppUpdateStore>((set, get) => ({
     try {
       const [{ getVersion }, updater] = await Promise.all([
         import('@tauri-apps/api/app'),
-        import('@tauri-apps/plugin-updater'),
+        import('@/lib/appUpdater'),
       ]);
       const currentVersion = isTauriRuntime() ? await getVersion() : packageJson.version;
       const update = isTauriRuntime() ? await updater.check() : null;

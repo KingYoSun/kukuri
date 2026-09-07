@@ -20,7 +20,7 @@
 ## Preview Surface
 
 - packaged distribution: Windows NSIS installer via GitHub Releases
-- 配布予定: Linux x86_64 AppImage、x86_64／aarch64 `kukuri-cli`をGitHub Preview Releaseで配布（#885）
+- 配布予定: Linux x86_64 AppImage／Deb、x86_64／aarch64 `kukuri-cli`をGitHub Preview Releaseで配布（#885、Deb追加は#905）
 - source実行による代替導線: Linux（#885完了までは現行導線として維持）
 - docs: root README, `docs/runbooks/mvp-user-quickstart.md`, `docs/runbooks/mvp-troubleshooting.md`
 - feedback home: GitHub を canonical とし、preview announcement 前に Discussions か同等の feedback surface を有効化する
@@ -41,6 +41,7 @@
 | Windows release workflow | landed | repo change | tag / manual dispatch で NSIS asset を Release に載せる |
 | Linux共通基盤／常駐プロセス／CLI通信規約 | implemented | repo change | #886〜#888完了。GUIと分離したprofile・単一所有・版管理protocol・1入力1実行を維持 |
 | Linux AppImage／リリース統合 | in progress | repo change | #889完了、#890で公開統合中。Ubuntu 22.04 buildと代表実機証跡を採用し、追加OS／XWayland全件検証は延期。公開物の全件整合とCLI arch smokeを確認する |
+| Linux Deb配布／署名付き更新 | in progress | repo change | #905、#890の公開前追加依存。同一buildのamd64 Deb、形式別manifest、単一OS認証・取消停止、手持ちUbuntu Desktopでの保持確認を追加。公開済みとはしない |
 | Seed content on hosted preview node | planned | launch op | project-owned author で preview topics を事前投入する |
 | GitHub feedback surface | planned | launch op | Discussions category か同等の GitHub feedback home を整備する |
 
@@ -64,7 +65,7 @@
 - [ ] hosted preview node 上で starter topic seed content を確認
 - [ ] GitHub feedback surface を preview copy から辿れるようにする
 - [ ] packaged Windows app で `launch -> ready -> post -> reply -> private channel` を手動確認
-- [ ] #885の全親AC／INVARを満たし、Linux AppImageとx86_64／aarch64 CLIをWindows成果物と同じPreview Releaseへ完全に公開
+- [ ] #885の全親AC／INVARと#905の追加条件を満たし、Linux AppImage／Debとx86_64／aarch64 CLIをWindows成果物と同じPreview Releaseへ完全に公開
 
 ## Assumptions
 

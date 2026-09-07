@@ -154,7 +154,7 @@ pub(crate) fn watch_hidden_tray(app: AppHandle) {
 }
 
 /// 排他待ち中に終了が始まる場合もあるため、各操作はlock取得後にも呼ぶ。
-pub(crate) fn require_running(app: &AppHandle) -> Result<(), CommandError> {
+pub(crate) fn require_running<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<(), CommandError> {
     app.state::<DesktopLifecycle>().ensure_running()
 }
 
@@ -185,6 +185,7 @@ pub(crate) fn request_exit(app: &AppHandle, action: ExitAction) {
 #[tauri::command]
 pub(crate) fn restart_after_update(app_handle: AppHandle) -> Result<(), CommandError> {
     require_running(&app_handle)?;
+    crate::app_update::require_installed(&app_handle).map_err(CommandError::from)?;
     request_exit(&app_handle, ExitAction::Restart);
     Ok(())
 }

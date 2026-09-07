@@ -78,6 +78,9 @@ mod tests {
             "restore_device_backup_command",
             "create_post",
             "restart_after_update",
+            "check_app_update",
+            "download_app_update",
+            "install_app_update",
         ] {
             assert!(!command_allowed_during_exit(command, true));
             assert!(command_allowed_during_exit(command, false));
@@ -123,6 +126,9 @@ mod tests {
             "acknowledge_pending_device_restore_frontend_state",
             "preview_device_backup_command",
             "list_accounts",
+            "check_app_update",
+            "download_app_update",
+            "install_app_update",
         ] {
             assert!(!command_allowed(command, &status), "{command}");
         }

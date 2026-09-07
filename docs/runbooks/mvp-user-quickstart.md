@@ -4,7 +4,7 @@
 
 - Builder Previewを試すデスクトップ利用者向け
 - 現在のパッケージ版はWindows向け
-- Linuxは対象ReleaseにAppImageがあれば利用可能。未掲載の場合はソース起動を使用する。CLIは[専用手順](linux-cli.md)を参照
+- Linuxは対象ReleaseにAppImage／Debがあれば利用可能。Debの導入・署名付き更新・削除は[Deb手順](linux-deb.md)を参照。未掲載の場合はソース起動を使用する。CLIは[専用手順](linux-cli.md)を参照
 
 ## 3分で試す
 

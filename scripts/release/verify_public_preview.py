@@ -30,6 +30,8 @@ def verify(root, tag, repository, source, fetch=download_hash):
             names.add(f"kukuri-cli_{version}_{target.removeprefix('cli-linux-')}-unknown-linux-gnu.tar.gz")
         else:
             names.add(package["updater_file"])
+            if target == "linux-x86_64":
+                names.add(package["deb_updater_file"])
     for name in sorted(names):
         if fetch(base + name) != file_record(root, name)["sha256"]:
             raise ValueError(f"Published artifact mismatch: {name}")

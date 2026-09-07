@@ -15,10 +15,10 @@ class PublicTests(unittest.TestCase):
             root = pathlib.Path(work)
             packages = {
                 "windows-x86_64": {"updater_file": "windows.exe"},
-                "linux-x86_64": {"updater_file": "linux.AppImage"},
+                "linux-x86_64": {"updater_file": "linux.AppImage", "deb_updater_file": "linux.deb"},
                 "cli-linux-x86_64": {}, "cli-linux-aarch64": {},
             }
-            names = ["latest-preview.json", "SHA256SUMS.txt", "windows.exe", "linux.AppImage"]
+            names = ["latest-preview.json", "SHA256SUMS.txt", "windows.exe", "linux.AppImage", "linux.deb"]
             names += [f"kukuri-cli_0.1.8_{arch}-unknown-linux-gnu.tar.gz" for arch in ("x86_64", "aarch64")]
             for name in names:
                 (root / name).write_text(name)
@@ -32,9 +32,9 @@ class PublicTests(unittest.TestCase):
 
             with patch.object(public, "validate_output", return_value=[]):
                 result = public.verify(root, "v0.1.8-preview.2", "KingYoSun/kukuri", "a" * 40, fetch)
-                self.assertEqual(result["public_files"], 6)
-                self.assertEqual(len(calls), 7)
-                for broken in ("linux.AppImage", "windows.exe", names[-1]):
+                self.assertEqual(result["public_files"], 7)
+                self.assertEqual(len(calls), 8)
+                for broken in ("linux.AppImage", "linux.deb", "windows.exe", names[-1]):
                     with self.subTest(broken=broken), self.assertRaisesRegex(ValueError, "Published artifact mismatch"):
                         public.verify(root, "v0.1.8-preview.2", "KingYoSun/kukuri", "a" * 40,
                                       lambda url: "0" * 64 if url.endswith(broken) else fetch(url))

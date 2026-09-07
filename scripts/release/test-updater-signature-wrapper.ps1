@@ -15,8 +15,12 @@ try {
     $env:KUKURI_UPDATER_PUBLIC_KEY_FILE = 'original-value'
     $manifest = @{ version = '0.1.8'; platforms = @{} }
     $sums = @()
-    foreach ($target in 'windows-x86_64', 'linux-x86_64') {
-        $name = "$target.bundle"
+    foreach ($target in 'windows-x86_64', 'linux-x86_64', 'linux-x86_64-deb') {
+        $name = switch ($target) {
+            'linux-x86_64' { 'kukuri_0.1.8_amd64.AppImage' }
+            'linux-x86_64-deb' { 'kukuri_0.1.8_amd64.deb' }
+            default { "$target.bundle" }
+        }
         [IO.File]::WriteAllText((Join-Path $work $name), $target)
         $hash = (Get-FileHash (Join-Path $work $name)).Hash.ToLowerInvariant()
         $sums += "$hash  $name"
@@ -27,7 +31,7 @@ try {
         [IO.File]::WriteAllText((Join-Path $work 'latest-preview.json'), ($manifest | ConvertTo-Json -Depth 5), [Text.UTF8Encoding]::new($false))
     }
     function Run-Wrapper {
-        & (Join-Path $PSScriptRoot 'test-published-updater-signature.ps1') -Tag v0.1.8-preview.2 -InputDir $work -Platforms windows-x86_64,linux-x86_64 -VerifierExecutable Invoke-FixtureVerifier
+        & (Join-Path $PSScriptRoot 'test-published-updater-signature.ps1') -Tag v0.1.8-preview.2 -InputDir $work -Platforms windows-x86_64,linux-x86_64,linux-x86_64-deb -VerifierExecutable Invoke-FixtureVerifier
     }
     function Expect-Rejection([string]$message, [int]$expectedCalls) {
         $global:KukuriWrapperFixture.calls = 0
@@ -39,7 +43,13 @@ try {
     }
     Write-Fixture
     Run-Wrapper
-    if ($global:KukuriWrapperFixture.calls -ne 2 -or $env:KUKURI_UPDATER_PUBLIC_KEY_FILE -ne 'original-value') { throw 'Two-platform verification failed' }
+    if ($global:KukuriWrapperFixture.calls -ne 3 -or $env:KUKURI_UPDATER_PUBLIC_KEY_FILE -ne 'original-value') { throw 'Three-platform verification failed' }
+    $debUrl = $manifest.platforms.'linux-x86_64-deb'.url
+    $manifest.platforms.'linux-x86_64-deb'.url = $manifest.platforms.'linux-x86_64'.url
+    Write-Fixture
+    Expect-Rejection 'format/target mismatch' 2
+    $manifest.platforms.'linux-x86_64-deb'.url = $debUrl
+    Write-Fixture
     $global:KukuriWrapperFixture.passed = 0
     Expect-Rejection 'did not pass exactly one test' 1
     $global:KukuriWrapperFixture.passed = 1

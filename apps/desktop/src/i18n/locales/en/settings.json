@@ -398,6 +398,9 @@
         "manifest": "Could not fetch or read the update information. Check the release publication state and try again.",
         "signature": "The update signature verification failed. This update will not be installed.",
         "install": "The update failed to install. Restart the app and try again.",
+        "debCancelled": "Authorization was cancelled. No update was installed and the app was not restarted. Use Check when you want to try again.",
+        "debAuthorization": "System authorization is unavailable or was denied. No update was installed. Run kukuri as your normal desktop user and check the desktop authentication service.",
+        "debInstall": "The package update did not complete. The app was not restarted; the installed package may be partially changed. Check `dpkg-query -W kukuri` and follow the Deb recovery steps in the release guide before trying again.",
         "unknown": "The update failed. Try again later, and include a diagnostic report if it keeps failing."
       }
     },

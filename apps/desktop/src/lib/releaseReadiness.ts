@@ -21,7 +21,8 @@ export type UpdateStatus =
   | 'installing'
   | 'failed';
 
-export type UpdateErrorKind = 'network' | 'manifest' | 'signature' | 'install' | 'missing' | 'unknown';
+export type UpdateErrorKind = 'network' | 'manifest' | 'signature' | 'install' | 'missing' | 'unknown'
+  | 'debCancelled' | 'debAuthorization' | 'debInstall';
 
 export type UpdateState = {
   status: UpdateStatus;
@@ -86,6 +87,10 @@ export function classifyUpdateError(errorMessage?: string | null): UpdateErrorKi
     return 'unknown';
   }
   const normalized = errorMessage.toLowerCase();
+  if (normalized.includes('deb_update_auth_cancelled')) return 'debCancelled';
+  if (normalized.includes('deb_update_auth_unavailable') || normalized.includes('deb_update_root_forbidden')) return 'debAuthorization';
+  if (normalized.includes('deb_update_install_failed')) return 'debInstall';
+  if (normalized.includes('deb_update_format_mismatch') || normalized.includes('deb_update_package_mismatch')) return 'manifest';
 
   if (
     normalized.includes('release json') ||

@@ -9,7 +9,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 def workflow(name):
     # GitHub uses YAML 1.2; BaseLoader also preserves the literal `on` key.
-    return yaml.load((ROOT / ".github/workflows" / name).read_text(), Loader=yaml.BaseLoader)
+    return yaml.load((ROOT / ".github/workflows" / name).read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
 
 
 class WorkflowTests(unittest.TestCase):
@@ -43,7 +43,7 @@ class WorkflowTests(unittest.TestCase):
 
     def test_linux_pr_does_not_receive_distribution_secrets(self):
         steps = workflow("kukuri-linux-package.yml")["jobs"]["linux-appimage"]["steps"]
-        signing = next(step for step in steps if step.get("name") == "Build and verify AppImage")
+        signing = next(step for step in steps if step.get("name") == "Build and verify AppImage and Deb")
         for key in ("TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD", "TAURI_UPDATER_PUBLIC_KEY"):
             expression = signing["env"][key]
             self.assertIn("inputs.signing == 'distribution'", expression)

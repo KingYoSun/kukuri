@@ -8,7 +8,7 @@ const { invoke, updaterCheck, getVersion } = vi.hoisted(() => ({
 }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 vi.mock('@tauri-apps/api/app', () => ({ getVersion }));
-vi.mock('@tauri-apps/plugin-updater', () => ({ check: updaterCheck }));
+vi.mock('@/lib/appUpdater', () => ({ check: updaterCheck }));
 vi.mock('@/lib/releaseReadiness', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/releaseReadiness')>()),
   isTauriRuntime: () => true,

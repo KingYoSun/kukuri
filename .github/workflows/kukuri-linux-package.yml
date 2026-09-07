@@ -14,6 +14,7 @@ on:
       - 'scripts/release/release_assets.py'
       - 'scripts/release/native*'
       - 'scripts/release/test_native_compliance.py'
+      - 'scripts/release/*deb*'
   workflow_call:
     inputs:
       source_ref:
@@ -88,7 +89,8 @@ jobs:
           cargo test --locked -p xtask
           python3 scripts/release/test_appimage_runtime_inventory.py
           python3 scripts/release/test_native_compliance.py
-      - name: Build and verify AppImage
+          python3 scripts/release/test_deb_package.py
+      - name: Build and verify AppImage and Deb
         env:
           # PRでは本番secretを環境へ渡さない。
           TAURI_SIGNING_PRIVATE_KEY: ${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))) && inputs.signing == 'distribution' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
@@ -137,18 +139,29 @@ jobs:
             for (const name of [metadata.file, metadata.signature_file, "appimage-artifacts.json", "test-updater-key.pub", "signing-mode.txt", "source-commit.txt"]) {
               fs.copyFileSync(path.join(source, name), path.join(output, name));
             }
+            const debSource = path.join(source, "..", "deb");
+            const deb = JSON.parse(fs.readFileSync(path.join(debSource, "deb-artifacts.json"), "utf8"));
+            for (const name of [deb.file, deb.signature_file, "deb-artifacts.json"]) {
+              fs.copyFileSync(path.join(debSource, name), path.join(output, name));
+            }
           '
           python3 scripts/release/appimage_runtime_inventory.py \
             "$bundle/kukuri.AppDir" "$RUNNER_TEMP/kukuri-linux-package/runtime-evidence"
           output="$RUNNER_TEMP/kukuri-linux-package"
           version=$(python3 -c 'import json,os; print(json.load(open(os.environ["KUKURI_PACKAGE_BUNDLE_DIR"]+"/appimage-artifacts.json"))["version"])')
           filename=$(python3 -c 'import json,os; print(json.load(open(os.environ["KUKURI_PACKAGE_BUNDLE_DIR"]+"/appimage-artifacts.json"))["file"])')
+          deb="kukuri_${version}_amd64.deb"
+          payload="kukuri_${version}_deb-payload.json"
+          python3 scripts/release/deb_package.py "$output/$deb" --version "$version" \
+            --source "$(git rev-parse HEAD)" --output "$output/$payload"
+          bash scripts/release/deb-install-smoke.sh "$output/$deb" "$version"
           cp "$output/test-updater-key.pub" "$output/linux-x86_64-updater-key.pub"
           notices="kukuri_${version}_linux-native-notices.tar.gz"
           tar -czf "$output/$notices" -C "$output" runtime-evidence
           python3 scripts/release/release_assets.py package --directory "$output" --target linux-x86_64 \
             --version "$version" --source "$(git rev-parse HEAD)" --signing "$SIGNING_MODE" \
             --updater "$filename" --public-key-file linux-x86_64-updater-key.pub \
+            --deb-updater "$deb" --file "$deb" --file "$deb.sig" --file "$payload" \
             --file "$filename" --file "$filename.sig" --file linux-x86_64-updater-key.pub --file "$notices"
       - name: Collect corresponding native sources for distribution
         if: ${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))) && inputs.signing == 'distribution' }}
@@ -173,6 +186,10 @@ jobs:
           export KUKURI_UPDATER_BUNDLE="${bundles[0]}"
           export KUKURI_UPDATER_SIGNATURE="${bundles[0]}.sig"
           export KUKURI_UPDATER_PUBLIC_KEY_FILE="$bundle_dir/test-updater-key.pub"
+          debs=("$bundle_dir/../deb/"*.deb)
+          test "${#debs[@]}" -eq 1
+          export KUKURI_DEB_UPDATER_BUNDLE="${debs[0]}"
+          export KUKURI_DEB_UPDATER_SIGNATURE="${debs[0]}.sig"
           cargo test --locked --release --target x86_64-unknown-linux-gnu \
             --manifest-path apps/desktop/src-tauri/Cargo.toml --test updater_install -- --ignored
       - name: Keep verified artifacts (no Release publication)

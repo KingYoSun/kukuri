@@ -35,6 +35,22 @@ canonical sourceを変更しない。一方で、CLI profileの購読期待状�
 - 必須 contract: x86_64 AppImage、x86_64／aarch64 CLI archive、checksum、必要な署名、Windows成果物、platform manifestを同一sourceから完全に生成し、一部欠落時はmanifest／Releaseを公開しない。署名用secretを成果物、cache、log、untrusted eventへ渡さない
 - 必須 scenario: Ubuntu 22.04／Debian 12における配布済みAppImageの実環境smoke test、x86_64／aarch64 CLI smoke test、Windows回帰、不正なupdater署名、成果物欠落、取得失敗を含む検証環境での更新
 
+### Deb配布と権限承認付き更新（#905）
+
+- Feature 名: Linux amd64 Debと形式別自動更新（2026-09-07承認）
+- Durable / Transient: Deb・署名・manifest・収録物報告は公開Release単位のDurable。確認／取得sessionと検証済みbytes、昇格結果はprocess内のTransient
+- Canonical Source: 固定sourceの署名済みDeb、backendが確認した形式別manifest、実package状態はdpkg database。WebViewからURL・鍵・bytes・installer引数を指定させない
+- Replicated?: No。公開CDN copyはKukuri replicaではない
+- Rebuildable From: 公開資材は固定source／toolchainから再生成。更新sessionは再確認・再取得し、未完了の権限承認をrestart後に自動再実行しない
+- Public Replica / Private Replica / Local Only: 配布資材は公開、更新session／昇格処理はLocal Only
+- Gossip Hint 必要有無: 不要
+- Blob 必要有無: 不要
+- SQLite projection 必要有無: 不要。GUIのidentifier・profile・鍵・DBと保存形式は変更しない
+- 必須 contract: AppImageとDebを同sourceで併産し、`.deb.sig`を既存Tauri公開鍵で検証する。Debは`linux-x86_64-deb`だけを使用し、entry欠落時のAppImage fallbackを拒否する。未検証bytesはinstallしない。明示適用後のpolkit昇格は1回だけとし、取消・拒否・agent不在で別認証や自動retryへ進まない。OS passwordを独自UI・IPC・logへ扱わない。検証済みbytesは変更不能なsealed memfdでroot dpkgへ渡し、GUIをrootで起動しない。適用・状態照合成功後だけhostを停止し通常userとして再起動する
+- 必須 scenario: Ubuntu 22.04 CIのinstall／reinstall／remove、手持ちUbuntu 24.04.4 LTSの旧Deb→新版更新／非root再起動／同じprofile保持と認証取消。不正署名・別形式・package失敗は隔離fixtureで確認する。任意のdpkg部分失敗の自動rollbackは保証せず、失敗表示・実状態確認・手動回復を案内する
+
+DebにCLIは同梱しない。Deb payloadはfirst-party ELF、desktop／iconとnoticeだけとし、shared system librariesはDependsで解決する。実Debの全payload inventoryとsourceを結び付け、AppImage runtimeや同梱Ubuntu librariesの資料をDebの対応sourceの根拠としない。実装・検証中の状態は[#905作業記録](../progress/2026-09-07-issue-905-linux-deb-updater.md)、公開判定は#890が所有する。
+
 ### CLI専用profileと購読期待状態
 
 - Feature 名: CLI専用クライアントprofile

@@ -119,6 +119,7 @@ if ($IncludeLinux) {
 
 - Match source $SourceCommit, version, target, checksums and embedded signatures to the final assets.
 - Require the existing CI gates and x86_64/aarch64 CLI archive smoke; reuse matching #889 GUI/update evidence.
+- Require AppImage and amd64 Deb with separate updater entries; reuse matching #905 Ubuntu Desktop Deb update/cancellation evidence.
 - Include reviewed native notices and corresponding source delivery material before publishing.
 - Verify the stable public URLs after publication. Do not replace assets during verification.
 - Additional manual desktop checks are only for concrete gaps that automated evidence cannot resolve.
@@ -177,7 +178,7 @@ Use the in-app Release settings diagnostic report and attach it to the preview f
 if ($IncludeLinux) {
   $notes = Get-Content -LiteralPath $notesPath -Raw -Encoding UTF8
   $notes = $notes.Replace('This preview is distributed for Windows 10 and Windows 11 through GitHub Releases. Linux remains source-run only.',
-    'This preview includes Windows NSIS, Linux x86_64 AppImage, and Linux x86_64/aarch64 CLI archives.')
+    'This preview includes Windows NSIS, Linux x86_64 AppImage and amd64 Deb, and Linux x86_64/aarch64 CLI archives.')
   $notes = $notes.Replace('- macOS and Linux binary packages are not included.',
     '- macOS and aarch64 GUI packages are not included. Additional Linux desktop/device environments are unverified.')
   $notes = $notes.Replace('- Manual smoke checklist.', '- Release verification checklist and native notice/source material.')

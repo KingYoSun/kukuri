@@ -4,7 +4,7 @@ param(
     [string]$Tag,
     [ValidatePattern('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')]
     [string]$Repository = 'KingYoSun/kukuri',
-    [ValidateSet('windows-x86_64', 'linux-x86_64')]
+    [ValidateSet('windows-x86_64', 'linux-x86_64', 'linux-x86_64-deb')]
     [string[]]$Platforms = @('windows-x86_64'),
     [string]$InputDir,
     [string]$PublicKeyFile,
@@ -51,6 +51,12 @@ try {
             throw 'Updater asset URL must belong to the selected release'
         }
         $bundlePath = Join-Path $workDir "$target.bundle"
+        $expectedLinux = switch ($target) {
+            'linux-x86_64' { "kukuri_$($manifest.version)_amd64.AppImage" }
+            'linux-x86_64-deb' { "kukuri_$($manifest.version)_amd64.deb" }
+            default { $null }
+        }
+        if ($expectedLinux -and $name -cne $expectedLinux) { throw 'Updater bundle format/target mismatch' }
         $signaturePath = Join-Path $workDir "$target.sig"
         if ($InputDir) {
             $local = Join-Path $InputDir $name

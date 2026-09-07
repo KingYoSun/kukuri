@@ -16,7 +16,7 @@ kukuri は、興味のある話題から人やコミュニティにつながる�
 | 環境 | 現在の対応状況 |
 | --- | --- |
 | Windows 10 / 11 | 最新の GitHub Release から NSIS インストーラーを配布 |
-| Linux | AppImage（x86_64）／CLI（x86_64・aarch64）は対象Releaseの成果物一覧を確認。未公開の場合はソースから起動 |
+| Linux | AppImage／Deb（x86_64）、CLI（x86_64・aarch64）は対象Releaseの成果物一覧を確認。未公開の場合はソースから起動 |
 | macOS | 現在パッケージは未提供 |
 
 プレビューのインストーラーは未署名の場合があります。その場合は Windows SmartScreen の警告が表示されることがあるため、実行前にリリースノートを確認してください。
@@ -34,7 +34,7 @@ kukuri は、興味のある話題から人やコミュニティにつながる�
 
 ## 3 分で試す
 
-1. Windowsプレビュー、公開済みの[Linux AppImage](docs/runbooks/linux-appimage-smoke.md)、または[ソース実行](#開発クイックスタート)で起動します。CLI専用profileは[Linux CLI手順](docs/runbooks/linux-cli.md)を参照してください。
+1. Windowsプレビュー、公開済みの[Linux AppImage](docs/runbooks/linux-appimage-smoke.md)／[Deb](docs/runbooks/linux-deb.md)、または[ソース実行](#開発クイックスタート)で起動します。CLI専用profileは[Linux CLI手順](docs/runbooks/linux-cli.md)を参照してください。
 2. あらかじめ設定された Community Node が `ready` になるまで数秒待ち、最初から用意されたトピックを開きます。
 3. 公開投稿を 1 件作成し、既存の投稿へ返信します。
 4. 同じトピックの中で非公開チャンネルを作成するか、既存のチャンネルへ参加します。
@@ -44,7 +44,7 @@ kukuri は、興味のある話題から人やコミュニティにつながる�
 
 ## プレビューの状態と制限
 
-- 配布対象はWindows NSIS、Linux x86_64 AppImage、Linux x86_64／aarch64 CLIです。実際の提供状況は公開Releaseの成果物一覧を正とし、生成成功だけを公開済みと扱いません。macOSはパッケージ未提供です。
+- 配布対象はWindows NSIS、Linux x86_64 AppImage／Deb、Linux x86_64／aarch64 CLIです。実際の提供状況は公開Releaseの成果物一覧を正とし、生成成功だけを公開済みと扱いません。Debの更新は明示適用とOS権限承認が必要で、取消後に別認証を自動要求しません。macOSはパッケージ未提供です。
 - DM の確認には、別のテスト用ピアと相互関係が必要です。P2P の動作は、2 台の端末またはデータ領域を分けた 2 つのアプリで確認しやすくなります。
 - Live、Metaverse、ゲームルームの画面は現在も発展途上です。一部の拡張機能は開発者モードの段階にあり、Stream にはまだメディアプレーヤーがありません。
 - プレビュー版の更新では、アカウントを識別する鍵、プロフィール、フォロー関係、自分の投稿、端末内データベース、Irohのデータ、コミュニティノードの設定、非公開チャンネルの権限情報、通知一覧を保持する前提です。端末内の状態を残したい場合は、アンインストールやリセットの前にアプリのデータディレクトリを保管してください。

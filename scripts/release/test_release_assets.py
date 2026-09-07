@@ -15,6 +15,17 @@ TAG = "v0.1.8-preview.2"
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_linux_appimage_without_deb_is_not_a_complete_release(self):
+        with tempfile.TemporaryDirectory() as work:
+            root = pathlib.Path(work)
+            self.fixture(root)
+            metadata = root / "linux-x86_64" / "release-package.json"
+            value = json.loads(metadata.read_text())
+            del value["deb_updater_file"]
+            metadata.write_text(json.dumps(value))
+            with self.assertRaisesRegex(ValueError, "Deb"):
+                release.assembly_plan(root, TAG, "KingYoSun/kukuri", VERSION, SOURCE)
+
     def test_untrusted_or_injected_release_input_has_no_output(self):
         import subprocess
         import sys
@@ -41,6 +52,7 @@ class ReleaseTests(unittest.TestCase):
             (directory / filename).write_bytes(b"fixture")
             files = [filename]
             updater = None if target.startswith("cli-") else filename
+            deb = None
             key = None
             if updater:
                 key = f"{target}-updater-key.pub"
@@ -48,6 +60,19 @@ class ReleaseTests(unittest.TestCase):
                 (directory / f"{filename}.sig").write_text("signature")
                 files += [key, f"{filename}.sig"]
             if target == "linux-x86_64":
+                deb = f"kukuri_{VERSION}_amd64.deb"
+                (directory / deb).write_bytes(b"deb fixture")
+                (directory / f"{deb}.sig").write_text("deb-signature")
+                payload_name = f"kukuri_{VERSION}_deb-payload.json"
+                (directory / payload_name).write_text(json.dumps({
+                    "deb_sha256": release.file_record(directory, deb)["sha256"],
+                    "source_commit": SOURCE, "package": "kukuri", "version": VERSION,
+                    "architecture": "amd64", "maintainer_scripts": [],
+                    "elf_paths": ["usr/bin/kukuri-desktop-tauri"],
+                    "payload": [{"path": path} for path in ["usr/bin/kukuri-desktop-tauri",
+                        "usr/share/doc/kukuri/copyright", "usr/share/doc/kukuri/THIRD_PARTY_NOTICES.md"]],
+                }))
+                files += [deb, f"{deb}.sig", payload_name]
                 spec = json.loads(pathlib.Path(__file__).with_name("native-runtime-sources.json").read_text())
                 material = []
                 for kind in ("sources", "notices"):
@@ -62,18 +87,55 @@ class ReleaseTests(unittest.TestCase):
                     "runtime_source": spec["runtime"]["source_commit"],
                     "runtime_normalized_sha256": spec["runtime"]["normalized_prefix_sha256"],
                     "appimage_sha256": release.file_record(directory, filename)["sha256"], "material": material,
+                    "deb_sha256": release.file_record(directory, deb)["sha256"],
+                    "deb_payload_sha256": release.file_record(directory, payload_name)["sha256"],
+                    "deb_native_scope": "first-party-elf-system-shared-libraries",
                 }))
                 files.append(name)
-            release.write_package(directory, target, VERSION, SOURCE, files, updater, key, "distribution")
+            release.write_package(directory, target, VERSION, SOURCE, files, updater, key, "distribution", deb)
 
-    def test_complete_set_has_two_platforms_and_pinned_source(self):
+    def test_complete_set_has_three_platforms_and_pinned_source(self):
         with tempfile.TemporaryDirectory() as work:
             root = pathlib.Path(work)
             self.fixture(root)
             plan = release.assembly_plan(root, TAG, "KingYoSun/kukuri", VERSION, SOURCE)
-            self.assertEqual(set(plan["platforms"]), {"windows-x86_64", "linux-x86_64"})
+            self.assertEqual(set(plan["platforms"]), {"windows-x86_64", "linux-x86_64", "linux-x86_64-deb"})
             self.assertEqual(plan["source_commit"], SOURCE)
             self.assertEqual(plan["platforms"]["linux-x86_64"]["signature"], "signature")
+            self.assertEqual(plan["platforms"]["linux-x86_64-deb"]["signature"], "deb-signature")
+
+    def test_deb_missing_tampered_mixed_or_uncovered_is_rejected(self):
+        for defect in ("missing", "signature", "tampered", "arch", "version", "source", "notice", "coverage", "format"):
+            with self.subTest(defect=defect), tempfile.TemporaryDirectory() as work:
+                root = pathlib.Path(work)
+                self.fixture(root)
+                directory = root / "linux-x86_64"
+                metadata = directory / "release-package.json"
+                value = json.loads(metadata.read_text())
+                deb = directory / value["deb_updater_file"]
+                payload = directory / f"kukuri_{VERSION}_deb-payload.json"
+                report = json.loads(payload.read_text())
+                if defect == "missing": deb.unlink()
+                elif defect == "signature": (directory / (deb.name + ".sig")).unlink()
+                elif defect == "tampered": deb.write_bytes(b"changed")
+                elif defect == "arch": report["architecture"] = "arm64"
+                elif defect == "version": report["version"] = "0.2.0"
+                elif defect == "source": report["source_commit"] = "b" * 40
+                elif defect == "notice": report["payload"] = []
+                elif defect == "coverage": report["deb_sha256"] = "0" * 64
+                elif defect == "format":
+                    value["deb_updater_file"] = value["updater_file"]
+                    metadata.write_text(json.dumps(value))
+                if defect in {"arch", "version", "source", "notice", "coverage"}:
+                    payload.write_text(json.dumps(report))
+                    compliance = directory / f"kukuri_{VERSION}_linux-native-compliance.json"
+                    native = json.loads(compliance.read_text())
+                    native["deb_payload_sha256"] = release.file_record(directory, payload.name)["sha256"]
+                    compliance.write_text(json.dumps(native))
+                    value["files"] = [release.file_record(directory, row["name"]) for row in value["files"]]
+                    metadata.write_text(json.dumps(value))
+                with self.assertRaises(ValueError):
+                    release.assembly_plan(root, TAG, "KingYoSun/kukuri", VERSION, SOURCE)
 
     def test_missing_tampered_foreign_source_or_test_key_is_rejected_before_output(self):
         for defect in ("missing", "tampered", "foreign", "test-key", "key-mismatch", "duplicate", "missing-source"):
