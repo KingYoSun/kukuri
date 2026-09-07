@@ -5,7 +5,7 @@ const { updaterCheck, invoke } = vi.hoisted(() => ({
   updaterCheck: vi.fn(),
   invoke: vi.fn(async () => undefined),
 }));
-vi.mock('@tauri-apps/plugin-updater', () => ({ check: updaterCheck }));
+vi.mock('@/lib/appUpdater', () => ({ check: updaterCheck }));
 vi.mock('@tauri-apps/api/app', () => ({ getVersion: async () => '0.1.8' }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => {} }));

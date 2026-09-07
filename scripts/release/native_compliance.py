@@ -12,6 +12,7 @@ import tempfile
 import urllib.request
 
 from release_assets import file_record, write_package
+from deb_package import inspect as inspect_deb
 
 SPEC_FILE = pathlib.Path(__file__).with_name("native-runtime-sources.json")
 
@@ -138,6 +139,16 @@ def collect(package_dir, appdir):
     if hashlib.sha256((appdir / "AppRun.wrapped").read_bytes()).hexdigest() != "f30140a43a0a59e46db21bdefdf749b9e9f2c6946e92afabbacf98b8ae73fb4f":
         raise ValueError("Unreviewed AppRun binary")
     evidence = package_dir / "runtime-evidence"
+    deb = package_dir / metadata["deb_updater_file"]
+    deb_payload_name = f"kukuri_{metadata['version']}_deb-payload.json"
+    deb_payload = inspect_deb(deb, metadata["version"])
+    deb_payload["source_commit"] = metadata["source_commit"]
+    if json.loads((package_dir / deb_payload_name).read_text()) != deb_payload:
+        raise ValueError("Deb payload differs from the build inventory")
+    # Deb contains only the first-party Rust ELF, desktop/icon and notices. Its
+    # dynamically linked OS libraries are resolved by Depends, not redistributed.
+    # The AppImage runtime and Ubuntu source inventory do not claim to cover Deb.
+    shutil.copyfile(package_dir / deb_payload_name, evidence / "deb-payload.json")
     inventory = json.loads((evidence / "runtime-inventory.json").read_text())
     if inventory["missing_copyright"]:
         raise ValueError("Native copyright material is incomplete")
@@ -181,11 +192,14 @@ def collect(package_dir, appdir):
         "runtime_normalized_sha256": runtime, "runtime_source": spec["runtime"]["source_commit"],
         "ubuntu_source_count": len(ubuntu), "static_source_count": len(spec["sources"]),
         "material": [file_record(package_dir, source_archive.name), file_record(package_dir, notices_archive.name)],
+        "deb_sha256": file_record(package_dir, deb.name)["sha256"],
+        "deb_payload_sha256": file_record(package_dir, deb_payload_name)["sha256"],
+        "deb_native_scope": "first-party-elf-system-shared-libraries",
     }
     compliance_file.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     files = sorted({row["name"] for row in metadata["files"]} | {source_archive.name, notices_archive.name, compliance_file.name})
     write_package(package_dir, metadata["target"], version, metadata["source_commit"], files,
-                  metadata["updater_file"], metadata["public_key_file"], metadata["signing_mode"])
+                  metadata["updater_file"], metadata["public_key_file"], metadata["signing_mode"], metadata["deb_updater_file"])
     print(json.dumps({"ubuntu_source_count": len(ubuntu), "static_source_count": len(spec["sources"]), "complete": True}))
 
 

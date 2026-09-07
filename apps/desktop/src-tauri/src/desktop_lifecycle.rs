@@ -185,6 +185,7 @@ pub(crate) fn request_exit(app: &AppHandle, action: ExitAction) {
 #[tauri::command]
 pub(crate) fn restart_after_update(app_handle: AppHandle) -> Result<(), CommandError> {
     require_running(&app_handle)?;
+    crate::app_update::require_installed(&app_handle).map_err(CommandError::from)?;
     request_exit(&app_handle, ExitAction::Restart);
     Ok(())
 }

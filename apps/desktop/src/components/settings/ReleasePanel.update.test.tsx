@@ -38,6 +38,22 @@ function renderPanel() {
   );
 }
 
+test.each(['en', 'ja', 'zh-CN'])('Deb cancellation and partial failure have distinct recovery guidance in %s', async (locale) => {
+  await i18n.changeLanguage(locale);
+  for (const [code, key] of [
+    ['deb_update_auth_cancelled', 'debCancelled'],
+    ['deb_update_auth_unavailable', 'debAuthorization'],
+    ['deb_update_install_failed', 'debInstall'],
+  ]) {
+    appUpdateStore.setState({ updateState: { ...INITIAL_UPDATE_STATE, status: 'failed', lastError: code } });
+    const view = renderPanel();
+    expect(screen.getByText(i18n.t(`settings:release.update.errors.${key}`))).toBeInTheDocument();
+    expect(restart).not.toHaveBeenCalled();
+    expect(download).not.toHaveBeenCalled();
+    view.unmount();
+  }
+});
+
 test('a verified update keeps its apply action after deferring and reopening the panel', () => {
   appUpdateStore.setState({
     updateState: { ...INITIAL_UPDATE_STATE, status: 'ready_to_restart', availableVersion: '0.1.9' },

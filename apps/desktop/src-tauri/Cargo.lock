@@ -3972,6 +3972,7 @@ dependencies = [
  "minisign-verify",
  "notify-rust",
  "open",
+ "rustix",
  "serde",
  "serde_json",
  "tauri",

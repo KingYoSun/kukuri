@@ -504,7 +504,7 @@ jobs:
         run: |
           if ((Get-Content -Raw dist/updater-verifier/source-commit.txt).Trim() -ne $env:RELEASE_SOURCE) { throw 'Verifier source mismatch' }
           ./scripts/release/test-published-updater-signature.ps1 -Tag $env:RELEASE_TAG `
-            -Repository $env:GITHUB_REPOSITORY -Platforms 'windows-x86_64','linux-x86_64' `
+            -Repository $env:GITHUB_REPOSITORY -Platforms 'windows-x86_64','linux-x86_64','linux-x86_64-deb' `
             -InputDir dist/release-assets -PublicKeyFile dist/release-assets/windows-x86_64-updater-key.pub `
             -VerifierExecutable (Resolve-Path dist/updater-verifier/updater-verifier.exe).Path
 

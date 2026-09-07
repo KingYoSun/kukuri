@@ -1,4 +1,7 @@
+mod app_update;
 mod commands;
+#[cfg(target_os = "linux")]
+mod deb_update;
 mod desktop_lifecycle;
 mod invoke_gate;
 mod restore_lifecycle;
@@ -206,6 +209,7 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            app.manage(app_update::AppUpdateState::default());
             app.manage(desktop_lifecycle::DesktopLifecycle::default());
             // runtimeが無い同意待ちでもrestore activation/account switchと同じlockを使う。
             app.manage(DesktopOperationState::default());
@@ -327,6 +331,9 @@ pub fn run() {
             tauri::generate_handler![
             commands::startup::get_desktop_startup_status,
             desktop_lifecycle::restart_after_update,
+            app_update::check_app_update,
+            app_update::download_app_update,
+            app_update::install_app_update,
             commands::external_url::open_external_url,
             commands::app_consent::get_app_consent_status,
             commands::app_consent::accept_app_consents,

@@ -41,16 +41,33 @@ pub(crate) fn verify_package() -> Result<()> {
             }
         })
         .unwrap_or_else(|| tauri_dir.join("target"));
-    let bundle_dir = target_dir.join("x86_64-unknown-linux-gnu/release/bundle/appimage");
-    let artifacts = inspect_package(&bundle_dir, name, version, pubkey)?;
-    std::fs::write(
-        bundle_dir.join("appimage-artifacts.json"),
-        serde_json::to_vec_pretty(&artifacts)?,
-    )?;
-    println!(
-        "[xtask] verified Linux AppImage and updater signature: {}",
-        artifacts.file
-    );
+    let bundle_root = target_dir.join("x86_64-unknown-linux-gnu/release/bundle");
+    for format in ["appimage", "deb"] {
+        let bundle_dir = bundle_root.join(format);
+        let artifacts = if format == "appimage" {
+            inspect_package(&bundle_dir, name, version, pubkey)?
+        } else {
+            inspect_signed_bundle(&bundle_dir, name, version, pubkey, "deb", b"!<arch>\n")?
+        };
+        if format == "deb" {
+            let status = std::process::Command::new("python3")
+                .arg(crate::root_dir().join("scripts/release/deb_package.py"))
+                .arg(bundle_dir.join(&artifacts.file))
+                .args(["--version", version])
+                .status()?;
+            if !status.success() {
+                bail!("Deb payload verification failed");
+            }
+        }
+        std::fs::write(
+            bundle_dir.join(format!("{format}-artifacts.json")),
+            serde_json::to_vec_pretty(&artifacts)?,
+        )?;
+        println!(
+            "[xtask] verified Linux package and updater signature: {}",
+            artifacts.file
+        );
+    }
     Ok(())
 }
 
@@ -62,22 +79,37 @@ fn decode_text(value: &str) -> Result<String> {
 }
 
 fn inspect_package(dir: &Path, name: &str, version: &str, key: &str) -> Result<AppImageArtifacts> {
-    let file = format!("{name}_{version}_amd64.AppImage");
+    inspect_signed_bundle(dir, name, version, key, "AppImage", b"\x7fELF")
+}
+
+fn inspect_signed_bundle(
+    dir: &Path,
+    name: &str,
+    version: &str,
+    key: &str,
+    extension: &str,
+    magic: &[u8],
+) -> Result<AppImageArtifacts> {
+    let file = format!("{name}_{version}_amd64.{extension}");
     if Path::new(&file).file_name().and_then(|part| part.to_str()) != Some(file.as_str()) {
         bail!("package name/version must not contain path components");
     }
     let signature_file = format!("{file}.sig");
-    let bundle = std::fs::read(dir.join(&file)).context("missing AppImage")?;
+    let bundle = std::fs::read(dir.join(&file)).context("missing Linux package")?;
     // ELF magicだけで実行可能性を断定しない。実起動はpackaged smokeが所有する。
-    if !bundle.starts_with(b"\x7fELF") {
-        bail!("AppImage is empty or is not an ELF executable");
+    if !bundle.starts_with(magic) {
+        bail!("Linux package is empty or has the wrong format");
     }
     let signature = std::fs::read_to_string(dir.join(&signature_file))
-        .context("missing AppImage updater signature")?;
+        .context("missing Linux package updater signature")?;
     verify_signature(&bundle, key, &signature)?;
     Ok(AppImageArtifacts {
         version: version.to_owned(),
-        target: "linux-x86_64",
+        target: if extension == "deb" {
+            "linux-x86_64-deb"
+        } else {
+            "linux-x86_64"
+        },
         file,
         sha256: hex::encode(Sha256::digest(&bundle)),
         signature_file,
@@ -91,7 +123,7 @@ fn verify_signature(bundle: &[u8], key: &str, signature: &str) -> Result<()> {
         Signature::decode(&decode_text(signature)?).context("invalid updater signature")?;
     public_key
         .verify(bundle, &signature, true)
-        .context("AppImage updater signature does not match configured public key")?;
+        .context("Linux package updater signature does not match configured public key")?;
     Ok(())
 }
 

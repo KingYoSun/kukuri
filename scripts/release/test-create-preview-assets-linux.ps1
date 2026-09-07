@@ -27,6 +27,16 @@ try {
       $arguments += @('--updater', $name, '--public-key-file', $key, '--signing', 'distribution', '--file', "$name.sig", '--file', $key)
     }
     if ($target -eq 'linux-x86_64') {
+      $debName = "kukuri_${version}_amd64.deb"
+      $payloadName = "kukuri_${version}_deb-payload.json"
+      [IO.File]::WriteAllText((Join-Path $directory $debName), 'deb fixture', $utf8)
+      [IO.File]::WriteAllText((Join-Path $directory "$debName.sig"), 'deb-signature', $utf8)
+      $debHash = (Get-FileHash -LiteralPath (Join-Path $directory $debName)).Hash.ToLowerInvariant()
+      $payload = @{ deb_sha256 = $debHash; source_commit = $source; package = 'kukuri'; version = $version;
+        architecture = 'amd64'; maintainer_scripts = @(); elf_paths = @('usr/bin/kukuri-desktop-tauri');
+        payload = @('usr/bin/kukuri-desktop-tauri', 'usr/share/doc/kukuri/copyright', 'usr/share/doc/kukuri/THIRD_PARTY_NOTICES.md') | ForEach-Object { @{path = $_} } }
+      [IO.File]::WriteAllText((Join-Path $directory $payloadName), ($payload | ConvertTo-Json -Depth 6), $utf8)
+      $arguments += @('--deb-updater', $debName, '--file', $debName, '--file', "$debName.sig", '--file', $payloadName)
       $spec = Get-Content -Raw (Join-Path $PSScriptRoot 'native-runtime-sources.json') | ConvertFrom-Json
       $material = @()
       foreach ($kind in 'sources', 'notices') {
@@ -41,6 +51,10 @@ try {
         runtime_source = $spec.runtime.source_commit; runtime_normalized_sha256 = $spec.runtime.normalized_prefix_sha256;
         appimage_sha256 = (Get-FileHash -LiteralPath (Join-Path $directory $name) -Algorithm SHA256).Hash.ToLowerInvariant(); material = $material }
       [IO.File]::WriteAllText((Join-Path $directory $complianceName), ($compliance | ConvertTo-Json -Depth 6), $utf8)
+      $compliance.deb_sha256 = $debHash
+      $compliance.deb_payload_sha256 = (Get-FileHash -LiteralPath (Join-Path $directory $payloadName)).Hash.ToLowerInvariant()
+      $compliance.deb_native_scope = 'first-party-elf-system-shared-libraries'
+      [IO.File]::WriteAllText((Join-Path $directory $complianceName), ($compliance | ConvertTo-Json -Depth 6), $utf8)
       $arguments += @('--file', $complianceName)
     }
     & python @arguments
@@ -53,7 +67,8 @@ try {
     --tag 'v0.1.8-preview.2' --repository 'KingYoSun/kukuri' --version $version --source $source
   if ($LASTEXITCODE -ne 0) { throw 'Final output verification failed' }
   $manifest = Get-Content -Raw (Join-Path $outputDir 'latest-preview.json') | ConvertFrom-Json
-  if (@($manifest.platforms.PSObject.Properties).Count -ne 2) { throw 'Both updater platforms are required' }
+  if (@($manifest.platforms.PSObject.Properties).Count -ne 3) { throw 'All three updater platforms are required' }
+  if ($manifest.platforms.'linux-x86_64-deb'.signature -ne 'deb-signature' -or $manifest.platforms.'linux-x86_64-deb'.url -notlike '*/kukuri_0.1.8_amd64.deb') { throw 'Wrong Deb updater entry' }
   if ($manifest.platforms.'linux-x86_64'.signature -ne 'signature') { throw 'Linux embedded signature mismatch' }
   if ($manifest.platforms.'linux-x86_64'.url -notlike '*/kukuri_0.1.8_amd64.AppImage') { throw 'Wrong Linux updater URL' }
   $provenance = Get-Content -Raw (Join-Path $outputDir 'release-provenance.json') | ConvertFrom-Json

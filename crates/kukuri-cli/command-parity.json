@@ -1,9 +1,12 @@
 {
-  "baseline": "d2414e5a58ca14a8920f588164df8efad8e7ffba",
-  "scope_revision": "2026-09-04-issue-889-linux-appimage-v1",
+  "baseline": "c4616fc706b94150ac6c2ac06aec68bc1c2b0f5a",
+  "scope_revision": "2026-09-07-linux-deb-release-addition-v2",
   "entries": [
     {"tauri":"commands::startup::get_desktop_startup_status","cli":"get_desktop_startup_status","inventory":"INV-1"},
-    {"tauri":"desktop_lifecycle::restart_after_update","excluded":"os","reason":"AppImage更新後にGUI runtimeを停止してアプリを再起動するOS連携。CLI／daemonの更新や再起動は行わない。"},
+    {"tauri":"desktop_lifecycle::restart_after_update","excluded":"os","reason":"署名付きGUI更新後にruntimeを停止してアプリを再起動するOS連携。CLI／daemonの更新や再起動は行わない。"},
+    {"tauri":"app_update::check_app_update","excluded":"os","reason":"GUI配布形式に対応するTauri updater確認。CLIはpackageの自動更新対象外。"},
+    {"tauri":"app_update::download_app_update","excluded":"os","reason":"GUI更新packageの取得・署名検証。CLIはpackageの自動更新対象外。"},
+    {"tauri":"app_update::install_app_update","excluded":"os","reason":"明示操作によるGUI更新のOS適用。CLIはpackageの自動更新対象外。"},
     {"tauri":"commands::external_url::open_external_url","excluded":"os","reason":"GUIの明示的な外部リンクをOSの既定ブラウザーへ渡す。CLI／daemonからのOS起動は対象外。"},
     {"tauri":"commands::app_consent::get_app_consent_status","cli":"get_app_consent_status","inventory":"INV-1"},
     {"tauri":"commands::app_consent::accept_app_consents","cli":"accept_app_consents","inventory":"INV-1"},

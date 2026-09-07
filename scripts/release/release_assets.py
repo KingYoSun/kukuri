@@ -33,7 +33,7 @@ def file_record(directory, name):
     return {"name": name, "sha256": hashlib.sha256(file.read_bytes()).hexdigest()}
 
 
-def write_package(directory, target, version, source, files, updater=None, key=None, signing="none"):
+def write_package(directory, target, version, source, files, updater=None, key=None, signing="none", deb=None):
     source_version(version, source)
     if target not in TARGETS or len(files) != len(set(files)) or not files:
         raise ValueError("Invalid package target or duplicate/empty inventory")
@@ -45,10 +45,16 @@ def write_package(directory, target, version, source, files, updater=None, key=N
             raise ValueError("CLI archive does not match version/target")
     elif not updater or updater not in files or f"{updater}.sig" not in files or key not in files:
         raise ValueError("GUI updater, signature and public key must be present")
+    if target == "linux-x86_64":
+        if deb != f"kukuri_{version}_amd64.deb" or not {deb, f"{deb}.sig"}.issubset(files):
+            raise ValueError("Deb updater and signature must be present")
+    elif deb:
+        raise ValueError("Deb updater belongs only to the Linux GUI package")
     value = {
         "schema_version": 1, "target": target, "version": version, "source_commit": source,
         "signing_mode": signing, "files": records, "updater_file": updater,
         "public_key_file": key,
+        "deb_updater_file": deb,
     }
     (directory / "release-package.json").write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
     return value
@@ -104,6 +110,16 @@ def packages_plan(entries, tag, repository, version, source):
                 raise ValueError("Empty updater signature or public key")
             public_keys.add(public_key)
             if target == "linux-x86_64":
+                deb = value.get("deb_updater_file")
+                if deb != f"kukuri_{version}_amd64.deb" or not {deb, f"{deb}.sig"}.issubset(package_names):
+                    raise ValueError("Deb updater and signature are missing or mismatched")
+                deb_signature = (directory / f"{deb}.sig").read_text(encoding="utf-8-sig").strip()
+                if not deb_signature:
+                    raise ValueError("Deb updater signature is empty")
+                platforms["linux-x86_64-deb"] = {
+                    "signature": deb_signature,
+                    "url": f"https://github.com/{repository}/releases/download/{tag}/{deb}",
+                }
                 validate_native_material(directory, value)
             platforms[target] = {
                 "signature": signature,
@@ -136,6 +152,27 @@ def validate_native_material(directory, package):
     for row in material:
         if file_record(directory, row["name"]) != row:
             raise ValueError("Native source/notice archive changed")
+    validate_deb_material(directory, package, report)
+
+
+def validate_deb_material(directory, package, native):
+    name = f"kukuri_{package['version']}_deb-payload.json"
+    if name not in {row["name"] for row in package["files"]}:
+        raise ValueError("Deb payload inventory is missing")
+    report = json.loads((directory / name).read_text(encoding="utf-8"))
+    digest = file_record(directory, package["deb_updater_file"])["sha256"]
+    if (report.get("deb_sha256") != digest or native.get("deb_sha256") != digest
+            or report.get("source_commit") != package["source_commit"]
+            or report.get("package") != "kukuri" or report.get("version") != package["version"]
+            or report.get("architecture") != "amd64" or report.get("maintainer_scripts") != []
+            or report.get("elf_paths") != ["usr/bin/kukuri-desktop-tauri"]
+            or native.get("deb_payload_sha256") != file_record(directory, name)["sha256"]
+            or native.get("deb_native_scope") != "first-party-elf-system-shared-libraries"):
+        raise ValueError("Deb native compliance does not cover this payload/source")
+    paths = {row["path"] for row in report.get("payload", [])}
+    if not {"usr/bin/kukuri-desktop-tauri", "usr/share/doc/kukuri/copyright",
+            "usr/share/doc/kukuri/THIRD_PARTY_NOTICES.md"}.issubset(paths):
+        raise ValueError("Deb notice payload is incomplete")
 
 
 def validate_output(root, tag, repository, version, source):
@@ -180,6 +217,7 @@ def main():
     package.add_argument("--source", required=True)
     package.add_argument("--file", action="append", required=True)
     package.add_argument("--updater")
+    package.add_argument("--deb-updater")
     package.add_argument("--public-key-file")
     package.add_argument("--signing", choices=["none", "test", "distribution"], default="none")
     plan = commands.add_parser("plan")
@@ -202,7 +240,7 @@ def main():
     args = parser.parse_args()
     if args.command == "package":
         write_package(args.directory, args.target, args.version, args.source, args.file,
-                      args.updater, args.public_key_file, args.signing)
+                      args.updater, args.public_key_file, args.signing, args.deb_updater)
     elif args.command == "plan":
         print(json.dumps(assembly_plan(args.input, args.tag, args.repository, args.version, args.source)))
     elif args.command == "validate-output":

@@ -35,6 +35,7 @@ windows = { version = "0.62.2", features = ["Data_Xml_Dom", "UI_Notifications"] 
 notify-rust = "4"
 
 [target.'cfg(target_os = "linux")'.dependencies]
+rustix = { version = "1.1.4", features = ["fs", "process"] }
 # Keep zbus's blocking Secret Service client compatible with async startup.
 # Enabling ashpd/tokio also enables zbus/tokio through Cargo feature unification.
 ashpd = { version = "0.13.13", default-features = false, features = ["async-io", "open_uri"] }
