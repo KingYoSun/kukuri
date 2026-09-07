@@ -22,6 +22,7 @@ struct TransferNode {
     acceptances: Mutex<Vec<kukuri_core::SignedDomeHostingAcceptanceV1>>,
     activations: Mutex<Vec<DomeHostingActivationRequest>>,
     candidates: AtomicUsize,
+    policy_update_after_assignment: Mutex<Option<Arc<MockManagedCommunityNodeState>>>,
 }
 
 impl TransferNode {
@@ -34,6 +35,7 @@ impl TransferNode {
             acceptances: Mutex::new(Vec::new()),
             activations: Mutex::new(Vec::new()),
             candidates: AtomicUsize::new(0),
+            policy_update_after_assignment: Mutex::new(None),
         })
     }
     fn routes(self: &Arc<Self>) -> Router {
@@ -93,6 +95,11 @@ async fn assign(
         .lock()
         .await
         .push(signed_acceptance.clone());
+    if let Some(managed) = node.policy_update_after_assignment.lock().await.as_ref() {
+        managed
+            .simulate_pending_update
+            .store(true, Ordering::SeqCst);
+    }
     Ok(Json(DomeHostingAssignmentResponse {
         signed_acceptance,
         state: DomeHostingStateKindV1::Transferring,
@@ -294,6 +301,17 @@ async fn public_delegation_preserves_each_transfer_failure_boundary_and_retry() 
             .await
             .expect("saved hosting");
         assert_eq!(saved.state.lease_epoch, Some(2));
+        if failure == 0 {
+            let returned = result.expect("successful delegation view");
+            assert_eq!(returned.state.kind, saved.state.kind);
+            assert_eq!(returned.state.lease_epoch, saved.state.lease_epoch);
+            assert_eq!(returned.state.session_id, saved.state.session_id);
+            assert_eq!(returned.signed_lease_json, saved.signed_lease_json);
+            assert_eq!(
+                returned.signed_activation_json,
+                saved.signed_activation_json
+            );
+        }
         assert_eq!(
             node.counts().await,
             (1, usize::from(failure == 0 || failure == 3))
@@ -350,6 +368,20 @@ async fn public_layout_restart_preserves_transfer_failure_and_operation_retry() 
             .await
             .expect("saved hosting");
         assert_eq!(saved.state.lease_epoch, Some(3));
+        if failure == 0 {
+            let returned = result.expect("successful layout view");
+            assert_eq!(returned.outcome, DomeLayoutCommitOutcome::Committed);
+            assert_eq!(returned.revision, 2);
+            assert_eq!(returned.operation_id, "layout-once");
+            assert!(returned.signed_commit_json.is_some());
+            assert_eq!(returned.hosting.state.lease_epoch, saved.state.lease_epoch);
+            assert_eq!(returned.hosting.state.session_id, saved.state.session_id);
+            assert_eq!(returned.hosting.signed_lease_json, saved.signed_lease_json);
+            assert_eq!(
+                returned.hosting.signed_activation_json,
+                saved.signed_activation_json
+            );
+        }
         let manifest: kukuri_core::DomePresetManifestV1 =
             serde_json::from_str(&saved.preset_manifest_json).expect("preset");
         assert_eq!(manifest.revision, 2);
@@ -462,6 +494,56 @@ async fn cn_noop_and_owner_layout_changes_do_not_send_transfer_requests() {
     assert_eq!(node.candidates.load(Ordering::SeqCst), 1);
     runtime.shutdown().await;
     server.abort();
+}
+
+#[tokio::test]
+async fn activation_rechecks_current_consent_after_assignment_for_both_entries() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    for layout in [false, true] {
+        let node = TransferNode::new();
+        let (runtime, base_url, managed, server, _dir) =
+            dome_runtime_with_routes(node.routes()).await;
+        seed_local_community_node_consents(&runtime, &base_url, 1);
+        let (context, instance) = create_owner(&runtime).await;
+        if layout {
+            runtime
+                .delegate_dome_hosting(delegate_request(&node, &base_url, &context, &instance))
+                .await
+                .expect("initial delegation");
+            node.changed_layout.store(true, Ordering::SeqCst);
+        }
+        *node.policy_update_after_assignment.lock().await = Some(managed.clone());
+        let before = node.counts().await;
+        let result = if layout {
+            runtime
+                .commit_dome_layout(layout_request(&context, &instance))
+                .await
+                .map(|_| ())
+        } else {
+            runtime
+                .delegate_dome_hosting(delegate_request(&node, &base_url, &context, &instance))
+                .await
+                .map(|_| ())
+        };
+        let error = result.expect_err("new policy stops activation HTTP");
+        assert_eq!(
+            error
+                .downcast_ref::<crate::DomeHostingRequestError>()
+                .expect("typed guard")
+                .code,
+            CONSENT_REQUIRED_CODE
+        );
+        assert_eq!(node.counts().await, (before.0 + 1, before.1));
+        let saved = runtime
+            .app_service
+            .get_dome_hosting(context, &instance)
+            .await
+            .expect("saved activation");
+        assert!(saved.signed_activation_json.is_some());
+        assert_eq!(saved.state.lease_epoch, Some(if layout { 3 } else { 2 }));
+        runtime.shutdown().await;
+        server.abort();
+    }
 }
 
 #[tokio::test]

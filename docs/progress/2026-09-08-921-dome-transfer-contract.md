@@ -20,6 +20,7 @@
 | INV-2、TR-1/2/3/4 | `public_layout_restart_preserves_transfer_failure_and_operation_retry`: 同4条件をlayout再起動で確認。revision2/operation1/epoch3の保存、同operation retryではrevision/operationを増やさない。未activation時は同leaseでtransfer再送、既にactivation保存済みなら再送しない |
 | INV-2、TR-4 | `cn_noop_and_owner_layout_changes_do_not_send_transfer_requests`: owner no-opはoperation0、owner新規変更はrevision/operation/lease更新を許可しCN送信0、retryで追加保存0。CN no-opはcandidate取得だけでassignment/activationを増やさない |
 | INV-3、TR-5 | `public_transfer_entries_cannot_bypass_current_consent_or_configured_node`: public delegationの未同意と、両入口の撤回/現行版変更/未登録拒否。新規assignment/activation/candidate0、challenge/verify不変。policy preflightの許可された取得は禁じない |
+| INV-1/2/3、TR-3/5 | `activation_rechecks_current_consent_after_assignment_for_both_entries`: assignment応答を返すmockがpolicyを更新し、両入口でactivation自身のpreflightがCONSENT_REQUIREDを返す。owner activationは保存済み、activation HTTPは増えない |
 | INV-3、TR-5 | 既存6 adapter testsは未同意、撤回、版変更、未登録、同意済み、401再認証を保持。authorityの署名/manifest整合は既存AppService2 testsとmock受信時のcore verifier・acceptance ID一致でも確認 |
 
 後段activation HTTP失敗でもownerの署名済みactivationは保存済み。同operationのlayout retryは前段candidateを取得するがtransferを再送しない、という現行挙動をそのまま記録する。このcontractへrollback/retry policy修正を混ぜない。
@@ -38,6 +39,7 @@ Tauri `commands/live_game.rs`とCLI `commands/live_metaverse.rs`の2command登�
 
 - before `cargo test -p kukuri-desktop-runtime tests::community_node::dome_hosting`: 6 PASS（0.54秒）。
 - 初回after: 既存6+新規4 tests PASS（5.93秒）。新規4 tests内で両入口の4failure条件と7guard条件等を実行。保存operation数のassert追加後の最終結果とCI/監査headはPR/Issueへ記録する。
+- 独立監査で返却viewの直接比較とassignment後のactivate再guardの証拠補強を指摘。成功時の返却lease/session/署名recordと保存状態の一致を追加し、policy更新を跨ぐ両入口のtestを追加。既存6+新規5の11 tests PASS（8.28秒）、最終headでdelta監査する。
 - 必須: 同targeted、`cargo test -p kukuri-app-api tests::dome_hosting`、`cargo xtask rust-test`。CIが全Rustの結果を担う場合は対象SHAとjobを記録し、local targetedを全suite成功と呼ばない。
 - UI/IPC/製品source変更なし。静的確認は`git diff --check`と製品diff0。
 
