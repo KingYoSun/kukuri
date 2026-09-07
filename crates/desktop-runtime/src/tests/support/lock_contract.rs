@@ -18,6 +18,11 @@ const LOCK_CLASSIFICATION: &[(&str, &str, usize)] = &[
     ("community_node/config.rs", "ProcessEnvironment", 5),
     ("community_node/connectivity.rs", "IrohNetwork", 6),
     ("community_node/dome_hosting.rs", "CommunityNodeServer", 6),
+    (
+        "community_node/dome_hosting/transfer_contract.rs",
+        "CommunityNodeServer",
+        5,
+    ),
     ("community_node/index_query.rs", "CommunityNodeServer", 14),
     ("community_node/metadata.rs", "CommunityNodeServer", 10),
     (
@@ -108,12 +113,13 @@ fn lock_acquisitions_match_declared_classification() {
     );
     let total: usize = expected.values().sum();
     assert_eq!(
-        total, 123,
+        total, 128,
         "classification total drifted from the Q7 T6 baseline(#711 で index_query 試験を 1 件、\
          #802 で tester_feedback_submission 試験を 3 件、#862 で config 永続化試験を 2 件、\
          #855 で device_backup 試験を 7 件、recovery 試験を 13 件へ拡充、\
          #857 で report consent gate 試験を 3 件、\
          Dome hosting consent gate 試験を 6 件、固定面回帰で session・metadata・report を各 1 件追加、
-         transition rerun で index_query 試験を 3 件、tester feedback・trust relation 試験を各 1 件追加)"
+         transition rerun で index_query 試験を 3 件、tester feedback・trust relation 試験を各 1 件追加、
+         #921 で Dome transfer contract の CommunityNodeServer 取得を 5 件追加)"
     );
 }

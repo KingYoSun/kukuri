@@ -42,6 +42,7 @@ Tauri `commands/live_game.rs`とCLI `commands/live_metaverse.rs`の2command登�
 - 独立監査で返却viewの直接比較とassignment後のactivate再guardの証拠補強を指摘。成功時の返却lease/session/署名recordと保存状態の一致を追加し、policy更新を跨ぐ両入口のtestを追加。既存6+新規5の11 tests PASS（8.28秒）、最終headでdelta監査する。
 - 必須: 同targeted、`cargo test -p kukuri-app-api tests::dome_hosting`、`cargo xtask rust-test`。CIが全Rustの結果を担う場合は対象SHAとjobを記録し、local targetedを全suite成功と呼ばない。
 - UI/IPC/製品source変更なし。静的確認は`git diff --check`と製品diff0。
+- CI `34146718415`で`tests::support::lock_contract::lock_acquisitions_match_declared_classification`がFAIL。新testのCommunityNodeServer lock取得5箇所を分類表に反映していなかったため、明示entryを追加し総数123→128へ同期した。scan/全件一致のassertは保持し、未分類追加の検出を弱めない。該当testと全CIを修正headで再実行する。
 
 ## Rollback
 
