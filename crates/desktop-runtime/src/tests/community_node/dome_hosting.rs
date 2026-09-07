@@ -1,7 +1,21 @@
 use super::super::*;
 use kukuri_cn_protocol::CONSENT_REQUIRED_CODE;
 
+mod transfer_contract;
+
 async fn dome_runtime() -> (
+    DesktopRuntime,
+    String,
+    Arc<MockManagedCommunityNodeState>,
+    tokio::task::JoinHandle<()>,
+    tempfile::TempDir,
+) {
+    dome_runtime_with_routes(Router::new()).await
+}
+
+async fn dome_runtime_with_routes(
+    extra_routes: Router,
+) -> (
     DesktopRuntime,
     String,
     Arc<MockManagedCommunityNodeState>,
@@ -38,7 +52,8 @@ async fn dome_runtime() -> (
             "/v1/dome-hosting/session/resync",
             post(mock_managed_dome_resync),
         )
-        .with_state(state.clone());
+        .with_state(state.clone())
+        .merge(extra_routes);
     let server = tokio::spawn(async move {
         axum::serve(listener, app).await.expect("mock server");
     });
