@@ -35,3 +35,14 @@
 - CLI parityは登録＋3を分類した後、固定件数139が不一致となった。基準／revision／件数142へ同期し、再実行する。
 - `cargo xtask desktop-ui-check`進行中。Linux compile／実Deb生成・installとmemfd、実Desktop更新は未実施。
 - `cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check`は新規fileと既存未変更fileのformat差を報告。変更した新規module／xtaskだけrustfmtを適用し、既存state等の無関係なformat差は混ぜない。
+
+### 境界テストと手順の追加
+
+- CLI parity: 5/5 PASS、142入口に同期済み。`cargo xtask e2e-smoke`: post永続6step PASS。
+- `cargo xtask desktop-ui-check`: lint／typecheck、151files・1185tests、Storybook、browser64、visual smoke14 PASS。Windowsのvisualはpixel比較ではなく到達smoke、Linux CIのpixel比較も初回headでPASS。
+- `local2`の隔離cloneでLinux backendを実行。Deb unit4 PASS（sealed memfdの他handle／child reader、取消／拒否／agent不在、形式／metadata拒否、実dpkgの隔離rootでhalf-configuredとなる部分失敗・試行1回・profile sentinel保持）。実機systemのdpkg databaseは変更していない。
+- updater boundary4 PASS（厳密manifest、直接IPC相当のstale／unverified／busy拒否とrestart禁止、installed状態上書き禁止、実capability付きmock Webviewから上流updaterのcheck／download／install／download_and_install拒否）。失敗後payload消費の追加testは実行待ち。
+- Windows backend unit testはcompile成功後に`STATUS_ENTRYPOINT_NOT_FOUND`でtest process起動失敗。合格扱いせずLinux実機／CIを使用する。通常のWindows Tauri compileはPASS。
+- 実Deb署名の正常download／1byte改変／形式別entry欠落はLinux package CIの既存`updater_install`へ追加し、実package生成後に実行する。fixture routingだけを署名証拠にしない。
+- README en／ja、Deb導入・更新・失敗時回復／削除runbook、quickstart／troubleshooting／dev／release、builder preview現状を同期。Debの公開は未実施。
+- 手持ちUbuntu Desktop用に隔離stagingの`99.0.1→99.0.2→99.0.3` test-key Debを準備中。公開設定・配布秘密鍵は使用せず、日常profileへ書き込まない。system packageの導入・実GUI更新／取消はまだ未実施。

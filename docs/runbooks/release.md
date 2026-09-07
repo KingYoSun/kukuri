@@ -2,7 +2,7 @@
 
 ## 対象と公開前の判断
 
-Preview tagは`vX.Y.Z-preview.N`。Windows NSIS／updater、Linux AppImage x86_64、CLI x86_64／aarch64を同じsourceから生成する。Linux資材が公開済みかはReleaseのasset一覧を正とし、workflow実装だけで公開済みとしない。
+Preview tagは`vX.Y.Z-preview.N`。Windows NSIS／updater、Linux AppImage／Deb x86_64、CLI x86_64／aarch64を同じsourceから生成する。Linux資材が公開済みかはReleaseのasset一覧を正とし、workflow実装だけで公開済みとしない。
 
 version／tag／source SHAと公開の依頼範囲を先に確定する。実装PRの承認はRelease公開の承認と区別する。既存tag／公開assetの上書き、検証用一時鍵の転用はしない。
 
@@ -32,6 +32,7 @@ cargo xtask release-check v0.1.8-preview.2
 python scripts/release/test_release_assets.py
 python scripts/release/test_cli_archive.py
 python scripts/release/test_native_compliance.py
+python scripts/release/test_deb_package.py
 python scripts/release/test_publish_preview.py
 python scripts/release/test_verify_public_preview.py
 ```
@@ -52,9 +53,9 @@ python scripts/release/test_verify_public_preview.py
 4. `linux-verify`が既存製品CIを実行。Windows／Linux GUI package、CLI 2archのjobで本体を生成し、source／target／version／SHA-256を`release-package.json`へ記録する。
 5. CLIはarchiveから展開した実binaryでschema、専用profileのdaemon起動・status・終了を確認する。aarch64はQEMUで実行し、cross-compileだけを成功条件にしない。HOME／XDGとprofileは一時領域で、GUIのidentityを共有しない。
 6. `changelog`が固定sourceからRelease notesを生成し、`release-assets`が4targetの資材を集約する。必須job失敗・欠落・異なるsource／version／鍵・test署名・hash不一致は公開前に拒否する。
-7. 同じWindows buildの実Rust verifierで、最終manifestの両platformの実bytesとembedded signatureを検証する。正常bundle受理と1 byte改変拒否の双方が必要。installは行わない。
+7. 同じWindows buildの実Rust verifierで、最終manifestのWindows／AppImage／Debの3entryの実bytesとembedded signatureを検証する。正常bundle受理と1 byte改変拒否の双方が必要。installは行わない。
 8. `publish-draft`が完全性と現在のtag SHAを再検証し、draftを作成してuploadする。公開指定でも、全assetのuploadとGitHub SHA-256 digest照合が終わるまで公開しない。
-9. 公開指定時は`verify-published`が安定updater URL、checksum／provenance、4本体を取得して候補hashと照合する。失敗は公開後検証未完了として扱う。
+9. 公開指定時は`verify-published`が安定updater URL、checksum／provenance、5本体を取得して候補hashと照合する。失敗は公開後検証未完了として扱う。
 
 GitHub上の`prerelease` flagは既存互換のため`false`、公開時`make_latest=true`を維持する。製品としてはPreviewだが、`prerelease=true`へ変えると既存clientの`/releases/latest/download/latest-preview.json`に出なくなる。
 
@@ -62,15 +63,17 @@ GitHub上の`prerelease` flagは既存互換のため`false`、公開時`make_la
 
 正確な一覧は`release-assets.txt`、各hashは`SHA256SUMS.txt`、source／targetとの対応は`release-provenance.json`。主要資材は次のとおり。
 
-- Windows NSIS／updaterと`.sig`、Linux AppImageと`.sig`、両platformの公開鍵。
+- Windows NSIS／updaterと`.sig`、Linux AppImage／Debと各`.sig`、Windows／Linuxの公開鍵。
 - `kukuri-cli_<version>_x86_64-unknown-linux-gnu.tar.gz`とaarch64版（binary、LICENSE、README、THIRD_PARTY_NOTICESを含む）。
 - `latest-preview.json`、上記の一覧／checksum／provenance。
 - `THIRD_PARTY_NOTICES.md`、Linux native notice／source archiveとnative compliance JSON。
 - `RELEASE_NOTES_DRAFT.md`、`manual-smoke-checklist.md`（追加手動試験を一律要求するものではない）。
 
-manifestは`windows-x86_64`と`linux-x86_64`の両entryを持ち、signatureは`.sig`の内容を埋め込む。UTF-8 BOMは禁止。Windows PowerShell 5.1の`Set-Content -Encoding UTF8`で手動上書きせず、`create-preview-assets.ps1 -IncludeLinux -SourceCommit <SHA>`を使う。入力は各jobの`release-package.json`を含むartifactを子directoryへ展開したもの。出力先は空でなければならない。
+manifestは`windows-x86_64`、AppImage用`linux-x86_64`、Deb用`linux-x86_64-deb`の3entryを持ち、signatureは対応する`.sig`の内容を埋め込む。Deb欠落や他形式との取り違えは公開前に拒否する。UTF-8 BOMは禁止。Windows PowerShell 5.1の`Set-Content -Encoding UTF8`で手動上書きせず、`create-preview-assets.ps1 -IncludeLinux -SourceCommit <SHA>`を使う。入力は各jobの`release-package.json`を含むartifactを子directoryへ展開したもの。出力先は空でなければならない。
 
 ## Native notice／source
+
+Debは実archiveを再検査し、`kukuri_<version>_deb-payload.json`へPackage／Version／Architecture／Depends、全fileのpath／mode／SHA-256、Deb本体hashとsource SHAを記録する。native compliance資料はこのreportとDebを照合する。Deb同梱ELFはfirst-party GUIだけとし、WebKitGTK等のsystem dependencyをAppImageの同梱物と混同しない。Deb内のLICENSE／THIRD_PARTY_NOTICES／native noticeを要求し、AppImage runtime資料だけでDeb全体を証明しない。
 
 Rust／npm／非code assetの正本は`docs/THIRD_PARTY_NOTICES.md`と`docs/ASSET_MANIFEST.json`。非code assetの追加・変更・削除時は正確なpath／hash／由来／権利／再配布条件を更新し、次を実行する。
 
@@ -103,7 +106,7 @@ python scripts/release/publish_preview.py --input <same-run-assets> --tag v0.1.8
 公開承認後に同じcommandの`--draft false`で公開する。`GH_TOKEN`は環境変数で供給し、引数や記録へ値を書かない。公開前に同一候補の実署名検証成功が必要。build／smoke／署名／完全性の失敗を手動公開で迂回しない。
 
 ```powershell
-./scripts/release/test-published-updater-signature.ps1 -Tag v0.1.8-preview.2 -Platforms windows-x86_64,linux-x86_64 -InputDir <same-run-assets> -PublicKeyFile <same-run-assets>/windows-x86_64-updater-key.pub
+./scripts/release/test-published-updater-signature.ps1 -Tag v0.1.8-preview.2 -Platforms windows-x86_64,linux-x86_64,linux-x86_64-deb -InputDir <same-run-assets> -PublicKeyFile <same-run-assets>/windows-x86_64-updater-key.pub
 ```
 
 ```bash
@@ -113,6 +116,8 @@ python scripts/release/verify_public_preview.py --input <same-run-assets> --tag 
 安定URLは`https://github.com/KingYoSun/kukuri/releases/latest/download/latest-preview.json`。一時redirect URLを設定へ保存しない。CDN未反映なら同じ公開候補への読み取り検証を再実行し、assetを上書きして直さない。大きなnative source archiveは公開前のGitHub upload digestで全件照合済みとし、公開後に同じdownloadを重複しない。
 
 ## 既存動作の採用と利用者データ
+
+Deb追加時の更新エンジン／権限境界は[#905作業記録](../progress/2026-09-07-issue-905-linux-deb-updater.md)の独立監査と実機証跡を使う。導入・権限承認・取消・適用失敗時のpackage確認と明示回復は[Deb手順](linux-deb.md)を参照する。#890はDebを含む最終公開確認が完了するまでCloseしない。
 
 更新エンジン・保存形式が不変なら#889のinstall／restart・失敗時保持証拠を採用する。Windows 10／11、追加Ubuntu／Debian、全通知・全データの手動matrixを各Releaseで再要求しない。変更影響や具体的な失敗を既存証拠と自動検証で判定できない場合だけ、必要な手動補完と終了条件を相談する。
 

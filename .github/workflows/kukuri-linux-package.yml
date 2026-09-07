@@ -186,6 +186,10 @@ jobs:
           export KUKURI_UPDATER_BUNDLE="${bundles[0]}"
           export KUKURI_UPDATER_SIGNATURE="${bundles[0]}.sig"
           export KUKURI_UPDATER_PUBLIC_KEY_FILE="$bundle_dir/test-updater-key.pub"
+          debs=("$bundle_dir/../deb/"*.deb)
+          test "${#debs[@]}" -eq 1
+          export KUKURI_DEB_UPDATER_BUNDLE="${debs[0]}"
+          export KUKURI_DEB_UPDATER_SIGNATURE="${debs[0]}.sig"
           cargo test --locked --release --target x86_64-unknown-linux-gnu \
             --manifest-path apps/desktop/src-tauri/Cargo.toml --test updater_install -- --ignored
       - name: Keep verified artifacts (no Release publication)

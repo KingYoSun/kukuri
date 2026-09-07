@@ -261,12 +261,14 @@ npx pnpm@10.16.1 tauri:dev
 cargo xtask desktop-package
 ```
 
-- Windows hostではNSISを生成する。Linux x86_64 hostではAppImageを生成する（次節）。
+- Windows hostではNSISを生成する。Linux x86_64 hostではAppImageとDebを同一buildで生成する（次節）。
 - 生成物は `apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/` に出る
 - `cargo xtask desktop-package` は `src-tauri/tauri.windows.conf.json` を使った Windows bundle config を前提にする
 - release workflow / updater manifest / draft release の手順は `docs/runbooks/release.md` を参照する
 
-## Linux AppImage生成
+## Linux AppImage／Deb生成
+
+Debは`bundle/deb/`へ生成され、同じ公開鍵で`.deb.sig`を検証する。`scripts/release/deb_package.py`がmetadata／ELF／desktop entry／icon／依存／noticeを実payloadから検査する。package CIは使い捨てrunnerで依存解決・install／reinstall／remove・データsentinel保持を確認する。GUI更新・権限承認は[Deb手順](linux-deb.md)と[#905作業記録](../progress/2026-09-07-issue-905-linux-deb-updater.md)を参照する。
 
 Ubuntu 22.04のx86_64 hostで `cargo xtask desktop-package` を実行する。Linux設定は `apps/desktop/src-tauri/tauri.linux.conf.json`、署名はTauri updater署名のみとする。鍵なしのLinux生成は拒否し、生成後も設定公開鍵との署名一致を検査する。
 
@@ -518,7 +520,7 @@ cd apps/desktop && npx pnpm@10.16.1 test
 - `kukuri-transport` の `transport_two_process_roundtrip_static_peer` は required に戻した。
 - deterministic な required lane は `FakeTransport` と `kukuri-harness` が担う。
 - Tauri wrapper の単体 compile は `cargo xtask check` に含めて確認する。
-- `cargo xtask desktop-package` はWindows hostでcurrent-user NSIS installer、Linux x86_64 hostで署名付きAppImageを生成する。Linuxの前提と検査は [AppImage手順](linux-appimage-smoke.md) を参照する。
+- `cargo xtask desktop-package` はWindows hostでcurrent-user NSIS installer、Linux x86_64 hostで署名付きAppImageとDebを生成する。Linuxの前提と検査は [AppImage手順](linux-appimage-smoke.md)／[Deb手順](linux-deb.md) を参照する。
 
 補足:
 - GitHub branch protection の required check 名は repo 外設定なので、`Next Fast/Nightly` から `Kukuri Fast/Nightly` への手動更新が必要。

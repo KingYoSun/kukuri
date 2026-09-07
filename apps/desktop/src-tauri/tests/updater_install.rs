@@ -24,12 +24,16 @@ struct FixtureServer {
 
 impl FixtureServer {
     fn start(bundle: Vec<u8>, signature: String) -> Self {
+        Self::start_for_target(bundle, signature, "linux-x86_64")
+    }
+
+    fn start_for_target(bundle: Vec<u8>, signature: String, target: &str) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
         let manifest = serde_json::to_vec(&serde_json::json!({
             "version": "99.0.0",
-            "platforms": { "linux-x86_64": {
+            "platforms": { target: {
                 "url": format!("{base}/bundle"), "signature": signature.trim()
             }}
         }))
@@ -182,4 +186,65 @@ fn verified_appimage_install_failure_preserves_old_file_and_profile() {
         0o755
     );
     assert_eq!(fs::read(&profile_file).unwrap(), profile_bytes);
+}
+
+#[test]
+#[ignore = "requires signed Deb fixture; run in Linux package CI"]
+fn real_deb_signature_tampering_and_missing_target_fail_closed() {
+    let bundle = fs::read(std::env::var("KUKURI_DEB_UPDATER_BUNDLE").unwrap()).unwrap();
+    assert!(bundle.starts_with(b"!<arch>\n"));
+    let signature =
+        fs::read_to_string(std::env::var("KUKURI_DEB_UPDATER_SIGNATURE").unwrap()).unwrap();
+    let pubkey =
+        fs::read_to_string(std::env::var("KUKURI_UPDATER_PUBLIC_KEY_FILE").unwrap()).unwrap();
+    let mut context = tauri::test::mock_context(tauri::test::noop_assets());
+    context.config_mut().plugins.0.insert(
+        "updater".into(),
+        serde_json::json!({
+            "pubkey": pubkey.trim(), "dangerousInsecureTransportProtocol": true
+        }),
+    );
+    let app = tauri::test::mock_builder()
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .build(context)
+        .unwrap();
+    for (target, tamper) in [
+        ("linux-x86_64-deb", false),
+        ("linux-x86_64-deb", true),
+        ("linux-x86_64", false),
+    ] {
+        let mut served = bundle.clone();
+        if tamper {
+            let last = served.len() - 1;
+            served[last] ^= 1;
+        }
+        let server = FixtureServer::start_for_target(served, signature.clone(), target);
+        let updater = app
+            .updater_builder()
+            .target("linux-x86_64-deb")
+            .endpoints(vec![server.endpoint.parse().unwrap()])
+            .unwrap()
+            .no_proxy()
+            .timeout(Duration::from_secs(15))
+            .build()
+            .unwrap();
+        let checked = tauri::async_runtime::block_on(updater.check());
+        if target != "linux-x86_64-deb" {
+            assert!(
+                checked.is_err(),
+                "AppImage entry must not serve as Deb fallback"
+            );
+            continue;
+        }
+        let update = checked.unwrap().unwrap();
+        let downloaded = tauri::async_runtime::block_on(update.download(|_, _| {}, || {}));
+        if tamper {
+            assert!(
+                downloaded.is_err(),
+                "one changed byte must reject real signature"
+            );
+        } else {
+            assert_eq!(downloaded.unwrap(), bundle);
+        }
+    }
 }

@@ -173,4 +173,77 @@ mod tests {
             assert!(check_metadata(output, "0.1.9").is_err());
         }
     }
+
+    #[test]
+    fn real_dpkg_partial_failure_is_reported_without_retry_or_profile_change() {
+        // All package database, files and maintainer-script effects stay in this fixture.
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("root");
+        let package = temporary.path().join("package");
+        std::fs::create_dir_all(package.join("DEBIAN")).unwrap();
+        std::fs::create_dir_all(package.join("usr/share/issue905-fixture")).unwrap();
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(package.join("DEBIAN/control"), b"Package: issue905-fixture\nVersion: 1.0.0\nArchitecture: all\nMaintainer: Fixture <fixture@example.invalid>\nDescription: isolated package failure fixture\n").unwrap();
+        std::fs::write(
+            package.join("usr/share/issue905-fixture/data"),
+            b"installed before failure",
+        )
+        .unwrap();
+        std::fs::write(package.join("DEBIAN/postinst"), b"#!/bin/sh\nexit 17\n").unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(
+            package.join("DEBIAN/postinst"),
+            std::fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+        let archive = temporary.path().join("fixture.deb");
+        assert!(
+            Command::new("/usr/bin/dpkg-deb")
+                .args(["--build", "--root-owner-group"])
+                .arg(&package)
+                .arg(&archive)
+                .output()
+                .unwrap()
+                .status
+                .success()
+        );
+        let profile = temporary.path().join("profile-sentinel");
+        std::fs::write(&profile, b"unchanged identity/db fixture").unwrap();
+        let mut attempts = 0;
+        let result = apply_once(|| {
+            attempts += 1;
+            Command::new("/usr/bin/dpkg")
+                .arg(format!("--root={}", root.display()))
+                .args([
+                    "--force-not-root",
+                    "--force-bad-path",
+                    "--force-script-chrootless",
+                    "--install",
+                ])
+                .arg(&archive)
+                .output()
+                .map(|output| output.status.code())
+        });
+        assert_eq!(result.unwrap_err(), "deb_update_install_failed");
+        assert_eq!(attempts, 1);
+        assert!(
+            root.join("usr/share/issue905-fixture/data").is_file(),
+            "must exercise a partial install, not a preflight failure"
+        );
+        let actual = Command::new("/usr/bin/dpkg-query")
+            .arg(format!("--admindir={}/var/lib/dpkg", root.display()))
+            .args([
+                "--show",
+                "--showformat=${db:Status-Status}",
+                "issue905-fixture",
+            ])
+            .output()
+            .unwrap();
+        assert!(actual.status.success());
+        assert_eq!(actual.stdout, b"half-configured");
+        assert_eq!(
+            std::fs::read(profile).unwrap(),
+            b"unchanged identity/db fixture"
+        );
+    }
 }

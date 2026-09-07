@@ -1,6 +1,6 @@
 //! Updater IPC boundary. Only the backend selects targets and retains verified bytes.
 use serde::Serialize;
-use tauri::{AppHandle, Manager, ipc::Channel};
+use tauri::{AppHandle, Manager, Runtime, ipc::Channel};
 use tauri_plugin_updater::{Update, UpdaterExt};
 use tokio::sync::Mutex;
 
@@ -57,7 +57,9 @@ fn validate_deb_manifest(
 }
 
 #[tauri::command]
-pub(crate) async fn check_app_update(app: AppHandle) -> Result<Option<UpdateMetadata>, String> {
+pub(crate) async fn check_app_update<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<Option<UpdateMetadata>, String> {
     let state = app.state::<AppUpdateState>();
     let mut session = state.0.try_lock().map_err(|_| "update_busy")?;
     if session.installed
@@ -106,8 +108,8 @@ pub(crate) async fn check_app_update(app: AppHandle) -> Result<Option<UpdateMeta
 }
 
 #[tauri::command]
-pub(crate) async fn download_app_update(
-    app: AppHandle,
+pub(crate) async fn download_app_update<R: Runtime>(
+    app: AppHandle<R>,
     id: u32,
     on_event: Channel<serde_json::Value>,
 ) -> Result<(), String> {
@@ -147,7 +149,14 @@ pub(crate) async fn download_app_update(
 }
 
 #[tauri::command]
-pub(crate) async fn install_app_update(app: AppHandle, id: u32) -> Result<(), String> {
+pub(crate) async fn install_app_update<R: Runtime>(
+    app: AppHandle<R>,
+    id: u32,
+) -> Result<(), String> {
+    install_checked(app, id, is_deb()).await
+}
+
+async fn install_checked<R: Runtime>(app: AppHandle<R>, id: u32, deb: bool) -> Result<(), String> {
     let state = app.state::<AppUpdateState>();
     let mut session = state.0.try_lock().map_err(|_| "update_busy")?;
     let operations = app.state::<crate::restore_lifecycle::DesktopOperationState>();
@@ -163,9 +172,11 @@ pub(crate) async fn install_app_update(app: AppHandle, id: u32) -> Result<(), St
     // Consume the authorization attempt even on failure; no implicit install/authentication retry.
     let result = tauri::async_runtime::spawn_blocking(move || {
         #[cfg(target_os = "linux")]
-        if is_deb() {
+        if deb {
             return crate::deb_update::install(&bytes, &update.version);
         }
+        #[cfg(not(target_os = "linux"))]
+        let _ = deb;
         update.install(bytes).map_err(|e| e.to_string())
     })
     .await
@@ -174,7 +185,7 @@ pub(crate) async fn install_app_update(app: AppHandle, id: u32) -> Result<(), St
     result
 }
 
-pub(crate) fn require_installed(app: &AppHandle) -> Result<(), String> {
+pub(crate) fn require_installed<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     let state = app.state::<AppUpdateState>();
     let session = state.0.try_lock().map_err(|_| "update_busy")?;
     if session.installed {
@@ -183,6 +194,10 @@ pub(crate) fn require_installed(app: &AppHandle) -> Result<(), String> {
         Err("update_not_installed".into())
     }
 }
+
+#[cfg(test)]
+#[path = "app_update_tests.rs"]
+mod boundary_tests;
 
 #[cfg(test)]
 mod tests {

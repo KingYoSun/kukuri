@@ -57,7 +57,8 @@ preview の primary UX は明示同意後のセッション確立・維持を自
 
 ## Linux配布・CLI
 
-- 公開済みLinux成果物の有無はRelease asset一覧で確認する。AppImageはx86_64、CLIはx86_64／aarch64で、別architectureのbinaryを実行しない。
+- 公開済みLinux成果物の有無はRelease asset一覧で確認する。AppImage／Debはx86_64、CLIはx86_64／aarch64で、別architectureのbinaryを実行しない。
+- Debの認証取消／拒否後は再起動や別認証の自動要求をしない。適用失敗時は`dpkg-query -W -f='${db:Status-Status} ${Version}\n' kukuri`で実状態を確認し、[Deb手順](linux-deb.md)に沿って明示回復する。旧版への自動rollbackは保証しない。
 - AppImageの実行権限、FUSE／展開実行、X11の前提は[quickstart](./mvp-user-quickstart.md)を確認する。追加Ubuntu／Debianやnative Wayland-onlyは確認済みとしない。
 - CLIの接続失敗は、同じ`--profile`のdaemonが動いているか、同意状態、XDG runtime directoryを確認する。[foreground例](./linux-cli.md)はsystemdの導入を要求しない。
 - timeout／切断で変更結果が不明ならstatusを確認し、変更要求を無条件に再送しない。GUIのdata directoryをCLIへ共有したり、鍵取得失敗時にidentityを削除したりしない。
