@@ -2,7 +2,7 @@
 
 - 親Scope revision `2026-09-04-issue-872-refactoring-campaign-v1`を維持する。
 - ユーザー承認範囲は#919〜#928の各実装、必須CI、独立監査後のmerge。各子の固定scopeを広げず1 PR=1意図で進めた。
-- 現在の完了数: **9/10**。以下は個別実行の追跡記録であり、親Phase 4の完了監査・Close・#873用完了baselineではない。
+- 現在の完了数: **10/10**。以下は個別実行の追跡記録であり、親Phase 4の完了監査・Close・#873用完了baselineではない。
 - [Phase 0〜2](2026-09-08-872-refactoring-campaign-phase-2.md)はPR#938、`271b494c`で保存した。監査開始JSONの`completed_campaign_baseline=false`を維持し、当時のfail/未実施記録を遡及変更しない。
 
 | Issue | PR | 構造上の成果・役割 | 現在判定 | merge SHA / 未merge head |
@@ -14,7 +14,7 @@
 | [#923](https://github.com/KingYoSun/kukuri/issues/923) | [#934](https://github.com/KingYoSun/kukuri/pull/934) | Dome非同期transition contract | Complete | `d9ea79be4fe03e3d97032b53bef2747760652908` |
 | [#924](https://github.com/KingYoSun/kukuri/issues/924) | [#937](https://github.com/KingYoSun/kukuri/pull/937) | attempt直接更新9→0、専用owner9 | Complete | `3971fba25a8d6034e16623aefc5a5b7b51d02bd6` |
 | [#925](https://github.com/KingYoSun/kukuri/issues/925) | [#935](https://github.com/KingYoSun/kukuri/pull/935) | source解決の禁止I/O contract | Complete | `7c9cba850d572c8d358d5f529798a89c3c84eb06` |
-| [#926](https://github.com/KingYoSun/kukuri/issues/926) | [#939](https://github.com/KingYoSun/kukuri/pull/939) | source到達service依存6→2 | 最終gate確認中 | `cedfad649f1c13e48be523d356a39eb210595cc1` |
+| [#926](https://github.com/KingYoSun/kukuri/issues/926) | [#939](https://github.com/KingYoSun/kukuri/pull/939) | source到達service依存6→2 | Complete | `5c61680c82607ae96ebcce78496e62e2f457ecb5` |
 | [#927](https://github.com/KingYoSun/kukuri/issues/927) | [#931](https://github.com/KingYoSun/kukuri/pull/931) | 未同期Dome manifestのtyped欠落処理 | Complete | `2229fefaa479064bf8080bc55e2984acf025fc66` |
 | [#928](https://github.com/KingYoSun/kukuri/issues/928) | [#930](https://github.com/KingYoSun/kukuri/pull/930) | capability規範を実装へ同期 | Complete | `36e3732edfb68e0637a60e7badf4c778d0530e4d` |
 
@@ -29,7 +29,7 @@
 - Metaverse実iroh: 修正前に同じtestのmanifest欠落failを再現。欠落だけをtyped outcomeに分け、bad reference/signature等を抑止しない。既存testは変更せず、slow feature全199 tests PASSと独立delta監査を確認。
 - capability文書: Availableへ移行済みの提供状態と、各配備のreadiness/公開条件を分けて同期。製品availabilityや過去ADRの判断は変更しない。
 
-ローカルの対象test成功を全suite成功に読み替えない。全source PRは必要なFast9jobと適用されるpackage/image checksを確認してmergeする。docs-only PRではpath filterで製品CIが起動しないことと、構文/参照/diff check/GitGuardianの結果を区別する。
+ローカルの対象test成功を全suite成功に読み替えない。全source PRは必要なFast9jobと適用されるpackage/image checksを確認してmergeした。docs-only PRではpath filterで製品CIが起動しないことと、構文/参照/diff check/GitGuardianの結果を区別する。
 
 ## Windows/WebViewと制約
 
