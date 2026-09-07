@@ -345,47 +345,17 @@ impl DesktopRuntime {
                 lease_duration_millis: request.lease_duration_millis,
             })
             .await?;
-        let signed_lease: SignedDomeHostingLeaseV1 = serde_json::from_str(
-            prepared
-                .signed_lease_json
-                .as_deref()
-                .context("prepared Dome hosting view has no signed lease")?,
-        )?;
-        let assignment = self
-            .assign_dome_hosting_to_community_node(
-                &request.base_url,
-                &self
-                    .build_dome_hosting_assignment_request(
-                        signed_lease,
-                        &prepared.instance_manifest_json,
-                        &prepared.preset_manifest_json,
-                    )
-                    .await?,
-            )
-            .await?;
-        let activated = self
-            .app_service
-            .activate_community_node_dome_hosting(ActivateCommunityNodeDomeHostingInput {
-                spatial_context: request.spatial_context,
-                instance_id: request.instance_id.clone(),
-                signed_acceptance_json: serde_json::to_string(&assignment.signed_acceptance)?,
-            })
-            .await?;
-        let signed_activation: SignedDomeHostingActivationV1 = serde_json::from_str(
-            activated
-                .signed_activation_json
-                .as_deref()
-                .context("activated Dome hosting view has no signed activation")?,
-        )?;
-        self.activate_dome_hosting_on_community_node(
+        self.complete_community_node_dome_transfer(
             &request.base_url,
-            &DomeHostingActivationRequest {
-                instance_id: request.instance_id,
-                signed_activation,
-            },
+            request.spatial_context,
+            request.instance_id,
+            &prepared,
+            (
+                "prepared Dome hosting view has no signed lease",
+                "activated Dome hosting view has no signed activation",
+            ),
         )
-        .await?;
-        Ok(activated)
+        .await
     }
 
     pub async fn close_dome_hosting(
@@ -715,48 +685,18 @@ impl DesktopRuntime {
             return Ok(committed);
         }
         let api_base_url = api_base_url.clone();
-        let signed_lease: SignedDomeHostingLeaseV1 = serde_json::from_str(
-            committed
-                .hosting
-                .signed_lease_json
-                .as_deref()
-                .context("prepared layout commit has no signed lease")?,
-        )?;
-        let assignment = self
-            .assign_dome_hosting_to_community_node(
+        committed.hosting = self
+            .complete_community_node_dome_transfer(
                 &api_base_url,
-                &self
-                    .build_dome_hosting_assignment_request(
-                        signed_lease,
-                        &committed.hosting.instance_manifest_json,
-                        &committed.hosting.preset_manifest_json,
-                    )
-                    .await?,
+                request.spatial_context,
+                request.instance_id,
+                &committed.hosting,
+                (
+                    "prepared layout commit has no signed lease",
+                    "activated layout commit has no signed activation",
+                ),
             )
             .await?;
-        let activated = self
-            .app_service
-            .activate_community_node_dome_hosting(ActivateCommunityNodeDomeHostingInput {
-                spatial_context: request.spatial_context,
-                instance_id: request.instance_id.clone(),
-                signed_acceptance_json: serde_json::to_string(&assignment.signed_acceptance)?,
-            })
-            .await?;
-        let signed_activation: SignedDomeHostingActivationV1 = serde_json::from_str(
-            activated
-                .signed_activation_json
-                .as_deref()
-                .context("activated layout commit has no signed activation")?,
-        )?;
-        self.activate_dome_hosting_on_community_node(
-            &api_base_url,
-            &DomeHostingActivationRequest {
-                instance_id: request.instance_id,
-                signed_activation,
-            },
-        )
-        .await?;
-        committed.hosting = activated;
         Ok(committed)
     }
 
@@ -804,6 +744,59 @@ impl DesktopRuntime {
                 Ok(snapshot.snapshot)
             })
             .collect()
+    }
+
+    // Both entrypoints retain their own preparation/no-op rules. This method owns
+    // assignment -> owner activation persistence -> remote activation in that order.
+    async fn complete_community_node_dome_transfer(
+        &self,
+        base_url: &str,
+        spatial_context: kukuri_core::SpatialContextV1,
+        instance_id: String,
+        prepared: &DomeHostingView,
+        error_contexts: (&'static str, &'static str),
+    ) -> Result<DomeHostingView> {
+        let signed_lease: SignedDomeHostingLeaseV1 = serde_json::from_str(
+            prepared
+                .signed_lease_json
+                .as_deref()
+                .context(error_contexts.0)?,
+        )?;
+        let assignment = self
+            .assign_dome_hosting_to_community_node(
+                base_url,
+                &self
+                    .build_dome_hosting_assignment_request(
+                        signed_lease,
+                        &prepared.instance_manifest_json,
+                        &prepared.preset_manifest_json,
+                    )
+                    .await?,
+            )
+            .await?;
+        let activated = self
+            .app_service
+            .activate_community_node_dome_hosting(ActivateCommunityNodeDomeHostingInput {
+                spatial_context,
+                instance_id: instance_id.clone(),
+                signed_acceptance_json: serde_json::to_string(&assignment.signed_acceptance)?,
+            })
+            .await?;
+        let signed_activation: SignedDomeHostingActivationV1 = serde_json::from_str(
+            activated
+                .signed_activation_json
+                .as_deref()
+                .context(error_contexts.1)?,
+        )?;
+        self.activate_dome_hosting_on_community_node(
+            base_url,
+            &DomeHostingActivationRequest {
+                instance_id,
+                signed_activation,
+            },
+        )
+        .await?;
+        Ok(activated)
     }
 
     async fn build_dome_hosting_assignment_request(
