@@ -66,7 +66,10 @@ function fixture(objectId: string) {
   const api = createDesktopMockApi({
     notifications: [target],
     seedPosts: {
-      'kukuri:topic:general': posts,
+      // Only the root is needed in the background Timeline. Rendering the same
+      // 45 replies there as well as in Thread made cold jsdom runs exceed 5s.
+      // Keep all replies in listThread below, including its real second page.
+      'kukuri:topic:general': [posts[0]],
     },
   });
   api.listThread = async (topic, thread, cursor, limit = 30) =>
@@ -75,6 +78,19 @@ function fixture(objectId: string) {
       : { items: [], next_cursor: null };
   return { target, api };
 }
+
+test('notification fixture retains both thread pages and both focus targets', async () => {
+  const { api } = fixture('focus-reply-40');
+  const first = await api.listThread('kukuri:topic:general', 'focus-root', null, 30);
+  expect(first.items).toHaveLength(30);
+  expect(first.items.some((post) => post.object_id === 'focus-reply-40')).toBe(true);
+  expect(first.items.some((post) => post.object_id === 'focus-reply-2')).toBe(false);
+  expect(first.next_cursor).not.toBeNull();
+  const second = await api.listThread('kukuri:topic:general', 'focus-root', first.next_cursor, 30);
+  expect(second.items).toHaveLength(15);
+  expect(second.items.some((post) => post.object_id === 'focus-reply-2')).toBe(true);
+  expect(second.next_cursor).toBeNull();
+});
 
 test.each([
   ['os', 'focus-reply-40'], ['in-app', 'focus-reply-40'],

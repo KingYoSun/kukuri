@@ -3,7 +3,7 @@
 ## 現在判定
 
 - 実装・実機検証済み。製品コード`747a7440`は全CI・独立監査PASS。最終記録差分の監査・merge tree確認はPR #906／Issue #905へ記録する。基準 `c4616fc706b94150ac6c2ac06aec68bc1c2b0f5a`。
-- Scope revision: `2026-09-07-linux-deb-release-addition-v2`。リスク区分C。
+- Scope revision: `2026-09-07-linux-deb-release-addition-v3`。リスク区分C。v2のDeb製品条件は不変、後述の承認済み通知test安定化を追加。
 - 2026-09-07に計画・実装・commit・PR・必須CI／独立監査成功後のmergeを利用者が承認。Releaseのversion／tag／公開承認は別工程。
 - 固定AC-D1〜6、INVAR-D1〜5、INV-D1〜5、TR-D1〜5（TR-D4a〜d）は[Issue #905](https://github.com/KingYoSun/kukuri/issues/905)。#890の公開前追加依存であり、#889／#904の完了済み監査は変更しない。
 
@@ -108,3 +108,13 @@
 | AC-D6／INV-D5 | README en／ja、ADR0049、Deb／release／quickstart／troubleshooting／dev手順、builder preview現状、CIと独立監査。実公開は#890へ引渡し |
 
 独立監査は[監査記録](2026-09-07-issue-905-linux-deb-updater-audit.md)を参照。Release version／tag／sourceの公開承認は本Issueの実装承認に含めず、Debを含む最終公開確認が終わるまで#890をCloseしない。
+
+## v3: 承認済み通知テスト安定化
+
+最終記録head`794e6c9f`のCIで既存通知テストが2回5000msを超過したためmergeを保留し、利用者へ範囲追加を確認した。2026-09-07に「含めて修正してください」と承認を受け、AC-D6／T6にtest安定化を追加した。Deb本体・更新境界・既存の製品inventoryは変更しない。
+
+- 修正前の再現: Fast CI `34081123960`の初回とattempt2で`os notification ... focus-reply-40`がtimeout。attempt2は5225ms、残り1184testsは成功。ローカル変更前の9testsは成功したが、同case3033ms、file内test合計23.64sであった。異なる環境の時間を同条件の性能保証として比較しない。
+- 原因の切り分け: fixtureの背景TimelineとThreadで同じ返信群を重複描画していた。通知targetをThreadへ開いてfocusする契約に不要な背景側だけを親投稿1件に絞った。Threadには45件すべてを残す。
+- 維持した検証: OS／in-app、first／older pageの両target、対象postのclassとfocus、scroll container、route、topic／thread、再クリック、競合、missing target、private channelの全既存assertions。新contractでThreadの30件＋15件、各targetの所属pageを明示的に検査した。
+- 修正後の同じローカルcommand: 対象10tests PASS、問題case1445ms、file内test合計9.41s。timeout延長・retry・skip・製品コード変更は0。
+- `cargo xtask desktop-ui-check`と新headのCIで必須validationを確認する。前回Deb監査PASSを維持し、testと記録deltaだけを独立監査する。最終の結果とmerge tree照合はPR #906に集約し、製品差分のない証跡更新のためだけに全実機試験を繰り返さない。

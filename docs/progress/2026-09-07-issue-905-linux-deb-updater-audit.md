@@ -56,3 +56,9 @@ SSHで実機の対象7ソースのblob一致、検証Deb3本のhash、OS承認�
 - 最終記録commitは製品コードを変更しない。記録deltaの監査と最終headのCI結果はPR #906へ記録し、merge後に対象treeを照合してIssueをCloseする。
 
 詳細な実行条件とAC／INVAR対応は[作業記録](2026-09-07-issue-905-linux-deb-updater.md)を参照する。
+
+## v3承認追加の監査境界
+
+2026-09-07に利用者が既存通知testの安定化を承認した。Scope revisionは`2026-09-07-linux-deb-release-addition-v3`。上記v2のDeb製品監査は当時のPASSとして維持する。追加差分は通知fixtureの背景Timeline縮小、Threadの全45件・2page／target維持contract、対応する作業記録のみであり、Deb製品入力・固定inventoryは不変。
+
+v3では全既存assertions／Threadの新旧ページ／通知入口を維持したまま、背景側の重複描画を減らしたかを独立に確認する。timeout延長・retry・skipや製品コード変更による成功扱いはしない。追加差分の対象head・判定とCI結果はPR #906の最終監査コメントに記録する。
