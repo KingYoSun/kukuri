@@ -515,7 +515,7 @@ export function useDesktopShellSectionLoaders({
   );
 
   // 個別 loader も公開する: section 遷移起点の effect(useDesktopShellDataEffects)が
-  // 同じ実装を呼ぶための SSoT。取得・state 反映ロジックはこのファイルにだけ置く。
+  // 同じ実装を呼ぶための入口。通知の取得・state反映は注入したloaderへ委譲する。
   return {
     loadShellSections,
     loadProfileSection,
