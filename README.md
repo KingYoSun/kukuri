@@ -11,12 +11,12 @@ kukuri is a topic-first P2P social app. Find a topic you care about, join a publ
 > [!IMPORTANT]
 > kukuri is currently a **Builder Preview for testers**, not a stable general release.
 
-**[Download the latest Windows Preview](https://github.com/KingYoSun/kukuri/releases/latest)**
+**[Download the latest Windows / Linux Preview](https://github.com/KingYoSun/kukuri/releases/latest)**
 
 | Platform | Current support |
 | --- | --- |
 | Windows 10 / 11 | NSIS installer from the latest GitHub Release |
-| Linux | AppImage / Deb (x86_64), CLI (x86_64, aarch64): check the selected Release's assets; use source-run if not yet published |
+| Linux | AppImage / Deb (x86_64), CLI (x86_64, aarch64), published together in [v0.2.0-preview.2](https://github.com/KingYoSun/kukuri/releases/tag/v0.2.0-preview.2) |
 | macOS | No package is currently provided |
 
 Preview installers may be unsigned. Windows SmartScreen can therefore show a warning; check the release notes before running the installer.
