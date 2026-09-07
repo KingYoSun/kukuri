@@ -11,6 +11,7 @@
         "bundleMediaFramework": false
       },
       "deb": {
+        "desktopTemplate": "linux/kukuri.desktop",
         "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0", "libayatana-appindicator3-1", "libssl3", "policykit-1"],
         "section": "net",
         "files": {

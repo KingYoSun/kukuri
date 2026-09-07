@@ -46,3 +46,10 @@
 - 実Deb署名の正常download／1byte改変／形式別entry欠落はLinux package CIの既存`updater_install`へ追加し、実package生成後に実行する。fixture routingだけを署名証拠にしない。
 - README en／ja、Deb導入・更新・失敗時回復／削除runbook、quickstart／troubleshooting／dev／release、builder preview現状を同期。Debの公開は未実施。
 - 手持ちUbuntu Desktop用に隔離stagingの`99.0.1→99.0.2→99.0.3` test-key Debを準備中。公開設定・配布秘密鍵は使用せず、日常profileへ書き込まない。system packageの導入・実GUI更新／取消はまだ未実施。
+
+### 実Deb生成で発見した不一致
+
+- 初回Linux package CI `34078227469`と`local2`でAppImage／Deb生成・署名は成功したが、Deb payload検査が`desktop executable/deep-link mismatch`でFAIL。
+- 実Debのdesktop entryは`MimeType=x-scheme-handler/kukuri`を含む一方、`Exec=kukuri-desktop-tauri`でURL引数が欠落していた。Tauri bundler既定値を受理するための検査緩和はせず、Deb専用desktop templateへ`Exec=kukuri-desktop-tauri %U`を設定し、実物を再検査する。
+- `test_bundler_default_without_url_argument_is_rejected`へ同じ不一致を固定。既存失敗証拠と新しいfixtureを区別する。
+- `local2`のruntime AppIndicatorは導入済みだが開発用pkg-config情報がなく、初回bundlerは停止した。Ubuntuの対応dev package4個を検証directoryへ非root展開し、限定`PKG_CONFIG_PATH`で解決。OSのAPT設定・installed packageは変更していない。

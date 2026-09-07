@@ -61,6 +61,14 @@ class DebTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     deb.inspect_payload(metadata, archive(files), archive(scripts), "0.1.8")
 
+    def test_bundler_default_without_url_argument_is_rejected(self):
+        # Observed in both the real Ubuntu Desktop Deb and initial Linux package CI.
+        files = self.fixture()
+        name = "usr/share/applications/kukuri.desktop"
+        files[name] = (files[name][0].replace(b"Exec=kukuri-desktop-tauri %U", b"Exec=kukuri-desktop-tauri"), 0o644)
+        with self.assertRaisesRegex(ValueError, "desktop executable/deep-link mismatch"):
+            deb.inspect_payload(self.metadata(), archive(files), archive({}), "0.1.8")
+
 
 if __name__ == "__main__":
     unittest.main()

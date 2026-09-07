@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=kukuri
+Comment=kukuri desktop
+Exec=kukuri-desktop-tauri %U
+Icon=kukuri-desktop-tauri
+Terminal=false
+Categories=Network;
+StartupWMClass=kukuri-desktop-tauri
+MimeType=x-scheme-handler/kukuri;
