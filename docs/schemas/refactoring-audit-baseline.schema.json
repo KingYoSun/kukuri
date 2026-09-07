@@ -1,0 +1,749 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Reviewed refactoring campaign completion baseline v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "record_kind",
+    "completed_campaign_baseline",
+    "tracking_issue",
+    "scope_revision",
+    "audit_date",
+    "baseline_commit",
+    "audit_start_commit",
+    "commit_semantics",
+    "completion_record",
+    "update_policy",
+    "activation_policy",
+    "code_tree_oids",
+    "scope",
+    "oversized",
+    "signals",
+    "signal_combination",
+    "signal_semantics",
+    "diagnostics_at_baseline",
+    "human_only_triggers",
+    "structural_metrics",
+    "children",
+    "candidate_counts",
+    "candidates",
+    "known_limitations"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "../docs/schemas/refactoring-audit-baseline.schema.json"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "record_kind": {
+      "const": "refactoring-campaign-completion"
+    },
+    "completed_campaign_baseline": {
+      "const": true
+    },
+    "tracking_issue": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "scope_revision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "audit_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "baseline_commit": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "audit_start_commit": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "commit_semantics": {
+      "type": "string",
+      "minLength": 1
+    },
+    "completion_record": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\\\u0000]+$"
+    },
+    "update_policy": {
+      "type": "string",
+      "minLength": 1
+    },
+    "activation_policy": {
+      "type": "string",
+      "minLength": 1
+    },
+    "code_tree_oids": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{40}$"
+      },
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\\\u0000]+$"
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_policy",
+        "source_policy_blob",
+        "extensions",
+        "excluded_exact_paths",
+        "excluded_path_prefixes",
+        "tracked_candidate_count",
+        "tracked_candidate_paths_sha256",
+        "population_semantics",
+        "member_digest_semantics",
+        "groups"
+      ],
+      "properties": {
+        "source_policy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_policy_blob": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "extensions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "excluded_exact_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\\\u0000]+$"
+          },
+          "minItems": 0,
+          "uniqueItems": true
+        },
+        "excluded_path_prefixes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\\\u0000]+$"
+          },
+          "minItems": 0,
+          "uniqueItems": true
+        },
+        "tracked_candidate_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "tracked_candidate_paths_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "population_semantics": {
+          "type": "string",
+          "minLength": 1
+        },
+        "member_digest_semantics": {
+          "type": "string",
+          "minLength": 1
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/group"
+          },
+          "minItems": 6,
+          "uniqueItems": true,
+          "maxItems": 6
+        }
+      }
+    },
+    "oversized": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "line_limit",
+        "count",
+        "ratchet_path",
+        "ratchet_blob",
+        "line_count_semantics",
+        "files"
+      ],
+      "properties": {
+        "line_limit": {
+          "const": 1000
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ratchet_path": {
+          "const": "xtask/oversized-baseline.json"
+        },
+        "ratchet_blob": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "line_count_semantics": {
+          "type": "string",
+          "minLength": 1
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/oversized_file"
+          },
+          "minItems": 0,
+          "uniqueItems": true
+        }
+      }
+    },
+    "signals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ratchet_new_paths",
+        "ratchet_increased_caps"
+      ],
+      "properties": {
+        "ratchet_new_paths": {
+          "$ref": "#/definitions/signal"
+        },
+        "ratchet_increased_caps": {
+          "$ref": "#/definitions/signal"
+        }
+      }
+    },
+    "signal_combination": {
+      "const": "any"
+    },
+    "signal_semantics": {
+      "type": "string",
+      "minLength": 1
+    },
+    "diagnostics_at_baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commits_since_baseline",
+        "changed_candidate_paths",
+        "max_path_change_commits",
+        "days_since_audit",
+        "historical_context"
+      ],
+      "properties": {
+        "commits_since_baseline": {
+          "const": 0
+        },
+        "changed_candidate_paths": {
+          "const": 0
+        },
+        "max_path_change_commits": {
+          "const": 0
+        },
+        "days_since_audit": {
+          "const": 0
+        },
+        "historical_context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "since",
+            "method",
+            "commits",
+            "path_change_commits"
+          ],
+          "properties": {
+            "since": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "method": {
+              "type": "string",
+              "minLength": 1
+            },
+            "commits": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "path_change_commits": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "propertyNames": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\\\u0000]+$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "human_only_triggers": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "structural_metrics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/metric"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "children": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/child"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "candidate_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selected",
+        "deferred",
+        "rejected",
+        "other_type",
+        "unclassified"
+      ],
+      "properties": {
+        "selected": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "deferred": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rejected": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "other_type": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unclassified": {
+          "const": 0
+        }
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/candidate"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "known_limitations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/limitation"
+      },
+      "minItems": 0,
+      "uniqueItems": true
+    }
+  },
+  "definitions": {
+    "group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "selector_regex",
+        "before_count",
+        "member_count",
+        "member_paths_sha256",
+        "added_paths",
+        "removed_paths"
+      ],
+      "properties": {
+        "id": {
+          "enum": [
+            "INV-1",
+            "INV-2",
+            "INV-3",
+            "INV-4",
+            "INV-5",
+            "INV-6"
+          ]
+        },
+        "selector_regex": {
+          "type": "string",
+          "minLength": 1
+        },
+        "before_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "member_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "member_paths_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "added_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\\\u0000]+$"
+          },
+          "minItems": 0,
+          "uniqueItems": true
+        },
+        "removed_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\\\u0000]+$"
+          },
+          "minItems": 0,
+          "uniqueItems": true
+        }
+      }
+    },
+    "oversized_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "before_lines",
+        "observed_lines",
+        "ratchet_lines"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\\\u0000]+$"
+        },
+        "before_lines": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "observed_lines": {
+          "type": "integer",
+          "minimum": 1000
+        },
+        "ratchet_lines": {
+          "type": "integer",
+          "minimum": 1000
+        }
+      }
+    },
+    "signal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "initial_value",
+        "operator",
+        "threshold",
+        "unit",
+        "reason"
+      ],
+      "properties": {
+        "initial_value": {
+          "const": 0
+        },
+        "operator": {
+          "const": "gt"
+        },
+        "threshold": {
+          "const": 0
+        },
+        "unit": {
+          "const": "paths"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 20
+        }
+      }
+    },
+    "metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "before",
+        "after",
+        "before_paths",
+        "after_paths",
+        "measurement_regex",
+        "issues",
+        "meaning",
+        "measurement_scope"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "before": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "after": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "before_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\\\u0000]+$"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "after_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\\\u0000]+$"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "measurement_regex": {
+          "type": "string",
+          "minLength": 1
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "meaning": {
+          "type": "string",
+          "minLength": 1
+        },
+        "measurement_scope": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "before_symbol",
+                "after_symbol"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "whole_file"
+                },
+                "before_symbol": {
+                  "type": "null"
+                },
+                "after_symbol": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "before_symbol",
+                "after_symbol"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "struct_fields"
+                },
+                "before_symbol": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "after_symbol": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "child": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "issue",
+        "pr",
+        "audit_head",
+        "merge_commit",
+        "check_count",
+        "all_checks_success",
+        "fast_run_id",
+        "target_paths",
+        "audited_head_matches_merge",
+        "post_merge_changed_paths"
+      ],
+      "properties": {
+        "issue": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "pr": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "audit_head": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "merge_commit": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "check_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "all_checks_success": {
+          "const": true
+        },
+        "fast_run_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "target_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\\\u0000]+$"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "audited_head_matches_merge": {
+          "const": true
+        },
+        "post_merge_changed_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\\\u0000]+$"
+          },
+          "minItems": 0,
+          "uniqueItems": true
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "classification",
+        "reason",
+        "followup"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "classification": {
+          "enum": [
+            "実施",
+            "延期",
+            "却下",
+            "別種別"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "followup": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "limitation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "status",
+        "description",
+        "evidence"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "not_measured",
+            "pre_existing",
+            "recorded"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\\\u0000]+$"
+        }
+      }
+    }
+  }
+}
