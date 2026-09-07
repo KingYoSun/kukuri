@@ -250,3 +250,111 @@ async fn invalid_preset_signature_is_an_error_not_pending() {
         .await
         .expect_err("invalid signature must fail, not be skipped");
 }
+
+#[tokio::test]
+async fn missing_preset_envelope_keeps_other_rooms_and_recovers_after_delivery() {
+    let f = fixture().await;
+    let replica = author_replica_id(f.preset.owner_pubkey.as_str());
+    let record = f
+        .docs
+        .query_replica(&replica, DocQuery::Exact(preset_key(&f.preset)))
+        .await
+        .expect("state")
+        .pop()
+        .expect("state record");
+    let state: DomePresetStateDocV1 = serde_json::from_slice(&record.value).expect("decode state");
+    let key = format!("envelopes/{}", state.last_envelope_id.as_str());
+    let signed = f
+        .docs
+        .query_replica(&replica, DocQuery::Exact(key.clone()))
+        .await
+        .expect("signed envelope")
+        .pop()
+        .expect("envelope");
+    f.docs
+        .apply_doc_op(
+            &replica,
+            DocOp::DeletePrefix {
+                prefix: key.clone(),
+            },
+        )
+        .await
+        .expect("delay envelope");
+    assert_pending_then_available(&f).await;
+    f.docs
+        .apply_doc_op(
+            &replica,
+            DocOp::SetBytes {
+                key,
+                value: signed.value,
+            },
+        )
+        .await
+        .expect("deliver envelope");
+    assert_eq!(
+        f.app
+            .list_game_rooms(TOPIC)
+            .await
+            .expect("complete rooms")
+            .len(),
+        2
+    );
+}
+
+#[tokio::test]
+async fn current_instance_preset_controls_readiness_even_with_an_old_cache_row() {
+    let f = fixture().await;
+    let old_row = f
+        .store
+        .list_topic_game_rooms(TOPIC)
+        .await
+        .expect("rows")
+        .into_iter()
+        .find(|row| row.room_id == f.dome_id)
+        .expect("Dome row");
+    let mut customization = old_row
+        .metaverse
+        .as_ref()
+        .expect("state")
+        .dome
+        .customization
+        .clone();
+    customization.environment.fog_density_micros += 1;
+    f.app
+        .update_metaverse_room(
+            TOPIC,
+            &f.dome_id,
+            UpdateMetaverseRoomInput {
+                status: old_row.status.clone(),
+                customization,
+            },
+        )
+        .await
+        .expect("new revision");
+    let current = f
+        .app
+        .list_game_rooms(TOPIC)
+        .await
+        .expect("new rooms")
+        .into_iter()
+        .find(|row| row.room_id == f.dome_id)
+        .expect("new Dome")
+        .metaverse
+        .expect("new state");
+    assert_eq!(current.preset_ref.revision, f.preset.revision + 1);
+    f.store
+        .upsert_game_room_cache(old_row)
+        .await
+        .expect("lagging derived cache");
+    *f.blobs.held_hash.lock().await = Some(BlobHash::new(current.preset_ref.manifest_blob_hash));
+    assert_pending_then_available(&f).await;
+    *f.blobs.held_hash.lock().await = None;
+    assert_eq!(
+        f.app
+            .list_game_rooms(TOPIC)
+            .await
+            .expect("complete rooms")
+            .len(),
+        2
+    );
+}

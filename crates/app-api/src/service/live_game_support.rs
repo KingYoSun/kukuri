@@ -1,5 +1,22 @@
 use super::*;
 
+#[derive(Debug)]
+pub(crate) enum DomeReadUnavailable {
+    Preset,
+    Envelope,
+}
+
+impl std::fmt::Display for DomeReadUnavailable {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Preset => "Dome preset manifest is unavailable",
+            Self::Envelope => "signed Dome envelope is unavailable",
+        })
+    }
+}
+
+impl std::error::Error for DomeReadUnavailable {}
+
 impl AppService {
     pub async fn fetch_metaverse_blob_bytes(&self, hash: &str) -> Result<Option<Vec<u8>>> {
         self.services
@@ -199,14 +216,26 @@ impl AppService {
         {
             anyhow::bail!("Dome Preset reference does not match its manifest");
         }
-        let signed: DomePresetManifestV1 = fetch_verified_dome_envelope(
+        let signed: DomePresetManifestV1 = match fetch_verified_dome_envelope(
             self.services.docs_sync.as_ref(),
             &replica,
             &state.last_envelope_id,
             "dome-preset",
             &manifest.owner_pubkey,
         )
-        .await?;
+        .await
+        {
+            Ok(signed) => signed,
+            Err(error)
+                if matches!(
+                    error.downcast_ref::<DomeReadUnavailable>(),
+                    Some(DomeReadUnavailable::Envelope)
+                ) =>
+            {
+                return Ok(None);
+            }
+            Err(error) => return Err(error),
+        };
         if signed != manifest {
             anyhow::bail!("signed Dome Preset content does not match its manifest blob");
         }
@@ -615,7 +644,7 @@ pub(crate) async fn fetch_verified_dome_envelope<T: DeserializeOwned>(
         .next()
         .map(|record| serde_json::from_slice(&record.value))
         .transpose()?
-        .ok_or_else(|| anyhow::anyhow!("signed Dome envelope is unavailable"))?;
+        .ok_or(DomeReadUnavailable::Envelope)?;
     envelope.verify()?;
     if envelope.id != *envelope_id
         || envelope.kind != expected_kind

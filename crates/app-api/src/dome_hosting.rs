@@ -57,7 +57,7 @@ impl AppService {
         let preset = self
             .fetch_dome_preset_manifest(&instance.preset_ref)
             .await?
-            .context("Dome preset manifest is unavailable")?;
+            .ok_or(DomeReadUnavailable::Preset)?;
         let records = self
             .list_dome_hosting_records(&replica, &input.instance_id)
             .await?;
@@ -911,7 +911,7 @@ impl AppService {
         let preset = self
             .fetch_dome_preset_manifest(&instance.preset_ref)
             .await?
-            .context("Dome preset manifest is unavailable")?;
+            .ok_or(DomeReadUnavailable::Preset)?;
         Ok(DomeHostingView {
             instance_id: instance.instance_id.clone(),
             state,
