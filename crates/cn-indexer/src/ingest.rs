@@ -36,17 +36,13 @@ use kukuri_cn_core::{IndexEntryStore, IndexScopeKind, NewIndexEntry};
 use kukuri_cn_safety::ReasonCode;
 use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
 use kukuri_cn_safety_runtime::{SafetyScanOutcome, SafetyScanService};
-use kukuri_core::{
-    AssetRef, KukuriEnvelope, KukuriMediaManifestV1, ObjectStatus, PayloadRef, ReplicaId,
-    blob_hash, verify_post_withdrawal,
-};
+use kukuri_core::{KukuriEnvelope, ObjectStatus, ReplicaId, verify_post_withdrawal};
 use kukuri_docs_sync::{DocFetchPolicy, DocQuery, DocRecord, DocsSync, stable_key};
 
 use crate::projection::{IndexProjection, IndexedEntry};
 
-/// app-api の投稿上限（10,000 Unicode scalar values）を UTF-8 bytes でも有界にする。
-const MAX_INDEXABLE_POST_BODY_CHARS: usize = 10_000;
-const MAX_INDEXABLE_POST_BODY_BYTES: u64 = (MAX_INDEXABLE_POST_BODY_CHARS as u64) * 4;
+mod source;
+use source::{PostObjectView, SourceResolver};
 
 /// 単一 scope（topic / channel）を ingest した結果のサマリ（監査 / テスト用）。
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -299,7 +295,11 @@ impl IngestPipeline {
         }
 
         // 本文 text を取り出す。blob 参照は scan 用の一時 fetch のみ（恒久保存しない）。
-        let text = match self.resolve_body_text(replica_id, &object, envelopes).await {
+        let source = SourceResolver::new(self.docs_sync.as_ref(), self.blob_service.as_deref());
+        let text = match source
+            .resolve_body_text(replica_id, &object, envelopes)
+            .await
+        {
             Ok(text) => text,
             Err(error) => {
                 self.deindex_object(scope_kind, scope_id, object.object_id.as_str())
@@ -345,7 +345,7 @@ impl IngestPipeline {
         // provider / fetcher が未構成なら scan は Unavailable → fail-closed hold になり、media
         // 参照 post は従来どおり index されない（挙動後退なし）。全 allow のときのみ derived
         // 検索タグを収集する。
-        let media_targets = match self.media_scan_targets(replica_id, &object).await {
+        let media_targets = match source.media_scan_targets(replica_id, &object).await {
             Ok(targets) => targets,
             Err(error) => {
                 self.deindex_object(scope_kind, scope_id, object.object_id.as_str())
@@ -448,172 +448,6 @@ impl IngestPipeline {
             .await?;
         Ok(())
     }
-
-    /// scan 対象の media 参照を blob 単位（hash + mime）に展開する（#609）。
-    ///
-    /// attachments は `AssetRef` から直接、`media_manifest_refs` は replica 上の署名済み
-    /// manifest（`manifests/media/<id>/envelope`）を解決して items（+ thumbnail）に展開する。
-    /// 同一 blob hash は先勝ちで dedup する。manifest の欠落・検証失敗は Err
-    /// （呼び出し側が index しない = fail-closed）。
-    async fn media_scan_targets(
-        &self,
-        replica_id: &ReplicaId,
-        object: &PostObjectView,
-    ) -> Result<Vec<MediaScanTarget>> {
-        let mut targets: Vec<MediaScanTarget> = Vec::new();
-        for asset in &object.attachments {
-            push_media_target(
-                &mut targets,
-                asset.hash.as_str().to_string(),
-                non_empty_mime(asset.mime.as_str()),
-            );
-        }
-        for reference in &object.media_manifest_refs {
-            let manifest = self
-                .resolve_media_manifest(replica_id, object, reference)
-                .await?;
-            for item in &manifest.items {
-                push_media_target(
-                    &mut targets,
-                    item.blob_hash.as_str().to_string(),
-                    non_empty_mime(item.mime.as_str()),
-                );
-                if let Some(thumbnail) = &item.thumbnail_blob_hash {
-                    // thumbnail の mime は manifest に無い（fetcher の magic bytes 判定に委ねる）。
-                    push_media_target(&mut targets, thumbnail.as_str().to_string(), None);
-                }
-            }
-        }
-        Ok(targets)
-    }
-
-    /// replica から署名済み media manifest を解決する。
-    ///
-    /// 共有 replica の entry が本物であること（署名検証）に加えて、post author 本人が署名した
-    /// manifest であることを要求する（他者の manifest を参照して scan 対象を偽装する経路を
-    /// 塞ぐ）。いずれの失敗も Err = fail-closed。
-    async fn resolve_media_manifest(
-        &self,
-        replica_id: &ReplicaId,
-        object: &PostObjectView,
-        manifest_id: &str,
-    ) -> Result<KukuriMediaManifestV1> {
-        let key = stable_key("manifests/media", &format!("{manifest_id}/envelope"));
-        let records = self
-            .docs_sync
-            .query_replica_with_policy(
-                replica_id,
-                DocQuery::Exact(key),
-                DocFetchPolicy::LocalThenRemote,
-            )
-            .await
-            .with_context(|| format!("failed to query media manifest `{manifest_id}`"))?;
-        let Some(record) = records.into_iter().next() else {
-            bail!("media manifest `{manifest_id}` is not present in the replica");
-        };
-        let envelope: KukuriEnvelope = serde_json::from_slice(&record.value)
-            .with_context(|| format!("failed to decode media manifest envelope `{manifest_id}`"))?;
-        envelope.verify().with_context(|| {
-            format!("media manifest envelope `{manifest_id}` failed verification")
-        })?;
-        if envelope.kind != "media-manifest" {
-            bail!(
-                "entry for media manifest `{manifest_id}` has unexpected kind `{}`",
-                envelope.kind
-            );
-        }
-        if envelope.pubkey.as_str() != object.author.as_str() {
-            bail!("media manifest `{manifest_id}` is not signed by the post author (fail-closed)");
-        }
-        let manifest: KukuriMediaManifestV1 = serde_json::from_str(envelope.content.as_str())
-            .with_context(|| format!("failed to parse media manifest content `{manifest_id}`"))?;
-        Ok(manifest)
-    }
-
-    /// post 本文 text を取り出す。
-    ///
-    /// inline text はそのまま返す。blob text は同一 scope scan で取得済みの署名済み envelope と object
-    /// state の参照を突合し、`BlobService::fetch_blob_ephemeral` で本文 bytes を一時取得する。取得した
-    /// bytes は宣言サイズ・上限・BLAKE3 hash・UTF-8 を検証し、raw blob は恒久保存しない。
-    async fn resolve_body_text(
-        &self,
-        _replica_id: &ReplicaId,
-        object: &PostObjectView,
-        envelopes: &HashMap<String, DocRecord>,
-    ) -> Result<String> {
-        match &object.payload_ref {
-            PayloadRef::InlineText { text } => Ok(text.clone()),
-            PayloadRef::BlobText { hash, bytes, .. } => {
-                if *bytes > MAX_INDEXABLE_POST_BODY_BYTES {
-                    bail!(
-                        "blob text declared size exceeds the index body limit ({} > {} bytes)",
-                        bytes,
-                        MAX_INDEXABLE_POST_BODY_BYTES
-                    );
-                }
-                let record = envelopes
-                    .get(object.object_id.as_str())
-                    .context("blob text envelope is missing")?;
-                let envelope: KukuriEnvelope = serde_json::from_slice(&record.value)
-                    .context("failed to decode post envelope for blob text")?;
-                envelope
-                    .verify()
-                    .context("post envelope failed verification")?;
-                if envelope.id.as_str() != object.object_id {
-                    bail!("blob text envelope id does not match the object state");
-                }
-                if envelope.pubkey.as_str() != object.author {
-                    bail!("blob text envelope author does not match the object state");
-                }
-                let content = envelope
-                    .post_content()
-                    .context("failed to parse blob text post content")?
-                    .context("blob text envelope is not a post")?;
-                if content.payload_ref != object.payload_ref {
-                    bail!("blob text payload metadata does not match the signed envelope");
-                }
-
-                let blob_service = self
-                    .blob_service
-                    .as_ref()
-                    .context("blob service is not configured for blob text")?;
-                let fetched = blob_service
-                    .fetch_blob_ephemeral(hash)
-                    .await
-                    .context("failed to fetch blob text body")?
-                    .context("blob text body is not retrievable")?;
-                let actual_bytes = u64::try_from(fetched.len())
-                    .context("blob text body size does not fit in u64")?;
-                if actual_bytes != *bytes {
-                    bail!(
-                        "blob text body size does not match metadata ({} != {} bytes)",
-                        actual_bytes,
-                        bytes
-                    );
-                }
-                if actual_bytes > MAX_INDEXABLE_POST_BODY_BYTES {
-                    bail!(
-                        "blob text body exceeds the index body limit ({} > {} bytes)",
-                        actual_bytes,
-                        MAX_INDEXABLE_POST_BODY_BYTES
-                    );
-                }
-                if blob_hash(&fetched) != *hash {
-                    bail!("blob text body hash does not match metadata");
-                }
-                let text = String::from_utf8(fetched).context("blob text body is not UTF-8")?;
-                let char_count = text.chars().count();
-                if char_count > MAX_INDEXABLE_POST_BODY_CHARS {
-                    bail!(
-                        "blob text body exceeds the index character limit ({} > {} characters)",
-                        char_count,
-                        MAX_INDEXABLE_POST_BODY_CHARS
-                    );
-                }
-                Ok(text)
-            }
-        }
-    }
 }
 
 enum IngestOutcome {
@@ -621,49 +455,6 @@ enum IngestOutcome {
     SkippedNonAllow,
     Deindexed,
     Ignored,
-}
-
-/// docs replica に保存された post object state の最小 view。
-///
-/// `object_persistence_support` の `CanonicalPostHeader`（= `KukuriPostObjectV1`）と同じ JSON を
-/// 部分的に読む。cn-indexer は index に必要な最小フィールドのみを取り出す。
-#[derive(Debug, serde::Deserialize)]
-struct PostObjectView {
-    object_id: String,
-    author: String,
-    created_at: i64,
-    payload_ref: PayloadRef,
-    #[serde(default)]
-    attachments: Vec<AssetRef>,
-    #[serde(default)]
-    media_manifest_refs: Vec<String>,
-    #[serde(default)]
-    status: ObjectStatus,
-}
-
-/// scan 対象の media 参照 1 件（blob hash + 参照元 metadata 由来の mime）。
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct MediaScanTarget {
-    hash: String,
-    mime: Option<String>,
-}
-
-/// 同一 blob hash を dedup しながら scan 対象へ追加する（mime は先勝ち）。
-fn push_media_target(targets: &mut Vec<MediaScanTarget>, hash: String, mime: Option<String>) {
-    if targets.iter().any(|target| target.hash == hash) {
-        return;
-    }
-    targets.push(MediaScanTarget { hash, mime });
-}
-
-/// 空 / 空白のみの mime は「無し」として扱う。
-fn non_empty_mime(mime: &str) -> Option<String> {
-    let trimmed = mime.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
 }
 
 /// 本文 text に derived 検索タグを相乗りさせた投影用 text を組み立てる。
