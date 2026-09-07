@@ -3,6 +3,12 @@
 ## Status
 Draft
 
+2026-09-08補足（#928）: 本文の`community_index` / `moderation` / `community_local_trust`を
+`Availability::Planned`とする記述と§2.9の昇格判断は起草時の記録である。
+3 capabilityは#616の実行時readiness / fail-closed gateを経て#617で`Available`へ移行済み。
+現在の提供状態と配備ごとの公開条件は[ADR 0025](0025-community-node-indexing-foundation.md)の
+2026-08-16改訂を参照する。以下の当時の判断とcritical safetyの条件自体は変更しない。
+
 ## Date
 2026-06-30
 
