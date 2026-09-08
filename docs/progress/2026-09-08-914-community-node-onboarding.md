@@ -6,7 +6,7 @@
 - Scope revision: `2026-09-08-914-plan-v1`。2026-09-08に実装・commit・PR・CI成功後のmergeまで承認。
 - 基準commit: `916f5e0a1c2a81cfe0f88aa463fd77cc1e793c19`。
 - 区分: C。固定AC-1〜6、INVAR-1〜5、INV-1〜7、TR-1〜10の全文はIssue本文。計画原本は`.codex/plans/2026-09-08-issue-914-community-node-onboarding-and-index-recovery.md`。
-- 現在判定: 実装・ローカル統合検証済み。初回独立監査の3件を修正し、差分監査と最終CIを待つ。
+- 判定: 実装・ローカル統合検証・独立監査PASS。最終CI/merge/Closeの現在判定は[PR #946](https://github.com/KingYoSun/kukuri/pull/946)とIssue本文に集約する。
 - 非目標: relay優先度変更、自動同意、明示選択先の無断fallback、既定Node復活、規約本文改定、本番Node設定変更、関連のないrefactor。
 
 ## 原因と変更
@@ -84,9 +84,11 @@ CodeGraphを先行使用し、動的なJSX/IPC登録は登録箇所の参照検�
 | 監査修正の先行test | event後の遅延受諾、設定の古いpolicy、modal内受諾errorの3件で期待assertion失敗を確認 |
 | 監査修正targeted | settings/Dome、共通policy controller、shell actionsの43 tests PASS。表示言語をcallbackの期待引数へ追加し、既存assertionを維持 |
 | `cargo xtask check` | PASS（Rust clippy、Tauri check、frontend lint/typecheck） |
-| `cargo xtask rust-test` | PASS（non-CN、serial harness、doctests） |
+| `cargo xtask rust-test` | PASS（non-CN 886件、既定skip 4件、serial harness 22件、doctests） |
 | UI実機・画像 | Windows Tauri/WebViewの隔離mock fixtureで日本語の説明→先頭Node規約→同意→検索の成功した空結果を確認。画像はUI採用記録へ集約 |
-| 独立監査・CI | 初回FAILの3件を修正済み、delta判定/最終CI待ち |
+| 修正後UI gate | `cargo xtask desktop-lint`、`desktop-storybook`、`desktop-browser-test`（81件）、`desktop-visual-test`（16件、Windowsはpixel比較skip）PASS |
+| 独立監査 | `e0200108793f0dabcf7290ede797cb5fe1a9db46`でdelta PASS。inventory 7/適合7/不適合0/未分類0、blocker0、監査側の7 files / 53 tests PASS |
+| CI | 最終headの[PR checks](https://github.com/KingYoSun/kukuri/pull/946/checks)を参照。必須CI成功と上記監査PASSがmerge条件 |
 
 初回browser実行は日本語/英語とerror/zoomの10件が成功し、中国語4件はテスト側のbutton名が既存訳`接受`ではなく`同意`だったため失敗。既存訳に修正して再実行する。製品の訳をtestに合わせて変更していない。
 
@@ -97,4 +99,5 @@ CodeGraphを先行使用し、動的なJSX/IPC登録は登録箇所の参照検�
 - 採用記録: [UI review](../ui-reviews/2026-09-08-914-community-node-onboarding.md)。brief、文言、データ境界は`DESIGN.md` §4.3とNode法務データ分類へ反映。
 - Debian 13の実機と本番Nodeを使った報告sequenceは未確認。Windows/Chromiumの成功で置き換えない。
 - Windowsのvisual comparisonは設定上skip。Linux/Chromium baselineは専用workflowで作り、CIで比較する。
-- 完了条件を満たすまでIssueをCloseしない。区分Cの独立監査はPR headを固定して別工程で行い、監査後のcode deltaは再監査する。
+- 監査: [初回FAILの記録](2026-09-08-914-independent-audit-initial.md)、[修正差分PASSの記録](2026-09-08-914-independent-audit.md)。PASS後の文書だけの証跡更新は製品surface不変を確認し、code変更があればdeltaを再監査する。
+- 完了条件を満たすまでIssueをCloseしない。必須CI成功後にmergeし、merge treeと監査対象の製品surface一致を確認してIssue本文へ完了記録を残す。

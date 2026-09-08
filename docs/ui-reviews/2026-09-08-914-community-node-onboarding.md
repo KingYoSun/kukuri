@@ -17,6 +17,7 @@
 - Performance: 初回説明のための外部I/Oは0。表示条件判定は設定Node一覧のローカル走査。ほかのDialogが閉じるまでのobserverは表示後/unmountでcleanupし、追加pollを作らない。高負荷media面の変更なし。
 - Validation: [#914実装記録](../progress/2026-09-08-914-community-node-onboarding.md)を参照。
 - Not verified: Debian 13実機、本番Nodeの当時の障害。screen reader/Windows High Contrastは未確認。
-- Review result: 操作/geometryと上記Windows画像・Linux英語baselineを確認済み。初回独立監査の非同期競合・modal error指摘は修正し、差分の独立監査待ち。
+- Review result: 操作/geometryと上記Windows画像・Linux英語baselineを確認済み。初回独立監査の非同期競合・modal error指摘を修正し、[差分監査PASS](../progress/2026-09-08-914-independent-audit.md)。最終CIはPR checksへ集約。
+- Evidence scope: Windows画像/操作確認は`bf9df4a8`の隔離mock fixture。後続の設定/Dome controllerと競合修正は、43件のtargeted test、独立監査53件、および再実行したbrowser全81件で確認。初回説明/規約の見た目は変更していない。
 - Baseline: Linux生成runは[34202969424](https://github.com/KingYoSun/kukuri/actions/runs/34202969424)。runnerのCJK font不足による日本語豆腐画像は採用しない。視覚baselineは既存と同じ英語、日本語glyph/実描画はWindowsで確認する。
 - Exceptions: なし。Linux実機未確認をbrowser/WebViewのPASSに置き換えない。
