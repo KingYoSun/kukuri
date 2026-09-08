@@ -5,7 +5,7 @@
 - Scope revision: `2026-09-08-913-plan-v1`（ユーザー承認済み）。
 - 基準commit: `a5ebf1abdb1071c0d32b73bc30ae6d0477883e57`。
 - リスク区分: B。frontendの取得・表示更新の修正。Rustの変更は既存テストへのassertion追加のみで、永続化・署名・network・同意guardは変更しない。
-- 状態: 実装・targeted validation済み、全体検証中。
+- 状態: 実装・ローカル全体検証完了。PR #945の最終head CIを確認後にmergeする。
 - [Issue #913](https://github.com/KingYoSun/kukuri/issues/913) の先頭に固定AC/INVAR、INV-1〜5、TR-1〜6を記録。過去のDebian/peer0・peer1の観測は元の報告とコメントとして保持する。
 
 ## 原因と変更
@@ -56,15 +56,18 @@ TR-1/2はProfile統合/browser、TR-3はloaderのerror/retryと投稿失敗、TR
 
 | 検証 | 結果 |
 | --- | --- |
-| 非active Profile / loader targeted tests | 原因再現red→修正後green。全関連suiteの再実行中 |
+| 非active Profile / loader targeted tests | 原因再現red→修正後green。frontend全152ファイル・1,219件成功 |
 | actions / adult-content gate | 20 passed。対象hashへの禁止取得0のassertion維持 |
-| 実runtimeのProfile永続往復 | targeted 1 passed。追加のpeer0明示assertionは全体検証で再確認 |
+| 実runtimeのProfile永続往復 | 最終差分のtargeted 1 passed。再起動前後のpeer0、保存済み公開投稿2件、重複なしを確認 |
 | 日本語browser操作 | 1280×800、1024×800、390×800の3ケース成功。投稿後の件数+1、重複0、active Timeline維持、狭幅Profileへの移動後表示を確認 |
-| lint / typecheck | 成功。最終差分で再確認 |
-| `cargo xtask check` / `cargo xtask test` | 実行中。Rust 886件とharness 22件成功。check初回は追加Rust assertionのformat差分で停止し、`cargo fmt --all` 後の再実行は並行起動したxtask.exeのWindowsファイルロックで失敗。test完了後に直列で再実行する |
-| `cargo xtask desktop-ui-check` / CI | 未完了 |
+| lint / typecheck | 最終差分で成功（`cargo xtask check`に含む） |
+| `cargo xtask check` / `cargo xtask test` | ともに成功。Rust 886件・harness 22件・frontend 1,219件成功。check初回のformat差分を`cargo fmt --all`で修正。並行xtask.exeのWindowsファイルロックによる再実行失敗後、test完了後の直列実行で成功 |
+| `desktop-ui-check`相当の構成gate | 重複するlint/typecheck/Vitestは上記結果を使用し、Storybook build、browser全67件、Windows visual smoke全14件を個別実行して成功 |
+| Linux visual CI | 実装commit `9b2a0ed6` の `linux-desktop-ui` 成功（run `34193096837`）。baseline変更なし。最終headのCI結果はPRに記録 |
 
 frontend全体の初回実行は20件失敗した。19件はProfileにも同じ投稿が表示されることによる単数DOM検索の曖昧さで、元の検証対象のTimeline内へselectorを限定した。残るAccountKeyPanelの1件は並行実行中の5秒timeoutで、製品変更なしのtargeted再実行で成功した。判定条件やmedia禁止取得assertionは弱めていない。
+
+browser全体の初回は59成功・8失敗で、失敗は同じ投稿がProfileにも表示されたことによる単数検索の曖昧さだった。既存の投稿→Thread操作をTimelineに限定し、全67件の成功を確認した。
 
 ## UI証跡と確認の限界
 
@@ -80,4 +83,4 @@ frontend全体の初回実行は20件失敗した。19件はProfileにも同じ�
 
 ## 終了判定
 
-全体validationとPR CIを確認して追記する。区分Bの局所UI修正であり、認証・同意等のshared guard、親Issue、Reopen作業を含まないため独立監査の必須条件には該当しない。マージ後は対象差分の一致とIssue現在判定を確認する。
+固定AC/INVAR、INV-1〜5、TR-1〜6に上記証跡を対応付け、実装上のblockerは0。区分Bの局所UI修正であり、認証・同意等のshared guard、親Issue、Reopen作業を含まないため独立監査の必須条件には該当しない。最終headのCI、merge commitとの対象差分一致、Complete判定は[PR #945](https://github.com/KingYoSun/kukuri/pull/945)とIssueの現在判定へ記録する。
