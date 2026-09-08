@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
 
@@ -6,6 +6,7 @@ import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import { App } from '@/App';
 import {
   buildImagePost,
+  getActiveColumn,
   openSettingsSection,
   setViewportWidth,
 } from './DesktopShellPage.testHelpers';
@@ -43,9 +44,9 @@ test('adult-labeled media is not requested and shows a placeholder while display
   render(<App api={api} />);
 
   // メディア: 一貫したプレースホルダー表示。
-  expect(await screen.findByTestId('media-adult-gated-adult-image-post')).toBeInTheDocument();
+  expect(await within(getActiveColumn('Timeline')).findByTestId('media-adult-gated-adult-image-post')).toBeInTheDocument();
   // テキスト: 本文の代わりに代替表示。
-  expect(screen.getByTestId('post-adult-gated-adult-image-post')).toBeInTheDocument();
+  expect(within(getActiveColumn('Timeline')).getByTestId('post-adult-gated-adult-image-post')).toBeInTheDocument();
   expect(screen.queryByText('labeled adult caption')).not.toBeInTheDocument();
 
   // 取得制御: 対象 hash への取得リクエストが 1 度も発生しない。
@@ -74,7 +75,7 @@ test('adult-labeled text is hidden independently of media fetch control', async 
 
   render(<App api={api} />);
 
-  expect(await screen.findByTestId('post-adult-gated-adult-text-post')).toBeInTheDocument();
+  expect(await within(getActiveColumn('Timeline')).findByTestId('post-adult-gated-adult-text-post')).toBeInTheDocument();
   expect(screen.queryByText('text only adult body')).not.toBeInTheDocument();
 });
 
@@ -107,7 +108,7 @@ test('adult-labeled quote source gates the enclosing card and media fetch', asyn
   render(<App api={api} />);
 
   expect(
-    await screen.findByTestId('post-adult-gated-adult-quote-source-host')
+    await within(getActiveColumn('Timeline')).findByTestId('post-adult-gated-adult-quote-source-host')
   ).toBeInTheDocument();
   expect(screen.queryByText('safe-looking quote commentary')).not.toBeInTheDocument();
   expect(screen.queryByText('adult quote source body')).not.toBeInTheDocument();
@@ -145,7 +146,7 @@ test('adult-labeled reply preview gates the enclosing card and media fetch', asy
   render(<App api={api} />);
 
   expect(
-    await screen.findByTestId('post-adult-gated-adult-reply-preview-host')
+    await within(getActiveColumn('Timeline')).findByTestId('post-adult-gated-adult-reply-preview-host')
   ).toBeInTheDocument();
   expect(screen.queryByText('safe-looking reply body')).not.toBeInTheDocument();
   expect(screen.queryByText('adult reply preview body')).not.toBeInTheDocument();
@@ -189,7 +190,7 @@ test('enabling the safety setting fetches adult media and disabling stops and cl
 
   render(<App api={api} />);
 
-  expect(await screen.findByTestId('media-adult-gated-adult-image-post')).toBeInTheDocument();
+  expect(await within(getActiveColumn('Timeline')).findByTestId('media-adult-gated-adult-image-post')).toBeInTheDocument();
   expect(getBlobMediaPayload.mock.calls.filter(([hash]) => hash === ADULT_HASH)).toHaveLength(0);
 
   // 設定画面から明示的に有効化する。
@@ -218,7 +219,7 @@ test('enabling the safety setting fetches adult media and disabling stops and cl
   await waitFor(() => {
     expect(setAdultContentDisplayEnabled).toHaveBeenCalledWith(false);
   });
-  expect(await screen.findByTestId('media-adult-gated-adult-image-post')).toBeInTheDocument();
+  expect(await within(getActiveColumn('Timeline')).findByTestId('media-adult-gated-adult-image-post')).toBeInTheDocument();
   expect(
     getBlobMediaPayload.mock.calls.filter(([hash]) => hash === ADULT_HASH)
   ).toHaveLength(callsBeforeDisable);

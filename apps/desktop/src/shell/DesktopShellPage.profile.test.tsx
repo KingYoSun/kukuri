@@ -1,11 +1,13 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import { App } from '@/App';
+import type { TimelineView } from '@/lib/api';
 import {
   expectActiveTopic,
+  createDeferred,
   getActiveColumn,
   getDetailPane,
   getSocialConnectionsTabs,
@@ -27,13 +29,59 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+test('publishing refreshes the inactive profile column without changing the active timeline', async () => {
+  const user = userEvent.setup();
+  const api = createDesktopMockApi();
+  const createPost = vi.spyOn(api, 'createPost');
+  render(<App api={api} />);
+  const profileColumn = await screen.findByRole('region', { name: /^Profile Column,/ });
+  const timelineColumn = getActiveColumn('Timeline');
+
+  await publishPost(user, 'inactive profile regression');
+  await waitFor(() => expect(createPost).toHaveResolved());
+  const profile = await api.getMyProfile();
+  const saved = await api.listProfileTimeline(profile.pubkey);
+  expect(saved.items.some((post) => post.content === 'inactive profile regression')).toBe(true);
+  await waitFor(() => {
+    expect(within(profileColumn).getAllByText('inactive profile regression')).toHaveLength(1);
+  });
+  expect(getActiveColumn('Timeline')).toBe(timelineColumn);
+  expect(profileColumn).not.toHaveAttribute('aria-current', 'true');
+});
+
+test('an unrequested or loading profile does not report an empty public feed', async () => {
+  const api = createDesktopMockApi();
+  const pending = createDeferred<TimelineView>();
+  vi.spyOn(api, 'listProfileTimeline').mockReturnValue(pending.promise);
+  render(<App api={api} />);
+  const column = await screen.findByRole('region', { name: /^Profile Column,/ });
+  expect(within(column).queryByText('No public posts published yet.')).not.toBeInTheDocument();
+  expect(within(column).getByText('Loading profile…')).toBeInTheDocument();
+  await act(async () => pending.resolve({ items: [], next_cursor: null }));
+  await waitFor(() => expect(within(column).getByText('No public posts published yet.')).toBeInTheDocument());
+});
+
+test('a failed profile read offers retry instead of an empty public feed', async () => {
+  const user = userEvent.setup();
+  const api = createDesktopMockApi();
+  const read = vi.spyOn(api, 'listProfileTimeline').mockRejectedValue(new Error('profile unavailable'));
+  render(<App api={api} />);
+  const column = await screen.findByRole('region', { name: /^Profile Column,/ });
+  await waitFor(() => expect(within(column).getByText('profile unavailable')).toBeInTheDocument());
+  expect(within(column).queryByText('No public posts published yet.')).not.toBeInTheDocument();
+  read.mockResolvedValue({ items: [], next_cursor: null });
+  await user.click(within(column).getByRole('button', { name: 'Retry' }));
+  await waitFor(() => expect(within(column).getByText('No public posts published yet.')).toBeInTheDocument());
+  expect(within(column).queryByText('profile unavailable')).not.toBeInTheDocument();
+});
+
 test('profile overview aggregates public posts across topics and excludes private channel posts', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
 
   await publishPost(user, 'demo public post');
   await waitFor(() => {
-    expect(screen.getByText('demo public post')).toBeInTheDocument();
+    expect(within(getActiveColumn('Timeline')).getByText('demo public post')).toBeInTheDocument();
   });
 
   const channelDialog = await openChannelManager(user);
@@ -71,7 +119,7 @@ test('profile overview aggregates public posts across topics and excludes privat
   await selectWorkspace(user, 'Timeline');
   await publishPost(user, 'second public post');
   await waitFor(() => {
-    expect(screen.getByText('second public post')).toBeInTheDocument();
+    expect(within(getActiveColumn('Timeline')).getByText('second public post')).toBeInTheDocument();
   });
 
   await selectWorkspace(user, 'Profile');

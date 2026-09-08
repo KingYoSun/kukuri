@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import { App } from '@/App';
+import { getActiveColumn } from '@/shell/DesktopShellPage.testHelpers';
 import type {
   AttachmentView,
   BlobViewStatus,
@@ -310,7 +311,7 @@ test('timeline image post renders actual preview when object-url payload is avai
 
   render(<App api={api} />);
 
-  const preview = await screen.findByTestId('media-preview-image-post');
+  const preview = await within(getActiveColumn('Timeline')).findByTestId('media-preview-image-post');
   expect(preview).toBeInTheDocument();
   expect(preview.getAttribute('src')).toContain('blob:mock-');
 });
@@ -435,7 +436,7 @@ test('timeline image post switches to ready state when attachment becomes availa
   );
 
   await waitFor(() => {
-    expect(screen.getByTestId('media-skeleton-image-post')).toBeInTheDocument();
+    expect(within(getActiveColumn('Timeline')).getByTestId('media-skeleton-image-post')).toBeInTheDocument();
   });
 
   rerender(
@@ -460,7 +461,7 @@ test('timeline image post switches to ready state when attachment becomes availa
   );
 
   await waitFor(() => {
-    expect(screen.getByTestId('media-preview-image-post')).toBeInTheDocument();
+    expect(within(getActiveColumn('Timeline')).getByTestId('media-preview-image-post')).toBeInTheDocument();
   });
   expect(screen.queryByTestId('media-skeleton-image-post')).not.toBeInTheDocument();
 });

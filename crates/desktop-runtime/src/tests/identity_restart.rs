@@ -34,6 +34,14 @@ async fn desktop_runtime_persists_posts_and_author_identity_after_restart() {
     .await
     .expect("runtime creation timeout")
     .expect("runtime");
+    assert_eq!(
+        runtime
+            .get_sync_status()
+            .await
+            .expect("sync status")
+            .peer_count,
+        0
+    );
     let object_id = runtime
         .create_post(CreatePostRequest {
             topic: "kukuri:topic:runtime".into(),
@@ -45,6 +53,21 @@ async fn desktop_runtime_persists_posts_and_author_identity_after_restart() {
         })
         .await
         .expect("create post");
+    let author_pubkey = runtime
+        .get_my_profile()
+        .await
+        .expect("local profile")
+        .pubkey;
+    let profile_before_restart = runtime
+        .list_profile_timeline(ListProfileTimelineRequest {
+            pubkey: author_pubkey.as_str().to_string(),
+            cursor: None,
+            limit: Some(20),
+        })
+        .await
+        .expect("profile timeline without a peer");
+    assert_eq!(profile_before_restart.items.len(), 1);
+    assert_eq!(profile_before_restart.items[0].object_id, object_id);
     timeout(Duration::from_secs(15), runtime.shutdown())
         .await
         .expect("runtime shutdown timeout");
@@ -61,6 +84,14 @@ async fn desktop_runtime_persists_posts_and_author_identity_after_restart() {
     .await
     .expect("runtime restart timeout")
     .expect("runtime restart");
+    assert_eq!(
+        restarted
+            .get_sync_status()
+            .await
+            .expect("restarted sync status")
+            .peer_count,
+        0
+    );
     let restarted_object_id = restarted
         .create_post(CreatePostRequest {
             topic: "kukuri:topic:runtime".into(),
@@ -105,6 +136,25 @@ async fn desktop_runtime_persists_posts_and_author_identity_after_restart() {
         .find(|post| post.object_id == restarted_object_id)
         .expect("restarted post");
     assert_eq!(original_post.author_pubkey, restarted_post.author_pubkey);
+    let profile_after_restart = restarted
+        .list_profile_timeline(ListProfileTimelineRequest {
+            pubkey: author_pubkey.as_str().to_string(),
+            cursor: None,
+            limit: Some(20),
+        })
+        .await
+        .expect("profile timeline after restart without a peer");
+    assert_eq!(profile_after_restart.items.len(), 2);
+    for expected in [&object_id, &restarted_object_id] {
+        assert_eq!(
+            profile_after_restart
+                .items
+                .iter()
+                .filter(|post| &post.object_id == expected)
+                .count(),
+            1,
+        );
+    }
     assert_eq!(restarted.db_path(), db_path.as_path());
     timeout(Duration::from_secs(15), restarted.shutdown())
         .await

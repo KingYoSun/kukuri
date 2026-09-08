@@ -405,14 +405,18 @@ export function useDesktopShellDataEffects({
     trackedTopics,
   ]);
 
+  const hasOwnProfileColumn = useDesktopShellStore((state) =>
+    state.workspaceState.columns.some((column) => column.kind === 'profile' && !column.entityId)
+  );
+
   // 以下 4 つの section effect は live/game/bookmarks/settings と同じ委譲形:
   // トリガ判定だけを持ち、取得・state 反映は loaders/ の単一実装(SSoT)を呼ぶ。
   useEffect(() => {
-    if (shellChromeState.activePrimarySection !== 'profile') {
+    if (!hasOwnProfileColumn) {
       return;
     }
     void loadProfileSection().catch(() => undefined);
-  }, [loadProfileSection, shellChromeState.activePrimarySection]);
+  }, [hasOwnProfileColumn, loadProfileSection, shellChromeState.activePrimarySection]);
 
   useEffect(() => {
     if (!selectedAuthorPubkey) {

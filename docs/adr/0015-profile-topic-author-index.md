@@ -155,6 +155,14 @@ v1 の read surface は `list_profile_timeline(author_pubkey, cursor, limit)` �
 
 v1 では new dedicated SQLite projection は入れず、author replica query を canonical read path とする。
 
+#### ローカル投稿後の表示（#913）
+
+自分の端末で正常に保存された公開投稿・公開返信は、ピアが0台でもローカルのauthor replicaからプロフィールに表示する。ピア接続や遠隔への伝播を自己投稿の表示条件にしない。
+
+Column Canvasでは、自己Profileが非アクティブでも、公開投稿の保存成功後にその一覧を再取得する。件数は取得済みの公開feedに合わせ、全期間の投稿総数や伝播完了数として扱わない。送信中・失敗したdraftは投稿元で状態を示し、確定済みのプロフィール件数には加えない。
+
+初回取得中・取得失敗を空のfeedと同一視せず、更新中・失敗時は直前の有効な一覧を保持する。失敗時は理由と再試行手段を示す。更新によってアクティブColumn、編集draft、focusやscrollを移動しない。
+
 ## 5. UX Boundary
 
 初回の UX 境界は次の二箇所に固定する。

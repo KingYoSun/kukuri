@@ -536,11 +536,49 @@ describe('useDesktopShellActions', () => {
       channel_id: 'friends',
       local_state: 'syncing',
     });
+    expect(state.profileTimeline).toEqual([]);
+    expect(state.selectedAuthorTimeline).toEqual([]);
     expect(view.mocks.refreshVisibleTimelineAfterPublish).toHaveBeenCalledWith(
       'topic-a',
       null,
       'friends'
     );
+  });
+
+  test('pending and failed public drafts never enter a confirmed profile feed', async () => {
+    let rejectPost!: (reason: Error) => void;
+    const createPost = vi.fn(() => new Promise<string>((_resolve, reject) => { rejectPost = reject; }));
+    const localProfile = await createDesktopMockApi().getMyProfile();
+    const target = {
+      columnId: 'timeline-public', action: 'post' as const,
+      scope: { topicId: 'topic-a', channelId: null },
+    };
+    const confirmed = buildPost({ author_pubkey: SELF_PUBKEY });
+    const view = renderActionsHook({
+      api: { createPost },
+      preset: (current) => ({
+        localProfile,
+        syncStatus: { ...current.syncStatus, local_author_pubkey: SELF_PUBKEY },
+        profileTimeline: [confirmed],
+        workspaceState: { ...current.workspaceState,
+          activeColumnId: current.workspaceState.columns.find((column) => column.kind === 'profile')!.id },
+        columnDraftsByKey: setColumnDraft(current.columnDraftsByKey, target,
+          (draft) => ({ ...draft, content: 'failed public draft', expanded: true })),
+      }),
+    });
+    let submission!: Promise<void>;
+    act(() => {
+      submission = view.result.current.handleSubmitColumnDraft(target, publishFormEvent().event);
+    });
+    expect(createPost).toHaveBeenCalledTimes(1);
+    expect(view.store.getState().profileTimeline).toEqual([confirmed]);
+    await act(async () => {
+      rejectPost(new Error('post write failed'));
+      await submission;
+    });
+    expect(view.store.getState().profileTimeline).toEqual([confirmed]);
+    expect(view.store.getState().timelinesByKey['topic-a::public'][0].local_state).toBe('failed');
+    expect(view.mocks.refreshVisibleTimelineAfterPublish).not.toHaveBeenCalled();
   });
 
   test('pending Column Draft rejects a repeated form submission', async () => {

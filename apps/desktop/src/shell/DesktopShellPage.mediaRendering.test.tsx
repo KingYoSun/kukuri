@@ -7,6 +7,7 @@ import { App } from '@/App';
 import {
   createDeferred,
   getDetailPane,
+  getActiveColumn,
   buildImagePost,
   buildVideoPost,
   installObjectUrlMocks,
@@ -38,7 +39,7 @@ test('timeline image stops loading and hides unavailable media after a null resp
 
   render(<App api={api} />);
 
-  expect(await screen.findByTestId('media-skeleton-image-post')).toBeInTheDocument();
+  expect(await within(getActiveColumn('Timeline')).findByTestId('media-skeleton-image-post')).toBeInTheDocument();
   act(() => payload.resolve(null));
 
   await waitFor(() => {
@@ -62,7 +63,7 @@ test('timeline image stops loading and hides unavailable media after a rejected 
 
   render(<App api={api} />);
 
-  expect(await screen.findByTestId('media-skeleton-image-post')).toBeInTheDocument();
+  expect(await within(getActiveColumn('Timeline')).findByTestId('media-skeleton-image-post')).toBeInTheDocument();
   act(() => payload.reject(new Error('blob unavailable')));
 
   await waitFor(() => {
@@ -103,8 +104,8 @@ test('developer mode shows concise diagnostics after body and media become unava
 
   render(<App api={api} />);
 
-  expect(await screen.findByText('Content unavailable.')).toBeInTheDocument();
-  expect(await screen.findByText('Media unavailable.')).toBeInTheDocument();
+  expect(await within(getActiveColumn('Timeline')).findByText('Content unavailable.')).toBeInTheDocument();
+  expect(await within(getActiveColumn('Timeline')).findByText('Media unavailable.')).toBeInTheDocument();
   expect(screen.queryByTestId('text-skeleton-image-post')).not.toBeInTheDocument();
   expect(screen.queryByTestId('media-skeleton-image-post')).not.toBeInTheDocument();
   expect(screen.queryByText('[blob pending]')).not.toBeInTheDocument();
@@ -120,7 +121,7 @@ test('developer mode replaces a missing image skeleton with a diagnostic', async
 
   render(<App api={api} />);
 
-  expect(await screen.findByText('Media unavailable.')).toBeInTheDocument();
+  expect(await within(getActiveColumn('Timeline')).findByText('Media unavailable.')).toBeInTheDocument();
   expect(screen.queryByTestId('media-skeleton-image-post')).not.toBeInTheDocument();
   expect(screen.queryByText('image/png')).not.toBeInTheDocument();
 });
@@ -138,7 +139,7 @@ test('timeline image post switches to ready state when attachment becomes availa
   );
 
   await waitFor(() => {
-    expect(screen.getByTestId('media-skeleton-image-post')).toBeInTheDocument();
+    expect(within(getActiveColumn('Timeline')).getByTestId('media-skeleton-image-post')).toBeInTheDocument();
   });
 
   rerender(
@@ -199,7 +200,7 @@ test('timeline image recovers when an existing refresh retries a previously unav
 
   rerender(<App api={recoveredApi} />);
 
-  expect(await screen.findByTestId('media-preview-image-post')).toHaveAttribute(
+  expect(await within(getActiveColumn('Timeline')).findByTestId('media-preview-image-post')).toHaveAttribute(
     'src',
     expect.stringContaining('blob:mock-')
   );
@@ -233,7 +234,7 @@ test('timeline image post renders actual preview when object-url payload is avai
 
   const { unmount } = render(<App api={api} />);
 
-  const preview = await screen.findByTestId('media-preview-image-post');
+  const preview = await within(getActiveColumn('Timeline')).findByTestId('media-preview-image-post');
   expect(preview).toBeInTheDocument();
   const previewUrl = preview.getAttribute('src');
   expect(previewUrl).toMatch(/^blob:mock-\d+$/);
@@ -297,7 +298,7 @@ test('developer mode reports an unavailable text body without rendering its plac
     />
   );
 
-  expect(await screen.findByText('Content unavailable.')).toBeInTheDocument();
+  expect(await within(getActiveColumn('Timeline')).findByText('Content unavailable.')).toBeInTheDocument();
   expect(screen.queryByTestId('text-skeleton-image-post')).not.toBeInTheDocument();
   expect(screen.queryByText('[blob pending]')).not.toBeInTheDocument();
 });
@@ -312,7 +313,7 @@ test('developer mode replaces an unavailable video skeleton with a diagnostic', 
 
   render(<App api={api} />);
 
-  expect(await screen.findByText('Media unavailable.')).toBeInTheDocument();
+  expect(await within(getActiveColumn('Timeline')).findByText('Media unavailable.')).toBeInTheDocument();
   expect(screen.queryByTestId('media-skeleton-video-post')).not.toBeInTheDocument();
   expect(screen.queryByText('video/mp4')).not.toBeInTheDocument();
 });

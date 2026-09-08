@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, test, vi } from 'vitest';
 
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
@@ -11,6 +11,8 @@ import {
   DesktopShellStoreContext,
 } from '@/shell/store';
 import { columnIdentityId, openTransientColumn } from '@/shell/slices/workspace';
+import { createDeferred } from '@/shell/DesktopShellPage.testHelpers';
+import type { TimelineView } from '@/lib/api';
 
 function setup() {
   const api = createDesktopMockApi();
@@ -39,6 +41,81 @@ function setup() {
 }
 
 describe('useDesktopShellSectionLoaders', () => {
+  test('loads an inactive own profile and preserves an unsaved profile draft', async () => {
+    const { api, hook, store } = setup();
+    const profile = await api.getMyProfile();
+    const objectId = await api.createPost('kukuri:topic:general', 'saved public post');
+    const activeColumnId = store.getState().workspaceState.activeColumnId;
+    store.setState({ profileDirty: true, profileDraft: { display_name: 'unsaved name' } });
+
+    await act(async () => hook.result.current.loadShellSections('kukuri:topic:general'));
+
+    expect(store.getState().profileTimeline.map((post) => post.object_id)).toContain(objectId);
+    expect(store.getState().localProfile?.pubkey).toBe(profile.pubkey);
+    expect(store.getState().profileDraft.display_name).toBe('unsaved name');
+    expect(store.getState().workspaceState.activeColumnId).toBe(activeColumnId);
+  });
+
+  test.each(['success', 'failure'])('ignores an older profile %s after a newer response', async (outcome) => {
+    const { api, hook, store } = setup();
+    const profile = await api.getMyProfile();
+    await api.createPost('kukuri:topic:general', 'newest profile post');
+    const latest = await api.listProfileTimeline(profile.pubkey);
+    const old = createDeferred<TimelineView>();
+    const listProfileTimeline = vi.spyOn(api, 'listProfileTimeline')
+      .mockReturnValueOnce(old.promise)
+      .mockResolvedValueOnce(latest);
+    let first!: Promise<void>;
+    act(() => { first = hook.result.current.loadProfileSection(); });
+    await waitFor(() => expect(listProfileTimeline).toHaveBeenCalledTimes(1));
+    await act(async () => hook.result.current.loadProfileSection());
+    await act(async () => {
+      if (outcome === 'success') old.resolve({ items: [], next_cursor: null });
+      else old.reject(new Error('outdated failure'));
+      await first;
+    });
+    expect(store.getState().profileTimeline).toEqual(latest.items);
+    expect(store.getState().profilePanelState).toEqual({ status: 'ready', error: null });
+  });
+
+  test('retains confirmed posts on profile failure and recovers on retry', async () => {
+    const { api, hook, store } = setup();
+    await api.createPost('kukuri:topic:general', 'retained public post');
+    await act(async () => hook.result.current.loadProfileSection());
+    const confirmed = store.getState().profileTimeline;
+    vi.spyOn(api, 'listProfileTimeline').mockRejectedValueOnce(new Error('profile read failed'));
+    await act(async () => hook.result.current.loadProfileSection());
+    expect(store.getState().profileTimeline).toEqual(confirmed);
+    expect(store.getState().profileError).toBe('profile read failed');
+    await act(async () => hook.result.current.loadProfileSection());
+    expect(store.getState().profileTimeline).toEqual(confirmed);
+    expect(store.getState().profileError).toBeNull();
+  });
+
+  test('refreshing an own-author column does not replace another selected author', async () => {
+    const { api, hook, store } = setup();
+    const profile = await api.getMyProfile();
+    await api.createPost('kukuri:topic:general', 'own-author refresh');
+    const ownTimeline = await api.listProfileTimeline(profile.pubkey);
+    const otherPubkey = 'b'.repeat(64);
+    const other = { ...ownTimeline.items[0], object_id: 'other-post', author_pubkey: otherPubkey };
+    store.setState({ selectedAuthorPubkey: otherPubkey, selectedAuthorTimeline: [other] });
+    await act(async () => hook.result.current.loadAuthorSection(profile.pubkey));
+    expect(store.getState().selectedAuthorTimeline).toEqual([other]);
+    expect(store.getState().authorTimelinesByPubkey[profile.pubkey]).toEqual(ownTimeline.items);
+  });
+
+  test('does not fetch an own profile when its column is closed', async () => {
+    const { api, hook, store } = setup();
+    store.setState((state) => ({ workspaceState: {
+      ...state.workspaceState,
+      columns: state.workspaceState.columns.filter((column) => column.kind !== 'profile'),
+    } }));
+    const read = vi.spyOn(api, 'listProfileTimeline');
+    await act(async () => hook.result.current.loadShellSections('kukuri:topic:general'));
+    expect(read).not.toHaveBeenCalled();
+  });
+
   test('loads only the active live section with the selected channel scope', async () => {
     const { api, hook, store } = setup();
     const listLiveSessions = vi.spyOn(api, 'listLiveSessions').mockResolvedValue([]);

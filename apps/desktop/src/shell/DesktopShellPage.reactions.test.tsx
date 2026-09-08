@@ -6,6 +6,7 @@ import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import { App } from '@/App';
 import {
   installObjectUrlMocks,
+  getActiveColumn,
   openSettingsSection,
   publishPost,
   setViewportWidth,
@@ -33,7 +34,7 @@ test('desktop shell can create a simple repost from timeline', async () => {
   render(<App api={api} />);
 
   await publishPost(user, 'source post');
-  const sourcePost = await screen.findByText('source post');
+  const sourcePost = await within(getActiveColumn('Timeline')).findByText('source post');
   const card = sourcePost.closest('article');
   if (!card) {
     throw new Error('source post card not found');
@@ -51,7 +52,7 @@ test('desktop shell can create a simple repost from timeline', async () => {
     );
   });
   // The repost renders X-style: the reposter is demoted to a small attribution header.
-  expect(await screen.findByText(/reposted$/i)).toBeInTheDocument();
+  expect(await within(getActiveColumn('Timeline')).findByText(/reposted$/i)).toBeInTheDocument();
   expect(document.querySelector('.post-repost-attribution')).not.toBeNull();
 });
 
@@ -67,7 +68,7 @@ test('desktop shell can create a quote repost from the Column composer', async (
   render(<App api={api} />);
 
   await publishPost(user, 'source post');
-  const sourcePost = await screen.findByText('source post');
+  const sourcePost = await within(getActiveColumn('Timeline')).findByText('source post');
   const card = sourcePost.closest('article');
   if (!card) {
     throw new Error('source post card not found');
@@ -97,7 +98,7 @@ test('desktop shell can create a quote repost from the Column composer', async (
       'quoted take'
     );
   });
-  expect(screen.getByText('quoted take')).toBeInTheDocument();
+  expect(within(getActiveColumn('Timeline')).getByText('quoted take')).toBeInTheDocument();
 });
 
 test('reaction popover supports search and recent reactions without legacy management actions', async () => {
@@ -105,7 +106,7 @@ test('reaction popover supports search and recent reactions without legacy manag
   render(<App api={createDesktopMockApi()} />);
 
   await publishPost(user, 'reactable post');
-  const postCard = (await screen.findByText('reactable post')).closest('article');
+  const postCard = (await within(getActiveColumn('Timeline')).findByText('reactable post')).closest('article');
   if (!(postCard instanceof HTMLElement)) {
     throw new Error('reactable post card not found');
   }
@@ -145,7 +146,7 @@ test('reaction picker lazily loads recent and custom reactions when opened', asy
   render(<App api={api} />);
 
   await publishPost(user, 'reaction preload');
-  const postCard = (await screen.findByText('reaction preload')).closest('article');
+  const postCard = (await within(getActiveColumn('Timeline')).findByText('reaction preload')).closest('article');
   if (!(postCard instanceof HTMLElement)) {
     throw new Error('reaction preload post card not found');
   }

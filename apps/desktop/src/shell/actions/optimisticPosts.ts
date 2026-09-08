@@ -15,9 +15,7 @@ import {
 } from '@/shell/store';
 import { publishedTopicIdForPost } from '@/shell/presentation';
 import {
-  activeWorkspaceColumn,
   activeWorkspaceScope,
-  primarySectionForColumn,
 } from '@/shell/slices/workspace';
 import { updateRecordEntry } from '@/shell/stateUpdates';
 
@@ -234,7 +232,6 @@ export function createOptimisticPostActions({
 
   function insertOptimisticPost(post: PostView) {
     const currentState = storeApi.getState();
-    const activeSection = primarySectionForColumn(activeWorkspaceColumn(currentState.workspaceState));
     const topicId = post.published_topic_id ?? activeTopic;
     const timelineKey = timelineStorageKeyForChannel(topicId, post.channel_id ?? null);
     setTimelinesByKey(updateRecordEntry(timelineKey, (prev) => prependPost(prev ?? [], post)));
@@ -243,20 +240,8 @@ export function createOptimisticPostActions({
         updateRecordEntry(post.root_id, (current) => prependPost(current ?? [], post))
       );
     }
-    if (
-      !post.channel_id &&
-      localProfile &&
-      activeSection === 'profile'
-    ) {
-      setProfileTimeline((current) => prependPost(current, post));
-    }
-    if (
-      !post.channel_id &&
-      currentState.selectedAuthorPubkey === localAuthorPubkey &&
-      activeSection === 'timeline'
-    ) {
-      setSelectedAuthorTimeline((current) => prependPost(current, post));
-    }
+    // Profile lists confirmed author-replica data. Pending/failed drafts stay in
+    // their posting timeline; a successful publish refreshes the profile feed.
   }
 
   async function submitOptimisticPost(post: PostView): Promise<boolean> {
