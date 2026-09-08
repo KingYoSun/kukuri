@@ -6,7 +6,7 @@ import { CommunityNodeConsentDialog } from '@/components/settings/CommunityNodeC
 import { CommunityNodeOnboardingDialog } from '@/components/settings/CommunityNodeOnboardingDialog';
 import { CommunityIndexAvailabilityNotice } from '@/components/core/CommunityIndexAvailabilityNotice';
 import { useCommunityNodeConsentFlow, type AcceptCommunityNodeConsents } from '@/shell/actions/useCommunityNodeConsentFlow';
-import { useDesktopShellStore } from '@/shell/store';
+import { useDesktopShellFieldSetter, useDesktopShellStore } from '@/shell/store';
 import { useCommunityNodeOnboarding } from './useCommunityNodeOnboarding';
 
 export function CommunityNodeOnboarding({ api, onAccept, onOpenSettings, onRetry }: {
@@ -16,6 +16,7 @@ export function CommunityNodeOnboarding({ api, onAccept, onOpenSettings, onRetry
   onRetry: (availability: CommunityNodeAvailability) => Promise<void>;
 }) {
   const intro = useCommunityNodeOnboarding();
+  const setPreference = useDesktopShellFieldSetter('communityIndexNodePreference');
   const state = useDesktopShellStore(useShallow((s) => ({
     config: s.communityNodeConfig, statuses: s.communityNodeStatuses, manifests: s.communityNodeManifests,
     preference: s.communityIndexNodePreference, configLoaded: s.communityNodeConfigLoaded,
@@ -31,7 +32,7 @@ export function CommunityNodeOnboarding({ api, onAccept, onOpenSettings, onRetry
   return <>
     {state.statusError ? <CommunityIndexAvailabilityNotice
       availability={availability} onRetry={() => onRetry(availability)} onReviewPolicies={consent.open}
-      onOpenSettings={onOpenSettings} onAutomatic={() => {}}
+      onOpenSettings={onOpenSettings} onAutomatic={() => setPreference({ mode: 'auto' })}
     /> : null}
     {baseUrl ? <CommunityNodeOnboardingDialog
       baseUrl={baseUrl}

@@ -101,13 +101,15 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
       return runtime.communityNodeStatuses;
     },
     async setCommunityNodeConfig(nodes) {
+      const previousNodes = new Map(runtime.communityNodeConfig.nodes.map((node) => [node.base_url, node]));
+      const previousStatuses = new Map(runtime.communityNodeStatuses.map((status) => [status.base_url, status]));
       runtime.communityNodeConfig = {
-        nodes: nodes.map((node) => ({
+        nodes: nodes.map((node) => previousNodes.get(node.base_url) ?? ({
           base_url: node.base_url,
           resolved_urls: null,
         })),
       };
-      runtime.communityNodeStatuses = nodes.map((node) => ({
+      runtime.communityNodeStatuses = nodes.map((node) => previousStatuses.get(node.base_url) ?? ({
         base_url: node.base_url,
         auth_state: { authenticated: false, expires_at: null },
         consent_state: null,

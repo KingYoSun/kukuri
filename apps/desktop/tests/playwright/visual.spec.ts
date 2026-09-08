@@ -23,13 +23,13 @@ const NARROW = { width: 700, height: 980 } as const;
 
 const LOCALE_EN = 'en';
 
-test('community node introduction wide Japanese dark', async ({ page }) => {
-  await seedUnconsentedCommunityNodes(page, { locale: 'ja', theme: 'dark' });
+test('community node introduction wide English dark', async ({ page }) => {
+  await seedUnconsentedCommunityNodes(page, { locale: 'en', theme: 'dark' });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/#/explore?topic=kukuri%3Atopic%3Ageneral');
-  const dialog = page.getByRole('dialog', { name: 'コミュニティノードとは？' });
+  const dialog = page.getByRole('dialog', { name: 'What is a community node?' });
   await expect(dialog).toBeVisible();
-  await expect(dialog).toHaveScreenshot('community-node-introduction-ja-dark.png');
+  await expect(dialog).toHaveScreenshot('community-node-introduction-en-dark.png');
 });
 
 test('community node policies narrow English light', async ({ page }) => {

@@ -89,3 +89,13 @@ test('an accepted but offline node does not repeat the first-use explanation', a
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Check status again' })).toBeDisabled();
 });
+
+test('adding a node keeps the existing node consent and does not restart onboarding', async () => {
+  const api = createDesktopMockApi();
+  const existing = (await api.getCommunityNodeConfig()).nodes;
+  await api.setCommunityNodeConfig([...existing, { base_url: SECOND }]);
+  expect((await api.getCommunityNodeStatuses())[0].local_consent?.records.length).toBeGreaterThan(0);
+  renderAtHash('#/explore?topic=kukuri%3Atopic%3Ageneral', api);
+  await screen.findByRole('textbox', { name: 'Search query' });
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+});

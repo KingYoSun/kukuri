@@ -22,10 +22,12 @@ export function useCommunityNodeRecovery(
       const refreshed = await api.refreshCommunityNodeMetadata(baseUrl);
       const current = store.getState();
       if (!current.communityNodeConfig.nodes.some((node) => node.base_url === baseUrl)) return;
-      current.patchState({
-        communityNodeStatuses: upsertCommunityNodeStatus(current.communityNodeStatuses, refreshed),
-        communityNodeConfig: syncCommunityNodeConfigWithStatus(current.communityNodeConfig, refreshed),
-      });
+      if (current.communityNodeStatuses.find((node) => node.base_url === baseUrl) === status) {
+        current.patchState({
+          communityNodeStatuses: upsertCommunityNodeStatus(current.communityNodeStatuses, refreshed),
+          communityNodeConfig: syncCommunityNodeConfigWithStatus(current.communityNodeConfig, refreshed),
+        });
+      }
     }
     await refreshStatus();
     await loadCapability();

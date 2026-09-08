@@ -30,6 +30,9 @@ export function CommunityIndexAvailabilityNotice({
     <Notice tone={availability.reason === 'checking' || availability.reason === 'connecting' ? 'neutral' : 'warning'}>
       <div className='space-y-2'>
         <p role='status'>{t(`shell:communityIndex.availability.${availability.reason}`)}</p>
+        {availability.baseUrl ? <p className='break-all text-sm'>
+          {t('shell:communityIndex.nodeLabel')}: {availability.baseUrl}
+        </p> : null}
         {availability.manual ? <p>{t('shell:communityIndex.availability.manualStopped')}</p> : null}
         {remaining > 0 ? <p>{t('shell:communityIndex.availability.retryAfter', { seconds: remaining })}</p> : null}
         {failed ? <p role='alert'>{t('shell:communityIndex.availability.retryFailed')}</p> : null}
