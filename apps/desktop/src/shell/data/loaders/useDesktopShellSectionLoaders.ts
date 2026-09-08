@@ -1,10 +1,6 @@
 import { startTransition, useCallback, useRef } from 'react';
 
-import type { CommunityNodeNodeStatus, DesktopApi } from '@/lib/api';
-import {
-  eligibleCommunityIndexNodes,
-  resolveCommunityIndexNodePreference,
-} from '@/lib/api/communityIndex';
+import type { DesktopApi } from '@/lib/api';
 import type { LoadNotificationsSection } from '@/shell/data/loaders/useNotificationLoaders';
 import { VISIBLE_TIMELINE_LIMIT } from '@/shell/pagination';
 import {
@@ -44,6 +40,7 @@ export function useDesktopShellSectionLoaders({
   translate,
 }: UseDesktopShellSectionLoadersArgs) {
   const profileRequestId = useRef(0);
+  const communityNodeRequestId = useRef(0);
   const authorRequestIds = useRef(new Map<string, number>());
   const setAuthorError = useDesktopShellFieldSetter('authorError');
   const setAuthorErrorsByPubkey = useDesktopShellFieldSetter('authorErrorsByPubkey');
@@ -330,12 +327,13 @@ export function useDesktopShellSectionLoaders({
     }
   }, [api, setBookmarkedPosts]);
 
-  const loadCommunityIndexCapability = useCallback(async (
-    refreshedStatuses?: readonly CommunityNodeNodeStatus[]
-  ) => {
+  const loadCommunityIndexCapability = useCallback(async () => {
+    const requestId = ++communityNodeRequestId.current;
+    const previousConfig = storeApi.getState().communityNodeConfig;
     try {
       const config = await api.getCommunityNodeConfig();
-      const statuses = refreshedStatuses ?? storeApi.getState().communityNodeStatuses;
+      if (requestId !== communityNodeRequestId.current ||
+        storeApi.getState().communityNodeConfig !== previousConfig) return;
       startTransition(() => {
         setCommunityNodeConfig(config);
         if (!storeApi.getState().communityNodeEditorDirty) {
@@ -347,10 +345,7 @@ export function useDesktopShellSectionLoaders({
         .map((node) => node.base_url)
         .filter((baseUrl) => baseUrl.trim().length > 0);
       if (baseUrls.length === 0) {
-        storeApi.getState().patchState({
-          communityIndexNodePreference: { mode: 'auto' },
-          communityIndexNodeBaseUrl: null,
-        });
+        setCommunityNodeManifests({});
         return;
       }
       setCommunityNodeManifests((current) => {
@@ -386,23 +381,18 @@ export function useDesktopShellSectionLoaders({
           }
         })
       );
+      if (requestId !== communityNodeRequestId.current) return;
+      const currentUrls = storeApi.getState().communityNodeConfig.nodes.map((node) => node.base_url);
+      if (JSON.stringify(currentUrls) !== JSON.stringify(baseUrls)) return;
       const manifests = Object.fromEntries(manifestResults);
       setCommunityNodeManifests((current) => ({ ...current, ...manifests }));
-      const eligible = eligibleCommunityIndexNodes(config, statuses, manifests);
-      const resolution = resolveCommunityIndexNodePreference(
-        storeApi.getState().communityIndexNodePreference,
-        baseUrls,
-        eligible
-      );
-      storeApi.getState().patchState({
-        communityIndexNodePreference: resolution.preference,
-        communityIndexNodeBaseUrl: resolution.selectedBaseUrl,
-      });
     } catch (error) {
+      if (requestId !== communityNodeRequestId.current ||
+        storeApi.getState().communityNodeConfig !== previousConfig) return;
+      storeApi.getState().patchState({ communityNodeConfigError: 'config_unavailable' });
       setCommunityNodeError(
         messageFromError(error, translate('common:errors.failedToLoadSettings'))
       );
-      storeApi.getState().patchState({ communityIndexNodeBaseUrl: null });
     }
   }, [
     api,

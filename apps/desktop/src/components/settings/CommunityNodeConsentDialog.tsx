@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Badge } from '@/components/ui/badge';
@@ -6,6 +7,7 @@ import {
   Dialog,
   DialogBody,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -20,6 +22,8 @@ type CommunityNodeConsentDialogProps = {
   baseUrl: string;
   consent: CommunityNodeConsentView;
   busy: boolean;
+  error?: string | null;
+  onCloseAutoFocus?: (event: Event) => void;
   onAccept: () => void;
   // #857: 取得失敗（オフライン等）時の再試行。
   onRetry: () => void;
@@ -35,26 +39,40 @@ export function CommunityNodeConsentDialog({
   baseUrl,
   consent,
   busy,
+  error,
+  onCloseAutoFocus,
   onAccept,
   onRetry,
   onWithdraw,
 }: CommunityNodeConsentDialogProps) {
   const { t } = useTranslation(['common', 'settings']);
+  const titleRef = useRef<HTMLHeadingElement>(null);
 
-  const acceptDisabled = busy || !consent.loaded || consent.allRequiredAccepted;
+  const acceptDisabled = busy || !consent.loaded || consent.policies.length === 0 || consent.allRequiredAccepted;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='max-h-[88vh] w-[min(40rem,92vw)] overflow-hidden'>
+      <DialogContent
+        className='max-h-[88vh] w-[min(40rem,92vw)] overflow-hidden'
+        onCloseAutoFocus={onCloseAutoFocus}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          titleRef.current?.focus();
+        }}
+      >
         <DialogHeader>
-          <DialogTitle>{t('settings:communityNode.consent.title')}</DialogTitle>
+          <DialogTitle ref={titleRef} tabIndex={-1}>{t('settings:communityNode.consent.title')}</DialogTitle>
           <p className='break-all font-mono text-xs text-[var(--muted-foreground)]'>{baseUrl}</p>
         </DialogHeader>
 
         <DialogBody className='max-h-[60vh] space-y-4 overflow-y-auto'>
-          <p className='text-sm leading-6 text-[var(--muted-foreground)]'>
+          {error ? <Notice tone='destructive' role='alert'>
+            <p>{error}</p>
+            <Button variant='secondary' disabled={busy} onClick={onRetry}>{t('common:actions.retry')}</Button>
+          </Notice> : null}
+          <DialogDescription className='text-sm leading-6 text-[var(--muted-foreground)]'>
             {t('settings:communityNode.consent.intro')}
-          </p>
+          </DialogDescription>
 
           {consent.loading ? (
             <Notice aria-live='polite'>{t('settings:communityNode.consent.loading')}</Notice>

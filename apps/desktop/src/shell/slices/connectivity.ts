@@ -36,7 +36,12 @@ export type ConnectivitySliceState = {
   discoveryEditorDirty: boolean;
   discoveryError: string | null;
   communityNodeConfig: CommunityNodeConfig;
+  communityNodeConfigLoaded: boolean;
+  communityNodeConfigError: string | null;
   communityNodeStatuses: CommunityNodeNodeStatus[];
+  communityNodeStatusesLoaded: boolean;
+  communityNodeStatusError: string | null;
+  communityNodeOnboardingShownFor: string[];
   communityNodeManifests: Record<string, CommunityNodeManifestEntry>;
   communityNodePolicies: Record<string, CommunityNodePoliciesEntry>;
   communityNodeInput: CommunityNodeDraftNode[];
@@ -99,7 +104,12 @@ export function createInitialConnectivitySlice(): ConnectivitySliceState {
     discoveryEditorDirty: false,
     discoveryError: null,
     communityNodeConfig: DEFAULT_COMMUNITY_NODE_CONFIG,
+    communityNodeConfigLoaded: false,
+    communityNodeConfigError: null,
     communityNodeStatuses: [],
+    communityNodeStatusesLoaded: false,
+    communityNodeStatusError: null,
+    communityNodeOnboardingShownFor: [],
     communityNodeManifests: {},
     communityNodePolicies: {},
     communityNodeInput: [],

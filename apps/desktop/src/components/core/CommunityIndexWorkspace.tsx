@@ -9,6 +9,7 @@ import type {
   CommunityIndexPostResolveInput,
   CommunityIndexResolvedPostView,
   CommunityNodeIndexQueryRequest,
+  CommunityNodeNodeStatus,
   CustomReactionAssetView,
   DesktopApi,
   IndexEntryView,
@@ -27,8 +28,9 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
 import { CommunityNodeConsentDialog } from '@/components/settings/CommunityNodeConsentDialog';
-import { communityNodeConsentView } from '@/shell/presentation';
-import type { CommunityNodePoliciesEntry } from '@/shell/store';
+import type { CommunityNodeAvailability } from '@/lib/api/communityNodeAvailability';
+import { useCommunityNodeConsentFlow, type AcceptCommunityNodeConsents } from '@/shell/actions/useCommunityNodeConsentFlow';
+import { CommunityIndexAvailabilityNotice } from './CommunityIndexAvailabilityNotice';
 import { communityIndexPostCardView } from './communityIndexPostCardView';
 import { PostCard } from './PostCard';
 
@@ -45,6 +47,12 @@ type CommunityIndexWorkspaceProps = {
   // Node 機能の利用直前に同意モーダルを提示するために使う。
   consentPendingNodeBaseUrls?: readonly string[];
   selectedNodeBaseUrl: string | null;
+  configuredNodeBaseUrls?: readonly string[];
+  nodeStatuses?: readonly CommunityNodeNodeStatus[];
+  availability?: CommunityNodeAvailability;
+  onAcceptConsents?: AcceptCommunityNodeConsents;
+  onRetryNode?: (recovery?: 'metadata' | 'manifest' | 'status') => Promise<void>;
+  onAutomaticNode?: () => void;
   onOpenCommunityNodeSettings: () => void;
   knownAuthorsByPubkey?: Record<string, AuthorSocialView>;
   mediaObjectUrls?: Record<string, string | null>;
@@ -155,7 +163,7 @@ function communityIndexErrorMessage(error: unknown, t: TFunction): string {
   if (error.code === 'AUTH_REQUIRED' || error.status === 401) {
     return t('shell:communityIndex.errors.authRequired');
   }
-  if (error.code === 'CONSENT_REQUIRED' || error.status === 403) {
+  if (error.code === 'CONSENT_REQUIRED') {
     return t('shell:communityIndex.errors.consentRequired');
   }
   if (error.code === 'INDEX_QUERY_NOT_CONFIGURED') {
@@ -171,6 +179,7 @@ function communityIndexErrorMessage(error: unknown, t: TFunction): string {
         })
       : t('shell:communityIndex.errors.rateLimited');
   }
+  if (error.status === 403) return t('shell:communityIndex.availability.admissionDenied');
   return error.message;
 }
 
@@ -220,6 +229,12 @@ export function CommunityIndexWorkspace({
   eligibleNodeBaseUrls,
   consentPendingNodeBaseUrls = [],
   selectedNodeBaseUrl,
+  configuredNodeBaseUrls,
+  nodeStatuses,
+  availability,
+  onAcceptConsents,
+  onRetryNode = async () => {},
+  onAutomaticNode = () => {},
   onOpenCommunityNodeSettings,
   knownAuthorsByPubkey = EMPTY_KNOWN_AUTHORS,
   mediaObjectUrls = {},
@@ -245,17 +260,21 @@ export function CommunityIndexWorkspace({
   onActivateReference,
   onCopyPostLink,
 }: CommunityIndexWorkspaceProps) {
-  const { t, i18n } = useTranslation(['shell', 'common']);
+  const { t } = useTranslation(['shell', 'common']);
   const [operation, setOperation] = useState<IndexOperation>('search');
-  // #857: Node 機能の利用直前に提示する同意モーダルの状態。提示内容は認証不要の
-  // 公開 policy カタログから取得し、同意成立後にのみ認証・接続が始まる。
-  const [consentGateBaseUrl, setConsentGateBaseUrl] = useState<string | null>(null);
-  const [consentGateEntry, setConsentGateEntry] = useState<CommunityNodePoliciesEntry | null>(null);
-  const [consentGateBusy, setConsentGateBusy] = useState(false);
+  const consentFlow = useCommunityNodeConsentFlow({
+    api,
+    configuredBaseUrls: configuredNodeBaseUrls ?? [...eligibleNodeBaseUrls, ...consentPendingNodeBaseUrls],
+    statuses: nodeStatuses,
+    acceptConsents: onAcceptConsents,
+  });
   const [query, setQuery] = useState('');
   const [resultState, setResultState] = useState<IndexResultState | null>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [queryRecovery, setQueryRecovery] = useState<'consent' | 'metadata' | 'settings' | null>(null);
+  const [queryRetryDeadlines, setQueryRetryDeadlines] = useState<Record<string, number>>({});
+  const [queryClock, setQueryClock] = useState(() => Date.now());
   const [resolvedPostState, setResolvedPostState] = useState<ResolvedPostState | null>(null);
   const [resolvedAuthorState, setResolvedAuthorState] = useState<ResolvedAuthorState | null>(null);
   const requestSequence = useRef(0);
@@ -270,7 +289,15 @@ export function CommunityIndexWorkspace({
     selectedNodeBaseUrl !== null && eligibleNodeBaseUrls.includes(selectedNodeBaseUrl)
       ? selectedNodeBaseUrl
       : null;
-  const disabled = activeNodeBaseUrl === null || isAllJoined;
+  const disabled = activeNodeBaseUrl === null || isAllJoined ||
+    (availability !== undefined && availability.reason !== 'ready');
+  const retryDeadline = activeNodeBaseUrl ? queryRetryDeadlines[activeNodeBaseUrl] ?? 0 : 0;
+  const queryRetrySeconds = Math.max(0, Math.ceil((retryDeadline - queryClock) / 1000));
+  useEffect(() => {
+    if (retryDeadline <= Date.now()) return;
+    const timer = window.setInterval(() => setQueryClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [retryDeadline]);
   const currentContext = useMemo(
     () => indexContext(mode, effectiveOperation, activeNodeBaseUrl, activeTopic, activeTimelineScope),
     [activeNodeBaseUrl, activeTimelineScope, activeTopic, effectiveOperation, mode]
@@ -354,6 +381,7 @@ export function CommunityIndexWorkspace({
     setResolvedPostState(null);
     setResolvedAuthorState(null);
     setError(null);
+    setQueryRecovery(null);
   }, []);
 
   useEffect(() => {
@@ -531,52 +559,9 @@ export function CommunityIndexWorkspace({
     [api, visibleResult]
   );
 
-  async function openConsentGate(baseUrl: string) {
-    setConsentGateBaseUrl(baseUrl);
-    setConsentGateEntry({ status: 'loading' });
-    try {
-      const catalog = await api.fetchCommunityNodePolicies(baseUrl, i18n.resolvedLanguage);
-      setConsentGateEntry({ status: 'ok', policies: catalog.policies });
-    } catch (fetchError) {
-      // 取得失敗(オフライン等)はモーダル内で再試行できる。
-      setConsentGateEntry({
-        status: 'error',
-        error: fetchError instanceof Error ? fetchError.message : String(fetchError),
-      });
-    }
-  }
-
-  function closeConsentGate() {
-    setConsentGateBaseUrl(null);
-    setConsentGateEntry(null);
-  }
-
-  async function acceptConsentGate() {
-    if (consentGateBaseUrl === null || consentGateEntry?.status !== 'ok') {
-      return;
-    }
-    setConsentGateBusy(true);
-    try {
-      await api.acceptCommunityNodeConsents(
-        consentGateBaseUrl,
-        consentGateEntry.policies.map((policy) => ({
-          policy_slug: policy.policy_slug,
-          policy_version: policy.policy_version,
-          policy_snapshot_revision: policy.policy_snapshot_revision ?? null,
-        })),
-        i18n.resolvedLanguage ?? i18n.language
-      );
-      closeConsentGate();
-    } catch (acceptError) {
-      setError(communityIndexErrorMessage(acceptError, t));
-    } finally {
-      setConsentGateBusy(false);
-    }
-  }
-
   async function runQuery(event?: FormEvent) {
     event?.preventDefault();
-    if (disabled || !currentContext) return;
+    if (disabled || !currentContext || retryDeadline > Date.now()) return;
     if (effectiveOperation === 'search' && !query.trim()) {
       setStatus('error');
       setError(t('shell:communityIndex.queryRequired'));
@@ -594,6 +579,7 @@ export function CommunityIndexWorkspace({
     const sequence = ++requestSequence.current;
     setStatus('loading');
     setError(null);
+    setQueryRecovery(null);
     try {
       const response = await operationMethod(api, requestContext.operation)(request);
       if (
@@ -613,6 +599,13 @@ export function CommunityIndexWorkspace({
       }
       setResultState(null);
       setError(communityIndexErrorMessage(cause, t));
+      setQueryRecovery(cause instanceof InvokeError && cause.code === 'CONSENT_REQUIRED'
+        ? 'consent' : cause instanceof InvokeError && cause.status === 403 ? 'settings' : 'metadata');
+      if (cause instanceof InvokeError && (cause.status === 429 || cause.code === 'RATE_LIMITED') && cause.retryAfterSeconds) {
+        const deadline = Date.now() + cause.retryAfterSeconds * 1000;
+        setQueryClock(Date.now());
+        setQueryRetryDeadlines((current) => ({ ...current, [requestContext.nodeBaseUrl]: deadline }));
+      }
       setStatus('error');
     }
   }
@@ -654,7 +647,7 @@ export function CommunityIndexWorkspace({
         </div>
       ) : null}
 
-      {consentPendingNodeBaseUrls.length > 0 ? (
+      {consentPendingNodeBaseUrls.length > 0 && availability?.recovery !== 'consent' ? (
         <Notice tone='warning'>
           <div className='flex flex-wrap items-center justify-between gap-3'>
             <span>{t('shell:communityIndex.consentRequiredNotice')}</span>
@@ -664,7 +657,7 @@ export function CommunityIndexWorkspace({
                   key={baseUrl}
                   variant='secondary'
                   type='button'
-                  onClick={() => void openConsentGate(baseUrl)}
+                  onClick={() => consentFlow.open(baseUrl)}
                 >
                   {t('shell:communityIndex.reviewPolicies', { baseUrl })}
                 </Button>
@@ -674,7 +667,15 @@ export function CommunityIndexWorkspace({
         </Notice>
       ) : null}
 
-      {eligibleNodeBaseUrls.length === 0 ? (
+      {availability && availability.reason !== 'ready' ? (
+        <CommunityIndexAvailabilityNotice
+          availability={availability}
+          onRetry={onRetryNode}
+          onReviewPolicies={consentFlow.open}
+          onOpenSettings={onOpenCommunityNodeSettings}
+          onAutomatic={onAutomaticNode}
+        />
+      ) : eligibleNodeBaseUrls.length === 0 ? (
         consentPendingNodeBaseUrls.length > 0 ? null : (
         <Notice tone='warning'>
           <div className='flex flex-wrap items-center justify-between gap-3'>
@@ -710,7 +711,7 @@ export function CommunityIndexWorkspace({
               {t(`shell:communityIndex.operationHints.${effectiveOperation}`)}
             </p>
           )}
-          <Button type='submit' disabled={status === 'loading'}>
+          <Button type='submit' disabled={status === 'loading' || queryRetrySeconds > 0}>
             <Search className='size-4' aria-hidden='true' />
             {status === 'loading'
               ? t('shell:communityIndex.loading')
@@ -719,7 +720,24 @@ export function CommunityIndexWorkspace({
         </form>
       )}
 
-      {error ? <Notice tone='destructive'>{error}</Notice> : null}
+      {queryRetrySeconds > 0 ? <Notice>{t('shell:communityIndex.availability.retryAfter', { seconds: queryRetrySeconds })}</Notice> : null}
+      {error ? <Notice tone='destructive'>
+        <p>{error}</p>
+        {queryRecovery ? <div className='mt-2 flex flex-wrap gap-2'>
+          {queryRecovery === 'consent' && activeNodeBaseUrl ? (
+            <Button variant='secondary' onClick={() => consentFlow.open(activeNodeBaseUrl)}>
+              {t('shell:communityIndex.reviewPolicies', { baseUrl: activeNodeBaseUrl })}
+            </Button>
+          ) : queryRecovery === 'metadata' ? (
+            <Button variant='secondary' disabled={queryRetrySeconds > 0} onClick={() => {
+              void onRetryNode('metadata').catch(() => setError(t('shell:communityIndex.availability.retryFailed')));
+            }}>{t('shell:communityIndex.availability.retry')}</Button>
+          ) : null}
+          <Button variant='secondary' onClick={onOpenCommunityNodeSettings}>
+            {t('shell:workspace.communityNodeUnavailableAction')}
+          </Button>
+        </div> : null}
+      </Notice> : null}
       {status === 'success' && visibleResult && visibleResult.entries.length === 0 ? (
         <p className='empty-state'>{t('shell:communityIndex.empty')}</p>
       ) : null}
@@ -783,21 +801,7 @@ export function CommunityIndexWorkspace({
         </ul>
       ) : null}
 
-      {consentGateBaseUrl !== null ? (
-        <CommunityNodeConsentDialog
-          open
-          onOpenChange={(open) => {
-            if (!open) {
-              closeConsentGate();
-            }
-          }}
-          baseUrl={consentGateBaseUrl}
-          consent={communityNodeConsentView(undefined, consentGateEntry ?? undefined)}
-          busy={consentGateBusy}
-          onAccept={() => void acceptConsentGate()}
-          onRetry={() => void openConsentGate(consentGateBaseUrl)}
-        />
-      ) : null}
+      {consentFlow.dialog ? <CommunityNodeConsentDialog {...consentFlow.dialog} /> : null}
     </Card>
   );
 }

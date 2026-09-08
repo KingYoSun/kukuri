@@ -17,6 +17,19 @@ ADR 0002 (`docs/adr/0002-feature-data-classification-template.md`) に基づく�
 
 ## 境界
 
+### 初回説明Dialog（#914）のデータ分類
+
+- Feature 名: Community Node初回説明と規約確認への案内
+- Durable / Transient: 表示段階・再試行表示・起動session中の提示済みアカウントはTransient。
+- Canonical Source: Node一覧と既存暗号化local consent record。検索適格性やtokenを同意記録の代替にしない。
+- Replicated?: No。表示stateをNodeやpeerへ送らず、再起動時にはローカル同意から再判定する。
+- Rebuildable From: Node一覧・ローカル同意・既存の接続status。案内表示履歴の復元は不要。
+- Public Replica / Private Replica / Local Only: Local Only。新しい永続同意store・DB tableは追加しない。
+- Gossip Hint 必要有無 / Blob 必要有無 / SQLite projection 必要有無: いずれも不要。
+- 必須contract/scenario: 全Nodeのlocal状態取得後にだけ全件未同意を判定、一覧index 0へ案内、説明表示の追加外部I/O/同意mutationが0、閉じる/あとでが同意にならない、表示文書のslug/version/snapshotと言語を既存APIへ渡す、同意後のready eventが検索先へ反映される。
+
+説明Dialogを出すことはNode利用への同意ではない。規約確認操作では既存の公開policy取得を使い、明示受諾後だけ既存のlocal記録→認証→server同期へ進む。app-level同意・年齢/restore gate、Node別の現行policy preflight、撤回、他Node/Direct P2Pとの境界は維持する。
+
 - 対象は当該 community node の運用だけであり、kukuri クライアント本体の規約・プライバシーポリシーとは別である。
 - node が扱わない Direct P2P、他 node、peer が保持する copy は当該 node の削除・送信防止の権限外である。
 - 生成物は法的助言・完全性保証ではない。第三者 operator も同じ schema と検証を使えるが、自らの実態、契約する provider、補足記述を確認する責任を負う。

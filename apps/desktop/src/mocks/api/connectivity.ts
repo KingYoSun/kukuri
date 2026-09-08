@@ -111,6 +111,8 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
         base_url: node.base_url,
         auth_state: { authenticated: false, expires_at: null },
         consent_state: null,
+        local_consent: { records: [], withdrawn_at: null },
+        consent_update_pending: false,
         resolved_urls: null,
         last_error: null,
         invite_code_saved: false,
@@ -196,6 +198,7 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
                 records: documents.map((document) => ({
                   policy_slug: document.policy_slug,
                   policy_version: document.policy_version,
+                  policy_snapshot_revision: document.policy_snapshot_revision ?? null,
                   accepted_at: acceptedAt,
                   language,
                   app_version: 'mock',

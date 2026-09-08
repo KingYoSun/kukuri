@@ -729,13 +729,14 @@ export function createProfileTopicChannelActions({
   // #857: 提示された文書と版をそのまま受諾し、ローカル記録 → セッション確立を開始する。
   async function handleAcceptCommunityNodeConsents(
     baseUrl: string,
-    documents: CommunityNodeConsentDocumentRef[]
+    documents: CommunityNodeConsentDocumentRef[],
+    language = i18n.resolvedLanguage ?? i18n.language
   ) {
     try {
       const nextStatus = await api.acceptCommunityNodeConsents(
         baseUrl,
         documents,
-        i18n.resolvedLanguage ?? i18n.language
+        language
       );
       setCommunityNodeStatuses((current) => upsertCommunityNodeStatus(current, nextStatus));
       setCommunityNodeConfig((current) => syncCommunityNodeConfigWithStatus(current, nextStatus));

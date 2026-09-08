@@ -17,6 +17,7 @@ import type {
 
 import { removeRecordEntry, setRecordEntry, updateRecordEntry } from '@/shell/stateUpdates';
 import { useConnectivityStatusRefresh } from '@/shell/data/useConnectivityStatusRefresh';
+import { useCommunityNodeRecovery } from '@/shell/actions/useCommunityNodeRecovery';
 import { useDesktopShellDataEffects } from '@/shell/data/useDesktopShellDataEffects';
 import {
   activeWorkspaceScope,
@@ -634,6 +635,7 @@ export function useDesktopShellData({
   );
 
   const queuedLoadTopics = useQueuedLoadTopics(runLoadTopics);
+  const retryCommunityNode = useCommunityNodeRecovery(api, refreshConnectivityStatus, loadCommunityIndexCapability);
   const loadTopics = useCallback(
     async (topics: string[], currentActiveTopic: string, currentThread: string | null) => {
       await queuedLoadTopics(topics, currentActiveTopic, currentThread);
@@ -736,6 +738,7 @@ export function useDesktopShellData({
 
   return {
     loadTopics,
+    retryCommunityNode,
     refreshVisibleShellData,
     refreshVisibleTimelineAfterPublish,
     refreshTimelineFeed,

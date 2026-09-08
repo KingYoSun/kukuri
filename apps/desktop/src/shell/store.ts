@@ -3,6 +3,7 @@ import { useStore } from 'zustand';
 import { createStore } from 'zustand/vanilla';
 
 import { type DesktopApi } from '@/lib/api';
+import { reconcileCommunityIndexNodePreference } from '@/lib/api/communityIndex';
 import type { DesktopTheme } from '@/lib/theme';
 import { type ChromeSliceState, createInitialChromeSlice } from '@/shell/slices/chrome';
 import {
@@ -128,6 +129,28 @@ type CreateDesktopShellStoreOptions = {
   communityIndexPreferenceStorage?: CommunityIndexNodePreferenceStorage;
 };
 
+// 検索先は接続stateの派生値。受諾・event・poll・manifest・設定変更の各入口で
+// 同じ更新と同時に解決し、利用可能なNodeだけ更新されて選択がnullに残るのを防ぐ。
+function withCommunityIndexSelection(
+  current: DesktopShellStore,
+  patch: Partial<DesktopShellState>
+): Partial<DesktopShellState> {
+  if (!['communityNodeConfig', 'communityNodeStatuses', 'communityNodeManifests',
+    'communityIndexNodePreference'].some((key) => key in patch)) return patch;
+  const next = { ...current, ...patch };
+  if ('communityNodeConfig' in patch) next.communityNodeConfigLoaded = true;
+  // 保存済みmanual preferenceを初回config取得前の空配列で消さない。
+  if (!next.communityNodeConfigLoaded) return patch;
+  const resolution = reconcileCommunityIndexNodePreference(next);
+  return {
+    ...patch,
+    communityNodeConfigLoaded: next.communityNodeConfigLoaded,
+    ...('communityNodeConfig' in patch ? { communityNodeConfigError: null } : {}),
+    communityIndexNodePreference: resolution.preference,
+    communityIndexNodeBaseUrl: resolution.selectedBaseUrl,
+  };
+}
+
 export function createDesktopShellStore(options: CreateDesktopShellStoreOptions = {}) {
   const initialState = createInitialShellState();
   const workspaceState = options.workspaceStorage
@@ -153,7 +176,7 @@ export function createDesktopShellStore(options: CreateDesktopShellStoreOptions 
     savedWorkspaceLayouts,
     columnDraftsByKey,
     communityIndexNodePreference,
-    patchState: (patch) => set((current) => ({ ...current, ...patch })),
+    patchState: (patch) => set((current) => withCommunityIndexSelection(current, patch)),
     resetState: () => set(createInitialShellState()),
     setField: (key, value) =>
       set((current) => {
@@ -166,9 +189,9 @@ export function createDesktopShellStore(options: CreateDesktopShellStoreOptions 
         if (Object.is(current[key], nextValue)) {
           return current;
         }
-        return {
+        return withCommunityIndexSelection(current, {
           [key]: nextValue,
-        };
+        });
       }),
   }));
 }

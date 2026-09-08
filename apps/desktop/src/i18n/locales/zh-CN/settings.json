@@ -206,7 +206,8 @@
       "loadFailed": "无法获取政策(可能处于离线状态)。请在可连接时重试。",
       "withdrawnNotice": "您已撤回对此节点的同意。本地功能与直接 P2P 仍可使用;如需重新连接,请再次同意。",
       "withdraw": "撤回同意",
-      "decline": "暂不同意"
+      "decline": "暂不同意",
+      "acceptFailed": "无法完成同意操作。请确认当前条款后重试。如果条款已更新，请重新加载。"
     },
     "baseUrlLabel": "基础 URL",
     "baseUrlsHint": "每行一个 HTTPS 基础 URL。",
@@ -260,6 +261,15 @@
       "waitingForConsent": "等待接受同意",
       "acceptPolicies": "请接受必需策略以解析连接 URL",
       "consentWithdrawn": "已撤回同意"
+    },
+    "onboarding": {
+      "title": "什么是社区节点？",
+      "description": "社区节点是一种服务器，帮助您发现其他用户并连接彼此的设备。当设备无法直接连接时，它也可以中继通信。搜索和发现等功能因节点而异。使用前，请先查看该节点的条款。",
+      "candidate": "首个推荐：{{node}}",
+      "address": "查看节点地址",
+      "reviewPolicies": "查看条款",
+      "later": "稍后",
+      "openSettings": "打开社区节点设置"
     }
   },
   "connectivity": {

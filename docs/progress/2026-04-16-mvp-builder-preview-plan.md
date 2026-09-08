@@ -6,7 +6,7 @@
 - capability baseline は [2026-03-10-foundation.md](./2026-03-10-foundation.md) を維持し、その上に `初回体験 / 配布 / 説明 / feedback loop` を載せます。
 - Issue #885を現行マイルストーンへ組み込み、Windows NSISに加えてLinux x86_64 AppImageとx86_64／aarch64利用者向けCLIをPreview Releaseへ載せます。実装順と境界は#886〜#890、データ分類はADR 0049を正本とします。
 - Community Node は最後まで単一の概念として扱います。配布候補と利用者追加 Node はどちらも、Node 固有文書への明示同意後にセッションを自動確立・維持します。
-- current preview surface は `launch -> default product Columns -> profile setup -> community node consent -> node ready -> starter topic -> post/reply -> private channel -> feedback` です。
+- current preview surface は `launch -> default product Columns -> community node explanation / consent -> node ready -> profile setup -> starter topic -> post/reply -> private channel -> feedback` です。Nodeの説明は「あとで」で閉じ、規約確認を後から再開できます。
 
 ## Current Snapshot
 
@@ -16,6 +16,7 @@
 - desktop settings は textarea editor をやめ、Community Node の単一 list 上で `base URL`, diagnostics, consent / troubleshooting actions を扱います。
 - starter topic は `kukuri:topic:general`, `kukuri:topic:dev`, `kukuri:topic:test` を default とします（#805 で `demo / iroh / nostr / operators` から変更）。
 - 保存済みlayoutがないfresh installでは、`demo Timeline -> 自分のProfile -> Explore -> Notifications -> Messages`のpin済みColumnを表示し、Timelineをactiveにします。既存layoutは補完・移行しません。
+- #914: 全設定Nodeのlocal同意状態を確認でき、どれにもactive consentがない場合だけ、先頭Nodeの規約確認へ進む説明Dialogを表示します。同意保存と接続・検索の利用可能を区別し、受諾とruntime eventで検索先を更新します。取得失敗・再試行・参加制限・検索非提供には理由と復旧操作を表示します。
 
 ## Preview Surface
 

@@ -1,0 +1,21 @@
+# 2026-09-08 Community Node初回案内・検索復旧
+
+- Status: current
+- Supersedes: None
+- Superseded by: None
+- PR: #914対応PR（作成後に追記）
+- Preview: Linux/Chromium baseline生成後に追記。
+- Surface / user / purpose: 初回shell、Node規約Dialog、見つける。初見ユーザーがNodeの役割を理解し、先頭Nodeの規約確認・同意から検索または理由付き復旧へ進む。
+- Summary: 説明と同意を分離、設定index 0を保持、session内の「あとで」を尊重。同意結果とeventで検索先を同期し、同意保存・接続・検索提供を区別する。既存Dialog/Notice/Button/tokenを使用。
+- Conditions:
+  - Platform: Windows/Chromiumを先行確認。Windows Tauri/WebViewは準備中。Debian 13実機は未確認。
+  - Viewport: 1280×800、390×800。1280幅で200% zoom。
+  - Theme: dark / light
+  - Locale: ja / en / zh-CN
+  - State: 初回説明、規約取得中、文書表示、取得失敗/再試行、受諾、あとで/Escape、同意済み接続失敗。Storyでmanifest欠落/非提供/入場制限/再同意/空文書も提供。
+- Accessibility / interaction: browserの実pointer/keyboardで単一Dialog、説明・規約の見出しfocus、Escape/Enter、本文/操作領域の幅を検証。自動検査だけでscreen reader適合としない。
+- Performance: 初回説明のための外部I/Oは0。表示条件判定は設定Node一覧のローカル走査。ほかのDialogが閉じるまでのobserverは表示後/unmountでcleanupし、追加pollを作らない。高負荷media面の変更なし。
+- Validation: [#914実装記録](../progress/2026-09-08-914-community-node-onboarding.md)を参照。
+- Not verified: Debian 13実機、本番Nodeの当時の障害。screen reader/Windows High Contrastは未確認。
+- Review result: 操作/geometryの自動確認を進行中。最終画像と独立監査結果は確定後に追記。
+- Exceptions: なし。Linux実機未確認をbrowser/WebViewのPASSに置き換えない。

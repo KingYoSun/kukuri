@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { seedUnconsentedCommunityNodes } from './community-node-fixture';
 
 import { DEVELOPER_MODE_STORAGE_KEY } from '../../src/lib/developerMode';
 import { DESKTOP_THEME_STORAGE_KEY, type DesktopTheme } from '../../src/lib/theme';
@@ -21,6 +22,25 @@ const WIDE = { width: 1400, height: 980 } as const;
 const NARROW = { width: 700, height: 980 } as const;
 
 const LOCALE_EN = 'en';
+
+test('community node introduction wide Japanese dark', async ({ page }) => {
+  await seedUnconsentedCommunityNodes(page, { locale: 'ja', theme: 'dark' });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/#/explore?topic=kukuri%3Atopic%3Ageneral');
+  const dialog = page.getByRole('dialog', { name: 'コミュニティノードとは？' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveScreenshot('community-node-introduction-ja-dark.png');
+});
+
+test('community node policies narrow English light', async ({ page }) => {
+  await seedUnconsentedCommunityNodes(page, { locale: 'en', theme: 'light' });
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.goto('/#/explore?topic=kukuri%3Atopic%3Ageneral');
+  await page.getByRole('dialog').getByRole('button', { name: 'Review terms' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('You must follow the community node terms of service.')).toBeVisible();
+  await expect(dialog).toHaveScreenshot('community-node-policies-en-light.png');
+});
 
 /**
  * テーマ / ロケールを localStorage へ事前注入する（UI 操作でのテーマ切替は

@@ -345,7 +345,28 @@
       "rateLimitedWithRetry": "Too many requests. Try again in {{seconds}} seconds."
     },
     "consentRequiredNotice": "A community node requires your consent before it can be used. Review its terms and policies to connect.",
-    "reviewPolicies": "Review policies: {{baseUrl}}"
+    "reviewPolicies": "Review policies: {{baseUrl}}",
+    "availability": {
+      "checking": "Checking the community node. Search will be available when it is ready.",
+      "noNodes": "No community node is configured. Add one in community node settings.",
+      "statusUnavailable": "The community node configuration or consent status could not be read. Check the status again.",
+      "consentRequired": "Review and accept this community node’s terms before using it.",
+      "reconsentRequired": "Review the latest terms for this community node.",
+      "connecting": "Preparing the connection after consent.",
+      "retrying": "Your consent is saved. The connection failed and is waiting to retry.",
+      "inviteRequired": "This node requires a valid invitation. Check “Invite code” in community node settings.",
+      "admissionDenied": "This node has not allowed you to join. Check its admission requirements in community node settings, or choose another node.",
+      "manifestError": "The node information could not be loaded. Check the connection and try again.",
+      "manifestAbsent": "This node does not publish its feature information. Check its settings or choose another node.",
+      "indexNotProvided": "This node does not provide search or discovery. These are separate from connection assistance. Choose a node that provides search.",
+      "authRequired": "Authentication with the node is not complete. Check the connection again.",
+      "connectionFailed": "Communication with the node failed. Check the connection again or inspect this node in community node settings.",
+      "manualStopped": "Search is paused so your chosen provider is not changed without your permission. Choose another node or return to automatic selection.",
+      "retryAfter": "You can retry in about {{seconds}} seconds.",
+      "retryFailed": "The status could not be updated. Check the connection and try again.",
+      "retry": "Check status again",
+      "automatic": "Return to automatic selection"
+    }
   },
   "report": {
     "title": "Report content",
