@@ -71,8 +71,10 @@ OSのファイルダイアログ内部、他surfaceの翻訳監査、画像/動�
 | `cargo xtask desktop-ui-check` | lint/typecheck、Vitest 160ファイル1,271件、Storybook build、browser 88件、visual到達smoke16件成功 |
 | 最終差分lint | 変更したTS/TSXのESLint成功 |
 | Windows Tauri/WebView | 専用profile＋製品frontend/mock APIの隔離ホスト、1280×800、ja/dark。見出し・可視日本語button・native dialog起動・Escapeキャンセル・Enter再開・複数画像選択・削除と件数更新を確認 |
-| Linux/Chromiumの視覚比較 | CIで確認中。Windowsのvisualは比較skipであり代替ではない |
+| Linux/Chromiumの視覚比較 | [baseline run 34211627895](https://github.com/KingYoSun/kukuri/actions/runs/34211627895)成功。16枚中差分はcomposerの1枚のみで、目視確認後に採用。最終CI比較はPRのcheckで確認する。Windowsのvisualは比較skipであり代替ではない |
 | `git diff --check` | 成功 |
+
+Linux baselineのcomposer画像は、添付button/状態表示とその高さ変更に加えて、旧画像に残っていた既存の英語文言（Publish等）・読み込み中プロフィールも現行描画へ揃う。これらの製品実装は基準commitから変更していない。他15枚はbyte単位で一致し更新していない。
 
 ### 条件と証跡の対応
 
