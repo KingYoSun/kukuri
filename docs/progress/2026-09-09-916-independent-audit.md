@@ -164,4 +164,3 @@ CodeGraph exploreを最初に利用し、表示された実ソースとgit diff�
 音声screen readerの実発話、OS設定そのもののWindows High Contrast、Windows WebView2の実200%zoom（確認ホストでzoom hotkey無効）は未確認。実engine200%zoomはLinux WebKit、reflowはChromium、forcedColors/ARIA/addon-a11yは別証拠であり、上記未確認を全OSでの完全な確認として扱わない。固定ACを満たす観測と実装の具体的な裏付けが揃っており、この範囲を新要件としてblocker化しない。
 
 監査PASSは残る必須CIの免除ではない。merge担当者は全必須CI成功を確認し、merge treeがこの監査対象のsurfaceと一致することを確認する。docsのみの追記を含めheadが変わる場合は差分を確認し、製品surfaceが変わればそのdeltaと影響先だけを再監査する。
-
