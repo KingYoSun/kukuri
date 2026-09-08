@@ -1,0 +1,54 @@
+name: Kukuri Refactoring Audit Tests
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/refactoring-audit/**'
+      - 'xtask/**'
+      - 'docs/schemas/refactoring-audit-baseline.schema.json'
+      - '.github/workflows/kukuri-refactoring-audit*.yml'
+      - '.cargo/config.toml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.92.0
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: refactoring-audit-light
+      - run: python -m pip install -r scripts/refactoring-audit/requirements.txt
+      - run: cargo build --locked -p xtask --no-default-features
+      - name: Git fixture and real CLI contracts
+        env:
+          KUKURI_AUDIT_XTASK: ${{ github.workspace }}/target/debug/xtask
+        run: python -m unittest discover -s scripts/refactoring-audit -p 'test_*.py'
+      - run: node --test scripts/refactoring-audit/upsert.test.mjs
+      - run: cargo test --locked -p xtask --no-default-features
+      - run: cargo clippy --locked -p xtask --all-targets --no-default-features -- -D warnings
+      - name: Evaluate current repository baseline
+        run: cargo run --locked --quiet -p xtask --no-default-features -- refactoring-audit-check
+      - name: Workflow lint
+        uses: docker://rhysd/actionlint:1.7.7
+        with:
+          args: .github/workflows/kukuri-refactoring-audit.yml .github/workflows/kukuri-refactoring-audit-test.yml

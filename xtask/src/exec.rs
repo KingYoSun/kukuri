@@ -25,6 +25,7 @@ pub(crate) fn desktop_dir() -> PathBuf {
     root_dir().join("apps").join("desktop")
 }
 
+#[cfg(feature = "harness")]
 pub(crate) fn artifacts_dir(name: &str) -> PathBuf {
     root_dir()
         .join("test-results")
