@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { FetchCommunityNodePolicyView, AcceptCommunityNodePolicyView } from '@/shell/actions/useCommunityNodePolicyDialog';
 
 import type {
   AuthorSocialView,
@@ -12,7 +13,6 @@ import type {
   SyncStatus,
 } from '@/lib/api';
 import type { SupportedLocale } from '@/i18n';
-import type { CommunityNodeConsentDocumentRef } from '@/lib/api';
 import type { CommunityNodePanelView } from '@/components/settings/types';
 import { blobToBase64 } from '@/lib/attachments';
 import {
@@ -42,11 +42,8 @@ type MetaverseRoomPanelProps = {
   initialSelectedRoomId?: string | null;
   activeChannel?: JoinedPrivateChannelView | null;
   communityNodePanelView?: CommunityNodePanelView;
-  onFetchCommunityNodeConsents?: (baseUrl: string) => Promise<void>;
-  onAcceptCommunityNodeConsents?: (
-    baseUrl: string,
-    documents: CommunityNodeConsentDocumentRef[]
-  ) => Promise<void>;
+  onFetchCommunityNodeConsents?: FetchCommunityNodePolicyView;
+  onAcceptCommunityNodeConsents?: AcceptCommunityNodePolicyView;
   onOpenCommunityNodeSettings?: () => void;
 };
 

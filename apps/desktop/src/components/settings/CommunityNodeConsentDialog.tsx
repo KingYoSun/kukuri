@@ -54,6 +54,7 @@ export function CommunityNodeConsentDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className='max-h-[88vh] w-[min(40rem,92vw)] overflow-hidden'
+        hideClose={busy}
         onCloseAutoFocus={onCloseAutoFocus}
         onOpenAutoFocus={(event) => {
           event.preventDefault();
@@ -195,7 +196,7 @@ export function CommunityNodeConsentDialog({
               {t('settings:communityNode.consent.withdraw')}
             </Button>
           ) : null}
-          <Button variant='secondary' onClick={() => onOpenChange(false)}>
+          <Button variant='secondary' disabled={busy} onClick={() => onOpenChange(false)}>
             {consent.allRequiredAccepted
               ? t('common:actions.close')
               : t('settings:communityNode.consent.decline')}

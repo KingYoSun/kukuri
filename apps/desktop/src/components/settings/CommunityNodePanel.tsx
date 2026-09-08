@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
-import type { CommunityNodeConsentDocumentRef, RelationOptoutResponse } from '@/lib/api';
+import type { RelationOptoutResponse } from '@/lib/api';
 import type { CommunityIndexNodePreference } from '@/lib/api/communityIndex';
 import {
   trustRelationUnavailableReason,
@@ -13,6 +13,7 @@ import {
 } from '@/lib/api/trustRelationPresentation';
 
 import { CommunityNodeConsentDialog } from './CommunityNodeConsentDialog';
+import { useCommunityNodePolicyDialog, type FetchCommunityNodePolicyView, type AcceptCommunityNodePolicyView } from '@/shell/actions/useCommunityNodePolicyDialog';
 import { SettingsActionRow } from './SettingsActionRow';
 import { SettingsDiagnosticList } from './SettingsDiagnosticList';
 import { SettingsEditorField } from './SettingsEditorField';
@@ -31,12 +32,8 @@ type CommunityNodePanelProps = {
   onReset: () => void;
   onClearNodes: () => void;
   onAuthenticate: (baseUrl: string) => void;
-  onFetchConsents: (baseUrl: string) => void | Promise<void>;
-  // #857: 提示された文書と版をそのまま受諾する。
-  onAcceptConsents: (
-    baseUrl: string,
-    documents: CommunityNodeConsentDocumentRef[]
-  ) => void | Promise<void>;
+  onFetchConsents: FetchCommunityNodePolicyView;
+  onAcceptConsents: AcceptCommunityNodePolicyView;
   onWithdrawConsents?: (baseUrl: string) => void | Promise<void>;
   onRefresh: (baseUrl: string) => boolean | void | Promise<boolean | void>;
   onClearToken: (baseUrl: string) => void;
@@ -77,11 +74,11 @@ export function CommunityNodePanel({
   onIndexNodePreferenceChange = () => {},
   showDiagnostics = true,
 }: CommunityNodePanelProps) {
-  const { t } = useTranslation(['common', 'settings']);
-  const [consentDialogNodeBaseUrl, setConsentDialogNodeBaseUrl] = useState<string | null>(null);
-  const [consentDialogLoadedBaseUrl, setConsentDialogLoadedBaseUrl] = useState<string | null>(null);
-  const [consentDialogFetchError, setConsentDialogFetchError] = useState<string | null>(null);
-  const [consentBusy, setConsentBusy] = useState(false);
+  const { t, i18n } = useTranslation(['common', 'settings']);
+  const consentFlow = useCommunityNodePolicyDialog({
+    nodes: view.nodes, language: i18n.resolvedLanguage ?? i18n.language,
+    fetchPolicies: onFetchConsents, acceptPolicies: onAcceptConsents, withdraw: onWithdrawConsents,
+  });
   const [relationOptoutByNode, setRelationOptoutByNode] = useState<
     Record<string, { busy: boolean; value: RelationOptoutResponse | null; error: string | null }>
   >({});
@@ -139,39 +136,6 @@ export function CommunityNodePanel({
     }
   }
 
-  const consentDialogNode =
-    consentDialogNodeBaseUrl != null
-      ? view.nodes.find((node) => node.baseUrl === consentDialogNodeBaseUrl)
-      : undefined;
-  const consentDialogView = consentDialogNode
-    ? {
-        ...consentDialogNode.consent,
-        loaded:
-          consentDialogNode.consent.loaded &&
-          consentDialogLoadedBaseUrl === consentDialogNode.baseUrl,
-        // #857: 取得失敗(オフライン等)はダイアログ内で再試行できるよう明示する。
-        loadError: consentDialogFetchError ?? consentDialogNode.consent.loadError,
-      }
-    : null;
-
-  async function openConsentDialog(baseUrl: string) {
-    setConsentDialogNodeBaseUrl(baseUrl);
-    setConsentDialogLoadedBaseUrl(null);
-    setConsentDialogFetchError(null);
-    setConsentBusy(true);
-    try {
-      await onFetchConsents(baseUrl);
-      setConsentDialogLoadedBaseUrl(baseUrl);
-    } catch (fetchError) {
-      setConsentDialogLoadedBaseUrl(null);
-      setConsentDialogFetchError(
-        fetchError instanceof Error ? fetchError.message : String(fetchError)
-      );
-    } finally {
-      setConsentBusy(false);
-    }
-  }
-
   async function refreshCommunityNode(node: CommunityNodePanelView['nodes'][number]) {
     const knownConsentRequired =
       !node.consent.hasLocalConsent ||
@@ -179,43 +143,12 @@ export function CommunityNodePanel({
       node.consent.hasPendingUpdate ||
       (node.consent.loaded && !node.consent.allRequiredAccepted);
     if (knownConsentRequired) {
-      await openConsentDialog(node.baseUrl);
+      consentFlow.open(node.baseUrl);
       return;
     }
     const consentRequired = await onRefresh(node.baseUrl);
     if (consentRequired) {
-      await openConsentDialog(node.baseUrl);
-    }
-  }
-
-  async function acceptConsentFromDialog(baseUrl: string) {
-    // #857: 提示中の文書と版をそのまま受諾する(提示していない版を黙って受諾しない)。
-    const documents = (consentDialogView?.policies ?? []).map((policy) => ({
-      policy_slug: policy.policySlug,
-      policy_version: policy.policyVersion,
-      policy_snapshot_revision: policy.policySnapshotRevision ?? null,
-    }));
-    if (documents.length === 0) {
-      return;
-    }
-    setConsentBusy(true);
-    try {
-      await onAcceptConsents(baseUrl, documents);
-    } catch {
-      return;
-    } finally {
-      setConsentBusy(false);
-    }
-  }
-
-  async function withdrawConsentFromDialog(baseUrl: string) {
-    setConsentBusy(true);
-    try {
-      await onWithdrawConsents(baseUrl);
-    } catch {
-      return;
-    } finally {
-      setConsentBusy(false);
+      consentFlow.open(node.baseUrl);
     }
   }
 
@@ -434,7 +367,7 @@ export function CommunityNodePanel({
                 <Button
                   variant='secondary'
                   disabled={nodeActionsDisabled || !node.saved || !node.baseUrl.trim()}
-                  onClick={() => void openConsentDialog(node.baseUrl)}
+                  onClick={() => consentFlow.open(node.baseUrl)}
                 >
                   {t('common:actions.consents')}
                 </Button>
@@ -531,23 +464,7 @@ export function CommunityNodePanel({
         })}
       </div>
 
-      {consentDialogNode && consentDialogView ? (
-        <CommunityNodeConsentDialog
-          open={consentDialogNodeBaseUrl != null}
-          onOpenChange={(open) => {
-            if (!open) {
-              setConsentDialogNodeBaseUrl(null);
-              setConsentDialogLoadedBaseUrl(null);
-            }
-          }}
-          baseUrl={consentDialogNode.baseUrl}
-          consent={consentDialogView}
-          busy={consentBusy}
-          onAccept={() => void acceptConsentFromDialog(consentDialogNode.baseUrl)}
-          onRetry={() => void openConsentDialog(consentDialogNode.baseUrl)}
-          onWithdraw={() => void withdrawConsentFromDialog(consentDialogNode.baseUrl)}
-        />
-      ) : null}
+      {consentFlow.dialog ? <CommunityNodeConsentDialog {...consentFlow.dialog} /> : null}
     </Card>
   );
 }

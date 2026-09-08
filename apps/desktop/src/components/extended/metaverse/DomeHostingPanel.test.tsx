@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
@@ -139,6 +139,15 @@ function renderPanel(options: {
 }
 
 describe('DomeHostingPanel Community Node consent', () => {
+  test('keeps a consent failure inside the modal without delegating', async () => {
+    const user = userEvent.setup();
+    const { roomActions } = renderPanel({ entry: node(false), onAccept: vi.fn().mockRejectedValue(new Error('save failed')) });
+    await user.click(screen.getByRole('button', { name: 'Explicitly delegate to Community Node' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(await within(dialog).findByRole('button', { name: 'Accept' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Consent could not be completed');
+    expect(roomActions.delegateHosting).not.toHaveBeenCalled();
+  });
   test('delegates directly to the manifest identity only with current local consent', async () => {
     const user = userEvent.setup();
     const { roomActions, onFetch } = renderPanel({ entry: node(true) });
@@ -164,7 +173,7 @@ describe('DomeHostingPanel Community Node consent', () => {
 
     await user.click(screen.getByRole('button', { name: 'Explicitly delegate to Community Node' }));
 
-    expect(onFetch).toHaveBeenCalledWith('https://node.example');
+    expect(onFetch).toHaveBeenCalledWith('https://node.example', 'en');
     expect(roomActions.delegateHosting).not.toHaveBeenCalled();
     expect(await screen.findByText('Builder preview policy body.')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Accept' }));
@@ -176,7 +185,7 @@ describe('DomeHostingPanel Community Node consent', () => {
           policy_version: 2,
           policy_snapshot_revision: 'snapshot-2',
         },
-      ])
+      ], 'en')
     );
     expect(roomActions.delegateHosting).toHaveBeenCalledWith(
       room.metaverse!.spatial_context,
@@ -239,7 +248,7 @@ describe('DomeHostingPanel Community Node consent', () => {
 
     await user.click(screen.getByRole('button', { name: 'Explicitly delegate to Community Node' }));
 
-    await waitFor(() => expect(onFetch).toHaveBeenCalledWith('https://node.example'));
+    await waitFor(() => expect(onFetch).toHaveBeenCalledWith('https://node.example', 'en'));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(delegateHosting).toHaveBeenCalledTimes(1);
   });

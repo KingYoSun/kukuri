@@ -49,7 +49,7 @@ export function CommunityIndexAvailabilityNotice({
               setFailed(false);
               void onRetry().catch(() => setFailed(true)).finally(() => setBusy(false));
             }}>
-              {busy ? t('common:states.loading') : t('shell:communityIndex.availability.retry')}
+              {busy ? t('shell:communityIndex.loading') : t('shell:communityIndex.availability.retry')}
             </Button>
           ) : null}
           <Button variant='secondary' onClick={onOpenSettings}>

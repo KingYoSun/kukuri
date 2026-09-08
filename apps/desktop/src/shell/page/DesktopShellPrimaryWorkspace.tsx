@@ -33,6 +33,7 @@ import { buildLiveLink, type InternalSmartReference } from '@/lib/internalLinks'
 import { copyTextToClipboard } from '@/lib/utils';
 import { consentPendingCommunityNodes, eligibleCommunityIndexNodes } from '@/lib/api/communityIndex';
 import { communityIndexAvailability, type CommunityNodeAvailability } from '@/lib/api/communityNodeAvailability';
+import type { FetchCommunityNodePolicyView } from '@/shell/actions/useCommunityNodePolicyDialog';
 import type { SubmitCommunityNodeReportRequest } from '@/lib/api';
 import {
   timelineStorageKeyForChannel,
@@ -88,7 +89,7 @@ export type DesktopShellPrimarySurfaceProps = {
   >;
   openCommunityNodeSettings: () => void;
   communityNodePanelView?: CommunityNodePanelView;
-  onFetchCommunityNodeConsents?: (baseUrl: string) => Promise<void>;
+  onFetchCommunityNodeConsents?: FetchCommunityNodePolicyView;
   onAcceptCommunityNodeConsents?: (
     baseUrl: string,
     documents: CommunityNodeConsentDocumentRef[],

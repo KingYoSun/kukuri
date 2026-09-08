@@ -3,19 +3,20 @@
 - Status: current
 - Supersedes: None
 - Superseded by: None
-- PR: #914対応PR（作成後に追記）
-- Preview: Linux/Chromium baseline生成後に追記。
+- PR: [#946](https://github.com/KingYoSun/kukuri/pull/946)
+- Preview: [Windows日本語の説明](assets/issue-914/windows-introduction-ja.png)、[規約](assets/issue-914/windows-policies-ja.png)、[同意後の検索](assets/issue-914/windows-search-ja.png)。Linux/Chromiumの英語baseline: [説明](../../apps/desktop/tests/playwright/__screenshots__/visual.spec.ts/community-node-introduction-en-dark.png)、[狭幅規約](../../apps/desktop/tests/playwright/__screenshots__/visual.spec.ts/community-node-policies-en-light.png)。
 - Surface / user / purpose: 初回shell、Node規約Dialog、見つける。初見ユーザーがNodeの役割を理解し、先頭Nodeの規約確認・同意から検索または理由付き復旧へ進む。
 - Summary: 説明と同意を分離、設定index 0を保持、session内の「あとで」を尊重。同意結果とeventで検索先を同期し、同意保存・接続・検索提供を区別する。既存Dialog/Notice/Button/tokenを使用。
 - Conditions:
-  - Platform: Windows/Chromiumを先行確認。Windows Tauri/WebViewは準備中。Debian 13実機は未確認。
+  - Platform: Windows/ChromiumとWindows Tauri/WebView（専用app data/WebView profile、mock API）を確認。実サーバ接続の確認とは区別。Debian 13実機は未確認。
   - Viewport: 1280×800、390×800。1280幅で200% zoom。
   - Theme: dark / light
   - Locale: ja / en / zh-CN
   - State: 初回説明、規約取得中、文書表示、取得失敗/再試行、受諾、あとで/Escape、同意済み接続失敗。Storyでmanifest欠落/非提供/入場制限/再同意/空文書も提供。
-- Accessibility / interaction: browserの実pointer/keyboardで単一Dialog、説明・規約の見出しfocus、Escape/Enter、本文/操作領域の幅を検証。自動検査だけでscreen reader適合としない。
+- Accessibility / interaction: browserの実pointer/keyboardで単一Dialog、説明・規約の見出しfocus、Escape/Enter、本文/操作領域の幅を検証。Windows WebViewでも説明→規約→同意、検索入力/Enter→成功空結果を確認。自動検査だけでscreen reader適合としない。
 - Performance: 初回説明のための外部I/Oは0。表示条件判定は設定Node一覧のローカル走査。ほかのDialogが閉じるまでのobserverは表示後/unmountでcleanupし、追加pollを作らない。高負荷media面の変更なし。
 - Validation: [#914実装記録](../progress/2026-09-08-914-community-node-onboarding.md)を参照。
 - Not verified: Debian 13実機、本番Nodeの当時の障害。screen reader/Windows High Contrastは未確認。
-- Review result: 操作/geometryの自動確認を進行中。最終画像と独立監査結果は確定後に追記。
+- Review result: 操作/geometryと上記Windows画像・Linux英語baselineを確認済み。初回独立監査の非同期競合・modal error指摘は修正し、差分の独立監査待ち。
+- Baseline: Linux生成runは[34202969424](https://github.com/KingYoSun/kukuri/actions/runs/34202969424)。runnerのCJK font不足による日本語豆腐画像は採用しない。視覚baselineは既存と同じ英語、日本語glyph/実描画はWindowsで確認する。
 - Exceptions: なし。Linux実機未確認をbrowser/WebViewのPASSに置き換えない。
