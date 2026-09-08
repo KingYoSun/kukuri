@@ -644,9 +644,22 @@ export function useDesktopShellData({
 
   const refreshVisibleTimelineAfterPublish = useCallback(
     async (topic: string, currentThread: string | null, scopeChannelId?: string | null) => {
-      await refreshVisibleShellData(topic, currentThread, 'apply', scopeChannelId);
+      const state = storeApi.getState();
+      const tasks = [refreshVisibleShellData(topic, currentThread, 'apply', scopeChannelId)];
+      if (!scopeChannelId) {
+        if (state.workspaceState.columns.some((column) => column.kind === 'profile' && !column.entityId)) {
+          tasks.push(loadProfileSection());
+        }
+        const ownAuthor = state.syncStatus.local_author_pubkey;
+        if (ownAuthor && state.workspaceState.columns.some(
+          (column) => column.kind === 'profile' && column.entityId === ownAuthor
+        )) {
+          tasks.push(loadAuthorSection(ownAuthor));
+        }
+      }
+      await Promise.all(tasks);
     },
-    [refreshVisibleShellData]
+    [loadAuthorSection, loadProfileSection, refreshVisibleShellData, storeApi]
   );
 
   const refreshTimelineFeed = useCallback(
@@ -726,6 +739,7 @@ export function useDesktopShellData({
     refreshVisibleShellData,
     refreshVisibleTimelineAfterPublish,
     refreshTimelineFeed,
+    loadProfileSection,
     applyPendingTimeline,
     loadReactionCatalogData,
     loadNotificationsSection,

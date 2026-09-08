@@ -10,7 +10,7 @@ type ProfileOverviewPanelProps = {
   picture: string | null;
   status: 'loading' | 'ready' | 'error';
   error: string | null;
-  postCount: number;
+  postCount: number | null;
   followingCount: number;
   followedCount: number;
   mutedCount: number;
@@ -82,7 +82,7 @@ export function ProfileOverviewPanel({
         <p className='lede'>{about?.trim() || t('overview.noBio')}</p>
         <div className='topic-diagnostic topic-diagnostic-secondary'>
           <span>{t('overview.postCount')}</span>
-          <span>{postCount}</span>
+          <span>{postCount ?? '—'}</span>
         </div>
       </div>
     </Card>

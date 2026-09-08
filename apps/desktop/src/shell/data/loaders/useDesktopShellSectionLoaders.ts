@@ -1,4 +1,4 @@
-import { startTransition, useCallback } from 'react';
+import { startTransition, useCallback, useRef } from 'react';
 
 import type { CommunityNodeNodeStatus, DesktopApi } from '@/lib/api';
 import {
@@ -43,6 +43,8 @@ export function useDesktopShellSectionLoaders({
   storeApi,
   translate,
 }: UseDesktopShellSectionLoadersArgs) {
+  const profileRequestId = useRef(0);
+  const authorRequestIds = useRef(new Map<string, number>());
   const setAuthorError = useDesktopShellFieldSetter('authorError');
   const setAuthorErrorsByPubkey = useDesktopShellFieldSetter('authorErrorsByPubkey');
   const setAuthorTimelinesByPubkey = useDesktopShellFieldSetter('authorTimelinesByPubkey');
@@ -152,6 +154,9 @@ export function useDesktopShellSectionLoaders({
   );
 
   const loadProfileSection = useCallback(async () => {
+    const requestId = ++profileRequestId.current;
+    setProfileError(null);
+    setProfilePanelState({ status: 'loading', error: null });
     try {
       const [profile, following, followed, muted] = await Promise.all([
         api.getMyProfile(),
@@ -164,6 +169,7 @@ export function useDesktopShellSectionLoaders({
         null,
         VISIBLE_TIMELINE_LIMIT
       );
+      if (requestId !== profileRequestId.current) return;
       startTransition(() => {
         setLocalProfile(profile);
         if (!storeApi.getState().profileDirty) {
@@ -180,6 +186,7 @@ export function useDesktopShellSectionLoaders({
         setSocialConnectionsPanelState({ status: 'ready', error: null });
       });
     } catch (error) {
+      if (requestId !== profileRequestId.current) return;
       const message = messageFromError(
         error,
         translate('common:errors.failedToLoadProfile')
@@ -204,28 +211,34 @@ export function useDesktopShellSectionLoaders({
 
   const loadAuthorSection = useCallback(
     async (pubkey: string) => {
+      const requestId = (authorRequestIds.current.get(pubkey) ?? 0) + 1;
+      authorRequestIds.current.set(pubkey, requestId);
       try {
         const [author, timeline] = await Promise.all([
           api.getAuthorSocialView(pubkey),
           api.listProfileTimeline(pubkey, null, VISIBLE_TIMELINE_LIMIT),
         ]);
+        if (requestId !== authorRequestIds.current.get(pubkey)) return;
         startTransition(() => {
-          setSelectedAuthor(author);
-          setSelectedAuthorTimeline(timeline.items);
-          setSelectedAuthorTimelineNextCursor(timeline.next_cursor ?? null);
+          if (storeApi.getState().selectedAuthorPubkey === pubkey) {
+            setSelectedAuthor(author);
+            setSelectedAuthorTimeline(timeline.items);
+            setSelectedAuthorTimelineNextCursor(timeline.next_cursor ?? null);
+            setAuthorError(null);
+          }
           setAuthorTimelinesByPubkey(setRecordEntry(pubkey, timeline.items));
           setAuthorTimelineNextCursorByPubkey(
             setRecordEntry(pubkey, timeline.next_cursor ?? null)
           );
-          setAuthorError(null);
           setAuthorErrorsByPubkey(setRecordEntry(pubkey, null));
           if (author) {
             setKnownAuthorsByPubkey((current) => mergeKnownAuthors(current, [author]));
           }
         });
       } catch (error) {
+        if (requestId !== authorRequestIds.current.get(pubkey)) return;
         const message = messageFromError(error, translate('common:errors.failedToLoadAuthor'));
-        setAuthorError(message);
+        if (storeApi.getState().selectedAuthorPubkey === pubkey) setAuthorError(message);
         setAuthorErrorsByPubkey(setRecordEntry(pubkey, message));
       }
     },
@@ -239,6 +252,7 @@ export function useDesktopShellSectionLoaders({
       setSelectedAuthor,
       setSelectedAuthorTimeline,
       setSelectedAuthorTimelineNextCursor,
+      storeApi,
       translate,
     ]
   );
@@ -476,7 +490,7 @@ export function useDesktopShellSectionLoaders({
       if (activePrimarySection === 'game') {
         tasks.push(loadGameSection(topic, selectedChannelId));
       }
-      if (activePrimarySection === 'profile') {
+      if (state.workspaceState.columns.some((column) => column.kind === 'profile' && !column.entityId)) {
         tasks.push(loadProfileSection());
       }
       if (selectedAuthorPubkey) {

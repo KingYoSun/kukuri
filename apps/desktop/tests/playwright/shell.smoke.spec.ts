@@ -340,9 +340,9 @@ test('browser mock shell can switch topics, publish, open thread, open author, a
   await page.getByPlaceholder('Write a post').fill('hello browser mock');
   await page.getByRole('button', { name: 'Post', exact: true }).click();
 
-  await expect(page.getByText('hello browser mock')).toBeVisible();
+  await expect(activeColumn(page, 'Timeline').getByText('hello browser mock')).toBeVisible();
 
-  await page.getByText('hello browser mock').click();
+  await activeColumn(page, 'Timeline').getByText('hello browser mock').click();
   const threadPane = activeColumn(page, 'Thread');
   await expect(threadPane).toBeVisible();
   await threadPane.getByRole('button', { name: 'Unknown user' }).first().click();
@@ -576,7 +576,7 @@ for (const mobileViewport of [
   await openComposerDialog(page);
   await page.getByPlaceholder('Write a post').fill('mobile paging thread');
   await page.getByRole('button', { name: 'Post', exact: true }).click();
-  await page.getByText('mobile paging thread').click();
+    await activeColumn(page, 'Timeline').getByText('mobile paging thread').click();
   const thread = activeColumn(page, 'Thread');
   await expect(thread).toBeVisible();
   await thread.getByRole('button', { name: 'Unknown user' }).first().click();
@@ -956,9 +956,9 @@ test('browser mock narrow shell keeps nav, context, and settings flows reachable
   await openComposerDialog(page);
   await page.getByPlaceholder('Write a post').fill('narrow browser mock');
   await page.getByRole('button', { name: 'Post', exact: true }).click();
-  await expect(page.getByText('narrow browser mock')).toBeVisible();
+  await expect(activeColumn(page, 'Timeline').getByText('narrow browser mock')).toBeVisible();
 
-  await page.getByText('narrow browser mock').click();
+  await activeColumn(page, 'Timeline').getByText('narrow browser mock').click();
   const threadColumn = activeColumn(page, 'Thread');
   await expect(threadColumn).toBeVisible();
 

@@ -93,6 +93,7 @@ export type DesktopShellPrimarySurfaceProps = {
     documents: CommunityNodeConsentDocumentRef[]
   ) => Promise<void>;
   loadReactionCatalogData: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
   refreshTimelineFeed: (
     topic: string,
     currentThread: string | null,
@@ -149,6 +150,7 @@ export function DesktopShellPrimarySurface({
   onAcceptCommunityNodeConsents,
   loadReactionCatalogData,
   refreshTimelineFeed,
+  refreshProfile,
   loadMoreTimeline,
   openAuthorDetail,
   openThread,
@@ -729,7 +731,8 @@ export function DesktopShellPrimarySurface({
                 picture={resolveProfilePictureSrc(localProfile, mediaObjectUrls)}
                 status={profilePanelState.status}
                 error={profileError ?? profilePanelState.error}
-                postCount={viewModels.profileTimelinePostViews.length}
+                postCount={profilePanelState.status !== 'ready' && viewModels.profileTimelinePostViews.length === 0
+                  ? null : viewModels.profileTimelinePostViews.length}
                 followingCount={socialConnections.following.length}
                 followedCount={socialConnections.followed.length}
                 mutedCount={socialConnections.muted.length}
@@ -739,7 +742,13 @@ export function DesktopShellPrimarySurface({
                 onOpenMuted={() => openProfileConnections('muted')}
               />
             )}
-            {profileMode !== 'connections' ? (
+            {profileMode !== 'connections' && profilePanelState.status === 'error' ? (
+              <Button variant='secondary' onClick={() => void refreshProfile()}>
+                {t('common:actions.retry')}
+              </Button>
+            ) : null}
+            {profileMode !== 'connections' &&
+            (profilePanelState.status === 'ready' || viewModels.profileTimelinePostViews.length > 0) ? (
               <Card className='shell-workspace-card'>
                 <TimelineFeed
                   posts={viewModels.profileTimelinePostViews}

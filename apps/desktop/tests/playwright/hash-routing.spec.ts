@@ -97,9 +97,9 @@ test('browser mock hash history keeps route state stable without narrow-width ov
 
   await page.getByPlaceholder('Write a post').fill('route history post');
   await page.getByRole('button', { name: 'Post', exact: true }).click();
-  await expect(page.getByText('route history post')).toBeVisible();
+  await expect(activeColumn(page, 'Timeline').getByText('route history post')).toBeVisible();
 
-  await page.getByText('route history post').click();
+  await activeColumn(page, 'Timeline').getByText('route history post').click();
   await expect(page).toHaveURL(/context=thread/);
   await expect(activeColumn(page, 'Thread')).toBeVisible();
 

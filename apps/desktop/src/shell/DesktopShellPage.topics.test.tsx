@@ -6,6 +6,7 @@ import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import { App } from '@/App';
 import {
   expectActiveTopic,
+  getActiveColumn,
   openChannelManager,
   openControlCenter,
   publishPost,
@@ -353,19 +354,19 @@ test('desktop shell can track multiple topics at once', async () => {
   await selectTopic(user, 'general');
   await publishPost(user, 'demo post');
   await waitFor(() => {
-    expect(screen.getByText('demo post')).toBeInTheDocument();
+    expect(within(getActiveColumn('Timeline')).getByText('demo post')).toBeInTheDocument();
   });
 
   await selectTopic(user, 'second');
   await publishPost(user, 'second post');
   await waitFor(() => {
-    expect(screen.getByText('second post')).toBeInTheDocument();
+    expect(within(getActiveColumn('Timeline')).getByText('second post')).toBeInTheDocument();
   });
 
   await selectTopic(user, 'general');
   const generalTopic = await getTopicItem(user, 'general');
   expect(generalTopic).not.toBeNull();
-  expect(screen.getByText('demo post')).toBeInTheDocument();
+  expect(within(getActiveColumn('Timeline')).getByText('demo post')).toBeInTheDocument();
   expect(generalTopic).toHaveTextContent(/\/ peers: \d/);
   expect(generalTopic).not.toHaveTextContent('expected:');
   expect(generalTopic).not.toHaveTextContent('Connected to all configured peers for this topic');

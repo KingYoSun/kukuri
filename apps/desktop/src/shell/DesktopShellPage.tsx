@@ -195,6 +195,7 @@ export function DesktopShellPage({
     loadTopics,
     refreshVisibleTimelineAfterPublish,
     refreshTimelineFeed,
+    loadProfileSection,
     loadReactionCatalogData,
     loadNotificationsSection,
     loadMoreTimeline,
@@ -618,6 +619,7 @@ export function DesktopShellPage({
       onAcceptCommunityNodeConsents={shellActions.handleAcceptCommunityNodeConsents}
       loadReactionCatalogData={loadReactionCatalogData}
       refreshTimelineFeed={refreshTimelineFeed}
+      refreshProfile={loadProfileSection}
       loadMoreTimeline={loadMoreTimeline}
       openAuthorDetail={(authorPubkey, options) =>
         openAuthorDetail(authorPubkey, {

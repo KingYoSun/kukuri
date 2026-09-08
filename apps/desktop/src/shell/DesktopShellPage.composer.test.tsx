@@ -6,6 +6,7 @@ import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import { App } from '@/App';
 import {
   closestSection,
+  getActiveColumn,
   createDeferred,
   expectActiveTopic,
   openControlCenter,
@@ -32,7 +33,7 @@ test('desktop shell can publish and render a post', async () => {
   await publishPost(user, 'hello desktop');
 
   await waitFor(() => {
-    expect(screen.getByText('hello desktop')).toBeInTheDocument();
+    expect(within(getActiveColumn('Timeline')).getByText('hello desktop')).toBeInTheDocument();
   });
   expectActiveTopic('kukuri:topic:general');
   expect(screen.queryByTestId('shell-nav-trigger')).not.toBeInTheDocument();
@@ -55,7 +56,7 @@ test('desktop shell can enter reply mode and render reply state', async () => {
 
   await publishPost(user, 'root post');
   await waitFor(() => {
-    expect(screen.getByText('root post')).toBeInTheDocument();
+    expect(within(getActiveColumn('Timeline')).getByText('root post')).toBeInTheDocument();
   });
 
   await user.click(screen.getAllByRole('button', { name: 'Reply' })[0]);
@@ -94,7 +95,7 @@ test('compose dialog stays width-safe when the source post contains a long token
     expect(screen.queryByRole('dialog', { name: 'Post' })).not.toBeInTheDocument();
   });
   await waitFor(() => {
-    expect(screen.getByText(longContent)).toBeInTheDocument();
+    expect(within(getActiveColumn('Timeline')).getByText(longContent)).toBeInTheDocument();
   });
 
   await user.click(screen.getAllByRole('button', { name: 'Reply' })[0]);
@@ -116,7 +117,7 @@ test('reply publish reloads thread only once after a successful submit', async (
 
   await publishPost(user, 'root post');
   await waitFor(() => {
-    expect(screen.getByText('root post')).toBeInTheDocument();
+    expect(within(getActiveColumn('Timeline')).getByText('root post')).toBeInTheDocument();
   });
 
   await user.click(screen.getAllByRole('button', { name: 'Reply' })[0]);
@@ -176,7 +177,7 @@ test('publish refreshes the active timeline without reloading full shell data', 
   await user.click(within(publishDialog).getByRole('button', { name: 'Post' }));
 
   await waitFor(() => {
-    expect(screen.getByText('local refresh post')).toBeInTheDocument();
+    expect(within(getActiveColumn('Timeline')).getByText('local refresh post')).toBeInTheDocument();
   });
   expect(listDirectMessagesSpy).toHaveBeenCalledTimes(0);
 });

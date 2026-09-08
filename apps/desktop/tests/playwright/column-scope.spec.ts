@@ -249,7 +249,7 @@ for (const viewport of [
     // fresh defaultの末尾にThreadを追加した6 Column状態を作る。
     const timelineColumn = activeColumn(page, 'Timeline');
     await publishFromTimelineColumn(page, timelineColumn, GENERAL_PUBLIC_SCOPE, 'focus sync post');
-    await page.getByText('focus sync post').click();
+    await timelineColumn.getByText('focus sync post').click();
     await expect(activeColumn(page, 'Thread')).toBeVisible();
 
     const canvas = page.locator('.shell-column-canvas');
