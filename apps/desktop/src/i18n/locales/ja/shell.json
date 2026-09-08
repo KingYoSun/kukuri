@@ -93,7 +93,8 @@
     "createJoinChannel": "チャンネルを作成または参加",
     "shareChannel": "選択中のチャンネルを共有",
     "release": "リリースと更新",
-    "settings": "設定"
+    "settings": "設定",
+    "languageSettingsHint": "言語とテーマ"
   },
   "columnState": {
     "active": "選択中",
@@ -198,7 +199,7 @@
     },
     "appearance": {
       "description": "ローカルのライト / ダーク / 言語設定です。",
-      "label": "表示"
+      "label": "表示と言語"
     },
     "community-node": {
       "description": "コミュニティノードの設定、認証、同意、更新操作です。",

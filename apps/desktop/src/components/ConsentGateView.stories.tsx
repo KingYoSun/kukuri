@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ConsentGateView, type ConsentGateViewProps } from './ConsentGateView';
+import { useTranslation } from 'react-i18next';
+import { normalizeSupportedLocale } from '@/i18n';
+import { changeDesktopLocale } from '@/i18n/changeLocale';
 
 const documents = ['terms', 'privacy'].map((slug) => ({
   slug, currentVersion: 5, acceptedVersion: null, acceptedAt: null,
@@ -10,9 +13,11 @@ const documents = ['terms', 'privacy'].map((slug) => ({
 }));
 
 function InteractiveGate(args: ConsentGateViewProps) {
+  const { i18n } = useTranslation();
   const [ageAttested, setAgeAttested] = useState(args.ageAttested);
   const [declined, setDeclined] = useState(args.declined);
   return <ConsentGateView {...args} ageAttested={ageAttested} declined={declined}
+    locale={normalizeSupportedLocale(i18n.resolvedLanguage)} onLocaleChange={changeDesktopLocale}
     onAgeAttestedChange={setAgeAttested} onDecline={() => setDeclined(true)} />;
 }
 
@@ -22,6 +27,7 @@ const meta = {
   args: {
     documents, updated: false, attestationRequired: true, ageAttested: false,
     accepting: false, error: null, declined: false,
+    locale: 'en', onLocaleChange: () => {},
     onAgeAttestedChange: () => {}, onAccept: () => {}, onDecline: () => {},
   },
   render: (args) => <InteractiveGate {...args} />,
@@ -35,3 +41,4 @@ export const SaveError: Story = { args: { ageAttested: true, error: 'Storage una
 export const Declined: Story = { args: { declined: true } };
 export const RenewedConsent: Story = { args: { updated: true, attestationRequired: false } };
 export const OutdatedAttestation: Story = { args: { updated: true } };
+export const LocaleSaveError: Story = { args: { localeSaveFailed: true } };

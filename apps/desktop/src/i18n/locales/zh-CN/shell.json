@@ -93,7 +93,8 @@
     "createJoinChannel": "创建或加入频道",
     "shareChannel": "分享当前频道",
     "release": "版本与更新",
-    "settings": "设置"
+    "settings": "设置",
+    "languageSettingsHint": "语言和主题"
   },
   "columnState": {
     "active": "当前",
@@ -198,7 +199,7 @@
     },
     "appearance": {
       "description": "本地亮色、暗色与语言选择。",
-      "label": "显示"
+      "label": "外观与语言"
     },
     "community-node": {
       "description": "社区节点配置、认证、同意与刷新操作。",

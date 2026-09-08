@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { seedUnconsentedCommunityNodes } from './community-node-fixture';
 import { seedAppConsent } from './app-consent-fixture';
 
@@ -104,6 +104,15 @@ async function clearFocus(page: Page): Promise<void> {
 async function settleForShot(page: Page, theme: DesktopTheme): Promise<void> {
   await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
   await clearFocus(page);
+}
+
+async function expectLanguageBeforeTheme(settings: Locator) {
+  await expect(settings.getByTestId('settings-section-appearance')).toHaveText('Language & theme');
+  const language = await settings.getByRole('combobox', { name:'Language', exact:true }).boundingBox();
+  const theme = await settings.getByRole('radiogroup', { name:'Theme mode' }).boundingBox();
+  expect(language).not.toBeNull();
+  expect(theme).not.toBeNull();
+  expect(language!.y + language!.height).toBeLessThanOrEqual(theme!.y);
 }
 
 async function openComposerDialog(page: Page): Promise<void> {
@@ -222,6 +231,7 @@ test.describe('visual regression smoke', () => {
       'location'
     );
     await settleForShot(page, 'dark');
+    await expectLanguageBeforeTheme(settingsDialog);
     await expect(page).toHaveScreenshot('settings-appearance-wide-dark.png');
   });
 
@@ -237,6 +247,7 @@ test.describe('visual regression smoke', () => {
       'location'
     );
     await settleForShot(page, 'light');
+    await expectLanguageBeforeTheme(settingsDialog);
     await expect(page).toHaveScreenshot('settings-appearance-wide-light.png');
   });
 

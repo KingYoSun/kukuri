@@ -1,0 +1,724 @@
+{
+  "windows_before": [
+    {
+      "navigator": [
+        "ja",
+        "en",
+        "en-GB",
+        "en-US"
+      ],
+      "stored": "ja",
+      "htmlLanguage": "ja",
+      "title": "ご利用の前に",
+      "languageChoices": []
+    }
+  ],
+  "windows_after": [
+    {
+      "navigator": [
+        "ja",
+        "en",
+        "en-GB",
+        "en-US"
+      ],
+      "stored": "ja",
+      "htmlLanguage": "ja",
+      "title": "ご利用の前に",
+      "languageChoices": [
+        "日本語",
+        "English",
+        "简体中文"
+      ],
+      "selected": "ja",
+      "focus": "BODY",
+      "viewport": {
+        "width": 1280,
+        "height": 800,
+        "scrollWidth": 1280
+      },
+      "selectBox": {
+        "x": 284.66668701171875,
+        "y": 177.6666717529297,
+        "width": 710.6666870117188,
+        "height": 44,
+        "top": 177.6666717529297,
+        "right": 995.3333740234375,
+        "bottom": 221.6666717529297,
+        "left": 284.66668701171875
+      },
+      "body": "ご利用の前に"
+    },
+    {
+      "navigator": [
+        "ja",
+        "en",
+        "en-GB",
+        "en-US"
+      ],
+      "stored": "en",
+      "htmlLanguage": "en",
+      "title": "Before you continue",
+      "languageChoices": [
+        "日本語",
+        "English",
+        "简体中文"
+      ],
+      "selected": "en",
+      "focus": "SELECT",
+      "viewport": {
+        "width": 1280,
+        "height": 800,
+        "scrollWidth": 1280
+      },
+      "selectBox": {
+        "x": 284.66668701171875,
+        "y": 177.6666717529297,
+        "width": 710.6666870117188,
+        "height": 44,
+        "top": 177.6666717529297,
+        "right": 995.3333740234375,
+        "bottom": 221.6666717529297,
+        "left": 284.66668701171875
+      },
+      "body": "Before you continue"
+    },
+    {
+      "navigator": [
+        "ja",
+        "en",
+        "en-GB",
+        "en-US"
+      ],
+      "stored": "zh-CN",
+      "htmlLanguage": "zh-CN",
+      "title": "继续之前",
+      "languageChoices": [
+        "日本語",
+        "English",
+        "简体中文"
+      ],
+      "selected": "zh-CN",
+      "focus": "SELECT",
+      "viewport": {
+        "width": 1280,
+        "height": 800,
+        "scrollWidth": 1280
+      },
+      "selectBox": {
+        "x": 284.66668701171875,
+        "y": 177.6666717529297,
+        "width": 710.6666870117188,
+        "height": 44,
+        "top": 177.6666717529297,
+        "right": 995.3333740234375,
+        "bottom": 221.6666717529297,
+        "left": 284.66668701171875
+      },
+      "body": "继续之前"
+    },
+    {
+      "navigator": [
+        "ja",
+        "en",
+        "en-GB",
+        "en-US"
+      ],
+      "stored": "zh-CN",
+      "htmlLanguage": "zh-CN",
+      "title": "继续之前",
+      "languageChoices": [
+        "日本語",
+        "English",
+        "简体中文"
+      ],
+      "selected": "zh-CN",
+      "focus": "SELECT",
+      "viewport": {
+        "width": 1280,
+        "height": 800,
+        "scrollWidth": 1280
+      },
+      "selectBox": {
+        "x": 284.66668701171875,
+        "y": 177.6666717529297,
+        "width": 710.6666870117188,
+        "height": 44,
+        "top": 177.6666717529297,
+        "right": 995.3333740234375,
+        "bottom": 221.6666717529297,
+        "left": 284.66668701171875
+      },
+      "body": "继续之前"
+    },
+    {
+      "navigator": [
+        "ja",
+        "en",
+        "en-GB",
+        "en-US"
+      ],
+      "stored": "en",
+      "htmlLanguage": "en",
+      "title": "Before you continue",
+      "languageChoices": [
+        "日本語",
+        "English",
+        "简体中文"
+      ],
+      "selected": "en",
+      "focus": "SELECT",
+      "viewport": {
+        "width": 1280,
+        "height": 800,
+        "scrollWidth": 1280
+      },
+      "selectBox": {
+        "x": 284.66668701171875,
+        "y": 177.6666717529297,
+        "width": 710.6666870117188,
+        "height": 44,
+        "top": 177.6666717529297,
+        "right": 995.3333740234375,
+        "bottom": 221.6666717529297,
+        "left": 284.66668701171875
+      },
+      "body": "Before you continue"
+    },
+    {
+      "navigator": [
+        "ja",
+        "en",
+        "en-GB",
+        "en-US"
+      ],
+      "stored": "en",
+      "htmlLanguage": "en",
+      "title": "Before you continue",
+      "languageChoices": [
+        "日本語",
+        "English",
+        "简体中文"
+      ],
+      "selected": "en",
+      "focus": "SELECT",
+      "viewport": {
+        "width": 1280,
+        "height": 800,
+        "scrollWidth": 1280
+      },
+      "selectBox": {
+        "x": 284.66668701171875,
+        "y": 177.6666717529297,
+        "width": 710.6666870117188,
+        "height": 44,
+        "top": 177.6666717529297,
+        "right": 995.3333740234375,
+        "bottom": 221.6666717529297,
+        "left": 284.66668701171875
+      },
+      "body": "Before you continue"
+    }
+  ],
+  "windows_restart": [
+    {
+      "navigator": [
+        "ja",
+        "en",
+        "en-GB",
+        "en-US"
+      ],
+      "stored": "en",
+      "htmlLanguage": "en",
+      "title": "Before you continue",
+      "languageChoices": [
+        "日本語",
+        "English",
+        "简体中文"
+      ],
+      "selected": "en",
+      "focus": "BODY",
+      "viewport": {
+        "width": 1280,
+        "height": 800,
+        "scrollWidth": 1280
+      },
+      "selectBox": {
+        "x": 284.66668701171875,
+        "y": 177.6666717529297,
+        "width": 710.6666870117188,
+        "height": 44,
+        "top": 177.6666717529297,
+        "right": 995.3333740234375,
+        "bottom": 221.6666717529297,
+        "left": 284.66668701171875
+      },
+      "body": "Before you continue"
+    }
+  ],
+  "linux_before": {
+    "environment": {
+      "LANG": "ja_JP.UTF-8",
+      "LANGUAGE": "",
+      "LC_ALL": null,
+      "LC_MESSAGES": null
+    },
+    "observations": [
+      {
+        "step": "initial",
+        "navigator": [
+          "ja-JP"
+        ],
+        "stored": "ja",
+        "htmlLanguage": "ja",
+        "title": "ご利用の前に",
+        "languageChoices": [],
+        "focus": "BODY",
+        "viewport": {
+          "width": 1280,
+          "height": 800,
+          "scrollWidth": 1280
+        },
+        "body": "ご利用の前に"
+      }
+    ],
+    "failures": []
+  },
+  "linux_after": {
+    "environment": {
+      "LANG": "ja_JP.UTF-8",
+      "LANGUAGE": "",
+      "LC_ALL": null,
+      "LC_MESSAGES": null
+    },
+    "observations": [
+      {
+        "step": "initial",
+        "navigator": [
+          "ja-JP"
+        ],
+        "stored": "ja",
+        "htmlLanguage": "ja",
+        "title": "ご利用の前に",
+        "languageChoices": [
+          "日本語",
+          "English",
+          "简体中文"
+        ],
+        "selected": "ja",
+        "focus": "BODY",
+        "viewport": {
+          "width": 1280,
+          "height": 800,
+          "scrollWidth": 1280
+        },
+        "selectBox": {
+          "x": 285,
+          "y": 178,
+          "width": 710,
+          "height": 44,
+          "top": 178,
+          "right": 995,
+          "bottom": 222,
+          "left": 285
+        },
+        "body": "ご利用の前に"
+      },
+      {
+        "step": "keyboard-focus",
+        "navigator": [
+          "ja-JP"
+        ],
+        "stored": "ja",
+        "htmlLanguage": "ja",
+        "title": "ご利用の前に",
+        "languageChoices": [
+          "日本語",
+          "English",
+          "简体中文"
+        ],
+        "selected": "ja",
+        "focus": "SELECT",
+        "viewport": {
+          "width": 1280,
+          "height": 800,
+          "scrollWidth": 1280
+        },
+        "selectBox": {
+          "x": 285,
+          "y": 178,
+          "width": 710,
+          "height": 44,
+          "top": 178,
+          "right": 995,
+          "bottom": 222,
+          "left": 285
+        },
+        "body": "ご利用の前に"
+      },
+      {
+        "step": "zh-CN",
+        "navigator": [
+          "ja-JP"
+        ],
+        "stored": "zh-CN",
+        "htmlLanguage": "zh-CN",
+        "title": "继续之前",
+        "languageChoices": [
+          "日本語",
+          "English",
+          "简体中文"
+        ],
+        "selected": "zh-CN",
+        "focus": "SELECT",
+        "viewport": {
+          "width": 1280,
+          "height": 800,
+          "scrollWidth": 1280
+        },
+        "selectBox": {
+          "x": 285,
+          "y": 178,
+          "width": 710,
+          "height": 44,
+          "top": 178,
+          "right": 995,
+          "bottom": 222,
+          "left": 285
+        },
+        "body": "继续之前"
+      },
+      {
+        "step": "ja",
+        "navigator": [
+          "ja-JP"
+        ],
+        "stored": "ja",
+        "htmlLanguage": "ja",
+        "title": "ご利用の前に",
+        "languageChoices": [
+          "日本語",
+          "English",
+          "简体中文"
+        ],
+        "selected": "ja",
+        "focus": "SELECT",
+        "viewport": {
+          "width": 1280,
+          "height": 800,
+          "scrollWidth": 1280
+        },
+        "selectBox": {
+          "x": 285,
+          "y": 178,
+          "width": 710,
+          "height": 44,
+          "top": 178,
+          "right": 995,
+          "bottom": 222,
+          "left": 285
+        },
+        "body": "ご利用の前に"
+      },
+      {
+        "step": "en",
+        "navigator": [
+          "ja-JP"
+        ],
+        "stored": "en",
+        "htmlLanguage": "en",
+        "title": "Before you continue",
+        "languageChoices": [
+          "日本語",
+          "English",
+          "简体中文"
+        ],
+        "selected": "en",
+        "focus": "SELECT",
+        "viewport": {
+          "width": 1280,
+          "height": 800,
+          "scrollWidth": 1280
+        },
+        "selectBox": {
+          "x": 285,
+          "y": 178,
+          "width": 710,
+          "height": 44,
+          "top": 178,
+          "right": 995,
+          "bottom": 222,
+          "left": 285
+        },
+        "body": "Before you continue"
+      },
+      {
+        "step": "restart",
+        "navigator": [
+          "ja-JP"
+        ],
+        "stored": "en",
+        "htmlLanguage": "en",
+        "title": "Before you continue",
+        "languageChoices": [
+          "日本語",
+          "English",
+          "简体中文"
+        ],
+        "selected": "en",
+        "focus": "BODY",
+        "viewport": {
+          "width": 1280,
+          "height": 800,
+          "scrollWidth": 1280
+        },
+        "selectBox": {
+          "x": 285,
+          "y": 178,
+          "width": 710,
+          "height": 44,
+          "top": 178,
+          "right": 995,
+          "bottom": 222,
+          "left": 285
+        },
+        "body": "Before you continue"
+      }
+    ],
+    "failures": []
+  },
+  "linux_zoom": {
+    "environment": {
+      "LANG": "ja_JP.UTF-8",
+      "LANGUAGE": "",
+      "LC_ALL": null,
+      "LC_MESSAGES": null
+    },
+    "observations": [
+      {
+        "step": "initial",
+        "navigator": [
+          "ja-JP"
+        ],
+        "stored": "ja",
+        "htmlLanguage": "ja",
+        "title": "ご利用の前に",
+        "languageChoices": [
+          "日本語",
+          "English",
+          "简体中文"
+        ],
+        "selected": "ja",
+        "focus": "BODY",
+        "viewport": {
+          "width": 640,
+          "height": 400,
+          "scrollWidth": 628
+        },
+        "selectBox": {
+          "x": 35,
+          "y": 156,
+          "width": 558,
+          "height": 44,
+          "top": 156,
+          "right": 593,
+          "bottom": 200,
+          "left": 35
+        },
+        "body": "ご利用の前に"
+      },
+      {
+        "step": "keyboard-focus",
+        "navigator": [
+          "ja-JP"
+        ],
+        "stored": "ja",
+        "htmlLanguage": "ja",
+        "title": "ご利用の前に",
+        "languageChoices": [
+          "日本語",
+          "English",
+          "简体中文"
+        ],
+        "selected": "ja",
+        "focus": "SELECT",
+        "viewport": {
+          "width": 640,
+          "height": 400,
+          "scrollWidth": 628
+        },
+        "selectBox": {
+          "x": 35,
+          "y": 156,
+          "width": 558,
+          "height": 44,
+          "top": 156,
+          "right": 593,
+          "bottom": 200,
+          "left": 35
+        },
+        "body": "ご利用の前に"
+      },
+      {
+        "step": "zh-CN",
+        "navigator": [
+          "ja-JP"
+        ],
+        "stored": "zh-CN",
+        "htmlLanguage": "zh-CN",
+        "title": "继续之前",
+        "languageChoices": [
+          "日本語",
+          "English",
+          "简体中文"
+        ],
+        "selected": "zh-CN",
+        "focus": "SELECT",
+        "viewport": {
+          "width": 640,
+          "height": 400,
+          "scrollWidth": 628
+        },
+        "selectBox": {
+          "x": 35,
+          "y": 156,
+          "width": 558,
+          "height": 44,
+          "top": 156,
+          "right": 593,
+          "bottom": 200,
+          "left": 35
+        },
+        "body": "继续之前"
+      },
+      {
+        "step": "ja",
+        "navigator": [
+          "ja-JP"
+        ],
+        "stored": "ja",
+        "htmlLanguage": "ja",
+        "title": "ご利用の前に",
+        "languageChoices": [
+          "日本語",
+          "English",
+          "简体中文"
+        ],
+        "selected": "ja",
+        "focus": "SELECT",
+        "viewport": {
+          "width": 640,
+          "height": 400,
+          "scrollWidth": 628
+        },
+        "selectBox": {
+          "x": 35,
+          "y": 156,
+          "width": 558,
+          "height": 44,
+          "top": 156,
+          "right": 593,
+          "bottom": 200,
+          "left": 35
+        },
+        "body": "ご利用の前に"
+      },
+      {
+        "step": "en",
+        "navigator": [
+          "ja-JP"
+        ],
+        "stored": "en",
+        "htmlLanguage": "en",
+        "title": "Before you continue",
+        "languageChoices": [
+          "日本語",
+          "English",
+          "简体中文"
+        ],
+        "selected": "en",
+        "focus": "SELECT",
+        "viewport": {
+          "width": 640,
+          "height": 400,
+          "scrollWidth": 628
+        },
+        "selectBox": {
+          "x": 35,
+          "y": 156,
+          "width": 558,
+          "height": 44,
+          "top": 156,
+          "right": 593,
+          "bottom": 200,
+          "left": 35
+        },
+        "body": "Before you continue"
+      },
+      {
+        "step": "actions-after-tab",
+        "navigator": [
+          "ja-JP"
+        ],
+        "stored": "en",
+        "htmlLanguage": "en",
+        "title": "Before you continue",
+        "languageChoices": [
+          "日本語",
+          "English",
+          "简体中文"
+        ],
+        "selected": "en",
+        "focus": "BUTTON",
+        "viewport": {
+          "width": 640,
+          "height": 400,
+          "scrollWidth": 628
+        },
+        "selectBox": {
+          "x": 35,
+          "y": -89,
+          "width": 558,
+          "height": 44,
+          "top": -89,
+          "right": 593,
+          "bottom": -45,
+          "left": 35
+        },
+        "body": "Before you continue"
+      },
+      {
+        "step": "restart",
+        "navigator": [
+          "ja-JP"
+        ],
+        "stored": "en",
+        "htmlLanguage": "en",
+        "title": "Before you continue",
+        "languageChoices": [
+          "日本語",
+          "English",
+          "简体中文"
+        ],
+        "selected": "en",
+        "focus": "BODY",
+        "viewport": {
+          "width": 640,
+          "height": 400,
+          "scrollWidth": 628
+        },
+        "selectBox": {
+          "x": 35,
+          "y": 156,
+          "width": 558,
+          "height": 44,
+          "top": 156,
+          "right": 593,
+          "bottom": 200,
+          "left": 35
+        },
+        "body": "Before you continue"
+      }
+    ],
+    "failures": []
+  }
+}

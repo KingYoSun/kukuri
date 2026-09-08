@@ -330,6 +330,7 @@ pub fn run() {
         .invoke_handler(invoke_gate::with_desktop_startup_gate(
             tauri::generate_handler![
             commands::startup::get_desktop_startup_status,
+            commands::system_locale::get_system_locales,
             desktop_lifecycle::restart_after_update,
             app_update::check_app_update,
             app_update::download_app_update,

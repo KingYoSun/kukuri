@@ -2,6 +2,8 @@ import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AppConsentDocumentStatus } from '@/lib/api';
 import { LegalDocumentView } from './LegalDocumentView';
+import { LocaleSelect } from './LocaleSelect';
+import type { SupportedLocale } from '@/i18n';
 import { Button } from './ui/button';
 import { Notice } from './ui/notice';
 
@@ -13,6 +15,9 @@ export type ConsentGateViewProps = {
   accepting: boolean;
   error: string | null;
   declined: boolean;
+  locale: SupportedLocale;
+  localeSaveFailed?: boolean;
+  onLocaleChange: (locale: SupportedLocale) => void;
   onAgeAttestedChange: (value: boolean) => void;
   onAccept: () => void;
   onDecline: () => void;
@@ -21,6 +26,7 @@ export type ConsentGateViewProps = {
 // 起動・保存の判定はAppのConsentGateが所有する。ここは同じ状態の描画確認面でもある。
 export function ConsentGateView({
   documents, updated, attestationRequired, ageAttested, accepting, error, declined,
+  locale, localeSaveFailed, onLocaleChange,
   onAgeAttestedChange, onAccept, onDecline,
 }: ConsentGateViewProps) {
   const { t } = useTranslation('legal');
@@ -34,6 +40,7 @@ export function ConsentGateView({
         <header className='space-y-2'>
           <h1 id={titleId} className='text-xl font-semibold text-foreground'>{t('gate.title')}</h1>
           <p className='text-sm leading-6 text-[var(--muted-foreground)]'>{t('gate.intro')}</p>
+          <LocaleSelect value={locale} onChange={onLocaleChange} disabled={accepting} saveFailed={localeSaveFailed} />
           {updated ? <Notice tone='warning'>{t('gate.updatedNotice')}</Notice> : null}
         </header>
         <div className='app-consent-documents' role='region' aria-label={t('gate.documentsLabel')} tabIndex={0}>

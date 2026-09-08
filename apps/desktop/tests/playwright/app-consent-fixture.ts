@@ -3,11 +3,15 @@ import type { Page } from '@playwright/test';
 // 実際のAppを起動する。productionのmock分岐は変更せず、試験内だけでIPCを置き換える。
 export async function seedAppConsent(page: Page, {
   locale = 'en', theme = 'dark', attestedVersion = null, failOnce = false,
+  systemLocales = ['en-US'],
 }: {
-  locale?: string; theme?: string; attestedVersion?: number | null; failOnce?: boolean;
+  locale?: string | null; theme?: string; attestedVersion?: number | null; failOnce?: boolean;
+  systemLocales?: string[];
 } = {}) {
-  await page.addInitScript(({ locale, theme, attestedVersion, failOnce }) => {
-    localStorage.setItem('kukuri.desktop.locale', locale);
+  await page.addInitScript(({ locale, theme, attestedVersion, failOnce, systemLocales }) => {
+    // nullはfresh contextの言語をseedしない。reload時も実際の保存値を保持する。
+    if (locale !== null) localStorage.setItem('kukuri.desktop.locale', locale);
+    Object.defineProperty(window, 'isTauri', { configurable: true, value: true });
     localStorage.setItem('kukuri.desktop.theme', theme);
     let desktopApi = window.__KUKURI_DESKTOP__;
     let ready = false;
@@ -23,6 +27,7 @@ export async function seedAppConsent(page: Page, {
       configurable: true,
       value: { invoke: async (command: string, args?: Record<string, unknown>) => {
         calls.push({ command, args });
+        if (command === 'get_system_locales') return systemLocales;
         if (command === 'get_desktop_startup_status') return {
           status: 'consent_required',
           documents: ['terms', 'privacy'].map((slug) => ({
@@ -44,7 +49,7 @@ export async function seedAppConsent(page: Page, {
         throw new Error(`Unexpected consent fixture IPC: ${command}`);
       } },
     });
-  }, { locale, theme, attestedVersion, failOnce });
+  }, { locale, theme, attestedVersion, failOnce, systemLocales });
 }
 
 export async function appConsentCalls(page: Page) {

@@ -11,3 +11,4 @@ pub mod posts;
 pub mod profile;
 pub mod reactions;
 pub mod startup;
+pub mod system_locale;

@@ -27,6 +27,7 @@ jobs:
           libayatana-appindicator3-dev
           librsvg2-dev
           patchelf
+          fonts-noto-cjk
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4

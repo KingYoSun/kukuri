@@ -78,8 +78,8 @@
   },
   "appearance": {
     "darkSelected": "ダークテーマを選択中",
-    "languageHint": "言語の変更はこの端末ですぐ反映され、ローカルに保存されます。",
-    "languageLabel": "言語",
+    "languageHint": "変更はすぐに反映され、この端末に保存されます。",
+    "languageLabel": "言語 / Language",
     "languageOptions": {
       "en": "English",
       "ja": "日本語",
@@ -98,7 +98,9 @@
         "label": "ライト"
       }
     },
-    "title": "表示"
+    "title": "表示",
+    "languageSaveFailed": "今回の表示言語は変更しましたが、保存できませんでした。再度選択してお試しください。再起動すると元に戻る場合があります。",
+    "retryLanguageSave": "言語の保存を再試行"
   },
   "communityNode": {
     "indexNode": {

@@ -1,0 +1,80 @@
+[
+  {
+    "viewport": {
+      "width": 1280,
+      "height": 800
+    },
+    "initialLocale": "ja",
+    "selectedLocale": "en",
+    "tabToDocuments": true,
+    "shiftTabToLanguage": true,
+    "keyboardSelection": true,
+    "focusPreserved": true,
+    "consentCalls": 0
+  },
+  {
+    "viewport": {
+      "width": 1280,
+      "height": 800
+    },
+    "initialLocale": "en",
+    "selectedLocale": "ja",
+    "tabToDocuments": true,
+    "shiftTabToLanguage": true,
+    "keyboardSelection": true,
+    "focusPreserved": true,
+    "consentCalls": 0
+  },
+  {
+    "viewport": {
+      "width": 1280,
+      "height": 800
+    },
+    "initialLocale": "zh-CN",
+    "selectedLocale": "ja",
+    "tabToDocuments": true,
+    "shiftTabToLanguage": true,
+    "keyboardSelection": true,
+    "focusPreserved": true,
+    "consentCalls": 0
+  },
+  {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "initialLocale": "ja",
+    "selectedLocale": "en",
+    "tabToDocuments": true,
+    "shiftTabToLanguage": true,
+    "keyboardSelection": true,
+    "focusPreserved": true,
+    "consentCalls": 0
+  },
+  {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "initialLocale": "en",
+    "selectedLocale": "ja",
+    "tabToDocuments": true,
+    "shiftTabToLanguage": true,
+    "keyboardSelection": true,
+    "focusPreserved": true,
+    "consentCalls": 0
+  },
+  {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "initialLocale": "zh-CN",
+    "selectedLocale": "ja",
+    "tabToDocuments": true,
+    "shiftTabToLanguage": true,
+    "keyboardSelection": true,
+    "focusPreserved": true,
+    "consentCalls": 0
+  }
+]

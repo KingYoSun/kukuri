@@ -6,6 +6,14 @@
 
 以下のstate・性能・検証の短い要約は[DESIGN.md](../../DESIGN.md)と[ADR 0014](../adr/0014-uiux-dev-flow.md)への配置上の案内であり、正本の変更時に同期する。
 
+## 表示言語の配置
+
+`src/i18n/index.ts` は同梱resourceの登録だけを行い、import時の検出・保存を行わない。`main.tsx` が `i18n/bootstrap.ts` を待ってからAppを描画する。保存値→OS候補→navigator候補→英語の優先順位と候補の正規化は `i18n/locale.ts`、端末保存と即時適用は `i18n/changeLocale.ts` が所有する。
+
+OS取得のfrontend wrapperは `lib/api/systemLocale.ts`、読み取り専用IPCはTauri `commands/system_locale.rs` に置く。OSの取得は初回だけで、runtimeや同意ファイルに依存しない。browserとStorybookではnative IPCを使わない。
+
+`components/LocaleSelect.tsx` は同意画面と表示設定が共有する表示・操作component。選択値、保存失敗、pendingのstateは利用側が渡す。同意送信中の変更抑止は `App.tsx::ConsentGate`、通常設定は `DesktopShellPage` が所有する。HTMLの言語同期はshell外のAppにも適用する。製品契約は [DESIGN.md](../../DESIGN.md#43-アプリ初回同意)、確認手順は [ADR 0014](../adr/0014-uiux-dev-flow.md) を参照する。
+
 ## Style bundle
 
 `apps/desktop/src/styles/index.css`がproductionとStorybookで共通の入口であり、local stylesheetを次の順で読み込む。この順序はcascade contractである。

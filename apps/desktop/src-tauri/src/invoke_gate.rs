@@ -4,6 +4,7 @@ use crate::state::{CommandError, DesktopStartupState, DesktopStartupStatus};
 
 const NON_READY_COMMAND_ALLOWLIST: &[&str] = &[
     "get_desktop_startup_status",
+    "get_system_locales",
     "get_app_consent_status",
     "accept_app_consents",
     "cancel_device_backup",
@@ -69,6 +70,87 @@ where
 mod tests {
     use super::*;
     use crate::state::consent_required_status;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    use tauri::Manager;
+
+    #[test]
+    fn locale_ipc_before_ready_does_not_construct_runtime_or_reach_protected_sinks() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let protected_hits = hits.clone();
+        let locale_handler: fn(tauri::ipc::Invoke<tauri::test::MockRuntime>) -> bool =
+            tauri::generate_handler![crate::commands::system_locale::get_system_locales];
+        let app = tauri::test::mock_builder()
+            .manage(DesktopStartupState::initializing())
+            .invoke_handler(with_desktop_startup_gate(move |invoke| {
+                if invoke.message.command() == "get_system_locales" {
+                    locale_handler(invoke)
+                } else {
+                    protected_hits.fetch_add(1, Ordering::SeqCst);
+                    invoke.resolver.resolve(());
+                    true
+                }
+            }))
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock app without runtime");
+        let webview = tauri::WebviewWindowBuilder::new(&app, "review", Default::default())
+            .build()
+            .expect("mock webview");
+        let request = |command: &str| tauri::webview::InvokeRequest {
+            cmd: command.into(),
+            callback: tauri::ipc::CallbackFn(0),
+            error: tauri::ipc::CallbackFn(1),
+            url: if cfg!(windows) {
+                "http://tauri.localhost"
+            } else {
+                "tauri://localhost"
+            }
+            .parse()
+            .unwrap(),
+            body: tauri::ipc::InvokeBody::Json(serde_json::json!({})),
+            headers: Default::default(),
+            invoke_key: tauri::test::INVOKE_KEY.into(),
+        };
+        for status in [
+            DesktopStartupStatus::Initializing,
+            consent_required_status(&Default::default()),
+            crate::state::failed_status(
+                crate::state::StartupError::unknown("fixture".into()),
+                None,
+            ),
+        ] {
+            app.state::<DesktopStartupState>().set_status(status);
+            let before = serde_json::to_value(app.state::<DesktopStartupState>().status()).unwrap();
+            let result = tauri::test::get_ipc_response(&webview, request("get_system_locales"))
+                .expect("read-only locale IPC succeeds before Ready");
+            let _: Vec<String> = result.deserialize().expect("locale list");
+            for command in [
+                "create_post",
+                "fetch_community_node_policies",
+                "get_pending_device_restore_frontend_state",
+                "acknowledge_pending_device_restore_frontend_state",
+            ] {
+                assert!(
+                    tauri::test::get_ipc_response(&webview, request(command)).is_err(),
+                    "{command}"
+                );
+            }
+            assert_eq!(hits.load(Ordering::SeqCst), 0);
+            assert!(app.try_state::<crate::state::DesktopState>().is_none());
+            assert_eq!(
+                serde_json::to_value(app.state::<DesktopStartupState>().status()).unwrap(),
+                before
+            );
+        }
+        // positive control: fixtureの禁止sinkはReadyなら実際に到達できる。
+        app.state::<DesktopStartupState>()
+            .set_status(DesktopStartupStatus::Ready);
+        assert!(tauri::test::get_ipc_response(&webview, request("create_post")).is_ok());
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
+        assert!(!command_allowed_during_exit("get_system_locales", true));
+    }
 
     #[test]
     fn exit_rejects_new_operations_but_keeps_backup_cancellation_available() {
@@ -113,6 +195,7 @@ mod tests {
             NON_READY_COMMAND_ALLOWLIST,
             [
                 "get_desktop_startup_status",
+                "get_system_locales",
                 "get_app_consent_status",
                 "accept_app_consents",
                 "cancel_device_backup",

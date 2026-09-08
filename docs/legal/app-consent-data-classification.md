@@ -23,3 +23,20 @@ ADR 0002 (`docs/adr/0002-feature-data-classification-template.md`) に基づく�
 - version 4 は、管理主体、実データフロー、外部送信、診断情報、P2P copy の削除限界、日本語正文と参考訳を明記する重要変更である(#854)。外部送信の突合は `docs/legal/app-data-flow-inventory.md` と `docs/legal/external-transmission-notice.md` を参照。
 - version 5 は、主体定義と責任範囲、投稿者責任、適切な権利主体への限定的許諾、鍵の中央復旧不能、Community Node 別規約、通報・利用制限、サービス変更・中断・終了、OSS ライセンスとの関係、責任制限、日本法・合意管轄、変更通知を全面改訂する重要変更である(#856)。
 - 同意するまで `DesktopRuntime` を構築せず、iroh endpoint の bind / discovery を開始しない（fail-closed = IP 取得前に同意）。
+
+## 初回表示と言語選択（#917）
+
+### Feature Data Classification
+- Feature 名: 同意前のOS言語取得と端末表示言語
+- Durable / Transient: OS／navigatorの候補はTransient、選択・初期決定した言語はDurable
+- Canonical Source: OSのUI言語設定／起動環境、端末の `localStorage[kukuri.desktop.locale]`
+- Replicated?: No。既存の端末バックアップに含まれるlocaleキーの扱いだけを維持する
+- Rebuildable From: OS候補は再取得可能。保存済み言語の喪失時はOS／navigatorから再決定、または利用者が選び直す
+- Public Replica / Private Replica / Local Only: Local Only
+- Gossip Hint 必要有無: 不要
+- Blob 必要有無: 不要
+- SQLite projection 必要有無: 不要
+- 必須 contract: `get_system_locales` は引数なしでOS言語候補だけを返す。同意前も呼べるがruntime、DB、同意ファイル、networkを使用しない。言語変更だけでは受諾しない
+- 必須 scenario: locale未保存の日本語OS→日本語で同意表示、保存値優先、取得失敗fallback、明示選択と再起動、同意pending中の言語固定、復元activation後の既存locale適用
+
+優先順位は保存済み対応言語→OS候補→navigator候補→英語。自動決定も既存キーへ保存する。過去のcacheと明示選択を推測で区別・書換えしない。言語と保存可否は同意状態とは独立し、選択言語は従来どおり明示受諾の時点でのみ同意レコードへ記録する。

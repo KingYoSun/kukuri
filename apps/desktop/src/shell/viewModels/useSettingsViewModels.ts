@@ -231,20 +231,6 @@ export function useSettingsViewModels({
           description: t('settings:appearance.themeOptions.light.description'),
         },
       ],
-      localeOptions: [
-        {
-          value: 'en',
-          label: t('settings:appearance.languageOptions.en'),
-        },
-        {
-          value: 'ja',
-          label: t('settings:appearance.languageOptions.ja'),
-        },
-        {
-          value: 'zh-CN',
-          label: t('settings:appearance.languageOptions.zh-CN'),
-        },
-      ],
     }),
     [locale, t, theme]
   );
