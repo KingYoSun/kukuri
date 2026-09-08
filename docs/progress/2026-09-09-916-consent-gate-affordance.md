@@ -4,7 +4,7 @@
 - Scope revision: `916-r1`（2026-09-09承認・固定）
 - 基準commit: `74016c04677e3b4032733213b8fa0f9f050a1819`
 - リスク区分: C
-- 状態: 実装済み、全体検証・PR head独立監査を進行中。
+- 状態: 実装・ローカル検証・独立監査完了。mergeの現在判定は [PR #948](https://github.com/KingYoSun/kukuri/pull/948) とIssueを参照。
 
 ## 変更結果
 
@@ -38,7 +38,7 @@ native disabledを維持し、専用の境界・背景・影と理由文で有�
 | ID | 入口・trigger | shared helper | 読み書き・外部副作用 | 必要なguard / invariant | 対象transition | test / evidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | INV-1 | `App` cold start / reload / initializingのstatus再取得 | `getDesktopStartupStatus` → `ConsentGate` | 起動状態のlocal読取り・gate描画 | INVAR-1〜3。ready前のshell構築を増やさない | TR-1, TR-6, TR-7 | `App.test.tsx`、host起動gate test |
-| INV-2 | `ConsentGate` 文書scroll・checkbox・拒否・locale/theme描画 | `LegalDocumentView`、Button、i18n | React内stateとDOMのみ | AC-1〜5、INVAR-2,4 | TR-1〜3, TR-5 | component / browser / visual / 実機 |
+| INV-2 | `ConsentGate` 文書scroll・checkbox・拒否・locale/theme描画 | `ConsentGateView` → `LegalDocumentView`、Button、i18n | React内stateとDOMのみ | AC-1〜5、INVAR-2,4 | TR-1〜3, TR-5 | component / browser / visual / 実機 |
 | INV-3 | 同意ボタンpointer／keyboard → `handleAccept` | `acceptAppConsents` → `accept_app_consents` | 文書版・言語・年齢boolをIPC送信 | 年齢条件とpending。INVAR-1〜3 | TR-2〜4, TR-6 | IPC引数・0回／回数test |
 | INV-4 | 同意IPC成功／失敗 | `onAccepted`、`applyPendingDeviceRestoreFrontendState` | 起動状態変更、ready時の復元frontend state適用／reload | INVAR-3。失敗を成功扱いしない | TR-4, TR-7 | App統合test、既存restore回帰 |
 | INV-5 | Tauri `accept_app_consents`（逆引き対象） | `validate_app_consent_documents`、`require_consent_acceptance_state`、`record_app_consents` | local同意保存→初期化またはrestore activation | INVAR-1〜3。拒否時は保存・構築なし | TR-1, TR-6, TR-7 | Rust境界testとcall path確認 |
@@ -46,7 +46,7 @@ native disabledを維持し、専用の境界・背景・影と理由文で有�
 
 入口の機械的確認は `ConsentGate` / `LegalDocumentView` / `acceptAppConsents` / `record_app_consents` のCodeGraph callerと、`rg -n 'ConsentGate|LegalDocumentView|acceptAppConsents|record_app_consents|accept_app_consents' apps/desktop/src apps/desktop/src-tauri/src crates/desktop-runtime/src/host crates/kukuri-cli/src` を併用する。Buttonはimportの別名も含めて利用先を確認する。runtime全体や全CN routeを今回の変更scopeへ拡張しない。
 
-期待するinventory差分は、INV-2内の理由表示・本文scroll領域・footerと試験fixtureの追加のみ。productionのIPC、保存sink、別consumerの追加・削除は0。実装時に各memberとguardを再確認し、未分類と不適合を別々に記録する。
+確定したinventory差分は、INV-2内の理由表示・本文scroll領域・footer、純粋な表示consumer `ConsentGateView` と試験fixtureの追加。productionのIPC・保存sinkの追加・削除は0。共有法務表示のgate側callerはAppからViewへ移り、AboutPanelは不変。各memberとguardを独立監査で確認し、未分類0・不適合0と判定した。
 
 ### Sensitive sink
 
@@ -90,18 +90,42 @@ inventory差分: INV-2に理由、footer、文書scroll領域を追加。表示�
 - 変更後: 対象browser 26testと関連Vitest 82testが成功。browserにはtouch操作と独立監査で判明した低い画面の回帰testも含む。
 - 画像・実機条件: [UI review](../ui-reviews/2026-09-09-consent-gate-affordance.md)。報告OS / WebView版はIssue本文からは確定できず、当時の配布版そのものの再試験とは区別する。
 
-## 検証状況
+## 検証結果
 
-- 独立監査の初回判定はFAIL（blocker 1件）。390×541 / jaで拒否→チェック→保存失敗→チェック解除すると文書のclientHeightが16pxになるExisting-gap（AC-3/5、INV-2、TR-4/5）を再現した。可読な本文の最小行高を持つgridとpanelのintrinsic minimumへ修正し、noticeが増えた場合にpanelが伸びてpage scrollへ退避する。追加browser testは変更前16pxで失敗、変更後に文書末尾・focus・操作到達を含め成功。変更deltaは再監査対象。
-- Linux visual baseline: [run 34247865615](https://github.com/KingYoSun/kukuri/actions/runs/34247865615)で同意画面2枚を生成。既存16枚とのbyte比較を行い、今回の同意画面だけを追加する。最終CI比較は確認中。
+| 検証 | 結果 |
+| --- | --- |
+| `cargo xtask check` | 成功。Rust追加testのformat差分を修正して完走 |
+| `cargo xtask test` | 成功。non-CN Rust 887 passed / 既存設定の4 skipped、harness 22 passed、doctest、Vitest 160files / 1275 passed |
+| 同意関連targeted Vitest | App / LegalDocumentView / locale parity / deviceBackupの82件成功 |
+| `cargo xtask desktop-ui-check` の各構成gate | 初回Vitestは既存messages/socialGraphの3件がtimeout（1272件成功）。対象2fileの12件と、その後の全Vitest1275件が成功。最終 `desktop-lint`（lint/typecheck）、`desktop-storybook`、`desktop-browser-test` 114件、`desktop-visual-test` 18件も成功。失敗したaggregate command自体を成功と呼び替えず、構成gateの補完結果として記録 |
+| 同意browser | 26件成功。3locale×2theme×3viewport、pointer/keyboard/touch、pending/error/retry、再同意、低い画面のnotice累積、forced-colors/reduced-motionを含む |
+| Storybook addon-a11y | 7state×3locale×2themeの42条件で違反0。ボタン文字contrast最小4.79:1、未選択理由13.54:1、disabled境界4.69:1 |
+| Tauri境界unit | 同意4件、同意前invoke禁止1件、restore関連allowlist/終了待機2件、旧bundle再同意1件が成功。restore activation全体の件数とは扱わず、host backup/restoreはRust全suiteでも確認 |
+| Linux visual | [生成run 34247865615](https://github.com/KingYoSun/kukuri/actions/runs/34247865615)の同意画面2枚を追加。既存16枚はbyte一致し変更なし。[head aef944c0のCI](https://github.com/KingYoSun/kukuri/actions/runs/34248845019)でlinux-desktop-browser（比較を含む）とlinux-desktop-ui成功。Windowsの18件は比較skipのsmokeとして区別 |
+| 実機・描画 | Windows WebView2、Linux WebKitGTK2.50.4の同条件before/after・実入力、WebKit実zoom 2.0での本文末尾・操作到達・focusを確認。[UI review](../ui-reviews/2026-09-09-consent-gate-affordance.md)に画像と範囲を記録 |
 
-- `cargo xtask check`: 成功。最初のRust追加testのformat差分を整えた後に完走。
-- Rust対象 `cargo test -p kukuri-desktop-runtime consent`: 29件成功。
-- `cargo xtask desktop-ui-check`: 最初の実行はVitestで既存messages/socialGraphの3件がタイムアウト（1272件成功）。対象2fileの再実行は12件すべて成功。最終frontend gateとCIは確認中。
-- `cargo xtask test`: Windows SDKの `ucrt.lib` 探索で失敗。SDKのLIBを明示した再実行中。失敗を成功扱いせず、最終結果は後続記録で置き換える。
-- Linux visual baseline、Storybook addon-a11y、native WebView、Tauri境界test、独立監査: 実施中。
+### 環境補完と再実行
 
-## 残る確認・終了条件
+Windowsの `cargo xtask test` 初回はSDKの `ucrt.lib` 探索で失敗した。実在するSDK 10.0.22621.0のucrt/um x64 pathを検証processのLIBに加えて再実行し、suiteを完走した。製品のbuild設定は変更していない。
 
-AC / INVAR・全INV / TRの証拠、必須validation、PR head独立監査PASSが必要。未確認OS・入力条件は明記し、browserと実機を同一視しない。
-PRは `Refs #916` とし、必須CIと独立監査後にmergeし、merge treeとの一致を確認してIssueをCloseする。
+Tauri unit exeと隔離確認用exeにはCommon Controls v6 manifestがなく `STATUS_ENTRYPOINT_NOT_FOUND` となった。生成済みの同じunit exeへmanifest resourceを付け、上記filterを直接実行した。cargo runnerの成功とは混同せず、test名と実行結果で判定した。product sourceやtest assertionを回避する変更はない。
+
+最初のnative確認用ホストのIPC接続、Linux fixtureのcache/入力dispatch間隔、cairo snapshot依存は確認環境側で補正した。成功した最終観測だけを実機の証拠にし、これらの準備失敗を製品不具合の再現には数えない。
+
+## 独立監査と修正
+
+初回監査はFAIL（blocker 1件）。390×541 / jaで拒否→チェック→保存失敗→チェック解除すると文書clientHeightが16pxになるExisting-gap（AC-3/5、INV-2、TR-4/5）を再現した。可読な本文の最小高さを持つgridとpanelのintrinsic minimumへ修正し、notice増加時はpanelが伸びてpage scrollへ退避する。
+
+追加browser testは修正前16pxで失敗、修正後に文書末尾・focus・操作到達を含め成功。独立したdelta確認でも390×541の本文190px・末尾remaining0、5viewportのdisabled pointer IPC0、Tab/Shift+Tab、focus可視、横overflow0を確認した。
+
+- 最終監査対象code commit: `aef944c05a9b6a18b6f31a0053b011bb1c5a9042`
+- Scope revision: `916-r1`
+- inventory: 合計6 / 適合6 / 不適合0 / 未分類0
+- blocker: 0、総合判定: **PASS**
+- 詳細: [独立監査記録](2026-09-09-916-independent-audit.md)。初回FAILと後続の補完経緯を維持する。
+
+## 未確認範囲とmerge条件
+
+音声screen readerの実発話、OS設定としてのWindows High Contrast、利用者の報告版・OSそのものは未確認。semantic tree、ARIA description、addon-a11y、forced-colorsや実engine描画を、それらの全面的な代替とは呼ばない。公開する文書・画像はsynthetic fixtureで、利用者の同意記録やアカウントを使わない。
+
+実装を含む監査対象surfaceが同じであることと、最終PR headの必須CI成功を確認してからmergeする。後続の文書・証跡だけのcommitは対象surfaceの差分を確認して監査PASSを再利用する。merge後のtree一致とIssueのCloseはPR/Issueに記録する。
