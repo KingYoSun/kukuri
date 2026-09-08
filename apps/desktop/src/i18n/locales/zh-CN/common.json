@@ -51,6 +51,9 @@
     "report": "举报"
   },
   "composer": {
+    "chooseFiles": "选择文件",
+    "noFilesSelected": "未选择文件",
+    "selectedFiles": "已附加 {{count}} 个文件",
     "actionTo": "向 {{destination}}{{action}}",
     "clearQuoteRepost": "清除转发评论",
     "draftPreviewAlt": "草稿预览：{{name}}",

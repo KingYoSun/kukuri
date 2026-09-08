@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
@@ -46,6 +46,7 @@ test('single attach button classifies mixed image and video files', async () => 
     expect(screen.getByText('flower.png')).toBeInTheDocument();
     expect(screen.getByText('clip.mp4')).toBeInTheDocument();
   });
+  expect(within(publishDialog).getByText('Attached files: 2')).toBeVisible();
   await user.click(within(publishDialog).getByRole('button', { name: 'Post' }));
 
   await waitFor(() => {
@@ -144,9 +145,35 @@ test('video poster generation failure blocks publish', async () => {
   await waitFor(() => {
     expect(screen.getAllByText('Failed to generate the video preview.').length).toBeGreaterThan(0);
   });
+  expect(within(publishDialog).getByText('No files selected')).toBeVisible();
 
   await user.click(within(publishDialog).getByRole('button', { name: 'Post' }));
 
+  expect(createPostSpy).not.toHaveBeenCalled();
+});
+
+test('attachment summary retains only accepted drafts through partial failure, cancellation and reselection', async () => {
+  installObjectUrlMocks();
+  installFailedPosterGenerationMocks();
+  const api = createDesktopMockApi();
+  const createPostSpy = vi.fn(api.createPost);
+  api.createPost = createPostSpy;
+  const user = userEvent.setup();
+  render(<App api={api} />);
+  const composer = within(await openPublishDialog(user));
+  const image = new File(['image'], 'kept.png', { type: 'image/png' });
+  await user.upload(composer.getByLabelText(/attachment/i), [
+    image, new File(['video'], 'broken.mp4', { type: 'video/mp4' }),
+  ]);
+  expect(await composer.findByText('Attached files: 1')).toBeVisible();
+  expect(composer.getByText('kept.png')).toBeVisible();
+  expect(screen.getAllByText('Failed to generate the video preview.').length).toBeGreaterThan(0);
+  fireEvent.change(composer.getByLabelText(/attachment/i), { target: { files: [] } });
+  expect(composer.getByText('Attached files: 1')).toBeVisible();
+  await user.click(composer.getByRole('button', { name: 'Remove' }));
+  expect(composer.getByText('No files selected')).toBeVisible();
+  await user.upload(composer.getByLabelText(/attachment/i), image);
+  expect(await composer.findByText('Attached files: 1')).toBeVisible();
   expect(createPostSpy).not.toHaveBeenCalled();
 });
 

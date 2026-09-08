@@ -85,6 +85,7 @@ test('desktop shell can create a quote repost from the Column composer', async (
   expect(within(composer).getByText('Adding a comment')).toBeInTheDocument();
   expect(within(composer).getByText(/Original post.*source post/)).toBeInTheDocument();
   expect(within(composer).getByLabelText(/attachment/i)).toBeDisabled();
+  expect(within(composer).getByRole('button', { name: 'Choose files' })).toBeDisabled();
 
   await user.type(quoteInput, 'quoted take');
   const submitButton = within(composer).getByRole('button', { name: 'Add comment' });

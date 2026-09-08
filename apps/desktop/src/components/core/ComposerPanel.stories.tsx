@@ -26,13 +26,17 @@ function ComposerStory({
   initialValue,
   replyMode = false,
   error = null,
+  initialItems = DRAFT_ITEMS,
+  attachmentsDisabled = false,
 }: {
   initialValue: string;
   replyMode?: boolean;
   error?: string | null;
+  initialItems?: ComposerDraftMediaView[];
+  attachmentsDisabled?: boolean;
 }) {
   const [value, setValue] = useState(initialValue);
-  const [items, setItems] = useState(DRAFT_ITEMS);
+  const [items, setItems] = useState(initialItems);
 
   return (
     <div className='w-[min(42rem,calc(100vw-2rem))]'>
@@ -41,6 +45,7 @@ function ComposerStory({
         onChange={(event) => setValue(event.target.value)}
         onSubmit={(event) => event.preventDefault()}
         attachmentInputKey={0}
+        attachmentsDisabled={attachmentsDisabled}
         onAttachmentSelection={() => undefined}
         draftMediaItems={items}
         onRemoveDraftAttachment={(itemId) =>
@@ -88,4 +93,19 @@ export const ErrorState: Story = {
       error='Video poster generation failed. Remove the draft or retry with another file.'
     />
   ),
+};
+
+export const NoAttachments: Story = {
+  render: () => <ComposerStory initialValue='' initialItems={[]} />,
+};
+
+export const AttachmentsDisabled: Story = {
+  render: () => <ComposerStory initialValue='Pending draft' attachmentsDisabled />,
+};
+
+export const MultipleLongAttachments: Story = {
+  render: () => <ComposerStory initialValue='下書き / Draft / 草稿' initialItems={[
+    { ...DRAFT_ITEMS[0], sourceName: `${'長いファイル名'.repeat(12)}.png` },
+    { ...DRAFT_ITEMS[0], id: 'draft-2', sourceName: 'second-image.png' },
+  ]} />,
 };
