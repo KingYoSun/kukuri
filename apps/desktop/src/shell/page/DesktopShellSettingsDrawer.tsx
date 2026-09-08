@@ -12,7 +12,8 @@ import { SafetyPanel } from '@/components/settings/SafetyPanel';
 import { SettingsDrawer } from '@/components/shell/SettingsDrawer';
 
 import type { SupportedLocale } from '@/i18n';
-import type { CommunityNodeConsentDocumentRef, CustomReactionCropRect, DesktopApi } from '@/lib/api';
+import type { CustomReactionCropRect, DesktopApi } from '@/lib/api';
+import type { FetchCommunityNodePolicyView, AcceptCommunityNodePolicyView } from '@/shell/actions/useCommunityNodePolicyDialog';
 import {
   eligibleCommunityIndexNodes,
   resolveCommunityIndexNodePreference,
@@ -52,13 +53,10 @@ type DesktopShellSettingsDrawerProps = {
   handleClearCommunityNodes: () => Promise<void>;
   handleAuthenticateCommunityNode: (baseUrl: string) => Promise<void>;
   handleSetCommunityNodeInviteCode: (baseUrl: string, inviteCode: string) => Promise<void>;
-  handleFetchCommunityNodeConsents: (baseUrl: string) => Promise<void>;
-  handleAcceptCommunityNodeConsents: (
-    baseUrl: string,
-    documents: CommunityNodeConsentDocumentRef[]
-  ) => Promise<void>;
+  handleFetchCommunityNodeConsents: FetchCommunityNodePolicyView;
+  handleAcceptCommunityNodeConsents: AcceptCommunityNodePolicyView;
   handleWithdrawCommunityNodeConsents: (baseUrl: string) => Promise<void>;
-  handleRefreshCommunityNode: (baseUrl: string) => Promise<boolean>;
+  handleRefreshCommunityNode: (baseUrl: string) => Promise<boolean | void>;
   handleClearCommunityNodeToken: (baseUrl: string) => Promise<void>;
   handleCreateCustomReactionAsset: (
     file: File,
@@ -264,9 +262,9 @@ export function DesktopShellSettingsDrawer({
           onClearNodes={() => void handleClearCommunityNodes()}
           onAuthenticate={(baseUrl) => void handleAuthenticateCommunityNode(baseUrl)}
           onSubmitInviteCode={handleSetCommunityNodeInviteCode}
-          onFetchConsents={(baseUrl) => handleFetchCommunityNodeConsents(baseUrl)}
-          onAcceptConsents={(baseUrl, documents) =>
-            handleAcceptCommunityNodeConsents(baseUrl, documents)
+          onFetchConsents={(baseUrl, language) => handleFetchCommunityNodeConsents(baseUrl, language)}
+          onAcceptConsents={(baseUrl, documents, language) =>
+            handleAcceptCommunityNodeConsents(baseUrl, documents, language)
           }
           onWithdrawConsents={(baseUrl) => handleWithdrawCommunityNodeConsents(baseUrl)}
           onRefresh={handleRefreshCommunityNode}

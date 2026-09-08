@@ -20,12 +20,15 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import type {
   BookmarkedPostView,
+  CommunityNodeNodeStatus,
+  CommunityNodePoliciesResponse,
   DesktopApi,
   PostView,
   ReactionStateView,
   RecentReactionView,
 } from '@/lib/api';
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
+import i18n from '@/i18n';
 import type { DesktopShellState, DraftMediaItem } from '@/shell/store';
 import { columnDraftKey, setColumnDraft } from '@/shell/slices/columnDrafts';
 import {
@@ -196,6 +199,42 @@ beforeEach(() => {
 });
 
 describe('useDesktopShellActions', () => {
+  test('a late consent response cannot roll a newer ready event back to retrying', async () => {
+    const baseApi = createDesktopMockApi();
+    const config = await baseApi.getCommunityNodeConfig();
+    const [ready] = await baseApi.getCommunityNodeStatuses();
+    const pending = { ...ready, auth_state: { authenticated: false, expires_at: null }, consent_state: null };
+    let complete!: (status: CommunityNodeNodeStatus) => void;
+    const accept = vi.fn(() => new Promise<CommunityNodeNodeStatus>((resolve) => { complete = resolve; }));
+    const { result, store } = renderActionsHook({ api: { ...baseApi, acceptCommunityNodeConsents: accept },
+      preset: () => ({ communityNodeConfig: config, communityNodeStatuses: [pending] }),
+    });
+    let accepting!: Promise<void>;
+    act(() => { accepting = result.current.handleAcceptCommunityNodeConsents(ready.base_url, [], 'en'); });
+    act(() => store.getState().setField('communityNodeStatuses', [ready]));
+    await act(async () => { complete({ ...pending, session_phase: 'retrying', last_error: 'old failure' }); await accepting; });
+    expect(store.getState().communityNodeStatuses[0].session_phase).toBe('ready');
+    expect(store.getState().communityNodeStatuses[0].auth_state.authenticated).toBe(true);
+  });
+
+  test('a late settings policy response cannot replace the newest language catalog', async () => {
+    const baseApi = createDesktopMockApi();
+    const node = (await baseApi.getCommunityNodeConfig()).nodes[0].base_url;
+    const catalog = await baseApi.fetchCommunityNodePolicies(node);
+    let complete!: (response: CommunityNodePoliciesResponse) => void;
+    const fetch = vi.fn().mockImplementationOnce(() => new Promise<CommunityNodePoliciesResponse>((resolve) => { complete = resolve; }))
+      .mockResolvedValueOnce({ policies: catalog.policies.map((policy) => ({ ...policy, body_markdown: 'new English document' })) });
+    const { result, store } = renderActionsHook({ api: { ...baseApi, fetchCommunityNodePolicies: fetch } });
+    await act(async () => i18n.changeLanguage('ja'));
+    let first!: Promise<unknown>;
+    act(() => { first = result.current.handleFetchCommunityNodeConsents(node); });
+    await act(async () => i18n.changeLanguage('en'));
+    await act(async () => result.current.handleFetchCommunityNodeConsents(node));
+    await act(async () => { complete({ policies: catalog.policies.map((policy) => ({ ...policy, body_markdown: 'old Japanese document' })) }); await first; });
+    const entry = store.getState().communityNodePolicies[node];
+    expect(entry.status === 'ok' && entry.policies[0].body_markdown).toBe('new English document');
+  });
+
   test('only the latest notification navigates after delayed topic loading', async () => {
     const { result, mocks } = renderActionsHook();
     let finish!: () => void;

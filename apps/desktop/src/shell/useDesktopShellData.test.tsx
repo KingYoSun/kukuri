@@ -32,6 +32,7 @@ import type {
   JoinedPrivateChannelView,
   NotificationView,
   PostView,
+  RuntimeEvent,
   TimelineCursor,
   TimelineScope,
   TimelineView,
@@ -191,6 +192,27 @@ beforeEach(() => {
 });
 
 describe('useDesktopShellData characterization', () => {
+  test('a consent-ready runtime event selects the index node without waiting for polling', async () => {
+    (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
+    const api = createDesktopMockApi();
+    const node = 'https://first.example';
+    await api.setCommunityNodeConfig([{ base_url: node }]);
+    const { harness, view } = renderDataHook(api);
+    await flushAsyncWork();
+    expect(harness.store.getState().communityIndexNodeBaseUrl).toBeNull();
+    const policies = await api.fetchCommunityNodePolicies(node);
+    const ready = await api.acceptCommunityNodeConsents(node, policies.policies, 'en');
+    const eventCall = listenMock.mock.calls.find(([name]) => name === 'kukuri://runtime-event');
+    expect(eventCall).toBeDefined();
+    const listener = eventCall![1] as (event: { payload: RuntimeEvent }) => void;
+    act(() => listener({ payload: {
+      type: 'sync_status_changed', community_node_statuses: [ready],
+    } }));
+    expect(harness.store.getState().communityIndexNodeBaseUrl).toBe(node);
+    expect(harness.store.getState().communityIndexNodePreference).toEqual({ mode: 'auto' });
+    view.unmount();
+  });
+
   test('mount refresh calls listTimeline for both active and public scopes with limit 20 and fills the store', async () => {
     const channelPost = buildPost({
       object_id: 'post-channel',

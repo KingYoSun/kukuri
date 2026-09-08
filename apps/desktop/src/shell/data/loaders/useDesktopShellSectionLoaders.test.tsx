@@ -12,7 +12,7 @@ import {
 } from '@/shell/store';
 import { columnIdentityId, openTransientColumn } from '@/shell/slices/workspace';
 import { createDeferred } from '@/shell/DesktopShellPage.testHelpers';
-import type { TimelineView } from '@/lib/api';
+import type { CommunityNodeManifestFetch, TimelineView } from '@/lib/api';
 
 function setup() {
   const api = createDesktopMockApi();
@@ -41,6 +41,45 @@ function setup() {
 }
 
 describe('useDesktopShellSectionLoaders', () => {
+  test('manifest completion resolves the index using consent received after the request started', async () => {
+    const { api, hook, store } = setup();
+    const node = 'https://first.example';
+    const config = await api.setCommunityNodeConfig([{ base_url: node }]);
+    const pending = await api.getCommunityNodeStatuses();
+    const manifest = await api.fetchCommunityNodeManifest(node);
+    store.getState().patchState({ communityNodeConfig: config, communityNodeStatuses: pending });
+    const deferred = createDeferred<CommunityNodeManifestFetch>();
+    const fetch = vi.spyOn(api, 'fetchCommunityNodeManifest').mockReturnValue(deferred.promise);
+    let loading!: Promise<void>;
+    act(() => { loading = hook.result.current.loadCommunityIndexCapability(); });
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    const policies = await api.fetchCommunityNodePolicies(node);
+    const ready = await api.acceptCommunityNodeConsents(node, policies.policies, 'en');
+    act(() => store.getState().setField('communityNodeStatuses', [ready]));
+    await act(async () => { deferred.resolve(manifest); await loading; });
+    expect(store.getState().communityIndexNodeBaseUrl).toBe(node);
+  });
+
+  test('an older manifest response cannot overwrite a newer capability result', async () => {
+    const { api, hook, store } = setup();
+    const node = 'https://first.example';
+    await api.setCommunityNodeConfig([{ base_url: node }]);
+    const policies = await api.fetchCommunityNodePolicies(node);
+    const ready = await api.acceptCommunityNodeConsents(node, policies.policies, 'en');
+    store.getState().setField('communityNodeStatuses', [ready]);
+    const manifest = await api.fetchCommunityNodeManifest(node);
+    const deferred = createDeferred<CommunityNodeManifestFetch>();
+    const fetch = vi.spyOn(api, 'fetchCommunityNodeManifest')
+      .mockReturnValueOnce(deferred.promise).mockResolvedValue(manifest);
+    let first!: Promise<void>;
+    act(() => { first = hook.result.current.loadCommunityIndexCapability(); });
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    await act(async () => hook.result.current.loadCommunityIndexCapability());
+    await act(async () => { deferred.resolve({ status: 'absent', manifest: null }); await first; });
+    expect(store.getState().communityNodeManifests[node]?.status).toBe('ok');
+    expect(store.getState().communityIndexNodeBaseUrl).toBe(node);
+  });
+
   test('loads an inactive own profile and preserves an unsaved profile draft', async () => {
     const { api, hook, store } = setup();
     const profile = await api.getMyProfile();

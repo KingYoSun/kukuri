@@ -206,7 +206,8 @@
       "loadFailed": "Could not load the policies (you may be offline). Retry when the node is reachable.",
       "withdrawnNotice": "You withdrew consent for this node. Local and direct P2P features keep working; accept again to reconnect.",
       "withdraw": "Withdraw consent",
-      "decline": "Not now"
+      "decline": "Not now",
+      "acceptFailed": "Consent could not be completed. Check the displayed terms and try again. Reload the terms if they have changed."
     },
     "baseUrlLabel": "Base URL",
     "baseUrlsHint": "One HTTPS base URL per line.",
@@ -260,6 +261,15 @@
       "waitingForConsent": "waiting for consent acceptance",
       "acceptPolicies": "accept required policies to resolve connectivity urls",
       "consentWithdrawn": "Consent withdrawn"
+    },
+    "onboarding": {
+      "title": "What is a community node?",
+      "description": "A community node is a server that helps you find other people and connect their devices. It can also relay communication when devices cannot connect directly. Features such as search and discovery vary by node. Review the terms of the node before using it.",
+      "candidate": "First suggestion: {{node}}",
+      "address": "View node address",
+      "reviewPolicies": "Review terms",
+      "later": "Later",
+      "openSettings": "Open community node settings"
     }
   },
   "connectivity": {

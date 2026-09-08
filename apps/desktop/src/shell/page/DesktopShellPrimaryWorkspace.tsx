@@ -32,6 +32,8 @@ import type { SupportedLocale } from '@/i18n';
 import { buildLiveLink, type InternalSmartReference } from '@/lib/internalLinks';
 import { copyTextToClipboard } from '@/lib/utils';
 import { consentPendingCommunityNodes, eligibleCommunityIndexNodes } from '@/lib/api/communityIndex';
+import { communityIndexAvailability, type CommunityNodeAvailability } from '@/lib/api/communityNodeAvailability';
+import type { FetchCommunityNodePolicyView } from '@/shell/actions/useCommunityNodePolicyDialog';
 import type { SubmitCommunityNodeReportRequest } from '@/lib/api';
 import {
   timelineStorageKeyForChannel,
@@ -87,11 +89,13 @@ export type DesktopShellPrimarySurfaceProps = {
   >;
   openCommunityNodeSettings: () => void;
   communityNodePanelView?: CommunityNodePanelView;
-  onFetchCommunityNodeConsents?: (baseUrl: string) => Promise<void>;
+  onFetchCommunityNodeConsents?: FetchCommunityNodePolicyView;
   onAcceptCommunityNodeConsents?: (
     baseUrl: string,
-    documents: CommunityNodeConsentDocumentRef[]
+    documents: CommunityNodeConsentDocumentRef[],
+    language?: string
   ) => Promise<void>;
+  onRetryCommunityNode: (availability: CommunityNodeAvailability) => Promise<void>;
   loadReactionCatalogData: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   refreshTimelineFeed: (
@@ -148,6 +152,7 @@ export function DesktopShellPrimarySurface({
   communityNodePanelView,
   onFetchCommunityNodeConsents,
   onAcceptCommunityNodeConsents,
+  onRetryCommunityNode,
   loadReactionCatalogData,
   refreshTimelineFeed,
   refreshProfile,
@@ -201,6 +206,12 @@ export function DesktopShellPrimarySurface({
     communityNodeConfig,
     communityIndexNodeBaseUrl,
     communityNodeStatuses,
+    communityIndexNodePreference,
+    communityNodeConfigLoaded,
+    communityNodeStatusesLoaded,
+    communityNodeConfigError,
+    communityNodeStatusError,
+    patchState,
     ownedReactionAssets,
     pendingTimelineCountsByKey,
     profileDirty,
@@ -243,6 +254,12 @@ export function DesktopShellPrimarySurface({
       communityNodeConfig: s.communityNodeConfig,
       communityIndexNodeBaseUrl: s.communityIndexNodeBaseUrl,
       communityNodeStatuses: s.communityNodeStatuses,
+      communityIndexNodePreference: s.communityIndexNodePreference,
+      communityNodeConfigLoaded: s.communityNodeConfigLoaded,
+      communityNodeStatusesLoaded: s.communityNodeStatusesLoaded,
+      communityNodeConfigError: s.communityNodeConfigError,
+      communityNodeStatusError: s.communityNodeStatusError,
+      patchState: s.patchState,
       ownedReactionAssets: s.ownedReactionAssets,
       pendingTimelineCountsByKey: s.pendingTimelineCountsByKey,
       profileDirty: s.profileDirty,
@@ -374,6 +391,11 @@ export function DesktopShellPrimarySurface({
     () => consentPendingCommunityNodes(communityNodeConfig, communityNodeStatuses),
     [communityNodeConfig, communityNodeStatuses]
   );
+  const indexAvailability = communityIndexAvailability({
+    config: communityNodeConfig, statuses: communityNodeStatuses, manifests: communityNodeManifests,
+    preference: communityIndexNodePreference, configLoaded: communityNodeConfigLoaded,
+    statusesLoaded: communityNodeStatusesLoaded, statusError: Boolean(communityNodeStatusError || communityNodeConfigError),
+  });
   const showCommunityNodeUnavailableNotice =
     activeSurfaceSection === 'explore' &&
     communityNodeConfig.nodes.length > 0 &&
@@ -488,6 +510,12 @@ export function DesktopShellPrimarySurface({
             eligibleNodeBaseUrls={eligibleIndexNodeBaseUrls}
             consentPendingNodeBaseUrls={consentPendingNodeBaseUrls}
             selectedNodeBaseUrl={communityIndexNodeBaseUrl}
+            configuredNodeBaseUrls={communityNodeConfig.nodes.map((node) => node.base_url)}
+            nodeStatuses={communityNodeStatuses}
+            availability={indexAvailability}
+            onAcceptConsents={onAcceptCommunityNodeConsents}
+            onRetryNode={(recovery) => onRetryCommunityNode({ ...indexAvailability, recovery: recovery ?? indexAvailability.recovery })}
+            onAutomaticNode={() => patchState({ communityIndexNodePreference: { mode: 'auto' } })}
             onOpenCommunityNodeSettings={openCommunityNodeSettings}
             knownAuthorsByPubkey={knownAuthorsByPubkey}
             mediaObjectUrls={mediaObjectUrls}

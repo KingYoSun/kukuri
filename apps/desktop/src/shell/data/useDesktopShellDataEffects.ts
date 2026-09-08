@@ -6,7 +6,6 @@ import {
   type MutableRefObject,
 } from 'react';
 
-import { reconcileCommunityIndexNodePreference } from '@/lib/api/communityIndex';
 import type {
   AttachmentView,
   CommunityNodeNodeStatus,
@@ -77,9 +76,7 @@ type UseDesktopShellDataEffectsArgs = {
   loadMessagesSection: () => Promise<void>;
   loadNotificationsSection: (options?: { markAsRead?: boolean }) => Promise<void>;
   refreshNotificationStatus: () => Promise<void>;
-  loadCommunityIndexCapability: (
-    refreshedStatuses?: readonly CommunityNodeNodeStatus[]
-  ) => Promise<void>;
+  loadCommunityIndexCapability: () => Promise<void>;
   refreshVisibleShellData: (
     topic: string,
     currentThread: string | null,
@@ -286,39 +283,27 @@ export function useDesktopShellDataEffects({
           setCommunityNodeStatuses((current) =>
             mergeCommunityNodeStatuses(current, communityNodeStatuses)
           );
+          storeApi.getState().patchState({
+            communityNodeStatusesLoaded: true, communityNodeStatusError: null,
+          });
         }
       });
     },
-    [setCommunityNodeStatuses, setSyncStatus]
+    [setCommunityNodeStatuses, setSyncStatus, storeApi]
   );
 
   useRuntimeEventBridge(refreshNotificationStatus, applySyncStatusChange);
 
   useEffect(() => {
     void refreshConnectivityStatus()
-      .then((statuses) => loadCommunityIndexCapability(statuses ?? undefined))
+      .then(() => loadCommunityIndexCapability())
       .catch(() => undefined);
     const intervalMs = isTauriRuntime()
       ? CONNECTIVITY_STATUS_FALLBACK_INTERVAL_MS
       : REFRESH_INTERVAL_MS;
     const intervalId = window.setInterval(() => {
-      // 接続状態(認証・同意・通信エラー)が変わって適格ノードが入れ替わった場合に備え、
-      // 定期更新の後は既存の構成情報記録で選択中の索引ノードを再調整する(#698)。
-      void refreshConnectivityStatus().then((statuses) => {
-        if (!statuses) return;
-        const state = storeApi.getState();
-        const resolution = reconcileCommunityIndexNodePreference(state);
-        if (
-          resolution.selectedBaseUrl !== state.communityIndexNodeBaseUrl ||
-          JSON.stringify(resolution.preference) !==
-            JSON.stringify(state.communityIndexNodePreference)
-        ) {
-          state.patchState({
-            communityIndexNodeBaseUrl: resolution.selectedBaseUrl,
-            communityIndexNodePreference: resolution.preference,
-          });
-        }
-      });
+      // 選択の整合はstatus更新と同じstore transactionで行う(event/受諾経路も共通)。
+      void refreshConnectivityStatus();
     }, intervalMs);
     return () => {
       window.clearInterval(intervalId);

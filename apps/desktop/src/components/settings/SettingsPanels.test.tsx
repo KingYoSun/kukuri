@@ -181,7 +181,7 @@ test('community node panel renders ready and error states', async () => {
   expect(screen.getByDisplayValue('https://api.kukuri.app')).toBeInTheDocument();
 
   await user.click(screen.getAllByRole('button', { name: 'Consents' })[0]);
-  expect(onFetchConsents).toHaveBeenCalledWith('https://api.kukuri.app');
+  expect(onFetchConsents).toHaveBeenCalledWith('https://api.kukuri.app', 'en');
 
   // 既に全て同意済みのノードでは Accept が無効化され、誤受諾を防ぐ。
   const consentDialog = await screen.findByRole('dialog');
@@ -269,7 +269,7 @@ test('community node consent dialog shows policy body, version, and update notic
       policy_version: 2,
       policy_snapshot_revision: null,
     },
-  ]);
+  ], 'en');
 });
 
 test('community node refresh opens consent dialog without protected refresh when consent is missing', async () => {
@@ -318,7 +318,7 @@ test('community node refresh opens consent dialog without protected refresh when
   await user.click(screen.getAllByRole('button', { name: 'Refresh' })[0]);
 
   expect(onRefresh).not.toHaveBeenCalled();
-  expect(onFetchConsents).toHaveBeenCalledWith('https://api.kukuri.app');
+  expect(onFetchConsents).toHaveBeenCalledWith('https://api.kukuri.app', 'en');
   expect(await screen.findByRole('dialog')).toBeInTheDocument();
 });
 
@@ -353,7 +353,7 @@ test('community node refresh opens consent dialog when runtime detects a policy 
   await user.click(screen.getAllByRole('button', { name: 'Refresh' })[0]);
 
   expect(onRefresh).toHaveBeenCalledWith('https://api.kukuri.app');
-  expect(onFetchConsents).toHaveBeenCalledWith('https://api.kukuri.app');
+  expect(onFetchConsents).toHaveBeenCalledWith('https://api.kukuri.app', 'en');
   expect(await screen.findByRole('dialog')).toBeInTheDocument();
 });
 

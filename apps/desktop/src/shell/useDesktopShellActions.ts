@@ -361,6 +361,7 @@ export function useDesktopShellActions({
     handleWithdrawCommunityNodeConsents,
   } = createProfileTopicChannelActions({
     api,
+    getState: storeApi.getState,
     translate,
     loadTopics,
     syncRoute,

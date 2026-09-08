@@ -3,11 +3,11 @@ import { useTranslation } from 'react-i18next';
 
 import type { SupportedLocale } from '@/i18n';
 import type {
-  CommunityNodeConsentDocumentRef,
   DomeHostingView,
   GameRoomView,
 } from '@/lib/api';
 import { CommunityNodeConsentDialog } from '@/components/settings/CommunityNodeConsentDialog';
+import { useCommunityNodePolicyDialog, type FetchCommunityNodePolicyView, type AcceptCommunityNodePolicyView } from '@/shell/actions/useCommunityNodePolicyDialog';
 import type { CommunityNodeEntryView } from '@/components/settings/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
@@ -28,11 +28,8 @@ type DomeHostingPanelProps = {
   onAddPersistentProp: () => Promise<void>;
   onDeletePersistentProp: () => Promise<void>;
   communityNodes?: CommunityNodeEntryView[];
-  onFetchCommunityNodeConsents?: (baseUrl: string) => Promise<void>;
-  onAcceptCommunityNodeConsents?: (
-    baseUrl: string,
-    documents: CommunityNodeConsentDocumentRef[]
-  ) => Promise<void>;
+  onFetchCommunityNodeConsents?: FetchCommunityNodePolicyView;
+  onAcceptCommunityNodeConsents?: AcceptCommunityNodePolicyView;
   onOpenCommunityNodeSettings?: () => void;
 };
 
@@ -57,27 +54,17 @@ export function DomeHostingPanel({
   const [layoutResult, setLayoutResult] = useState<string | null>(null);
   const [resyncResult, setResyncResult] = useState<string | null>(null);
   const [hosting, setHosting] = useState<DomeHostingView | null>(null);
-  const [consentDialogNodeBaseUrl, setConsentDialogNodeBaseUrl] = useState<string | null>(null);
-  const [consentDialogLoadedBaseUrl, setConsentDialogLoadedBaseUrl] = useState<string | null>(null);
-  const [consentDialogFetchError, setConsentDialogFetchError] = useState<string | null>(null);
-  const [consentBusy, setConsentBusy] = useState(false);
+  const consentFlow = useCommunityNodePolicyDialog({
+    nodes: communityNodes, language: locale,
+    fetchPolicies: onFetchCommunityNodeConsents ?? (async () => { throw new Error('consent unavailable'); }),
+    acceptPolicies: onAcceptCommunityNodeConsents ?? (async () => { throw new Error('consent unavailable'); }),
+    onAccepted: (node) => delegateToCommunityNode(node),
+  });
   const savedCommunityNodes = communityNodes.filter((node) => node.saved && node.baseUrl.trim());
   const selectableCommunityNodes = savedCommunityNodes.filter((node) => node.nodeId?.trim());
   const selectedCommunityNode = selectableCommunityNodes.find(
     (node) => node.baseUrl === selectedNodeBaseUrl
   );
-  const consentDialogNode = communityNodes.find(
-    (node) => node.baseUrl === consentDialogNodeBaseUrl
-  );
-  const consentDialogView = consentDialogNode
-    ? {
-        ...consentDialogNode.consent,
-        loaded:
-          consentDialogNode.consent.loaded &&
-          consentDialogLoadedBaseUrl === consentDialogNode.baseUrl,
-        loadError: consentDialogFetchError ?? consentDialogNode.consent.loadError,
-      }
-    : null;
 
   useEffect(() => {
     if (
@@ -108,20 +95,7 @@ export function DomeHostingPanel({
       setError(t('hosting.consentUnavailable'));
       return;
     }
-    setConsentDialogNodeBaseUrl(node.baseUrl);
-    setConsentDialogLoadedBaseUrl(null);
-    setConsentDialogFetchError(null);
-    setConsentBusy(true);
-    try {
-      await onFetchCommunityNodeConsents(node.baseUrl);
-      setConsentDialogLoadedBaseUrl(node.baseUrl);
-    } catch (fetchError) {
-      setConsentDialogFetchError(
-        fetchError instanceof Error ? fetchError.message : String(fetchError)
-      );
-    } finally {
-      setConsentBusy(false);
-    }
+    consentFlow.open(node.baseUrl);
   };
   const run = async (
     action: () => Promise<unknown>,
@@ -175,26 +149,6 @@ export function DomeHostingPanel({
       return;
     }
     await delegateToCommunityNode(selectedCommunityNode);
-  };
-  const acceptConsentFromDialog = async () => {
-    if (!consentDialogNode || !consentDialogView || !onAcceptCommunityNodeConsents) return;
-    const documents = consentDialogView.policies.map((policy) => ({
-      policy_slug: policy.policySlug,
-      policy_version: policy.policyVersion,
-      policy_snapshot_revision: policy.policySnapshotRevision ?? null,
-    }));
-    if (documents.length === 0) return;
-    setConsentBusy(true);
-    try {
-      await onAcceptCommunityNodeConsents(consentDialogNode.baseUrl, documents);
-      setConsentDialogNodeBaseUrl(null);
-      setConsentDialogLoadedBaseUrl(null);
-      await delegateToCommunityNode(consentDialogNode);
-    } catch (acceptError) {
-      setError(acceptError instanceof Error ? acceptError.message : t('hosting.error'));
-    } finally {
-      setConsentBusy(false);
-    }
   };
   const saveLayout = async () => {
     setPending(true);
@@ -366,23 +320,7 @@ export function DomeHostingPanel({
           </Button>
         </div>
       ) : null}
-      {consentDialogNode && consentDialogView ? (
-        <CommunityNodeConsentDialog
-          open={consentDialogNodeBaseUrl != null}
-          onOpenChange={(open) => {
-            if (!open) {
-              setConsentDialogNodeBaseUrl(null);
-              setConsentDialogLoadedBaseUrl(null);
-              setConsentDialogFetchError(null);
-            }
-          }}
-          baseUrl={consentDialogNode.baseUrl}
-          consent={consentDialogView}
-          busy={consentBusy}
-          onAccept={() => void acceptConsentFromDialog()}
-          onRetry={() => void openConsentDialog(consentDialogNode)}
-        />
-      ) : null}
+      {consentFlow.dialog ? <CommunityNodeConsentDialog {...consentFlow.dialog} /> : null}
     </Card>
   );
 }

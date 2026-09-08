@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 
 import type {
   CommunityNodeConsentDocumentRef,
+  CommunityNodeNodeStatus,
   JoinedPrivateChannelView,
   ProfileInput,
 } from '@/lib/api';
@@ -14,9 +15,11 @@ import {
   DEFAULT_COMMUNITY_NODE_CONFIG,
   PUBLIC_CHANNEL_REF,
   PUBLIC_TIMELINE_SCOPE,
+  type DesktopShellStore,
 } from '@/shell/store';
 import {
   communityNodeDraftNodesToConfigInput,
+  communityNodeConsentView,
   communityNodesToDraftNodes,
   joinedChannelFromAccessTokenPreview,
   messageFromError,
@@ -38,6 +41,7 @@ import type {
 } from './shared';
 
 type ProfileTopicChannelParams = ActionsBaseParams & {
+  getState: () => DesktopShellStore;
   activePrivateChannel: JoinedPrivateChannelView | null;
   activeTopic: string;
   channelAudienceInput: 'invite_only' | 'friend_only' | 'friend_plus';
@@ -97,6 +101,7 @@ type ProfileTopicChannelParams = ActionsBaseParams & {
 
 export function createProfileTopicChannelActions({
   api,
+  getState,
   translate,
   loadTopics,
   syncRoute,
@@ -149,6 +154,36 @@ export function createProfileTopicChannelActions({
   setDiscoveryEditorDirty,
   setDiscoveryError,
 }: ProfileTopicChannelParams) {
+  async function runCommunityNodeOperation(
+    baseUrl: string,
+    operation: () => Promise<CommunityNodeNodeStatus>
+  ): Promise<CommunityNodeNodeStatus | null> {
+    const before = getState();
+    if (!before.communityNodeConfig.nodes.some((node) => node.base_url === baseUrl)) return null;
+    const baseline = before.communityNodeStatuses.find((node) => node.base_url === baseUrl);
+    let response = await operation();
+    let current = getState();
+    if (current.syncStatus.local_author_pubkey !== before.syncStatus.local_author_pubkey ||
+      !current.communityNodeConfig.nodes.some((node) => node.base_url === baseUrl)) return null;
+    const latest = current.communityNodeStatuses.find((node) => node.base_url === baseUrl);
+    // RPCとevent/pollが競合したら、到着順を鮮度と見なさずmutation後の読取で確定する。
+    if (latest !== baseline) {
+      const statuses = await api.getCommunityNodeStatuses();
+      current = getState();
+      if (current.syncStatus.local_author_pubkey !== before.syncStatus.local_author_pubkey ||
+        !current.communityNodeConfig.nodes.some((node) => node.base_url === baseUrl)) return null;
+      const observed = current.communityNodeStatuses.find((node) => node.base_url === baseUrl);
+      if (observed !== latest) return observed ?? null;
+      const refreshed = statuses.find((node) => node.base_url === baseUrl);
+      if (!refreshed) return null;
+      response = refreshed;
+    }
+    current.patchState({
+      communityNodeStatuses: upsertCommunityNodeStatus(current.communityNodeStatuses, response),
+      communityNodeConfig: syncCommunityNodeConfigWithStatus(current.communityNodeConfig, response),
+    });
+    return response;
+  }
   function handleProfileFieldChange(field: 'displayName' | 'name' | 'about', value: string) {
     const nextField: keyof ProfileInput = field === 'displayName' ? 'display_name' : field;
     setProfileDraft(setRecordEntry(nextField, value));
@@ -631,9 +666,8 @@ export function createProfileTopicChannelActions({
 
   async function handleAuthenticateCommunityNode(baseUrl: string) {
     try {
-      const nextStatus = await api.authenticateCommunityNode(baseUrl);
-      setCommunityNodeStatuses((current) => upsertCommunityNodeStatus(current, nextStatus));
-      setCommunityNodeConfig((current) => syncCommunityNodeConfigWithStatus(current, nextStatus));
+      const nextStatus = await runCommunityNodeOperation(baseUrl, () => api.authenticateCommunityNode(baseUrl));
+      if (!nextStatus) return;
       setCommunityNodeError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (authError) {
@@ -647,9 +681,8 @@ export function createProfileTopicChannelActions({
 
   async function handleSetCommunityNodeInviteCode(baseUrl: string, inviteCode: string) {
     try {
-      const nextStatus = await api.setCommunityNodeInviteCode(baseUrl, inviteCode);
-      setCommunityNodeStatuses((current) => upsertCommunityNodeStatus(current, nextStatus));
-      setCommunityNodeConfig((current) => syncCommunityNodeConfigWithStatus(current, nextStatus));
+      const nextStatus = await runCommunityNodeOperation(baseUrl, () => api.setCommunityNodeInviteCode(baseUrl, inviteCode));
+      if (!nextStatus) return;
       setCommunityNodeError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (inviteError) {
@@ -664,9 +697,8 @@ export function createProfileTopicChannelActions({
 
   async function handleClearCommunityNodeToken(baseUrl: string) {
     try {
-      const nextStatus = await api.clearCommunityNodeToken(baseUrl);
-      setCommunityNodeStatuses((current) => upsertCommunityNodeStatus(current, nextStatus));
-      setCommunityNodeConfig((current) => syncCommunityNodeConfigWithStatus(current, nextStatus));
+      const nextStatus = await runCommunityNodeOperation(baseUrl, () => api.clearCommunityNodeToken(baseUrl));
+      if (!nextStatus) return;
       setCommunityNodeError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (clearError) {
@@ -680,9 +712,8 @@ export function createProfileTopicChannelActions({
 
   async function handleRefreshCommunityNode(baseUrl: string) {
     try {
-      const nextStatus = await api.refreshCommunityNodeMetadata(baseUrl);
-      setCommunityNodeStatuses((current) => upsertCommunityNodeStatus(current, nextStatus));
-      setCommunityNodeConfig((current) => syncCommunityNodeConfigWithStatus(current, nextStatus));
+      const nextStatus = await runCommunityNodeOperation(baseUrl, () => api.refreshCommunityNodeMetadata(baseUrl));
+      if (!nextStatus) return;
       setCommunityNodeError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
       const localConsent = nextStatus.local_consent;
@@ -704,24 +735,32 @@ export function createProfileTopicChannelActions({
   }
 
   // #857: 同意提示に必要な情報は認証不要の公開 policy カタログから取得する。
-  async function handleFetchCommunityNodeConsents(baseUrl: string) {
-    setCommunityNodePolicies(setRecordEntry(baseUrl, { status: 'loading' as const }));
+  async function handleFetchCommunityNodeConsents(
+    baseUrl: string, language = i18n.resolvedLanguage ?? i18n.language
+  ) {
+    const pending = { status: 'loading' as const };
+    setCommunityNodePolicies(setRecordEntry(baseUrl, pending));
     try {
-      const catalog = await api.fetchCommunityNodePolicies(baseUrl, i18n.resolvedLanguage);
-      setCommunityNodePolicies(
-        setRecordEntry(baseUrl, { status: 'ok' as const, policies: catalog.policies })
+      const catalog = await api.fetchCommunityNodePolicies(baseUrl, language);
+      const entry = { status: 'ok' as const, policies: catalog.policies };
+      if (getState().communityNodePolicies[baseUrl] === pending) {
+        setCommunityNodePolicies(setRecordEntry(baseUrl, entry));
+        setCommunityNodeError(null);
+      }
+      // callerは共有cacheの後続更新で表示内容が変わらないsnapshotを受け取る。
+      return communityNodeConsentView(
+        getState().communityNodeStatuses.find((node) => node.base_url === baseUrl), entry
       );
-      setCommunityNodeError(null);
     } catch (consentError) {
       const message =
         consentError instanceof Error
           ? consentError.message
           : translate('common:errors.failedToFetchConsentStatus');
       // 取得失敗(オフライン等)はダイアログ内で再試行できるよう entry に残す。
-      setCommunityNodePolicies(
-        setRecordEntry(baseUrl, { status: 'error' as const, error: message })
-      );
-      setCommunityNodeError(message);
+      if (getState().communityNodePolicies[baseUrl] === pending) {
+        setCommunityNodePolicies(setRecordEntry(baseUrl, { status: 'error' as const, error: message }));
+        setCommunityNodeError(message);
+      }
       throw consentError;
     }
   }
@@ -729,16 +768,14 @@ export function createProfileTopicChannelActions({
   // #857: 提示された文書と版をそのまま受諾し、ローカル記録 → セッション確立を開始する。
   async function handleAcceptCommunityNodeConsents(
     baseUrl: string,
-    documents: CommunityNodeConsentDocumentRef[]
+    documents: CommunityNodeConsentDocumentRef[],
+    language = i18n.resolvedLanguage ?? i18n.language
   ) {
     try {
-      const nextStatus = await api.acceptCommunityNodeConsents(
-        baseUrl,
-        documents,
-        i18n.resolvedLanguage ?? i18n.language
+      const nextStatus = await runCommunityNodeOperation(baseUrl, () =>
+        api.acceptCommunityNodeConsents(baseUrl, documents, language)
       );
-      setCommunityNodeStatuses((current) => upsertCommunityNodeStatus(current, nextStatus));
-      setCommunityNodeConfig((current) => syncCommunityNodeConfigWithStatus(current, nextStatus));
+      if (!nextStatus) return;
       setCommunityNodeError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (consentError) {
@@ -754,9 +791,8 @@ export function createProfileTopicChannelActions({
   // #857: 同意の撤回。記録は履歴として残り、トークン破棄で接続だけが止まる。
   async function handleWithdrawCommunityNodeConsents(baseUrl: string) {
     try {
-      const nextStatus = await api.withdrawCommunityNodeConsents(baseUrl);
-      setCommunityNodeStatuses((current) => upsertCommunityNodeStatus(current, nextStatus));
-      setCommunityNodeConfig((current) => syncCommunityNodeConfigWithStatus(current, nextStatus));
+      const nextStatus = await runCommunityNodeOperation(baseUrl, () => api.withdrawCommunityNodeConsents(baseUrl));
+      if (!nextStatus) return;
       setCommunityNodeError(null);
     } catch (consentError) {
       setCommunityNodeError(

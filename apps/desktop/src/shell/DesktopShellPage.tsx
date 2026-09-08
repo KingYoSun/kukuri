@@ -54,6 +54,7 @@ import {
   DesktopShellNotificationsSurface,
 } from '@/shell/page/DesktopShellAuxiliaryPanels';
 import { DesktopShellOverlays } from '@/shell/page/DesktopShellOverlays';
+import { CommunityNodeOnboarding } from '@/shell/page/CommunityNodeOnboarding';
 import { DesktopShellColumnWorkspace } from '@/shell/page/DesktopShellColumnWorkspace';
 import { DesktopShellControlCenter } from '@/shell/page/DesktopShellControlCenter';
 import { DesktopShellPrimarySurface } from '@/shell/page/DesktopShellPrimaryWorkspace';
@@ -193,6 +194,7 @@ export function DesktopShellPage({
 
   const {
     loadTopics,
+    retryCommunityNode,
     refreshVisibleTimelineAfterPublish,
     refreshTimelineFeed,
     loadProfileSection,
@@ -617,6 +619,7 @@ export function DesktopShellPage({
       communityNodePanelView={viewModels.communityNodePanelView}
       onFetchCommunityNodeConsents={shellActions.handleFetchCommunityNodeConsents}
       onAcceptCommunityNodeConsents={shellActions.handleAcceptCommunityNodeConsents}
+      onRetryCommunityNode={retryCommunityNode}
       loadReactionCatalogData={loadReactionCatalogData}
       refreshTimelineFeed={refreshTimelineFeed}
       refreshProfile={loadProfileSection}
@@ -936,6 +939,8 @@ export function DesktopShellPage({
         clipboardToastId={clipboardToastId}
         onRequestPrivateIndexing={setIndexingTarget}
       />
+      <CommunityNodeOnboarding api={api} onAccept={shellActions.handleAcceptCommunityNodeConsents}
+        onOpenSettings={handleOpenCommunityNodeSettings} onRetry={retryCommunityNode} />
 
       <CommunityIndexingRequestDialog
         api={api}
