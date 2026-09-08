@@ -1,0 +1,451 @@
+{
+  "before": {
+    "webkit": "2.50.4",
+    "records": [
+      {
+        "step": "initial",
+        "title": "Before you continue",
+        "checkbox": {
+          "x": 285,
+          "y": 5133,
+          "width": 12,
+          "height": 12
+        },
+        "checked": false,
+        "disabled": true,
+        "button": {
+          "x": 285,
+          "y": 5169,
+          "width": 214,
+          "height": 48
+        },
+        "docs": null,
+        "scroll": null,
+        "error": false,
+        "focus": "BODY",
+        "calls": 0,
+        "shell": false
+      }
+    ],
+    "failures": []
+  },
+  "after": {
+    "webkit": "2.50.4",
+    "records": [
+      {
+        "step": "initial",
+        "title": "Before you continue",
+        "checkbox": {
+          "x": 285,
+          "y": 618,
+          "width": 20,
+          "height": 20
+        },
+        "checked": false,
+        "disabled": true,
+        "button": {
+          "x": 285,
+          "y": 695,
+          "width": 214,
+          "height": 48
+        },
+        "docs": {
+          "x": 285,
+          "y": 157,
+          "width": 710,
+          "height": 420
+        },
+        "scroll": {
+          "top": 0,
+          "height": 418,
+          "total": 5060
+        },
+        "reason": "To continue, check the box to confirm that you are 18 or older.",
+        "error": false,
+        "focus": "BODY",
+        "calls": 0,
+        "shell": false
+      },
+      {
+        "step": "document-end",
+        "title": "Before you continue",
+        "checkbox": {
+          "x": 285,
+          "y": 618,
+          "width": 20,
+          "height": 20
+        },
+        "checked": false,
+        "disabled": true,
+        "button": {
+          "x": 285,
+          "y": 695,
+          "width": 214,
+          "height": 48
+        },
+        "docs": {
+          "x": 285,
+          "y": 157,
+          "width": 710,
+          "height": 420
+        },
+        "scroll": {
+          "top": 4642,
+          "height": 418,
+          "total": 5060
+        },
+        "reason": "To continue, check the box to confirm that you are 18 or older.",
+        "error": false,
+        "focus": "DIV",
+        "calls": 0,
+        "shell": false
+      },
+      {
+        "step": "checked",
+        "title": "Before you continue",
+        "checkbox": {
+          "x": 285,
+          "y": 647,
+          "width": 20,
+          "height": 20
+        },
+        "checked": true,
+        "disabled": false,
+        "button": {
+          "x": 285,
+          "y": 695,
+          "width": 214,
+          "height": 48
+        },
+        "docs": {
+          "x": 285,
+          "y": 157,
+          "width": 710,
+          "height": 449
+        },
+        "scroll": {
+          "top": 4613,
+          "height": 447,
+          "total": 5060
+        },
+        "error": false,
+        "focus": "INPUT",
+        "calls": 0,
+        "shell": false
+      },
+      {
+        "step": "back-to-document",
+        "title": "Before you continue",
+        "checkbox": {
+          "x": 285,
+          "y": 647,
+          "width": 20,
+          "height": 20
+        },
+        "checked": true,
+        "disabled": false,
+        "button": {
+          "x": 285,
+          "y": 695,
+          "width": 214,
+          "height": 48
+        },
+        "docs": {
+          "x": 285,
+          "y": 157,
+          "width": 710,
+          "height": 449
+        },
+        "scroll": {
+          "top": 4613,
+          "height": 447,
+          "total": 5060
+        },
+        "error": false,
+        "focus": "DIV",
+        "calls": 0,
+        "shell": false
+      },
+      {
+        "step": "unchecked",
+        "title": "Before you continue",
+        "checkbox": {
+          "x": 285,
+          "y": 618,
+          "width": 20,
+          "height": 20
+        },
+        "checked": false,
+        "disabled": true,
+        "button": {
+          "x": 285,
+          "y": 695,
+          "width": 214,
+          "height": 48
+        },
+        "docs": {
+          "x": 285,
+          "y": 157,
+          "width": 710,
+          "height": 420
+        },
+        "scroll": {
+          "top": 4613,
+          "height": 418,
+          "total": 5060
+        },
+        "reason": "To continue, check the box to confirm that you are 18 or older.",
+        "error": false,
+        "focus": "INPUT",
+        "calls": 0,
+        "shell": false
+      },
+      {
+        "step": "disabled-click",
+        "title": "Before you continue",
+        "checkbox": {
+          "x": 285,
+          "y": 618,
+          "width": 20,
+          "height": 20
+        },
+        "checked": false,
+        "disabled": true,
+        "button": {
+          "x": 285,
+          "y": 695,
+          "width": 214,
+          "height": 48
+        },
+        "docs": {
+          "x": 285,
+          "y": 157,
+          "width": 710,
+          "height": 420
+        },
+        "scroll": {
+          "top": 4613,
+          "height": 418,
+          "total": 5060
+        },
+        "reason": "To continue, check the box to confirm that you are 18 or older.",
+        "error": false,
+        "focus": "BODY",
+        "calls": 0,
+        "shell": false
+      },
+      {
+        "step": "save-error",
+        "title": "Before you continue",
+        "checkbox": {
+          "x": 285,
+          "y": 567,
+          "width": 20,
+          "height": 20
+        },
+        "checked": true,
+        "disabled": false,
+        "button": {
+          "x": 285,
+          "y": 695,
+          "width": 214,
+          "height": 48
+        },
+        "docs": {
+          "x": 285,
+          "y": 157,
+          "width": 710,
+          "height": 369
+        },
+        "scroll": {
+          "top": 4613,
+          "height": 367,
+          "total": 5060
+        },
+        "error": true,
+        "focus": "BODY",
+        "calls": 1,
+        "shell": false
+      },
+      {
+        "step": "retry",
+        "checkbox": null,
+        "disabled": false,
+        "button": {
+          "x": 53,
+          "y": 37.203125,
+          "width": 33.59375,
+          "height": 33.59375
+        },
+        "docs": null,
+        "scroll": null,
+        "error": false,
+        "focus": "SECTION",
+        "calls": 2,
+        "shell": true
+      }
+    ],
+    "failures": []
+  },
+  "after-zoom200": {
+    "webkit": "2.50.4",
+    "zoom": 2.0,
+    "records": [
+      {
+        "step": "initial",
+        "viewport": {
+          "width": 640,
+          "height": 400,
+          "scrollWidth": 628
+        },
+        "title": "Before you continue",
+        "checkbox": {
+          "x": 35,
+          "y": 392,
+          "width": 20,
+          "height": 20
+        },
+        "checked": false,
+        "disabled": true,
+        "button": {
+          "x": 35,
+          "y": 469,
+          "width": 217.5,
+          "height": 48
+        },
+        "docs": {
+          "x": 35,
+          "y": 159,
+          "width": 558,
+          "height": 192
+        },
+        "scroll": {
+          "top": 0,
+          "height": 190,
+          "total": 6016
+        },
+        "reason": "To continue, check the box to confirm that you are 18 or older.",
+        "error": false,
+        "focus": "BODY",
+        "calls": 0,
+        "shell": false
+      },
+      {
+        "step": "document-end",
+        "viewport": {
+          "width": 640,
+          "height": 400,
+          "scrollWidth": 628
+        },
+        "title": "Before you continue",
+        "checkbox": {
+          "x": 35,
+          "y": 240,
+          "width": 20,
+          "height": 20
+        },
+        "checked": false,
+        "disabled": true,
+        "button": {
+          "x": 35,
+          "y": 317,
+          "width": 217.5,
+          "height": 48
+        },
+        "docs": {
+          "x": 35,
+          "y": 7,
+          "width": 558,
+          "height": 192
+        },
+        "scroll": {
+          "top": 5826,
+          "height": 190,
+          "total": 6016
+        },
+        "reason": "To continue, check the box to confirm that you are 18 or older.",
+        "error": false,
+        "focus": "DIV",
+        "calls": 0,
+        "shell": false
+      },
+      {
+        "step": "checked",
+        "viewport": {
+          "width": 640,
+          "height": 400,
+          "scrollWidth": 628
+        },
+        "title": "Before you continue",
+        "checkbox": {
+          "x": 35,
+          "y": 269,
+          "width": 20,
+          "height": 20
+        },
+        "checked": true,
+        "disabled": false,
+        "button": {
+          "x": 35,
+          "y": 317,
+          "width": 217.5,
+          "height": 48
+        },
+        "docs": {
+          "x": 35,
+          "y": 36,
+          "width": 558,
+          "height": 192
+        },
+        "scroll": {
+          "top": 5826,
+          "height": 190,
+          "total": 6016
+        },
+        "error": false,
+        "focus": "INPUT",
+        "calls": 0,
+        "shell": false
+      },
+      {
+        "step": "zoom-actions",
+        "viewport": {
+          "width": 640,
+          "height": 400,
+          "scrollWidth": 628
+        },
+        "title": "Before you continue",
+        "checkbox": {
+          "x": 35,
+          "y": 269,
+          "width": 20,
+          "height": 20
+        },
+        "checked": true,
+        "disabled": false,
+        "button": {
+          "x": 35,
+          "y": 317,
+          "width": 217.5,
+          "height": 48
+        },
+        "docs": {
+          "x": 35,
+          "y": 36,
+          "width": 558,
+          "height": 192
+        },
+        "scroll": {
+          "top": 5826,
+          "height": 190,
+          "total": 6016
+        },
+        "error": false,
+        "focus": "BUTTON",
+        "calls": 0,
+        "shell": false
+      }
+    ],
+    "failures": []
+  }
+}

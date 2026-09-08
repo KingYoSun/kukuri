@@ -8,6 +8,8 @@
     "declineNotice": "If you do not accept, you cannot use kukuri. Please close the app.",
     "accepting": "Applying…",
     "acceptError": "Failed to save your consent. Please try again.",
+    "ageAttestationRequired": "To continue, check the box to confirm that you are 18 or older.",
+    "documentsLabel": "Terms of Service and Privacy Policy",
     "ageAttestationLabel": "I am 18 years of age or older."
   },
   "about": {

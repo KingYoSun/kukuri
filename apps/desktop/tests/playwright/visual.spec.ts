@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { seedUnconsentedCommunityNodes } from './community-node-fixture';
+import { seedAppConsent } from './app-consent-fixture';
 
 import { DEVELOPER_MODE_STORAGE_KEY } from '../../src/lib/developerMode';
 import { DESKTOP_THEME_STORAGE_KEY, type DesktopTheme } from '../../src/lib/theme';
@@ -22,6 +23,24 @@ const WIDE = { width: 1400, height: 980 } as const;
 const NARROW = { width: 700, height: 980 } as const;
 
 const LOCALE_EN = 'en';
+
+test('app consent unchecked English dark', async ({ page }) => {
+  await seedAppConsent(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Accept and continue' })).toBeDisabled();
+  await expect(page).toHaveScreenshot('app-consent-en-dark.png');
+});
+
+test('app consent checked Japanese light narrow', async ({ page }) => {
+  await seedAppConsent(page, { locale: 'ja', theme: 'light' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await page.getByRole('checkbox').check();
+  await page.getByRole('checkbox').blur();
+  await expect(page.getByRole('button', { name: '同意して続行' })).toBeEnabled();
+  await expect(page).toHaveScreenshot('app-consent-ja-light-narrow.png');
+});
 
 test('community node introduction wide English dark', async ({ page }) => {
   await seedUnconsentedCommunityNodes(page, { locale: 'en', theme: 'dark' });

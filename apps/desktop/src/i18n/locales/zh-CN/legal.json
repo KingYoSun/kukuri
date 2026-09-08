@@ -8,6 +8,8 @@
     "declineNotice": "如果您不同意，则无法使用 kukuri。请关闭应用。",
     "accepting": "正在应用…",
     "acceptError": "保存同意失败，请重试。",
+    "ageAttestationRequired": "如需继续，请勾选复选框，确认您已年满18周岁。",
+    "documentsLabel": "服务条款和隐私政策",
     "ageAttestationLabel": "我已年满 18 周岁。"
   },
   "about": {
