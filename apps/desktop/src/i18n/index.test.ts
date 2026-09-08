@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 
 import i18n, { DESKTOP_LOCALE_STORAGE_KEY, normalizeSupportedLocale } from './index';
+import { changeDesktopLocale } from './changeLocale';
 
 test('normalizeSupportedLocale maps supported and fallback locales', () => {
   expect(normalizeSupportedLocale('en-US')).toBe('en');
@@ -12,8 +13,8 @@ test('normalizeSupportedLocale maps supported and fallback locales', () => {
   expect(normalizeSupportedLocale(null)).toBe('en');
 });
 
-test('changeLanguage persists the selected locale in localStorage', async () => {
-  await i18n.changeLanguage('zh-CN');
+test('an explicit language choice persists the selected locale in localStorage', () => {
+  expect(changeDesktopLocale('zh-CN')).toBe(true);
 
   expect(window.localStorage.getItem(DESKTOP_LOCALE_STORAGE_KEY)).toBe('zh-CN');
   expect(i18n.resolvedLanguage).toBe('zh-CN');

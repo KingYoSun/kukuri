@@ -1,0 +1,362 @@
+[
+  {
+    "id": "startup-consentgate--unchecked",
+    "locale": "en",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--unchecked",
+    "locale": "en",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--unchecked",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--unchecked",
+    "locale": "ja",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--unchecked",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--unchecked",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--checked",
+    "locale": "en",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--checked",
+    "locale": "en",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--checked",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--checked",
+    "locale": "ja",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--checked",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--checked",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--pending",
+    "locale": "en",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--pending",
+    "locale": "en",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--pending",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--pending",
+    "locale": "ja",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--pending",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--pending",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--save-error",
+    "locale": "en",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--save-error",
+    "locale": "en",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--save-error",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--save-error",
+    "locale": "ja",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--save-error",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--save-error",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--declined",
+    "locale": "en",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--declined",
+    "locale": "en",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--declined",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--declined",
+    "locale": "ja",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--declined",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--declined",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--renewed-consent",
+    "locale": "en",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--renewed-consent",
+    "locale": "en",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--renewed-consent",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--renewed-consent",
+    "locale": "ja",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--renewed-consent",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--renewed-consent",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--outdated-attestation",
+    "locale": "en",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--outdated-attestation",
+    "locale": "en",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--outdated-attestation",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--outdated-attestation",
+    "locale": "ja",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--outdated-attestation",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--outdated-attestation",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--locale-save-error",
+    "locale": "en",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--locale-save-error",
+    "locale": "en",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--locale-save-error",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--locale-save-error",
+    "locale": "ja",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--locale-save-error",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "startup-consentgate--locale-save-error",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "settings-appearancepanel--default",
+    "locale": "en",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "settings-appearancepanel--default",
+    "locale": "en",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "settings-appearancepanel--default",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "settings-appearancepanel--default",
+    "locale": "ja",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "settings-appearancepanel--default",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "settings-appearancepanel--default",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "settings-appearancepanel--locale-save-error",
+    "locale": "en",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "settings-appearancepanel--locale-save-error",
+    "locale": "en",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "settings-appearancepanel--locale-save-error",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "settings-appearancepanel--locale-save-error",
+    "locale": "ja",
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "id": "settings-appearancepanel--locale-save-error",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "id": "settings-appearancepanel--locale-save-error",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": []
+  }
+]

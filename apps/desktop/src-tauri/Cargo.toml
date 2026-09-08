@@ -29,7 +29,7 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [target.'cfg(windows)'.dependencies]
 open = { version = "5.4.3", features = ["shellexecute-on-windows"] }
-windows = { version = "0.62.2", features = ["Data_Xml_Dom", "UI_Notifications"] }
+windows = { version = "0.62.2", features = ["Data_Xml_Dom", "UI_Notifications", "Win32_Globalization"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
 notify-rust = "4"

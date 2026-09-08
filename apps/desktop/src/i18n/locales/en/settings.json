@@ -78,7 +78,7 @@
   },
   "appearance": {
     "darkSelected": "dark theme selected",
-    "languageHint": "Language changes apply immediately on this device and stay local to this desktop.",
+    "languageHint": "Changes apply immediately and are saved on this device.",
     "languageLabel": "Language",
     "languageOptions": {
       "en": "English",
@@ -98,7 +98,9 @@
         "label": "Light"
       }
     },
-    "title": "Appearance"
+    "title": "Appearance",
+    "languageSaveFailed": "The language changed for this session, but could not be saved. Select it again to retry; it may reset when you restart.",
+    "retryLanguageSave": "Save language again"
   },
   "communityNode": {
     "indexNode": {

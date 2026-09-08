@@ -507,9 +507,15 @@ export function DesktopShellControlCenter({
                   <Radio className='size-4' aria-hidden='true' />
                   {t('shell:settingsSections.community-node.label')}
                 </Button>
-                <Button variant='ghost' type='button' onClick={() => openSettings('appearance')}>
+                <Button variant='ghost' type='button' onClick={() => openSettings('appearance')}
+                  aria-label={t('shell:controlCenter.settings')} aria-describedby='control-center-appearance-hint'>
                   <Settings className='size-4' aria-hidden='true' />
-                  {t('shell:controlCenter.settings')}
+                  <span className='text-left'>
+                    <span className='block'>{t('shell:controlCenter.settings')}</span>
+                    <span id='control-center-appearance-hint' className='block text-xs text-muted-foreground'>
+                      {t('shell:controlCenter.languageSettingsHint')}
+                    </span>
+                  </span>
                 </Button>
                 <Button variant='ghost' type='button' onClick={() => openSettings('about')}>
                   <Info className='size-4' aria-hidden='true' />

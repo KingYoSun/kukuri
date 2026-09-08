@@ -13,6 +13,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 import { App } from '@/App';
 import { DESKTOP_THEME_STORAGE_KEY } from '@/lib/theme';
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
+import { DESKTOP_LOCALE_STORAGE_KEY } from '@/i18n';
 
 beforeEach(() => {
   Object.defineProperty(window, 'innerWidth', {
@@ -108,6 +109,90 @@ function ageAttestation(attestedVersion: number | null) {
     attestedAt: attestedVersion === null ? null : 1_700_000_000,
   };
 }
+
+test('language selection before consent preserves the age choice without any consent side effects', async () => {
+  const user = userEvent.setup();
+  invokeMock.mockResolvedValue({
+    status: 'consent_required', documents: consentDocuments(null), age_attestation: ageAttestation(null),
+  });
+  render(<App />);
+  const language = await screen.findByRole('combobox', { name: 'Language' });
+  const checkbox = screen.getByRole('checkbox');
+  await user.click(checkbox);
+  await user.selectOptions(language, 'ja');
+  expect(screen.getByRole('heading', { name: 'ご利用の前に' })).toBeVisible();
+  expect(language).toHaveValue('ja');
+  expect(checkbox).toBeChecked();
+  expect(document.documentElement).toHaveAttribute('lang', 'ja');
+  expect(localStorage.getItem(DESKTOP_LOCALE_STORAGE_KEY)).toBe('ja');
+  expect(invokeMock.mock.calls.every(([command]) => command === 'get_desktop_startup_status')).toBe(true);
+  await user.selectOptions(language, 'zh-CN');
+  expect(screen.getByRole('heading', { name: '继续之前' })).toBeVisible();
+  expect(document.documentElement).toHaveAttribute('lang', 'zh-CN');
+  expect(checkbox).toBeChecked();
+  expect(screen.queryByTestId('control-center-trigger')).not.toBeInTheDocument();
+});
+
+test('pending consent fixes the display language and retry sends the newly displayed language', async () => {
+  const user = userEvent.setup();
+  let rejectSave!: (error: Error) => void;
+  invokeMock.mockImplementation((command: string) => {
+    if (command === 'get_desktop_startup_status') return Promise.resolve({
+      status: 'consent_required', documents: consentDocuments(null), age_attestation: ageAttestation(null),
+    });
+    if (command === 'accept_app_consents') return new Promise((_resolve, reject) => { rejectSave = reject; });
+    throw new Error(`Unexpected consent effect: ${command}`);
+  });
+  render(<App />);
+  const language = await screen.findByRole('combobox', { name: 'Language' });
+  await user.selectOptions(language, 'ja');
+  await user.click(screen.getByRole('checkbox'));
+  await user.click(screen.getByRole('button', { name: '同意して続行' }));
+  expect(language).toBeDisabled();
+  await user.selectOptions(language, 'en');
+  expect(language).toHaveValue('ja');
+  expect(invokeMock).toHaveBeenLastCalledWith('accept_app_consents', {
+    documents: [{slug:'terms',version:5},{slug:'privacy',version:5}], language:'ja', ageAttested:true,
+  });
+  rejectSave(new Error('storage unavailable'));
+  await screen.findByText('同意の保存に失敗しました。もう一度お試しください。');
+  expect(language).toBeEnabled();
+  await user.selectOptions(language, 'en');
+  expect(screen.getByRole('checkbox')).toBeChecked();
+  await user.click(screen.getByRole('button', { name: 'Accept and continue' }));
+  expect(invokeMock).toHaveBeenLastCalledWith('accept_app_consents', {
+    documents: [{slug:'terms',version:5},{slug:'privacy',version:5}], language:'en', ageAttested:true,
+  });
+  rejectSave(new Error('retry result'));
+  await screen.findByText('Failed to save your consent. Please try again.');
+  expect(invokeMock.mock.calls.filter(([command]) => command === 'accept_app_consents')).toHaveLength(2);
+});
+
+test('failed language storage leaves a usable translated consent screen and permits retry', async () => {
+  const user = userEvent.setup();
+  invokeMock.mockResolvedValue({
+    status:'consent_required', documents:consentDocuments(null), age_attestation:ageAttestation(null),
+  });
+  render(<App />);
+  const language = await screen.findByRole('combobox', { name:'Language' });
+  const original = Storage.prototype.setItem;
+  const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
+    if (key === DESKTOP_LOCALE_STORAGE_KEY) throw new Error('quota exceeded');
+    original.call(this, key, value);
+  });
+  try {
+    await user.selectOptions(language, 'ja');
+    expect(screen.getByRole('heading', { name:'ご利用の前に' })).toBeVisible();
+    expect(language).toHaveAccessibleDescription(expect.stringContaining('保存できませんでした'));
+    expect(localStorage.getItem(DESKTOP_LOCALE_STORAGE_KEY)).toBeNull();
+  } finally {
+    write.mockRestore();
+  }
+  await user.click(screen.getByRole('button', { name:'言語の保存を再試行' }));
+  expect(localStorage.getItem(DESKTOP_LOCALE_STORAGE_KEY)).toBe('ja');
+  expect(language).toHaveAccessibleDescription('変更はすぐに反映され、この端末に保存されます。');
+  expect(invokeMock.mock.calls.filter(([command]) => command === 'accept_app_consents')).toHaveLength(0);
+});
 
 test('consent explains the missing age confirmation before any action', async () => {
   const user = userEvent.setup();

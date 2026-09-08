@@ -36,6 +36,7 @@ type DesktopShellSettingsDrawerProps = {
   api: DesktopApi;
   onThemeChange: (theme: DesktopTheme) => void;
   onLocaleChange: (locale: SupportedLocale) => void;
+  localeSaveFailed?: boolean;
   syncRoute: SyncRoute;
   setSettingsOpen: (open: boolean, focusTrigger?: boolean) => void;
   viewModels: Pick<
@@ -74,6 +75,7 @@ export function DesktopShellSettingsDrawer({
   api,
   onThemeChange,
   onLocaleChange,
+  localeSaveFailed,
   syncRoute,
   setSettingsOpen,
   viewModels,
@@ -166,6 +168,7 @@ export function DesktopShellSettingsDrawer({
           view={appearancePanelView}
           onThemeChange={onThemeChange}
           onLocaleChange={onLocaleChange}
+          localeSaveFailed={localeSaveFailed}
         />
       ),
     },

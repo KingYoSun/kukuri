@@ -3,8 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 
 import { Card } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Select } from '@/components/ui/select';
+import { LocaleSelect } from '@/components/LocaleSelect';
 
 import { type AppearancePanelView } from './types';
 
@@ -12,17 +11,20 @@ type AppearancePanelProps = {
   view: AppearancePanelView;
   onThemeChange: (theme: AppearancePanelView['selectedTheme']) => void;
   onLocaleChange: (locale: AppearancePanelView['selectedLocale']) => void;
+  localeSaveFailed?: boolean;
 };
 
 export function AppearancePanel({
   view,
   onThemeChange,
   onLocaleChange,
+  localeSaveFailed,
 }: AppearancePanelProps) {
   const { t } = useTranslation(['common', 'settings']);
 
   return (
     <Card className='space-y-4'>
+      <LocaleSelect value={view.selectedLocale} onChange={onLocaleChange} saveFailed={localeSaveFailed} />
       <div
         role='radiogroup'
         aria-label={t('settings:appearance.themeLabel')}
@@ -66,22 +68,6 @@ export function AppearancePanel({
         })}
       </div>
 
-      <Label>
-        <span>{t('settings:appearance.languageLabel')}</span>
-        <Select
-          aria-label={t('settings:appearance.languageLabel')}
-          value={view.selectedLocale}
-          onChange={(event) =>
-            onLocaleChange(event.target.value as AppearancePanelView['selectedLocale'])
-          }
-        >
-          {view.localeOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </Select>
-      </Label>
     </Card>
   );
 }

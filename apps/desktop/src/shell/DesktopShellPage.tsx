@@ -20,6 +20,7 @@ import {
   eligibleTesterFeedbackNodes,
 } from '@/lib/api/communityIndex';
 import i18n from '@/i18n';
+import { changeDesktopLocale } from '@/i18n/changeLocale';
 import { getResolvedLocale } from '@/i18n/format';
 import {
   buildTopicLink,
@@ -114,14 +115,11 @@ export function DesktopShellPage({
   const [clipboardToastId, setClipboardToastId] = useState(0);
   const [indexingTarget, setIndexingTarget] = useState<CommunityIndexingTarget | null>(null);
   const [testerFeedbackOpen, setTesterFeedbackOpen] = useState(false);
+  const [localeSaveFailed, setLocaleSaveFailed] = useState(false);
   const clipboardToastTimeoutRef = useRef<number | null>(null);
   const dialogs = useShellDialogs({
     activePrimarySection: shellChromeState.activePrimarySection,
   });
-
-  useEffect(() => {
-    document.documentElement.lang = locale;
-  }, [locale]);
 
   useEffect(
     () => () => {
@@ -967,8 +965,9 @@ export function DesktopShellPage({
         api={api}
         onThemeChange={onThemeChange}
         onLocaleChange={(nextLocale) => {
-          void i18nInstance.changeLanguage(nextLocale);
+          setLocaleSaveFailed(!changeDesktopLocale(nextLocale));
         }}
+        localeSaveFailed={localeSaveFailed}
         syncRoute={syncRoute}
         setSettingsOpen={setSettingsOpen}
         viewModels={viewModels}

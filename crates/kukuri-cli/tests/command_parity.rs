@@ -110,6 +110,7 @@ fn exclusion_allowed(tauri: &str, kind: &str) -> bool {
                 | "app_update::download_app_update"
                 | "app_update::install_app_update"
                 | "commands::external_url::open_external_url"
+                | "commands::system_locale::get_system_locales"
         ),
         "frontend_state" => matches!(
             tauri,
@@ -158,9 +159,9 @@ fn baseline_inventory_is_classified_once() {
     );
     assert_eq!(
         manifest.scope_revision,
-        "2026-09-07-linux-deb-release-addition-v2"
+        "2026-09-09-917-initial-locale-r1"
     );
-    assert_eq!(manifest.entries.len(), 142);
+    assert_eq!(manifest.entries.len(), 143);
     check_inventory(&registrations(TAURI_SOURCE), &manifest.entries).expect("全入口の分類");
 }
 

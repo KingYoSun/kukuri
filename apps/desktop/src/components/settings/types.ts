@@ -134,16 +134,10 @@ export type AppearanceOptionView = {
   description: string;
 };
 
-export type LocaleOptionView = {
-  value: SupportedLocale;
-  label: string;
-};
-
 export type AppearancePanelView = {
   selectedTheme: DesktopTheme;
   selectedLocale: SupportedLocale;
   options: AppearanceOptionView[];
-  localeOptions: LocaleOptionView[];
 };
 
 export type ReactionsPanelView = {

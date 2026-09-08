@@ -9,6 +9,7 @@ import {
   closestSection,
   openChannelManager,
   openControlCenter,
+  openPublishDialog,
   openSettingsSection,
   renderAtHash,
   selectTimelineView,
@@ -203,6 +204,32 @@ test('settings drawer removes redundant section copy and duplicate headings', as
   ).not.toBeInTheDocument();
   expect(within(drawer).queryByRole('heading', { name: 'Appearance', level: 3 })).not.toBeInTheDocument();
   expect(within(drawer).getByRole('button', { name: 'Close settings' })).toBeInTheDocument();
+});
+
+test('language is discoverable in settings and switching preserves the workspace and draft', async () => {
+  const user = userEvent.setup();
+  render(<App api={createDesktopMockApi()} />);
+  await openPublishDialog(user);
+  const composer = await screen.findByPlaceholderText('Write a post');
+  await user.type(composer, 'Keep this draft');
+  const controlCenter = await openControlCenter(user);
+  const settingsButton = within(controlCenter).getByRole('button', { name:'Settings' });
+  expect(settingsButton).toHaveAccessibleDescription('Language and theme');
+  await user.click(settingsButton);
+  const drawer = screen.getByRole('dialog', { name:'Settings' });
+  expect(within(drawer).getByRole('button', { name:'Language & theme' })).toHaveAttribute('aria-current', 'location');
+  const language = within(drawer).getByRole('combobox', { name:'Language' });
+  const theme = within(drawer).getByRole('radiogroup', { name:'Theme mode' });
+  expect(language.compareDocumentPosition(theme) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  await user.selectOptions(language, 'ja');
+  expect(document.documentElement).toHaveAttribute('lang', 'ja');
+  expect(localStorage.getItem('kukuri.desktop.locale')).toBe('ja');
+  expect(language).toHaveFocus();
+  expect(within(drawer).getByTestId('settings-section-appearance')).toHaveAttribute('aria-current', 'location');
+  expect(composer).toHaveValue('Keep this draft');
+  expect(composer).toBeInTheDocument();
+  await user.click(within(drawer).getByRole('button', { name:'設定を閉じる' }));
+  expect(composer).toHaveValue('Keep this draft');
 });
 
 test('desktop shell can update discovery seeds', async () => {

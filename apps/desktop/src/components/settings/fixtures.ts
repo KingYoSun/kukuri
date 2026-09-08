@@ -27,11 +27,6 @@ export function createAppearancePanelFixture(): AppearancePanelView {
         description: i18n.t('settings:appearance.themeOptions.light.description'),
       },
     ],
-    localeOptions: [
-      { value: 'en', label: i18n.t('settings:appearance.languageOptions.en') },
-      { value: 'ja', label: i18n.t('settings:appearance.languageOptions.ja') },
-      { value: 'zh-CN', label: i18n.t('settings:appearance.languageOptions.zh-CN') },
-    ],
   };
 }
 

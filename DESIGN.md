@@ -88,6 +88,12 @@ false empty、無期限skeleton、取得不能な補助面が主要面を占有�
 
 規約全文を読めるscroll領域と年齢申告・同意・拒否の操作領域を分け、標準の初期画面で主要操作を見える位置に置く。footerは本文やfocusに重ねず、低い高さやzoomではpage scrollへ退避して全文と操作への到達を保つ。保存中は重複操作を防ぎ、失敗時はチェックを保持して明示的に再試行できるようにする。同意・年齢条件や文書の版、runtime開始条件は表示上の都合で変更しない。
 
+言語が未設定ならOSのUI言語、WebViewの言語候補、英語の順で初期言語を決め、最初の同意表示より前に確定する。保存済みの対応言語はOSより優先し、過去の自動決定と明示選択を推測して書き換えない。OS取得の失敗で起動を止めず、遅着した結果で利用者の選択を巻き戻さない。
+
+同意画面のheaderには本文scrollと独立した言語選択を置く。「日本語／English／简体中文」の自称表記と、現在の言語を読めなくても認識できるlabelで選べるようにする。切替は同梱の文書全文と正文／参考訳表示、操作、HTMLの言語へ反映し、それ自体では同意・年齢申告・network開始を行わない。同意保存中は言語を固定し、実際に表示した言語を受諾記録へ渡す。言語の保存失敗ではsession内の表示を維持し、保存の再試行を提示する。
+
+通常画面ではControl Centerの設定入口に言語とテーマを扱うことを示し、「表示と言語」でthemeより先に言語選択を置く。既存の設定section ID、deep link、draft、workspaceと戻る文脈を保持する。
+
 ### 4.4 Community Nodeの初回案内と復旧
 
 app規約・年齢申告・復元gateを終え、設定済みNodeのローカル同意状態をすべて確認でき、どのNodeにも撤回されていない同意記録がない場合は、Nodeが利用者発見・端末接続・必要時の中継を手助けするサーバーであると短いDialogで説明する。「規約を確認する」は設定一覧index 0の既存規約Dialogへ進み、それ自体は同意ではない。既定候補と利用者追加Nodeを区別せず、一覧順を変えない。
@@ -101,6 +107,7 @@ app規約・年齢申告・復元gateを終え、設定済みNodeのローカル
 - user-generated contentはshort、normal、very long、emptyを確認する。日本語、英語、中国語、長いURL、絵文字、技術識別子、改行、添付あり／なしを含める。
 - 長い語や識別子は`overflow-wrap: anywhere`等でcontainmentを守る。省略時は完全値へ到達できる手段を持つ。
 - 日本語localeでは、kukuri、固有名、技術識別子以外の未意図な英語を混ぜない。他localeも同一情報と操作結果を保持する。
+- 言語を読めない利用者の回復導線として、`settings:appearance.languageLabel` の `Language` 併記と `settings:appearance.languageOptions` の各言語の自称表記を許容する。
 - ボタン、pending表示、成功通知、errorで同じ操作名を使う。曖昧な「実行」「失敗」だけで終わらせない。
 - emptyとerrorには、利用者が次に行える具体的な行動を示す。値が空であることと取得できなかったことを区別する。
 - icon-only操作はローカライズ済みの操作名をaccessible nameとtooltipの双方に使い、tooltipをpointer hoverとkeyboard focusの両方で表示する。

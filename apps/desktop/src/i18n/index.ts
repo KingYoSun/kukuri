@@ -1,6 +1,10 @@
 import i18n from 'i18next';
-import LanguageDetector from 'i18next-browser-languagedetector';
 import { initReactI18next } from 'react-i18next';
+import { SUPPORTED_LOCALES } from './locale';
+export {
+  DESKTOP_LOCALE_STORAGE_KEY, SUPPORTED_LOCALES, normalizeSupportedLocale,
+  type SupportedLocale,
+} from './locale';
 
 import commonEn from './locales/en/common.json';
 import shellEn from './locales/en/shell.json';
@@ -29,30 +33,6 @@ import liveZhCn from './locales/zh-CN/live.json';
 import gameZhCn from './locales/zh-CN/game.json';
 import legalZhCn from './locales/zh-CN/legal.json';
 import metaverseZhCn from './locales/zh-CN/metaverse.json';
-
-export const SUPPORTED_LOCALES = ['ja', 'en', 'zh-CN'] as const;
-export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
-
-export const DESKTOP_LOCALE_STORAGE_KEY = 'kukuri.desktop.locale';
-
-export function normalizeSupportedLocale(value: string | null | undefined): SupportedLocale {
-  if (!value) {
-    return 'en';
-  }
-
-  const normalized = value.toLowerCase();
-  if (normalized === 'zh' || normalized.startsWith('zh-')) {
-    return 'zh-CN';
-  }
-  if (normalized.startsWith('ja')) {
-    return 'ja';
-  }
-  if (normalized.startsWith('en')) {
-    return 'en';
-  }
-
-  return 'en';
-}
 
 export const resources = {
   en: {
@@ -92,9 +72,11 @@ export const resources = {
 
 if (!i18n.isInitialized) {
   void i18n
-    .use(LanguageDetector)
     .use(initReactI18next)
     .init({
+      // resourceは全て同梱。import時には検出・保存せず、mainのbootstrapが描画前に決定する。
+      lng: 'en',
+      initAsync: false,
       resources,
       supportedLngs: [...SUPPORTED_LOCALES],
       fallbackLng: {
@@ -109,12 +91,6 @@ if (!i18n.isInitialized) {
       },
       interpolation: {
         escapeValue: false,
-      },
-      detection: {
-        order: ['localStorage', 'navigator'],
-        caches: ['localStorage'],
-        lookupLocalStorage: DESKTOP_LOCALE_STORAGE_KEY,
-        convertDetectedLanguage: normalizeSupportedLocale,
       },
     });
 }

@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { HashRouter } from 'react-router-dom';
 
 import { ConsentGateView } from '@/components/ConsentGateView';
+import { normalizeSupportedLocale } from '@/i18n';
+import { changeDesktopLocale } from '@/i18n/changeLocale';
 import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
 import { DesktopShellPage } from '@/shell/DesktopShellPage';
@@ -41,6 +43,11 @@ import { startCommunityIndexNodePreferencePersistence } from '@/shell/communityI
 type StartupGateState = { status: 'checking' } | DesktopStartupStatus;
 
 export function App(props: AppProps) {
+  const { i18n } = useTranslation();
+  const locale = normalizeSupportedLocale(i18n.resolvedLanguage ?? i18n.language);
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
   const [store] = useState(() => {
     const createdStore = createDesktopShellStore({
       workspaceStorage: window.localStorage,
@@ -190,6 +197,7 @@ function ConsentGate({
   const [error, setError] = useState<string | null>(null);
   const [declined, setDeclined] = useState(false);
   const [ageAttested, setAgeAttested] = useState(false);
+  const [localeSaveFailed, setLocaleSaveFailed] = useState(false);
   // #857: 文書単位判定 — どれか 1 つでも旧版で同意済みなら「更新」通知を出す。
   const updated = documents.some(
     (document) =>
@@ -239,6 +247,12 @@ function ConsentGate({
       accepting={accepting}
       error={error}
       declined={declined}
+      locale={normalizeSupportedLocale(i18n.resolvedLanguage ?? i18n.language)}
+      localeSaveFailed={localeSaveFailed}
+      onLocaleChange={(locale) => {
+        if (acceptInFlight.current) return;
+        setLocaleSaveFailed(!changeDesktopLocale(locale));
+      }}
       onAgeAttestedChange={setAgeAttested}
       onAccept={() => void handleAccept()}
       onDecline={() => setDeclined(true)}

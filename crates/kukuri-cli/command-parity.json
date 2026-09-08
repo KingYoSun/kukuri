@@ -1,8 +1,9 @@
 {
   "baseline": "c4616fc706b94150ac6c2ac06aec68bc1c2b0f5a",
-  "scope_revision": "2026-09-07-linux-deb-release-addition-v2",
+  "scope_revision": "2026-09-09-917-initial-locale-r1",
   "entries": [
     {"tauri":"commands::startup::get_desktop_startup_status","cli":"get_desktop_startup_status","inventory":"INV-1"},
+    {"tauri":"commands::system_locale::get_system_locales","excluded":"os","reason":"#917: desktopの同意前UI言語を選ぶOS local read。UIを持たないCLIの業務commandには追加しない。"},
     {"tauri":"desktop_lifecycle::restart_after_update","excluded":"os","reason":"署名付きGUI更新後にruntimeを停止してアプリを再起動するOS連携。CLI／daemonの更新や再起動は行わない。"},
     {"tauri":"app_update::check_app_update","excluded":"os","reason":"GUI配布形式に対応するTauri updater確認。CLIはpackageの自動更新対象外。"},
     {"tauri":"app_update::download_app_update","excluded":"os","reason":"GUI更新packageの取得・署名検証。CLIはpackageの自動更新対象外。"},

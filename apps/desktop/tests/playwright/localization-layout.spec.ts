@@ -11,21 +11,21 @@ const LOCALES = [
     timeline: 'Timeline',
     controlCenter: 'Control Center',
     settings: 'Settings',
-    appearance: 'Appearance',
+    appearance: 'Language & theme',
   },
   {
     locale: 'ja',
     timeline: 'タイムライン',
     controlCenter: 'コントロールセンター',
     settings: '設定',
-    appearance: '表示',
+    appearance: '表示と言語',
   },
   {
     locale: 'zh-CN',
     timeline: '时间线',
     controlCenter: '控制中心',
     settings: '设置',
-    appearance: '显示',
+    appearance: '外观与语言',
   },
 ] as const;
 

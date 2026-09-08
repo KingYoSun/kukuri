@@ -78,8 +78,8 @@
   },
   "appearance": {
     "darkSelected": "已选择深色主题",
-    "languageHint": "语言更改会立即在此设备生效，并仅保存在本地。",
-    "languageLabel": "语言",
+    "languageHint": "更改立即生效，并保存在此设备上。",
+    "languageLabel": "语言 / Language",
     "languageOptions": {
       "en": "English",
       "ja": "日本語",
@@ -98,7 +98,9 @@
         "label": "浅色"
       }
     },
-    "title": "显示"
+    "title": "显示",
+    "languageSaveFailed": "本次显示语言已更改，但无法保存。请重新选择以重试；重启后可能会恢复原来的语言。",
+    "retryLanguageSave": "重新保存语言"
   },
   "communityNode": {
     "indexNode": {
