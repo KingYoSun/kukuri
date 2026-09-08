@@ -87,10 +87,13 @@ inventory差分: INV-2に理由、footer、文書scroll領域を追加。表示�
 
 - `App.test.tsx`: 理由文を要求する追加testが失敗、既存7testは成功。
 - browser: 1280×800 / en / dark / 初回未申告で同意ボタン下端が4961pxとなり、viewport内の操作到達性assertが失敗。自動scrollで問題を隠さず、操作前の座標を確認した。
-- 変更後: 対象browser 24testと関連Vitest 82testが成功（この後追加したtouchと最終style差分は下記最終validationで確認する）。
+- 変更後: 対象browser 26testと関連Vitest 82testが成功。browserにはtouch操作と独立監査で判明した低い画面の回帰testも含む。
 - 画像・実機条件: [UI review](../ui-reviews/2026-09-09-consent-gate-affordance.md)。報告OS / WebView版はIssue本文からは確定できず、当時の配布版そのものの再試験とは区別する。
 
 ## 検証状況
+
+- 独立監査の初回判定はFAIL（blocker 1件）。390×541 / jaで拒否→チェック→保存失敗→チェック解除すると文書のclientHeightが16pxになるExisting-gap（AC-3/5、INV-2、TR-4/5）を再現した。可読な本文の最小行高を持つgridとpanelのintrinsic minimumへ修正し、noticeが増えた場合にpanelが伸びてpage scrollへ退避する。追加browser testは変更前16pxで失敗、変更後に文書末尾・focus・操作到達を含め成功。変更deltaは再監査対象。
+- Linux visual baseline: [run 34247865615](https://github.com/KingYoSun/kukuri/actions/runs/34247865615)で同意画面2枚を生成。既存16枚とのbyte比較を行い、今回の同意画面だけを追加する。最終CI比較は確認中。
 
 - `cargo xtask check`: 成功。最初のRust追加testのformat差分を整えた後に完走。
 - Rust対象 `cargo test -p kukuri-desktop-runtime consent`: 29件成功。

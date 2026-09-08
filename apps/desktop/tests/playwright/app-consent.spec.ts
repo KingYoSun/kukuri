@@ -107,6 +107,26 @@ test('renewed documents do not require another current age attestation', async (
   expect((await appConsentCalls(page))[0].args?.ageAttested).toBe(false);
 });
 
+test('short windows preserve readable terms after declining and a save error', async ({ page }) => {
+  await seedAppConsent(page, { locale: 'ja', failOnce: true });
+  await page.setViewportSize({ width: 390, height: 541 });
+  await page.goto('/');
+  await page.getByRole('button', { name: copy.ja.decline, exact: true }).click();
+  await page.getByRole('checkbox').check();
+  await page.getByRole('button', { name: copy.ja.accept, exact: true }).click();
+  await expect(page.getByText(copy.ja.error)).toBeVisible();
+  await page.getByRole('checkbox').uncheck();
+  const documents = page.getByRole('region', { name: copy.ja.documents });
+  expect(await documents.evaluate((element) => element.clientHeight)).toBeGreaterThanOrEqual(128);
+  await documents.focus();
+  await page.keyboard.press('Control+End');
+  await expect.poll(() => documents.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight)).toBeLessThanOrEqual(2);
+  await page.getByRole('button', { name: copy.ja.decline, exact: true }).focus();
+  const box = await page.getByRole('button', { name: copy.ja.decline, exact: true }).boundingBox();
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(541);
+});
+
 test('consent reflows at a 200-percent-equivalent viewport with forced colors', async ({ page }) => {
   await seedAppConsent(page, { locale: 'ja' });
   await page.setViewportSize({ width: 640, height: 400 });
