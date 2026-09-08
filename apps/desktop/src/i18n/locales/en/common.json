@@ -51,6 +51,9 @@
     "report": "Report"
   },
   "composer": {
+    "chooseFiles": "Choose files",
+    "noFilesSelected": "No files selected",
+    "selectedFiles": "Attached files: {{count}}",
     "actionTo": "{{action}} to {{destination}}",
     "clearQuoteRepost": "Clear repost comment",
     "draftPreviewAlt": "draft preview {{name}}",

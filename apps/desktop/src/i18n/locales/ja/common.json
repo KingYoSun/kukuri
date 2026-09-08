@@ -51,6 +51,9 @@
     "report": "通報"
   },
   "composer": {
+    "chooseFiles": "ファイルを選択",
+    "noFilesSelected": "ファイル未選択",
+    "selectedFiles": "添付 {{count}} 件",
     "actionTo": "{{destination}}へ{{action}}",
     "clearQuoteRepost": "リポストのコメントをクリア",
     "draftPreviewAlt": "下書きのプレビュー: {{name}}",

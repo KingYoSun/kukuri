@@ -80,6 +80,8 @@ describe('ColumnComposerFooter', () => {
     });
 
     expect(screen.getByRole('button', { name: 'Post' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Choose files' })).toBeDisabled();
+    expect(screen.getByLabelText(/attachment/i)).toBeDisabled();
     await user.keyboard('{Control>}{Enter}{/Control}');
     expect(view.onSubmit).not.toHaveBeenCalled();
   });
