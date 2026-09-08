@@ -1,0 +1,90 @@
+name: Kukuri Refactoring Audit
+
+on:
+  schedule:
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
+    inputs:
+      force_audit:
+        description: '人間判断のtriggerで監査を推奨する'
+        type: boolean
+        default: false
+      reason:
+        description: '手動理由（force_audit=trueでは必須）'
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+# All scheduled/manual/rerun writers share this lock, across baselines.
+concurrency:
+  group: kukuri-refactoring-audit-upsert
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      audit_required: ${{ steps.check.outputs.audit_required }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: scripts/refactoring-audit/requirements.txt
+      - name: Install schema validator
+        run: python -m pip install -r scripts/refactoring-audit/requirements.txt
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.92.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: refactoring-audit-light
+      - name: Read-only recommendation
+        id: check
+        env:
+          AUDIT_FORCE: ${{ inputs.force_audit }}
+          AUDIT_REASON: ${{ inputs.reason }}
+        run: python scripts/refactoring-audit/workflow_check.py
+      - uses: actions/upload-artifact@v4
+        if: steps.check.outputs.audit_required == 'true'
+        with:
+          name: refactoring-audit-result
+          path: ${{ runner.temp }}/refactoring-audit.json
+          if-no-files-found: error
+          retention-days: 7
+
+  upsert:
+    needs: check
+    if: github.ref == 'refs/heads/main' && needs.check.result == 'success' && needs.check.outputs.audit_required == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: scripts/refactoring-audit
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          name: refactoring-audit-result
+          path: ${{ runner.temp }}/refactoring-audit
+      - name: Create or update one open audit issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUDIT_RESULT: ${{ runner.temp }}/refactoring-audit/refactoring-audit.json
+        run: node scripts/refactoring-audit/upsert.mjs "$AUDIT_RESULT"

@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+default = ["harness"]
+harness = ["dep:kukuri-harness", "dep:tokio"]
+
 [dependencies]
 anyhow.workspace = true
 base64.workspace = true
@@ -12,8 +16,8 @@ minisign-verify = "0.2"
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
-tokio.workspace = true
-kukuri-harness = { path = "../crates/harness" }
+tokio = { workspace = true, optional = true }
+kukuri-harness = { path = "../crates/harness", optional = true }
 
 [lints]
 workspace = true

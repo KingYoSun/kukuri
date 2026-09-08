@@ -68,6 +68,51 @@ cargo xtask desktop-visual-test
 
 日常の製品変更は `cargo xtask check` + `cargo xtask test` を起点とし、変更pathと影響に応じた必須項目は [検証マトリクス](../../REFACTORING.md#path別検証マトリクス) で選ぶ。文書の誤字など区分Aは同節の対象確認を使う。UIの証跡は [ADR 0014](../adr/0014-uiux-dev-flow.md)、視覚baselineの更新方法は次節を参照する。
 
+## リファクタリング監査の発火要否（#873）
+
+`cargo xtask refactoring-audit-check` は、監査済みbaseline以後にratchetの新規path登録または許容上限増加があるかを読み取り専用で判定する。判定結果のtrue／falseはともにexit 0で、破損baseline・commit不足・非祖先・git取得失敗はnonzero。既存 `oversized-files` のCIゲートとは別のコマンドである。
+
+Python 3.13とschema validatorを準備する（Linuxでは必要に応じて `python` を `python3` に置き換え、venvを使用する）。判定自身は依存をinstallせず、GitHub APIも呼ばない。
+
+```bash
+python -m pip install -r scripts/refactoring-audit/requirements.txt
+cargo xtask refactoring-audit-check
+cargo xtask refactoring-audit-check --format json --now 2026-09-09T00:00:00Z
+cargo xtask refactoring-audit-check --force-audit --reason "release安定化前の責務確認"
+```
+
+Python実行ファイルは `KUKURI_AUDIT_PYTHON` で指定できる。未指定時はWindowsで `python`、他OSで `python3`。`--repo` はfixture等のGit repository、`--current` は評価するcommit（既定HEAD）、`--now` はtimezone付き評価日時（既定UTC現在時刻）。同じ入力ではJSONとMarkdownは同一になる。入力は引数で渡し、shellのコードとして展開しない。
+
+baselineは評価commit内の `xtask/refactoring-audit-baseline.json` から読み、その `baseline_commit` と評価commitの確定blobを比較する。未commit／未追跡の変更は含めない。schemaとcommit祖先関係、保存した集合／digest、ratchet上限、計測scope付きmetricを検証する。baselineを検証するために `audit_start_commit` までの履歴も必要となる。shallow cloneで履歴不足ならfetchして再実行し、比較起点を動かして回避しない。
+
+発火は `ratchet_new_paths > 0 OR ratchet_increased_caps > 0` のみ。縮小・削除は発火せず、実測行数と許容上限を区別する。commit数・変更path数・hotspot・経過日は観測専用で自動閾値を持たない。変更path数は比較起点以後の履歴で一度でも変更された手書きpathの集合、hotspotはpathごとの変更commit数（mergeはfirst parentとの差分、rename追跡なし、binaryはpath変更として数える）。手書きpathの対象はbaselineのextension／除外設定に従う。
+
+週次実行は `Kukuri Refactoring Audit`、毎週月曜00:00 UTC（日本時間09:00）。手動実行はmainを選び、必要なら `force_audit=true` と空白だけではない `reason` を指定する。forceでもbaseline異常を迂回しない。release／milestone／変更摩擦／互換経路のsunsetなど、人間判断の項目はsummaryと監査Issueに残す。
+
+workflowは以下の軽量経路を使い、harnessと製品crateをbuildしない。標準xtaskではharness featureが既定有効で、既存scenario等の挙動は維持する。
+
+```bash
+cargo run --locked --quiet -p xtask --no-default-features -- refactoring-audit-check
+```
+
+false時はsummaryだけで終わり、GitHub Issueへのwriteは0件。true時だけ専用jobがOpen Issueの固定marker `kukuri-refactoring-audit:v1` を全ページ探索し、一件を作成または最新の機械管理領域だけ更新する。人間が書いたscope／AC／判断本文は更新対象にしない。全schedule／manual／rerunは共通concurrency groupで直列化するため、Issue write scriptを別経路で同時実行しない。
+
+検索／API失敗は新規作成で回避しない。応答喪失時はActionsログとOpen Issueを確認してworkflowを再実行し、既存markerへ収束させる。同じmarkerのOpen Issueが複数、または管理領域が欠落／重複した場合はwriteせず失敗する。担当者が履歴・scopeを確認して正しい一件と管理領域を確定してから再実行する。既存IssueのClose／削除／scope拡張をworkflowに任せない。
+
+baseline更新は監査完了後の独立review付きPRだけで行う。比較起点・監査日・採用signal・根拠・集合／metric・完了証拠を再計測して更新し、schema／意味検証の成功とtracking IssueのCompleteを確認する。baseline公開merge SHAと製品比較起点は分けて記録し、定期checkの成功だけでbaselineを前進させない。初期入力は [#872完了記録](../progress/2026-09-08-872-refactoring-campaign-phase-4.md)、実装と証跡は [#873作業記録](../progress/2026-09-08-873-refactoring-audit-trigger.md)。
+
+変更時のtargeted validation（週次runでは実行しない）:
+
+```bash
+python -m unittest discover -s scripts/refactoring-audit -p 'test_*.py'
+node --test scripts/refactoring-audit/upsert.test.mjs
+cargo test --locked -p xtask --no-default-features
+cargo clippy --locked -p xtask --all-targets --no-default-features -- -D warnings
+actionlint .github/workflows/kukuri-refactoring-audit.yml .github/workflows/kukuri-refactoring-audit-test.yml
+```
+
+`KUKURI_AUDIT_XTASK` にbuild済みxtask実行ファイルの絶対pathを指定すると、PythonのCLI fixture testは実xtask経由で終了コードと出力を検証する。`Kukuri Refactoring Audit Tests` はこの経路と実repository baselineも検証する。基準値・workflowだけの変更でもこの専用test workflowが動く。
+
 ## 視覚回帰 (visual regression)
 
 WP-H8（CSS 改名・整理）の安全網として、主要 14 サーフェスを Playwright `toHaveScreenshot` で撮って baseline と比較する（`apps/desktop/tests/playwright/visual.spec.ts`）。

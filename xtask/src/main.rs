@@ -9,8 +9,10 @@ mod ipc;
 mod operator_neutrality;
 mod oversized;
 mod packages;
+mod refactoring_audit;
 mod release;
 mod rust;
+#[cfg(feature = "harness")]
 mod scenario;
 
 pub(crate) use assets::*;
@@ -23,6 +25,7 @@ pub(crate) use oversized::*;
 pub(crate) use packages::*;
 pub(crate) use release::*;
 pub(crate) use rust::*;
+#[cfg(feature = "harness")]
 pub(crate) use scenario::*;
 
 fn main() -> Result<()> {
@@ -67,6 +70,7 @@ fn main() -> Result<()> {
             oversized_files(update_baseline)
         }
         "operator-neutrality-check" => operator_neutrality_check(),
+        "refactoring-audit-check" => refactoring_audit::refactoring_audit_check(args),
         "ipc-types" => {
             let check = match args.next().as_deref() {
                 None => false,
@@ -78,11 +82,15 @@ fn main() -> Result<()> {
             };
             ipc_types(check)
         }
+        #[cfg(feature = "harness")]
         "e2e-smoke" => e2e_smoke("desktop_smoke_post_persist"),
+        #[cfg(feature = "harness")]
         "scenario" => {
             let name = args.next().context("scenario name is required")?;
             scenario(name.as_str())
         }
+        #[cfg(not(feature = "harness"))]
+        "e2e-smoke" | "scenario" => bail!("this command requires the default harness feature"),
         _ => {
             print_usage();
             bail!("unsupported xtask command: {command}");
@@ -115,6 +123,6 @@ fn doctor() -> Result<()> {
 
 fn print_usage() {
     eprintln!(
-        "usage: cargo xtask <doctor|check|test|rust-check|rust-test|app-api-slow-test|tauri-check|desktop-lint|desktop-test|desktop-storybook|desktop-browser-test|desktop-visual-test|desktop-ui-check|cn-check|cn-test|cn-e2e|desktop-package|asset-check|release-check [tag]|oversized-files [--update-baseline]|operator-neutrality-check|ipc-types [--check]|e2e-smoke|scenario <name>>"
+        "usage: cargo xtask <doctor|check|test|rust-check|rust-test|app-api-slow-test|tauri-check|desktop-lint|desktop-test|desktop-storybook|desktop-browser-test|desktop-visual-test|desktop-ui-check|cn-check|cn-test|cn-e2e|desktop-package|asset-check|release-check [tag]|oversized-files [--update-baseline]|operator-neutrality-check|refactoring-audit-check [--help]|ipc-types [--check]|e2e-smoke|scenario <name>>"
     );
 }

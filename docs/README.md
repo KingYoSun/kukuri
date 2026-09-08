@@ -42,7 +42,7 @@
 - Issueの起票、scope固定、計画、実装、PR、独立監査、Close/Reopen: `docs/runbooks/issue-lifecycle.md`
 - 実装計画の要否、粒度と記録形式: root `PLANS.md`
 - path別validationとリファクタリング境界: root `REFACTORING.md`
-- 初回campaignの完了記録: `docs/progress/2026-09-08-872-refactoring-campaign-phase-4.md`。比較起点と初期signalは `xtask/refactoring-audit-baseline.json`、形状は `docs/schemas/refactoring-audit-baseline.schema.json`。継続checkの実装・有効化は #873 が所有する。
+- 初回campaignの完了記録: `docs/progress/2026-09-08-872-refactoring-campaign-phase-4.md`。比較起点と初期signalは `xtask/refactoring-audit-baseline.json`、形状は `docs/schemas/refactoring-audit-baseline.schema.json`。継続checkは `cargo xtask refactoring-audit-check`、週次／manualの発火判定と監査Issueの集約は `Kukuri Refactoring Audit`。実行・復旧・review付きbaseline更新は `docs/runbooks/dev.md` の「リファクタリング監査の発火要否」、#873の証跡は `docs/progress/2026-09-08-873-refactoring-audit-trigger.md`。
 - GitHub Issue / PRは追跡面。既存仕様と今回の変更要求の区別は次節に従う。
 
 ## 正本と変更要求
