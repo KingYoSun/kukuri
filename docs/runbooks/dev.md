@@ -118,6 +118,7 @@ actionlint .github/workflows/kukuri-refactoring-audit.yml .github/workflows/kuku
 WP-H8（CSS 改名・整理）の安全網として、主要 14 サーフェスを Playwright `toHaveScreenshot` で撮って baseline と比較する（`apps/desktop/tests/playwright/visual.spec.ts`）。
 
 - **baseline は Linux / Chromium 固定**。`apps/desktop/tests/playwright/__screenshots__/visual.spec.ts/*.png` に commit されている。フォントは非同梱（システムフォント依存）のため Windows 開発機と CI の pixel 一致は構造的に不可能。
+- 日本語・中国語を欠落glyphで比較しないよう、比較jobとbaseline生成jobの両方へ `fonts-noto-cjk` をinstallする。ローカルLinuxで再生成する場合も同じfontを用意し、「□」になった画像を正しいbaselineとして採用しない。
 - **ローカル（非 CI）は比較 skip**。`playwright.config.ts` の `ignoreSnapshots: !process.env.CI` により、Windows 等では `cargo xtask desktop-visual-test` / `desktop-ui-check` は到達操作の smoke としてのみ流れ、比較は行わない（従来どおり green）。
 - **CI（`linux-desktop-browser`）が比較を強制**。CSS 変更で見た目が変わると視覚 step が赤くなる。
 - 決定性のための固定: `timezoneId: 'UTC'`（絶対時刻表示が TZ 依存）、`animations: 'disabled'`、`maxDiffPixelRatio: 0.01`（AA 微差を吸収）。

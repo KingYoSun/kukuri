@@ -5,7 +5,7 @@
 - Issue: [#917](https://github.com/KingYoSun/kukuri/issues/917)
 - Scope revision: `917-r1`（2026-09-09承認・固定）、リスク区分C。
 - 調査基準commit: `62b75baeeb40c62d9ee4afedee4e584b4f20c14a`。
-- 判定: 実装・対象検証済み。全体検証、独立監査、CI、merge確認は進行中。
+- 判定: 実装と[独立監査](2026-09-09-917-independent-audit.md)はPASS。最終CI・mergeの現在判定は [PR #949](https://github.com/KingYoSun/kukuri/pull/949) に集約する。
 - 詳細な固定AC／INVARはIssue本文。本書は実装・判断・証跡の記録であり、要件を別管理しない。
 
 ## 問題と変更
@@ -72,9 +72,13 @@ getterはAppHandle／DesktopStateを受け取らず、OS言語以外の環境値
 - Linux browserは118件中117件が成功し、英語の長い設定名だけが既存の折返し禁止testで失敗した。名前を `Language & theme` に短縮し、全3言語のlocalization16件が成功した。
 - Linux visual18件を確認。意図した同意2枚・設定3枚を更新。既存の比較許容差内だと旧画像が残るため、設定3枚は `--update-snapshots=all` で実際の新しい配置を固定した。画像更新だけでなく表示名・言語とthemeの順序をassertする。
 - Storybook build成功、同意8stateと表示設定2state × 3locale × 2themeのa11y60条件で違反0。
+- Windows browserの最終全体実行は118件成功。言語Select→Tab→本文領域→Shift+Tab→Selectへ戻り、矢印／Homeで選択してfocusを維持する6条件も成功し、同意IPCは0回。[keyboard証跡](../ui-reviews/assets/issue-917-keyboard.json)
 - Tauri生成unit exeで `system_locale` 2件、`invoke_gate` 4件、`app_consent` 4件、`restore` 2件成功（filter間の重複あり）。Windowsの生成test／隔離host exeに必要なCommon Controls v6 manifestを検証環境だけで付加した。製品のtest assertionや同意guardは変更していない。
-- 全Vitestの初回は1302件中1300件成功、既存media／route testの2件がtimeout。worker数を4にした全体再実行ではその2件を含む1301件が成功し、別の既存DM refresh testだけがtimeout。timeoutした3suiteをworker数1で個別再実行し30件すべて成功した。timeout値やassertionは緩めていない。Rust全体・tauri-check／永続smokeは実行中。
+- 全Vitestの初回は1302件中1300件成功、既存media／route testの2件がtimeout。worker数を4にした全体再実行ではその2件を含む1301件が成功し、別の既存DM refresh testだけがtimeout。timeoutした3suiteをworker数1で個別再実行し30件すべて成功した。timeout値やassertionは緩めていない。
 - Rust check成功。最初のRust testはWindowsのlibrary探索でvcruntime.libが見つからず実行前に失敗し、MSVCとWindows SDKのLIBを明示した再実行へ進めた。
+- GUI／CLI対応表の同期後、`command_parity` 5件と全Rust test（887件、harness22件、doctest）が成功。CIのRust整形チェックで対応表testのassert_eq折返しが検出され、rustfmtで補正した。
+- `cargo xtask tauri-check`、`cargo xtask e2e-smoke`（post永続往復6step）、`cargo fmt --all --check`、`cargo xtask oversized-files`、`git diff --check` が成功。Windowsのvisual smoke18件も成功し、pixel比較の証拠は別のLinux実行で確認した。
+- 最初のCIは日本語の狭幅snapshotだけで文字が「□」になった。CJK fontがないCI画像をbaselineには採用せず、`kukuri-fast.yml` のbrowser jobと `kukuri-visual-baseline.yml` の生成jobに `fonts-noto-cjk` を追加した。Noto Sans CJK JPに揃えた隔離Linuxで対象1枚を再生成し、visual18件が成功した。比較許容差は変更していない。workflowはactionlint成功。
 
 ## Native確認と限界
 
@@ -86,4 +90,4 @@ Windows WebView2とLinux WebKitGTK2.50.4（Ubuntu22.04、Xvfb）で初回日本�
 
 ## 次の工程
 
-未完了のvalidationを整理し、固定PR headの独立監査を受ける。必須CIと監査PASSの後にmergeし、merge treeと監査対象の一致を確認してからIssueをCloseする。監査／CIの現在判定はPRとIssueに集約する。
+固定headの独立監査はPASS。整形・CI font・記録差分を再監査し、必須CIと監査PASSの後にmergeする。merge treeと監査対象の一致を確認してからIssueをCloseする。差分監査／CI／mergeの現在判定はPRとIssueに集約する。

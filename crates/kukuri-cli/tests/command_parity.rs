@@ -157,10 +157,7 @@ fn baseline_inventory_is_classified_once() {
         manifest.baseline,
         "c4616fc706b94150ac6c2ac06aec68bc1c2b0f5a"
     );
-    assert_eq!(
-        manifest.scope_revision,
-        "2026-09-09-917-initial-locale-r1"
-    );
+    assert_eq!(manifest.scope_revision, "2026-09-09-917-initial-locale-r1");
     assert_eq!(manifest.entries.len(), 143);
     check_inventory(&registrations(TAURI_SOURCE), &manifest.entries).expect("全入口の分類");
 }
