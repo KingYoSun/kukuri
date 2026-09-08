@@ -8,6 +8,8 @@
     "declineNotice": "同意されない場合、kukuri を利用できません。アプリを終了してください。",
     "accepting": "適用しています…",
     "acceptError": "同意の保存に失敗しました。もう一度お試しください。",
+    "ageAttestationRequired": "続行するには、18歳以上であることをチェックしてください。",
+    "documentsLabel": "利用規約とプライバシーポリシー",
     "ageAttestationLabel": "私は18歳以上です。"
   },
   "about": {

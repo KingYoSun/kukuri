@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { HashRouter } from 'react-router-dom';
 
-import { LegalDocumentView } from '@/components/LegalDocumentView';
+import { ConsentGateView } from '@/components/ConsentGateView';
 import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
 import { DesktopShellPage } from '@/shell/DesktopShellPage';
@@ -184,8 +184,9 @@ function ConsentGate({
   ageAttestation: AgeAttestationStatus;
   onAccepted: (status: DesktopStartupStatus) => void;
 }) {
-  const { t, i18n } = useTranslation(['common', 'legal']);
+  const { i18n } = useTranslation('legal');
   const [accepting, setAccepting] = useState(false);
+  const acceptInFlight = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [declined, setDeclined] = useState(false);
   const [ageAttested, setAgeAttested] = useState(false);
@@ -200,6 +201,8 @@ function ConsentGate({
     ageAttestation.attestedVersion < ageAttestation.currentVersion;
 
   async function handleAccept() {
+    if (acceptInFlight.current || (attestationRequired && !ageAttested)) return;
+    acceptInFlight.current = true;
     setAccepting(true);
     setError(null);
     try {
@@ -222,81 +225,24 @@ function ConsentGate({
     } catch (acceptError) {
       setError(acceptError instanceof Error ? acceptError.message : String(acceptError));
     } finally {
+      acceptInFlight.current = false;
       setAccepting(false);
     }
   }
 
   return (
-    <main className='startup-error-screen'>
-      <section className='startup-error-panel max-h-[90vh] overflow-y-auto' aria-live='polite'>
-        <div className='space-y-4'>
-          <div className='space-y-2'>
-            <h1 className='text-xl font-semibold text-foreground'>{t('legal:gate.title')}</h1>
-            <p className='text-sm leading-6 text-[var(--muted-foreground)]'>
-              {t('legal:gate.intro')}
-            </p>
-          </div>
-          {updated ? <Notice tone='warning'>{t('legal:gate.updatedNotice')}</Notice> : null}
-          <LegalDocumentView
-            documentVersions={Object.fromEntries(
-              documents.map((document) => [document.slug, document.currentVersion])
-            )}
-            documentMetadata={Object.fromEntries(
-              documents.map((document) => [
-                document.slug,
-                {
-                  effectiveDate: document.effectiveDate,
-                  authoritativeLanguage: document.authoritativeLanguage,
-                  materialChange: document.materialChange,
-                  controllerName: document.controllerName,
-                  contact: document.contact,
-                },
-              ])
-            )}
-            compact
-          />
-          {attestationRequired ? (
-            <label className='flex items-start gap-2 text-sm leading-6 text-foreground'>
-              <input
-                type='checkbox'
-                className='mt-1'
-                checked={ageAttested}
-                disabled={accepting}
-                onChange={(event) => setAgeAttested(event.target.checked)}
-                data-testid='age-attestation-checkbox'
-              />
-              <span>{t('legal:gate.ageAttestationLabel')}</span>
-            </label>
-          ) : null}
-          {error ? (
-            <Notice tone='destructive'>
-              <div className='space-y-1'>
-                <p>{t('legal:gate.acceptError')}</p>
-                <small className='font-mono'>{error}</small>
-              </div>
-            </Notice>
-          ) : null}
-          {declined ? <Notice tone='destructive'>{t('legal:gate.declineNotice')}</Notice> : null}
-          <div className='startup-error-actions'>
-            <Button
-              type='button'
-              disabled={accepting || (attestationRequired && !ageAttested)}
-              onClick={() => void handleAccept()}
-            >
-              {accepting ? t('legal:gate.accepting') : t('legal:gate.accept')}
-            </Button>
-            <Button
-              type='button'
-              variant='secondary'
-              disabled={accepting}
-              onClick={() => setDeclined(true)}
-            >
-              {t('legal:gate.decline')}
-            </Button>
-          </div>
-        </div>
-      </section>
-    </main>
+    <ConsentGateView
+      documents={documents}
+      updated={updated}
+      attestationRequired={attestationRequired}
+      ageAttested={ageAttested}
+      accepting={accepting}
+      error={error}
+      declined={declined}
+      onAgeAttestedChange={setAgeAttested}
+      onAccept={() => void handleAccept()}
+      onDecline={() => setDeclined(true)}
+    />
   );
 }
 

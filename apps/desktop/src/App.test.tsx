@@ -109,6 +109,99 @@ function ageAttestation(attestedVersion: number | null) {
   };
 }
 
+test('consent explains the missing age confirmation before any action', async () => {
+  const user = userEvent.setup();
+  invokeMock.mockResolvedValue({
+    status: 'consent_required', documents: consentDocuments(null),
+    age_attestation: ageAttestation(null),
+  });
+  render(<App />);
+  const checkbox = await screen.findByRole('checkbox');
+  const accept = screen.getByRole('button', { name: 'Accept and continue' });
+  const reason = 'To continue, check the box to confirm that you are 18 or older.';
+  expect(screen.getByText(reason)).toBeVisible();
+  expect(checkbox).toHaveAccessibleDescription(reason);
+  expect(accept).toHaveAccessibleDescription(reason);
+  expect(accept).toBeDisabled();
+  await user.click(checkbox);
+  expect(accept).toBeEnabled();
+  expect(screen.queryByText(reason)).not.toBeInTheDocument();
+  await user.click(checkbox);
+  expect(accept).toBeDisabled();
+  expect(screen.getByText(reason)).toBeVisible();
+  await user.click(screen.getByRole('button', { name: 'Decline' }));
+  expect(invokeMock.mock.calls.filter(([command]) => command === 'accept_app_consents')).toHaveLength(0);
+});
+
+test('consent keeps the choice after a save error and suppresses repeated pending submissions', async () => {
+  const user = userEvent.setup();
+  let rejectSave!: (error: Error) => void;
+  invokeMock.mockImplementation((command: string) => {
+    if (command === 'get_desktop_startup_status') return Promise.resolve({
+      status: 'consent_required', documents: consentDocuments(null),
+      age_attestation: ageAttestation(null),
+    });
+    if (command === 'accept_app_consents') return new Promise((_resolve, reject) => { rejectSave = reject; });
+    throw new Error(`Unexpected command before consent: ${command}`);
+  });
+  render(<App />);
+  const checkbox = await screen.findByRole('checkbox');
+  await user.click(checkbox);
+  await user.dblClick(screen.getByRole('button', { name: 'Accept and continue' }));
+  expect(screen.getByRole('button', { name: 'Applying…' })).toBeDisabled();
+  expect(checkbox).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Decline' })).toBeDisabled();
+  expect(invokeMock.mock.calls.filter(([command]) => command === 'accept_app_consents')).toHaveLength(1);
+  rejectSave(new Error('storage unavailable'));
+  expect(await screen.findByText('Failed to save your consent. Please try again.')).toBeVisible();
+  expect(checkbox).toBeChecked();
+  expect(checkbox).toBeEnabled();
+  expect(screen.queryByTestId('control-center-trigger')).not.toBeInTheDocument();
+  // 非readyの結果では復元frontend stateの取得も行わない。
+  invokeMock.mockResolvedValueOnce({ status: 'initializing' });
+  await user.click(screen.getByRole('button', { name: 'Accept and continue' }));
+  expect(await screen.findByText('Checking startup status…')).toBeVisible();
+  expect(invokeMock.mock.calls.filter(([command]) => command === 'accept_app_consents')).toHaveLength(2);
+  expect(invokeMock).not.toHaveBeenCalledWith('get_pending_device_restore_frontend_state', undefined);
+});
+
+test('an outdated age attestation needs a new explicit choice, and remount discards an unsaved choice', async () => {
+  const user = userEvent.setup();
+  invokeMock.mockResolvedValue({
+    status: 'consent_required', documents: consentDocuments(4), age_attestation: ageAttestation(0),
+  });
+  const first = render(<App />);
+  await user.click(await screen.findByRole('checkbox'));
+  expect(screen.getByRole('button', { name: 'Accept and continue' })).toBeEnabled();
+  first.unmount();
+  render(<App />);
+  expect(await screen.findByRole('checkbox')).not.toBeChecked();
+  expect(screen.getByRole('button', { name: 'Accept and continue' })).toBeDisabled();
+  expect(invokeMock.mock.calls.filter(([command]) => command === 'accept_app_consents')).toHaveLength(0);
+});
+
+test('a ready consent result applies pending restore frontend state before opening the shell', async () => {
+  const user = userEvent.setup();
+  let resolveRestore!: (value: null) => void;
+  invokeMock.mockImplementation((command: string) => {
+    if (command === 'get_desktop_startup_status') return Promise.resolve({
+      status: 'consent_required', documents: consentDocuments(null), age_attestation: ageAttestation(null),
+    });
+    if (command === 'accept_app_consents') return Promise.resolve({ status: 'ready' });
+    if (command === 'get_pending_device_restore_frontend_state') return new Promise((resolve) => { resolveRestore = resolve; });
+    throw new Error(`Unexpected command before restore: ${command}`);
+  });
+  render(<App />);
+  await user.click(await screen.findByRole('checkbox'));
+  expect(invokeMock).not.toHaveBeenCalledWith('get_pending_device_restore_frontend_state', undefined);
+  await user.click(screen.getByRole('button', { name: 'Accept and continue' }));
+  await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('get_pending_device_restore_frontend_state', undefined));
+  expect(screen.queryByTestId('control-center-trigger')).not.toBeInTheDocument();
+  window.__KUKURI_DESKTOP__ = createDesktopMockApi();
+  resolveRestore(null);
+  expect(await screen.findByTestId('control-center-trigger')).toBeInTheDocument();
+});
+
 test('desktop app blocks startup until app-level legal consent is accepted', async () => {
   const user = userEvent.setup();
   invokeMock.mockResolvedValueOnce({

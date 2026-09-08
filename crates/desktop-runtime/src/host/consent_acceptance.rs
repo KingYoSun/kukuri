@@ -152,4 +152,40 @@ mod tests {
             assert!(require_consent_acceptance_state(&status).is_err());
         }
     }
+
+    #[test]
+    fn missing_age_attestation_does_not_create_or_mutate_consent_file() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let db_path = directory.path().join("kukuri.db");
+        let consent_path = crate::host::app_consent_path(&db_path);
+        let documents = crate::host::APP_LEGAL_DOCUMENTS
+            .iter()
+            .map(|(slug, version)| AcceptedAppConsentDocument {
+                slug: (*slug).to_string(),
+                version: *version,
+            })
+            .collect::<Vec<_>>();
+        validate_app_consent_documents(&documents).expect("current documents");
+        assert!(record_app_consents(&db_path, &documents, "en", false, "test").is_err());
+        assert!(!consent_path.exists());
+
+        // 壊れた保存状態でも失敗前に書き直さない。
+        let original = b"invalid consent record";
+        std::fs::write(&consent_path, original).expect("write fixture");
+        assert!(record_app_consents(&db_path, &documents, "en", false, "test").is_err());
+        assert_eq!(
+            std::fs::read(&consent_path).expect("read fixture"),
+            original
+        );
+
+        record_app_consents(&db_path, &documents, "en", true, "test")
+            .expect("explicit attestation");
+        let saved = app_consent_status(&db_path);
+        assert!(saved.satisfied);
+        let attested_at = saved.age_attestation.attested_at;
+        record_app_consents(&db_path, &documents, "ja", false, "test").expect("renewed consent");
+        let renewed = app_consent_status(&db_path);
+        assert!(renewed.satisfied);
+        assert_eq!(renewed.age_attestation.attested_at, attested_at);
+    }
 }
