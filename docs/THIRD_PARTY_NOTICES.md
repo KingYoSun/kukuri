@@ -1133,7 +1133,7 @@ Total packages: 1074
 
 ## Desktop npm packages
 
-Total packages: 137
+Total packages: 136
 
 | Package | Version | License | Source |
 | --- | --- | --- | --- |
@@ -1224,7 +1224,6 @@ Total packages: 137
 | hls.js | 1.6.18 | Apache-2.0 | https://github.com/video-dev/hls.js |
 | html-parse-stringify | 4.0.1 | MIT | https://github.com/i18next/html-parse-stringify |
 | i18next | 26.3.6 | MIT | https://www.i18next.com |
-| i18next-browser-languagedetector | 8.2.1 | MIT | https://github.com/i18next/i18next-browser-languageDetector |
 | ieee754 | 1.2.1 | BSD-3-Clause | https://github.com/feross/ieee754#readme |
 | immediate | 3.0.6 | MIT | https://github.com/calvinmetcalf/immediate#readme |
 | is-promise | 2.2.2 | MIT | https://github.com/then/is-promise#readme |
