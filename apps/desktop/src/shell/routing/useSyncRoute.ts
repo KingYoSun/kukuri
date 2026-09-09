@@ -3,6 +3,7 @@ import type { NavigateFunction } from 'react-router-dom';
 
 import {
   buildShellUrl,
+  parseHashRouteLocation,
   type DesktopShellRouteOverrides,
   type HashRouteLocation,
 } from '@/shell/routes';
@@ -94,7 +95,15 @@ export function useSyncRoute({
         settingsSection: nextSettingsSection,
         timelineView: nextTimelineView,
       });
-      const currentUrl = `${resolvedRouteLocation.pathname}${resolvedRouteLocation.search}`;
+      // HashRouter は hash を同期更新し、location の render は後から追いつく。
+      // A → B → A の再選択を古い render の A と比較すると、最後の navigate を落とす。
+      const renderedUrl = `${resolvedRouteLocation.pathname}${resolvedRouteLocation.search}`;
+      const currentLocation = typeof window !== 'undefined' && window.location.hash
+        ? parseHashRouteLocation(window.location.hash)
+        : null;
+      const currentUrl = currentLocation
+        ? `${currentLocation.pathname}${currentLocation.search}`
+        : renderedUrl;
 
       if (currentUrl !== nextUrl) {
         pendingRouteUrlRef.current = nextUrl;
@@ -102,7 +111,8 @@ export function useSyncRoute({
         return;
       }
 
-      pendingRouteUrlRef.current = null;
+      // 同じ遷移先への再要求は history を増やさず、router の観測までは pending を保つ。
+      pendingRouteUrlRef.current = renderedUrl === nextUrl ? null : nextUrl;
     },
     [
       navigate,

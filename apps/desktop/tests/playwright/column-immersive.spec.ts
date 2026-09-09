@@ -192,6 +192,105 @@ test('offscreen Metaverse and Live Columns suspend rendering and resume without 
   await expect(live).toHaveAttribute('data-runtime-suspended', 'true');
 });
 
+test('rapid header reselection keeps Metaverse active while the previous route is pending', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 900, height: 900 });
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
+  await addColumn(page, 'Add Live Column');
+  await addColumn(page, 'Add Metaverse Column');
+  const { metaverse, stage } = await createMetaverseRoom(page);
+  const live = page.getByRole('region', { name: /^Live Column/ });
+  await expect(activeColumn(page, 'Metaverse')).toBeVisible();
+  await expect(page).toHaveURL(/#\/game\?/);
+
+  const sequence = await page.evaluate(async ({ liveId, metaverseId }) => {
+    const header = (id: string) => document.querySelector<HTMLElement>(
+      `[data-column-id="${CSS.escape(id)}"] .shell-column-header h2`
+    )!;
+    const snapshot = () => ({
+      hash: window.location.hash,
+      active: document.querySelector<HTMLElement>('[data-column-id][data-active]')?.dataset.columnId,
+      focus: document.activeElement?.closest<HTMLElement>('[data-column-id]')?.dataset.columnId,
+    });
+    const before = snapshot();
+    header(liveId).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    // external store の更新を反映し、router の transition render より先に選び直す。
+    await Promise.resolve();
+    const afterLive = snapshot();
+    header(metaverseId).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await Promise.resolve();
+    return { before, afterLive, afterMetaverse: snapshot() };
+  }, {
+    liveId: (await live.getAttribute('data-column-id'))!,
+    metaverseId: (await metaverse.getAttribute('data-column-id'))!,
+  });
+  await testInfo.attach('activation-sequence', {
+    body: JSON.stringify(sequence, null, 2),
+    contentType: 'application/json',
+  });
+  expect(sequence.afterLive.active).toBe(await live.getAttribute('data-column-id'));
+  expect(sequence.afterMetaverse.active).toBe(await metaverse.getAttribute('data-column-id'));
+  expect(sequence.afterMetaverse.hash).toBe(sequence.before.hash);
+  // 選択・URL・runtime・scene を同時点で観測し、一瞬の復帰だけを成功としない。
+  const liveId = (await live.getAttribute('data-column-id'))!;
+  await expect.poll(() => metaverse.evaluate((element, streamId) => ({
+    active: element.getAttribute('data-active') === 'true',
+    hash: window.location.hash,
+    suspended: element.getAttribute('data-runtime-suspended') === 'true',
+    suspendedScenes: element.querySelectorAll('[data-render-suspended="true"]').length,
+    canvases: element.querySelectorAll('canvas').length,
+    liveSuspended: document.querySelector(`[data-column-id="${CSS.escape(streamId)}"]`)
+      ?.getAttribute('data-runtime-suspended') === 'true',
+  }), liveId)).toEqual({
+    active: true, hash: sequence.before.hash, suspended: false,
+    suspendedScenes: 0, canvases: 1, liveSuspended: true,
+  });
+  await expect(stage).toHaveCount(1);
+});
+
+test('pointer selection and history preserve joined Live and hosted Metaverse sessions', async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 });
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
+  await addColumn(page, 'Add Live Column');
+  const live = page.getByRole('region', { name: /^Live Column/ });
+  await live.getByRole('button', { name: 'Start Live', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Start Live' });
+  await dialog.getByLabel('Live Title').fill('Column session continuity');
+  await dialog.getByRole('button', { name: 'Start Live', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  const liveSession = live.locator('[data-live-session-id]').filter({ hasText: 'Column session continuity' });
+  await liveSession.getByRole('button', { name: 'Join', exact: true }).click();
+  await expect(liveSession.getByRole('button', { name: 'Leave', exact: true })).toBeEnabled();
+  const sessionElement = await liveSession.elementHandle();
+
+  await addColumn(page, 'Add Metaverse Column');
+  const { metaverse, stage } = await createMetaverseRoom(page);
+  const stageElement = await stage.elementHandle();
+  const canvasElement = await stage.locator('canvas').elementHandle();
+
+  // 実 pointer の default focus／scroll と、正当な後続の履歴操作も維持する。
+  await live.locator('.shell-column-header h2').click();
+  await expect(activeColumn(page, 'Live')).toBeVisible();
+  await expect(metaverse).toHaveAttribute('data-runtime-suspended', 'true');
+  await metaverse.locator('.shell-column-header h2').click();
+  await expect(activeColumn(page, 'Metaverse')).toBeVisible();
+  await expect(stage.locator('[data-render-suspended="true"]')).toHaveCount(0);
+  await expect(live).toHaveAttribute('data-runtime-suspended', 'true');
+  await page.goBack();
+  await expect(activeColumn(page, 'Live')).toBeVisible();
+  await expect(page).toHaveURL(/#\/live\?/);
+  await expect(liveSession.getByRole('button', { name: 'Leave', exact: true })).toBeEnabled();
+  await expect(liveSession).toContainText('viewers: 1');
+  await page.goForward();
+  await expect(activeColumn(page, 'Metaverse')).toBeVisible();
+  await expect(page).toHaveURL(/#\/game\?/);
+  await expect(metaverse).not.toHaveAttribute('data-runtime-suspended', 'true');
+  expect(await sessionElement!.evaluate((element) => element.isConnected)).toBe(true);
+  expect(await stageElement!.evaluate((element) => element.isConnected)).toBe(true);
+  expect(await canvasElement!.evaluate((element) => element.isConnected)).toBe(true);
+});
+
 // CDP で touch swipe を合成する(Playwright は touch drag API を持たない)。
 async function swipe(
   client: Awaited<ReturnType<Page['context']>['newCDPSession']> extends (...args: never[]) => infer R
