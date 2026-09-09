@@ -189,6 +189,7 @@ impl AppService {
                 "status": "waiting",
             }),
         )?;
+        let projection_guard = self.services.game_room_projections.lock(&room_id).await;
         let state = self
             .persist_game_room_manifest(
                 &source_replica_id,
@@ -207,6 +208,7 @@ impl AppService {
                 &source_replica_id,
             ))
             .await?;
+        drop(projection_guard);
         self.services
             .hint_transport
             .publish_hint(
@@ -386,6 +388,7 @@ impl AppService {
         input: UpdateGameRoomInput,
     ) -> Result<()> {
         self.ensure_topic_subscription(topic_id).await?;
+        let projection_guard = self.services.game_room_projections.lock(room_id).await;
         let (source_replica_id, state, mut manifest) = self
             .fetch_game_room_state_and_manifest(topic_id, room_id)
             .await?
@@ -441,6 +444,7 @@ impl AppService {
                 &source_replica_id,
             ))
             .await?;
+        drop(projection_guard);
         self.services
             .hint_transport
             .publish_hint(

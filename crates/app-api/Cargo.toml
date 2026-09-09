@@ -31,6 +31,7 @@ ts = ["dep:ts-rs", "kukuri-core/ts", "kukuri-store/ts", "kukuri-transport/ts"]
 iroh-integration-tests = []
 
 [dev-dependencies]
+sqlx.workspace = true
 kukuri-test-support = { path = "../test-support" }
 kukuri-iroh-node = { path = "../iroh-node" }
 tempfile.workspace = true

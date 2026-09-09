@@ -125,8 +125,12 @@ mod direct_messages_subscription_support;
 mod dome_connection_support;
 pub(crate) use dome_connection_support::*;
 mod errors;
+mod game_projection_support;
 mod gossip_subscription_support;
 mod hydration_support;
+use game_projection_support::GameRoomProjectionLocks;
+#[cfg(test)]
+pub(crate) use hydration_support::{hydrate_game_room_from_key, hydrate_game_rooms_from_replica};
 mod live_game_support;
 pub(crate) use live_game_support::{DomeReadUnavailable, fetch_verified_dome_envelope};
 mod metaverse_room_event_support;
@@ -346,6 +350,7 @@ pub struct ServiceHandles {
     pub(crate) docs_sync: Arc<dyn DocsSync>,
     pub(crate) blob_service: Arc<dyn BlobService>,
     pub(crate) keys: Arc<KukuriKeys>,
+    pub(crate) game_room_projections: Arc<GameRoomProjectionLocks>,
 }
 
 impl ServiceHandles {
@@ -366,6 +371,7 @@ impl ServiceHandles {
             docs_sync,
             blob_service,
             keys: Arc::new(keys),
+            game_room_projections: Arc::default(),
         }
     }
 }
