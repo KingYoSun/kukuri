@@ -127,6 +127,8 @@ pub(crate) use dome_connection_support::*;
 mod errors;
 mod gossip_subscription_support;
 mod hydration_support;
+#[cfg(test)]
+pub(crate) use hydration_support::{hydrate_game_room_from_key, hydrate_game_rooms_from_replica};
 mod live_game_support;
 pub(crate) use live_game_support::{DomeReadUnavailable, fetch_verified_dome_envelope};
 mod metaverse_room_event_support;

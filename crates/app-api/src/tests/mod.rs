@@ -60,6 +60,7 @@ mod dome_hosting;
 mod dome_listing;
 mod dome_move;
 mod game;
+mod game_projection_freshness;
 mod live;
 mod media;
 mod media_adult_gating;
