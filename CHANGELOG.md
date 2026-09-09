@@ -18,6 +18,43 @@ file; automated changelog entries start from the next preview release.
 
 ## [Unreleased]
 
+## [v0.2.1-preview.1] - 2026-09-09
+
+### Fixes
+
+- keep ScoreGame projections aligned with canonical state ([#942](https://github.com/KingYoSun/kukuri/pull/942))
+- 見つけるの見切れと本文の文字密度を修正 ([#918](https://github.com/KingYoSun/kukuri/pull/918))
+- 初回言語と同意前の言語選択を改善 ([#917](https://github.com/KingYoSun/kukuri/pull/917))
+- 初回同意の年齢確認案内と操作到達性を改善 ([#948](https://github.com/KingYoSun/kukuri/pull/948))
+- report successful negative smoke exit to CI ([#911](https://github.com/KingYoSun/kukuri/pull/911))
+
+### Other
+
+- prepare v0.2.1-preview.1 release ([#953](https://github.com/KingYoSun/kukuri/pull/953))
+- [codex][fix] Column再選択時に古いrouteへ戻らないようにする ([#952](https://github.com/KingYoSun/kukuri/pull/952))
+- record ScoreGame freshness validation ([#942](https://github.com/KingYoSun/kukuri/pull/942))
+- reproduce stale ScoreGame hydration overwrites ([#942](https://github.com/KingYoSun/kukuri/pull/942))
+- 日本語のCI描画環境と監査記録を整える ([#917](https://github.com/KingYoSun/kukuri/pull/917))
+- [codex][fix] 投稿添付UIを表示言語に合わせる ([#947](https://github.com/KingYoSun/kukuri/pull/947))
+- [codex][fix] コミュニティノードの初回案内と同意後の検索復旧 ([#946](https://github.com/KingYoSun/kukuri/pull/946))
+- [codex][fix] 公開投稿後に非activeプロフィールの一覧と件数を更新する ([#945](https://github.com/KingYoSun/kukuri/pull/945))
+- [codex][feature] add refactoring audit trigger and guarded issue upsert ([#944](https://github.com/KingYoSun/kukuri/pull/944))
+- [codex][docs] #872の親完了監査と初回baselineを確定する ([#941](https://github.com/KingYoSun/kukuri/pull/941))
+- [codex][docs] #872 Phase 3の実行結果と実機比較を保存する ([#940](https://github.com/KingYoSun/kukuri/pull/940))
+- isolate CN indexer read-only source resolution ([#926](https://github.com/KingYoSun/kukuri/pull/926), [#939](https://github.com/KingYoSun/kukuri/pull/939))
+- give Dome transition attempts one owner ([#924](https://github.com/KingYoSun/kukuri/pull/924), [#937](https://github.com/KingYoSun/kukuri/pull/937))
+- [codex][contract] CN indexerのsource解決と禁止I/Oを固定する ([#935](https://github.com/KingYoSun/kukuri/pull/935))
+- share prepared CN Dome transfer activation ([#922](https://github.com/KingYoSun/kukuri/pull/922), [#936](https://github.com/KingYoSun/kukuri/pull/936))
+- preserve issue 872 audit and scope records ([#938](https://github.com/KingYoSun/kukuri/pull/938))
+- [codex][refactor:extract] 通知取得とstate反映を単一loaderへ集約する ([#933](https://github.com/KingYoSun/kukuri/pull/933))
+- [codex][contract] Dome遷移の取消・ack喪失・cleanupを固定する ([#934](https://github.com/KingYoSun/kukuri/pull/934))
+- [codex][contract] CN Dome transferの途中失敗とretryを固定する ([#932](https://github.com/KingYoSun/kukuri/pull/932))
+- [codex][fix] Preset取得待ちでもroom一覧の読込みを継続する ([#931](https://github.com/KingYoSun/kukuri/pull/931))
+- characterize notification loading side effects ([#919](https://github.com/KingYoSun/kukuri/pull/919), [#929](https://github.com/KingYoSun/kukuri/pull/929))
+- align capability freeze references with promoted availability ([#928](https://github.com/KingYoSun/kukuri/pull/928), [#930](https://github.com/KingYoSun/kukuri/pull/930))
+- record preview.2 publication and verified VM rollout ([#912](https://github.com/KingYoSun/kukuri/pull/912))
+- update CHANGELOG for v0.2.0-preview.2 ([#910](https://github.com/KingYoSun/kukuri/pull/910))
+
 ## [v0.2.0-preview.2] - 2026-09-07
 
 ### Fixes
