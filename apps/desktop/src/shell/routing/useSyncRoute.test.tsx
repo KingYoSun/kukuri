@@ -17,8 +17,8 @@
  *   activeTopic / primarySection / timelineView / profileMode / profileConnectionsView /
  *   settingsSection は素の `??` 判定で、明示 undefined はキー省略と同じ現状維持になる
  *   (useSyncRoute.ts L29-37, L59-60)。
- * - 生成 URL が現 URL と同一なら navigate せず pendingRouteUrlRef を null に戻し、
- *   異なれば pendingRouteUrlRef に次 URL を記録してから navigate する。
+ * - 生成 URL は実 hash と比較する。同一なら navigate せず、render 観測済みの場合だけ
+ *   pendingRouteUrlRef を解除する。異なれば次 URL を記録してから navigate する。
  * - 固定するのは navigate の呼び出し引数と pendingRouteUrlRef の値のみ。
  */
 import { renderHook } from '@testing-library/react';

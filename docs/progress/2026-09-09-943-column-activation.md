@@ -2,7 +2,7 @@
 
 ## 現在判定
 
-- 判定: 実装・ローカル UI 検証完了。固定 PR head の独立監査と必須 CI を待つ。
+- 判定: 実装・ローカル UI 検証・独立監査 PASS。最終 PR head の必須 CI を待つ。
 - Issue: [#943](https://github.com/KingYoSun/kukuri/issues/943)、種別 `fix`、リスク区分 B（共有 route／選択状態）。
 - Scope revision: `2026-09-08-column-activation-ci-v1`。AC-1～3／INVAR-1～2 は Issue 本文を維持。
 - 基準 commit: `d2610af4467f6a91fefa208952abc5728496dc29`。
@@ -97,4 +97,6 @@ screen reader の実発話、Linux WebKitGTK 実機、既知 native fullscreen �
 
 ## 独立監査・merge
 
-固定 head に対する独立監査を実施し、必要な CI とともに PASS を確認してから merge する。監査後の code 変更は delta を再監査する。merge commit の対象 tree と監査対象の一致を確認後、Issue の現在判定と Close を更新する。
+[独立監査](2026-09-09-943-independent-audit.md)は `fc532883232233986535dd4f21a4e456b03975fb` に対して **PASS**。3 group 適合、不適合0／未分類0／blocker0。独自unit54件が成功し、基準hookの隔離再実行で A→B→A の不更新と同一pending先への重複pushの2件が失敗することを再確認した。
+
+監査後の追加は本監査記録・作業記録と unit test 冒頭の説明コメントだけで、製品／test の実行コードは変えない。最終 head の delta 確認と必須 CI の結果は [PR #952](https://github.com/KingYoSun/kukuri/pull/952) に記録する。merge commit の対象 tree と監査対象の一致を確認後、Issue の現在判定と Close を更新する。
