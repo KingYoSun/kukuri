@@ -1,0 +1,44 @@
+apps/desktop/src/shell\actions\composeInteractions.ts:116:    syncRoute('replace', {
+apps/desktop/src/shell\actions\messageReactionSocial.ts:134:      syncRoute('push', {
+apps/desktop/src/shell\actions\messageReactionSocial.ts:181:    syncRoute('replace', {
+apps/desktop/src/shell\actions\liveGame.ts:120:      syncRoute('replace', {
+apps/desktop/src/shell\actions\liveGame.ts:205:      syncRoute('replace', {
+apps/desktop/src/shell\DesktopShellPage.tsx:336:        syncRoute('push', {
+apps/desktop/src/shell\DesktopShellPage.tsx:366:        syncRoute('push', {
+apps/desktop/src/shell\DesktopShellPage.tsx:395:        syncRoute('push', {
+apps/desktop/src/shell\DesktopShellPage.tsx:423:      syncRoute('push', {
+apps/desktop/src/shell\DesktopShellPage.tsx:475:    syncRoute('push', {
+apps/desktop/src/shell\DesktopShellPage.tsx:678:      syncRoute('push', {
+apps/desktop/src/shell\actions\profileTopicChannel.ts:263:    syncRoute('replace', {
+apps/desktop/src/shell\actions\profileTopicChannel.ts:302:      syncRoute('replace', {
+apps/desktop/src/shell\actions\profileTopicChannel.ts:337:    syncRoute('replace', {
+apps/desktop/src/shell\actions\profileTopicChannel.ts:353:    syncRoute('replace', {
+apps/desktop/src/shell\actions\profileTopicChannel.ts:370:    syncRoute('replace', {
+apps/desktop/src/shell\actions\profileTopicChannel.ts:394:    syncRoute('replace', {
+apps/desktop/src/shell\actions\profileTopicChannel.ts:459:      syncRoute('replace', {
+apps/desktop/src/shell\actions\profileTopicChannel.ts:500:          syncRoute('replace', {
+apps/desktop/src/shell\actions\profileTopicChannel.ts:566:    syncRoute('replace', {
+apps/desktop/src/shell\actions\profileTopicChannel.ts:618:      syncRoute('replace');
+apps/desktop/src/shell\actions\profileTopicChannel.ts:638:      syncRoute('replace');
+apps/desktop/src/shell\actions\profileTopicChannel.ts:657:      syncRoute('replace');
+apps/desktop/src/shell\routing\useRouteSynchronization.ts:320:        syncRoute('replace', {
+apps/desktop/src/shell\routing\useRouteSynchronization.ts:915:        syncRoute('replace', {
+apps/desktop/src/shell\useDesktopShellRouting.ts:233:      syncRoute(open ? 'push' : 'replace', {
+apps/desktop/src/shell\useDesktopShellRouting.ts:296:        syncRoute(options?.historyMode ?? 'push', {
+apps/desktop/src/shell\useDesktopShellRouting.ts:314:          syncRoute('replace', {
+apps/desktop/src/shell\useDesktopShellRouting.ts:393:          syncRoute('replace', {
+apps/desktop/src/shell\useDesktopShellRouting.ts:433:        syncRoute(options?.historyMode ?? 'push', {
+apps/desktop/src/shell\useDesktopShellRouting.ts:465:          syncRoute('replace', {
+apps/desktop/src/shell\useDesktopShellRouting.ts:531:        syncRoute(options?.historyMode ?? 'push', {
+apps/desktop/src/shell\useDesktopShellRouting.ts:573:          syncRoute('replace', {
+apps/desktop/src/shell\useDesktopShellRouting.ts:640:      syncRoute('push', {
+apps/desktop/src/shell\useDesktopShellRouting.ts:710:      syncRoute('push', {
+apps/desktop/src/shell\useDesktopShellRouting.ts:749:    syncRoute('replace', {
+apps/desktop/src/shell\useDesktopShellRouting.ts:766:    syncRoute('replace', {
+apps/desktop/src/shell\useDesktopShellRouting.ts:797:      syncRoute(historyMode, {
+apps/desktop/src/shell\useDesktopShellRouting.ts:826:    syncRoute('push', {
+apps/desktop/src/shell\useDesktopShellRouting.ts:837:    syncRoute('push', {
+apps/desktop/src/shell\useDesktopShellRouting.ts:850:      syncRoute('push', {
+apps/desktop/src/shell\useDesktopShellActions.ts:790:    syncRoute('replace', {
+apps/desktop/src/shell\useDesktopShellActions.ts:849:      syncRoute('replace', {
+apps/desktop/src/shell\page\DesktopShellSettingsDrawer.tsx:333:        syncRoute('replace', {

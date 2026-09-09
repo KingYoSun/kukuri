@@ -26,7 +26,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { useSyncRoute } from '@/shell/routing/useSyncRoute';
 import { createDesktopShellStore, type DesktopShellStoreApi } from '@/shell/store';
-import { resetWindowHash } from '@/shell/testSupport/renderShellHook';
+import { resetWindowHash, setWindowHash } from '@/shell/testSupport/renderShellHook';
 import { columnIdentityId, openTransientColumn } from '@/shell/slices/workspace';
 
 type SyncRouteArgs = Parameters<typeof useSyncRoute>[0];
@@ -120,6 +120,77 @@ describe('useSyncRoute', () => {
   });
 
   describe('url comparison and pendingRouteUrlRef', () => {
+    test('keeps the latest Metaverse selection when Live navigation has not rendered yet', () => {
+      const topicSearch = '?topic=kukuri%3Atopic%3Ageneral';
+      setWindowHash(`/game${topicSearch}`);
+      const storeApi = createDesktopShellStore();
+      const navigate = vi.fn((url: unknown) => setWindowHash(String(url)));
+      const args = createHookArgs(storeApi, {
+        navigate,
+        resolvedRouteLocation: { pathname: '/game', search: topicSearch },
+      });
+      const view = renderHook(() => useSyncRoute(args));
+
+      // HashRouter は hash を同期更新する一方、location の render は遅れ得る。
+      // Metaverse → Live → Metaverse を、前の location のまま処理する順序を固定する。
+      view.result.current('push', { primarySection: 'live' });
+      expect(window.location.hash).toBe(`#/live${topicSearch}`);
+      view.result.current('push', { primarySection: 'game' });
+
+      expect(window.location.hash).toBe(`#/game${topicSearch}`);
+      expect(navigate).toHaveBeenLastCalledWith(`/game${topicSearch}`, { replace: false });
+      expect(args.pendingRouteUrlRef.current).toBe(`/game${topicSearch}`);
+      view.unmount();
+    });
+
+    test('does not push the same pending target twice and keeps it pending until observed', () => {
+      const topicSearch = '?topic=kukuri%3Atopic%3Ageneral';
+      setWindowHash(`/game${topicSearch}`);
+      const storeApi = createDesktopShellStore();
+      const navigate = vi.fn((url: unknown) => setWindowHash(String(url)));
+      const args = createHookArgs(storeApi, {
+        navigate,
+        resolvedRouteLocation: { pathname: '/game', search: topicSearch },
+      });
+      const view = renderHook((props: SyncRouteArgs) => useSyncRoute(props), { initialProps: args });
+
+      view.result.current('push', { primarySection: 'live' });
+      view.result.current('push', { primarySection: 'live' });
+      expect(navigate).toHaveBeenCalledTimes(1);
+      expect(args.pendingRouteUrlRef.current).toBe(`/live${topicSearch}`);
+
+      view.rerender({ ...args, resolvedRouteLocation: { pathname: '/live', search: topicSearch } });
+      view.result.current('replace', { primarySection: 'live' });
+      expect(navigate).toHaveBeenCalledTimes(1);
+      expect(args.pendingRouteUrlRef.current).toBeNull();
+      view.unmount();
+    });
+
+    test('allows a new replace after browser history supersedes a pending push', () => {
+      const topicSearch = '?topic=kukuri%3Atopic%3Ageneral';
+      setWindowHash(`/game${topicSearch}`);
+      const storeApi = createDesktopShellStore();
+      const navigate = vi.fn((url: unknown) => setWindowHash(String(url)));
+      const args = createHookArgs(storeApi, {
+        navigate,
+        resolvedRouteLocation: { pathname: '/game', search: topicSearch },
+      });
+      const view = renderHook(() => useSyncRoute(args));
+      view.result.current('push', { primarySection: 'live' });
+
+      // pending push を history back が追い越す。観測済み target への再要求は no-op。
+      setWindowHash(`/game${topicSearch}`);
+      view.result.current('push', { primarySection: 'game' });
+      expect(navigate).toHaveBeenCalledTimes(1);
+      expect(args.pendingRouteUrlRef.current).toBeNull();
+
+      view.result.current('replace', { primarySection: 'notifications' });
+      expect(navigate).toHaveBeenLastCalledWith(`/notifications${topicSearch}`, { replace: true });
+      expect(window.location.hash).toBe(`#/notifications${topicSearch}`);
+      expect(args.pendingRouteUrlRef.current).toBe(`/notifications${topicSearch}`);
+      view.unmount();
+    });
+
     test('does not navigate and resets pendingRouteUrlRef to null when the built url equals the current url', () => {
       const storeApi = createDesktopShellStore();
       const args = createHookArgs(storeApi, {

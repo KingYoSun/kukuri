@@ -1,0 +1,14 @@
+{
+  "before": {
+    "hash": "#/game?topic=kukuri%3Atopic%3Ageneral",
+    "active": "column:metaverse:kukuri%3Atopic%3Ageneral:-:-"
+  },
+  "afterLive": {
+    "hash": "#/live?topic=kukuri%3Atopic%3Ageneral",
+    "active": "column:stream:kukuri%3Atopic%3Ageneral:-:-"
+  },
+  "afterMetaverse": {
+    "hash": "#/game?topic=kukuri%3Atopic%3Ageneral",
+    "active": "column:metaverse:kukuri%3Atopic%3Ageneral:-:-"
+  }
+}
