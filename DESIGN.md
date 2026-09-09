@@ -104,6 +104,8 @@ app規約・年齢申告・復元gateを終え、設定済みNodeのローカル
 
 ## 5. 内容、国際化、文言
 
+- カラム本文とControl Center本文の基準は`--text-body`、行高は1.5とする。投稿本文は`--text-body-reading`、カラム一覧・参加先一覧の補助情報は`--text-caption`を使い、ヘッダーの文字階層とportal内Dialogのサイズを分けて維持する。文字密度を変えるために`html`の基準サイズやカラム幅を縮めない。
+- 見つけるのフォーム・タブ・Node案内はカラム内部の実幅に収める。長いNode URLを含む規約操作は全文を折り返し、buttonの高さも内容に追従する。フォームの横並びは実幅に余裕がある場合に限り、viewportが広いことだけを条件にしない。
 - user-generated contentはshort、normal、very long、emptyを確認する。日本語、英語、中国語、長いURL、絵文字、技術識別子、改行、添付あり／なしを含める。
 - 長い語や識別子は`overflow-wrap: anywhere`等でcontainmentを守る。省略時は完全値へ到達できる手段を持つ。
 - 日本語localeでは、kukuri、固有名、技術識別子以外の未意図な英語を混ぜない。他localeも同一情報と操作結果を保持する。

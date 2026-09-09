@@ -8,6 +8,7 @@ const availability: CommunityNodeAvailability = {
 const meta = {
   title: 'Core/CommunityIndexAvailabilityNotice',
   component: CommunityIndexAvailabilityNotice,
+  decorators: [(Story) => <div style={{ width: 'min(360px, 100vw)' }}><Story /></div>],
   args: { availability, onRetry: async () => {}, onReviewPolicies: () => {}, onOpenSettings: () => {}, onAutomatic: () => {} },
 } satisfies Meta<typeof CommunityIndexAvailabilityNotice>;
 export default meta;
@@ -26,3 +27,12 @@ export const ManifestAbsent: Story = { args: { availability: { ...availability, 
 export const SearchUnavailable: Story = { args: { availability: { ...availability, reason: 'indexNotProvided', recovery: 'settings' } } };
 export const Authentication: Story = { args: { availability: { ...availability, reason: 'authRequired', recovery: 'metadata' } } };
 export const ManualFailure: Story = { args: { availability: { ...availability, reason: 'connectionFailed', recovery: 'metadata', manual: true } } };
+export const LongNodeAddress: Story = {
+  args: {
+    availability: {
+      ...availability,
+      reason: 'connectionFailed', recovery: 'metadata', manual: true,
+      baseUrl: 'https://community-node-community-node-community-node-first.discovery.service.example.test',
+    },
+  },
+};

@@ -27,7 +27,7 @@ export function CommunityIndexAvailabilityNotice({
   if (availability.reason === 'ready') return null;
   const canRetry = ['status', 'metadata', 'manifest'].includes(availability.recovery ?? '');
   return (
-    <Notice tone={availability.reason === 'checking' || availability.reason === 'connecting' ? 'neutral' : 'warning'}>
+    <Notice className='shell-community-index-notice' tone={availability.reason === 'checking' || availability.reason === 'connecting' ? 'neutral' : 'warning'}>
       <div className='space-y-2'>
         <p role='status'>{t(`shell:communityIndex.availability.${availability.reason}`)}</p>
         {availability.baseUrl ? <p className='break-all text-sm'>
