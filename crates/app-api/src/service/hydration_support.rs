@@ -1,3 +1,4 @@
+use super::game_projection_support::hydrate_game_room_from_record;
 use super::*;
 
 fn scrub_withdrawn_header(mut header: CanonicalPostHeader) -> CanonicalPostHeader {
@@ -332,15 +333,7 @@ pub(crate) async fn hydrate_subscription_state(
         policy,
     )
     .await?;
-    let game_count = hydrate_game_rooms_from_replica(
-        docs_sync,
-        blob_service,
-        projection_store,
-        topic_id,
-        replica,
-        policy,
-    )
-    .await?;
+    let game_count = hydrate_game_rooms_from_replica(services, topic_id, replica, policy).await?;
     Ok(withdrawal_count + post_count + reaction_count + live_count + game_count)
 }
 
@@ -469,15 +462,13 @@ pub(crate) async fn hydrate_live_session_from_key_with_retry(
 }
 
 pub(crate) async fn hydrate_game_rooms_from_replica(
-    docs_sync: &dyn DocsSync,
-    blob_service: &dyn BlobService,
-    projection_store: &dyn ProjectionStore,
+    services: &ServiceHandles,
     topic_id: &str,
     replica: &ReplicaId,
     policy: DocFetchPolicy,
 ) -> Result<usize> {
     let records = query_replica_with_fetch_policy(
-        docs_sync,
+        services.docs_sync.as_ref(),
         replica,
         DocQuery::Prefix("sessions/game/".into()),
         policy,
@@ -485,74 +476,20 @@ pub(crate) async fn hydrate_game_rooms_from_replica(
     .await?;
     let mut hydrated = 0usize;
     for record in records {
-        let state: GameRoomStateDocV1 = serde_json::from_slice(&record.value)?;
-        projection_store
-            .mark_blob_status(
-                &state.current_manifest.hash,
-                blob_status(
-                    blob_service
-                        .blob_status(&state.current_manifest.hash)
-                        .await?,
-                ),
-            )
-            .await?;
-        let Some(manifest) =
-            fetch_manifest_blob::<GameRoomManifestBlobV1>(blob_service, &state.current_manifest)
-                .await?
-        else {
-            continue;
-        };
-        projection_store
-            .upsert_game_room_cache(game_projection_row_from_state(
-                &state, &manifest, topic_id, replica,
-            ))
-            .await?;
-        hydrated += 1;
+        hydrated +=
+            usize::from(hydrate_game_room_from_record(services, topic_id, replica, record).await?);
     }
     Ok(hydrated)
 }
 
-pub(crate) async fn hydrate_game_room_from_record(
-    blob_service: &dyn BlobService,
-    projection_store: &dyn ProjectionStore,
-    topic_id: &str,
-    replica: &ReplicaId,
-    record: DocRecord,
-) -> Result<bool> {
-    let state: GameRoomStateDocV1 = serde_json::from_slice(&record.value)?;
-    projection_store
-        .mark_blob_status(
-            &state.current_manifest.hash,
-            blob_status(
-                blob_service
-                    .blob_status(&state.current_manifest.hash)
-                    .await?,
-            ),
-        )
-        .await?;
-    let Some(manifest) =
-        fetch_manifest_blob::<GameRoomManifestBlobV1>(blob_service, &state.current_manifest)
-            .await?
-    else {
-        return Ok(false);
-    };
-    projection_store
-        .upsert_game_room_cache(game_projection_row_from_state(
-            &state, &manifest, topic_id, replica,
-        ))
-        .await?;
-    Ok(true)
-}
-
 pub(crate) async fn hydrate_game_room_from_key(
-    docs_sync: &dyn DocsSync,
-    blob_service: &dyn BlobService,
-    projection_store: &dyn ProjectionStore,
+    services: &ServiceHandles,
     topic_id: &str,
     replica: &ReplicaId,
     key: &str,
 ) -> Result<bool> {
-    let Some(record) = docs_sync
+    let Some(record) = services
+        .docs_sync
         .query_replica(replica, DocQuery::Exact(key.to_string()))
         .await?
         .into_iter()
@@ -560,28 +497,17 @@ pub(crate) async fn hydrate_game_room_from_key(
     else {
         return Ok(false);
     };
-    hydrate_game_room_from_record(blob_service, projection_store, topic_id, replica, record).await
+    hydrate_game_room_from_record(services, topic_id, replica, record).await
 }
 
 pub(crate) async fn hydrate_game_room_from_key_with_retry(
-    docs_sync: &dyn DocsSync,
-    blob_service: &dyn BlobService,
-    projection_store: &dyn ProjectionStore,
+    services: &ServiceHandles,
     topic_id: &str,
     replica: &ReplicaId,
     key: &str,
 ) -> Result<usize> {
     for attempt in 0..session_projection_retry_attempts() {
-        if hydrate_game_room_from_key(
-            docs_sync,
-            blob_service,
-            projection_store,
-            topic_id,
-            replica,
-            key,
-        )
-        .await?
-        {
+        if hydrate_game_room_from_key(services, topic_id, replica, key).await? {
             return Ok(1);
         }
         if attempt + 1 < session_projection_retry_attempts() {
@@ -628,15 +554,7 @@ pub(crate) async fn hydrate_subscription_event(
         .await;
     }
     if key.starts_with("sessions/game/") && key.ends_with("/state") {
-        return hydrate_game_room_from_key_with_retry(
-            docs_sync,
-            blob_service,
-            projection_store,
-            topic_id,
-            replica,
-            key,
-        )
-        .await;
+        return hydrate_game_room_from_key_with_retry(services, topic_id, replica, key).await;
     }
     Ok(0)
 }
@@ -728,9 +646,7 @@ pub(crate) async fn hydrate_subscription_hint(
             }
             "game-session" => {
                 hydrate_game_room_from_key_with_retry(
-                    docs_sync,
-                    blob_service,
-                    projection_store,
+                    services,
                     topic_id,
                     replica,
                     stable_key("sessions/game", &format!("{session_id}/state")).as_str(),
