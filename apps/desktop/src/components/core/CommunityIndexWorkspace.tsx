@@ -611,7 +611,7 @@ export function CommunityIndexWorkspace({
   }
 
   return (
-    <Card className='shell-workspace-card space-y-4' data-testid={`community-index-${mode}`}>
+    <Card className='shell-workspace-card shell-community-index-workspace space-y-4' data-testid={`community-index-${mode}`}>
       <div className='flex flex-wrap items-start justify-between gap-3'>
         <div className='space-y-1'>
           <h3 className='text-lg font-semibold'>{t('shell:communityIndex.title')}</h3>
@@ -648,7 +648,7 @@ export function CommunityIndexWorkspace({
       ) : null}
 
       {consentPendingNodeBaseUrls.length > 0 && availability?.recovery !== 'consent' ? (
-        <Notice tone='warning'>
+        <Notice className='shell-community-index-notice' tone='warning'>
           <div className='flex flex-wrap items-center justify-between gap-3'>
             <span>{t('shell:communityIndex.consentRequiredNotice')}</span>
             <div className='flex flex-wrap gap-2'>
@@ -677,7 +677,7 @@ export function CommunityIndexWorkspace({
         />
       ) : eligibleNodeBaseUrls.length === 0 ? (
         consentPendingNodeBaseUrls.length > 0 ? null : (
-        <Notice tone='warning'>
+        <Notice className='shell-community-index-notice' tone='warning'>
           <div className='flex flex-wrap items-center justify-between gap-3'>
             <span>{t('shell:communityIndex.noEligibleNode')}</span>
             <Button variant='secondary' type='button' onClick={onOpenCommunityNodeSettings}>
@@ -687,7 +687,7 @@ export function CommunityIndexWorkspace({
         </Notice>
         )
       ) : activeNodeBaseUrl === null ? (
-        <Notice tone='warning'>
+        <Notice className='shell-community-index-notice' tone='warning'>
           <div className='flex flex-wrap items-center justify-between gap-3'>
             <span>{t('shell:communityIndex.selectedNodeUnavailable')}</span>
             <Button variant='secondary' type='button' onClick={onOpenCommunityNodeSettings}>
@@ -696,9 +696,9 @@ export function CommunityIndexWorkspace({
           </div>
         </Notice>
       ) : isAllJoined ? (
-        <Notice tone='warning'>{t('shell:communityIndex.allJoinedDisabled')}</Notice>
+        <Notice className='shell-community-index-notice' tone='warning'>{t('shell:communityIndex.allJoinedDisabled')}</Notice>
       ) : (
-        <form className='flex flex-col gap-3 sm:flex-row' onSubmit={(event) => void runQuery(event)}>
+        <form className='shell-community-index-form' onSubmit={(event) => void runQuery(event)}>
           {effectiveOperation === 'search' ? (
             <Input
               aria-label={t('shell:communityIndex.queryLabel')}
@@ -720,8 +720,8 @@ export function CommunityIndexWorkspace({
         </form>
       )}
 
-      {queryRetrySeconds > 0 ? <Notice>{t('shell:communityIndex.availability.retryAfter', { seconds: queryRetrySeconds })}</Notice> : null}
-      {error ? <Notice tone='destructive'>
+      {queryRetrySeconds > 0 ? <Notice className='shell-community-index-notice'>{t('shell:communityIndex.availability.retryAfter', { seconds: queryRetrySeconds })}</Notice> : null}
+      {error ? <Notice className='shell-community-index-notice' tone='destructive'>
         <p>{error}</p>
         {queryRecovery ? <div className='mt-2 flex flex-wrap gap-2'>
           {queryRecovery === 'consent' && activeNodeBaseUrl ? (

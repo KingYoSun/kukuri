@@ -192,6 +192,34 @@
   grid-column: 1 / -1;
 }
 
+.shell-community-index-workspace {
+  grid-template-columns: minmax(0, 1fr);
+  overflow-wrap: anywhere;
+}
+
+.shell-community-index-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.shell-community-index-form > *,
+.shell-community-index-notice {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow-wrap: anywhere;
+}
+
+.shell-community-index-notice .button,
+.shell-community-index-form > .button,
+.shell-community-index-tabs .shell-tab {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .shell-section {
   min-width: 0;
   display: grid;

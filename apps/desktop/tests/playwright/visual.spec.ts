@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { seedUnconsentedCommunityNodes } from './community-node-fixture';
 import { seedAppConsent } from './app-consent-fixture';
+import { expectIndexContentContained, seedIndexLayout } from './community-index-layout-fixture';
 
 import { DEVELOPER_MODE_STORAGE_KEY } from '../../src/lib/developerMode';
 import { DESKTOP_THEME_STORAGE_KEY, type DesktopTheme } from '../../src/lib/theme';
@@ -59,6 +60,28 @@ test('community node policies narrow English light', async ({ page }) => {
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByText('You must follow the community node terms of service.')).toBeVisible();
   await expect(dialog).toHaveScreenshot('community-node-policies-en-light.png');
+});
+
+test('Explore Japanese long policy labels stay inside the Column', async ({ page }) => {
+  await seedIndexLayout(page, { pendingNodes: true });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/#/explore?topic=kukuri%3Atopic%3Ageneral');
+  const workspace = page.getByTestId('community-index-explore');
+  await expect(workspace.getByRole('textbox')).toBeVisible();
+  await expectIndexContentContained(workspace);
+  await settleForShot(page, 'dark');
+  await expect(page).toHaveScreenshot('explore-long-policies-ja-dark.png');
+});
+
+test('Control Center Japanese content density', async ({ page }) => {
+  await seedIndexLayout(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/#/explore?topic=kukuri%3Atopic%3Ageneral');
+  await page.getByTestId('control-center-trigger').click();
+  await expect(page.locator('.shell-control-center-grid')).toHaveCSS('font-size', '14px');
+  await settleForShot(page, 'dark');
+  await page.mouse.move(1275, 2);
+  await expect(page).toHaveScreenshot('control-center-ja-dark.png');
 });
 
 /**

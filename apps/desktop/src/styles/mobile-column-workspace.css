@@ -68,6 +68,12 @@
     overscroll-behavior-y: contain;
   }
 
+  .shell-phase1 .shell-column-body:has(.shell-community-index-workspace) {
+    /* Reserve the page indicator / dock area at every scroll position, including focus. */
+    margin-bottom: calc(max(var(--space-sm), env(safe-area-inset-bottom)) + 7.5rem);
+    scroll-padding-block: var(--space-sm);
+  }
+
   .shell-phase1 [data-column-gesture-owner] {
     touch-action: none;
     overscroll-behavior: contain;
