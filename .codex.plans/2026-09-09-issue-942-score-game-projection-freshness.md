@@ -12,7 +12,7 @@
 ## 前提・完了条件
 
 - 計画作成日: 2026-09-09。
-- 状態: 実装中。T1の制御可能な再現はMemory／SQLite、一括／個別の4ケースで失敗を確認。現在の証跡は [作業記録](../docs/progress/2026-09-09-942-score-game-projection-freshness.md) に集約する。
+- 状態: T1～T6の実装・ローカル検証を完了。現在の証跡は [作業記録](../docs/progress/2026-09-09-942-score-game-projection-freshness.md)、T7の独立監査・CI・merge判定は [PR #951](https://github.com/KingYoSun/kukuri/pull/951) に集約する。
 - リスク区分: C（共有 projection／永続 cache と拒否更新の mutation 境界）。
 - Scope revision: Issue の `2026-09-08-score-game-projection-freshness-v1` を維持。
 - Issue の基準 commit: `e98d2025e01332a6dbd4b13f5f4712654a931c65`。
@@ -162,4 +162,4 @@ git diff --check
 - 作業仮定: blob await による旧 record 遅着を T1 で制御できる。T1 が成立しない場合は、固定した入口の trace に調査を戻す。
 - T2で決めること: room 単位の共有排他の配置と全 writer の包含、canonical照合後の再取得／fallbackの扱い。比較と書込みを別々の非atomic操作で終わらせない。
 - ユーザー判断が必要な条件: 調査の結果、固定した API／wire／schema／時刻／Metaverse の対象外を変更する必要が判明した場合のみ。現時点で計画作成を妨げる質問はない。
-- 次の一手: 実装が依頼・承認されたら HEAD／差分を確認し、T1 の修正前再現から開始する。追加発見は Existing-gap／Regression／New-requirement／Optional-hardening に分類し、固定 scope にない要件を完了条件へ追加しない。
+- 次の一手: 最終PR headの独立監査と必須CIの成功を確認し、承認済みのマージ・対象tree照合・Issue Closeを行う。追加発見は Existing-gap／Regression／New-requirement／Optional-hardening に分類し、固定 scope にない要件を完了条件へ追加しない。

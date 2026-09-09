@@ -2,7 +2,7 @@
 
 ## 現在の状態
 
-- 状態: 修正とtargeted contract追加が完了し、関連validationを実行中。
+- 状態: 実装・ローカル必須検証を完了。本書はその時点の証跡であり、PR head監査・CI・mergeの最終判定は [PR #951](https://github.com/KingYoSun/kukuri/pull/951) とIssueの`Current status`に記録する。
 - Issue: [#942](https://github.com/KingYoSun/kukuri/issues/942)。区分C。
 - Scope revision: `2026-09-08-score-game-projection-freshness-v1`。
 - 調査・実装開始基準: `58328f035a391f8f321bffdf6287cd339228fec7`。
@@ -74,6 +74,25 @@ production upsert呼出しは11→10箇所。一括／個別hydrateの2 sinkを�
 
 ## 検証・監査
 
-- `cargo test -p kukuri-app-api --lib game_projection_freshness -- --nocapture`: 15 passed、0 failed、0 ignored（1.05秒）。
-- CLI／store parity／既存game・Dome／Runtime restart、scenario、path別validationは実行中。独立監査、CI、merge tree照合は未実施。
+検証対象の実装commitは`9ef60ddff285008b9ad288d09af8ed23fd2d5412`。この後の計画・本記録の更新は文書のみで、製品とtestのtreeを変更していない。
+
+| 実行command | 結果 |
+| --- | --- |
+| `cargo test -p kukuri-app-api --lib game_projection_freshness -- --nocapture` | 15 PASS、0 failed、0 ignored（1.05秒） |
+| `cargo test -p kukuri-cli --test content_live game_ -- --nocapture` | invalid roster／nonownerの2 PASS。元のassertは無変更 |
+| `cargo test -p kukuri-store game_room -- --nocapture` | backend parity／row mapping／migrationを含む11 PASS |
+| `cargo test -p kukuri-app-api --lib tests::game -- --nocapture` | 26 PASS（新規15件を含む） |
+| `cargo test -p kukuri-app-api --lib tests::dome_ -- --nocapture` | listing／connection／hosting／moveの17 PASS |
+| `cargo test -p kukuri-desktop-runtime restart_restores_game_room_manifest -- --nocapture` | 1 PASS |
+| `cargo clippy -p kukuri-app-api --all-targets -- -D warnings` | PASS |
+| `cargo test -p kukuri-app-api --features iroh-integration-tests game_room_score_update_replicates -- --nocapture` | 実peerで1 PASS |
+| `cargo xtask scenario desktop_smoke_game_room_persist` | 7 steps PASS |
+| `cargo xtask rust-test` | exit 0。non-CN主suite 902 PASS／4 skipped、serial harness 22 PASS、doctest処理正常終了（対象内のdoctestは0件）。skip設定の追加／変更なし |
+| `cargo xtask oversized-files` | exit 0。既存大型fileのwarningのみ。baseline変更なし |
+| `git diff --check` | PASS |
+
+`rust-test`のharnessにはDome persist／moveとprivate-channel関連の既存scenarioも含まれる。full suite完了後の同じtestの重複実行は行わない。frontend/Tauri、docs-syncの実装・connectivity契約に変更はなく、追加のローカルUI gateやCN全suiteは変更path別の必須対象ではない。PRで起動したCIは別途すべての結果を確認する。
+
 - ADR 0006の`late_joiner_backfills_game_room_manifest`という同名testは現行にはない。現行`game_room_score_update_replicates`はsender側create/update完了後にreceiverが初めて`list_game_rooms`でsubscribeするsequenceを持つため、latest stateのlate-join取得証跡として同testをfeature有効で実行する。
+
+独立監査の初回は`9ef60ddf`を対象に別コンテキストで実施し、固定INV-1～3は合計3／適合3／不適合0／未分類0、code blocker 0と報告された。その時点ではRust suite実行中のため総合判定を`INCONCLUSIVE`として保留した。上表の完了ログと最終PR headの文書deltaを追加監査し、その最終判定をPRに記録する。CI前・監査保留中の状態をmerge可能とは扱わない。
