@@ -321,10 +321,18 @@
   "developer": {
     "mode": {
       "description": "显示开发中的功能（直播、游戏）以及面向开发者的详细诊断信息。",
-      "label": "启用开发者模式"
+      "label": "启用开发者模式",
+      "enabled": "开发者模式已开启。",
+      "disabled": "开发者模式已关闭。"
     },
     "summary": "开发中功能与诊断信息",
-    "title": "开发者"
+    "title": "开发者",
+    "diagnostics": {
+      "description": "请选择诊断以查看连接状态。",
+      "connectivity": "打开连接诊断",
+      "discovery": "打开发现诊断",
+      "community-node": "打开社区节点诊断"
+    }
   },
   "discovery": {
     "actions": {

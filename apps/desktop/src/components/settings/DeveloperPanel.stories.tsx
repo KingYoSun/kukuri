@@ -16,7 +16,7 @@ function DeveloperPanelStory({ args, width = 'wide' }: DeveloperStoryProps) {
   return (
     <SettingsStoryFrame width={width}>
       <div>
-        <DeveloperPanel developerModeEnabled={enabled} onDeveloperModeChange={setEnabled} />
+        <DeveloperPanel {...args} developerModeEnabled={enabled} onDeveloperModeChange={setEnabled} />
       </div>
     </SettingsStoryFrame>
   );
@@ -29,6 +29,7 @@ const meta = {
   args: {
     developerModeEnabled: false,
     onDeveloperModeChange: () => {},
+    onOpenDiagnostics: () => {},
   },
 } satisfies Meta<typeof DeveloperPanel>;
 
@@ -45,5 +46,6 @@ export const Enabled: Story = {
 };
 
 export const Narrow: Story = {
+  args: { developerModeEnabled: true },
   render: (args) => <DeveloperPanelStory args={args} width='narrow' />,
 };

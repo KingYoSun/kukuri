@@ -10,6 +10,7 @@ import { ReleasePanel } from '@/components/settings/ReleasePanel';
 import { ReactionsPanel } from '@/components/settings/ReactionsPanel';
 import { SafetyPanel } from '@/components/settings/SafetyPanel';
 import { SettingsDrawer } from '@/components/shell/SettingsDrawer';
+import type { SettingsSection } from '@/components/shell/types';
 
 import type { SupportedLocale } from '@/i18n';
 import type { CustomReactionCropRect, DesktopApi } from '@/lib/api';
@@ -155,6 +156,11 @@ export function DesktopShellSettingsDrawer({
     communityNodeStatuses,
     communityNodeManifests
   );
+
+  const changeSettingsSection = (section: SettingsSection) => {
+    setShellChromeState((current) => ({ ...current, activeSettingsSection: section }));
+    syncRoute('replace', { settingsOpen: true, settingsSection: section });
+  };
 
   const settingsSections = [
     {
@@ -307,6 +313,11 @@ export function DesktopShellSettingsDrawer({
             setDeveloperModeEnabled(enabled);
             writeDeveloperMode(enabled);
           }}
+          onOpenDiagnostics={(section) => {
+            changeSettingsSection(section);
+            // The selected panel unmounts; keep keyboard focus on the destination nav.
+            document.getElementById(`${SHELL_SETTINGS_ID}-section-${section}`)?.focus();
+          }}
         />
       ),
     },
@@ -327,16 +338,7 @@ export function DesktopShellSettingsDrawer({
       open={shellChromeState.settingsOpen}
       onOpenChange={(open) => setSettingsOpen(open, !open)}
       activeSection={shellChromeState.activeSettingsSection}
-      onSectionChange={(section) => {
-        setShellChromeState((current) => ({
-          ...current,
-          activeSettingsSection: section,
-        }));
-        syncRoute('replace', {
-          settingsOpen: true,
-          settingsSection: section,
-        });
-      }}
+      onSectionChange={changeSettingsSection}
       sections={settingsSections}
     />
   );

@@ -81,6 +81,7 @@ export function SettingsDrawer({
             {sections.map((section) => (
               <button
                 key={section.id}
+                id={`${drawerId}-section-${section.id}`}
                 className={cn(
                   'shell-settings-nav-item',
                   activeSection === section.id && 'shell-settings-nav-item-active'

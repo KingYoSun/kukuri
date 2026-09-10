@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 
 import { App } from '@/App';
 import { DEVELOPER_MODE_STORAGE_KEY } from '@/lib/developerMode';
@@ -98,4 +98,78 @@ test('developer mode off keeps ticket import while hiding connectivity diagnosti
   expect(within(drawer).getByText('Peer Ticket')).toBeInTheDocument();
   expect(within(drawer).queryByText('Effective Peers')).not.toBeInTheDocument();
   expect(within(drawer).queryByText('Connected Peers')).not.toBeInTheDocument();
+});
+
+test('developer settings immediately confirm mode changes and restore the current status', async () => {
+  const user = userEvent.setup();
+  const { unmount } = render(<App api={createDesktopMockApi()} />);
+  const drawer = await openSettingsSection(user, 'developer');
+  const toggle = within(drawer).getByRole('checkbox', { name: 'Enable developer mode' });
+  expect(within(drawer).getByRole('status')).toHaveTextContent('Developer mode is off.');
+  expect(within(drawer).queryByRole('button', { name: 'Connection diagnostics' })).not.toBeInTheDocument();
+  await user.click(toggle);
+  expect(toggle).toHaveFocus();
+  expect(within(drawer).getByRole('status')).toHaveTextContent('Developer mode is on.');
+  expect(within(drawer).getByRole('button', { name: 'Connection diagnostics' })).toBeVisible();
+  await user.click(toggle);
+  expect(within(drawer).getByRole('status')).toHaveTextContent('Developer mode is off.');
+  expect(within(drawer).queryByRole('button', { name: 'Connection diagnostics' })).not.toBeInTheDocument();
+  await user.click(toggle);
+  unmount();
+  render(<App api={createDesktopMockApi()} />);
+  const restored = await openSettingsSection(user, 'developer');
+  expect(within(restored).getByRole('status')).toHaveTextContent('Developer mode is on.');
+  expect(within(restored).getByRole('button', { name: 'Connection diagnostics' })).toBeVisible();
+});
+
+test.each([
+  ['connectivity', 'Connection diagnostics'],
+  ['discovery', 'Discovery diagnostics'],
+  ['community-node', 'Community node diagnostics'],
+])('developer diagnostics navigate directly to %s and keep settings open', async (section, name) => {
+  const user = userEvent.setup();
+  render(<App api={createDesktopMockApi()} />);
+  const drawer = await openSettingsSection(user, 'developer');
+  await user.click(within(drawer).getByRole('checkbox', { name: 'Enable developer mode' }));
+  await user.click(within(drawer).getByRole('button', { name }));
+  expect(drawer).toBeVisible();
+  const selected = within(drawer).getByTestId(`settings-section-${section}`);
+  expect(selected).toHaveAttribute('aria-current', 'location');
+  await waitFor(() => expect(selected).toHaveFocus());
+  expect(window.location.hash).toContain(`settings=${section}`);
+  await user.click(within(drawer).getByTestId('settings-section-developer'));
+  expect(within(drawer).getByRole('status')).toHaveTextContent('Developer mode is on.');
+});
+
+test('diagnostic shortcuts preserve unsaved input and show connection errors without mutations', async () => {
+  const user = userEvent.setup();
+  const api = createDesktopMockApi();
+  const status = await api.getSyncStatus();
+  vi.spyOn(api, 'getSyncStatus').mockResolvedValue({ ...status, last_error: 'Connection unavailable' });
+  const mutations = [
+    vi.spyOn(api, 'importPeerTicket'),
+    vi.spyOn(api, 'setDiscoverySeeds'),
+    vi.spyOn(api, 'setCommunityNodeConfig'),
+    vi.spyOn(api, 'authenticateCommunityNode'),
+    vi.spyOn(api, 'clearCommunityNodeToken'),
+    vi.spyOn(api, 'refreshCommunityNodeMetadata'),
+  ];
+  render(<App api={api} />);
+  const drawer = await openSettingsSection(user, 'connectivity');
+  await user.type(within(drawer).getByRole('textbox', { name: 'Peer Ticket' }), 'unsaved ticket');
+  await user.click(within(drawer).getByTestId('settings-section-discovery'));
+  await user.type(within(drawer).getByRole('textbox', { name: 'Seed Peers' }), 'unsaved seed');
+  await user.click(within(drawer).getByTestId('settings-section-developer'));
+  await user.click(within(drawer).getByRole('checkbox', { name: 'Enable developer mode' }));
+  await user.click(within(drawer).getByRole('button', { name: 'Connection diagnostics' }));
+  expect(within(drawer).getByRole('textbox', { name: 'Peer Ticket' })).toHaveValue('unsaved ticket');
+  expect(within(drawer).getByText('Effective Peers')).toBeVisible();
+  expect(within(drawer).getAllByText(/Connection unavailable/).length).toBeGreaterThan(0);
+  await user.click(within(drawer).getByTestId('settings-section-developer'));
+  await user.click(within(drawer).getByRole('button', { name: 'Discovery diagnostics' }));
+  expect(within(drawer).getByRole('textbox', { name: 'Seed Peers' })).toHaveValue('unsaved seed');
+  expect(within(drawer).getByText('Local Endpoint ID')).toBeVisible();
+  await user.click(within(drawer).getByTestId('settings-section-developer'));
+  await user.click(within(drawer).getByRole('button', { name: 'Community node diagnostics' }));
+  for (const mutation of mutations) expect(mutation).not.toHaveBeenCalled();
 });
