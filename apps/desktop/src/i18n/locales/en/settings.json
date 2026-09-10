@@ -375,7 +375,10 @@
     "clearSelected": "Clear selected",
     "selectAll": "Select all",
     "selectReaction": "Select {{key}}",
-    "noSavedAssets": "No saved reactions yet."
+    "noSavedAssets": "No saved reactions yet.",
+    "editCrop": "Edit crop",
+    "cropTitle": "Crop reaction image",
+    "cropDescription": "Drag to reposition and use zoom to choose the visible square."
   },
   "release": {
     "title": "Release",

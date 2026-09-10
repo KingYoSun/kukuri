@@ -375,7 +375,10 @@
     "clearSelected": "清除已选项",
     "selectAll": "全选",
     "selectReaction": "选择 {{key}}",
-    "noSavedAssets": "还没有已保存的回应。"
+    "noSavedAssets": "还没有已保存的回应。",
+    "editCrop": "编辑裁剪",
+    "cropTitle": "裁剪表情图片",
+    "cropDescription": "拖动以调整位置，并缩放以选择显示的正方形区域。"
   },
   "release": {
     "title": "发布",

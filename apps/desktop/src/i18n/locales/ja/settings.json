@@ -375,7 +375,10 @@
     "clearSelected": "選択した項目をクリア",
     "selectAll": "全選択",
     "selectReaction": "{{key}} を選択",
-    "noSavedAssets": "保存済みリアクションはありません。"
+    "noSavedAssets": "保存済みリアクションはありません。",
+    "editCrop": "切り抜きを編集",
+    "cropTitle": "リアクション画像の切り抜き",
+    "cropDescription": "ドラッグして位置を動かし、拡大率を調整して表示する正方形の範囲を選択します。"
   },
   "release": {
     "title": "リリース",

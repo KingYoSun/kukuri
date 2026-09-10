@@ -183,6 +183,7 @@ export function ReactionsPanel({
               <div className='reactions-preview-card'>
                 <div
                   className='reactions-preview-thumb'
+                  role='img'
                   style={{ backgroundImage: `url(${draftPreviewUrl})` }}
                   aria-label={t('reactions.preview')}
                 />
@@ -196,7 +197,7 @@ export function ReactionsPanel({
                   setCropDialogOpen(true);
                 }}
               >
-                {t('reactions.editCrop', { defaultValue: 'Edit crop' })}
+                {t('reactions.editCrop')}
               </Button>
             </div>
             <div className='shell-main-stack'>
@@ -363,10 +364,8 @@ export function ReactionsPanel({
       <ImageCropDialog
         open={cropDialogOpen}
         file={cropDialogFile}
-        title={t('reactions.cropTitle', { defaultValue: 'Crop reaction image' })}
-        description={t('reactions.cropDescription', {
-          defaultValue: 'Drag to reposition and use zoom to choose the visible square.',
-        })}
+        title={t('reactions.cropTitle')}
+        description={t('reactions.cropDescription')}
         confirmLabel={t('common:actions.save')}
         onOpenChange={(open) => {
           setCropDialogOpen(open);

@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, test, vi } from 'vitest';
+import i18n from '@/i18n';
 
 import { AppearancePanel } from './AppearancePanel';
 import { CommunityNodePanel } from './CommunityNodePanel';
@@ -665,8 +666,15 @@ test('reaction file selection and crop cancellation preserve the accepted draft 
   expect(screen.getByText(file.name)).toBeVisible();
   expect(screen.getByLabelText('Search key')).toHaveValue('preserved');
   expect(create).not.toHaveBeenCalled();
+  await act(() => i18n.changeLanguage('ja'));
+  expect(screen.getByText(file.name)).toBeVisible();
+  await user.click(screen.getByRole('button', { name: '切り抜きを編集' }));
+  const japaneseCrop = await screen.findByRole('dialog', { name: 'リアクション画像の切り抜き' });
+  expect(within(japaneseCrop).getByText('ドラッグして位置を動かし、拡大率を調整して表示する正方形の範囲を選択します。')).toBeVisible();
+  await user.click(within(japaneseCrop).getByRole('button', { name: 'キャンセル' }));
+  expect(screen.getByLabelText('検索キーワード')).toHaveValue('preserved');
   view.rerender(<ReactionsPanel {...props} creating />);
-  expect(screen.getByRole('button', { name: 'Choose files' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'ファイルを選択' })).toBeDisabled();
   expect(input).toBeDisabled();
 });
 

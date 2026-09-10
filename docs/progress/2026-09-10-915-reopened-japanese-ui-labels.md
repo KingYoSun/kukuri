@@ -3,7 +3,7 @@
 ## 現在の判定・承認範囲
 
 - 作成日: 2026-09-10（JST）。対象: [#915 表示言語を日本語にしても一部ラベルが英語のまま残る](https://github.com/KingYoSun/kukuri/issues/915)。
-- 現在判定: In progress。r2 の実装と検証を進行中。独立監査・必須 CI・merge 後確認が揃うまで Complete としない。
+- 現在判定: 実装・ローカル検証完了。最終 head の独立監査、必須 CI、merge 後の一致確認は [PR #968](https://github.com/KingYoSun/kukuri/pull/968) の現在判定へ集約する。
 - Scope revision: `915-r2`（2026-09-10 承認済み）。前回の `915-r1` を上書きせず、2026-09-10 JST までの再報告を取り込む。承認された以下の AC / INVAR / INV / TR を固定した。
 - 基準 commit: `48690af9126096bfca1b99e792a69817366318c0`。Windows と `local2:~/kukuri` の HEAD が一致し、調査開始時点で両方の追跡差分はない。
 - リスク区分: B。Reopen のため独立監査を必須とする。native 対応は WebKitGTK の既存選択要求に返す UI の置換に限定した。新規ファイル読取 IPC、filesystem 権限、送信/認証/同意 guard、永続化形式の追加・変更はない。
@@ -75,7 +75,7 @@ path は特記しない限り `apps/desktop/` 配下。T1 で各群の登録点�
 
 T1 では `type='file'` / `type="file"` と既存 dialog wrapper の一覧も比較する。プロフィール、avatar、Metaverse、端末バックアップ等は別用途として記名し、共通部品変更の影響先なら回帰対象、独立した未翻訳なら New-requirement とする。全 file input の一括置換はしない。`LocaleSelect` の全 caller と、picker を共通化する場合の全 caller は検証対象から外さない。
 
-INV-7 の caller は `ComposerPanel`（multiple、image/video）、`ReactionsPanel`（単一 image/GIF）、`ProfileEditorPanel`（単一 image）、`DesktopShellAuxiliaryPanels` の avatar 選択（単一 VRM）、`DomeCustomizationControls` の texture（単一 image）、`MetaverseRoomControls` の avatar 選択（単一 VRM）の6箇所。CodeGraph と `input type=file` 登録点から確認した。既存の File/onChange 契約を維持し、各画面の登録・保存 handler へ直結する新経路は作っていない。`chooseDeviceBackupSource/Destination` は plugin-dialog の別経路で、この WebKit hook の対象外。
+INV-7 の登録点は `ComposerPanel`（multiple、image/video）、`ReactionsPanel`（単一 image/GIF）、`ProfileEditorPanel`（単一 image）、`DesktopShellAuxiliaryPanels::DesktopShellMessagesSurface` の旧DM composer（単一 image/video、現行唯一の caller は `showComposer=false` で非表示）、`DomeCustomizationControls` の texture（単一 image）、`MetaverseRoomControls` の avatar 選択（単一 VRM）の6箇所。CodeGraph と `input type=file` 登録点から確認した。既存の File/onChange 契約を維持し、各画面の登録・保存 handler へ直結する新経路は作っていない。`chooseDeviceBackupSource/Destination` は plugin-dialog の別経路で、この WebKit hook の対象外。
 
 INV-3 の影響先として `SettingsDrawer` の `keepMounted` を追加した。利用はリアクション section のみで、初めて開くまで mount せず、他 section に移動中は hidden とする。初回同意や他の設定 section の mount、guard、データ取得は維持する。ファイル/crop draft はメモリー内だけで保持し、端末へ新規保存しない。
 
@@ -100,7 +100,13 @@ INV-3 の影響先として `SettingsDrawer` の `keepMounted` を追加した�
 - `SettingsLocalization.test.tsx` と `settingsLocalization.test.ts` は修正前4件失敗。言語欄、リアクションの可視選択操作、mode、未知エラーの表示不足を確認した。
 - `settings-localization.spec.ts` の reaction draft は、選択→crop確定→表示設定へ移動→ja→リアクションへ戻る sequence で選択名が消えることを修正前に再現。r2 AC-6 / INVAR-2 の Existing-gap として入力欄の保持へ統合し、同じ test が修正後成功した。
 - native 実装判断: HTML/document lang が日本語でも既定タイトルが英語であり、WebKitGTK の要求 hook で明示 title を付けた。plugin の path→File 読取経路を新設する案は採らず、元の WebKit File API を維持する方法で承認済み AC を満たす。GTK/WebKitGTK は Tauri の既存依存と同じ version の直接参照だけを追加し、lockfile の version 更新はない。
-- native 候補版では同じ OS/session で「ファイルを選択」を確認。画像2枚＋H.264動画1本を選択し、posterを含む既存変換後の「添付 3 件」、Enterで再開できることを確認した。実 backend 通信・投稿の証跡とは分ける。
+- native 候補版では同じ OS/session で「ファイルを選択」を確認。画像2枚＋H.264動画1本を選択し、posterを含む既存変換後の「添付 3 件」、Enterで再開、Escape取消後の3件とfocus保持を確認した。実 backend 通信・投稿の証跡とは分ける。
+- 日本語OS上でアプリをenへ変更し、native title/cancel/filterが英語に追従することを実測。同じnativeプロセスでen→jaに戻し、リアクション入力の日本語title、画像専用filter（動画非表示）、画像選択→日本語crop→確定draft名を確認した。
+- さらに保存済みjaのままnativeプロセスを終了し、`LANG=C LC_ALL=C LANGUAGE=C`で再起動。`/proc`で実効環境を確認し、アプリは日本語を復元、nativeの標準列見出しがName/Location等でもtitle/cancel/filterは日本語であることを実測した。OS全体やRDP sessionのlocaleは変更していない。
+- 候補Linux binaryのSHA-256は `c69c3954421fc53ea6e5457d58d3084f50df75046010d3a4ba670af48c08bdb7`。native sourceは実装commit `8600e7a2` から不変。最終frontend deltaは下記のcrop翻訳とrole補正のみ。
+- Windowsも製品Tauri＋既存mock frontend、専用runtime profile・検証用origin（loopback:5185）・1280×800で確認。見つける見出し・言語欄「言語」、nativeから画像2枚→添付2件、Enter再開→Escape取消→2件/focus保持、リアクションの単一画像→日本語crop→確定draft名を確認した。通常の配布app originのデータを検証入力に使わない。
+- Storybookの選択済み状態を目視して、`editCrop` / `cropTitle` / `cropDescription` が3localeとも欠落し英語defaultValueへ落ちることを発見。r2 AC-6の対象crop操作のExisting-gapとして、ja再編集の失敗testを先に実行し、3キーを翻訳してdefaultValueを除去した。関連77件成功。
+- 同じpreviewの`div aria-label`に対する`aria-prohibited-attr`をaddon-a11yで再現。既存の選択画像の意味に合わせ`role=img`を補正し、未選択・保存中・長い選択名×3locale×2themeの18条件を再検査、WCAG 2/2.1/2.2 A・AAタグの違反0件。
 
 | 段階 | 作業と現時点の証跡 |
 | --- | --- |
@@ -108,10 +114,10 @@ INV-3 の影響先として `SettingsDrawer` の `keepMounted` を追加した�
 | T2 | 言語ラベル、reaction の hidden input / 翻訳 button / 確定 draft 名、取消と再選択。SettingsLocalization / SettingsPanels の tests |
 | T3 | Linux `file_dialog`、同梱3locale、multiple / filter / cancel を維持。native test と実機画像 |
 | T4 | `diagnosticLabels` の既知値・未知値・exact timeout と原文保持、settings view model / CN dependency / Control Center への接続。raw store は不変 |
-| T5 | 追加7 browser tests、6ファイル89 unit tests成功。全体ゲートを実行中。初回 Windows 全体は1312成功・旧表示期待の2件失敗。期待を新しい要約＋同じ原文へ更新し、関連33件が成功。test削除・skipなし |
-| T6 | Ubuntu RDP の native title と複数画像/動画。Windows・言語切替/再起動等の残りを確認中 |
-| T7 | 固定 head の独立監査は未実施 |
-| T8 | 必須 CI / merge / merge 後確認は未実施 |
+| T5 | 追加7 browser tests、6ファイル89 unit tests成功。Linux全体ゲート成功。初回 Windows 全体は1312成功・旧表示期待の2件失敗。期待を新しい要約＋同じ原文へ更新し、関連33件とLinux全体が成功。最終crop deltaは77unit/7browser/lint/typecheck/Storybook/a11yで再検証。test削除・恒久skipなし |
+| T6 | 上記のUbuntu RDP / Windows製品Tauri確認、言語切替、保存ja再起動、OS/native message localeとの不一致条件を確認 |
+| T7 | `8600e7a2`の独立コード監査はblocker0・7群未分類0、監査者の独立実行4ファイル14件成功。最終headと追加証跡・deltaの判定はPR本文に記録 |
+| T8 | PR #968。必須CIと最終監査PASS後にのみmergeし、merge treeを照合してIssueの現在判定を更新する。結果はPR/Issue参照 |
 
 | 必須/関連検証 | 現時点の結果 |
 | --- | --- |
@@ -120,7 +126,8 @@ INV-3 の影響先として `SettingsDrawer` の `keepMounted` を追加した�
 | Linux `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --lib` | 57件成功（native locale・既存 startup/consent/exit/backup 等を含む） |
 | Linux `cargo xtask e2e-smoke` | desktop_smoke_post_persist、6steps成功。native chooserやpeer接続の代替ではない |
 | Linux `CI=true pnpm exec playwright test --project=visual` | 20件成功。snapshot 比較を実施、baseline 更新なし |
-| Linux `CI=true cargo xtask desktop-ui-check` | 実行中 |
+| Linux `CI=true cargo xtask desktop-ui-check` | lint/typecheck、165ファイル1314unit、Storybook build、146browser、20visual比較成功（`8600e7a2`の製品差分）。最終frontend deltaは関連検証を別途実行 |
+| 最終crop delta | 77unit、Linux browser7件、lint/typecheck、Storybook build成功。addon-a11y18条件違反0件 |
 
 ### 実機画像
 
@@ -132,4 +139,27 @@ INV-3 の影響先として `SettingsDrawer` の `keepMounted` を追加した�
 
 ![同じ native chooser から画像2枚と動画1本を選択](assets/issue-915-r2/ubuntu-selected-media.png)
 
-未確認の項目を成功とは扱わない。実装・検証・独立監査は進行中であり、Complete ではない。
+| アプリen / OS日本語 | 保存jaをnative message locale Cで再起動 |
+| --- | --- |
+| ![英語アプリのnativeタイトル](assets/issue-915-r2/ubuntu-en-title-ja-os.png) | ![再起動後も日本語タイトル](assets/issue-915-r2/ubuntu-ja-title-c-locale.png) |
+
+| Ubuntuのリアクション選択 | Windowsのリアクション選択 |
+| --- | --- |
+| ![Ubuntuの確定crop draft](assets/issue-915-r2/ubuntu-reaction-draft.png) | ![Windowsの確定crop draft](assets/issue-915-r2/windows-reaction-draft.png) |
+
+![Windows nativeから複数画像を選択](assets/issue-915-r2/windows-selected-media.png)
+
+### 固定条件と最終証跡の対応
+
+| 条件 | 実装・検証 |
+| --- | --- |
+| AC-1 / INV-1 / TR-1 | `settings.json`のlanguageLabel、共有LocaleSelect tests、bootstrap/initial-locale browser、Linuxの保存済みja再起動、Windowsの実表示 |
+| AC-2/3 / INV-2/3/7 / TR-2〜4 | hidden入力と翻訳済み操作、native hook、GTKから元WebKitへの選択結果。両OSの実選択、composer既存tests、reaction crop/再選択tests |
+| AC-4/5 / INV-4〜6 / TR-5〜7 | `diagnosticLabels`、settings view model、CN dependency、Control Center。既知/未知、exact timeout・prefix、原文不変、null回復、scope分離、locale投影のunitとbrowser |
+| AC-6 / INVAR-1/2 / TR-1〜7 | r1のcomposer・footer・mediaComposerと見つけるsuite、reactionの確定draft→表示設定→言語変更→戻るbrowser、ja crop再編集test、同じnativeプロセスでのlocale切替 |
+| INVAR-3〜5 | protocol/manifest/raw state/認証・同意/transport/永続形式を変更しない差分、raw JSON不変・未知値で権限/成功状態を捏造しないtests、既存guard suite、native選択以外のread IPC/権限追加なし |
+| AC-7 | 1280×800・狭幅・3locale×2theme・実pointer/keyboard、Linux比較20件、addon-a11y18条件、実機画像、固定headの独立監査と必須CI（PR記録） |
+
+native入力はHTML内部とOSのウィンドウであり、DOM文字列検査・filechooserイベントだけではタイトルを検証できないため実機画像と操作を採取した。診断は再現可能なAPI fixtureで3localeの表示を検証しており、接続障害そのものを解決した証拠ではない。Ubuntu 24.04.5の実測をDebian 13の実測とは記録しない。
+
+色/token・設計言語・通信責務は変更しない。全画面のscreen reader適合認証やOS内蔵メニュー全体の翻訳は行っていない。対象の実操作とa11y結果、未対象の範囲を区別する。最終CI・独立監査とmergeの判定はPR #968へ集約し、合格前にIssueをCloseしない。
