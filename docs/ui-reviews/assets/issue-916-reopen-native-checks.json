@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "audited_head": "df35d7f6ebaba3ea8c7040e5e6e63446f1beb802",
+  "product_commit": "b0f00db50beea285623829dc0f9623e9f4eff708",
+  "package_source_tree_matches_product_commit": true,
+  "audit_delta_from_product_commit": "visual test and snapshots only",
+  "linux": {
+    "os": "Ubuntu 24.04.5 LTS",
+    "display": "GNOME Wayland / XWayland application / RDP observation",
+    "package_webkit": "2.50.4-0ubuntu0.22.04.1",
+    "appimage_sha256": "a0a2825d3d95b3307ae8ca70a53b718e569ff7b1097371ff976dc1c1100ea2f3",
+    "source_commit": "e6018dbc922567c0bb7952e75cfa125b6779523b",
+    "signing_mode": "test",
+    "package_run": 34443470080,
+    "observations": [
+      {
+        "phase": "denied-initial",
+        "observed_at": "2026-09-10T06:51:15.331748+00:00",
+        "artifact_sha256": "a0a2825d3d95b3307ae8ca70a53b718e569ff7b1097371ff976dc1c1100ea2f3",
+        "artifact_source": "e6018dbc922567c0bb7952e75cfa125b6779523b",
+        "consent_file_exists": false,
+        "accounts_file_exists": false,
+        "profile_top_level": [
+          ".kukuri-profile.json",
+          ".kukuri-profile.lock"
+        ]
+      },
+      {
+        "phase": "denied-after-notice",
+        "observed_at": "2026-09-10T06:52:26.172248+00:00",
+        "artifact_sha256": "a0a2825d3d95b3307ae8ca70a53b718e569ff7b1097371ff976dc1c1100ea2f3",
+        "artifact_source": "e6018dbc922567c0bb7952e75cfa125b6779523b",
+        "consent_file_exists": false,
+        "accounts_file_exists": false,
+        "profile_top_level": [
+          ".kukuri-profile.json",
+          ".kukuri-profile.lock"
+        ]
+      },
+      {
+        "phase": "accepted",
+        "observed_at": "2026-09-10T06:49:29.259164+00:00",
+        "artifact_sha256": "a0a2825d3d95b3307ae8ca70a53b718e569ff7b1097371ff976dc1c1100ea2f3",
+        "artifact_source": "e6018dbc922567c0bb7952e75cfa125b6779523b",
+        "consent_file_exists": true,
+        "accounts_file_exists": true,
+        "profile_top_level": [
+          ".kukuri-profile.json",
+          ".kukuri-profile.lock",
+          "accounts",
+          "accounts.json",
+          "kukuri.app-consent.json"
+        ],
+        "consent_record_count": 2,
+        "age_attestation_count": 1,
+        "consent_modified_at": "2026-09-10T06:45:49.448921+00:00"
+      }
+    ],
+    "actions": [
+      "native disabled pointer click",
+      "decline without acceptance",
+      "pointer checkbox select",
+      "Space uncheck / recheck",
+      "restart discards unsaved checkbox",
+      "Tab + Enter explicit acceptance opens community node introduction"
+    ],
+    "document_end": "Native XTest wheel on the same RDP desktop; final legal paragraph visible"
+  },
+  "windows": {
+    "webview2": "152.0.4191.66",
+    "executable_sha256": "824b57af9194be74e9e48766e380ae6601633658888ed1cbef6e1a0611d9204a",
+    "build": "pnpm tauri:build --debug --no-bundle; normal Tauri app, embedded frontend",
+    "source_product_commit": "b0f00db50beea285623829dc0f9623e9f4eff708",
+    "observed_at": "2026-09-10T06:51:49.7539943Z",
+    "consent_file_exists": false,
+    "accounts_file_exists": false,
+    "profile_top_level": [
+      ".kukuri-profile.json",
+      ".kukuri-profile.lock"
+    ],
+    "actions": [
+      "pointer checkbox",
+      "Tab focus on enabled accept",
+      "Shift+Tab and Space uncheck",
+      "disabled pointer click"
+    ]
+  },
+  "limitations": [
+    "Linux forced service restart produced SIGBUS; only restart state reset is asserted, not graceful exit",
+    "Windows full Rust suite had one transport failure and was complemented by successful Linux CI",
+    "Actual 200 percent engine zoom is a separate WebKitGTK 2.52.6 fixture, not the AppImage",
+    "No audio screen reader or Windows OS High Contrast certification"
+  ]
+}

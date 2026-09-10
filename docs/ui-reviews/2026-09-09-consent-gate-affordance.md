@@ -1,8 +1,8 @@
 # 2026-09-09 同意画面の操作領域
 
-- Status: current
+- Status: superseded
 - Supersedes: None
-- Superseded by: None
+- Superseded by: [2026-09-10 年齢未確認の同意ボタン](2026-09-10-consent-gate-blocked-action.md)（無効状態の採用判断。文書scroll・footer分離・同意境界は継承）
 - PR: [#948](https://github.com/KingYoSun/kukuri/pull/948)、Issue #916、Scope revision `916-r1`
 - Surface / user / purpose: 初回・再同意gate。年齢自己申告の必要性を理解し、規約確認から同意へ到達する。
 - Summary: 本文scrollと通常flow上の操作footerを分離。未選択理由を常時表示し、native disabledと専用styleを併用する。本文の可読な最小高さを保ち、低い高さやnotice増加時はpage scrollへ退避する。
