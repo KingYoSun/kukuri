@@ -11,13 +11,12 @@ import {
   CommunityIndexingRequestDialog,
   type CommunityIndexingTarget,
 } from '@/components/core/CommunityIndexingRequestDialog';
-import { TesterFeedbackDialog } from '@/components/core/TesterFeedbackDialog';
+import { DesktopShellTesterFeedbackDialog } from './page/DesktopShellTesterFeedbackDialog';
 import { type SettingsSection } from '@/components/shell/types';
 
 import { runtimeApi } from '@/lib/api';
 import {
   eligibleCommunityIndexNodes,
-  eligibleTesterFeedbackNodes,
 } from '@/lib/api/communityIndex';
 import i18n from '@/i18n';
 import { changeDesktopLocale } from '@/i18n/changeLocale';
@@ -449,15 +448,6 @@ export function DesktopShellPage({
   const eligibleIndexingNodes = useMemo(
     () =>
       eligibleCommunityIndexNodes(
-        communityNodeConfig,
-        communityNodeStatuses,
-        communityNodeManifests
-      ),
-    [communityNodeConfig, communityNodeManifests, communityNodeStatuses]
-  );
-  const eligibleFeedbackNodes = useMemo(
-    () =>
-      eligibleTesterFeedbackNodes(
         communityNodeConfig,
         communityNodeStatuses,
         communityNodeManifests
@@ -950,15 +940,11 @@ export function DesktopShellPage({
         onOpenCommunityNodeSettings={handleOpenCommunityNodeSettings}
       />
 
-      <TesterFeedbackDialog
+      <DesktopShellTesterFeedbackDialog
         api={api}
         open={testerFeedbackOpen}
-        eligibleNodeBaseUrls={eligibleFeedbackNodes}
         onOpenChange={setTesterFeedbackOpen}
-        onOpenCommunityNodeSettings={() => {
-          setTesterFeedbackOpen(false);
-          handleOpenCommunityNodeSettings();
-        }}
+        onOpenCommunityNodeSettings={handleOpenCommunityNodeSettings}
       />
 
       <DesktopShellSettingsDrawer

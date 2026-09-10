@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 
 import type { DesktopApi } from '@/lib/api';
 import { InvokeError } from '@/lib/api/invoke/error';
+import type { TesterFeedbackAvailability } from '@/lib/api/testerFeedbackAvailability';
+import { TesterFeedbackAvailabilityNotice } from './TesterFeedbackAvailabilityNotice';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -25,6 +27,7 @@ type TesterFeedbackDialogProps = {
   api: DesktopApi;
   open: boolean;
   eligibleNodeBaseUrls: readonly string[];
+  availability: TesterFeedbackAvailability;
   onOpenChange: (open: boolean) => void;
   onOpenCommunityNodeSettings: () => void;
 };
@@ -49,6 +52,7 @@ export function TesterFeedbackDialog({
   api,
   open,
   eligibleNodeBaseUrls,
+  availability,
   onOpenChange,
   onOpenCommunityNodeSettings,
 }: TesterFeedbackDialogProps) {
@@ -63,6 +67,8 @@ export function TesterFeedbackDialog({
   const [referenceId, setReferenceId] = useState<string | null>(null);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const requestVersionRef = useRef(0);
+  const settingsRequestedRef = useRef(false);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
 
   // 適格一覧は定期更新のたびに新しい配列になり得るため、参照ではなく内容の変化で初期化する。
   const eligibleKey = JSON.stringify(eligibleNodeBaseUrls);
@@ -131,21 +137,35 @@ export function TesterFeedbackDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent
+        onOpenAutoFocus={() => {
+          returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          if (settingsRequestedRef.current) {
+            settingsRequestedRef.current = false;
+            onOpenCommunityNodeSettings();
+          } else returnFocusRef.current?.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{t('shell:testerFeedback.title')}</DialogTitle>
           <DialogDescription>{t('shell:testerFeedback.description')}</DialogDescription>
         </DialogHeader>
         <DialogBody>
           <div className='extended-module-stack'>
-            {eligibleNodeBaseUrls.length === 0 ? (
-              <Notice>
-                <p>{t('shell:testerFeedback.noEligibleNode')}</p>
-                <Button type='button' variant='secondary' onClick={onOpenCommunityNodeSettings}>
-                  {t('shell:testerFeedback.openSettings')}
-                </Button>
-              </Notice>
-            ) : (
+            {eligibleNodeBaseUrls.length === 0 || availability.state !== 'ready' ? (
+              <TesterFeedbackAvailabilityNotice
+                availability={availability}
+                cachedNodes={eligibleNodeBaseUrls.length > 0}
+                onOpenSettings={() => {
+                  settingsRequestedRef.current = true;
+                  onOpenChange(false);
+                }}
+              />
+            ) : null}
+            {eligibleNodeBaseUrls.length > 0 ? (
               <Label>
                 <span>{t('shell:testerFeedback.nodeLabel')}</span>
                 <Select
@@ -160,7 +180,7 @@ export function TesterFeedbackDialog({
                   ))}
                 </Select>
               </Label>
-            )}
+            ) : null}
 
             {fieldDefs.map(({ key, label }) => (
               <div key={key}>

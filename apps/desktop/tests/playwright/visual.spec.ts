@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { seedUnconsentedCommunityNodes } from './community-node-fixture';
 import { seedAppConsent } from './app-consent-fixture';
+import { seedFeedback } from './tester-feedback-fixture';
 import { expectIndexContentContained, seedIndexLayout } from './community-index-layout-fixture';
 
 import { DEVELOPER_MODE_STORAGE_KEY } from '../../src/lib/developerMode';
@@ -24,6 +25,21 @@ const WIDE = { width: 1400, height: 980 } as const;
 const NARROW = { width: 700, height: 980 } as const;
 
 const LOCALE_EN = 'en';
+
+for (const { locale, theme, width, height } of [
+  { locale: 'en', theme: 'dark', width: 1280, height: 800 },
+  { locale: 'ja', theme: 'light', width: 390, height: 844 },
+] as const) {
+  test(`feedback unavailable ${locale} ${theme}`, async ({ page }) => {
+    await seedFeedback(page, locale, theme);
+    await page.setViewportSize({ width, height });
+    await page.goto('/#/timeline');
+    await page.getByTestId('tester-feedback-trigger').click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByText('Search / 検索 / 搜索')).toBeVisible();
+    await expect(dialog).toHaveScreenshot(`feedback-unavailable-${locale}-${theme}.png`);
+  });
+}
 
 test('app consent unchecked English dark', async ({ page }) => {
   await seedAppConsent(page);

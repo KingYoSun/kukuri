@@ -265,7 +265,6 @@
     "charCount": "{{current}} / {{max}} characters",
     "overLimit": "Each field must be at most {{max}} characters.",
     "metadataNotice": "The app version and OS are attached automatically. No information identifying the sender is stored.",
-    "noEligibleNode": "No authenticated and consented Community Node currently accepts tester feedback.",
     "openSettings": "Open Community Node settings",
     "submit": "Send",
     "submitting": "Sending…",
@@ -276,7 +275,30 @@
       "authRequired": "Authentication is required for the selected Community Node.",
       "consentRequired": "Required consent is missing for the selected Community Node.",
       "requestFailed": "Sending feedback failed. Please try again later."
-    }
+    },
+    "availability": {
+      "ready": "A Community Node is ready to accept feedback.",
+      "checking": "Checking which Community Nodes can accept feedback. If this continues, open settings to check the node status.",
+      "configUnavailable": "Could not load your Community Node settings. Open settings to check the saved nodes.",
+      "statusUnavailable": "Could not check the current node status. Open settings and refresh the connection information when online.",
+      "noNodes": "No Community Nodes are configured. In settings, use “Add Node” and “Save Nodes” to add one that accepts feedback, then review its terms.",
+      "unavailable": "None of your configured Community Nodes can accept feedback right now."
+    },
+    "reasons": {
+      "checking": "Node information is still being checked. If this continues, check this node in settings.",
+      "consentRequired": "Review this node’s terms in settings before connecting. Accept them if you agree.",
+      "reconsentRequired": "The required consent is not current. Review this node’s latest terms in settings.",
+      "authRequired": "This node is not authenticated. Use “Authenticate” for this node in settings.",
+      "connecting": "This node is preparing its connection. Wait for it to finish; if it does not, check the node in settings.",
+      "retrying": "Reconnection is waiting for its next retry. Check the connection and retry status in settings.",
+      "connectionFailed": "Could not connect to this node. Check your connection and refresh the node information in settings.",
+      "admissionRequired": "This node restricts access. Check its invite or access instructions in settings.",
+      "manifestUnavailable": "This node’s public information is unavailable, so feedback support is unknown. Refresh its information in settings.",
+      "notProvided": "This node does not offer feedback intake. Add a node that accepts feedback, or ask this node’s operator about availability."
+    },
+    "intakeRequirement": "Search and consent alone do not enable feedback. The node operator must also offer feedback intake.",
+    "settingsReturnHint": "After checking settings, open “Send feedback” again. Closing this dialog clears the text you entered.",
+    "cachedNodesHint": "Showing the last known destinations. Their current availability has not been confirmed."
   },
   "indexingRequest": {
     "title": "Request Community Node indexing",
