@@ -265,7 +265,6 @@
     "charCount": "{{current}} / {{max}} 字",
     "overLimit": "每项内容不能超过 {{max}} 字。",
     "metadataNotice": "客户端版本和操作系统会自动附加。不会保存发送者的身份信息。",
-    "noEligibleNode": "没有已认证、已完成必需同意且接受测试反馈的社区节点。",
     "openSettings": "打开社区节点设置",
     "submit": "发送",
     "submitting": "发送中…",
@@ -276,7 +275,30 @@
       "authRequired": "需要对所选社区节点进行认证。",
       "consentRequired": "所选社区节点的必需同意尚未完成。",
       "requestFailed": "反馈发送失败,请稍后再试。"
-    }
+    },
+    "availability": {
+      "ready": "有可接收反馈的社区节点。",
+      "checking": "正在检查哪些社区节点可以接收反馈。如果一直没有完成，请打开设置检查节点状态。",
+      "configUnavailable": "无法加载社区节点设置。请打开设置检查已保存的节点。",
+      "statusUnavailable": "无法检查节点的当前状态。请确认网络连接，并在设置中刷新连接信息。",
+      "noNodes": "尚未配置社区节点。请在设置中添加并保存支持反馈的节点，然后查看其条款。",
+      "unavailable": "已配置的社区节点目前均无法接收反馈。"
+    },
+    "reasons": {
+      "checking": "正在检查节点信息。如果一直没有完成，请在设置中检查此节点。",
+      "consentRequired": "连接前需要查看此节点的条款。请在设置中阅读，并在同意后确认。",
+      "reconsentRequired": "必需同意尚未更新。请在设置中查看此节点的最新条款。",
+      "authRequired": "此节点尚未认证。请在设置中对此节点执行认证。",
+      "connecting": "正在准备连接。请等待完成；如果一直没有完成，请在设置中检查此节点。",
+      "retrying": "正在等待下一次重新连接。请在设置中检查连接和重试状态。",
+      "connectionFailed": "无法连接此节点。请检查网络，并在设置中刷新节点连接信息。",
+      "admissionRequired": "此节点限制访问。请在设置中查看邀请或访问条件的说明。",
+      "manifestUnavailable": "无法获取节点公开信息，尚不能确认其是否支持反馈。请在设置中刷新节点信息。",
+      "notProvided": "此节点不提供反馈接收功能。请添加支持反馈的节点，或向此节点的运营者确认是否提供该功能。"
+    },
+    "intakeRequirement": "仅能使用搜索或同意条款并不代表可以发送反馈。节点运营者还需要提供反馈接收功能。",
+    "settingsReturnHint": "检查设置后，请重新打开“发送反馈”。关闭此对话框会清除已输入的内容。",
+    "cachedNodesHint": "正在显示上次确认的发送目标。目前尚未确认其可用状态。"
   },
   "indexingRequest": {
     "title": "申请社区节点索引",

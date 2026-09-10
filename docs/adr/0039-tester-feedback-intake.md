@@ -36,6 +36,8 @@ kukuri は仕様・機能の変更頻度が高く、詳細なチェックリス�
 
 テスターフィードバックの受付は `tester_feedback` capability を有効化した node だけが提供する(`features: tester_feedback: true`)。capability は manifest の `capability_scope.available_enabled` に載り、client はこれを送信先セレクトの適格条件に使う。無効な node への送信は 404 `TESTER_FEEDBACK_NOT_CONFIGURED` で fail-closed にする。中央窓口は作らない。
 
+送信先がないときは、clientが取得済みの設定・認証/同意・接続状態・公開manifestから理由を説明し、既存のコミュニティノード設定へ案内する。取得中や取得失敗を「受付非対応」と断定しない。検索の提供・規約同意と受付機能の提供は別であり、利用者側の設定だけで運営者の受付を有効化できると案内しない。説明用の状態判定は既存の送信適格条件を緩和せず、新たな外部送信や自動認証・同意を発生させない。表示とfocusの契約は[DESIGN.md](../../DESIGN.md)に従う（#957）。
+
 ### 2. bearer 認証 + 同意承認を必須にする
 
 `POST /v1/tester-feedback` は `require_bearer_identity` + `require_consents` を通す(indexing request と同じパターン)。client の送信先セレクトは認証済み・同意承認済みの configured node だけを表示するため、テスターの追加負担はない。匿名受付にしない理由は、自由記述の蓄積 endpoint のスパム面を認証と既存のグローバル per-IP レートリミットで抑えるためである。送信者の識別情報(pubkey)はレポート record に保存しない。
