@@ -1,0 +1,506 @@
+[
+  {
+    "id": "settings-connectivitypanel--ready",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--narrow-error",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--unknown",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--loading",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--failed",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--stale",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--offline",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--recovering",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--durable",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--live",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--missing-topics",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--discovery",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--ready",
+    "locale": "ja",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--narrow-error",
+    "locale": "ja",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--unknown",
+    "locale": "ja",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--loading",
+    "locale": "ja",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--failed",
+    "locale": "ja",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--stale",
+    "locale": "ja",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--offline",
+    "locale": "ja",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--recovering",
+    "locale": "ja",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--durable",
+    "locale": "ja",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--live",
+    "locale": "ja",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--missing-topics",
+    "locale": "ja",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--discovery",
+    "locale": "ja",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--ready",
+    "locale": "en",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--narrow-error",
+    "locale": "en",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--unknown",
+    "locale": "en",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--loading",
+    "locale": "en",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--failed",
+    "locale": "en",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--stale",
+    "locale": "en",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--offline",
+    "locale": "en",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--recovering",
+    "locale": "en",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--durable",
+    "locale": "en",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--live",
+    "locale": "en",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--missing-topics",
+    "locale": "en",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--discovery",
+    "locale": "en",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--ready",
+    "locale": "en",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--narrow-error",
+    "locale": "en",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--unknown",
+    "locale": "en",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--loading",
+    "locale": "en",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--failed",
+    "locale": "en",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--stale",
+    "locale": "en",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--offline",
+    "locale": "en",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--recovering",
+    "locale": "en",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--durable",
+    "locale": "en",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--live",
+    "locale": "en",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--missing-topics",
+    "locale": "en",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--discovery",
+    "locale": "en",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--ready",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--narrow-error",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--unknown",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--loading",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--failed",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--stale",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--offline",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--recovering",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--durable",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--live",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--missing-topics",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--discovery",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--ready",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--narrow-error",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--unknown",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--loading",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--failed",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--stale",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--offline",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--recovering",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--durable",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--live",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--missing-topics",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-connectivitypanel--discovery",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": [],
+    "incomplete": []
+  }
+]

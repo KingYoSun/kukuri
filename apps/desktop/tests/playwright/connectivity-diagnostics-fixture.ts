@@ -1,11 +1,11 @@
 import type { Page } from '@playwright/test';
 
-export async function seedConnectivityDiagnostics(page: Page, locale = 'ja', theme = 'dark', developer = true) {
-  await page.addInitScript(({ locale, theme, developer }) => {
+export async function seedConnectivityDiagnostics(page: Page, locale = 'ja', theme = 'dark', developer = true, initialFailure = false) {
+  await page.addInitScript(({ locale, theme, developer, initialFailure }) => {
     localStorage.setItem('kukuri.desktop.locale', locale);
     localStorage.setItem('kukuri.desktop.theme', theme);
     localStorage.setItem('kukuri.desktop.developer-mode', String(developer));
-    const control = { fail: false, delay: 0, live: false, reads: 0, mutations: [] as string[] };
+    const control = { fail: initialFailure, delay: 0, live: false, reads: 0, mutations: [] as string[] };
     Object.assign(window, { diagnosticsTest: control });
     let desktopApi = window.__KUKURI_DESKTOP__;
     Object.defineProperty(window, '__KUKURI_DESKTOP__', {
@@ -40,5 +40,5 @@ export async function seedConnectivityDiagnostics(page: Page, locale = 'ja', the
         }
       },
     });
-  }, { locale, theme, developer });
+  }, { locale, theme, developer, initialFailure });
 }

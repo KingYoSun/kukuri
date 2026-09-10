@@ -82,3 +82,21 @@ test('Control Center topic summaries distinguish missing diagnostics and paused 
   await expect(paused.locator('.topic-diagnostic')).toHaveText('Live reception paused');
   await expect(dev.locator('.topic-diagnostic')).not.toContainText('peers: 0');
 });
+
+test('an initial read failure remains unknown in settings and Control Center until a successful refresh', async ({ page }) => {
+  await seedConnectivityDiagnostics(page, 'en', 'dark', true, true);
+  await page.goto('/#/timeline?settings=connectivity');
+  const drawer = page.getByRole('dialog');
+  await expect(drawer.getByText('Diagnostics could not be loaded. Try refreshing again.').first()).toBeVisible();
+  await expect(drawer.getByText('Diagnostics not loaded').first()).toBeVisible();
+  await expect(drawer.getByText('Peers', { exact: true })).toHaveCount(0);
+  await drawer.locator('.shell-settings-close').click();
+  await page.getByTestId('control-center-trigger').click();
+  const center = page.getByRole('complementary');
+  const dev = center.getByRole('button', { name: 'dev', exact: true }).locator('..');
+  await expect(dev.locator('.topic-diagnostic')).toHaveText('Diagnostics not loaded');
+  await center.getByRole('button', { name: /Diagnostics not loaded Connectivity/ }).click();
+  await page.evaluate(() => Object.assign((window as unknown as { diagnosticsTest: object }).diagnosticsTest, { fail: false }));
+  await drawer.getByRole('button', { name: 'Refresh diagnostics', exact: true }).click();
+  await expect(drawer.getByText('No live connection · recovering delivery', { exact: true }).first()).toBeVisible();
+});
