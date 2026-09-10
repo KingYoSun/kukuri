@@ -8,9 +8,11 @@ import { ConnectivityPanel } from './ConnectivityPanel';
 import { DiscoveryPanel } from './DiscoveryPanel';
 import { getResolvedLocale } from '@/i18n/format';
 import type { SyncStatus } from '@/lib/api';
+import { SettingsStoryFrame } from './SettingsStoryFrame';
 
 type State = 'unknown' | 'loading' | 'failed' | 'stale' | 'offline' | 'recovering' | 'durable' | 'live' | 'topics' | 'discovery';
-function DiagnosticStory({ state }: { state: State }) {
+function DiagnosticStory({ state, width = 'wide', operationError = false }:
+  { state: State; width?: 'wide' | 'narrow'; operationError?: boolean }) {
   const { t, i18n } = useTranslation(['settings', 'common']);
   const [initial] = useState(() => createDesktopShellStore().getState());
   const [ticket, setTicket] = useState('');
@@ -25,19 +27,22 @@ function DiagnosticStory({ state }: { state: State }) {
     discovery: { ...base.discovery, docs_assist_peer_ids: ['assistance-peer'] } };
   if (state === 'offline') sync.delivery_state = base.delivery_state;
   const view = useSettingsViewModels({ ...initial, syncStatus: sync,
+    error: operationError ? 'failed to import peer ticket: invalid endpoint id' : null,
     syncStatusRead: { loaded: !['unknown', 'loading', 'failed'].includes(state) || refreshed,
       refreshing: state === 'loading', error: ['failed', 'stale'].includes(state) && !refreshed },
     trackedTopics: state === 'topics' ? ['general', 'dev', 'test'] : [], topicDiagnostics: {},
     peerTicket: ticket, discoverySeedInput: seed, locale: getResolvedLocale(i18n.resolvedLanguage), theme: 'dark', t });
   const actions = { onRefreshDiagnostics: () => setRefreshed(true), onOpenCommunityNode: () => undefined };
-  return <div className='max-w-3xl p-4'>{state === 'discovery'
+  return <SettingsStoryFrame width={width}><main className='max-w-3xl p-4'>{state === 'discovery'
     ? <DiscoveryPanel view={view.discoveryPanelView} {...actions} saveDisabled resetDisabled onSeedPeersChange={setSeed} onSave={() => {}} onReset={() => {}} />
-    : <ConnectivityPanel view={view.connectivityPanelView} {...actions} onPeerTicketInputChange={setTicket} onImportPeer={() => {}} />}</div>;
+    : <ConnectivityPanel view={view.connectivityPanelView} {...actions} onPeerTicketInputChange={setTicket} onImportPeer={() => {}} />}</main></SettingsStoryFrame>;
 }
-const meta = { title: 'Settings/Connectivity diagnostics', component: DiagnosticStory,
+const meta = { title: 'Settings/ConnectivityPanel', component: DiagnosticStory,
   parameters: { layout: 'fullscreen' }, args: { state: 'recovering' } } satisfies Meta<typeof DiagnosticStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+export const Ready: Story = { args: { state: 'live' } };
+export const NarrowError: Story = { args: { state: 'offline', width: 'narrow', operationError: true } };
 export const Unknown: Story = { args: { state: 'unknown' } };
 export const Loading: Story = { args: { state: 'loading' } };
 export const Failed: Story = { args: { state: 'failed' } };
