@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
+import { LockKeyhole } from 'lucide-react';
 import type { AppConsentDocumentStatus } from '@/lib/api';
 import { LegalDocumentView } from './LegalDocumentView';
 import { LocaleSelect } from './LocaleSelect';
@@ -94,7 +95,9 @@ export function ConsentGateView({
               aria-busy={accepting}
               onClick={onAccept}
             >
-              {accepting ? t('gate.accepting') : t('gate.accept')}
+              {accepting ? t('gate.accepting') : missingAttestation ? (
+                <><LockKeyhole className='size-4 shrink-0' aria-hidden='true' />{t('gate.acceptBlocked')}</>
+              ) : t('gate.accept')}
             </Button>
             <Button type='button' variant='secondary' disabled={accepting} onClick={onDecline}>
               {t('gate.decline')}

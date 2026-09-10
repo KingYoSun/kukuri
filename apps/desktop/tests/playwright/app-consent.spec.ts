@@ -18,7 +18,7 @@ test('consent actions are reachable on first paint without scrolling the terms',
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Before you continue' })).toBeVisible();
-  const accept = page.getByRole('button', { name: 'Accept and continue' });
+  const accept = page.getByRole('button', { name: 'Age confirmation required' });
   await page.screenshot({ path: testInfo.outputPath('first-paint.png') });
   await testInfo.attach('consent-first-paint', { path: testInfo.outputPath('first-paint.png'), contentType: 'image/png' });
   const rect = await accept.boundingBox();
@@ -39,7 +39,7 @@ for (const locale of ['en', 'ja', 'zh-CN'] as const) {
         await page.goto('/');
         const text = copy[locale];
         await expect(page.getByRole('heading', { level: 1 })).toHaveText(text.title);
-        const accept = page.getByRole('button', { name: text.accept, exact: true });
+        const accept = page.locator('.app-consent-actions').getByRole('button').first();
         const checkbox = page.getByRole('checkbox');
         await expect(accept).toBeDisabled();
         await expect(checkbox).toHaveAccessibleDescription(text.reason);
@@ -66,7 +66,7 @@ for (const locale of ['en', 'ja', 'zh-CN'] as const) {
         expect(await appConsentCalls(page)).toEqual([]);
         await page.reload();
         await expect(page.getByRole('checkbox')).not.toBeChecked();
-        await expect(page.getByRole('button', { name: text.accept, exact: true })).toBeDisabled();
+        await expect(accept).toBeDisabled();
       });
     }
   }

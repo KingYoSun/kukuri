@@ -29,7 +29,7 @@ test('app consent unchecked English dark', async ({ page }) => {
   await seedAppConsent(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await expect(page.getByRole('button', { name: 'Accept and continue' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Age confirmation required' })).toBeDisabled();
   await expect(page).toHaveScreenshot('app-consent-en-dark.png');
 });
 

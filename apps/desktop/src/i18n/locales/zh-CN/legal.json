@@ -4,6 +4,7 @@
     "intro": "在使用 kukuri 之前，请阅读服务条款与隐私政策。在您同意之前，kukuri 不会开始任何网络连接（不会暴露您的 IP 地址）。",
     "updatedNotice": "服务条款或隐私政策已更新。请重新阅读并同意以继续。",
     "accept": "同意并继续",
+    "acceptBlocked": "需要确认年龄",
     "decline": "不同意",
     "declineNotice": "如果您不同意，则无法使用 kukuri。请关闭应用。",
     "accepting": "正在应用…",

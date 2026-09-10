@@ -202,7 +202,7 @@ test('consent explains the missing age confirmation before any action', async ()
   });
   render(<App />);
   const checkbox = await screen.findByRole('checkbox');
-  const accept = screen.getByRole('button', { name: 'Accept and continue' });
+  const accept = screen.getByRole('button', { name: 'Age confirmation required' });
   const reason = 'To continue, check the box to confirm that you are 18 or older.';
   expect(screen.getByText(reason)).toBeVisible();
   expect(checkbox).toHaveAccessibleDescription(reason);
@@ -210,9 +210,11 @@ test('consent explains the missing age confirmation before any action', async ()
   expect(accept).toBeDisabled();
   await user.click(checkbox);
   expect(accept).toBeEnabled();
+  expect(accept).toHaveAccessibleName('Accept and continue');
   expect(screen.queryByText(reason)).not.toBeInTheDocument();
   await user.click(checkbox);
   expect(accept).toBeDisabled();
+  expect(accept).toHaveAccessibleName('Age confirmation required');
   expect(screen.getByText(reason)).toBeVisible();
   await user.click(screen.getByRole('button', { name: 'Decline' }));
   expect(invokeMock.mock.calls.filter(([command]) => command === 'accept_app_consents')).toHaveLength(0);
@@ -261,7 +263,7 @@ test('an outdated age attestation needs a new explicit choice, and remount disca
   first.unmount();
   render(<App />);
   expect(await screen.findByRole('checkbox')).not.toBeChecked();
-  expect(screen.getByRole('button', { name: 'Accept and continue' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Age confirmation required' })).toBeDisabled();
   expect(invokeMock.mock.calls.filter(([command]) => command === 'accept_app_consents')).toHaveLength(0);
 });
 
@@ -331,7 +333,7 @@ test('desktop app blocks startup until app-level legal consent is accepted', asy
   expect(screen.queryByRole('button', { name: 'Post' })).not.toBeInTheDocument();
 
   // #858: 年齢の自己申告チェックが無い間は同意ボタンが無効。
-  const acceptButton = screen.getByRole('button', { name: 'Accept and continue' });
+  const acceptButton = screen.getByRole('button', { name: 'Age confirmation required' });
   expect(acceptButton).toBeDisabled();
   expect(screen.getByText('I am 18 years of age or older.')).toBeInTheDocument();
   await user.click(screen.getByTestId('age-attestation-checkbox'));
