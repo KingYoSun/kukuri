@@ -41,6 +41,7 @@ kukuriの通常画面は、コンテンツを継続して閲覧・作成・操�
 - topic、post、thread、profile、channel、conversationを主役にする。node URL、peer id、ticket、hash、capability、sync内部状態は通常表示の主階層へ置かない。
 - 技術識別子は通常画面では人が判別できる名前と短い補助情報に置き換える。完全値はcontext menu等の明示操作でコピー可能にし、Developer modeと診断画面では表示してよい。
 - product UIとdiagnostics UIを視覚的・構造的に分け、diagnosticsはControl Center、Settings、inline Noticeの補助階層へ置く。
+- 開発者設定ではモードの有効／無効を文字で示し、有効時は接続・ディスカバリー・コミュニティノードの診断へ同じ設定drawer内で移動できるようにする。有効化だけで自動遷移せず、移動後は対象sectionへfocusを引き継ぐ。設定drawerとbackdropはworkspaceのdock／page indicatorより前面に置き、診断操作を妨げたり背景の操作を受け付けたりしない。
 - warm-orangeをprimary action、cool-tealをaccent、focus、selected stateに限定する。dark-firstのdeep-navy、Column Canvas、topic-firstの情報構造をkukuri固有の基盤とする。
 - 半透明gradient、過剰なcard nesting、装飾目的の巨大見出しで階層を作らず、solid surface、境界、余白、弱い拡散影で表す。
 - 外部trendや一般的な禁止リストより、既存brief、token、component、受け入れ済みADRを優先する。

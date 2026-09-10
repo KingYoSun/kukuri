@@ -26,6 +26,31 @@ const NARROW = { width: 700, height: 980 } as const;
 
 const LOCALE_EN = 'en';
 
+for (const { locale, theme, width, height, status, toggle } of [
+  { locale: 'ja', theme: 'dark', width: 1280, height: 800,
+    status: '開発者モードは有効です。', toggle: '開発者モードを有効にする' },
+  { locale: 'en', theme: 'light', width: 390, height: 844,
+    status: 'Developer mode is on.', toggle: 'Enable developer mode' },
+] as const) {
+  test(`developer settings ${locale} ${theme}`, async ({ page }) => {
+    await page.addInitScript(({ locale, theme }) => {
+      localStorage.setItem('kukuri.desktop.locale', locale);
+      localStorage.setItem('kukuri.desktop.theme', theme);
+      localStorage.setItem('kukuri.desktop.developer-mode', 'false');
+    }, { locale, theme });
+    await page.setViewportSize({ width, height });
+    await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral&settings=developer');
+    const drawer = page.getByRole('dialog');
+    await expect(drawer.getByRole('status')).toBeVisible();
+    await settleForShot(page, theme);
+    await expect(drawer).toHaveScreenshot(`developer-disabled-${locale}-${theme}.png`, { maxDiffPixelRatio: 0.001 });
+    await drawer.getByRole('checkbox', { name: toggle }).check();
+    await expect(drawer.getByRole('status')).toHaveText(status);
+    await settleForShot(page, theme);
+    await expect(drawer).toHaveScreenshot(`developer-enabled-${locale}-${theme}.png`, { maxDiffPixelRatio: 0.001 });
+  });
+}
+
 for (const { locale, theme, width, height } of [
   { locale: 'en', theme: 'dark', width: 1280, height: 800 },
   { locale: 'ja', theme: 'light', width: 390, height: 844 },

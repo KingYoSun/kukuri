@@ -755,7 +755,7 @@ test('developer panel toggle reports the requested developer mode state', async 
   const onDeveloperModeChange = vi.fn();
 
   render(
-    <DeveloperPanel developerModeEnabled={false} onDeveloperModeChange={onDeveloperModeChange} />
+    <DeveloperPanel developerModeEnabled={false} onDeveloperModeChange={onDeveloperModeChange} onOpenDiagnostics={vi.fn()} />
   );
 
   const toggle = screen.getByRole('checkbox', { name: 'Enable developer mode' });
@@ -763,4 +763,23 @@ test('developer panel toggle reports the requested developer mode state', async 
 
   await user.click(toggle);
   expect(onDeveloperModeChange).toHaveBeenCalledWith(true);
+});
+
+test('developer panel shortcuts follow the current controlled mode', async () => {
+  const user = userEvent.setup();
+  const onOpenDiagnostics = vi.fn();
+  const props = { onDeveloperModeChange: vi.fn(), onOpenDiagnostics };
+  const { rerender } = render(<DeveloperPanel {...props} developerModeEnabled />);
+  expect(screen.getByRole('status')).toHaveTextContent('Developer mode is on.');
+  for (const [name, section] of [
+    ['Connection diagnostics', 'connectivity'],
+    ['Discovery diagnostics', 'discovery'],
+    ['Community node diagnostics', 'community-node'],
+  ]) {
+    await user.click(screen.getByRole('button', { name }));
+    expect(onOpenDiagnostics).toHaveBeenLastCalledWith(section);
+  }
+  rerender(<DeveloperPanel {...props} developerModeEnabled={false} />);
+  expect(screen.getByRole('status')).toHaveTextContent('Developer mode is off.');
+  expect(screen.queryByRole('button')).not.toBeInTheDocument();
 });

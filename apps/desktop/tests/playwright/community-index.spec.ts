@@ -103,7 +103,7 @@ test('advanced Community Node settings persist manual and automatic index prefer
   await page.setViewportSize({ width: 1400, height: 980 });
   await page.goto('/#/explore?topic=kukuri%3Atopic%3Ageneral');
 
-  let controlCenter = await openControlCenter(page);
+  const controlCenter = await openControlCenter(page);
   await controlCenter.getByRole('button', { name: 'Settings', exact: true }).click();
   let settings = page.getByRole('dialog', { name: 'Settings' });
   await settings.getByTestId('settings-section-community-node').click();
@@ -116,10 +116,12 @@ test('advanced Community Node settings persist manual and automatic index prefer
   )).toContain('manual');
 
   await page.reload();
-  controlCenter = await openControlCenter(page);
-  await controlCenter.getByRole('button', { name: 'Settings', exact: true }).click();
   settings = page.getByRole('dialog', { name: 'Settings' });
-  await settings.getByTestId('settings-section-community-node').click();
+  // The URL restores the open modal. Its backdrop must block the workspace dock.
+  await expect(settings).toBeVisible();
+  await expect(settings.getByTestId('settings-section-community-node')).toHaveAttribute(
+    'aria-current', 'location'
+  );
   selector = settings.getByRole('combobox', { name: 'Community Index query node' });
   await expect(selector).toHaveValue('https://api.kukuri.app');
   await selector.selectOption('auto');

@@ -321,10 +321,18 @@
   "developer": {
     "mode": {
       "description": "開発中の機能（ライブ・ゲーム）と開発者向けの詳細な診断情報を表示します。",
-      "label": "開発者モードを有効にする"
+      "label": "開発者モードを有効にする",
+      "enabled": "開発者モードは有効です。",
+      "disabled": "開発者モードは無効です。"
     },
     "summary": "開発中機能と診断情報",
-    "title": "開発者"
+    "title": "開発者",
+    "diagnostics": {
+      "description": "接続の状態を調べるには、診断を選んでください。",
+      "connectivity": "接続の診断を開く",
+      "discovery": "ディスカバリーの診断を開く",
+      "community-node": "コミュニティノードの診断を開く"
+    }
   },
   "discovery": {
     "actions": {
