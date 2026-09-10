@@ -215,7 +215,8 @@ button:disabled {
   opacity: 1;
   color: var(--muted-foreground);
   background: var(--surface-panel-muted);
-  box-shadow: inset 0 0 0 1px var(--muted-foreground-soft);
+  border: 1px dashed var(--muted-foreground-soft);
+  box-shadow: none;
   cursor: not-allowed;
 }
 

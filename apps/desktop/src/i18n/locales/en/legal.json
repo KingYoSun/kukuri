@@ -4,6 +4,7 @@
     "intro": "Please review the terms of service and privacy policy before using kukuri. kukuri does not start any network connection (which would expose your IP address) until you accept.",
     "updatedNotice": "The terms of service or privacy policy have been updated. Please review and accept again to continue.",
     "accept": "Accept and continue",
+    "acceptBlocked": "Age confirmation required",
     "decline": "Decline",
     "declineNotice": "If you do not accept, you cannot use kukuri. Please close the app.",
     "accepting": "Applying…",

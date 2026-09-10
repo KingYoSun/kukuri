@@ -29,8 +29,16 @@ test('app consent unchecked English dark', async ({ page }) => {
   await seedAppConsent(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await expect(page.getByRole('button', { name: 'Accept and continue' })).toBeDisabled();
-  await expect(page).toHaveScreenshot('app-consent-en-dark.png');
+  const accept = page.locator('.app-consent-actions').getByRole('button').first();
+  await expect(accept).toHaveAccessibleName('Age confirmation required');
+  await expect(accept).toBeDisabled();
+  // A button-only change can fit inside the global full-page 1% tolerance.
+  await expect(page).toHaveScreenshot('app-consent-en-dark.png', { maxDiffPixelRatio: 0.001 });
+  await expect(accept).toHaveScreenshot('app-consent-action-blocked-en-dark.png', { maxDiffPixelRatio: 0.001 });
+  await page.getByRole('checkbox').check();
+  await expect(accept).toHaveAccessibleName('Accept and continue');
+  await expect(accept).toBeEnabled();
+  await expect(accept).toHaveScreenshot('app-consent-action-ready-en-dark.png', { maxDiffPixelRatio: 0.001 });
 });
 
 test('app consent checked Japanese light narrow', async ({ page }) => {

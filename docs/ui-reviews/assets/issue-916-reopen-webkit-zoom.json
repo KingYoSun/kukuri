@@ -1,0 +1,228 @@
+{
+  "host_webkit": "2.52.6",
+  "zoom": 2.0,
+  "native_inputs": [
+    "document pointer wheel down (150 events)",
+    "Tab",
+    "space",
+    "Tab",
+    "Shift_L+Tab",
+    "space",
+    "Tab",
+    "disabled pointer click"
+  ],
+  "records": [
+    {
+      "step": "initial",
+      "viewport": {
+        "width": 640,
+        "height": 400,
+        "scrollWidth": 628
+      },
+      "button": {
+        "x": 35,
+        "y": 562,
+        "width": 170.0078125,
+        "height": 50
+      },
+      "label": "年齢確認が必要",
+      "disabled": true,
+      "checked": false,
+      "focus": "BODY",
+      "docs": {
+        "top": 0,
+        "height": 190,
+        "total": 4851,
+        "box": {
+          "x": 35,
+          "y": 252,
+          "width": 558,
+          "height": 192
+        }
+      },
+      "calls": 0,
+      "style": {
+        "background": "rgb(19, 32, 44)",
+        "border": "dashed",
+        "shadow": "none"
+      }
+    },
+    {
+      "step": "document-focused",
+      "viewport": {
+        "width": 640,
+        "height": 400,
+        "scrollWidth": 628
+      },
+      "button": {
+        "x": 35,
+        "y": 518,
+        "width": 170.0078125,
+        "height": 50
+      },
+      "label": "年齢確認が必要",
+      "disabled": true,
+      "checked": false,
+      "focus": "DIV",
+      "docs": {
+        "top": 0,
+        "height": 190,
+        "total": 4851,
+        "box": {
+          "x": 35,
+          "y": 208,
+          "width": 558,
+          "height": 192
+        }
+      },
+      "calls": 0,
+      "style": {
+        "background": "rgb(19, 32, 44)",
+        "border": "dashed",
+        "shadow": "none"
+      }
+    },
+    {
+      "step": "document-end",
+      "viewport": {
+        "width": 640,
+        "height": 400,
+        "scrollWidth": 628
+      },
+      "button": {
+        "x": 35,
+        "y": 518,
+        "width": 170.0078125,
+        "height": 50
+      },
+      "label": "年齢確認が必要",
+      "disabled": true,
+      "checked": false,
+      "focus": "DIV",
+      "docs": {
+        "top": 4661,
+        "height": 190,
+        "total": 4851,
+        "box": {
+          "x": 35,
+          "y": 208,
+          "width": 558,
+          "height": 192
+        }
+      },
+      "calls": 0,
+      "style": {
+        "background": "rgb(19, 32, 44)",
+        "border": "dashed",
+        "shadow": "none"
+      }
+    },
+    {
+      "step": "checked-focus",
+      "viewport": {
+        "width": 640,
+        "height": 400,
+        "scrollWidth": 628
+      },
+      "button": {
+        "x": 35,
+        "y": 317,
+        "width": 128.0078125,
+        "height": 48
+      },
+      "label": "同意して続行",
+      "disabled": false,
+      "checked": true,
+      "focus": "BUTTON",
+      "docs": {
+        "top": 4661,
+        "height": 190,
+        "total": 4851,
+        "box": {
+          "x": 35,
+          "y": 36,
+          "width": 558,
+          "height": 192
+        }
+      },
+      "calls": 0,
+      "style": {
+        "background": "rgb(245, 157, 98)",
+        "border": "none",
+        "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(245, 157, 98, 0.16) 0px 10px 28px 0px"
+      }
+    },
+    {
+      "step": "unchecked",
+      "viewport": {
+        "width": 640,
+        "height": 400,
+        "scrollWidth": 628
+      },
+      "button": {
+        "x": 35,
+        "y": 346,
+        "width": 170.0078125,
+        "height": 50
+      },
+      "label": "年齢確認が必要",
+      "disabled": true,
+      "checked": false,
+      "focus": "BUTTON",
+      "docs": {
+        "top": 4661,
+        "height": 190,
+        "total": 4851,
+        "box": {
+          "x": 35,
+          "y": 36,
+          "width": 558,
+          "height": 192
+        }
+      },
+      "calls": 0,
+      "style": {
+        "background": "rgb(19, 32, 44)",
+        "border": "dashed",
+        "shadow": "none"
+      }
+    },
+    {
+      "step": "disabled-click",
+      "viewport": {
+        "width": 640,
+        "height": 400,
+        "scrollWidth": 628
+      },
+      "button": {
+        "x": 35,
+        "y": 346,
+        "width": 170.0078125,
+        "height": 50
+      },
+      "label": "年齢確認が必要",
+      "disabled": true,
+      "checked": false,
+      "focus": "BODY",
+      "docs": {
+        "top": 4661,
+        "height": 190,
+        "total": 4851,
+        "box": {
+          "x": 35,
+          "y": 36,
+          "width": 558,
+          "height": 192
+        }
+      },
+      "calls": 0,
+      "style": {
+        "background": "rgb(19, 32, 44)",
+        "border": "dashed",
+        "shadow": "none"
+      }
+    }
+  ],
+  "failures": [],
+  "scope": "isolated WebKitGTK host; production frontend; synthetic IPC; not AppImage"
+}

@@ -1,0 +1,248 @@
+[
+  {
+    "locale": "en",
+    "theme": "dark",
+    "state": "unchecked",
+    "colors": {
+      "label": "Age confirmation required",
+      "disabled": true,
+      "text": "rgb(203, 189, 174)",
+      "background": "rgb(19, 32, 44)",
+      "border": "rgb(168, 155, 143)",
+      "borderStyle": "dashed",
+      "shadow": "none",
+      "reason": "rgb(246, 241, 232)",
+      "panel": "rgb(12, 23, 33)"
+    },
+    "contrast": {
+      "text": 8.994934274997851,
+      "boundary_inside": 6.099282175516904,
+      "boundary_outside": 6.680277793100203,
+      "reason": 16.089204437525165
+    }
+  },
+  {
+    "locale": "en",
+    "theme": "dark",
+    "state": "checked",
+    "colors": {
+      "label": "Accept and continue",
+      "disabled": false,
+      "text": "rgb(14, 27, 38)",
+      "background": "rgb(245, 157, 98)",
+      "border": "rgb(14, 27, 38)",
+      "borderStyle": "none",
+      "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(245, 157, 98, 0.16) 0px 10px 28px 0px",
+      "reason": null,
+      "panel": "rgb(12, 23, 33)"
+    },
+    "contrast": {
+      "text": 8.211214290687545
+    }
+  },
+  {
+    "locale": "en",
+    "theme": "light",
+    "state": "unchecked",
+    "colors": {
+      "label": "Age confirmation required",
+      "disabled": true,
+      "text": "rgb(95, 108, 118)",
+      "background": "rgb(237, 242, 246)",
+      "border": "rgb(98, 109, 119)",
+      "borderStyle": "dashed",
+      "shadow": "none",
+      "reason": "rgb(33, 48, 59)",
+      "panel": "rgb(255, 255, 255)"
+    },
+    "contrast": {
+      "text": 4.785907869234357,
+      "boundary_inside": 4.689583837657058,
+      "boundary_outside": 5.28545000242473,
+      "reason": 13.543136332195294
+    }
+  },
+  {
+    "locale": "en",
+    "theme": "light",
+    "state": "checked",
+    "colors": {
+      "label": "Accept and continue",
+      "disabled": false,
+      "text": "rgb(14, 27, 38)",
+      "background": "rgb(215, 125, 69)",
+      "border": "rgb(14, 27, 38)",
+      "borderStyle": "none",
+      "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(215, 125, 69, 0.18) 0px 10px 24px 0px",
+      "reason": null,
+      "panel": "rgb(255, 255, 255)"
+    },
+    "contrast": {
+      "text": 5.740901977484944
+    }
+  },
+  {
+    "locale": "ja",
+    "theme": "dark",
+    "state": "unchecked",
+    "colors": {
+      "label": "年齢確認が必要",
+      "disabled": true,
+      "text": "rgb(203, 189, 174)",
+      "background": "rgb(19, 32, 44)",
+      "border": "rgb(168, 155, 143)",
+      "borderStyle": "dashed",
+      "shadow": "none",
+      "reason": "rgb(246, 241, 232)",
+      "panel": "rgb(12, 23, 33)"
+    },
+    "contrast": {
+      "text": 8.994934274997851,
+      "boundary_inside": 6.099282175516904,
+      "boundary_outside": 6.680277793100203,
+      "reason": 16.089204437525165
+    }
+  },
+  {
+    "locale": "ja",
+    "theme": "dark",
+    "state": "checked",
+    "colors": {
+      "label": "同意して続行",
+      "disabled": false,
+      "text": "rgb(14, 27, 38)",
+      "background": "rgb(245, 157, 98)",
+      "border": "rgb(14, 27, 38)",
+      "borderStyle": "none",
+      "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(245, 157, 98, 0.16) 0px 10px 28px 0px",
+      "reason": null,
+      "panel": "rgb(12, 23, 33)"
+    },
+    "contrast": {
+      "text": 8.211214290687545
+    }
+  },
+  {
+    "locale": "ja",
+    "theme": "light",
+    "state": "unchecked",
+    "colors": {
+      "label": "年齢確認が必要",
+      "disabled": true,
+      "text": "rgb(95, 108, 118)",
+      "background": "rgb(237, 242, 246)",
+      "border": "rgb(98, 109, 119)",
+      "borderStyle": "dashed",
+      "shadow": "none",
+      "reason": "rgb(33, 48, 59)",
+      "panel": "rgb(255, 255, 255)"
+    },
+    "contrast": {
+      "text": 4.785907869234357,
+      "boundary_inside": 4.689583837657058,
+      "boundary_outside": 5.28545000242473,
+      "reason": 13.543136332195294
+    }
+  },
+  {
+    "locale": "ja",
+    "theme": "light",
+    "state": "checked",
+    "colors": {
+      "label": "同意して続行",
+      "disabled": false,
+      "text": "rgb(14, 27, 38)",
+      "background": "rgb(215, 125, 69)",
+      "border": "rgb(14, 27, 38)",
+      "borderStyle": "none",
+      "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(215, 125, 69, 0.18) 0px 10px 24px 0px",
+      "reason": null,
+      "panel": "rgb(255, 255, 255)"
+    },
+    "contrast": {
+      "text": 5.740901977484944
+    }
+  },
+  {
+    "locale": "zh-CN",
+    "theme": "dark",
+    "state": "unchecked",
+    "colors": {
+      "label": "需要确认年龄",
+      "disabled": true,
+      "text": "rgb(203, 189, 174)",
+      "background": "rgb(19, 32, 44)",
+      "border": "rgb(168, 155, 143)",
+      "borderStyle": "dashed",
+      "shadow": "none",
+      "reason": "rgb(246, 241, 232)",
+      "panel": "rgb(12, 23, 33)"
+    },
+    "contrast": {
+      "text": 8.994934274997851,
+      "boundary_inside": 6.099282175516904,
+      "boundary_outside": 6.680277793100203,
+      "reason": 16.089204437525165
+    }
+  },
+  {
+    "locale": "zh-CN",
+    "theme": "dark",
+    "state": "checked",
+    "colors": {
+      "label": "同意并继续",
+      "disabled": false,
+      "text": "rgb(14, 27, 38)",
+      "background": "rgb(245, 157, 98)",
+      "border": "rgb(14, 27, 38)",
+      "borderStyle": "none",
+      "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(245, 157, 98, 0.16) 0px 10px 28px 0px",
+      "reason": null,
+      "panel": "rgb(12, 23, 33)"
+    },
+    "contrast": {
+      "text": 8.211214290687545
+    }
+  },
+  {
+    "locale": "zh-CN",
+    "theme": "light",
+    "state": "unchecked",
+    "colors": {
+      "label": "需要确认年龄",
+      "disabled": true,
+      "text": "rgb(95, 108, 118)",
+      "background": "rgb(237, 242, 246)",
+      "border": "rgb(98, 109, 119)",
+      "borderStyle": "dashed",
+      "shadow": "none",
+      "reason": "rgb(33, 48, 59)",
+      "panel": "rgb(255, 255, 255)"
+    },
+    "contrast": {
+      "text": 4.785907869234357,
+      "boundary_inside": 4.689583837657058,
+      "boundary_outside": 5.28545000242473,
+      "reason": 13.543136332195294
+    }
+  },
+  {
+    "locale": "zh-CN",
+    "theme": "light",
+    "state": "checked",
+    "colors": {
+      "label": "同意并继续",
+      "disabled": false,
+      "text": "rgb(14, 27, 38)",
+      "background": "rgb(215, 125, 69)",
+      "border": "rgb(14, 27, 38)",
+      "borderStyle": "none",
+      "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(215, 125, 69, 0.18) 0px 10px 24px 0px",
+      "reason": null,
+      "panel": "rgb(255, 255, 255)"
+    },
+    "contrast": {
+      "text": 5.740901977484944
+    }
+  }
+]
