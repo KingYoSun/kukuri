@@ -1,6 +1,6 @@
 # #959 接続診断の状態説明と回復案内
 
-- 判定: In progress
+- 判定: Audit pending（コードdelta確認済み、最終CI待ち）
 - Scope revision: `959-plan-v1 / 2026-09-11`（ユーザー承認済み）
 - 基準commit: `70aa3e9e463f24889e1db1d15717ff26c9cd682d`
 - リスク区分: B。表示と既存状態取得・設定内遷移。network / IPC / 永続化 / 認証・同意guardは変更しない。
@@ -64,13 +64,47 @@
 直積をすべて増やさず、意味が異なる有効な組合せをT1でfixtureとして固定する。再現可能なUI logicは先に失敗testを実行する。実ネットワークのtimeoutが起きない場合も再現用snapshotで表示の欠陥を検証できるが、実ネットワークで障害再現済みとは記録しない。
 
 
-## 作業・検証の現在結果
+## 作業・検証の結果
 
 - T1: callerと3件の失敗test、Ubuntu変更前を記録。
-- T2〜T5: 実装・targeted validation中。
-- T6: 両OS変更後・browser / visual / a11yは未実施。
-- T7: 独立確認は未実施。
-- T8: PR / CI / merge / Closeは未実施。
+- T2〜T4: sync取得状態、最新snapshot保護、設定・Control Centerの共通説明、回復CTAを実装。別操作の共有errorは同期状態と分けて保持する。
+- T5: 状態表・取得競合・操作・翻訳・狭幅を検証。初回失敗→再取得、更新失敗→回復、raw詳細、topic欠落／停止、focusとdraft保持、mutation call0を固定。
+- T6: 両OSのmock Tauri、Storybook、browserを確認。visualはLinux公式workflow生成の新規2枚を目視後に取り込み、Linux比較26件成功。既存画像はartifactと同一で変更なし。
+- T7: `b5c7d29`の独立監査でControl Center topic一覧の欠落idle/0表示をExisting-gap B1と判定。修正前browser testで再現し、`76ff9fc8`のdelta独立確認はコードPASS、INV 7/適合7/不適合0/未分類0。最終visual/CIの判定は別途記録する。
+- T8: [PR #974](https://github.com/KingYoSun/kukuri/pull/974)。最終必須CI成功後にmergeと対象tree一致を確認し、Issueの現在判定を更新する。
+
+### AC / INVARと具体的な証跡
+
+| 条件 | 実装・証跡 |
+| --- | --- |
+| AC-1 / AC-5 / INVAR-1 | `connectivityGuidance.ts`をControl Centerの全体・topic一覧と設定panelで共有。`connectivityGuidance.test.ts`の3locale×3経路×4配送状態、欠落・停止・未知error、`connectivity-diagnostics.spec.ts`の一覧／設定一致test。 |
+| AC-2 / INVAR-4 | `diagnosticLabels.ts::diagnosticErrorSummary`で既存の厳密なtimeout識別を共用。原文関数の他callerは維持。原文詳細の非表示→展開、locale切替、未知errorのtestを維持。 |
+| AC-3 / INVAR-5 | `useConnectivityStatusRefresh.test.tsx`で初回失敗、前回snapshot保持、連打抑止、最新eventに対する古い成功／失敗、既存CN per-node競合保護。topic countは不明時null。初回取得失敗のbrowser testで0件確定しないことと再試行を確認。 |
+| AC-4 / INVAR-2・3 | 既存read APIとdrawer section切替のみ。browserでticket保持、移動先nav focus、閉じた後のtrigger focus、禁止mutation API call0。既存gossipやseed / CN設定の変更処理は変更しない。 |
+| AC-6 | Ubuntu24 / WindowsのTauri上でmock表示・更新・回復導線。browser3locale×2theme・広幅／390px・通常モード200% zoom。Story12状態×3locale×2themeの[axe結果](assets/issue-959/story-a11y.json)は72条件・違反0・要確認0。 |
+
+### 実行結果
+
+| 検証 | 結果・対象範囲 |
+| --- | --- |
+| Windows `cargo xtask check` | 成功。Rust check、Tauri backend check、frontend lint/typecheck。 |
+| Windows `cargo xtask test` | 成功。non-CN 902件成功（既存skip4）、harness22件成功、doctest成功、frontend169 files / 1392件成功。その後のtopic一覧・contrast差分は下記targetedと最終CIで補完。 |
+| Ubuntu `cargo xtask desktop-ui-check` | lint/typecheck、Vitest169 files /1392件、Storybook build成功。初回browserでは未転送のnowrap修正と既存詳細開閉testで失敗し、修正・同期後にbrowserを再実行。全体成功と一括記録しない。 |
+| Ubuntu `cargo xtask desktop-browser-test` | コードdeltaを含む220件成功。以後追加した初回失敗1本はWindowsでも成功し、最終CIで全体を確認。 |
+| 最終targeted Vitest | 状態・view model・topic UI等58件、composer等の差分60件、settings panel・read・翻訳等66件成功（集合には重複があるため合算しない）。 |
+| 最終Windows browser | `connectivity-diagnostics.spec.ts`10件成功。#915関連を含む先行targeted15件も成功。 |
+| 最終lint / typecheck | 成功。 |
+| Storybook / a11y | 最終build成功。最初の72条件でライトテーマの既存metricラベルにcontrast違反24条件。色付き背景上のdtのみ既存foreground色へ変更し、同条件72件を再検査して違反0・要確認0。 |
+| Linux visual | [生成workflow](https://github.com/KingYoSun/kukuri/actions/runs/34513333475)はsource `76ff9fc8`で成功。追加した`connection-recovery-{ja-dark,en-light}.png`を目視し取り込み。`CI=1 cargo xtask desktop-visual-test`26件成功。 |
+| 独立確認 | 初回71件、delta64件の独立targeted test成功。固定条件を再構築しB1のみ検出・修正確認。自己検証の件数で監査を代替しない。 |
+| 大型ファイルgate | 既存`tests/playwright/shell.smoke.spec.ts`が詳細展開の1行追加で999→1000行となりCIでfail。`cargo xtask oversized-files --update-baseline`で生成した当該1件だけを登録。元の長いIDの表示・幅検証を弱めず、局所UI修正に全smoke分割を混ぜないための登録で、他pathの上限は維持。最終gateを再確認する。 |
+
+### 実機確認と未確認の境界
+
+- [Ubuntu変更前](assets/issue-959/ubuntu-before.jpg) / [Ubuntu変更後](assets/issue-959/ubuntu-after.jpg)、[Windows変更後](assets/issue-959/windows-after.jpg)。製品App / shell / panelへ既存mock APIを供給し、テスト用runtime profileで確認。実際の同意・認証・送信は行わない。
+- Ubuntuでは「診断を更新」→Tabで設定CTA→Enter→移動先nav focus→Escape→Control Centerのfocus復元を確認。Windowsでは更新・設定移動と表示を確認。
+- 実APIを使う通常起動も試みたが、Ubuntu既存profileは利用前の規約・年齢確認待ちでruntime起動が延期された。そこで終了し、同意記録や年齢申告は変更していない。実runtimeの診断面到達・実ネットワーク障害再現は未確認。mock Tauriの表示成功とは区別し、network挙動の変更はない。
+- Debian13、screen reader読み上げ、touch端末実測は未確認。200%はbrowserのreflow検証であり、nativeのzoom操作成功とは記録しない。
 
 ## 固定callerの確認
 
