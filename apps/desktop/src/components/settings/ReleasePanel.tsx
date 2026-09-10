@@ -220,7 +220,7 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
       tone: updateState.status === 'failed' ? ('danger' as const) : ('default' as const),
     },
   ];
-  const updateErrorMessage = updateState.lastError
+  const updateErrorMessage = updateState.status === 'failed'
     ? t(updateErrorTranslationKey(updateState.lastError))
     : null;
   const updateBusy = ['checking', 'downloading', 'installing'].includes(updateState.status);
@@ -245,11 +245,25 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
           {t('settings:release.update.title')}
         </h4>
         {showDiagnostics ? <SettingsDiagnosticList items={updateDiagnostics} columns={2} /> : null}
-        {updateState.status === 'installing' ? (
-          <Notice>{formatUpdateStatus(updateState.status, t)}</Notice>
-        ) : null}
-        {updateState.lastError ? (
-          <Notice tone='destructive'>
+        <div role='status' aria-live='polite' aria-atomic='true'>
+          {['checking', 'up_to_date', 'downloading', 'installing'].includes(updateState.status) ? (
+            <Notice>
+              <p>{formatUpdateStatus(updateState.status, t)}</p>
+              {updateState.status === 'checking' && updateState.availableVersion ? (
+                <p className='break-words text-xs'>
+                  {t('settings:release.update.previouslyAvailable', { version: updateState.availableVersion })}
+                </p>
+              ) : null}
+            </Notice>
+          ) : null}
+          {updateState.availableVersion && ['available', 'downloading'].includes(updateState.status) ? (
+            <Notice className='break-words' tone='accent'>
+              {t('settings:release.update.available', { version: updateState.availableVersion })}
+            </Notice>
+          ) : null}
+        </div>
+        {updateErrorMessage ? (
+          <Notice className='break-words' tone='destructive' role='alert'>
             <div className='space-y-1'>
               <p>{updateErrorMessage}</p>
               {showDiagnostics ? (
@@ -287,20 +301,18 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
             </div>
           </Notice>
         ) : null}
-        {updateState.availableVersion && !updateReadyToRestart && updateState.status !== 'installing' ? (
-          <Notice tone='accent'>
-            {t('settings:release.update.available', { version: updateState.availableVersion })}
-          </Notice>
-        ) : null}
         <SettingsActionRow className='flex-col sm:flex-row'>
           <Button
             variant='secondary'
             type='button'
             disabled={updateBusy || updateReadyToRestart}
+            aria-busy={updateState.status === 'checking'}
             onClick={() => void checkForUpdate()}
           >
             <RefreshCw className='size-4' aria-hidden='true' />
-            {t('settings:release.update.check')}
+            {t(updateState.status === 'checking'
+              ? 'settings:release.update.statuses.checking'
+              : 'settings:release.update.check')}
           </Button>
           {updateReadyToRestart ? (
             <Button

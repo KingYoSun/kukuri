@@ -1,0 +1,127 @@
+import { expect, test, type Page } from '@playwright/test';
+
+const copy = {
+  en: { release: 'Release and updates', check: 'Check', checking: 'Checking', latest: 'Up to date',
+    failed: 'Could not connect to the update server.' },
+  ja: { release: 'リリースと更新', check: '確認', checking: '確認中', latest: '最新です',
+    failed: '更新サーバーに接続できませんでした。' },
+  'zh-CN': { release: '版本与更新', check: '检查', checking: '正在检查', latest: '已是最新版本',
+    failed: '无法连接到更新服务器。' },
+};
+
+async function seedUpdateCheck(page: Page, locale: keyof typeof copy, theme: string) {
+  await page.addInitScript(({ locale, theme }) => {
+    localStorage.setItem('kukuri.desktop.locale', locale);
+    localStorage.setItem('kukuri.desktop.theme', theme);
+    localStorage.setItem('kukuri.desktop.developer-mode', 'false');
+    const fixture = {
+      armed: false, pending: false, checks: 0, forbidden: [] as string[],
+      resolve: (() => {}) as (result: { id: number; version: string } | null) => void,
+      reject: (() => {}) as (reason: string) => void,
+    };
+    Object.defineProperty(window, '__updateFeedback', { value: fixture });
+    Object.defineProperty(window, '__TAURI_INTERNALS__', {
+      configurable: true,
+      value: {
+        transformCallback: () => 1,
+        unregisterCallback: () => {},
+        invoke: async (command: string) => {
+          if (command === 'plugin:app|version') return '0.2.1';
+          if (command === 'check_app_update') {
+            // Let the existing startup check complete before the manual action.
+            if (!fixture.armed) return null;
+            fixture.checks += 1;
+            return new Promise((resolve, reject) => {
+              fixture.resolve = resolve;
+              fixture.reject = reject;
+              fixture.pending = true;
+            });
+          }
+          if (['download_app_update', 'install_app_update', 'restart_after_update'].includes(command)) {
+            fixture.forbidden.push(command);
+            throw new Error(`Unexpected update side effect: ${command}`);
+          }
+          if (command.startsWith('plugin:event|')) return 1;
+          throw new Error(`Unexpected fixture command: ${command}`);
+        },
+      },
+    });
+    Object.defineProperty(window, '__TAURI_EVENT_PLUGIN_INTERNALS__', {
+      value: { unregisterListener: () => {} },
+    });
+  }, { locale, theme });
+}
+
+type UpdateFixture = {
+  armed: boolean; pending: boolean; checks: number; forbidden: string[];
+  resolve: (result: { id: number; version: string } | null) => void;
+  reject: (reason: string) => void;
+};
+
+async function settleCheck(page: Page, outcome: 'latest' | 'available' | 'failed') {
+  await expect.poll(() => page.evaluate(() =>
+    (window as unknown as { __updateFeedback: UpdateFixture }).__updateFeedback.pending
+  )).toBe(true);
+  await page.evaluate((outcome) => {
+    const fixture = (window as unknown as { __updateFeedback: UpdateFixture }).__updateFeedback;
+    fixture.pending = false;
+    if (outcome === 'failed') fixture.reject('network unavailable: fixture.internal');
+    else fixture.resolve(outcome === 'latest' ? null : { id: 1, version: '0.2.2-preview.1' });
+  }, outcome);
+}
+
+for (const locale of ['en', 'ja', 'zh-CN'] as const) {
+  for (const theme of ['dark', 'light']) {
+    for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }, { width: 640, height: 400 }]) {
+      test(`update feedback ${locale} ${theme} ${viewport.width}`, async ({ page }, testInfo) => {
+        await seedUpdateCheck(page, locale, theme);
+        await page.setViewportSize(viewport);
+        await page.goto('/#/timeline');
+        const text = copy[locale];
+        await page.getByTestId('control-center-trigger').click();
+        await page.locator('.shell-control-center').getByRole('button', { name: text.release, exact: true }).click();
+        const dialog = page.getByRole('dialog');
+        const status = dialog.getByRole('status');
+        await expect(status).toHaveText(text.latest);
+        // A populated live region can still be clipped by a zero-height drawer body.
+        await expect(status).toBeInViewport();
+        await page.evaluate(() => {
+          (window as unknown as { __updateFeedback: UpdateFixture }).__updateFeedback.armed = true;
+        });
+        const check = dialog.getByRole('button', { name: text.check, exact: true });
+        await check.focus();
+        await page.keyboard.press('Enter');
+        await expect(status).toHaveText(text.checking);
+        await expect(dialog.getByRole('button', { name: text.checking, exact: true })).toBeDisabled();
+        await expect(dialog.getByRole('button', { name: text.checking, exact: true })).toHaveAttribute('aria-busy', 'true');
+        await settleCheck(page, 'failed');
+        await expect(dialog.getByRole('alert')).toContainText(text.failed);
+        await expect(dialog).not.toContainText('fixture.internal');
+        await check.click();
+        await expect(status).toHaveText(text.checking);
+        await expect(dialog.getByRole('alert')).toHaveCount(0);
+        await settleCheck(page, 'latest');
+        await expect(status).toHaveText(text.latest);
+        await page.keyboard.press('Escape');
+        await expect(dialog).toHaveCount(0);
+        await page.getByTestId('control-center-trigger').click();
+        await page.locator('.shell-control-center').getByRole('button', { name: text.release, exact: true }).click();
+        await expect(status).toHaveText(text.latest);
+        await check.click();
+        await expect(status).toHaveText(text.checking);
+        await settleCheck(page, 'available');
+        await expect(status).toContainText('0.2.2-preview.1');
+        const bounds = await status.boundingBox();
+        expect(bounds).not.toBeNull();
+        expect(bounds!.x).toBeGreaterThanOrEqual(0);
+        expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(viewport.width);
+        expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+        await testInfo.attach('update-result', { body: await dialog.screenshot(), contentType: 'image/png' });
+        expect(await page.evaluate(() => {
+          const fixture = (window as unknown as { __updateFeedback: UpdateFixture }).__updateFeedback;
+          return { checks: fixture.checks, forbidden: fixture.forbidden };
+        })).toEqual({ checks: 3, forbidden: [] });
+      });
+    }
+  }
+}

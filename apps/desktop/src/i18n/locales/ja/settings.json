@@ -402,6 +402,7 @@
       "check": "確認",
       "install": "インストール",
       "available": "更新 {{version}} を利用できます。",
+      "previouslyAvailable": "前回見つかった更新: {{version}}。現在の提供状況を確認しています。",
       "ready": "更新をインストールできます",
       "readyDescription": "更新のダウンロードと検証が完了しました。インストールを完了するには再起動してください。",
       "restartNow": "今すぐ再起動してインストール",
