@@ -177,6 +177,7 @@ export const selectShellViewModelsSlice = (s: DesktopShellStore) => ({
   shellChromeState: projectedChromeState(s),
   socialConnections: s.socialConnections,
   syncStatus: s.syncStatus,
+  syncStatusRead: s.syncStatusRead,
   threadsById: s.threadsById,
   timelineScopeByTopic: s.timelineScopeByTopic,
   timelinesByKey: s.timelinesByKey,

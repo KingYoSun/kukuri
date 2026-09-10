@@ -13,6 +13,7 @@ async function setup(locale: SupportedLocale = 'ja') {
   const error = 'topic join pending: timed out waiting for initial topic join';
   const args: Parameters<typeof useSettingsViewModels>[0] = {
     ...state, locale, theme: 'dark', t: i18n.t.bind(i18n), trackedTopics: [], topicDiagnostics: {},
+    syncStatusRead: { loaded: true, refreshing: false, error: false },
     syncStatus: {
       ...state.syncStatus, last_error: error, status_detail: error,
       discovery: { ...state.syncStatus.discovery, mode: 'seeded_dht', connect_mode: 'direct_or_relay', last_discovery_error: error },
@@ -25,7 +26,8 @@ test('Japanese diagnostics label discovery values and summarize the reported tim
   const { args, error } = await setup();
   const before = JSON.stringify(args.syncStatus);
   const { result, rerender } = renderHook(useSettingsViewModels, { initialProps: args });
-  expect(result.current.discoveryPanelView.summaryLabel).toContain('シード付き DHT');
+  expect(result.current.discoveryPanelView.summaryLabel).toBe('発見経路の接続待ち');
+  expect(result.current.discoveryPanelView.metrics[0].value).toContain('シード付き DHT');
   expect(result.current.discoveryPanelView.metrics[1].value).toContain('直接接続またはリレー');
   const displayedErrors = [
     result.current.connectivityPanelView.diagnostics[1].value,

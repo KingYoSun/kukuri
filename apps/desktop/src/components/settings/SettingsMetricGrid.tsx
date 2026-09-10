@@ -29,7 +29,8 @@ export function SettingsMetricGrid({ items }: SettingsMetricGridProps) {
               'border-[var(--border-subtle)] bg-[var(--surface-panel-muted)]'
           )}
         >
-          <dt className='text-[0.74rem] uppercase tracking-[0.08em] text-[var(--muted-foreground)]'>
+          <dt className={cn('text-[0.74rem] uppercase tracking-[0.08em]',
+            item.tone && item.tone !== 'default' ? 'text-foreground' : 'text-[var(--muted-foreground)]')}>
             {item.label}
           </dt>
           <dd

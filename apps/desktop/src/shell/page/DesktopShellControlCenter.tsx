@@ -46,8 +46,8 @@ import {
   type ColumnKind,
   type ColumnState,
 } from '@/shell/slices/workspace';
-import { formatCount, syncStatusBadgeLabel } from '@/shell/presentation';
-import { diagnosticValueLabel } from '@/shell/diagnosticLabels';
+import { formatCount } from '@/shell/presentation';
+import { connectivityGuidance } from '@/shell/connectivityGuidance';
 import { useDesktopShellFieldSetter, useDesktopShellStore } from '@/shell/store';
 import { SavedWorkspaceLayouts } from '@/components/shell/SavedWorkspaceLayouts';
 import { applySavedWorkspaceLayout } from '@/shell/savedWorkspaceLayouts';
@@ -113,6 +113,7 @@ export function DesktopShellControlCenter({
     joinedChannelsByTopic,
     notificationStatus,
     syncStatus,
+    syncStatusRead,
     workspaceState,
   } = useDesktopShellStore(
     useShallow((state) => ({
@@ -121,6 +122,7 @@ export function DesktopShellControlCenter({
       joinedChannelsByTopic: state.joinedChannelsByTopic,
       notificationStatus: state.notificationStatus,
       syncStatus: state.syncStatus,
+      syncStatusRead: state.syncStatusRead,
       workspaceState: state.workspaceState,
     }))
   );
@@ -129,7 +131,8 @@ export function DesktopShellControlCenter({
   const selectedChannelId = activeScope.channelId;
   const setWorkspaceState = useDesktopShellFieldSetter('workspaceState');
   const communityNodeNeedsAttention = communityNodeStatuses.some((status) => status.last_error);
-  const connectionNeedsAttention = Boolean(syncStatus.last_error) || syncStatus.delivery_state !== 'Live';
+  const guidance = connectivityGuidance(syncStatus, syncStatusRead, t);
+  const connectionNeedsAttention = guidance.tone !== 'accent';
   const statusKey = communityNodeNeedsAttention
     ? 'communityNodeAttention'
     : connectionNeedsAttention
@@ -485,7 +488,9 @@ export function DesktopShellControlCenter({
               <div className='shell-control-center-action-list'>
                 <Button variant='secondary' type='button' onClick={() => openSettings('connectivity')}>
                   <Radio className='size-4' aria-hidden='true' />
-                  {syncStatusBadgeLabel(syncStatus)} · {diagnosticValueLabel('path', syncStatus.active_path, t, false)}
+                  <span className='min-w-0 text-left [overflow-wrap:anywhere]'>{guidance.label}
+                    <span className='block text-xs text-muted-foreground'>{t('shell:settingsSections.connectivity.label')}</span>
+                  </span>
                 </Button>
                 <Button variant='ghost' type='button' onClick={() => openSettings('release')}>
                   <Download className='size-4' aria-hidden='true' />

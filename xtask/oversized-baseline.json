@@ -63,6 +63,10 @@
     {
       "lines": 1004,
       "path": "crates/desktop-runtime/src/identity.rs"
+    },
+    {
+      "lines": 1000,
+      "path": "apps/desktop/tests/playwright/shell.smoke.spec.ts"
     }
   ]
 }

@@ -276,13 +276,13 @@
   },
   "connectivity": {
     "diagnostics": {
-      "configuredPeers": "Configured Peers",
+      "configuredPeers": "Configured connection candidates",
       "connectedPeers": "Connected Peers",
       "connectionDetail": "Connection Detail",
-      "effectivePeers": "Effective Peers",
+      "effectivePeers": "Connected peers and assistance candidates",
       "lastError": "Last Error",
       "missingPeers": "Missing Peers",
-      "relayAssistedPeers": "Relay-assisted Peers",
+      "relayAssistedPeers": "Stored-data sync assistance candidates",
       "statusDetail": "Status Detail"
     },
     "lastReceivedBadge": "last received {{value}}",
@@ -342,8 +342,8 @@
       "communityBootstrapPeers": "Community Bootstrap Peers",
       "configuredSeedIds": "Configured Seed IDs",
       "connectedPeers": "Connected Peers",
-      "docsAssistPeers": "Docs Assist Peers",
-      "blobAssistPeers": "Blob Assist Peers",
+      "docsAssistPeers": "Stored-data sync assistance candidates",
+      "blobAssistPeers": "Attachment assistance candidates",
       "discoveryError": "Discovery Error",
       "localEndpointId": "Local Endpoint ID",
       "manualTicketPeers": "Manual Ticket Peers",
@@ -562,5 +562,54 @@
         "user_social_graph_canonical_source": "Authoritative user relationships"
       }
     }
+  },
+  "connectionGuidance": {
+    "states": {
+      "unknown": "Diagnostics not loaded",
+      "live": "Connected",
+      "durable": "Sync activity recorded · current connection unconfirmed",
+      "recovering": "No live connection · recovering delivery",
+      "offline": "No live connection",
+      "paused": "Live reception paused",
+      "preparing": "Topic diagnostics pending",
+      "unsubscribed": "Not currently subscribed"
+    },
+    "descriptions": {
+      "unknown": "Connection diagnostics have not loaded yet. This does not mean there are no peers or that a topic has never been used.",
+      "live": "A live connection is available. Check the topic details for individual connections.",
+      "durable": "There is no live connection. Stored-data sync activity was recorded, but this does not guarantee a current connection.",
+      "recovering": "There is no live connection. Stored-data delivery is recovering. Configured assistance does not mean a peer connection has been established.",
+      "offline": "There is no live connection. Configured connection candidates are separate from connected peers.",
+      "paused": "Live reception for this topic is paused. Viewing or refreshing diagnostics does not resume it.",
+      "preparing": "This topic is subscribed, but its diagnostics have not arrived yet.",
+      "unsubscribed": "This topic is not currently subscribed. Diagnostics do not establish whether it was used in the past."
+    },
+    "steps": {
+      "unknown": "Refresh diagnostics to check the state.",
+      "live": "If a topic is having trouble, check its individual diagnostics.",
+      "durable": "Check that someone on the same topic is online, wait briefly, then refresh diagnostics.",
+      "recovering": "Wait briefly and refresh diagnostics. If this continues, check peers on the same topic or community node settings. A ready node does not guarantee a peer connection.",
+      "offline": "Check that someone on the same topic is online, wait briefly, then refresh diagnostics. You can also check connection settings.",
+      "paused": "To resume, enable live reception from the topic actions in Control Center.",
+      "preparing": "Wait briefly, then refresh diagnostics.",
+      "unsubscribed": "To use this topic, open it from Control Center, then refresh diagnostics."
+    },
+    "discovery": {
+      "found": "Discovery connection available",
+      "waiting": "Waiting for discovery connections",
+      "description": "This shows peer discovery, not individual topic delivery. Seeds and assistance peers are candidates. Allowing relay does not mean data is currently relayed."
+    },
+    "stale": "Diagnostics could not be refreshed. Showing the previous snapshot; the current state is unconfirmed.",
+    "failed": "Diagnostics could not be loaded. Try refreshing again.",
+    "refresh": "Refresh diagnostics",
+    "refreshing": "Refreshing diagnostics…",
+    "openNode": "Check community node settings",
+    "details": "Technical diagnostic details",
+    "candidates": "Configured candidates and assistance peers are not counted as connected peers.",
+    "lastRecordedError": "Last recorded error: {{error}}",
+    "topicLive": "This topic has a live connection.",
+    "operationError": "Another app operation failed. This is separate from the current connection state.",
+    "operationDetails": "Operation error details",
+    "previousLabel": "{{state}} (previous snapshot)"
   }
 }

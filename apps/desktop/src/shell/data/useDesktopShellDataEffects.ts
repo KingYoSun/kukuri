@@ -278,6 +278,9 @@ export function useDesktopShellDataEffects({
       startTransition(() => {
         if (syncStatus) {
           setSyncStatus(syncStatus);
+          storeApi.getState().patchState({ syncStatusRead: {
+            ...storeApi.getState().syncStatusRead, loaded: true, error: false,
+          } });
         }
         if (communityNodeStatuses) {
           setCommunityNodeStatuses((current) =>

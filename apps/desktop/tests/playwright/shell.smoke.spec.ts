@@ -906,6 +906,7 @@ test('browser mock connectivity settings keep long identifiers within the conten
   const localPeerTicket = settingsDialog.getByRole('textbox', { name: 'Your Ticket' });
   await expect(settingsDialog).toBeVisible();
   await expect(localPeerTicket).toHaveValue(LONG_PEER_TICKET);
+  await settingsDialog.getByText('Technical diagnostic details', { exact: true }).first().click();
   await expect(settingsDialog.getByText(LONG_ENDPOINT_DETAIL).first()).toBeVisible();
   await expect(settingsDialog.getByText(LONG_PEER_ID).first()).toBeVisible();
 

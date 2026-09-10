@@ -15,12 +15,17 @@ export function diagnosticValueLabel(
 
 const initialJoinTimeout = /^(?:topic join pending: )?timed out waiting for initial topic join$/;
 
-export function diagnosticErrorLabel(error: string | null | undefined, t: Translate): string | null {
+export function diagnosticErrorSummary(error: string | null | undefined, t: Translate): string | null {
   if (!error) return null;
   const key = initialJoinTimeout.test(error)
     ? 'settings:diagnostics.initialJoinTimeout'
     : 'settings:diagnostics.error';
-  return `${t(key)} ${t('settings:diagnostics.original', { value: error })}`;
+  return t(key);
+}
+
+export function diagnosticErrorLabel(error: string | null | undefined, t: Translate): string | null {
+  const summary = diagnosticErrorSummary(error, t);
+  return summary ? `${summary} ${t('settings:diagnostics.original', { value: error })}` : null;
 }
 
 export function diagnosticStatusDetail(detail: string, t: Translate): string {

@@ -35,6 +35,7 @@ type ViewModels = ReturnType<typeof useDesktopShellViewModels>;
 
 type DesktopShellSettingsDrawerProps = {
   api: DesktopApi;
+  onRefreshDiagnostics: () => void;
   onThemeChange: (theme: DesktopTheme) => void;
   onLocaleChange: (locale: SupportedLocale) => void;
   localeSaveFailed?: boolean;
@@ -74,6 +75,7 @@ function createCommunityNodeDraftId(): string {
 
 export function DesktopShellSettingsDrawer({
   api,
+  onRefreshDiagnostics,
   onThemeChange,
   onLocaleChange,
   localeSaveFailed,
@@ -162,6 +164,11 @@ export function DesktopShellSettingsDrawer({
     syncRoute('replace', { settingsOpen: true, settingsSection: section });
   };
 
+  const openDiagnosticSettings = (section: SettingsSection) => {
+    changeSettingsSection(section);
+    document.getElementById(`${SHELL_SETTINGS_ID}-section-${section}`)?.focus();
+  };
+
   const settingsSections = [
     {
       ...settingsSectionCopy[0],
@@ -191,6 +198,8 @@ export function DesktopShellSettingsDrawer({
       ...settingsSectionCopy[3],
       content: (
         <ConnectivityPanel
+          onRefreshDiagnostics={onRefreshDiagnostics}
+          onOpenCommunityNode={() => openDiagnosticSettings('community-node')}
           view={connectivityPanelView}
           onPeerTicketInputChange={setPeerTicket}
           onImportPeer={() => void handleImportPeer()}
@@ -202,6 +211,8 @@ export function DesktopShellSettingsDrawer({
       ...settingsSectionCopy[4],
       content: (
         <DiscoveryPanel
+          onRefreshDiagnostics={onRefreshDiagnostics}
+          onOpenCommunityNode={() => openDiagnosticSettings('community-node')}
           view={discoveryPanelView}
           showDiagnostics={developerModeEnabled}
           saveDisabled={discoveryConfig.env_locked || !discoveryEditorDirty}
