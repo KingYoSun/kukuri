@@ -242,3 +242,10 @@
     align-items: stretch;
   }
 }
+
+/* Keep the selected settings content reachable in short windows and at 200% zoom. */
+@media (max-width: 759px) and (max-height: 600px) {
+  .shell-settings-nav {
+    max-height: 20dvh;
+  }
+}

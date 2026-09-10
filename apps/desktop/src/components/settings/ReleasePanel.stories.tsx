@@ -34,6 +34,46 @@ type Story = StoryObj<typeof meta>;
 
 export const Resources: Story = {};
 
+function updateStatus(status: 'idle' | 'checking' | 'up_to_date' | 'available' | 'failed') {
+  const previous = appUpdateStore.getState();
+  appUpdateStore.setState({
+    updateState: {
+      ...INITIAL_UPDATE_STATE, status,
+      availableVersion: status === 'available' ? '0.2.2-preview.1' : null,
+      lastError: status === 'failed' ? 'network unavailable' : null,
+    },
+    pendingUpdate: status === 'available'
+      ? { version: '0.2.2-preview.1', download: async () => {}, install: async () => {} }
+      : null,
+  });
+  return () => appUpdateStore.setState(previous);
+}
+
+export const UpdateIdle: Story = {
+  args: { showDiagnostics: false },
+  beforeEach: () => updateStatus('idle'),
+};
+
+export const UpdateChecking: Story = {
+  args: { showDiagnostics: false },
+  beforeEach: () => updateStatus('checking'),
+};
+
+export const UpToDate: Story = {
+  args: { showDiagnostics: false },
+  beforeEach: () => updateStatus('up_to_date'),
+};
+
+export const UpdateAvailable: Story = {
+  args: { showDiagnostics: false },
+  beforeEach: () => updateStatus('available'),
+};
+
+export const UpdateCheckFailed: Story = {
+  args: { showDiagnostics: false },
+  beforeEach: () => updateStatus('failed'),
+};
+
 function externalLinkState(pending: boolean) {
   mocked(isTauriRuntime).mockReturnValue(true);
   mocked(invokeDesktop).mockImplementation((command) => {
