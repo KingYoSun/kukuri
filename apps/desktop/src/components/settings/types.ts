@@ -3,6 +3,8 @@ import { type DesktopTheme } from '@/lib/theme';
 import { type SupportedLocale } from '@/i18n';
 import { type BookmarkedCustomReactionView, type CustomReactionAssetView } from '@/lib/api';
 
+import type { ConnectivityGuidance } from '@/shell/connectivityGuidance';
+
 export type SettingsPanelStatus = 'loading' | 'ready' | 'error';
 
 export type SettingsMetricView = {
@@ -19,11 +21,12 @@ export type SettingsDiagnosticItemView = {
 };
 
 export type ConnectivityTopicDetailView = {
+  guidance?: ConnectivityGuidance;
   topic: string;
   summary: string;
   lastReceivedLabel: string;
-  expectedPeerCount: number;
-  missingPeerCount: number;
+  expectedPeerCount: number | null;
+  missingPeerCount: number | null;
   statusDetail: string;
   connectedPeersLabel: string;
   relayAssistedPeersLabel: string;
@@ -33,6 +36,7 @@ export type ConnectivityTopicDetailView = {
 };
 
 export type ConnectivityPanelView = {
+  guidance?: ConnectivityGuidance;
   status: SettingsPanelStatus;
   summaryLabel: string;
   panelError?: string | null;
@@ -44,6 +48,7 @@ export type ConnectivityPanelView = {
 };
 
 export type DiscoveryPanelView = {
+  guidance?: ConnectivityGuidance;
   status: SettingsPanelStatus;
   summaryLabel: string;
   panelError?: string | null;

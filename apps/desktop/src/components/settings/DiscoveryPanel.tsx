@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { ConnectivityGuidanceNotice, type DiagnosticActions } from './ConnectivityGuidanceNotice';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
@@ -11,7 +12,7 @@ import { SettingsEditorField } from './SettingsEditorField';
 import { SettingsMetricGrid } from './SettingsMetricGrid';
 import { type DiscoveryPanelView } from './types';
 
-type DiscoveryPanelProps = {
+type DiscoveryPanelProps = DiagnosticActions & {
   view: DiscoveryPanelView;
   saveDisabled: boolean;
   resetDisabled: boolean;
@@ -23,6 +24,8 @@ type DiscoveryPanelProps = {
 
 export function DiscoveryPanel({
   view,
+  onRefreshDiagnostics,
+  onOpenCommunityNode,
   saveDisabled,
   resetDisabled,
   onSeedPeersChange,
@@ -42,11 +45,13 @@ export function DiscoveryPanel({
       {view.status === 'loading' ? <Notice>{t('settings:discovery.loading')}</Notice> : null}
       {view.panelError ? <Notice tone='destructive'>{view.panelError}</Notice> : null}
 
-      {showDiagnostics ? (
-        <>
+      <ConnectivityGuidanceNotice guidance={view.guidance} onRefreshDiagnostics={onRefreshDiagnostics} onOpenCommunityNode={onOpenCommunityNode} />
+      {showDiagnostics && view.guidance?.loaded !== false ? (
+        <details className='min-w-0'>
+          <summary className='cursor-pointer py-2'>{t('settings:connectionGuidance.details')}</summary>
           <SettingsMetricGrid items={view.metrics} />
           <SettingsDiagnosticList items={view.diagnostics} columns={2} />
-        </>
+        </details>
       ) : null}
 
       <SettingsEditorField

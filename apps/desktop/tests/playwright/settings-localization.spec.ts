@@ -43,9 +43,10 @@ for (const copy of [
       const drawer = page.locator('.shell-settings-drawer');
       await expect(drawer.getByText(copy.timeout, { exact: false }).first()).toBeVisible();
       await drawer.getByTestId('settings-section-discovery').click();
+      await drawer.locator('summary').first().click();
       await expect(drawer.getByText(`${copy.mode} (seeded_dht)`).first()).toBeVisible();
       await expect(drawer.getByText(`${copy.connect} (direct_or_relay)`)).toBeVisible();
-      await expect(drawer.getByText(copy.timeout, { exact: false })).toBeVisible();
+      await expect(drawer.getByText(copy.timeout, { exact: false }).first()).toBeVisible();
       await testInfo.attach('discovery', { body: await drawer.screenshot(), contentType: 'image/png' });
       await drawer.getByTestId('settings-section-community-node').click();
       await expect(drawer.getByText(copy.auth, { exact: false }).first()).toBeVisible();

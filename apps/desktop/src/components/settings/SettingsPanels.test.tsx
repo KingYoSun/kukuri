@@ -692,7 +692,7 @@ test('connectivity panel hides diagnostics but keeps ticket import when showDiag
 
   expect(screen.getByText('Your Ticket')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Import Peer' })).toBeInTheDocument();
-  expect(screen.queryByText('Effective Peers')).not.toBeInTheDocument();
+  expect(screen.queryByText('Connected peers and assistance candidates')).not.toBeInTheDocument();
   expect(screen.queryByText('Connected Peers')).not.toBeInTheDocument();
   expect(screen.queryByText('peer-a, peer-b')).not.toBeInTheDocument();
 });

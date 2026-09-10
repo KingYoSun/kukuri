@@ -230,6 +230,7 @@ export function useDesktopShellViewModels({
     communityNodePanelView,
     reactionsPanelView,
   } = useSettingsViewModels({
+    syncStatusRead: state.syncStatusRead,
     bookmarkedReactionAssets,
     communityNodeConfig,
     communityNodeEditorDirty,

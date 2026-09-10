@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { ConnectivityGuidanceNotice, type DiagnosticActions } from './ConnectivityGuidanceNotice';
 
 import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
@@ -13,7 +14,7 @@ import { SettingsMetricGrid } from './SettingsMetricGrid';
 import { type ConnectivityPanelView } from './types';
 import { topicDisplayName } from '@/lib/topicId';
 
-type ConnectivityPanelProps = {
+type ConnectivityPanelProps = DiagnosticActions & {
   view: ConnectivityPanelView;
   onPeerTicketInputChange: (value: string) => void;
   onImportPeer: () => void;
@@ -22,6 +23,8 @@ type ConnectivityPanelProps = {
 
 export function ConnectivityPanel({
   view,
+  onRefreshDiagnostics,
+  onOpenCommunityNode,
   onPeerTicketInputChange,
   onImportPeer,
   showDiagnostics = true,
@@ -35,19 +38,31 @@ export function ConnectivityPanel({
           <div className='min-w-0'>
             <h3>{t('settings:connectivity.title')}</h3>
           </div>
-          <StatusBadge label={view.summaryLabel} tone={view.status === 'error' ? 'destructive' : 'accent'} />
+          <StatusBadge label={view.summaryLabel} tone={view.guidance?.tone === 'warning' ? 'warning' : view.status === 'error' ? 'destructive' : 'accent'} />
         </CardHeader>
 
         {view.status === 'loading' ? <Notice>{t('settings:connectivity.loading')}</Notice> : null}
-        {view.panelError ? <Notice tone='destructive'>{view.panelError}</Notice> : null}
 
-        {showDiagnostics ? (
+        <ConnectivityGuidanceNotice guidance={view.guidance} onRefreshDiagnostics={onRefreshDiagnostics} onOpenCommunityNode={onOpenCommunityNode} />
+        {showDiagnostics && view.guidance?.loaded !== false ? (
           <>
             <SettingsMetricGrid items={view.metrics} />
+            <p className='text-sm text-muted-foreground'>{t('settings:connectionGuidance.candidates')}</p>
+            <details className='min-w-0'>
+              <summary className='cursor-pointer py-2'>{t('settings:connectionGuidance.details')}</summary>
             <SettingsDiagnosticList items={view.diagnostics} columns={2} />
+            </details>
           </>
         ) : null}
       </Card>
+
+      {view.panelError ? <Notice tone='destructive'>
+        <p>{t('settings:connectionGuidance.operationError')}</p>
+        <details hidden={!showDiagnostics}>
+          <summary className='cursor-pointer py-2'>{t('settings:connectionGuidance.operationDetails')}</summary>
+          <p className='[overflow-wrap:anywhere]'>{view.panelError}</p>
+        </details>
+      </Notice> : null}
 
       <Card className='min-w-0 max-w-full space-y-4'>
         <CardHeader>
@@ -100,15 +115,17 @@ export function ConnectivityPanel({
                   <h4 className='break-all text-base font-semibold text-foreground' title={topic.topic}>{topicDisplayName(topic.topic)}</h4>
                   <p className='mt-2 text-sm text-[var(--muted-foreground)]'>{topic.summary}</p>
                 </div>
-                <StatusBadge
+                {topic.expectedPeerCount !== null && topic.guidance?.loaded !== false ? <StatusBadge
                   label={t('settings:connectivity.lastReceivedBadge', {
                     value: topic.lastReceivedLabel,
                   })}
-                />
+                /> : null}
               </div>
 
-              {showDiagnostics ? (
-                <>
+              <div className='mt-3'><ConnectivityGuidanceNotice guidance={topic.guidance} /></div>
+              {showDiagnostics && topic.guidance?.loaded !== false && topic.expectedPeerCount !== null ? (
+                <details className='min-w-0'>
+                  <summary className='cursor-pointer py-2'>{t('settings:connectionGuidance.details')}</summary>
                   <div className='mt-4'>
                     <SettingsMetricGrid
                       items={[
@@ -119,7 +136,7 @@ export function ConnectivityPanel({
                         {
                           label: t('settings:connectivity.metrics.missing'),
                           value: String(topic.missingPeerCount),
-                          tone: topic.missingPeerCount > 0 ? 'warning' : 'default',
+                          tone: (topic.missingPeerCount ?? 0) > 0 ? 'warning' : 'default',
                         },
                         {
                           label: t('settings:connectivity.metrics.lastReceived'),
@@ -165,7 +182,7 @@ export function ConnectivityPanel({
                       columns={2}
                     />
                   </div>
-                </>
+                </details>
               ) : null}
             </section>
           ))}

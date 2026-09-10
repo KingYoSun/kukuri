@@ -301,16 +301,13 @@ export function syncStatusBadgeTone(
 }
 
 export function syncStatusBadgeLabel(syncStatus: SyncStatus): string {
-  if (syncStatus.last_error) {
-    return translate('common:states.error');
-  }
   switch (syncStatus.delivery_state) {
     case 'Live':
       return translate('common:states.connected');
     case 'DurableReady':
-      return 'durable';
+      return translate('settings:connectionGuidance.states.durable');
     case 'DurableRecovering':
-      return 'recovering';
+      return translate('settings:connectionGuidance.states.recovering');
     case 'Offline':
     default:
       return translate('common:states.waiting');
@@ -321,19 +318,19 @@ export function topicConnectionLabel(diagnostic?: TopicSyncStatus): string {
   if (!diagnostic) {
     return 'idle';
   }
-  if (diagnostic.active_path === 'relay_fallback') {
+  if (diagnostic.peer_count > 0 && diagnostic.active_path === 'relay_fallback') {
     return 'relay fallback';
   }
-  if (diagnostic.active_path === 'relay_supported_p2p') {
+  if (diagnostic.peer_count > 0 && diagnostic.active_path === 'relay_supported_p2p') {
     return 'relay-supported P2P';
   }
   switch (diagnostic.delivery_state) {
     case 'Live':
       return 'joined';
     case 'DurableReady':
-      return 'durable';
+      return translate('settings:connectionGuidance.states.durable');
     case 'DurableRecovering':
-      return 'recovering';
+      return translate('settings:connectionGuidance.states.recovering');
     case 'Offline':
     default:
       return diagnostic.joined ? 'joined' : 'idle';

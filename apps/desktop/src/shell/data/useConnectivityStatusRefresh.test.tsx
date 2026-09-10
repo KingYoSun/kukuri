@@ -7,6 +7,67 @@ import { createDesktopShellStore, DesktopShellStoreContext } from '@/shell/store
 import { createDeferred } from '@/shell/DesktopShellPage.testHelpers';
 import { useConnectivityStatusRefresh } from './useConnectivityStatusRefresh';
 
+test('sync read failure retains its snapshot and retry exposes pending then clears the error', async () => {
+  const api = createDesktopMockApi();
+  const store = createDesktopShellStore();
+  const response = createDeferred<Awaited<ReturnType<typeof api.getSyncStatus>>>();
+  const initial = await api.getSyncStatus();
+  const syncRead = vi.spyOn(api, 'getSyncStatus').mockRejectedValueOnce(new Error('offline'))
+    .mockResolvedValueOnce(initial).mockRejectedValueOnce(new Error('later failure')).mockReturnValue(response.promise);
+  const { result } = renderHook(() => useConnectivityStatusRefresh(api,
+    next => store.getState().setField('syncStatus', next), vi.fn()), {
+    wrapper: ({ children }: { children: ReactNode }) => <DesktopShellStoreContext.Provider value={store}>{children}</DesktopShellStoreContext.Provider>,
+  });
+  await act(async () => result.current());
+  expect(store.getState().syncStatusRead).toEqual({ loaded: false, refreshing: false, error: true });
+  await act(async () => result.current());
+  expect(store.getState().syncStatusRead).toEqual({ loaded: true, refreshing: false, error: false });
+  await act(async () => result.current());
+  expect(store.getState().syncStatus).toBe(initial);
+  expect(store.getState().syncStatusRead.error).toBe(true);
+  let refresh!: ReturnType<typeof result.current>;
+  act(() => { refresh = result.current(); void result.current(); });
+  expect(store.getState().syncStatusRead.refreshing).toBe(true);
+  expect(syncRead).toHaveBeenCalledTimes(4);
+  await act(async () => { response.resolve(initial); await refresh; });
+  expect(store.getState().syncStatusRead).toEqual({ loaded: true, refreshing: false, error: false });
+});
+
+test('a failed old sync read cannot mark a newer event snapshot as failed', async () => {
+  const api = createDesktopMockApi();
+  const store = createDesktopShellStore();
+  const response = createDeferred<Awaited<ReturnType<typeof api.getSyncStatus>>>();
+  const initial = await api.getSyncStatus();
+  vi.spyOn(api, 'getSyncStatus').mockReturnValue(response.promise);
+  const { result } = renderHook(() => useConnectivityStatusRefresh(api,
+    next => store.getState().setField('syncStatus', next), vi.fn()), {
+    wrapper: ({ children }: { children: ReactNode }) => <DesktopShellStoreContext.Provider value={store}>{children}</DesktopShellStoreContext.Provider>,
+  });
+  let refresh!: ReturnType<typeof result.current>;
+  act(() => { refresh = result.current(); store.getState().setField('syncStatus', initial); });
+  await act(async () => { response.reject(new Error('old read')); await refresh; });
+  expect(store.getState().syncStatus).toBe(initial);
+  expect(store.getState().syncStatusRead).toEqual({ loaded: true, refreshing: false, error: false });
+});
+
+test('a newer sync snapshot survives an older pending read', async () => {
+  const api = createDesktopMockApi();
+  const store = createDesktopShellStore();
+  const before = await api.getSyncStatus();
+  const response = createDeferred<typeof before>();
+  vi.spyOn(api, 'getSyncStatus').mockReturnValue(response.promise);
+  const { result } = renderHook(() => useConnectivityStatusRefresh(api,
+    next => store.getState().setField('syncStatus', next), vi.fn()), {
+    wrapper: ({ children }: { children: ReactNode }) => <DesktopShellStoreContext.Provider value={store}>{children}</DesktopShellStoreContext.Provider>,
+  });
+  let refresh!: ReturnType<typeof result.current>;
+  act(() => { refresh = result.current(); });
+  const newer = { ...before, connected: true, peer_count: 99 };
+  act(() => store.getState().setField('syncStatus', newer));
+  await act(async () => { response.resolve(before); await refresh; });
+  expect(store.getState().syncStatus).toBe(newer);
+});
+
 test('an in-flight poll preserves a newer per-node event and refreshes untouched nodes', async () => {
   const api = createDesktopMockApi();
   await api.setCommunityNodeConfig([{ base_url: 'https://a.example' }, { base_url: 'https://b.example' }]);

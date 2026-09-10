@@ -28,6 +28,16 @@ export type CommunityNodePoliciesEntry =
   | { status: 'ok'; policies: CommunityNodePolicyDocument[] }
   | { status: 'error'; error: string };
 
+export type SyncStatusRead = {
+  loaded: boolean;
+  refreshing: boolean;
+  error: boolean;
+};
+
+export const INITIAL_SYNC_STATUS_READ: SyncStatusRead = {
+  loaded: false, refreshing: false, error: false,
+};
+
 export type ConnectivitySliceState = {
   peerTicket: string;
   localPeerTicket: string | null;
@@ -50,6 +60,7 @@ export type ConnectivitySliceState = {
   communityIndexNodeBaseUrl: string | null;
   communityIndexNodePreference: CommunityIndexNodePreference;
   syncStatus: SyncStatus;
+  syncStatusRead: SyncStatusRead;
 };
 
 export const DEFAULT_DISCOVERY_CONFIG: DiscoveryConfig = {
@@ -118,5 +129,6 @@ export function createInitialConnectivitySlice(): ConnectivitySliceState {
     communityIndexNodeBaseUrl: null,
     communityIndexNodePreference: { mode: 'auto' },
     syncStatus: DEFAULT_SYNC_STATUS,
+    syncStatusRead: INITIAL_SYNC_STATUS_READ,
   };
 }

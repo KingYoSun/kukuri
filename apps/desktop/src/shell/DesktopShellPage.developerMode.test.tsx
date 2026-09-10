@@ -96,7 +96,7 @@ test('developer mode off keeps ticket import while hiding connectivity diagnosti
 
   expect(within(drawer).getByText('Your Ticket')).toBeInTheDocument();
   expect(within(drawer).getByText('Peer Ticket')).toBeInTheDocument();
-  expect(within(drawer).queryByText('Effective Peers')).not.toBeInTheDocument();
+  expect(within(drawer).queryByText('Connected peers and assistance candidates')).not.toBeInTheDocument();
   expect(within(drawer).queryByText('Connected Peers')).not.toBeInTheDocument();
 });
 
@@ -163,11 +163,14 @@ test('diagnostic shortcuts preserve unsaved input and show connection errors wit
   await user.click(within(drawer).getByRole('checkbox', { name: 'Enable developer mode' }));
   await user.click(within(drawer).getByRole('button', { name: 'Connection diagnostics' }));
   expect(within(drawer).getByRole('textbox', { name: 'Peer Ticket' })).toHaveValue('unsaved ticket');
-  expect(within(drawer).getByText('Effective Peers')).toBeVisible();
+  expect(within(drawer).getByText(/Connection unavailable/)).not.toBeVisible();
+  await user.click(within(drawer).getAllByText('Technical diagnostic details')[0]);
+  expect(within(drawer).getByText('Connected peers and assistance candidates')).toBeVisible();
   expect(within(drawer).getAllByText(/Connection unavailable/).length).toBeGreaterThan(0);
   await user.click(within(drawer).getByTestId('settings-section-developer'));
   await user.click(within(drawer).getByRole('button', { name: 'Discovery diagnostics' }));
   expect(within(drawer).getByRole('textbox', { name: 'Seed Peers' })).toHaveValue('unsaved seed');
+  await user.click(within(drawer).getByText('Technical diagnostic details'));
   expect(within(drawer).getByText('Local Endpoint ID')).toBeVisible();
   await user.click(within(drawer).getByTestId('settings-section-developer'));
   await user.click(within(drawer).getByRole('button', { name: 'Community node diagnostics' }));

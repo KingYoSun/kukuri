@@ -14,43 +14,59 @@ export function useConnectivityStatusRefresh(
   setCommunityNodeStatuses: Setter<'communityNodeStatuses'>
 ): () => Promise<CommunityNodeNodeStatus[] | null> {
   const store = useDesktopShellStoreApi();
-  const sequence = useRef(0);
-  return useCallback(async () => {
-    const requestId = ++sequence.current;
-    const baseline = store.getState().communityNodeStatuses;
-    const [syncStatusResult, communityNodeStatusesResult] = await Promise.allSettled([
-      api.getSyncStatus(),
-      api.getCommunityNodeStatuses(),
-    ]);
-    if (requestId !== sequence.current) return null;
-    startTransition(() => {
-      if (syncStatusResult.status === 'fulfilled') {
-        setSyncStatus(syncStatusResult.value);
-      }
-      if (communityNodeStatusesResult.status === 'fulfilled') {
-        setCommunityNodeStatuses((current) => {
-          const baselineByUrl = new Map(baseline.map((status) => [status.base_url, status]));
-          const currentByUrl = new Map(current.map((status) => [status.base_url, status]));
-          const incoming = communityNodeStatusesResult.value;
-          const next = incoming.map((status) => {
-            const latest = currentByUrl.get(status.base_url);
-            // この読込中に受諾/撤回/eventで更新されたNodeを古いsnapshotで巻き戻さない。
-            return latest && latest !== baselineByUrl.get(status.base_url)
-              ? latest : mergeCommunityNodeStatus(latest, status);
+  const inFlight = useRef<Promise<CommunityNodeNodeStatus[] | null> | null>(null);
+  return useCallback(() => {
+    if (inFlight.current) return inFlight.current;
+    const request = (async () => {
+      const baseline = store.getState().communityNodeStatuses;
+      const syncBaseline = store.getState().syncStatus;
+      store.getState().patchState({ syncStatusRead: {
+        ...store.getState().syncStatusRead, refreshing: true,
+      } });
+      const [syncStatusResult, communityNodeStatusesResult] = await Promise.allSettled([
+        api.getSyncStatus(),
+        api.getCommunityNodeStatuses(),
+      ]);
+      startTransition(() => {
+        // A runtime event or another operation owns any newer snapshot.
+        const unchanged = store.getState().syncStatus === syncBaseline;
+        if (unchanged && syncStatusResult.status === 'fulfilled') {
+          setSyncStatus(syncStatusResult.value);
+        }
+        const read = store.getState().syncStatusRead;
+        store.getState().patchState({ syncStatusRead: {
+          loaded: read.loaded || !unchanged || syncStatusResult.status === 'fulfilled',
+          refreshing: false,
+          error: unchanged && syncStatusResult.status === 'rejected',
+        } });
+        if (communityNodeStatusesResult.status === 'fulfilled') {
+          setCommunityNodeStatuses((current) => {
+            const baselineByUrl = new Map(baseline.map((status) => [status.base_url, status]));
+            const currentByUrl = new Map(current.map((status) => [status.base_url, status]));
+            const incoming = communityNodeStatusesResult.value;
+            const next = incoming.map((status) => {
+              const latest = currentByUrl.get(status.base_url);
+              // この読込中に受諾/撤回/eventで更新されたNodeを古いsnapshotで巻き戻さない。
+              return latest && latest !== baselineByUrl.get(status.base_url)
+                ? latest : mergeCommunityNodeStatus(latest, status);
+            });
+            return [...next, ...current.filter((status) =>
+              status !== baselineByUrl.get(status.base_url) &&
+              !incoming.some((item) => item.base_url === status.base_url))];
           });
-          return [...next, ...current.filter((status) =>
-            status !== baselineByUrl.get(status.base_url) &&
-            !incoming.some((item) => item.base_url === status.base_url))];
-        });
-        store.getState().patchState({
-          communityNodeStatusesLoaded: true, communityNodeStatusError: null,
-        });
-      } else if (store.getState().communityNodeStatuses === baseline) {
-        store.getState().patchState({ communityNodeStatusError: 'status_unavailable' });
-      }
-    });
-    return communityNodeStatusesResult.status === 'fulfilled'
-      ? communityNodeStatusesResult.value
-      : null;
+          store.getState().patchState({
+            communityNodeStatusesLoaded: true, communityNodeStatusError: null,
+          });
+        } else if (store.getState().communityNodeStatuses === baseline) {
+          store.getState().patchState({ communityNodeStatusError: 'status_unavailable' });
+        }
+      });
+      return communityNodeStatusesResult.status === 'fulfilled'
+        ? communityNodeStatusesResult.value
+        : null;
+    })();
+    inFlight.current = request;
+    void request.finally(() => { inFlight.current = null; });
+    return request;
   }, [api, setCommunityNodeStatuses, setSyncStatus, store]);
 }

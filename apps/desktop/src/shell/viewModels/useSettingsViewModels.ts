@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { connectivityGuidance, discoveryGuidance } from '@/shell/connectivityGuidance';
 import { diagnosticErrorLabel, diagnosticStatusDetail, diagnosticValueLabel } from '@/shell/diagnosticLabels';
 import { eligibleDistanceOptoutNodes } from '@/lib/api/communityIndex';
 
@@ -25,9 +26,6 @@ import {
   formatCount,
   formatLastReceivedLabel,
   formatListLabel,
-  syncStatusBadgeLabel,
-  topicConnectionLabel,
-  translateTopicConnectionText,
 } from '@/shell/presentation';
 import type { DesktopShellState } from '@/shell/store';
 
@@ -51,6 +49,7 @@ type UseSettingsViewModelsArgs = {
   peerTicket: DesktopShellState['peerTicket'];
   reactionPanelState: DesktopShellState['reactionPanelState'];
   syncStatus: DesktopShellState['syncStatus'];
+  syncStatusRead: DesktopShellState['syncStatusRead'];
   t: (key: string, options?: Record<string, unknown>) => string;
   theme: DesktopTheme;
   topicDiagnostics: Record<string, TopicSyncStatus>;
@@ -108,6 +107,7 @@ export function useSettingsViewModels({
   peerTicket,
   reactionPanelState,
   syncStatus,
+  syncStatusRead,
   t,
   theme,
   topicDiagnostics,
@@ -140,8 +140,9 @@ export function useSettingsViewModels({
 
   const connectivityPanelView = useMemo<ConnectivityPanelView>(
     () => ({
-      status: 'ready' as const,
-      summaryLabel: syncStatusBadgeLabel(syncStatus),
+      status: syncStatusRead.refreshing && !syncStatusRead.loaded ? 'loading' : 'ready',
+      guidance: connectivityGuidance(syncStatus, syncStatusRead, t),
+      summaryLabel: connectivityGuidance(syncStatus, syncStatusRead, t).label,
       panelError: error,
       metrics: [
         {
@@ -186,13 +187,11 @@ export function useSettingsViewModels({
         const diagnostic = topicDiagnostics[topic];
         return {
           topic,
-          summary: t('settings:connectivity.summary', {
-            status: translateTopicConnectionText(topicConnectionLabel(diagnostic)),
-            count: diagnostic?.peer_count ?? 0,
-          }),
+          guidance: connectivityGuidance(syncStatus, syncStatusRead, t, { id: topic, diagnostic }),
+          summary: connectivityGuidance(syncStatus, syncStatusRead, t, { id: topic, diagnostic }).label,
           lastReceivedLabel: formatLastReceivedLabel(diagnostic?.last_received_at, locale),
-          expectedPeerCount: diagnostic?.configured_peer_ids.length ?? 0,
-          missingPeerCount: diagnostic?.missing_peer_ids.length ?? 0,
+          expectedPeerCount: diagnostic?.configured_peer_ids.length ?? null,
+          missingPeerCount: diagnostic?.missing_peer_ids.length ?? null,
           statusDetail:
             localizeConnectivityStatusDetail(diagnostic?.status_detail, t),
           connectedPeersLabel: formatListLabel(diagnostic?.connected_peers ?? []),
@@ -210,6 +209,7 @@ export function useSettingsViewModels({
       locale,
       peerTicket,
       syncStatus,
+      syncStatusRead,
       t,
       topicDiagnostics,
       trackedTopics,
@@ -238,8 +238,9 @@ export function useSettingsViewModels({
 
   const discoveryPanelView = useMemo<DiscoveryPanelView>(
     () => ({
-      status: 'ready' as const,
-      summaryLabel: diagnosticValueLabel('discoveryMode', syncStatus.discovery.mode, t),
+      status: syncStatusRead.refreshing && !syncStatusRead.loaded ? 'loading' : 'ready',
+      guidance: discoveryGuidance(syncStatus, syncStatusRead, t),
+      summaryLabel: discoveryGuidance(syncStatus, syncStatusRead, t).label,
       panelError: null,
       metrics: [
         { label: t('settings:discovery.metrics.mode'), value: diagnosticValueLabel('discoveryMode', syncStatus.discovery.mode, t) },
@@ -311,16 +312,8 @@ export function useSettingsViewModels({
       discoveryEditorDirty,
       discoveryError,
       discoverySeedInput,
-      syncStatus.discovery.blob_assist_peer_ids,
-      syncStatus.discovery.bootstrap_seed_peer_ids,
-      syncStatus.discovery.configured_seed_peer_ids,
-      syncStatus.discovery.connect_mode,
-      syncStatus.discovery.connected_peer_ids,
-      syncStatus.discovery.docs_assist_peer_ids,
-      syncStatus.discovery.last_discovery_error,
-      syncStatus.discovery.local_endpoint_id,
-      syncStatus.discovery.manual_ticket_peer_ids,
-      syncStatus.discovery.mode,
+      syncStatus,
+      syncStatusRead,
       t,
     ]
   );

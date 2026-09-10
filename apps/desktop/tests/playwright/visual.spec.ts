@@ -1,3 +1,4 @@
+import { seedConnectivityDiagnostics } from './connectivity-diagnostics-fixture';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { seedUnconsentedCommunityNodes } from './community-node-fixture';
 import { seedAppConsent } from './app-consent-fixture';
@@ -374,3 +375,18 @@ test.describe('visual regression smoke', () => {
     await expect(page).toHaveScreenshot('game-wide-dark.png');
   });
 });
+
+for (const { locale, theme, width } of [
+  { locale: 'ja', theme: 'dark', width: 1280 },
+  { locale: 'en', theme: 'light', width: 390 },
+]) {
+  test(`connection recovery ${locale} ${theme}`, async ({ page }) => {
+    await seedConnectivityDiagnostics(page, locale, theme);
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/#/timeline?settings=connectivity');
+    const drawer = page.getByRole('dialog');
+    await expect(drawer.getByRole('button', { name: locale === 'ja' ? '診断を更新' : 'Refresh diagnostics', exact: true })).toBeEnabled();
+    await settleForShot(page, theme as DesktopTheme);
+    await expect(drawer).toHaveScreenshot(`connection-recovery-${locale}-${theme}.png`);
+  });
+}

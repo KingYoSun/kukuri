@@ -276,13 +276,13 @@
   },
   "connectivity": {
     "diagnostics": {
-      "configuredPeers": "設定済みピア",
+      "configuredPeers": "接続候補（設定）",
       "connectedPeers": "接続中のピア",
       "connectionDetail": "接続詳細",
-      "effectivePeers": "有効ピア",
+      "effectivePeers": "接続ピアと補助候補の一覧",
       "lastError": "最終エラー",
       "missingPeers": "不足ピア",
-      "relayAssistedPeers": "リレー補助ピア",
+      "relayAssistedPeers": "保存データの同期補助候補",
       "statusDetail": "状態詳細"
     },
     "lastReceivedBadge": "最終受信 {{value}}",
@@ -342,8 +342,8 @@
       "communityBootstrapPeers": "コミュニティブートストラップピア",
       "configuredSeedIds": "設定済みシード ID",
       "connectedPeers": "接続中のピア",
-      "docsAssistPeers": "ドキュメント補助ピア",
-      "blobAssistPeers": "添付補助ピア",
+      "docsAssistPeers": "保存データの同期補助候補",
+      "blobAssistPeers": "添付データの取得補助候補",
       "discoveryError": "ディスカバリーエラー",
       "localEndpointId": "ローカルエンドポイント ID",
       "manualTicketPeers": "手動チケットピア",
@@ -562,5 +562,53 @@
         "user_social_graph_canonical_source": "ユーザーの関係情報の正本"
       }
     }
+  },
+  "connectionGuidance": {
+    "states": {
+      "unknown": "診断未取得",
+      "live": "接続中",
+      "durable": "同期履歴あり・現在の接続は未確認",
+      "recovering": "リアルタイム未接続・配送回復中",
+      "offline": "リアルタイム未接続",
+      "paused": "リアルタイム受信を停止中",
+      "preparing": "トピック診断を準備中",
+      "unsubscribed": "現在未購読"
+    },
+    "descriptions": {
+      "unknown": "接続診断をまだ取得できていません。ピアがいないことや、トピックが未使用であることを意味しません。",
+      "live": "リアルタイム接続があります。トピックごとの接続状況は下の詳細で確認できます。",
+      "durable": "リアルタイム接続はありません。保存データの同期活動は記録されていますが、現在の接続成功を保証するものではありません。",
+      "recovering": "リアルタイム接続はありません。保存データの配送を回復中です。補助先の設定があっても、相手への接続が成立したとは限りません。",
+      "offline": "現在、リアルタイム接続はありません。設定済みの接続候補と、実際に接続しているピアは別です。",
+      "paused": "このトピックのリアルタイム受信は停止されています。診断の表示や更新では再開しません。",
+      "preparing": "このトピックは購読対象ですが、個別の診断情報はまだ届いていません。",
+      "unsubscribed": "現在、このトピックは購読されていません。過去に使用したかどうかは診断からは分かりません。"
+    },
+    "steps": {
+      "unknown": "「診断を更新」で状態を確認できます。",
+      "live": "接続不調のトピックがある場合は、そのトピックの診断を確認してください。",
+      "durable": "同じトピックの相手がオンラインか確認し、少し待って診断を更新してください。",
+      "recovering": "少し待って診断を更新してください。続く場合は同じトピックの相手やコミュニティノード設定を確認できます。ノードの準備完了とピア接続は別です。",
+      "offline": "同じトピックの相手がオンラインか確認し、少し待って診断を更新してください。接続先の設定も確認できます。",
+      "paused": "再開する場合は、コントロールセンターのトピック操作からリアルタイム受信を有効にしてください。",
+      "preparing": "少し待って診断を更新してください。",
+      "unsubscribed": "利用する場合はコントロールセンターからこのトピックを開き、その後で診断を更新してください。"
+    },
+    "discovery": {
+      "found": "発見経路の接続あり",
+      "waiting": "発見経路の接続待ち",
+      "description": "ここは接続先の発見状況です。トピックごとの配送状態とは異なります。シードや補助先は候補であり、中継の許可設定だけでは実際に中継中とは限りません。"
+    },
+    "stale": "診断を更新できませんでした。前回取得した情報を表示しています。現在の状態は未確認です。",
+    "failed": "診断を取得できませんでした。再度更新してください。",
+    "refresh": "診断を更新",
+    "refreshing": "診断を更新中…",
+    "openNode": "コミュニティノード設定を確認",
+    "details": "技術的な診断詳細",
+    "candidates": "接続候補・補助先の設定は、接続済みピア数には含みません。",
+    "lastRecordedError": "最後に記録されたエラー: {{error}}",
+    "topicLive": "このトピックにリアルタイム接続があります。",
+    "operationError": "別のアプリ操作でエラーが発生しました。現在の接続状態とは別の情報です。",
+    "operationDetails": "操作エラーの詳細"
   }
 }

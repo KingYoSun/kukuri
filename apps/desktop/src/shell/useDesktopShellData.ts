@@ -739,6 +739,7 @@ export function useDesktopShellData({
   return {
     loadTopics,
     retryCommunityNode,
+    refreshConnectivityStatus,
     refreshVisibleShellData,
     refreshVisibleTimelineAfterPublish,
     refreshTimelineFeed,

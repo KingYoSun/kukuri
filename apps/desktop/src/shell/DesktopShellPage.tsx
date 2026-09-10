@@ -194,6 +194,7 @@ export function DesktopShellPage({
     retryCommunityNode,
     refreshVisibleTimelineAfterPublish,
     refreshTimelineFeed,
+    refreshConnectivityStatus,
     loadProfileSection,
     loadReactionCatalogData,
     loadNotificationsSection,
@@ -948,6 +949,7 @@ export function DesktopShellPage({
       />
 
       <DesktopShellSettingsDrawer
+        onRefreshDiagnostics={() => { void refreshConnectivityStatus(); }}
         api={api}
         onThemeChange={onThemeChange}
         onLocaleChange={(nextLocale) => {

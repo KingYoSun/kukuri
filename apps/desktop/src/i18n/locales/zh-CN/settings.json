@@ -276,13 +276,13 @@
   },
   "connectivity": {
     "diagnostics": {
-      "configuredPeers": "已配置 Peer",
+      "configuredPeers": "已配置的连接候选",
       "connectedPeers": "已连接 Peer",
       "connectionDetail": "连接详情",
-      "effectivePeers": "有效 Peer",
+      "effectivePeers": "已连接节点与辅助候选",
       "lastError": "最近错误",
       "missingPeers": "缺失 Peer",
-      "relayAssistedPeers": "中继辅助 Peer",
+      "relayAssistedPeers": "存储数据同步辅助候选",
       "statusDetail": "状态详情"
     },
     "lastReceivedBadge": "最近接收 {{value}}",
@@ -342,8 +342,8 @@
       "communityBootstrapPeers": "社区引导 Peer",
       "configuredSeedIds": "已配置种子 ID",
       "connectedPeers": "已连接 Peer",
-      "docsAssistPeers": "文档辅助 Peer",
-      "blobAssistPeers": "附件辅助 Peer",
+      "docsAssistPeers": "存储数据同步辅助候选",
+      "blobAssistPeers": "附件获取辅助候选",
       "discoveryError": "发现错误",
       "localEndpointId": "本地端点 ID",
       "manualTicketPeers": "手动票据 Peer",
@@ -562,5 +562,53 @@
         "user_social_graph_canonical_source": "用户关系的权威来源"
       }
     }
+  },
+  "connectionGuidance": {
+    "states": {
+      "unknown": "尚未加载诊断",
+      "live": "已连接",
+      "durable": "有同步记录 · 当前连接未确认",
+      "recovering": "无实时连接 · 正在恢复传递",
+      "offline": "无实时连接",
+      "paused": "已暂停实时接收",
+      "preparing": "正在准备话题诊断",
+      "unsubscribed": "当前未订阅"
+    },
+    "descriptions": {
+      "unknown": "尚未获取连接诊断。这并不表示没有节点或话题从未使用。",
+      "live": "实时连接可用。各话题的连接情况请查看下方详情。",
+      "durable": "当前没有实时连接。已有存储数据的同步活动记录，但不保证当前连接成功。",
+      "recovering": "当前没有实时连接，正在恢复存储数据的传递。配置了辅助节点不代表已建立连接。",
+      "offline": "当前没有实时连接。已配置的连接候选与实际连接的节点不同。",
+      "paused": "此话题的实时接收已暂停。查看或刷新诊断不会恢复接收。",
+      "preparing": "已订阅此话题，但尚未收到其诊断信息。",
+      "unsubscribed": "当前未订阅此话题。诊断无法判断过去是否使用过。"
+    },
+    "steps": {
+      "unknown": "请刷新诊断以确认状态。",
+      "live": "如果某个话题连接异常，请查看该话题的诊断。",
+      "durable": "确认同一话题的其他用户在线，稍等片刻后刷新诊断。",
+      "recovering": "稍等片刻后刷新诊断。如果问题持续，请确认同一话题的其他用户或社区节点设置。节点就绪不代表已连接到对等节点。",
+      "offline": "确认同一话题的其他用户在线，稍等片刻后刷新诊断。也可以检查连接设置。",
+      "paused": "如需恢复，请从控制中心的话题操作启用实时接收。",
+      "preparing": "请稍等片刻后刷新诊断。",
+      "unsubscribed": "如需使用，请从控制中心打开此话题，然后刷新诊断。"
+    },
+    "discovery": {
+      "found": "发现路径已连接",
+      "waiting": "等待发现路径连接",
+      "description": "这里显示对等节点发现情况，与各话题的传递状态不同。种子和辅助节点是候选，允许中继不代表正在通过中继传输。"
+    },
+    "stale": "无法刷新诊断。正在显示上次获取的信息，当前状态未确认。",
+    "failed": "无法获取诊断，请再次刷新。",
+    "refresh": "刷新诊断",
+    "refreshing": "正在刷新诊断…",
+    "openNode": "检查社区节点设置",
+    "details": "技术诊断详情",
+    "candidates": "已配置的候选和辅助节点不计入已连接节点数。",
+    "lastRecordedError": "最后记录的错误：{{error}}",
+    "topicLive": "此话题具有实时连接。",
+    "operationError": "其他应用操作发生错误。这与当前连接状态不同。",
+    "operationDetails": "操作错误详情"
   }
 }

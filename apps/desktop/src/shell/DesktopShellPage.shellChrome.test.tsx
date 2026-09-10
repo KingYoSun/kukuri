@@ -261,7 +261,7 @@ test('desktop shell surfaces docs-assisted topic recovery in diagnostics', async
 
   const drawer = await openSettingsSection(user, 'discovery');
   await waitFor(() => {
-    expect(within(drawer).getByText('Docs Assist Peers')).toBeInTheDocument();
+    expect(within(drawer).getByText('Stored-data sync assistance candidates')).toBeInTheDocument();
     expect(within(drawer).getAllByText('relay-peer').length).toBeGreaterThan(0);
   });
 
