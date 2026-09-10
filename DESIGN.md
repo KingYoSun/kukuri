@@ -162,6 +162,7 @@ WCAG 2.2 AAを基準とする。自動検査の満点だけを適合の証明に
 - desktop Column unitは`--column-unit`、gapは`--column-gap`を使い、複数spanの式は`width = span * columnUnit + (span - 1) * gap`とする。
 - Timeline、Notifications、Profile、Threadは1 span、Messages／Conversationは1〜2、Streamは2、Metaverseは3、focused Metaverseは最大4を基準とする。
 - internal layoutはColumn自身の実幅に応答し、viewportだけに依存しない。Column Canvasの意図的な横scrollは維持し、document-levelの横scrollを発生させない。
+- 直前まで全幅を表示していた選択Columnは、Canvas幅やWebViewの拡大率が変わっても表示範囲へ追従させる。その補正scrollをMobileのpage移動と誤認しない。利用者が手動scrollで選択Columnから離れている場合は、閲覧位置を引き戻さない。
 - overlay、Control Center、Composer、fullscreen controlはsafe areaと互いのhit areaを塞がない。
 - Tauri／WebView依存surfaceはbrowserだけで完了とせず、影響するOS／WebViewでinput ownership、fullscreen、resource縮退を確認する。
 

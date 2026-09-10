@@ -184,6 +184,53 @@ export function ColumnCanvas({
     }
   }, [activeColumnId]);
 
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return undefined;
+    const activeColumn = () => canvas.querySelector<HTMLElement>(
+      `[data-column-id="${CSS.escape(activeColumnId)}"]`
+    );
+    let width = canvas.clientWidth;
+    let wasVisible = false;
+    const rememberVisibility = () => {
+      // Scroll snap can move the old page before the resize callback runs.
+      // Keep the last geometry from the old width until we handle that resize.
+      if (canvas.clientWidth !== width) return;
+      const column = activeColumn();
+      if (!column) return;
+      const bounds = column.getBoundingClientRect();
+      const viewport = canvas.getBoundingClientRect();
+      wasVisible = bounds.left >= viewport.left - 1 && bounds.right <= viewport.right + 1;
+    };
+    const resize = () => {
+      if (canvas.clientWidth === width) return;
+      width = canvas.clientWidth;
+      const column = activeColumn();
+      // Preserve a visible reading/editing context, but do not pull someone
+      // back after they deliberately scrolled away from the active Column.
+      if (wasVisible && column) {
+        if (scrollSettleTimeoutRef.current !== null) {
+          window.clearTimeout(scrollSettleTimeoutRef.current);
+          scrollSettleTimeoutRef.current = null;
+        }
+        const mobile = isMobileViewport();
+        programmaticScrollTargetRef.current = mobile ? activeColumnId : null;
+        column.scrollIntoView({ block: 'nearest', inline: mobile ? 'center' : 'nearest', behavior: 'instant' });
+      }
+      rememberVisibility();
+    };
+    rememberVisibility();
+    canvas.addEventListener('scroll', rememberVisibility, { passive: true });
+    window.addEventListener('resize', resize);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(resize);
+    observer?.observe(canvas);
+    return () => {
+      canvas.removeEventListener('scroll', rememberVisibility);
+      window.removeEventListener('resize', resize);
+      observer?.disconnect();
+    };
+  }, [activeColumnId]);
+
   const columnCount = Children.count(children);
   // Issue #765: 同数の transient 置換(Column 数は不変で id 列だけ入れ替わる)でも
   // 新しい Column 要素を observe し直すため、id 列を安定 key にして再購読する。
