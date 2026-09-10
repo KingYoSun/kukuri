@@ -126,7 +126,7 @@ export function TopicNavList({
 
             <div className='topic-diagnostic'>
               <span>
-                {t('shell:navigation.topicSummary', {
+                {item.peerCount === null ? item.connectionLabel : t('shell:navigation.topicSummary', {
                   status:
                     item.connectionLabel === 'joined'
                       ? t('common:states.joined')
@@ -136,7 +136,7 @@ export function TopicNavList({
                   count: item.peerCount,
                 })}
               </span>
-              <small>{item.lastReceivedLabel}</small>
+              {item.peerCount !== null ? <small>{item.lastReceivedLabel}</small> : null}
             </div>
 
             {item.active || showAllScopes ? (

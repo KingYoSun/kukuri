@@ -433,6 +433,7 @@ describe('useDesktopShellViewModels', () => {
 
   test('builds topicNavItems from diagnostics and exposes joined channels for every topic', () => {
     const view = renderViewModels((current) => ({
+      syncStatusRead: { loaded: true, refreshing: false, error: false },
       syncStatus: {
         ...current.syncStatus,
         topic_diagnostics: [
@@ -480,8 +481,8 @@ describe('useDesktopShellViewModels', () => {
     // channel 選択中は public 行は非アクティブ
     expect(generalItem.publicActive).toBe(false);
     expect(generalItem.removable).toBe(true);
-    // delivery_state='Live' + direct_p2p → 'joined'
-    expect(generalItem.connectionLabel).toBe('joined');
+    // Control Center and settings share the current connection explanation.
+    expect(generalItem.connectionLabel).toBe('settings:connectionGuidance.states.live · settings:diagnostics.values.path.direct_p2p');
     expect(generalItem.peerCount).toBe(3);
     expect(generalItem.gossipJoined).toBe(true);
     // `topic::channel_id` が gossip_disabled_channels にあれば
@@ -505,9 +506,9 @@ describe('useDesktopShellViewModels', () => {
 
     const devItem = items[1];
     expect(devItem.active).toBe(false);
-    // diagnostic が無い topic は 'idle' / peerCount 0
-    expect(devItem.connectionLabel).toBe('idle');
-    expect(devItem.peerCount).toBe(0);
+    // A paused topic with no diagnostic has no confirmed peer count.
+    expect(devItem.connectionLabel).toBe('settings:connectionGuidance.states.paused');
+    expect(devItem.peerCount).toBeNull();
     // gossip_disabled_topics に載っている topic は gossipJoined=false
     expect(devItem.gossipJoined).toBe(false);
     // Control Center の検索と直接選択のため、inactive topic の joined channel も公開する。

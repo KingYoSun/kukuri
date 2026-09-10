@@ -20,6 +20,7 @@ import { useChannelsViewModels } from '@/shell/viewModels/useChannelsViewModels'
 import { useMessagesViewModels } from '@/shell/viewModels/useMessagesViewModels';
 import { useProfileViewModels } from '@/shell/viewModels/useProfileViewModels';
 import { useSettingsViewModels } from '@/shell/viewModels/useSettingsViewModels';
+import { connectivityGuidance } from '@/shell/connectivityGuidance';
 import { useTimelineViewModels } from '@/shell/viewModels/useTimelineViewModels';
 
 import { useShallow } from 'zustand/react/shallow';
@@ -42,7 +43,6 @@ import {
   authorDisplayLabel,
   formatLastReceivedLabel,
   resolveProfilePictureSrc,
-  topicConnectionLabel,
 } from '@/shell/presentation';
 import { selectShellViewModelsSlice } from '@/shell/storeSelectors';
 
@@ -271,8 +271,11 @@ export function useDesktopShellViewModels({
         active: topic === activeTopic,
         publicActive: topic === activeTopic && (selectedChannelIdByTopic[topic] ?? null) === null,
         removable: trackedTopics.length > 1,
-        connectionLabel: topicConnectionLabel(topicDiagnostics[topic]),
-        peerCount: topicDiagnostics[topic]?.peer_count ?? 0,
+        connectionLabel: connectivityGuidance(syncStatus, state.syncStatusRead, t, {
+          id: topic, diagnostic: topicDiagnostics[topic],
+        }).label,
+        peerCount: state.syncStatusRead.loaded && !gossipDisabledTopics.has(topic)
+          ? topicDiagnostics[topic]?.peer_count ?? null : null,
         lastReceivedLabel: formatLastReceivedLabel(topicDiagnostics[topic]?.last_received_at, locale),
         lastReceivedAt: topicDiagnostics[topic]?.last_received_at ?? null,
         gossipJoined: !gossipDisabledTopics.has(topic),
@@ -293,6 +296,9 @@ export function useDesktopShellViewModels({
       joinedChannelsByTopic,
       locale,
       selectedChannelIdByTopic,
+      state.syncStatusRead,
+      syncStatus,
+      t,
       topicDiagnostics,
       trackedTopics,
     ]

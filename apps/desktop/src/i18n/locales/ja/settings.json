@@ -609,6 +609,7 @@
     "lastRecordedError": "最後に記録されたエラー: {{error}}",
     "topicLive": "このトピックにリアルタイム接続があります。",
     "operationError": "別のアプリ操作でエラーが発生しました。現在の接続状態とは別の情報です。",
-    "operationDetails": "操作エラーの詳細"
+    "operationDetails": "操作エラーの詳細",
+    "previousLabel": "{{state}}（前回の情報）"
   }
 }

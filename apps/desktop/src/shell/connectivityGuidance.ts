@@ -31,7 +31,9 @@ export function connectivityGuidance(
     : value.delivery_state === 'DurableReady' ? 'durable'
     : value.delivery_state === 'DurableRecovering' ? 'recovering' : 'offline';
   const error = value?.last_error;
-  const label = t(`settings:connectionGuidance.states.${state}`);
+  const stateLabel = t(`settings:connectionGuidance.states.${state}`);
+  const label = read.loaded && read.error
+    ? t('settings:connectionGuidance.previousLabel', { state: stateLabel }) : stateLabel;
   return {
     label: live && read.loaded && !disabled
       ? `${label} · ${diagnosticValueLabel('path', value!.active_path, t, false)}` : label,
@@ -51,7 +53,9 @@ export function discoveryGuidance(sync: SyncStatus, read: SyncStatusRead, t: Tra
   const error = sync.discovery.last_discovery_error;
   return {
     ...base,
-    label: read.loaded ? t(`settings:connectionGuidance.discovery.${connected ? 'found' : 'waiting'}`) : base.label,
+    label: read.loaded ? (read.error
+      ? t('settings:connectionGuidance.previousLabel', { state: t(`settings:connectionGuidance.discovery.${connected ? 'found' : 'waiting'}`) })
+      : t(`settings:connectionGuidance.discovery.${connected ? 'found' : 'waiting'}`)) : base.label,
     description: read.loaded ? t('settings:connectionGuidance.discovery.description') : base.description,
     nextStep: read.loaded ? t('settings:connectionGuidance.steps.offline') : base.nextStep,
     tone: connected && read.loaded && !read.error ? 'accent' : 'warning',

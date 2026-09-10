@@ -40,7 +40,7 @@ test('desktop shell can publish and render a post', async () => {
   const controlCenter = await openControlCenter(user);
   const generalTopic = within(controlCenter).getByRole('button', { name: 'general' }).closest('li');
   expect(generalTopic).not.toBeNull();
-  expect(generalTopic).toHaveTextContent('joined / peers: 1');
+  expect(generalTopic).toHaveTextContent('Connected · Direct P2P / peers: 1');
 
   const drawer = await openSettingsSection(user, 'connectivity');
   expect(within(drawer).getByDisplayValue('peer1@127.0.0.1:7777')).toBeInTheDocument();

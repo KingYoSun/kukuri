@@ -609,6 +609,7 @@
     "lastRecordedError": "Last recorded error: {{error}}",
     "topicLive": "This topic has a live connection.",
     "operationError": "Another app operation failed. This is separate from the current connection state.",
-    "operationDetails": "Operation error details"
+    "operationDetails": "Operation error details",
+    "previousLabel": "{{state}} (previous snapshot)"
   }
 }

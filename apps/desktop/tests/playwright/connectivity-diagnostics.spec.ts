@@ -70,3 +70,15 @@ test('ordinary mode offers recovery without exposing raw diagnostic details', as
   await drawer.evaluate(el => { (el as HTMLElement).style.zoom = '2'; });
   expect(await drawer.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
 });
+
+test('Control Center topic summaries distinguish missing diagnostics and paused reception', async ({ page }) => {
+  await seedConnectivityDiagnostics(page, 'en');
+  await page.goto('/#/timeline');
+  await page.getByTestId('control-center-trigger').click();
+  const center = page.getByRole('complementary');
+  const dev = center.getByRole('button', { name: 'dev', exact: true }).locator('..');
+  const paused = center.getByRole('button', { name: 'test', exact: true }).locator('..');
+  await expect(dev.locator('.topic-diagnostic')).toHaveText('Not currently subscribed');
+  await expect(paused.locator('.topic-diagnostic')).toHaveText('Live reception paused');
+  await expect(dev.locator('.topic-diagnostic')).not.toContainText('peers: 0');
+});

@@ -18,7 +18,7 @@ export type TopicDiagnosticSummary = {
   publicActive?: boolean;
   removable: boolean;
   connectionLabel: string;
-  peerCount: number;
+  peerCount: number | null;
   lastReceivedLabel: string;
   // Raw last-received timestamp used for "updated" sorting in the nav list.
   // Null/absent means nothing has been received yet.

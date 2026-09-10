@@ -609,6 +609,7 @@
     "lastRecordedError": "最后记录的错误：{{error}}",
     "topicLive": "此话题具有实时连接。",
     "operationError": "其他应用操作发生错误。这与当前连接状态不同。",
-    "operationDetails": "操作错误详情"
+    "operationDetails": "操作错误详情",
+    "previousLabel": "{{state}}（上次的信息）"
   }
 }
