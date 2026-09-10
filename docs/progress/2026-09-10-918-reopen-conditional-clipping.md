@@ -2,7 +2,7 @@
 
 ## 現在判定
 
-- ローカル検証完了・独立監査待ち。2026-09-10に計画実行、commit・PR・必須CI成功後のmergeまで承認済み。再Open案件の独立監査も必要であり、IssueのComplete判定はまだ行っていない。
+- 実装・ローカル検証・独立監査の記録。独立監査はPASS。CI・merge・Closeの最新判定は [PR #970](https://github.com/KingYoSun/kukuri/pull/970) とIssueのCurrent statusを参照する。2026-09-10に計画実行、commit・PR・必須CI成功後のmergeまで承認済み。
 - リスク区分B、Scope revision `918-r2`。基準commit `5db2aeb0853329ac12558a5fbc503553fd6618d0`。PR識別子 `codex/issue-918-reopen-conditional-clipping`。
 - [Issue #918](https://github.com/KingYoSun/kukuri/issues/918)の再現／非再現が混在する報告を受けた再開。[前回作業記録](2026-09-09-918-explore-overflow-and-content-density.md)は`918-r1`当時の実装・検証証拠であり、今回の完了根拠ではない。
 - 正本は[DESIGN](../../DESIGN.md)、[ADR 0031](../adr/0031-variable-span-column-workspace.md)、[ADR 0014](../adr/0014-uiux-dev-flow.md)、[Issue lifecycle](../runbooks/issue-lifecycle.md)。現在のfreshは5カラム。3本の同時表示やCanvas横scrollの廃止は今回の要件にしない。
@@ -37,7 +37,7 @@
 
 ## 固定surface inventory
 
-基準は上記commit。INV-1〜6の全memberは前回固定inventoryと適用先一覧を継承し、INV-7/8を明示する。コードはCodeGraph、CSSはselectorから確認。実差分はCanvasのresize／scroll観測のみ。認証・検索・保存APIの入口／sink追加削除は0。担当者確認では8 group適合、不適合0・未分類0で、独立監査は別工程とする。
+基準は上記commit。INV-1〜6の全memberは前回固定inventoryと適用先一覧を継承し、INV-7/8を明示する。コードはCodeGraph、CSSはselectorから確認。実差分はCanvasのresize／scroll観測のみ。認証・検索・保存APIの入口／sink追加削除は0。独立監査でも8 group適合、不適合0・未分類0を確認した。
 
 | ID | 入口・trigger／member | shared helper | 読み書き・副作用 | guard／invariant | transition／検査 |
 | --- | --- | --- | --- | --- | --- |
@@ -85,7 +85,8 @@ mobile補正は既存のprogrammatic scroll targetを設定し、保留中のset
 | Linux `desktop-browser-test`（CI=1） | 165件成功。新規13件、既存Canvas／mobile／scope／query／layout／localizationを含む |
 | Linux `desktop-visual-test`（CI=1） | 20件のLinux／Chromium比較成功。baseline更新0。最初の起動はbrowser testとport4176が競合しtest開始前に失敗したため、browser終了後に単独実行して成功 |
 | `cargo xtask oversized-files`／`git diff --check` | 成功。baseline上限の変更0 |
-| 独立監査・必須CI | 未実施 |
+| 独立監査 | `3f3327dba4f343d4a739ba849f4399d3a0b93ce9`でPASS。新規13件を独立再実行して成功、blocker0。[監査記録](2026-09-10-918-resize-independent-audit.md) |
+| 必須CI・merge後照合 | PR #970の最終headとmerge commitに対する結果をPR／IssueのCurrent statusへ記録する |
 
 ## 実機の区別と再実行条件
 
@@ -100,8 +101,8 @@ mobile補正は既存のprogrammatic scroll targetを設定し、保留中のset
 - 両OSでzoomを1へ戻した後、layoutを再投入せず製品processを終了・再起動し、Explore active、3カラム、Canvas内のboundsを確認。LinuxはSIGTERM、Windowsは試験processをterminateして再起動した。Windowsで正常Quitの永続化を新たに検証したという扱いにはしない。
 - [同条件画像とUI採用記録](../ui-reviews/2026-09-10-918-resize-context.md)を参照。Windowsのzoom画像はCDP screenshotではnative DPIによるcropが起きたため、実際に観測したComputer Useのwindow captureを保存した。cropした画像をUI不具合や成功証拠と混同しない。
 
-## 残作業
+## 終了条件と確認範囲
 
-独立監査、CI、merge後照合が残る。今回見つけたresize条件は再現済みだが、報告時の操作履歴を断定しない。nativeはNode未同意の表示・回復と実機のresize／zoom／保存復元を検証し、検索成功／pending／retryと送信先の契約は既存のcomponent／browser試験で確認した。実Nodeへの検索成功を今回再検証したという扱いにはしない。
+今回見つけたresize条件は修正前後の検査で解消を確認したが、報告時の操作履歴を断定しない。nativeはNode未同意の表示・回復と実機のresize／zoom／保存復元を検証し、検索成功／pending／retryと送信先の契約は既存のcomponent／browser試験で確認した。実Nodeへの検索成功を今回再検証したという扱いにはしない。
 
 新規observerの影響はCanvas内に閉じ、loopback以外の新しい試験serverや実データ投稿は作成していない。色・label・target・CSSが不変のため、screen reader／High Contrast全体とGPU／巨大一覧の性能再評価は非該当。全条件の証跡と独立監査・CIを揃えるまで再Closeしない。
