@@ -66,7 +66,8 @@
     "writeMessage": "写一条消息",
     "writeQuoteRepost": "添加评论",
     "writeReply": "写一条回复",
-    "adultLabel": "将此帖标记为成人内容(自我声明)"
+    "adultLabel": "将此帖标记为成人内容(自我声明)",
+    "supportedFiles": "支持的文件"
   },
   "audience": {
     "allJoined": "全部已加入",

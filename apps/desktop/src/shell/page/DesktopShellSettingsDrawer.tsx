@@ -280,6 +280,8 @@ export function DesktopShellSettingsDrawer({
     },
     {
       ...settingsSectionCopy[6],
+      // Keep the local file/crop draft when visiting Appearance to change language.
+      keepMounted: true,
       content: (
         <ReactionsPanel
           view={reactionsPanelView}

@@ -487,5 +487,68 @@
       "label": "显示被发布者标记为成人内容的媒体和帖子",
       "description": "关闭期间,kukuri 不会获取或显示发布者标记为成人内容的帖子所附媒体,而是显示占位符。标签由发布者自我声明,未带标签的帖子并不保证不含成人内容。该设置仅保存在本设备上,与年满 18 周岁的自我声明相互独立。"
     }
+  },
+  "diagnostics": {
+    "unknownValue": "未知值",
+    "initialJoinTimeout": "首次加入话题超时。",
+    "error": "发生了错误。",
+    "connectionDetail": "连接详情",
+    "original": "（诊断详情：{{value}}）",
+    "values": {
+      "discoveryMode": {
+        "static_peer": "固定节点",
+        "seeded_dht": "带种子的 DHT"
+      },
+      "connectMode": {
+        "direct_only": "仅直接连接",
+        "direct_or_relay": "直接连接或中继"
+      },
+      "path": {
+        "direct_p2p": "直接 P2P",
+        "relay_supported_p2p": "中继辅助 P2P",
+        "relay_fallback": "中继备用连接"
+      },
+      "role": {
+        "community-node": "社区节点",
+        "default-onboarding-node": "默认引导节点",
+        "relay-assist": "中继辅助节点",
+        "index-node": "索引节点",
+        "moderation-node": "审核节点",
+        "trust-signal-node": "信任信息节点"
+      },
+      "capability": {
+        "auth_consent": "认证与同意",
+        "bootstrap_assist": "初始连接辅助",
+        "topic_rendezvous": "话题节点发现",
+        "iroh_relay": "iroh 中继",
+        "traffic_relay_fallback": "备用路径中继传输",
+        "blob_cache": "附件缓存",
+        "private_message_storage": "私密消息存储",
+        "analytics": "使用情况分析",
+        "crash_report": "崩溃报告",
+        "cloudflare_proxy": "Cloudflare 代理",
+        "push_notification": "推送通知",
+        "community_index": "社区索引",
+        "moderation": "内容审核",
+        "community_local_trust": "社区内信任信息",
+        "report_endpoint": "举报受理",
+        "rights_request_endpoint": "侵权申请受理",
+        "tester_feedback": "测试者反馈",
+        "dome_hosting": "Dome 托管"
+      },
+      "authority": {
+        "this_node": "此节点",
+        "communities_indexed_by_this_node": "此节点索引的社区",
+        "moderation_events_issued_by_this_node": "此节点发布的审核信息",
+        "trust_signals_issued_by_this_node": "此节点发布的信任信息",
+        "media_cached_by_this_node": "此节点缓存的媒体",
+        "dome_sessions_leased_to_this_node": "分配给此节点的 Dome 会话",
+        "kukuri_network_as_a_whole": "整个 kukuri 网络",
+        "third_party_nodes": "其他运营者的节点",
+        "user_identity": "用户的账号身份",
+        "user_profile_canonical_source": "用户资料的权威来源",
+        "user_social_graph_canonical_source": "用户关系的权威来源"
+      }
+    }
   }
 }

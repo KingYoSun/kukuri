@@ -117,7 +117,7 @@ test('connectivity panel renders loading and topic detail states', async () => {
 
   expect(screen.getByText('Loading connectivity diagnostics…')).toBeInTheDocument();
   expect(screen.getByText('Topic Connectivity Detail')).toBeInTheDocument();
-  expect(screen.getByText('timed out waiting for gossip topic join')).toBeInTheDocument();
+  expect(screen.getByText('The initial topic join timed out. (Diagnostic details: topic join pending: timed out waiting for initial topic join)')).toBeInTheDocument();
 
   await user.click(screen.getByRole('button', { name: 'Import Peer' }));
   expect(onImportPeer).toHaveBeenCalledTimes(1);
@@ -634,6 +634,40 @@ test('reactions panel crops an uploaded image before creating a custom asset', a
     }),
     'party'
   );
+});
+
+test('reaction file selection and crop cancellation preserve the accepted draft and permit reselection', async () => {
+  installCropperMocks();
+  const user = userEvent.setup();
+  const create = vi.fn();
+  const props = {
+    view: { status: 'ready' as const, summaryLabel: '', ownedAssets: [], bookmarkedAssets: [] },
+    creating: false, onCreateAsset: create, onRemoveBookmark: async () => {},
+  };
+  const view = render(<ReactionsPanel {...props} />);
+  const file = new File(['image'], '選択した画像.png', { type: 'image/png' });
+  const input = screen.getByLabelText('Upload image');
+  await user.upload(input, file);
+  let crop = await screen.findByRole('dialog', { name: 'Crop reaction image' });
+  await user.click(within(crop).getByRole('button', { name: 'Cancel' }));
+  expect(screen.getByText('No files selected')).toBeVisible();
+  await user.upload(input, file);
+  crop = await screen.findByRole('dialog', { name: 'Crop reaction image' });
+  await user.click(within(crop).getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(screen.getByText(file.name)).toBeVisible();
+  await user.type(screen.getByLabelText('Search key'), 'preserved');
+  fireEvent(input, new Event('cancel'));
+  expect(screen.getByText(file.name)).toBeVisible();
+  await user.upload(input, new File(['new'], 'replacement.gif', { type: 'image/gif' }));
+  crop = await screen.findByRole('dialog', { name: 'Crop reaction image' });
+  await user.click(within(crop).getByRole('button', { name: 'Cancel' }));
+  expect(screen.getByText(file.name)).toBeVisible();
+  expect(screen.getByLabelText('Search key')).toHaveValue('preserved');
+  expect(create).not.toHaveBeenCalled();
+  view.rerender(<ReactionsPanel {...props} creating />);
+  expect(screen.getByRole('button', { name: 'Choose files' })).toBeDisabled();
+  expect(input).toBeDisabled();
 });
 
 test('connectivity panel hides diagnostics but keeps ticket import when showDiagnostics is false', () => {

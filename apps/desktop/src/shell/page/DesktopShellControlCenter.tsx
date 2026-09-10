@@ -47,6 +47,7 @@ import {
   type ColumnState,
 } from '@/shell/slices/workspace';
 import { formatCount, syncStatusBadgeLabel } from '@/shell/presentation';
+import { diagnosticValueLabel } from '@/shell/diagnosticLabels';
 import { useDesktopShellFieldSetter, useDesktopShellStore } from '@/shell/store';
 import { SavedWorkspaceLayouts } from '@/components/shell/SavedWorkspaceLayouts';
 import { applySavedWorkspaceLayout } from '@/shell/savedWorkspaceLayouts';
@@ -81,12 +82,6 @@ const ADDABLE_COLUMN_KINDS: ColumnKind[] = [
   'stream',
   'metaverse',
 ];
-
-function connectionPathLabel(path: string) {
-  if (path === 'relay_supported_p2p') return 'Relay Supported P2P';
-  if (path === 'relay_fallback') return 'Relay Fallback';
-  return 'Direct P2P';
-}
 
 export function DesktopShellControlCenter({
   triggerRef,
@@ -490,7 +485,7 @@ export function DesktopShellControlCenter({
               <div className='shell-control-center-action-list'>
                 <Button variant='secondary' type='button' onClick={() => openSettings('connectivity')}>
                   <Radio className='size-4' aria-hidden='true' />
-                  {syncStatusBadgeLabel(syncStatus)} · {connectionPathLabel(syncStatus.active_path)}
+                  {syncStatusBadgeLabel(syncStatus)} · {diagnosticValueLabel('path', syncStatus.active_path, t, false)}
                 </Button>
                 <Button variant='ghost' type='button' onClick={() => openSettings('release')}>
                   <Download className='size-4' aria-hidden='true' />

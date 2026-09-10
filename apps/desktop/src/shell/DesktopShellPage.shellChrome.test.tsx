@@ -270,7 +270,7 @@ test('desktop shell surfaces docs-assisted topic recovery in diagnostics', async
   const relaySection = closestSection(relayHeading);
   expect(
     within(relaySection).getByText(
-      'docs-assisted recovery is in progress via 1 peer(s); live topic delivery is unavailable'
+      'Connection details (Diagnostic details: docs-assisted recovery is in progress via 1 peer(s); live topic delivery is unavailable)'
     )
   ).toBeInTheDocument();
 });
@@ -289,13 +289,13 @@ test('desktop shell renders diagnostics error reasons', async () => {
   const drawer = await openSettingsSection(user, 'connectivity');
   await waitFor(() => {
     expect(
-      within(drawer).getByText('failed to import peer ticket: invalid endpoint id')
+      within(drawer).getByText('An error occurred. (Diagnostic details: failed to import peer ticket: invalid endpoint id)')
     ).toBeInTheDocument();
   });
 
   const topicHeading = await within(drawer).findByRole('heading', { name: 'general' });
   const topicSection = closestSection(topicHeading);
-  expect(within(topicSection).getByText('timed out waiting for gossip topic join')).toBeInTheDocument();
+  expect(within(topicSection).getByText('An error occurred. (Diagnostic details: timed out waiting for gossip topic join)')).toBeInTheDocument();
 });
 
 test('desktop shell exposes the Timeline Column and settings drawer restores trigger focus on escape', async () => {

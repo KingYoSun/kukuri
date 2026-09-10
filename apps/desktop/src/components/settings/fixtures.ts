@@ -6,6 +6,7 @@ import type {
 } from './types';
 import { buildCommunityNodeDependencyView } from './communityNodeDependency';
 import i18n from '@/i18n';
+import { diagnosticErrorLabel, diagnosticValueLabel } from '@/shell/diagnosticLabels';
 import { formatLocalizedDateTime, formatLocalizedTime, getResolvedLocale } from '@/i18n/format';
 
 const fixtureTranslate = (key: string, options?: Record<string, unknown>): string =>
@@ -93,7 +94,7 @@ export function createConnectivityPanelFixture(): ConnectivityPanelView {
         relayAssistedPeersLabel: 'relay-peer',
         configuredPeersLabel: i18n.t('common:fallbacks.none'),
         missingPeersLabel: i18n.t('common:fallbacks.none'),
-        lastError: 'timed out waiting for gossip topic join',
+        lastError: diagnosticErrorLabel('topic join pending: timed out waiting for initial topic join', fixtureTranslate),
       },
     ],
   };
@@ -104,11 +105,11 @@ export const connectivityPanelFixture = createConnectivityPanelFixture();
 export function createDiscoveryPanelFixture(): DiscoveryPanelView {
   return {
     status: 'ready',
-    summaryLabel: 'seeded_dht',
+    summaryLabel: diagnosticValueLabel('discoveryMode', 'seeded_dht', fixtureTranslate),
     panelError: null,
     metrics: [
-      { label: i18n.t('settings:discovery.metrics.mode'), value: 'seeded_dht' },
-      { label: i18n.t('settings:discovery.metrics.connect'), value: 'direct_or_relay', tone: 'accent' },
+      { label: i18n.t('settings:discovery.metrics.mode'), value: diagnosticValueLabel('discoveryMode', 'seeded_dht', fixtureTranslate) },
+      { label: i18n.t('settings:discovery.metrics.connect'), value: diagnosticValueLabel('connectMode', 'direct_or_relay', fixtureTranslate), tone: 'accent' },
       { label: i18n.t('settings:discovery.metrics.envLock'), value: i18n.t('common:states.no') },
     ],
     diagnostics: [

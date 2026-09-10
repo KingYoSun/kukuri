@@ -1,4 +1,5 @@
 import { type CommunityNodeManifestEntry } from '@/shell/store';
+import { diagnosticErrorLabel, diagnosticValueLabel } from '@/shell/diagnosticLabels';
 
 import { type CommunityNodeDependencyView } from './types';
 
@@ -6,8 +7,8 @@ type Translate = (key: string, options?: Record<string, unknown>) => string;
 
 const DEFAULT_ONBOARDING_NODE_ROLE = 'default-onboarding-node';
 
-function joinedOrNone(values: string[], t: Translate): string {
-  return values.length > 0 ? values.join(', ') : t('common:fallbacks.none');
+function joinedOrNone(group: 'capability' | 'authority', values: string[], t: Translate): string {
+  return values.length > 0 ? values.map((value) => diagnosticValueLabel(group, value, t)).join(', ') : t('common:fallbacks.none');
 }
 
 /// manifest fetch 状態 (#356) から、settings 表示用の依存度 view を組み立てる。
@@ -45,7 +46,7 @@ export function buildCommunityNodeDependencyView(
       },
       {
         label: t('settings:communityNode.dependency.diagnostics.role'),
-        value: manifest.node_role || t('common:fallbacks.none'),
+        value: diagnosticValueLabel('role', manifest.node_role, t),
         monospace: true,
       },
       {
@@ -55,22 +56,22 @@ export function buildCommunityNodeDependencyView(
       },
       {
         label: t('settings:communityNode.dependency.diagnostics.capabilityAvailable'),
-        value: joinedOrNone(manifest.capability_scope.available_enabled, t),
+        value: joinedOrNone('capability', manifest.capability_scope.available_enabled, t),
         monospace: true,
       },
       {
         label: t('settings:communityNode.dependency.diagnostics.capabilityPlanned'),
-        value: joinedOrNone(manifest.capability_scope.planned_enabled, t),
+        value: joinedOrNone('capability', manifest.capability_scope.planned_enabled, t),
         monospace: true,
       },
       {
         label: t('settings:communityNode.dependency.diagnostics.authorityAppliesTo'),
-        value: joinedOrNone(manifest.authority_scope.applies_to, t),
+        value: joinedOrNone('authority', manifest.authority_scope.applies_to, t),
         monospace: true,
       },
       {
         label: t('settings:communityNode.dependency.diagnostics.authorityDoesNotApplyTo'),
-        value: joinedOrNone(manifest.authority_scope.does_not_apply_to, t),
+        value: joinedOrNone('authority', manifest.authority_scope.does_not_apply_to, t),
         monospace: true,
       }
     );
@@ -84,6 +85,6 @@ export function buildCommunityNodeDependencyView(
   return {
     diagnostics,
     boundaryNotes,
-    manifestError: entry?.status === 'error' ? entry.error : null,
+    manifestError: entry?.status === 'error' ? diagnosticErrorLabel(entry.error, t) : null,
   };
 }

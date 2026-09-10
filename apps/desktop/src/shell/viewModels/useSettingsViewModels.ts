@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { diagnosticErrorLabel, diagnosticStatusDetail, diagnosticValueLabel } from '@/shell/diagnosticLabels';
 import { eligibleDistanceOptoutNodes } from '@/lib/api/communityIndex';
 
 import { buildCommunityNodeDependencyView } from '@/components/settings/communityNodeDependency';
@@ -82,7 +83,7 @@ function localizeConnectivityStatusDetail(
     return t('settings:connectivity.summaryDetailFallback');
   }
   const translationKey = connectivityStatusDetailKeys[detail];
-  return translationKey ? t(translationKey) : detail;
+  return translationKey ? t(translationKey) : diagnosticStatusDetail(detail, t);
 }
 
 // settings section(connectivity / appearance / discovery / community-node /
@@ -175,7 +176,7 @@ export function useSettingsViewModels({
         },
         {
           label: t('settings:connectivity.diagnostics.lastError'),
-          value: syncStatus.last_error ?? t('common:fallbacks.none'),
+          value: diagnosticErrorLabel(syncStatus.last_error, t) ?? t('common:fallbacks.none'),
           tone: syncStatus.last_error ? 'danger' : 'default',
         },
       ],
@@ -198,7 +199,7 @@ export function useSettingsViewModels({
           relayAssistedPeersLabel: formatListLabel(diagnostic?.docs_assist_peer_ids ?? []),
           configuredPeersLabel: formatListLabel(diagnostic?.configured_peer_ids ?? []),
           missingPeersLabel: formatListLabel(diagnostic?.missing_peer_ids ?? []),
-          lastError: diagnostic?.last_error ?? null,
+          lastError: diagnosticErrorLabel(diagnostic?.last_error, t),
         };
       }),
     }),
@@ -238,13 +239,13 @@ export function useSettingsViewModels({
   const discoveryPanelView = useMemo<DiscoveryPanelView>(
     () => ({
       status: 'ready' as const,
-      summaryLabel: syncStatus.discovery.mode,
+      summaryLabel: diagnosticValueLabel('discoveryMode', syncStatus.discovery.mode, t),
       panelError: null,
       metrics: [
-        { label: t('settings:discovery.metrics.mode'), value: syncStatus.discovery.mode },
+        { label: t('settings:discovery.metrics.mode'), value: diagnosticValueLabel('discoveryMode', syncStatus.discovery.mode, t) },
         {
           label: t('settings:discovery.metrics.connect'),
-          value: syncStatus.discovery.connect_mode,
+          value: diagnosticValueLabel('connectMode', syncStatus.discovery.connect_mode, t),
           tone: syncStatus.discovery.connect_mode === 'direct_or_relay' ? 'accent' : 'default',
         },
         {
@@ -291,7 +292,7 @@ export function useSettingsViewModels({
         },
         {
           label: t('settings:discovery.diagnostics.discoveryError'),
-          value: discoveryError ?? syncStatus.discovery.last_discovery_error ?? t('common:fallbacks.none'),
+          value: diagnosticErrorLabel(discoveryError ?? syncStatus.discovery.last_discovery_error, t) ?? t('common:fallbacks.none'),
           tone:
             discoveryError || syncStatus.discovery.last_discovery_error ? 'danger' : 'default',
         },
@@ -385,7 +386,7 @@ export function useSettingsViewModels({
             },
             {
               label: t('settings:communityNode.diagnostics.lastError'),
-              value: status?.last_error ?? t('common:fallbacks.none'),
+              value: diagnosticErrorLabel(status?.last_error, t) ?? t('common:fallbacks.none'),
               tone: status?.last_error ? 'danger' : 'default',
             },
           ],
@@ -396,7 +397,7 @@ export function useSettingsViewModels({
           consent: communityNodeConsentView(status, communityNodePolicies[node.base_url]),
           inviteCodeSaved: status?.invite_code_saved ?? false,
           admissionRejectionCode: status?.admission_rejection?.code ?? null,
-          lastError: status?.last_error ?? null,
+          lastError: diagnosticErrorLabel(status?.last_error, t),
         };
       }),
     }),
