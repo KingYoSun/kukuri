@@ -16,7 +16,7 @@ test('fresh Japanese OS locale controls the first consent render even with an En
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('ご利用の前に');
   await expect(page.locator('html')).toHaveAttribute('lang', 'ja');
   await expect(page.locator('html')).toHaveAttribute('data-first-consent-title', 'ご利用の前に');
-  await expect(page.getByRole('combobox', { name: /Language/ })).toHaveValue('ja');
+  await expect(page.getByRole('combobox', { name: '言語', exact: true })).toHaveValue('ja');
   expect(await page.evaluate(() => localStorage.getItem('kukuri.desktop.locale'))).toBe('ja');
   expect(await appConsentCalls(page)).toEqual([]);
 });
@@ -53,6 +53,6 @@ test('language is selectable before consent and the saved choice survives reload
   await expect(page.getByRole('checkbox')).not.toBeChecked();
   expect(await appConsentCalls(page)).toEqual([]);
   await page.reload();
-  await expect(language).toHaveValue('ja');
+  await expect(page.getByRole('combobox', { name: '言語', exact: true })).toHaveValue('ja');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('ご利用の前に');
 });

@@ -14,6 +14,7 @@ type SettingsDrawerSection = {
   label: string;
   description: string;
   content: React.ReactNode;
+  keepMounted?: boolean;
 };
 
 type SettingsDrawerProps = {
@@ -35,6 +36,12 @@ export function SettingsDrawer({
 }: SettingsDrawerProps) {
   const { t } = useTranslation('shell');
   const currentSection = sections.find((section) => section.id === activeSection) ?? sections[0];
+  const [visited, setVisited] = React.useState<SettingsSection[]>([]);
+  React.useEffect(() => {
+    if (currentSection.keepMounted) {
+      setVisited((previous) => previous.includes(currentSection.id) ? previous : [...previous, currentSection.id]);
+    }
+  }, [currentSection.id, currentSection.keepMounted]);
 
   return (
     <>
@@ -90,7 +97,14 @@ export function SettingsDrawer({
         </div>
 
         <div className='shell-settings-body'>
-          <div className='shell-settings-content'>{currentSection.content}</div>
+          <div className='shell-settings-content'>
+            {sections.filter(section => section.keepMounted && (section.id === currentSection.id || visited.includes(section.id))).map(section => (
+              <div key={section.id} hidden={section.id !== currentSection.id}>
+                {section.content}
+              </div>
+            ))}
+            {!currentSection.keepMounted ? currentSection.content : null}
+          </div>
         </div>
       </Card>
     </>

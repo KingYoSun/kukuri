@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, test, vi } from 'vitest';
+import i18n from '@/i18n';
 
 import { AppearancePanel } from './AppearancePanel';
 import { CommunityNodePanel } from './CommunityNodePanel';
@@ -117,7 +118,7 @@ test('connectivity panel renders loading and topic detail states', async () => {
 
   expect(screen.getByText('Loading connectivity diagnostics…')).toBeInTheDocument();
   expect(screen.getByText('Topic Connectivity Detail')).toBeInTheDocument();
-  expect(screen.getByText('timed out waiting for gossip topic join')).toBeInTheDocument();
+  expect(screen.getByText('The initial topic join timed out. (Diagnostic details: topic join pending: timed out waiting for initial topic join)')).toBeInTheDocument();
 
   await user.click(screen.getByRole('button', { name: 'Import Peer' }));
   expect(onImportPeer).toHaveBeenCalledTimes(1);
@@ -634,6 +635,47 @@ test('reactions panel crops an uploaded image before creating a custom asset', a
     }),
     'party'
   );
+});
+
+test('reaction file selection and crop cancellation preserve the accepted draft and permit reselection', async () => {
+  installCropperMocks();
+  const user = userEvent.setup();
+  const create = vi.fn();
+  const props = {
+    view: { status: 'ready' as const, summaryLabel: '', ownedAssets: [], bookmarkedAssets: [] },
+    creating: false, onCreateAsset: create, onRemoveBookmark: async () => {},
+  };
+  const view = render(<ReactionsPanel {...props} />);
+  const file = new File(['image'], '選択した画像.png', { type: 'image/png' });
+  const input = screen.getByLabelText('Upload image');
+  await user.upload(input, file);
+  let crop = await screen.findByRole('dialog', { name: 'Crop reaction image' });
+  await user.click(within(crop).getByRole('button', { name: 'Cancel' }));
+  expect(screen.getByText('No files selected')).toBeVisible();
+  await user.upload(input, file);
+  crop = await screen.findByRole('dialog', { name: 'Crop reaction image' });
+  await user.click(within(crop).getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(screen.getByText(file.name)).toBeVisible();
+  await user.type(screen.getByLabelText('Search key'), 'preserved');
+  fireEvent(input, new Event('cancel'));
+  expect(screen.getByText(file.name)).toBeVisible();
+  await user.upload(input, new File(['new'], 'replacement.gif', { type: 'image/gif' }));
+  crop = await screen.findByRole('dialog', { name: 'Crop reaction image' });
+  await user.click(within(crop).getByRole('button', { name: 'Cancel' }));
+  expect(screen.getByText(file.name)).toBeVisible();
+  expect(screen.getByLabelText('Search key')).toHaveValue('preserved');
+  expect(create).not.toHaveBeenCalled();
+  await act(() => i18n.changeLanguage('ja'));
+  expect(screen.getByText(file.name)).toBeVisible();
+  await user.click(screen.getByRole('button', { name: '切り抜きを編集' }));
+  const japaneseCrop = await screen.findByRole('dialog', { name: 'リアクション画像の切り抜き' });
+  expect(within(japaneseCrop).getByText('ドラッグして位置を動かし、拡大率を調整して表示する正方形の範囲を選択します。')).toBeVisible();
+  await user.click(within(japaneseCrop).getByRole('button', { name: 'キャンセル' }));
+  expect(screen.getByLabelText('検索キーワード')).toHaveValue('preserved');
+  view.rerender(<ReactionsPanel {...props} creating />);
+  expect(screen.getByRole('button', { name: 'ファイルを選択' })).toBeDisabled();
+  expect(input).toBeDisabled();
 });
 
 test('connectivity panel hides diagnostics but keeps ticket import when showDiagnostics is false', () => {

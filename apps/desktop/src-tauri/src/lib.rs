@@ -3,6 +3,8 @@ mod commands;
 #[cfg(target_os = "linux")]
 mod deb_update;
 mod desktop_lifecycle;
+#[cfg(target_os = "linux")]
+mod file_dialog;
 mod invoke_gate;
 mod restore_lifecycle;
 mod state;
@@ -209,6 +211,8 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            #[cfg(target_os = "linux")]
+            file_dialog::install(app.handle())?;
             app.manage(app_update::AppUpdateState::default());
             app.manage(desktop_lifecycle::DesktopLifecycle::default());
             // runtimeが無い同意待ちでもrestore activation/account switchと同じlockを使う。

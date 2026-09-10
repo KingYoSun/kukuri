@@ -66,7 +66,8 @@
     "writeMessage": "メッセージを書く",
     "writeQuoteRepost": "コメントを追加",
     "writeReply": "返信を書く",
-    "adultLabel": "この投稿を成人向けとして申告する"
+    "adultLabel": "この投稿を成人向けとして申告する",
+    "supportedFiles": "対応するファイル"
   },
   "audience": {
     "allJoined": "参加済みすべて",

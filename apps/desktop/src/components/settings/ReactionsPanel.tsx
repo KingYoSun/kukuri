@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useState } from 'react';
+import { ChangeEvent, useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
@@ -33,6 +33,9 @@ export function ReactionsPanel({
   onRemoveBookmark,
 }: ReactionsPanelProps) {
   const { t } = useTranslation(['settings', 'common']);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileButtonRef = useRef<HTMLButtonElement>(null);
+  const fileStatusId = useId();
   const [draftFile, setDraftFile] = useState<File | null>(null);
   const [draftPreviewUrl, setDraftPreviewUrl] = useState<string | null>(null);
   const [draftCrop, setDraftCrop] = useState<CustomReactionCropRect | null>(null);
@@ -46,6 +49,13 @@ export function ReactionsPanel({
     null
   );
   const [savedMenuAssetId, setSavedMenuAssetId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const input = fileInputRef.current;
+    const restoreFocus = () => fileButtonRef.current?.focus();
+    input?.addEventListener('cancel', restoreFocus);
+    return () => input?.removeEventListener('cancel', restoreFocus);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -69,6 +79,9 @@ export function ReactionsPanel({
 
   const handleDraftFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
+    // The accepted crop is the draft; clearing the input permits the same source again.
+    event.target.value = '';
+    if (creating) return;
     if (!file) {
       return;
     }
@@ -135,10 +148,34 @@ export function ReactionsPanel({
           <h4>{t('reactions.myCustomReactions')}</h4>
           <small>{t('reactions.myCustomReactionsHint')}</small>
         </div>
-        <Label>
+        <div className='space-y-2'>
           <span>{t('reactions.uploadLabel')}</span>
-          <Input type='file' accept='image/*,.gif' onChange={handleDraftFileChange} />
-        </Label>
+          <div className='flex min-w-0 flex-wrap items-center gap-2'>
+            <Button
+              ref={fileButtonRef}
+              type='button'
+              variant='secondary'
+              disabled={creating}
+              aria-describedby={fileStatusId}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {t('common:composer.chooseFiles')}
+            </Button>
+            <span id={fileStatusId} role='status' className='min-w-0 break-all text-sm text-muted-foreground'>
+              {draftFile ? draftFile.name : t('common:composer.noFilesSelected')}
+            </span>
+          </div>
+          <Input
+            ref={fileInputRef}
+            hidden
+            className='hidden'
+            type='file'
+            accept='image/*,.gif'
+            aria-label={t('reactions.uploadLabel')}
+            disabled={creating}
+            onChange={handleDraftFileChange}
+          />
+        </div>
         {draftError ? <Notice tone='destructive'>{draftError}</Notice> : null}
         {draftFile && draftPreviewUrl && draftCrop ? (
           <div className='reactions-editor-grid'>
@@ -146,6 +183,7 @@ export function ReactionsPanel({
               <div className='reactions-preview-card'>
                 <div
                   className='reactions-preview-thumb'
+                  role='img'
                   style={{ backgroundImage: `url(${draftPreviewUrl})` }}
                   aria-label={t('reactions.preview')}
                 />
@@ -159,7 +197,7 @@ export function ReactionsPanel({
                   setCropDialogOpen(true);
                 }}
               >
-                {t('reactions.editCrop', { defaultValue: 'Edit crop' })}
+                {t('reactions.editCrop')}
               </Button>
             </div>
             <div className='shell-main-stack'>
@@ -326,10 +364,8 @@ export function ReactionsPanel({
       <ImageCropDialog
         open={cropDialogOpen}
         file={cropDialogFile}
-        title={t('reactions.cropTitle', { defaultValue: 'Crop reaction image' })}
-        description={t('reactions.cropDescription', {
-          defaultValue: 'Drag to reposition and use zoom to choose the visible square.',
-        })}
+        title={t('reactions.cropTitle')}
+        description={t('reactions.cropDescription')}
         confirmLabel={t('common:actions.save')}
         onOpenChange={(open) => {
           setCropDialogOpen(open);

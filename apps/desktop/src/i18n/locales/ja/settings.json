@@ -79,7 +79,7 @@
   "appearance": {
     "darkSelected": "ダークテーマを選択中",
     "languageHint": "変更はすぐに反映され、この端末に保存されます。",
-    "languageLabel": "言語 / Language",
+    "languageLabel": "言語",
     "languageOptions": {
       "en": "English",
       "ja": "日本語",
@@ -375,7 +375,10 @@
     "clearSelected": "選択した項目をクリア",
     "selectAll": "全選択",
     "selectReaction": "{{key}} を選択",
-    "noSavedAssets": "保存済みリアクションはありません。"
+    "noSavedAssets": "保存済みリアクションはありません。",
+    "editCrop": "切り抜きを編集",
+    "cropTitle": "リアクション画像の切り抜き",
+    "cropDescription": "ドラッグして位置を動かし、拡大率を調整して表示する正方形の範囲を選択します。"
   },
   "release": {
     "title": "リリース",
@@ -486,6 +489,69 @@
     "adultContent": {
       "label": "成人向けとして申告されたメディア・投稿を表示する",
       "description": "無効の間、kukuri は投稿者が成人向けとして申告した投稿の添付メディアを取得・表示せず、代わりにプレースホルダーを表示します。ラベルは投稿者の自己申告であり、ラベルのない投稿に成人向け表現が含まれないことは保証されません。この設定はこの端末にのみ保存され、18歳以上の自己申告とは別の設定です。"
+    }
+  },
+  "diagnostics": {
+    "unknownValue": "不明な値",
+    "initialJoinTimeout": "トピックへの初回参加がタイムアウトしました。",
+    "error": "エラーが発生しました。",
+    "connectionDetail": "接続状況の詳細",
+    "original": "（診断詳細: {{value}}）",
+    "values": {
+      "discoveryMode": {
+        "static_peer": "固定ピア",
+        "seeded_dht": "シード付き DHT"
+      },
+      "connectMode": {
+        "direct_only": "直接接続のみ",
+        "direct_or_relay": "直接接続またはリレー"
+      },
+      "path": {
+        "direct_p2p": "直接 P2P",
+        "relay_supported_p2p": "リレー補助 P2P",
+        "relay_fallback": "リレー経由の代替接続"
+      },
+      "role": {
+        "community-node": "コミュニティノード",
+        "default-onboarding-node": "初期設定用の既定ノード",
+        "relay-assist": "リレー補助ノード",
+        "index-node": "索引ノード",
+        "moderation-node": "モデレーションノード",
+        "trust-signal-node": "信頼情報ノード"
+      },
+      "capability": {
+        "auth_consent": "認証と同意",
+        "bootstrap_assist": "初期接続の補助",
+        "topic_rendezvous": "トピックのピア探索",
+        "iroh_relay": "iroh リレー",
+        "traffic_relay_fallback": "代替経路のリレー通信",
+        "blob_cache": "添付ファイルのキャッシュ",
+        "private_message_storage": "非公開メッセージの保管",
+        "analytics": "利用状況の分析",
+        "crash_report": "クラッシュレポート",
+        "cloudflare_proxy": "Cloudflare プロキシ",
+        "push_notification": "プッシュ通知",
+        "community_index": "コミュニティインデックス",
+        "moderation": "モデレーション",
+        "community_local_trust": "コミュニティ内の信頼情報",
+        "report_endpoint": "通報受付",
+        "rights_request_endpoint": "権利侵害申出の受付",
+        "tester_feedback": "テスターからのフィードバック",
+        "dome_hosting": "Dome のホスティング"
+      },
+      "authority": {
+        "this_node": "このノード",
+        "communities_indexed_by_this_node": "このノードが索引するコミュニティ",
+        "moderation_events_issued_by_this_node": "このノードが発行するモデレーション情報",
+        "trust_signals_issued_by_this_node": "このノードが発行する信頼情報",
+        "media_cached_by_this_node": "このノードがキャッシュするメディア",
+        "dome_sessions_leased_to_this_node": "このノードに割り当てられた Dome セッション",
+        "kukuri_network_as_a_whole": "kukuri ネットワーク全体",
+        "third_party_nodes": "他の運営者のノード",
+        "user_identity": "ユーザーのアカウントの本人性",
+        "user_profile_canonical_source": "ユーザープロフィールの正本",
+        "user_social_graph_canonical_source": "ユーザーの関係情報の正本"
+      }
     }
   }
 }

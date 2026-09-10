@@ -375,7 +375,10 @@
     "clearSelected": "Clear selected",
     "selectAll": "Select all",
     "selectReaction": "Select {{key}}",
-    "noSavedAssets": "No saved reactions yet."
+    "noSavedAssets": "No saved reactions yet.",
+    "editCrop": "Edit crop",
+    "cropTitle": "Crop reaction image",
+    "cropDescription": "Drag to reposition and use zoom to choose the visible square."
   },
   "release": {
     "title": "Release",
@@ -486,6 +489,69 @@
     "adultContent": {
       "label": "Show media and posts self-labeled as adult material",
       "description": "While this is off, kukuri does not download or display media attached to posts that were self-labeled as adult material, and shows a placeholder instead. Labels are self-declared by the people who post; an unlabeled post is not guaranteed to be free of adult material. This preference is stored only on this device and is separate from the age self-attestation."
+    }
+  },
+  "diagnostics": {
+    "unknownValue": "Unknown value",
+    "initialJoinTimeout": "The initial topic join timed out.",
+    "error": "An error occurred.",
+    "connectionDetail": "Connection details",
+    "original": "(Diagnostic details: {{value}})",
+    "values": {
+      "discoveryMode": {
+        "static_peer": "Static peers",
+        "seeded_dht": "Seeded DHT"
+      },
+      "connectMode": {
+        "direct_only": "Direct connections only",
+        "direct_or_relay": "Direct connections or relay"
+      },
+      "path": {
+        "direct_p2p": "Direct P2P",
+        "relay_supported_p2p": "Relay-supported P2P",
+        "relay_fallback": "Relay fallback"
+      },
+      "role": {
+        "community-node": "Community node",
+        "default-onboarding-node": "Default onboarding node",
+        "relay-assist": "Relay assistance node",
+        "index-node": "Index node",
+        "moderation-node": "Moderation node",
+        "trust-signal-node": "Trust signal node"
+      },
+      "capability": {
+        "auth_consent": "Authentication and consent",
+        "bootstrap_assist": "Initial connection assistance",
+        "topic_rendezvous": "Topic peer discovery",
+        "iroh_relay": "iroh relay",
+        "traffic_relay_fallback": "Relay fallback traffic",
+        "blob_cache": "Attachment cache",
+        "private_message_storage": "Private message storage",
+        "analytics": "Usage analytics",
+        "crash_report": "Crash reports",
+        "cloudflare_proxy": "Cloudflare proxy",
+        "push_notification": "Push notifications",
+        "community_index": "Community index",
+        "moderation": "Moderation",
+        "community_local_trust": "Community-local trust information",
+        "report_endpoint": "Report reception",
+        "rights_request_endpoint": "Rights infringement requests",
+        "tester_feedback": "Tester feedback",
+        "dome_hosting": "Dome hosting"
+      },
+      "authority": {
+        "this_node": "This node",
+        "communities_indexed_by_this_node": "Communities indexed by this node",
+        "moderation_events_issued_by_this_node": "Moderation events issued by this node",
+        "trust_signals_issued_by_this_node": "Trust signals issued by this node",
+        "media_cached_by_this_node": "Media cached by this node",
+        "dome_sessions_leased_to_this_node": "Dome sessions assigned to this node",
+        "kukuri_network_as_a_whole": "The entire kukuri network",
+        "third_party_nodes": "Other operators’ nodes",
+        "user_identity": "Users’ account identities",
+        "user_profile_canonical_source": "Authoritative user profiles",
+        "user_social_graph_canonical_source": "Authoritative user relationships"
+      }
     }
   }
 }
