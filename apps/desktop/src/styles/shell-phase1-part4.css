@@ -337,14 +337,15 @@
   font-size: var(--text-caption);
 }
 
-/* topic 名の行は操作列・診断行と同じ間隔（--space-2xs）で並べる */
+/* topic 名の行は上余白を保ち、下余白 0 で操作列との間隔を 2px にする */
 .shell-phase1 .shell-control-center-place-list .topic-item > .topic-link {
   min-height: 0;
-  padding-block: 0;
+  padding-block: var(--space-xs) 0;
 }
 
 .shell-phase1 .shell-control-center-place-list .topic-actions {
   justify-content: flex-end;
+  margin-block-end: 2px;
 }
 
 .shell-phase1 .shell-control-center-place-list .topic-channel-empty-action {
