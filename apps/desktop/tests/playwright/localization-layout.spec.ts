@@ -45,6 +45,8 @@ const SETTINGS_SECTIONS = [
   'about',
   'appearance',
   'notifications',
+  'backup',
+  'account',
   'connectivity',
   'discovery',
   'community-node',

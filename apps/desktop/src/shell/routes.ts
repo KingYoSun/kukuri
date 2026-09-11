@@ -96,6 +96,16 @@ export const SETTINGS_SECTION_COPY: Array<{
     description: 'OS notification categories, quiet mode, and preview text.',
   },
   {
+    id: 'backup',
+    label: 'Backup & restore',
+    description: 'Create and restore an encrypted backup of this device\'s data.',
+  },
+  {
+    id: 'account',
+    label: 'Account',
+    description: 'Key-only export, import, and account switching.',
+  },
+  {
     id: 'connectivity',
     label: 'Connectivity',
     description: 'Sync summary, peer tickets, and global error visibility.',
@@ -125,11 +135,6 @@ export const SETTINGS_SECTION_COPY: Array<{
     label: 'Developer',
     description: 'Developer mode and work-in-progress feature visibility.',
   },
-  {
-    id: 'account',
-    label: 'Account',
-    description: 'Account key export, import, and account switching.',
-  },
 ];
 
 export const PRIMARY_SECTION_PATHS: Record<PrimarySection, string> = {
@@ -149,6 +154,7 @@ export function isSettingsSection(value: string | null): value is SettingsSectio
     value === 'keyboard' ||
     value === 'safety' ||
     value === 'notifications' ||
+    value === 'backup' ||
     value === 'connectivity' ||
     value === 'discovery' ||
     value === 'community-node' ||

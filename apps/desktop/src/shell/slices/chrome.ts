@@ -1,6 +1,6 @@
 import { type SettingsSection, type ShellChromeState } from '@/components/shell/types';
 import { readDeveloperMode } from '@/lib/developerMode';
-import { parseHashRouteLocation } from '@/shell/routes';
+import { isSettingsSection, parseHashRouteLocation } from '@/shell/routes';
 
 /// shell chrome(ナビ・設定ドロワー)とルート記憶・全体エラー(WP-H6 PR3 のドメインスライス)。
 export type ChromeSliceState = {
@@ -31,20 +31,9 @@ function parseInitialSettingsSection(): {
     };
   }
 
+  // section id の正本は routes.ts の isSettingsSection。ここで別に列挙しない(#967)。
   const requestedSection = new URLSearchParams(search).get('settings');
-  if (
-    requestedSection !== 'about' &&
-    requestedSection !== 'appearance' &&
-    requestedSection !== 'keyboard' &&
-    requestedSection !== 'safety' &&
-    requestedSection !== 'notifications' &&
-    requestedSection !== 'connectivity' &&
-    requestedSection !== 'discovery' &&
-    requestedSection !== 'community-node' &&
-    requestedSection !== 'reactions' &&
-    requestedSection !== 'release' &&
-    requestedSection !== 'developer'
-  ) {
+  if (!isSettingsSection(requestedSection)) {
     return {
       activeSettingsSection: DEFAULT_SETTINGS_SECTION,
       settingsOpen: false,

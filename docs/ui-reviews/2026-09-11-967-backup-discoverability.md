@@ -1,0 +1,21 @@
+# 2026-09-11 967 backup discoverability
+
+- Status: current
+- Supersedes: None（[2026-09-02 device backup restore](2026-09-02-device-backup-restore.md) の panel 設計は維持し、配置だけを「設定 → バックアップと復元」へ移す）
+- Superseded by: None
+- PR: Issue #967 / `claude/youthful-mccarthy-uqu094`
+- Preview: [設定 > バックアップと復元 1280×840](../progress/assets/967/settings-backup-ja-dark-1280x840.png)、[Control Center システム節](../progress/assets/967/control-center-system-ja-dark-1280x840.png)、[変更前の nav](../progress/assets/967/before-settings-nav-ja-dark-1280x840.png)
+- Surface / user / purpose: Desktop 設定ドロワーの nav と Control Center「システム」。端末故障への備えまたは端末移行を始めたい利用者が、通常設定からバックアップ作成・復元の既存 UI へ、鍵だけの移行と混同せずに到達する。
+- Summary: 「バックアップと復元」を独立 section にして「通知」の直後へ置き、「アカウント」を隣接させる。両 section 冒頭で対象の違いを説明し相互に移動できる。Control Center「システム」に入口を追加。設定 nav は Tauri 既定 window（1280×840）で全 section が可視域に収まる密度にし、選択中 section の nav item を可視域へ入れる。
+- Conditions:
+  - Platform: Linux Chromium（browser mock）。Tauri Linux／Windows 実機は未確認
+  - Viewport: 1280×840（Tauri 既定）、1280×768、1400×980、700、390×844
+  - Theme: dark / light
+  - Locale: ja / en（zh-CN は localization-layout gate 対象）
+  - State: 開発者モード OFF、backup 初期状態、account 一覧 1 件
+- Accessibility / interaction: 入口は `button`、nav は既存の `aria-current="location"`、相互案内の移動先 nav item へ focus。Enter／Escape の keyboard 操作と、1280／700／390 での横 overflow なしを Playwright で確認。screen reader の音声聴取は未実施。
+- Performance: 新規 motion・取得・長い一覧なし。nav の `scrollIntoView` は section 変更時のみ。
+- Validation: Vitest（shell 5 件、routes unit、既存 panel 7 件）、Playwright `backup-discoverability.spec.ts`、`localization-layout.spec.ts`、`developer-mode.spec.ts`、視覚 `settings-backup-wide-dark`（baseline は Linux workflow で再生成）。詳細は [progress 記録](../progress/2026-09-11-967-backup-discoverability.md)。
+- Not verified: Linux .deb（WebKitGTK）と Windows WebView の実機 nav 高さ・日本語 glyph・native dialog、screen reader、200% zoom。
+- Review result: 1280×840 と 1280×768 で 13 section が nav 可視域に収まり、390 の 2 列 nav でも全 section が見える。panel header の title 折り返しは summary 短縮で解消。blocking issue なし。
+- Exceptions: AC-1 の Linux .deb 実機画像は承認により browser 同条件の画像で代替した。

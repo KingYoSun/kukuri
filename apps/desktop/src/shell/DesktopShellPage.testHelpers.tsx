@@ -290,6 +290,8 @@ export async function openSettingsSection(
     | 'appearance'
     | 'keyboard'
     | 'safety'
+    | 'backup'
+    | 'account'
     | 'connectivity'
     | 'discovery'
     | 'community-node'

@@ -15,6 +15,7 @@ export type SettingsSection =
   | 'keyboard'
   | 'safety'
   | 'notifications'
+  | 'backup'
   | 'connectivity'
   | 'discovery'
   | 'community-node'

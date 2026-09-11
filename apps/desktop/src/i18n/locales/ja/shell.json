@@ -198,7 +198,7 @@
     },
     "account": {
       "label": "アカウント",
-      "description": "アカウント鍵のエクスポート・インポートと切り替えです。"
+      "description": "本人性を表すアカウント鍵だけのエクスポート・インポートと、アカウントの切り替えです。"
     },
     "appearance": {
       "description": "ローカルのライト / ダーク / 言語設定です。",
@@ -239,6 +239,10 @@
     "notifications": {
       "label": "通知",
       "description": "OS 通知の種類、静音モード、本文プレビューの設定です。"
+    },
+    "backup": {
+      "label": "バックアップと復元",
+      "description": "端末内データの暗号化バックアップの作成と復元です。"
     }
   },
   "workspace": {

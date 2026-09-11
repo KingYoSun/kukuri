@@ -9,7 +9,8 @@ const meta = {
   component: DeviceBackupPanel,
   render: () => (
     <SettingsStoryFrame width='narrow'>
-      <DeviceBackupPanel />
+      {/* #967: 鍵だけの移行(アカウント section)への案内 button を含める。 */}
+      <DeviceBackupPanel onOpenAccountKeys={() => undefined} />
     </SettingsStoryFrame>
   ),
 } satisfies Meta<typeof DeviceBackupPanel>;

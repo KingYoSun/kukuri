@@ -35,7 +35,12 @@ function formatBytes(value: number): string {
   return `${(value / 1024 / 1024 / 1024).toFixed(1)} GiB`;
 }
 
-export function DeviceBackupPanel() {
+type DeviceBackupPanelProps = {
+  // #967: 鍵だけの移行(設定 > アカウント)への案内。設定内の section 移動だけを行う。
+  onOpenAccountKeys?: () => void;
+};
+
+export function DeviceBackupPanel({ onOpenAccountKeys }: DeviceBackupPanelProps = {}) {
   const { t } = useTranslation(['settings']);
   const [progress, setProgress] = useState<DeviceBackupProgress | null>(null);
 
@@ -165,6 +170,14 @@ export function DeviceBackupPanel() {
 
       <Notice>{t('settings:deviceBackup.oneFileNotice')}</Notice>
       <Notice tone='destructive'>{t('settings:deviceBackup.secretNotice')}</Notice>
+      <div className='space-y-2'>
+        <p className='text-sm text-[var(--muted-foreground)]'>{t('settings:deviceBackup.keyOnlyHint')}</p>
+        {onOpenAccountKeys ? (
+          <Button variant='secondary' type='button' onClick={onOpenAccountKeys}>
+            {t('settings:deviceBackup.openAccount')}
+          </Button>
+        ) : null}
+      </div>
 
       <section className='space-y-3'>
         <h4 className='text-sm font-semibold text-foreground'>

@@ -198,7 +198,7 @@
     },
     "account": {
       "label": "Account",
-      "description": "Account key export, import, and switching."
+      "description": "Key-only export and import of your account key, and account switching."
     },
     "appearance": {
       "description": "Local light, dark, and language selection.",
@@ -239,6 +239,10 @@
     "notifications": {
       "label": "Notifications",
       "description": "OS notification categories, quiet mode, and preview text."
+    },
+    "backup": {
+      "label": "Backup & restore",
+      "description": "Create and restore an encrypted backup of this device's data."
     }
   },
   "workspace": {

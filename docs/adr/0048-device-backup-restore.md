@@ -50,6 +50,8 @@ Accepted
 ### 6. 設定画面のフロー
 
 - 対象利用者は端末故障への備え、または別端末への移行を行うdesktop利用者とする。単一目的は、鍵だけの移行と端末全体の移行を混同せず、安全に1アカウントを持ち出すことである。
+- 設定では「バックアップと復元」を「アカウント」（鍵だけのexport／import、切り替え）と別のsectionに置き、両sectionの冒頭で対象の違いを説明して相手のsectionへ移動できるようにする。Control Centerの「システム」からも「バックアップと復元」へ直接入る。入口の表示・移動はsectionとURLだけを変え、backup作成、復元、鍵export、file選択を開始しない（#967）。
+- 設定navは、Tauri既定window（1280×840）でも全sectionがnavの可視域に収まる密度にする。navの末尾がnav内scrollでしか現れない配置は、入口の未発見として扱う（#967）。
 - 作成は説明・秘密情報警告・確認checkbox・パスフレーズと確認入力・native保存先選択・進捗・cancel・成功／失敗を持つ。復元はnativeファイル選択・パスフレーズ・内容preview・任意設定の適用・既存アカウント置換確認・進捗・cancel・失敗回復を持つ。
 - 狭幅では1columnを維持し、長いpathと公開鍵は折り返す。pointerとkeyboardの同じcontrolを使い、native dialog以外の操作にdragやhoverを必須としない。
 - offlineでもローカルファイルの作成・preview・復元は可能とする。runtime停止中のネットワーク同期は復元後の明示的な再同意とruntime activation後に再開し、remote copyを削除したような表示はしない。

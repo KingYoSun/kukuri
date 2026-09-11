@@ -11,6 +11,7 @@ import {
   BookPlus,
   Columns3,
   Compass,
+  DatabaseBackup,
   Download,
   GitBranchPlus,
   Info,
@@ -536,6 +537,11 @@ export function DesktopShellControlCenter({
                 <Button variant='ghost' type='button' onClick={() => openSettings('keyboard')}>
                   <Keyboard className='size-4' aria-hidden='true' />
                   {t('shell:settingsSections.keyboard.label')}
+                </Button>
+                {/* #967: 端末移行・故障への備えの入口。設定の backup section を開くだけで、backup は開始しない。 */}
+                <Button variant='ghost' type='button' onClick={() => openSettings('backup')}>
+                  <DatabaseBackup className='size-4' aria-hidden='true' />
+                  {t('shell:settingsSections.backup.label')}
                 </Button>
                 <Button variant='ghost' type='button' onClick={() => openSettings('about')}>
                   <Info className='size-4' aria-hidden='true' />
