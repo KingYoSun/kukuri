@@ -122,3 +122,37 @@ test('toggles a channel gossip subscription', async () => {
   await user.click(button);
   expect(onToggleChannelGossip).toHaveBeenCalledWith('kukuri:topic:demo', 'channel-1', true);
 });
+
+// Issue #966: 参加済みチャンネルが無い topic にも、機能の存在と作成・参加の入口を出す。
+test('shows the empty channel state with a create/join entry when no channel is joined', async () => {
+  const user = userEvent.setup();
+  const onOpenChannelManager = vi.fn();
+  render(
+    <TopicNavList
+      items={[topicItem({ channels: [] })]}
+      onSelectTopic={vi.fn()}
+      onSelectChannel={vi.fn()}
+      onRemoveTopic={vi.fn()}
+      onOpenChannelManager={onOpenChannelManager}
+    />
+  );
+
+  expect(screen.getByText('Channels')).toBeInTheDocument();
+  expect(screen.getByText('No joined private channels.')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Create or join' }));
+  expect(onOpenChannelManager).toHaveBeenCalledWith('kukuri:topic:demo');
+});
+
+test('omits the empty channel state when no channel manager entry is wired', () => {
+  render(
+    <TopicNavList
+      items={[topicItem({ channels: [] })]}
+      onSelectTopic={vi.fn()}
+      onSelectChannel={vi.fn()}
+      onRemoveTopic={vi.fn()}
+    />
+  );
+
+  expect(screen.queryByText('No joined private channels.')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Create or join' })).not.toBeInTheDocument();
+});

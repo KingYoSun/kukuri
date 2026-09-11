@@ -45,7 +45,7 @@ function getActiveColumn(title: string) {
 
 async function openChannelManager(user: ReturnType<typeof userEvent.setup>) {
   const controlCenter = await openControlCenter(user);
-  await user.click(within(controlCenter).getByRole('button', { name: 'Create or join channel' }));
+  await user.click(within(controlCenter).getByRole('button', { name: 'Create or join a private channel' }));
   return await screen.findByRole('dialog', { name: 'Create / Join Private Channel' });
 }
 

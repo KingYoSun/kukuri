@@ -64,7 +64,7 @@ test('public and private indexing requests expose status and require private dis
   await requestDialog.getByRole('button', { name: 'Close', exact: true }).click();
 
   controlCenter = await openControlCenter(page);
-  await controlCenter.getByRole('button', { name: 'Create or join channel' }).click();
+  await controlCenter.getByRole('button', { name: 'Create or join a private channel' }).click();
   const channelDialog = page.getByRole('dialog', { name: 'Create / Join Private Channel' });
   await channelDialog.getByPlaceholder('Channel name').fill('Index Review');
   await channelDialog.getByRole('button', { name: 'Create Channel' }).click();

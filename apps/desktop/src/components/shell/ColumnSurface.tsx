@@ -15,6 +15,8 @@ type ColumnSurfaceProps = {
   fullscreenable?: boolean;
   headerActions?: ReactNode;
   scopeControl?: ReactNode;
+  // scope 行の右側に置く導線(例: Timeline Column のプライベートチャンネル入口、Issue #966)。
+  scopeActions?: ReactNode;
   onPinnedChange?: (pinned: boolean) => void;
   onClose?: () => void;
   onMoveLeft?: () => void;
@@ -38,6 +40,7 @@ export function ColumnSurface({
   fullscreenable = false,
   headerActions,
   scopeControl,
+  scopeActions,
   onPinnedChange,
   onClose,
   onMoveLeft,
@@ -159,14 +162,17 @@ export function ColumnSurface({
             {active ? <span className='shell-column-state-label'>{activityLabel}</span> : null}
             <span className='shell-column-state-label'>{stateLabel}</span>
           </div>
-          {scopeControl ? (
-            <>
-              <span className='sr-only'>{scopeLabel}</span>
-              {scopeControl}
-            </>
-          ) : (
-            <p>{scopeLabel}</p>
-          )}
+          <div className='shell-column-scope-row'>
+            {scopeControl ? (
+              <>
+                <span className='sr-only'>{scopeLabel}</span>
+                {scopeControl}
+              </>
+            ) : (
+              <p>{scopeLabel}</p>
+            )}
+            {scopeActions}
+          </div>
         </div>
         {headerActions || onPinnedChange || onClose ? (
           <div className='shell-column-header-actions'>

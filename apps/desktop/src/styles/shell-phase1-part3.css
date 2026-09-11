@@ -24,6 +24,69 @@
   min-width: 0;
 }
 
+/* 作成・参加 Dialog の説明と参加済み一覧(Issue #966)。 */
+.private-channel-intro {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: var(--text-body);
+  line-height: 1.6;
+}
+
+.private-channel-help {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: var(--text-caption);
+  line-height: 1.5;
+}
+
+.private-channel-help + form,
+.private-channel-help + .extended-module-stack {
+  margin-top: var(--space-sm);
+}
+
+.private-channel-joined-list {
+  display: grid;
+  gap: var(--space-2xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.private-channel-joined-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  min-width: 0;
+}
+
+.private-channel-joined-open {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: baseline;
+  gap: var(--space-xs);
+  min-width: 0;
+  min-height: 2.75rem;
+  border: 0;
+  border-radius: var(--radius);
+  padding: var(--space-xs) var(--space-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.private-channel-joined-open:hover,
+.private-channel-joined-open:focus-visible {
+  background: var(--surface-button-ghost-hover);
+}
+
+.private-channel-joined-open small {
+  flex: none;
+  color: var(--muted-foreground);
+  font-size: var(--text-caption);
+}
+
 
 .access-preview-list {
   display: grid;

@@ -6,6 +6,16 @@ name: Kukuri Visual Baseline
 # kukuri-fast.yml の必須ジョブには一切手を入れない（step 追加は T2）。
 on:
   workflow_dispatch:
+    inputs:
+      commit_to_branch:
+        description: >-
+          生成した baseline を対象ブランチへ commit / push する（artifact をダウンロードできない環境向け。
+          GITHUB_TOKEN の push は他の workflow を起動しないため、CI を流すには別 commit を push する）
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
 
 jobs:
   generate-baseline:
@@ -14,6 +24,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
 
       - name: Install Linux system dependencies
         run: >
@@ -61,3 +73,16 @@ jobs:
           name: kukuri-desktop-visual-baseline
           path: apps/desktop/tests/playwright/__screenshots__/
           if-no-files-found: warn
+
+      - name: Commit visual baseline to branch
+        if: ${{ inputs.commit_to_branch }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/desktop/tests/playwright/__screenshots__/
+          if git diff --cached --quiet; then
+            echo "baseline unchanged"
+            exit 0
+          fi
+          git commit -m "chore(desktop): 視覚回帰 baseline を再生成 (Kukuri Visual Baseline ${{ github.run_id }})"
+          git push origin HEAD:${{ github.ref_name }}

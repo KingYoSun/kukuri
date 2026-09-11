@@ -116,7 +116,7 @@ test('channel manager opens as a modal from Control Center', async () => {
 
   const controlCenter = await openControlCenter(user);
   expect(
-    within(controlCenter).getByRole('button', { name: 'Create or join channel' })
+    within(controlCenter).getByRole('button', { name: 'Create or join a private channel' })
   ).toBeInTheDocument();
 
   const dialog = await openChannelManager(user);

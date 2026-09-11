@@ -69,6 +69,8 @@ type DesktopShellControlCenterProps = TopicListProps & {
   onTopicInputChange: (value: string) => void;
   onAddTopic: () => void | Promise<void>;
   onOpenChannelManager: () => void;
+  // 「場所」の未参加 topic から作成・参加 Dialog を開く。topic を選択してから開く(Issue #966)。
+  onOpenChannelManagerForTopic: (topic: string) => void;
   onActivateColumn: (column: ColumnState) => void | Promise<void>;
   onOpenSettings: (section: SettingsSection) => void;
   onOpenTesterFeedback: () => void;
@@ -93,6 +95,7 @@ export function DesktopShellControlCenter({
   onTopicInputChange,
   onAddTopic,
   onOpenChannelManager,
+  onOpenChannelManagerForTopic,
   onActivateColumn,
   onOpenSettings,
   onOpenTesterFeedback,
@@ -430,6 +433,7 @@ export function DesktopShellControlCenter({
                   variant='ghost'
                   type='button'
                   disabled={!selectedChannelId || !onOpenChannelSettings}
+                  aria-describedby={selectedChannelId ? undefined : 'control-center-share-channel-hint'}
                   onClick={() => {
                     if (selectedChannelId) {
                       setOpen(false);
@@ -440,6 +444,14 @@ export function DesktopShellControlCenter({
                   <Radio className='size-4' aria-hidden='true' />
                   {t('shell:controlCenter.shareChannel')}
                 </Button>
+                {selectedChannelId ? null : (
+                  <p
+                    id='control-center-share-channel-hint'
+                    className='shell-control-center-place-hint'
+                  >
+                    {t('shell:controlCenter.shareChannelHint')}
+                  </p>
+                )}
               </div>
               <div className='shell-control-center-place-list'>
                 <FilterableTopicNavList
@@ -449,6 +461,10 @@ export function DesktopShellControlCenter({
                   onSelectTopic={selectTopic}
                   onSelectChannel={selectChannel}
                   onOpenChannelSettings={onOpenChannelSettings}
+                  onOpenChannelManager={(topic) => {
+                    setOpen(false);
+                    onOpenChannelManagerForTopic(topic);
+                  }}
                   onLeaveChannel={onLeaveChannel}
                   onRemoveTopic={onRemoveTopic}
                   onCopyTopicLink={onCopyTopicLink}

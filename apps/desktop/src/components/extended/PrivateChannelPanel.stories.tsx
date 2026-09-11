@@ -148,3 +148,65 @@ export const InviteOutputState: Story = {
     />
   ),
 };
+
+// Issue #966: 参加済み一覧付きの作成・参加 Dialog と、設定 Dialog の理由表示。
+export const WithJoinedChannels: Story = {
+  args: STORY_ARGS,
+  render: () => (
+    <PrivateChannelPanel
+      {...STORY_ARGS}
+      channelLabel=''
+      channelAudience='invite_only'
+      joinedChannels={BASE_CHANNELS.map((item) => item.channel)}
+      onSelectJoinedChannel={() => undefined}
+      onOpenJoinedChannelSettings={() => undefined}
+    />
+  ),
+};
+
+export const SettingsOwnerOnlyBlocked: Story = {
+  args: STORY_ARGS,
+  render: () => (
+    <PrivateChannelSettingsPanel
+      error={null}
+      pendingAction={null}
+      channel={{ ...BASE_CHANNELS[0].channel, audience_kind: 'friend_only', is_owner: false }}
+      inviteOutput={null}
+      inviteOutputLabel='grant'
+      onShare={() => undefined}
+    />
+  ),
+};
+
+export const SettingsRotationRequired: Story = {
+  args: STORY_ARGS,
+  render: () => (
+    <PrivateChannelSettingsPanel
+      error={null}
+      pendingAction={null}
+      channel={{
+        ...BASE_CHANNELS[0].channel,
+        audience_kind: 'friend_only',
+        rotation_required: true,
+        stale_participant_count: 1,
+      }}
+      inviteOutput={null}
+      inviteOutputLabel='grant'
+      onShare={() => undefined}
+    />
+  ),
+};
+
+export const SettingsPending: Story = {
+  args: STORY_ARGS,
+  render: () => (
+    <PrivateChannelSettingsPanel
+      error={null}
+      pendingAction='share'
+      channel={BASE_CHANNELS[0].channel}
+      inviteOutput={null}
+      inviteOutputLabel='share'
+      onShare={() => undefined}
+    />
+  ),
+};

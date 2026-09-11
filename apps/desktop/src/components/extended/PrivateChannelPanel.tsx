@@ -1,6 +1,6 @@
 import type { FormEventHandler } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Copy } from 'lucide-react';
+import { Copy, Settings } from 'lucide-react';
 
 import { buildChannelAccessPreviewDeepLink } from '@/lib/internalLinks';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Notice } from '@/components/ui/notice';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import type { JoinedPrivateChannelView } from '@/lib/api';
 
 import {
   type ChannelAudienceOption,
@@ -53,12 +54,16 @@ type PrivateChannelPanelProps = {
   inviteTokenInput: string;
   inviteOutput?: string | null;
   inviteOutputLabel?: InviteOutputLabel;
+  // 同じトピックで参加済みのチャンネル(Issue #966)。未参加なら空配列または省略。
+  joinedChannels?: JoinedPrivateChannelView[];
   onChannelLabelChange: (value: string) => void;
   onChannelAudienceChange: (value: ChannelAudienceOption['value']) => void;
   onInviteTokenChange: (value: string) => void;
   onCreateChannel: FormEventHandler<HTMLFormElement>;
   onJoin: FormEventHandler<HTMLFormElement>;
   onCopyInviteOutput?: (token: string) => void;
+  onSelectJoinedChannel?: (channelId: string) => void;
+  onOpenJoinedChannelSettings?: (channelId: string) => void;
 };
 
 type PrivateChannelSettingsPanelProps = {
@@ -82,29 +87,71 @@ export function PrivateChannelPanel({
   inviteTokenInput,
   inviteOutput = null,
   inviteOutputLabel = 'invite',
+  joinedChannels = [],
   onChannelLabelChange,
   onChannelAudienceChange,
   onInviteTokenChange,
   onCreateChannel,
   onJoin,
   onCopyInviteOutput,
+  onSelectJoinedChannel,
+  onOpenJoinedChannelSettings,
 }: PrivateChannelPanelProps) {
   const { t } = useTranslation(['channels', 'common', 'shell']);
   const channelActionDisabled = pendingAction !== null;
   const channelAccessDeepLink = inviteOutput
     ? buildChannelAccessPreviewDeepLink(inviteOutput)
     : null;
+  const audienceDescription = policyDescription(channelAudience, t);
 
   return (
     <div className='extended-module-stack'>
+      <p className='private-channel-intro'>{t('channels:intro')}</p>
       {status === 'loading' ? <Notice>{t('channels:loading')}</Notice> : null}
       {status === 'error' && error ? <Notice tone='destructive'>{error}</Notice> : null}
+
+      {joinedChannels.length > 0 ? (
+        <Card className='panel-subsection private-channel-editor-block'>
+          <CardHeader>
+            <h3>{t('channels:joinedList.title')}</h3>
+          </CardHeader>
+          <ul className='private-channel-joined-list'>
+            {joinedChannels.map((channel) => (
+              <li key={channel.channel_id} className='private-channel-joined-row'>
+                <button
+                  type='button'
+                  className='private-channel-joined-open'
+                  aria-label={t('channels:joinedList.open', { channel: channel.label })}
+                  disabled={!onSelectJoinedChannel}
+                  onClick={() => onSelectJoinedChannel?.(channel.channel_id)}
+                >
+                  <span className='shell-topic-link-label'>{channel.label}</span>
+                  <small>{t(`channels:audienceOptions.${channel.audience_kind}`)}</small>
+                </button>
+                {onOpenJoinedChannelSettings ? (
+                  <Button
+                    variant='ghost'
+                    size='sm'
+                    type='button'
+                    aria-label={t('channels:joinedList.settings', { channel: channel.label })}
+                    onClick={() => onOpenJoinedChannelSettings(channel.channel_id)}
+                  >
+                    <Settings className='size-4' aria-hidden='true' />
+                    {t('shell:workspace.channelSettingsEntry')}
+                  </Button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
 
       <div className='private-channel-editor-grid'>
         <Card className='panel-subsection private-channel-editor-block'>
           <CardHeader>
             <h3>{t('channels:editor.createBlockTitle')}</h3>
           </CardHeader>
+          <p className='private-channel-help'>{t('channels:editor.createHint')}</p>
           <form className='composer composer-compact' onSubmit={onCreateChannel}>
             <Label>
               <span>{t('channels:editor.channelName')}</span>
@@ -119,6 +166,7 @@ export function PrivateChannelPanel({
               <span>{t('channels:editor.audience')}</span>
               <Select
                 aria-label={t('channels:editor.audience')}
+                aria-describedby='private-channel-audience-description'
                 value={channelAudience}
                 onChange={(event) =>
                   onChannelAudienceChange(event.target.value as ChannelAudienceOption['value'])
@@ -132,6 +180,9 @@ export function PrivateChannelPanel({
                 ))}
               </Select>
             </Label>
+            <p id='private-channel-audience-description' className='private-channel-help'>
+              {audienceDescription}
+            </p>
             <Button variant='secondary' type='submit' disabled={channelActionDisabled}>
               {t('channels:actions.createChannel')}
             </Button>
@@ -142,6 +193,7 @@ export function PrivateChannelPanel({
           <CardHeader>
             <h3>{t('channels:editor.joinBlockTitle')}</h3>
           </CardHeader>
+          <p className='private-channel-help'>{t('channels:editor.joinHint')}</p>
           <form className='composer composer-compact' onSubmit={onJoin}>
             <Label>
               <span>{t('channels:editor.join')}</span>
@@ -200,13 +252,17 @@ export function PrivateChannelSettingsPanel({
   const channelAccessDeepLink = inviteOutput
     ? buildChannelAccessPreviewDeepLink(inviteOutput)
     : null;
+  // 相互フォロー限定の共有リンク(grant)は owner だけが発行できる(app-api の guard と同じ条件)。
+  // client 側の無効化は理由の提示であり、権限判定の正本は runtime のまま。
+  const ownerOnlyShareBlocked = channel.audience_kind === 'friend_only' && !channel.is_owner;
+  const shareDisabled = channelActionDisabled || ownerOnlyShareBlocked;
 
   return (
     <Card tone='accent' className='panel-subsection extended-channel-detail'>
       <CardHeader>
         <h3>{t('channels:settings.channelName', { channel: channel.label })}</h3>
-        <small>{t('channels:settings.policy', { policy: policyLabel })}</small>
       </CardHeader>
+      <p className='private-channel-help'>{t('channels:settings.policy', { policy: policyLabel })}</p>
 
       <div className='extended-module-stack'>
         {(channel.audience_kind === 'friend_only' || channel.audience_kind === 'friend_plus') ? (
@@ -221,16 +277,25 @@ export function PrivateChannelSettingsPanel({
         {channel.audience_kind === 'friend_only' && channel.rotation_required ? (
           <div className='topic-diagnostic topic-diagnostic-error'>
             <span>{t('channels:rotationRequired')}</span>
+            <span>{t('channels:settings.rotationNextStep')}</span>
           </div>
+        ) : null}
+        {ownerOnlyShareBlocked ? (
+          <Notice id='private-channel-share-reason'>{t('channels:settings.ownerOnlyShare')}</Notice>
+        ) : channelActionDisabled ? (
+          <Notice id='private-channel-share-reason' role='status'>
+            {t('channels:settings.pending')}
+          </Notice>
         ) : null}
 
         <div className='discovery-actions'>
           <Button
             aria-label={t('channels:actions.createShareLink')}
+            aria-describedby={shareDisabled ? 'private-channel-share-reason' : undefined}
             className='w-full'
             variant='secondary'
             type='button'
-            disabled={channelActionDisabled}
+            disabled={shareDisabled}
             onClick={onShare}
           >
             {t('channels:actions.createShareLink')}
@@ -247,6 +312,7 @@ export function PrivateChannelSettingsPanel({
             </Button>
           ) : null}
         </div>
+        <p className='private-channel-help'>{t('channels:settings.shareHint')}</p>
 
         {inviteOutput && channelAccessDeepLink ? (
           <Notice tone='accent'>

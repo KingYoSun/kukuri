@@ -31,6 +31,7 @@ import type { useShellDialogs } from '@/shell/page/useShellDialogs';
 import type { useSharePreview } from '@/shell/page/useSharePreview';
 import type { useDesktopShellActions } from '@/shell/useDesktopShellActions';
 import { useDesktopShellViewModels } from '@/shell/useDesktopShellViewModels';
+import { useCallback, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { topicDisplayName } from '@/lib/topicId';
 import type { CommunityIndexingTarget } from '@/components/core/CommunityIndexingRequestDialog';
@@ -42,6 +43,7 @@ type OverlayActions = Pick<
   | 'handleCreateLiveSession'
   | 'handleCreatePrivateChannel'
   | 'handleJoinChannelAccess'
+  | 'handleSelectPrivateChannel'
   | 'handleLeavePrivateChannel'
   | 'handleProfileAvatarFile'
   | 'handleShareChannelAccess'
@@ -91,7 +93,29 @@ type DesktopShellOverlaysProps = {
   sharePreview: SharePreview;
   clipboardToastId: number;
   onRequestPrivateIndexing: (target: CommunityIndexingTarget) => void;
+  // 作成・参加 Dialog の参加済み一覧から設定・共有 Dialog へ進む(Issue #966)。
+  onOpenChannelSettings: (topicId: string, channelId: string) => void;
 };
+
+// Issue #966: Radix の既定の focus 復元はこの shell では body へ落ちるため、
+// TesterFeedbackDialog と同じく開いた要素を記録して閉じたときに戻す。
+// Control Center から開いた場合は trigger が閉じて外れているため、そのときは既定に任せる。
+function useDialogReturnFocus() {
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+  const onOpenAutoFocus = useCallback(() => {
+    returnFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }, []);
+  const onCloseAutoFocus = useCallback((event: Event) => {
+    const target = returnFocusRef.current;
+    returnFocusRef.current = null;
+    if (target?.isConnected) {
+      event.preventDefault();
+      target.focus();
+    }
+  }, []);
+  return { onOpenAutoFocus, onCloseAutoFocus };
+}
 
 function AccessPreviewItem({
   label,
@@ -126,12 +150,14 @@ export function DesktopShellOverlays({
   sharePreview,
   clipboardToastId,
   onRequestPrivateIndexing,
+  onOpenChannelSettings,
 }: DesktopShellOverlaysProps) {
   const {
     handleCreateGameRoom,
     handleCreateLiveSession,
     handleCreatePrivateChannel,
     handleJoinChannelAccess,
+    handleSelectPrivateChannel,
     handleProfileAvatarFile,
     handleShareChannelAccess,
   } = actions;
@@ -181,6 +207,7 @@ export function DesktopShellOverlays({
     inviteOutput,
     inviteOutputLabel,
     inviteTokenInput,
+    joinedChannelsByTopic,
     knownAuthorsByPubkey,
     localProfile,
     liveCreatePending,
@@ -203,6 +230,7 @@ export function DesktopShellOverlays({
       inviteOutput: s.inviteOutput,
       inviteOutputLabel: s.inviteOutputLabel,
       inviteTokenInput: s.inviteTokenInput,
+      joinedChannelsByTopic: s.joinedChannelsByTopic,
       knownAuthorsByPubkey: s.knownAuthorsByPubkey,
       localProfile: s.localProfile,
       liveCreatePending: s.liveCreatePending,
@@ -212,6 +240,8 @@ export function DesktopShellOverlays({
       syncStatus: s.syncStatus,
     }))
   );
+  const channelDialogFocus = useDialogReturnFocus();
+  const channelSettingsFocus = useDialogReturnFocus();
   const setChannelLabelInput = useDesktopShellFieldSetter('channelLabelInput');
   const setChannelAudienceInput = useDesktopShellFieldSetter('channelAudienceInput');
   const setInviteTokenInput = useDesktopShellFieldSetter('inviteTokenInput');
@@ -267,7 +297,10 @@ export function DesktopShellOverlays({
       />
 
       <Dialog open={channelDialogOpen} onOpenChange={setChannelDialogOpen}>
-        <DialogContent>
+        <DialogContent
+          onOpenAutoFocus={channelDialogFocus.onOpenAutoFocus}
+          onCloseAutoFocus={channelDialogFocus.onCloseAutoFocus}
+        >
           <DialogHeader>
             <DialogTitle>{t('channels:createDialogTitle')}</DialogTitle>
             <DialogDescription>{topicDisplayName(activeTopic)}</DialogDescription>
@@ -286,16 +319,28 @@ export function DesktopShellOverlays({
               onChannelLabelChange={setChannelLabelInput}
               onChannelAudienceChange={setChannelAudienceInput}
               onInviteTokenChange={setInviteTokenInput}
+              joinedChannels={joinedChannelsByTopic[activeTopic] ?? []}
               onCreateChannel={(event) => void handleCreatePrivateChannel(event)}
               onJoin={(event) => void handleJoinChannelAccess(event)}
               onCopyInviteOutput={handleCopyInternalLink}
+              onSelectJoinedChannel={(channelId) => {
+                setChannelDialogOpen(false);
+                handleSelectPrivateChannel(activeTopic, channelId);
+              }}
+              onOpenJoinedChannelSettings={(channelId) => {
+                setChannelDialogOpen(false);
+                onOpenChannelSettings(activeTopic, channelId);
+              }}
             />
           </DialogBody>
         </DialogContent>
       </Dialog>
 
       <Dialog open={channelSettingsDialogOpen} onOpenChange={setChannelSettingsDialogOpen}>
-        <DialogContent>
+        <DialogContent
+          onOpenAutoFocus={channelSettingsFocus.onOpenAutoFocus}
+          onCloseAutoFocus={channelSettingsFocus.onCloseAutoFocus}
+        >
           <DialogHeader>
             <DialogTitle>{t('channels:settings.title')}</DialogTitle>
           </DialogHeader>

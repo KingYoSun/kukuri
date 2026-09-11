@@ -62,6 +62,7 @@ import { DesktopShellSettingsDrawer } from '@/shell/page/DesktopShellSettingsDra
 import { useFocusScroll } from '@/shell/page/useFocusScroll';
 import { useSharePreview } from '@/shell/page/useSharePreview';
 import { useShellDialogs } from '@/shell/page/useShellDialogs';
+import { usePrivateChannelEntries } from '@/shell/page/usePrivateChannelEntries';
 import { useShallow } from 'zustand/react/shallow';
 import {
   columnIdentityId,
@@ -174,8 +175,6 @@ export function DesktopShellPage({
   const setTimelineScopeByTopic = useDesktopShellFieldSetter('timelineScopeByTopic');
   const setSelectedLiveSessionId = useDesktopShellFieldSetter('selectedLiveSessionId');
   const setSelectedGameRoomId = useDesktopShellFieldSetter('selectedGameRoomId');
-  const setInviteOutput = useDesktopShellFieldSetter('inviteOutput');
-  const setChannelError = useDesktopShellFieldSetter('channelError');
   const setWorkspaceState = useDesktopShellFieldSetter('workspaceState');
   const draftSequenceRef = useRef(0);
   // 表示中 Column id(背景 Timeline refresh 用、Issue #765)。runtime 情報なので store には置かない。
@@ -817,6 +816,7 @@ export function DesktopShellPage({
     game: t('shell:primarySections.game'),
     metaverse: 'Metaverse',
   };
+  const channelEntries = usePrivateChannelEntries({ dialogs, shellActions, activateWorkspaceColumn });
   const workspace = (
     <DesktopShellColumnWorkspace
       scopeLabel={viewModels.activeComposeAudienceLabel}
@@ -839,6 +839,8 @@ export function DesktopShellPage({
         void selectColumnTimelineTopic(column, topicId)
       }
       onSelectTimelineView={selectColumnTimelineView}
+      onOpenChannelManager={channelEntries.openChannelManagerForColumn}
+      onOpenChannelSettings={channelEntries.openChannelSettingsForColumn}
       onRefreshNotifications={refreshNotificationsColumn}
       onRefreshConversation={(peerPubkey) => void refreshConversationColumn(peerPubkey)}
       onClearConversation={(peerPubkey) => void clearConversationColumn(peerPubkey)}
@@ -906,6 +908,7 @@ export function DesktopShellPage({
           onTopicInputChange={setTopicInput}
           onAddTopic={shellActions.handleAddTopic}
           onOpenChannelManager={() => dialogs.setChannelDialogOpen(true)}
+          onOpenChannelManagerForTopic={channelEntries.openChannelManagerForTopic}
           onActivateColumn={activateWorkspaceColumn}
           onOpenSettings={handleOpenSettingsSection}
           onOpenTesterFeedback={() => setTesterFeedbackOpen(true)}
@@ -913,12 +916,7 @@ export function DesktopShellPage({
           onSelectChannel={(topic, channelId) => {
             shellActions.handleSelectPrivateChannel(topic, channelId);
           }}
-          onOpenChannelSettings={(topic, channelId) => {
-            setInviteOutput(null);
-            setChannelError(null);
-            shellActions.handleSelectPrivateChannel(topic, channelId);
-            dialogs.setChannelSettingsDialogOpen(true);
-          }}
+          onOpenChannelSettings={channelEntries.openChannelSettingsDialog}
           onLeaveChannel={(topic, channelId) => dialogs.openLeaveChannelDialog(topic, channelId)}
           onRemoveTopic={(topic) => void shellActions.handleRemoveTopic(topic)}
           onCopyTopicLink={(topic) => handleCopyInternalLink(buildTopicLink(topic))}
@@ -943,6 +941,7 @@ export function DesktopShellPage({
         sharePreview={sharePreview}
         clipboardToastId={clipboardToastId}
         onRequestPrivateIndexing={setIndexingTarget}
+        onOpenChannelSettings={channelEntries.openChannelSettingsDialog}
       />
       <CommunityNodeOnboarding api={api} onAccept={shellActions.handleAcceptCommunityNodeConsents}
         onOpenSettings={handleOpenCommunityNodeSettings} onRetry={retryCommunityNode} />

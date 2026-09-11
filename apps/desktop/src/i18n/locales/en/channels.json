@@ -23,7 +23,9 @@
     "placeholders": {
       "channelLabel": "Channel name",
       "inviteToken": "Paste a private channel invite, mutual grant, or mutuals+ share"
-    }
+    },
+    "joinHint": "Invite and share links (or tokens) come from a channel participant. If you have none yet, start your own channel under Create.",
+    "createHint": "You become the owner and can create invite or share links right after."
   },
   "empty": "No joined private channels for this topic.",
   "errors": {
@@ -52,7 +54,7 @@
   "policies": {
     "friend_only": "Mutuals: only users who follow each other can join",
     "friend_plus": "Mutuals+: participants can share with users they mutually follow",
-    "invite_only": "Invite only"
+    "invite_only": "Invite only: only users who receive an invite link can join. Participants can also create invites"
   },
   "previewDialog": {
     "title": "Review access",
@@ -75,7 +77,17 @@
   "settings": {
     "channelName": "Channel name: {{channel}}",
     "policy": "Who can join: {{policy}}",
-    "title": "Channel Settings"
+    "title": "Channel Settings",
+    "pending": "Working… please wait until it finishes.",
+    "rotationNextStep": "Creating a share link hands new access only to participants who still qualify. Check follow relationships from their profiles.",
+    "ownerOnlyShare": "Only the owner can create share links for a mutuals channel. Ask the owner for an invite.",
+    "shareHint": "Send the share link only to people you want to invite. Anyone who receives it can join if they meet the audience rule."
   },
-  "title": "Private Channels"
+  "title": "Private Channels",
+  "intro": "A private channel is a space inside this topic where only participants can read and write posts. Create one yourself, or join with an invite or share link from a participant. Invite and share links are created from the channel settings after you join.",
+  "joinedList": {
+    "title": "Joined in this topic",
+    "open": "Open {{channel}}",
+    "settings": "{{channel}} settings and sharing"
+  }
 }
