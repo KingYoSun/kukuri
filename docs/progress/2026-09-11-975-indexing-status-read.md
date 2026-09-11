@@ -79,7 +79,7 @@ sensitive sink: server は DB 読取りと secret 復号（既存 helper）の�
 | `cargo test -p kukuri-cn-user-api --test indexing_requests --test activation_gate --test index_query --test contract_auth --lib` | indexing_requests 13、activation_gate 7、index_query 6、contract_auth 18、lib 35 件成功（contract_auth の初回失敗は disk full による Postgres 停止が原因で、再起動後に全件成功） |
 | `cargo clippy -p kukuri-cn-protocol -p kukuri-cn-core -p kukuri-cn-user-api -p kukuri-desktop-runtime -p kukuri-cli --all-targets -- -D warnings` | 成功 |
 | `cargo test -p kukuri-desktop-runtime --lib community_node::index_query` / `community_node::indexing_status` | 14 件 + 4 件成功 |
-| `cargo test -p kukuri-cli --test command_parity --test community_node` | 5 件 + 2 件成功 |
+| `cargo test -p kukuri-cli --test command_parity --test community_node --test daemon_linux` | 5 件 + 2 件 + 8 件成功（`daemon_linux` の registry 総数 assertion は CI の初回失敗で検出し 135 → 136 へ更新） |
 | `cargo xtask ipc-types` | 再生成（差分は新 4 型のみ。生成器由来の行末空白は既存行と同じ形式） |
 | `cargo xtask oversized-files` | 成功（test 分離後） |
 | desktop `pnpm lint` / `typecheck` | 成功 |
@@ -114,4 +114,4 @@ sensitive sink: server は DB 読取りと secret 復号（既存 helper）の�
 - blocker: 0件
 - non-blocker とした事項: (1) Optional-hardening: GET 専用の「鍵未設定」test は無く、共有 helper の分岐と POST 側 test で担保。(2) Optional-hardening（doc 整合）: ADR §2.8 の test 参照が実名・実 file と食い違っていた → 監査後 delta として docs のみ修正。(3) Optional-hardening: 空状態は own request `approved` を `supported` 実値より優先表示するため、承認後に operator が supported から外した稀なケースで文言が食い違い得る（dialog は両者を別表示、再申請は冪等）。(4) Existing-gap（#698 由来、本 diff で不変）: 適格一覧の内容変化で dialog が選択 node を先頭へ戻す。
 - 判定: PASS
-- 監査後 delta: ADR 0025 §2.8 の test 参照修正（docs のみ。code・test の変更なし）
+- 監査後 delta: ADR 0025 §2.8 の test 参照修正（docs のみ）。CI `linux-rust-tests` の失敗を受けて `crates/kukuri-cli/tests/daemon_linux.rs` の registry 総数 assertion を 135 → 136 へ更新（test の期待値のみ。監査対象の入口・sink・guard に変更なし）
