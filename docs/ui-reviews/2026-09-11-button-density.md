@@ -3,7 +3,7 @@
 - Status: current
 - Supersedes: None
 - Superseded by: None
-- PR: TBD
+- PR: [#983](https://github.com/KingYoSun/kukuri/pull/983)
 - Preview: [スレッド+プロフィール 変更前](assets/2026-09-11-button-density/before-thread-profile.jpg)、[同 変更後](assets/2026-09-11-button-density/after-thread-profile.jpg)、[コントロールセンター 変更前](assets/2026-09-11-button-density/before-control-center.jpg)、[同 変更後](assets/2026-09-11-button-density/after-control-center.jpg)
 - Surface / user / purpose: 全surface共通のtextボタン、icon-only control、投稿カード、profile overview、Control Center。閲覧者・投稿者が1画面で読める情報量を増やし、ボタン内の不自然な改行をなくす。
 - Summary: textボタンを全丸のまま高さ2rem（`sm`は1.75rem）、横padding 0.625rem（`sm`は0.5rem）へ縮小。icon-only controlは2rem前後、投稿カードのavatarは1.75rem、profile overviewのavatarは3remへ縮小し、avatarは大きさに関わらず常に`--radius-pill`（全丸）に固定。投稿カードの余白と投稿meta／actionsの間隔を1段詰める。文字サイズは変更しない。Control Centerの「場所」topic行はtopic名だけで1行を確保し、操作列を次の行へ置く。文言「プライベートチャンネルを作成または参加」を「プライベートチャンネル作成・参加」へ変更。
