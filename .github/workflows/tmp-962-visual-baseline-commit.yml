@@ -3,8 +3,11 @@ name: Temporary Visual Baseline Commit (#962)
 # #962 の作業ブランチ専用の一時 workflow。この実行環境では Actions artifact の
 # 取得先(Azure blob)へ到達できないため、kukuri-visual-baseline.yml と同じ手順で
 # baseline を生成し、そのまま作業ブランチへ commit する。baseline 取り込み後に削除する。
+# default branch に無い workflow は workflow_dispatch できないため、push で発火する。
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - claude/issue-962-investigation-nbxfo9
 
 permissions:
   contents: write
