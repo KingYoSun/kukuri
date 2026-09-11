@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, mocked, userEvent, within } from 'storybook/test';
 
-import { getOsNotificationPermission, requestOsNotificationPermission } from '@/lib/api/osNotificationPermission';
 import { isTauriRuntime } from '@/lib/releaseReadiness';
 import { invokeDesktop } from '@/lib/api/invoke/desktop';
 
@@ -152,33 +151,3 @@ export const MissingUpdateAsset: Story = {
 };
 
 export const ReadyToRestartPrompt: Story = { ...ReadyToRestart, play: undefined };
-
-function notificationState(state: 'available' | 'unavailable' | 'checking') {
-  mocked(isTauriRuntime).mockReturnValue(true);
-  if (state === 'checking') {
-    mocked(getOsNotificationPermission).mockReturnValue(new Promise(() => {}));
-  } else {
-    mocked(getOsNotificationPermission).mockResolvedValue(state);
-  }
-  mocked(requestOsNotificationPermission).mockResolvedValue('available');
-  return () => {
-    mocked(isTauriRuntime).mockRestore();
-    mocked(getOsNotificationPermission).mockRestore();
-    mocked(requestOsNotificationPermission).mockRestore();
-  };
-}
-
-export const NotificationServiceAvailable: Story = {
-  args: { showDiagnostics: false },
-  beforeEach: () => notificationState('available'),
-};
-
-export const NotificationServiceUnavailable: Story = {
-  args: { showDiagnostics: false },
-  beforeEach: () => notificationState('unavailable'),
-};
-
-export const NotificationServiceChecking: Story = {
-  args: { showDiagnostics: false },
-  beforeEach: () => notificationState('checking'),
-};

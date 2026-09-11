@@ -807,3 +807,23 @@ test('safety panel explains mute versus block and opens each list', async () => 
   await user.click(screen.getByRole('button', { name: 'Open blocked users' }));
   expect(onOpenBlockedUsers).toHaveBeenCalledTimes(1);
 });
+
+// #962: 開発者モードON時は診断レポートへの導線と、ログの所在(専用ビューアなし)を明示する。
+test('developer panel links to the diagnostic report and explains where logs live only while enabled', async () => {
+  const user = userEvent.setup();
+  const onOpenDiagnostics = vi.fn();
+  const props = { onDeveloperModeChange: vi.fn(), onOpenDiagnostics };
+  const { rerender } = render(<DeveloperPanel {...props} developerModeEnabled />);
+  await user.click(screen.getByRole('button', { name: 'Diagnostic report' }));
+  expect(onOpenDiagnostics).toHaveBeenLastCalledWith('release');
+  expect(screen.getByRole('heading', { name: 'Logs' })).toBeVisible();
+  expect(screen.getByText(/does not include a log viewer/i)).toBeVisible();
+  expect(screen.getByText(/RUST_LOG/)).toBeVisible();
+  expect(screen.getByRole('link', { name: /Troubleshooting guide/ })).toHaveAttribute(
+    'href',
+    'https://github.com/KingYoSun/kukuri/blob/main/docs/runbooks/mvp-troubleshooting.md'
+  );
+  rerender(<DeveloperPanel {...props} developerModeEnabled={false} />);
+  expect(screen.queryByRole('heading', { name: 'Logs' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Diagnostic report' })).not.toBeInTheDocument();
+});

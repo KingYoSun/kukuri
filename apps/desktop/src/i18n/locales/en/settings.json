@@ -331,7 +331,15 @@
       "description": "Choose diagnostics to investigate your connection.",
       "connectivity": "Connection diagnostics",
       "discovery": "Discovery diagnostics",
-      "community-node": "Community node diagnostics"
+      "community-node": "Community node diagnostics",
+      "release": "Diagnostic report"
+    },
+    "logs": {
+      "title": "Logs",
+      "description": "This preview does not include a log viewer. The desktop app writes its logs to the standard output of its process, so start it from a terminal to capture them.",
+      "capture": "Example: RUST_LOG=info kukuri (set RUST_LOG to change the level per module).",
+      "windows": "The Windows build hides its console, so logs cannot be captured there yet.",
+      "runbook": "Troubleshooting guide"
     }
   },
   "discovery": {
@@ -390,7 +398,7 @@
   },
   "release": {
     "title": "Release",
-    "summary": "Preview channel, updater, diagnostics, and local notification settings.",
+    "summary": "Preview channel, updater, diagnostics, and resources.",
     "update": {
       "title": "Updates",
       "version": "Version",
@@ -470,26 +478,6 @@
       "externalTransmission": "External transmission",
       "abusePolicy": "Abuse policy",
       "dataRetention": "Data retention"
-    },
-    "osNotifications": {
-      "title": "OS Notifications",
-      "permission": "Status: {{permission}}",
-      "permissions": {
-        "denied": "Denied",
-        "granted": "Granted",
-        "prompt": "Not requested",
-        "unavailable": "Unavailable. Check the desktop notification service and OS settings",
-        "available": "Notification service connected (display depends on OS settings)",
-        "unknown": "Unknown"
-      },
-      "enabled": "Enable OS notifications",
-      "directMessages": "Direct messages",
-      "mentionsAndReplies": "Mentions and replies",
-      "followsAndReposts": "Follows and reposts",
-      "quietMode": "Quiet mode",
-      "previewBody": "Show preview text",
-      "checking": "Checking notification availability…",
-      "requestPermission": "Check notification availability"
     }
   },
   "safety": {
@@ -618,5 +606,30 @@
     "operationError": "Another app operation failed. This is separate from the current connection state.",
     "operationDetails": "Operation error details",
     "previousLabel": "{{state}} (previous snapshot)"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "summary": "How OS notifications arrive",
+    "description": "Choose which events show OS notifications. The in-app notification list stays available regardless of these settings.",
+    "osNotifications": {
+      "title": "OS Notifications",
+      "permission": "Status: {{permission}}",
+      "permissions": {
+        "denied": "Denied",
+        "granted": "Granted",
+        "prompt": "Not requested",
+        "unavailable": "Unavailable. Check the desktop notification service and OS settings",
+        "available": "Notification service connected (display depends on OS settings)",
+        "unknown": "Unknown"
+      },
+      "enabled": "Enable OS notifications",
+      "directMessages": "Direct messages",
+      "mentionsAndReplies": "Mentions and replies",
+      "followsAndReposts": "Follows and reposts",
+      "quietMode": "Quiet mode",
+      "previewBody": "Show preview text",
+      "checking": "Checking notification availability…",
+      "requestPermission": "Check notification availability"
+    }
   }
 }

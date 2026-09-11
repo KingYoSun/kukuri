@@ -12,5 +12,5 @@ export function formatOsNotificationPermission(permission: string, t: Translate)
   )
     ? permission
     : 'unknown';
-  return t(`settings:release.osNotifications.permissions.${knownPermission}`);
+  return t(`settings:notifications.osNotifications.permissions.${knownPermission}`);
 }

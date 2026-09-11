@@ -31,12 +31,15 @@ describe('isSettingsSection', () => {
   test.each([
     'about',
     'appearance',
+    'safety',
+    'notifications',
     'connectivity',
     'discovery',
     'community-node',
     'reactions',
     'release',
     'developer',
+    'account',
   ])('returns true for "%s"', (value) => {
     expect(isSettingsSection(value)).toBe(true);
   });

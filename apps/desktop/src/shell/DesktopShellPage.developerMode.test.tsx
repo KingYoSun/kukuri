@@ -176,3 +176,17 @@ test('diagnostic shortcuts preserve unsaved input and show connection errors wit
   await user.click(within(drawer).getByRole('button', { name: 'Community node diagnostics' }));
   for (const mutation of mutations) expect(mutation).not.toHaveBeenCalled();
 });
+
+// #962: 開発者 section から診断レポート(リリース section の開発者向け診断)へ移動できる。
+test('developer settings open the diagnostic report without leaving the drawer', async () => {
+  const user = userEvent.setup();
+  render(<App api={createDesktopMockApi()} />);
+  const drawer = await openSettingsSection(user, 'developer');
+  await user.click(within(drawer).getByRole('checkbox', { name: 'Enable developer mode' }));
+  expect(within(drawer).getByRole('heading', { name: 'Logs' })).toBeVisible();
+  await user.click(within(drawer).getByRole('button', { name: 'Diagnostic report' }));
+  expect(drawer).toBeVisible();
+  expect(within(drawer).getByTestId('settings-section-release')).toHaveAttribute('aria-current', 'location');
+  expect(window.location.hash).toContain('settings=release');
+  expect(within(drawer).getByRole('button', { name: 'Copy Report' })).toBeVisible();
+});

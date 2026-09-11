@@ -170,6 +170,7 @@
       "repost": "リポスト"
     },
     "loading": "通知を読み込み中です…",
+    "settings": "通知の受信設定",
     "preview": {
       "followed": "あなたをフォローしました。",
       "noContent": "元のイベントを開きます。",
@@ -222,12 +223,16 @@
       "label": "リアクション"
     },
     "release": {
-      "description": "プレビュー更新、診断、OS 通知です。",
+      "description": "プレビュー更新、診断、リソースです。",
       "label": "リリース"
     },
     "safety": {
       "label": "セーフティ",
       "description": "成人向け表現の表示設定と、ミュート・ブロック。"
+    },
+    "notifications": {
+      "label": "通知",
+      "description": "OS 通知の種類、静音モード、本文プレビューの設定です。"
     }
   },
   "workspace": {

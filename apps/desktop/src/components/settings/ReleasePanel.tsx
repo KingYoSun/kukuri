@@ -5,35 +5,27 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
 import { Notice } from '@/components/ui/notice';
-import {
-  getOsNotificationPermission,
-  requestOsNotificationPermission as requestOsNotificationPermissionCommand,
-} from '@/lib/api/osNotificationPermission';
 import { copyTextToClipboard } from '@/lib/utils';
 import { useExternalLinkOpener } from '@/lib/useExternalLinkOpener';
 import {
   buildSafeDiagnosticReport,
   classifyUpdateError,
-  DEFAULT_OS_NOTIFICATION_SETTINGS,
-  isTauriRuntime,
-  loadOsNotificationSettings,
   RELEASE_CHANNEL,
   RELEASE_FEEDBACK_URL,
   RELEASE_LATEST_URL,
   RELEASE_MANIFEST_NAME,
   RELEASE_QUICKSTART_URL,
   RELEASE_RUNBOOK_URL,
-  saveOsNotificationSettings,
   THIRD_PARTY_NOTICES_URL,
-  type OsNotificationSettings,
 } from '@/lib/releaseReadiness';
+import { useOsNotificationPermission, useOsNotificationSettings } from '@/lib/useOsNotificationSettings';
 import { buildCommunityNodeDisclosures } from '@/lib/communityNodeDisclosures';
 import { useAppUpdateStore } from '@/shell/useAppUpdateStore';
 import { useDesktopShellStore } from '@/shell/store';
 
 import { SettingsActionRow } from './SettingsActionRow';
 import { SettingsDiagnosticList } from './SettingsDiagnosticList';
-import { formatOsNotificationPermission, formatUpdateStatus } from './releasePanelCopy';
+import { formatUpdateStatus } from './releasePanelCopy';
 
 function updateErrorTranslationKey(errorMessage?: string | null): string {
   return `settings:release.update.errors.${classifyUpdateError(errorMessage)}`;
@@ -59,80 +51,15 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
   const [diagnosticReport, setDiagnosticReport] = useState('');
   const [diagnosticMessage, setDiagnosticMessage] = useState<string | null>(null);
   const [restartPromptDismissed, setRestartPromptDismissed] = useState(false);
-  const [osNotificationSettings, setOsNotificationSettings] =
-    useState<OsNotificationSettings>(DEFAULT_OS_NOTIFICATION_SETTINGS);
-  const [osNotificationPermission, setOsNotificationPermission] = useState('unknown');
-  const [osNotificationChecking, setOsNotificationChecking] = useState(isTauriRuntime);
-
-  useEffect(() => {
-    setOsNotificationSettings(loadOsNotificationSettings());
-    if (!isTauriRuntime()) {
-      return;
-    }
-    let cancelled = false;
-    // Query the Tauri backend directly instead of the WebView Web Notification
-    // API, whose permission state is volatile and unreliable on Windows (#313).
-    void getOsNotificationPermission()
-      .then((permission) => {
-        if (!cancelled) {
-          setOsNotificationPermission(permission.toLowerCase());
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setOsNotificationPermission('unavailable');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setOsNotificationChecking(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // #962: 受信設定の編集は通知 section へ移した。ここでは診断レポート用に現在値だけ読む。
+  const [osNotificationSettings] = useOsNotificationSettings();
+  const { permission: osNotificationPermission } = useOsNotificationPermission();
 
   useEffect(() => {
     if (updateState.status !== 'ready_to_restart') {
       setRestartPromptDismissed(false);
     }
   }, [updateState.status]);
-
-  const updateOsNotificationSetting = useCallback(
-    (patch: Partial<OsNotificationSettings>) => {
-      const next = {
-        ...osNotificationSettings,
-        ...patch,
-      };
-      setOsNotificationSettings(next);
-      saveOsNotificationSettings(next);
-    },
-    [osNotificationSettings]
-  );
-
-  const requestOsNotificationPermission = useCallback(async () => {
-    if (osNotificationChecking) {
-      return;
-    }
-    if (!isTauriRuntime()) {
-      setOsNotificationPermission('unavailable');
-      return;
-    }
-    setOsNotificationChecking(true);
-    try {
-      const permission = await requestOsNotificationPermissionCommand();
-      const normalized = permission.toLowerCase();
-      setOsNotificationPermission(normalized);
-      if (normalized === 'granted') {
-        updateOsNotificationSetting({ enabled: true });
-      }
-    } catch {
-      setOsNotificationPermission('unavailable');
-    } finally {
-      setOsNotificationChecking(false);
-    }
-  }, [osNotificationChecking, updateOsNotificationSetting]);
 
   const diagnosticReportText = useMemo(
     () =>
@@ -508,58 +435,6 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
         ) : null}
       </section>
       ) : null}
-
-      <section className='min-w-0 space-y-3'>
-        <h4 className='text-base font-semibold text-foreground'>
-          {t('settings:release.osNotifications.title')}
-        </h4>
-        <Notice>
-          {t('settings:release.osNotifications.permission', {
-            permission: formatOsNotificationPermission(osNotificationPermission, t),
-          })}
-        </Notice>
-        <div className='grid gap-3 sm:grid-cols-2'>
-          {[
-            ['enabled', t('settings:release.osNotifications.enabled')],
-            ['directMessages', t('settings:release.osNotifications.directMessages')],
-            ['mentionsAndReplies', t('settings:release.osNotifications.mentionsAndReplies')],
-            ['followsAndReposts', t('settings:release.osNotifications.followsAndReposts')],
-            ['quietMode', t('settings:release.osNotifications.quietMode')],
-            ['previewBody', t('settings:release.osNotifications.previewBody')],
-          ].map(([key, label]) => (
-            <label
-              key={key}
-              className='flex min-w-0 items-center gap-3 rounded-[var(--radius-input)] border border-[var(--border-subtle)] bg-[var(--surface-panel-soft)] px-4 py-3 text-sm text-foreground'
-            >
-              <input
-                type='checkbox'
-                checked={Boolean(osNotificationSettings[key as keyof OsNotificationSettings])}
-                onChange={(event) =>
-                  updateOsNotificationSetting({
-                    [key]: event.currentTarget.checked,
-                  } as Partial<OsNotificationSettings>)
-                }
-              />
-              <span>{label}</span>
-            </label>
-          ))}
-        </div>
-        <SettingsActionRow>
-          <Button
-            variant='secondary'
-            type='button'
-            disabled={osNotificationChecking}
-            aria-busy={osNotificationChecking}
-            onClick={() => void requestOsNotificationPermission()}
-          >
-            {t(
-              osNotificationChecking
-                ? 'settings:release.osNotifications.checking'
-                : 'settings:release.osNotifications.requestPermission'
-            )}
-          </Button>
-        </SettingsActionRow>
-      </section>
     </Card>
   );
 }

@@ -86,6 +86,11 @@ export const SETTINGS_SECTION_COPY: Array<{
     description: 'Adult material display preference.',
   },
   {
+    id: 'notifications',
+    label: 'Notifications',
+    description: 'OS notification categories, quiet mode, and preview text.',
+  },
+  {
     id: 'connectivity',
     label: 'Connectivity',
     description: 'Sync summary, peer tickets, and global error visibility.',
@@ -108,7 +113,7 @@ export const SETTINGS_SECTION_COPY: Array<{
   {
     id: 'release',
     label: 'Release',
-    description: 'Preview updates, diagnostics, and OS notifications.',
+    description: 'Preview updates, diagnostics, and resources.',
   },
   {
     id: 'developer',
@@ -137,6 +142,7 @@ export function isSettingsSection(value: string | null): value is SettingsSectio
     value === 'about' ||
     value === 'appearance' ||
     value === 'safety' ||
+    value === 'notifications' ||
     value === 'connectivity' ||
     value === 'discovery' ||
     value === 'community-node' ||

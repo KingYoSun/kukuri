@@ -331,7 +331,15 @@
       "description": "请选择诊断以查看连接状态。",
       "connectivity": "打开连接诊断",
       "discovery": "打开发现诊断",
-      "community-node": "打开社区节点诊断"
+      "community-node": "打开社区节点诊断",
+      "release": "打开诊断报告"
+    },
+    "logs": {
+      "title": "日志",
+      "description": "此预览版没有日志查看器。桌面应用会将日志写入进程的标准输出，请从终端启动以保存日志。",
+      "capture": "示例: RUST_LOG=info kukuri（可通过 RUST_LOG 调整各模块的输出级别）",
+      "windows": "Windows 版本不会显示控制台，因此目前无法获取日志。",
+      "runbook": "故障排查指南"
     }
   },
   "discovery": {
@@ -390,7 +398,7 @@
   },
   "release": {
     "title": "发布",
-    "summary": "预览频道、更新、诊断和本地通知设置。",
+    "summary": "预览频道、更新、诊断和资源。",
     "update": {
       "title": "更新",
       "version": "版本",
@@ -470,26 +478,6 @@
       "externalTransmission": "外部传输",
       "abusePolicy": "滥用政策",
       "dataRetention": "数据保留"
-    },
-    "osNotifications": {
-      "title": "系统通知",
-      "permission": "状态: {{permission}}",
-      "permissions": {
-        "denied": "已拒绝",
-        "granted": "已允许",
-        "prompt": "尚未请求",
-        "unavailable": "不可用。请检查桌面通知服务和系统设置",
-        "available": "已连接通知服务（显示取决于系统设置）",
-        "unknown": "未知"
-      },
-      "enabled": "启用系统通知",
-      "directMessages": "私信",
-      "mentionsAndReplies": "提及和回复",
-      "followsAndReposts": "关注和转发",
-      "quietMode": "静音模式",
-      "previewBody": "显示预览文本",
-      "checking": "正在检查通知可用性…",
-      "requestPermission": "检查通知可用性"
     }
   },
   "safety": {
@@ -618,5 +606,30 @@
     "operationError": "其他应用操作发生错误。这与当前连接状态不同。",
     "operationDetails": "操作错误详情",
     "previousLabel": "{{state}}（上次的信息）"
+  },
+  "notifications": {
+    "title": "通知",
+    "summary": "系统通知的接收方式",
+    "description": "选择哪些事件显示为系统通知。无论此设置如何，应用内的通知列表都可查看。",
+    "osNotifications": {
+      "title": "系统通知",
+      "permission": "状态: {{permission}}",
+      "permissions": {
+        "denied": "已拒绝",
+        "granted": "已允许",
+        "prompt": "尚未请求",
+        "unavailable": "不可用。请检查桌面通知服务和系统设置",
+        "available": "已连接通知服务（显示取决于系统设置）",
+        "unknown": "未知"
+      },
+      "enabled": "启用系统通知",
+      "directMessages": "私信",
+      "mentionsAndReplies": "提及和回复",
+      "followsAndReposts": "关注和转发",
+      "quietMode": "静音模式",
+      "previewBody": "显示预览文本",
+      "checking": "正在检查通知可用性…",
+      "requestPermission": "检查通知可用性"
+    }
   }
 }

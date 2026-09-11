@@ -96,9 +96,28 @@ preview の primary UX は明示同意後のセッション確立・維持を自
 
 ## Diagnostics
 
-- `Settings -> Release -> Copy Report` で GitHub issue に貼れる診断レポートを作る。
+- `設定 -> 開発者` で開発者モードを有効にすると、接続・ディスカバリー・コミュニティノードの診断と「診断レポートを開く」が同じ画面に出る。診断レポートは `設定 -> リリース -> 診断` にあり、開発者モードOFFでは表示されない。
+- `レポートをコピー` で GitHub issue に貼れる診断レポートを作る。
 - 既定のレポートには secret key、auth token、private channel secret、invite/share token、DM 本文、ローカル DB path を含めない。
-- `Export` は `kukuri-diagnostics.txt` を作成する。
+- `書き出し` は `kukuri-diagnostics.txt` を作成する。
+
+## ログの確認
+
+- アプリ内にログビューアはない(#962)。Tauri backend は `tracing` の出力をプロセスの標準出力へ書き、ファイルへは保存しない。開発者 section にも同じ案内を置いている。
+- Linux では AppImage または `kukuri` をターミナルから起動し、標準出力を保存する。出力レベルは `RUST_LOG` で変える。既定値と noise 抑制対象は [dev runbook](./dev.md) の `RUST_LOG` の記述を参照する。
+
+```bash
+RUST_LOG=info ./kukuri_*.AppImage 2>&1 | tee kukuri.log
+```
+
+- Windows の release build はコンソールを表示しない(`windows_subsystem = "windows"`)ため、現時点では標準出力のログを取得できない。診断レポートと再現手順を添えて報告する。
+- ログには peer / topic / Node URL などの識別子が含まれる。共有する前に不要な行を除く。秘密鍵、token、DM 本文はログへ出力しない契約であり、それらが見えた場合は不具合として報告する。
+
+## 通知の受信設定
+
+- `設定 -> 通知` で OS 通知の有効化、ダイレクトメッセージ、メンションと返信、フォローとリポスト、静音モード、本文プレビューを切り替える。通知カラムのヘッダーと空状態からも同じ設定へ移動できる。
+- アプリ内の通知一覧はこの設定に関係なく届く。OS 通知だけを止めたい場合は「OS 通知を有効にする」を外すか静音モードを使う。
+- 「通知の利用可否を確認」は端末の通知サービスへの接続だけを確認する。Linux の `利用可` は表示許可を保証せず、表示は OS 側の設定に従う。
 
 ## Data Safety
 

@@ -1,4 +1,5 @@
 import { useMemo, type ChangeEvent, type FormEvent } from 'react';
+import { Settings } from 'lucide-react';
 
 import { AuthorAvatar } from '@/components/core/AuthorAvatar';
 import { AuthorDetailCard } from '@/components/core/AuthorDetailCard';
@@ -421,12 +422,15 @@ export type DesktopShellNotificationsSurfaceProps = {
   t: Translate;
   locale: SupportedLocale;
   handleOpenNotification: (notification: NotificationView) => Promise<void>;
+  /** #962: 通知の受信設定(設定 > 通知)を開く。一覧の状態や既読は変えない。 */
+  onOpenNotificationSettings: () => void;
 };
 
 export function DesktopShellNotificationsSurface({
   t,
   locale,
   handleOpenNotification,
+  onOpenNotificationSettings,
 }: DesktopShellNotificationsSurfaceProps) {
   const {
     knownAuthorsByPubkey,
@@ -511,6 +515,14 @@ export function DesktopShellNotificationsSurface({
         <Notice tone='destructive'>{notificationPanelState.error}</Notice>
       ) : null}
       {notificationAutoReadError ? <Notice tone='warning'>{notificationAutoReadError}</Notice> : null}
+
+      {/* #962: 受信設定(設定 > 通知)への導線。header は要約と更新で埋まるため本文先頭に置く。 */}
+      <div className='flex justify-end'>
+        <Button variant='ghost' size='sm' type='button' onClick={onOpenNotificationSettings}>
+          <Settings className='size-4' aria-hidden='true' />
+          {t('shell:notifications.settings')}
+        </Button>
+      </div>
 
       <Card className='shell-workspace-card'>
         {notificationPanelState.status === 'ready' && notificationItems.length === 0 ? (

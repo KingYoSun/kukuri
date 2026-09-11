@@ -324,6 +324,22 @@ test.describe('visual regression smoke', () => {
     await expect(page).toHaveScreenshot('settings-appearance-wide-light.png');
   });
 
+  // #962: settings drawer / notifications（受信設定の正本。nav 追加の回帰も兼ねる）
+  test('settings notifications wide dark', async ({ page }) => {
+    await seedAppearance(page, 'dark');
+    await page.setViewportSize(WIDE);
+    await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral&settings=notifications');
+    const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
+    await expect(settingsDialog).toBeVisible();
+    await expect(settingsDialog.getByTestId('settings-section-notifications')).toHaveAttribute(
+      'aria-current',
+      'location'
+    );
+    await expect(settingsDialog.getByRole('checkbox', { name: 'Enable OS notifications' })).toBeVisible();
+    await settleForShot(page, 'dark');
+    await expect(page).toHaveScreenshot('settings-notifications-wide-dark.png');
+  });
+
   // 11: settings drawer / connectivity（スクロール drawer・フォーム群）
   test('settings connectivity wide dark', async ({ page }) => {
     await seedAppearance(page, 'dark');
