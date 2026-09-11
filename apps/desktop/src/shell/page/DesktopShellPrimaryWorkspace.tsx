@@ -3,6 +3,7 @@ import { Link2 } from 'lucide-react';
 
 import { TimelineFeed } from '@/components/core/TimelineFeed';
 import { CommunityIndexWorkspace } from '@/components/core/CommunityIndexWorkspace';
+import type { CommunityIndexingTarget } from '@/components/core/CommunityIndexingRequestDialog';
 import { MetaverseRoomPanel } from '@/components/extended/MetaverseRoomPanel';
 import type { CommunityNodePanelView } from '@/components/settings/types';
 import { GameRoomPanel } from '@/components/extended/GameRoomPanel';
@@ -88,6 +89,10 @@ export type DesktopShellPrimarySurfaceProps = {
     | 'timelineViewItems'
   >;
   openCommunityNodeSettings: () => void;
+  /** #960: 見つけるの空状態から既存の接続診断・タイムライン・索引登録申請へ移る。 */
+  openConnectivitySettings?: () => void;
+  openTimelineSection?: () => void;
+  requestIndexing?: (target: CommunityIndexingTarget) => void;
   communityNodePanelView?: CommunityNodePanelView;
   onFetchCommunityNodeConsents?: FetchCommunityNodePolicyView;
   onAcceptCommunityNodeConsents?: (
@@ -149,6 +154,9 @@ export function DesktopShellPrimarySurface({
   notificationsWorkspace,
   viewModels,
   openCommunityNodeSettings,
+  openConnectivitySettings,
+  openTimelineSection,
+  requestIndexing,
   communityNodePanelView,
   onFetchCommunityNodeConsents,
   onAcceptCommunityNodeConsents,
@@ -507,6 +515,9 @@ export function DesktopShellPrimarySurface({
             mode='explore'
             activeTopic={surfaceTopic}
             activeTimelineScope={surfaceTimelineScope}
+            activeChannelLabel={surfaceChannelId
+              ? surfaceJoinedChannels.find((channel) => channel.channel_id === surfaceChannelId)?.label ?? null
+              : null}
             eligibleNodeBaseUrls={eligibleIndexNodeBaseUrls}
             consentPendingNodeBaseUrls={consentPendingNodeBaseUrls}
             selectedNodeBaseUrl={communityIndexNodeBaseUrl}
@@ -517,6 +528,9 @@ export function DesktopShellPrimarySurface({
             onRetryNode={(recovery) => onRetryCommunityNode({ ...indexAvailability, recovery: recovery ?? indexAvailability.recovery })}
             onAutomaticNode={() => patchState({ communityIndexNodePreference: { mode: 'auto' } })}
             onOpenCommunityNodeSettings={openCommunityNodeSettings}
+            onOpenConnectivitySettings={openConnectivitySettings}
+            onOpenTimeline={openTimelineSection}
+            onRequestIndexing={requestIndexing}
             knownAuthorsByPubkey={knownAuthorsByPubkey}
             mediaObjectUrls={mediaObjectUrls}
             adultContentEnabled={adultContentEnabled}

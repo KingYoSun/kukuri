@@ -223,6 +223,7 @@ export function DesktopShellPage({
     routeSection,
     syncRoute,
     setSettingsOpen,
+    focusPrimarySection,
     focusTimelineView,
     openDirectMessageList,
     openDirectMessagePane,
@@ -472,6 +473,14 @@ export function DesktopShellPage({
     () => handleOpenSettingsSection('community-node'),
     [handleOpenSettingsSection]
   );
+  const handleOpenConnectivitySettings = useCallback(
+    () => handleOpenSettingsSection('connectivity'),
+    [handleOpenSettingsSection]
+  );
+  const handleOpenTimelineSection = useCallback(
+    () => focusPrimarySection('timeline'),
+    [focusPrimarySection]
+  );
   const liveFocusKey =
     shellChromeState.activePrimarySection === 'live' ? selectedLiveSessionId : null;
   useFocusScroll({
@@ -605,6 +614,9 @@ export function DesktopShellPage({
       notificationsWorkspace={null}
       viewModels={viewModels}
       openCommunityNodeSettings={handleOpenCommunityNodeSettings}
+      openConnectivitySettings={handleOpenConnectivitySettings}
+      openTimelineSection={handleOpenTimelineSection}
+      requestIndexing={setIndexingTarget}
       communityNodePanelView={viewModels.communityNodePanelView}
       onFetchCommunityNodeConsents={shellActions.handleFetchCommunityNodeConsents}
       onAcceptCommunityNodeConsents={shellActions.handleAcceptCommunityNodeConsents}

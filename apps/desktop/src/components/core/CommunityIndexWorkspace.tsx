@@ -31,6 +31,9 @@ import { CommunityNodeConsentDialog } from '@/components/settings/CommunityNodeC
 import type { CommunityNodeAvailability } from '@/lib/api/communityNodeAvailability';
 import { useCommunityNodeConsentFlow, type AcceptCommunityNodeConsents } from '@/shell/actions/useCommunityNodeConsentFlow';
 import { CommunityIndexAvailabilityNotice } from './CommunityIndexAvailabilityNotice';
+import { CommunityIndexEmptyState } from './CommunityIndexEmptyState';
+import type { CommunityIndexingTarget } from './CommunityIndexingRequestDialog';
+import { communityIndexEmptyGuidance } from './communityIndexEmptyGuidance';
 import { communityIndexPostCardView } from './communityIndexPostCardView';
 import { PostCard } from './PostCard';
 
@@ -42,6 +45,8 @@ type CommunityIndexWorkspaceProps = {
   mode: 'topic' | 'explore';
   activeTopic: string;
   activeTimelineScope: TimelineScope;
+  /** private channel 範囲の索引登録申請に使う表示名。未指定なら channel id を使う。 */
+  activeChannelLabel?: string | null;
   eligibleNodeBaseUrls: readonly string[];
   // #857: 設定済みだがローカル同意が成立していない(未同意・撤回・再同意待ち)node。
   // Node 機能の利用直前に同意モーダルを提示するために使う。
@@ -54,6 +59,10 @@ type CommunityIndexWorkspaceProps = {
   onRetryNode?: (recovery?: 'metadata' | 'manifest' | 'status') => Promise<void>;
   onAutomaticNode?: () => void;
   onOpenCommunityNodeSettings: () => void;
+  /** #960: 空状態の次の行動。未指定の導線は表示しない。 */
+  onOpenConnectivitySettings?: () => void;
+  onOpenTimeline?: () => void;
+  onRequestIndexing?: (target: CommunityIndexingTarget) => void;
   knownAuthorsByPubkey?: Record<string, AuthorSocialView>;
   mediaObjectUrls?: Record<string, string | null>;
   adultContentEnabled?: boolean;
@@ -91,6 +100,8 @@ type IndexRequestContext = {
 type IndexResultState = {
   context: IndexRequestContext;
   entries: IndexEntryView[];
+  /** 実際に送った検索語。空状態の説明は編集中の入力ではなくこれを使う。 */
+  query: string;
 };
 
 type ResolvedPostState = {
@@ -226,6 +237,7 @@ export function CommunityIndexWorkspace({
   mode,
   activeTopic,
   activeTimelineScope,
+  activeChannelLabel = null,
   eligibleNodeBaseUrls,
   consentPendingNodeBaseUrls = [],
   selectedNodeBaseUrl,
@@ -236,6 +248,9 @@ export function CommunityIndexWorkspace({
   onRetryNode = async () => {},
   onAutomaticNode = () => {},
   onOpenCommunityNodeSettings,
+  onOpenConnectivitySettings,
+  onOpenTimeline,
+  onRequestIndexing,
   knownAuthorsByPubkey = EMPTY_KNOWN_AUTHORS,
   mediaObjectUrls = {},
   adultContentEnabled = false,
@@ -588,7 +603,7 @@ export function CommunityIndexWorkspace({
       ) {
         return;
       }
-      setResultState({ context: requestContext, entries: response.entries });
+      setResultState({ context: requestContext, entries: response.entries, query: request.query ?? '' });
       setStatus('success');
     } catch (cause) {
       if (
@@ -739,7 +754,25 @@ export function CommunityIndexWorkspace({
         </div> : null}
       </Notice> : null}
       {status === 'success' && visibleResult && visibleResult.entries.length === 0 ? (
-        <p className='empty-state'>{t('shell:communityIndex.empty')}</p>
+        <CommunityIndexEmptyState
+          guidance={communityIndexEmptyGuidance({
+            mode,
+            operation: visibleResult.context.operation,
+            query: visibleResult.query,
+            activeTopic,
+            activeTimelineScope,
+            activeChannelLabel,
+            canRequestIndexing: typeof onRequestIndexing === 'function',
+          })}
+          nodeBaseUrl={visibleResult.context.nodeBaseUrl}
+          retryDisabled={queryRetrySeconds > 0}
+          onRetry={() => void runQuery()}
+          onOpenAuthor={onOpenAuthor}
+          onOpenTimeline={onOpenTimeline}
+          onRequestIndexing={onRequestIndexing}
+          onOpenCommunityNodeSettings={onOpenCommunityNodeSettings}
+          onOpenConnectivitySettings={onOpenConnectivitySettings}
+        />
       ) : null}
       {visiblePostCards.length > 0 ? (
         <ul className='post-list' aria-label={t('shell:communityIndex.results')}>

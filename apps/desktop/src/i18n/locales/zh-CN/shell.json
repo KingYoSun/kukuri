@@ -356,6 +356,29 @@
     "contentResolving": "正在确认安全信息，确认后显示帖子…",
     "contentUnavailable": "无法确认安全信息，因此无法显示帖子正文。",
     "empty": "没有找到匹配的帖子。",
+    "emptyState": {
+      "scope": {
+        "topic": "已搜索范围：此话题中已建立索引的帖子",
+        "channel": "已搜索范围：此私密频道中已建立索引的帖子",
+        "explore": "已搜索范围：此节点建立索引的全部公开话题"
+      },
+      "matchesPostText": "匹配对象：已建立索引的帖子正文。用户名和用户 ID 只有出现在帖子正文中才会匹配。",
+      "reasonsHeading": "没有结果的常见原因",
+      "reasons": {
+        "notIndexedYet": "帖子可能尚未进入此节点的索引。应用无法查看索引进度，请稍等片刻后再次搜索。",
+        "outsideNodeScope": "该话题可能不在此节点的索引范围内。只有经节点运营者批准并通过安全检查的帖子才会被索引。",
+        "pubkeyQuery": "用户 ID 不是搜索的匹配对象。你可以直接打开该用户。"
+      },
+      "exploreRequestHint": "要让此节点为你已加入的公开话题建立索引，请在话题列表中使用“申请索引”。",
+      "actions": {
+        "openAuthor": "打开此用户",
+        "retrySearch": "再次搜索",
+        "retry": "再试一次",
+        "openTimeline": "查看时间线",
+        "requestIndexing": "申请索引",
+        "openConnectivity": "打开连接诊断"
+      }
+    },
     "results": "社区索引结果",
     "noEligibleNode": "当前没有已认证、已同意且提供可用社区索引的社区节点。",
     "allJoinedDisabled": "请一次搜索一个公开主题或私密频道。不会把全部已加入范围发送给节点。",
