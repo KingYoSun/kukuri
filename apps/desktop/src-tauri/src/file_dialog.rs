@@ -1,5 +1,7 @@
 //! WebKitGTK's default file chooser title does not follow the document language.
 //! Keep the HTML File API and its selection boundary; only own the native chooser UI.
+//! #965: the accept filter stays the default, and an "all files" filter lets the user pick an
+//! unsupported file so the frontend can explain why it is rejected instead of a silent chooser.
 
 use gtk::prelude::*;
 use tauri::{Manager, Runtime};
@@ -9,6 +11,7 @@ struct DialogCopy {
     title: String,
     cancel: String,
     filter: String,
+    all_files: String,
 }
 
 fn dialog_copy(locale: &str) -> DialogCopy {
@@ -23,6 +26,10 @@ fn dialog_copy(locale: &str) -> DialogCopy {
         filter: common["composer"]["supportedFiles"]
             .as_str()
             .expect("file filter label")
+            .to_owned(),
+        all_files: common["composer"]["allFiles"]
+            .as_str()
+            .expect("all files filter label")
             .to_owned(),
         title: common["composer"]["chooseFiles"]
             .as_str()
@@ -74,6 +81,12 @@ pub fn install<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
                     if let Some(filter) = request.mime_types_filter() {
                         filter.set_name(Some(&copy.filter));
                         dialog.add_filter(filter.clone());
+                        // Unsupported files stay selectable here on purpose: the frontend
+                        // rejects them by MIME type before reading and shows the reason.
+                        let all_files = gtk::FileFilter::new();
+                        all_files.set_name(Some(&copy.all_files));
+                        all_files.add_pattern("*");
+                        dialog.add_filter(all_files);
                         dialog.set_filter(&filter);
                     }
                     for file in request.selected_files() {
@@ -142,6 +155,21 @@ mod tests {
             let copy = dialog_copy(locale);
             assert_eq!(copy.title, title);
             assert_eq!(copy.cancel, cancel);
+        }
+    }
+
+    // #965: the default filter names what is supported, and "all files" is offered next to it.
+    #[test]
+    fn native_filters_name_supported_media_and_offer_all_files() {
+        for (locale, filter, all_files) in [
+            ("ja", "画像と動画", "すべてのファイル"),
+            ("en", "Images and videos", "All files"),
+            ("zh-CN", "图片和视频", "所有文件"),
+            ("invalid", "Images and videos", "All files"),
+        ] {
+            let copy = dialog_copy(locale);
+            assert_eq!(copy.filter, filter);
+            assert_eq!(copy.all_files, all_files);
         }
     }
 }

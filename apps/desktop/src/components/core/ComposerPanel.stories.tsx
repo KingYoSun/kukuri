@@ -95,6 +95,17 @@ export const ErrorState: Story = {
   ),
 };
 
+// #965: 非対応ファイルを選んだ直後。案内文と理由が同時に見える状態。
+export const RejectedAttachment: Story = {
+  render: () => (
+    <ComposerStory
+      initialValue='Draft text stays while the reason is shown.'
+      initialItems={[]}
+      error='The file “notes.txt” and 1 more cannot be attached. Only images and videos can be attached.'
+    />
+  ),
+};
+
 export const NoAttachments: Story = {
   render: () => <ComposerStory initialValue='' initialItems={[]} />,
 };

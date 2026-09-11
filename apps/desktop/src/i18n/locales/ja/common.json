@@ -67,7 +67,9 @@
     "writeQuoteRepost": "コメントを追加",
     "writeReply": "返信を書く",
     "adultLabel": "この投稿を成人向けとして申告する",
-    "supportedFiles": "対応するファイル",
+    "supportedFiles": "画像と動画",
+    "allFiles": "すべてのファイル",
+    "supportedFormats": "画像と動画のみ添付できます。テキストや PDF などのファイルは添付できません。",
     "emptyDraft": "本文を入力するか、ファイルを添付してから送信してください。",
     "keyboardHint": "Esc で閉じる、Ctrl+Enter で送信。",
     "keyboardHelp": "キーボード操作"
@@ -110,7 +112,8 @@
     "failedToUpdateFollowState": "フォロー状態の更新に失敗しました",
     "failedToUpdateMuteState": "ミュート状態の更新に失敗しました",
     "quoteRepostRequiresCommentary": "コメントを追加してからリポストしてください",
-    "unsupportedAttachmentType": "未対応の添付タイプです: {{name}}",
+    "unsupportedAttachmentType": "「{{name}}」は添付できません。画像と動画のみ添付できます。",
+    "unsupportedAttachmentTypes": "「{{name}}」ほか {{others}} 件は添付できません。画像と動画のみ添付できます。",
     "failedToWithdrawConsents": "コミュニティノードの同意撤回に失敗しました。",
     "failedToUpdateBlockState": "ブロック状態の更新に失敗しました"
   },

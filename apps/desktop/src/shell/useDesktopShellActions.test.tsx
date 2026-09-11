@@ -15,7 +15,7 @@
  *   (toHaveBeenCalledWith)・store 状態遷移・キー/フィールド単位の値のみ。
  */
 import { act, renderHook } from '@testing-library/react';
-import type { FormEvent } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import type {
@@ -95,9 +95,20 @@ function directMessageFormEvent(value: string) {
   };
 }
 
+// 添付選択は ChangeEvent を受けるため files だけを持つ stub を渡す。
+function attachmentChangeEvent(files: File[]) {
+  return { target: { files } } as unknown as ChangeEvent<HTMLInputElement>;
+}
+
+// 補間値まで固定したい文言は key と options を連結する stub を使う。
+const recordingTranslate = (key: string, options?: Record<string, unknown>) =>
+  options ? `${key}:${JSON.stringify(options)}` : key;
+
 type RenderActionsOptions = {
   /** mock api のうち差し替えたいメソッドだけを vi.fn で上書きする。 */
   api?: Partial<DesktopApi>;
+  /** 既定は key をそのまま返す stub。補間値を固定したい test だけ差し替える。 */
+  translate?: (key: string, options?: Record<string, unknown>) => string;
   /** render 前の store プリセット(act 不要)。current を受けて patch を返す。 */
   preset?: (current: DesktopShellState) => Partial<DesktopShellState>;
 };
@@ -146,7 +157,7 @@ function renderActionsHook(options: RenderActionsOptions = {}) {
     () =>
       useDesktopShellActions({
         api,
-        translate: stubTranslate,
+        translate: options.translate ?? stubTranslate,
         loadTopics,
         refreshVisibleTimelineAfterPublish,
         syncRoute,
@@ -916,5 +927,84 @@ describe('useDesktopShellActions', () => {
       pending: false,
       error: 'offline',
     });
+  });
+
+  // #965: 非対応ファイルは読み込まずに理由(ファイル名 + 対応形式)を composer に出し、
+  // 対応ファイルだけを下書きへ追加する。
+  test('unsupported Column Draft attachments show one reason with the rejected count and are never read', async () => {
+    const readAsDataURL = vi.spyOn(FileReader.prototype, 'readAsDataURL');
+    const target = {
+      columnId: 'timeline-public',
+      action: 'post' as const,
+      scope: { topicId: 'topic-a', channelId: null },
+    };
+    const view = renderActionsHook({
+      translate: recordingTranslate,
+      preset: (current) => ({
+        columnDraftsByKey: setColumnDraft(current.columnDraftsByKey, target, (draft) => ({
+          ...draft,
+          content: 'keep me',
+          expanded: true,
+        })),
+      }),
+    });
+
+    await act(async () => {
+      await view.result.current.handleColumnDraftAttachmentSelection(
+        target,
+        attachmentChangeEvent([
+          new File(['notes'], 'notes.txt', { type: 'text/plain' }),
+          new File(['image'], 'photo.png', { type: 'image/png' }),
+          new File(['pdf'], 'report.pdf', { type: 'application/pdf' }),
+          new File(['?'], 'unknown.bin', { type: '' }),
+        ])
+      );
+    });
+
+    const draft = view.store.getState().columnDraftsByKey[columnDraftKey(target)];
+    expect(draft).toMatchObject({
+      content: 'keep me',
+      expanded: true,
+      pending: false,
+      attachmentInputKey: 1,
+      mediaItems: [{ id: 'image-item-photo.png' }],
+      error: 'common:errors.unsupportedAttachmentTypes:{"name":"notes.txt","others":2}',
+    });
+    expect(view.mocks.buildImageDraftItem).toHaveBeenCalledTimes(1);
+    expect(view.mocks.buildVideoDraftItem).not.toHaveBeenCalled();
+    expect(readAsDataURL).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await view.result.current.handleColumnDraftAttachmentSelection(
+        target,
+        attachmentChangeEvent([new File(['notes'], 'only.txt', { type: 'text/plain' })])
+      );
+    });
+    expect(view.store.getState().columnDraftsByKey[columnDraftKey(target)]).toMatchObject({
+      attachmentInputKey: 2,
+      mediaItems: [{ id: 'image-item-photo.png' }],
+      error: 'common:errors.unsupportedAttachmentType:{"name":"only.txt"}',
+    });
+    expect(view.mocks.buildImageDraftItem).toHaveBeenCalledTimes(1);
+    readAsDataURL.mockRestore();
+  });
+
+  test('unsupported DM attachment shows the same reason and keeps the DM draft untouched', async () => {
+    const view = renderActionsHook({ translate: recordingTranslate });
+
+    await act(async () => {
+      await view.result.current.handleDirectMessageAttachmentSelection(
+        attachmentChangeEvent([new File(['notes'], 'notes.txt', { type: 'text/plain' })])
+      );
+    });
+
+    expect(view.store.getState()).toMatchObject({
+      directMessageError: 'common:errors.unsupportedAttachmentType:{"name":"notes.txt"}',
+      directMessageDraftMediaItems: [],
+      directMessageAttachmentInputKey: 1,
+    });
+    expect(view.mocks.buildImageDraftItem).not.toHaveBeenCalled();
+    expect(view.mocks.buildVideoDraftItem).not.toHaveBeenCalled();
+    expect(view.mocks.rememberDirectMessageDraftPreview).not.toHaveBeenCalled();
   });
 });

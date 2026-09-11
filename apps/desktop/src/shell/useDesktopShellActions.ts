@@ -9,6 +9,7 @@ import {
 } from 'react';
 
 import type { DesktopApi, PostView } from '@/lib/api';
+import { formatUnsupportedAttachmentMessage } from '@/lib/attachments';
 
 import {
   PUBLIC_CHANNEL_REF,
@@ -568,7 +569,9 @@ export function useDesktopShellActions({
     const files = Array.from(event.target.files ?? []);
     if (files.length === 0) return;
     const nextItems: DraftMediaItem[] = [];
-    const failures: string[] = [];
+    // #965: 非対応ファイルは読み込まずに名前だけ集め、1 つの理由文にまとめる。
+    const rejectedNames: string[] = [];
+    let posterFailed = false;
     for (const file of files) {
       try {
         if (file.type.startsWith('image/')) {
@@ -576,18 +579,22 @@ export function useDesktopShellActions({
         } else if (file.type.startsWith('video/')) {
           nextItems.push(await buildVideoDraftItem(file));
         } else {
-          failures.push(translate('common:errors.unsupportedAttachmentType', { name: file.name }));
+          rejectedNames.push(file.name);
         }
       } catch {
-        failures.push(translate('common:errors.failedToGenerateVideoPoster'));
+        posterFailed = true;
       }
     }
+    const failures = [
+      formatUnsupportedAttachmentMessage(translate, rejectedNames),
+      posterFailed ? translate('common:errors.failedToGenerateVideoPoster') : null,
+    ].filter((message): message is string => message !== null);
     nextItems.forEach(rememberDraftPreview);
     setColumnDraftsByKey((current) =>
       setColumnDraft(current, target, (draft) => ({
         ...draft,
         mediaItems: [...draft.mediaItems, ...nextItems],
-        error: failures[0] ?? null,
+        error: failures.length > 0 ? failures.join(' ') : null,
         attachmentInputKey: draft.attachmentInputKey + 1,
       }))
     );

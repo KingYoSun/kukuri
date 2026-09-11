@@ -67,7 +67,9 @@
     "writeQuoteRepost": "添加评论",
     "writeReply": "写一条回复",
     "adultLabel": "将此帖标记为成人内容(自我声明)",
-    "supportedFiles": "支持的文件",
+    "supportedFiles": "图片和视频",
+    "allFiles": "所有文件",
+    "supportedFormats": "仅可附加图片和视频。文本、PDF 等其他文件无法附加。",
     "emptyDraft": "请先输入内容或附加文件，然后再发送。",
     "keyboardHint": "Esc 关闭，Ctrl+Enter 发送。",
     "keyboardHelp": "键盘操作"
@@ -110,7 +112,8 @@
     "failedToUpdateFollowState": "更新关注状态失败",
     "failedToUpdateMuteState": "更新静音状态失败",
     "quoteRepostRequiresCommentary": "请先添加评论再转发",
-    "unsupportedAttachmentType": "不支持的附件类型: {{name}}",
+    "unsupportedAttachmentType": "无法附加“{{name}}”。仅可附加图片和视频。",
+    "unsupportedAttachmentTypes": "无法附加“{{name}}”及另外 {{others}} 个文件。仅可附加图片和视频。",
     "failedToWithdrawConsents": "撤回社区节点同意失败。",
     "failedToUpdateBlockState": "更新屏蔽状态失败"
   },

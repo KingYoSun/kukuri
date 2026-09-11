@@ -1,5 +1,6 @@
 import type { ChangeEvent } from 'react';
 import type { PostView } from '@/lib/api';
+import { formatUnsupportedAttachmentMessage } from '@/lib/attachments';
 
 import { PUBLIC_CHANNEL_REF, type DraftMediaItem } from '@/shell/store';
 import { canCreateRepostFromPost, publishedTopicIdForPost } from '@/shell/presentation';
@@ -64,9 +65,7 @@ export function createComposeInteractionsActions({
           ? await buildVideoDraftItem(file)
           : null;
       if (!nextItem) {
-        setDirectMessageError(
-          translate('common:errors.unsupportedAttachmentType', { name: file.name })
-        );
+        setDirectMessageError(formatUnsupportedAttachmentMessage(translate, [file.name]));
       } else {
         releaseAllDirectMessageDraftPreviews();
         rememberDirectMessageDraftPreview(nextItem);

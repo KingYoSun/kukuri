@@ -23,7 +23,7 @@ async function setup(locale = 'ja') {
     value: 'draft', onChange: vi.fn(), onSubmit: vi.fn((event) => event.preventDefault()),
     attachmentInputKey: 0, onAttachmentSelection: vi.fn(), draftMediaItems: [] as ComposerDraftMediaView[],
     onRemoveDraftAttachment: vi.fn(), audienceLabel: 'Public', onClearReply: vi.fn(),
-    attachmentsDisabled: false,
+    attachmentsDisabled: false, composerError: null as string | null,
   };
   const view = render(<I18nextProvider i18n={i18n}><ComposerPanel {...props} /></I18nextProvider>);
   const update = (next: Partial<typeof props>) => {
@@ -50,6 +50,37 @@ test('Japanese attachment control owns visible copy and follows locale changes w
   expect(screen.getByDisplayValue('draft')).toBeVisible();
   view.update({ draftMediaItems: [] });
   expect(screen.getByText('未选择文件')).toBeVisible();
+});
+
+// #965: 選ぶ前に対応形式が分かり、非対応ファイルの理由は支援技術にも通知される。
+test('attachment control explains supported formats before choosing and announces a rejection', async () => {
+  const guidance = {
+    ja: '画像と動画のみ添付できます。テキストや PDF などのファイルは添付できません。',
+    en: 'Only images and videos can be attached. Text, PDF, and other files are not supported.',
+    'zh-CN': '仅可附加图片和视频。文本、PDF 等其他文件无法附加。',
+  };
+  const view = await setup();
+  expect(screen.getByLabelText('添付')).toHaveAttribute('accept', 'image/*,video/*');
+  expect(screen.getByText(guidance.ja)).toBeVisible();
+  expect(screen.getByRole('button', { name: 'ファイルを選択' })).toHaveAccessibleDescription(
+    `ファイル未選択 ${guidance.ja}`
+  );
+  expect(screen.queryByRole('alert')).toBeNull();
+  const rejected = '「notes.txt」は添付できません。画像と動画のみ添付できます。';
+  view.update({ composerError: rejected });
+  expect(screen.getByRole('alert')).toHaveTextContent(rejected);
+  expect(screen.getByText(guidance.ja)).toBeVisible();
+  expect(screen.getByDisplayValue('draft')).toBeVisible();
+  view.update({ composerError: null });
+  expect(screen.queryByRole('alert')).toBeNull();
+  await act(() => view.i18n.changeLanguage('en'));
+  expect(screen.getByRole('button', { name: 'Choose files' })).toHaveAccessibleDescription(
+    `No files selected ${guidance.en}`
+  );
+  await act(() => view.i18n.changeLanguage('zh-CN'));
+  expect(screen.getByRole('button', { name: '选择文件' })).toHaveAccessibleDescription(
+    `未选择文件 ${guidance['zh-CN']}`
+  );
 });
 
 test.each(['click', 'Enter', 'Space'])('attachment %s activates its own picker without submitting', async (action) => {
