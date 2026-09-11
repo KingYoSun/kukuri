@@ -71,15 +71,21 @@
 
 ### 実行結果（Linux container、Node 22.22、pnpm 10.16.1、Rust 1.92）
 
-結果は PR 本文と同じ。以下は本記録作成時点のローカル実行。
+以下は head `dafc280` に対するローカル実行。CI の結果は PR #981 を参照する。
 
 | 検証 | 結果 |
 | --- | --- |
 | targeted Vitest（actions / ComposerPanel / footer / i18n / attachments） | 成功 |
 | `composer-localization.spec.ts`（chromium） | 9 件成功（新規 2 件を含む） |
-| 全体 `eslint` / `tsc` / Vitest / Storybook build / Playwright chromium / visual smoke | PR 本文の「検証とリスク」を参照 |
+| `eslint . --max-warnings 0` / `tsc --noEmit` | 成功 |
+| 全体 Vitest | 174 files 中 164 成功。10 files / 15 件が `Test timed out in 5000ms` で失敗（`DesktopShellPage.*.test.tsx` などの shell-integration と `media.test.tsx` / `routes.test.tsx` / `App.test.tsx`）。基準 commit `704c72c` の worktree で同じ 13 files を実行しても 10 files / 14 件が同じ timeout で失敗し、失敗 file を 2 件ずつ単独実行すると両 tree とも成功する。本 container（4 core）の並列実行時間の問題であり、本変更の回帰ではない。CI の `linux-desktop-ui`（Vitest 全件）は head `dafc280` で成功 |
+| Storybook build | 成功 |
+| Playwright chromium 全体 | 242 件成功（新規 2 件を含む） |
+| Playwright visual（非 CI のため比較 skip、到達 smoke） | 27 件成功 |
+| `cargo xtask oversized-files` | 成功（分割後。`useDesktopShellActions.test.tsx` 814 行、`shell-phase1-part1.css` 996 行） |
+| `cargo xtask tauri-check` | 成功（6m12s） |
+| `cargo xtask e2e-smoke` | `desktop_smoke_post_persist` pass（6 steps） |
 | `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --lib file_dialog` | 2 件成功（locale ごとの title / cancel / filter / all files） |
-| `cargo xtask tauri-check` / `e2e-smoke` | PR 本文を参照 |
 
 Playwright は repo 固定の chromium build が container に無いため、`/opt/pw-browsers/chromium` を `executablePath` に指定する未 commit の local config で実行した。
 
