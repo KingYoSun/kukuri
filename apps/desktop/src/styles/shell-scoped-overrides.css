@@ -596,28 +596,6 @@
   margin-bottom: var(--space-xs);
 }
 
-.shell-phase1 .shell-column-composer-hint {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-xs) var(--space-sm);
-  margin: 0 0 var(--space-xs);
-  font-size: 0.8rem;
-  line-height: 1.5;
-  color: var(--muted-foreground);
-}
-
-.shell-phase1 .shell-column-composer-hint-link {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--accent);
-  font: inherit;
-  text-decoration: underline;
-  text-underline-offset: 0.15em;
-  cursor: pointer;
-}
-
 .shell-phase1 .composer-target-summary {
   display: grid;
   min-width: 0;
