@@ -54,6 +54,18 @@ jobs:
         working-directory: apps/desktop
         run: pnpm test:e2e:visual --update-snapshots
 
+      # TEMPORARY (#964, branch-only, reverted before merge): the session driving PR #980
+      # cannot download artifacts, so print the regenerated baselines into the job log.
+      - name: Dump changed baselines as base64
+        if: always()
+        run: |
+          cd apps/desktop/tests/playwright/__screenshots__/visual.spec.ts
+          for f in $(git status --porcelain . | awk '{print $2}' | xargs -n1 basename); do
+            echo "BEGIN_PNG $f"
+            base64 -w 76 "$f"
+            echo "END_PNG $f"
+          done
+
       - name: Upload visual baseline
         if: always()
         uses: actions/upload-artifact@v4
