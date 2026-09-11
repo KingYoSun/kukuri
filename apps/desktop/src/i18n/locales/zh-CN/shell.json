@@ -45,7 +45,6 @@
     "channelEmptyAction": "创建或加入"
   },
   "controlCenter": {
-    "eyebrow": "全局导航",
     "title": "控制中心",
     "openWithStatus": "打开控制中心 · {{status}}",
     "closeWithStatus": "关闭控制中心 · {{status}}",

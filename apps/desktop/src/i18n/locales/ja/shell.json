@@ -45,7 +45,6 @@
     "channelEmptyAction": "作成または参加"
   },
   "controlCenter": {
-    "eyebrow": "全体ナビゲーション",
     "title": "コントロールセンター",
     "openWithStatus": "コントロールセンターを開く · {{status}}",
     "closeWithStatus": "コントロールセンターを閉じる · {{status}}",
@@ -92,7 +91,7 @@
         "storage": "保存済みレイアウトをローカルストレージへ書き込めませんでした。"
       }
     },
-    "createJoinChannel": "プライベートチャンネル作成・参加",
+    "createJoinChannel": "チャンネル作成・参加",
     "shareChannel": "選択中のチャンネルを共有",
     "release": "リリースと更新",
     "settings": "設定",
@@ -266,7 +265,7 @@
     "communityNodeUnavailableTitle": "コミュニティノードを利用できません",
     "viewScope": "表示範囲",
     "privateChannelEntry": "プライベートチャンネル",
-    "privateChannelEntryLabel": "プライベートチャンネル作成・参加",
+    "privateChannelEntryLabel": "チャンネル作成・参加",
     "channelSettingsEntry": "設定と共有",
     "channelSettingsEntryLabel": "{{channel}} のチャンネル設定と共有を開く"
   },

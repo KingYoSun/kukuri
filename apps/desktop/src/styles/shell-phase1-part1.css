@@ -979,7 +979,6 @@
   justify-content: center;
   overflow: hidden;
   border: 1px solid var(--border-subtle);
-  /* avatar は角丸の例外として常に全丸 */
   border-radius: var(--radius-pill);
   background: var(--surface-avatar);
   color: var(--foreground-strong);
