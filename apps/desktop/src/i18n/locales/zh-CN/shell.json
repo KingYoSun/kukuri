@@ -170,6 +170,8 @@
       "repost": "转发"
     },
     "loading": "正在加载通知…",
+    "openSettings": "打开通知接收设置",
+    "settings": "通知接收设置",
     "preview": {
       "followed": "开始关注你了。",
       "noContent": "打开来源事件。",
@@ -222,12 +224,16 @@
       "label": "回应"
     },
     "release": {
-      "description": "预览更新、诊断和系统通知。",
+      "description": "预览更新、诊断和资源。",
       "label": "发布"
     },
     "safety": {
       "label": "安全",
       "description": "成人内容显示设置、静音与屏蔽。"
+    },
+    "notifications": {
+      "label": "通知",
+      "description": "系统通知类别、静音模式和预览文本设置。"
     }
   },
   "workspace": {

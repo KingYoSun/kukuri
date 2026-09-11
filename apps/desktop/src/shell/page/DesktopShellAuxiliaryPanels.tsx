@@ -421,12 +421,15 @@ export type DesktopShellNotificationsSurfaceProps = {
   t: Translate;
   locale: SupportedLocale;
   handleOpenNotification: (notification: NotificationView) => Promise<void>;
+  /** #962: 空状態の次の行動として通知の受信設定を開く。 */
+  onOpenNotificationSettings: () => void;
 };
 
 export function DesktopShellNotificationsSurface({
   t,
   locale,
   handleOpenNotification,
+  onOpenNotificationSettings,
 }: DesktopShellNotificationsSurfaceProps) {
   const {
     knownAuthorsByPubkey,
@@ -514,7 +517,12 @@ export function DesktopShellNotificationsSurface({
 
       <Card className='shell-workspace-card'>
         {notificationPanelState.status === 'ready' && notificationItems.length === 0 ? (
-          <p className='empty-state'>{t('shell:notifications.empty')}</p>
+          <div className='space-y-3'>
+            <p className='empty-state'>{t('shell:notifications.empty')}</p>
+            <Button variant='secondary' type='button' onClick={onOpenNotificationSettings}>
+              {t('shell:notifications.openSettings')}
+            </Button>
+          </div>
         ) : null}
         {notificationItems.length > 0 ? (
           <ul className='notification-list' aria-label={t('shell:notifications.title')}>

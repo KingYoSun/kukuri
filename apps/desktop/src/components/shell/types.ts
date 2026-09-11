@@ -13,6 +13,7 @@ export type SettingsSection =
   | 'about'
   | 'appearance'
   | 'safety'
+  | 'notifications'
   | 'connectivity'
   | 'discovery'
   | 'community-node'

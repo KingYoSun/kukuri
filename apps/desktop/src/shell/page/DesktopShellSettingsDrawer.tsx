@@ -6,6 +6,7 @@ import { ConnectivityPanel } from '@/components/settings/ConnectivityPanel';
 import { DeveloperPanel } from '@/components/settings/DeveloperPanel';
 import { DeviceBackupPanel } from '@/components/settings/DeviceBackupPanel';
 import { DiscoveryPanel } from '@/components/settings/DiscoveryPanel';
+import { NotificationsPanel } from '@/components/settings/NotificationsPanel';
 import { ReleasePanel } from '@/components/settings/ReleasePanel';
 import { ReactionsPanel } from '@/components/settings/ReactionsPanel';
 import { SafetyPanel } from '@/components/settings/SafetyPanel';
@@ -181,13 +182,22 @@ export function DesktopShellSettingsDrawer({
     openProfileConnections(view);
   };
 
+  // #962: section の追加で index がずれないよう id で引く。順序は SETTINGS_SECTION_COPY が正本。
+  const sectionCopy = (id: SettingsSection) => {
+    const copy = settingsSectionCopy.find((section) => section.id === id);
+    if (!copy) {
+      throw new Error(`settings section copy missing: ${id}`);
+    }
+    return copy;
+  };
+
   const settingsSections = [
     {
-      ...settingsSectionCopy[0],
+      ...sectionCopy('about'),
       content: <AboutPanel />,
     },
     {
-      ...settingsSectionCopy[1],
+      ...sectionCopy('appearance'),
       content: (
         <AppearancePanel
           view={appearancePanelView}
@@ -198,7 +208,7 @@ export function DesktopShellSettingsDrawer({
       ),
     },
     {
-      ...settingsSectionCopy[2],
+      ...sectionCopy('safety'),
       content: (
         <SafetyPanel
           adultContentEnabled={adultContentEnabled}
@@ -209,7 +219,11 @@ export function DesktopShellSettingsDrawer({
       ),
     },
     {
-      ...settingsSectionCopy[3],
+      ...sectionCopy('notifications'),
+      content: <NotificationsPanel />,
+    },
+    {
+      ...sectionCopy('connectivity'),
       content: (
         <ConnectivityPanel
           onRefreshDiagnostics={onRefreshDiagnostics}
@@ -222,7 +236,7 @@ export function DesktopShellSettingsDrawer({
       ),
     },
     {
-      ...settingsSectionCopy[4],
+      ...sectionCopy('discovery'),
       content: (
         <DiscoveryPanel
           onRefreshDiagnostics={onRefreshDiagnostics}
@@ -245,7 +259,7 @@ export function DesktopShellSettingsDrawer({
       ),
     },
     {
-      ...settingsSectionCopy[5],
+      ...sectionCopy('community-node'),
       content: (
         <CommunityNodePanel
           view={communityNodePanelView}
@@ -310,7 +324,7 @@ export function DesktopShellSettingsDrawer({
       ),
     },
     {
-      ...settingsSectionCopy[6],
+      ...sectionCopy('reactions'),
       // Keep the local file/crop draft when visiting Appearance to change language.
       keepMounted: true,
       content: (
@@ -326,11 +340,11 @@ export function DesktopShellSettingsDrawer({
       ),
     },
     {
-      ...settingsSectionCopy[7],
+      ...sectionCopy('release'),
       content: <ReleasePanel showDiagnostics={developerModeEnabled} />,
     },
     {
-      ...settingsSectionCopy[8],
+      ...sectionCopy('developer'),
       content: (
         <DeveloperPanel
           developerModeEnabled={developerModeEnabled}
@@ -347,7 +361,7 @@ export function DesktopShellSettingsDrawer({
       ),
     },
     {
-      ...settingsSectionCopy[9],
+      ...sectionCopy('account'),
       content: (
         <div className='space-y-5'>
           <DeviceBackupPanel />

@@ -9,7 +9,7 @@ import {
 import { saveOsNotificationSettings } from '@/lib/releaseReadiness';
 import { createDesktopShellStore, DesktopShellStoreContext } from '@/shell/store';
 
-import { ReleasePanel } from './ReleasePanel';
+import { NotificationsPanel } from './NotificationsPanel';
 
 vi.mock('@/lib/api/osNotificationPermission', () => ({
   getOsNotificationPermission: vi.fn(),
@@ -30,7 +30,7 @@ afterEach(() => vi.resetAllMocks());
 function renderPanel() {
   return render(
     <DesktopShellStoreContext.Provider value={createDesktopShellStore()}>
-      <ReleasePanel showDiagnostics={false} />
+      <NotificationsPanel />
     </DesktopShellStoreContext.Provider>
   );
 }
@@ -80,10 +80,10 @@ test.each(['en', 'ja', 'zh-CN'])('service status and recheck are localized in %s
   await i18n.changeLanguage(locale);
   vi.mocked(getOsNotificationPermission).mockResolvedValue('available');
   renderPanel();
-  const status = i18n.t('settings:release.osNotifications.permissions.available');
-  expect(await screen.findByText(i18n.t('settings:release.osNotifications.permission', { permission: status })))
+  const status = i18n.t('settings:notifications.osNotifications.permissions.available');
+  expect(await screen.findByText(i18n.t('settings:notifications.osNotifications.permission', { permission: status })))
     .toBeInTheDocument();
-  expect(screen.getByRole('button', { name: i18n.t('settings:release.osNotifications.requestPermission') }))
+  expect(screen.getByRole('button', { name: i18n.t('settings:notifications.osNotifications.requestPermission') }))
     .toBeEnabled();
 });
 

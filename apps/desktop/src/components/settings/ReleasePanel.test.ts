@@ -11,9 +11,9 @@ describe('ReleasePanel localized status copy', () => {
       'settings:release.update.statuses.up_to_date': '最新です',
       'settings:release.update.statuses.ready_to_restart': '再起動待ち',
       'settings:release.update.statuses.installing': '更新を適用中',
-      'settings:release.osNotifications.permissions.granted': '許可済み',
-      'settings:release.osNotifications.permissions.denied': '拒否済み',
-      'settings:release.osNotifications.permissions.available': 'サービスに接続済み',
+      'settings:notifications.osNotifications.permissions.granted': '許可済み',
+      'settings:notifications.osNotifications.permissions.denied': '拒否済み',
+      'settings:notifications.osNotifications.permissions.available': 'サービスに接続済み',
     };
     const t = (key: string) => translations[key] ?? key;
 

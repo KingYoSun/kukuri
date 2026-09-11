@@ -540,6 +540,7 @@ export function DesktopShellPage({
       showComposer={false}
     />
   );
+  const openNotificationSettings = () => handleOpenSettingsSection('notifications');
   const renderNotificationsSurface = (column: ColumnState) => (
     <DesktopShellNotificationsSurface
       t={t}
@@ -547,6 +548,7 @@ export function DesktopShellPage({
       handleOpenNotification={(notification) =>
         shellActions.handleOpenNotification(notification, column.id)
       }
+      onOpenNotificationSettings={openNotificationSettings}
     />
   );
   const renderDetailSurface = (
@@ -837,6 +839,7 @@ export function DesktopShellPage({
       }
       onSelectTimelineView={selectColumnTimelineView}
       onRefreshNotifications={refreshNotificationsColumn}
+      onOpenNotificationSettings={openNotificationSettings}
       onRefreshConversation={(peerPubkey) => void refreshConversationColumn(peerPubkey)}
       onClearConversation={(peerPubkey) => void clearConversationColumn(peerPubkey)}
       onOpenConversationAuthor={(peerPubkey, parentColumnId) =>

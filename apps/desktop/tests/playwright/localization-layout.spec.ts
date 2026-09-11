@@ -44,6 +44,7 @@ const MAJOR_ROUTES = [
 const SETTINGS_SECTIONS = [
   'about',
   'appearance',
+  'notifications',
   'connectivity',
   'discovery',
   'community-node',

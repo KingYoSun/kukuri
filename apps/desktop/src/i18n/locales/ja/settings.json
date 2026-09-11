@@ -331,7 +331,15 @@
       "description": "接続の状態を調べるには、診断を選んでください。",
       "connectivity": "接続の診断を開く",
       "discovery": "ディスカバリーの診断を開く",
-      "community-node": "コミュニティノードの診断を開く"
+      "community-node": "コミュニティノードの診断を開く",
+      "release": "診断レポートを開く"
+    },
+    "logs": {
+      "title": "ログ",
+      "description": "このプレビューにはログビューアがありません。デスクトップアプリはログをプロセスの標準出力へ書き出すため、ターミナルから起動して保存してください。",
+      "capture": "例: RUST_LOG=info kukuri（RUST_LOG でモジュールごとの出力レベルを変更できます）",
+      "windows": "Windows 版はコンソールを表示しないため、現時点ではログを取得できません。",
+      "runbook": "トラブルシューティング手順"
     }
   },
   "discovery": {
@@ -390,7 +398,7 @@
   },
   "release": {
     "title": "リリース",
-    "summary": "プレビューチャンネル、更新、診断、ローカル通知設定です。",
+    "summary": "プレビューチャンネル、更新、診断、リソースです。",
     "update": {
       "title": "更新",
       "version": "バージョン",
@@ -470,26 +478,6 @@
       "externalTransmission": "外部送信",
       "abusePolicy": "不正利用ポリシー",
       "dataRetention": "データ保持"
-    },
-    "osNotifications": {
-      "title": "OS 通知",
-      "permission": "状態: {{permission}}",
-      "permissions": {
-        "denied": "拒否済み",
-        "granted": "許可済み",
-        "prompt": "未要求",
-        "unavailable": "利用不可。デスクトップの通知サービスとOS設定を確認してください",
-        "available": "通知サービスに接続済み（表示はOS設定に依存します）",
-        "unknown": "不明"
-      },
-      "enabled": "OS 通知を有効にする",
-      "directMessages": "ダイレクトメッセージ",
-      "mentionsAndReplies": "メンションと返信",
-      "followsAndReposts": "フォローとリポスト",
-      "quietMode": "静音モード",
-      "previewBody": "本文プレビューを表示",
-      "checking": "通知の利用可否を確認中…",
-      "requestPermission": "通知の利用可否を確認"
     }
   },
   "safety": {
@@ -618,5 +606,29 @@
     "operationError": "別のアプリ操作でエラーが発生しました。現在の接続状態とは別の情報です。",
     "operationDetails": "操作エラーの詳細",
     "previousLabel": "{{state}}（前回の情報）"
+  },
+  "notifications": {
+    "title": "通知",
+    "summary": "OS 通知として表示する種類を選びます。アプリ内の通知一覧はこの設定に関係なく確認できます。",
+    "osNotifications": {
+      "title": "OS 通知",
+      "permission": "状態: {{permission}}",
+      "permissions": {
+        "denied": "拒否済み",
+        "granted": "許可済み",
+        "prompt": "未要求",
+        "unavailable": "利用不可。デスクトップの通知サービスとOS設定を確認してください",
+        "available": "通知サービスに接続済み（表示はOS設定に依存します）",
+        "unknown": "不明"
+      },
+      "enabled": "OS 通知を有効にする",
+      "directMessages": "ダイレクトメッセージ",
+      "mentionsAndReplies": "メンションと返信",
+      "followsAndReposts": "フォローとリポスト",
+      "quietMode": "静音モード",
+      "previewBody": "本文プレビューを表示",
+      "checking": "通知の利用可否を確認中…",
+      "requestPermission": "通知の利用可否を確認"
+    }
   }
 }

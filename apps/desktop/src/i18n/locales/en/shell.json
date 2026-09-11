@@ -170,6 +170,8 @@
       "repost": "Repost"
     },
     "loading": "Loading notifications…",
+    "openSettings": "Open notification settings",
+    "settings": "Notification settings",
     "preview": {
       "followed": "Started following you.",
       "noContent": "Open the source event.",
@@ -222,12 +224,16 @@
       "label": "Reactions"
     },
     "release": {
-      "description": "Preview updates, diagnostics, and OS notifications.",
+      "description": "Preview updates, diagnostics, and resources.",
       "label": "Release"
     },
     "safety": {
       "label": "Safety",
       "description": "Adult material display, mute, and block."
+    },
+    "notifications": {
+      "label": "Notifications",
+      "description": "OS notification categories, quiet mode, and preview text."
     }
   },
   "workspace": {
