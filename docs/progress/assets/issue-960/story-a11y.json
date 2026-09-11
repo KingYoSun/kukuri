@@ -1,0 +1,338 @@
+[
+  {
+    "id": "core-communityindexemptystate--explore-search",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [],
+    "lang": "ja"
+  },
+  {
+    "id": "core-communityindexemptystate--topic-search",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [],
+    "lang": "ja"
+  },
+  {
+    "id": "core-communityindexemptystate--private-channel-search",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [],
+    "lang": "ja"
+  },
+  {
+    "id": "core-communityindexemptystate--user-id-query",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [],
+    "lang": "ja"
+  },
+  {
+    "id": "core-communityindexemptystate--discovery",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [],
+    "lang": "ja"
+  },
+  {
+    "id": "core-communityindexemptystate--retry-paused",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [],
+    "lang": "ja"
+  },
+  {
+    "id": "core-communityindexemptystate--without-optional-actions",
+    "locale": "ja",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [],
+    "lang": "ja"
+  },
+  {
+    "id": "core-communityindexemptystate--explore-search",
+    "locale": "ja",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [],
+    "lang": "ja"
+  },
+  {
+    "id": "core-communityindexemptystate--topic-search",
+    "locale": "ja",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [],
+    "lang": "ja"
+  },
+  {
+    "id": "core-communityindexemptystate--private-channel-search",
+    "locale": "ja",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [],
+    "lang": "ja"
+  },
+  {
+    "id": "core-communityindexemptystate--user-id-query",
+    "locale": "ja",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [],
+    "lang": "ja"
+  },
+  {
+    "id": "core-communityindexemptystate--discovery",
+    "locale": "ja",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [],
+    "lang": "ja"
+  },
+  {
+    "id": "core-communityindexemptystate--retry-paused",
+    "locale": "ja",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [],
+    "lang": "ja"
+  },
+  {
+    "id": "core-communityindexemptystate--without-optional-actions",
+    "locale": "ja",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [],
+    "lang": "ja"
+  },
+  {
+    "id": "core-communityindexemptystate--explore-search",
+    "locale": "en",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [],
+    "lang": "en"
+  },
+  {
+    "id": "core-communityindexemptystate--topic-search",
+    "locale": "en",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [],
+    "lang": "en"
+  },
+  {
+    "id": "core-communityindexemptystate--private-channel-search",
+    "locale": "en",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [],
+    "lang": "en"
+  },
+  {
+    "id": "core-communityindexemptystate--user-id-query",
+    "locale": "en",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [],
+    "lang": "en"
+  },
+  {
+    "id": "core-communityindexemptystate--discovery",
+    "locale": "en",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [],
+    "lang": "en"
+  },
+  {
+    "id": "core-communityindexemptystate--retry-paused",
+    "locale": "en",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [],
+    "lang": "en"
+  },
+  {
+    "id": "core-communityindexemptystate--without-optional-actions",
+    "locale": "en",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [],
+    "lang": "en"
+  },
+  {
+    "id": "core-communityindexemptystate--explore-search",
+    "locale": "en",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [],
+    "lang": "en"
+  },
+  {
+    "id": "core-communityindexemptystate--topic-search",
+    "locale": "en",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [],
+    "lang": "en"
+  },
+  {
+    "id": "core-communityindexemptystate--private-channel-search",
+    "locale": "en",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [],
+    "lang": "en"
+  },
+  {
+    "id": "core-communityindexemptystate--user-id-query",
+    "locale": "en",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [],
+    "lang": "en"
+  },
+  {
+    "id": "core-communityindexemptystate--discovery",
+    "locale": "en",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [],
+    "lang": "en"
+  },
+  {
+    "id": "core-communityindexemptystate--retry-paused",
+    "locale": "en",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [],
+    "lang": "en"
+  },
+  {
+    "id": "core-communityindexemptystate--without-optional-actions",
+    "locale": "en",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [],
+    "lang": "en"
+  },
+  {
+    "id": "core-communityindexemptystate--explore-search",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [],
+    "lang": "zh-CN"
+  },
+  {
+    "id": "core-communityindexemptystate--topic-search",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [],
+    "lang": "zh-CN"
+  },
+  {
+    "id": "core-communityindexemptystate--private-channel-search",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [],
+    "lang": "zh-CN"
+  },
+  {
+    "id": "core-communityindexemptystate--user-id-query",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [],
+    "lang": "zh-CN"
+  },
+  {
+    "id": "core-communityindexemptystate--discovery",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [],
+    "lang": "zh-CN"
+  },
+  {
+    "id": "core-communityindexemptystate--retry-paused",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [],
+    "lang": "zh-CN"
+  },
+  {
+    "id": "core-communityindexemptystate--without-optional-actions",
+    "locale": "zh-CN",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [],
+    "lang": "zh-CN"
+  },
+  {
+    "id": "core-communityindexemptystate--explore-search",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [],
+    "lang": "zh-CN"
+  },
+  {
+    "id": "core-communityindexemptystate--topic-search",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [],
+    "lang": "zh-CN"
+  },
+  {
+    "id": "core-communityindexemptystate--private-channel-search",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [],
+    "lang": "zh-CN"
+  },
+  {
+    "id": "core-communityindexemptystate--user-id-query",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [],
+    "lang": "zh-CN"
+  },
+  {
+    "id": "core-communityindexemptystate--discovery",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [],
+    "lang": "zh-CN"
+  },
+  {
+    "id": "core-communityindexemptystate--retry-paused",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [],
+    "lang": "zh-CN"
+  },
+  {
+    "id": "core-communityindexemptystate--without-optional-actions",
+    "locale": "zh-CN",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [],
+    "lang": "zh-CN"
+  }
+]

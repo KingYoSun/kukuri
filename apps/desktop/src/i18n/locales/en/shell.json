@@ -356,6 +356,29 @@
     "contentResolving": "Checking the post before showing its content…",
     "contentUnavailable": "Post content is unavailable because its safety labels could not be verified.",
     "empty": "No matching posts found.",
+    "emptyState": {
+      "scope": {
+        "topic": "Searched: posts indexed for this topic",
+        "channel": "Searched: posts indexed for this private channel",
+        "explore": "Searched: all public topics indexed by this node"
+      },
+      "matchesPostText": "Matches: the text of indexed posts. User names and user IDs do not match unless they appear in a post.",
+      "reasonsHeading": "Why there may be no results",
+      "reasons": {
+        "notIndexedYet": "The posts may not be in this node’s index yet. The app cannot check indexing progress, so wait a while and search again.",
+        "outsideNodeScope": "The topic may not be one this node indexes. Only posts approved by the node operator and passed safety checks are indexed.",
+        "pubkeyQuery": "A user ID is not matched by search. You can open the user directly."
+      },
+      "exploreRequestHint": "To ask this node to index a public topic you joined, use “Request indexing” in the topic list.",
+      "actions": {
+        "openAuthor": "Open this user",
+        "retrySearch": "Search again",
+        "retry": "Try again",
+        "openTimeline": "Open timeline",
+        "requestIndexing": "Request indexing",
+        "openConnectivity": "Open connection diagnostics"
+      }
+    },
     "results": "Community Index results",
     "noEligibleNode": "No authenticated and consented Community Node currently advertises an available Community Index.",
     "allJoinedDisabled": "Search one public topic or private channel at a time. All joined scopes are not sent to a node.",

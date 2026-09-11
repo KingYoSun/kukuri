@@ -125,3 +125,52 @@ test('Explore header selects named eligible nodes, clears stale results, and ret
     );
   });
 });
+
+test('an empty Explore search explains the index scope and its actions reach existing surfaces without mutations', async () => {
+  const user = userEvent.setup();
+  const api = createDesktopMockApi();
+  await api.setCommunityNodeConfig([{ base_url: NODE_A }]);
+  await api.authenticateCommunityNode(NODE_A);
+  await api.acceptCommunityNodeConsents(
+    NODE_A,
+    [
+      { policy_slug: 'terms_of_service', policy_version: 1 },
+      { policy_slug: 'privacy_policy', policy_version: 1 },
+    ],
+    'en'
+  );
+  vi.spyOn(api, 'fetchCommunityNodeManifest').mockImplementation(async (baseUrl) => ({
+    status: 'ok',
+    manifest: manifestFor(baseUrl, 'Alpha Index'),
+  }));
+  const search = vi.spyOn(api, 'searchCommunityNodeIndex').mockResolvedValue({ entries: [] });
+  const mutations = [
+    vi.spyOn(api, 'submitCommunityNodeIndexingRequest'),
+    vi.spyOn(api, 'acceptCommunityNodeConsents'),
+    vi.spyOn(api, 'authenticateCommunityNode'),
+    vi.spyOn(api, 'setCommunityNodeConfig'),
+  ];
+
+  renderAtHash('#/explore?topic=kukuri%3Atopic%3Ageneral', api);
+  const explore = await screen.findByRole('region', { name: /^Explore Column,/ });
+  await user.type(await within(explore).findByLabelText('Search query'), 'CliPeerA');
+  await user.click(within(explore).getByRole('button', { name: 'Show results' }));
+  const empty = await within(explore).findByRole('status', { name: 'No matching posts found.' });
+  expect(search).toHaveBeenCalledWith(expect.objectContaining({ base_url: NODE_A, query: 'CliPeerA', scope_kind: null }));
+  expect(within(empty).getByText(`Search provider: ${NODE_A}`)).toBeInTheDocument();
+  expect(within(empty).getByText('Searched: all public topics indexed by this node')).toBeInTheDocument();
+  expect(within(empty).queryByRole('button', { name: 'Request indexing' })).not.toBeInTheDocument();
+
+  await user.click(within(empty).getByRole('button', { name: 'Open connection diagnostics' }));
+  const drawer = await screen.findByRole('dialog', { name: 'Settings' });
+  expect(within(drawer).getByTestId('settings-section-connectivity')).toHaveAttribute('aria-current', 'location');
+  expect(window.location.hash).toContain('settings=connectivity');
+  await user.keyboard('{Escape}');
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Settings' })).not.toBeInTheDocument());
+  expect(within(explore).getByRole('status', { name: 'No matching posts found.' })).toBeInTheDocument();
+  expect(within(explore).getByLabelText('Search query')).toHaveValue('CliPeerA');
+
+  await user.click(within(empty).getByRole('button', { name: 'Open timeline' }));
+  await waitFor(() => expect(window.location.hash).toMatch(/^#\/timeline/));
+  for (const mutation of mutations) expect(mutation).not.toHaveBeenCalled();
+});
