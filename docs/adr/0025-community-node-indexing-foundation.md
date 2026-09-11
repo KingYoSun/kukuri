@@ -7,6 +7,9 @@ Accepted
 実際の読み取り面は設定と、現在の構成・配布版・判定項目に結び付いた有効な準備完了記録の
 両方が揃った場合だけ公開する。
 
+**2026-09-11 改訂**: #975 で索引状況の read 面 `GET /v1/indexing/status`（自分の申請状態と
+対象の supported 判定）を追加した（§2.8）。多段ゲートと申請受付条件（#713）は変えない。
+
 ## Date
 2026-06-30
 
@@ -61,6 +64,9 @@ community node の `indexing`（`index` / `search` / `discovery` / `recommendati
   - `index_private_channel_request_authz_reuses_channel_permission`
   - `indexing_startup_requires_validated_relay`
   - `indexing_startup_fails_without_own_or_external_relay`
+  - `indexing_status_returns_own_requests_only`（#975）
+  - `indexing_status_private_target_requires_membership_proof`（#975）
+  - `indexing_status_reads_do_not_mutate_scope_state`（#975）
 - 必須 scenario:
   - operator が topic を supported set に追加 → その topic の post 本文が検索に出る / supported 外 topic の post は検索に出ない
   - 画像のみの投稿は、本文が無くても VLM 派生タグで検索でき、raw blob 自体は index されない
@@ -141,6 +147,52 @@ content が index に入る条件は次の AND とする:
 - **CN ベースのトピック横断検索（cross-topic search）は別画面**として用意する。supported topic set 全体を対象に、node の authority scope 内で横断検索する。
 - どちらの検索面も §2.2 の supported-topic scope と §2.5 の safety ゲートに従う（横断検索でも supported 外 topic / 非 `allow` content は出ない）。
 - **横断検索の対象は supported set のうち公開 scope（public topic）全体**（#711 で明確化）。非公開チャンネルの索引は §6.3 の閲覧境界（チャンネル参加者に閉じる）に従い、横断検索・発見・推薦には項目も識別子も出さない。非公開チャンネルの読み口は所属証明つきの範囲指定読みだけである。「supported set 全体」と「参加者に閉じる」は矛盾しない: 横断面は公開 scope の集合、非公開 scope は範囲指定面、と読み口を分ける。
+
+### 2.8 索引状況の read 面 — 自分の申請状態と対象の supported 判定（#975）
+
+利用者は申請（§2.2）の結果を申請時応答でしか知れず、対象が supported set に入っているかも
+読めなかった。#975 で認証・同意済み利用者向けの読取り面 `GET /v1/indexing/status` を追加し、
+「見つける」の空状態と申請 dialog が確定した状態と未確認を区別できるようにする。
+
+- **返すもの**: `requests` = 呼出し主（bearer identity）の申請だけ（`pending / approved / rejected`、
+  申請・判定時刻）。却下済みも含む。`target` = `scope_kind` + `scope_id` を指定した場合だけ、その
+  対象が supported set に含まれるか（`supported`）。`supported` は §2.6 の 1 段目（scope ゲート）
+  だけを表し、個々の投稿が検索に出るかは safety ゲートと sync の反映に依存するため、client は
+  これだけで「索引済み」とは断定しない。
+- **返さないもの**: 他利用者の申請、supported set 全体の一覧、非公開チャンネルの索引有無
+  （所属証明なし）。manifest には引き続き supported topic を載せない（§4）。
+- **門と順序**: 申請と同じ `require_indexing_gate`（索引参照が構成済み → 準備完了記録が有効 →
+  bearer → consent）。未構成・失効は認証より先に 404（`INDEXING_REQUEST_NOT_CONFIGURED` /
+  `INDEXING_REQUEST_NOT_ACTIVATED`。#713 と同じコードを再利用）。申請できないノードの申請状態は
+  語らない。
+- **非公開チャンネルの閲覧境界（#711 を read に適用）**: `target` が `private_channel` のときは
+  範囲指定読みと同じ所属証明ヘッダ（`x-kukuri-channel-secret`）を要求し、未提示・不一致・未登録・
+  鍵未設定を同一の 403 `CHANNEL_MEMBERSHIP_REQUIRED` で拒否する。自分の申請一覧（`target` 無指定）
+  は所属証明を要求しない。申請者自身が提出した対象識別子を本人へ返すだけで、非参加者に索引の
+  存在有無を漏らさない。
+- **読取り専用**: `supported_topics` / `indexing_requests` / `channel_secrets` を書き換えない。
+  承認は operator の CLI 判断のまま（§6.6）。
+- **client 側**: desktop-runtime は申請と同じ順序（session → 同意 → 秘密値 → token → HTTP）で
+  送り、非公開チャンネルの `supported` 判定だけが所属証明を伴う。所属証明の送信は申請 dialog の
+  明示確認後に限り、空状態からの自動取得は所属証明を伴わない（一覧と公開 topic のみ）。応答は
+  永続化せず、表示 state でだけ保持する（再取得で再構築できる transient な写し）。
+- contract: `indexing_status_returns_own_requests_only` /
+  `indexing_status_private_target_requires_membership_proof` /
+  `indexing_status_reads_do_not_mutate_scope_state`（`crates/cn-user-api/tests/indexing_requests.rs`、
+  `crates/desktop-runtime/src/tests/community_node/index_query.rs`）。
+
+#### Feature Data Classification（read 面）
+- Feature 名: community node indexing status read（自分の索引申請状態 + 対象の supported 判定）
+- Durable / Transient: Transient（client は保持しない。server 側は既存の `cn_index` scope state を読むだけ）
+- Canonical Source: `cn_index.indexing_requests` / `cn_index.supported_topics`（node-local な運用 state。既存）
+- Replicated?: No（node-local。他 node へ複製しない）
+- Rebuildable From: 同 endpoint の再取得
+- Public Replica / Private Replica / Local Only: node-local server state の本人向け読取り。非公開チャンネルの `supported` は所属証明つき
+- Gossip Hint 必要有無: No
+- Blob 必要有無: No
+- SQLite projection 必要有無: No（client は表示 state のみ）
+- 必須 contract: 上記 3 件
+- 必須 scenario: なし（contract test で固定。harness scenario への追加は Optional-hardening として対象外）
 
 ## 3. Consequences
 

@@ -59,8 +59,25 @@ test('public and private indexing requests expose status and require private dis
   let controlCenter = await openControlCenter(page);
   await controlCenter.getByRole('button', { name: 'Request indexing for general' }).click();
   let requestDialog = page.getByRole('dialog', { name: 'Request Community Node indexing' });
+  // #975: 公開トピックは開いた時点で索引状況を読み、確定した「対象外・申請なし」を示す。
+  await expect(
+    requestDialog.getByText('This target is not indexed by this Community Node and has no request.')
+  ).toBeVisible();
   await requestDialog.getByRole('button', { name: 'Submit request' }).click();
   await expect(requestDialog.getByText('The request is pending review.')).toBeVisible();
+  // 申請済みの対象は再申請できない(server は冪等で状態を変えない)。
+  await expect(
+    requestDialog.getByText('A request already exists for this target, so it cannot be submitted again.')
+  ).toBeVisible();
+  await expect(requestDialog.getByRole('button', { name: 'Submit request' })).toBeDisabled();
+  await requestDialog.getByRole('button', { name: 'Close', exact: true }).click();
+
+  // 再度開くと read API から同じ状態が復元される(client は保持しない)。
+  controlCenter = await openControlCenter(page);
+  await controlCenter.getByRole('button', { name: 'Request indexing for general' }).click();
+  requestDialog = page.getByRole('dialog', { name: 'Request Community Node indexing' });
+  await expect(requestDialog.getByText('The request is pending review.')).toBeVisible();
+  await expect(requestDialog.getByRole('button', { name: 'Submit request' })).toBeDisabled();
   await requestDialog.getByRole('button', { name: 'Close', exact: true }).click();
 
   controlCenter = await openControlCenter(page);
@@ -82,19 +99,25 @@ test('public and private indexing requests expose status and require private dis
     name: /I agree to disclose this channel's read capability/,
   });
   await expect(submit).toBeDisabled();
+  // #975: 非公開チャンネルは開いた時点では自分の申請一覧だけを読み、索引対象かは明示確認後の
+  // 「索引状況を確認」でだけ読む(所属証明の秘密値を無断で送らない)。
+  await expect(requestDialog.getByText('You have no request on this Community Node.')).toBeVisible();
+  const check = requestDialog.getByRole('button', { name: 'Check indexing status' });
+  await expect(check).toBeDisabled();
   await confirmation.check();
   await expect(submit).toBeEnabled();
   await submit.click();
   await expect(requestDialog.getByText('The request is pending review.')).toBeVisible();
   await expect(confirmation).not.toBeChecked();
   await expect(submit).toBeDisabled();
+  await expect(check).toHaveCount(0);
 
+  // 申請済みの対象は確認し直しても再申請できない。
   await confirmation.check();
-  await expect(submit).toBeEnabled();
-  await submit.click();
-  await expect(requestDialog.getByText('The request is pending review.')).toBeVisible();
-  await expect(confirmation).not.toBeChecked();
   await expect(submit).toBeDisabled();
+  await expect(
+    requestDialog.getByText('A request already exists for this target, so it cannot be submitted again.')
+  ).toBeVisible();
 });
 
 test('advanced Community Node settings persist manual and automatic index preferences', async ({

@@ -4,8 +4,14 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
 
+import { topicDisplayName } from '@/lib/topicId';
+
 import type { CommunityIndexingTarget } from './CommunityIndexingRequestDialog';
-import type { CommunityIndexEmptyAction, CommunityIndexEmptyGuidance } from './communityIndexEmptyGuidance';
+import type {
+  CommunityIndexEmptyAction,
+  CommunityIndexEmptyGuidance,
+  CommunityIndexEmptyIndexStatus,
+} from './communityIndexEmptyGuidance';
 
 type CommunityIndexEmptyStateProps = {
   guidance: CommunityIndexEmptyGuidance;
@@ -21,7 +27,8 @@ type CommunityIndexEmptyStateProps = {
 
 /**
  * 検索成功 0 件の空状態(#960)。何をどこで探したか、0 件の考えられる理由、次の行動を同じ場所に置く。
- * 表示と既存導線の呼出しだけを行い、送信・認証・同意・保存は起こさない。
+ * #975: 選択ノードでの索引状況(確定 / 取得中 / 未確認)を区別して示す。取得は workspace が行い、
+ * この component は表示と既存導線の呼出しだけを行う。送信・認証・同意・保存は起こさない。
  */
 export function CommunityIndexEmptyState({
   guidance,
@@ -36,6 +43,44 @@ export function CommunityIndexEmptyState({
 }: CommunityIndexEmptyStateProps) {
   const { t } = useTranslation(['shell']);
   const titleId = useId();
+
+  const renderIndexStatus = (status: CommunityIndexEmptyIndexStatus) => {
+    const targetNoun = t(`shell:communityIndex.emptyState.indexStatus.targetNoun.${guidance.scope === 'channel' ? 'channel' : 'topic'}`);
+    switch (status.kind) {
+      case 'loading':
+        return <p className='text-sm'>{t('shell:communityIndex.emptyState.indexStatus.loading')}</p>;
+      case 'unknown':
+        return <p className='text-sm'>{t('shell:communityIndex.emptyState.indexStatus.unknown')}</p>;
+      case 'privateUnverified':
+        return <p className='text-sm'>{t('shell:communityIndex.emptyState.indexStatus.privateUnverified')}</p>;
+      case 'target':
+        return (
+          <p className='text-sm font-medium' data-testid='community-index-empty-index-status'>
+            {t(`shell:communityIndex.emptyState.indexStatus.target.${status.state}`, { target: targetNoun })}
+          </p>
+        );
+      case 'ownRequests': {
+        const groups = (['approved', 'pending', 'rejected'] as const).filter((group) => status[group].length > 0);
+        return (
+          <div className='space-y-1 text-sm' data-testid='community-index-empty-index-status'>
+            {groups.length === 0 ? (
+              <p>{t('shell:communityIndex.emptyState.indexStatus.ownRequests.none')}</p>
+            ) : (
+              groups.map((group) => (
+                <p key={group}>
+                  {t(`shell:communityIndex.emptyState.indexStatus.ownRequests.${group}`, {
+                    targets: status[group].map((target) => topicDisplayName(target)).join(', '),
+                  })}
+                </p>
+              ))
+            )}
+          </div>
+        );
+      }
+      default:
+        return null;
+    }
+  };
 
   const renderAction = (action: CommunityIndexEmptyAction) => {
     switch (action) {
@@ -105,6 +150,7 @@ export function CommunityIndexEmptyState({
         {guidance.explainsPostTextMatching ? (
           <p className='text-sm'>{t('shell:communityIndex.emptyState.matchesPostText')}</p>
         ) : null}
+        {guidance.indexStatus ? renderIndexStatus(guidance.indexStatus) : null}
         <p className='text-sm font-medium'>{t('shell:communityIndex.emptyState.reasonsHeading')}</p>
         <ul className='list-disc space-y-1 pl-5 text-sm'>
           {guidance.reasons.map((reason) => (

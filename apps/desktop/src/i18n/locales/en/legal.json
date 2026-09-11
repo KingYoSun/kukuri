@@ -187,7 +187,7 @@
           "heading": "Connectivity and Community Nodes",
           "paragraphs": [
             "Public keys, endpoint identifiers, IP addresses, and connection metadata can be observed by the Mainline DHT, peers, configured Community Nodes, iroh relays, and network providers. Routes are selected in the order Direct P2P, Relay Supported P2P, and Relay Fallback.",
-            "Depending on the capabilities you accept, a Community Node may receive authentication proofs, endpoint data, topic rendezvous keys, search queries, indexing requests, and report or feedback fields. A Node operator is not necessarily the kukuri operator; use the Node manifest to review its retention and external-transmission documents."
+            "Depending on the capabilities you accept, a Community Node may receive authentication proofs, endpoint data, topic rendezvous keys, search queries, indexing requests, indexing status checks (the state of your own requests and whether a target is indexed), and report or feedback fields. A Node operator is not necessarily the kukuri operator; use the Node manifest to review its retention and external-transmission documents."
           ]
         },
         {

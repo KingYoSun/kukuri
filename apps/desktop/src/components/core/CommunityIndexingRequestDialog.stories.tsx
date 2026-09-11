@@ -26,6 +26,19 @@ type Story = StoryObj<typeof meta>;
 
 export const PrivateChannelConfirmation: Story = {};
 
+// #975: 公開トピックは開いた時点で索引状況(自分の申請と索引対象か)を読む。mock は demo topic を索引対象にする。
+export const PublicTopicIndexed: Story = {
+  args: {
+    target: { kind: 'public_topic', topicId: 'kukuri:topic:demo' },
+  },
+};
+
+export const PublicTopicNotIndexed: Story = {
+  args: {
+    target: { kind: 'public_topic', topicId: 'kukuri:topic:rust' },
+  },
+};
+
 export const NoEligibleNode: Story = {
   args: {
     target: { kind: 'public_topic', topicId: 'kukuri:topic:demo' },

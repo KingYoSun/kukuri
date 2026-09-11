@@ -93,6 +93,91 @@ export const Discovery: Story = {
   },
 };
 
+// #975: 索引状況が確定した空状態。理由が断定文になり、申請済み・索引対象では申請 CTA が消える。
+export const TopicNotIndexed: Story = {
+  args: {
+    guidance: communityIndexEmptyGuidance({
+      mode: 'topic',
+      operation: 'search',
+      query: 'CliPeerA',
+      activeTopic: 'kukuri:topic:general',
+      activeTimelineScope: { kind: 'public' },
+      canRequestIndexing: true,
+      indexStatus: {
+        kind: 'known',
+        response: {
+          requests: [],
+          target: { scope_kind: 'public_topic', scope_id: 'kukuri:topic:general', supported: false },
+        },
+      },
+    }),
+  },
+};
+
+export const TopicRequestPending: Story = {
+  args: {
+    guidance: communityIndexEmptyGuidance({
+      mode: 'topic',
+      operation: 'search',
+      query: 'CliPeerA',
+      activeTopic: 'kukuri:topic:general',
+      activeTimelineScope: { kind: 'public' },
+      canRequestIndexing: true,
+      indexStatus: {
+        kind: 'known',
+        response: {
+          requests: [{
+            request_id: 'request-1',
+            scope_kind: 'public_topic',
+            target_id: 'kukuri:topic:general',
+            status: 'pending',
+            created_at: 1_757_500_000_000,
+            decided_at: null,
+          }],
+          target: { scope_kind: 'public_topic', scope_id: 'kukuri:topic:general', supported: false },
+        },
+      },
+    }),
+  },
+};
+
+export const ExploreOwnRequests: Story = {
+  args: {
+    guidance: communityIndexEmptyGuidance({
+      mode: 'explore',
+      operation: 'search',
+      query: 'CliPeerA',
+      activeTopic: 'kukuri:topic:general',
+      activeTimelineScope: { kind: 'public' },
+      canRequestIndexing: true,
+      indexStatus: {
+        kind: 'known',
+        response: {
+          requests: [
+            { request_id: 'r1', scope_kind: 'public_topic', target_id: 'kukuri:topic:rust', status: 'approved', created_at: 1, decided_at: 2 },
+            { request_id: 'r2', scope_kind: 'public_topic', target_id: 'kukuri:topic:golang', status: 'pending', created_at: 3, decided_at: null },
+          ],
+          target: null,
+        },
+      },
+    }),
+  },
+};
+
+export const StatusUnavailable: Story = {
+  args: {
+    guidance: communityIndexEmptyGuidance({
+      mode: 'topic',
+      operation: 'search',
+      query: 'CliPeerA',
+      activeTopic: 'kukuri:topic:general',
+      activeTimelineScope: { kind: 'public' },
+      canRequestIndexing: true,
+      indexStatus: { kind: 'unknown' },
+    }),
+  },
+};
+
 export const RetryPaused: Story = {
   args: { retryDisabled: true },
 };

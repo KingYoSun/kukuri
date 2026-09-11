@@ -33,7 +33,10 @@ import { useCommunityNodeConsentFlow, type AcceptCommunityNodeConsents } from '@
 import { CommunityIndexAvailabilityNotice } from './CommunityIndexAvailabilityNotice';
 import { CommunityIndexEmptyState } from './CommunityIndexEmptyState';
 import type { CommunityIndexingTarget } from './CommunityIndexingRequestDialog';
-import { communityIndexEmptyGuidance } from './communityIndexEmptyGuidance';
+import {
+  type CommunityIndexEmptyIndexStatusInput,
+  communityIndexEmptyGuidance,
+} from './communityIndexEmptyGuidance';
 import { communityIndexPostCardView } from './communityIndexPostCardView';
 import { PostCard } from './PostCard';
 
@@ -292,6 +295,12 @@ export function CommunityIndexWorkspace({
   const [queryClock, setQueryClock] = useState(() => Date.now());
   const [resolvedPostState, setResolvedPostState] = useState<ResolvedPostState | null>(null);
   const [resolvedAuthorState, setResolvedAuthorState] = useState<ResolvedAuthorState | null>(null);
+  // #975: 空状態の説明用に読む索引状況。結果 object ごとに取り直し、永続化しない。
+  const [emptyIndexStatus, setEmptyIndexStatus] = useState<{
+    result: IndexResultState;
+    state: CommunityIndexEmptyIndexStatusInput;
+  } | null>(null);
+  const emptyStatusSequence = useRef(0);
   const requestSequence = useRef(0);
   const detailSequence = useRef(0);
   const authorSequence = useRef(0);
@@ -403,6 +412,37 @@ export function CommunityIndexWorkspace({
     currentContextKeyRef.current = currentContextKey;
     invalidateResults();
   }, [currentContextKey, invalidateResults]);
+
+  useEffect(() => {
+    const isEmptyResult =
+      status === 'success' && visibleResult !== null && visibleResult.entries.length === 0;
+    if (!isEmptyResult || typeof api.readCommunityNodeIndexingStatus !== 'function') return;
+    const result = visibleResult;
+    const sequence = ++emptyStatusSequence.current;
+    // 検索したのと同じノードへ、認証済みの read を 1 回だけ送る。公開 topic の範囲指定は対象付きで
+    // 読み、横断・非公開チャンネルは自分の申請一覧だけを読む(所属証明の秘密値は送らない。INVAR-3)。
+    const publicTopic =
+      result.context.scopeKind === 'public_topic' && result.context.scopeId
+        ? result.context.scopeId
+        : null;
+    setEmptyIndexStatus({ result, state: { kind: 'loading' } });
+    api
+      .readCommunityNodeIndexingStatus({
+        base_url: result.context.nodeBaseUrl,
+        scope_kind: publicTopic ? 'public_topic' : null,
+        topic_id: publicTopic,
+        channel_id: null,
+        confirm_private_channel_secret_disclosure: false,
+      })
+      .then((response) => {
+        if (sequence !== emptyStatusSequence.current) return;
+        setEmptyIndexStatus({ result, state: { kind: 'known', response } });
+      })
+      .catch(() => {
+        if (sequence !== emptyStatusSequence.current) return;
+        setEmptyIndexStatus({ result, state: { kind: 'unknown' } });
+      });
+  }, [api, status, visibleResult]);
 
   useEffect(() => {
     if (!visibleResult) {
@@ -763,6 +803,7 @@ export function CommunityIndexWorkspace({
             activeTimelineScope,
             activeChannelLabel,
             canRequestIndexing: typeof onRequestIndexing === 'function',
+            indexStatus: emptyIndexStatus?.result === visibleResult ? emptyIndexStatus.state : null,
           })}
           nodeBaseUrl={visibleResult.context.nodeBaseUrl}
           retryDisabled={queryRetrySeconds > 0}
