@@ -3,6 +3,7 @@ mod config;
 mod connectivity;
 mod dome_hosting;
 mod index_query;
+mod indexing_status;
 mod metadata;
 mod report_submission;
 mod scheduler;

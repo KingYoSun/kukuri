@@ -1,7 +1,9 @@
 use super::*;
 
 use chrono::Utc;
-use kukuri_cn_protocol::CommunityNodePoliciesResponse;
+use kukuri_cn_protocol::{CommunityNodePoliciesResponse, IndexingStatusResponse};
+
+use crate::community_node::CommunityNodeIndexingStatusRequest;
 
 impl DesktopRuntime {
     pub async fn read_community_node_trust_user(
@@ -58,6 +60,15 @@ impl DesktopRuntime {
         request: CommunityNodeIndexingRequest,
     ) -> std::result::Result<SubmitIndexingRequestResponse, CommunityNodeIndexingRequestError> {
         self.request_community_node_indexing(request).await
+    }
+
+    /// 自分の索引申請の状態と、任意の対象の supported 判定を読む(#975)。読取り専用で、
+    /// 応答を永続化しない。
+    pub async fn read_community_node_indexing_status(
+        &self,
+        request: CommunityNodeIndexingStatusRequest,
+    ) -> std::result::Result<IndexingStatusResponse, CommunityNodeIndexingRequestError> {
+        self.fetch_community_node_indexing_status(request).await
     }
 
     pub async fn submit_community_node_tester_feedback(

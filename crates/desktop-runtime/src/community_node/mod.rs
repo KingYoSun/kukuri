@@ -33,6 +33,7 @@ mod dome_hosting_support;
 mod http_client_support;
 mod index_query_support;
 mod indexing_request_support;
+mod indexing_status_support;
 mod invite_storage_support;
 mod manifest_support;
 mod reconnect_support;
@@ -62,12 +63,14 @@ pub use index_query_support::{CommunityNodeIndexQueryError, CommunityNodeIndexQu
 pub use indexing_request_support::{
     CommunityNodeIndexingRequest, CommunityNodeIndexingRequestError,
 };
+pub use indexing_status_support::CommunityNodeIndexingStatusRequest;
 pub(crate) use invite_storage_support::*;
 pub use kukuri_cn_protocol::{
     CommunityNodePoliciesResponse, CommunityNodePolicyDocument, CommunityNodeReportAppeal,
     CommunityNodeTesterFeedbackResponse, IndexEntryView, IndexQueryResponse, IndexScopeKind,
-    RelationNeighborsResponse, RelationOptoutResponse, RelationReadResponse,
-    SubmitIndexingRequestResponse, TrustUserReadResponse,
+    IndexingRequestView, IndexingStatusResponse, IndexingTargetStatus, RelationNeighborsResponse,
+    RelationOptoutResponse, RelationReadResponse, SubmitIndexingRequestResponse,
+    TrustUserReadResponse,
 };
 pub use manifest_support::{
     CommunityNodeAuthorityScope, CommunityNodeCapabilityScope, CommunityNodeLegalDocument,

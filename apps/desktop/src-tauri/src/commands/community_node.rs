@@ -1,6 +1,7 @@
 use kukuri_desktop_runtime::{
     AcceptCommunityNodeConsentsRequest, CommunityNodeConfig, CommunityNodeIndexQueryRequest,
-    CommunityNodeIndexingRequest, CommunityNodeManifestFetch, CommunityNodeNodeStatus,
+    CommunityNodeIndexingRequest, CommunityNodeIndexingStatusRequest, CommunityNodeManifestFetch,
+    CommunityNodeNodeStatus,
     CommunityNodeRelationNeighborsRequest, CommunityNodeTargetRequest,
     CommunityNodeTesterFeedbackResponse, CommunityNodeTesterFeedbackSubmission,
     CommunityNodeUserAdvisoryRequest, CreatePrivateChannelRequest, DiscoveryConfig,
@@ -9,7 +10,7 @@ use kukuri_desktop_runtime::{
     FreezePrivateChannelRequest,
     ImportChannelAccessTokenRequest, ImportFriendOnlyGrantRequest, ImportFriendPlusShareRequest,
     ImportPeerTicketRequest, ImportPrivateChannelInviteRequest, IndexQueryResponse,
-    LeavePrivateChannelRequest, ListJoinedPrivateChannelsRequest, PreviewChannelAccessTokenRequest,
+    IndexingStatusResponse, LeavePrivateChannelRequest, ListJoinedPrivateChannelsRequest, PreviewChannelAccessTokenRequest,
     RelationNeighborsResponse, RelationOptoutResponse, RelationReadResponse,
     RotatePrivateChannelRequest, SetChannelGossipEnabledRequest, SetCommunityNodeConfigRequest,
     SetCommunityNodeInviteCodeRequest, SetDiscoverySeedsRequest, SetPrivateChannelEntryDomeRequest,
@@ -465,6 +466,18 @@ pub async fn submit_community_node_indexing_request(
     state
         .runtime()
         .submit_community_node_indexing_request(request)
+        .await
+        .map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub async fn read_community_node_indexing_status(
+    state: tauri::State<'_, DesktopState>,
+    request: CommunityNodeIndexingStatusRequest,
+) -> Result<IndexingStatusResponse, CommandError> {
+    state
+        .runtime()
+        .read_community_node_indexing_status(request)
         .await
         .map_err(CommandError::from)
 }

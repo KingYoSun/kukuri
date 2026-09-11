@@ -7,6 +7,7 @@ import type {
   ChannelAccessTokenPreview,
   CommunityNodeConfig,
   CommunityNodeIndexingRequest,
+  CommunityNodeIndexingStatusRequest,
   CommunityNodeIndexQueryRequest,
   CommunityIndexPostResolveResponse,
   CommunityNodeManifestFetch,
@@ -36,6 +37,7 @@ import type {
   GameRoomView,
   JoinedPrivateChannelView,
   IndexQueryResponse,
+  IndexingStatusResponse,
   RelationNeighborsResponse,
   RelationOptoutResponse,
   RelationReadResponse,
@@ -949,6 +951,10 @@ export const runtimeApi: DesktopApi = {
       );
     }
   ),
+  readCommunityNodeIndexingStatus: command('readCommunityNodeIndexingStatus', (request) =>
+    invokeDesktop<IndexingStatusResponse>('read_community_node_indexing_status', {
+      request: request satisfies CommunityNodeIndexingStatusRequest,
+    })),
   submitCommunityNodeReport: command('submitCommunityNodeReport', async (request) => {
     return invokeDesktop<SubmitCommunityNodeReportResult>('submit_community_node_report', {
       request,

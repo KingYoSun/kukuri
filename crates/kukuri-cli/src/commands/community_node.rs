@@ -6,11 +6,11 @@ use crate::{
 use async_trait::async_trait;
 use kukuri_desktop_runtime::{
     AcceptCommunityNodeConsentsRequest, CommunityNodeIndexQueryRequest,
-    CommunityNodeIndexingRequest, CommunityNodeNodeStatus, CommunityNodeRelationNeighborsRequest,
-    CommunityNodeTargetRequest, CommunityNodeTesterFeedbackSubmission,
-    CommunityNodeUserAdvisoryRequest, FetchCommunityNodePoliciesRequest,
-    SetCommunityNodeConfigRequest, SetCommunityNodeInviteCodeRequest,
-    SubmitCommunityNodeReportRequest,
+    CommunityNodeIndexingRequest, CommunityNodeIndexingStatusRequest, CommunityNodeNodeStatus,
+    CommunityNodeRelationNeighborsRequest, CommunityNodeTargetRequest,
+    CommunityNodeTesterFeedbackSubmission, CommunityNodeUserAdvisoryRequest,
+    FetchCommunityNodePoliciesRequest, SetCommunityNodeConfigRequest,
+    SetCommunityNodeInviteCodeRequest, SubmitCommunityNodeReportRequest,
 };
 use serde_json::Value;
 use std::sync::Arc;
@@ -126,6 +126,14 @@ impl CommandHandler for Handler {
                     .submit_community_node_indexing_request(decode::<CommunityNodeIndexingRequest>(
                         payload,
                     )?)
+                    .await
+                    .map_err(|error| command_error(error.into()))?,
+            ),
+            "read_community_node_indexing_status" => encode(
+                runtime
+                    .read_community_node_indexing_status(decode::<
+                        CommunityNodeIndexingStatusRequest,
+                    >(payload)?)
                     .await
                     .map_err(|error| command_error(error.into()))?,
             ),
@@ -255,6 +263,7 @@ pub(super) fn registrations() -> Vec<CommandRegistration> {
         ("submit_community_node_report", Write, false),
         ("submit_community_node_tester_feedback", Write, false),
         ("submit_community_node_indexing_request", Write, false),
+        ("read_community_node_indexing_status", Read, false),
         ("search_community_node_index", Read, false),
         ("discover_community_node_index", Read, false),
         ("recommend_community_node_index", Read, false),

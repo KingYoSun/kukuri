@@ -67,6 +67,10 @@ pub(super) fn input(name: &str) -> Value {
             json!({"base_url": string(), "scope_kind": scope(), "topic_id": string(), "channel_id": nullable(string()), "confirm_private_channel_secret_disclosure": boolean()}),
             &["base_url", "scope_kind", "topic_id"],
         ),
+        "read_community_node_indexing_status" => object(
+            json!({"base_url": string(), "scope_kind": {"enum": ["public_topic", "private_channel", null]}, "topic_id": nullable(string()), "channel_id": nullable(string()), "confirm_private_channel_secret_disclosure": boolean()}),
+            &["base_url"],
+        ),
         "search_community_node_index"
         | "discover_community_node_index"
         | "recommend_community_node_index" => object(
@@ -129,6 +133,13 @@ pub(super) fn output(name: &str) -> Value {
         "submit_community_node_tester_feedback" => object(json!({"reference_id": string()}), &[]),
         "submit_community_node_indexing_request" => view(
             json!({"request_id": string(), "status": {"enum": ["pending", "approved", "rejected"]}}),
+            &[],
+        ),
+        "read_community_node_indexing_status" => view(
+            json!({
+                "requests": array(view(json!({"request_id": string(), "scope_kind": scope(), "target_id": string(), "status": {"enum": ["pending", "approved", "rejected"]}, "created_at": integer(), "decided_at": nullable(integer())}), &[])),
+                "target": nullable(view(json!({"scope_kind": scope(), "scope_id": string(), "supported": boolean()}), &[]))
+            }),
             &[],
         ),
         "search_community_node_index"

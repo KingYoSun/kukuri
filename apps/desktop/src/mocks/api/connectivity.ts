@@ -3,6 +3,8 @@ import {
   type CommunityNodeIndexQueryRequest,
   type DesktopApi,
   type IndexQueryResponse,
+  type IndexingRequestView,
+  type IndexingStatusResponse,
   type SubmitIndexingRequestResponse,
 } from '@/lib/api';
 
@@ -35,6 +37,7 @@ type ConnectivityMock = Pick<
   | 'discoverCommunityNodeIndex'
   | 'recommendCommunityNodeIndex'
   | 'submitCommunityNodeIndexingRequest'
+  | 'readCommunityNodeIndexingStatus'
   | 'submitCommunityNodeReport'
   | 'submitCommunityNodeTesterFeedback'
   | 'importPeerTicket'
@@ -86,6 +89,11 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
   }
 
   const relationOptoutNodes = new Set<string>();
+  // #975: node 別の索引申請簿。submit した申請を status 読取りが返す(mock 内 memory のみ)。
+  const indexingRequestsByNode = new Map<string, IndexingRequestView[]>();
+  // 索引対象は seed に依存せず固定する(Storybook の確認面用)。browser seed の general は対象外のままにし、
+  // 申請 → pending → 承認前の流れを既存 spec で保つ。
+  const supportedPublicTopics = new Set<string>(['kukuri:topic:demo']);
 
   return {
     async getSyncStatus() {
@@ -380,10 +388,49 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
       return queryIndex(request);
     },
     async submitCommunityNodeIndexingRequest(request) {
-      return {
-        request_id: `mock-indexing-${request.scope_kind}-${request.channel_id ?? request.topic_id}`,
+      const targetId = request.channel_id ?? request.topic_id;
+      const requests = indexingRequestsByNode.get(request.base_url) ?? [];
+      const existing = requests.find(
+        (entry) => entry.scope_kind === request.scope_kind && entry.target_id === targetId
+      );
+      if (existing) {
+        return { request_id: existing.request_id, status: existing.status };
+      }
+      const created: IndexingRequestView = {
+        request_id: `mock-indexing-${request.scope_kind}-${targetId}`,
+        scope_kind: request.scope_kind,
+        target_id: targetId,
         status: 'pending',
+        created_at: Date.now(),
+        decided_at: null,
+      };
+      indexingRequestsByNode.set(request.base_url, [created, ...requests]);
+      return {
+        request_id: created.request_id,
+        status: created.status,
       } satisfies SubmitIndexingRequestResponse;
+    },
+    async readCommunityNodeIndexingStatus(request) {
+      const requests = indexingRequestsByNode.get(request.base_url) ?? [];
+      if (!request.scope_kind) {
+        return { requests, target: null } satisfies IndexingStatusResponse;
+      }
+      const scopeId =
+        request.scope_kind === 'private_channel' ? (request.channel_id ?? '') : (request.topic_id ?? '');
+      const supported =
+        request.scope_kind === 'public_topic'
+          ? supportedPublicTopics.has(scopeId) ||
+            requests.some(
+              (entry) =>
+                entry.scope_kind === 'public_topic' &&
+                entry.target_id === scopeId &&
+                entry.status === 'approved'
+            )
+          : false;
+      return {
+        requests,
+        target: { scope_kind: request.scope_kind, scope_id: scopeId, supported },
+      } satisfies IndexingStatusResponse;
     },
     async submitCommunityNodeReport(request) {
       return {

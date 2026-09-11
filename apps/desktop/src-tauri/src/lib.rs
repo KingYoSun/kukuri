@@ -463,6 +463,7 @@ pub fn run() {
             commands::community_node::submit_community_node_report,
             commands::community_node::submit_community_node_tester_feedback,
             commands::community_node::submit_community_node_indexing_request,
+            commands::community_node::read_community_node_indexing_status,
             commands::community_node::search_community_node_index,
             commands::community_node::discover_community_node_index,
             commands::community_node::recommend_community_node_index,
