@@ -11,6 +11,8 @@ jobs:
   generate-baseline:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    outputs:
+      changed: ${{ steps.changed.outputs.list }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -55,16 +57,14 @@ jobs:
         run: pnpm test:e2e:visual --update-snapshots
 
       # TEMPORARY (#964, branch-only, reverted before merge): the session driving PR #980
-      # cannot download artifacts, so print the regenerated baselines into the job log.
-      - name: Dump changed baselines as base64
-        if: always()
+      # cannot download artifacts, so list the changed baselines for the dump job below.
+      - name: List changed baselines
+        id: changed
         run: |
           cd apps/desktop/tests/playwright/__screenshots__/visual.spec.ts
-          for f in $(git status --porcelain . | awk '{print $2}' | xargs -n1 basename); do
-            echo "BEGIN_PNG $f"
-            base64 -w 76 "$f"
-            echo "END_PNG $f"
-          done
+          list=$(git status --porcelain . | awk '{print $2}' | xargs -n1 basename | jq -R . | jq -sc .)
+          echo "changed=$list"
+          echo "list=$list" >> "$GITHUB_OUTPUT"
 
       - name: Upload visual baseline
         if: always()
@@ -73,3 +73,27 @@ jobs:
           name: kukuri-desktop-visual-baseline
           path: apps/desktop/tests/playwright/__screenshots__/
           if-no-files-found: warn
+
+  # TEMPORARY (#964, branch-only, reverted before merge): one job per changed PNG so each
+  # job log stays small enough to read back and decode.
+  dump-baseline:
+    needs: generate-baseline
+    if: ${{ needs.generate-baseline.outputs.changed != '[]' && needs.generate-baseline.outputs.changed != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        file: ${{ fromJSON(needs.generate-baseline.outputs.changed) }}
+    steps:
+      - name: Download visual baseline
+        uses: actions/download-artifact@v4
+        with:
+          name: kukuri-desktop-visual-baseline
+          path: shots
+
+      - name: Dump ${{ matrix.file }} as base64
+        run: |
+          f="shots/visual.spec.ts/${{ matrix.file }}"
+          echo "BEGIN_PNG ${{ matrix.file }}"
+          base64 -w 76 "$f"
+          echo "END_PNG ${{ matrix.file }}"
