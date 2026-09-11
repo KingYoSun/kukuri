@@ -288,6 +288,7 @@ export async function openSettingsSection(
   user: ReturnType<typeof userEvent.setup>,
   section:
     | 'appearance'
+    | 'keyboard'
     | 'safety'
     | 'connectivity'
     | 'discovery'

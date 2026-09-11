@@ -652,6 +652,40 @@ describe('useDesktopShellActions', () => {
     });
   });
 
+  // #964: 本文も添付もない送信(Ctrl+Enter / ボタン)は無言で無視せず、理由を composer に表示する。
+  test('empty Column Draft submission shows a reason instead of silently returning', async () => {
+    const createPost = vi.fn(async () => 'never-created');
+    const target = {
+      columnId: 'timeline-empty',
+      action: 'post' as const,
+      scope: { topicId: 'topic-a', channelId: null },
+    };
+    const view = renderActionsHook({
+      api: { createPost },
+      preset: (current) => ({
+        columnDraftsByKey: setColumnDraft(current.columnDraftsByKey, target, (draft) => ({
+          ...draft,
+          content: '   ',
+          expanded: true,
+        })),
+      }),
+    });
+    const form = publishFormEvent();
+
+    await act(async () => {
+      await view.result.current.handleSubmitColumnDraft(target, form.event);
+    });
+
+    expect(form.preventDefault).toHaveBeenCalledTimes(1);
+    expect(createPost).not.toHaveBeenCalled();
+    expect(view.store.getState().columnDraftsByKey[columnDraftKey(target)]).toMatchObject({
+      content: '   ',
+      expanded: true,
+      pending: false,
+      error: 'common:composer.emptyDraft',
+    });
+  });
+
   test('quote repost expands the source topic public Column Draft and submits through createRepost', async () => {
     const createRepost = vi.fn(async () => 'repost-1');
     const source = buildPost({

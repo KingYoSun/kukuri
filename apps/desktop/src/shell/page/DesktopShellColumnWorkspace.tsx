@@ -74,6 +74,7 @@ type DesktopShellColumnWorkspaceProps = {
   onJoinLiveSession: (sessionId: string, topic: string) => Promise<void>;
   onLeaveLiveSession: (sessionId: string, topic: string) => Promise<void>;
   onOpenGameCreate: () => void;
+  onOpenKeyboardHelp: () => void;
   onOpenLiveCreate: () => void;
   renderConversationSurface: (column: ColumnState) => ReactNode;
   renderMessagesSurface: (column: ColumnState) => ReactNode;
@@ -104,6 +105,7 @@ export function DesktopShellColumnWorkspace({
   onJoinLiveSession,
   onLeaveLiveSession,
   onOpenGameCreate,
+  onOpenKeyboardHelp,
   onOpenLiveCreate,
   renderConversationSurface,
   renderMessagesSurface,
@@ -336,6 +338,7 @@ export function DesktopShellColumnWorkspace({
       locale,
       mentionCandidates,
       onActivate: () => activate(column.id, true),
+      onOpenKeyboardHelp,
       onAttachmentSelection: onColumnAttachmentSelection,
       onRemoveAttachment: onRemoveColumnAttachment,
       onSubmit: onSubmitColumnDraft,

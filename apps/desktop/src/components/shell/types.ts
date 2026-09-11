@@ -12,6 +12,7 @@ export type ProfileConnectionsView = 'following' | 'followed' | 'muted' | 'block
 export type SettingsSection =
   | 'about'
   | 'appearance'
+  | 'keyboard'
   | 'safety'
   | 'notifications'
   | 'connectivity'

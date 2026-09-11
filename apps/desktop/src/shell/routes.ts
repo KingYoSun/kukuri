@@ -81,6 +81,11 @@ export const SETTINGS_SECTION_COPY: Array<{
     description: 'Local light and dark theme selection.',
   },
   {
+    id: 'keyboard',
+    label: 'Keyboard',
+    description: 'Assigned keys and the screen or focus each one needs.',
+  },
+  {
     id: 'safety',
     label: 'Safety',
     description: 'Adult material display preference.',
@@ -141,6 +146,7 @@ export function isSettingsSection(value: string | null): value is SettingsSectio
   return (
     value === 'about' ||
     value === 'appearance' ||
+    value === 'keyboard' ||
     value === 'safety' ||
     value === 'notifications' ||
     value === 'connectivity' ||

@@ -14,6 +14,7 @@ import {
   Download,
   GitBranchPlus,
   Info,
+  Keyboard,
   Menu,
   MessageCircle,
   MessageSquarePlus,
@@ -516,6 +517,10 @@ export function DesktopShellControlCenter({
                       {t('shell:controlCenter.languageSettingsHint')}
                     </span>
                   </span>
+                </Button>
+                <Button variant='ghost' type='button' onClick={() => openSettings('keyboard')}>
+                  <Keyboard className='size-4' aria-hidden='true' />
+                  {t('shell:settingsSections.keyboard.label')}
                 </Button>
                 <Button variant='ghost' type='button' onClick={() => openSettings('about')}>
                   <Info className='size-4' aria-hidden='true' />

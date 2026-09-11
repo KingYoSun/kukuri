@@ -63,7 +63,8 @@ beforeEach(() => {
   window.history.replaceState(null, '', '/');
 });
 
-test('Escape inside the reply composer textarea keeps the thread selection', async () => {
+// #964: Escape は投稿作成だけを閉じ、thread selection と下書きは残る。focus は開始元へ戻る。
+test('Escape inside the reply composer textarea closes only the composer and keeps the thread selection', async () => {
   const user = userEvent.setup();
   renderShell();
   const threadColumn = await openSeedThread(user);
@@ -74,10 +75,17 @@ test('Escape inside the reply composer textarea keeps the thread selection', asy
   await user.type(replyInput, 'draft');
   await user.keyboard('{Escape}');
 
-  // thread selection は残り、Composer の入力も失われない。
+  // thread selection は残り、Composer は閉じ、focus は Reply の開始元ボタンへ戻る。
   expect(window.location.hash).toContain('context=thread');
   const survivingColumn = screen.getByRole('region', { name: /^Thread Column,/ });
+  expect(within(survivingColumn).queryByPlaceholderText('Write a reply')).not.toBeInTheDocument();
+  const replyAction = within(survivingColumn).getByRole('button', { name: /^Reply to / });
+  expect(replyAction).toHaveFocus();
+
+  // 下書きは失われず、再度開くと復元される。
+  await user.click(replyAction);
   expect(within(survivingColumn).getByPlaceholderText('Write a reply')).toHaveValue('draft');
+  expect(window.location.hash).toContain('context=thread');
 });
 
 test('Escape closes only the Radix dialog and keeps the thread selection', async () => {

@@ -67,7 +67,10 @@
     "writeQuoteRepost": "添加评论",
     "writeReply": "写一条回复",
     "adultLabel": "将此帖标记为成人内容(自我声明)",
-    "supportedFiles": "支持的文件"
+    "supportedFiles": "支持的文件",
+    "emptyDraft": "请先输入内容或附加文件，然后再发送。",
+    "keyboardHint": "Esc 关闭，Ctrl+Enter 发送。",
+    "keyboardHelp": "键盘操作"
   },
   "audience": {
     "allJoined": "全部已加入",

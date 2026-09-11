@@ -72,6 +72,22 @@ test('Enter and Shift+Enter keep inserting line breaks while Alt+Enter keeps its
   expect(onSubmit).not.toHaveBeenCalled();
 });
 
+// #964: 日本語入力の変換中に押した Ctrl+Enter は IME の確定であり、投稿を送信しない。
+test('Ctrl+Enter during IME composition does not submit', async () => {
+  const user = userEvent.setup();
+  const onSubmit = vi.fn<FormEventHandler<HTMLFormElement>>((event) => event.preventDefault());
+  render(<MentionHarness onSubmit={onSubmit} />);
+
+  const textarea = screen.getByRole('textbox');
+  await user.click(textarea);
+  await user.type(textarea, 'へんかんちゅう');
+  fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true, isComposing: true });
+
+  expect(onSubmit).not.toHaveBeenCalled();
+  await user.keyboard('{Control>}{Enter}{/Control}');
+  expect(onSubmit).toHaveBeenCalledTimes(1);
+});
+
 test('disabled submit blocks both Ctrl+Enter and the submit button', async () => {
   const user = userEvent.setup();
   const onSubmit = vi.fn<FormEventHandler<HTMLFormElement>>((event) => event.preventDefault());

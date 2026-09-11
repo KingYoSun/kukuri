@@ -35,6 +35,7 @@ function parseInitialSettingsSection(): {
   if (
     requestedSection !== 'about' &&
     requestedSection !== 'appearance' &&
+    requestedSection !== 'keyboard' &&
     requestedSection !== 'safety' &&
     requestedSection !== 'notifications' &&
     requestedSection !== 'connectivity' &&

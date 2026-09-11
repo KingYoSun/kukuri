@@ -292,7 +292,7 @@ WCAG 2.2 AAを基準とする。自動検査の満点だけを適合の証明に
 | dark | `--destructive` | `#ffb48a` |
 | dark | `--warning` | `#e6b066` |
 | dark | `--danger` | `#ffb48a` |
-| dark | `--ring` | `rgba(0, 179, 164, 0.45)` |
+| dark | `--ring` | `rgba(0, 179, 164, 0.8)` |
 | dark | `--shadow-panel` | `0 18px 60px rgba(2, 7, 15, 0.22)` |
 | dark | `--shadow-dropdown` | `0 12px 32px rgba(2, 7, 15, 0.12)` |
 | dark | `--shadow-button-primary` | `0 10px 28px rgba(245, 157, 98, 0.16)` |

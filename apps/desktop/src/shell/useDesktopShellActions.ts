@@ -613,7 +613,16 @@ export function useDesktopShellActions({
     const trimmedContent = draft.content.trim();
     const draftMediaSnapshot = cloneDraftMediaItems(draft.mediaItems);
     const attachments = draftMediaSnapshot.flatMap((item) => item.attachments);
-    if (!draft.repostTarget && !trimmedContent && attachments.length === 0) return;
+    // #964: 空の下書きは無言で無視せず、送信できない理由を composer に表示する。
+    if (!draft.repostTarget && !trimmedContent && attachments.length === 0) {
+      setColumnDraftsByKey((current) =>
+        setColumnDraft(current, target, (currentDraft) => ({
+          ...currentDraft,
+          error: translate('common:composer.emptyDraft'),
+        }))
+      );
+      return;
+    }
     setColumnDraftsByKey((current) =>
       setColumnDraft(current, target, (currentDraft) => ({
         ...currentDraft,
