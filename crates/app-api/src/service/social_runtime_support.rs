@@ -95,6 +95,32 @@ impl AppService {
             .collect())
     }
 
+    /// #961: content surface から隠す author の集合。ミュート(端末内)に加え、どちらの向きでも
+    /// Active な署名済み block edge を持つ相手を含める。取得・保存は禁止せず表示だけを隠す。
+    pub(crate) async fn current_hidden_author_pubkeys(&self) -> Result<BTreeSet<String>> {
+        let mut hidden = self.current_muted_author_pubkeys().await?;
+        let local_author = self.current_author_pubkey();
+        hidden.extend(
+            self.services
+                .store
+                .list_block_edges_by_subject(local_author.as_str())
+                .await?
+                .into_iter()
+                .filter(|edge| edge.status == BlockEdgeStatus::Active)
+                .map(|edge| edge.target_pubkey.as_str().to_string()),
+        );
+        hidden.extend(
+            self.services
+                .store
+                .list_block_edges_by_target(local_author.as_str())
+                .await?
+                .into_iter()
+                .filter(|edge| edge.status == BlockEdgeStatus::Active)
+                .map(|edge| edge.subject_pubkey.as_str().to_string()),
+        );
+        Ok(hidden)
+    }
+
     pub(crate) async fn authors_blocked_either_direction(
         &self,
         left_pubkey: &str,

@@ -16,7 +16,12 @@ function SafetyPanelStory({ args, width = 'wide' }: SafetyStoryProps) {
   return (
     <SettingsStoryFrame width={width}>
       <div>
-        <SafetyPanel adultContentEnabled={enabled} onAdultContentEnabledChange={setEnabled} />
+        <SafetyPanel
+          adultContentEnabled={enabled}
+          onAdultContentEnabledChange={setEnabled}
+          onOpenMutedUsers={args.onOpenMutedUsers}
+          onOpenBlockedUsers={args.onOpenBlockedUsers}
+        />
       </div>
     </SettingsStoryFrame>
   );
@@ -29,6 +34,8 @@ const meta = {
   args: {
     adultContentEnabled: false,
     onAdultContentEnabledChange: () => {},
+    onOpenMutedUsers: () => {},
+    onOpenBlockedUsers: () => {},
   },
 } satisfies Meta<typeof SafetyPanel>;
 

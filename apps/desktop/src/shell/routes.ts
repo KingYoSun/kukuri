@@ -150,7 +150,12 @@ export function isSettingsSection(value: string | null): value is SettingsSectio
 export function isProfileConnectionsView(
   value: string | null
 ): value is ProfileConnectionsView {
-  return value === 'following' || value === 'followed' || value === 'muted';
+  return (
+    value === 'following' ||
+    value === 'followed' ||
+    value === 'muted' ||
+    value === 'blocking'
+  );
 }
 
 export function parsePrimarySectionPath(pathname: string): PrimarySection | null {

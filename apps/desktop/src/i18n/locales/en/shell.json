@@ -227,7 +227,7 @@
     },
     "safety": {
       "label": "Safety",
-      "description": "Adult material display preference."
+      "description": "Adult material display, mute, and block."
     }
   },
   "workspace": {

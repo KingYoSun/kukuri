@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 
@@ -212,4 +212,31 @@ test('author report does not reuse a previously fetched target after the latest 
   expect(screen.queryByText('node.example')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Send report' })).not.toBeInTheDocument();
   expect(onSubmitReport).not.toHaveBeenCalled();
+});
+
+// #961: 通報ダイアログのローカル操作は案内文どおりブロックも並べる。
+test('author report local actions offer block next to mute', async () => {
+  const user = userEvent.setup();
+  const onToggleBlock = vi.fn();
+  const author = STORY_AUTHOR_DETAIL_VIEW.author!;
+
+  render(
+    <AuthorDetailCard
+      view={{
+        ...STORY_AUTHOR_DETAIL_VIEW,
+        author: { ...author, provenance: null },
+      }}
+      localAuthorPubkey={'f'.repeat(64)}
+      onToggleRelationship={vi.fn()}
+      onToggleMute={vi.fn()}
+      onToggleBlock={onToggleBlock}
+      onSubmitReport={vi.fn()}
+    />
+  );
+
+  await user.click(screen.getByRole('button', { name: 'Report' }));
+  const dialog = screen.getByRole('dialog');
+  expect(within(dialog).getByRole('button', { name: 'Mute' })).toBeInTheDocument();
+  await user.click(within(dialog).getByRole('button', { name: 'Block' }));
+  expect(onToggleBlock).toHaveBeenCalledWith(author.author_pubkey, false);
 });

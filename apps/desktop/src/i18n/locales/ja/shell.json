@@ -227,7 +227,7 @@
     },
     "safety": {
       "label": "セーフティ",
-      "description": "成人向け表現の表示設定。"
+      "description": "成人向け表現の表示設定と、ミュート・ブロック。"
     }
   },
   "workspace": {

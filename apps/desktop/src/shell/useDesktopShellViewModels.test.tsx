@@ -604,6 +604,7 @@ describe('useDesktopShellViewModels', () => {
         ],
         followed: [],
         muted: [],
+        blocking: [],
       },
       knownAuthorsByPubkey: {
         // following と重複する author は following 側が勝つ(先勝ち)

@@ -118,6 +118,8 @@
     "loading": "プロフィールを読み込み中…",
     "mutedCount_one": "ミュート中 {{count}}人",
     "mutedCount_other": "ミュート中 {{count}}人",
+    "blockingCount_one": "ブロック中 {{count}}人",
+    "blockingCount_other": "ブロック中 {{count}}人",
     "noBio": "自己紹介はまだありません。",
     "postCount": "公開投稿",
     "title": "プロフィール"
@@ -127,17 +129,20 @@
     "empty": {
       "followed": "この端末で確認できるフォロワーはまだいません。",
       "following": "まだ誰もフォローしていません。",
-      "muted": "ミュート中のユーザーはいません。"
+      "muted": "ミュート中のユーザーはいません。",
+      "blocking": "ブロック中のユーザーはいません。"
     },
-    "loading": "フォローとミュートを読み込み中…",
+    "loading": "フォロー・ミュート・ブロックを読み込み中…",
     "mutedBadge": "ミュート中",
     "tabs": {
       "followed": "フォロワー",
       "following": "フォロー中",
-      "muted": "ミュート中"
+      "muted": "ミュート中",
+      "blocking": "ブロック中"
     },
     "tabsLabel": "ソーシャル一覧",
-    "title": "フォローとミュート"
+    "title": "フォロー・ミュート・ブロック",
+    "blockedBadge": "ブロック中"
   },
   "feed": {
     "noAuthorPosts": "このユーザーにはまだ公開投稿がありません。",

@@ -60,8 +60,8 @@ impl AppService {
                 .cmp(&left.created_at())
                 .then_with(|| right.object_id().cmp(left.object_id()))
         });
-        let muted_author_pubkeys = self.current_muted_author_pubkeys().await?;
-        items.retain(|item| !profile_timeline_item_is_muted(item, &muted_author_pubkeys));
+        let hidden_author_pubkeys = self.current_hidden_author_pubkeys().await?;
+        items.retain(|item| !profile_timeline_item_is_hidden(item, &hidden_author_pubkeys));
         let page = profile_timeline_page(items, cursor, limit);
         let mut views = Vec::with_capacity(page.items.len());
         for item in page.items {
@@ -167,14 +167,14 @@ impl AppService {
     }
 
     pub async fn list_bookmarked_posts(&self) -> Result<Vec<BookmarkedPostView>> {
-        let muted_author_pubkeys = self.current_muted_author_pubkeys().await?;
+        let hidden_author_pubkeys = self.current_hidden_author_pubkeys().await?;
         let rows = self
             .services
             .projection_store
             .list_bookmarked_posts()
             .await?
             .into_iter()
-            .filter(|row| !bookmarked_post_row_is_muted(row, &muted_author_pubkeys))
+            .filter(|row| !bookmarked_post_row_is_hidden(row, &hidden_author_pubkeys))
             .collect::<Vec<_>>();
         let mut items = Vec::with_capacity(rows.len());
         for row in rows {
@@ -722,14 +722,14 @@ impl AppService {
         let had_topic_subscription = self.has_topic_subscription(topic_id).await;
         let empty_recovery_key = scope_empty_recovery_key(topic_id, &scope);
         self.ensure_scope_subscriptions(topic_id, &scope).await?;
-        let muted_author_pubkeys = self.current_muted_author_pubkeys().await?;
+        let hidden_author_pubkeys = self.current_hidden_author_pubkeys().await?;
         let mut page = filtered_timeline_page(
             self.services.projection_store.as_ref(),
             topic_id,
             cursor.clone(),
             limit,
             &self.allowed_channel_ids_for_scope(topic_id, &scope).await?,
-            &muted_author_pubkeys,
+            &hidden_author_pubkeys,
         )
         .await?;
         let needs_hydration = projection_page_needs_hydration(&page)
@@ -751,7 +751,7 @@ impl AppService {
                 cursor.clone(),
                 limit,
                 &self.allowed_channel_ids_for_scope(topic_id, &scope).await?,
-                &muted_author_pubkeys,
+                &hidden_author_pubkeys,
             )
             .await?;
         }
@@ -771,7 +771,7 @@ impl AppService {
                 cursor,
                 limit,
                 &self.allowed_channel_ids_for_scope(topic_id, &scope).await?,
-                &muted_author_pubkeys,
+                &hidden_author_pubkeys,
             )
             .await?;
         }
@@ -800,7 +800,7 @@ impl AppService {
         let empty_recovery_key = thread_empty_recovery_key(topic_id, thread_id);
         self.ensure_scope_subscriptions(topic_id, &TimelineScope::AllJoined)
             .await?;
-        let muted_author_pubkeys = self.current_muted_author_pubkeys().await?;
+        let hidden_author_pubkeys = self.current_hidden_author_pubkeys().await?;
         let thread_root = EnvelopeId::from(thread_id);
         let mut page = filtered_thread_page(
             self.services.projection_store.as_ref(),
@@ -809,7 +809,7 @@ impl AppService {
             cursor.clone(),
             limit,
             None,
-            &muted_author_pubkeys,
+            &hidden_author_pubkeys,
         )
         .await?;
         let needs_hydration = projection_page_needs_hydration(&page);
@@ -838,7 +838,7 @@ impl AppService {
                 cursor.clone(),
                 limit,
                 root_channel.as_deref(),
-                &muted_author_pubkeys,
+                &hidden_author_pubkeys,
             )
             .await?;
         }
@@ -869,7 +869,7 @@ impl AppService {
                 cursor,
                 limit,
                 root_channel.as_deref(),
-                &muted_author_pubkeys,
+                &hidden_author_pubkeys,
             )
             .await?;
         }

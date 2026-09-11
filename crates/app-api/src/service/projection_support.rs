@@ -6,7 +6,7 @@ pub(crate) async fn filtered_timeline_page(
     cursor: Option<TimelineCursor>,
     limit: usize,
     allowed_channels: &BTreeSet<String>,
-    muted_author_pubkeys: &BTreeSet<String>,
+    hidden_author_pubkeys: &BTreeSet<String>,
 ) -> Result<Page<ObjectProjectionRow>> {
     if limit == 0 {
         return Ok(Page {
@@ -28,7 +28,7 @@ pub(crate) async fn filtered_timeline_page(
         .await?;
         let next_cursor = page.next_cursor.clone();
         for row in page.items {
-            if !object_projection_row_is_muted(&row, muted_author_pubkeys) {
+            if !object_projection_row_is_hidden(&row, hidden_author_pubkeys) {
                 items.push(row);
                 if items.len() >= limit {
                     return Ok(Page { items, next_cursor });
@@ -49,7 +49,7 @@ pub(crate) async fn filtered_thread_page(
     cursor: Option<TimelineCursor>,
     limit: usize,
     allowed_channel: Option<&str>,
-    muted_author_pubkeys: &BTreeSet<String>,
+    hidden_author_pubkeys: &BTreeSet<String>,
 ) -> Result<Page<ObjectProjectionRow>> {
     if limit == 0 {
         return Ok(Page {
@@ -72,7 +72,7 @@ pub(crate) async fn filtered_thread_page(
         .await?;
         let next_cursor = page.next_cursor.clone();
         for row in page.items {
-            if !object_projection_row_is_muted(&row, muted_author_pubkeys) {
+            if !object_projection_row_is_hidden(&row, hidden_author_pubkeys) {
                 items.push(row);
                 if items.len() >= limit {
                     return Ok(Page { items, next_cursor });
@@ -96,37 +96,37 @@ pub(crate) fn filter_channel_rows<T>(
         .collect()
 }
 
-pub(crate) fn object_projection_row_is_muted(
+pub(crate) fn object_projection_row_is_hidden(
     row: &ObjectProjectionRow,
-    muted_author_pubkeys: &BTreeSet<String>,
+    hidden_author_pubkeys: &BTreeSet<String>,
 ) -> bool {
-    muted_author_pubkeys.contains(row.author_pubkey.as_str())
+    hidden_author_pubkeys.contains(row.author_pubkey.as_str())
         || row.repost_of.as_ref().is_some_and(|snapshot| {
-            muted_author_pubkeys.contains(snapshot.source_author_pubkey.as_str())
+            hidden_author_pubkeys.contains(snapshot.source_author_pubkey.as_str())
         })
 }
 
-pub(crate) fn bookmarked_post_row_is_muted(
+pub(crate) fn bookmarked_post_row_is_hidden(
     row: &BookmarkedPostRow,
-    muted_author_pubkeys: &BTreeSet<String>,
+    hidden_author_pubkeys: &BTreeSet<String>,
 ) -> bool {
-    muted_author_pubkeys.contains(row.author_pubkey.as_str())
+    hidden_author_pubkeys.contains(row.author_pubkey.as_str())
         || row.repost_of.as_ref().is_some_and(|snapshot| {
-            muted_author_pubkeys.contains(snapshot.source_author_pubkey.as_str())
+            hidden_author_pubkeys.contains(snapshot.source_author_pubkey.as_str())
         })
 }
 
-pub(crate) fn profile_timeline_item_is_muted(
+pub(crate) fn profile_timeline_item_is_hidden(
     item: &ProfileTimelineItem,
-    muted_author_pubkeys: &BTreeSet<String>,
+    hidden_author_pubkeys: &BTreeSet<String>,
 ) -> bool {
     match item {
         ProfileTimelineItem::Post(post) => {
-            muted_author_pubkeys.contains(post.author_pubkey.as_str())
+            hidden_author_pubkeys.contains(post.author_pubkey.as_str())
         }
         ProfileTimelineItem::Repost(repost) => {
-            muted_author_pubkeys.contains(repost.author_pubkey.as_str())
-                || muted_author_pubkeys.contains(repost.repost_of.source_author_pubkey.as_str())
+            hidden_author_pubkeys.contains(repost.author_pubkey.as_str())
+                || hidden_author_pubkeys.contains(repost.repost_of.source_author_pubkey.as_str())
         }
     }
 }

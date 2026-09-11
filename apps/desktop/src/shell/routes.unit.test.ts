@@ -50,11 +50,11 @@ describe('isSettingsSection', () => {
 });
 
 describe('isProfileConnectionsView', () => {
-  test.each(['following', 'followed', 'muted'])('returns true for "%s"', (value) => {
+  test.each(['following', 'followed', 'muted', 'blocking'])('returns true for "%s"', (value) => {
     expect(isProfileConnectionsView(value)).toBe(true);
   });
 
-  test.each([null, '', 'follower', 'Following'])('returns false for %j', (value) => {
+  test.each([null, '', 'follower', 'Following', 'blocked_by'])('returns false for %j', (value) => {
     expect(isProfileConnectionsView(value)).toBe(false);
   });
 });

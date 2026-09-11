@@ -12,7 +12,7 @@ import {
   type CommunityIndexingTarget,
 } from '@/components/core/CommunityIndexingRequestDialog';
 import { DesktopShellTesterFeedbackDialog } from './page/DesktopShellTesterFeedbackDialog';
-import { type SettingsSection } from '@/components/shell/types';
+import { type ProfileConnectionsView, type SettingsSection } from '@/components/shell/types';
 
 import { runtimeApi } from '@/lib/api';
 import {
@@ -481,6 +481,14 @@ export function DesktopShellPage({
     () => focusPrimarySection('timeline'),
     [focusPrimarySection]
   );
+  // #961: 設定からの導線は Profile Column を前面にしてから一覧を開く。
+  const openProfileConnectionsFromSettings = useCallback(
+    (view: ProfileConnectionsView) => {
+      focusPrimarySection('profile');
+      openProfileConnections(view);
+    },
+    [focusPrimarySection, openProfileConnections]
+  );
   const liveFocusKey =
     shellChromeState.activePrimarySection === 'live' ? selectedLiveSessionId : null;
   useFocusScroll({
@@ -669,6 +677,7 @@ export function DesktopShellPage({
       resetProfileDraft={shellActions.resetProfileDraft}
       handleRelationshipAction={shellActions.handleRelationshipAction}
       handleMuteAction={shellActions.handleMuteAction}
+      handleBlockAction={shellActions.handleBlockAction}
       handleOpenOriginalTopic={shellActions.handleOpenOriginalTopic}
     />
   );
@@ -970,6 +979,7 @@ export function DesktopShellPage({
         localeSaveFailed={localeSaveFailed}
         syncRoute={syncRoute}
         setSettingsOpen={setSettingsOpen}
+        openProfileConnections={openProfileConnectionsFromSettings}
         viewModels={viewModels}
         handleImportPeer={shellActions.handleImportPeer}
         handleSaveDiscoverySeeds={shellActions.handleSaveDiscoverySeeds}

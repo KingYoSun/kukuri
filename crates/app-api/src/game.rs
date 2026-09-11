@@ -15,7 +15,7 @@ impl AppService {
         scope: TimelineScope,
     ) -> Result<Vec<GameRoomView>> {
         self.ensure_scope_subscriptions(topic_id, &scope).await?;
-        let muted_author_pubkeys = self.current_muted_author_pubkeys().await?;
+        let hidden_author_pubkeys = self.current_hidden_author_pubkeys().await?;
         let allowed = self.allowed_channel_ids_for_scope(topic_id, &scope).await?;
         let mut rows = filter_channel_rows(
             self.services
@@ -26,7 +26,7 @@ impl AppService {
             |row| row.channel_id.as_str(),
         )
         .into_iter()
-        .filter(|row| !muted_author_pubkeys.contains(row.host_pubkey.as_str()))
+        .filter(|row| !hidden_author_pubkeys.contains(row.host_pubkey.as_str()))
         .filter(|row| {
             row.room_kind != GameRoomKind::MetaverseRoom
                 || row
@@ -46,7 +46,7 @@ impl AppService {
                 |row| row.channel_id.as_str(),
             )
             .into_iter()
-            .filter(|row| !muted_author_pubkeys.contains(row.host_pubkey.as_str()))
+            .filter(|row| !hidden_author_pubkeys.contains(row.host_pubkey.as_str()))
             .filter(|row| {
                 row.room_kind != GameRoomKind::MetaverseRoom
                     || row

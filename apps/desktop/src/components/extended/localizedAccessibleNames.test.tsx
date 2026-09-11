@@ -76,10 +76,12 @@ describe.each(expectations)('accessible names in $locale', (expected) => {
           followingCount={0}
           followedCount={0}
           mutedCount={0}
+          blockingCount={0}
           onEdit={noop}
           onOpenFollowing={noop}
           onOpenFollowed={noop}
           onOpenMuted={noop}
+          onOpenBlocking={noop}
         />
         <ProfileEditorPanel
           authorLabel='Alex'

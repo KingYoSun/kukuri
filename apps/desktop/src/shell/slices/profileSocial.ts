@@ -42,6 +42,7 @@ export const DEFAULT_SOCIAL_CONNECTIONS: SocialConnectionsState = {
   following: [],
   followed: [],
   muted: [],
+  blocking: [],
 };
 
 export function createInitialProfileSocialSlice(): ProfileSocialSliceState {

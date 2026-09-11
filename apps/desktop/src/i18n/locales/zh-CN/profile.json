@@ -118,6 +118,8 @@
     "loading": "正在加载资料…",
     "mutedCount_one": "已静音 {{count}} 位用户",
     "mutedCount_other": "已静音 {{count}} 位用户",
+    "blockingCount_one": "已屏蔽 {{count}} 位用户",
+    "blockingCount_other": "已屏蔽 {{count}} 位用户",
     "noBio": "尚未发布个人简介。",
     "postCount": "公开帖子",
     "title": "资料"
@@ -127,17 +129,20 @@
     "empty": {
       "followed": "这个设备上还没有已知的关注者。",
       "following": "你还没有关注任何人。",
-      "muted": "还没有静音任何用户。"
+      "muted": "还没有静音任何用户。",
+      "blocking": "还没有屏蔽任何用户。"
     },
-    "loading": "正在加载关注与静音…",
+    "loading": "正在加载关注、静音与屏蔽…",
     "mutedBadge": "已静音",
     "tabs": {
       "followed": "关注者",
       "following": "正在关注",
-      "muted": "已静音"
+      "muted": "已静音",
+      "blocking": "已屏蔽"
     },
     "tabsLabel": "社交列表",
-    "title": "关注与静音"
+    "title": "关注、静音与屏蔽",
+    "blockedBadge": "已屏蔽"
   },
   "feed": {
     "noAuthorPosts": "这位用户还没有公开帖子。",

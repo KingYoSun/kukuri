@@ -10,7 +10,7 @@ import { ReleasePanel } from '@/components/settings/ReleasePanel';
 import { ReactionsPanel } from '@/components/settings/ReactionsPanel';
 import { SafetyPanel } from '@/components/settings/SafetyPanel';
 import { SettingsDrawer } from '@/components/shell/SettingsDrawer';
-import type { SettingsSection } from '@/components/shell/types';
+import type { ProfileConnectionsView, SettingsSection } from '@/components/shell/types';
 
 import type { SupportedLocale } from '@/i18n';
 import type { CustomReactionCropRect, DesktopApi } from '@/lib/api';
@@ -41,6 +41,7 @@ type DesktopShellSettingsDrawerProps = {
   localeSaveFailed?: boolean;
   syncRoute: SyncRoute;
   setSettingsOpen: (open: boolean, focusTrigger?: boolean) => void;
+  openProfileConnections: (view: ProfileConnectionsView) => void;
   viewModels: Pick<
     ViewModels,
     | 'settingsSectionCopy'
@@ -81,6 +82,7 @@ export function DesktopShellSettingsDrawer({
   localeSaveFailed,
   syncRoute,
   setSettingsOpen,
+  openProfileConnections,
   viewModels,
   handleImportPeer,
   handleSaveDiscoverySeeds,
@@ -169,6 +171,12 @@ export function DesktopShellSettingsDrawer({
     document.getElementById(`${SHELL_SETTINGS_ID}-section-${section}`)?.focus();
   };
 
+  // #961: 設定からミュート／ブロック一覧へ移動する。一覧の正本はプロフィールの connections 画面。
+  const openSocialConnections = (view: ProfileConnectionsView) => {
+    setSettingsOpen(false);
+    openProfileConnections(view);
+  };
+
   const settingsSections = [
     {
       ...settingsSectionCopy[0],
@@ -191,6 +199,8 @@ export function DesktopShellSettingsDrawer({
         <SafetyPanel
           adultContentEnabled={adultContentEnabled}
           onAdultContentEnabledChange={(enabled) => void handleAdultContentEnabledChange(enabled)}
+          onOpenMutedUsers={() => openSocialConnections('muted')}
+          onOpenBlockedUsers={() => openSocialConnections('blocking')}
         />
       ),
     },

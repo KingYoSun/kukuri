@@ -7,7 +7,7 @@ export type PrimarySection =
   | 'profile'
   | 'notifications';
 export type TimelineWorkspaceView = 'feed' | 'bookmarks';
-export type ProfileConnectionsView = 'following' | 'followed' | 'muted';
+export type ProfileConnectionsView = 'following' | 'followed' | 'muted' | 'blocking';
 
 export type SettingsSection =
   | 'about'

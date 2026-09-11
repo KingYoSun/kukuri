@@ -26,10 +26,11 @@ type ProfileConnectionsPanelProps = {
   onSelectView: (view: ProfileConnectionsView) => void;
   onToggleRelationship: (authorPubkey: string, following: boolean) => void;
   onToggleMute: (authorPubkey: string, muted: boolean) => void;
+  onToggleBlock: (authorPubkey: string, blocking: boolean) => void;
   onBack: () => void;
 };
 
-const CONNECTION_VIEWS: ProfileConnectionsView[] = ['following', 'followed', 'muted'];
+const CONNECTION_VIEWS: ProfileConnectionsView[] = ['following', 'followed', 'muted', 'blocking'];
 
 function displayLabel(author: AuthorSocialView, unknownAuthorLabel: string): string {
   return author.display_name?.trim() || author.name?.trim() || unknownAuthorLabel;
@@ -60,6 +61,7 @@ export function ProfileConnectionsPanel({
   onSelectView,
   onToggleRelationship,
   onToggleMute,
+  onToggleBlock,
   onBack,
 }: ProfileConnectionsPanelProps) {
   const { t } = useTranslation(['profile', 'common']);
@@ -163,6 +165,11 @@ export function ProfileConnectionsPanel({
                         {t('connections.mutedBadge')}
                       </span>
                     ) : null}
+                    {author.blocking ? (
+                      <span className='relationship-badge relationship-badge-direct'>
+                        {t('connections.blockedBadge')}
+                      </span>
+                    ) : null}
                   </div>
                   {showActions ? (
                     <div className='post-actions'>
@@ -181,6 +188,13 @@ export function ProfileConnectionsPanel({
                         {author.muted
                           ? t('common:actions.unmute', { defaultValue: 'Unmute' })
                           : t('common:actions.mute', { defaultValue: 'Mute' })}
+                      </Button>
+                      <Button
+                        variant='secondary'
+                        type='button'
+                        onClick={() => onToggleBlock(author.author_pubkey, author.blocking)}
+                      >
+                        {t(author.blocking ? 'common:actions.unblock' : 'common:actions.block')}
                       </Button>
                     </div>
                   ) : null}

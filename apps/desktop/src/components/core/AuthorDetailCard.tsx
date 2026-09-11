@@ -241,13 +241,24 @@ export function AuthorDetailCard({
               resolveError={reportResolveError}
               localActions={
                 showMuteAction ? (
-                  <Button
-                    variant='secondary'
-                    type='button'
-                    onClick={() => onToggleMute(author.author_pubkey, author.muted)}
-                  >
-                    {t(author.muted ? 'actions.unmute' : 'actions.mute')}
-                  </Button>
+                  <>
+                    <Button
+                      variant='secondary'
+                      type='button'
+                      onClick={() => onToggleMute(author.author_pubkey, author.muted)}
+                    >
+                      {t(author.muted ? 'actions.unmute' : 'actions.mute')}
+                    </Button>
+                    {onToggleBlock ? (
+                      <Button
+                        variant='secondary'
+                        type='button'
+                        onClick={() => onToggleBlock(author.author_pubkey, author.blocking)}
+                      >
+                        {t(author.blocking ? 'actions.unblock' : 'actions.block')}
+                      </Button>
+                    ) : null}
+                  </>
                 ) : undefined
               }
             />
