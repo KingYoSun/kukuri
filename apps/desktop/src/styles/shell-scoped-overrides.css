@@ -879,7 +879,7 @@
 .shell-phase1 .shell-control-center-place-list .topic-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 0;
+  gap: var(--space-2xs);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
   padding: var(--space-xs);

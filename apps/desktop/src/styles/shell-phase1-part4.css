@@ -337,6 +337,12 @@
   font-size: var(--text-caption);
 }
 
+/* topic 名の行は操作列・診断行と同じ間隔（--space-2xs）で並べる */
+.shell-phase1 .shell-control-center-place-list .topic-item > .topic-link {
+  min-height: 0;
+  padding-block: 0;
+}
+
 .shell-phase1 .shell-control-center-place-list .topic-actions {
   justify-content: flex-end;
 }
