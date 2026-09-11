@@ -1,6 +1,6 @@
 # Issue #966: 通常 GUI からのプライベートチャンネル発見性（作成・招待参加・招待共有の入口）
 
-- Issue: [#966](https://github.com/KingYoSun/kukuri/issues/966)
+- Issue: [#966](https://github.com/KingYoSun/kukuri/issues/966) / PR: [#982](https://github.com/KingYoSun/kukuri/pull/982)
 - Scope revision: `2026-09-10-first-look-private-channel-discoverability-v1`（Issue 本文で固定。実装計画は 2026-09-11 に承認。未決 4 点は推奨案で確定: 入口は Timeline Column header、AC-1 の実機固定は browser 切り分け表＋実機欄未実施、dev.md の旧 UI 名称は別 Issue、「選択中のチャンネルを共有」は disabled のまま理由を表示）
 - 基準 commit: `f2cdb5cacf02218b34291a35754b55a15c2f564e`（v0.2.1-preview.1、観測環境）。実装は main 先端 `c21ee62` 以降に対して行う。基準 commit と main 先端の間にチャンネル導線の差分はない（Control Center の接続表示・キーボード案内の追加のみ）
 - リスク区分: B（既存 GUI の開始導線の改善。audience・権限・秘密値の取扱いは変更しない）
@@ -101,5 +101,5 @@ Linux .deb（Debian 13、日本語、WebKitGTK）での再観測は本記録の�
 | Playwright browser（`private-channel-discoverability.spec.ts` 9 件 + `extended-flow` / `column-scope` / `hash-routing` / `community-index`） | 24 passed。環境の Chromium build が pin と異なるため、`PLAYWRIGHT_BROWSERS_PATH` に同 build への symlink を置いて実行 |
 | Playwright browser（全 spec） | 下記 |
 | Storybook build | 下記 |
-| 視覚回帰 | Timeline Column header と Control Center「場所」の変更で `timeline-*` / `control-center-ja-dark` の baseline が変わるため、`Kukuri Visual Baseline` workflow で Linux baseline を再生成して同梱する |
+| 視覚回帰 | ローカル `CI=1` 比較は 21 passed / 6 failed。失敗は ja / zh の glyph（`fonts-noto-cjk` なし）と `settings-notifications-wide-dark`（#964 の設定 nav 追加以降 baseline 未更新）で、本差分の layout 退行ではない。Timeline Column header と Control Center「場所」の変更で baseline が変わるため、`Kukuri Visual Baseline` workflow（`commit_to_branch=true`）で Linux baseline を再生成して同梱する。この環境は artifact の download 先（Azure blob）へ到達できないため、workflow に branch へ commit する option を追加した |
 | Rust / Tauri | 変更なし（frontend と docs のみ） |

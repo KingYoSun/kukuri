@@ -132,6 +132,7 @@ WP-H8（CSS 改名・整理）の安全網として、主要 14 サーフェス�
 - **必ず Linux/Chromium で生成する。Windows ローカルでの `--update-snapshots` は禁止**（フォント差で CI と不一致になり、生成した baseline が即割れる）。
 - 手順: GitHub Actions の **「Kukuri Visual Baseline」ワークフロー（`workflow_dispatch`）** を対象ブランチで実行 → 生成された artifact `kukuri-desktop-visual-baseline` をダウンロード → `apps/desktop/tests/playwright/__screenshots__/visual.spec.ts/` に上書き展開して commit。
   - CLI 例: `gh workflow run kukuri-visual-baseline.yml --ref <branch>` → 完了後 `gh run download <run-id> -n kukuri-desktop-visual-baseline -D <tmp>`。
+  - artifact をダウンロードできない環境（egress 制限のある remote session 等）では、dispatch 時に input `commit_to_branch=true` を指定すると workflow が対象ブランチへ baseline を commit / push する。`GITHUB_TOKEN` による push は他の workflow を起動しないため、その後に別の commit を push して CI を流す。
 - optional（ローカルで Linux baseline を再生成したい場合）: Playwright 公式 Docker イメージ `mcr.microsoft.com/playwright:v1.62.1-jammy`（`pnpm-lock.yaml` の `@playwright/test` バージョンと一致させる）内で `pnpm test:e2e:visual --update-snapshots` を実行する。
 - `@playwright/test`（同梱 Chromium）更新や ubuntu-latest ランナーイメージ更新でフォント/AA が変わると baseline が一斉に割れることがある。その場合は deps 更新 PR に baseline 再生成を同梱する。
 - baseline の置き場は `apps/desktop/tests/playwright/__screenshots__/`（`.gitignore` 済みの `test-results/` とは別。混同しない）。
