@@ -345,7 +345,23 @@
       "secretConflict": "频道读取权限与现有注册冲突，请联系节点运营者。",
       "authRequired": "需要对所选社区节点进行认证。",
       "consentRequired": "尚未完成所选社区节点的必要同意。",
-      "requestFailed": "索引申请失败，请稍后重试。"
+      "requestFailed": "索引申请失败，请稍后重试。",
+      "membershipRequired": "此频道的读取权限与社区节点的注册不匹配，或该频道尚未在此注册。",
+      "capabilityUnavailable": "无法在本设备上获取此频道的读取权限。只能检查已加入的频道。",
+      "statusFailed": "获取索引状态失败，请稍后重试。"
+    },
+    "indexStatus": {
+      "heading": "此社区节点上的索引状态",
+      "loading": "正在检查索引状态…",
+      "supported": "此对象是该社区节点的索引对象。各条帖子会在安全检查和同步后进入搜索。",
+      "notSupported": "此对象不是该社区节点的索引对象，也没有申请。",
+      "noRequest": "您在该社区节点上没有申请。",
+      "privateCheckHint": "要确认是否为索引对象，请同意提供读取权限并点击“检查索引状态”。",
+      "check": "检查索引状态",
+      "unavailable": "无法检查索引状态。这并不意味着该对象不在索引中。",
+      "retry": "再次检查状态",
+      "submitBlockedRequested": "此对象已有申请，无法再次提交。",
+      "submitBlockedSupported": "此对象已是索引对象，无需申请。"
     }
   },
   "communityIndex": {
@@ -384,11 +400,14 @@
       "matchesPostText": "匹配对象：已建立索引的帖子正文。用户名和用户 ID 只有出现在帖子正文中才会匹配。",
       "reasonsHeading": "没有结果的常见原因",
       "reasons": {
-        "notIndexedYet": "帖子可能尚未进入此节点的索引。应用无法查看索引进度，请稍等片刻后再次搜索。",
+        "notIndexedYet": "帖子可能尚未进入此节点的索引，或尚未通过安全检查。无法查看单条帖子的索引进度，请稍等片刻后再次搜索。",
         "outsideNodeScope": "该话题可能不在此节点的索引范围内。只有经节点运营者批准并通过安全检查的帖子才会被索引。",
-        "pubkeyQuery": "用户 ID 不是搜索的匹配对象。你可以直接打开该用户。"
+        "pubkeyQuery": "用户 ID 不是搜索的匹配对象。你可以直接打开该用户。",
+        "notSupportedTarget": "该对象不是此节点的索引对象，因此其帖子不会被索引。你可以申请索引。",
+        "requestPending": "索引申请正在等待审核，因此尚未建立索引。节点运营者批准后，帖子才会进入索引。",
+        "requestRejected": "索引申请已被拒绝，因此此节点不会为其建立索引。请选择其他节点或联系节点运营者。"
       },
-      "exploreRequestHint": "要让此节点为你已加入的公开话题建立索引，请在话题列表中使用“申请索引”。",
+      "exploreRequestHint": "要确认你已加入的公开话题是否已被此节点索引，或申请索引，请在话题列表中使用“申请索引”。",
       "actions": {
         "openAuthor": "打开此用户",
         "retrySearch": "再次搜索",
@@ -396,6 +415,28 @@
         "openTimeline": "查看时间线",
         "requestIndexing": "申请索引",
         "openConnectivity": "打开连接诊断"
+      },
+      "indexStatus": {
+        "targetNoun": {
+          "topic": "此话题",
+          "channel": "此频道"
+        },
+        "loading": "正在检查此节点上的索引状态…",
+        "unknown": "无法检查此节点上的索引状态。这并不意味着它不在索引中。",
+        "target": {
+          "supported": "索引状态：{{target}}是此节点的索引对象。",
+          "notSupported": "索引状态：{{target}}不是此节点的索引对象，也没有申请。",
+          "pending": "索引状态：{{target}}的索引申请正在等待审核。",
+          "approved": "索引状态：{{target}}的索引申请已获批准，并已是索引对象。",
+          "rejected": "索引状态：{{target}}的索引申请已被拒绝。"
+        },
+        "ownRequests": {
+          "none": "你在此节点上没有索引申请。",
+          "approved": "已批准的申请：{{targets}}",
+          "pending": "等待审核的申请：{{targets}}",
+          "rejected": "已拒绝的申请：{{targets}}"
+        },
+        "privateUnverified": "是否已为此频道建立索引，可在同意提供读取权限后通过“申请索引”界面查看。"
       }
     },
     "results": "社区索引结果",

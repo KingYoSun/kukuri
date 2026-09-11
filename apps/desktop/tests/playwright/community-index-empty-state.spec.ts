@@ -6,7 +6,7 @@ import en from '../../src/i18n/locales/en/shell.json' with { type: 'json' };
 import ja from '../../src/i18n/locales/ja/shell.json' with { type: 'json' };
 import zh from '../../src/i18n/locales/zh-CN/shell.json' with { type: 'json' };
 
-import { expectIndexContentContained, indexLayoutCalls, seedIndexLayout } from './community-index-layout-fixture';
+import { expectIndexContentContained, indexLayoutCalls, indexStatusCalls, seedIndexLayout } from './community-index-layout-fixture';
 
 const NO_MATCH_QUERY = 'layout-no-matching-post';
 
@@ -31,6 +31,11 @@ for (const [locale, copy] of [['en', en], ['ja', ja], ['zh-CN', zh]] as const) {
       await expect(empty.getByText(labels.emptyState.reasons.notIndexedYet, { exact: true })).toBeVisible();
       await expect(empty.getByText(labels.emptyState.reasons.outsideNodeScope, { exact: true })).toBeVisible();
       await expect(empty.getByText(labels.emptyState.exploreRequestHint, { exact: true })).toBeVisible();
+      // #975: 横断検索は同じノードへ自分の申請一覧だけを読み(所属証明なし)、確定した「申請なし」を示す。
+      await expect(empty.getByText(labels.emptyState.indexStatus.ownRequests.none, { exact: true })).toBeVisible();
+      expect(await indexStatusCalls(page)).toEqual([
+        { baseUrl: 'https://api.kukuri.app', scopeKind: null, withSecretConfirmation: false },
+      ]);
       await expect(empty.getByRole('button', { name: labels.emptyState.actions.requestIndexing, exact: true })).toHaveCount(0);
       await expect(empty.getByRole('button', { name: labels.emptyState.actions.openAuthor, exact: true })).toHaveCount(0);
       await expectIndexContentContained(workspace);
@@ -40,6 +45,8 @@ for (const [locale, copy] of [['en', en], ['ja', ja], ['zh-CN', zh]] as const) {
       await empty.getByRole('button', { name: labels.emptyState.actions.retrySearch, exact: true }).click();
       await expect(empty).toBeVisible();
       expect((await indexLayoutCalls(page)).filter((call) => call.method === 'searchCommunityNodeIndex')).toHaveLength(2);
+      await expect(empty.getByText(labels.emptyState.indexStatus.ownRequests.none, { exact: true })).toBeVisible();
+      expect(await indexStatusCalls(page)).toHaveLength(2);
 
       // 接続診断は既存の設定 section へ移り、閉じると検索語と空状態を保つ。
       await empty.getByRole('button', { name: labels.emptyState.actions.openConnectivity, exact: true }).click();

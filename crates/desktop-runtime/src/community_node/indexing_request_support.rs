@@ -38,7 +38,7 @@ pub struct CommunityNodeIndexingRequestError {
 }
 
 impl CommunityNodeIndexingRequestError {
-    fn new(code: &str, message: impl Into<String>) -> Self {
+    pub(super) fn new(code: &str, message: impl Into<String>) -> Self {
         Self {
             code: code.to_string(),
             message: message.into(),
@@ -47,7 +47,7 @@ impl CommunityNodeIndexingRequestError {
         }
     }
 
-    fn from_response(
+    pub(super) fn from_response(
         status: StatusCode,
         retry_after_seconds: Option<u64>,
         body: Option<ApiErrorBody>,

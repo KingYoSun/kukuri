@@ -384,6 +384,42 @@ export type CommunityIndexPostResolveResponse = { entries: Array<CommunityIndexR
 
 export type SubmitIndexingRequestResponse = { request_id: string, status: IndexingRequestStatus, };
 
+export type CommunityNodeIndexingStatusRequest = { base_url: string, scope_kind?: IndexScopeKind | null, 
+/**
+ * public の target、private capability の親 topic。`scope_kind` 指定時は必須。
+ */
+topic_id?: string | null, 
+/**
+ * private の target。public では指定しない。
+ */
+channel_id?: string | null, 
+/**
+ * private の所属証明(channel secret)を外部送信することを UI で明示確認した。
+ */
+confirm_private_channel_secret_disclosure: boolean, };
+
+export type IndexingRequestView = { request_id: string, scope_kind: IndexScopeKind, target_id: string, status: IndexingRequestStatus, 
+/**
+ * 申請時刻(unix ms)。
+ */
+created_at: number, 
+/**
+ * 承認・却下時刻(unix ms)。審査待ちでは null。
+ */
+decided_at?: number | null, };
+
+export type IndexingTargetStatus = { scope_kind: IndexScopeKind, scope_id: string, supported: boolean, };
+
+export type IndexingStatusResponse = { 
+/**
+ * 呼出し主の申請だけ。他利用者の申請は含まない。
+ */
+requests: Array<IndexingRequestView>, 
+/**
+ * `scope_kind` / `scope_id` を指定した場合のみ。非公開チャンネルは所属証明が必要。
+ */
+target?: IndexingTargetStatus | null, };
+
 export type CommunityNodeUserAdvisoryRequest = { base_url: string, target_pubkey: string, };
 
 export type CommunityNodeRelationNeighborsRequest = { base_url: string, limit?: number | null, };

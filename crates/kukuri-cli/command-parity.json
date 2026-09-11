@@ -132,6 +132,7 @@
     {"tauri":"commands::community_node::submit_community_node_report","cli":"submit_community_node_report","inventory":"INV-7"},
     {"tauri":"commands::community_node::submit_community_node_tester_feedback","cli":"submit_community_node_tester_feedback","inventory":"INV-7"},
     {"tauri":"commands::community_node::submit_community_node_indexing_request","cli":"submit_community_node_indexing_request","inventory":"INV-7"},
+    {"tauri":"commands::community_node::read_community_node_indexing_status","cli":"read_community_node_indexing_status","inventory":"INV-7"},
     {"tauri":"commands::community_node::search_community_node_index","cli":"search_community_node_index","inventory":"INV-7"},
     {"tauri":"commands::community_node::discover_community_node_index","cli":"discover_community_node_index","inventory":"INV-7"},
     {"tauri":"commands::community_node::recommend_community_node_index","cli":"recommend_community_node_index","inventory":"INV-7"},

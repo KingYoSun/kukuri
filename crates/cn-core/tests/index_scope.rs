@@ -10,8 +10,9 @@ use kukuri_cn_core::{
     ChannelSecretCipher, ChannelSecretConflict, IndexScopeKind, IndexingRequestStatus,
     TestDatabase, add_supported_topic, approve_indexing_request, connect_postgres,
     get_channel_secret, initialize_database, insert_indexing_request, is_topic_supported,
-    list_channel_secrets, list_indexing_requests, list_supported_topics, register_channel_secret,
-    reject_indexing_request, remove_channel_secret, remove_supported_topic, upsert_channel_secret,
+    list_channel_secrets, list_indexing_requests, list_indexing_requests_for_requester,
+    list_supported_topics, register_channel_secret, reject_indexing_request, remove_channel_secret,
+    remove_supported_topic, upsert_channel_secret,
 };
 
 const DEFAULT_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:15432/cn";
@@ -269,6 +270,55 @@ async fn supported_topics_listed_for_startup_restore() -> Result<()> {
         topics
             .iter()
             .any(|t| t.kind == IndexScopeKind::PrivateChannel && t.id == "secret-room")
+    );
+
+    database.cleanup().await
+}
+
+#[tokio::test]
+async fn requester_listing_returns_own_requests_only_including_rejected() -> Result<()> {
+    // #975: 自分の申請一覧は requester で絞り、他利用者の行を含まず、却下行を含む。
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-core index scope test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_index_own_list").await?;
+    let pool = connect_postgres(database.database_url.as_str()).await?;
+    initialize_database(&pool).await?;
+
+    let mine_rust =
+        insert_indexing_request(&pool, "npub-me", IndexScopeKind::PublicTopic, "rust").await?;
+    let mine_room =
+        insert_indexing_request(&pool, "npub-me", IndexScopeKind::PrivateChannel, "room").await?;
+    insert_indexing_request(&pool, "npub-other", IndexScopeKind::PublicTopic, "golang").await?;
+    reject_indexing_request(&pool, mine_room.id.as_str()).await?;
+
+    let mine = list_indexing_requests_for_requester(&pool, "npub-me").await?;
+    let mut ids: Vec<&str> = mine.iter().map(|request| request.id.as_str()).collect();
+    ids.sort_unstable();
+    let mut expected = vec![mine_rust.id.as_str(), mine_room.id.as_str()];
+    expected.sort_unstable();
+    assert_eq!(ids, expected);
+    assert!(
+        mine.iter()
+            .all(|request| request.requester_pubkey == "npub-me")
+    );
+    let rejected = mine
+        .iter()
+        .find(|request| request.id == mine_room.id)
+        .expect("rejected row remains listed");
+    assert_eq!(rejected.status, IndexingRequestStatus::Rejected);
+    assert!(rejected.decided_at.is_some());
+
+    assert!(
+        list_indexing_requests_for_requester(&pool, "npub-nobody")
+            .await?
+            .is_empty()
+    );
+    assert!(
+        list_indexing_requests_for_requester(&pool, " ")
+            .await
+            .is_err()
     );
 
     database.cleanup().await

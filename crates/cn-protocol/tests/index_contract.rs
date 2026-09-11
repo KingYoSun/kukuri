@@ -112,3 +112,68 @@ fn api_error_body_wire_shape_is_stable() {
         })
     );
 }
+
+#[test]
+fn indexing_status_wire_shape_is_stable() {
+    use kukuri_cn_protocol::{
+        INDEXING_STATUS_PATH, IndexingRequestView, IndexingStatusParams, IndexingStatusResponse,
+        IndexingTargetStatus,
+    };
+
+    assert_eq!(INDEXING_STATUS_PATH, "/v1/indexing/status");
+
+    let params = IndexingStatusParams {
+        scope_kind: Some(IndexScopeKind::PrivateChannel.as_str().to_string()),
+        scope_id: Some("channel-1".to_string()),
+    };
+    assert_eq!(
+        serde_json::to_value(&params).unwrap(),
+        serde_json::json!({ "scope_kind": "private_channel", "scope_id": "channel-1" })
+    );
+    let decoded: IndexingStatusParams = serde_json::from_value(serde_json::json!({})).unwrap();
+    assert_eq!(decoded, IndexingStatusParams::default());
+
+    let response = IndexingStatusResponse {
+        requests: vec![IndexingRequestView {
+            request_id: "request-1".to_string(),
+            scope_kind: IndexScopeKind::PublicTopic,
+            target_id: "rust".to_string(),
+            status: IndexingRequestStatus::Rejected,
+            created_at: 1_000,
+            decided_at: Some(2_000),
+        }],
+        target: Some(IndexingTargetStatus {
+            scope_kind: IndexScopeKind::PublicTopic,
+            scope_id: "rust".to_string(),
+            supported: false,
+        }),
+    };
+    assert_eq!(
+        serde_json::to_value(&response).unwrap(),
+        serde_json::json!({
+            "requests": [{
+                "request_id": "request-1",
+                "scope_kind": "public_topic",
+                "target_id": "rust",
+                "status": "rejected",
+                "created_at": 1000,
+                "decided_at": 2000
+            }],
+            "target": { "scope_kind": "public_topic", "scope_id": "rust", "supported": false }
+        })
+    );
+    let list_only: IndexingStatusResponse = serde_json::from_value(serde_json::json!({
+        "requests": [{
+            "request_id": "request-2",
+            "scope_kind": "private_channel",
+            "target_id": "channel-1",
+            "status": "pending",
+            "created_at": 3000,
+            "decided_at": null
+        }],
+        "target": null
+    }))
+    .unwrap();
+    assert_eq!(list_only.requests[0].decided_at, None);
+    assert_eq!(list_only.target, None);
+}

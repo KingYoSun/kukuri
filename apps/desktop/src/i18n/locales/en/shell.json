@@ -345,7 +345,23 @@
       "secretConflict": "The channel capability conflicts with the existing registration. Contact the node operator.",
       "authRequired": "Authentication is required for the selected Community Node.",
       "consentRequired": "Required consent is missing for the selected Community Node.",
-      "requestFailed": "The indexing request failed. Please try again later."
+      "requestFailed": "The indexing request failed. Please try again later.",
+      "membershipRequired": "This channel's read capability does not match the Community Node registration, or the channel is not registered there.",
+      "capabilityUnavailable": "This channel's read capability is not available on this device. Only channels you have joined can be checked.",
+      "statusFailed": "Fetching the indexing status failed. Please try again later."
+    },
+    "indexStatus": {
+      "heading": "Indexing status on this Community Node",
+      "loading": "Checking indexing status…",
+      "supported": "This target is indexed by this Community Node. Individual posts appear in search after safety checks and sync.",
+      "notSupported": "This target is not indexed by this Community Node and has no request.",
+      "noRequest": "You have no request on this Community Node.",
+      "privateCheckHint": "To check whether it is indexed, agree to disclose the read capability and press “Check indexing status”.",
+      "check": "Check indexing status",
+      "unavailable": "Indexing status could not be checked. This does not mean the target is not indexed.",
+      "retry": "Check status again",
+      "submitBlockedRequested": "A request already exists for this target, so it cannot be submitted again.",
+      "submitBlockedSupported": "This target is already indexed, so no request is needed."
     }
   },
   "communityIndex": {
@@ -384,11 +400,14 @@
       "matchesPostText": "Matches: the text of indexed posts. User names and user IDs do not match unless they appear in a post.",
       "reasonsHeading": "Why there may be no results",
       "reasons": {
-        "notIndexedYet": "The posts may not be in this node’s index yet. The app cannot check indexing progress, so wait a while and search again.",
+        "notIndexedYet": "The posts may not be in this node’s index yet, or may not have passed safety checks. Indexing progress for individual posts cannot be checked, so wait a while and search again.",
         "outsideNodeScope": "The topic may not be one this node indexes. Only posts approved by the node operator and passed safety checks are indexed.",
-        "pubkeyQuery": "A user ID is not matched by search. You can open the user directly."
+        "pubkeyQuery": "A user ID is not matched by search. You can open the user directly.",
+        "notSupportedTarget": "This target is not indexed by this node, so its posts are not indexed. You can request indexing.",
+        "requestPending": "The indexing request is pending review, so nothing is indexed yet. Posts enter the index once the node operator approves it.",
+        "requestRejected": "The indexing request was rejected, so this node does not index it. Choose another node or contact the node operator."
       },
-      "exploreRequestHint": "To ask this node to index a public topic you joined, use “Request indexing” in the topic list.",
+      "exploreRequestHint": "To check whether a public topic you joined is indexed here, or to request indexing, use “Request indexing” in the topic list.",
       "actions": {
         "openAuthor": "Open this user",
         "retrySearch": "Search again",
@@ -396,6 +415,28 @@
         "openTimeline": "Open timeline",
         "requestIndexing": "Request indexing",
         "openConnectivity": "Open connection diagnostics"
+      },
+      "indexStatus": {
+        "targetNoun": {
+          "topic": "this topic",
+          "channel": "this channel"
+        },
+        "loading": "Checking the indexing status on this node…",
+        "unknown": "The indexing status on this node could not be checked. This does not mean it is not indexed.",
+        "target": {
+          "supported": "Indexing status: {{target}} is indexed by this node.",
+          "notSupported": "Indexing status: {{target}} is not indexed by this node and has no request.",
+          "pending": "Indexing status: the indexing request for {{target}} is pending review.",
+          "approved": "Indexing status: the indexing request for {{target}} is approved and it is indexed.",
+          "rejected": "Indexing status: the indexing request for {{target}} was rejected."
+        },
+        "ownRequests": {
+          "none": "You have no indexing requests on this node.",
+          "approved": "Approved requests: {{targets}}",
+          "pending": "Pending requests: {{targets}}",
+          "rejected": "Rejected requests: {{targets}}"
+        },
+        "privateUnverified": "Whether this channel is indexed can be checked from “Request indexing” after agreeing to disclose the read capability."
       }
     },
     "results": "Community Index results",

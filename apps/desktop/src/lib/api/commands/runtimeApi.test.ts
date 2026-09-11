@@ -135,3 +135,22 @@ test('distance opt-out commands preserve the configured node target', async () =
     request: { base_url: 'https://node.example' },
   });
 });
+
+test('readCommunityNodeIndexingStatus invokes the typed indexing status command', async () => {
+  await runtimeApi.readCommunityNodeIndexingStatus({
+    base_url: 'https://node.example',
+    scope_kind: 'public_topic',
+    topic_id: 'kukuri:topic:demo',
+    channel_id: null,
+    confirm_private_channel_secret_disclosure: false,
+  });
+  expect(invokeMock).toHaveBeenCalledWith('read_community_node_indexing_status', {
+    request: {
+      base_url: 'https://node.example',
+      scope_kind: 'public_topic',
+      topic_id: 'kukuri:topic:demo',
+      channel_id: null,
+      confirm_private_channel_secret_disclosure: false,
+    },
+  });
+});

@@ -14,6 +14,7 @@ import type {
   CommunityNodeConfig,
   CommunityNodeConsentDocumentRef,
   CommunityNodeIndexingRequest,
+  CommunityNodeIndexingStatusRequest,
   CommunityNodeIndexQueryRequest,
   CommunityIndexPostResolveInput,
   CommunityIndexPostResolveResponse,
@@ -66,6 +67,7 @@ import type {
   SubmitCommunityNodeReportRequest,
   SubmitCommunityNodeReportResult,
   SubmitIndexingRequestResponse,
+  IndexingStatusResponse,
   IndexQueryResponse,
   RelationNeighborsResponse,
   RelationOptoutResponse,
@@ -533,6 +535,9 @@ export interface DesktopApi {
   submitCommunityNodeIndexingRequest(
     request: CommunityNodeIndexingRequest
   ): Promise<SubmitIndexingRequestResponse>;
+  readCommunityNodeIndexingStatus(
+    request: CommunityNodeIndexingStatusRequest
+  ): Promise<IndexingStatusResponse>;
   submitCommunityNodeReport(
     request: SubmitCommunityNodeReportRequest
   ): Promise<SubmitCommunityNodeReportResult>;

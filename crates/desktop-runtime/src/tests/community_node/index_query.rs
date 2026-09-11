@@ -3,21 +3,25 @@ use axum::extract::Query;
 use axum::http::{Uri, header::RETRY_AFTER};
 use kukuri_cn_protocol::{
     ApiErrorBody, IndexEntryView, IndexQueryParams, IndexQueryResponse, IndexScopeKind,
-    IndexingRequestStatus, SubmitIndexingRequestRequest, SubmitIndexingRequestResponse,
+    IndexingRequestStatus, IndexingRequestView, IndexingStatusParams, IndexingStatusResponse,
+    IndexingTargetStatus, SubmitIndexingRequestRequest, SubmitIndexingRequestResponse,
 };
 
-type ForcedIndexError = (StatusCode, ApiErrorBody, Option<&'static str>);
+pub(super) type ForcedIndexError = (StatusCode, ApiErrorBody, Option<&'static str>);
+/// #975: 索引状況読取りの (query, 所属証明ヘッダ) 記録。
+type IndexingStatusCall = (IndexingStatusParams, Option<String>);
 
 #[derive(Clone)]
-struct MockIndexQueryState {
-    expected_token: Arc<Mutex<String>>,
-    requests: Arc<Mutex<Vec<(String, IndexQueryParams)>>>,
-    channel_secret_headers: Arc<Mutex<Vec<Option<String>>>>,
-    indexing_requests: Arc<Mutex<Vec<SubmitIndexingRequestRequest>>>,
-    forced_error: Arc<Mutex<Option<ForcedIndexError>>>,
-    unauthorized_remaining: Arc<AtomicUsize>,
-    response_object_id: Arc<Mutex<String>>,
-    response_author_pubkey: Arc<Mutex<String>>,
+pub(super) struct MockIndexQueryState {
+    pub(super) expected_token: Arc<Mutex<String>>,
+    pub(super) requests: Arc<Mutex<Vec<(String, IndexQueryParams)>>>,
+    pub(super) channel_secret_headers: Arc<Mutex<Vec<Option<String>>>>,
+    pub(super) indexing_requests: Arc<Mutex<Vec<SubmitIndexingRequestRequest>>>,
+    pub(super) indexing_status_calls: Arc<Mutex<Vec<IndexingStatusCall>>>,
+    pub(super) forced_error: Arc<Mutex<Option<ForcedIndexError>>>,
+    pub(super) unauthorized_remaining: Arc<AtomicUsize>,
+    pub(super) response_object_id: Arc<Mutex<String>>,
+    pub(super) response_author_pubkey: Arc<Mutex<String>>,
 }
 
 async fn mock_indexing_request(
@@ -56,6 +60,73 @@ async fn mock_indexing_request(
     Json(SubmitIndexingRequestResponse {
         request_id: "request-1".to_string(),
         status: IndexingRequestStatus::Pending,
+    })
+    .into_response()
+}
+
+async fn mock_indexing_status(
+    State(state): State<MockIndexQueryState>,
+    headers: HeaderMap,
+    Query(params): Query<IndexingStatusParams>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+
+    state.indexing_status_calls.lock().await.push((
+        params.clone(),
+        headers
+            .get("x-kukuri-channel-secret")
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string),
+    ));
+    let expected = state.expected_token.lock().await.clone();
+    let expected_header = format!("Bearer {expected}");
+    if headers
+        .get(AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        != Some(expected_header.as_str())
+        || state
+            .unauthorized_remaining
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |remaining| {
+                remaining.checked_sub(1)
+            })
+            .is_ok()
+    {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(ApiErrorBody {
+                code: "AUTH_REQUIRED".to_string(),
+                message: "community node authentication is required".to_string(),
+            }),
+        )
+            .into_response();
+    }
+    if let Some((status, body, retry_after)) = state.forced_error.lock().await.clone() {
+        let mut response = (status, Json(body)).into_response();
+        if let Some(value) = retry_after {
+            response
+                .headers_mut()
+                .insert(RETRY_AFTER, value.parse().expect("retry-after"));
+        }
+        return response;
+    }
+    let target = match (params.scope_kind.as_deref(), params.scope_id.clone()) {
+        (Some(kind), Some(scope_id)) => Some(IndexingTargetStatus {
+            scope_kind: IndexScopeKind::parse(kind).expect("scope kind"),
+            scope_id,
+            supported: kind == "public_topic",
+        }),
+        _ => None,
+    };
+    Json(IndexingStatusResponse {
+        requests: vec![IndexingRequestView {
+            request_id: "request-1".to_string(),
+            scope_kind: IndexScopeKind::PublicTopic,
+            target_id: "rust".to_string(),
+            status: IndexingRequestStatus::Rejected,
+            created_at: 1_000,
+            decided_at: Some(2_000),
+        }],
+        target,
     })
     .into_response()
 }
@@ -139,7 +210,7 @@ async fn mock_index_query(
     .into_response()
 }
 
-async fn index_runtime(
+pub(super) async fn index_runtime(
     forced_error: Option<ForcedIndexError>,
 ) -> (
     DesktopRuntime,
@@ -172,6 +243,7 @@ async fn index_runtime(
         requests: Arc::new(Mutex::new(Vec::new())),
         channel_secret_headers: Arc::new(Mutex::new(Vec::new())),
         indexing_requests: Arc::new(Mutex::new(Vec::new())),
+        indexing_status_calls: Arc::new(Mutex::new(Vec::new())),
         forced_error: Arc::new(Mutex::new(forced_error)),
         unauthorized_remaining: Arc::new(AtomicUsize::new(0)),
         response_object_id: Arc::new(Mutex::new("post-1".to_string())),
@@ -194,6 +266,7 @@ async fn index_runtime(
         .route("/v1/index/discovery", get(mock_index_query))
         .route("/v1/index/recommendations", get(mock_index_query))
         .route("/v1/indexing/requests", post(mock_indexing_request))
+        .route("/v1/indexing/status", get(mock_indexing_status))
         .route(
             "/v1/rendezvous/topics/heartbeat",
             post(mock_index_rendezvous),

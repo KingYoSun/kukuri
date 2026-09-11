@@ -24,6 +24,9 @@ export async function seedIndexLayout(
     }
     const calls: { method: string; baseUrl: string }[] = [];
     Object.defineProperty(window, '__indexLayoutCalls', { value: calls });
+    // #975: 索引状況の読取りは query とは別に記録し、既存 spec の query 呼出し比較を変えない。
+    const statusCalls: { baseUrl: string; scopeKind: string | null; withSecretConfirmation: boolean }[] = [];
+    Object.defineProperty(window, '__indexStatusCalls', { value: statusCalls });
     let desktopApi = window.__KUKURI_DESKTOP__;
     Object.defineProperty(window, '__KUKURI_DESKTOP__', {
       configurable: true,
@@ -48,6 +51,15 @@ export async function seedIndexLayout(
             return original(request);
           };
         }
+        const readStatus = api.readCommunityNodeIndexingStatus.bind(api);
+        api.readCommunityNodeIndexingStatus = async (request) => {
+          statusCalls.push({
+            baseUrl: request.base_url,
+            scopeKind: request.scope_kind ?? null,
+            withSecretConfirmation: request.confirm_private_channel_secret_disclosure === true,
+          });
+          return readStatus(request);
+        };
         const policies = api.fetchCommunityNodePolicies.bind(api);
         api.fetchCommunityNodePolicies = async (baseUrl, language) => {
           calls.push({ method: 'policies', baseUrl });
@@ -61,6 +73,12 @@ export async function seedIndexLayout(
       },
     });
   }, { locale, theme, pendingNodes, threeColumns, holdQueries, urls: LONG_NODE_URLS, key: WORKSPACE_LAYOUT_STORAGE_KEY, columns });
+}
+
+export async function indexStatusCalls(page: Page) {
+  return page.evaluate(() => (window as unknown as {
+    __indexStatusCalls: { baseUrl: string; scopeKind: string | null; withSecretConfirmation: boolean }[];
+  }).__indexStatusCalls);
 }
 
 export async function indexLayoutCalls(page: Page) {

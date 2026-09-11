@@ -37,6 +37,92 @@ describe('communityIndexEmptyGuidance', () => {
       authorPubkey: null,
       indexingTarget: { kind: 'public_topic', topicId: 'rust' },
       explainsTopicListRequest: false,
+      indexStatus: null,
+    });
+  });
+
+  // #975: 索引状況の応答で理由と申請 CTA が確定する。
+  describe('index status', () => {
+    const target = (supported: boolean) => ({ scope_kind: 'public_topic' as const, scope_id: 'rust', supported });
+    const request = (status: 'pending' | 'approved' | 'rejected') => ({
+      request_id: `r-${status}`,
+      scope_kind: 'public_topic' as const,
+      target_id: 'rust',
+      status,
+      created_at: 1,
+      decided_at: status === 'pending' ? null : 2,
+    });
+
+    test.each([
+      ['loading', { kind: 'loading' as const }, { kind: 'loading' }, ['notIndexedYet', 'outsideNodeScope'], true],
+      ['unknown', { kind: 'unknown' as const }, { kind: 'unknown' }, ['notIndexedYet', 'outsideNodeScope'], true],
+      ['supported', { kind: 'known' as const, response: { requests: [], target: target(true) } }, { kind: 'target', state: 'supported' }, ['notIndexedYet'], false],
+      ['not supported', { kind: 'known' as const, response: { requests: [], target: target(false) } }, { kind: 'target', state: 'notSupported' }, ['notSupportedTarget'], true],
+      ['pending', { kind: 'known' as const, response: { requests: [request('pending')], target: target(false) } }, { kind: 'target', state: 'pending' }, ['requestPending'], false],
+      ['approved', { kind: 'known' as const, response: { requests: [request('approved')], target: target(true) } }, { kind: 'target', state: 'approved' }, ['notIndexedYet'], false],
+      ['rejected', { kind: 'known' as const, response: { requests: [request('rejected')], target: target(false) } }, { kind: 'target', state: 'rejected' }, ['requestRejected'], false],
+      ['target missing', { kind: 'known' as const, response: { requests: [], target: null } }, { kind: 'unknown' }, ['notIndexedYet', 'outsideNodeScope'], true],
+    ])('topic %s', (_name, indexStatus, expected, reasons, offersRequest) => {
+      const guidance = communityIndexEmptyGuidance({ ...base, mode: 'topic', indexStatus });
+      expect(guidance.indexStatus).toEqual(expected);
+      expect(guidance.reasons).toEqual(reasons);
+      expect(guidance.actions.includes('requestIndexing')).toBe(offersRequest);
+      expect(guidance.indexingTarget !== null).toBe(offersRequest);
+    });
+
+    test('a pubkey query keeps the user hint in front of the definite reason', () => {
+      const guidance = communityIndexEmptyGuidance({
+        ...base,
+        mode: 'topic',
+        query: PUBKEY,
+        indexStatus: { kind: 'known', response: { requests: [], target: target(false) } },
+      });
+      expect(guidance.reasons).toEqual(['pubkeyQuery', 'notSupportedTarget']);
+    });
+
+    test('a private channel without an own request asks to verify from the request dialog', () => {
+      const channel = { ...base, mode: 'topic' as const, activeTimelineScope: { kind: 'channel' as const, channel_id: 'channel-1' } };
+      expect(
+        communityIndexEmptyGuidance({ ...channel, indexStatus: { kind: 'known', response: { requests: [], target: null } } }).indexStatus
+      ).toEqual({ kind: 'privateUnverified' });
+      const pending = communityIndexEmptyGuidance({
+        ...channel,
+        indexStatus: {
+          kind: 'known',
+          response: {
+            requests: [{ ...request('pending'), scope_kind: 'private_channel', target_id: 'channel-1' }],
+            target: null,
+          },
+        },
+      });
+      expect(pending.indexStatus).toEqual({ kind: 'target', state: 'pending' });
+      expect(pending.actions.includes('requestIndexing')).toBe(false);
+    });
+
+    test('explore groups own requests by status and never asserts a per-topic state', () => {
+      const guidance = communityIndexEmptyGuidance({
+        ...base,
+        mode: 'explore',
+        indexStatus: {
+          kind: 'known',
+          response: {
+            requests: [
+              { ...request('approved'), target_id: 'kukuri:topic:rust' },
+              { ...request('pending'), target_id: 'kukuri:topic:golang' },
+              { ...request('rejected'), scope_kind: 'private_channel', target_id: 'channel-9' },
+            ],
+            target: null,
+          },
+        },
+      });
+      expect(guidance.indexStatus).toEqual({
+        kind: 'ownRequests',
+        approved: ['kukuri:topic:rust'],
+        pending: ['kukuri:topic:golang'],
+        rejected: ['channel-9'],
+      });
+      expect(guidance.reasons).toEqual(['notIndexedYet', 'outsideNodeScope']);
+      expect(guidance.indexingTarget).toBeNull();
     });
   });
 

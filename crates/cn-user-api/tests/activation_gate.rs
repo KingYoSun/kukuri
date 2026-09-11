@@ -28,8 +28,9 @@ use support::{integration_test_admin_database_url, integration_test_rendezvous_r
 ///
 /// コード名は通信契約(クライアントが縮退判別に使う)なので、変更はこの契約試験の
 /// 失敗として検知させる。ここでは意図的にリテラルで固定する。
-const SURFACES: [(&str, &str); 4] = [
+const SURFACES: [(&str, &str); 5] = [
     ("/v1/index/search?q=test", "INDEX_QUERY_NOT_ACTIVATED"),
+    ("/v1/indexing/status", "INDEXING_REQUEST_NOT_ACTIVATED"),
     (
         "/v1/trust/users/0000000000000000000000000000000000000000000000000000000000000001",
         "TRUST_READ_NOT_ACTIVATED",

@@ -79,6 +79,60 @@ pub struct SubmitIndexingRequestResponse {
     pub status: IndexingRequestStatus,
 }
 
+/// `GET /v1/indexing/status` の query(#975)。
+///
+/// `scope_kind` と `scope_id` は両方あるか両方ないか。両方あれば `target` の supported 判定を
+/// 併せて返し、無ければ自分の申請一覧だけを返す。
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
+pub struct IndexingStatusParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope_id: Option<String>,
+}
+
+/// 呼出し主自身の索引申請 1 件の現在状態(#975)。
+///
+/// `requester_pubkey` は bearer identity と一致するため wire には載せない。
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
+pub struct IndexingRequestView {
+    pub request_id: String,
+    pub scope_kind: IndexScopeKind,
+    pub target_id: String,
+    pub status: IndexingRequestStatus,
+    /// 申請時刻(unix ms)。
+    pub created_at: i64,
+    /// 承認・却下時刻(unix ms)。審査待ちでは null。
+    pub decided_at: Option<i64>,
+}
+
+/// 指定した対象がこのノードの supported set に含まれるか(#975)。
+///
+/// `supported` は scope ゲート(ADR 0025 §2.6 の 1 段目)だけを表す。個々の投稿が検索に出るかは
+/// safety ゲートと sync の反映に依存するため、これだけで「索引済み」とは断定しない。
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct IndexingTargetStatus {
+    pub scope_kind: IndexScopeKind,
+    pub scope_id: String,
+    pub supported: bool,
+}
+
+/// `GET /v1/indexing/status` の応答(#975)。
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
+pub struct IndexingStatusResponse {
+    /// 呼出し主の申請だけ。他利用者の申請は含まない。
+    pub requests: Vec<IndexingRequestView>,
+    /// `scope_kind` / `scope_id` を指定した場合のみ。非公開チャンネルは所属証明が必要。
+    pub target: Option<IndexingTargetStatus>,
+}
+
 impl IndexScopeKind {
     pub fn as_str(self) -> &'static str {
         match self {
