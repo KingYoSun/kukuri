@@ -113,7 +113,7 @@ inventory 差分は INV-1 の id 追加、INV-2／INV-3 の入口追加、INV-6 
 | 検証 | 条件／結果 |
 | --- | --- |
 | targeted Vitest | backupDiscoverability、routes unit、shellChrome、developerMode、notificationSettings、i18n（parity 含む）、AccountKeyPanel、DeviceBackupPanel、SettingsPanels、routes: 12 ファイル 233 件成功 |
-| `npx vitest run`（全体） | 下記「全体 test」参照 |
+| `npx vitest run`（全体） | 下記「全体 test」参照（2 件の timeout は単独再実行で成功） |
 | `tsc --noEmit`／`eslint . --max-warnings 0` | 成功 |
 | Playwright browser（targeted） | backup-discoverability 5 件、developer-mode、hash-routing、localization-layout、notification-settings、settings-localization、shell.smoke: 成功。環境の Chromium build が pin と異なるため `PLAYWRIGHT_BROWSERS_PATH` に同 build への symlink を置いて実行 |
 | Playwright browser（全体、`--project=chromium`） | 下記「全体 test」参照 |
@@ -123,7 +123,9 @@ inventory 差分は INV-1 の id 追加、INV-2／INV-3 の入口追加、INV-6 
 
 ### 全体 test
 
-- 記入予定（background 実行の完了後に更新）
+- `npx vitest run`: 177 ファイル中 175 成功、1473 件中 1471 成功・2 件失敗。失敗は `media.test.tsx`（`single attach button classifies mixed image and video files`、5 秒 timeout）と `routes.test.tsx`（`topic and private channel selection sync into the hash route`、11 秒）で、いずれも今回の変更 path ではない。Playwright 全体と同時実行していたため、2 ファイルを単独で再実行して 22 件成功を確認した。CI で最終確認する。
+- Playwright browser（全体、`--project=chromium`）: 256 件成功（4.2 分）。
+- Playwright visual（ローカル、比較 skip の smoke）: settings appearance dark／light、notifications、backup、connectivity の 5 件成功。baseline は「Kukuri Visual Baseline」workflow（[run 34622269900](https://github.com/KingYoSun/kukuri/actions/runs/34622269900)、`commit_to_branch=true`）で再生成し、本ブランチへ commit した。
 
 ## UI 証跡と確認の限界
 
