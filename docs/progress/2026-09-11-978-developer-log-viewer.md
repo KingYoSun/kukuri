@@ -32,7 +32,7 @@
 
 ### frontend（`apps/desktop/src`）
 
-- `lib/api/types.ts` に `DesktopLogEntry` / `DesktopLogSnapshot` と `DesktopApi.readDesktopLogs`、`lib/api/commands/runtimeApi.ts` に `command('readDesktopLogs', ...)`（`afterSeq` / `limit` は camelCase で送る）。mock は `mocks/api/developerLogs.ts`（固定時刻の 12 行、長い 1 行と ERROR / WARN を含む）。
+- `lib/api/types.ts` に `DesktopLogEntry` / `DesktopLogSnapshot` と `DesktopApi.readDesktopLogs`、`lib/api/commands/developerLogsApi.ts` に `command('readDesktopLogs', ...)`（`afterSeq` / `limit` は camelCase で送る）を置き、`commands/apiModules.ts` 経由で `runtimeApi.ts` へ spread する（大型ファイル ratchet を増やさないため）。mock は `mocks/api/developerLogs.ts`（固定時刻の 12 行、長い 1 行と ERROR / WARN を含む）。
 - `shell/useDeveloperModeBridge.ts`: `isTauriRuntime()` のときだけ mount 時と変更時に `set_developer_mode_enabled` を送る。`DesktopShellPage.tsx` で `useOsNotificationBridge()` の直後に呼ぶ。
 - `lib/desktopLogs.ts`: `mergeDesktopLogSnapshot`（差分取得の追記、buffer から落ちた行の除去、gap 検出）、`buildDesktopLogsExport`（先頭に件数・上限・除外規則、以後 `ISO LEVEL target: message`）、`formatDesktopLogBytes`。`lib/downloadTextFile.ts` を新設し、`ReleasePanel.tsx` の診断レポート書き出しも同じ helper を使う（挙動は同一）。
 - `shell/useDesktopLogs.ts`: enabled のあいだだけ表示時に 1 回取得し、`refresh()` で `afterSeq = 最後の seq` の差分取得。polling なし。無効化・unmount 後の応答は世代番号で捨てる。
@@ -93,14 +93,18 @@ sensitive sink の逆引き: `DesktopLogBuffer::snapshot` の caller は `Develo
 | `cargo xtask doctor` | Linux（remote）、成功 |
 | Tauri backend unit（`cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --lib -- tracing:: developer_logs:: invoke_gate::`） | 本文の「検証ログ」参照 |
 | `cargo test -p kukuri-cli --test command_parity` | 5 件成功 |
-| `cargo xtask desktop-lint`（`eslint --max-warnings 0` + `tsc --noEmit`） | 成功 |
-| targeted Vitest（desktopLogs、downloadTextFile、useDeveloperModeBridge、SettingsPanels、DesktopShellPage.developerMode） | 成功 |
-| その他 | 本文の「検証ログ」参照 |
+| `cargo xtask check`（`cargo fmt --check`、workspace clippy、`tauri-check`、`desktop-lint`） | 成功 |
+| `cargo xtask oversized-files` | 初回 CI で `runtimeApi.ts` が 1042 → 1047 行に増えて失敗。`readDesktopLogs` を `commands/developerLogsApi.ts` へ移し `commands/apiModules.ts` で分割 module を 1 行で re-export して 1041 行に戻し、成功（commit `b0cd97b`） |
+| targeted Vitest（desktopLogs、downloadTextFile、useDeveloperModeBridge、SettingsPanels、DesktopShellPage.developerMode、i18n/parity） | 成功。`parity.test.ts` は初回 CI で ja の `developer.logs.share` が禁止語 `Node` を含み失敗。「コミュニティノードの URL」へ言い換えて成功（commit `8323266`） |
+| Playwright `developer-mode.spec.ts`（chromium、`PLAYWRIGHT_BROWSERS_PATH` に pin build 1234 → 環境の 1194 への symlink を置いて実行） | 16 件成功（既存 14 + 新規 2） |
+| Storybook build | 成功 |
+| Tauri crate clippy（`cargo clippy --all-targets -- -D warnings`、CI 対象外） | 本 PR の新規 file に指摘なし。既存 file（`background_notifications.rs`、`file_dialog.rs`、`restore_lifecycle.rs`、`app_update_tests.rs`）に既存の指摘 5 件があり、本 PR では触れない（Optional-hardening） |
+| 全体 Vitest / `cargo xtask rust-test` / `cargo xtask e2e-smoke` | 下記「全体検証」参照 |
 
 ## UI 証跡と確認の限界
 
 - 対象 platform / state: browser（Linux Chromium、mock）、1280 / 390px、dark、en（browser spec）、ja / en / zh-CN（Vitest は en、locale parity は 3 言語同期）、開発者 OFF / ON、ready / loading / empty / limit reached / error（Storybook）。
 - Accessibility: 一覧は `role="region"` + `aria-label`（件数入り）+ `tabIndex=0` で keyboard scroll 可、level は文字と色の併用、エラーは `role="alert"`、コピー／書き出し結果は `aria-live="polite"`。screen reader の音声聴取は未実施。
 - 未確認: Tauri / WebView 実機（Linux WebKitGTK、Windows WebView2）での表示・保存ダイアログ・実 backend からの取得。remote 環境では実行できないため、browser mock の成功で置き換えない。Windows での取得可否は backend の IPC test と `windows_subsystem` に依存しない実装から判断し、実機で再確認していない。
-- 視覚 baseline: `developer-enabled-{ja,en,zh-CN}-{dark,light}.png` はログ節の置換で意図的に変わる。「Kukuri Visual Baseline」workflow（Linux / Chromium、`fonts-noto-cjk`）で再生成する。
+- 視覚 baseline: `visual.spec.ts` の開発者画面は `developer-enabled-ja-dark.png`（1280 幅）と `developer-enabled-en-light.png`（390 幅）の 2 枚。「Kukuri Visual Baseline」workflow（Linux / Chromium、`fonts-noto-cjk`、run 34655685231）で再生成し、ログ節が drawer の可視範囲に入る ja-dark だけが変わった（commit `f037757`）。en-light は 390 幅で節が可視範囲外のため変更なし。
 - 性能: 最大 2,000 行を `<li>` で描画する。表示時と更新時だけ取得し、timer / 購読は無い。mock 12 行で計測は非該当。実 2,000 行の描画は 18rem の内部 scroll に収まり、仮想化は Optional-hardening とする。
